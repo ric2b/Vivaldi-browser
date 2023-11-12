@@ -4,12 +4,16 @@
 
 #include "chrome/browser/optimization_guide/page_content_annotations_service_factory.h"
 
+#include <memory>
+
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
+#include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
@@ -18,10 +22,14 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/search_engines/template_url_fetcher_factory.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
+#include "components/omnibox/browser/zero_suggest_cache_service.h"
 #include "components/optimization_guide/content/browser/page_content_annotations_service.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "third_party/blink/public/common/features.h"
@@ -89,6 +97,8 @@ PageContentAnnotationsServiceFactory::PageContentAnnotationsServiceFactory()
     : ProfileKeyedServiceFactory("PageContentAnnotationsService") {
   DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(TemplateURLServiceFactory::GetInstance());
+  DependsOn(ZeroSuggestCacheServiceFactory::GetInstance());
 }
 
 PageContentAnnotationsServiceFactory::~PageContentAnnotationsServiceFactory() =
@@ -113,11 +123,16 @@ KeyedService* PageContentAnnotationsServiceFactory::BuildServiceInstanceFor(
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::IMPLICIT_ACCESS);
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile);
+  ZeroSuggestCacheService* zero_suggest_cache_service =
+      ZeroSuggestCacheServiceFactory::GetForProfile(profile);
   if (optimization_guide_keyed_service && history_service) {
     return new optimization_guide::PageContentAnnotationsService(
+        std::make_unique<ChromeAutocompleteProviderClient>(profile),
         g_browser_process->GetApplicationLocale(),
-        optimization_guide_keyed_service, history_service, proto_db_provider,
-        profile_path,
+        optimization_guide_keyed_service, history_service, template_url_service,
+        zero_suggest_cache_service, proto_db_provider, profile_path,
         optimization_guide_keyed_service->GetOptimizationGuideLogger(),
         base::ThreadPool::CreateSequencedTaskRunner(
             {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));

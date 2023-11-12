@@ -48,9 +48,6 @@ class Hierarchy {
                     const Hierarchy* hierarchy);
     ~SectionMetadata();
 
-    // Whether the only contents of the section is a link to a subpage.
-    bool only_contains_link_to_subpage;
-
     // Generates a search result for this section, using the canonical search
     // tag as the search result text. |relevance_score| must be passed by the
     // client, since this result is being created manually instead of via query
@@ -73,17 +70,17 @@ class Hierarchy {
                     const Hierarchy* hierarchy);
     ~SubpageMetadata();
 
-    // The section in which the subpage appears.
-    chromeos::settings::mojom::Section section;
-
-    // The parent subpage, if applicable. Only applies to nested subpages.
-    absl::optional<chromeos::settings::mojom::Subpage> parent_subpage;
-
     // Generates a search result for this subpage, using the canonical search
     // tag as the search result text. |relevance_score| must be passed by the
     // client, since this result is being created manually instead of via query
     // matching.
     mojom::SearchResultPtr ToSearchResult(double relevance_score) const;
+
+    // The section in which the subpage appears.
+    chromeos::settings::mojom::Section section;
+
+    // The parent subpage, if applicable. Only applies to nested subpages.
+    absl::optional<chromeos::settings::mojom::Subpage> parent_subpage;
 
    private:
     chromeos::settings::mojom::Subpage subpage_;
@@ -108,9 +105,14 @@ class Hierarchy {
   // The location of a setting, which includes its section and, if applicable,
   // its subpage. Some settings are embedded directly into the section and have
   // no associated subpage.
-  using SettingLocation =
-      std::pair<chromeos::settings::mojom::Section,
-                absl::optional<chromeos::settings::mojom::Subpage>>;
+  struct SettingLocation {
+    SettingLocation(chromeos::settings::mojom::Section section,
+                    absl::optional<chromeos::settings::mojom::Subpage> subpage)
+        : section(section), subpage(subpage) {}
+    ~SettingLocation() = default;
+    chromeos::settings::mojom::Section section;
+    absl::optional<chromeos::settings::mojom::Subpage> subpage;
+  };
 
   struct SettingMetadata {
     explicit SettingMetadata(
@@ -159,6 +161,7 @@ class Hierarchy {
 
  private:
   class PerSectionHierarchyGenerator;
+  friend std::ostream& operator<<(std::ostream& os, const Hierarchy& h);
 
   // Generates an array with the Settings app name and |section|'s name.
   std::vector<std::u16string> GenerateHierarchyStrings(
@@ -170,8 +173,13 @@ class Hierarchy {
       OsSettingsIdentifier id,
       const std::string& url_to_modify) const;
 
-  const OsSettingsSections* sections_;
+  const OsSettingsSections* sections_;  // Owned by |OsSettingsManager|
 };
+
+#ifdef DCHECK
+// For logging use only. Prints out text representation of the `Hierarchy`.
+std::ostream& operator<<(std::ostream& os, const Hierarchy& h);
+#endif
 
 }  // namespace ash::settings
 

@@ -24,7 +24,9 @@
   </div>
     <template is="dom-if" if="[[shouldShowVerifyButton_(pageContentData)]]"
         restamp>
-      <cr-button on-click="handleVerifyButtonClick_">
+      <cr-button
+        aria-label="$i18n{multideviceVerifyButtonA11yLabel}"
+        on-click="handleVerifyButtonClick_">
         $i18n{multideviceVerifyButton}
       </cr-button>
     </template>
@@ -49,7 +51,6 @@
       <settings-multidevice-feature-item id="smartLockItem"
           feature="[[MultiDeviceFeature.SMART_LOCK]]"
           page-content-data="[[pageContentData]]"
-          subpage-route="[[getSmartLockSubpageRoute_()]]"
           deep-link-focus-id$="[[Setting.kSmartLockOnOff]]">
       </settings-multidevice-feature-item>
     </template>

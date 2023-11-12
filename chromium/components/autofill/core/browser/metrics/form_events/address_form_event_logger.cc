@@ -12,8 +12,9 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
-#include "components/autofill/core/browser/autofill_type.h"
-#include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/logging/log_manager.h"
+#include "components/autofill/core/common/autofill_internals/log_message.h"
+#include "components/autofill/core/common/autofill_internals/logging_scope.h"
 
 namespace autofill {
 
@@ -24,7 +25,7 @@ AddressFormEventLogger::AddressFormEventLogger(
     : FormEventLoggerBase("Address",
                           is_in_any_main_frame,
                           form_interactions_ukm_logger,
-                          client ? client->GetLogManager() : nullptr) {}
+                          client) {}
 
 AddressFormEventLogger::~AddressFormEventLogger() = default;
 
@@ -58,6 +59,9 @@ void AddressFormEventLogger::OnDidFillSuggestion(
 
   base::RecordAction(
       base::UserMetricsAction("Autofill_FilledProfileSuggestion"));
+
+  ++form_interaction_counts_.autofill_fills;
+  UpdateFlowId();
 }
 
 void AddressFormEventLogger::OnDidSeeFillableDynamicForm(

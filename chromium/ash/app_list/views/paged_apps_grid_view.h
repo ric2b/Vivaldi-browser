@@ -75,9 +75,6 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
   PagedAppsGridView& operator=(const PagedAppsGridView&) = delete;
   ~PagedAppsGridView() override;
 
-  // Called when tablet mode starts and ends.
-  void OnTabletModeChanged(bool started);
-
   // Sets the number of max rows and columns in grid pages. Special-cases the
   // first page, which may allow smaller number of rows in certain cases (to
   // make room for other UI elements like continue section).
@@ -91,7 +88,6 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
 
   // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void OnMouseEvent(ui::MouseEvent* event) override;
 
   // views::View:
   void Layout() override;
@@ -104,9 +100,12 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
   gfx::Size GetTileGridSize() const override;
   int GetTotalPages() const override;
   int GetSelectedPage() const override;
+  bool IsPageFull(size_t page_index) const override;
+  GridIndex GetGridIndexFromIndexInViewModel(int index) const override;
+  int GetNumberOfPulsingBlocksToShow(int item_count) const override;
   void MaybeStartCardifiedView() override;
   void MaybeEndCardifiedView() override;
-  void MaybeStartPageFlip() override;
+  bool MaybeStartPageFlip() override;
   void MaybeStopPageFlip() override;
   bool MaybeAutoScroll() override;
   void StopAutoScroll() override {}
@@ -114,7 +113,7 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
                                   ui::EventType type) override;
   void SetFocusAfterEndDrag(AppListItem* drag_item) override;
   void RecordAppMovingTypeMetrics(AppListAppMovingType type) override;
-  int GetMaxRowsInPage(int page) const override;
+  absl::optional<int> GetMaxRowsInPage(int page) const override;
   gfx::Vector2d GetGridCenteringOffset(int page) const override;
   void UpdatePaging() override;
   void RecordPageMetrics() override;
@@ -190,10 +189,6 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
   // Animates items to their ideal bounds when the reorder nudge gets removed.
   void AnimateOnNudgeRemoved();
 
-  bool GetBoundsAnimationForCardifiedStateInProgressForTest() {
-    return bounds_animation_for_cardified_state_in_progress_;
-  }
-
   // Set the callback that runs when cardified state has ended.
   void SetCardifiedStateEndedTestCallback(
       base::RepeatingClosure cardified_ended_callback);
@@ -216,10 +211,6 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
 
   // Gets the tile grid size on the provided apps grid page.
   gfx::Size GetTileGridSizeForPage(int page) const;
-
-  // Indicates whether the drag event (from the gesture or mouse) should be
-  // handled by PagedAppsGridView.
-  bool ShouldHandleDragEvent(const ui::LocatedEvent& event);
 
   // Returns true if the page is the right target to flip to.
   bool IsValidPageFlipTarget(int page) const;
@@ -256,8 +247,8 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
       views::AnimationSequenceBlock* animation_sequence,
       const gfx::Vector2d& translate_offset);
 
-  // Call OnBoundsAnimatorDone when all layer animations finish.
-  void MaybeCallOnBoundsAnimatorDone();
+  // Called when all cardified layer animations finish.
+  void OnCardifiedStateAnimationDone();
 
   // Called when app item animations are completed for ending cardified state.
   void OnCardifiedStateEnded();
@@ -311,19 +302,6 @@ class ASH_EXPORT PagedAppsGridView : public AppsGridView,
   // Delay for when |page_flip_timer_| should fire after user drags an item near
   // the edge.
   base::TimeDelta page_flip_delay_;
-
-  // Whether the grid is in mouse drag. Used for between-item drags that move
-  // the entire grid, not for app icon drags.
-  bool is_in_mouse_drag_ = false;
-
-  // The initial mouse drag location in root window coordinate. Updates when the
-  // drag on PagedAppsGridView starts. Used for between-item drags that move the
-  // entire grid, not for app icon drags.
-  gfx::PointF mouse_drag_start_point_;
-
-  // The last mouse drag location in root window coordinate. Used for
-  // between-item drags that move the entire grid, not for app icon drags.
-  gfx::PointF last_mouse_drag_point_;
 
   // Records smoothness of pagination animation.
   absl::optional<ui::ThroughputTracker> pagination_metrics_tracker_;

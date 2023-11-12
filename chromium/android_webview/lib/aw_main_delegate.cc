@@ -69,6 +69,7 @@
 #include "services/network/public/cpp/features.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
+#include "tools/v8_context_snapshot/buildflags.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -171,7 +172,7 @@ absl::optional<int> AwMainDelegate::BasicStartupComplete() {
     if (AwDrawFnImpl::IsUsingVulkan())
       cl->AppendSwitch(switches::kWebViewDrawFunctorUsesVulkan);
 
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
+#if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
     const gin::V8SnapshotFileType file_type =
         gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
@@ -259,9 +260,6 @@ absl::optional<int> AwMainDelegate::BasicStartupComplete() {
     // clear on how user can remove persistent media licenses from UI.
     features.DisableIfNotSet(media::kMediaDrmPersistentLicense);
 
-    // WebView does not support Picture-in-Picture yet.
-    features.DisableIfNotSet(media::kPictureInPictureAPI);
-
     features.DisableIfNotSet(::features::kBackgroundFetch);
 
     // SurfaceControl is controlled by kWebViewSurfaceControl flag.
@@ -283,9 +281,6 @@ absl::optional<int> AwMainDelegate::BasicStartupComplete() {
     features.DisableIfNotSet(::features::kDigitalGoodsApi);
 
     features.DisableIfNotSet(::features::kDynamicColorGamut);
-
-    // De-jelly is never supported on WebView.
-    features.EnableIfNotSet(::features::kDisableDeJelly);
 
     // COOP is not supported on WebView yet. See:
     // https://groups.google.com/a/chromium.org/forum/#!topic/blink-dev/XBKAGb2_7uAi.
@@ -331,10 +326,11 @@ absl::optional<int> AwMainDelegate::BasicStartupComplete() {
     // renderer processes. See also: switches::kInProcessGPU above.
     features.EnableIfNotSet(::features::kNetworkServiceInProcess);
 
-    // Disable Event.path on Canary and Dev to help the deprecation and removal.
+    // Enable Event.path on Beta and Stable. The feature has been deprecated and
+    // removed on other platforms, but needs more time on WebView.
     // See crbug.com/1277431 for more details.
-    if (version_info::android::GetChannel() < version_info::Channel::BETA)
-      features.DisableIfNotSet(blink::features::kEventPath);
+    if (version_info::android::GetChannel() >= version_info::Channel::BETA)
+      features.EnableIfNotSet(blink::features::kEventPath);
 
     // FedCM is not yet supported on WebView.
     features.DisableIfNotSet(::features::kFedCm);

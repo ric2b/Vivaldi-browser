@@ -26,6 +26,15 @@ namespace media {
 
 class MediaTracks;
 
+enum class DemuxerType {
+  kMockDemuxer,
+  kFFmpegDemuxer,
+  kChunkDemuxer,
+  kMediaUrlDemuxer,
+  kFrameInjectingDemuxer,
+  kStreamProviderDemuxer,
+};
+
 class MEDIA_EXPORT DemuxerHost {
  public:
   // Notify the host that buffered time ranges have changed. Note that buffered
@@ -87,6 +96,9 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
 
   // Returns the name of the demuxer for logging purpose.
   virtual std::string GetDisplayName() const = 0;
+
+  // Get the demuxer type for identification purposes.
+  virtual DemuxerType GetDemuxerType() const = 0;
 
   // Completes initialization of the demuxer.
   //
@@ -168,13 +180,6 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
       const std::vector<MediaTrack::Id>& track_ids,
       base::TimeDelta curr_time,
       TrackChangeCB change_completed_cb) = 0;
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  // Perform any cleanup operation that are required to run on the media thread
-  // before a destructor call on the owner thread. Compared with Stop() this
-  // will always be called even if Initialize() was not called.
-  virtual void VivaldiFinishOnMediaThread() {}
-#endif
 };
 
 }  // namespace media

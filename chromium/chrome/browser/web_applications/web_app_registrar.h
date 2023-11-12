@@ -17,7 +17,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
+#include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -330,6 +333,10 @@ class WebAppRegistrar : public ProfileManagerObserver {
   // enabled, otherwise returns nullopt.
   absl::optional<GURL> GetAppPinnedHomeTabUrl(const AppId& app_id) const;
 
+  // Returns the current WebAppOsIntegrationState stored in the web_app DB.
+  absl::optional<proto::WebAppOsIntegrationState>
+  GetAppCurrentOsIntegrationState(const AppId& app_id) const;
+
 #if BUILDFLAG(IS_MAC)
   bool AlwaysShowToolbarInFullscreen(const AppId& app_id) const;
   void NotifyAlwaysShowToolbarInFullscreenChanged(const AppId& app_id,
@@ -363,6 +370,7 @@ class WebAppRegistrar : public ProfileManagerObserver {
   // ProfileManagerObserver:
   void OnProfileMarkedForPermanentDeletion(
       Profile* profile_to_be_deleted) override;
+  void OnProfileManagerDestroying() override;
 
   // A filter must return false to skip the |web_app|.
   using Filter = bool (*)(const WebApp& web_app);
@@ -457,9 +465,12 @@ class WebAppRegistrar : public ProfileManagerObserver {
 
  private:
   const raw_ptr<Profile> profile_;
-  raw_ptr<WebAppPolicyManager> policy_manager_ = nullptr;
-  raw_ptr<WebAppTranslationManager> translation_manager_ = nullptr;
+  raw_ptr<WebAppPolicyManager, DanglingUntriaged> policy_manager_ = nullptr;
+  raw_ptr<WebAppTranslationManager, DanglingUntriaged> translation_manager_ =
+      nullptr;
 
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observation_{this};
   base::ObserverList<AppRegistrarObserver, /*check_empty=*/true> observers_;
 
   Registry registry_;

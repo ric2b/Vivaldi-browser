@@ -803,7 +803,7 @@ bool ServiceWorkerGlobalScope::CrossOriginIsolatedCapability() const {
   return Agent::IsCrossOriginIsolated();
 }
 
-bool ServiceWorkerGlobalScope::IsolatedApplicationCapability() const {
+bool ServiceWorkerGlobalScope::IsIsolatedContext() const {
   // TODO(mkwst): Make a decision here, and spec it.
   return false;
 }
@@ -2297,7 +2297,7 @@ void ServiceWorkerGlobalScope::StartCanMakePaymentEvent(
           this, event_id, wait_until_observer);
 
   Event* event = CanMakePaymentEvent::Create(
-      ScriptController()->GetScriptState(), event_type_names::kCanmakepayment,
+      event_type_names::kCanmakepayment,
       PaymentEventDataConversion::ToCanMakePaymentEventInit(
           ScriptController()->GetScriptState(), std::move(event_data)),
       respond_with_observer, wait_until_observer);
@@ -2473,6 +2473,23 @@ void ServiceWorkerGlobalScope::SetIdleDelay(base::TimeDelta delay) {
   event_queue_->SetIdleDelay(delay);
 }
 
+void ServiceWorkerGlobalScope::AddKeepAlive() {
+  DCHECK(IsContextThread());
+  DCHECK(event_queue_);
+
+  // TODO(richardzh): refactor with RAII pattern, as explained in crbug/1399324
+  event_queue_->ResetIdleTimeout();
+}
+
+void ServiceWorkerGlobalScope::ClearKeepAlive() {
+  DCHECK(IsContextThread());
+  DCHECK(event_queue_);
+
+  // TODO(richardzh): refactor with RAII pattern, as explained in crbug/1399324
+  event_queue_->ResetIdleTimeout();
+  event_queue_->CheckEventQueue();
+}
+
 void ServiceWorkerGlobalScope::AddMessageToConsole(
     mojom::blink::ConsoleMessageLevel level,
     const String& message) {
@@ -2602,7 +2619,7 @@ ServiceWorkerGlobalScope::FetchHandlerType() {
   if (!elv) {
     return mojom::blink::ServiceWorkerFetchHandlerType::kNoHandler;
   }
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = GetIsolate();
   v8::HandleScope handle_scope(isolate);
   // TODO(crbug.com/1349613): revisit the way to implement this.
   // The following code returns kEmptyFetchHandler if all handlers are nop.
@@ -2610,7 +2627,8 @@ ServiceWorkerGlobalScope::FetchHandlerType() {
     EventTarget* et = EventTarget::Create(ScriptController()->GetScriptState());
     v8::Local<v8::Value> v =
         To<JSBasedEventListener>(e.Callback())->GetEffectiveFunction(*et);
-    if (!v.As<v8::Function>()->Experimental_IsNopFunction()) {
+    if (!v->IsFunction() ||
+        !v.As<v8::Function>()->Experimental_IsNopFunction()) {
       return mojom::blink::ServiceWorkerFetchHandlerType::kNotSkippable;
     }
   }

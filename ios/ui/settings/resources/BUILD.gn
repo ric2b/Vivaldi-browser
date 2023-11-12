@@ -2,10 +2,177 @@
 
 import("//build/config/ios/asset_catalog.gni")
 
+group("main_settings") {
+  deps = [
+    ":vivaldi_setting_sync",
+    ":vivaldi_setting_default_browser",
+    ":vivaldi_setting_search_engine",
+    ":vivaldi_setting_passwords",
+    ":vivaldi_setting_payment_methods",
+    ":vivaldi_setting_addresses",
+    ":vivaldi_setting_tabs",
+    ":vivaldi_setting_start_page_layout",
+    ":vivaldi_setting_privacy",
+    ":vivaldi_setting_atb",
+    ":vivaldi_setting_languages",
+    ":vivaldi_setting_contents",
+    ":vivaldi_setting_version",
+  ]
+}
+
 imageset("chrome_icon") {
   sources = [
     "chrome_icon.imageset/Contents.json",
     "chrome_icon.imageset/chrome_icon@2x.png",
     "chrome_icon.imageset/chrome_icon@3x.png",
+  ]
+}
+
+imageset("sync_autofill") {
+  sources = [
+    "sync_autofill.imageset/Contents.json",
+    "sync_autofill.imageset/sync_autofill.pdf",
+  ]
+}
+
+imageset("sync_bookmarks") {
+  sources = [
+    "sync_bookmarks.imageset/Contents.json",
+    "sync_bookmarks.imageset/sync_bookmarks.pdf",
+  ]
+}
+
+imageset("sync_extensions") {
+  sources = [
+    "sync_extensions.imageset/Contents.json",
+    "sync_extensions.imageset/sync_extensions.pdf",
+  ]
+}
+
+imageset("sync_history") {
+  sources = [
+    "sync_history.imageset/Contents.json",
+    "sync_history.imageset/sync_history.pdf",
+  ]
+}
+
+imageset("sync_notes") {
+  sources = [
+    "sync_notes.imageset/Contents.json",
+    "sync_notes.imageset/sync_notes.pdf",
+  ]
+}
+
+imageset("sync_passwords") {
+  sources = [
+    "sync_passwords.imageset/Contents.json",
+    "sync_passwords.imageset/sync_passwords.pdf",
+  ]
+}
+
+imageset("sync_readinglist") {
+  sources = [
+    "sync_readinglist.imageset/Contents.json",
+    "sync_readinglist.imageset/sync_readinglist.pdf",
+  ]
+}
+
+imageset("sync_settings") {
+  sources = [
+    "sync_settings.imageset/Contents.json",
+    "sync_settings.imageset/sync_settings.pdf",
+  ]
+}
+
+# Main Setting
+
+imageset("vivaldi_setting_sync") {
+  sources = [
+    "vivaldi_setting_sync.imageset/Contents.json",
+    "vivaldi_setting_sync.imageset/vivaldi_setting_sync.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_default_browser") {
+  sources = [
+    "vivaldi_setting_default_browser.imageset/Contents.json",
+    "vivaldi_setting_default_browser.imageset/vivaldi_setting_default_browser.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_search_engine") {
+  sources = [
+    "vivaldi_setting_search_engine.imageset/Contents.json",
+    "vivaldi_setting_search_engine.imageset/vivaldi_setting_search_engine.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_passwords") {
+  sources = [
+    "vivaldi_setting_passwords.imageset/Contents.json",
+    "vivaldi_setting_passwords.imageset/vivaldi_setting_passwords.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_payment_methods") {
+  sources = [
+    "vivaldi_setting_payment_methods.imageset/Contents.json",
+    "vivaldi_setting_payment_methods.imageset/vivaldi_setting_payment_methods.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_addresses") {
+  sources = [
+    "vivaldi_setting_addresses.imageset/Contents.json",
+    "vivaldi_setting_addresses.imageset/vivaldi_setting_addresses.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_tabs") {
+  sources = [
+    "vivaldi_setting_tabs.imageset/Contents.json",
+    "vivaldi_setting_tabs.imageset/vivaldi_setting_tabs.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_start_page_layout") {
+  sources = [
+    "vivaldi_setting_start_page_layout.imageset/Contents.json",
+    "vivaldi_setting_start_page_layout.imageset/vivaldi_setting_start_page_layout.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_privacy") {
+  sources = [
+    "vivaldi_setting_privacy.imageset/Contents.json",
+    "vivaldi_setting_privacy.imageset/vivaldi_setting_privacy.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_atb") {
+  sources = [
+    "vivaldi_setting_atb.imageset/Contents.json",
+    "vivaldi_setting_atb.imageset/vivaldi_setting_atb.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_languages") {
+  sources = [
+    "vivaldi_setting_languages.imageset/Contents.json",
+    "vivaldi_setting_languages.imageset/vivaldi_setting_languages.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_contents") {
+  sources = [
+    "vivaldi_setting_contents.imageset/Contents.json",
+    "vivaldi_setting_contents.imageset/vivaldi_setting_contents.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_version") {
+  sources = [
+    "vivaldi_setting_version.imageset/Contents.json",
+    "vivaldi_setting_version.imageset/vivaldi_setting_version.pdf",
   ]
 }

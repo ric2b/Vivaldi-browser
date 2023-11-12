@@ -363,6 +363,8 @@ bool WaylandRemoteOutput::SendDisplayMetrics(const display::Display& display,
   return true;
 }
 
+void WaylandRemoteOutput::SendActiveDisplay() {}
+
 void WaylandRemoteOutput::OnOutputDestroyed() {
   display_handler_->RemoveObserver(this);
   display_handler_ = nullptr;
@@ -596,7 +598,7 @@ void WaylandRemoteShell::OnTabletModeEnded() {}
 
 void WaylandRemoteShell::ScheduleSendDisplayMetrics(int delay_ms) {
   needs_send_display_metrics_ = true;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&WaylandRemoteShell::SendDisplayMetrics,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -1282,13 +1284,14 @@ void remote_surface_set_aspect_ratio(wl_client* client,
 
 void remote_surface_set_snapped_to_left(wl_client* client,
                                         wl_resource* resource) {
-  GetUserDataAs<ClientControlledShellSurface>(resource)->SetSnappedToPrimary();
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetSnapPrimary(
+      chromeos::kDefaultSnapRatio);
 }
 
 void remote_surface_set_snapped_to_right(wl_client* client,
                                          wl_resource* resource) {
-  GetUserDataAs<ClientControlledShellSurface>(resource)
-      ->SetSnappedToSecondary();
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetSnapSecondary(
+      chromeos::kDefaultSnapRatio);
 }
 
 void remote_surface_start_resize(wl_client* client,

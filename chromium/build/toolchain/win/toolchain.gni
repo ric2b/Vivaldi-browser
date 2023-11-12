@@ -145,9 +145,9 @@ template("msvc_toolchain") {
       linker_wrapper = ""
       sys_lib_flags = "${invoker.sys_lib_flags} "  # Note trailing space.
       if (defined(is_vivaldi) && is_vivaldi &&
-          vivaldi_signing_key != "" && vivaldi_signing_command != "") {
+          vivaldi_signing_key != "") {
         vivaldi_signing_wrapper = rebase_path("//vivaldi/scripts/signing_wrapper.py", root_build_dir)
-        linker_wrapper = "$linker_wrapper$python_path $vivaldi_signing_wrapper --key \"$vivaldi_signing_key\" --cmd \"$vivaldi_signing_command\" $linker_wrapper"
+        linker_wrapper = "$linker_wrapper$python_path $vivaldi_signing_wrapper --key \"$vivaldi_signing_key\" --cmd \"$windows_sdk_path/bin/$vivaldi_win_sdk_version/x64/signtool.exe\" $linker_wrapper"
       }
     } else {
       # link.exe must be run under a wrapper to set up the environment
@@ -259,7 +259,7 @@ template("msvc_toolchain") {
           ml = "armasm64.exe"
         }
       } else {
-        if (toolchain_is_clang) {
+        if (toolchain_is_clang && !disable_llvm_ml) {
           prefix = rebase_path("$clang_base_path/bin", root_build_dir)
           ml = "$prefix/llvm-ml${_exe}"
           if (toolchain_args.current_cpu == "x64") {
@@ -284,7 +284,7 @@ template("msvc_toolchain") {
         if (toolchain_args.current_cpu != "arm64") {
           ml += " /c"
         }
-        if (use_lld && !toolchain_is_clang) {
+        if (use_lld && (!toolchain_is_clang || disable_llvm_ml)) {
           # Wrap ml(64).exe with a script that makes its output deterministic.
           # It's lld only because the script zaps obj Timestamp which
           # link.exe /incremental looks at.

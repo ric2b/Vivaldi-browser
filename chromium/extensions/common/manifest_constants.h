@@ -294,6 +294,7 @@ extern const char kInvalidFileBrowserHandlerMissingPermission[];
 extern const char16_t kInvalidFileFiltersList[];
 extern const char kInvalidFileFilterValue[];
 extern const char16_t kInvalidFileHandlers[];
+extern const char kInvalidFileHandlersMV3[];
 extern const char16_t kInvalidFileHandlersTooManyTypesAndExtensions[];
 extern const char kInvalidFileHandlerExtension[];
 extern const char kInvalidFileHandlerExtensionElement[];
@@ -465,6 +466,7 @@ extern const char kUnrecognizedManifestProperty[];
 extern const char16_t kWebRequestConflictsWithLazyBackground[];
 extern const char kInvalidExtensionOriginPopup[];
 extern const char kNonexistentDefaultPopup[];
+extern const char kCommandActionIncorrectForManifestActionType[];
 #if BUILDFLAG(IS_CHROMEOS)
 extern const char16_t kInvalidFileSystemProviderMissingCapabilities[];
 extern const char kInvalidFileSystemProviderMissingPermission[];

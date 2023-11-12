@@ -14,9 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
-#include "components/reporting/resources/disk_resource_impl.h"
-#include "components/reporting/resources/memory_resource_impl.h"
-#include "components/reporting/resources/resource_interface.h"
+#include "components/reporting/resources/resource_manager.h"
 
 namespace reporting {
 
@@ -60,12 +58,12 @@ class StorageOptions {
   }
   StorageOptions& set_max_total_files_size(uint64_t max_total_files_size) {
     disk_space_resource_ =
-        base::MakeRefCounted<DiskResourceImpl>(max_total_files_size);
+        base::MakeRefCounted<ResourceManager>(max_total_files_size);
     return *this;
   }
   StorageOptions& set_max_total_memory_size(uint64_t max_total_memory_size) {
     memory_resource_ =
-        base::MakeRefCounted<MemoryResourceImpl>(max_total_memory_size);
+        base::MakeRefCounted<ResourceManager>(max_total_memory_size);
     return *this;
   }
   const base::FilePath& directory() const { return directory_; }
@@ -80,10 +78,10 @@ class StorageOptions {
     return memory_resource_->GetTotal();
   }
 
-  scoped_refptr<ResourceInterface> disk_space_resource() const {
+  scoped_refptr<ResourceManager> disk_space_resource() const {
     return disk_space_resource_.get();
   }
-  scoped_refptr<ResourceInterface> memory_resource() const {
+  scoped_refptr<ResourceManager> memory_resource() const {
     return memory_resource_;
   }
 
@@ -99,8 +97,8 @@ class StorageOptions {
   size_t max_record_size_ = 1U * 1024UL * 1024UL;  // 1 MiB
 
   // Resources managements.
-  scoped_refptr<ResourceInterface> memory_resource_;
-  scoped_refptr<ResourceInterface> disk_space_resource_;
+  scoped_refptr<ResourceManager> memory_resource_;
+  scoped_refptr<ResourceManager> disk_space_resource_;
 };
 
 // Single queue options class allowing to set parameters individually, e.g.:
@@ -135,6 +133,10 @@ class QueueOptions {
     max_single_file_size_ = max_single_file_size;
     return *this;
   }
+  QueueOptions& set_can_shed_records(bool can_shed_records) {
+    can_shed_records_ = can_shed_records;
+    return *this;
+  }
   const base::FilePath& directory() const { return directory_; }
   const base::FilePath::StringType& file_prefix() const { return file_prefix_; }
   size_t max_record_size() const { return storage_options_.max_record_size(); }
@@ -147,10 +149,11 @@ class QueueOptions {
   uint64_t max_single_file_size() const { return max_single_file_size_; }
   base::TimeDelta upload_period() const { return upload_period_; }
   base::TimeDelta upload_retry_delay() const { return upload_retry_delay_; }
-  scoped_refptr<ResourceInterface> disk_space_resource() const {
+  bool can_shed_records() const { return can_shed_records_; }
+  scoped_refptr<ResourceManager> disk_space_resource() const {
     return storage_options_.disk_space_resource();
   }
-  scoped_refptr<ResourceInterface> memory_resource() const {
+  scoped_refptr<ResourceManager> memory_resource() const {
     return storage_options_.memory_resource();
   }
 
@@ -171,6 +174,9 @@ class QueueOptions {
   // Retry delay for a failed upload. If 0, not retried at all
   // (should only be set to 0 in periodic queues).
   base::TimeDelta upload_retry_delay_;
+  // Does the queue have the ability to perform a record shedding process on
+  // itself. Only SECURITY can't shed.
+  bool can_shed_records_ = true;
   // Cut-off file size of an individual queue
   // When file exceeds this size, the new file is created
   // for further records. Note that each file must have at least

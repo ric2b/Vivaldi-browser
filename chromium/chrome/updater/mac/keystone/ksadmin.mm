@@ -34,16 +34,14 @@
 #include "base/time/time.h"
 #include "chrome/updater/app/app.h"
 #include "chrome/updater/constants.h"
-#include "chrome/updater/mac/mac_util.h"
 #include "chrome/updater/mac/setup/ks_tickets.h"
-#include "chrome/updater/mac/update_service_proxy.h"
-#include "chrome/updater/persisted_data.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/mac_util.h"
+#include "chrome/updater/util/util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
@@ -194,7 +192,7 @@ void MaybeInstallUpdater(UpdaterScope scope) {
     return;
   }
 
-  if (scope == UpdaterScope::kSystem && geteuid() != 0) {
+  if (IsSystemInstall(scope) && geteuid() != 0) {
     VLOG(0) << "Cannot install system updater without root privilege.";
     return;
   }
@@ -245,6 +243,8 @@ class KSAdminApp : public App {
   void DoPrintTag(UpdaterScope scope);
   void DoPrintTickets(UpdaterScope scope);
 
+  static KSTicket* TicketFromAppState(
+      const updater::UpdateService::AppState& state);
   int PrintKeystoneTag(const std::string& app_id) const;
   void PrintKeystoneTickets(const std::string& app_id) const;
 
@@ -262,10 +262,20 @@ class KSAdminApp : public App {
   scoped_refptr<UpdateService> user_service_proxy_;
 };
 
+KSTicket* KSAdminApp::TicketFromAppState(
+    const updater::UpdateService::AppState& state) {
+  return [[[KSTicket alloc]
+      initWithAppId:base::SysUTF8ToNSString(state.app_id)
+            version:base::SysUTF8ToNSString(state.version.GetString())
+                ecp:state.ecp
+                tag:base::SysUTF8ToNSString(state.ap)
+          brandCode:base::SysUTF8ToNSString(state.brand_code)
+          brandPath:state.brand_path] autorelease];
+}
+
 scoped_refptr<UpdateService> KSAdminApp::ServiceProxy(
     UpdaterScope scope) const {
-  return scope == UpdaterScope::kSystem ? system_service_proxy_
-                                        : user_service_proxy_;
+  return IsSystemInstall(scope) ? system_service_proxy_ : user_service_proxy_;
 }
 
 void KSAdminApp::ChooseService(
@@ -487,8 +497,7 @@ void KSAdminApp::DoPrintTag(UpdaterScope scope) {
                   return base::EqualsCaseInsensitiveASCII(state.app_id, app_id);
                 });
         if (it != std::end(states)) {
-          KSTicket* ticket =
-              [[[KSTicket alloc] initWithAppState:*it] autorelease];
+          KSTicket* ticket = TicketFromAppState(*it);
           printf("%s\n",
                  base::SysNSStringToUTF8([ticket determineTag]).c_str());
 
@@ -551,8 +560,7 @@ void KSAdminApp::DoPrintTickets(UpdaterScope scope) {
               !base::EqualsCaseInsensitiveASCII(app_id, state.app_id)) {
             continue;
           }
-          KSTicket* ticket =
-              [[[KSTicket alloc] initWithAppState:state] autorelease];
+          KSTicket* ticket = TicketFromAppState(state);
           printf("%s\n", base::SysNSStringToUTF8([ticket description]).c_str());
           ticket_printed = true;
         }

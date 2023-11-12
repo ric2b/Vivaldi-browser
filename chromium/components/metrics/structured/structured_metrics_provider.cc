@@ -8,18 +8,20 @@
 
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/current_thread.h"
 #include "components/metrics/structured/enums.h"
 #include "components/metrics/structured/external_metrics.h"
 #include "components/metrics/structured/histogram_util.h"
+#include "components/metrics/structured/project_validator.h"
 #include "components/metrics/structured/storage.pb.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_validator.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
-namespace metrics {
-namespace structured {
+namespace metrics::structured {
 namespace {
 
 using ::metrics::ChromeUserMetricsExtension;
@@ -136,8 +138,9 @@ void StructuredMetricsProvider::OnProfileAdded(
   // in the first logged-in user's cryptohome. So if a second profile is added
   // we should ignore it. All init state beyond |InitState::kUninitialized| mean
   // a profile has already been added.
-  if (init_state_ != InitState::kUninitialized)
+  if (init_state_ != InitState::kUninitialized) {
     return;
+  }
   init_state_ = InitState::kProfileAdded;
 
   const auto save_delay = base::Milliseconds(kSaveDelayMs);
@@ -208,8 +211,9 @@ void StructuredMetricsProvider::OnEventRecord(const Event& event) {
 absl::optional<int> StructuredMetricsProvider::LastKeyRotation(
     const uint64_t project_name_hash) {
   DCHECK(base::CurrentUIThread::IsSet());
-  if (init_state_ != InitState::kInitialized)
+  if (init_state_ != InitState::kInitialized) {
     return absl::nullopt;
+  }
   DCHECK(profile_key_data_->is_initialized());
   DCHECK(device_key_data_->is_initialized());
 
@@ -273,8 +277,9 @@ void StructuredMetricsProvider::OnSystemProfileInitialized() {
 void StructuredMetricsProvider::ProvideCurrentSessionData(
     ChromeUserMetricsExtension* uma_proto) {
   DCHECK(base::CurrentUIThread::IsSet());
-  if (!recording_enabled_ || init_state_ != InitState::kInitialized)
+  if (!recording_enabled_ || init_state_ != InitState::kInitialized) {
     return;
+  }
 
   if (base::FeatureList::IsEnabled(kDelayUploadUntilHwid) &&
       !system_profile_initialized_) {
@@ -346,6 +351,12 @@ void StructuredMetricsProvider::ProvideIndependentMetrics(
   // Independent events should not be associated with the client_id, so clear
   // it.
   uma_proto->clear_client_id();
+  // TODO(crbug/1052796): Remove the UMA timer code, which is currently used to
+  // determine if it is worth to finalize independent logs in the background
+  // by measuring the time it takes to execute the callback
+  // MetricsService::PrepareProviderMetricsLogDone().
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "UMA.IndependentLog.StructuredMetricsProvider.FinalizeTime");
   std::move(done_callback).Run(true);
 }
 
@@ -397,7 +408,6 @@ void StructuredMetricsProvider::RecordEvent(const Event& event) {
     return;
   }
   const auto* project_validator = maybe_project_validator.value();
-
   const auto maybe_event_validator =
       project_validator->GetEventValidator(event.event_name());
   DCHECK(maybe_event_validator.has_value());
@@ -426,6 +436,27 @@ void StructuredMetricsProvider::RecordEvent(const Event& event) {
 
   event_proto->set_project_name_hash(project_validator->project_hash());
 
+  // Sequence-related metadata.
+  if (project_validator->event_type() ==
+          StructuredEventProto_EventType_SEQUENCE &&
+      base::FeatureList::IsEnabled(kEventSequenceLogging)) {
+    auto* event_sequence_metadata =
+        event_proto->mutable_event_sequence_metadata();
+
+    event_sequence_metadata->set_reset_counter(
+        event.event_sequence_metadata().reset_counter);
+    event_sequence_metadata->set_system_uptime(
+        event.recorded_time_since_boot().InMilliseconds());
+    event_sequence_metadata->set_event_unique_id(
+        base::HashMetricName(event.event_sequence_metadata().event_unique_id));
+    event_proto->set_device_project_id(
+        device_key_data_.get()->Id(project_validator->project_hash(),
+                                   project_validator->key_rotation_period()));
+    event_proto->set_user_project_id(
+        profile_key_data_.get()->Id(project_validator->project_hash(),
+                                    project_validator->key_rotation_period()));
+  }
+
   // Choose which KeyData to use for this event.
   KeyData* key_data;
   switch (project_validator->id_scope()) {
@@ -433,7 +464,17 @@ void StructuredMetricsProvider::RecordEvent(const Event& event) {
       key_data = profile_key_data_.get();
       break;
     case IdScope::kPerDevice:
-      key_data = device_key_data_.get();
+      // For event sequence, use the profile key for now to hash strings.
+      //
+      // TODO(crbug/1399632): Event sequence is considered a structured metrics
+      // project. Once the client supports device/profile split of events like
+      // structured metrics, remove this.
+      if (project_validator->event_type() ==
+          StructuredEventProto_EventType_SEQUENCE) {
+        key_data = profile_key_data_.get();
+      } else {
+        key_data = device_key_data_.get();
+      }
       break;
     default:
       // In case id_scope is uninitialized.
@@ -464,6 +505,7 @@ void StructuredMetricsProvider::RecordEvent(const Event& event) {
   switch (project_validator->event_type()) {
     case StructuredEventProto_EventType_REGULAR:
     case StructuredEventProto_EventType_RAW_STRING:
+    case StructuredEventProto_EventType_SEQUENCE:
       event_proto->set_event_type(project_validator->event_type());
       break;
     default:
@@ -512,9 +554,11 @@ void StructuredMetricsProvider::RecordEvent(const Event& event) {
       case Event::MetricType::kRawString:
         metric_proto->set_value_string(value.GetString());
         break;
+      case Event::MetricType::kDouble:
+        metric_proto->set_value_double(value.GetDouble());
+        break;
       // Not supported yet.
       case Event::MetricType::kInt:
-      case Event::MetricType::kDouble:
       case Event::MetricType::kBoolean:
         break;
     }
@@ -530,5 +574,4 @@ void StructuredMetricsProvider::HashUnhashedEventsAndPersist() {
   }
 }
 
-}  // namespace structured
-}  // namespace metrics
+}  // namespace metrics::structured

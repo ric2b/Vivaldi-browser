@@ -4,11 +4,6 @@
 
 #include "chrome/browser/ash/device_sync/device_sync_client_factory.h"
 
-#include "ash/services/device_sync/device_sync_impl.h"
-#include "ash/services/device_sync/public/cpp/device_sync_client.h"
-#include "ash/services/device_sync/public/cpp/device_sync_client_impl.h"
-#include "ash/services/device_sync/stub_device_sync.h"
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/timer/timer.h"
@@ -21,6 +16,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chromeos/ash/components/multidevice/stub_multidevice_util.h"
+#include "chromeos/ash/services/device_sync/device_sync_impl.h"
+#include "chromeos/ash/services/device_sync/public/cpp/device_sync_client.h"
+#include "chromeos/ash/services/device_sync/public/cpp/device_sync_client_impl.h"
+#include "chromeos/ash/services/device_sync/stub_device_sync.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/account_id/account_id.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -48,7 +48,7 @@ class DeviceSyncClientHolder : public KeyedService {
  public:
   explicit DeviceSyncClientHolder(content::BrowserContext* context)
       : soft_bind_attestation_flow_(
-            std::make_unique<ash::attestation::SoftBindAttestationFlow>()),
+            std::make_unique<attestation::SoftBindAttestationFlow>()),
         device_sync_(CreateDeviceSyncImplForProfile(
             Profile::FromBrowserContext(context))),
         device_sync_client_(DeviceSyncClientImpl::Factory::Create()) {
@@ -56,7 +56,8 @@ class DeviceSyncClientHolder : public KeyedService {
     device_sync_->BindReceiver(device_sync_client_->GetDeviceSyncRemote()
                                    ->BindNewPipeAndPassReceiver());
     // Finish client initialization.
-    device_sync_client_->Initialize(base::ThreadTaskRunnerHandle::Get());
+    device_sync_client_->Initialize(
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
 
   DeviceSyncClientHolder(const DeviceSyncClientHolder&) = delete;
@@ -78,7 +79,7 @@ class DeviceSyncClientHolder : public KeyedService {
     return DeviceSyncImpl::Factory::Create(
         IdentityManagerFactory::GetForProfile(profile),
         gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver(),
-        profile->GetPrefs(), chromeos::GcmDeviceInfoProviderImpl::GetInstance(),
+        profile->GetPrefs(), GcmDeviceInfoProviderImpl::GetInstance(),
         ClientAppMetadataProviderServiceFactory::GetForProfile(profile),
         profile->GetURLLoaderFactory(), std::make_unique<base::OneShotTimer>(),
         base::BindRepeating(&DeviceSyncClientHolder::GetAttestationCertificates,
@@ -87,7 +88,7 @@ class DeviceSyncClientHolder : public KeyedService {
 
   void GetAttestationCertificates(
       Profile* profile,
-      ash::attestation::SoftBindAttestationFlow::Callback notify_callback,
+      attestation::SoftBindAttestationFlow::Callback notify_callback,
       const std::string& user_key) {
     const user_manager::User* user =
         ProfileHelper::Get()->GetUserByProfile(profile);
@@ -96,7 +97,7 @@ class DeviceSyncClientHolder : public KeyedService {
         user ? user->GetAccountId() : EmptyAccountId(), user_key);
   }
 
-  std::unique_ptr<ash::attestation::SoftBindAttestationFlow>
+  std::unique_ptr<attestation::SoftBindAttestationFlow>
       soft_bind_attestation_flow_;
 
   std::unique_ptr<DeviceSyncBase> device_sync_;
@@ -105,6 +106,7 @@ class DeviceSyncClientHolder : public KeyedService {
 
 DeviceSyncClientFactory::DeviceSyncClientFactory()
     : ProfileKeyedServiceFactory("DeviceSyncClient") {
+  DependsOn(ClientAppMetadataProviderServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
 

@@ -9,14 +9,17 @@
 #include "ash/public/cpp/schedule_enums.h"
 #include "ash/system/scheduled_feature/scheduled_feature.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
+#include "chrome/browser/ash/login/wizard_context.h"
+#include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/theme_selection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/theme_selection_screen_handler.h"
 #include "components/prefs/pref_service.h"
 #include "ui/native_theme/native_theme.h"
 
 namespace ash {
 
 namespace {
+
 constexpr const char kUserActionNext[] = "next";
 constexpr const char kUserActionSelect[] = "select";
 
@@ -58,11 +61,18 @@ bool ThemeSelectionScreen::ShouldBeSkipped(const WizardContext& context) const {
   if (context.skip_post_login_screens_for_tests)
     return true;
 
+  if (features::IsOobeChoobeEnabled() &&
+      WizardController::default_controller()
+          ->GetChoobeFlowController()
+          ->ShouldScreenBeSkipped(ThemeSelectionScreenView::kScreenId)) {
+    return true;
+  }
+
   const PrefService::Preference* pref =
       ProfileManager::GetActiveUserProfile()->GetPrefs()->FindPreference(
           prefs::kDarkModeScheduleType);
   if (pref->IsManaged() || pref->IsRecommended() ||
-      !chromeos::features::IsOobeThemeSelectionEnabled() ||
+      !features::IsOobeThemeSelectionEnabled() ||
       !features::IsDarkLightModeEnabled()) {
     return true;
   }
@@ -90,6 +100,10 @@ void ThemeSelectionScreen::HideImpl() {}
 void ThemeSelectionScreen::OnUserAction(const base::Value::List& args) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   const std::string& action_id = args[0].GetString();
+
+  // Set the nudge shown count to 0 once the user goes through the Dark / Light
+  // setup to avoiding triggering Dark / Light nudge after OOBE.
+  profile->GetPrefs()->SetInteger(prefs::kDarkLightModeNudgeLeftToShowCount, 0);
 
   if (action_id == kUserActionSelect) {
     const SelectedTheme selected_theme =

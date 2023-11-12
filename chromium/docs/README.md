@@ -69,6 +69,7 @@ used when committed.
 *   [iOS Build Instructions](ios/build_instructions.md) - iOS target (on a MacOS
     host)
 *   [Chrome OS Build Instructions](chromeos_build_instructions.md) - Chrome OS
+*   [Lacros Build Instructions](lacros/build_instructions.md) - Lacros
 *   [Linux Chromium ARM Recipes](linux/chromium_arm.md) - Recipes for building
     Chromium for ARM on Linux.
 *   [Chrome Component Build](component_build.md) - Faster builds using more
@@ -173,6 +174,8 @@ used when committed.
 *   [API Keys](api_keys.md) - When you need access to Google APIs for a custom
     build, fork, integration of stock Chromium, or are building ChromiumOS (for
     login).
+*   [User Education](../components/user_education/README.md) - Create
+    in-product help (IPH) and tutorials to call out Chromium features
 
 ### Testing
 *   [Running and Debugging Web Tests](testing/web_tests.md)
@@ -327,6 +330,7 @@ used when committed.
 *   [Debugging UI in OOBE/login/lock](login/ui_debugging.md)
 *   [Chrome Logging on Chrome OS](chrome_os_logging.md)
 *   [Debugging tips](testing/chromeos_debugging_tips.md)
+*   [What is Lacros](lacros.md)
 
 ### Misc WebUI-Specific Docs
 *   [Creating WebUI Interfaces in components/](webui_in_components.md) How to

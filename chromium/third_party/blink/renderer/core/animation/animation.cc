@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/core/animation/timing_calculations.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unit_values.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
@@ -1028,7 +1029,6 @@ absl::optional<AnimationTimeDelta> Animation::CalculateCurrentTime() const {
 // https://www.w3.org/TR/web-animations-1/#setting-the-start-time-of-an-animation
 void Animation::setStartTime(const V8CSSNumberish* start_time,
                              ExceptionState& exception_state) {
-
   absl::optional<AnimationTimeDelta> new_start_time;
   // Failure to convert results in a thrown exception and returning false.
   if (!ConvertCSSNumberishToTime(start_time, new_start_time, "startTime",
@@ -1936,20 +1936,35 @@ void Animation::setPlaybackRate(double playback_rate,
   // 2. Let previous time be the value of the current time of animation before
   //    changing the playback rate.
   // 3. Set the playback rate to new playback rate.
-  // 4. If previous time is resolved, set the current time of animation to
-  //    previous time
+  // 4. If the timeline is monotonically increasing and the previous time is
+  //    resolved, set the current time of animation to previous time.
+  // 5. If the timeline is not monotonically increasing, the start time is
+  //    resolved and either:
+  //      * the previous playback rate < 0 and the new playback rate >= 0, or
+  //      * the previous playback rate >= 0 and the new playback rate < 0,
+  //    Set animation's start time to the result of evaluating:
+  //        associated effect end - start time
+  bool preserve_current_time =
+      timeline() && timeline()->IsMonotonicallyIncreasing();
+
+  bool reversal = (EffectivePlaybackRate() < 0) != (playback_rate < 0);
   pending_playback_rate_ = absl::nullopt;
   V8CSSNumberish* previous_current_time = currentTime();
   playback_rate_ = playback_rate;
-  if (previous_current_time) {
+  if (previous_current_time && preserve_current_time) {
     setCurrentTime(previous_current_time, exception_state);
+  }
+
+  if (timeline() && !timeline()->IsMonotonicallyIncreasing() && reversal &&
+      start_time_) {
+    start_time_ = EffectEnd() - start_time_.value();
   }
 
   // Adds a UseCounter to check if setting playbackRate causes a compensatory
   // seek forcing a change in start_time_
   // We use an epsilon (1 microsecond) to handle precision issue.
   double epsilon = 1e-6;
-  if (start_time_before && start_time_ &&
+  if (preserve_current_time && start_time_before && start_time_ &&
       fabs(start_time_.value().InMillisecondsF() -
            start_time_before.value().InMillisecondsF()) > epsilon &&
       CalculateAnimationPlayState() != kFinished) {
@@ -2290,7 +2305,7 @@ bool Animation::Update(TimingUpdateReason reason) {
     }
 
     content_->UpdateInheritedTime(inherited_time, AtScrollTimelineBoundary(),
-                                  playback_rate_, reason);
+                                  idle, playback_rate_, reason);
 
     // After updating the animation time if the animation is no longer current
     // blink will no longer composite the element (see
@@ -2305,10 +2320,10 @@ bool Animation::Update(TimingUpdateReason reason) {
     if (idle || CalculateAnimationPlayState() == kFinished) {
       finished_ = true;
     }
+    NotifyProbe();
   }
 
   DCHECK(!outdated_);
-  NotifyProbe();
 
   return !finished_ || TimeToEffectChange() ||
          // Always return true for not idle animations attached to not
@@ -2368,6 +2383,7 @@ absl::optional<AnimationTimeDelta> Animation::TimeToEffectChange() {
              : (content_->TimeToReverseEffectChange() / -playback_rate_);
 }
 
+// https://www.w3.org/TR/web-animations-1/#canceling-an-animation-section
 void Animation::cancel() {
   AnimationTimeDelta current_time_before_cancel =
       CurrentTimeInternal().value_or(AnimationTimeDelta());
@@ -2400,7 +2416,7 @@ void Animation::cancel() {
   start_time_ = absl::nullopt;
 
   // Apply changes synchronously.
-  SetCompositorPending(/*effect_changed=*/false);
+  CancelAnimationOnCompositor();
   SetOutdated();
 
   // Force dispatch of canceled event.
@@ -2563,6 +2579,11 @@ void Animation::InvalidateEffectTargetStyle() {
                                 StyleChangeReasonForTracing::Create(
                                     style_change_reason::kScrollTimeline));
   }
+}
+
+void Animation::InvalidateNormalizedTiming() {
+  if (effect())
+    effect()->InvalidateNormalizedTiming();
 }
 
 void Animation::ResolvePromiseMaybeAsync(AnimationPromise* promise) {
@@ -2827,17 +2848,13 @@ bool Animation::IsInDisplayLockedSubtree() {
 }
 
 void Animation::UpdateCompositedPaintStatus() {
-  if (!RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled())
+  if (!RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled() &&
+      !RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled())
     return;
 
   KeyframeEffect* keyframe_effect = DynamicTo<KeyframeEffect>(content_.Get());
   if (!keyframe_effect)
     return;
-
-  if (!keyframe_effect->Affects(
-          PropertyHandle(GetCSSPropertyBackgroundColor()))) {
-    return;
-  }
 
   Element* target = keyframe_effect->EffectTarget();
   if (!target)
@@ -2846,8 +2863,17 @@ void Animation::UpdateCompositedPaintStatus() {
   ElementAnimations* element_animations = target->GetElementAnimations();
   DCHECK(element_animations);
 
-  element_animations->SetCompositedBackgroundColorStatus(
-      ElementAnimations::CompositedPaintStatus::kNeedsRepaintOrNoAnimation);
+  if (RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled() &&
+      keyframe_effect->Affects(
+          PropertyHandle(GetCSSPropertyBackgroundColor()))) {
+    element_animations->SetCompositedBackgroundColorStatus(
+        ElementAnimations::CompositedPaintStatus::kNeedsRepaintOrNoAnimation);
+  }
+  if (RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled() &&
+      keyframe_effect->Affects(PropertyHandle(GetCSSPropertyClipPath()))) {
+    element_animations->SetCompositedClipPathStatus(
+        ElementAnimations::CompositedPaintStatus::kNeedsRepaintOrNoAnimation);
+  }
 }
 
 void Animation::Trace(Visitor* visitor) const {

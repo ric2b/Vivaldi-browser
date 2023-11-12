@@ -21,7 +21,7 @@
 #include "base/callback_forward.h"
 #include "base/cancelable_callback.h"
 #include "base/containers/queue.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -311,7 +311,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
   // function definition.
   void NotifyFlushDoneIfNeeded();
   // Notify the client of a flush completion.
-  void NofityFlushDone();
+  void NotifyFlushDone();
   // Returns true if VIDIOC_DECODER_CMD is supported.
   bool IsDecoderCmdSupported();
   // Send V4L2_DEC_CMD_STOP to the driver. Return true if success.

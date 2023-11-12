@@ -20,10 +20,10 @@
 #include "chrome/browser/policy/messaging_layer/upload/upload_provider.h"
 #include "chromeos/dbus/missive/missive_client.h"
 #include "components/reporting/proto/synced/interface.pb.h"
-#include "components/reporting/resources/memory_resource_impl.h"
+#include "components/reporting/proto/synced/status.pb.h"
+#include "components/reporting/resources/resource_manager.h"
 #include "components/reporting/storage_selector/storage_selector.h"
 #include "components/reporting/util/status.h"
-#include "components/reporting/util/status.pb.h"
 #include "components/reporting/util/statusor.h"
 #include "dbus/bus.h"
 #include "dbus/exported_object.h"
@@ -59,8 +59,8 @@ EncryptedReportingServiceProvider::EncryptedReportingServiceProvider(
     std::unique_ptr<::reporting::EncryptedReportingUploadProvider>
         upload_provider)
     : origin_thread_id_(base::PlatformThread::CurrentId()),
-      origin_thread_runner_(base::ThreadTaskRunnerHandle::Get()),
-      memory_resource_(base::MakeRefCounted<::reporting::MemoryResourceImpl>(
+      origin_thread_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+      memory_resource_(base::MakeRefCounted<::reporting::ResourceManager>(
           kDefaultMemoryAllocation)),
       upload_provider_(std::move(upload_provider)) {
   DCHECK(upload_provider_.get());

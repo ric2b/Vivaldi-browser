@@ -43,20 +43,16 @@ void CSSMediaRule::SetMediaQueries(const MediaQuerySet* media_queries) {
 
 String CSSMediaRule::cssText() const {
   StringBuilder result;
-  result.Append("@media ");
+  result.Append("@media");
   if (MediaQueries()) {
-    result.Append(MediaQueries()->MediaText());
     result.Append(' ');
+    result.Append(MediaQueries()->MediaText());
   }
-  result.Append("{\n");
   AppendCSSTextForItems(result);
-  result.Append('}');
   return result.ReleaseString();
 }
 
 String CSSMediaRule::conditionText() const {
-  if (MediaQueries() && MediaQueries()->HasUnknown())
-    CountUse(WebFeature::kCSSOMMediaConditionUnknown);
   return ConditionTextInternal();
 }
 

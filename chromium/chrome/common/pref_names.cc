@@ -11,6 +11,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_font_webkit_names.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -1705,6 +1706,12 @@ const char kWebRtcLocalIpsAllowedUrls[] = "webrtc.local_ips_allowed_urls";
 const char kWebRTCAllowLegacyTLSProtocols[] =
     "webrtc.allow_legacy_tls_protocols";
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(ENABLE_DICE_SUPPORT)
+// Boolean that indicates that the first run experience has been finished (or
+// skipped by some policy) for this browser install.
+const char kFirstRunFinished[] = "browser.first_run_finished";
+#endif
+
 #if !BUILDFLAG(IS_ANDROID)
 // Whether or not this profile has been shown the Welcome page.
 const char kHasSeenWelcomePage[] = "browser.has_seen_welcome_page";
@@ -1774,9 +1781,13 @@ const char kForceMajorVersionToMinorPositionInUserAgent[] =
 const char kSidePanelHorizontalAlignment[] = "side_panel.is_right_aligned";
 #endif
 
-// Number of minutes of inactivity before closing the profile and showing the
-// Profile Picker. Controlled via the IdleProfileCloseTimeout policy.
-const char kIdleProfileCloseTimeout[] = "idle_profile_close_timeout";
+// Number of minutes of inactivity before running actions from
+// kIdleTimeoutActions. Controlled via the IdleTimeout policy.
+const char kIdleTimeout[] = "idle_timeout";
+
+// Actions to run when the idle timeout is reached. Controller via the
+// IdleTimeoutActions policy.
+const char kIdleTimeoutActions[] = "idle_timeout_actions";
 
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
@@ -1932,6 +1943,12 @@ const char kDefaultTasksBySuffix[] = "filebrowser.tasks.default_by_suffix";
 // DefaultHandlersForFileExtensions policy.
 const char kDefaultHandlersForFileExtensions[] =
     "filebrowser.default_handlers_for_file_extensions";
+
+// Whether the office files setup flow has ever been completed by the user.
+const char kOfficeSetupComplete[] = "filebrowser.office.setup_complete";
+
+// Whether we should always move office files without prompting the user first.
+const char kOfficeFilesAlwaysMove[] = "filebrowser.office.always_move";
 #endif
 
 // A flag to enable/disable the Shared Clipboard feature which enables users to
@@ -2313,6 +2330,11 @@ const char kIsolatedWebAppInstallForceList[] =
     "profile.isolated_web_app.install.forcelist";
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+#if BUILDFLAG(IS_WIN)
+// The integer value of the CloudAPAuthEnabled policy.
+const char kCloudApAuthEnabled[] = "auth.cloud_ap_auth.enabled";
+#endif  // BUILDFLAG(IS_WIN)
+
 // Boolean that specifies whether to enable revocation checking (best effort)
 // by default.
 const char kCertRevocationCheckingEnabled[] = "ssl.rev_checking.enabled";
@@ -2362,11 +2384,32 @@ const char kBuiltInDnsClientEnabled[] = "async_dns.enabled";
 // String specifying the secure DNS mode to use. Any string other than
 // "secure" or "automatic" will be mapped to the default "off" mode.
 const char kDnsOverHttpsMode[] = "dns_over_https.mode";
+
 // String containing a space-separated list of DNS over HTTPS templates to use
 // in secure mode or automatic mode. If no templates are specified in automatic
 // mode, we will attempt discovery of DoH servers associated with the configured
 // insecure resolvers.
 const char kDnsOverHttpsTemplates[] = "dns_over_https.templates";
+
+#if BUILDFLAG(IS_CHROMEOS)
+// String containing a space-separated list of DNS over HTTPS templates to use
+// in secure mode or automatic mode. If no templates are specified in automatic
+// mode, we will attempt discovery of DoH servers associated with the configured
+// insecure resolvers.
+// This is very similar to kDnsOverHttpsTemplates except that on ChromeOS it
+// supports additional variables which are used to transport identity
+// information to the DNS provider. This is ignored on all other platforms than
+// ChromeOS. On ChromeOS if it exists it will override kDnsOverHttpsTemplates,
+// otherwise kDnsOverHttpsTemplates will be used. This pref is only evaluated if
+// kDnsOverHttpsSalt is set.
+const char kDnsOverHttpsTemplatesWithIdentifiers[] =
+    "dns_over_https.templates_with_identifiers";
+// String containing a salt value. This is used together with
+// kDnsOverHttpsTemplatesWithIdentifiers, only. The value will be used as a salt
+// to a hash applied to the various identity variables to prevent dictionary
+// attacks.
+const char kDnsOverHttpsSalt[] = "dns_over_https.salt";
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Boolean that specifies whether additional DNS query types (e.g. HTTPS) may be
 // queried alongside the traditional A and AAAA queries.
@@ -2804,20 +2847,6 @@ const char kCloudPrintSubmitEnabled[] = "cloud_print.submit_enabled";
 const char kMaxConnectionsPerProxy[] = "net.max_connections_per_proxy";
 
 #if BUILDFLAG(IS_MAC)
-// Set to true if the user removed our login item so we should not create a new
-// one when uninstalling background apps.
-const char kUserRemovedLoginItem[] = "background_mode.user_removed_login_item";
-
-// Set to true if Chrome already created a login item, so there's no need to
-// create another one.
-const char kChromeCreatedLoginItem[] =
-    "background_mode.chrome_created_login_item";
-
-// Set to true once we've initialized kChromeCreatedLoginItem for the first
-// time.
-const char kMigratedLoginItemPref[] =
-    "background_mode.migrated_login_item_pref";
-
 // A boolean that tracks whether to show a notification when trying to quit
 // while there are apps running.
 const char kNotifyWhenAppsKeepChromeAlive[] =
@@ -3081,7 +3110,7 @@ const char kLacrosAccessibilityLargeCursorEnabled[] =
 // settings.a11y.screen_magnifier_type2, but we only shipped one type (full).
 // See http://crbug.com/170850 for history.
 const char kLacrosAccessibilityScreenMagnifierEnabled[] =
-    "lacros.ettings.a11y.screen_magnifier";
+    "lacros.settings.a11y.screen_magnifier";
 
 // A boolean pref which determines whether select-to-speak is enabled.
 const char kLacrosAccessibilitySelectToSpeakEnabled[] =
@@ -3449,13 +3478,21 @@ const char kShowCaretBrowsingDialog[] =
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enum pref indicating how to launch the Lacros browser. It is managed by
-// LacrosAvailability policy can have one of the following values:
+// LacrosAvailability policy and can have one of the following values:
 // 0: User choice (default value).
 // 1: Lacros is disallowed.
 // 2: Lacros is enabled but not the pimary browser.
 // 3: Lacros is enabled as the primary browser.
 // 4: Lacros is the only available browser.
 const char kLacrosLaunchSwitch[] = "lacros_launch_switch";
+
+// Enum pref indicating which Lacros browser to launch: rootfs or stateful. It
+// is managed by LacrosSelection policy and can have one of the following
+// values:
+// 0: User choice (default value).
+// 1: Always load rootfs Lacros.
+// 2: Always load stateful Lacros.
+const char kLacrosSelection[] = "lacros_selection";
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -3568,6 +3605,10 @@ const char kLastWhatsNewVersion[] = "browser.last_whats_new_version";
 // A boolean indicating whether the Lens Region search feature should be enabled
 // if supported.
 const char kLensRegionSearchEnabled[] = "policy.lens_region_search_enabled";
+// A boolean indicating whether the Lens NTP searchbox feature should be enabled
+// if supported.
+const char kLensDesktopNTPSearchEnabled[] =
+    "policy.lens_desktop_ntp_search_enabled";
 #endif
 
 // A boolean indicating whether the Privacy guide feature has been viewed. This
@@ -3596,6 +3637,11 @@ const char kSCTAuditingHashdanceReportCount[] =
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kConsumerAutoUpdateToggle[] = "settings.consumer_auto_update_toggle";
+
+// A boolean pref that controls whether or not Hindi Inscript keyboard layout
+// is available. Set with the corresponding enterprise policy.
+const char kHindiInscriptLayoutEnabled[] =
+    "settings.input.hindi_inscript_layout_enabled";
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -3627,5 +3673,32 @@ const char kStrictMimetypeCheckForWorkerScriptsEnabled[] =
 const char kVirtualKeyboardResizesLayoutByDefault[] =
     "virtual_keyboard_resizes_layout_by_default";
 #endif  // BUILDFLAG(IS_ANDROID)
+
+// A boolean indicating whether Access-Control-Allow-Methods matching in CORS
+// preflights is fixed according to the spec. https://crbug.com/1228178
+const char kAccessControlAllowMethodsInCORSPreflightSpecConformant[] =
+    "access_control_allow_methods_in_cors_preflight_spec_conformant";
+
+// A time preference keeping track of the last time the DIPS service performed
+// DIPS-related repeated actions (logging metrics, clearing state, etc).
+const char kDIPSTimerLastUpdate[] = "dips_timer_last_update";
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// A dictionary that keeps client_ids assigned by Authorization Servers indexed
+// by URLs of these servers. It does not contain empty strings.
+const char kPrintingOAuth2AuthorizationServers[] =
+    "printing.oauth2_authorization_servers";
+#endif
+
+// If true, the feature ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes
+// will be allowed, otherwise attempts to enable the feature will be
+// disallowed.
+const char kThrottleNonVisibleCrossOriginIframesAllowed[] =
+    "throttle_non_visible_cross_origin_iframes_allowed";
+
+// If true, the feature NewBaseUrlInheritanceBehavior will be allowed, otherwise
+// attempts to enable the feature will be disallowed.
+const char kNewBaseUrlInheritanceBehaviorAllowed[] =
+    "new_base_url_inheritance_behavior_allowed";
 
 }  // namespace prefs

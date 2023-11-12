@@ -6,27 +6,31 @@ package org.chromium.chrome.browser.keyboard_accessory.bar_component;
 
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryIPHUtils.hasShownAnyAutofillIphBefore;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryIPHUtils.showHelpBubble;
+import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.HAS_SUGGESTIONS;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.KEYBOARD_TOGGLE_VISIBLE;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.OBFUSCATED_CHILD_AT_CALLBACK;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHEET_TITLE;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHOW_KEYBOARD_CALLBACK;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHOW_SWIPING_IPH;
 
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.google.android.material.tabs.TabLayout;
-
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.browser.autofill.AutofillUiUtils;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.AutofillBarItem;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.BarItem;
-import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.TabLayoutBarItem;
+import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SheetOpenerBarItem;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryViewBinder.BarItemViewHolder;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
+import org.chromium.components.autofill.AutofillSuggestion;
+import org.chromium.components.autofill.PopupItemId;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -38,12 +42,15 @@ import org.chromium.ui.widget.RectProvider;
  * the {@link KeyboardAccessoryViewBinder} which will modify the view accordingly.
  */
 class KeyboardAccessoryModernViewBinder {
+    // Credit card suggestion ids are at least 17 bits long.
+    private static final int CREDIT_CARD_ID_BIT_MASK = 0xFFFF0000;
+
     static BarItemViewHolder create(ViewGroup parent, @BarItem.Type int viewType) {
         switch (viewType) {
             case BarItem.Type.SUGGESTION:
                 return new BarItemChipViewHolder(parent);
             case BarItem.Type.TAB_LAYOUT:
-                return new TabItemViewHolder(parent);
+                return new SheetOpenerViewHolder(parent);
             case BarItem.Type.ACTION_BUTTON:
                 return new KeyboardAccessoryViewBinder.BarItemTextViewHolder(
                         parent, R.layout.keyboard_accessory_action_modern);
@@ -77,6 +84,30 @@ class KeyboardAccessoryModernViewBinder {
                     showHelpBubble(item.getFeatureForIPH(), chipView, mRootViewForIPH, null);
                 }
             }
+
+            // Credit card chips never occupy the entire width of the window to allow for other
+            // cards (if they exist) to be seen. Their max width is set to 85% of the window width.
+            // The chip size is limited by truncating the card label.
+            // TODO (crbug.com/1376691): Check if it's alright to instead show a fixed portion of
+            // the following chip. This might give a more consistent user experience and allow wider
+            // windows to show more information in a chip before truncating.
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA)
+                    && ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.AUTOFILL_ENABLE_CARD_PRODUCT_NAME)
+                    && containsCreditCardInfo(item.getSuggestion())) {
+                int windowWidth =
+                        chipView.getContext().getResources().getDisplayMetrics().widthPixels;
+                chipView.setMaxWidth((int) (windowWidth * 0.85));
+            } else {
+                // For other data types, there is no limit on width.
+                chipView.setMaxWidth(Integer.MAX_VALUE);
+            }
+
+            // When chips are recycled, the constraint on primary text width (that is applied on
+            // long credit card suggestions) can persist. Reset such constraints.
+            chipView.getPrimaryTextView().setMaxWidth(Integer.MAX_VALUE);
+            chipView.getPrimaryTextView().setEllipsize(null);
+
             chipView.getPrimaryTextView().setText(item.getSuggestion().getLabel());
             if (item.getSuggestion().getItemTag() != null
                     && !item.getSuggestion().getItemTag().isEmpty()) {
@@ -105,16 +136,19 @@ class KeyboardAccessoryModernViewBinder {
             // the event that the bitmap is not present in the PersonalDataManager, fall back to the
             // default `iconId`.
             Bitmap customIconBitmap = null;
+            Resources res = chipView.getContext().getResources();
             if (item.getSuggestion().getCustomIconUrl() != null
                     && item.getSuggestion().getCustomIconUrl().isValid()) {
-                customIconBitmap = PersonalDataManager.getInstance()
-                                           .getCustomImageForAutofillSuggestionIfAvailable(
-                                                   item.getSuggestion().getCustomIconUrl());
+                customIconBitmap =
+                        PersonalDataManager.getInstance().getCustomImageForAutofillSuggestionIfAvailable(
+                                AutofillUiUtils.getCCIconURLWithParams(
+                                        item.getSuggestion().getCustomIconUrl(),
+                                        res.getDimensionPixelSize(
+                                                R.dimen.keyboard_accessory_bar_item_cc_icon_width),
+                                        res.getDimensionPixelSize(R.dimen.chip_icon_size)));
             }
             if (customIconBitmap != null) {
-                chipView.setIcon(new BitmapDrawable(mRootViewForIPH.getContext().getResources(),
-                                         customIconBitmap),
-                        false);
+                chipView.setIcon(new BitmapDrawable(res, customIconBitmap), false);
             } else {
                 chipView.setIcon(iconId != 0 ? iconId : ChipView.INVALID_ICON_ID, false);
             }
@@ -122,24 +156,24 @@ class KeyboardAccessoryModernViewBinder {
         }
     }
 
-    static class TabItemViewHolder extends BarItemViewHolder<TabLayoutBarItem, TabLayout> {
-        private TabLayoutBarItem mTabItem;
-        private TabLayout mTabLayout;
+    static class SheetOpenerViewHolder extends BarItemViewHolder<SheetOpenerBarItem, View> {
+        private SheetOpenerBarItem mSheetOpenerItem;
+        private View mView;
 
-        TabItemViewHolder(ViewGroup parent) {
-            super(parent, R.layout.keyboard_accessory_tabs);
+        SheetOpenerViewHolder(ViewGroup parent) {
+            super(parent, R.layout.keyboard_accessory_buttons);
         }
 
         @Override
-        protected void bind(TabLayoutBarItem tabItem, TabLayout tabLayout) {
-            mTabItem = tabItem;
-            mTabLayout = tabLayout;
-            tabItem.notifyAboutViewCreation(tabLayout);
+        protected void bind(SheetOpenerBarItem sheetOpenerItem, View view) {
+            mSheetOpenerItem = sheetOpenerItem;
+            mView = view;
+            sheetOpenerItem.notifyAboutViewCreation(view);
         }
 
         @Override
         protected void recycle() {
-            mTabItem.notifyAboutViewDestruction(mTabLayout);
+            mSheetOpenerItem.notifyAboutViewDestruction(mView);
         }
     }
 
@@ -162,8 +196,15 @@ class KeyboardAccessoryModernViewBinder {
                 showHelpBubble(FeatureConstants.KEYBOARD_ACCESSORY_BAR_SWIPING_FEATURE,
                         swipingIphRectProvider, modernView.mBarItemsView);
             }
+        } else if (propertyKey == HAS_SUGGESTIONS) {
+            modernView.setAccessibilityMessage(model.get(HAS_SUGGESTIONS));
         } else {
             assert wasBound : "Every possible property update needs to be handled!";
         }
+    }
+
+    private static boolean containsCreditCardInfo(AutofillSuggestion suggestion) {
+        return (suggestion.getSuggestionId() & CREDIT_CARD_ID_BIT_MASK) != 0
+                || suggestion.getSuggestionId() == PopupItemId.ITEM_ID_VIRTUAL_CREDIT_CARD_ENTRY;
     }
 }

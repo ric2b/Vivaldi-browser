@@ -24,9 +24,11 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
@@ -52,12 +54,16 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
+#include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/custom_handlers/protocol_handler.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
@@ -86,6 +92,7 @@
 #include "base/vivaldi_switches.h"
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "components/locale/locale_kit.h"
@@ -94,6 +101,8 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "sync/file_sync/file_store.h"
+#include "sync/file_sync/file_store_factory.h"
 #include "ui/lights/razer_chroma_handler.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
@@ -151,12 +160,13 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
 }  // namespace
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
-    : browser_context_(context),
-      password_access_authenticator_(
-          base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
-                              base::Unretained(this)),
-          base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
-                              base::Unretained(this))) {
+  : browser_context_(context) {
+  password_access_authenticator_.Init(
+    base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
+      base::Unretained(this)),
+    base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
+      base::Unretained(this)));
+
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
                                  vivaldi::utilities::OnScroll::kEventName);
@@ -736,38 +746,75 @@ void UtilitiesSelectLocalImageFunction::OnFileSelected(
   // Presently JS does not need to distinguish between cancelled and error,
   // so just return false when the path is empty here.
   if (path.empty()) {
-    SendResult(/*success=*/false);
+    SendResult(std::string());
     return;
   }
   absl::optional<VivaldiImageStore::ImageFormat> format =
       VivaldiImageStore::FindFormatForPath(path);
   if (!format) {
     LOG(ERROR) << "Unsupported image format - " << path;
-    SendResult(/*success=*/false);
+    SendResult(std::string());
     return;
   }
 
-  if (!place.IsEmpty()) {
+  if (place.IsBookmarkId()) {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&base::ReadFileToBytes, path),
+        base::BindOnce(&UtilitiesSelectLocalImageFunction::OnContentRead, this,
+                       place.GetBookmarkId()));
+  } else if (!place.IsEmpty()) {
     VivaldiImageStore::UpdateMapping(
         browser_context(), std::move(place), *format, std::move(path),
         base::BindOnce(&UtilitiesSelectLocalImageFunction::SendResult, this));
   } else if (store_as_profile_image) {
     Profile* profile =
         Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+    std::string data_url = path.AsUTF8Unsafe();
     ::vivaldi::SetImagePathForProfilePath(
-        vivaldiprefs::kVivaldiProfileImagePath, path.AsUTF8Unsafe(),
+        vivaldiprefs::kVivaldiProfileImagePath, data_url,
         profile->GetPath().AsUTF8Unsafe());
-    SendResult(/*success=*/true);
+    SendResult(data_url);
     RuntimeAPI::OnProfileAvatarChanged(profile);
   } else {
     NOTREACHED();
   }
 }
 
-void UtilitiesSelectLocalImageFunction::SendResult(bool success) {
+void UtilitiesSelectLocalImageFunction::OnContentRead(
+    int64_t bookmark_id,
+    absl::optional<std::vector<uint8_t>> content) {
+  if (!content) {
+    SendResult("");
+    return;
+  }
+
+  auto* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(browser_context());
+  const bookmarks::BookmarkNode* node =
+      bookmarks::GetBookmarkNodeByID(bookmark_model, bookmark_id);
+  if (!node) {
+    SendResult("");
+    return;
+  }
+
+  auto* synced_file_store =
+      SyncedFileStoreFactory::GetForBrowserContext(browser_context());
+  std::string checksum = synced_file_store->SetLocalFile(
+      node->guid(), syncer::BOOKMARKS, *content);
+  vivaldi_bookmark_kit::SetBookmarkThumbnail(
+      bookmark_model, bookmark_id,
+      vivaldi_data_url_utils::MakeUrl(
+          vivaldi_data_url_utils::PathType::kSyncedStore, checksum));
+  SendResult(checksum);
+}
+
+void UtilitiesSelectLocalImageFunction::SendResult(std::string data_url) {
   namespace Results = vivaldi::utilities::SelectLocalImage::Results;
 
-  Respond(ArgumentList(Results::Create(success)));
+  Respond(ArgumentList(Results::Create(!data_url.empty())));
 }
 
 UtilitiesStoreImageFunction::UtilitiesStoreImageFunction() = default;
@@ -780,66 +827,55 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
-  int case_count = ParseImagePlaceParams(
-      place_, params->options.theme_id.value_or(std::string()),
-      params->options.thumbnail_bookmark_id.value_or(std::string()), error);
+  ParseImagePlaceParams(place_,
+                        params->options.theme_id.value_or(std::string()),
+                        std::string(), error);
   if (!error.empty())
     return RespondNow(Error(std::move(error)));
-  if (case_count != 1) {
-    return RespondNow(
-        Error("Exactly one of themeId, "
-              "thumbnailBookmarkId must be given"));
-  }
-  case_count = 0;
   if (params->options.data.has_value()) {
-    if (++case_count == 1) {
-      if (params->options.data->empty()) {
-        return RespondNow(Error("blob option cannot be empty"));
-      }
-      if (!params->options.mime_type.has_value() || params->options.mime_type->empty()) {
-        return RespondNow(Error("mimeType must be given"));
-      }
-
-      image_format_ =
-          VivaldiImageStore::FindFormatForMimeType(*params->options.mime_type);
-      if (!image_format_) {
-        return RespondNow(
-            Error("unsupported mimeType - " + *params->options.mime_type));
-      }
-      StoreImage(base::RefCountedBytes::TakeVector(&params->options.data.value()));
+    if (params->options.data->empty()) {
+      return RespondNow(Error("blob option cannot be empty"));
     }
-  }
-  if (params->options.url && !params->options.url->empty()) {
-    if (++case_count == 1) {
-      GURL url(*params->options.url);
-      if (!url.is_valid()) {
-        return RespondNow(
-            Error("url is not valid - " + url.possibly_invalid_spec()));
-      }
-      if (!url.SchemeIsFile()) {
-        return RespondNow(Error("only file: url is supported - " + url.spec()));
-      }
-      base::FilePath file_path;
-      if (!net::FileURLToFilePath(url, &file_path)) {
-        return RespondNow(
-            Error("url does not refer to a valid file path - " + url.spec()));
-      }
-      image_format_ = VivaldiImageStore::FindFormatForPath(file_path);
-      if (!image_format_) {
-        return RespondNow(Error("Unsupported image format - " +
-                                file_path.BaseName().AsUTF8Unsafe()));
-      }
-      base::ThreadPool::PostTaskAndReplyWithResult(
-          FROM_HERE,
-          {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-          base::BindOnce(&vivaldi_data_url_utils::ReadFileOnBlockingThread,
-                         std::move(file_path), /*log_not_found=*/true),
-          base::BindOnce(&UtilitiesStoreImageFunction::StoreImage, this));
+    if (!params->options.mime_type.has_value() ||
+        params->options.mime_type->empty()) {
+      return RespondNow(Error("mimeType must be given"));
     }
-  }
 
-  if (case_count != 1) {
+    image_format_ =
+        VivaldiImageStore::FindFormatForMimeType(*params->options.mime_type);
+    if (!image_format_) {
+      return RespondNow(
+          Error("unsupported mimeType - " + *params->options.mime_type));
+    }
+    StoreImage(
+        base::RefCountedBytes::TakeVector(&params->options.data.value()));
+  } else if (params->options.url && !params->options.url->empty()) {
+    GURL url(*params->options.url);
+    if (!url.is_valid()) {
+      return RespondNow(
+          Error("url is not valid - " + url.possibly_invalid_spec()));
+    }
+    if (!url.SchemeIsFile()) {
+      return RespondNow(Error("only file: url is supported - " + url.spec()));
+    }
+    base::FilePath file_path;
+    if (!net::FileURLToFilePath(url, &file_path)) {
+      return RespondNow(
+          Error("url does not refer to a valid file path - " + url.spec()));
+    }
+    image_format_ = VivaldiImageStore::FindFormatForPath(file_path);
+    if (!image_format_) {
+      return RespondNow(Error("Unsupported image format - " +
+                              file_path.BaseName().AsUTF8Unsafe()));
+    }
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&vivaldi_data_url_utils::ReadFileOnBlockingThread,
+                       std::move(file_path), /*log_not_found=*/true),
+        base::BindOnce(&UtilitiesStoreImageFunction::StoreImage, this));
+  } else {
     return RespondNow(Error("Exactly one of data, url must be given"));
   }
 
@@ -851,12 +887,12 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
 void UtilitiesStoreImageFunction::StoreImage(
     scoped_refptr<base::RefCountedMemory> data) {
   if (!data) {
-    SendResult(/*success=*/false);
+    SendResult(std::string());
     return;
   }
   if (!data->size()) {
     LOG(ERROR) << "Empty image";
-    SendResult(/*success=*/false);
+    SendResult(std::string());
     return;
   }
   VivaldiImageStore::StoreImage(
@@ -864,10 +900,10 @@ void UtilitiesStoreImageFunction::StoreImage(
       base::BindOnce(&UtilitiesStoreImageFunction::SendResult, this));
 }
 
-void UtilitiesStoreImageFunction::SendResult(bool success) {
+void UtilitiesStoreImageFunction::SendResult(std::string data_url) {
   namespace Results = vivaldi::utilities::StoreImage::Results;
 
-  Respond(ArgumentList(Results::Create(success)));
+  Respond(ArgumentList(Results::Create(data_url)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
@@ -906,12 +942,11 @@ ExtensionFunction::ResponseAction UtilitiesSetSharedDataFunction::Run() {
 
   // Fetch value back from api and use in reply
   const base::Value* value = api->GetSharedData(params->key_value_pair.key);
-  ::vivaldi::BroadcastEvent(
-      vivaldi::utilities::OnSharedDataUpdated::kEventName,
-      vivaldi::utilities::OnSharedDataUpdated::Create(
-          params->key_value_pair.key,
-          value ? *value : params->key_value_pair.value),
-      browser_context());
+  ::vivaldi::BroadcastEvent(vivaldi::utilities::OnSharedDataUpdated::kEventName,
+                            vivaldi::utilities::OnSharedDataUpdated::Create(
+                                params->key_value_pair.key,
+                                value ? *value : params->key_value_pair.value),
+                            browser_context());
   return AlreadyResponded();
 }
 
@@ -997,8 +1032,9 @@ ExtensionFunction::ResponseAction UtilitiesGetSystemDateFormatFunction::Run() {
 
   vivaldi::utilities::DateFormats date_formats;
   if (!ReadDateFormats(&date_formats)) {
-    return RespondNow(Error(
-        "Error reading date formats or not implemented on mac/linux yet"));
+    return RespondNow(
+        Error("Error reading date formats or not implemented on "
+              "mac/linux yet"));
   } else {
     return RespondNow(ArgumentList(Results::Create(date_formats)));
   }
@@ -1215,7 +1251,7 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
   ContentSetting default_setting = vivContentSettingFromString(value);
   //
   ContentSettingsType content_type =
-        site_settings::ContentSettingsTypeFromGroupName(content_settings);
+      site_settings::ContentSettingsTypeFromGroupName(content_settings);
 
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
@@ -1442,9 +1478,8 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
     std::string mail_version = ::vivaldi::GetVivaldiMailVersionString();
     std::string last_seen_version =
         profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
-    std::string last_seen_mail_version =
-        profile->GetPrefs()->GetString(
-            vivaldiprefs::kStartupLastSeenMailVersion);
+    std::string last_seen_mail_version = profile->GetPrefs()->GetString(
+        vivaldiprefs::kStartupLastSeenMailVersion);
 
     std::vector<std::string> version_array = base::SplitString(
         version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
@@ -1467,8 +1502,8 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
                                      mail_version);
     } else {
       version_changed =
-        HasVersionChanged(version_array, last_seen_array) ||
-        HasVersionChanged(mail_version_array, last_seen_mail_array);
+          HasVersionChanged(version_array, last_seen_array) ||
+          HasVersionChanged(mail_version_array, last_seen_mail_array);
       if (version_changed) {
         profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                        version);
@@ -1707,8 +1742,8 @@ UtilitiesGetMediaAvailableStateFunction::Run() {
     ::GetProductInfo(version_info.dwMajorVersion, version_info.dwMinorVersion,
                      0, 0, &os_type);
 
-    // Only present on Vista+. All these 'N' versions of Windows come without
-    // a media player or codecs.
+    // Only present on Vista+. All these 'N' versions of Windows come
+    // without a media player or codecs.
     switch (os_type) {
       case PRODUCT_HOME_BASIC_N:
       case PRODUCT_BUSINESS_N:
@@ -1730,13 +1765,13 @@ UtilitiesGetMediaAvailableStateFunction::Run() {
         break;
     }
     if (!is_available) {
-      // MFStartup triggers a delayload which crashes on startup if the dll is
-      // not available, so ensure the dll is present first.
+      // MFStartup triggers a delayload which crashes on startup if the
+      // dll is not available, so ensure the dll is present first.
       HMODULE dll =
           ::LoadLibraryExW(L"mfplat.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
       if (dll) {
-        // Only check N versions for media framework, otherwise just assume
-        // all is fine and proceed.
+        // Only check N versions for media framework, otherwise just
+        // assume all is fine and proceed.
         HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
         if (SUCCEEDED(hr)) {
           is_available = true;
@@ -2115,6 +2150,25 @@ UtilitiesShowManageSSLCertificatesFunction::Run() {
 #else
   return RespondNow(Error("API not available on this platform"));
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+}
+
+ExtensionFunction::ResponseAction UtilitiesSetProtocolHandlingFunction::Run() {
+  std::unique_ptr<vivaldi::utilities::SetProtocolHandling::Params> params(
+      vivaldi::utilities::SetProtocolHandling::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  bool enabled = params->enabled;
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  custom_handlers::ProtocolHandlerRegistry* registry =
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(profile);
+
+  if (enabled) {
+    registry->Enable();
+  } else {
+    registry->Disable();
+  }
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

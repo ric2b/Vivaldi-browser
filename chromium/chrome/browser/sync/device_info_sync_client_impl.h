@@ -46,6 +46,8 @@ class DeviceInfoSyncClientImpl : public syncer::DeviceInfoSyncClient {
   // syncer::DeviceInfoSyncClient:
   bool IsUmaEnabledOnCrOSDevice() const override;
 
+  size_t VivaldiGetSyncedFileStorageSize() const override;
+
  private:
   const raw_ptr<Profile> profile_;
 };

@@ -32,7 +32,7 @@ import {CrActionMenuElement} from '//resources/cr_elements/cr_action_menu/cr_act
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {isWindows} from 'chrome://resources/js/cr.m.js';
+import {isWindows} from 'chrome://resources/js/platform.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -290,7 +290,7 @@ export class SettingsLanguagesPageElement extends
    * @return True if the given language cannot be set as the
    *     prospective UI language by the user.
    */
-  private disableUILanguageCheckbox_(
+  private disableUiLanguageCheckbox_(
       languageState: LanguageState, prospectiveUILanguage: string): boolean {
     if (this.detailLanguage_ === undefined) {
       return true;
@@ -320,12 +320,12 @@ export class SettingsLanguagesPageElement extends
   /**
    * Handler for changes to the UI language checkbox.
    */
-  private onUILanguageChange_(e: Event) {
+  private onUiLanguageChange_(e: Event) {
     // We don't support unchecking this checkbox. TODO(michaelpg): Ask for a
     // simpler widget.
     assert((e.target as CrCheckboxElement).checked);
     this.isChangeInProgress_ = true;
-    this.languageHelper.setProspectiveUILanguage(
+    this.languageHelper.setProspectiveUiLanguage(
         this.detailLanguage_!.language.code);
     this.languageHelper.moveLanguageToFront(
         this.detailLanguage_!.language.code);
@@ -345,7 +345,7 @@ export class SettingsLanguagesPageElement extends
    * @return True if the given language matches the prospective UI pref (which
    *     may be different from the actual UI language).
    */
-  private isProspectiveUILanguage_(
+  private isProspectiveUiLanguage_(
       languageCode: string, prospectiveUILanguage: string): boolean {
     return languageCode === prospectiveUILanguage;
   }

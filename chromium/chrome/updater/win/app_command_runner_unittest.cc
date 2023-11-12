@@ -21,10 +21,13 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
+#include "base/win/scoped_localalloc.h"
+#include "build/branding_buildflags.h"
 #include "chrome/updater/test_scope.h"
-#include "chrome/updater/unittest_util_win.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_version.h"
+#include "chrome/updater/util/unittest_util_win.h"
+#include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/test/test_executables.h"
 #include "chrome/updater/win/win_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,15 +64,25 @@ class AppCommandRunnerTest : public testing::Test {
 
   void TearDown() override { DeleteAppClientKey(GetTestScope(), kAppId1); }
 
-  HRESULT CreateAppCommandRunner(const std::wstring& app_id,
-                                 const std::wstring& command_id,
-                                 const std::wstring& command_line_format,
-                                 AppCommandRunner& app_command_runner) {
+  HResultOr<AppCommandRunner> CreateAppCommandRunner(
+      const std::wstring& app_id,
+      const std::wstring& command_id,
+      const std::wstring& command_line_format) {
     CreateAppCommandRegistry(GetTestScope(), app_id, command_id,
                              command_line_format);
+    return AppCommandRunner::LoadAppCommand(GetTestScope(), app_id, command_id);
+  }
 
-    return AppCommandRunner::LoadAppCommand(GetTestScope(), app_id, command_id,
-                                            app_command_runner);
+  HResultOr<AppCommandRunner> CreateProcessLauncherRunner(
+      const std::wstring& app_id,
+      const std::wstring& name,
+      const std::wstring& pv,
+      const std::wstring& command_id,
+      const std::wstring& command_line_format) {
+    EXPECT_TRUE(IsSystemInstall(GetTestScope()));
+    CreateLaunchCmdElevatedRegistry(app_id, name, pv, command_id,
+                                    command_line_format);
+    return AppCommandRunner::LoadAppCommand(GetTestScope(), app_id, command_id);
   }
 
   base::CommandLine cmd_exe_command_line_{base::CommandLine::NO_PROGRAM};
@@ -237,15 +250,15 @@ TEST_F(AppCommandRunnerTest,
     // verify that it produces the original substitution.
     std::wstring cmd = base::StrCat({L"process.exe ", command_line.value()});
     int num_args = 0;
-    ScopedLocalAlloc argv_handle(::CommandLineToArgvW(&cmd[0], &num_args));
-    ASSERT_TRUE(argv_handle.is_valid());
+    base::win::ScopedLocalAllocTyped<wchar_t*> argv_handle(
+        ::CommandLineToArgvW(&cmd[0], &num_args));
+    ASSERT_TRUE(argv_handle);
     EXPECT_EQ(num_args, 2) << "substitution '" << test_case.substitutions[0]
                            << "' gave command line '" << cmd
                            << "' which unexpectedly did not parse to a single "
                            << "argument.";
 
-    EXPECT_EQ(reinterpret_cast<const wchar_t**>(argv_handle.get())[1],
-              test_case.substitutions[0])
+    EXPECT_EQ(argv_handle.get()[1], test_case.substitutions[0])
         << "substitution '" << test_case.substitutions[0]
         << "' gave command line '" << cmd
         << "' which did not parse back to the "
@@ -277,20 +290,19 @@ TEST_F(AppCommandRunnerTest, ExecuteAppCommand) {
 }
 
 TEST_F(AppCommandRunnerTest, NoApp) {
-  AppCommandRunner app_command_runner;
-  EXPECT_HRESULT_FAILED(AppCommandRunner::LoadAppCommand(
-      GetTestScope(), kAppId1, kCmdId1, app_command_runner));
+  HResultOr<AppCommandRunner> app_command_runner =
+      AppCommandRunner::LoadAppCommand(GetTestScope(), kAppId1, kCmdId1);
+  EXPECT_FALSE(app_command_runner.has_value());
 }
 
 TEST_F(AppCommandRunnerTest, NoCmd) {
-  AppCommandRunner app_command_runner;
   CreateAppCommandRegistry(GetTestScope(), kAppId1, kCmdId1, kCmdLineValid);
-
-  EXPECT_HRESULT_FAILED(AppCommandRunner::LoadAppCommand(
-      GetTestScope(), kAppId1, kCmdId2, app_command_runner));
+  HResultOr<AppCommandRunner> app_command_runner =
+      AppCommandRunner::LoadAppCommand(GetTestScope(), kAppId1, kCmdId2);
+  EXPECT_FALSE(app_command_runner.has_value());
 }
 
-TEST_F(AppCommandRunnerTest, Run) {
+TEST_F(AppCommandRunnerTest, RunAppCommandFormat) {
   const struct {
     const std::vector<std::wstring> input;
     const std::vector<std::wstring> substitutions;
@@ -301,24 +313,160 @@ TEST_F(AppCommandRunnerTest, Run) {
   };
 
   for (const auto& test_case : test_cases) {
-    AppCommandRunner app_command_runner;
+    HResultOr<AppCommandRunner> app_command_runner;
+
     base::Process process;
-    ASSERT_EQ(app_command_runner.Run(test_case.substitutions, process),
+    ASSERT_EQ(app_command_runner->Run(test_case.substitutions, process),
               E_UNEXPECTED);
 
-    ASSERT_HRESULT_SUCCEEDED(CreateAppCommandRunner(
+    app_command_runner = CreateAppCommandRunner(
         kAppId1, kCmdId1,
         base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
-                      base::JoinString(test_case.input, L" ")}),
-        app_command_runner));
-
+                      base::JoinString(test_case.input, L" ")}));
+    ASSERT_TRUE(app_command_runner.has_value());
     ASSERT_HRESULT_SUCCEEDED(
-        app_command_runner.Run(test_case.substitutions, process));
+        app_command_runner->Run(test_case.substitutions, process));
 
     int exit_code = 0;
     EXPECT_TRUE(process.WaitForExitWithTimeout(
         TestTimeouts::action_max_timeout(), &exit_code));
     EXPECT_EQ(exit_code, test_case.expected_exit_code);
+  }
+}
+
+TEST_F(AppCommandRunnerTest, CheckChromeBrandedName) {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  EXPECT_STREQ("Google Chrome", BROWSER_PRODUCT_NAME_STRING);
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+}
+
+TEST_F(AppCommandRunnerTest, RunProcessLauncherFormat) {
+  if (!IsSystemInstall(GetTestScope()))
+    return;
+
+  const struct {
+    const wchar_t* app_name;
+    const wchar_t* app_version;
+    const wchar_t* cmd_id;
+    const std::vector<std::wstring> input;
+    const int expected_exit_code;
+    const int expected_hr;
+  } test_cases[] = {
+      {L"foo", L"1.0.0.0", L"cmd1", {L"/c", L"exit 7"}, 7, E_INVALIDARG},
+      {L"foo", L"110.0.5434.0", L"cmd", {L"/c", L"exit 7"}, 7, E_INVALIDARG},
+      {L"Chrome", L"110.0.5434.0", L"cmd", {L"/c", L"exit 7"}, 7, E_INVALIDARG},
+      {L"Not" BROWSER_PRODUCT_NAME_STRING,
+       L"110.0.5434.0",
+       L"cmd",
+       {L"/c", L"exit 7"},
+       7,
+       E_INVALIDARG},
+      {L"" BROWSER_PRODUCT_NAME_STRING,
+       L"110.0.5434.0",
+       L"cmd",
+       {L"/c", L"exit 7"},
+       7,
+       S_OK},
+      {L"" BROWSER_PRODUCT_NAME_STRING L" Beta",
+       L"1.0.0.0",
+       L"cmd",
+       {L"/c", L"exit 7"},
+       7,
+       S_OK},
+      {L"" BROWSER_PRODUCT_NAME_STRING " Dev",
+       L"110.0.0.0",
+       L"cmd",
+       {L"/c", L"exit 7"},
+       7,
+       S_OK},
+      {L"" BROWSER_PRODUCT_NAME_STRING " SxS",
+       L"110.0.0.0",
+       L"cmd",
+       {L"/c", L"exit 7"},
+       7,
+       S_OK},
+  };
+
+  for (const auto& test_case : test_cases) {
+    HResultOr<AppCommandRunner> app_command_runner;
+    base::Process process;
+    ASSERT_EQ(app_command_runner->Run({}, process), E_UNEXPECTED);
+
+    app_command_runner = CreateProcessLauncherRunner(
+        kAppId1, test_case.app_name, test_case.app_version, test_case.cmd_id,
+        base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
+                      base::JoinString(test_case.input, L" ")}));
+    ASSERT_EQ(
+        app_command_runner.has_value() ? S_OK : app_command_runner.error(),
+        test_case.expected_hr);
+    if (FAILED(test_case.expected_hr))
+      continue;
+
+    ASSERT_HRESULT_SUCCEEDED(app_command_runner->Run({}, process));
+
+    int exit_code = 0;
+    EXPECT_TRUE(process.WaitForExitWithTimeout(
+        TestTimeouts::action_max_timeout(), &exit_code));
+    EXPECT_EQ(exit_code, test_case.expected_exit_code);
+  }
+}
+
+TEST_F(AppCommandRunnerTest, RunBothFormats) {
+  if (!IsSystemInstall(GetTestScope()))
+    return;
+
+  const struct {
+    const wchar_t* cmd_id_to_execute;
+    const wchar_t* cmd_id_appcommand;
+    const std::vector<std::wstring> input_appcommand;
+    const wchar_t* cmd_id_processlauncher;
+    const std::vector<std::wstring> input_processlauncher;
+    const int expected_exit_code;
+  } test_cases[] = {
+      // both formats in registry; AppCommand overrides ProcessLauncher entry.
+      {L"cmd", L"cmd", {L"/c", L"exit 7"}, L"cmd", {L"/c", L"exit 14"}, 7},
+      // only AppCommand format in registry.
+      {L"cmd", L"cmd", {L"/c", L"exit 21"}, {}, {}, 21},
+      // only ProcessLauncher format in registry.
+      {L"cmd", {}, {}, L"cmd", {L"/c", L"exit 28"}, 28},
+      // both formats in registry, but AppCommand has a different command ID, so
+      // does not override ProcessLauncher entry.
+      {L"cmd", L"cmd2", {L"/c", L"exit 7"}, L"cmd", {L"/c", L"exit 35"}, 35},
+  };
+
+  for (const auto& test_case : test_cases) {
+    HResultOr<AppCommandRunner> app_command_runner;
+    base::Process process;
+    ASSERT_EQ(app_command_runner->Run({}, process), E_UNEXPECTED);
+
+    if (test_case.cmd_id_appcommand) {
+      CreateAppCommandRegistry(
+          GetTestScope(), kAppId1, test_case.cmd_id_appcommand,
+          base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
+                        base::JoinString(test_case.input_appcommand, L" ")}));
+    }
+
+    if (test_case.cmd_id_processlauncher) {
+      CreateLaunchCmdElevatedRegistry(
+          kAppId1, L"" BROWSER_PRODUCT_NAME_STRING, L"1.0.0.0",
+          test_case.cmd_id_processlauncher,
+          base::StrCat(
+              {cmd_exe_command_line_.GetCommandLineString(), L" ",
+               base::JoinString(test_case.input_processlauncher, L" ")}));
+    }
+
+    app_command_runner = AppCommandRunner::LoadAppCommand(
+        GetTestScope(), kAppId1, test_case.cmd_id_to_execute);
+    ASSERT_TRUE(app_command_runner.has_value());
+
+    ASSERT_HRESULT_SUCCEEDED(app_command_runner->Run({}, process));
+
+    int exit_code = 0;
+    EXPECT_TRUE(process.WaitForExitWithTimeout(
+        TestTimeouts::action_max_timeout(), &exit_code));
+    EXPECT_EQ(exit_code, test_case.expected_exit_code);
+
+    DeleteAppClientKey(GetTestScope(), kAppId1);
   }
 }
 

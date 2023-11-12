@@ -24,6 +24,7 @@
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/presenter.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/common/gl_ozone_egl.h"
 #include "ui/ozone/common/native_pixmap_egl_binding.h"
@@ -61,6 +62,8 @@ typedef VkResult(VKAPI_PTR* PFN_vkCreateDmaBufImageINTEL)(
 #endif
 
 namespace ui {
+
+class ScopedAllowBlockingForGbmSurface : public base::ScopedAllowBlocking {};
 
 namespace {
 
@@ -138,12 +141,16 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
     return nullptr;
   }
 
-  scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
+  scoped_refptr<gl::Presenter> CreateSurfacelessViewGLSurface(
       gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override {
-    return gl::InitializeGLSurface(new GbmSurfaceless(
-        surface_factory_, display->GetAs<gl::GLDisplayEGL>(),
-        drm_thread_proxy_->CreateDrmWindowProxy(window), window));
+    scoped_refptr<gl::Presenter> presenter =
+        base::MakeRefCounted<GbmSurfaceless>(
+            surface_factory_, display->GetAs<gl::GLDisplayEGL>(),
+            drm_thread_proxy_->CreateDrmWindowProxy(window), window);
+    if (!presenter->Initialize(gl::GLSurfaceFormat()))
+      return nullptr;
+    return presenter;
   }
 
   scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
@@ -203,7 +210,7 @@ std::vector<gfx::BufferFormat> EnumerateSupportedBufferFormatsForTexturing() {
     base::FilePath dev_path(FILE_PATH_LITERAL(
         base::StringPrintf(kRenderNodeFilePattern, i).c_str()));
 
-    base::ThreadRestrictions::ScopedAllowIO scoped_allow_io;
+    ScopedAllowBlockingForGbmSurface scoped_allow_blocking;
     base::File dev_path_file(dev_path,
                              base::File::FLAG_OPEN | base::File::FLAG_READ);
     if (!dev_path_file.IsValid())
@@ -218,8 +225,9 @@ std::vector<gfx::BufferFormat> EnumerateSupportedBufferFormatsForTexturing() {
     ScopedGbmDevice device(gbm_create_device(dev_path_file.GetPlatformFile()));
     if (!device) {
       LOG(ERROR) << "Couldn't create Gbm Device at " << dev_path.MaybeAsASCII();
-      return supported_buffer_formats;
+      continue;
     }
+    VLOG(1) << "Found Gbm Device at " << dev_path.MaybeAsASCII();
 
     for (int j = 0; j <= static_cast<int>(gfx::BufferFormat::LAST); ++j) {
       const gfx::BufferFormat buffer_format = static_cast<gfx::BufferFormat>(j);
@@ -385,7 +393,7 @@ std::unique_ptr<SurfaceOzoneCanvas> GbmSurfaceFactory::CreateCanvasForWidget(
 
 scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::AcceleratedWidget widget,
-    VkDevice vk_device,
+    gpu::VulkanDeviceQueue* device_queue,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -405,12 +413,13 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
                                          std::move(framebuffer));
 }
 
-void GbmSurfaceFactory::CreateNativePixmapAsync(gfx::AcceleratedWidget widget,
-                                                VkDevice vk_device,
-                                                gfx::Size size,
-                                                gfx::BufferFormat format,
-                                                gfx::BufferUsage usage,
-                                                NativePixmapCallback callback) {
+void GbmSurfaceFactory::CreateNativePixmapAsync(
+    gfx::AcceleratedWidget widget,
+    gpu::VulkanDeviceQueue* device_queue,
+    gfx::Size size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    NativePixmapCallback callback) {
   drm_thread_proxy_->CreateBufferAsync(
       widget, size, format, usage, 0 /* flags */,
       base::BindOnce(OnNativePixmapCreated, std::move(callback),

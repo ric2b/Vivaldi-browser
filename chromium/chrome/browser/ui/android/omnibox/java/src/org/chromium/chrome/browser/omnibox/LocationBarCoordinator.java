@@ -18,7 +18,6 @@ import androidx.core.view.ViewCompat;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.jank_tracker.JankTracker;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -58,6 +57,7 @@ import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -110,6 +110,7 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
 
     /** Vivaldi */
     private View mQrCodeButton;
+    private boolean mShouldRefineSuggestion;
 
     /**
      * Creates {@link LocationBarCoordinator} and its subcoordinator: {@link
@@ -391,6 +392,11 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
         return mLocationBarMediator;
     }
 
+    @Override
+    public UrlBarData getUrlBarData() {
+        return mUrlCoordinator.getUrlBarData();
+    }
+
     // OmniboxSuggestionsDropdownEmbedder implementation
     @Override
     public boolean isTablet() {
@@ -422,6 +428,9 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
     @Override
     public void onSuggestionsChanged(String autocompleteText, boolean defaultMatchIsSearch) {
         mLocationBarMediator.onSuggestionsChanged(autocompleteText, defaultMatchIsSearch);
+
+        // Vivaldi
+        mShouldRefineSuggestion = false;
     }
 
     @Override
@@ -466,13 +475,18 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
 
     @Override
     public void setOmniboxEditingText(String text) {
-        if (BuildConfig.IS_VIVALDI)
+        if (BuildConfig.IS_VIVALDI && !mShouldRefineSuggestion)
             mUrlCoordinator.setUrlBarData(UrlBarData.forNonUrlText(text),
                     UrlBar.ScrollType.NO_SCROLL, UrlBarCoordinator.SelectionState.SELECT_ALL);
         else
         mUrlCoordinator.setUrlBarData(UrlBarData.forNonUrlText(text), UrlBar.ScrollType.NO_SCROLL,
                 UrlBarCoordinator.SelectionState.SELECT_END);
         updateButtonVisibility();
+    }
+
+    /** @see UrlBarCoordinator#getVisibleTextPrefixHint() */
+    public CharSequence getOmniboxVisibleTextPrefixHint() {
+        return mUrlCoordinator.getVisibleTextPrefixHint();
     }
 
     /**
@@ -543,6 +557,8 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
      * @param focusable Whether the url bar should be focusable.
      */
     public void setUrlBarFocusable(boolean focusable) {
+        // Vivaldi
+        if (mUrlCoordinator != null)
         mUrlCoordinator.setAllowFocus(focusable);
     }
 
@@ -587,6 +603,11 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
     /** Updates the visibility of the buttons inside the location bar. */
     public void updateButtonVisibility() {
         mLocationBarMediator.updateButtonVisibility();
+    }
+
+    /** @param show Whether the status icon background should be shown. */
+    public void setStatusIconBackgroundVisibility(boolean show) {
+        mStatusCoordinator.setStatusIconBackgroundVisibility(show);
     }
 
     /** Returns whether the layout is RTL. */
@@ -716,5 +737,12 @@ public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
             float urlExpansionPercent, boolean isOnNtp) {
         return mLocationBarMediator.getUrlBarTranslationXForToolbarAnimation(
                 urlExpansionPercent, isOnNtp);
+    }
+
+    // Vivaldi
+    @Override
+    public void setOmniboxEditingText(String text, boolean isRefineSuggestion) {
+        mShouldRefineSuggestion = isRefineSuggestion;
+        setOmniboxEditingText(text);
     }
 }

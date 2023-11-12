@@ -428,6 +428,11 @@ void FrameSinkManagerImpl::RegisterCompositorFrameSinkSupport(
     UpdateThrottlingRecursively(frame_sink_id,
                                 global_throttle_interval_.value());
   }
+
+  if (frame_counter_) {
+    frame_counter_->AddFrameSink(frame_sink_id, support->frame_sink_type(),
+                                 support->is_root());
+  }
 }
 
 void FrameSinkManagerImpl::UnregisterCompositorFrameSinkSupport(
@@ -751,20 +756,7 @@ void FrameSinkManagerImpl::Throttle(const std::vector<FrameSinkId>& ids,
 
 void FrameSinkManagerImpl::StartThrottlingAllFrameSinks(
     base::TimeDelta interval) {
-  // Floor the requested interval to the nearest 10th of a millisecond. This is
-  // because the precision of timing between frames is in microseconds, which
-  // can result in error accumulation over several throttled frames.
-  //
-  // For instance, on a 60Hz display, the first frame is produced at 0.016666
-  // seconds, and the second at (0.016666 + 0.016666 = 0.033332) seconds.
-  // base::Hertz(30) is 0.033333 seconds, so the second frame is considered to
-  // have been produced too fast, and is therefore throttled. This results in a
-  // 20Hz refresh rate instead of the desired 30Hz.
-  //
-  // Flooring at the nearest 10th of a millisecond produces correct throttling
-  // results for frame rates up to 960Hz, after which either flooring to
-  // milliseconds or a more precise between-frames measurement is required.
-  global_throttle_interval_ = interval.FloorToMultiple(base::Microseconds(100));
+  global_throttle_interval_ = interval;
   UpdateThrottling();
 }
 
@@ -806,6 +798,52 @@ void FrameSinkManagerImpl::UpdateThrottling() {
 
 void FrameSinkManagerImpl::ClearThrottling(const FrameSinkId& id) {
   UpdateThrottlingRecursively(id, base::TimeDelta());
+}
+
+void FrameSinkManagerImpl::CacheSurfaceAnimationManager(
+    NavigationID navigation_id,
+    std::unique_ptr<SurfaceAnimationManager> manager) {
+  if (navigation_to_animation_manager_.contains(navigation_id)) {
+    LOG(ERROR)
+        << "SurfaceAnimationManager already exists for |navigation_id| : "
+        << navigation_id;
+    return;
+  }
+
+  navigation_to_animation_manager_[navigation_id] = std::move(manager);
+}
+
+std::unique_ptr<SurfaceAnimationManager>
+FrameSinkManagerImpl::TakeSurfaceAnimationManager(NavigationID navigation_id) {
+  auto it = navigation_to_animation_manager_.find(navigation_id);
+  if (it == navigation_to_animation_manager_.end()) {
+    LOG(ERROR) << "SurfaceAnimationManager missing for |navigation_id| : "
+               << navigation_id;
+    return nullptr;
+  }
+
+  auto manager = std::move(it->second);
+  navigation_to_animation_manager_.erase(it);
+  return manager;
+}
+
+void FrameSinkManagerImpl::StartFrameCountingForTest(
+    base::TimeDelta bucket_size) {
+  DCHECK(!frame_counter_.has_value());
+  frame_counter_.emplace(bucket_size);
+
+  for (auto& [sink_id, support] : support_map_) {
+    DCHECK_EQ(sink_id, support->frame_sink_id());
+    frame_counter_->AddFrameSink(sink_id, support->frame_sink_type(),
+                                 support->is_root());
+  }
+}
+
+void FrameSinkManagerImpl::StopFrameCountingForTest(
+    StopFrameCountingForTestCallback callback) {
+  DCHECK(frame_counter_.has_value());
+  std::move(callback).Run(frame_counter_->TakeData());
+  frame_counter_.reset();
 }
 
 }  // namespace viz

@@ -13,6 +13,7 @@ import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v
 
 import {btRegEx, buildWordMatcher, FeedbackFlowState} from './feedback_flow.js';
 import {FeedbackContext, HelpContentList, HelpContentProviderInterface, SearchRequest, SearchResponse, SearchResult} from './feedback_types.js';
+import {showScrollingEffectOnStart, showScrollingEffects} from './feedback_utils.js';
 import {getHelpContentProvider} from './mojo_interface_provider.js';
 import {domainQuestions, questionnaireBegin} from './questionnaire.js';
 
@@ -82,6 +83,12 @@ export class SearchPageElement extends SearchPageElementBase {
         readonly: true,
         observer: SearchPageElement.prototype.descriptionTemplateChanged_,
       },
+      descriptionPlaceholderText: {
+        type: String,
+        readonly: true,
+        observer:
+            SearchPageElement.prototype.descriptionPlaceholderTextChanged_,
+      },
       helpContentSearchResultCount: {
         type: Number,
         notify: true,
@@ -104,18 +111,14 @@ export class SearchPageElement extends SearchPageElementBase {
     /** @type {string} */
     this.descriptionTemplate = '';
 
+    /** @type {string} */
+    this.descriptionPlaceholderText = '';
+
     /** @private {number} */
     this.helpContentSearchResultCount = 0;
 
     /** @private {boolean} */
     this.noHelpContentDisplayed = false;
-
-    /**
-     * Record the most recent number of characters in the input for which a
-     * search has been attempted.
-     * @private {number}
-     */
-    this.lastCharCount_ = 0;
 
     /** @private {!HelpContentProviderInterface} */
     this.helpContentProvider_ = getHelpContentProvider();
@@ -135,8 +138,12 @@ export class SearchPageElement extends SearchPageElementBase {
       this.resolveIframeLoaded_ = resolve;
     });
 
-    // Set focus on the input field after iframe is loaded.
-    this.iframeLoaded_.then(() => this.focusInputElement());
+    // Set focus on the input field and decide whether to show scrolling effect
+    // after iframe is loaded.
+    this.iframeLoaded_.then(() => {
+      this.focusInputElement();
+      showScrollingEffectOnStart(this);
+    });
 
     /** @private {?HTMLIFrameElement} */
     this.iframe_ = null;
@@ -153,6 +160,44 @@ export class SearchPageElement extends SearchPageElementBase {
      * @private {Array<string>}
      */
     this.appendedQuestions = [];
+
+    /**
+     * Whether the search result content is returned with popular content.
+     * @private {!boolean}
+     */
+    this.isPopularContentForTesting_;
+
+    /**
+     * Timer used to add a delay to fire a new search.
+     * @private {number}
+     */
+    this.searchTimerID_ = -1;
+
+    /**
+     * The unique id of a query. Whenever a new query is scheduled, this number
+     * will be incremented by 1. New query will have a bigger sequence number
+     * than older queries.
+     * @private {number}
+     */
+    this.querySeqNo_ = 0;
+
+    /**
+     * The most recent query sequence number whose result has been posted to the
+     * iframe and thus seen by the user. Results for two queries fired at
+     * different times may come back in reverse order. By recording this number,
+     * we can prevent displaying the result from older queries.
+     * @private {number}
+     */
+    this.lastPostedQuerySeqNo_ = -1;
+
+    /**
+     * Delay in milliseconds before firing a new search.
+     *
+     * This variable needs to remain public because the unit tests need to
+     * set its value.
+     * @type {number}
+     */
+    this.searchTimoutInMs_ = 250;
   }
 
   ready() {
@@ -161,11 +206,20 @@ export class SearchPageElement extends SearchPageElementBase {
     this.iframe_ = /** @type {HTMLIFrameElement} */ (
         this.shadowRoot.querySelector('iframe'));
     // Fetch popular help contents with empty query.
-    this.fetchHelpContent_(/* query= */ '');
+    this.fetchHelpContent_(
+        /* query= */ '', /* querySeqNo= */ this.getNextQuerySeqNo_());
 
     this.shadowRoot.querySelector('#descriptionText')
         .addEventListener(
             'input', (event) => this.checkForShowQuestionnaire_(event));
+
+    window.addEventListener('message', (e) => {
+      const message = e.data;
+      if (message.iframeHeight) {
+        this.style.setProperty(
+            '--iframe-height', message.iframeHeight.toString() + 'px');
+      }
+    }, false);
   }
 
   /**
@@ -173,25 +227,37 @@ export class SearchPageElement extends SearchPageElementBase {
    * @private
    */
   handleInputChanged_(e) {
-    const newInput = e.target.value;
-    // Get the number of characters in the input.
-    const newCharCount = [...newInput].length;
+    clearTimeout(this.searchTimerID_);
 
-    if (newCharCount > 0) {
+    const query = e.target.value.trim();
+
+    // As the user is typing, hide the error message.
+    if (query.length > 0) {
       this.hideError_();
     }
 
-    if (Math.abs(newCharCount - this.lastCharCount_) >= MIN_CHARS_COUNT) {
-      this.lastCharCount_ = newCharCount;
-      this.fetchHelpContent_(newInput);
-    }
+    const querySeqNo = this.getNextQuerySeqNo_();
+    this.searchTimerID_ = setTimeout(() => {
+      this.fetchHelpContent_(query, querySeqNo);
+    }, this.searchTimoutInMs_);
   }
 
   /**
-   * @param {string} query
+   * @return {number}
    * @private
    */
-  async fetchHelpContent_(query) {
+  getNextQuerySeqNo_() {
+    return this.querySeqNo_++;
+  }
+
+  /**
+   * Fetches help content/popular search and notifies iframe if querySeqNo is
+   * greater than previous.
+   * @param {string} query
+   * @param {number} querySeqNo
+   * @private
+   */
+  async fetchHelpContent_(query, querySeqNo) {
     if (!this.iframe_) {
       console.warn('untrusted iframe is not found');
       return;
@@ -218,13 +284,16 @@ export class SearchPageElement extends SearchPageElementBase {
         response = await this.helpContentProvider_.getHelpContents(request);
         this.popularHelpContentList_ = response.response.results;
       }
+      this.helpContentSearchResultCount = this.popularHelpContentList_.length;
       isPopularContent = true;
     } else {
       response = await this.helpContentProvider_.getHelpContents(request);
-      isPopularContent = (response.response.totalResults === 0);
+      isPopularContent = (response.response.results.length === 0);
+      this.helpContentSearchResultCount = response.response.results.length;
     }
 
     /** @type {!SearchResult} */
+    this.isPopularContentForTesting_ = isPopularContent;
     const data = {
       contentList: /** @type {!HelpContentList} */ (
           isPopularContent ? this.popularHelpContentList_ :
@@ -235,12 +304,16 @@ export class SearchPageElement extends SearchPageElementBase {
 
     this.noHelpContentDisplayed = (data.contentList.length === 0);
 
-    this.helpContentSearchResultCount = response.response.results.length;
-
     // Wait for the iframe to complete loading before postMessage.
     await this.iframeLoaded_;
-    // TODO(xiangdongkong): Use Mojo to communicate with untrusted page.
-    this.iframe_.contentWindow.postMessage(data, OS_FEEDBACK_UNTRUSTED_ORIGIN);
+
+    // Results from an older query will be ignored.
+    if (querySeqNo > this.lastPostedQuerySeqNo_) {
+      this.lastPostedQuerySeqNo_ = querySeqNo;
+      // TODO(xiangdongkong): Use Mojo to communicate with untrusted page.
+      this.iframe_.contentWindow.postMessage(
+          data, OS_FEEDBACK_UNTRUSTED_ORIGIN);
+    }
   }
 
   /**
@@ -271,15 +344,6 @@ export class SearchPageElement extends SearchPageElementBase {
    * @return {!HTMLElement}
    * @private
    */
-  getDescriptionTextElement_() {
-    return /** @type {!HTMLElement} */ (
-        this.shadowRoot.querySelector('#descriptionText'));
-  }
-
-  /**
-   * @return {!HTMLElement}
-   * @private
-   */
   getErrorElement_() {
     return /** @type {!HTMLElement} */ (
         this.shadowRoot.querySelector('#emptyErrorContainer'));
@@ -297,7 +361,7 @@ export class SearchPageElement extends SearchPageElementBase {
     errorElement.hidden = false;
     errorElement.setAttribute('aria-hidden', false);
 
-    const descriptionTextElement = this.getDescriptionTextElement_();
+    const descriptionTextElement = this.getInputElement_();
     descriptionTextElement.classList.add('has-error');
   }
 
@@ -306,10 +370,15 @@ export class SearchPageElement extends SearchPageElementBase {
    */
   hideError_() {
     const errorElement = this.getErrorElement_();
+
+    if (errorElement.hidden) {
+      return;
+    }
+
     errorElement.hidden = true;
     errorElement.setAttribute('aria-hidden', true);
 
-    const descriptionTextElement = this.getDescriptionTextElement_();
+    const descriptionTextElement = this.getInputElement_();
     descriptionTextElement.classList.remove('has-error');
   }
 
@@ -330,7 +399,7 @@ export class SearchPageElement extends SearchPageElementBase {
   handleContinueButtonClicked_(e) {
     e.stopPropagation();
 
-    const textInput = this.getInputElement_().value;
+    const textInput = this.getInputElement_().value.trim();
     if (textInput.length === 0) {
       this.onInputInvalid_();
     } else {
@@ -359,10 +428,15 @@ export class SearchPageElement extends SearchPageElementBase {
   }
 
   /**
-   * @return {!number}
+   * @param {string} currentPlaceholder
+   * @protected
    */
-  getSearchResultCountForTesting() {
-    return this.helpContentSearchResultCount;
+  descriptionPlaceholderTextChanged_(currentPlaceholder) {
+    if (currentPlaceholder === '') {
+      this.getInputElement_().placeholder = this.i18n('descriptionHint');
+    } else {
+      this.getInputElement_().placeholder = currentPlaceholder;
+    }
   }
 
   /**
@@ -410,7 +484,7 @@ export class SearchPageElement extends SearchPageElementBase {
     }
 
     for (const question of toAppend) {
-      if (question in this.appendedQuestions) {
+      if (this.appendedQuestions.includes(question)) {
         continue;
       }
 
@@ -422,6 +496,49 @@ export class SearchPageElement extends SearchPageElementBase {
     // the end of the appended text, so we need to move the cursor back to where
     // the user was typing before.
     textarea.selectionEnd = savedCursor;
+  }
+
+  /**
+   * @param {!Event} event
+   * @protected
+   */
+  onContainerScroll_(event) {
+    showScrollingEffects(event, this);
+  }
+
+  /**
+   * @return {!number}
+   */
+  getSearchResultCountForTesting() {
+    return this.helpContentSearchResultCount;
+  }
+
+  /**
+   * @return {!boolean}
+   */
+  getIsPopularContentForTesting_() {
+    return this.isPopularContentForTesting_;
+  }
+
+  /**
+   * @return {!number}
+   */
+  getNextQuerySeqNoForTesting() {
+    return this.querySeqNo_;
+  }
+
+  /**
+   * @param {!number} nextQuerySeqNo{!number}
+   */
+  setNextQuerySeqNoForTesting(nextQuerySeqNo) {
+    this.querySeqNo_ = nextQuerySeqNo;
+  }
+
+  /**
+   * @return {!number}
+   */
+  getLastPostedQuerySeqNoForTesting() {
+    return this.lastPostedQuerySeqNo_;
   }
 }
 

@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_controller_delegate.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
@@ -16,7 +15,6 @@
 
 // INITIALIZER
 + (instancetype)initWithBrowser:(Browser*)browser
-                      bookmarks:(bookmarks::BookmarkModel*)bookmarks
                            item:(VivaldiSpeedDialItem*)item
                          parent:(VivaldiSpeedDialItem*)parent
                       isEditing:(BOOL)isEditing

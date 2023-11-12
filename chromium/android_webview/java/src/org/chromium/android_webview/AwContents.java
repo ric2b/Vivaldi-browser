@@ -48,6 +48,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.android_webview.autofill.AndroidAutofillSafeModeAction;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.gfx.AwDrawFnImpl;
@@ -77,7 +78,6 @@ import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.blink_public.common.BlinkFeatures;
 import org.chromium.components.autofill.AutofillActionModeCallback;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.content_capture.OnscreenContentProvider;
@@ -120,6 +120,7 @@ import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.ViewAndroidDelegate;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid.DisplayAndroidObserver;
 import org.chromium.url.GURL;
@@ -709,7 +710,8 @@ public class AwContents implements SmartClipProvider {
     private class AwLayoutSizerDelegate implements AwLayoutSizer.Delegate {
         @Override
         public void requestLayout() {
-            mContainerView.requestLayout();
+            ViewUtils.requestLayout(
+                    mContainerView, "AwContents.AwLayoutSizerDelegate.requestLayout");
         }
 
         @Override
@@ -1128,7 +1130,8 @@ public class AwContents implements SmartClipProvider {
             mAwDarkMode = new AwDarkMode(context);
             mStylusWritingController = new StylusWritingController(context);
 
-            setNewAwContents(AwContentsJni.get().init(mBrowserContext.getNativePointer()));
+            setNewAwContents(
+                    AwContentsJni.get().init(mBrowserContext.getNativeBrowserContextPointer()));
 
             onContainerViewChanged();
         }
@@ -1160,6 +1163,11 @@ public class AwContents implements SmartClipProvider {
     private void initializeAutofillProviderIfNecessary() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
+        if (AndroidAutofillSafeModeAction.isAndroidAutofillDisabled()) {
+            Log.i(TAG, "Android autofill is disabled by SafeMode");
+            return;
+        }
+
         if (mAutofillProvider == null) {
             mAutofillProvider =
                     new AutofillProvider(mContext, mContainerView, mWebContents, "Android WebView");
@@ -1180,7 +1188,7 @@ public class AwContents implements SmartClipProvider {
                 || "com.samsung.android.email.composer".equals(currentPackageName);
     }
 
-    boolean isFullScreen() {
+    public boolean isFullScreen() {
         return mFullScreenTransitionsState.isFullScreen();
     }
 
@@ -1221,7 +1229,7 @@ public class AwContents implements SmartClipProvider {
     /**
      * Called when the app has requested to exit fullscreen.
      */
-    void requestExitFullscreen() {
+    public void requestExitFullscreen() {
         if (!isDestroyed(NO_WARN)) mWebContents.exitFullscreen();
     }
 
@@ -1324,7 +1332,7 @@ public class AwContents implements SmartClipProvider {
         }
         awViewMethodsImpl.onWindowFocusChanged(mContainerView.hasWindowFocus());
         awViewMethodsImpl.onFocusChanged(mContainerView.hasFocus(), 0, null);
-        mContainerView.requestLayout();
+        ViewUtils.requestLayout(mContainerView, "AwContents.onContainerViewChanged");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (mAutofillProvider != null) mAutofillProvider.onContainerViewChanged(mContainerView);
         }
@@ -2319,8 +2327,8 @@ public class AwContents implements SmartClipProvider {
         } else if (!mContentsClient.isCachedRendererBackgroundColorValid()) {
             // In force dark mode or the dark style preferred , if background color not set,
             // this cause a white flash, just show black background.
-            // TODO(crbug.com/1253990): Check if dark style is preferred.
-            if (mSettings.isForceDarkApplied() && !mDidInitBackground) {
+            if ((mSettings.isForceDarkApplied() || mSettings.prefersDarkFromTheme())
+                    && !mDidInitBackground) {
                 return Color.BLACK;
             }
             return mBaseBackgroundColor;
@@ -2672,16 +2680,14 @@ public class AwContents implements SmartClipProvider {
         if (isDestroyed(WARN)) return null;
         NavigationHistory history = getNavigationHistory();
         int currentIndex = history.getCurrentEntryIndex();
-        if (AwFeatureList.isEnabled(BlinkFeatures.INITIAL_NAVIGATION_ENTRY)) {
-            // When InitialNavigationEntry is enabled, the current entry will
-            // always exist, but only return it if it is not the initial
-            // NavigationEntry, to preserve legacy behavior.
-            if (!history.getEntryAtIndex(currentIndex).isInitialEntry()) {
-                return history.getEntryAtIndex(currentIndex).getOriginalUrl().getSpec();
-            }
-        } else if (currentIndex >= 0 && currentIndex < history.getEntryCount()) {
-            // When InitialNavigationEntry is enabled, the current entry might
-            // not exist.
+        // The current entry will always exist, but only return it if it is not
+        // the initial NavigationEntry, to preserve legacy behavior. This is
+        // because initial NavigationEntries used to not exist (see
+        // https://crbug.com/524208), and the API used to return null when
+        // no navigation had committed. Keeping the legacy behavior prevents
+        // unexpected breakages on things that depend on it. See also
+        // https://crbug.com/1277414.
+        if (!history.getEntryAtIndex(currentIndex).isInitialEntry()) {
             return history.getEntryAtIndex(currentIndex).getOriginalUrl().getSpec();
         }
 
@@ -3124,12 +3130,6 @@ public class AwContents implements SmartClipProvider {
     }
 
     void startProcessTextIntent(Intent intent) {
-        // on Android M, WebView is not able to replace the text with the processed text.
-        // So set the readonly flag for M.
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
-            intent.putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true);
-        }
-
         if (ContextUtils.activityFromContext(mContext) == null) {
             mContext.startActivity(intent);
             return;
@@ -3746,6 +3746,11 @@ public class AwContents implements SmartClipProvider {
     private void setAwAutofillClient(AwAutofillClient client) {
         mAwAutofillClient = client;
         client.init(mContext);
+    }
+
+    @VisibleForTesting
+    public AwAutofillClient getAutofillClient() {
+        return mAwAutofillClient;
     }
 
     @CalledByNative

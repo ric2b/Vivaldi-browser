@@ -90,7 +90,7 @@ const gfx::ImageSkia GetImageForSignalStrength(int signal_strength) {
   return gfx::CanvasImageSource::MakeImageSkia<
       network_icon::SignalStrengthImageSource>(
       network_icon::BARS, gfx::kGoogleBlue500, kTetherSignalIconSize,
-      normalized_signal_strength);
+      normalized_signal_strength, 5);
 }
 
 }  // namespace
@@ -217,7 +217,7 @@ void TetherNotificationPresenter::NotifyConnectionToHostFailed() {
   PA_LOG(VERBOSE) << "Displaying \"connection attempt failed\" notification. "
                   << "Notification ID = " << id;
 
-  ShowNotification(CreateSystemNotification(
+  ShowNotification(CreateSystemNotificationPtr(
       message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE, id,
       l10n_util::GetStringUTF16(
           IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_TITLE),

@@ -6,6 +6,7 @@
 #define UI_PLATFORM_WINDOW_EXTENSIONS_WAYLAND_EXTENSION_H_
 
 #include "base/component_export.h"
+#include "build/chromeos_buildflags.h"
 
 namespace ui {
 
@@ -38,11 +39,13 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
   // features.
   virtual void StartWindowDraggingSessionIfNeeded(bool allow_system_drag) = 0;
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Signals the underneath platform that browser is entering (or exiting)
   // 'immersive fullscreen mode'.
   // Under lacros, it controls for instance interaction with the system shelf
   // widget, when browser goes in fullscreen.
   virtual void SetImmersiveFullscreenStatus(bool status) = 0;
+#endif
 
   // Signals the underneath platform to shows a preview for the given window
   // snap direction. `allow_haptic_feedback` indicates if it should send haptic
@@ -52,8 +55,10 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
 
   // Requests the underneath platform to snap the window in the given direction,
   // if not WaylandWindowSnapDirection::kNone, otherwise cancels the window
-  // snapping.
-  virtual void CommitSnap(WaylandWindowSnapDirection snap) = 0;
+  // snapping. `snap_ratio` indicates the width of the work area to snap to in
+  // landscape mode, or height in portrait mode.
+  virtual void CommitSnap(WaylandWindowSnapDirection snap,
+                          float snap_ratio) = 0;
 
   // Signals the underneath platform whether the current tab of the browser
   // window can go back. The underneath platform might react, for example,

@@ -10,7 +10,7 @@
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_service.h"
@@ -140,12 +140,31 @@ bool RealTimeUrlLookupServiceBase::CanCheckUrl(const GURL& url) {
   if (VerdictCacheManager::has_artificial_unsafe_url()) {
     return true;
   }
+  base::UmaHistogramBoolean("SafeBrowsing.RT.CannotCheckInvalidUrl",
+                            !url.is_valid());
   return CanGetReputationOfUrl(url);
 }
 
 // static
 SBThreatType RealTimeUrlLookupServiceBase::GetSBThreatTypeForRTThreatType(
-    RTLookupResponse::ThreatInfo::ThreatType rt_threat_type) {
+    RTLookupResponse::ThreatInfo::ThreatType rt_threat_type,
+    RTLookupResponse::ThreatInfo::VerdictType rt_verdict_type) {
+  if (rt_threat_type == RTLookupResponse::ThreatInfo::MANAGED_POLICY) {
+    switch (rt_verdict_type) {
+      case RTLookupResponse::ThreatInfo::DANGEROUS:
+        return SB_THREAT_TYPE_MANAGED_POLICY_BLOCK;
+      case RTLookupResponse::ThreatInfo::WARN:
+        return SB_THREAT_TYPE_MANAGED_POLICY_WARN;
+      default:
+        NOTREACHED();
+        return SB_THREAT_TYPE_SAFE;
+    }
+  }
+
+  if (rt_verdict_type != RTLookupResponse::ThreatInfo::DANGEROUS) {
+    return SB_THREAT_TYPE_SAFE;
+  }
+
   switch (rt_threat_type) {
     case RTLookupResponse::ThreatInfo::WEB_MALWARE:
       return SB_THREAT_TYPE_URL_MALWARE;
@@ -155,6 +174,7 @@ SBThreatType RealTimeUrlLookupServiceBase::GetSBThreatTypeForRTThreatType(
       return SB_THREAT_TYPE_URL_UNWANTED;
     case RTLookupResponse::ThreatInfo::UNCLEAR_BILLING:
       return SB_THREAT_TYPE_BILLING;
+    case RTLookupResponse::ThreatInfo::MANAGED_POLICY:
     case RTLookupResponse::ThreatInfo::THREAT_TYPE_UNSPECIFIED:
       NOTREACHED() << "Unexpected RTLookupResponse::ThreatType encountered";
       return SB_THREAT_TYPE_SAFE;
@@ -313,7 +333,7 @@ void RealTimeUrlLookupServiceBase::MayBeCacheRealTimeUrlVerdict(
     const GURL& url,
     RTLookupResponse response) {
   if (cache_manager_ && response.threat_info_size() > 0) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&VerdictCacheManager::CacheRealTimeUrlVerdict,
                                   cache_manager_->GetWeakPtr(), url, response,
                                   base::Time::Now()));

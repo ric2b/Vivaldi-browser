@@ -28,10 +28,13 @@
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/connectivity_diagnostics_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/connectivity_diagnostics_dialog.h"
+#include "chrome/browser/ui/webui/ash/internet_detail_dialog.h"
+#include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/offline_login_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/ash/components/network/network_connection_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -43,6 +46,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace ash {
+
 namespace {
 
 // TODO(https://crbug.com/1241511): Remove this global.
@@ -275,7 +279,7 @@ void ErrorScreen::OnUserAction(const base::Value::List& args) {
     ShowCaptivePortal();
   } else if (action_id == kUserActionOpenInternetDialog) {
     // Empty string opens the internet detail dialog for the default network.
-    chromeos::InternetDetailDialog::ShowDialog("");
+    InternetDetailDialog::ShowDialog("");
   } else if (action_id == kUserActionConfigureCertsButtonClicked) {
     OnConfigureCerts();
   } else if (action_id == kUserActionDiagnoseButtonClicked) {
@@ -288,8 +292,14 @@ void ErrorScreen::OnUserAction(const base::Value::List& args) {
     OnCancelButtonClicked();
   } else if (action_id == kUserActionReloadGaia) {
     OnReloadGaiaClicked();
-  } else if (action_id == kUserActionNetworkConnected ||
-             action_id == kUserActionCancelReset) {
+  } else if (action_id == kUserActionNetworkConnected) {
+    // JS network implementation might notify that the network was connected
+    // faster than the corresponding C++ code. Let the screen on which error is
+    // shown handle `ErrorScreen::Hide`
+    if (network_state_informer_->state() == NetworkStateInformer::ONLINE) {
+      Hide();
+    }
+  } else if (action_id == kUserActionCancelReset) {
     Hide();
   } else if (action_id == kUserActionOfflineLogin) {
     OnOfflineLoginClicked();
@@ -334,7 +344,7 @@ void ErrorScreen::PolicyLoadFailed() {
 }
 
 void ErrorScreen::DefaultHideCallback() {
-  if (parent_screen_ != ash::OOBE_SCREEN_UNKNOWN && view_)
+  if (parent_screen_ != OOBE_SCREEN_UNKNOWN && view_)
     view_->ShowOobeScreen(parent_screen_);
 
   // TODO(antrim): Due to potential race with GAIA reload and hiding network
@@ -350,7 +360,7 @@ void ErrorScreen::OnConfigureCerts() {
 }
 
 void ErrorScreen::OnDiagnoseButtonClicked() {
-  chromeos::ConnectivityDiagnosticsDialog::ShowDialog();
+  ConnectivityDiagnosticsDialog::ShowDialog();
 }
 
 void ErrorScreen::OnLaunchOobeGuestSession() {
@@ -427,8 +437,8 @@ void ErrorScreen::StartGuestSessionAfterOwnershipCheck(
   if (guest_login_performer_)
     return;
 
-  guest_login_performer_ = std::make_unique<ChromeLoginPerformer>(
-      this, LoginDisplayHost::default_host()->metrics_recorder());
+  guest_login_performer_ =
+      std::make_unique<ChromeLoginPerformer>(this, AuthMetricsRecorder::Get());
   guest_login_performer_->LoginOffTheRecord();
 }
 

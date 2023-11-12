@@ -2275,12 +2275,6 @@ void GLES2TraceImplementation::ContextVisibilityHintCHROMIUM(
   gl_->ContextVisibilityHintCHROMIUM(visibility);
 }
 
-void GLES2TraceImplementation::CoverageModulationCHROMIUM(GLenum components) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::CoverageModulationCHROMIUM");
-  gl_->CoverageModulationCHROMIUM(components);
-}
-
 GLenum GLES2TraceImplementation::GetGraphicsResetStatusKHR() {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::GetGraphicsResetStatusKHR");
   return gl_->GetGraphicsResetStatusKHR();
@@ -2462,6 +2456,11 @@ void GLES2TraceImplementation::ColorMaskiOES(GLuint buf,
 GLboolean GLES2TraceImplementation::IsEnablediOES(GLenum target, GLuint index) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::IsEnablediOES");
   return gl_->IsEnablediOES(target, index);
+}
+
+void GLES2TraceImplementation::ProvokingVertexANGLE(GLenum provokeMode) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::ProvokingVertexANGLE");
+  gl_->ProvokingVertexANGLE(provokeMode);
 }
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_IMPL_AUTOGEN_H_

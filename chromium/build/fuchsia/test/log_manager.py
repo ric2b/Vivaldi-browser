@@ -13,7 +13,7 @@ import time
 from contextlib import AbstractContextManager
 from typing import Iterable, Optional, TextIO
 
-from common import read_package_paths, register_common_args, \
+from common import SDK_ROOT, read_package_paths, register_common_args, \
                    register_device_args, run_continuous_ffx_command, \
                    run_ffx_command
 from ffx_integration import ScopedFfxConfig
@@ -37,7 +37,7 @@ class LogManager(AbstractContextManager):
     def __enter__(self):
         if self._scoped_ffx_log:
             self._scoped_ffx_log.__enter__()
-            run_ffx_command(('daemon', 'stop'))
+            run_ffx_command(('daemon', 'stop'), check=False)
 
         return self
 
@@ -119,7 +119,11 @@ def start_system_log(log_manager: LogManager,
                                               target_id,
                                               stdout=subprocess.PIPE)
         log_manager.add_log_process(log_proc)
-        symbolize_cmd = (['debug', 'symbolize', '--', '--omit-module-lines'])
+        symbolize_cmd = ([
+            'debug', 'symbolize', '--', '--omit-module-lines',
+            '--build-id-dir',
+            os.path.join(SDK_ROOT, '.build-id')
+        ])
         for symbol_path in symbol_paths:
             symbolize_cmd.extend(['--ids-txt', symbol_path])
         log_manager.add_log_process(

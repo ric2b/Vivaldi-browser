@@ -4,11 +4,9 @@
 
 #import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
 
-#import "components/url_param_filter/core/features.h"
-#import "components/url_param_filter/core/url_param_filterer.h"
-#import "components/url_param_filter/ios/cross_otr_tab_helper.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/url_loading/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/web/public/web_state.h"
@@ -33,7 +31,7 @@ web::WebState* TabInsertionBrowserAgent::InsertWebState(
     bool in_background,
     bool inherit_opener,
     bool should_show_start_surface,
-    const url_param_filter::FilterResult& filtering_result) {
+    bool should_skip_new_tab_animation) {
   DCHECK(index == TabInsertion::kPositionAutomatically ||
          (index >= 0 && index <= web_state_list_->count()));
 
@@ -68,16 +66,10 @@ web::WebState* TabInsertionBrowserAgent::InsertWebState(
         ->SetShowStartSurface(true);
   }
 
-  if (base::FeatureList::IsEnabled(
-          url_param_filter::features::kIncognitoParamFilterEnabled) &&
-      web_state->GetBrowserState()->IsOffTheRecord() && !parent &&
-      filtering_result.filtered_param_count > 0) {
-    // Only attach the CrossOtrTabHelper to OTR web_state if parent is null,
-    // as this indicates that it's the result of a "Open In Incognito" press.
-    url_param_filter::CrossOtrTabHelper::CreateForWebState(web_state.get());
-    auto* observer =
-        url_param_filter::CrossOtrTabHelper::FromWebState(web_state.get());
-    observer->SetExperimentalStatus(filtering_result.experimental_status);
+  if (should_skip_new_tab_animation) {
+    NewTabAnimationTabHelper::CreateForWebState(web_state.get());
+    NewTabAnimationTabHelper::FromWebState(web_state.get())
+        ->DisableNewTabAnimation();
   }
 
   web_state->GetNavigationManager()->LoadURLWithParams(params);

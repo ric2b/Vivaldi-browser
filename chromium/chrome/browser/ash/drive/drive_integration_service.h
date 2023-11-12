@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "chromeos/ash/components/drivefs/drivefs_host.h"
+#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/file_errors.h"
@@ -30,7 +31,7 @@ class Profile;
 namespace base {
 class FilePath;
 class SequencedTaskRunner;
-}
+}  // namespace base
 
 namespace drivefs {
 class DriveFsHost;
@@ -70,12 +71,10 @@ struct QuickAccessItem {
 class DriveIntegrationServiceObserver : public base::CheckedObserver {
  public:
   // Triggered when the file system is mounted.
-  virtual void OnFileSystemMounted() {
-  }
+  virtual void OnFileSystemMounted() {}
 
   // Triggered when the file system is being unmounted.
-  virtual void OnFileSystemBeingUnmounted() {
-  }
+  virtual void OnFileSystemBeingUnmounted() {}
 
   // Triggered when mounting the filesystem has failed in a fashion that will
   // not be automatically retried.
@@ -172,6 +171,9 @@ class DriveIntegrationService : public KeyedService,
   // Returns the DriveFsHost if it is enabled.
   drivefs::DriveFsHost* GetDriveFsHost() const;
 
+  // Returns the `DriveFsPinManager` iff DriveFS is mounted.
+  drivefs::pinning::DriveFsPinManager* GetDriveFsPinManager();
+
   // Returns the mojo interface to the DriveFs daemon if it is enabled and
   // connected.
   drivefs::mojom::DriveFs* GetDriveFsInterface() const;
@@ -262,7 +264,8 @@ class DriveIntegrationService : public KeyedService,
   void GetSyncingPaths(
       drivefs::mojom::DriveFs::GetSyncingPathsCallback callback);
 
-  drivefs::SyncStatus GetSyncStatusForPath(const base::FilePath& drive_path);
+  drivefs::SyncStatusAndProgress GetSyncStatusForPath(
+      const base::FilePath& drive_path);
 
   // Tells DriveFS to update its cached pin states of hosted files (once).
   void PollHostedFilePinStates();
@@ -389,6 +392,7 @@ class DriveIntegrationService : public KeyedService,
 
   std::unique_ptr<DriveFsHolder> drivefs_holder_;
   std::unique_ptr<PreferenceWatcher> preference_watcher_;
+  std::unique_ptr<drivefs::pinning::DriveFsPinManager> pin_manager_;
   int drivefs_total_failures_count_ = 0;
   int drivefs_consecutive_failures_count_ = 0;
   bool remount_when_online_ = false;

@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "chromeos/ash/components/attestation/attestation_flow.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace attestation {
@@ -20,6 +22,8 @@ struct AttestationFlowAdaptive::GetCertificateParams {
   bool force_new_key;
   ::attestation::KeyType key_crypto_type;
   std::string key_name;
+  absl::optional<AttestationFlow::CertProfileSpecificData>
+      profile_specific_data;
 };
 
 // Consructs the object with `AttestationFlowTypeDecider` and
@@ -51,6 +55,8 @@ void AttestationFlowAdaptive::GetCertificate(
     bool force_new_key,
     ::attestation::KeyType key_crypto_type,
     const std::string& key_name,
+    const absl::optional<AttestationFlow::CertProfileSpecificData>&
+        profile_specific_data,
     CertificateCallback callback) {
   GetCertificateParams params = {
       /*.certificate_profile=*/certificate_profile,
@@ -59,6 +65,7 @@ void AttestationFlowAdaptive::GetCertificate(
       /*.force_new_key=*/force_new_key,
       /*.key_crypto_type=*/key_crypto_type,
       /*.key_name=*/key_name,
+      /*.profile_specific_data=*/profile_specific_data,
   };
 
   auto status_reporter = std::make_unique<AttestationFlowStatusReporter>();
@@ -96,8 +103,14 @@ void AttestationFlowAdaptive::StartGetCertificate(
     AttestationFlow* fallback_attestation_flow =
         attestation_flow_factory_->GetFallback();
     fallback_attestation_flow->GetCertificate(
-        params.certificate_profile, params.account_id, params.request_origin,
-        params.force_new_key, params.key_crypto_type, params.key_name,
+        /*certificate_profile=*/params.certificate_profile,
+        /*account_id=*/params.account_id,
+        /*request_origin=*/params.request_origin,
+        /*force_new_key=*/params.force_new_key,
+        /*key_crypto_type=*/params.key_crypto_type,
+        /*key_name=*/params.key_name,
+        /*profile_specific_data=*/params.profile_specific_data,
+        /*callback=*/
         base::BindOnce(
             &AttestationFlowAdaptive::OnGetCertificateWithFallbackFlow,
             weak_factory_.GetWeakPtr(), std::move(status_reporter),
@@ -107,8 +120,13 @@ void AttestationFlowAdaptive::StartGetCertificate(
   AttestationFlow* default_attestation_flow =
       attestation_flow_factory_->GetDefault();
   default_attestation_flow->GetCertificate(
-      params.certificate_profile, params.account_id, params.request_origin,
-      params.force_new_key, params.key_crypto_type, params.key_name,
+      /*certificate_profile=*/params.certificate_profile,
+      /*account_id=*/params.account_id,
+      /*request_origin=*/params.request_origin,
+      /*force_new_key=*/params.force_new_key,
+      /*key_crypto_type=*/params.key_crypto_type, /*key_name=*/params.key_name,
+      /*profile_specific_data=*/params.profile_specific_data,
+      /*callback=*/
       base::BindOnce(&AttestationFlowAdaptive::OnGetCertificateWithDefaultFlow,
                      weak_factory_.GetWeakPtr(), params,
                      std::move(status_reporter), std::move(callback)));

@@ -117,6 +117,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kPowerSmartDimEnabled, true);
   registry->RegisterBooleanPref(prefs::kPowerAlsLoggingEnabled, false);
   registry->RegisterBooleanPref(prefs::kPowerQuickDimEnabled, false);
+  registry->RegisterIntegerPref(prefs::kPowerQuickLockDelay,
+                                hps::GetQuickLockDelay().InMilliseconds());
 
   registry->RegisterBooleanPref(prefs::kAllowScreenLock, true);
   registry->RegisterBooleanPref(
@@ -327,8 +329,7 @@ void PowerPrefs::UpdatePowerPolicyFromPrefs() {
   // poorly with delay scaling, resulting in the system staying awake for a long
   // time if a prediction is wrong. https://crbug.com/888392.
   if (prefs->GetBoolean(prefs::kPowerSmartDimEnabled) &&
-      base::FeatureList::IsEnabled(
-          chromeos::features::kUserActivityPrediction)) {
+      base::FeatureList::IsEnabled(features::kUserActivityPrediction)) {
     values.presentation_screen_dim_delay_factor = 1.0;
     values.user_activity_screen_dim_delay_factor = 1.0;
   } else {
@@ -346,8 +347,9 @@ void PowerPrefs::UpdatePowerPolicyFromPrefs() {
       values.ac_quick_dim_delay_ms = hps::GetQuickDimDelay().InMilliseconds();
 
       values.battery_quick_lock_delay_ms =
-          hps::GetQuickLockDelay().InMilliseconds();
-      values.ac_quick_lock_delay_ms = hps::GetQuickLockDelay().InMilliseconds();
+          prefs->GetInteger(prefs::kPowerQuickLockDelay);
+      values.ac_quick_lock_delay_ms =
+          prefs->GetInteger(prefs::kPowerQuickLockDelay);
 
       values.send_feedback_if_undimmed = hps::GetQuickDimFeedbackEnabled();
 
@@ -497,6 +499,7 @@ void PowerPrefs::ObservePrefs(PrefService* prefs) {
                           update_callback);
   profile_registrar_->Add(prefs::kPowerAlsLoggingEnabled, update_callback);
   profile_registrar_->Add(prefs::kPowerQuickDimEnabled, update_callback);
+  profile_registrar_->Add(prefs::kPowerQuickLockDelay, update_callback);
   profile_registrar_->Add(prefs::kPowerAdaptiveChargingEnabled,
                           update_callback);
 

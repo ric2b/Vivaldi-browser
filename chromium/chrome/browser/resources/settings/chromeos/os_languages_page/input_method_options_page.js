@@ -14,17 +14,17 @@ import './os_japanese_clear_ime_data_dialog.js';
 import './os_japanese_manage_user_dictionary_page.js';
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
+import {assert, assertNotReached} from 'chrome://resources/ash/common/assert.js';
 import {afterNextRender, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
-import {Route, Router} from '../../router.js';
+import {Route, Router} from '../router.js';
 import {routes} from '../os_route.js';
 import {PrefsBehavior, PrefsBehaviorInterface} from '../prefs_behavior.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
 
 import {getTemplate} from './input_method_options_page.html.js';
-import {generateOptions, getFirstPartyInputMethodEngineId, getOptionLabelName, getOptionMenuItems, getOptionSubtitleName, getOptionUiType, getOptionUrl, getSubmenuButtonType, getUntranslatedOptionLabelName, hasOptionsPageInSettings, isOptionLabelTranslated, OPTION_DEFAULT, OptionType, shouldStoreNumberAsString, SubmenuButton, UiType} from './input_method_util.js';
+import {generateOptions, getDefaultValue, getFirstPartyInputMethodEngineId, getOptionLabelName, getOptionMenuItems, getOptionSubtitleName, getOptionUiType, getOptionUrl, getSubmenuButtonType, getUntranslatedOptionLabelName, hasOptionsPageInSettings, isOptionLabelTranslated, OPTION_MAP, OptionType, PHYSICAL_KEYBOARD_AUTOCORRECT_ENABLED_BY_DEFAULT, shouldStoreAsNumber, SubmenuButton, UiType} from './input_method_util.js';
 import {LanguageHelper} from './languages_types.js';
 
 /**
@@ -140,6 +140,15 @@ class SettingsInputMethodOptionsPageElement extends
   }
 
   /**
+   * For some engineId, we want to store the data in a different storage
+   * engineId. i.e. we want to use the nacl_mozc_jp settings data for
+   * the nacl_mozc_us settings.
+   */
+  getStorageEngineId_() {
+    return this.engineId_ !== 'nacl_mozc_us' ? this.engineId_ : 'nacl_mozc_jp';
+  }
+
+  /**
    * Get menu items for an option, and enrich the items with selected status and
    * i18n label.
    * @param {OptionType} name
@@ -162,18 +171,30 @@ class SettingsInputMethodOptionsPageElement extends
     const options = generateOptions(
         this.engineId_, loadTimeData.getBoolean('allowPredictiveWriting'),
         loadTimeData.getBoolean('allowDiacriticsOnPhysicalKeyboardLongpress'),
-        loadTimeData.getBoolean('languageSettingsUpdateJapanese'));
-    const prefValue = this.getPref(this.PREFS_PATH).value;
-    const currentSettings =
-        this.engineId_ in prefValue ? prefValue[this.engineId_] : {};
+        loadTimeData.getBoolean('systemJapanesePhysicalTyping'));
+    const inputMethodSpecificSettings = this.getPref(this.PREFS_PATH).value;
+    // The settings for Japanese for both engine nacl_mozc_us and nacl_mozc_jp
+    // types will be stored in nacl_mozc_us. See:
+    // https://crsrc.org/c/chrome/browser/ash/input_method/input_method_settings.cc;drc=5b784205e8043fb7d1c11e3d80521e80704947ca;l=25
+    const engineId = this.getStorageEngineId_();
+    const currentSettings = engineId in inputMethodSpecificSettings ?
+        inputMethodSpecificSettings[engineId] :
+        {};
+    const defaultOverrides = this.getDefaultValueOverrides_(engineId);
 
     const makeOption = (option) => {
       const name = option.name;
       const uiType = getOptionUiType(name);
-      let value = name in currentSettings ? currentSettings[name] :
-                                            OPTION_DEFAULT[name];
+
+      let value = name in currentSettings ?
+          currentSettings[name] :
+          getDefaultValue(name, defaultOverrides);
+      if (loadTimeData.getBoolean('allowAutocorrectToggle') &&
+          name in OPTION_MAP) {
+        value = OPTION_MAP[name].mapValueForDisplay(value);
+      }
       if (!this.isSettingValueValid_(name, value)) {
-        value = OPTION_DEFAULT[name];
+        value = getDefaultValue(name, defaultOverrides);
         this.updatePref_(name, value);
       }
 
@@ -211,6 +232,27 @@ class SettingsInputMethodOptionsPageElement extends
                 options: section.optionNames.map(makeOption, false),
               };
             });
+  }
+
+  /**
+   * Returns an object specifying the default values to be used for a subset
+   * of options.
+   *
+   * @param engineId string The engine id we want default values for.
+   * @return {Object<OptionType, *>} Default value overrides.
+   */
+  getDefaultValueOverrides_(engineId) {
+    if (!loadTimeData.getBoolean('autocorrectEnableByDefault')) {
+      return {};
+    }
+    const enabledByDefaultKey =
+        PHYSICAL_KEYBOARD_AUTOCORRECT_ENABLED_BY_DEFAULT;
+    const prefBlob = this.getPref(this.PREFS_PATH).value;
+    const isAutocorrectDefaultEnabled =
+        prefBlob?.[engineId]?.[enabledByDefaultKey];
+    return !isAutocorrectDefaultEnabled ? {} : {
+      [OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL]: 1,
+    };
   }
 
   /**
@@ -265,13 +307,19 @@ class SettingsInputMethodOptionsPageElement extends
     // new variable.
     const updatedSettings = {};
     Object.assign(updatedSettings, this.getPref(this.PREFS_PATH)['value']);
-    if (!(this.engineId_ in updatedSettings)) {
-      updatedSettings[this.engineId_] = {};
+
+    const engineId = this.getStorageEngineId_();
+    if (updatedSettings[engineId] === undefined) {
+      updatedSettings[engineId] = {};
     }
-    if (shouldStoreNumberAsString(optionName)) {
-      newValue = parseInt(newValue, 10);
+    if (shouldStoreAsNumber(optionName)) {
+      if (loadTimeData.getBoolean('allowAutocorrectToggle')) {
+        newValue = OPTION_MAP[optionName].mapValueForWrite(newValue);
+      } else {
+        newValue = parseInt(newValue, 10);
+      }
     }
-    updatedSettings[this.engineId_][optionName] = newValue;
+    updatedSettings[engineId][optionName] = newValue;
 
     this.setPrefValue(this.PREFS_PATH, updatedSettings);
   }

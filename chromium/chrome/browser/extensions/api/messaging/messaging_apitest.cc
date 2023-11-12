@@ -40,6 +40,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
@@ -77,24 +78,23 @@ class MessageSender : public ExtensionHostRegistry::Observer {
   }
 
  private:
-  static std::unique_ptr<base::ListValue> BuildEventArguments(
-      const bool last_message,
-      const std::string& data) {
-    base::Value event(base::Value::Type::DICTIONARY);
-    event.SetBoolKey("lastMessage", last_message);
-    event.SetStringKey("data", data);
-    std::unique_ptr<base::ListValue> arguments(new base::ListValue());
-    arguments->Append(std::move(event));
+  static base::Value::List BuildEventArguments(const bool last_message,
+                                               const std::string& data) {
+    base::Value::Dict event;
+    event.Set("lastMessage", last_message);
+    event.Set("data", data);
+    base::Value::List arguments;
+    arguments.Append(std::move(event));
     return arguments;
   }
 
   static std::unique_ptr<Event> BuildEvent(
-      std::unique_ptr<base::ListValue> event_args,
+      base::Value::List event_args,
       content::BrowserContext* browser_context,
       GURL event_url) {
-    auto event = std::make_unique<Event>(
-        events::TEST_ON_MESSAGE, "test.onMessage",
-        std::move(*event_args).TakeList(), browser_context);
+    auto event =
+        std::make_unique<Event>(events::TEST_ON_MESSAGE, "test.onMessage",
+                                std::move(event_args), browser_context);
     event->event_url = std::move(event_url);
     return event;
   }
@@ -387,9 +387,9 @@ class ExternallyConnectableMessagingTest : public MessagingApiTest {
 
     // Turn the array into a JS array, which effectively gets eval()ed.
     std::string as_js_array;
-    for (size_t i = 0; i < std::size(non_messaging_apis); ++i) {
+    for (const auto* non_messaging_api : non_messaging_apis) {
       as_js_array += as_js_array.empty() ? "[" : ",";
-      as_js_array += base::StringPrintf("'%s'", non_messaging_apis[i]);
+      as_js_array += base::StringPrintf("'%s'", non_messaging_api);
     }
     as_js_array += "]";
 
@@ -615,7 +615,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest, NotInstalled) {
                            .Set("name", "Fake extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1483,7 +1483,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
                            .Set("name", "Fake extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1540,14 +1540,103 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, LargeMessages) {
   ASSERT_TRUE(RunExtensionTest("messaging/large_messages"));
 }
 
-class MessagingApiFencedFrameTest
-    : public MessagingApiTest,
-      public testing::WithParamInterface<bool /* shadow_dom_fenced_frame */> {
+class ServiceWorkerMessagingApiTest : public MessagingApiTest {
+ protected:
+  ~ServiceWorkerMessagingApiTest() override = default;
+
+  size_t GetWorkerRefCount(const blink::StorageKey& key) {
+    content::ServiceWorkerContext* sw_context =
+        browser()
+            ->profile()
+            ->GetDefaultStoragePartition()
+            ->GetServiceWorkerContext();
+    return sw_context->CountExternalRequestsForTest(key);
+  }
+};
+
+// After sending message from extension and got response back, there should be
+// no in-flight request hanging.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerMessagingApiTest,
+                       InflightCountAfterSendMessage) {
+  constexpr char kManifest[] =
+      R"({
+           "name": "Test Extension",
+           "manifest_version": 3,
+           "version": "0.1",
+           "background": {
+              "service_worker": "script.js",
+              "type": "module"
+            }
+         })";
+  constexpr char kScript[] =
+      R"(
+          import { openTab } from '/_test_resources/test_util/tabs_util.js';
+
+          self.addEventListener('activate', async (event) => {
+            await openTab('page.html');
+            sendMessage();
+          });
+
+          function sendMessage() {
+            chrome.runtime.sendMessage({ greeting: 'hello' }, (response) => {
+              chrome.test.notifyPass();
+              console.log('pass');
+            });
+          }
+        )";
+  constexpr char kPageHtml[] =
+      R"(
+          <title>Page Title</title>
+          <html>
+          <body>
+            <p>Test page</p>
+            <script src="page.js"></script>
+          </body>
+          </html>
+        )";
+  constexpr char kPageJs[] =
+      R"(
+          function onMessage(request, sender, sendResponse) {
+            sendResponse({ greeting: 'there' });
+          }
+
+          chrome.runtime.onMessage.addListener(onMessage);
+        )";
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("script.js"), kScript);
+  test_dir.WriteFile(FILE_PATH_LITERAL("page.html"), kPageHtml);
+  test_dir.WriteFile(FILE_PATH_LITERAL("page.js"), kPageJs);
+
+  ResultCatcher catcher;
+  const Extension* extension = LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(catcher.GetNextResult());
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(web_contents);
+  EXPECT_EQ(extension->origin(),
+            web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin());
+  // This is a hack to make sure messaging IPCs are finished. Since IPCs
+  // are sent synchronously, anything started prior to this method will finish
+  // before this method returns (as content::ExecuteScript() blocks until
+  // completion).
+  ASSERT_TRUE(content::ExecuteScript(web_contents, "1 == 1;"));
+
+  content::RunAllTasksUntilIdle();
+
+  url::Origin extension_origin = url::Origin::Create(extension->url());
+  blink::StorageKey extension_key(extension_origin);
+  EXPECT_EQ(0u, GetWorkerRefCount(extension_key));
+}
+
+class MessagingApiFencedFrameTest : public MessagingApiTest {
  protected:
   MessagingApiFencedFrameTest() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames,
-          {{"implementation_type", GetParam() ? "shadow_dom" : "mparch"}}},
+        {{blink::features::kFencedFrames, {{}}},
          {features::kPrivacySandboxAdsAPIsOverride, {}}},
         {/* disabled_features */});
   }
@@ -1557,15 +1646,10 @@ class MessagingApiFencedFrameTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(MessagingApiFencedFrameTest, Load) {
-  ASSERT_TRUE(RunExtensionTest("messaging/connect_fenced_frames",
-                               {.custom_arg = GetParam() ? "" : "MPArch"}))
+IN_PROC_BROWSER_TEST_F(MessagingApiFencedFrameTest, Load) {
+  ASSERT_TRUE(RunExtensionTest("messaging/connect_fenced_frames", {}))
       << message_;
 }
-
-INSTANTIATE_TEST_SUITE_P(MessagingApiFencedFrameTest,
-                         MessagingApiFencedFrameTest,
-                         testing::Bool());
 
 }  // namespace
 

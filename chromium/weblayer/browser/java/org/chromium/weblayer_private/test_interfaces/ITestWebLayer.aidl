@@ -34,8 +34,6 @@ interface ITestWebLayer {
 
   void setAccessibilityEnabled(in boolean enabled) = 8;
 
-  boolean canBrowserControlsScroll(in ITab tab) = 9;
-
   // Creates and shows a test infobar in |tab|, calling |runnable| when the addition (including
   // animations) is complete.
   void addInfoBar(in ITab tab, in IObjectWrapper runnable) = 10;
@@ -47,8 +45,6 @@ interface ITestWebLayer {
   void forceNetworkConnectivityState(in boolean networkAvailable) = 13;
 
   boolean canInfoBarContainerScroll(in ITab tab) = 14;
-
-  String getDisplayedUrl(IObjectWrapper /* View */ urlBarView) = 15;
 
   // Returns the target language of the currently-showing translate infobar, or null if no translate
   // infobar is currently showing.
@@ -70,7 +66,6 @@ interface ITestWebLayer {
   void crashTab(in ITab tab) = 20;
 
   boolean isWindowOnSmallDevice(in IBrowser browser) = 21;
-  IObjectWrapper getSecurityButton(IObjectWrapper /* View */ urlBarView) = 22;
   void fetchAccessToken(in IProfile profile, in IObjectWrapper /* Set<String */ scopes, in IObjectWrapper /* ValueCallback<String> */ onTokenFetched) = 23;
   // Add a TestContentCaptureConsumer for the provided |browser|, with a Runnable |onNewEvent| to notify the
   // caller when the events happened, the event ID will be received through |eventsObserved| list.

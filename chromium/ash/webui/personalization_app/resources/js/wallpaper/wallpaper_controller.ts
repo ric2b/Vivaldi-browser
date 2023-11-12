@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
@@ -277,13 +277,14 @@ async function getMissingLocalImageThumbnails(
 
   // There may be multiple async tasks triggered that pull off this queue.
   while (imageThumbnailsToFetch.size) {
-    const path = imageThumbnailsToFetch.values().next().value;
-    imageThumbnailsToFetch.delete(path);
-    const {data} = await provider.getLocalImageThumbnail({path});
-    if (!data) {
-      console.warn('Failed to fetch local image data', path);
-    }
-    store.dispatch(action.setLocalImageDataAction({path}, data));
+    await Promise.all(Array.from(imageThumbnailsToFetch).map(async path => {
+      imageThumbnailsToFetch.delete(path);
+      const {data} = await provider.getLocalImageThumbnail({path});
+      if (!data) {
+        console.warn('Failed to fetch local image data', path);
+      }
+      store.dispatch(action.setLocalImageDataAction({path}, data));
+    }));
   }
 }
 
@@ -366,21 +367,29 @@ export async function setDailyRefreshCollectionId(
     collectionId: WallpaperCollection['id'],
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
-  await provider.setDailyRefreshCollectionId(collectionId);
-  // Dispatch action to highlight enabled daily refresh.
-  getDailyRefreshState(provider, store);
+  const {response} = await provider.setDailyRefreshCollectionId(collectionId);
+  // Only trigger the pending UI if this call successfully enables daily refresh
+  // and the wallpaper is going to be refreshed. Otherwise, update the daily
+  // refresh state immediately to prevent the users from seeing unnecessary
+  // loading UI.
+  if (!!collectionId && response.success && response.forceRefresh) {
+    store.dispatch(action.beginUpdateDailyRefreshImageAction());
+  } else {
+    getDailyRefreshState(provider, store);
+  }
 }
 
 export async function selectGooglePhotosAlbum(
     albumId: GooglePhotosAlbum['id'], provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
-  store.dispatch(action.beginUpdateDailyRefreshImageAction());
-  const {success} = await provider.selectGooglePhotosAlbum(albumId);
-  // If the call failed, or if this is simply disabling Daily Refresh, hide the
-  // pending UI immediately and fetch the new state, since `OnWallpaperChanged`
-  // doesn't get called.
-  if (!success || !albumId) {
-    store.dispatch(action.setUpdatedDailyRefreshImageAction());
+  const {response} = await provider.selectGooglePhotosAlbum(albumId);
+  // Only trigger the pending UI if this call successfully enables daily refresh
+  // and the wallpaper is going to be refreshed. Otherwise, update the daily
+  // refresh state immediately to prevent the users from seeing unnecessary
+  // loading UI.
+  if (!!albumId && response.success && response.forceRefresh) {
+    store.dispatch(action.beginUpdateDailyRefreshImageAction());
+  } else {
     getDailyRefreshState(provider, store);
   }
 }

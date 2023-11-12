@@ -4,7 +4,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <algorithm>
+
 #include <memory>
 #include <tuple>
 
@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
@@ -60,6 +61,7 @@
 #include "ui/gfx/color_transform.h"
 #include "ui/gfx/geometry/mask_filter_info.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/test/icc_profiles.h"
 #include "ui/gfx/video_types.h"
 
@@ -275,7 +277,7 @@ void CreateTestTwoColoredTextureDrawQuad(
         base::DoNothing());
 
     auto span = mapping.GetMemoryAsSpan<uint32_t>(pixels.size());
-    std::copy(pixels.begin(), pixels.end(), span.begin());
+    base::ranges::copy(pixels, span.begin());
   }
 
   // Return the mapped resource id.
@@ -337,7 +339,7 @@ void CreateTestTextureDrawQuad(
         base::DoNothing());
 
     auto span = mapping.GetMemoryAsSpan<uint32_t>(pixels.size());
-    std::copy(pixels.begin(), pixels.end(), span.begin());
+    base::ranges::copy(pixels, span.begin());
   }
 
   // Return the mapped resource id.
@@ -3432,8 +3434,8 @@ TEST_P(GPURendererPixelTest, TrilinearFiltering) {
   blue->SetNew(blue_shared_state, child_pass_rect, child_pass_rect,
                SkColors::kBlue, false);
 
-  auto child_to_root_transform = gfx::SkMatrixToTransform(SkMatrix::RectToRect(
-      RectToSkRect(child_pass_rect), RectToSkRect(viewport_rect)));
+  auto child_to_root_transform = gfx::TransformBetweenRects(
+      gfx::RectF(child_pass_rect), gfx::RectF(viewport_rect));
   SharedQuadState* child_pass_shared_state = CreateTestSharedQuadState(
       child_to_root_transform, child_pass_rect, root_pass.get(), gfx::MaskFilterInfo());
   auto* child_pass_quad =
@@ -5158,7 +5160,7 @@ class DelegatedInkWithPredictionTest : public DelegatedInkTest {
   virtual void EnablePrediction() {
     base::FieldTrialParams params;
     params["predicted_points"] = ::features::kDraw1Point12Ms;
-    base::test::ScopedFeatureList::FeatureAndParams prediction_params = {
+    base::test::FeatureRefAndParams prediction_params = {
         features::kDrawPredictedInkPoint, params};
 
     feature_list_.Reset();

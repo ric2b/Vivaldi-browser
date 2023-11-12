@@ -165,9 +165,11 @@ void ProxyMain::BeginMainFrame(
         "viz,benchmark", "MainFrame.BeginMainFrameAbortedOnMain",
         TRACE_ID_LOCAL(begin_main_frame_state->trace_id),
         TRACE_EVENT_FLAG_FLOW_IN, "reason", "ABORTED_NOT_VISIBLE");
-    // In this case, since the commit is deferred to a later time, gathered
-    // events metrics are not discarded so that they can be reported if the
-    // commit happens in the future.
+    // Since the commit is deferred due to the page becoming invisible, the
+    // metrics are not meaningful anymore (as the page might become visible in
+    // any arbitrary time in the future and cause an arbitrarily large latency).
+    // Discard event metrics.
+    layer_tree_host_->ClearEventsMetrics();
     std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE,
@@ -215,6 +217,14 @@ void ProxyMain::BeginMainFrame(
     return;
   }
 
+  // This call winds through to the LocalFrameView to mark the beginning
+  // of a main frame for metrics purposes. Some metrics are only gathered
+  // between calls to RecordStartOfFrameMetrics and RecordEndOfFrameMetrics.
+  // This is not wrapped into layer_tree_host_->WillBeginMainFrame because
+  // it should only be called from the multi-threaded proxy (we do not want
+  // metrics gathering in tests).
+  layer_tree_host_->RecordStartOfFrameMetrics();
+
   final_pipeline_stage_ =
       std::max(final_pipeline_stage_, deferred_final_pipeline_stage_);
   deferred_final_pipeline_stage_ = NO_PIPELINE_STAGE;
@@ -245,14 +255,6 @@ void ProxyMain::BeginMainFrame(
       std::move(begin_main_frame_state->mutator_events));
 
   layer_tree_host_->WillBeginMainFrame();
-
-  // This call winds through to the LocalFrameView to mark the beginning
-  // of a main frame for metrics purposes. Some metrics are only gathered
-  // between calls to RecordStartOfFrameMetrics and RecordEndOfFrameMetrics.
-  // This is not wrapped into layer_tree_host_->WillBeginMainFrame because
-  // it should only be called from the multi-threaded proxy (we do not want
-  // metrics gathering in tests).
-  layer_tree_host_->RecordStartOfFrameMetrics();
 
   // See LayerTreeHostClient::BeginMainFrame for more documentation on
   // what this does.
@@ -466,10 +468,14 @@ void ProxyMain::DidCompleteCommit(CommitTimestamps commit_timestamps) {
 
 void ProxyMain::DidPresentCompositorFrame(
     uint32_t frame_token,
-    std::vector<PresentationTimeCallbackBuffer::MainCallback> callbacks,
+    std::vector<PresentationTimeCallbackBuffer::Callback>
+        presentation_callbacks,
+    std::vector<PresentationTimeCallbackBuffer::SuccessfulCallback>
+        sucessful_presentation_callbacks,
     const gfx::PresentationFeedback& feedback) {
-  layer_tree_host_->DidPresentCompositorFrame(frame_token, std::move(callbacks),
-                                              feedback);
+  layer_tree_host_->DidPresentCompositorFrame(
+      frame_token, std::move(presentation_callbacks),
+      std::move(sucessful_presentation_callbacks), feedback);
 }
 
 void ProxyMain::NotifyThroughputTrackerResults(CustomTrackerResults results) {
@@ -481,11 +487,6 @@ void ProxyMain::DidObserveFirstScrollDelay(
     base::TimeTicks first_scroll_timestamp) {
   layer_tree_host_->DidObserveFirstScrollDelay(first_scroll_delay,
                                                first_scroll_timestamp);
-}
-
-void ProxyMain::ReportEventLatency(
-    std::vector<EventLatencyTracker::LatencyData> latencies) {
-  layer_tree_host_->ReportEventLatency(std::move(latencies));
 }
 
 void ProxyMain::NotifyTransitionRequestFinished(uint32_t sequence_id) {
@@ -720,7 +721,7 @@ void ProxyMain::Stop() {
 }
 
 void ProxyMain::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
-  TRACE_EVENT0("cc", "ThreadProxy::SetMutator");
+  TRACE_EVENT0("cc", "ProxyMain::SetMutator");
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&ProxyImpl::InitializeMutatorOnImpl,
@@ -729,7 +730,7 @@ void ProxyMain::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
 
 void ProxyMain::SetPaintWorkletLayerPainter(
     std::unique_ptr<PaintWorkletLayerPainter> painter) {
-  TRACE_EVENT0("cc", "ThreadProxy::SetPaintWorkletLayerPainter");
+  TRACE_EVENT0("cc", "ProxyMain::SetPaintWorkletLayerPainter");
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&ProxyImpl::InitializePaintWorkletLayerPainterOnImpl,
@@ -793,6 +794,7 @@ bool ProxyMain::SendCommitRequestToImplThreadIfNeeded(
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ProxyImpl::SetNeedsCommitOnImpl,
                                 base::Unretained(proxy_impl_.get())));
+  layer_tree_host_->OnCommitRequested();
   return true;
 }
 

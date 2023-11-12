@@ -55,7 +55,7 @@ class ExternallyManagedAppManagerImplBrowserTest : public InProcessBrowserTest {
   Profile* profile() { return browser()->profile(); }
 
   WebAppRegistrar& registrar() {
-    return WebAppProvider::GetForTest(profile())->registrar();
+    return WebAppProvider::GetForTest(profile())->registrar_unsafe();
   }
 
   ExternallyManagedAppManager& externally_managed_app_manager() {
@@ -88,17 +88,35 @@ class ExternallyManagedAppManagerImplBrowserTest : public InProcessBrowserTest {
 
 class ExternallyManagedBrowserTestWithPrefMigrationRead
     : public ExternallyManagedAppManagerImplBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   ExternallyManagedBrowserTestWithPrefMigrationRead() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
  private:
@@ -662,22 +680,20 @@ IN_PROC_BROWSER_TEST_P(ExternallyManagedBrowserTestWithPrefMigrationRead,
 
   // Reinstall policy app
   InstallApp(install_options);
-  // The success codes will vary as per the storage, as prefs will stay
-  // after deletion, but the web_app values are wiped on every uninstall.
-  if (base::FeatureList::IsEnabled(
-          features::kUseWebAppDBInsteadOfExternalPrefs)) {
-    ASSERT_EQ(webapps::InstallResultCode::kSuccessNewInstall,
-              result_code_.value());
-  } else {
-    ASSERT_EQ(webapps::InstallResultCode::kSuccessAlreadyInstalled,
-              result_code_.value());
-  }
+  ASSERT_EQ(webapps::InstallResultCode::kSuccessNewInstall,
+            result_code_.value());
   ASSERT_TRUE(registrar().GetAppById(app_id)->IsPolicyInstalledApp());
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ExternallyManagedBrowserTestWithPrefMigrationRead,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ExternallyManagedBrowserTestWithPrefMigrationRead,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 class ExternallyManagedAppManagerImplBrowserTestShortcut
     : public ExternallyManagedAppManagerImplBrowserTest,

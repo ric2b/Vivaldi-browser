@@ -32,6 +32,18 @@ extern const char kPrefersReducedMotionNoPreference[];
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const char kPrefersReducedMotionReduce[];
 
+// Mapping from WebEffectiveConnectionType to the header value. This value is
+// sent to the origins and is returned by the JavaScript API. The ordering
+// should match the ordering in //net/nqe/effective_connection_type.h and
+// public/platform/WebEffectiveConnectionType.h.
+// This array should be updated if either of the enums in
+// effective_connection_type.h or WebEffectiveConnectionType.h are updated.
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const char* const kWebEffectiveConnectionTypeMapping[];
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const size_t kWebEffectiveConnectionTypeMappingCount;
+
 using ClientHintToNameMap =
     base::flat_map<network::mojom::WebClientHintsType, std::string>;
 
@@ -77,6 +89,12 @@ enum class MetaCHType {
 const ClientHintToDelegatedThirdPartiesHeader COMPONENT_EXPORT(NETWORK_CPP)
     ParseClientHintToDelegatedThirdPartiesHeader(const std::string& header,
                                                  MetaCHType type);
+
+// This is used by subclassed of ClientHintsControllerDelegate to track the
+// amount of time that persisting client hints takes.
+void COMPONENT_EXPORT(NETWORK_CPP)
+    LogClientHintsPersistenceMetrics(const base::TimeTicks& persistence_started,
+                                     std::size_t hints_stored);
 
 }  // namespace network
 

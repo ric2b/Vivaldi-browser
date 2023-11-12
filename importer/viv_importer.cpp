@@ -70,7 +70,7 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
     // Read Inifile
     DictionaryValueINIParser inifile_parser;
     if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
-      const base::Value::Dict& inifile = inifile_parser.root().GetDict();
+      const base::Value::Dict& inifile = inifile_parser.root();
 
       bookmarkfilename_ =
           StringToPath(inifile.FindStringByDottedPath("User Prefs.Hot List File Ver2"));
@@ -142,7 +142,7 @@ bool OperaImporter::ImportSpeedDial(std::string* error) {
   ini_file = ini_file.AppendASCII(OPERA_SPEEDDIAL_NAME);
 
   if (ReadOperaIniFile(ini_file, &inifile_parser)) {
-    for (auto i : inifile_parser.root().GetDict()) {
+    for (auto i : inifile_parser.root()) {
       const std::string& key = i.first;
       if (key.find("Speed Dial ") == std::string::npos)
         continue;

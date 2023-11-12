@@ -10,8 +10,9 @@
 #include "base/callback.h"
 #include "base/strings/string_piece.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/client/report_queue_provider.h"
 #include "components/reporting/util/backoff_settings.h"
@@ -25,12 +26,13 @@ namespace reporting {
 // static
 void ReportQueueFactory::Create(EventType event_type,
                                 Destination destination,
-                                SuccessCallback success_cb) {
-  DCHECK(base::ThreadTaskRunnerHandle::IsSet());
+                                SuccessCallback success_cb,
+                                int64_t reserved_space) {
+  DCHECK(base::SequencedTaskRunner::HasCurrentDefault());
 
   auto config_result = ReportQueueConfiguration::Create(
       event_type, destination,
-      base::BindRepeating([]() { return Status::StatusOK(); }));
+      base::BindRepeating([]() { return Status::StatusOK(); }), reserved_space);
   if (!config_result.ok()) {
     LOG_WITH_STATUS(1, "ReportQueueConfiguration is invalid.", config_result);
     return;
@@ -48,20 +50,20 @@ void ReportQueueFactory::Create(EventType event_type,
 // static
 std::unique_ptr<ReportQueue, base::OnTaskRunnerDeleter>
 ReportQueueFactory::CreateSpeculativeReportQueue(EventType event_type,
-                                                 Destination destination) {
-  DCHECK(base::SequencedTaskRunnerHandle::IsSet());
+                                                 Destination destination,
+                                                 int64_t reserved_space) {
+  DCHECK(base::SequencedTaskRunner::HasCurrentDefault());
 
   auto config_result = ReportQueueConfiguration::Create(
       event_type, destination,
-      base::BindRepeating([]() { return Status::StatusOK(); }));
-
+      base::BindRepeating([]() { return Status::StatusOK(); }), reserved_space);
   if (!config_result.ok()) {
     DVLOG(1)
         << "Cannot initialize report queue. Invalid ReportQueueConfiguration: "
         << config_result.status();
     return std::unique_ptr<ReportQueue, base::OnTaskRunnerDeleter>(
-        nullptr,
-        base::OnTaskRunnerDeleter(base::SequencedTaskRunnerHandle::Get()));
+        nullptr, base::OnTaskRunnerDeleter(
+                     base::SequencedTaskRunner::GetCurrentDefault()));
   }
 
   auto speculative_queue_result = ReportQueueProvider::CreateSpeculativeQueue(
@@ -70,8 +72,8 @@ ReportQueueFactory::CreateSpeculativeReportQueue(EventType event_type,
     DVLOG(1) << "Failed to create speculative queue: "
              << speculative_queue_result.status();
     return std::unique_ptr<ReportQueue, base::OnTaskRunnerDeleter>(
-        nullptr,
-        base::OnTaskRunnerDeleter(base::SequencedTaskRunnerHandle::Get()));
+        nullptr, base::OnTaskRunnerDeleter(
+                     base::SequencedTaskRunner::GetCurrentDefault()));
   }
 
   return std::move(speculative_queue_result.ValueOrDie());
@@ -83,7 +85,7 @@ ReportQueueFactory::CreateTrySetCallback(
     SuccessCallback success_cb,
     std::unique_ptr<::net::BackoffEntry> backoff_entry) {
   return base::BindPostTask(
-      base::ThreadTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(&ReportQueueFactory::TrySetReportQueue,
                      std::move(success_cb)));
 }

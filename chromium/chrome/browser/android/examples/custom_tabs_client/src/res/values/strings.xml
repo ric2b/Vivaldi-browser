@@ -38,9 +38,10 @@
     <string name="package_label">Package:</string>
     <string name="amazing_grace">Amazing Grace 2011</string>
     <string name="artist">Kevin MacLeod</string>
-    <string name="pcct_resizable_text">PCCT Resizable</string>
+    <string name="pcct_height_resizable_text">PCCT Height Resizable</string>
     <string name="pcct_initial_height_text">PCCT Initial Height</string>
     <string name="pcct_initial_height_slider_label_desc">PCCT initial height slider</string>
+    <string name="force_engagement_signals">Force Engagement Signals</string>
     <string name="px_template">%dpx</string>
     <string name="url_hiding_text">Enable URL Bar Hiding (PCCT ignores)</string>
     <string name="color">Toolbar Color:</string>
@@ -49,5 +50,6 @@
     <string name="theme_button_light">Light</string>
     <string name="theme_button_dark">Dark</string>
     <string name="cct_type">CCT Type:</string>
+    <string name="background_interact_text">Interact with Background App</string>
 
 </resources>

@@ -7,9 +7,14 @@
  */
 
 import {Earcon} from '../../common/abstract_earcons.js';
+import {Spannable} from '../../common/spannable.js';
 import {ChromeVox} from '../chromevox.js';
 
+import {OutputFormatTree} from './output_format_tree.js';
+import {OutputFormatLogger} from './output_logger.js';
+
 const AriaCurrentState = chrome.automation.AriaCurrentState;
+const AutomationNode = chrome.automation.AutomationNode;
 const Restriction = chrome.automation.Restriction;
 
 /**
@@ -68,26 +73,26 @@ export class OutputAction {
  */
 export class OutputEarconAction extends OutputAction {
   /**
-   * @param {string} earconId
+   * @param {!Earcon} earcon
    * @param {chrome.automation.Rect=} opt_location
    */
-  constructor(earconId, opt_location) {
+  constructor(earcon, opt_location) {
     super();
 
-    /** @type {string} */
-    this.earconId = earconId;
+    /** @type {!Earcon} */
+    this.earcon = earcon;
     /** @type {chrome.automation.Rect|undefined} */
     this.location = opt_location;
   }
 
   /** @override */
   run() {
-    ChromeVox.earcons.playEarcon(Earcon[this.earconId], this.location);
+    ChromeVox.earcons.playEarcon(this.earcon, this.location);
   }
 
   /** @override */
   toJSON() {
-    return {earconId: this.earconId};
+    return {earcon: this.earcon};
   }
 }
 
@@ -126,9 +131,12 @@ export class OutputNodeSpan {
  * Possible events handled by ChromeVox internally.
  * @enum {string}
  */
-export const OutputEventType = {
+export const OutputCustomEvent = {
   NAVIGATE: 'navigate',
 };
+
+/** @typedef {!chrome.automation.EventType|!OutputCustomEvent} */
+export let OutputEventType;
 
 /**
  * Rules for mapping properties to a msg id
@@ -161,8 +169,8 @@ export const OutputPropertyMap = {
 
 /**
  * Metadata about supported automation states.
- * @const {!Object<string, {on: {msgId: string, earconId: string},
- *                          off: {msgId: string, earconId: string},
+ * @const {!Object<string, {on: {msgId: string, earcon: !Earcon},
+ *                          off: {msgId: string, earcon: !Earcon},
  *                          isRoleSpecific: (boolean|undefined)}>}
  *     on: info used to describe a state that is set to true.
  *     off: info used to describe a state that is set to undefined.
@@ -189,4 +197,32 @@ export const INPUT_TYPE_MESSAGE_IDS = {
   'tel': 'input_type_number',
   'text': 'input_type_text',
   'url': 'input_type_url',
+};
+
+/**
+ * @typedef {{
+ *    node: chrome.automation.AutomationNode,
+ *    outputFormat: (string|!OutputFormatTree),
+ *    outputBuffer: !Array<Spannable>,
+ *    outputFormatLogger: !OutputFormatLogger,
+ *    opt_prevNode: (!AutomationNode|undefined),
+ *    opt_speechProps: (OutputSpeechProperties|undefined)
+ * }}
+ *
+ * node: The AutomationNode of interest.
+ * outputFormat: The output format either specified as an output template
+ *     string or a parsed output format tree.
+ * outputBuffer: Buffer to receive rendered output.
+ * outputFormatLogger: Used for logging and recording output.
+ * opt_prevNode: Optional argument. Helps provide context for certain speech
+ *     output.
+ * opt_speechProps: Optional argument. Used to specify how speech should be
+ *     verbalized; can specify pitch, rate, language, etc.
+ */
+export let OutputFormattingData;
+
+/** @enum {string} */
+export const OutputFormatType = {
+  BRAILLE: 'braille',
+  SPEAK: 'speak',
 };

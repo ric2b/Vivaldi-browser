@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/qr_generator/qr_generator_view_controller.h"
 
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/qr_generator/qr_generator_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
@@ -109,7 +109,7 @@ constexpr CGFloat kSymbolSize = 22;
 
   // Content size of the scrollview.
   AddSameConstraintsWithInsets(stackView, scrollView,
-                               ChromeDirectionalEdgeInsetsMake(0, 0, 20, 0));
+                               NSDirectionalEdgeInsetsMake(0, 0, 20, 0));
   // Scroll View constraints to the height of its content. Can be overridden.
   NSLayoutConstraint* heightConstraint = [scrollView.heightAnchor
       constraintEqualToAnchor:scrollView.contentLayoutGuide.heightAnchor];

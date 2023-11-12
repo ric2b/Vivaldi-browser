@@ -10,6 +10,7 @@
 #include "base/check_op.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "chromeos/ash/components/dbus/cryptohome/auth_factor.pb.h"
 
 namespace cryptohome {
@@ -17,6 +18,8 @@ namespace cryptohome {
 namespace {
 
 using ::ash::ChallengeResponseKey;
+
+}  // namespace
 
 user_data_auth::AuthFactorType ConvertFactorTypeToProto(AuthFactorType type) {
   switch (type) {
@@ -34,18 +37,17 @@ user_data_auth::AuthFactorType ConvertFactorTypeToProto(AuthFactorType type) {
     case AuthFactorType::kSmartCard:
       return user_data_auth::AUTH_FACTOR_TYPE_SMART_CARD;
     case AuthFactorType::kLegacyFingerprint:
-      NOTIMPLEMENTED() << "Auth factor " << static_cast<int>(type)
-                       << " is not implemented in cryptohome yet.";
-      return user_data_auth::AUTH_FACTOR_TYPE_UNSPECIFIED;
+      return user_data_auth::AUTH_FACTOR_TYPE_LEGACY_FINGERPRINT;
   }
 }
-
-}  // namespace
 
 AuthFactorType ConvertFactorTypeFromProto(user_data_auth::AuthFactorType type) {
   switch (type) {
     case user_data_auth::AUTH_FACTOR_TYPE_UNSPECIFIED:
       NOTREACHED() << "Unknown factor type should be handled separately";
+      return AuthFactorType::kUnknownLegacy;
+    case user_data_auth::AUTH_FACTOR_TYPE_LEGACY_FINGERPRINT:
+      NOTREACHED() << "Fingerprint factor type should never be returned";
       return AuthFactorType::kUnknownLegacy;
     case user_data_auth::AUTH_FACTOR_TYPE_PASSWORD:
       return AuthFactorType::kPassword;
@@ -117,10 +119,13 @@ void SerializeAuthFactor(const AuthFactor& factor,
       out_proto->mutable_smart_card_metadata()->set_public_key_spki_der(
           factor.GetSmartCardMetadata().public_key_spki_der);
       break;
+    case AuthFactorType::kLegacyFingerprint:
+      LOG(FATAL) << "Legacy fingerprint factor type should never be serialized";
+      break;
     case AuthFactorType::kUnknownLegacy:
       LOG(FATAL) << "Unknown factor type should never be serialized";
       break;
-    case AuthFactorType::kLegacyFingerprint:
+    default:
       NOTIMPLEMENTED() << "Auth factor "
                        << static_cast<int>(factor.ref().type())
                        << " is not implemented in cryptohome yet.";
@@ -148,7 +153,11 @@ void SerializeAuthInput(const AuthFactorRef& ref,
         proto_input->set_recovery_response(recovery_auth.recovery_data);
       } else {
         const auto& recovery_creation = auth_input.GetRecoveryCreationInput();
-        proto_input->set_mediator_pub_key(recovery_creation.pub_key);
+        DCHECK(
+            base::HexStringToString(recovery_creation.pub_key,
+                                    proto_input->mutable_mediator_pub_key()));
+        proto_input->set_user_gaia_id(recovery_creation.user_gaia_id);
+        proto_input->set_device_user_id(recovery_creation.device_user_id);
       }
     } break;
     case AuthFactorType::kKiosk:
@@ -166,10 +175,15 @@ void SerializeAuthInput(const AuthFactorRef& ref,
       }
       break;
     }
+    case AuthFactorType::kLegacyFingerprint:
+      // Legacy Fingerprint does not use any information from the Ash side,
+      // only the signal. Creating empty input for `oneof` to work.
+      out_proto->mutable_legacy_fingerprint_input();
+      break;
     case AuthFactorType::kUnknownLegacy:
       LOG(FATAL) << "Unknown factor type should never be serialized";
       break;
-    case AuthFactorType::kLegacyFingerprint:
+    default:
       NOTIMPLEMENTED() << "Auth factor "
                        << static_cast<int>(auth_input.GetType())
                        << " is not implemented in cryptohome yet.";
@@ -233,11 +247,15 @@ AuthFactor DeserializeAuthFactor(const user_data_auth::AuthFactor& proto,
       return AuthFactor(std::move(ref), std::move(common_metadata),
                         std::move(smart_card_metadata));
     }
-
+    case AuthFactorType::kLegacyFingerprint: {
+      LOG(FATAL) << "Legacy fingerprint factor should never be returned"
+                 << " by cryptohome.";
+      __builtin_unreachable();
+    }
     case AuthFactorType::kUnknownLegacy:
       LOG(FATAL) << "Should already be handled above";
       __builtin_unreachable();
-    case AuthFactorType::kLegacyFingerprint:
+    default:
       NOTIMPLEMENTED() << "Auth factor " << static_cast<int>(type)
                        << " is not implemented in cryptohome yet.";
       return AuthFactor(std::move(ref), std::move(common_metadata));

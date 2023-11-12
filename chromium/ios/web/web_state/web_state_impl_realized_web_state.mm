@@ -355,18 +355,6 @@ void WebStateImpl::RealizedWebState::ShouldAllowRequest(
       num_decisions_requested);
 }
 
-bool WebStateImpl::RealizedWebState::ShouldAllowErrorPageToBeDisplayed(
-    NSURLResponse* response,
-    bool for_main_frame) {
-  for (auto& policy_decider : policy_deciders()) {
-    if (!policy_decider.ShouldAllowErrorPageToBeDisplayed(response,
-                                                          for_main_frame)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void WebStateImpl::RealizedWebState::ShouldAllowResponse(
     NSURLResponse* response,
     WebStatePolicyDecider::ResponseInfo response_info,
@@ -425,23 +413,20 @@ void WebStateImpl::RealizedWebState::ShowRepostFormWarningDialog(
   }
 }
 
-void WebStateImpl::RealizedWebState::RunJavaScriptDialog(
+void WebStateImpl::RealizedWebState::RunJavaScriptAlertDialog(
     const GURL& origin_url,
-    JavaScriptDialogType java_script_dialog_type,
     NSString* message_text,
-    NSString* default_prompt_text,
-    DialogClosedCallback callback) {
+    base::OnceClosure callback) {
   JavaScriptDialogPresenter* presenter =
       delegate_ ? delegate_->GetJavaScriptDialogPresenter(owner_) : nullptr;
   if (!presenter) {
-    std::move(callback).Run(false, nil);
+    std::move(callback).Run();
     return;
   }
 
   running_javascript_dialog_ = true;
-  presenter->RunJavaScriptDialog(
-      owner_, origin_url, java_script_dialog_type, message_text,
-      default_prompt_text,
+  presenter->RunJavaScriptAlertDialog(
+      owner_, origin_url, message_text,
       // Use a lambda to mark the dialog as closed if the `WebState` still
       // exists, then always run `callback`, even if the `WebState` has been
       // destroyed (otherwise, WebKit raises an inconsistent state exception).
@@ -450,16 +435,90 @@ void WebStateImpl::RealizedWebState::RunJavaScriptDialog(
       // are not called, this cannot be implemented by passing the `callback`
       // to `JavaScriptDialogClosed` as otherwise the call would not happen
       // if `WebState` is destroyed.
+      // TODO(crbug.com/1400873): Combine logic across all dialog callbacks.
       base::BindOnce(
           [](base::WeakPtr<WebStateImpl> weak_web_state,
-             DialogClosedCallback callback, bool success,
+             base::OnceClosure callback) {
+            if (weak_web_state) {
+              DCHECK(weak_web_state->pimpl_);
+              weak_web_state->pimpl_->JavaScriptDialogClosed();
+            }
+
+            std::move(callback).Run();
+          },
+          owner_->weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void WebStateImpl::RealizedWebState::RunJavaScriptConfirmDialog(
+    const GURL& origin_url,
+    NSString* message_text,
+    base::OnceCallback<void(bool success)> callback) {
+  JavaScriptDialogPresenter* presenter =
+      delegate_ ? delegate_->GetJavaScriptDialogPresenter(owner_) : nullptr;
+  if (!presenter) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  running_javascript_dialog_ = true;
+  presenter->RunJavaScriptConfirmDialog(
+      owner_, origin_url, message_text,
+      // Use a lambda to mark the dialog as closed if the `WebState` still
+      // exists, then always run `callback`, even if the `WebState` has been
+      // destroyed (otherwise, WebKit raises an inconsistent state exception).
+      //
+      // Since bound callback that take a member function and a `WeakPtr<T>`
+      // are not called, this cannot be implemented by passing the `callback`
+      // to `JavaScriptDialogClosed` as otherwise the call would not happen
+      // if `WebState` is destroyed.
+      // TODO(crbug.com/1400873): Combine logic across all dialog callbacks.
+      base::BindOnce(
+          [](base::WeakPtr<WebStateImpl> weak_web_state,
+             base::OnceCallback<void(bool success)> callback, bool success) {
+            if (weak_web_state) {
+              DCHECK(weak_web_state->pimpl_);
+              weak_web_state->pimpl_->JavaScriptDialogClosed();
+            }
+
+            std::move(callback).Run(success);
+          },
+          owner_->weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void WebStateImpl::RealizedWebState::RunJavaScriptPromptDialog(
+    const GURL& origin_url,
+    NSString* message_text,
+    NSString* default_prompt_text,
+    base::OnceCallback<void(NSString* user_input)> callback) {
+  JavaScriptDialogPresenter* presenter =
+      delegate_ ? delegate_->GetJavaScriptDialogPresenter(owner_) : nullptr;
+  if (!presenter) {
+    std::move(callback).Run(nil);
+    return;
+  }
+
+  running_javascript_dialog_ = true;
+  presenter->RunJavaScriptPromptDialog(
+      owner_, origin_url, message_text, default_prompt_text,
+      // Use a lambda to mark the dialog as closed if the `WebState` still
+      // exists, then always run `callback`, even if the `WebState` has been
+      // destroyed (otherwise, WebKit raises an inconsistent state exception).
+      //
+      // Since bound callback that take a member function and a `WeakPtr<T>`
+      // are not called, this cannot be implemented by passing the `callback`
+      // to `JavaScriptDialogClosed` as otherwise the call would not happen
+      // if `WebState` is destroyed.
+      // TODO(crbug.com/1400873): Combine logic across all dialog callbacks.
+      base::BindOnce(
+          [](base::WeakPtr<WebStateImpl> weak_web_state,
+             base::OnceCallback<void(NSString * user_input)> callback,
              NSString* user_input) {
             if (weak_web_state) {
               DCHECK(weak_web_state->pimpl_);
               weak_web_state->pimpl_->JavaScriptDialogClosed();
             }
 
-            std::move(callback).Run(success, user_input);
+            std::move(callback).Run(user_input);
           },
           owner_->weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -519,7 +578,8 @@ void WebStateImpl::RealizedWebState::RetrieveExistingFrames() {
   // This call must be sent to the webstate directly, because the result of this
   // call will create the WebFrames. (Thus, the WebFrames do not yet exist and
   // can not be used to call JavaScript.)
-  ExecuteJavaScript(u"__gCrWeb.message.getExistingFrames();");
+  [web_controller_ executeJavaScript:@"__gCrWeb.message.getExistingFrames();"
+                   completionHandler:nil];
 }
 
 void WebStateImpl::RealizedWebState::RemoveAllWebFrames() {
@@ -556,7 +616,7 @@ UIView* WebStateImpl::RealizedWebState::GetView() {
 }
 
 void WebStateImpl::RealizedWebState::DidCoverWebContent() {
-  [web_controller_ removeWebViewFromViewHierarchy];
+  [web_controller_ removeWebViewFromViewHierarchyForShutdown:NO];
   WasHidden();
 }
 
@@ -637,32 +697,10 @@ CRWSessionStorage* WebStateImpl::RealizedWebState::BuildSessionStorage() {
                                              *certificate_policy_cache_);
 }
 
-CRWJSInjectionReceiver* WebStateImpl::RealizedWebState::GetJSInjectionReceiver()
-    const {
-  return [web_controller_ jsInjectionReceiver];
-}
-
 void WebStateImpl::RealizedWebState::LoadData(NSData* data,
                                               NSString* mime_type,
                                               const GURL& url) {
   [web_controller_ loadData:data MIMEType:mime_type forURL:url];
-}
-
-void WebStateImpl::RealizedWebState::ExecuteJavaScript(
-    const std::u16string& javascript) {
-  [web_controller_ executeJavaScript:base::SysUTF16ToNSString(javascript)
-                   completionHandler:nil];
-}
-
-void WebStateImpl::RealizedWebState::ExecuteJavaScript(
-    const std::u16string& javascript,
-    JavaScriptResultCallback callback) {
-  __block JavaScriptResultCallback stack_callback = std::move(callback);
-  [web_controller_
-      executeJavaScript:base::SysUTF16ToNSString(javascript)
-      completionHandler:^(id value, NSError* error) {
-        std::move(stack_callback).Run(ValueResultFromWKResult(value).get());
-      }];
 }
 
 void WebStateImpl::RealizedWebState::ExecuteUserJavaScript(
@@ -888,6 +926,24 @@ void WebStateImpl::RealizedWebState::OnStateChangedForPermission(
     Permission permission) {
   for (auto& observer : observers()) {
     observer.PermissionStateChanged(owner_, permission);
+  }
+}
+
+void WebStateImpl::RealizedWebState::RequestPermissionsWithDecisionHandler(
+    NSArray<NSNumber*>* permissions,
+    PermissionDecisionHandler web_view_decision_handler) {
+  bool delegate_can_handle_decision = false;
+  if (delegate_) {
+    WebStateDelegate::WebStatePermissionDecisionHandler
+        web_state_decision_handler = ^(BOOL allowed) {
+          allowed ? web_view_decision_handler(WKPermissionDecisionGrant)
+                  : web_view_decision_handler(WKPermissionDecisionDeny);
+        };
+    delegate_can_handle_decision = delegate_->HandlePermissionsDecisionRequest(
+        owner_, permissions, web_state_decision_handler);
+  }
+  if (!delegate_can_handle_decision) {
+    web_view_decision_handler(WKPermissionDecisionPrompt);
   }
 }
 

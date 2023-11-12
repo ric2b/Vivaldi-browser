@@ -33,6 +33,10 @@ source_set("base") {
     visibility += [ "//media/base/mac" ]
   }
 
+  if (is_win) {
+    visibility += [ "//media/base/win:color_space_util_win" ]
+  }
+
   if (is_android) {
     visibility +=
         [ "//gpu/command_buffer/service:android_texture_owner_unittests" ]
@@ -67,6 +71,8 @@ source_set("base") {
     "audio_encoder.h",
     "audio_fifo.cc",
     "audio_fifo.h",
+    "audio_glitch_info.cc",
+    "audio_glitch_info.h",
     "audio_hash.cc",
     "audio_hash.h",
     "audio_power_monitor.cc",
@@ -105,6 +111,7 @@ source_set("base") {
     "byte_queue.h",
     "callback_holder.h",
     "callback_registry.h",
+    "callback_timeout_helpers.h",
     "cdm_callback_promise.cc",
     "cdm_callback_promise.h",
     "cdm_config.cc",
@@ -136,6 +143,7 @@ source_set("base") {
     "converting_audio_fifo.cc",
     "converting_audio_fifo.h",
     "crc_16.h",
+    "cross_origin_data_source.h",
     "data_buffer.cc",
     "data_buffer.h",
     "data_source.cc",
@@ -562,6 +570,7 @@ source_set("unit_tests") {
     "audio_converter_unittest.cc",
     "audio_discard_helper_unittest.cc",
     "audio_fifo_unittest.cc",
+    "audio_glitch_info_unittest.cc",
     "audio_hash_unittest.cc",
     "audio_latency_unittest.cc",
     "audio_parameters_unittest.cc",
@@ -578,6 +587,7 @@ source_set("unit_tests") {
     "bitrate_unittest.cc",
     "callback_holder_unittest.cc",
     "callback_registry_unittest.cc",
+    "callback_timeout_helpers_unittest.cc",
     "channel_mixer_unittest.cc",
     "channel_mixing_matrix_unittest.cc",
     "container_names_unittest.cc",
@@ -650,7 +660,7 @@ source_set("unit_tests") {
     "//ui/gfx",
   ]
 
-  if (is_apple) {
+  if (is_mac) {
     deps += [ "//media/base/mac:unit_tests" ]
   }
 

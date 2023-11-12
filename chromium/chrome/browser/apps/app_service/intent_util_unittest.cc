@@ -175,42 +175,6 @@ TEST_F(IntentUtilsTest, CreateIntentForActivity) {
   EXPECT_EQ(activity_name, intent->activity_name.value());
 }
 
-// TODO(crbug.com/1253250): Remove after migrating to non-mojo AppService.
-TEST_F(IntentUtilsTest, CreateIntentForActivityMojom) {
-  const std::string& activity_name = "com.android.vending.AssetBrowserActivity";
-  const std::string& start_type = "initialStart";
-  const std::string& category = "android.intent.category.LAUNCHER";
-  apps::mojom::IntentPtr intent =
-      apps_util::CreateIntentForActivity(activity_name, start_type, category);
-  arc::mojom::IntentInfoPtr arc_intent =
-      apps_util::ConvertAppServiceToArcIntent(intent);
-
-  ASSERT_TRUE(intent);
-  ASSERT_TRUE(arc_intent);
-
-  std::string intent_str =
-      "#Intent;action=android.intent.action.MAIN;category=android.intent."
-      "category.LAUNCHER;launchFlags=0x10200000;component=com.android.vending/"
-      ".AssetBrowserActivity;S.org.chromium.arc.start_type=initialStart;end";
-  EXPECT_EQ(intent_str, apps_util::CreateLaunchIntent(
-                            "com.android.vending",
-                            apps::ConvertMojomIntentToIntent(intent)));
-
-  EXPECT_EQ(arc::kIntentActionMain, arc_intent->action);
-
-  base::flat_map<std::string, std::string> extras;
-  extras.insert(std::make_pair("org.chromium.arc.start_type", start_type));
-  EXPECT_TRUE(arc_intent->extras.has_value());
-  EXPECT_EQ(extras, arc_intent->extras);
-
-  EXPECT_TRUE(arc_intent->categories.has_value());
-  EXPECT_EQ(category, arc_intent->categories.value()[0]);
-
-  arc_intent->extras = apps_util::CreateArcIntentExtras(intent);
-  EXPECT_TRUE(intent->activity_name.has_value());
-  EXPECT_EQ(activity_name, intent->activity_name.value());
-}
-
 TEST_F(IntentUtilsTest, CreateShareIntentFromText) {
   apps::IntentPtr intent = apps_util::MakeShareIntent("text", "title");
   std::string intent_str =
@@ -236,22 +200,6 @@ TEST_F(IntentUtilsTest, CreateNoteTakingFilter) {
   EXPECT_TRUE(apps_util::CreateCreateNoteIntent()->MatchFilter(filter));
 }
 
-// TODO(crbug.com/1253250): Remove after migrating to non-mojo AppService.
-TEST_F(IntentUtilsTest, CreateNoteTakingFilterMojom) {
-  apps::mojom::IntentFilterPtr filter =
-      apps_util::CreateNoteTakingFilterMojom();
-
-  ASSERT_EQ(filter->conditions.size(), 1u);
-  const apps::mojom::Condition& condition = *filter->conditions[0];
-  EXPECT_EQ(condition.condition_type, apps::mojom::ConditionType::kAction);
-  ASSERT_EQ(condition.condition_values.size(), 1u);
-  EXPECT_EQ(condition.condition_values[0]->value,
-            apps_util::kIntentActionCreateNote);
-
-  EXPECT_TRUE(apps_util::IntentMatchesFilter(
-      ConvertIntentToMojomIntent(apps_util::CreateCreateNoteIntent()), filter));
-}
-
 TEST_F(IntentUtilsTest, CreateLockScreenFilter) {
   IntentFilterPtr filter = apps_util::CreateLockScreenFilter();
 
@@ -263,23 +211,6 @@ TEST_F(IntentUtilsTest, CreateLockScreenFilter) {
             apps_util::kIntentActionStartOnLockScreen);
 
   EXPECT_TRUE(apps_util::CreateStartOnLockScreenIntent()->MatchFilter(filter));
-}
-
-// TODO(crbug.com/1253250): Remove after migrating to non-mojo AppService.
-TEST_F(IntentUtilsTest, CreateLockScreenFilterMojom) {
-  apps::mojom::IntentFilterPtr filter =
-      apps_util::CreateLockScreenFilterMojom();
-
-  ASSERT_EQ(filter->conditions.size(), 1u);
-  const apps::mojom::Condition& condition = *filter->conditions[0];
-  EXPECT_EQ(condition.condition_type, apps::mojom::ConditionType::kAction);
-  ASSERT_EQ(condition.condition_values.size(), 1u);
-  EXPECT_EQ(condition.condition_values[0]->value,
-            apps_util::kIntentActionStartOnLockScreen);
-
-  EXPECT_TRUE(apps_util::IntentMatchesFilter(
-      ConvertIntentToMojomIntent(apps_util::CreateStartOnLockScreenIntent()),
-      filter));
 }
 
 TEST_F(IntentUtilsTest, CreateIntentFiltersForChromeApp_FileHandlers) {
@@ -483,49 +414,6 @@ TEST_F(IntentUtilsTest, CreateIntentFiltersForChromeApp_NoteTaking) {
 
   apps::IntentPtr intent = apps_util::CreateCreateNoteIntent();
   EXPECT_TRUE(intent->MatchFilter(filter));
-}
-
-// TODO(crbug.com/1253250): Remove after migrating to non-mojo AppService.
-TEST_F(IntentUtilsTest, CreateChromeAppIntentFilters_NoteTaking) {
-  const std::string note_action_handler =
-      extensions::api::app_runtime::ToString(
-          extensions::api::app_runtime::ACTION_TYPE_NEW_NOTE);
-  // Foo app has a note-taking action handler.
-  extensions::ExtensionBuilder foo_app;
-  foo_app.SetManifest(
-      extensions::DictionaryBuilder()
-          .Set("name", "Foo")
-          .Set("version", "1.0.0")
-          .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder()
-                          .Set("background",
-                               extensions::DictionaryBuilder()
-                                   .Set("scripts", extensions::ListBuilder()
-                                                       .Append("background.js")
-                                                       .Build())
-                                   .Build())
-                          .Build())
-          .Set("action_handlers",
-               extensions::ListBuilder().Append(note_action_handler).Build())
-          .Build());
-  foo_app.SetID("abcdefghzxcv");
-  scoped_refptr<const extensions::Extension> foo = foo_app.Build();
-
-  std::vector<apps::mojom::IntentFilterPtr> filters =
-      apps_util::CreateChromeAppIntentFilters(foo.get());
-
-  ASSERT_EQ(filters.size(), 1u);
-  const apps::mojom::IntentFilterPtr& filter = filters[0];
-  ASSERT_EQ(filter->conditions.size(), 1u);
-  const apps::mojom::Condition& condition = *filter->conditions[0];
-  EXPECT_EQ(condition.condition_type, apps::mojom::ConditionType::kAction);
-  ASSERT_EQ(condition.condition_values.size(), 1u);
-  EXPECT_EQ(condition.condition_values[0]->value,
-            apps_util::kIntentActionCreateNote);
-
-  EXPECT_TRUE(apps_util::IntentMatchesFilter(
-      apps::ConvertIntentToMojomIntent(apps_util::CreateCreateNoteIntent()),
-      filter));
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -1124,25 +1012,6 @@ TEST_F(IntentUtilsTest, CrosapiIntentConversion) {
       apps_util::CreateAppServiceIntentFromCrosapi(crosapi_intent, nullptr);
   EXPECT_EQ(*original_intent, *converted_intent);
 }
-
-// TODO(crbug.com/1253250): Will be removed soon.
-TEST_F(IntentUtilsTest, CrosapiIntentConversionMojom) {
-  apps::mojom::IntentPtr original_intent =
-      apps_util::CreateIntentFromUrl(GURL("www.google.com"));
-  original_intent->data = "geo:0,0?q=1600%20amphitheatre%20parkway";
-  auto crosapi_intent =
-      apps_util::ConvertAppServiceToCrosapiIntent(original_intent, nullptr);
-  auto converted_intent =
-      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, nullptr);
-  EXPECT_EQ(original_intent, converted_intent);
-
-  original_intent = apps_util::CreateShareIntentFromText("text", "title");
-  crosapi_intent =
-      apps_util::ConvertAppServiceToCrosapiIntent(original_intent, nullptr);
-  converted_intent =
-      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, nullptr);
-  EXPECT_EQ(original_intent, converted_intent);
-}
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1214,30 +1083,6 @@ TEST_F(IntentUtilsFileTest, ConvertFileSystemScheme) {
   EXPECT_EQ(crosapi_intent->files.value()[0]->mime_type, mime_type);
 }
 
-// TODO(crbug.com/1253250): Will be removed soon.
-TEST_F(IntentUtilsFileTest, ConvertFileSystemSchemeMojom) {
-  auto app_service_intent = apps::mojom::Intent::New();
-  app_service_intent->action = "action";
-  app_service_intent->mime_type = "*/*";
-  const std::string path = "Documents/foo.txt";
-  const std::string mime_type = "text/plain";
-  auto url = ToGURL(base::FilePath(storage::kTestDir), path);
-  EXPECT_TRUE(url.SchemeIsFileSystem());
-  app_service_intent->files = std::vector<apps::mojom::IntentFilePtr>{};
-  auto file = apps::mojom::IntentFile::New();
-  file->url = url;
-  file->mime_type = mime_type;
-  app_service_intent->files->push_back(std::move(file));
-  auto crosapi_intent = apps_util::ConvertAppServiceToCrosapiIntent(
-      app_service_intent, GetProfile());
-  EXPECT_EQ(app_service_intent->action, crosapi_intent->action);
-  EXPECT_EQ(app_service_intent->mime_type, crosapi_intent->mime_type);
-  ASSERT_TRUE(crosapi_intent->files.has_value());
-  ASSERT_EQ(crosapi_intent->files.value().size(), 1U);
-  EXPECT_EQ(crosapi_intent->files.value()[0]->file_path, base::FilePath(path));
-  EXPECT_EQ(crosapi_intent->files.value()[0]->mime_type, mime_type);
-}
-
 TEST_F(IntentUtilsFileTest, ConvertFileScheme) {
   auto app_service_intent = std::make_unique<apps::Intent>("action");
   app_service_intent->mime_type = "*/*";
@@ -1259,30 +1104,6 @@ TEST_F(IntentUtilsFileTest, ConvertFileScheme) {
   EXPECT_EQ(crosapi_intent->files.value()[0]->mime_type, mime_type);
 }
 
-// TODO(crbug.com/1253250): Will be removed soon.
-TEST_F(IntentUtilsFileTest, ConvertFileSchemeMojom) {
-  auto app_service_intent = apps::mojom::Intent::New();
-  app_service_intent->action = "action";
-  app_service_intent->mime_type = "*/*";
-  base::FilePath path("/path/to/document.txt");
-  const std::string mime_type = "text/plain";
-  auto url = net::FilePathToFileURL(path);
-  EXPECT_TRUE(url.SchemeIsFile());
-  app_service_intent->files = std::vector<apps::mojom::IntentFilePtr>{};
-  auto file = apps::mojom::IntentFile::New();
-  file->url = url;
-  file->mime_type = mime_type;
-  app_service_intent->files->push_back(std::move(file));
-  auto crosapi_intent = apps_util::ConvertAppServiceToCrosapiIntent(
-      app_service_intent, GetProfile());
-  EXPECT_EQ(app_service_intent->action, crosapi_intent->action);
-  EXPECT_EQ(app_service_intent->mime_type, crosapi_intent->mime_type);
-  ASSERT_TRUE(crosapi_intent->files.has_value());
-  ASSERT_EQ(crosapi_intent->files.value().size(), 1U);
-  EXPECT_EQ(crosapi_intent->files.value()[0]->file_path, path);
-  EXPECT_EQ(crosapi_intent->files.value()[0]->mime_type, mime_type);
-}
-
 TEST_F(IntentUtilsFileTest, CrosapiIntentToAppService) {
   const std::string path = "Documents/foo.txt";
   std::vector<base::FilePath> file_paths;
@@ -1290,33 +1111,14 @@ TEST_F(IntentUtilsFileTest, CrosapiIntentToAppService) {
   auto crosapi_intent =
       apps_util::CreateCrosapiIntentForViewFiles(std::move(file_paths));
 
-  auto app_service_intent =
-      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, GetProfile());
+  auto app_service_intent = apps_util::CreateAppServiceIntentFromCrosapi(
+      crosapi_intent, GetProfile());
   EXPECT_EQ(app_service_intent->action, crosapi_intent->action);
   EXPECT_EQ(app_service_intent->mime_type, crosapi_intent->mime_type);
   ASSERT_TRUE(crosapi_intent->files.has_value());
   ASSERT_EQ(crosapi_intent->files.value().size(), 1U);
   EXPECT_EQ(
-      app_service_intent->files.value()[0]->url,
-      ToGURL(base::FilePath(storage::kExternalDir).Append(mount_name_), path));
-}
-
-// TODO(crbug.com/1253250): Will be removed soon.
-TEST_F(IntentUtilsFileTest, CrosapiIntentToAppServiceMojom) {
-  const std::string path = "Documents/foo.txt";
-  auto file_path = base::FilePath(fs_root_).Append(path);
-  auto file_paths = apps::mojom::FilePaths::New();
-  file_paths->file_paths.push_back(file_path);
-  auto crosapi_intent = apps_util::CreateCrosapiIntentForViewFiles(file_paths);
-
-  auto app_service_intent =
-      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, GetProfile());
-  EXPECT_EQ(app_service_intent->action, crosapi_intent->action);
-  EXPECT_EQ(app_service_intent->mime_type, crosapi_intent->mime_type);
-  ASSERT_TRUE(crosapi_intent->files.has_value());
-  ASSERT_EQ(crosapi_intent->files.value().size(), 1U);
-  EXPECT_EQ(
-      app_service_intent->files.value()[0]->url,
+      app_service_intent->files[0]->url,
       ToGURL(base::FilePath(storage::kExternalDir).Append(mount_name_), path));
 }
 #endif

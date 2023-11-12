@@ -56,8 +56,8 @@ namespace container_internal {
 
 struct RawHashSetTestOnlyAccess {
   template <typename C>
-  static auto GetSlots(const C& c) -> decltype(c.slots_) {
-    return c.slots_;
+  static auto GetSlots(const C& c) -> decltype(c.slot_array()) {
+    return c.slot_array();
   }
 };
 
@@ -399,7 +399,7 @@ struct StringEq : std::equal_to<absl::string_view> {
 struct StringTable
     : raw_hash_set<StringPolicy, StringHash, StringEq, std::allocator<int>> {
   using Base = typename StringTable::raw_hash_set;
-  StringTable() {}
+  StringTable() = default;
   using Base::Base;
 };
 
@@ -419,7 +419,7 @@ struct Uint8Table
 
 template <typename T>
 struct CustomAlloc : std::allocator<T> {
-  CustomAlloc() {}
+  CustomAlloc() = default;
 
   template <typename U>
   explicit CustomAlloc(const CustomAlloc<U>& /*other*/) {}
@@ -446,7 +446,7 @@ struct BadFastHash {
 struct BadTable : raw_hash_set<IntPolicy, BadFastHash, std::equal_to<int>,
                                std::allocator<int>> {
   using Base = typename BadTable::raw_hash_set;
-  BadTable() {}
+  BadTable() = default;
   using Base::Base;
 };
 
@@ -455,12 +455,12 @@ TEST(Table, EmptyFunctorOptimization) {
   static_assert(std::is_empty<std::allocator<int>>::value, "");
 
   struct MockTable {
+    void* infoz;
     void* ctrl;
     void* slots;
     size_t size;
     size_t capacity;
     size_t growth_left;
-    void* infoz;
   };
   struct MockTableInfozDisabled {
     void* ctrl;
@@ -1003,7 +1003,7 @@ TEST(Table, ClearBug) {
   // We are checking that original and second are close enough to each other
   // that they are probably still in the same group.  This is not strictly
   // guaranteed.
-  EXPECT_LT(std::abs(original - second),
+  EXPECT_LT(static_cast<size_t>(std::abs(original - second)),
             capacity * sizeof(IntTable::value_type));
 }
 
@@ -1079,19 +1079,6 @@ struct ProbeStats {
   std::vector<size_t> all_probes_histogram;
   // Ratios total_probe_length/size for every tested table.
   std::vector<double> single_table_ratios;
-
-  friend ProbeStats operator+(const ProbeStats& a, const ProbeStats& b) {
-    ProbeStats res = a;
-    res.all_probes_histogram.resize(std::max(res.all_probes_histogram.size(),
-                                             b.all_probes_histogram.size()));
-    std::transform(b.all_probes_histogram.begin(), b.all_probes_histogram.end(),
-                   res.all_probes_histogram.begin(),
-                   res.all_probes_histogram.begin(), std::plus<size_t>());
-    res.single_table_ratios.insert(res.single_table_ratios.end(),
-                                   b.single_table_ratios.begin(),
-                                   b.single_table_ratios.end());
-    return res;
-  }
 
   // Average ratio total_probe_length/size over tables.
   double AvgRatio() const {
@@ -1555,7 +1542,7 @@ TEST(Table, CopyConstructWithAlloc) {
 struct ExplicitAllocIntTable
     : raw_hash_set<IntPolicy, container_internal::hash_default_hash<int64_t>,
                    std::equal_to<int64_t>, Alloc<int64_t>> {
-  ExplicitAllocIntTable() {}
+  ExplicitAllocIntTable() = default;
 };
 
 TEST(Table, AllocWithExplicitCtor) {
@@ -1943,7 +1930,7 @@ TEST(Nodes, ExtractInsert) {
   EXPECT_FALSE(res.inserted);
   EXPECT_THAT(*res.position, Pair(k0, ""));
   EXPECT_TRUE(res.node);
-  EXPECT_FALSE(node);
+  EXPECT_FALSE(node);  // NOLINT(bugprone-use-after-move)
 }
 
 TEST(Nodes, HintInsert) {
@@ -1953,7 +1940,7 @@ TEST(Nodes, HintInsert) {
   auto it = t.insert(t.begin(), std::move(node));
   EXPECT_THAT(t, UnorderedElementsAre(1, 2, 3));
   EXPECT_EQ(*it, 1);
-  EXPECT_FALSE(node);
+  EXPECT_FALSE(node);  // NOLINT(bugprone-use-after-move)
 
   node = t.extract(2);
   EXPECT_THAT(t, UnorderedElementsAre(1, 3));
@@ -1963,7 +1950,7 @@ TEST(Nodes, HintInsert) {
   it = t.insert(t.begin(), std::move(node));
   EXPECT_EQ(*it, 2);
   // The node was not emptied by the insert call.
-  EXPECT_TRUE(node);
+  EXPECT_TRUE(node);  // NOLINT(bugprone-use-after-move)
 }
 
 IntTable MakeSimpleTable(size_t size) {
@@ -2036,20 +2023,75 @@ TEST(Table, UnstablePointers) {
   EXPECT_NE(old_ptr, addr(0));
 }
 
-// Confirm that we assert if we try to erase() end().
-TEST(TableDeathTest, EraseOfEndAsserts) {
+bool IsAssertEnabled() {
   // Use an assert with side-effects to figure out if they are actually enabled.
   bool assert_enabled = false;
   assert([&]() {  // NOLINT
     assert_enabled = true;
     return true;
   }());
-  if (!assert_enabled) return;
+  return assert_enabled;
+}
+
+TEST(TableDeathTest, InvalidIteratorAsserts) {
+  if (!IsAssertEnabled()) GTEST_SKIP() << "Assertions not enabled.";
 
   IntTable t;
   // Extra simple "regexp" as regexp support is highly varied across platforms.
-  constexpr char kDeathMsg[] = "erase.. called on invalid iterator";
-  EXPECT_DEATH_IF_SUPPORTED(t.erase(t.end()), kDeathMsg);
+  EXPECT_DEATH_IF_SUPPORTED(
+      t.erase(t.end()),
+      "erase.* called on invalid iterator. The iterator might be an "
+      "end.*iterator or may have been default constructed.");
+  typename IntTable::iterator iter;
+  EXPECT_DEATH_IF_SUPPORTED(
+      ++iter,
+      "operator.* called on invalid iterator. The iterator might be an "
+      "end.*iterator or may have been default constructed.");
+  t.insert(0);
+  iter = t.begin();
+  t.erase(iter);
+  EXPECT_DEATH_IF_SUPPORTED(
+      ++iter,
+      "operator.* called on invalid iterator. The element might have been "
+      "erased or .*the table might have rehashed.");
+}
+
+TEST(TableDeathTest, IteratorInvalidAssertsEqualityOperator) {
+  if (!IsAssertEnabled()) GTEST_SKIP() << "Assertions not enabled.";
+
+  IntTable t;
+  t.insert(1);
+  t.insert(2);
+  t.insert(3);
+  auto iter1 = t.begin();
+  auto iter2 = std::next(iter1);
+  ASSERT_NE(iter1, t.end());
+  ASSERT_NE(iter2, t.end());
+  t.erase(iter1);
+  // Extra simple "regexp" as regexp support is highly varied across platforms.
+  const char* const kErasedDeathMessage =
+      "Invalid iterator comparison. The element might have .*been erased or "
+      "the table might have rehashed.";
+  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == iter2), kErasedDeathMessage);
+  EXPECT_DEATH_IF_SUPPORTED(void(iter2 != iter1), kErasedDeathMessage);
+  t.erase(iter2);
+  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == iter2), kErasedDeathMessage);
+
+  IntTable t1, t2;
+  t1.insert(0);
+  t2.insert(0);
+  iter1 = t1.begin();
+  iter2 = t2.begin();
+  const char* const kContainerDiffDeathMessage =
+      "Invalid iterator comparison. The iterators may be from different "
+      ".*containers or the container might have rehashed.";
+  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == iter2), kContainerDiffDeathMessage);
+  EXPECT_DEATH_IF_SUPPORTED(void(iter2 == iter1), kContainerDiffDeathMessage);
+
+  for (int i = 0; i < 10; ++i) t1.insert(i);
+  // There should have been a rehash in t1.
+  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == t1.begin()),
+                            kContainerDiffDeathMessage);
 }
 
 #if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)

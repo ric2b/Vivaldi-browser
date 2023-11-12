@@ -6,9 +6,14 @@
 
 #include "base/metrics/field_trial_params.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ui/base/device_form_factor.h"
 
 BASE_FEATURE(kEnableSuggestionsScrollingOnIPad,
              "EnableSuggestionsScrollingOnIPad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnablePopoutOmniboxIpad,
+             "EnablePopoutOmniboxIpad",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOmniboxPasteButton,
@@ -23,27 +28,27 @@ BASE_FEATURE(kOmniboxKeyboardPasteButton,
              "OmniboxKeyboardPasteButton",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kOmniboxCarouselDynamicSpacing,
+             "OmniboxCarouselDynamicSpacing",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 bool IsOmniboxActionsEnabled() {
   return base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI);
 }
 
 bool IsOmniboxActionsVisualTreatment1() {
-  if (!IsOmniboxActionsEnabled()) {
-    return false;
-  }
-  auto param = base::GetFieldTrialParamValueByFeature(
-      kIOSOmniboxUpdatedPopupUI, kIOSOmniboxUpdatedPopupUIVariationName);
-  return param == kIOSOmniboxUpdatedPopupUIVariation1 ||
-         param == kIOSOmniboxUpdatedPopupUIVariation1UIKit;
+  return base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI);
 }
 
 bool IsOmniboxActionsVisualTreatment2() {
-  if (!IsOmniboxActionsEnabled()) {
-    return false;
-  }
-  return !IsOmniboxActionsVisualTreatment1();
+  return false;
 }
 
 bool IsSwiftUIPopupEnabled() {
   return false;
+}
+
+bool IsIpadPopoutOmniboxEnabled() {
+  return base::FeatureList::IsEnabled(kEnablePopoutOmniboxIpad) &&
+         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
 }

@@ -10,17 +10,17 @@ import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/paper-progress/paper-progress.js';
 import '//resources/polymer/v3_0/paper-styles/color.js';
 import '../../components/common_styles/oobe_dialog_host_styles.m.js';
-import '../../components/dialogs/oobe_loading_dialog.m.js';
+import '../../components/dialogs/oobe_loading_dialog.js';
 import '../../components/oobe_icons.m.js';
-import '../../components/oobe_slide.m.js';
+import '../../components/oobe_slide.js';
 
-import {assert} from '//resources/js/assert.js';
+import {assert} from '//resources/ash/common/assert.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
 import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
-import {OobeDialogHostBehavior} from '../../components/behaviors/oobe_dialog_host_behavior.m.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.m.js';
+import {OobeDialogHostBehavior} from '../../components/behaviors/oobe_dialog_host_behavior.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
 
 
 /**
@@ -39,6 +39,7 @@ const LacrosDataBackwardMigrationScreenElementBase = mixinBehaviors(
     ],
     PolymerElement);
 
+/** @polymer */
 class LacrosDataBackwardMigrationScreen extends
     LacrosDataBackwardMigrationScreenElementBase {
   static get is() {
@@ -65,7 +66,30 @@ class LacrosDataBackwardMigrationScreen extends
   get UI_STEPS() {
     return {
       PROGRESS: 'progress',
+      ERROR: 'error',
     };
+  }
+
+  get EXTERNAL_API() {
+    return [
+      'setProgressValue',
+      'setFailureStatus',
+    ];
+  }
+
+  /**
+   * Called when the migration failed.
+  */
+  setFailureStatus() {
+    this.setUIStep('error');
+  }
+
+  /**
+   * Called to update the progress of data migration.
+   * @param {number} progress Percentage of data copied so far.
+   */
+  setProgressValue(progress) {
+    this.progressValue_ = progress;
   }
 
   ready() {

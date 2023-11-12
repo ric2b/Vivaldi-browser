@@ -9,7 +9,7 @@ import {BaseAction} from './base_store.js';
  *
  * It's a function that return a AsyncGenerator.
  *
- * @template TYield: Is the type of the yielded/returned action.
+ * @template T: Is the type of the yielded/returned action.
  * @template Args: It's the inferred types of the arguments in the function.
  *
  * Example of an ActionsProducer:
@@ -20,18 +20,21 @@ import {BaseAction} from './base_store.js';
  *     yield {type: 'some-action', status: 'SUCCESS', result};
  *   }
  */
-export type ActionsProducer<TYield extends BaseAction, Args extends any[]> =
-    (...args: Args) => ActionsProducerGen<TYield>;
+export type ActionsProducer<T extends BaseAction, Args extends any[]> =
+    (...args: Args) => ActionsProducerGen<T>;
 
 /**
  * This is the type of the generator that is returned by the ActionsProducer.
  *
- * This is used to enforce the same type for yield and return, since the
- * built-in template accepts different types for both.
- * @template TYield the type for the action yielded by the ActionsProducer.
+ * This is used to enforce the type for the yield.
+ * The return should be always void, because consuming the generator using `for
+ * await()` doesn't consume the value from the return.
+ *
+ * Yielding `undefined` or a bare yield like `yield;` gives the concurrency
+ * model a chance to interrupt the ActionsProducer, when it's invalidated.
+ * @template T the type for the action yielded by the ActionsProducer.
  */
-export type ActionsProducerGen<TYield> =
-    AsyncGenerator<void|TYield, void|TYield>;
+export type ActionsProducerGen<T> = AsyncGenerator<void|T, void>;
 
 /**
  * Exception used to stop ActionsProducer when they're no longer valid.

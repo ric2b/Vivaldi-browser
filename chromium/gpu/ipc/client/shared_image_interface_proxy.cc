@@ -160,6 +160,45 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
 }
 
 Mailbox SharedImageInterfaceProxy::CreateSharedImage(
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
+    uint32_t usage,
+    gfx::GpuMemoryBufferHandle buffer_handle) {
+  // IO surface needs sync token.
+  DCHECK_NE(buffer_handle.type, gfx::IO_SURFACE_BUFFER);
+
+  // TODO(kylechar): Verify buffer_handle works for size+format.
+
+  auto mailbox = Mailbox::GenerateForSharedImage();
+
+  auto params = mojom::CreateSharedImageWithBufferParams::New();
+  params->mailbox = mailbox;
+  params->buffer_handle = std::move(buffer_handle);
+  params->size = size;
+  params->format = format;
+  params->color_space = color_space;
+  params->usage = usage;
+  params->surface_origin = surface_origin;
+  params->alpha_type = alpha_type;
+
+  base::AutoLock lock(lock_);
+  params->release_id = ++next_release_id_;
+  // Note: we enqueue and send the IPC under the lock to guarantee
+  // monotonicity of the release ids as seen by the service.
+  last_flush_id_ = host_->EnqueueDeferredMessage(
+      mojom::DeferredRequestParams::NewSharedImageRequest(
+          mojom::DeferredSharedImageRequest::NewCreateSharedImageWithBuffer(
+              std::move(params))));
+  host_->EnsureFlush(last_flush_id_);
+
+  AddMailbox(mailbox, usage);
+  return mailbox;
+}
+
+Mailbox SharedImageInterfaceProxy::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gfx::BufferPlane plane,
@@ -190,13 +229,6 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
                                                        params->format));
 
   bool requires_sync_token =
-#if BUILDFLAG(IS_FUCHSIA)
-      // Synchronization is not required if the image is being created by
-      // FuchsiaVideoDecoder. |gpu_memory_buffer_manager| is nullptr in that
-      // case.
-      (gpu_memory_buffer_manager &&
-       params->buffer_handle.type == gfx::NATIVE_PIXMAP) ||
-#endif
       params->buffer_handle.type == gfx::IO_SURFACE_BUFFER;
   {
     base::AutoLock lock(lock_);
@@ -448,19 +480,15 @@ void SharedImageInterfaceProxy::PresentSwapChain(const SyncToken& sync_token,
 
 #if BUILDFLAG(IS_FUCHSIA)
 void SharedImageInterfaceProxy::RegisterSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id,
-    zx::channel token,
+    zx::eventpair service_handle,
+    zx::channel sysmem_token,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
   host_->GetGpuChannel().RegisterSysmemBufferCollection(
-      id, mojo::PlatformHandle(std::move(token)), format, usage,
+      mojo::PlatformHandle(std::move(service_handle)),
+      mojo::PlatformHandle(std::move(sysmem_token)), format, usage,
       register_with_image_pipe);
-}
-
-void SharedImageInterfaceProxy::ReleaseSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id) {
-  host_->GetGpuChannel().ReleaseSysmemBufferCollection(id);
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 

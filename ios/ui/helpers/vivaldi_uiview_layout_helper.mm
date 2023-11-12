@@ -177,6 +177,26 @@
   [self fillSuperviewWithPadding:UIEdgeInsetsZero];
 }
 
+// The child view follows the safe area insets in all side with user provided
+// padding.
+- (void) fillSuperviewToSafeAreaInsetWithPadding:(UIEdgeInsets)padding {
+  if (self.superview == nil)
+    return;
+
+  [self anchorTop:self.superview.safeTopAnchor
+          leading:self.superview.safeLeftAnchor
+           bottom:self.superview.safeBottomAnchor
+         trailing:self.superview.safeRightAnchor
+          padding:padding];
+}
+
+// The child view follows the safe area insets of the parent in all side
+// without padding. The default padding is zero.
+- (void) fillSuperviewToSafeAreaInset {
+  [self fillSuperviewToSafeAreaInsetWithPadding:UIEdgeInsetsZero];
+}
+
+
 // The child view placed in the center of the superview with user provided size.
 - (void) centerInSuperviewWithSize:(CGSize)size {
   self.translatesAutoresizingMaskIntoConstraints = NO;
@@ -240,6 +260,17 @@
 
   [[self.centerYAnchor
     constraintEqualToAnchor:self.superview.centerYAnchor] setActive:YES];
+}
+
+// Center the view vertically with respect to a given value
+- (void) centerYToView:(UIView*)view {
+  self.translatesAutoresizingMaskIntoConstraints = NO;
+
+  if (!view)
+    return;
+
+  [[self.centerYAnchor
+    constraintEqualToAnchor:view.centerYAnchor] setActive:YES];
 }
 
 // Match the constraints of a given view

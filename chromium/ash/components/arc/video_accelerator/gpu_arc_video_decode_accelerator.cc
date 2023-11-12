@@ -17,7 +17,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
@@ -398,9 +398,12 @@ void GpuArcVideoDecodeAccelerator::InitializeTask(
       CreateVdaConfig(profile_, use_vd);
   if (use_vd) {
     VLOGF(2) << "Using VideoDecoder-backed VdVideoDecodeAccelerator.";
+    // Decoded video frames are sent "quickly" (i.e. without much buffering)
+    // to SurfaceFlinger, so we consider it a |low_delay| pipeline.
     vda_ = media::VdVideoDecodeAccelerator::Create(
         base::BindRepeating(&media::VideoDecoderPipeline::Create), this,
-        vda_config, base::SequencedTaskRunnerHandle::Get());
+        vda_config, true /* low_delay */,
+        base::SequencedTaskRunner::GetCurrentDefault());
   } else {
     VLOGF(2) << "Using original VDA";
     auto vda_factory = media::GpuVideoDecodeAcceleratorFactory::Create(
@@ -550,7 +553,7 @@ void GpuArcVideoDecodeAccelerator::ContinueDecode(
       // Note: we PostTask() in order to keep the right order of input buffers
       // and to avoid having to reason about the re-entrancy of Decode() and/or
       // ContinueDecode().
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&GpuArcVideoDecodeAccelerator::
                              ResumeDecodingAfterFirstSecureBuffer,

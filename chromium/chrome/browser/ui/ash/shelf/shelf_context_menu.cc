@@ -15,12 +15,12 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ash/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
-#include "chrome/browser/ash/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_shelf_utils.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/ash/shelf/app_service/app_service_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
@@ -28,8 +28,6 @@
 #include "chrome/browser/ui/ash/shelf/extension_uninstaller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/cpp/features.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
@@ -45,13 +43,8 @@ void UninstallApp(Profile* profile, const std::string& app_id) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
   if (proxy->AppRegistryCache().GetAppType(app_id) != apps::AppType::kUnknown) {
-    if (base::FeatureList::IsEnabled(apps::kAppServiceUninstallWithoutMojom)) {
-      proxy->Uninstall(app_id, apps::UninstallSource::kShelf,
-                       nullptr /* parent_window */);
-    } else {
-      proxy->Uninstall(app_id, apps::mojom::UninstallSource::kShelf,
-                       nullptr /* parent_window */);
-    }
+    proxy->Uninstall(app_id, apps::UninstallSource::kShelf,
+                     nullptr /* parent_window */);
     return;
   }
 
@@ -81,7 +74,7 @@ std::unique_ptr<ShelfContextMenu> ShelfContextMenu::Create(
   // AppService, Arc shortcuts and Crostini apps with the prefix "crostini:".
   if ((app_type != apps::AppType::kUnknown &&
        app_type != apps::AppType::kExtension) ||
-      crostini::IsUnmatchedCrostiniShelfAppId(item->id.app_id) ||
+      guest_os::IsUnregisteredCrostiniShelfAppId(item->id.app_id) ||
       arc::IsArcItem(controller->profile(), item->id.app_id)) {
     return std::make_unique<AppServiceShelfContextMenu>(controller, item,
                                                         display_id);

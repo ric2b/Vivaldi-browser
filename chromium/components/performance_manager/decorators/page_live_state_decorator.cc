@@ -240,6 +240,21 @@ const char kDescriberName[] = "PageLiveStateDecorator";
 
 }  // namespace
 
+void PageLiveStateDecorator::Delegate::GetContentSettingsAndReply(
+    WebContentsProxy web_contents_proxy,
+    const GURL& url,
+    GetContentSettingsForUrlCallback callback) {
+  content::WebContents* web_contents = web_contents_proxy.Get();
+  if (web_contents) {
+    PerformanceManager::CallOnGraph(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback),
+            PerformanceManager::GetPrimaryPageNodeForWebContents(web_contents),
+            GetContentSettingsForUrl(web_contents, url)));
+  }
+}
+
 PageLiveStateDecorator::PageLiveStateDecorator(
     base::SequenceBound<Delegate> delegate)
     : delegate_(std::move(delegate)) {}
@@ -373,18 +388,32 @@ base::Value PageLiveStateDecorator::DescribePageNodeData(
 }
 
 void PageLiveStateDecorator::OnMainFrameUrlChanged(const PageNode* page_node) {
+  // Don't get the content settings on android on each navigation because it may
+  // induce scroll jank. There are many same-document navigations while
+  // scrolling and getting the settings can invoke expensive platform APIs on
+  // Android. Moreover, this information is only used to decide if a tab should
+  // be discarded, which doesn't happen through Chrome code on that platform.
+#if !BUILDFLAG(IS_ANDROID)
   // Get the content settings from the main thread.
-  delegate_.AsyncCall(&Delegate::GetContentSettingsForUrl)
-      .WithArgs(page_node->GetContentsProxy(), page_node->GetMainFrameUrl())
-      .Then(base::BindOnce(&PageLiveStateDecorator::OnContentSettingsReceived,
-                           weak_factory_.GetWeakPtr(),
-                           PageNodeImpl::FromNode(page_node)->GetWeakPtr(),
-                           page_node->GetMainFrameUrl()));
+  // This call is not using `Then` and is instead passing a callback for the
+  // delegate to invoke with `CallOnGraph` on purpose. This is because it's
+  // possible for the first async call to be placed in the UI thread's task
+  // queue, and skipped as part of browser shutdown before being run. When that
+  // happens, the post task's reply has to be destroyed on its owner sequence,
+  // so a task is posted back to the Performance Manager sequence. At that point
+  // shutdown is complete, and the PM sequence is `BLOCK_SHUTDOWN` so a DCHECK
+  // is triggered. See crbug.com/1375270.
+  delegate_.AsyncCall(&Delegate::GetContentSettingsAndReply)
+      .WithArgs(page_node->GetContentsProxy(), page_node->GetMainFrameUrl(),
+                base::BindOnce(
+                    &PageLiveStateDecorator::OnContentSettingsReceived,
+                    weak_factory_.GetWeakPtr(), page_node->GetMainFrameUrl()));
+#endif
 }
 
 void PageLiveStateDecorator::OnContentSettingsReceived(
-    base::WeakPtr<const PageNode> page_node,
     const GURL& url,
+    base::WeakPtr<const PageNode> page_node,
     const std::map<ContentSettingsType, ContentSetting>& settings) {
   // If the page node doesn't exist anymore, or it has navigated to a different
   // URL, there's nothing to do.

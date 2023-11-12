@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace ash {
 namespace disks {
@@ -20,7 +20,7 @@ void OnMountDone(DiskMountManager* disk_mount_manager,
                  MountError error_code,
                  const DiskMountManager::MountPoint& mount_info) {
   std::unique_ptr<MountPoint> mount_point;
-  if (error_code == MountError::kNone) {
+  if (error_code == MountError::kSuccess) {
     DCHECK(!mount_info.mount_path.empty());
     mount_point = std::make_unique<MountPoint>(
         base::FilePath(mount_info.mount_path), disk_mount_manager);
@@ -28,7 +28,7 @@ void OnMountDone(DiskMountManager* disk_mount_manager,
 
   // Post a task to guarantee the callback isn't called inline with the
   // Mount() call.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback), error_code, std::move(mount_point)));
 }
@@ -63,7 +63,7 @@ MountPoint::~MountPoint() {
   if (!mount_path_.empty()) {
     disk_mount_manager_->UnmountPath(
         mount_path_.value(), base::BindOnce([](MountError error_code) {
-          LOG_IF(WARNING, error_code != MountError::kNone)
+          LOG_IF(WARNING, error_code != MountError::kSuccess)
               << "Failed to unmount with error code: " << error_code;
         }));
   }

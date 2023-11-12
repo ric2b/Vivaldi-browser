@@ -10,6 +10,7 @@
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "ui/base/cursor/platform_cursor.h"
+#include "ui/linux/linux_ui.h"
 #include "ui/ozone/common/bitmap_cursor.h"
 #include "ui/ozone/common/bitmap_cursor_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
@@ -170,7 +171,7 @@ void WaylandCursorFactory::MaybeLoadThemeCursors() {
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(LoadCursorTheme, name_, size_, scale_,
-                     connection_->wayland_buffer_factory()->shm()),
+                     connection_->buffer_factory()->shm()),
       base::BindOnce(&WaylandCursorFactory::OnThemeLoaded,
                      weak_factory_.GetWeakPtr(), name_, size_));
 }

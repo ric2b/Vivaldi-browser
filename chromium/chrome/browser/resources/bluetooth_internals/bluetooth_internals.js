@@ -7,8 +7,8 @@
  *     chrome://bluetooth-internals/.
  */
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {$} from 'chrome://resources/js/util.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
+import {$} from 'chrome://resources/js/util_ts.js';
 
 import {DiscoverySessionRemote} from './adapter.mojom-webui.js';
 import {AdapterBroker, AdapterProperty, getAdapterBroker} from './adapter_broker.js';
@@ -21,7 +21,7 @@ import {DeviceDetailsPage} from './device_details_page.js';
 import {DevicesPage, ScanStatus} from './devices_page.js';
 import {PageManager, PageManagerObserver} from './page_manager.js';
 import {Sidebar} from './sidebar.js';
-import {Snackbar, SnackbarType} from './snackbar.js';
+import {showSnackbar, SnackbarType} from './snackbar.js';
 
 
 // Expose for testing.
@@ -169,9 +169,10 @@ function updateStoppedDiscoverySession() {
 
 function setupAdapterSystem(response) {
   adapterBroker.addEventListener('adapterchanged', function(event) {
-    adapterPage.adapterFieldSet.value[event.detail.property] =
-        event.detail.value;
-    adapterPage.redraw();
+    const oldValue = adapterPage.adapterFieldSet.value;
+    const newValue = Object.assign({}, oldValue);
+    newValue[event.detail.property] = event.detail.value;
+    adapterPage.setAdapterInfo(newValue);
 
     if (event.detail.property === AdapterProperty.POWERED) {
       devicesPage.updatedScanButtonVisibility(event.detail.value);
@@ -180,7 +181,7 @@ function setupAdapterSystem(response) {
     if (event.detail.property === AdapterProperty.DISCOVERING &&
         !event.detail.value && !userRequestedScanStop && discoverySession) {
       updateStoppedDiscoverySession();
-      Snackbar.show(
+      showSnackbar(
           'Discovery session ended unexpectedly', SnackbarType.WARNING);
     }
   });
@@ -241,7 +242,7 @@ function setupDeviceSystem(response) {
         }
 
         devicesPage.setScanStatus(ScanStatus.ON);
-        Snackbar.show('Failed to stop discovery session', SnackbarType.ERROR);
+        showSnackbar('Failed to stop discovery session', SnackbarType.ERROR);
         userRequestedScanStop = false;
       });
 
@@ -251,19 +252,19 @@ function setupDeviceSystem(response) {
     devicesPage.setScanStatus(ScanStatus.STARTING);
     adapterBroker.startDiscoverySession()
         .then(function(session) {
-          discoverySession = assert(session);
+          assert(session);
+          discoverySession = session;
 
           discoverySession.onConnectionError.addListener(() => {
             updateStoppedDiscoverySession();
-            Snackbar.show('Discovery session ended', SnackbarType.WARNING);
+            showSnackbar('Discovery session ended', SnackbarType.WARNING);
           });
 
           devicesPage.setScanStatus(ScanStatus.ON);
         })
         .catch(function(error) {
           devicesPage.setScanStatus(ScanStatus.OFF);
-          Snackbar.show(
-              'Failed to start discovery session', SnackbarType.ERROR);
+          showSnackbar('Failed to start discovery session', SnackbarType.ERROR);
           console.error(error);
         });
   });
@@ -288,7 +289,10 @@ function setupPages() {
   window.addEventListener('hashchange', function() {
     // If a user navigates and the page doesn't exist, do nothing.
     const pageName = window.location.hash.substr(1);
-    if ($(pageName)) {
+    // Device page names are invalid selectors for querySelector(), as they
+    // contain "/" and ":".
+    // eslint-disable-next-line no-restricted-properties
+    if (document.getElementById(pageName)) {
       pageManager.showPageByName(pageName);
     }
   });
@@ -317,7 +321,7 @@ export function initializeViews() {
       })
       .then(setupDeviceSystem)
       .catch(function(error) {
-        Snackbar.show(error.message, SnackbarType.ERROR);
+        showSnackbar(error.message, SnackbarType.ERROR);
         console.error(error);
       });
 }

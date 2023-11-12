@@ -101,6 +101,22 @@ class WindowPrivateGetFocusedElementInfoFunction : public ExtensionFunction {
                                   const std::string& role);
 };
 
+class WindowPrivateIsOnScreenWithNotchFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.isOnScreenWithNotch",
+                             WINDOW_PRIVATE_IS_ON_SCREEN_WITH_NOTCH)
+
+  WindowPrivateIsOnScreenWithNotchFunction() = default;
+
+ protected:
+  ~WindowPrivateIsOnScreenWithNotchFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  bool IsWindowOnScreenWithNotch(VivaldiBrowserWindow* window);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_WINDOW_WINDOW_PRIVATE_API_H_

@@ -22,6 +22,9 @@ enum class KeepAliveOrigin {
   BROWSER_PROCESS_LACROS,
   SESSION_RESTORE,
 
+  // c/b/apps
+  APP_LAUNCH,
+
   // c/b/background
   BACKGROUND_MODE_MANAGER,
   BACKGROUND_MODE_MANAGER_STARTUP,
@@ -71,6 +74,7 @@ enum class KeepAliveOrigin {
   APP_MANIFEST_UPDATE,
   APP_START_URL_MIGRATION,
   APP_GET_INFO,
+  WEB_APP_LAUNCH,
 
   // c/b/sessions
   SESSION_DATA_DELETER,

@@ -37,7 +37,9 @@
 #include "storage/browser/file_system/copy_or_move_hook_delegate.h"
 #include "storage/browser/file_system/file_observers.h"
 #include "storage/browser/file_system/file_permission_policy.h"
+#include "storage/browser/file_system/file_system_backend.h"
 #include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_file_util.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/file_system/isolated_context.h"
 #include "storage/common/file_system/file_system_info.h"
@@ -853,8 +855,6 @@ void FileSystemManagerImpl::ContinueTruncate(
     return;
   }
 
-  // TODO(https://crbug.com/1221308): function will use StorageKey for the
-  // receiver frame/worker in future CL
   OperationID op_id =
       fs_op_runner->Truncate(url, length,
                              base::BindOnce(&FileSystemManagerImpl::DidFinish,
@@ -915,10 +915,9 @@ void FileSystemManagerImpl::CreateSnapshotFile(
     const GURL& file_path,
     CreateSnapshotFileCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  // TODO(https://crbug.com/1221308): function will use StorageKey for the
-  // receiver frame/worker in future CL
-  FileSystemURL url(context_->CrackURL(
-      file_path, blink::StorageKey(url::Origin::Create(file_path))));
+
+  FileSystemURL url(
+      context_->CrackURL(file_path, receivers_.current_context()));
 
   // Make sure if this file can be read by the renderer as this is
   // called when the renderer is about to create a new File object
@@ -994,6 +993,28 @@ void FileSystemManagerImpl::RegisterBlob(
     RegisterBlobCallback callback) {
   storage::FileSystemURL crack_url =
       context_->CrackURL(url, receivers_.current_context());
+
+  content::GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      // security_policy_ is a singleton so refcounting is unnecessary
+      base::BindOnce(&ChildProcessSecurityPolicyImpl::CanReadFileSystemFile,
+                     base::Unretained(security_policy_), process_id_,
+                     crack_url),
+      base::BindOnce(&FileSystemManagerImpl::ContinueRegisterBlob,
+                     weak_factory_.GetWeakPtr(), content_type, url, length,
+                     expected_modification_time, std::move(callback),
+                     crack_url));
+}
+
+void FileSystemManagerImpl::ContinueRegisterBlob(
+    const std::string& content_type,
+    const GURL& url,
+    uint64_t length,
+    absl::optional<base::Time> expected_modification_time,
+    RegisterBlobCallback callback,
+    storage::FileSystemURL crack_url,
+    bool security_check_success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   std::string uuid = base::GenerateGUID();
   mojo::PendingRemote<blink::mojom::Blob> blob_remote;
   mojo::PendingReceiver<blink::mojom::Blob> blob_receiver =
@@ -1001,7 +1022,7 @@ void FileSystemManagerImpl::RegisterBlob(
 
   if (crack_url.is_valid() &&
       context_->GetFileSystemBackend(crack_url.type()) &&
-      security_policy_->CanReadFileSystemFile(process_id_, crack_url)) {
+      security_check_success) {
     blob_storage_context_->CreateFileSystemBlob(
         context_, std::move(blob_receiver), crack_url, uuid, content_type,
         length, expected_modification_time.value_or(base::Time()));
@@ -1178,12 +1199,29 @@ void FileSystemManagerImpl::DidCreateSnapshot(
     return;
   }
 
+  // Post a task to use ChildProcessSecurityPolicy to check and grant file read
+  // permission on the UI thread, since access to these functions on the IO
+  // thread should be avoided.
   content::GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
       FROM_HERE,
-      // security_policy_ is a singleton so refcounting is unnecessary
-      base::BindOnce(&ChildProcessSecurityPolicyImpl::CanReadFile,
-                     base::Unretained(security_policy_), process_id_,
-                     platform_path),
+      base::BindOnce(
+          [](ChildProcessSecurityPolicyImpl* security_policy, int process_id,
+             const base::FilePath& platform_path) {
+            bool can_read_file =
+                security_policy->CanReadFile(process_id, platform_path);
+            if (!can_read_file) {
+              // Give per-file read permission to the snapshot file if it hasn't
+              // it yet. In order for the renderer to be able to read the file
+              // via File object, it must be granted per-file read permission
+              // for the file's platform path. By now, it has already been
+              // verified that the renderer has sufficient permissions to read
+              // the file, so giving per-file permission here must be safe.
+              security_policy->GrantReadFile(process_id, platform_path);
+            }
+            return can_read_file;
+          },
+          // security_policy_ is a singleton so refcounting is unnecessary.
+          base::Unretained(security_policy_), process_id_, platform_path),
       base::BindOnce(&FileSystemManagerImpl::ContinueDidCreateSnapshot,
                      weak_factory_.GetWeakPtr(), std::move(callback), url,
                      result, info, platform_path));
@@ -1200,14 +1238,6 @@ void FileSystemManagerImpl::ContinueDidCreateSnapshot(
       storage::ShareableFileReference::Get(platform_path);
 
   if (!security_check_success) {
-    // Give per-file read permission to the snapshot file if it hasn't it yet.
-    // In order for the renderer to be able to read the file via File object,
-    // it must be granted per-file read permission for the file's platform
-    // path. By now, it has already been verified that the renderer has
-    // sufficient permissions to read the file, so giving per-file permission
-    // here must be safe.
-    security_policy_->GrantReadFile(process_id_, platform_path);
-
     // Revoke all permissions for the file when the last ref of the file
     // is dropped.
     if (!file_ref.get()) {

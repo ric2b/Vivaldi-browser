@@ -87,6 +87,7 @@ source_set("eg_test_support+eg2") {
     "//ios/third_party/earl_grey2:test_lib",
     "//ios/web/public/test:element_selector",
     "//ios/web/shell:shell_interfaces",
+    "//net:test_support",
     "//url",
   ]
 }
@@ -100,6 +101,7 @@ source_set("eg2_tests") {
 
   sources = [
     "context_menu_egtest.mm",
+    "page_load_egtest.mm",
     "page_state_egtest.mm",
   ]
 
@@ -126,6 +128,13 @@ ios_eg2_test_app_host("ios_web_shell_eg2tests") {
     ":eg_app_support+eg2",
     "//ios/testing/earl_grey:eg_app_support+eg2",
   ]
+
+  if (ios_use_shared_bundle_id_for_test_apps) {
+    bundle_identifier = shared_bundle_id_for_test_apps
+  } else {
+    bundle_identifier = "$ios_app_bundle_id_prefix.chrome." +
+                        string_replace(_output_name, "_", "-")
+  }
 }
 
 ios_eg2_test("ios_web_shell_eg2tests_module") {

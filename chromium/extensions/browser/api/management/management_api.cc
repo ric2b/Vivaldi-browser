@@ -19,7 +19,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
@@ -37,6 +36,7 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
+#include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/offline_enabled_info.h"
@@ -352,8 +352,8 @@ void ManagementGetPermissionWarningsByManifestFunction::OnParse(
     return;
   }
 
-  const base::DictionaryValue* parsed_manifest;
-  if (!result->GetAsDictionary(&parsed_manifest)) {
+  const base::Value::Dict* parsed_manifest = result->GetIfDict();
+  if (!parsed_manifest) {
     Respond(Error(keys::kManifestParseError));
     Release();
     return;
@@ -614,7 +614,11 @@ ExtensionFunction::ResponseAction ManagementUninstallFunctionBase::Uninstall(
     return RespondNow(Error(keys::kUserCantModifyError, target_extension_id_));
   }
 
-  // Note: null extension() means it's WebUI.
+  // A null extension() should only happen if the call is coming from WebUI or
+  // the new Webstore which is a webpage the management API is exposed on.
+  DCHECK(extension() || source_context_type() == Feature::WEBUI_CONTEXT ||
+         extension_urls::IsWebstoreDomain(source_url()));
+
   bool self_uninstall = extension() && extension_id() == target_extension_id_;
   // We need to show a dialog for any extension uninstalling another extension.
   show_confirm_dialog |= !self_uninstall;
@@ -634,7 +638,7 @@ ExtensionFunction::ResponseAction ManagementUninstallFunctionBase::Uninstall(
     uninstall_dialog_ = delegate->UninstallFunctionDelegate(
         this, target_extension, show_programmatic_uninstall_ui);
   } else {  // No confirm dialog.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&ManagementUninstallFunctionBase::UninstallExtension,
                        this));

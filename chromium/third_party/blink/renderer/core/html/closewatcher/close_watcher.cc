@@ -11,11 +11,14 @@
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
+#include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 
 namespace blink {
@@ -64,20 +67,35 @@ void CloseWatcher::WatcherStack::Trace(Visitor* visitor) const {
   visitor->Trace(window_);
 }
 
-void CloseWatcher::WatcherStack::EscapeKeyHandler(KeyboardEvent* event) {
+void CloseWatcher::WatcherStack::EscapeKeyHandler(KeyboardEvent* event,
+                                                  bool* cancel_skipped) {
   if (!watchers_.empty() && !event->DefaultHandled() && event->isTrusted() &&
       event->keyCode() == VKEY_ESCAPE) {
-    Signal();
+    SignalInternal(cancel_skipped);
   }
 }
 
 void CloseWatcher::WatcherStack::Signal() {
+  SignalInternal(/*cancel_skipped=*/nullptr);
+}
+
+void CloseWatcher::WatcherStack::SignalInternal(bool* cancel_skipped) {
+  int num_dialogs_closed = 0;
   while (!watchers_.empty()) {
     CloseWatcher* watcher = watchers_.back();
-    watcher->close();
+    watcher->close(cancel_skipped);
+    if (watcher->dialog_for_use_counters_) {
+      ++num_dialogs_closed;
+    }
+
     if (!watcher->IsGroupedWithPrevious()) {
       break;
     }
+  }
+
+  if (num_dialogs_closed > 1) {
+    UseCounter::Count(window_,
+                      WebFeature::kDialogCloseWatcherCloseSignalClosedMultiple);
   }
 }
 
@@ -91,12 +109,13 @@ bool CloseWatcher::WatcherStack::HasConsumedFreeWatcher() const {
 }
 
 // static
-CloseWatcher* CloseWatcher::Create(LocalDOMWindow* window) {
+CloseWatcher* CloseWatcher::Create(LocalDOMWindow* window,
+                                   HTMLDialogElement* dialog_for_use_counters) {
   if (!window->GetFrame())
     return nullptr;
 
   WatcherStack& stack = *window->closewatcher_stack();
-  return CreateInternal(window, stack, nullptr);
+  return CreateInternal(window, stack, nullptr, dialog_for_use_counters);
 }
 
 // static
@@ -112,16 +131,20 @@ CloseWatcher* CloseWatcher::Create(ScriptState* script_state,
   }
 
   WatcherStack& stack = *window->closewatcher_stack();
-  return CreateInternal(window, stack, options);
+  return CreateInternal(window, stack, options, nullptr);
 }
 
 // static
-CloseWatcher* CloseWatcher::CreateInternal(LocalDOMWindow* window,
-                                           WatcherStack& stack,
-                                           CloseWatcherOptions* options) {
-  CloseWatcher* watcher = MakeGarbageCollected<CloseWatcher>(window);
+CloseWatcher* CloseWatcher::CreateInternal(
+    LocalDOMWindow* window,
+    WatcherStack& stack,
+    CloseWatcherOptions* options,
+    HTMLDialogElement* dialog_for_use_counters) {
+  CloseWatcher* watcher =
+      MakeGarbageCollected<CloseWatcher>(window, dialog_for_use_counters);
 
-  if (LocalFrame::ConsumeTransientUserActivation(window->GetFrame())) {
+  if (window->history_user_activation_state().IsActive()) {
+    window->history_user_activation_state().Consume();
     watcher->created_with_user_activation_ = true;
     watcher->grouped_with_previous_ = false;
   } else if (!stack.HasConsumedFreeWatcher()) {
@@ -132,15 +155,13 @@ CloseWatcher* CloseWatcher::CreateInternal(LocalDOMWindow* window,
     watcher->grouped_with_previous_ = true;
   }
 
-  stack.ConsumeCloseWatcherCancelability();
-
   if (options && options->hasSignal()) {
     AbortSignal* signal = options->signal();
     if (signal->aborted()) {
       watcher->state_ = State::kClosed;
       return watcher;
     }
-    signal->AddAlgorithm(
+    watcher->abort_handle_ = signal->AddAlgorithm(
         MakeGarbageCollected<DestroyOnAbortAlgorithm>(watcher));
   }
 
@@ -148,32 +169,42 @@ CloseWatcher* CloseWatcher::CreateInternal(LocalDOMWindow* window,
   return watcher;
 }
 
-CloseWatcher::CloseWatcher(LocalDOMWindow* window)
-    : ExecutionContextClient(window) {}
+CloseWatcher::CloseWatcher(LocalDOMWindow* window,
+                           HTMLDialogElement* dialog_for_use_counters)
+    : ExecutionContextClient(window),
+      dialog_for_use_counters_(dialog_for_use_counters) {}
 
-void CloseWatcher::close() {
+void CloseWatcher::close(bool* cancel_skipped) {
   if (IsClosed() || dispatching_cancel_ || !DomWindow())
     return;
 
-  WatcherStack& stack = *DomWindow()->closewatcher_stack();
-
-  if (stack.CanCloseWatcherFireCancel()) {
-    stack.ConsumeCloseWatcherCancelability();
+  if (DomWindow()->history_user_activation_state().IsActive()) {
     Event& cancel_event = *Event::CreateCancelable(event_type_names::kCancel);
     {
       base::AutoReset<bool> scoped_committing(&dispatching_cancel_, true);
       DispatchEvent(cancel_event);
     }
-    if (cancel_event.defaultPrevented())
+    if (cancel_event.defaultPrevented()) {
+      DomWindow()->history_user_activation_state().Consume();
       return;
+    }
+  } else if (dialog_for_use_counters_ &&
+             dialog_for_use_counters_->HasEventListeners(
+                 event_type_names::kCancel)) {
+    UseCounter::Count(DomWindow(),
+                      WebFeature::kDialogCloseWatcherCancelSkipped);
+    if (cancel_skipped)
+      *cancel_skipped = true;
   }
 
   // These might have changed because of the event firing.
   if (IsClosed())
     return;
-  if (DomWindow())
+  if (DomWindow()) {
     DomWindow()->closewatcher_stack()->Remove(this);
+  }
 
+  abort_handle_.Clear();
   state_ = State::kClosed;
   DispatchEvent(*Event::Create(event_type_names::kClose));
 }
@@ -183,6 +214,7 @@ void CloseWatcher::destroy() {
   if (DomWindow())
     DomWindow()->closewatcher_stack()->Remove(this);
   state_ = State::kClosed;
+  abort_handle_.Clear();
 }
 
 const AtomicString& CloseWatcher::InterfaceName() const {
@@ -190,6 +222,8 @@ const AtomicString& CloseWatcher::InterfaceName() const {
 }
 
 void CloseWatcher::Trace(Visitor* visitor) const {
+  visitor->Trace(abort_handle_);
+  visitor->Trace(dialog_for_use_counters_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
 }

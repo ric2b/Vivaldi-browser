@@ -58,6 +58,15 @@ class ShellToplevelWrapper {
   // Unsets a native window from fullscreen state.
   virtual void UnSetFullscreen() = 0;
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Sets a native window's immersive mode.
+  virtual void SetUseImmersiveMode(bool immersive) = 0;
+
+  // Whether the shell supports top level immersive status. The deprecated
+  // immersive status used to be set on the surface level.
+  virtual bool SupportsTopLevelImmersiveStatus() const = 0;
+#endif
+
   // Sets a native window to minimized state.
   virtual void SetMinimized() = 0;
 
@@ -142,6 +151,22 @@ class ShellToplevelWrapper {
   virtual bool SupportsActivation() = 0;
   virtual void Activate() = 0;
   virtual void Deactivate() = 0;
+
+  // Sets the scale factor for the next commit. Scale factor persists until a
+  // new one is set.
+  virtual void SetScaleFactor(float scale_factor) = 0;
+
+  // Snaps the window in the direction of `snap_direction`. `snap_ratio`
+  // indicates the width of the work area to snap to in landscape mode, or
+  // height in portrait mode.
+  virtual void CommitSnap(WaylandWindowSnapDirection snap_direction,
+                          float snap_ratio) = 0;
+
+  // Signals the underneath platform to shows a preview for the given window
+  // snap direction. `allow_haptic_feedback` indicates if it should send haptic
+  // feedback.
+  virtual void ShowSnapPreview(WaylandWindowSnapDirection snap_direction,
+                               bool allow_haptic_feedback) = 0;
 };
 
 // Look for |value| in |wl_array| in C++ style.

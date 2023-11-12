@@ -8,13 +8,12 @@
 // patterns. Use Web Components in any new code.
 
 // clang-format off
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 
 import {Command} from './command.js';
-
-import {define as crUiDefine, decorate, swallowDoubleClick} from 'chrome://resources/js/cr/ui.js';
-import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/js/cr.m.js';
+import {getPropertyDescriptor, PropertyKind} from './cr_deprecated.js';
+import {define as crUiDefine, decorate, swallowDoubleClick} from './ui.js';
 // clang-format on
 
 
@@ -89,7 +88,8 @@ MenuItem.prototype = {
     }
 
     if (typeof command === 'string' && command[0] === '#') {
-      command = assert(this.ownerDocument.body.querySelector(command));
+      command = this.ownerDocument.body.querySelector(command);
+      assert(command);
       decorate(command, Command);
     }
 

@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows çəbəkəsinin diaqnostikasını başladın<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Sayt zərərli proqramlardan ibarətdir</translation>
 <translation id="1916770123977586577">Sayta yeni ayarları tətbiq etmək üçün səhifəni yenidən açın</translation>
-<translation id="1973351931613083086">avtomatik oynatma</translation>
 <translation id="1974060860693918893">Daha ətraflı</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proksi və təhlükəsizlik divarının yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verildi: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Bu sayt təhlükəsiz bağlantı təmin edə bilmir</translation>
 <translation id="2187317261103489799">Müəyyən etmək (susmaya görə)</translation>
 <translation id="2224337661447660594">İnternet yoxdur</translation>
-<translation id="2230458221926704099">Xətanı aradan qaldırmaq üçün bağlantını <ph name="BEGIN_LINK" />diaqnostika<ph name="END_LINK" /> edin</translation>
 <translation id="2292556288342944218">Sizin internetə girişiniz əngəllənib</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> istifadəçi adı və şifrəsini tələb edir.</translation>
 <translation id="2337852623177822836">Bu ayar inzibatçınız tərəfindən idarə olunur</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Haker hücumu edənlər sizin məlumatlarınızı <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (məsələn, şifrələrinizi, ismarıclarınızı, məktublarınızı, bank kartı məlumatlarını) saytından ələ keçirə bilərlər. <ph name="BEGIN_LEARN_MORE_LINK" />Daha ətraflı...<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Şəbəkə dəyişikliyi aşkar edildi.</translation>
 <translation id="2948083400971632585">Ayarlar səhifəsindən hər hansı proksi serveri söndürə bilərsiniz.</translation>
-<translation id="2953943267837858202">Videonun avtomatik göstərilməsinə icazə verilmir</translation>
 <translation id="2991571918955627853">İndi siz <ph name="SITE" /> saytına daxil ola bilməzsiniz, çünki sayt HSTS mexanizmindən istifadə edir. Şəbəkə xətası və sayta kənar hücumlar səbəbi ilə yaranan problem adətən müvəqqəti xarakter daşıyır. Yəqin ki, sayt bir müddət sonra işini bərpa edəcək.</translation>
 <translation id="3005723025932146533">Saxlanılan kopyasını göstərmək</translation>
 <translation id="301521992641321250">Avtomatik əngəlləndi</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Səhifənin yüklənməsi üçün lazım olan verilənləri yenidən daxil etmək üçün yenidən yüklə düyməsinə vurun.</translation>
 <translation id="3234666976984236645">Bu saytda vacib kontenti həmişə aşkarlamaq</translation>
-<translation id="3291915639428159043">Avtomatik oynatma əngəllənib</translation>
 <translation id="3308738399950580893">reklamlar</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> hal-hazırda əlçatan deyil.</translation>
 <translation id="3427092606871434483">İcazə vermək (standart)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Bağlantınız qorunmur</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Əlavə məlumatları gizlədin</translation>
-<translation id="3620979700683094848">Saytlar videonu avtomatik göstərə bilər</translation>
 <translation id="3630155396527302611">Əgər tətbiq şəbəkəyə girişinə icazə verilənlər siyahısındadırsa,
       onları siyahıdan silin və yenidən əlavə edin.</translation>
 <translation id="3658742229777143148">Versiya</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> kilidlənib</translation>
 <translation id="3987940399970879459">1 MB-dan az</translation>
 <translation id="4075732493274867456">Müştəri və server, müxtəlif SSL protokolu versiyasını və ya şifrələr yığınını dəstəkləyir.</translation>
-<translation id="410351446219883937">Avtomatik oynatma</translation>
 <translation id="4116663294526079822">Bu saytda həmişə icazə vermək</translation>
 <translation id="4130226655945681476">Şəbəkə kabelini, modemi, routeri yoxlayın</translation>
 <translation id="4151403195736952345">Ümumi istifadə etmək (müəyyənləşdirmək)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Formanın yenidən göndərilməsini təsdiqləmək</translation>
 <translation id="6569060085658103619">Siz əlavə qoşmalar səhifəsinə baxırsınız</translation>
 <translation id="6657585470893396449">Şifrə</translation>
-<translation id="6685834062052613830">Hesabdan çıxın və ayarlanmanı tamamlayın</translation>
 <translation id="6711464428925977395">Proksi serverdə hansısa problem yaranıb və ya ünvan düzgün göstərilməyib.</translation>
 <translation id="6757797048963528358">Cihazınız yuxu rejiminə keçdi.</translation>
 <translation id="6897140037006041989">User Agent</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">Təhlükəsizlik divarı və antivirus bağlantını əngəlləyə bilər.</translation>
 <translation id="7800304661137206267">Bağlantı, <ph name="CIPHER" /> köməyi ilə şifrələnib, ismarıcların doğrulanması üçün <ph name="MAC" /> istifadə olunur, açarların mübadiləsi üçün <ph name="KX" /> istifadə olunur.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> adi halda məlumatlarınızın qorunması üçün şifrələmədən istifadə edir. İndi Vivaldinin <ph name="SITE" /> saytına qoşulduğu zaman veb-saytdan qeyri-adi və səhv kimlik məlumatları alındı. Ola bilsin ki, təcavüzkar <ph name="SITE" /> adı altında maskalanıb və ya Wi-Fi şəbəkəsinə giriş ekranı bağlantını kəsdi. Sizin məlumatlarınız hələ də qorunur, çünki Vivaldi, verilənlərdə dəyişiklik edilmədən öncə bağlantını kəsdi.</translation>
-<translation id="7834693436815575883">Avtomatik oynatmaya icazə verilir</translation>
 <translation id="7878562273885520351">Şifrəniz üçüncü tərəfin əlinə keçə bilər</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Bu sayta səyahət zərərli proqram təminatının quraşdırılmasına və şəxsi məlumatlarınızın (məs., şifrələr, telefon nömrələri və bank kartı məlumatları) oğurlanmasına səbəb ola bilər.</translation>
 <translation id="8037357227543935929">Soruşmaq (standart)</translation>
 <translation id="8041940743680923270">Ümumi istifadə etmək (soruşulsun)</translation>
-<translation id="8044382196220116469">Sayta videonun avtomatik göstərilməsinə icazə verməyin</translation>
 <translation id="808894953321890993">Şifrəni dəyişin</translation>
 <translation id="8119307142152921512">izləyicilər və reklamlar</translation>
 <translation id="8149426793427495338">Kompyuteriniz yuxu rejiminə keçdi.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">İstifadəçi adı</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> ilə bağlantınız şifrələnməyib.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />'nin &lt;abbr id="dnsDefinition"&gt;DNS ünvanı&lt;/abbr&gt; tapılmadı. Diaqnostika edilir.</translation>
-<translation id="8774017153185436870">Saytlar videonu avtomatik göstərə bilərlər</translation>
 <translation id="8820817407110198400">Əlfəcinlər</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="8963117664422609631">Sayt ayarlarına keçin</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Gözardı etmək</translation>
 <translation id="9025348182339809926">(yalnış)</translation>
 <translation id="9039213469156557790">Nəzərə alın ki, bu səhifə təhlükəli olan digər mənbələrdən ibarətdir. Bu mənbələr, göndərilmə zamanı üçüncü şəxs tərəfindən görünə və dəyişdirilə bilər, kiberdələduzlar isə səhifəyə giriş əldə edərək onun davranışlarını dəyişə bilərlər.</translation>
-<translation id="9048224371732578627">Videonun avtomatik göstərilməsnə icazə verin</translation>
 <translation id="9062620674789239642">Bu, ya köçürülüb, dəyişdirilib və ya silinib.</translation>
 <translation id="9069693763241529744">Qoşma tərəfindən əngəllənib</translation>
 <translation id="9073799351042754113">Bu sayt üçün təhlükəsizlik xəbərdarlıqlarını deaktiv etməyi seçdiniz.</translation>

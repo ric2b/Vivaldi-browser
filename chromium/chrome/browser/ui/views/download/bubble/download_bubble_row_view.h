@@ -10,9 +10,9 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/ui/download/download_item_mode.h"
+#include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
 #include "chrome/browser/ui/views/download/bubble/download_toolbar_button_view.h"
-#include "chrome/browser/ui/views/hover_button.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
@@ -80,6 +80,10 @@ class DownloadBubbleRowView : public views::View,
                                   const gfx::Point& point,
                                   ui::MenuSourceType source_type) override;
 
+  // Overrides ui::AcceleratorTarget
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  bool CanHandleAccelerators() const override;
+
   DownloadUIModel* model() { return model_.get(); }
 
   DownloadUIModel::BubbleUIInfo& ui_info() { return ui_info_; }
@@ -97,6 +101,8 @@ class DownloadBubbleRowView : public views::View,
                                          const std::u16string& button_string);
   views::ImageButton* AddQuickAction(DownloadCommands::Command command);
   views::ImageButton* GetActionButtonForCommand(
+      DownloadCommands::Command command);
+  std::u16string GetAccessibleNameForQuickAction(
       DownloadCommands::Command command);
 
   // If there is any change in state, update UI info.
@@ -125,7 +131,12 @@ class DownloadBubbleRowView : public views::View,
   void OnDiscardButtonPressed();
   void OnMainButtonPressed();
 
-  // TODO(bhatiarohit): Add platform-independent icons.
+  void AnnounceInProgressAlert();
+
+  // Registers/unregisters copy accelerator for copy/paste support.
+  void RegisterAccelerators(views::FocusManager* focus_manager);
+  void UnregisterAccelerators(views::FocusManager* focus_manager);
+
   // The icon for the file. We get platform-specific icons from IconLoader.
   raw_ptr<views::ImageView> icon_ = nullptr;
   raw_ptr<views::ImageView> subpage_icon_ = nullptr;
@@ -208,6 +219,9 @@ class DownloadBubbleRowView : public views::View,
   // Whether the download's completion has already been logged. This is used to
   // avoid inaccurate repeated logging.
   bool has_download_completion_been_logged_ = false;
+
+  // A timer for accessible alerts of progress updates
+  base::RepeatingTimer accessible_alert_in_progress_timer_;
 
   base::WeakPtrFactory<DownloadBubbleRowView> weak_factory_{this};
 };

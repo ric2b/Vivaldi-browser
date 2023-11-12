@@ -117,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(RealboxHandlerPedalIconTest, PedalVectorIcons) {
 
   const scoped_refptr<OmniboxAction> history_clusters_action =
       base::MakeRefCounted<history_clusters::HistoryClustersAction>(
-          "test", history::ClusterKeywordData());
+          "test", history::ClusterKeywordData(), /*takes_over_match=*/false);
   const gfx::VectorIcon& vector_icon = history_clusters_action->GetVectorIcon();
   const std::string& svg_name =
       RealboxHandler::PedalVectorIconToResourceName(vector_icon);
@@ -145,30 +145,26 @@ class RealboxSearchPreloadBrowserTest : public SearchPrefetchBaseBrowserTest {
 };
 
 // A sink instance that allows Realbox to make IPC without failing DCHECK.
-class RealboxSearchBrowserTestPage : public realbox::mojom::Page {
+class RealboxSearchBrowserTestPage : public omnibox::mojom::Page {
  public:
-  // realbox::mojom::Page
+  // omnibox::mojom::Page
   void AutocompleteResultChanged(
-      realbox::mojom::AutocompleteResultPtr result) override {}
-  void AutocompleteMatchImageAvailable(uint32_t match_index,
-                                       const GURL& url,
-                                       const std::string& data_url) override {}
-
-  mojo::PendingRemote<realbox::mojom::Page> GetRemotePage() {
+      omnibox::mojom::AutocompleteResultPtr result) override {}
+  mojo::PendingRemote<omnibox::mojom::Page> GetRemotePage() {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
  private:
-  mojo::Receiver<realbox::mojom::Page> receiver_{this};
+  mojo::Receiver<omnibox::mojom::Page> receiver_{this};
 };
 
 // Tests the realbox input can trigger prerender and prefetch.
 IN_PROC_BROWSER_TEST_F(RealboxSearchPreloadBrowserTest, SearchPreloadSuccess) {
-  mojo::Remote<realbox::mojom::PageHandler> remote_page_handler;
+  mojo::Remote<omnibox::mojom::PageHandler> remote_page_handler;
   RealboxSearchBrowserTestPage page;
-  RealboxHandler realbox_handler =
-      RealboxHandler(remote_page_handler.BindNewPipeAndPassReceiver(),
-                     browser()->profile(), GetWebContents());
+  RealboxHandler realbox_handler = RealboxHandler(
+      remote_page_handler.BindNewPipeAndPassReceiver(), browser()->profile(),
+      GetWebContents(), /*metrics_reporter=*/nullptr);
   realbox_handler.SetPage(page.GetRemotePage());
   content::test::PrerenderHostRegistryObserver registry_observer(
       *GetWebContents());

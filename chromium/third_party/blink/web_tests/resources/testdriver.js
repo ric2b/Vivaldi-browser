@@ -195,7 +195,7 @@
          * @returns {Promise} Returns an array of cookies objects as defined in the spec:
          *                    https://w3c.github.io/webdriver/#cookies
          */
-         get_all_cookies: function(context=null) {
+        get_all_cookies: function(context=null) {
             return window.test_driver_internal.get_all_cookies(context);
         },
 
@@ -212,7 +212,7 @@
          *                    https://w3c.github.io/webdriver/#cookies
          *                    Rejected if no such cookie exists.
          */
-        get_named_cookie: async function(name, context=null) {
+         get_named_cookie: async function(name, context=null) {
             let cookie = await window.test_driver_internal.get_named_cookie(name, context);
             if (!cookie) {
                 throw new Error("no such cookie");
@@ -404,18 +404,16 @@
          *                              <https://w3c.github.io/permissions/#dictdef-permissiondescriptor>`_
          *                              object
          * @param {String} state - the state of the permission
-         * @param {boolean} one_realm - Optional. Whether the permission applies to only one realm
          * @param {WindowProxy} context - Browsing context in which
          *                                to run the call, or null for the current
          *                                browsing context.
          * @returns {Promise} fulfilled after the permission is set, or rejected if setting the
          *                    permission fails
          */
-        set_permission: function(descriptor, state, one_realm=false, context=null) {
+        set_permission: function(descriptor, state, context=null) {
             let permission_params = {
               descriptor,
               state,
-              oneRealm: one_realm,
             };
             return window.test_driver_internal.set_permission(permission_params, context);
         },

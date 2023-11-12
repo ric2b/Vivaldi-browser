@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/origin_access_entry.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
@@ -92,6 +93,7 @@ FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
   request->SetFetchPriorityHint(original->FetchPriorityHint());
   request->SetPriority(original->Priority());
   request->SetKeepalive(original->Keepalive());
+  request->SetBrowsingTopics(original->BrowsingTopics());
   request->SetIsHistoryNavigation(original->IsHistoryNavigation());
   if (original->URLLoaderFactory()) {
     mojo::PendingRemote<network::mojom::blink::URLLoaderFactory> factory_clone;
@@ -121,8 +123,9 @@ static bool AreAnyMembersPresent(const RequestInit* init) {
          init->hasReferrer() || init->hasReferrerPolicy() || init->hasMode() ||
          init->hasTargetAddressSpace() || init->hasCredentials() ||
          init->hasCache() || init->hasRedirect() || init->hasIntegrity() ||
-         init->hasKeepalive() || init->hasPriority() || init->hasSignal() ||
-         init->hasDuplex() || init->hasTrustToken();
+         init->hasKeepalive() || init->hasBrowsingTopics() ||
+         init->hasPriority() || init->hasSignal() || init->hasDuplex() ||
+         init->hasTrustToken();
 }
 
 static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
@@ -530,6 +533,39 @@ Request* Request::CreateRequestWithRequestOrString(
   if (init->hasKeepalive())
     request->SetKeepalive(init->keepalive());
 
+  if (init->hasBrowsingTopics()) {
+    if (!execution_context->IsSecureContext()) {
+      exception_state.ThrowTypeError(
+          "browsingTopics: Topics operations are only available in secure "
+          "contexts.");
+      return nullptr;
+    }
+
+    // Check the permissions policy on `execution_context` as part of the
+    // "Should request be allowed to use feature?" algorithm
+    // (https://www.w3.org/TR/permissions-policy/#algo-should-request-be-allowed-to-use-feature).
+    // The check against request’s origin is done in `BrowsingTopicsURLLoader`
+    // that is able to cover redirects.
+    if (!execution_context->IsFeatureEnabled(
+            mojom::blink::PermissionsPolicyFeature::kBrowsingTopics)) {
+      exception_state.ThrowTypeError(
+          "The \"browsing-topics\" Permissions Policy denied the use of "
+          "fetch(<url>, {browsingTopics: true}).");
+      return nullptr;
+    }
+
+    if (!execution_context->IsFeatureEnabled(
+            mojom::blink::PermissionsPolicyFeature::
+                kBrowsingTopicsBackwardCompatible)) {
+      exception_state.ThrowTypeError(
+          "The \"interest-cohort\" Permissions Policy denied the use of "
+          "fetch(<url>, {browsingTopics: true}).");
+      return nullptr;
+    }
+
+    request->SetBrowsingTopics(init->browsingTopics());
+  }
+
   // "If |init|'s method member is present, let |method| be it and run these
   // substeps:"
   if (init->hasMethod()) {
@@ -755,6 +791,14 @@ Request* Request::CreateRequestWithRequestOrString(
     // "Let |reader| be the result of getting reader from |dummyStream|."
     // "Read all bytes from |dummyStream| with |reader|."
     input_request->BodyBuffer()->CloseAndLockAndDisturb();
+  }
+
+  // Back/forward-cache is interested in use of the "Authorization" header.
+  if (r->getHeaders() &&
+      r->getHeaders()->has("Authorization", exception_state)) {
+    execution_context->GetScheduler()->RegisterStickyFeature(
+        SchedulingPolicy::Feature::kAuthorizationHeader,
+        {SchedulingPolicy::DisableBackForwardCache()});
   }
 
   // "Return |r|."
@@ -1020,13 +1064,7 @@ mojom::blink::FetchAPIRequestPtr Request::CreateFetchAPIRequest() const {
   fetch_api_request->is_history_navigation = request_->IsHistoryNavigation();
   fetch_api_request->destination = request_->Destination();
   fetch_api_request->request_initiator = request_->Origin();
-
-  // Strip off the fragment part of URL. So far, all callers expect the fragment
-  // to be excluded.
-  KURL url(request_->Url());
-  if (request_->Url().HasFragmentIdentifier())
-    url.RemoveFragmentIdentifier();
-  fetch_api_request->url = url;
+  fetch_api_request->url = KURL(request_->Url());
 
   HTTPHeaderMap headers;
   for (const auto& header : headers_->HeaderList()->List()) {

@@ -72,8 +72,11 @@ class CORE_EXPORT StyleColor {
     DCHECK(!IsNumeric());
     return color_keyword_;
   }
+  bool HasColorKeyword() const {
+    return color_keyword_ != CSSValueID::kInvalid;
+  }
 
-  Color Resolve(Color current_color,
+  Color Resolve(const Color& current_color,
                 mojom::blink::ColorScheme color_scheme,
                 bool* is_current_color = nullptr,
                 bool is_forced_color = false) const;

@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
+#include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/name_node_list.h"
 #include "third_party/blink/renderer/core/dom/node_child_removal_tracker.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -48,6 +49,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/radio_node_list.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
+#include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_tag_collection.h"
@@ -866,6 +868,7 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
     TreeOrderedMap::RemoveScope tree_remove_scope;
     StyleEngine& engine = GetDocument().GetStyleEngine();
     StyleEngine::DetachLayoutTreeScope detach_scope(engine);
+    bool has_element_child = false;
     {
       SlotAssignmentRecalcForbiddenScope forbid_slot_recalc(GetDocument());
       StyleEngine::DOMRemovalScope style_scope(engine);
@@ -873,6 +876,9 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
       ScriptForbiddenScope forbid_script;
 
       while (Node* child = first_child_) {
+        if (child->IsElementNode()) {
+          has_element_child = true;
+        }
         RemoveBetween(nullptr, child->nextSibling(), *child);
         NotifyNodeRemoved(*child);
         if (children_changed)
@@ -882,6 +888,9 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
 
     ChildrenChange change = {ChildrenChangeType::kAllChildrenRemoved,
                              ChildrenChangeSource::kAPI,
+                             has_element_child
+                                 ? ChildrenChangeAffectsElements::kYes
+                                 : ChildrenChangeAffectsElements::kNo,
                              nullptr,
                              nullptr,
                              nullptr,
@@ -1394,9 +1403,11 @@ void ContainerNode::RecalcSubsequentSiblingStyles(
   DCHECK(GetDocument().InStyleRecalc());
   DCHECK(!NeedsStyleRecalc());
 
-  // TODO(crbug.com/1356098): Use flat-tree siblings.
-  for (Node* sibling = nextSibling(); sibling;
-       sibling = sibling->nextSibling()) {
+  // We use LayoutTreeBuilderTraversal to skip siblings which are not in the
+  // flat tree, because they don't have a ComputedStyle (and are therefore not
+  // affected by any change on this node).
+  for (Node* sibling = LayoutTreeBuilderTraversal::NextSibling(*this); sibling;
+       sibling = LayoutTreeBuilderTraversal::NextSibling(*sibling)) {
     if (auto* sibling_element = DynamicTo<Element>(sibling)) {
       sibling_element->RecalcStyle(change, style_recalc_context);
     }
@@ -1533,6 +1544,11 @@ void ContainerNode::InvalidateNodeListCachesInAncestors(
     }
   }
 
+  // This is a performance optimization, NodeList cache invalidation is
+  // not necessary for non-element nodes.
+  if (change && change->affects_elements == ChildrenChangeAffectsElements::kNo)
+    return;
+
   // Modifications to attributes that are not associated with an Element can't
   // invalidate NodeList caches.
   if (attr_name && !attribute_owner_element)
@@ -1621,6 +1637,43 @@ Element* ContainerNode::getElementById(const AtomicString& id) const {
 
 NodeListsNodeData& ContainerNode::EnsureNodeLists() {
   return EnsureRareData().EnsureNodeLists();
+}
+
+// https://html.spec.whatwg.org/C/#autofocus-delegate
+Element* ContainerNode::GetAutofocusDelegate() const {
+  Element* element = ElementTraversal::Next(*this, this);
+  while (element) {
+    // TODO(jarhar): Add this to the HTML spec as a followup to the popover PR
+    if (auto* html_element = DynamicTo<HTMLElement>(element)) {
+      if (DynamicTo<HTMLDialogElement>(html_element) ||
+          html_element->HasPopoverAttribute()) {
+        element = ElementTraversal::NextSkippingChildren(*element, this);
+        continue;
+      }
+    }
+
+    if (!element->IsAutofocusable()) {
+      element = ElementTraversal::Next(*element, this);
+      continue;
+    }
+
+    Element* focusable_area =
+        element->IsFocusable() ? element : element->GetFocusableArea();
+    if (!focusable_area) {
+      element = ElementTraversal::Next(*element, this);
+      continue;
+    }
+
+    // The spec says to continue instead of returning focusable_area if
+    // focusable_area is not click-focusable and the call was initiated by the
+    // user clicking. I don't believe this is currently possible, so DCHECK
+    // instead.
+    DCHECK(focusable_area->IsMouseFocusable());
+
+    return focusable_area;
+  }
+
+  return nullptr;
 }
 
 }  // namespace blink

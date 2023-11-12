@@ -15,11 +15,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/service_worker/service_worker_accessed_callback.h"
 #include "content/browser/service_worker/service_worker_main_resource_loader.h"
 #include "content/common/content_export.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
@@ -45,12 +45,22 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  //
+  // Only one reason is recorded even if multiple reasons are matched.
+  // The order is following:
+  // 1. kSkippedForEmptyFetchHandler
+  // 2. kMainResourceSkippedDueToOriginTrial
+  // 3. kMainResourceSkippedDueToFeatureFlag
+  // 4. kMainResourceSkippedBecauseMatchedWithAllowedOriginList
   enum class FetchHandlerSkipReason {
     kNoFetchHandler = 0,
     kNotSkipped = 1,
     kSkippedForEmptyFetchHandler = 2,
+    kMainResourceSkippedDueToOriginTrial = 3,
+    kMainResourceSkippedDueToFeatureFlag = 4,
+    kMainResourceSkippedBecauseMatchedWithAllowedOriginList = 5,
 
-    kMaxValue = kSkippedForEmptyFetchHandler,
+    kMaxValue = kMainResourceSkippedBecauseMatchedWithAllowedOriginList,
   };
 
   // If |skip_service_worker| is true, service workers are bypassed for
@@ -116,6 +126,12 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   // Schedules a service worker update to occur shortly after the page and its
   // initial subresources load, if this handler was for a navigation.
   void MaybeScheduleUpdate();
+
+  // Runs after ServiceWorker has started. Normally ServiceWorker starts before
+  // dispatching the main resource request, but if the
+  // ServiceWorkerBypassFetchHandler feature is enabled, we bypass the main
+  // resource request and then start ServiceWorker for subresources.
+  void DidStartWorkerForSubresources(blink::ServiceWorkerStatusCode status);
 
   const base::WeakPtr<ServiceWorkerContextCore> context_;
   const base::WeakPtr<ServiceWorkerContainerHost> container_host_;

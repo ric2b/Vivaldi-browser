@@ -19,6 +19,7 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/documents_provider_root_manager.h"
+#include "chrome/browser/ash/file_manager/fusebox_mounter.h"
 #include "chrome/browser/ash/file_manager/io_task_controller.h"
 #include "chrome/browser/ash/file_system_provider/icon_set.h"
 #include "chrome/browser/ash/file_system_provider/observer.h"
@@ -50,7 +51,6 @@ class BrowserContext;
 
 namespace file_manager {
 
-class FuseBoxMounter;
 class SnapshotManager;
 class VolumeManagerObserver;
 
@@ -270,7 +270,7 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   base::FilePath remote_mount_path_;
 
   // The mounting condition. See the enum for the details.
-  ash::MountError mount_condition_ = ash::MountError::kNone;
+  ash::MountError mount_condition_ = ash::MountError::kSuccess;
 
   // The context of the mount. Whether mounting was performed due to a user
   // interaction or not.
@@ -537,27 +537,6 @@ class VolumeManager : public KeyedService,
                       const std::string& display_name);
   void RemoveSmbFsVolume(const base::FilePath& mount_point);
 
-  void OnFuseboxAttachStorageADP(const std::string& subdir,
-                                 const std::string& authority,
-                                 const std::string& root_id,
-                                 const std::string& document_id,
-                                 const std::string& title,
-                                 const std::string& summary,
-                                 const GURL icon_url,
-                                 bool read_only,
-                                 int error);
-  void OnFuseboxAttachStorageMTP(const std::string& subdir,
-                                 const std::string& fsid,
-                                 const std::string& label,
-                                 bool read_only,
-                                 int error);
-  void OnFuseboxAttachStorageProvidedFileSystem(
-      const std::string& subdir,
-      const std::string& fsid,
-      const ash::file_system_provider::ProvidedFileSystemInfo& file_system_info,
-      MountContext volume_context,
-      int error);
-
   void ConvertFuseBoxFSPVolumeIdToFSPIfNeeded(std::string* volume_id) const;
 
   SnapshotManager* snapshot_manager() { return snapshot_manager_.get(); }
@@ -591,7 +570,6 @@ class VolumeManager : public KeyedService,
   // Set of Volume objects indexed by volume ID.
   using Volumes = std::set<std::unique_ptr<Volume>, SortByVolumeId>;
 
-  void RestoreProvidedFileSystems();
   void OnDiskMountManagerRefreshed(bool success);
   void OnStorageMonitorInitialized();
   void DoAttachMtpStorage(const storage_monitor::StorageInfo& info,
@@ -601,20 +579,20 @@ class VolumeManager : public KeyedService,
   // Returns true if the volume was actually added, ie if |error| is
   // |kNone| and there was no previous volume with the same ID.
   bool DoMountEvent(std::unique_ptr<Volume> volume,
-                    ash::MountError error = ash::MountError::kNone);
+                    ash::MountError error = ash::MountError::kSuccess);
 
   // Removes the Volume at position |it| if |error| is |kNone|.
   // Precondition: it != mounted_volumes_.end()
   void DoUnmountEvent(Volumes::const_iterator it,
-                      ash::MountError error = ash::MountError::kNone);
+                      ash::MountError error = ash::MountError::kSuccess);
 
   // Removes the Volume with the given ID if |error| is |kNone|.
   void DoUnmountEvent(base::StringPiece volume_id,
-                      ash::MountError error = ash::MountError::kNone);
+                      ash::MountError error = ash::MountError::kSuccess);
 
   // Removes the Volume with the same ID as |volume| if |error| is |kNone|.
   void DoUnmountEvent(const Volume& volume,
-                      ash::MountError error = ash::MountError::kNone) {
+                      ash::MountError error = ash::MountError::kSuccess) {
     DoUnmountEvent(volume.volume_id(), error);
   }
 
@@ -647,7 +625,7 @@ class VolumeManager : public KeyedService,
   base::ObserverList<VolumeManagerObserver>::Unchecked observers_;
   GetMtpStorageInfoCallback get_mtp_storage_info_callback_;
   Volumes mounted_volumes_;
-  std::unique_ptr<FuseBoxMounter> fusebox_mounter_;
+  FuseBoxMounter fusebox_mounter_;
   std::unique_ptr<SnapshotManager> snapshot_manager_;
   std::unique_ptr<DocumentsProviderRootManager>
       documents_provider_root_manager_;

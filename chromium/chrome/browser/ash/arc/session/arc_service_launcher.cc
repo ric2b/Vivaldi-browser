@@ -46,6 +46,7 @@
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_usb_host_permission_manager.h"
 #include "chrome/browser/ash/app_restore/app_restore_arc_task_handler.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_helper_bridge.h"
@@ -59,6 +60,7 @@
 #include "chrome/browser/ash/arc/file_system_watcher/arc_file_system_watcher_service.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_bridge.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_mounter.h"
+#include "chrome/browser/ash/arc/idle_manager/arc_idle_manager.h"
 #include "chrome/browser/ash/arc/input_method_manager/arc_input_method_manager_service.h"
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_manager.h"
 #include "chrome/browser/ash/arc/instance_throttle/arc_instance_throttle.h"
@@ -71,6 +73,7 @@
 #include "chrome/browser/ash/arc/net/cert_manager_impl.h"
 #include "chrome/browser/ash/arc/notification/arc_boot_error_notification.h"
 #include "chrome/browser/ash/arc/notification/arc_provision_notification_service.h"
+#include "chrome/browser/ash/arc/notification/arc_vm_data_migration_notifier.h"
 #include "chrome/browser/ash/arc/oemcrypto/arc_oemcrypto_bridge.h"
 #include "chrome/browser/ash/arc/pip/arc_pip_bridge.h"
 #include "chrome/browser/ash/arc/policy/arc_policy_bridge.h"
@@ -80,6 +83,7 @@
 #include "chrome/browser/ash/arc/screen_capture/arc_screen_capture_bridge.h"
 #include "chrome/browser/ash/arc/session/arc_demo_mode_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_disk_space_monitor.h"
+#include "chrome/browser/ash/arc/session/arc_initial_optin_notifier.h"
 #include "chrome/browser/ash/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/sharesheet/arc_sharesheet_bridge.h"
@@ -87,14 +91,12 @@
 #include "chrome/browser/ash/arc/tracing/arc_app_performance_tracing.h"
 #include "chrome/browser/ash/arc/tracing/arc_tracing_bridge.h"
 #include "chrome/browser/ash/arc/tts/arc_tts_service.h"
-#include "chrome/browser/ash/arc/usb/arc_usb_host_bridge_delegate.h"
 #include "chrome/browser/ash/arc/user_session/arc_user_session_service.h"
 #include "chrome/browser/ash/arc/video/gpu_arc_video_service_host.h"
 #include "chrome/browser/ash/arc/wallpaper/arc_wallpaper_service.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_usb_host_permission_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/common/channel_info.h"
 #include "components/arc/common/intent_helper/arc_icon_cache_delegate.h"
@@ -175,7 +177,7 @@ void ArcServiceLauncher::Initialize() {
       base::BindOnce(&ArcServiceLauncher::OnCdmFactoryDaemonAvailable,
                      weak_factory_.GetWeakPtr(), /*from_timeout=*/false));
 
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ArcServiceLauncher::OnCheckTpmStatus,
                      weak_factory_.GetWeakPtr()),
@@ -245,8 +247,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcIioSensorBridge::GetForBrowserContext(profile);
   ArcImeService::GetForBrowserContext(profile);
   ArcInputMethodManagerService::GetForBrowserContext(profile);
-  if (ash::features::IsArcInputOverlayEnabled())
-    ArcInputOverlayManager::GetForBrowserContext(profile);
+  input_overlay::ArcInputOverlayManager::GetForBrowserContext(profile);
   ArcInstanceThrottle::GetForBrowserContext(profile);
   {
     auto* intent_helper = ArcIntentHelperBridge::GetForBrowserContext(profile);
@@ -299,8 +300,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcTimerBridge::GetForBrowserContext(profile);
   ArcTracingBridge::GetForBrowserContext(profile);
   ArcTtsService::GetForBrowserContext(profile);
-  ArcUsbHostBridge::GetForBrowserContext(profile)->SetDelegate(
-      std::make_unique<ArcUsbHostBridgeDelegate>());
+  ArcUsbHostBridge::GetForBrowserContext(profile);
   ArcUsbHostPermissionManager::GetForBrowserContext(profile);
   ArcUserSessionService::GetForBrowserContext(profile);
   ArcVolumeMounterBridge::GetForBrowserContext(profile);
@@ -311,11 +311,18 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   apps::ArcAppsFactory::GetForProfile(profile);
   ash::ApkWebAppService::Get(profile);
   ash::app_restore::AppRestoreArcTaskHandler::GetForProfile(profile);
+  ArcInitialOptInNotifier::GetForProfile(profile);
 
   if (arc::IsArcVmEnabled()) {
     // ARCVM-only services.
-    if (base::FeatureList::IsEnabled(kVmBalloonPolicy))
-      ArcMemoryPressureBridge::GetForBrowserContext(profile);
+    ArcMemoryPressureBridge::GetForBrowserContext(profile);
+
+    if (base::FeatureList::IsEnabled(kEnableArcVmDataMigration)) {
+      arc_vm_data_migration_notifier_ =
+          std::make_unique<ArcVmDataMigrationNotifier>(profile);
+    }
+    if (base::FeatureList::IsEnabled(kEnableArcIdleManager))
+      ArcIdleManager::GetForBrowserContext(profile);
   } else {
     // ARC Container-only services.
     ArcAppfuseBridge::GetForBrowserContext(profile);
@@ -381,7 +388,7 @@ void ArcServiceLauncher::OnGetTpmStatus(
     // The TPM is owned, so we should invoke OnCdmFactoryDaemonAvailable() after
     // our timeout so that the property files get expanded even if the daemon
     // doesn't come online.
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&ArcServiceLauncher::OnCdmFactoryDaemonAvailable,
                        weak_factory_.GetWeakPtr(),
@@ -391,7 +398,7 @@ void ArcServiceLauncher::OnGetTpmStatus(
     return;
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ArcServiceLauncher::OnCheckTpmStatus,
                      weak_factory_.GetWeakPtr()),

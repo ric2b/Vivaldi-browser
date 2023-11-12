@@ -9,23 +9,20 @@ load("//lib/try.star", "SOURCELESS_BUILDER_CACHES", "try_")
 
 try_.defaults.set(
     builder_group = "tryserver.chromium.tricium",
+    executable = try_.DEFAULT_EXECUTABLE,
     builderless = True,
     cores = 8,
-    orchestrator_cores = 2,
-    executable = try_.DEFAULT_EXECUTABLE,
+    pool = try_.DEFAULT_POOL,
+    service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     goma_backend = goma.backend.RBE_PROD,
     goma_jobs = goma.jobs.J150,
+    orchestrator_cores = 2,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
-    pool = try_.DEFAULT_POOL,
-    service_account = try_.DEFAULT_SERVICE_ACCOUNT,
 
     # Make each bot specify its own OS, since we have a variety of these in this
     # file.
-
-    # TODO(crbug.com/1362440): remove this.
-    omit_python2 = False,
 )
 
 consoles.list_view(
@@ -44,10 +41,10 @@ try_.builder(
     name = "tricium-clang-tidy",
     executable = "recipe:tricium_clang_tidy_orchestrator",
     builderless = False,
-    # src checkouts are only required by bots spawned by this builder.
-    caches = SOURCELESS_BUILDER_CACHES,
     cores = try_.defaults.orchestrator_cores.get(),
     os = os.LINUX_DEFAULT,
+    # src checkouts are only required by bots spawned by this builder.
+    caches = SOURCELESS_BUILDER_CACHES,
     goma_backend = None,
 )
 
@@ -57,12 +54,14 @@ try_.builder(
     name = "android-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.LINUX_DEFAULT,
+    goma_backend = None,
 )
 
 try_.builder(
     name = "fuchsia-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.LINUX_DEFAULT,
+    goma_backend = None,
 )
 
 try_.builder(
@@ -78,31 +77,31 @@ try_.builder(
     name = "linux-chromeos-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.LINUX_DEFAULT,
-)
-
-try_.builder(
-    name = "linux-clang-tidy-dbg",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    os = os.LINUX_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
     name = "linux-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.LINUX_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
     name = "linux-lacros-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.LINUX_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
     name = "mac-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
-    os = os.MAC_DEFAULT,
     cores = None,
+    os = os.MAC_DEFAULT,
     ssd = True,
     # TODO(gbiv): Determine why this needs a system xcode and things like `Mac
     # Builder` don't.
@@ -113,4 +112,5 @@ try_.builder(
     name = "win10-clang-tidy-rel",
     executable = "recipe:tricium_clang_tidy_wrapper",
     os = os.WINDOWS_DEFAULT,
+    goma_backend = None,
 )

@@ -83,11 +83,7 @@ class BLINK_EXPORT WebAXObject {
   static WebAXObject FromWebNode(const WebNode&);
   static WebAXObject FromWebDocument(const WebDocument&);
   static WebAXObject FromWebDocumentByID(const WebDocument&, int);
-  static WebAXObject FromWebDocumentFocused(
-      const WebDocument&,
-      bool update_layout_if_necessary = true);
-  static bool MaybeUpdateLayoutAndCheckValidity(const WebDocument&);
-  static void UpdateLayout(const WebDocument&);
+  static WebAXObject FromWebDocumentFocused(const WebDocument&);
   static bool IsDirty(const WebDocument&);
 
   void Reset();
@@ -112,8 +108,6 @@ class BLINK_EXPORT WebAXObject {
   // the unneeded WebAXObject interfaces below.
   void Serialize(ui::AXNodeData* node_data,
                  ui::AXMode accessibility_mode) const;
-
-  void SerializerClearedNode(int node_id) const;
 
   void InvalidateSerializerSubtree() const;
   bool SerializeChanges(ui::AXTreeUpdate* update);
@@ -335,10 +329,11 @@ class BLINK_EXPORT WebAXObject {
 
   // Marks ths object as dirty (needing serialization). If subtree is true,
   // the entire AX subtree should be invalidated as well.
-  void MarkDirty(bool subtree,
-                 ax::mojom::EventFrom event_from,
-                 ax::mojom::Action event_from_action,
-                 std::vector<ui::AXEventIntent> event_intents) const;
+  void MarkAXObjectDirtyWithDetails(
+      bool subtree,
+      ax::mojom::EventFrom event_from,
+      ax::mojom::Action event_from_action,
+      std::vector<ui::AXEventIntent> event_intents) const;
 
   // Exchanges a WebAXObject with another.
   void Swap(WebAXObject& other);

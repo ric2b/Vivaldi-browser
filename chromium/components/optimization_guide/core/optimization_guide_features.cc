@@ -23,6 +23,8 @@
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace optimization_guide {
 namespace features {
 
@@ -84,7 +86,7 @@ BASE_FEATURE(kOptimizationHints,
 // Enables fetching from a remote Optimization Guide Service.
 BASE_FEATURE(kRemoteOptimizationGuideFetching,
              "OptimizationHintsFetching",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRemoteOptimizationGuideFetchingAnonymousDataConsent,
              "OptimizationHintsFetchingAnonymousDataConsent",
@@ -105,7 +107,7 @@ BASE_FEATURE(kOptimizationTargetPrediction,
 BASE_FEATURE(kOptimizationGuideModelDownloading,
              "OptimizationGuideModelDownloading",
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-             base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #else   // BUILD_WITH_TFLITE_LIB
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif  // !BUILD_WITH_TFLITE_LIB
@@ -192,6 +194,16 @@ BASE_FEATURE(kOptimizationHintsComponent,
              "OptimizationHintsComponent",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables the new model store that is tied with Chrome installation and shares
+// the models across user profiles.
+BASE_FEATURE(kOptimizationGuideInstallWideModelStore,
+             "OptimizationGuideInstallWideModelStore",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kExtractRelatedSearchesFromPrefetchedZPSResponse,
+             "ExtractRelatedSearchesFromPrefetchedZPSResponse",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // The default value here is a bit of a guess.
 // TODO(crbug/1163244): This should be tuned once metrics are available.
 base::TimeDelta PageTextExtractionOutstandingRequestsGracePeriod() {
@@ -252,6 +264,9 @@ GURL GetOptimizationGuideServiceGetHintsURL() {
         switches::kOptimizationGuideServiceGetHintsURL));
   }
 
+  if (vivaldi::IsVivaldiRunning())
+    return GURL();
+
   std::string url = base::GetFieldTrialParamValueByFeature(
       kRemoteOptimizationGuideFetching, "optimization_guide_service_url");
   if (url.empty() || !GURL(url).SchemeIs(url::kHttpsScheme)) {
@@ -274,6 +289,9 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
     return GURL(command_line->GetSwitchValueASCII(
         switches::kOptimizationGuideServiceGetModelsURL));
   }
+
+  if (vivaldi::IsVivaldiRunning())
+    return GURL();
 
   GURL get_models_url(kOptimizationGuideServiceGetModelsDefaultURL);
   CHECK(get_models_url.SchemeIs(url::kHttpsScheme));
@@ -648,6 +666,10 @@ bool ShouldCheckFailedComponentVersionPref() {
   return GetFieldTrialParamByFeatureAsBool(
       kOptimizationHintsComponent, "check_failed_component_version_pref",
       false);
+}
+
+bool IsInstallWideModelStoreEnabled() {
+  return base::FeatureList::IsEnabled(kOptimizationGuideInstallWideModelStore);
 }
 
 }  // namespace features

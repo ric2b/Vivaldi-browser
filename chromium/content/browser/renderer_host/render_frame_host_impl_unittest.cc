@@ -5,7 +5,9 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/buildflag.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/cors_origin_pattern_setter.h"
@@ -27,9 +29,14 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
+#include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_util.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "content/public/browser/authenticator_request_client_delegate.h"
+#endif  // BUIDLFLAG(IS_ANDROID)
 
 namespace content {
 
@@ -365,13 +372,13 @@ TEST_F(RenderFrameHostImplTest, FaviconURLsResetWithNavigation) {
   EXPECT_EQ(0u, contents()->GetFaviconURLs().size());
 }
 
-TEST_F(RenderFrameHostImplTest, ChildOfAnonymousIsAnonymous) {
-  EXPECT_FALSE(main_test_rfh()->IsAnonymous());
+TEST_F(RenderFrameHostImplTest, ChildOfCredentiallessIsCredentialless) {
+  EXPECT_FALSE(main_test_rfh()->IsCredentialless());
 
   auto* child_frame = static_cast<TestRenderFrameHost*>(
       content::RenderFrameHostTester::For(main_test_rfh())
           ->AppendChild("child"));
-  EXPECT_FALSE(child_frame->IsAnonymous());
+  EXPECT_FALSE(child_frame->IsCredentialless());
   EXPECT_FALSE(child_frame->storage_key().nonce().has_value());
 
   auto attributes = blink::mojom::IframeAttributes::New();
@@ -380,44 +387,43 @@ TEST_F(RenderFrameHostImplTest, ChildOfAnonymousIsAnonymous) {
   attributes->id = child_frame->frame_tree_node()->html_id();
   attributes->name = child_frame->frame_tree_node()->html_name();
   attributes->src = child_frame->frame_tree_node()->html_src();
-  // Set |anonymous| to true.
-  attributes->anonymous = true;
+  attributes->credentialless = true;
   child_frame->frame_tree_node()->SetAttributes(std::move(attributes));
 
-  EXPECT_FALSE(child_frame->IsAnonymous());
+  EXPECT_FALSE(child_frame->IsCredentialless());
   EXPECT_FALSE(child_frame->storage_key().nonce().has_value());
 
-  // A navigation in the anonymous iframe commits an anonymous RFH.
+  // A navigation in the credentialless iframe commits a credentialless RFH.
   std::unique_ptr<NavigationSimulator> navigation =
       NavigationSimulator::CreateRendererInitiated(
           GURL("https://example.com/navigation.html"), child_frame);
   navigation->Commit();
   child_frame =
       static_cast<TestRenderFrameHost*>(navigation->GetFinalRenderFrameHost());
-  EXPECT_TRUE(child_frame->IsAnonymous());
+  EXPECT_TRUE(child_frame->IsCredentialless());
   EXPECT_TRUE(child_frame->storage_key().nonce().has_value());
 
-  // An anonymous document sets a nonce on its network isolation key.
+  // A credentialless document sets a nonce on its network isolation key.
   EXPECT_TRUE(child_frame->GetNetworkIsolationKey().GetNonce().has_value());
-  EXPECT_EQ(main_test_rfh()->anonymous_iframes_nonce(),
+  EXPECT_EQ(main_test_rfh()->credentialless_iframes_nonce(),
             child_frame->GetNetworkIsolationKey().GetNonce().value());
 
-  // A child of an anonymous RFH is anonymous.
+  // A child of a credentialless RFH is credentialless.
   auto* grandchild_frame = static_cast<TestRenderFrameHost*>(
       content::RenderFrameHostTester::For(child_frame)
           ->AppendChild("grandchild"));
-  EXPECT_TRUE(grandchild_frame->IsAnonymous());
+  EXPECT_TRUE(grandchild_frame->IsCredentialless());
   EXPECT_TRUE(grandchild_frame->storage_key().nonce().has_value());
 
-  // The two anonymous RFH's storage keys should have the same nonce.
+  // The two credentialless RFH's storage keys should have the same nonce.
   EXPECT_EQ(child_frame->storage_key().nonce().value(),
             grandchild_frame->storage_key().nonce().value());
 
-  // Also the anonymous initial empty document sets a nonce on its network
+  // Also the credentialless initial empty document sets a nonce on its network
   // isolation key.
   EXPECT_TRUE(
       grandchild_frame->GetNetworkIsolationKey().GetNonce().has_value());
-  EXPECT_EQ(main_test_rfh()->anonymous_iframes_nonce(),
+  EXPECT_EQ(main_test_rfh()->credentialless_iframes_nonce(),
             grandchild_frame->GetNetworkIsolationKey().GetNonce().value());
 }
 
@@ -452,8 +458,7 @@ class FakeLocalFrameWithBeforeUnload : public content::FakeLocalFrame {
 TEST_F(RenderFrameHostImplTest, BeforeUnloadNotSentToRenderer) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kAvoidUnnecessaryBeforeUnloadCheckPostTask},
-      {features::kAvoidUnnecessaryBeforeUnloadCheckSync});
+      {}, {features::kAvoidUnnecessaryBeforeUnloadCheckSync});
   FakeLocalFrameWithBeforeUnload local_frame(contents()->GetPrimaryMainFrame());
   auto simulator = NavigationSimulatorImpl::CreateBrowserInitiated(
       GURL("https://example.com/simple.html"), contents());
@@ -474,30 +479,6 @@ TEST_F(RenderFrameHostImplTest, BeforeUnloadNotSentToRenderer) {
   EXPECT_FALSE(contents()
                    ->GetPrimaryMainFrame()
                    ->is_waiting_for_beforeunload_completion());
-}
-
-// Verifies BeforeUnloadNotSentToRenderer() is sent to renderer.
-TEST_F(RenderFrameHostImplTest, BeforeUnloadSentToRenderer) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kAvoidUnnecessaryBeforeUnloadCheckPostTask);
-  FakeLocalFrameWithBeforeUnload local_frame(contents()->GetPrimaryMainFrame());
-  auto simulator = NavigationSimulatorImpl::CreateBrowserInitiated(
-      GURL("https://example.com/simple.html"), contents());
-  simulator->set_block_invoking_before_unload_completed_callback(true);
-  simulator->Start();
-  EXPECT_TRUE(contents()
-                  ->GetPrimaryMainFrame()
-                  ->is_waiting_for_beforeunload_completion());
-  // This is necessary to trigger FakeLocalFrameWithBeforeUnload to be bound.
-  contents()->GetPrimaryMainFrame()->FlushLocalFrameMessages();
-  local_frame.FlushMessages();
-  EXPECT_TRUE(local_frame.was_before_unload_called());
-  EXPECT_TRUE(contents()
-                  ->GetPrimaryMainFrame()
-                  ->is_waiting_for_beforeunload_completion());
-  // Needed to avoid DCHECK in mojo if callback is not run.
-  local_frame.RunBeforeUnloadCallback();
 }
 
 class LoadingStateChangedDelegate : public WebContentsDelegate {
@@ -529,7 +510,6 @@ TEST_F(RenderFrameHostImplTest, NavigationApiInterceptShowLoadingUi) {
   const GURL url2("http://foo#a");
   auto params = mojom::DidCommitProvisionalLoadParams::New();
   params->did_create_new_entry = false;
-  params->should_replace_current_entry = true;
   params->url = url2;
   params->origin = url::Origin::Create(url2);
   params->referrer = blink::mojom::Referrer::New();
@@ -540,7 +520,8 @@ TEST_F(RenderFrameHostImplTest, NavigationApiInterceptShowLoadingUi) {
   params->post_id = -1;
   main_test_rfh()->SendDidCommitSameDocumentNavigation(
       std::move(params),
-      blink::mojom::SameDocumentNavigationType::kNavigationApiIntercept);
+      blink::mojom::SameDocumentNavigationType::kNavigationApiIntercept,
+      /*should_replace_current_entry=*/false);
 
   // navigateEvent.intercept() should leave WebContents in the loading
   // state and showing loading UI, unlike other same-document navigations.
@@ -707,6 +688,117 @@ TEST_F(RenderFrameHostImplTest,
                 url::Origin::Create(no_host_permissions_url), nullptr));
 }
 
+#if BUILDFLAG(IS_ANDROID)
+class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
+ public:
+  MOCK_METHOD(bool,
+              IsSecurityLevelAcceptableForWebAuthn,
+              (RenderFrameHost*, const url::Origin& origin),
+              ());
+};
+
+class TestWebAuthnContentBrowserClientImpl : public ContentBrowserClient {
+ public:
+  explicit TestWebAuthnContentBrowserClientImpl(
+      TestWebAuthenticationDelegate* delegate)
+      : delegate_(delegate) {}
+
+  WebAuthenticationDelegate* GetWebAuthenticationDelegate() override {
+    return delegate_;
+  }
+
+ private:
+  raw_ptr<TestWebAuthenticationDelegate> delegate_;
+};
+
+class RenderFrameHostImplWebAuthnTest : public RenderFrameHostImplTest {
+ public:
+  void SetUp() override {
+    RenderFrameHostImplTest::SetUp();
+    browser_client_ = std::make_unique<TestWebAuthnContentBrowserClientImpl>(
+        webauthn_delegate_.get());
+    old_browser_client_ = SetBrowserClientForTesting(browser_client_.get());
+    contents()->GetController().LoadURLWithParams(
+        NavigationController::LoadURLParams(
+            GURL("https://example.com/navigation.html")));
+  }
+
+  void TearDown() override {
+    RenderFrameHostImplTest::TearDown();
+    SetBrowserClientForTesting(old_browser_client_);
+  }
+
+ protected:
+  raw_ptr<ContentBrowserClient> old_browser_client_;
+  std::unique_ptr<TestWebAuthnContentBrowserClientImpl> browser_client_;
+  std::unique_ptr<TestWebAuthenticationDelegate> webauthn_delegate_ =
+      std::make_unique<TestWebAuthenticationDelegate>();
+};
+
+TEST_F(RenderFrameHostImplWebAuthnTest,
+       PerformGetAssertionWebAuthSecurityChecks_TLSError) {
+  GURL url("https://doofenshmirtz.evil");
+  const auto origin = url::Origin::Create(url);
+  EXPECT_CALL(*webauthn_delegate_,
+              IsSecurityLevelAcceptableForWebAuthn(main_test_rfh(), origin))
+      .WillOnce(testing::Return(false));
+  std::pair<blink::mojom::AuthenticatorStatus, bool> result =
+      main_test_rfh()->PerformGetAssertionWebAuthSecurityChecks(
+          "doofenshmirtz.evil", url::Origin::Create(url),
+          /*is_payment_credential_get_assertion=*/false,
+          /*remote_desktop_client_override=*/nullptr);
+  EXPECT_EQ(std::get<blink::mojom::AuthenticatorStatus>(result),
+            blink::mojom::AuthenticatorStatus::CERTIFICATE_ERROR);
+}
+
+TEST_F(RenderFrameHostImplWebAuthnTest,
+       PerformMakeCredentialWebAuthSecurityChecks_TLSError) {
+  GURL url("https://doofenshmirtz.evil");
+  const auto origin = url::Origin::Create(url);
+  EXPECT_CALL(*webauthn_delegate_,
+              IsSecurityLevelAcceptableForWebAuthn(main_test_rfh(), origin))
+      .WillOnce(testing::Return(false));
+  blink::mojom::AuthenticatorStatus result =
+      main_test_rfh()->PerformMakeCredentialWebAuthSecurityChecks(
+          "doofenshmirtz.evil", url::Origin::Create(url),
+          /*is_payment_credential_creation=*/false,
+          /*remote_desktop_client_override=*/nullptr);
+  EXPECT_EQ(result, blink::mojom::AuthenticatorStatus::CERTIFICATE_ERROR);
+}
+
+TEST_F(RenderFrameHostImplWebAuthnTest,
+       PerformGetAssertionWebAuthSecurityChecks_Success) {
+  GURL url("https://owca.org");
+  const auto origin = url::Origin::Create(url);
+  EXPECT_CALL(*webauthn_delegate_,
+              IsSecurityLevelAcceptableForWebAuthn(main_test_rfh(), origin))
+      .WillOnce(testing::Return(true));
+  std::pair<blink::mojom::AuthenticatorStatus, bool> result =
+      main_test_rfh()->PerformGetAssertionWebAuthSecurityChecks(
+          "owca.org", url::Origin::Create(url),
+          /*is_payment_credential_get_assertion=*/false,
+          /*remote_desktop_client_override=*/nullptr);
+  EXPECT_EQ(std::get<blink::mojom::AuthenticatorStatus>(result),
+            blink::mojom::AuthenticatorStatus::SUCCESS);
+}
+
+TEST_F(RenderFrameHostImplWebAuthnTest,
+       PerformMakeCredentialWebAuthSecurityChecks_Success) {
+  GURL url("https://owca.org");
+  const auto origin = url::Origin::Create(url);
+  EXPECT_CALL(*webauthn_delegate_,
+              IsSecurityLevelAcceptableForWebAuthn(main_test_rfh(), origin))
+      .WillOnce(testing::Return(true));
+  blink::mojom::AuthenticatorStatus result =
+      main_test_rfh()->PerformMakeCredentialWebAuthSecurityChecks(
+          "owca.org", url::Origin::Create(url),
+          /*is_payment_credential_creation=*/false,
+          /*remote_desktop_client_override=*/nullptr);
+  EXPECT_EQ(result, blink::mojom::AuthenticatorStatus::SUCCESS);
+}
+
+#endif  // BUILDFLAG(IS_ANDROID)
+
 TEST_F(RenderFrameHostImplTest, NoBeforeUnloadCheckForBrowserInitiated) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
@@ -723,9 +815,7 @@ TEST_F(RenderFrameHostImplTest,
        NoBeforeUnloadCheckForBrowserInitiatedSyncTakesPrecedence) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kAvoidUnnecessaryBeforeUnloadCheckSync,
-       features::kAvoidUnnecessaryBeforeUnloadCheckPostTask},
-      {});
+      {features::kAvoidUnnecessaryBeforeUnloadCheckSync}, {});
   contents()->GetController().LoadURLWithParams(
       NavigationController::LoadURLParams(
           GURL("https://example.com/navigation.html")));
@@ -797,7 +887,7 @@ class RenderFrameHostImplThirdPartyStorageTest
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     All,
     RenderFrameHostImplThirdPartyStorageTest,
     /*third_party_storage_partitioning_enabled*/ testing::Bool());

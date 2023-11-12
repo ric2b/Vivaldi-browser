@@ -219,7 +219,7 @@ bool VivaldiSessionService::AppendCommandsToFile(
 }
 
 bool VivaldiSessionService::Save(const base::FilePath& file_name) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   base::CreateDirectory(file_name.DirName());
 

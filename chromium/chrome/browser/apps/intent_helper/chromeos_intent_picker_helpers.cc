@@ -26,11 +26,11 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
+#include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
+#include "chrome/common/chrome_features.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
@@ -47,14 +47,14 @@ namespace {
 
 bool ShouldAutoDisplayUi(
     const std::vector<IntentPickerAppInfo>& apps_for_picker,
-    content::NavigationHandle* navigation_handle) {
-  content::WebContents* web_contents = navigation_handle->GetWebContents();
+    NavigationInfo navigation_info) {
+  content::WebContents* web_contents = navigation_info.web_contents;
 
   if (web_contents->GetVisibility() == content::Visibility::HIDDEN) {
     return false;
   }
 
-  const GURL& url = navigation_handle->GetURL();
+  const GURL& url = navigation_info.url;
 
   // Disable Auto-display in the new Intent Picker UI unless it is specifically
   // re-enabled.
@@ -67,7 +67,7 @@ bool ShouldAutoDisplayUi(
   if (InAppBrowser(web_contents))
     return false;
 
-  if (!ShouldOverrideUrlLoading(GetStartingGURL(navigation_handle), url))
+  if (!ShouldOverrideUrlLoading(navigation_info.starting_url, url))
     return false;
 
   Profile* profile =
@@ -101,10 +101,10 @@ bool ShouldAutoDisplayUi(
 }
 
 PickerShowState GetPickerShowState(
-    content::NavigationHandle* navigation_handle,
+    NavigationInfo navigation_info,
     const std::vector<IntentPickerAppInfo>& apps_for_picker) {
-  return ShouldAutoDisplayUi(apps_for_picker, navigation_handle) &&
-                 IsNavigateFromLink(navigation_handle)
+  return ShouldAutoDisplayUi(apps_for_picker, navigation_info) &&
+                 navigation_info.is_navigate_from_link
              ? PickerShowState::kPopOut
              : PickerShowState::kOmnibox;
 }
@@ -122,18 +122,18 @@ void OnAppIconsLoaded(content::WebContents* web_contents,
 
 }  // namespace
 
-void MaybeShowIntentPickerBubble(content::NavigationHandle* navigation_handle,
+void MaybeShowIntentPickerBubble(NavigationInfo navigation_info,
                                  std::vector<IntentPickerAppInfo> apps) {
-  if (apps.empty() || GetPickerShowState(navigation_handle, apps) ==
-                          PickerShowState::kOmnibox) {
+  if (apps.empty() ||
+      GetPickerShowState(navigation_info, apps) == PickerShowState::kOmnibox) {
     return;
   }
 
   IntentHandlingMetrics::RecordIntentPickerIconEvent(
       IntentHandlingMetrics::IntentPickerIconEvent::kAutoPopOut);
 
-  content::WebContents* web_contents = navigation_handle->GetWebContents();
-  const GURL& url = navigation_handle->GetURL();
+  content::WebContents* web_contents = navigation_info.web_contents;
+  const GURL& url = navigation_info.url;
 
   IntentPickerTabHelper::LoadAppIcons(
       web_contents, std::move(apps),
@@ -230,22 +230,26 @@ void LaunchAppFromIntentPickerChromeOs(content::WebContents* web_contents,
     auto* proxy = AppServiceProxyFactory::GetForProfile(profile);
 
     // TODO(crbug.com/853604): Distinguish the source from link and omnibox.
-    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-      proxy->LaunchAppWithUrl(
-          launch_name,
-          GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
-                        /*prefer_container=*/true),
-          url, LaunchSource::kFromLink,
-          std::make_unique<WindowInfo>(display::kDefaultDisplayId));
-    } else {
-      proxy->LaunchAppWithUrl(launch_name,
-                              GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
-                                            /*prefer_container=*/true),
-                              url, mojom::LaunchSource::kFromLink,
-                              apps::MakeWindowInfo(display::kDefaultDisplayId));
-    }
+    proxy->LaunchAppWithUrl(
+        launch_name,
+        GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                      /*prefer_container=*/true),
+        url, LaunchSource::kFromLink,
+        std::make_unique<WindowInfo>(display::kDefaultDisplayId));
     CloseOrGoBack(web_contents);
   }
+}
+
+bool ShouldOverrideUrlLoadingForOfficeExperiment(const GURL& previous_url,
+                                                 const GURL& current_url) {
+  if (base::FeatureList::IsEnabled(
+          ::features::kMicrosoftOfficeWebAppExperiment)) {
+    if (web_app::ChromeOsWebAppExperiments::ShouldOverrideUrlLoading(
+            previous_url, current_url)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace apps

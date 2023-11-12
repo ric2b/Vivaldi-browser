@@ -35,11 +35,6 @@
 
 namespace blink {
 
-enum {
-  kMaxPendingCompositorFrames = 2,
-  kMaxUnreclaimedPlaceholderFrames = 3,
-};
-
 struct CanvasResourceDispatcher::FrameResource {
   FrameResource() = default;
   ~FrameResource() {
@@ -69,6 +64,7 @@ struct CanvasResourceDispatcher::FrameResource {
 
 CanvasResourceDispatcher::CanvasResourceDispatcher(
     CanvasResourceDispatcherClient* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     scoped_refptr<base::SingleThreadTaskRunner>
         agent_group_scheduler_compositor_task_runner,
     uint32_t client_id,
@@ -84,6 +80,7 @@ CanvasResourceDispatcher::CanvasResourceDispatcher(
       animation_power_mode_voter_(
           power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
               "PowerModeVoter.Animation.Canvas")),
+      task_runner_(std::move(task_runner)),
       agent_group_scheduler_compositor_task_runner_(
           std::move(agent_group_scheduler_compositor_task_runner)) {
   // Frameless canvas pass an invalid |frame_sink_id_|; don't create mojo
@@ -334,7 +331,7 @@ void CanvasResourceDispatcher::DidReceiveCompositorFrameAck(
     WTF::Vector<viz::ReturnedResource> resources) {
   ReclaimResources(std::move(resources));
   pending_compositor_frames_--;
-  DCHECK_GE(pending_compositor_frames_, 0);
+  DCHECK_GE(pending_compositor_frames_, 0u);
 }
 
 void CanvasResourceDispatcher::SetNeedsBeginFrame(bool needs_begin_frame) {
@@ -487,21 +484,17 @@ void CanvasResourceDispatcher::SetPlaceholderCanvasDispatcher(
   if (!agent_group_scheduler_compositor_task_runner_)
     return;
 
-  scoped_refptr<base::SingleThreadTaskRunner> dispatcher_task_runner =
-      Thread::Current()->GetDeprecatedTaskRunner();
-
-  // If the offscreencanvas is in the same tread as the canvas, we will update
+  // If the offscreencanvas is in the same thread as the canvas, we will update
   // the canvas resource dispatcher directly. So Offscreen Canvas can behave in
   // a more synchronous way when it's on the main thread.
   if (IsMainThread()) {
-    UpdatePlaceholderDispatcher(GetWeakPtr(), dispatcher_task_runner,
+    UpdatePlaceholderDispatcher(GetWeakPtr(), task_runner_,
                                 placeholder_canvas_id);
   } else {
     PostCrossThreadTask(
         *agent_group_scheduler_compositor_task_runner_, FROM_HERE,
         CrossThreadBindOnce(UpdatePlaceholderDispatcher, GetWeakPtr(),
-                            std::move(dispatcher_task_runner),
-                            placeholder_canvas_id));
+                            task_runner_, placeholder_canvas_id));
   }
 }
 

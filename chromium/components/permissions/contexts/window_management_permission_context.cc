@@ -28,7 +28,7 @@ ContentSetting WindowManagementPermissionContext::GetPermissionStatusInternal(
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   // TODO(crbug.com/897300): Add window-placement support on Android.
-  NOTIMPLEMENTED_LOG_ONCE() << "window-placement permission is not supported";
+  NOTIMPLEMENTED_LOG_ONCE();
   return CONTENT_SETTING_BLOCK;
 }
 #endif  // IS_ANDROID
@@ -44,7 +44,7 @@ void WindowManagementPermissionContext::UserMadePermissionDecision(
   // then immediately request fullscreen or place a window using granted info.
   if (content_setting == CONTENT_SETTING_ALLOW) {
     if (auto* render_frame_host = content::RenderFrameHost::FromID(
-            id.render_process_id(), id.render_frame_id())) {
+            id.global_render_frame_host_id())) {
       render_frame_host->NotifyUserActivation(
           blink::mojom::UserActivationNotificationType::kInteraction);
     }

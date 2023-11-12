@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/animation/worklet_animation_base.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/properties/css_bitset.h"
+#include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_counted_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/hash_counted_set.h"
@@ -50,7 +51,8 @@ using AnimationCountedSet = HeapHashCountedSet<WeakMember<Animation>>;
 using WorkletAnimationSet = HeapHashSet<WeakMember<WorkletAnimationBase>>;
 
 class CORE_EXPORT ElementAnimations final
-    : public GarbageCollected<ElementAnimations> {
+    : public GarbageCollected<ElementAnimations>,
+      public ElementRareDataField {
  public:
   ElementAnimations();
   ElementAnimations(const ElementAnimations&) = delete;
@@ -120,7 +122,15 @@ class CORE_EXPORT ElementAnimations final
 
   void SetCompositedBackgroundColorStatus(CompositedPaintStatus status);
 
-  void Trace(Visitor*) const;
+  CompositedPaintStatus CompositedClipPathStatus() {
+    return static_cast<CompositedPaintStatus>(composited_clip_path_status_);
+  }
+
+  void SetCompositedClipPathStatus(CompositedPaintStatus status) {
+    composited_clip_path_status_ = static_cast<unsigned>(status);
+  }
+
+  void Trace(Visitor*) const override;
 
  private:
   EffectStack effect_stack_;
@@ -138,11 +148,12 @@ class CORE_EXPORT ElementAnimations final
   // See also StyleBaseData.
   bool animation_style_change_ : 1;
 
-  // The decision of whether to composite a background color animation needs to
+  // The decision of whether to composite a compositable animations needs to
   // be made at Paint time and respected by the compositor.
   // The size of the bit-field must be updated if adding new
   // CompositedPaintStatus values to ensure that it can hold the value.
   unsigned composited_background_color_status_ : 2;
+  unsigned composited_clip_path_status_ : 2;
 
   FRIEND_TEST_ALL_PREFIXES(StyleEngineTest, PseudoElementBaseComputedStyle);
 };

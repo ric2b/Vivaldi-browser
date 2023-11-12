@@ -5,7 +5,8 @@
 #ifndef ASH_SYSTEM_TIME_UNIFIED_CALENDAR_VIEW_CONTROLLER_H_
 #define ASH_SYSTEM_TIME_UNIFIED_CALENDAR_VIEW_CONTROLLER_H_
 
-#include "ash/system/accessibility/tray_accessibility.h"
+#include <memory>
+
 #include "ash/system/unified/detailed_view_controller.h"
 
 namespace ash {
@@ -26,7 +27,7 @@ class UnifiedCalendarViewController : public DetailedViewController {
   ~UnifiedCalendarViewController() override;
 
   // DetailedViewController:
-  views::View* CreateView() override;
+  std::unique_ptr<views::View> CreateView() override;
   std::u16string GetAccessibleName() const override;
 
  private:

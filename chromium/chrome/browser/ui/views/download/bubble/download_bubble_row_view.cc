@@ -7,10 +7,12 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/bubble/download_bubble_controller.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
+#include "chrome/browser/download/download_item_warning_data.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/download/drag_download_item.h"
@@ -20,10 +22,11 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
 #include "chrome/browser/ui/views/download/download_shelf_context_menu_view.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/crash/core/common/crash_key.h"
 #include "components/download/public/common/download_item.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -32,6 +35,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -76,27 +80,6 @@ constexpr int kProgressBarHeight = 3;
 // span. The 5 columns are Download Icon, Padding, Status text,
 // Main Button, Subpage Icon.
 constexpr int kNumColumns = 5;
-
-class LabelWithCrashKey : public views::Label {
- public:
-  METADATA_HEADER(LabelWithCrashKey);
-  LabelWithCrashKey(const std::u16string& text,
-                    int text_context,
-                    int text_style)
-      : Label(text, text_context, text_style) {}
-
-  int GetHeightForWidth(int w) const override {
-    // Not sure how big the filename will be. 256 char should be enough though.
-    static crash_reporter::CrashKeyString<256> download_bubble_crash_key(
-        "DownloadBubble-LabelText");
-    crash_reporter::ScopedCrashKeyString auto_clear(
-        &download_bubble_crash_key, base::UTF16ToUTF8(GetText()));
-    return Label::GetHeightForWidth(w);
-  }
-};
-
-BEGIN_METADATA(LabelWithCrashKey, Label)
-END_METADATA
 
 // A stub subclass of Button that has no visuals.
 class TransparentButton : public views::Button {
@@ -146,6 +129,27 @@ bool DownloadBubbleRowView::UpdateBubbleUIInfo(bool initial_setup) {
       (is_paused_ == is_paused)) {
     return false;
   }
+
+  // Announce completion of downloads
+  if (state == download::DownloadItem::COMPLETE && !initial_setup &&
+      state_ != state) {
+    const std::u16string alert_text = l10n_util::GetStringFUTF16(
+        IDS_DOWNLOAD_COMPLETE_ACCESSIBLE_ALERT,
+        model_->GetFileNameToReportUser().LossyDisplayName());
+    GetViewAccessibility().AnnounceText(alert_text);
+  }
+
+  // When in progress, announce the progress immediately and start the timer for
+  // further updates.
+  if (state == download::DownloadItem::IN_PROGRESS &&
+      (initial_setup || state_ != state)) {
+    AnnounceInProgressAlert();
+    accessible_alert_in_progress_timer_.Reset();
+  } else if (!initial_setup && state_ == download::DownloadItem::IN_PROGRESS &&
+             state != state_) {
+    accessible_alert_in_progress_timer_.Stop();
+  }
+
   mode_ = mode;
   state_ = state;
   is_paused_ = is_paused;
@@ -177,13 +181,16 @@ void DownloadBubbleRowView::AddedToWidget() {
   auto* focus_manager = GetFocusManager();
   if (focus_manager) {
     focus_manager->AddFocusChangeListener(this);
+    RegisterAccelerators(focus_manager);
   }
 }
 
 void DownloadBubbleRowView::RemovedFromWidget() {
   auto* focus_manager = GetFocusManager();
-  if (focus_manager)
+  if (focus_manager) {
     focus_manager->RemoveFocusChangeListener(this);
+    UnregisterAccelerators(focus_manager);
+  }
 }
 
 void DownloadBubbleRowView::OnThemeChanged() {
@@ -295,7 +302,12 @@ DownloadBubbleRowView::DownloadBubbleRowView(
       navigation_handler_(navigation_handler),
       browser_(browser),
       inkdrop_container_(
-          AddChildView(std::make_unique<views::InkDropContainerView>())) {
+          AddChildView(std::make_unique<views::InkDropContainerView>())),
+      accessible_alert_in_progress_timer_(
+          FROM_HERE,
+          base::Minutes(3),
+          base::BindRepeating(&DownloadBubbleRowView::AnnounceInProgressAlert,
+                              base::Unretained(this))) {
   model_->SetDelegate(this);
   SetBorder(views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ROW)));
 
@@ -356,7 +368,7 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   icon_->SetPaintToLayer();
   icon_->layer()->SetFillsBoundsOpaquely(false);
 
-  primary_label_ = AddChildView(std::make_unique<LabelWithCrashKey>(
+  primary_label_ = AddChildView(std::make_unique<views::Label>(
       model_->GetFileNameToReportUser().LossyDisplayName(),
       views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY));
   primary_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -419,7 +431,7 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   // Empty cell under icon_
   AddChildView(std::make_unique<views::FlexLayoutView>());
 
-  secondary_label_ = AddChildView(std::make_unique<LabelWithCrashKey>(
+  secondary_label_ = AddChildView(std::make_unique<views::Label>(
       model_->GetStatusText(), views::style::CONTEXT_LABEL,
       views::style::STYLE_SECONDARY));
   secondary_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -430,7 +442,7 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   secondary_label_->SetMultiLine(true);
   secondary_label_->SetAllowCharacterBreak(true);
 
-  // TODO(bhatiarohit): Remove the progress bar holder view here.
+  // TODO(crbug.com/1379447): Remove the progress bar holder view here.
   // Currently the animation does not show up on deep scanning without
   // the holder.
   progress_bar_holder_ =
@@ -578,6 +590,10 @@ void DownloadBubbleRowView::Layout() {
 
 void DownloadBubbleRowView::OnMainButtonPressed() {
   if (ui_info_.has_subpage) {
+    DownloadItemWarningData::AddWarningActionEvent(
+        model_->GetDownloadItem(),
+        DownloadItemWarningData::WarningSurface::BUBBLE_MAINPAGE,
+        DownloadItemWarningData::WarningAction::OPEN_SUBPAGE);
     navigation_handler_->OpenSecurityDialog(this);
   } else {
     RecordDownloadOpenButtonPressed(model_->IsDone());
@@ -600,7 +616,8 @@ void DownloadBubbleRowView::UpdateButtons() {
         views::Button::STATE_NORMAL,
         ui::ImageModel::FromVectorIcon(*(action.icon), ui::kColorIcon,
                                        GetLayoutConstant(DOWNLOAD_ICON_SIZE)));
-    action_button->SetAccessibleName(action.hover_text);
+    action_button->SetAccessibleName(
+        GetAccessibleNameForQuickAction(action.command));
     action_button->SetTooltipText(action.hover_text);
     action_button->SetVisible(true);
   }
@@ -649,8 +666,14 @@ void DownloadBubbleRowView::UpdateLabels() {
   primary_label_->SetText(model_->GetFileNameToReportUser().LossyDisplayName());
   secondary_label_->SetText(model_->GetStatusText());
 
-  transparent_button_->SetAccessibleName(base::JoinString(
-      {primary_label_->GetText(), secondary_label_->GetText()}, u" "));
+  if (ui_info_.has_subpage) {
+    transparent_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_DOWNLOAD_BUBBLE_MAIN_BUTTON_SUBPAGE, primary_label_->GetText(),
+        secondary_label_->GetText()));
+  } else {
+    transparent_button_->SetAccessibleName(base::JoinString(
+        {primary_label_->GetText(), secondary_label_->GetText()}, u" "));
+  }
 
   if (GetWidget()) {
     secondary_label_->SetEnabledColor(
@@ -675,6 +698,12 @@ void DownloadBubbleRowView::RecordMetricsOnUpdate() {
 }
 
 void DownloadBubbleRowView::RecordDownloadDisplayed() {
+  if (model_->IsDangerous()) {
+    DownloadItemWarningData::AddWarningActionEvent(
+        model_->GetDownloadItem(),
+        DownloadItemWarningData::WarningSurface::BUBBLE_MAINPAGE,
+        DownloadItemWarningData::WarningAction::SHOWN);
+  }
   if (!model_->GetEphemeralWarningUiShownTime().has_value() &&
       model_->IsEphemeralWarning()) {
     model_->SetEphemeralWarningUiShownTime(base::Time::Now());
@@ -719,7 +748,7 @@ views::MdTextButton* DownloadBubbleRowView::AddMainPageButton(
           base::BindRepeating(
               &DownloadBubbleUIController::ProcessDownloadButtonPress,
               base::Unretained(bubble_controller_),
-              base::Unretained(model_.get()), command),
+              base::Unretained(model_.get()), command, /*is_main_view=*/true),
           button_string));
   button->SetMaxSize(gfx::Size(0, kDownloadButtonHeight));
   button->SetProperty(views::kMarginsKey, kRowInterElementPadding);
@@ -733,12 +762,19 @@ views::ImageButton* DownloadBubbleRowView::AddQuickAction(
       views::CreateVectorImageButton(base::BindRepeating(
           &DownloadBubbleUIController::ProcessDownloadButtonPress,
           base::Unretained(bubble_controller_), base::Unretained(model_.get()),
-          command)));
+          command, /*is_main_view=*/true)));
   InstallCircleHighlightPathGenerator(quick_action);
   quick_action->SetBorder(
       views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ICON)));
   quick_action->SetProperty(views::kMarginsKey, kRowInterElementPadding);
   quick_action->SetVisible(false);
+  views::InkDrop::Get(quick_action)
+      ->SetBaseColorCallback(base::BindRepeating(
+          [](views::View* host) {
+            return views::style::GetColor(*host, views::style::CONTEXT_BUTTON,
+                                          views::style::STYLE_SECONDARY);
+          },
+          quick_action));
   return quick_action;
 }
 
@@ -760,6 +796,35 @@ views::ImageButton* DownloadBubbleRowView::GetActionButtonForCommand(
   }
 }
 
+std::u16string DownloadBubbleRowView::GetAccessibleNameForQuickAction(
+    DownloadCommands::Command command) {
+  switch (command) {
+    case DownloadCommands::RESUME:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_RESUME_QUICK_ACTION_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::PAUSE:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_PAUSE_QUICK_ACTION_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::OPEN_WHEN_COMPLETE:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_OPEN_QUICK_ACTION_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::CANCEL:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_CANCEL_QUICK_ACTION_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::SHOW_IN_FOLDER:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_SHOW_IN_FOLDER_QUICK_ACTION_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    default:
+      NOTREACHED();
+      return u"";
+  }
+}
+
 void DownloadBubbleRowView::ShowContextMenuForViewImpl(
     View* source,
     const gfx::Point& point,
@@ -778,6 +843,71 @@ void DownloadBubbleRowView::ShowContextMenuForViewImpl(
   context_menu_->Run(GetWidget()->GetTopLevelWidget(),
                      gfx::Rect(point, gfx::Size()), source_type,
                      base::RepeatingClosure());
+}
+
+void DownloadBubbleRowView::AnnounceInProgressAlert() {
+  GetViewAccessibility().AnnounceText(
+      model_->GetInProgressAccessibleAlertText());
+}
+
+bool DownloadBubbleRowView::AcceleratorPressed(
+    const ui::Accelerator& accelerator) {
+  if (model_->GetState() != download::DownloadItem::COMPLETE) {
+    return false;
+  }
+
+  // The only accelerator we registered is for copy, so we know that's what
+  // `accelerator` contains. If DCHECKs are enabled, we can confirm that.
+#if DCHECK_IS_ON()
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  ui::Accelerator registered_accelerator;
+  if (browser_view &&
+      browser_view->GetAccelerator(IDC_COPY, &registered_accelerator)) {
+    DCHECK(accelerator == registered_accelerator);
+  }
+#endif
+
+  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+  std::string uri_list = ui::FileInfosToURIList({ui::FileInfo(
+      model_->GetTargetFilePath(), model_->GetFileNameToReportUser())});
+  scw.WriteFilenames(uri_list);
+  return true;
+}
+
+bool DownloadBubbleRowView::CanHandleAccelerators() const {
+  bool focused = Contains(GetFocusManager()->GetFocusedView());
+  return focused;
+}
+
+void DownloadBubbleRowView::RegisterAccelerators(
+    views::FocusManager* focus_manager) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  if (!browser_view) {
+    return;
+  }
+
+  ui::Accelerator accelerator;
+  if (!browser_view->GetAccelerator(IDC_COPY, &accelerator)) {
+    return;
+  }
+
+  focus_manager->RegisterAccelerator(
+      accelerator, ui::AcceleratorManager::kNormalPriority, this);
+}
+
+void DownloadBubbleRowView::UnregisterAccelerators(
+    views::FocusManager* focus_manager) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  if (!browser_view) {
+    return;
+  }
+
+  ui::Accelerator accelerator;
+  if (!browser_view->GetAccelerator(IDC_COPY, &accelerator)) {
+    return;
+  }
+
+  focus_manager->UnregisterAccelerator(accelerator, this);
 }
 
 BEGIN_METADATA(DownloadBubbleRowView, views::View)

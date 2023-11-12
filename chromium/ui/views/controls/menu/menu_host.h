@@ -42,15 +42,15 @@ class MenuControllerTest;
 class MenuHost : public Widget, public WidgetObserver {
  public:
   struct InitParams {
-    Widget* parent = nullptr;
+    raw_ptr<Widget> parent = nullptr;
     gfx::Rect bounds;
-    View* contents_view = nullptr;
+    raw_ptr<View> contents_view = nullptr;
     bool do_capture = false;
     gfx::NativeView native_view_for_gestures;
     ui::MenuType menu_type = ui::MenuType::kRootContextMenu;
     // Window that is stacked below a new menu window (can be different from the
     // |parent|).
-    Widget* context = nullptr;
+    raw_ptr<Widget> context = nullptr;
 
     // Additional information that helps to position anchored windows in such
     // backends as Wayland.
@@ -106,18 +106,18 @@ class MenuHost : public Widget, public WidgetObserver {
   void OnWidgetDestroying(Widget* widget) override;
 
   // Parent of the MenuHost widget.
-  raw_ptr<Widget> owner_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> owner_ = nullptr;
 
   gfx::NativeView native_view_for_gestures_ = nullptr;
 
   // The view we contain.
-  raw_ptr<SubmenuView> submenu_;
+  raw_ptr<SubmenuView, DanglingUntriaged> submenu_;
 
   // If true, DestroyMenuHost has been invoked.
-  bool destroying_;
+  bool destroying_ = false;
 
   // If true and capture is lost we don't notify the delegate.
-  bool ignore_capture_lost_;
+  bool ignore_capture_lost_ = false;
 
 #if !BUILDFLAG(IS_MAC)
   // Handles raw touch events at the moment.

@@ -19,9 +19,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/display/display_util.h"
 #include "ash/public/cpp/clipboard_image_model_factory.h"
-#include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/public/cpp/window_tree_host_lookup.h"
 #include "ash/shell.h"
+#include "ash/style/color_util.h"
 #include "ash/wm/window_util.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
@@ -35,9 +35,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -283,13 +283,21 @@ bool ClipboardHistoryControllerImpl::IsMenuShowing() const {
   return context_menu_ && context_menu_->IsRunning();
 }
 
-void ClipboardHistoryControllerImpl::ToggleMenuShownByAccelerator() {
+void ClipboardHistoryControllerImpl::ToggleMenuShownByAccelerator(
+    bool is_plain_text_paste) {
   if (IsMenuShowing()) {
     // Before hiding the menu, paste the selected menu item, or the first item
     // if none is selected.
     PasteMenuItemData(context_menu_->GetSelectedMenuItemCommand().value_or(
                           clipboard_history_util::kFirstItemCommandId),
-                      ClipboardHistoryPasteType::kRichTextAccelerator);
+                      is_plain_text_paste
+                          ? ClipboardHistoryPasteType::kPlainTextAccelerator
+                          : ClipboardHistoryPasteType::kRichTextAccelerator);
+    return;
+  }
+
+  // Do not allow the plain text shortcut to open the menu.
+  if (is_plain_text_paste) {
     return;
   }
 
@@ -439,7 +447,7 @@ void ClipboardHistoryControllerImpl::GetHistoryValues(
   base::RepeatingClosure barrier = base::BarrierClosure(
       bitmaps_to_be_encoded.size(),
       base::BindPostTask(
-          base::SequencedTaskRunnerHandle::Get(),
+          base::SequencedTaskRunner::GetCurrentDefault(),
           base::BindOnce(
               &ClipboardHistoryControllerImpl::GetHistoryValuesWithEncodedPNGs,
               weak_ptr_factory_.GetMutableWeakPtr(), item_id_filter,
@@ -543,11 +551,17 @@ void ClipboardHistoryControllerImpl::GetHistoryValuesWithEncodedPNGs(
         std::string file_name =
             base::UTF16ToUTF8(resource_manager_->GetLabel(item));
         item_value.SetKey(kTextDataKey, base::Value(file_name));
-        ScopedLightModeAsDefault scoped_light_mode_as_default;
+        ui::ImageModel image_model =
+            clipboard_history_util::GetIconForFileClipboardItem(item,
+                                                                file_name);
+        // TODO(b/252366283): Refactor so we don't use the RootWindow from
+        // Shell.
+        const ui::ColorProvider* color_provider =
+            ColorUtil::GetColorProviderSourceForWindow(
+                Shell::Get()->GetPrimaryRootWindow())
+                ->GetColorProvider();
         std::string data_url = webui::GetBitmapDataUrl(
-            *clipboard_history_util::GetIconForFileClipboardItem(item,
-                                                                 file_name)
-                 .bitmap());
+            *image_model.Rasterize(color_provider).bitmap());
         item_value.SetKey(kImageDataKey, base::Value(data_url));
         item_value.SetKey(kFormatDataKey, base::Value(kFileFormat));
         break;
@@ -587,7 +601,7 @@ bool ClipboardHistoryControllerImpl::PasteClipboardItemById(
 
   for (const auto& item : history()->GetItems()) {
     if (item.id().ToString() == item_id) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(
               &ClipboardHistoryControllerImpl::PasteClipboardHistoryItem,
@@ -771,7 +785,7 @@ void ClipboardHistoryControllerImpl::PasteMenuItemData(
   const ClipboardHistoryItem& selected_item =
       context_menu_->GetItemFromCommandId(command_id);
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClipboardHistoryControllerImpl::PasteClipboardHistoryItem,
                      weak_ptr_factory_.GetWeakPtr(), active_window,
@@ -904,7 +918,7 @@ void ClipboardHistoryControllerImpl::PasteClipboardHistoryItem(
   // Replace the clipboard data. Some apps take a long time to receive the paste
   // event, and some apps will read from the clipboard multiple times per paste.
   // Wait a bit before writing `data_to_restore` back to the clipboard.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(
           [](const base::WeakPtr<ClipboardHistoryControllerImpl>& weak_ptr,

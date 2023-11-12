@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/gtest_tags.h"
 #include "base/test/mock_callback.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/media/router/providers/cast/dual_media_sink_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/media_router/browser/media_router_factory.h"
 #include "components/media_router/common/test/test_helper.h"
@@ -33,6 +35,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/ash/cast_config_controller_media_router.h"
@@ -137,22 +140,6 @@ void AccessCodeCastIntegrationBrowserTest::OnWillCreateBrowserContextServices(
         auto it = base::ranges::find(media_sinks_observers_, observer);
         if (it != media_sinks_observers_.end()) {
           media_sinks_observers_.erase(it);
-        }
-      });
-
-  ON_CALL(*media_router_, RegisterMediaRoutesObserver(_))
-      .WillByDefault([this](MediaRoutesObserver* observer) {
-        media_routes_observers_.push_back(observer);
-        return true;
-      });
-
-  // Remove route observers as appropriate (destructing handlers will cause
-  // this to occur).
-  ON_CALL(*media_router_, UnregisterMediaRoutesObserver(_))
-      .WillByDefault([this](MediaRoutesObserver* observer) {
-        auto it = base::ranges::find(media_routes_observers_, observer);
-        if (it != media_routes_observers_.end()) {
-          media_routes_observers_.erase(it);
         }
       });
 
@@ -269,12 +256,17 @@ void AccessCodeCastIntegrationBrowserTest::ShowUi(const std::string& name) {
 
 content::WebContents* AccessCodeCastIntegrationBrowserTest::ShowDialog() {
   content::WebContentsAddedObserver observer;
+  // Make sure Chrome is in the foreground, otherwise sending input
+  // won't do anything and the test will hang.
+  EXPECT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
+
   // This string is empty since the ShowUi function requires a string. We do not
   // need one in the context we are using the function.
   ShowUi("");
   EXPECT_TRUE(VerifyUi());
   content::WebContents* dialog_contents = observer.GetWebContents();
   EXPECT_TRUE(content::WaitForLoadStop(dialog_contents));
+  AccessCodeCastDialog::ShouldBlockWidgetActivationChangedForTest(true);
 
   return dialog_contents;
 }
@@ -308,6 +300,38 @@ void AccessCodeCastIntegrationBrowserTest::PressSubmitAndWaitForClose(
     content::WebContents* dialog_contents) {
   CloseObserver close_observer(dialog_contents);
   PressSubmit(dialog_contents);
+  close_observer.Wait();
+}
+
+void AccessCodeCastIntegrationBrowserTest::CloseDialogUsingKeyPress() {
+  EXPECT_TRUE(ui_test_utils::SendKeyPressSync(
+      browser(), ui::KeyboardCode::VKEY_ESCAPE, false, false, false, false));
+}
+
+void AccessCodeCastIntegrationBrowserTest::SetAccessCodeUsingKeyPress(
+    const std::string& access_code) {
+  for (const char& letter : access_code) {
+#if BUILDFLAG(IS_WIN)
+    ui::KeyboardCode keyboard_code = ui::KeyboardCode(toupper(letter));
+#else
+    ui::KeyboardCode keyboard_code =
+        static_cast<ui::KeyboardCode>(toupper(letter));
+#endif
+    EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), keyboard_code, false,
+                                                false, false, false));
+  }
+}
+
+void AccessCodeCastIntegrationBrowserTest::PressSubmitUsingKeyPress() {
+  EXPECT_TRUE(ui_test_utils::SendKeyPressSync(
+      browser(), ui::KeyboardCode::VKEY_RETURN, false, false, false, false));
+}
+
+void AccessCodeCastIntegrationBrowserTest::
+    PressSubmitAndWaitForCloseUsingKeyPress(
+        content::WebContents* dialog_contents) {
+  CloseObserver close_observer(dialog_contents);
+  PressSubmitUsingKeyPress();
   close_observer.Wait();
 }
 
@@ -407,7 +431,6 @@ void AccessCodeCastIntegrationBrowserTest::MockOnChannelOpenedCall(
     CastDeviceCountMetrics::SinkSource sink_source,
     ChannelOpenedCallback callback,
     cast_channel::CastSocketOpenParams open_params) {
-  std::move(callback).Run(open_channel_response_);
   if (!open_channel_response_)
     return;
 
@@ -426,6 +449,11 @@ void AccessCodeCastIntegrationBrowserTest::MockOnChannelOpenedCall(
                      base::Unretained(mock_cast_media_sink_service_impl()),
                      cast_sink));
 
+  // The open channel callback needs to run after the AddSinkForTest is posted
+  // to ensure that no race conditions occur and we mimic an actual access code
+  // casting situation.
+  std::move(callback).Run(open_channel_response_);
+
   // A delay is added to the QRM notification since this
   // simulates the non-instant time it takes for a sink to be added
   // to the QRM.
@@ -439,7 +467,7 @@ void AccessCodeCastIntegrationBrowserTest::MockOnChannelOpenedCall(
 
 void AccessCodeCastIntegrationBrowserTest::SpinRunLoop(base::TimeDelta delay) {
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), delay);
   run_loop.Run();
 }
@@ -503,8 +531,9 @@ void AccessCodeCastIntegrationBrowserTest::UpdateSinks(
 
 void AccessCodeCastIntegrationBrowserTest::UpdateRoutes(
     const std::vector<MediaRoute>& routes) {
-  for (MediaRoutesObserver* routes_observer : media_routes_observers_) {
-    routes_observer->OnRoutesUpdated(routes);
+  for (MediaRoutesObserver& routes_observer :
+       media_router_->routes_observers()) {
+    routes_observer.OnRoutesUpdated(routes);
   }
 }
 
@@ -528,6 +557,11 @@ raw_ptr<AccessCodeCastPrefUpdater>
 AccessCodeCastIntegrationBrowserTest::GetPrefUpdater() {
   return AccessCodeCastSinkServiceFactory::GetForProfile(browser()->profile())
       ->pref_updater_.get();
+}
+
+void AccessCodeCastIntegrationBrowserTest::AddScreenplayTag(
+    const std::string& screenplay_tag) {
+  base::AddTagToTestResult("feature_id", screenplay_tag);
 }
 
 }  // namespace media_router

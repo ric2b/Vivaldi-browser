@@ -19,12 +19,16 @@
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
-#include "content/browser/attribution_reporting/aggregatable_attribution_utils.h"
-#include "content/browser/attribution_reporting/attribution_aggregation_keys.h"
+#include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/parsing_utils.h"
+#include "components/attribution_reporting/source_registration_error.mojom.h"
+#include "components/attribution_reporting/suitable_origin.h"
+#include "components/attribution_reporting/trigger_registration.h"
+#include "content/browser/attribution_reporting/attribution_debug_report.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
+#include "content/browser/attribution_reporting/attribution_internals.mojom.h"
 #include "content/browser/attribution_reporting/attribution_observer_types.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
@@ -49,37 +53,51 @@ namespace {
 
 using Attributability =
     ::attribution_internals::mojom::WebUISource::Attributability;
+using SourceDebugReporting =
+    ::attribution_internals::mojom::WebUISource::DebugReporting;
+
 using Empty = ::attribution_internals::mojom::Empty;
 using ReportStatus = ::attribution_internals::mojom::ReportStatus;
 using ReportStatusPtr = ::attribution_internals::mojom::ReportStatusPtr;
 
-attribution_internals::mojom::DebugKeyPtr WebUIDebugKey(
-    absl::optional<uint64_t> debug_key) {
-  return debug_key ? attribution_internals::mojom::DebugKey::New(*debug_key)
-                   : nullptr;
-}
+using ::attribution_internals::mojom::WebUIDebugReport;
 
 attribution_internals::mojom::WebUISourcePtr WebUISource(
     const CommonSourceInfo& source,
     Attributability attributability,
     const std::vector<uint64_t>& dedup_keys,
     int64_t aggregatable_budget_consumed,
-    const std::vector<uint64_t>& aggregatable_dedup_keys) {
+    const std::vector<uint64_t>& aggregatable_dedup_keys,
+    SourceDebugReporting debug_reporting_enabled,
+    absl::optional<uint64_t> cleared_debug_key) {
   DCHECK_GE(aggregatable_budget_consumed, 0);
+
+  attribution_internals::mojom::SourceDebugKeyPtr debug_key =
+      cleared_debug_key
+          ? attribution_internals::mojom::SourceDebugKey::NewClearedDebugKey(
+                *cleared_debug_key)
+          : (source.debug_key()
+                 ? attribution_internals::mojom::SourceDebugKey::NewDebugKey(
+                       *source.debug_key())
+                 : nullptr);
+
   return attribution_internals::mojom::WebUISource::New(
       source.source_event_id(), source.source_origin(),
       source.DestinationSite().Serialize(), source.reporting_origin(),
       source.source_time().ToJsTime(), source.expiry_time().ToJsTime(),
-      source.source_type(), source.priority(),
-      WebUIDebugKey(source.debug_key()), dedup_keys,
+      source.event_report_window_time().ToJsTime(),
+      source.aggregatable_report_window_time().ToJsTime(), source.source_type(),
+      source.priority(), std::move(debug_key), dedup_keys,
       source.filter_data().filter_values(),
       base::MakeFlatMap<std::string, std::string>(
           source.aggregation_keys().keys(), {},
           [](const auto& key) {
-            return std::make_pair(key.first,
-                                  HexEncodeAggregationKey(key.second));
+            return std::make_pair(
+                key.first,
+                attribution_reporting::HexEncodeAggregationKey(key.second));
           }),
-      aggregatable_budget_consumed, aggregatable_dedup_keys, attributability);
+      aggregatable_budget_consumed, aggregatable_dedup_keys,
+      debug_reporting_enabled, attributability);
 }
 
 void ForwardSourcesToWebUI(
@@ -107,10 +125,11 @@ void ForwardSourcesToWebUI(
       }
     }
 
-    web_ui_sources.push_back(WebUISource(source.common_info(), attributability,
-                                         source.dedup_keys(),
-                                         source.aggregatable_budget_consumed(),
-                                         source.aggregatable_dedup_keys()));
+    web_ui_sources.push_back(WebUISource(
+        source.common_info(), attributability, source.dedup_keys(),
+        source.aggregatable_budget_consumed(), source.aggregatable_dedup_keys(),
+        SourceDebugReporting::kNotApplicable,
+        /*cleared_debug_key=*/absl::nullopt));
   }
 
   std::move(web_ui_callback).Run(std::move(web_ui_sources));
@@ -144,7 +163,8 @@ attribution_internals::mojom::WebUIReportPtr WebUIReport(
                 std::back_inserter(contributions),
                 [](const auto& contribution) {
                   return ai_mojom::AggregatableHistogramContribution::New(
-                      HexEncodeAggregationKey(contribution.key()),
+                      attribution_reporting::HexEncodeAggregationKey(
+                          contribution.key()),
                       contribution.value());
                 });
             return ai_mojom::WebUIReportData::NewAggregatableAttributionData(
@@ -174,12 +194,6 @@ void ForwardReportsToWebUI(
   }
 
   std::move(web_ui_callback).Run(std::move(web_ui_reports));
-}
-
-attribution_internals::mojom::DedupKeyPtr CreateWebUIDedupKey(
-    absl::optional<uint64_t> dedup_key) {
-  return dedup_key ? attribution_internals::mojom::DedupKey::New(*dedup_key)
-                   : nullptr;
 }
 
 }  // namespace
@@ -285,10 +299,13 @@ void AttributionInternalsHandlerImpl::OnReportsChanged(
 
 void AttributionInternalsHandlerImpl::OnSourceHandled(
     const StorableSource& source,
+    absl::optional<uint64_t> cleared_debug_key,
     StorableSource::Result result) {
   Attributability attributability;
   switch (result) {
     case StorableSource::Result::kSuccess:
+    // TODO(linnan): Consider displaying source noised in internals UI.
+    case StorableSource::Result::kSuccessNoised:
       return;
     case StorableSource::Result::kInternalError:
       attributability = Attributability::kInternalError;
@@ -310,7 +327,10 @@ void AttributionInternalsHandlerImpl::OnSourceHandled(
   auto web_ui_source =
       WebUISource(source.common_info(), attributability, /*dedup_keys=*/{},
                   /*aggregatable_budget_consumed=*/0,
-                  /*aggregatable_dedup_keys=*/{});
+                  /*aggregatable_dedup_keys=*/{},
+                  source.debug_reporting() ? SourceDebugReporting::kEnabled
+                                           : SourceDebugReporting::kDisabled,
+                  cleared_debug_key);
 
   for (auto& observer : observers_) {
     observer->OnSourceRejected(web_ui_source.Clone());
@@ -346,13 +366,37 @@ void AttributionInternalsHandlerImpl::OnReportSent(
   }
 }
 
+void AttributionInternalsHandlerImpl::OnDebugReportSent(
+    const AttributionDebugReport& report,
+    int status,
+    base::Time time) {
+  if (observers_.empty())
+    return;
+
+  auto web_report = WebUIDebugReport::New();
+  web_report->url = report.ReportURL();
+  web_report->time = time.ToJsTime();
+  web_report->body =
+      SerializeAttributionJson(report.ReportBody(), /*pretty_print=*/true);
+
+  web_report->status =
+      status > 0
+          ? attribution_internals::mojom::DebugReportStatus::
+                NewHttpResponseCode(status)
+          : attribution_internals::mojom::DebugReportStatus::NewNetworkError(
+                net::ErrorToShortString(status));
+
+  for (auto& observer : observers_)
+    observer->OnDebugReportSent(web_report.Clone());
+}
+
 // TODO(crbug/1351843): Consider surfacing this error in devtools instead of
 // internals, currently however this error is associated with a redirect
 // navigation, rather than a specific committed page.
 void AttributionInternalsHandlerImpl::OnFailedSourceRegistration(
     const std::string& header_value,
     base::Time source_time,
-    const url::Origin& reporting_origin,
+    const attribution_reporting::SuitableOrigin& reporting_origin,
     attribution_reporting::mojom::SourceRegistrationError error) {
   auto web_ui_log =
       attribution_internals::mojom::FailedSourceRegistration::New();
@@ -390,6 +434,7 @@ WebUITriggerStatus GetWebUITriggerStatus(EventLevelStatus status) {
     case EventLevelStatus::kPriorityTooLow:
       return WebUITriggerStatus::kLowPriority;
     case EventLevelStatus::kDroppedForNoise:
+    case EventLevelStatus::kFalselyAttributedSource:
       return WebUITriggerStatus::kNoised;
     case EventLevelStatus::kExcessiveReportingOrigins:
       return WebUITriggerStatus::kExcessiveReportingOrigins;
@@ -399,6 +444,10 @@ WebUITriggerStatus GetWebUITriggerStatus(EventLevelStatus status) {
       return WebUITriggerStatus::kProhibitedByBrowserPolicy;
     case EventLevelStatus::kNoMatchingConfigurations:
       return WebUITriggerStatus::kNoMatchingConfigurations;
+    case EventLevelStatus::kExcessiveReports:
+      return WebUITriggerStatus::kExcessiveEventLevelReports;
+    case EventLevelStatus::kReportWindowPassed:
+      return WebUITriggerStatus::kReportWindowPassed;
   }
 }
 
@@ -428,6 +477,8 @@ WebUITriggerStatus GetWebUITriggerStatus(AggregatableStatus status) {
       return WebUITriggerStatus::kProhibitedByBrowserPolicy;
     case AggregatableStatus::kDeduplicated:
       return WebUITriggerStatus::kDeduplicated;
+    case AggregatableStatus::kReportWindowPassed:
+      return WebUITriggerStatus::kReportWindowPassed;
   }
 }
 
@@ -435,47 +486,26 @@ WebUITriggerStatus GetWebUITriggerStatus(AggregatableStatus status) {
 
 void AttributionInternalsHandlerImpl::OnTriggerHandled(
     const AttributionTrigger& trigger,
+    const absl::optional<uint64_t> cleared_debug_key,
     const CreateReportResult& result) {
+  const attribution_reporting::TriggerRegistration& registration =
+      trigger.registration();
+
   auto web_ui_trigger = attribution_internals::mojom::WebUITrigger::New();
   web_ui_trigger->trigger_time = result.trigger_time().ToJsTime();
   web_ui_trigger->destination_origin = trigger.destination_origin();
   web_ui_trigger->reporting_origin = trigger.reporting_origin();
-  web_ui_trigger->filters = trigger.filters().filter_values();
-  web_ui_trigger->not_filters = trigger.not_filters().filter_values();
-  web_ui_trigger->debug_key = WebUIDebugKey(trigger.debug_key());
+  web_ui_trigger->registration_json =
+      SerializeAttributionJson(registration.ToJson(),
+                               /*pretty_print=*/true);
+  web_ui_trigger->cleared_debug_key =
+      cleared_debug_key ? attribution_internals::mojom::TriggerDebugKey::New(
+                              *cleared_debug_key)
+                        : nullptr;
   web_ui_trigger->event_level_status =
       GetWebUITriggerStatus(result.event_level_status());
   web_ui_trigger->aggregatable_status =
       GetWebUITriggerStatus(result.aggregatable_status());
-
-  for (const auto& event_trigger : trigger.event_triggers()) {
-    web_ui_trigger->event_triggers.emplace_back(
-        absl::in_place,
-        /*data=*/event_trigger.data,
-        /*priority=*/event_trigger.priority,
-        /*deduplication_key=*/CreateWebUIDedupKey(event_trigger.dedup_key),
-        /*filters=*/event_trigger.filters.filter_values(),
-        /*not_filters=*/event_trigger.not_filters.filter_values());
-  }
-
-  for (const auto& aggregatable_trigger_data :
-       trigger.aggregatable_trigger_data()) {
-    web_ui_trigger->aggregatable_triggers.emplace_back(
-        absl::in_place,
-        /*key_piece=*/
-        HexEncodeAggregationKey(aggregatable_trigger_data.key_piece()),
-        /*source_keys=*/
-        std::vector<std::string>(
-            aggregatable_trigger_data.source_keys().begin(),
-            aggregatable_trigger_data.source_keys().end()),
-        /*filters=*/aggregatable_trigger_data.filters().filter_values(),
-        /*not_filters=*/
-        aggregatable_trigger_data.not_filters().filter_values());
-  }
-
-  web_ui_trigger->aggregatable_values = trigger.aggregatable_values().values();
-  web_ui_trigger->aggregatable_dedup_key =
-      CreateWebUIDedupKey(trigger.aggregatable_dedup_key());
 
   for (auto& observer : observers_) {
     observer->OnTriggerHandled(web_ui_trigger.Clone());

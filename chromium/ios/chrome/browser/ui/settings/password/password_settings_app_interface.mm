@@ -11,14 +11,17 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "base/time/time.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/password_form.h"
+#import "components/password_manager/core/browser/password_manager_features_util.h"
 #import "components/password_manager/core/browser/password_store_consumer.h"
 #import "components/password_manager/core/browser/password_store_interface.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/password_test_util.h"
 #import "url/gurl.h"
@@ -62,9 +65,10 @@ class FakeStoreConsumer : public password_manager::PasswordStoreConsumer {
     results_.clear();
     ResetObtained();
     GetPasswordStore()->GetAllLogins(weak_ptr_factory_.GetWeakPtr());
-    bool responded = base::test::ios::WaitUntilConditionOrTimeout(2.0, ^bool {
-      return !AreObtainedReset();
-    });
+    bool responded =
+        base::test::ios::WaitUntilConditionOrTimeout(base::Seconds(2), ^bool {
+          return !AreObtainedReset();
+        });
     if (responded) {
       AppendObtainedToResults();
     }
@@ -155,6 +159,10 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
 
 + (void)setUpMockReauthenticationModule {
   _mockReauthenticationModule = SetUpAndReturnMockReauthenticationModule();
+}
+
++ (void)setUpMockReauthenticationModuleForAddPassword {
+  _mockReauthenticationModule = SetUpAndReturnMockReauthenticationModule(true);
 }
 
 + (void)setUpMockReauthenticationModuleForExport {
@@ -260,6 +268,15 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
       chrome_test_util::GetOriginalBrowserState();
   return browserState->GetPrefs()->GetBoolean(
       password_manager::prefs::kCredentialsEnableService);
+}
+
++ (BOOL)isOptedInForAccountStorage {
+  ChromeBrowserState* browserState =
+      chrome_test_util::GetOriginalBrowserState();
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(browserState);
+  return password_manager::features_util::IsOptedInForAccountStorage(
+      browserState->GetPrefs(), syncService);
 }
 
 @end

@@ -4,9 +4,9 @@
 
 import './strings.m.js';
 
-import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {$} from 'chrome://resources/js/util.js';
+import {sendWithPromise} from 'chrome://resources/ash/common/cr.m.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {$} from 'chrome://resources/ash/common/util.js';
 
 /**
  * The different types of power consumer types. Should be kept in sync with the

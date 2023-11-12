@@ -8,13 +8,13 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#include "base/time/time.h"
 #import "components/content_settings/core/common/content_settings.h"
 #import "components/sync/base/model_type.h"
 #include "third_party/metrics_proto/user_demographics.pb.h"
 
 @class ElementSelector;
-@class FakeChromeIdentity;
-@class NamedGuide;
+@class FakeSystemIdentity;
 
 @interface JavaScriptExecutionResult : NSObject
 @property(readonly, nonatomic) BOOL success;
@@ -75,10 +75,6 @@
 // Reloads the page without waiting for the page to load.
 + (void)startReloading;
 
-// Returns the NamedGuide with the given `name`, if one is attached to `view`
-// or one of `view`'s ancestors.  If no guide is found, returns nil.
-+ (NamedGuide*)guideWithName:(NSString*)name view:(UIView*)view;
-
 // Loads `URL` as if it was opened from an external application.
 + (void)openURLFromExternalApp:(NSString*)URL;
 
@@ -111,9 +107,6 @@
 // If not succeed returns an NSError indicating  why the
 // operation failed, otherwise nil.
 + (NSError*)simulateTabsBackgrounding;
-
-// Persists the current list of tabs to disk immediately.
-+ (void)saveSessionImmediately;
 
 // Returns the number of main (non-incognito) tabs currently evicted.
 + (NSUInteger)evictedMainTabCount [[nodiscard]];
@@ -352,7 +345,7 @@
 + (void)clearSyncServerData;
 
 // Signs in with `identity` without sync consent.
-+ (void)signInWithoutSyncWithIdentity:(FakeChromeIdentity*)identity;
++ (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity;
 
 // Starts the sync server. The server should not be running when calling this.
 + (void)startSync;
@@ -360,11 +353,17 @@
 // Stops the sync server. The server should be running when calling this.
 + (void)stopSync;
 
-// Waits for sync to be initialized or not.
-// Returns nil on success, or else an NSError indicating why the
-// operation failed.
-+ (NSError*)waitForSyncInitialized:(BOOL)isInitialized
-                       syncTimeout:(NSTimeInterval)timeout;
+// Waits for sync engine to be initialized or not. It doesn't necessarily mean
+// that data types are configured and ready to use. See
+// SyncService::IsEngineInitialized() for details. If not succeeded a GREYAssert
+// is induced.
++ (NSError*)waitForSyncEngineInitialized:(BOOL)isInitialized
+                             syncTimeout:(base::TimeDelta)timeout;
+
+// Waits for the sync feature to be enabled/disabled. See SyncService::
+// IsSyncFeatureEnabled() for details. If not succeeded a GREYAssert is induced.
++ (NSError*)waitForSyncFeatureEnabled:(BOOL)isEnabled
+                          syncTimeout:(base::TimeDelta)timeout;
 
 // Returns the current sync cache GUID. The sync server must be running when
 // calling this.
@@ -540,6 +539,9 @@
 // Returns whether the Web Channels feature is enabled.
 + (BOOL)isWebChannelsEnabled;
 
+// Returns whether SF Symbols are used.
++ (BOOL)isSFSymbolEnabled;
+
 #pragma mark - ContentSettings
 
 // Gets the current value of the popup content setting preference for the
@@ -638,7 +640,7 @@
 // replaced with this set. Note that timeout is best effort and can be a bit
 // longer than specified. This method returns immediately.
 + (void)watchForButtonsWithLabels:(NSArray<NSString*>*)labels
-                          timeout:(NSTimeInterval)timeout;
+                          timeout:(base::TimeDelta)timeout;
 
 // Returns YES if the button with given (accessibility) `label` was observed at
 // some point since `watchForButtonsWithLabels:timeout:` was called.
@@ -660,13 +662,6 @@
 // message.
 + (void)disableDefaultBrowserPromo;
 
-#pragma mark - Url Param Classification utilities
-// Sets `contents` to be used by the url_param_filter::ClassificationsLoader.
-+ (void)setUrlParamClassifications:(NSString*)contents;
-
-// Resets the stored classifications on the
-// url_param_filter::ClassificationsLoader.
-+ (void)resetUrlParamClassifications;
 @end
 
 #endif  // IOS_CHROME_TEST_EARL_GREY_CHROME_EARL_GREY_APP_INTERFACE_H_

@@ -9,6 +9,8 @@
 <translation id="5167047459440711824">Advarsel: Vivaldi kan ikke hindre utvidelser i å registrere nettleserloggen din. For å deaktivere denne utvidelsen i privatmodus, fjern merkingen for dette alternativet.</translation>
 <translation id="5288672417093782294">Gå til innstillingene for varsler fra Vivaldi</translation>
 <translation id="5743878272102782872">Oppgavebehandling - Vivaldi</translation>
+<translation id="6524604576097824284">Hvis slått på, frigjør Vivaldi minne fra inaktive faner. Dette gir aktive faner og andre apper flere maskinvareressurser og holder Vivaldi rask. Dine inaktive faner blir automatisk aktive igjen når du går tilbake til dem. <ph name="BEGIN_LINK" />Lær mer<ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">Oisann! Vivaldi har krasjet. Starte på nytt nå?</translation>
+<translation id="7642161109152167169">Hvis slått på, sparer Vivaldi batteristrøm ved å begrense bakgrunnsaktivitet og visuelle effekter, som jevn rulling og bilderate i videoer. <ph name="BEGIN_LINK" />Lær mer<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Vivaldi-apper</translation>
 </translationbundle>

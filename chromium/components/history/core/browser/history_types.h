@@ -896,6 +896,9 @@ struct ClusterVisit {
   // as well as deleted when the whole cluster is deleted. This is computed in
   // the UI code, and should not be persisted.
   bool hidden = false;
+
+  // The URL of the representative image, which may be empty.
+  GURL image_url;
 };
 
 // Additional data for a cluster keyword.
@@ -957,6 +960,14 @@ struct ClusterKeywordData {
 // A cluster of `ClusterVisit`s with associated metadata (i.e. `keywords` and
 // `should_show_on_prominent_ui_surfaces`).
 struct Cluster {
+  // Values are not persisted and can be freely changed.
+  enum class LabelSource {
+    kUnknown,
+    kSearch,
+    kContentDerivedEntity,
+    kHostname,
+  };
+
   Cluster();
   Cluster(int64_t cluster_id,
           const std::vector<ClusterVisit>& visits,

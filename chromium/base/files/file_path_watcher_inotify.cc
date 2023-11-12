@@ -37,10 +37,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
 
@@ -71,28 +71,6 @@ class InotifyReader;
 // Used by test to override inotify watcher limit.
 size_t g_override_max_inotify_watches = 0u;
 
-// Get the maximum number of inotify watches can be used by a FilePathWatcher
-// instance. This is based on /proc/sys/fs/inotify/max_user_watches entry.
-size_t GetMaxNumberOfInotifyWatches() {
-#if BUILDFLAG(IS_FUCHSIA)
-  // Fuchsia has no limit on the number of watches.
-  return std::numeric_limits<int>::max();
-#else
-  static const size_t max = []() {
-    size_t max_number_of_inotify_watches = 0u;
-
-    std::ifstream in(kInotifyMaxUserWatchesPath);
-    if (!in.is_open() || !(in >> max_number_of_inotify_watches)) {
-      LOG(ERROR) << "Failed to read " << kInotifyMaxUserWatchesPath;
-      return kDefaultInotifyMaxUserWatches / kExpectedFilePathWatchers;
-    }
-
-    return max_number_of_inotify_watches / kExpectedFilePathWatchers;
-  }();
-  return g_override_max_inotify_watches ? g_override_max_inotify_watches : max;
-#endif  // if BUILDFLAG(IS_FUCHSIA)
-}
-
 class InotifyReaderThreadDelegate final : public PlatformThread::Delegate {
  public:
   explicit InotifyReaderThreadDelegate(int inotify_fd)
@@ -119,6 +97,13 @@ class InotifyReader {
 #else
   using Watch = int;
 #endif
+
+  // Record of watchers tracked for watch descriptors.
+  struct WatcherEntry {
+    scoped_refptr<SequencedTaskRunner> task_runner;
+    WeakPtr<FilePathWatcherImpl> watcher;
+  };
+
   static constexpr Watch kInvalidWatch = static_cast<Watch>(-1);
   static constexpr Watch kWatchLimitExceeded = static_cast<Watch>(-2);
 
@@ -140,12 +125,6 @@ class InotifyReader {
 
  private:
   friend struct LazyInstanceTraitsBase<InotifyReader>;
-
-  // Record of watchers tracked for watch descriptors.
-  struct WatcherEntry {
-    scoped_refptr<SequencedTaskRunner> task_runner;
-    WeakPtr<FilePathWatcherImpl> watcher;
-  };
 
   InotifyReader();
   // There is no destructor because |g_inotify_reader| is a
@@ -197,11 +176,8 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
   // would exceed the limit if adding one more.
   bool WouldExceedWatchLimit() const;
 
-  // Returns the task runner to be used with this.
-  scoped_refptr<SequencedTaskRunner> GetTaskRunner() const;
-
-  // Returns the WeakPtr of this, must be called on the original sequence.
-  WeakPtr<FilePathWatcherImpl> GetWeakPtr() const;
+  // Returns a WatcherEntry for this, must be called on the original sequence.
+  InotifyReader::WatcherEntry GetWatcherEntry();
 
  private:
   // Start watching |path| for changes and notify |delegate| on each change.
@@ -209,6 +185,11 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
   bool Watch(const FilePath& path,
              Type type,
              const FilePathWatcher::Callback& callback) override;
+
+  // A generalized version. It extends |Type|.
+  bool WatchWithOptions(const FilePath& path,
+                        const WatchOptions& flags,
+                        const FilePathWatcher::Callback& callback) override;
 
   // Cancel the watch. This unregisters the instance with InotifyReader.
   void Cancel() override;
@@ -271,6 +252,7 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
   FilePath target_;
 
   Type type_ = Type::kNonRecursive;
+  bool report_modified_path_ = false;
 
   // The vector of watches and next component names for all path components,
   // starting at the root directory. The last entry corresponds to the watch for
@@ -365,8 +347,7 @@ InotifyReader::Watch InotifyReader::AddWatch(const FilePath& path,
     return kInvalidWatch;
   const Watch watch = static_cast<Watch>(watch_int);
 
-  watchers_[watch].emplace(std::make_pair(
-      watcher, WatcherEntry{watcher->GetTaskRunner(), watcher->GetWeakPtr()}));
+  watchers_[watch].emplace(std::make_pair(watcher, watcher->GetWatcherEntry()));
 
   return watch;
 }
@@ -513,7 +494,12 @@ void FilePathWatcherImpl::OnFilePathChanged(InotifyReader::Watch fired_watch,
         }
         did_update = true;
       }
-      callback_.Run(target_, /*error=*/false);  // `this` may be deleted.
+      if (report_modified_path_ && !change_on_target_path) {
+        callback_.Run(target_.Append(child),
+                      /*error=*/false);  // `this` may be deleted.
+      } else {
+        callback_.Run(target_, /*error=*/false);  // `this` may be deleted.
+      }
       return;
     }
   }
@@ -524,7 +510,12 @@ void FilePathWatcherImpl::OnFilePathChanged(InotifyReader::Watch fired_watch,
         exceeded_limit = true;
     }
     if (!exceeded_limit) {
-      callback_.Run(target_, /*error=*/false);  // `this` may be deleted.
+      if (report_modified_path_) {
+        callback_.Run(recursive_paths_by_watch_[fired_watch].Append(child),
+                      /*error=*/false);  // `this` may be deleted.
+      } else {
+        callback_.Run(target_, /*error=*/false);  // `this` may be deleted.
+      }
       return;
     }
   }
@@ -557,14 +548,9 @@ bool FilePathWatcherImpl::WouldExceedWatchLimit() const {
   return number_of_inotify_watches >= GetMaxNumberOfInotifyWatches();
 }
 
-scoped_refptr<SequencedTaskRunner> FilePathWatcherImpl::GetTaskRunner() const {
+InotifyReader::WatcherEntry FilePathWatcherImpl::GetWatcherEntry() {
   DCHECK(task_runner()->RunsTasksInCurrentSequence());
-  return task_runner();
-}
-
-WeakPtr<FilePathWatcherImpl> FilePathWatcherImpl::GetWeakPtr() const {
-  DCHECK(task_runner()->RunsTasksInCurrentSequence());
-  return weak_factory_.GetWeakPtr();
+  return {task_runner(), weak_factory_.GetWeakPtr()};
 }
 
 bool FilePathWatcherImpl::Watch(const FilePath& path,
@@ -572,7 +558,7 @@ bool FilePathWatcherImpl::Watch(const FilePath& path,
                                 const FilePathWatcher::Callback& callback) {
   DCHECK(target_.empty());
 
-  set_task_runner(SequencedTaskRunnerHandle::Get());
+  set_task_runner(SequencedTaskRunner::GetCurrentDefault());
   callback_ = callback;
   target_ = path;
   type_ = type;
@@ -590,6 +576,14 @@ bool FilePathWatcherImpl::Watch(const FilePath& path,
   }
 
   return true;
+}
+
+bool FilePathWatcherImpl::WatchWithOptions(
+    const FilePath& path,
+    const WatchOptions& options,
+    const FilePathWatcher::Callback& callback) {
+  report_modified_path_ = options.report_modified_path;
+  return Watch(path, options.type, callback);
 }
 
 void FilePathWatcherImpl::Cancel() {
@@ -815,6 +809,26 @@ bool FilePathWatcherImpl::HasValidWatchVector() const {
 }
 
 }  // namespace
+
+size_t GetMaxNumberOfInotifyWatches() {
+#if BUILDFLAG(IS_FUCHSIA)
+  // Fuchsia has no limit on the number of watches.
+  return std::numeric_limits<int>::max();
+#else
+  static const size_t max = []() {
+    size_t max_number_of_inotify_watches = 0u;
+
+    std::ifstream in(kInotifyMaxUserWatchesPath);
+    if (!in.is_open() || !(in >> max_number_of_inotify_watches)) {
+      LOG(ERROR) << "Failed to read " << kInotifyMaxUserWatchesPath;
+      return kDefaultInotifyMaxUserWatches / kExpectedFilePathWatchers;
+    }
+
+    return max_number_of_inotify_watches / kExpectedFilePathWatchers;
+  }();
+  return g_override_max_inotify_watches ? g_override_max_inotify_watches : max;
+#endif  // if BUILDFLAG(IS_FUCHSIA)
+}
 
 ScopedMaxNumberOfInotifyWatchesOverrideForTest::
     ScopedMaxNumberOfInotifyWatchesOverrideForTest(size_t override_max) {

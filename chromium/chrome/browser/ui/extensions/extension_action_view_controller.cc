@@ -16,7 +16,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
-#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_view.h"
 #include "chrome/browser/extensions/extension_view_host.h"
@@ -32,7 +31,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/blocked_action_type.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
@@ -40,7 +38,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/permissions/api_permission.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/gfx/image/image_skia.h"
@@ -50,12 +47,78 @@
 using extensions::ActionInfo;
 using extensions::CommandService;
 using extensions::ExtensionActionRunner;
+using extensions::PermissionsManager;
 
 namespace {
 
 void RecordInvocationSource(
     ToolbarActionViewController::InvocationSource source) {
   base::UmaHistogramEnumeration("Extensions.Toolbar.InvocationSource", source);
+}
+
+// Computes hover card site access status based on:
+// 1. Extension wants site access: user site settings takes precedence
+// over the extension's site access.
+// 2. Extension does not want access: if all extensions are blocked display
+// such message because a) user could wrongly infer that an extension that
+// does not want access has access if we only show the blocked message for
+// extensions that want access; and b) it helps us work around tricky
+// calculations where we get into collisions between withheld and denied
+// permission. Otherwise, it should display "does not want access".
+ExtensionActionViewController::HoverCardState::SiteAccess
+GetHoverCardSiteAccessState(
+    extensions::PermissionsManager::UserSiteSetting site_setting,
+    extensions::SitePermissionsHelper::SiteInteraction site_interaction) {
+  switch (site_interaction) {
+    case extensions::SitePermissionsHelper::SiteInteraction::kGranted:
+      return site_setting == extensions::PermissionsManager::UserSiteSetting::
+                                 kGrantAllExtensions
+                 ? ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kAllExtensionsAllowed
+                 : ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kExtensionHasAccess;
+
+    case extensions::SitePermissionsHelper::SiteInteraction::kWithheld:
+    case extensions::SitePermissionsHelper::SiteInteraction::kActiveTab:
+      return site_setting == extensions::PermissionsManager::UserSiteSetting::
+                                 kBlockAllExtensions
+                 ? ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kAllExtensionsBlocked
+                 : ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kExtensionRequestsAccess;
+
+    case extensions::SitePermissionsHelper::SiteInteraction::kNone:
+      // kNone site interaction includes extensions that don't want access when
+      // user site setting is "block all extensions".
+      return site_setting == extensions::PermissionsManager::UserSiteSetting::
+                                 kBlockAllExtensions
+                 ? ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kAllExtensionsBlocked
+                 : ExtensionActionViewController::HoverCardState::SiteAccess::
+                       kExtensionDoesNotWantAccess;
+  }
+}
+
+// Computes hover card policy status based on admin policy. Note that an
+// extension pinned by admin is also installed by admin. Thus, "pinned by admin"
+// has preference.
+ExtensionActionViewController::HoverCardState::AdminPolicy
+GetHoverCardPolicyState(Browser* browser,
+                        const extensions::ExtensionId& extension_id) {
+  auto* const model = ToolbarActionsModel::Get(browser->profile());
+  if (model->IsActionForcePinned(extension_id))
+    return ExtensionActionViewController::HoverCardState::AdminPolicy::
+        kPinnedByAdmin;
+
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ExtensionRegistry::Get(browser->profile())
+          ->enabled_extensions()
+          .GetByID(extension_id);
+  if (extensions::Manifest::IsPolicyLocation(extension->location()))
+    return ExtensionActionViewController::HoverCardState::AdminPolicy::
+        kInstalledByAdmin;
+
+  return ExtensionActionViewController::HoverCardState::AdminPolicy::kNone;
 }
 
 }  // namespace
@@ -393,39 +456,14 @@ ExtensionActionViewController::GetHoverCardState(
   extensions::PermissionsManager::UserSiteSetting site_setting =
       extensions::PermissionsManager::Get(browser_->profile())
           ->GetUserSiteSetting(origin);
-
-  // Compute hover card status based on:
-  // 1. Extension wants site access: user site settings takes precedence
-  // over the extension's site access.
-  // 2. Extension does not want access: if all extensions are blocked display
-  // such message because a) user could wrongly infer that an extension that
-  // does not want access has access if we only show the blocked message for
-  // extensions that want access; and b) it helps us work around tricky
-  // calculations where we get into collisions between withheld and denied
-  // permission. Otherwise, it should display "does not want access".
   auto site_interaction = GetSiteInteraction(web_contents);
-  switch (site_interaction) {
-    case extensions::SitePermissionsHelper::SiteInteraction::kGranted:
-      return site_setting == extensions::PermissionsManager::UserSiteSetting::
-                                 kGrantAllExtensions
-                 ? HoverCardState::kAllExtensionsAllowed
-                 : HoverCardState::kExtensionHasAccess;
 
-    case extensions::SitePermissionsHelper::SiteInteraction::kWithheld:
-    case extensions::SitePermissionsHelper::SiteInteraction::kActiveTab:
-      return site_setting == extensions::PermissionsManager::UserSiteSetting::
-                                 kBlockAllExtensions
-                 ? HoverCardState::kAllExtensionsBlocked
-                 : HoverCardState::kExtensionRequestsAccess;
+  HoverCardState state;
+  state.site_access =
+      GetHoverCardSiteAccessState(site_setting, site_interaction);
+  state.policy = GetHoverCardPolicyState(browser_, GetId());
 
-    case extensions::SitePermissionsHelper::SiteInteraction::kNone:
-      // kNone site interaction includes extensions that don't want access when
-      // user site setting is "block all extensions".
-      return site_setting == extensions::PermissionsManager::UserSiteSetting::
-                                 kBlockAllExtensions
-                 ? HoverCardState::kAllExtensionsBlocked
-                 : HoverCardState::kExtensionDoesNotWantAccess;
-  }
+  return state;
 }
 
 bool ExtensionActionViewController::CanHandleAccelerators() const {
@@ -456,12 +494,6 @@ ExtensionActionViewController::GetIconImageSourceForTesting(
     content::WebContents* web_contents,
     const gfx::Size& size) {
   return GetIconImageSource(web_contents, size);
-}
-
-bool ExtensionActionViewController::HasBeenBlockedForTesting(
-    content::WebContents* web_contents) const {
-  return extensions::SitePermissionsHelper(browser_->profile())
-      .HasBeenBlocked(*extension(), web_contents);
 }
 
 ExtensionActionViewController*

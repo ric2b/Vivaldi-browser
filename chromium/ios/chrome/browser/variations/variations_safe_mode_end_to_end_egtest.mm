@@ -129,7 +129,7 @@ std::unique_ptr<ScopedAllowCrashOnStartup> gAllowCrashOnStartup;
 
 // Tests that three seed-driven crashes trigger variations safe mode.
 //
-// Corresponds to VariationsSafeModeEndToEndBrowserTest.ExtendedSafeModeEndToEnd
+// Corresponds to VariationsSafeModeEndToEndBrowserTest.ExtendedSafeSeedEndToEnd
 // in variations_safe_mode_browsertest.cc.
 - (void)testVariationsSafeModeEndToEnd {
 #if !TARGET_OS_SIMULATOR
@@ -151,7 +151,7 @@ std::unique_ptr<ScopedAllowCrashOnStartup> gAllowCrashOnStartup;
   [VariationsAppInterface setCrashingRegularSeedAndSignature];
 
   // Pretend chrome has repeatedly crashed, just one away from safe mode.
-  int penultimateCrash = variations::kCrashStreakThreshold - 1;
+  int penultimateCrash = variations::kCrashStreakSafeSeedThreshold - 1;
   [VariationsAppInterface setCrashValue:penultimateCrash];
   [self checkCrashStreakValue:penultimateCrash];
 
@@ -172,7 +172,7 @@ std::unique_ptr<ScopedAllowCrashOnStartup> gAllowCrashOnStartup;
                  @"The variations safe seed pref should be set.");
   GREYAssertTrue([VariationsAppInterface fieldTrialExistsForTestSeed],
                  @"There should be field trials from kTestSeedData.");
-  [self checkCrashStreakValue:variations::kCrashStreakThreshold];
+  [self checkCrashStreakValue:variations::kCrashStreakSafeSeedThreshold];
 }
 
 @end

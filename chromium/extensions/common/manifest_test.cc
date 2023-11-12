@@ -55,10 +55,8 @@ base::Value LoadManifestFile(const base::FilePath& manifest_path,
   // Calling LocalizeExtension at this point mirrors file_util::LoadExtension.
   if (manifest_path.value().find(FILE_PATH_LITERAL("localized")) !=
       std::string::npos) {
-    base::DictionaryValue* manifest_dictionary = nullptr;
-    manifest->GetAsDictionary(&manifest_dictionary);
     extension_l10n_util::LocalizeExtension(
-        extension_path, &manifest_dictionary->GetDict(),
+        extension_path, manifest->GetIfDict(),
         extension_l10n_util::GzippedMessagesPermission::kDisallow, error);
   }
 
@@ -71,8 +69,7 @@ ManifestTest::ManifestTest()
     : enable_apps_(true) {
 }
 
-ManifestTest::~ManifestTest() {
-}
+ManifestTest::~ManifestTest() = default;
 
 // Helper class that simplifies creating methods that take either a filename
 // to a manifest or the manifest itself.
@@ -84,6 +81,14 @@ ManifestTest::ManifestData::ManifestData(base::Value manifest,
     : name_(name), manifest_(std::move(manifest)) {
   CHECK(manifest_.is_dict()) << "Manifest must be a dictionary. " << name_;
 }
+
+ManifestTest::ManifestData::ManifestData(base::Value::Dict manifest,
+                                         base::StringPiece name)
+    : ManifestData(base::Value(std::move(manifest)), std::move(name)) {}
+
+ManifestTest::ManifestData::ManifestData(base::Value::Dict manifest)
+    : ManifestData(base::Value(std::move(manifest))) {}
+
 ManifestTest::ManifestData::ManifestData(base::Value manifest)
     : name_(GetNameFromManifest(manifest)), manifest_(std::move(manifest)) {
   CHECK(manifest_.is_dict()) << "Manifest must be a dictionary.";
@@ -128,12 +133,8 @@ scoped_refptr<Extension> ManifestTest::LoadExtension(
   const base::Value& value = manifest.GetManifest(test_data_dir, error);
   if (value.is_none())
     return nullptr;
-  DCHECK(value.is_dict());
-  const base::DictionaryValue* dictionary_manifest = nullptr;
-  value.GetAsDictionary(&dictionary_manifest);
-  return Extension::Create(test_data_dir.DirName(), location,
-                           *dictionary_manifest, flags, GetTestExtensionID(),
-                           error);
+  return Extension::Create(test_data_dir.DirName(), location, value.GetDict(),
+                           flags, GetTestExtensionID(), error);
 }
 
 scoped_refptr<Extension> ManifestTest::LoadAndExpectSuccess(

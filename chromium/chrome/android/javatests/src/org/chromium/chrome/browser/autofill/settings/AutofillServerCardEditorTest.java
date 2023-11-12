@@ -56,8 +56,10 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.metrics.HistogramTestRule;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.autofill.AutofillEditorBase;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.LegalMessageLine;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
@@ -103,7 +105,8 @@ public class AutofillServerCardEditorTest {
             /* instrumentId= */ 123, /* cardLabel= */ "", /* nickname= */ "",
             /* cardArtUrl= */ null,
             /* virtualCardEnrollmentState= */ VirtualCardEnrollmentState.ENROLLED,
-            /* productDescription= */ "");
+            /* productDescription= */ "", /* cardNameForAutofillDisplay= */ "",
+            /* obfuscatedLastFourDigits= */ "");
 
     private static final CreditCard SAMPLE_VIRTUAL_CARD_UNENROLLED_AND_ELIGIBLE_CARD =
             new CreditCard(/* guid= */ "2", /* origin= */ "", /* isLocal= */ false,
@@ -114,7 +117,8 @@ public class AutofillServerCardEditorTest {
                     /* cardLabel= */ "", /* nickname= */ "", /* cardArtUrl= */ null,
                     /* virtualCardEnrollmentState= */
                     VirtualCardEnrollmentState.UNENROLLED_AND_ELIGIBLE,
-                    /* productDescription= */ "");
+                    /* productDescription= */ "", /* cardNameForAutofillDisplay= */ "",
+                    /* obfuscatedLastFourDigits= */ "");
 
     private static final CreditCard SAMPLE_VIRTUAL_CARD_UNENROLLED_AND_NOT_ELIGIBLE_CARD =
             new CreditCard(/* guid= */ "3", /* origin= */ "", /* isLocal= */ false,
@@ -125,7 +129,8 @@ public class AutofillServerCardEditorTest {
                     /* cardLabel= */ "", /* nickname= */ "", /* cardArtUrl= */ null,
                     /* virtualCardEnrollmentState= */
                     VirtualCardEnrollmentState.UNENROLLED_AND_NOT_ELIGIBLE,
-                    /* productDescription= */ "");
+                    /* productDescription= */ "", /* cardNameForAutofillDisplay= */ "",
+                    /* obfuscatedLastFourDigits= */ "");
 
     @Mock
     private AutofillPaymentMethodsDelegate.Natives mNativeMock;
@@ -475,6 +480,7 @@ public class AutofillServerCardEditorTest {
     @Test
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_UPDATE_VIRTUAL_CARD_ENROLLMENT})
+    @DisabledTest(message = "https://crbug.com/1368548")
     public void
     virtualCardUnenrolledAndEligible_virtualCardAddButtonClicked_enrollAccepted_editorExited()
             throws Exception {

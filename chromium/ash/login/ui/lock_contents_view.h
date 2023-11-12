@@ -114,6 +114,7 @@ class ASH_EXPORT LockContentsView
     LoginExpandedPublicAccountView* expanded_view() const;
     views::View* main_view() const;
     const std::vector<LockContentsView::UserState>& users() const;
+    LoginCameraTimeoutView* login_camera_timeout_view() const;
 
     // Finds and focuses (if needed) Big User View view specified by
     // |account_id|. Returns nullptr if the user not found.
@@ -363,7 +364,9 @@ class ASH_EXPORT LockContentsView
   void SwapActiveAuthBetweenPrimaryAndSecondary(bool is_primary);
 
   // Called when an authentication check is complete.
-  void OnAuthenticate(bool auth_success, bool display_error_messages);
+  void OnAuthenticate(bool auth_success,
+                      bool display_error_messages,
+                      bool authenticated_by_pin);
 
   // Tries to lookup the stored state for |user|. Returns an unowned pointer
   // that is invalidated whenver |users_| changes.
@@ -511,7 +514,8 @@ class ASH_EXPORT LockContentsView
 
   // If the kiosk app button is not visible, the kiosk app default message would
   // be shown.
-  raw_ptr<KioskAppDefaultMessage> kiosk_default_message_ = nullptr;
+  raw_ptr<KioskAppDefaultMessage, DanglingUntriaged> kiosk_default_message_ =
+      nullptr;
 
   // Actions that should be executed before a new layout happens caused by a
   // display change (eg. screen rotation). A full layout pass is performed after
@@ -540,7 +544,8 @@ class ASH_EXPORT LockContentsView
   LoginErrorBubble* warning_banner_bubble_;
 
   // View that is shown on login timeout with camera usage.
-  base::raw_ptr<LoginCameraTimeoutView> login_camera_timeout_view_ = nullptr;
+  base::raw_ptr<LoginCameraTimeoutView, DanglingUntriaged>
+      login_camera_timeout_view_ = nullptr;
 
   // Bottom status indicator displaying entreprise domain or ADB enabled alert
   BottomStatusIndicator* bottom_status_indicator_;
@@ -550,6 +555,7 @@ class ASH_EXPORT LockContentsView
 
   // Tracks the unlock attempt of each user before a successful sign-in.
   base::flat_map<AccountId, int> unlock_attempt_by_user_;
+  base::flat_map<AccountId, int> pin_unlock_attempt_by_user_;
 
   // Whether a lock screen app is currently active (i.e. lock screen note action
   // state is reported as kActive by the data dispatcher).

@@ -16,6 +16,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -25,8 +26,8 @@
 #include "base/metrics/user_metrics.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -59,6 +60,7 @@
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -154,7 +156,6 @@
 #include "chrome/browser/ui/views/theme_copying_widget.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_account_icon_container_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/translate/translate_bubble_controller.h"
 #include "chrome/browser/ui/views/translate/translate_bubble_view.h"
@@ -250,6 +251,7 @@
 #include "ui/views/views_features.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/root_view.h"
+#include "ui/views/widget/sublevel_manager.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -502,6 +504,34 @@ void GetAnyTabAudioStates(const Browser* browser,
 }
 #endif  // BUILDFLAG(IS_MAC)
 
+#if BUILDFLAG(IS_MAC)
+// OverlayWidget is a child Widget of BrowserFrame used during immersive
+// fullscreen on macOS that hosts the top container. Its native Window and View
+// interface with macOS fullscreen APIs allowing separation of the top container
+// and web contents.
+// Currently the only explicit reason for OverlayWidget to be its own subclass
+// is to support GetAccelerator() forwarding.
+class OverlayWidget : public ThemeCopyingWidget {
+ public:
+  explicit OverlayWidget(views::Widget* role_model)
+      : ThemeCopyingWidget(role_model) {}
+
+  OverlayWidget(const OverlayWidget&) = delete;
+  OverlayWidget& operator=(const OverlayWidget&) = delete;
+
+  ~OverlayWidget() override = default;
+
+  // OverlayWidget hosts the top container. Views within the top container look
+  // up accelerators by asking their hosting Widget. In non-immersive fullscreen
+  // that would be the BrowserFrame. Give top chrome what it expects and forward
+  // GetAccelerator() calls to OverlayWidget's parent (BrowserFrame).
+  bool GetAccelerator(int cmd_id, ui::Accelerator* accelerator) const override {
+    DCHECK(parent());
+    return parent()->GetAccelerator(cmd_id, accelerator);
+  }
+};
+#endif  // BUILDFLAG(IS_MAC)
+
 }  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -639,7 +669,7 @@ class BrowserView::AccessibilityModeObserver : public ui::AXModeObserver {
     // notifications are in progress, and |MaybeInitializeWebUITabStrip| can
     // destroy things synchronously.
     if (mode.has_mode(ui::AXMode::kScreenReader)) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&BrowserView::MaybeInitializeWebUITabStrip,
                                     browser_view_->GetAsWeakPtr()));
     }
@@ -831,6 +861,8 @@ BrowserView::BrowserView(std::unique_ptr<Browser> browser)
     SetCanMinimize(true);
   }
 
+  SetProperty(views::kElementIdentifierKey, kBrowserViewElementId);
+
   // Create user education resources.
   UserEducationService* const user_education_service =
       UserEducationServiceFactory::GetForProfile(GetProfile());
@@ -967,7 +999,7 @@ BrowserView::BrowserView(std::unique_ptr<Browser> browser)
   // startup.
   if (JumpList::Enabled()) {
     content::BrowserThread::PostBestEffortTask(
-        FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
+        FROM_HERE, base::SingleThreadTaskRunner::GetCurrentDefault(),
         base::BindOnce(&BrowserView::CreateJumpList,
                        weak_ptr_factory_.GetWeakPtr()));
   }
@@ -1019,6 +1051,12 @@ BrowserView::~BrowserView() {
   // this observer before those children are removed.
   side_panel_button_highlighter_.reset();
   side_panel_visibility_controller_.reset();
+
+// Delete lens side panel controller before deleting the child views.
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  if (lens_side_panel_controller_)
+    lens_side_panel_controller_.reset();
+#endif
 
   // Child views maintain PrefMember attributes that point to
   // OffTheRecordProfile's PrefService which gets deleted by ~Browser.
@@ -1232,6 +1270,15 @@ float BrowserView::GetTopControlsSlideBehaviorShownRatio() const {
   return 1.f;
 }
 
+views::Widget* BrowserView::GetWidgetForAnchoring() {
+#if BUILDFLAG(IS_MAC)
+  if (UsesImmersiveFullscreenMode()) {
+    return IsFullscreen() ? overlay_widget_.get() : GetWidget();
+  }
+#endif
+  return GetWidget();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserView, BrowserWindow implementation:
 
@@ -1280,8 +1327,7 @@ void BrowserView::Show() {
 }
 
 void BrowserView::ShowInactive() {
-  if (!frame_->IsVisible())
-    frame_->ShowInactive();
+  frame_->ShowInactive();
 }
 
 void BrowserView::Hide() {
@@ -1647,7 +1693,7 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
   // This is only done once when the app is first opened so that there is only
   // one subscriber per web contents.
   if (AppUsesBorderlessMode() && !old_contents) {
-    SetWindowPlacementPermissionSubscriptionForBorderlessMode(new_contents);
+    SetWindowManagementPermissionSubscriptionForBorderlessMode(new_contents);
     UpdateIsIsolatedWebApp();
   }
 }
@@ -1658,14 +1704,14 @@ void BrowserView::OnTabDetached(content::WebContents* contents,
   if (!was_active)
     return;
 
-  // This is to unsubscribe the window-placement permission subscriber.
-  if (window_placement_subscription_id_) {
+  // This is to unsubscribe the Window Management permission subscriber.
+  if (window_management_subscription_id_) {
     contents->GetPrimaryMainFrame()
         ->GetBrowserContext()
         ->GetPermissionController()
         ->UnsubscribePermissionStatusChange(
-            window_placement_subscription_id_.value());
-    window_placement_subscription_id_.reset();
+            window_management_subscription_id_.value());
+    window_management_subscription_id_.reset();
   }
 
   // We need to reset the current tab contents to null before it gets
@@ -1915,7 +1961,7 @@ void BrowserView::FullscreenStateChanging() {
 void BrowserView::FullscreenStateChanged() {
 #if BUILDFLAG(IS_MAC)
   if (!IsFullscreen() && restore_pre_fullscreen_bounds_callback_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, std::move(restore_pre_fullscreen_bounds_callback_));
   }
 
@@ -2188,16 +2234,16 @@ void BrowserView::UpdateBorderlessModeEnabled() {
             ->GetBrowserContext()
             ->GetPermissionController()
             ->GetPermissionResultForOriginWithoutContext(
-                blink::PermissionType::WINDOW_PLACEMENT, url)
+                blink::PermissionType::WINDOW_MANAGEMENT, url)
             .status;
 
-    window_placement_permission_granted_ =
+    window_management_permission_granted_ =
         status == blink::mojom::PermissionStatus::GRANTED;
   } else {
     // Defaults to the value of borderless_mode_enabled if web contents are
     // null. These get overridden when the app is launched and its web contents
     // are ready.
-    window_placement_permission_granted_ = borderless_mode_enabled;
+    window_management_permission_granted_ = borderless_mode_enabled;
     is_isolated_web_app_ = borderless_mode_enabled;
   }
 
@@ -2210,16 +2256,16 @@ void BrowserView::UpdateBorderlessModeEnabled() {
   }
 }
 
-void BrowserView::UpdateWindowPlacementPermission(
+void BrowserView::UpdateWindowManagementPermission(
     blink::mojom::PermissionStatus status) {
-  window_placement_permission_granted_ =
+  window_management_permission_granted_ =
       status == blink::mojom::PermissionStatus::GRANTED;
 
   // The layout has to update to reflect the borderless mode view change.
   InvalidateLayout();
 }
 
-void BrowserView::SetWindowPlacementPermissionSubscriptionForBorderlessMode(
+void BrowserView::SetWindowManagementPermissionSubscriptionForBorderlessMode(
     content::WebContents* web_contents) {
   content::RenderFrameHost* rfh = web_contents->GetPrimaryMainFrame();
   auto* controller = rfh->GetBrowserContext()->GetPermissionController();
@@ -2227,18 +2273,18 @@ void BrowserView::SetWindowPlacementPermissionSubscriptionForBorderlessMode(
   // Last committed URL is null when PWA is opened from chrome://apps.
   url::Origin url = url::Origin::Create(web_contents->GetVisibleURL());
 
-  UpdateWindowPlacementPermission(
+  UpdateWindowManagementPermission(
       controller
           ->GetPermissionResultForOriginWithoutContext(
-              blink::PermissionType::WINDOW_PLACEMENT, url)
+              blink::PermissionType::WINDOW_MANAGEMENT, url)
           .status);
 
   // It is safe to bind base::Unretained(this) because WebContents is
   // owned by BrowserView.
-  window_placement_subscription_id_ =
+  window_management_subscription_id_ =
       controller->SubscribePermissionStatusChange(
-          blink::PermissionType::WINDOW_PLACEMENT, rfh->GetProcess(), url,
-          base::BindRepeating(&BrowserView::UpdateWindowPlacementPermission,
+          blink::PermissionType::WINDOW_MANAGEMENT, rfh->GetProcess(), url,
+          base::BindRepeating(&BrowserView::UpdateWindowManagementPermission,
                               base::Unretained(this)));
 }
 
@@ -2254,13 +2300,15 @@ void BrowserView::UpdateIsIsolatedWebApp() {
           web_contents->GetPrimaryMainFrame()->GetBrowserContext(), url);
 }
 
-void BrowserView::ToggleWindowControlsOverlayEnabled() {
-  browser()->app_controller()->ToggleWindowControlsOverlayEnabled();
-  UpdateWindowControlsOverlayEnabled();
+void BrowserView::ToggleWindowControlsOverlayEnabled(base::OnceClosure done) {
+  browser()->app_controller()->ToggleWindowControlsOverlayEnabled(
+      base::BindOnce(&BrowserView::UpdateWindowControlsOverlayEnabled,
+                     weak_ptr_factory_.GetWeakPtr())
+          .Then(std::move(done)));
 }
 
 bool BrowserView::IsBorderlessModeEnabled() const {
-  return borderless_mode_enabled_ && window_placement_permission_granted_ &&
+  return borderless_mode_enabled_ && window_management_permission_granted_ &&
          is_isolated_web_app_;
 }
 
@@ -2385,13 +2433,6 @@ bool BrowserView::ActivateFirstInactiveBubbleForAccessibility() {
         return true;
       }
     }
-  }
-
-  if (toolbar_ && toolbar_->toolbar_account_icon_container() &&
-      toolbar_->toolbar_account_icon_container()
-          ->page_action_icon_controller()
-          ->ActivateFirstInactiveBubbleForAccessibility()) {
-    return true;
   }
 
   return false;
@@ -3047,7 +3088,7 @@ bool BrowserView::CanActivate() const {
   // has to be done in a post task, otherwise if the user clicked on a window
   // that doesn't have the modal dialog the windows keep trying to get the focus
   // from each other on Windows. http://crbug.com/141650.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BrowserView::ActivateAppModalDialog,
                                 weak_ptr_factory_.GetWeakPtr()));
   return false;
@@ -3468,12 +3509,28 @@ views::View* BrowserView::CreateMacOverlayView() {
   params.type = views::Widget::InitParams::TYPE_POPUP;
   params.child = true;
   params.parent = GetWidget()->GetNativeView();
-  overlay_widget_ = new ThemeCopyingWidget(GetWidget());
+  overlay_widget_ = new OverlayWidget(GetWidget());
   overlay_widget_->Init(std::move(params));
   overlay_widget_->SetNativeWindowProperty(kBrowserViewKey, this);
 
+  // Disable sublevel widget layering because in fullscreen the NSWindow of
+  // `overlay_widget_` is reparented to a AppKit-owned NSWindow that does not
+  // have an associated Widget. This will cause issues in sublevel manager
+  // which operates at the Widget level.
+  if (overlay_widget_->GetSublevelManager()) {
+    overlay_widget_->parent()->GetSublevelManager()->UntrackChildWidget(
+        overlay_widget_);
+  }
+
+  // Create a new TopContainerOverlayView. The tab strip, omnibox, bookmarks
+  // etc. will be contained within this view. Right clicking on the blank space
+  // that is not taken up by the child views should show the context menu. Set
+  // the BrowserFrame as the context menu controller to handle displaying the
+  // top container context menu.
   std::unique_ptr<TopContainerOverlayView> overlay_view =
       std::make_unique<TopContainerOverlayView>(weak_ptr_factory_.GetWeakPtr());
+  overlay_view->set_context_menu_controller(frame());
+
   overlay_view_targeter_ = std::make_unique<OverlayViewTargeterDelegate>();
   overlay_view->SetEventTargeter(
       std::make_unique<views::ViewTargeter>(overlay_view_targeter_.get()));
@@ -3664,7 +3721,7 @@ void BrowserView::RevealTabStripIfNeeded() {
       [](std::unique_ptr<ImmersiveRevealedLock>) {}, std::move(revealer));
   constexpr auto kDefaultDelay = base::Seconds(1);
   constexpr auto kZeroDelay = base::Seconds(0);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, std::move(delete_revealer),
       g_disable_revealer_delay_for_testing ? kZeroDelay : kDefaultDelay);
 }
@@ -3762,6 +3819,22 @@ views::CloseRequestResult BrowserView::OnWindowCloseRequested() {
 }
 
 int BrowserView::NonClientHitTest(const gfx::Point& point) {
+#if BUILDFLAG(IS_MAC)
+  // The top container while in immersive fullscreen on macOS lives in another
+  // Widget (OverlayWidget). This means that BrowserView does not need to
+  // consult BrowserViewLayout::NonClientHitTest() to calculate the hit test.
+  if (IsImmersiveModeEnabled()) {
+    // Handle hits on the overlay widget when it is hovering overtop of the
+    // content view.
+    gfx::Point screen_point(point);
+    View::ConvertPointToScreen(this, &screen_point);
+    if (overlay_widget()->GetWindowBoundsInScreen().Contains(screen_point)) {
+      return HTNOWHERE;
+    }
+    return views::ClientView::NonClientHitTest(point);
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   return GetBrowserViewLayout()->NonClientHitTest(point);
 }
 
@@ -3909,10 +3982,9 @@ void BrowserView::AddedToWidget() {
   // TODO(https://crbug.com/1036519): Remove BrowserViewLayout dependence on
   // Widget and move to the constructor.
   SetLayoutManager(std::make_unique<BrowserViewLayout>(
-      std::make_unique<BrowserViewLayoutDelegateImpl>(this),
-      GetWidget()->GetNativeView(), this, top_container_,
-      tab_strip_region_view_, tabstrip_, toolbar_, infobar_container_,
-      contents_container_, side_search_side_panel_,
+      std::make_unique<BrowserViewLayoutDelegateImpl>(this), this,
+      top_container_, tab_strip_region_view_, tabstrip_, toolbar_,
+      infobar_container_, contents_container_, side_search_side_panel_,
       left_aligned_side_panel_separator_, unified_side_panel_,
       right_aligned_side_panel_separator_, lens_side_panel_,
       immersive_mode_controller_.get(), contents_separator_));
@@ -3932,7 +4004,7 @@ void BrowserView::AddedToWidget() {
   MaybeShowWebUITabStripIPH();
 
   // Want to show this promo, but not right at startup.
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&BrowserView::MaybeShowReadingListInSidePanelIPH,
                      GetAsWeakPtr()),
@@ -4330,13 +4402,6 @@ void BrowserView::ProcessFullscreen(bool fullscreen,
   // asynchronous transition so we synchronously invoke the function.
   FullscreenStateChanged();
 #endif
-
-  if (fullscreen && !chrome::IsRunningInAppMode()) {
-    UpdateExclusiveAccessExitBubbleContent(
-        url, bubble_type, ExclusiveAccessBubbleHideCallback(),
-        /*notify_download=*/false,
-        /*force_update=*/display_id != display::kInvalidDisplayId);
-  }
 
   // Undo our anti-jankiness hacks and force a re-layout.
   in_process_fullscreen_ = false;

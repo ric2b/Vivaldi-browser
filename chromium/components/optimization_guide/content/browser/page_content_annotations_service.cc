@@ -4,19 +4,25 @@
 
 #include "components/optimization_guide/content/browser/page_content_annotations_service.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/barrier_closure.h"
-#include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros_local.h"
-#include "base/rand_util.h"
-#include "base/strings/stringprintf.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/google/core/common/google_util.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
+#include "components/omnibox/browser/autocomplete_input.h"
+#include "components/omnibox/browser/search_suggestion_parser.h"
 #include "components/optimization_guide/content/browser/page_content_annotations_validator.h"
 #include "components/optimization_guide/core/entity_metadata.h"
 #include "components/optimization_guide/core/local_page_entities_metadata_provider.h"
+#include "components/optimization_guide/core/noisy_metrics_recorder.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
@@ -24,6 +30,12 @@
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/omnibox_proto/types.pb.h"
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 #include "components/optimization_guide/content/browser/page_content_annotations_model_manager.h"
@@ -68,25 +80,77 @@ void LogPageContentAnnotationsStorageStatus(
       status);
 }
 
+void LogRelatedSearchesExtracted(bool success) {
+  base::UmaHistogramBoolean(
+      "OptimizationGuide.PageContentAnnotationsService."
+      "RelatedSearchesExtracted",
+      success);
+}
+
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+// Record the visibility score of the provided visit as a RAPPOR-style record to
+// UKM.
+void MaybeRecordVisibilityUKM(
+    const HistoryVisit& visit,
+    const absl::optional<history::VisitContentModelAnnotations>&
+        content_annotations) {
+  if (!content_annotations)
+    return;
+
+  if (content_annotations->visibility_score < 0)
+    return;
+
+  int64_t score =
+      static_cast<int64_t>(100 * content_annotations->visibility_score);
+  // We want 2^|num_bits| buckets, linearly spaced.
+  uint32_t num_buckets =
+      std::pow(2, optimization_guide::features::NumBitsForRAPPORMetrics());
+  DCHECK_GT(num_buckets, 0u);
+  float bucket_size = 100.0 / num_buckets;
+  uint32_t bucketed_score = static_cast<uint32_t>(floor(score / bucket_size));
+  DCHECK_LE(bucketed_score, num_buckets);
+  uint32_t noisy_score = NoisyMetricsRecorder().GetNoisyMetric(
+      optimization_guide::features::NoiseProbabilityForRAPPORMetrics(),
+      bucketed_score, optimization_guide::features::NumBitsForRAPPORMetrics());
+  ukm::SourceId ukm_source_id = ukm::ConvertToSourceId(
+      visit.navigation_id, ukm::SourceIdType::NAVIGATION_ID);
+
+  ukm::builders::PageContentAnnotations2(ukm_source_id)
+      .SetVisibilityScore(static_cast<int64_t>(noisy_score))
+      .Record(ukm::UkmRecorder::Get());
+}
+#endif /* BUILDFLAG(BUILD_WITH_TFLITE_LIB) */
+
 }  // namespace
 
 PageContentAnnotationsService::PageContentAnnotationsService(
+    std::unique_ptr<AutocompleteProviderClient> autocomplete_provider_client,
     const std::string& application_locale,
     OptimizationGuideModelProvider* optimization_guide_model_provider,
     history::HistoryService* history_service,
+    TemplateURLService* template_url_service,
+    ZeroSuggestCacheService* zero_suggest_cache_service,
     leveldb_proto::ProtoDatabaseProvider* database_provider,
     const base::FilePath& database_dir,
     OptimizationGuideLogger* optimization_guide_logger,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner)
-    : min_page_category_score_to_persist_(
+    : autocomplete_provider_client_(std::move(autocomplete_provider_client)),
+      min_page_category_score_to_persist_(
           features::GetMinimumPageCategoryScoreToPersist()),
+      history_service_(history_service),
+      template_url_service_(template_url_service),
+      zero_suggest_cache_service_(zero_suggest_cache_service),
       last_annotated_history_visits_(
           features::MaxContentAnnotationRequestsCached()),
       annotated_text_cache_(features::MaxVisitAnnotationCacheSize()),
       optimization_guide_logger_(optimization_guide_logger) {
   DCHECK(optimization_guide_model_provider);
-  DCHECK(history_service);
-  history_service_ = history_service;
+  DCHECK(history_service_);
+  history_service_observation_.Observe(history_service_);
+  if (zero_suggest_cache_service_) {
+    zero_suggest_cache_service_observation_.Observe(
+        zero_suggest_cache_service_);
+  }
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   model_manager_ = std::make_unique<PageContentAnnotationsModelManager>(
       optimization_guide_model_provider);
@@ -331,20 +395,13 @@ void PageContentAnnotationsService::RequestAndNotifyWhenModelAvailable(
 #endif
 }
 
-void PageContentAnnotationsService::PersistSearchMetadata(
-    const HistoryVisit& visit,
-    const SearchMetadata& search_metadata) {
-  QueryURL(visit,
-           base::BindOnce(&history::HistoryService::AddSearchMetadataForVisit,
-                          history_service_->AsWeakPtr(),
-                          search_metadata.normalized_url,
-                          search_metadata.search_terms),
-           PageContentAnnotationsType::kSearchMetadata);
-}
-
 void PageContentAnnotationsService::ExtractRelatedSearches(
     const HistoryVisit& visit,
     content::WebContents* web_contents) {
+  if (ShouldExtractRelatedSearchesFromZPSCache()) {
+    return;
+  }
+
   search_result_extractor_client_.RequestData(
       web_contents, {continuous_search::mojom::ResultType::kRelatedSearches},
       base::BindOnce(&PageContentAnnotationsService::OnRelatedSearchesExtracted,
@@ -383,6 +440,8 @@ void PageContentAnnotationsService::OnPageContentAnnotated(
     }
   }
 
+  MaybeRecordVisibilityUKM(visit, content_annotations);
+
   if (!features::ShouldWriteContentAnnotationsToHistoryService())
     return;
 
@@ -394,16 +453,81 @@ void PageContentAnnotationsService::OnPageContentAnnotated(
 }
 #endif
 
+bool PageContentAnnotationsService::ShouldExtractRelatedSearchesFromZPSCache() {
+  return base::FeatureList::IsEnabled(
+             features::kExtractRelatedSearchesFromPrefetchedZPSResponse) &&
+         autocomplete_provider_client_ && zero_suggest_cache_service_;
+}
+
+void PageContentAnnotationsService::OnZeroSuggestResponseUpdated(
+    const std::string& page_url,
+    const ZeroSuggestCacheService::CacheEntry& response) {
+  if (!ShouldExtractRelatedSearchesFromZPSCache()) {
+    return;
+  }
+
+  if (page_url.empty() || !google_util::IsGoogleSearchUrl(GURL(page_url))) {
+    return;
+  }
+
+  history_service_->QueryURL(
+      GURL(page_url), /*want_visits=*/true,
+      base::BindOnce(&PageContentAnnotationsService::
+                         ExtractRelatedSearchesFromZeroSuggestResponse,
+                     weak_ptr_factory_.GetWeakPtr(), response),
+      &history_service_task_tracker_);
+}
+
+void PageContentAnnotationsService::
+    ExtractRelatedSearchesFromZeroSuggestResponse(
+        const ZeroSuggestCacheService::CacheEntry& response,
+        history::QueryURLResult url_result) {
+  if (!url_result.success || url_result.visits.empty()) {
+    LogPageContentAnnotationsStorageStatus(
+        PageContentAnnotationsStorageStatus::kNoVisitsForUrl,
+        PageContentAnnotationsType::kRelatedSearches);
+    return;
+  }
+
+  AutocompleteInput input(u"", metrics::OmniboxEventProto::JOURNEYS,
+                          autocomplete_provider_client_->GetSchemeClassifier());
+  auto suggest_results =
+      response.GetSuggestResults(input, *autocomplete_provider_client_);
+
+  std::vector<std::string> related_searches;
+  for (const auto& result : suggest_results) {
+    const auto subtypes = result.subtypes();
+    // Suggestions with HIVEMIND subtype are considered "related searches".
+    auto it = std::find(subtypes.begin(), subtypes.end(),
+                        omnibox::SuggestSubtype::SUBTYPE_HIVEMIND);
+    if (it != subtypes.end()) {
+      related_searches.push_back(base::UTF16ToUTF8(
+          base::CollapseWhitespace(result.suggestion(), true)));
+    }
+  }
+
+  if (related_searches.empty()) {
+    LogRelatedSearchesExtracted(false);
+    return;
+  }
+
+  LogRelatedSearchesExtracted(true);
+
+  auto visit_id = url_result.visits.front().visit_id;
+  history_service_->AddRelatedSearchesForVisit(related_searches, visit_id);
+
+  LogPageContentAnnotationsStorageStatus(
+      PageContentAnnotationsStorageStatus::kSuccess,
+      PageContentAnnotationsType::kRelatedSearches);
+}
+
 void PageContentAnnotationsService::OnRelatedSearchesExtracted(
     const HistoryVisit& visit,
     continuous_search::SearchResultExtractorClientStatus status,
     continuous_search::mojom::CategoryResultsPtr results) {
   const bool success =
       status == continuous_search::SearchResultExtractorClientStatus::kSuccess;
-  base::UmaHistogramBoolean(
-      "OptimizationGuide.PageContentAnnotationsService."
-      "RelatedSearchesExtracted",
-      success);
+  LogRelatedSearchesExtracted(success);
 
   if (!success) {
     return;
@@ -510,6 +634,30 @@ void PageContentAnnotationsService::GetMetadataForEntityId(
 #else
   std::move(callback).Run(absl::nullopt);
 #endif
+}
+
+void PageContentAnnotationsService::OnURLVisited(
+    history::HistoryService* history_service,
+    const history::URLRow& url_row,
+    const history::VisitRow& visit_row) {
+  DCHECK_EQ(history_service, history_service_);
+
+  if (!template_url_service_) {
+    // `template_url_service_` is only nullptr in unit tests.
+    return;
+  }
+
+  if (optimization_guide::features::
+          ShouldPersistSearchMetadataForNonGoogleSearches() ||
+      google_util::IsGoogleSearchUrl(url_row.url())) {
+    auto search_metadata =
+        template_url_service_->ExtractSearchMetadata(url_row.url());
+    if (search_metadata) {
+      history_service_->AddSearchMetadataForVisit(
+          search_metadata->normalized_url, search_metadata->search_terms,
+          visit_row.visit_id);
+    }
+  }
 }
 
 void PageContentAnnotationsService::PersistRemotePageMetadata(

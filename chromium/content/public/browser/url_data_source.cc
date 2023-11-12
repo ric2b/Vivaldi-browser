@@ -57,10 +57,6 @@ bool URLDataSource::ShouldReplaceExistingSource() {
   return true;
 }
 
-bool URLDataSource::AllowCaching(const GURL& url) {
-  return AllowCaching();
-}
-
 bool URLDataSource::AllowCaching() {
   return true;
 }

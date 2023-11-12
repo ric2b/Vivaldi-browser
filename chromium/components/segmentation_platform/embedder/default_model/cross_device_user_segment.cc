@@ -7,7 +7,7 @@
 #include <array>
 
 #include "base/strings/strcat.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/chromeos_buildflags.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 #include "components/segmentation_platform/public/config.h"
@@ -132,6 +132,7 @@ std::unique_ptr<Config> CrossDeviceUserSegment::GetConfig() {
       base::Days(kCrossDeviceUserSegmentSelectionTTLDays);
   config->unknown_selection_ttl =
       base::Days(kCrossDeviceUserSegmentUnknownSelectionTTLDays);
+  config->is_boolean_segment = true;
   return config;
 }
 
@@ -175,18 +176,18 @@ void CrossDeviceUserSegment::InitAndFetchModel(
                         kCrossDeviceUserUMAFeatures.size());
 
   constexpr int kModelVersion = 1;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindRepeating(model_updated_callback, kCrossDeviceUserSegmentId,
                           std::move(chrome_start_metadata), kModelVersion));
 }
 
 void CrossDeviceUserSegment::ExecuteModelWithInput(
-    const std::vector<float>& inputs,
+    const ModelProvider::Request& inputs,
     ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != kCrossDeviceUserUMAFeatures.size()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -238,8 +239,9 @@ void CrossDeviceUserSegment::ExecuteModelWithInput(
   }
 
   float result = RANK(segment);
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), ModelProvider::Response(1, result)));
 }
 
 bool CrossDeviceUserSegment::ModelAvailable() {

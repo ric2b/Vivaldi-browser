@@ -17,7 +17,7 @@ namespace web_app {
 LinkCapturingPrefMigration::LinkCapturingPrefMigration(Profile& profile)
     : profile_(profile) {
   scoped_observation_.Observe(
-      &apps::AppServiceProxyFactory::GetForProfile(&profile_)
+      &apps::AppServiceProxyFactory::GetForProfile(&*profile_)
            ->AppRegistryCache());
 }
 
@@ -34,11 +34,12 @@ void LinkCapturingPrefMigration::OnAppUpdate(const apps::AppUpdate& update) {
     return;
 
   // The DLC API was never used by system web apps.
-  const WebAppProvider* provider = WebAppProvider::GetForWebApps(&profile_);
+  const WebAppProvider* provider = WebAppProvider::GetForWebApps(&*profile_);
   if (!provider)
     return;
 
-  const WebApp* web_app = provider->registrar().GetAppById(update.AppId());
+  const WebApp* web_app =
+      provider->registrar_unsafe().GetAppById(update.AppId());
   if (!web_app)
     return;
 
@@ -49,7 +50,7 @@ void LinkCapturingPrefMigration::OnAppUpdate(const apps::AppUpdate& update) {
 
     case blink::mojom::CaptureLinks::kNewClient:
     case blink::mojom::CaptureLinks::kExistingClientNavigate:
-      apps::AppServiceProxyFactory::GetForProfile(&profile_)
+      apps::AppServiceProxyFactory::GetForProfile(&*profile_)
           ->SetSupportedLinksPreference(update.AppId());
       break;
   }

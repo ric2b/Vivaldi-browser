@@ -21,8 +21,7 @@ import {
   Resolution,
   VideoResolutionLevel,
 } from './type.js';
-import {GAHelper} from './untrusted_ga_helper.js';
-import * as util from './util.js';
+import {getGAHelper} from './untrusted_scripts.js';
 import {WaitableEvent} from './waitable_event.js';
 
 /**
@@ -33,9 +32,6 @@ const GA_ID = 'UA-134822711-1';
 let baseDimen: Map<number, number|string>|null = null;
 
 const ready = new WaitableEvent();
-
-const gaHelper =
-    util.createUntrustedJSModule<GAHelper>('/js/untrusted_ga_helper.js');
 
 /**
  * Send the event to GA backend.
@@ -61,13 +57,20 @@ async function sendEvent(
     assignDimension(event, dimen);
   }
 
+  if (event.eventValue !== undefined && !Number.isInteger(event.eventValue)) {
+    // Round the duration here since GA expects that the value is an
+    // integer. Reference:
+    // https://support.google.com/analytics/answer/1033068
+    event.eventValue = Math.round(event.eventValue);
+  }
+
   await ready.wait();
 
   // This value reflects the logging consent option in OS settings.
   const canSendMetrics =
       await ChromeHelper.getInstance().isMetricsAndCrashReportingEnabled();
   if (canSendMetrics) {
-    (await gaHelper).sendGAEvent(event);
+    (await getGAHelper()).sendGAEvent(event);
   }
 }
 
@@ -79,7 +82,7 @@ async function sendEvent(
  */
 export async function setMetricsEnabled(enabled: boolean): Promise<void> {
   await ready.wait();
-  await (await gaHelper).setMetricsEnabled(GA_ID, enabled);
+  await (await getGAHelper()).setMetricsEnabled(GA_ID, enabled);
 }
 
 const SCHEMA_VERSION = 3;
@@ -161,7 +164,8 @@ export async function initMetrics(): Promise<void> {
     localStorage.set(LocalStorageKey.GA_USER_ID, id);
   }
 
-  await (await gaHelper).initGA(GA_ID, clientId, Comlink.proxy(setClientId));
+  await (await getGAHelper())
+      .initGA(GA_ID, clientId, Comlink.proxy(setClientId));
   ready.signal();
 }
 
@@ -405,10 +409,7 @@ export function sendPerfEvent({event, duration, perfInfo = {}}: PerfEventParam):
         eventCategory: 'perf',
         eventAction: event,
         eventLabel: facing,
-        // Round the duration here since GA expects that the value is an
-        // integer. Reference:
-        // https://support.google.com/analytics/answer/1033068
-        eventValue: Math.round(duration),
+        eventValue: duration,
       },
       new Map([
         [MetricDimension.RESOLUTION, `${resolution}`],
@@ -580,6 +581,24 @@ export enum DocScanActionType {
 export function sendDocScanEvent(action: DocScanActionType): void {
   sendEvent({
     eventCategory: 'doc-scan',
+    eventAction: action,
+  });
+}
+
+export enum LowStorageActionType {
+  MANAGE_STORAGE_AUTO_STOP = 'manage-storage-auto-stop',
+  MANAGE_STORAGE_CANNOT_START = 'manage-storage-cannot-start',
+  SHOW_AUTO_STOP_DIALOG = 'show-auto-stop-dialog',
+  SHOW_CANNOT_START_DIALOG = 'show-cannot-start-dialog',
+  SHOW_WARNING_MSG = 'show-warning-msg',
+}
+
+/**
+ * Sends low-storage handling event.
+ */
+export function sendLowStorageEvent(action: LowStorageActionType): void {
+  sendEvent({
+    eventCategory: 'low-storage',
     eventAction: action,
   });
 }

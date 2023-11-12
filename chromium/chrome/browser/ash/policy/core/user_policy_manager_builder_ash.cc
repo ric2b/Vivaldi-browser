@@ -16,8 +16,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/policy/active_directory/active_directory_policy_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -92,7 +92,7 @@ void CreateConfigurationPolicyProvider(
   *active_directory_policy_manager_out = nullptr;
 
   // Don't initialize cloud policy for the signin and the lock screen profile.
-  if (!ash::ProfileHelper::IsRegularProfile(profile)) {
+  if (!ash::ProfileHelper::IsUserProfile(profile)) {
     return;
   }
 
@@ -278,7 +278,7 @@ void CreateConfigurationPolicyProvider(
             component_policy_cache_dir, enforcement_type,
             g_browser_process->local_state(), policy_refresh_timeout,
             base::BindOnce(&OnUserPolicyFatalError, account_id), account_id,
-            base::ThreadTaskRunnerHandle::Get());
+            base::SingleThreadTaskRunner::GetCurrentDefault());
 
     bool wildcard_match = false;
     if (connector->IsDeviceEnterpriseManaged() &&

@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を試す<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">このサイトには有害なプログラムが含まれています</translation>
 <translation id="1916770123977586577">更新後の設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
-<translation id="1973351931613083086">自動再生</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">このサイトは安全に接続できません</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">インターネットに接続されていません</translation>
-<translation id="2230458221926704099"><ph name="BEGIN_LINK" />診断アプリ<ph name="END_LINK" />を使用して接続を修正してください</translation>
 <translation id="2292556288342944218">インターネットアクセスがブロックされています</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> にはユーザー名とパスワードが必要です。</translation>
 <translation id="2337852623177822836">管理者が指定する設定</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> では、悪意のあるユーザーによって、パスワード、メッセージ、クレジットカードなどの情報が盗まれる可能性があります。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシーは、設定ページから無効にすることができます。</translation>
-<translation id="2953943267837858202">動画の自動再生を許可しない</translation>
 <translation id="2991571918955627853"><ph name="SITE" /> では HSTS が使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="3005723025932146533">保存済みのコピーを表示</translation>
 <translation id="301521992641321250">自動ブロックされました</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">ページの読み込みに必要なデータを再送信するため、再読み込みボタンを押してください。</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
-<translation id="3291915639428159043">自動再生がブロックされています</translation>
 <translation id="3308738399950580893">広告</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> は現在アクセスできません。</translation>
 <translation id="3427092606871434483">許可（デフォルト）</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">この接続ではプライバシーが保護されません</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /> <ph name="STATE" /> <ph name="CITY" /></translation>
 <translation id="3586931643579894722">詳細を非表示</translation>
-<translation id="3620979700683094848">サイトは自動で動画再生できます</translation>
 <translation id="3630155396527302611">ネットワークアクセスが許可されたプログラムのリストにすでに登録されている場合は、
       いったんリストから削除し、もう一度追加してみてください。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> はブロックされています</translation>
 <translation id="3987940399970879459">1 MB 未満</translation>
 <translation id="4075732493274867456">クライアントとサーバーの両方がサポートする SSL プロトコルのバージョンまたは暗号化方式が見つかりません。</translation>
-<translation id="410351446219883937">自動再生</translation>
 <translation id="4116663294526079822">このサイトでは常に許可</translation>
 <translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
 <translation id="4151403195736952345">グローバルの既定値（[検出]）を使用</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">フォーム再送信の確認</translation>
 <translation id="6569060085658103619">拡張機能のページを表示しています</translation>
 <translation id="6657585470893396449">パスワード</translation>
-<translation id="6685834062052613830">ログアウトして設定を完了してください</translation>
 <translation id="6711464428925977395">プロキシーサーバーに問題がある、またはアドレスが正しくありません。</translation>
 <translation id="6757797048963528358">端末がスリープ状態でした。</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">ファイアウォールまたはウイルス対策ソフトウェアによって接続がブロックされた可能性があります。</translation>
 <translation id="7800304661137206267">この接続は <ph name="CIPHER" /> で暗号化されており、メッセージ認証には <ph name="MAC" />、鍵交換メカニズムには <ph name="KX" /> が使用されています。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> では通常、暗号化して情報を保護しています。今回、Vivaldi から <ph name="SITE" /> への接続試行時に、このウェブサイトからいつもとは異なる誤った認証情報が返されました。悪意のあるユーザーが <ph name="SITE" /> になりすまそうとしているか、Wi-Fi ログイン画面で接続が中断された可能性があります。データのやり取りが行われる前に Vivaldi によって接続が停止されたため、情報は引き続き保護されています。</translation>
-<translation id="7834693436815575883">自動再生が許可されています</translation>
 <translation id="7878562273885520351">パスワードが不正利用される可能性があります</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">このサイトを利用すると、悪意のあるユーザーによってソフトウェアのインストールや個人情報（例: パスワード、電話番号、クレジット カード番号）の入力などの危険な操作を行うよう誘導される可能性があります。</translation>
 <translation id="8037357227543935929">確認（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（[確認]）を使用</translation>
-<translation id="8044382196220116469">サイトに動画の自動再生を許可しない</translation>
 <translation id="808894953321890993">パスワードの変更</translation>
 <translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8149426793427495338">パソコンがスリープ状態でした。</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">ユーザー名</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続は暗号化されていません。</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> の &lt;abbr id="dnsDefinition"&gt;DNS アドレス&lt;/abbr&gt;が見つかりませんでした。問題を診断しています。</translation>
-<translation id="8774017153185436870">サイトが自動で動画を再生する可能性があります</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> によりブロックされました</translation>
 <translation id="8963117664422609631">サイトの設定に移動します</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">無視する</translation>
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">加えて、このページには安全でない他のリソースが含まれています。このリソースは受信中に他のユーザーから見られる可能性があります。また、悪意のあるユーザーによって改変されページの動作が変わる可能性もあります。</translation>
-<translation id="9048224371732578627">動画の自動再生が許可されています</translation>
 <translation id="9062620674789239642">移動、編集または削除された可能性があります。</translation>
 <translation id="9069693763241529744">拡張機能によってブロック</translation>
 <translation id="9073799351042754113">このサイトではセキュリティの警告をオフにしました。</translation>

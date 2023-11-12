@@ -10,6 +10,7 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
@@ -18,6 +19,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/shelf/hotseat_widget.h"
 #include "ash/shelf/login_shelf_widget.h"
+#include "ash/shelf/scrollable_shelf_view.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_focus_cycler.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -608,11 +610,6 @@ void Shelf::ProcessScrollEvent(ui::ScrollEvent* event) {
 
   auto* app_list_controller = Shell::Get()->app_list_controller();
   DCHECK(app_list_controller);
-  // |shelf_layout_manager_| handles scroll events to toggle the App List. If
-  // the AppList is already showing, the event must not be handled since hiding
-  // the app list is not in scope for this action.
-  if (app_list_controller->IsVisible(shelf_layout_manager_->display_.id()))
-    return;
 
   shelf_layout_manager_->ProcessScrollEventFromShelf(event);
   event->SetHandled();
@@ -629,11 +626,6 @@ void Shelf::ProcessMouseWheelEvent(ui::MouseWheelEvent* event) {
 
   auto* app_list_controller = Shell::Get()->app_list_controller();
   DCHECK(app_list_controller);
-  // |shelf_layout_manager_| handles mousewheel events to toggle the App List.
-  // If the AppList is already showing, the event must not be handled since
-  // hiding the app list is not in scope for this action.
-  if (app_list_controller->IsVisible(shelf_layout_manager_->display_.id()))
-    return;
 
   shelf_layout_manager_->ProcessMouseWheelEventFromShelf(event);
   event->SetHandled();

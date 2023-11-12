@@ -12,10 +12,11 @@
 #include "base/check_op.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_change_notifier.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
@@ -104,7 +105,7 @@ class TestUDPClientSocket : public DatagramClientSocket {
         base::BindOnce(&TestUDPClientSocket::RunConnectCallback,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback), rv);
     if (connect_mode_ == ConnectMode::kAsynchronous) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(finish_connect_callback_));
       return ERR_IO_PENDING;
     } else if (connect_mode_ == ConnectMode::kAsynchronousManual) {
@@ -521,6 +522,41 @@ TEST_F(AddressSorterPosixTest, RandomAsyncSocketOrder) {
   created_sockets[1]->FinishConnect();
   created_sockets[2]->FinishConnect();
   created_sockets[0]->FinishConnect();
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(completed_);
+}
+
+// Regression test for https://crbug.com/1374387
+TEST_F(AddressSorterPosixTest, IPAddressChangedSort) {
+  SetConnectMode(TestUDPClientSocket::ConnectMode::kAsynchronousManual);
+  std::vector<TestUDPClientSocket*> created_sockets;
+  SetSocketCreateCallback(base::BindRepeating(
+      [](std::vector<TestUDPClientSocket*>& created_sockets,
+         TestUDPClientSocket* socket) { created_sockets.push_back(socket); },
+      std::ref(created_sockets)));
+
+  AddMapping("::1", "::1");
+  AddMapping("::2", "::2");
+  AddMapping("::3", "::3");
+
+  IPEndPoint endpoint1(ParseIP("::1"), /*port=*/111);
+  IPEndPoint endpoint2(ParseIP("::2"), /*port=*/222);
+  IPEndPoint endpoint3(ParseIP("::3"), /*port=*/333);
+
+  std::vector<IPEndPoint> input = {endpoint1, endpoint2, endpoint3};
+  std::vector<IPEndPoint> sorted;
+  TestCompletionCallback callback;
+  sorter_->Sort(input, base::BindOnce(&OnSortComplete, std::ref(completed_),
+                                      &sorted, callback.callback()));
+
+  ASSERT_EQ(created_sockets.size(), 3u);
+  created_sockets[0]->FinishConnect();
+  // Trigger OnIPAddressChanged() to reset `source_map_`
+  NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
+  base::RunLoop().RunUntilIdle();
+  created_sockets[1]->FinishConnect();
+  created_sockets[2]->FinishConnect();
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(completed_);

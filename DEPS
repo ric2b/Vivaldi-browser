@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Ib7b22d6b6117fb8db372f1a5e39132cc4033d27b",
+  "upstream_commit_id": "I380cddd91b50eb60161b4003af2cd764ab731caa",
 }
 
 hooks = [
@@ -131,10 +131,11 @@ hooks = [
   },
   {
     # Should run after the clang hook. Used on mac, as well as for orderfile
-    # generation on Android.
+    # generation and size tooling on Android. Used by
+    # dump-static-initializers.py on linux.
     'name': 'objdump',
     'pattern': '.',
-    'condition': 'checkout_mac  or checkout_android and host_os != "mac"',
+    'condition': 'checkout_linux or checkout_mac  or checkout_android and host_os != "mac"',
     'action': ['python3', 'chromium/tools/clang/scripts/update.py',
                '--package=objdump'],
   },
@@ -345,7 +346,7 @@ hooks = [
     ],
   },
   {
-    'name': 'gvr_static_shim_android_arm_Cr',
+    'name': 'gvr_static_shim_android',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',
     'action': [ 'python3', "-u",
@@ -353,19 +354,7 @@ hooks = [
                 '--no_resume',
                 '--no_auth',
                 '--bucket', 'chromium-gvr-static-shim',
-                '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm_Cr.a.sha1',
-    ],
-  },
-  {
-    'name': 'gvr_static_shim_android_arm64_Cr',
-    'pattern': '\\.sha1',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-gvr-static-shim',
-                '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64_Cr.a.sha1',
+                '-d', 'chromium/third_party/gvr-android-sdk',
     ],
   },
   {

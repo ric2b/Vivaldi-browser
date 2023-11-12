@@ -8,9 +8,8 @@
 
 #include "base/bind.h"
 #include "base/path_service.h"
-#include "base/task/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/win/conflicts/module_info_util.h"
 #include "chrome/browser/win/util_win_service.h"
@@ -85,7 +84,7 @@ ModuleInspector::ModuleInspector(
       is_waiting_on_util_win_service_(false) {
   // Use BEST_EFFORT as those will only run after startup is finished.
   content::BrowserThread::PostBestEffortTask(
-      FROM_HERE, base::SequencedTaskRunnerHandle::Get(),
+      FROM_HERE, base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(&ModuleInspector::OnStartupFinished,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -156,8 +155,8 @@ void ModuleInspector::OnStartupFinished() {
   is_after_startup_ = true;
 
   // Read the inspection cache now that it won't affect startup.
-  base::PostTaskAndReplyWithResult(
-      cache_task_runner_.get(), FROM_HERE,
+  cache_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&ReadInspectionResultsCacheOnBackgroundSequence,
                      GetInspectionResultsCachePath()),
       base::BindOnce(&ModuleInspector::OnInspectionResultsCacheRead,
@@ -209,7 +208,7 @@ void ModuleInspector::StartInspectingModule() {
       GetInspectionResultFromCache(module_key, &inspection_results_cache_);
   if (inspection_result) {
     // Send asynchronously or this might cause a stack overflow.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ModuleInspector::OnInspectionFinished,
                                   weak_ptr_factory_.GetWeakPtr(), module_key,
                                   std::move(*inspection_result)));

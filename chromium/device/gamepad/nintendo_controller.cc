@@ -4,12 +4,12 @@
 
 #include "device/gamepad/nintendo_controller.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/cxx17_backports.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "device/gamepad/gamepad_id_list.h"
 
@@ -1565,8 +1565,7 @@ void NintendoController::SubCommand(uint8_t sub_command,
   report_bytes[8] = 0x40;
   report_bytes[9] = sub_command;
   DCHECK_LT(bytes.size() + kSubCommandDataOffset, output_report_size_bytes_);
-  std::copy(bytes.begin(), bytes.end(),
-            &report_bytes[kSubCommandDataOffset - 1]);
+  base::ranges::copy(bytes, &report_bytes[kSubCommandDataOffset - 1]);
   WriteOutputReport(kReportIdOutput01, report_bytes, true);
 }
 
@@ -1801,7 +1800,7 @@ void NintendoController::ArmTimeout() {
   DCHECK(timeout_callback_.IsCancelled());
   timeout_callback_.Reset(base::BindOnce(&NintendoController::OnTimeout,
                                          weak_factory_.GetWeakPtr()));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, timeout_callback_.callback(), kTimeoutDuration);
 }
 

@@ -1792,10 +1792,12 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
   EXPECT_TRUE(content::ExecJs(web_contents(), R"(
     const iframe = document.createElement("iframe");
-    iframe.anonymous = false;
+    iframe.credentialless = false;
     document.body.appendChild(iframe);
   )"));
   CheckCounter(WebFeature::kAnonymousIframe, 0);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 0);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -1804,10 +1806,12 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
   EXPECT_TRUE(content::ExecJs(web_contents(), R"(
     const iframe = document.createElement("iframe");
-    iframe.anonymous = true;
+    iframe.credentialless = true;
     document.body.appendChild(iframe);
   )"));
   CheckCounter(WebFeature::kAnonymousIframe, 1);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 1);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -1818,12 +1822,14 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
     new Promise(resolve => {
       let iframe = document.createElement("iframe");
       iframe.src = location.href;
-      iframe.anonymous = false;
+      iframe.credentialless = false;
       iframe.onload = resolve;
       document.body.appendChild(iframe);
     });
   )"));
   CheckCounter(WebFeature::kAnonymousIframe, 0);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 0);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -1834,12 +1840,14 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
     new Promise(resolve => {
       let iframe = document.createElement("iframe");
       iframe.src = location.href;
-      iframe.anonymous = true;
+      iframe.credentialless = true;
       iframe.onload = resolve;
       document.body.appendChild(iframe);
     });
   )"));
   CheckCounter(WebFeature::kAnonymousIframe, 1);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 1);
+  CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -1854,6 +1862,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
       document.body.appendChild(iframe);
     });
   )"));
+  CheckCounter(WebFeature::kAnonymousIframe, 0);
   CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 0);
   CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 0);
 }
@@ -1866,7 +1875,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
     const createIframe = sandbox => {
       let iframe = document.createElement("iframe");
       iframe.src = location.href;
-      iframe.anonymous = true;
+      iframe.credentialless = true;
       if (sandbox)
         iframe.sandbox = "";
       document.body.appendChild(iframe);
@@ -1880,8 +1889,72 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
       createIframe(true),
     ]);
   )"));
+  CheckCounter(WebFeature::kAnonymousIframe, 1);
   CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", false, 3);
   CheckHistogramCount("Navigation.AnonymousIframeIsSandboxed", true, 2);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest, BlobUrl) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      const iframe = document.createElement("iframe");
+      const blob = new Blob(["test"], {type: "text/html"});
+      const url = URL.createObjectURL(blob);
+      iframe.src = url;
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+  CheckHistogramCount("Navigation.BlobUrl", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl", false, 3);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", false, 1);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", false, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       BlobUrlFromDataUrl) {
+  EXPECT_TRUE(
+      content::NavigateToURL(web_contents(), GURL("data:text/html,test")));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    const blob = new Blob(["test"], {type: "text/html"});
+    const url = URL.createObjectURL(blob);
+    location.href = url;
+  )"));
+  CheckHistogramCount("Navigation.BlobUrl", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl", false, 3);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", false, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", false, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       BlobUrlPopup) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  CheckHistogramCount("Navigation.BlobUrl", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl", false, 3);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", false, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", false, 0);
+
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    const blob = new Blob(["test"], {type: "text/html"});
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+  )"));
+  CheckHistogramCount("Navigation.BlobUrl", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl", false, 3);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", true, 1);
+  CheckHistogramCount("Navigation.BlobUrl.MainFrame", false, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", true, 0);
+  CheckHistogramCount("Navigation.BlobUrl.Sandboxed", false, 1);
 }
 
 // TODO(arthursonzogni): Add basic test(s) for the WebFeatures:

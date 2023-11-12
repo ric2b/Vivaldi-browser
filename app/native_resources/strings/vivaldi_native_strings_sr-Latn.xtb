@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Ponovo učitaj sliku</translation>
 <translation id="1924750141060565109">Pejzaž 15</translation>
 <translation id="19598411548897379">Opšte</translation>
+<translation id="1973351931613083086">automatska reprodukcija</translation>
 <translation id="1985669426322966465">Ažuriranje programa</translation>
 <translation id="2079036669923635404">Kliknite ovde da biste ažurirali Vivaldi na verziju <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Došlo je do greške prilikom preuzimanja datoteka za ažuriranje. Proverite internet vezu i pokušajte ponovo kasnije.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Otpad</translation>
 <translation id="292258461174562431">Čudovište 4</translation>
 <translation id="2923448633003185837">Nalepi i idi</translation>
+<translation id="2953943267837858202">Nije dozvoljena automatska reprodukcija videa</translation>
 <translation id="2977472760057091832">Otvori vezu u privatnom prozoru</translation>
 <translation id="2989805286512600854">Otvori u novoj kartici</translation>
 <translation id="3027988479108856431">Na žalost, podešavanja Yandex pregledača nisu dostupna dok je pregledač pokrenut. Za uvoz tih podešavanja u Vivaldi, sačuvajte vaš rad i zatvorite sve prozore Yandex pregledača. Nakon toga kliknite na Nastavi.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Novi obeleživač</translation>
 <translation id="3255747772218936245">Instaliraj ažuriranje</translation>
 <translation id="3259769196742189631">Proveri valjanost na W3C</translation>
+<translation id="3291915639428159043">Automatska reprodukcija blokirana</translation>
 <translation id="3302905971452834934">Čudovište 1</translation>
 <translation id="3334610655141903168">(bez naslova)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je trenutno najnovija dostupna verzija.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Otvori vezu u novom prozoru</translation>
 <translation id="3588820906588687999">Otvori sliku u novoj kartici</translation>
 <translation id="3601066750251199488">Čudovište 3</translation>
+<translation id="3620979700683094848">Sajtovi mogu automatski da reprodukuju video</translation>
 <translation id="3680031241659195730">Nova verzija Vivaldi pregledača je dostupna!</translation>
 <translation id="3708982624815781692">Preuzimanje je otkazano.</translation>
 <translation id="3732157130969736834">Dodaj vezu u obeleživače</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Ne prikazuj ponovo</translation>
 <translation id="4074744496918018786">Otvori sliku u privatnom prozoru</translation>
+<translation id="410351446219883937">Automatska reprodukcija</translation>
 <translation id="4324492550286218827">Pejzaž 2</translation>
 <translation id="4406101500523955324">Otvori u novom privatnom prozoru</translation>
 <translation id="4420816922321010053">Da li zaista želite da izađete iz Vivaldi pregledača?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Iseci</translation>
 <translation id="7727481996062361502">Verifikacija ažuriranja...</translation>
 <translation id="7793738202466490491">Dodaj kao događaj kalendara</translation>
+<translation id="7834693436815575883">Automatska reprodukcija dozvoljena</translation>
 <translation id="7848222781052558334">Verifikacija digitalnog potpisa preuzetih datoteka nije uspela.</translation>
 <translation id="7865983598101744945">Potvrda izlaska</translation>
 <translation id="7957213167373139414">Moj kalendar</translation>
 <translation id="8027581147000338959">Otvori u novom prozoru</translation>
+<translation id="8044382196220116469">Ne dozvoli sajtovima da automatski reprodukuju video</translation>
 <translation id="8099620695029051217">Kopiraj adresu stranice</translation>
 <translation id="8197810018650377191">Dodaj stranicu u obeleživače</translation>
 <translation id="8261506727792406068">Izbriši</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Ispitaj dokument portala</translation>
 <translation id="8768970203213061953">Pejzaž 14</translation>
 <translation id="8773635261052182196">Više nećete videti ova obaveštenja. Možete ih omogućiti ponovo u podešavanjima Vivaldi pregledača.</translation>
+<translation id="8774017153185436870">Sajtovi bi mogli automatski da reprodukuju video</translation>
 <translation id="8813277370772331957">Podseti me kasnije</translation>
 <translation id="8894900864683381599">Dodaj vezu kao veb panel</translation>
 <translation id="8912720443398351457">Da li zaista želite da izađete iz Vivaldi pregledača?</translation>
 <translation id="8947109330183116400">Izaberite HTML datoteku sa obeleživačima</translation>
 <translation id="9017566390391482291">Izaberite fasciklu profila Vivaldi pregledača za uvoz</translation>
 <translation id="9048058608784130603">Ažuriranje <ph name="VERSION" /> je na čekanju</translation>
+<translation id="9048224371732578627">Dozvoljena automatska reprodukcija videa</translation>
 <translation id="9065203028668620118">Uredi</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Otvori sliku kao <ph name="USER" /></translation>

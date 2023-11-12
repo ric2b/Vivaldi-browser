@@ -337,8 +337,9 @@ RTCVideoDecoderFactory::CreateVideoDecoder(
   }
   // ScopedVideoDecoder uses the task runner to make sure the decoder is
   // destructed on the correct thread.
-  return decoder ? std::make_unique<ScopedVideoDecoder>(media_task_runner_,
-                                                        std::move(decoder))
+  return decoder ? std::make_unique<ScopedVideoDecoder>(
+                       base::SequencedTaskRunner::GetCurrentDefault(),
+                       std::move(decoder))
                  : nullptr;
 }
 

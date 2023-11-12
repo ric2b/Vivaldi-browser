@@ -22,6 +22,7 @@ namespace {
 
 constexpr char kAddFencedFrameScript[] = R"({
     const fenced_frame = document.createElement('fencedframe');
+    fenced_frame.mode = $1;
     document.body.appendChild(fenced_frame);
   })";
 
@@ -33,22 +34,22 @@ constexpr char kAddAndNavigateFencedFrameScript[] = R"({
 
 constexpr char kNavigateFrameScript[] = R"({location.href = $1;})";
 
+std::string ModeToString(blink::mojom::FencedFrameMode mode) {
+  switch (mode) {
+    case blink::mojom::FencedFrameMode::kDefault:
+      return "default";
+    case blink::mojom::FencedFrameMode::kOpaqueAds:
+      return "opaque-ads";
+  }
+}
+
 }  // namespace
 
-FencedFrameTestHelper::FencedFrameTestHelper(FencedFrameType type)
-    : type_(type) {
-  if (type == FencedFrameType::kMPArch) {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames, {{"implementation_type", "mparch"}}},
-         {features::kPrivacySandboxAdsAPIsOverride, {}}},
-        {/* disabled_features */});
-  } else {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames,
-          {{"implementation_type", "shadow_dom"}}},
-         {features::kPrivacySandboxAdsAPIsOverride, {}}},
-        {/* disabled_features */});
-  }
+FencedFrameTestHelper::FencedFrameTestHelper() {
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{blink::features::kFencedFrames, {}},
+       {features::kPrivacySandboxAdsAPIsOverride, {}}},
+      {/* disabled_features */});
 }
 
 FencedFrameTestHelper::~FencedFrameTestHelper() = default;
@@ -56,41 +57,32 @@ FencedFrameTestHelper::~FencedFrameTestHelper() = default;
 RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
     RenderFrameHost* fenced_frame_parent,
     const GURL& url,
-    net::Error expected_error_code) {
+    net::Error expected_error_code,
+    blink::mojom::FencedFrameMode mode) {
   TRACE_EVENT("test", "FencedFrameTestHelper::CreateAndGetFencedFrame",
               "fenced_frame_parent", fenced_frame_parent, "url", url);
   RenderFrameHostImpl* fenced_frame_parent_rfh =
       static_cast<RenderFrameHostImpl*>(fenced_frame_parent);
   RenderFrameHostImpl* fenced_frame_rfh;
-  if (type_ == FencedFrameType::kMPArch) {
-    size_t previous_fenced_frame_count =
-        fenced_frame_parent_rfh->GetFencedFrames().size();
+  size_t previous_fenced_frame_count =
+      fenced_frame_parent_rfh->GetFencedFrames().size();
 
-    EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
-                       JsReplace(kAddFencedFrameScript),
-                       EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
+                     JsReplace(kAddFencedFrameScript, ModeToString(mode)),
+                     EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
 
-    std::vector<FencedFrame*> fenced_frames =
-        fenced_frame_parent_rfh->GetFencedFrames();
-    EXPECT_EQ(previous_fenced_frame_count + 1, fenced_frames.size());
+  std::vector<FencedFrame*> fenced_frames =
+      fenced_frame_parent_rfh->GetFencedFrames();
+  EXPECT_EQ(previous_fenced_frame_count + 1, fenced_frames.size());
 
-    FencedFrame* fenced_frame = fenced_frames.back();
-    // It is possible that we got the did stop loading notification because the
-    // fenced frame was actually being destroyed. Check to make sure that's not
-    // the case. TODO(crbug.com/1123606): Consider weakly referencing the fenced
-    // frame if the removal-and-stop-loading scenario is a useful one to test.
-    EXPECT_EQ(previous_fenced_frame_count + 1,
-              fenced_frame_parent_rfh->GetFencedFrames().size());
-    fenced_frame_rfh = fenced_frame->GetInnerRoot();
-  } else {
-    EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
-                       JsReplace(kAddFencedFrameScript),
-                       EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
-    fenced_frame_rfh = static_cast<RenderFrameHostImpl*>(
-        fenced_frame_parent_rfh
-            ->child_at(fenced_frame_parent_rfh->child_count() - 1)
-            ->current_frame_host());
-  }
+  FencedFrame* fenced_frame = fenced_frames.back();
+  // It is possible that we got the did stop loading notification because the
+  // fenced frame was actually being destroyed. Check to make sure that's not
+  // the case. TODO(crbug.com/1123606): Consider weakly referencing the fenced
+  // frame if the removal-and-stop-loading scenario is a useful one to test.
+  EXPECT_EQ(previous_fenced_frame_count + 1,
+            fenced_frame_parent_rfh->GetFencedFrames().size());
+  fenced_frame_rfh = fenced_frame->GetInnerRoot();
   if (url.is_empty())
     return fenced_frame_rfh;
   return NavigateFrameInFencedFrameTree(fenced_frame_rfh, url,
@@ -131,27 +123,11 @@ RenderFrameHost* FencedFrameTestHelper::NavigateFrameInFencedFrameTree(
 // static
 RenderFrameHost* FencedFrameTestHelper::GetMostRecentlyAddedFencedFrame(
     RenderFrameHost* rfh) {
-  if (blink::features::kFencedFramesImplementationTypeParam.Get() ==
-      blink::features::FencedFramesImplementationType::kMPArch) {
-    std::vector<FencedFrame*> fenced_frames =
-        static_cast<RenderFrameHostImpl*>(rfh)->GetFencedFrames();
-    if (fenced_frames.empty())
-      return nullptr;
-    return fenced_frames.back()->GetInnerRoot();
-  }
-  if (blink::features::kFencedFramesImplementationTypeParam.Get() ==
-      blink::features::FencedFramesImplementationType::kShadowDOM) {
-    RenderFrameHostImpl* parent_rfh = static_cast<RenderFrameHostImpl*>(rfh);
-    for (size_t i = 0, ff_index = parent_rfh->child_count() - 1;
-         i < parent_rfh->child_count(); ++i, --ff_index) {
-      RenderFrameHost* child_rfh =
-          parent_rfh->child_at(ff_index)->current_frame_host();
-      if (child_rfh->IsFencedFrameRoot())
-        return child_rfh;
-    }
+  std::vector<FencedFrame*> fenced_frames =
+      static_cast<RenderFrameHostImpl*>(rfh)->GetFencedFrames();
+  if (fenced_frames.empty())
     return nullptr;
-  }
-  return nullptr;
+  return fenced_frames.back()->GetInnerRoot();
 }
 
 GURL CreateFencedFrameURLMapping(RenderFrameHost* rfh, const GURL& url) {
@@ -159,7 +135,7 @@ GURL CreateFencedFrameURLMapping(RenderFrameHost* rfh, const GURL& url) {
       static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
   FencedFrameURLMapping& url_mapping =
       target_node->current_frame_host()->GetPage().fenced_frame_urls_map();
-  absl::optional<GURL> urn_uuid = url_mapping.AddFencedFrameURL(url);
+  absl::optional<GURL> urn_uuid = url_mapping.AddFencedFrameURLForTesting(url);
   EXPECT_TRUE(urn_uuid.has_value());
   EXPECT_TRUE(urn_uuid->is_valid());
   return urn_uuid.value();

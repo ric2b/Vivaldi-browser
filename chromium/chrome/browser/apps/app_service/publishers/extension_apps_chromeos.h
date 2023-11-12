@@ -9,7 +9,6 @@
 #include <set>
 #include <string>
 
-#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/apps/app_service/app_icon/icon_key_util.h"
 #include "chrome/browser/apps/app_service/app_notifications.h"
@@ -18,10 +17,10 @@
 #include "chrome/browser/apps/app_service/media_requests.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_base.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
@@ -76,6 +75,17 @@ class ExtensionAppsChromeOs : public ExtensionAppsBase,
 
   // ExtensionAppsBase overrides.
   void Initialize() override;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Requests a compressed icon data for an app identified by `app_id`. The icon
+  // is identified by `size_in_dip` and `scale_factor`. Calls `callback` with
+  // the result.
+  void GetCompressedIconData(const std::string& app_id,
+                             int32_t size_in_dip,
+                             ui::ResourceScaleFactor scale_factor,
+                             LoadIconCallback callback) override;
+#endif
+
   void LaunchAppWithParamsImpl(AppLaunchParams&& params,
                                LaunchCallback callback) override;
 
@@ -91,18 +101,8 @@ class ExtensionAppsChromeOs : public ExtensionAppsBase,
                     base::OnceCallback<void(MenuItems)> callback) override;
 
   // apps::mojom::Publisher overrides.
-  void LaunchAppWithIntent(const std::string& app_id,
-                           int32_t event_flags,
-                           apps::mojom::IntentPtr intent,
-                           apps::mojom::LaunchSource launch_source,
-                           apps::mojom::WindowInfoPtr window_info,
-                           LaunchAppWithIntentCallback callback) override;
   void PauseApp(const std::string& app_id) override;
   void UnpauseApp(const std::string& app_id) override;
-  void GetMenuModel(const std::string& app_id,
-                    apps::mojom::MenuType menu_type,
-                    int64_t display_id,
-                    GetMenuModelCallback callback) override;
 
   // Overridden from AppWindowRegistry::Observer:
   void OnAppWindowAdded(extensions::AppWindow* app_window) override;
@@ -193,7 +193,7 @@ class ExtensionAppsChromeOs : public ExtensionAppsBase,
                        IntentPtr intent,
                        LaunchSource launch_source,
                        WindowInfoPtr window_info,
-                       LaunchAppWithIntentCallback callback);
+                       LaunchCallback callback);
 
   apps::InstanceRegistry* const instance_registry_;
   base::ScopedObservation<extensions::AppWindowRegistry,

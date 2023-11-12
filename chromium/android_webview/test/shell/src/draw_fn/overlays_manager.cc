@@ -8,15 +8,20 @@
 
 #include "android_webview/public/browser/draw_fn.h"
 #include "android_webview/test/shell/src/draw_fn/allocator.h"
+#include "base/android/build_info.h"
 #include "base/android/jni_array.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 
 namespace draw_fn {
 namespace {
 
 bool AreOverlaysSupported() {
-  static bool supported = gfx::SurfaceControl::IsSupported();
+  static bool supported = gfx::SurfaceControl::IsSupported() &&
+                          (base::android::BuildInfo::GetInstance()->sdk_int() >=
+                           base::android::SDK_VERSION_S);
+
   return supported;
 }
 
@@ -51,21 +56,21 @@ class OverlaysManager::ScopedCurrentFunctorCall {
 
  private:
   ASurfaceControl* GetSurfaceControl() {
-    if (!functor_.overlay_surface) {
+    if (!functor_->overlay_surface) {
       DCHECK(native_window_);
-      functor_.overlay_surface =
+      functor_->overlay_surface =
           base::MakeRefCounted<gfx::SurfaceControl::Surface>(native_window_,
                                                              "webview_root");
     }
 
-    return functor_.overlay_surface->surface();
+    return functor_->overlay_surface->surface();
   }
 
   void MergeTransaction(ASurfaceTransaction* transaction) {
     gfx::SurfaceControl::ApplyTransaction(transaction);
   }
 
-  FunctorData& functor_;
+  const raw_ref<FunctorData> functor_;
   raw_ptr<ANativeWindow> native_window_;
 };
 

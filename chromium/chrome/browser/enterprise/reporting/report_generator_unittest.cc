@@ -31,8 +31,8 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/test/fake_app_instance.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -393,7 +393,11 @@ TEST_F(ReportGeneratorTest, GenerateBasicReport) {
   EXPECT_NE(std::string(), os_report.name());
   EXPECT_NE(std::string(), os_report.arch());
   EXPECT_NE(std::string(), os_report.version());
-#endif
+
+#if BUILDFLAG(IS_WIN)
+  EXPECT_TRUE(os_report.has_version_type());
+#endif  // BUILDFLAG(IS_WIN)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   EXPECT_EQ(
       0, basic_request->GetDeviceReportRequest().partial_report_types_size());
@@ -449,7 +453,11 @@ TEST_F(ReportGeneratorTest, GenerateWithoutProfiles) {
   EXPECT_NE(std::string(), os_report.name());
   EXPECT_NE(std::string(), os_report.arch());
   EXPECT_NE(std::string(), os_report.version());
-#endif
+
+#if BUILDFLAG(IS_WIN)
+  EXPECT_TRUE(os_report.has_version_type());
+#endif  // BUILDFLAG(IS_WIN)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   EXPECT_TRUE(basic_request->GetDeviceReportRequest().has_browser_report());
   auto& browser_report =

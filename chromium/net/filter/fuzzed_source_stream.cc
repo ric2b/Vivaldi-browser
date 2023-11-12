@@ -11,7 +11,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 
@@ -48,7 +49,7 @@ int FuzzedSourceStream::Read(IOBuffer* buf,
 
   if (sync) {
     if (result > 0) {
-      std::copy(data.data(), data.data() + data.size(), buf->data());
+      base::ranges::copy(data, buf->data());
     } else {
       end_returned_ = true;
     }
@@ -59,7 +60,7 @@ int FuzzedSourceStream::Read(IOBuffer* buf,
 
   read_pending_ = true;
   // |this| is owned by the caller so use base::Unretained is safe.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&FuzzedSourceStream::OnReadComplete,
                                 base::Unretained(this), std::move(callback),
                                 data, pending_read_buf, result));

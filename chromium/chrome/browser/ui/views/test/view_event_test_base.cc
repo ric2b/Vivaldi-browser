@@ -7,7 +7,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
@@ -23,10 +23,11 @@
 #if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_OZONE)
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
+    BUILDFLAG(IS_OZONE)
 #include "ui/views/test/test_desktop_screen_ozone.h"
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) &&
-        // defined(USE_OZONE)
+        // BUILDFLAG(IS_OZONE)
 #endif
 
 namespace {
@@ -99,7 +100,8 @@ ViewEventTestBase::ViewEventTestBase() {
   // insufficient for these tests, then either bolster/replace it or fix the
   // tests.
   DCHECK(!display::Screen::HasScreen());
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_OZONE)
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
+    BUILDFLAG(IS_OZONE)
   if (!display::Screen::HasScreen())
     screen_ = views::test::TestDesktopScreenOzone::Create();
 #endif
@@ -161,7 +163,7 @@ void ViewEventTestBase::StartMessageLoopAndRunTest() {
 
   // Schedule a task that starts the test. Need to do this as we're going to
   // run the message loop.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ViewEventTestBase::DoTestOnMessageLoop,
                                 base::Unretained(this)));
 
@@ -184,7 +186,7 @@ ViewEventTestBase::GetDragTaskRunner() {
   // platforms cannot be posted from background threads.  The nested drag
   // message loop on non-Windows does not filter out non-input events, so these
   // tasks will run.
-  return base::ThreadTaskRunnerHandle::Get();
+  return base::SingleThreadTaskRunner::GetCurrentDefault();
 #endif
 }
 

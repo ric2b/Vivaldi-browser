@@ -136,9 +136,7 @@ group("All") {
       "//ui/aura:aura_unittests",
       "//ui/compositor:compositor_unittests",
     ]
-    if (!is_chromecast) {
-      deps += [ "//ui/views:views_unittests" ]
-    }
+    deps += [ "//ui/views:views_unittests" ]
   }
   if (is_win && vivaldi_build_tests) {
     deps += ["//vivaldi/testing:testing"]
@@ -192,25 +190,6 @@ copy("standalone") {
 if (is_linux && !is_component_build) {
   group("linux_packages_all") {
     deps = [ "//chrome/installer/linux" ]
-  }
-}
-
-if (is_win && getenv("CHROME_HEADLESS") == "1") {
-  import("//build/toolchain/cc_wrapper.gni")
-
-  if (cc_wrapper != "") {
-    import("//vivaldi/gn/command_action.gni")
-
-    system_command("compile_cache_cleanup") {
-      testonly=true
-      deps = [":All"]
-
-      inputs = []
-      outputs = ["$root_gen_dir/vivaldi/compile_cache_cleanup.stamp"]
-
-      command = cc_wrapper
-      args = ["-c"]
-    }
   }
 }
 

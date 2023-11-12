@@ -73,20 +73,6 @@ void ClientControlledState::HandleTransitionEvents(WindowState* window_state,
     WindowStateType next_state_type =
         GetStateForTransitionEvent(window_state, event);
     delegate_->HandleWindowStateRequest(window_state, next_state_type);
-    WindowStateType old_state_type = state_type_;
-
-    bool was_pinned = window_state->IsPinned();
-    bool was_trusted_pinned = window_state->IsTrustedPinned();
-
-    set_next_bounds_change_animation_type(
-        WindowState::BoundsChangeAnimationType::kCrossFade);
-    EnterNextState(window_state, next_state_type);
-
-    VLOG(1) << "Processing Pinned Transition: event=" << event_type
-            << ", state=" << old_state_type << "=>" << next_state_type
-            << ", pinned=" << was_pinned << "=>" << window_state->IsPinned()
-            << ", trusted pinned=" << was_trusted_pinned << "=>"
-            << window_state->IsTrustedPinned();
     return;
   }
 
@@ -122,13 +108,6 @@ void ClientControlledState::AttachState(
     WindowState::State* state_in_previous_mode) {}
 
 void ClientControlledState::DetachState(WindowState* window_state) {}
-
-#if DCHECK_IS_ON()
-void ClientControlledState::CheckMaximizableCondition(
-    const WindowState* window_state) const {
-  // A client decides when the window should be maximizable.
-}
-#endif  // DCHECK_IS_ON()
 
 void ClientControlledState::HandleWorkspaceEvents(WindowState* window_state,
                                                   const WMEvent* event) {
@@ -292,10 +271,11 @@ bool ClientControlledState::EnterNextState(WindowState* window_state,
 
   if (IsPinnedWindowStateType(next_state_type) ||
       IsPinnedWindowStateType(previous_state_type)) {
+    set_next_bounds_change_animation_type(
+        WindowState::BoundsChangeAnimationType::kCrossFade);
     Shell::Get()->screen_pinning_controller()->SetPinnedWindow(
         window_state->window());
   }
-
   return true;
 }
 
@@ -347,7 +327,7 @@ void ClientControlledState::UpdateWindowForTransitionEvents(
                     static_cast<const WindowSnapWMEvent*>(event)->snap_ratio())
               : (is_restoring && window_state->snap_ratio().has_value()
                      ? window_state->snap_ratio().value()
-                     : kDefaultPositionRatio);
+                     : kDefaultSnapRatio);
       gfx::Rect bounds = GetSnappedWindowBoundsInParent(window, next_state_type,
                                                         snap_ratio_to_restore);
       // We don't want Unminimize() to restore the pre-snapped state during the

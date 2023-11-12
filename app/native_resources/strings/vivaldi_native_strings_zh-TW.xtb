@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">重新載入圖片(&amp;R)</translation>
 <translation id="1924750141060565109">風景 15</translation>
 <translation id="19598411548897379">一般</translation>
+<translation id="1973351931613083086">自動播放</translation>
 <translation id="1985669426322966465">軟體更新</translation>
 <translation id="2079036669923635404">按這裡升級為Vivaldi <ph name="VERSION" /> 版。</translation>
 <translation id="2141974047387702305">下載檔案時發生錯誤，請檢查你的網路連線並稍後再試。</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">垃圾桶</translation>
 <translation id="292258461174562431">怪獸 4</translation>
 <translation id="2923448633003185837">貼上並前往</translation>
+<translation id="2953943267837858202">不允許自動播放影音</translation>
 <translation id="2977472760057091832">在無痕視窗開啟連結</translation>
 <translation id="2989805286512600854">在新分頁開啟</translation>
 <translation id="3027988479108856431">真遺憾，您的 Yandex 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Yandex 視窗， 然後點擊繼續。</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">新增書籤</translation>
 <translation id="3255747772218936245">安裝更新</translation>
 <translation id="3259769196742189631">驗證</translation>
+<translation id="3291915639428159043">已封鎖的自動播放</translation>
 <translation id="3302905971452834934">怪獸 1</translation>
 <translation id="3334610655141903168">（無標題）</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" />現在是最新版本。</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">在新視窗開啟連結</translation>
 <translation id="3588820906588687999">在新分頁開啟圖片</translation>
 <translation id="3601066750251199488">怪獸 3</translation>
+<translation id="3620979700683094848">網站可以自動播放影音</translation>
 <translation id="3680031241659195730">有新版的 Vivaldi可以使用！</translation>
 <translation id="3708982624815781692">下載已被取消。</translation>
 <translation id="3732157130969736834">新增連結為書籤</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">不再顯示(&amp;D)</translation>
 <translation id="4074744496918018786">在無痕視窗開啟圖片</translation>
+<translation id="410351446219883937">自動播放</translation>
 <translation id="4324492550286218827">風景 2</translation>
 <translation id="4406101500523955324">在新無痕視窗開啟</translation>
 <translation id="4420816922321010053">您確定要結束 Vivaldi 嗎？</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">剪下</translation>
 <translation id="7727481996062361502">驗證更新中...</translation>
 <translation id="7793738202466490491">新增為行事曆行程</translation>
+<translation id="7834693436815575883">已允許的自動播放</translation>
 <translation id="7848222781052558334">驗證下載檔案的數位簽章失敗。</translation>
 <translation id="7865983598101744945">確認結束</translation>
 <translation id="7957213167373139414">我的行事曆</translation>
 <translation id="8027581147000338959">在新視窗開啟</translation>
+<translation id="8044382196220116469">不允許網站自動播放影音</translation>
 <translation id="8099620695029051217">複製頁面網址</translation>
 <translation id="8197810018650377191">新增現用頁面為書籤</translation>
 <translation id="8261506727792406068">刪除</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">檢查入口文件</translation>
 <translation id="8768970203213061953">風景 14</translation>
 <translation id="8773635261052182196">您將不再收到這些通知。您可以在 Vivaldi 設定中再次啟用。</translation>
+<translation id="8774017153185436870">網站可能會自動播放影音</translation>
 <translation id="8813277370772331957">稍後提醒我</translation>
 <translation id="8894900864683381599">新增連結至網頁面板</translation>
 <translation id="8912720443398351457">您確定要結束 Vivaldi 嗎？</translation>
 <translation id="8947109330183116400">選取 HTML 書籤檔案</translation>
 <translation id="9017566390391482291">選取 Vivaldi 設定檔資料夾以匯入</translation>
 <translation id="9048058608784130603">等待更新 <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">允許自動播放影音</translation>
 <translation id="9065203028668620118">編輯</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">開啟圖片為 <ph name="USER" /></translation>

@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
@@ -50,7 +49,7 @@ scoped_refptr<base::TaskRunner> CreatePrinterHandlerTaskRunner() {
       base::MayBlock(), base::TaskPriority::USER_VISIBLE};
 #endif
 
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
   // CUPS is thread safe.
   return base::ThreadPool::CreateTaskRunner(kTraits);
 #elif BUILDFLAG(IS_WIN)
@@ -253,8 +252,8 @@ void LocalPrinterHandlerDefault::GetDefaultPrinter(DefaultPrinterCallback cb) {
 #endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
 
   VLOG(1) << "Getting default printer in-process";
-  base::PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE,
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&GetDefaultPrinterAsync,
                      g_browser_process->GetApplicationLocale()),
       std::move(cb));
@@ -270,16 +269,16 @@ void LocalPrinterHandlerDefault::StartGetPrinters(
     VLOG(1) << "Enumerate printers start via service";
     PrintBackendServiceManager& service_mgr =
         PrintBackendServiceManager::GetInstance();
-    service_mgr.EnumeratePrinters(
-        base::BindOnce(&OnDidEnumeratePrinters, std::move(callback),
-                       std::move(done_callback)));
+    service_mgr.EnumeratePrinters(base::BindOnce(&OnDidEnumeratePrinters,
+                                                 std::move(callback),
+                                                 std::move(done_callback)));
     return;
   }
 #endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
 
   VLOG(1) << "Enumerate printers start in-process";
-  base::PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE,
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&EnumeratePrintersAsync,
                      g_browser_process->GetApplicationLocale()),
       base::BindOnce(&ConvertPrinterListForCallback, std::move(callback),
@@ -307,8 +306,8 @@ void LocalPrinterHandlerDefault::StartGetCapability(
 #endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
 
   VLOG(1) << "Getting printer capabilities in-process for " << device_name;
-  base::PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE,
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&FetchCapabilitiesAsync, device_name,
                      g_browser_process->GetApplicationLocale()),
       std::move(cb));

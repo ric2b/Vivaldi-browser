@@ -12,9 +12,12 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ref.h"
 #include "base/message_loop/message_pump.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/common/task_annotator.h"
+#include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/tasks.h"
 #include "base/task/task_features.h"
 #include "base/threading/hang_watcher.h"
@@ -51,15 +54,34 @@ BASE_FEATURE(kRunTasksByBatches,
              "RunTasksByBatches",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_WIN)
+// If enabled, deactivate the high resolution timer immediately in DoWork(),
+// instead of waiting for next DoIdleWork.
+BASE_FEATURE(kUseLessHighResTimers,
+             "UseLessHighResTimers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+std::atomic_bool g_use_less_high_res_timers = false;
+#endif
+
 std::atomic_bool g_align_wake_ups = false;
 std::atomic_bool g_run_tasks_by_batches = false;
+#if BUILDFLAG(IS_WIN)
+bool g_explicit_high_resolution_timer_win = false;
+#endif  // BUILDFLAG(IS_WIN)
 
 TimeTicks WakeUpRunTime(const WakeUp& wake_up) {
+  // Windows relies on the low resolution timer rather than manual wake up
+  // alignment.
+#if BUILDFLAG(IS_WIN)
+  if (g_explicit_high_resolution_timer_win)
+    return wake_up.earliest_time();
+#else  // BUILDFLAG(IS_WIN)
   if (g_align_wake_ups.load(std::memory_order_relaxed)) {
     TimeTicks aligned_run_time = wake_up.earliest_time().SnappedToNextTick(
-        TimeTicks(), base::GetTaskLeeway());
+        TimeTicks(), GetTaskLeewayForCurrentThread());
     return std::min(aligned_run_time, wake_up.latest_time());
   }
+#endif
   return wake_up.time;
 }
 
@@ -70,6 +92,12 @@ void ThreadControllerWithMessagePumpImpl::InitializeFeatures() {
   g_align_wake_ups = FeatureList::IsEnabled(kAlignWakeUps);
   g_run_tasks_by_batches.store(FeatureList::IsEnabled(kRunTasksByBatches),
                                std::memory_order_relaxed);
+#if BUILDFLAG(IS_WIN)
+  g_explicit_high_resolution_timer_win =
+      FeatureList::IsEnabled(kExplicitHighResolutionTimerWin);
+  g_use_less_high_res_timers.store(
+      FeatureList::IsEnabled(kUseLessHighResTimers), std::memory_order_relaxed);
+#endif
 }
 
 // static
@@ -219,7 +247,8 @@ void ThreadControllerWithMessagePumpImpl::InitializeThreadTaskRunnerHandle() {
   // so reset the old one.
   main_thread_only().thread_task_runner_handle.reset();
   main_thread_only().thread_task_runner_handle =
-      std::make_unique<ThreadTaskRunnerHandle>(task_runner_);
+      std::make_unique<SingleThreadTaskRunner::CurrentDefaultHandle>(
+          task_runner_);
   // When the task runner is known, bind the power manager. Power notifications
   // are received through that sequence.
   power_monitor_.BindToCurrentThread();
@@ -290,6 +319,15 @@ void ThreadControllerWithMessagePumpImpl::BeforeWait() {
 
 MessagePump::Delegate::NextWorkInfo
 ThreadControllerWithMessagePumpImpl::DoWork() {
+#if BUILDFLAG(IS_WIN)
+  // We've been already in a wakeup here. Deactivate the high res timer of OS
+  // immediately instead of waiting for next DoIdleWork().
+  if (g_use_less_high_res_timers.load(std::memory_order_relaxed) &&
+      main_thread_only().in_high_res_mode) {
+    main_thread_only().in_high_res_mode = false;
+    Time::ActivateHighResolutionTimer(false);
+  }
+#endif
   MessagePump::Delegate::NextWorkInfo next_work_info{};
 
   work_deduplicator_.OnWorkStarted();
@@ -418,8 +456,8 @@ WorkDetails ThreadControllerWithMessagePumpImpl::DoWorkImpl(
                                                        select_task_option);
     LazyNow lazy_now_task_selected(time_source_);
     run_level_tracker_.OnApplicationTaskSelected(
-        (selected_task && selected_task->task.delayed_run_time.is_null())
-            ? selected_task->task.queue_time
+        (selected_task && selected_task->task->delayed_run_time.is_null())
+            ? selected_task->task->queue_time
             : TimeTicks(),
         lazy_now_task_selected);
     if (!selected_task) {
@@ -436,17 +474,23 @@ WorkDetails ThreadControllerWithMessagePumpImpl::DoWorkImpl(
     // See https://crbug.com/681863 and https://crbug.com/874982
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "RunTask");
 
-    // Note: all arguments after task are just passed to a TRACE_EVENT for
-    // logging so lambda captures are safe as lambda is executed inline.
-    task_annotator_.RunTask("ThreadControllerImpl::RunTask",
-                            selected_task->task,
-                            [&selected_task](perfetto::EventContext& ctx) {
-                              if (selected_task->task_execution_trace_logger)
-                                selected_task->task_execution_trace_logger.Run(
-                                    ctx, selected_task->task);
-                              SequenceManagerImpl::MaybeEmitTaskDetails(
-                                  ctx, selected_task.value());
-                            });
+    {
+      // Always track the start of the task, as this is low-overhead.
+      TaskAnnotator::LongTaskTracker long_task_tracker(
+          time_source_, *selected_task->task, &task_annotator_);
+
+      // Note: all arguments after task are just passed to a TRACE_EVENT for
+      // logging so lambda captures are safe as lambda is executed inline.
+      task_annotator_.RunTask(
+          "ThreadControllerImpl::RunTask", *selected_task->task,
+          [&selected_task](perfetto::EventContext& ctx) {
+            if (selected_task->task_execution_trace_logger)
+              selected_task->task_execution_trace_logger.Run(
+                  ctx, *selected_task->task);
+            SequenceManagerImpl::MaybeEmitTaskDetails(ctx,
+                                                      selected_task.value());
+          });
+    }
 
     LazyNow lazy_now_after_run_task(time_source_);
     main_thread_only().task_source->DidRunTask(lazy_now_after_run_task);
@@ -496,12 +540,12 @@ bool ThreadControllerWithMessagePumpImpl::DoIdleWork() {
 
     // Very last step before going idle, must be fast as this is hidden from the
     // DoIdleWork trace event below.
-    ~OnIdle() { run_level_tracker.OnIdle(lazy_now); }
+    ~OnIdle() { run_level_tracker->OnIdle(lazy_now); }
 
     LazyNow lazy_now;
 
    private:
-    RunLevelTracker& run_level_tracker;
+    const raw_ref<RunLevelTracker> run_level_tracker;
   };
   absl::optional<OnIdle> on_idle;
 

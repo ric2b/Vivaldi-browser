@@ -27,6 +27,11 @@
 
 #include <limits>
 #include "third_party/blink/renderer/platform/image-decoders/segment_stream.h"
+#include "third_party/skia/include/codec/SkCodec.h"
+#include "third_party/skia/include/codec/SkCodecAnimation.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
+#include "third_party/skia/include/core/SkColorType.h"
+#include "third_party/skia/include/core/SkEncodedImageFormat.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 
 namespace blink {
@@ -58,6 +63,11 @@ GIFImageDecoder::GIFImageDecoder(AlphaOption alpha_option,
                    max_decoded_bytes) {}
 
 GIFImageDecoder::~GIFImageDecoder() = default;
+
+const AtomicString& GIFImageDecoder::MimeType() const {
+  DEFINE_STATIC_LOCAL(const AtomicString, gif_mime_type, ("image/gif"));
+  return gif_mime_type;
+}
 
 void GIFImageDecoder::OnSetData(SegmentReader* data) {
   if (!data) {

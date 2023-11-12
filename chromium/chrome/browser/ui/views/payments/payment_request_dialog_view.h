@@ -68,8 +68,6 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
 
     virtual void OnShippingOptionSectionOpened() = 0;
 
-    virtual void OnCreditCardEditorOpened() = 0;
-
     virtual void OnShippingAddressEditorOpened() = 0;
 
     virtual void OnContactInfoEditorOpened() = 0;
@@ -84,13 +82,13 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
 
     virtual void OnSpecDoneUpdating() = 0;
 
-    virtual void OnCvcPromptShown() = 0;
-
     virtual void OnProcessingSpinnerShown() = 0;
 
     virtual void OnProcessingSpinnerHidden() = 0;
 
     virtual void OnPaymentHandlerWindowOpened() = 0;
+
+    virtual void OnPaymentHandlerTitleSet() = 0;
   };
 
   PaymentRequestDialogView(const PaymentRequestDialogView&) = delete;
@@ -177,6 +175,10 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // handler window is currently showing.
   int GetActualDialogWidth() const;
 
+  // Called when a PaymentHandler dialog detects a title being set from the
+  // underlying WebContents.
+  void OnPaymentHandlerTitleSet();
+
   ViewStack* view_stack_for_testing() { return view_stack_; }
   ControllerMap* controller_map_for_testing() { return &controller_map_; }
   views::View* throbber_overlay_for_testing() { return throbber_overlay_; }
@@ -204,7 +206,7 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // The PaymentRequest object that initiated this dialog.
   base::WeakPtr<PaymentRequest> request_;
   ControllerMap controller_map_;
-  raw_ptr<ViewStack> view_stack_;
+  raw_ptr<ViewStack, DanglingUntriaged> view_stack_;
 
   // A full dialog overlay that shows a spinner and the "processing" label. It's
   // hidden until ShowProcessingSpinner is called.

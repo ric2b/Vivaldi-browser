@@ -156,7 +156,7 @@ AXNodePosition::AXPositionInstance TestAXNodeWrapper::CreatePositionAt(
   if (node_->IsLeaf()) {
     return AXNodePosition::CreateTextPosition(*node_, offset, affinity);
   }
-  return AXNodePosition::CreateTreePosition(*tree_, *node_, offset);
+  return AXNodePosition::CreateTreePosition(*node_, offset);
 }
 
 AXNodePosition::AXPositionInstance TestAXNodeWrapper::CreateTextPositionAt(
@@ -464,10 +464,6 @@ void TestAXNodeWrapper::ReplaceTreeDataTextSelection(int32_t anchor_node_id,
   new_tree_data.sel_focus_offset = focus_offset;
 
   tree_->UpdateDataForTesting(new_tree_data);
-}
-
-bool TestAXNodeWrapper::IsTable() const {
-  return node_->IsTable();
 }
 
 absl::optional<int> TestAXNodeWrapper::GetTableRowCount() const {
@@ -868,13 +864,13 @@ bool TestAXNodeWrapper::HasVisibleCaretOrSelection() const {
   return node_->HasVisibleCaretOrSelection();
 }
 
-std::set<AXPlatformNode*> TestAXNodeWrapper::GetReverseRelations(
+std::set<AXPlatformNode*> TestAXNodeWrapper::GetSourceNodesForReverseRelations(
     ax::mojom::IntAttribute attr) {
   DCHECK(IsNodeIdIntAttribute(attr));
   return GetNodesForNodeIds(tree_->GetReverseRelations(attr, GetData().id));
 }
 
-std::set<AXPlatformNode*> TestAXNodeWrapper::GetReverseRelations(
+std::set<AXPlatformNode*> TestAXNodeWrapper::GetSourceNodesForReverseRelations(
     ax::mojom::IntListAttribute attr) {
   DCHECK(IsNodeIdIntListAttribute(attr));
   return GetNodesForNodeIds(tree_->GetReverseRelations(attr, GetData().id));

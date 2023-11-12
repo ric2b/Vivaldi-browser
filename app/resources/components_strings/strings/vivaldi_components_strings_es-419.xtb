@@ -25,7 +25,6 @@
 <translation id="2166378884831602661">Este sitio no puede proporcionar una conexión segura</translation>
 <translation id="2187317261103489799">Detectar (predeterminado)</translation>
 <translation id="2224337661447660594">Sin internet</translation>
-<translation id="2230458221926704099">Corrija su conexión con la <ph name="BEGIN_LINK" />aplicación de diagnóstico<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Se bloqueó tu acceso a Internet</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
 <translation id="2337852623177822836">Configuración controlada por tu administrador</translation>
@@ -145,7 +144,6 @@
 <translation id="6451458296329894277">Confirmar reenvío del formulario</translation>
 <translation id="6569060085658103619">Estás viendo la página de una extensión</translation>
 <translation id="6657585470893396449">Contraseña</translation>
-<translation id="6685834062052613830">Salir y completar la configuración</translation>
 <translation id="6711464428925977395">Hay un error en el servidor proxy o la dirección es incorrecta.</translation>
 <translation id="6757797048963528358">El ordenador entró en suspensión.</translation>
 <translation id="6897140037006041989">User agent</translation>

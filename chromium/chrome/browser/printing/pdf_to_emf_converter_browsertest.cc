@@ -142,7 +142,8 @@ class PdfToEmfConverterBrowserTest : public InProcessBrowserTest {
     if (pdf_data_str.empty())
       return false;
 
-    test_input_ = base::RefCountedString::TakeString(&pdf_data_str);
+    test_input_ =
+        base::MakeRefCounted<base::RefCountedString>(std::move(pdf_data_str));
     return true;
   }
 
@@ -468,6 +469,28 @@ IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest, PostScriptLevel3Image) {
       PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3);
   RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "embedded_images.pdf",
                                             "embedded_images_ps_level3.emf");
+}
+
+// Regression test for crbug.com/1399155.
+IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
+                       PostScriptLevel2FaxCompress) {
+  const PdfRenderSettings pdf_settings(
+      kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
+      /*autorotate=*/false, /*use_color=*/true,
+      PdfRenderSettings::Mode::POSTSCRIPT_LEVEL2);
+  RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "bug_1399155.pdf",
+                                            "bug_1399155.emf");
+}
+
+// Regression test for crbug.com/1399155.
+IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
+                       PostScriptLevel3FaxCompress) {
+  const PdfRenderSettings pdf_settings(
+      kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
+      /*autorotate=*/false, /*use_color=*/true,
+      PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3);
+  RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "bug_1399155.pdf",
+                                            "bug_1399155.emf");
 }
 
 }  // namespace printing

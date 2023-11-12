@@ -72,6 +72,9 @@ BASE_DECLARE_FEATURE(kSyncExtensionTypesThrottling);
 
 BASE_DECLARE_FEATURE(kSyncResetPollIntervalOnStart);
 
+// If enabled, Segmentation data type will be synced.
+BASE_DECLARE_FEATURE(kSyncSegmentationDataType);
+
 // If enabled, interested data types, excluding Wallet and Offer, will be sent
 // to the Sync Server as part of DeviceInfo.
 BASE_DECLARE_FEATURE(kSyncSendInterestedDataTypes);
@@ -100,11 +103,6 @@ inline constexpr base::FeatureParam<base::TimeDelta>
         &kSyncTrustedVaultPeriodicDegradedRecoverabilityPolling,
         "kSyncTrustedVaultShortPeriodDegradedRecoverabilityPolling",
         base::Hours(1)};
-
-#if BUILDFLAG(IS_IOS)
-// Whether RPC is enabled.
-BASE_DECLARE_FEATURE(kSyncTrustedVaultPassphraseiOSRPC);
-#endif  // BUILDFLAG(IS_IOS)
 
 // Whether the entry point to opt in to trusted vault in settings should be
 // shown.
@@ -142,6 +140,12 @@ BASE_DECLARE_FEATURE(kSyncTrustedVaultUseMD5HashedFile);
 // SyncSendInterestedDataTypes must be enabled for this to take effect.
 BASE_DECLARE_FEATURE(kUseSyncInvalidations);
 
+// If enabled, all incoming invalidations will be stored in ModelTypeState
+// proto message.
+// TODO(crbug/1365292): Add more information about this feature after
+// upload/download invalidations support from ModelTypeState msg will be added.
+BASE_DECLARE_FEATURE(kSyncPersistInvalidations);
+
 // If enabled, types related to Wallet and Offer will be included in interested
 // data types, and the device will listen to new invalidations for those types
 // (if they are enabled).
@@ -154,16 +158,27 @@ BASE_DECLARE_FEATURE(kUseSyncInvalidationsForWalletAndOffer);
 // DeviceInfo has been updated.
 BASE_DECLARE_FEATURE(kSkipInvalidationOptimizationsWhenDeviceInfoUpdated);
 
-#if BUILDFLAG(IS_IOS)
-// Returns whether RPC is enabled.
-bool IsSyncTrustedVaultPassphraseiOSRPCEnabled();
-#endif  // BUILDFLAG(IS_IOS)
-
+// If enabled, the HISTORY data type replaces TYPED_URLS.
 BASE_DECLARE_FEATURE(kSyncEnableHistoryDataType);
+inline constexpr base::FeatureParam<int>
+    kSyncHistoryForeignVisitsToDeletePerBatch{
+        &kSyncEnableHistoryDataType, "foreign_visit_deletions_per_batch", 100};
 
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataType);
 
 BASE_DECLARE_FEATURE(kSyncPauseUponAnyPersistentAuthError);
+
+// If enabled, issues error and disables bookmarks sync when limit is crossed.
+BASE_DECLARE_FEATURE(kSyncEnforceBookmarksCountLimit);
+
+// If enabled, Sync will not use a primary account that doesn't have a refresh
+// token. (This state should only ever occur temporarily during signout.)
+BASE_DECLARE_FEATURE(kSyncIgnoreAccountWithoutRefreshToken);
+
+// Enabled by default, it acts as a kill switch for a newly-introduced logic,
+// which implies that DataTypeManager (and hence individual datatypes) won't be
+// notified about browser shutdown.
+BASE_DECLARE_FEATURE(kSyncDoNotPropagateBrowserShutdownToDataTypes);
 
 }  // namespace syncer
 

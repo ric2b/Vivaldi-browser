@@ -94,7 +94,6 @@ class ReportQueueImplTest : public testing::Test {
   std::unique_ptr<ReportQueue> report_queue_;
   base::OnceCallback<void(Status)> callback_;
 
- private:
   const std::string dm_token_;
   const Destination destination_;
   scoped_refptr<StorageModuleInterface> storage_module_;
@@ -145,6 +144,40 @@ TEST_F(ReportQueueImplTest, SuccessfulProtoRecord) {
   EXPECT_OK(a_result) << a_result;
 
   EXPECT_THAT(test_storage_module()->priority(), Eq(priority_));
+
+  test::TestMessage result_message;
+  ASSERT_TRUE(
+      result_message.ParseFromString(test_storage_module()->record().data()));
+  ASSERT_EQ(result_message.test(), test_message.test());
+}
+
+TEST_F(ReportQueueImplTest, SuccessfulProtoRecordWithReservedSpace) {
+  static constexpr int64_t kReservedSpace = 12345L;
+  StatusOr<std::unique_ptr<ReportQueueConfiguration>> config_result =
+      ReportQueueConfiguration::Create(dm_token_, destination_,
+                                       policy_check_callback_, kReservedSpace);
+
+  ASSERT_OK(config_result) << config_result.status();
+
+  test::TestEvent<StatusOr<std::unique_ptr<ReportQueue>>> report_queue_event;
+  ReportQueueImpl::Create(std::move(config_result.ValueOrDie()),
+                          storage_module_, report_queue_event.cb());
+  auto report_queue_result = report_queue_event.result();
+  ASSERT_OK(report_queue_result) << report_queue_result.status();
+
+  report_queue_ = std::move(report_queue_result.ValueOrDie());
+
+  test::TestMessage test_message;
+  test_message.set_test(kTestMessage);
+  test::TestEvent<Status> a;
+  report_queue_->Enqueue(std::make_unique<test::TestMessage>(test_message),
+                         priority_, a.cb());
+  const auto a_result = a.result();
+  EXPECT_OK(a_result) << a_result;
+
+  EXPECT_THAT(test_storage_module()->priority(), Eq(priority_));
+  EXPECT_THAT(test_storage_module()->record().reserved_space(),
+              Eq(kReservedSpace));
 
   test::TestMessage result_message;
   ASSERT_TRUE(
@@ -256,7 +289,8 @@ TEST_F(ReportQueueImplTest, SuccessfulSpeculativeStringRecord) {
                                     a.cb());
 
   // Enqueue would not end until actual queue is attached.
-  speculative_report_queue->AttachActualQueue(std::move(report_queue_));
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      std::move(report_queue_));
   const auto a_result = a.result();
   EXPECT_OK(a_result) << a_result;
 
@@ -267,12 +301,51 @@ TEST_F(ReportQueueImplTest, SuccessfulSpeculativeStringRecord) {
   EXPECT_THAT(test_storage_module()->record().data(), StrEq(kTestString));
 }
 
+TEST_F(ReportQueueImplTest,
+       SuccessfulSpeculativeStringRecordWithReservedSpace) {
+  static constexpr int64_t kReservedSpace = 12345L;
+  StatusOr<std::unique_ptr<ReportQueueConfiguration>> config_result =
+      ReportQueueConfiguration::Create(dm_token_, destination_,
+                                       policy_check_callback_, kReservedSpace);
+
+  ASSERT_OK(config_result) << config_result.status();
+
+  test::TestEvent<StatusOr<std::unique_ptr<ReportQueue>>> report_queue_event;
+  ReportQueueImpl::Create(std::move(config_result.ValueOrDie()),
+                          storage_module_, report_queue_event.cb());
+  auto report_queue_result = report_queue_event.result();
+  ASSERT_OK(report_queue_result) << report_queue_result.status();
+
+  report_queue_ = std::move(report_queue_result.ValueOrDie());
+
+  static constexpr char kTestString[] = "El-Chupacabra";
+  test::TestEvent<Status> a;
+  auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
+  speculative_report_queue->Enqueue(std::string(kTestString), priority_,
+                                    a.cb());
+
+  // Enqueue would not end until actual queue is attached.
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      std::move(report_queue_));
+  const auto a_result = a.result();
+  EXPECT_OK(a_result) << a_result;
+
+  // Let everything ongoing to finish.
+  task_environment_.RunUntilIdle();
+
+  EXPECT_THAT(test_storage_module()->priority(), Eq(priority_));
+  EXPECT_THAT(test_storage_module()->record().data(), StrEq(kTestString));
+  EXPECT_THAT(test_storage_module()->record().reserved_space(),
+              Eq(kReservedSpace));
+}
+
 TEST_F(ReportQueueImplTest, SpeculativeQueueMultipleRecordsAfterCreation) {
   static constexpr char kTestString1[] = "record1";
   static constexpr char kTestString2[] = "record2";
   auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
 
-  speculative_report_queue->AttachActualQueue(std::move(report_queue_));
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      std::move(report_queue_));
   // Let everything ongoing to finish.
   task_environment_.RunUntilIdle();
 
@@ -297,37 +370,42 @@ TEST_F(ReportQueueImplTest, SpeculativeQueueCreationFailedToCreate) {
   static constexpr char kTestString[] = "record";
   test::TestEvent<Status> test_event;
 
-  auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
+  {
+    auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
 
-  auto attach_cb = speculative_report_queue->PrepareToAttachActualQueue();
-  std::move(attach_cb).Run(Status(error::UNKNOWN, "Failed for Test"));
+    // Fail to attach queue before calling `Enqueue`.
+    speculative_report_queue->PrepareToAttachActualQueue().Run(
+        Status(error::UNKNOWN, "Failed for Test"));
+    task_environment_.RunUntilIdle();  // Let `AttachActualQueue` finish.
 
-  speculative_report_queue->Enqueue(kTestString, Priority::IMMEDIATE,
-                                    test_event.cb());
+    speculative_report_queue->Enqueue(kTestString, Priority::IMMEDIATE,
+                                      test_event.cb());
+  }  // Destructs `speculative_report_queue` now, fails all pending Enqueues.
 
   // Unfulfilled pending Enqueue returns the queue failure status.
   const auto result = test_event.result();
   ASSERT_FALSE(result.ok());
-  EXPECT_THAT(result.code(), Eq(error::UNKNOWN));
+  EXPECT_THAT(result.code(), Eq(error::DATA_LOSS)) << result;
 }
 
-TEST_F(ReportQueueImplTest, SpeculativeQueueDeletedAfterQneueue) {
+TEST_F(ReportQueueImplTest, SpeculativeQueueEnqueueAndCreationFailed) {
   static constexpr char kTestString[] = "record";
   test::TestEvent<Status> test_event;
-  {
-    auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
 
-    auto attach_cb = speculative_report_queue->PrepareToAttachActualQueue();
-    std::move(attach_cb).Run(Status(error::UNKNOWN, "Failed for Test"));
+  auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
 
-    speculative_report_queue->Enqueue(kTestString, Priority::IMMEDIATE,
-                                      test_event.cb());
-  }
+  speculative_report_queue->Enqueue(kTestString, Priority::IMMEDIATE,
+                                    test_event.cb());
 
-  // Queue destructed, unfulfilled pending Enqueue returns a data loss.
+  // Fail to attach queue after calling `Enqueue`.
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      Status(error::UNKNOWN, "Failed for Test"));
+  task_environment_.RunUntilIdle();  // Let `AttachActualQueue` finish.
+
+  // Unfulfilled pending Enqueue returns the queue failure status.
   const auto result = test_event.result();
   ASSERT_FALSE(result.ok());
-  EXPECT_THAT(result.code(), Eq(error::DATA_LOSS));
+  EXPECT_THAT(result.code(), Eq(error::UNKNOWN)) << result;
 }
 
 TEST_F(ReportQueueImplTest, EnqueueRecordWithInvalidPriority) {
@@ -345,7 +423,8 @@ TEST_F(ReportQueueImplTest, FlushSpeculativeReportQueue) {
 
   // Set up speculative report queue
   auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
-  speculative_report_queue->AttachActualQueue(std::move(report_queue_));
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      std::move(report_queue_));
   task_environment_.RunUntilIdle();
 
   EXPECT_CALL(*test_storage_module(), Flush(Eq(priority_), _))
@@ -373,16 +452,19 @@ TEST_F(ReportQueueImplTest, FlushUninitializedSpeculativeReportQueue) {
 TEST_F(ReportQueueImplTest, FlushFailedSpeculativeReportQueue) {
   test::TestEvent<Status> event;
 
-  auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
-  auto attach_cb = speculative_report_queue->PrepareToAttachActualQueue();
-  std::move(attach_cb).Run(Status(error::UNKNOWN, "Failing for Test"));
-  task_environment_.RunUntilIdle();
+  {
+    auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
 
-  speculative_report_queue->Flush(priority_, event.cb());
+    speculative_report_queue->PrepareToAttachActualQueue().Run(
+        Status(error::UNKNOWN, "Failed for Test"));
+    task_environment_.RunUntilIdle();  // Let `AttachActualQueue` finish.
+
+    speculative_report_queue->Flush(priority_, event.cb());
+  }  // Destructs speculative
 
   const auto result = event.result();
   ASSERT_FALSE(result.ok());
-  EXPECT_THAT(result.error_code(), Eq(error::FAILED_PRECONDITION));
+  EXPECT_THAT(result.error_code(), Eq(error::FAILED_PRECONDITION)) << result;
 }
 
 TEST_F(ReportQueueImplTest, AsyncProcessingReportQueue) {
@@ -449,7 +531,8 @@ TEST_F(ReportQueueImplTest, AsyncProcessingSpeculativeReportQueue) {
                          ReportQueue::EnqueueCallback cb) {
         std::move(cb).Run(Status::StatusOK());
       });
-  speculative_report_queue->AttachActualQueue(std::move(mock_queue));
+  speculative_report_queue->PrepareToAttachActualQueue().Run(
+      std::move(mock_queue));
 
   const auto a_string_result = a_string.result();
   EXPECT_OK(a_string_result) << a_string_result;

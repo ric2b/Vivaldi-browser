@@ -6,6 +6,8 @@
 
 #include <limits>
 
+#include "build/build_config.h"
+
 namespace printing {
 
 // True if this is the first preview request.
@@ -19,6 +21,12 @@ const char kPreviewUIID[] = "previewUIID";
 
 // Capabilities option. Contains the capabilities in CDD format.
 const char kSettingCapabilities[] = "capabilities";
+
+#if BUILDFLAG(IS_CHROMEOS)
+// If set, contains OAuth token that must be used during communication with the
+// printer.
+const char kSettingChromeOSAccessOAuthToken[] = "chromeos-access-oauth-token";
+#endif
 
 // Print job setting 'collate'.
 const char kSettingCollate[] = "collate";
@@ -229,7 +237,7 @@ const char kSettingOpenPDFInPreview[] = "openPDFInPreview";
 const uint32_t kInvalidPageIndex = std::numeric_limits<int>::max();
 const uint32_t kMaxPageCount = std::numeric_limits<int>::max();
 
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
 const char kBlack[] = "Black";
 const char kCMYK[] = "CMYK";
 const char kKCMY[] = "KCMY";

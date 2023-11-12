@@ -6,7 +6,6 @@ package org.chromium.ui.base;
 
 import android.content.ClipData;
 import android.graphics.Bitmap;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
@@ -18,14 +17,12 @@ import android.view.inputmethod.InputConnection;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.MarginLayoutParamsCompat;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.dragdrop.DragAndDropDelegateImpl;
 import org.chromium.ui.dragdrop.DragStateTracker;
@@ -251,12 +248,8 @@ public class ViewAndroidDelegate {
      * @param shadowImage The shadow image for the dragged text.
      * @param dropData The drop data presenting the drag target.
      */
-    @SuppressWarnings("deprecation")
-    @RequiresApi(Build.VERSION_CODES.N)
     @CalledByNative
     private boolean startDragAndDrop(Bitmap shadowImage, DropDataAndroid dropData) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) return false;
-
         ViewGroup containerView = getContainerViewGroup();
         if (containerView == null) return false;
 
@@ -266,18 +259,13 @@ public class ViewAndroidDelegate {
     @VisibleForTesting
     @CalledByNative
     public void onCursorChangedToCustom(Bitmap customCursorBitmap, int hotspotX, int hotspotY) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            PointerIcon icon =
-                    ApiHelperForN.createPointerIcon(customCursorBitmap, hotspotX, hotspotY);
-            ApiHelperForN.setPointerIcon(getContainerViewGroup(), icon);
-        }
+        PointerIcon icon = PointerIcon.create(customCursorBitmap, hotspotX, hotspotY);
+        getContainerViewGroup().setPointerIcon(icon);
     }
 
     @VisibleForTesting
     @CalledByNative
     public void onCursorChanged(int cursorType) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
-
         // Allow stylus writing handler to override the cursor.
         if (mHoverActionStylusWritable && mStylusWritingCursorHandler != null
                 && mStylusWritingCursorHandler.didHandleCursorUpdate(getContainerViewGroup())) {
@@ -407,7 +395,7 @@ public class ViewAndroidDelegate {
         }
         ViewGroup containerView = getContainerViewGroup();
         PointerIcon icon = PointerIcon.getSystemIcon(containerView.getContext(), pointerIconType);
-        ApiHelperForN.setPointerIcon(containerView, icon);
+        containerView.setPointerIcon(icon);
     }
 
     @CalledByNative

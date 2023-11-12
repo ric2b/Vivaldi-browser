@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.compositor.layouts.components;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.RectF;
+import android.util.FloatProperty;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.layouts.animation.FloatProperty;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 
 /**
@@ -64,6 +64,7 @@ public class CompositorButton implements VirtualView {
     private final CompositorOnClickHandler mClickHandler;
 
     protected int mResource;
+    protected int mBackgroundResource;
 
     private int mPressedResource;
     private int mIncognitoResource;

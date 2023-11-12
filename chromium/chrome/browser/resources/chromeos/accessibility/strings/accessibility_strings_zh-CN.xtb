@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">当前时间</translation>
 <translation id="1161762950103988776">跳转</translation>
 <translation id="1164857107703583584">跳转命令可用于在网页中高效导航。</translation>
+<translation id="116896278675803795">自动更改语言以匹配所选内容</translation>
 <translation id="1175914831232945926">数字</translation>
 <translation id="1188858454923323853">补充内容</translation>
 <translation id="1189258430971676908">练习区：下拉列表</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">上一个表单字段</translation>
 <translation id="3393605254399152980">拖动 1 根手指即可听取您所触摸的内容</translation>
 <translation id="3406283310380167331">显示表单列表</translation>
+<translation id="3407726812456125464">朗读所选文字</translation>
 <translation id="3414400929511680526">爱丽丝蓝色</translation>
 <translation id="3418936350470374046">下方没有单元格</translation>
 <translation id="3419269701801640163">粘贴</translation>

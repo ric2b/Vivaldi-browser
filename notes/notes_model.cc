@@ -125,14 +125,12 @@ void NotesModel::DoneLoading(std::unique_ptr<NoteLoadDetails> details) {
   other_node_ = details->other_notes_node();
   trash_node_ = details->trash_notes_node();
 
-  if (synced_file_store_) {
-    if (synced_file_store_->IsLoaded())
-      OnSyncedFilesStoreLoaded(std::move(details));
-    else
-      synced_file_store_->AddOnLoadedCallback(
-          base::BindOnce(&NotesModel::OnSyncedFilesStoreLoaded,
-                         weak_factory_.GetWeakPtr(), std::move(details)));
-  }
+  if (!synced_file_store_ || synced_file_store_->IsLoaded())
+    OnSyncedFilesStoreLoaded(std::move(details));
+  else
+    synced_file_store_->AddOnLoadedCallback(
+        base::BindOnce(&NotesModel::OnSyncedFilesStoreLoaded,
+                       weak_factory_.GetWeakPtr(), std::move(details)));
 }
 
 void NotesModel::OnSyncedFilesStoreLoaded(
@@ -367,7 +365,7 @@ const NoteNode* NotesModel::AddAttachmentFromChecksum(
     nodes_ordered_by_url_set_.insert(new_node.get());
   }
 
-  synced_file_store_->AddLocalFileRef(new_node->guid(), syncer::NOTES,
+  synced_file_store_->SetLocalFileRef(new_node->guid(), syncer::NOTES,
                                       checksum);
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
@@ -402,7 +400,7 @@ const NoteNode* NotesModel::AddAttachment(
     nodes_ordered_by_url_set_.insert(new_node.get());
   }
 
-  std::string checksum = synced_file_store_->AddLocalFile(
+  std::string checksum = synced_file_store_->SetLocalFile(
       new_node->guid(), syncer::NOTES, std::move(content));
   new_node->SetContent(base::ASCIIToUTF16(checksum));
   return AddNode(AsMutable(parent), index, std::move(new_node));

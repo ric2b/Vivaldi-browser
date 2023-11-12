@@ -53,11 +53,14 @@ class FixedBrowsingTopicsService
   FixedBrowsingTopicsService() = default;
   ~FixedBrowsingTopicsService() override = default;
 
-  std::vector<blink::mojom::EpochTopicPtr> GetBrowsingTopicsForJsApi(
+  bool HandleTopicsWebApi(
       const url::Origin& context_origin,
       content::RenderFrameHost* main_frame,
-      bool observe) override {
-    return {};
+      ApiCallerSource caller_source,
+      bool get_topics,
+      bool observe,
+      std::vector<blink::mojom::EpochTopicPtr>& topics) override {
+    return false;
   }
 
   void GetBrowsingTopicsStateForWebUi(
@@ -67,11 +70,6 @@ class FixedBrowsingTopicsService
     DCHECK(result_override_);
 
     std::move(callback).Run(result_override_->Clone());
-  }
-
-  std::vector<privacy_sandbox::CanonicalTopic> GetTopicsForSiteForDisplay(
-      const url::Origin& top_origin) const override {
-    return {};
   }
 
   std::vector<privacy_sandbox::CanonicalTopic> GetTopTopicsForDisplay()
@@ -281,6 +279,7 @@ class BrowsingTopicsDisabledInternalsBrowserTest
             privacy_sandbox::kPrivacySandboxSettings3,
             optimization_guide::features::kPageContentAnnotations,
             optimization_guide::features::kPageContentAnnotationsValidation,
+            optimization_guide::features::kRemotePageMetadata,
         });
   }
 
@@ -395,8 +394,10 @@ class BrowsingTopicsInternalsBrowserTest
 
     auto page_content_annotations_service =
         std::make_unique<optimization_guide::PageContentAnnotationsService>(
-            "en-US", optimization_guide_model_providers_.at(profile).get(),
-            history_service, nullptr, base::FilePath(), nullptr, nullptr);
+            nullptr, "en-US",
+            optimization_guide_model_providers_.at(profile).get(),
+            history_service, nullptr, nullptr, nullptr, base::FilePath(),
+            nullptr, nullptr);
 
     page_content_annotations_service->OverridePageContentAnnotatorForTesting(
         &test_page_content_annotator_);

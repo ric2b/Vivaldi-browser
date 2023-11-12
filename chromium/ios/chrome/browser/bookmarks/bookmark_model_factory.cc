@@ -21,6 +21,8 @@
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 
+#include "ios/sync/file_store_factory.h"
+
 namespace ios {
 
 namespace {
@@ -33,6 +35,8 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(web::BrowserState* context) {
           browser_state,
           ManagedBookmarkServiceFactory::GetForBrowserState(browser_state),
           ios::BookmarkSyncServiceFactory::GetForBrowserState(browser_state))));
+  bookmark_model->set_vivaldi_synced_file_store(
+      SyncedFileStoreFactory::GetForBrowserState(browser_state));
   bookmark_model->Load(browser_state->GetPrefs(),
                        browser_state->GetStatePath());
   ios::BookmarkUndoServiceFactory::GetForBrowserState(browser_state)
@@ -71,8 +75,10 @@ BookmarkModelFactory::BookmarkModelFactory()
     : BrowserStateKeyedServiceFactory(
           "BookmarkModel",
           BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(ios::BookmarkSyncServiceFactory::GetInstance());
   DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
   DependsOn(ManagedBookmarkServiceFactory::GetInstance());
+  DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 BookmarkModelFactory::~BookmarkModelFactory() {}

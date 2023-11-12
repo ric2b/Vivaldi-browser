@@ -4,12 +4,14 @@
 
 #include <set>
 
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
+#include "base/test/test_file_util.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -54,7 +56,13 @@ using safe_browsing::ClientDownloadRequest;
 class FileSystemAccessBrowserTest : public InProcessBrowserTest {
  public:
   void SetUp() override {
-    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    // Create a scoped directory under %TEMP% instead of using
+    // `base::ScopedTempDir::CreateUniqueTempDir`.
+    // `base::ScopedTempDir::CreateUniqueTempDir` creates a path under
+    // %ProgramFiles% on Windows when running as Admin, which is a blocked path
+    // (`kBlockedPaths`). This can fail some of the tests.
+    ASSERT_TRUE(
+        temp_dir_.CreateUniqueTempDirUnderPath(base::GetTempDirForTesting()));
     InProcessBrowserTest::SetUp();
   }
 
@@ -553,13 +561,19 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
       ->set_auto_response_for_test(permissions::PermissionAction::GRANTED);
 
   // 2. Showing https://a.com/iframe_cross_site.html, with an iframe for
-  // https://b.com/title1.html
-  Browser* second_window = CreateBrowser(profile);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      second_window, https_server.GetURL("a.com", "/iframe_cross_site.html")));
-
+  // https://b.com/title1.html. This should be opened by the first window to
+  // facilitate communication between the two.
+  content::TestNavigationObserver popup_observer(nullptr);
+  popup_observer.StartWatchingNewWebContents();
+  auto iframe_url = https_server.GetURL("a.com", "/iframe_cross_site.html");
+  EXPECT_TRUE(ExecuteScript(
+      first_party_web_contents,
+      "self.third_party_window = window.open('" + iframe_url.spec() + "');"));
+  popup_observer.Wait();
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
   content::WebContents* third_party_web_contents =
-      second_window->tab_strip_model()->GetActiveWebContents();
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(first_party_web_contents, third_party_web_contents);
   content::RenderFrameHost* third_party_iframe =
       ChildFrameAt(third_party_web_contents, 0);
   ASSERT_TRUE(third_party_iframe);
@@ -572,30 +586,58 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       third_window, https_server.GetURL("b.com", "/title1.html")));
 
-  // The b.com iframe inside a.com should wait to receive a handle from a
-  // top-level b.com page.
+  // Set up a MessageChannel between the first two b.com contexts. This will
+  // allow us to pass a FileSystemFileHandle between the two later in the test
+  // since we can't postMessage the FileSystemFileHandle to a.com and then to
+  // the b.com iframe since a.com is cross-origin. Also, this approach avoids
+  // using BroadcastChannel which doesn't work when third-party storage
+  // partitioning is enabled.
   EXPECT_EQ(nullptr,
             content::EvalJs(third_party_iframe,
-                            "let b = new BroadcastChannel('channel');\n"
                             "self.message_promise = new Promise(resolve => {\n"
-                            "  b.onmessage = resolve;\n"
+                            "  self.onmessage = resolve;\n"
                             "}); null;"));
+
+  EXPECT_EQ(nullptr,
+            content::EvalJs(
+                third_party_web_contents,
+                "self.onmessage = (e) => {\n"
+                "  iframe = document.getElementsByTagName('iframe')[0];\n"
+                "  iframe.contentWindow.postMessage('😀', '*', [e.ports[0]]);\n"
+                "}; null;"));
+
+  EXPECT_EQ(nullptr,
+            content::EvalJs(first_party_web_contents,
+                            "let message_channel = new MessageChannel();\n"
+                            "self.message_port = message_channel.port1;\n"
+                            "self.third_party_window.postMessage('🚀', '*', "
+                            "[message_channel.port2]);\n"
+                            "null;"));
+
+  EXPECT_EQ(
+      nullptr,
+      content::EvalJs(third_party_iframe,
+                      "(async () => {\n"
+                      "  let e = await self.message_promise;\n"
+                      "  self.message_port = e.ports[0];\n"
+                      "  self.message_port_promise = new Promise(resolve => {\n"
+                      "    self.message_port.onmessage = resolve;\n"
+                      "  })})();"));
 
   // Top-level page in first window picks files and sends it to iframe.
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
-            content::EvalJs(
-                first_party_web_contents,
-                "(async () => {"
-                "  let [e] = await self.showOpenFilePicker();"
-                "  self.entry = e;"
-                "  new BroadcastChannel('channel').postMessage({entry: e});"
-                "  return e.name; })()"));
+            content::EvalJs(first_party_web_contents,
+                            "(async () => {"
+                            "  let [e] = await self.showOpenFilePicker();"
+                            "  self.entry = e;"
+                            "  self.message_port.postMessage({entry: e});"
+                            "  return e.name; })()"));
 
   // Verify iframe received handle.
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(third_party_iframe,
                             "(async () => {"
-                            "  let e = await self.message_promise;"
+                            "  let e = await self.message_port_promise;"
                             "  self.entry = e.data.entry;"
                             "  return self.entry.name; })()"));
 
@@ -632,10 +674,12 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   }
 
   // Now navigate away from b.com in first window.
+  browser()->tab_strip_model()->ActivateTabAt(0);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server.GetURL("c.com", "/title1.html")));
 
   // Permission should still be granted in iframe.
+  browser()->tab_strip_model()->ActivateTabAt(1);
   EXPECT_EQ("granted",
             content::EvalJs(third_party_iframe,
                             "self.entry.queryPermission({mode: 'readwrite'})"));
@@ -697,13 +741,19 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
       ->set_auto_response_for_test(permissions::PermissionAction::GRANTED);
 
   // 2. Showing https://a.com/iframe_cross_site.html, with an iframe for
-  // https://b.com/title1.html
-  Browser* second_window = CreateBrowser(profile);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      second_window, https_server.GetURL("a.com", "/iframe_cross_site.html")));
-
+  // https://b.com/title1.html. This should be opened by the first window to
+  // facilitate communication between the two.
+  content::TestNavigationObserver popup_observer(nullptr);
+  popup_observer.StartWatchingNewWebContents();
+  auto iframe_url = https_server.GetURL("a.com", "/iframe_cross_site.html");
+  EXPECT_TRUE(ExecuteScript(
+      first_party_web_contents,
+      "self.third_party_window = window.open('" + iframe_url.spec() + "');"));
+  popup_observer.Wait();
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
   content::WebContents* third_party_web_contents =
-      second_window->tab_strip_model()->GetActiveWebContents();
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(first_party_web_contents, third_party_web_contents);
   content::RenderFrameHost* third_party_iframe =
       ChildFrameAt(third_party_web_contents, 0);
   ASSERT_TRUE(third_party_iframe);
@@ -711,30 +761,58 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
             first_party_web_contents->GetPrimaryMainFrame()
                 ->GetLastCommittedOrigin());
 
-  // The b.com iframe inside a.com should wait to receive a handle from a
-  // top-level b.com page.
+  // Set up a MessageChannel between the two b.com contexts. This will allow us
+  // to pass a FileSystemFileHandle between the two later in the test since we
+  // can't postMessage the FileSystemFileHandle to a.com and then to the b.com
+  // iframe since a.com is cross-origin. Also, this approach avoids using
+  // BroadcastChannel which doesn't work when third-party storage partitioning
+  // is enabled.
   EXPECT_EQ(nullptr,
             content::EvalJs(third_party_iframe,
-                            "let b = new BroadcastChannel('channel');\n"
                             "self.message_promise = new Promise(resolve => {\n"
-                            "  b.onmessage = resolve;\n"
+                            "  self.onmessage = resolve;\n"
                             "}); null;"));
+
+  EXPECT_EQ(nullptr,
+            content::EvalJs(
+                third_party_web_contents,
+                "self.onmessage = (e) => {\n"
+                "  iframe = document.getElementsByTagName('iframe')[0];\n"
+                "  iframe.contentWindow.postMessage('😀', '*', [e.ports[0]]);\n"
+                "}; null;"));
+
+  EXPECT_EQ(nullptr,
+            content::EvalJs(first_party_web_contents,
+                            "let message_channel = new MessageChannel();\n"
+                            "self.message_port = message_channel.port1;\n"
+                            "self.third_party_window.postMessage('🚀', '*', "
+                            "[message_channel.port2]);\n"
+                            "null;"));
+
+  EXPECT_EQ(
+      nullptr,
+      content::EvalJs(third_party_iframe,
+                      "(async () => {\n"
+                      "  let e = await self.message_promise;\n"
+                      "  self.message_port = e.ports[0];\n"
+                      "  self.message_port_promise = new Promise(resolve => {\n"
+                      "    self.message_port.onmessage = resolve;\n"
+                      "  })})();"));
 
   // Top-level page in first window picks files and sends it to iframe.
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
-            content::EvalJs(
-                first_party_web_contents,
-                "(async () => {"
-                "  let [e] = await self.showOpenFilePicker();"
-                "  self.entry = e;"
-                "  new BroadcastChannel('channel').postMessage({entry: e});"
-                "  return e.name; })()"));
+            content::EvalJs(first_party_web_contents,
+                            "(async () => {"
+                            "  let [e] = await self.showOpenFilePicker();"
+                            "  self.entry = e;"
+                            "  self.message_port.postMessage({entry: e});"
+                            "  return e.name; })()"));
 
   // Verify iframe received handle.
   EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
             content::EvalJs(third_party_iframe,
                             "(async () => {"
-                            "  let e = await self.message_promise;"
+                            "  let e = await self.message_port_promise;"
                             "  self.entry = e.data.entry;"
                             "  return self.entry.name; })()"));
 
@@ -756,7 +834,11 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
                             "self.entry.queryPermission({mode: 'readwrite'})"));
 
   // Now close first window.
-  CloseBrowserSynchronously(browser());
+  browser()->tab_strip_model()->CloseWebContentsAt(
+      0, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+  ASSERT_EQ(1, browser()->tab_strip_model()->count());
+  ASSERT_EQ(browser()->tab_strip_model()->GetActiveWebContents(),
+            third_party_web_contents);
 
   // Permission should still be granted in iframe.
   EXPECT_EQ("granted",
@@ -1027,22 +1109,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderFileSystemAccessBrowserTest,
 }
 
 class FencedFrameFileSystemAccessBrowserTest
-    : public testing::WithParamInterface<
-          blink::features::FencedFramesImplementationType>,
-      public FileSystemAccessBrowserTest {
+    : public FileSystemAccessBrowserTest {
  public:
   FencedFrameFileSystemAccessBrowserTest() {
-    if (GetParam() ==
-        blink::features::FencedFramesImplementationType::kMPArch) {
-      fenced_frame_helper_ =
-          std::make_unique<content::test::FencedFrameTestHelper>();
-    } else {
-      feature_list_.InitWithFeaturesAndParameters(
-          {{blink::features::kFencedFrames,
-            {{"implementation_type", "shadow_dom"}}},
-           {features::kPrivacySandboxAdsAPIsOverride, {}}},
-          {/* disabled_features */});
-    }
+    fenced_frame_helper_ =
+        std::make_unique<content::test::FencedFrameTestHelper>();
   }
 
   void SetUpOnMainThread() override {
@@ -1093,7 +1164,7 @@ class FencedFrameFileSystemAccessBrowserTest
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
 };
 
-IN_PROC_BROWSER_TEST_P(FencedFrameFileSystemAccessBrowserTest,
+IN_PROC_BROWSER_TEST_F(FencedFrameFileSystemAccessBrowserTest,
                        RequestWriteAccess) {
   std::unique_ptr<ChromeFileSystemAccessPermissionContext> permission_context =
       std::make_unique<ChromeFileSystemAccessPermissionContext>(
@@ -1147,19 +1218,19 @@ IN_PROC_BROWSER_TEST_P(FencedFrameFileSystemAccessBrowserTest,
                                 PermissionRequestOutcome::kInvalidFrame);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    FencedFrameFileSystemAccessBrowserTest,
-    FencedFrameFileSystemAccessBrowserTest,
-    testing::Values(blink::features::FencedFramesImplementationType::kShadowDOM,
-                    blink::features::FencedFramesImplementationType::kMPArch));
-
 // The helper methods in this class uses ExecuteScriptXXX, because WebUI has
 // a Content Security Policy that interferes with ExecJs and EvalJs.
 class FileSystemAccessBrowserTestForWebUI : public InProcessBrowserTest {
  public:
   FileSystemAccessBrowserTestForWebUI() {
     base::ScopedAllowBlockingForTesting allow_blocking;
-    CHECK(temp_dir_.CreateUniqueTempDir());
+
+    // Create a scoped directory under %TEMP% instead of using
+    // `base::ScopedTempDir::CreateUniqueTempDir`.
+    // `base::ScopedTempDir::CreateUniqueTempDir` creates a path under
+    // %ProgramFiles% on Windows when running as Admin, which is a blocked path
+    // (`kBlockedPaths`). This can fail some of the tests.
+    CHECK(temp_dir_.CreateUniqueTempDirUnderPath(base::GetTempDirForTesting()));
   }
 
   // Return the evaluated value of a JavaScript |statement| as a std::string.

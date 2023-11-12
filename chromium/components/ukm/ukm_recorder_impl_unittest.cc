@@ -20,6 +20,7 @@
 #include "url/gurl.h"
 
 namespace ukm {
+namespace {
 
 using TestEvent1 = builders::PageLoad;
 
@@ -27,6 +28,12 @@ const uint64_t kTestEntryHash = 1234;
 const uint64_t kTestMetricsHash = 12345;
 const char kTestEntryName[] = "TestEntry";
 const char kTestMetrics[] = "TestMetrics";
+
+// Builds a blank UkmEntry with given SourceId.
+mojom::UkmEntryPtr BlankUkmEntry(SourceId source_id) {
+  return mojom::UkmEntry::New(source_id, 0ull,
+                              base::flat_map<uint64_t, int64_t>());
+}
 
 std::map<uint64_t, builders::EntryDecoder> CreateTestingDecodeMap() {
   return {
@@ -76,15 +83,15 @@ class TestUkmObserver : public UkmRecorderObserver {
       std::move(stop_waiting_).Run();
   }
 
-  void OnUkmAllowedStateChanged(bool allow) override {
+  void OnUkmAllowedStateChanged(ukm::UkmConsentState consent_state) override {
     if (stop_waiting_)
       std::move(stop_waiting_).Run();
 
-    EXPECT_EQ(expected_allow_, allow);
+    EXPECT_EQ(expected_state_, consent_state);
   }
 
-  void WaitOnUkmAllowedStateChanged(bool expected_allow) {
-    expected_allow_ = expected_allow;
+  void WaitOnUkmAllowedStateChanged(ukm::UkmConsentState expected_state) {
+    expected_state_ = expected_state;
     WaitCallback();
   }
 
@@ -111,8 +118,10 @@ class TestUkmObserver : public UkmRecorderObserver {
   mojom::UkmEntryPtr ukm_entry_;
   SourceId source_id_;
   std::vector<GURL> urls_;
-  bool expected_allow_ = false;
+  ukm::UkmConsentState expected_state_;
 };
+
+}  // namespace
 
 TEST(UkmRecorderImplTest, IsSampledIn) {
   UkmRecorderImpl impl;
@@ -203,7 +212,7 @@ TEST(UkmRecorderImplTest, PurgeExtensionRecordings) {
   TestEvent1(id2).Record(&recorder);
 
   // All sources and events have been recorded.
-  EXPECT_TRUE(recorder.extensions_enabled_);
+  EXPECT_TRUE(recorder.recording_enabled(EXTENSIONS));
   EXPECT_TRUE(recorder.recording_is_continuous_);
   EXPECT_EQ(4U, recorder.sources().size());
   EXPECT_EQ(2U, recorder.entries().size());
@@ -223,9 +232,9 @@ TEST(UkmRecorderImplTest, PurgeExtensionRecordings) {
 
   // Recording is disabled for extensions, thus new extension URL will not be
   // recorded.
-  recorder.EnableRecording(/* extensions = */ false);
+  recorder.UpdateRecording(UkmConsentState(UkmConsentType::MSBB));
   recorder.UpdateSourceURL(id4, GURL("chrome-extension://abc/index.html"));
-  EXPECT_FALSE(recorder.extensions_enabled_);
+  EXPECT_FALSE(recorder.recording_state_.Has(UkmConsentType::EXTENSIONS));
   EXPECT_EQ(2U, recorder.sources().size());
 }
 
@@ -333,11 +342,11 @@ TEST(UkmRecorderImplTest, ObserverNotifiedOnUkmAllowedStateChanged) {
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
   TestUkmObserver test_observer(&test_ukm_recorder);
 
-  test_ukm_recorder.OnUkmAllowedStateChanged(false);
-  test_observer.WaitOnUkmAllowedStateChanged(false);
+  test_ukm_recorder.OnUkmAllowedStateChanged(ukm::UkmConsentState());
+  test_observer.WaitOnUkmAllowedStateChanged(ukm::UkmConsentState());
 
-  test_ukm_recorder.OnUkmAllowedStateChanged(true);
-  test_observer.WaitOnUkmAllowedStateChanged(true);
+  test_ukm_recorder.OnUkmAllowedStateChanged(ukm::UkmConsentState::All());
+  test_observer.WaitOnUkmAllowedStateChanged(ukm::UkmConsentState::All());
 }
 
 // Tests that adding and removing observers work as expected.
@@ -383,6 +392,44 @@ TEST(UkmRecorderImplTest, AddRemoveObserver) {
     base::AutoLock auto_lock(test_ukm_recorder.lock_);
     ASSERT_TRUE(test_ukm_recorder.observers_.empty());
   }
+}
+
+TEST(UkmRecorderImplTest, VerifyShouldDropEntry) {
+  UkmRecorderImpl impl;
+
+  // Enable Recording, if recording was disabled everything
+  // would be dropped.
+  impl.EnableRecording();
+
+  auto msbb_entry =
+      BlankUkmEntry(ConvertToSourceId(1, SourceIdType::NAVIGATION_ID));
+  auto app_entry = BlankUkmEntry(ConvertToSourceId(1, SourceIdType::APP_ID));
+
+  // Neither MSBB nor App-Sync is consented too, both will be dropped.
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(msbb_entry.get()));
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(app_entry.get()));
+
+  // Update service with MSBB consent.
+  impl.UpdateRecording(UkmConsentState(MSBB));
+  EXPECT_FALSE(impl.ShouldDropEntryForTesting(msbb_entry.get()));
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(app_entry.get()));
+
+  // Update service with App-sync consent as well.
+  impl.UpdateRecording(UkmConsentState(MSBB, APPS));
+  EXPECT_FALSE(impl.ShouldDropEntryForTesting(msbb_entry.get()));
+  EXPECT_FALSE(impl.ShouldDropEntryForTesting(app_entry.get()));
+
+  // Update service with only App-sync consent.
+  // Only applicable to ASH builds but will not affect the test.
+  impl.UpdateRecording(UkmConsentState(APPS));
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(msbb_entry.get()));
+  EXPECT_FALSE(impl.ShouldDropEntryForTesting(app_entry.get()));
+
+  // Disabling recording will supersede any consent state.
+  impl.UpdateRecording(UkmConsentState(MSBB, APPS));
+  impl.DisableRecording();
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(msbb_entry.get()));
+  EXPECT_TRUE(impl.ShouldDropEntryForTesting(app_entry.get()));
 }
 
 }  // namespace ukm

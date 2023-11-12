@@ -253,9 +253,15 @@ struct BLINK_COMMON_EXPORT WebPreferences {
 
   // Don't accelerate small canvases to avoid crashes TODO(crbug.com/1004304)
   bool disable_accelerated_small_canvases;
+#endif  // BUILDFLAG(IS_ANDROID)
+
+// TODO(crbug.com/1284805): Remove IS_ANDROID once WebView supports WebAuthn.
+// TODO(crbug.com/1382970): Remove IS_FUCHSIA and merge with the block above
+// once all Content embedders on Fuchsia support WebAuthn.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
   // Disable the Web Authentication API.
   bool disable_webauthn = false;
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
 
   // Enable forcibly modifying content rendering to result in a light on dark
   // color scheme.
@@ -359,6 +365,10 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // Whether MIME type checking for worker scripts is strict (true) or lax
   // (false). Used by StrictMimetypeCheckForWorkerScriptsEnabled policy.
   bool strict_mime_type_check_for_worker_scripts_enabled = true;
+
+  // Whether modal context menu is used. A modal context menu meaning it is
+  // blocking user's access to the background web content.
+  bool modal_context_menu = true;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

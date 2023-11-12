@@ -15,16 +15,10 @@
 #include "base/process/process.h"
 #include "base/scoped_generic.h"
 #include "chrome/updater/updater_scope.h"
+#include "chrome/updater/util/win_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
-
-struct LocalAllocTraits {
-  static HLOCAL InvalidValue() { return nullptr; }
-  static void Free(HLOCAL mem) { ::LocalFree(mem); }
-};
-
-using ScopedLocalAlloc = base::ScopedGeneric<HLOCAL, LocalAllocTraits>;
 
 // AppCommandRunner loads and runs a pre-registered command line from the
 // registry.
@@ -35,12 +29,12 @@ class AppCommandRunner {
   AppCommandRunner& operator=(const AppCommandRunner&);
   ~AppCommandRunner();
 
-  // Loads and initializes an `AppCommandRunner` object corresponding to
-  // `app_id` and `command_id`.
-  static HRESULT LoadAppCommand(UpdaterScope scope,
-                                const std::wstring& app_id,
-                                const std::wstring& command_id,
-                                AppCommandRunner& app_command_runner);
+  // Creates an instance of `AppCommandRunner` object corresponding to `app_id`
+  // and `command_id`.
+  static HResultOr<AppCommandRunner> LoadAppCommand(
+      UpdaterScope scope,
+      const std::wstring& app_id,
+      const std::wstring& command_id);
 
   // Loads and returns a vector of `AppCommandRunner` objects corresponding to
   // "AutoRunOnOsUpgradeAppCommands" for `app_id`.
@@ -54,10 +48,10 @@ class AppCommandRunner {
               base::Process& process) const;
 
  private:
-  // Starts a process with separate `executable` and `command_line` components.
+  // Starts a process with separate `executable` and `parameters` components.
   // `executable` needs to be an absolute path.
   static HRESULT StartProcess(const base::FilePath& executable,
-                              const std::wstring& command_line,
+                              const std::wstring& parameters,
                               base::Process& process);
 
   // Separates a command line in `command_format` into an `executable` and

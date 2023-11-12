@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_SPEECH_CHROME_SPEECH_RECOGNITION_SERVICE_H_
 #define CHROME_BROWSER_SPEECH_CHROME_SPEECH_RECOGNITION_SERVICE_H_
 
+#include <string>
+
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/speech/speech_recognition_service.h"
@@ -40,15 +43,19 @@ class ChromeSpeechRecognitionService : public SpeechRecognitionService {
       mojo::PendingReceiver<media::mojom::AudioSourceSpeechRecognitionContext>
           receiver) override;
 
+ protected:
+  content::BrowserContext* context() { return context_; }
+
  private:
   // Launches the speech recognition service in a sandboxed utility process.
   void LaunchIfNotRunning();
 
   // Gets the path of the SODA configuration file for the selected language.
-  base::FilePath GetSodaConfigPath(PrefService* prefs);
+  base::flat_map<std::string, base::FilePath> GetSodaConfigPaths(
+      PrefService* prefs);
 
   // The browser context associated with the keyed service.
-  const raw_ptr<content::BrowserContext> context_;
+  raw_ptr<content::BrowserContext> context_;
 
   // The remote to the speech recognition service. The browser will not launch a
   // new speech recognition service process if this remote is already bound.

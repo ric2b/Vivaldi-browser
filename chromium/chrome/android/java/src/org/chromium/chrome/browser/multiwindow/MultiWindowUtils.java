@@ -21,7 +21,6 @@ import android.view.Display;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
@@ -47,9 +46,6 @@ import org.chromium.ui.display.DisplayAndroidManager;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Locale;
 
@@ -219,7 +215,6 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @param activity The activity firing the intent.
      * @param targetActivity The class of the activity receiving the intent.
      */
-    @RequiresApi(Build.VERSION_CODES.N)
     public static void setOpenInOtherWindowIntentExtras(
             Intent intent, Activity activity, Class<? extends Activity> targetActivity) {
         intent.setClass(activity, targetActivity);
@@ -344,10 +339,7 @@ public class MultiWindowUtils implements ActivityStateListener {
      * Determines the name of an activity from its {@link AppTask}.
      * @param task The AppTask to get the name of.
      */
-    @RequiresApi(Build.VERSION_CODES.M)
     public static String getActivityNameFromTask(AppTask task) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return "";
-
         ActivityManager.RecentTaskInfo taskInfo = AndroidTaskUtils.getTaskInfoFromTask(task);
         if (taskInfo == null || taskInfo.baseActivity == null) return "";
 
@@ -389,9 +381,6 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @return True if multiple instances of Chrome are running.
      */
     public boolean areMultipleChromeInstancesRunning(Context context) {
-        // Exit early if multi-window isn't supported.
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) return false;
-
         // Check if both tasks are running.
         boolean tabbedTaskRunning = false;
         boolean tabbed2TaskRunning = false;
@@ -432,10 +421,8 @@ public class MultiWindowUtils implements ActivityStateListener {
         // 0. Use always ChromeTabbedActivity when multi-instance support in S+ is enabled.
         if (mMultiInstanceApi31Enabled) return ChromeTabbedActivity.class;
 
-        // 1. Exit early if the build version doesn't support Android N+ multi-window mode or
-        // ChromeTabbedActivity2 isn't running.
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M
-                || (mTabbedActivity2TaskRunning != null && !mTabbedActivity2TaskRunning)) {
+        // 1. Exit early if ChromeTabbedActivity2 isn't running.
+        if (mTabbedActivity2TaskRunning != null && !mTabbedActivity2TaskRunning) {
             return ChromeTabbedActivity.class;
         }
 
@@ -511,7 +498,6 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @return True if the Activity still has a task in Android recents, regardless of whether
      *         the Activity has been destroyed.
      */
-    @RequiresApi(Build.VERSION_CODES.M)
     private boolean isActivityTaskInRecents(String className, Context context) {
         ActivityManager activityManager = (ActivityManager)
                 context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -611,49 +597,6 @@ public class MultiWindowUtils implements ActivityStateListener {
     }
 
     /**
-     * @param activity The {@link Activity} to check.
-     * @return Whether or not {@code activity} is currently in pre-N Samsung multi-window mode.
-     */
-    public boolean isLegacyMultiWindow(Activity activity) {
-        if (activity == null) return false;
-
-        try {
-            // Check if Samsung's multi-window mode is supported on this device.
-            // PackageManager#hasSystemFeature(PackageManager.FEATURE_MULTIWINDOW);
-            PackageManager pm = activity.getPackageManager();
-            Field multiwindowFeatureField = pm.getClass().getField("FEATURE_MULTIWINDOW");
-            if (!pm.hasSystemFeature((String) multiwindowFeatureField.get(null))) return false;
-
-            // Grab the current window mode.
-            // int windowMode = Activity#getWindowMode();
-            Method getWindowMode = activity.getClass().getMethod("getWindowMode", (Class[]) null);
-            int windowMode = (Integer) getWindowMode.invoke(activity, (Object[]) null);
-
-            // Grab the multi-window mode constant.
-            // android.view.WindowManagerPolicy#WINDOW_MODE_FREESTYLE
-            Class<?> windowManagerPolicyClass = Class.forName("android.view.WindowManagerPolicy");
-            Field windowModeFreestyleField =
-                    windowManagerPolicyClass.getField("WINDOW_MODE_FREESTYLE");
-            int featureMultiWindowFreestyle = (Integer) windowModeFreestyleField.get(null);
-
-            // Compare windowMode with WINDOW_MODE_FREESTYLE to see if that flag is set.
-            return (windowMode & featureMultiWindowFreestyle) != 0;
-        } catch (NoSuchFieldException e) {
-            return false;
-        } catch (IllegalAccessException e) {
-            return false;
-        } catch (IllegalArgumentException e) {
-            return false;
-        } catch (NoSuchMethodException e) {
-            return false;
-        } catch (InvocationTargetException e) {
-            return false;
-        } catch (ClassNotFoundException e) {
-            return false;
-        }
-    }
-
-    /**
      * @return Whether ChromeTabbedActivity (exact activity, not a subclass of) is currently
      *         running.
      */
@@ -662,29 +605,6 @@ public class MultiWindowUtils implements ActivityStateListener {
             if (activity.getClass().equals(ChromeTabbedActivity.class)) return true;
         }
         return false;
-    }
-
-    /**
-     * @return Whether or not activity should run in pre-N Samsung multi-instance mode.
-     */
-    public boolean shouldRunInLegacyMultiInstanceMode(Activity activity, Intent intent) {
-        return Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP
-                && TextUtils.equals(intent.getAction(), Intent.ACTION_MAIN)
-                && isLegacyMultiWindow(activity) && isPrimaryTabbedActivityRunning();
-    }
-
-    /**
-     * Makes |intent| able to support multi-instance in pre-N Samsung multi-window mode.
-     */
-    public void makeLegacyMultiInstanceIntent(Activity activity, Intent intent) {
-        if (isLegacyMultiWindow(activity)) {
-            if (TextUtils.equals(ChromeTabbedActivity.class.getName(),
-                    intent.getComponent().getClassName())) {
-                intent.setClassName(activity, MultiInstanceChromeTabbedActivity.class.getName());
-            }
-            intent.setFlags(intent.getFlags()
-                    & ~(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT));
-        }
     }
 
     /**

@@ -16,9 +16,11 @@ import './chooser_exception_list_entry.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {ListPropertyUpdateMixin} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PaperTooltipElement} from 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {TooltipMixin} from '../tooltip_mixin.js';
 
 import {getTemplate} from './chooser_exception_list.html.js';
 import {ChooserType, ContentSettingsTypes} from './constants.js';
@@ -31,8 +33,8 @@ export interface ChooserExceptionListElement {
   };
 }
 
-const ChooserExceptionListElementBase = ListPropertyUpdateMixin(
-    SiteSettingsMixin(WebUIListenerMixin(I18nMixin(PolymerElement))));
+const ChooserExceptionListElementBase = TooltipMixin(ListPropertyUpdateMixin(
+    SiteSettingsMixin(WebUiListenerMixin(I18nMixin(PolymerElement)))));
 
 export class ChooserExceptionListElement extends
     ChooserExceptionListElementBase {
@@ -86,12 +88,12 @@ export class ChooserExceptionListElement extends
   override connectedCallback() {
     super.connectedCallback();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'contentSettingChooserPermissionChanged',
         (category: ContentSettingsTypes, chooserType: ChooserType) => {
           this.objectWithinChooserTypeChanged_(category, chooserType);
         });
-    this.addWebUIListener(
+    this.addWebUiListener(
         'onIncognitoStatusChanged',
         (hasIncognito: boolean) =>
             this.onIncognitoStatusChanged_(hasIncognito));
@@ -165,23 +167,10 @@ export class ChooserExceptionListElement extends
    */
   private onShowTooltip_(e: CustomEvent<{target: HTMLElement, text: string}>) {
     this.tooltipText_ = e.detail.text;
-    const target = e.detail.target;
     // paper-tooltip normally determines the target from the |for| property,
     // which is a selector. Here paper-tooltip is being reused by multiple
     // potential targets.
-    this.$.tooltip.target = target;
-    const hide = () => {
-      this.$.tooltip.hide();
-      target.removeEventListener('mouseleave', hide);
-      target.removeEventListener('blur', hide);
-      target.removeEventListener('click', hide);
-      this.$.tooltip.removeEventListener('mouseenter', hide);
-    };
-    target.addEventListener('mouseleave', hide);
-    target.addEventListener('blur', hide);
-    target.addEventListener('click', hide);
-    this.$.tooltip.addEventListener('mouseenter', hide);
-    this.$.tooltip.show();
+    this.showTooltipAtTarget(this.$.tooltip, e.detail.target);
   }
 
   /**

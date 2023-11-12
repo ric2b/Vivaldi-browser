@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_JS_INJECTION_BROWSER_WEB_MESSAGE_H_
 #define COMPONENTS_JS_INJECTION_BROWSER_WEB_MESSAGE_H_
 
-#include <string>
 #include <vector>
 
 #include "third_party/blink/public/common/messaging/message_port_descriptor.h"
+#include "third_party/blink/public/common/messaging/string_message_codec.h"
 
 namespace js_injection {
 
@@ -17,7 +17,7 @@ struct WebMessage {
   WebMessage();
   ~WebMessage();
 
-  std::u16string message;
+  blink::WebMessagePayload message;
   std::vector<blink::MessagePortDescriptor> ports;
 };
 

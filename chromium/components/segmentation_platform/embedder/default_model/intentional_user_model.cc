@@ -6,7 +6,7 @@
 
 #include <array>
 
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
@@ -62,6 +62,7 @@ std::unique_ptr<Config> IntentionalUserModel::GetConfig() {
                        std::make_unique<IntentionalUserModel>());
   config->segment_selection_ttl = base::Days(7);
   config->unknown_selection_ttl = base::Days(7);
+  config->is_boolean_segment = true;
 
   return config;
 }
@@ -84,7 +85,7 @@ void IntentionalUserModel::InitAndFetchModel(
   writer.AddUmaFeatures(kIntentionalUserUMAFeatures.data(),
                         kIntentionalUserUMAFeatures.size());
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindRepeating(model_updated_callback, kIntentionalUserSegmentId,
                           std::move(intentional_user_metadata),
@@ -92,11 +93,11 @@ void IntentionalUserModel::InitAndFetchModel(
 }
 
 void IntentionalUserModel::ExecuteModelWithInput(
-    const std::vector<float>& inputs,
+    const ModelProvider::Request& inputs,
     ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != kIntentionalUserUMAFeatures.size()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -108,8 +109,9 @@ void IntentionalUserModel::ExecuteModelWithInput(
     result = 1;  // User is intentionally using Chrome.
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), ModelProvider::Response(1, result)));
 }
 
 bool IntentionalUserModel::ModelAvailable() {

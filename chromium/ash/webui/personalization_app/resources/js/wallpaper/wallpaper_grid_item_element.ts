@@ -13,6 +13,8 @@ import {assert} from 'chrome://resources/js/assert_ts.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {isSelectionEvent} from '../utils.js';
+
 import {getLoadingPlaceholderAnimationDelay} from './utils.js';
 import {getTemplate} from './wallpaper_grid_item_element.html.js';
 
@@ -30,6 +32,39 @@ function getDataIndex(event: Event&{currentTarget: HTMLImageElement}): number {
   return index;
 }
 
+function shouldShowPlaceholder(imageStatus: ImageStatus[]): boolean {
+  return imageStatus.length === 0 ||
+      (imageStatus.includes(ImageStatus.LOADING) &&
+       !imageStatus.includes(ImageStatus.ERROR));
+}
+
+const wallpaperGridItemSelectedEventName = 'wallpaper-grid-item-selected';
+
+export class WallpaperGridItemSelectedEvent extends CustomEvent<null> {
+  constructor() {
+    super(
+        wallpaperGridItemSelectedEventName,
+        {
+          bubbles: true,
+          composed: true,
+          detail: null,
+        },
+    );
+  }
+}
+
+declare global {
+  interface HTMLElementEventMap {
+    [wallpaperGridItemSelectedEventName]: WallpaperGridItemSelectedEvent;
+  }
+}
+
+/** The maximum number of images to display in one wallpaper grid item. */
+const enum MaxImageCount {
+  COLLAGE = 4,
+  DEFAULT = 2,
+}
+
 export class WallpaperGridItem extends PolymerElement {
   static get is(): 'wallpaper-grid-item' {
     return 'wallpaper-grid-item';
@@ -44,6 +79,7 @@ export class WallpaperGridItem extends PolymerElement {
       src: {
         type: Object,
         observer: 'onImageSrcChanged_',
+        value: null,
       },
 
       index: Number,
@@ -60,6 +96,19 @@ export class WallpaperGridItem extends PolymerElement {
         observer: 'onSelectedChanged_',
       },
 
+      disabled: {
+        type: Boolean,
+        value: false,
+        observer: 'onDisabledChanged_',
+      },
+
+      collage: {
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true,
+        observer: 'onCollageChanged_',
+      },
+
       imageStatus_: {
         type: Array,
         value() {
@@ -72,10 +121,13 @@ export class WallpaperGridItem extends PolymerElement {
 
   /**
    * The source for the image to render for the grid item. Will display a
-   * placeholder loading animation if src is undefined.
-   * If |src| is an array, will display the first two images side by side.
+   * placeholder loading animation if `src` is null.
+   * If `src` is an array, will display the first two images side by side.
+   * If `collage` is set and `src` is an array, will display up to the first
+   * four images tiled.
+   * @default null
    */
-  src: Url|Url[]|undefined;
+  src: Url|Url[]|null;
 
   /** The index of the grid item within its parent grid. */
   index: number;
@@ -97,15 +149,48 @@ export class WallpaperGridItem extends PolymerElement {
    */
   selected: boolean|undefined;
 
+  /**
+   * Whether the grid item is currently disabled. Automatically sets the
+   * aria-disabled property.
+   * @default false
+   */
+  disabled: boolean;
+
+  /**
+   * Whether to display 2 images side by side in split Dark/Light mode,
+   * or 4 images in a collage.
+   * @default false
+   */
+  collage: boolean;
+
   // Track if images are loaded, failed, or ready to display.
   private imageStatus_: ImageStatus[];
 
+  override ready() {
+    super.ready();
+    this.addEventListener('click', this.onUserSelection_);
+    this.addEventListener('keydown', this.onUserSelection_);
+  }
+
+  private onUserSelection_(event: MouseEvent|KeyboardEvent) {
+    // Ignore extraneous events and let them continue.
+    // Also ignore click and keydown events if this grid item is disabled.
+    // These events will continue to propagate up in case someone else is
+    // interested that this item was interacted with.
+    if (!isSelectionEvent(event) || this.disabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(new WallpaperGridItemSelectedEvent());
+  }
+
   // Invoked on changes to |imageSrc|.
-  private onImageSrcChanged_(
-      src: Url|Url[]|undefined, old: Url|Url[]|undefined) {
+  private onImageSrcChanged_(src: Url|Url[]|null, old: Url|Url[]|null) {
     // Set loading status if src has just changed while we wait for new images.
-    const oldSrcArray = this.getSrcArray_(old);
-    this.imageStatus_ = this.getSrcArray_(src).map(({url}, i) => {
+    const oldSrcArray = this.getSrcArray_(old, this.collage);
+    this.imageStatus_ = this.getSrcArray_(src, this.collage).map(({url}, i) => {
       if (oldSrcArray.length > i && oldSrcArray[i].url === url) {
         // If the underlying url has not changed, keep the prior image status.
         // If we have a new |Url| object but the underlying url is the same, the
@@ -124,10 +209,28 @@ export class WallpaperGridItem extends PolymerElement {
     }
   }
 
+  private onDisabledChanged_(disabled: boolean) {
+    this.setAttribute('aria-disabled', disabled.toString());
+  }
+
+  private onCollageChanged_(collage: boolean) {
+    if (collage) {
+      const imageStatus =
+          this.getSrcArray_(this.src, collage)
+              .map(
+                  (_, index) => this.imageStatus_.length > index ?
+                      this.imageStatus_[index] :
+                      ImageStatus.LOADING);
+      this.imageStatus_ = imageStatus;
+      return;
+    }
+
+    this.imageStatus_.length =
+        Math.min(MaxImageCount.DEFAULT, this.imageStatus_.length);
+  }
+
   private onImageStatusChanged_(imageStatus: ImageStatus[]) {
-    if (imageStatus.length === 0 ||
-        (imageStatus.includes(ImageStatus.LOADING) &&
-         !imageStatus.includes(ImageStatus.ERROR))) {
+    if (shouldShowPlaceholder(imageStatus)) {
       this.setAttribute('placeholder', '');
     } else {
       this.removeAttribute('placeholder');
@@ -146,12 +249,13 @@ export class WallpaperGridItem extends PolymerElement {
         (status, index) => index === targetIndex ? ImageStatus.READY : status);
   }
 
-  private getSrcArray_(src: Url|Url[]|undefined): Url[] {
+  private getSrcArray_(src: Url|Url[]|null, collage: boolean): Url[] {
     if (!src) {
       return [];
     }
     if (Array.isArray(src)) {
-      return src.slice(0, 2);
+      const max = collage ? MaxImageCount.COLLAGE : MaxImageCount.DEFAULT;
+      return src.slice(0, max);
     }
     return [src];
   }
@@ -186,7 +290,11 @@ export class WallpaperGridItem extends PolymerElement {
   }
 
   /** Whether any text is currently visible. */
-  private isTextVisible_() {
+  private isTextVisible_(): boolean {
+    if (shouldShowPlaceholder(this.imageStatus_)) {
+      // Hide text while placeholder is displayed.
+      return false;
+    }
     return this.isSecondaryTextVisible_() || this.isPrimaryTextVisible_();
   }
 }

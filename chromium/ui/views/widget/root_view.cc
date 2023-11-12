@@ -35,8 +35,7 @@
 
 using DispatchDetails = ui::EventDispatchDetails;
 
-namespace views {
-namespace internal {
+namespace views::internal {
 
 namespace {
 
@@ -226,7 +225,8 @@ RootView::~RootView() {
 
 void RootView::SetContentsView(View* contents_view) {
   DCHECK(contents_view && GetWidget()->native_widget())
-      << "Can't be called until after the native widget is created!";
+      << "Can't be called because the widget is not initialized or is "
+         "destroyed";
   // The ContentsView must be set up _after_ the window is created so that its
   // Widget pointer is valid.
   SetUseDefaultFillLayout(true);
@@ -282,7 +282,7 @@ raw_ptr<AnnounceTextView> RootView::GetOrCreateAnnounceView() {
     announce_view_ = AddChildView(std::make_unique<AnnounceTextView>());
     announce_view_->SetProperty(kViewIgnoredByLayoutKey, true);
   }
-  return announce_view_;
+  return announce_view_.get();
 }
 
 void RootView::AnnounceText(const std::u16string& text) {
@@ -363,7 +363,10 @@ void RootView::OnEventProcessingStarted(ui::Event* event) {
   gesture_handler_set_before_processing_ = !!gesture_handler_;
 }
 
-void RootView::OnEventProcessingFinished(ui::Event* event) {
+void RootView::OnEventProcessingFinished(
+    ui::Event* event,
+    ui::EventTarget* target,
+    const ui::EventDispatchDetails& details) {
   VLOG(5) << "RootView::OnEventProcessingFinished(" << event->ToString() << ")";
   // If |event| was not handled and |gesture_handler_| was not set by the
   // dispatch of a previous gesture event, then no default gesture handler
@@ -851,5 +854,4 @@ ui::EventDispatchDetails RootView::PostDispatchEvent(ui::EventTarget* target,
 
 BEGIN_METADATA(RootView, View)
 END_METADATA
-}  // namespace internal
-}  // namespace views
+}  // namespace views::internal

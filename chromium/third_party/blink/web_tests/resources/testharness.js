@@ -91,7 +91,12 @@
         }
 
         on_event(window, 'load', function() {
+          setTimeout(() => {
             this_obj.all_loaded = true;
+            if (tests.all_done()) {
+              tests.complete();
+            }
+          },0);
         });
 
         on_event(window, 'message', function(event) {
@@ -2246,7 +2251,8 @@
                 ReadOnlyError: 0,
                 VersionError: 0,
                 OperationError: 0,
-                NotAllowedError: 0
+                NotAllowedError: 0,
+                OptOutError: 0
             };
 
             var code_name_map = {};
@@ -3822,7 +3828,9 @@
             return;
         }
 
-        this.pending_remotes.push(this.create_remote_window(remote));
+        var remoteContext = this.create_remote_window(remote);
+        this.pending_remotes.push(remoteContext);
+        return remoteContext.done;
     };
 
     /**
@@ -3837,7 +3845,7 @@
      * @param {Window} window - The window to fetch tests from.
      */
     function fetch_tests_from_window(window) {
-        tests.fetch_tests_from_window(window);
+        return tests.fetch_tests_from_window(window);
     }
     expose(fetch_tests_from_window, 'fetch_tests_from_window');
 
@@ -3871,7 +3879,7 @@
      */
     function begin_shadow_realm_tests(postMessage) {
         if (!(test_environment instanceof ShadowRealmTestEnvironment)) {
-            throw new Error("beign_shadow_realm_tests called in non-Shadow Realm environment");
+            throw new Error("begin_shadow_realm_tests called in non-Shadow Realm environment");
         }
 
         test_environment.begin(function (msg) {

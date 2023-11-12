@@ -2,119 +2,156 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import './setup_cancel_dialog.js';
 
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
+import {CANCEL_SETUP_EVENT, NEXT_PAGE_EVENT} from './base_setup_page.js';
 import {UserAction} from './cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from './cloud_upload_browser_proxy.js';
-import {getTemplate} from './cloud_upload_dialog.html.js';
-
-export enum UploadType {
-  ONE_DRIVE = 0,
-  DRIVE = 1,
-}
+import {OfficePwaInstallPageElement} from './office_pwa_install_page.js';
+import {OneDriveUploadPageElement} from './one_drive_upload_page.js';
+import type {SetupCancelDialogElement} from './setup_cancel_dialog.js';
+import {SignInPageElement} from './sign_in_page.js';
+import {WelcomePageElement} from './welcome_page.js';
 
 /**
- * @fileoverview
- * 'cloud-upload' defines the UI for the "Upload to cloud" workflow.
+ * The CloudUploadElement is the main dialog controller that aggregates all the
+ * individual setup pages and determines which one to show.
  */
-
 export class CloudUploadElement extends HTMLElement {
-  uploadType: UploadType|undefined;
-  fileName: string;
+  private proxy = CloudUploadBrowserProxy.getInstance();
+
+  /** Resolved once the element's shadow DOM has finished initializing. */
+  initPromise: Promise<void>;
+
+  /** List of pages to show. */
+  pages: HTMLElement[] = [];
+
+  /** The current page index into `pages`. */
+  private currentPageIdx: number = 0;
+
+  /** The modal dialog shown to confirm if the user wants to cancel setup. */
+  private cancelDialog: SetupCancelDialogElement;
+
+  /** The names of the files to upload. */
+  private fileNames: string[] = [];
 
   constructor() {
     super();
-    this.fileName = '';
-    this.processDialogArgs();
-    const template = this.createTemplate();
-    const fragment = template.content.cloneNode(true);
-    this.attachShadow({mode: 'open'}).appendChild(fragment);
+    const shadow = this.attachShadow({mode: 'open'});
+
+    this.cancelDialog = document.createElement('setup-cancel-dialog');
+    shadow.appendChild(this.cancelDialog);
+
+    document.addEventListener('keydown', this.onKeyDown.bind(this));
+
+    this.initPromise = this.init();
+  }
+
+  async init(): Promise<void> {
+    const [, {installed: isOfficeWebAppInstalled}, {mounted: isOdfsMounted}] =
+        await Promise.all([
+          this.processDialogArgs(),
+          this.proxy.handler.isOfficeWebAppInstalled(),
+          this.proxy.handler.isODFSMounted(),
+        ]);
+
+    // TODO(b/251046341): Adjust this once the rest of the pages are in place.
+    this.pages.push(new WelcomePageElement());
+
+    if (!isOfficeWebAppInstalled) {
+      this.pages.push(new OfficePwaInstallPageElement());
+    }
+
+    if (!isOdfsMounted) {
+      this.pages.push(new SignInPageElement());
+    }
+
+    const oneDriveUploadPage = new OneDriveUploadPageElement();
+    oneDriveUploadPage.setFileNames(this.fileNames);
+    this.pages.push(oneDriveUploadPage);
+
+    this.pages.forEach((page, index) => {
+      page.setAttribute('total-pages', String(this.pages.length));
+      page.setAttribute('page-number', String(index));
+      page.addEventListener(NEXT_PAGE_EVENT, () => this.goNextPage());
+      page.addEventListener(CANCEL_SETUP_EVENT, () => this.cancelSetup());
+    });
+
+    this.switchPage(0);
   }
 
   $<T extends HTMLElement>(query: string): T {
     return this.shadowRoot!.querySelector(query)!;
   }
 
-  get dialog(): CrDialogElement {
-    return this.$('cr-dialog') as CrDialogElement;
+  /**
+   * Gets the element corresponding to the currently shown page.
+   */
+  get currentPage(): HTMLElement|undefined {
+    return this.pages[this.currentPageIdx];
   }
 
-  get proxy() {
-    return CloudUploadBrowserProxy.getInstance();
+  /**
+   * Switches the currently shown page.
+   * @param page Page index to show.
+   */
+  private switchPage(page: number): void {
+    this.currentPage?.remove();
+    this.currentPageIdx = page;
+    this.shadowRoot!.appendChild(this.currentPage!);
   }
 
-  async connectedCallback() {
-    const cancelButton = this.$('#cancel-button')! as HTMLElement;
-    const uploadButton = this.$('#upload-button')! as HTMLElement;
-    cancelButton.addEventListener('click', () => this.onCancelButtonClick());
-    uploadButton.addEventListener('click', () => this.onUploadButtonClick());
-  }
-
-  processDialogArgs() {
+  /**
+   * Initialises the class members based off the given dialog arguments.
+   */
+  private async processDialogArgs(): Promise<void> {
     try {
-      const dialogArgs = this.proxy.getDialogArguments();
-      assert(dialogArgs);
-      const args = JSON.parse(dialogArgs);
-      assert(args);
-      assert(args.fileName);
-      assert(args.uploadType);
-      this.fileName = args.fileName;
-      switch (args.uploadType) {
-        case 'OneDrive':
-          this.uploadType = UploadType.ONE_DRIVE;
-          break;
-        case 'Drive':
-          this.uploadType = UploadType.DRIVE;
-          break;
-      }
+      const dialogArgs = await this.proxy.handler.getDialogArgs();
+      assert(dialogArgs.args);
+      this.fileNames = dialogArgs.args.fileNames;
     } catch (e) {
       // TODO(b/243095484) Define expected behavior.
       console.error(`Unable to get dialog arguments . Error: ${e}.`);
     }
   }
 
-  createTemplate(): HTMLTemplateElement {
-    const template = document.createElement('template');
-    template.innerHTML = getTemplate() as string;
-    const fragment = template.content;
-    const titleElement =
-        fragment.querySelector('div[slot="title"]')! as HTMLElement;
-    const uploadMessageElement =
-        fragment.querySelector('#upload-message')! as HTMLElement;
-    const fileNameElement =
-        fragment.querySelector('#file-name')! as HTMLElement;
-    const uploadButton =
-        fragment.querySelector('#upload-button')! as HTMLElement;
-
-    switch (this.uploadType) {
-      case UploadType.ONE_DRIVE:
-        titleElement.innerText = 'Upload to OneDrive';
-        uploadMessageElement.innerText =
-            'Upload your file to OneDrive to open with Office.';
-        uploadButton.innerText = 'Upload to OneDrive';
-        break;
-      case UploadType.DRIVE:
-        titleElement.innerText = 'Upload to Drive';
-        uploadMessageElement.innerText =
-            'Upload your file to Google Drive to open with Google Docs.';
-        uploadButton.innerText = 'Upload to Drive';
-        break;
+  private onKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && !this.cancelDialog.open) {
+      this.cancelSetup();
+      // Stop escape from also immediately closing the dialog.
+      event.stopImmediatePropagation();
+      event.preventDefault();
     }
-    fileNameElement.innerText = `File name: ${this.fileName}`;
-
-    return template;
   }
 
-  private onCancelButtonClick(): void {
-    this.proxy.handler.respondAndClose(UserAction.kCancel);
+  /**
+   * Invoked when a page fires a `CANCEL_SETUP_EVENT` event.
+   */
+  private cancelSetup(): void {
+    if (this.currentPage instanceof OneDriveUploadPageElement) {
+      // No need to show the cancel dialog as setup is finished.
+      this.proxy.handler.respondAndClose(UserAction.kCancel);
+      return;
+    }
+    this.cancelDialog.show(
+        () => this.proxy.handler.respondAndClose(UserAction.kCancel));
   }
 
-  private onUploadButtonClick(): void {
-    this.proxy.handler.respondAndClose(UserAction.kUpload);
+  /**
+   * Invoked when a page fires a `NEXT_PAGE_EVENT` event.
+   */
+  private goNextPage(): void {
+    if (this.currentPageIdx < this.pages.length - 1) {
+      this.switchPage(this.currentPageIdx + 1);
+    }
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cloud-upload': CloudUploadElement;
   }
 }
 

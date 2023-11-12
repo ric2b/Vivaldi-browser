@@ -212,4 +212,12 @@ void DeviceInfo::set_interested_data_types(const ModelTypeSet& data_types) {
   interested_data_types_ = data_types;
 }
 
+size_t DeviceInfo::vivaldi_total_synced_files_size() const {
+  return vivaldi_total_synced_files_size_;
+}
+
+void DeviceInfo::set_vivaldi_total_synced_files_size(size_t size) {
+  vivaldi_total_synced_files_size_ = size;
+}
+
 }  // namespace syncer

@@ -13,6 +13,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/ozone/platform/wayland/test/global_object.h"
 #include "ui/ozone/platform/wayland/test/test_zaura_output.h"
+#include "ui/ozone/platform/wayland/test/test_zxdg_output.h"
 
 namespace wl {
 
@@ -26,6 +27,12 @@ class TestOutput : public GlobalObject {
 
   ~TestOutput() override;
 
+  static TestOutput* FromResource(wl_resource* resource);
+
+  // Useful only when zaura_shell is supported.
+  void set_aura_shell_enabled() { aura_shell_enabled_ = true; }
+  bool aura_shell_enabled() { return aura_shell_enabled_; }
+
   const gfx::Rect GetRect() { return rect_; }
   void SetRect(const gfx::Rect& rect);
   int32_t GetScale() const { return scale_; }
@@ -37,10 +44,14 @@ class TestOutput : public GlobalObject {
   void SetAuraOutput(TestZAuraOutput* aura_output);
   TestZAuraOutput* GetAuraOutput();
 
+  void SetXdgOutput(TestZXdgOutput* aura_output);
+  TestZXdgOutput* xdg_output() { return xdg_output_; }
+
  protected:
   void OnBind() override;
 
  private:
+  bool aura_shell_enabled_ = false;
   gfx::Rect rect_;
   int32_t scale_;
   wl_output_transform transform_{WL_OUTPUT_TRANSFORM_NORMAL};
@@ -50,6 +61,7 @@ class TestOutput : public GlobalObject {
   absl::optional<wl_output_transform> pending_transform_ = absl::nullopt;
 
   raw_ptr<TestZAuraOutput> aura_output_ = nullptr;
+  raw_ptr<TestZXdgOutput> xdg_output_ = nullptr;
 };
 
 }  // namespace wl

@@ -7,19 +7,28 @@
 
 #import <UIKit/UIKit.h>
 
+@class CarouselItem;
 @class CrURL;
 @class FaviconAttributes;
 
-// Represent an carousel item in UI.
+/// An abstract consumer of carousel items.
+@protocol CarouselItemConsumer <NSObject>
+
+/// Removes `carouselItem`.
+- (void)deleteCarouselItem:(CarouselItem*)carouselItem;
+
+@end
+
+/// Represent an carousel item in UI.
 @interface CarouselItem : NSObject
 
-// Title of the suggestion.
+/// Title of the suggestion.
 @property(nonatomic, strong) NSString* title;
-// URL of the suggestion.
+/// URL of the suggestion.
 @property(nonatomic, strong) CrURL* URL;
-// Attributes used to display a `FaviconView` in the item.
+/// Attributes used to display a `FaviconView` in the item.
 @property(nonatomic, strong) FaviconAttributes* faviconAttributes;
-// IndexPath of the item in the omnibox popup.
+/// IndexPath of the item in the omnibox popup.
 @property(nonatomic, strong) NSIndexPath* indexPath;
 
 @end

@@ -11,7 +11,6 @@
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/svc_scalability_mode.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
@@ -230,6 +229,16 @@ void FreeCodecCtx(vpx_codec_ctx_t* codec_ctx) {
   delete codec_ctx;
 }
 
+std::string LogVpxErrorMessage(vpx_codec_ctx_t* context,
+                               const char* message,
+                               vpx_codec_err_t status) {
+  auto formatted_msg = base::StringPrintf("%s: %s (%s)", message,
+                                          vpx_codec_err_to_string(status),
+                                          vpx_codec_error_detail(context));
+  DLOG(ERROR) << formatted_msg;
+  return formatted_msg;
+}
+
 }  // namespace
 
 VpxVideoEncoder::VpxVideoEncoder() : codec_(nullptr, FreeCodecCtx) {}
@@ -238,7 +247,7 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
                                  const Options& options,
                                  OutputCB output_cb,
                                  EncoderStatusCB done_cb) {
-  done_cb = BindToCurrentLoop(std::move(done_cb));
+  done_cb = BindCallbackToCurrentLoopIfNeeded(std::move(done_cb));
   if (codec_) {
     std::move(done_cb).Run(EncoderStatus::Codes::kEncoderInitializeTwice);
     return;
@@ -308,10 +317,8 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
       codec.get(), iface, &codec_config_,
       codec_config_.g_bit_depth == VPX_BITS_8 ? 0 : VPX_CODEC_USE_HIGHBITDEPTH);
   if (vpx_error != VPX_CODEC_OK) {
-    std::string msg = base::StringPrintf(
-        "VPX encoder initialization error: %s %s",
-        vpx_codec_err_to_string(vpx_error), codec->err_detail);
-    DLOG(ERROR) << msg;
+    auto msg = LogVpxErrorMessage(
+        codec.get(), "VPX encoder initialization error", vpx_error);
     std::move(done_cb).Run(
         EncoderStatus(EncoderStatus::Codes::kEncoderInitializationError, msg));
     return;
@@ -325,10 +332,8 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
   int cpu_used = is_vp9 ? 7 : -6;
   vpx_error = vpx_codec_control(codec.get(), VP8E_SET_CPUUSED, cpu_used);
   if (vpx_error != VPX_CODEC_OK) {
-    std::string msg =
-        base::StringPrintf("VPX encoder VP8E_SET_CPUUSED error: %s",
-                           vpx_codec_err_to_string(vpx_error));
-    DLOG(ERROR) << msg;
+    auto msg = LogVpxErrorMessage(
+        codec.get(), "VPX encoder VP8E_SET_CPUUSED error", vpx_error);
     std::move(done_cb).Run(
         EncoderStatus(EncoderStatus::Codes::kEncoderInitializationError, msg));
     return;
@@ -362,10 +367,8 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
       vpx_codec_control(codec.get(), VP9E_SET_SVC_PARAMETERS, &svc_conf);
       vpx_error = vpx_codec_control(codec.get(), VP9E_SET_SVC, 1);
       if (vpx_error != VPX_CODEC_OK) {
-        std::string msg =
-            base::StringPrintf("Can't activate SVC encoding: %s",
-                               vpx_codec_err_to_string(vpx_error));
-        DLOG(ERROR) << msg;
+        auto msg = LogVpxErrorMessage(codec.get(),
+                                      "Can't activate SVC encoding", vpx_error);
         status = EncoderStatus(
             EncoderStatus::Codes::kEncoderInitializationError, msg);
         std::move(done_cb).Run(status);
@@ -380,7 +383,7 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
 
   options_ = options;
   originally_configured_size_ = options.frame_size;
-  output_cb_ = BindToCurrentLoop(std::move(output_cb));
+  output_cb_ = BindCallbackToCurrentLoopIfNeeded(std::move(output_cb));
   codec_ = std::move(codec);
   std::move(done_cb).Run(EncoderStatus::Codes::kOk);
 }
@@ -388,7 +391,7 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
 void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
                              bool key_frame,
                              EncoderStatusCB done_cb) {
-  done_cb = BindToCurrentLoop(std::move(done_cb));
+  done_cb = BindCallbackToCurrentLoopIfNeeded(std::move(done_cb));
   if (!codec_) {
     std::move(done_cb).Run(
         EncoderStatus::Codes::kEncoderInitializeNeverCompleted);
@@ -518,6 +521,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
   if (last_frame_color_space_ != frame->ColorSpace()) {
     last_frame_color_space_ = frame->ColorSpace();
     key_frame = true;
+    UpdateEncoderColorSpace();
   }
   auto deadline = VPX_DL_REALTIME;
   vpx_codec_flags_t flags = key_frame ? VPX_EFLAG_FORCE_KF : 0;
@@ -545,10 +549,8 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
                                     duration_us, flags, deadline);
 
   if (vpx_error != VPX_CODEC_OK) {
-    std::string msg = base::StringPrintf("VPX encoding error: %s (%s)",
-                                         vpx_codec_err_to_string(vpx_error),
-                                         vpx_codec_error_detail(codec_.get()));
-    DLOG(ERROR) << msg;
+    auto msg =
+        LogVpxErrorMessage(codec_.get(), "VPX encoding error", vpx_error);
     std::move(done_cb).Run(
         EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode, msg)
             .WithData("vpx_error", vpx_error));
@@ -562,7 +564,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 void VpxVideoEncoder::ChangeOptions(const Options& options,
                                     OutputCB output_cb,
                                     EncoderStatusCB done_cb) {
-  done_cb = BindToCurrentLoop(std::move(done_cb));
+  done_cb = BindCallbackToCurrentLoopIfNeeded(std::move(done_cb));
   if (!codec_) {
     std::move(done_cb).Run(
         EncoderStatus::Codes::kEncoderInitializeNeverCompleted);
@@ -633,7 +635,7 @@ void VpxVideoEncoder::ChangeOptions(const Options& options,
     codec_config_ = new_config;
     options_ = options;
     if (!output_cb.is_null())
-      output_cb_ = BindToCurrentLoop(std::move(output_cb));
+      output_cb_ = BindCallbackToCurrentLoopIfNeeded(std::move(output_cb));
   } else {
     status = EncoderStatus(EncoderStatus::Codes::kEncoderUnsupportedConfig,
                            "Failed to set new VPX config")
@@ -671,7 +673,7 @@ VpxVideoEncoder::~VpxVideoEncoder() {
 }
 
 void VpxVideoEncoder::Flush(EncoderStatusCB done_cb) {
-  done_cb = BindToCurrentLoop(std::move(done_cb));
+  done_cb = BindCallbackToCurrentLoopIfNeeded(std::move(done_cb));
   if (!codec_) {
     std::move(done_cb).Run(
         EncoderStatus::Codes::kEncoderInitializeNeverCompleted);
@@ -680,10 +682,8 @@ void VpxVideoEncoder::Flush(EncoderStatusCB done_cb) {
 
   auto vpx_error = vpx_codec_encode(codec_.get(), nullptr, -1, 0, 0, 0);
   if (vpx_error != VPX_CODEC_OK) {
-    std::string msg = base::StringPrintf("VPX flushing error: %s (%s)",
-                                         vpx_codec_err_to_string(vpx_error),
-                                         vpx_codec_error_detail(codec_.get()));
-    DLOG(ERROR) << msg;
+    auto msg =
+        LogVpxErrorMessage(codec_.get(), "VPX flushing error", vpx_error);
     auto status = EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode, msg)
                       .WithData("vpx_error", vpx_error);
     std::move(done_cb).Run(std::move(status));
@@ -721,6 +721,55 @@ void VpxVideoEncoder::DrainOutputs(int temporal_id,
       memcpy(result.data.get(), pkt->data.frame.buf, result.size);
       output_cb_.Run(std::move(result), {});
     }
+  }
+}
+
+void VpxVideoEncoder::UpdateEncoderColorSpace() {
+  auto vpx_cs = VPX_CS_UNKNOWN;
+  switch (last_frame_color_space_.GetPrimaryID()) {
+    case gfx::ColorSpace::PrimaryID::BT709: {
+      const auto matrix_id = last_frame_color_space_.GetMatrixID();
+      if (matrix_id == gfx::ColorSpace::MatrixID::GBR ||
+          matrix_id == gfx::ColorSpace::MatrixID::RGB) {
+        vpx_cs = VPX_CS_SRGB;
+      } else {
+        vpx_cs = VPX_CS_BT_709;
+      }
+      break;
+    }
+    case gfx::ColorSpace::PrimaryID::BT2020:
+      vpx_cs = VPX_CS_BT_2020;
+      break;
+    case gfx::ColorSpace::PrimaryID::SMPTE170M:
+      vpx_cs = VPX_CS_SMPTE_170;
+      break;
+    case gfx::ColorSpace::PrimaryID::SMPTE240M:
+      vpx_cs = VPX_CS_SMPTE_240;
+      break;
+    case gfx::ColorSpace::PrimaryID::BT470BG:
+      vpx_cs = VPX_CS_BT_601;
+      break;
+    default:
+      break;
+  };
+
+  if (vpx_cs != VPX_CS_UNKNOWN) {
+    auto vpx_error =
+        vpx_codec_control(codec_.get(), VP9E_SET_COLOR_SPACE, vpx_cs);
+    if (vpx_error != VPX_CODEC_OK)
+      LogVpxErrorMessage(codec_.get(), "Failed to set color space", vpx_error);
+  }
+
+  if (last_frame_color_space_.GetRangeID() == gfx::ColorSpace::RangeID::FULL ||
+      last_frame_color_space_.GetRangeID() ==
+          gfx::ColorSpace::RangeID::LIMITED) {
+    auto vpx_error = vpx_codec_control(
+        codec_.get(), VP9E_SET_COLOR_RANGE,
+        last_frame_color_space_.GetRangeID() == gfx::ColorSpace::RangeID::FULL
+            ? VPX_CR_FULL_RANGE
+            : VPX_CR_STUDIO_RANGE);
+    if (vpx_error != VPX_CODEC_OK)
+      LogVpxErrorMessage(codec_.get(), "Failed to set color range", vpx_error);
   }
 }
 

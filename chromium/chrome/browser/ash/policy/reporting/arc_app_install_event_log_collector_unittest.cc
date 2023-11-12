@@ -12,9 +12,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -152,10 +152,10 @@ class ArcAppInstallEventLogCollectorTest : public testing::Test {
         std::make_unique<ash::NetworkHandlerTestHelper>();
     network_handler_test_helper_->service_test()->AddService(
         kEthernetServicePath, "eth1_guid", "eth1", shill::kTypeEthernet,
-        shill::kStateOffline, true /* visible */);
+        shill::kStateIdle, true /* visible */);
     network_handler_test_helper_->service_test()->AddService(
         kWifiServicePath, "wifi1_guid", "wifi1", shill::kTypeEthernet,
-        shill::kStateOffline, true /* visible */);
+        shill::kStateIdle, true /* visible */);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -339,10 +339,10 @@ TEST_F(ArcAppInstallEventLogCollectorTest, ConnectivityChanges) {
   SetNetworkState(collector.get(), kWifiServicePath, shill::kStateOnline);
   EXPECT_EQ(1, delegate()->add_for_all_count());
 
-  SetNetworkState(collector.get(), kEthernetServicePath, shill::kStateOffline);
+  SetNetworkState(collector.get(), kEthernetServicePath, shill::kStateIdle);
   EXPECT_EQ(1, delegate()->add_for_all_count());
 
-  SetNetworkState(collector.get(), kWifiServicePath, shill::kStateOffline);
+  SetNetworkState(collector.get(), kWifiServicePath, shill::kStateIdle);
   EXPECT_EQ(2, delegate()->add_for_all_count());
   EXPECT_EQ(em::AppInstallReportLogEvent::CONNECTIVITY_CHANGE,
             delegate()->last_event().event_type());

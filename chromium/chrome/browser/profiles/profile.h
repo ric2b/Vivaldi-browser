@@ -127,6 +127,11 @@ class Profile : public content::BrowserContext {
 
     bool AllowsBrowserWindows() const;
 
+#if BUILDFLAG(IS_CHROMEOS)
+    // Returns true if the OTR Profile was created for captive portal signin.
+    bool IsCaptivePortal() const;
+#endif
+
 #if BUILDFLAG(IS_ANDROID)
     // Constructs a Java OTRProfileID from the provided C++ OTRProfileID
     base::android::ScopedJavaLocalRef<jobject> ConvertToJavaOTRProfileID(
@@ -149,7 +154,6 @@ class Profile : public content::BrowserContext {
 #endif
 
    private:
-    friend class ProfileDestroyer;
     friend std::ostream& operator<<(std::ostream& out,
                                     const OTRProfileID& profile_id);
 
@@ -488,6 +492,8 @@ class Profile : public content::BrowserContext {
 
   virtual void RecordPrimaryMainFrameNavigation() = 0;
 
+  base::WeakPtr<Profile> GetWeakPtr();
+
  protected:
   // Creates an OffTheRecordProfile which points to this Profile.
   static std::unique_ptr<Profile> CreateOffTheRecordProfile(
@@ -503,11 +509,6 @@ class Profile : public content::BrowserContext {
 
   // Returns whether the user has signed in this profile to an account.
   virtual bool IsSignedIn() = 0;
-
- public:
-  friend class ProfileDestroyer;
-
-  base::WeakPtr<Profile> GetWeakPtr();
 
  private:
   // Created on the UI thread, and returned by GetResourceContext(), but

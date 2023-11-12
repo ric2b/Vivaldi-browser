@@ -1,4 +1,4 @@
-# Copyright 2020 Vivaldi Technologies. All rights reserved.
+# Copyright 2020-2022 Vivaldi Technologies. All rights reserved.
 
 import os
 import subprocess
@@ -14,7 +14,8 @@ def build(project_folder, output_folder, signed):
     project_name = "Sparkle.xcodeproj"
     build_command = "xcodebuild -project " + project_folder + "/" + project_name + \
         " -scheme Distribution -configuration Release -derivedDataPath " + output_folder + \
-        " build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO"
+        " -destination platform=macOS" + \
+        " build CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO"
     if signed:
         build_command += " GCC_PREPROCESSOR_DEFINITIONS='${inherited} VIVALDI_SIGNED_BUILD=1'"
     build_command += " > /dev/null"

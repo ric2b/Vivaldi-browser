@@ -10,6 +10,7 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/style_util.h"
 #include "ash/wallpaper/wallpaper_base_view.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
@@ -18,10 +19,10 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_highlight_item_border.h"
 #include "ash/wm/workspace/backdrop_controller.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ash/wm/workspace_controller.h"
@@ -56,9 +57,6 @@ constexpr int kRootHeightDividerForSmallScreen = 8;
 constexpr int kDeskPreviewMaxHeight = 140;
 constexpr int kDeskPreviewMinHeight = 48;
 constexpr int kUseSmallerHeightDividerWidthThreshold = 600;
-
-// The corner radius of the border in dips.
-constexpr int kBorderCornerRadius = 6;
 
 // The rounded corner radii, also in dips.
 constexpr int kCornerRadius = 4;
@@ -117,16 +115,37 @@ const LayerData GetLayerDataEntry(
   return iter == layers_data.end() ? LayerData{} : iter->second;
 }
 
+// Get the z-order of all-desk `window` in `desk` for `root`. If it does not
+// exist, then nullopt is returned. Please note, the z-order information is
+// retrieved from the stored stacking data of `desk` for all-desk windows.
+absl::optional<size_t> GetWindowZOrderForDeskAndRoot(const aura::Window* window,
+                                                     const Desk* desk,
+                                                     const aura::Window* root) {
+  const auto& adw_by_root = desk->all_desk_window_stacking();
+
+  if (auto it = adw_by_root.find(root); it != adw_by_root.end()) {
+    for (auto& adw : it->second) {
+      if (adw.window == window)
+        return adw.order;
+    }
+  }
+
+  return absl::nullopt;
+}
+
 // Appends clones of all the visible on all desks windows' layers to
-// |out_desk_container_children|. Should only be called if
-// |visible_on_all_desks_windows| is not empty.
+// `out_desk_container_children`. Should only be called if
+// `visible_on_all_desks_windows` is not empty.
 void AppendVisibleOnAllDesksWindowsToDeskLayer(
     const base::flat_set<aura::Window*>& visible_on_all_desks_windows,
     const base::flat_map<ui::Layer*, LayerData>& layers_data,
-    std::vector<ui::Layer*>* out_desk_container_children) {
+    std::vector<ui::Layer*>* out_desk_container_children,
+    aura::Window* desk_container) {
   DCHECK(!visible_on_all_desks_windows.empty());
   auto mru_windows =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kAllDesks);
+  const Desk* desk = desks_util::GetDeskForContext(desk_container);
+  aura::Window* root = desk_container->GetRootWindow();
 
   for (auto* window : visible_on_all_desks_windows) {
     const LayerData layer_data =
@@ -138,36 +157,53 @@ void AppendVisibleOnAllDesksWindowsToDeskLayer(
     if (window_iter == mru_windows.end())
       continue;
 
-    auto closest_window_below_iter = std::next(window_iter);
-    while (closest_window_below_iter != mru_windows.end() &&
-           !base::Contains(*out_desk_container_children,
-                           (*closest_window_below_iter)->layer())) {
-      // Find the closest window to |window| in the MRU tracker whose layer also
-      // is in |out_desk_container_children|. This window will be used to
-      // determine the stacking order of the visible on all desks window in the
-      // preview view.
-      closest_window_below_iter = std::next(closest_window_below_iter);
+    auto insertion_point_iter = out_desk_container_children->end();
+    auto desk_windows = desk_container->children();
+
+    // Find z order of `window`. If `features::IsPerDeskZOrderEnabled()` is not
+    // on, default value of zero will be used so `window` would be put on top.
+    size_t window_order =
+        GetWindowZOrderForDeskAndRoot(window, desk, root).value_or(0);
+
+    // If `desk` has no child window, or `window` has lowest z order, use
+    // default `insertion_point_iter` to put it on top.
+    if (!desk_windows.empty() && window_order) {
+      // Find the nearest window that should be on top of `window`.
+      size_t order = 0, target_idx = desk_windows.size();
+      for (int i = desk_windows.size() - 1; i >= 0 && order < window_order;
+           i--) {
+        if (desks_util::IsZOrderTracked(window)) {
+          target_idx = static_cast<size_t>(i);
+          ++order;
+        }
+      }
+
+      // Move to the next nearest window until its layer is in the
+      // `out_desk_container_children`.
+      for (size_t i = target_idx; i < desk_windows.size(); i++) {
+        if (base::Contains(*out_desk_container_children,
+                           desk_windows[i]->layer())) {
+          insertion_point_iter = base::ranges::find(
+              *out_desk_container_children, desk_windows[i]->layer());
+          break;
+        }
+      }
     }
 
-    auto insertion_point_iter =
-        closest_window_below_iter == mru_windows.end()
-            ? out_desk_container_children->begin()
-            : std::next(
-                  base::ranges::find(*out_desk_container_children,
-                                     (*closest_window_below_iter)->layer()));
     out_desk_container_children->insert(insertion_point_iter, window->layer());
   }
 }
 
-// Recursively mirrors |source_layer| and its children and adds them as children
-// of |parent|, taking into account the given |layers_data|. If the layer data
-// of |source_layer| has |should_clear_transform| set to true, the transforms of
+// Recursively mirrors `source_layer` and its children and adds them as children
+// of `parent`, taking into account the given |layers_data|. If the layer data
+// of `source_layer` has `should_clear_transform` set to true, the transforms of
 // its mirror layers will be reset to identity.
-void MirrorLayerTree(ui::Layer* source_layer,
-                     ui::Layer* parent,
-                     const base::flat_map<ui::Layer*, LayerData>& layers_data,
-                     const base::flat_set<aura::Window*>&
-                         visible_on_all_desks_windows_to_mirror) {
+void MirrorLayerTree(
+    ui::Layer* source_layer,
+    ui::Layer* parent,
+    const base::flat_map<ui::Layer*, LayerData>& layers_data,
+    const base::flat_set<aura::Window*>& visible_on_all_desks_windows_to_mirror,
+    aura::Window* desk_container) {
   const LayerData layer_data = GetLayerDataEntry(layers_data, source_layer);
   if (layer_data.should_skip_layer)
     return;
@@ -181,13 +217,14 @@ void MirrorLayerTree(ui::Layer* source_layer,
     // preview so for inactive desks, we need to append the layers of visible on
     // all desks windows.
     AppendVisibleOnAllDesksWindowsToDeskLayer(
-        visible_on_all_desks_windows_to_mirror, layers_data, &children);
+        visible_on_all_desks_windows_to_mirror, layers_data, &children,
+        desk_container);
   }
   for (auto* child : children) {
     // Visible on all desks windows only needed to be added to the subtree once
     // so use an empty set for subsequent calls.
-    MirrorLayerTree(child, mirror, layers_data,
-                    base::flat_set<aura::Window*>());
+    MirrorLayerTree(child, mirror, layers_data, base::flat_set<aura::Window*>(),
+                    desk_container);
   }
 
   mirror->set_sync_bounds_with_source(true);
@@ -232,6 +269,16 @@ void GetLayersData(aura::Window* window,
   // mirrored and the transforms of the mirrored layers should be reset to
   // identity.
   if (window->GetProperty(kForceVisibleInMiniViewKey))
+    layer_data.should_force_mirror_visible = true;
+
+  // Since floated window is not stored in desk container and will be hidden
+  // when the desk is inactive, or when we switch to the template/save desk grid
+  // on overview (via `HideForSavedDeskLibrary` etc.). We need to make sure it's
+  // visible in the desk mini view at anytime, except when it's minimized (which
+  // has been handled above). Currently we force the floated window to be
+  // visible at all time, since we don't have a use case where we need to hide
+  // floated window for desk preview.
+  if (window_state && window_state->IsFloated())
     layer_data.should_force_mirror_visible = true;
 
   // Visible on all desks windows and floated windows aren't children of
@@ -301,12 +348,6 @@ DeskPreviewView::DeskPreviewView(PressedCallback callback,
     highlight_overlay_layer->SetIsFastRoundedCorner(true);
   }
 
-  auto border = std::make_unique<WmHighlightItemBorder>(kBorderCornerRadius);
-  border_ptr_ = border.get();
-  SetBorder(std::move(border));
-  // Do not install the default focus ring on the button since we have `border`.
-  SetInstallFocusRingOnFocus(false);
-
   RecreateDeskContentsMirrorLayers();
 }
 
@@ -323,11 +364,6 @@ int DeskPreviewView::GetHeight(aura::Window* root) {
           : kRootHeightDivider;
   return base::clamp(root->bounds().height() / height_divider,
                      kDeskPreviewMinHeight, kDeskPreviewMaxHeight);
-}
-
-void DeskPreviewView::SetBorderColor(SkColor color) {
-  border_ptr_->set_color(color);
-  SchedulePaint();
 }
 
 void DeskPreviewView::SetHighlightOverlayVisibility(bool visible) {
@@ -371,14 +407,16 @@ void DeskPreviewView::RecreateDeskContentsMirrorLayers() {
 
   auto* desk_container_layer = desk_container->layer();
   MirrorLayerTree(desk_container_layer, mirrored_content_root_layer.get(),
-                  layers_data, visible_on_all_desks_windows_to_mirror);
+                  layers_data, visible_on_all_desks_windows_to_mirror,
+                  desk_container);
 
   // Since floated window is not stored in desk container, we need to mirror it
   // separately.
   if (floated_window) {
     auto* floated_window_layer = floated_window->layer();
     MirrorLayerTree(floated_window_layer, mirrored_content_root_layer.get(),
-                    layers_data, /*visible_on_all_desks_windows_to_mirror=*/{});
+                    layers_data, /*visible_on_all_desks_windows_to_mirror=*/{},
+                    desk_container);
   }
 
   // Add the root of the mirrored layer tree as a child of the
@@ -466,7 +504,8 @@ void DeskPreviewView::OnGestureEvent(ui::GestureEvent* event) {
       [[fallthrough]];
     case ui::ET_GESTURE_SCROLL_UPDATE:
       owner_bar->HandleDragEvent(mini_view_, *event);
-      event->SetHandled();
+      if (owner_bar->IsDraggingDesk())
+        event->SetHandled();
       break;
     case ui::ET_GESTURE_END:
       if (owner_bar->HandleReleaseEvent(mini_view_, *event))
@@ -493,12 +532,12 @@ void DeskPreviewView::OnThemeChanged() {
 
 void DeskPreviewView::OnFocus() {
   UpdateOverviewHighlightForFocusAndSpokenFeedback(this);
-  mini_view_->UpdateBorderColor();
+  mini_view_->UpdateFocusColor();
   View::OnFocus();
 }
 
 void DeskPreviewView::OnBlur() {
-  mini_view_->UpdateBorderColor();
+  mini_view_->UpdateFocusColor();
   View::OnBlur();
 }
 
@@ -524,9 +563,7 @@ void DeskPreviewView::MaybeSwapHighlightedView(bool right) {
   const int old_index = mini_view_->owner_bar()->GetMiniViewIndex(mini_view_);
   DCHECK_NE(old_index, -1);
 
-  const bool mirrored = mini_view_->owner_bar()->GetMirrored();
-  // If mirrored, flip the swap direction.
-  int new_index = mirrored ^ right ? old_index + 1 : old_index - 1;
+  int new_index = right ? old_index + 1 : old_index - 1;
   if (new_index < 0 ||
       new_index ==
           static_cast<int>(mini_view_->owner_bar()->mini_views().size())) {
@@ -545,12 +582,12 @@ bool DeskPreviewView::MaybeActivateHighlightedViewOnOverviewExit(
 }
 
 void DeskPreviewView::OnViewHighlighted() {
-  mini_view_->UpdateBorderColor();
+  mini_view_->UpdateFocusColor();
   mini_view_->owner_bar()->ScrollToShowMiniViewIfNecessary(mini_view_);
 }
 
 void DeskPreviewView::OnViewUnhighlighted() {
-  mini_view_->UpdateBorderColor();
+  mini_view_->UpdateFocusColor();
 }
 
 }  // namespace ash

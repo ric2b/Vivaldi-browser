@@ -23,7 +23,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_driver.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
@@ -55,6 +55,9 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 namespace autofill {
 
@@ -96,7 +99,7 @@ const net::BackoffEntry::Policy kAutofillBackoffPolicy = {
 };
 
 const char kDefaultAutofillServerURL[] =
-    "https://content-autofill.googleapis.com/";
+    KNOWN_404("/");
 
 // The default number of days after which to reset the registry of autofill
 // events for which an upload has been sent.
@@ -136,6 +139,9 @@ GURL GetAutofillServerURL() {
                << command_line.GetSwitchValueASCII(
                       switches::kAutofillServerURL);
   }
+
+  if (vivaldi::IsVivaldiRunning())
+    return GURL();
 
   // If communication is disabled, leave the autofill server URL unset.
   if (!base::FeatureList::IsEnabled(features::kAutofillServerCommunication))
@@ -986,7 +992,7 @@ void AutofillDownloadManager::OnSimpleLoaderComplete(
 
     // Reschedule with the appropriate delay, ignoring return value because
     // payload is already well formed.
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(
             base::IgnoreResult(&AutofillDownloadManager::StartRequest),

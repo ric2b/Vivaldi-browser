@@ -5,7 +5,7 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {DefaultUserImage, Paths, UserImage, UserPreview} from 'chrome://personalization/js/personalization_app.js';
+import {DefaultUserImage, getSanitizedDefaultImageUrl, Paths, UserImage, UserPreview} from 'chrome://personalization/js/personalization_app.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -74,8 +74,8 @@ suite('UserPreviewTest', function() {
     const avatarImage = userPreviewElement!.shadowRoot!.getElementById(
                             'avatar') as HTMLImageElement;
     assertEquals(
-        userProvider.image.defaultImage?.url.url, avatarImage.src,
-        'correct image url is shown for default image');
+        getSanitizedDefaultImageUrl(userProvider.image.defaultImage?.url!).url,
+        avatarImage.src, 'correct image url is shown for default image');
   });
 
   test('displays user image from profile image', async () => {
@@ -114,15 +114,15 @@ suite('UserPreviewTest', function() {
         'blob url is shown for external image');
   });
 
-  test('displays placeholder image if user image is unavailable', async () => {
+  test('do not display image if user image is not ready yet', async () => {
     userPreviewElement = initElement(UserPreview, {path: Paths.ROOT});
     await waitAfterNextRender(userPreviewElement!);
 
     const avatarImage = userPreviewElement!.shadowRoot!.getElementById(
                             'avatar') as HTMLImageElement;
     assertEquals(
-        'chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE', avatarImage.src,
-        'placeholder image is shown if user image is unavailable');
+        null, avatarImage,
+        'do not display image if user image is not ready yet');
   });
 
   test('displays placeholder image if user image is invalid', async () => {
@@ -145,8 +145,8 @@ suite('UserPreviewTest', function() {
     const avatarImage = userPreviewElement!.shadowRoot!.getElementById(
                             'avatar2') as HTMLImageElement;
     assertEquals(
-        userProvider.image.defaultImage?.url.url, avatarImage.src,
-        'default image url is shown on non-clickable image');
+        getSanitizedDefaultImageUrl(userProvider.image.defaultImage?.url!).url,
+        avatarImage.src, 'default image url is shown on non-clickable image');
   });
 
   test('displays enterprise logo on avatar image', async () => {

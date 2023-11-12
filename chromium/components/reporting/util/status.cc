@@ -11,7 +11,9 @@
 
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
-#include "components/reporting/util/status.pb.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_number_conversions_internal.h"
+#include "components/reporting/proto/synced/status.pb.h"
 
 namespace reporting {
 namespace error {
@@ -33,8 +35,6 @@ inline std::string CodeEnumToString(error::Code code) {
       return "ALREADY_EXISTS";
     case PERMISSION_DENIED:
       return "PERMISSION_DENIED";
-    case UNAUTHENTICATED:
-      return "UNAUTHENTICATED";
     case RESOURCE_EXHAUSTED:
       return "RESOURCE_EXHAUSTED";
     case FAILED_PRECONDITION:
@@ -51,11 +51,11 @@ inline std::string CodeEnumToString(error::Code code) {
       return "UNAVAILABLE";
     case DATA_LOSS:
       return "DATA_LOSS";
+    case UNAUTHENTICATED:
+      return "UNAUTHENTICATED";
+    default:
+      return base::StrCat({"ILLEGAL[", base::NumberToString(code), "]"});
   }
-
-  // No default clause, clang will abort if a code is missing from
-  // above switch.
-  return "UNKNOWN";
 }
 }  // namespace error.
 

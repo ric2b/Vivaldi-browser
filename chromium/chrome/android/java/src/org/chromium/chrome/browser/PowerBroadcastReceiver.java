@@ -92,8 +92,7 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
          * Executed when all of the system conditions are met.
          */
         public void runActions() {
-            Context context = ContextUtils.getApplicationContext();
-            OmahaBase.onForegroundSessionStart(context);
+            OmahaBase.onForegroundSessionStart();
         }
 
     }
@@ -109,7 +108,7 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
         if (powerManager.isInteractive()) {
             mServiceRunnable.post();
         } else {
-            registerReceiver();
+            registerBroadcastReceiver();
         }
     }
 
@@ -118,7 +117,7 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
         assert Looper.getMainLooper() == Looper.myLooper();
 
         mServiceRunnable.cancel();
-        unregisterReceiver();
+        unregisterBroadcastReceiver();
     }
 
     @Override
@@ -126,7 +125,7 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
         if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())
                 && ApplicationStatus.hasVisibleActivities()) {
             mServiceRunnable.post();
-            unregisterReceiver();
+            unregisterBroadcastReceiver();
         }
     }
 
@@ -142,7 +141,7 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
      * Unregisters this broadcast receiver so it no longer receives Intents.
      * Also cancels any Runnables waiting to be executed.
      */
-    private void unregisterReceiver() {
+    private void unregisterBroadcastReceiver() {
         if (mIsRegistered.getAndSet(false)) {
             ContextUtils.getApplicationContext().unregisterReceiver(this);
         }
@@ -151,11 +150,11 @@ public class PowerBroadcastReceiver extends BroadcastReceiver {
     /**
      * Registers this broadcast receiver so it receives Intents.
      */
-    private void registerReceiver() {
+    private void registerBroadcastReceiver() {
         assert Looper.getMainLooper() == Looper.myLooper();
         if (mIsRegistered.getAndSet(true)) return;
-        ContextUtils.getApplicationContext().registerReceiver(
-                this, new IntentFilter(Intent.ACTION_SCREEN_ON));
+        ContextUtils.registerProtectedBroadcastReceiver(ContextUtils.getApplicationContext(), this,
+                new IntentFilter(Intent.ACTION_SCREEN_ON));
     }
 
     /**

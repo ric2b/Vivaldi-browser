@@ -7,6 +7,7 @@
 #include <stylus-unstable-v2-client-protocol.h>
 
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/time/time.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -41,7 +42,7 @@ WaylandTouch::WaylandTouch(wl_touch* touch,
                            Delegate* delegate)
     : obj_(touch), connection_(connection), delegate_(delegate) {
   static constexpr wl_touch_listener listener = {
-      &Down, &Up, &Motion, &Frame, &Cancel,
+      &Down, &Up, &Motion, &Frame, &Cancel, &Shape, &Orientation,
   };
 
   wl_touch_add_listener(obj_.get(), &listener, this);
@@ -53,6 +54,7 @@ WaylandTouch::~WaylandTouch() {
   delegate_->OnTouchCancelEvent();
 }
 
+// static
 void WaylandTouch::Down(void* data,
                         wl_touch* obj,
                         uint32_t serial,
@@ -78,6 +80,7 @@ void WaylandTouch::Down(void* data,
                                       EventDispatchPolicyForPlatform());
 }
 
+// static
 void WaylandTouch::Up(void* data,
                       wl_touch* obj,
                       uint32_t serial,
@@ -91,6 +94,7 @@ void WaylandTouch::Up(void* data,
                                         EventDispatchPolicyForPlatform());
 }
 
+// static
 void WaylandTouch::Motion(void* data,
                           wl_touch* obj,
                           uint32_t time,
@@ -112,6 +116,24 @@ void WaylandTouch::Motion(void* data,
                                        EventDispatchPolicyForPlatform());
 }
 
+// static
+void WaylandTouch::Shape(void* data,
+                         wl_touch* obj,
+                         int32_t id,
+                         wl_fixed_t major,
+                         wl_fixed_t minor) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+// static
+void WaylandTouch::Orientation(void* data,
+                               wl_touch* obj,
+                               int32_t id,
+                               wl_fixed_t orientation) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+// static
 void WaylandTouch::Cancel(void* data, wl_touch* obj) {
   auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
@@ -119,6 +141,7 @@ void WaylandTouch::Cancel(void* data, wl_touch* obj) {
   touch->delegate_->OnTouchCancelEvent();
 }
 
+// static
 void WaylandTouch::Frame(void* data, wl_touch* obj) {
   auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);

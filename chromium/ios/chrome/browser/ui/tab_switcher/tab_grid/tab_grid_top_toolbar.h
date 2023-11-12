@@ -9,11 +9,6 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 
-// Kill switch guarding a workaround for broken UI around the dynamic island,
-// see crbug.com/1364629. This workaround makes the UIToolbar background
-// transparent and correctly frames a UIVisualEffectView.
-bool ShouldUseToolbarBlurFix();
-
 @class TabGridPageControl;
 
 // Top toolbar for TabGrid. The appearance of the toolbar is decided by screen
@@ -28,6 +23,7 @@ bool ShouldUseToolbarBlurFix();
 //   Remote page:    [                   PageControl             Done]
 //   Selection mode: [SelectAll        SelectedTabsCount         Done]
 @interface TabGridTopToolbar : UIToolbar
+
 // These components are publicly available to allow the user to set their
 // contents, visibility and actions.
 @property(nonatomic, strong, readonly) UIBarButtonItem* anchorItem;
@@ -55,6 +51,8 @@ bool ShouldUseToolbarBlurFix();
 - (void)setCancelSearchButtonTarget:(id)target action:(SEL)action;
 // Sets the delegate for the searchbar.
 - (void)setSearchBarDelegate:(id<UISearchBarDelegate>)delegate;
+// Set `enabled` on the search button.
+- (void)setSearchButtonEnabled:(BOOL)enabled;
 // Set `enabled` on the new tab button.
 - (void)setNewTabButtonEnabled:(BOOL)enabled;
 // Set `enabled` on the select all button.
@@ -65,6 +63,7 @@ bool ShouldUseToolbarBlurFix();
 - (void)setCloseAllButtonEnabled:(BOOL)enabled;
 // use undo or closeAll text on the close all button based on `useUndo` value.
 - (void)useUndoCloseAll:(BOOL)useUndo;
+
 // Sets the `menu` displayed on tapping the Edit button.
 - (void)setEditButtonMenu:(UIMenu*)menu API_AVAILABLE(ios(14.0));
 // Set `enabled` on the Edit button.
@@ -80,6 +79,9 @@ bool ShouldUseToolbarBlurFix();
 - (void)hide;
 // Recovers the normal appearance for tab grid transition animation.
 - (void)show;
+// Updates the appearance of the this toolbar, based on whether the content
+// below it is `scrolledToEdge` or not.
+- (void)setScrollViewScrolledToEdge:(BOOL)scrolledToEdge;
 
 @end
 

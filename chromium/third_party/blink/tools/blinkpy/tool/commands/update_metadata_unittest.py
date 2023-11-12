@@ -187,11 +187,8 @@ class UpdateMetadataExecuteTest(BaseUpdateMetadataTest):
         self.assertLog([
             'INFO: All builds finished.\n',
             'INFO: Processing wptrunner report (1/1)\n',
-            "INFO: Updated 'crash.html' (1/5, modified)\n",
-            "INFO: Updated 'dir/multiglob.https.any.js' (2/5)\n",
-            "INFO: Updated 'fail.html' (3/5)\n",
-            "INFO: Updated 'pass.html' (4/5)\n",
-            "INFO: Updated 'variant.html' (5/5)\n",
+            'INFO: Updating expectations for up to 5 test files.\n',
+            "INFO: Updated 'crash.html'\n",
             'INFO: Staged 1 metadata file.\n',
         ])
         self.assertEqual(self.command.git.added_paths, {
@@ -217,11 +214,52 @@ class UpdateMetadataExecuteTest(BaseUpdateMetadataTest):
         self.assertLog([
             'INFO: All builds finished.\n',
             'INFO: Processing wptrunner report (1/1)\n',
-            "INFO: Updated 'dir/multiglob.https.any.js' (1/3)\n",
-            "INFO: Updated 'pass.html' (2/3)\n",
-            "INFO: Updated 'variant.html' (3/3)\n",
+            'INFO: Updating expectations for up to 3 test files.\n',
             'INFO: Staged 0 metadata files.\n',
         ])
+
+    def test_execute_exclude_patterns(self):
+        url = 'https://cr.dev/123/wptreport.json?token=abc'
+        self.tool.web.urls[url] = json.dumps({
+            'run_info': {
+                'os': 'mac'
+            },
+            'results': [{
+                'test': '/variant.html?foo=bar/abc',
+                'subtests': [],
+                'expected': 'PASS',
+                'status': 'FAIL',
+            }, {
+                'test': '/variant.html?foo=baz',
+                'subtests': [],
+                'expected': 'PASS',
+                'status': 'FAIL',
+            }],
+        }).encode()
+        with self._patch_builtins() as stack:
+            stack.enter_context(self._unstaged_changes())
+            exit_code = self.command.main([
+                '--exclude=wpt_internal',
+                '--exclude=variant.html?foo=baz',
+                '--exclude=crash.html',
+            ])
+        self.assertEqual(exit_code, 0)
+        self.assertLog([
+            'INFO: All builds finished.\n',
+            'INFO: Processing wptrunner report (1/1)\n',
+            'INFO: Updating expectations for up to 3 test files.\n',
+            "INFO: Updated 'variant.html'\n",
+            'INFO: Staged 1 metadata file.\n',
+        ])
+        # The other variant is not updated.
+        self.assertEqual(
+            self.tool.filesystem.read_text_file(
+                self.finder.path_from_web_tests('external', 'wpt',
+                                                'variant.html.ini')),
+            textwrap.dedent("""\
+                [variant.html?foo=bar/abc]
+                  expected: FAIL
+                """))
 
     def test_execute_with_no_issue_number_aborts(self):
         self.command.git_cl = MockGitCL(self.tool, issue_number='None')
@@ -297,11 +335,8 @@ class UpdateMetadataExecuteTest(BaseUpdateMetadataTest):
             'INFO: Processing wptrunner report (1/1)\n',
             'WARNING: Deleting 1 orphaned metadata file:\n',
             'WARNING:   external/wpt/dir/is/orphaned.html.ini\n',
-            "INFO: Updated 'crash.html' (1/5, modified)\n",
-            "INFO: Updated 'dir/multiglob.https.any.js' (2/5)\n",
-            "INFO: Updated 'fail.html' (3/5)\n",
-            "INFO: Updated 'pass.html' (4/5)\n",
-            "INFO: Updated 'variant.html' (5/5)\n",
+            'INFO: Updating expectations for up to 5 test files.\n',
+            "INFO: Updated 'crash.html'\n",
         ])
         self.assertEqual(self.tool.filesystem.files, files_before)
         self.assertEqual(self.tool.executive.calls, [['luci-auth', 'token']])
@@ -322,7 +357,8 @@ class UpdateMetadataExecuteTest(BaseUpdateMetadataTest):
         self.assertLog([
             'INFO: All builds finished.\n',
             'INFO: Processing wptrunner report (1/1)\n',
-            "INFO: Updated 'crash.html' (1/1, modified)\n",
+            'INFO: Updating expectations for up to 1 test file.\n',
+            "INFO: Updated 'crash.html'\n",
             'INFO: Staged 1 metadata file.\n',
         ])
 
@@ -356,6 +392,30 @@ class UpdateMetadataExecuteTest(BaseUpdateMetadataTest):
             'ERROR:   external/wpt/fail.html.ini\n',
             'ERROR:   external/wpt/pass.html.ini\n',
             'ERROR: Please commit or reset these files to continue.\n',
+        ])
+
+    def test_execute_warn_absent_tests(self):
+        url = 'https://cr.dev/123/wptreport.json?token=abc'
+        self.tool.web.urls[url] = json.dumps({
+            'run_info': {},
+            'results': [{
+                'test': '/new-test-on-tot.html',
+                'subtests': [],
+                'status': 'PASS',
+            }],
+        }).encode()
+        with self._patch_builtins():
+            exit_code = self.command.main(['fail.html'])
+        self.assertEqual(exit_code, 0)
+        self.assertLog([
+            'INFO: All builds finished.\n',
+            'INFO: Processing wptrunner report (1/1)\n',
+            'WARNING: Some builders have results for tests that are absent '
+            'from your local checkout.\n',
+            'WARNING: To update metadata for these tests, please rebase-update '
+            'on tip-of-tree.\n',
+            'INFO: Updating expectations for up to 1 test file.\n',
+            'INFO: Staged 0 metadata files.\n',
         ])
 
     def test_gather_reports(self):
@@ -866,19 +926,23 @@ class UpdateMetadataArgumentParsingTest(unittest.TestCase):
 
     def test_build_syntax(self):
         options, _args = self.command.parse_args([
-            '--build=Linux Tests:100,linux-rel', '--build=mac-rel:200',
-            '--build=Mac12 Tests'
+            '--build=ci/Linux Tests:100,linux-rel', '--build=mac-rel:200',
+            '--build=ci/Mac12 Tests:300-302'
         ])
         self.assertEqual(options.builds, [
-            Build('Linux Tests', 100),
+            Build('Linux Tests', 100, bucket='ci'),
             Build('linux-rel'),
             Build('mac-rel', 200),
-            Build('Mac12 Tests'),
+            Build('Mac12 Tests', 300, bucket='ci'),
+            Build('Mac12 Tests', 301, bucket='ci'),
+            Build('Mac12 Tests', 302, bucket='ci'),
         ])
-        with self.assert_parse_error('invalid build number'):
+        with self.assert_parse_error('invalid build specifier'):
             self.command.parse_args(['--build=linux-rel:'])
-        with self.assert_parse_error('invalid build number'):
+        with self.assert_parse_error('invalid build specifier'):
             self.command.parse_args(['--build=linux-rel:nan'])
+        with self.assert_parse_error('start build number must precede end'):
+            self.command.parse_args(['--build=Linux Tests:100-10'])
 
     def test_bug_number_patterns(self):
         options, _args = self.command.parse_args(['-b', '123'])

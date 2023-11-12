@@ -24,8 +24,7 @@ TestSigninClient::TestSigninClient(
     : test_url_loader_factory_(test_url_loader_factory),
       pref_service_(pref_service),
       are_signin_cookies_allowed_(true),
-      network_calls_delayed_(false),
-      is_signout_allowed_(true) {}
+      network_calls_delayed_(false) {}
 
 TestSigninClient::~TestSigninClient() {}
 
@@ -35,12 +34,14 @@ PrefService* TestSigninClient::GetPrefs() {
   return pref_service_;
 }
 
+bool TestSigninClient::IsClearPrimaryAccountAllowed() const {
+  return is_clear_primary_account_allowed_ == SignoutDecision::ALLOW;
+}
+
 void TestSigninClient::PreSignOut(
     base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached,
     signin_metrics::ProfileSignout signout_source_metric) {
-  std::move(on_signout_decision_reached)
-      .Run(is_signout_allowed_ ? SignoutDecision::ALLOW_SIGNOUT
-                               : SignoutDecision::DISALLOW_SIGNOUT);
+  std::move(on_signout_decision_reached).Run(is_clear_primary_account_allowed_);
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>

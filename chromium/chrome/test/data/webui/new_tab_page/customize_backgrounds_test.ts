@@ -22,8 +22,8 @@ function createCollection(
 }
 
 suite('NewTabPageCustomizeBackgroundsTest', () => {
-  let windowProxy: TestBrowserProxy;
-  let handler: TestBrowserProxy;
+  let windowProxy: TestBrowserProxy<WindowProxy>;
+  let handler: TestBrowserProxy<PageHandlerRemote>;
 
   async function createCustomizeBackgrounds():
       Promise<CustomizeBackgroundsElement> {
@@ -39,8 +39,7 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
   }
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     windowProxy = installMock(WindowProxy);
     windowProxy.setResultFor('createIframeSrc', '');

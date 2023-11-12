@@ -157,9 +157,7 @@ class CORE_EXPORT NGConstraintSpace final {
   NGConstraintSpace CloneWithoutFragmentation() const {
     DCHECK(HasBlockFragmentation());
     NGConstraintSpace copy = *this;
-    DCHECK(copy.rare_data_);
-    copy.rare_data_->block_direction_fragmentation_type = kFragmentNone;
-    copy.rare_data_->is_block_fragmentation_forced_off = true;
+    copy.DisableFurtherFragmentation();
     return copy;
   }
 
@@ -328,11 +326,6 @@ class CORE_EXPORT NGConstraintSpace final {
 
   bool IsTableCellWithCollapsedBorders() const {
     return HasRareData() ? rare_data_->IsTableCellWithCollapsedBorders()
-                         : false;
-  }
-
-  bool IsTableCellWithEffectiveRowspan() const {
-    return HasRareData() ? rare_data_->IsTableCellWithEffectiveRowspan()
                          : false;
   }
 
@@ -578,6 +571,12 @@ class CORE_EXPORT NGConstraintSpace final {
   // the one established by the nearest ancestor multicol container.
   bool IsInColumnBfc() const {
     return HasRareData() && rare_data_->is_in_column_bfc;
+  }
+
+  // True if there's a preceding break in the current fragmentainer (typically a
+  // break in a parallel flow, or we wouldn't attempt to keep laying out).
+  bool IsPastBreak() const {
+    return HasRareData() && rare_data_->is_past_break;
   }
 
   // Return true if we would be at least our intrinsic block-size.
@@ -890,6 +889,7 @@ class CORE_EXPORT NGConstraintSpace final {
           is_inside_balanced_columns(false),
           should_ignore_forced_breaks(false),
           is_in_column_bfc(false),
+          is_past_break(false),
           min_block_size_should_encompass_intrinsic_size(false),
           has_override_min_max_block_sizes(false),
           min_break_appeal(kBreakAppealLastResort),
@@ -922,6 +922,7 @@ class CORE_EXPORT NGConstraintSpace final {
           is_inside_balanced_columns(other.is_inside_balanced_columns),
           should_ignore_forced_breaks(other.should_ignore_forced_breaks),
           is_in_column_bfc(other.is_in_column_bfc),
+          is_past_break(other.is_past_break),
           min_block_size_should_encompass_intrinsic_size(
               other.min_block_size_should_encompass_intrinsic_size),
           has_override_min_max_block_sizes(
@@ -1006,6 +1007,7 @@ class CORE_EXPORT NGConstraintSpace final {
           is_inside_balanced_columns != other.is_inside_balanced_columns ||
           should_ignore_forced_breaks != other.should_ignore_forced_breaks ||
           is_in_column_bfc != other.is_in_column_bfc ||
+          is_past_break != other.is_past_break ||
           min_break_appeal != other.min_break_appeal ||
           propagate_child_break_values != other.propagate_child_break_values ||
           should_repeat != other.should_repeat ||
@@ -1043,7 +1045,7 @@ class CORE_EXPORT NGConstraintSpace final {
           block_direction_fragmentation_type != kFragmentNone ||
           is_block_fragmentation_forced_off ||
           requires_content_before_breaking || is_inside_balanced_columns ||
-          should_ignore_forced_breaks || is_in_column_bfc ||
+          should_ignore_forced_breaks || is_in_column_bfc || is_past_break ||
           min_break_appeal != kBreakAppealLastResort ||
           propagate_child_break_values || is_at_fragmentainer_start ||
           should_repeat || is_inside_repeatable_content)
@@ -1196,15 +1198,6 @@ class CORE_EXPORT NGConstraintSpace final {
       EnsureTableCellData()->has_collapsed_borders = has_collapsed_borders;
     }
 
-    bool IsTableCellWithEffectiveRowspan() const {
-      return GetDataUnionType() == DataUnionType::kTableCellData &&
-             table_cell_data_.has_effective_rowspan;
-    }
-
-    void SetIsTableCellWithEffectiveRowspan(bool has_effective_rowspan) {
-      EnsureTableCellData()->has_effective_rowspan = has_effective_rowspan;
-    }
-
     void SetTableRowData(
         scoped_refptr<const NGTableConstraintSpaceData> table_data,
         wtf_size_t row_index) {
@@ -1334,6 +1327,7 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned is_inside_balanced_columns : 1;
     unsigned should_ignore_forced_breaks : 1;
     unsigned is_in_column_bfc : 1;
+    unsigned is_past_break : 1;
     unsigned min_block_size_should_encompass_intrinsic_size : 1;
     unsigned has_override_min_max_block_sizes : 1;
     unsigned min_break_appeal : kNGBreakAppealBitsNeeded;
@@ -1366,14 +1360,13 @@ class CORE_EXPORT NGConstraintSpace final {
         return table_cell_borders == other.table_cell_borders &&
                table_cell_column_index == other.table_cell_column_index &&
                is_hidden_for_paint == other.is_hidden_for_paint &&
-               has_collapsed_borders == other.has_collapsed_borders &&
-               has_effective_rowspan == other.has_effective_rowspan;
+               has_collapsed_borders == other.has_collapsed_borders;
       }
 
       bool IsInitialForMaySkipLayout() const {
         return table_cell_borders == NGBoxStrut() &&
                table_cell_column_index == kNotFound && !is_hidden_for_paint &&
-               !has_collapsed_borders && !has_effective_rowspan;
+               !has_collapsed_borders;
       }
 
       NGBoxStrut table_cell_borders;
@@ -1381,7 +1374,6 @@ class CORE_EXPORT NGConstraintSpace final {
       absl::optional<LayoutUnit> table_cell_alignment_baseline;
       bool is_hidden_for_paint = false;
       bool has_collapsed_borders = false;
-      bool has_effective_rowspan = false;
     };
 
     struct TableRowData {
@@ -1665,6 +1657,15 @@ class CORE_EXPORT NGConstraintSpace final {
     }
 
     return rare_data_;
+  }
+
+  void DisableFurtherFragmentation() {
+    if (!HasBlockFragmentation()) {
+      return;
+    }
+    DCHECK(rare_data_);
+    rare_data_->block_direction_fragmentation_type = kFragmentNone;
+    rare_data_->is_block_fragmentation_forced_off = true;
   }
 
   LogicalSize available_size_;

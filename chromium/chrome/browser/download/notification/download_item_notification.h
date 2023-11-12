@@ -71,11 +71,7 @@ class DownloadItemNotification : public ImageDecoder::ImageRequest,
 
   enum ImageDecodeStatus { NOT_STARTED, IN_PROGRESS, DONE, FAILED, NOT_IMAGE };
 
-  enum NotificationUpdateType {
-    ADD,
-    UPDATE,
-    UPDATE_AND_POPUP
-  };
+  enum NotificationUpdateType { ADD, UPDATE, UPDATE_AND_POPUP };
 
   std::string GetNotificationId() const;
 
@@ -116,6 +112,8 @@ class DownloadItemNotification : public ImageDecoder::ImageRequest,
   bool IsScanning() const;
   bool AllowedToOpenWhileScanning() const;
 
+  bool IsGalleryAppPdfEditNotificationEligible() const;
+
   Browser* GetBrowser() const;
   Profile* profile() const;
 
@@ -152,7 +150,7 @@ class DownloadItemNotification : public ImageDecoder::ImageRequest,
   download::DownloadItem::DownloadState previous_download_state_ =
       download::DownloadItem::MAX_DOWNLOAD_STATE;  // As uninitialized state
   bool previous_dangerous_state_ = false;
-  bool previous_mixed_content_state_ = false;
+  bool previous_insecure_state_ = false;
   std::unique_ptr<message_center::Notification> notification_;
 
   DownloadUIModel::DownloadUIModelPtr item_;

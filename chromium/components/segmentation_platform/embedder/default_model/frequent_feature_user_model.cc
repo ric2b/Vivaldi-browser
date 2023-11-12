@@ -7,7 +7,7 @@
 #include <array>
 
 #include "base/feature_list.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 #include "components/segmentation_platform/public/constants.h"
 #include "components/segmentation_platform/public/features.h"
@@ -69,6 +69,7 @@ std::unique_ptr<Config> FrequentFeatureUserModel::GetConfig() {
                        std::make_unique<FrequentFeatureUserModel>());
   config->segment_selection_ttl = base::Days(7);
   config->unknown_selection_ttl = base::Days(7);
+  config->is_boolean_segment = true;
 
   return config;
 }
@@ -90,18 +91,18 @@ void FrequentFeatureUserModel::InitAndFetchModel(
   writer.AddUmaFeatures(kUMAFeatures.data(), kUMAFeatures.size());
 
   constexpr int kModelVersion = 1;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindRepeating(
                      model_updated_callback, kFrequentFeatureUserSegmentId,
                      std::move(frequent_feature_user_metadata), kModelVersion));
 }
 
 void FrequentFeatureUserModel::ExecuteModelWithInput(
-    const std::vector<float>& inputs,
+    const ModelProvider::Request& inputs,
     ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != kUMAFeatures.size()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -110,10 +111,12 @@ void FrequentFeatureUserModel::ExecuteModelWithInput(
   for (int i = 0; i <= 8; ++i)
     total_non_search_feature += inputs[i];
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(callback),
-                     (total_non_search_feature > 0 && inputs[9] > 0) ? 1 : 0));
+      base::BindOnce(
+          std::move(callback),
+          ModelProvider::Response(
+              1, (total_non_search_feature > 0 && inputs[9] > 0) ? 1 : 0)));
 }
 
 bool FrequentFeatureUserModel::ModelAvailable() {

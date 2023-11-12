@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/web_applications/projector_system_web_app_info.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/webui/grit/ash_projector_app_trusted_resources.h"
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
@@ -14,18 +13,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/styles/cros_styles.h"
-
-namespace {
-
-SkColor GetBgColor(bool use_dark_mode) {
-  return cros_styles::ResolveColor(
-      cros_styles::ColorName::kBgColor, use_dark_mode,
-      base::FeatureList::IsEnabled(
-          ash::features::kSemanticColorsDebugOverride));
-}
-
-}  // namespace
 
 ProjectorSystemWebAppDelegate::ProjectorSystemWebAppDelegate(Profile* profile)
     : ash::SystemWebAppDelegate(ash::SystemWebAppType::PROJECTOR,
@@ -65,8 +52,10 @@ ProjectorSystemWebAppDelegate::GetWebAppInfo() const {
       },
       *info);
 
-  info->theme_color = GetBgColor(/*use_dark_mode=*/false);
-  info->dark_mode_theme_color = GetBgColor(/*use_dark_mode=*/true);
+  info->theme_color =
+      web_app::GetDefaultBackgroundColor(/*use_dark_mode=*/false);
+  info->dark_mode_theme_color =
+      web_app::GetDefaultBackgroundColor(/*use_dark_mode=*/true);
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
   info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 

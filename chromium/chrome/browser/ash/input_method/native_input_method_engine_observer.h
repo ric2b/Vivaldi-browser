@@ -4,11 +4,6 @@
 #ifndef CHROME_BROWSER_ASH_INPUT_METHOD_NATIVE_INPUT_METHOD_ENGINE_OBSERVER_H_
 #define CHROME_BROWSER_ASH_INPUT_METHOD_NATIVE_INPUT_METHOD_ENGINE_OBSERVER_H_
 
-#include "ash/services/ime/public/cpp/suggestions.h"
-#include "ash/services/ime/public/mojom/connection_factory.mojom.h"
-#include "ash/services/ime/public/mojom/input_engine.mojom.h"
-#include "ash/services/ime/public/mojom/input_method.mojom.h"
-#include "ash/services/ime/public/mojom/input_method_host.mojom.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/input_method/assistive_suggester.h"
@@ -16,8 +11,15 @@
 #include "chrome/browser/ash/input_method/autocorrect_manager.h"
 #include "chrome/browser/ash/input_method/grammar_manager.h"
 #include "chrome/browser/ash/input_method/input_method_engine.h"
+#include "chrome/browser/ash/input_method/pref_change_recorder.h"
 #include "chrome/browser/ash/input_method/suggestions_collector.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
+#include "chromeos/ash/services/ime/public/cpp/assistive_suggestions.h"
+#include "chromeos/ash/services/ime/public/mojom/connection_factory.mojom.h"
+#include "chromeos/ash/services/ime/public/mojom/input_engine.mojom.h"
+#include "chromeos/ash/services/ime/public/mojom/input_method.mojom.h"
+#include "chromeos/ash/services/ime/public/mojom/input_method_host.mojom.h"
+#include "chromeos/ash/services/ime/public/mojom/japanese_settings.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -80,6 +82,8 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
                           MouseButtonEvent button) override;
   void OnAssistiveWindowButtonClicked(
       const ui::ime::AssistiveWindowButton& button) override;
+  void OnAssistiveWindowChanged(
+      const ash::ime::AssistiveWindow& window) override;
   void OnMenuItemActivated(const std::string& component_id,
                            const std::string& menu_id) override;
   void OnScreenProjectionChanged(bool is_projected) override;
@@ -106,11 +110,12 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   void RequestSuggestions(ime::mojom::SuggestionsRequestPtr request,
                           RequestSuggestionsCallback callback) override;
   void DisplaySuggestions(
-      const std::vector<ime::TextSuggestion>& suggestions) override;
+      const std::vector<ime::AssistiveSuggestion>& suggestions) override;
   void UpdateCandidatesWindow(ime::mojom::CandidatesWindowPtr window) override;
   void RecordUkm(ime::mojom::UkmEntryPtr entry) override;
   void ReportKoreanAction(ime::mojom::KoreanAction action) override;
   void ReportKoreanSettings(ime::mojom::KoreanSettingsPtr settings) override;
+  void ReportSuggestionOpportunity(ime::AssistiveSuggestionMode mode) override;
   void UpdateQuickSettings(
       ime::mojom::InputMethodQuickSettingsPtr quick_settings) override;
 
@@ -154,6 +159,9 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   bool ShouldRouteToNativeMojoEngine(const std::string& engine_id) const;
 
   void OnConnectionFactoryBound(bool bound);
+
+  void OnJapaneseSettingsReceived(ime::mojom::JapaneseConfigPtr config);
+  void OnJapaneseDecoderConnected(bool bound);
   void ConnectToImeService(ime::mojom::ConnectionTarget connection_target,
                            const std::string& engine_id);
 
@@ -174,12 +182,17 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   mojo::Remote<ime::mojom::InputEngineManager> remote_manager_;
   mojo::Remote<ime::mojom::ConnectionFactory> connection_factory_;
   mojo::AssociatedRemote<ime::mojom::InputMethod> input_method_;
+  // TODO(b/232341104): Delete this connection once Japanese settings have been
+  // migrated completely
+  mojo::AssociatedRemote<ime::mojom::JapaneseDecoder> japanese_decoder_;
   mojo::AssociatedReceiver<ime::mojom::InputMethodHost> host_receiver_{this};
 
   std::unique_ptr<AssistiveSuggester> assistive_suggester_;
   std::unique_ptr<AutocorrectManager> autocorrect_manager_;
   std::unique_ptr<SuggestionsCollector> suggestions_collector_;
   std::unique_ptr<GrammarManager> grammar_manager_;
+
+  absl::optional<PrefChangeRecorder> pref_change_recorder_;
 
   ui::CharacterComposer character_composer_;
 

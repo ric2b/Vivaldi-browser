@@ -13,7 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/abseil_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
@@ -152,7 +152,7 @@ void QuicChromiumClientStream::Handle::OnError(int error) {
   // Post a task to invoke the callbacks to ensure that there is no reentrancy.
   // A ScopedPacketFlusher might cause an error which closes the stream under
   // the call stack of the owner of the handle.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&QuicChromiumClientStream::Handle::InvokeCallbacksOnClose,
                      weak_factory_.GetWeakPtr(), error));
@@ -301,7 +301,9 @@ void QuicChromiumClientStream::Handle::
 void QuicChromiumClientStream::Handle::SetPriority(
     const spdy::SpdyStreamPrecedence& precedence) {
   if (stream_)
-    stream_->SetPriority(precedence);
+    stream_->SetPriority(quic::QuicStreamPriority{
+        precedence.spdy3_priority(),
+        quic::QuicStreamPriority::kDefaultIncremental});
 }
 
 void QuicChromiumClientStream::Handle::Reset(
@@ -616,8 +618,8 @@ size_t QuicChromiumClientStream::WriteHeaders(
   net_log_.AddEvent(
       NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_SEND_REQUEST_HEADERS,
       [&](NetLogCaptureMode capture_mode) {
-        return QuicRequestNetLogParams(
-            id(), &header_block, precedence().spdy3_priority(), capture_mode);
+        return QuicRequestNetLogParams(id(), &header_block, priority().urgency,
+                                       capture_mode);
       });
   size_t len = quic::QuicSpdyStream::WriteHeaders(std::move(header_block), fin,
                                                   std::move(ack_listener));
@@ -700,7 +702,7 @@ int QuicChromiumClientStream::Read(IOBuffer* buf, int buf_len) {
 
 void QuicChromiumClientStream::NotifyHandleOfInitialHeadersAvailableLater() {
   DCHECK(handle_);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &QuicChromiumClientStream::NotifyHandleOfInitialHeadersAvailable,
@@ -717,7 +719,7 @@ void QuicChromiumClientStream::NotifyHandleOfInitialHeadersAvailable() {
 
 void QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailableLater() {
   DCHECK(handle_);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailable,
@@ -813,7 +815,7 @@ bool QuicChromiumClientStream::DeliverTrailingHeaders(
 
 void QuicChromiumClientStream::NotifyHandleOfDataAvailableLater() {
   DCHECK(handle_);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&QuicChromiumClientStream::NotifyHandleOfDataAvailable,
                      weak_factory_.GetWeakPtr()));

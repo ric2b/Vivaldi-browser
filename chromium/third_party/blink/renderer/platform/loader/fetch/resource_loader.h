@@ -162,7 +162,7 @@ class PLATFORM_EXPORT ResourceLoader final
                int64_t encoded_body_length,
                int64_t decoded_body_length) override;
 
-  blink::mojom::CodeCacheType GetCodeCacheType() const;
+  mojom::blink::CodeCacheType GetCodeCacheType() const;
   void SendCachedCodeToResource(mojo_base::BigBuffer data);
 
   void HandleError(const ResourceError&);
@@ -294,6 +294,7 @@ class PLATFORM_EXPORT ResourceLoader final
 
   base::TimeTicks request_start_time_;
   base::TimeTicks code_cache_arrival_time_;
+  uint32_t received_body_length_from_service_worker_ = 0;
 };
 
 }  // namespace blink

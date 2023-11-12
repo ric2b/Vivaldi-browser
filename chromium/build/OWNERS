@@ -3,6 +3,7 @@ set noparent
 # by emailing lsc-policy@chromium.org when this list changes.
 agrieve@chromium.org
 brucedawson@chromium.org
+dpranke@google.com
 jochen@chromium.org
 sdefresne@chromium.org
 thakis@chromium.org
@@ -13,6 +14,7 @@ tikuta@chromium.org
 file://tools/clang/scripts/OWNERS
 
 # For java build changes:
+smaier@chromium.org
 wnwen@chromium.org
 
 # NOTE: keep this in sync with lsc-owners-override@chromium.org owners

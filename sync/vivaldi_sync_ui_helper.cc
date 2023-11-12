@@ -15,6 +15,11 @@
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 namespace vivaldi {
+
+EngineData::EngineData() = default;
+EngineData::EngineData(const EngineData& other) = default;
+EngineData::~EngineData() = default;
+
 VivaldiSyncUIHelper::VivaldiSyncUIHelper(VivaldiSyncServiceImpl* sync_service,
                                          VivaldiAccountManager* account_manager)
     : sync_service_(sync_service), account_manager_(account_manager) {}
@@ -105,6 +110,68 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
   }
 
   return cycle_data;
+}
+
+vivaldi::EngineData VivaldiSyncUIHelper::GetEngineData() {
+  vivaldi::EngineData engine_data;
+
+  if (sync_service_->is_clearing_sync_data()) {
+    engine_data.engine_state = EngineState::CLEARING_DATA;
+  } else if (!sync_service_->GetUserSettings()->IsSyncRequested() ||
+             sync_service_->GetTransportState() ==
+                 syncer::SyncService::TransportState::START_DEFERRED) {
+    engine_data.engine_state = EngineState::STOPPED;
+
+  } else if (!sync_service_->CanSyncFeatureStart()) {
+    engine_data.engine_state = EngineState::FAILED;
+
+  } else if (sync_service_->IsEngineInitialized()) {
+    if (sync_service_->GetTransportState() ==
+          syncer::SyncService::TransportState::PENDING_DESIRED_CONFIGURATION ||
+        !sync_service_->GetUserSettings()->IsFirstSetupComplete()) {
+      engine_data.engine_state = EngineState::CONFIGURATION_PENDING;
+    } else {
+      engine_data.engine_state = EngineState::STARTED;
+    }
+
+  } else if (
+      sync_service_->GetSyncTokenStatusForDebugging().connection_status ==
+        syncer::CONNECTION_SERVER_ERROR) {
+    engine_data.engine_state = EngineState::STARTING_SERVER_ERROR;
+  } else {
+    engine_data.engine_state = EngineState::STARTING;
+  }
+
+  engine_data.disable_reasons = sync_service_->GetDisableReasons();
+
+  syncer::SyncStatus status;
+  sync_service_->QueryDetailedSyncStatusForDebugging(&status);
+
+  engine_data.protocol_error_type = status.sync_protocol_error.error_type;
+  engine_data.protocol_error_description =
+      status.sync_protocol_error.error_description;
+  engine_data.protocol_error_client_action =
+      status.sync_protocol_error.action;
+
+  engine_data.is_encrypting_everything =
+      sync_service_->IsEngineInitialized()
+          ? sync_service_->GetUserSettings()->IsEncryptEverythingEnabled()
+          : false;
+  engine_data.uses_encryption_password =
+      sync_service_->GetUserSettings()->IsUsingExplicitPassphrase();
+  engine_data.needs_decryption_password =
+      sync_service_->GetUserSettings()
+          ->IsPassphraseRequiredForPreferredDataTypes();
+  engine_data.is_setup_in_progress = sync_service_->IsSetupInProgress();
+  engine_data.is_first_setup_complete =
+      sync_service_->GetUserSettings()->IsFirstSetupComplete();
+
+  engine_data.sync_everything =
+      sync_service_->GetUserSettings()->IsSyncEverythingEnabled();
+
+  engine_data.data_types = sync_service_->GetUserSettings()->GetSelectedTypes();
+
+  return engine_data;
 }
 
 bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {

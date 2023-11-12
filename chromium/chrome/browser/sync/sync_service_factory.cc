@@ -73,6 +73,12 @@
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
+
 #include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "sync/vivaldi_sync_service_factory.h"
@@ -95,7 +101,7 @@ std::unique_ptr<KeyedService> BuildSyncService(
   // profile and lockscreen profile).
   init_params.is_regular_profile_for_uma =
       init_params.is_regular_profile_for_uma &&
-      ash::ProfileHelper::IsRegularProfile(profile);
+      ash::ProfileHelper::IsUserProfile(profile);
 #endif
 
   init_params.sync_client =
@@ -258,6 +264,11 @@ SyncServiceFactory::SyncServiceFactory()
 #if !BUILDFLAG(IS_ANDROID)
   DependsOn(ThemeServiceFactory::GetInstance());
 #endif  // !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+  DependsOn(SavedTabGroupServiceFactory::GetInstance());
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
   DependsOn(WebDataServiceFactory::GetInstance());
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   DependsOn(

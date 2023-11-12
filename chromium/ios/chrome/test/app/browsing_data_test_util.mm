@@ -62,6 +62,11 @@ bool ClearBrowsingHistory() {
                            BrowsingDataRemoveMask::REMOVE_HISTORY);
 }
 
+bool ClearCookiesAndSiteData() {
+  return ClearBrowsingData(/*off_the_record=*/false,
+                           BrowsingDataRemoveMask::REMOVE_SITE_DATA);
+}
+
 bool ClearAllBrowsingData(bool off_the_record) {
   return ClearBrowsingData(off_the_record, BrowsingDataRemoveMask::REMOVE_ALL);
 }
@@ -74,7 +79,7 @@ bool ClearAllWebStateBrowsingData() {
       completionHandler:^{
         callback_finished = true;
       }];
-  return WaitUntilConditionOrTimeout(20, ^{
+  return WaitUntilConditionOrTimeout(base::Seconds(20), ^{
     return callback_finished;
   });
 }
@@ -89,7 +94,7 @@ bool ClearCertificatePolicyCache(bool off_the_record) {
                                              cache->ClearCertificatePolicies();
                                              policies_cleared = YES;
                                            }));
-  return WaitUntilConditionOrTimeout(2, ^{
+  return WaitUntilConditionOrTimeout(base::Seconds(2), ^{
     return policies_cleared;
   });
 }

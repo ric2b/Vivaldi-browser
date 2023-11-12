@@ -128,7 +128,7 @@ class PasswordSaveManagerImpl : public PasswordSaveManager {
   const std::unique_ptr<FormSaver> account_store_form_saver_;
 
   // The client which implements embedder-specific PasswordManager operations.
-  raw_ptr<PasswordManagerClient> client_;
+  raw_ptr<PasswordManagerClient, DanglingUntriaged> client_;
 
   // Stores updated credentials when the form was submitted but success is still
   // unknown. This variable contains credentials that are ready to be written
@@ -140,15 +140,15 @@ class PasswordSaveManagerImpl : public PasswordSaveManager {
       PendingCredentialsState::NONE;
 
   // FormFetcher instance which owns the login data from PasswordStore.
-  raw_ptr<const FormFetcher> form_fetcher_;
+  raw_ptr<const FormFetcher, DanglingUntriaged> form_fetcher_;
 
  private:
   struct PendingCredentialsStates {
     PendingCredentialsState profile_store_state = PendingCredentialsState::NONE;
     PendingCredentialsState account_store_state = PendingCredentialsState::NONE;
 
-    const PasswordForm* similar_saved_form_from_profile_store = nullptr;
-    const PasswordForm* similar_saved_form_from_account_store = nullptr;
+    raw_ptr<const PasswordForm> similar_saved_form_from_profile_store = nullptr;
+    raw_ptr<const PasswordForm> similar_saved_form_from_account_store = nullptr;
   };
   static PendingCredentialsStates ComputePendingCredentialsStates(
       const PasswordForm& parsed_submitted_form,
@@ -181,7 +181,7 @@ class PasswordSaveManagerImpl : public PasswordSaveManager {
   scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder_;
 
   // Can be nullptr.
-  raw_ptr<VotesUploader> votes_uploader_;
+  raw_ptr<VotesUploader, DanglingUntriaged> votes_uploader_;
 
   // True if the user edited the username field during the save prompt.
   bool username_updated_in_bubble_ = false;

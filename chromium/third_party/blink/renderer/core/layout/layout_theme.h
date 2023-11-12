@@ -37,6 +37,7 @@
 namespace blink {
 
 class ComputedStyle;
+class ComputedStyleBuilder;
 class Document;
 class Element;
 class File;
@@ -65,7 +66,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // selection of control size based off the font, the disabling of appearance
   // when certain other properties like "border" are set, or if the appearance
   // is not supported by the theme.
-  void AdjustStyle(const Element*, ComputedStyle&);
+  void AdjustStyle(const Element*, ComputedStyleBuilder&);
 
   // The remaining methods should be implemented by the platform-specific
   // portion of the theme, e.g., layout_theme_mac.mm for macOS.
@@ -77,7 +78,8 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
   // Whether or not the control has been styled enough by the author to disable
   // the native appearance.
-  virtual bool IsControlStyled(ControlPart part, const ComputedStyle&) const;
+  virtual bool IsControlStyled(ControlPart part,
+                               const ComputedStyleBuilder&) const;
 
   bool ShouldDrawDefaultFocusRing(const Node*, const ComputedStyle&) const;
 
@@ -144,7 +146,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual Color SystemColor(CSSValueID,
                             mojom::blink::ColorScheme color_scheme) const;
 
-  virtual void AdjustSliderThumbSize(ComputedStyle&) const;
+  virtual void AdjustSliderThumbSize(ComputedStyleBuilder&) const;
 
   virtual int PopupInternalPaddingStart(const ComputedStyle&) const {
     return 0;
@@ -177,7 +179,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual bool SupportsSelectionForegroundColors() const { return true; }
 
   // Adjust style as per platform selection.
-  virtual void AdjustControlPartStyle(ComputedStyle&);
+  virtual void AdjustControlPartStyle(ComputedStyleBuilder&);
 
   virtual bool IsAccentColorCustomized(
       mojom::blink::ColorScheme color_scheme) const {
@@ -210,17 +212,18 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
       mojom::blink::ColorScheme color_scheme) const;
 
   // Methods for each appearance value.
-  virtual void AdjustCheckboxStyle(ComputedStyle&) const;
-  virtual void AdjustRadioStyle(ComputedStyle&) const;
+  virtual void AdjustCheckboxStyle(ComputedStyleBuilder&) const;
+  virtual void AdjustRadioStyle(ComputedStyleBuilder&) const;
 
-  virtual void AdjustButtonStyle(ComputedStyle&) const;
-  virtual void AdjustInnerSpinButtonStyle(ComputedStyle&) const;
+  virtual void AdjustButtonStyle(ComputedStyleBuilder&) const;
+  virtual void AdjustInnerSpinButtonStyle(ComputedStyleBuilder&) const;
 
-  virtual void AdjustMenuListStyle(ComputedStyle&) const;
-  virtual void AdjustMenuListButtonStyle(ComputedStyle&) const;
-  virtual void AdjustSliderContainerStyle(const Element&, ComputedStyle&) const;
-  virtual void AdjustSliderThumbStyle(ComputedStyle&) const;
-  virtual void AdjustSearchFieldCancelButtonStyle(ComputedStyle&) const;
+  virtual void AdjustMenuListStyle(ComputedStyleBuilder&) const;
+  virtual void AdjustMenuListButtonStyle(ComputedStyleBuilder&) const;
+  virtual void AdjustSliderContainerStyle(const Element&,
+                                          ComputedStyleBuilder&) const;
+  virtual void AdjustSliderThumbStyle(ComputedStyleBuilder&) const;
+  virtual void AdjustSearchFieldCancelButtonStyle(ComputedStyleBuilder&) const;
 
   bool HasCustomFocusRingColor() const;
   Color GetCustomFocusRingColor() const;
@@ -236,11 +239,12 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // implementation to hand back the appropriate platform theme.
   static LayoutTheme& NativeTheme();
 
-  ControlPart AdjustAppearanceWithAuthorStyle(ControlPart part,
-                                              const ComputedStyle& style);
+  ControlPart AdjustAppearanceWithAuthorStyle(
+      ControlPart part,
+      const ComputedStyleBuilder& style);
 
-  ControlPart AdjustAppearanceWithElementType(const ComputedStyle& style,
-                                              const Element* element);
+  ControlPart AdjustAppearanceWithElementType(const ComputedStyleBuilder&,
+                                              const Element*);
 
   void UpdateForcedColorsState();
 

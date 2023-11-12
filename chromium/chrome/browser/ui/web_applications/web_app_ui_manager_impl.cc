@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/ui/web_applications/commands/launch_web_app_command.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
@@ -35,7 +36,6 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/uninstall_result_code.h"
@@ -46,9 +46,9 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/shelf_model.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
-#include "chrome/browser/ui/app_list/extension_app_utils.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
+#include "chrome/browser/ash/app_list/extension_app_utils.h"
 #include "chrome/browser/ui/ash/shelf/app_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
@@ -102,11 +102,16 @@ void UninstallWebAppWithDialogFromStartupSwitch(const AppId& app_id,
     // In this case we clean up the OsSettings entry.
     web_app::OsHooksOptions options;
     options[OsHookType::kUninstallationViaOsSettings] = true;
-    provider->os_integration_manager().UninstallOsHooks(
-        app_id, options,
-        base::BindOnce([](std::unique_ptr<ScopedKeepAlive> scoped_keep_alive,
-                          OsHooksErrors os_hooks_errors) {},
-                       std::move(scoped_keep_alive)));
+
+    auto synchronize_barrier =
+        web_app::OsIntegrationManager::GetBarrierForSynchronize(base::BindOnce(
+            [](std::unique_ptr<ScopedKeepAlive> scoped_keep_alive,
+               OsHooksErrors os_hooks_errors) {},
+            std::move(scoped_keep_alive)));
+    provider->os_integration_manager().UninstallOsHooks(app_id, options,
+                                                        synchronize_barrier);
+    provider->os_integration_manager().Synchronize(
+        app_id, base::BindOnce(synchronize_barrier, OsHooksErrors()));
   }
 }
 
@@ -209,8 +214,8 @@ void WebAppUiManagerImpl::NotifyOnAllAppWindowsClosed(
 
   const size_t num_windows_for_app = GetNumWindowsForApp(app_id);
   if (num_windows_for_app == 0) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  std::move(callback));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
     return;
   }
 
@@ -283,12 +288,7 @@ bool WebAppUiManagerImpl::UninstallAndReplaceIfExists(
     }
 
     auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
-    if (base::FeatureList::IsEnabled(apps::kAppServiceUninstallWithoutMojom)) {
-      proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
-    } else {
-      proxy->UninstallSilently(from_app,
-                               apps::mojom::UninstallSource::kMigration);
-    }
+    proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
     uninstall_triggered = true;
   }
 
@@ -308,12 +308,7 @@ void WebAppUiManagerImpl::OnShortcutInfoReceivedSearchShortcutLocations(
   if (!shortcut_info) {
     // The shortcut info couldn't be found, simply uninstall.
     auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
-    if (base::FeatureList::IsEnabled(apps::kAppServiceUninstallWithoutMojom)) {
-      proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
-    } else {
-      proxy->UninstallSilently(from_app,
-                               apps::mojom::UninstallSource::kMigration);
-    }
+    proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
     return;
   }
   auto callback =
@@ -338,12 +333,7 @@ void WebAppUiManagerImpl::OnShortcutLocationGathered(
                        weak_ptr_factory_.GetWeakPtr(), app_id, locations));
   }
 
-  if (base::FeatureList::IsEnabled(apps::kAppServiceUninstallWithoutMojom)) {
-    proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
-  } else {
-    proxy->UninstallSilently(from_app,
-                             apps::mojom::UninstallSource::kMigration);
-  }
+  proxy->UninstallSilently(from_app, apps::UninstallSource::kMigration);
 
   if (!is_extension)
     InstallOsHooksForReplacementApp(app_id, locations);
@@ -359,8 +349,11 @@ void WebAppUiManagerImpl::InstallOsHooksForReplacementApp(
   options.add_to_desktop = locations.on_desktop;
   options.add_to_quick_launch_bar = locations.in_quick_launch_bar;
   options.os_hooks[OsHookType::kRunOnOsLogin] = locations.in_startup;
+  // TODO(crbug.com/1401125): Remove InstallOsHooks() once OS integration
+  // sub managers have been implemented.
   os_integration_manager_->InstallOsHooks(app_id, base::DoNothing(), nullptr,
                                           options);
+  os_integration_manager_->Synchronize(app_id, base::DoNothing());
 }
 
 bool WebAppUiManagerImpl::CanAddAppToQuickLaunchBar() const {
@@ -446,6 +439,16 @@ void WebAppUiManagerImpl::ShowWebAppIdentityUpdateDialog(
   chrome::ShowWebAppIdentityUpdateDialog(
       app_id, title_change, icon_change, old_title, new_title, old_icon,
       new_icon, web_contents, std::move(callback));
+}
+
+base::Value WebAppUiManagerImpl::LaunchWebApp(
+    apps::AppLaunchParams params,
+    LaunchWebAppWindowSetting launch_setting,
+    Profile& profile,
+    LaunchWebAppCallback callback,
+    AppLock& lock) {
+  return ::web_app::LaunchWebApp(std::move(params), launch_setting, profile,
+                                 std::move(callback), lock);
 }
 
 void WebAppUiManagerImpl::OnBrowserAdded(Browser* browser) {

@@ -166,12 +166,8 @@ void VEAEncoder::BitstreamBufferReady(
   const auto front_frame = frames_in_encode_.front();
   frames_in_encode_.pop();
 
-  PostCrossThreadTask(
-      *origin_task_runner_.get(), FROM_HERE,
-      CrossThreadBindOnce(OnFrameEncodeCompleted,
-                          CrossThreadBindRepeating(on_encoded_video_cb_),
-                          front_frame.first, std::move(data), std::string(),
-                          front_frame.second, metadata.key_frame));
+  on_encoded_video_cb_.Run(front_frame.first, std::move(data), std::string(),
+                           front_frame.second, metadata.key_frame);
 
   UseOutputBitstreamBufferId(bitstream_buffer_id);
 }
@@ -303,8 +299,8 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
         WTF::BindOnce(&VEAEncoder::FrameFinished, WrapRefCounted(this),
                       std::move(input_buffer))));
   }
-  frames_in_encode_.push(std::make_pair(
-      media::WebmMuxer::VideoParameters(frame), capture_timestamp));
+  frames_in_encode_.emplace(media::Muxer::VideoParameters(*frame),
+                            capture_timestamp);
 
   video_encoder_->Encode(video_frame, force_next_frame_to_be_keyframe_);
   force_next_frame_to_be_keyframe_ = false;

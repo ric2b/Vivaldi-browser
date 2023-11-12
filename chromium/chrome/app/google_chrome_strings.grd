@@ -1062,6 +1062,15 @@ Permissions you've already given to websites and apps may apply to this account.
         Google Chrome is using your camera.
       </message>
 
+      <if expr="not is_android">
+        <!-- WebHID system tray icon -->
+        <message name="IDS_WEBHID_SYSTEM_TRAY_ICON_TOOLTIP" desc="Tooltip for the WebHID system tray icon when one or more HID devices are being accessed.">
+            {NUM_DEVICES, plural,
+            =1 {Google Chrome is connected to a HID device}
+            other {Google Chrome is connected to HID devices}}
+        </message>
+      </if>
+
       <!-- ProcessSingleton -->
       <if expr="is_posix">
         <message name="IDS_PROFILE_IN_USE_POSIX" desc="Message shown when the browser cannot start because the profile is in use on a different host.">
@@ -1435,6 +1444,29 @@ Permissions you've already given to websites and apps may apply to this account.
       <message name="IDS_DESKTOP_MEDIA_PICKER_TITLE_WEB_CONTENTS_ONLY" desc="Title for the window picker dialog shown when desktop capture of a tab is requested by an app.">
         Share a Chrome tab
       </message>
+
+    <!-- Idle timeout dialog. -->
+    <if expr="not is_android and not is_chromeos">
+      <message name="IDS_IDLE_TIMEOUT_TITLE" desc="TODO">
+        Chrome is inactive
+      </message>
+      <!-- TODO(crbug.com/1326685): Show different text for long durations.
+           e.g., say "4 hours" instead of "240 minutes". -->
+      <message name="IDS_IDLE_TIMEOUT_BODY" desc="TODO">
+        {COUNT, plural,
+          =1 {Your administrator has configured Chrome to close if it is idle for more than 1 minute.}
+          other {Your administrator has configured Chrome to close if it is idle for more than # minutes.}}
+      </message>
+      <message name="IDS_IDLE_TIMEOUT_COUNTDOWN" desc="TODO">
+        {0, plural,
+          =0 {Chrome will close now.}
+          =1 {Chrome will close in 1 second.}
+          other {Chrome will close in # seconds.}}
+      </message>
+      <message name="IDS_IDLE_ACCEPT_BUTTON" desc="TODO">
+        Continue using Chrome
+      </message>
+    </if>
 
       <!-- User happiness tracking survey UI -->
       <if expr="not is_android">

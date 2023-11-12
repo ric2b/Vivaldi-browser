@@ -123,6 +123,12 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
   crosapi::mojom::BrowserInitParams::GpuSandboxStartMode GpuSandboxStartMode()
       const;
 
+  const crosapi::mojom::ExtensionKeepListPtr& ExtensionKeepList() const;
+
+  bool IsPartialSplitEnabled() const;
+
+  bool VcControlsUiEnabled() const;
+
  private:
   friend base::NoDestructor<BrowserParamsProxy>;
 

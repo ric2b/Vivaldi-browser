@@ -15,6 +15,7 @@
 
 #include <stddef.h>
 
+#include <iterator>
 #include <utility>
 
 #include "base/base64.h"
@@ -35,17 +36,34 @@ namespace extensions {
 
 namespace proxy_api_helpers {
 
-bool CreateDataURLFromPACScript(const std::string& pac_script,
-                                std::string* pac_script_url_base64_encoded) {
+// The names of the schemes to be used to build the preference value string
+// for manual proxy settings.  These must be kept in sync with the SCHEME_*
+// constants.
+constexpr const char* scheme_name[] = {"*error*", "http", "https", "ftp",
+                                       "socks"};
+
+constexpr const char* field_name[] = {"singleProxy", "proxyForHttp",
+                                      "proxyForHttps", "proxyForFtp",
+                                      "fallbackProxy"};
+
+static_assert(SCHEME_MAX == SCHEME_FALLBACK, "SCHEME_MAX is incorrect");
+static_assert(std::size(field_name) == SCHEME_MAX + 1,
+              "field_name array size is incorrect");
+static_assert(std::size(scheme_name) == SCHEME_MAX + 1,
+              "scheme_name array size is incorrect");
+static_assert(SCHEME_ALL == 0, "SCHEME_ALL must be the first value");
+
+std::string CreateDataURLFromPACScript(const std::string& pac_script) {
+  // Prefix that identifies PAC-script encoding urls.
+  static constexpr char kPACDataUrlPrefix[] =
+      "data:application/x-ns-proxy-autoconfig;base64,";
+
   // Encode pac_script in base64.
   std::string pac_script_base64_encoded;
   base::Base64Encode(pac_script, &pac_script_base64_encoded);
 
   // Make it a correct data url.
-  *pac_script_url_base64_encoded =
-      std::string(proxy_api_constants::kPACDataUrlPrefix) +
-      pac_script_base64_encoded;
-  return true;
+  return kPACDataUrlPrefix + pac_script_base64_encoded;
 }
 
 bool CreatePACScriptFromDataURL(
@@ -62,7 +80,7 @@ bool CreatePACScriptFromDataURL(
 
 // Extension Pref -> Browser Pref conversion.
 
-bool GetProxyModeFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetProxyModeFromExtensionPref(const base::Value::Dict& proxy_config,
                                    ProxyPrefs::ProxyMode* out,
                                    std::string* error,
                                    bool* bad_message) {
@@ -71,7 +89,7 @@ bool GetProxyModeFromExtensionPref(const base::DictionaryValue* proxy_config,
   // We can safely assume that this is ASCII due to the allowed enumeration
   // values specified in the extension API JSON.
   if (const std::string* proxy_mode_ptr =
-          proxy_config->FindStringKey(proxy_api_constants::kProxyConfigMode)) {
+          proxy_config.FindString(proxy_api_constants::kProxyConfigMode)) {
     proxy_mode = *proxy_mode_ptr;
     DCHECK(base::IsStringASCII(proxy_mode));
   }
@@ -83,19 +101,19 @@ bool GetProxyModeFromExtensionPref(const base::DictionaryValue* proxy_config,
   return true;
 }
 
-bool GetPacMandatoryFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacMandatoryFromExtensionPref(const base::Value::Dict& proxy_config,
                                       bool* out,
                                       std::string* error,
                                       bool* bad_message) {
-  const base::Value* pac_dict =
-      proxy_config->FindDictKey(proxy_api_constants::kProxyConfigPacScript);
+  const base::Value::Dict* pac_dict =
+      proxy_config.FindDict(proxy_api_constants::kProxyConfigPacScript);
   if (!pac_dict) {
     *out = false;
     return true;
   }
 
   const base::Value* mandatory_pac =
-      pac_dict->FindKey(proxy_api_constants::kProxyConfigPacScriptMandatory);
+      pac_dict->Find(proxy_api_constants::kProxyConfigPacScriptMandatory);
   if (mandatory_pac) {
     if (!mandatory_pac->is_bool()) {
       LOG(ERROR) << "'pacScript.mandatory' could not be parsed.";
@@ -107,19 +125,19 @@ bool GetPacMandatoryFromExtensionPref(const base::DictionaryValue* proxy_config,
   return true;
 }
 
-bool GetPacUrlFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacUrlFromExtensionPref(const base::Value::Dict& proxy_config,
                                 std::string* out,
                                 std::string* error,
                                 bool* bad_message) {
-  const base::Value* pac_dict =
-      proxy_config->FindDictKey(proxy_api_constants::kProxyConfigPacScript);
+  const base::Value::Dict* pac_dict =
+      proxy_config.FindDict(proxy_api_constants::kProxyConfigPacScript);
   if (!pac_dict)
     return true;
 
   // TODO(battre): Handle UTF-8 URLs (http://crbug.com/72692).
   std::string pac_url;
   const base::Value* pac_url_val =
-      pac_dict->FindKey(proxy_api_constants::kProxyConfigPacScriptUrl);
+      pac_dict->Find(proxy_api_constants::kProxyConfigPacScriptUrl);
   if (pac_url_val) {
     if (!pac_url_val->is_string()) {
       LOG(ERROR) << "'pacScript.url' could not be parsed.";
@@ -137,18 +155,18 @@ bool GetPacUrlFromExtensionPref(const base::DictionaryValue* proxy_config,
   return true;
 }
 
-bool GetPacDataFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacDataFromExtensionPref(const base::Value::Dict& proxy_config,
                                  std::string* out,
                                  std::string* error,
                                  bool* bad_message) {
-  const base::Value* pac_dict =
-      proxy_config->FindDictKey(proxy_api_constants::kProxyConfigPacScript);
+  const base::Value::Dict* pac_dict =
+      proxy_config.FindDict(proxy_api_constants::kProxyConfigPacScript);
   if (!pac_dict)
     return true;
 
   std::string pac_data;
   const base::Value* pac_val =
-      pac_dict->FindKey(proxy_api_constants::kProxyConfigPacScriptData);
+      pac_dict->Find(proxy_api_constants::kProxyConfigPacScriptData);
   if (pac_val) {
     if (!pac_val->is_string()) {
       LOG(ERROR) << "'pacScript.data' could not be parsed.";
@@ -167,7 +185,7 @@ bool GetPacDataFromExtensionPref(const base::DictionaryValue* proxy_config,
   return true;
 }
 
-bool GetProxyServer(const base::DictionaryValue* proxy_server,
+bool GetProxyServer(const base::Value::Dict& proxy_server,
                     net::ProxyServer::Scheme default_scheme,
                     net::ProxyServer* out,
                     std::string* error,
@@ -176,7 +194,7 @@ bool GetProxyServer(const base::DictionaryValue* proxy_server,
 
   // We can safely assume that this is ASCII due to the allowed enumeration
   // values specified in the extension API JSON.
-  if (const std::string* scheme_string_ptr = proxy_server->FindStringKey(
+  if (const std::string* scheme_string_ptr = proxy_server.FindString(
           proxy_api_constants::kProxyConfigRuleScheme)) {
     scheme_string = *scheme_string_ptr;
     DCHECK(base::IsStringASCII(scheme_string));
@@ -188,8 +206,8 @@ bool GetProxyServer(const base::DictionaryValue* proxy_server,
 
   // TODO(battre): handle UTF-8 in hostnames (http://crbug.com/72692).
   std::u16string host16;
-  if (const std::string* ptr = proxy_server->FindStringKey(
-          proxy_api_constants::kProxyConfigRuleHost)) {
+  if (const std::string* ptr =
+          proxy_server.FindString(proxy_api_constants::kProxyConfigRuleHost)) {
     host16 = base::UTF8ToUTF16(*ptr);
   } else {
     LOG(ERROR) << "Could not parse a 'rules.*.host' entry.";
@@ -206,7 +224,7 @@ bool GetProxyServer(const base::DictionaryValue* proxy_server,
   std::string host = base::UTF16ToASCII(host16);
 
   // optional.
-  int port = proxy_server->FindIntKey(proxy_api_constants::kProxyConfigRulePort)
+  int port = proxy_server.FindInt(proxy_api_constants::kProxyConfigRulePort)
                  .value_or(net::ProxyServer::GetDefaultPortForScheme(scheme));
 
   *out = net::ProxyServer(scheme, net::HostPortPair(host, port));
@@ -214,33 +232,31 @@ bool GetProxyServer(const base::DictionaryValue* proxy_server,
   return true;
 }
 
-bool GetProxyRulesStringFromExtensionPref(
-    const base::DictionaryValue* proxy_config,
-    std::string* out,
-    std::string* error,
-    bool* bad_message) {
-  const base::Value* proxy_rules =
-      proxy_config->FindDictKey(proxy_api_constants::kProxyConfigRules);
+bool GetProxyRulesStringFromExtensionPref(const base::Value::Dict& proxy_config,
+                                          std::string* out,
+                                          std::string* error,
+                                          bool* bad_message) {
+  const base::Value::Dict* proxy_rules =
+      proxy_config.FindDict(proxy_api_constants::kProxyConfigRules);
   if (!proxy_rules)
     return true;
 
   // Local data into which the parameters will be parsed. has_proxy describes
   // whether a setting was found for the scheme; proxy_server holds the
   // respective ProxyServer objects containing those descriptions.
-  bool has_proxy[proxy_api_constants::SCHEME_MAX + 1];
-  net::ProxyServer proxy_server[proxy_api_constants::SCHEME_MAX + 1];
+  bool has_proxy[SCHEME_MAX + 1];
+  net::ProxyServer proxy_server[SCHEME_MAX + 1];
 
   // Looking for all possible proxy types is inefficient if we have a
   // singleProxy that will supersede per-URL proxies, but it's worth it to keep
   // the code simple and extensible.
-  for (size_t i = 0; i <= proxy_api_constants::SCHEME_MAX; ++i) {
-    const base::Value* proxy_dict =
-        proxy_rules->FindDictPath(proxy_api_constants::field_name[i]);
+  for (size_t i = 0; i <= SCHEME_MAX; ++i) {
+    const base::Value::Dict* proxy_dict =
+        proxy_rules->FindDictByDottedPath(field_name[i]);
     has_proxy[i] = proxy_dict != nullptr;
     if (has_proxy[i]) {
       net::ProxyServer::Scheme default_scheme = net::ProxyServer::SCHEME_HTTP;
-      if (!GetProxyServer(&base::Value::AsDictionaryValue(*proxy_dict),
-                          default_scheme, &proxy_server[i], error,
+      if (!GetProxyServer(*proxy_dict, default_scheme, &proxy_server[i], error,
                           bad_message)) {
         // Don't set |error| here, as GetProxyServer takes care of that.
         return false;
@@ -248,22 +264,17 @@ bool GetProxyRulesStringFromExtensionPref(
     }
   }
 
-  static_assert(proxy_api_constants::SCHEME_ALL == 0,
-                "SCHEME_ALL must be the first value");
-
   // Handle case that only singleProxy is specified.
-  if (has_proxy[proxy_api_constants::SCHEME_ALL]) {
-    for (size_t i = 1; i <= proxy_api_constants::SCHEME_MAX; ++i) {
+  if (has_proxy[SCHEME_ALL]) {
+    for (size_t i = 1; i <= SCHEME_MAX; ++i) {
       if (has_proxy[i]) {
         *error = ErrorUtils::FormatErrorMessage(
             "Proxy rule for * and * cannot be set at the same time.",
-            proxy_api_constants::field_name[proxy_api_constants::SCHEME_ALL],
-            proxy_api_constants::field_name[i]);
+            field_name[SCHEME_ALL], field_name[i]);
         return false;
       }
     }
-    *out = net::ProxyServerToProxyUri(
-        proxy_server[proxy_api_constants::SCHEME_ALL]);
+    *out = net::ProxyServerToProxyUri(proxy_server[SCHEME_ALL]);
     return true;
   }
 
@@ -271,12 +282,12 @@ bool GetProxyRulesStringFromExtensionPref(
 
   // Build the proxy preference string.
   std::string proxy_pref;
-  for (size_t i = 1; i <= proxy_api_constants::SCHEME_MAX; ++i) {
+  for (size_t i = 1; i <= SCHEME_MAX; ++i) {
     if (has_proxy[i]) {
       // http=foopy:4010;ftp=socks5://foopy2:80
       if (!proxy_pref.empty())
         proxy_pref.append(";");
-      proxy_pref.append(proxy_api_constants::scheme_name[i]);
+      proxy_pref.append(scheme_name[i]);
       proxy_pref.append("=");
       proxy_pref.append(net::ProxyServerToProxyUri(proxy_server[i]));
     }
@@ -314,17 +325,17 @@ bool JoinUrlList(const base::Value::List& list,
   return true;
 }
 
-bool GetBypassListFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetBypassListFromExtensionPref(const base::Value::Dict& proxy_config,
                                     std::string* out,
                                     std::string* error,
                                     bool* bad_message) {
-  const base::Value* proxy_rules =
-      proxy_config->FindDictKey(proxy_api_constants::kProxyConfigRules);
+  const base::Value::Dict* proxy_rules =
+      proxy_config.FindDict(proxy_api_constants::kProxyConfigRules);
   if (!proxy_rules)
     return true;
 
   const base::Value* bypass_list =
-      proxy_rules->FindKey(proxy_api_constants::kProxyConfigBypassList);
+      proxy_rules->Find(proxy_api_constants::kProxyConfigBypassList);
   if (!bypass_list) {
     *out = "";
     return true;
@@ -339,7 +350,7 @@ bool GetBypassListFromExtensionPref(const base::DictionaryValue* proxy_config,
   return JoinUrlList(bypass_list->GetList(), ",", out, error, bad_message);
 }
 
-std::unique_ptr<base::Value> CreateProxyConfigDict(
+absl::optional<base::Value::Dict> CreateProxyConfigDict(
     ProxyPrefs::ProxyMode mode_enum,
     bool pac_mandatory,
     const std::string& pac_url,
@@ -349,45 +360,37 @@ std::unique_ptr<base::Value> CreateProxyConfigDict(
     std::string* error) {
   switch (mode_enum) {
     case ProxyPrefs::MODE_DIRECT:
-      return std::make_unique<base::Value>(
-          ProxyConfigDictionary::CreateDirect());
+      return ProxyConfigDictionary::CreateDirect();
     case ProxyPrefs::MODE_AUTO_DETECT:
-      return std::make_unique<base::Value>(
-          ProxyConfigDictionary::CreateAutoDetect());
+      return ProxyConfigDictionary::CreateAutoDetect();
     case ProxyPrefs::MODE_PAC_SCRIPT: {
       std::string url;
       if (!pac_url.empty()) {
         url = pac_url;
       } else if (!pac_data.empty()) {
-        if (!CreateDataURLFromPACScript(pac_data, &url)) {
-          *error = "Internal error, at base64 encoding of 'pacScript.data'.";
-          return nullptr;
-        }
+        url = CreateDataURLFromPACScript(pac_data);
       } else {
         *error =
             "Proxy mode 'pac_script' requires a 'pacScript' field with "
             "either a 'url' field or a 'data' field.";
-        return nullptr;
+        return absl::nullopt;
       }
-      return std::make_unique<base::Value>(
-          ProxyConfigDictionary::CreatePacScript(url, pac_mandatory));
+      return ProxyConfigDictionary::CreatePacScript(url, pac_mandatory);
     }
     case ProxyPrefs::MODE_FIXED_SERVERS: {
       if (proxy_rules_string.empty()) {
         *error = "Proxy mode 'fixed_servers' requires a 'rules' field.";
-        return nullptr;
+        return absl::nullopt;
       }
-      return std::make_unique<base::Value>(
-          ProxyConfigDictionary::CreateFixedServers(proxy_rules_string,
-                                                    bypass_list));
+      return ProxyConfigDictionary::CreateFixedServers(proxy_rules_string,
+                                                       bypass_list);
     }
     case ProxyPrefs::MODE_SYSTEM:
-      return std::make_unique<base::Value>(
-          ProxyConfigDictionary::CreateSystem());
+      return ProxyConfigDictionary::CreateSystem();
     case ProxyPrefs::kModeCount:
       NOTREACHED();
   }
-  return nullptr;
+  return absl::nullopt;
 }
 
 absl::optional<base::Value::Dict> CreateProxyRulesDict(
@@ -412,30 +415,29 @@ absl::optional<base::Value::Dict> CreateProxyRulesDict(
     case net::ProxyConfig::ProxyRules::Type::PROXY_LIST:
       if (!rules.single_proxies.IsEmpty()) {
         extension_proxy_rules.Set(
-            proxy_api_constants::field_name[proxy_api_constants::SCHEME_ALL],
+            field_name[SCHEME_ALL],
             CreateProxyServerDict(rules.single_proxies.Get()));
       }
       break;
     case net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME:
       if (!rules.proxies_for_http.IsEmpty()) {
         extension_proxy_rules.Set(
-            proxy_api_constants::field_name[proxy_api_constants::SCHEME_HTTP],
+            field_name[SCHEME_HTTP],
             CreateProxyServerDict(rules.proxies_for_http.Get()));
       }
       if (!rules.proxies_for_https.IsEmpty()) {
         extension_proxy_rules.Set(
-            proxy_api_constants::field_name[proxy_api_constants::SCHEME_HTTPS],
+            field_name[SCHEME_HTTPS],
             CreateProxyServerDict(rules.proxies_for_https.Get()));
       }
       if (!rules.proxies_for_ftp.IsEmpty()) {
         extension_proxy_rules.Set(
-            proxy_api_constants::field_name[proxy_api_constants::SCHEME_FTP],
+            field_name[SCHEME_FTP],
             CreateProxyServerDict(rules.proxies_for_ftp.Get()));
       }
       if (!rules.fallback_proxies.IsEmpty()) {
         extension_proxy_rules.Set(
-            proxy_api_constants::field_name
-                [proxy_api_constants::SCHEME_FALLBACK],
+            field_name[SCHEME_FALLBACK],
             CreateProxyServerDict(rules.fallback_proxies.Get()));
       }
       break;
@@ -443,8 +445,7 @@ absl::optional<base::Value::Dict> CreateProxyRulesDict(
 
   // If we add a new scheme sometime, we need to also store a new dictionary
   // representing this scheme in the code above.
-  static_assert(proxy_api_constants::SCHEME_MAX == 4,
-                "rules need to be updated along with schemes");
+  static_assert(SCHEME_MAX == 4, "rules need to be updated along with schemes");
 
   if (proxy_config.HasBypassList()) {
     std::string bypass_list_string;

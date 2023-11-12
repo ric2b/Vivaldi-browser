@@ -8,7 +8,6 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
-#include "chrome/browser/ash/crostini/crostini_upgrade_available_notification.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
@@ -69,7 +68,7 @@ class CrostiniUpgradeAvailableNotificationTest
   ash::CrostiniUpgraderDialog* GetCrostiniUpgraderDialog() {
     auto url = GURL{chrome::kChromeUICrostiniUpgraderUrl};
     return static_cast<ash::CrostiniUpgraderDialog*>(
-        chromeos::SystemWebDialogDelegate::FindInstance(url.spec()));
+        ash::SystemWebDialogDelegate::FindInstance(url.spec()));
   }
 
   void SafelyCloseDialog() {

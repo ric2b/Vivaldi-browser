@@ -30,6 +30,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
@@ -43,7 +44,6 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/scoped_thread_priority.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_types.h"
@@ -55,6 +55,7 @@ namespace {
 
 const DWORD kFileShareAll =
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+const wchar_t kDefaultTempDirPrefix[] = L"ChromiumTemp";
 
 // Returns the Win32 last error code or ERROR_SUCCESS if the last error code is
 // ERROR_FILE_NOT_FOUND or ERROR_PATH_NOT_FOUND. This is useful in cases where
@@ -350,7 +351,7 @@ OnceClosure GetDeleteFileCallbackInternal(
     OnceCallback<void(bool)> reply_callback) {
   OnceCallback<void(bool)> bound_callback;
   if (!reply_callback.is_null()) {
-    bound_callback = BindPostTask(SequencedTaskRunnerHandle::Get(),
+    bound_callback = BindPostTask(SequencedTaskRunner::GetCurrentDefault(),
                                   std::move(reply_callback));
   }
   return BindOnce(&DeleteFileWithRetry, path, recursive, /*attempt=*/0,
@@ -620,15 +621,33 @@ bool CreateTemporaryDirInDir(const FilePath& base_dir,
   return false;
 }
 
+// The directory is created under %ProgramFiles% for security reasons if the
+// caller is admin. Since only admin can write to %ProgramFiles%, this avoids
+// attacks from lower privilege processes.
+//
+// If unable to create a dir under %ProgramFiles%, the dir is created under
+// %TEMP%. The reasons for not being able to create a dir under %ProgramFiles%
+// could be because we are unable to resolve `DIR_PROGRAM_FILES`, say due to
+// registry redirection, or unable to create a directory due to %ProgramFiles%
+// being read-only or having atypical ACLs.
 bool CreateNewTempDirectory(const FilePath::StringType& prefix,
                             FilePath* new_temp_path) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
 
-  FilePath system_temp_dir;
-  if (!GetTempDir(&system_temp_dir))
+  DCHECK(new_temp_path);
+
+  FilePath parent_dir;
+  if (::IsUserAnAdmin() && PathService::Get(DIR_PROGRAM_FILES, &parent_dir) &&
+      CreateTemporaryDirInDir(parent_dir,
+                              prefix.empty() ? kDefaultTempDirPrefix : prefix,
+                              new_temp_path)) {
+    return true;
+  }
+
+  if (!GetTempDir(&parent_dir))
     return false;
 
-  return CreateTemporaryDirInDir(system_temp_dir, prefix, new_temp_path);
+  return CreateTemporaryDirInDir(parent_dir, prefix, new_temp_path);
 }
 
 bool CreateDirectoryAndGetError(const FilePath& full_path,
@@ -995,44 +1014,18 @@ bool SetNonBlocking(int fd) {
   return false;
 }
 
-namespace {
-
-// ::PrefetchVirtualMemory() is only available on Windows 8 and above. Chrome
-// supports Windows 7, so we need to check for the function's presence
-// dynamically.
-using PrefetchVirtualMemoryPtr = decltype(&::PrefetchVirtualMemory);
-
-// Returns null if ::PrefetchVirtualMemory() is not available.
-PrefetchVirtualMemoryPtr GetPrefetchVirtualMemoryPtr() {
-  HMODULE kernel32_dll = ::GetModuleHandleA("kernel32.dll");
-  return reinterpret_cast<PrefetchVirtualMemoryPtr>(
-      GetProcAddress(kernel32_dll, "PrefetchVirtualMemory"));
-}
-
-}  // namespace
-
 bool PreReadFile(const FilePath& file_path,
                  bool is_executable,
                  int64_t max_bytes) {
   DCHECK_GE(max_bytes, 0);
 
-  // On Win8 and higher use ::PrefetchVirtualMemory(). This is better than a
-  // simple data file read, more from a RAM perspective than CPU. This is
-  // because reading the file as data results in double mapping to
-  // Image/executable pages for all pages of code executed.
-  static PrefetchVirtualMemoryPtr prefetch_virtual_memory =
-      GetPrefetchVirtualMemoryPtr();
-
-  if (prefetch_virtual_memory == nullptr)
-    return internal::PreReadFileSlow(file_path, max_bytes);
-
   if (max_bytes == 0) {
-    // PrefetchVirtualMemory() fails when asked to read zero bytes.
+    // ::PrefetchVirtualMemory() fails when asked to read zero bytes.
     // base::MemoryMappedFile::Initialize() fails on an empty file.
     return true;
   }
 
-  // PrefetchVirtualMemory() fails if the file is opened with write access.
+  // ::PrefetchVirtualMemory() fails if the file is opened with write access.
   MemoryMappedFile::Access access = is_executable
                                         ? MemoryMappedFile::READ_CODE_IMAGE
                                         : MemoryMappedFile::READ_ONLY;
@@ -1044,7 +1037,11 @@ bool PreReadFile(const FilePath& file_path,
       std::min(base::saturated_cast<::SIZE_T>(max_bytes),
                base::saturated_cast<::SIZE_T>(mapped_file.length()));
   ::_WIN32_MEMORY_RANGE_ENTRY address_range = {mapped_file.data(), length};
-  if (!prefetch_virtual_memory(::GetCurrentProcess(),
+  // Use ::PrefetchVirtualMemory(). This is better than a
+  // simple data file read, more from a RAM perspective than CPU. This is
+  // because reading the file as data results in double mapping to
+  // Image/executable pages for all pages of code executed.
+  if (!::PrefetchVirtualMemory(::GetCurrentProcess(),
                                /*NumberOfEntries=*/1, &address_range,
                                /*Flags=*/0)) {
     return internal::PreReadFileSlow(file_path, max_bytes);

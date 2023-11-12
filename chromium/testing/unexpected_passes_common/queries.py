@@ -20,6 +20,7 @@ from typ import json_results
 from unexpected_passes_common import builders as builders_module
 from unexpected_passes_common import constants
 from unexpected_passes_common import data_types
+from unexpected_passes_common import expectations
 from unexpected_passes_common import multiprocessing_utils
 
 DEFAULT_NUM_SAMPLES = 100
@@ -61,7 +62,7 @@ class BigQueryQuerier(object):
   """Class to handle all BigQuery queries for a script invocation."""
 
   def __init__(self, suite: Optional[str], project: str, num_samples: int,
-               large_query_mode: bool):
+               large_query_mode: bool, num_jobs: Optional[int]):
     """
     Args:
       suite: A string containing the name of the suite that is being queried
@@ -75,13 +76,17 @@ class BigQueryQuerier(object):
           are used to perform additional filtering on a second, larger query in
           BigQuery. This works around hitting a hard memory limit when running
           the ORDER BY clause.
+      num_jobs: An integer specifying how many jobs to run in parallel. If None,
+          all jobs will be run in parallel at the same time.
     """
     self._suite = suite
     self._project = project
     self._num_samples = num_samples or DEFAULT_NUM_SAMPLES
     self._large_query_mode = large_query_mode
+    self._num_jobs = num_jobs
 
     assert self._num_samples > 0
+    assert (self._num_jobs is None or self._num_jobs > 0)
 
   def FillExpectationMapForBuilders(
       self, expectation_map: data_types.TestExpectationMap,
@@ -121,12 +126,14 @@ class BigQueryQuerier(object):
     # produce data we care about.
     builders = self._FilterOutInactiveBuilders(builders, builder_type)
 
-    # Spin up a separate process for each query/add step. This is wasteful in
-    # the sense that we'll have a bunch of idle processes once faster steps
-    # start finishing, but ensures that we start slow queries early and avoids
-    # the overhead of passing large amounts of data between processes. See
-    # crbug.com/1182459 for more information on performance considerations.
-    process_pool = multiprocessing_utils.GetProcessPool(nodes=len(builders))
+    # If we don't have an explicit number of jobs set, spin up a separate
+    # process for each query/add step. This is wasteful in the sense that we'll
+    # have a bunch of idle processes once faster steps start finishing, but
+    # ensures that we start slow queries early and avoids the overhead of
+    # passing large amounts of data between processes. See crbug.com/1182459 for
+    # more information on performance considerations.
+    num_jobs = self._num_jobs or len(builders)
+    process_pool = multiprocessing_utils.GetProcessPool(nodes=num_jobs)
 
     args = [(b, expectation_map) for b in builders]
 
@@ -310,7 +317,7 @@ class BigQueryQuerier(object):
     test_name = self._StripPrefixFromTestId(json_result['test_id'])
     actual_result = _ConvertActualResultToExpectationFileFormat(
         json_result['status'])
-    tags = json_result['typ_tags']
+    tags = expectations.GetInstance().FilterToKnownTags(json_result['typ_tags'])
     step = json_result['step_name']
     return data_types.Result(test_name, tags, actual_result, step, build_id)
 

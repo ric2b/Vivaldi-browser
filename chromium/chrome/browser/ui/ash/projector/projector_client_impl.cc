@@ -13,6 +13,10 @@
 #include "ash/webui/projector_app/projector_app_client.h"
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
 #include "base/bind.h"
+#include "base/containers/fixed_flat_map.h"
+#include "base/containers/flat_set.h"
+#include "base/functional/callback_helpers.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/browser_process.h"
@@ -23,9 +27,11 @@
 #include "chrome/browser/ui/ash/projector/projector_utils.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/web_applications/locks/app_lock.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chromeos/login/login_state/login_state.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/soda/soda_installer.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_contents.h"
@@ -42,6 +48,27 @@ namespace {
 
 inline const std::string& GetLocale() {
   return g_browser_process->GetApplicationLocale();
+}
+
+inline const std::string GetLocaleOrLanguageForServerSideRecognition() {
+  const std::string& locale = g_browser_process->GetApplicationLocale();
+
+  // Some languages and locales need to be mapped to the default
+  // languages/locales provided by the server side speech recognition service.
+  static constexpr auto kSupportedLanguagesAndLocales =
+      base::MakeFixedFlatMap<base::StringPiece, base::StringPiece>(
+          {{"zh", "cmn-hant-tw"},
+           {"zh-tw", "cmn-hant-tw"},
+           {"ar", "ar-x-maghrebi"}});
+
+  base::fixed_flat_map<base::StringPiece, base::StringPiece,
+                       /*size_t=*/3>::const_iterator it =
+      kSupportedLanguagesAndLocales.find(base::ToLowerASCII(locale));
+  if (it != kSupportedLanguagesAndLocales.end()) {
+    return std::string(it->second);
+  }
+
+  return locale;
 }
 
 }  // namespace
@@ -65,6 +92,12 @@ ProjectorClientImpl::ProjectorClientImpl(ash::ProjectorController* controller)
       session_manager::SessionManager::Get();
   if (session_manager)
     session_observation_.Observe(session_manager);
+
+  if (base::FeatureList::IsEnabled(ash::features::kOnDeviceSpeechRecognition)) {
+    soda_installation_controller_ =
+        std::make_unique<ProjectorSodaInstallationController>(
+            ash::ProjectorAppClient::Get(), controller_);
+  }
 }
 
 ProjectorClientImpl::ProjectorClientImpl()
@@ -74,21 +107,46 @@ ProjectorClientImpl::~ProjectorClientImpl() {
   controller_->SetClient(nullptr);
 }
 
-void ProjectorClientImpl::StartSpeechRecognition() {
-  // ProjectorController should only request for speech recognition after it
-  // has been informed that recognition is available.
-  // TODO(crbug.com/1165437): Dynamically determine language code.
-  DCHECK(SpeechRecognitionRecognizerClientImpl::
-             IsOnDeviceSpeechRecognizerAvailable(GetLocale()));
+// Projector prioritizes on-device speech recognition over server
+// based speech recognition.
+ash::SpeechRecognitionAvailability
+ProjectorClientImpl::GetSpeechRecognitionAvailability() const {
+  ash::SpeechRecognitionAvailability availability;
+  availability.use_on_device = true;
+  availability.on_device_availability = SpeechRecognitionRecognizerClientImpl::
+      GetOnDeviceSpeechRecognitionAvailability(GetLocale());
+  availability.server_based_availability =
+      SpeechRecognitionRecognizerClientImpl::
+          GetServerBasedRecognitionAvailability(
+              GetLocaleOrLanguageForServerSideRecognition());
 
+  if (ash::features::ShouldForceEnableServerSideSpeechRecognitionForDev() ||
+      (availability.on_device_availability !=
+           ash::OnDeviceRecognitionAvailability::kAvailable &&
+       availability.server_based_availability ==
+           ash::ServerBasedRecognitionAvailability::kAvailable)) {
+    availability.use_on_device = false;
+  }
+
+  return availability;
+}
+
+void ProjectorClientImpl::StartSpeechRecognition() {
+  const auto availability = GetSpeechRecognitionAvailability();
+  DCHECK(availability.IsAvailable());
   DCHECK_EQ(speech_recognizer_.get(), nullptr);
   recognizer_status_ = SPEECH_RECOGNIZER_OFF;
+  const std::string locale =
+      availability.use_on_device
+          ? GetLocale()
+          : GetLocaleOrLanguageForServerSideRecognition();
+
   speech_recognizer_ = std::make_unique<SpeechRecognitionRecognizerClientImpl>(
       weak_ptr_factory_.GetWeakPtr(), ProfileManager::GetActiveUserProfile(),
       media::mojom::SpeechRecognitionOptions::New(
           media::mojom::SpeechRecognitionMode::kCaption,
-          /*enable_formatting=*/true, GetLocale(),
-          /*is_server_based=*/false,
+          /*enable_formatting=*/true, locale,
+          /*is_server_based=*/!availability.use_on_device,
           media::mojom::RecognizerClientType::kProjector));
 }
 
@@ -115,7 +173,7 @@ bool ProjectorClientImpl::GetBaseStoragePath(base::FilePath* result) const {
 }
 
 bool ProjectorClientImpl::IsDriveFsMounted() const {
-  if (!chromeos::LoginState::Get()->IsUserLoggedIn())
+  if (!ash::LoginState::Get()->IsUserLoggedIn())
     return false;
 
   if (ash::ProjectorController::AreExtendedProjectorFeaturesDisabled()) {
@@ -302,15 +360,7 @@ void ProjectorClientImpl::SetAppIsDisabled(bool disabled) {
                                         kWebAppProviderOnRegistryReady);
     return;
   }
-  auto* sync_bridge = &web_app_provider->sync_bridge();
-  // TODO(b/240497023): convert to dcheck once confirm that the pointer is
-  // always available at this point.
-  if (!sync_bridge) {
-    RecordPolicyChangeHandlingError(
-        ash::ProjectorPolicyChangeHandlingError::kSyncBridge);
-    return;
-  }
 
-  sync_bridge->SetAppIsDisabled(ash::kChromeUITrustedProjectorSwaAppId,
-                                disabled);
+  web_app_provider->scheduler().SetAppIsDisabled(
+      ash::kChromeUITrustedProjectorSwaAppId, disabled, base::DoNothing());
 }

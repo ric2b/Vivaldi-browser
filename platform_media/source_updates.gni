@@ -1,10 +1,6 @@
 import("//build/config/features.gni")
 import("//vivaldi/gn/config/features.gni")
 
-if (vivaldi_use_system_media_demuxer) {
-  import("//vivaldi/platform_media/ipc_demuxer/source_updates.gni")
-}
-
 if (system_proprietary_codecs) {
 
 if (is_mac) {

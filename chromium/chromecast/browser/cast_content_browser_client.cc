@@ -20,7 +20,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "chromecast/base/cast_constants.h"
@@ -38,7 +38,6 @@
 #include "chromecast/browser/cast_navigation_ui_data.h"
 #include "chromecast/browser/cast_network_contexts.h"
 #include "chromecast/browser/cast_overlay_manifests.h"
-#include "chromecast/browser/cast_quota_permission_context.h"
 #include "chromecast/browser/cast_session_id_map.h"
 #include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/browser/cast_web_preferences.h"
@@ -215,7 +214,8 @@ CastContentBrowserClient::GetMediaTaskRunner() {
     // and we want to initialize it with the correct task runner before any
     // tasks that might use it are posted to the media thread.
     media_resource_tracker_ = new media::MediaResourceTracker(
-        base::ThreadTaskRunnerHandle::Get(), media_thread_->task_runner());
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        media_thread_->task_runner());
   }
   return media_thread_->task_runner();
 }
@@ -538,11 +538,6 @@ std::string CastContentBrowserClient::GetApplicationLocale() {
   return locale.empty() ? "en-US" : locale;
 }
 
-scoped_refptr<content::QuotaPermissionContext>
-CastContentBrowserClient::CreateQuotaPermissionContext() {
-  return new CastQuotaPermissionContext();
-}
-
 void CastContentBrowserClient::AllowCertificateError(
     content::WebContents* web_contents,
     int cert_error,
@@ -592,7 +587,7 @@ base::OnceClosure CastContentBrowserClient::SelectClientCertificate(
           base::Unretained(this), requesting_url, session_id,
           web_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
           web_contents->GetPrimaryMainFrame()->GetRoutingID(),
-          base::SequencedTaskRunnerHandle::Get(),
+          base::SequencedTaskRunner::GetCurrentDefault(),
           base::BindOnce(
               &content::ClientCertificateDelegate::ContinueWithCertificate,
               base::Owned(delegate.release()))));

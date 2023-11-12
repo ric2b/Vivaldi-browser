@@ -34,9 +34,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -195,9 +195,7 @@ void AmbientPhotoController::FetchWeather() {
 
 void AmbientPhotoController::ClearCache() {
   DCHECK(photo_cache_);
-  DCHECK(backup_photo_cache_);
   photo_cache_->Clear();
-  backup_photo_cache_->Clear();
 }
 
 void AmbientPhotoController::ScheduleFetchBackupImages() {
@@ -315,7 +313,7 @@ void AmbientPhotoController::TryReadPhotoFromCache() {
       // Try to resume normal workflow with backoff.
       const base::TimeDelta delay =
           resume_fetch_image_backoff_.GetTimeUntilRelease();
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(&AmbientPhotoController::StartPreparingNextTopic,
                          weak_factory_.GetWeakPtr()),

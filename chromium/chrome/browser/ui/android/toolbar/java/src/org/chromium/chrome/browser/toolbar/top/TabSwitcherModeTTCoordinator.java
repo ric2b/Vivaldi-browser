@@ -10,7 +10,7 @@ import android.view.ViewStub;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.supplier.BooleanSupplier;
+import org.chromium.base.FeatureList;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
@@ -19,6 +19,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * The coordinator for the tab switcher mode top toolbar, responsible for
@@ -258,7 +260,7 @@ class TabSwitcherModeTTCoordinator {
     }
 
     private boolean isNewTabVariationEnabled() {
-        return mIsGridTabSwitcherEnabled && ChromeFeatureList.isInitialized()
+        return mIsGridTabSwitcherEnabled && FeatureList.isInitialized()
                 && mIsIncognitoModeEnabledSupplier.getAsBoolean()
                 && !ChromeFeatureList
                             .getFieldTrialParamByFeature(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,

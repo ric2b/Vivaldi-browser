@@ -14,26 +14,27 @@ ChromeVoxEditingTest = class extends ChromeVoxNextE2ETest {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
+
+    // Alphabetical based on file path.
     await importModule(
         'BrailleBackground',
         '/chromevox/background/braille/braille_background.js');
     await importModule(
+        'BrailleCommandHandler',
+        '/chromevox/background/braille/braille_command_handler.js');
+    await importModule(
         'DesktopAutomationInterface',
         '/chromevox/background/desktop_automation_interface.js');
-    await importModule('EventGenerator', '/common/event_generator.js');
     await importModule(
         'EditableLine', '/chromevox/background/editing/editable_line.js');
     await importModule(
         'TextEditHandler', '/chromevox/background/editing/editing.js');
     await importModule(
-        'TtsBackground', '/chromevox/background/tts_background.js');
-    await importModule('KeyCode', '/common/key_code.js');
-    await importModule(
-        'BrailleCommandHandler',
-        '/chromevox/background/braille/braille_command_handler.js');
-    await importModule(
         ['BrailleKeyEvent', 'BrailleKeyCommand'],
         '/chromevox/common/braille/braille_key_types.js');
+    await importModule('EventGenerator', '/common/event_generator.js');
+    await importModule('KeyCode', '/common/key_code.js');
+    await importModule('LocalStorage', '/common/local_storage.js');
   }
 
   press(keyCode, modifiers) {
@@ -151,7 +152,7 @@ AX_TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', async function() {
 
 AX_TEST_F('ChromeVoxEditingTest', 'RichTextMoveByLine', async function() {
   // Turn on rich text output settings.
-  localStorage['announceRichTextAttributes'] = 'true';
+  LocalStorage.set('announceRichTextAttributes', true);
 
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
@@ -203,7 +204,7 @@ AX_TEST_F('ChromeVoxEditingTest', 'RichTextMoveByLine', async function() {
 
 AX_TEST_F('ChromeVoxEditingTest', 'RichTextMoveByCharacter', async function() {
   // Turn on rich text output settings.
-  localStorage['announceRichTextAttributes'] = 'true';
+  LocalStorage.set('announceRichTextAttributes', true);
 
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
@@ -279,7 +280,7 @@ AX_TEST_F(
     'ChromeVoxEditingTest', 'RichTextMoveByCharacterAllAttributes',
     async function() {
       // Turn on rich text output settings.
-      localStorage['announceRichTextAttributes'] = 'true';
+      LocalStorage.set('announceRichTextAttributes', true);
 
       const mockFeedback = this.createMockFeedback();
       const root = await this.runWithLoadedTree(`
@@ -523,7 +524,7 @@ AX_TEST_F(
 
 AX_TEST_F('ChromeVoxEditingTest', 'RichTextLinkOutput', async function() {
   // Turn on rich text output settings.
-  localStorage['announceRichTextAttributes'] = 'true';
+  LocalStorage.set('announceRichTextAttributes', true);
 
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
@@ -1660,9 +1661,11 @@ AX_TEST_F('ChromeVoxEditingTest', 'MoveByCharSuggestions', async function() {
   await mockFeedback.replay();
 });
 
-AX_TEST_F('ChromeVoxEditingTest', 'MoveByWordSuggestions', async function() {
-  const mockFeedback = this.createMockFeedback();
-  const site = `
+// TODO(accessibility): flaky; https://crbug.com/1342870.
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'DISABLED_MoveByWordSuggestions', async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site = `
     <div contenteditable="true" role="textbox">
       <p>Start</p>
       <span>I </span>
@@ -1672,29 +1675,29 @@ AX_TEST_F('ChromeVoxEditingTest', 'MoveByWordSuggestions', async function() {
       <p>End</p>
     </div>
   `;
-  const root = await this.runWithLoadedTree(site);
-  await this.focusFirstTextField(root);
+      const root = await this.runWithLoadedTree(site);
+      await this.focusFirstTextField(root);
 
-  mockFeedback.call(this.press(KeyCode.DOWN))
-      .expectSpeech('I ')
-      // Move forward through line.
-      .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-      .expectSpeech('I')
-      .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-      .expectSpeech('Suggest', 'Username', 'Insert', 'was', 'Insert end')
-      .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-      .expectSpeech('Delete', 'am', 'Delete end', 'Suggest end')
-      // Move backward through line.
-      .call(this.press(KeyCode.LEFT, {ctrl: true}))
-      .expectSpeech('Delete', 'am', 'Delete end', 'Suggest end')
-      .call(this.press(KeyCode.LEFT, {ctrl: true}))
-      .expectSpeech('Suggest', 'Username', 'Insert', 'was')
-      .call(this.press(KeyCode.LEFT, {ctrl: true}))
-      .expectSpeech('I')
-      .call(this.press(KeyCode.DOWN))
-      .expectSpeech('End');
-  await mockFeedback.replay();
-});
+      mockFeedback.call(this.press(KeyCode.DOWN))
+          .expectSpeech('I ')
+          // Move forward through line.
+          .call(this.press(KeyCode.RIGHT, {ctrl: true}))
+          .expectSpeech('I')
+          .call(this.press(KeyCode.RIGHT, {ctrl: true}))
+          .expectSpeech('Suggest', 'Username', 'Insert', 'was', 'Insert end')
+          .call(this.press(KeyCode.RIGHT, {ctrl: true}))
+          .expectSpeech('Delete', 'am', 'Delete end', 'Suggest end')
+          // Move backward through line.
+          .call(this.press(KeyCode.LEFT, {ctrl: true}))
+          .expectSpeech('Delete', 'am', 'Delete end', 'Suggest end')
+          .call(this.press(KeyCode.LEFT, {ctrl: true}))
+          .expectSpeech('Suggest', 'Username', 'Insert', 'was')
+          .call(this.press(KeyCode.LEFT, {ctrl: true}))
+          .expectSpeech('I')
+          .call(this.press(KeyCode.DOWN))
+          .expectSpeech('End');
+      await mockFeedback.replay();
+    });
 
 AX_TEST_F(
     'ChromeVoxEditingTest', 'MoveByWordSuggestionsNoIntents', async function() {
@@ -2054,7 +2057,7 @@ AX_TEST_F(
 
       // Set braille to use 6-dot braille (which is defaulted to UEB grade 2
       // contracted braille).
-      localStorage['brailleTable'] = 'en-ueb-g2';
+      LocalStorage.set('brailleTable', 'en-ueb-g2');
 
       // Wait for it to be fully refreshed (liblouis loads the new tables, our
       // translators are re-created).
@@ -2067,10 +2070,10 @@ AX_TEST_F(
 
       // Set braille to use 6-dot braille (which is defaulted to UEB grade 2
       // contracted braille).
-      localStorage['brailleTable'] = 'en-ueb-g2';
+      LocalStorage.set('brailleTable', 'en-ueb-g2');
       await new Promise(
           r => BrailleBackground.instance.getTranslatorManager().refresh(
-              localStorage['brailleTable'], undefined, r));
+              LocalStorage.get('brailleTable'), undefined, r));
 
       async function waitForBrailleDots(expectedDots) {
         return new Promise(r => {
@@ -2206,7 +2209,7 @@ AX_TEST_F('ChromeVoxEditingTest', 'TablesWithEmptyCells', async function() {
       .call(() => textField.setSelection(0, 1))
       .expectSpeech('A', 'selected')
 
-      // Non-breaking spaces (\u00a0) get preprocessed later by TtsBackground
+      // Non-breaking spaces (\u00a0) get preprocessed later by PrimaryTts
       // to ' '. This comes as part of speak line output in
       // AutomationRichEditableText.
       .call(doCmd('nativeNextCharacter'))
@@ -2458,3 +2461,28 @@ AX_TEST_F(
 
       await mockFeedback.replay();
     });
+
+AX_TEST_F('ChromeVoxEditingTest', 'SelectAcrossSoftLineWraps', async function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <p>start</p>
+    <div role=textbox contenteditable>Copy this message into any text field. Move to the top, then select with shift+down arrow. Notice that text selection reads from the beginning of the very long line when pressing shift+down arrow. This continues to happen until encountering a line break
+like this one.
+    </div>
+  `;
+  const root = await this.runWithLoadedTree(site);
+  await this.focusFirstTextField(root);
+
+  const textField = root.find({role: RoleType.TEXT_FIELD});
+  mockFeedback.expectSpeech('Text area')
+      .call(this.press(KeyCode.DOWN, {shift: true}))
+      .expectSpeech(
+          'Copy this message into any text field. Move to the top, then select with shift+down arrow. Notice that text selection reads from the beginning of the very long line when ',
+          'selected')
+      .call(this.press(KeyCode.DOWN, {shift: true}))
+      .expectSpeech(
+          'pressing shift+down arrow. This continues to happen until encountering a line breaklike this one.',
+          'selected');
+
+  await mockFeedback.replay();
+});

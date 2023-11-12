@@ -335,7 +335,7 @@ bool MimeHandlerViewGuest::PluginDoSave() {
   if (!attached() || !plugin_can_save_)
     return false;
 
-  base::ListValue::List args;
+  base::Value::List args;
   args.Append(stream_->stream_url().spec());
 
   auto event =

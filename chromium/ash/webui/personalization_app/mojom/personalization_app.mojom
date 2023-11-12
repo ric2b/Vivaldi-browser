@@ -165,11 +165,18 @@ struct FetchGooglePhotosPhotosResponse {
     string? resume_token;
 };
 
+// Represents the response to a daily refresh request.
+struct SetDailyRefreshResponse {
+  // Indicates whether the request is successful.
+  bool success;
+
+  // Indicates whether the request forces the current wallpaper image to
+  // refresh.
+  bool force_refresh;
+};
+
 // Represents the currently selected wallpaper image.
 struct CurrentWallpaper {
-  // URL of the currently selected wallpaper image in data scheme.
-  url.mojom.Url url;
-
   // Attribution text such as "Photo by John Doe" or the file name of the local
   // image.
   array<string> attribution;
@@ -281,8 +288,10 @@ interface WallpaperProvider {
         bool preview_mode) => (bool success);
 
     // Sets the Google Photos album with the given id as the daily refresh
+    // album. May refresh the current wallpaper image if it is not part of the
     // album.
-    SelectGooglePhotosAlbum(string id) => (bool success);
+    SelectGooglePhotosAlbum(string id)
+        => (SetDailyRefreshResponse response);
 
     // Gets the id of the current Google Photos album on daily refresh, or an
     // empty string if Google Photos daily refresh is not active.
@@ -291,8 +300,10 @@ interface WallpaperProvider {
     // Sets the layout for current wallpaper.
     SetCurrentWallpaperLayout(WallpaperLayout layout);
 
-    // Set and enable daily refresh for the given |collection_id|.
-    SetDailyRefreshCollectionId(string collection_id);
+    // Sets and enables daily refresh for the given |collection_id|. May refresh
+    // the current wallpaper image if it is not part of the collection.
+    SetDailyRefreshCollectionId(string collection_id)
+        => (SetDailyRefreshResponse response);
 
     // Get the daily refresh collection id. It can be empty if daily refresh is
     // not enabled.
@@ -313,6 +324,14 @@ interface WallpaperProvider {
     CancelPreviewWallpaper();
 };
 
+enum ColorScheme {
+  kStatic = 0,
+  kTonalSpot = 1,
+  kNeutral = 2,
+  kExpressive = 3,
+  kVibrant = 4,
+};
+
 // Receives information whenever there are theme related changes such as color
 // mode.
 interface ThemeObserver {
@@ -322,6 +341,12 @@ interface ThemeObserver {
 
   // Notifies the JS side the current state of color mode auto scheduler.
   OnColorModeAutoScheduleChanged(bool enabled);
+
+  //Notifies the JS side about the current state of the color scheme.
+  OnColorSchemeChanged(ColorScheme color_scheme);
+
+  // Notifies the JS side about the current state of the static color.
+  OnStaticColorChanged(skia.mojom.SkColor? color);
 };
 
 // Provides APIs to expose theme settings such dark/light color mode.
@@ -334,6 +359,20 @@ interface ThemeProvider {
 
   // Disables or enables dark color mode auto scheduler.
   SetColorModeAutoScheduleEnabled(bool enabled);
+
+  // Sets the color scheme for dynamic color.
+  // @see //ash/style/color_palette_controller.h
+  SetColorScheme(ColorScheme colorScheme);
+
+  // Sets the seed color for dynamic color.
+  // @see //ash/style/color_palette_controller.h
+  SetStaticColor(skia.mojom.SkColor static_color);
+
+  // Retrieves the color scheme for dynamic color.
+  GetColorScheme() => (ColorScheme color_scheme);
+
+  // Retrieves the static seed color for dynamic color.
+  GetStaticColor() => (skia.mojom.SkColor? static_color);
 
   // Returns whether color mode auto scheduler is enabled.
   IsColorModeAutoScheduleEnabled() => (bool enabled);
@@ -475,6 +514,15 @@ enum TemperatureUnit {
   kCelsius = 1,
 };
 
+// Enumeration of UI visibility states.
+// This should be kept in sync with |ash:AmbientUiVisibility|.
+enum AmbientUiVisibility {
+  kShown = 0,
+  kPreview = 1,
+  kHidden = 2,
+  kClosed = 3,
+};
+
 // Album metadaba to display. Contains necessary data for both topic sources.
 struct AmbientModeAlbum {
   // Unique identifier for this album. It assumes unique id across different
@@ -518,10 +566,13 @@ interface AmbientObserver {
   // Notifies the JS side about the previews of the selected Google Photos
   // albums.
   OnGooglePhotosAlbumsPreviewsFetched(array<url.mojom.Url> previews);
+
+  // Notifies the JS side when ambient visibility is changed.
+  OnAmbientUiVisibilityChanged(AmbientUiVisibility visibility);
 };
 
 // Provides APIs to expose Ambient mode settings.
-// Used by the Personalization Hub.
+// Used by the personalization hub WebUI to call into the browser process.
 interface AmbientProvider {
   // Boolean pref for whether ambient mode is enabled.
   IsAmbientModeEnabled() => (bool enabled);
@@ -549,6 +600,9 @@ interface AmbientProvider {
 
   // Request updated Ambient mode settings and albums.
   FetchSettingsAndAlbums();
+
+  // Starts the screen saver preview.
+  StartScreenSaverPreview();
 };
 
 // The supported preset colors for keyboard backlight.

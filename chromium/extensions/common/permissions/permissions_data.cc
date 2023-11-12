@@ -26,6 +26,8 @@
 #include "url/origin.h"
 #include "url/url_constants.h"
 
+#include "app/vivaldi_apptools.h"
+
 using extensions::mojom::APIPermissionID;
 
 namespace extensions {
@@ -110,6 +112,9 @@ void PermissionsData::SetPolicyDelegate(PolicyDelegate* delegate) {
 bool PermissionsData::CanExecuteScriptEverywhere(
     const ExtensionId& extension_id,
     mojom::ManifestLocation location) {
+  if (vivaldi::IsVivaldiApp(extension_id)) {
+    return true;
+  }
   if (location == mojom::ManifestLocation::kComponent)
     return true;
 

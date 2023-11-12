@@ -62,7 +62,7 @@ class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void SendResult(bool success);
+  void SendResult(std::string data_url);
 
   GURL url_;
 };

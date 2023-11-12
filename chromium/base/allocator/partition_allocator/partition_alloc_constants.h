@@ -261,7 +261,11 @@ constexpr size_t kSuperPageBaseMask = ~kSuperPageOffsetMask;
 
 // PartitionAlloc's address space is split into pools. See `glossary.md`.
 #if defined(PA_HAS_64_BITS_POINTERS)
+#if BUILDFLAG(ENABLE_PKEYS)
+constexpr size_t kNumPools = 4;
+#else
 constexpr size_t kNumPools = 3;
+#endif
 // Maximum pool size. With exception of Configurable Pool, it is also
 // the actual size, unless PA_DYNAMICALLY_SELECT_POOL_SIZE is set, which
 // allows to choose a different size at initialization time for certain
@@ -270,7 +274,11 @@ constexpr size_t kNumPools = 3;
 // Special-case Android and iOS, which incur test failures with larger
 // pools. Regardless, allocating >8GiB with malloc() on these platforms is
 // unrealistic as of 2022.
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+//
+// When pointer compression is enabled, we cannot use large pools (at most
+// 8GB for each of the glued pools).
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || \
+    defined(PA_POINTER_COMPRESSION)
 constexpr size_t kPoolMaxSize = 8 * kGiB;
 #else
 constexpr size_t kPoolMaxSize = 16 * kGiB;
@@ -284,6 +292,12 @@ constexpr size_t kMaxSuperPagesInPool = kPoolMaxSize / kSuperPageSize;
 static constexpr pool_handle kRegularPoolHandle = 1;
 static constexpr pool_handle kBRPPoolHandle = 2;
 static constexpr pool_handle kConfigurablePoolHandle = 3;
+#if BUILDFLAG(ENABLE_PKEYS)
+static constexpr pool_handle kPkeyPoolHandle = 4;
+static_assert(
+    kPkeyPoolHandle == kNumPools,
+    "The pkey pool must come last since we pkey_mprotect its metadata.");
+#endif
 
 // Slots larger than this size will not receive MTE protection. Pages intended
 // for allocations larger than this constant should not be backed with PROT_MTE
@@ -475,6 +489,18 @@ using ::partition_alloc::internal::kNumBuckets;
 using ::partition_alloc::internal::kSuperPageSize;
 using ::partition_alloc::internal::MaxDirectMapped;
 using ::partition_alloc::internal::PartitionPageSize;
+
+// Return values to indicate where a pointer is pointing relative to the bounds
+// of an allocation.
+enum class PtrPosWithinAlloc {
+  // When PA_USE_OOB_POISON is disabled, end-of-allocation pointers are also
+  // considered in-bounds.
+  kInBounds,
+#if defined(PA_USE_OOB_POISON)
+  kAllocEnd,
+#endif
+  kFarOOB
+};
 
 }  // namespace partition_alloc
 

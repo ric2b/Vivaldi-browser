@@ -41,12 +41,14 @@
 #include "base/win/windows_version.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "chrome/browser/chrome_for_testing/buildflags.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/user_hive_visitor.h"
+#include "chrome/installer/util/app_command.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/initial_preferences.h"
@@ -96,6 +98,7 @@ void RemoveLegacyIExecuteCommandKey(const InstallerState& installer_state) {
 // for this mode of install was dropped from ToT in December 2016. Remove any
 // stray bits in the registry leftover from such installs.
 void RemoveBinariesVersionKey(const InstallerState& installer_state) {
+#if !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   std::wstring path(install_static::GetClientsKeyPath(
       L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}"));
@@ -105,6 +108,7 @@ void RemoveBinariesVersionKey(const InstallerState& installer_state) {
 #endif
   installer::DeleteRegistryKey(installer_state.root_key(), path,
                                KEY_WOW64_32KEY);
+#endif  // !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 }
 
 void RemoveAppLauncherVersionKey(const InstallerState& installer_state) {
@@ -122,9 +126,10 @@ void RemoveAppLauncherVersionKey(const InstallerState& installer_state) {
 void RemoveLegacyChromeAppCommands(const InstallerState& installer_state) {
 // These app commands were only registered for Google Chrome.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  installer::DeleteRegistryKey(installer_state.root_key(),
-                               GetCommandKey(L"install-extension"),
-                               KEY_WOW64_32KEY);
+  std::unique_ptr<WorkItemList> list(WorkItem::CreateWorkItemList());
+  AppCommand(L"install-extension", {})
+      .AddDeleteAppCommandWorkItems(installer_state.root_key(), list.get());
+  list->Do();
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 #endif // !defined(VIVALDI_BUILD)
@@ -375,15 +380,6 @@ bool IsProcessorSupported() {
 #else
 #error Port
 #endif
-}
-
-std::wstring GetCommandKey(const wchar_t* name) {
-  std::wstring cmd_key = install_static::GetClientsKeyPath();
-  cmd_key.append(1, base::FilePath::kSeparators[0])
-      .append(google_update::kRegCommandsKey)
-      .append(1, base::FilePath::kSeparators[0])
-      .append(name);
-  return cmd_key;
 }
 
 void DeleteRegistryKeyPartial(

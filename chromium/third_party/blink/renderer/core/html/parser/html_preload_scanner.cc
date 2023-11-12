@@ -70,6 +70,7 @@
 #include "third_party/blink/renderer/core/script_type_names.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/integrity_metadata.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
@@ -86,14 +87,17 @@ bool Match(const AtomicString& name, const QualifiedName& q_name) {
   return q_name.LocalName() == name;
 }
 
-String InitiatorFor(const StringImpl* tag_impl) {
+String InitiatorFor(const StringImpl* tag_impl, bool link_is_modulepreload) {
   DCHECK(tag_impl);
   if (Match(tag_impl, html_names::kImgTag))
     return html_names::kImgTag.LocalName();
   if (Match(tag_impl, html_names::kInputTag))
     return html_names::kInputTag.LocalName();
-  if (Match(tag_impl, html_names::kLinkTag))
+  if (Match(tag_impl, html_names::kLinkTag)) {
+    if (link_is_modulepreload)
+      return fetch_initiator_type_names::kOther;
     return html_names::kLinkTag.LocalName();
+  }
   if (Match(tag_impl, html_names::kScriptTag))
     return html_names::kScriptTag.LocalName();
   if (Match(tag_impl, html_names::kVideoTag))
@@ -280,9 +284,9 @@ class TokenPreloadScanner::StartTagScanner {
             ? referrer_policy_
             : document_parameters.referrer_policy;
     auto request = PreloadRequest::CreateIfNeeded(
-        InitiatorFor(tag_impl_), position, url_to_load_, predicted_base_url,
-        type.value(), referrer_policy, is_image_set, exclusion_info,
-        resource_width, request_type);
+        InitiatorFor(tag_impl_, link_is_modulepreload_), position, url_to_load_,
+        predicted_base_url, type.value(), referrer_policy, is_image_set,
+        exclusion_info, resource_width, request_type);
     if (!request)
       return nullptr;
 
@@ -1130,17 +1134,17 @@ std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
   if (script_token_scanner_)
     script_token_scanner_->set_first_script_in_scan(true);
 
-  while (tokenizer_->NextToken(source_, token_)) {
-    if (token_.GetType() == HTMLToken::kStartTag)
-      tokenizer_->UpdateStateFor(token_);
+  while (HTMLToken* token = tokenizer_->NextToken(source_)) {
+    if (token->GetType() == HTMLToken::kStartTag)
+      tokenizer_->UpdateStateFor(*token);
     bool seen_csp_meta_tag = false;
-    scanner_.Scan(token_, source_, pending_data->requests,
+    scanner_.Scan(*token, source_, pending_data->requests,
                   pending_data->meta_ch_values, &pending_data->viewport,
                   &seen_csp_meta_tag);
     if (script_token_scanner_)
-      script_token_scanner_->ScanToken(token_);
+      script_token_scanner_->ScanToken(*token);
     pending_data->has_csp_meta_tag |= seen_csp_meta_tag;
-    token_.Clear();
+    token->Clear();
     // Don't preload anything if a CSP meta tag is found. We should rarely find
     // them here because the HTMLPreloadScanner is only used for the synchronous
     // parsing path.

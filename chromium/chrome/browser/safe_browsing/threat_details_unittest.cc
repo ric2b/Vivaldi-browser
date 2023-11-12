@@ -404,9 +404,8 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
     // The last item of the redirect chain has to be the final url when adding
     // to history backend.
     redirects->push_back(url);
-    history_service()->AddPage(url, base::Time::Now(),
-                               reinterpret_cast<history::ContextID>(1), 0,
-                               GURL(), *redirects, ui::PAGE_TRANSITION_TYPED,
+    history_service()->AddPage(url, base::Time::Now(), 1, 0, GURL(), *redirects,
+                               ui::PAGE_TRANSITION_TYPED,
                                history::SOURCE_BROWSED, false);
   }
 
@@ -1570,10 +1569,8 @@ TEST_F(ThreatDetailsTest, ThreatWithPendingLoad) {
 }
 
 TEST_F(ThreatDetailsTest, ThreatOnFreshTab) {
-  // A fresh WebContents should be on the initial NavigationEntry, or have
-  // no NavigationEntry (if InitialNavigationEntry is disabled).
-  EXPECT_TRUE(!controller().GetLastCommittedEntry() ||
-              controller().GetLastCommittedEntry()->IsInitialEntry());
+  // A fresh WebContents should be on the initial NavigationEntry.
+  EXPECT_TRUE(controller().GetLastCommittedEntry()->IsInitialEntry());
   EXPECT_EQ(nullptr, controller().GetPendingEntry());
 
   // Initiate the connection to a (pretend) renderer process.

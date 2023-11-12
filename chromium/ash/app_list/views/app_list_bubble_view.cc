@@ -244,7 +244,7 @@ void AppListBubbleView::InitContentsView(
   layout->set_cross_axis_alignment(BoxLayout::CrossAxisAlignment::kStretch);
 
   search_box_view_ = contents->AddChildView(std::make_unique<SearchBoxView>(
-      /*delegate=*/this, view_delegate_, /*app_list_view=*/nullptr));
+      /*delegate=*/this, view_delegate_, /*is_app_list_bubble=*/true));
   search_box_view_->InitializeForBubbleLauncher();
 
   // Skip the assistant button on arrow up/down in app list.
@@ -294,7 +294,7 @@ void AppListBubbleView::InitFolderView(
     ApplicationDragAndDropHost* drag_and_drop_host) {
   auto folder_view = std::make_unique<AppListFolderView>(
       this, apps_page_->scrollable_apps_grid_view(), a11y_announcer_.get(),
-      view_delegate_);
+      view_delegate_, /*tablet_mode=*/false);
   folder_view->items_grid_view()->SetDragAndDropHostOfCurrentAppList(
       drag_and_drop_host);
   folder_view->UpdateAppListConfig(GetAppListConfig());
@@ -474,6 +474,7 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
         apps_page_->SetVisible(true);
         search_page_->SetVisible(false);
       }
+      a11y_announcer_->AnnounceAppListShown();
       MaybeFocusAndActivateSearchBox();
       break;
     case AppListBubblePage::kSearch:
@@ -606,7 +607,10 @@ void AppListBubbleView::Layout() {
     // NOTE: Folder view bounds are also modified during reparent drag when the
     // view is "visible" but hidden offscreen. See app_list_folder_view.cc.
     folder_view_->SetBoundsRect(folder_view_->preferred_bounds());
-    folder_view_->UpdateShadowBounds();
+    // The folder view updates the shadow bounds on its own when animating, so
+    // only update the shadow bounds here when not animating.
+    if (!folder_view_->IsAnimationRunning())
+      folder_view_->UpdateShadowBounds();
   }
 }
 

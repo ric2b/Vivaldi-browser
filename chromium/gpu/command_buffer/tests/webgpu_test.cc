@@ -26,11 +26,6 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(IS_MAC)
-#include "gpu/command_buffer/tests/gl_manager.h"
-#include "ui/gl/gl_context.h"
-#endif
-
 namespace gpu {
 
 namespace {
@@ -108,15 +103,10 @@ void WebGPUTest::Initialize(const Options& options) {
   attributes.enable_gles2_interface = false;
   attributes.context_type = CONTEXT_TYPE_WEBGPU;
 
-#if BUILDFLAG(IS_MAC)
-  ImageFactory* image_factory = &image_factory_;
-#else
-  static constexpr ImageFactory* image_factory = nullptr;
-#endif
   context_ = std::make_unique<WebGPUInProcessContext>();
   ContextResult result =
       context_->Initialize(gpu_service_holder_->task_executor(), attributes,
-                           options.shared_memory_limits, image_factory);
+                           options.shared_memory_limits);
   ASSERT_EQ(result, ContextResult::kSuccess) << "Context failed to initialize";
 
   cmd_helper_ = std::make_unique<webgpu::WebGPUCmdHelper>(
@@ -349,21 +339,7 @@ TEST_F(WebGPUTest, RequestDeviceAfterContextLost) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(WebGPUTest, RequestDeviceWitUnsupportedFeature) {
-#if BUILDFLAG(IS_MAC)
-  // Crashing on Mac M1. Currently missing stack trace. crbug.com/1271926
-  // This must be checked before WebGPUTest::Initialize otherwise context
-  // switched is locked and we cannot temporarily have this GLContext.
-  GLManager gl_manager;
-  gl_manager.Initialize(GLManager::Options());
-  std::string renderer(gl_manager.context()->GetGLRenderer());
-  if (renderer.find("Apple M1") != std::string::npos) {
-    gl_manager.Destroy();
-    GTEST_SKIP() << "Skipped due to crbug.com/1271926.";
-  }
-  gl_manager.Destroy();
-#endif
-
+TEST_F(WebGPUTest, RequestDeviceWithUnsupportedFeature) {
   Initialize(WebGPUTest::Options());
 
   // Create device with unsupported features, expect to fail to create and

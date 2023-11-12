@@ -113,7 +113,7 @@ bool VivaldiContextMenuViews::Show() {
 
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
-  base::CurrentThread::ScopedNestableTaskAllower allow;
+  base::CurrentThread::ScopedAllowApplicationTasksInNativeNestedLoop allow;
   RunMenuAt(widget, rect, ui::MENU_SOURCE_NONE);
   return true;
 }

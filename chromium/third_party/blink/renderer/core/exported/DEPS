@@ -22,7 +22,6 @@ specific_include_rules = {
     "+base/strings/string_split.h",
     "+base/strings/utf_string_conversions.h",
     "+base/task/current_thread.h",
-    "+base/task/task_runner_util.h",
     "+base/threading/thread.h",
     "+components/viz/test",
     "+media/base",
@@ -34,5 +33,8 @@ specific_include_rules = {
 
     # Allow test support dependencies.
     "+third_party/blink/renderer/platform/media/testing",
+  ],
+  "test_web_frame_helper.cc": [
+    "+third_party/blink/renderer/core/frame/web_local_frame_impl.h",
   ],
 }

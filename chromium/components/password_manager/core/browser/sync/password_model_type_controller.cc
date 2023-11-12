@@ -8,7 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
@@ -33,7 +33,7 @@ enum class ClearedOnStartup {
 
 void RecordClearedOnStartup(ClearedOnStartup state) {
   base::UmaHistogramEnumeration(
-      "PasswordManager.AccountStorage.ClearedOnStartup", state);
+      "PasswordManager.AccountStorage.ClearedOnStartup2", state);
 }
 
 void PasswordStoreClearDone(bool cleared) {
@@ -65,32 +65,29 @@ PasswordModelTypeController::PasswordModelTypeController(
           base::BindRepeating(
               &PasswordModelTypeController::OnOptInStateMaybeChanged,
               base::Unretained(this))) {
-  identity_manager_->AddObserver(this);
+  identity_manager_observation_.Observe(identity_manager_);
 
-  DCHECK_EQ(
-      base::FeatureList::IsEnabled(features::kEnablePasswordsAccountStorage),
-      !!account_password_store_for_cleanup);
-  if (base::FeatureList::IsEnabled(features::kEnablePasswordsAccountStorage)) {
+  if (account_password_store_for_cleanup) {
+    DCHECK(
+        base::FeatureList::IsEnabled(features::kEnablePasswordsAccountStorage));
     // Note: Right now, we're still in the middle of SyncService initialization,
     // so we can't check IsOptedInForAccountStorage() yet (SyncService might not
     // have determined the syncing account yet). Post a task do to it after the
     // initialization is complete.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&PasswordModelTypeController::MaybeClearStore,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   account_password_store_for_cleanup));
   }
 }
 
-PasswordModelTypeController::~PasswordModelTypeController() {
-  identity_manager_->RemoveObserver(this);
-}
+PasswordModelTypeController::~PasswordModelTypeController() = default;
 
 void PasswordModelTypeController::LoadModels(
     const syncer::ConfigureContext& configure_context,
     const ModelLoadCallback& model_load_callback) {
   DCHECK(CalledOnValidThread());
-  sync_service_->AddObserver(this);
+  sync_service_observation_.Observe(sync_service_);
   sync_mode_ = configure_context.sync_mode;
   ModelTypeController::LoadModels(configure_context, model_load_callback);
 }
@@ -98,7 +95,7 @@ void PasswordModelTypeController::LoadModels(
 void PasswordModelTypeController::Stop(syncer::ShutdownReason shutdown_reason,
                                        StopCallback callback) {
   DCHECK(CalledOnValidThread());
-  sync_service_->RemoveObserver(this);
+  sync_service_observation_.Reset();
   // In transport-only mode, our storage is scoped to the Gaia account. That
   // means it should be cleared if Sync is stopped for any reason (other than
   // just browser shutdown). E.g. when switching to full-Sync mode, we don't

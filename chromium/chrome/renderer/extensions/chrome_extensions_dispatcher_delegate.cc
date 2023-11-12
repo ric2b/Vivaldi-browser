@@ -13,14 +13,14 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/grit/renderer_resources.h"
-#include "chrome/renderer/extensions/app_hooks_delegate.h"
-#include "chrome/renderer/extensions/extension_hooks_delegate.h"
-#include "chrome/renderer/extensions/identity_hooks_delegate.h"
-#include "chrome/renderer/extensions/media_galleries_custom_bindings.h"
-#include "chrome/renderer/extensions/notifications_native_handler.h"
-#include "chrome/renderer/extensions/page_capture_custom_bindings.h"
-#include "chrome/renderer/extensions/sync_file_system_custom_bindings.h"
-#include "chrome/renderer/extensions/tabs_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/app_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/extension_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/identity_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/media_galleries_custom_bindings.h"
+#include "chrome/renderer/extensions/api/notifications_native_handler.h"
+#include "chrome/renderer/extensions/api/page_capture_custom_bindings.h"
+#include "chrome/renderer/extensions/api/sync_file_system_custom_bindings.h"
+#include "chrome/renderer/extensions/api/tabs_hooks_delegate.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_thread.h"
@@ -38,21 +38,22 @@
 #include "extensions/renderer/resource_bundle_source_map.h"
 #include "extensions/renderer/script_context.h"
 #include "media/media_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/renderer/extensions/file_browser_handler_custom_bindings.h"
-#include "chrome/renderer/extensions/platform_keys_natives.h"
-#if defined(USE_CUPS)
-#include "chrome/renderer/extensions/printing_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/file_browser_handler_custom_bindings.h"
+#include "chrome/renderer/extensions/api/platform_keys_natives.h"
+#if BUILDFLAG(USE_CUPS)
+#include "chrome/renderer/extensions/api/printing_hooks_delegate.h"
 #endif
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/renderer/extensions/accessibility_private_hooks_delegate.h"
-#include "chrome/renderer/extensions/file_manager_private_custom_bindings.h"
+#include "chrome/renderer/extensions/api/accessibility_private_hooks_delegate.h"
+#include "chrome/renderer/extensions/api/file_manager_private_custom_bindings.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -254,7 +255,7 @@ void ChromeExtensionsDispatcherDelegate::InitializeBindingsSystem(
       ->SetDelegate(
           std::make_unique<extensions::AccessibilityPrivateHooksDelegate>());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-#if BUILDFLAG(IS_CHROMEOS) && defined(USE_CUPS)
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
   bindings->GetHooksForAPI("printing")
       ->SetDelegate(std::make_unique<extensions::PrintingHooksDelegate>());
 #endif

@@ -17,17 +17,18 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
-#include "chrome/browser/ui/webui/chromeos/login/os_install_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/sync_consent_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/os_install_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 
 namespace ash {
+
 namespace {
 
 constexpr char kExistingUserEmail[] = "existing@gmail.com";
@@ -92,6 +93,7 @@ class OsInstallVisibilityTest : public LoginUIShelfVisibilityTest {
     command_line->AppendSwitch(switches::kAllowOsInstall);
   }
 };
+
 }  // namespace
 
 // Verifies that shelf buttons are shown by default on login screen.
@@ -188,7 +190,7 @@ class KioskSkuVisibilityTest : public LoginUIShelfVisibilityTest {
   KioskSkuVisibilityTest() {
     device_state_.set_skip_initial_policy_setup(true);
     scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kEnableKioskLoginScreen);
+        features::kEnableKioskLoginScreen);
   }
   ~KioskSkuVisibilityTest() override = default;
   KioskSkuVisibilityTest(const KioskSkuVisibilityTest&) = delete;
@@ -200,9 +202,8 @@ class KioskSkuVisibilityTest : public LoginUIShelfVisibilityTest {
   }
 
  private:
-  ash::DeviceStateMixin device_state_{
-      &mixin_host_,
-      ash::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
   policy::DevicePolicyCrosTestHelper policy_helper_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };

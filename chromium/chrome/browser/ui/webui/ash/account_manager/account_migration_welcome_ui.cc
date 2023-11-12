@@ -12,7 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
+#include "chrome/browser/ui/webui/signin/ash/inline_login_dialog.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -87,6 +87,7 @@ AccountMigrationWelcomeUI::AccountMigrationWelcomeUI(content::WebUI* web_ui)
   content::WebUIDataSource* html_source = content::WebUIDataSource::Create(
       chrome::kChromeUIAccountMigrationWelcomeHost);
   webui::SetJSModuleDefaults(html_source);
+  html_source->DisableTrustedTypesCSP();
 
   // Add localized strings.
   html_source->AddLocalizedString("welcomePageTitle",
@@ -104,7 +105,9 @@ AccountMigrationWelcomeUI::AccountMigrationWelcomeUI(content::WebUI* web_ui)
   // Add required resources.
   html_source->AddResourcePath("account_migration_welcome_app.js",
                                IDR_ACCOUNT_MIGRATION_WELCOME_APP_JS);
-  html_source->AddResourcePath("account_manager_shared_css.js",
+  html_source->AddResourcePath("account_migration_welcome_app.html.js",
+                               IDR_ACCOUNT_MIGRATION_WELCOME_APP_HTML_JS);
+  html_source->AddResourcePath("account_manager_shared.css.js",
                                IDR_ACCOUNT_MANAGER_SHARED_CSS_JS);
   html_source->AddResourcePath("account_manager_browser_proxy.js",
                                IDR_ACCOUNT_MANAGER_BROWSER_PROXY_JS);

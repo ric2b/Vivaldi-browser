@@ -8,9 +8,14 @@
 #include <string>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
@@ -21,15 +26,24 @@
 #include "chrome/browser/web_applications/os_integration/web_app_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/pref_names.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "base/system/sys_info.h"
+#include "chrome/common/mac/app_mode_common.h"
+#endif
 
 namespace web_app {
 
@@ -53,7 +67,46 @@ WebAppShortcutManager::ShortcutCallback& GetShortcutUpdateCallbackForTesting() {
   return *callback;
 }
 
+WebAppShortcutManager::UpdateShortcutsForAllAppsCallback&
+GetUpdateShortcutsForAllAppsCallback() {
+  static base::NoDestructor<
+      WebAppShortcutManager::UpdateShortcutsForAllAppsCallback>
+      callback;
+  return *callback;
+}
+
+#if BUILDFLAG(IS_MAC)
+// This version number is stored in local prefs to check whether app shortcuts
+// need to be recreated. This might happen when we change various aspects of app
+// shortcuts like command-line flags or associated icons, binaries, etc.
+const int kCurrentAppShortcutsVersion = APP_SHIM_VERSION_NUMBER;
+
+// The architecture that was last used to create app shortcuts for this user
+// directory.
+std::string CurrentAppShortcutsArch() {
+  return base::SysInfo::OperatingSystemArchitecture();
+}
+#else
+// Non-mac platforms do not update shortcuts.
+const int kCurrentAppShortcutsVersion = 0;
+std::string CurrentAppShortcutsArch() {
+  return "";
+}
+#endif
+
+// Delay in seconds before running UpdateShortcutsForAllApps.
+const int kUpdateShortcutsForAllAppsDelay = 10;
+
 }  // namespace
+
+void WebAppShortcutManager::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // Indicates whether app shortcuts have been created.
+  registry->RegisterIntegerPref(prefs::kAppShortcutsVersion,
+                                kCurrentAppShortcutsVersion);
+  registry->RegisterStringPref(prefs::kAppShortcutsArch,
+                               CurrentAppShortcutsArch());
+}
 
 WebAppShortcutManager::WebAppShortcutManager(
     Profile* profile,
@@ -73,13 +126,15 @@ void WebAppShortcutManager::SetSubsystems(WebAppIconManager* icon_manager,
   registrar_ = registrar;
 }
 
+void WebAppShortcutManager::Start() {
+  UpdateShortcutsForAllAppsIfNeeded();
+}
+
 void WebAppShortcutManager::UpdateShortcuts(
     const AppId& app_id,
     base::StringPiece old_name,
-    base::OnceClosure update_finished_callback) {
-  if (!CanCreateShortcuts())
-    return;
-
+    ResultCallback update_finished_callback) {
+  DCHECK(CanCreateShortcuts());
   GetShortcutInfoForApp(
       app_id,
       base::BindOnce(
@@ -107,6 +162,11 @@ void WebAppShortcutManager::GetAppExistingShortCutLocation(
             std::move(callback).Run(locations);
           },
           std::move(shortcut_info), std::move(callback)));
+}
+
+void WebAppShortcutManager::SetUpdateShortcutsForAllAppsCallback(
+    UpdateShortcutsForAllAppsCallback callback) {
+  GetUpdateShortcutsForAllAppsCallback() = std::move(callback);
 }
 
 void WebAppShortcutManager::SetShortcutUpdateCallbackForTesting(
@@ -271,17 +331,19 @@ void WebAppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu(
 
 void WebAppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts(
     std::u16string old_name,
-    base::OnceClosure update_finished_callback,
+    ResultCallback update_finished_callback,
     std::unique_ptr<ShortcutInfo> shortcut_info) {
   if (GetShortcutUpdateCallbackForTesting())
     std::move(GetShortcutUpdateCallbackForTesting()).Run(shortcut_info.get());
 
-  if (suppress_shortcuts_for_testing_ || !shortcut_info)
+  if (suppress_shortcuts_for_testing_ || !shortcut_info) {
+    std::move(update_finished_callback).Run(Result::kOk);
     return;
+  }
 
   base::FilePath shortcut_data_dir =
       internals::GetShortcutDataDir(*shortcut_info);
-  internals::PostShortcutIOTaskAndReply(
+  internals::PostShortcutIOTaskAndReplyWithResult(
       base::BindOnce(&internals::UpdatePlatformShortcuts,
                      std::move(shortcut_data_dir), std::move(old_name)),
       std::move(shortcut_info), std::move(update_finished_callback));
@@ -409,7 +471,75 @@ std::unique_ptr<ShortcutInfo> WebAppShortcutManager::BuildShortcutInfoForWebApp(
   }
 #endif  // BUILDFLAG(IS_LINUX)
 
+#if BUILDFLAG(IS_MAC)
+  shortcut_info->handlers_per_profile =
+      AppShimRegistry::Get()->GetHandlersForApp(app->app_id());
+#endif
+
   return shortcut_info;
+}
+
+void WebAppShortcutManager::UpdateShortcutsForAllAppsIfNeeded() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Updating shortcuts writes to user home folders, which can not be done in
+  // tests without exploding disk space usage on the bots.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
+    return;
+
+  int last_version =
+      profile_->GetPrefs()->GetInteger(prefs::kAppShortcutsVersion);
+  std::string last_arch =
+      profile_->GetPrefs()->GetString(prefs::kAppShortcutsArch);
+
+  if (last_version == kCurrentAppShortcutsVersion &&
+      last_arch == CurrentAppShortcutsArch()) {
+    // This either means this is a profile where installed shortcuts already
+    // match the expected version and arch, or this could be a fresh profile.
+    // For the latter, make sure to actually store version and arch in prefs,
+    // as otherwise this code would always just read the defaults for these
+    // prefs, and not actually ever detect a version change.
+    SetCurrentAppShortcutsVersion();
+    return;
+  }
+
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&WebAppShortcutManager::UpdateShortcutsForAllAppsNow,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::Seconds(kUpdateShortcutsForAllAppsDelay));
+}
+
+void WebAppShortcutManager::UpdateShortcutsForAllAppsNow() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (suppress_shortcuts_for_testing_)
+    return;
+
+  std::vector<AppId> app_ids = registrar_->GetAppIds();
+  auto done_callback = base::BarrierClosure(
+      app_ids.size() + 1,
+      base::BindOnce(&WebAppShortcutManager::SetCurrentAppShortcutsVersion,
+                     weak_ptr_factory_.GetWeakPtr()));
+
+  for (const auto& app_id : app_ids) {
+    UpdateShortcuts(app_id, /*old_name=*/{},
+                    base::IgnoreArgs<Result>(done_callback));
+  }
+
+  UpdateShortcutsForAllAppsCallback update_callback =
+      GetUpdateShortcutsForAllAppsCallback();
+  if (update_callback) {
+    update_callback.Run(profile_, done_callback);
+  } else {
+    done_callback.Run();
+  }
+}
+
+void WebAppShortcutManager::SetCurrentAppShortcutsVersion() {
+  profile_->GetPrefs()->SetInteger(prefs::kAppShortcutsVersion,
+                                   kCurrentAppShortcutsVersion);
+  profile_->GetPrefs()->SetString(prefs::kAppShortcutsArch,
+                                  CurrentAppShortcutsArch());
 }
 
 }  // namespace web_app

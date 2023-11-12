@@ -10,7 +10,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/raster_cmd_helper.h"
 #include "gpu/command_buffer/client/raster_implementation_gles.h"
@@ -46,7 +46,6 @@ ContextResult RasterInProcessContext::Initialize(
     CommandBufferTaskExecutor* task_executor,
     const ContextCreationAttribs& attribs,
     const SharedMemoryLimits& memory_limits,
-    ImageFactory* image_factory,
     gpu::raster::GrShaderCache* gr_shader_cache,
     GpuProcessActivityFlags* activity_flags) {
   DCHECK(attribs.enable_raster_interface);
@@ -60,9 +59,9 @@ ContextResult RasterInProcessContext::Initialize(
 
   command_buffer_ =
       std::make_unique<InProcessCommandBuffer>(task_executor, GURL());
-  auto result = command_buffer_->Initialize(attribs, image_factory,
-                                            base::ThreadTaskRunnerHandle::Get(),
-                                            gr_shader_cache, activity_flags);
+  auto result = command_buffer_->Initialize(
+      attribs, base::SingleThreadTaskRunner::GetCurrentDefault(),
+      gr_shader_cache, activity_flags);
   if (result != ContextResult::kSuccess) {
     DLOG(ERROR) << "Failed to initialize InProcessCommmandBuffer";
     return result;

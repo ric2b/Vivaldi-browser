@@ -180,9 +180,15 @@ enum SBThreatType {
   SB_THREAT_TYPE_HIGH_CONFIDENCE_ALLOWLIST = 24,
 
   // List of URLs that should shown an accuracy tip.
-  SB_THREAT_TYPE_ACCURACY_TIPS = 25,
+  // DEPRECATED: SB_THREAT_TYPE_ACCURACY_TIPS = 25,
 
-  SB_THREAT_TYPE_MAX = SB_THREAT_TYPE_ACCURACY_TIPS,
+  // Managed policy indicated to warn a navigation.
+  SB_THREAT_TYPE_MANAGED_POLICY_WARN = 26,
+
+  // Managed policy indicated to block a navigation.
+  SB_THREAT_TYPE_MANAGED_POLICY_BLOCK = 27,
+
+  SB_THREAT_TYPE_MAX = SB_THREAT_TYPE_MANAGED_POLICY_BLOCK,
 };
 
 using SBThreatTypeSet = base::flat_set<SBThreatType>;
@@ -235,7 +241,6 @@ ListIdentifier GetChromeExtMalwareId();
 ListIdentifier GetChromeUrlApiId();
 ListIdentifier GetChromeUrlClientIncidentId();
 ListIdentifier GetIpMalwareId();
-ListIdentifier GetUrlAccuracyTipsId();
 ListIdentifier GetUrlBillingId();
 ListIdentifier GetUrlCsdDownloadAllowlistId();
 ListIdentifier GetUrlCsdAllowlistId();

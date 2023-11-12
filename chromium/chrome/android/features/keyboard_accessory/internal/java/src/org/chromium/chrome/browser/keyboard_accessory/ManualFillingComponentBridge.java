@@ -50,6 +50,7 @@ class ManualFillingComponentBridge {
         PropertyProvider<AccessorySheetData> provider = mProviders.get(tabType);
         if (provider != null) return provider;
         if (getManualFillingComponent() == null) return null;
+        if (mWebContents.isDestroyed()) return null;
         if (mProviders.size() == 0) { // True iff the component is available for the first time.
             getManualFillingComponent().registerSheetUpdateDelegate(
                     mWebContents, this::requestSheet);
@@ -109,13 +110,13 @@ class ManualFillingComponentBridge {
     }
 
     @CalledByNative
-    void showWhenKeyboardIsVisible() {
+    void show(boolean waitForKeyboard) {
         // Note(david@vivaldi.com): We only show the filling ui when setting is on.
         if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                     VivaldiPreferences.SHOW_KEYBOARD_ACCESSORY_VIEW, true)) {
             try { // Vivaldi: Catch potential exceptions here to avoid native crash, ref. VAB-4732.
         if (getManualFillingComponent() != null) {
-            getManualFillingComponent().showWhenKeyboardIsVisible();
+            getManualFillingComponent().show(waitForKeyboard);
         }
             } catch (Exception ignored) {
             }

@@ -16,8 +16,7 @@ suite('item tests', function() {
   let toastManager: CrToastManagerElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     // This isn't strictly necessary, but is a probably good idea.
     BrowserProxy.setInstance(new TestDownloadsProxy());
@@ -131,8 +130,8 @@ suite('item tests', function() {
     assertTrue(toastManager.slottedHidden);
   });
 
-  test('undo is not shown in toast when item is mixed content', () => {
-    item.data = createDownload({hideDate: false, isMixedContent: true});
+  test('undo is not shown in toast when item is insecure', () => {
+    item.data = createDownload({hideDate: false, isInsecure: true});
     toastManager.show('', /* hideSlotted= */ false);
     assertFalse(toastManager.slottedHidden);
     item.$.remove.click();

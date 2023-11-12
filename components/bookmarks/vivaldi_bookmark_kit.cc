@@ -277,6 +277,11 @@ const std::string& GetThumbnail(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().thumbnail);
 }
 
+const std::string& GetThumbnail(
+    const BookmarkNode::MetaInfoMap& meta_info_map) {
+  return GetMetaString(meta_info_map, GetMetaNames().thumbnail);
+}
+
 bool IsSeparator(const BookmarkNode* node) {
   // TODO(espen@vivaldi.com): Add separator flag to node. Needed many places.
   return node->GetTitle() == GetMetaNames().tripple_dash &&

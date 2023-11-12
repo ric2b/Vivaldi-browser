@@ -43,7 +43,7 @@ void FlossAdapterClient::SetName(ResponseCallback<Void> callback,
 void FlossAdapterClient::SetDiscoverable(ResponseCallback<Void> callback,
                                          bool discoverable) {
   CallAdapterMethod<Void>(std::move(callback), adapter::kSetDiscoverable,
-                          discoverable);
+                          discoverable, /*duration=*/0u);
 }
 
 void FlossAdapterClient::StartDiscovery(ResponseCallback<Void> callback) {
@@ -83,6 +83,13 @@ void FlossAdapterClient::GetRemoteClass(ResponseCallback<uint32_t> callback,
                                         FlossDeviceId device) {
   CallAdapterMethod<uint32_t>(std::move(callback), adapter::kGetRemoteClass,
                               device);
+}
+
+void FlossAdapterClient::GetRemoteAppearance(
+    ResponseCallback<uint16_t> callback,
+    FlossDeviceId device) {
+  CallAdapterMethod<uint16_t>(std::move(callback),
+                              adapter::kGetRemoteAppearance, device);
 }
 
 void FlossAdapterClient::GetConnectionState(ResponseCallback<uint32_t> callback,

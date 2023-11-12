@@ -506,11 +506,6 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
       policy_base->MakeTokens(&initial_token, &lockdown_token, &lowbox_token);
   if (SBOX_ALL_OK != result)
     return result;
-  if (lowbox_token.IsValid() &&
-      base::win::GetVersion() < base::win::Version::WIN8) {
-    // We don't allow lowbox_token below Windows 8.
-    return SBOX_ERROR_BAD_PARAMS;
-  }
 
   result = UpdateDesktopIntegrity(config_base->desktop(),
                                   config_base->integrity_level());
@@ -546,11 +541,8 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   if (container)
     startup_info->SetAppContainer(container);
 
-  // On Win10, jobs are associated via startup_info.
-  if (base::win::GetVersion() >= base::win::Version::WIN10 &&
-      policy_base->HasJob()) {
+  if (policy_base->HasJob())
     startup_info->AddJobToAssociate(policy_base->GetJobHandle());
-  }
 
   if (!startup_info->BuildStartupInformation())
     return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
@@ -566,8 +558,8 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
     }
   }
   std::unique_ptr<TargetProcess> target = std::make_unique<TargetProcess>(
-      std::move(initial_token), std::move(lockdown_token),
-      policy_base->GetJobHandle(), thread_pool_, imp_caps);
+      std::move(initial_token), std::move(lockdown_token), thread_pool_,
+      imp_caps);
 
   result = target->Create(exe_path, command_line, std::move(startup_info),
                           &process_info, last_error);
@@ -680,10 +672,9 @@ std::wstring BrokerServicesBase::GetDesktopName(Desktop desktop) {
       // No alternate desktop or winstation. Return an empty string.
       return std::wstring();
     case Desktop::kAlternateWinstation:
-      return alt_winstation_ ? alt_winstation_->GetDesktopName()
-                             : std::wstring();
+      return alt_winstation_->GetDesktopName();
     case Desktop::kAlternateDesktop:
-      return alt_desktop_ ? alt_desktop_->GetDesktopName() : std::wstring();
+      return alt_desktop_->GetDesktopName();
   }
 }
 
@@ -693,22 +684,17 @@ ResultCode BrokerServicesBase::UpdateDesktopIntegrity(
   // If we're launching on an alternate desktop we need to make sure the
   // integrity label on the object is no higher than the sandboxed process's
   // integrity level. So, we lower the label on the desktop handle if it's
-  // not already low enough for our process. TODO(crbug.com/1361470) we allow
-  // desktop creation to fail - perhaps we can require them to be present in
-  // the future.
+  // not already low enough for our process.
   if (integrity == INTEGRITY_LEVEL_LAST)
     return SBOX_ALL_OK;
-  if (desktop == Desktop::kDefault)
-    return SBOX_ALL_OK;
-
-  ResultCode result = SBOX_ALL_OK;
-  if (desktop == Desktop::kAlternateWinstation && alt_winstation_) {
-    result = alt_winstation_->UpdateDesktopIntegrity(integrity);
-  } else if (desktop == Desktop::kAlternateDesktop && alt_desktop_) {
-    result = alt_desktop_->UpdateDesktopIntegrity(integrity);
+  switch (desktop) {
+    case Desktop::kDefault:
+      return SBOX_ALL_OK;
+    case Desktop::kAlternateWinstation:
+      return alt_winstation_->UpdateDesktopIntegrity(integrity);
+    case Desktop::kAlternateDesktop:
+      return alt_desktop_->UpdateDesktopIntegrity(integrity);
   }
-
-  return result;
 }
 
 ResultCode BrokerServicesBase::CreateAlternateDesktop(Desktop desktop) {

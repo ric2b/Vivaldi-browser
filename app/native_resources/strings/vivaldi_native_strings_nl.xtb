@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">Afbeelding he&amp;rladen</translation>
 <translation id="1924750141060565109">Landschap 15</translation>
 <translation id="19598411548897379">Algemeen</translation>
+<translation id="1973351931613083086">Automatisch afspelen</translation>
 <translation id="1985669426322966465">Software-update</translation>
 <translation id="2079036669923635404">Klik hier om Vivaldi bij te werken naar versie <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Er is iets misgegaan bij het binnenhalen van de updatebestanden. Controleer je internetverbinding en probeer het opnieuw.</translation>
@@ -37,7 +38,8 @@
 <translation id="2848085334714181751">Dier 3</translation>
 <translation id="2873951654529031587">Prullenbak</translation>
 <translation id="292258461174562431">Monster 4</translation>
-<translation id="2923448633003185837">Plakken en gaan</translation>
+<translation id="2923448633003185837">Plakken en openen</translation>
+<translation id="2953943267837858202">Automatisch afspelen van video niet toegestaan</translation>
 <translation id="2977472760057091832">Koppeling openen in &amp;privévenster</translation>
 <translation id="2989805286512600854">Openen in nieuwe tab</translation>
 <translation id="3027988479108856431">Helaas zijn instellingen van Yandex niet te benaderen als die browser open staat. Om Yandex-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Yandex. Klik daarna op Opnieuw proberen.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Nieuwe bladwijzer</translation>
 <translation id="3255747772218936245">Update installeren</translation>
 <translation id="3259769196742189631">Pagina vali&amp;deren</translation>
+<translation id="3291915639428159043">Automatisch afspelen geblokkeerd</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(geen titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is de nieuwst beschikbare versie.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Koppeling openen in &amp;nieuw venster</translation>
 <translation id="3588820906588687999">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3620979700683094848">Websites mogen video automatisch afspelen</translation>
 <translation id="3680031241659195730">Er is een nieuwe versie van Vivaldi beschikbaar.</translation>
 <translation id="3708982624815781692">De download is geannuleerd.</translation>
 <translation id="3732157130969736834">Koppeling toevoegen aan &amp;bladwijzers</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Niet meer weergeven</translation>
 <translation id="4074744496918018786">Afbeelding openen in &amp;privévenster</translation>
+<translation id="410351446219883937">Automatisch afspelen</translation>
 <translation id="4324492550286218827">Landschap 2</translation>
 <translation id="4406101500523955324">Openen in privévenster</translation>
 <translation id="4420816922321010053">Weet je zeker dat je Vivaldi wilt afsluiten?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Knippen</translation>
 <translation id="7727481996062361502">Update verifiëren...</translation>
 <translation id="7793738202466490491">Toevoegen als kalendergebeurtenis</translation>
+<translation id="7834693436815575883">Automatisch afspelen toegestaan</translation>
 <translation id="7848222781052558334">De digitale ondertekening van de binnengehaalde bestanden kon niet worden geverifieerd.</translation>
 <translation id="7865983598101744945">Afsluiten bevestigen</translation>
 <translation id="7957213167373139414">Mijn kalender</translation>
 <translation id="8027581147000338959">Openen in nieuw venster</translation>
+<translation id="8044382196220116469">Niet toestaan dat websites automatisch video afspelen</translation>
 <translation id="8099620695029051217">Pagina-adres &amp;kopiëren</translation>
 <translation id="8197810018650377191">Pagina toevoegen aan &amp;bladwijzers</translation>
 <translation id="8261506727792406068">Verwijderen</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Portal-document inspecteren</translation>
 <translation id="8768970203213061953">Landschap 14</translation>
 <translation id="8773635261052182196">Je krijgt deze meldingen niet meer te zien. Je kunt ze weer aanzetten in Vivaldi's instellingen.</translation>
+<translation id="8774017153185436870">Websites zouden video automatisch kunnen afspelen</translation>
 <translation id="8813277370772331957">Later herinneren</translation>
 <translation id="8894900864683381599">Koppeling toevoegen aan &amp;webpaneel</translation>
 <translation id="8912720443398351457">Weet je zeker dat je Vivaldi wilt afsluiten?</translation>
 <translation id="8947109330183116400">Html-bladwijzerbestand selecteren</translation>
 <translation id="9017566390391482291">Te importeren Vivaldi-profielmap selecteren</translation>
 <translation id="9048058608784130603">In afwachting van update <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Toegestaan om automatisch video af te spelen</translation>
 <translation id="9065203028668620118">Bewerken</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Afbeelding openen als <ph name="USER" /></translation>

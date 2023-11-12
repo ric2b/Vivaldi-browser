@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_gpu.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -46,7 +47,8 @@ CanvasResource::CanvasResource(base::WeakPtr<CanvasResourceProvider> provider,
                                cc::PaintFlags::FilterQuality filter_quality,
                                const SkColorInfo& info)
     : owning_thread_ref_(base::PlatformThread::CurrentRef()),
-      owning_thread_task_runner_(Thread::Current()->GetDeprecatedTaskRunner()),
+      owning_thread_task_runner_(
+          ThreadScheduler::Current()->CleanupTaskRunner()),
       provider_(std::move(provider)),
       info_(info),
       filter_quality_(filter_quality) {}
@@ -128,7 +130,12 @@ static void ReleaseFrameResources(
     scoped_refptr<CanvasResource>&& resource,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
-  if (!resource)
+  // If there is a LastUnrefCallback, we need to abort because recycling the
+  // resource now will prevent the LastUnrefCallback from ever being called.
+  // In such cases, ReleaseFrameResources will be called again when
+  // CanvasResourceDispatcher destroys the corresponding FrameResource object,
+  // at which time this resource will be safely recycled.
+  if (!resource || resource->HasLastUnrefCallback())
     return;
 
   resource->WaitSyncToken(sync_token);
@@ -142,8 +149,9 @@ static void ReleaseFrameResources(
   if (lost_resource)
     resource->NotifyResourceLost();
   if (resource_provider && !lost_resource && resource->IsRecycleable() &&
-      resource->HasOneRef())
+      resource->HasOneRef()) {
     resource_provider->RecycleResource(std::move(resource));
+  }
 }
 
 bool CanvasResource::PrepareTransferableResource(

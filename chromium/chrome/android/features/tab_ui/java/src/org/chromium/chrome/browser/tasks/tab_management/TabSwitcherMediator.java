@@ -25,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -37,6 +38,7 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -124,6 +126,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<Boolean> mIsDialogVisibleSupplier =
             new ObservableSupplierImpl<>();
+    private final Callback<Boolean> mNotifyBackPressedCallback = this::notifyBackPressStateChanged;
 
     /**
      * The callback which is supplied to the {@link IncognitoReauthController} that takes care of
@@ -344,6 +347,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
                     mShouldIgnoreNextSelect = currentTabModelFilter.getCount() > 0;
 
                 mContainerViewModel.set(IS_INCOGNITO, currentTabModelFilter.isIncognito());
+                notifyBackPressStateChangedInternal();
                 if (mTabGridDialogController != null) {
                     mTabGridDialogController.hideDialog(false);
                 }
@@ -430,6 +434,18 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
             @Override
             public void tabPendingClosure(Tab tab) {
+                notifyBackPressStateChangedInternal();
+            }
+
+            @Override
+            public void onFinishingTabClosure(Tab tab) {
+                // If tab is closed by the site itself rather than user's input,
+                // tabPendingClosure & tabClosureCommitted won't be called.
+                notifyBackPressStateChangedInternal();
+            }
+
+            @Override
+            public void tabRemoved(Tab tab) {
                 notifyBackPressStateChangedInternal();
             }
 
@@ -540,6 +556,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             }
         };
         mMultiWindowModeStateDispatcher.addObserver(mMultiWindowModeObserver);
+        notifyBackPressStateChangedInternal();
     }
 
     /**
@@ -564,7 +581,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         if (tabSelectionEditorController != null) {
             mTabSelectionEditorController = tabSelectionEditorController;
             mTabSelectionEditorController.getHandleBackPressChangedSupplier().addObserver(
-                    this::notifyBackPressStateChanged);
+                    mNotifyBackPressedCallback);
         }
     }
 
@@ -576,7 +593,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             TabGridDialogMediator.DialogController tabGridDialogController) {
         mTabGridDialogController = tabGridDialogController;
         mTabGridDialogController.getHandleBackPressChangedSupplier().addObserver(
-                this::notifyBackPressStateChanged);
+                mNotifyBackPressedCallback);
     }
 
     @VisibleForTesting
@@ -624,7 +641,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         // If the Start surface is enabled, it will handle the margins and positioning of the tab
         // switcher. So, we shouldn't do it here.
         if (ReturnToChromeUtil.isStartSurfaceEnabled(mContext)
-                && !ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mContext)) {
+                && !ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mContext)) {
             mContainerViewModel.set(TOP_MARGIN, 0);
             mContainerViewModel.set(SHADOW_TOP_OFFSET, 0);
             return;
@@ -898,7 +915,10 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return true;
         }
 
-        if (!mContainerViewModel.get(IS_VISIBLE)) return false;
+        if (!mContainerViewModel.get(IS_VISIBLE)) {
+            assert !BackPressManager.isEnabled() : "Invisible container: Backpress must be handled";
+            return false;
+        }
 
         if (mTabGridDialogController != null && mTabGridDialogController.handleBackPressed()) {
             return true;
@@ -907,7 +927,10 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         // When the Start surface is showing, we no longer need to call onTabSelecting().
         if (isOnHomepage && mMode == TabListCoordinator.TabListMode.CAROUSEL) return false;
 
-        if (mTabModelSelector.getCurrentTab() == null) return false;
+        if (mTabModelSelector.getCurrentTab() == null) {
+            assert !BackPressManager.isEnabled() : "No tab: Backpress must be handled";
+            return false;
+        }
 
         onTabSelecting(mTabModelSelector.getCurrentTabId(), false);
 
@@ -943,24 +966,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     @Override
-    public void showTabSelectionEditor(List<Tab> tabs) {
-        if (mTabSelectionEditorController == null) {
-            return;
-        }
-        mTabSelectionEditorController.show(tabs);
-    }
-
-    @Override
     public void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs) {
         mFirstMeaningfulPaintRecorder = new FirstMeaningfulPaintRecorder(activityCreateTimeMs);
     }
 
     @Override
-    public void onOverviewShownAtLaunch(long activityCreationTimeMs) {
-        if (mMode == TabListMode.CAROUSEL) {
-            ReturnToChromeUtil.recordLastVisitedTabIsSRPWhenOverviewIsShownAtLaunch();
-        }
-    }
+    public void onOverviewShownAtLaunch(long activityCreationTimeMs) {}
 
     @Override
     public @TabSwitcherType int getTabSwitcherType() {
@@ -1053,12 +1064,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     public void destroy() {
         if (mTabSelectionEditorController != null) {
             mTabSelectionEditorController.getHandleBackPressChangedSupplier().removeObserver(
-                    this::notifyBackPressStateChanged);
+                    mNotifyBackPressedCallback);
         }
 
         if (mTabGridDialogController != null) {
             mTabGridDialogController.getHandleBackPressChangedSupplier().removeObserver(
-                    this::notifyBackPressStateChanged);
+                    mNotifyBackPressedCallback);
         }
 
         if (mIncognitoReauthController != null) {

@@ -42,7 +42,6 @@ component("wtf") {
     "allocator/partition_allocator.h",
     "allocator/partitions.cc",
     "allocator/partitions.h",
-    "assertions.cc",
     "assertions.h",
     "atomic_operations.cc",
     "atomic_operations.h",
@@ -95,8 +94,6 @@ component("wtf") {
     "pod_red_black_tree.h",
     "ref_counted.h",
     "sanitizers.h",
-    "scoped_logger.cc",
-    "scoped_logger.h",
     "sequence_bound.h",
     "shared_buffer.cc",
     "shared_buffer.h",
@@ -123,6 +120,10 @@ component("wtf") {
     "text/case_map.h",
     "text/character_names.h",
     "text/character_visitor.h",
+    "text/code_point_iterator.h",
+    "text/copy_lchars_from_uchar_source.h",
+    "text/encoding_tables.cc",
+    "text/encoding_tables.h",
     "text/integer_to_string_conversion.h",
     "text/line_ending.cc",
     "text/line_ending.h",
@@ -151,6 +152,8 @@ component("wtf") {
     "text/text_codec.cc",
     "text/text_codec.h",
     "text/text_codec_ascii_fast_path.h",
+    "text/text_codec_cjk.cc",
+    "text/text_codec_cjk.h",
     "text/text_codec_icu.cc",
     "text/text_codec_icu.h",
     "text/text_codec_latin1.cc",
@@ -214,6 +217,8 @@ component("wtf") {
   deps = [
     "//base/allocator:buildflags",
     "//build:chromeos_buildflags",
+    "//third_party/blink/public/common:common",
+    "//third_party/modp_b64",
 
     # TODO(tkent): WTF should not depend on it.
     "//third_party/blink/public/common:headers",
@@ -239,7 +244,7 @@ component("wtf") {
   }
 
   if (!is_mac && (current_cpu == "x86" || current_cpu == "x64")) {
-    sources += [ "text/ascii_fast_path.cc" ]
+    sources += [ "text/copy_lchars_from_uchar_source.cc" ]
   }
 
   if (is_win) {
@@ -311,13 +316,15 @@ source_set("wtf_unittests_sources") {
     "pod_red_black_tree_test.cc",
     "pod_tree_test_helpers.cc",
     "pod_tree_test_helpers.h",
-    "scoped_logger_test.cc",
     "sequence_bound_test.cc",
     "shared_buffer_test.cc",
     "testing/run_all_tests.cc",
     "text/atomic_string_table_test.cc",
     "text/atomic_string_test.cc",
+    "text/base64_test.cc",
     "text/case_map_test.cc",
+    "text/code_point_iterator_test.cc",
+    "text/encoding_tables_test.cc",
     "text/integer_to_string_conversion_test.cc",
     "text/line_ending_test.cc",
     "text/math_transform_test.cc",
@@ -327,6 +334,7 @@ source_set("wtf_unittests_sources") {
     "text/string_impl_test.cc",
     "text/string_to_number_test.cc",
     "text/string_view_test.cc",
+    "text/text_codec_cjk_test.cc",
     "text/text_codec_icu_test.cc",
     "text/text_codec_replacement_test.cc",
     "text/text_codec_test.cc",

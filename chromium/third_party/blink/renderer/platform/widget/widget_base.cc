@@ -8,7 +8,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
@@ -37,6 +37,7 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/platform/graphics/raster_dark_mode_filter_impl.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/compositor_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
@@ -138,7 +139,7 @@ CreateSyntheticBeginFrameSource() {
   base::SingleThreadTaskRunner* compositor_impl_side_task_runner =
       Platform::Current()->CompositorThreadTaskRunner()
           ? Platform::Current()->CompositorThreadTaskRunner().get()
-          : base::ThreadTaskRunnerHandle::Get().get();
+          : base::SingleThreadTaskRunner::GetCurrentDefault().get();
   return std::make_unique<viz::BackToBackBeginFrameSource>(
       std::make_unique<viz::DelayBasedTimeSource>(
           compositor_impl_side_task_runner));
@@ -296,7 +297,7 @@ void WidgetBase::Shutdown() {
     // compositor thread.
 
     scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner =
-        base::ThreadTaskRunnerHandle::Get();
+        base::SingleThreadTaskRunner::GetCurrentDefault();
     cleanup_runner->PostNonNestableTask(
         FROM_HERE, base::BindOnce(
                        [](std::unique_ptr<LayerTreeView> view,
@@ -554,6 +555,10 @@ void WidgetBase::OnDeferCommitsChanged(
 
 void WidgetBase::OnPauseRenderingChanged(bool paused) {
   widget_input_handler_manager_->OnPauseRenderingChanged(paused);
+}
+
+void WidgetBase::OnCommitRequested() {
+  client_->OnCommitRequested();
 }
 
 void WidgetBase::DidBeginMainFrame() {

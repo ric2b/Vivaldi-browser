@@ -14,7 +14,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
@@ -184,14 +184,14 @@ void ClientTagBasedModelTypeProcessor::ConnectIfReady() {
   activation_response->type_processor =
       std::make_unique<ModelTypeProcessorProxy>(
           weak_ptr_factory_for_worker_.GetWeakPtr(),
-          base::SequencedTaskRunnerHandle::Get());
+          base::SequencedTaskRunner::GetCurrentDefault());
 
   // Defer invoking of |start_callback_| to avoid synchronous call from the
   // |bridge_|. It might cause a situation when inside the ModelReadyToSync()
   // another methods of the bridge eventually were called. This behavior would
   // be complicated and be unexpected in some bridges.
   // See crbug.com/1055584 for more details.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(start_callback_),
                                 std::move(activation_response)));
 }
@@ -800,6 +800,22 @@ void ClientTagBasedModelTypeProcessor::OnUpdateReceived(
   NudgeForCommitIfNeeded();
 }
 
+void ClientTagBasedModelTypeProcessor::StorePendingInvalidations(
+    std::vector<sync_pb::ModelTypeState::Invalidation> invalidations_to_store) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!model_error_);
+  DCHECK(IsConnected());
+  std::unique_ptr<MetadataChangeList> metadata_changes =
+      bridge_->CreateMetadataChangeList();
+  sync_pb::ModelTypeState model_type_state =
+      entity_tracker_->model_type_state();
+  model_type_state.mutable_invalidations()->Assign(
+      invalidations_to_store.begin(), invalidations_to_store.end());
+  metadata_changes->UpdateModelTypeState(model_type_state);
+  entity_tracker_->set_model_type_state(model_type_state);
+  bridge_->ApplySyncChanges(std::move(metadata_changes), EntityChangeList());
+}
+
 bool ClientTagBasedModelTypeProcessor::ValidateUpdate(
     const sync_pb::ModelTypeState& model_type_state,
     const UpdateResponseDataList& updates,
@@ -1158,8 +1174,7 @@ void ClientTagBasedModelTypeProcessor::MergeDataWithMetadataForDebugging(
     node.Set("modelType", type_string);
     // Copy the whole metadata message into the dictionary (if existing).
     if (entity != nullptr) {
-      node.Set("metadata", base::Value::FromUniquePtrValue(
-                               EntityMetadataToValue(entity->metadata())));
+      node.Set("metadata", EntityMetadataToValue(entity->metadata()));
     }
     all_nodes.Append(std::move(node));
   }

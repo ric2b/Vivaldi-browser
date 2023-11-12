@@ -10,9 +10,7 @@
 
 #if BUILDFLAG(USE_V4L2_CODEC)
 #include <linux/videodev2.h>
-#endif  // BUILDFLAG(USE_V4L2_CODEC)
-
-#if BUILDFLAG(USE_VAAPI)
+#elif BUILDFLAG(USE_VAAPI)
 #include <va/va.h>
 #endif  // BUILDFLAG(USE_VAAPI)
 
@@ -73,6 +71,7 @@ absl::optional<Fourcc> Fourcc::FromVideoPixelFormat(
       case PIXEL_FORMAT_I444:
       case PIXEL_FORMAT_RGB24:
       case PIXEL_FORMAT_MJPEG:
+      case PIXEL_FORMAT_NV12A:
       case PIXEL_FORMAT_YUV420P9:
       case PIXEL_FORMAT_YUV420P10:
       case PIXEL_FORMAT_YUV422P9:
@@ -116,6 +115,7 @@ absl::optional<Fourcc> Fourcc::FromVideoPixelFormat(
       case PIXEL_FORMAT_XRGB:
       case PIXEL_FORMAT_RGB24:
       case PIXEL_FORMAT_MJPEG:
+      case PIXEL_FORMAT_NV12A:
       case PIXEL_FORMAT_YUV420P9:
       case PIXEL_FORMAT_YUV420P10:
       case PIXEL_FORMAT_YUV422P9:
@@ -199,9 +199,7 @@ uint32_t Fourcc::ToV4L2PixFmt() const {
   // Fourcc as V4L2.
   return static_cast<uint32_t>(value_);
 }
-#endif  // BUILDFLAG(USE_V4L2_CODEC)
-
-#if BUILDFLAG(USE_VAAPI)
+#elif BUILDFLAG(USE_VAAPI)
 // static
 absl::optional<Fourcc> Fourcc::FromVAFourCC(uint32_t va_fourcc) {
   switch (va_fourcc) {

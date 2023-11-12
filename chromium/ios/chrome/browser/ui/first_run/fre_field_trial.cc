@@ -30,17 +30,18 @@ const char kTrialGroupMICeAndDefaultBrowserVersionPrefName[] =
 // enrolled in the experiment.
 const int kPlaceholderTrialVersion = -1;
 // The current trial version; should be updated when the experiment is modified.
-const int kCurrentTrialVersion = 3;
+const int kCurrentTrialVersion = 5;
 
 // Group names for the FRE redesign permissions trial.
 const char kDefaultGroup[] = "Default";
 // Group name for the FRE control group.
-const char kControlGroup[] = "Control-V3";
+const char kControlGroup[] = "Control-V5";
 // Group names for the MICe FRE and TangibleSync FRE trial.
-const char kTangibleSyncAFREGroup[] = "kTangibleSyncA-V3";
-const char kTangibleSyncBFREGroup[] = "kTangibleSyncB-V3";
-const char kTangibleSyncCFREGroup[] = "kTangibleSyncC-V3";
-const char kTwoStepsMICEFREGroup[] = "kTwoStepsMICEFRE-V3";
+const char kTangibleSyncAFREGroup[] = "kTangibleSyncA-V5";
+const char kTangibleSyncDFREGroup[] = "kTangibleSyncD-V5";
+const char kTangibleSyncEFREGroup[] = "kTangibleSyncE-V5";
+const char kTangibleSyncFFREGroup[] = "kTangibleSyncF-V5";
+const char kTwoStepsMICEFREGroup[] = "kTwoStepsMICEFRE-V5";
 
 // Options for kkNewMobileIdentityConsistencyFREParam.
 constexpr base::FeatureParam<NewMobileIdentityConsistencyFRE>::Option
@@ -53,6 +54,12 @@ constexpr base::FeatureParam<NewMobileIdentityConsistencyFRE>::Option
          kNewMobileIdentityConsistencyFREParamTangibleSyncC},
         {NewMobileIdentityConsistencyFRE::kTwoSteps,
          kNewMobileIdentityConsistencyFREParamTwoSteps},
+        {NewMobileIdentityConsistencyFRE::kTangibleSyncD,
+         kNewMobileIdentityConsistencyFREParamTangibleSyncD},
+        {NewMobileIdentityConsistencyFRE::kTangibleSyncE,
+         kNewMobileIdentityConsistencyFREParamTangibleSyncE},
+        {NewMobileIdentityConsistencyFRE::kTangibleSyncF,
+         kNewMobileIdentityConsistencyFREParamTangibleSyncF},
 };
 
 // Parameter for signin::kNewMobileIdentityConsistencyFRE feature.
@@ -92,8 +99,7 @@ void AssociateFieldTrialParamsForNewMobileIdentityConsistency(
 namespace fre_field_trial {
 
 NewDefaultBrowserPromoFRE GetFREDefaultBrowserScreenPromoFRE() {
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS) &&
-      base::FeatureList::IsEnabled(kEnableFREDefaultBrowserPromoScreen)) {
+  if (base::FeatureList::IsEnabled(kEnableFREDefaultBrowserPromoScreen)) {
     return NewDefaultBrowserPromoFRE::kShortDelay;
   }
   return NewDefaultBrowserPromoFRE::kDisabled;
@@ -109,26 +115,15 @@ NewMobileIdentityConsistencyFRE GetNewMobileIdentityConsistencyFRE() {
 // Returns the weight for each trial group according to the FRE variations.
 std::map<variations::VariationID, int> GetGroupWeightsForFREVariations() {
   // It would probably be more efficient to use a fixed_flat_map.
+  // kTangibleSyncAFRETrialID is launched to 100% of the users.
   std::map<variations::VariationID, int> weight_by_id = {
       {kControlTrialID, 0},          {kTangibleSyncAFRETrialID, 0},
-      {kTangibleSyncBFRETrialID, 0}, {kTangibleSyncCFRETrialID, 0},
-      {kTwoStepsMICEFRETrialID, 0},
+      {kTangibleSyncDFRETrialID, 0}, {kTangibleSyncEFRETrialID, 0},
+      {kTangibleSyncFFRETrialID, 0}, {kTwoStepsMICEFRETrialID, 0},
   };
-  switch (GetChannel()) {
-    case version_info::Channel::UNKNOWN:
-    case version_info::Channel::CANARY:
-    case version_info::Channel::DEV:
-    case version_info::Channel::BETA:
-      for (auto& [id, weight] : weight_by_id) {
-        weight = 20;
-      };
-      break;
-    case version_info::Channel::STABLE:
-      for (auto& [id, weight] : weight_by_id) {
-        weight = 4;
-      };
-      break;
-  }
+
+  // `kTangibleSyncAFRETrialID` launched to 100% of users.
+  weight_by_id[kTangibleSyncAFRETrialID] = 100;
   return weight_by_id;
 }
 
@@ -149,12 +144,15 @@ int CreateNewMICeFRETrial(
 
   // Control group.
   AddGroupToConfig(kControlGroup, kControlTrialID, weight_by_id, config);
+
   // MICe FRE and TangibleSync FRE groups.
   AddGroupToConfig(kTangibleSyncAFREGroup, kTangibleSyncAFRETrialID,
                    weight_by_id, config);
-  AddGroupToConfig(kTangibleSyncBFREGroup, kTangibleSyncBFRETrialID,
+  AddGroupToConfig(kTangibleSyncDFREGroup, kTangibleSyncDFRETrialID,
                    weight_by_id, config);
-  AddGroupToConfig(kTangibleSyncCFREGroup, kTangibleSyncCFRETrialID,
+  AddGroupToConfig(kTangibleSyncEFREGroup, kTangibleSyncEFRETrialID,
+                   weight_by_id, config);
+  AddGroupToConfig(kTangibleSyncFFREGroup, kTangibleSyncFFRETrialID,
                    weight_by_id, config);
   AddGroupToConfig(kTwoStepsMICEFREGroup, kTwoStepsMICEFRETrialID, weight_by_id,
                    config);
@@ -164,11 +162,14 @@ int CreateNewMICeFRETrial(
       kTangibleSyncAFREGroup,
       kNewMobileIdentityConsistencyFREParamTangibleSyncA);
   AssociateFieldTrialParamsForNewMobileIdentityConsistency(
-      kTangibleSyncBFREGroup,
-      kNewMobileIdentityConsistencyFREParamTangibleSyncB);
+      kTangibleSyncDFREGroup,
+      kNewMobileIdentityConsistencyFREParamTangibleSyncD);
   AssociateFieldTrialParamsForNewMobileIdentityConsistency(
-      kTangibleSyncCFREGroup,
-      kNewMobileIdentityConsistencyFREParamTangibleSyncC);
+      kTangibleSyncEFREGroup,
+      kNewMobileIdentityConsistencyFREParamTangibleSyncE);
+  AssociateFieldTrialParamsForNewMobileIdentityConsistency(
+      kTangibleSyncFFREGroup,
+      kNewMobileIdentityConsistencyFREParamTangibleSyncF);
   AssociateFieldTrialParamsForNewMobileIdentityConsistency(
       kTwoStepsMICEFREGroup, kNewMobileIdentityConsistencyFREParamTwoSteps);
 
@@ -200,9 +201,7 @@ void Create(const base::FieldTrial::EntropyProvider& low_entropy_provider,
   // The client would not be assigned to any group because features controlled
   // by the experiment if the feature is already overridden. This handles
   // scenarios where FRE is forced for testing purposes.
-  if (feature_list->IsFeatureOverriddenFromCommandLine(
-          kEnableFREUIModuleIOS.name) ||
-      feature_list->IsFeatureOverridden(
+  if (feature_list->IsFeatureOverridden(
           signin::kNewMobileIdentityConsistencyFRE.name)) {
     return;
   }

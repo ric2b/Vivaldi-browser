@@ -72,6 +72,9 @@ constexpr NSString* const WebAutomaticDashSubstitutionEnabled =
 constexpr NSString* const WebAutomaticTextReplacementEnabled =
     @"WebAutomaticTextReplacementEnabled";
 
+constexpr NSString* const kGoogleJapaneseInputPrefix =
+    @"com.google.inputmethod.Japanese.";
+
 // A dummy RenderWidgetHostNSViewHostHelper implementation which no-ops all
 // functions.
 class DummyHostHelper : public RenderWidgetHostNSViewHostHelper {
@@ -185,7 +188,7 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)processedWheelEvent:(const blink::WebMouseWheelEvent&)event
                    consumed:(BOOL)consumed;
 - (void)keyEvent:(NSEvent*)theEvent wasKeyEquivalent:(BOOL)equiv;
-- (void)windowDidChangeBackingProperties:(NSNotification*)notification;
+- (void)windowDidChangeScreenOrBackingProperties:(NSNotification*)notification;
 - (void)windowChangedGlobalFrame:(NSNotification*)notification;
 - (void)windowDidBecomeKey:(NSNotification*)notification;
 - (void)windowDidResignKey:(NSNotification*)notification;
@@ -1435,6 +1438,9 @@ void ExtractUnderlines(NSAttributedString* string,
       [NSNotificationCenter defaultCenter];
 
   if (oldWindow) {
+    [notificationCenter removeObserver:self
+                                  name:NSWindowDidChangeScreenNotification
+                                object:oldWindow];
     [notificationCenter
         removeObserver:self
                   name:NSWindowDidChangeBackingPropertiesNotification
@@ -1455,7 +1461,12 @@ void ExtractUnderlines(NSAttributedString* string,
   if (newWindow) {
     [notificationCenter
         addObserver:self
-           selector:@selector(windowDidChangeBackingProperties:)
+           selector:@selector(windowDidChangeScreenOrBackingProperties:)
+               name:NSWindowDidChangeScreenNotification
+             object:newWindow];
+    [notificationCenter
+        addObserver:self
+           selector:@selector(windowDidChangeScreenOrBackingProperties:)
                name:NSWindowDidChangeBackingPropertiesNotification
              object:newWindow];
     [notificationCenter addObserver:self
@@ -1498,7 +1509,7 @@ void ExtractUnderlines(NSAttributedString* string,
 // another, and makes note of the new screen's color space, scale factor, etc.
 // It is also called when the current NSScreen's properties change (which is
 // redundant with display::DisplayObserver::OnDisplayMetricsChanged).
-- (void)windowDidChangeBackingProperties:(NSNotification*)notification {
+- (void)windowDidChangeScreenOrBackingProperties:(NSNotification*)notification {
   // Delay calling updateScreenProperties so that display::ScreenMac can
   // update our display::Displays first (if applicable).
   [self performSelector:@selector(updateScreenProperties)
@@ -1883,6 +1894,10 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   return NSUInteger(char_index);
 }
 
+- (BOOL)drawsVerticallyForCharacterAtIndex:(NSUInteger)charIndex {
+  return !!(_textInputFlags & blink::kWebTextInputFlagVertical);
+}
+
 - (NSRect)firstRectForCharacterRange:(NSRange)theRange
                          actualRange:(NSRangePointer)actualRange {
   gfx::Rect gfxRect;
@@ -1909,6 +1924,18 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   // Convert into screen coordinates for return.
   rect = [self convertRect:rect toView:nil];
   rect = [[self window] convertRectToScreen:rect];
+
+  if (_textInputFlags & blink::kWebTextInputFlagVertical) {
+    // Google Japanese Input doesn't use the result of
+    // drawsVerticallyForCharacterAtIndex. So we'd like to ask it to show its
+    // horizontal candidate window at the right side of the caret if the text
+    // is vertical.
+    NSString* inputSourceName =
+        [[self inputContext] selectedKeyboardInputSource];
+    if ([inputSourceName hasPrefix:kGoogleJapaneseInputPrefix])
+      rect.origin.x += rect.size.width;
+  }
+
   return rect;
 }
 
@@ -2279,11 +2306,9 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 
 - (id)validRequestorForSendType:(NSString*)sendType
                      returnType:(NSString*)returnType {
-  NSString* const utf8Type = base::mac::CFToNSCast(kUTTypeUTF8PlainText);
-
   id requestor = nil;
-  BOOL sendTypeIsString = [sendType isEqualToString:utf8Type];
-  BOOL returnTypeIsString = [returnType isEqualToString:utf8Type];
+  BOOL sendTypeIsString = [sendType isEqualToString:NSPasteboardTypeString];
+  BOOL returnTypeIsString = [returnType isEqualToString:NSPasteboardTypeString];
   BOOL hasText = !_textSelectionRange.is_empty();
   BOOL takesText = _textInputType != ui::TEXT_INPUT_TYPE_NONE;
 
@@ -2392,13 +2417,25 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 @implementation RenderWidgetHostViewCocoa (NSServicesRequests)
 
 - (BOOL)writeSelectionToPasteboard:(NSPasteboard*)pboard types:(NSArray*)types {
-  // NB: The NSServicesMenuRequestor protocol has not (as of macOS 12) been
-  // upgraded to request UTIs rather than obsolete PboardType constants. Handle
-  // either for when it is upgraded.
+  // /!\ Compatibility hack!
+  //
+  // The NSServicesMenuRequestor protocol does not pass in the correct
+  // NSPasteboardType constants in the `types` array, verified through macOS 13
+  // (FB11838671). To keep the code below clean, if an obsolete type is passed
+  // in, rewrite the array.
+  //
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  if ([types containsObject:NSStringPboardType] &&
+      ![types containsObject:NSPasteboardTypeString]) {
+    types = [types arrayByAddingObject:NSPasteboardTypeString];
+  }
+#pragma clang diagnostic pop
+  // /!\ End compatibility hack.
+
   bool wasAbleToWriteAtLeastOneType = false;
 
-  if (([types containsObject:NSStringPboardType] ||
-       [types containsObject:base::mac::CFToNSCast(kUTTypeUTF8PlainText)]) &&
+  if ([types containsObject:NSPasteboardTypeString] &&
       !_textSelectionRange.is_empty()) {
     NSString* text = base::SysUTF16ToNSString([self selectedText]);
     wasAbleToWriteAtLeastOneType |= [pboard writeObjects:@[ text ]];
@@ -2410,13 +2447,19 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 - (BOOL)readSelectionFromPasteboard:(NSPasteboard*)pboard {
   NSArray* objects = [pboard readObjectsForClasses:@[ [NSString class] ]
                                            options:nil];
-  if (![objects count])
+  if (!objects.count) {
     return NO;
+  }
 
   // If the user is currently using an IME, confirm the IME input,
   // and then insert the text from the service, the same as TextEdit and Safari.
   [self finishComposingText];
-  [self insertText:[objects lastObject]];
+
+  // It's expected that there only will be one string object on the pasteboard,
+  // but if there is more than one, catenate them. This is the same compat
+  // technique used by the compatibility call, -[NSPasteboard stringForType:].
+  NSString* allTheText = [objects componentsJoinedByString:@"\n"];
+  [self insertText:allTheText];
   return YES;
 }
 

@@ -25,6 +25,7 @@
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/device_attributes.mojom.h"
+#include "chromeos/crosapi/mojom/multi_capture_service.mojom.h"
 #include "chromeos/crosapi/mojom/structured_metrics_service.mojom.h"
 #include "chromeos/crosapi/mojom/video_capture.mojom.h"
 #include "chromeos/lacros/lacros_service_never_blocking_state.h"
@@ -119,6 +120,7 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
   bool IsMediaSessionAudioFocusDebugAvailable() const;
   bool IsMediaSessionControllerAvailable() const;
   bool IsMetricsReportingAvailable() const;
+  bool IsMultiCaptureServiceAvailable() const;
   bool IsSensorHalClientAvailable() const;
   bool IsStableVideoDecoderFactoryAvailable() const;
 
@@ -250,6 +252,10 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
   // BindVideoCaptureDeviceFactory() can only be used if this method returns
   // true.
   bool IsVideoCaptureDeviceFactoryAvailable() const;
+
+  // Binds video conference manager to lacros-browser clients.
+  void BindVideoConferenceManager(
+      mojo::PendingReceiver<crosapi::mojom::VideoConferenceManager> receiver);
 
   // Returns SystemIdleCache, which uses IdleInfoObserver to observe idle info
   // changes and caches the results. Requires IsIdleServiceAvailable() for full

@@ -44,6 +44,8 @@
 #include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
+#include "sync/file_sync/file_store.h"
 
 using base::Time;
 
@@ -77,7 +79,7 @@ class VisibilityComparator {
   }
 
  private:
-  BookmarkClient* client_;
+  raw_ptr<BookmarkClient> client_;
 };
 
 // Comparator used when sorting bookmarks. Folders are sorted first, then
@@ -101,7 +103,7 @@ class SortComparator {
   }
 
  private:
-  icu::Collator* collator_;
+  raw_ptr<icu::Collator> collator_;
 };
 
 // Delegate that does nothing.
@@ -498,6 +500,19 @@ void BookmarkModel::SetNodeMetaInfo(const BookmarkNode* node,
                                     const std::string& value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (vivaldi_synced_file_store_) {
+    if (key == vivaldi_bookmark_kit::ThumbnailString()) {
+      auto checksum = vivaldi_data_url_utils::GetSyncedStoreChecksumForUrl(value);
+      if (checksum) {
+        vivaldi_synced_file_store_->SetLocalFileRef(
+            node->guid(), syncer::BOOKMARKS, *checksum);
+      } else {
+        vivaldi_synced_file_store_->RemoveLocalRef(node->guid(),
+                                                   syncer::BOOKMARKS);
+      }
+    }
+  }
+
   std::string old_value;
   if (node->GetMetaInfo(key, &old_value) && old_value == value)
     return;
@@ -516,6 +531,24 @@ void BookmarkModel::SetNodeMetaInfoMap(
     const BookmarkNode* node,
     const BookmarkNode::MetaInfoMap& meta_info_map) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (vivaldi_synced_file_store_) {
+    const std::string& new_thumbnail =
+        vivaldi_bookmark_kit::GetThumbnail(meta_info_map);
+    // We notify the synced file store even if the thumbnail URL hasn't changed
+    // in case the store was missing the reference. This can happen with sync
+    // made between versions of vivaldi with different support for syncing
+    // thumbnail metadata.
+    auto checksum =
+        vivaldi_data_url_utils::GetSyncedStoreChecksumForUrl(new_thumbnail);
+    if (checksum) {
+      vivaldi_synced_file_store_->SetLocalFileRef(
+          node->guid(), syncer::BOOKMARKS, *checksum);
+    } else {
+      vivaldi_synced_file_store_->RemoveLocalRef(node->guid(),
+                                                  syncer::BOOKMARKS);
+    }
+  }
 
   const BookmarkNode::MetaInfoMap* old_meta_info_map = node->GetMetaInfoMap();
   if ((!old_meta_info_map && meta_info_map.empty()) ||
@@ -783,6 +816,18 @@ const BookmarkNode* BookmarkModel::AddURL(
       url);
   new_node->SetTitle(title);
   new_node->set_date_added(provided_creation_time_or_now);
+
+  if (meta_info && vivaldi_synced_file_store_) {
+    const std::string& thumbnail =
+        vivaldi_bookmark_kit::GetThumbnail(*meta_info);
+    auto checksum =
+        vivaldi_data_url_utils::GetSyncedStoreChecksumForUrl(thumbnail);
+    if (checksum) {
+      vivaldi_synced_file_store_->SetLocalFileRef(new_node->guid(),
+                                                  syncer::BOOKMARKS, *checksum);
+    }
+  }
+
   if (meta_info)
     new_node->SetMetaInfoMap(*meta_info);
 
@@ -923,6 +968,9 @@ void BookmarkModel::RemoveNodeFromIndexRecursive(BookmarkNode* node) {
   CancelPendingFaviconLoadRequests(node);
   node->InvalidateFavicon();
 
+  if (vivaldi_synced_file_store_)
+    vivaldi_synced_file_store_->RemoveLocalRef(node->guid(), syncer::BOOKMARKS);
+
   // Recurse through children.
   for (size_t i = node->children().size(); i > 0; --i)
     RemoveNodeFromIndexRecursive(node->children()[i - 1].get());
@@ -963,6 +1011,16 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
 
   root_->SetMetaInfoMap(details->model_meta_info_map());
 
+  if (!vivaldi_synced_file_store_ || vivaldi_synced_file_store_->IsLoaded())
+    OnVivaldiSyncedFilesStoreLoaded(std::move(details));
+  else
+    vivaldi_synced_file_store_->AddOnLoadedCallback(
+        base::BindOnce(&BookmarkModel::OnVivaldiSyncedFilesStoreLoaded,
+                       weak_factory_.GetWeakPtr(), std::move(details)));
+}
+
+void BookmarkModel::OnVivaldiSyncedFilesStoreLoaded(
+    std::unique_ptr<BookmarkLoadDetails> details) {
   loaded_ = true;
   client_->DecodeBookmarkSyncMetadata(
       details->sync_metadata_str(),

@@ -199,6 +199,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Wayland only: determine whether toplevel surfaces can be activated and
     // deactivated.
     bool supports_activation = false;
+
+    // Wayland only: determines whether tooltip can be delegated via wayland
+    // protocol.
+    bool supports_tooltip = false;
   };
 
   // Corresponds to chrome_browser_main_extra_parts.h.
@@ -218,11 +222,13 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   // error handlers if supported so that we can print errors during the browser
   // process' start up).
   static void PreEarlyInitialization();
-  // Sets error handlers if supported for the browser process after the message
-  // loop started. It's required to call this so that we can exit cleanly if the
+  // Sets error handlers if supported for the browser process, and provides a
+  // task_runner suitable for handling user input after the message loop
+  // started. It's required to call this so that we can exit cleanly if the
   // server can exit before we do.
   virtual void PostCreateMainMessageLoop(
-      base::OnceCallback<void()> shutdown_cb);
+      base::OnceCallback<void()> shutdown_cb,
+      scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner);
   // Resets the error handlers if set.
   virtual void PostMainMessageLoopRun();
 

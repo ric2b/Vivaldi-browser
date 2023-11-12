@@ -62,6 +62,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   [super viewDidLoad];
   self.tableView.accessibilityIdentifier =
       kSafeBrowsingEnhancedProtectionTableViewId;
+  self.tableView.separatorColor = UIColor.clearColor;
   self.title =
       l10n_util::GetNSString(IDS_IOS_SAFE_BROWSING_ENHANCED_PROTECTION_TITLE);
   self.styler.cellBackgroundColor = UIColor.clearColor;
@@ -84,11 +85,13 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 #pragma mark - SettingsControllerProtocol
 
 - (void)reportDismissalUserAction {
-  // TODO(crbug.com/1307428): Add UMA recording
+  base::RecordAction(base::UserMetricsAction(
+      "MobileSafeBrowsingEnhancedProtectionSettingsClose"));
 }
 
 - (void)reportBackUserAction {
-  // TODO(crbug.com/1307428): Add UMA recording
+  base::RecordAction(base::UserMetricsAction(
+      "MobileSafeBrowsingEnhancedProtectionSettingsBack"));
 }
 
 #pragma mark - SafeBrowsingEnhancedProtectionConsumer
@@ -126,7 +129,8 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
-  // TODO(crbug.com/1307428): Add UMA recording
+  base::RecordAction(base::UserMetricsAction(
+      "IOSSafeBrowsingEnhancedProtectionSettingsCloseWithSwipe"));
 }
 
 #pragma mark - UITableViewDelegate

@@ -226,15 +226,6 @@ BASE_FEATURE(kElasticOverscroll,
 );
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kAndroidPermissionsCache,
-             "AndroidPermissionsCache",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const char kElasticOverscrollType[] = "type";
-const char kElasticOverscrollTypeFilter[] = "filter";
-const char kElasticOverscrollTypeTransform[] = "transform";
-#endif  // BUILDFLAG(IS_ANDROID)
-
 // Enables focus follow follow cursor (sloppyfocus).
 BASE_FEATURE(kFocusFollowsCursor,
              "FocusFollowsCursor",
@@ -293,6 +284,16 @@ BASE_FEATURE(kDeprecateAltBasedSixPack,
 
 bool IsDeprecateAltBasedSixPackEnabled() {
   return base::FeatureList::IsEnabled(kDeprecateAltBasedSixPack);
+}
+
+// Whether to enable new touch text editing features for ChromeOS.
+// TODO(b/262297017): Remove after touch text editing redesign ships.
+BASE_FEATURE(kTouchTextEditingRedesign,
+             "TouchTextEditingRedesign",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsTouchTextEditingRedesignEnabled() {
+  return base::FeatureList::IsEnabled(kTouchTextEditingRedesign);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -441,6 +442,14 @@ BASE_FEATURE(kLacrosColorManagement,
 
 bool IsLacrosColorManagementEnabled() {
   return base::FeatureList::IsEnabled(kLacrosColorManagement);
+}
+
+BASE_FEATURE(kChromeRefresh2023,
+             "ChromeRefresh2023",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsChromeRefresh2023() {
+  return base::FeatureList::IsEnabled(kChromeRefresh2023);
 }
 
 }  // namespace features

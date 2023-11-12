@@ -43,7 +43,7 @@
 #include "ui/accessibility/accessibility_features.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "ash/services/ime/public/mojom/input_engine.mojom.h"
+#include "chromeos/ash/services/ime/public/mojom/input_engine.mojom.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"  // nogncheck
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/input_method_manager.h"
@@ -229,8 +229,7 @@ void PopulateChromeFrameBindersForExtension(
   }
 
   // Limit the binding to EnhancedNetworkTts Extension.
-  if (features::IsEnhancedNetworkVoicesEnabled() &&
-      extension->id() == extension_misc::kEnhancedNetworkTtsExtensionId) {
+  if (extension->id() == extension_misc::kEnhancedNetworkTtsExtensionId) {
     binder_map->Add<ash::enhanced_network_tts::mojom::EnhancedNetworkTts>(
         base::BindRepeating(&BindEnhancedNetworkTts));
   }

@@ -19,13 +19,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/viz/common/switches.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/webid/federated_auth_request_impl.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -239,10 +237,12 @@ void WebTestBrowserMainRunner::Initialize() {
   command_line.AppendSwitchASCII(network::switches::kHostResolverRules,
                                  "MAP nonexistent.*.test ~NOTFOUND,"
                                  "MAP web-platform.test:443 127.0.0.1:8444,"
+                                 "MAP not-web-platform.test:443 127.0.0.1:8444,"
                                  "MAP *.test. 127.0.0.1,"
                                  "MAP *.test 127.0.0.1");
 
-  // These must be kept in sync with //third_party/wpt_tools/wpt.config.json.
+  // These must be kept in sync with
+  // //third_party/blink/web_tests/external/wpt/config.json.
   command_line.AppendSwitchASCII(network::switches::kIpAddressSpaceOverrides,
                                  "127.0.0.1:8082=private,"
                                  "127.0.0.1:8093=public,"
@@ -305,7 +305,7 @@ void WebTestBrowserMainRunner::RunBrowserMain(
   RunTests(main_runner.get());
 
   // Shell::Shutdown() will cause the |main_runner| loop to quit.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&Shell::Shutdown));
   main_runner->Run();
 

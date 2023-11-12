@@ -63,9 +63,9 @@
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_client.h"
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
-#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "ui/gfx/geometry/quad_f.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace ui {
 class Cursor;
@@ -466,8 +466,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   LayoutBlockFlow* FragmentItemsContainer() const;
 
   // Return the containing NG block, if the containing block is an NG block,
-  // nullptr otherwise.
-  LayoutBlock* ContainingNGBlock() const;
+  // or the LayoutMedia parent.
+  // Nullptr otherwise.
+  LayoutBox* ContainingNGBox() const;
 
   // Return the nearest fragmentation context root, if any.
   LayoutBlock* ContainingFragmentationContextRoot() const;
@@ -1095,7 +1096,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     return false;
   }
 
-  virtual bool IsDocumentTransitionContent() const {
+  virtual bool IsViewTransitionContent() const {
     NOT_DESTROYED();
     return false;
   }
@@ -1208,6 +1209,19 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     bitfields_.SetMayHaveAnchorQuery(true);
   }
   void MarkMayHaveAnchorQuery();
+
+  void SetHasBrokenSpine() {
+    NOT_DESTROYED();
+    bitfields_.SetHasBrokenSpine(true);
+  }
+  void ClearHasBrokenSpine() {
+    NOT_DESTROYED();
+    bitfields_.SetHasBrokenSpine(false);
+  }
+  bool HasBrokenSpine() const {
+    NOT_DESTROYED();
+    return bitfields_.HasBrokenSpine();
+  }
 
   bool IsTruncated() const {
     NOT_DESTROYED();
@@ -1507,6 +1521,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   bool IsFloatingWithNonContainingBlockParent() const {
     NOT_DESTROYED();
     return IsFloating() && Parent() && !Parent()->IsLayoutBlockFlow();
+  }
+
+  virtual bool IsInitialLetterBox() const {
+    NOT_DESTROYED();
+    return false;
   }
 
   // absolute or fixed positioning
@@ -1906,8 +1925,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // Returns true if this object is a proper descendant of any list marker.
   bool IsInListMarker() const;
 
-  bool IsTextDecorationBoundary(NGStyleVariant) const;
-
   // The pseudo element style can be cached or uncached. Use the cached method
   // if the pseudo element doesn't respect any pseudo classes (and therefore
   // has no concept of changing state). The cached pseudo style always inherits
@@ -2075,13 +2092,19 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   // Returns true if style would make this object an absolute container. This
   // value gets cached by bitfields_.can_contain_absolute_position_objects_.
+  //
+  // `style` should be the current :first-line style or the current normal
+  // style. This function doesn't work for old_style in StyleDidChange().
+  // Use CanContainAbsolutePositionObjects() for old_style.
   bool ComputeIsAbsoluteContainer(const ComputedStyle* style) const;
 
   // Returns true if style would make this object a fixed container.
   // This value gets cached by bitfields_.can_contain_fixed_position_objects_.
   bool ComputeIsFixedContainer(const ComputedStyle* style) const;
 
-  Element* OffsetParent(const Element* = nullptr) const;
+  // If |base| is provided, then this function will not return an Element which
+  // is closed shadow hidden from |base|.
+  Element* OffsetParent(const Element* base = nullptr) const;
 
   // Mark this object needing to re-run |CollectInlines()|. Ancestors may be
   // marked too if needed.
@@ -2099,7 +2122,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   void MarkContainerChainForLayout(bool schedule_relayout = true,
                                    SubtreeLayoutScope* = nullptr);
-  void MarkParentForOutOfFlowPositionedChange();
+  void MarkParentForSpannerOrOutOfFlowPositionedChange();
   void SetNeedsLayout(LayoutInvalidationReasonForTracing,
                       MarkingBehavior = kMarkContainerChain,
                       SubtreeLayoutScope* = nullptr);
@@ -2141,6 +2164,13 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   virtual void InvalidateSubtreeLayoutForFontUpdates();
 
   void InvalidateIntersectionObserverCachedRects();
+
+  // Mark elements with a principal box and a computed position-fallback
+  // different from 'none' for layout when @position-fallback rules are removed
+  // or added. mark_style_dirty is true if the element should be marked dirty as
+  // well. mark_style_dirty is typically set to false if we are inside a subtree
+  // which is already marked for subtree recalc.
+  void InvalidateSubtreePositionFallback(bool mark_style_dirty);
 
  private:
   enum PositionedState {
@@ -2582,11 +2612,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // system of a container, taking transforms into account (kIgnoreTransforms is
   // not allowed).
   // Passing null for |ancestor| behaves the same as LocalToAncestorRect.
-  TransformationMatrix LocalToAncestorTransform(
-      const LayoutBoxModelObject* ancestor,
-      MapCoordinatesFlags = 0) const;
-  TransformationMatrix LocalToAbsoluteTransform(
-      MapCoordinatesFlags mode = 0) const {
+  gfx::Transform LocalToAncestorTransform(const LayoutBoxModelObject* ancestor,
+                                          MapCoordinatesFlags = 0) const;
+  gfx::Transform LocalToAbsoluteTransform(MapCoordinatesFlags mode = 0) const {
     NOT_DESTROYED();
     return LocalToAncestorTransform(nullptr, mode);
   }
@@ -2731,13 +2759,26 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
 
   static inline Color ResolveColor(const ComputedStyle& style_to_use,
-                                   const CSSProperty& color_property) {
+                                   const Longhand& color_property) {
     return style_to_use.VisitedDependentColor(color_property);
   }
 
-  inline Color ResolveColor(const CSSProperty& color_property) const {
+  inline Color ResolveColor(const Longhand& color_property) const {
     NOT_DESTROYED();
     return StyleRef().VisitedDependentColor(color_property);
+  }
+
+  // See ComputedStyle::VisitedDependentColorFast().
+  template <class Property>
+  static inline Color ResolveColorFast(const ComputedStyle& style_to_use,
+                                       const Property& color_property) {
+    return style_to_use.VisitedDependentColorFast(color_property);
+  }
+
+  template <class Property>
+  inline Color ResolveColorFast(const Property& color_property) const {
+    NOT_DESTROYED();
+    return StyleRef().VisitedDependentColorFast(color_property);
   }
 
   virtual CursorDirective GetCursor(const PhysicalOffset&, ui::Cursor&) const;
@@ -3036,7 +3077,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // correct yet.
   void GetTransformFromContainer(const LayoutObject* container,
                                  const PhysicalOffset& offset_in_container,
-                                 TransformationMatrix&,
+                                 gfx::Transform&,
                                  const PhysicalSize* size = nullptr) const;
 
   bool CreatesGroup() const {
@@ -3061,12 +3102,20 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
       return {style.OutlineWidth().ToInt(), style.OutlineOffset().ToInt()};
     }
 
+    static float getUnzoomedWidth(const ComputedStyle& style) {
+      float unzoomedWidth = style.OutlineWidth() / style.EffectiveZoom();
+
+      if (unzoomedWidth > 0.0f && unzoomedWidth <= 1.0f)
+        return 1.0f;
+
+      return std::floor(unzoomedWidth);
+    }
+
     // Unzoomed values modifies the style values by effective zoom. This is
     // used when the outline rects are specified in a space that does not
     // include EffectiveZoom, such as SVG.
     static OutlineInfo GetUnzoomedFromStyle(const ComputedStyle& style) {
-      return {static_cast<int>(
-                  std::floor(style.OutlineWidth() / style.EffectiveZoom())),
+      return {static_cast<int>(getUnzoomedWidth(style)),
               static_cast<int>(
                   std::floor(style.OutlineOffset() / style.EffectiveZoom()))};
     }
@@ -3133,14 +3182,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // background needs full invalidation, use
   // SetBackgroundNeedsFullPaintInvalidation().
   void SetShouldDoFullPaintInvalidation(
-      PaintInvalidationReason = PaintInvalidationReason::kFull);
-  void SetShouldDoFullPaintInvalidationWithoutGeometryChange(
-      PaintInvalidationReason reason = PaintInvalidationReason::kFull) {
-    NOT_DESTROYED();
-    // Use SetBackgroundNeedsFullPaintInvalidation() instead. See comment above.
-    DCHECK_NE(reason, PaintInvalidationReason::kBackground);
-    SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(reason);
-  }
+      PaintInvalidationReason = PaintInvalidationReason::kLayout);
+  void SetShouldDoFullPaintInvalidationWithoutLayoutChange(
+      PaintInvalidationReason reason);
 
   void ClearPaintInvalidationFlags();
 
@@ -3149,13 +3193,13 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     return bitfields_.ShouldCheckForPaintInvalidation();
   }
   // Sets both ShouldCheckForPaintInvalidation() and
-  // ShouldCheckGeometryForPaintInvalidation(). Though the setter and the getter
+  // ShouldCheckLayoutForPaintInvalidation(). Though the setter and the getter
   // are asymmetric, this prevents callers from accidentally missing the
-  // geometry checking flag.
+  // layout checking flag.
   void SetShouldCheckForPaintInvalidation();
   // Sets ShouldCheckForPaintInvalidation() only. PaintInvalidator won't require
-  // paint property tree update or other geometry related updates.
-  void SetShouldCheckForPaintInvalidationWithoutGeometryChange();
+  // paint property tree update or other layout related updates.
+  void SetShouldCheckForPaintInvalidationWithoutLayoutChange();
 
   bool SubtreeShouldCheckForPaintInvalidation() const {
     NOT_DESTROYED();
@@ -3163,13 +3207,13 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
   void SetSubtreeShouldCheckForPaintInvalidation();
 
-  bool ShouldCheckGeometryForPaintInvalidation() const {
+  bool ShouldCheckLayoutForPaintInvalidation() const {
     NOT_DESTROYED();
-    return bitfields_.ShouldCheckGeometryForPaintInvalidation();
+    return bitfields_.ShouldCheckLayoutForPaintInvalidation();
   }
-  bool DescendantShouldCheckGeometryForPaintInvalidation() const {
+  bool DescendantShouldCheckLayoutForPaintInvalidation() const {
     NOT_DESTROYED();
-    return bitfields_.DescendantShouldCheckGeometryForPaintInvalidation();
+    return bitfields_.DescendantShouldCheckLayoutForPaintInvalidation();
   }
 
   bool MayNeedPaintInvalidationAnimatedBackgroundImage() const {
@@ -3229,7 +3273,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // Called before setting style for existing/new anonymous child. Override to
   // set custom styles for the child. For new anonymous child, |child| is null.
   virtual void UpdateAnonymousChildStyle(const LayoutObject* child,
-                                         ComputedStyle& style) const {
+                                         ComputedStyleBuilder&) const {
     NOT_DESTROYED();
   }
 
@@ -3262,7 +3306,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     if (InsideBlockingTouchEventHandler())
       return TouchAction::kNone;
-    return StyleRef().GetEffectiveTouchAction();
+    return StyleRef().EffectiveTouchAction();
   }
   bool HasEffectiveAllowedTouchAction() const {
     NOT_DESTROYED();
@@ -3333,29 +3377,29 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     void SetShouldCheckForPaintInvalidation() {
       DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
                 DocumentLifecycle::kInPrePaint);
-      layout_object_.bitfields_.SetShouldCheckGeometryForPaintInvalidation(
-          true);
+      layout_object_.bitfields_.SetShouldCheckLayoutForPaintInvalidation(true);
       layout_object_.bitfields_.SetShouldCheckForPaintInvalidation(true);
     }
     void SetShouldDoFullPaintInvalidation(PaintInvalidationReason reason) {
       DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
                 DocumentLifecycle::kInPrePaint);
-      if (layout_object_.ShouldDoFullPaintInvalidation())
-        return;
-      SetShouldDoFullPaintInvalidationWithoutGeometryChange(reason);
-      layout_object_.bitfields_.SetShouldCheckGeometryForPaintInvalidation(
-          true);
+      // This call to MutableForPainting::SetShouldCheckForPaintInvaldiation()
+      // prevents LayoutObject::SetShouldDoFullPaintInvalidation() from marking
+      // ancestors for paint invalidation, which is not needed when this is
+      // called during PrePaint.
+      SetShouldCheckForPaintInvalidation();
+      layout_object_.SetShouldDoFullPaintInvalidation(reason);
     }
-    void SetShouldDoFullPaintInvalidationWithoutGeometryChange(
+    void SetShouldDoFullPaintInvalidationWithoutLayoutChange(
         PaintInvalidationReason reason) {
       DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
                 DocumentLifecycle::kInPrePaint);
-      if (layout_object_.ShouldDoFullPaintInvalidation())
-        return;
+      DCHECK(IsNonLayoutFullPaintInvalidationReason(reason));
+      // This prevents LayoutObject::SetShouldDoFullPaintInvalidation...()
+      // from marking ancestors for paint invalidation.
       layout_object_.bitfields_.SetShouldCheckForPaintInvalidation(true);
-      layout_object_.bitfields_.SetShouldDelayFullPaintInvalidation(false);
-      layout_object_.full_paint_invalidation_reason_ =
-          static_cast<unsigned>(reason);
+      layout_object_
+          .SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(reason);
     }
 
     void SetShouldDelayFullPaintInvalidation() {
@@ -3524,7 +3568,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
   void SetBackgroundNeedsFullPaintInvalidation() {
     NOT_DESTROYED();
-    SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(
+    SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(
         PaintInvalidationReason::kBackground);
     bitfields_.SetBackgroundNeedsFullPaintInvalidation(true);
   }
@@ -3951,6 +3995,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   const ComputedStyle* SlowStyleForContinuationOutline() const;
 
+  // It's unclear why Clang doesn't inline this.
+  ALWAYS_INLINE
   StyleDifference AdjustStyleDifference(StyleDifference) const;
 
 #if DCHECK_IS_ON()
@@ -3978,7 +4024,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   void MarkSelfPaintingLayerForVisualOverflowRecalc();
 
-  void SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(
+  void SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(
       PaintInvalidationReason);
 
   // Additional bitfields.
@@ -4069,12 +4115,12 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
           subtree_should_do_full_paint_invalidation_(false),
           may_need_paint_invalidation_animated_background_image_(false),
           should_invalidate_selection_(false),
-          should_check_geometry_for_paint_invalidation_(true),
-          descendant_should_check_geometry_for_paint_invalidation_(true),
+          should_check_layout_for_paint_invalidation_(true),
+          descendant_should_check_layout_for_paint_invalidation_(true),
           needs_paint_property_update_(true),
           descendant_needs_paint_property_update_(true),
           floating_(false),
-          is_anonymous_(!node),
+          is_anonymous(!node),
           is_text_(false),
           is_box_(false),
           is_inline_(true),
@@ -4132,7 +4178,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
           might_traverse_physical_fragments_(false),
           whitespace_children_may_change_(false),
           needs_devtools_info_(false),
-          may_have_anchor_query_(false) {}
+          may_have_anchor_query_(false),
+          has_broken_spine_(false) {}
 
     // Self needs layout for style means that this layout object is marked for a
     // full layout. This is the default layout but it is expensive as it
@@ -4226,11 +4273,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
                          MayNeedPaintInvalidationAnimatedBackgroundImage);
     ADD_BOOLEAN_BITFIELD(should_invalidate_selection_,
                          ShouldInvalidateSelection);
-    ADD_BOOLEAN_BITFIELD(should_check_geometry_for_paint_invalidation_,
-                         ShouldCheckGeometryForPaintInvalidation);
-    ADD_BOOLEAN_BITFIELD(
-        descendant_should_check_geometry_for_paint_invalidation_,
-        DescendantShouldCheckGeometryForPaintInvalidation);
+    ADD_BOOLEAN_BITFIELD(should_check_layout_for_paint_invalidation_,
+                         ShouldCheckLayoutForPaintInvalidation);
+    ADD_BOOLEAN_BITFIELD(descendant_should_check_layout_for_paint_invalidation_,
+                         DescendantShouldCheckLayoutForPaintInvalidation);
     // Whether the paint properties need to be updated. For more details, see
     // LayoutObject::NeedsPaintPropertyUpdate().
     ADD_BOOLEAN_BITFIELD(needs_paint_property_update_,
@@ -4245,7 +4291,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // (see ComputedStyle::isFloating).
     ADD_BOOLEAN_BITFIELD(floating_, Floating);
 
-    ADD_BOOLEAN_BITFIELD(is_anonymous_, IsAnonymous);
+    ADD_BOOLEAN_BITFIELD(is_anonymous, IsAnonymous);
     ADD_BOOLEAN_BITFIELD(is_text_, IsText);
     ADD_BOOLEAN_BITFIELD(is_box_, IsBox);
 
@@ -4488,6 +4534,13 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
     // See comments for |MayHaveAnchorQuery()|.
     ADD_BOOLEAN_BITFIELD(may_have_anchor_query_, MayHaveAnchorQuery);
+
+    // Set if we stopped rebuilding the spine because this object was marked for
+    // layout. We don't need to do anything if we actually end up re-laying out
+    // the object, but if it turns out that we hit the cache, we need to update
+    // the vertebra for this object at that point - i.e. update the associated
+    // layout results, by reading out the post-layout results from the children.
+    ADD_BOOLEAN_BITFIELD(has_broken_spine_, HasBrokenSpine);
   };
 
 #undef ADD_BOOLEAN_BITFIELD

@@ -26,12 +26,9 @@ js_type_check("closure_compile") {
 }
 
 js_library("notifications_internals") {
-  deps = [
-    ":notifications_internals_browser_proxy",
-    "//ui/webui/resources/js:util",
-  ]
+  deps = [ ":notifications_internals_browser_proxy" ]
 }
 
 js_library("notifications_internals_browser_proxy") {
-  deps = [ "//ui/webui/resources/js:cr.m" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
 }

@@ -14,10 +14,15 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
+#include <algorithm>
+
+#include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info_internal.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -36,15 +41,10 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
-#include <sys/sysctl.h>
-#include "base/feature_list.h"
-#include "base/system/sys_info_internal.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #endif
 
 namespace {
-#if BUILDFLAG(IS_MAC)
-bool is_cpu_security_mitigation_enabled = false;
-#endif
 
 uint64_t AmountOfVirtualMemory() {
   struct rlimit limit;
@@ -115,19 +115,10 @@ namespace internal {
 
 int NumberOfProcessors() {
 #if BUILDFLAG(IS_MAC)
-  // When CPU security mitigation is enabled, return number of "physical"
-  // cores and not the number of "logical" cores. CPU security mitigations
-  // disables hyper-threading for the current application, which effectively
-  // limits the number of concurrently executing threads to the number of
-  // physical cores.
-  if (base::FeatureList::IsEnabled(
-          base::kNumberOfCoresWithCpuSecurityMitigation) &&
-      is_cpu_security_mitigation_enabled) {
-    absl::optional<int> number_of_physical_cores =
-        internal::NumberOfPhysicalProcessors();
-    if (number_of_physical_cores.has_value())
-      return number_of_physical_cores.value();
-  }
+  absl::optional<int> number_of_physical_cores =
+      NumberOfProcessorsWhenCpuSecurityMitigationEnabled();
+  if (number_of_physical_cores.has_value())
+    return number_of_physical_cores.value();
 #endif  // BUILDFLAG(IS_MAC)
 
   // sysconf returns the number of "logical" (not "physical") processors on both
@@ -165,20 +156,6 @@ int NumberOfProcessors() {
 
   return num_cpus;
 }
-
-#if BUILDFLAG(IS_MAC)
-absl::optional<int> NumberOfPhysicalProcessors() {
-  uint32_t sysctl_value = 0;
-  size_t length = sizeof(sysctl_value);
-
-  if (sysctlbyname("hw.physicalcpu_max", &sysctl_value, &length, nullptr, 0) ==
-      0) {
-    return static_cast<int>(sysctl_value);
-  }
-
-  return absl::nullopt;
-}
-#endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace internal
 
@@ -289,15 +266,43 @@ size_t SysInfo::VMAllocationGranularity() {
   return checked_cast<size_t>(getpagesize());
 }
 
-#if BUILDFLAG(IS_MAC)
-BASE_FEATURE(kNumberOfCoresWithCpuSecurityMitigation,
-             "NumberOfCoresWithCpuSecurityMitigation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if !BUILDFLAG(IS_MAC)
+// static
+int SysInfo::NumberOfEfficientProcessorsImpl() {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+  // Try to guess the CPU architecture and cores of each cluster by comparing
+  // the maximum frequencies of the available (online and offline) cores.
+  int num_cpus = SysInfo::NumberOfProcessors();
+  DCHECK_GE(num_cpus, 0);
+  std::vector<uint32_t> max_core_frequencies_khz(static_cast<size_t>(num_cpus),
+                                                 0);
+  for (int core_index = 0; core_index < num_cpus; ++core_index) {
+    std::string content;
+    auto path = StringPrintf(
+        "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", core_index);
+    if (!ReadFileToStringNonBlocking(FilePath(path), &content))
+      return 0;
+    if (!StringToUint(
+            content,
+            &max_core_frequencies_khz[static_cast<size_t>(core_index)]))
+      return 0;
+  }
 
-void SysInfo::SetIsCpuSecurityMitigationsEnabled(bool is_enabled) {
-  is_cpu_security_mitigation_enabled = is_enabled;
+  auto [min_max_core_frequencies_khz_it, max_max_core_frequencies_khz_it] =
+      std::minmax_element(max_core_frequencies_khz.begin(),
+                          max_core_frequencies_khz.end());
+
+  if (*min_max_core_frequencies_khz_it == *max_max_core_frequencies_khz_it)
+    return 0;
+
+  return static_cast<int>(std::count(max_core_frequencies_khz.begin(),
+                                     max_core_frequencies_khz.end(),
+                                     *min_max_core_frequencies_khz_it));
+#else
+  NOTIMPLEMENTED();
+  return 0;
+#endif
 }
-
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // !BUILDFLAG(IS_MAC)
 
 }  // namespace base

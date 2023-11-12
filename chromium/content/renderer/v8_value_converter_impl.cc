@@ -460,7 +460,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
       return out;
   }
 
-  std::unique_ptr<base::ListValue> result(new base::ListValue());
+  base::Value::List result;
 
   // Only fields with integer keys are carried over to the ListValue.
   for (uint32_t i = 0; i < val->Length(); ++i) {
@@ -475,21 +475,21 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
 
     if (!val->HasRealIndexedProperty(isolate->GetCurrentContext(), i)
              .FromMaybe(false)) {
-      result->Append(base::Value());
+      result.Append(base::Value());
       continue;
     }
 
     std::unique_ptr<base::Value> child =
         FromV8ValueImpl(state, child_v8, isolate);
     if (child) {
-      result->Append(base::Value::FromUniquePtrValue(std::move(child)));
+      result.Append(base::Value::FromUniquePtrValue(std::move(child)));
     } else {
       // JSON.stringify puts null in places where values don't serialize, for
       // example undefined and functions. Emulate that behavior.
-      result->Append(base::Value());
+      result.Append(base::Value());
     }
   }
-  return std::move(result);
+  return std::make_unique<base::Value>(std::move(result));
 }
 
 std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ArrayBuffer(
@@ -554,14 +554,15 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
   //
   // ANOTHER NOTE: returning an empty dictionary here to minimise surprise.
   // See also http://crbug.com/330559.
-  if (val->InternalFieldCount())
-    return std::make_unique<base::DictionaryValue>();
+  base::Value::Dict result;
 
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  if (val->InternalFieldCount())
+    return std::make_unique<base::Value>(std::move(result));
+
   v8::Local<v8::Array> property_names;
   if (!val->GetOwnPropertyNames(isolate->GetCurrentContext())
            .ToLocal(&property_names)) {
-    return std::move(result);
+    return std::make_unique<base::Value>(std::move(result));
   }
 
   for (uint32_t i = 0; i < property_names->Length(); ++i) {
@@ -619,11 +620,11 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
     if (strip_null_from_objects_ && child->is_none())
       continue;
 
-    result->SetKey(std::string(*name_utf8, name_utf8.length()),
-                   base::Value::FromUniquePtrValue(std::move(child)));
+    result.Set(std::string(*name_utf8, name_utf8.length()),
+               base::Value::FromUniquePtrValue(std::move(child)));
   }
 
-  return std::move(result);
+  return std::make_unique<base::Value>(std::move(result));
 }
 
 }  // namespace content

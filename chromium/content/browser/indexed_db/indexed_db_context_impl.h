@@ -50,7 +50,6 @@ class QuotaClientCallbackWrapper;
 }  // namespace storage
 
 namespace content {
-class IndexedDBConnection;
 class IndexedDBFactoryImpl;
 class IndexedDBQuotaClient;
 
@@ -164,10 +163,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
   // Methods called by IndexedDBFactoryImpl or IndexedDBDispatcherHost for
   // quota support.
   void FactoryOpened(const storage::BucketLocator& bucket_locator);
-  void ConnectionOpened(const storage::BucketLocator& bucket_locator,
-                        IndexedDBConnection* db);
-  void ConnectionClosed(const storage::BucketLocator& bucket_locator,
-                        IndexedDBConnection* db);
+  void ConnectionOpened(const storage::BucketLocator& bucket_locator);
+  void ConnectionClosed(const storage::BucketLocator& bucket_locator);
   void TransactionComplete(const storage::BucketLocator& bucket_locator);
   void DatabaseDeleted(const storage::BucketLocator& bucket_locator);
 
@@ -274,6 +271,7 @@ class CONTENT_EXPORT IndexedDBContextImpl
   // cannot be done in the constructor as it might block destruction.
   void InitializeFromFilesIfNeeded(base::OnceClosure callback);
   bool did_initialize_from_files_{false};
+  std::vector<base::OnceClosure> on_initialize_from_files_callbacks_;
 
   using DidGetBucketLocatorCallback = base::OnceCallback<void(
       const absl::optional<storage::BucketLocator>& bucket_locator)>;
@@ -290,6 +288,10 @@ class CONTENT_EXPORT IndexedDBContextImpl
   // Reads IDB files from disk, looking in the directories where
   // third-party-context IDB files are stored.
   const std::map<storage::BucketId, base::FilePath> FindIndexedDBFiles();
+
+  void OnBucketInfoReady(
+      GetAllBucketsDetailsCallback callback,
+      std::vector<storage::QuotaErrorOr<storage::BucketInfo>> bucket_infos);
 
   const scoped_refptr<base::SequencedTaskRunner> idb_task_runner_;
   IndexedDBDispatcherHost dispatcher_host_;

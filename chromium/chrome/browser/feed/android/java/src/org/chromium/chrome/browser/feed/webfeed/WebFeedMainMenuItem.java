@@ -68,6 +68,7 @@ public class WebFeedMainMenuItem extends FrameLayout {
     private AppMenuHandler mAppMenuHandler;
     private CrowButtonDelegate mCrowButtonDelegate;
     private Class<?> mCreatorActivityClass;
+    private byte[] mWebFeedId;
 
     // Points to the currently shown chip: null, mFollowingChipView, mFollowChipView,
     private ChipView mChipView;
@@ -138,6 +139,9 @@ public class WebFeedMainMenuItem extends FrameLayout {
         mCrowButtonDelegate = crowButtonDelegate;
         mCreatorActivityClass = creatorActivityClass;
         Callback<WebFeedMetadata> metadataCallback = result -> {
+            if (result != null) {
+                mWebFeedId = result.id;
+            }
             initializeFavicon(result);
             initializeText(result);
             initializeChipView(result);
@@ -181,14 +185,8 @@ public class WebFeedMainMenuItem extends FrameLayout {
         mItemTextClicked = false;
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CORMORANT)) {
             mItemText.setOnClickListener((view) -> {
-                try {
-                    mItemTextClicked = true;
-                    // Launch a new activity for the creator page.
-                    Intent intent = new Intent(mContext, mCreatorActivityClass);
-                    mContext.startActivity(intent);
-                } catch (Exception e) {
-                    Log.d(TAG, "Failed to launch CreatorActivity " + e);
-                }
+                mItemTextClicked = true;
+                launchCreatorActivity();
             });
         }
     }
@@ -350,6 +348,9 @@ public class WebFeedMainMenuItem extends FrameLayout {
         if (icon == null) {
             mIcon.setVisibility(View.GONE);
         }
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CORMORANT)) {
+            mIcon.setOnClickListener((view) -> { launchCreatorActivity(); });
+        }
     }
 
     private void moveChipsToDedicatedRow() {
@@ -365,5 +366,20 @@ public class WebFeedMainMenuItem extends FrameLayout {
         UiUtils.removeViewFromParent(chipGroup);
         secondRow.addView(chipGroup);
         secondRow.setVisibility(View.VISIBLE);
+    }
+
+    private void launchCreatorActivity() {
+        try {
+            String creatorUrl =
+                    UrlFormatter.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(mUrl);
+            // Launch a new activity for the creator page.
+            Intent intent = new Intent(mContext, mCreatorActivityClass);
+            intent.putExtra("CREATOR_WEB_FEED_ID", mWebFeedId);
+            intent.putExtra("CREATOR_TITLE", mTitle);
+            intent.putExtra("CREATOR_URL", creatorUrl);
+            mContext.startActivity(intent);
+        } catch (Exception e) {
+            Log.d(TAG, "Failed to launch CreatorActivity " + e);
+        }
     }
 }

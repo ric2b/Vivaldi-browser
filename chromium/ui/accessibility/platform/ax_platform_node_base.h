@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
@@ -34,7 +35,7 @@ struct AXNodeData;
 
 // TODO(nektar): Move this struct over to AXNode so that it can be accessed by
 // AXPosition.
-struct AX_EXPORT AXLegacyHypertext {
+struct COMPONENT_EXPORT(AX_PLATFORM) AXLegacyHypertext {
   using OffsetToIndex = std::map<int32_t, int32_t>;
 
   AXLegacyHypertext();
@@ -61,7 +62,7 @@ struct AX_EXPORT AXLegacyHypertext {
   std::u16string hypertext;
 };
 
-class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
+class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeBase : public AXPlatformNode {
  public:
   using AXPosition = AXNodePosition::AXPositionInstance;
 
@@ -127,7 +128,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   AXPlatformNodeChildIterator AXPlatformNodeChildrenBegin() const;
   AXPlatformNodeChildIterator AXPlatformNodeChildrenEnd() const;
 
-  ax::mojom::Role GetRole() const;
+  virtual ax::mojom::Role GetRole() const;
   bool HasBoolAttribute(ax::mojom::BoolAttribute attribute) const;
   bool GetBoolAttribute(ax::mojom::BoolAttribute attribute) const;
   bool GetBoolAttribute(ax::mojom::BoolAttribute attribute, bool* value) const;
@@ -283,6 +284,11 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // Returns true if this node is currently focused.
   bool IsFocused() const;
+
+  // Returns true if this node is focusable.
+  // This does more than just use HasState(ax::mojom::State::kFocusable) -- it
+  // also checks whether the object is a likely activedescendant.
+  bool IsFocusable() const;
 
   // Returns true if this node can be scrolled either in the horizontal or the
   // vertical direction.

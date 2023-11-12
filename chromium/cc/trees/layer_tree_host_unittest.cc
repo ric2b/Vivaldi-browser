@@ -27,7 +27,6 @@
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/base/features.h"
-#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/scroll_elasticity_helper.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/heads_up_display_layer.h"
@@ -70,6 +69,7 @@
 #include "cc/trees/swap_promise.h"
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/transform_node.h"
+#include "cc/view_transition/view_transition_request.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -6042,7 +6042,8 @@ class TestSwapPromise : public SwapPromise {
 
   void DidSwap() override {}
 
-  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
+  DidNotSwapAction DidNotSwap(DidNotSwapReason reason,
+                              base::TimeTicks ts) override {
     base::AutoLock lock(result_->lock);
     EXPECT_FALSE(result_->did_swap_called);
     EXPECT_FALSE(result_->did_not_swap_called);
@@ -8937,7 +8938,7 @@ class LayerTreeHostTestRequestForceSendMetadata
         : target_(target) {}
 
     // RenderFrameMetadataObserver implementation.
-    void BindToCurrentThread() override { target_->BindToCurrentThread(); }
+    void BindToCurrentSequence() override { target_->BindToCurrentSequence(); }
     void OnRenderFrameSubmission(
         const RenderFrameMetadata& render_frame_metadata,
         viz::CompositorFrameMetadata* compositor_frame_metadata,
@@ -8989,7 +8990,7 @@ class LayerTreeHostTestRequestForceSendMetadata
   void AfterTest() override { EXPECT_EQ(1, num_force_sends_); }
 
   // RenderFrameMetadataObserver implementation. Called on thread.
-  void BindToCurrentThread() override {}
+  void BindToCurrentSequence() override {}
   void OnRenderFrameSubmission(
       const RenderFrameMetadata& render_frame_metadata,
       viz::CompositorFrameMetadata* compositor_frame_metadata,
@@ -9172,7 +9173,7 @@ class LayerTreeHostTestDelegatedInkMetadataBase
         : target_(target) {}
 
     // RenderFrameMetadataObserver implementation.
-    void BindToCurrentThread() override { target_->BindToCurrentThread(); }
+    void BindToCurrentSequence() override { target_->BindToCurrentSequence(); }
     void OnRenderFrameSubmission(
         const RenderFrameMetadata& render_frame_metadata,
         viz::CompositorFrameMetadata* compositor_frame_metadata,
@@ -9246,7 +9247,7 @@ class LayerTreeHostTestDelegatedInkMetadataBase
   }
 
   // RenderFrameMetadataObserver implementation.
-  void BindToCurrentThread() override {}
+  void BindToCurrentSequence() override {}
   void OnRenderFrameSubmission(
       const RenderFrameMetadata& render_frame_metadata,
       viz::CompositorFrameMetadata* compositor_frame_metadata,
@@ -9488,8 +9489,8 @@ class LayerTreeHostTestEventsMetrics : public LayerTreeHostTest {
 };
 
 // Verifies that if the commit is aborted (deferred) due to LayerTreeHost being
-// hidden, events metrics are not thrown away to be used when it becomes
-// visible.
+// hidden, events metrics are discarded to prevent reporting arbitrarily large
+// latencies when the frame becomes visible again.
 class LayerTreeHostTestKeepEventsMetricsForVisibility
     : public LayerTreeHostTestEventsMetrics {
  protected:
@@ -9521,19 +9522,20 @@ class LayerTreeHostTestKeepEventsMetricsForVisibility
     EXPECT_EQ(reason, CommitEarlyOutReason::ABORTED_NOT_VISIBLE);
 
     // Since the main frame is aborted due to invisibility, events metrics
-    // should not have been thrown away.
-    PostVerifyMainSavedEventsMetricsCount(1);
+    // should be discarded.
+    PostVerifyMainSavedEventsMetricsCount(0);
 
-    // Make layer tree host visible so that the deferred commit is completed,
-    // causing events metrics being passed to the impl thread.
+    // Make layer tree host visible so that the deferred commit is completed.
+    // Note that there is no events metrics to be passed to the impl thread.
     PostSetLayerTreeHostVisible(true);
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
-    // Now that a commit is completed and activated, events metrics from main
-    // thread should have been moved to the impl thread.
+    // Now a commit is completed and activated, but events metrics from main are
+    // already discarded, so there is no events metrics to be moved to the impl
+    // thread.
     PostVerifyMainSavedEventsMetricsCount(0);
-    EXPECT_SCOPED(VerifyImplEventsMetricsFromMainCount(impl, 1));
+    EXPECT_SCOPED(VerifyImplEventsMetricsFromMainCount(impl, 0));
 
     EndTest();
   }
@@ -9928,7 +9930,7 @@ class LayerTreeHostUkmSmoothnessMemoryOwnership : public LayerTreeTest {
 
 MULTI_THREAD_TEST_F(LayerTreeHostUkmSmoothnessMemoryOwnership);
 
-class LayerTreeHostTestDocumentTransitionsPropagatedToMetadata
+class LayerTreeHostTestViewTransitionsPropagatedToMetadata
     : public LayerTreeHostTest {
  protected:
   void SetupTree() override {
@@ -9937,9 +9939,10 @@ class LayerTreeHostTestDocumentTransitionsPropagatedToMetadata
   }
 
   void BeginTest() override {
-    layer_tree_host()->AddDocumentTransitionRequest(
-        DocumentTransitionRequest::CreateCapture(
-            /*document_tag=*/0, /*shared_element_count=*/0, {},
+    layer_tree_host()->AddViewTransitionRequest(
+        ViewTransitionRequest::CreateCapture(
+            /*document_tag=*/0, /*shared_element_count=*/0,
+            viz::NavigationID::Null(), {},
             base::BindLambdaForTesting([this]() { CommitLambdaCalled(); })));
   }
 
@@ -9968,7 +9971,7 @@ class LayerTreeHostTestDocumentTransitionsPropagatedToMetadata
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostTestDocumentTransitionsPropagatedToMetadata);
+    LayerTreeHostTestViewTransitionsPropagatedToMetadata);
 
 class LayerTreeHostTestDebugStateDowngrade : public LayerTreeHostTest {
   void InitializeSettings(LayerTreeSettings* settings) override {
@@ -10648,7 +10651,7 @@ class LayerTreeHostTestBeginFramePausedChanged : public LayerTreeHostTest {
   }
 
  private:
-  TestLayerTreeFrameSink* layer_tree_frame_sink_;
+  raw_ptr<TestLayerTreeFrameSink> layer_tree_frame_sink_;
 };
 MULTI_THREAD_TEST_F(LayerTreeHostTestBeginFramePausedChanged);
 
@@ -10730,6 +10733,109 @@ class LayerTreeHostUpdateViewportContainerSize : public LayerTreeHostTest {
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostUpdateViewportContainerSize);
+
+// Ensures that a change in LCD text status forces tilings to be recreated on
+// the pending tree even during accelerated gestures (scrolling and pinch zoom)
+// and animations.
+class LayerTreeHostTestForceRecreateTilingForLCDText
+    : public LayerTreeHostTestWithHelper {
+ public:
+  LayerTreeHostTestForceRecreateTilingForLCDText() {}
+
+  void SetupTree() override {
+    client_.set_fill_with_nonsolid_color(true);
+    client_.set_has_draw_text_op();
+
+    scoped_refptr<FakePictureLayer> root_layer =
+        FakePictureLayer::Create(&client_);
+    root_layer->SetBounds(gfx::Size(150, 150));
+    root_layer->SetIsDrawable(true);
+
+    layer_on_main_ =
+        CreateAndAddFakePictureLayer(gfx::Size(30, 30), root_layer.get());
+
+    layer_tree_host()->SetRootLayer(root_layer);
+    LayerTreeHostTest::SetupTree();
+    client_.set_bounds(root_layer->bounds());
+
+    layer_id_ = layer_on_main_->id();
+  }
+
+  void WillCommit(const CommitState&) override {
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 0:
+        // First frame enables LCD text by marking the layer opaque.
+        layer_on_main_->SetContentsOpaque(true);
+        layer_on_main_->SetBackgroundColor(SkColor4f::FromColor(SK_ColorBLACK));
+        break;
+      case 1:
+        // Now mark the layer non-opaque to disable LCD text.
+        layer_on_main_->SetContentsOpaque(false);
+        break;
+      case 2:
+        // Back to LCD text.
+        layer_on_main_->SetContentsOpaque(true);
+        break;
+      case 3:
+        // Disable LCD text from non-opaque background.
+        layer_on_main_->SetContentsOpaque(false);
+        layer_on_main_->SetBackgroundColor(
+            SkColor4f::FromColor(SK_ColorTRANSPARENT));
+        break;
+    }
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
+        host_impl->pending_tree()->LayerById(layer_id_));
+
+    switch (host_impl->pending_tree()->source_frame_number()) {
+      case 0:
+        ASSERT_FALSE(host_impl->IsPinchGestureActive());
+        EXPECT_TRUE(layer_impl->can_use_lcd_text());
+        EXPECT_TRUE(layer_impl->HighResTiling()->can_use_lcd_text());
+        host_impl->GetInputHandler().PinchGestureBegin(
+            gfx::Point(1, 1), ui::ScrollInputType::kWheel);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 1:
+        ASSERT_TRUE(host_impl->IsPinchGestureActive());
+        EXPECT_FALSE(layer_impl->can_use_lcd_text());
+        EXPECT_EQ(layer_impl->lcd_text_disallowed_reason(),
+                  LCDTextDisallowedReason::kContentsNotOpaque);
+        EXPECT_FALSE(layer_impl->HighResTiling()->can_use_lcd_text());
+        host_impl->GetInputHandler().PinchGestureEnd(gfx::Point(1, 1));
+        break;
+      case 2:
+        ASSERT_FALSE(host_impl->IsPinchGestureActive());
+        EXPECT_TRUE(layer_impl->can_use_lcd_text());
+        EXPECT_TRUE(layer_impl->HighResTiling()->can_use_lcd_text());
+        host_impl->GetInputHandler().PinchGestureBegin(
+            gfx::Point(1, 1), ui::ScrollInputType::kWheel);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 3:
+        ASSERT_TRUE(host_impl->IsPinchGestureActive());
+        EXPECT_FALSE(layer_impl->can_use_lcd_text());
+        EXPECT_EQ(layer_impl->lcd_text_disallowed_reason(),
+                  LCDTextDisallowedReason::kBackgroundColorNotOpaque);
+        EXPECT_FALSE(layer_impl->HighResTiling()->can_use_lcd_text());
+        EndTest();
+        break;
+    }
+  }
+
+ protected:
+  // main and impl thread.
+  int layer_id_;
+
+  // main thread only
+  FakeContentLayerClient client_;
+  scoped_refptr<FakePictureLayer> layer_on_main_;
+};
+MULTI_THREAD_TEST_F(LayerTreeHostTestForceRecreateTilingForLCDText);
 
 }  // namespace
 }  // namespace cc

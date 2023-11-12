@@ -6,22 +6,21 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {ModuleDescriptor, ModuleDescriptorV2, ModuleHeight, ModuleWrapperElement} from 'chrome://new-tab-page/lazy_load.js';
 import {WindowProxy} from 'chrome://new-tab-page/new_tab_page.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertThrows} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {fakeMetricsPrivate, MetricsTracker} from '../metrics_test_support.js';
+import {fakeMetricsPrivate, MetricsTracker} from '../../metrics_test_support.js';
 import {createElement, initNullModule, installMock} from '../test_support.js';
 
 suite('NewTabPageModulesModuleWrapperTest', () => {
   let moduleWrapper: ModuleWrapperElement;
   let metrics: MetricsTracker;
-  let windowProxy: TestBrowserProxy;
+  let windowProxy: TestBrowserProxy<WindowProxy>;
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     loadTimeData.overrideValues({
       navigationStartTime: 0.0,
     });
@@ -41,7 +40,7 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
 
     // Act.
     moduleWrapper.module = {
-      descriptor: new ModuleDescriptor('foo', 'Foo', initNullModule),
+      descriptor: new ModuleDescriptor('foo', initNullModule),
       element: moduleElement,
     };
     await detectedImpression;
@@ -59,7 +58,7 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
     // Act.
     moduleWrapper.module = {
       descriptor: new ModuleDescriptorV2(
-          'foo', 'Foo', ModuleHeight.TALL, async () => createElement()),
+          'foo', ModuleHeight.TALL, async () => createElement()),
       element: createElement(),
     };
 
@@ -70,12 +69,12 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
   test('descriptor can only be set once', () => {
     const moduleElement = createElement();
     moduleWrapper.module = {
-      descriptor: new ModuleDescriptor('foo', 'Foo', initNullModule),
+      descriptor: new ModuleDescriptor('foo', initNullModule),
       element: moduleElement,
     };
     assertThrows(() => {
       moduleWrapper.module = {
-        descriptor: new ModuleDescriptor('foo', 'Foo', initNullModule),
+        descriptor: new ModuleDescriptor('foo', initNullModule),
         element: moduleElement,
       };
     });
@@ -85,7 +84,7 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
     // Arrange.
     const moduleElement = createElement();
     moduleWrapper.module = {
-      descriptor: new ModuleDescriptor('foo', 'Foo', initNullModule),
+      descriptor: new ModuleDescriptor('foo', initNullModule),
       element: moduleElement,
     };
 
@@ -101,7 +100,7 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
     // Arrange.
     const moduleElement = createElement();
     moduleWrapper.module = {
-      descriptor: new ModuleDescriptor('foo', 'Foo', initNullModule),
+      descriptor: new ModuleDescriptor('foo', initNullModule),
       element: moduleElement,
     };
 

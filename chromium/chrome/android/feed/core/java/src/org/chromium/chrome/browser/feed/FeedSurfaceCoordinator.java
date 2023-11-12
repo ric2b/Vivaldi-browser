@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.feed.componentinterfaces.SurfaceCoordinator;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderView;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderViewBinder;
+import org.chromium.chrome.browser.feed.sections.StickySectionHeaderView;
 import org.chromium.chrome.browser.feed.settings.FeedAutoplaySettingsFragment;
 import org.chromium.chrome.browser.feed.sort_ui.FeedOptionsCoordinator;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
@@ -111,6 +112,7 @@ public class FeedSurfaceCoordinator
     private boolean mIsActive;
     private int mHeaderCount;
     private int mSectionHeaderIndex;
+    private int mToolbarHeight;
 
     // Used when Feed is enabled.
     private @Nullable Profile mProfile;
@@ -125,6 +127,12 @@ public class FeedSurfaceCoordinator
             SectionHeaderView, PropertyKey> mSectionHeaderListModelChangeProcessor;
     private @Nullable PropertyModelChangeProcessor<PropertyModel, SectionHeaderView, PropertyKey>
             mSectionHeaderModelChangeProcessor;
+    // Sticky section header fields.
+    private @Nullable StickySectionHeaderView mStickySectionHeaderView;
+    private @Nullable ListModelChangeProcessor<PropertyListModel<PropertyModel, PropertyKey>,
+            SectionHeaderView, PropertyKey> mStickySectionHeaderListModelChangeProcessor;
+    private @Nullable PropertyModelChangeProcessor<PropertyModel, SectionHeaderView, PropertyKey>
+            mStickySectionHeaderModelChangeProcessor;
     // Feed RecyclerView/xSurface fields.
     private @Nullable NtpListContentManager mContentManager;
     private @Nullable RecyclerView mRecyclerView;
@@ -140,6 +148,7 @@ public class FeedSurfaceCoordinator
 
     private @Nullable HeaderIphScrollListener mHeaderIphScrollListener;
     private @Nullable RefreshIphScrollListener mRefreshIphScrollListener;
+    private @Nullable StartSurfaceScrollListener mStartSurfaceScrollListener;
     private @Nullable BackToTopBubbleScrollListener mBackToTopBubbleScrollListener;
     private @Nullable FeedReliabilityLogger mReliabilityLogger;
     private final PrivacyPreferencesManagerImpl mPrivacyPreferencesManager;
@@ -208,6 +217,28 @@ public class FeedSurfaceCoordinator
             int[] pos = new int[2];
             ViewUtils.getRelativeLayoutPosition(mRootView, childView, pos);
             return pos[1];
+        }
+    }
+
+    // This listener is used to handle the sticky header on the start surface.
+    class StartSurfaceScrollListener implements ScrollListener {
+        @Override
+        public void onScrollStateChanged(@ScrollState int state) {}
+
+        @Override
+        public void onScrolled(int dx, int dy) {}
+
+        /**
+         * On the start surface, the header offset changes will trigger this third method in the
+         * listener, and we compare the toolbar height which is passed as a parameter in the
+         * constructor with the in-feed header current position. If the header position is smaller
+         * than the toolbar height, we make the sticky header visible.
+         */
+        @Override
+        public void onHeaderOffsetChanged(int verticalOffset) {
+            boolean isStickyHeaderVisibleOnStartSurface = mToolbarHeight >= getFeedHeaderPosition();
+            mSectionHeaderModel.set(SectionHeaderListProperties.STICKY_HEADER_VISIBLILITY_KEY,
+                    isStickyHeaderVisibleOnStartSurface);
         }
     }
 
@@ -289,6 +320,7 @@ public class FeedSurfaceCoordinator
         mEmbeddingSurfaceCreatedTimeNs = embeddingSurfaceCreatedTimeNs;
         mWebFeedHasContent = false;
         mSectionHeaderIndex = 0;
+        mToolbarHeight = toolbarHeight;
 
         Resources resources = mActivity.getResources();
 
@@ -312,7 +344,7 @@ public class FeedSurfaceCoordinator
 
         mHandler = new Handler(Looper.getMainLooper());
 
-        // MVC setup for feed header.
+        // MVC setup for feed header and sticky header.
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)) {
             mSectionHeaderView = (SectionHeaderView) LayoutInflater.from(mActivity).inflate(
                     R.layout.new_tab_page_multi_feed_header, null, false);
@@ -332,8 +364,43 @@ public class FeedSurfaceCoordinator
                 .addObserver(mSectionHeaderListModelChangeProcessor);
 
         FeedOptionsCoordinator optionsCoordinator = new FeedOptionsCoordinator(mActivity);
+
         mSectionHeaderModel.set(SectionHeaderListProperties.EXPANDING_DRAWER_VIEW_KEY,
                 optionsCoordinator.getView());
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_HEADER_STICK_TO_TOP)) {
+            mStickySectionHeaderView =
+                    (StickySectionHeaderView) LayoutInflater.from(mActivity).inflate(
+                            R.layout.new_tab_page_multi_sticky_feed_header, null, false);
+            mRootView.addView(mStickySectionHeaderView);
+
+            mStickySectionHeaderModelChangeProcessor = PropertyModelChangeProcessor.create(
+                    mSectionHeaderModel, mStickySectionHeaderView, binder);
+            mStickySectionHeaderListModelChangeProcessor = new ListModelChangeProcessor<>(
+                    mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY),
+                    mStickySectionHeaderView, binder);
+            mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
+                    .addObserver(mStickySectionHeaderListModelChangeProcessor);
+            mSectionHeaderModel.set(
+                    SectionHeaderListProperties.STICKY_HEADER_EXPANDING_DRAWER_VIEW_KEY,
+                    optionsCoordinator.getStickyHeaderOptionsView());
+
+            // TODO(b/258073469): update the margin to the correct number
+            // If we are on start surface, the sticky header's margin is temporarily set to be 1/2
+            // toolbar height; if we are on NTP, the sticky header's margin should be set to the
+            // toolbar height.
+            if (mSurfaceType == SurfaceType.START_SURFACE) {
+                mSectionHeaderModel.set(
+                        SectionHeaderListProperties.STICKY_HEADER_MUTABLE_MARGIN_KEY,
+                        mToolbarHeight / 2);
+                createStartSurfaceScrollListener();
+            } else {
+                mSectionHeaderModel.set(
+                        SectionHeaderListProperties.STICKY_HEADER_MUTABLE_MARGIN_KEY,
+                        mToolbarHeight);
+            }
+        }
 
         // Mediator should be created before any Stream changes.
         mMediator = new FeedSurfaceMediator(this, mActivity, snapScrollHelper, mSectionHeaderModel,
@@ -343,6 +410,33 @@ public class FeedSurfaceCoordinator
 
         // Creates streams, initiates content changes.
         mMediator.updateContent();
+    }
+
+    int getToolbarHeight() {
+        return mToolbarHeight;
+    }
+
+    void setToolbarHairlineVisibility(boolean isVisible) {
+        Toolbar toolbar = mToolbarSupplier.get();
+        // If the ToolbarLayout isn't visible, we shouldn't change the toolbar_hairline to be
+        // visible.
+        if (toolbar == null || !toolbar.isBrowsingModeToolbarVisible() && isVisible) {
+            return;
+        }
+        toolbar.setBrowsingModeHairlineVisibility(isVisible);
+    }
+
+    /**
+     * @return the position of the in-feed header, or an error value Integer.MAX_VALUE when
+     * mScrollableContainerDelegate isn't initialized successfully, in this case, the sticky header
+     * will always be invisible.
+     */
+    int getFeedHeaderPosition() {
+        if (mScrollableContainerDelegate != null) {
+            return mScrollableContainerDelegate.getTopPositionRelativeToContainerView(
+                    mSectionHeaderView);
+        }
+        return Integer.MAX_VALUE;
     }
 
     @Override
@@ -407,6 +501,12 @@ public class FeedSurfaceCoordinator
             mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
                     .removeObserver(mSectionHeaderListModelChangeProcessor);
         }
+        if (mStickySectionHeaderModelChangeProcessor != null) {
+            mStickySectionHeaderModelChangeProcessor.destroy();
+            mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
+                    .removeObserver(mStickySectionHeaderListModelChangeProcessor);
+        }
+
         // Destroy mediator after all other related controller/processors are destroyed.
         mMediator.destroy();
 
@@ -484,6 +584,13 @@ public class FeedSurfaceCoordinator
             mSwipeRefreshLayout.setRefreshing(false);
         });
         getFeatureEngagementTracker().notifyEvent(EventConstants.FEED_SWIPE_REFRESHED);
+    }
+
+    public void nonSwipeRefresh() {
+        if (mSwipeRefreshLayout != null) {
+            mSwipeRefreshLayout.startRefreshingAtTheBottom();
+        }
+        onRefresh();
     }
 
     void updateReloadButtonVisibility(boolean isReloading) {
@@ -700,7 +807,7 @@ public class FeedSurfaceCoordinator
         return new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 mIsPlaceholderShownInitially, mWindowAndroid, mShareSupplier, kind, this,
                 mActionDelegate, mHelpAndFeedbackLauncher, this /* FeedContentFirstLoadWatcher */,
-                streamsMediator);
+                streamsMediator, "".getBytes());
     }
 
     private void setHeaders(List<View> headerViews) {
@@ -807,6 +914,11 @@ public class FeedSurfaceCoordinator
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_BACK_TO_TOP)) {
             createBackToTopBubbleScrollListener();
         }
+    }
+
+    private void createStartSurfaceScrollListener() {
+        mStartSurfaceScrollListener = new StartSurfaceScrollListener();
+        mScrollableContainerDelegate.addScrollListener(mStartSurfaceScrollListener);
     }
 
     private void createHeaderIphScrollListener() {
@@ -997,5 +1109,10 @@ public class FeedSurfaceCoordinator
     @VisibleForTesting
     public void setReliabilityLoggerForTesting(FeedReliabilityLogger logger) {
         mReliabilityLogger = logger;
+    }
+
+    @VisibleForTesting
+    public void clearScrollableContainerDelegateForTesting() {
+        mScrollableContainerDelegate = null;
     }
 }

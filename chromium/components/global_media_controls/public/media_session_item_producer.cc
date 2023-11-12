@@ -374,6 +374,15 @@ bool MediaSessionItemProducer::IsItemActivelyPlaying(const std::string& id) {
   return it == sessions_.end() ? false : it->second.IsPlaying();
 }
 
+void MediaSessionItemProducer::ActivateItem(const std::string& id) {
+  DCHECK(HasSession(id));
+  if (base::Contains(inactive_session_ids_, id))
+    return;
+
+  active_controllable_session_ids_.insert(id);
+  item_manager_->ShowItem(id);
+}
+
 void MediaSessionItemProducer::HideItem(const std::string& id) {
   active_controllable_session_ids_.erase(id);
   frozen_session_ids_.erase(id);
@@ -389,13 +398,12 @@ void MediaSessionItemProducer::RemoveItem(const std::string& id) {
   sessions_.erase(id);
 }
 
-void MediaSessionItemProducer::ActivateItem(const std::string& id) {
+void MediaSessionItemProducer::RefreshItem(const std::string& id) {
   DCHECK(HasSession(id));
   if (base::Contains(inactive_session_ids_, id))
     return;
 
-  active_controllable_session_ids_.insert(id);
-  item_manager_->ShowItem(id);
+  item_manager_->RefreshItem(id);
 }
 
 bool MediaSessionItemProducer::HasSession(const std::string& id) const {
@@ -414,6 +422,13 @@ void MediaSessionItemProducer::SetAudioSinkId(const std::string& id,
   auto it = sessions_.find(id);
   DCHECK(it != sessions_.end());
   it->second.SetAudioSinkId(sink_id);
+}
+
+media_session::mojom::RemotePlaybackMetadataPtr
+MediaSessionItemProducer::GetRemotePlaybackMetadataFromItem(
+    const std::string& id) {
+  auto* session = GetSession(id);
+  return session ? session->item()->GetRemotePlaybackMetadata() : nullptr;
 }
 
 base::CallbackListSubscription

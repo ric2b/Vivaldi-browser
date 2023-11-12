@@ -258,6 +258,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE" desc="Message when opening a Voice Search from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to trigger a voice search.">
         Voice Search
       </message>
+      <message name="IDS_IOS_APPLICATION_SHORTCUT_SET_DEFAULT_BROWSER" desc="The title of the spotlight item to set Chrome as a default browser. [Length: unlimited] [iOS only]." meaning="Spotlight item title for setting default browser.">
+        Set Chrome as Default Browser
+      </message>
       <message name="IDS_IOS_APP_LAUNCHER_OPEN_APP_BUTTON_LABEL" desc="Label of a button to open an application. [Length: 10em] [iOS only]">
         Open
       </message>
@@ -529,7 +532,10 @@ locale.  The strings in this file are specific to iOS.
         Search bar is now easier to reach
       </message>
       <message name="IDS_IOS_CALENDARS_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's calendar while the app is in use [Length: unlimited] [iOS only].">
-        This allows you to easily create calendar events using Google Lens.
+          This will be used to create events in your Apple Calendar from Chrome and Google Lens.
+      </message>
+      <message name="IDS_IOS_CONTACTS_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's contacts while the app is in use [Length: unlimited] [iOS only].">
+        This will be used to show you possible invitees to your event.
       </message>
       <message name="IDS_IOS_CAMERA_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's camera while the app is in use [Length: unlimited] [iOS only].">
         This lets you take and upload photos, as well as scan QR codes
@@ -636,8 +642,8 @@ See your search engine’s instructions for deleting your search history, if app
       <message name="IDS_IOS_CONTENT_CONTEXT_ADDTOBOOKMARKS" desc="The iOS context menu item for adding the url of a tab to the bookmarks. [iOS only]">
         Add to Bookmarks
       </message>
-      <message name="IDS_IOS_CONTENT_CONTEXT_CLOSETAB" desc="The iOS context menu item for closing a tab. [iOS only]">
-        Close tab
+      <message name="IDS_IOS_CONTENT_CONTEXT_CLOSETAB" desc="The iOS context menu item for closing a tab. [iOS only]" meaning="Close the current tab [Title Case].">
+        Close Tab
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_COPY" desc="The iOS menu item for copying a link's URL into the pasteboard. Shorter than the desktop version [iOS only]">
         Copy Link URL
@@ -677,6 +683,9 @@ See your search engine’s instructions for deleting your search history, if app
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_SELECTTABS" desc="The iOS context menu item for entering into the selection mode, where users can select tabs to perform bulk actions on them.[iOS only]">
         Select Tabs
+      </message>
+      <message name="IDS_IOS_CONTENT_CONTEXT_PINTAB" desc="The iOS context menu item for pinning a tab.[iOS only]">
+        Pin Tab
       </message>
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_LABEL_SUGGESTION" desc="The accessibility label of a suggestion. Summarizes fields in the reading list entry (title, publisher informations, status and informations). Read by Text-to-Speech.">
         <ph name="TITLE"><ex>Learn about the new Chromium Projects</ex>$1</ph>, <ph name="PUBLISHER_INFORMATION"><ex>The Chromium organization</ex>$2</ph>, <ph name="PUBLICATION_DATE"><ex>January 1 2017</ex>$3</ph>
@@ -909,6 +918,18 @@ See your search engine’s instructions for deleting your search history, if app
       <message name="IDS_IOS_FACETIME_BUTTON" desc="Text in the confirmation dialog button that will initiate a FaceTime call for the presented number. [Length: 10em] [iOS only]">
         FaceTime
       </message>
+      <message name="IDS_IOS_FEED_CARD_SIGN_IN_PROMO_CANCEL_BUTTON" desc="Text of the cancel button in the feed card sign-in promo UI. [iOS only]">
+        Cancel
+      </message>
+      <message name="IDS_IOS_FEED_CARD_SIGN_IN_PROMO_CONTINUE_BUTTON" desc="Text of the continue button in the feed card sign-in promo UI. [iOS only]">
+        Continue
+      </message>
+      <message name="IDS_IOS_FEED_CARD_SIGN_IN_PROMO_DESC" desc="Description of the feed card sign-in promo UI. [iOS only]">
+        To personalize your Discover feed and Chrome, sign in and turn on sync.
+      </message>
+      <message name="IDS_IOS_FEED_CARD_SIGN_IN_PROMO_TITLE" desc="Title of the feed card sign-in promo UI. [iOS only]">
+        Sign in to manage the content you see
+      </message>
       <message name="IDS_IOS_FEED_CUSTOM_SEARCH_ENGINE_LABEL" desc="Message informing users with custom search engines that the feed is provided by Google.">
         Provided by Google
       </message>
@@ -997,7 +1018,7 @@ See your search engine’s instructions for deleting your search history, if app
         Tap <ph name="BEGIN_BOLD">BEGIN_BOLD</ph>Default Browser App<ph name="END_BOLD">END_BOLD</ph>
       </message>
       <message name="IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SECONDARY_ACTION" desc="The secondary action string on the default browser screen presented to the user on First Run [iOS only]">
-        No, Thanks
+        No Thanks
       </message>
       <message name="IDS_IOS_FIRST_RUN_SCREEN_READ_MORE" desc="The label on the primary button of some screens in the first run experience if the content requires scrolling to the end [iOS only]">
         More
@@ -1047,17 +1068,8 @@ See your search engine’s instructions for deleting your search history, if app
       <message name="IDS_IOS_FIRST_RUN_WELCOME_SCREEN_MANAGED" desc="The disclaimer that the browser is managed on the welcome screen presented to the user on First Run when the browser is managed [iOS only]">
         Your administrator has control over Chrome and can access its data
       </message>
-      <message name="IDS_IOS_FIRSTRUN_BROWSER_MANAGED" desc="Label explaining that the app is managed by an organization. This is shown on the Welcome screen presented to the user on First Run. Only shown if some enterprise policies are set. [iOS only]">
-        Your browser is managed by your organization. Some features may be disabled.
-      </message>
       <message name="IDS_IOS_FIRSTRUN_TERMS_TITLE" desc="Title for the Terms of Service page shown to user on First Run. [Length: 20em] [iOS only]">
         Terms of Service
-      </message>
-      <message name="IDS_IOS_FIRSTRUN_ACCOUNT_CONSISTENCY_SKIP_BUTTON" desc="Title of the button to skip the selection of an account on First Run when account consistency is enabled. [Length: 10em] [iOS only]">
-        No Thanks
-      </message>
-      <message name="IDS_IOS_FIRSTRUN_OPT_IN_ACCEPT_BUTTON" desc="User metrics opt-in acceptance button label [iOS only]">
-        Accept &amp; Continue
       </message>
       <message name="IDS_IOS_GENERIC_PASSKIT_ERROR" desc="Generic error message on failure reading a PassKit object. [Length: 60em] [iOS only]">
         Sorry, your Pass cannot be installed to Passbook at this time.
@@ -1258,32 +1270,122 @@ See your search engine’s instructions for deleting your search history, if app
       <message name="IDS_IOS_JAVA_SCRIPT_DIALOG_BLOCKING_BUTTON_TEXT" desc="The text used for the button added to JavaScript dialogs to prevent a page from spamming the user with endless alerts. [Length:27em]">
         Suppress Dialogs
       </message>
+      <message name="IDS_IOS_KEYBOARD_ACCESSORY_VIEW_LENS" desc="Accessibility label for a button that opens Lens [iOS only].">
+        Search with Lens
+      </message>
       <message name="IDS_IOS_KEYBOARD_ACCESSORY_VIEW_QR_CODE_SEARCH" desc="Accessibility label for a button that starts scanning QR Codes [iOS only].">
         QR code Search
       </message>
       <message name="IDS_IOS_KEYBOARD_ACCESSORY_VIEW_VOICE_SEARCH" desc="Accessibility label for a button that starts a Voice Search [iOS only]">
         Voice Search
       </message>
-      <message name="IDS_IOS_KEYBOARD_BOOKMARK_THIS_PAGE" desc="In Title Case: Title of the keyboard shortcut that bookmarks the current page. [Length: 20 em] [iOS only]">
-        Bookmark This Page...
+      <message name="IDS_IOS_KEYBOARD_ADD_TO_BOOKMARKS" desc="In Title Case: Title of the keyboard shortcut that bookmarks the current page." meaning="Used as a command title in the iPad command menu.">
+        Add to Bookmarks
       </message>
-      <message name="IDS_IOS_KEYBOARD_HISTORY_BACK" desc="Title of the keyboard shortcut to go back in the history menu. [Length: 20 em] [iOS only]">
+      <message name="IDS_IOS_KEYBOARD_ADD_TO_READING_LIST" desc="Title of the keyboard shortcut to add the current URL to the Reading List." meaning="Used as a command title in the iPad command menu.">
+        Add to Reading List
+      </message>
+      <message name="IDS_IOS_KEYBOARD_BOOKMARKS" desc="Title of the menu listing bookmarks-related keyboard shortcuts." meaning="Used as a menu title in the iPad command menu.">
+        Bookmarks
+      </message>
+      <message name="IDS_IOS_KEYBOARD_CLEAR_BROWSING_DATA" desc="Title of the keyboard shortcut to clear the browsing data." meaning="Used as a command title in the iPad command menu.">
+        Clear Browsing Data…
+      </message>
+      <message name="IDS_IOS_KEYBOARD_CLOSE_ALL" desc="Title of the button in the tab grid UI that closes all the tabs in the grid." meaning="Used as a command title in the iPad command menu.">
+        Close All
+      </message>
+      <message name="IDS_IOS_KEYBOARD_CLOSE_TAB" desc="Title of the keyboard shortcut to close the current tab." meaning="Used as a command title in the iPad command menu.">
+        Close Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_EDIT_BOOKMARK" desc="Title of the keyboard shortcut that edits the bookmark of the current page." meaning="Used as a command title in the iPad command menu.">
+        Edit Bookmark
+      </message>
+      <message name="IDS_IOS_KEYBOARD_FIND" desc="The default title of the keyboard shortcut to search." meaning="Used as a command title in the iPad command menu.">
+        Find
+      </message>
+      <message name="IDS_IOS_KEYBOARD_FIND_IN_PAGE" desc="The title of the keyboard shortcut to search in the current page." meaning="Used as a command title in the iPad command menu.">
+        Find in Page…
+      </message>
+      <message name="IDS_IOS_KEYBOARD_FIND_NEXT" desc="The title of the keyboard shortcut to find the next matching string." meaning="Used as a command title in the iPad command menu.">
+        Find Next
+      </message>
+      <message name="IDS_IOS_KEYBOARD_FIND_PREVIOUS" desc="The title of the keyboard shortcut to find the previous matching string." meaning="Used as a command title in the iPad command menu.">
+        Find Previous
+      </message>
+      <message name="IDS_IOS_KEYBOARD_FIRST_TAB" desc="The title of the keyboard shortcut to open the first tab." meaning="Used as a command title in the iPad command menu.">
+        Go to First Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_GO_TO_TAB_GRID" desc="The title of the keyboard shortcut to open the form to report an issue." meaning="Used as a command title in the iPad command menu.">
+        Go to Tab Grid
+      </message>
+      <message name="IDS_IOS_KEYBOARD_HISTORY" desc="Title of the menu listing history-related keyboard shortcuts." meaning="Used as a menu title in the iPad command menu.">
+        History
+      </message>
+      <message name="IDS_IOS_KEYBOARD_HISTORY_BACK" desc="Title of the keyboard shortcut to go back in the history menu." meaning="Used as a command title in the iPad command menu.">
         Back
       </message>
-      <message name="IDS_IOS_KEYBOARD_HISTORY_FORWARD" desc="Title of the keyboard shortcut to go forward in the history menu. [Length: 20 em] [iOS only]">
+      <message name="IDS_IOS_KEYBOARD_HISTORY_FORWARD" desc="Title of the keyboard shortcut to go forward in the history menu." meaning="Used as a command title in the iPad command menu.">
         Forward
       </message>
-      <message name="IDS_IOS_KEYBOARD_OPEN_LOCATION" desc="Title of the keyboard shortcut to open a location (puts cursor in the URL bar). [Length: 20 em] [iOS only]">
-        Open Location...
+      <message name="IDS_IOS_KEYBOARD_LAST_TAB" desc="The title of the keyboard shortcut to open the last tab." meaning="Used as a command title in the iPad command menu.">
+        Go to Last Tab
       </message>
-      <message name="IDS_IOS_KEYBOARD_REOPEN_CLOSED_TAB" desc="Title of the keyboard shortcut to reopen a recently closed tab. [Length: 20 em] [iOS only]">
-        Reopen Closed Tab
+      <message name="IDS_IOS_KEYBOARD_NEXT_TAB" desc="Title of the keyboard shortcut to switch to the next tab in the tab strip." meaning="Used as a command title in the iPad command menu.">
+        Go to Next Tab
       </message>
-      <message name="IDS_IOS_KEYBOARD_NEXT_TAB" desc="Title of the keyboard shortcut to switch to the next tab in the tab strip. [Length: 20 em] [iOS only]">
-        Next Tab
+      <message name="IDS_IOS_KEYBOARD_NEW_INCOGNITO_TAB" desc="The title of the keyboard shortcut to open a new Incognito tab." meaning="Used as a command title in the iPad command menu.">
+        New Incognito Tab
       </message>
-      <message name="IDS_IOS_KEYBOARD_PREVIOUS_TAB" desc="Title of the keyboard shortcut to switch to the previous tab in the tab strip. [Length: 20 em] [iOS only]">
-        Previous Tab
+      <message name="IDS_IOS_KEYBOARD_NEW_INCOGNITO_WINDOW" desc="The title of the keyboard shortcut to open a new Incognito window." meaning="Used as a command title in the iPad command menu.">
+        New Incognito Window
+      </message>
+      <message name="IDS_IOS_KEYBOARD_NEW_TAB" desc="The title of the keyboard shortcut to open a new tab." meaning="Used as a command title in the iPad command menu.">
+        New Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_NEW_WINDOW" desc="The title of the keyboard shortcut to open a new window." meaning="Used as a command title in the iPad command menu.">
+        New Window
+      </message>
+      <message name="IDS_IOS_KEYBOARD_OPEN_LOCATION" desc="Title of the keyboard shortcut to open a location (puts cursor in the URL bar)." meaning="Used as a command title in the iPad command menu.">
+        Open Location…
+      </message>
+      <message name="IDS_IOS_KEYBOARD_PREVIOUS_TAB" desc="Title of the keyboard shortcut to switch to the previous tab in the tab strip." meaning="Used as a command title in the iPad command menu.">
+        Go to Previous Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_REOPEN_CLOSED_TAB" desc="Title of the keyboard shortcut to reopen a recently closed tab." meaning="Used as a command title in the iPad command menu.">
+        Reopen Last Closed Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_READING_LIST" desc="Title of the keyboard shortcut to show the reading list." meaning="Used as a command title in the iPad command menu.">
+        Show Reading List
+      </message>
+      <message name="IDS_IOS_KEYBOARD_REPORT_AN_ISSUE" desc="The title of the keyboard shortcut to open the form to report an issue." meaning="Used as a command title in the iPad command menu.">
+        Report an Issue…
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SEARCH_TABS" desc="In Title Case: Title of the keyboard shortcut that open the search tab menu in tab grid." meaning="Used as a command title in the iPad command menu.">
+        Search Tabs…
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_BOOKMARKS" desc="In Title Case: Title of the keyboard shortcut that shows the list of bookmarks." meaning="Used as a command title in the iPad command menu.">
+        Show Bookmarks
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_DOWNLOADS" desc="The title of the keyboard shortcut to open the app's Download folder." meaning="Used as a command title in the iPad command menu.">
+        Show Downloads
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_HELP" desc="The title of the keyboard shortcut to open the app's Help." meaning="Used as a command title in the iPad command menu.">
+        Show Help
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_HISTORY" desc="Title of the keyboard shortcut to show the History." meaning="Used as a command title in the iPad command menu.">
+        Show History
+      </message>
+      <message name="IDS_IOS_KEYBOARD_SHOW_SETTINGS" desc="The title of the keyboard shortcut to open the app's Settings." meaning="Used as a command title in the iPad command menu.">
+        Show Settings
+      </message>
+      <message name="IDS_IOS_KEYBOARD_RELOAD" desc="Title for the keyboard shortcut to reload the page." meaning="Used as a command title in the iPad command menu.">
+        Reload
+      </message>
+      <message name="IDS_IOS_KEYBOARD_STOP" desc="The title of the keyboard shortcut to stop loading the page." meaning="Used as a command title in the iPad command menu.">
+        Stop
+      </message>
+      <message name="IDS_IOS_KEYBOARD_VOICE_SEARCH" desc="Title for the Voice Search keyboard shortcut in the discoverability." meaning="Used as a command title in the iPad command menu.">
+        Voice Search
       </message>
       <message name="IDS_IOS_LONG_PRESS_TOOLBAR_IPH_PROMOTION_TEXT" desc="Text for the LongPress Toolbar Tip in-product help promotion, explaining that the user can long press on the toolbar's button to display more options. [iOS only]">
         Touch &amp; hold for more tab options
@@ -1647,11 +1749,17 @@ While in Incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TITLE" desc="Title for Price Notifications table view.">
         Track Price
       </message>
+      <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TOAST_IPH_TEXT" desc="Text for Price tracking toast IPH.">
+        Track price here
+      </message>
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TRACKABLE_SECTION_HEADER" desc="Section header for a Price Notifications table view section that lists items available on the current page to have their prices tracked.">
         Current Site
       </message>
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TRACKED_SECTION_HEADER" desc="Section header for a Price Notifications table view section that lists items the user is currently price tracking.">
         Tracking Prices
+      </message>
+      <message name="IDS_IOS_PRICE_NOTIFICAITONS_PRICE_TRACK_TRACKABLE_ITEM_IS_TRACKED" desc="Table element description explaining that the current website contains an item that the user is already tracking">
+        You're already tracking this product.
       </message>
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TRACKABLE_EMPTY_LIST" desc="Table element description explaining that the current website does not contain any items that can have their prices tracked.">
         Price tracking isn't available for this site.
@@ -1843,6 +1951,18 @@ While in Incognito, sites can't use cookies to see your browsing activity across
       </message>
       <message name="IDS_IOS_TABLE_VIEW_INFO_BUTTON_ITEM_ACCESSIBILITY_TAP" desc="Accessibility hint for info button items that have a tap functionality.">
         Button
+      </message>
+      <message name="IDS_IOS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_TITLE" desc="Title shown in the iOS message when the account tailored security setting is enabled for a consented primary account">
+        Enhanced Protection is On
+      </message>
+      <message name="IDS_IOS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_TITLE" desc="Title shown in the iOS message when the account tailored security setting is disabled for a consented primary account">
+        Enhanced Protection is Off
+      </message>
+      <message name="IDS_IOS_TAILORED_SECURITY_UNCONSENTED_ENABLE_MESSAGE_TITLE" desc="Title shown in the iOS message when the account tailored security setting is enabled for an unconsented primary account">
+        More Security?
+      </message>
+      <message name="IDS_IOS_TAILORED_SECURITY_TURN_ON_ACTION_TITLE" desc="Action shown in the iOS message when the account tailored security setting is enabled for an unconsented primary account">
+        Turn On
       </message>
       <message name="IDS_SAVE_PASSWORD_FOOTER" desc="The footer text of the infobar that offers user to save/update a password to Chrome.">
         Passwords are saved in your Google Account so you can use them on any device.
@@ -2110,6 +2230,12 @@ While in Incognito, sites can't use cookies to see your browsing activity across
       </message>
       <message name="IDS_IOS_TOOLS_MENU_NEW_WINDOW" desc="The iOS menu item for opening a new window [iOS only]" meaning="[Length: unlimited]">
         New Window
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_PIN_TAB" desc="The iOS menu item for pinning a tab [iOS only]" meaning="[Length: unlimited]">
+        Pin Tab
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_UNPIN_TAB" desc="The iOS menu item for unpinning a tab [iOS only]" meaning="[Length: unlimited]">
+        Unpin Tab
       </message>
       <message name="IDS_IOS_READING_LIST_CONTENT_CONTEXT_OFFLINE" desc="Title of the button to display the Offline version instead of the Online one. [Length: 50em]">
         View Offline Version in New Tab
@@ -2471,6 +2597,9 @@ Try to use a unique password for every site.
       <message name="IDS_IOS_SEARCH_COPIED_IMAGE" desc="If a user has an image on their clipboard, this string will appear as an option when the user long-presses on Chrome's address bar. The user can select this option to search the default search engine for the image. This string is a complete sentence. If necessary for your language, you can translate as 'Search for Image That You Copied.' [iOS only]" meaning="Maximum characters: 32">
           Search for Copied Image
       </message>
+      <message name="IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS" desc="If a user has an image on their clipboard, this string will appear as an option when the user long-presses on Chrome's address bar if Lens is enabled. The user can select this option to trigger a Lens search on the image. This string is a complete sentence. If necessary for your language, you can translate as 'Lens Image That You Copied.' [iOS only]" meaning="Maximum characters: 32">
+          Lens Copied Image
+      </message>
       <message name="IDS_IOS_SEARCH_COPIED_TEXT" desc="If a user has some text on their clipboard, this string will appear as an option when the user long-presses on Chrome's address bar. The user can select this option to search the default search engine for the text. This string is a complete sentence. If necessary for your language, you can translate as 'Search for Text That You Copied.' [iOS only]" meaning="Maximum characters: 32">
           Search for Copied Text
       </message>
@@ -2502,13 +2631,19 @@ Try to use a unique password for every site.
         Search Engine
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS" desc="The title of the view that teaches users to turn on iOS auto-fill from Chrome password manager">
-        Passwords In Other Apps
+        Passwords in Other Apps
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_CAPTION" desc="The caption label below subtitle of the view that teaches users to turn off iOS auto-fill from Chrome password manager">
         To turn off, open <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph> and go to AutoFill Passwords.
       </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_CAPTION_IOS16" desc="The caption label below subtitle of the view that teaches users to turn off iOS auto-fill from Chrome password manager on iOS 16 and above">
+        To turn off, open <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph> and go to Password Options.
+      </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SHORTENED_STEP_1" desc="Text of the row indicating the first step of shortened instruction of of turning on iOS auto-fill from Chrome password manager [iOS only]">
         Open AutoFill Password Settings
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SHORTENED_STEP_1_IOS16" desc="Text of the row indicating the first step of shortened instruction of of turning on iOS auto-fill from Chrome password manager on iOS 16 and above [iOS only]">
+        Open Password Options
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_STEP_1_IPAD" desc="Text of the row indicating the first step of full instruction of of turning on iOS auto-fill from Chrome password manager [iOS only]">
         1. Open iPad Settings
@@ -2517,10 +2652,13 @@ Try to use a unique password for every site.
         1. Open iPhone Settings
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_STEP_2" desc="Text of the row indicating the second step of full instruction of of turning on iOS auto-fill from Chrome password manager [iOS only]">
-        2. Tap on Passwords
+        2. Tap Passwords
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_STEP_3" desc="Text of the row indicating the third step of full instruction of of turning on iOS auto-fill from Chrome password manager [iOS only]">
         3. Tap AutoFill Passwords
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_STEP_3_IOS16" desc="Text of the row indicating the third step of full instruction of of turning on iOS auto-fill from Chrome password manager on iOS 16 and above [iOS only]">
+        3. Tap Password Options
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE" desc="The subtitle of the view that teaches users to turn on iOS auto-fill from Chrome password manager">
         Use the passwords you saved to Chrome in other apps on your device
@@ -2557,9 +2695,6 @@ Try to use a unique password for every site.
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED_DESC" desc="Detail text for the Safe Browsing check if the user has Safe Browsing Standard Protection enabled">
         Enhanced protection is on
-      </message>
-      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC" desc="Detail text for the Safe Browsing check if the user has Safe Browsing Standard Protection enabled">
-        Standard protection is on
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC_WITH_ENHANCED_PROTECTION" desc="Detail text for the Safe Browsing check if the user has Safe Browsing Standard Protection enabled">
         Standard protection is on. For even more security, use Enhanced protection.
@@ -2702,20 +2837,20 @@ Try to use a unique password for every site.
       <message name="IDS_IOS_SHARE_MENU_PRINT_ACTION" desc="The text label of the Print action in the extension menu that starts the printing process. [Length: 13em] [iOS only]">
         Print
       </message>
-      <message name="IDS_IOS_SHARE_MENU_GENERATE_QR_CODE_ACTION" desc="The text label of the action in the extension menu that generates and shows a QR code for the current page. [iOS only]">
+      <message name="IDS_IOS_SHARE_MENU_GENERATE_QR_CODE_ACTION" desc="The text label of the action in the extension menu that generates and shows a QR code for the current page. This is Title Case. [iOS only]" meaning="Action from the displayed menu after the user tap on the share button. In Title Case.">
         Create a QR Code
       </message>
-      <message name="IDS_IOS_SHARE_MENU_READING_LIST_ACTION" desc="The text label of the Add To Reading List action in the extension menu that adds the current page to the reading list. [Length: 25em] [iOS only]">
+      <message name="IDS_IOS_SHARE_MENU_READING_LIST_ACTION" desc="The text label of the Add To Reading List action in the extension menu that adds the current page to the reading list. [Length: 25em] This is Title Case. [iOS only]" meaning="Action from the displayed menu after the user tap on the share button. In Title Case.">
         Add to Reading List
       </message>
-      <message name="IDS_IOS_SHARE_MENU_REQUEST_DESKTOP_SITE" desc="Text label to the Request Desktop Site action in the extension menu that request the desktop version of the current page. [iOS only]">
+      <message name="IDS_IOS_SHARE_MENU_REQUEST_DESKTOP_SITE" desc="Text label to the Request Desktop Site action in the extension menu that request the desktop version of the current page. This is Title Case. [iOS only]" meaning="Action from the displayed menu after the user tap on the share button. In Title Case.">
         Request Desktop Site
       </message>
-      <message name="IDS_IOS_SHARE_MENU_REQUEST_MOBILE_SITE" desc="Text label to the Request Mobile Site action in the extension menu that request the mobile version of the current page. [iOS only]">
+      <message name="IDS_IOS_SHARE_MENU_REQUEST_MOBILE_SITE" desc="Text label to the Request Mobile Site action in the extension menu that request the mobile version of the current page. This is Title Case. [iOS only]" meaning="Action from the displayed menu after the user tap on the share button. In Title Case.">
         Request Mobile Site
       </message>
-      <message name="IDS_IOS_SHARE_MENU_SEND_TAB_TO_SELF_ACTION" desc="Text label to the Send Tab To Self action in the extension menu that sends the current tab to the user's other devices. [iOS only]">
-        Send To Your Devices
+      <message name="IDS_IOS_SHARE_MENU_SEND_TAB_TO_SELF_ACTION" desc="Text label to the Send Tab To Self action in the extension menu that sends the current tab to the user's other devices. This is Title Case. [iOS only]" meaning="Action from the displayed menu after the user tap on the share button. In Title Case.">
+        Send to Your Devices
       </message>
       <message name="IDS_SEND_TAB_TO_SELF_SIGN_IN_PROMO_LABEL" desc = "Text when a signed out user attempts to use send-tab-to-self, then sees a sign-in promo.">
         To send this tab to another device, sign in to Chrome on both devices.
@@ -2819,6 +2954,9 @@ Try to use a unique password for every site.
       <message name="IDS_IOS_RETURN_TO_RECENT_TAB_TIME_HOURS" desc="Type in hours for time since the recent tab was opened, shortened to h.">
           <ph name="TIME">$1</ph> h ago
           </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_NUMBER_ACCOUNT" desc="A description presented to the user of how many accounts have sign-in information available by tapping on this menu item. [iOS only]">
+        <ph name="NUMBER_OF_ACCOUNTS">$1<ex>2</ex></ph> accounts
+      </message>
       <message name="IDS_IOS_SETTINGS_PASSWORDS_SAVED_HEADING" desc="The title for a list of username/site/password items. These items are already saved by the browser and can be deleted/edited. [Length: one line] [iOS only]">
       Saved Passwords
       </message>
@@ -2862,7 +3000,7 @@ Try to use a unique password for every site.
         Open the Tab Grid
       </message>
       <message name="IDS_IOS_WHATS_NEW_FEATURE_SEARCH_TABS_STEP_2" desc="Text of the row indicating the second step of Search Tabs in What's New. [iOS only]">
-        At the Top Left, Tap the Search Icon
+        At the Top of the Screen, Tap the Search Icon
       </message>
       <message name="IDS_IOS_WHATS_NEW_FEATURE_SEARCH_TABS_STEP_3" desc="Text of the row indicating the third step of Search Tabs in What's New. [iOS only]">
         Enter a Word or Phrase
@@ -2904,7 +3042,7 @@ Try to use a unique password for every site.
         Open Chrome Settings
       </message>
       <message name="IDS_IOS_WHATS_NEW_FEATURE_ADD_PASSWORDS_MANUALLY_STEP_2" desc="Text of the row indicating the second step of Share Highlight in What's New. [iOS only]">
-        Tap Passwords Then Tap Add
+        Tap Passwords Manager Then Tap Add
       </message>
       <message name="IDS_IOS_WHATS_NEW_FEATURE_ADD_PASSWORDS_MANUALLY_STEP_3" desc="Text of the row indicating the third step of Share Highlight in What's New. [iOS only]">
         Enter Site and Password, Then Save
@@ -2919,7 +3057,7 @@ Try to use a unique password for every site.
         You can now use Chrome anytime you browse or tap links in messages, documents, and other apps.
       </message>
       <message name="IDS_IOS_WHATS_NEW_CHROME_TIP_CHROME_DEFAULT_STEP_1" desc="Text of the row indicating the first step of Use Chrome By Default in What's New. [iOS only]">
-        Open Chrome Settings
+        Open Settings
       </message>
       <message name="IDS_IOS_WHATS_NEW_CHROME_TIP_CHROME_DEFAULT_STEP_2" desc="Text of the row indicating the second step of Use Chrome By Default in What's New. [iOS only]">
         Tap Default Browser App
@@ -2931,7 +3069,7 @@ Try to use a unique password for every site.
         Make Default in Settings...
       </message>
       <message name="IDS_IOS_WHATS_NEW_CHROME_TIP_PASSWORDS_IN_OTHER_APPS_TITLE" desc="Passwords In Other Apps title displayed in What's New. [iOS only]">
-        Passwords In Other Apps
+        Passwords in Other Apps
       </message>
       <message name="IDS_IOS_WHATS_NEW_CHROME_TIP_PASSWORDS_IN_OTHER_APPS_SUBTITLE" desc="Passwords In Other Apps subtitle displayed in What's New. [iOS only]">
         You can use the passwords you saved to Google Password Manager in other apps on your iPhone.
@@ -3054,6 +3192,10 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>reset sync<ph name=
       </message>
       <message name="IDS_IOS_SYNC_ENCRYPTION_PASSPHRASE_INFO" desc="The information text for encrypting sync using a passphrase, shown on the passphrase screen [iOS only]">
         Passphrase encryption doesn’t include payment methods and addresses from Google Pay. Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, you will need to reset sync. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <message name="IDS_IOS_NEW_SYNC_ENCRYPTION_PASSPHRASE_INFO" desc="The information text for encrypting sync using a passphrase, shown on the passphrase screen [iOS only]">
+        Payment methods and addresses from Google Pay won’t be encrypted. Browsing history from Chrome won’t sync.
+Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, you’ll need to reset sync. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_IOS_SYNC_VERIFY_ITS_YOU_BUTTON" desc="Button title displayed when the signed in user needs to reauthenticate. Syncing of encrypted types (e.g. passwords) is blocked until the user completes the reauth flow.">
         Verify It's You
@@ -3240,7 +3382,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Create new Incognito tab.
       </message>
       <message name="IDS_IOS_TAB_GRID_CREATE_NEW_TAB" desc="The accessibility label for the button that creates new regular tabs (as opposed to Incognito tabs). [iOS only]">
-        Create new tab.
+        Create New Tab
       </message>
       <message name="IDS_IOS_TAB_STRIP_ENTER_TAB_SWITCHER" desc="The accessibility label of the tab strip button to enter the tab switcher. The tab switcher is a view showing the opened tabs, and allows users to switch, close, and open new tabs. [iOS only]">
         Enter Tab Switcher
@@ -3333,10 +3475,13 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Turn On Sync
       </message>
       <message name="IDS_IOS_TANGIBLE_SYNC_SUBTITLE_BACK_UP" desc="This string appears as a subheading a full-page screen that asks users if they want to turn on sync. This string explains to users that they can back up their Chrome/Chromium data and use it on all their computers, phones, and other devices; a user's Chrome/Chromium data includes their bookmarks, passwords, history, settings, and more. The word 'stuff' can be translated as 'data' or similar if there is no natural translation of 'stuff'. Maintain the level of formality that your language generally uses in the Chrome/Chromium app. The tone should be informative and inviting. [iOS only][CHAR_LIMIT=100]">
-        Back up your stuff and use it on any device
+        Back up your stuff and use it on any device.
       </message>
       <message name="IDS_IOS_TANGIBLE_SYNC_SUBTITLE_SYNC" desc="This string appears as a subheading a full-page screen that asks users if they want to turn on sync. This string explains to users that they can get their Chrome data on all their computers, phones, and other devices; a user's Chrome data includes their bookmarks, passwords, history, settings, and more. Maintain the level of formality that your language generally uses in the Chrome app. The tone should be informative and inviting. [iOS only][CHAR_LIMIT=100]">
-        Sync your data on all devices
+        Sync your data on all devices.
+      </message>
+      <message name="IDS_IOS_TANGIBLE_SYNC_TURN_ON_SYNC" desc="This string appears as the primary button on a full-page screen that asks users if they want to turn on sync. It appears when the user launches Chrome for the first time, after they have signed in. When the user chooses this button, they opt in to the sync feature. The tone should be straightforward. [CHAR_LIMIT=15][iOS only]">
+        Turn On
       </message>
       <message name="IDS_IOS_TERMS_OF_SERVICE" desc="The label to access the terms of service, displayed in the application settings, with no product name. [Length: 30em] [iOS only]">
         Terms of Service
@@ -3419,15 +3564,18 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TOOLS_MENU_HISTORY" desc="The Tools menu item for opening the navigation history menu">
         History
       </message>
-<message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH" desc="The iOS menu item for opening a new Incognito tab and doing a new search in that tab." meaning="Do a new search in a new Incognito tab">
-Incognito Search
-</message>
+      <message name="IDS_IOS_TOOLS_MENU_LENS_COPIED_IMAGE" desc="If a user has an image on their clipboard, this string will appear as an option when the user long-presses on Chrome's search icon and Lens is enabled. The user can select this option to search the image using Lens. This string is a complete sentence. If necessary for your language, you can translate as 'Lens Image That You Copied.'" meaning="[Length:Unlimited]">
+        Lens Image You Copied
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH" desc="The iOS menu item for opening a new Incognito tab and doing a new search in that tab." meaning="Do a new search in a new Incognito tab">
+        Incognito Search
+      </message>
       <message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB" desc="The iOS menu item for opening a new Incognito tab [iOS only]" meaning="Tools menu entry to create a new Incognito tab. [Length: Unlimited]">
         New Incognito Tab
       </message>
-<message name="IDS_IOS_TOOLS_MENU_NEW_SEARCH" desc="The iOS menu item for opening a new tab and doing a new search in that tab." meaning="Do a new search in a new tab">
-New Search
-</message>
+      <message name="IDS_IOS_TOOLS_MENU_NEW_SEARCH" desc="The iOS menu item for opening a new tab and doing a new search in that tab." meaning="Do a new search in a new tab">
+        New Search
+      </message>
       <message name="IDS_IOS_TOOLS_MENU_NEW_TAB" desc="The iOS menu item for opening a new tab [iOS only]" meaning="Tools menu entry to create a new tab. [Length: Unlimited]">
         New Tab
       </message>
@@ -3453,10 +3601,10 @@ New Search
         Share Chrome
       </message>
       <message name="IDS_IOS_OVERFLOW_MENU_SHARE_CHROME_TITLE" desc="The title displayed along with the app store link to Chrome, when sharing the chrome app" meaning="[In Title case] [iOS only] [Length: Unlimited]">
-        Chrome for iOS
+        Chrome for Mobile
       </message>
       <message name="IDS_IOS_OVERFLOW_MENU_SHARE_CHROME_DESC" desc="The description displayed along with the app store link to Chrome, when sharing the chrome app" meaning="[In Title case] [iOS only] [Length: Unlimited]">
-        Get Chrome for iOS
+        Download Chrome here.
       </message>
       <message name="IDS_IOS_TOOLS_MENU_RELOAD" desc="The title of the button in the menu allowing the user to reload the page.">
         Reload
@@ -3503,6 +3651,9 @@ New Search
       <message name="IDS_IOS_TRANSLATE_INFOBAR_TRANSLATE_ACTION" desc="The button text for the action to translate the page. [iOS only]">
         Translate
       </message>
+      <message name="IDS_IOS_TRANSLATE_INFOBAR_TRANSLATE_TRY_AGAIN_ACTION" desc="The button text for the action to try again the translation after failure. [iOS only]">
+        Try Again
+      </message>
       <message name="IDS_IOS_TRANSLATE_INFOBAR_TRANSLATE_UNDO_ACTION" desc="The button text for the action to undo the translation. [iOS only]">
         Show Original
       </message>
@@ -3517,6 +3668,9 @@ New Search
       </message>
       <message name="IDS_IOS_TRANSLATE_INFOBAR_BEFORE_TRANSLATE_BANNER_TITLE" desc="The text for the title of the Translate Message Banner asking the user to translate the page [iOS only]">
         Translate Page?
+      </message>
+      <message name="IDS_IOS_TRANSLATE_INFOBAR_ON_ERROR_BANNER_TITLE" desc="The text for the title of the Translate Message Banner in case of an error [iOS only]">
+        Translation Failed
       </message>
       <message name="IDS_IOS_TRANSLATE_INFOBAR_MODAL_SOURCE_LANGUAGE_FIELD_NAME" desc="The text field name for the source language in the Translate Infobar modal. [iOS only]">
         From
@@ -3604,9 +3758,6 @@ New Search
       </message>
       <message name="IDS_IOS_VERSION_COPIED" desc="The message displayed when the version label is tapped (in About settings) [Length: 10em] [iOS only]">
         Copied
-      </message>
-      <message name="IDS_IOS_VOICE_SEARCH_KEYBOARD_DISCOVERY_TITLE" desc="Title for the Voice Search keyboard shortcut in the discoverability [Length:20em] [iOS only]">
-        Voice Search
       </message>
       <message name="IDS_IOS_VOICE_SEARCH_SETTINGS_DEFAULT_LOCALE" desc="The label for the default locale option in the voice search settings [iOS only]">
         Default - <ph name="DEFAULT_LOCALE">$1<ex>English (United States)</ex></ph>
@@ -3725,7 +3876,7 @@ New Search
         What's New
       </message>
       <message name="IDS_IOS_WHATS_NEW_LEARN_MORE_ACTION_TITLE" desc="Label of the button for users to learn more about a feature or a chrome tip.">
-        Learn more
+        Learn More
       </message>
       <message name="IDS_IOS_WHATS_NEW_SECTION_CHROME_TIP_TITLE" desc="Title of a section in a table view to inform users about a chrome tip.">
         Chrome Tip
@@ -3737,7 +3888,7 @@ New Search
         New
       </message>
       <message name="IDS_IOS_WHATS_NEW_IPH_TEXT" desc="An in product help message to inform the user about the feature What's New.">
-        Find out what's new in Chrome
+        Explore new features and tips in What’s New
       </message>
       <message name="IDS_IOS_CARD_WILL_BE_SAVED_TO_ACCOUNT" desc="A message to inform the user that a credit card will be saved to their Google Account.">
         Cards are saved to your Google Account.
@@ -3768,6 +3919,26 @@ New Search
       </message>
       <message name="IDS_IOS_OVERFLOW_MENU_CAROUSEL_TIP_VOICEOVER" desc="The VoiceOver announcement for the tip explaining to the user they can use the carousel in the overflow menu.">
         Your saved bookmarks, passwords, settings, and more are available from this screen.
+      </message>
+      <message name="IDS_IOS_AUTOFILL_ADDRESS_SUGGESTIONS_AVAILABLE_ACCESSIBILITY_ANNOUNCEMENT" is_accessibility_with_no_ui="true" desc="The accessibility announcement to indicate the number of address suggestions available to the user above the keyboard. This announcement is triggered when the user enters edit mode in a form field that has address suggestions available for autofill purposes. According to the number of available addresses, the string goes from singular to plural. [iOS only]">
+        {count, plural,
+           =1 {{count} saved address available above your keyboard.}
+           other {{count} saved addresses available above your keyboard.}}
+      </message>
+      <message name="IDS_IOS_AUTOFILL_PASSWORD_SUGGESTIONS_AVAILABLE_ACCESSIBILITY_ANNOUNCEMENT" is_accessibility_with_no_ui="true" desc="The accessibility announcement to indicate the number of password suggestions available to the user above the keyboard. This announcement is triggered when the user enters edit mode in a form field that has password suggestions available for autofill purposes. According to the number of available passwords, the string goes from singular to plural. [iOS only]">
+        {count, plural,
+           =1 {{count} saved password available above your keyboard.}
+           other {{count} saved passwords available above your keyboard.}}
+      </message>
+      <message name="IDS_IOS_AUTOFILL_PAYMENT_METHOD_SUGGESTIONS_AVAILABLE_ACCESSIBILITY_ANNOUNCEMENT" is_accessibility_with_no_ui="true" desc="The accessibility announcement to indicate the number of payment method suggestions available to the user above the keyboard. This announcement is triggered when the user enters edit mode in a form field that has payment method suggestions available for autofill purposes. According to the number of available payment methods, the string goes from singular to plural. [iOS only]">
+        {count, plural,
+           =1 {{count} saved payment method available above your keyboard.}
+           other {{count} saved payment methods available above your keyboard.}}
+      </message>
+      <message name="IDS_IOS_AUTOFILL_PROFILE_SUGGESTIONS_AVAILABLE_ACCESSIBILITY_ANNOUNCEMENT" is_accessibility_with_no_ui="true" desc="The accessibility announcement to indicate the number of profile suggestions available to the user above the keyboard. This announcement is triggered when the user enters edit mode in a form field that has profile suggestions available for autofill purposes. According to the number of available profiles, the string goes from singular to plural. [iOS only]">
+        {count, plural,
+           =1 {{count} saved profile available above your keyboard.}
+           other {{count} saved profiles available above your keyboard.}}
       </message>
     </messages>
   </release>

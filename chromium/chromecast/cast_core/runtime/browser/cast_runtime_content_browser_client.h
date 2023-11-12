@@ -9,8 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "chromecast/browser/cast_content_browser_client.h"
-#include "chromecast/cast_core/runtime/browser/runtime_application_dispatcher.h"
-#include "components/cast_receiver/browser/public/application_client.h"
+#include "components/cast_receiver/browser/public/content_browser_client_mixins.h"
 
 namespace gfx {
 class Rect;
@@ -20,14 +19,15 @@ namespace media {
 struct VideoTransformation;
 }  // namespace media
 
+namespace cast_receiver {
+class RuntimeApplication;
+}  // namespace cast_receiver
+
 namespace chromecast {
 
-class RuntimeApplication;
-class RuntimeApplicationDispatcher;
+class RuntimeServiceImpl;
 
-class CastRuntimeContentBrowserClient
-    : public shell::CastContentBrowserClient,
-      public cast_receiver::ApplicationClient {
+class CastRuntimeContentBrowserClient : public shell::CastContentBrowserClient {
  public:
   explicit CastRuntimeContentBrowserClient(
       CastFeatureListCreator* feature_list_creator);
@@ -48,19 +48,23 @@ class CastRuntimeContentBrowserClient
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   bool IsBufferingEnabled() override;
-
-  // cast_receiver::ApplicationClient overrides:
-  NetworkContextGetter GetNetworkContextGetter() override;
+  void OnWebContentsCreated(content::WebContents* web_contents) override;
+  std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
+  CreateURLLoaderThrottles(
+      const network::ResourceRequest& request,
+      content::BrowserContext* browser_context,
+      const base::RepeatingCallback<content::WebContents*()>& wc_getter,
+      content::NavigationUIData* navigation_ui_data,
+      int frame_tree_node_id) override;
 
  protected:
   void InitializeCoreComponents(CastWebService* web_service);
 
  private:
-  class ApplicationClientObservers
-      : public cast_receiver::StreamingResolutionObserver,
-        public cast_receiver::ApplicationStateObserver {
+  class Observer : public cast_receiver::StreamingResolutionObserver,
+                   public cast_receiver::ApplicationStateObserver {
    public:
-    ~ApplicationClientObservers() override;
+    ~Observer() override;
 
     void SetVideoPlaneController(
         media::VideoPlaneController* video_plane_controller);
@@ -69,7 +73,8 @@ class CastRuntimeContentBrowserClient
 
    private:
     // cast_receiver::ApplicationStateObserver overrides:
-    void OnForegroundApplicationChanged(RuntimeApplication* app) override;
+    void OnForegroundApplicationChanged(
+        cast_receiver::RuntimeApplication* app) override;
 
     // cast_receiver::StreamResolutionObserver overrides:
     //
@@ -86,9 +91,12 @@ class CastRuntimeContentBrowserClient
     std::atomic_bool is_buffering_enabled_{false};
   };
 
+  std::unique_ptr<cast_receiver::ContentBrowserClientMixins>
+      cast_browser_client_mixins_;
+
   // Wrapper around the observers used with the cast_receiver component.
-  ApplicationClientObservers application_client_observers_;
-  std::unique_ptr<RuntimeApplicationDispatcher> app_dispatcher_;
+  Observer observer_;
+  std::unique_ptr<RuntimeServiceImpl> runtime_service_;
 };
 
 }  // namespace chromecast

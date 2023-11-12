@@ -30,7 +30,7 @@ import './wrapup_wait_for_manual_wp_enable_page.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
@@ -913,6 +913,9 @@ export class ShimlessRma extends ShimlessRmaBase {
             this.logSavedStatusText_ =
                 this.i18n('rmaLogsSaveSuccessText', result.savePath.path);
             this.usbLogState_ = USBLogState.LOG_SAVE_SUCCESS;
+          } else if (result.error === RmadErrorCode.kUsbNotFound) {
+            this.logSavedStatusText_ = this.i18n('rmaLogsSaveUsbNotFound');
+            this.usbLogState_ = USBLogState.LOG_SAVE_FAIL;
           } else {
             this.logSavedStatusText_ = this.i18n('rmaLogsSaveFailText');
             this.usbLogState_ = USBLogState.LOG_SAVE_FAIL;

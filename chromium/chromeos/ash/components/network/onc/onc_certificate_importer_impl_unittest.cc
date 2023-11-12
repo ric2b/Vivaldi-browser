@@ -39,7 +39,8 @@ class ONCCertificateImporterImplTest : public testing::Test {
 
     task_runner_ = new base::TestSimpleTaskRunner();
     thread_task_runner_handle_ =
-        std::make_unique<base::ThreadTaskRunnerHandle>(task_runner_);
+        std::make_unique<base::SingleThreadTaskRunner::CurrentDefaultHandle>(
+            task_runner_);
 
     test_nssdb_ = std::make_unique<net::NSSCertDatabaseChromeOS>(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(public_nssdb_.slot())),
@@ -73,10 +74,11 @@ class ONCCertificateImporterImplTest : public testing::Test {
                                ImportType import_type,
                                bool expected_parse_success,
                                bool expected_import_success) {
-    base::Value onc = test_utils::ReadTestDictionaryValue(filename);
+    base::Value onc =
+        chromeos::onc::test_utils::ReadTestDictionaryValue(filename);
     absl::optional<base::Value> certificates_value =
         onc.ExtractKey(::onc::toplevel_config::kCertificates);
-    onc_certificates_ = std::move(*certificates_value);
+    onc_certificates_ = std::move(*certificates_value).TakeList();
 
     CertificateImporterImpl importer(task_runner_, test_nssdb_.get());
     auto onc_parsed_certificates =
@@ -130,7 +132,7 @@ class ONCCertificateImporterImplTest : public testing::Test {
                 certificate::GetCertType(private_list_[0].get()));
     }
 
-    const base::Value& certificate = onc_certificates_.GetList()[0];
+    const base::Value& certificate = onc_certificates_[0];
     const std::string* guid_value =
         certificate.FindStringKey(::onc::certificate::kGUID);
     *guid = *guid_value;
@@ -142,9 +144,10 @@ class ONCCertificateImporterImplTest : public testing::Test {
   crypto::ScopedTestNSSDB private_nssdb_;
 
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
-  std::unique_ptr<base::ThreadTaskRunnerHandle> thread_task_runner_handle_;
+  std::unique_ptr<base::SingleThreadTaskRunner::CurrentDefaultHandle>
+      thread_task_runner_handle_;
   std::unique_ptr<net::NSSCertDatabaseChromeOS> test_nssdb_;
-  base::Value onc_certificates_;
+  base::Value::List onc_certificates_;
   // List of certs in the nssdb's public slot.
   net::ScopedCERTCertificateList public_list_;
   // List of certs in the nssdb's "private" slot.
@@ -185,7 +188,7 @@ TEST_F(ONCCertificateImporterImplTest, MultipleCertificates) {
   AddCertificatesFromFile("managed_toplevel2.onc", ImportType::kAllCertificates,
                           true /* expected_parse_success */,
                           true /* expected_import_success */);
-  EXPECT_EQ(onc_certificates_.GetList().size(), public_list_.size());
+  EXPECT_EQ(onc_certificates_.size(), public_list_.size());
   EXPECT_TRUE(private_list_.empty());
   EXPECT_EQ(2ul, public_list_.size());
 }
@@ -205,7 +208,7 @@ TEST_F(ONCCertificateImporterImplTest, MultipleCertificatesWithFailures) {
   AddCertificatesFromFile(
       "toplevel_partially_invalid.onc", ImportType::kAllCertificates,
       false /* expected_parse_success */, true /* expected_import_success */);
-  EXPECT_EQ(3ul, onc_certificates_.GetList().size());
+  EXPECT_EQ(3ul, onc_certificates_.size());
   EXPECT_EQ(1ul, private_list_.size());
   EXPECT_TRUE(public_list_.empty());
 }

@@ -15,10 +15,12 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/notreached.h"
+#import "base/task/bind_post_task.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/metrics/metrics_service.h"
 #import "components/previous_session_info/previous_session_info.h"
+#import "ios/chrome/app/application_delegate/app_state+private.h"
 #import "ios/chrome/app/application_delegate/browser_launcher.h"
 #import "ios/chrome/app/application_delegate/memory_warning_helper.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
@@ -29,7 +31,6 @@
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/browsing_data/sessions_storage_util.h"
-#import "ios/chrome/browser/chrome_constants.h"
 #import "ios/chrome/browser/crash_report/crash_helper.h"
 #import "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
@@ -65,15 +66,7 @@
 #endif
 
 namespace {
-// Helper method to post `closure` on the UI thread.
-void PostTaskOnUIThread(base::OnceClosure closure) {
-  web::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(closure));
-}
 NSString* const kStartupAttemptReset = @"StartupAttemptReset";
-
-// Time interval used for startRecordingMemoryFootprintWithInterval:
-const NSTimeInterval kMemoryFootprintRecordingTimeInterval = 5;
-
 }  // namespace
 
 #pragma mark - AppStateObserverList
@@ -86,22 +79,7 @@ const NSTimeInterval kMemoryFootprintRecordingTimeInterval = 5;
 
 #pragma mark - AppState
 
-@interface AppState () <AppStateObserver> {
-  // Browser launcher to launch browser in different states.
-  __weak id<BrowserLauncher> _browserLauncher;
-
-  // UIApplicationDelegate for the application.
-  __weak MainApplicationDelegate* _mainApplicationDelegate;
-
-  // Whether the application is currently in the background.
-  // This is a workaround for rdar://22392526 where
-  // -applicationDidEnterBackground: can be called twice.
-  // TODO(crbug.com/546196): Remove this once rdar://22392526 is fixed.
-  BOOL _applicationInBackground;
-
-  // YES if cookies are currently being flushed to disk.
-  BOOL _savingCookies;
-}
+@interface AppState () <AppStateObserver>
 
 // Container for observers.
 @property(nonatomic, strong) AppStateObserverList* observers;
@@ -148,12 +126,24 @@ const NSTimeInterval kMemoryFootprintRecordingTimeInterval = 5;
 // while queueTransitionToNextInitStage is already on the call stack.
 @property(nonatomic, assign) BOOL needsIncrementInitStage;
 
-// Redefined internally as readwrite.
-@property(nonatomic, assign, readwrite) InitStage initStage;
-
 @end
 
-@implementation AppState
+@implementation AppState {
+  // Browser launcher to launch browser in different states.
+  __weak id<BrowserLauncher> _browserLauncher;
+
+  // UIApplicationDelegate for the application.
+  __weak MainApplicationDelegate* _mainApplicationDelegate;
+
+  // Whether the application is currently in the background.
+  // This is a workaround for rdar://22392526 where
+  // -applicationDidEnterBackground: can be called twice.
+  // TODO(crbug.com/546196): Remove this once rdar://22392526 is fixed.
+  BOOL _applicationInBackground;
+
+  // YES if cookies are currently being flushed to disk.
+  BOOL _savingCookies;
+}
 
 @synthesize userInteracted = _userInteracted;
 
@@ -226,8 +216,8 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   }
 
   // Return YES if the First Run UI is showing.
-  return (self.initStage == InitStageFirstRun ||
-          self.initStage == InitStageEnterprise) &&
+  return self.initStage > InitStageSafeMode &&
+         self.initStage <= InitStageFirstRun &&
          self.startupInformation.isFirstRun;
 }
 
@@ -290,8 +280,8 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
           net::CookieStore* store =
               getter->GetURLRequestContext()->cookie_store();
           // FlushStore() runs its callback on any thread. Jump back to UI.
-          store->FlushStore(
-              base::BindOnce(&PostTaskOnUIThread, std::move(criticalClosure)));
+          store->FlushStore(base::BindPostTask(web::GetUIThreadTaskRunner({}),
+                                               std::move(criticalClosure)));
         }));
   }
 
@@ -376,12 +366,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 
   base::RecordAction(base::UserMetricsAction("MobileWillEnterForeground"));
 
-  if (EnableSyntheticCrashReportsForUte()) {
-    [[PreviousSessionInfo sharedInstance]
-        startRecordingMemoryFootprintWithInterval:
-            base::Seconds(kMemoryFootprintRecordingTimeInterval)];
-  }
-
   // This will be a no-op if upload already started.
   crash_helper::UploadCrashReports();
 }
@@ -445,6 +429,10 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 }
 
 - (void)willResignActive {
+  // Regardless of app state, if the user is able to background the app, reset
+  // the failed startup count.
+  crash_util::ResetFailedStartupAttemptCount();
+
   if (self.initStage < InitStageBrowserObjectsForUI) {
     // If the application did not pass the foreground initialization stage,
     // there is no active tab model to resign.
@@ -617,14 +605,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 
 - (void)completeUIInitialization {
   DCHECK([self.startupInformation isColdStart]);
-
-  if (EnableSyntheticCrashReportsForUte()) {
-    // Must be called after sequenced context creation, which happens in
-    // startUpBrowserToStage: method called above.
-    [[PreviousSessionInfo sharedInstance]
-        startRecordingMemoryFootprintWithInterval:
-            base::Seconds(kMemoryFootprintRecordingTimeInterval)];
-  }
 }
 
 #pragma mark - Internal methods.

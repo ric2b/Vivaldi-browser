@@ -38,37 +38,12 @@ ASH_EXPORT extern const char kContinueSectionFilesRemovedInSessionHistogram[];
 
 // These are used in histograms, do not remove/renumber entries. If you're
 // adding to this enum with the intention that it will be logged, update the
-// AppListZeroStateSearchResultUserActionType enum listing in
-// tools/metrics/histograms/enums.xml.
-enum class ZeroStateSearchResultUserActionType {
-  kRemoveResult = 0,
-  kAppendResult = 1,
-  kMaxValue = kAppendResult,
-};
-
-// These are used in histograms, do not remove/renumber entries. If you're
-// adding to this enum with the intention that it will be logged, update the
 // AppListResultRemovalConfirmation enum listing in
 // tools/metrics/histograms/enums.xml.
 enum class SearchResultRemovalConfirmation {
   kRemovalConfirmed = 0,
   kRemovalCanceled = 1,
   kMaxValue = kRemovalCanceled,
-};
-
-// The different ways the app list can be shown. These values are written to
-// logs.  New enum values can be added, but existing enums must never be
-// renumbered or deleted and reused.
-enum class AppListShowSource : uint8_t {
-  kSearchKey = 0,
-  kShelfButton = 1,
-  kSwipeFromShelf = 2,
-  kTabletMode = 3,
-  kSearchKeyFullscreen_DEPRECATED = 4,   // Migrated to kSearchKey.
-  kShelfButtonFullscreen_DEPRACTED = 5,  // Obsolete on bubble launcher.
-  kAssistantEntryPoint = 6,
-  kScrollFromShelf = 7,
-  kMaxValue = kScrollFromShelf,
 };
 
 // The two versions of folders. These values are written to logs.  New enum
@@ -234,17 +209,9 @@ struct AppLaunchedMetricParams {
   absl::optional<base::TimeTicks> launcher_show_timestamp;
 };
 
-void AppListRecordPageSwitcherSourceByEventType(ui::EventType type,
-                                                bool is_tablet_mode);
+void AppListRecordPageSwitcherSourceByEventType(ui::EventType type);
 
-void RecordPageSwitcherSource(AppListPageSwitcherSource source,
-                              bool is_tablet_mode);
-
-void RecordZeroStateSearchResultUserActionHistogram(
-    ZeroStateSearchResultUserActionType action);
-
-void RecordZeroStateSearchResultRemovalHistogram(
-    SearchResultRemovalConfirmation removal_decision);
+void RecordPageSwitcherSource(AppListPageSwitcherSource source);
 
 void RecordSearchResultRemovalDialogDecision(
     SearchResultRemovalConfirmation removal_decision);
@@ -259,11 +226,6 @@ ASH_EXPORT void RecordSearchResultOpenSource(const SearchResult* result,
                                              AppListViewState state,
                                              bool is_tablet_mode);
 
-ASH_EXPORT void RecordSearchLaunchIndexAndQueryLength(
-    SearchResultLaunchLocation launch_location,
-    int query_length,
-    int suggestion_index);
-
 ASH_EXPORT void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,
                                          AppListViewState app_list_state,
                                          bool is_tablet_mode,
@@ -276,7 +238,7 @@ ASH_EXPORT void RecordLauncherWorkflowMetrics(
 
 ASH_EXPORT bool IsCommandIdAnAppLaunch(int command_id);
 
-ASH_EXPORT void ReportPaginationSmoothness(bool is_tablet_mode, int smoothness);
+ASH_EXPORT void ReportPaginationSmoothness(int smoothness);
 
 ASH_EXPORT void ReportCardifiedSmoothness(bool is_entering_cardified,
                                           int smoothness);

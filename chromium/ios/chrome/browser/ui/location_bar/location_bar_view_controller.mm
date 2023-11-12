@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
 
 #import "base/bind.h"
+#import "base/containers/contains.h"
 #import "base/ios/ios_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
@@ -19,7 +20,7 @@
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
@@ -29,10 +30,16 @@
 #import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -104,6 +111,26 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 // Displays the long press menu.
 - (void)showLongPressMenu:(UILongPressGestureRecognizer*)sender;
 
+// Vivaldi
+// Button for trigerring vivaldi menu.
+@property(nonatomic, assign) UIButton* vivaldiMenuButton;
+// Button for shield item.
+@property(nonatomic, assign) UIButton* vivaldiShieldButton;
+// Location bar steady view leading constraint when shield button is not
+// visible
+@property(nonatomic, strong) NSLayoutConstraint*
+    locationBarSteadyViewLeadingConstraintNoShield;
+// Location bar steady view leading constraint when shield button is visible
+@property(nonatomic, strong) NSLayoutConstraint*
+    locationBarSteadyViewLeadingConstraint;
+// Location bar steady view trailing constraint when no menu button visible
+@property(nonatomic, strong) NSLayoutConstraint*
+    locationBarSteadyViewTrailingConstraintNoMenu;
+// Location bar steady view trailing constraint when menu button visible
+@property(nonatomic, strong) NSLayoutConstraint*
+    locationBarSteadyViewTrailingConstraint;
+// End Vivaldi
+
 @end
 
 @implementation LocationBarViewController
@@ -118,6 +145,17 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     _hideShareButtonWhileOnIncognitoNTP;
 @synthesize shareButtonEnabled = _shareButtonEnabled;
 @synthesize offsetProvider = _offsetProvider;
+
+// Vivaldi
+@synthesize locationBarSteadyViewLeadingConstraint =
+  _locationBarSteadyViewLeadingConstraint;
+@synthesize locationBarSteadyViewLeadingConstraintNoShield =
+ _locationBarSteadyViewLeadingConstraintNoShield;
+@synthesize locationBarSteadyViewTrailingConstraint =
+  _locationBarSteadyViewTrailingConstraint;
+@synthesize locationBarSteadyViewTrailingConstraintNoMenu =
+  _locationBarSteadyViewTrailingConstraintNoMenu;
+// End Vivaldi
 
 #pragma mark - public
 
@@ -154,6 +192,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                           BrowserCommands,
                           ApplicationCommands,
                           LoadQueryCommands,
+                          PopupMenuCommands, // Vivaldi
                           OmniboxCommands>)dispatcher {
   _dispatcher = dispatcher;
 }
@@ -175,6 +214,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 
 - (void)updateTrailingButtonState {
+
+  // Vivaldi: We will show the share button only within the location bar.
+  if (IsVivaldiRunning())
+    self.trailingButtonState = kShareButton;
+  else {
   BOOL shouldShowVoiceSearch =
       self.traitCollection.horizontalSizeClass ==
           UIUserInterfaceSizeClassRegular ||
@@ -189,6 +233,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   } else {
     self.trailingButtonState = kShareButton;
   }
+  } // End Vivaldi
 }
 
 #pragma mark - UIViewController
@@ -228,7 +273,15 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
   [self.view addSubview:self.locationBarSteadyView];
   self.locationBarSteadyView.translatesAutoresizingMaskIntoConstraints = NO;
+
+  // Vivaldi
+  [self setUpVivaldiCommon];
+  if (self.isDeviceIPad) {
   AddSameConstraints(self.locationBarSteadyView, self.view);
+  } else {
+    [self setUpLocationBarModForiPhone];
+  }
+  // End Vivaldi
 
   [self updateTrailingButtonState];
   [self switchToEditing:NO];
@@ -258,6 +311,16 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)updateForFullscreenProgress:(CGFloat)progress {
   CGFloat alphaValue = fmax((progress - 0.85) / 0.15, 0);
   CGFloat scaleValue = 0.79 + 0.21 * progress;
+
+  // Vivaldi
+  self.vivaldiMenuButton.alpha = alphaValue;
+  self.vivaldiShieldButton.alpha = alphaValue;
+  self.locationBarSteadyView.backgroundColor =
+    [[UIColor colorNamed:vSearchbarBackgroundColor]
+      colorWithAlphaComponent:alphaValue];
+  self.locationBarSteadyView.alpha = alphaValue;
+  // End Vivaldi
+
   self.locationBarSteadyView.trailingButton.alpha = alphaValue;
   BOOL badgeViewShouldCollapse =
       progress <= kFullscreenProgressBadgeViewThreshold;
@@ -367,6 +430,17 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 - (void)setSteadyViewHidden:(BOOL)hidden {
   self.locationBarSteadyView.hidden = hidden;
+
+  // Vivaldi
+  if (self.hasValidOrientation && !self.isDevicePortrait) {
+    self.vivaldiMenuButton.hidden = YES;
+    self.vivaldiShieldButton.hidden = YES;
+  } else {
+    self.vivaldiMenuButton.hidden = hidden;
+    self.vivaldiShieldButton.hidden = hidden;
+  }
+  // End Vivaldi
+
 }
 
 - (void)resetTransforms {
@@ -493,6 +567,10 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
           UseSymbols()
               ? DefaultSymbolWithPointSize(kShareSymbol, kSymbolImagePointSize)
               : [UIImage imageNamed:@"location_bar_share"];
+
+      if (IsVivaldiRunning())
+        shareImage = [UIImage imageNamed:@"toolbar_share"]; // End Vivaldi
+
       [self.locationBarSteadyView.trailingButton
           setImage:[shareImage imageWithRenderingMode:
                                    UIImageRenderingModeAlwaysTemplate]
@@ -544,6 +622,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   [self.layoutGuideCenter
       referenceView:self.locationBarSteadyView.trailingButton
           underName:kVoiceSearchButtonGuide];
+  base::RecordAction(base::UserMetricsAction("MobileOmniboxVoiceSearch"));
   [self.dispatcher startVoiceSearch];
 }
 
@@ -577,24 +656,17 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   desired_types.insert(ClipboardContentType::Image);
   __weak __typeof(self) weakSelf = self;
   clipboardRecentContent->HasRecentContentFromClipboard(
-      desired_types,
-      base::BindOnce(^(std::set<ClipboardContentType> matched_types) {
-        weakSelf.hasCopiedContent = !matched_types.empty();
-        if (weakSelf.searchByImageEnabled &&
-            matched_types.find(ClipboardContentType::Image) !=
-                matched_types.end()) {
-          weakSelf.copiedContentType = ClipboardContentType::Image;
-        } else if (matched_types.find(ClipboardContentType::URL) !=
-                   matched_types.end()) {
-          weakSelf.copiedContentType = ClipboardContentType::URL;
-        } else if (matched_types.find(ClipboardContentType::Text) !=
-                   matched_types.end()) {
-          weakSelf.copiedContentType = ClipboardContentType::Text;
-        }
-        weakSelf.isUpdatingCachedClipboardState = NO;
+      desired_types, base::BindOnce(^(std::set<ClipboardContentType> types) {
+        [weakSelf onClipboardContentTypeReceived:types];
         completion();
       }));
   return YES;
+}
+
+- (BOOL)shouldUseLensInLongPressMenu {
+  return ios::provider::IsLensSupported() &&
+         base::FeatureList::IsEnabled(kEnableLensInOmniboxCopiedImage) &&
+         self.lensImageEnabled;
 }
 
 #pragma mark - UIMenu
@@ -605,6 +677,10 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     [self.locationBarSteadyView becomeFirstResponder];
 
     UIMenuController* menu = [UIMenuController sharedMenuController];
+    RegisterEditMenuItem([[UIMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(
+                          (IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS))
+               action:@selector(lensCopiedImage:)]);
     RegisterEditMenuItem([[UIMenuItem alloc]
         initWithTitle:l10n_util::GetNSString((IDS_IOS_SEARCH_COPIED_IMAGE))
                action:@selector(searchCopiedImage:)]);
@@ -643,20 +719,35 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
       std::set<ClipboardContentType>
           clipboard_content_types_values =
               clipboard_content_types.value();
-
+      __weak LocationBarViewController* weakSelf = self;
       if (clipboard_content_types_values.find(
               ClipboardContentType::Image) !=
           clipboard_content_types_values.end()) {
-        id searchCopiedImageHandler = ^(UIAction* action) {
-          [self searchCopiedImage:nil];
-        };
-        UIAction* searchCopiedImageAction = [UIAction
-            actionWithTitle:l10n_util::GetNSString(
-                                (IDS_IOS_SEARCH_COPIED_IMAGE))
-                      image:nil
-                 identifier:nil
-                    handler:searchCopiedImageHandler];
-        [menuElements addObject:searchCopiedImageAction];
+        // Either add an option to search the copied image with Lens, or via the
+        // default search engine's reverse image search functionality.
+        if (self.shouldUseLensInLongPressMenu) {
+          id lensCopiedImageHandler = ^(UIAction* action) {
+            [weakSelf lensCopiedImage:nil];
+          };
+          UIAction* lensCopiedImageAction = [UIAction
+              actionWithTitle:l10n_util::GetNSString(
+                                  (IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS))
+                        image:nil
+                   identifier:nil
+                      handler:lensCopiedImageHandler];
+          [menuElements addObject:lensCopiedImageAction];
+        } else {
+          id searchCopiedImageHandler = ^(UIAction* action) {
+            [weakSelf searchCopiedImage:nil];
+          };
+          UIAction* searchCopiedImageAction =
+              [UIAction actionWithTitle:l10n_util::GetNSString(
+                                            (IDS_IOS_SEARCH_COPIED_IMAGE))
+                                  image:nil
+                             identifier:nil
+                                handler:searchCopiedImageHandler];
+          [menuElements addObject:searchCopiedImageAction];
+        }
       } else if (clipboard_content_types_values.find(
                      ClipboardContentType::URL) !=
                  clipboard_content_types_values.end()) {
@@ -693,11 +784,21 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                           (UIContextMenuInteraction*)interaction
     previewForHighlightingMenuWithConfiguration:
         (UIContextMenuConfiguration*)configuration {
+
+  // Vivaldi: We will preview the steady view only since Vivaldi Menu button
+  // is part of location bar and we don't want to show it on the context preview
+  if (IsVivaldiRunning()) {
+    return [[UITargetedPreview alloc]
+        initWithView:self.locationBarSteadyView
+          parameters:[[UIPreviewParameters alloc] init]];
+  } else {
   // Use the location bar's container view because that's the view that has the
   // background color and corner radius.
   return [[UITargetedPreview alloc]
       initWithView:self.view.superview
         parameters:[[UIPreviewParameters alloc] init]];
+  } // End Vivaldi
+
 }
 
 - (UIContextMenuConfiguration*)contextMenuInteraction:
@@ -722,6 +823,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   }
 
   BOOL isClipboardAction = action == @selector(searchCopiedImage:) ||
+                           action == @selector(lensCopiedImage:) ||
                            action == @selector(visitCopiedLink:) ||
                            action == @selector(searchCopiedText:);
   if (self.locationBarSteadyView.isFirstResponder && isClipboardAction) {
@@ -729,6 +831,9 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
       return NO;
     }
     if (self.copiedContentType == ClipboardContentType::Image) {
+      if ([self shouldUseLensInLongPressMenu]) {
+        return action == @selector(lensCopiedImage:);
+      }
       return action == @selector(searchCopiedImage:);
     }
     if (self.copiedContentType == ClipboardContentType::URL) {
@@ -750,6 +855,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   RecordAction(
       UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedImage"));
   [self.delegate searchCopiedImage];
+}
+
+- (void)lensCopiedImage:(id)sender {
+  RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.LensCopiedImage"));
+  [self.delegate lensCopiedImage];
 }
 
 - (void)visitCopiedLink:(id)sender {
@@ -787,5 +897,141 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
         });
       }));
 }
+
+- (void)onClipboardContentTypeReceived:
+    (const std::set<ClipboardContentType>&)types {
+  self.hasCopiedContent = !types.empty();
+  if (base::Contains(types, ClipboardContentType::Image) &&
+      (self.searchByImageEnabled || self.shouldUseLensInLongPressMenu)) {
+    self.copiedContentType = ClipboardContentType::Image;
+  } else if (base::Contains(types, ClipboardContentType::URL)) {
+    self.copiedContentType = ClipboardContentType::URL;
+  } else if (base::Contains(types, ClipboardContentType::Text)) {
+    self.copiedContentType = ClipboardContentType::Text;
+  }
+  self.isUpdatingCachedClipboardState = NO;
+}
+
+
+#pragma mark - VIVALDI
+
+/// Set up common UI changes for both iPhone and iPads.
+- (void)setUpVivaldiCommon {
+  self.editView.backgroundColor =
+      [UIColor colorNamed:vSearchbarBackgroundColor];
+  self.editView.layer.cornerRadius = vNTPSearchBarCornerRadius;
+
+  self.locationBarSteadyView.layer.cornerRadius = vNTPSearchBarCornerRadius;
+}
+
+/// Set up Vivaldi menu button and make changes to the UI and constraints for
+/// iPhone. iPad is not affected by this since the menu button is already part
+/// of the tool bar on iPad.
+- (void)setUpLocationBarModForiPhone {
+
+  UIButton* vivaldiMenuButton = [UIButton new];
+  _vivaldiMenuButton = vivaldiMenuButton;
+  UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
+  [vivaldiMenuButton setImage:menuImage forState:UIControlStateNormal];
+  [vivaldiMenuButton addTarget:self.dispatcher
+                        action:@selector(showToolsMenuPopup)
+              forControlEvents:UIControlEventTouchUpInside];
+  [self.view addSubview:vivaldiMenuButton];
+  [vivaldiMenuButton anchorTop:nil
+                       leading:nil
+                        bottom:nil
+                      trailing:self.view.trailingAnchor
+                       padding:vLocationBarVivaldiMenuItemPadding
+                          size:vLocationBarVivaldiMenuItemSize];
+  [vivaldiMenuButton centerYInSuperview];
+
+  UIButton* vivaldiShieldButton = [UIButton new];
+  _vivaldiShieldButton = vivaldiShieldButton;
+  UIImage* shieldImage = [UIImage imageNamed:vATBShield];
+  [vivaldiShieldButton setImage:shieldImage forState:UIControlStateNormal];
+  [vivaldiShieldButton addTarget:self.dispatcher
+                          action:@selector(showTrackerBlockerManager)
+                forControlEvents:UIControlEventTouchUpInside];
+  [self.view addSubview:vivaldiShieldButton];
+  [vivaldiShieldButton anchorTop:nil
+                         leading:self.view.leadingAnchor
+                          bottom:nil
+                        trailing:nil
+                            size:vLocationBarVivaldiMenuItemSize];
+  [vivaldiShieldButton centerYInSuperview];
+
+  self.locationBarSteadyView.backgroundColor =
+      [UIColor colorNamed:vSearchbarBackgroundColor];
+  [self.locationBarSteadyView anchorTop:self.view.topAnchor
+                                leading:nil
+                                 bottom:self.view.bottomAnchor
+                               trailing:nil];
+
+  self.locationBarSteadyViewLeadingConstraint =
+    [self.locationBarSteadyView.leadingAnchor
+     constraintEqualToAnchor:vivaldiShieldButton.trailingAnchor
+                    constant:vLocationBarSteadyViewLeadingPadding];
+
+  self.locationBarSteadyViewTrailingConstraint =
+    [self.locationBarSteadyView.trailingAnchor
+     constraintEqualToAnchor:vivaldiMenuButton.leadingAnchor
+                    constant:vLocationBarSteadyViewTrailingPadding];
+
+  self.locationBarSteadyViewLeadingConstraintNoShield =
+    [self.locationBarSteadyView.leadingAnchor
+     constraintEqualToAnchor:self.view.leadingAnchor];
+
+  self.locationBarSteadyViewTrailingConstraintNoMenu =
+    [self.locationBarSteadyView.trailingAnchor
+     constraintEqualToAnchor:self.view.trailingAnchor];
+
+  [self handleVivaldiMenuButtonVisibility];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:
+  (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  if (self.isDeviceIPad || !self.hasValidOrientation)
+    return;
+  [self handleVivaldiMenuButtonVisibility];
+}
+
+/// Device orientation change handler for Vivaldi.
+/// In landscape mode for iPhone, we won't show the Vivaldi menu and tracker
+/// blocker shield as they are part of toolbar more menu.
+- (void)handleVivaldiMenuButtonVisibility {
+  if (self.isDevicePortrait) {
+    self.vivaldiMenuButton.alpha = 1.0;
+    self.vivaldiShieldButton.alpha = 1.0;
+
+    [NSLayoutConstraint deactivateConstraints:@[
+      self.locationBarSteadyViewLeadingConstraintNoShield,
+      self.locationBarSteadyViewTrailingConstraintNoMenu
+    ]];
+
+    [NSLayoutConstraint activateConstraints:@[
+      self.locationBarSteadyViewLeadingConstraint,
+      self.locationBarSteadyViewTrailingConstraint
+    ]];
+  } else {
+    self.vivaldiMenuButton.alpha = 0.0;
+    self.vivaldiShieldButton.alpha = 0.0;
+
+    [NSLayoutConstraint deactivateConstraints:@[
+      self.locationBarSteadyViewLeadingConstraint,
+      self.locationBarSteadyViewTrailingConstraint
+    ]];
+
+    [NSLayoutConstraint activateConstraints:@[
+      self.locationBarSteadyViewLeadingConstraintNoShield,
+      self.locationBarSteadyViewTrailingConstraintNoMenu
+    ]];
+  }
+}
+
+- (LocationBarSteadyView*)steadyView {
+  return self.locationBarSteadyView;
+}
+// End Vivaldi
 
 @end

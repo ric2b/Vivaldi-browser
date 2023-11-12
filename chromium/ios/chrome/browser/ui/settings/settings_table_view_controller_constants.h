@@ -18,6 +18,10 @@ typedef NS_ENUM(NSInteger, SettingsSectionIdentifier) {
   SettingsSectionIdentifierInfo,
   SettingsSectionIdentifierDebug,
   SettingsSectionIdentifierDefaults,
+
+  // Vivaldi
+  SettingsSectionIdentifierVivaldiAccount,
+  SettingsSectionIdentifierVivaldiAppearance,
 };
 
 // Item types used per Setting section.
@@ -48,6 +52,12 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeSafetyCheck,
   SettingsItemTypeDefaultBrowser,
   SettingsItemTypeSigninDisabled,
+
+  // Vivaldi
+  SettingsItemTypeVivaldiSyncSettings,
+  SettingsItemTypeVivaldiTabsSettings,
+  SettingsItemTypeVivaldiStartPageLayoutSettings,
+  SettingsItemTypeVivaldiATBSettings,
 };
 
 // The accessibility identifier of the settings TableView.

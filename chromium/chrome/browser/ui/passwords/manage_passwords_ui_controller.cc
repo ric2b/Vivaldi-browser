@@ -13,10 +13,10 @@
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/autofill_assistant/password_change/apc_client.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -353,6 +353,11 @@ void ManagePasswordsUIController::ShowBiometricActivationConfirmation() {
   UpdateBubbleAndIconVisibility();
 }
 
+void ManagePasswordsUIController::OnBiometricAuthBeforeFillingDeclined() {
+  passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
+  UpdateBubbleAndIconVisibility();
+}
+
 void ManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
     std::vector<password_manager::PasswordForm> unsynced_credentials) {
   passwords_data_.ProcessUnsyncedCredentialsWillBeDeleted(
@@ -679,14 +684,6 @@ void ManagePasswordsUIController::NavigateToPasswordCheckup(
   password_manager::LogPasswordCheckReferrer(referrer);
 }
 
-void ManagePasswordsUIController::StartAutomatedPasswordChange(
-    const GURL& origin,
-    const std::u16string& username) {
-  ApcClient* apc_client = ApcClient::GetOrCreateForWebContents(web_contents());
-  // Start checks that no other run is ongoing, so we can always call it.
-  apc_client->Start(origin, base::UTF16ToUTF8(username), /*skip_login=*/true);
-}
-
 void ManagePasswordsUIController::EnableSync(const AccountInfo& account) {
   signin_ui_util::EnableSyncFromSingleAccountPromo(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()), account,
@@ -713,7 +710,7 @@ void ManagePasswordsUIController::OnLeakDialogHidden() {
 
 bool ManagePasswordsUIController::AuthenticateUser() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ManagePasswordsUIController::RequestAuthenticationAndReopenBubble,
@@ -895,7 +892,7 @@ void ManagePasswordsUIController::RequestAuthenticationAndReopenBubble() {
   base::WeakPtr<ManagePasswordsUIController> weak_ptr =
       weak_ptr_factory_.GetWeakPtr();
   bool auth_is_successful = ShowAuthenticationDialog();
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ManagePasswordsUIController::ReopenBubbleAfterAuth,
                      weak_ptr, auth_is_successful));

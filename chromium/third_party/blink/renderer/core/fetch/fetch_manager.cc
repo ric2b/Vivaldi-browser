@@ -292,6 +292,7 @@ class FetchManager::Loader final
   Member<SRIVerifier> integrity_verifier_;
   scoped_refptr<const DOMWrapperWorld> world_;
   Member<AbortSignal> signal_;
+  Member<AbortSignal::AlgorithmHandle> abort_handle_;
   Vector<KURL> url_list_;
   Member<ExecutionContext> execution_context_;
   Member<ScriptCachedMetadataHandler> cached_metadata_handler_;
@@ -313,6 +314,8 @@ FetchManager::Loader::Loader(ExecutionContext* execution_context,
       integrity_verifier_(nullptr),
       world_(std::move(world)),
       signal_(signal),
+      abort_handle_(signal->AddAlgorithm(
+          WTF::BindOnce(&Loader::Abort, WrapWeakPersistent(this)))),
       execution_context_(execution_context) {
   DCHECK(world_);
   url_list_.push_back(fetch_request_data->Url());
@@ -339,6 +342,7 @@ void FetchManager::Loader::Trace(Visitor* visitor) const {
   visitor->Trace(place_holder_body_);
   visitor->Trace(integrity_verifier_);
   visitor->Trace(signal_);
+  visitor->Trace(abort_handle_);
   visitor->Trace(execution_context_);
   visitor->Trace(cached_metadata_handler_);
   visitor->Trace(exception_);
@@ -392,6 +396,9 @@ void FetchManager::Loader::DidReceiveResponse(
        response.CurrentRequestUrl().GetPath() == url_list_.back().GetPath() &&
        response.CurrentRequestUrl().Query() == url_list_.back().Query()));
 
+  auto response_type = response.GetType();
+  DCHECK_NE(response_type, FetchResponseType::kError);
+
   ScriptState* script_state = resolver_->GetScriptState();
   ScriptState::Scope scope(script_state);
 
@@ -412,12 +419,19 @@ void FetchManager::Loader::DidReceiveResponse(
   FetchResponseData* response_data =
       FetchResponseData::CreateWithBuffer(BodyStreamBuffer::Create(
           script_state, place_holder_body_, signal_, cached_metadata_handler_));
+  if (!execution_context_ || execution_context_->IsContextDestroyed() ||
+      response.GetType() == FetchResponseType::kError) {
+    // BodyStreamBuffer::Create() may run scripts and cancel this request.
+    // Do nothing in such a case.
+    // See crbug.com/1373785 for more details.
+    return;
+  }
 
+  DCHECK_EQ(response_type, response.GetType());
   DCHECK(!(network_utils::IsRedirectResponseCode(response_http_status_code_) &&
            HasNonEmptyLocationHeader(response_data->HeaderList()) &&
            fetch_request_data_->Redirect() != RedirectMode::kManual));
 
-  auto response_type = response.GetType();
   if (network_utils::IsRedirectResponseCode(response_http_status_code_) &&
       fetch_request_data_->Redirect() == RedirectMode::kManual) {
     response_type = network::mojom::FetchResponseType::kOpaqueRedirect;
@@ -811,6 +825,8 @@ void FetchManager::Loader::PerformHTTPFetch() {
     UseCounter::Count(execution_context_, mojom::WebFeature::kFetchKeepalive);
   }
 
+  request.SetBrowsingTopics(fetch_request_data_->BrowsingTopics());
+
   request.SetOriginalDestination(fetch_request_data_->OriginalDestination());
 
   // "3. Append `Host`, ..."
@@ -954,8 +970,6 @@ ScriptPromise FetchManager::Fetch(ScriptState* script_state,
       MakeGarbageCollected<Loader>(GetExecutionContext(), this, resolver,
                                    request, &script_state->World(), signal);
   loaders_.insert(loader);
-  signal->AddAlgorithm(
-      WTF::BindOnce(&Loader::Abort, WrapWeakPersistent(loader)));
   // TODO(ricea): Reject the Response body with AbortError, not TypeError.
   loader->Start();
   return promise;

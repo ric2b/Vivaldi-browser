@@ -4,7 +4,6 @@
 # found in the LICENSE file.
 '''Assembles a Rust toolchain in-tree linked against in-tree LLVM.
 
-!!! DO NOT USE IN PRODUCTION
 Builds a Rust toolchain bootstrapped from an untrusted rustc build.
 
 Rust has an official boostrapping build. At a high level:
@@ -50,6 +49,7 @@ sys.path.append(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'clang',
                  'scripts'))
 
+from build import (AddCMakeToPath, RunCommand)
 from update import (CLANG_REVISION, CLANG_SUB_REVISION, LLVM_BUILD_DIR,
                     GetDefaultHostOs, RmTree, UpdatePackage)
 import build
@@ -65,7 +65,9 @@ RUST_SRC_DIR = os.path.join(THIRD_PARTY_DIR, 'rust_src', 'src')
 STAGE0_JSON_PATH = os.path.join(RUST_SRC_DIR, 'src', 'stage0.json')
 # Download crates.io dependencies to rust-src subdir (rather than $HOME/.cargo)
 CARGO_HOME_DIR = os.path.join(RUST_SRC_DIR, 'cargo-home')
-RUST_SRC_VERSION_FILE_PATH = os.path.join(RUST_SRC_DIR, 'src', 'version')
+RUST_SRC_VERSION_FILE_PATH = os.path.join(RUST_SRC_DIR, 'version')
+RUST_SRC_GIT_COMMIT_INFO_FILE_PATH = os.path.join(RUST_SRC_DIR,
+                                                  'git-commit-info')
 RUST_TOOLCHAIN_LIB_DIR = os.path.join(RUST_TOOLCHAIN_OUT_DIR, 'lib')
 RUST_TOOLCHAIN_SRC_DIST_DIR = os.path.join(RUST_TOOLCHAIN_LIB_DIR, 'rustlib',
                                            'src', 'rust')
@@ -99,17 +101,6 @@ EXCLUDED_TESTS = [
 ]
 
 
-def RunCommand(command, env=None, fail_hard=True):
-    print('Running', command)
-    if subprocess.run(command, env=env,
-                      shell=sys.platform == 'win32').returncode == 0:
-        return True
-    print('Failed.')
-    if fail_hard:
-        sys.exit(1)
-    return False
-
-
 def VerifyStage0JsonHash():
     hasher = hashlib.sha256()
     with open(STAGE0_JSON_PATH, 'rb') as input:
@@ -130,9 +121,12 @@ def Configure(llvm_libs_root):
     with open(RUST_CONFIG_TEMPLATE_PATH, 'r') as input:
         template = string.Template(input.read())
 
+    def quote_string(s: str):
+        return s.replace('\\', '\\\\').replace('"', '\\"')
+
     subs = {}
-    subs['INSTALL_DIR'] = RUST_TOOLCHAIN_OUT_DIR
-    subs['LLVM_ROOT'] = llvm_libs_root
+    subs['INSTALL_DIR'] = quote_string(str(RUST_TOOLCHAIN_OUT_DIR))
+    subs['LLVM_ROOT'] = quote_string(str(llvm_libs_root))
     subs['PACKAGE_VERSION'] = GetPackageVersionForBuild()
 
     # ...and apply substitutions, writing to config.toml in Rust tree.
@@ -142,40 +136,77 @@ def Configure(llvm_libs_root):
 
 def RunXPy(sub, args, gcc_toolchain_path, verbose):
     ''' Run x.py, Rust's build script'''
-    clang_path = os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')
     RUSTENV = collections.defaultdict(str, os.environ)
+
+    ##### For C/C++ compilation steps #####
+    # The Rust toolchain does include some C/C++ code, and these env vars
+    # control the compilation and library making for that code.
+
+    clang_path = os.path.join(LLVM_BUILD_DIR, 'bin')
+    if sys.platform == 'win32':
+        # The Rust toolchain build requires the use of link.exe already (it is
+        # the well-lit path, and we don't override the Rust linker when building
+        # the toolchain here), so we could use it for linking the small bits of
+        # C/C++ inside the Rust build too.
+        #
+        # That said, the `config.toml.template` file can override the linker for
+        # the Rust toolchain build.
+        #
+        # The `cc` crate wants to use link.exe by default for making static
+        # libs (the `AR` env var) but if clang-cl is being used to compile,
+        # then it wants to use llvm-lib.
+        #
+        # It's not totally clear if we ship llvm-lib, but it seems in practice
+        # that we have it available on the LLVM toolchain builders. Otherwise,
+        # we would need to use `lld-link /lib` and that doesn't work
+        # at the moment as the `cc` crate doesn't consume `ARFLAGS`:
+        # https://github.com/rust-lang/cc-rs/issues/762
+        #
+        # So, since we're using clang-cl, we point to `llvm-lib`, though we
+        # could equally let the `cc` crate find it (it looks in the same path
+        # as the compiler on Windows as of the time of this writing).
+        #
+        # We don't set a final linker with `LD`, as either the default works,
+        # or there are C executables or shared libs compiled during the Rust
+        # toolchain build.
+        RUSTENV['AR'] = os.path.join(clang_path, 'llvm-lib')
+        RUSTENV['CC'] = os.path.join(clang_path, 'clang-cl')
+        RUSTENV['CXX'] = os.path.join(clang_path, 'clang-cl')
+    else:
+        RUSTENV['AR'] = os.path.join(clang_path, 'llvm-ar')
+        RUSTENV['CC'] = os.path.join(clang_path, 'clang')
+        RUSTENV['CXX'] = os.path.join(clang_path, 'clang++')
+
+    if gcc_toolchain_path:
+        # We use these flags to avoid linking with the system libstdc++.
+        gcc_toolchain_flag = (f'--gcc-toolchain={gcc_toolchain_path}')
+        RUSTENV['CFLAGS'] += f' {gcc_toolchain_flag}'
+        RUSTENV['CXXFLAGS'] += f' {gcc_toolchain_flag}'
+        RUSTENV['LDFLAGS'] += f' {gcc_toolchain_flag}'
+
+    ##### For Rust compilation steps #####
+    # These env vars set arguments passed to the rust compiler when building
+    # Rust target.
+    #
+    # A `-Clink-arg=<foo>` arg passes `foo`` to the linker invovation.
+
+    RUSTENV['RUSTFLAGS_BOOTSTRAP'] = ''
+    if gcc_toolchain_path:
+        RUSTENV['RUSTFLAGS_BOOTSTRAP'] += f' -Clink-arg={gcc_toolchain_flag} '
+        RUSTENV['RUSTFLAGS_BOOTSTRAP'] += (
+            f' -L native={gcc_toolchain_path}/lib64')
+    RUSTENV['RUSTFLAGS_NOT_BOOTSTRAP'] = RUSTENV['RUSTFLAGS_BOOTSTRAP']
+
+    ##### Do the build now #####
+
     # Cargo normally stores files in $HOME. Override this.
     RUSTENV['CARGO_HOME'] = CARGO_HOME_DIR
-    RUSTENV['AR'] = os.path.join(LLVM_BUILD_DIR, 'bin', 'llvm-ar')
-    RUSTENV['CC'] = clang_path
-    RUSTENV['CXX'] = os.path.join(LLVM_BUILD_DIR, 'bin', 'clang++')
-    RUSTENV['LD'] = clang_path
-    # We use these flags to avoid linking with the system libstdc++.
-    gcc_toolchain_flag = (f'--gcc-toolchain={gcc_toolchain_path}'
-                          if gcc_toolchain_path else '')
-    # These affect how C/C++ files are compiled, but not Rust libs/exes.
-    RUSTENV['CFLAGS'] += f' {gcc_toolchain_flag}'
-    RUSTENV['CXXFLAGS'] += f' {gcc_toolchain_flag}'
-    RUSTENV['LDFLAGS'] += f' {gcc_toolchain_flag}'
-    # These affect how Rust crates are built. A `-Clink-arg=<foo>` arg passes
-    # foo to the clang invocation used to link.
-    #
-    # TODO(https://crbug.com/1281664): remove --no-gc-sections argument.
-    # Workaround for a bug causing std::env::args() to return an empty list,
-    # making Rust binaries unable to take command line arguments. Fix is landed
-    # upstream in LLVM but hasn't rolled into Chromium. Also see:
-    # * https://github.com/rust-lang/rust/issues/92181
-    # * https://reviews.llvm.org/D116528
-    RUSTENV['RUSTFLAGS_BOOTSTRAP'] = (
-        f'-Clinker={clang_path} -Clink-arg=-fuse-ld=lld '
-        f'-Clink-arg=-Wl,--no-gc-sections -Clink-arg={gcc_toolchain_flag} '
-        f'-L native={gcc_toolchain_path}/lib64')
-    RUSTENV['RUSTFLAGS_NOT_BOOTSTRAP'] = RUSTENV['RUSTFLAGS_BOOTSTRAP']
+
     os.chdir(RUST_SRC_DIR)
     cmd = [sys.executable, 'x.py', sub]
     if verbose and verbose > 0:
         cmd.append('-' + verbose * 'v')
-    RunCommand(cmd + args, env=RUSTENV)
+    RunCommand(cmd + args, msvc_arch='x64', env=RUSTENV)
 
 
 # Get arguments to run desired test suites, minus disabled tests.
@@ -185,6 +216,18 @@ def GetTestArgs():
         args.append('--skip')
         args.append(excluded)
     return args
+
+
+def GetVersionStamp():
+    # We must generate a version stamp that contains the expected `rustc
+    # --version` output. This contains the Rust release version, git commit data
+    # that the nightly tarball was generated from, and chromium-specific package
+    # information.
+    with open(RUST_SRC_VERSION_FILE_PATH) as version_file:
+        rust_version = version_file.readline().rstrip()
+
+    return ('rustc %s (%s chromium)\n' %
+            (rust_version, GetPackageVersionForBuild()))
 
 
 def main():
@@ -247,13 +290,17 @@ def main():
     if args.fetch_llvm_libs:
         UpdatePackage('clang-libs', GetDefaultHostOs())
 
-    # Fetch GCC package to build against same libstdc++ as Clang. This function
-    # will only download it if necessary.
     args.gcc_toolchain = None
-    build.MaybeDownloadHostGcc(args)
+    if sys.platform.startswith('linux'):
+        # Fetch GCC package to build against same libstdc++ as Clang. This
+        # function will only download it if necessary, and it will set the
+        # `args.gcc_toolchain` if so.
+        build.MaybeDownloadHostGcc(args)
 
     # Set up config.toml in Rust source tree to configure build.
     Configure(llvm_libs_root)
+
+    AddCMakeToPath()
 
     if args.run_xpy:
         if rest[0] == '--':
@@ -294,12 +341,8 @@ def main():
 
     RunXPy('install', DISTRIBUTION_ARTIFACTS, args.gcc_toolchain, args.verbose)
 
-    # Write expected `rustc --version` string to our toolchain directory.
-    with open(RUST_SRC_VERSION_FILE_PATH) as version_file:
-        rust_version = version_file.readline().rstrip()
     with open(VERSION_STAMP_PATH, 'w') as stamp:
-        stamp.write('rustc %s-dev (%s chromium)\n' %
-                    (rust_version, GetPackageVersionForBuild()))
+        stamp.write(GetVersionStamp())
 
     return 0
 

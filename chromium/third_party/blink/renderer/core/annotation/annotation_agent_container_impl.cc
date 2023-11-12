@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/annotation/annotation_agent_container_impl.h"
 
 #include "base/callback.h"
+#include "base/trace_event/typed_macros.h"
 #include "components/shared_highlighting/core/common/disabled_sites.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_generator.h"
@@ -19,6 +20,17 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 
 namespace blink {
+
+namespace {
+const char* ToString(mojom::blink::AnnotationType type) {
+  switch (type) {
+    case mojom::blink::AnnotationType::kSharedHighlight:
+      return "SharedHighlight";
+    case mojom::blink::AnnotationType::kUserNote:
+      return "UserNote";
+  }
+}
+}  // namespace
 
 // static
 const char AnnotationAgentContainerImpl::kSupplementName[] =
@@ -80,6 +92,26 @@ void AnnotationAgentContainerImpl::Trace(Visitor* visitor) const {
   Supplement<Document>::Trace(visitor);
 }
 
+void AnnotationAgentContainerImpl::FinishedParsing() {
+  TRACE_EVENT("blink", "AnnotationAgentContainerImpl::FinishedParsing",
+              "num_agents", agents_.size());
+  for (auto& agent : agents_) {
+    // TODO(crbug.com/1379741): Don't try attaching shared highlights like
+    // this. Their lifetime is currently owned by TextFragmentAnchor which is
+    // driven by the document lifecycle. Attach() itself may perform lifecycle
+    // updates and has safeguards to prevent reentrancy so it's important to
+    // not call Attach outside of that process. See also: comment in
+    // Document::ApplyScrollRestorationLogic. Eventually we'd like to move the
+    // lifecycle management of shared highlight annotations out of
+    // TextFragmentAnchor. When that happens we can remove this exception.
+    if (agent->GetType() == mojom::blink::AnnotationType::kSharedHighlight)
+      continue;
+
+    if (!agent->DidTryAttach())
+      agent->Attach();
+  }
+}
+
 AnnotationAgentImpl* AnnotationAgentContainerImpl::CreateUnboundAgent(
     mojom::blink::AnnotationType type,
     AnnotationSelector& selector) {
@@ -125,6 +157,8 @@ void AnnotationAgentContainerImpl::CreateAgent(
     mojo::PendingReceiver<mojom::blink::AnnotationAgent> agent_receiver,
     mojom::blink::AnnotationType type,
     const String& serialized_selector) {
+  TRACE_EVENT("blink", "AnnotationAgentContainerImpl::CreateAgent", "type",
+              ToString(type), "selector", serialized_selector);
   DCHECK(GetSupplementable());
 
   AnnotationSelector* selector =
@@ -134,14 +168,26 @@ void AnnotationAgentContainerImpl::CreateAgent(
   // will see as a disconnect.
   // TODO(bokan): We could support more graceful fallback/error reporting by
   // calling an error method on the host.
-  if (!selector)
+  if (!selector) {
+    TRACE_EVENT_INSTANT("blink", "Failed to deserialize selector");
     return;
+  }
 
   auto* agent_impl = MakeGarbageCollected<AnnotationAgentImpl>(
       *this, type, *selector, PassKey());
   agents_.insert(agent_impl);
   agent_impl->Bind(std::move(host_remote), std::move(agent_receiver));
-  agent_impl->Attach();
+
+  Document& document = *GetSupplementable();
+
+  // We may have received this message before the document finishes parsing.
+  // Postpone attachment for now; these agents will try attaching when the
+  // document finishes parsing.
+  if (document.HasFinishedParsing()) {
+    agent_impl->Attach();
+  } else {
+    TRACE_EVENT_INSTANT("blink", "Waiting on parse to attach");
+  }
 }
 
 void AnnotationAgentContainerImpl::CreateAgentFromSelection(

@@ -20,6 +20,8 @@
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/commerce/price_notifications/price_notifications_tab_helper.h"
+#import "ios/chrome/browser/commerce/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/download/download_directory_util.h"
 #import "ios/chrome/browser/download/external_app_util.h"
 #import "ios/chrome/browser/download/pass_kit_tab_helper.h"
@@ -41,7 +43,6 @@
 #import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/ssl/captive_portal_tab_helper.h"
 #import "ios/chrome/browser/store_kit/store_kit_coordinator.h"
-#import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/sync/sync_error_browser_agent.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
@@ -57,6 +58,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_coordinator.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
+#import "ios/chrome/browser/ui/browser_view/browser_coordinator+private.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+delegates.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+private.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
@@ -83,6 +85,7 @@
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/ui/commands/web_content_commands.h"
 #import "ios/chrome/browser/ui/commands/whats_new_commands.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_coordinator.h"
@@ -106,7 +109,9 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/lens/lens_coordinator.h"
+#import "ios/chrome/browser/ui/main/browser_interface_provider.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/open_in/features.h"
@@ -118,6 +123,7 @@
 #import "ios/chrome/browser/ui/passwords/password_suggestion_coordinator.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/presenters/vertical_animation_container.h"
+#import "ios/chrome/browser/ui/price_notifications/price_notifications_iph_coordinator.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_view_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_coordinator.h"
@@ -173,27 +179,39 @@
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
+#import "third_party/abseil-cpp/absl/types/optional.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
 #import "ios/panel/panel_interaction_controller.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
+namespace {
+
 // Duration of the toolbar animation.
 constexpr base::TimeDelta kLegacyFullscreenControllerToolbarAnimationDuration =
     base::Milliseconds(300);
 
 // URL to share when user selects "Share Chrome"
-const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
+const char kChromeAppStoreUrl[] = "https://google.com/chrome/go-mobile";
 
-@interface BrowserCoordinator () <ActivityServiceCommands,
-                                  BrowserCoordinatorCommands,
+// Enum for toolbar to present.
+enum class ToolbarKind {
+  kTextZoom,
+  kFindInPage,
+};
+
+}  // anonymous namespace
+
+@interface BrowserCoordinator () <BrowserCoordinatorCommands,
                                   CRWWebStateObserver,
                                   DefaultBrowserPromoCommands,
                                   DefaultPromoNonModalPresentationDelegate,
@@ -217,6 +235,7 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
                                   SnapshotGeneratorDelegate,
                                   ToolbarAccessoryCoordinatorDelegate,
                                   URLLoadingDelegate,
+                                  WebContentCommands,
                                   WebStateListObserving,
                                   WebNavigationNTPDelegate>
 
@@ -290,9 +309,6 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 // The coordinator that manages net export.
 @property(nonatomic, strong) NetExportCoordinator* netExportCoordinator;
 
-// Weak reference for the next coordinator to be displayed over the toolbar.
-@property(nonatomic, weak) ChromeCoordinator* nextToolbarCoordinator;
-
 // Coordinator for Page Info UI.
 @property(nonatomic, strong) ChromeCoordinator* pageInfoCoordinator;
 
@@ -314,6 +330,10 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 // Coordinator for the password suggestion UI presentation.
 @property(nonatomic, strong)
     PasswordSuggestionCoordinator* passwordSuggestionCoordinator;
+
+// Coordinator for the price notifications IPH feature.
+@property(nonatomic, strong)
+    PriceNotificationsIPHCoordinator* priceNotificationsIPHCoordinator;
 
 // Coordinator for the price notifications UI presentation.
 @property(nonatomic, strong)
@@ -419,6 +439,8 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   id<HelpCommands> _helpHandler;
   id<PopupMenuCommands> _popupMenuCommandsHandler;
   id<SnackbarCommands> _snackbarCommandsHandler;
+  absl::optional<ToolbarKind> _nextToolbarToPresent;
+
 
   // Vivaldi
   PanelInteractionController* _panelInteractionController;
@@ -510,7 +532,7 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
                            dismissOmnibox:(BOOL)dismissOmnibox {
   [self.passKitCoordinator stop];
 
-  [self.openInCoordinator disableAll];
+  [self.openInCoordinator dismissAll];
 
   [self.printController dismissAnimated:YES];
 
@@ -635,6 +657,7 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
     @protocol(PolicyChangeCommands),
     @protocol(PriceNotificationsCommands),
     @protocol(TextZoomCommands),
+    @protocol(WebContentCommands),
   ];
 
   for (Protocol* protocol in protocols) {
@@ -680,6 +703,8 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
       [[BubblePresenter alloc] initWithBrowserState:browserState];
   _bubblePresenter.toolbarHandler =
       HandlerForProtocol(_dispatcher, ToolbarCommands);
+  _bubblePresenter.layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
   [_dispatcher startDispatchingToTarget:_bubblePresenter
                             forProtocol:@protocol(HelpCommands)];
 
@@ -731,6 +756,15 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   _primaryToolbarCoordinator.longPressDelegate = self.popupMenuCoordinator;
   _secondaryToolbarCoordinator.longPressDelegate = self.popupMenuCoordinator;
 
+  if (IsVivaldiRunning()) {
+    _legacyTabStripCoordinator =
+        [[TabStripLegacyCoordinator alloc] initWithBrowser:self.browser];
+    _legacyTabStripCoordinator.longPressDelegate = self.popupMenuCoordinator;
+    _legacyTabStripCoordinator.animationWaitDuration =
+        kLegacyFullscreenControllerToolbarAnimationDuration.InSecondsF();
+
+    [_sideSwipeController setTabStripDelegate:_legacyTabStripCoordinator];
+  } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     if (base::FeatureList::IsEnabled(kModernTabStrip)) {
       _tabStripCoordinator =
@@ -745,6 +779,7 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
       [_sideSwipeController setTabStripDelegate:_legacyTabStripCoordinator];
     }
   }
+  } // End Vivaldi
 
   _ntpCoordinator =
       [[NewTabPageCoordinator alloc] initWithBrowser:self.browser];
@@ -796,8 +831,6 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 }
 
 - (void)updateViewControllerDependencies {
-  _keyCommandsProvider.baseViewController = self.viewController;
-
   _bookmarkInteractionController.parentController = self.viewController;
 
   // Vivaldi
@@ -814,14 +847,17 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
   self.popupMenuCoordinator.baseViewController = self.viewController;
 
+  // The Lens coordinator needs to be started before the primary toolbar
+  // coordinator so that the LensCommands dispatcher is correctly registered in
+  // time.
+  _lensCoordinator.baseViewController = self.viewController;
+  [_lensCoordinator start];
+
   _primaryToolbarCoordinator.delegate = self.viewController;
   _primaryToolbarCoordinator.popupPresenterDelegate = self.viewController;
   [_primaryToolbarCoordinator start];
 
   _ntpCoordinator.baseViewController = self.viewController;
-
-  _lensCoordinator.baseViewController = self.viewController;
-  [_lensCoordinator start];
 
   [_dispatcher startDispatchingToTarget:self.viewController
                             forProtocol:@protocol(BrowserCommands)];
@@ -920,10 +956,6 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
                                                    browser:self.browser];
   [self.vcardCoordinator start];
 
-  self.passKitCoordinator =
-      [[PassKitCoordinator alloc] initWithBaseViewController:self.viewController
-                                                     browser:self.browser];
-
   self.printController =
       [[PrintController alloc] initWithBaseViewController:self.viewController];
 
@@ -961,20 +993,14 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
   /* SharingCoordinator is created and started by an ActivityServiceCommand */
 
-  self.storeKitCoordinator = [[StoreKitCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser];
-
   self.addCreditCardCoordinator = [[AutofillAddCreditCardCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];
 
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    self.safeBrowsingCoordinator = [[SafeBrowsingCoordinator alloc]
-        initWithBaseViewController:self.viewController
-                           browser:self.browser];
-    [self.safeBrowsingCoordinator start];
-  }
+  self.safeBrowsingCoordinator = [[SafeBrowsingCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  [self.safeBrowsingCoordinator start];
 
   self.textFragmentsCoordinator = [[TextFragmentsCoordinator alloc]
       initWithBaseViewController:self.viewController
@@ -1010,6 +1036,14 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   [self.infobarBannerOverlayContainerCoordinator start];
   self.viewController.infobarBannerOverlayContainerViewController =
       self.infobarBannerOverlayContainerCoordinator.viewController;
+
+  if (IsPriceNotificationsEnabled()) {
+    self.priceNotificationsIPHCoordinator =
+        [[PriceNotificationsIPHCoordinator alloc]
+            initWithBaseViewController:self.viewController
+                               browser:self.browser];
+    [self.priceNotificationsIPHCoordinator start];
+  }
 }
 
 // Stops child coordinators.
@@ -1074,12 +1108,8 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   [self.sadTabCoordinator disconnect];
   self.sadTabCoordinator = nil;
 
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    [self.safeBrowsingCoordinator stop];
-    self.safeBrowsingCoordinator = nil;
-  } else {
-    DCHECK(!self.safeBrowsingCoordinator);
-  }
+  [self.safeBrowsingCoordinator stop];
+  self.safeBrowsingCoordinator = nil;
 
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
@@ -1123,6 +1153,9 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   [self.passwordSettingsCoordinator stop];
   self.passwordSettingsCoordinator.delegate = nil;
   self.passwordSettingsCoordinator = nil;
+
+  [self.priceNotificationsIPHCoordinator stop];
+  self.priceNotificationsIPHCoordinator = nil;
 }
 
 // Starts mediators owned by this coordinator.
@@ -1268,7 +1301,8 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
   // Vivaldi
   if (vivaldi::IsVivaldiRunning()) {
-      [_panelInteractionController presentPanel:PanelPage::BookmarksPage];
+      [_panelInteractionController presentPanel:PanelPage::BookmarksPage
+                               withSearchString:nil];
       return;
   }
   // End Vivaldi
@@ -1278,7 +1312,12 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
 // Vivaldi
 - (void)showNotesManager {
-  [_panelInteractionController presentPanel:PanelPage::NotesPage];
+  [_panelInteractionController presentPanel:PanelPage::NotesPage
+                           withSearchString:nil];
+}
+
+- (void)showPanel {
+  [self showBookmarksManager];
 }
 // End Vivaldi
 
@@ -1506,20 +1545,27 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   if (!self.canShowFindBar)
     return;
 
-  self.findBarCoordinator =
-      [[FindBarCoordinator alloc] initWithBaseViewController:self.viewController
-                                                     browser:self.browser];
-  self.findBarCoordinator.presenter = _toolbarAccessoryPresenter;
-  self.findBarCoordinator.delegate = self;
-  self.findBarCoordinator.presentationDelegate = self.viewController;
-
   if (_toolbarAccessoryPresenter.isPresenting) {
-    self.nextToolbarCoordinator = self.findBarCoordinator;
+    _nextToolbarToPresent = ToolbarKind::kFindInPage;
     [self closeTextZoom];
     return;
   }
 
-  [self.findBarCoordinator start];
+  FindBarCoordinator* findBarCoordinator = self.findBarCoordinator;
+  if (findBarCoordinator) {
+    [findBarCoordinator stop];
+    self.findBarCoordinator = nil;
+  }
+
+  findBarCoordinator =
+      [[FindBarCoordinator alloc] initWithBaseViewController:self.viewController
+                                                     browser:self.browser];
+  self.findBarCoordinator = findBarCoordinator;
+
+  findBarCoordinator.presenter = _toolbarAccessoryPresenter;
+  findBarCoordinator.delegate = self;
+  findBarCoordinator.presentationDelegate = self.viewController;
+  [findBarCoordinator start];
 }
 
 - (void)closeFindInPage {
@@ -1657,9 +1703,14 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   if (base::FeatureList::IsEnabled(
           password_manager::features::kIOSPasswordUISplit)) {
     DCHECK(!self.passwordSettingsCoordinator);
+
+    // Use main browser to open the password settings.
+    SceneState* sceneState =
+        SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
     self.passwordSettingsCoordinator = [[PasswordSettingsCoordinator alloc]
         initWithBaseViewController:self.viewController
-                           browser:self.browser];
+                           browser:sceneState.interfaceProvider.mainInterface
+                                       .browser];
     self.passwordSettingsCoordinator.delegate = self;
     [self.passwordSettingsCoordinator start];
   } else {
@@ -1704,47 +1755,68 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
 - (void)toolbarAccessoryCoordinatorDidDismissUI:
     (ChromeCoordinator*)coordinator {
-  if (!self.nextToolbarCoordinator) {
+  if (self.findBarCoordinator) {
+    [self.findBarCoordinator stop];
+    self.findBarCoordinator = nil;
+  }
+
+  if (self.textZoomCoordinator) {
+    [self.textZoomCoordinator stop];
+    self.textZoomCoordinator = nil;
+  }
+
+  if (!_nextToolbarToPresent.has_value()) {
     return;
   }
-  if (self.nextToolbarCoordinator == self.findBarCoordinator) {
-    [self openFindInPage];
-    self.nextToolbarCoordinator = nil;
-  } else if (self.nextToolbarCoordinator == self.textZoomCoordinator) {
-    [self openTextZoom];
-    self.nextToolbarCoordinator = nil;
+
+  const ToolbarKind nextToolbarToPresent = *_nextToolbarToPresent;
+  _nextToolbarToPresent = absl::nullopt;
+
+  switch (nextToolbarToPresent) {
+    case ToolbarKind::kTextZoom:
+      [self openTextZoom];
+      break;
+
+    case ToolbarKind::kFindInPage:
+      [self openFindInPage];
+      break;
   }
 }
 
 #pragma mark - TextZoomCommands
 
 - (void)openTextZoom {
-  self.textZoomCoordinator = [[TextZoomCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser];
-  self.textZoomCoordinator.presenter = _toolbarAccessoryPresenter;
-  self.textZoomCoordinator.delegate = self;
-
   if (_toolbarAccessoryPresenter.isPresenting) {
-    self.nextToolbarCoordinator = self.textZoomCoordinator;
+    _nextToolbarToPresent = ToolbarKind::kTextZoom;
     [self closeFindInPage];
     return;
   }
 
-  [self.textZoomCoordinator start];
+  TextZoomCoordinator* textZoomCoordinator = self.textZoomCoordinator;
+  if (textZoomCoordinator) {
+    [textZoomCoordinator stop];
+    self.textZoomCoordinator = nil;
+  }
+
+  textZoomCoordinator = [[TextZoomCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  self.textZoomCoordinator = textZoomCoordinator;
+
+  textZoomCoordinator.presenter = _toolbarAccessoryPresenter;
+  textZoomCoordinator.delegate = self;
+  [textZoomCoordinator start];
 }
 
 - (void)closeTextZoom {
-  if (!ios::provider::IsTextZoomEnabled()) {
-    return;
-  }
-
   web::WebState* currentWebState =
       self.browser->GetWebStateList()->GetActiveWebState();
   if (currentWebState) {
-    FontSizeTabHelper* fontSizeTabHelper =
-        FontSizeTabHelper::FromWebState(currentWebState);
-    fontSizeTabHelper->SetTextZoomUIActive(false);
+    if (ios::provider::IsTextZoomEnabled()) {
+      FontSizeTabHelper* fontSizeTabHelper =
+          FontSizeTabHelper::FromWebState(currentWebState);
+      fontSizeTabHelper->SetTextZoomUIActive(false);
+    }
   }
   [self.textZoomCoordinator stop];
 }
@@ -1946,19 +2018,11 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
         self.viewController);
   }
 
-  PassKitTabHelper::FromWebState(webState)->SetDelegate(
-      self.passKitCoordinator);
-
   if (PrintTabHelper::FromWebState(webState)) {
     PrintTabHelper::FromWebState(webState)->set_printer(self.printController);
   }
 
   RepostFormTabHelper::FromWebState(webState)->SetDelegate(self);
-
-  if (StoreKitTabHelper::FromWebState(webState)) {
-    StoreKitTabHelper::FromWebState(webState)->SetLauncher(
-        self.storeKitCoordinator);
-  }
 
   FollowTabHelper* followTabHelper = FollowTabHelper::FromWebState(webState);
   if (followTabHelper) {
@@ -1981,6 +2045,13 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
     AnnotationsTabHelper::FromWebState(webState)->SetBaseViewController(
         self.viewController);
   }
+
+  PriceNotificationsTabHelper* priceNotificationsTabHelper =
+      PriceNotificationsTabHelper::FromWebState(webState);
+  if (priceNotificationsTabHelper) {
+    priceNotificationsTabHelper->SetPriceNotificationsIPHPresenter(
+        self.priceNotificationsIPHCoordinator);
+  }
 }
 
 // Uninstalls delegates for `webState`.
@@ -1994,17 +2065,11 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
     AutofillTabHelper::FromWebState(webState)->SetBaseViewController(nil);
   }
 
-  PassKitTabHelper::FromWebState(webState)->SetDelegate(nil);
-
   if (PrintTabHelper::FromWebState(webState)) {
     PrintTabHelper::FromWebState(webState)->set_printer(nil);
   }
 
   RepostFormTabHelper::FromWebState(webState)->SetDelegate(nil);
-
-  if (StoreKitTabHelper::FromWebState(webState)) {
-    StoreKitTabHelper::FromWebState(webState)->SetLauncher(nil);
-  }
 
   FollowTabHelper* followTabHelper = FollowTabHelper::FromWebState(webState);
   if (followTabHelper) {
@@ -2022,6 +2087,12 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
   if (AnnotationsTabHelper::FromWebState(webState)) {
     AnnotationsTabHelper::FromWebState(webState)->SetBaseViewController(nil);
+  }
+
+  PriceNotificationsTabHelper* priceNotificationsTabHelper =
+      PriceNotificationsTabHelper::FromWebState(webState);
+  if (priceNotificationsTabHelper) {
+    priceNotificationsTabHelper->SetPriceNotificationsIPHPresenter(nil);
   }
 }
 
@@ -2095,6 +2166,10 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
   [self.priceNotificationsViewCoordiantor stop];
 }
 
+- (void)presentPriceNotificationsWhileBrowsingIPH {
+  [_bubblePresenter presentPriceNotificationsWhileBrowsingTipBubble];
+}
+
 #pragma mark - PolicyChangeCommands
 
 - (void)showForceSignedOutPrompt {
@@ -2140,6 +2215,30 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
                      [weakSelf showRestrictAccountSignedOutPrompt];
                    });
   }
+}
+
+#pragma mark - WebContentCommands
+
+- (void)showAppStoreWithParameters:(NSDictionary*)productParameters {
+  self.storeKitCoordinator = [[StoreKitCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  self.storeKitCoordinator.iTunesProductParameters = productParameters;
+  [self.storeKitCoordinator start];
+}
+
+- (void)showDialogForPassKitPass:(PKPass*)pass {
+  if (self.passKitCoordinator.pass) {
+    // Another pass is being displayed -- early return (this is unexpected).
+    return;
+  }
+
+  self.passKitCoordinator =
+      [[PassKitCoordinator alloc] initWithBaseViewController:self.viewController
+                                                     browser:self.browser];
+
+  self.passKitCoordinator.pass = pass;
+  [self.passKitCoordinator start];
 }
 
 #pragma mark - DefaultBrowserPromoNonModalCommands
@@ -2294,6 +2393,12 @@ const char kChromeAppStoreUrl[] = "https://apps.apple.com/app/id535886823";
 
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   if (NTPHelper && NTPHelper->IsActive()) {
+
+    // Vivaldi: We will always return zero inset since we will always have the
+    // location bar on top.
+    if (IsVivaldiRunning())
+      return UIEdgeInsetsZero; // End Vivaldi
+
     BOOL canShowTabStrip = IsRegularXRegularSizeClass(self.viewController);
     // If the NTP is active, then it's used as the base view for snapshotting.
     // When the tab strip is visible, or for the incognito NTP, the NTP is laid

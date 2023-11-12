@@ -132,8 +132,8 @@ bool IsCrxWebstoreOrDownloadUrl(const GURL& effective_url) {
       "https://chrome.google.com/webstore/download/"};
 
   // Chrome Webstore.
-  if (extension_urls::GetWebstoreLaunchURL().host() ==
-      url_matcher::util::Normalize(effective_url).host()) {
+  if (extension_urls::IsWebstoreDomain(
+          url_matcher::util::Normalize(effective_url))) {
     return true;
   }
 
@@ -314,6 +314,19 @@ bool SupervisedUserURLFilter::HostMatchesPattern(
   }
 
   return trimmed_host == trimmed_pattern;
+}
+
+// Static.
+std::string SupervisedUserURLFilter::WebFilterTypeToDisplayString(
+    WebFilterType web_filter_type) {
+  switch (web_filter_type) {
+    case WebFilterType::kAllowAllSites:
+      return "allow_all_sites";
+    case WebFilterType::kCertainSites:
+      return "allow_certain_sites";
+    case WebFilterType::kTryToBlockMatureSites:
+      return "block_mature_sites";
+  }
 }
 
 SupervisedUserURLFilter::FilteringBehavior

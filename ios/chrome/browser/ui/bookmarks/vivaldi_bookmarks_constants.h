@@ -17,18 +17,10 @@ extern NSString* vBookmarkFolderSelectionChevron;
 extern NSString* vBookmarkFolderSelectionCheckmark;
 // Image name for add folder
 extern NSString* vBookmarkAddFolder;
-// Image name for bookmark text field delete button
-extern NSString* vBookmarkTextfieldDeleteIcon;
 
 #pragma mark - COLOR
 // Underline color for bookmark text field underline
 extern NSString* vBookmarkTextFieldUnderlineColor;
-
-#pragma mark - NOTIFICATION
-// Notification name for bookmark data source update
-extern NSString* vBookmarkDataSourceDidChange;
-// Notification name for bookmark moved out of folder event
-extern NSString* vBookmarkDidMoveOutOfFolder;
 
 #pragma mark - SIZE
 // Corner radius for the bookmark body containr view

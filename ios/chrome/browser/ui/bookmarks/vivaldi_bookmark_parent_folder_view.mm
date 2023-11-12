@@ -5,10 +5,11 @@
 #import "UIKit/UIKit.h"
 
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -93,7 +94,7 @@ CGFloat speedDialSelectionViewHiddenHeight = 0.f;
   UILabel* titleLabel = [[UILabel alloc] init];
   _titleLabel = titleLabel;
   titleLabel.textColor = [UIColor colorNamed:vNTPToolbarTextColor];
-  titleLabel.font = [UIFont systemFontOfSize:vBody2FontSize];
+  titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   titleLabel.numberOfLines = 1;
   titleLabel.textAlignment = NSTextAlignmentLeft;
 
@@ -141,8 +142,8 @@ CGFloat speedDialSelectionViewHiddenHeight = 0.f;
   // Folder Name label
   UILabel* folderNameLabel = [UILabel new];
   _folderNameLabel = folderNameLabel;
-  folderNameLabel.textColor = [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
-  folderNameLabel.font = [UIFont systemFontOfSize:vBodyFontSize];
+  folderNameLabel.textColor = UIColor.labelColor;
+  folderNameLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   folderNameLabel.numberOfLines = 1;
   folderNameLabel.textAlignment = NSTextAlignmentLeft;
 
@@ -203,7 +204,8 @@ CGFloat speedDialSelectionViewHiddenHeight = 0.f;
   speedDialSelectionLabel.accessibilityLabel = titleString;
   speedDialSelectionLabel.textColor =
     [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
-  speedDialSelectionLabel.font = [UIFont systemFontOfSize:vBodyFontSize];
+  speedDialSelectionLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   speedDialSelectionLabel.numberOfLines = 1;
   speedDialSelectionLabel.textAlignment = NSTextAlignmentLeft;
 

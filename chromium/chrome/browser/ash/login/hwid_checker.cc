@@ -15,7 +15,7 @@
 #include "base/system/sys_info.h"
 #include "build/branding_buildflags.h"
 #include "chrome/common/chrome_switches.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "content/public/common/content_switches.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "third_party/zlib/zlib.h"
@@ -172,13 +172,14 @@ bool IsMachineHWIDCorrect() {
   if (stats->IsRunningOnVm())
     return true;
 
-  std::string hwid;
-  if (!stats->GetMachineStatistic(chromeos::system::kHardwareClassKey, &hwid)) {
+  const absl::optional<base::StringPiece> hwid =
+      stats->GetMachineStatistic(chromeos::system::kHardwareClassKey);
+  if (!hwid) {
     LOG(ERROR) << "Couldn't get machine statistic 'hardware_class'.";
     return false;
   }
-  if (!IsHWIDCorrect(hwid)) {
-    LOG(ERROR) << "Machine has malformed HWID '" << hwid << "'. ";
+  if (!IsHWIDCorrect(std::string(hwid.value()))) {
+    LOG(ERROR) << "Machine has malformed HWID '" << hwid.value() << "'. ";
     return false;
   }
 #endif

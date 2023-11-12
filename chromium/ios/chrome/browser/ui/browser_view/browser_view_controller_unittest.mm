@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/lens/lens_browser_agent.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/prerender/fake_prerender_service.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -25,7 +26,7 @@
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/test_session_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/authentication_service_fake.h"
+#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
@@ -35,6 +36,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/page_info_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
@@ -46,10 +48,12 @@
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_coordinator.h"
+#import "ios/chrome/browser/ui/tabs/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_adaptor.h"
+#import "ios/chrome/browser/url_loading/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
@@ -65,6 +69,7 @@
 #import "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
+#import "ui/base/device_form_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -114,11 +119,12 @@ class BrowserViewControllerTest : public BlockCleanupTest {
         ios::BookmarkModelFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        base::BindRepeating(
-            &AuthenticationServiceFake::CreateAuthenticationService));
+        AuthenticationServiceFactory::GetDefaultFactory());
 
     chrome_browser_state_ = test_cbs_builder.Build();
-
+    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
+        chrome_browser_state_.get(),
+        std::make_unique<FakeAuthenticationServiceDelegate>());
     id passKitController =
         [OCMockObject niceMockForClass:[PKAddPassesViewController class]];
     passKitViewController_ = passKitController;
@@ -126,6 +132,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
     WebUsageEnablerBrowserAgent::CreateForBrowser(browser_.get());
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
+    LensBrowserAgent::CreateForBrowser(browser_.get());
     WebNavigationBrowserAgent::CreateForBrowser(browser_.get());
 
     WebUsageEnablerBrowserAgent::FromBrowser(browser_.get())
@@ -148,6 +155,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
         OCMProtocolMock(@protocol(FindInPageCommands));
     [dispatcher startDispatchingToTarget:mockFindInPageCommandHandler
                              forProtocol:@protocol(FindInPageCommands)];
+    id mockLensCommandHandler = OCMProtocolMock(@protocol(LensCommands));
+    [dispatcher startDispatchingToTarget:mockLensCommandHandler
+                             forProtocol:@protocol(LensCommands)];
     id mockTextZoomCommandHandler =
         OCMProtocolMock(@protocol(TextZoomCommands));
     [dispatcher startDispatchingToTarget:mockTextZoomCommandHandler
@@ -279,6 +289,35 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     return browser_->GetWebStateList()->GetActiveWebState();
   }
 
+  void InsertWebState(std::unique_ptr<web::WebState> web_state) {
+    WebStateList* web_state_list = browser_->GetWebStateList();
+    web_state_list->InsertWebState(0, std::move(web_state),
+                                   WebStateList::INSERT_ACTIVATE,
+                                   WebStateOpener());
+  }
+
+  std::unique_ptr<web::WebState> CreateWebState() {
+    web::WebState::CreateParams params(chrome_browser_state_.get());
+    auto web_state = web::WebState::Create(params);
+    AttachTabHelpers(web_state.get(), NO);
+    return web_state;
+  }
+
+  void ExpectNewTabInsertionAnimation(bool animated, ProceduralBlock block) {
+    id mock_animation_view_class =
+        OCMClassMock([ForegroundTabAnimationView class]);
+
+    if (animated) {
+      OCMExpect([mock_animation_view_class alloc]);
+    } else {
+      [[mock_animation_view_class reject] alloc];
+    }
+
+    block();
+
+    [mock_animation_view_class verify];
+  }
+
   MOCK_METHOD0(OnCompletionCalled, void());
 
   web::WebTaskEnvironment task_environment_;
@@ -341,6 +380,26 @@ TEST_F(BrowserViewControllerTest, UpdateWebStateVisibility) {
   EXPECT_EQ(web_state_list->GetWebStateAt(0)->IsVisible(), false);
   EXPECT_EQ(web_state_list->GetWebStateAt(1)->IsVisible(), false);
   EXPECT_EQ(web_state_list->GetWebStateAt(2)->IsVisible(), true);
+}
+
+TEST_F(BrowserViewControllerTest, didInsertWebStateWithAnimation) {
+  // Animation is only expected on iPhone, not iPad.
+  bool animation_expected =
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
+  ExpectNewTabInsertionAnimation(animation_expected, ^{
+    auto web_state = CreateWebState();
+    InsertWebState(std::move(web_state));
+  });
+}
+
+TEST_F(BrowserViewControllerTest, didInsertWebStateWithoutAnimation) {
+  ExpectNewTabInsertionAnimation(false, ^{
+    auto web_state = CreateWebState();
+    NewTabAnimationTabHelper::CreateForWebState(web_state.get());
+    NewTabAnimationTabHelper::FromWebState(web_state.get())
+        ->DisableNewTabAnimation();
+    InsertWebState(std::move(web_state));
+  });
 }
 
 }  // namespace

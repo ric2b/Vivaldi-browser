@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/arc/arc_optin_uma.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
@@ -18,7 +19,6 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/consent_auditor/consent_auditor.h"
@@ -177,9 +177,6 @@ void ArcPlayStoreEnabledPreferenceHandler::UpdateArcSessionManager() {
     arc_session_manager_->RequestEnable();
   } else if (IsArcPlayStoreEnabledForProfile(profile_)) {
     if (!ShouldArcStartManually()) {
-      // TODO(b/246282398): Stop calling AllowActivation() on a regular boot
-      // once go/arc-on-demand-v1 is properly implemented.
-      arc_session_manager_->AllowActivation();
       arc_session_manager_->RequestEnable();
     } else {
       VLOG(1) << "ARC is not started automatically";

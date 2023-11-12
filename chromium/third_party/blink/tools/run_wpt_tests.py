@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 
+from blinkpy.common import exit_codes
 from blinkpy.common import path_finder
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.web_tests.port.android import (
@@ -94,12 +95,20 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             product_cls = _product_registry[self.options.product_name]
             self.product = product_cls(self.host, self.options,
                                        self.select_python_executable())
+            self.add_default_child_process()
         except ValueError as exc:
             self._parser.error(str(exc))
 
     @property
     def _upstream_dir(self):
         return self.fs.join(self._tmp_dir, 'upstream_wpt')
+
+    def add_default_child_process(self):
+        if self._options.processes is None:
+            if self.product.name == 'chrome' or self.product.name == 'content_shell':
+                self._options.processes = self.port.default_child_processes()
+            else:
+                self._options.processes = 1
 
     def parse_args(self, args=None):
         super().parse_args(args)
@@ -110,6 +119,12 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             # Align level name for easier reading.
             format='%(asctime)s [%(levelname)-8s] %(name)s: %(message)s',
             force=True)
+
+    @property
+    def _default_retry_limit(self) -> int:
+        if self.options.use_upstream_wpt:
+            return 0
+        return super()._default_retry_limit
 
     @property
     def wpt_binary(self):
@@ -145,8 +160,29 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             '--binary-arg=--force-fieldtrial-params='
             'DownloadServiceStudy.Enabled:start_up_delay_ms/0',
             '--run-info=%s' % self._tmp_dir,
-            '--run-by-dir=0',
         ])
+        if self.options.use_upstream_wpt:
+            # when running with upstream, the goal is to get wpt report that can
+            # be uploaded to wpt.fyi. We do not really cares if tests failed or
+            # not. Add '--no-fail-on-unexpected' so that the overall result is
+            # success. Add '--no-restart-on-unexpected' to speed up the test. On
+            # Android side, we are always running with one emulator or worker,
+            # so do not add '--run-by-dir=0'
+            rest_args.extend([
+                '--no-fail-on-unexpected',
+                '--no-restart-on-unexpected',
+            ])
+        else:
+            # By default, wpt will treat unexpected passes as errors, so we
+            # disable that to be consistent with Chromium CI. Add
+            # '--run-by-dir=0' so that tests can be more evenly distributed
+            # among workers.
+            rest_args.extend([
+                '--no-fail-on-unexpected-pass',
+                '--no-restart-on-new-group',
+                '--run-by-dir=0',
+            ])
+
         rest_args.extend(self.product.wpt_args)
 
         if self.options.headless:
@@ -162,6 +198,11 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             configs = self.port.flag_specific_configs()
             rest_args.extend('--binary-arg=%s' % arg
                              for arg in configs[self.options.flag_specific][0])
+            if configs[self.options.flag_specific][1] is not None:
+                smoke_file_path = self.path_finder.path_from_web_tests(
+                    configs[self.options.flag_specific][1])
+                if not self._has_explicit_tests:
+                    rest_args.append('--include-file=%s' % smoke_file_path)
 
         if self.options.test_filter:
             for pattern in self.options.test_filter.split(':'):
@@ -206,11 +247,12 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
 
     def _create_extra_run_info(self):
         run_info = {
-            # This property should always be present so that the metadata
+            # This property should always be a string so that the metadata
             # updater works, even when wptrunner is not running a flag-specific
             # suite.
-            'flag_specific': self.options.flag_specific,
+            'flag_specific': self.options.flag_specific or '',
             'used_upstream': self.options.use_upstream_wpt,
+            'sanitizer_enabled': self.options.enable_sanitizer,
         }
         if self.options.use_upstream_wpt:
             # `run_wpt_tests` does not run in the upstream checkout's git
@@ -226,7 +268,17 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             json.dump(run_info, file_handle)
 
     def do_post_test_run_tasks(self):
-        self.process_and_upload_results()
+        process_return = self.process_and_upload_results()
+
+        if (process_return != exit_codes.INTERRUPTED_EXIT_STATUS
+                and self.options.show_results_in_browser):
+            self.show_results_in_browser()
+
+    def show_results_in_browser(self):
+        results_file = self.fs.join(self.fs.dirname(self.wpt_output),
+                                    self.layout_test_results_subdir,
+                                    'results.html')
+        self.port.show_results_html_file(results_file)
 
     def clean_up_after_test_run(self):
         super().clean_up_after_test_run()
@@ -263,7 +315,6 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             '--processes',
             '--child-processes',
             type=lambda processes: max(0, int(processes)),
-            default=1,
             help=('Number of drivers to start in parallel. (For Android, '
                   'this number is the number of emulators started.) '
                   'The actual number of devices tested may be higher '
@@ -274,11 +325,6 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
                                   'the upstream github wpt to a temporary '
                                   'directory and will use the binary and '
                                   'tests from upstream'))
-        parser.add_argument('--no-wpt-internal',
-                            action='store_false',
-                            dest='run_wpt_internal',
-                            default=True,
-                            help=('Do not run internal WPTs.'))
         parser.add_argument('--flag-specific',
                             choices=sorted(self.port.flag_specific_configs()),
                             metavar='FLAG_SPECIFIC',
@@ -289,6 +335,13 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
                             default=True,
                             help=('Use this tag to not run wptrunner in'
                                   'headless mode'))
+        parser.add_argument('--show-results-in-browser',
+                            action='store_true',
+                            help='Open the results viewer in a browser.')
+        parser.add_argument(
+            '--enable-sanitizer',
+            action='store_true',
+            help='Only report sanitizer-related errors and crashes.')
 
     def add_binary_arguments(self, parser):
         group = parser.add_argument_group(
@@ -329,6 +382,11 @@ class WPTAdapter(wpt_common.BaseWptScriptAdapter):
             '--gtest_filter',
             metavar='TESTS_OR_DIRS',
             help='Colon-separated list of test names (URL prefixes).')
+        parser.add_argument('--no-wpt-internal',
+                            action='store_false',
+                            dest='run_wpt_internal',
+                            default=True,
+                            help='Do not run internal WPTs.')
         return group
 
     def add_mode_arguments(self, parser):
@@ -528,8 +586,14 @@ class ChromeiOS(Product):
     @property
     def wpt_args(self):
         wpt_args = list(super().wpt_args)
+        cwt_chromedriver_path = os.path.realpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                '../../../ios/chrome/test/wpt/tools/'
+                'run_cwt_chromedriver_wrapper.py'))
         wpt_args.extend([
             '--processes=%d' % self._options.processes,
+            '--webdriver-binary=%s' % cwt_chromedriver_path,
         ])
         return wpt_args
 
@@ -804,7 +868,8 @@ def get_devices(args):
                 instances.append(instance)
 
             SyncParallelizer(instances).Start(writable_system=True,
-                                              window=args.emulator_window)
+                                              window=args.emulator_window,
+                                              require_fast_start=True)
 
         #TODO(weizhong): when choose device, make sure abi matches with target
         yield device_utils.DeviceUtils.HealthyDevices()
@@ -813,8 +878,15 @@ def get_devices(args):
 
 
 def main():
-    adapter = WPTAdapter()
-    return adapter.run_test()
+    # This environment fix is needed on windows as codec is trying
+    # to encode in cp1252 rather than utf-8 and throwing errors.
+    os.environ['PYTHONUTF8'] = '1'
+
+    try:
+        adapter = WPTAdapter()
+        return adapter.run_test()
+    except KeyboardInterrupt:
+        return exit_codes.INTERRUPTED_EXIT_STATUS
 
 
 # This is not really a "script test" so does not need to manually add

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "components/device_signals/core/common/signals_constants.h"
 
@@ -126,7 +127,7 @@ GetSignalsContract() {
   contract[names::kOsFirewall] =
       base::BindRepeating(VerifyIsSettingInteger, names::kOsFirewall);
   contract[names::kSystemDnsServers] = base::BindRepeating(
-      VerifyIsStringArray, names::kSystemDnsServers, /*enforce_value=*/true);
+      VerifyIsStringArray, names::kSystemDnsServers, /*enforce_value=*/false);
 
   // Signals added for both CrOS and Browser but from different collection
   // locations.
@@ -152,6 +153,29 @@ GetSignalsContract() {
       base::BindRepeating(VerifyOptionalString, names::kWindowsUserDomain);
   contract[names::kSecureBootEnabled] =
       base::BindRepeating(VerifyIsSettingInteger, names::kSecureBootEnabled);
+
+  contract[names::kCrowdStrike] =
+      base::BindLambdaForTesting([](const base::Value::Dict& signals) {
+        // CrowdStrike signals are optional. But if the object is set, then at
+        // least one of the values must be present.
+        auto* cs_value = signals.Find(device_signals::names::kCrowdStrike);
+        if (!cs_value) {
+          return true;
+        }
+
+        if (!cs_value->is_dict()) {
+          return false;
+        }
+
+        const auto& cs_dict = cs_value->GetDict();
+        auto* customer_id =
+            cs_dict.FindString(device_signals::names::kCustomerId);
+        auto* agent_id = cs_dict.FindString(device_signals::names::kAgentId);
+
+        return (customer_id && !customer_id->empty()) ||
+               (agent_id && !agent_id->empty());
+      });
+
 #else
   // Windows-only signals that shouldn't be set on other platforms.
   contract[names::kChromeCleanupEnabled] =
@@ -162,6 +186,8 @@ GetSignalsContract() {
       base::BindRepeating(VerifyUnset, names::kWindowsUserDomain);
   contract[names::kSecureBootEnabled] =
       base::BindRepeating(VerifyUnset, names::kSecureBootEnabled);
+  contract[names::kCrowdStrike] =
+      base::BindRepeating(VerifyUnset, names::kCrowdStrike);
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -173,6 +199,10 @@ GetSignalsContract() {
   // Chrome OS Signals.
   contract[names::kAllowScreenLock] =
       base::BindRepeating(VerifyIsBoolean, names::kAllowScreenLock);
+  contract[names::kImei] = base::BindRepeating(
+      VerifyIsStringArray, names::kImei, /*enforce_value=*/false);
+  contract[names::kMeid] = base::BindRepeating(
+      VerifyIsStringArray, names::kMeid, /*enforce_value=*/false);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
   return contract;

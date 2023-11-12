@@ -67,18 +67,26 @@ const char kOldVivaldiUseNativeWindowDecoration[] =
 
 #if BUILDFLAG(IS_IOS)
 // Caches the folder id of user's position in the note hierarchy navigator.
-const char kIosNoteCachedFolderId[] = "ios.note.cached_folder_id";
+const char kVivaldiNoteCachedFolderId[] = "vivaldi.note.cached_folder_id";
 
 // Caches the scroll position of Notes.
-const char kIosNoteCachedTopMostRow[] = "ios.note.cached_top_most_row";
+const char kVivaldiNoteCachedTopMostRow[] = "vivaldi.note.cached_top_most_row";
 
-const char kIosNoteFolderDefault[] = "ios.note.default_folder";
+const char kVivaldiNoteFolderDefault[] = "vivaldi.note.default_folder";
 
 // Speed dial sorting mode
 const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
+// Start page layout
+const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
 // Setting for folder visiblity on bookmark folder page
 const char kVivaldiBookmarkFoldersViewMode[] =
   "vivaldi.bookmark_folders.view_mode";
+
+// Tabs
+// Desktop style tabs enabled status
+const char kVivaldiDesktopTabsEnabled[] = "vivaldi.desktop_tabs.mode";
+// Tab stack use status
+const char kVivaldiTabStackEnabled[] = "vivaldi.desktop_tabs.tab_stack";
 
 #endif
 }  // namespace vivaldiprefs

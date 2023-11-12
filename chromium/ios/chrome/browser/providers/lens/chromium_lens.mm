@@ -49,19 +49,12 @@ bool IsLensWebResultsURL(const GURL& url) {
   return false;
 }
 
-web::NavigationManager::WebLoadParams GenerateLensLoadParamsForImage(
-    UIImage* image,
-    LensEntrypoint entry_point,
-    bool is_incognito) {
-  // Lens is not supported in Chromium; this function will never be called.
-  NOTREACHED() << "Lens is not supported.";
-  return web::NavigationManager::WebLoadParams({});
+absl::optional<LensEntrypoint> GetLensEntryPointFromURL(const GURL& url) {
+  return absl::nullopt;
 }
 
-void GenerateLensLoadParamsForImageAsync(UIImage* image,
-                                         LensEntrypoint entry_point,
-                                         bool is_incognito,
-                                         LensWebParamsCallback completion) {
+void GenerateLensLoadParamsAsync(LensQuery* query,
+                                 LensWebParamsCallback completion) {
   NOTREACHED() << "Lens is not supported.";
 }
 

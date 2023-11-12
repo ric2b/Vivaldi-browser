@@ -10,19 +10,48 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/overloaded.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "components/attribution_reporting/suitable_origin.h"
 #include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 #include "url/url_canon.h"
 
 namespace content {
+
+namespace {
+
+base::Value SerializeDestinations(
+    const base::flat_set<attribution_reporting::SuitableOrigin>& destinations) {
+  DCHECK(!destinations.empty());
+
+  base::flat_set<net::SchemefulSite> sites;
+  for (const auto& destination : destinations) {
+    sites.insert(net::SchemefulSite(destination));
+  }
+
+  if (sites.size() == 1)
+    return base::Value(sites.begin()->Serialize());
+
+  base::Value::List list;
+  list.reserve(sites.size());
+
+  for (const auto& site : sites) {
+    list.Append(site.Serialize());
+  }
+
+  return base::Value(std::move(list));
+}
+
+}  // namespace
 
 AttributionReport::EventLevelData::EventLevelData(
     uint64_t trigger_data,
@@ -53,10 +82,13 @@ AttributionReport::EventLevelData::~EventLevelData() = default;
 AttributionReport::AggregatableAttributionData::AggregatableAttributionData(
     std::vector<AggregatableHistogramContribution> contributions,
     Id id,
-    base::Time initial_report_time)
+    base::Time initial_report_time,
+    ::aggregation_service::mojom::AggregationCoordinator
+        aggregation_coordinator)
     : contributions(std::move(contributions)),
       id(id),
-      initial_report_time(initial_report_time) {}
+      initial_report_time(initial_report_time),
+      aggregation_coordinator(aggregation_coordinator) {}
 
 AttributionReport::AggregatableAttributionData::AggregatableAttributionData(
     const AggregatableAttributionData&) = default;
@@ -131,7 +163,7 @@ GURL AttributionReport::ReportURL(bool debug) const {
   replacements.SetPathStr(path);
   return attribution_info_.source.common_info()
       .reporting_origin()
-      .GetURL()
+      ->GetURL()
       .ReplaceComponents(replacements);
 }
 
@@ -145,7 +177,8 @@ base::Value::Dict AttributionReport::ReportBody() const {
                 this->attribution_info().source.common_info();
 
             dict.Set("attribution_destination",
-                     common_source_info.DestinationSite().Serialize());
+                     SerializeDestinations(
+                         common_source_info.destination_origins()));
 
             // The API denotes these values as strings; a `uint64_t` cannot be
             // put in a dict as an integer in order to be opaque to various API

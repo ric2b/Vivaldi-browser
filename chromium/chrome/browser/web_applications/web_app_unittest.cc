@@ -191,6 +191,12 @@ TEST(WebAppTest, WasInstalledByUser) {
   app.RemoveSource(WebAppManagement::kWebAppStore);
   EXPECT_FALSE(app.WasInstalledByUser());
 
+  app.AddSource(WebAppManagement::kOneDriveIntegration);
+  EXPECT_TRUE(app.WasInstalledByUser());
+
+  app.RemoveSource(WebAppManagement::kOneDriveIntegration);
+  EXPECT_FALSE(app.WasInstalledByUser());
+
   app.AddSource(WebAppManagement::kDefault);
   EXPECT_FALSE(app.WasInstalledByUser());
 
@@ -236,6 +242,8 @@ TEST(WebAppTest, CanUserUninstallWebApp) {
   EXPECT_TRUE(app.CanUserUninstallWebApp());
   app.AddSource(WebAppManagement::kSubApp);
   EXPECT_TRUE(app.CanUserUninstallWebApp());
+  app.AddSource(WebAppManagement::kOneDriveIntegration);
+  EXPECT_TRUE(app.CanUserUninstallWebApp());
 
   app.AddSource(WebAppManagement::kPolicy);
   EXPECT_FALSE(app.CanUserUninstallWebApp());
@@ -258,6 +266,9 @@ TEST(WebAppTest, CanUserUninstallWebApp) {
   EXPECT_FALSE(app.CanUserUninstallWebApp());
 
   app.RemoveSource(WebAppManagement::kPolicy);
+  EXPECT_TRUE(app.CanUserUninstallWebApp());
+
+  app.RemoveSource(WebAppManagement::kOneDriveIntegration);
   EXPECT_TRUE(app.CanUserUninstallWebApp());
 
   EXPECT_TRUE(app.IsPreinstalledApp());
@@ -285,6 +296,12 @@ TEST(WebAppTest, EmptyAppAsDebugValue) {
       << kGenerateExpectationsMessage;
 }
 
+// The values of the SampleApp are randomly generated. This test is mainly
+// checking that the output is formatted well and doesn't crash. Exact field
+// values are unimportant.
+//
+// If you have made changes and this test is failing, run the test with
+// `--rebaseline-web-app-expectations` to generate a new `sample_web_app.json`.
 TEST(WebAppTest, SampleAppAsDebugValue) {
   const base::FilePath path_to_test_file =
       GetPathToTestFile("sample_web_app.json");

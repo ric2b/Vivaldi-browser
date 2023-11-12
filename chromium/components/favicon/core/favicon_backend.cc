@@ -19,12 +19,6 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "url/origin.h"
 
-#include "base/base64.h"
-#include "ui/gfx/image/image.h"
-#include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/image/image_skia_rep.h"
-#include "app/vivaldi_apptools.h"
-
 namespace favicon {
 
 using RedirectList = std::vector<GURL>;
@@ -57,12 +51,6 @@ bool AreIconTypesEquivalent(favicon_base::IconType type_a,
   return false;
 }
 
-struct VivaldiPreloadedFavicon {
-  base::StringPiece page_url;
-  base::StringPiece favicon_url;
-  base::StringPiece favicon_png_base64;
-};
-#include "components/favicon/vivaldi_preloaded_favicons.inc"
 }  // namespace
 
 // static
@@ -830,35 +818,5 @@ bool FaviconBackend::ClearAllExcept(const std::vector<GURL>& kept_page_urls) {
   db_->Vacuum();
   db_->BeginTransaction();
   return true;
-}
-
-void FaviconBackend::SetVivaldiPreloadedFavicons() {
-  if (!vivaldi::IsVivaldiRunning())
-    return;
-  db_->DeleteVivaldiPreloadedFavicons();
-
-  for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
-    std::string png;
-    if (!base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64, &png)) {
-      NOTREACHED();
-    }
-    gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(
-            reinterpret_cast<const unsigned char*>(png.c_str()), png.length());
-    gfx::ImageSkia image_skia = image.AsImageSkia();
-    image_skia.EnsureRepsForSupportedScales();
-    std::vector<SkBitmap> bitmaps;
-    const std::vector<float> favicon_scales = favicon_base::GetFaviconScales();
-    for (const gfx::ImageSkiaRep& rep : image_skia.image_reps()) {
-      // Only save images with a supported sale.
-      if (base::Contains(favicon_scales, rep.scale()))
-        bitmaps.push_back(rep.GetBitmap());
-    }
-    SetFavicons(
-        {GURL(kPreloadedFavicons[i].page_url)},
-        favicon_base::IconType::kFavicon,
-        GURL(kPreloadedFavicons[i].favicon_url),
-        bitmaps,
-        FaviconBitmapType::VIVALDI_PRELOADED);
-  }
 }
 }  // namespace favicon

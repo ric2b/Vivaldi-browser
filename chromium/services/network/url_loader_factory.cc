@@ -27,7 +27,6 @@
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
-#include "services/network/trust_tokens/local_trust_token_operation_delegate_impl.h"
 #include "services/network/trust_tokens/trust_token_request_helper_factory.h"
 #include "services/network/url_loader.h"
 #include "services/network/web_bundle/web_bundle_url_loader_factory.h"
@@ -297,6 +296,9 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
         std::move(const_cast<mojo::PendingRemote<mojom::CookieAccessObserver>&>(
             resource_request.trusted_params->cookie_observer));
   }
+  // TODO(https://crbug.com/1378264): Currently Trust Token Access observer
+  // isn't hooked up through URLLoaderFactory.
+  mojo::PendingRemote<mojom::TrustTokenAccessObserver> trust_token_observer;
   mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
       url_loader_network_observer;
   if (resource_request.trusted_params &&
@@ -339,9 +341,10 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
       request_id, keepalive_request_size,
       std::move(keepalive_statistics_recorder), std::move(trust_token_factory),
-      std::move(cookie_observer), std::move(url_loader_network_observer),
-      std::move(devtools_observer), std::move(accept_ch_frame_observer),
-      third_party_cookies_enabled, context_->cache_transparency_settings());
+      std::move(cookie_observer), std::move(trust_token_observer),
+      std::move(url_loader_network_observer), std::move(devtools_observer),
+      std::move(accept_ch_frame_observer), third_party_cookies_enabled,
+      context_->cache_transparency_settings());
 
   if (context_->GetMemoryCache())
     loader->SetMemoryCache(context_->GetMemoryCache()->GetWeakPtr());
@@ -358,6 +361,13 @@ mojom::DevToolsObserver* URLLoaderFactory::GetDevToolsObserver() const {
 mojom::CookieAccessObserver* URLLoaderFactory::GetCookieAccessObserver() const {
   if (cookie_observer_)
     return cookie_observer_.get();
+  return nullptr;
+}
+
+mojom::TrustTokenAccessObserver* URLLoaderFactory::GetTrustTokenAccessObserver()
+    const {
+  // TODO(https://crbug.com/1378264): URLLoaderFactory support for the Trust
+  // Token Access Observer is currently unimplemented.
   return nullptr;
 }
 

@@ -7,6 +7,7 @@
 
 #include <functional>
 
+#include "base/callback_list.h"
 #include "components/password_manager/core/browser/fake_password_store_backend.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -29,7 +30,7 @@ MATCHER_P(MatchesFormExceptStore, expected, "") {
 class TestPasswordStore : public PasswordStore {
  public:
   // TODO(crbug.com/1222591): Clean up all references using this.
-  using PasswordMap = PasswordMap;
+  using PasswordMap = password_manager::PasswordMap;
 
   // We need to qualify password_manager::IsAccountStore with the full
   // namespace, otherwise, it's confused with the method
@@ -51,12 +52,19 @@ class TestPasswordStore : public PasswordStore {
   const TestPasswordStore::PasswordMap& stored_passwords() const;
   ::password_manager::IsAccountStore IsAccountStore() const;
 
+  base::CallbackListSubscription AddSyncEnabledOrDisabledCallback(
+      base::RepeatingClosure sync_enabled_or_disabled_cb) override;
+
+  void CallSyncEnabledOrDisabledCallbacks();
+
  protected:
   ~TestPasswordStore() override;
 
  private:
   FakePasswordStoreBackend* fake_backend();
   const FakePasswordStoreBackend* fake_backend() const;
+
+  base::RepeatingClosureList sync_enabled_or_disabled_cbs_;
 };
 
 }  // namespace password_manager

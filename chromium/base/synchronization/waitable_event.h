@@ -104,7 +104,7 @@ class BASE_EXPORT WaitableEvent {
   // have elapsed if this returns false.
   //
   // TimedWait can synchronise its own destruction like |Wait|.
-  bool NOT_TAIL_CALLED TimedWait(const TimeDelta& wait_delta);
+  bool NOT_TAIL_CALLED TimedWait(TimeDelta wait_delta);
 
 #if BUILDFLAG(IS_WIN)
   HANDLE handle() const { return handle_.get(); }
@@ -117,6 +117,11 @@ class BASE_EXPORT WaitableEvent {
   // when it's merely idle and ready to do work. As such, this is only expected
   // to be used by thread and thread pool impls.
   void declare_only_used_while_idle() { waiting_is_blocking_ = false; }
+
+  // Declares that this WaitableEvent should not emit wakeup.flow trace events
+  // in order to prevent duplicate flow events when the owner is emitting their
+  // flow events more specifically.
+  void opt_out_of_wakeup_flow_events() { emit_wakeup_flow_ = false; }
 
   // Wait, synchronously, on multiple events.
   //   waitables: an array of WaitableEvent pointers
@@ -167,6 +172,11 @@ class BASE_EXPORT WaitableEvent {
 
  private:
   friend class WaitableEventWatcher;
+
+  // The platform specific portions of Signal and TimedWait (which do the actual
+  // signaling and waiting).
+  void SignalImpl();
+  bool TimedWaitImpl(TimeDelta wait_delta);
 
 #if BUILDFLAG(IS_WIN)
   win::ScopedHandle handle_;
@@ -257,6 +267,10 @@ class BASE_EXPORT WaitableEvent {
   // Whether a thread invoking Wait() on this WaitableEvent should be considered
   // blocked as opposed to idle (and potentially replaced if part of a pool).
   bool waiting_is_blocking_ = true;
+
+  // Whether this WaitableEvent should emit a wakeup.flow event on
+  // Signal => TimedWait.
+  bool emit_wakeup_flow_ = true;
 };
 
 }  // namespace base

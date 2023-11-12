@@ -137,8 +137,6 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   bool IsInSynchronousComposite() const override;
   void FrameSinksToThrottleUpdated(
       const base::flat_set<viz::FrameSinkId>& id) override;
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies) override;
 
   // SchedulerClient implementation
   bool WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
@@ -170,6 +168,8 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   bool IsMainThreadBlocked() const;
   base::SingleThreadTaskRunner* MainThreadTaskRunner();
   bool ShouldDeferBeginMainFrame() const;
+
+  void OnHungCommit();
 
   const int layer_tree_host_id_;
 
@@ -230,6 +230,9 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   // Either thread can request deferring BeginMainFrame; keep track of both.
   bool main_wants_defer_begin_main_frame_ = false;
   bool impl_wants_defer_begin_main_frame_ = false;
+
+  // Temporary for production debugging of renderer hang (crbug.com/1159366).
+  base::OneShotTimer hung_commit_timer_;
 };
 
 }  // namespace cc

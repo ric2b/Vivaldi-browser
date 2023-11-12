@@ -17,7 +17,7 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/ad_blocker",
   ]
   deps += [
-    "//vivaldi/components/datasource:dataurl",
+    "//vivaldi/components/datasource:resource_reader",
     "//vivaldi/components/ad_blocker",
     "//vivaldi/components/request_filter/adblock_filter/mojom"
   ]
@@ -27,6 +27,13 @@ update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/components/content_injection/renderer",
     "//vivaldi/components/translate/renderer",
+  ]
+}
+
+update_target("//components/sync_bookmarks:sync_bookmarks") {
+  deps += [
+    "//vivaldi/sync/file_sync",
+    "//vivaldi/components/datasource:data_url_utils",
   ]
 }
 

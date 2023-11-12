@@ -35,7 +35,6 @@
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
@@ -55,6 +54,7 @@
 #include "content/browser/tracing/startup_tracing_controller.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/app/content_main.h"
+#include "content/public/app/initialize_mojo_core.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -558,9 +558,23 @@ void BrowserTestBase::SetUp() {
     });
   }
 
-#if BUILDFLAG(IS_ANDROID)
-  // For all other platforms, we call ContentMain for browser tests which goes
-  // through the normal browser initialization paths. For Android, we must set
+  auto content_main_params = CopyContentMainParams();
+  content_main_params.created_main_parts_closure =
+      std::move(created_main_parts_closure);
+  content_main_params.ui_task = base::BindOnce(
+      &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this));
+
+  ContentMainDelegate* overridden_delegate =
+      GetOptionalContentMainDelegateOverride();
+  if (overridden_delegate)
+    content_main_params.delegate = overridden_delegate;
+
+#if !BUILDFLAG(IS_ANDROID)
+  // ContentMain which goes through the normal browser initialization paths
+  // and will invoke `content_main_params.ui_task`, which runs the test.
+  EXPECT_EQ(expected_exit_code_, ContentMain(std::move(content_main_params)));
+#else
+  // Android's equivalent of ContentMain is in Java so browser tests must set
   // things up manually. A meager re-implementation of ContentMainRunnerImpl
   // follows.
 
@@ -572,9 +586,11 @@ void BrowserTestBase::SetUp() {
   base::i18n::AllowMultipleInitializeCallsForTesting();
   base::i18n::InitializeICU();
 
-  ContentMainDelegate* delegate = GetContentMainDelegateForTesting();
-  // The delegate should have been set by JNI_OnLoad for the test target.
-  DCHECK(delegate);
+  // The ContentMainDelegate and ContentClient should have been set by
+  // JNI_OnLoad for the test target.
+  ContentMainDelegate* delegate = content_main_params.delegate;
+  ASSERT_TRUE(delegate);
+  ASSERT_TRUE(GetContentClientForTesting());
 
   absl::optional<int> startup_error = delegate->BasicStartupComplete();
   ASSERT_FALSE(startup_error.has_value());
@@ -591,14 +607,18 @@ void BrowserTestBase::SetUp() {
     ui::RegisterPathProvider();
 
     delegate->PreSandboxStartup();
+    delegate->SandboxInitialized("");
 
     const ContentMainDelegate::InvokedInBrowserProcess invoked_in_browser{
         .is_running_test = true};
     DCHECK(!field_trial_list_);
     if (delegate->ShouldCreateFeatureList(invoked_in_browser))
       field_trial_list_ = SetUpFieldTrialsAndFeatureList();
+    if (delegate->ShouldInitializeMojo(invoked_in_browser))
+      InitializeMojoCore();
 
-    base::ThreadPoolInstance::Create("Browser");
+    const bool has_thread_pool =
+        GetContentClientForTesting()->browser()->CreateThreadPool("Browser");
 
     absl::optional<int> pre_browser_main_exit_code = delegate->PreBrowserMain();
     ASSERT_FALSE(pre_browser_main_exit_code.has_value());
@@ -615,7 +635,9 @@ void BrowserTestBase::SetUp() {
         delegate->PostEarlyInitialization(invoked_in_browser);
     ASSERT_FALSE(post_early_initialization_exit_code.has_value());
 
-    StartBrowserThreadPool();
+    if (has_thread_pool)
+      StartBrowserThreadPool();
+
     BrowserTaskExecutor::PostFeatureListSetup();
     tracing::InitTracingPostThreadPoolStartAndFeatureList(
         /* enable_consumer */ true);
@@ -652,16 +674,15 @@ void BrowserTestBase::SetUp() {
     // run.
     base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
 
-    auto ui_task = base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
-                                  base::Unretained(this), loop.QuitClosure(),
-                                  /*wait_retry_left=*/
-                                  TestTimeouts::action_max_timeout());
-
     // The MainFunctionParams must out-live all the startup tasks running.
     MainFunctionParams params(command_line);
-    params.ui_task = std::move(ui_task);
-    params.created_main_parts_closure = std::move(created_main_parts_closure);
+    params.created_main_parts_closure =
+        std::move(content_main_params.created_main_parts_closure);
     params.startup_data = std::move(startup_data);
+    params.ui_task = base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
+                                    base::Unretained(this), loop.QuitClosure(),
+                                    /*wait_retry_left=*/
+                                    TestTimeouts::action_max_timeout());
     // Passing "" as the process type to indicate the browser process.
     auto exit_code = delegate->RunProcess("", std::move(params));
     DCHECK(absl::holds_alternative<int>(exit_code));
@@ -674,11 +695,11 @@ void BrowserTestBase::SetUp() {
     // So when we run the ProxyRunTestOnMainThreadLoop() we no longer can block,
     // but tests should be allowed to. So we undo that blocking inside here.
     base::ScopedAllowUnresponsiveTasksForTesting allow_unresponsive;
-    // Runs the test now that the Java setup is complete. This must be called
-    // directly from the same call stack as RUN_ALL_TESTS(), it may not be
-    // inside a posted task, or it would prevent NonNestable tasks from running
-    // inside tests.
-    ProxyRunTestOnMainThreadLoop();
+    // Runs the test now that the Java setup is complete. The closure must be
+    // invoked directly from the same call stack as RUN_ALL_TESTS(), it may not
+    // be inside a posted task, or it would prevent NonNestable tasks from
+    // running inside tests.
+    std::move(content_main_params.ui_task).Run();
   }
 
   {
@@ -695,14 +716,6 @@ void BrowserTestBase::SetUp() {
 
   base::PostTaskAndroid::SignalNativeSchedulerShutdownForTesting();
   BrowserTaskExecutor::Shutdown();
-
-#else   // BUILDFLAG(IS_ANDROID)
-  auto ui_task = base::BindOnce(&BrowserTestBase::ProxyRunTestOnMainThreadLoop,
-                                base::Unretained(this));
-  auto params = CopyContentMainParams();
-  params.ui_task = std::move(ui_task);
-  params.created_main_parts_closure = std::move(created_main_parts_closure);
-  EXPECT_EQ(expected_exit_code_, ContentMain(std::move(params)));
 #endif  // BUILDFLAG(IS_ANDROID)
 
   TearDownInProcessBrowserTestFixture();
@@ -771,7 +784,7 @@ void BrowserTestBase::WaitUntilJavaIsReady(
   }
 
   base::TimeDelta retry_interval = base::Milliseconds(100);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
                      base::Unretained(this), std::move(quit_closure),
@@ -821,10 +834,8 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 #endif  // BUILDFLAG(IS_POSIX)
 
   {
-    // This can be called from a posted task. Allow nested tasks here, because
-    // otherwise the test body will have to do it in order to use RunLoop for
-    // waiting.
-    base::CurrentThread::ScopedNestableTaskAllower allow;
+    // This shouldn't be invoked from a posted task.
+    DCHECK(!base::RunLoop::IsRunningOnCurrentThread());
 
 #if !BUILDFLAG(IS_ANDROID)
     // Fail the test if a renderer crashes while the test is running.
@@ -1117,6 +1128,10 @@ void BrowserTestBase::CreatedBrowserMainPartsImpl(
     BrowserMainParts* browser_main_parts) {
   browser_main_parts_ = browser_main_parts;
   CreatedBrowserMainParts(browser_main_parts);
+}
+
+ContentMainDelegate* BrowserTestBase::GetOptionalContentMainDelegateOverride() {
+  return nullptr;
 }
 
 }  // namespace content

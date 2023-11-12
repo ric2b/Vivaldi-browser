@@ -28,11 +28,11 @@
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/controls/rich_hover_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_cookies_content_view.h"
-#include "chrome/browser/ui/views/page_info/page_info_hover_button.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "chrome/browser/ui/views/page_info/security_information_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -112,7 +112,7 @@ void OpenPageInfoBubble(Browser* browser) {
 
 // Opens the Page Info bubble and retrieves the UI view identified by
 // |view_id|.
-views::View* GetView(Browser* browser, int view_id) {
+views::View* GetView(int view_id) {
   views::Widget* page_info_bubble =
       PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetWidget();
   EXPECT_TRUE(page_info_bubble);
@@ -141,7 +141,6 @@ const GURL OpenSiteSettingsForUrl(Browser* browser, const GURL& url) {
   OpenPageInfoBubble(browser);
   // Get site settings button.
   views::View* site_settings_button = GetView(
-      browser,
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SITE_SETTINGS);
   ClickAndWaitForSettingsPageToOpen(site_settings_button);
 
@@ -168,7 +167,15 @@ void AddHintForTesting(Browser* browser,
 
 class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
  public:
-  PageInfoBubbleViewBrowserTest() = default;
+  PageInfoBubbleViewBrowserTest() {
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched. Disable features for the new version of "Cookies in use"
+    // dialog. The new UI is covered by
+    // PageInfoBubbleViewBrowserTestCookiesSubpage.
+    feature_list_.InitWithFeatures({}, {page_info::kPageSpecificSiteDataDialog,
+                                        page_info::kPageInfoCookiesSubpage});
+  }
+
   PageInfoBubbleViewBrowserTest(const PageInfoBubbleViewBrowserTest& test) =
       delete;
   PageInfoBubbleViewBrowserTest& operator=(
@@ -235,19 +242,19 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
   std::u16string GetCertificateButtonTitle() const {
     // Only PageInfoBubbleViewBrowserTest can access certificate_button_ in
     // PageInfoBubbleView, or title() in HoverButton.
-    auto* certificate_button = static_cast<PageInfoHoverButton*>(
+    auto* certificate_button = static_cast<RichHoverButton*>(
         PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetViewByID(
             PageInfoViewFactory::
                 VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER));
-    return certificate_button->title()->GetText();
+    return certificate_button->GetTitleViewForTesting()->GetText();
   }
 
   std::u16string GetCertificateButtonSubtitle() const {
-    auto* certificate_button = static_cast<PageInfoHoverButton*>(
+    auto* certificate_button = static_cast<RichHoverButton*>(
         PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetViewByID(
             PageInfoViewFactory::
                 VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER));
-    return certificate_button->subtitle()->GetText();
+    return certificate_button->GetSubTitleViewForTesting()->GetText();
   }
 
   const std::u16string GetPageInfoBubbleViewDetailText() {
@@ -269,7 +276,9 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
         PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetViewByID(
             PageInfoViewFactory::
                 VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SECURITY_INFORMATION);
-    return static_cast<PageInfoHoverButton*>(button)->title()->GetText();
+    return static_cast<RichHoverButton*>(button)
+        ->GetTitleViewForTesting()
+        ->GetText();
   }
 
   void SetupSentimentServiceExpectations(bool interacted) {
@@ -280,10 +289,12 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
     EXPECT_CALL(*mock_sentiment_service_, PageInfoClosed);
   }
 
-  raw_ptr<MockTrustSafetySentimentService> mock_sentiment_service_;
+  raw_ptr<MockTrustSafetySentimentService, DanglingUntriaged>
+      mock_sentiment_service_;
 
  private:
   std::vector<PageInfoViewFactory::PageInfoViewID> expected_identifiers_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, ShowBubble) {
@@ -407,10 +418,9 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
       "unused_token", reused_password_account_type);
 
   OpenPageInfoBubble(browser());
-  views::View* change_password_button = GetView(
-      browser(), PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
+  views::View* change_password_button =
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
   views::View* allowlist_password_reuse_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_ALLOWLIST_PASSWORD_REUSE);
 
   SecurityStateTabHelper* helper =
@@ -487,10 +497,9 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
       "unused_token", reused_password_account_type);
 
   OpenPageInfoBubble(browser());
-  views::View* change_password_button = GetView(
-      browser(), PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
+  views::View* change_password_button =
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
   views::View* allowlist_password_reuse_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_BUTTON_ALLOWLIST_PASSWORD_REUSE);
 
   SecurityStateTabHelper* helper =
@@ -589,7 +598,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   run_loop.Run();
 
   views::View* cookies_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG);
   PerformMouseClickOnView(cookies_button);
 }
@@ -663,7 +671,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, BlockedAndInvalidCert) {
   // Check that clicking the certificate viewer button is reported to the
   // sentiment service.
   views::View* certificates_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER);
   PerformMouseClickOnView(certificates_button);
 }
@@ -1071,6 +1078,7 @@ class PageInfoBubbleViewBrowserTestCookiesSubpage
   PageInfoBubbleViewBrowserTestCookiesSubpage() {
     feature_list_.InitWithFeatures(
         {page_info::kPageInfoCookiesSubpage,
+         page_info::kPageSpecificSiteDataDialog,
          privacy_sandbox::kPrivacySandboxFirstPartySetsUI},
         {});
   }
@@ -1102,7 +1110,6 @@ class PageInfoBubbleViewBrowserTestCookiesSubpage
     run_loop.Run();
 
     views::View* cookies_button = GetView(
-        browser(),
         PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIES_SUBPAGE);
 
     base::RunLoop run_loop2;
@@ -1121,8 +1128,9 @@ class PageInfoBubbleViewBrowserTestCookiesSubpage
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  PrefService* prefs_;
-  raw_ptr<MockPrivacySandboxService> mock_privacy_sandbox_service_;
+  raw_ptr<PrefService, DanglingUntriaged> prefs_;
+  raw_ptr<MockPrivacySandboxService, DanglingUntriaged>
+      mock_privacy_sandbox_service_;
 };
 
 // Checks if there is correct number of buttons in cookies subpage when fps are
@@ -1136,11 +1144,9 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTestCookiesSubpage,
   // FPS blocked and 3pc allowed -> only button for opening cookie dialog.
   size_t kExpectedChildren = 1;
   auto* cookies_buttons_container =
-      GetView(browser(),
-              PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
   EXPECT_EQ(kExpectedChildren, cookies_buttons_container->children().size());
   auto* cookie_dialog_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG);
   EXPECT_TRUE(cookie_dialog_button);
 
@@ -1166,14 +1172,11 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTestCookiesSubpage,
   // FPS allowed and 3pc blocked -> buttons for cookie dialog and 3pc and fps.
   size_t kExpectedChildren = 3;
   auto* cookies_buttons_container =
-      GetView(browser(),
-              PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
   EXPECT_EQ(kExpectedChildren, cookies_buttons_container->children().size());
   EXPECT_TRUE(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG));
   auto* fps_button = GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_FPS_SETTINGS);
 
   // Checking if fps button opens correct page and records correctly user
@@ -1213,17 +1216,13 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTestCookiesSubpage,
   // cookies.
   size_t kExpectedChildren = 2;
   auto* cookies_buttons_container =
-      GetView(browser(),
-              PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
   EXPECT_EQ(kExpectedChildren, cookies_buttons_container->children().size());
   EXPECT_TRUE(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG));
   EXPECT_TRUE(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_ROW));
   auto* third_party_cookies_toggle = static_cast<views::ToggleButton*>(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_TOGGLE));
   EXPECT_TRUE(third_party_cookies_toggle->GetIsOn());
 
@@ -1254,18 +1253,14 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTestCookiesSubpage,
   // FPS allowed and 3pc allowed -> buttons for cookie dialog and fps button.
   size_t kExpectedChildren = 2;
   auto* cookies_buttons_container =
-      GetView(browser(),
-              PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
   EXPECT_EQ(kExpectedChildren, cookies_buttons_container->children().size());
   EXPECT_TRUE(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG));
   EXPECT_TRUE(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_FPS_SETTINGS));
 
   auto* label_with_link = static_cast<views::StyledLabel*>(GetView(
-      browser(),
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_DESCRIPTION_LABEL));
   base::UserActionTester user_actions_stats;
   content::WebContentsAddedObserver new_tab_observer;

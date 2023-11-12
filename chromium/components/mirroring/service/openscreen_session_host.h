@@ -18,8 +18,8 @@
 #include "components/mirroring/service/mirror_settings.h"
 #include "components/mirroring/service/openscreen_message_port.h"
 #include "components/mirroring/service/openscreen_rpc_dispatcher.h"
-#include "components/mirroring/service/receiver_setup_querier.h"
 #include "components/mirroring/service/rtp_stream.h"
+#include "components/openscreen_platform/event_trace_logging_platform.h"
 #include "components/openscreen_platform/task_runner.h"
 #include "gpu/config/gpu_info.h"
 #include "media/capture/video/video_capture_feedback.h"
@@ -46,7 +46,6 @@ class Gpu;
 namespace mirroring {
 
 class VideoCaptureClient;
-class ReceiverSetupQuerier;
 
 // Minimum required bitrate used for calculating bandwidth.
 constexpr int kMinRequiredBitrate = 384 << 10;  // 384 kbps
@@ -123,6 +122,8 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   void RequestRemotingStreaming() override;
   void RestartMirroringStreaming() override;
 
+  void SwitchSourceTab();
+
   // Callback by media::cast::VideoSender to set a new target playout delay.
   void SetTargetPlayoutDelay(base::TimeDelta playout_delay);
 
@@ -189,6 +190,10 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   void NegotiateMirroring();
   void NegotiateRemoting();
 
+  // Initialize `media_remoter_` and `rpc_dispatcher_`.
+  void InitMediaRemoter(
+      const openscreen::cast::RemotingCapabilities& capabilities);
+
   // Called to provide Open Screen with access to this host's network proxy.
   network::mojom::NetworkContext* GetNetworkContext();
 
@@ -251,9 +256,6 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   mojo::Remote<network::mojom::NetworkContext> network_context_;
   bool set_network_context_proxy_ = false;
 
-  // Used to get build and name information from the receiver.
-  std::unique_ptr<ReceiverSetupQuerier> setup_querier_;
-
   // Stored as part of generating an OFFER.
   // NOTE: currently we only support Opus audio, but may provide a variety of
   // video codec configurations.
@@ -281,10 +283,12 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   // Captures audio samples from the resourceprovider-created audio stream.
   scoped_refptr<media::AudioInputDevice> audio_input_device_;
 
-  // Used as an interface for the media remoter to send RPC messages.
+  // Used as an interface for the media remoter to send RPC messages. Created
+  // when a successful capabilities response arrives.
   std::unique_ptr<OpenscreenRpcDispatcher> rpc_dispatcher_;
 
-  // Manages remoting content to the Cast Receiver.
+  // Manages remoting content to the Cast Receiver. Created when a successful
+  // capabilities response arrives.
   std::unique_ptr<MediaRemoter> media_remoter_;
 
   // GPU specific properties, used to indicate whether HW encoding should be
@@ -303,6 +307,9 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   // positive  value causes the session's bandwidth estimation to not be called.
   int forced_bandwidth_estimate_ = 0;
   int bandwidth_being_utilized_ = kDefaultBitrate;
+
+  // Indicate whether we're in the middle of switching tab sources.
+  bool switching_tab_source_ = false;
 
   // Used in callbacks executed on task runners, such as by RtpStream.
   // TODO(https://crbug.com/1363503): determine if weak pointers can be removed.

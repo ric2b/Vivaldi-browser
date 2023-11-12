@@ -7,7 +7,7 @@
 #include <array>
 
 #include "base/metrics/field_trial_params.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/query_tiles/switches.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 #include "components/segmentation_platform/public/config.h"
@@ -77,6 +77,7 @@ std::unique_ptr<Config> QueryTilesModel::GetConfig() {
       kNumDaysMVCkicksBelowThreshold, kQueryTilesDefaultUnknownTTLDays);
   config->segment_selection_ttl = base::Days(segment_selection_ttl_days);
   config->unknown_selection_ttl = base::Days(unknown_selection_ttl_days);
+  config->is_boolean_segment = true;
   return config;
 }
 
@@ -96,17 +97,18 @@ void QueryTilesModel::InitAndFetchModel(
   writer.AddUmaFeatures(kQueryTilesUMAFeatures.data(),
                         kQueryTilesUMAFeatures.size());
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindRepeating(model_updated_callback, kQueryTilesSegmentId,
                           std::move(query_tiles_metadata), 2));
 }
 
-void QueryTilesModel::ExecuteModelWithInput(const std::vector<float>& inputs,
-                                            ExecutionCallback callback) {
+void QueryTilesModel::ExecuteModelWithInput(
+    const ModelProvider::Request& inputs,
+    ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != kQueryTilesUMAFeatures.size()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -121,8 +123,9 @@ void QueryTilesModel::ExecuteModelWithInput(const std::vector<float>& inputs,
     result = 1;  // Enable query tiles;
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), ModelProvider::Response(1, result)));
 }
 
 bool QueryTilesModel::ModelAvailable() {

@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">画像もっかい読み込む (&amp;R)</translation>
 <translation id="1924750141060565109">風景１５</translation>
 <translation id="19598411548897379">一般</translation>
+<translation id="1973351931613083086">自動再生</translation>
 <translation id="1985669426322966465">ソフトウェアアップデート</translation>
 <translation id="2079036669923635404">新しいVivaldi、バージョン<ph name="VERSION" />もう出てるで。</translation>
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラー出たわ。インターネット接続確認して、後でもう一回やってみて。</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">ごみ箱</translation>
 <translation id="292258461174562431">怪獣４</translation>
 <translation id="2923448633003185837">貼り付けて移動</translation>
+<translation id="2953943267837858202">動画の自動再生、許可されてへん</translation>
 <translation id="2977472760057091832">プライベートウィンドウで開く</translation>
 <translation id="2989805286512600854">さらのタブで開く</translation>
 <translation id="3027988479108856431">ごめん、Yandex起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存して全部のYandexウィンドウ閉じてからやってみて。</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">さらのブックマーク</translation>
 <translation id="3255747772218936245">アップデートをインストール</translation>
 <translation id="3259769196742189631">W3Cサービスで検証</translation>
+<translation id="3291915639428159043">自動再生、ブロックされてるで</translation>
 <translation id="3302905971452834934">怪獣１</translation>
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiやで。</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">さらのウィンドウで開く (&amp;W)</translation>
 <translation id="3588820906588687999">さらのタブで画像開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
+<translation id="3620979700683094848">サイトは自動で動画再生できるで</translation>
 <translation id="3680031241659195730">新しいVivaldiあるわ！</translation>
 <translation id="3708982624815781692">ダウンロード、キャンセルされたわ。</translation>
 <translation id="3732157130969736834">リンク先をブックマークに入れとく</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">もう表示せんでいい (&amp;D)</translation>
 <translation id="4074744496918018786">プライベートウィンドウで画像開く</translation>
+<translation id="410351446219883937">自動再生</translation>
 <translation id="4324492550286218827">風景２</translation>
 <translation id="4406101500523955324">プライベートウィンドウで開く</translation>
 <translation id="4420816922321010053">ほんまにVivaldi終了すんの？</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">切り取り</translation>
 <translation id="7727481996062361502">アップデート検証するわ...</translation>
 <translation id="7793738202466490491">カレンダーイベントとして追加</translation>
+<translation id="7834693436815575883">自動再生、許可されてるで</translation>
 <translation id="7848222781052558334">ダウンロードされたファイルのデジタル署名認証に失敗したわ。</translation>
 <translation id="7865983598101744945">終了の確認</translation>
 <translation id="7957213167373139414">カレンダー</translation>
 <translation id="8027581147000338959">さらのウィンドウで開く</translation>
+<translation id="8044382196220116469">サイトに自動で動画再生できへんようにする</translation>
 <translation id="8099620695029051217">アドレスをコピー</translation>
 <translation id="8197810018650377191">ブックマークに追加</translation>
 <translation id="8261506727792406068">消す</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">ポータルドキュメント調べる</translation>
 <translation id="8768970203213061953">風景１４</translation>
 <translation id="8773635261052182196">この通知を見ることはもうないわ。また出したいんやったら、Vivaldiの設定からやっといて。</translation>
+<translation id="8774017153185436870">サイトが自動で動画再生してくる可能性あるで</translation>
 <translation id="8813277370772331957">また後にして</translation>
 <translation id="8894900864683381599">リンク先をウェブパネルに追加する</translation>
 <translation id="8912720443398351457">ほんまにVivaldi終了すんの？</translation>
 <translation id="8947109330183116400">HTMLブックマークファイルどれにするん</translation>
 <translation id="9017566390391482291">インポートするVivaldiのプロファイルフォルダーどれにするん</translation>
 <translation id="9048058608784130603">アップデートちょっとタンマ<ph name="VERSION" /></translation>
+<translation id="9048224371732578627">動画の自動再生、許可してるで</translation>
 <translation id="9065203028668620118">編集</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261"><ph name="USER" />で画像開く</translation>

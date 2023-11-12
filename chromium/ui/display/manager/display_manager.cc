@@ -26,11 +26,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chromeos/system/devicemode.h"
+#include "chromeos/ash/components/system/devicemode.h"
 #include "chromeos/ui/base/display_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
@@ -1004,9 +1004,20 @@ void DisplayManager::UpdateDisplaysWith(
       ++new_info_iter;
     }
   }
+
   Display old_primary;
-  if (delegate_)
-    old_primary = screen_->GetPrimaryDisplay();
+  if (delegate_) {
+    // Get old primary from current resolved layout, because we could be in the
+    // middle of updating the primary display, so screen_->GetPrimaryDisplay()
+    // may already point to the new primary.
+    if (current_resolved_layout_) {
+      Display* primary = FindDisplayForId(current_resolved_layout_->primary_id);
+      if (primary)
+        old_primary = *primary;
+    }
+    if (!old_primary.is_valid())
+      old_primary = screen_->GetPrimaryDisplay();
+  }
 
   // Clear focus if the display has been removed, but don't clear focus if
   // the destkop has been moved from one display to another
@@ -1557,7 +1568,7 @@ void DisplayManager::UpdateZoomFactor(int64_t display_id, float zoom_factor) {
     on_display_zoom_modify_timeout_.Cancel();
     on_display_zoom_modify_timeout_.Reset(
         base::BindOnce(&OnInternalDisplayZoomChanged, zoom_factor));
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, on_display_zoom_modify_timeout_.callback(),
         base::Seconds(kDisplayZoomModifyTimeoutSec));
   }
@@ -1637,7 +1648,7 @@ void DisplayManager::CreateMirrorWindowAsyncIfAny() {
   // ash::Shell::Init() will call this after the compositor is initialized.
   if (software_mirroring_display_list_.empty() || !delegate_)
     return;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&DisplayManager::CreateMirrorWindowIfAny,
                                 weak_ptr_factory_.GetWeakPtr()));
 }

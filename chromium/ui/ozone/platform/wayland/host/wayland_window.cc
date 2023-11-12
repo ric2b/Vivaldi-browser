@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
+#include <aura-shell-client-protocol.h>
 #include <stdint.h>
 #include <wayland-cursor.h>
 
@@ -12,9 +13,10 @@
 
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/chromeos_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/cursor/cursor.h"
@@ -44,6 +46,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_surface.h"
+#include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_cursor_shapes.h"
 #include "ui/ozone/platform/wayland/mojom/wayland_overlay_config.mojom.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
@@ -71,8 +74,8 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
       wayland_overlay_delegation_enabled_(connection->viewporter() &&
                                           IsWaylandOverlayDelegationEnabled()),
       accelerated_widget_(
-          connection->wayland_window_manager()->AllocateAcceleratedWidget()),
-      ui_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+          connection->window_manager()->AllocateAcceleratedWidget()),
+      ui_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
   // Set a class property key, which allows |this| to be used for drag action.
   SetWmDragHandler(this, this);
 }
@@ -84,15 +87,15 @@ WaylandWindow::~WaylandWindow() {
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 
   if (wayland_overlay_delegation_enabled_) {
-    connection_->wayland_window_manager()->RemoveSubsurface(
-        GetWidget(), primary_subsurface_.get());
+    connection_->window_manager()->RemoveSubsurface(GetWidget(),
+                                                    primary_subsurface_.get());
   }
   for (const auto& widget_subsurface : wayland_subsurfaces()) {
-    connection_->wayland_window_manager()->RemoveSubsurface(
-        GetWidget(), widget_subsurface.get());
+    connection_->window_manager()->RemoveSubsurface(GetWidget(),
+                                                    widget_subsurface.get());
   }
   if (root_surface_)
-    connection_->wayland_window_manager()->RemoveWindow(GetWidget());
+    connection_->window_manager()->RemoveWindow(GetWidget());
 
   // This might have already been hidden and another window has been shown.
   // Thus, the parent will have another child window. Do not reset it.
@@ -125,7 +128,7 @@ void WaylandWindow::UpdateWindowScale(bool update_bounds) {
   auto* output = output_manager->GetOutput(preferred_outputs_id.value());
   // There can be a race between sending leave output event and destroying
   // wl_outputs. Thus, explicitly check if the output exist.
-  if (!output)
+  if (!output || !output->IsReady())
     return;
 
   float new_scale = output->scale_factor();
@@ -204,13 +207,13 @@ void WaylandWindow::OnPointerFocusChanged(bool focused) {
 }
 
 bool WaylandWindow::HasPointerFocus() const {
-  return this == connection_->wayland_window_manager()
-                     ->GetCurrentPointerFocusedWindow();
+  return this ==
+         connection_->window_manager()->GetCurrentPointerFocusedWindow();
 }
 
 bool WaylandWindow::HasKeyboardFocus() const {
-  return this == connection_->wayland_window_manager()
-                     ->GetCurrentKeyboardFocusedWindow();
+  return this ==
+         connection_->window_manager()->GetCurrentKeyboardFocusedWindow();
 }
 
 void WaylandWindow::RemoveEnteredOutput(uint32_t output_id) {
@@ -241,6 +244,13 @@ bool WaylandWindow::StartDrag(
   if (!alive)
     return false;
   return true;
+}
+
+void WaylandWindow::UpdateDragImage(const gfx::ImageSkia& image,
+                                    const gfx::Vector2d& offset) {
+  if (connection_->data_drag_controller()->state() !=
+      WaylandDataDragController::State::kIdle)
+    connection_->data_drag_controller()->UpdateDragImage(image, offset);
 }
 
 void WaylandWindow::CancelDrag() {
@@ -282,6 +292,17 @@ void WaylandWindow::OnChannelDestroyed() {
   frame_manager_->RecordFrame(
       std::make_unique<WaylandFrame>(root_surface(), wl::WaylandOverlayConfig(),
                                      std::move(subsurfaces_to_overlays)));
+}
+
+void WaylandWindow::SetAuraSurface(zaura_surface* aura_surface) {
+  DCHECK(connection()->zaura_shell());
+  DCHECK_NE(aura_surface_.get(), aura_surface);
+  aura_surface_.reset(aura_surface);
+}
+
+bool WaylandWindow::IsSupportedOnAuraSurface(uint32_t version) const {
+  return aura_surface_ &&
+         zaura_surface_get_version(aura_surface_.get()) >= version;
 }
 
 void WaylandWindow::Close() {
@@ -336,21 +357,20 @@ void WaylandWindow::SetCapture() {
   // this specific window has grabbed the events, and they will be rerouted in
   // WaylandWindow::DispatchEvent method.
   if (!HasCapture())
-    connection_->wayland_window_manager()->GrabLocatedEvents(this);
+    connection_->window_manager()->GrabLocatedEvents(this);
 }
 
 void WaylandWindow::ReleaseCapture() {
   if (HasCapture())
-    connection_->wayland_window_manager()->UngrabLocatedEvents(this);
+    connection_->window_manager()->UngrabLocatedEvents(this);
   // See comment in SetCapture() for details on wayland and grabs.
 }
 
 bool WaylandWindow::HasCapture() const {
-  return connection_->wayland_window_manager()->located_events_grabber() ==
-         this;
+  return connection_->window_manager()->located_events_grabber() == this;
 }
 
-void WaylandWindow::ToggleFullscreen() {}
+void WaylandWindow::SetFullscreen(bool fullscreen, int64_t target_display_id) {}
 
 void WaylandWindow::Maximize() {}
 
@@ -453,7 +473,7 @@ uint32_t WaylandWindow::DispatchEvent(const PlatformEvent& native_event) {
 
   if (event->IsLocatedEvent()) {
     auto* event_grabber =
-        connection_->wayland_window_manager()->located_events_grabber();
+        connection_->window_manager()->located_events_grabber();
     auto* root_parent_window = GetRootParentWindow();
 
     // We must reroute the events to the event grabber iff these windows belong
@@ -623,9 +643,6 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
     return false;
   }
 
-  if (properties.inhibit_keyboard_shortcuts)
-    root_surface_->InhibitKeyboardShortcuts();
-
   // Update visual size in tests immediately if the test config is set.
   // Otherwise, such tests as interactive_ui_tests fail.
   if (!update_visual_size_immediately_for_testing_) {
@@ -641,7 +658,11 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
   opacity_ = properties.opacity;
   type_ = properties.type;
 
-  connection_->wayland_window_manager()->AddWindow(GetWidget(), this);
+  if (properties.inhibit_keyboard_shortcuts) {
+    InitKeyboardShortcutsInhibition();
+  }
+
+  connection_->window_manager()->AddWindow(GetWidget(), this);
 
   if (!OnInitialize(std::move(properties)))
     return false;
@@ -651,8 +672,8 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
         std::make_unique<WaylandSubsurface>(connection_, this);
     if (!primary_subsurface_->surface())
       return false;
-    connection_->wayland_window_manager()->AddSubsurface(
-        GetWidget(), primary_subsurface_.get());
+    connection_->window_manager()->AddSubsurface(GetWidget(),
+                                                 primary_subsurface_.get());
   }
 
   PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
@@ -666,7 +687,41 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
   return true;
 }
 
-void WaylandWindow::SetWindowGeometry(gfx::Rect bounds) {}
+// When upper layer requests to 'inhibit keyboard shortcuts', two different
+// behaviors are currently implemented:
+//
+// 1. If `zcr_keyboard_extension_v1` extension is available (typically meaning
+// it is running under Exo compositor), shortcuts are kept inhibited since the
+// window initialization. That is required to keep Lacros behaving just like
+// Ash Chrome's classic browser.
+//
+// 2. Otherwise, keyboard shortcuts will be inhibited only when in fullscreen.
+// See KeyboardLock spec for more details: https://wicg.github.io/keyboard-lock
+//
+// The main technical difference here is that keyboard-extension-v1 extension
+// allows ozone/wayland to report back to the Wayland compositor that a given
+// key was not processed by the client, giving it a chance of processing global
+// shortcuts (even with a shortcuts inhibitor in place), which is not currently
+// possible with standard Wayland protocol and extensions.
+//
+// TODO(crbug.com/1338554): Revisit and update when/if this scenario changes.
+void WaylandWindow::InitKeyboardShortcutsInhibition() {
+  DCHECK_EQ(keyboard_shortcuts_inhibition_mode_,
+            KeyboardShortcutsInhibitionMode::kDisabled);
+  if (!connection_->keyboard_extension_v1()) {
+    // Only set inhibition mode to kFullscreenOnly and defer the actual handling
+    // to the subsequent shell surface configure events, where window state is
+    // applied/updated. See WaylandToplevelWindow::HandleAuraToplevelConfigure.
+    keyboard_shortcuts_inhibition_mode_ =
+        KeyboardShortcutsInhibitionMode::kFullscreenOnly;
+    return;
+  }
+  keyboard_shortcuts_inhibition_mode_ =
+      KeyboardShortcutsInhibitionMode::kAlwaysEnabled;
+  root_surface()->SetKeyboardShortcutsInhibition(/*enabled=*/true);
+}
+
+void WaylandWindow::SetWindowGeometry(gfx::Size size_dip) {}
 
 gfx::Vector2d WaylandWindow::GetWindowGeometryOffsetInDIP() const {
   if (!frame_insets_px_.has_value())
@@ -748,8 +803,7 @@ bool WaylandWindow::RequestSubsurface() {
   auto subsurface = std::make_unique<WaylandSubsurface>(connection_, this);
   if (!subsurface->surface())
     return false;
-  connection_->wayland_window_manager()->AddSubsurface(GetWidget(),
-                                                       subsurface.get());
+  connection_->window_manager()->AddSubsurface(GetWidget(), subsurface.get());
   subsurface_stack_above_.push_back(subsurface.get());
   auto result = wayland_subsurfaces_.emplace(std::move(subsurface));
   DCHECK(result.second);
@@ -789,6 +843,7 @@ bool WaylandWindow::ArrangeSubsurfaceStack(size_t above, size_t below) {
 
 bool WaylandWindow::CommitOverlays(
     uint32_t frame_id,
+    int64_t seq,
     std::vector<wl::WaylandOverlayConfig>& overlays) {
   if (overlays.empty())
     return true;
@@ -821,7 +876,7 @@ bool WaylandWindow::CommitOverlays(
   if (!wayland_overlay_delegation_enabled_) {
     DCHECK_EQ(overlays.size(), 1u);
     frame_manager_->RecordFrame(std::make_unique<WaylandFrame>(
-        frame_id, root_surface(), std::move(*overlays.begin())));
+        frame_id, seq, root_surface(), std::move(*overlays.begin())));
     return true;
   }
 
@@ -884,7 +939,7 @@ bool WaylandWindow::CommitOverlays(
   }
 
   frame_manager_->RecordFrame(std::make_unique<WaylandFrame>(
-      frame_id, root_surface(), std::move(root_config),
+      frame_id, seq, root_surface(), std::move(root_config),
       std::move(subsurfaces_to_overlays)));
 
   return true;
@@ -927,7 +982,11 @@ void WaylandWindow::UpdateCursorShape(scoped_refptr<BitmapCursor> cursor) {
 }
 
 void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
-  if (pending_bounds_dip_.IsEmpty() &&
+  auto pending_bounds_dip =
+      pending_configure_state_.bounds_dip.value_or(gfx::Rect());
+  auto pending_size_px = pending_configure_state_.size_px.value_or(gfx::Size());
+
+  if (pending_bounds_dip.IsEmpty() &&
       GetPlatformWindowState() == PlatformWindowState::kMinimized &&
       pending_configures_.empty()) {
     // In exo, widget creation is deferred until the surface has contents and
@@ -939,15 +998,15 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
     // As per spec, width and height must be greater than zero.
     if (bounds_in_dip.IsEmpty())
       bounds_in_dip = gfx::Rect(0, 0, 1, 1);
-    SetWindowGeometry(bounds_in_dip);
+    SetWindowGeometry(bounds_in_dip.size());
     AckConfigure(serial);
     root_surface()->Commit();
-  } else if (delegate()->ConvertRectToPixels(pending_bounds_dip_) ==
+  } else if (delegate()->ConvertRectToPixels(pending_bounds_dip) ==
                  GetBoundsInPixels() &&
              pending_configures_.empty()) {
-    // If |pending_bounds_dip_| matches the current window bounds, and
+    // If |pending_bounds_dip| matches the current window bounds, and
     // |pending_configures_| is empty, which implies that the window is already
-    // rendering at |pending_bounds_dip_|, then a new frame matching it may take
+    // rendering at |pending_bounds_dip|, then a new frame matching it may take
     // some time to arrive, despite the window delegate receives the updated
     // bounds. Without a new frame, UpdateVisualSize() is not invoked, leaving
     // this configure sequence unacknowledged. E.g: With static window content,
@@ -955,11 +1014,11 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
     // the window to redraw. Hence, acknowledge this configure sequence now to
     // tell the Wayland compositor that the requested configuration for this
     // window has been applied.
-    SetWindowGeometry(pending_bounds_dip_);
+    SetWindowGeometry(pending_bounds_dip.size());
     AckConfigure(serial);
-    connection()->Flush();
+    root_surface()->Commit();
   } else if (!pending_configures_.empty() &&
-             pending_bounds_dip_.size() ==
+             pending_bounds_dip.size() ==
                  pending_configures_.back().bounds_dip.size()) {
     // There is an existing pending_configure with the same size, do not push a
     // new one. Instead, update the serial of the pending_configure.
@@ -970,7 +1029,7 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
     LOG_IF(WARNING, pending_configures_.size() > 100u)
         << "The queue of configures is longer than 100!";
     pending_configures_.push_back(
-        {pending_bounds_dip_, pending_size_px_, serial});
+        {pending_bounds_dip, pending_size_px, serial});
     // The Wayland compositor can generate xdg-shell.configure events more
     // frequently than frame updates from gpu process. Throttle
     // ApplyPendingBounds() such that we forward new bounds to
@@ -978,6 +1037,9 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
     if (pending_configures_.size() <= 1)
       ApplyPendingBounds();
   }
+
+  // Reset pending state.
+  pending_configure_state_ = PendingConfigureState();
 }
 
 gfx::Rect WaylandWindow::AdjustBoundsToConstraintsPx(
@@ -1037,10 +1099,6 @@ gfx::Rect WaylandWindow::AdjustBoundsToConstraintsDIP(
 }
 
 bool WaylandWindow::ProcessVisualSizeUpdate(const gfx::Size& size_px) {
-  // TODO(crbug.com/1307501): Optimize this to be less expensive. Maybe
-  // precompute in pixels for configure events. pending_configures_ can have 10s
-  // of elements in it for several frames under some conditions.
-  // The `pending_configures_` should store px size instead of dip.
   auto result =
       base::ranges::find_if(pending_configures_, [&size_px](auto& configure) {
         // Should we adjust?
@@ -1049,7 +1107,7 @@ bool WaylandWindow::ProcessVisualSizeUpdate(const gfx::Size& size_px) {
 
   if (result != pending_configures_.end()) {
     auto serial = result->serial;
-    SetWindowGeometry(result->bounds_dip);
+    SetWindowGeometry(result->bounds_dip.size());
     AckConfigure(serial);
     connection()->Flush();
     pending_configures_.erase(pending_configures_.begin(), ++result);

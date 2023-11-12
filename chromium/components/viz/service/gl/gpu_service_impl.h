@@ -262,9 +262,6 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   gpu::Scheduler* GetGpuScheduler() override;
 
 #if BUILDFLAG(IS_WIN)
-  void SendCreatedChildWindow(gpu::SurfaceHandle parent_window,
-                              gpu::SurfaceHandle child_window) override;
-
   // DirectCompositionOverlayCapsObserver implementation.
   // Update overlay info and HDR status on the GPU process and send the updated
   // info back to the browser process if there is a change.
@@ -430,6 +427,12 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 
   scoped_refptr<base::SingleThreadTaskRunner> main_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
+
+#if BUILDFLAG(IS_FUCHSIA)
+  // TODO(crbug.com/1340041): Fuchsia does not support FIDL communication from
+  // ThreadPool's worker threads.
+  std::unique_ptr<base::Thread> vea_thread_;
+#endif
 
   // Do not change the class member order here. watchdog_thread_ should be the
   // last one to be destroyed before main_runner_ and io_runner_.

@@ -4,57 +4,8 @@
  * found in the LICENSE file.
  */
 
-let methodName = window.location.origin + '/pay';
+let methodName = window.location.origin;
 let request = undefined;
-
-/** Switches to the basic-card method name. */
-function basicCardMethodName() { // eslint-disable-line no-unused-vars
-  methodName = 'basic-card';
-}
-
-/** Installs the payment handler. */
-function install() { // eslint-disable-line no-unused-vars
-  navigator.serviceWorker
-    .getRegistration('change_payment_method_app.js')
-    .then((registration) => {
-      if (registration) {
-        output(
-            'serviceWorker.getRegistration()',
-            'The ServiceWorker is already installed.',
-        );
-        return;
-      }
-      navigator.serviceWorker
-        .register('change_payment_method_app.js')
-        .then(() => {
-          return navigator.serviceWorker.ready;
-        })
-        .then((registration) => {
-          if (!registration.paymentManager) {
-            output('serviceWorker.register()', 'PaymentManager API not found.');
-            return;
-          }
-
-          registration.paymentManager.instruments
-            .set('instrument-id', {
-              name: 'Instrument Name',
-              method: methodName,
-            })
-            .then(() => {
-              output('instruments.set()', 'Payment handler installed.');
-            })
-            .catch((error) => {
-              output('instruments.set() rejected with', error);
-            });
-        })
-        .catch((error) => {
-          output('serviceWorker.register() rejected with', error);
-        });
-    })
-    .catch((error) => {
-      output('serviceWorker.getRegistration() rejected with', error);
-    });
-}
 
 /**
  * Shows the payment sheet and outputs the return value of
@@ -90,7 +41,7 @@ function initTestNoHandler() {
  * Verifies that PaymentRequestEvent.changePaymentMethod() returns null if there
  * is no handler for the "paymentmethodchange" event in PaymentRequest.
  */
-function testNoHandler() { // eslint-disable-line no-unused-vars
+function testNoHandler() {
   // Intentionally do not respond to the 'paymentmethodchange' event.
   outputChangePaymentMethodReturnValue(initTestNoHandler());
 }
@@ -110,7 +61,7 @@ function initTestReject() {
  * Verifies that PaymentRequest.show() is rejected if the promise passed into
  * PaymentMethodChangeEvent.updateWith() is rejected.
  */
-function testReject() { // eslint-disable-line no-unused-vars
+function testReject() {
   outputChangePaymentMethodReturnValue(initTestReject());
 }
 
@@ -133,7 +84,7 @@ function initTestThrow() {
  * Verifies that PaymentRequest.show() is rejected if there is an exception in
  * the promised passed into PaymentMethodChangeEvent.updateWith().
  */
-function testThrow() { // eslint-disable-line no-unused-vars
+function testThrow() {
   outputChangePaymentMethodReturnValue(initTestThrow());
 }
 
@@ -162,7 +113,7 @@ function initTestDetails() {
           ],
         },
         {
-          supportedMethods: methodName + '2',
+          supportedMethods: methodName + '/other',
           data: {soup: 'tomato'},
           total: {
             label: 'Modified total #2',
@@ -199,6 +150,6 @@ function initTestDetails() {
  * Verifies that PaymentRequestEvent.changePaymentMethod() returns a subset of
  * details passed into PaymentMethodChangeEvent.updateWith() method.
  */
-function testDetails() { // eslint-disable-line no-unused-vars
+function testDetails() {
   outputChangePaymentMethodReturnValue(initTestDetails());
 }

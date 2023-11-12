@@ -38,6 +38,7 @@
 #include "cc/input/snap_selection_strategy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/animation/scroll_timeline.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -48,7 +49,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
-#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/scroll/mac_scrollbar_animator.h"
 #include "third_party/blink/renderer/core/scroll/programmatic_scroll_animator.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
@@ -79,7 +80,8 @@ int ScrollableArea::MaxOverlapBetweenPages() const {
 }
 
 // static
-float ScrollableArea::DirectionBasedScrollDelta(ui::ScrollGranularity granularity) {
+float ScrollableArea::DirectionBasedScrollDelta(
+    ui::ScrollGranularity granularity) {
   return (granularity == ui::ScrollGranularity::kScrollByPercentage)
              ? cc::kPercentDeltaForDirectionalScroll
              : 1;
@@ -195,8 +197,9 @@ float ScrollableArea::ScrollStep(ui::ScrollGranularity granularity,
   }
 }
 
-ScrollOffset ScrollableArea::ResolveScrollDelta(ui::ScrollGranularity granularity,
-                                                const ScrollOffset& delta) {
+ScrollOffset ScrollableArea::ResolveScrollDelta(
+    ui::ScrollGranularity granularity,
+    const ScrollOffset& delta) {
   gfx::SizeF step(ScrollStep(granularity, kHorizontalScrollbar),
                   ScrollStep(granularity, kVerticalScrollbar));
 
@@ -596,13 +599,6 @@ void ScrollableArea::ContentsResized() {
     mac_scrollbar_animator_->ContentsResized();
 }
 
-void ScrollableArea::InvalidateScrollTimeline() {
-  if (auto* layout_box = GetLayoutBox()) {
-    if (auto* node = layout_box->GetNode())
-      ScrollTimeline::Invalidate(node);
-  }
-}
-
 bool ScrollableArea::HasOverlayScrollbars() const {
   Scrollbar* v_scrollbar = VerticalScrollbar();
   if (v_scrollbar && v_scrollbar->IsOverlayScrollbar())
@@ -840,8 +836,14 @@ Node* ScrollableArea::EventTargetNode() const {
   Node* node = box->GetNode();
   if (!node && box->Parent() && box->Parent()->IsLayoutNGFieldset())
     node = box->Parent()->GetNode();
-  if (node && IsA<Element>(node))
-    DCHECK_EQ(box, To<Element>(node)->GetLayoutBoxForScrolling());
+  if (node && IsA<Element>(node)) {
+    const LayoutBox* layout_box_for_scrolling =
+        To<Element>(node)->GetLayoutBoxForScrolling();
+    if (layout_box_for_scrolling)
+      DCHECK_EQ(box, layout_box_for_scrolling);
+    else
+      return nullptr;
+  }
   return node;
 }
 

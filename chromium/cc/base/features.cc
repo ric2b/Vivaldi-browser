@@ -78,7 +78,7 @@ BASE_FEATURE(kSlidingWindowForDroppedFrameCounter,
 
 BASE_FEATURE(kNormalPriorityImageDecoding,
              "NormalPriorityImageDecoding",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSkipCommitsIfNotSynchronizingCompositorState,
              "SkipCommitsIfNotSynchronizingCompositorState",
@@ -91,5 +91,17 @@ BASE_FEATURE(kUseDMSAAForTiles,
 BASE_FEATURE(kUpdateBrowserControlsWithoutProxy,
              "UpdateBrowserControlsWithoutProxy",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kRasterTilePriorityQueue,
+             "RasterTilePriorityQueue",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUIEnableSharedImageCacheForGpu,
+             "UIEnableSharedImageCacheForGpu",
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 }  // namespace features

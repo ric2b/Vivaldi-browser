@@ -3,18 +3,27 @@
 # found in the LICENSE file.
 
 source_set("commands") {
-  friend = [ ":unit_tests" ]
+  friend = [
+    "//chrome/browser/enterprise/connectors/device_trust/test:test_support",
+    ":test_support",
+    ":unit_tests",
+  ]
 
   public = [
     "key_rotation_command.h",
     "key_rotation_command_factory.h",
+    "metrics_utils.h",
   ]
 
-  sources = [ "key_rotation_command_factory.cc" ]
+  sources = [
+    "key_rotation_command_factory.cc",
+    "metrics_utils.cc",
+  ]
 
   public_deps = [ "//base" ]
 
   deps = [
+    "//chrome/browser/enterprise/connectors/device_trust/common",
     "//components/prefs",
     "//services/network/public/cpp",
     "//third_party/abseil-cpp:absl",
@@ -90,6 +99,8 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//chrome/browser/enterprise/connectors/device_trust/common",
+    "//chrome/browser/enterprise/connectors/device_trust/test:test_support",
     "//testing/gtest",
   ]
 

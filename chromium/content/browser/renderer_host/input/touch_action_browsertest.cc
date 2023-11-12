@@ -55,12 +55,19 @@ const char kTouchActionDataURL[] =
     "  margin: 0;"
     "}"
     ".box {"
-    "  height: 96px;"
-    "  width: 96px;"
-    "  border: 2px solid blue;"
+    "  height: 100px;"
+    "  width: 100px;"
+    "  background-color: red;"
     "}"
-    ".spacer { height: 10000px; }"
-    ".ta-none { touch-action: none; }"
+    ".ta-none {"
+    "  touch-action: none;"
+    "  background-color: green;"
+    "}"
+    ".spacer {"
+    "  height: 10000px;"
+    "  width: 100px;"
+    "  background-color: blue;"
+    "}"
     "</style>"
     "<div class=box></div>"
     "<div class='box ta-none'></div>"
@@ -121,7 +128,7 @@ const char kTouchActionURLWithOverlapArea[] =
 
 void GiveItSomeTime(int t) {
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(t));
   run_loop.Run();
 }

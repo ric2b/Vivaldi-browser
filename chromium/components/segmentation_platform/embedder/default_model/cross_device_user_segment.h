@@ -18,8 +18,8 @@ class CrossDeviceUserSegment : public ModelProvider {
   CrossDeviceUserSegment();
   ~CrossDeviceUserSegment() override = default;
 
-  CrossDeviceUserSegment(CrossDeviceUserSegment&) = delete;
-  CrossDeviceUserSegment& operator=(CrossDeviceUserSegment&) = delete;
+  CrossDeviceUserSegment(const CrossDeviceUserSegment&) = delete;
+  CrossDeviceUserSegment& operator=(const CrossDeviceUserSegment&) = delete;
 
   static std::unique_ptr<Config> GetConfig();
 
@@ -31,7 +31,7 @@ class CrossDeviceUserSegment : public ModelProvider {
   // ModelProvider implementation.
   void InitAndFetchModel(
       const ModelUpdatedCallback& model_updated_callback) override;
-  void ExecuteModelWithInput(const std::vector<float>& inputs,
+  void ExecuteModelWithInput(const ModelProvider::Request& inputs,
                              ExecutionCallback callback) override;
   bool ModelAvailable() override;
 };

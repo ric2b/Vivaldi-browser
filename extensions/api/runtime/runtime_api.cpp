@@ -710,12 +710,13 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
     extensions::VivaldiWindowsAPI::WindowsForProfileClosing(profile);
   }
 
-  g_browser_process->profile_manager()->MaybeScheduleProfileForDeletion(
+  g_browser_process->profile_manager()
+    ->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
       profile_path,
       base::BindOnce(
-          &runtime_api::DeleteProfileCallback,
-          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_MANAGER,
-                                            KeepAliveRestartOption::DISABLED)),
+        &runtime_api::DeleteProfileCallback,
+        std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_MANAGER,
+          KeepAliveRestartOption::DISABLED)),
       ProfileMetrics::DELETE_PROFILE_SETTINGS);
 
   return RespondNow(ArgumentList(Results::Create(true)));

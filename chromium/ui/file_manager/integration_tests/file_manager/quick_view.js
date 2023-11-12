@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {DialogType} from '../dialog_type.js';
 import {ExecuteScriptError} from '../remote_call.js';
-import {addEntries, ENTRIES, EntryType, getCaller, getHistogramCount, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo, wait} from '../test_util.js';
+import {addEntries, ENTRIES, EntryType, getCaller, getHistogramCount, pending, repeatUntil, RootPath, sanitizeDate, sendTestMessage, TestEntryInfo, wait} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
 import {mountCrostini, mountGuestOs, navigateWithDirectoryTree, openNewWindow, remoteCall, setupAndWaitUntilReady} from './background.js';
@@ -339,7 +339,11 @@ async function getQuickViewMetadataBoxField(appId, name, hidden = '') {
   }
 
   const element = await remoteCall.waitForElement(appId, quickViewQuery);
-  return element.text;
+  if (name === 'Date modified') {
+    return sanitizeDate(element.text || '');
+  } else {
+    return element.text;
+  }
 }
 
 /**
@@ -1978,10 +1982,9 @@ testcase.openQuickViewVideo = async () => {
   // Close Quick View.
   await closeQuickView(appId);
 
-  // Check quickview video <files-safe-media> has no "src", so it stops
-  // playing the video. crbug.com/970192
-  const noSrcFilesSafeMedia = ['#quick-view', '#videoSafeMedia[src=""]'];
-  await remoteCall.waitForElement(appId, noSrcFilesSafeMedia);
+  // Check: closing Quick View should remove the video <files-safe-media>
+  // preview element, so it stops playing the video. crbug.com/970192
+  await remoteCall.waitForElementLost(appId, preview);
 };
 
 /**
@@ -2035,10 +2038,9 @@ testcase.openQuickViewVideoOnDrive = async () => {
   // Close Quick View.
   await closeQuickView(appId);
 
-  // Check quickview video <files-safe-media> has no "src", so it stops
-  // playing the video. crbug.com/970192
-  const noSrcFilesSafeMedia = ['#quick-view', '#videoSafeMedia[src=""]'];
-  await remoteCall.waitForElement(appId, noSrcFilesSafeMedia);
+  // Check: closing Quick View should remove the video <files-safe-media>
+  // preview element, so it stops playing the video. crbug.com/970192
+  await remoteCall.waitForElementLost(appId, preview);
 };
 
 /**
@@ -3076,7 +3078,7 @@ testcase.openQuickViewAndDeleteSingleSelection = async () => {
     let deleteDialogButton = ['#quick-view', '.cr-dialog-ok:not([hidden])'];
     deleteDialogButton =
         await remoteCall.waitAndClickElement(appId, deleteDialogButton);
-    chrome.test.assertEq('Delete', deleteDialogButton.text);
+    chrome.test.assertEq('Delete forever', deleteDialogButton.text);
   }
 
   // Check: |hello.txt| should have been deleted.
@@ -3135,7 +3137,7 @@ testcase.openQuickViewAndDeleteCheckSelection = async () => {
     let deleteDialogButton = ['#quick-view', '.cr-dialog-ok:not([hidden])'];
     deleteDialogButton =
         await remoteCall.waitAndClickElement(appId, deleteDialogButton);
-    chrome.test.assertEq('Delete', deleteDialogButton.text);
+    chrome.test.assertEq('Delete forever', deleteDialogButton.text);
   }
 
   // Check: |hello.txt| should have been deleted.

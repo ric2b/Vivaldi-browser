@@ -197,8 +197,14 @@ void OmniboxPopupContentsView::OpenMatch(
     base::TimeTicks match_selection_timestamp) {
   DCHECK(HasMatchAt(index));
 
-  omnibox_view_->OpenMatch(edit_model_->result().match_at(index), disposition,
-                           GURL(), std::u16string(), index,
+  // This is needed for mouse clicks and gestures to respect takeover actions.
+  auto& match = edit_model_->result().match_at(index);
+  if (match.action && match.action->TakesOverMatch()) {
+    return edit_model_->ExecuteAction(match, index, match_selection_timestamp,
+                                      disposition);
+  }
+
+  omnibox_view_->OpenMatch(match, disposition, GURL(), std::u16string(), index,
                            match_selection_timestamp);
 }
 
@@ -332,9 +338,6 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
 
     popup_created = true;
   }
-
-  // Fix-up any matches due to tail suggestions, before display below.
-  edit_model_->autocomplete_controller()->SetTailSuggestContentPrefixes();
 
   // Update the match cached by each row, in the process of doing so make sure
   // we have enough row views.

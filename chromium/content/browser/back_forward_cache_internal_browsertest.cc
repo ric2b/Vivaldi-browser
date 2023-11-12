@@ -262,7 +262,11 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
-                       DISABLED_NavigationsAreFullyCommitted) {
+                       NavigationsAreFullyCommitted) {
+  // Sometimes messages arrive from a renderer to browser for the page in
+  // back/forward cache (message on content.mojom.FrameHost), because the input
+  // task queue is currently not frozen. Do not fail for unexpected messages.
+  DoNotFailForUnexpectedMessagesWhileCached();
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // During a navigation, the document being navigated *away from* can either be
@@ -756,7 +760,36 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(rfh_b_2->IsInBackForwardCache());
 }
 
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, EvictPageWithInfiniteLoop) {
+class BackForwardCacheEntryTimeoutBrowserTest
+    : public BackForwardCacheBrowserTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    BackForwardCacheBrowserTest::SetUpCommandLine(command_line);
+    feature_list_.InitAndEnableFeature(features::kBackForwardCacheEntryTimeout);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(BackForwardCacheEntryTimeoutBrowserTest, BusyPagehide) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url_a(embedded_test_server()->GetURL("a.test", "/title1.html"));
+  GURL url_b(embedded_test_server()->GetURL("b.test", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), url_a));
+  RenderFrameHostImplWrapper rfh(current_frame_host());
+  ASSERT_TRUE(ExecJs(rfh.get(), R"(
+      addEventListener("pagehide", () => {while(1){}});
+  )"));
+  ASSERT_TRUE(NavigateToURL(shell(), url_b));
+  ASSERT_TRUE(rfh.WaitUntilRenderFrameDeleted());
+  ASSERT_TRUE(HistoryGoBack(web_contents()));
+  ExpectNotRestored({NotRestoredReason::kTimeoutPuttingInCache}, {}, {}, {}, {},
+                    FROM_HERE);
+}
+
+IN_PROC_BROWSER_TEST_F(BackForwardCacheEntryTimeoutBrowserTest,
+                       EvictPageWithInfiniteLoop) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
@@ -1042,7 +1075,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, TimedEviction) {
   // 1) Navigate to A.
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
   RenderFrameHostImplWrapper rfh_a(current_frame_host());
-  RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a.get());
   rfh_a->GetBackForwardCacheMetrics()->SetObserverForTesting(this);
 
   // 2) Navigate to B.
@@ -1053,14 +1085,13 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, TimedEviction) {
   task_runner->FastForwardBy(time_to_live_in_back_forward_cache - delta);
 
   // 4) Confirm A is still in BackForwardCache.
-  ASSERT_FALSE(delete_observer_rfh_a.deleted());
+  ASSERT_FALSE(rfh_a.IsDestroyed());
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
 
   // 5) Fast forward to when eviction is due.
   task_runner->FastForwardBy(delta);
 
   // 6) Confirm A is evicted.
-  delete_observer_rfh_a.WaitUntilDeleted();
   EXPECT_EQ(current_frame_host(), rfh_b.get());
 
   // 7) Go back to A.
@@ -2391,7 +2422,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 
   // 2) Navigate to B.
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
-  delegate.WaitForInBackForwardCacheAck();
+  ASSERT_TRUE(delegate.WaitForInBackForwardCacheAck());
   ASSERT_FALSE(delete_observer_rfh_a.deleted());
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
 
@@ -2428,7 +2459,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // 2) Navigate to B.
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
-  delegate.WaitForInBackForwardCacheAck();
+  ASSERT_TRUE(delegate.WaitForInBackForwardCacheAck());
   RenderFrameHostImpl* rfh_b = current_frame_host();
   ASSERT_FALSE(delete_observer_rfh_a.deleted());
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
@@ -2825,7 +2856,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
     // Posted because Stop() will destroy the NavigationRequest but
     // DisableJsEviction will be called from inside the navigation which may
     // not be a safe place to destruct a NavigationRequest.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&WebContentsImpl::Stop,
                                   base::Unretained(web_contents())));
   }));
@@ -3724,7 +3755,6 @@ IN_PROC_BROWSER_TEST_F(CustomTTLBackForwardCacheBrowserTest,
   // 1) Navigate to A.
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
   RenderFrameHostImplWrapper rfh_a(current_frame_host());
-  RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a.get());
 
   // 2) Navigate to B.
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
@@ -3734,14 +3764,14 @@ IN_PROC_BROWSER_TEST_F(CustomTTLBackForwardCacheBrowserTest,
   task_runner->FastForwardBy(time_to_live_in_back_forward_cache - delta);
 
   // 4) Confirm A is still in BackForwardCache.
-  ASSERT_FALSE(delete_observer_rfh_a.deleted());
+  ASSERT_FALSE(rfh_a.IsDestroyed());
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
 
   // 5) Fast forward to when eviction is due.
   task_runner->FastForwardBy(delta);
 
   // 6) Confirm A is evicted.
-  delete_observer_rfh_a.WaitUntilDeleted();
+  ASSERT_TRUE(rfh_a.WaitUntilRenderFrameDeleted());
   EXPECT_EQ(current_frame_host(), rfh_b.get());
 
   // 7) Go back to A.
@@ -3801,24 +3831,24 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   // Navigate back to a.com.
   ASSERT_TRUE(HistoryGoBack(web_contents()));
   ASSERT_TRUE(rfh_b.WaitUntilRenderFrameDeleted());
+  ExpectRestored(FROM_HERE);
 
   // Navigate forward to b.com again with no error.
   ASSERT_TRUE(HistoryGoForward(web_contents()));
 
-  // We would normally confirm that the blocking reasons are correct, however,
-  // when performing a history navigations back to an error document, a new
-  // entry is created and the reasons in the old entry are not recorded.
-  //
   // Check that we indeed got a new history entry.
   ASSERT_NE(
       history_entry_id,
       web_contents()->GetController().GetLastCommittedEntry()->GetUniqueID());
+  // The reasons from the old entry should be copied to the new entry.
+  ExpectNotRestored(
+      {NotRestoredReason::kHTTPStatusNotOK, NotRestoredReason::kNoResponseHead,
+       NotRestoredReason::kErrorDocument},
+      {}, {}, {}, {}, FROM_HERE);
 }
 
 class BackForwardCacheBrowserTestWithFencedFrames
-    : public BackForwardCacheBrowserTest,
-      public ::testing::WithParamInterface<
-          test::FencedFrameTestHelper::FencedFrameType> {
+    : public BackForwardCacheBrowserTest {
  public:
   BackForwardCacheBrowserTestWithFencedFrames() = default;
   ~BackForwardCacheBrowserTestWithFencedFrames() override = default;
@@ -3829,22 +3859,17 @@ class BackForwardCacheBrowserTestWithFencedFrames
 
  private:
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    EnableFeatureAndSetParams(blink::features::kFencedFrames, "", "");
+    EnableFeatureAndSetParams(features::kPrivacySandboxAdsAPIsOverride, "", "");
     BackForwardCacheBrowserTest::SetUpCommandLine(command_line);
 
-    fenced_frame_test_helper_ =
-        std::make_unique<test::FencedFrameTestHelper>(GetParam());
+    fenced_frame_test_helper_ = std::make_unique<test::FencedFrameTestHelper>();
   }
 
   std::unique_ptr<test::FencedFrameTestHelper> fenced_frame_test_helper_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    BackForwardCacheBrowserTestWithFencedFrames,
-    ::testing::Values(test::FencedFrameTestHelper::FencedFrameType::kShadowDOM,
-                      test::FencedFrameTestHelper::FencedFrameType::kMPArch));
-
-IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestWithFencedFrames,
                        CachesFencedFramesSimple) {
   CreateHttpsServer();
   ASSERT_TRUE(https_server()->Start());
@@ -3876,12 +3901,8 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
 
 // Test that the back/forward cache can store documents containing a fenced
 // frame in their contents.
-IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestWithFencedFrames,
                        InnerFrameStorageSupport) {
-  // This tests specific FrameTree information so isn't applicable to
-  // ShadowDOM.
-  if (GetParam() == test::FencedFrameTestHelper::FencedFrameType::kShadowDOM)
-    return;
   CreateHttpsServer();
   ASSERT_TRUE(https_server()->Start());
   GURL url_a(https_server()->GetURL(
@@ -3993,12 +4014,8 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
 }
 
 // Test that documents are evicted correctly through the outermost main frame.
-IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestWithFencedFrames,
                        OuterDocumentTimeEviction) {
-  // This tests specific FrameTree information so isn't applicable to
-  // ShadowDOM.
-  if (GetParam() == test::FencedFrameTestHelper::FencedFrameType::kShadowDOM)
-    return;
   CreateHttpsServer();
   ASSERT_TRUE(https_server()->Start());
   // Inject mock time task runner to be used in the eviction timer, so we can,
@@ -4065,12 +4082,8 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
 }
 
 // This test checks that the TreeResults generated are correct.
-IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestWithFencedFrames,
                        TreeResults) {
-  // This tests specific FrameTree information so isn't applicable to
-  // ShadowDOM.
-  if (GetParam() == test::FencedFrameTestHelper::FencedFrameType::kShadowDOM)
-    return;
   CreateHttpsServer();
   ASSERT_TRUE(https_server()->Start());
   GURL url_a(https_server()->GetURL("a.test", "/title1.html"));
@@ -4147,17 +4160,15 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
   blink::mojom::BackForwardCacheNotRestoredReasonsPtr web_reasons =
       can_store_result.tree_reasons->GetWebExposedNotRestoredReasons();
   EXPECT_TRUE(web_reasons->same_origin_details);
-  EXPECT_FALSE(web_reasons->blocked);
+  EXPECT_EQ(web_reasons->blocked, blink::mojom::BFCacheBlocked::kNo);
   EXPECT_EQ(2u, web_reasons->same_origin_details->children.size());
-  EXPECT_FALSE(web_reasons->same_origin_details->children.at(0)->blocked);
   EXPECT_FALSE(
       web_reasons->same_origin_details->children.at(0)->same_origin_details);
-  EXPECT_TRUE(web_reasons->same_origin_details->children.at(1)->blocked);
   EXPECT_FALSE(
       web_reasons->same_origin_details->children.at(1)->same_origin_details);
 }
 
-IN_PROC_BROWSER_TEST_P(BackForwardCacheBrowserTestWithFencedFrames,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestWithFencedFrames,
                        EvictionOnInnerFrameTree) {
   DoNotFailForUnexpectedMessagesWhileCached();
   CreateHttpsServer();

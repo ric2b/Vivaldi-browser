@@ -7,13 +7,17 @@
 
 #include <stdint.h>
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "media/gpu/vaapi/vaapi_picture_native_pixmap.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gl/gl_bindings.h"
+
+namespace gl {
+class GLImage;
+}
 
 namespace media {
 
@@ -51,6 +55,9 @@ class VaapiPictureNativePixmapAngle : public VaapiPictureNativePixmap {
 
  private:
   x11::Pixmap x_pixmap_ = x11::Pixmap::None;
+
+  // GLImage bound to the GL textures used by the VDA client.
+  scoped_refptr<gl::GLImage> gl_image_;
 };
 
 }  // namespace media

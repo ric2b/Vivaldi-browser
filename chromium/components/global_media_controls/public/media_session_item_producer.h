@@ -65,6 +65,7 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionItemProducer
   void ActivateItem(const std::string& id) override;
   void HideItem(const std::string& id) override;
   void RemoveItem(const std::string& id) override;
+  void RefreshItem(const std::string& id) override;
   void LogMediaSessionActionButtonPressed(
       const std::string& id,
       media_session::mojom::MediaSessionAction action) override;
@@ -86,6 +87,9 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionItemProducer
   bool HasSession(const std::string& id) const;
 
   void SetAudioSinkId(const std::string& id, const std::string& sink_id);
+
+  media_session::mojom::RemotePlaybackMetadataPtr
+  GetRemotePlaybackMetadataFromItem(const std::string& id);
 
   base::CallbackListSubscription
   RegisterIsAudioOutputDeviceSwitchingSupportedCallback(

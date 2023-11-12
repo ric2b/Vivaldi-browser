@@ -33,6 +33,7 @@
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
+#include "third_party/blink/public/test/test_web_frame_helper.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_control.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -150,7 +151,8 @@ class MockFrameHost : public mojom::FrameHost {
       bool is_created_by_script,
       const blink::FramePolicy& frame_policy,
       blink::mojom::FrameOwnerPropertiesPtr frame_owner_properties,
-      blink::FrameOwnerElementType owner_type) override {
+      blink::FrameOwnerElementType owner_type,
+      ukm::SourceId document_ukm_source_id) override {
     // If we get here, then the remote end of
     // `associated_interface_provider_receiver` is expected to be usable even
     // though we don't pass this receiver over an existing mojo pipe. Simulate
@@ -273,7 +275,6 @@ void TestRenderFrame::Navigate(
           blink::mojom::PolicyContainerPolicies::New(),
           mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote()),
       mojo::NullRemote() /* code_cache_host */, nullptr, nullptr,
-      /* not_restored_reasons */ nullptr,
       base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
                      base::Unretained(mock_frame_host_.get())));
 }
@@ -366,6 +367,11 @@ void TestRenderFrame::BeginNavigation(
 
     navigation_params->policy_container->policies.sandbox_flags =
         navigation_params->frame_policy->sandbox_flags;
+
+    if (url.IsAboutSrcdoc()) {
+      blink::TestWebFrameHelper::FillStaticResponseForSrcdocNavigation(
+          GetWebFrame(), navigation_params.get());
+    }
 
     frame_->CommitNavigation(std::move(navigation_params),
                              nullptr /* extra_data */);

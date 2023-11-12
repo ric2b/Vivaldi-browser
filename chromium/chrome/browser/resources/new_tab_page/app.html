@@ -3,6 +3,9 @@
     --ntp-theme-text-shadow: none;
     --ntp-one-google-bar-height: 56px;
     --ntp-search-box-width: 337px;
+    --ntp-menu-shadow:
+        var(--color-new-tab-page-menu-inner-shadow) 0 1px 2px 0,
+        var(--color-new-tab-page-menu-outer-shadow) 0 2px 6px 2px;
     --ntp-module-width: var(--ntp-search-box-width);
     --ntp-module-layout-width: var(--ntp-search-box-width);
     --ntp-module-border-radius: 5px;
@@ -103,8 +106,10 @@
   }
 
   cr-most-visited {
+    --cr-menu-shadow: var(--ntp-menu-shadow);
     --most-visited-focus-shadow: var(--ntp-focus-shadow);
-    --most-visited-text-color: var(--color-new-tab-page-most-visited-foreground);
+    --most-visited-text-color:
+        var(--color-new-tab-page-most-visited-foreground);
     --most-visited-text-shadow: var(--ntp-theme-text-shadow);
   }
 
@@ -138,6 +143,7 @@
   }
 
   #customizeButton {
+    --hover-bg-color: var(--color-new-tab-page-button-background-hovered);
     --text-color: var(--color-new-tab-page-button-foreground);
     border: none;
     border-radius: calc(.5 * var(--cr-button-height));
@@ -324,12 +330,14 @@
   </ntp-logo>
   <div id="realboxContainer">
     <ntp-realbox id="realbox" is-dark="[[theme_.isDark]]"
+        single-colored-icons="[[theme_.themeRealboxIcons]]"
         on-open-lens-search="onOpenLensSearch_"
         on-open-voice-search="onOpenVoiceSearch_" shown$="[[realboxShown_]]">
     </ntp-realbox>
     <template is="dom-if" if="[[realboxLensSearchEnabled_]]">
-      <ntp-lens-upload-dialog id="lensUploadDialog" 
-          on-close-lens-search="onCloseLensSearch_">
+      <ntp-lens-upload-dialog id="lensUploadDialog"
+          on-close-lens-search="onCloseLensSearch_"
+          on-bind-open-dialog="bindOpenLensDialog_">
       </ntp-lens-upload-dialog>
     </template>
   </div>

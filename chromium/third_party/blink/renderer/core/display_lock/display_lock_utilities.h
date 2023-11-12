@@ -293,6 +293,8 @@ class CORE_EXPORT DisplayLockUtilities {
   static void ElementLostFocus(Element*);
   static void ElementGainedFocus(Element*);
 
+  // Returns true if the selection changed functions need to be called.
+  static bool NeedsSelectionChangedUpdate(const Document& document);
   static void SelectionChanged(const EphemeralRangeInFlatTree& old_selection,
                                const EphemeralRangeInFlatTree& new_selection);
   static void SelectionRemovedFromDocument(Document& document);
@@ -323,6 +325,9 @@ class CORE_EXPORT DisplayLockUtilities {
   static bool IsPotentialStyleRecalcRoot(const Node& node);
 
  private:
+  static bool IsDisplayLockedPreventingPaintUnmemoized(const Node& node,
+                                                       bool inclusive_check);
+
   // This is a helper function for ShouldIgnoreNodeDueToDisplayLock() when the
   // activation reason is kAccessibility. Note that it's private because it
   // assumes certain conditions (specifically the presence of `memoizer_`, which

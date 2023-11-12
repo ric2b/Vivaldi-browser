@@ -40,7 +40,6 @@
 #include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
-#include "third_party/blink/public/common/mobile_metrics/mobile_friendliness.h"
 #include "ui/base/page_transition_types.h"
 
 namespace page_load_metrics {
@@ -148,6 +147,8 @@ void MetricsWebContentsObserver::WebContentsDestroyed() {
   for (auto& observer : lifecycle_observers_)
     observer.OnGoingAway();
 
+  UnregisterInputEventObserver(web_contents()->GetPrimaryMainFrame());
+
   // We tear down PageLoadTrackers in WebContentsDestroyed, rather than in the
   // destructor, since `web_contents()` returns nullptr in the destructor, and
   // PageLoadMetricsObservers can cause code to execute that wants to be able to
@@ -160,20 +161,24 @@ void MetricsWebContentsObserver::WebContentsDestroyed() {
 }
 
 void MetricsWebContentsObserver::RegisterInputEventObserver(
-    content::RenderViewHost* host) {
+    content::RenderFrameHost* host) {
   if (host != nullptr)
-    host->GetWidget()->AddInputEventObserver(this);
+    host->GetRenderWidgetHost()->AddInputEventObserver(this);
 }
 
 void MetricsWebContentsObserver::UnregisterInputEventObserver(
-    content::RenderViewHost* host) {
+    content::RenderFrameHost* host) {
   if (host != nullptr)
-    host->GetWidget()->RemoveInputEventObserver(this);
+    host->GetRenderWidgetHost()->RemoveInputEventObserver(this);
 }
 
-void MetricsWebContentsObserver::RenderViewHostChanged(
-    content::RenderViewHost* old_host,
-    content::RenderViewHost* new_host) {
+void MetricsWebContentsObserver::RenderFrameHostChanged(
+    content::RenderFrameHost* old_host,
+    content::RenderFrameHost* new_host) {
+  if (!new_host->IsInPrimaryMainFrame()) {
+    return;
+  }
+
   UnregisterInputEventObserver(old_host);
   RegisterInputEventObserver(new_host);
 }
@@ -258,8 +263,7 @@ MetricsWebContentsObserver::MetricsWebContentsObserver(
   if (embedder_interface_->IsNoStatePrefetch(web_contents))
     in_foreground_ = false;
 
-  RegisterInputEventObserver(
-      web_contents->GetPrimaryMainFrame()->GetRenderViewHost());
+  RegisterInputEventObserver(web_contents->GetPrimaryMainFrame());
 }
 
 void MetricsWebContentsObserver::WillStartNavigationRequestImpl(
@@ -951,7 +955,7 @@ void MetricsWebContentsObserver::PrimaryMainFrameRenderProcessGone(
     return;
   }
 
-  // RenderProcessGone is associated with the render frame host for the
+  // RenderProcessGone is associated with the RenderFrameHost for the
   // currently committed load. We don't know if the pending navs or aborted
   // pending navs are associated w/ the render process that died, so we can't be
   // sure the info should propagate to them.
@@ -1048,7 +1052,7 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr cpu_timing,
     mojom::InputTimingPtr input_timing_delta,
-    const absl::optional<blink::MobileFriendliness>& mobile_friendliness,
+    mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
     uint32_t soft_navigation_count) {
   // Replacing this call by GetPageLoadTracker breaks some tests.
   //
@@ -1079,7 +1083,7 @@ void MetricsWebContentsObserver::OnTimingUpdated(
         render_frame_host, std::move(timing), std::move(metadata),
         std::move(new_features), resources, std::move(render_data),
         std::move(cpu_timing), std::move(input_timing_delta),
-        std::move(mobile_friendliness), soft_navigation_count);
+        std::move(subresource_load_metrics), soft_navigation_count);
   }
 }
 
@@ -1108,14 +1112,14 @@ void MetricsWebContentsObserver::UpdateTiming(
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr cpu_timing,
     mojom::InputTimingPtr input_timing_delta,
-    const absl::optional<blink::MobileFriendliness>& mobile_friendliness,
+    mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
     uint32_t soft_navigation_count) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_receivers_.GetCurrentTargetFrame();
   OnTimingUpdated(render_frame_host, std::move(timing), std::move(metadata),
                   new_features, resources, std::move(render_data),
                   std::move(cpu_timing), std::move(input_timing_delta),
-                  std::move(mobile_friendliness), soft_navigation_count);
+                  std::move(subresource_load_metrics), soft_navigation_count);
 }
 
 void MetricsWebContentsObserver::SetUpSharedMemoryForSmoothness(

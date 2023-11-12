@@ -80,10 +80,11 @@ class RenderAccessibilityManager;
 class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
                                                public RenderFrameObserver {
  public:
+  // A call to AccessibilityModeChanged() is required after construction to
+  // start accessibility.
   RenderAccessibilityImpl(
       RenderAccessibilityManager* const render_accessibility_manager,
-      RenderFrameImpl* const render_frame,
-      ui::AXMode mode);
+      RenderFrameImpl* const render_frame);
 
   RenderAccessibilityImpl(const RenderAccessibilityImpl&) = delete;
   RenderAccessibilityImpl& operator=(const RenderAccessibilityImpl&) = delete;
@@ -123,10 +124,14 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
   void NotifyWebAXObjectMarkedDirty(const blink::WebAXObject& obj,
     ax::mojom::Event event_type = ax::mojom::Event::kNone);
+  // Called when it is safe to begin a serialization.
+  void AXReadyCallback();
 
   // Returns the main top-level document for this page, or NULL if there's
   // no view or frame.
   blink::WebDocument GetMainDocument();
+
+  blink::WebAXContext* GetAXContext() { return ax_context_.get(); }
 
   // Returns the page language.
   std::string GetLanguage();
@@ -184,6 +189,9 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   void AddPluginTreeToUpdate(ui::AXTreeUpdate* update,
                              bool invalidate_plugin_subtree);
 
+  // If the document is loaded, fire a load complete event.
+  void FireLoadCompleteIfLoaded();
+
   // Creates and takes ownership of an instance of the class that automatically
   // labels images for accessibility.
   void CreateAXImageAnnotator();
@@ -197,8 +205,9 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   void MarkAllAXObjectsDirty(ax::mojom::Role role,
                              ax::mojom::Action event_from_action);
 
-  void Scroll(const ui::AXActionTarget* target,
-              ax::mojom::Action scroll_action);
+  // Ensure that AXReadyCallback() will be called at the next available
+  // opportunity, so that any dirty objects will be serialized soon.
+  void ScheduleImmediateAXUpdate();
 
   // If we are calling this from a task, scheduling is allowed even if there is
   // a running task

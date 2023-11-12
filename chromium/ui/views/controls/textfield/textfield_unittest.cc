@@ -77,12 +77,11 @@
 #include "ui/base/cocoa/text_services_context_menu.h"
 #endif
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/events/ozone/layout/keyboard_layout_engine_test_utils.h"
 #endif
 
-namespace views {
-namespace test {
+namespace views::test {
 
 const char16_t kHebrewLetterSamekh = 0x05E1;
 
@@ -414,10 +413,10 @@ void TextfieldTest::SetUp() {
       std::make_unique<ui::TestClipboard>());
   ViewsTestBase::SetUp();
 
-#if defined(USE_OZONE)
-  // TODO(crbug.com/1209477): Wayland bots use Weston with Headless backend that
-  // sets up XkbKeyboardLayoutEngine differently. When that is fixed, remove the
-  // workaround below.
+#if BUILDFLAG(IS_OZONE)
+  // Setting up the keyboard layout engine depends on the implementation and may
+  // be asynchronous.  We ensure that it is ready to use so that tests could
+  // handle key events properly.
   ui::WaitUntilLayoutEngineIsReadyForTest();
 #endif
 }
@@ -4227,5 +4226,4 @@ TEST_F(TextfieldTest, ScrollCommands) {
       ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT));
 #endif
 }
-}  // namespace test
-}  // namespace views
+}  // namespace views::test

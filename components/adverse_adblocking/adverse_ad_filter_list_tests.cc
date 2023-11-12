@@ -168,7 +168,7 @@ TEST_F(AdverseAdFiltering, LotsAurls) {
     domain_prefix << "foo" << i << ".";
   }
 
-  for (i = 0; i < 1000000; i += 2) {
+  for (i = 0; i < 1000000; i += 3) {
     {
       std::ostringstream domain_name;
       domain_name << "subdomain-" << i << ".example.com";

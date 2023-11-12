@@ -61,8 +61,8 @@ void RecordCpuRestrictionVMResult(CpuRestrictionVmResult result) {
 // instance is being unthrottled.
 // This function can only be called when the instance is being unthrottled.
 UnthrottlingReason GetUnthrottlingReason(
-    const std::vector<std::unique_ptr<chromeos::ThrottleObserver>>& observers) {
-  std::vector<chromeos::ThrottleObserver*> active_observers;
+    const std::vector<std::unique_ptr<ash::ThrottleObserver>>& observers) {
+  std::vector<ash::ThrottleObserver*> active_observers;
 
   // Check which observer(s) are active.
   for (const auto& observer : observers) {
@@ -393,7 +393,7 @@ void ArcInstanceThrottle::ThrottleInstance(bool should_throttle) {
                               CpuRestrictionState::CPU_RESTRICTION_BACKGROUND);
 
   if (arc_has_booted && !never_enforce_quota_ && is_throttling) {
-    // TODO(yusukes): Do not use quota when Android VPN is in use.
+    // TODO(khmel): Do not use quota when Android VPN is in use.
     use_quota = true;
     DVLOG(2) << "Enforcing cfs_quota";
   }
@@ -417,7 +417,7 @@ void ArcInstanceThrottle::NotifyCpuRestriction(
 }
 
 ArcBootPhaseThrottleObserver* ArcInstanceThrottle::GetBootObserver() {
-  chromeos::ThrottleObserver* observer =
+  ash::ThrottleObserver* observer =
       GetObserverByName(kArcBootPhaseThrottleObserverName);
   return static_cast<ArcBootPhaseThrottleObserver*>(observer);
 }

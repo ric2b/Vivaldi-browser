@@ -33,7 +33,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Stability.Android.MinidumpUploadingTime" units="ms"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>shaktisahu@chromium.org</owner>
   <owner>src/components/minidump_uploader/OWNERS</owner>
   <summary>
@@ -111,7 +111,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.Android.RendererCrash" enum="Boolean"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>wnwen@chromium.org</owner>
   <summary>
     Counts renderer crashes including OOMs. Android only. Mirrors old stability
@@ -120,7 +120,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Stability.Android.SystemExitReason"
-    enum="AndroidProcessExitReason" expires_after="2023-03-19">
+    enum="AndroidProcessExitReason" expires_after="2023-06-04">
   <owner>boliu@chromium.org</owner>
   <owner>ssid@chromium.org</owner>
   <owner>wnwen@chromium.org</owner>
@@ -300,7 +300,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.DebugScenario.Navigation" enum="DebugScenario"
-    expires_after="2023-02-19">
+    expires_after="2023-04-23">
   <owner>nasko@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <summary>
@@ -328,7 +328,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.Experimental.PageLoads" enum="StabilityPageLoadType"
-    expires_after="2023-02-19">
+    expires_after="2023-04-23">
   <owner>fdoray@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -398,6 +398,16 @@ chromium-metrics-reviews@google.com.
     for iOS that Stability.IOS.Experimental.Counts2 is still a good proxy for
     user-visible crashes. IOS.MetricKit.ForegroundExitData includes OOM crashes
     (iOS 14 and higher) and can be used in conjunction with this metric.
+  </summary>
+</histogram>
+
+<histogram name="Stability.IOS.PostCrashAction" enum="IOSPostCrashAction"
+    expires_after="2023-10-04">
+  <owner>justincohen@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <summary>
+    Recorded when the app is foregrounded. Records what action is taken after an
+    unclear shutdown (likely a crash).
   </summary>
 </histogram>
 
@@ -471,7 +481,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.HasPossibleExplanation"
-    enum="BooleanHasPossibleExplanation" expires_after="2023-02-26">
+    enum="BooleanHasPossibleExplanation" expires_after="2023-05-14">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -552,7 +562,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.MobileSessionShutdownType"
-    enum="MobileSessionShutdownType" expires_after="2023-02-26">
+    enum="MobileSessionShutdownType" expires_after="2023-05-14">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -569,7 +579,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.MobileSessionShutdownType2"
-    enum="MobileSessionShutdownType" expires_after="2023-02-26">
+    enum="MobileSessionShutdownType" expires_after="2023-05-14">
   <owner>justincohen@chromium.org</owner>
   <owner>ajuma@chromium.org</owner>
   <summary>

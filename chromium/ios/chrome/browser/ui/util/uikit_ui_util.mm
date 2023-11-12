@@ -12,17 +12,18 @@
 #import <stdint.h>
 #import <cmath>
 
+#import "base/check.h"
 #import "base/check_op.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/notreached.h"
 #import "base/numerics/math_constants.h"
 #import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
-#import "ios/web/public/thread/web_thread.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/resource/resource_bundle.h"
@@ -70,6 +71,12 @@ void MaybeSetUITextFieldScaledFont(BOOL maybe,
   } else {
     textField.font = font;
   }
+}
+
+UIFont* CreateDynamicFont(UIFontTextStyle style, UIFontWeight weight) {
+  UIFontDescriptor* fontDescriptor =
+      [UIFontDescriptor preferredFontDescriptorWithTextStyle:style];
+  return [UIFont systemFontOfSize:fontDescriptor.pointSize weight:weight];
 }
 
 UIImage* CaptureViewWithOption(UIView* view,
@@ -278,7 +285,7 @@ UIView* GetFirstResponderSubview(UIView* view) {
 }
 
 UIResponder* GetFirstResponder() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  DCHECK(NSThread.isMainThread);
   return GetFirstResponderSubview(GetAnyKeyWindow());
 }
 
@@ -331,17 +338,38 @@ void TriggerHapticFeedbackForNotification(UINotificationFeedbackType type) {
   }
 }
 
-NSString* TextForTabCount(long count) {
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) {
-    if (count <= 0)
-      return @"0";
+NSAttributedString* TextForTabCount(int count, CGFloat font_size) {
+  NSString* string;
+  if (count <= 0) {
+    string = @"";
+  } else if (count > 99) {
+    string = @":)";
+  } else {
+    string = [NSString stringWithFormat:@"%d", count];
   }
-  if (count <= 0)
-    return @"";
-  if (count > 99)
-    return @":)";
-  return [NSString stringWithFormat:@"%ld", count];
+
+  if (vivaldi::IsVivaldiRunning() && count <= 0) {
+    string = @"0";
+  } // End Vivaldi
+
+  if (UseSymbols()) {
+    UIFontWeight weight = UIAccessibilityIsBoldTextEnabled() ? UIFontWeightHeavy
+                                                             : UIFontWeightBold;
+    UIFont* font = [UIFont systemFontOfSize:font_size weight:weight];
+    UIFontDescriptor* descriptor = [font.fontDescriptor
+        fontDescriptorWithDesign:UIFontDescriptorSystemDesignRounded];
+    font = [UIFont fontWithDescriptor:descriptor size:font_size];
+
+    return [[NSAttributedString alloc] initWithString:string
+                                           attributes:@{
+                                             NSFontAttributeName : font,
+                                             NSKernAttributeName : @(-0.8),
+                                           }];
+  }
+  UIFont* font = [UIFont systemFontOfSize:font_size weight:UIFontWeightBold];
+  return
+      [[NSAttributedString alloc] initWithString:string
+                                      attributes:@{NSFontAttributeName : font}];
 }
 
 void RegisterEditMenuItem(UIMenuItem* item) {

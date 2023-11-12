@@ -46,13 +46,13 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/paint/paint_phase.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
-#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/rounded_border_geometry.h"
 #include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/scoped_svg_paint_state.h"
 #include "third_party/blink/renderer/core/paint/scrollable_area_painter.h"
 #include "third_party/blink/renderer/core/paint/theme_painter.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/url_metadata_utils.h"
 #include "third_party/blink/renderer/core/paint/view_painter.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
@@ -510,8 +510,7 @@ void NGBoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
       // make it easier to merge scrolling background and scrolling contents
       // into the same layer. The function checks if it's appropriate to paint
       // overflow controls now.
-      if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled())
-        painted_overflow_controls = PaintOverflowControls(info, paint_offset);
+      painted_overflow_controls = PaintOverflowControls(info, paint_offset);
 
       info.SetIsPaintingBackgroundInContentsSpace(true);
       PaintObject(info, paint_offset);
@@ -1744,9 +1743,7 @@ bool NGBoxFragmentPainter::ShouldPaint(
   // rectangle.
   if (box_fragment_.IsPaginatedRoot())
     return true;
-  const auto& box = *To<LayoutBox>(box_fragment_.GetLayoutObject());
-  return paint_state.LocalRectIntersectsCullRect(
-      box.PhysicalVisualOverflowRect());
+  return paint_state.LocalRectIntersectsCullRect(box_fragment_.InkOverflow());
 }
 
 void NGBoxFragmentPainter::PaintTextClipMask(const PaintInfo& paint_info,

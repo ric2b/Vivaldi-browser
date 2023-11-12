@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/attestation/enrollment_certificate_uploader_impl.h"
 #include "chrome/browser/ash/policy/core/dm_token_storage.h"
@@ -44,7 +44,7 @@ const char kClientId[] = "fake-client-id";
 
 void CertCallbackSuccess(
     ash::attestation::AttestationFlow::CertificateCallback callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback), ash::attestation::ATTESTATION_SUCCESS,
                      "fake_cert"));
@@ -84,7 +84,7 @@ class FakeDMTokenStorage : public DMTokenStorageBase {
   }
   void RetrieveDMToken(RetrieveCallback callback) override {
     if (!delay_response_.is_zero()) {
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE, base::BindOnce(std::move(callback), dm_token_),
           delay_response_);
     } else {
@@ -207,10 +207,10 @@ class ActiveDirectoryDeviceStateUploaderTest
           attestation_flow_,
           GetCertificate(
               ash::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
-              /*force_new_key=*/false, _, _, _))
-          .WillOnce(WithArgs<6>(Invoke(CertCallbackSuccess)));
+              /*force_new_key=*/false, _, _, _, _))
+          .WillOnce(WithArgs<7>(Invoke(CertCallbackSuccess)));
     } else {
-      EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _, _, _))
+      EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _, _, _, _))
           .Times(0);
     }
   }

@@ -5,9 +5,9 @@
 package org.chromium.components.messages;
 
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
-import android.animation.Animator;
 import android.app.Activity;
 import android.view.LayoutInflater;
 
@@ -24,12 +24,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.Callback;
 import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
@@ -74,7 +72,9 @@ public class SingleActionMessageTest {
     @Rule
     public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Mock
-    private Callback<Animator> mAnimatorStartCallback;
+    private SwipeAnimationHandler mSwipeAnimationHandler;
+    @Mock
+    private MessageBannerCoordinator mMessageBanner;
 
     private CallbackHelper mPrimaryActionCallback;
     private CallbackHelper mSecondaryActionCallback;
@@ -111,11 +111,10 @@ public class SingleActionMessageTest {
         PropertyModel model = createBasicSingleActionMessageModel();
         SingleActionMessage message =
                 new SingleActionMessage(container, model, mEmptyDismissCallback,
-                        () -> 0, new MockDurationProvider(0L), mAnimatorStartCallback);
-        final MessageBannerCoordinator messageBanner = Mockito.mock(MessageBannerCoordinator.class);
+                        () -> 0, new MockDurationProvider(0L), mSwipeAnimationHandler);
         final MessageBannerView view = createMessageBannerView(container);
         view.setId(R.id.message_banner);
-        message.setMessageBannerForTesting(messageBanner);
+        message.setMessageBannerForTesting(mMessageBanner);
         message.setViewForTesting(view);
         message.show(Position.INVISIBLE, Position.FRONT);
         Assert.assertEquals(
@@ -124,7 +123,9 @@ public class SingleActionMessageTest {
         message.hide(Position.FRONT, Position.INVISIBLE, true);
         // Let's pretend the animation ended, and the mediator called the callback as a result.
         final ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-        verify(messageBanner).hide(anyBoolean(), runnableCaptor.capture());
+        verify(mMessageBanner)
+                .hide(eq(Position.FRONT), eq(Position.INVISIBLE), anyBoolean(),
+                        runnableCaptor.capture());
         runnableCaptor.getValue().run();
         Assert.assertEquals(
                 "Message container should not have any view after the message is hidden.", 0,
@@ -144,7 +145,7 @@ public class SingleActionMessageTest {
         long duration = 42;
         SingleActionMessage message =
                 new SingleActionMessage(container, model, mEmptyDismissCallback,
-                        () -> 0, new MockDurationProvider(duration), mAnimatorStartCallback);
+                        () -> 0, new MockDurationProvider(duration), mSwipeAnimationHandler);
         Assert.assertEquals("Autodismiss duration is not propagated correctly.", duration,
                 message.getAutoDismissDuration());
     }
@@ -158,7 +159,7 @@ public class SingleActionMessageTest {
         long duration = 42;
         SingleActionMessage message =
                 new SingleActionMessage(container, model, mEmptyDismissCallback,
-                        () -> 0, new MockDurationProvider(duration + 1000), mAnimatorStartCallback);
+                        () -> 0, new MockDurationProvider(duration + 1000), mSwipeAnimationHandler);
         Assert.assertEquals("Autodismiss duration is not propagated correctly.", duration + 1000,
                 message.getAutoDismissDuration());
     }
@@ -289,11 +290,10 @@ public class SingleActionMessageTest {
             PropertyModel model, MessageBannerView view, @Position int from, @Position int to) {
         SingleActionMessage message =
                 new SingleActionMessage(container, model, mEmptyDismissCallback,
-                        () -> 0, new MockDurationProvider(0L), mAnimatorStartCallback);
-        final MessageBannerCoordinator messageBanner = Mockito.mock(MessageBannerCoordinator.class);
+                        () -> 0, new MockDurationProvider(0L), mSwipeAnimationHandler);
         view.setId(R.id.message_banner);
         PropertyModelChangeProcessor.create(model, view, MessageBannerViewBinder::bind);
-        message.setMessageBannerForTesting(messageBanner);
+        message.setMessageBannerForTesting(mMessageBanner);
         message.setViewForTesting(view);
         message.show(from, to);
         return message;

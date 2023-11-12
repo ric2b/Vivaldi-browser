@@ -38,9 +38,9 @@ enum class AudioDeviceType {
 };
 
 // Default value of user priority preference.
-const uint32_t kUserPriorityNone = 0;
+const int kUserPriorityNone = 0;
 // Min value of user priority preference.
-const uint32_t kUserPriorityMin = 1;
+const int kUserPriorityMin = 1;
 
 struct COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) AudioDevice {
   AudioDevice();
@@ -133,13 +133,5 @@ struct COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) AudioDeviceCompare {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the Chrome OS source code
-// directory migration is finished.
-namespace chromeos {
-using ::ash::AudioDevice;
-using ::ash::AudioDeviceList;
-using ::ash::AudioDeviceType;
-}  // namespace chromeos
 
 #endif  // CHROMEOS_ASH_COMPONENTS_AUDIO_AUDIO_DEVICE_H_

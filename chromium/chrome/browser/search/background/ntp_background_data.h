@@ -8,6 +8,7 @@
 #include <string>
 
 #include "chrome/browser/search/background/ntp_background.pb.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
 enum class ErrorType {
@@ -118,6 +119,9 @@ struct CustomBackground {
   // Url of the custom background selected by the user.
   GURL custom_background_url;
 
+  // Whether the image is a local resource.
+  bool is_uploaded_image;
+
   // First attribution string for custom background.
   std::string custom_background_attribution_line_1;
 
@@ -129,6 +133,9 @@ struct CustomBackground {
 
   // Id of the collection being used for "daily refresh".
   std::string collection_id;
+
+  // Main color of the image.
+  SkColor custom_background_main_color;
 };
 
 #endif  // CHROME_BROWSER_SEARCH_BACKGROUND_NTP_BACKGROUND_DATA_H_

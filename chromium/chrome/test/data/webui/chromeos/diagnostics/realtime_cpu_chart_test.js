@@ -3,15 +3,16 @@
 // found in the LICENSE file.
 
 import 'chrome://diagnostics/realtime_cpu_chart.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {RealtimeCpuChartElement} from 'chrome://diagnostics/realtime_cpu_chart.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertEquals, assertFalse, assertGT, assertTrue} from '../../chai_assert.js';
+import {assertEquals, assertFalse, assertGT, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import * as diagnostics_test_utils from './diagnostics_test_utils.js';
 
-export function realtimeCpuChartTestSuite() {
+suite('realtimeCpuChartTestSuite', function() {
   /** @type {?RealtimeCpuChartElement} */
   let realtimeCpuChartElement = null;
 
@@ -147,4 +148,4 @@ export function realtimeCpuChartTestSuite() {
                        .getAttribute('d'));
     });
   });
-}
+});

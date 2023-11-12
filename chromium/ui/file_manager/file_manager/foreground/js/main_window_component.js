@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertInstanceof} from 'chrome://resources/js/assert.js';
+import {assertInstanceof} from 'chrome://resources/ash/common/assert.js';
 
-import {DialogType} from '../../common/js/dialog_type.js';
+import {DialogType, isFolderDialogType} from '../../common/js/dialog_type.js';
+import {getKeyModifiers} from '../../common/js/dom_utils.js';
 import {metrics} from '../../common/js/metrics.js';
 import {TrashEntry} from '../../common/js/trash.js';
 import {str, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {DirectoryChangeEvent} from '../../externs/directory_change_event.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
-import {changeDirectory} from '../../state/actions.js';
+import {changeDirectory} from '../../state/actions/current_directory.js';
 import {getStore} from '../../state/store.js';
 
 import {AppStateController} from './app_state_controller.js';
@@ -165,6 +166,7 @@ export class MainWindowComponent {
     document.addEventListener('keydown', this.onKeyDown_.bind(this));
     document.addEventListener('keyup', this.onKeyUp_.bind(this));
     window.addEventListener('focus', this.onWindowFocus_.bind(this));
+    addIsFocusedMethod();
 
     /**
      * @type {!FileTapHandler}
@@ -257,6 +259,11 @@ export class MainWindowComponent {
         selection.entries.filter(util.isTrashEntry));
     if (trashEntries.length > 0) {
       this.showFailedToOpenTrashItemDialog_(trashEntries);
+      return false;
+    }
+    // If the selection is blocked by DLP restrictions, we don't allow to change
+    // directory or the default action.
+    if (this.selectionHandler_.isDlpBlocked()) {
       return false;
     }
     const entry = selection.entries[0];
@@ -387,7 +394,7 @@ export class MainWindowComponent {
       return;
     }
 
-    switch (util.getKeyModifiers(event) + event.key) {
+    switch (getKeyModifiers(event) + event.key) {
       case 'Escape':  // Escape => Cancel dialog.
       case 'Ctrl-w':  // Ctrl+W => Cancel dialog.
         if (this.dialogType_ != DialogType.FULL_PAGE) {
@@ -417,7 +424,7 @@ export class MainWindowComponent {
    */
   onDirectoryTreeKeyDown_(event) {
     // Enter => Change directory or perform default action.
-    if (util.getKeyModifiers(event) + event.key === 'Enter') {
+    if (getKeyModifiers(event) + event.key === 'Enter') {
       const selectedItem = this.ui_.directoryTree.selectedItem;
       if (!selectedItem) {
         return;
@@ -439,7 +446,7 @@ export class MainWindowComponent {
    * @private
    */
   onListKeyDown_(event) {
-    switch (util.getKeyModifiers(event) + event.key) {
+    switch (getKeyModifiers(event) + event.key) {
       case 'Backspace':  // Backspace => Up one directory.
         event.preventDefault();
         const store = getStore();
@@ -453,20 +460,28 @@ export class MainWindowComponent {
         break;
 
       case 'Enter':  // Enter => Change directory or perform default action.
+                     // If the selection is blocked by DLP restrictions, we
+                     // don't allow to
+        // change directory or the default action.
+        if (this.selectionHandler_.isDlpBlocked()) {
+          break;
+        }
         const selection = this.selectionHandler_.selection;
         if (selection.totalCount === 1 && selection.entries[0].isDirectory &&
-            !DialogType.isFolderDialog(this.dialogType_) &&
+            !isFolderDialogType(this.dialogType_) &&
             !selection.entries.some(util.isTrashEntry)) {
           const item = this.ui_.listContainer.currentList.getListItemByIndex(
               selection.indexes[0]);
-          // If the item is in renaming process, we don't allow to change
+          // If the item is in renaming process we don't allow to change
           // directory.
           if (item && !item.hasAttribute('renaming')) {
             event.preventDefault();
             this.directoryModel_.changeDirectoryEntry(
                 /** @type {!DirectoryEntry} */ (selection.entries[0]));
           }
-        } else if (this.acceptSelection_()) {
+          break;
+        }
+        if (this.acceptSelection_()) {
           event.preventDefault();
         }
         break;
@@ -515,14 +530,8 @@ export class MainWindowComponent {
       if (this.dialogType_ === DialogType.FULL_PAGE) {
         const locationInfo =
             this.volumeManager_.getLocationInfo(event.newDirEntry);
-        if (locationInfo) {
-          const label = util.getEntryLabel(locationInfo, event.newDirEntry);
-          document.title = `${str('FILEMANAGER_APP_NAME')} - ${label}`;
-        } else {
-          console.warn(
-              'Could not find location info for entry: ' +
-              event.newDirEntry.fullPath);
-        }
+        const label = util.getEntryLabel(locationInfo, event.newDirEntry);
+        document.title = `${str('FILEMANAGER_APP_NAME')} - ${label}`;
       }
     }
   }
@@ -547,3 +556,23 @@ export class MainWindowComponent {
     }
   }
 }
+
+/** Adds an isFocused method to the current window object.  */
+const addIsFocusedMethod = () => {
+  let focused = true;
+
+  window.addEventListener('focus', () => {
+    focused = true;
+  });
+
+  window.addEventListener('blur', () => {
+    focused = false;
+  });
+
+  /**
+   * @return {boolean} True if focused.
+   */
+  window.isFocused = () => {
+    return focused;
+  };
+};

@@ -93,11 +93,12 @@ void AttemptRestartInternal(IgnoreUnloadHandlers ignore_unload_handlers) {
   ash::BootTimesRecorder::Get()->set_restart_requested();
   chrome::SetSendStopRequestToSessionManager(false);
 
-  // If an update is pending NotifyAndTerminate() will trigger a system reboot,
+  // If an update is pending StopSession() will trigger a system reboot,
   // which in turn will send SIGTERM to Chrome, and that ends up processing
   // unload handlers.
   if (UpdatePending()) {
-    browser_shutdown::NotifyAndTerminate(true);
+    browser_shutdown::NotifyAppTerminating();
+    StopSession();
     return;
   }
 
@@ -143,8 +144,10 @@ void ShutdownIfNoBrowsers() {
   // them down here to ensure they have a chance to persist their data.
   ProfileManager::ShutdownSessionServices();
 #endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)
-
-  browser_shutdown::NotifyAndTerminate(true /* fast_path */);
+  browser_shutdown::NotifyAppTerminating();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  StopSession();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   OnAppExiting();
 }
 
@@ -202,7 +205,7 @@ void SessionEnding() {
   // ~ShutdownWatcherHelper uses IO (it joins a thread). We'll only trigger that
   // if Terminate() fails, which leaves us in a weird state, or the OS is going
   // to kill us soon. Either way we don't care about that here.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlocking allow_blocking;
 
   // Two different types of hang detection cannot attempt to upload crashes at
   // the same time or they would interfere with each other.

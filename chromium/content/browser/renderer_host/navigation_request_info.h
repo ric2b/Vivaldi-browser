@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_NAVIGATION_REQUEST_INFO_H_
 #define CONTENT_BROWSER_RENDERER_HOST_NAVIGATION_REQUEST_INFO_H_
 
-#include "base/memory/ref_counted.h"
 #include "base/unguessable_token.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/weak_document_ptr.h"
@@ -47,7 +46,8 @@ struct CONTENT_EXPORT NavigationRequestInfo {
       const absl::optional<std::vector<net::SourceStream::SourceType>>&
           devtools_accepted_stream_types,
       bool is_pdf,
-      WeakDocumentPtr initiator_document);
+      WeakDocumentPtr initiator_document,
+      bool allow_cookies_from_browser);
   NavigationRequestInfo(const NavigationRequestInfo& other) = delete;
   ~NavigationRequestInfo();
 
@@ -130,6 +130,10 @@ struct CONTENT_EXPORT NavigationRequestInfo {
 
   // The initiator document, if still available.
   const WeakDocumentPtr initiator_document;
+
+  // Whether a Cookie header added to this request should not be overwritten by
+  // the network service.
+  const bool allow_cookies_from_browser;
 };
 
 }  // namespace content

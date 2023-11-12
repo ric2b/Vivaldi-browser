@@ -7,6 +7,20 @@ source_set("panel") {
     "panel_view_controller.mm",
     "panel_view_controller.h",
     "panel_constants.h",
+    "sidebar_panel_view_controller.mm",
+    "sidebar_panel_view_controller.h",
+    "sidebar_panel_presentation_controller.mm",
+    "sidebar_panel_presentation_controller.h",
+    "panel_transitioning_delegate.mm",
+    "panel_transitioning_delegate.h",
+    "slide_in_animator.mm",
+    "slide_in_animator.h",
+    "slide_out_animator.mm",
+    "slide_out_animator.h",
+    "panel_button_view.mm",
+    "panel_button_view.h",
+    "panel_button_cell.mm",
+    "panel_button_cell.h"
   ]
 
   deps = [
@@ -32,7 +46,15 @@ source_set("panel") {
     "//ui/base",
     "//base",
     "//vivaldi/ios/notes/cells",
-    "//vivaldi/ios/notes/resources:panel_notes"
+    "resources:vivaldi_notes_empty",
+    "resources:vivaldi_history_empty",
+    "resources:vivaldi_bookmarks_empty",
+    "resources:bookmark_panel",
+    "resources:history_panel",
+    "resources:notes_panel",
+    "resources:bookmark_panel_active",
+    "resources:history_panel_active",
+    "resources:notes_panel_active"
  ]
  frameworks = [ "UIKit.framework" ]
 

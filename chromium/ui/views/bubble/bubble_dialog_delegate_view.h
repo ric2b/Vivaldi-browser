@@ -144,6 +144,10 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // normally, do not call this.
   void OnAnchorBoundsChanged();
 
+  // Call this method to update view shown time stamp of underneath input
+  // protectors.
+  void UpdateInputProtectorsTimeStamp();
+
   //////////////////////////////////////////////////////////////////////////////
   // Subtitle:
   //
@@ -501,9 +505,9 @@ VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, ExtraView)
 VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, FootnoteView)
 VIEW_BUILDER_PROPERTY(bool, FocusTraversesOut)
 VIEW_BUILDER_PROPERTY(bool, EnableArrowKeyTraversal)
-VIEW_BUILDER_PROPERTY(gfx::ImageSkia, Icon)
-VIEW_BUILDER_PROPERTY(gfx::ImageSkia, MainImage)
-VIEW_BUILDER_PROPERTY(gfx::ImageSkia, AppIcon)
+VIEW_BUILDER_PROPERTY(ui::ImageModel, Icon)
+VIEW_BUILDER_PROPERTY(ui::ImageModel, AppIcon)
+VIEW_BUILDER_PROPERTY(ui::ImageModel, MainImage)
 VIEW_BUILDER_PROPERTY(ui::ModalType, ModalType)
 VIEW_BUILDER_PROPERTY(bool, OwnedByWidget)
 VIEW_BUILDER_PROPERTY(bool, ShowCloseButton)

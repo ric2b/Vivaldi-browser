@@ -9,9 +9,13 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller_observer.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager_observer.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-shared.h"
 #include "base/scoped_observation.h"
 #include "components/session_manager/session_manager_types.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class PrefRegistrySimple;
@@ -22,7 +26,8 @@ class KeyboardBacklightColorNudgeController;
 
 // Controller to manage keyboard backlight colors.
 class ASH_EXPORT KeyboardBacklightColorController
-    : public SessionObserver,
+    : public RgbKeyboardManagerObserver,
+      public SessionObserver,
       public WallpaperControllerObserver {
  public:
   KeyboardBacklightColorController();
@@ -34,7 +39,8 @@ class ASH_EXPORT KeyboardBacklightColorController
 
   ~KeyboardBacklightColorController() override;
 
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+  // Register the pref to store keyboard color in the given registry.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // Sets the keyboard backlight color for the user with |account_id|.
   void SetBacklightColor(
@@ -44,6 +50,9 @@ class ASH_EXPORT KeyboardBacklightColorController
   // Returns the currently set backlight color for user with |account_id|.
   personalization_app::mojom::BacklightColor GetBacklightColor(
       const AccountId& account_id);
+
+  // RgbKeyboardManagerObserver:
+  void OnRgbKeyboardSupportedChanged(bool supported) override;
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
@@ -69,15 +78,26 @@ class ASH_EXPORT KeyboardBacklightColorController
       personalization_app::mojom::BacklightColor backlight_color,
       const AccountId& account_id);
 
-  SkColor displayed_color_for_testing_ = SK_ColorTRANSPARENT;
+  // Toggles on the keyboard brightness at 40% if the backlight is off.
+  void MaybeToggleOnKeyboardBrightness();
 
-  ScopedSessionObserver scoped_session_observer_{this};
+  // Callbacks:
+  void KeyboardBrightnessPercentReceived(absl::optional<double> percentage);
+
+  SkColor displayed_color_for_testing_ = SK_ColorTRANSPARENT;
+  bool keyboard_brightness_on_for_testing_ = false;
+
+  base::ScopedObservation<SessionControllerImpl, SessionObserver>
+      session_observer_{this};
 
   base::ScopedObservation<WallpaperController, WallpaperControllerObserver>
       wallpaper_controller_observation_{this};
 
   std::unique_ptr<KeyboardBacklightColorNudgeController>
       keyboard_backlight_color_nudge_controller_;
+
+  base::WeakPtrFactory<KeyboardBacklightColorController> weak_ptr_factory_{
+      this};
 };
 
 }  // namespace ash

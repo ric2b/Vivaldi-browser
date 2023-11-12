@@ -187,7 +187,7 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
 
   const base::FilePath& path = file.local_path;
   if (dialog_type_ == ui::SelectFileDialog::SELECT_UPLOAD_FOLDER) {
-    StartNewEnumeration(path);
+    PerformContentAnalysisForFolderUploadIfNeeded(path);
     return;
   }
 
@@ -317,8 +317,10 @@ void FileSelectHelper::ConvertToFileChooserFileInfoList(
     storage::FileSystemContext* file_system_context =
         profile_->GetStoragePartition(site_instance)->GetFileSystemContext();
     file_manager::util::ConvertSelectedFileInfoListToFileChooserFileInfoList(
-        file_system_context, site_instance->GetSiteURL(), files,
-        base::BindOnce(&FileSelectHelper::CheckIfPolicyAllowed, this));
+        file_system_context, render_frame_host_->GetLastCommittedOrigin(),
+        files,
+        base::BindOnce(&FileSelectHelper::PerformContentAnalysisIfNeeded,
+                       this));
     return;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -331,35 +333,7 @@ void FileSelectHelper::ConvertToFileChooserFileInfoList(
             base::FilePath(file.display_name).AsUTF16Unsafe())));
   }
 
-  CheckIfPolicyAllowed(std::move(chooser_files));
-}
-
-void FileSelectHelper::CheckIfPolicyAllowed(
-    std::vector<blink::mojom::FileChooserFileInfoPtr> list) {
-  if (AbortIfWebContentsDestroyed())
-    return;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  DCHECK(render_frame_host_);
-  policy::DlpFilesController* files_controller = nullptr;
-  policy::DlpRulesManager* rules_manager =
-      policy::DlpRulesManagerFactory::GetForPrimaryProfile();
-  if (rules_manager)
-    files_controller = rules_manager->GetDlpFilesController();
-
-  if (files_controller) {
-    files_controller->FilterDisallowedUploads(
-        std::move(list),
-        render_frame_host_->GetMainFrame()->GetLastCommittedURL(),
-        base::BindOnce(&FileSelectHelper::PerformContentAnalysisIfNeeded,
-                       weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    PerformContentAnalysisIfNeeded(std::move(list));
-  }
-
-#else
-  PerformContentAnalysisIfNeeded(std::move(list));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  PerformContentAnalysisIfNeeded(std::move(chooser_files));
 }
 
 void FileSelectHelper::PerformContentAnalysisIfNeeded(
@@ -399,7 +373,7 @@ void FileSelectHelper::PerformContentAnalysisIfNeeded(
 void FileSelectHelper::ContentAnalysisCompletionCallback(
     std::vector<blink::mojom::FileChooserFileInfoPtr> list,
     const enterprise_connectors::ContentAnalysisDelegate::Data& data,
-    const enterprise_connectors::ContentAnalysisDelegate::Result& result) {
+    enterprise_connectors::ContentAnalysisDelegate::Result& result) {
   if (AbortIfWebContentsDestroyed())
     return;
 
@@ -409,7 +383,8 @@ void FileSelectHelper::ContentAnalysisCompletionCallback(
   DCHECK_GE(list.size(), result.paths_results.size());
 
   // Remove any files that did not pass the deep scan. Non-native files are
-  // skipped.
+  // skipped. There is no need to update `result` since the logic here doesn't
+  // change verdicts.
   size_t i = 0;
   for (auto it = list.begin(); it != list.end();) {
     if ((*it)->is_native_file()) {
@@ -428,6 +403,76 @@ void FileSelectHelper::ContentAnalysisCompletionCallback(
 
   NotifyListenerAndEnd(std::move(list));
 }
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
+
+void FileSelectHelper::PerformContentAnalysisForFolderUploadIfNeeded(
+    const base::FilePath& path) {
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  auto files_scan_data =
+      std::make_unique<enterprise_connectors::FilesScanData>(std::vector{path});
+  auto* files_scan_data_raw = files_scan_data.get();
+  files_scan_data_raw->ExpandPaths(
+      base::BindOnce(&FileSelectHelper::ScanDataCallback, this, path,
+                     std::move(files_scan_data)));
+#else
+  StartNewEnumeration(path);
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
+}
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+
+void FileSelectHelper::ScanDataCallback(
+    const base::FilePath& path,
+    std::unique_ptr<enterprise_connectors::FilesScanData> files_scan_data) {
+  if (AbortIfWebContentsDestroyed()) {
+    return;
+  }
+
+  enterprise_connectors::ContentAnalysisDelegate::Data data;
+  if (enterprise_connectors::ContentAnalysisDelegate::IsEnabled(
+          profile_, web_contents_->GetLastCommittedURL(), &data,
+          enterprise_connectors::AnalysisConnector::FILE_ATTACHED)) {
+    for (const auto& epath : files_scan_data->expanded_paths()) {
+      data.paths.push_back(epath);
+    }
+  }
+
+  if (data.paths.empty()) {
+    StartNewEnumeration(path);
+  } else {
+    enterprise_connectors::ContentAnalysisDelegate::CreateForWebContents(
+        web_contents_, std::move(data),
+        base::BindOnce(
+            &FileSelectHelper::FolderUploadContentAnalysisCompletionCallback,
+            this, path),
+        safe_browsing::DeepScanAccessPoint::UPLOAD);
+  }
+}
+
+void FileSelectHelper::FolderUploadContentAnalysisCompletionCallback(
+    const base::FilePath& path,
+    const enterprise_connectors::ContentAnalysisDelegate::Data& data,
+    enterprise_connectors::ContentAnalysisDelegate::Result& result) {
+  if (AbortIfWebContentsDestroyed()) {
+    return;
+  }
+
+  DCHECK_EQ(data.text.size(), 0u);
+  DCHECK_EQ(result.text_results.size(), 0u);
+  DCHECK_EQ(data.paths.size(), result.paths_results.size());
+
+  bool all_file_results_allowed = !base::Contains(result.paths_results, false);
+
+  if (all_file_results_allowed) {
+    StartNewEnumeration(path);
+  } else {
+    for (size_t i = 0; i < data.paths.size(); ++i) {
+      result.paths_results[i] = false;
+    }
+    RunFileChooserEnd();
+  }
+}
+
 #endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 
 void FileSelectHelper::NotifyListenerAndEnd(
@@ -476,6 +521,10 @@ void FileSelectHelper::SetFileSelectListenerForTesting(
 
 void FileSelectHelper::DontAbortOnMissingWebContentsForTesting() {
   abort_on_missing_web_contents_in_tests_ = false;
+}
+
+bool FileSelectHelper::IsDirectoryEnumerationStartedForTesting() {
+  return directory_enumeration_.get() != nullptr;
 }
 
 std::unique_ptr<ui::SelectFileDialog::FileTypeInfo>
@@ -749,10 +798,14 @@ void FileSelectHelper::RunFileChooserOnUIThread(
   // 1-based index of default extension to show.
   int file_type_index =
       select_file_types_ && !select_file_types_->extensions.empty() ? 1 : 0;
+
+  const GURL* caller =
+      &render_frame_host_->GetMainFrame()->GetLastCommittedURL();
+
   select_file_dialog_->SelectFile(dialog_type_, params->title,
                                   default_file_path, select_file_types_.get(),
                                   file_type_index, base::FilePath::StringType(),
-                                  owning_window, accept_types_ptr);
+                                  owning_window, accept_types_ptr, caller);
 
   select_file_types_.reset();
 }

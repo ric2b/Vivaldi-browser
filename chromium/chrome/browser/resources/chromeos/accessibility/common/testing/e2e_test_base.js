@@ -33,6 +33,11 @@ E2ETestBase = class extends AccessibilityTestBase {
   /** @override */
   testGenCppIncludes() {
     GEN(`
+  #include "ash/accessibility/accessibility_delegate.h"
+  #include "ash/shell.h"
+  #include "base/bind.h"
+  #include "base/callback.h"
+  #include "chrome/browser/ash/accessibility/accessibility_manager.h"
   #include "chrome/browser/ash/crosapi/browser_manager.h"
   #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
   #include "chrome/browser/ui/browser.h"
@@ -49,7 +54,7 @@ E2ETestBase = class extends AccessibilityTestBase {
     GEN(`
     TtsExtensionEngine::GetInstance()->DisableBuiltInTTSEngineForTesting();
     if (ash_starter()->HasLacrosArgument()) {
-      crosapi::BrowserManager::Get()->NewTab(false);
+      crosapi::BrowserManager::Get()->NewTab();
       ASSERT_TRUE(crosapi::BrowserManager::Get()->IsRunning());
     }
       `);

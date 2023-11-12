@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import {PrintPreviewModelElement, PrintPreviewScalingSettingsElement, ScalingType} from 'chrome://print/print_preview.js';
-import {assert} from 'chrome://resources/js/assert.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -26,8 +25,7 @@ suite(scaling_settings_test.suiteName, function() {
   let model: PrintPreviewModelElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     model = document.createElement('print-preview-model');
     document.body.appendChild(model);
 
@@ -40,8 +38,7 @@ suite(scaling_settings_test.suiteName, function() {
   });
 
   test(
-      assert(scaling_settings_test.TestNames.ShowCorrectDropdownOptions),
-      function() {
+      scaling_settings_test.TestNames.ShowCorrectDropdownOptions, function() {
         // Not a PDF document -> No fit to page or fit to paper options.
         const fitToPageOption =
             scalingSection.shadowRoot!.querySelector<HTMLOptionElement>(
@@ -112,7 +109,7 @@ suite(scaling_settings_test.suiteName, function() {
 
   // Verifies that setting the scaling value using the dropdown and/or the
   // custom input works correctly.
-  test(assert(scaling_settings_test.TestNames.SetScaling), async () => {
+  test(scaling_settings_test.TestNames.SetScaling, async () => {
     // Default is 100
     const scalingInput =
         scalingSection.shadowRoot!
@@ -189,7 +186,7 @@ suite(scaling_settings_test.suiteName, function() {
   // Verifies that the input is never disabled when the validity of the
   // setting changes.
   test(
-      assert(scaling_settings_test.TestNames.InputNotDisabledOnValidityChange),
+      scaling_settings_test.TestNames.InputNotDisabledOnValidityChange,
       async () => {
         const numberSection = scalingSection.shadowRoot!.querySelector(
             'print-preview-number-settings-section')!;

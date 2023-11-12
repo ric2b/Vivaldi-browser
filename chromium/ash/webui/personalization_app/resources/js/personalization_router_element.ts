@@ -10,8 +10,8 @@
 import 'chrome://resources/polymer/v3_0/iron-location/iron-location.js';
 import 'chrome://resources/polymer/v3_0/iron-location/iron-query-params.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {GooglePhotosAlbum, TopicSource, WallpaperCollection} from './personalization_app.mojom-webui.js';
@@ -164,6 +164,9 @@ export class PersonalizationRouter extends PolymerElement {
    * subpages, but the ambient mode is not allowed, reset path to root.
    */
   private onPathChanged_(path: string|null) {
+    // Navigates to the top of the subpage.
+    window.scrollTo(0, 0);
+
     if (!isPathValid(path) || isAmbientPathNotAllowed(path)) {
       // Reset the path to root.
       this.setProperties({path_: Paths.ROOT, queryParams_: {}});

@@ -15,8 +15,8 @@
 #import "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/authentication_service_fake.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
@@ -29,7 +29,6 @@
 #import "ios/chrome/browser/url_loading/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/voice/fake_voice_search_availability.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -53,9 +52,11 @@ class NTPHomeMediatorTest : public PlatformTest {
         IOSChromeContentSuggestionsServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        base::BindRepeating(
-            &AuthenticationServiceFake::CreateAuthenticationService));
+        AuthenticationServiceFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
+    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
+        chrome_browser_state_.get(),
+        std::make_unique<FakeAuthenticationServiceDelegate>());
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
 
     std::unique_ptr<ToolbarTestNavigationManager> navigation_manager =
@@ -64,14 +65,13 @@ class NTPHomeMediatorTest : public PlatformTest {
     fake_web_state_ = std::make_unique<web::FakeWebState>();
     NewTabPageTabHelper::CreateForWebState(fake_web_state_.get());
     logo_vendor_ = OCMProtocolMock(@protocol(LogoVendor));
-    voice_availability_.SetVoiceProviderEnabled(true);
 
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
     FakeUrlLoadingBrowserAgent::InjectForBrowser(browser_.get());
     url_loader_ = FakeUrlLoadingBrowserAgent::FromUrlLoadingBrowserAgent(
         UrlLoadingBrowserAgent::FromBrowser(browser_.get()));
 
-    auth_service_ = static_cast<AuthenticationServiceFake*>(
+    auth_service_ = static_cast<AuthenticationService*>(
         AuthenticationServiceFactory::GetInstance()->GetForBrowserState(
             chrome_browser_state_.get()));
     identity_manager_ =
@@ -80,16 +80,15 @@ class NTPHomeMediatorTest : public PlatformTest {
         ChromeAccountManagerServiceFactory::GetForBrowserState(
             chrome_browser_state_.get());
     mediator_ = [[NTPHomeMediator alloc]
-               initWithWebState:fake_web_state_.get()
-             templateURLService:ios::TemplateURLServiceFactory::
-                                    GetForBrowserState(
-                                        chrome_browser_state_.get())
-                      URLLoader:url_loader_
-                    authService:auth_service_
-                identityManager:identity_manager_
-          accountManagerService:accountManagerService
-                     logoVendor:logo_vendor_
-        voiceSearchAvailability:&voice_availability_];
+             initWithWebState:fake_web_state_.get()
+           templateURLService:ios::TemplateURLServiceFactory::
+                                  GetForBrowserState(
+                                      chrome_browser_state_.get())
+                    URLLoader:url_loader_
+                  authService:auth_service_
+              identityManager:identity_manager_
+        accountManagerService:accountManagerService
+                   logoVendor:logo_vendor_];
     consumer_ = OCMProtocolMock(@protocol(NTPHomeConsumer));
     mediator_.consumer = consumer_;
     histogram_tester_.reset(new base::HistogramTester());
@@ -106,11 +105,10 @@ class NTPHomeMediatorTest : public PlatformTest {
   std::unique_ptr<web::FakeWebState> fake_web_state_;
   id consumer_;
   id logo_vendor_;
-  FakeVoiceSearchAvailability voice_availability_;
   NTPHomeMediator* mediator_;
   ToolbarTestNavigationManager* navigation_manager_;
   FakeUrlLoadingBrowserAgent* url_loader_;
-  AuthenticationServiceFake* auth_service_;
+  AuthenticationService* auth_service_;
   signin::IdentityManager* identity_manager_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
 };
@@ -153,21 +151,5 @@ TEST_F(NTPHomeMediatorTest, TestConsumerNotificationUnfocus) {
   [mediator_ locationBarDidResignFirstResponder];
 
   // Test.
-  EXPECT_OCMOCK_VERIFY(consumer_);
-}
-
-// Tests that the voice search button is disabled when VoiceOver is turned on
-// and off.
-TEST_F(NTPHomeMediatorTest, DisableVoiceSearch) {
-  [mediator_ setUp];
-
-  // Enable VoiceOver and verify that voice search is disabled for the consumer.
-  OCMExpect([consumer_ setVoiceSearchIsEnabled:NO]);
-  voice_availability_.SetVoiceOverEnabled(true);
-
-  // Disable VoiceOVer and verify that voice search is enabled again.
-  OCMExpect([consumer_ setVoiceSearchIsEnabled:YES]);
-  voice_availability_.SetVoiceOverEnabled(false);
-
   EXPECT_OCMOCK_VERIFY(consumer_);
 }

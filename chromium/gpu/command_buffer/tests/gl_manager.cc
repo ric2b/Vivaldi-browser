@@ -44,7 +44,6 @@
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/buffer_format_utils.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_image_ref_counted_memory.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
@@ -341,10 +340,9 @@ void GLManager::InitializeWithWorkaroundsImpl(
     context_group = new gles2::ContextGroup(
         gpu_preferences_, true, mailbox_manager_, nullptr /* memory_tracker */,
         translator_cache_.get(), &completeness_cache_, feature_info,
-        options.bind_generates_resource, options.image_factory,
-        nullptr /* progress_reporter */, gpu_feature_info,
-        discardable_manager_.get(), passthrough_discardable_manager_.get(),
-        &shared_image_manager_);
+        options.bind_generates_resource, nullptr /* progress_reporter */,
+        gpu_feature_info, discardable_manager_.get(),
+        passthrough_discardable_manager_.get(), &shared_image_manager_);
   }
 
   command_buffer_.reset(
@@ -352,7 +350,7 @@ void GLManager::InitializeWithWorkaroundsImpl(
 
   decoder_.reset(::gpu::gles2::GLES2Decoder::Create(
       command_buffer_.get(), command_buffer_->service(), &outputter_,
-      context_group));
+      context_group, options.image_factory));
   if (options.force_shader_name_hashing) {
     decoder_->SetForceShaderNameHashingForTest(true);
   }

@@ -40,6 +40,8 @@ class AsyncSharedStorageDatabase {
   using GetResult = SharedStorageDatabase::GetResult;
   using BudgetResult = SharedStorageDatabase::BudgetResult;
   using TimeResult = SharedStorageDatabase::TimeResult;
+  using MetadataResult = SharedStorageDatabase::MetadataResult;
+  using EntriesResult = SharedStorageDatabase::EntriesResult;
 
   // A callback type to check if a given origin matches a storage policy.
   // Can be passed empty/null where used, which means the origin will always
@@ -60,12 +62,13 @@ class AsyncSharedStorageDatabase {
 
   // `TrimMemory()`, `Get()`, `Set()`, `Append()`, `Delete()`, `Clear()`,
   // `Length()`, `Keys()`, `Entries()`, `PurgeMatchingOrigins()`,
-  // `PurgeStaleOrigins()`, `FetchOrigins()`, `MakeBudgetWithdrawal()`, and
-  // `GetRemainingBudget()` are all async versions of the corresponding methods
-  // in `storage::SharedStorageDatabase`, with the modification that `Set()` and
-  // `Append()` take a boolean callback to indicate that a value was set or
-  // appended, rather than a long integer callback with the row number for the
-  // next available row.
+  // `PurgeStale()`, `FetchOrigins()`, `MakeBudgetWithdrawal()`,
+  // `GetRemainingBudget()`, `GetCreationTime()`, `GetMetadata()`, and
+  // `GetEntriesForDevTools()` are all async versions of the corresponding
+  // methods in `storage::SharedStorageDatabase`, with the modification that
+  // `Set()` and `Append()` take a boolean callback to indicate that a value was
+  // set or appended, rather than a long integer callback with the row number
+  // for the next available row.
   //
   // It is OK to call these async methods even if the database has failed to
   // initialize, as there is an alternate code path to handle this case that
@@ -184,13 +187,13 @@ class AsyncSharedStorageDatabase {
       base::OnceCallback<void(OperationResult)> callback,
       bool perform_storage_cleanup = false) = 0;
 
-  // Clear all entries for all origins whose `last_read_time` (i.e. creation
-  // time) falls before `SharedStorageDatabase::clock_->Now() -
-  // SharedStorageDatabase::origin_staleness_threshold_`. Also purges, for all
-  // origins, all privacy budget withdrawals that have `time_stamps` older than
-  // `SharedStorageDatabase::clock_->Now() -
-  // SharedStorageDatabase::budget_interval_`.
-  virtual void PurgeStaleOrigins(
+  // Clear all entries whose `last_used_time` (currently the last write access)
+  // falls before `SharedStorageDatabase::clock_->Now() - staleness_threshold_`.
+  // Also purges, for all origins, all privacy budget withdrawals that have
+  // `time_stamps` older than `SharedStorageDatabase::clock_->Now() -
+  // budget_interval_`. The parameter of `callback` reports whether the
+  // transaction was successful.
+  virtual void PurgeStale(
       base::OnceCallback<void(OperationResult)> callback) = 0;
 
   // Fetches a vector of `mojom::StorageUsageInfoPtr`, with one
@@ -224,6 +227,21 @@ class AsyncSharedStorageDatabase {
   virtual void GetCreationTime(
       url::Origin context_origin,
       base::OnceCallback<void(TimeResult)> callback) = 0;
+
+  // Calls `SharedStorageDatabase::Length()`,
+  // `SharedStorageDatabase::GetRemainingBudget()`, and
+  // `SharedStorageDatabase::GetCreationTime()`, then bundles this info along
+  // with the accompanying `OperationResult`s into a struct to send to the
+  // DevTools `StorageHandler` via `callback`.
+  virtual void GetMetadata(
+      url::Origin context_origin,
+      base::OnceCallback<void(MetadataResult)> callback) = 0;
+
+  // Calls `callback` with an origin's entries in a vector bundled with an
+  // `OperationResult`. To only be used by DevTools.
+  virtual void GetEntriesForDevTools(
+      url::Origin context_origin,
+      base::OnceCallback<void(EntriesResult)> callback) = 0;
 };
 
 }  // namespace storage

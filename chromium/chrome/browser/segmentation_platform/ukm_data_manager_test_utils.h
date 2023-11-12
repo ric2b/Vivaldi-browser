@@ -29,8 +29,8 @@ class UkmDataManagerTestUtils {
   explicit UkmDataManagerTestUtils(ukm::TestUkmRecorder* ukm_recorder);
   ~UkmDataManagerTestUtils();
 
-  UkmDataManagerTestUtils(UkmDataManagerTestUtils&) = delete;
-  UkmDataManagerTestUtils& operator=(UkmDataManagerTestUtils&) = delete;
+  UkmDataManagerTestUtils(const UkmDataManagerTestUtils&) = delete;
+  UkmDataManagerTestUtils& operator=(const UkmDataManagerTestUtils&) = delete;
 
   // Must be called before the first profile initialization, sets up default
   // model overrides for the given `default_overrides`
@@ -70,7 +70,7 @@ class UkmDataManagerTestUtils {
 
   const raw_ptr<ukm::TestUkmRecorder> ukm_recorder_;
   int source_id_counter_ = 1;
-  raw_ptr<history::HistoryService> history_service_;
+  raw_ptr<history::HistoryService, DanglingUntriaged> history_service_;
 
   std::map<proto::SegmentId, MockModelProvider*> default_overrides_;
   std::map<proto::SegmentId, std::vector<ModelProvider::ModelUpdatedCallback>>

@@ -3,4 +3,14 @@
 <translationbundle lang="ro">
 <translation id="3830627370375585318">Configurați setările de firewall sau antivirus pentru a permite Vivaldi să acceseze
           rețeaua.</translation>
+<translation id="4200102020577305737">Accesați
+          meniul Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Setări LAN
+          și debifați caseta de selectare „Utilizați un server proxy pentru LAN”.</translation>
 </translationbundle>

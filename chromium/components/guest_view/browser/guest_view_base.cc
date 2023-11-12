@@ -92,17 +92,20 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
 
   void DidToggleFullscreenModeForTab(bool entered_fullscreen,
                                      bool will_cause_resize) override {
+    if (!IsGuestInitialized()) {
+      return;
+    }
+
     is_fullscreen_ = entered_fullscreen;
     guest_->EmbedderFullscreenToggled(is_fullscreen_);
   }
 
   void PrimaryMainFrameWasResized(bool width_changed) override {
-    if (!web_contents()->GetDelegate())
+    if (!IsGuestInitialized()) {
       return;
+    }
 
-    bool current_fullscreen =
-        web_contents()->GetDelegate()->IsFullscreenForTabOrPending(
-            web_contents());
+    bool current_fullscreen = web_contents()->IsFullscreen();
     if (is_fullscreen_ && !current_fullscreen) {
       is_fullscreen_ = false;
       guest_->EmbedderFullscreenToggled(is_fullscreen_);
@@ -110,10 +113,14 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
   }
 
   void DidUpdateAudioMutingState(bool muted) override {
-    guest_->web_contents()->SetAudioMuted(muted);
+    if (IsGuestInitialized()) {
+      guest_->web_contents()->SetAudioMuted(muted);
+    }
   }
 
  private:
+  bool IsGuestInitialized() { return guest_->web_contents(); }
+
   bool is_fullscreen_ = false;
   const base::SafeRef<GuestViewBase> guest_;
 };
@@ -149,6 +156,8 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
     : owner_web_contents_(owner_web_contents),
       browser_context_(owner_web_contents->GetBrowserContext()),
       guest_instance_id_(GetGuestViewManager()->GetNextInstanceID()) {
+  owner_contents_observer_ = std::make_unique<OwnerContentsObserver>(
+      weak_ptr_factory_.GetSafeRef(), owner_web_contents_);
   SetOwnerHost();
 }
 
@@ -162,11 +171,23 @@ GuestViewBase::~GuestViewBase() {
     delegate_to_browser_plugin_->set_delegate(nullptr);
   }
 
+  // We can get here without starting to observe webcontents.
+  if (web_contents()) {
+  // Even out the observing in InitWithWebContents
+    auto* zoom_controller =
+        zoom::ZoomController::FromWebContents(web_contents());
+    zoom_controller->RemoveObserver(this);
+  }
   // If `this` was ever attached, it is important to clear `owner_web_contents_`
   // after the call to StopTrackingEmbedderZoomLevel(), but before the rest of
   // the statements in this function.
   StopTrackingEmbedderZoomLevel();
   owner_web_contents_ = nullptr;
+
+  // NOTE(andre@vivaldi.com) : We need to update the map so that
+  // GuestViewBase::FromWebContents does not return destroyed guests. One case
+  // was VB-94399.
+  g_webcontents_guestview_map.Get().erase(web_contents());
 
   // This is not necessarily redundant with the removal when the guest contents
   // is destroyed, since we may never have initialized a guest WebContents.
@@ -211,11 +232,6 @@ void GuestViewBase::InitWithWebContents(const base::Value::Dict& create_params,
   AttachWebContentsObservers(guest_web_contents);
 #endif
 
-  // At this point, we have just created the guest WebContents, we need to add
-  // an observer to the owner WebContents.
-  owner_contents_observer_ = std::make_unique<OwnerContentsObserver>(
-      weak_ptr_factory_.GetSafeRef(), owner_web_contents_);
-
   WebContentsObserver::Observe(guest_web_contents);
 
   // NOTE(david@vivaldi.com): In Vivaldi we need to use the
@@ -248,11 +264,11 @@ void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
     return;
 
   // Dispatch the onResize event.
-  auto args = std::make_unique<base::DictionaryValue>();
-  args->SetInteger(kOldWidth, old_size.width());
-  args->SetInteger(kOldHeight, old_size.height());
-  args->SetInteger(kNewWidth, new_size.width());
-  args->SetInteger(kNewHeight, new_size.height());
+  base::Value::Dict args;
+  args.Set(kOldWidth, old_size.width());
+  args.Set(kOldHeight, old_size.height());
+  args.Set(kNewWidth, new_size.width());
+  args.Set(kNewHeight, new_size.height());
   DispatchEventToGuestProxy(
       std::make_unique<GuestViewEvent>(kEventResize, std::move(args)));
 }
@@ -961,6 +977,10 @@ void GuestViewBase::SetOwnerHost() {
 }
 
 bool GuestViewBase::CanBeEmbeddedInsideCrossProcessFrames() const {
+  return false;
+}
+
+bool GuestViewBase::RequiresSslInterstitials() const {
   return false;
 }
 

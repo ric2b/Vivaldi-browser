@@ -8,12 +8,13 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/parental_handoff_screen_handler.h"
 
 namespace ash {
+
+class ParentalHandoffScreenView;
 
 class ParentalHandoffScreen : public BaseScreen {
  public:
@@ -49,11 +50,5 @@ class ParentalHandoffScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::ParentalHandoffScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_PARENTAL_HANDOFF_SCREEN_H_

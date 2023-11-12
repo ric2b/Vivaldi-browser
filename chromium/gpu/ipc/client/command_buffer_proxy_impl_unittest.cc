@@ -7,10 +7,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -47,12 +48,12 @@ class TestGpuChannelHost : public GpuChannelHost {
                            mojo::MessagePipeHandle(mojo::kInvalidHandleValue))),
         gpu_channel_(gpu_channel) {}
 
-  mojom::GpuChannel& GetGpuChannel() override { return gpu_channel_; }
+  mojom::GpuChannel& GetGpuChannel() override { return *gpu_channel_; }
 
  protected:
   ~TestGpuChannelHost() override = default;
 
-  mojom::GpuChannel& gpu_channel_;
+  const raw_ref<mojom::GpuChannel> gpu_channel_;
 };
 
 class MockGpuControlClient : public GpuControlClient {
@@ -82,7 +83,7 @@ class CommandBufferProxyImplTest : public testing::Test {
       MockCommandBuffer* mock_command_buffer = nullptr) {
     auto proxy = std::make_unique<CommandBufferProxyImpl>(
         channel_, nullptr /* gpu_memory_buffer_manager */, 0 /* stream_id */,
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
 
     // The Initialize() call below synchronously requests a new CommandBuffer
     // using the channel's GpuControl interface.  Simulate success, since we're

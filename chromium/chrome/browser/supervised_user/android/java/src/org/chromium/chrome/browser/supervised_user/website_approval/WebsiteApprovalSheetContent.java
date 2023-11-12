@@ -19,6 +19,7 @@ import androidx.appcompat.widget.DialogTitle;
 import org.chromium.chrome.browser.supervised_user.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.ui.ElidedUrlTextView;
 import org.chromium.ui.widget.ButtonCompat;
 import org.chromium.url.GURL;
 
@@ -34,6 +35,16 @@ class WebsiteApprovalSheetContent implements BottomSheetContent {
 
     private final Context mContext;
     private final View mContentView;
+
+    static final class StringSpecs {
+        String mFormattedString;
+        int mVisibleUrlLength;
+
+        StringSpecs(String formattedString, int length) {
+            mFormattedString = formattedString;
+            mVisibleUrlLength = length;
+        }
+    }
 
     public WebsiteApprovalSheetContent(Context context) {
         mContext = context;
@@ -119,7 +130,11 @@ class WebsiteApprovalSheetContent implements BottomSheetContent {
 
     public void setTitle(String childName) {
         DialogTitle titleView = mContentView.findViewById(R.id.website_approval_sheet_title);
-        titleView.setText(mContext.getString(R.string.parent_website_approval_title, childName));
+        String displayedTitle =
+                mContext.getString(R.string.parent_website_approval_title, childName);
+        titleView.setText(displayedTitle);
+        // Set for accessibility announcement.
+        titleView.setContentDescription(displayedTitle);
     }
 
     public void setDomainText(GURL url) {
@@ -127,18 +142,26 @@ class WebsiteApprovalSheetContent implements BottomSheetContent {
         // Omit scheme, credentials, path and trivial subdomains
         String formattedDomain =
                 UrlFormatter.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(url);
-        domainTextView.setText(mContext.getString(
-                R.string.parent_website_approval_all_of_domain, formattedDomain));
+        String displayedFormattedDomain =
+                mContext.getString(R.string.parent_website_approval_all_of_domain, formattedDomain);
+        domainTextView.setText(displayedFormattedDomain);
+        // Set for accessibility announcement.
+        domainTextView.setContentDescription(displayedFormattedDomain);
     }
 
     @VisibleForTesting
-    static String truncateLongUrl(GURL url) {
+    static StringSpecs truncateLongUrl(GURL url) {
         // Omit user-specific and trivial url parts.
         String formattedUrl =
                 UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(url.getSpec());
 
-        if (formattedUrl.length() <= MAX_FULL_URL_SIZE) {
-            return formattedUrl;
+        if (formattedUrl.length() <= MAX_HOST_SIZE) {
+            // Display the full url.
+            return new StringSpecs(formattedUrl, formattedUrl.length());
+        } else if (formattedUrl.length() <= MAX_FULL_URL_SIZE) {
+            // By default display the host and url up to MAX_HOST_SIZE chars.
+            // On click display the full url.
+            return new StringSpecs(formattedUrl, MAX_HOST_SIZE);
         } else {
             // Omit scheme, credentials, path and trivial subdomains
             String formattedHost =
@@ -155,13 +178,22 @@ class WebsiteApprovalSheetContent implements BottomSheetContent {
             } else {
                 truncatedUrlBuilder.append(url.getPath());
             }
-            return truncatedUrlBuilder.toString();
+            // By default display the host and url up to MAX_HOST_SIZE chars.
+            // On click display the expanded url (which we may have truncated).
+            return new StringSpecs(truncatedUrlBuilder.toString(), MAX_HOST_SIZE);
         }
     }
 
     public void setFullUrlText(GURL url) {
-        TextView urlTextView = mContentView.findViewById(R.id.full_url);
-        urlTextView.setText(truncateLongUrl(url));
+        ElidedUrlTextView fullUrlView = mContentView.findViewById(R.id.full_url);
+        StringSpecs specs = truncateLongUrl(url);
+        fullUrlView.setUrl(specs.mFormattedString, specs.mVisibleUrlLength);
+
+        LinearLayout urlWrapper = mContentView.findViewById(R.id.url_container);
+        urlWrapper.setOnClickListener(v -> { fullUrlView.toggleTruncation(); });
+
+        // Set for accessibility announcement.
+        fullUrlView.setContentDescription(specs.mFormattedString);
     }
 
     public void setFaviconBitmap(Bitmap bitmap) {

@@ -14,11 +14,12 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "components/services/storage/indexed_db/locks/partitioned_lock_manager_impl.h"
+#include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "content/browser/indexed_db/fake_indexed_db_metadata_coding.h"
 #include "content/browser/indexed_db/indexed_db.h"
@@ -53,7 +54,7 @@ void CreateAndBindTransactionPlaceholder(
 
 class IndexedDBDatabaseTest : public ::testing::Test {
  public:
-  IndexedDBDatabaseTest() : lock_manager_(kIndexedDBLockLevelCount) {}
+  IndexedDBDatabaseTest() = default;
 
   void SetUp() override {
     backing_store_ = std::make_unique<IndexedDBFakeBackingStore>();
@@ -76,7 +77,7 @@ class IndexedDBDatabaseTest : public ::testing::Test {
     if (!db_)
       return;
     if (async) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&IndexedDBDatabaseTest::RunTasksForDatabase,
                                     weak_factory_.GetWeakPtr(), false));
       return;
@@ -106,7 +107,7 @@ class IndexedDBDatabaseTest : public ::testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  PartitionedLockManagerImpl lock_manager_;
+  PartitionedLockManager lock_manager_;
 
   base::WeakPtrFactory<IndexedDBDatabaseTest> weak_factory_{this};
 };
@@ -189,9 +190,9 @@ class MockCallbacks : public IndexedDBCallbacks {
  public:
   MockCallbacks()
       : IndexedDBCallbacks(nullptr,
-                           storage::BucketLocator(),
+                           absl::nullopt,
                            mojo::NullAssociatedRemote(),
-                           base::ThreadTaskRunnerHandle::Get()) {}
+                           base::SingleThreadTaskRunner::GetCurrentDefault()) {}
 
   MockCallbacks(const MockCallbacks&) = delete;
   MockCallbacks& operator=(const MockCallbacks&) = delete;
@@ -460,8 +461,7 @@ leveldb::Status DummyOperation(IndexedDBTransaction* transaction) {
 class IndexedDBDatabaseOperationTest : public testing::Test {
  public:
   IndexedDBDatabaseOperationTest()
-      : lock_manager_(kIndexedDBLockLevelCount),
-        commit_success_(leveldb::Status::OK()),
+      : commit_success_(leveldb::Status::OK()),
         factory_(std::make_unique<MockIndexedDBFactory>()) {}
 
   IndexedDBDatabaseOperationTest(const IndexedDBDatabaseOperationTest&) =
@@ -518,7 +518,7 @@ class IndexedDBDatabaseOperationTest : public testing::Test {
     if (!db_)
       return;
     if (async) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&IndexedDBDatabaseOperationTest::RunTasksForDatabase,
                          base::Unretained(this), false));
@@ -551,7 +551,7 @@ class IndexedDBDatabaseOperationTest : public testing::Test {
   scoped_refptr<MockIndexedDBCallbacks> request_;
   scoped_refptr<MockIndexedDBDatabaseCallbacks> callbacks_;
   raw_ptr<IndexedDBTransaction> transaction_ = nullptr;
-  PartitionedLockManagerImpl lock_manager_;
+  PartitionedLockManager lock_manager_;
   bool error_called_ = false;
 
   leveldb::Status commit_success_;

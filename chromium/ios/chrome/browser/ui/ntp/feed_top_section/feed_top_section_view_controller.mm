@@ -107,8 +107,7 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     [self.promoViewContainer removeFromSuperview];
     self.promoViewContainer = nil;
     self.promoView = nil;
-    self.contentStack.directionalLayoutMargins =
-        NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
+    self.contentStack.directionalLayoutMargins = NSDirectionalEdgeInsetsZero;
   }
   [self.ntpDelegate updateFeedLayout];
 }
@@ -151,11 +150,10 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     [self.contentStack.topAnchor constraintEqualToAnchor:self.view.topAnchor],
     [self.contentStack.bottomAnchor
         constraintEqualToAnchor:self.view.bottomAnchor],
-    [self.contentStack.centerXAnchor
-        constraintEqualToAnchor:self.view.centerXAnchor],
+    [self.contentStack.leadingAnchor
+        constraintEqualToAnchor:self.view.leadingAnchor],
     [self.contentStack.widthAnchor
-        constraintEqualToConstant:MIN(kDiscoverFeedContentWidth,
-                                      self.view.frame.size.width)],
+        constraintEqualToAnchor:self.view.widthAnchor],
   ]];
 }
 

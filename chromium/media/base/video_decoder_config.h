@@ -191,11 +191,6 @@ class MEDIA_EXPORT VideoDecoderConfig {
   absl::optional<gfx::HDRMetadata> hdr_metadata_;
   bool is_rtc_ = false;
 
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-public:
-  bool platform_media_pass_through_ = false;
-#endif
-
   // Not using DISALLOW_COPY_AND_ASSIGN here intentionally to allow the compiler
   // generated copy constructor and assignment operator. Since the extra data is
   // typically small, the performance impact is minimal.

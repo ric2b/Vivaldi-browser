@@ -19,19 +19,12 @@ MerchantPromoCodeManager::MerchantPromoCodeManager() = default;
 MerchantPromoCodeManager::~MerchantPromoCodeManager() = default;
 
 bool MerchantPromoCodeManager::OnGetSingleFieldSuggestions(
-    int query_id,
-    bool is_autocomplete_enabled,
-    bool autoselect_first_suggestion,
+    AutoselectFirstSuggestion autoselect_first_suggestion,
     const FormFieldData& field,
+    const AutofillClient& client,
     base::WeakPtr<SuggestionsHandler> handler,
     const SuggestionsContext& context) {
-  // We don't check whether |is_autocomplete_enabled| is false because it is
-  // redundant. If |is_autocomplete_enabled| is false, then autofill
-  // wallet import must be disabled. Disabling autofill wallet import (turning
-  // off the "Save and fill payment methods" toggle) will disable offering
-  // suggestions and filling promo codes, because it will cause
-  // PersonalDataManager::GetActiveAutofillPromoCodeOffersForOrigin() to return
-  // an empty vector.
+  // The field is eligible only if it's focused on a merchant promo code.
   bool field_is_eligible =
       context.focused_field &&
       context.focused_field->Type().GetStorableType() == MERCHANT_PROMO_CODE;
@@ -47,8 +40,8 @@ bool MerchantPromoCodeManager::OnGetSingleFieldSuggestions(
     if (!promo_code_offers.empty()) {
       SendPromoCodeSuggestions(
           promo_code_offers, field.global_id(),
-          QueryHandler(query_id, autoselect_first_suggestion, field.value,
-                       handler));
+          QueryHandler(field.global_id(), autoselect_first_suggestion,
+                       field.value, handler));
       return true;
     }
   }
@@ -172,16 +165,15 @@ void MerchantPromoCodeManager::SendPromoCodeSuggestions(
       // Return empty suggestions to query handler. This will result in no
       // suggestions being displayed.
       query_handler.handler_->OnSuggestionsReturned(
-          query_handler.client_query_id_,
-          query_handler.autoselect_first_suggestion_, {});
+          query_handler.field_id_, query_handler.autoselect_first_suggestion_,
+          {});
       return;
     }
   }
 
   // Return suggestions to query handler.
   query_handler.handler_->OnSuggestionsReturned(
-      query_handler.client_query_id_,
-      query_handler.autoselect_first_suggestion_,
+      query_handler.field_id_, query_handler.autoselect_first_suggestion_,
       AutofillSuggestionGenerator::GetPromoCodeSuggestionsFromPromoCodeOffers(
           promo_code_offers));
 

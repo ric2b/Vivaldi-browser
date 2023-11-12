@@ -57,6 +57,8 @@ struct Theme {
   bool is_custom_background;
   // True if the theme is dark (e.g. NTP background color is dark).
   bool is_dark;
+  // True if the realbox icons should be themed based on the background color.
+  bool theme_realbox_icons;
   // Color of Google logo. If not set show the logo multi-colored.
   skia.mojom.SkColor? logo_color;
   // Selected collection for daily refresh.
@@ -68,7 +70,6 @@ struct Theme {
   string? background_image_attribution_2;
   // URL associated with the background image. Used for href.
   url.mojom.Url? background_image_attribution_url;
-
   // Theme settings for the NTP MV tiles.
   most_visited.mojom.MostVisitedTheme most_visited;
 };
@@ -181,6 +182,14 @@ struct Promo {
   array<PromoPart> middle_slot_parts;
 };
 
+// Used to determine available modules for the NTP.
+struct ModuleIdName {
+  // A unique identifier associated with a module.
+  string id;
+  // The name associated with a module.
+  string name;
+};
+
 // Action the user performed while using the customize dialog. Used for metrics
 // logging only. Actions correspond to items in NTPLoggingEventType.
 enum CustomizeDialogAction {
@@ -217,7 +226,8 @@ interface PageHandlerFactory {
 interface PageHandler {
   // Sets the background image and notifies all NTPs of the change.
   SetBackgroundImage(string attribution_1, string attribution_2,
-      url.mojom.Url attribution_url, url.mojom.Url image_url);
+      url.mojom.Url attribution_url, url.mojom.Url image_url,
+      url.mojom.Url thumbnail_url);
   // Sets collection id for daily refresh. When |collection_id| is empty, the
   // daily refresh is turned off.
   SetDailyRefreshCollectionId(string collection_id);
@@ -261,6 +271,8 @@ interface PageHandler {
   // `module_ids` is an array of module descriptor ids that identifies the
   // modules that loaded with data.
   OnModulesLoadedWithData(array<string> module_ids);
+  // Returns a list of available module id and name pairs.
+  GetModulesIdNames() => (array<ModuleIdName> data);
   // Sets the order of modules.
   SetModulesOrder(array<string> module_ids);
   // Returns the order of modules or an empty array if the user has not

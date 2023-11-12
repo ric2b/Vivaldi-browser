@@ -26,19 +26,11 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.lifecycle.Stage;
-import android.text.Spanned;
-import android.text.style.ClickableSpan;
-import android.view.View;
-import android.widget.TextView;
 
 import androidx.fragment.app.Fragment;
-import androidx.test.espresso.NoMatchingViewException;
-import androidx.test.espresso.UiController;
-import androidx.test.espresso.ViewAction;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 
-import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -58,7 +50,6 @@ import org.chromium.base.test.util.CommandLineFlags.Add;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Matchers;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.FirstRunPageDelegate;
@@ -86,6 +77,7 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.BlankUiTestActivity;
+import org.chromium.ui.test.util.ViewUtils;
 
 import java.io.IOException;
 import java.util.List;
@@ -308,9 +300,6 @@ public class SyncConsentFragmentTest {
     @LargeTest
     @Feature("RenderTest")
     @DisabledTest(message = "crbug.com/1304737")
-    // This test is only relevant if child users do not have sync force-enabled (if they do, then
-    // they can only ever access this fragment from the FRE).
-    @EnableFeatures({ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS})
     @DisableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
     public void testSyncConsentFragmentWithChildAccount() throws IOException {
         CoreAccountInfo accountInfo = mSigninTestRule.addChildTestAccountThenWaitForSignin();
@@ -387,36 +376,8 @@ public class SyncConsentFragmentTest {
     @Test
     @LargeTest
     @Feature("RenderTest")
-    @DisableFeatures(
-            {ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS, ChromeFeatureList.TANGIBLE_SYNC})
-    public void
-    testFRESyncConsentFragmentWithChildAccount() throws IOException {
-        HistogramDelta startPageHistogram =
-                new HistogramDelta("Signin.SigninStartedAccessPoint", SigninAccessPoint.START_PAGE);
-        mSigninTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        CustomSyncConsentFirstRunFragment fragment = new CustomSyncConsentFirstRunFragment();
-        Bundle bundle = new Bundle();
-        bundle.putBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT, true);
-        when(mFirstRunPageDelegateMock.getProperties()).thenReturn(bundle);
-        fragment.setPageDelegate(mFirstRunPageDelegateMock);
-
-        launchActivityWithFragment(fragment);
-        assertEquals(1, startPageHistogram.getDelta());
-        // TODO(https://crbug.com/1291903): Rewrite this test when RenderTestRule is integrated with
-        // Espresso.
-        // We check the button is enabled rather than visible, as it may be off-screen on small
-        // devices.
-        onView(withId(R.id.positive_button)).check(matches(isEnabled()));
-        mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(android.R.id.content),
-                "fre_sync_consent_fragment_with_regular_child");
-    }
-
-    @Test
-    @LargeTest
-    @Feature("RenderTest")
-    @EnableFeatures({ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS})
     @DisableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
-    public void testFRESyncConsentFragmentWithChildAccountAllowSyncOff() throws IOException {
+    public void testFRESyncConsentFragmentWithChildAccount() throws IOException {
         HistogramDelta startPageHistogram =
                 new HistogramDelta("Signin.SigninStartedAccessPoint", SigninAccessPoint.START_PAGE);
         mSigninTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
@@ -441,7 +402,6 @@ public class SyncConsentFragmentTest {
     @LargeTest
     @Feature("RenderTest")
     @CommandLineFlags.Remove({ChromeSwitches.FORCE_ENABLE_SIGNIN_FRE})
-    @EnableFeatures({ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS})
     @DisableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
     public void testFRESyncConsentFragmentWithChildAccountLegacy() throws IOException {
         HistogramDelta startPageHistogram =
@@ -539,7 +499,7 @@ public class SyncConsentFragmentTest {
                             accountInfo.getEmail());
                 });
         onView(withText(accountInfo.getEmail())).check(matches(isDisplayed()));
-        onView(withId(R.id.signin_details_description)).perform(clickOnClickableSpan());
+        onView(withId(R.id.signin_details_description)).perform(ViewUtils.clickOnClickableSpan(0));
         // Wait for sign in process to finish.
         CriteriaHelper.pollUiThread(() -> {
             return IdentityServicesProvider.get()
@@ -567,7 +527,8 @@ public class SyncConsentFragmentTest {
                             mChromeActivityTestRule.getActivity(), SigninAccessPoint.SETTINGS,
                             accountInfo.getEmail());
                 });
-        onView(withId(R.id.sync_consent_details_description)).perform(clickOnClickableSpan());
+        onView(withId(R.id.sync_consent_details_description))
+                .perform(ViewUtils.clickOnClickableSpan(0));
         // Wait for sign in process to finish.
         CriteriaHelper.pollUiThread(() -> {
             return IdentityServicesProvider.get()
@@ -585,7 +546,6 @@ public class SyncConsentFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures({ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS})
     public void testClickingSettingsThenCancelForChildIsNoOp() {
         CoreAccountInfo accountInfo = mSigninTestRule.addChildTestAccountThenWaitForSignin();
         // Check the user is not consented to sync.
@@ -601,7 +561,7 @@ public class SyncConsentFragmentTest {
                             mChromeActivityTestRule.getActivity(), SigninAccessPoint.SETTINGS,
                             accountInfo.getEmail());
                 });
-        onView(withId(R.id.signin_details_description)).perform(clickOnClickableSpan());
+        onView(withId(R.id.signin_details_description)).perform(ViewUtils.clickOnClickableSpan(0));
         // Wait for the sync consent to be set.
         CriteriaHelper.pollUiThread(() -> {
             return IdentityServicesProvider.get()
@@ -1015,36 +975,6 @@ public class SyncConsentFragmentTest {
         assertEquals(3,
                 mHistogramTestRule.getHistogramTotalCount(
                         "Signin.SyncConsentScreen.DataRowClicked"));
-    }
-
-    private ViewAction clickOnClickableSpan() {
-        return new ViewAction() {
-            @Override
-            public Matcher<View> getConstraints() {
-                return Matchers.instanceOf(TextView.class);
-            }
-
-            @Override
-            public String getDescription() {
-                return "Clicks on the one and only clickable span in the view";
-            }
-
-            @Override
-            public void perform(UiController uiController, View view) {
-                TextView textView = (TextView) view;
-                Spanned spannedString = (Spanned) textView.getText();
-                ClickableSpan[] spans =
-                        spannedString.getSpans(0, spannedString.length(), ClickableSpan.class);
-                if (spans.length == 0) {
-                    throw new NoMatchingViewException.Builder()
-                            .includeViewHierarchy(true)
-                            .withRootView(textView)
-                            .build();
-                }
-                assertEquals("There should be only one clickable link", 1, spans.length);
-                spans[0].onClick(view);
-            }
-        };
     }
 
     private void launchActivityWithFragment(Fragment fragment) {

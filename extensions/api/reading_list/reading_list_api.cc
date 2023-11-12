@@ -62,7 +62,8 @@ ExtensionFunction::ResponseAction ReadingListPrivateAddFunction::Run() {
   DCHECK(model->IsUrlSupported(url));
   bool success = false;
   if (model->IsUrlSupported(url) && model->loaded()) {
-    model->AddEntry(url, params->title, reading_list::ADDED_VIA_CURRENT_APP);
+    model->AddOrReplaceEntry(url, params->title,
+        reading_list::ADDED_VIA_CURRENT_APP, {});
     success = true;
   }
   return RespondNow(ArgumentList(Results::Create(success)));
@@ -116,7 +117,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateGetAllFunction::Run() {
 
   std::vector<vivaldi::reading_list_private::ReadingListEntry> entries;
 
-  for (const auto& url : model->Keys()) {
+  for (const auto& url : model->GetKeys()) {
     const ReadingListEntry* entry = model->GetEntryByURL(url);
     DCHECK(entry);
     entries.push_back(GetEntryData(entry));
@@ -140,7 +141,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateSetReadStatusFunction::Run()
 
   bool success = false;
   if (model->IsUrlSupported(url) && model->loaded()) {
-    model->SetReadStatus(url, params->read);
+    model->SetReadStatusIfExists(url, params->read);
     success = true;
   }
   return RespondNow(ArgumentList(Results::Create(success)));

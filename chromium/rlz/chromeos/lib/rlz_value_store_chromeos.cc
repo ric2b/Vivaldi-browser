@@ -26,8 +26,8 @@
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
-#include "chromeos/system/factory_ping_embargo_check.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/factory_ping_embargo_check.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "dbus/bus.h"
 #include "rlz/lib/lib_values.h"
 #include "rlz/lib/recursive_cross_process_lock_posix.h"
@@ -379,9 +379,9 @@ bool RlzValueStoreChromeOS::IsStatefulEvent(Product product,
   if (strcmp(event_rlz, "CAF") == 0) {
     chromeos::system::StatisticsProvider* stats =
         chromeos::system::StatisticsProvider::GetInstance();
-    std::string should_send_rlz_ping_value;
-    if (stats->GetMachineStatistic(chromeos::system::kShouldSendRlzPingKey,
-                                   &should_send_rlz_ping_value)) {
+    if (const absl::optional<base::StringPiece> should_send_rlz_ping_value =
+            stats->GetMachineStatistic(
+                chromeos::system::kShouldSendRlzPingKey)) {
       if (should_send_rlz_ping_value ==
           chromeos::system::kShouldSendRlzPingValueFalse) {
         return true;
@@ -389,7 +389,7 @@ bool RlzValueStoreChromeOS::IsStatefulEvent(Product product,
                  chromeos::system::kShouldSendRlzPingValueTrue) {
         LOG(WARNING) << chromeos::system::kShouldSendRlzPingKey
                      << " has an unexpected value: "
-                     << should_send_rlz_ping_value << ". Treat it as "
+                     << should_send_rlz_ping_value.value() << ". Treat it as "
                      << chromeos::system::kShouldSendRlzPingValueFalse
                      << " to avoid sending duplicate rlz ping.";
         return true;

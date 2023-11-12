@@ -33,7 +33,9 @@ void SetIsInputSourceCommandHebrewForTesting(bool is_command_hebrew) {
 
 bool IsKeyboardLayoutCommandQwerty(NSString* layout_id) {
   return [layout_id isEqualToString:@"com.apple.keylayout.DVORAK-QWERTYCMD"] ||
-         [layout_id isEqualToString:@"com.apple.keylayout.Dhivehi-QWERTY"];
+         [layout_id isEqualToString:@"com.apple.keylayout.Dhivehi-QWERTY"] ||
+         [layout_id isEqualToString:@"com.apple.keylayout.Inuktitut-QWERTY"] ||
+         [layout_id isEqualToString:@"com.apple.keylayout.Cherokee-QWERTY"];
 }
 
 bool IsKeyboardLayoutDvorakRightOrLeft(NSString* layout_id) {
@@ -171,9 +173,14 @@ NSUInteger ModifierMaskForKeyEvent(NSEvent* event) {
   if (useEventCharacters) {
     eventString = eventCharacters;
 
-    // Process the shift if necessary.
-    if (eventModifiers & NSEventModifierFlagShift)
+    // If the user is pressing the Shift key, force the shortcut string to
+    // uppercase. Otherwise, if only Caps Lock is down, ensure the shortcut
+    // string is lowercase.
+    if (eventModifiers & NSEventModifierFlagShift) {
       eventString = [eventString uppercaseString];
+    } else if (eventModifiers & NSEventModifierFlagCapsLock) {
+      eventString = [eventString lowercaseString];
+    }
   }
 
   if ([eventString length] == 0 || [[self keyEquivalent] length] == 0)

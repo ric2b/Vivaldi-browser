@@ -493,18 +493,20 @@ bool OriginTrialContext::CanEnableTrialFromName(const StringView& trial_name) {
   if (trial_name == "FencedFrames")
     return base::FeatureList::IsEnabled(features::kFencedFrames);
 
-  if (trial_name == "ComputePressure")
-    return base::FeatureList::IsEnabled(features::kComputePressure);
-
   if (trial_name == "AdInterestGroupAPI")
     return base::FeatureList::IsEnabled(features::kInterestGroupStorage);
 
   if (trial_name == "TrustTokens")
-    return base::FeatureList::IsEnabled(network::features::kTrustTokens);
+    return base::FeatureList::IsEnabled(network::features::kPrivateStateTokens);
 
   if (trial_name == "SpeculationRulesPrefetch") {
     return base::FeatureList::IsEnabled(
         features::kSpeculationRulesPrefetchProxy);
+  }
+
+  if (trial_name == "SpeculationRulesPrefetchFuture") {
+    return base::FeatureList::IsEnabled(
+        features::kSpeculationRulesPrefetchFuture);
   }
 
   if (trial_name == "PendingBeaconAPI") {

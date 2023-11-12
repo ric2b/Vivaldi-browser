@@ -38,7 +38,6 @@
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
-#include "chromeos/login/login_state/login_state.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/signin/public/base/consent_level.h"
@@ -195,7 +194,8 @@ std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
            {ContentSettingsType::MEDIASTREAM_MIC, "microphone"},
            {ContentSettingsType::MEDIASTREAM_CAMERA, "camera"},
            {ContentSettingsType::MIDI_SYSEX, "midiDevices"},
-           {ContentSettingsType::ADS, "ads"}});
+           {ContentSettingsType::ADS, "ads"},
+           {ContentSettingsType::HID_CHOOSER_DATA, "hidDevices"}});
   const auto* it = kSettingsPathOverrides.find(type);
 
   return base::StrCat({kContentSettingsSubPage, "/",
@@ -212,7 +212,8 @@ void ShowSiteSettingsImpl(Browser* browser, Profile* profile, const GURL& url) {
   // TODO(https://crbug.com/444047): Site Details should work with file:// urls
   // when this bug is fixed, so add it to the allowlist when that happens.
   if (!site_origin.opaque() && (url.SchemeIsHTTPOrHTTPS() ||
-                                url.SchemeIs(extensions::kExtensionScheme))) {
+                                url.SchemeIs(extensions::kExtensionScheme) ||
+                                url.SchemeIs(chrome::kIsolatedAppScheme))) {
     std::string origin_string = site_origin.Serialize();
     url::RawCanonOutputT<char> percent_encoded_origin;
     url::EncodeURIComponent(origin_string.c_str(), origin_string.length(),
@@ -585,7 +586,7 @@ void ShowDiagnosticsApp(Profile* profile) {
 
 void ShowFirmwareUpdatesApp(Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  DCHECK(base::FeatureList::IsEnabled(chromeos::features::kFirmwareUpdaterApp));
+  DCHECK(base::FeatureList::IsEnabled(ash::features::kFirmwareUpdaterApp));
   ShowSystemAppInternal(profile, ash::SystemWebAppType::FIRMWARE_UPDATE);
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   ShowSystemAppInternal(profile, GURL(kOsUIFirmwareUpdaterAppURL));

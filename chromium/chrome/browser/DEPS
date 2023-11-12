@@ -15,8 +15,6 @@ include_rules = [
   "+ash/components/arc",
   "+chrome/android/native_j_unittests_jni_headers",
   "+chrome/android/chrome_jni_headers",
-  "+chrome/android/features/autofill_assistant/jni_headers",
-  "+chrome/android/features/autofill_assistant/jni_headers_public",
   "+chrome/android/features/dev_ui",
   "+chrome/android/modules",
   "+chrome/android/test_support_jni_headers",
@@ -33,6 +31,7 @@ include_rules = [
   "+chrome/services/machine_learning/public",
   "+chrome/services/media_gallery_util/public",
   "+chrome/services/printing/public",
+  "+chrome/services/qrcode_generator/public",
   "+chrome/services/sharing/public",
   "+chrome/services/removable_storage_writer/public",
   "+chrome/services/util_win/public",
@@ -44,13 +43,9 @@ include_rules = [
   # TODO(b/129295708): Remove after move is complete.
   "+components/arc",
   "+components/access_code_cast",
-  "+components/accuracy_tips",
   "+components/account_manager_core",
+  "+components/app_restore",
   "+components/assist_ranker",
-  "+components/autofill_assistant/android",
-  "+components/autofill_assistant/browser",
-  "+components/autofill_assistant/content/browser",
-  "+components/autofill_assistant/content/common",
   "+components/autofill/content/browser",
   "+components/autofill/content/common",
   "+components/autofill/core/browser",
@@ -117,6 +112,7 @@ include_rules = [
   "+components/crash/core/app",
   "+components/crash/core/browser",
   "+components/crash/core/common",
+  "+components/creator",
   "+components/crx_file",
   "+components/data_use_measurement/core",
   "+components/desks_storage",
@@ -155,7 +151,7 @@ include_rules = [
   "+components/file_access",
   "+components/find_in_page",
   "+components/flags_ui",
-  "+components/app_restore",
+  "+components/fuchsia_component_support",
   "+components/gcm_driver",
   "+components/global_media_controls",
   "+components/google/core/browser",
@@ -171,6 +167,7 @@ include_rules = [
   "+components/history/core/test",
   "+components/history/metrics",
   "+components/image_fetcher/core",
+  "+components/image_service",
   "+components/infobars/android",
   "+components/infobars/content",
   "+components/infobars/core",
@@ -196,7 +193,7 @@ include_rules = [
   "+components/login",
   "+components/media_message_center",
   "+components/media_router/browser",
-  "+components/history_clusters/core",
+  "+components/history_clusters",
   "+components/history_clusters/history_clusters_internals",
   "+components/memory_pressure",
   "+components/messages/android",
@@ -243,6 +240,7 @@ include_rules = [
   "+components/paint_preview/browser",
   "+components/paint_preview/buildflags",
   "+components/password_manager/content/browser",
+  "+components/password_manager/content/common",
   "+components/password_manager/core/browser",
   "+components/password_manager/core/common",
   "+components/payments/content",
@@ -356,7 +354,6 @@ include_rules = [
   "+components/upload_list",
   "+components/url_matcher",
   "+components/url_pattern_index/proto",
-  "+components/url_param_filter/content",
   "+components/user_manager",
   "+components/user_notes",
   "+components/user_prefs",
@@ -403,11 +400,13 @@ include_rules = [
   "+media/capabilities", # For InMemoryVideoDecodeStatsDB
   "+media/cdm/cdm_paths.h",
   "+media/cdm/win/media_foundation_cdm.h",
+  "+media/remoting/device_capability_checker.h",
   "+media/capture",
   "+media/midi",  # For midi switches
   "+media/mojo",  # For mojo media services.
   "+media/renderers",
   "+media/webrtc",  # For webrtc media switches.
+  "+mojo/core/embedder",
   "+ppapi/c",  # For various types.
   "+ppapi/host",
   "+ppapi/proxy",
@@ -583,5 +582,8 @@ specific_include_rules = {
   ],
   "dbus_memory_pressure_evaluator_linux(_unittest)?\.(cc|h)" : [
     "+dbus",
+  ],
+  "browsing_data_model_browsertest.cc" : [
+    "+components/services/storage/shared_storage/shared_storage_manager.h",
   ]
 }

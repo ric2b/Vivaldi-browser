@@ -24,7 +24,7 @@ import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -59,7 +59,7 @@ export interface SettingsSecurityKeysCredentialManagementDialogElement {
 }
 
 const SettingsSecurityKeysCredentialManagementDialogElementBase =
-    WebUIListenerMixin(I18nMixin(PolymerElement));
+    WebUiListenerMixin(I18nMixin(PolymerElement));
 
 const MAX_INPUT_LENGTH: number = 62;
 
@@ -142,7 +142,7 @@ export class SettingsSecurityKeysCredentialManagementDialogElement extends
     super.connectedCallback();
 
     this.$.dialog.showModal();
-    this.addWebUIListener(
+    this.addWebUiListener(
         'security-keys-credential-management-finished',
         (error: string, requiresPINChange = false) =>
             this.onPinError_(error, requiresPINChange));
@@ -165,11 +165,11 @@ export class SettingsSecurityKeysCredentialManagementDialogElement extends
     this.dialogPage_ = CredentialManagementDialogPage.ERROR;
   }
 
-  private submitPIN_() {
+  private submitPin_() {
     // Disable the confirm button to prevent concurrent submissions.
     this.confirmButtonDisabled_ = true;
 
-    this.$.pin.trySubmit(pin => this.browserProxy_.providePIN(pin))
+    this.$.pin.trySubmit(pin => this.browserProxy_.providePin(pin))
         .then(
             () => {
               // Leave confirm button disabled while enumerating credentials.
@@ -263,7 +263,7 @@ export class SettingsSecurityKeysCredentialManagementDialogElement extends
   private onConfirmButtonClick_() {
     switch (this.dialogPage_) {
       case CredentialManagementDialogPage.PIN_PROMPT:
-        this.submitPIN_();
+        this.submitPin_();
         break;
       case CredentialManagementDialogPage.PIN_ERROR:
         this.$.dialog.close();

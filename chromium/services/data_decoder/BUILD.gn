@@ -6,7 +6,7 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
 source_set("lib") {
-  # This target should only be depeneded upon by components that host a
+  # This target should only be depended upon by components that host a
   # data_decoder service. Consumers should depend on a a target in the
   # public/ directory.
   visibility = [
@@ -23,6 +23,8 @@ source_set("lib") {
     "gzipper.h",
     "json_parser_impl.cc",
     "json_parser_impl.h",
+    "structured_headers_parser_impl.cc",
+    "structured_headers_parser_impl.h",
     "web_bundler.cc",
     "web_bundler.h",
     "xml_parser.cc",
@@ -99,12 +101,10 @@ source_set("tests") {
       "//gin",
       "//gin:gin_test",
       "//third_party/blink/public:blink",
+      "//tools/v8_context_snapshot:buildflags",
     ]
     data_deps = [ "//tools/v8_context_snapshot" ]
-    configs += [
-      "//tools/v8_context_snapshot:use_v8_context_snapshot",
-      "//v8:external_startup_data",
-    ]
+    configs += [ "//v8:external_startup_data" ]
   }
 }
 

@@ -71,6 +71,7 @@ class TextPosition;
 
 namespace blink {
 
+class ComputedStyleBuilder;
 class CounterStyle;
 class CounterStyleMap;
 class CSSFontSelector;
@@ -95,6 +96,7 @@ class StyleResolver;
 class StyleResolverStats;
 class StyleRuleFontFace;
 class StyleRuleFontPaletteValues;
+class FontFeatureValuesStorage;
 class StyleRuleKeyframes;
 class StyleRuleUsageTracker;
 class StyleSheet;
@@ -225,8 +227,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void AdoptedStyleSheetAdded(TreeScope& tree_scope, CSSStyleSheet* sheet);
   void AdoptedStyleSheetRemoved(TreeScope& tree_scope, CSSStyleSheet* sheet);
 
-  void AddedCustomElementDefaultStyles(
-      const HeapVector<Member<CSSStyleSheet>>& default_styles);
   void WatchedSelectorsChanged();
   void InitialStyleChanged();
   void ColorSchemeChanged();
@@ -476,6 +476,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // body element which changed between being the document.body element and not.
   void FirstBodyElementChanged(HTMLBodyElement*);
 
+  // Invalidate caches that depends on the base url.
+  void BaseURLChanged();
+
   unsigned StyleForElementCount() const { return style_for_element_count_; }
   void IncStyleForElementCount() { style_for_element_count_++; }
 
@@ -490,7 +493,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void VisionDeficiencyChanged();
   void ApplyVisionDeficiencyStyle(
-      scoped_refptr<ComputedStyle> layout_view_style);
+      ComputedStyleBuilder& layout_view_style_builder);
 
   void CollectMatchingUserRules(ElementRuleCollector&) const;
 
@@ -511,11 +514,22 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void MarkCounterStylesNeedUpdate();
   void UpdateCounterStyles();
 
+  // Set a flag to invalidate elements using position-fallback on next lifecycle
+  // update when @position-fallback rules are added or removed.
+  void MarkPositionFallbackStylesDirty();
+
+  // Mark elements affected by @position-fallback rules for style and layout
+  // update.
+  void InvalidatePositionFallbackStyles();
+
   StyleRuleKeyframes* KeyframeStylesForAnimation(
       const AtomicString& animation_name);
 
   StyleRuleFontPaletteValues* FontPaletteValuesForNameAndFamily(
       AtomicString palette_name,
+      AtomicString font_family);
+
+  const FontFeatureValuesStorage* FontFeatureValuesForFamily(
       AtomicString font_family);
 
   CounterStyleMap* GetUserCounterStyleMap() { return user_counter_style_map_; }
@@ -594,11 +608,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   Color ForcedBackgroundColor() const { return forced_background_color_; }
   Color ColorAdjustBackgroundColor() const;
 
-  void SetDocumentTransitionTags(const Vector<AtomicString>& tags) {
-    document_transition_tags_ = tags;
+  void SetViewTransitionNames(const Vector<AtomicString>& names) {
+    view_transition_names_ = names;
   }
-  const Vector<AtomicString>& DocumentTransitionTags() const {
-    return document_transition_tags_;
+  const Vector<AtomicString>& ViewTransitionTags() const {
+    return view_transition_names_;
   }
 
   StyleFetchedImage* CacheStyleImage(FetchParameters& params,
@@ -608,11 +622,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                               origin_clean, is_ad_related);
   }
 
+  void AddCachedFillOrClipPathURIValue(const AtomicString& string,
+                                       const CSSValue& value);
+  const CSSValue* GetCachedFillOrClipPathURIValue(const AtomicString& string);
+
   void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
 
-  RuleSet* DefaultDocumentTransitionStyle() const;
-  void InvalidateUADocumentTransitionStyle();
+  RuleSet* DefaultViewTransitionStyle() const;
+  void InvalidateUAViewTransitionStyle();
 
   const ActiveStyleSheetVector& ActiveUserStyleSheetsForDebug() const {
     return active_user_style_sheets_;
@@ -726,12 +744,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                   bool is_user_style);
   void AddFontPaletteValuesRulesFromSheets(
       const ActiveStyleSheetVector& sheets);
+  void AddFontFeatureValuesRulesFromSheets(
+      const ActiveStyleSheetVector& sheets);
 
   // Returns true if any @font-face rules are added.
   bool AddUserFontFaceRules(const RuleSet&);
   void AddUserKeyframeRules(const RuleSet&);
   void AddUserKeyframeStyle(StyleRuleKeyframes*);
   void AddFontPaletteValuesRules(const RuleSet& rule_set);
+  void AddFontFeatureValuesRules(const RuleSet& rule_set);
   void AddPropertyRules(AtRuleCascadeMap&, const RuleSet&, bool is_user_style);
   bool UserKeyframeStyleShouldOverride(
       const StyleRuleKeyframes* new_rule,
@@ -837,6 +858,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool viewport_style_dirty_{false};
   bool fonts_need_update_{false};
   bool counter_styles_need_update_{false};
+  bool position_fallback_styles_dirty_{false};
 
   // Set to true if we allow marking style dirty from style recalc. Ideally, we
   // should get rid of this, but we keep track of where we allow it with
@@ -869,7 +891,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // elements. This is tracked by StyleEngine as opposed to
   // CSSDefaultStyleSheets since it is 1:1 with a Document and can be
   // dynamically updated.
-  Member<RuleSet> ua_document_transition_style_;
+  Member<RuleSet> ua_view_transition_style_;
 
   PendingInvalidations pending_invalidations_;
 
@@ -881,8 +903,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   HeapHashMap<AtomicString, WeakMember<StyleSheetContents>>
       text_to_sheet_cache_;
-  HeapHashMap<WeakMember<StyleSheetContents>, AtomicString>
-      sheet_to_text_cache_;
 
   std::unique_ptr<StyleResolverStats> style_resolver_stats_;
   unsigned style_for_element_count_{0};
@@ -894,7 +914,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   ActiveStyleSheetVector active_user_style_sheets_;
 
-  HeapHashSet<WeakMember<CSSStyleSheet>> custom_element_default_style_sheets_;
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
   KeyframesRuleMap keyframes_rule_map_;
@@ -905,6 +924,18 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       HeapHashMap<std::pair<AtomicString, String>,
                   Member<StyleRuleFontPaletteValues>>;
   FontPaletteValuesRuleMap font_palette_values_rule_map_;
+
+  // Multiple entries are created pointing to the same
+  // StyleRuleFontFeatureValues for each mentioned family name in the
+  // comma-separated list of font families in the @font-feature-values at-rule
+  // prelude.
+  // TODO(https://crbug.com/716567): Needs ability to store multiple entries per
+  // family https://drafts.csswg.org/css-fonts-4/#font-feature-values-syntax: If
+  // multiple @font-feature-values rules are defined for a given family, the
+  // resulting values definitions are the union of the definitions contained
+  // within these rules.
+  using FontFeatureValuesRuleMap = HashMap<String, FontFeatureValuesStorage>;
+  FontFeatureValuesRuleMap font_feature_values_storage_map_;
 
   Member<CounterStyleMap> user_counter_style_map_;
 
@@ -962,13 +993,19 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // re-attachment after the removal.
   Member<LayoutObject> parent_for_detached_subtree_;
 
-  // The set of IDs for which ::page-transition-container pseudo elements are
-  // generated during a DocumentTransition.
-  Vector<AtomicString> document_transition_tags_;
+  // The set of IDs for which ::view-transition-group pseudo elements are
+  // generated during a ViewTransition.
+  Vector<AtomicString> view_transition_names_;
 
   // Cache for sharing StyleFetchedImage between CSSValues referencing the same
   // URL.
   StyleImageCache style_image_cache_;
+
+  // A cache for CSSURIValue objects for SVG element presentation attributes for
+  // fill and clip path. See SVGElement::CollectStyleForPresentationAttribute()
+  // for more info.
+  HeapHashMap<AtomicString, Member<const CSSValue>>
+      fill_or_clip_path_uri_value_cache_;
 };
 
 // Helper function for checking if we need to handle legacy fragmentation cases

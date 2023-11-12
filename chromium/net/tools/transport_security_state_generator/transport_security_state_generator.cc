@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -125,14 +126,14 @@ bool CheckDuplicateEntries(const TransportSecurityStateEntries& entries) {
 // Checks for entries which have no effect.
 bool CheckNoopEntries(const TransportSecurityStateEntries& entries) {
   for (const auto& entry : entries) {
-    if (!entry->force_https && entry->pinset.empty() && !entry->expect_ct) {
+    if (!entry->force_https && entry->pinset.empty()) {
       if (entry->hostname == "learn.doubleclick.net") {
         // This entry is deliberately used as an exclusion.
         continue;
       }
 
       LOG(ERROR) << "Entry for " << entry->hostname
-                 << " has no mode, no pins and is not expect-CT";
+                 << " has no mode and no pins";
       return false;
     }
   }
@@ -201,6 +202,7 @@ bool CheckHostnames(const TransportSecurityStateEntries& entries) {
 int main(int argc, char* argv[]) {
   crypto::EnsureOpenSSLInit();
 
+  base::AtExitManager at_exit_manager;
   base::CommandLine::Init(argc, argv);
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();

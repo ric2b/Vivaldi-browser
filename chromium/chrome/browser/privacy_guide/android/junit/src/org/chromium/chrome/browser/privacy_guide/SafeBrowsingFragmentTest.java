@@ -24,6 +24,7 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridgeJni;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
@@ -49,6 +50,7 @@ public class SafeBrowsingFragmentTest {
     private FragmentScenario mScenario;
     private RadioButtonWithDescriptionAndAuxButton mEnhancedProtectionButton;
     private RadioButtonWithDescriptionAndAuxButton mStandardProtectionButton;
+    private final UserActionTester mActionTester = new UserActionTester();
 
     @Before
     public void setUp() {
@@ -60,6 +62,7 @@ public class SafeBrowsingFragmentTest {
         if (mScenario != null) {
             mScenario.close();
         }
+        mActionTester.tearDown();
     }
 
     private void initFragmentWithSBState(@SafeBrowsingState int state) {
@@ -104,5 +107,21 @@ public class SafeBrowsingFragmentTest {
         initFragmentWithSBState(SafeBrowsingState.ENHANCED_PROTECTION);
         mStandardProtectionButton.performClick();
         verify(mNativeMock).setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
+    }
+
+    @Test
+    public void testSelectEnhanced_changeSafeBrowsingEnhancedUserAction() {
+        initFragmentWithSBState(SafeBrowsingState.STANDARD_PROTECTION);
+        mEnhancedProtectionButton.performClick();
+        assertTrue(mActionTester.getActions().contains(
+                "Settings.PrivacyGuide.ChangeSafeBrowsingEnhanced"));
+    }
+
+    @Test
+    public void testSelectStandard_changeSafeBrowsingStandardUserAction() {
+        initFragmentWithSBState(SafeBrowsingState.ENHANCED_PROTECTION);
+        mStandardProtectionButton.performClick();
+        assertTrue(mActionTester.getActions().contains(
+                "Settings.PrivacyGuide.ChangeSafeBrowsingStandard"));
     }
 }

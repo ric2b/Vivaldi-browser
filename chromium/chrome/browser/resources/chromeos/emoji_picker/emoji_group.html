@@ -207,9 +207,8 @@
   <div id="heading" role="heading" aria-level="2" tabindex="-1">
     <div id="heading-left">[[group]]</div>
     <template is="dom-if" if="[[clearable]]">
-      <cr-icon-button id="show-clear"
-        iron-icon="emoji_picker:more_horizontal"
-        aria-label="More options" on-click="onClearClick">
+      <cr-icon-button id="show-clear" iron-icon="emoji_picker:more_horizontal"
+        on-click="onClearClick">
       </cr-icon-button>
     </template>
   </div>
@@ -233,8 +232,8 @@
   <div id="fake-focus-target" tabindex="-1"></div>
   <template is="dom-repeat" items="[[data]]">
     <div class="emoji-button-container">
-      <button id="[[getEmojiButtonId(index)]]" data-index$="[[index]]"
-        class$="[[getEmojiButtonClassName(item)]]"
+      <button id="emoji-[[index]]" data-index$="[[index]]"
+        class$="emoji-button [[getEmojiButtonClassName(item)]]"
         on-mouseenter="showTooltip" on-focus="showTooltip"
         aria-label="[[getEmojiAriaLabel(item)]]">
         [[getDisplayEmojiForEmoji(item.base.string)]]
@@ -242,7 +241,7 @@
       <template is="dom-if"
         if="[[isEmojiVariantVisible(index,shownEmojiVariantIndex)]]">
         <emoji-variants
-          id="[[getEmojiVariantId(index)]]"
+          id="emoji-variant-[[index]]"
           variants="[[item.alternates]]"
           tooltip="[[item.base.name]]">
         </emoji-variants>

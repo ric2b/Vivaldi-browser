@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {dispatchSimpleEvent} from 'chrome://resources/js/cr.m.js';
-import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.js';
+import {dispatchSimpleEvent} from 'chrome://resources/ash/common/cr_deprecated.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 
-import {AsyncUtil} from '../../common/js/async_util.js';
+import {Aggregator, AsyncQueue} from '../../common/js/async_util.js';
 import {GuestOsPlaceholder} from '../../common/js/files_app_entry_types.js';
 import {metrics} from '../../common/js/metrics.js';
 import {util} from '../../common/js/util.js';
-import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
+import {isNative, VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FileOperationManager} from '../../externs/background/file_operation_manager.js';
 import {EntriesChangedEvent} from '../../externs/entries_changed_event.js';
 import {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
@@ -18,7 +18,8 @@ import {PropStatus, State} from '../../externs/ts/state.js';
 import {Store} from '../../externs/ts/store.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
-import {changeDirectory, searchAction} from '../../state/actions.js';
+import {clearSearch, updateSearch} from '../../state/actions.js';
+import {changeDirectory} from '../../state/actions/current_directory.js';
 import {getStore} from '../../state/store.js';
 
 import {constants} from './constants.js';
@@ -73,7 +74,7 @@ export class DirectoryModel extends EventTarget {
      */
     this.ignoreCurrentDirectoryDeletion_ = false;
 
-    this.directoryChangeQueue_ = new AsyncUtil.Queue();
+    this.directoryChangeQueue_ = new AsyncQueue();
 
     /**
      * Number of running directory change trackers.
@@ -82,7 +83,7 @@ export class DirectoryModel extends EventTarget {
     this.numChangeTrackerRunning_ = 0;
 
     this.rescanAggregator_ =
-        new AsyncUtil.Aggregator(this.rescanSoon.bind(this, true), 500);
+        new Aggregator(this.rescanSoon.bind(this, true), 500);
 
     this.fileFilter_ = fileFilter;
     this.fileFilter_.addEventListener(
@@ -122,9 +123,6 @@ export class DirectoryModel extends EventTarget {
       chrome.fileManagerPrivate.onIOTaskProgressStatus.addListener(
           this.updateFileListAfterIOTask_.bind(this));
     }
-    util.addEventListenerToBackgroundComponent(
-        fileOperationManager, 'entries-changed',
-        this.onEntriesChanged_.bind(this));
 
     /** @private {string} */
     this.lastSearchQuery_ = '';
@@ -311,8 +309,18 @@ export class DirectoryModel extends EventTarget {
   isOnNative() {
     const rootType = this.getCurrentRootType();
     return rootType != null && !util.isRecentRootType(rootType) &&
-        VolumeManagerCommon.VolumeType.isNative(
-            VolumeManagerCommon.getVolumeTypeFromRootType(rootType));
+        isNative(VolumeManagerCommon.getVolumeTypeFromRootType(rootType));
+  }
+
+  /**
+   * @return {boolean} True if the current volume is blocked by DLP.
+   */
+  isDlpBlocked() {
+    if (!util.isDlpEnabled()) {
+      return false;
+    }
+    const info = this.getCurrentVolumeInfo();
+    return info ? this.volumeManager_.isDisabled(info.volumeType) : false;
   }
 
   /**
@@ -980,66 +988,6 @@ export class DirectoryModel extends EventTarget {
   }
 
   /**
-   * Callback when an entry is changed.
-   * @param {EntriesChangedEvent} event Entry change event.
-   * @private
-   */
-  async onEntriesChanged_(event) {
-    const kind = event.kind;
-    const entries = event.entries;
-    // TODO(hidehiko): We should update directory model even the search result
-    // is shown.
-    const rootType = this.getCurrentRootType();
-    if ((rootType === VolumeManagerCommon.RootType.DRIVE ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_RECENT ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_OFFLINE) &&
-        this.isSearching()) {
-      return;
-    }
-
-    switch (kind) {
-      case util.EntryChangedKind.CREATED:
-        try {
-          const parentPromises =
-              entries.map(entry => new Promise((resolve, reject) => {
-                            entry.getParent(resolve, reject);
-                          }));
-          const parents = await Promise.all(parentPromises);
-          const entriesToAdd = [];
-
-          for (let i = 0; i < parents.length; i++) {
-            if (!util.isSameEntry(parents[i], this.getCurrentDirEntry())) {
-              continue;
-            }
-
-            const index = this.findIndexByEntry_(entries[i]);
-            if (index >= 0) {
-              this.getFileList().replaceItem(
-                  this.getFileList().item(index), entries[i]);
-            } else {
-              entriesToAdd.push(entries[i]);
-            }
-          }
-
-          this.partialUpdate_(entriesToAdd, []);
-        } catch (error) {
-          console.warn(error.stack || error);
-        }
-        break;
-
-      case util.EntryChangedKind.DELETED:
-        // This is the delete event.
-        this.partialUpdate_([], util.entriesToURLs(entries));
-        break;
-
-      default:
-        console.error('Invalid EntryChangedKind: ' + kind);
-        break;
-    }
-  }
-
-  /**
    * @param {Entry} entry The entry to be searched.
    * @return {number} The index in the fileList, or -1 if not found.
    * @private
@@ -1181,7 +1129,7 @@ export class DirectoryModel extends EventTarget {
   changeDirectoryEntry(dirEntry, opt_callback) {
     // Increment the sequence value.
     const sequence = ++this.changeDirectorySequence_;
-    this.clearSearch_();
+    this.stopActiveSearch_();
 
     // When switching to MyFiles volume, we should use a FilesAppEntry if
     // available because it returns UI-only entries too, like Linux files and
@@ -1279,7 +1227,7 @@ export class DirectoryModel extends EventTarget {
    * Creates an object which could say whether directory has changed while it
    * has been active or not. Designed for long operations that should be
    * cancelled if the used change current directory.
-   * @return {Object} Created object.
+   * @return {!DirectoryChangeTracker} Created object.
    */
   createDirectoryChangeTracker() {
     const tracker = {
@@ -1640,7 +1588,7 @@ export class DirectoryModel extends EventTarget {
    */
   search(query, onSearchRescan) {
     this.lastSearchQuery_ = query;
-    this.clearSearch_();
+    this.stopActiveSearch_();
     const currentDirEntry = this.getCurrentDirEntry();
     if (!currentDirEntry) {
       // Not yet initialized. Do nothing.
@@ -1672,13 +1620,15 @@ export class DirectoryModel extends EventTarget {
         return;
       }
 
+      this.store_.dispatch(
+          updateSearch({query: query, status: PropStatus.STARTED}));
       this.onSearchCompleted_ = (...args) => {
         // Notify the caller via callback, for non-store based callers.
         onSearchRescan(...args);
 
         // Notify the store-aware parts.
         this.store_.dispatch(
-            searchAction({query: query, status: PropStatus.SUCCESS}));
+            updateSearch({query: query, status: PropStatus.SUCCESS}));
       };
       this.addEventListener('scan-completed', this.onSearchCompleted_);
       this.clearAndScan_(newDirContents, callback);
@@ -1690,7 +1640,7 @@ export class DirectoryModel extends EventTarget {
    * its canceling.
    * @private
    */
-  clearSearch_() {
+  stopActiveSearch_() {
     if (!this.isSearching()) {
       return;
     }
@@ -1701,7 +1651,7 @@ export class DirectoryModel extends EventTarget {
     }
 
     if (this.store_.getState()?.search?.query) {
-      this.store_.dispatch(searchAction({}));
+      this.store_.dispatch(clearSearch());
     }
   }
 
@@ -1739,3 +1689,23 @@ export class DirectoryModel extends EventTarget {
     }
   }
 }
+
+/**
+ * Used to track asynchronous directory change use like:
+ * const tracker = directoryModel.createDirectoryChangeTracker();
+ * tracker.start();
+ * try {
+ *    ... async code here ...
+ *    if (tracker.hasChanged) {
+ *      // This code shouldn't continue anymore.
+ *    }
+ * } finally {
+ *     tracker.stop();
+ * }
+ * @typedef {{
+ *   start: function(),
+ *   stop: function(),
+ *   hasChanged: boolean,
+ * }}
+ */
+export let DirectoryChangeTracker;

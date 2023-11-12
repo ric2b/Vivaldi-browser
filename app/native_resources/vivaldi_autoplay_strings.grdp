@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vivaldi autoplay specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_SITE_SETTINGS_TYPE_AUTOPLAY" desc="Vivaldi autoplay extension to Chromium settings.">
+    Autoplay
+  </message>
+  <message name="IDS_SITE_SETTINGS_TYPE_AUTOPLAY_MID_SENTENCE" desc="The label used for the autoplay site settings controls when used mid-sentence.">
+    autoplay
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_DESCRIPTION" desc="Description of the autoplay content setting.">
+    Sites might automatically play video
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_ALLOWED" desc="Label for the enabled option of the autoplay content setting.">
+    Sites can automatically play video
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_BLOCKED" desc="Label for the disabled option of the autoplay content setting.">
+    Don't allow sites to automatically play video
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_ALLOWED_EXCEPTIONS" desc="Label for the allowed exceptions site list of the autoplay content setting.">
+    Allowed to automatically play video
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_BLOCKED_EXCEPTIONS" desc="Label for the blocked exceptions site list of the autoplay content setting.">
+    Not allowed to automatically play video
+  </message>
+  <message name="IDS_BLOCKED_AUTOPLAY_TITLE" desc="Bubble info header text when a page is not allowed to autoplay videos.">
+    Autoplay blocked
+  </message>
+  <message name="IDS_ALLOWED_AUTOPLAY_TITLE" desc="Bubble info header text when a page is allowed to autoplay videos.">
+    Autoplay allowed
+  </message>
+</grit-part>

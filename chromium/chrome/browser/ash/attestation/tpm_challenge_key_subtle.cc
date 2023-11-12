@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ash/attestation/tpm_challenge_key_subtle.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/check_op.h"
@@ -35,6 +39,7 @@
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace attestation {
@@ -63,12 +68,13 @@ std::unique_ptr<TpmChallengeKeySubtle>
 TpmChallengeKeySubtleFactory::CreateForPreparedKey(
     AttestationKeyType key_type,
     bool will_register_key,
+    ::attestation::KeyType key_crypto_type,
     const std::string& key_name,
     const std::string& public_key,
     Profile* profile) {
   auto result = TpmChallengeKeySubtleFactory::Create();
-  result->RestorePreparedKeyState(key_type, will_register_key, key_name,
-                                  public_key, profile);
+  result->RestorePreparedKeyState(key_type, will_register_key, key_crypto_type,
+                                  key_name, public_key, profile);
   return result;
 }
 
@@ -105,23 +111,47 @@ bool IsUserConsentRequired() {
 // If no key name was given, use default well-known key names so they can be
 // reused across attestation operations (multiple challenge responses can be
 // generated using the same key).
-std::string GetDefaultKeyName(AttestationKeyType key_type) {
+std::string GetDefaultKeyName(AttestationKeyType key_type,
+                              ::attestation::KeyType key_crypto_type) {
+  // When the caller wants to "register" a key through attestation (resulting in
+  // a general-purpose key in the chaps PKCS#11 store), the behavior is
+  // different between EUK and EMK:
+  //
+  // For EUK, the EUK used to sign the attestation response is also the key that
+  // is "registered". If the EUK does not exist, one will be generated; but if
+  // it does already exist, the existing key will be used.  Thus it must be
+  // parameterized with the crypto algorithm type to ensure that the caller gets
+  // a key of the type they expect.
+  //
+  //  For EMK, the EMK used to sign the attestation response must remain stable
+  //  and instead a newly-generated EMK is registered. This function returns the
+  //  EMK that is used to sign the attesation response, so it may not be
+  //  parametrized with the crypto algorithm type.
+  //
+  //  See http://go/chromeos-va-registering-device-wide-keys-support for details
+  //  on the concept of the stable EMK.
   switch (key_type) {
     case KEY_DEVICE:
       return kEnterpriseMachineKey;
     case KEY_USER:
-      return kEnterpriseUserKey;
+      switch (key_crypto_type) {
+        case ::attestation::KEY_TYPE_RSA:
+          return kEnterpriseUserKey;
+        case ::attestation::KEY_TYPE_ECC:
+          return std::string(kEnterpriseUserKey) + "-ecdsa";
+      }
   }
   NOTREACHED();
 }
 
 // Returns the key name that should be used for the attestation platform APIs.
 std::string GetKeyNameWithDefault(AttestationKeyType key_type,
+                                  ::attestation::KeyType key_crypto_type,
                                   const std::string& key_name) {
   if (!key_name.empty())
     return key_name;
 
-  return GetDefaultKeyName(key_type);
+  return GetDefaultKeyName(key_type, key_crypto_type);
 }
 
 }  // namespace
@@ -152,6 +182,7 @@ TpmChallengeKeySubtleImpl::~TpmChallengeKeySubtleImpl() {
 void TpmChallengeKeySubtleImpl::RestorePreparedKeyState(
     AttestationKeyType key_type,
     bool will_register_key,
+    ::attestation::KeyType key_crypto_type,
     const std::string& key_name,
     const std::string& public_key,
     Profile* profile) {
@@ -163,7 +194,8 @@ void TpmChallengeKeySubtleImpl::RestorePreparedKeyState(
 
   key_type_ = key_type;
   will_register_key_ = will_register_key;
-  key_name_ = GetKeyNameWithDefault(key_type, key_name);
+  key_crypto_type_ = key_crypto_type;
+  key_name_ = GetKeyNameWithDefault(key_type, key_crypto_type, key_name);
   public_key_ = public_key;
   profile_ = profile;
 }
@@ -171,6 +203,7 @@ void TpmChallengeKeySubtleImpl::RestorePreparedKeyState(
 void TpmChallengeKeySubtleImpl::StartPrepareKeyStep(
     AttestationKeyType key_type,
     bool will_register_key,
+    ::attestation::KeyType key_crypto_type,
     const std::string& key_name,
     Profile* profile,
     TpmChallengeKeyCallback callback,
@@ -187,7 +220,8 @@ void TpmChallengeKeySubtleImpl::StartPrepareKeyStep(
 
   key_type_ = key_type;
   will_register_key_ = will_register_key;
-  key_name_ = GetKeyNameWithDefault(key_type, key_name);
+  key_crypto_type_ = key_crypto_type;
+  key_name_ = GetKeyNameWithDefault(key_type, key_crypto_type, key_name);
   profile_ = profile;
   callback_ = std::move(callback);
   signals_ = signals;
@@ -510,9 +544,12 @@ void TpmChallengeKeySubtleImpl::AskForUserConsentCallback(bool result) {
 
   // Generate a new key and have it signed by PCA.
   attestation_flow_->GetCertificate(
-      GetCertificateProfile(), GetAccountIdForAttestationFlow(),
+      /*certificate_profile=*/GetCertificateProfile(),
+      /*account_id=*/GetAccountIdForAttestationFlow(),
       /*request_origin=*/std::string(),  // Not used.
-      /*force_new_key=*/true, ::attestation::KEY_TYPE_RSA, key_name_,
+      /*force_new_key=*/true, /*key_crypto_type=*/key_crypto_type_,
+      /*key_name=*/key_name_, /*profile_specific_data=*/absl::nullopt,
+      /*callback=*/
       base::BindOnce(&TpmChallengeKeySubtleImpl::GetCertificateCallback,
                      weak_factory_.GetWeakPtr()));
 }
@@ -573,7 +610,8 @@ void TpmChallengeKeySubtleImpl::StartSignChallengeStep(
   // Name of the key that will be used to sign challenge.
   // Device key challenges are signed using a stable key.
   std::string key_name_for_challenge =
-      (key_type_ == KEY_DEVICE) ? GetDefaultKeyName(key_type_) : key_name_;
+      (key_type_ == KEY_DEVICE) ? GetDefaultKeyName(key_type_, key_crypto_type_)
+                                : key_name_;
   // Name of the key that will be included in SPKAC, it is used only when SPKAC
   // should be included for device key.
   std::string key_name_for_spkac =
@@ -666,7 +704,8 @@ void TpmChallengeKeySubtleImpl::RegisterKeyCallback(
   key_permissions_manager->AllowKeyForUsage(
       base::BindOnce(&TpmChallengeKeySubtleImpl::MarkCorporateKeyCallback,
                      weak_factory_.GetWeakPtr()),
-      platform_keys::KeyUsage::kCorporate, public_key_);
+      platform_keys::KeyUsage::kCorporate,
+      std::vector<uint8_t>(public_key_.begin(), public_key_.end()));
 }
 
 void TpmChallengeKeySubtleImpl::MarkCorporateKeyCallback(

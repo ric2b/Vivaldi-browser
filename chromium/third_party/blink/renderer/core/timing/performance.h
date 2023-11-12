@@ -32,8 +32,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_H_
 
+#include <list>
 #include "base/task/single_thread_task_runner.h"
-#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace base {
+class Clock;
 class TickClock;
 }  // namespace base
 
@@ -88,6 +89,11 @@ class V8UnionPerformanceMeasureOptionsOrString;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 using PerformanceEntryDeque = HeapDeque<Member<PerformanceEntry>>;
+
+// Merge two sorted PerformanceEntryVectors in linear time.
+CORE_EXPORT PerformanceEntryVector
+MergePerformanceEntryVectors(const PerformanceEntryVector& first_entry_vector,
+                             const PerformanceEntryVector& second_entry_vector);
 
 class CORE_EXPORT Performance : public EventTargetWithInlineData {
   DEFINE_WRAPPERTYPEINFO();
@@ -147,17 +153,30 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   // Internal getter method for the time origin value.
   base::TimeTicks GetTimeOriginInternal() const { return time_origin_; }
 
-  PerformanceEntryVector getEntries();
+  // Get performance entries of the current frame, and optionally, nested
+  // same-origin iframes.
+  PerformanceEntryVector getEntries(ScriptState* script_state,
+                                    bool include_frames = false);
   // Get BufferedEntriesByType will return all entries in the buffer regardless
   // of whether they are exposed in the Performance Timeline. getEntriesByType
   // will only return all entries for existing types in
   // PerformanceEntry.IsValidTimelineEntryType.
   PerformanceEntryVector getBufferedEntriesByType(
       const AtomicString& entry_type);
-  PerformanceEntryVector getEntriesByType(const AtomicString& entry_type);
+
+  // Get performance entries of the current frame by type, and optionally,
+  // nested same-origin iframes.
+  PerformanceEntryVector getEntriesByType(ScriptState* script_state,
+                                          const AtomicString& entry_type,
+                                          bool includeFrames = false);
+
+  // Get performance entries of the current frame by name and/or type, and
+  // optionally, nested same-origin iframes.
   PerformanceEntryVector getEntriesByName(
+      ScriptState* script_state,
       const AtomicString& name,
-      const AtomicString& entry_type = g_null_atom);
+      const AtomicString& entry_type = g_null_atom,
+      bool includeFrames = false);
 
   void clearResourceTimings();
   void setResourceTimingBufferSize(unsigned);
@@ -292,42 +311,34 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
 
   bool HasObserverFor(PerformanceEntry::EntryType) const;
 
-  // Checks whether the single ResourceResponse passes the Timing-Allow-Origin
-  // check. The first parameter is the ResourceResponse being checked. The
-  // second parameter is the next ResourceResponse in the redirect chain, or is
-  // equal to the first parameter if there is no such response. This parameter
-  // is only introduced temporarily to enable computing a UseCounter within this
-  // method. The first bool parameter is
-  // https://fetch.spec.whatwg.org/#concept-request-response-tainting, while the
-  // second bool is
-  // https://fetch.spec.whatwg.org/#concept-request-tainted-origin.
-  // The next ResourceResponse and tainted origin flag are currently only being
-  // used in a UseCounter.
-  static bool PassesTimingAllowCheck(const ResourceResponse& response,
-                                     const ResourceResponse& next_response,
-                                     const SecurityOrigin&,
-                                     ExecutionContext*,
-                                     bool* response_tainting_not_basic,
-                                     bool* tainted_origin_flag);
-
-  static bool ShouldReportResponseStatus(
+  static bool IsResponseSameOriginWithInitiator(
       const ResourceResponse& response,
-      const SecurityOrigin& initiator_security_origin,
-      const network::mojom::RequestMode request_mode);
+      const SecurityOrigin& initiator_security_origin);
 
-  static bool AllowsTimingRedirect(const Vector<ResourceResponse>&,
-                                   const ResourceResponse&,
-                                   const SecurityOrigin&,
-                                   ExecutionContext*);
+  static bool PassesCORSConditions(
+      const ResourceResponse& final_response,
+      const SecurityOrigin& initiator_security_origin,
+      const network::mojom::RequestMode request_mode,
+      const Vector<ResourceResponse>& redirect_chain);
 
   // Determine whether a given Node can be exposed via a Web Perf API.
   static bool CanExposeNode(Node*);
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
+  enum Metrics { kRecordSwaps = 0, kDoNotRecordSwaps = 1 };
+
+  // Insert a PerformanceEntry into a Vector sorted by StartTime. By Default,
+  // record the number of 'swaps' per function call in a histogram.
+  void InsertEntryIntoSortedBuffer(PerformanceEntryVector& vector,
+                                   PerformanceEntry& entry,
+                                   Metrics record);
+
   void Trace(Visitor*) const override;
 
-  void SetTickClockForTesting(const base::TickClock* tick_clock);
+  // The caller owns the |clock|.
+  void SetClocksForTesting(const base::Clock* clock,
+                           const base::TickClock* tick_clock);
   void ResetTimeOriginForTesting(base::TimeTicks time_origin);
 
  private:
@@ -350,10 +361,24 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
                                         ExceptionState& exception_state);
 
   void CopySecondaryBuffer();
+
   PerformanceEntryVector getEntriesByTypeInternal(
       PerformanceEntry::EntryType type);
 
   void MeasureMemoryExperimentTimerFired(TimerBase*);
+
+  // Get performance entries of the current frame.
+  PerformanceEntryVector GetEntriesForCurrentFrame();
+
+  // Get performance entries of the current frame by type.
+  PerformanceEntryVector GetEntriesByTypeForCurrentFrame(
+      const AtomicString& entry_type);
+
+  // Get performance entries of nested same-origin iframes, with an optional
+  // type.
+  PerformanceEntryVector GetEntriesWithChildFrames(
+      ScriptState* script_state,
+      const AtomicString& entry_type = g_null_atom);
 
  protected:
   Performance(base::TimeTicks time_origin,
@@ -401,11 +426,11 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   PerformanceEntryVector soft_navigation_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
-  Member<PerformanceEntry> first_paint_timing_;
-  Member<PerformanceEntry> first_contentful_paint_timing_;
+  PerformanceEntryVector paint_entries_timing_;
   Member<PerformanceEventTiming> first_input_timing_;
 
   base::TimeTicks time_origin_;
+  base::TimeDelta unix_at_zero_monotonic_;
   const base::TickClock* tick_clock_;
   bool cross_origin_isolated_capability_;
 

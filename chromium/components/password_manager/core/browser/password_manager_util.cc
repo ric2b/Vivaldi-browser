@@ -16,14 +16,14 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/common/password_generation_util.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/credentials_cleaner.h"
 #include "components/password_manager/core/browser/credentials_cleaner_runner.h"
 #include "components/password_manager/core/browser/http_credentials_cleaner.h"
@@ -213,7 +213,7 @@ void RemoveUselessCredentials(
   if (cleaning_tasks_runner->HasPendingTasks()) {
     // The runner will delete itself once the clearing tasks are done, thus we
     // are releasing ownership here.
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(
             &password_manager::CredentialsCleanerRunner::StartCleaning,
@@ -418,10 +418,6 @@ bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
       !authenticator) {
     return false;
   }
-  if (authenticator->CanAuthenticate(requester)) {
-    client->GetLocalStatePrefs()->SetBoolean(
-        password_manager::prefs::kHadBiometricsAvailable, true);
-  }
   return client->GetPasswordFeatureManager()
       ->IsBiometricAuthenticationBeforeFillingEnabled();
 #else
@@ -471,14 +467,6 @@ std::string GetSignonRealm(const GURL& url) {
   return url.ReplaceComponents(rep).spec();
 }
 
-bool UsesPasswordManagerGoogleBranding(bool is_syncing) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return true;
-#else
-  return is_syncing;
-#endif  // GOOGLE_CHROME_BRANDING
-}
-
 #if BUILDFLAG(IS_IOS)
 bool IsCredentialProviderEnabledOnStartup(const PrefService* prefs) {
   return prefs->GetBoolean(
@@ -490,5 +478,25 @@ void SetCredentialProviderEnabledOnStartup(PrefService* prefs, bool enabled) {
       password_manager::prefs::kCredentialProviderEnabledOnStartup, enabled);
 }
 #endif
+
+bool IsNumeric(char16_t c) {
+  return '0' <= c && c <= '9';
+}
+
+bool IsLetter(char16_t c) {
+  return IsLowercaseLetter(c) || IsUppercaseLetter(c);
+}
+
+bool IsLowercaseLetter(char16_t c) {
+  return 'a' <= c && c <= 'z';
+}
+
+bool IsUppercaseLetter(char16_t c) {
+  return 'A' <= c && c <= 'Z';
+}
+
+bool IsSpecialSymbol(char16_t c) {
+  return base::Contains(kSpecialSymbols, c);
+}
 
 }  // namespace password_manager_util

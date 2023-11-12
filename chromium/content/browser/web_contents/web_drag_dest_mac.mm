@@ -4,9 +4,11 @@
 
 #import "content/browser/web_contents/web_drag_dest_mac.h"
 
+#include <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -21,12 +23,10 @@
 #include "content/public/common/drop_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
-#import "ui/base/dragdrop/cocoa_dnd_util.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/point.h"
 
@@ -99,10 +99,8 @@ void DropCompletionCallback(WebDragDest* drag_dest,
                             const content::DropContext context,
                             absl::optional<content::DropData> drop_data) {
   // This is an async callback. Make sure RWH is still valid.
-  if (!context.target_rwh ||
-      ![drag_dest isValidDragTarget:context.target_rwh.get()]) {
+  if (!context.target_rwh)
     return;
-  }
 
   [drag_dest completeDropAsync:drop_data withContext:context];
 }
@@ -396,6 +394,12 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   _dragStartViewID = GetRenderViewHostID(_webContents->GetRenderViewHost());
 }
 
+- (void)resetDragStartTrackers {
+  _dragStartProcessID = content::ChildProcessHost::kInvalidUniqueID;
+  _dragStartViewID = content::GlobalRoutingID(
+      content::ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
+}
+
 - (bool)isValidDragTarget:(content::RenderWidgetHostImpl*)targetRWH {
   if (vivaldi::IsVivaldiRunning()) {
     // NOTE: In Vivaldi we allow dragging between guests and our app-window.
@@ -421,55 +425,45 @@ void PopulateDropDataFromPasteboard(content::DropData* data,
   base::scoped_nsobject<NSArray> types([[pboard types] retain]);
 
   data->did_originate_from_renderer =
-      [types containsObject:ui::kChromeDragDummyPboardType];
+      [types containsObject:ui::kUTTypeChromiumInitiatedDrag];
 
   // Get URL if possible. To avoid exposing file system paths to web content,
   // filenames in the drag are not converted to file URLs.
-  ui::PopulateURLAndTitleFromPasteboard(&data->url,
-                                        &data->url_title,
-                                        pboard,
-                                        NO);
+
+  NSArray<NSString*>* urls;
+  NSArray<NSString*>* titles;
+  if (ui::ClipboardUtil::URLsAndTitlesFromPasteboard(
+          pboard, /*include_files=*/false, &urls, &titles)) {
+    data->url = GURL(base::SysNSStringToUTF8(urls.firstObject));
+    data->url_title = base::SysNSStringToUTF16(titles.firstObject);
+  }
 
   // Get plain text.
-  if ([types containsObject:NSStringPboardType]) {
+  if ([types containsObject:NSPasteboardTypeString]) {
     data->text =
-        base::SysNSStringToUTF16([pboard stringForType:NSStringPboardType]);
+        base::SysNSStringToUTF16([pboard stringForType:NSPasteboardTypeString]);
   }
 
   // Get HTML. If there's no HTML, try RTF.
-  if ([types containsObject:NSHTMLPboardType]) {
-    NSString* html = [pboard stringForType:NSHTMLPboardType];
+  if ([types containsObject:NSPasteboardTypeHTML]) {
+    NSString* html = [pboard stringForType:NSPasteboardTypeHTML];
     data->html = base::SysNSStringToUTF16(html);
-  } else if ([types containsObject:ui::kChromeDragImageHTMLPboardType]) {
-    NSString* html = [pboard stringForType:ui::kChromeDragImageHTMLPboardType];
+  } else if ([types containsObject:ui::kUTTypeChromiumImageAndHTML]) {
+    NSString* html = [pboard stringForType:ui::kUTTypeChromiumImageAndHTML];
     data->html = base::SysNSStringToUTF16(html);
-  } else if ([types containsObject:NSRTFPboardType]) {
+  } else if ([types containsObject:NSPasteboardTypeRTF]) {
     NSString* html = ui::ClipboardUtil::GetHTMLFromRTFOnPasteboard(pboard);
     data->html = base::SysNSStringToUTF16(html);
   }
 
   // Get files.
-  if ([types containsObject:NSFilenamesPboardType]) {
-    NSArray* files = [pboard propertyListForType:NSFilenamesPboardType];
-    if ([files isKindOfClass:[NSArray class]] && [files count]) {
-      for (NSUInteger i = 0; i < [files count]; i++) {
-        NSString* filename = [files objectAtIndex:i];
-        BOOL exists = [[NSFileManager defaultManager]
-                           fileExistsAtPath:filename];
-        if (exists) {
-          data->filenames.emplace_back(
-              base::FilePath::FromUTF8Unsafe(base::SysNSStringToUTF8(filename)),
-              base::FilePath());
-        }
-      }
-    }
-  }
-
-  // TODO(pinkerton): Get file contents. http://crbug.com/34661
+  std::vector<ui::FileInfo> files =
+      ui::ClipboardUtil::FilesFromPasteboard(pboard);
+  base::ranges::move(files, std::back_inserter(data->filenames));
 
   // Get custom MIME data.
-  if ([types containsObject:ui::kWebCustomDataPboardType]) {
-    NSData* customData = [pboard dataForType:ui::kWebCustomDataPboardType];
+  if ([types containsObject:ui::kUTTypeChromiumWebCustomData]) {
+    NSData* customData = [pboard dataForType:ui::kUTTypeChromiumWebCustomData];
     ui::ReadCustomDataIntoMap([customData bytes],
                               [customData length],
                               &data->custom_data);

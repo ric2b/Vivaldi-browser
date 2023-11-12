@@ -655,7 +655,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
 base::Value::Dict ReadPrefsJson() {
   // This might be called outside the startup, eg. during creation of a guest
   // window, so need to allow IO.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   ResourceReader reader_main(kPrefsDefinitionFileName);
   absl::optional<base::Value> dictionary_value = reader_main.ParseJSON();

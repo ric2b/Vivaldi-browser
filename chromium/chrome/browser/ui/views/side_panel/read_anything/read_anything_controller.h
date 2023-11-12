@@ -59,16 +59,16 @@ class ReadAnythingController : public ReadAnythingToolbarView::Delegate,
   // ReadAnythingToolbarView::Delegate:
   void OnFontSizeChanged(bool increase) override;
   void OnColorsChanged(int new_index) override;
-  ui::ComboboxModel* GetColorsModel() override;
-  ui::ColorId GetForegroundColorId() override;
+  ReadAnythingMenuModel* GetColorsModel() override;
   void OnLineSpacingChanged(int new_index) override;
-  ui::ComboboxModel* GetLineSpacingModel() override;
+  ReadAnythingMenuModel* GetLineSpacingModel() override;
   void OnLetterSpacingChanged(int new_index) override;
-  ui::ComboboxModel* GetLetterSpacingModel() override;
+  ReadAnythingMenuModel* GetLetterSpacingModel() override;
 
   // ReadAnythingPageHandler::Delegate:
   void OnUIReady() override;
   void OnUIDestroyed() override;
+  void OnLinkClicked(const GURL& url, bool open_in_new_tab) override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(

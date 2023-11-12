@@ -14,15 +14,15 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../controls/settings_toggle_button.js';
 import '../prefs/prefs.js';
-import '../site_settings/settings_category_default_radio_group.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
 import '../settings_shared.css.js';
+import '../site_settings/settings_category_default_radio_group.js';
 import './privacy_guide/privacy_guide_dialog.js';
 
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -58,10 +58,10 @@ export interface SettingsPrivacyPageElement {
 }
 
 const SettingsPrivacyPageElementBase =
-    RouteObserverMixin(WebUIListenerMixin(
+    RouteObserverMixin(WebUiListenerMixin(
         I18nMixin(PrefsMixin(BaseMixin(PolymerElement))))) as {
       new (): PolymerElement & I18nMixinInterface &
-          WebUIListenerMixinInterface & PrefsMixinInterface &
+          WebUiListenerMixinInterface & PrefsMixinInterface &
           RouteObserverMixinInterface,
     };
 
@@ -180,6 +180,23 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('isPrivacySandboxRestricted'),
       },
 
+      isPrivacySandboxSettings4_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('isPrivacySandboxSettings4'),
+      },
+
+      /**
+       * Whether the File System Access Persistent Permissions UI should be
+       * displayed.
+       */
+      showPersistentPermissions_: {
+        type: Boolean,
+        readOnly: true,
+        value: function() {
+          return loadTimeData.getBoolean('showPersistentPermissions');
+        },
+      },
+
       focusConfig_: {
         type: Object,
         value() {
@@ -204,6 +221,10 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
 
           if (routes.PRIVACY_GUIDE) {
             map.set(routes.PRIVACY_GUIDE.path, '#privacyGuideLinkRow');
+          }
+
+          if (routes.PRIVACY_SANDBOX) {
+            map.set(routes.PRIVACY_SANDBOX.path, '#privacySandboxLinkRow');
           }
 
           return map;
@@ -253,6 +274,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   }
 
   private isGuest_: boolean;
+  private showPersistentPermissions_: boolean;
   private showClearBrowsingDataDialog_: boolean;
   private showPrivacyGuideDialog_: boolean;
   private enableSafeBrowsingSubresourceFilter_: boolean;
@@ -269,6 +291,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enablePrivacyGuidePage_: boolean;
   private showNotificationPermissionsReview_: boolean;
   private isPrivacySandboxRestricted_: boolean;
+  private isPrivacySandboxSettings4_: boolean;
   private safetyCheckNotificationPermissionsEnabled_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
@@ -291,7 +314,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
       enabled: false,
     });
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'onBlockAutoplayStatusChanged',
         (status: BlockAutoplayStatus) =>
             this.onBlockAutoplayStatusChanged_(status));
@@ -299,11 +322,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     this.siteSettingsBrowserProxy_.getCookieSettingDescription().then(
         (description: string) => this.cookieSettingDescription_ = description);
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'cookieSettingDescriptionChanged',
         (description: string) => this.cookieSettingDescription_ = description);
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'notification-permission-review-list-maybe-changed',
         (sites: NotificationPermission[]) =>
             this.onReviewNotificationPermissionListChanged_(sites));
@@ -312,9 +335,9 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (sites: NotificationPermission[]) =>
             this.onReviewNotificationPermissionListChanged_(sites));
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'is-managed-changed', this.onIsManagedChanged_.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'sync-status-changed', this.onSyncStatusChanged_.bind(this));
   }
 
@@ -388,8 +411,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   }
 
   private onPrivacySandboxClick_() {
+    this.interactedWithPage_();
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacySandbox.OpenedFromSettingsParent');
+
+    if (this.isPrivacySandboxSettings4_) {
+      Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX);
+      return;
+    }
+
     // Create a MouseEvent directly to avoid Polymer failing to synthesise a
     // click event if this function was called in response to a touch event.
     // See crbug.com/1253883 for details.
@@ -460,6 +490,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     return this.safetyCheckNotificationPermissionsEnabled_ ?
         this.i18n('siteSettingsNotificationsDefaultBehaviorDescription') :
         this.i18n('siteSettingsDefaultBehaviorDescription');
+  }
+
+  private isPrivacySandboxSettings3Enabled_(): boolean {
+    return !this.isPrivacySandboxRestricted_ &&
+        !this.isPrivacySandboxSettings4_;
+  }
+
+  private isPrivacySandboxSettings4Enabled_(): boolean {
+    return !this.isPrivacySandboxRestricted_ && this.isPrivacySandboxSettings4_;
   }
 }
 

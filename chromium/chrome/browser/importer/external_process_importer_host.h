@@ -137,7 +137,7 @@ class ExternalProcessImporterHost
   gfx::NativeWindow parent_window_;
 
   // The observer that we need to notify about changes in the import process.
-  raw_ptr<importer::ImporterProgressObserver> observer_;
+  raw_ptr<importer::ImporterProgressObserver, DanglingUntriaged> observer_;
 
   // Firefox profile lock.
   std::unique_ptr<FirefoxProfileLock> firefox_lock_;
@@ -161,7 +161,7 @@ class ExternalProcessImporterHost
   scoped_refptr<ProfileWriter> writer_;
 
   // Used to pass notifications from the browser side to the external process.
-  raw_ptr<ExternalProcessImporterClient> client_;
+  raw_ptr<ExternalProcessImporterClient, DanglingUntriaged> client_;
 
   // Information about a profile needed for importing.
   importer::SourceProfile source_profile_;

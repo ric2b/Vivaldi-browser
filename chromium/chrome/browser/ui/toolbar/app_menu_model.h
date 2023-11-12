@@ -83,6 +83,7 @@ enum AppMenuAction {
   MENU_ACTION_CHROME_TIPS = 53,
   MENU_ACTION_CHROME_WHATS_NEW = 54,
   MENU_ACTION_LACROS_DATA_MIGRATION = 55,
+  MENU_ACTION_MENU_OPENED = 56,
   LIMIT_MENU_ACTION
 };
 
@@ -130,6 +131,7 @@ class AppMenuModel : public ui::SimpleMenuModel,
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDownloadsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kHistoryMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMoreToolsMenuItem);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kIncognitoMenuItem);
 
   // First command ID to use for the recent tabs menu. This is one higher than
   // the first command id used for the bookmarks menus, as the command ids for

@@ -75,9 +75,9 @@ void PrefServicePersistenceProvider::DeleteExpiredTokens(
     base::Time current_time) {
   PrefService* service = pref_service();
   DCHECK(service);
-  DictionaryPrefUpdate update(service, kOriginTrialPrefKey);
+  ScopedDictPrefUpdate update(service, kOriginTrialPrefKey);
 
-  base::Value::Dict& storage_dict = update->GetDict();
+  base::Value::Dict& storage_dict = update.Get();
 
   // Get the map keys to iterate over, so we avoid modifying the map while
   // iterating.
@@ -106,7 +106,7 @@ void PrefServicePersistenceProvider::DeleteExpiredTokens(
 
 base::flat_set<PersistedTrialToken>
 PrefServicePersistenceProvider::GetPersistentTrialTokens(
-    const url::Origin& origin) const {
+    const url::Origin& origin) {
   DCHECK(!origin.opaque());
 
   PrefService* service = pref_service();
@@ -143,9 +143,9 @@ void PrefServicePersistenceProvider::SavePersistentTrialTokens(
   DCHECK(!origin.opaque());
   PrefService* service = pref_service();
   DCHECK(service);
-  DictionaryPrefUpdate update(service, kOriginTrialPrefKey);
+  ScopedDictPrefUpdate update(service, kOriginTrialPrefKey);
 
-  base::Value::Dict& storage_dict = update->GetDict();
+  base::Value::Dict& storage_dict = update.Get();
   std::string origin_key = origin.Serialize();
   if (tokens.empty()) {
     if (storage_dict.contains(origin_key)) {
@@ -158,6 +158,10 @@ void PrefServicePersistenceProvider::SavePersistentTrialTokens(
     }
     storage_dict.Set(origin_key, std::move(token_dicts));
   }
+}
+
+void PrefServicePersistenceProvider::ClearPersistedTokens() {
+  pref_service()->ClearPref(kOriginTrialPrefKey);
 }
 
 PrefService* PrefServicePersistenceProvider::pref_service() const {

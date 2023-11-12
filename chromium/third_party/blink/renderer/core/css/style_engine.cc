@@ -31,27 +31,22 @@
 
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
+#include "base/hash/hash.h"
 #include "base/ranges/algorithm.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
-#include "third_party/blink/renderer/core/animation/css/css_scroll_timeline.h"
-#include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/css/cascade_layer_map.h"
 #include "third_party/blink/renderer/core/css/check_pseudo_has_cache_scope.h"
 #include "third_party/blink/renderer/core/css/container_query_data.h"
 #include "third_party/blink/renderer/core/css/container_query_evaluator.h"
 #include "third_party/blink/renderer/core/css/counter_style_map.h"
 #include "third_party/blink/renderer/core/css/css_default_style_sheets.h"
-#include "third_party/blink/renderer/core/css/css_font_family_value.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
-#include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/document_style_environment_variables.h"
 #include "third_party/blink/renderer/core/css/document_style_sheet_collection.h"
-#include "third_party/blink/renderer/core/css/document_style_sheet_collector.h"
 #include "third_party/blink/renderer/core/css/font_face_cache.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_set.h"
 #include "third_party/blink/renderer/core/css/media_feature_overrides.h"
@@ -70,7 +65,6 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
-#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -81,15 +75,14 @@
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
 #include "third_party/blink/renderer/core/dom/scriptable_document_parser.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
-#include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/frame/frame_owner.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
-#include "third_party/blink/renderer/core/html/html_iframe_element.h"
-#include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html/track/text_track.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -103,19 +96,19 @@
 #include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/page_popup_controller.h"
-#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/style/style_initial_data.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
-#include "third_party/blink/renderer/core/svg/svg_style_element.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_helper.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -389,16 +382,6 @@ void StyleEngine::AdoptedStyleSheetRemoved(TreeScope& tree_scope,
   SetNeedsActiveStyleUpdate(tree_scope);
 }
 
-void StyleEngine::AddedCustomElementDefaultStyles(
-    const HeapVector<Member<CSSStyleSheet>>& default_styles) {
-  if (!RuntimeEnabledFeatures::CustomElementDefaultStyleEnabled() ||
-      GetDocument().IsDetached())
-    return;
-  for (CSSStyleSheet* sheet : default_styles)
-    custom_element_default_style_sheets_.insert(sheet);
-  global_rule_set_->MarkDirty();
-}
-
 void StyleEngine::MediaQueryAffectingValueChanged(TreeScope& tree_scope,
                                                   MediaValueChange change) {
   auto* collection = StyleSheetCollectionFor(tree_scope);
@@ -554,6 +537,27 @@ void StyleEngine::UpdateCounterStyles() {
                                              active_tree_scopes_);
   CounterStyleMap::ResolveAllReferences(GetDocument(), active_tree_scopes_);
   counter_styles_need_update_ = false;
+}
+
+void StyleEngine::MarkPositionFallbackStylesDirty() {
+  // TODO(crbug.com/1381623): Currently invalidating all elements in the
+  // document with a position-fallback, regardless of where the
+  // @position-fallback rules are added. In order to make invalidation more
+  // targeted we would need to add per tree-scope dirtiness, but
+  // also adding at-rules in one tree-scope may affect multiple other tree
+  // scopes through :host, ::slotted, ::part, exportparts, and inheritance.
+  // Doing that is going to be a lot more complicated.
+  position_fallback_styles_dirty_ = true;
+  GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
+}
+
+void StyleEngine::InvalidatePositionFallbackStyles() {
+  if (!position_fallback_styles_dirty_)
+    return;
+  position_fallback_styles_dirty_ = false;
+  const bool mark_style_dirty = true;
+  GetDocument().GetLayoutView()->InvalidateSubtreePositionFallback(
+      mark_style_dirty);
 }
 
 void StyleEngine::UpdateViewport() {
@@ -798,9 +802,29 @@ CSSStyleSheet* StyleEngine::CreateSheet(
   if (type != PendingSheetType::kNonBlocking)
     AddPendingBlockingSheet(element, type);
 
-  AtomicString text_content(text);
+  // The style sheet text can be long; hundreds of kilobytes. In order not to
+  // insert such a huge string into the AtomicString table, we take its hash
+  // instead and use that. (This is not a cryptographic hash, so a page could
+  // cause collisions if it wanted to, but only within its own renderer.)
+  // Note that in many cases, we won't actually be able to free the
+  // memory used by the string, since it may e.g. be already stuck in
+  // the DOM (as text contents of the <style> tag), but it may eventually
+  // be parked (compressed, or stored to disk) if there's memory pressure,
+  // or otherwise dropped, so this keeps us from being the only thing
+  // that keeps it alive.
+  AtomicString key;
+  if (text.length() >= 1024) {
+    size_t digest = FastHash(base::span<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(text.Bytes()),
+        text.CharactersSizeInBytes()));
+    LChar digest_as_char[sizeof(digest)];
+    memcpy(digest_as_char, &digest, sizeof(digest));
+    key = AtomicString(digest_as_char, sizeof(digest));
+  } else {
+    key = AtomicString(text);
+  }
 
-  auto result = text_to_sheet_cache_.insert(text_content, nullptr);
+  auto result = text_to_sheet_cache_.insert(key, nullptr);
   StyleSheetContents* contents = result.stored_value->value;
   if (result.is_new_entry || !contents ||
       !contents->IsCacheableForStyleElement()) {
@@ -809,7 +833,6 @@ CSSStyleSheet* StyleEngine::CreateSheet(
         ParseSheet(element, text, start_position, render_blocking_behavior);
     if (style_sheet->Contents()->IsCacheableForStyleElement()) {
       result.stored_value->value = style_sheet->Contents();
-      sheet_to_text_cache_.insert(style_sheet->Contents(), text_content);
     }
   } else {
     DCHECK(contents);
@@ -1942,12 +1965,6 @@ void StyleEngine::SetHttpDefaultStyle(const String& content) {
 void StyleEngine::CollectFeaturesTo(RuleFeatureSet& features) {
   CollectUserStyleFeaturesTo(features);
   CollectScopedStyleFeaturesTo(features);
-  for (CSSStyleSheet* sheet : custom_element_default_style_sheets_) {
-    if (!sheet)
-      continue;
-    if (RuleSet* rule_set = RuleSetForSheet(*sheet))
-      features.Merge(rule_set->Features());
-  }
 }
 
 void StyleEngine::EnsureUAStyleForXrOverlay() {
@@ -1992,18 +2009,17 @@ void StyleEngine::EnsureUAStyleForPseudoElement(PseudoId pseudo_id) {
 }
 
 void StyleEngine::EnsureUAStyleForTransitionPseudos() {
-  if (ua_document_transition_style_)
+  if (ua_view_transition_style_)
     return;
 
   // Note that we don't need to mark any state dirty for style invalidation
   // here. This is done externally by the code which invalidates this style
   // sheet.
-  auto* document_transition =
-      DocumentTransitionSupplement::From(GetDocument())->GetTransition();
-  auto* style_sheet_contents =
-      CSSDefaultStyleSheets::ParseUASheet(document_transition->UAStyleSheet());
-  ua_document_transition_style_ = MakeGarbageCollected<RuleSet>();
-  ua_document_transition_style_->AddRulesFromSheet(
+  auto* transition = ViewTransitionUtils::GetActiveTransition(GetDocument());
+  auto* style_sheet_contents = CSSDefaultStyleSheets::ParseUASheet(
+      transition ? transition->UAStyleSheet() : "");
+  ua_view_transition_style_ = MakeGarbageCollected<RuleSet>();
+  ua_view_transition_style_->AddRulesFromSheet(
       style_sheet_contents, CSSDefaultStyleSheets::ScreenEval());
 }
 
@@ -2017,13 +2033,13 @@ void StyleEngine::EnsureUAStyleForForcedColors() {
   }
 }
 
-RuleSet* StyleEngine::DefaultDocumentTransitionStyle() const {
-  DCHECK(ua_document_transition_style_);
-  return ua_document_transition_style_.Get();
+RuleSet* StyleEngine::DefaultViewTransitionStyle() const {
+  DCHECK(ua_view_transition_style_);
+  return ua_view_transition_style_.Get();
 }
 
-void StyleEngine::InvalidateUADocumentTransitionStyle() {
-  ua_document_transition_style_ = nullptr;
+void StyleEngine::InvalidateUAViewTransitionStyle() {
+  ua_view_transition_style_ = nullptr;
 }
 
 bool StyleEngine::HasRulesForId(const AtomicString& id) const {
@@ -2075,6 +2091,8 @@ enum RuleSetFlags {
   kCounterStyleRules = 1 << 4,
   kLayerRules = 1 << 5,
   kFontPaletteValuesRules = 1 << 6,
+  kPositionFallbackRules = 1 << 7,
+  kFontFeatureValuesRules = 1 << 8
 };
 
 const unsigned kRuleSetFlagsAll = ~0u;
@@ -2089,6 +2107,8 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
       flags |= kFontFaceRules;
     if (!rule_set->FontPaletteValuesRules().empty())
       flags |= kFontPaletteValuesRules;
+    if (!rule_set->FontFeatureValuesRules().empty())
+      flags |= kFontFeatureValuesRules;
     if (rule_set->NeedsFullRecalcForRuleSetInvalidation())
       flags |= kFullRecalcRules;
     if (!rule_set->PropertyRules().empty())
@@ -2097,6 +2117,8 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
       flags |= kCounterStyleRules;
     if (rule_set->HasCascadeLayers())
       flags |= kLayerRules;
+    if (!rule_set->PositionFallbackRules().empty())
+      flags |= kPositionFallbackRules;
   }
   return flags;
 }
@@ -2272,7 +2294,8 @@ void StyleEngine::ApplyUserRuleSetChanges(
     MarkCounterStylesNeedUpdate();
   }
 
-  if (changed_rule_flags & (kPropertyRules | kFontPaletteValuesRules)) {
+  if (changed_rule_flags &
+      (kPropertyRules | kFontPaletteValuesRules | kFontFeatureValuesRules)) {
     if (changed_rule_flags & kPropertyRules) {
       ClearPropertyRules();
       AtRuleCascadeMap cascade_map(GetDocument());
@@ -2286,6 +2309,12 @@ void StyleEngine::ApplyUserRuleSetChanges(
       MarkFontsNeedUpdate();
     }
 
+    if (changed_rule_flags & kFontFeatureValuesRules) {
+      font_feature_values_storage_map_.clear();
+      AddFontFeatureValuesRulesFromSheets(new_style_sheets);
+      MarkFontsNeedUpdate();
+    }
+
     // We just cleared all the rules, which includes any author rules. They
     // must be forcibly re-added.
     if (ScopedStyleResolver* scoped_resolver =
@@ -2293,6 +2322,12 @@ void StyleEngine::ApplyUserRuleSetChanges(
       scoped_resolver->SetNeedsAppendAllSheets();
       MarkDocumentDirty();
     }
+  }
+
+  if (changed_rule_flags & kPositionFallbackRules) {
+    // TODO(crbug.com/1383907): @position-fallback rules are not yet collected
+    // from user stylesheets.
+    MarkPositionFallbackStylesDirty();
   }
 
   InvalidateForRuleSetChanges(GetDocument(), changed_rule_sets,
@@ -2390,12 +2425,23 @@ void StyleEngine::ApplyRuleSetChanges(
 
   if ((changed_rule_flags & kFontPaletteValuesRules) ||
       rebuild_at_font_palette_values_map) {
-    // TODO(https://crbug.com1296114): Support @font-palette-values in shadow
-    // trees and support scoping correctly.
+    // TODO(crbug.com/1296114): Support @font-palette-values in shadow trees and
+    // support scoping correctly.
     if (tree_scope.RootNode().IsDocumentNode()) {
       font_palette_values_rule_map_.clear();
       AddFontPaletteValuesRulesFromSheets(active_user_style_sheets_);
       AddFontPaletteValuesRulesFromSheets(new_style_sheets);
+    }
+  }
+
+  if ((changed_rule_flags & kFontFeatureValuesRules) ||
+      rebuild_at_font_palette_values_map) {
+    // TODO(https://crbug.com/1382722): Support @font-feature-values in shadow
+    // trees and support scoping correctly.
+    if (tree_scope.RootNode().IsDocumentNode()) {
+      font_feature_values_storage_map_.clear();
+      AddFontFeatureValuesRulesFromSheets(active_user_style_sheets_);
+      AddFontFeatureValuesRulesFromSheets(new_style_sheets);
     }
   }
 
@@ -2407,14 +2453,16 @@ void StyleEngine::ApplyRuleSetChanges(
     }
     if ((changed_rule_flags & kFontFaceRules) ||
         (changed_rule_flags & kFontPaletteValuesRules) ||
+        (changed_rule_flags & kFontFeatureValuesRules) ||
         has_rebuilt_font_face_cache) {
       GetFontSelector()->FontFaceInvalidated(
           FontInvalidationReason::kGeneralInvalidation);
     }
   }
 
-  // TODO(crbug.com/1309178): Invalidate style & layout for @position-fallback
-  // rule changes.
+  if (changed_rule_flags & kPositionFallbackRules) {
+    MarkPositionFallbackStylesDirty();
+  }
 
   if (!new_style_sheets.empty()) {
     tree_scope.EnsureScopedStyleResolver().AppendActiveStyleSheets(
@@ -2452,12 +2500,12 @@ void StyleEngine::VisionDeficiencyChanged() {
 }
 
 void StyleEngine::ApplyVisionDeficiencyStyle(
-    scoped_refptr<ComputedStyle> layout_view_style) {
+    ComputedStyleBuilder& layout_view_style_builder) {
   LoadVisionDeficiencyFilter();
   if (vision_deficiency_filter_) {
     FilterOperations ops;
     ops.Operations().push_back(vision_deficiency_filter_);
-    layout_view_style->SetFilter(ops);
+    layout_view_style_builder.SetFilter(ops);
   }
 }
 
@@ -2588,6 +2636,14 @@ void StyleEngine::AddFontPaletteValuesRulesFromSheets(
   }
 }
 
+void StyleEngine::AddFontFeatureValuesRulesFromSheets(
+    const ActiveStyleSheetVector& sheets) {
+  for (const ActiveStyleSheet& active_sheet : sheets) {
+    if (RuleSet* rule_set = active_sheet.second)
+      AddFontFeatureValuesRules(*rule_set);
+  }
+}
+
 bool StyleEngine::AddUserFontFaceRules(const RuleSet& rule_set) {
   if (!font_selector_)
     return false;
@@ -2643,6 +2699,20 @@ void StyleEngine::AddFontPaletteValuesRules(const RuleSet& rule_set) {
   }
 }
 
+void StyleEngine::AddFontFeatureValuesRules(const RuleSet& rule_set) {
+  const HeapVector<Member<StyleRuleFontFeatureValues>>
+      font_feature_values_rules = rule_set.FontFeatureValuesRules();
+  for (auto& rule : font_feature_values_rules) {
+    for (auto& font_family : rule->GetFamilies()) {
+      auto add_result = font_feature_values_storage_map_.insert(
+          String(font_family).FoldCase(), rule->Storage());
+      if (!add_result.is_new_entry) {
+        add_result.stored_value->value.FuseUpdate(rule->Storage());
+      }
+    }
+  }
+}
+
 void StyleEngine::AddPropertyRules(AtRuleCascadeMap& cascade_map,
                                    const RuleSet& rule_set,
                                    bool is_user_style) {
@@ -2695,6 +2765,19 @@ StyleRuleFontPaletteValues* StyleEngine::FontPaletteValuesForNameAndFamily(
   return it->value.Get();
 }
 
+const FontFeatureValuesStorage* StyleEngine::FontFeatureValuesForFamily(
+    AtomicString font_family) {
+  if (font_feature_values_storage_map_.empty() || font_family.empty())
+    return nullptr;
+
+  auto it =
+      font_feature_values_storage_map_.find(String(font_family).FoldCase());
+  if (it == font_feature_values_storage_map_.end())
+    return nullptr;
+
+  return &(it->value);
+}
+
 DocumentStyleEnvironmentVariables& StyleEngine::EnsureEnvironmentVariables() {
   if (!environment_variables_) {
     environment_variables_ = DocumentStyleEnvironmentVariables::Create(
@@ -2737,9 +2820,6 @@ void StyleEngine::RecalcStyleForContainer(Element& container,
 void StyleEngine::RecalcStyleForNonLayoutNGContainerDescendants(
     Element& container) {
   DCHECK(InRebuildLayoutTree());
-
-  if (!RuntimeEnabledFeatures::CSSContainerQueriesEnabled())
-    return;
 
   // This method is called from AttachLayoutTree() when we are forced to use
   // legacy layout for a query container. At the time of RecalcStyle, it is not
@@ -2902,7 +2982,7 @@ void StyleEngine::RecalcTransitionPseudoStyle() {
   // we can optimize this to only when the pseudo element tree is dirtied.
   SelectorFilterRootScope filter_scope(nullptr);
   document_->documentElement()->RecalcTransitionPseudoTreeStyle(
-      document_transition_tags_);
+      view_transition_names_);
 }
 
 void StyleEngine::RecalcStyle() {
@@ -2959,7 +3039,7 @@ void StyleEngine::RebuildLayoutTree(
         root_element.GetReattachParent());
     if (rebuild_transition_pseudo_tree == RebuildTransitionPseudoTree::kYes) {
       document_->documentElement()->RebuildTransitionPseudoLayoutTree(
-          document_transition_tags_);
+          view_transition_names_);
     }
     layout_tree_rebuild_root_.Clear();
     propagate_to_root = IsA<HTMLHtmlElement>(root_element) ||
@@ -3473,7 +3553,6 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(injected_user_style_sheets_);
   visitor->Trace(injected_author_style_sheets_);
   visitor->Trace(active_user_style_sheets_);
-  visitor->Trace(custom_element_default_style_sheets_);
   visitor->Trace(keyframes_rule_map_);
   visitor->Trace(font_palette_values_rule_map_);
   visitor->Trace(user_counter_style_map_);
@@ -3494,13 +3573,13 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(layout_tree_rebuild_root_);
   visitor->Trace(font_selector_);
   visitor->Trace(text_to_sheet_cache_);
-  visitor->Trace(sheet_to_text_cache_);
   visitor->Trace(tracker_);
   visitor->Trace(text_tracks_);
   visitor->Trace(vtt_originating_element_);
   visitor->Trace(parent_for_detached_subtree_);
-  visitor->Trace(ua_document_transition_style_);
+  visitor->Trace(ua_view_transition_style_);
   visitor->Trace(style_image_cache_);
+  visitor->Trace(fill_or_clip_path_uri_value_cache_);
   FontSelectorClient::Trace(visitor);
 }
 
@@ -3581,6 +3660,23 @@ bool StyleEngine::AllowSkipStyleRecalcForScope() const {
     return !view->IsSubtreeLayout();
   }
   return true;
+}
+
+void StyleEngine::AddCachedFillOrClipPathURIValue(const AtomicString& string,
+                                                  const CSSValue& value) {
+  fill_or_clip_path_uri_value_cache_.insert(string, &value);
+}
+
+const CSSValue* StyleEngine::GetCachedFillOrClipPathURIValue(
+    const AtomicString& string) {
+  auto it = fill_or_clip_path_uri_value_cache_.find(string);
+  if (it == fill_or_clip_path_uri_value_cache_.end())
+    return nullptr;
+  return it->value;
+}
+
+void StyleEngine::BaseURLChanged() {
+  fill_or_clip_path_uri_value_cache_.clear();
 }
 
 }  // namespace blink

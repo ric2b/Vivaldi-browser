@@ -5,16 +5,14 @@
 #ifndef CHROME_BROWSER_ASH_LOGIN_SCREENS_BASE_SCREEN_H_
 #define CHROME_BROWSER_ASH_LOGIN_SCREENS_BASE_SCREEN_H_
 
-#include <string>
-
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ash/login/wizard_context.h"
 #include "components/login/base_screen_handler_utils.h"
 
 namespace ash {
+
+class WizardContext;
 
 // Base class for the all OOBE/login/before-session screens.
 // Screens are identified by ID, screen and it's JS counterpart must have same
@@ -53,8 +51,6 @@ class BaseScreen {
 
   // Forwards user action if screen is shown.
   void HandleUserAction(const base::Value::List& args);
-  // DEPRECATED: Use HandleUserAction.
-  void HandleUserActionDeprecated(const std::string& action);
 
   // Returns `true` if `action` was handled by the screen.
   virtual bool HandleAccelerator(LoginAcceleratorAction action);
@@ -74,8 +70,6 @@ class BaseScreen {
   // Called when user action event with happened. Notification about this event
   // comes from the JS counterpart. Not called if the screen is hidden
   virtual void OnUserAction(const base::Value::List& args);
-  // DEPRECATED: Use OnUserAction.
-  virtual void OnUserActionDeprecated(const std::string& action_id);
 
   WizardContext* context() const { return wizard_context_; }
 
@@ -92,23 +86,5 @@ class BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::BaseScreen;
-}
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace ash {
-using ::chromeos::BaseScreen;
-}
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace ash {
-using ::chromeos::BaseScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_BASE_SCREEN_H_

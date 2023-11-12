@@ -20,7 +20,7 @@ namespace {
 
 // TODO(crbug.com/1305213): The data type toggles shouldn't be individually
 // listed here.
-static_assert(42 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "If the new type has a corresponding pref, add it here");
 const char* backed_up_preferences_[] = {
     autofill::prefs::kAutofillWalletImportEnabled,
@@ -34,6 +34,7 @@ const char* backed_up_preferences_[] = {
     syncer::prefs::kSyncRequested,
     syncer::prefs::kSyncTabs,
     syncer::prefs::kSyncTypedUrls,
+    syncer::prefs::kSyncSavedTabGroups,
 };
 
 }  // namespace

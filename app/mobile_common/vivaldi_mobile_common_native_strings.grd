@@ -287,6 +287,7 @@ locale.  The strings in this file are specific to iOS.
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
+        <!-- Notes-->
         <message name="IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES" desc="The iOS menu item for adding the current page to the notes. This is a verb  [iOS only]" meaning="Add current page to notes. [Verb]">
           Create note
         </message>
@@ -323,11 +324,9 @@ locale.  The strings in this file are specific to iOS.
         <message name="IDS_VIVALDI_NOTE_NAME_FIELD_HEADER" desc="Title shown above note name field on Edit Note screen. [Length: 20em]" meaning="Name of an inanimate object">
           Name
         </message>
-
         <message name="IDS_VIVALDI_NOTE_NEW_NOTES_BAR_TITLE" desc="Text that describes the notes present in the notes bar for chrome on desktop. [Length: 30em.] [iOS only]">
           Notes Bar
         </message>
-
         <message name="IDS_VIVALDI_NOTE_NEW_NOTE_CREATED" desc="A description presented to the user that they just created a note. [Length: 30em.] [iOS only]">
           Item created
         </message>
@@ -410,7 +409,7 @@ locale.  The strings in this file are specific to iOS.
           New Note
         </message>
         <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_DELETE" desc="Text on the notes context bar for delete action">
-         Delete
+          Delete
         </message>
         <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_SELECT" desc="Text on the notes context bar for select action">
           Select
@@ -433,17 +432,11 @@ locale.  The strings in this file are specific to iOS.
         <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT" desc="Text on the notes context menu to edit selected note">
           Edit Note
         </message>
-         <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the notes context menu to edit selected note folder">
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the notes context menu to edit selected note folder">
           Edit Folder
         </message>
-         <message name="IDS_VIVALDI_NOTE_NEW_NOTE" desc="Text on the new note action">
-           New note
-        </message>
-        <message name="IDS_VIVALDI_NOTE_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
-           You can remember text notes you need for later use by adding a note
-        </message>
-        <message name="IDS_VIVALDI_NOTE_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
-           You'll find your notes here
+        <message name="IDS_VIVALDI_NOTE_NEW_NOTE" desc="Text on the new note action">
+          New note
         </message>
         <message name="IDS_VIVALDI_NOTE_EDIT_SCREEN_TITLE" desc="Title of Edit Note screen [Length: 13em]">
           Edit Note
@@ -460,6 +453,7 @@ locale.  The strings in this file are specific to iOS.
         <message name="IDS_VIVALDI_NOTE_CREATE_GROUP" desc="Button to create a new note folder [Length: 30em.]">
           New Folder…
         </message>
+        <!-- End Notes -->
         <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE" desc="Message shown in the Incognito Tabs page when the grid is empty, explaining that the user can open a new tab.">
           Tap the plus icon below to create a new private tab.
         </message>
@@ -499,6 +493,190 @@ locale.  The strings in this file are specific to iOS.
         <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder. ">
           New Folder
         </message>
+      <!-- Sync -->
+      <message name="IDS_PREFS_VIVALDI_SYNC" desc="(Vivaldi) Sync settings access point name">
+        Sync
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTOMATIC_TITLE" desc="(Vivaldi) Title of sync all data.">
+        Sync All
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DATA_CHOOSE_TITLE" desc="(Vivaldi) Title of data to sync.">
+        Sync Selected
+      </message>
+      <message name="IDS_VIVALDI_SYNC_EVERYTHING" desc="(Vivaldi) Choose to sync all datatypes.">
+        Synchronize all data, and automatically enable synchronization of new data types
+      </message>
+      <message name="IDS_SYNC_ALL_SET_TEXT" desc="(Vivaldi) Text to indicate user about starting sync.">
+        All set! Time to decide what data to sync between devices.
+      </message>
+      <message name="IDS_VIVALDI_START_SYNCING" desc="(Vivaldi) Text on start sync button.">
+        Start Syncing All Data
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_OUT" desc="(Vivaldi) Label of the button used to log out of Sync.">
+        Log Out
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_IN" desc="(Vivaldi) Confirming sync account credentials.">
+        Log In
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_IN_TITLE" desc="(Vivaldi) Sync account log in title.">
+        Log in to your Account
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE" desc="(Vivaldi) Title of sync encryption password">
+        Encryption password
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DECRYPT" desc="(Vivaldi) Label of the button used to confirm encryption password.">
+        Decrypt
+      </message>
+      <message name="IDS_VIVALDI_DECRYPTION_TEXT" desc="(Vivaldi) Text used to tell the user what to do on the encryption password screen.">
+        Your sync data is encrypted. Provide your encryption password in order to decrypt the data.
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_USERNAME" desc="(Vivaldi) Username field in sync account set up.">
+        Username
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_PASSWORD" desc="(Vivaldi) Login password field in sync account set up.">
+        Password
+      </message>
+      <message name="IDS_VIVALDI_BACKUP_ENCRYPTION_KEY" desc="(Vivaldi) Title of encryption backup key">
+        Backup encryption key
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_SECTION" desc="(Vivaldi) Sync encryption password.">
+        Data secured by encryption password
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CLEAR_SERVER_DATA" desc="(Vivaldi) Label of the button used to remove Sync server-side data.">
+        Delete Data
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE" desc="(Vivaldi) Title of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        Delete Remote Sync Data
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_MESSAGE" desc="(Vivaldi) Text of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        This will remove all sync data stored on our server, reset your encryption password, and log you out.
+      </message>
+      <message name="IDS_VIVALDI_SAVE" desc="(Vivaldi) Label of the button to confirm save">
+        Save
+      </message>
+      <message name="IDS_VIVALDI_SYNC_SUCCESS" desc="(Vivaldi) Sync succeeded text.">
+        Sync is active
+      </message>
+      <message name="IDS_VIVALDI_SYNC_APPLYING_CHANGES" desc="(Vivaldi) Text to inform that the changes are being applied">
+        Applying changes...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_NOT_SYNCED_CYCLE" desc="(Vivaldi) Not Synced text.">
+        Not Synced
+      </message>
+      <message name="IDS_VIVALDI_SYNC_INITIALIZING" desc="(Vivaldi) Messages shown while the sync engine is starting up.">
+        Initializing sync...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_WAITING_SERVER_ERROR" desc="(Vivaldi) Messages shown while the sync engine is starting up.">
+        The sync server is experiencing issues. Retrying sync initialization soon...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CLIENT_NEEDS_UPDATE" desc="(Vivaldi) Error message displayed when sync cannot start.">
+        You must upgrade Vivaldi in order to use sync.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_FAILED" desc="(Vivaldi) Error message displayed when sync cannot start.">
+        Sync Failed to start.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTH_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Server refused your credentials.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_SERVER_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Server error.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_NETWORK_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Network error.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFLICT" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Conflict with another client's data.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_THROTTLED" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Connection throttled by server.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_OTHER_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Unexpected error.
+      </message>
+      <!-- End Sync -->
+      <!-- AD AND TRACKER BLOCKER -->
+      <message name="IDS_LEVEL_NO_BLOCKING" desc="Title for the No Blocking option in the blocker popup window">
+        No Blocking
+      </message>
+      <message name="IDS_LEVEL_NO_BLOCKING_DESCRIPTION" desc="Description for the No Blocking in the blocker popup window">
+        We don’t block any ads or trackers.
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS" desc="Title for the Block Trackers option in the blocker popup window">
+        Block Trackers
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_DESCRIPTION" desc="Description for the Block Trackers in the blocker popup window">
+        Trackers are blocked, but not ads. Some sites may break.
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_AND_ADS" desc="Title for the Block Trackers and Ads option in the blocker popup window">
+        Block Trackers and Ads
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_AND_ADS_DESCRIPTION" desc="Description for the Block Trackers and Ads option in the blocker popup window">
+        Trackers and ads are blocked. Some sites may break.
+      </message>
+      <message name="IDS_DEFAULT_LEVEL_LABEL" desc="Default level marker text for option">
+        (Default)
+      </message>
+      <message name="IDS_TRACKER_BLOCKED_TEXT" desc="Label for blocked tracker (singular) counter in the blocker popup window [2 LINES]">
+        Tracker\nblocked
+      </message>
+      <message name="IDS_TRACKERS_BLOCKED_TEXT" desc="Label for blocked trackers counter in the blocker popup window [2 LINES]">
+        Trackers\nblocked
+      </message>
+      <message name="IDS_TRACKER_DETAILS" desc="Label for blocked tracker details spinner">
+        Tracker details
+      </message>
+      <message name="IDS_AD_BLOCKED_TEXT" desc="Label for blocked ad (singular) counter in the blocker popup window [2 LINES]">
+        Ad\nblocked
+      </message>
+      <message name="IDS_ADS_BLOCKED_TEXT" desc="Label for blocked ads counter in the blocker popup window [2 LINES]">
+        Ads\nblocked
+      </message>
+      <message name="IDS_AD_DETAILS" desc="Label for blocked ad details spinner">
+        Ad details
+      </message>
+      <message name="IDS_MANAGE_DEFAULT_SETTINGS" desc="Push button in the blocker popup window">
+        Manage Privacy Settings
+      </message>
+      <message name="IDS_PREFS_ADS_TRACKING" desc="General Ads and Tracking Blocker preference">
+        Tracker and Ad Blocking
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_TRACKING_PROTECTION_LEVEL" desc="Blocker preference category: DEFAULT TRACKING PROTECTION LEVEL">
+        DEFAULT BLOCKING LEVEL
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_EXCEPTIONS" desc="Blocker preference category: EXCEPTIONS">
+        EXCEPTIONS
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_BLOCKING_LEVEL_PER_SITE" desc="Blocker preference">
+        Manage blocking level per site
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_SOURCES" desc="Blocker preference category: SOURCES">
+        SOURCES
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_TRACKER_BLOCKING_SOURCES" desc="Blocker preference">
+        Manage Tracker Blocking Sources
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_AD_BLOCKING_SOURCES" desc="Blocker preference">
+        Manage Ad Blocking Sources
+      </message>
+      <message name="IDS_ADD_NEW_SOURCE" desc="Add new source label">
+        Add New Source
+      </message>
+      <message name="IDS_AUTOFILL_IMPORT_URL_HINT" desc="Hint for the import blocker list url">
+        Enter URL to import blocker rules
+      </message>
+      <message name="IDS_ADD_NEW_DOMAIN" desc="Add new domain label">
+        Add New Domain
+      </message>
+      <message name="IDS_EDIT_DOMAIN" desc="Edit domain label">
+        Edit Domain
+      </message>
+      <message name="IDS_AUTOFILL_DOMAIN_HINT" desc="Hint for the website url">
+        Domain
+      </message>
+      <message name="IDS_AUTOFILL_IMPORT_URL" desc="Button text in import blocker list dialog">
+        Import
+      </message>
+      <!-- END AD AND TRACKER BLOCKER -->
     </messages>
   </release>
 </grit>

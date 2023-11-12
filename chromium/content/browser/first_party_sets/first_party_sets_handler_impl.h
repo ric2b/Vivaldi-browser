@@ -93,6 +93,11 @@ class CONTENT_EXPORT FirstPartySetsHandlerImpl : public FirstPartySetsHandler {
   void Init(const base::FilePath& user_data_dir,
             const LocalSetDeclaration& local_set);
 
+  // Factory method that exposes the ctor for testing.
+  static FirstPartySetsHandlerImpl CreateForTesting(
+      bool enabled,
+      bool embedder_will_provide_public_sets);
+
   // Returns the fully-parsed and validated global First-Party Sets data.
   // Returns the data synchronously via an optional if it's already available,
   // or via an asynchronously-invoked callback if the data is not ready yet.
@@ -110,8 +115,6 @@ class CONTENT_EXPORT FirstPartySetsHandlerImpl : public FirstPartySetsHandler {
   bool IsEnabled() const override;
   void SetPublicFirstPartySets(const base::Version& version,
                                base::File sets_file) override;
-  void ResetForTesting() override;
-  void SetGlobalSetsForTesting(net::GlobalFirstPartySets global_sets) override;
   absl::optional<net::FirstPartySetEntry> FindEntry(
       const net::SchemefulSite& site,
       const net::FirstPartySetsContextConfig& config) const override;
@@ -126,25 +129,27 @@ class CONTENT_EXPORT FirstPartySetsHandlerImpl : public FirstPartySetsHandler {
       base::OnceCallback<void(net::FirstPartySetsContextConfig,
                               net::FirstPartySetsCacheFilter)> callback)
       override;
+  void ComputeFirstPartySetMetadata(
+      const net::SchemefulSite& site,
+      const net::SchemefulSite* top_frame_site,
+      const std::set<net::SchemefulSite>& party_context,
+      const net::FirstPartySetsContextConfig& config,
+      base::OnceCallback<void(net::FirstPartySetMetadata)> callback) override;
 
-  // Sets whether FPS is enabled (for testing).
-  void SetEnabledForTesting(bool enabled) {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    enabled_ = enabled;
-  }
-
-  void SetEmbedderWillProvidePublicSetsForTesting(bool will_provide) {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    embedder_will_provide_public_sets_ = enabled_ && will_provide;
-  }
-
-  void GetPersistedGlobalSetsForTesting(
+  void GetPersistedSetsForTesting(
       const std::string& browser_context_id,
-      base::OnceCallback<void(absl::optional<net::GlobalFirstPartySets>)>
+      base::OnceCallback<
+          void(absl::optional<std::pair<net::GlobalFirstPartySets,
+                                        net::FirstPartySetsContextConfig>>)>
           callback);
   void HasBrowserContextClearedForTesting(
       const std::string& browser_context_id,
       base::OnceCallback<void(absl::optional<bool>)> callback);
+
+  void SynchronouslyResetDBHelperForTesting() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    db_helper_.SynchronouslyResetForTest();  // IN-TEST
+  }
 
   // Computes information needed by the FirstPartySetsAccessDelegate in order
   // to update the browser's list of First-Party Sets to respect a profile's
@@ -184,6 +189,15 @@ class CONTENT_EXPORT FirstPartySetsHandlerImpl : public FirstPartySetsHandler {
       base::OnceCallback<void(net::FirstPartySetsContextConfig,
                               net::FirstPartySetsCacheFilter)> callback);
 
+  // Like ComputeFirstPartySetMetadata, but passes the result into the provided
+  // callback. Must not be called before `global_sets_` has been set.
+  void ComputeFirstPartySetMetadataInternal(
+      const net::SchemefulSite& site,
+      const absl::optional<net::SchemefulSite>& top_frame_site,
+      const std::set<net::SchemefulSite>& party_context,
+      const net::FirstPartySetsContextConfig& config,
+      base::OnceCallback<void(net::FirstPartySetMetadata)> callback) const;
+
   // Parses the policy and computes the config that represents the changes
   // needed to apply `policy` to `global_sets_`.
   net::FirstPartySetsContextConfig GetContextConfigForPolicyInternal(
@@ -217,13 +231,6 @@ class CONTENT_EXPORT FirstPartySetsHandlerImpl : public FirstPartySetsHandler {
   // This is nullopt until all of the required inputs have been received.
   absl::optional<net::GlobalFirstPartySets> global_sets_
       GUARDED_BY_CONTEXT(sequence_checker_);
-
-  // The version of the public First-Party Sets. It is invalid until the
-  // `SetPublicFirstPartySets()` is called with a valid version.
-  //
-  // TODO(crbug.com/1219656): bundle `version_` with `global_sets_` to
-  // guarantee that we have both or neither.
-  base::Version version_;
 
   bool enabled_ GUARDED_BY_CONTEXT(sequence_checker_);
   bool embedder_will_provide_public_sets_ GUARDED_BY_CONTEXT(sequence_checker_);

@@ -9,16 +9,21 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "net/base/schemeful_site.h"
 #include "net/first_party_sets/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_entry_override.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "net/first_party_sets/first_party_sets_context_config.h"
 #include "net/first_party_sets/global_first_party_sets.h"
 #include "services/network/public/mojom/first_party_sets.mojom.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace network {
 namespace {
+
+using testing::Key;
+using testing::UnorderedElementsAre;
 
 TEST(FirstPartySetsTraitsTest, Roundtrips_SiteIndex) {
   net::FirstPartySetEntry::SiteIndex original(1337);
@@ -125,9 +130,8 @@ TEST(FirstPartySetsTraitsTest, RoundTrips_GlobalFirstPartySets) {
   net::SchemefulSite b_cctld(GURL("https://b.cctld"));
   net::SchemefulSite c(GURL("https://c.test"));
 
-  net::FirstPartySetsContextConfig manual_config({{c, absl::nullopt}});
-
-  const net::GlobalFirstPartySets original(
+  net::GlobalFirstPartySets original(
+      base::Version("1.2.3"),
       /*entries=*/
       {
           {a,
@@ -136,7 +140,11 @@ TEST(FirstPartySetsTraitsTest, RoundTrips_GlobalFirstPartySets) {
           {c,
            net::FirstPartySetEntry(a, net::SiteType::kService, absl::nullopt)},
       },
-      /*aliases=*/{{b_cctld, b}}, manual_config.Clone());
+      /*aliases=*/{{b_cctld, b}});
+
+  original.ApplyManuallySpecifiedSet(
+      {{a, net::FirstPartySetEntry(a, net::SiteType::kPrimary, absl::nullopt)},
+       {b, net::FirstPartySetEntry(a, net::SiteType::kAssociated, 0)}});
 
   net::GlobalFirstPartySets round_tripped;
 
@@ -145,6 +153,45 @@ TEST(FirstPartySetsTraitsTest, RoundTrips_GlobalFirstPartySets) {
           original, round_tripped));
 
   EXPECT_EQ(original, round_tripped);
+  EXPECT_FALSE(round_tripped.empty());
+}
+
+TEST(FirstPartySetsTraitsTest, GlobalFirstPartySets_InvalidVersion) {
+  net::SchemefulSite a(GURL("https://a.test"));
+  net::SchemefulSite b(GURL("https://b.test"));
+  net::SchemefulSite b_cctld(GURL("https://b.cctld"));
+  net::SchemefulSite c(GURL("https://c.test"));
+
+  net::GlobalFirstPartySets original(
+      base::Version(),
+      /*entries=*/
+      {
+          {a,
+           net::FirstPartySetEntry(a, net::SiteType::kPrimary, absl::nullopt)},
+          {b, net::FirstPartySetEntry(a, net::SiteType::kAssociated, 0)},
+          {c,
+           net::FirstPartySetEntry(a, net::SiteType::kService, absl::nullopt)},
+      },
+      /*aliases=*/{{b_cctld, b}});
+
+  original.ApplyManuallySpecifiedSet(
+      {{a, net::FirstPartySetEntry(a, net::SiteType::kPrimary, absl::nullopt)},
+       {b, net::FirstPartySetEntry(a, net::SiteType::kAssociated, 0)}});
+
+  net::GlobalFirstPartySets round_tripped;
+
+  EXPECT_TRUE(
+      mojo::test::SerializeAndDeserialize<network::mojom::GlobalFirstPartySets>(
+          original, round_tripped));
+
+  EXPECT_FALSE(round_tripped.empty());
+
+  // base::Version::operator== crashes for invalid versions, so we don't check
+  // equality of `round_tripped` and `original` that way. However, we can verify
+  // that the original entries and alias are not present in `round_tripped`:
+  EXPECT_THAT(round_tripped.FindEntries({a, b, b_cctld, c},
+                                        net::FirstPartySetsContextConfig()),
+              UnorderedElementsAre(Key(a), Key(b)));
 }
 
 TEST(FirstPartySetsTraitsTest, RoundTrips_FirstPartySetsContextConfig) {
@@ -153,9 +200,11 @@ TEST(FirstPartySetsTraitsTest, RoundTrips_FirstPartySetsContextConfig) {
   net::SchemefulSite c(GURL("https://c.test"));
 
   const net::FirstPartySetsContextConfig original({
-      {a, net::FirstPartySetEntry(a, net::SiteType::kPrimary, absl::nullopt)},
-      {b, net::FirstPartySetEntry(a, net::SiteType::kAssociated, 0)},
-      {c, absl::nullopt},
+      {a, net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+              a, net::SiteType::kPrimary, absl::nullopt))},
+      {b, net::FirstPartySetEntryOverride(
+              net::FirstPartySetEntry(a, net::SiteType::kAssociated, 0))},
+      {c, net::FirstPartySetEntryOverride()},
   });
 
   net::FirstPartySetsContextConfig round_tripped;

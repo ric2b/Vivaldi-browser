@@ -32,6 +32,7 @@ class VivaldiNativeWidgetMac;
 - (void)onWindowWillExitFullScreen:(NSNotification*)notification;
 - (void)onWindowDidExitFullScreen:(NSNotification*)notification;
 - (void)stopObserving;
+- (void)onWindowDidChangeScreen:(NSNotification*)notification;
 @end
 
 class VivaldiNativeWidgetMac : public views::NativeWidgetMac {
@@ -49,6 +50,7 @@ class VivaldiNativeWidgetMac : public views::NativeWidgetMac {
   void OnWindowWillEnterFullScreen();
   void OnWindowWillExitFullScreen();
   void OnWindowDidExitFullScreen();
+  void OnWindowDidChangeScreen(bool hasNotch);
 
  private:
   static OSStatus MenuBarChangedHandler(EventHandlerCallRef handler,
@@ -101,6 +103,17 @@ bool NSWindowIsMaximized(NSWindow* ns_window) {
   return NSEqualRects([ns_window frame], [[ns_window screen] visibleFrame]);
 }
 
+// Screen notch detection functions.
+bool ScreenHasNotch(NSScreen* screen) {
+  if (@available(macos 12.0.1, *)) {
+    NSEdgeInsets insets = [screen safeAreaInsets];
+    if (insets.top != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 @implementation VivaldiResizeNotificationObserver
@@ -129,6 +142,11 @@ bool NSWindowIsMaximized(NSWindow* ns_window) {
            selector:@selector(onWindowDidExitFullScreen:)
                name:NSWindowDidExitFullScreenNotification
              object:ns_window];
+    [[NSNotificationCenter defaultCenter]
+       addObserver:self
+           selector:@selector(onWindowDidChangeScreen:)
+               name:NSWindowDidChangeScreenNotification
+             object:ns_window];
   }
   return self;
 }
@@ -152,6 +170,12 @@ bool NSWindowIsMaximized(NSWindow* ns_window) {
 - (void)stopObserving {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   native_widget_ = nullptr;
+}
+
+- (void)onWindowDidChangeScreen:(NSNotification*)notification {
+  NSWindow* window = (NSWindow*) [notification object];
+  bool screen_has_notch = ScreenHasNotch([window screen]);
+  native_widget_->OnWindowDidChangeScreen(screen_has_notch);
 }
 
 @end
@@ -259,6 +283,18 @@ void VivaldiNativeWidgetMac::OnWindowWillExitFullScreen() {
   DispatchFullscreenMenubarChangedEvent(false);
   in_fullscreen_transition_ = true;
 }
+
+void VivaldiNativeWidgetMac::OnWindowDidChangeScreen(bool hasNotch) {
+  if (!browser_window_)
+    return;
+  Browser* browser = browser_window_->browser();
+  if (!browser)
+    return;
+  ::vivaldi::BroadcastEvent(
+    extensions::vivaldi::window_private::OnWindowDidChangeScreens::kEventName,
+    extensions::vivaldi::window_private::OnWindowDidChangeScreens::Create(
+      browser->session_id().id(), hasNotch),
+    browser->profile());}
 
 void VivaldiNativeWidgetMac::OnWindowDidExitFullScreen() {
   in_fullscreen_transition_ = false;

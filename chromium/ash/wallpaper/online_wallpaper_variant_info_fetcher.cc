@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace ash {
 namespace {
@@ -114,7 +114,7 @@ class VariantMatches {
       : unit_id(unit_id_in),
         variants(variants_in),
         first_match(first_match_in) {
-    DCHECK_EQ(std::count(variants.begin(), variants.end(), first_match), 1);
+    DCHECK_EQ(base::ranges::count(variants, first_match), 1);
   }
 };
 
@@ -167,12 +167,12 @@ void OnlineWallpaperVariantInfoFetcher::FetchOnlineWallpaper(
       NOTREACHED() << "No suitable wallpaper for "
                    << (mode == ColorMode::kDarkMode ? "dark" : "lite")
                    << " mode in collection";
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
       return;
     }
 
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
             std::move(callback),

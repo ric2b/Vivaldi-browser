@@ -23,6 +23,7 @@
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom-blink.h"
 
 namespace content {
@@ -30,6 +31,11 @@ namespace content {
 using NotRestoredReasons =
     BackForwardCacheCanStoreDocumentResult::NotRestoredReasons;
 using NotRestoredReason = BackForwardCacheMetrics::NotRestoredReason;
+
+using ReasonsMatcher = testing::Matcher<
+    const blink::mojom::BackForwardCacheNotRestoredReasonsPtr&>;
+using SameOriginMatcher = testing::Matcher<
+    const blink::mojom::SameOriginBfcacheNotRestoredDetailsPtr&>;
 
 // Match RenderFrameHostImpl* that are in the BackForwardCache.
 MATCHER(InBackForwardCache, "") {
@@ -125,13 +131,9 @@ class BackForwardCacheBrowserTest
   MatchesDocumentResult(testing::Matcher<NotRestoredReasons> not_stored,
                         BlockListedFeatures block_listed);
 
-  using ReasonsMatcher = testing::Matcher<
-      const blink::mojom::BackForwardCacheNotRestoredReasonsPtr&>;
-  using SameOriginMatcher = testing::Matcher<
-      const blink::mojom::SameOriginBfcacheNotRestoredDetailsPtr&>;
   ReasonsMatcher MatchesNotRestoredReasons(
-      const testing::Matcher<bool>& blocked,
-      const SameOriginMatcher* same_origin_details);
+      const testing::Matcher<blink::mojom::BFCacheBlocked>& blocked,
+      const absl::optional<SameOriginMatcher>& same_origin_details);
   SameOriginMatcher MatchesSameOriginDetails(
       const testing::Matcher<std::string>& id,
       const testing::Matcher<std::string>& name,
@@ -165,9 +167,6 @@ class BackForwardCacheBrowserTest
 
   const ukm::TestAutoSetUkmRecorder& ukm_recorder() override;
   const base::HistogramTester& histogram_tester() override;
-
-  const int kMaxBufferedBytesPerProcess = 10000;
-  const base::TimeDelta kGracePeriodToFinishLoading = base::Seconds(5);
 
  private:
   content::ContentMockCertVerifier mock_cert_verifier_;
@@ -217,7 +216,7 @@ class PageLifecycleStateManagerTestDelegate
 
   // Waits for the renderer finishing to set the state of being in back/forward
   // cache.
-  void WaitForInBackForwardCacheAck();
+  [[nodiscard]] bool WaitForInBackForwardCacheAck();
 
   void OnStoreInBackForwardCacheSent(base::OnceClosure cb);
   void OnDisableJsEvictionSent(base::OnceClosure cb);

@@ -4,6 +4,7 @@
 
 #include "chromeos/ash/components/device_activity/monthly_use_case_impl.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/device_activity/fresnel_pref_names.h"
@@ -37,12 +38,12 @@ std::string MonthlyUseCaseImpl::GenerateUTCWindowIdentifier(
   return base::StringPrintf("%04d%02d", exploded.year, exploded.month);
 }
 
-ImportDataRequest MonthlyUseCaseImpl::GenerateImportRequestBody() {
+FresnelImportDataRequest MonthlyUseCaseImpl::GenerateImportRequestBody() {
   std::string psm_id_str = GetPsmIdentifier().value().sensitive_id();
   std::string window_id_str = GetWindowIdentifier().value();
 
   // Generate Fresnel PSM import request body.
-  device_activity::ImportDataRequest import_request;
+  FresnelImportDataRequest import_request;
   import_request.set_window_identifier(window_id_str);
 
   // Create fresh |DeviceMetadata| object.
@@ -51,9 +52,11 @@ ImportDataRequest MonthlyUseCaseImpl::GenerateImportRequestBody() {
   device_metadata->set_chromeos_version(GetChromeOSVersion());
   device_metadata->set_chromeos_channel(GetChromeOSChannel());
 
-  // TODO(hirthanan): Disable until monthly check membership is rolled out.
-  // device_metadata->set_market_segment(GetMarketSegment());
-  // device_metadata->set_hardware_id(GetFullHardwareClass());
+  if (base::FeatureList::IsEnabled(
+          features::kDeviceActiveClientMonthlyCheckMembership)) {
+    device_metadata->set_market_segment(GetMarketSegment());
+    device_metadata->set_hardware_id(GetFullHardwareClass());
+  }
 
   import_request.set_use_case(GetPsmUseCase());
   import_request.set_plaintext_identifier(psm_id_str);

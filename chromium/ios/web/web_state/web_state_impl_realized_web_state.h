@@ -99,8 +99,6 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
       NSURLRequest* request,
       WebStatePolicyDecider::RequestInfo request_info,
       WebStatePolicyDecider::PolicyDecisionCallback callback);
-  bool ShouldAllowErrorPageToBeDisplayed(NSURLResponse* response,
-                                         bool for_main_frame);
   void ShouldAllowResponse(
       NSURLResponse* response,
       WebStatePolicyDecider::ResponseInfo response_info,
@@ -111,11 +109,18 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
   void SendChangeLoadProgress(double progress);
   void HandleContextMenu(const ContextMenuParams& params);
   void ShowRepostFormWarningDialog(base::OnceCallback<void(bool)> callback);
-  void RunJavaScriptDialog(const GURL& origin_url,
-                           JavaScriptDialogType java_script_dialog_type,
-                           NSString* message_text,
-                           NSString* default_prompt_text,
-                           DialogClosedCallback callback);
+  void RunJavaScriptAlertDialog(const GURL& origin_url,
+                                NSString* message_text,
+                                base::OnceClosure callback);
+  void RunJavaScriptConfirmDialog(
+      const GURL& origin_url,
+      NSString* message_text,
+      base::OnceCallback<void(bool success)> callback);
+  void RunJavaScriptPromptDialog(
+      const GURL& origin_url,
+      NSString* message_text,
+      NSString* default_prompt_text,
+      base::OnceCallback<void(NSString* user_input)> callback);
   bool IsJavaScriptDialogRunning() const;
   WebState* CreateNewWebState(const GURL& url,
                               const GURL& opener_url,
@@ -146,11 +151,7 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
   void OpenURL(const WebState::OpenURLParams& params);
   void Stop();
   CRWSessionStorage* BuildSessionStorage();
-  CRWJSInjectionReceiver* GetJSInjectionReceiver() const;
   void LoadData(NSData* data, NSString* mime_type, const GURL& url);
-  void ExecuteJavaScript(const std::u16string& javascript);
-  void ExecuteJavaScript(const std::u16string& javascript,
-                         JavaScriptResultCallback callback);
   void ExecuteUserJavaScript(NSString* javaScript);
   const std::string& GetContentsMimeType() const;
   bool ContentIsHTML() const;
@@ -185,6 +186,10 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
   NSDictionary<NSNumber*, NSNumber*>* GetStatesForAllPermissions() const
       API_AVAILABLE(ios(15.0));
   void OnStateChangedForPermission(Permission permission)
+      API_AVAILABLE(ios(15.0));
+  void RequestPermissionsWithDecisionHandler(
+      NSArray<NSNumber*>* permissions,
+      PermissionDecisionHandler web_view_decision_handler)
       API_AVAILABLE(ios(15.0));
 
   // NavigationManagerDelegate:

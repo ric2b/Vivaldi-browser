@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/services/app_service/public/cpp/intent_filter.h"
+#include "url/url_constants.h"
 
 namespace apps {
 
@@ -239,7 +240,7 @@ std::set<std::string> IntentFilter::GetSupportedLinksForAppManagement() {
   std::set<std::string> supported_links;
   for (auto& host : hosts) {
     for (auto& path : paths) {
-      if (path.front() == '/') {
+      if (!path.empty() && path.front() == '/') {
         supported_links.insert(host + path);
       } else {
         supported_links.insert(host + "/" + path);

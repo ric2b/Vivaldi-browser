@@ -49,7 +49,8 @@ DXGISharedHandleState::DXGISharedHandleState(
     gfx::DXGIHandleToken token,
     base::win::ScopedHandle shared_handle,
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture)
-    : base::subtle::RefCountedThreadSafeBase(kRefCountPreference),
+    : base::subtle::RefCountedThreadSafeBase(
+          base::subtle::GetRefCountPreference<DXGISharedHandleState>()),
       manager_(std::move(manager)),
       token_(std::move(token)),
       shared_handle_(std::move(shared_handle)),
@@ -88,7 +89,6 @@ void DXGISharedHandleState::Release() const {
 }
 
 bool DXGISharedHandleState::BeginAccessD3D11() {
-  // Nop for shared images that are created without keyed mutex (D3D11 only).
   if (!dxgi_keyed_mutex_)
     return true;
 
@@ -111,7 +111,6 @@ bool DXGISharedHandleState::BeginAccessD3D11() {
 }
 
 void DXGISharedHandleState::EndAccessD3D11() {
-  // Nop for shared images that are created without keyed mutex (D3D11 only).
   if (!dxgi_keyed_mutex_)
     return;
 
@@ -126,10 +125,9 @@ void DXGISharedHandleState::EndAccessD3D11() {
 }
 
 bool DXGISharedHandleState::BeginAccessD3D12() {
-  if (!dxgi_keyed_mutex_) {
-    DLOG(ERROR) << "D3D12 access not supported without keyed mutex";
-    return false;
-  }
+  if (!dxgi_keyed_mutex_)
+    return true;
+
   if (acquired_for_d3d12_ || acquired_for_d3d11_count_ > 0) {
     DLOG(ERROR) << "Recursive BeginAccess not supported";
     return false;
@@ -139,6 +137,8 @@ bool DXGISharedHandleState::BeginAccessD3D12() {
 }
 
 void DXGISharedHandleState::EndAccessD3D12() {
+  if (!dxgi_keyed_mutex_)
+    return;
   acquired_for_d3d12_ = false;
 }
 

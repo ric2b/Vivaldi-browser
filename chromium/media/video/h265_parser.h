@@ -21,6 +21,11 @@
 #include "media/video/h264_parser.h"
 #include "media/video/h265_nalu_parser.h"
 
+namespace gfx {
+struct HDRMetadata;
+struct ColorVolumeMetadata;
+}  // namespace gfx
+
 namespace media {
 
 // For explanations of each struct and its members, see H.265 specification
@@ -53,6 +58,12 @@ struct MEDIA_EXPORT H265ProfileTierLevel {
   // Syntax elements.
   int general_profile_idc;
   int general_level_idc;  // 30x the actual level.
+  uint32_t general_profile_compatibility_flags;
+  bool general_progressive_source_flag;
+  bool general_interlaced_source_flag;
+  bool general_non_packed_constraint_flag;
+  bool general_frame_only_constraint_flag;
+  bool general_one_picture_only_constraint_flag;
 
   // From Table A.8 - General tier and level limits.
   int GetMaxLumaPs() const;
@@ -113,6 +124,12 @@ struct MEDIA_EXPORT H265VUIParameters {
   int def_disp_win_right_offset;
   int def_disp_win_top_offset;
   int def_disp_win_bottom_offset;
+  bool bitstream_restriction_flag;
+  int min_spatial_segmentation_idc;
+  int max_bytes_per_pic_denom;
+  int max_bits_per_min_cu_denom;
+  int log2_max_mv_length_horizontal;
+  int log2_max_mv_length_vertical;
 };
 
 struct MEDIA_EXPORT H265VPS {
@@ -141,6 +158,7 @@ struct MEDIA_EXPORT H265SPS {
   // Syntax elements.
   int sps_video_parameter_set_id;
   int sps_max_sub_layers_minus1;
+  bool sps_temporal_id_nesting_flag;
   H265ProfileTierLevel profile_tier_level;
   int sps_seq_parameter_set_id;
   int chroma_format_idc;
@@ -416,6 +434,8 @@ struct MEDIA_EXPORT H265SEIAlphaChannelInfo {
 struct MEDIA_EXPORT H265SEIContentLightLevelInfo {
   uint16_t max_content_light_level;
   uint16_t max_picture_average_light_level;
+
+  void PopulateHDRMetadata(gfx::HDRMetadata& hdr_metadata) const;
 };
 
 struct MEDIA_EXPORT H265SEIMasteringDisplayInfo {
@@ -428,6 +448,9 @@ struct MEDIA_EXPORT H265SEIMasteringDisplayInfo {
   uint16_t white_points[2];
   uint32_t max_luminance;
   uint32_t min_luminance;
+
+  void PopulateColorVolumeMetadata(
+      gfx::ColorVolumeMetadata& color_volume_metadata) const;
 };
 
 struct MEDIA_EXPORT H265SEIMessage {
@@ -448,6 +471,13 @@ struct MEDIA_EXPORT H265SEIMessage {
     H265SEIContentLightLevelInfo content_light_level_info;
     H265SEIMasteringDisplayInfo mastering_display_info;
   };
+};
+
+struct MEDIA_EXPORT H265SEI {
+  H265SEI();
+  ~H265SEI();
+
+  std::vector<H265SEIMessage> msgs;
 };
 
 // Class to parse an Annex-B H.265 stream.
@@ -494,19 +524,24 @@ class MEDIA_EXPORT H265Parser : public H265NaluParser {
                           H265SliceHeader* shdr,
                           H265SliceHeader* prior_shdr);
 
-  // Parse a SEI message, returning it in |*sei_msg|, provided and managed
-  // by the caller.
-  Result ParseSEI(H265SEIMessage* sei_msg);
+  // Parse a slice header and return the associated picture parameter set ID.
+  Result ParseSliceHeaderForPictureParameterSets(const H265NALU& nalu,
+                                                 int* pps_id);
+
+  // Parse a SEI, returning it in |*sei|, provided and managed by the caller.
+  Result ParseSEI(H265SEI* sei);
 
   static VideoCodecProfile ProfileIDCToVideoCodecProfile(int profile_idc);
 
  private:
   // Exp-Golomb code parsing as specified in chapter 9.2 of the spec.
-  // Read one unsigned exp-Golomb code from the stream and return in |*val|.
-  Result ReadUE(int* val);
+  // Read one unsigned exp-Golomb code from the stream and return in |*val|
+  // with total bits read return in |*num_bits_read|.
+  Result ReadUE(int* val, int* num_bits_read);
 
-  // Read one signed exp-Golomb code from the stream and return in |*val|.
-  Result ReadSE(int* val);
+  // Read one signed exp-Golomb code from the stream and return in |*val|
+  // with total bits read return in |*num_bits_read|.
+  Result ReadSE(int* val, int* num_bits_read);
 
   Result ParseProfileTierLevel(bool profile_present,
                                int max_num_sub_layers_minus1,

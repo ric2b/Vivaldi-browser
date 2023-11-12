@@ -17,6 +17,14 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ui/gfx/ios/uikit_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_constants+vivaldi.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -48,6 +56,13 @@ const CGFloat kToolsMenuOffset = -7;
 @property(nonatomic, strong, readwrite) ToolbarTabGridButton* tabGridButton;
 // Button to create a new tab, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarButton* openNewTabButton;
+
+// Vivaldi
+// Button to display the panels.
+@property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
+// Search button on the new tab page.
+@property(nonatomic, strong, readwrite) ToolbarButton* searchButton;
+// End Vivaldi
 
 @end
 
@@ -114,9 +129,24 @@ const CGFloat kToolsMenuOffset = -7;
   self.tabGridButton = [self.buttonFactory tabGridButton];
   self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
 
+  // Vivaldi
+  self.panelButton = [self.buttonFactory panelButton];
+  self.searchButton = [self.buttonFactory vivaldiSearchButton];
+  // End Vivaldi
+
   // Move the tools menu button such as it looks visually balanced with the
   // button on the other side of the toolbar.
   NSInteger textDirection = base::i18n::IsRTL() ? -1 : 1;
+
+  if (IsVivaldiRunning()) {
+    self.allButtons = @[
+      self.panelButton,
+      self.backButton,
+      self.openNewTabButton,
+      self.forwardButton,
+      self.tabGridButton
+    ];
+  } else {
   self.toolsMenuButton.transform =
       CGAffineTransformMakeTranslation(textDirection * kToolsMenuOffset, 0);
 
@@ -124,6 +154,7 @@ const CGFloat kToolsMenuOffset = -7;
     self.backButton, self.forwardButton, self.openNewTabButton,
     self.tabGridButton, self.toolsMenuButton
   ];
+  } // End Vivaldi
 
   self.separator = [[UIView alloc] init];
   self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
@@ -138,6 +169,23 @@ const CGFloat kToolsMenuOffset = -7;
 
   id<LayoutGuideProvider> safeArea = self.safeAreaLayoutGuide;
 
+  if (IsVivaldiRunning()) {
+    [self.stackView anchorTop:self.topAnchor
+                      leading:self.safeLeftAnchor
+                       bottom:nil
+                     trailing:self.safeRightAnchor
+                      padding:UIEdgeInsetsMake(vSecondaryToolbarTopPadding,
+                                               kAdaptiveToolbarMargin,
+                                               0,
+                                               kAdaptiveToolbarMargin)];
+    [self.separator
+      anchorTop:nil
+        leading:self.leadingAnchor
+         bottom:self.topAnchor
+       trailing:self.trailingAnchor
+           size:CGSizeMake(0,
+                     ui::AlignValueToUpperPixel(kToolbarSeparatorHeight))];
+  } else {
   [NSLayoutConstraint activateConstraints:@[
     [self.stackView.leadingAnchor
         constraintEqualToAnchor:safeArea.leadingAnchor
@@ -156,6 +204,8 @@ const CGFloat kToolsMenuOffset = -7;
         constraintEqualToConstant:ui::AlignValueToUpperPixel(
                                       kToolbarSeparatorHeight)],
   ]];
+  } // End Vivaldi
+
 }
 
 #pragma mark - AdaptiveToolbarView
@@ -184,6 +234,44 @@ const CGFloat kToolsMenuOffset = -7;
 
 - (CGFloat)collapsedToolbarHeight {
   return 0.0;
+}
+
+#pragma mark: - Vivaldi
+- (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
+                  desktopTabEnabled:(BOOL)desktopTabEnabled {
+  if (desktopTabEnabled || isNewTabPage) {
+    self.allButtons = @[
+      self.panelButton,
+      self.backButton,
+      self.searchButton,
+      self.forwardButton,
+      self.tabGridButton
+    ];
+  } else {
+    self.allButtons = @[
+      self.panelButton,
+      self.backButton,
+      self.openNewTabButton,
+      self.forwardButton,
+      self.tabGridButton
+    ];
+  }
+
+  [self.stackView removeFromSuperview];
+
+  self.stackView =
+      [[UIStackView alloc] initWithArrangedSubviews:self.allButtons];
+  self.stackView.distribution = UIStackViewDistributionEqualSpacing;
+  [self addSubview:self.stackView];
+
+  [self.stackView anchorTop:self.topAnchor
+                    leading:self.safeLeftAnchor
+                     bottom:nil
+                   trailing:self.safeRightAnchor
+                    padding:UIEdgeInsetsMake(vSecondaryToolbarTopPadding,
+                                             kAdaptiveToolbarMargin,
+                                             0,
+                                             kAdaptiveToolbarMargin)];
 }
 
 @end

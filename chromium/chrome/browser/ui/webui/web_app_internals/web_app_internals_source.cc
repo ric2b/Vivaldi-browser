@@ -311,8 +311,8 @@ void BuildResponse(Profile* profile,
 
 void ConvertValueToJsonData(content::URLDataSource::GotDataCallback callback,
                             base::Value value) {
-  std::string data = value.DebugString();
-  std::move(callback).Run(base::RefCountedString::TakeString(&data));
+  std::move(callback).Run(
+      base::MakeRefCounted<base::RefCountedString>(value.DebugString()));
 }
 
 }  // namespace
@@ -335,7 +335,6 @@ void WebAppInternalsSource::BuildWebAppInternalsJson(
 #if BUILDFLAG(IS_MAC)
   root.Append(BuildAppShimRegistryLocalStorageJson());
 #endif
-  root.Append(BuildInstallProcessErrorLogJson(*provider));
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
       base::BindOnce(&BuildWebAppDiskStateJson,

@@ -17,7 +17,7 @@ bool PathProvider(int key, base::FilePath* result) {
     case DIR_VIVALDI_TEST_DATA:
       {
         // PathExists() triggers IO restriction.
-        base::ThreadRestrictions::ScopedAllowIO allow_io;
+        base::VivaldiScopedAllowBlocking allow_blocking;
 
         if (!PathService::Get(base::DIR_SOURCE_ROOT, result))
           return false;

@@ -19,26 +19,35 @@ NSString* const kCRUTicketTagKey = @"KSChannelID";
 
 + (nullable NSDictionary<NSString*, KSTicket*>*)readStoreWithPath:
     (nonnull NSString*)path {
-  if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+  if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
     VLOG(0) << "Ticket store does not exist at "
             << base::SysNSStringToUTF8(path);
     return [NSDictionary dictionary];
   }
-  NSError* readError = nil;
+
+  NSError* error = nil;
   NSData* storeData = [NSData dataWithContentsOfFile:path
                                              options:0  // Use normal IO
-                                               error:&readError];
+                                               error:&error];
   if (!storeData) {
     VLOG(0) << "Failed to decode ticket store at "
-            << base::SysNSStringToUTF8(path) << ": " << readError;
+            << base::SysNSStringToUTF8(path) << ": " << error;
     return nil;
   }
-  if (![storeData length])
+  if (!storeData.length) {
     return [NSDictionary dictionary];
+  }
+
   NSDictionary* store = nil;
   @try {  // Unarchiver can throw
     NSKeyedUnarchiver* unpacker =
-        [[NSKeyedUnarchiver alloc] initForReadingWithData:storeData];
+        [[[NSKeyedUnarchiver alloc] initForReadingFromData:storeData
+                                                     error:&error] autorelease];
+    if (!unpacker) {
+      VLOG(0) << base::SysNSStringToUTF8(
+          [NSString stringWithFormat:@"Ticket error %@", error]);
+      return nil;
+    }
     unpacker.requiresSecureCoding = YES;
     NSSet* classes =
         [NSSet setWithObjects:[NSDictionary class], [KSTicket class],
@@ -46,6 +55,7 @@ NSString* const kCRUTicketTagKey = @"KSChannelID";
                               [NSURL class], nil];
     store = [unpacker decodeObjectOfClasses:classes
                                      forKey:NSKeyedArchiveRootObjectKey];
+    [unpacker finishDecoding];
   } @catch (id e) {
     VLOG(0) << base::SysNSStringToUTF8(
         [NSString stringWithFormat:@"Ticket exception %@", e]);
@@ -200,25 +210,28 @@ NSString* const kKSTicketCohortNameKey = @"CohortName";
   return self;
 }
 
-- (instancetype)initWithAppState:
-    (const updater::UpdateService::AppState&)state {
+- (instancetype)initWithAppId:(NSString*)appId
+                      version:(NSString*)version
+                          ecp:(const base::FilePath&)ecp
+                          tag:(NSString*)tag
+                    brandCode:(NSString*)brandCode
+                    brandPath:(const base::FilePath&)brandPath {
   if ((self = [super init])) {
-    productID_ = [base::SysUTF8ToNSString(state.app_id) retain];
-    version_ = [base::SysUTF8ToNSString(state.version.GetString()) retain];
-    if (!state.ecp.empty()) {
-      existenceChecker_ =
-          [[KSPathExistenceChecker alloc] initWithFilePath:state.ecp];
+    productID_ = [appId retain];
+    version_ = [version retain];
+    if (!ecp.empty()) {
+      existenceChecker_ = [[KSPathExistenceChecker alloc] initWithFilePath:ecp];
 
-      tagPath_ = [[NSString
-          stringWithFormat:@"%@/Contents/Info.plist",
-                           base::mac::FilePathToNSString(state.ecp)] retain];
+      tagPath_ = [[NSString stringWithFormat:@"%@/Contents/Info.plist",
+                                             base::mac::FilePathToNSString(ecp)]
+          retain];
       tagKey_ = [kCRUTicketTagKey retain];
     }
-    tag_ = [base::SysUTF8ToNSString(state.ap) retain];
+    tag_ = [tag retain];
 
-    brandCode_ = [base::SysUTF8ToNSString(state.brand_code) retain];
-    if (!state.brand_path.empty()) {
-      brandPath_ = [base::mac::FilePathToNSString(state.brand_path) retain];
+    brandCode_ = [brandCode retain];
+    if (!brandPath.empty()) {
+      brandPath_ = [base::mac::FilePathToNSString(brandPath) retain];
       brandKey_ = [kCRUTicketBrandKey retain];
     }
     serverURL_ = [[NSURL

@@ -14,8 +14,8 @@
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -194,7 +194,7 @@ bool MediaRouterIntegrationBrowserTest::ConditionalWait(
       return true;
 
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), interval);
     run_loop.Run();
   } while (timer.Elapsed() < timeout);
@@ -204,7 +204,7 @@ bool MediaRouterIntegrationBrowserTest::ConditionalWait(
 
 void MediaRouterIntegrationBrowserTest::Wait(base::TimeDelta timeout) {
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), timeout);
   run_loop.Run();
 }
@@ -214,12 +214,13 @@ void MediaRouterIntegrationBrowserTest::WaitUntilNoRoutes(
   if (!test_provider_->HasRoutes())
     return;
 
-  // FIXME: There can't be a good reason to use the observer API to check for
-  // routes asynchronously, which is fragile.  However, some browser tests rely
-  // on this behavior.  Either add a callback parameter to TerminateRoute, or
-  // add pass callback to the TestProvider to run when all routes are gone.
+  // TODO(crbug.com/1374499): There can't be a good reason to use the observer
+  // API to check for routes asynchronously, which is fragile.  However, some
+  // browser tests rely on this behavior.  Either add a callback parameter to
+  // TerminateRoute, or add pass callback to the TestProvider to run when all
+  // routes are gone.
   base::RunLoop run_loop;
-  NoRoutesObserver no_routes_observer(
+  auto no_routes_observer = std::make_unique<NoRoutesObserver>(
       MediaRouterFactory::GetApiForBrowserContext(
           web_contents->GetBrowserContext()),
       run_loop.QuitClosure());

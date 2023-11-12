@@ -38,11 +38,13 @@
 
 #include "base/callback.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/tiles/raster_dark_mode_filter.h"
 #include "cc/trees/raster_context_provider_wrapper.h"
+#include "components/attribution_reporting/os_support.mojom-shared.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_latency.h"
@@ -50,7 +52,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
-#include "third_party/blink/public/mojom/loader/code_cache.mojom-forward.h"
 #include "third_party/blink/public/platform/audio/web_audio_device_source_type.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
@@ -343,9 +344,16 @@ class BLINK_PLATFORM_EXPORT Platform {
   // once CreateAndSetCompositorThread() is called.
   scoped_refptr<base::SingleThreadTaskRunner> CompositorThreadTaskRunner();
 
+  // Returns the video frame compositor thread task runner. This may
+  // conditionally be the same as the compositor thread task runner.
+  virtual scoped_refptr<base::SingleThreadTaskRunner>
+  VideoFrameCompositorTaskRunner() {
+    return CompositorThreadTaskRunner();
+  }
+
   // Returns the task runner of the media thread.
   // This method should only be called on the main thread, or it crashes.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> MediaThreadTaskRunner() {
+  virtual scoped_refptr<base::SequencedTaskRunner> MediaThreadTaskRunner() {
     return nullptr;
   }
 
@@ -402,6 +410,14 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual base::PlatformThreadId GetIOThreadId() const {
     return base::kInvalidThreadId;
+  }
+
+  // Returns the sequenced task runner used to funnel video frames from
+  // MediaStreamVideoSource. It may conditionally be the same as the result
+  // from GetIOTaskRunner().
+  virtual scoped_refptr<base::SequencedTaskRunner>
+  GetMediaStreamVideoSourceVideoTaskRunner() const {
+    return GetIOTaskRunner();
   }
 
   // Returns an interface to run nested message loop. Used for debugging.
@@ -771,6 +787,16 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual void AppendContentSecurityPolicy(
       const WebURL& url,
       blink::WebVector<blink::WebContentSecurityPolicyHeader>* csp) {}
+
+  // Attribution Reporting API ------------------------------------
+
+  // Returns whether OS-level support is enabled for Attribution Reporting API.
+  // See
+  // https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md.
+  virtual attribution_reporting::mojom::OsSupport
+  GetOsSupportForAttributionReporting() {
+    return attribution_reporting::mojom::OsSupport::kDisabled;
+  }
 
  private:
   static void InitializeMainThreadCommon(

@@ -187,9 +187,11 @@ void WebViewAutofillClientIOS::ShowAutofillSettings(
 
 void WebViewAutofillClientIOS::ShowUnmaskPrompt(
     const CreditCard& card,
-    UnmaskCardReason reason,
+    const CardUnmaskPromptOptions& card_unmask_prompt_options,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
-  [bridge_ showUnmaskPromptForCard:card reason:reason delegate:delegate];
+  [bridge_ showUnmaskPromptForCard:card
+           cardUnmaskPromptOptions:card_unmask_prompt_options
+                          delegate:delegate];
 }
 
 void WebViewAutofillClientIOS::OnUnmaskVerificationResult(
@@ -265,16 +267,6 @@ bool WebViewAutofillClientIOS::IsFastCheckoutTriggerForm(
   return false;
 }
 
-bool WebViewAutofillClientIOS::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-  return false;
-}
-
-bool WebViewAutofillClientIOS::
-    FastCheckoutClientSupportsConsentlessExecution() {
-  return false;
-}
-
 bool WebViewAutofillClientIOS::ShowFastCheckout(
     base::WeakPtr<FastCheckoutDelegate> delegate) {
   NOTREACHED();
@@ -290,7 +282,8 @@ bool WebViewAutofillClientIOS::IsTouchToFillCreditCardSupported() {
 }
 
 bool WebViewAutofillClientIOS::ShowTouchToFillCreditCard(
-    base::WeakPtr<TouchToFillDelegate> delegate) {
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const autofill::CreditCard* const> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -337,7 +330,7 @@ void WebViewAutofillClientIOS::HideAutofillPopup(PopupHidingReason reason) {
   [bridge_ hideAutofillPopup];
 }
 
-bool WebViewAutofillClientIOS::IsAutocompleteEnabled() {
+bool WebViewAutofillClientIOS::IsAutocompleteEnabled() const {
   return false;
 }
 
@@ -383,6 +376,17 @@ void WebViewAutofillClientIOS::OpenPromoCodeOfferDetailsURL(const GURL& url) {
       /*is_renderer_initiated=*/false));
 }
 
+autofill::FormInteractionsFlowId
+WebViewAutofillClientIOS::GetCurrentFormInteractionsFlowId() {
+  // Currently not in use here. See `ChromeAutofillClient` for a proper
+  // implementation.
+  return {};
+}
+
+bool WebViewAutofillClientIOS::IsLastQueriedField(FieldGlobalId field_id) {
+  return [bridge_ isLastQueriedField:field_id];
+}
+
 void WebViewAutofillClientIOS::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   [bridge_ loadRiskData:std::move(callback)];
@@ -390,10 +394,6 @@ void WebViewAutofillClientIOS::LoadRiskData(
 
 LogManager* WebViewAutofillClientIOS::GetLogManager() const {
   return log_manager_.get();
-}
-
-bool WebViewAutofillClientIOS::IsQueryIDRelevant(int query_id) {
-  return [bridge_ isQueryIDRelevant:query_id];
 }
 
 }  // namespace autofill

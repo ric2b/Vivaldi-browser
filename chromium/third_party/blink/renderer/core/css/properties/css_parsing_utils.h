@@ -68,7 +68,7 @@ using ConsumeAnimationItemValue = CSSValue* (*)(CSSPropertyID,
                                                 bool use_legacy_parsing);
 using IsPositionKeyword = bool (*)(CSSValueID);
 
-constexpr size_t kMaxNumAnimationLonghands = 9;
+constexpr size_t kMaxNumAnimationLonghands = 10;
 
 void Complete4Sides(CSSValue* side[4]);
 
@@ -155,8 +155,6 @@ CSSIdentifierValue* ConsumeIdent(CSSParserTokenRange&);
 
 CSSCustomIdentValue* ConsumeCustomIdent(CSSParserTokenRange&,
                                         const CSSParserContext&);
-CSSCustomIdentValue* ConsumeCustomIdentConservatively(CSSParserTokenRange&,
-                                                      const CSSParserContext&);
 CSSCustomIdentValue* ConsumeDashedIdent(CSSParserTokenRange&,
                                         const CSSParserContext&);
 CSSStringValue* ConsumeString(CSSParserTokenRange&);
@@ -309,12 +307,20 @@ CSSValue* ConsumeAnimationIterationCount(CSSParserTokenRange&,
 CSSValue* ConsumeAnimationName(CSSParserTokenRange&,
                                const CSSParserContext&,
                                bool allow_quoted_name);
-CSSValue* ConsumeScroller(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeScrollFunction(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeViewFunction(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeAnimationTimeline(CSSParserTokenRange&,
                                    const CSSParserContext&);
 CSSValue* ConsumeAnimationTimingFunction(CSSParserTokenRange&,
                                          const CSSParserContext&);
+CSSValue* ConsumeAnimationDuration(CSSParserTokenRange&,
+                                   const CSSParserContext&);
+// https://drafts.csswg.org/scroll-animations-1/#typedef-timeline-range-name
+CSSValue* ConsumeTimelineRangeName(CSSParserTokenRange&);
+CSSValue* ConsumeTimelineRangeNameAndPercent(CSSParserTokenRange&,
+                                             const CSSParserContext&);
+CSSValue* ConsumeAnimationDelay(CSSParserTokenRange&, const CSSParserContext&);
+
 bool ConsumeAnimationShorthand(
     const StylePropertyShorthand&,
     HeapVector<Member<CSSValueList>, kMaxNumAnimationLonghands>&,

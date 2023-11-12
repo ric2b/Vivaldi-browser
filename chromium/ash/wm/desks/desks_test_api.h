@@ -10,6 +10,10 @@
 #include "base/time/clock.h"
 #include "third_party/skia/include/core/SkColor.h"
 
+namespace aura {
+class Window;
+}  // namespace aura
+
 namespace views {
 class LabelButton;
 class ScrollView;
@@ -17,6 +21,7 @@ class View;
 }  // namespace views
 
 namespace ui {
+class LayerTreeOwner;
 class SimpleMenuModel;
 }  // namespace ui
 
@@ -34,6 +39,9 @@ class ScrollArrowButton;
 // PersistentDesksBarView.
 class DesksTestApi {
  public:
+  // Don't instantiate, just use the static helpers below.
+  DesksTestApi() = delete;
+
   // Getters for elements inside the desks.
   static ScrollArrowButton* GetDesksBarLeftScrollButton();
   static ScrollArrowButton* GetDesksBarRightScrollButton();
@@ -48,6 +56,9 @@ class DesksTestApi {
   static views::LabelButton* GetCloseAllUndoToastDismissButton();
   static const ui::SimpleMenuModel& GetContextMenuModelForDesk(int index);
   static views::View* GetHighlightOverlayForDeskPreview(int index);
+  static ui::LayerTreeOwner* GetMirroredContentsLayerTreeForRootAndDesk(
+      aura::Window* root,
+      Desk* desk);
   static bool HasVerticalDotsButton();
   static bool DesksControllerHasDesk(Desk* desk);
   static bool DesksControllerCanUndoDeskRemoval();
@@ -59,12 +70,6 @@ class DesksTestApi {
   // Resets `first_day_visited_` and `last_day_visited_` of `desk` for testing
   // to the current date.
   static void ResetDeskVisitedMetrics(Desk* desk);
-
- private:
-  DesksTestApi() = default;
-  DesksTestApi(const DesksTestApi&) = delete;
-  DesksTestApi& operator=(const DesksTestApi&) = delete;
-  ~DesksTestApi() = default;
 };
 
 }  // namespace ash

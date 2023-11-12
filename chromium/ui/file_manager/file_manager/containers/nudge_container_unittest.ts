@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {waitUntil} from '../common/js/test_error_reporting.js';
 import {XfNudge} from '../widgets/xf_nudge.js';
@@ -159,7 +159,7 @@ export async function testAriaDescribedByElementIsAdded() {
 
   assertNotEquals(describedByElement, null);
   assertEquals(
-      describedByElement!.innerText, nudgeInfo[NudgeType.TEST_NUDGE].content);
+      describedByElement!.innerText, nudgeInfo[NudgeType.TEST_NUDGE].content());
 }
 
 /**

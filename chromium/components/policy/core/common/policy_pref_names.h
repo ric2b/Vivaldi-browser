@@ -33,8 +33,6 @@ POLICY_EXPORT extern const char kUrlAllowlist[];
 POLICY_EXPORT extern const char kUserPolicyRefreshRate[];
 POLICY_EXPORT extern const char kIntensiveWakeUpThrottlingEnabled[];
 POLICY_EXPORT extern const char kUserAgentClientHintsGREASEUpdateEnabled[];
-POLICY_EXPORT extern const char kUrlParamFilterEnabled[];
-POLICY_EXPORT extern const char kSetTimeoutWithout1MsClampEnabled[];
 POLICY_EXPORT extern const char kUnthrottledNestedTimeoutEnabled[];
 #if BUILDFLAG(IS_ANDROID)
 POLICY_EXPORT extern const char kBackForwardCacheEnabled[];
@@ -47,6 +45,11 @@ POLICY_EXPORT extern const char kLastPolicyCheckTime[];
 POLICY_EXPORT extern const char kUserPolicyNotificationWasShown[];
 #endif
 POLICY_EXPORT extern const char kEventPathEnabled[];
+POLICY_EXPORT extern const char kOffsetParentNewSpecBehaviorEnabled[];
+POLICY_EXPORT extern const char kSendMouseEventsDisabledFormControlsEnabled[];
+POLICY_EXPORT extern const char kUseMojoVideoDecoderForPepperAllowed[];
+POLICY_EXPORT extern const char kPPAPISharedImagesSwapChainAllowed[];
+
 }  // namespace policy_prefs
 }  // namespace policy
 

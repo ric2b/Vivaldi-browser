@@ -537,7 +537,7 @@ HistoryPrivateMigrateOldTypedUrlFunction::Run() {
   }
 
   hs->AddPage(
-      GURL(params->url), base::Time::FromJsTime(params->time), nullptr, 0,
+      GURL(params->url), base::Time::FromJsTime(params->time), 0, 0,
       GURL(), history::RedirectList(),
       HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
           params->transition_type),

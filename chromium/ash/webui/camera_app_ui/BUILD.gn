@@ -38,6 +38,7 @@ static_library("camera_app_ui") {
     ":mojo_bindings_js",
     ":window_managemet",
     "//ash/public/cpp",
+    "//ash/webui/system_apps/public:system_web_app_config",
     "//ash/webui/web_applications",
     "//chromeos/utils",
     "//components/arc",
@@ -82,7 +83,6 @@ source_set("document_scanning") {
   public_deps = [ "//dbus" ]
 
   deps = [
-    "//ash/constants",
     "//base",
     "//chromeos/ash/components/dbus/dlcservice",
     "//chromeos/ash/components/dbus/dlcservice:dlcservice_proto",

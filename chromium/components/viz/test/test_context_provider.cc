@@ -158,6 +158,21 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
 }
 
 gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
+    SharedImageFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
+    uint32_t usage,
+    gfx::GpuMemoryBufferHandle buffer_handle) {
+  base::AutoLock locked(lock_);
+  auto mailbox = gpu::Mailbox::GenerateForSharedImage();
+  shared_images_.insert(mailbox);
+  most_recent_size_ = size;
+  return mailbox;
+}
+
+gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gfx::BufferPlane plane,
@@ -215,16 +230,11 @@ void TestSharedImageInterface::PresentSwapChain(
 
 #if BUILDFLAG(IS_FUCHSIA)
 void TestSharedImageInterface::RegisterSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id,
-    zx::channel token,
+    zx::eventpair service_handle,
+    zx::channel sysmem_token,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
-  NOTREACHED();
-}
-
-void TestSharedImageInterface::ReleaseSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id) {
   NOTREACHED();
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
@@ -292,7 +302,7 @@ scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker(
       /*support_locking=*/true);
 
   // Worker contexts are bound to the thread they are created on.
-  auto result = worker_context_provider->BindToCurrentThread();
+  auto result = worker_context_provider->BindToCurrentSequence();
   if (result != gpu::ContextResult::kSuccess)
     return nullptr;
   return worker_context_provider;
@@ -392,7 +402,7 @@ void TestContextProvider::Release() const {
   base::RefCountedThreadSafe<TestContextProvider>::Release();
 }
 
-gpu::ContextResult TestContextProvider::BindToCurrentThread() {
+gpu::ContextResult TestContextProvider::BindToCurrentSequence() {
   // This is called on the thread the context will be used.
   DCHECK(context_thread_checker_.CalledOnValidThread());
 

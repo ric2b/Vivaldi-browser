@@ -68,7 +68,15 @@ enum class TranslationStatus {
   kRevertedManualContextMenuTranslation = 17,
   kFailedWithNoErrorManualContextMenuTranslation = 18,
   kFailedWithErrorManualContextMenuTranslation = 19,
-  kMaxValue = kFailedWithErrorManualContextMenuTranslation,
+  kSuccessFromAutomaticTranslationToPredefinedTarget = 20,
+  kRevertedAutomaticTranslationToPredefinedTarget = 21,
+  kFailedWithNoErrorAutomaticTranslationToPredefinedTarget = 22,
+  kFailedWithErrorAutomaticTranslationToPredefinedTarget = 23,
+  kSuccessFromAutomaticTranslationByHref = 24,
+  kRevertedAutomaticTranslationByHref = 25,
+  kFailedWithNoErrorAutomaticTranslationByHref = 26,
+  kFailedWithErrorAutomaticTranslationByHref = 27,
+  kMaxValue = kFailedWithErrorAutomaticTranslationByHref,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -85,7 +93,9 @@ enum class TranslationType {
   kManualUiReTranslation = 6,
   kManualContextMenuInitialTranslation = 7,
   kManualContextMenuReTranslation = 8,
-  kMaxValue = kManualContextMenuReTranslation,
+  kAutomaticTranslationToPredefinedTarget = 9,
+  kAutomaticTranslationByHref = 10,
+  kMaxValue = kAutomaticTranslationByHref,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -161,7 +171,6 @@ class TranslateMetricsLogger {
   // highest priority trigger decision will be logged to UMA at the end of the
   // page load.
   virtual void LogTriggerDecision(TriggerDecision trigger_decision) = 0;
-  virtual void LogAutofillAssistantDeferredTriggerDecision() = 0;
 
   // Tracks the state of Translate over the course of the page load.
   virtual void LogInitialState() = 0;

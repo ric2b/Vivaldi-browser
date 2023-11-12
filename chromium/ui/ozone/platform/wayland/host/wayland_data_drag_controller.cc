@@ -11,7 +11,6 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/notreached.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -75,9 +74,13 @@ uint32_t DragOperationsToDndActions(int operations) {
   return dnd_actions;
 }
 
-const SkBitmap* GetDragImage(const OSExchangeData& data) {
-  const SkBitmap* icon_bitmap = data.provider().GetDragImage().bitmap();
+const SkBitmap* GetDragImage(const gfx::ImageSkia& image) {
+  const SkBitmap* icon_bitmap = image.bitmap();
   return icon_bitmap && !icon_bitmap->empty() ? icon_bitmap : nullptr;
+}
+
+const SkBitmap* GetDragImage(const OSExchangeData& data) {
+  return GetDragImage(data.provider().GetDragImage());
 }
 
 }  // namespace
@@ -90,7 +93,7 @@ WaylandDataDragController::WaylandDataDragController(
     : connection_(connection),
       data_device_manager_(data_device_manager),
       data_device_(data_device_manager->GetDevice()),
-      window_manager_(connection->wayland_window_manager()),
+      window_manager_(connection->window_manager()),
       pointer_delegate_(pointer_delegate),
       touch_delegate_(touch_delegate) {
   DCHECK(connection_);
@@ -121,7 +124,7 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
   // by the time "start drag" gets processed by Ozone/Wayland, the origin
   // pointer event (touch or mouse) has already been released. In this case,
   // make sure the flow bails earlier, otherwise the drag loop keeps running,
-  // causing hangs as observerd in crbug.com/1209269.
+  // causing hangs as observed in crbug.com/1209269.
   auto serial = GetAndValidateSerialForDrag(source);
   if (!serial.has_value()) {
     LOG(ERROR) << "Invalid state when trying to start drag. source=" << source;
@@ -140,7 +143,8 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
     icon_surface_ = std::make_unique<WaylandSurface>(connection_, nullptr);
     if (icon_surface_->Initialize()) {
       // Corresponds to actual scale factor of the origin surface.
-      icon_surface_->set_surface_buffer_scale(origin_window->window_scale());
+      icon_surface_buffer_scale_ = origin_window->window_scale();
+      icon_surface_->set_surface_buffer_scale(icon_surface_buffer_scale_);
       // Icon surface do not need input.
       const gfx::Rect empty_region_px;
       icon_surface_->set_input_region(&empty_region_px);
@@ -153,6 +157,7 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
     } else {
       LOG(ERROR) << "Failed to create drag icon surface.";
       icon_surface_.reset();
+      icon_surface_buffer_scale_ = 1.0f;
     }
   }
 
@@ -174,6 +179,24 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
   nested_dispatcher_ =
       PlatformEventSource::GetInstance()->OverrideDispatcher(this);
   return true;
+}
+
+void WaylandDataDragController::UpdateDragImage(const gfx::ImageSkia& image,
+                                                const gfx::Vector2d& offset) {
+  icon_bitmap_ = GetDragImage(image);
+
+  if (icon_surface_ && window_) {
+    icon_surface_buffer_scale_ = window_->window_scale();
+    icon_surface_->set_surface_buffer_scale(icon_surface_buffer_scale_);
+    icon_surface_->ApplyPendingState();
+
+    icon_offset_ = gfx::ScaleToRoundedPoint({offset.x(), offset.y()},
+                                            1.0f / window_->window_scale());
+  } else {
+    icon_offset_ = {offset.x(), offset.y()};
+  }
+
+  DrawIconInternal();
 }
 
 bool WaylandDataDragController::ShouldReleaseCaptureForDrag(
@@ -221,25 +244,45 @@ void WaylandDataDragController::OnDragSurfaceFrame(void* data,
 }
 
 void WaylandDataDragController::DrawIconInternal() {
+  // If there was a drag icon before but now there isn't, attach a null buffer
+  // to the icon surface to hide it.
+  if (icon_surface_ && !icon_bitmap_) {
+    auto* const surface = icon_surface_->surface();
+    wl_surface_attach(surface, nullptr, 0, 0);
+    wl_surface_commit(surface);
+  }
+
   if (!icon_surface_ || !icon_bitmap_)
     return;
 
   DCHECK(!icon_bitmap_->empty());
-  gfx::Size size(icon_bitmap_->width(), icon_bitmap_->height());
+  // The protocol expects the attached buffer to have a pixel size that is a
+  // multiple of the surface's scale factor. Some compositors (eg. Wlroots) will
+  // refuse to attach the buffer if this condition is not met.
+  const gfx::Size size_dip =
+      gfx::ScaleToCeiledSize({icon_bitmap_->width(), icon_bitmap_->height()},
+                             1.0f / icon_surface_buffer_scale_);
+  const gfx::Size size_px =
+      gfx::ScaleToCeiledSize(size_dip, icon_surface_buffer_scale_);
 
   icon_buffer_ = std::make_unique<WaylandShmBuffer>(
-      connection_->wayland_buffer_factory(), size);
+      connection_->buffer_factory(), size_px);
   if (!icon_buffer_->IsValid()) {
     LOG(ERROR) << "Failed to create drag icon buffer.";
     return;
   }
 
-  DVLOG(3) << "Drawing drag icon. size=" << size.ToString();
+  DVLOG(3) << "Drawing drag icon. size_px=" << size_px.ToString();
   wl::DrawBitmap(*icon_bitmap_, icon_buffer_.get());
   auto* const surface = icon_surface_->surface();
-  wl_surface_attach(surface, icon_buffer_->get(), icon_offset_.x(),
-                    icon_offset_.y());
-  wl_surface_damage(surface, 0, 0, size.width(), size.height());
+  if (wl::get_version_of_object(surface) < WL_SURFACE_OFFSET_SINCE_VERSION) {
+    wl_surface_attach(surface, icon_buffer_->get(), icon_offset_.x(),
+                      icon_offset_.y());
+  } else {
+    wl_surface_attach(surface, icon_buffer_->get(), 0, 0);
+    wl_surface_offset(surface, icon_offset_.x(), icon_offset_.y());
+  }
+  wl_surface_damage(surface, 0, 0, size_px.width(), size_px.height());
   wl_surface_commit(surface);
 }
 
@@ -262,6 +305,8 @@ void WaylandDataDragController::OnDragEnter(WaylandWindow* window,
     data_offer_->Accept(serial, mime);
   }
 
+  // Update the focused window to ensure the window under the cursor receives
+  // drag motion events.
   if (pointer_grabber_for_window_drag_) {
     DCHECK(drag_source_.has_value());
     if (*drag_source_ == DragSource::kMouse) {
@@ -286,7 +331,7 @@ void WaylandDataDragController::OnDragEnter(WaylandWindow* window,
                              offered_exchange_data_provider_->Clone()));
   } else {
     // Otherwise, we are about to accept data dragged from another application.
-    // Reading the data may take some time so set |state_| to |kTrasferring|,
+    // Reading the data may take some time so set |state_| to |kTransferring|,
     // which will defer sending OnDragEnter to the client until the data
     // is ready.
     state_ = State::kTransferring;
@@ -370,6 +415,7 @@ void WaylandDataDragController::OnDataSourceFinish(bool completed) {
   data_offer_.reset();
   icon_buffer_.reset();
   icon_surface_.reset();
+  icon_surface_buffer_scale_ = 1.0f;
   icon_bitmap_ = nullptr;
   icon_frame_callback_.reset();
   offered_exchange_data_provider_.reset();
@@ -457,7 +503,7 @@ void WaylandDataDragController::OnDataTransferFinished(
       data_offer_.reset();
     }
     offered_exchange_data_provider_.reset();
-    data_device_->ResetDragDelegate();
+    data_device_->ResetDragDelegateIfNotDragSource();
     is_leave_pending_ = false;
     return;
   }
@@ -486,12 +532,17 @@ std::string WaylandDataDragController::GetNextUnprocessedMimeType() {
 void WaylandDataDragController::PropagateOnDragEnter(
     const gfx::PointF& location,
     std::unique_ptr<OSExchangeData> data) {
-  DCHECK(window_);
-  {
-    window_->OnDragEnter(
-        location, std::move(data),
-        DndActionsToDragOperations(data_offer_->source_actions()));
+  // |data_offer_| may have already been destroyed at this point if, for
+  // example, the drop event comes in while the data fetching was ongoing and no
+  // subsequent 'leave' is received, so just early-out in this case.
+  if (!data_offer_) {
+    return;
   }
+
+  DCHECK(window_);
+  window_->OnDragEnter(
+      location, std::move(data),
+      DndActionsToDragOperations(data_offer_->source_actions()));
   OnDragMotion(location);
 }
 
@@ -546,7 +597,8 @@ void WaylandDataDragController::DispatchPointerRelease() {
   DCHECK(pointer_grabber_for_window_drag_);
   pointer_delegate_->OnPointerButtonEvent(
       ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, pointer_grabber_for_window_drag_,
-      wl::EventDispatchPolicy::kImmediate);
+      wl::EventDispatchPolicy::kImmediate,
+      /*allow_release_of_unpressed_button=*/true);
   pointer_grabber_for_window_drag_ = nullptr;
 }
 

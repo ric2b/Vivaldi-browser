@@ -16,17 +16,17 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
+#include "content/browser/renderer_host/navigation_type.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/javascript_dialog_manager.h"
-#include "content/public/browser/navigation_type.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -686,6 +686,27 @@ class InactiveRenderFrameHostDeletionObserver : public WebContentsObserver {
   std::unique_ptr<base::RunLoop> loop_;
   std::set<RenderFrameHost*> inactive_rfhs_;
 };
+
+class TestNavigationObserverInternal : public TestNavigationObserver {
+ public:
+  using TestNavigationObserver::TestNavigationObserver;
+  ~TestNavigationObserverInternal() override = default;
+
+  // TestNavigationObserver:
+  void OnDidFinishNavigation(NavigationHandle* navigation_handle) override;
+  // Return the NavigationType of the last navigation.
+  NavigationType last_navigation_type() const { return last_navigation_type_; }
+
+ private:
+  NavigationType last_navigation_type_ = NAVIGATION_TYPE_UNKNOWN;
+};
+
+// Return the descendant of `rfh` found by selecting children according to
+// `descendant_indices`. E.g. `DescendantRenderFrameHostImplAt(rfh, {0, 1}) will
+// return the child at index 1 of the child at index 0 of `rfh`.
+RenderFrameHostImpl* DescendantRenderFrameHostImplAt(
+    const ToRenderFrameHost& adapter,
+    std::vector<size_t> descendant_indices);
 
 }  // namespace content
 

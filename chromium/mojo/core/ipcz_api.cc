@@ -39,11 +39,18 @@ IpczHandle GetIpczNode() {
 
 bool InitializeIpczNodeForProcess(const IpczNodeOptions& options) {
   g_options = options;
-  IpczCreateNodeFlags flags =
+  const IpczCreateNodeFlags flags =
       options.is_broker ? IPCZ_CREATE_NODE_AS_BROKER : IPCZ_NO_FLAGS;
+  const IpczCreateNodeOptions create_options = {
+      .size = sizeof(create_options),
+
+      // TODO(https://crbug.com/1380476): Enable parcel data allocation capacity
+      // to be expanded.
+      .disable_parcel_memory_expansion = true,
+  };
   IpczResult result =
       GetIpczAPI().CreateNode(&ipcz_driver::kDriver, IPCZ_INVALID_DRIVER_HANDLE,
-                              flags, nullptr, &g_node);
+                              flags, &create_options, &g_node);
   return result == IPCZ_RESULT_OK;
 }
 

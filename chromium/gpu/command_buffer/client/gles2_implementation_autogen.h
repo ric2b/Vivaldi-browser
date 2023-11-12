@@ -1113,8 +1113,6 @@ void SetActiveURLCHROMIUM(const char* url) override;
 
 void ContextVisibilityHintCHROMIUM(GLboolean visibility) override;
 
-void CoverageModulationCHROMIUM(GLenum components) override;
-
 GLenum GetGraphicsResetStatusKHR() override;
 
 void BlendBarrierKHR() override;
@@ -1188,5 +1186,7 @@ void ColorMaskiOES(GLuint buf,
                    GLboolean a) override;
 
 GLboolean IsEnablediOES(GLenum target, GLuint index) override;
+
+void ProvokingVertexANGLE(GLenum provokeMode) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

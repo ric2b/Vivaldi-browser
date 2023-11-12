@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CurrentWallpaper, DefaultImageSymbol, FetchGooglePhotosAlbumsResponse, FetchGooglePhotosPhotosResponse, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {CurrentWallpaper, DefaultImageSymbol, FetchGooglePhotosAlbumsResponse, FetchGooglePhotosPhotosResponse, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, SetDailyRefreshResponse, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
-export class TestWallpaperProvider extends
-    TestBrowserProxy<WallpaperProviderInterface> implements
-        WallpaperProviderInterface {
+export class TestWallpaperProvider extends TestBrowserProxy implements
+    WallpaperProviderInterface {
   constructor() {
     super([
       'makeTransparent',
@@ -104,7 +103,6 @@ export class TestWallpaperProvider extends
       layout: WallpaperLayout.kCenter,
       key: '1',
       type: WallpaperType.kOnline,
-      url: {url: 'data:image/png;base64somedataurl/0'},
     };
   }
 
@@ -127,6 +125,10 @@ export class TestWallpaperProvider extends
   currentWallpaper: CurrentWallpaper;
   selectWallpaperResponse = true;
   selectGooglePhotosPhotoResponse = true;
+  selectGooglePhotosAlbumResponse: SetDailyRefreshResponse = {
+    success: true,
+    forceRefresh: true,
+  };
   selectDefaultImageResponse = true;
   selectLocalImageResponse = true;
   updateDailyRefreshWallpaperResponse = true;
@@ -239,7 +241,7 @@ export class TestWallpaperProvider extends
 
   selectGooglePhotosAlbum(id: string) {
     this.methodCalled('selectGooglePhotosAlbum', id);
-    return Promise.resolve({success: false});
+    return Promise.resolve({response: this.selectGooglePhotosAlbumResponse});
   }
 
   getGooglePhotosDailyRefreshAlbumId() {
@@ -259,6 +261,10 @@ export class TestWallpaperProvider extends
 
   setDailyRefreshCollectionId(collectionId: string) {
     this.methodCalled('setDailyRefreshCollectionId', collectionId);
+    const response = new SetDailyRefreshResponse();
+    response.success = false;
+    response.forceRefresh = false;
+    return Promise.resolve({response});
   }
 
   getDailyRefreshCollectionId() {

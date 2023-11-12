@@ -5,12 +5,13 @@
 #include "cc/trees/image_animation_controller.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/gtest_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -76,8 +77,8 @@ class ImageAnimationControllerTest : public testing::Test,
                                      public ImageAnimationController::Client {
  public:
   void SetUp() override {
-    task_runner_ =
-        new DelayTrackingTaskRunner(base::ThreadTaskRunnerHandle::Get().get());
+    task_runner_ = new DelayTrackingTaskRunner(
+        base::SingleThreadTaskRunner::GetCurrentDefault().get());
     controller_ = std::make_unique<ImageAnimationController>(
         task_runner_.get(), this, GetEnableImageAnimationResync());
     controller_->set_now_callback_for_testing(base::BindRepeating(

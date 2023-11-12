@@ -18,6 +18,7 @@
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/runtime_feature_state/runtime_feature_state_document_data.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/content_navigation_policy.h"
@@ -56,7 +57,10 @@
 #include "net/test/url_request/url_request_failed_job.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
+#include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
+#include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_read_context.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
@@ -621,6 +625,141 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest, VerifyRedirect) {
     EXPECT_FALSE(observer.is_error());
     EXPECT_TRUE(observer.was_redirected());
   }
+}
+
+// Ensure that we can read and write to the browser process's copy of the blink
+// runtime-enabled features via NavigationRequest's method
+// GetMutableRuntimeFeatureStateContext() during commit. Then ensure that its
+// values are persisted to the RenderFrameHostImpl's read-only context.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       RuntimeFeatureStatePersisted) {
+  // Sets up the NavigationRequest where we can begin accessing the
+  // RuntimeFeatureStateContext class.
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  TestNavigationManager manager(shell()->web_contents(), url);
+
+  // Begin loading our url and wait for the request to start.
+  shell()->LoadURL(url);
+  EXPECT_TRUE(manager.WaitForRequestStart());
+
+  // Ensure we can get and set values in RuntimeFeatureStateContext.
+  blink::RuntimeFeatureStateContext& context =
+      NavigationRequest::From(manager.GetNavigationHandle())
+          ->GetMutableRuntimeFeatureStateContext();
+  bool is_test_feature_enabled(context.IsTestFeatureEnabled());
+  context.SetTestFeatureEnabled(!is_test_feature_enabled);
+  EXPECT_EQ(context.IsTestFeatureEnabled(), !is_test_feature_enabled);
+
+  // Check the override value map as well.
+  base::flat_map<::blink::mojom::RuntimeFeatureState, bool>
+      expected_feature_overrides = context.GetFeatureOverrides();
+  EXPECT_EQ(expected_feature_overrides
+                [blink::mojom::RuntimeFeatureState::kTestFeature],
+            !is_test_feature_enabled);
+
+  // Continue with the navigation until completion.
+  manager.WaitForNavigationFinished();
+  EXPECT_TRUE(manager.was_successful());
+
+  // Check that the changes were saved to the RenderFrameHost.
+  RuntimeFeatureStateDocumentData* document_data =
+      RuntimeFeatureStateDocumentData::GetForCurrentDocument(
+          shell()->web_contents()->GetPrimaryMainFrame());
+  EXPECT_TRUE(document_data);
+  blink::RuntimeFeatureStateReadContext read_context =
+      document_data->runtime_feature_read_context();
+  EXPECT_EQ(expected_feature_overrides, read_context.GetFeatureOverrides());
+}
+
+// Similar to RuntimeFeatureStatePersisted but ensures that even for
+// runtime-enabled feature values that are equivalent to the previous state.
+// This is important to persist as it helps the renderer determine force-enabled
+// and force-disabled values.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       RuntimeFeatureStatePersistedForSameValue) {
+  // Sets up the NavigationRequest where we can begin accessing the
+  // RuntimeFeatureStateContext class.
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  TestNavigationManager manager(shell()->web_contents(), url);
+
+  // Begin loading our url and wait for the request to start.
+  shell()->LoadURL(url);
+  EXPECT_TRUE(manager.WaitForRequestStart());
+
+  // Ensure we can set values in RuntimeFeatureStateContext that are
+  // equivalent to the feature's previous state.
+  blink::RuntimeFeatureStateContext& context =
+      NavigationRequest::From(manager.GetNavigationHandle())
+          ->GetMutableRuntimeFeatureStateContext();
+  bool is_test_feature_enabled(context.IsTestFeatureEnabled());
+  context.SetTestFeatureEnabled(is_test_feature_enabled);
+  EXPECT_EQ(context.IsTestFeatureEnabled(), is_test_feature_enabled);
+
+  // Check the override value map as well.
+  base::flat_map<::blink::mojom::RuntimeFeatureState, bool>
+      expected_feature_overrides = context.GetFeatureOverrides();
+  EXPECT_EQ(expected_feature_overrides
+                [blink::mojom::RuntimeFeatureState::kTestFeature],
+            is_test_feature_enabled);
+
+  // Continue with the navigation until completion.
+  manager.WaitForNavigationFinished();
+  EXPECT_TRUE(manager.was_successful());
+
+  // Check that the changes were saved to the RenderFrameHost's feature
+  // overrides.
+  RuntimeFeatureStateDocumentData* document_data =
+      RuntimeFeatureStateDocumentData::GetForCurrentDocument(
+          shell()->web_contents()->GetPrimaryMainFrame());
+  EXPECT_TRUE(document_data);
+  blink::RuntimeFeatureStateReadContext read_context =
+      document_data->runtime_feature_read_context();
+  EXPECT_EQ(expected_feature_overrides, read_context.GetFeatureOverrides());
+}
+
+// Similar to RuntimeFeatureStatePersisted but ensures that even for
+// runtime-enabled feature values are cleared across redirects.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       RuntimeFeatureStateClearOnRedirect) {
+  // Sets up the NavigationRequest where we can begin accessing the
+  // RuntimeFeatureStateContext class.
+  GURL redirect_url(
+      embedded_test_server()->GetURL("/cross-site/bar.com/title2.html"));
+  TestNavigationManager redirect_manager(shell()->web_contents(), redirect_url);
+  shell()->LoadURL(redirect_url);
+
+  EXPECT_TRUE(redirect_manager.WaitForRequestStart());
+
+  // Set a feature value we expect to be cleared upon redirect.
+  blink::RuntimeFeatureStateContext& context =
+      NavigationRequest::From(redirect_manager.GetNavigationHandle())
+          ->GetMutableRuntimeFeatureStateContext();
+  bool is_test_feature_enabled(context.IsTestFeatureEnabled());
+  context.SetTestFeatureEnabled(!is_test_feature_enabled);
+  EXPECT_FALSE(context.GetFeatureOverrides().empty());
+
+  redirect_manager.ResumeNavigation();
+  EXPECT_TRUE(redirect_manager.WaitForResponse());
+
+  // Ensure NavigationRequest's new RuntimeFeatureStateContext is clear
+  const blink::RuntimeFeatureStateContext& new_context =
+      NavigationRequest::From(redirect_manager.GetNavigationHandle())
+          ->GetRuntimeFeatureStateContext();
+  EXPECT_TRUE(new_context.GetFeatureOverrides().empty());
+
+  // Continue with the navigation until completion.
+  redirect_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(redirect_manager.was_successful());
+
+  // Ensure that the changes made to the features before redirect do not
+  // persist to the read context.
+  RuntimeFeatureStateDocumentData* document_data =
+      RuntimeFeatureStateDocumentData::GetForCurrentDocument(
+          shell()->web_contents()->GetPrimaryMainFrame());
+  EXPECT_TRUE(document_data);
+  blink::RuntimeFeatureStateReadContext read_context =
+      document_data->runtime_feature_read_context();
+  EXPECT_TRUE(read_context.GetFeatureOverrides().empty());
 }
 
 // Ensure that a certificate error results in a committed navigation with
@@ -3340,6 +3479,49 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
   SetBrowserClientForTesting(old_client);
 }
 
+// Check that a subframe can load an error page with an about:srcdoc URL, and
+// that the origin does not inherit the parent's origin (i.e., behaves like all
+// error pages) in this case.  In practice, this path may be taken by the heavy
+// ads intervention (for an example, see the
+// HeavyAdInterventionEnabled_ErrorPageLoaded test).
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       OriginForSrcdocErrorPageInSubframe) {
+  // Start on a page with a blank subframe.
+  GURL start_url =
+      embedded_test_server()->GetURL("a.test", "/page_with_blank_iframe.html");
+  EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+  // Do a srcdoc navigation in the subframe.
+  EXPECT_TRUE(
+      ExecJs(shell(), "document.querySelector('iframe').srcdoc='foo';"));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  RenderFrameHostImpl* subframe_rfh = root->child_at(0)->current_frame_host();
+  EXPECT_EQ(GURL("about:srcdoc"), subframe_rfh->GetLastCommittedURL());
+
+  // Navigate the subframe to a post-commit error page, reusing its current
+  // srcdoc URL.  A post-commit error page provides a way to reach an error
+  // page for a srcdoc subframe; note that it isn't possible to use
+  // NavigationThrottles to block srcdoc navigations, since throttles don't
+  // currently run in that case.
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 1);
+  shell()->web_contents()->GetController().LoadPostCommitErrorPage(
+      subframe_rfh, subframe_rfh->GetLastCommittedURL(), "error_page_contents",
+      net::ERR_BLOCKED_BY_CLIENT);
+  navigation_observer.Wait();
+  EXPECT_FALSE(navigation_observer.last_navigation_succeeded());
+
+  // Verify that the origin of the srcdoc frame's parent wasn't inherited and
+  // also wasn't used for the precursor.  The error page's origin should be
+  // opaque without a valid precursor.
+  url::Origin origin =
+      root->child_at(0)->current_frame_host()->GetLastCommittedOrigin();
+  EXPECT_TRUE(origin.opaque());
+  EXPECT_FALSE(origin.GetTupleOrPrecursorTupleIfOpaque().IsValid());
+}
+
 // Verify that when navigation 1, which starts in an initial siteless
 // SiteInstance and results in an error page, races with navigation 2, which
 // requires a dedicated process and wants to reuse an existing process,
@@ -3633,7 +3815,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestFencedFrameBrowserTest,
   EXPECT_EQ(view_source_url.spec(),
             EvalJs(fenced_frame_host,
                    JsReplace(R"({location.href = $1;})", view_source_url)));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 
   // Original page shouldn't navigate away.
   EXPECT_EQ(fenced_frame_url, fenced_frame_host->GetLastCommittedURL());

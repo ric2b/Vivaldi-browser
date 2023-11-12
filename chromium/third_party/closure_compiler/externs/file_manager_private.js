@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// TODO(crbug.com/1086381): Disable automatic extern generation until fixed.
+
 /**
  * @fileoverview Externs generated from namespace: fileManagerPrivate
  * @externs
@@ -56,13 +58,6 @@ chrome.fileManagerPrivate.DriveOfflineReason = {
 };
 
 /** @enum {string} */
-chrome.fileManagerPrivate.MountCondition = {
-  UNKNOWN: 'unknown',
-  UNSUPPORTED: 'unsupported',
-  IN_PROGRESS: 'in_progress',
-};
-
-/** @enum {string} */
 chrome.fileManagerPrivate.MountContext = {
   USER: 'user',
   AUTO: 'auto',
@@ -75,28 +70,26 @@ chrome.fileManagerPrivate.MountCompletedEventType = {
 };
 
 /** @enum {string} */
-chrome.fileManagerPrivate.MountCompletedStatus = {
+chrome.fileManagerPrivate.MountError = {
   SUCCESS: 'success',
-  ERROR_UNKNOWN: 'error_unknown',
-  ERROR_INTERNAL: 'error_internal',
-  ERROR_INVALID_ARGUMENT: 'error_invalid_argument',
-  ERROR_INVALID_PATH: 'error_invalid_path',
-  ERROR_PATH_ALREADY_MOUNTED: 'error_path_already_mounted',
-  ERROR_PATH_NOT_MOUNTED: 'error_path_not_mounted',
-  ERROR_DIRECTORY_CREATION_FAILED: 'error_directory_creation_failed',
-  ERROR_INVALID_MOUNT_OPTIONS: 'error_invalid_mount_options',
-  ERROR_INVALID_UNMOUNT_OPTIONS: 'error_invalid_unmount_options',
-  ERROR_INSUFFICIENT_PERMISSIONS: 'error_insufficient_permissions',
-  ERROR_MOUNT_PROGRAM_NOT_FOUND: 'error_mount_program_not_found',
-  ERROR_MOUNT_PROGRAM_FAILED: 'error_mount_program_failed',
-  ERROR_INVALID_DEVICE_PATH: 'error_invalid_device_path',
-  ERROR_UNKNOWN_FILESYSTEM: 'error_unknown_filesystem',
-  ERROR_UNSUPPORTED_FILESYSTEM: 'error_unsupported_filesystem',
-  ERROR_INVALID_ARCHIVE: 'error_invalid_archive',
-  ERROR_NEED_PASSWORD: 'error_need_password',
-  ERROR_IN_PROGRESS: 'error_in_progress',
-  ERROR_CANCELLED: 'error_cancelled',
-  ERROR_BUSY: 'error_busy',
+  IN_PROGRESS: 'in_progress',
+  UNKNOWN_ERROR: 'unknown_error',
+  INTERNAL_ERROR: 'internal_error',
+  INVALID_ARGUMENT: 'invalid_argument',
+  INVALID_PATH: 'invalid_path',
+  PATH_ALREADY_MOUNTED: 'path_already_mounted',
+  PATH_NOT_MOUNTED: 'path_not_mounted',
+  DIRECTORY_CREATION_FAILED: 'directory_creation_failed',
+  INVALID_MOUNT_OPTIONS: 'invalid_mount_options',
+  INSUFFICIENT_PERMISSIONS: 'insufficient_permissions',
+  MOUNT_PROGRAM_NOT_FOUND: 'mount_program_not_found',
+  MOUNT_PROGRAM_FAILED: 'mount_program_failed',
+  INVALID_DEVICE_PATH: 'invalid_device_path',
+  UNKNOWN_FILESYSTEM: 'unknown_filesystem',
+  UNSUPPORTED_FILESYSTEM: 'unsupported_filesystem',
+  NEED_PASSWORD: 'need_password',
+  CANCELLED: 'cancelled',
+  BUSY: 'busy',
 };
 
 /** @enum {string} */
@@ -109,19 +102,9 @@ chrome.fileManagerPrivate.FormatFileSystemType = {
 /** @enum {string} */
 chrome.fileManagerPrivate.TransferState = {
   IN_PROGRESS: 'in_progress',
+  QUEUED: 'queued',
   COMPLETED: 'completed',
   FAILED: 'failed',
-};
-
-/** @enum {string} */
-chrome.fileManagerPrivate.CopyOrMoveProgressStatusType = {
-  BEGIN: 'begin',
-  PROGRESS: 'progress',
-  END_COPY: 'end_copy',
-  END_MOVE: 'end_move',
-  END_REMOVE_SOURCE: 'end_remove_source',
-  SUCCESS: 'success',
-  ERROR: 'error',
 };
 
 /** @enum {string} */
@@ -249,6 +232,7 @@ chrome.fileManagerPrivate.EntryPropertyName = {
   IS_EXTERNAL_MEDIA: 'isExternalMedia',
   IS_ARBITRARY_SYNC_FOLDER: 'isArbitrarySyncFolder',
   SYNC_STATUS: 'syncStatus',
+  PROGRESS: 'progress',
 };
 
 /** @enum {string} */
@@ -263,14 +247,6 @@ chrome.fileManagerPrivate.Source = {
   DEVICE: 'device',
   NETWORK: 'network',
   SYSTEM: 'system',
-};
-
-/** @enum {string} */
-chrome.fileManagerPrivate.Verb = {
-  OPEN_WITH: 'open_with',
-  ADD_TO: 'add_to',
-  PACK_WITH: 'pack_with',
-  SHARE_WITH: 'share_with',
 };
 
 /** @enum {string} */
@@ -380,7 +356,6 @@ chrome.fileManagerPrivate.FileTaskDescriptor;
  * @typedef {{
  *   descriptor: !chrome.fileManagerPrivate.FileTaskDescriptor,
  *   title: string,
- *   verb: (!chrome.fileManagerPrivate.Verb|undefined),
  *   iconUrl: (string|undefined),
  *   isDefault: (boolean|undefined),
  *   isGenericFileHandler: (boolean|undefined)
@@ -429,7 +404,9 @@ chrome.fileManagerPrivate.ResultingTasks;
  *   canPin: (boolean|undefined),
  *   isMachineRoot: (boolean|undefined),
  *   isExternalMedia: (boolean|undefined),
- *   isArbitrarySyncFolder: (boolean|undefined)
+ *   isArbitrarySyncFolder: (boolean|undefined),
+ *   syncStatus: (string|undefined),
+ *   progress: (number|undefined)
  * }}
  */
 chrome.fileManagerPrivate.EntryProperties;
@@ -488,7 +465,7 @@ chrome.fileManagerPrivate.IconSet;
  *   hasMedia: boolean,
  *   configurable: boolean,
  *   watchable: boolean,
- *   mountCondition: (!chrome.fileManagerPrivate.MountCondition|undefined),
+ *   mountCondition: (!chrome.fileManagerPrivate.MountError|undefined),
  *   mountContext: (!chrome.fileManagerPrivate.MountContext|undefined),
  *   diskFileSystemType: (string|undefined),
  *   iconSet: !chrome.fileManagerPrivate.IconSet,
@@ -501,7 +478,7 @@ chrome.fileManagerPrivate.VolumeMetadata;
 /**
  * @typedef {{
  *   eventType: !chrome.fileManagerPrivate.MountCompletedEventType,
- *   status: !chrome.fileManagerPrivate.MountCompletedStatus,
+ *   status: !chrome.fileManagerPrivate.MountError,
  *   volumeMetadata: !chrome.fileManagerPrivate.VolumeMetadata,
  *   shouldNotify: boolean
  * }}
@@ -523,6 +500,16 @@ chrome.fileManagerPrivate.FileTransferStatus;
 
 /**
  * @typedef {{
+ *   entry: !Entry,
+ *   transferState: !chrome.fileManagerPrivate.TransferState,
+ *   processed: number,
+ *   total: number,
+ * }}
+ */
+chrome.fileManagerPrivate.IndividualFileTransferStatus;
+
+/**
+ * @typedef {{
  *   type: !chrome.fileManagerPrivate.DriveSyncErrorType,
  *   fileUrl: string,
  *   showNotification: boolean
@@ -537,17 +524,6 @@ chrome.fileManagerPrivate.DriveSyncErrorEvent;
  * }}
  */
 chrome.fileManagerPrivate.DriveConfirmDialogEvent;
-
-/**
- * @typedef {{
- *   type: !chrome.fileManagerPrivate.CopyOrMoveProgressStatusType,
- *   sourceUrl: (string|undefined),
- *   destinationUrl: (string|undefined),
- *   size: (number|undefined),
- *   error: (string|undefined)
- * }}
- */
-chrome.fileManagerPrivate.CopyOrMoveProgressStatus;
 
 /**
  * @typedef {{
@@ -672,6 +648,7 @@ chrome.fileManagerPrivate.MountableGuest;
  * @typedef {{
  * eventType: chrome.fileManagerPrivate.CrostiniEventType,
  * vmName: string,
+ * containerName: string,
  * entries: !Array<!Entry>,
  * }}
  */
@@ -780,6 +757,7 @@ chrome.fileManagerPrivate.ProgressStatus;
  * @typedef {{
  *   sourceUrl: string,
  *   isDlpRestricted: boolean,
+ *   isRestrictedForDestination: boolean,
  * }}
  */
 chrome.fileManagerPrivate.DlpMetadata;
@@ -795,6 +773,7 @@ chrome.fileManagerPrivate.DlpLevel = {
 /** @enum {string} */
 chrome.fileManagerPrivate.SyncStatus = {
   NOT_FOUND: 'not_found',
+  QUEUED: 'queued',
   IN_PROGRESS: 'in_progress',
   ERROR: 'error'
 };
@@ -824,12 +803,6 @@ chrome.fileManagerPrivate.DialogCallerInformation;
  * }}
  */
 chrome.fileManagerPrivate.ParsedTrashInfoFile;
-
-/**
- * Logout the current user for navigating to the re-authentication screen for
- * the Google account.
- */
-chrome.fileManagerPrivate.logoutUserForReauthentication = function() {};
 
 /**
  * Cancels file selection.
@@ -864,8 +837,8 @@ chrome.fileManagerPrivate.setDefaultTask = function(descriptor, entries, mimeTyp
  * Gets the list of tasks that can be performed over selected files. |entries|
  * Array of selected entries |callback|
  * @param {!Array<!Entry>} entries
- * @param {function((!Array<!chrome.fileManagerPrivate.FileTask>|undefined))}
- *     callback |tasks| The list of matched file entries for this task.
+ * @param {function((!chrome.fileManagerPrivate.ResultingTasks|undefined))}
+ *     callback The list of matched file tasks for the entries.
  */
 chrome.fileManagerPrivate.getFileTasks = function(entries, callback) {};
 
@@ -1033,11 +1006,12 @@ chrome.fileManagerPrivate.getVolumeMetadataList = function(callback) {};
  * directory.
  * @param {!Array<!Entry>} entries
  * @param {!DirectoryEntry} destinationEntry
+ * @param {boolean} isMove true if the operation is move. false if copy.
  * @param {!Array<!Entry>} callback Entries of the files not allowed to be
  *     transferred.
  */
 chrome.fileManagerPrivate.getDisallowedTransfers = function(
-    entries, destinationEntry, callback) {};
+    entries, destinationEntry, isMove, callback) {};
 
 /**
  * Returns a list of files that are restricted by any Data Leak Prevention
@@ -1079,28 +1053,6 @@ chrome.fileManagerPrivate.getDlpBlockedComponents = function(
  * the caller.
  */
 chrome.fileManagerPrivate.getDialogCaller = function(callback) {};
-
-/**
- * Starts to copy an entry. If the source is a directory, the copy is done
- * recursively. |entry| Entry of the source entry to be copied. |parent| Entry
- * of the destination directory. |newName| Name of the new entry. It must not
- * contain '/'. |callback| Completion callback.
- * @param {!Entry} entry
- * @param {!DirectoryEntry} parentEntry
- * @param {string} newName
- * @param {function((number|undefined))} callback |copyId| ID of the copy task.
- *     Can be used to identify the progress, and to cancel the task.
- */
-chrome.fileManagerPrivate.startCopy = function(entry, parentEntry, newName,
-    callback) {};
-
-/**
- * Cancels the running copy task. |copyId| ID of the copy task to be cancelled.
- * |callback| Completion callback of the cancel.
- * @param {number} copyId
- * @param {function()} callback Callback that does not take arguments.
- */
-chrome.fileManagerPrivate.cancelCopy = function(copyId, callback) {};
 
 /**
  * Retrieves total and remaining size of a mount point. |volumeId| ID of the
@@ -1616,7 +1568,10 @@ chrome.fileManagerPrivate.onFileTransfersUpdated;
 chrome.fileManagerPrivate.onPinTransfersUpdated;
 
 /** @type {!ChromeEvent} */
-chrome.fileManagerPrivate.onCopyProgress;
+chrome.fileManagerPrivate.onIndividualFileTransfersUpdated;
+
+/** @type {!ChromeEvent} */
+chrome.fileManagerPrivate.onIndividualPinTransfersUpdated;
 
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onDirectoryChanged;

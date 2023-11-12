@@ -14,8 +14,9 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -71,7 +72,7 @@
 #include "ui/aura/window_delegate.h"
 #endif
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -79,9 +80,19 @@
 
 using ui::OSExchangeData;
 
+DEFINE_UI_CLASS_PROPERTY_TYPE(std::vector<views::ViewTracker>*)
+
 namespace views {
 
 namespace {
+
+// The menu controller manages the AX index attributes inside menu items. This
+// property maintains a vector of menu children that were last assigned such
+// attributes by MenuController::SetSelectionIndices() so that the controller
+// can update them if children change via MenuController::MenuChildrenChanged().
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::vector<views::ViewTracker>,
+                                   kOrderedMenuChildren,
+                                   nullptr)
 
 #if BUILDFLAG(IS_MAC)
 bool AcceleratorShouldCancelMenu(const ui::Accelerator& accelerator) {
@@ -116,7 +127,7 @@ bool AcceleratorShouldCancelMenu(const ui::Accelerator& accelerator) {
 #endif
 
 bool ShouldIgnoreScreenBoundsForMenus() {
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   // Some platforms, such as Wayland, disallow client applications to manipulate
   // global screen coordinates, requiring menus to be positioned relative to
   // their parent windows. See comment in ozone_platform_wayland.cc.
@@ -730,7 +741,7 @@ bool MenuController::OnMouseDragged(SubmenuView* source,
         part.menu = source->GetMenuItem();
       else
         mouse_menu = part.menu;
-      SetSelection(part.menu ? part.menu : state_.item.get(),
+      SetSelection(part.menu ? part.menu.get() : state_.item.get(),
                    SELECTION_OPEN_SUBMENU);
     }
   } else if (part.type == MenuPart::Type::kNone) {
@@ -834,7 +845,7 @@ void MenuController::OnMouseReleased(SubmenuView* source,
     }
   } else if (part.type == MenuPart::Type::kMenuItem) {
     // User either clicked on empty space, or a menu that has children.
-    SetSelection(part.menu ? part.menu : state_.item.get(),
+    SetSelection(part.menu ? part.menu.get() : state_.item.get(),
                  SELECTION_OPEN_SUBMENU | SELECTION_UPDATE_IMMEDIATELY);
   }
   SendMouseCaptureLostToActiveView();
@@ -899,7 +910,7 @@ bool MenuController::OnMouseWheel(SubmenuView* source,
                                   const ui::MouseWheelEvent& event) {
   MenuPart part = GetMenuPart(source, event.location());
 
-  SetSelection(part.menu ? part.menu : state_.item.get(),
+  SetSelection(part.menu ? part.menu.get() : state_.item.get(),
                SELECTION_OPEN_SUBMENU | SELECTION_UPDATE_IMMEDIATELY);
 
   return part.submenu && part.submenu->OnMouseWheel(event);
@@ -963,7 +974,7 @@ void MenuController::OnGestureEvent(SubmenuView* source,
       event->StopPropagation();
     } else if (part.type == MenuPart::Type::kMenuItem) {
       // User either tapped on empty space, or a menu that has children.
-      SetSelection(part.menu ? part.menu : state_.item.get(),
+      SetSelection(part.menu ? part.menu.get() : state_.item.get(),
                    SELECTION_OPEN_SUBMENU | SELECTION_UPDATE_IMMEDIATELY);
       event->StopPropagation();
     }
@@ -2318,6 +2329,10 @@ void MenuController::MenuChildrenChanged(MenuItemView* item) {
   // Menu shouldn't be updated during drag operation.
   DCHECK(!active_mouse_view_tracker_->view());
 
+  // If needed, refresh the AX index assignments.
+  if (item->GetProperty(kOrderedMenuChildren))
+    SetSelectionIndices(item);
+
   // If the current item or pending item is a descendant of the item
   // that changed, move the selection back to the changed item.
   const MenuItemView* ancestor = state_.item;
@@ -2346,9 +2361,7 @@ void MenuController::BuildPathsAndCalculateDiff(
   BuildMenuItemPath(new_item, new_path);
 
   *first_diff_at = static_cast<size_t>(std::distance(
-      old_path->cbegin(), std::mismatch(old_path->cbegin(), old_path->cend(),
-                                        new_path->cbegin(), new_path->cend())
-                              .first));
+      old_path->begin(), base::ranges::mismatch(*old_path, *new_path).first));
 }
 
 void MenuController::BuildMenuItemPath(MenuItemView* item,
@@ -2888,6 +2901,14 @@ void MenuController::IncrementSelection(
 }
 
 void MenuController::SetSelectionIndices(MenuItemView* parent) {
+  if (parent->GetProperty(kOrderedMenuChildren)) {
+    // Clear any old AX index assignments.
+    for (ViewTracker& item : *(parent->GetProperty(kOrderedMenuChildren))) {
+      if (item.view())
+        item.view()->GetViewAccessibility().ClearPosInSetOverride();
+    }
+  }
+
   std::vector<View*> ordering;
   SubmenuView* const submenu = parent->GetSubmenu();
 
@@ -2906,6 +2927,10 @@ void MenuController::SetSelectionIndices(MenuItemView* parent) {
     if (!found_focusable)
       ordering.push_back(item);
   }
+
+  parent->SetProperty(kOrderedMenuChildren,
+                      std::make_unique<std::vector<ViewTracker>>(
+                          ordering.begin(), ordering.end()));
 
   if (ordering.empty())
     return;
@@ -3270,7 +3295,7 @@ void MenuController::ExitMenu() {
 MenuItemView* MenuController::ExitTopMostMenu() {
   // Release the lock which prevents Chrome from shutting down while the menu is
   // showing.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ViewsDelegate::ReleaseRef,
                      base::Unretained(ViewsDelegate::GetInstance())));
@@ -3404,7 +3429,7 @@ void MenuController::SetNextHotTrackedView(
   const size_t num_menu_items = menu_items.size();
   if (num_menu_items <= 1)
     return;
-  const auto i = std::find(menu_items.cbegin(), menu_items.cend(), item);
+  const auto i = base::ranges::find(menu_items, item);
   DCHECK(i != menu_items.cend());
   auto index = static_cast<size_t>(std::distance(menu_items.cbegin(), i));
 
@@ -3540,6 +3565,11 @@ void MenuController::OnMenuEdgeReached() {
 
 void MenuController::SetEnabledScrollButtons(bool enabled) {
   scroll_buttons_enabled = enabled;
+}
+
+void MenuController::SetMenuRoundedCorners(
+    absl::optional<gfx::RoundedCornersF> corners) {
+  rounded_corners_ = corners;
 }
 
 }  // namespace views

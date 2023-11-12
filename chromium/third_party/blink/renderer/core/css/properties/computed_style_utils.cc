@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 
 #include "third_party/blink/renderer/core/css/basic_shape_functions.h"
+#include "third_party/blink/renderer/core/css/css_alternate_value.h"
 #include "third_party/blink/renderer/core/css/css_border_image.h"
 #include "third_party/blink/renderer/core/css/css_border_image_slice_value.h"
 #include "third_party/blink/renderer/core/css/css_bracketed_value_list.h"
@@ -17,6 +18,7 @@
 #include "third_party/blink/renderer/core/css/css_grid_auto_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_integer_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
+#include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
@@ -29,6 +31,7 @@
 #include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
+#include "third_party/blink/renderer/core/css/css_view_value.h"
 #include "third_party/blink/renderer/core/css/cssom/cross_thread_color_value.h"
 #include "third_party/blink/renderer/core/css/cssom/cross_thread_keyword_value.h"
 #include "third_party/blink/renderer/core/css/cssom/cross_thread_unit_value.h"
@@ -38,6 +41,9 @@
 #include "third_party/blink/renderer/core/css/cssom/css_unit_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unparsed_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unsupported_color.h"
+#include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
+#include "third_party/blink/renderer/core/css/properties/shorthands.h"
 #include "third_party/blink/renderer/core/css/style_color.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
@@ -55,6 +61,20 @@
 #include "third_party/blink/renderer/platform/transforms/skew_transform_operation.h"
 
 namespace blink {
+
+static Length Negate(const Length& length) {
+  if (length.IsCalculated()) {
+    NOTREACHED();
+    return length;
+  }
+
+  Length ret =
+      length.GetRoundToInt()
+          ? Length(-static_cast<int>(length.GetFloatValue()), length.GetType())
+          : Length(-length.GetFloatValue(), length.GetType());
+  ret.SetQuirk(length.Quirk());
+  return ret;
+}
 
 // TODO(rjwright): make this const
 CSSValue* ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
@@ -491,10 +511,13 @@ CSSValue* ComputedStyleUtils::ValueForReflection(
 
   CSSPrimitiveValue* offset = nullptr;
   // TODO(alancutter): Make this work correctly for calc lengths.
-  if (reflection->Offset().IsPercentOrCalc()) {
+  if (reflection->Offset().IsPercent()) {
     offset = CSSNumericLiteralValue::Create(
         reflection->Offset().Percent(),
         CSSPrimitiveValue::UnitType::kPercentage);
+  } else if (reflection->Offset().IsCalculated()) {
+    offset = CSSMathFunctionValue::Create(reflection->Offset(),
+                                          style.EffectiveZoom());
   } else {
     offset = ZoomAdjustedPixelValue(reflection->Offset().Value(), style);
   }
@@ -611,9 +634,7 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
         return CSSIdentifierValue::Create(CSSValueID::kAuto);
       }
 
-      // Length doesn't provide operator -, so multiply by -1.
-      Length negated_opposite = opposite;
-      negated_opposite *= -1.f;
+      Length negated_opposite = Negate(opposite);
       return ZoomAdjustedPixelValueForLength(negated_opposite, style);
     }
 
@@ -946,6 +967,87 @@ CSSValue* ComputedStyleUtils::ValueForFontVariantNumeric(
     value_list->Append(*CSSIdentifierValue::Create(CSSValueID::kSlashedZero));
 
   return value_list;
+}
+
+CSSValue* ComputedStyleUtils::ValueForFontVariantAlternates(
+    const ComputedStyle& style) {
+  FontVariantAlternates* variant_alternates =
+      style.GetFontDescription().GetFontVariantAlternates();
+  if (!variant_alternates || variant_alternates->IsNormal())
+    return CSSIdentifierValue::Create(CSSValueID::kNormal);
+
+  DCHECK(RuntimeEnabledFeatures::FontVariantAlternatesEnabled());
+
+  auto make_single_ident_list = [](const AtomicString& alias) {
+    CSSValueList* aliases_list = CSSValueList::CreateCommaSeparated();
+    aliases_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(alias));
+    return aliases_list;
+  };
+
+  CSSValueList* value_list = CSSValueList::CreateSpaceSeparated();
+  if (AtomicString* opt_stylistic = variant_alternates->Stylistic()) {
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kStylistic),
+        *make_single_ident_list(*opt_stylistic)));
+  }
+  if (variant_alternates->HistoricalForms()) {
+    value_list->Append(
+        *CSSIdentifierValue::Create(CSSValueID::kHistoricalForms));
+  }
+  if (AtomicString* opt_swash = variant_alternates->Swash()) {
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kSwash),
+        *make_single_ident_list(*opt_swash)));
+  }
+  if (AtomicString* opt_ornaments = variant_alternates->Ornaments()) {
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kOrnaments),
+        *make_single_ident_list(*opt_ornaments)));
+  }
+  if (AtomicString* opt_annotation = variant_alternates->Annotation()) {
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kAnnotation),
+        *make_single_ident_list(*opt_annotation)));
+  }
+
+  if (!variant_alternates->Styleset().empty()) {
+    CSSValueList* aliases_list = CSSValueList::CreateCommaSeparated();
+    for (auto alias : variant_alternates->Styleset()) {
+      aliases_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(alias));
+    }
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kStyleset),
+        *aliases_list));
+  }
+  if (!variant_alternates->CharacterVariant().empty()) {
+    CSSValueList* aliases_list = CSSValueList::CreateCommaSeparated();
+    for (auto alias : variant_alternates->CharacterVariant()) {
+      aliases_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(alias));
+    }
+    value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
+        *MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kCharacterVariant),
+        *aliases_list));
+  }
+
+  DCHECK(value_list->length());
+  return value_list;
+}
+
+CSSIdentifierValue* ComputedStyleUtils::ValueForFontVariantPosition(
+    const ComputedStyle& style) {
+  FontDescription::FontVariantPosition variant_position =
+      style.GetFontDescription().VariantPosition();
+  switch (variant_position) {
+    case FontDescription::kNormalVariantPosition:
+      return CSSIdentifierValue::Create(CSSValueID::kNormal);
+    case FontDescription::kSubVariantPosition:
+      return CSSIdentifierValue::Create(CSSValueID::kSub);
+    case FontDescription::kSuperVariantPosition:
+      return CSSIdentifierValue::Create(CSSValueID::kSuper);
+    default:
+      NOTREACHED();
+      return CSSIdentifierValue::Create(CSSValueID::kNormal);
+  }
 }
 
 CSSIdentifierValue* ValueForFontStretchAsKeyword(const ComputedStyle& style) {
@@ -1428,28 +1530,58 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   wtf_size_t auto_repeat_insertion_point =
       computed_grid_track_list.auto_repeat_insertion_point;
 
-  // If the element is a grid container, the resolved value is the used value,
-  // specifying track sizes in pixels and expanding the repeat() notation.
   if (is_layout_grid) {
     const auto* grid = ToInterface<LayoutNGGridInterface>(layout_object);
-    OrderedNamedLinesCollectorInGridLayout collector(
-        computed_grid_track_list.ordered_named_grid_lines,
-        computed_grid_track_list.auto_repeat_ordered_named_grid_lines,
-        auto_repeat_insertion_point,
-        grid->AutoRepeatCountForDirection(direction),
-        auto_repeat_track_sizes.size());
-    auto getTrackSize = [&](const LayoutUnit& v) {
-      return ZoomAdjustedPixelValue(v, style);
-    };
-    // Named grid line indices are relative to the explicit grid, but we are
-    // including all tracks. So we need to subtract the number of leading
-    // implicit tracks in order to get the proper line index.
-    int offset = -base::checked_cast<int>(
-        grid->ExplicitGridStartForDirection(direction));
-    PopulateGridTrackList(list, collector,
-                          grid->TrackSizesForComputedStyle(direction),
-                          getTrackSize, offset);
-    return list;
+    if (computed_grid_track_list.IsSubgriddedAxis()) {
+      // If the track list is subgridded, return the word 'subgrid', followed by
+      // the specified named grid lines in brackets. Empty brackets are also
+      // valid.
+      list->Append(
+          *MakeGarbageCollected<CSSIdentifierValue>(CSSValueID::kSubgrid));
+
+      wtf_size_t subgrid_line_names_start =
+          grid->ExplicitGridStartForDirection(direction);
+      wtf_size_t subgrid_line_names_end =
+          grid->ExplicitGridEndForDirection(direction);
+      for (wtf_size_t i = subgrid_line_names_start; i <= subgrid_line_names_end;
+           ++i) {
+        auto iter = computed_grid_track_list.ordered_named_grid_lines.find(i);
+
+        cssvalue::CSSBracketedValueList* value_list =
+            MakeGarbageCollected<cssvalue::CSSBracketedValueList>();
+
+        if (iter != computed_grid_track_list.ordered_named_grid_lines.end()) {
+          for (auto named_grid_line : iter->value) {
+            value_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(
+                named_grid_line.line_name));
+          }
+        }
+        list->Append(*value_list);
+      }
+      return list;
+    } else {
+      // If the element is a grid container, the resolved value is the used
+      // value, specifying track sizes in pixels and expanding the repeat()
+      // notation.
+      OrderedNamedLinesCollectorInGridLayout collector(
+          computed_grid_track_list.ordered_named_grid_lines,
+          computed_grid_track_list.auto_repeat_ordered_named_grid_lines,
+          auto_repeat_insertion_point,
+          grid->AutoRepeatCountForDirection(direction),
+          auto_repeat_track_sizes.size());
+      auto getTrackSize = [&](const LayoutUnit& v) {
+        return ZoomAdjustedPixelValue(v, style);
+      };
+      // Named grid line indices are relative to the explicit grid, but we are
+      // including all tracks. So we need to subtract the number of leading
+      // implicit tracks in order to get the proper line index.
+      int offset = -base::checked_cast<int>(
+          grid->ExplicitGridStartForDirection(direction));
+      PopulateGridTrackList(list, collector,
+                            grid->TrackSizesForComputedStyle(direction),
+                            getTrackSize, offset);
+      return list;
+    }
   }
 
   // Otherwise, the resolved value is the computed value, preserving repeat().
@@ -1690,19 +1822,58 @@ CSSValue* ComputedStyleUtils::ValueForWillChange(
   return list;
 }
 
-CSSValue* ComputedStyleUtils::ValueForAnimationDelay(
-    const CSSTimingData* timing_data) {
+namespace {
+
+template <class U>
+using ItemFunc = CSSValue*(U);
+
+template <typename T, typename U>
+CSSValue* CreateAnimationValueList(const Vector<T>& values,
+                                   ItemFunc<U>* item_func) {
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
-  if (timing_data) {
-    for (wtf_size_t i = 0; i < timing_data->DelayList().size(); ++i) {
-      list->Append(*CSSNumericLiteralValue::Create(
-          timing_data->DelayList()[i], CSSPrimitiveValue::UnitType::kSeconds));
-    }
-  } else {
-    list->Append(*CSSNumericLiteralValue::Create(
-        CSSTimingData::InitialDelay(), CSSPrimitiveValue::UnitType::kSeconds));
+  for (const T& value : values) {
+    list->Append(*item_func(value));
   }
   return list;
+}
+
+}  // namespace
+
+CSSValue* ComputedStyleUtils::ValueForAnimationDelayStart(
+    const Timing::Delay& delay) {
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  if (delay.IsTimelineOffset()) {
+    list->Append(*MakeGarbageCollected<CSSIdentifierValue>(delay.phase));
+    list->Append(*CSSNumericLiteralValue::Create(
+        delay.relative_offset * 100.0,
+        CSSPrimitiveValue::UnitType::kPercentage));
+  } else {
+    return CSSNumericLiteralValue::Create(
+        delay.AsTimeValue().InSecondsF(),
+        CSSPrimitiveValue::UnitType::kSeconds);
+  }
+  return list;
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationDelayStartList(
+    const CSSTimingData* timing_data) {
+  return CreateAnimationValueList(
+      timing_data ? timing_data->DelayStartList()
+                  : Vector<Timing::Delay>{CSSTimingData::InitialDelayStart()},
+      &ValueForAnimationDelayStart);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationDelayEnd(
+    const Timing::Delay& delay) {
+  return ValueForAnimationDelayStart(delay);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationDelayEndList(
+    const CSSTimingData* timing_data) {
+  return CreateAnimationValueList(
+      timing_data ? timing_data->DelayEndList()
+                  : Vector<Timing::Delay>{CSSTimingData::InitialDelayEnd()},
+      &ValueForAnimationDelayEnd);
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationDirection(
@@ -1722,21 +1893,32 @@ CSSValue* ComputedStyleUtils::ValueForAnimationDirection(
   }
 }
 
+CSSValue* ComputedStyleUtils::ValueForAnimationDirectionList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->DirectionList()
+          : Vector<Timing::PlaybackDirection>{CSSAnimationData::
+                                                  InitialDirection()},
+      &ValueForAnimationDirection);
+}
+
 CSSValue* ComputedStyleUtils::ValueForAnimationDuration(
-    const CSSTimingData* timing_data) {
-  CSSValueList* list = CSSValueList::CreateCommaSeparated();
-  if (timing_data) {
-    for (wtf_size_t i = 0; i < timing_data->DurationList().size(); ++i) {
-      list->Append(*CSSNumericLiteralValue::Create(
-          timing_data->DurationList()[i],
-          CSSPrimitiveValue::UnitType::kSeconds));
-    }
-  } else {
-    list->Append(
-        *CSSNumericLiteralValue::Create(CSSTimingData::InitialDuration(),
-                                        CSSPrimitiveValue::UnitType::kSeconds));
+    const absl::optional<double>& duration) {
+  if (!duration.has_value()) {
+    return CSSIdentifierValue::Create(CSSValueID::kAuto);
   }
-  return list;
+  return CSSNumericLiteralValue::Create(duration.value(),
+                                        CSSPrimitiveValue::UnitType::kSeconds);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationDurationList(
+    const CSSTimingData* timing_data) {
+  return CreateAnimationValueList(
+      timing_data
+          ? timing_data->DurationList()
+          : Vector<absl::optional<double>>{CSSTimingData::InitialDuration()},
+      &ValueForAnimationDuration);
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationFillMode(
@@ -1756,12 +1938,30 @@ CSSValue* ComputedStyleUtils::ValueForAnimationFillMode(
   }
 }
 
+CSSValue* ComputedStyleUtils::ValueForAnimationFillModeList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->FillModeList()
+          : Vector<Timing::FillMode>{CSSAnimationData::InitialFillMode()},
+      &ValueForAnimationFillMode);
+}
+
 CSSValue* ComputedStyleUtils::ValueForAnimationIterationCount(
     double iteration_count) {
   if (iteration_count == std::numeric_limits<double>::infinity())
     return CSSIdentifierValue::Create(CSSValueID::kInfinite);
   return CSSNumericLiteralValue::Create(iteration_count,
                                         CSSPrimitiveValue::UnitType::kNumber);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationIterationCountList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->IterationCountList()
+          : Vector<double>{CSSAnimationData::InitialIterationCount()},
+      &ValueForAnimationIterationCount);
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationPlayState(
@@ -1772,12 +1972,21 @@ CSSValue* ComputedStyleUtils::ValueForAnimationPlayState(
   return CSSIdentifierValue::Create(CSSValueID::kPaused);
 }
 
-CSSValue* ComputedStyleUtils::CreateTimingFunctionValue(
-    const TimingFunction* timing_function) {
+CSSValue* ComputedStyleUtils::ValueForAnimationPlayStateList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->PlayStateList()
+          : Vector<EAnimPlayState>{CSSAnimationData::InitialPlayState()},
+      &ValueForAnimationPlayState);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunction(
+    const scoped_refptr<TimingFunction>& timing_function) {
   switch (timing_function->GetType()) {
     case TimingFunction::Type::CUBIC_BEZIER: {
       const auto* bezier_timing_function =
-          To<CubicBezierTimingFunction>(timing_function);
+          To<CubicBezierTimingFunction>(timing_function.get());
       if (bezier_timing_function->GetEaseType() !=
           CubicBezierTimingFunction::EaseType::CUSTOM) {
         CSSValueID value_id = CSSValueID::kInvalid;
@@ -1807,7 +2016,7 @@ CSSValue* ComputedStyleUtils::CreateTimingFunctionValue(
 
     case TimingFunction::Type::STEPS: {
       const auto* steps_timing_function =
-          To<StepsTimingFunction>(timing_function);
+          To<StepsTimingFunction>(timing_function.get());
       StepsTimingFunction::StepPosition position =
           steps_timing_function->GetStepPosition();
       int steps = steps_timing_function->NumberOfSteps();
@@ -1823,19 +2032,14 @@ CSSValue* ComputedStyleUtils::CreateTimingFunctionValue(
   }
 }
 
-CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunction(
+CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunctionList(
     const CSSTimingData* timing_data) {
-  CSSValueList* list = CSSValueList::CreateCommaSeparated();
-  if (timing_data) {
-    for (wtf_size_t i = 0; i < timing_data->TimingFunctionList().size(); ++i) {
-      list->Append(*CreateTimingFunctionValue(
-          timing_data->TimingFunctionList()[i].get()));
-    }
-  } else {
-    list->Append(*CreateTimingFunctionValue(
-        CSSTimingData::InitialTimingFunction().get()));
-  }
-  return list;
+  return CreateAnimationValueList(
+      timing_data
+          ? timing_data->TimingFunctionList()
+          : Vector<scoped_refptr<TimingFunction>>{CSSAnimationData::
+                                                      InitialTimingFunction()},
+      &ValueForAnimationTimingFunction);
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationTimeline(
@@ -1845,8 +2049,24 @@ CSSValue* ComputedStyleUtils::ValueForAnimationTimeline(
            timeline.GetKeyword() == CSSValueID::kNone);
     return CSSIdentifierValue::Create(timeline.GetKeyword());
   }
-  if (timeline.IsName())
-    return ValueForStyleName(timeline.GetName());
+  if (timeline.IsName()) {
+    const ScopedCSSName& scoped_name = timeline.GetName();
+    const AtomicString& name = scoped_name.GetName();
+    // Serialize as <string> if the value is not a valid <custom-ident>.
+    if (css_parsing_utils::IsCSSWideKeyword(name) ||
+        EqualIgnoringASCIICase(name, "auto") ||
+        EqualIgnoringASCIICase(name, "none")) {
+      return MakeGarbageCollected<CSSStringValue>(name);
+    }
+    return MakeGarbageCollected<CSSCustomIdentValue>(name);
+  }
+  if (timeline.IsView()) {
+    const StyleTimeline::ViewData& view_data = timeline.GetView();
+    CSSValue* axis = view_data.HasDefaultAxis()
+                         ? nullptr
+                         : CSSIdentifierValue::Create(view_data.GetAxis());
+    return MakeGarbageCollected<cssvalue::CSSViewValue>(axis);
+  }
   DCHECK(timeline.IsScroll());
   const StyleTimeline::ScrollData& scroll_data = timeline.GetScroll();
   CSSValue* axis = scroll_data.HasDefaultAxis()
@@ -1860,8 +2080,17 @@ CSSValue* ComputedStyleUtils::ValueForAnimationTimeline(
   return MakeGarbageCollected<cssvalue::CSSScrollValue>(axis, scroller);
 }
 
+CSSValue* ComputedStyleUtils::ValueForAnimationTimelineList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->TimelineList()
+          : Vector<StyleTimeline>{CSSAnimationData::InitialTimeline()},
+      &ValueForAnimationTimeline);
+}
+
 CSSValue* ComputedStyleUtils::SingleValueForViewTimelineShorthand(
-    const AtomicString& name,
+    const ScopedCSSName* name,
     TimelineAxis axis) {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   list->Append(*ValueForCustomIdentOrNone(name));
@@ -1898,14 +2127,14 @@ CSSValue* ComputedStyleUtils::ValueForBorderRadiusCorner(
       CSSValuePair::kDropIdenticalValues);
 }
 
-CSSFunctionValue* ComputedStyleUtils::ValueForTransformationMatrix(
-    const TransformationMatrix& matrix,
+CSSFunctionValue* ComputedStyleUtils::ValueForTransform(
+    const gfx::Transform& matrix,
     float zoom,
     bool force_matrix3d) {
-  if (matrix.IsAffine() && !force_matrix3d) {
+  if (matrix.Is2dTransform() && !force_matrix3d) {
     auto* result = MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kMatrix);
     // CSS matrix values are returned in column-major order.
-    auto unzoomed = matrix.ToAffineTransform().Zoom(1.f / zoom);
+    auto unzoomed = AffineTransform::FromTransform(matrix).Zoom(1.f / zoom);
     for (double value : {unzoomed.A(), unzoomed.B(), unzoomed.C(), unzoomed.D(),
                          unzoomed.E(), unzoomed.F()}) {
       result->Append(*CSSNumericLiteralValue::Create(
@@ -1920,7 +2149,7 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformationMatrix(
     unzoomed.Zoom(1.f / zoom);
     for (int i = 0; i < 16; i++) {
       result->Append(*CSSNumericLiteralValue::Create(
-          unzoomed.ColMajorData()[i], CSSPrimitiveValue::UnitType::kNumber));
+          unzoomed.ColMajorData(i), CSSPrimitiveValue::UnitType::kNumber));
     }
     return result;
   }
@@ -2063,10 +2292,10 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformOperation(
     case TransformOperation::kRotateAroundOrigin: {
       // TODO(https://github.com/w3c/csswg-drafts/issues/5011):
       // Update this once there is consensus.
-      TransformationMatrix matrix;
+      gfx::Transform matrix;
       operation.Apply(matrix, gfx::SizeF(0, 0));
-      return ValueForTransformationMatrix(matrix, zoom,
-                                          /*force_matrix3d=*/false);
+      return ValueForTransform(matrix, zoom,
+                               /*force_matrix3d=*/false);
     }
     case TransformOperation::kSkewX: {
       const auto& skew = To<SkewTransformOperation>(operation);
@@ -2106,14 +2335,14 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformOperation(
     }
     case TransformOperation::kMatrix: {
       const auto& matrix = To<MatrixTransformOperation>(operation).Matrix();
-      return ValueForTransformationMatrix(matrix, zoom,
-                                          /*force_matrix3d=*/false);
+      return ValueForTransform(matrix, zoom,
+                               /*force_matrix3d=*/false);
     }
     case TransformOperation::kMatrix3D: {
       const auto& matrix = To<Matrix3DTransformOperation>(operation).Matrix();
       // Force matrix3d serialization
-      return ValueForTransformationMatrix(matrix, zoom,
-                                          /*force_matrix3d=*/true);
+      return ValueForTransform(matrix, zoom,
+                               /*force_matrix3d=*/true);
     }
     case TransformOperation::kInterpolated:
       // TODO(https://github.com/w3c/csswg-drafts/issues/2854):
@@ -2121,10 +2350,10 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformOperation(
       // This currently converts the operation to a matrix, using box_size if
       // provided, 0x0 if not (returning all but the relative translate
       // portion of the transform). Update this once the spec is updated.
-      TransformationMatrix matrix;
+      gfx::Transform matrix;
       operation.Apply(matrix, box_size);
-      return ValueForTransformationMatrix(matrix, zoom,
-                                          /*force_matrix3d=*/false);
+      return ValueForTransform(matrix, zoom,
+                               /*force_matrix3d=*/false);
   }
 }
 
@@ -2176,7 +2405,7 @@ CSSValue* ComputedStyleUtils::ResolvedTransform(
 
   gfx::RectF reference_box = ReferenceBoxForTransform(*layout_object);
 
-  TransformationMatrix transform;
+  gfx::Transform transform;
   style.ApplyTransform(
       transform, reference_box, ComputedStyle::kIncludeTransformOperations,
       ComputedStyle::kExcludeTransformOrigin, ComputedStyle::kExcludeMotionPath,
@@ -2185,8 +2414,8 @@ CSSValue* ComputedStyleUtils::ResolvedTransform(
   // FIXME: Need to print out individual functions
   // (https://bugs.webkit.org/show_bug.cgi?id=23924)
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  list->Append(*ValueForTransformationMatrix(transform, style.EffectiveZoom(),
-                                             /*force_matrix3d=*/false));
+  list->Append(*ValueForTransform(transform, style.EffectiveZoom(),
+                                  /*force_matrix3d=*/false));
 
   return list;
 }
@@ -3097,6 +3326,11 @@ CSSValue* ComputedStyleUtils::ValueForCustomIdentOrNone(
   return MakeGarbageCollected<CSSCustomIdentValue>(ident);
 }
 
+CSSValue* ComputedStyleUtils::ValueForCustomIdentOrNone(
+    const ScopedCSSName* name) {
+  return ValueForCustomIdentOrNone(name ? name->GetName() : g_null_atom);
+}
+
 const CSSValue* ComputedStyleUtils::ValueForStyleAutoColor(
     const ComputedStyle& style,
     const StyleAutoColor& color,
@@ -3197,7 +3431,7 @@ const CSSValue* ComputedStyleUtils::ComputedPropertyValue(
           style, style.CaretColor(), CSSValuePhase::kComputedValue);
     case CSSPropertyID::kColor:
       return ComputedStyleUtils::CurrentColorOrValidColor(
-          style, style.GetColor(), CSSValuePhase::kComputedValue);
+          style, style.Color(), CSSValuePhase::kComputedValue);
     case CSSPropertyID::kMinHeight: {
       if (style.MinHeight().IsAuto())
         return CSSIdentifierValue::Create(CSSValueID::kAuto);

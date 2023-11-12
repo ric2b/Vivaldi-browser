@@ -39,13 +39,13 @@ class SyncedFileStoreImpl : public SyncedFileStore {
   // Implementing SyncedFileStore
   bool IsLoaded() override;
   void AddOnLoadedCallback(base::OnceClosure on_loaded_callback) override;
-  void AddLocalFileRef(base::GUID owner_guid,
+  void SetLocalFileRef(base::GUID owner_guid,
                        syncer::ModelType sync_type,
                        std::string checksum) override;
-  std::string AddLocalFile(base::GUID owner_guid,
+  std::string SetLocalFile(base::GUID owner_guid,
                            syncer::ModelType sync_type,
                            std::vector<uint8_t> content) override;
-  void AddSyncFileRef(std::string owner_sync_id,
+  void SetSyncFileRef(std::string owner_sync_id,
                       syncer::ModelType sync_type,
                       std::string checksum) override;
   void GetFile(std::string checksum, GetFileCallback callback) override;
@@ -56,8 +56,14 @@ class SyncedFileStoreImpl : public SyncedFileStore {
                      syncer::ModelType sync_type) override;
   void RemoveAllSyncRefsForType(syncer::ModelType sync_type) override;
 
+  size_t GetTotalStorageSize() override;
+
  private:
   base::FilePath GetFilePath(const std::string& checksum) const;
+
+  void DoSetLocalFileRef(base::GUID owner_guid,
+                         syncer::ModelType sync_type,
+                         std::string checksum);
 
   void OnReadContentDone(std::string checksum,
                          absl::optional<std::vector<uint8_t>> content);

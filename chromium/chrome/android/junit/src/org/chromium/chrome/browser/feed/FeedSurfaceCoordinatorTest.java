@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -99,7 +100,8 @@ import java.util.ArrayList;
         // default or removed if the flag is removed.
         ChromeFeatureList.SYNC_ANDROID_LIMIT_NTP_PROMO_IMPRESSIONS,
 })
-@Features.EnableFeatures({ChromeFeatureList.FEED_CLIENT_GOOD_VISITS})
+@Features.EnableFeatures(
+        {ChromeFeatureList.FEED_CLIENT_GOOD_VISITS, ChromeFeatureList.FEED_HEADER_STICK_TO_TOP})
 public class FeedSurfaceCoordinatorTest {
     private static final @SurfaceType int SURFACE_TYPE = SurfaceType.NEW_TAB_PAGE;
     private static final long SURFACE_CREATION_TIME_NS = 1234L;
@@ -227,6 +229,8 @@ public class FeedSurfaceCoordinatorTest {
     private Tracker mTracker;
     @Mock
     private TabModelSelector mTabModelSelector;
+    @Mock
+    private ScrollableContainerDelegate mScrollableContainerDelegate;
 
     @Rule
     public final MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -234,7 +238,7 @@ public class FeedSurfaceCoordinatorTest {
     @Before
     public void setUp() {
         mActivity = Robolectric.buildActivity(Activity.class).get();
-        mActivity.setTheme(R.style.ColorOverlay);
+        mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
         mocker.mock(FeedStreamJni.TEST_HOOKS, mFeedStreamJniMock);
         mocker.mock(FeedServiceBridgeJni.TEST_HOOKS, mFeedServiceBridgeJniMock);
         mocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
@@ -446,6 +450,37 @@ public class FeedSurfaceCoordinatorTest {
                 .logUiStarting(SURFACE_TYPE, SURFACE_CREATION_TIME_NS);
     }
 
+    @Test
+    public void testFeedHeaderPosition_scrollableContainerDelegate() {
+        when(mScrollableContainerDelegate.getTopPositionRelativeToContainerView(any()))
+                .thenReturn(-1);
+        assertEquals(-1, mCoordinator.getFeedHeaderPosition());
+
+        mCoordinator.clearScrollableContainerDelegateForTesting();
+        assertEquals(Integer.MAX_VALUE, mCoordinator.getFeedHeaderPosition());
+    }
+
+    @Test
+    public void testStartSurfaceScrollListener() {
+        FeedSurfaceCoordinator.StartSurfaceScrollListener listener =
+                mCoordinator.new StartSurfaceScrollListener();
+
+        // Our toolbar height is always set as 0.
+        when(mCoordinator.getFeedHeaderPosition()).thenReturn(-10);
+        listener.onHeaderOffsetChanged(0);
+        // Toolbar height is bigger than the header position, then the sticky header is visible.
+        assertEquals(true,
+                mCoordinator.getSectionHeaderModelForTest().get(
+                        SectionHeaderListProperties.STICKY_HEADER_VISIBLILITY_KEY));
+
+        when(mCoordinator.getFeedHeaderPosition()).thenReturn(10);
+        listener.onHeaderOffsetChanged(0);
+        // Toolbar height is smaller than the header position, so the sticky header is invisible.
+        assertEquals(false,
+                mCoordinator.getSectionHeaderModelForTest().get(
+                        SectionHeaderListProperties.STICKY_HEADER_VISIBLILITY_KEY));
+    }
+
     private boolean hasStreamBound() {
         if (mCoordinator.getMediatorForTesting().getCurrentStreamForTesting() == null) {
             return false;
@@ -457,7 +492,7 @@ public class FeedSurfaceCoordinatorTest {
     private FeedSurfaceCoordinator createCoordinator() {
         return new FeedSurfaceCoordinator(mActivity, mSnackbarManager, mWindowAndroid, mSnapHelper,
                 null, 0, false, new TestSurfaceDelegate(), mProfileMock, false,
-                mBottomSheetController, mShareDelegateSupplier, null,
+                mBottomSheetController, mShareDelegateSupplier, mScrollableContainerDelegate,
                 NewTabPageLaunchOrigin.UNKNOWN, mPrivacyPreferencesManager,
                 ()
                         -> { return null; },

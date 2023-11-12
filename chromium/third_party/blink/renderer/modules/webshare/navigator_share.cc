@@ -197,6 +197,13 @@ bool NavigatorShare::canShare(ScriptState* script_state,
                               const ShareData* data) {
   if (!script_state->ContextIsValid())
     return false;
+
+  if (!ExecutionContext::From(script_state)
+           ->IsFeatureEnabled(
+               mojom::blink::PermissionsPolicyFeature::kWebShare)) {
+    return false;
+  }
+
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
   KURL unused_url;
   return CanShareInternal(*window, *data, unused_url, nullptr);
@@ -213,21 +220,24 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
                                     ExceptionState& exception_state) {
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(
-        DOMExceptionCode::kAbortError,
+        DOMExceptionCode::kInvalidStateError,
         "Internal error: window frame is missing (the navigator may be "
         "detached).");
     return ScriptPromise();
   }
 
+  LocalDOMWindow* const window = LocalDOMWindow::From(script_state);
   ExecutionContext* const execution_context =
       ExecutionContext::From(script_state);
 
-  // The permissions policy is currently not enforced.
-  LocalDOMWindow* const window = LocalDOMWindow::From(script_state);
-  window->CountUse(execution_context->IsFeatureEnabled(
-                       mojom::blink::PermissionsPolicyFeature::kWebShare)
-                       ? WebFeature::kWebSharePolicyAllow
-                       : WebFeature::kWebSharePolicyDisallow);
+  if (!execution_context->IsFeatureEnabled(
+          mojom::blink::PermissionsPolicyFeature::kWebShare)) {
+    window->CountUse(WebFeature::kWebSharePolicyDisallow);
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                      "Permission denied");
+    return ScriptPromise();
+  }
+  window->CountUse(WebFeature::kWebSharePolicyAllow);
 
 // This is due to a limitation on Android, where we sometimes are not advised
 // when the share completes. This goes against the web share spec to work around
@@ -236,7 +246,7 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
 #if !BUILDFLAG(IS_ANDROID)
   if (!clients_.empty()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "A earlier share had not yet completed.");
+                                      "An earlier share has not yet completed.");
     return ScriptPromise();
   }
 #endif

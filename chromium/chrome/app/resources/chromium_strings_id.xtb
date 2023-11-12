@@ -13,7 +13,6 @@
 <translation id="1231839967188101156">Jika diaktifkan, Chromium akan membebaskan memori dari tab yang tidak aktif. Tindakan ini akan memberikan lebih banyak resource komputer untuk tab aktif dan aplikasi lainnya, serta menjaga Chromium tetap cepat. Tab yang tidak aktif akan otomatis menjadi aktif lagi saat Anda kembali ke tab tersebut. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="1261119230216066228">Penghemat Memori Membuat Chromium Lebih Cepat</translation>
 <translation id="1315551408014407711">Siapkan profil Chromium baru Anda</translation>
-<translation id="1385859895174722837">Asisten Google di Chromium</translation>
 <translation id="1396446129537741364">Chromium mencoba menampilkan sandi.</translation>
 <translation id="1414495520565016063">Anda sudah masuk ke Chromium!</translation>
 <translation id="1493803763272692301">Anda dapat menikmati manfaat optimal Chromium</translation>
@@ -62,6 +61,7 @@ Izin yang telah Anda berikan ke situs dan aplikasi dapat berlaku untuk akun ini.
 <translation id="2560420686485554789">Chromium memerlukan akses penyimpanan untuk mendownload file</translation>
 <translation id="2572494885440352020">Pembantu Chromium</translation>
 <translation id="2583187216237139145">Data Chromium yang dibuat selama penggunaan profil ini (seperti pembuatan bookmark, histori, sandi, dan setelan lain) dapat dihapus oleh administrator profil kerja. <ph name="LEARN_MORE" /></translation>
+<translation id="2592940277904433508">Terus gunakan Chromium</translation>
 <translation id="2648074677641340862">Terjadi error pada sistem operasi saat pemasangan berlangsung. Download Chromium lagi.</translation>
 <translation id="2661879430930417727">Jika Anda berbagi perangkat, teman dan keluarga dapat menjelajah secara terpisah dan menyiapkan Chromium sesuai keinginannya</translation>
 <translation id="2669853942967761236">Chromium memblokir file arsip ini karena dapat menyembunyikan malware</translation>
@@ -80,6 +80,7 @@ Izin yang telah Anda berikan ke situs dan aplikasi dapat berlaku untuk akun ini.
 <translation id="2977470724722393594">Chromium sudah diperbarui</translation>
 <translation id="2977506796191543575">Jika situs berusaha mencuri sandi Anda, atau jika Anda mendownload file berbahaya, Chromium mungkin juga mengirimkan URL, termasuk bit konten halaman, ke Safe Browsing</translation>
 <translation id="2983934633046890458">Chromium mencoba mengedit sandi.</translation>
+<translation id="3021964162552004083">{NUM_DEVICES,plural, =1{Chromium terhubung ke perangkat HID}other{Chromium terhubung ke perangkat HID}}</translation>
 <translation id="3032706164202344641">Chromium tidak dapat memeriksa sandi Anda. Coba lagi nanti.</translation>
 <translation id="3032787606318309379">Menambahkan Chromium...</translation>
 <translation id="3038232873781883849">Menunggu untuk menginstal...</translation>
@@ -103,12 +104,12 @@ Izin yang telah Anda berikan ke situs dan aplikasi dapat berlaku untuk akun ini.
 <translation id="3387527074123400161">ChromiumOS</translation>
 <translation id="3406848076815591792">Beralih ke profil Chromium yang sudah ada?</translation>
 <translation id="3412460710772753638">Di Pengelola Sandi di perangkat ini</translation>
+<translation id="3420193029125244288">{COUNT,plural, =1{Administrator telah mengonfigurasi Chromium agar ditutup jika tidak ada aktivitas selama lebih dari 1 menit.}other{Administrator telah mengonfigurasi Chromium agar ditutup jika tidak ada aktivitas selama lebih dari # menit.}}</translation>
 <translation id="3430503420100763906">Dengan profil Chromium, Anda dapat memisahkan semua aktivitas Chromium Anda. Buat profil untuk teman dan keluarga, atau pisahkan antara aktivitas kerja dan hiburan.</translation>
 <translation id="347328004046849135">Chromium akan memberi tahu Anda saat Anda login dengan sandi yang telah dibobol</translation>
 <translation id="3474745554856756813">Tindakan ini akan menghapus <ph name="ITEMS_COUNT" /> item dari perangkat. Untuk mengambil data nanti, login ke Chromium sebagai <ph name="USER_EMAIL" />.</translation>
 <translation id="3497319089134299931"><ph name="SHORTCUT" /> dapat membuat berpindah-pindah profil Chromium</translation>
 <translation id="3509308970982693815">Tutup semua jendela Chromium dan coba lagi.</translation>
-<translation id="3518180795744733843">Asisten Google di Chromium dapat menyelesaikan tindakan di seluruh situs untuk Anda</translation>
 <translation id="3533435340678213462">Untuk melindungi privasi Anda, kami otomatis menghapus minat Anda yang tersimpan lebih dari 4 minggu. Saat Anda terus menjelajah, minat dapat kembali muncul di daftar. Atau Anda dapat menghapus minat yang tidak perlu dipertimbangkan oleh Chromium.</translation>
 <translation id="3567254597502212821">Histori penjelajahan Anda, catatan situs yang telah Anda buka menggunakan Chromium di perangkat ini.</translation>
 <translation id="3575459661164320785">Ada software berbahaya di komputer Anda. Chromium dapat menghapusnya, memulihkan setelan Anda, dan menonaktifkan ekstensi agar browser berfungsi kembali secara normal.</translation>
@@ -184,6 +185,7 @@ Izin yang telah Anda berikan ke situs dan aplikasi dapat berlaku untuk akun ini.
 <translation id="538767207339317086">Izinkan login Chromium</translation>
 <translation id="5398878173008909840">Tersedia Chromium versi baru.</translation>
 <translation id="5405650547142096840">Hapus dari Chromium</translation>
+<translation id="5421879995290576427">{0,plural, =0{Chromium akan ditutup sekarang.}=1{Chromium akan ditutup dalam 1 detik.}other{Chromium akan ditutup dalam # detik.}}</translation>
 <translation id="5427571867875391349">Setel Chromium sebagai browser default</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> - Chromium Beta</translation>
 <translation id="5473971139929175403">Chromium mungkin tidak berfungsi dengan semestinya karena sudah tidak didukung di distribusi Linux ini</translation>
@@ -272,6 +274,7 @@ Sebagian fitur mungkin tidak tersedia. Tentukan direktori profil yang berbeda at
 <translation id="6940431691900807093">Kemudian, situs yang Anda buka dapat meminta Chromium untuk melihat minat Anda agar dapat mempersonalisasi iklan yang Anda lihat. Chromium dapat membagikan hingga 3 minat.</translation>
 <translation id="6964305034639999644">Buka link di jendela sa&amp;maran Chromium</translation>
 <translation id="6978145336957848883">Sandi yang lemah mudah ditebak. Izinkan Chromium <ph name="BEGIN_LINK" />membuat dan mengingat sandi yang kuat untuk Anda<ph name="END_LINK" />.</translation>
+<translation id="6984667024406244807">Chromium tidak aktif</translation>
 <translation id="6985329841647292029">Persyaratan ChromiumOS</translation>
 <translation id="6990124437352146030">Chromium memerlukan izin akses ke mikrofon untuk situs ini</translation>
 <translation id="7025789849649390912">Penginstalan Terhenti.</translation>

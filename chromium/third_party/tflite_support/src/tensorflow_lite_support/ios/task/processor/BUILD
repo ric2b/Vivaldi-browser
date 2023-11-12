@@ -1,4 +1,5 @@
 package(
+    default_applicable_licenses = ["//tensorflow_lite_support:license"],
     default_visibility = ["//tensorflow_lite_support:internal"],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -65,6 +66,17 @@ objc_library(
     deps = [
         "//tensorflow_lite_support/ios:TFLCommonUtils",
     ],
+)
+
+objc_library(
+    name = "TFLSearchResult",
+    srcs = [
+        "sources/TFLSearchResult.m",
+    ],
+    hdrs = [
+        "sources/TFLSearchResult.h",
+    ],
+    module_name = "TFLSearchResult",
 )
 
 objc_library(
@@ -196,5 +208,22 @@ objc_library(
     deps = [
         "//tensorflow_lite_support/cc/task/processor/proto:search_options_cc_proto_inc",
         "//tensorflow_lite_support/ios/task/processor:TFLSearchOptions",
+    ],
+)
+
+objc_library(
+    name = "TFLSearchResultHelpers",
+    srcs = [
+        "sources/TFLSearchResult+Helpers.mm",
+    ],
+    hdrs = [
+        "sources/TFLSearchResult+Helpers.h",
+    ],
+    module_name = "TFLSearchResultHelpers",
+    deps = [
+        "//tensorflow_lite_support/cc/port:statusor",
+        "//tensorflow_lite_support/cc/task/processor/proto:search_result_cc_proto_inc",
+        "//tensorflow_lite_support/ios:TFLCommonCppUtils",
+        "//tensorflow_lite_support/ios/task/processor:TFLSearchResult",
     ],
 )

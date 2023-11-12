@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "remoting/base/constants.h"
 #include "remoting/proto/control.pb.h"
@@ -80,24 +79,6 @@ void VideoFramePump::Pause(bool pause) {
   capture_scheduler_.Pause(pause);
 }
 
-void VideoFramePump::SetLosslessEncode(bool want_lossless) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  encode_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VideoEncoder::SetLosslessEncode,
-                     base::Unretained(encoder_.get()), want_lossless));
-}
-
-void VideoFramePump::SetLosslessColor(bool want_lossless) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  encode_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VideoEncoder::SetLosslessColor,
-                     base::Unretained(encoder_.get()), want_lossless));
-}
-
 void VideoFramePump::SetObserver(Observer* observer) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   observer_ = observer;
@@ -145,8 +126,8 @@ void VideoFramePump::OnCaptureResult(
   // Even when |frame| is nullptr we still need to post it to the encode thread
   // to make sure frames are freed in the same order they are received and
   // that we don't start capturing frame n+2 before frame n is freed.
-  base::PostTaskAndReplyWithResult(
-      encode_task_runner_.get(), FROM_HERE,
+  encode_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&VideoFramePump::EncodeFrame, encoder_.get(),
                      std::move(frame), std::move(captured_frame_timestamps_)),
       base::BindOnce(&VideoFramePump::OnFrameEncoded,

@@ -8,10 +8,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 
-import org.chromium.browserfragment.interfaces.IStringCallback;
-import org.chromium.browserfragment.interfaces.ITabObserverDelegate;
-import org.chromium.browserfragment.interfaces.ITabProxy;
-import org.chromium.browserfragment.interfaces.IWebMessageCallback;
+import org.chromium.webengine.interfaces.ExceptionType;
+import org.chromium.webengine.interfaces.IStringCallback;
+import org.chromium.webengine.interfaces.ITabObserverDelegate;
+import org.chromium.webengine.interfaces.ITabProxy;
+import org.chromium.webengine.interfaces.IWebMessageCallback;
 
 import java.util.List;
 
@@ -26,9 +27,9 @@ class TabProxy extends ITabProxy.Stub {
     private int mTabId;
     private String mGuid;
 
-    private BrowserFragmentTabDelegate mTabObserverDelegate = new BrowserFragmentTabDelegate();
-    private BrowserFragmentNavigationDelegate mNavigationObserverDelegate =
-            new BrowserFragmentNavigationDelegate();
+    private WebFragmentTabDelegate mTabObserverDelegate = new WebFragmentTabDelegate();
+    private WebFragmentNavigationDelegate mNavigationObserverDelegate =
+            new WebFragmentNavigationDelegate();
 
     TabProxy(Tab tab) {
         mTabId = tab.getId();
@@ -78,8 +79,20 @@ class TabProxy extends ITabProxy.Stub {
         mHandler.post(() -> {
             getTab().executeScript(script, useSeparateIsolate, (String result) -> {
                 try {
-                    callback.onResult(result);
+                    if (result != null) {
+                        callback.onResult(result);
+                    } else {
+                        // TODO(crbug.com/1392110): Pass a useful exception message.
+                        try {
+                            callback.onException(ExceptionType.RESTRICTED_API, "");
+                        } catch (RemoteException e) {
+                        }
+                    }
                 } catch (RemoteException e) {
+                    try {
+                        callback.onException(ExceptionType.UNKNOWN, e.getMessage());
+                    } catch (RemoteException e2) {
+                    }
                 }
             });
         });

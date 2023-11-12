@@ -108,6 +108,10 @@ class TestResultsTracker {
   FRIEND_TEST_ALL_PREFIXES(TestResultsTrackerTest,
                            SaveSummaryAsJSONWithLinkInResult);
   FRIEND_TEST_ALL_PREFIXES(TestResultsTrackerTest,
+                           SaveSummaryAsJSONWithTagInResult);
+  FRIEND_TEST_ALL_PREFIXES(TestResultsTrackerTest,
+                           SaveSummaryAsJSONWithPropertyInResult);
+  FRIEND_TEST_ALL_PREFIXES(TestResultsTrackerTest,
                            SaveSummaryAsJSONWithOutTimestampInResult);
   FRIEND_TEST_ALL_PREFIXES(TestResultsTrackerTest,
                            SaveSummaryAsJSONWithTimestampInResult);

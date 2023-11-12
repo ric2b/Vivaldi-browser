@@ -6,7 +6,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
+#include "media/base/stream_parser.h"
 #include "media/base/test_data_util.h"
 #include "media/base/timestamp_constants.h"
 
@@ -47,18 +48,10 @@ constexpr char kSourceId[] = "SourceId";
 TestMediaSource::TestMediaSource(const std::string& filename,
                                  const std::string& mimetype,
                                  size_t initial_append_size,
-                                 bool initial_sequence_mode
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-                                 , const base::FilePath& full_filename
-#endif
-                                 )
+                                 bool initial_sequence_mode)
     : current_position_(0),
       initial_append_size_(initial_append_size),
       initial_sequence_mode_(initial_sequence_mode),
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-      file_path_(full_filename.empty() ? GetTestDataFilePath(filename)
-                                       : full_filename),
-#endif
       mimetype_(mimetype),
       chunk_demuxer_(new ChunkDemuxer(
           base::BindOnce(&TestMediaSource::DemuxerOpened,
@@ -68,11 +61,7 @@ TestMediaSource::TestMediaSource(const std::string& filename,
                               base::Unretained(this)),
           &media_log_)),
       owned_chunk_demuxer_(chunk_demuxer_) {
-  file_data_ = ReadTestDataFile(filename
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-                                , file_path_
-#endif
-  );
+  file_data_ = ReadTestDataFile(filename);
 
   if (initial_append_size_ == kAppendWholeFile)
     initial_append_size_ = file_data_->data_size();
@@ -155,9 +144,26 @@ void TestMediaSource::AppendData(size_t size) {
   CHECK_LT(current_position_, file_data_->data_size());
   CHECK_LE(current_position_ + size, file_data_->data_size());
 
-  bool success = chunk_demuxer_->AppendData(
-      kSourceId, file_data_->data() + current_position_, size,
-      append_window_start_, append_window_end_, &last_timestamp_offset_);
+  // Actual append must succeed in these tests, but parse may fail depending on
+  // expectations verified later in this method after RunSegmentParserLoop()
+  // call(s) are completed.
+  ASSERT_TRUE(chunk_demuxer_->AppendToParseBuffer(
+      kSourceId, file_data_->data() + current_position_, size));
+
+  // Note that large StreamParser::kMaxPendingBytesPerParse makes these just 1
+  // iteration frequently.
+  bool success = true;
+  bool has_more_data = true;
+  while (success && has_more_data) {
+    StreamParser::ParseStatus parse_result =
+        chunk_demuxer_->RunSegmentParserLoop(kSourceId, append_window_start_,
+                                             append_window_end_,
+                                             &last_timestamp_offset_);
+    success = parse_result != StreamParser::ParseStatus::kFailed;
+    has_more_data =
+        parse_result == StreamParser::ParseStatus::kSuccessHasMoreData;
+  }
+
   current_position_ += size;
 
   VerifyExpectedAppendResult(success);
@@ -173,9 +179,23 @@ bool TestMediaSource::AppendAtTime(base::TimeDelta timestamp_offset,
                                    const uint8_t* pData,
                                    int size) {
   CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
-  bool success =
-      chunk_demuxer_->AppendData(kSourceId, pData, size, append_window_start_,
-                                 append_window_end_, &timestamp_offset);
+
+  EXPECT_TRUE(chunk_demuxer_->AppendToParseBuffer(kSourceId, pData, size));
+
+  // Note that large StreamParser::kMaxPendingBytesPerParse makes these just 1
+  // iteration frequently.
+  bool success = true;
+  bool has_more_data = true;
+  while (success && has_more_data) {
+    StreamParser::ParseStatus parse_result =
+        chunk_demuxer_->RunSegmentParserLoop(kSourceId, append_window_start_,
+                                             append_window_end_,
+                                             &timestamp_offset);
+    success = parse_result != StreamParser::ParseStatus::kFailed;
+    has_more_data =
+        parse_result == StreamParser::ParseStatus::kSuccessHasMoreData;
+  }
+
   last_timestamp_offset_ = timestamp_offset;
   return success;
 }
@@ -187,9 +207,24 @@ void TestMediaSource::AppendAtTimeWithWindow(
     const uint8_t* pData,
     int size) {
   CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
-  VerifyExpectedAppendResult(
-      chunk_demuxer_->AppendData(kSourceId, pData, size, append_window_start,
-                                 append_window_end, &timestamp_offset));
+
+  EXPECT_TRUE(chunk_demuxer_->AppendToParseBuffer(kSourceId, pData, size));
+
+  // Note that large StreamParser::kMaxPendingBytesPerParse makes these just 1
+  // iteration frequently.
+  bool success = true;
+  bool has_more_data = true;
+  while (success && has_more_data) {
+    StreamParser::ParseStatus parse_result =
+        chunk_demuxer_->RunSegmentParserLoop(kSourceId, append_window_start,
+                                             append_window_end,
+                                             &timestamp_offset);
+    success = parse_result != StreamParser::ParseStatus::kFailed;
+    has_more_data =
+        parse_result == StreamParser::ParseStatus::kSuccessHasMoreData;
+  }
+
+  VerifyExpectedAppendResult(success);
   last_timestamp_offset_ = timestamp_offset;
 }
 
@@ -226,7 +261,7 @@ void TestMediaSource::Shutdown() {
 }
 
 void TestMediaSource::DemuxerOpened() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&TestMediaSource::DemuxerOpenedTask,
                                 base::Unretained(this)));
 }

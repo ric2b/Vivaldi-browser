@@ -23,6 +23,7 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.blink.mojom.StylusWritingGestureAction;
 import org.chromium.blink.mojom.StylusWritingGestureData;
+import org.chromium.blink.mojom.StylusWritingGestureGranularity;
 import org.chromium.content_public.browser.StylusWritingImeCallback;
 import org.chromium.mojo_base.mojom.String16;
 
@@ -134,13 +135,20 @@ class DirectWritingServiceCallback
         // Populate gesture data as applicable for different gestures recognized.
         StylusWritingGestureData gestureData = new StylusWritingGestureData();
 
+        gestureData.granularity = StylusWritingGestureGranularity.CHARACTER;
         if (gestureType.equals(GESTURE_TYPE_BACKSPACE) || gestureType.equals(GESTURE_TYPE_ZIGZAG)) {
             startPoint = bundle.getFloatArray(GESTURE_BUNDLE_KEY_START_POINT);
             float[] endPoint = bundle.getFloatArray(GESTURE_BUNDLE_KEY_END_POINT);
-            // Clamp x-coordinates of gesture to Editable bounds in order to allow delete gesture
-            // even if delete strokes cross editable bounds.
-            startPoint[0] = Math.max(startPoint[0], mEditableBounds.left);
-            endPoint[0] = Math.min(endPoint[0], mEditableBounds.right);
+            // Clamp coordinates of gesture to Editable bounds in order to allow delete gesture even
+            // if delete strokes cross editable bounds.
+            startPoint[0] =
+                    Math.max(mEditableBounds.left, Math.min(startPoint[0], mEditableBounds.right));
+            startPoint[1] =
+                    Math.max(mEditableBounds.top, Math.min(startPoint[1], mEditableBounds.bottom));
+            endPoint[0] =
+                    Math.max(mEditableBounds.left, Math.min(endPoint[0], mEditableBounds.right));
+            endPoint[1] =
+                    Math.max(mEditableBounds.top, Math.min(endPoint[1], mEditableBounds.bottom));
 
             gestureData.endPoint = toMojoPoint(endPoint);
             gestureData.action = StylusWritingGestureAction.DELETE_TEXT;

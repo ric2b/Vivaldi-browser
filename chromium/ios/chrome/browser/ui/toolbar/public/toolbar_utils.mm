@@ -12,6 +12,7 @@
 // Vivaldi
 #include "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -52,6 +53,11 @@ CGFloat ToolbarClampedFontSizeMultiplier(UIContentSizeCategory category) {
 
 CGFloat ToolbarCollapsedHeight(UIContentSizeCategory category) {
   category = NormalizedCategory(category);
+
+  if (IsVivaldiRunning())
+    return Interpolate(category, vivaldiToolbarHeightFullscreen,
+                       vivaldiNonDynamicToolbarHeightFullscreen); // End Vivaldi
+
   return Interpolate(category, kToolbarHeightFullscreen,
                      kNonDynamicToolbarHeightFullscreen);
 }

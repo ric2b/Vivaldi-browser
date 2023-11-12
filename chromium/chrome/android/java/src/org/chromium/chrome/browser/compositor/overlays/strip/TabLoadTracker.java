@@ -88,7 +88,11 @@ public class TabLoadTracker {
      * @return Whether or not this tab should be visually represented as loading.
      */
     public boolean isLoading() {
-        return mLoading || mPageLoading;
+        // Vivaldi ref. https://bugs.vivaldi.com/browse/VAB-6950
+        // NOTE(jarle@vivaldi.com): Consider only mLoading here, because mPageLoading may never
+        // become true due to a bug in chromium, which gives a never ending spinner on the tab.
+        // Temp. fix.
+        return mLoading/* || mPageLoading*/;
     }
 
     private Runnable mLoadFinishedRunnable = new Runnable() {

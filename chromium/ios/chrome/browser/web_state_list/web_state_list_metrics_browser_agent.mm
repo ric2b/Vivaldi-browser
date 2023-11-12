@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/web_state_list/web_state_list_metrics_browser_agent.h"
 
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -85,6 +86,12 @@ void WebStateListMetricsBrowserAgent::WillCloseWebStateAt(
     bool user_action) {
   if (metric_collection_paused_)
     return;
+
+  base::TimeDelta age_at_deletion =
+      base::Time::Now() - web_state->GetCreationTime();
+  base::UmaHistogramCustomTimes("Tab.AgeAtDeletion", age_at_deletion,
+                                base::Minutes(1), base::Days(24), 50);
+
   if (user_action)
     base::RecordAction(base::UserMetricsAction("MobileTabClosed"));
 }
@@ -102,22 +109,6 @@ void WebStateListMetricsBrowserAgent::WebStateActivatedAt(
     return;
 
   base::RecordAction(base::UserMetricsAction("MobileTabSwitched"));
-}
-
-// web::WebStateObserver
-void WebStateListMetricsBrowserAgent::DidStartNavigation(
-    web::WebState* web_state,
-    web::NavigationContext* navigation_context) {
-  // In order to avoid false positive in the crash loop detection, disable the
-  // counter as soon as an URL is loaded. This requires an user action and is a
-  // significant source of crashes. Ignore NTP as it is loaded by default after
-  // a crash.
-  if (navigation_context->GetUrl().host_piece() != kChromeUINewTabHost) {
-    static dispatch_once_t dispatch_once_token;
-    dispatch_once(&dispatch_once_token, ^{
-      crash_util::ResetFailedStartupAttemptCount();
-    });
-  }
 }
 
 void WebStateListMetricsBrowserAgent::DidFinishNavigation(

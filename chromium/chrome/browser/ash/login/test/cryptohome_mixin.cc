@@ -24,12 +24,15 @@ CryptohomeMixin::~CryptohomeMixin() = default;
 
 void CryptohomeMixin::MarkUserAsExisting(const AccountId& user) {
   auto account_id = cryptohome::CreateAccountIdentifierFromAccountId(user);
-  if (FakeUserDataAuthClient::TestApi::Get()) {
-    FakeUserDataAuthClient::TestApi::Get()->AddExistingUser(
-        std::move(account_id));
-  } else {
-    pending_users_.emplace(account_id);
-  }
+  FakeUserDataAuthClient::TestApi::Get()->AddExistingUser(
+      std::move(account_id));
+}
+
+std::string CryptohomeMixin::AddSession(const AccountId& user,
+                                        bool authenticated) {
+  auto account_id = cryptohome::CreateAccountIdentifierFromAccountId(user);
+  return FakeUserDataAuthClient::TestApi::Get()->AddSession(
+      std::move(account_id), authenticated);
 }
 
 void CryptohomeMixin::AddGaiaPassword(const AccountId& user,
@@ -52,12 +55,37 @@ void CryptohomeMixin::AddGaiaPassword(const AccountId& user,
                                                  cryptohome_key);
 }
 
-void CryptohomeMixin::SetUpOnMainThread() {
-  while (!pending_users_.empty()) {
-    auto user = pending_users_.front();
-    FakeUserDataAuthClient::TestApi::Get()->AddExistingUser(std::move(user));
-    pending_users_.pop();
-  }
+bool CryptohomeMixin::HasPinFactor(const AccountId& user) {
+  return TestApi::HasPinFactor(
+      cryptohome::CreateAccountIdentifierFromAccountId(user));
+}
+
+void CryptohomeMixin::AddRecoveryFactor(const AccountId& user) {
+  return TestApi::AddRecoveryFactor(
+      cryptohome::CreateAccountIdentifierFromAccountId(user));
+}
+
+bool CryptohomeMixin::HasRecoveryFactor(const AccountId& user) {
+  return TestApi::HasRecoveryFactor(
+      cryptohome::CreateAccountIdentifierFromAccountId(user));
+}
+
+void CryptohomeMixin::SendLegacyFingerprintSuccessScan() {
+  CHECK(FakeUserDataAuthClient::TestApi::Get());
+  FakeUserDataAuthClient::TestApi::Get()->SendLegacyFPAuthSignal(
+      user_data_auth::FingerprintScanResult::FINGERPRINT_SCAN_RESULT_SUCCESS);
+}
+
+void CryptohomeMixin::SendLegacyFingerprintFailureScan() {
+  CHECK(FakeUserDataAuthClient::TestApi::Get());
+  FakeUserDataAuthClient::TestApi::Get()->SendLegacyFPAuthSignal(
+      user_data_auth::FingerprintScanResult::FINGERPRINT_SCAN_RESULT_RETRY);
+}
+
+void CryptohomeMixin::SendLegacyFingerprintFailureLockoutScan() {
+  CHECK(FakeUserDataAuthClient::TestApi::Get());
+  FakeUserDataAuthClient::TestApi::Get()->SendLegacyFPAuthSignal(
+      user_data_auth::FingerprintScanResult::FINGERPRINT_SCAN_RESULT_LOCKOUT);
 }
 
 }  // namespace ash

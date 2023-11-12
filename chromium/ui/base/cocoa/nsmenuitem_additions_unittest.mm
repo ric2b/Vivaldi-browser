@@ -8,10 +8,31 @@
 
 #include <ostream>
 
+#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/keycodes/keyboard_code_conversion_mac.h"
+
+@interface NSEventForTesting : NSEvent
+@property(copy, nonatomic) NSString* characters;
+@end
+
+@implementation NSEventForTesting
+
+@synthesize characters = _characters;
+
+- (void)setCharacters:(NSString*)aString {
+  _characters = [aString copy];
+  if (aString.length)
+    ASSERT_TRUE([[self characters] isEqualToString:aString]);
+}
+
+- (NSString*)characters {
+  return _characters != nil ? _characters : [super characters];
+}
+
+@end
 
 std::ostream& operator<<(std::ostream& out, NSObject* obj) {
   return out << base::SysNSStringToUTF8([obj description]);
@@ -29,16 +50,16 @@ NSEvent* KeyEvent(const NSUInteger modifierFlags,
                   NSString* chars,
                   NSString* charsNoMods,
                   const NSUInteger keyCode = 0) {
-  return [NSEvent keyEventWithType:NSEventTypeKeyDown
-                          location:NSZeroPoint
-                     modifierFlags:modifierFlags
-                         timestamp:0.0
-                      windowNumber:0
-                           context:nil
-                        characters:chars
-       charactersIgnoringModifiers:charsNoMods
-                         isARepeat:NO
-                           keyCode:keyCode];
+  return [NSEventForTesting keyEventWithType:NSEventTypeKeyDown
+                                    location:NSZeroPoint
+                               modifierFlags:modifierFlags
+                                   timestamp:0.0
+                                windowNumber:0
+                                     context:nil
+                                  characters:chars
+                 charactersIgnoringModifiers:charsNoMods
+                                   isARepeat:NO
+                                     keyCode:keyCode];
 }
 
 NSMenuItem* MenuItem(NSString* equiv, NSUInteger mask = 0) {
@@ -62,10 +83,14 @@ bool IsCommandlessCyrillicLayout(NSString* layoutId) {
 void ExpectKeyFiresItemEq(bool expected_result,
                           NSEvent* key,
                           NSMenuItem* item,
-                          bool compareCocoa) {
+                          NSString* layout_id,
+                          bool compare_cocoa) {
+  if (layout_id.length)
+    layout_id = [NSString stringWithFormat:@"\nLayout: %@", layout_id];
+
   EXPECT_EQ(expected_result, [item cr_firesForKeyEquivalentEvent:key])
       << key << '\n'
-      << item;
+      << item << layout_id;
 
   // Make sure that Cocoa does in fact agree with our expectations. However,
   // in some cases cocoa behaves weirdly (if you create e.g. a new event that
@@ -73,26 +98,29 @@ void ExpectKeyFiresItemEq(bool expected_result,
   // russion keyboard layout, the copy won't fire a menu item that has cmd-a as
   // key equivalent, even though the original event would) and isn't a good
   // oracle function.
-  if (compareCocoa) {
+  if (compare_cocoa) {
     base::scoped_nsobject<NSMenu> menu([[NSMenu alloc] initWithTitle:@"Menu!"]);
     [menu setAutoenablesItems:NO];
     EXPECT_FALSE([menu performKeyEquivalent:key]);
     [menu addItem:item];
-    EXPECT_EQ(expected_result, [menu performKeyEquivalent:key]) << key << '\n'
-                                                                << item;
+    EXPECT_EQ(expected_result, [menu performKeyEquivalent:key])
+        << key << '\n'
+        << item << layout_id;
   }
 }
 
 void ExpectKeyFiresItem(NSEvent* key,
                         NSMenuItem* item,
-                        bool compareCocoa = true) {
-  ExpectKeyFiresItemEq(true, key, item, compareCocoa);
+                        bool compare_cocoa = true,
+                        NSString* layout_id = @"") {
+  ExpectKeyFiresItemEq(true, key, item, layout_id, compare_cocoa);
 }
 
 void ExpectKeyDoesntFireItem(NSEvent* key,
                              NSMenuItem* item,
-                             bool compareCocoa = true) {
-  ExpectKeyFiresItemEq(false, key, item, compareCocoa);
+                             bool compare_cocoa = true,
+                             NSString* layout_id = @"") {
+  ExpectKeyFiresItemEq(false, key, item, layout_id, compare_cocoa);
 }
 
 TEST(NSMenuItemAdditionsTest, TestExtractsKeyEventModifierMask) {
@@ -502,6 +530,45 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   SetIsInputSourceCommandHebrewForTesting(false);
 }
 
+// With the Persian - Standard layout, pressing Cmd W without Shift but with
+// Caps Lock on generates a key event with a capital W. Make sure we treat
+// the W as lower case so that we don't match Shift Cmd W, unless the user
+// is also holding down the Shift key.
+TEST(NSMenuItemAdditionsTest, TestCmdCapsLockOnPersianStandardLayout) {
+  NSString* capitalW = @"W";
+  NSMenuItem* closeTabItem = MenuItem(@"w", NSEventModifierFlagCommand);
+  NSMenuItem* closeWindowItem = MenuItem(capitalW, NSEventModifierFlagCommand);
+
+  // Simulate pressing Cmd W with Caps Lock on.
+  NSEvent* cmdWWithCapsLock =
+      KeyEvent(NSEventModifierFlagCommand | NSEventModifierFlagCapsLock,
+               capitalW, @"\u0635", kVK_ANSI_W);
+  // The layout generates an event with a capital W. We have to force the
+  // characters because the regular NSEvent machinery insists on converting
+  // the string to lower case.
+  [base::mac::ObjCCastStrict<NSEventForTesting>(cmdWWithCapsLock)
+      setCharacters:capitalW];
+  ExpectKeyFiresItem(cmdWWithCapsLock, closeTabItem, /*compareCocoa=*/false);
+
+  // Make sure Shift-Cmd W triggers Close Window.
+  NSEvent* shiftCmdW =
+      KeyEvent(NSEventModifierFlagCommand | NSEventModifierFlagShift, capitalW,
+               @"\u1612", kVK_ANSI_W);
+  [base::mac::ObjCCastStrict<NSEventForTesting>(shiftCmdW)
+      setCharacters:capitalW];
+  ExpectKeyFiresItem(shiftCmdW, closeWindowItem, /*compareCocoa=*/false);
+
+  // And also Shift-Cmd W with Caps Lock down.
+  NSEvent* shiftCmdWWithCapsLock =
+      KeyEvent(NSEventModifierFlagCommand | NSEventModifierFlagShift |
+                   NSEventModifierFlagCapsLock,
+               capitalW, @"\u1612", kVK_ANSI_W);
+  [base::mac::ObjCCastStrict<NSEventForTesting>(shiftCmdWWithCapsLock)
+      setCharacters:capitalW];
+  ExpectKeyFiresItem(shiftCmdWWithCapsLock, closeWindowItem,
+                     /*compareCocoa=*/false);
+}
+
 NSString* keyCodeToCharacter(NSUInteger keyCode,
                              EventModifiers modifiers,
                              TISInputSourceRef layout) {
@@ -582,9 +649,9 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
       // for numerical key> will always trigger tab switching. This causes
       // Chrome to match the behavior of Safari, and has been expected by users
       // of every other keyboard layout.
-      ExpectKeyDoesntFireItem(key, item, false);
+      ExpectKeyDoesntFireItem(key, item, false, layoutId);
     } else {
-      ExpectKeyFiresItem(key, item, false);
+      ExpectKeyFiresItem(key, item, false, layoutId);
     }
 
     if (IsKeyboardLayoutCommandQwerty(layoutId)) {

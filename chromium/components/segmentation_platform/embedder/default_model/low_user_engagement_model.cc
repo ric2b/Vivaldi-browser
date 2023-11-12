@@ -6,9 +6,12 @@
 
 #include <array>
 
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/metrics/field_trial_params.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
+#include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
+#include "components/segmentation_platform/public/features.h"
 
 namespace segmentation_platform {
 
@@ -37,6 +40,26 @@ constexpr std::array<MetadataWriter::UMAFeature, 1> kChromeStartUMAFeatures = {
 LowUserEngagementModel::LowUserEngagementModel()
     : ModelProvider(kChromeStartSegmentId) {}
 
+std::unique_ptr<Config> LowUserEngagementModel::GetConfig() {
+  auto config = std::make_unique<Config>();
+  config->segmentation_key = kChromeLowUserEngagementSegmentationKey;
+  config->segmentation_uma_name = kChromeLowUserEngagementUmaName;
+  config->AddSegmentId(kChromeStartSegmentId,
+                       std::make_unique<LowUserEngagementModel>());
+
+  int segment_selection_ttl_days = base::GetFieldTrialParamByFeatureAsInt(
+      features::kSegmentationPlatformLowEngagementFeature,
+      kVariationsParamNameSegmentSelectionTTLDays, 7);
+  int unknown_selection_ttl_days = base::GetFieldTrialParamByFeatureAsInt(
+      features::kSegmentationPlatformLowEngagementFeature,
+      kVariationsParamNameUnknownSelectionTTLDays, 7);
+  config->segment_selection_ttl = base::Days(segment_selection_ttl_days);
+  config->unknown_selection_ttl = base::Days(unknown_selection_ttl_days);
+  config->is_boolean_segment = true;
+
+  return config;
+}
+
 void LowUserEngagementModel::InitAndFetchModel(
     const ModelUpdatedCallback& model_updated_callback) {
   proto::SegmentationModelMetadata chrome_start_metadata;
@@ -53,18 +76,18 @@ void LowUserEngagementModel::InitAndFetchModel(
                         kChromeStartUMAFeatures.size());
 
   constexpr int kModelVersion = 1;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindRepeating(model_updated_callback, kChromeStartSegmentId,
                           std::move(chrome_start_metadata), kModelVersion));
 }
 
 void LowUserEngagementModel::ExecuteModelWithInput(
-    const std::vector<float>& inputs,
+    const ModelProvider::Request& inputs,
     ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != 28) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -78,8 +101,9 @@ void LowUserEngagementModel::ExecuteModelWithInput(
   if (!weeks[0] || !weeks[1] || !weeks[2] || !weeks[3])
     result = 1;
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), ModelProvider::Response(1, result)));
 }
 
 bool LowUserEngagementModel::ModelAvailable() {

@@ -24,6 +24,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/price_tracking_utils.h"
+#include "components/commerce/core/shopping_service.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -67,6 +68,10 @@ std::u16string PriceTrackingIconView::GetTextForTooltipAndAccessibleName()
 
 void PriceTrackingIconView::OnExecuting(
     PageActionIconView::ExecuteSource execute_source) {
+  if (AnimateOutTimer().IsRunning()) {
+    AnimateOutTimer().Stop();
+  }
+
   auto* web_contents = GetWebContents();
   DCHECK(web_contents);
   auto* tab_helper =
@@ -85,6 +90,8 @@ void PriceTrackingIconView::OnExecuting(
         ui::ImageModel::FromImage(product_image),
         base::BindOnce(&PriceTrackingIconView::EnablePriceTracking,
                        weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&PriceTrackingIconView::UnpauseAnimation,
+                       weak_ptr_factory_.GetWeakPtr()),
         PriceTrackingBubbleDialogView::Type::TYPE_FIRST_USE_EXPERIENCE);
   } else {
     EnablePriceTracking(/*enable=*/true);
@@ -92,6 +99,8 @@ void PriceTrackingIconView::OnExecuting(
         GetWebContents(), profile_, GetWebContents()->GetLastCommittedURL(),
         ui::ImageModel::FromImage(product_image),
         base::BindOnce(&PriceTrackingIconView::EnablePriceTracking,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&PriceTrackingIconView::UnpauseAnimation,
                        weak_ptr_factory_.GetWeakPtr()),
         PriceTrackingBubbleDialogView::Type::TYPE_NORMAL);
   }
@@ -119,6 +128,7 @@ void PriceTrackingIconView::UpdateImpl() {
 
   if (should_show) {
     SetVisualState(IsPriceTracking());
+
     if (!GetVisible()) {
       base::RecordAction(
           base::UserMetricsAction("Commerce.PriceTracking.OmniboxChipShown"));
@@ -146,10 +156,10 @@ void PriceTrackingIconView::AnimationProgressed(
       GetAnimationValue() >= kAnimationValueWhenLabelFullyShown) {
     should_extend_label_shown_duration_ = false;
     PauseAnimation();
-    animate_out_timer_.Start(
+    AnimateOutTimer().Start(
         FROM_HERE, kLabelPersistDuration,
-        base::BindRepeating(&PriceTrackingIconView::UnpauseAnimation,
-                            base::Unretained(this)));
+        base::BindOnce(&PriceTrackingIconView::UnpauseAnimation,
+                       base::Unretained(this)));
   }
 }
 
@@ -160,6 +170,11 @@ void PriceTrackingIconView::ForceVisibleForTesting(bool is_tracking_price) {
 
 const std::u16string& PriceTrackingIconView::GetIconLabelForTesting() {
   return label()->GetText();
+}
+
+void PriceTrackingIconView::SetOneShotTimerForTesting(
+    base::OneShotTimer* timer) {
+  animate_out_timer_for_testing_ = timer;
 }
 
 void PriceTrackingIconView::EnablePriceTracking(bool enable) {
@@ -203,11 +218,27 @@ void PriceTrackingIconView::EnablePriceTracking(bool enable) {
   const bookmarks::BookmarkNode* node =
       model->GetMostRecentlyAddedUserNodeForURL(
           GetWebContents()->GetLastCommittedURL());
-  commerce::SetPriceTrackingStateForBookmark(
-      commerce::ShoppingServiceFactory::GetForBrowserContext(profile_), model,
-      node, enable,
+
+  commerce::ShoppingService* service =
+      commerce::ShoppingServiceFactory::GetForBrowserContext(profile_);
+  base::OnceCallback<void(bool)> callback =
       base::BindOnce(&PriceTrackingIconView::OnPriceTrackingServerStateUpdated,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr());
+
+  if (node) {
+    commerce::SetPriceTrackingStateForBookmark(
+        commerce::ShoppingServiceFactory::GetForBrowserContext(profile_), model,
+        node, enable, std::move(callback));
+  } else {
+    absl::optional<commerce::ProductInfo> info =
+        service->GetAvailableProductInfoForUrl(
+            GetWebContents()->GetLastCommittedURL());
+    if (info.has_value()) {
+      commerce::SetPriceTrackingStateForClusterId(
+          commerce::ShoppingServiceFactory::GetForBrowserContext(profile_),
+          model, info->product_cluster_id, enable, std::move(callback));
+    }
+  }
 
   SetVisualState(enable);
 }
@@ -235,15 +266,14 @@ void PriceTrackingIconView::OnPriceTrackingServerStateUpdated(bool success) {
 }
 
 bool PriceTrackingIconView::IsPriceTracking() const {
-  if (!GetWebContents()) {
+  if (!GetWebContents())
     return false;
-  }
-  bookmarks::BookmarkModel* const bookmark_model =
-      BookmarkModelFactory::GetForBrowserContext(profile_);
-  const bookmarks::BookmarkNode* bookmark_node =
-      bookmark_model->GetMostRecentlyAddedUserNodeForURL(
-          GetWebContents()->GetLastCommittedURL());
-  return commerce::IsBookmarkPriceTracked(bookmark_model, bookmark_node);
+
+  auto* tab_helper =
+      commerce::ShoppingListUiTabHelper::FromWebContents(GetWebContents());
+  CHECK(tab_helper);
+
+  return tab_helper->IsPriceTracking();
 }
 
 bool PriceTrackingIconView::ShouldShowFirstUseExperienceBubble() const {
@@ -274,4 +304,9 @@ void PriceTrackingIconView::MaybeShowPageActionLabel() {
 void PriceTrackingIconView::HidePageActionLabel() {
   UnpauseAnimation();
   ResetSlideAnimation(false);
+}
+
+base::OneShotTimer& PriceTrackingIconView::AnimateOutTimer() {
+  return animate_out_timer_for_testing_ ? *animate_out_timer_for_testing_
+                                        : animate_out_timer_;
 }

@@ -11,11 +11,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/task_runner_util.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "google_apis/common/request_sender.h"
 #include "google_apis/common/task_util.h"
@@ -159,7 +159,7 @@ void UrlFetchRequestBase::StartAfterPrepare(
     // to connect to the server.  We need to call CompleteRequestWithError
     // asynchronously because client code does not assume result callback is
     // called synchronously.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&UrlFetchRequestBase::CompleteRequestWithError,
                        weak_ptr_factory_.GetWeakPtr(), error_code));
@@ -262,8 +262,7 @@ UrlFetchRequestBase::DownloadData::DownloadData(
 UrlFetchRequestBase::DownloadData::~DownloadData() {
   if (output_file.IsValid()) {
     blocking_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce([](base::File file) {}, std::move(output_file)));
+        FROM_HERE, base::DoNothingWithBoundArgs(std::move(output_file)));
   }
 }
 
@@ -322,8 +321,8 @@ void UrlFetchRequestBase::OnDataReceived(base::StringPiece string_piece,
 
   if (!download_data_->output_file_path.empty()) {
     DownloadData* download_data_ptr = download_data_.get();
-    base::PostTaskAndReplyWithResult(
-        blocking_task_runner(), FROM_HERE,
+    blocking_task_runner()->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&UrlFetchRequestBase::WriteFileData,
                        std::string(string_piece), download_data_ptr),
         base::BindOnce(&UrlFetchRequestBase::OnWriteComplete,
@@ -341,8 +340,7 @@ void UrlFetchRequestBase::OnComplete(bool success) {
   DCHECK(download_data_);
   blocking_task_runner()->PostTaskAndReply(
       FROM_HERE,
-      base::BindOnce([](base::File file) {},
-                     std::move(download_data_->output_file)),
+      base::DoNothingWithBoundArgs(std::move(download_data_->output_file)),
       base::BindOnce(&UrlFetchRequestBase::OnOutputFileClosed,
                      weak_ptr_factory_.GetWeakPtr(), success));
 }

@@ -7,11 +7,11 @@
 
 #include <ostream>
 
-#include "ash/components/phonehub/browser_tabs_metadata_fetcher.h"
-#include "ash/components/phonehub/browser_tabs_model_provider.h"
-#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "base/callback_list.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/ash/components/phonehub/browser_tabs_metadata_fetcher.h"
+#include "chromeos/ash/components/phonehub/browser_tabs_model_provider.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 
 namespace sync_sessions {
 class SessionSyncService;

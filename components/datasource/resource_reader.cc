@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -30,25 +31,7 @@
 #include "ios/chrome/browser/paths/paths.h"
 #endif
 
-namespace {
-
-constexpr char kResourceUrlPrefix[] = "/resources/";
-
-}  // namespace
-
-/* static */
-bool ResourceReader::IsResourceURL(base::StringPiece url,
-                                   std::string* resource_path) {
-  base::StringPiece prefix(kResourceUrlPrefix);
-  if (!base::StartsWith(url, prefix))
-    return false;
-  if (resource_path) {
-    // Just strip the first slash.
-    static_assert(kResourceUrlPrefix[0] == '/', "starts with a slash");
-    resource_path->assign(url.data() + 1, url.size() - 1);
-  }
-  return true;
-}
+namespace {}  // namespace
 
 #if !BUILDFLAG(IS_ANDROID)
 
@@ -76,7 +59,7 @@ base::FilePath GetResourceDirectoryImpl() {
   base::FilePath dir;
 #if BUILDFLAG(IS_IOS)
   base::PathService::Get(base::DIR_MODULE, &dir);
-  return dir;
+  return dir.Append(FILE_PATH_LITERAL("res"));
 #else
   base::PathService::Get(chrome::DIR_RESOURCES, &dir);
   return dir.Append(FILE_PATH_LITERAL("vivaldi"));
@@ -119,17 +102,19 @@ absl::optional<base::Value> ResourceReader::ReadJSON(
 /* static */
 gfx::Image ResourceReader::ReadPngImage(base::StringPiece resource_url) {
   std::string resource_path;
-  if (!ResourceReader::IsResourceURL(resource_url, &resource_path)) {
-    LOG(ERROR) << "resource_url does not start with " << kResourceUrlPrefix
+  if (!vivaldi_data_url_utils::IsResourceURL(resource_url, &resource_path)) {
+    LOG(ERROR) << "resource_url does not start with "
+               << vivaldi_data_url_utils::kResourceUrlPrefix
                << " prefix: " << resource_url;
     return gfx::Image();
   }
 #if BUILDFLAG(IS_ANDROID)
   // On Android we need to strip the prefix resources folder from the path.
   else {
-    resource_path.erase(0, std::string(kResourceUrlPrefix).size() - 1);
+    resource_path.erase(
+        0, std::string(vivaldi_data_url_utils::kResourceUrlPrefix).size() - 1);
   }
-#endif // IS_ANDROID
+#endif  // IS_ANDROID
   ResourceReader reader(std::move(resource_path));
   if (!reader.IsValid()) {
     LOG(ERROR) << reader.GetError();

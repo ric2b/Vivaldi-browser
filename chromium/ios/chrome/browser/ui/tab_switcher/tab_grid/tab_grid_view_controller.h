@@ -10,23 +10,25 @@
 #import "ios/chrome/browser/ui/gestures/layout_switcher_provider.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/ui/keyboard/key_command_actions.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_animation_layout_providing.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
 @protocol ApplicationCommands;
-@protocol GridConsumer;
 @protocol GridCommands;
-@protocol GridDragDropHandler;
 @protocol GridImageDataSource;
 @protocol PriceCardDataSource;
 @protocol GridShareableItemsProvider;
 class GURL;
 @protocol IncognitoReauthCommands;
 @protocol IncognitoReauthConsumer;
+@class LayoutGuideCenter;
 @protocol PopupMenuCommands;
 @protocol RecentTabsConsumer;
 @class RecentTabsTableViewController;
+@protocol TabCollectionConsumer;
+@protocol TabCollectionDragDropHandler;
 @class TabGridViewController;
 @protocol ThumbStripCommands;
 @protocol ViewControllerTraitCollectionObserver;
@@ -90,9 +92,11 @@ enum class TabGridPageConfiguration {
 @interface TabGridViewController
     : UIViewController <GridTransitionAnimationLayoutProviding,
                         IncognitoReauthObserver,
+                        KeyCommandActions,
                         LayoutSwitcherProvider,
                         TabGridPaging,
-                        ThumbStripSupporting>
+                        ThumbStripSupporting,
+                        ViewRevealingAnimatee>
 
 @property(nonatomic, weak) id<ApplicationCommands> handler;
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
@@ -110,9 +114,10 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak) id<TabGridViewControllerDelegate> delegate;
 
 // Consumers send updates from the model layer to the UI layer.
-@property(nonatomic, readonly) id<GridConsumer> regularTabsConsumer;
-@property(nonatomic, readonly) id<GridConsumer, IncognitoReauthConsumer>
-    incognitoTabsConsumer;
+@property(nonatomic, readonly) id<TabCollectionConsumer> regularTabsConsumer;
+@property(nonatomic, readonly)
+    id<TabCollectionConsumer, IncognitoReauthConsumer>
+        incognitoTabsConsumer;
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
 
 // Vivaldi
@@ -124,8 +129,10 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak) id<GridCommands> incognitoTabsDelegate;
 
 // Handles drag and drop interactions that require the model layer.
-@property(nonatomic, weak) id<GridDragDropHandler> regularTabsDragDropHandler;
-@property(nonatomic, weak) id<GridDragDropHandler> incognitoTabsDragDropHandler;
+@property(nonatomic, weak) id<TabCollectionDragDropHandler>
+    regularTabsDragDropHandler;
+@property(nonatomic, weak) id<TabCollectionDragDropHandler>
+    incognitoTabsDragDropHandler;
 
 // Data sources provide lazy access to heavy-weight resources.
 @property(nonatomic, weak) id<GridImageDataSource> regularTabsImageDataSource;
@@ -168,6 +175,9 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak) id<GridContextMenuProvider>
     incognitoTabsContextMenuProvider;
 
+// The layout guide center to use to refer to the bottom toolbar.
+@property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
+
 // Init with tab grid view configuration, which decides which sub view
 // controller should be added.
 - (instancetype)initWithPageConfiguration:
@@ -195,6 +205,9 @@ enum class TabGridPageConfiguration {
 // Sets both the current page and page control's selected page to `page`.
 // Animation is used if `animated` is YES.
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated;
+
+// YES if it is possible to undo the close all conditions.
+@property(nonatomic, assign) BOOL undoCloseAllAvailable;
 
 @end
 

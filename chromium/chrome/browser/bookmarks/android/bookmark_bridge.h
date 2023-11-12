@@ -17,13 +17,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/supports_user_data.h"
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/reading_list/android/reading_list_manager.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/common/android/bookmark_id.h"
-#include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "url/android/gurl_android.h"
 
@@ -33,23 +33,28 @@ class ManagedBookmarkService;
 class ScopedGroupBookmarkActions;
 }  // namespace bookmarks
 
-class OptimizationGuideKeyedService;
 class Profile;
 
 // The delegate to fetch bookmarks information for the Android native
 // bookmark page. This fetches the bookmarks, title, urls, folder
 // hierarchy.
+// The life cycle of the bridge is controlled by the BookmarkModel through the
+// user data pattern. Native side of the bridge owns its Java counterpart.
 class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
                        public PartnerBookmarksShim::Observer,
                        public ReadingListManager::Observer,
-                       public ProfileObserver {
+                       public ProfileObserver,
+                       public base::SupportsUserData::Data {
  public:
-  BookmarkBridge(JNIEnv* env,
-                 const base::android::JavaRef<jobject>& obj,
-                 const base::android::JavaRef<jobject>& j_profile);
+  BookmarkBridge(Profile* profile,
+                 bookmarks::BookmarkModel* model,
+                 bookmarks::ManagedBookmarkService* managed_bookmark_service,
+                 PartnerBookmarksShim* partner_bookmarks_shim,
+                 ReadingListManager* reading_list_manager);
 
   BookmarkBridge(const BookmarkBridge&) = delete;
   BookmarkBridge& operator=(const BookmarkBridge&) = delete;
+  ~BookmarkBridge() override;
 
   void Destroy(JNIEnv*, const base::android::JavaParamRef<jobject>&);
 
@@ -198,20 +203,12 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& j_folder_id_obj,
-      const base::android::JavaParamRef<jobject>& j_callback_obj,
       const base::android::JavaParamRef<jobject>& j_result_obj);
 
   jboolean IsFolderVisible(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            jlong id,
                            jint type);
-
-  void GetCurrentFolderHierarchy(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& j_folder_id_obj,
-      const base::android::JavaParamRef<jobject>& j_callback_obj,
-      const base::android::JavaParamRef<jobject>& j_result_obj);
 
   void SearchBookmarks(JNIEnv* env,
                        const base::android::JavaParamRef<jobject>& obj,
@@ -288,19 +285,8 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
   // ProfileObserver override
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
-  void GetUpdatedProductPrices(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobjectArray>& gurls,
-      const base::android::JavaParamRef<jobject>& callback);
-
-  void OnProductPriceUpdated(
-      base::android::ScopedJavaGlobalRef<jobject> callback,
-      const GURL& url,
-      const base::flat_map<
-          optimization_guide::proto::OptimizationType,
-          optimization_guide::OptimizationGuideDecisionWithMetadata>&
-          decisions);
+  // Gets a reference to Java portion of the bridge.
+  base::android::ScopedJavaGlobalRef<jobject> GetJavaBookmarkModel();
 
 
   // <--- Vivaldi
@@ -358,8 +344,6 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
 
   // Vivaldi --->
  private:
-  ~BookmarkBridge() override;
-
   base::android::ScopedJavaLocalRef<jobject> CreateJavaBookmark(
       const bookmarks::BookmarkNode* node);
   void ExtractBookmarkNodeInformation(
@@ -436,7 +420,7 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
   void DestroyJavaObject();
 
   raw_ptr<Profile> profile_;
-  JavaObjectWeakGlobalRef weak_java_ref_;
+  base::android::ScopedJavaGlobalRef<jobject> java_bookmark_model_;
   raw_ptr<bookmarks::BookmarkModel> bookmark_model_;                     // weak
   raw_ptr<bookmarks::ManagedBookmarkService> managed_bookmark_service_;  // weak
   std::unique_ptr<bookmarks::ScopedGroupBookmarkActions>
@@ -452,9 +436,6 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
 
   // Observes the profile destruction and creation.
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
-
-  // A means of accessing metadata about bookmarks.
-  raw_ptr<OptimizationGuideKeyedService> opt_guide_;
 
   // Weak pointers for creating callbacks that won't call into a destroyed
   // object.

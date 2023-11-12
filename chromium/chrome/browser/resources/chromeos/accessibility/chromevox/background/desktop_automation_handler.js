@@ -10,11 +10,12 @@ import {AutomationUtil} from '../../common/automation_util.js';
 import {constants} from '../../common/constants.js';
 import {WrappingCursor} from '../../common/cursors/cursor.js';
 import {CursorRange} from '../../common/cursors/range.js';
+import {LocalStorage} from '../../common/local_storage.js';
 import {Command} from '../common/command_store.js';
 import {ChromeVoxEvent, CustomAutomationEvent} from '../common/custom_automation_event.js';
 import {EventSourceType} from '../common/event_source_type.js';
 import {Msgs} from '../common/msgs.js';
-import {QueueMode, TtsCategory} from '../common/tts_interface.js';
+import {QueueMode, TtsCategory} from '../common/tts_types.js';
 
 import {AutoScrollHandler} from './auto_scroll_handler.js';
 import {AutomationObjectConstructorInstaller} from './automation_object_constructor_installer.js';
@@ -25,7 +26,7 @@ import {DesktopAutomationInterface} from './desktop_automation_interface.js';
 import {TextEditHandler} from './editing/editing.js';
 import {EventSourceState} from './event_source.js';
 import {Output} from './output/output.js';
-import {OutputEventType} from './output/output_types.js';
+import {OutputCustomEvent} from './output/output_types.js';
 
 const ActionType = chrome.automation.ActionType;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -200,7 +201,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
       // results should generate output.
       const range = CursorRange.fromNode(focus);
       ChromeVoxState.instance.setCurrentRange(range);
-      output.withRichSpeechAndBraille(range, null, OutputEventType.NAVIGATE)
+      output.withRichSpeechAndBraille(range, null, OutputCustomEvent.NAVIGATE)
           .go();
     });
   }
@@ -327,7 +328,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
       return;
     }
 
-    if (!AutoScrollHandler.getInstance().onFocusEventNavigation(node)) {
+    if (!AutoScrollHandler.instance.onFocusEventNavigation(node)) {
       return;
     }
 
@@ -429,7 +430,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
 
       // If auto read is set, skip focus recovery and start reading from the
       // top.
-      if (localStorage['autoRead'] === 'true' &&
+      if (LocalStorage.get('autoRead') &&
           AutomationUtil.getTopLevelRoot(evt.target) === evt.target) {
         ChromeVoxState.instance.setCurrentRange(
             CursorRange.fromNode(evt.target));
@@ -613,7 +614,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
     if (fromDesktop &&
         (!this.lastValueTarget_ || this.lastValueTarget_ !== target)) {
       const range = CursorRange.fromNode(target);
-      output.withRichSpeechAndBraille(range, range, OutputEventType.NAVIGATE);
+      output.withRichSpeechAndBraille(range, range, OutputCustomEvent.NAVIGATE);
       this.lastValueTarget_ = target;
     } else {
       output.format(
@@ -688,7 +689,8 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
             currentRange.start.node.className === 'OmniboxViewViews') {
           const range = CursorRange.fromNode(target);
           new Output()
-              .withRichSpeechAndBraille(range, range, OutputEventType.NAVIGATE)
+              .withRichSpeechAndBraille(
+                  range, range, OutputCustomEvent.NAVIGATE)
               .go();
         }
 
@@ -766,7 +768,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
         // editable).
         const range = CursorRange.fromNode(focus);
         new Output()
-            .withRichSpeechAndBraille(range, null, OutputEventType.NAVIGATE)
+            .withRichSpeechAndBraille(range, null, OutputCustomEvent.NAVIGATE)
             .go();
         ChromeVoxState.instance.setCurrentRange(range);
       }
@@ -875,7 +877,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
     // Restore to previous position.
     let url = focusedRoot.docUrl;
     url = url.substring(0, url.indexOf('#')) || url;
-    const pos = ChromeVox.position[url];
+    const pos = ChromeVoxState.position[url];
 
     // Deny recovery for chrome urls.
     if (pos && url.indexOf('chrome://') !== 0) {

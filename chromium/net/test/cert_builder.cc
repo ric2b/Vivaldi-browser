@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -13,6 +14,8 @@
 #include "crypto/openssl_util.h"
 #include "crypto/rsa_private_key.h"
 #include "net/cert/asn1_util.h"
+#include "net/cert/pki/certificate_policies.h"
+#include "net/cert/pki/extended_key_usage.h"
 #include "net/cert/pki/parse_certificate.h"
 #include "net/cert/pki/verify_signed_data.h"
 #include "net/cert/x509_util.h"
@@ -31,6 +34,8 @@
 namespace net {
 
 namespace {
+
+constexpr char kSimpleChainHostname[] = "www.example.com";
 
 std::string Sha256WithRSAEncryption() {
   const uint8_t kSha256WithRSAEncryption[] = {0x30, 0x0D, 0x06, 0x09, 0x2a,
@@ -177,76 +182,45 @@ std::unique_ptr<CertBuilder> CertBuilder::FromSubjectPublicKeyInfo(
 CertBuilder::~CertBuilder() = default;
 
 // static
-void CertBuilder::CreateSimpleChain(
-    std::unique_ptr<CertBuilder>* out_leaf,
-    std::unique_ptr<CertBuilder>* out_intermediate,
-    std::unique_ptr<CertBuilder>* out_root) {
-  const char kHostname[] = "www.example.com";
-  base::FilePath certs_dir =
-      GetTestNetDataDirectory()
-          .AppendASCII("verify_certificate_chain_unittest")
-          .AppendASCII("target-and-intermediate");
-
-  CertificateList orig_certs = CreateCertificateListFromFile(
-      certs_dir, "chain.pem", X509Certificate::FORMAT_AUTO);
-  ASSERT_EQ(3U, orig_certs.size());
-
-  // Set a default validity.
+std::vector<std::unique_ptr<CertBuilder>> CertBuilder::CreateSimpleChain(
+    size_t chain_length) {
+  std::vector<std::unique_ptr<CertBuilder>> chain;
   base::Time not_before = base::Time::Now() - base::Days(7);
   base::Time not_after = base::Time::Now() + base::Days(7);
-
-  // Build slightly modified variants of |orig_certs|.
-  *out_root =
-      std::make_unique<CertBuilder>(orig_certs[2]->cert_buffer(), nullptr);
-  (*out_root)->SetValidity(not_before, not_after);
-  (*out_root)->SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
-  (*out_root)->GenerateECKey();
-
-  *out_intermediate = std::make_unique<CertBuilder>(
-      orig_certs[1]->cert_buffer(), out_root->get());
-  (*out_intermediate)->SetValidity(not_before, not_after);
-  (*out_intermediate)->EraseExtension(der::Input(kCrlDistributionPointsOid));
-  (*out_intermediate)->EraseExtension(der::Input(kAuthorityInfoAccessOid));
-  (*out_intermediate)->SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
-  (*out_intermediate)->GenerateECKey();
-
-  *out_leaf = std::make_unique<CertBuilder>(orig_certs[0]->cert_buffer(),
-                                            out_intermediate->get());
-  (*out_leaf)->SetValidity(not_before, not_after);
-  (*out_leaf)->SetSubjectAltName(kHostname);
-  (*out_leaf)->EraseExtension(der::Input(kCrlDistributionPointsOid));
-  (*out_leaf)->EraseExtension(der::Input(kAuthorityInfoAccessOid));
-  (*out_leaf)->SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
-  (*out_leaf)->GenerateECKey();
+  CertBuilder* parent_builder = nullptr;
+  for (size_t remaining_chain_length = chain_length; remaining_chain_length;
+       remaining_chain_length--) {
+    auto builder = std::make_unique<CertBuilder>(nullptr, parent_builder);
+    builder->SetValidity(not_before, not_after);
+    if (remaining_chain_length > 1) {
+      // CA properties:
+      builder->SetBasicConstraints(/*is_ca=*/true, /*path_len=*/-1);
+      builder->SetKeyUsages(
+          {KEY_USAGE_BIT_KEY_CERT_SIGN, KEY_USAGE_BIT_CRL_SIGN});
+    } else {
+      // Leaf properties:
+      builder->SetBasicConstraints(/*is_ca=*/false, /*path_len=*/-1);
+      builder->SetKeyUsages({KEY_USAGE_BIT_DIGITAL_SIGNATURE});
+      builder->SetExtendedKeyUsages({der::Input(kServerAuth)});
+      builder->SetSubjectAltName(kSimpleChainHostname);
+    }
+    parent_builder = builder.get();
+    chain.push_back(std::move(builder));
+  }
+  base::ranges::reverse(chain);
+  return chain;
 }
 
 // static
-void CertBuilder::CreateSimpleChain(std::unique_ptr<CertBuilder>* out_leaf,
-                                    std::unique_ptr<CertBuilder>* out_root) {
-  const char kHostname[] = "www.example.com";
-  base::FilePath certs_dir = GetTestCertsDirectory();
+std::array<std::unique_ptr<CertBuilder>, 3> CertBuilder::CreateSimpleChain3() {
+  auto chain = CreateSimpleChain(3);
+  return {std::move(chain[0]), std::move(chain[1]), std::move(chain[2])};
+}
 
-  auto orig_root = ImportCertFromFile(certs_dir, "root_ca_cert.pem");
-  ASSERT_TRUE(orig_root);
-  auto orig_leaf = ImportCertFromFile(certs_dir, "ok_cert.pem");
-  ASSERT_TRUE(orig_leaf);
-
-  // Set a default validity.
-  base::Time not_before = base::Time::Now() - base::Days(7);
-  base::Time not_after = base::Time::Now() + base::Days(7);
-
-  // Build slightly modified variants of |orig_certs|.
-  *out_root = std::make_unique<CertBuilder>(orig_root->cert_buffer(), nullptr);
-  (*out_root)->SetValidity(not_before, not_after);
-  (*out_root)->SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
-  (*out_root)->GenerateECKey();
-
-  *out_leaf =
-      std::make_unique<CertBuilder>(orig_leaf->cert_buffer(), out_root->get());
-  (*out_leaf)->SetValidity(not_before, not_after);
-  (*out_leaf)->SetSubjectAltName(kHostname);
-  (*out_leaf)->SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
-  (*out_leaf)->GenerateECKey();
+// static
+std::array<std::unique_ptr<CertBuilder>, 2> CertBuilder::CreateSimpleChain2() {
+  auto chain = CreateSimpleChain(2);
+  return {std::move(chain[0]), std::move(chain[1])};
 }
 
 // static
@@ -418,6 +392,66 @@ void CertBuilder::SetBasicConstraints(bool is_ca, int path_len) {
     ASSERT_TRUE(CBB_add_asn1_uint64(&basic_constraints, path_len));
 
   SetExtension(der::Input(kBasicConstraintsOid), FinishCBB(cbb.get()),
+               /*critical=*/true);
+}
+
+namespace {
+void AddNameConstraintsSubTrees(CBB* cbb,
+                                const std::vector<std::string>& dns_names) {
+  CBB subtrees;
+  ASSERT_TRUE(CBB_add_asn1(
+      cbb, &subtrees, CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0));
+  for (const auto& name : dns_names) {
+    CBB subtree;
+    ASSERT_TRUE(CBB_add_asn1(&subtrees, &subtree, CBS_ASN1_SEQUENCE));
+    CBB general_name;
+    ASSERT_TRUE(
+        CBB_add_asn1(&subtree, &general_name, CBS_ASN1_CONTEXT_SPECIFIC | 2));
+    ASSERT_TRUE(CBBAddBytes(&general_name, name));
+    ASSERT_TRUE(CBB_flush(&subtrees));
+  }
+  ASSERT_TRUE(CBB_flush(cbb));
+}
+}  // namespace
+
+void CertBuilder::SetNameConstraintsDnsNames(
+    const std::vector<std::string>& permitted_dns_names,
+    const std::vector<std::string>& excluded_dns_names) {
+  // From RFC 5280:
+  //
+  //   id-ce-nameConstraints OBJECT IDENTIFIER ::=  { id-ce 30 }
+  //
+  //   NameConstraints ::= SEQUENCE {
+  //        permittedSubtrees       [0]     GeneralSubtrees OPTIONAL,
+  //        excludedSubtrees        [1]     GeneralSubtrees OPTIONAL }
+  //
+  //   GeneralSubtrees ::= SEQUENCE SIZE (1..MAX) OF GeneralSubtree
+  //
+  //   GeneralSubtree ::= SEQUENCE {
+  //        base                    GeneralName,
+  //        minimum         [0]     BaseDistance DEFAULT 0,
+  //        maximum         [1]     BaseDistance OPTIONAL }
+  //
+  //   BaseDistance ::= INTEGER (0..MAX)
+
+  if (permitted_dns_names.empty() && excluded_dns_names.empty()) {
+    EraseExtension(der::Input(kNameConstraintsOid));
+    return;
+  }
+
+  bssl::ScopedCBB cbb;
+  CBB name_constraints;
+  ASSERT_TRUE(CBB_init(cbb.get(), 64));
+  ASSERT_TRUE(CBB_add_asn1(cbb.get(), &name_constraints, CBS_ASN1_SEQUENCE));
+  if (!permitted_dns_names.empty()) {
+    ASSERT_NO_FATAL_FAILURE(
+        AddNameConstraintsSubTrees(&name_constraints, permitted_dns_names));
+  }
+  if (!excluded_dns_names.empty()) {
+    ASSERT_NO_FATAL_FAILURE(
+        AddNameConstraintsSubTrees(&name_constraints, excluded_dns_names));
+  }
+  SetExtension(der::Input(kNameConstraintsOid), FinishCBB(cbb.get()),
                /*critical=*/true);
 }
 
@@ -609,7 +643,8 @@ void CertBuilder::SetKeyUsages(const std::vector<KeyUsageBit>& usages) {
   ASSERT_TRUE(CBB_add_asn1(cbb.get(), &ku_cbb, CBS_ASN1_BITSTRING));
   ASSERT_TRUE(CBB_add_u8(&ku_cbb, number_of_unused_bits));
   ASSERT_TRUE(CBB_add_bytes(&ku_cbb, bytes.data(), bytes.size()));
-  SetExtension(der::Input(kKeyUsageOid), FinishCBB(cbb.get()));
+  SetExtension(der::Input(kKeyUsageOid), FinishCBB(cbb.get()),
+               /*critical=*/true);
 }
 
 void CertBuilder::SetExtendedKeyUsages(
@@ -643,6 +678,11 @@ void CertBuilder::SetCertificatePolicies(
   //                                 PolicyQualifierInfo OPTIONAL }
   //
   //    CertPolicyId ::= OBJECT IDENTIFIER
+  if (policy_oids.empty()) {
+    EraseExtension(der::Input(kCertificatePoliciesOid));
+    return;
+  }
+
   bssl::ScopedCBB cbb;
   CBB certificate_policies;
   ASSERT_TRUE(CBB_init(cbb.get(), 64));
@@ -692,7 +732,22 @@ void CertBuilder::SetPolicyConstraints(
                                              der::ContextSpecificPrimitive(1)));
   }
 
-  SetExtension(der::Input(kPolicyConstraintsOid), FinishCBB(cbb.get()));
+  SetExtension(der::Input(kPolicyConstraintsOid), FinishCBB(cbb.get()),
+               /*critical=*/true);
+}
+
+void CertBuilder::SetInhibitAnyPolicy(uint64_t skip_certs) {
+  // From RFC 5280:
+  //   id-ce-inhibitAnyPolicy OBJECT IDENTIFIER ::=  { id-ce 54 }
+  //
+  //   InhibitAnyPolicy ::= SkipCerts
+  //
+  //   SkipCerts ::= INTEGER (0..MAX)
+  bssl::ScopedCBB cbb;
+  ASSERT_TRUE(CBB_init(cbb.get(), 64));
+  ASSERT_TRUE(CBB_add_asn1_uint64(cbb.get(), skip_certs));
+  SetExtension(der::Input(kInhibitAnyPolicyOid), FinishCBB(cbb.get()),
+               /*critical=*/true);
 }
 
 void CertBuilder::SetValidity(base::Time not_before, base::Time not_after) {
@@ -1007,8 +1062,7 @@ void CertBuilder::InitFromCert(const der::Input& cert) {
   // signature
   der::Input signature_algorithm_tlv;
   ASSERT_TRUE(tbs_certificate.ReadRawTLV(&signature_algorithm_tlv));
-  auto signature_algorithm =
-      ParseSignatureAlgorithm(signature_algorithm_tlv, nullptr);
+  auto signature_algorithm = ParseSignatureAlgorithm(signature_algorithm_tlv);
   ASSERT_TRUE(signature_algorithm);
   signature_algorithm_ = *signature_algorithm;
 

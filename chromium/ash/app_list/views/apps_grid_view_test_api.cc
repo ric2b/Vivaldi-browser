@@ -7,58 +7,20 @@
 #include <memory>
 #include <vector>
 
-#include "ash/app_list/paged_view_structure.h"
 #include "ash/app_list/views/app_drag_icon_proxy.h"
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/app_list/views/apps_grid_view.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/test/layer_animation_stopped_waiter.h"
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/views/animation/bounds_animator.h"
-#include "ui/views/animation/bounds_animator_observer.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
 namespace test {
-
-namespace {
-
-class BoundsAnimatorWaiter : public views::BoundsAnimatorObserver {
- public:
-  explicit BoundsAnimatorWaiter(views::BoundsAnimator* animator)
-      : animator_(animator) {
-    animator->AddObserver(this);
-  }
-
-  BoundsAnimatorWaiter(const BoundsAnimatorWaiter&) = delete;
-  BoundsAnimatorWaiter& operator=(const BoundsAnimatorWaiter&) = delete;
-
-  ~BoundsAnimatorWaiter() override { animator_->RemoveObserver(this); }
-
-  void Wait() {
-    if (!animator_->IsAnimating())
-      return;
-
-    run_loop_ = std::make_unique<base::RunLoop>();
-    run_loop_->Run();
-  }
-
- private:
-  // views::BoundsAnimatorObserver:
-  void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override {}
-  void OnBoundsAnimatorDone(views::BoundsAnimator* animator) override {
-    if (run_loop_)
-      run_loop_->Quit();
-  }
-
-  views::BoundsAnimator* animator_;
-  std::unique_ptr<base::RunLoop> run_loop_;
-};
-
-}  // namespace
 
 AppsGridViewTestApi::AppsGridViewTestApi(AppsGridView* view) : view_(view) {}
 
@@ -73,7 +35,6 @@ void AppsGridViewTestApi::LayoutToIdealBounds() {
     view_->reorder_timer_.Stop();
     view_->OnReorderTimer();
   }
-  view_->bounds_animator_->Cancel();
   view_->Layout();
 }
 
@@ -92,8 +53,13 @@ void AppsGridViewTestApi::PressItemAt(int index) {
       ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE));
 }
 
-size_t AppsGridViewTestApi::TilesPerPage(int page) const {
-  return view_->TilesPerPage(page);
+size_t AppsGridViewTestApi::TilesPerPageInPagedGrid(int page) const {
+  return *view_->TilesPerPage(page);
+}
+
+size_t AppsGridViewTestApi::TilesPerPageOr(int page,
+                                           size_t default_value) const {
+  return view_->TilesPerPage(page).value_or(default_value);
 }
 
 int AppsGridViewTestApi::AppsOnPage(int page) const {
@@ -106,13 +72,7 @@ AppListItemView* AppsGridViewTestApi::GetViewAtIndex(GridIndex index) const {
 
 AppListItemView* AppsGridViewTestApi::GetViewAtVisualIndex(int page,
                                                            int slot) const {
-  const std::vector<std::vector<AppListItemView*>>& view_structure =
-      view_->view_structure_.pages();
-  if (page >= static_cast<int>(view_structure.size()) ||
-      slot >= static_cast<int>(view_structure[page].size())) {
-    return nullptr;
-  }
-  return view_structure[page][slot];
+  return GetViewAtIndex(GridIndex(page, slot));
 }
 
 const std::string& AppsGridViewTestApi::GetNameAtVisualIndex(int page,
@@ -129,8 +89,21 @@ gfx::Rect AppsGridViewTestApi::GetItemTileRectAtVisualIndex(int page,
 }
 
 void AppsGridViewTestApi::WaitForItemMoveAnimationDone() {
-  BoundsAnimatorWaiter waiter(view_->bounds_animator_.get());
-  waiter.Wait();
+  ui::LayerAnimationStoppedWaiter animation_waiter;
+  while (true) {
+    bool found_animation = false;
+    for (size_t i = 0; i < view_->view_model()->view_size(); i++) {
+      auto* item_view = view_->view_model()->view_at(i);
+      if (view_->IsAnimatingView(item_view)) {
+        found_animation = true;
+        animation_waiter.Wait(item_view->layer());
+        break;
+      }
+    }
+
+    if (!found_animation)
+      break;
+  }
 }
 
 void AppsGridViewTestApi::FireReorderTimerAndWaitForAnimationDone() {

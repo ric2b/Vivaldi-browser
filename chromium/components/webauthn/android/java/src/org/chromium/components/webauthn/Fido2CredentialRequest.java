@@ -27,16 +27,19 @@ import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialDescriptor;
 import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialType;
+import org.chromium.blink.mojom.ResidentKeyRequirement;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.externalauth.UserRecoverableErrorHandler;
 import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.content_public.browser.ClientDataJson;
 import org.chromium.content_public.browser.ClientDataRequestType;
+import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.RenderFrameHost.WebAuthSecurityChecksResults;
 import org.chromium.content_public.browser.WebAuthenticationDelegate;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsStatics;
+import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.net.GURLUtils;
 import org.chromium.url.Origin;
 
@@ -69,7 +72,9 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
     private WebContents mWebContents;
     private boolean mAppIdExtensionUsed;
     private long mStartTimeMs;
+    private boolean mEchoCredProps;
     private WebAuthnBrowserBridge mBrowserBridge;
+    private boolean mAttestationAcceptable;
 
     private enum ConditionalUiState {
         NONE,
@@ -131,6 +136,27 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             return;
         }
 
+        // Currently discoverable credentials on Android do not support the payment bit. To avoid
+        // requiring per-platform code in a developer website, we map residentKey=preferred to
+        // discouraged here if the payment extension is present.
+        //
+        // See https://crbug.com/1393662
+        if (options.isPaymentCredentialCreation) {
+            // Earlier code should reject an attempt by a developer to use residentKey=required or
+            // discouraged on Android - only preferred should have made it this far.
+            assert options.authenticatorSelection.residentKey == ResidentKeyRequirement.PREFERRED;
+            options.authenticatorSelection.residentKey = ResidentKeyRequirement.DISCOURAGED;
+        }
+
+        // Attestation is only for non-discoverable credentials in the Android
+        // platform authenticator and discoverable credentials aren't supported
+        // on security keys. There was a bug where discoverable credentials
+        // accidentally included attestation, which was confusing, so that's
+        // filtered here.
+        mAttestationAcceptable =
+                options.authenticatorSelection.residentKey == ResidentKeyRequirement.DISCOURAGED;
+        mEchoCredProps = options.credProps;
+
         Fido2ApiCall call = new Fido2ApiCall(ContextUtils.getApplicationContext(), mSupportLevel);
         Parcel args = call.start();
         Fido2ApiCall.PendingIntentResult result = new Fido2ApiCall.PendingIntentResult(call);
@@ -184,7 +210,10 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             return;
         }
 
-        if (options.allowCredentials == null || options.allowCredentials.length == 0) {
+        boolean hasAllowCredentials =
+                options.allowCredentials != null && options.allowCredentials.length != 0;
+
+        if (!hasAllowCredentials) {
             // No UVM support for discoverable credentials.
             options.userVerificationMethods = false;
         }
@@ -222,7 +251,10 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             }
         }
 
-        if (options.isConditional) {
+        if (options.isConditional
+                || (ContentFeatureList.isEnabled(
+                            ContentFeatures.WEB_AUTHN_TOUCH_TO_FILL_CREDENTIAL_SELECTION)
+                        && !hasAllowCredentials)) {
             // For use in the lambda expression.
             final byte[] finalClientDataHash = clientDataHash;
             mConditionalUiState = ConditionalUiState.WAITING_FOR_CREDENTIAL_LIST;
@@ -335,23 +367,50 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
         assert mConditionalUiState == ConditionalUiState.WAITING_FOR_CREDENTIAL_LIST
                 || mConditionalUiState == ConditionalUiState.CANCEL_PENDING;
 
+        boolean hasAllowCredentials =
+                options.allowCredentials != null && options.allowCredentials.length != 0;
+        boolean isConditionalRequest = options.isConditional;
+        assert isConditionalRequest || !hasAllowCredentials;
+
         if (mConditionalUiState == ConditionalUiState.CANCEL_PENDING) {
             // The request was completed synchronously when the cancellation was received.
+            return;
+        }
+
+        List<WebAuthnCredentialDetails> discoverableCredentials = new ArrayList<>();
+        for (WebAuthnCredentialDetails credential : credentials) {
+            if (!credential.mIsDiscoverable) continue;
+
+            if (!hasAllowCredentials) {
+                discoverableCredentials.add(credential);
+                continue;
+            }
+
+            for (PublicKeyCredentialDescriptor descriptor : options.allowCredentials) {
+                if (Arrays.equals(credential.mCredentialId, descriptor.id)) {
+                    discoverableCredentials.add(credential);
+                    break;
+                }
+            }
+        }
+
+        if (!isConditionalRequest && discoverableCredentials.isEmpty()) {
+            mConditionalUiState = ConditionalUiState.NONE;
+            // When no passkeys are present for a non-conditional request, pass the request
+            // through to GMSCore. It will show an error message to the user. If at some point in
+            // the future GMSCore supports passkeys from other devices, this will also allow it to
+            // initiate a cross-device flow.
+            maybeDispatchGetAssertionRequest(options, callerOriginString, clientDataHash, null);
             return;
         }
 
         if (mBrowserBridge == null) {
             mBrowserBridge = new WebAuthnBrowserBridge();
         }
-        List<WebAuthnCredentialDetails> discoverableCredentials = new ArrayList<>();
-        for (WebAuthnCredentialDetails credential : credentials) {
-            if (credential.mIsDiscoverable) {
-                discoverableCredentials.add(credential);
-            }
-        }
 
         mConditionalUiState = ConditionalUiState.WAITING_FOR_SELECTION;
         mBrowserBridge.onCredentialsDetailsListReceived(frameHost, discoverableCredentials,
+                isConditionalRequest,
                 (selectedCredentialId)
                         -> maybeDispatchGetAssertionRequest(
                                 options, callerOriginString, clientDataHash, selectedCredentialId));
@@ -362,6 +421,7 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
         // For Conditional UI requests, this is invoked by a callback, and might have been
         // cancelled before a credential was selected.
         if (mConditionalUiState == ConditionalUiState.CANCEL_PENDING) {
+            mConditionalUiState = ConditionalUiState.NONE;
             returnErrorAndResetCallback(AuthenticatorStatus.ABORT_ERROR);
             return;
         }
@@ -369,10 +429,16 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
         mConditionalUiState = ConditionalUiState.NONE;
         if (credentialId != null) {
             if (credentialId.length == 0) {
-                // An empty credential ID means an error from native code, which can happen if the
-                // embedder does not support Conditional UI.
-                Log.e(TAG, "Empty credential ID from account selection.");
-                returnErrorAndResetCallback(AuthenticatorStatus.UNKNOWN_ERROR);
+                if (options.isConditional) {
+                    // An empty credential ID means an error from native code, which can happen if
+                    // the embedder does not support Conditional UI.
+                    Log.e(TAG, "Empty credential ID from account selection.");
+                    returnErrorAndResetCallback(AuthenticatorStatus.UNKNOWN_ERROR);
+                    return;
+                }
+                // For non-conditional requests, an empty credential ID means the user dismissed
+                // the account selection dialog.
+                returnErrorAndResetCallback(AuthenticatorStatus.NOT_ALLOWED_ERROR);
                 return;
             }
             PublicKeyCredentialDescriptor selected_credential = new PublicKeyCredentialDescriptor();
@@ -434,7 +500,7 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
                     errorCode = AuthenticatorStatus.NOT_ALLOWED_ERROR;
                 } else {
                     try {
-                        response = Fido2Api.parseIntentResponse(data);
+                        response = Fido2Api.parseIntentResponse(data, mAttestationAcceptable);
                     } catch (IllegalArgumentException e) {
                         response = null;
                     }
@@ -460,8 +526,16 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             errorCode = convertError(error);
         } else if (mMakeCredentialCallback != null) {
             if (response instanceof org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse) {
-                mMakeCredentialCallback.onRegisterResponse(AuthenticatorStatus.SUCCESS,
-                        (org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse) response);
+                org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse creationResponse =
+                        (org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse) response;
+                if (mEchoCredProps) {
+                    // The other credProps fields will have been set by
+                    // `parseIntentResponse` if Play Services provided credProps
+                    // information.
+                    creationResponse.echoCredProps = true;
+                }
+                mMakeCredentialCallback.onRegisterResponse(
+                        AuthenticatorStatus.SUCCESS, creationResponse);
                 mMakeCredentialCallback = null;
                 return;
             }
@@ -520,10 +594,8 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             case Fido2Api.CONSTRAINT_ERR:
                 if (errorMsg != null && errorMsg.equals(NO_SCREENLOCK_ERROR_MSG)) {
                     return AuthenticatorStatus.USER_VERIFICATION_UNSUPPORTED;
-                } else {
-                    // The user attempted to use a credential that was already registered.
-                    return AuthenticatorStatus.CREDENTIAL_EXCLUDED;
                 }
+                return AuthenticatorStatus.UNKNOWN_ERROR;
             case Fido2Api.INVALID_STATE_ERR:
                 if (errorMsg != null && errorMsg.equals(CREDENTIAL_EXISTS_ERROR_MSG)) {
                     return AuthenticatorStatus.CREDENTIAL_EXCLUDED;

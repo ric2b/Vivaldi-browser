@@ -30,6 +30,8 @@ import xctest_utils
 
 LOGGER = logging.getLogger(__name__)
 DERIVED_DATA = os.path.expanduser('~/Library/Developer/Xcode/DerivedData')
+DEFAULT_TEST_REPO = 'https://chromium.googlesource.com/chromium/src'
+HOST_IS_DOWN_ERROR = 'Domain=NSPOSIXErrorDomain Code=64 "Host is down"'
 
 
 # TODO(crbug.com/1077277): Move commonly used error classes to
@@ -137,6 +139,13 @@ class ShardingDisabledError(TestRunnerError):
   def __init__(self):
     super(ShardingDisabledError, self).__init__(
       'Sharding has not been implemented!')
+
+
+class HostIsDownError(TestRunnerError):
+  """Simulator host is down, usually due to a corrupted runtime."""
+
+  def __init__(self):
+    super(HostIsDownError, self).__init__('Simulator host is down!')
 
 
 def get_device_ios_version(udid):
@@ -265,6 +274,13 @@ def print_process_output(proc,
     LOGGER.info(line)
     sys.stdout.flush()
 
+    # This is a temporary mitigation to surface this issue so that
+    # test runner can clear runtime cache for the next run.
+    # TODO(crbug.com/1370522): remove this workaround once the issue
+    # is resolved.
+    if HOST_IS_DOWN_ERROR in line:
+      raise HostIsDownError()
+
   if parser:
     parser.Finalize()
   LOGGER.debug('Finished print_process_output.')
@@ -302,7 +318,9 @@ def init_test_result_defaults():
       'path_delimiter': '.',
       'seconds_since_epoch': int(time.time()),
       # This will be overwritten when the tests complete successfully.
-      'interrupted': True
+      'interrupted': True,
+      'num_failures_by_type': {},
+      'tests': {}
   }
 
 
@@ -361,6 +379,7 @@ class TestRunner(object):
     self.xctest = kwargs.get('xctest') or False
     self.readline_timeout = (
         kwargs.get('readline_timeout') or constants.READLINE_TIMEOUT)
+    self.output_disabled_tests = kwargs.get('output_disabled_tests') or False
 
     self.test_results = init_test_result_defaults()
 
@@ -561,6 +580,19 @@ class TestRunner(object):
     returncode = proc.returncode
 
     LOGGER.info('%s returned %s\n', cmd[0], returncode)
+
+    LOGGER.info('Populating test location info for test results...')
+    if isinstance(self, SimulatorTestRunner):
+      # TODO(crbug.com/1091345): currently we have some tests suites that are
+      # written in ios_internal, so not all test repos are public. We should
+      # figure out a way to identify test repo info depending on the test suite.
+      parser.ParseAndPopulateTestResultLocations(DEFAULT_TEST_REPO,
+                                                 self.output_disabled_tests)
+    else:
+      # TODO(crbug.com/1091345): Pull the file from device first before parsing.
+      LOGGER.warning(
+          'Cannot populate test locations because it is not yet supported' +
+          'on device tests yet...')
 
     return parser.GetResultCollection()
 

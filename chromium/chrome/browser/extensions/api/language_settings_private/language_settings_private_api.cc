@@ -19,6 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -423,14 +424,12 @@ LanguageSettingsPrivateGetAlwaysTranslateLanguagesFunction::Run() {
   std::vector<std::string> languages =
       translate_prefs->GetAlwaysTranslateLanguages();
 
-  std::unique_ptr<base::ListValue> always_translate_languages_ =
-      (std::make_unique<base::ListValue>());
+  base::Value::List always_translate_languages;
   for (const auto& entry : languages) {
-    always_translate_languages_->Append(entry);
+    always_translate_languages.Append(entry);
   }
 
-  return RespondNow(WithArguments(
-      base::Value::FromUniquePtrValue(std::move(always_translate_languages_))));
+  return RespondNow(WithArguments(std::move(always_translate_languages)));
 }
 
 LanguageSettingsPrivateSetLanguageAlwaysTranslateStateFunction::
@@ -555,8 +554,7 @@ LanguageSettingsPrivateGetSpellcheckWordsFunction::Run() {
   SpellcheckCustomDictionary* dictionary = service->GetCustomDictionary();
 
   if (dictionary->IsLoaded())
-    return RespondNow(
-        WithArguments(base::Value::FromUniquePtrValue(GetSpellcheckWords())));
+    return RespondNow(WithArguments(GetSpellcheckWords()));
 
   dictionary->AddObserver(this);
   AddRef();  // Balanced in OnCustomDictionaryLoaded().
@@ -568,7 +566,7 @@ void LanguageSettingsPrivateGetSpellcheckWordsFunction::
   SpellcheckService* service =
       SpellcheckServiceFactory::GetForContext(browser_context());
   service->GetCustomDictionary()->RemoveObserver(this);
-  Respond(WithArguments(base::Value::FromUniquePtrValue(GetSpellcheckWords())));
+  Respond(WithArguments(GetSpellcheckWords()));
   Release();
 }
 
@@ -580,7 +578,7 @@ void LanguageSettingsPrivateGetSpellcheckWordsFunction::
                   "OnCustomDictionaryLoaded()";
 }
 
-std::unique_ptr<base::ListValue>
+base::Value::List
 LanguageSettingsPrivateGetSpellcheckWordsFunction::GetSpellcheckWords() const {
   SpellcheckService* service =
       SpellcheckServiceFactory::GetForContext(browser_context());
@@ -588,10 +586,11 @@ LanguageSettingsPrivateGetSpellcheckWordsFunction::GetSpellcheckWords() const {
   DCHECK(dictionary->IsLoaded());
 
   // TODO(michaelpg): Sort using app locale.
-  std::unique_ptr<base::ListValue> word_list(new base::ListValue());
+  base::Value::List word_list;
   const std::set<std::string>& words = dictionary->GetWords();
+  word_list.reserve(words.size());
   for (const std::string& word : words)
-    word_list->Append(word);
+    word_list.Append(word);
   return word_list;
 }
 

@@ -145,7 +145,8 @@ enum class FeedUserActionType {
   // User action caused a unfollow failed snackbar to be shown. User action not
   // reported here. iOS only.
   kShowUnfollowFailedSnackbar = 51,
-  // User tapped to go to feed using the snackbar 'go to feed' option.
+  // User tapped to go to Following feed using the snackbar 'go to Following'
+  // option.
   kTappedGoToFeedOnSnackbar = 52,
   // User tapped the Crow button in the context menu.
   kTappedCrowButton = 53,
@@ -171,8 +172,15 @@ enum class FeedUserActionType {
   // User tapped the follow accelerator which is presented after a user taps
   // on a recommendation that is in the feed.
   kTappedFollowOnRecommendationFollowAccelerator = 62,
+  // User requested to refresh the Following feed using the post-follow snackbar
+  // 'refresh' action.
+  kTappedRefreshFollowingFeedOnSnackbar = 63,
+  // User tapped on the "Continue" of the sign-in promote UI. iOS only.
+  kTappedFeedSignInPromoUIContinue = 64,
+  // User tapped on the "Cancel" of the sign-in promote UI. iOS only.
+  kTappedFeedSignInPromoUICancel = 65,
 
-  kMaxValue = kTappedFollowOnRecommendationFollowAccelerator,
+  kMaxValue = kTappedFeedSignInPromoUICancel,
 };
 
 // For testing and debugging only.

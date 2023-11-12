@@ -74,6 +74,7 @@ class MockRenderProcessHostFactory;
 class NavigationController;
 class RenderProcessHostFactory;
 class TestNavigationURLLoaderFactory;
+class TestPageFactory;
 class TestRenderFrameHostFactory;
 class TestRenderViewHostFactory;
 class TestRenderWidgetHostFactory;
@@ -121,8 +122,9 @@ class RenderFrameHostTester {
       const std::string& frame_name,
       const blink::ParsedPermissionsPolicy& allow) = 0;
 
-  // Same as AppendChild above, but simulates a custom attributes.
-  virtual RenderFrameHost* AppendAnonymousChild(
+  // Same as AppendChild above, but simulates the `credentialless` attribute
+  // being added.
+  virtual RenderFrameHost* AppendCredentiallessChild(
       const std::string& frame_name) = 0;
 
   // Gives tests access to RenderFrameHostImpl::OnDetach. Destroys |this|.
@@ -228,6 +230,7 @@ class RenderViewHostTestEnabler {
   std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
   std::unique_ptr<MockRenderProcessHostFactory> rph_factory_;
   std::unique_ptr<MockAgentSchedulingGroupHostFactory> asgh_factory_;
+  std::unique_ptr<TestPageFactory> page_factory_;
   std::unique_ptr<TestRenderViewHostFactory> rvh_factory_;
   std::unique_ptr<TestRenderFrameHostFactory> rfh_factory_;
   std::unique_ptr<TestRenderWidgetHostFactory> rwhi_factory_;

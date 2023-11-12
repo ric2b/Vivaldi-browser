@@ -14,18 +14,12 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
-#include "base/gtest_prod_util.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "content/common/content_export.h"
 #include "sql/meta_table.h"
 
-namespace base {
-class Version;
-}  // namespace base
-
 namespace net {
-class FirstPartySetEntry;
 class FirstPartySetsCacheFilter;
 class FirstPartySetsContextConfig;
 class GlobalFirstPartySets;
@@ -76,11 +70,8 @@ class CONTENT_EXPORT FirstPartySetsDatabase {
 
   // Stores the overall First-Party Sets for the given `browser_context_id` into
   // database in one transaction.
-  // TODO(crbug.com/1219656): Currently only stores public sets. We should also
-  // store policy modifications and manual set in this method.
   [[nodiscard]] bool PersistSets(
       const std::string& browser_context_id,
-      const base::Version& public_sets_version,
       const net::GlobalFirstPartySets& sets,
       const net::FirstPartySetsContextConfig& config);
 
@@ -98,9 +89,11 @@ class CONTENT_EXPORT FirstPartySetsDatabase {
   // TODO(crbug.com/1219656): Consider returning absl::nullopt for all the
   // fetching methods when having query errors
 
-  // Gets the global First-Party Sets used by `browser_context_id`.
-  [[nodiscard]] net::GlobalFirstPartySets GetGlobalSets(
-      const std::string& browser_context_id);
+  // Gets the global First-Party Sets and the config used by
+  // `browser_context_id`.
+  [[nodiscard]] std::pair<net::GlobalFirstPartySets,
+                          net::FirstPartySetsContextConfig>
+  GetGlobalSetsAndConfig(const std::string& browser_context_id);
 
   // Gets the sites to clear filters. The first filter holds the list of sites
   // that haven't had their cookies/storage cleared, the second filter is the
@@ -111,43 +104,44 @@ class CONTENT_EXPORT FirstPartySetsDatabase {
                           net::FirstPartySetsCacheFilter>
   GetSitesToClearFilters(const std::string& browser_context_id);
 
-  // Gets the previously-stored policy modifications for the
-  // `browser_context_id`.
-  [[nodiscard]] net::FirstPartySetsContextConfig FetchPolicyModifications(
-      const std::string& browser_context_id);
-
   // Check whether the `browser_context_id`  has performed clearing.
   [[nodiscard]] bool HasEntryInBrowserContextsClearedForTesting(
       const std::string& browser_context_id);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(FirstPartySetsDatabaseTest,
-                           SetPublicSets_InvalidVersion);
-
   // Stores the public First-Party Sets into database, and keeps track of the
-  // the sets version used by `browser_context_id`. Returns true on success.
+  // the sets version used by `browser_context_id`. `sets_version` must be
+  // valid. Returns true on success.
   [[nodiscard]] bool SetPublicSets(const std::string& browser_context_id,
-                                   const base::Version& sets_version,
                                    const net::GlobalFirstPartySets& sets);
 
-  // Stores the Manual Sets into manual_sets table, and returns true on success.
-  // Inserting new manual sets will wipe out pre-existing manual sets for the
-  // given 'browser_context_id'
-  [[nodiscard]] bool InsertManualSets(
+  // Stores the manual configuration into manual_configurations table, and
+  // returns true on success. Inserting new manual configuration will wipe out
+  // pre-existing entries for the given 'browser_context_id'
+  [[nodiscard]] bool InsertManualConfiguration(
       const std::string& browser_context_id,
-      const base::flat_map<net::SchemefulSite, net::FirstPartySetEntry>&
-          manual_sets);
+      const net::GlobalFirstPartySets& global_first_party_sets);
 
-  // Stores the policy modifications into policy_modifications table, and
-  // returns true on success. Note that inserting new modifications will
+  // Stores the policy configurations into policy_configurations table, and
+  // returns true on success. Note that inserting new configurations will
   // wipe out the pre-existing ones for the given `browser_context_id`.
-  [[nodiscard]] bool InsertPolicyModifications(
+  [[nodiscard]] bool InsertPolicyConfigurations(
       const std::string& browser_context_id,
-      const net::FirstPartySetsContextConfig& config);
+      const net::FirstPartySetsContextConfig& policy_config);
 
-  // Gets the previously-stored manual_sets for the `browser_context_id`.
-  [[nodiscard]] base::flat_map<net::SchemefulSite, net::FirstPartySetEntry>
-  FetchManualSets(const std::string& browser_context_id);
+  // Gets the global First-Party Sets used by `browser_context_id`.
+  [[nodiscard]] net::GlobalFirstPartySets GetGlobalSets(
+      const std::string& browser_context_id);
+
+  // Gets the previously-stored manual configuration for the
+  // `browser_context_id`.
+  [[nodiscard]] net::FirstPartySetsContextConfig FetchManualConfiguration(
+      const std::string& browser_context_id);
+
+  // Gets the previously-stored policy configuration for the
+  // `browser_context_id`.
+  [[nodiscard]] net::FirstPartySetsContextConfig FetchPolicyConfigurations(
+      const std::string& browser_context_id);
 
   // Gets the list of sites to clear for the `browser_context_id`.
   [[nodiscard]] std::vector<net::SchemefulSite> FetchSitesToClear(
@@ -173,6 +167,16 @@ class CONTENT_EXPORT FirstPartySetsDatabase {
 
   // Helper function to implement internals of `LazyInit()`.
   [[nodiscard]] InitStatus InitializeTables()
+      VALID_CONTEXT_REQUIRED(sequence_checker_);
+
+  // Upgrades `db_` to the latest schema, and updates the version stored in
+  // `meta_table_` accordingly. Returns false on failure.
+  [[nodiscard]] bool UpgradeSchema() VALID_CONTEXT_REQUIRED(sequence_checker_);
+
+  [[nodiscard]] bool MigrateToVersion3()
+      VALID_CONTEXT_REQUIRED(sequence_checker_);
+
+  [[nodiscard]] bool MigrateToVersion4()
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   // Increase the `run_count` stored in the meta table by 1. Should only be

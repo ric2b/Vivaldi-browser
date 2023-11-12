@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 
 package enterprise_management;
 
-option go_package="chromium/policy/enterprise_management_proto";
+option go_package = "chromium/policy/enterprise_management_proto";
 
 import "private_membership_rlwe.proto";
 
@@ -34,6 +34,33 @@ message LicenseType {
   }
 
   optional LicenseTypeEnum license_type = 1;
+}
+
+// The current active session type on the device, or `NO_SESSION` if no user
+// is currently logged in.
+// This enum is used in the response payload of the
+// `FETCH_CRD_AVAILABILITY_INFO` remote command.
+enum UserSessionType {
+  USER_SESSION_TYPE_UNKNOWN = 0;
+  AUTO_LAUNCHED_KIOSK_SESSION = 1;
+  MANUALLY_LAUNCHED_KIOSK_SESSION = 2;
+  AFFILIATED_USER_SESSION = 3;
+  UNAFFILIATED_USER_SESSION = 4;
+  MANAGED_GUEST_SESSION = 5;
+  GUEST_SESSION = 6;
+  NO_SESSION = 7;
+}
+
+// The type of the CRD session. This enum is used in:
+//   * the response payload of `FETCH_CRD_AVAILABILITY_INFO`.
+//   * the request payload of `DEVICE_START_CRD_SESSION `.
+enum CrdSessionType {
+  CRD_SESSION_TYPE_UNKNOWN = 0;
+  // A session where the admin has exclusive control of the remote machine.
+  REMOTE_ACCESS_SESSION = 1;
+  // A session where the admin and the local user share control of the remote
+  // machine.
+  REMOTE_SUPPORT_SESSION = 2;
 }
 
 // Data along with a cryptographic signature verifying their authenticity.
@@ -531,11 +558,11 @@ message PolicyData {
   // anything like that.
   optional int64 timestamp = 2;
 
-  // The DM token that was used by the client in the HTTP POST header for
+  // The DMToken that was used by the client in the HTTP POST header for
   // authenticating the request. It is included here again so that the client
   // can verify that the response is meant for them (and not issued by a replay
   // or man-in-the-middle attack).
-  // Note that the existence or non-existence of the DM token is not the correct
+  // Note that the existence or non-existence of the DMToken is not the correct
   // way to determine whether the device is managed. Cf. |management_mode| below
   // for details.
   optional string request_token = 3;
@@ -927,20 +954,19 @@ message NetworkInterface {
 // any specific interface, or may be visible across multiple interfaces.
 message NetworkState {
   // The current state of this network.
-  // CARRIER (1), DISCONNECT (8) and ACTIVATION_FAILURE (10) are not used by the
-  // client.
   enum ConnectionState {
+    reserved 1;   // CARRIER
+    reserved 6;   // OFFLINE
+    reserved 10;  // ACTIVATION_FAILURE
+
     IDLE = 0;
-    CARRIER = 1;
     ASSOCIATION = 2;
     CONFIGURATION = 3;
     READY = 4;
     PORTAL = 5;
-    OFFLINE = 6;
     ONLINE = 7;
     DISCONNECT = 8;
     FAILURE = 9;
-    ACTIVATION_FAILURE = 10;
     UNKNOWN = 11;
   }
 
@@ -2067,6 +2093,18 @@ message OSReport {
 
   // A string contains OS version.
   optional string version = 3;
+
+  enum VersionType {
+    UNKNOWN = 0;
+    HOME = 1;
+    PROFESSIONAL = 2;
+    SERVER = 3;
+    ENTERPRISE = 4;
+    EDUCATION = 5;
+    EDUCATION_PRO = 6;
+  }
+
+  optional VersionType version_type = 4;
 }
 
 // An enum shows which information a partial CBCM report contains.
@@ -2151,7 +2189,7 @@ message PolicyValueValidationIssue {
   // Policy name of the faulty value.
   optional string policy_name = 1;
 
-  //# LINT.IfChange
+  // # LINT.IfChange
   enum ValueValidationIssueSeverity {
     // Default value for when a severity is not specified.
     VALUE_VALIDATION_ISSUE_SEVERITY_UNSPECIFIED = 0;
@@ -2227,7 +2265,7 @@ message PolicyValidationReportRequest {
     // policy.
     // Client behavior: Policy blob rejected.
     VALIDATION_RESULT_TYPE_BAD_TIMESTAMP = 8;
-    // DM token is empty or doesn't match.
+    // DMToken is empty or doesn't match.
     // Client behavior: Policy blob rejected.
     VALIDATION_RESULT_TYPE_BAD_DM_TOKEN = 9;
     // Device id is empty or doesn't match.
@@ -2597,6 +2635,20 @@ message DeviceInitialEnrollmentStateResponse {
 
   // SKU Type for License Packaged Device.
   optional LicensePackagingSKU license_packaging_sku = 5;
+
+  // Assigned upgrade type. See: go/zte-sku-consumption and go/cros-kiosk-prd
+  // LINT.IfChange(AssignedUpgradeTypeChange)
+  enum AssignedUpgradeType {
+    // Unspecified
+    ASSIGNED_UPGRADE_TYPE_UNSPECIFIED = 0;
+    // Chrome Enterprise Upgrade (CEU)
+    ASSIGNED_UPGRADE_TYPE_CHROME_ENTERPRISE = 1;
+    // Kiosk & Signage Upgrade (KSU)
+    ASSIGNED_UPGRADE_TYPE_KIOSK_AND_SIGNAGE = 2;
+  }
+  // LINT.ThenChange(//depot/google3/java/com/google/chrome/cros/spanner/devicemanagement/schema/enrollment.proto:AssignedUpgradeTypeChange)
+
+  optional AssignedUpgradeType assigned_upgrade_type = 6;
 }
 
 // Sent by the client to the server to pair the Host device with the Controller
@@ -2712,7 +2764,7 @@ message RemoteCommand {
     // Wipe all the users off of the device.
     DEVICE_WIPE_USERS = 5;
 
-    // Start Chrome Remote Desktop session (limited to Kiosk sessions only).
+    // Start Chrome Remote Desktop session.
     DEVICE_START_CRD_SESSION = 6;
 
     // Wipe the device (perform a powerwash).
@@ -2739,6 +2791,9 @@ message RemoteCommand {
 
     // Rotates the attestation credentials associated with a browser device.
     BROWSER_ROTATE_ATTESTATION_CREDENTIAL = 14;
+
+    // Fetch information that determines the availability of CRD on the device.
+    FETCH_CRD_AVAILABILITY_INFO = 15;
 
     // Please update metrics after adding a new item - see the comment above.
   }
@@ -2834,13 +2889,13 @@ message DeviceRemoteCommandResponse {
   repeated SignedData secure_commands = 2;
 }
 
-// Sent by the client to the server to check if the current user is allowed
-// to update attributes (asset id and location).  The HTTP request contains an
-// end-user OAuth token.
+// Sent by the client to the server to check if the current user or device is
+// allowed to update attributes (asset id and location).  The HTTP request
+// can contain an end-user OAuth token or a device DMToken.
 message DeviceAttributeUpdatePermissionRequest {}
 
-// Response from the server specifying whether the current user is allowed to
-// update attributes (asset id and location).
+// Response from the server specifying whether the current user or device is
+// allowed to update attributes (asset id and location).
 message DeviceAttributeUpdatePermissionResponse {
   enum ResultType {
     ATTRIBUTE_UPDATE_DISALLOWED = 0;
@@ -2851,7 +2906,8 @@ message DeviceAttributeUpdatePermissionResponse {
 }
 
 // Sent by the client to the server to update device attributes (asset id and
-// location).  The HTTP request contains an end-user OAuth token.
+// location). The HTTP request can contain an end-user OAuth token or a device
+// DMToken.
 message DeviceAttributeUpdateRequest {
   // The user-generated asset identifier.
   optional string asset_id = 1;
@@ -4108,7 +4164,7 @@ enum DeviceManagementErrorDetail {
 //     active_directory_play_activity, active_directory_user_signin,
 //     policy_validation_report, chrome_desktop_report,
 //     chrome_os_user_report, refresh_account, client_cert_provisioning requests
-//     Authorization: GoogleDMToken token=<dm token from register>
+//     Authorization: GoogleDMToken token=<DMToken from register>
 //
 //   * The Authorization header isn't used for enterprise_check,
 //     enterprise_psm_check, device_initial_enrollment_state or
@@ -4297,7 +4353,7 @@ message DeviceManagementRequest {
 // Possible HTTP status codes:
 // 200 OK: valid response is returned to client.
 // 400 Bad Request: invalid argument or payload.
-// 401 Unauthorized: invalid auth cookie/OAuth token or DM token.
+// 401 Unauthorized: invalid auth cookie/OAuth token or DMToken.
 // 402 Missing license.
 // 403 Forbidden: device management is not allowed (e.g. user may not enroll).
 // 404 Not Found: the request URL is invalid.

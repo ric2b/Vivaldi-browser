@@ -47,6 +47,8 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
@@ -129,6 +131,10 @@ public class WebViewBrowserActivity extends AppCompatActivity {
     private String mWebViewVersion;
     private boolean mEnableTracing;
     private boolean mIsStoppingTracing;
+    private final OnBackInvokedCallback mOnBackInvokedCallback =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? ()
+            -> mWebView.goBack()
+            : null;
 
     // Each time we make a request, store it here with an int key. onRequestPermissionsResult will
     // look up the request in order to grant the approprate permissions.
@@ -314,6 +320,9 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         } else if (manufacturer.equals("oppo")) {
             // https://crbug.com/1177779
             threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("nokia")) {
+            // https://crbug.com/1385924
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
         }
         StrictMode.setThreadPolicy(threadPolicyBuilder.build());
 
@@ -477,6 +486,21 @@ public class WebViewBrowserActivity extends AppCompatActivity {
             public void onReceivedError(WebView view, int errorCode, String description,
                     String failingUrl) {
                 setUrlFail(true);
+            }
+
+            @Override
+            public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (view.canGoBack()) {
+                        WebViewBrowserActivity.this.getOnBackInvokedDispatcher()
+                                .registerOnBackInvokedCallback(
+                                        OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                                        mOnBackInvokedCallback);
+                    } else if (!view.canGoBack()) {
+                        WebViewBrowserActivity.this.getOnBackInvokedDispatcher()
+                                .unregisterOnBackInvokedCallback(mOnBackInvokedCallback);
+                    }
+                }
             }
         });
 

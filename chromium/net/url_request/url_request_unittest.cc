@@ -4,32 +4,14 @@
 
 #include <stdint.h>
 
-#include <algorithm>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <utility>
 
-#include "base/memory/raw_ptr.h"
-
-// This must be before Windows headers
-#include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
-#include "base/time/time.h"
-#include "build/build_config.h"
-#include "net/dns/public/secure_dns_policy.h"
-#include "net/log/net_log.h"
-#include "url/url_constants.h"
-
-#if BUILDFLAG(IS_WIN)
-#include <objbase.h>
-#include <shlobj.h>
-#include <windows.h>
-#include <wrl/client.h>
-#endif
-
 #include "base/base64url.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -37,8 +19,11 @@
 #include "base/format_macros.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
@@ -52,8 +37,9 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "build/buildflag.h"
 #include "crypto/sha2.h"
 #include "net/base/chunked_upload_data_stream.h"
@@ -112,6 +98,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_source.h"
 #include "net/log/file_net_log_observer.h"
+#include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/test_net_log.h"
@@ -161,6 +148,11 @@
 #include "url/url_util.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <objbase.h>
+#include <shlobj.h>
+#include <windows.h>
+#include <wrl/client.h>
+
 #include "base/win/scoped_com_initializer.h"
 #endif
 
@@ -328,9 +320,9 @@ class PriorityMonitoringURLRequestJob : public URLRequestTestJob {
 
 // Do a case-insensitive search through |haystack| for |needle|.
 bool ContainsString(const std::string& haystack, const char* needle) {
-  std::string::const_iterator it = std::search(
-      haystack.begin(), haystack.end(), needle, needle + strlen(needle),
-      base::CaseInsensitiveCompareASCII<char>());
+  std::string::const_iterator it =
+      base::ranges::search(haystack, base::StringPiece(needle),
+                           base::CaseInsensitiveCompareASCII<char>());
   return it != haystack.end();
 }
 
@@ -480,7 +472,7 @@ void BlockingNetworkDelegate::DoCallback(int response) {
 
   // |callback| may trigger completion of a request, so post it as a task, so
   // it will run under a subsequent TestDelegate::RunUntilComplete() loop.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BlockingNetworkDelegate::RunCallback,
                                 weak_factory_.GetWeakPtr(), response,
                                 std::move(callback)));
@@ -570,7 +562,7 @@ int BlockingNetworkDelegate::MaybeBlockStage(
       return retval_;
 
     case AUTO_CALLBACK:
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&BlockingNetworkDelegate::RunCallback,
                                     weak_factory_.GetWeakPtr(), retval_,
                                     std::move(callback)));
@@ -581,7 +573,7 @@ int BlockingNetworkDelegate::MaybeBlockStage(
       stage_blocked_for_callback_ = stage;
       // We may reach here via a callback prior to RunUntilBlocked(), so post
       // a task to fetch and run the |on_blocked_| closure.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&BlockingNetworkDelegate::OnBlocked,
                                     weak_factory_.GetWeakPtr()));
       return ERR_IO_PENDING;
@@ -3988,7 +3980,7 @@ class URLRequestTestHTTP : public URLRequestTest {
       std::unique_ptr<URLRequest> r(default_context().CreateRequest(
           test_server_.GetURL("/echo"), DEFAULT_PRIORITY, &d,
           TRAFFIC_ANNOTATION_FOR_TESTS));
-      r->set_method(method.c_str());
+      r->set_method(method);
 
       r->set_upload(CreateSimpleUploadData(uploadBytes.get()));
 
@@ -5088,7 +5080,7 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
     LoadStateWithParam load_state = url_request_->GetLoadState();
     EXPECT_EQ(expected_first_load_state_, load_state.state);
     EXPECT_NE(kFirstDelegateInfo16, load_state.param);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&AsyncDelegateLogger::LogSecondDelegate, this));
   }
@@ -5102,7 +5094,7 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
     } else {
       EXPECT_NE(kSecondDelegateInfo16, load_state.param);
     }
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&AsyncDelegateLogger::LogComplete, this));
   }
 
@@ -5883,7 +5875,7 @@ TEST_F(URLRequestTestHTTP, PostFileTest) {
     path = path.Append(kTestFilePath);
     path = path.Append(FILE_PATH_LITERAL("with-headers.html"));
     element_readers.push_back(std::make_unique<UploadFileElementReader>(
-        base::ThreadTaskRunnerHandle::Get().get(), path, 0,
+        base::SingleThreadTaskRunner::GetCurrentDefault().get(), path, 0,
         std::numeric_limits<uint64_t>::max(), base::Time()));
     r->set_upload(std::make_unique<ElementsUploadDataStream>(
         std::move(element_readers), 0));
@@ -5924,7 +5916,7 @@ TEST_F(URLRequestTestHTTP, PostUnreadableFileTest) {
     std::vector<std::unique_ptr<UploadElementReader>> element_readers;
 
     element_readers.push_back(std::make_unique<UploadFileElementReader>(
-        base::ThreadTaskRunnerHandle::Get().get(),
+        base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         base::FilePath(FILE_PATH_LITERAL(
             "c:\\path\\to\\non\\existant\\file.randomness.12345")),
         0, std::numeric_limits<uint64_t>::max(), base::Time()));
@@ -6140,7 +6132,6 @@ TEST_F(URLRequestTestHTTP, STSNotProcessedOnIP) {
 }
 
 namespace {
-const char kExpectCTStaticHostname[] = "expect-ct.preloaded.test";
 const char kPKPReportUri[] = "http://report-uri.preloaded.test/pkp";
 const char kPKPHost[] = "with-report-uri-pkp.preloaded.test";
 }  // namespace
@@ -6363,208 +6354,6 @@ TEST_F(URLRequestTestHTTP, ProcessSTSOnce) {
             sts_state.upgrade_mode);
   EXPECT_FALSE(sts_state.include_subdomains);
   EXPECT_FALSE(sts_state.include_subdomains);
-}
-
-// An ExpectCTReporter that records the number of times OnExpectCTFailed() was
-// called.
-class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
- public:
-  MockExpectCTReporter() = default;
-  ~MockExpectCTReporter() override = default;
-
-  void OnExpectCTFailed(
-      const HostPortPair& host_port_pair,
-      const GURL& report_uri,
-      base::Time expiration,
-      const X509Certificate* validated_certificate_chain,
-      const X509Certificate* served_certificate_chain,
-      const SignedCertificateTimestampAndStatusList&
-          signed_certificate_timestamps,
-      const NetworkAnonymizationKey& network_anonymization_key) override {
-    num_failures_++;
-  }
-
-  uint32_t num_failures() { return num_failures_; }
-
- private:
-  uint32_t num_failures_ = 0;
-};
-
-// A CTPolicyEnforcer that returns a default CTPolicyCompliance value
-// for every certificate.
-class MockCTPolicyEnforcer : public CTPolicyEnforcer {
- public:
-  MockCTPolicyEnforcer() = default;
-  ~MockCTPolicyEnforcer() override = default;
-
-  ct::CTPolicyCompliance CheckCompliance(
-      X509Certificate* cert,
-      const ct::SCTList& verified_scts,
-      const NetLogWithSource& net_log) override {
-    return default_result_;
-  }
-
-  void set_default_result(ct::CTPolicyCompliance default_result) {
-    default_result_ = default_result;
-  }
-
- private:
-  ct::CTPolicyCompliance default_result_ =
-      ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
-};
-
-// Tests that Expect CT headers for the preload list are processed correctly.
-TEST_F(URLRequestTestHTTP, PreloadExpectCTHeader) {
-  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
-
-  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
-  https_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(kTestFilePath));
-  ASSERT_TRUE(https_test_server.Start());
-
-  // Set up a MockCertVerifier to accept the certificate that the server sends.
-  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
-  ASSERT_TRUE(cert);
-  CertVerifyResult verify_result;
-  verify_result.verified_cert = cert;
-  verify_result.is_issued_by_known_root = true;
-  auto cert_verifier = std::make_unique<MockCertVerifier>();
-  cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
-
-  // Set up a MockCTPolicyEnforcer to trigger an Expect CT violation.
-  auto ct_policy_enforcer = std::make_unique<MockCTPolicyEnforcer>();
-  ct_policy_enforcer->set_default_result(
-      ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS);
-
-  // Use a MockHostResolver, so that the request can be sent to a site on the
-  // Expect CT preload list.
-  auto host_resolver = std::make_unique<MockHostResolver>();
-  host_resolver->rules()->AddRule(kExpectCTStaticHostname,
-                                  https_test_server.GetIPLiteralString());
-  auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->set_host_resolver(std::move(host_resolver));
-  context_builder->SetCertVerifier(std::move(cert_verifier));
-  context_builder->set_ct_policy_enforcer(std::move(ct_policy_enforcer));
-  context_builder->set_hsts_policy_bypass_list({});
-  auto context = context_builder->Build();
-  MockExpectCTReporter expect_ct_reporter;
-  context->transport_security_state()->enable_static_expect_ct_ = true;
-  context->transport_security_state()->SetExpectCTReporter(&expect_ct_reporter);
-  context->transport_security_state()->ct_log_list_last_update_time_ =
-      base::Time::Now();
-
-  // Now send a request to trigger the violation.
-  TestDelegate d;
-  GURL url = https_test_server.GetURL("/expect-ct-header-preload.html");
-  GURL::Replacements replace_host;
-  replace_host.SetHostStr(kExpectCTStaticHostname);
-  url = url.ReplaceComponents(replace_host);
-  std::unique_ptr<URLRequest> violating_request(context->CreateRequest(
-      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-  violating_request->Start();
-  d.RunUntilComplete();
-
-  EXPECT_EQ(1u, expect_ct_reporter.num_failures());
-}
-
-// Tests that Expect CT HTTP headers are processed correctly.
-TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kDynamicExpectCTFeature);
-
-  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
-  https_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(kTestFilePath));
-  ASSERT_TRUE(https_test_server.Start());
-
-  // Set up a MockCertVerifier to accept the certificate that the server sends.
-  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
-  ASSERT_TRUE(cert);
-  CertVerifyResult verify_result;
-  verify_result.verified_cert = cert;
-  verify_result.is_issued_by_known_root = true;
-  auto cert_verifier = std::make_unique<MockCertVerifier>();
-  cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
-
-  // Set up a MockCTPolicyEnforcer to simulate CT compliance.
-  auto ct_policy_enforcer = std::make_unique<MockCTPolicyEnforcer>();
-  ct_policy_enforcer->set_default_result(
-      ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS);
-
-  auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->SetCertVerifier(std::move(cert_verifier));
-  context_builder->set_ct_policy_enforcer(std::move(ct_policy_enforcer));
-  auto context = context_builder->Build();
-  MockExpectCTReporter expect_ct_reporter;
-  context->transport_security_state()->SetExpectCTReporter(&expect_ct_reporter);
-
-  // Now send a request to trigger the header processing.
-  TestDelegate d;
-  GURL url = https_test_server.GetURL("/expect-ct-header.html");
-  std::unique_ptr<URLRequest> request(context->CreateRequest(
-      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-  request->Start();
-  d.RunUntilComplete();
-
-  TransportSecurityState::ExpectCTState state;
-  ASSERT_TRUE(context->transport_security_state()->GetDynamicExpectCTState(
-      url.host(), NetworkAnonymizationKey(), &state));
-  EXPECT_TRUE(state.enforce);
-  EXPECT_EQ(GURL("https://example.test"), state.report_uri);
-}
-
-// Tests that if multiple Expect CT HTTP headers are sent, they are all
-// processed.
-TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kDynamicExpectCTFeature);
-
-  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
-  https_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(kTestFilePath));
-  ASSERT_TRUE(https_test_server.Start());
-
-  // Set up a MockCertVerifier to accept the certificate that the server sends.
-  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
-  ASSERT_TRUE(cert);
-  CertVerifyResult verify_result;
-  verify_result.verified_cert = cert;
-  verify_result.is_issued_by_known_root = true;
-  auto cert_verifier = std::make_unique<MockCertVerifier>();
-  cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
-
-  // Set up a MockCTPolicyEnforcer to simulate CT compliance.
-  DoNothingCTVerifier ct_verifier;
-  auto ct_policy_enforcer = std::make_unique<MockCTPolicyEnforcer>();
-  ct_policy_enforcer->set_default_result(
-      ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS);
-
-  auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->SetCertVerifier(std::move(cert_verifier));
-  context_builder->set_ct_policy_enforcer(std::move(ct_policy_enforcer));
-  auto context = context_builder->Build();
-  MockExpectCTReporter expect_ct_reporter;
-  context->transport_security_state()->SetExpectCTReporter(&expect_ct_reporter);
-
-  // Now send a request to trigger the header processing.
-  TestDelegate d;
-  GURL url = https_test_server.GetURL("/expect-ct-header-multiple.html");
-  std::unique_ptr<URLRequest> request(context->CreateRequest(
-      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-  request->Start();
-  d.RunUntilComplete();
-
-  TransportSecurityState::ExpectCTState state;
-  ASSERT_TRUE(context->transport_security_state()->GetDynamicExpectCTState(
-      url.host(), NetworkAnonymizationKey(), &state));
-  EXPECT_TRUE(state.enforce);
-  EXPECT_EQ(GURL("https://example.test"), state.report_uri);
 }
 
 #endif  // !BUILDFLAG(IS_IOS)
@@ -8451,9 +8240,6 @@ TEST_F(URLRequestTestHTTP, Redirect303Tests) {
   HTTPRedirectMethodTest(url, "PUT", "GET", true);
   HTTPRedirectMethodTest(url, "HEAD", "HEAD", false);
 
-  HTTPRedirectOriginHeaderTest(url, "CONNECT", "GET", std::string());
-  HTTPRedirectOriginHeaderTest(https_redirect_url, "CONNECT", "GET",
-                               std::string());
   HTTPRedirectOriginHeaderTest(url, "DELETE", "GET", std::string());
   HTTPRedirectOriginHeaderTest(https_redirect_url, "DELETE", "GET",
                                std::string());
@@ -9991,7 +9777,7 @@ class TestSSLPrivateKey : public SSLPrivateKey {
             SignCallback callback) override {
     sign_count_++;
     if (fail_signing_) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback),
                                     ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED,
                                     std::vector<uint8_t>()));
@@ -13009,6 +12795,18 @@ TEST_F(URLRequestTestHTTP, AuthChallengeInfo) {
   EXPECT_EQ("/auth-basic", r->auth_challenge_info()->path);
 }
 
+TEST_F(URLRequestTestHTTP, ConnectNoSupported) {
+  ASSERT_TRUE(http_test_server()->Start());
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
+      http_test_server()->GetURL("/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
+  r->set_method("CONNECT");
+  r->Start();
+  delegate.RunUntilComplete();
+  EXPECT_EQ(ERR_METHOD_NOT_SUPPORTED, delegate.request_status());
+}
+
 class URLRequestDnsAliasTest : public TestWithTaskEnvironment {
  protected:
   URLRequestDnsAliasTest() {
@@ -13408,5 +13206,360 @@ TEST_P(URLRequestMaybeAsyncFirstPartySetsTest, SingleRedirect) {
 INSTANTIATE_TEST_SUITE_P(,
                          URLRequestMaybeAsyncFirstPartySetsTest,
                          testing::Bool());
+
+namespace {
+
+struct EnabledFeatureFlagsTestingParam {
+  const bool enable_double_key_network_anonymization_key;
+  const bool enable_cross_site_flag_network_anonymization_key;
+  const bool enable_double_key_network_isolation_key;
+};
+
+const EnabledFeatureFlagsTestingParam kFlagsParam[] = {
+    // 0. Triple-keying is enabled for both IsolationInfo and
+    // NetworkAnonymizationKey.
+    {/*enable_double_key_network_anonymization_key=*/false,
+     /*enable_cross_site_flag_network_anonymization_key=*/false,
+     /*enable_double_key_network_isolation_key=*/false},
+
+    // 1. Double-keying is enabled for both IsolationInfo and
+    // NetworkAnonymizationKey.
+    {/*enable_double_key_network_anonymization_key=*/true,
+     /*enable_cross_site_flag_network_anonymization_key=*/false,
+     /*enable_double_key_network_isolation_key=*/true},
+
+    // 2. Triple-keying is enabled for IsolationInfo and double-keying is
+    // enabled for NetworkAnonymizationKey.
+    {/*enable_double_key_network_anonymization_key=*/true,
+     /*enable_cross_site_flag_network_anonymization_key=*/false,
+     /*enable_double_key_network_isolation_key=*/false},
+
+    // 3. Triple-keying is enabled for IsolationInfo and double-keying +
+    // cross-site-bit is enabled for NetworkAnonymizationKey.
+    {/*enable_double_key_network_anonymization_key=*/false,
+     /*enable_cross_site_flag_network_anonymization_key=*/true,
+     /*enable_double_key_network_isolation_key=*/false}};
+
+}  // namespace
+
+class PartitionConnectionsByNetworkAnonymizationKey
+    : public URLRequestTest,
+      public testing::WithParamInterface<EnabledFeatureFlagsTestingParam> {
+ public:
+  PartitionConnectionsByNetworkAnonymizationKey() {
+    std::vector<base::test::FeatureRef> enabled_features = {
+        net::features::kPartitionConnectionsByNetworkIsolationKey,
+        net::features::kPartitionSSLSessionsByNetworkIsolationKey};
+    std::vector<base::test::FeatureRef> disabled_features = {};
+
+    if (IsDoubleKeyNetworkIsolationKeyEnabled()) {
+      enabled_features.push_back(
+          net::features::kForceIsolationInfoFrameOriginToTopLevelFrame);
+    } else {
+      disabled_features.push_back(
+          net::features::kForceIsolationInfoFrameOriginToTopLevelFrame);
+    }
+
+    if (IsDoubleKeyNetworkAnonymizationKeyEnabled()) {
+      enabled_features.push_back(
+          net::features::kEnableDoubleKeyNetworkAnonymizationKey);
+    } else {
+      disabled_features.push_back(
+          net::features::kEnableDoubleKeyNetworkAnonymizationKey);
+    }
+
+    if (IsCrossSiteFlagEnabled()) {
+      enabled_features.push_back(
+          net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
+    } else {
+      disabled_features.push_back(
+          net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
+    }
+
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
+
+  bool IsDoubleKeyNetworkIsolationKeyEnabled() const {
+    return GetParam().enable_double_key_network_isolation_key;
+  }
+
+  bool IsDoubleKeyNetworkAnonymizationKeyEnabled() const {
+    return GetParam().enable_double_key_network_anonymization_key;
+  }
+
+  bool IsCrossSiteFlagEnabled() const {
+    return GetParam().enable_cross_site_flag_network_anonymization_key;
+  }
+
+  const SchemefulSite kTestSiteA = SchemefulSite(GURL("http://a.test/"));
+  const SchemefulSite kTestSiteB = SchemefulSite(GURL("http://b.test/"));
+  const SchemefulSite kTestSiteC = SchemefulSite(GURL("http://c.test/"));
+  const base::UnguessableToken kNonceA = base::UnguessableToken::Create();
+  const base::UnguessableToken kNonceB = base::UnguessableToken::Create();
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+       DifferentTopFrameSitesNeverShareConnections) {
+  // Start server
+  EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
+  RegisterDefaultHandlers(&test_server);
+  ASSERT_TRUE(test_server.Start());
+  const auto original_url = test_server.GetURL("/echo");
+  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA);
+  NetworkAnonymizationKey network_anonymization_key2(kTestSiteB, kTestSiteB);
+
+  // Create a request from first party `kTestSiteA`.
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r1(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r1->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key1);
+    r1->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r1->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly
+    EXPECT_TRUE(r1->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r1->isolation_info().network_anonymization_key(),
+              network_anonymization_key1);
+    // Run request
+    r1->Start();
+    d.RunUntilComplete();
+
+    // Verify request started with a full handshake
+    EXPECT_THAT(d.request_status(), IsOk());
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r1->ssl_info().handshake_type);
+  }
+
+  // Create a request from first party `kTestSiteB`. This request should never
+  // share a key with r1 regardless of the NIK/NAK key schemes.
+  {
+    TestDelegate d;
+    // Create request and create IsolationInfo from
+    // `network_anonymization_key2`
+    std::unique_ptr<URLRequest> r2(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r2->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key2);
+    r2->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r2->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly.
+    EXPECT_TRUE(r2->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r2->isolation_info().network_anonymization_key(),
+              network_anonymization_key2);
+    // Run request
+    r2->Start();
+    d.RunUntilComplete();
+
+    // Verify request started with a full handshake
+    EXPECT_EQ(1, d.response_started_count());
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
+  }
+}
+
+TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+       FirstPartyIsSeparatedFromCrossSiteFrames) {
+  // Start server
+  EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
+  RegisterDefaultHandlers(&test_server);
+  ASSERT_TRUE(test_server.Start());
+  const auto original_url = test_server.GetURL("/echo");
+  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA);
+  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteB);
+
+  // Create a request from first party `kTestSiteA`.
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r1(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r1->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key1);
+    r1->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r1->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly
+    EXPECT_TRUE(r1->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r1->isolation_info().network_anonymization_key(),
+              network_anonymization_key1);
+    // Run request
+    r1->Start();
+    d.RunUntilComplete();
+    // Verify request started with a full handshake
+    EXPECT_THAT(d.request_status(), IsOk());
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r1->ssl_info().handshake_type);
+  }
+
+  // Create a request from third party `kTestSiteB` embedded in `kTestSiteA`.
+  // This request should share a key with r1 when NetworkAnonymizationKey is in
+  // double keyed scheme and should not share a key with r1 when
+  // NetworkAnonymizationKey is triple keyed or in cross site flag scheme.
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r2(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r2->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key2);
+    r2->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r2->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly.
+    EXPECT_TRUE(r2->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r2->isolation_info().network_anonymization_key(),
+              network_anonymization_key2);
+    // Run request
+    r2->Start();
+    d.RunUntilComplete();
+
+    EXPECT_THAT(d.request_status(), IsOk());
+    // We should only share a connection with r1 if double key
+    // NetworkAnonymizationKey scheme is enabled.
+    if (IsDoubleKeyNetworkAnonymizationKeyEnabled() &&
+        !IsCrossSiteFlagEnabled()) {
+      EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, r2->ssl_info().handshake_type);
+    } else {
+      EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
+    }
+  }
+}
+
+TEST_P(
+    PartitionConnectionsByNetworkAnonymizationKey,
+    DifferentCrossSiteFramesAreSeparatedOnlyWhenNetworkAnonymizationKeyIsTripleKeyed) {
+  // Start server
+  EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
+  RegisterDefaultHandlers(&test_server);
+  ASSERT_TRUE(test_server.Start());
+  const auto original_url = test_server.GetURL("/echo");
+  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteB);
+  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteC);
+
+  // Create a request from first party `kTestSiteA`.
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r1(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r1->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key1);
+    r1->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r1->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly
+    EXPECT_TRUE(r1->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r1->isolation_info().network_anonymization_key(),
+              network_anonymization_key1);
+    // Run request
+    r1->Start();
+    d.RunUntilComplete();
+    // Verify request started with a full handshake
+    EXPECT_THAT(d.request_status(), IsOk());
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r1->ssl_info().handshake_type);
+  }
+
+  // Create a request from third party `kTestSiteB` embedded in `kTestSiteA`.
+  // This request should share a key with r1 when NetworkAnonymizationKey is in
+  // double keyed scheme and should not share a key with r1 when
+  // NetworkAnonymizationKey is triple keyed or in cross site flag scheme.
+  {
+    TestDelegate d;
+    // Create request and create IsolationInfo from
+    // `network_anonymization_key2`
+    std::unique_ptr<URLRequest> r2(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r2->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key2);
+    r2->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r2->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly.
+    EXPECT_TRUE(r2->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r2->isolation_info().network_anonymization_key(),
+              network_anonymization_key2);
+    // Run request
+    r2->Start();
+    d.RunUntilComplete();
+
+    EXPECT_THAT(d.request_status(), IsOk());
+    // We should share a connection with r1 unless triple keyed
+    // NetworkAnonymizationKey scheme is enabled.
+    if (!IsDoubleKeyNetworkAnonymizationKeyEnabled() &&
+        !IsCrossSiteFlagEnabled()) {
+      EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
+    } else {
+      EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, r2->ssl_info().handshake_type);
+    }
+  }
+}
+
+TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+       DifferentNoncesAreAlwaysSeparated) {
+  // Start server
+  EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
+  RegisterDefaultHandlers(&test_server);
+  ASSERT_TRUE(test_server.Start());
+  const auto original_url = test_server.GetURL("/echo");
+  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA,
+                                                     false, kNonceA);
+  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteA,
+                                                     false, kNonceB);
+
+  // Create a request from first party `kTestSiteA`.
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r1(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r1->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key1);
+    r1->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r1->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly
+    EXPECT_TRUE(r1->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r1->isolation_info().network_anonymization_key(),
+              network_anonymization_key1);
+    // Run request
+    r1->Start();
+    d.RunUntilComplete();
+    // Verify request started with a full handshake
+    EXPECT_THAT(d.request_status(), IsOk());
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r1->ssl_info().handshake_type);
+  }
+
+  // Create a request from third party `kTestSiteB` embedded in `kTestSiteA`.
+  // This request should share a key with r1 when NetworkAnonymizationKey is in
+  // double keyed scheme and should not share a key with r1 when
+  // NetworkAnonymizationKey is triple keyed or in cross site flag scheme.
+  {
+    TestDelegate d;
+    // Create request and create IsolationInfo from
+    // `network_anonymization_key2`
+    std::unique_ptr<URLRequest> r2(default_context().CreateRequest(
+        original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r2->set_isolation_info_from_network_anonymization_key(
+        network_anonymization_key2);
+    r2->SetLoadFlags(LOAD_DISABLE_CACHE);
+    r2->set_allow_credentials(false);
+
+    // Verify NetworkAnonymizationKey is set correctly.
+    EXPECT_TRUE(r2->is_created_from_network_anonymization_key());
+    EXPECT_EQ(r2->isolation_info().network_anonymization_key(),
+              network_anonymization_key2);
+    // Run request
+    r2->Start();
+    d.RunUntilComplete();
+
+    EXPECT_THAT(d.request_status(), IsOk());
+    // Connections where the NetworkAnonymizationKey has different nonces should
+    // always be separated regardless of scheme
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         PartitionConnectionsByNetworkAnonymizationKey,
+                         testing::ValuesIn(kFlagsParam));
 
 }  // namespace net

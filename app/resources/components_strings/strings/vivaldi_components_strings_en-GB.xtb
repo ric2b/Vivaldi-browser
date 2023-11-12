@@ -25,7 +25,6 @@
 <translation id="2166378884831602661">This site can’t provide a secure connection</translation>
 <translation id="2187317261103489799">Detect (default)</translation>
 <translation id="2224337661447660594">No internet</translation>
-<translation id="2230458221926704099">Fix your connection using the <ph name="BEGIN_LINK" />diagnostics app<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Your Internet access is blocked</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requires a username and password.</translation>
 <translation id="2337852623177822836">Setting controlled by your administrator</translation>
@@ -152,7 +151,6 @@
 <translation id="6451458296329894277">Confirm Form Resubmission</translation>
 <translation id="6569060085658103619">You're viewing an extension page</translation>
 <translation id="6657585470893396449">Password</translation>
-<translation id="6685834062052613830">Sign out and complete setup</translation>
 <translation id="6711464428925977395">There is something wrong with the proxy server or the address is incorrect.</translation>
 <translation id="6757797048963528358">Your device went to sleep.</translation>
 <translation id="6897140037006041989">User Agent</translation>

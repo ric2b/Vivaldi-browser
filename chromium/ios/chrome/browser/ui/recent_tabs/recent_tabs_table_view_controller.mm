@@ -4,8 +4,11 @@
 
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
 
+#import <objc/runtime.h>
+
 #import "base/check_op.h"
 #import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -48,12 +51,13 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_menu_provider.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_presentation_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller_ui_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/synced_sessions.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
@@ -297,7 +301,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 #pragma mark - SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
-  if (self.preventUpdates || self.searchTerms.length ||
+  if (self.preventUpdates ||
       ![self.tableViewModel
           hasSectionForSectionIdentifier:SectionIdentifierOtherDevices]) {
     return;
@@ -305,7 +309,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
   [self.tableView
       performBatchUpdates:^{
-        [self updateOtherDevicesSectionForState:self.sessionState];
+        if (self.searchTerms.length)
+          [self updateSessionSections];
+        else
+          [self updateOtherDevicesSectionForState:self.sessionState];
       }
                completion:nil];
 }
@@ -402,11 +409,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   historyItem.image = UseSymbols() ? DefaultSymbolWithPointSize(
                                          kHistorySymbol, kSymbolActionPointSize)
                                    : [UIImage imageNamed:@"show_history"];
-  if (self.styler.tintColor) {
-    historyItem.textColor = self.styler.tintColor;
-  } else {
-    historyItem.textColor = [UIColor colorNamed:kBlueColor];
-  }
+  historyItem.textColor = [UIColor colorNamed:kBlueColor];
   historyItem.accessibilityIdentifier =
       kRecentTabsShowFullHistoryCellAccessibilityIdentifier;
   [model addItem:historyItem
@@ -781,9 +784,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 - (void)addSuggestedActionsSection {
   TableViewModel* model = self.tableViewModel;
 
-  UIColor* actionsTextColor = self.styler.tintColor
-                                  ? self.styler.tintColor
-                                  : [UIColor colorNamed:kBlueColor];
+  UIColor* actionsTextColor = [UIColor colorNamed:kBlueColor];
 
   [model addSectionWithIdentifier:SectionIdentifierSuggestedActions];
   TableViewTextHeaderFooterItem* header = [[TableViewTextHeaderFooterItem alloc]
@@ -1017,6 +1018,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   return [sessionSectionIdentifiers containsObject:sectionIdentifierObject];
 }
 
+// Returns YES if the recent tabs is presented modally.
+- (BOOL)isPresentedModally {
+  return self.navigationController.presentingViewController;
+}
+
 #pragma mark - Consumer Protocol
 
 - (void)refreshUserState:(SessionsSyncUserState)newSessionState {
@@ -1196,6 +1202,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
              : kSeparationSpaceBetweenSections;
 }
 
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+  [self.UIDelegate recentTabsScrollViewDidScroll:self];
+}
+
 #pragma mark - UITableViewDataSource
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
@@ -1262,6 +1272,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
           }
         }));
   }
+  [cell layoutIfNeeded];
   return cell;
 }
 
@@ -1534,11 +1545,17 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   const sessions::SessionTab* toLoad = nullptr;
   if (openTabs->GetForeignTab(distantTab->session_tag, distantTab->tab_id,
                               &toLoad)) {
+    base::TimeDelta time_since_last_use = base::Time::Now() - toLoad->timestamp;
+    base::UmaHistogramCustomTimes("IOS.DistantTab.TimeSinceLastUse",
+                                  time_since_last_use, base::Minutes(1),
+                                  base::Days(24), 50);
+
     base::RecordAction(base::UserMetricsAction(
         "MobileRecentTabManagerTabFromOtherDeviceOpened"));
     if (self.searchTerms.length) {
       base::RecordAction(base::UserMetricsAction(
           "MobileRecentTabManagerTabFromOtherDeviceOpenedSearchResult"));
+      self.searchTerms = @"";
     }
     new_tab_page_uma::RecordAction(
         self.browserState, self.webStateList->GetActiveWebState(),
@@ -1610,6 +1627,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
   const TemplateURL* defaultURL =
       templateURLService->GetDefaultSearchProvider();
+  DCHECK(defaultURL);
 
   TemplateURLRef::SearchTermsArgs search_args(
       base::SysNSStringToUTF16(self.searchTerms));
@@ -1821,6 +1839,29 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 - (BOOL)accessibilityPerformEscape {
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
   return YES;
+}
+
+#pragma mark - UIResponder
+
+// To always be able to register key commands via -keyCommands, the VC must be
+// able to become first responder.
+- (BOOL)canBecomeFirstResponder {
+  return YES;
+}
+
+- (NSArray<UIKeyCommand*>*)keyCommands {
+  return @[ UIKeyCommand.cr_close ];
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+  if (sel_isEqual(action, @selector(keyCommand_close))) {
+    return [self isPresentedModally];
+  }
+  return [super canPerformAction:action withSender:sender];
+}
+- (void)keyCommand_close {
+  base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
+  [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
 
 #pragma mark - Private Helpers

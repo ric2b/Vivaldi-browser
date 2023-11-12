@@ -27,6 +27,8 @@ enum AcceleratorAction {
   BRIGHTNESS_UP,
   CYCLE_BACKWARD_MRU,
   CYCLE_FORWARD_MRU,
+  CYCLE_SAME_APP_WINDOWS_BACKWARD,
+  CYCLE_SAME_APP_WINDOWS_FORWARD,
   DESKS_ACTIVATE_DESK_LEFT,
   DESKS_ACTIVATE_DESK_RIGHT,
   DESKS_MOVE_ACTIVE_ITEM_LEFT,
@@ -85,6 +87,9 @@ enum AcceleratorAction {
   OPEN_FEEDBACK_PAGE,
   OPEN_FILE_MANAGER,
   OPEN_GET_HELP,
+  // Similar to TOGGLE_CLIPBOARD_HISTORY but is used to paste plain text only
+  // when clipboard history menu is already open.
+  PASTE_CLIPBOARD_HISTORY_PLAIN_TEXT,
   POWER_PRESSED,
   POWER_RELEASED,
   PRINT_UI_HIERARCHIES,
@@ -164,6 +169,7 @@ enum AcceleratorAction {
   DEBUG_TOGGLE_TOUCH_PAD,
   DEBUG_TOGGLE_TOUCH_SCREEN,
   DEBUG_TOGGLE_TABLET_MODE,
+  DEBUG_TOGGLE_VIDEO_CONFERENCE_CAMERA_TRAY_ICON,
   DEBUG_TOGGLE_WALLPAPER_MODE,
   DEBUG_TRIGGER_CRASH,  // Intentionally crash the ash process.
   DEBUG_TOGGLE_HUD_DISPLAY,
@@ -211,6 +217,12 @@ ASH_PUBLIC_EXPORT extern const AcceleratorData
     kEnabledWithImprovedDesksKeyboardShortcutsAcceleratorData[];
 ASH_PUBLIC_EXPORT extern const size_t
     kEnabledWithImprovedDesksKeyboardShortcutsAcceleratorDataLength;
+
+// Accelerators that are enabled with same app window cycling experiment.
+ASH_PUBLIC_EXPORT extern const AcceleratorData
+    kEnableWithSameAppWindowCycleAcceleratorData[];
+ASH_PUBLIC_EXPORT extern const size_t
+    kEnableWithSameAppWindowCycleAcceleratorDataLength;
 
 // The public-facing interface for accelerator handling, which is Ash's duty to
 // implement.

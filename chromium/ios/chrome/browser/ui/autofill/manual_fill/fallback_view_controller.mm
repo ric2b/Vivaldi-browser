@@ -19,7 +19,8 @@
 #endif
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  ItemsSectionIdentifier = kSectionIdentifierEnumZero,
+  HeaderSectionIdentifier = kSectionIdentifierEnumZero,
+  ItemsSectionIdentifier,
   ActionsSectionIdentifier,
 };
 
@@ -28,12 +29,13 @@ namespace {
 // This is the width used for `self.preferredContentSize`.
 constexpr CGFloat PopoverPreferredWidth = 320;
 
-// This is the maximum height used for `self.preferredContentSize`.
-constexpr CGFloat PopoverMaxHeight = 360;
-
 // This is the height used for `self.preferredContentSize` when showing the
 // loading indicator on iPad.
 constexpr CGFloat PopoverLoadingHeight = 185.5;
+
+// Minimum and maximum heights permitted for `self.preferredContentSize`.
+constexpr CGFloat PopoverMinHeight = 160;
+constexpr CGFloat PopoverMaxHeight = 360;
 
 // If the loading indicator was shown, it will be on screen for at least this
 // amount of seconds.
@@ -52,6 +54,9 @@ constexpr CGFloat kSectionFooterHeight = 8;
 // The date when the loading indicator started or [NSDate distantPast] if it
 // hasn't been shown.
 @property(nonatomic, strong) NSDate* loadingIndicatorStartingDate;
+
+// Header item to be shown when the loading indicator disappears.
+@property(nonatomic, strong) TableViewItem* queuedHeaderItem;
 
 // Data Items to be shown when the loading indicator disappears.
 @property(nonatomic, strong) NSArray<TableViewItem*>* queuedDataItems;
@@ -78,6 +83,11 @@ constexpr CGFloat kSectionFooterHeight = 8;
 
   [super viewDidLoad];
 
+  // Remove extra spacing on top of sections.
+  if (@available(iOS 15, *)) {
+    self.tableView.sectionHeaderTopPadding = 0;
+  }
+
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
   self.tableView.sectionHeaderHeight = kSectionHeaderHeight;
   self.tableView.sectionFooterHeight = kSectionFooterHeight;
@@ -86,13 +96,46 @@ constexpr CGFloat kSectionFooterHeight = 8;
   self.tableView.allowsSelection = NO;
   self.definesPresentationContext = YES;
   if (!self.tableViewModel) {
-    if (self.popoverPresentationController) {
+    if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       self.preferredContentSize = CGSizeMake(
           PopoverPreferredWidth, AlignValueToPixel(PopoverLoadingHeight));
     }
     [self startLoadingIndicatorWithLoadingMessage:@""];
     self.loadingIndicatorStartingDate = [NSDate date];
   }
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    CGSize systemLayoutSize = self.tableView.contentSize;
+    CGFloat preferredHeight =
+        std::min(systemLayoutSize.height, PopoverMaxHeight);
+    preferredHeight = std::max(preferredHeight, PopoverMinHeight);
+    self.preferredContentSize =
+        CGSizeMake(PopoverPreferredWidth, preferredHeight);
+  }
+}
+
+- (void)presentHeaderItem:(TableViewItem*)item {
+  if (![self shouldPresentItems]) {
+    if (self.queuedHeaderItem) {
+      self.queuedHeaderItem = item;
+      return;
+    }
+    self.queuedHeaderItem = item;
+    NSTimeInterval remainingTime =
+        kMinimumLoadingTime - [self timeSinceLoadingIndicatorStarted];
+    __weak __typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(remainingTime * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+                     [weakSelf presentQueuedHeaderItem];
+                   });
+    return;
+  }
+  self.queuedHeaderItem = item;
+  [self presentQueuedHeaderItem];
 }
 
 - (void)presentDataItems:(NSArray<TableViewItem*>*)items {
@@ -139,6 +182,23 @@ constexpr CGFloat kSectionFooterHeight = 8;
 
 #pragma mark - Private
 
+// Presents the header item.
+- (void)presentQueuedHeaderItem {
+  [self createModelIfNeeded];
+  BOOL sectionExist = [self.tableViewModel
+      hasSectionForSectionIdentifier:HeaderSectionIdentifier];
+  // If there is no header, remove section if exist.
+  if (self.queuedHeaderItem == nil && sectionExist) {
+    [self.tableViewModel removeSectionWithIdentifier:HeaderSectionIdentifier];
+  } else if (self.queuedHeaderItem != nil && !sectionExist) {
+    [self.tableViewModel insertSectionWithIdentifier:HeaderSectionIdentifier
+                                             atIndex:0];
+  }
+  [self presentFallbackItems:@[ self.queuedHeaderItem ]
+                   inSection:HeaderSectionIdentifier];
+  self.queuedHeaderItem = nil;
+}
+
 // Presents the data items currently in queue.
 - (void)presentQueuedDataItems {
   DCHECK(self.queuedDataItems);
@@ -149,8 +209,15 @@ constexpr CGFloat kSectionFooterHeight = 8;
   if (!self.queuedDataItems.count && sectionExist) {
     [self.tableViewModel removeSectionWithIdentifier:ItemsSectionIdentifier];
   } else if (self.queuedDataItems.count && !sectionExist) {
+    // If the header section exists, insert after it. Otherwise, insert at the
+    // start.
+    NSInteger sectionIndex =
+        [self.tableViewModel
+            hasSectionForSectionIdentifier:HeaderSectionIdentifier]
+            ? 1
+            : 0;
     [self.tableViewModel insertSectionWithIdentifier:ItemsSectionIdentifier
-                                             atIndex:0];
+                                             atIndex:sectionIndex];
   }
   [self presentFallbackItems:self.queuedDataItems
                    inSection:ItemsSectionIdentifier];
@@ -176,6 +243,7 @@ constexpr CGFloat kSectionFooterHeight = 8;
 
 // Seconds since the loading indicator started. This is >> kMinimumLoadingTime
 // if the loading indicator wasn't shown.
+// TODO(crbug.com/1382857): Migrate to base::Time API.
 - (NSTimeInterval)timeSinceLoadingIndicatorStarted {
   return
       [[NSDate date] timeIntervalSinceDate:self.loadingIndicatorStartingDate];
@@ -207,15 +275,6 @@ constexpr CGFloat kSectionFooterHeight = 8;
     }
   }
   [self.tableView reloadData];
-  if (self.popoverPresentationController) {
-    // Update the preffered content size on iPad so the popover shows the right
-    // size.
-    [self.tableView layoutIfNeeded];
-    CGSize systemLayoutSize = self.tableView.contentSize;
-    CGFloat preferredHeight = MIN(systemLayoutSize.height, PopoverMaxHeight);
-    self.preferredContentSize =
-        CGSizeMake(PopoverPreferredWidth, preferredHeight);
-  }
 }
 
 @end

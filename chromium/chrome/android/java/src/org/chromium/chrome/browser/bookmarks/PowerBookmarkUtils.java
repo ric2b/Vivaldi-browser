@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.res.Resources;
+import android.os.Build;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
@@ -15,8 +16,10 @@ import com.google.common.primitives.UnsignedLongs;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.commerce.PriceTrackingUtils;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscription.CommerceSubscriptionType;
@@ -31,7 +34,6 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
 import org.chromium.components.power_bookmarks.PowerBookmarkType;
-import org.chromium.components.power_bookmarks.ProductPrice;
 import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 
 import java.lang.annotation.Retention;
@@ -82,27 +84,6 @@ public class PowerBookmarkUtils {
     }
 
     /**
-     * Lookup the cluster id for the given tab and retrieve the corresponding bookmark id which
-     * tracks the cluster id.
-     * @param tab The tab to lookup the {@link BookmarkId} for.
-     * @param bookmarkModel The {@link BookmarkModel} used to lookup bookmark data.
-     * @return The {@link BookmarkId} for the given tab or null.
-     */
-    public static List<BookmarkId> getBookmarkIdsWithSharedClusterIdForTab(
-            @Nullable Tab tab, BookmarkModel bookmarkModel) {
-        ShoppingService service =
-                ShoppingServiceFactory.getForProfile(Profile.getLastUsedRegularProfile());
-
-        if (tab == null || service == null) return new ArrayList<>();
-
-        ShoppingService.ProductInfo info = service.getAvailableProductInfoForUrl(tab.getUrl());
-
-        if (info == null) return new ArrayList<>();
-
-        return getBookmarkIdsForClusterId(info.productClusterId, bookmarkModel);
-    }
-
-    /**
      * Checks if the bookmark associated with the given cluster id has price tracking enabled.
      * @param clusterId The cluster id to lookup.
      * @param bookmarkModel The {@link BookmarkModel} used to lookup bookmark data.
@@ -147,76 +128,6 @@ public class PowerBookmarkUtils {
     /**
      * Checks if the given {@link BookmarkId} is price-tracked.
      *
-     * @param subscriptionsManager Manages price-tracking subscriptions.
-     * @param snackbarManager Manages snackbars, non-null if a message should be sent to alert the
-     *         users of price-tracking events.
-     * @param bookmarkModel The BookmarkModel used to query bookmarks.
-     * @param bookmarkId The BookmarkId to check the price-tracking status of.
-     * @param enabled Whether price-tracking should be enabled.
-     * @param callback The status callback.
-     */
-    public static void setPriceTrackingEnabled(@Nullable SubscriptionsManager subscriptionsManager,
-            @NonNull BookmarkModel bookmarkModel, @Nullable BookmarkId bookmarkId, boolean enabled,
-            Callback<Integer> callback) {
-        if (bookmarkId == null || subscriptionsManager == null) return;
-
-        bookmarkModel.finishLoadingBookmarkModel(() -> {
-            PowerBookmarkMeta meta = bookmarkModel.getPowerBookmarkMeta(bookmarkId);
-            if (meta == null || !meta.hasShoppingSpecifics()) return;
-
-            CommerceSubscription subscription =
-                    createCommerceSubscriptionForPowerBookmarkMeta(meta);
-            Callback<Integer> wrapperCallback = (status) -> {
-                if (bookmarkModel.isDestroyed()) return;
-                if (status == SubscriptionsManager.StatusCode.OK) {
-                    setPriceTrackingEnabledInMetadata(bookmarkModel, bookmarkId, enabled);
-                }
-                callback.onResult(status);
-            };
-
-            if (enabled) {
-                subscriptionsManager.subscribe(subscription, wrapperCallback);
-            } else {
-                subscriptionsManager.unsubscribe(subscription, wrapperCallback);
-            }
-        });
-    }
-
-    /**
-     * Sets the price-tracking status of the given bookmarks.
-     *
-     * @param subscriptionsManager Manages price-tracking subscriptions.
-     * @param bookmarkModel The BookmarkModel used to query bookmarks.
-     * @param bookmarkIds A list of BookmarkIds to set the price-tracking status of.
-     * @param enabled Whether price-tracking should be enabled.
-     * @param snackbarManager Manages snackbars, non-null if a message should be sent to alert the
-     *         users of price-tracking events.
-     * @param resources Used to retrieve resources.
-     */
-    public static void setPriceTrackingEnabledWithSnackbars(
-            @Nullable SubscriptionsManager subscriptionsManager,
-            @NonNull BookmarkModel bookmarkModel, @Nullable List<BookmarkId> bookmarkIds,
-            boolean enabled, SnackbarManager snackbarManager, Resources resources) {
-        if (bookmarkIds == null || bookmarkIds.size() == 0 || subscriptionsManager == null) return;
-
-        // Only the the first bookmark out of the list needs to query subscriptions manager.
-        BookmarkId id = bookmarkIds.get(0);
-        setPriceTrackingEnabledWithSnackbars(subscriptionsManager, bookmarkModel, id, enabled,
-                snackbarManager, resources, (status) -> {
-                    if (status == SubscriptionsManager.StatusCode.OK) {
-                        // If the request was successful, set the metadata properly.
-                        for (int i = 1; i < bookmarkIds.size(); i++) {
-                            setPriceTrackingEnabledInMetadata(
-                                    bookmarkModel, bookmarkIds.get(i), enabled);
-                        }
-                    }
-                });
-    }
-
-    /**
-     * Checks if the given {@link BookmarkId} is price-tracked.
-     *
-     * @param subscriptionsManager Manages price-tracking subscriptions.
      * @param bookmarkModel The BookmarkModel used to query bookmarks.
      * @param bookmarkId The BookmarkId to check the price-tracking status of.
      * @param enabled Whether price-tracking should be enabled.
@@ -226,23 +137,22 @@ public class PowerBookmarkUtils {
      * @param callback The status callback, may be called multiple times depending if the user
      *         retries on failure.
      */
-    public static void setPriceTrackingEnabledWithSnackbars(
-            @Nullable SubscriptionsManager subscriptionsManager,
-            @NonNull BookmarkModel bookmarkModel, @Nullable BookmarkId bookmarkId, boolean enabled,
-            SnackbarManager snackbarManager, Resources resources, Callback<Integer> callback) {
+    public static void setPriceTrackingEnabledWithSnackbars(@NonNull BookmarkModel bookmarkModel,
+            @Nullable BookmarkId bookmarkId, boolean enabled, SnackbarManager snackbarManager,
+            Resources resources, Callback<Boolean> callback) {
         // Action to retry the subscription request on failure.
         SnackbarManager.SnackbarController retrySnackbarControllerAction =
                 new SnackbarManager.SnackbarController() {
                     @Override
                     public void onAction(Object actionData) {
-                        setPriceTrackingEnabledWithSnackbars(subscriptionsManager, bookmarkModel,
-                                bookmarkId, enabled, snackbarManager, resources, callback);
+                        setPriceTrackingEnabledWithSnackbars(bookmarkModel, bookmarkId, enabled,
+                                snackbarManager, resources, callback);
                     }
                 };
         // Wrapper which shows a snackbar and forwards the result.
-        Callback<Integer> wrapperCallback = (status) -> {
+        Callback<Boolean> wrapperCallback = (success) -> {
             Snackbar snackbar;
-            if (status == SubscriptionsManager.StatusCode.OK) {
+            if (success) {
                 snackbar = Snackbar.make(
                         resources.getString(enabled ? R.string.price_tracking_enabled_snackbar
                                                     : R.string.price_tracking_disabled_snackbar),
@@ -258,35 +168,16 @@ public class PowerBookmarkUtils {
             }
             snackbar.setSingleLine(false);
             snackbarManager.showSnackbar(snackbar);
-            callback.onResult(status);
+            callback.onResult(success);
         };
-        setPriceTrackingEnabled(
-                subscriptionsManager, bookmarkModel, bookmarkId, enabled, wrapperCallback);
-    }
-
-    /**
-     * Update to the given price for the given bookmark id.
-     *
-     * @param bookmarkModel Used to read/write bookmark data.
-     * @param bookmarkId The bookmark id to update.
-     * @param price The price to update to.
-     */
-    public static void updatePriceForBookmarkId(@NonNull BookmarkModel bookmarkModel,
-            @NonNull BookmarkId bookmarkId,
-            @NonNull org.chromium.components.commerce.PriceTracking.ProductPrice price) {
-        PowerBookmarkMeta meta = bookmarkModel.getPowerBookmarkMeta(bookmarkId);
-        if (meta == null) return;
-        ProductPrice newPrice = ProductPrice.newBuilder()
-                                        .setCurrencyCode(price.getCurrencyCode())
-                                        .setAmountMicros(price.getAmountMicros())
-                                        .build();
-        bookmarkModel.setPowerBookmarkMeta(bookmarkId,
-                PowerBookmarkMeta.newBuilder(meta)
-                        .setShoppingSpecifics(
-                                ShoppingSpecifics.newBuilder(meta.getShoppingSpecifics())
-                                        .setCurrentPrice(newPrice)
-                                        .build())
-                        .build());
+        // Make sure the notification channel is initialized when the user tracks a product.
+        // TODO(crbug.com/1382191): Add a SubscriptionsObserver in the PriceDropNotificationManager
+        // and initialize the channel there.
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PriceDropNotificationManagerFactory.create().createNotificationChannel();
+        }
+        PriceTrackingUtils.setPriceTrackingStateForBookmark(
+                Profile.getLastUsedRegularProfile(), bookmarkId.getId(), enabled, wrapperCallback);
     }
 
     /**
@@ -303,14 +194,6 @@ public class PowerBookmarkUtils {
         if (bookmarkId == null) return null;
 
         return bookmarkModel.getPowerBookmarkMeta(bookmarkId);
-    }
-
-    /** @return Whether the price tracking flag is set in the bookmark's meta. */
-    public static boolean isBookmarkPriceTracked(BookmarkModel model, BookmarkId id) {
-        PowerBookmarkMeta meta = model.getPowerBookmarkMeta(id);
-        if (meta == null || !meta.hasShoppingSpecifics()) return false;
-
-        return meta.getShoppingSpecifics().getIsPriceTracked();
     }
 
     private static List<BookmarkId> getBookmarkIdsForClusterId(
@@ -330,20 +213,6 @@ public class PowerBookmarkUtils {
         }
 
         return results;
-    }
-
-    private static void setPriceTrackingEnabledInMetadata(@NonNull BookmarkModel bookmarkModel,
-            @Nullable BookmarkId bookmarkId, boolean enabled) {
-        PowerBookmarkMeta meta = bookmarkModel.getPowerBookmarkMeta(bookmarkId);
-        if (meta == null || !meta.hasShoppingSpecifics()) return;
-
-        bookmarkModel.setPowerBookmarkMeta(bookmarkId,
-                PowerBookmarkMeta.newBuilder(meta)
-                        .setShoppingSpecifics(
-                                ShoppingSpecifics.newBuilder(meta.getShoppingSpecifics())
-                                        .setIsPriceTracked(enabled)
-                                        .build())
-                        .build());
     }
 
     /** Sets the price-tracking eligibility to the test value given. */
@@ -410,7 +279,7 @@ public class PowerBookmarkUtils {
     /** @see #validateBookmarkedCommerceSubscriptions(BookmarkModel, SubscriptionsManager) */
     private static void doBookmarkedSubscriptionValidation(BookmarkModel bookmarkModel,
             SubscriptionsManager subscriptionsManager, List<CommerceSubscription> subscriptions) {
-        if (bookmarkModel.isDestroyed() || subscriptions == null) return;
+        if (subscriptions == null) return;
 
         List<BookmarkId> products =
                 bookmarkModel.searchBookmarks("", null, PowerBookmarkType.SHOPPING, -1);

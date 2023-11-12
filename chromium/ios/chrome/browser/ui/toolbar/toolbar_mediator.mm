@@ -18,8 +18,7 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/infobar_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
@@ -28,6 +27,7 @@
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -41,6 +41,11 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/image/image.h"
+
+// Vivaldi
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -88,6 +93,7 @@
 
 - (void)disconnect {
   self.webContentAreaOverlayPresenter = nullptr;
+  self.navigationBrowserAgent = nullptr;
 
   if (_webStateList) {
     _webStateList->RemoveObserver(_webStateListObserver.get());
@@ -253,6 +259,9 @@
     if (self.consumer) {
       [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
     }
+  } else {
+    // Clear the web navigation browser agent if the webStateList is nil.
+    self.navigationBrowserAgent = nil;
   }
 }
 
@@ -298,9 +307,13 @@
 - (void)updateNavigationBackAndForwardStateForWebState:
     (web::WebState*)webState {
   DCHECK(webState);
-  [self.consumer
-      setCanGoForward:webState->GetNavigationManager()->CanGoForward()];
-  [self.consumer setCanGoBack:webState->GetNavigationManager()->CanGoBack()];
+  const id<ToolbarConsumer> consumer = self.consumer;
+  WebNavigationBrowserAgent* navigationBrowserAgent =
+      self.navigationBrowserAgent;
+  if (navigationBrowserAgent) {
+    [consumer setCanGoForward:navigationBrowserAgent->CanGoForward(webState)];
+    [consumer setCanGoBack:navigationBrowserAgent->CanGoBack(webState)];
+  }
 }
 
 // Updates the Share Menu button of the consumer.
@@ -314,6 +327,11 @@
   // are displayed over the web content area.
   [self.consumer setShareMenuEnabled:shareMenuEnabled &&
                                      !self.webContentAreaShowingOverlay];
+
+  // Vivaldi
+  [self.consumer reloadButtonsWithNewTabPage:!shareMenuEnabled
+                           desktopTabEnabled:self.isDesktopTabBarEnabled];
+  // End Vivaldi
 }
 
 #pragma mark - OverlayPresesenterObserving
@@ -343,12 +361,10 @@
       title = l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_INCOGNITO_TAB);
       if (UseSymbols()) {
         if (@available(iOS 15, *)) {
-          image = CustomPaletteSymbol(
-              kIncognitoCircleFillSymbol, kSymbolImagePointSize,
-              UIImageSymbolWeightMedium, UIImageSymbolScaleMedium, @[
-                [UIColor colorNamed:kGrey400Color],
-                [UIColor colorNamed:kGrey100Color]
-              ]);
+          image =
+              SymbolWithPalette(CustomSymbolWithPointSize(
+                                    kIncognitoSymbol, kInfobarSymbolPointSize),
+                                @[ UIColor.whiteColor ]);
         } else {
           image = [UIImage imageNamed:@"incognito_badge_ios14"];
         }
@@ -418,16 +434,10 @@
   UIAction* openNewIncognitoTab =
       [self.actionFactory actionToOpenNewIncognitoTab];
 
-  UIMenu* newTabActions =
-      [UIMenu menuWithTitle:@""
-                      image:nil
-                 identifier:nil
-                    options:UIMenuOptionsDisplayInline
-                   children:@[ openNewTab, openNewIncognitoTab ]];
-
   UIAction* closeTab = [self.actionFactory actionToCloseCurrentTab];
 
-  return [UIMenu menuWithTitle:@"" children:@[ newTabActions, closeTab ]];
+  return [UIMenu menuWithTitle:@""
+                      children:@[ closeTab, openNewTab, openNewIncognitoTab ]];
 }
 
 // Returns the UIMenuElement for the content of the pasteboard. Can return nil.
@@ -462,6 +472,20 @@
   int index = self.webState->GetNavigationManager()->GetIndexOfItem(item);
   DCHECK_NE(index, -1);
   self.webState->GetNavigationManager()->GoToIndex(index);
+}
+
+#pragma mark - VIVALDI
+- (BOOL)isDesktopTabBarEnabled {
+  if (!self.webState)
+    return NO;
+
+  ChromeBrowserState* browserState =
+      ChromeBrowserState::FromBrowserState(self.webState->GetBrowserState());
+  if (!browserState)
+    return NO;
+
+  return [VivaldiTabSettingPrefs
+           getDesktopTabsModeWithPrefService:browserState->GetPrefs()];
 }
 
 @end

@@ -556,9 +556,10 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   return RespondLater();
 }
 
-void ThumbnailsCaptureBookmarkFunction::SendResult(bool success) {
+void ThumbnailsCaptureBookmarkFunction::SendResult(std::string data_url) {
   namespace Results = vivaldi::thumbnails::CaptureBookmark::Results;
 
+  bool success = !data_url.empty();
   if (!success) {
     LOG(ERROR) << "Failed to capture url " << url_.possibly_invalid_spec();
   }

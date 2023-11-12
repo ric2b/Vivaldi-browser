@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
+#include "components/enterprise/common/files_scan_data.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_widget_host.h"
@@ -39,7 +40,7 @@ struct SelectedFileInfo;
 }
 
 namespace policy {
-FORWARD_DECLARE_TEST(DlpFilesControllerBrowserTest, FilesUploadRestrictedFile);
+FORWARD_DECLARE_TEST(DlpFilesControllerBrowserTest, FilesUploadCallerPassed);
 }  // namespace policy
 
 // This class handles file-selection requests coming from renderer processes.
@@ -98,10 +99,20 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
       ContentAnalysisCompletionCallback_SystemFilesSkipped);
   FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest,
                            ContentAnalysisCompletionCallback_SystemOKBadFiles);
+  FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest,
+                           ContentAnalysisCompletionCallback_FolderUpload_OK);
+  FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest,
+                           ContentAnalysisCompletionCallback_FolderUpload_Bad);
+  FRIEND_TEST_ALL_PREFIXES(
+      FileSelectHelperTest,
+      ContentAnalysisCompletionCallback_FolderUploadBlockedThenAllowed);
+  FRIEND_TEST_ALL_PREFIXES(
+      FileSelectHelperTest,
+      ContentAnalysisCompletionCallback_FolderUpload_OKBad);
   FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest, GetFileTypesFromAcceptType);
   FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest, MultipleFileExtensionsForMime);
   FRIEND_TEST_ALL_PREFIXES(policy::DlpFilesControllerBrowserTest,
-                           FilesUploadRestrictedFile);
+                           FilesUploadCallerPassed);
 
   explicit FileSelectHelper(Profile* profile);
   ~FileSelectHelper() override;
@@ -221,11 +232,6 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
   void ConvertToFileChooserFileInfoList(
       const std::vector<ui::SelectedFileInfo>& files);
 
-  // Checks to see if any file is restricted to be transferred according to the
-  // rules of the DataLeakPrevention policy.
-  void CheckIfPolicyAllowed(
-      std::vector<blink::mojom::FileChooserFileInfoPtr> list);
-
   // Checks to see if scans are required for the specified files.
   void PerformContentAnalysisIfNeeded(
       std::vector<blink::mojom::FileChooserFileInfoPtr> list);
@@ -235,7 +241,28 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
   void ContentAnalysisCompletionCallback(
       std::vector<blink::mojom::FileChooserFileInfoPtr> list,
       const enterprise_connectors::ContentAnalysisDelegate::Data& data,
-      const enterprise_connectors::ContentAnalysisDelegate::Result& result);
+      enterprise_connectors::ContentAnalysisDelegate::Result& result);
+#endif
+
+  // Perform a content analysis when using the file selection helper in
+  // folder selection mode.  In this case, if any one file would be blocked,
+  // the entire folder should be blocked.
+  void PerformContentAnalysisForFolderUploadIfNeeded(
+      const base::FilePath& path);
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  // Callback used with the FilesScanData class to calculate the files
+  // required for scanning during folder upload.
+  void ScanDataCallback(
+      const base::FilePath& path,
+      std::unique_ptr<enterprise_connectors::FilesScanData> files_scan_data);
+
+  // Callback used to receive the results of a content analysis scan
+  // when doing a folder upload.
+  void FolderUploadContentAnalysisCompletionCallback(
+      const base::FilePath& path,
+      const enterprise_connectors::ContentAnalysisDelegate::Data& data,
+      enterprise_connectors::ContentAnalysisDelegate::Result& result);
 #endif
 
   // Finish the PerformContentAnalysisIfNeeded() handling after the
@@ -260,6 +287,8 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
       scoped_refptr<content::FileSelectListener> listener);
 
   void DontAbortOnMissingWebContentsForTesting();
+
+  bool IsDirectoryEnumerationStartedForTesting();
 
   // Helper method to get allowed extensions for select file dialog from
   // the specified accept types as defined in the spec:

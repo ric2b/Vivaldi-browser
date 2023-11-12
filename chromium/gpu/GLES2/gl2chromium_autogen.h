@@ -341,7 +341,6 @@
 #define glSetActiveURLCHROMIUM GLES2_GET_FUN(SetActiveURLCHROMIUM)
 #define glContextVisibilityHintCHROMIUM \
   GLES2_GET_FUN(ContextVisibilityHintCHROMIUM)
-#define glCoverageModulationCHROMIUM GLES2_GET_FUN(CoverageModulationCHROMIUM)
 #define glGetGraphicsResetStatusKHR GLES2_GET_FUN(GetGraphicsResetStatusKHR)
 #define glBlendBarrierKHR GLES2_GET_FUN(BlendBarrierKHR)
 #define glBindFragDataLocationIndexedEXT \
@@ -379,5 +378,6 @@
 #define glBlendFuncSeparateiOES GLES2_GET_FUN(BlendFuncSeparateiOES)
 #define glColorMaskiOES GLES2_GET_FUN(ColorMaskiOES)
 #define glIsEnablediOES GLES2_GET_FUN(IsEnablediOES)
+#define glProvokingVertexANGLE GLES2_GET_FUN(ProvokingVertexANGLE)
 
 #endif  // GPU_GLES2_GL2CHROMIUM_AUTOGEN_H_

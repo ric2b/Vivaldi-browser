@@ -357,6 +357,7 @@ CanonicalCookie& CanonicalCookie::operator=(const CanonicalCookie& other) =
 CanonicalCookie& CanonicalCookie::operator=(CanonicalCookie&& other) = default;
 
 CanonicalCookie::CanonicalCookie(
+    base::PassKey<CanonicalCookie> pass_key,
     std::string name,
     std::string value,
     std::string domain,
@@ -541,6 +542,11 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
 
   ParsedCookie parsed_cookie(cookie_line, status);
 
+  // We record this metric before checking validity because the presence of an
+  // HTAB will invalidate the ParsedCookie.
+  UMA_HISTOGRAM_BOOLEAN("Cookie.NameOrValueHtab",
+                        parsed_cookie.HasInternalHtab());
+
   if (!parsed_cookie.IsValid()) {
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "WARNING: Couldn't parse cookie";
@@ -609,10 +615,6 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
         CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY);
   }
 
-  // Collect metrics on whether usage of SameParty attribute is correct.
-  if (parsed_cookie.IsSameParty())
-    UMA_HISTOGRAM_BOOLEAN("Cookie.IsSamePartyValid", is_same_party_valid);
-
   bool partition_has_nonce = CookiePartitionKey::HasNonce(cookie_partition_key);
   bool is_partitioned_valid =
       IsCookiePartitionedValid(url, parsed_cookie, partition_has_nonce);
@@ -642,13 +644,14 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   // Get the port, this will get a default value if a port isn't provided.
   int source_port = ValidateAndAdjustSourcePort(url.EffectiveIntPort());
 
-  std::unique_ptr<CanonicalCookie> cc = base::WrapUnique(new CanonicalCookie(
-      parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain, cookie_path,
-      creation_time, cookie_expires, creation_time,
+  auto cc = std::make_unique<CanonicalCookie>(
+      base::PassKey<CanonicalCookie>(), parsed_cookie.Name(),
+      parsed_cookie.Value(), cookie_domain, cookie_path, creation_time,
+      cookie_expires, creation_time,
       /*last_update=*/base::Time::Now(), parsed_cookie.IsSecure(),
       parsed_cookie.IsHttpOnly(), samesite, parsed_cookie.Priority(),
       parsed_cookie.IsSameParty(), cookie_partition_key, source_scheme,
-      source_port));
+      source_port);
 
   // TODO(chlily): Log metrics.
   if (!cc->IsCanonical()) {
@@ -657,8 +660,15 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
     return nullptr;
   }
 
-  RecordCookieSameSiteAttributeValueHistogram(samesite_string,
-                                              parsed_cookie.IsSameParty());
+  RecordCookieSameSiteAttributeValueHistogram(samesite_string);
+
+  // Check for "__" prefixed names, excluding the cookie prefixes.
+  bool name_prefixed_with_underscores =
+      (prefix_case_insensitive == CanonicalCookie::COOKIE_PREFIX_NONE) &&
+      base::StartsWith(parsed_cookie.Name(), "__");
+
+  UMA_HISTOGRAM_BOOLEAN("Cookie.DoubleUnderscorePrefixedName",
+                        name_prefixed_with_underscores);
 
   UMA_HISTOGRAM_BOOLEAN("Cookie.ControlCharacterTruncation",
                         parsed_cookie.HasTruncatedNameOrValue());
@@ -710,18 +720,10 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
         net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
   }
 
-  if (base::FeatureList::IsEnabled(features::kExtraCookieValidityChecks)) {
-    // Validate name and value against character set and size limit constraints.
-    // If IsValidCookieNameValuePair identifies that `name` and/or `value` are
-    // invalid, it will add an ExclusionReason to `status`.
-    ParsedCookie::IsValidCookieNameValuePair(name, value, status);
-
-  } else if (!ParsedCookie::IsValidCookieAttributeValueLegacy(name) ||
-             !ParsedCookie::IsValidCookieAttributeValueLegacy(value) ||
-             (name.empty() && value.empty())) {
-    status->AddExclusionReason(
-        net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
-  }
+  // Validate name and value against character set and size limit constraints.
+  // If IsValidCookieNameValuePair identifies that `name` and/or `value` are
+  // invalid, it will add an ExclusionReason to `status`.
+  ParsedCookie::IsValidCookieNameValuePair(name, value, status);
 
   // Validate domain against character set and size limit constraints.
   bool domain_is_valid = true;
@@ -732,17 +734,15 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
     domain_is_valid = false;
   }
 
-  if (base::FeatureList::IsEnabled(features::kExtraCookieValidityChecks)) {
-    if (!ParsedCookie::CookieAttributeValueHasValidCharSet(domain)) {
-      status->AddExclusionReason(
-          net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
-      domain_is_valid = false;
-    }
-    if (!ParsedCookie::CookieAttributeValueHasValidSize(domain)) {
-      status->AddExclusionReason(
-          net::CookieInclusionStatus::EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE);
-      domain_is_valid = false;
-    }
+  if (!ParsedCookie::CookieAttributeValueHasValidCharSet(domain)) {
+    status->AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
+    domain_is_valid = false;
+  }
+  if (!ParsedCookie::CookieAttributeValueHasValidSize(domain)) {
+    status->AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE);
+    domain_is_valid = false;
   }
   const std::string& domain_attribute =
       domain_is_valid ? domain : std::string();
@@ -790,9 +790,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
       // error.
       status->AddExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
-    } else if (base::FeatureList::IsEnabled(
-                   features::kExtraCookieValidityChecks) &&
-               !ParsedCookie::CookieAttributeValueHasValidSize(
+    } else if (!ParsedCookie::CookieAttributeValueHasValidSize(
                    encoded_cookie_path)) {
       // The path attribute was specified and encodes into a value that's longer
       // than the length limit, so record an error.
@@ -834,11 +832,11 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
   if (!status->IsInclude())
     return nullptr;
 
-  std::unique_ptr<CanonicalCookie> cc = base::WrapUnique(new CanonicalCookie(
-      name, value, cookie_domain, encoded_cookie_path, creation_time,
-      expiration_time, last_access_time, /*last_update=*/base::Time::Now(),
-      secure, http_only, same_site, priority, same_party, partition_key,
-      source_scheme, source_port));
+  auto cc = std::make_unique<CanonicalCookie>(
+      base::PassKey<CanonicalCookie>(), name, value, cookie_domain,
+      encoded_cookie_path, creation_time, expiration_time, last_access_time,
+      /*last_update=*/base::Time::Now(), secure, http_only, same_site, priority,
+      same_party, partition_key, source_scheme, source_port);
   DCHECK(cc->IsCanonical());
 
   return cc;
@@ -870,11 +868,11 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::FromStorage(
   // TODO(crbug.com/1170548)
   int validated_port = ValidateAndAdjustSourcePort(source_port);
 
-  std::unique_ptr<CanonicalCookie> cc = base::WrapUnique(new CanonicalCookie(
-      std::move(name), std::move(value), std::move(domain), std::move(path),
-      creation, expiration, last_access, last_update, secure, httponly,
-      same_site, priority, same_party, partition_key, source_scheme,
-      validated_port));
+  auto cc = std::make_unique<CanonicalCookie>(
+      base::PassKey<CanonicalCookie>(), std::move(name), std::move(value),
+      std::move(domain), std::move(path), creation, expiration, last_access,
+      last_update, secure, httponly, same_site, priority, same_party,
+      partition_key, source_scheme, validated_port);
 
   if (cc->IsCanonicalForFromStorage()) {
     // This will help capture the number of times a cookie is canonical but does
@@ -907,10 +905,10 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateUnsafeCookieForTesting(
     absl::optional<CookiePartitionKey> partition_key,
     CookieSourceScheme source_scheme,
     int source_port) {
-  return base::WrapUnique(new CanonicalCookie(
-      name, value, domain, path, creation, expiration, last_access, last_update,
-      secure, httponly, same_site, priority, same_party, partition_key,
-      source_scheme, source_port));
+  return std::make_unique<CanonicalCookie>(
+      base::PassKey<CanonicalCookie>(), name, value, domain, path, creation,
+      expiration, last_access, last_update, secure, httponly, same_site,
+      priority, same_party, partition_key, source_scheme, source_port);
 }
 
 std::string CanonicalCookie::DomainWithoutDot() const {
@@ -1122,9 +1120,6 @@ CookieAccessResult CanonicalCookie::IncludeForRequestURL(
             CookieInclusionStatus::WARN_SAMEPARTY_EXCLUSION_OVERRULED_SAMESITE);
       }
       if (status.IsInclude()) {
-        UMA_HISTOGRAM_BOOLEAN(
-            "Cookie.SamePartyReadIncluded.InclusionUnderSameSite",
-            included_by_samesite);
         if (!included_by_samesite) {
           status.AddWarningReason(
               CookieInclusionStatus::
@@ -1166,6 +1161,24 @@ CookieAccessResult CanonicalCookie::IncludeForRequestURL(
     UMA_HISTOGRAM_ENUMERATION(
         "Cookie.CrossSiteRedirectDowngradeChangesInclusion2.Read",
         CookieSameSiteToCookieSameSiteForMetrics(SameSite()));
+
+    using HttpMethod =
+        CookieOptions::SameSiteCookieContext::ContextMetadata::HttpMethod;
+
+    HttpMethod http_method_enum = options.same_site_cookie_context()
+                                      .GetMetadataForCurrentSchemefulMode()
+                                      .http_method_bug_1221316;
+
+    DCHECK(http_method_enum != HttpMethod::kUnset);
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "Cookie.CrossSiteRedirectDowngradeChangesInclusionHttpMethod",
+        http_method_enum);
+
+    base::TimeDelta cookie_age = base::Time::Now() - creation_date_;
+    UMA_HISTOGRAM_EXACT_LINEAR(
+        "Cookie.CrossSiteRedirectDowngradeChangesInclusionAge",
+        cookie_age.InMinutes(), 30);
   }
 
   return CookieAccessResult(effective_same_site, status,
@@ -1324,9 +1337,6 @@ CookieAccessResult CanonicalCookie::IsSetPermittedInContext(
             CookieInclusionStatus::WARN_SAMEPARTY_EXCLUSION_OVERRULED_SAMESITE);
       }
       if (access_result.status.IsInclude()) {
-        UMA_HISTOGRAM_BOOLEAN(
-            "Cookie.SamePartySetIncluded.InclusionUnderSameSite",
-            included_by_samesite);
         if (!included_by_samesite) {
           access_result.status.AddWarningReason(
               CookieInclusionStatus::
@@ -1409,16 +1419,9 @@ bool CanonicalCookie::IsCanonicalForFromStorage() const {
     return false;
   }
 
-  if (base::FeatureList::IsEnabled(features::kExtraCookieValidityChecks)) {
-    if (!ParsedCookie::IsValidCookieName(name_) ||
-        !ParsedCookie::IsValidCookieValue(value_)) {
-      return false;
-    }
-  } else {
-    if (!ParsedCookie::IsValidCookieAttributeValueLegacy(name_) ||
-        !ParsedCookie::IsValidCookieAttributeValueLegacy(value_)) {
-      return false;
-    }
+  if (!ParsedCookie::IsValidCookieName(name_) ||
+      !ParsedCookie::IsValidCookieValue(value_)) {
+    return false;
   }
 
   if (!last_access_date_.is_null() && creation_date_.is_null())

@@ -69,13 +69,13 @@
     background-size: 24px;
   }
 
-  :host([in-searchbox][mask-image='search.svg']) #icon {
+  :host([in-searchbox][mask-image*='search.svg']) #icon {
     -webkit-mask-size: 20px;  /* Loupe in realbox is larger than in matches. */
   }
 </style>
 <div id="container" style="--container-bg-color:
-    [[containerBgColor_(imageSrc_, match.imageDominantColor)]];">
-  <image id="image" src="[[imageSrc_]]"></image>
+    [[containerBgColor_(match.imageDominantColor, imageLoading_)]];">
+  <img id="image" src="[[imageSrc_]]" on-load="onImageLoad_"></img>
   <!--Note: Do not remove the '$' in '$=' below, otherwise the 'style' attribute
       is erroneously removed by the HTML minifier. -->
   <div id="icon" style$="[[iconStyle_]]"></div>

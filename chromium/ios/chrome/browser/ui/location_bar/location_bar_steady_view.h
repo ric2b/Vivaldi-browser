@@ -7,6 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+// Vivaldi
+#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
+// End Vivaldi
+
 // A color scheme used for the steady view elements.
 @interface LocationBarSteadyViewColorScheme : NSObject
 
@@ -23,6 +27,10 @@
 
 // A simple view displaying the current URL and security status icon.
 @interface LocationBarSteadyView : UIView
+
+                                        // Vivaldi
+                                        <ActivityServicePositioner>
+                                        // End Vivaldi
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithFrame:(CGRect)frame NS_UNAVAILABLE;

@@ -7,6 +7,7 @@
 #include <lib/sys/cpp/component_context.h>
 #include <lib/ui/scenic/cpp/view_token_pair.h>
 
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/fuchsia/file_utils.h"
@@ -27,7 +28,7 @@
 #include "fuchsia_web/common/test/frame_test_util.h"
 #include "fuchsia_web/shell/remote_debugging_port.h"
 #include "fuchsia_web/webengine/switches.h"
-#include "fuchsia_web/webinstance_host/web_instance_host.h"
+#include "fuchsia_web/webinstance_host/web_instance_host_v1.h"
 #include "media/base/media_util.h"
 #include "media/gpu/test/video_test_helpers.h"
 
@@ -118,7 +119,7 @@ int main(int argc, char** argv) {
   }
 
   // Instantiate Web Instance Host.
-  WebInstanceHost web_instance_host;
+  WebInstanceHostV1 web_instance_host;
   fidl::InterfaceRequest<fuchsia::io::Directory> services_request;
   auto services = sys::ServiceDirectory::CreateWithRequest(&services_request);
   base::CommandLine child_command_line =

@@ -1,20 +1,22 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
 #import "ios/notes/note_interaction_controller.h"
-#include <stdint.h>
+
+#import <stdint.h>
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
-#include "base/check_op.h"
-#include "base/mac/foundation_util.h"
-#include "base/notreached.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
-#include "ios/notes/notes_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "app/vivaldi_apptools.h"
+#import "base/check_op.h"
+#import "base/mac/foundation_util.h"
+#import "base/notreached.h"
+#import "base/strings/utf_string_conversions.h"
+#import "base/time/time.h"
+#import "ios/notes/notes_factory.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
-#import "ios/notes/note_edit_view_controller.h"
+#import "ios/notes/note_add_edit_view_controller.h"
 #import "ios/notes/note_folder_editor_view_controller.h"
 #import "ios/notes/note_folder_view_controller.h"
 #import "ios/notes/note_home_view_controller.h"
@@ -25,8 +27,8 @@
 #import "ios/notes/note_path_cache.h"
 #import "ios/notes/note_transitioning_delegate.h"
 #import "ios/notes/note_utils_ios.h"
-#include "notes/note_node.h"
-#include "notes/notes_model.h"
+#import "notes/note_node.h"
+#import "notes/notes_model.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
@@ -34,20 +36,16 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
-#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
+#import "ios/web/public/navigation/referrer.h"
 #import "ios/web/public/web_state.h"
-
-#import "ios/notes/note_folder_view_controller.h"
-
-#include "app/vivaldi_apptools.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -70,7 +68,7 @@ enum class PresentedState {
 }  // namespace
 
 @interface NoteInteractionController () <
-    NoteEditViewControllerDelegate,
+    NoteAddEditViewControllerDelegate,
     NoteFolderEditorViewControllerDelegate,
     NoteFolderViewControllerDelegate,
     NoteHomeViewControllerDelegate,
@@ -108,7 +106,7 @@ enum class PresentedState {
 
 // A reference to the potentially presented single note editor. This will be
 // non-nil when |currentPresentedState| is NOTE_EDITOR.
-@property(nonatomic, strong) NoteEditViewController* noteEditor;
+@property(nonatomic, strong) NoteAddEditViewController* noteEditor;
 
 // A reference to the potentially presented folder editor. This will be non-nil
 // when |currentPresentedState| is FOLDER_EDITOR.
@@ -266,9 +264,10 @@ enum class PresentedState {
       editorController = nil;
   if (node->type() == vivaldi::NoteNode::NOTE) {
     self.currentPresentedState = PresentedState::NOTE_EDITOR;
-    NoteEditViewController* noteEditor =
-        [[NoteEditViewController alloc] initWithNote:node
-                                                     browser:_browser];
+    NoteAddEditViewController* noteEditor =
+        [[NoteAddEditViewController alloc] initWithNote:node
+         parent:nil
+         browser:_browser];
     self.noteEditor = noteEditor;
     self.noteEditor.delegate = self;
     editorController = noteEditor;
@@ -287,6 +286,20 @@ enum class PresentedState {
   }
 
   [self presentTableViewController:editorController
+      withReplacementViewControllers:nil];
+}
+
+- (void)presentAddViewController:(const NoteNode*)parent {
+  DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
+  [self dismissSnackbar];
+  self.currentPresentedState = PresentedState::NOTE_EDITOR;
+  NoteAddEditViewController* noteEditor =
+      [[NoteAddEditViewController alloc] initWithNote:nil
+       parent:parent
+      browser:_browser];
+  self.noteEditor = noteEditor;
+  self.noteEditor.delegate = self;
+  [self presentTableViewController:noteEditor
       withReplacementViewControllers:nil];
 }
 
@@ -389,19 +402,19 @@ enum class PresentedState {
           note_utils_ios::kNotesSnackbarCategory];
 }
 
-#pragma mark - NoteEditViewControllerDelegate
+#pragma mark - NoteAddEditViewControllerDelegate
 
-- (BOOL)noteEditor:(NoteEditViewController*)controller
+- (BOOL)noteEditor:(NoteAddEditViewController*)controller
     shoudDeleteAllOccurencesOfNote:(const NoteNode*)note {
   return YES;
 }
 
-- (void)noteEditorWantsDismissal:(NoteEditViewController*)controller {
+- (void)noteEditorWantsDismissal:(NoteAddEditViewController*)controller {
   [self dismissNoteEditorAnimated:YES];
 }
 
 - (void)noteEditorWillCommitContentChange:
-    (NoteEditViewController*)controller {
+    (NoteAddEditViewController*)controller {
   [self.delegate noteInteractionControllerWillCommitContentChange:self];
 }
 
@@ -501,6 +514,13 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
         (NSArray<ChromeTableViewController*>*)replacementViewControllers {
   TableViewNavigationController* navController =
       [[TableViewNavigationController alloc] initWithTable:viewController];
+
+  UINavigationBarAppearance* transparentAppearance =
+      [[UINavigationBarAppearance alloc] init];
+  [transparentAppearance configureWithTransparentBackground];
+  navController.navigationBar.standardAppearance = transparentAppearance;
+  navController.navigationBar.compactAppearance = transparentAppearance;
+  navController.navigationBar.scrollEdgeAppearance = transparentAppearance;
   self.noteNavigationController = navController;
   if (replacementViewControllers) {
     [navController setViewControllers:replacementViewControllers];
@@ -525,6 +545,13 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
   TableViewNavigationController* navController =
       [[TableViewNavigationController alloc] initWithTable:viewController];
   self.noteNavigationController = navController;
+  UINavigationBarAppearance* transparentAppearance =
+      [[UINavigationBarAppearance alloc] init];
+  [transparentAppearance configureWithTransparentBackground];
+  navController.navigationBar.standardAppearance = transparentAppearance;
+  navController.navigationBar.compactAppearance = transparentAppearance;
+  navController.navigationBar.scrollEdgeAppearance = transparentAppearance;
+
   if (replacementViewControllers) {
     [navController setViewControllers:replacementViewControllers];
   }

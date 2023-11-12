@@ -72,8 +72,9 @@ std::unique_ptr<WebAppInstallInfo> TerminalSystemAppDelegate::GetWebAppInfo()
   return CreateWebAppInfoForTerminalSystemWebApp();
 }
 
-bool TerminalSystemAppDelegate::ShouldReuseExistingWindow() const {
-  return false;
+Browser* TerminalSystemAppDelegate::GetWindowForLaunch(Profile* profile,
+                                                       const GURL& url) const {
+  return nullptr;
 }
 
 bool TerminalSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
@@ -87,6 +88,10 @@ bool TerminalSystemAppDelegate::ShouldShowInLauncher() const {
              crostini::prefs::kTerminalSshAllowedByPolicy);
 }
 
+bool TerminalSystemAppDelegate::IsAppEnabled() const {
+  // Do not install for child accounts.
+  return !profile()->IsChild();
+}
 bool TerminalSystemAppDelegate::ShouldHaveTabStrip() const {
   return true;
 }

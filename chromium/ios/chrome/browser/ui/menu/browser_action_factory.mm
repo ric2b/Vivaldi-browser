@@ -18,10 +18,10 @@
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
+#import "ios/chrome/browser/ui/menu/action_factory+protected.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
@@ -52,7 +52,7 @@ using vivaldi::IsVivaldiRunning;
 @implementation BrowserActionFactory
 
 - (instancetype)initWithBrowser:(Browser*)browser
-                       scenario:(MenuScenario)scenario {
+                       scenario:(MenuScenarioHistogram)scenario {
   DCHECK(browser);
   if (self = [super initWithScenario:scenario]) {
     _browser = browser;
@@ -117,11 +117,14 @@ using vivaldi::IsVivaldiRunning;
   UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
                                       kIncognitoSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"open_in_incognito"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE)
                          image:image
                           type:MenuActionType::OpenInNewIncognitoTab
-                         block:block];
+                         block:completionBlock];
   } // End Vivaldi
 }
 
@@ -317,7 +320,7 @@ using vivaldi::IsVivaldiRunning;
                        type:MenuActionType::StartNewIcognitoSearch
                       block:^{
                         OpenNewTabCommand* command =
-                            [OpenNewTabCommand commandWithIncognito:NO];
+                            [OpenNewTabCommand commandWithIncognito:YES];
                         command.shouldFocusOmnibox = YES;
                         [handler openURLInNewTab:command];
                       }];

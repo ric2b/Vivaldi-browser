@@ -5,17 +5,21 @@
 #import "UIKit/UIKit.h"
 
 #import "ios/chrome/browser/favicon/favicon_loader.h"
-#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_folder_item_cell.h"
-#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_url_item_cell.h"
+#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_folder_list_cell.h"
+#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_folder_regular_cell.h"
+#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_list_cell.h"
+#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
+#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ui/base/device_form_factor.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/device_form_factor.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-#include "url/gurl.h"
 
 using ui::GetDeviceFormFactor;
 using ui::DEVICE_FORM_FACTOR_TABLET;
@@ -27,9 +31,11 @@ using ui::DEVICE_FORM_FACTOR_TABLET;
 // NAMESPACE
 namespace {
 // Cell Identifier for the cell types
-NSString* cellIdFolderType = @"cellIdFolder";
-NSString* cellIdURLType = @"cellIdURL";
-
+NSString* cellIdFolderRegular = @"cellIdFolderRegular";
+NSString* cellIdFolderList = @"cellIdFolderList";
+NSString* cellIdRegular = @"cellIdRegular";
+NSString* cellIdSmall = @"cellIdSmall";
+NSString* cellIdList = @"cellIdList";
 }
 
 @interface VivaldiSpeedDialContainerView() <UICollectionViewDataSource,
@@ -47,6 +53,8 @@ NSString* cellIdURLType = @"cellIdURL";
 @property(strong,nonatomic) NSMutableArray *speedDialItems;
 // A BOOL to keep track the device orientation
 @property(assign,nonatomic) BOOL isDeviceLandscape;
+// Currently selected layout
+@property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
 @end
 
 @implementation VivaldiSpeedDialContainerView
@@ -84,10 +92,17 @@ NSString* cellIdURLType = @"cellIdURL";
   _collectionView.contentInsetAdjustmentBehavior =
     UIScrollViewContentInsetAdjustmentNever;
 
-  [_collectionView registerClass:[VivaldiSpeedDialURLItemCell class]
-      forCellWithReuseIdentifier:cellIdURLType];
-  [_collectionView registerClass:[VivaldiSpeedDialFolderItemCell class]
-      forCellWithReuseIdentifier:cellIdFolderType];
+  [_collectionView registerClass:[VivaldiSpeedDialRegularCell class]
+      forCellWithReuseIdentifier:cellIdRegular];
+  [collectionView registerClass:[VivaldiSpeedDialSmallCell class]
+      forCellWithReuseIdentifier:cellIdSmall];
+  [collectionView registerClass:[VivaldiSpeedDialListCell class]
+      forCellWithReuseIdentifier:cellIdList];
+  [_collectionView registerClass:[VivaldiSpeedDialFolderRegularCell class]
+      forCellWithReuseIdentifier:cellIdFolderRegular];
+   [_collectionView registerClass:[VivaldiSpeedDialFolderListCell class]
+       forCellWithReuseIdentifier:cellIdFolderList];
+
   [_collectionView setBackgroundColor:[UIColor clearColor]];
 
   [self addSubview:_collectionView];
@@ -98,17 +113,22 @@ NSString* cellIdURLType = @"cellIdURL";
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
+          layoutStyle:(VivaldiStartPageLayoutStyle)style
     deviceOrientation:(BOOL)isLandscape {
   self.parent = parent;
   self.faviconLoader = faviconLoader;
+  self.selectedLayout = style;
   self.isDeviceLandscape = isLandscape;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
   [self.collectionView reloadData];
 }
 
-- (void)setDeviceOrientation:(BOOL)isLandscape {
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                  isLandscape:(BOOL)isLandscape {
+  self.selectedLayout = style;
   self.isDeviceLandscape = isLandscape;
   [self.collectionView.collectionViewLayout invalidateLayout];
+  [self.collectionView reloadData];
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
@@ -125,29 +145,93 @@ NSString* cellIdURLType = @"cellIdURL";
 
   // If there's no more object then load the new speed dial creation tile
   if (indexPath.row == (long)self.speedDialItems.count) {
-    VivaldiSpeedDialFolderItemCell *cell =
-    [collectionView dequeueReusableCellWithReuseIdentifier:cellIdFolderType
-                                              forIndexPath:indexPath];
-    [cell configureCellWith:nil addNew:YES];
-    return cell;
+    switch (_selectedLayout) {
+      case VivaldiStartPageLayoutStyleLarge:
+      case VivaldiStartPageLayoutStyleMedium:
+      case VivaldiStartPageLayoutStyleSmall: {
+        VivaldiSpeedDialFolderRegularCell *folderRegularCell =
+        [collectionView
+          dequeueReusableCellWithReuseIdentifier:cellIdFolderRegular
+                                    forIndexPath:indexPath];
+        [folderRegularCell configureCellWith:nil
+                                      addNew:YES
+                                 layoutStyle:self.selectedLayout];
+        return folderRegularCell;
+      }
+      case VivaldiStartPageLayoutStyleList: {
+        VivaldiSpeedDialFolderListCell *folderListCell =
+            [collectionView
+              dequeueReusableCellWithReuseIdentifier:cellIdFolderList
+                                        forIndexPath:indexPath];
+        [folderListCell configureCellWith:nil
+                                   addNew:YES];
+        return folderListCell;
+      }
+    }
   }
 
+  // Deque speed dial items
   VivaldiSpeedDialItem* item =
     [self.speedDialItems objectAtIndex: indexPath.row];
 
   if (item.isFolder) {
-    VivaldiSpeedDialFolderItemCell *cell =
-      [collectionView dequeueReusableCellWithReuseIdentifier:cellIdFolderType
-                                                forIndexPath:indexPath];
-    [cell configureCellWith:item addNew:NO];
-    return cell;
+    switch (_selectedLayout) {
+      case VivaldiStartPageLayoutStyleLarge:
+      case VivaldiStartPageLayoutStyleMedium:
+      case VivaldiStartPageLayoutStyleSmall: {
+        VivaldiSpeedDialFolderRegularCell *folderRegularCell =
+        [collectionView
+          dequeueReusableCellWithReuseIdentifier:cellIdFolderRegular
+                                    forIndexPath:indexPath];
+        [folderRegularCell configureCellWith:item
+                                      addNew:NO
+                                 layoutStyle:self.selectedLayout];
+        return folderRegularCell;
+      }
+      case VivaldiStartPageLayoutStyleList: {
+        VivaldiSpeedDialFolderListCell *folderListCell =
+            [collectionView
+              dequeueReusableCellWithReuseIdentifier:cellIdFolderList
+                                        forIndexPath:indexPath];
+        [folderListCell configureCellWith:item
+                                   addNew:NO];
+        return folderListCell;
+      }
+    }
   } else {
-    VivaldiSpeedDialURLItemCell *cell =
-      [collectionView dequeueReusableCellWithReuseIdentifier:cellIdURLType
-                                                forIndexPath:indexPath];
-    [cell configureCellWith:item];
-    [self loadFaviconForItem:item forCell:cell fallbackToGoogleServer:YES];
-    return cell;
+    switch (_selectedLayout) {
+      case VivaldiStartPageLayoutStyleLarge:
+      case VivaldiStartPageLayoutStyleMedium: {
+        VivaldiSpeedDialRegularCell *largeCell =
+          [collectionView dequeueReusableCellWithReuseIdentifier:cellIdRegular
+                                                    forIndexPath:indexPath];
+        [largeCell configureCellWith:item layoutStyle:self.selectedLayout];
+        [self loadFaviconForItem:item
+                         forCell:largeCell
+          fallbackToGoogleServer:NO];
+        return largeCell;
+      }
+      case VivaldiStartPageLayoutStyleSmall: {
+        VivaldiSpeedDialSmallCell *smallCell =
+          [collectionView dequeueReusableCellWithReuseIdentifier:cellIdSmall
+                                                    forIndexPath:indexPath];
+        [smallCell configureCellWith:item];
+        [self loadFaviconForItem:item
+                         forCell:smallCell
+          fallbackToGoogleServer:NO];
+        return smallCell;
+      }
+      case VivaldiStartPageLayoutStyleList: {
+          VivaldiSpeedDialListCell *listCell =
+            [collectionView dequeueReusableCellWithReuseIdentifier:cellIdList
+                                                      forIndexPath:indexPath];
+        [listCell configureCellWith:item];
+        [self loadFaviconForItem:item
+                         forCell:listCell
+          fallbackToGoogleServer:NO];
+        return listCell;
+      }
+    }
   }
 }
 
@@ -156,8 +240,23 @@ NSString* cellIdURLType = @"cellIdURL";
 // loading it from a Google server if `fallbackToGoogleServer` is YES,
 // otherwise, use the fall back icon style.
 - (void)loadFaviconForItem:(VivaldiSpeedDialItem*)item
-                   forCell:(VivaldiSpeedDialURLItemCell*)cell
+                   forCell:(UICollectionViewCell*)cell
     fallbackToGoogleServer:(BOOL)fallbackToGoogleServer {
+
+  CGFloat desiredFaviconSizeInPoints;
+  CGFloat minFaviconSizeInPoints = kMinFaviconSizePt;
+
+  switch (_selectedLayout) {
+    case VivaldiStartPageLayoutStyleLarge:
+    case VivaldiStartPageLayoutStyleMedium:
+    case VivaldiStartPageLayoutStyleSmall:
+      desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
+      break;
+    case VivaldiStartPageLayoutStyleList: {
+      desiredFaviconSizeInPoints = kDesiredMediumFaviconSizePt;
+      break;
+    }
+  }
 
   // Start loading a favicon.
   __weak VivaldiSpeedDialContainerView* weakSelf = self;
@@ -166,11 +265,27 @@ NSString* cellIdURLType = @"cellIdURL";
     VivaldiSpeedDialContainerView* strongSelf = weakSelf;
     if (!strongSelf)
       return;
-    [cell configureCellWithAttributes:attributes];
+    switch (strongSelf.selectedLayout) {
+      case VivaldiStartPageLayoutStyleLarge:
+      case VivaldiStartPageLayoutStyleMedium: {
+        VivaldiSpeedDialRegularCell *largeCell =
+          (VivaldiSpeedDialRegularCell*)cell;
+        [largeCell configureCellWithAttributes:attributes];
+      }
+        break;
+      case VivaldiStartPageLayoutStyleSmall: {
+        VivaldiSpeedDialSmallCell *smallCell =
+          (VivaldiSpeedDialSmallCell*)cell;
+        [smallCell configureCellWithAttributes:attributes];
+      }
+        break;
+      case VivaldiStartPageLayoutStyleList: {
+        VivaldiSpeedDialListCell *listCell =
+          (VivaldiSpeedDialListCell*)cell;
+        [listCell configureCellWithAttributes:attributes];
+      }
+    }
   };
-
-  CGFloat desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
-  CGFloat minFaviconSizeInPoints = kMinFaviconSizePt;
 
   self.faviconLoader->FaviconForPageUrl(
       blockURL, desiredFaviconSizeInPoints, minFaviconSizeInPoints,
@@ -415,7 +530,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 
 #pragma mark - SET UP UI COMPONENTS
 
-/// Create and return the comositional layout for the collection view
+/// Create and return the compositional layout for the collection view
 - (UICollectionViewCompositionalLayout*)createLayout {
   UICollectionViewCompositionalLayout *layout =
     [[UICollectionViewCompositionalLayout alloc]
@@ -431,18 +546,28 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 - (NSCollectionLayoutSection*)layoutSectionFor:(NSInteger)index
      environment:(id<NSCollectionLayoutEnvironment>)environment {
 
-  CGFloat gridItemSize = [self getItemSize];
+  CGFloat gridItemSize = [self itemSizeWidth];
   CGFloat sectionPadding =
     self.isCurrentDeviceTablet ? self.getSectionPaddingForTablet
                                : self.getSectionPaddingForPhone;
   CGFloat itemPadding = [self getItemPadding];
 
-  NSCollectionLayoutSize *itemSize =
-    [NSCollectionLayoutSize
-      sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                fractionalWidthDimension:gridItemSize]
-             heightDimension:[NSCollectionLayoutDimension
-                                fractionalWidthDimension:gridItemSize]];
+  NSCollectionLayoutSize *itemSize;
+  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
+    itemSize =
+      [NSCollectionLayoutSize
+        sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:gridItemSize]
+               heightDimension:[NSCollectionLayoutDimension
+                                  absoluteDimension:vSDItemHeightListLayout]];
+  } else {
+    itemSize =
+      [NSCollectionLayoutSize
+        sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:gridItemSize]
+               heightDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:gridItemSize]];
+  }
 
   NSCollectionLayoutItem *item =
     [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
@@ -453,12 +578,23 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                                                    itemPadding,
                                                    itemPadding);
 
-  NSCollectionLayoutSize *groupSize =
-    [NSCollectionLayoutSize
-      sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                fractionalWidthDimension:1.0]
-             heightDimension:[NSCollectionLayoutDimension
-                                fractionalWidthDimension:gridItemSize]];
+  NSCollectionLayoutSize *groupSize;
+  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
+    groupSize =
+      [NSCollectionLayoutSize
+        sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:1.0]
+               heightDimension:[NSCollectionLayoutDimension
+                                  absoluteDimension:vSDItemHeightListLayout]];
+  } else {
+    groupSize =
+      [NSCollectionLayoutSize
+        sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:1.0]
+               heightDimension:[NSCollectionLayoutDimension
+                                  fractionalWidthDimension:gridItemSize]];
+  }
+
   NSCollectionLayoutGroup *group =
     [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
                                                   subitems:items];
@@ -477,29 +613,63 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET;
 }
 
-/// Returns the size for each speed dial item tile.
-- (CGFloat)getItemSize {
-  if (self.isCurrentDeviceTablet) {
-    return vSDItemSizeMultiplieriPad;
-  } else {
-    if (self.isDeviceLandscape) {
-      return vSDItemSizeMultiplieriPhoneLandscape;
-    } else {
-      return vSDItemSizeMultiplieriPhonePortrait;
-    }
+// Returns the multiplier to generate the grid item from view width.
+- (CGFloat)itemSizeWidth {
+  switch (_selectedLayout) {
+    case VivaldiStartPageLayoutStyleLarge:
+      if (self.isCurrentDeviceTablet) {
+        return vSDWidthiPadLarge;
+      } else {
+        if (self.isDeviceLandscape) {
+          return vSDWidthiPhoneLargeLand;
+        } else {
+          return vSDWidthiPhoneLarge;
+        }
+      }
+    case VivaldiStartPageLayoutStyleMedium:
+      if (self.isCurrentDeviceTablet) {
+        return vSDWidthiPadMedium;
+      } else {
+        if (self.isDeviceLandscape) {
+          return vSDWidthiPhoneMediumLand;
+        } else {
+          return vSDWidthiPhoneMedium;
+        }
+      }
+    case VivaldiStartPageLayoutStyleSmall:
+      if (self.isCurrentDeviceTablet) {
+        return vSDWidthiPadSmall;
+      } else {
+        if (self.isDeviceLandscape) {
+          return vSDWidthiPhoneSmallLand;
+        } else {
+          return vSDWidthiPhoneSmall;
+        }
+      }
+    case VivaldiStartPageLayoutStyleList:
+      if (self.isCurrentDeviceTablet) {
+        return vSDWidthiPadList;
+      } else {
+        if (self.isDeviceLandscape) {
+          return vSDWidthiPhoneListLand;
+        } else {
+          return vSDWidthiPhoneList;
+        }
+      }
   }
 }
+
 
 /// Return the item padding for iPhone and iPad
 /// Same item padding is used for both portrait and landscape mode.
 - (CGFloat)getItemPadding {
-  return self.isCurrentDeviceTablet ? vSDItemPaddingiPad : vSDItemPaddingiPhone;
+  return self.isCurrentDeviceTablet ? vSDPaddingiPad : vSDPaddingiPhone;
 }
 
 /// Returns the section padding for tablet
 - (CGFloat)getSectionPaddingForTablet {
   return self.isDeviceLandscape ?
-    vSDSectionPaddingiPadLandscape : vSDSectionPaddingiPortrait;
+    vSDSectionPaddingiPadLandscape : vSDSectionPaddingiPadPortrait;
 }
 
 /// Returns the section padding for iPhone

@@ -4,12 +4,10 @@
 
 #include "chrome/browser/ash/tether/tether_service.h"
 
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/tether/tether_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,6 +21,8 @@
 #include "chromeos/ash/components/tether/tether_component.h"
 #include "chromeos/ash/components/tether/tether_component_impl.h"
 #include "chromeos/ash/components/tether/tether_host_fetcher_impl.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -414,7 +414,20 @@ NetworkStateHandler::TechnologyState TetherService::GetTetherTechnologyState() {
       return NetworkStateHandler::TechnologyState::TECHNOLOGY_PROHIBITED;
 
     case BLUETOOTH_DISABLED:
-      return NetworkStateHandler::TechnologyState::TECHNOLOGY_UNINITIALIZED;
+      // Instant Tethering can sometimes be made available by enabling
+      // Bluetooth, in which case we should return TECHNOLOGY_UNINITIALIZED.
+      // However, if the user or policy has disabled the feature, then more
+      // steps are needed by user (or policy needs to be changed). In this case,
+      // return TECHNOLOGY_UNAVAILABLE.
+      switch (multidevice_setup_client_->GetFeatureState(
+          multidevice_setup::mojom::Feature::kInstantTethering)) {
+        case multidevice_setup::mojom::FeatureState::kUnavailableSuiteDisabled:
+        case multidevice_setup::mojom::FeatureState::kDisabledByUser:
+        case multidevice_setup::mojom::FeatureState::kProhibitedByPolicy:
+          return NetworkStateHandler::TechnologyState::TECHNOLOGY_UNAVAILABLE;
+        default:
+          return NetworkStateHandler::TechnologyState::TECHNOLOGY_UNINITIALIZED;
+      }
 
     case USER_PREFERENCE_DISABLED:
       return NetworkStateHandler::TechnologyState::TECHNOLOGY_AVAILABLE;
@@ -438,7 +451,7 @@ void TetherService::GetBluetoothAdapter() {
   // problems with the Fake implementation since the class is not fully
   // constructed yet. Post the GetAdapter call to avoid this.
   auto* factory = device::BluetoothAdapterFactory::Get();
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&device::BluetoothAdapterFactory::GetAdapter,
                      base::Unretained(factory),

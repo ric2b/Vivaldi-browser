@@ -23,6 +23,7 @@ var PERMISSION_TYPES = ['media',
                         'microphone',
                         'microphone_and_camera',
                         'notifications',
+                        'protocol_handling',
                         // Vivaldi end
                         'fullscreen'];
 

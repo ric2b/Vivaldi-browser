@@ -213,10 +213,10 @@ class WebBundleElementBrowserTest : public ContentBrowserTest {
     GURL test1_url(https_server_.GetURL("/web_bundle/test1.txt"));
     GURL test2_url(https_server_.GetURL("/web_bundle/test2.txt"));
     web_package::WebBundleBuilder builder;
-    builder.AddExchange(test1_url.spec(),
+    builder.AddExchange(test1_url,
                         {{":status", "200"}, {"content-type", "text/plain"}},
                         "test1");
-    builder.AddExchange(test2_url.spec(),
+    builder.AddExchange(test2_url,
                         {{":status", "200"}, {"content-type", "text/plain"}},
                         "test2");
     auto bundle = builder.CreateBundle();
@@ -387,6 +387,30 @@ IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, SubframeLoadError) {
             *finish_navigation_observer.error_code());
 }
 
+IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, HistogramSameOriginCount) {
+  base::HistogramTester histogram_tester;
+
+  GURL url(https_server()->GetURL("/web_bundle/same_origin_web_bundle.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  FetchHistogramsFromChildProcesses();
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceWebBundles.OriginType",
+      web_package::ScriptWebBundleOriginType::kSameOrigin, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, HistogramCrossOriginCount) {
+  base::HistogramTester histogram_tester;
+
+  GURL url(https_server()->GetURL("/web_bundle/cross_origin_web_bundle.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  FetchHistogramsFromChildProcesses();
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceWebBundles.OriginType",
+      web_package::ScriptWebBundleOriginType::kCrossOrigin, 1);
+}
+
 IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, BundleFetchError) {
   base::HistogramTester histogram_tester;
 
@@ -432,7 +456,7 @@ IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest,
     EXPECT_EQ(base::StrCat({"\"", expected_message, "\""}), message);
 
     if (std::string(expected_message) == "failed")
-      console_observer.Wait();
+      ASSERT_TRUE(console_observer.Wait());
   }
 }
 

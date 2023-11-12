@@ -90,8 +90,10 @@
 <translation id="2550212893339833758">Փոխանակված հիշողություն</translation>
 <translation id="2553440850688409052">Թաքցնել այս փլագինը</translation>
 <translation id="26224892172169984">Թույլ չտալ որևէ կայքի մշակել պրոտոկոլներ</translation>
+<translation id="2653275834716714682">Տեքստի փոխարինում</translation>
 <translation id="2662876636500006917">Chrome ինտերնետ-խանութ</translation>
 <translation id="2678063897982469759">Կրկին միացնել</translation>
+<translation id="2678100101831051676">Չի հաջողվում հեռարձակել։</translation>
 <translation id="2721037002783622288">&amp;Որոնել պատկերը <ph name="SEARCH_ENGINE" />-ով</translation>
 <translation id="2783321960289401138">Ստեղծել դյուրանցում…</translation>
 <translation id="2785873697295365461">Ֆայլերի դեսկրիպտորներ</translation>
@@ -235,10 +237,12 @@
 <translation id="5233231016133573565">Գործընթացի ID</translation>
 <translation id="5233736638227740678">&amp;Փակցնել</translation>
 <translation id="5256861893479663409">Բոլոր կայքերում</translation>
+<translation id="5260334392110301220">Խելացի չակերտներ</translation>
 <translation id="5269977353971873915">Տպումը ձախողվեց</translation>
 <translation id="5284445933715251131">Շարունակել ներբեռնումը</translation>
 <translation id="52912272896845572">Մասնավոր բանալիի ֆայլն անվավեր է։</translation>
 <translation id="5301954838959518834">Լավ, հասկանալի է</translation>
+<translation id="5302932258331363306">Ցույց տալ փոխարինումները</translation>
 <translation id="5317780077021120954">Պահպանել</translation>
 <translation id="5334142896108694079">Սկրիպտների քեշ</translation>
 <translation id="5355926466126177564">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
@@ -338,6 +342,7 @@
 <translation id="7053983685419859001">Արգելափակել</translation>
 <translation id="7070484045139057854">Կարող է կարդալ և փոխել կայքի տվյալները</translation>
 <translation id="708060913198414444">Պա&amp;տճենել աուդիոյի հասցեն</translation>
+<translation id="7121728544325372695">Խելացի գծիկներ</translation>
 <translation id="7175353351958621980">Բեռնված է հետևյալ տեղից.</translation>
 <translation id="7186088072322679094">Պահել գործիքների երիզում</translation>
 <translation id="7287143125007575591">Մուտքն արգելված է։</translation>
@@ -421,6 +426,7 @@
 <translation id="8808478386290700967">Ինտերնետ-խանութ</translation>
 <translation id="8823514049557262177">Պատճենել հղման տե&amp;քստը</translation>
 <translation id="8823704566850948458">Առաջարկել գաղտնաբառ…</translation>
+<translation id="883062543841130884">Փոխարինումներ</translation>
 <translation id="8859174528519900719">Սաբֆրեյմ. <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Բացել հղումը նոր &amp;պատուհանում</translation>
 <translation id="8915370057835397490">Բեռնել առաջարկներ</translation>

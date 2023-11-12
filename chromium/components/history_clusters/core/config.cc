@@ -23,15 +23,19 @@ namespace history_clusters {
 
 namespace {
 
-const char kShouldShowAllClustersOnProminentUiSurfaces[] =
-    "history-clusters-should-show-all-clusters-on-prominent-ui-surfaces";
-
 Config& GetConfigInternal() {
   static base::NoDestructor<Config> s_config;
   return *s_config;
 }
 
 }  // namespace
+
+namespace switches {
+
+const char kShouldShowAllClustersOnProminentUiSurfaces[] =
+    "history-clusters-should-show-all-clusters-on-prominent-ui-surfaces";
+
+}  // namespace switches
 
 Config::Config() {
   // Override any parameters that may be provided by Finch.
@@ -74,9 +78,6 @@ Config::Config() {
 
   // The `kJourneysLabels` feature and child params.
   {
-    should_label_clusters =
-        base::FeatureList::IsEnabled(internal::kJourneysLabels);
-
     labels_from_hostnames = GetFieldTrialParamByFeatureAsBool(
         internal::kJourneysLabels, "labels_from_hostnames",
         labels_from_hostnames);
@@ -85,6 +86,9 @@ Config::Config() {
         internal::kJourneysLabels, "labels_from_entities",
         labels_from_entities);
   }
+
+  // The `kJourneysImages` feature.
+  { images = base::FeatureList::IsEnabled(internal::kJourneysImages); }
 
   // The `kPersistedClusters` feature and child params.
   {
@@ -102,6 +106,9 @@ Config::Config() {
             internal::kPersistedClusters,
             "JourneysPersistClustersInHistoryDbPeriodMinutes",
             persist_clusters_in_history_db_period_minutes);
+
+    persist_on_query = base::GetFieldTrialParamByFeatureAsBool(
+        internal::kPersistedClusters, "persist_on_query", persist_on_query);
 
     max_persisted_clusters_to_fetch = base::GetFieldTrialParamByFeatureAsInt(
         internal::kPersistedClusters, "max_persisted_clusters_to_fetch",
@@ -169,11 +176,29 @@ Config::Config() {
             "omnibox_history_cluster_provider_score",
             omnibox_history_cluster_provider_score);
 
+    omnibox_history_cluster_provider_inherit_search_match_score =
+        base::GetFieldTrialParamByFeatureAsBool(
+            internal::kOmniboxHistoryClusterProvider,
+            "omnibox_history_cluster_provider_inherit_search_match_score",
+            omnibox_history_cluster_provider_inherit_search_match_score);
+
+    omnibox_history_cluster_provider_rank_above_searches =
+        base::GetFieldTrialParamByFeatureAsBool(
+            internal::kOmniboxHistoryClusterProvider,
+            "omnibox_history_cluster_provider_rank_above_searches",
+            omnibox_history_cluster_provider_rank_above_searches);
+
     omnibox_history_cluster_provider_shortcuts =
         base::GetFieldTrialParamByFeatureAsBool(
             internal::kOmniboxHistoryClusterProvider,
             "omnibox_history_cluster_provider_shortcuts",
             omnibox_history_cluster_provider_shortcuts);
+
+    omnibox_history_cluster_provider_allow_default =
+        base::GetFieldTrialParamByFeatureAsBool(
+            internal::kOmniboxHistoryClusterProvider,
+            "omnibox_history_cluster_provider_allow_default",
+            omnibox_history_cluster_provider_allow_default);
 
     omnibox_history_cluster_provider_navigation_intent_score_threshold =
         base::GetFieldTrialParamByFeatureAsInt(
@@ -187,12 +212,6 @@ Config::Config() {
             internal::kOmniboxHistoryClusterProvider,
             "omnibox_history_cluster_provider_on_navigation_intents",
             omnibox_history_cluster_provider_on_navigation_intents);
-
-    omnibox_history_cluster_provider_free_ranking =
-        base::GetFieldTrialParamByFeatureAsBool(
-            internal::kOmniboxHistoryClusterProvider,
-            "omnibox_history_cluster_provider_free_ranking",
-            omnibox_history_cluster_provider_free_ranking);
   }
 
   // The `kOnDeviceClusteringKeywordFiltering` feature and child params.
@@ -211,14 +230,6 @@ Config::Config() {
     keyword_filter_on_noisy_visits = GetFieldTrialParamByFeatureAsBool(
         history_clusters::features::kOnDeviceClusteringKeywordFiltering,
         "keyword_filter_on_noisy_visits", keyword_filter_on_noisy_visits);
-
-    keyword_filter_on_search_terms = GetFieldTrialParamByFeatureAsBool(
-        history_clusters::features::kOnDeviceClusteringKeywordFiltering,
-        "keyword_filter_on_search_terms", keyword_filter_on_search_terms);
-
-    keyword_filter_on_visit_hosts = GetFieldTrialParamByFeatureAsBool(
-        history_clusters::features::kOnDeviceClusteringKeywordFiltering,
-        "keyword_filter_on_visit_hosts", keyword_filter_on_visit_hosts);
 
     max_num_keywords_per_cluster = GetFieldTrialParamByFeatureAsInt(
         features::kOnDeviceClusteringKeywordFiltering,
@@ -245,22 +256,6 @@ Config::Config() {
     DCHECK_GE(content_visibility_threshold, 0.0f);
     DCHECK_LE(content_visibility_threshold, 1.0f);
 
-    should_hide_single_visit_clusters_on_prominent_ui_surfaces =
-        GetFieldTrialParamByFeatureAsBool(
-            features::kOnDeviceClustering,
-            "hide_single_visit_clusters_on_prominent_ui_surfaces",
-            should_hide_single_visit_clusters_on_prominent_ui_surfaces);
-
-    should_hide_single_domain_clusters_on_prominent_ui_surfaces =
-        GetFieldTrialParamByFeatureAsBool(
-            features::kOnDeviceClustering,
-            "hide_single_domain_clusters_on_prominent_ui_surfaces",
-            should_hide_single_domain_clusters_on_prominent_ui_surfaces);
-
-    should_filter_noisy_clusters = GetFieldTrialParamByFeatureAsBool(
-        features::kOnDeviceClustering, "filter_noisy_clusters",
-        should_filter_noisy_clusters);
-
     noisy_cluster_visits_engagement_threshold =
         GetFieldTrialParamByFeatureAsDouble(
             features::kOnDeviceClustering,
@@ -272,26 +267,6 @@ Config::Config() {
             features::kOnDeviceClustering,
             "num_interesting_visits_filter_threshold",
             number_interesting_visits_filter_threshold);
-
-    visit_duration_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
-        features::kOnDeviceClustering, "visit_duration_ranking_weight",
-        visit_duration_ranking_weight);
-    DCHECK_GE(visit_duration_ranking_weight, 0.0f);
-
-    foreground_duration_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
-        features::kOnDeviceClustering, "foreground_duration_ranking_weight",
-        foreground_duration_ranking_weight);
-    DCHECK_GE(foreground_duration_ranking_weight, 0.0f);
-
-    bookmark_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
-        features::kOnDeviceClustering, "bookmark_ranking_weight",
-        bookmark_ranking_weight);
-    DCHECK_GE(bookmark_ranking_weight, 0.0f);
-
-    search_results_page_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
-        features::kOnDeviceClustering, "search_results_page_ranking_weight",
-        search_results_page_ranking_weight);
-    DCHECK_GE(search_results_page_ranking_weight, 0.0f);
   }
 
   // The `kJourneysCategoryFiltering` feature and child params.
@@ -362,6 +337,52 @@ Config::Config() {
         JourneysCollectionContentClusteringBlocklist();
   }
 
+  // The `kHistoryClustersVisitDeduping` feature and child params.
+  {
+    use_host_for_visit_deduping = GetFieldTrialParamByFeatureAsBool(
+        internal::kHistoryClustersVisitDeduping, "use_host_for_visit_deduping",
+        use_host_for_visit_deduping);
+  }
+
+  // The `kOnDeviceClusteringVisitRanking` feature and child params.
+  {
+    visit_duration_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
+        features::kOnDeviceClusteringVisitRanking,
+        "visit_duration_ranking_weight", visit_duration_ranking_weight);
+    DCHECK_GE(visit_duration_ranking_weight, 0.0f);
+
+    foreground_duration_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
+        features::kOnDeviceClusteringVisitRanking,
+        "foreground_duration_ranking_weight",
+        foreground_duration_ranking_weight);
+    DCHECK_GE(foreground_duration_ranking_weight, 0.0f);
+
+    bookmark_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
+        features::kOnDeviceClusteringVisitRanking, "bookmark_ranking_weight",
+        bookmark_ranking_weight);
+    DCHECK_GE(bookmark_ranking_weight, 0.0f);
+
+    search_results_page_ranking_weight = GetFieldTrialParamByFeatureAsDouble(
+        features::kOnDeviceClusteringVisitRanking,
+        "search_results_page_ranking_weight",
+        search_results_page_ranking_weight);
+    DCHECK_GE(search_results_page_ranking_weight, 0.0f);
+  }
+
+  // The `kHistoryClustersNavigationContextClustering` feature and child params.
+  {
+    context_clustering_clean_up_duration =
+        base::Minutes(GetFieldTrialParamByFeatureAsInt(
+            internal::kHistoryClustersNavigationContextClustering,
+            "clean_up_duration_minutes",
+            context_clustering_clean_up_duration.InMinutes()));
+
+    persist_context_clusters_at_navigation = GetFieldTrialParamByFeatureAsBool(
+        internal::kHistoryClustersNavigationContextClustering,
+        "persist_context_clusters_at_navigation",
+        persist_context_clusters_at_navigation);
+  }
+
   // Lonely features without child params.
   {
     non_user_visible_debug =
@@ -384,7 +405,10 @@ Config::Config() {
 
     should_show_all_clusters_unconditionally_on_prominent_ui_surfaces =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
-            kShouldShowAllClustersOnProminentUiSurfaces);
+            switches::kShouldShowAllClustersOnProminentUiSurfaces);
+
+    include_synced_visits =
+        base::FeatureList::IsEnabled(internal::kJourneysIncludeSyncedVisits);
   }
 }
 

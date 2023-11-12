@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/memory/ref_counted.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
@@ -33,19 +32,9 @@ class TestNavigationURLLoaderDelegate : public NavigationURLLoaderDelegate {
   ~TestNavigationURLLoaderDelegate() override;
 
   const net::RedirectInfo& redirect_info() const { return redirect_info_; }
-  network::mojom::URLResponseHead* redirect_response() const {
-    return redirect_response_.get();
-  }
-  network::mojom::URLResponseHead* response() const {
-    return response_head_.get();
-  }
   int net_error() const { return net_error_; }
   const net::SSLInfo& ssl_info() const { return ssl_info_; }
   int on_request_handled_counter() const { return on_request_handled_counter_; }
-  bool is_download() const { return is_download_; }
-  bool has_url_loader_client_endpoints() {
-    return !!url_loader_client_endpoints_;
-  }
 
   // Waits for various navigation events.
   // Note: if the event already happened, the functions will hang.
@@ -55,12 +44,10 @@ class TestNavigationURLLoaderDelegate : public NavigationURLLoaderDelegate {
   void WaitForResponseStarted();
   void WaitForRequestFailed();
 
-  void ReleaseURLLoaderClientEndpoints();
-
   // NavigationURLLoaderDelegate implementation.
   void OnRequestRedirected(
       const net::RedirectInfo& redirect_info,
-      const net::NetworkAnonymizationKey& network_isolation_key,
+      const net::NetworkAnonymizationKey& network_anonymization_key,
       network::mojom::URLResponseHeadPtr response) override;
   void OnResponseStarted(
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
@@ -68,8 +55,7 @@ class TestNavigationURLLoaderDelegate : public NavigationURLLoaderDelegate {
       mojo::ScopedDataPipeConsumerHandle response_body,
       GlobalRequestID request_id,
       bool is_download,
-      blink::NavigationDownloadPolicy download_policy,
-      net::NetworkAnonymizationKey network_isolation_key,
+      net::NetworkAnonymizationKey network_anonymization_key,
       absl::optional<SubresourceLoaderParams> subresource_loader_params,
       EarlyHints early_hints) override;
   void OnRequestFailed(
@@ -81,13 +67,11 @@ class TestNavigationURLLoaderDelegate : public NavigationURLLoaderDelegate {
  private:
   net::RedirectInfo redirect_info_;
   network::mojom::URLResponseHeadPtr redirect_response_;
-  network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints_;
   network::mojom::URLResponseHeadPtr response_head_;
   mojo::ScopedDataPipeConsumerHandle response_body_;
   int net_error_;
   net::SSLInfo ssl_info_;
   int on_request_handled_counter_;
-  bool is_download_;
 
   std::unique_ptr<base::RunLoop> request_redirected_;
   std::unique_ptr<base::RunLoop> response_started_;

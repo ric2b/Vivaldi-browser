@@ -37,6 +37,7 @@
 #include "storage/browser/file_system/sandbox_origin_database.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/common/database/database_identifier.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
@@ -828,8 +829,16 @@ base::File::Error ObfuscatedFileUtil::DeleteDirectory(
   if (!db->GetFileWithPath(url.path(), &file_id))
     return base::File::FILE_ERROR_NOT_FOUND;
   if (!file_id) {
-    // Cannot remove the root directory.
-    return base::File::FILE_ERROR_ACCESS_DENIED;
+    // Attempting to remove the root directory. Delete the whole file system.
+    // This code should only be reached by the File System Access API when
+    // deleting the root of an Origin Private File System. All sandboxed URLs
+    // coming from that API are guaranteed to include bucket information.
+    DCHECK(url.bucket().has_value());
+    DCHECK(url.type() == kFileSystemTypeTemporary);
+    DeleteDirectoryForBucketAndType(url.bucket().value(), url.type());
+    context->change_observers()->Notify(&FileChangeObserver::OnRemoveDirectory,
+                                        url);
+    return base::File::FILE_OK;
   }
   FileInfo file_info;
   if (!db->GetFileInfo(file_id, &file_info)) {
@@ -912,9 +921,12 @@ ObfuscatedFileUtil::GetDirectoryForBucketAndType(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // A default bucket in a first-party context uses
   // GetDirectoryForStorageKeyAndType() to determine its file path.
-  if (bucket.storage_key.IsFirstPartyContext() && bucket.is_default) {
+  // In tests, `sandbox_delegate_->quota_manager_proxy()` may be null.
+  if ((bucket.storage_key.IsFirstPartyContext() && bucket.is_default) ||
+      !sandbox_delegate_->quota_manager_proxy()) {
     return GetDirectoryForStorageKeyAndType(bucket.storage_key, type, create);
   }
+
   // All other contexts use the provided bucket information to construct the
   // file path.
   base::FilePath path =
@@ -1511,27 +1523,6 @@ void ObfuscatedFileUtil::DeleteDefaultBucketForStorageKey(
   if (default_bucket_iter == default_buckets_.end())
     return;
   BucketLocator default_bucket = default_buckets_[storage_key];
-  // Ensure that all directories with that StorageKey and bucket have been
-  // erased.
-  DCHECK(directories_.find(
-             DatabaseKey(storage_key, default_bucket,
-                         SandboxFileSystemBackendDelegate::GetTypeString(
-                             FileSystemType::kFileSystemTypeTemporary))) ==
-         directories_.end());
-  default_buckets_.erase(default_bucket_iter);
-}
-
-void ObfuscatedFileUtil::DeleteDefaultBucket(
-    const BucketLocator& bucket_locator) {
-  blink::StorageKey storage_key = bucket_locator.storage_key;
-  auto default_bucket_iter = default_buckets_.find(storage_key);
-  // If we are not already caching the bucket for that StorageKey, it does not
-  // need to be deleted.
-  if (default_bucket_iter == default_buckets_.end())
-    return;
-  BucketLocator default_bucket = default_buckets_[storage_key];
-  // Ensure that `default_bucket` matches `bucket_locator`
-  DCHECK(default_bucket == bucket_locator);
   // Ensure that all directories with that StorageKey and bucket have been
   // erased.
   DCHECK(directories_.find(

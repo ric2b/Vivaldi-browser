@@ -123,7 +123,7 @@ class WebAppBadgingBrowserTest : public WebAppControllerBrowserTest {
 
   // WebAppControllerBrowserTest:
   void TearDownOnMainThread() override {
-    WebAppRegistrar& registrar = provider().registrar();
+    WebAppRegistrar& registrar = provider().registrar_unsafe();
     for (const auto& app_id : registrar.GetAppIds()) {
       web_app::test::UninstallWebApp(profile(), app_id);
       AppReadinessWaiter(profile(), app_id, apps::Readiness::kUninstalledByUser)
@@ -238,10 +238,10 @@ class WebAppBadgingBrowserTest : public WebAppControllerBrowserTest {
   const AppId& sub_app_id() { return sub_app_id_; }
   const AppId& cross_site_app_id() { return cross_site_app_id_; }
 
-  raw_ptr<RenderFrameHost> main_frame_;
-  raw_ptr<RenderFrameHost> sub_app_frame_;
-  raw_ptr<RenderFrameHost> in_scope_frame_;
-  raw_ptr<RenderFrameHost> cross_site_frame_;
+  raw_ptr<RenderFrameHost, DanglingUntriaged> main_frame_;
+  raw_ptr<RenderFrameHost, DanglingUntriaged> sub_app_frame_;
+  raw_ptr<RenderFrameHost, DanglingUntriaged> in_scope_frame_;
+  raw_ptr<RenderFrameHost, DanglingUntriaged> cross_site_frame_;
 
   // Use this script text with EvalJs() on |main_frame_| to register a service
   // worker.  Use ReplaceJs() to replace $1 with the service worker scope URL.
@@ -285,7 +285,7 @@ class WebAppBadgingBrowserTest : public WebAppControllerBrowserTest {
   AppId sub_app_id_;
   AppId cross_site_app_id_;
   std::unique_ptr<base::RunLoop> awaiter_;
-  raw_ptr<badging::TestBadgeManagerDelegate> delegate_;
+  raw_ptr<badging::TestBadgeManagerDelegate, DanglingUntriaged> delegate_;
   net::EmbeddedTestServer cross_origin_https_server_;
 };
 
@@ -514,7 +514,7 @@ IN_PROC_BROWSER_TEST_F(WebAppBadgingBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(WebAppBadgingBrowserTest, ClearLastBadgingTime) {
   ExecuteScriptAndWaitForBadgeChange("navigator.setAppBadge()", main_frame_);
-  WebAppRegistrar& registrar = provider().registrar();
+  WebAppRegistrar& registrar = provider().registrar_unsafe();
   EXPECT_NE(registrar.GetAppLastBadgingTime(main_app_id()), base::Time());
   EXPECT_NE(registrar.GetAppLastLaunchTime(main_app_id()), base::Time());
 

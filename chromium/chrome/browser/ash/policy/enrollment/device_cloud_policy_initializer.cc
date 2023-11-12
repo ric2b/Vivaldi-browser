@@ -18,7 +18,8 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
+#include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 
@@ -78,9 +79,6 @@ void DeviceCloudPolicyInitializer::OnStoreError(CloudPolicyStore* store) {
 }
 
 void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerConnected() {
-  // Do nothing.
-}
-void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerDisconnected() {
   // Do nothing.
 }
 void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerGotRegistry() {

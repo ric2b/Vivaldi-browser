@@ -5,11 +5,10 @@
 #ifndef IOS_CHROME_BROWSER_UI_MAIN_SCENE_CONTROLLER_TESTING_H_
 #define IOS_CHROME_BROWSER_UI_MAIN_SCENE_CONTROLLER_TESTING_H_
 
-#import "ios/chrome/browser/procedural_block_types.h"
-
 class Browser;
 struct UrlLoadParams;
 @class TabGridCoordinator;
+@protocol BrowserInterface;
 
 // Methods exposed for testing. This is terrible and should be rewritten.
 @interface SceneController ()
@@ -25,6 +24,8 @@ struct UrlLoadParams;
 // NO, then call `completion`.
 - (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox;
+
+- (id<BrowserInterface>)currentInterface;
 
 @end
 

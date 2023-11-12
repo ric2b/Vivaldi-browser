@@ -44,6 +44,14 @@ class GURL;
              additionalText:(NSString*)additionalText
                    scenario:(ActivityScenario)scenario;
 
+// Vivaldi
+// Initializes an instance configured to share 'text', along
+// with its 'title', for the metrics 'scenario'
+- (instancetype)initWithText:(NSString*)text
+                    title:(NSString*)title
+                    scenario:(ActivityScenario)scenario;
+// End Vivaldi
+
 - (instancetype)init NS_UNAVAILABLE;
 
 // Image to be shared.
@@ -63,6 +71,11 @@ class GURL;
 
 // File to be shared.
 @property(nonatomic, strong) NSURL* filePath;
+
+// Vivaldi
+// Note to be shared
+@property(nonatomic, strong) NSString* noteText;
+// End Vivaldi
 
 @end
 

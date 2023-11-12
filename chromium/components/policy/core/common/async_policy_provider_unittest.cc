@@ -11,8 +11,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/policy/core/common/async_policy_loader.h"
 #include "components/policy/core/common/external_data_fetcher.h"
@@ -47,11 +47,11 @@ class MockPolicyLoader : public AsyncPolicyLoader {
   MockPolicyLoader& operator=(const MockPolicyLoader&) = delete;
   ~MockPolicyLoader() override;
 
-  // Load() returns a std::unique_ptr<PolicyBundle> but it can't be mocked
-  // because std::unique_ptr is moveable but not copyable. This override
+  // Load() returns a PolicyBundle but it can't be mocked
+  // because PolicyBundle is moveable but not copyable. This override
   // forwards the call to MockLoad() which returns a PolicyBundle*, and returns
-  // a copy wrapped in a std::unique_ptr.
-  std::unique_ptr<PolicyBundle> Load() override;
+  // a copy wrapped.
+  PolicyBundle Load() override;
 
   MOCK_METHOD0(MockLoad, const PolicyBundle*());
   MOCK_METHOD0(InitOnBackgroundThread, void());
@@ -64,14 +64,8 @@ MockPolicyLoader::MockPolicyLoader(
 
 MockPolicyLoader::~MockPolicyLoader() {}
 
-std::unique_ptr<PolicyBundle> MockPolicyLoader::Load() {
-  std::unique_ptr<PolicyBundle> bundle;
-  const PolicyBundle* loaded = MockLoad();
-  if (loaded) {
-    bundle = std::make_unique<PolicyBundle>();
-    bundle->CopyFrom(*loaded);
-  }
-  return bundle;
+PolicyBundle MockPolicyLoader::Load() {
+  return MockLoad()->Clone();
 }
 
 }  // namespace
@@ -101,7 +95,8 @@ AsyncPolicyProviderTest::~AsyncPolicyProviderTest() {}
 
 void AsyncPolicyProviderTest::SetUp() {
   SetPolicy(&initial_bundle_, "policy", "initial");
-  loader_ = new MockPolicyLoader(base::ThreadTaskRunnerHandle::Get());
+  loader_ =
+      new MockPolicyLoader(base::SingleThreadTaskRunner::GetCurrentDefault());
   EXPECT_CALL(*loader_, LastModificationTime())
       .WillRepeatedly(Return(base::Time()));
   EXPECT_CALL(*loader_, InitOnBackgroundThread()).Times(1);

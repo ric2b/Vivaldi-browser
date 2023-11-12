@@ -9,10 +9,15 @@
 #include <memory>
 
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
+#include "components/attribution_reporting/source_registration.h"
+#include "components/attribution_reporting/suitable_origin.h"
+#include "components/attribution_reporting/trigger_registration.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "net/http/structured_headers.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom-blink.h"
 #include "third_party/blink/public/mojom/conversions/conversions.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -77,11 +82,12 @@ class MockDataHost : public mojom::blink::AttributionDataHost {
 
   ~MockDataHost() override = default;
 
-  const Vector<mojom::blink::AttributionSourceDataPtr>& source_data() const {
+  const Vector<attribution_reporting::SourceRegistration>& source_data() const {
     return source_data_;
   }
 
-  const Vector<mojom::blink::AttributionTriggerDataPtr>& trigger_data() const {
+  const Vector<attribution_reporting::TriggerRegistration>& trigger_data()
+      const {
     return trigger_data_;
   }
 
@@ -94,18 +100,20 @@ class MockDataHost : public mojom::blink::AttributionDataHost {
 
   // mojom::blink::AttributionDataHost:
   void SourceDataAvailable(
-      mojom::blink::AttributionSourceDataPtr data) override {
+      attribution_reporting::SuitableOrigin reporting_origin,
+      attribution_reporting::SourceRegistration data) override {
     source_data_.push_back(std::move(data));
   }
 
   void TriggerDataAvailable(
-      mojom::blink::AttributionTriggerDataPtr data) override {
+      attribution_reporting::SuitableOrigin reporting_origin,
+      attribution_reporting::TriggerRegistration data) override {
     trigger_data_.push_back(std::move(data));
   }
 
-  Vector<mojom::blink::AttributionSourceDataPtr> source_data_;
+  Vector<attribution_reporting::SourceRegistration> source_data_;
 
-  Vector<mojom::blink::AttributionTriggerDataPtr> trigger_data_;
+  Vector<attribution_reporting::TriggerRegistration> trigger_data_;
 
   size_t disconnects_ = 0;
   mojo::Receiver<mojom::blink::AttributionDataHost> receiver_{this};
@@ -142,14 +150,16 @@ class MockAttributionHost : public mojom::blink::ConversionHost {
       std::move(quit_).Run();
   }
 
-  void RegisterDataHost(mojo::PendingReceiver<mojom::blink::AttributionDataHost>
-                            data_host) override {
+  void RegisterDataHost(
+      mojo::PendingReceiver<mojom::blink::AttributionDataHost> data_host,
+      blink::mojom::AttributionRegistrationType) override {
     mock_data_host_ = std::make_unique<MockDataHost>(std::move(data_host));
   }
 
   void RegisterNavigationDataHost(
       mojo::PendingReceiver<mojom::blink::AttributionDataHost> data_host,
-      const blink::AttributionSrcToken& attribution_src_token) override {}
+      const blink::AttributionSrcToken& attribution_src_token,
+      blink::mojom::AttributionNavigationType type) override {}
 
   mojo::AssociatedReceiver<mojom::blink::ConversionHost> receiver_{this};
   base::OnceClosure quit_;
@@ -337,14 +347,17 @@ TEST_F(AttributionSrcLoaderTest, TooManyConcurrentRequests_NewRequestDropped) {
   RegisterMockedURLLoad(url, test::CoreTestDataPath("foo.html"));
 
   for (size_t i = 0; i < AttributionSrcLoader::kMaxConcurrentRequests; ++i) {
-    EXPECT_TRUE(attribution_src_loader_->RegisterNavigation(url));
+    EXPECT_TRUE(attribution_src_loader_->RegisterNavigation(
+        url, mojom::blink::AttributionNavigationType::kAnchor));
   }
 
-  EXPECT_FALSE(attribution_src_loader_->RegisterNavigation(url));
+  EXPECT_FALSE(attribution_src_loader_->RegisterNavigation(
+      url, mojom::blink::AttributionNavigationType::kAnchor));
 
   url_test_helpers::ServeAsynchronousRequests();
 
-  EXPECT_TRUE(attribution_src_loader_->RegisterNavigation(url));
+  EXPECT_TRUE(attribution_src_loader_->RegisterNavigation(
+      url, mojom::blink::AttributionNavigationType::kAnchor));
 }
 
 TEST_F(AttributionSrcLoaderTest, Referrer) {
@@ -378,13 +391,19 @@ TEST_F(AttributionSrcLoaderTest, EligibleHeader_Register) {
   ASSERT_EQ(dict->size(), 2u);
   EXPECT_TRUE(dict->contains("event-source"));
   EXPECT_TRUE(dict->contains("trigger"));
+
+  EXPECT_TRUE(client_->request_head()
+                  .HttpHeaderField(http_names::kAttributionReportingSupport)
+                  .IsNull());
 }
 
 TEST_F(AttributionSrcLoaderTest, EligibleHeader_RegisterNavigation) {
   KURL url = ToKURL("https://example1.com/foo.html");
   RegisterMockedURLLoad(url, test::CoreTestDataPath("foo.html"));
 
-  attribution_src_loader_->RegisterNavigation(url, /*element=*/nullptr);
+  attribution_src_loader_->RegisterNavigation(
+      url, mojom::blink::AttributionNavigationType::kAnchor,
+      /*element=*/nullptr);
 
   url_test_helpers::ServeAsynchronousRequests();
 
@@ -397,6 +416,10 @@ TEST_F(AttributionSrcLoaderTest, EligibleHeader_RegisterNavigation) {
   ASSERT_TRUE(dict);
   ASSERT_EQ(dict->size(), 1u);
   EXPECT_TRUE(dict->contains("navigation-source"));
+
+  EXPECT_TRUE(client_->request_head()
+                  .HttpHeaderField(http_names::kAttributionReportingSupport)
+                  .IsNull());
 }
 
 // Regression test for crbug.com/1336797, where we didn't eagerly disconnect a
@@ -416,6 +439,57 @@ TEST_F(AttributionSrcLoaderTest, EagerlyClosesRemote) {
   auto* mock_data_host = host.mock_data_host();
   ASSERT_TRUE(mock_data_host);
   EXPECT_EQ(mock_data_host->disconnects(), 1u);
+}
+
+class AttributionSrcLoaderCrossAppWebEnabledTest
+    : public AttributionSrcLoaderTest {
+ public:
+  AttributionSrcLoaderCrossAppWebEnabledTest() = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      blink::features::kAttributionReportingCrossAppWeb};
+};
+
+TEST_F(AttributionSrcLoaderCrossAppWebEnabledTest, SupportHeader_Register) {
+  KURL url = ToKURL("https://example1.com/foo.html");
+  RegisterMockedURLLoad(url, test::CoreTestDataPath("foo.html"));
+
+  attribution_src_loader_->Register(url, /*element=*/nullptr);
+
+  url_test_helpers::ServeAsynchronousRequests();
+
+  const AtomicString& support = client_->request_head().HttpHeaderField(
+      http_names::kAttributionReportingSupport);
+  EXPECT_EQ(support, "web");
+
+  absl::optional<net::structured_headers::Dictionary> dict =
+      net::structured_headers::ParseDictionary(support.Utf8());
+  ASSERT_TRUE(dict);
+  ASSERT_EQ(dict->size(), 1u);
+  EXPECT_TRUE(dict->contains("web"));
+}
+
+TEST_F(AttributionSrcLoaderCrossAppWebEnabledTest,
+       SupportHeader_RegisterNavigation) {
+  KURL url = ToKURL("https://example1.com/foo.html");
+  RegisterMockedURLLoad(url, test::CoreTestDataPath("foo.html"));
+
+  attribution_src_loader_->RegisterNavigation(
+      url, mojom::blink::AttributionNavigationType::kAnchor,
+      /*element=*/nullptr);
+
+  url_test_helpers::ServeAsynchronousRequests();
+
+  const AtomicString& support = client_->request_head().HttpHeaderField(
+      http_names::kAttributionReportingSupport);
+  EXPECT_EQ(support, "web");
+
+  absl::optional<net::structured_headers::Dictionary> dict =
+      net::structured_headers::ParseDictionary(support.Utf8());
+  ASSERT_TRUE(dict);
+  ASSERT_EQ(dict->size(), 1u);
+  EXPECT_TRUE(dict->contains("web"));
 }
 
 }  // namespace

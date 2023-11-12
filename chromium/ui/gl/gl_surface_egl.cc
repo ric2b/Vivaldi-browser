@@ -10,11 +10,13 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/scoped_environment_variable_override.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
@@ -33,14 +35,9 @@
 #include "ui/gl/scoped_make_current.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/buildflags.h"
-#endif  // defined(USE_OZONE)
-
-#if BUILDFLAG(IS_ANDROID)
-#include <android/native_window_jni.h>
-#include "base/android/build_info.h"
-#endif
+#endif  // BUILDFLAG(IS_OZONE)
 
 #if !defined(EGL_FIXED_SIZE_ANGLE)
 #define EGL_FIXED_SIZE_ANGLE 0x3201
@@ -91,7 +88,7 @@ struct TraceSwapEventsInitializer {
   TraceSwapEventsInitializer()
       : value(*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
             kSwapEventTraceCategories)) {}
-  const unsigned char& value;
+  const raw_ref<const unsigned char> value;
 };
 
 static base::LazyInstance<TraceSwapEventsInitializer>::Leaky
@@ -363,6 +360,16 @@ GLDisplayEGL* GLSurfaceEGL::GetGLDisplayEGL() {
 
 GLSurfaceEGL::~GLSurfaceEGL() = default;
 
+#if BUILDFLAG(IS_ANDROID)
+NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(
+    GLDisplayEGL* display,
+    ScopedANativeWindow scoped_window,
+    std::unique_ptr<gfx::VSyncProvider> vsync_provider)
+    : GLSurfaceEGL(display),
+      scoped_window_(std::move(scoped_window)),
+      window_(scoped_window_.a_native_window()),
+      vsync_provider_external_(std::move(vsync_provider)) {}
+#else
 NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(
     GLDisplayEGL* display,
     EGLNativeWindowType window,
@@ -370,17 +377,13 @@ NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(
     : GLSurfaceEGL(display),
       window_(window),
       vsync_provider_external_(std::move(vsync_provider)) {
-#if BUILDFLAG(IS_ANDROID)
-  if (window)
-    ANativeWindow_acquire(window);
-#endif
-
 #if BUILDFLAG(IS_WIN)
   RECT windowRect;
   if (GetClientRect(window_, &windowRect))
     size_ = gfx::Rect(windowRect).size();
 #endif
 }
+#endif  // BUILDFLAG(IS_ANDROID)
 
 bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
   DCHECK(!surface_);
@@ -664,7 +667,7 @@ void NativeViewGLSurfaceEGL::UpdateSwapEvents(EGLuint64KHR newFrameId,
   // If we weren't able to get a valid frame id before the swap, we can't get
   // its timestamps now.
   const SwapInfo& old_swap_info = swap_info_queue_.front();
-  if (old_swap_info.frame_id_is_valid && g_trace_swap_enabled.Get().value)
+  if (old_swap_info.frame_id_is_valid && *g_trace_swap_enabled.Get().value)
     TraceSwapEvents(old_swap_info.frame_id);
 
   swap_info_queue_.pop();
@@ -1040,7 +1043,7 @@ void NativeViewGLSurfaceEGL::SetVSyncEnabled(bool enabled) {
 }
 
 bool NativeViewGLSurfaceEGL::ScheduleOverlayPlane(
-    GLImage* image,
+    OverlayImage image,
     std::unique_ptr<gfx::GpuFence> gpu_fence,
     const gfx::OverlayPlaneData& overlay_plane_data) {
   NOTIMPLEMENTED();
@@ -1049,10 +1052,6 @@ bool NativeViewGLSurfaceEGL::ScheduleOverlayPlane(
 
 NativeViewGLSurfaceEGL::~NativeViewGLSurfaceEGL() {
   Destroy();
-#if BUILDFLAG(IS_ANDROID)
-  if (window_)
-    ANativeWindow_release(window_);
-#endif
 }
 
 PbufferGLSurfaceEGL::PbufferGLSurfaceEGL(GLDisplayEGL* display,

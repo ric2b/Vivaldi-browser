@@ -13,6 +13,7 @@
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "chrome/browser/ash/printing/oauth2/authorization_zone.h"
+#include "chrome/browser/ash/printing/oauth2/mock_client_ids_database.h"
 #include "chrome/browser/ash/printing/oauth2/status_code.h"
 #include "chrome/browser/ash/printing/oauth2/test_authorization_server.h"
 #include "chrome/test/base/testing_profile.h"
@@ -72,11 +73,15 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
         .Times(testing::AtMost(1))
         .WillOnce([this]() { bridge_initialization_.Quit(); });
 
+    auto client_ids_database =
+        std::make_unique<testing::NiceMock<MockClientIdsDatabase>>();
+    client_ids_database_ = client_ids_database.get();
     auth_zones_manager_ = AuthorizationZonesManager::CreateForTesting(
         &profile_,
         base::BindRepeating(
             &PrintingOAuth2AuthorizationZonesManagerTest::CreateAuthZoneMock,
             base::Unretained(this)),
+        std::move(client_ids_database),
         mock_processor_.CreateForwardingProcessor(),
         syncer::ModelTypeStoreTestUtil::FactoryForForwardingStore(
             store_.get()));
@@ -102,13 +107,13 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
   // Calls InitAuthorization(...) and waits for the callback.
   CallbackResult CallInitAuthorization(const GURL& auth_server,
                                        const std::string& scope) {
-    base::MockOnceCallback<void(StatusCode, const std::string&)> callback;
+    base::MockOnceCallback<void(StatusCode, std::string)> callback;
     CallbackResult cr;
     base::RunLoop loop;
     EXPECT_CALL(callback, Run)
-        .WillOnce([&cr, &loop](StatusCode status, const std::string& data) {
+        .WillOnce([&cr, &loop](StatusCode status, std::string data) {
           cr.status = status;
-          cr.data = data;
+          cr.data = std::move(data);
           loop.Quit();
         });
     auth_zones_manager_->InitAuthorization(auth_server, scope, callback.Get());
@@ -119,13 +124,13 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
   // Calls FinishAuthorization(...) and waits for the callback.
   CallbackResult CallFinishAuthorization(const GURL& auth_server,
                                          const GURL& redirect_url) {
-    base::MockOnceCallback<void(StatusCode, const std::string&)> callback;
+    base::MockOnceCallback<void(StatusCode, std::string)> callback;
     CallbackResult cr;
     base::RunLoop loop;
     EXPECT_CALL(callback, Run)
-        .WillOnce([&cr, &loop](StatusCode status, const std::string& data) {
+        .WillOnce([&cr, &loop](StatusCode status, std::string data) {
           cr.status = status;
-          cr.data = data;
+          cr.data = std::move(data);
           loop.Quit();
         });
     auth_zones_manager_->FinishAuthorization(auth_server, redirect_url,
@@ -138,13 +143,13 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
   CallbackResult CallGetEndpointAccessToken(const GURL& auth_server,
                                             const chromeos::Uri& ipp_endpoint,
                                             const std::string& scope) {
-    base::MockOnceCallback<void(StatusCode, const std::string&)> callback;
+    base::MockOnceCallback<void(StatusCode, std::string)> callback;
     CallbackResult cr;
     base::RunLoop loop;
     EXPECT_CALL(callback, Run)
-        .WillOnce([&cr, &loop](StatusCode status, const std::string& data) {
+        .WillOnce([&cr, &loop](StatusCode status, std::string data) {
           cr.status = status;
-          cr.data = data;
+          cr.data = std::move(data);
           loop.Quit();
         });
     auth_zones_manager_->GetEndpointAccessToken(auth_server, ipp_endpoint,
@@ -160,7 +165,7 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
         .WillOnce(
             [&results_to_report](const std::string&, StatusCallback callback) {
               std::move(callback).Run(results_to_report.status,
-                                      results_to_report.data);
+                                      std::move(results_to_report.data));
             });
   }
 
@@ -170,7 +175,7 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
     EXPECT_CALL(*auth_zone, FinishAuthorization(redirect_url, testing::_))
         .WillOnce([&results_to_report](const GURL&, StatusCallback callback) {
           std::move(callback).Run(results_to_report.status,
-                                  results_to_report.data);
+                                  std::move(results_to_report.data));
         });
   }
 
@@ -183,7 +188,7 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
         .WillOnce([&results_to_report](const chromeos::Uri&, const std::string&,
                                        StatusCallback callback) {
           std::move(callback).Run(results_to_report.status,
-                                  results_to_report.data);
+                                  std::move(results_to_report.data));
         });
   }
 
@@ -198,13 +203,14 @@ class PrintingOAuth2AuthorizationZonesManagerTest : public testing::Test {
 
   std::unique_ptr<AuthorizationZone> CreateAuthZoneMock(
       const GURL& url,
-      const std::string& client_id) {
+      ClientIdsDatabase* client_ids_database) {
     auto auth_zone = std::make_unique<AuthZoneMock>();
     auto [_, created] = auth_zones_.emplace(url, auth_zone.get());
     DCHECK(created);
     return auth_zone;
   }
 
+  testing::NiceMock<MockClientIdsDatabase>* client_ids_database_;
   std::map<GURL, AuthZoneMock*> auth_zones_;
   content::BrowserTaskEnvironment task_environment_;
   TestingProfile profile_;
@@ -267,9 +273,9 @@ TEST_F(PrintingOAuth2AuthorizationZonesManagerTest,
        SaveAuthorizationServerAsTrustedBeforeInitialization) {
   GURL url_1("https://ala.ma.kota/albo/psa");
   CallbackResult cr;
-  auto callback = [&cr](StatusCode status, const std::string& data) {
+  auto callback = [&cr](StatusCode status, std::string data) {
     cr.status = status;
-    cr.data = data;
+    cr.data = std::move(data);
   };
 
   AuthZoneMock* auth_zone_1 = CallSaveAuthorizationServerAsTrusted(url_1);
@@ -286,9 +292,9 @@ TEST_F(PrintingOAuth2AuthorizationZonesManagerTest,
        SaveAuthorizationServerAsTrustedAfterInitialization) {
   GURL url_1("https://ala.ma.kota/albo/psa");
   CallbackResult cr;
-  auto callback = [&cr](StatusCode status, const std::string& data) {
+  auto callback = [&cr](StatusCode status, std::string data) {
     cr.status = status;
-    cr.data = data;
+    cr.data = std::move(data);
   };
 
   WaitForTheCompletionOfInitialization();

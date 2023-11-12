@@ -10,11 +10,11 @@ import {FeedbackAppPreSubmitAction} from 'chrome://os-feedback/feedback_types.js
 import {FileAttachmentElement} from 'chrome://os-feedback/file_attachment.js';
 import {setFeedbackServiceProviderForTesting} from 'chrome://os-feedback/mojo_interface_provider.js';
 import {mojoString16ToString} from 'chrome://resources/ash/common/mojo_utils.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {eventToPromise, isVisible} from '../../test_util.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {eventToPromise, isVisible} from '../test_util.js';
 
 /** @type {string} */
 const fakeImageUrl = 'chrome://os_feedback/app_icon_48.png';
@@ -87,7 +87,7 @@ export function fileAttachmentTestSuite() {
     // Verify the i18n string is added.
     assertTrue(page.i18nExists('addFileLabel'));
     // Verify the replace file label is in the page.
-    assertEquals('Replace', getElementContent('#replaceFileButton'));
+    assertEquals('Replace file', getElementContent('#replaceFileButton'));
     // The addFileContainer should be visible when no file is selected.
     assertTrue(isVisible(getElement('#addFileContainer')));
     // The replaceFileContainer should be invisible when no file is selected.
@@ -96,7 +96,8 @@ export function fileAttachmentTestSuite() {
     assertTrue(!!getElement('#fileTooBigErrorMessage'));
   });
 
-  // Test that when the add file label is clicked, the file dialog is opened.
+  // Test that when the add file label is clicked, the file dialog is opened and
+  // the file input value will be reset to empty.
   test('canOpenFileDialogByClickAddFileLabel', async () => {
     await initializePage();
     // Verify the add file label is in the page.
@@ -106,6 +107,21 @@ export function fileAttachmentTestSuite() {
     const fileDialog =
         /**@type {!HTMLInputElement} */ (getElement('#selectFileDialog'));
     assertTrue(!!fileDialog);
+
+    // Create a new fake File object
+    const fakeFile = new File(
+        ['This is a fake file!'], 'fakeFile.txt',
+        /** @type {FilePropertyBag} */ ({
+          type: 'text/plain',
+          size: MAX_ATTACH_FILE_SIZE + 1,
+          lastModified: new Date(),
+        }));
+    // Set the selected file manually to simulate a file has been selected.
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(fakeFile);
+    fileDialog.files = dataTransfer.files;
+    // Verify that the file input has a value.
+    assertEquals('C:\\fakepath\\fakeFile.txt', fileDialog.value);
 
     const fileDialogClickPromise = eventToPromise('click', fileDialog);
     let fileDialogClicked = false;
@@ -117,6 +133,8 @@ export function fileAttachmentTestSuite() {
 
     await fileDialogClickPromise;
     assertTrue(fileDialogClicked);
+    // Verify that the file input value has been reset to empty.
+    assertEquals('', fileDialog.value);
   });
 
   // Test that when the replace file label is clicked, the file dialog is
@@ -175,7 +193,7 @@ export function fileAttachmentTestSuite() {
     // The aria label of the replace file button is set.
     assertEquals('Replace file', getElement('#replaceFileButton').ariaLabel);
     // Verify the i18n string is added.
-    assertTrue(page.i18nExists('replaceFileArialLabel'));
+    assertTrue(page.i18nExists('replaceFileLabel'));
     // Verify the image container is not visible for non-image files.
     const selectedImageButton = getElement('#selectedImageButton');
     assertFalse(isVisible(selectedImageButton));

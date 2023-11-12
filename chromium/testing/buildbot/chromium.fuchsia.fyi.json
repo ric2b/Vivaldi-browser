@@ -9,8 +9,7 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.browser_tests.filter",
-          "--",
-          "--test-launcher-timeout=60000"
+          "--test-arg=--test-launcher-timeout=60000"
         ],
         "merge": {
           "args": [],
@@ -22,7 +21,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -32,12 +32,6 @@
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
-        "args": [
-          "--",
-          "--disable-gpu",
-          "--headless",
-          "--ozone-platform=headless"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -48,14 +42,14 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 8
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
+        "test": "sync_integration_tests",
+        "test_id_prefix": "ninja://chrome/test:sync_integration_tests/"
       },
       {
         "args": [
@@ -71,7 +65,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -97,7 +92,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -116,7 +112,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -135,7 +132,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -154,7 +152,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -173,7 +172,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -192,7 +192,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -211,7 +212,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -230,7 +232,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -249,7 +252,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -268,7 +272,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -287,7 +292,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -306,7 +312,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -325,7 +332,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -344,7 +352,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -363,7 +372,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -382,7 +392,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -401,7 +412,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -420,7 +432,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -443,7 +456,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -462,7 +476,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -481,7 +496,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -500,7 +516,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -519,7 +536,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -538,7 +556,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -557,7 +576,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -576,7 +596,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -595,7 +616,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -614,7 +636,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -633,7 +656,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -652,7 +676,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -671,7 +696,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -693,7 +719,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -712,7 +739,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -731,7 +759,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -750,7 +779,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -769,7 +799,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -791,7 +822,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -802,8 +834,7 @@
       },
       {
         "args": [
-          "--",
-          "--ozone-platform=headless"
+          "--test-arg=--ozone-platform=headless"
         ],
         "merge": {
           "args": [],
@@ -815,7 +846,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -834,7 +866,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -853,7 +886,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -872,7 +906,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -894,7 +929,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -913,7 +949,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -932,7 +969,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -954,7 +992,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -973,7 +1012,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -992,7 +1032,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1014,7 +1055,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1033,7 +1075,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1052,7 +1095,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1071,7 +1115,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1081,8 +1126,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -1094,7 +1138,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1104,8 +1149,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -1117,7 +1161,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1136,7 +1181,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1155,7 +1201,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1174,7 +1221,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1193,7 +1241,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1212,7 +1261,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -1239,7 +1289,8 @@
             {
               "cpu": "arm64",
               "inside_docker": "1",
-              "os": "Ubuntu-20.04"
+              "os": "Ubuntu-20.04",
+              "pool": "chromium.tests.lifo"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -2062,8 +2113,7 @@
       },
       {
         "args": [
-          "--",
-          "--ozone-platform=headless"
+          "--test-arg=--ozone-platform=headless"
         ],
         "merge": {
           "args": [],
@@ -2141,7 +2191,7 @@
       },
       {
         "args": [
-          "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.services_unittests.filter"
+          "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.services_unittests.filter;../../testing/buildbot/filters/fuchsia.lsan.services_unittests.filter"
         ],
         "merge": {
           "args": [],
@@ -2390,8 +2440,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -2412,8 +2461,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -3355,8 +3403,7 @@
       },
       {
         "args": [
-          "--",
-          "--ozone-platform=headless"
+          "--test-arg=--ozone-platform=headless"
         ],
         "merge": {
           "args": [],
@@ -3680,8 +3727,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -3702,8 +3748,7 @@
       },
       {
         "args": [
-          "--",
-          "--vmodule=test_navigation_listener=1"
+          "--test-arg=--vmodule=test_navigation_listener=1"
         ],
         "merge": {
           "args": [],
@@ -3840,15 +3885,11 @@
     ]
   },
   "fuchsia-x64-chrome-rel": {
-    "additional_compile_targets": [
-      "all"
-    ],
     "gtest_tests": [
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.browser_tests.filter",
-          "--",
-          "--test-launcher-timeout=60000"
+          "--test-arg=--test-launcher-timeout=60000"
         ],
         "merge": {
           "args": [],
@@ -3869,12 +3910,6 @@
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
-        "args": [
-          "--",
-          "--disable-gpu",
-          "--headless",
-          "--ozone-platform=headless"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3887,11 +3922,10 @@
               "os": "Ubuntu-18.04"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 8
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
+        "test": "sync_integration_tests",
+        "test_id_prefix": "ninja://chrome/test:sync_integration_tests/"
       },
       {
         "args": [
@@ -3914,230 +3948,6 @@
         "test": "unit_tests",
         "test_id_prefix": "ninja://chrome/test:unit_tests/"
       }
-    ],
-    "isolated_scripts": [
-      {
-        "args": [
-          "info_collection",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--expected-vendor-id",
-          "1ae0",
-          "--expected-device-id",
-          "c0de"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "info_collection_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      },
-      {
-        "args": [
-          "mediapipe",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_higher_performance_gpu --use-cmd-decoder=validating"
-        ],
-        "experiment_percentage": 100,
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "mediapipe_validating_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      },
-      {
-        "args": [
-          "pixel",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
-          "--dont-restore-color-profile-after-test",
-          "--test-machine-name",
-          "${buildername}",
-          "--git-revision=${got_revision}"
-        ],
-        "experiment_percentage": 100,
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "pixel_skia_gold_validating_test",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      },
-      {
-        "args": [
-          "screenshot_sync",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
-          "--dont-restore-color-profile-after-test"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "screenshot_sync_validating_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      },
-      {
-        "args": [
-          "trace_test",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "experiment_percentage": 100,
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "trace_test",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=fuchsia-chrome",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test_fuchsia",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "webgl_conformance_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-18.04"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 18
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_fuchsia/"
-      }
     ]
   },
   "fuchsia-x64-workstation": {
@@ -4145,9 +3955,8 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.browser_tests.filter",
-          "--",
-          "--test-launcher-timeout=60000",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--test-arg=--test-launcher-timeout=60000",
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "merge": {
           "args": [],
@@ -4169,11 +3978,7 @@
       },
       {
         "args": [
-          "--",
-          "--disable-gpu",
-          "--headless",
-          "--ozone-platform=headless",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "merge": {
           "args": [],
@@ -4187,16 +3992,15 @@
               "os": "Ubuntu-18.04"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 8
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
+        "test": "sync_integration_tests",
+        "test_id_prefix": "ninja://chrome/test:sync_integration_tests/"
       },
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.unit_tests.filter",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "merge": {
           "args": [],
@@ -4228,7 +4032,7 @@
           "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
           "--expected-vendor-id",
           "1ae0",
-          "--custom-image=workstation_eng.qemu-x64-release",
+          "--custom-image=workstation_eng.qemu-x64",
           "--expected-device-id",
           "c0de"
         ],
@@ -4265,7 +4069,7 @@
           "-v",
           "--stable-jobs",
           "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_higher_performance_gpu --use-cmd-decoder=validating",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "isolate_name": "telemetry_gpu_integration_test_fuchsia",
         "merge": {
@@ -4303,7 +4107,7 @@
           "--dont-restore-color-profile-after-test",
           "--test-machine-name",
           "${buildername}",
-          "--custom-image=workstation_eng.qemu-x64-release",
+          "--custom-image=workstation_eng.qemu-x64",
           "--git-revision=${got_revision}"
         ],
         "isolate_name": "telemetry_gpu_integration_test_fuchsia",
@@ -4345,7 +4149,7 @@
           "--stable-jobs",
           "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
           "--dont-restore-color-profile-after-test",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "isolate_name": "telemetry_gpu_integration_test_fuchsia",
         "merge": {
@@ -4380,7 +4184,7 @@
           "-v",
           "--stable-jobs",
           "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "isolate_name": "telemetry_gpu_integration_test_fuchsia",
         "merge": {
@@ -4408,21 +4212,21 @@
       },
       {
         "args": [
-          "webgl_conformance",
+          "webgl1_conformance",
           "--show-stdout",
           "--browser=fuchsia-chrome",
           "--passthrough",
           "-v",
           "--stable-jobs",
           "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--custom-image=workstation_eng.qemu-x64-release"
+          "--custom-image=workstation_eng.qemu-x64"
         ],
         "isolate_name": "telemetry_gpu_integration_test_fuchsia",
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
-        "name": "webgl_conformance_tests",
+        "name": "webgl1_conformance_tests",
         "resultdb": {
           "enable": true,
           "has_native_resultdb_integration": true

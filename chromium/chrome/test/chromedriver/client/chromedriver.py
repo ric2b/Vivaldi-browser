@@ -137,7 +137,6 @@ class ChromeDriver(object):
     self._executor = command_executor.CommandExecutor(server_url)
     self._server_url = server_url
     self.w3c_compliant = False
-    self._websocket = None
 
     options = {}
 
@@ -357,11 +356,7 @@ class ChromeDriver(object):
     return self._UnwrapValue(response['value'])
 
   def CreateWebSocketConnection(self):
-    if self._websocket:
-      return self._websocket
-    else:
-      self._websocket = WebSocketConnection(self._server_url, self._session_id)
-      return self._websocket
+    return WebSocketConnection(self._server_url, self._session_id)
 
   def GetWindowHandles(self):
     return self.ExecuteCommand(Command.GET_WINDOW_HANDLES)
@@ -441,6 +436,15 @@ class ChromeDriver(object):
     return self.ExecuteCommand(Command.GET_TIMEOUTS)
 
   def SetTimeouts(self, params):
+    if (len(params) == 0):
+      return;
+    sorted_params = sorted(params.items(), key=lambda x: x[1])
+    max_kv = sorted_params[-1];
+    # make sure that we have ms on the both sides of inequality
+    if (self._executor.HttpTimeout() * 500 < max_kv[1]):
+      raise ChromeDriverException(
+        'Timeout "%s" for ChromeDriver exceeds 50%% of the HTTP connection timeout'
+         % max_kv[0])
     return self.ExecuteCommand(Command.SET_TIMEOUTS, params)
 
   def GetCurrentUrl(self):

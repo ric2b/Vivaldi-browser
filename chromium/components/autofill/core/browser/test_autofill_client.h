@@ -31,6 +31,7 @@
 #include "components/autofill/core/browser/test_address_normalizer.h"
 #include "components/autofill/core/browser/test_form_data_importer.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/translate/core/browser/language_state.h"
@@ -90,9 +91,10 @@ class TestAutofillClient : public AutofillClient {
 #endif
 
   void ShowAutofillSettings(bool show_credit_card_settings) override;
-  void ShowUnmaskPrompt(const CreditCard& card,
-                        UnmaskCardReason reason,
-                        base::WeakPtr<CardUnmaskDelegate> delegate) override;
+  void ShowUnmaskPrompt(
+      const autofill::CreditCard& card,
+      const autofill::CardUnmaskPromptOptions& card_unmask_prompt_options,
+      base::WeakPtr<autofill::CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
   VirtualCardEnrollmentManager* GetVirtualCardEnrollmentManager() override;
   void ShowVirtualCardEnrollDialog(
@@ -115,6 +117,9 @@ class TestAutofillClient : public AutofillClient {
       const std::u16string& tip_message,
       const std::vector<MigratableCreditCard>& migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback) override;
+  void ConfirmSaveIBANLocally(const IBAN& iban,
+                              bool should_show_prompt,
+                              LocalSaveIBANPromptCallback callback) override;
   void ShowWebauthnOfferDialog(
       WebauthnDialogCallback offer_dialog_callback) override;
   void ShowWebauthnVerifyPendingDialog(
@@ -158,14 +163,12 @@ class TestAutofillClient : public AutofillClient {
   bool IsFastCheckoutSupported() override;
   bool IsFastCheckoutTriggerForm(const FormData& form,
                                  const FormFieldData& field) override;
-  bool FastCheckoutScriptSupportsConsentlessExecution(
-      const url::Origin& origin) override;
-  bool FastCheckoutClientSupportsConsentlessExecution() override;
   bool ShowFastCheckout(base::WeakPtr<FastCheckoutDelegate> delegate) override;
   void HideFastCheckout() override;
   bool IsTouchToFillCreditCardSupported() override;
   bool ShowTouchToFillCreditCard(
-      base::WeakPtr<TouchToFillDelegate> delegate) override;
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const autofill::CreditCard* const> cards_to_suggest) override;
   void HideTouchToFillCreditCard() override;
   void ShowAutofillPopup(
       const AutofillClient::PopupOpenArgs& open_args,
@@ -181,7 +184,7 @@ class TestAutofillClient : public AutofillClient {
   void HideAutofillPopup(PopupHidingReason reason) override;
   void ShowVirtualCardErrorDialog(
       const AutofillErrorDialogContext& context) override;
-  bool IsAutocompleteEnabled() override;
+  bool IsAutocompleteEnabled() const override;
   bool IsPasswordManagerEnabled() override;
   void PropagateAutofillPredictions(
       AutofillDriver* driver,
@@ -197,13 +200,14 @@ class TestAutofillClient : public AutofillClient {
   void ExecuteCommand(int id) override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
   LogManager* GetLogManager() const override;
+  FormInteractionsFlowId GetCurrentFormInteractionsFlowId() override;
 
   // RiskDataLoader:
   void LoadRiskData(
       base::OnceCallback<void(const std::string&)> callback) override;
 
 #if BUILDFLAG(IS_IOS)
-  bool IsQueryIDRelevant(int query_id) override;
+  bool IsLastQueriedField(FieldGlobalId field_id) override;
 #endif
 
   // Initializes UKM source from form_origin_. This needs to be called
@@ -277,8 +281,21 @@ class TestAutofillClient : public AutofillClient {
     should_save_autofill_profiles_ = value;
   }
 
+  void Reset() {
+    confirm_save_iban_locally_called_ = false;
+    offer_to_save_iban_bubble_was_shown_ = false;
+  }
+
   bool ConfirmSaveCardLocallyWasCalled() {
     return confirm_save_credit_card_locally_called_;
+  }
+
+  bool ConfirmSaveIBANLocallyWasCalled() {
+    return confirm_save_iban_locally_called_;
+  }
+
+  bool offer_to_save_iban_bubble_was_shown() {
+    return offer_to_save_iban_bubble_was_shown_;
   }
 
   bool get_offer_to_save_credit_card_bubble_was_shown() {
@@ -375,6 +392,8 @@ class TestAutofillClient : public AutofillClient {
 
   bool confirm_save_credit_card_locally_called_ = false;
 
+  bool confirm_save_iban_locally_called_ = false;
+
   bool virtual_card_error_dialog_shown_ = false;
 
   // Context parameters that are used to display an error dialog during card
@@ -395,8 +414,12 @@ class TestAutofillClient : public AutofillClient {
 
   version_info::Channel channel_for_testing_ = version_info::Channel::UNKNOWN;
 
-  // Populated if local save or upload was offered.
+  // Populated if credit card local save or upload was offered.
   absl::optional<SaveCreditCardOptions> save_credit_card_options_;
+
+  // Populated if IBAN save was offered. True if bubble was shown, false
+  // otherwise.
+  bool offer_to_save_iban_bubble_was_shown_ = false;
 
   std::vector<std::string> migration_card_selection_;
 
@@ -415,11 +438,8 @@ class TestAutofillClient : public AutofillClient {
   LogRouter log_router_;
   std::unique_ptr<LogManager> log_manager_;
   TextLogReceiver text_log_receiver_;
-  base::ScopedObservation<LogRouter,
-                          LogReceiver,
-                          &LogRouter::RegisterReceiver,
-                          &LogRouter::UnregisterReceiver>
-      scoped_logging_subscription_{&text_log_receiver_};
+  base::ScopedObservation<LogRouter, LogReceiver> scoped_logging_subscription_{
+      &text_log_receiver_};
 };
 
 }  // namespace autofill

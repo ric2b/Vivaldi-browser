@@ -23,7 +23,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -256,6 +256,20 @@ StandaloneTrustedVaultBackend::PendingTrustedRecoveryMethod::operator=(
 StandaloneTrustedVaultBackend::PendingTrustedRecoveryMethod::
     ~PendingTrustedRecoveryMethod() = default;
 
+StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::
+    PendingGetIsRecoverabilityDegraded() = default;
+
+StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::
+    PendingGetIsRecoverabilityDegraded(PendingGetIsRecoverabilityDegraded&&) =
+        default;
+
+StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded&
+StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::operator=(
+    PendingGetIsRecoverabilityDegraded&&) = default;
+
+StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::
+    ~PendingGetIsRecoverabilityDegraded() = default;
+
 // static
 TrustedVaultDownloadKeysStatusForUMA
 StandaloneTrustedVaultBackend::GetDownloadKeysStatusForUMAFromResponse(
@@ -483,7 +497,9 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
       // |kSyncTrustedVaultPeriodicDegradedRecoverabilityPolling| is set.
       if (degraded_recoverability_handler_) {
         // TODO(crbug.com/1247990): Add Integration test.
-        degraded_recoverability_handler_->HintDegradedRecoverabilityChanged();
+        degraded_recoverability_handler_->HintDegradedRecoverabilityChanged(
+            TrustedVaultHintDegradedRecoverabilityChangedReasonForUMA::
+                kPersistentAuthErrorResolved);
       }
     }
 
@@ -513,6 +529,15 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
         std::make_unique<TrustedVaultDegradedRecoverabilityHandler>(
             connection_.get(), /*delegate=*/this, primary_account_.value(),
             per_user_vault->degraded_recoverability_state());
+    // Should process `pending_get_is_recoverability_degraded_` if it belongs to
+    // the current primary account.
+    if (pending_get_is_recoverability_degraded_.has_value() &&
+        pending_get_is_recoverability_degraded_->account_info ==
+            primary_account_) {
+      degraded_recoverability_handler_->GetIsRecoverabilityDegraded(std::move(
+          pending_get_is_recoverability_degraded_->completion_callback));
+    }
+    pending_get_is_recoverability_degraded_.reset();
   }
 
   const absl::optional<TrustedVaultDeviceRegistrationStateForUMA>
@@ -536,7 +561,7 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
              TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1) &&
         base::FeatureList::IsEnabled(
             kSyncTrustedVaultVerifyDeviceRegistration)) {
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(
               &StandaloneTrustedVaultBackend::VerifyDeviceRegistrationForUMA,
@@ -602,18 +627,16 @@ void StandaloneTrustedVaultBackend::GetIsRecoverabilityDegraded(
     base::OnceCallback<void(bool)> cb) {
   if (base::FeatureList::IsEnabled(
           kSyncTrustedVaultPeriodicDegradedRecoverabilityPolling)) {
-    sync_pb::LocalTrustedVaultPerUser* per_user_vault =
-        FindUserVault(account_info.gaia);
-    if (!per_user_vault) {
-      // If the account does not exist, then the recoverability state is
-      // unknown.
-      // TODO(crbug.com/1247990): Pass optional value with nullopt indicating
-      // that value is not yet known.
-      std::move(cb).Run(false);
+    if (account_info == primary_account_) {
+      degraded_recoverability_handler_->GetIsRecoverabilityDegraded(
+          std::move(cb));
       return;
     }
-    std::move(cb).Run(per_user_vault->degraded_recoverability_state()
-                          .is_recoverability_degraded());
+    pending_get_is_recoverability_degraded_ =
+        PendingGetIsRecoverabilityDegraded();
+    pending_get_is_recoverability_degraded_->account_info = account_info;
+    pending_get_is_recoverability_degraded_->completion_callback =
+        std::move(cb);
     return;
   }
   ongoing_get_recoverability_request_ =
@@ -1055,7 +1078,9 @@ void StandaloneTrustedVaultBackend::OnTrustedRecoveryMethodAdded(
   std::move(cb).Run();
   if (base::FeatureList::IsEnabled(
           kSyncTrustedVaultPeriodicDegradedRecoverabilityPolling)) {
-    degraded_recoverability_handler_->HintDegradedRecoverabilityChanged();
+    degraded_recoverability_handler_->HintDegradedRecoverabilityChanged(
+        TrustedVaultHintDegradedRecoverabilityChangedReasonForUMA::
+            kRecoveryMethodAdded);
   } else {
     delegate_->NotifyRecoverabilityDegradedChanged();
   }

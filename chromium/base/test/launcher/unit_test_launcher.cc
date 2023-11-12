@@ -26,7 +26,7 @@
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/test/allow_check_is_test_to_be_called.h"
+#include "base/test/allow_check_is_test_for_testing.h"
 #include "base/test/launcher/test_launcher.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
@@ -157,7 +157,7 @@ int LaunchUnitTestsInternal(RunTestSuiteCallback run_test_suite,
   vivaldi::InitTestEnvironment();
 #endif
 
-  base::test::AllowCheckIsTestToBeCalled();
+  base::test::AllowCheckIsTestForTesting();
 
 #if BUILDFLAG(IS_ANDROID)
   // We can't easily fork on Android, just run the test suite directly.

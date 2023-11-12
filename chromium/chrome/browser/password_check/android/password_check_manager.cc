@@ -10,7 +10,7 @@
 #include "chrome/browser/password_check/android/password_check_bridge.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -18,7 +18,6 @@
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/well_known_change_password_util.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -72,11 +71,6 @@ PasswordCheckManager::PasswordCheckManager(Profile* profile, Observer* observer)
   // GetCompromisedCredentials() that might happen until then will return an
   // empty list.
   saved_passwords_presenter_.Init();
-
-  if (!ShouldFetchPasswordScripts()) {
-    // Ensure that scripts are treated as initialized if they are unnecessary.
-    FulfillPrecondition(kScriptsCachePrewarmed);
-  }
 }
 
 PasswordCheckManager::~PasswordCheckManager() = default;
@@ -168,7 +162,7 @@ PasswordCheckManager::PasswordCheckProgress::PasswordCheckProgress() = default;
 PasswordCheckManager::PasswordCheckProgress::~PasswordCheckProgress() = default;
 
 void PasswordCheckManager::PasswordCheckProgress::IncrementCounts(
-    const password_manager::PasswordForm& password) {
+    const password_manager::CredentialUIEntry& password) {
   ++remaining_in_queue_;
   ++counts_[password];
 }
@@ -181,14 +175,16 @@ void PasswordCheckManager::PasswordCheckProgress::OnProcessed(
   remaining_in_queue_ -= num_matching;
 }
 
-void PasswordCheckManager::OnSavedPasswordsChanged(
-    password_manager::SavedPasswordsPresenter::SavedPasswordsView passwords) {
+void PasswordCheckManager::OnSavedPasswordsChanged() {
+  size_t passwords_count =
+      saved_passwords_presenter_.GetSavedPasswords().size();
+
   if (!IsPreconditionFulfilled(kSavedPasswordsAvailable)) {
-    observer_->OnSavedPasswordsFetched(passwords.size());
+    observer_->OnSavedPasswordsFetched(passwords_count);
     FulfillPrecondition(kSavedPasswordsAvailable);
   }
 
-  if (passwords.empty()) {
+  if (passwords_count == 0) {
     observer_->OnPasswordCheckStatusChanged(
         PasswordCheckUIStatus::kErrorNoPasswords);
     was_start_requested_ = false;
@@ -201,13 +197,8 @@ void PasswordCheckManager::OnSavedPasswordsChanged(
 }
 
 void PasswordCheckManager::OnInsecureCredentialsChanged() {
-  int count = GetCompromisedCredentialsCount();
-  if (AreScriptsRefreshed()) {
-    FulfillPrecondition(kKnownCredentialsFetched);
-  } else {
-    credentials_count_to_notify_ = count;
-  }
-  observer_->OnCompromisedCredentialsChanged(count);
+  FulfillPrecondition(kKnownCredentialsFetched);
+  observer_->OnCompromisedCredentialsChanged(GetCompromisedCredentialsCount());
 }
 
 void PasswordCheckManager::OnStateChanged(State state) {
@@ -259,9 +250,6 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
   credential_facet.signon_realm = credential.GetFirstSignonRealm();
   credential_facet.affiliated_web_realm = credential.GetAffiliatedWebRealm();
 
-  // UI is only be created after the list of available password check
-  // scripts has been refreshed.
-  DCHECK(AreScriptsRefreshed());
   auto facet = password_manager::FacetURI::FromPotentiallyInvalidSpec(
       credential.GetFirstSignonRealm());
 
@@ -297,14 +285,6 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
   }
 
   ui_credential.display_username = GetDisplayUsername(credential.username);
-  ui_credential.has_startable_script =
-      !credential.username.empty() && ShouldFetchPasswordScripts() &&
-      password_script_fetcher_->IsScriptAvailable(
-          url::Origin::Create(credential_facet.url.DeprecatedGetOriginAsURL()));
-  ui_credential.has_auto_change_button =
-      ui_credential.has_startable_script &&
-      base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordChangeInSettings);
 
   credential_facets.push_back(std::move(credential_facet));
   ui_credential.facets = std::move(credential_facets);
@@ -355,52 +335,6 @@ bool PasswordCheckManager::CanUseAccountCheck() const {
       ABSL_FALLTHROUGH_INTENDED;
     case SyncState::kAccountPasswordsActiveNormalEncryption:
       return true;
-  }
-}
-
-bool PasswordCheckManager::AreScriptsRefreshed() const {
-  return IsPreconditionFulfilled(kScriptsCachePrewarmed);
-}
-
-void PasswordCheckManager::RefreshScripts() {
-  if (!ShouldFetchPasswordScripts()) {
-    FulfillPrecondition(kScriptsCachePrewarmed);
-    return;
-  }
-  ResetPrecondition(kScriptsCachePrewarmed);
-  password_script_fetcher_->RefreshScriptsIfNecessary(base::BindOnce(
-      &PasswordCheckManager::OnScriptsFetched, weak_ptr_factory_.GetWeakPtr()));
-}
-
-void PasswordCheckManager::OnScriptsFetched() {
-  FulfillPrecondition(kScriptsCachePrewarmed);
-  if (credentials_count_to_notify_.has_value()) {
-    // Inform the UI about compromised credentials another time because it was
-    // not allowed to generate UI before the availability of password scripts is
-    // known.
-    FulfillPrecondition(kKnownCredentialsFetched);
-    observer_->OnCompromisedCredentialsChanged(
-        credentials_count_to_notify_.value());
-    credentials_count_to_notify_.reset();
-  }
-}
-
-bool PasswordCheckManager::ShouldFetchPasswordScripts() const {
-  SyncState sync_state = password_manager_util::GetPasswordSyncState(
-      SyncServiceFactory::GetForProfile(profile_));
-
-  // Password change scripts are using password generation, so automatic
-  // password change should not be offered to non sync users.
-  switch (sync_state) {
-    case SyncState::kNotSyncing:
-      return false;
-
-    case SyncState::kSyncingWithCustomPassphrase:
-      ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::kSyncingNormalEncryption:
-      ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::kAccountPasswordsActiveNormalEncryption:
-      return password_manager::features::IsPasswordScriptsFetchingEnabled();
   }
 }
 

@@ -14,15 +14,25 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_gemm_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_operand_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_pool_2d_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_resample_2d_options.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/modules/ml/ml.h"
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
+#include "third_party/blink/renderer/modules/ml/webnn/buildflags.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
+#if BUILDFLAG(BUILD_WEBNN_WITH_XNNPACK)
+#include "third_party/blink/renderer/modules/ml/webnn/ml_graph_xnnpack.h"
+#endif
+
 namespace blink {
 
 namespace {
+
+MLGraphBuilder::BackendForTesting* g_backend_for_testing = nullptr;
 
 bool IsFloatingPointType(V8MLOperandType::Enum operand_type) {
   switch (operand_type) {
@@ -192,8 +202,8 @@ absl::optional<double> CalculateConv2dOutputSize(
   // Calculate the output size in double precision floating point number that
   // ensures all dimension values of type uint32_t can be exactly represented.
   // https://en.wikipedia.org/wiki/Double-precision_floating-point_format#Precision_limitations_on_integer_values
-  // The max value of checked_output_size should be 3 * UINT_MAX + 1, assert it
-  // is less than max integer value of double type.
+  // The max value of checked_output_size should be 3 * UINT_MAX + 1,
+  // which is smaller than the max safe integer value for double type.
   auto checked_output_size =
       (base::MakeCheckedNum<double>(input_size) -
        checked_effective_filter_size + beginning_padding + ending_padding) /
@@ -201,8 +211,7 @@ absl::optional<double> CalculateConv2dOutputSize(
       1;
 
   if (checked_output_size.ValueOrDie() < 0) {
-    error_message =
-        "The input size is too small to fill the convolution window.";
+    error_message = "The input size is too small to fill the window.";
     return absl::nullopt;
   }
 
@@ -1053,6 +1062,113 @@ MLOperand* MLGraphBuilder::reshape(const MLOperand* input,
   return output;
 }
 
+MLOperand* MLGraphBuilder::resample2d(const MLOperand* input,
+                                      const MLResample2dOptions* options,
+                                      ExceptionState& exception_state) {
+  // According to WebNN spec:
+  // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-resample2d, the input
+  // must be a 4-D tensor.
+  const auto input_shape = input->Dimensions();
+  if (input_shape.size() != 4) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                      "The input must be a 4-D tensor.");
+    return nullptr;
+  }
+
+  const auto axes = options->getAxesOr({2, 3});
+  if (axes.size() != 2) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                      "The length of axes should be 2.");
+    return nullptr;
+  } else if (!((axes[0] == 0 && axes[1] == 1) ||
+               (axes[0] == 1 && axes[1] == 2) ||
+               (axes[0] == 2 && axes[1] == 3))) {
+    // According to WebNN spec:
+    // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-resample2d,
+    // the valid values in the sequence are [0, 1], [1, 2] or [2, 3].
+    exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                      "The values of axes are invalid.");
+    return nullptr;
+  }
+
+  Vector<uint32_t> output_shape(input_shape);
+  if (options->hasSizes()) {
+    if (options->hasScales()) {
+      auto* execution_context = GetContext()->GetML()->GetExecutionContext();
+      if (!execution_context) {
+        exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                          "Execution context is invalid.");
+        return nullptr;
+      }
+      execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kJavaScript,
+          mojom::blink::ConsoleMessageLevel::kWarning,
+          "When sizes and scales are both specified, scales argument is "
+          "ignored."));
+    }
+    if (options->sizes().size() != 2) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "The length of sizes should be 2.");
+      return nullptr;
+    } else if (std::any_of(options->sizes().begin(), options->sizes().end(),
+                           [](int32_t x) { return x <= 0; })) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "All sizes should be greater than 0.");
+      return nullptr;
+    }
+    // The current WebNN spec defines the sizes as signed integer:
+    // https://www.w3.org/TR/webnn/#dom-mlresample2doptions-sizes
+    // And an issue has been filed to track it:
+    // https://github.com/webmachinelearning/webnn/issues/300
+    // Before this issue is fixed, the signed integers are checked_cast to
+    // unsigned integers for output shape.
+    output_shape[axes[0]] = base::checked_cast<uint32_t>(options->sizes()[0]);
+    output_shape[axes[1]] = base::checked_cast<uint32_t>(options->sizes()[1]);
+  } else {
+    const auto scales = options->getScalesOr({1.0f, 1.0f});
+    if (scales.size() != 2) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "The length of scales should be 2.");
+      return nullptr;
+    } else if (std::any_of(scales.begin(), scales.end(),
+                           [](float x) { return x <= 0.0f; })) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "All scales should be greater than 0.");
+      return nullptr;
+    }
+    base::CheckedNumeric<uint32_t> checked_output_height =
+        input_shape[axes[0]] * scales[0];
+    if (!checked_output_height.AssignIfValid(&output_shape[axes[0]])) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "The scale height is too large.");
+      return nullptr;
+    }
+    base::CheckedNumeric<uint32_t> checked_output_width =
+        input_shape[axes[1]] * scales[1];
+    if (!checked_output_width.AssignIfValid(&output_shape[axes[1]])) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                        "The scale width is too large.");
+      return nullptr;
+    }
+  }
+
+  auto* resample2d = MakeGarbageCollected<MLOperator>(
+      this, MLOperator::OperatorKind::kResample2d, options);
+  String error_message;
+  // According to WebNN spec
+  // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-resample2d, the output
+  // tensor of resample2d has the same type as its input.
+  auto* output = MLOperand::ValidateAndCreateOutput(
+      this, input->Type(), std::move(output_shape), resample2d, error_message);
+  if (!output) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                      error_message);
+    return nullptr;
+  }
+  resample2d->Connect({input}, {output});
+  return output;
+}
+
 MLOperand* MLGraphBuilder::softmax(const MLOperand* input,
                                    ExceptionState& exception_state) {
   // According to WebNN spec:
@@ -1085,6 +1201,38 @@ MLOperand* MLGraphBuilder::softmax(const MLOperand* input,
   return output;
 }
 
+MLOperand* MLGraphBuilder::sigmoid(const MLOperand* input,
+                                   ExceptionState& exception_state) {
+  auto* sigmoid = MakeGarbageCollected<MLOperator>(
+      this, MLOperator::OperatorKind::kSigmoid);
+  // According to WebNN spec
+  // https://webmachinelearning.github.io/webnn/#api-mlgraphbuilder-sigmoid, the
+  // output tensor of sigmoid has the same type and dimensions as its input.
+  // And the input type must be one of the floating point types.
+  if (!IsFloatingPointType(input->Type())) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kDataError,
+        "The input type must be one of the floating point types.");
+    return nullptr;
+  }
+  String error_message;
+  auto* output = MLOperand::ValidateAndCreateOutput(
+      this, input->Type(), input->Dimensions(), sigmoid, error_message);
+  if (!output) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
+                                      error_message);
+    return nullptr;
+  }
+  sigmoid->Connect({input}, {output});
+  return output;
+}
+
+MLOperator* MLGraphBuilder::sigmoid(ExceptionState& exception_state) {
+  // Create the sigmoid operator that would be used as an activation function.
+  return MakeGarbageCollected<MLOperator>(this,
+                                          MLOperator::OperatorKind::kSigmoid);
+}
+
 ScriptPromise MLGraphBuilder::buildAsync(ScriptState* script_state,
                                          const MLNamedOperands& named_outputs,
                                          ExceptionState& exception_state) {
@@ -1097,13 +1245,49 @@ ScriptPromise MLGraphBuilder::buildAsync(ScriptState* script_state,
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   auto promise = resolver->Promise();
 
-  // TODO(ningxin.hu@intel.com): Create a concrete MLGraph object that builds
-  // the platform specific graph for hardware acceleration. For example:
-  // MLGraphXnnpack::ValidateAndBuildAsync(ml_context_, outputs, resolver);
+  if (g_backend_for_testing) {
+    g_backend_for_testing->BuildGraphAsyncImpl(ml_context_, named_outputs,
+                                               resolver);
+    return promise;
+  }
+
+#if BUILDFLAG(BUILD_WEBNN_WITH_XNNPACK)
+  if (ml_context_->GetDevicePreference() == V8MLDevicePreference::Enum::kAuto ||
+      ml_context_->GetDevicePreference() == V8MLDevicePreference::Enum::kCpu) {
+    MLGraphXnnpack::ValidateAndBuildAsync(ml_context_, named_outputs, resolver);
+    return promise;
+  }
+#endif
 
   resolver->Reject(MakeGarbageCollected<DOMException>(
       DOMExceptionCode::kNotSupportedError, "Not implemented"));
   return promise;
+}
+
+MLGraph* MLGraphBuilder::buildSync(const MLNamedOperands& named_outputs,
+                                   ExceptionState& exception_state) {
+  if (g_backend_for_testing) {
+    return g_backend_for_testing->BuildGraphSyncImpl(ml_context_, named_outputs,
+                                                     exception_state);
+  }
+
+#if BUILDFLAG(BUILD_WEBNN_WITH_XNNPACK)
+  if (ml_context_->GetDevicePreference() == V8MLDevicePreference::Enum::kAuto ||
+      ml_context_->GetDevicePreference() == V8MLDevicePreference::Enum::kCpu) {
+    return MLGraphXnnpack::ValidateAndBuildSync(ml_context_, named_outputs,
+                                                exception_state);
+  }
+#endif
+
+  exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                    "Not implemented");
+  return nullptr;
+}
+
+// static
+void MLGraphBuilder::SetBackendForTesting(
+    MLGraphBuilder::BackendForTesting* backend_for_testing) {
+  g_backend_for_testing = backend_for_testing;
 }
 
 }  // namespace blink

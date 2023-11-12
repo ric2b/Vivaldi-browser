@@ -44,6 +44,7 @@ class ConsistencyCookieManagerTest;
 }  // namespace signin
 
 class SigninClient;
+struct CoreAccountId;
 
 class AccountReconcilor
     : public KeyedService,
@@ -165,7 +166,9 @@ class AccountReconcilor
 #endif
 
  protected:
-  void OnSetAccountsInCookieCompleted(signin::SetAccountsInCookieResult result);
+  void OnSetAccountsInCookieCompleted(
+      const std::vector<CoreAccountId>& accounts_to_send,
+      signin::SetAccountsInCookieResult result);
   void OnLogOutFromCookieCompleted(const GoogleServiceAuthError& error);
 
  private:
@@ -210,6 +213,8 @@ class AccountReconcilor
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTestMiceMultilogin, TableRowTest);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorMiceTest,
                            AccountReconcilorStateScheduled);
+  FRIEND_TEST_ALL_PREFIXES(AccountReconcilorDiceTest,
+                           ClearPrimaryAccountNotAllowed);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorDiceTest,
                            DiceTokenServiceRegistration);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorDiceTest,
@@ -271,6 +276,9 @@ class AccountReconcilor
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorMirrorTest, NoLoopWithBadPrimary);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorMirrorTest,
                            WontMergeAccountsWithError);
+  FRIEND_TEST_ALL_PREFIXES(
+      AccountReconcilorMirrorTest,
+      WontMergeAccountsWithErrorDiscoveredByAccountReconcilorItself);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, DelegateTimeoutIsCalled);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorMirrorTest,
                            DelegateTimeoutIsNotCalled);

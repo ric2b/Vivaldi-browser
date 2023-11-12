@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_DATABASE_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_DATABASE_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
@@ -30,6 +32,10 @@
 
 namespace base {
 class FilePath;
+}
+
+namespace sql {
+class Transaction;
 }
 
 class InMemoryURLIndexTest;
@@ -98,19 +104,19 @@ class HistoryDatabase : public DownloadDatabase,
   // Returns the current version that we will generate history databases with.
   static int GetCurrentVersion();
 
-  // Transactions on the history database. Use the Transaction object above
-  // for most work instead of these directly. We support nested transactions
-  // and only commit when the outermost transaction is committed. This means
-  // that it is impossible to rollback a specific transaction. We could roll
-  // back the outermost transaction if any inner one is rolled back, but it
-  // turns out we don't really need this type of integrity for the history
-  // database, so we just don't support it.
-  void BeginTransaction();
-  void CommitTransaction();
-  int transaction_nesting() const {  // for debugging and assertion purposes
-    return db_.transaction_nesting();
-  }
-  void RollbackTransaction();
+  // Creates a new inactive transaction for the history database. Caller is
+  // responsible for calling `sql::Transaction::Begin()` and checking the return
+  // value. Only call this after `Init()`.
+  //
+  // There should only ever be one instance of these alive, as transaction
+  // nesting doesn't exist. The caller is responsible for ensuring this, and
+  // therefore, ONLY the owner of this instance (`HistoryBackend`) should call
+  // this, NOT any `HistoryDBTask`, which has a non-owning pointer to this.
+  std::unique_ptr<sql::Transaction> CreateTransaction();
+
+  // We DO NOT support transaction nesting. It's considered a "misfeature", and
+  // so the return value of this should always be 0 or 1 during runtime.
+  int transaction_nesting() const { return db_.transaction_nesting(); }
 
   // Drops all tables except the URL, and download tables, and recreates them
   // from scratch. This is done to rapidly clean up stuff when deleting all
@@ -161,6 +167,21 @@ class HistoryDatabase : public DownloadDatabase,
   // early expiration (AUTO_SUBFRAMES).
   virtual base::Time GetEarlyExpirationThreshold();
   virtual void UpdateEarlyExpirationThreshold(base::Time threshold);
+
+  // Retrieves/updates the bit that indicates whether the DB may contain any
+  // foreign visits, i.e. visits coming from other syncing devices.
+  // Note that this only counts visits *not* pending deletion (see below) - as
+  // soon as a deletion operation is started, this will get set to false.
+  // TODO(crbug.com/1365291): After syncer::HISTORY has launched, consider
+  // whether this bit is still required.
+  bool MayContainForeignVisits();
+  void SetMayContainForeignVisits(bool may_contain_foreign_visits);
+
+  // Retrieves/updates the max-foreign-visit-to-delete threshold. If this is
+  // not kInvalidVisitID, then all foreign visits with an ID <= this value
+  // should be deleted from the DB.
+  VisitID GetDeleteForeignVisitsUntilId();
+  void SetDeleteForeignVisitsUntilId(VisitID visit_id);
 
   // Sync metadata storage ----------------------------------------------------
 

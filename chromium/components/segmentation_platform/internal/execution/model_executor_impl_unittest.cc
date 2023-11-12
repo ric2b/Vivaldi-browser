@@ -93,7 +93,7 @@ class ModelExecutorTest : public testing::Test {
                            std::unique_ptr<ModelExecutionResult> expected,
                            std::unique_ptr<ModelExecutionResult> actual) {
     EXPECT_EQ(expected->status, actual->status);
-    EXPECT_NEAR(expected->score, actual->score, 1e-5);
+    EXPECT_EQ(expected->scores, actual->scores);
     EXPECT_EQ(expected->inputs, actual->inputs);
     std::move(closure).Run();
   }
@@ -161,8 +161,9 @@ TEST_F(ModelExecutorTest, FailedFeatureProcessing) {
               ProcessFeatureList(
                   _, _, segment_id, clock_.Now(),
                   FeatureListQueryProcessor::ProcessOption::kInputsOnly, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/true, std::vector<float>{1, 2, 3},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/true,
+                                   ModelProvider::Request{1, 2, 3},
+                                   ModelProvider::Response()));
 
   // The input tensor should contain all values flattened to a single vector.
   EXPECT_CALL(mock_model_, ModelAvailable()).WillRepeatedly(Return(true));
@@ -176,8 +177,8 @@ TEST_F(ModelExecutorTest, FailedFeatureProcessing) {
               ProcessFeatureList(
                   _, _, segment_id, clock_.Now(),
                   FeatureListQueryProcessor::ProcessOption::kInputsOnly, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/true, std::vector<float>(),
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/true, ModelProvider::Request(),
+                                   ModelProvider::Response()));
   ExecuteModel(*metadata_writer.FindOrCreateSegment(segment_id), &mock_model_,
                std::make_unique<ModelExecutionResult>(
                    ModelExecutionStatus::kSkippedInvalidMetadata));
@@ -192,23 +193,25 @@ TEST_F(ModelExecutorTest, ExecuteModelWithMultipleFeatures) {
   std::string user_action_name = "some_user_action";
   metadata_writer.AddUserActionFeature(kSegmentId, user_action_name, 3, 3,
                                        proto::Aggregation::BUCKETED_COUNT);
-  const std::vector<float> inputs{1, 2, 3, 4, 5, 6, 7};
+  const ModelProvider::Request inputs{1, 2, 3, 4, 5, 6, 7};
 
   EXPECT_CALL(*feature_list_query_processor_,
               ProcessFeatureList(
                   _, _, kSegmentId, clock_.Now(),
                   FeatureListQueryProcessor::ProcessOption::kInputsOnly, _))
-      .WillOnce(
-          RunOnceCallback<5>(/*error=*/false, inputs, std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/false, inputs,
+                                   ModelProvider::Response()));
 
   // The input tensor should contain all values flattened to a single vector.
   EXPECT_CALL(mock_model_, ModelAvailable()).WillRepeatedly(Return(true));
   EXPECT_CALL(mock_model_, ExecuteModelWithInput(inputs, _))
-      .WillOnce(RunOnceCallback<1>(absl::make_optional(0.8)));
+      .WillOnce(
+          RunOnceCallback<1>(absl::optional<ModelProvider::Response>{{0.8}}));
 
-  ExecuteModel(*metadata_writer.FindOrCreateSegment(kSegmentId), &mock_model_,
-               std::make_unique<ModelExecutionResult>(
-                   ModelExecutionResult::Tensor(inputs), 0.8));
+  ExecuteModel(
+      *metadata_writer.FindOrCreateSegment(kSegmentId), &mock_model_,
+      std::make_unique<ModelExecutionResult>(ModelProvider::Request(inputs),
+                                             ModelProvider::Response(1, 0.8)));
 }
 
 }  // namespace segmentation_platform

@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_callback.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -19,6 +20,8 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -79,7 +82,7 @@
 #include "content/browser/network_context_client_base_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/payments/payment_app_context_impl.h"
-#include "content/browser/preloading/prerender/prerender_host_registry.h"
+#include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
 #include "content/browser/push_messaging/push_messaging_context.h"
@@ -131,6 +134,7 @@
 #include "storage/browser/database/database_tracker.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "storage/browser/quota/quota_manager_impl.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
@@ -648,7 +652,7 @@ void CallCancelRequest(
 // tree, using `final_status` as the cancellation reason. Returns true if
 // cancelled.
 bool CancelIfPrerendering(NavigationOrDocumentHandle* navigation_or_document,
-                          PrerenderHost::FinalStatus final_status) {
+                          PrerenderFinalStatus final_status) {
   FrameTreeNode* frame_tree_node = nullptr;
   // `navigation_or_document` can be null for `kServiceWorkerContext`.
   if (!navigation_or_document)
@@ -795,26 +799,6 @@ StoragePartition::StorageKeyMatcherFunction CreateGenericStorageKeyMatcher(
   DCHECK(!storage_key_origin_empty);
   return base::BindRepeating(std::equal_to<const blink::StorageKey&>(),
                              storage_key);
-}
-
-void ClearPluginPrivateDataOnFileTaskRunner(
-    scoped_refptr<storage::FileSystemContext> filesystem_context,
-    base::OnceClosure callback) {
-  DCHECK(filesystem_context->default_file_task_runner()
-             ->RunsTasksInCurrentSequence());
-  DVLOG(3) << "Clearing plugin data: " << filesystem_context;
-
-  // The Plugin Private File System has been deprecated. Delete all data at
-  // %profile/File System/Plugins.
-  auto plugin_path = filesystem_context->partition_path()
-                         .Append(storage::kFileSystemDirectory)
-                         .Append(FILE_PATH_LITERAL("Plugins"));
-
-  filesystem_context->default_file_task_runner()->PostTaskAndReply(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&base::DeletePathRecursively),
-                     plugin_path),
-      std::move(callback));
 }
 
 }  // namespace
@@ -1037,8 +1021,8 @@ class StoragePartitionImpl::DataDeletionHelper {
     kQuota = 3,
     kLocalStorage = 4,
     kSessionStorage = 5,
-    kShaderCache = 6,  // Deprecated in favor of using kGpuCache.
-    kPluginPrivate = 7,
+    kShaderCache = 6,    // Deprecated in favor of using kGpuCache.
+    kPluginPrivate = 7,  // Deprecated.
     kConversions = 8,
     kAggregationService = 9,
     kSharedStorage = 10,
@@ -1204,6 +1188,17 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
       context->GetSpecialStoragePolicy()));
 }
 
+void StoragePartitionImpl::VivaldiUpdateBlobUrlRegistryWithFallback(storage::BlobUrlRegistry* fallback) {
+  blob_url_registry_ = std::make_unique<storage::BlobUrlRegistry>(fallback->AsWeakPtr());
+
+  if (!base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl)) {
+    scoped_refptr<ChromeBlobStorageContext> blob_context =
+        ChromeBlobStorageContext::GetFor(browser_context_);
+    blob_registry_ = BlobRegistryWrapper::Create(
+        blob_context, blob_url_registry_->AsWeakPtr());
+  }
+}
+
 void StoragePartitionImpl::Initialize(
     StoragePartitionImpl* fallback_for_blob_urls) {
   // Ensure that these methods are called on the UI thread, except for
@@ -1334,11 +1329,31 @@ void StoragePartitionImpl::Initialize(
                                 browser_context_->GetSpecialStoragePolicy(),
                                 blob_context.get());
 
-  BlobRegistryWrapper* fallback_blob_registry =
-      fallback_for_blob_urls ? fallback_for_blob_urls->GetBlobRegistry()
-                             : nullptr;
-  blob_registry_ = BlobRegistryWrapper::Create(
-      blob_context, filesystem_context_, fallback_blob_registry);
+  is_vivaldi_ = vivaldi::IsVivaldiApp(config_.partition_domain());
+  // NOTE (andre@vivaldi.com) : VB-94908 was caused by
+  // kSupportPartitionedBlobUrl being disabled.
+  if (is_vivaldi_) {
+    // Use the default storagepartition BlobUrlRegistry as fallback in Vivaldi.
+    StoragePartitionImpl* defaultstorage = static_cast<StoragePartitionImpl*>(
+        browser_context_->GetDefaultStoragePartition());
+    blob_url_registry_ = std::make_unique<storage::BlobUrlRegistry>(
+        defaultstorage->GetBlobUrlRegistry()->AsWeakPtr());
+    // And set the vivaldi bloburlregistry as fallback for the default storage.
+    defaultstorage->VivaldiUpdateBlobUrlRegistryWithFallback(blob_url_registry_.get());
+  } else {
+  blob_url_registry_ = std::make_unique<storage::BlobUrlRegistry>(
+      fallback_for_blob_urls
+          ? fallback_for_blob_urls->GetBlobUrlRegistry()->AsWeakPtr()
+          : nullptr);
+  }
+
+  if (base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl)) {
+    blob_registry_ = BlobRegistryWrapper::Create(blob_context);
+
+  } else {
+    blob_registry_ = BlobRegistryWrapper::Create(
+        blob_context, blob_url_registry_->AsWeakPtr());
+  }
 
   prefetch_url_loader_service_ =
       std::make_unique<PrefetchURLLoaderService>(browser_context_);
@@ -1380,8 +1395,6 @@ void StoragePartitionImpl::Initialize(
     browsing_topics_site_data_manager_ =
         std::make_unique<BrowsingTopicsSiteDataManagerImpl>(path);
   }
-
-  is_vivaldi_ = vivaldi::IsVivaldiApp(config_.partition_domain());
 
   GeneratedCodeCacheSettings settings =
       GetContentClient()->browser()->GetGeneratedCodeCacheSettings(
@@ -1669,6 +1682,11 @@ BlobRegistryWrapper* StoragePartitionImpl::GetBlobRegistry() {
   return blob_registry_.get();
 }
 
+storage::BlobUrlRegistry* StoragePartitionImpl::GetBlobUrlRegistry() {
+  DCHECK(initialized_);
+  return blob_url_registry_.get();
+}
+
 PrefetchURLLoaderService* StoragePartitionImpl::GetPrefetchURLLoaderService() {
   DCHECK(initialized_);
   return prefetch_url_loader_service_.get();
@@ -1879,7 +1897,7 @@ void StoragePartitionImpl::OnAuthRequired(
   // because the embedder may show UI for auth requests, and it's unsuitable for
   // a hidden page.
   if (CancelIfPrerendering(context.navigation_or_document(),
-                           PrerenderHost::FinalStatus::kLoginAuthRequested)) {
+                           PrerenderFinalStatus::kLoginAuthRequested)) {
     return;
   }
 
@@ -1897,7 +1915,7 @@ void StoragePartitionImpl::OnAuthRequired(
     process_id = network::mojom::kInvalidProcessId;
 
     // `navigation_or_document_` can be null when `context` is created with
-    // an invalid render frame host after a page is destroyed.
+    // an invalid RenderFrameHost after a page is destroyed.
     // It is currently possible for the ServiceWorker case above to use
     // kRenderFrameHostContext for the auth request, after the RenderFrameHost
     // has been deleted. Treating this as an invalid process ID will cancel the
@@ -1963,7 +1981,7 @@ void StoragePartitionImpl::OnCertificateRequested(
   // because the embedder may show a dialog and ask users to select client
   // certificates, and it's unsuitable for a hidden page.
   if (CancelIfPrerendering(context.navigation_or_document(),
-                           PrerenderHost::FinalStatus::kClientCertRequested)) {
+                           PrerenderFinalStatus::kClientCertRequested)) {
     CallCancelRequest(std::move(cert_responder));
     return;
   }
@@ -1986,7 +2004,7 @@ void StoragePartitionImpl::OnSSLCertificateError(
   // prerendering page, because prerendering pages are invisible and browser
   // cannot show errors on invisible pages.
   if (CancelIfPrerendering(context.navigation_or_document(),
-                           PrerenderHost::FinalStatus::kSslCertificateError)) {
+                           PrerenderFinalStatus::kSslCertificateError)) {
     std::move(response).Run(net_error);
     return;
   }
@@ -2172,50 +2190,6 @@ void StoragePartitionImpl::OnTrustAnchorUsed() {
 }
 #endif
 
-void StoragePartitionImpl::OnTrustTokenIssuanceDivertedToSystem(
-    network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
-    OnTrustTokenIssuanceDivertedToSystemCallback callback) {
-  if (!local_trust_token_fulfiller_ &&
-      !attempted_to_bind_local_trust_token_fulfiller_) {
-    attempted_to_bind_local_trust_token_fulfiller_ = true;
-    ProvisionallyBindUnboundLocalTrustTokenFulfillerIfSupportedBySystem();
-  }
-
-  if (!local_trust_token_fulfiller_) {
-    auto response = network::mojom::FulfillTrustTokenIssuanceAnswer::New();
-    response->status =
-        network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
-    std::move(callback).Run(std::move(response));
-    return;
-  }
-
-  int callback_key = next_pending_trust_token_issuance_callback_key_++;
-  pending_trust_token_issuance_callbacks_.emplace(callback_key,
-                                                  std::move(callback));
-
-  local_trust_token_fulfiller_->FulfillTrustTokenIssuance(
-      std::move(request),
-      base::BindOnce(
-          [](int callback_key, base::WeakPtr<StoragePartitionImpl> partition,
-             network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-            if (!partition)
-              return;
-
-            if (!base::Contains(
-                    partition->pending_trust_token_issuance_callbacks_,
-                    callback_key)) {
-              return;
-            }
-            auto callback =
-                std::move(partition->pending_trust_token_issuance_callbacks_.at(
-                    callback_key));
-            partition->pending_trust_token_issuance_callbacks_.erase(
-                callback_key);
-            std::move(callback).Run(std::move(answer));
-          },
-          callback_key, weak_factory_.GetWeakPtr()));
-}
-
 void StoragePartitionImpl::OnCanSendSCTAuditingReport(
     OnCanSendSCTAuditingReportCallback callback) {
   bool allowed =
@@ -2311,20 +2285,9 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::ClearDataOnIOThread(
       &QuotaManagedDataDeletionHelper::DecrementTaskCountOnIO,
       base::Unretained(this));
 
-  if (quota_storage_remove_mask_ & QUOTA_MANAGED_STORAGE_MASK_PERSISTENT) {
-    IncrementTaskCountOnIO();
-    // Ask the QuotaManager for all buckets with persistent quota modified
-    // within the user-specified timeframe, and deal with the resulting set in
-    // ClearBucketsOnIOThread().
-    quota_manager->GetBucketsModifiedBetween(
-        blink::mojom::StorageType::kPersistent, begin, end,
-        base::BindOnce(&QuotaManagedDataDeletionHelper::ClearBucketsOnIOThread,
-                       base::Unretained(this), base::RetainedRef(quota_manager),
-                       special_storage_policy, storage_key_matcher,
-                       perform_storage_cleanup, decrement_callback));
-  }
-
-  // Do the same for temporary quota.
+  // Ask the QuotaManager for all buckets with temporary quota modified
+  // within the user-specified timeframe, and deal with the resulting set in
+  // ClearBucketsOnIOThread().
   if (quota_storage_remove_mask_ & QUOTA_MANAGED_STORAGE_MASK_TEMPORARY) {
     IncrementTaskCountOnIO();
     quota_manager->GetBucketsModifiedBetween(
@@ -2632,7 +2595,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
       attribution_manager->ClearData(
           begin, end, generic_filter, filter_builder,
           remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_INTERNAL,
-          CreateTaskCompletionClosure(TracingDataType::kConversions));
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+              CreateTaskCompletionClosure(TracingDataType::kConversions)));
     } else if (storage_key.IsFirstPartyContext()) {
       // Attribution Reporting API doesn't support cross-site data deletion.
       std::unique_ptr<BrowsingDataFilterBuilder> effective_filter_builder =
@@ -2642,7 +2606,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
       attribution_manager->ClearData(
           begin, end, generic_filter, effective_filter_builder.get(),
           remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_INTERNAL,
-          CreateTaskCompletionClosure(TracingDataType::kConversions));
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+              CreateTaskCompletionClosure(TracingDataType::kConversions)));
     }
   }
 
@@ -2657,24 +2622,20 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
     // `CookiesTreeModel`.
     aggregation_service->ClearData(
         begin, end, generic_filter,
-        CreateTaskCompletionClosure(TracingDataType::kAggregationService));
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            CreateTaskCompletionClosure(TracingDataType::kAggregationService)));
   }
 
   if (private_aggregation_manager &&
       (remove_mask_ & REMOVE_DATA_MASK_PRIVATE_AGGREGATION_INTERNAL)) {
     private_aggregation_manager->ClearBudgetData(
         begin, end, generic_filter,
-        CreateTaskCompletionClosure(TracingDataType::kPrivateAggregation));
-  }
 
-  // TODO(crbug.com/1340250): The Plugin Private File System is removed, but
-  // some devices may still have old data on their machine. For now greedily try
-  // to delete this data, but we'll want to remove this code at some point.
-  filesystem_context->default_file_task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&ClearPluginPrivateDataOnFileTaskRunner,
-                                base::WrapRefCounted(filesystem_context),
-                                CreateTaskCompletionClosure(
-                                    TracingDataType::kPluginPrivate)));
+        // Wrapping the callback ensures that the callback is still run in the
+        // case that the storage partition is deleted before the task is posted.
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            CreateTaskCompletionClosure(TracingDataType::kPrivateAggregation)));
+  }
 
   if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI) &&
       shared_storage_manager &&
@@ -2711,6 +2672,56 @@ void StoragePartitionImpl::ClearDataForOrigin(
                 /*filter_builder=*/nullptr, StorageKeyPolicyMatcherFunction(),
                 std::move(deletion_filter), false, base::Time(),
                 base::Time::Max(), std::move(callback));
+}
+
+void StoragePartitionImpl::ClearDataForBuckets(
+    const blink::StorageKey& storage_key,
+    const std::set<std::string>& storage_buckets,
+    base::OnceClosure callback) {
+  DCHECK(initialized_);
+
+  const auto remove_buckets_done =
+      base::BarrierCallback<blink::mojom::QuotaStatusCode>(
+          storage_buckets.size(),
+          BindPostTask(
+              base::SequencedTaskRunnerHandle::Get(),
+              base::BindOnce(&StoragePartitionImpl::ClearDataForBucketsDone,
+                             base::Unretained(this), storage_key,
+                             storage_buckets, std::move(callback))));
+
+  storage::QuotaManagerProxy* quota_manager_proxy = GetQuotaManagerProxy();
+
+  for (const auto& bucket : storage_buckets) {
+    quota_manager_proxy->DeleteBucket(storage_key, bucket,
+                                      base::SequencedTaskRunnerHandle::Get(),
+                                      remove_buckets_done);
+  }
+}
+
+void StoragePartitionImpl::ClearDataForBucketsDone(
+    const blink::StorageKey& storage_key,
+    const std::set<std::string>& storage_buckets,
+    base::OnceClosure callback,
+    const std::vector<blink::mojom::QuotaStatusCode>& status_codes) {
+  auto bucket_iterator = storage_buckets.begin();
+
+  for (const auto status_code : status_codes) {
+    if (bucket_iterator == storage_buckets.end()) {
+      break;
+    }
+
+    const std::string bucket_name = *bucket_iterator;
+
+    if (status_code != blink::mojom::QuotaStatusCode::kOk) {
+      DLOG(ERROR) << "Couldn't remove bucket with name" << bucket_name
+                  << " with storage key " << storage_key.GetDebugString()
+                  << ". Status: " << static_cast<int>(status_code);
+    }
+
+    ++bucket_iterator;
+  }
+
+  std::move(callback).Run();
 }
 
 void StoragePartitionImpl::ClearData(uint32_t remove_mask,
@@ -3091,19 +3102,6 @@ StoragePartitionImpl::CreateCookieAccessObserverForServiceWorker() {
   return remote;
 }
 
-void StoragePartitionImpl::OnLocalTrustTokenFulfillerConnectionError() {
-  auto not_found_answer =
-      network::mojom::FulfillTrustTokenIssuanceAnswer::New();
-  // kNotFound represents a case where the local system was unable to provide an
-  // answer to the request.
-  not_found_answer->status =
-      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
-
-  for (auto& key_and_callback : pending_trust_token_issuance_callbacks_)
-    std::move(key_and_callback.second).Run(not_found_answer.Clone());
-  pending_trust_token_issuance_callbacks_.clear();
-}
-
 void StoragePartitionImpl::OpenLocalStorageForProcess(
     int process_id,
     const blink::StorageKey& storage_key,
@@ -3127,23 +3125,6 @@ void StoragePartitionImpl::BindSessionStorageAreaForProcess(
   dom_storage_context_->BindStorageArea(storage_key, absl::nullopt,
                                         namespace_id, std::move(receiver),
                                         std::move(handle), base::DoNothing());
-}
-
-void StoragePartitionImpl::
-    ProvisionallyBindUnboundLocalTrustTokenFulfillerIfSupportedBySystem() {
-  if (local_trust_token_fulfiller_)
-    return;
-
-#if BUILDFLAG(IS_ANDROID)
-  GetGlobalJavaInterfaces()->GetInterface(
-      local_trust_token_fulfiller_.BindNewPipeAndPassReceiver());
-#endif  // BUILDFLAG(IS_ANDROID)
-
-  if (local_trust_token_fulfiller_) {
-    local_trust_token_fulfiller_.set_disconnect_handler(base::BindOnce(
-        &StoragePartitionImpl::OnLocalTrustTokenFulfillerConnectionError,
-        weak_factory_.GetWeakPtr()));
-  }
 }
 
 absl::optional<blink::StorageKey> StoragePartitionImpl::CalculateStorageKey(

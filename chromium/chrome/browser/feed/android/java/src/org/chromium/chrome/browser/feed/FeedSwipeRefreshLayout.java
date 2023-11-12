@@ -18,6 +18,7 @@ import android.view.accessibility.AccessibilityManager;
 import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
 
+import org.chromium.base.FeatureList;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -39,6 +40,9 @@ public class FeedSwipeRefreshLayout extends SwipeRefreshLayout implements Scroll
     private static final int SPINNER_START_OFFSET = 16;
     // Offset in dips from the top of the view to where the progress spinner should stop.
     private static final int SPINNER_END_OFFSET = 80;
+    // Offset in dips from the bottom of the view to where the progress spinner should be shown when
+    // switched to a "bottom" spinner (non-pull refresh).
+    private static final int SPINNER_OFFSET_FROM_BOTTOM = 100;
 
     private final Activity mActivity;
     @IdRes
@@ -59,7 +63,7 @@ public class FeedSwipeRefreshLayout extends SwipeRefreshLayout implements Scroll
      */
     public static FeedSwipeRefreshLayout create(
             @NonNull Activity activity, @IdRes int anchorViewId) {
-        if (!ChromeFeatureList.isInitialized()
+        if (!FeatureList.isInitialized()
                 || !ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_INTERACTIVE_REFRESH)) {
             return null;
         }
@@ -168,6 +172,20 @@ public class FeedSwipeRefreshLayout extends SwipeRefreshLayout implements Scroll
      */
     public void removeOnRefreshListener(SwipeRefreshLayout.OnRefreshListener listener) {
         mRefreshListeners.removeObserver(listener);
+    }
+
+    /**
+     * Starts a refreshing spinner at the bottom of the view. Should only be used for non-swipe
+     * refreshes.
+     */
+    public void startRefreshingAtTheBottom() {
+        final DisplayMetrics metrics = mActivity.getResources().getDisplayMetrics();
+        // The offset will limited to show the spiiner as high as the vertical middle of the view.
+        int offset = Math.max(metrics.heightPixels / 2,
+                metrics.heightPixels - ((int) (SPINNER_OFFSET_FROM_BOTTOM * metrics.density)));
+        setProgressViewEndTarget(false, offset);
+        setRefreshing(true);
+        setProgressViewEndTarget(false, (int) (SPINNER_END_OFFSET * metrics.density));
     }
 
     private void ensureTarget() {

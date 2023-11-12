@@ -4,14 +4,16 @@
 
 #include "device/fido/cable/fido_cable_discovery.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_advertisement.h"
@@ -149,8 +151,8 @@ class CableMockBluetoothAdvertisement : public BluetoothAdvertisement {
   void ExpectUnregisterAndSucceed() {
     EXPECT_CALL(*this, Unregister(_, _))
         .WillOnce(::testing::WithArg<0>(::testing::Invoke([](auto success_cb) {
-          base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                        std::move(success_cb));
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, std::move(success_cb));
         })));
   }
 
@@ -204,8 +206,7 @@ class CableMockAdapter : public MockBluetoothAdapter {
 
     std::vector<uint8_t> service_data(18);
     service_data[0] = 1 << 5;
-    std::copy(authenticator_eid.begin(), authenticator_eid.end(),
-              service_data.begin() + 2);
+    base::ranges::copy(authenticator_eid, service_data.begin() + 2);
     BluetoothDevice::ServiceDataMap service_data_map;
     service_data_map.emplace(kGoogleCableUUID128, std::move(service_data));
 

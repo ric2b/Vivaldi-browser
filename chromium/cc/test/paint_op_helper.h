@@ -10,7 +10,7 @@
 
 #include "base/strings/stringprintf.h"
 #include "cc/paint/paint_filter.h"
-#include "cc/paint/paint_op_buffer.h"
+#include "cc/paint/paint_op.h"
 #include "cc/paint/skottie_wrapper.h"
 
 namespace cc {
@@ -624,9 +624,5 @@ class PaintOpHelper {
 };
 
 }  // namespace cc
-
-inline ::std::ostream& operator<<(::std::ostream& os, const cc::PaintOp& op) {
-  return os << cc::PaintOpHelper::ToString(&op);
-}
 
 #endif  // CC_TEST_PAINT_OP_HELPER_H_

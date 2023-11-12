@@ -15,11 +15,9 @@
 namespace blink {
 
 class StyleRecalcContextTest : public PageTestBase,
-                               private ScopedCSSContainerQueriesForTest,
                                private ScopedLayoutNGForTest {
  public:
-  StyleRecalcContextTest()
-      : ScopedCSSContainerQueriesForTest(true), ScopedLayoutNGForTest(true) {}
+  StyleRecalcContextTest() : ScopedLayoutNGForTest(true) {}
 };
 
 TEST_F(StyleRecalcContextTest, FromAncestors) {
@@ -63,6 +61,10 @@ TEST_F(StyleRecalcContextTest, FromAncestors) {
   auto* before = GetDocument().getElementById("before");
   auto* before_pseudo = before->GetPseudoElement(kPseudoIdBefore);
 
+  // It is not valid to call ::FromInclusiveAncestors on an element
+  // without a ComputedStyle.
+  EXPECT_TRUE(in_display_none->EnsureComputedStyle());
+
   EXPECT_FALSE(StyleRecalcContext::FromAncestors(*outer).container);
   EXPECT_EQ(StyleRecalcContext::FromInclusiveAncestors(*outer).container,
             outer);
@@ -85,13 +87,13 @@ TEST_F(StyleRecalcContextTest, FromAncestors) {
 
   EXPECT_EQ(StyleRecalcContext::FromAncestors(*display_none).container, outer);
   EXPECT_EQ(StyleRecalcContext::FromInclusiveAncestors(*display_none).container,
-            outer);
+            display_none);
 
   EXPECT_EQ(StyleRecalcContext::FromAncestors(*in_display_none).container,
-            outer);
+            display_none);
   EXPECT_EQ(
       StyleRecalcContext::FromInclusiveAncestors(*in_display_none).container,
-      outer);
+      in_display_none);
 
   EXPECT_EQ(StyleRecalcContext::FromAncestors(*inline_container).container,
             outer);

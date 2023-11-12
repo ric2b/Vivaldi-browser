@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/global_media_controls/media_item_ui_metrics.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/global_media_controls/media_dialog_view_observer.h"
@@ -26,11 +27,16 @@
 #include "components/global_media_controls/public/views/media_item_ui_view.h"
 #include "components/live_caption/caption_util.h"
 #include "components/live_caption/pref_names.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/browser/media_router_factory.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/soda/constants.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
+#include "net/base/url_util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -69,6 +75,59 @@ std::u16string GetLiveCaptionTitle(PrefService* profile_prefs) {
     }
   }
   return l10n_util::GetStringUTF16(IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION);
+}
+
+const std::string GetRemotePlaybackRouteId(const std::string& item_id,
+                                           content::BrowserContext* context) {
+  if (!base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen)) {
+    return "";
+  }
+
+  auto* web_contents =
+      content::MediaSession::GetWebContentsFromRequestId(item_id);
+  if (!web_contents) {
+    return "";
+  }
+
+  SessionID::id_type item_tab_id =
+      sessions::SessionTabHelper::IdForTab(web_contents).id();
+  for (auto route :
+       media_router::MediaRouterFactory::GetApiForBrowserContext(context)
+           ->GetCurrentRoutes()) {
+    if (!route.media_source().IsRemotePlaybackSource()) {
+      continue;
+    }
+    std::string media_source_tab_id;
+    net::GetValueForKeyInQuery(route.media_source().url(), "tab_id",
+                               &media_source_tab_id);
+    if (base::NumberToString(item_tab_id) == media_source_tab_id) {
+      return route.media_route_id();
+    }
+  }
+  return "";
+}
+
+bool ShouldShowDeviceSelectorView(const std::string& item_id,
+                                  media_message_center::SourceType source_type,
+                                  Profile* profile) {
+  if (source_type == media_message_center::SourceType::kCast) {
+    return false;
+  }
+
+  if (!media_router::GlobalMediaControlsCastStartStopEnabled(profile) &&
+      !base::FeatureList::IsEnabled(
+          media::kGlobalMediaControlsSeamlessTransfer)) {
+    return false;
+  }
+
+  // Hide device selector view if the local media session has started Remote
+  // Playback.
+  if (source_type == media_message_center::SourceType::kLocalMediaSession &&
+      !GetRemotePlaybackRouteId(item_id, profile).empty()) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -179,6 +238,19 @@ void MediaDialogView::HideMediaItem(const std::string& id) {
 
   for (auto& observer : observers_)
     observer.OnMediaSessionHidden();
+}
+
+void MediaDialogView::RefreshMediaItem(
+    const std::string& id,
+    base::WeakPtr<media_message_center::MediaNotificationItem> item) {
+  DCHECK(observed_items_[id]);
+
+  auto device_selector_view = BuildDeviceSelector(id, item);
+  observed_items_[id]->UpdateFooterView(
+      BuildFooterView(id, item, device_selector_view.get()));
+  observed_items_[id]->UpdateDeviceSelector(std::move(device_selector_view));
+
+  UpdateBubbleSize();
 }
 
 void MediaDialogView::HideMediaDialog() {
@@ -427,60 +499,93 @@ void MediaDialogView::SetLiveCaptionTitle(const std::u16string& new_text) {
   UpdateBubbleSize();
 }
 
-std::unique_ptr<global_media_controls::MediaItemUIView>
-MediaDialogView::BuildMediaItemUIView(
+std::unique_ptr<global_media_controls::MediaItemUIFooter>
+MediaDialogView::BuildFooterView(
+    const std::string& id,
+    base::WeakPtr<media_message_center::MediaNotificationItem> item,
+    MediaItemUIDeviceSelectorView* device_selector_view) {
+  // Show a footer view when media::kGlobalMediaControlsModernUI is enabled.
+  std::unique_ptr<global_media_controls::MediaItemUIFooter> footer_view;
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI)) {
+    footer_view = std::make_unique<MediaItemUIFooterView>(base::NullCallback());
+    if (device_selector_view) {
+      auto* modern_footer =
+          static_cast<MediaItemUIFooterView*>(footer_view.get());
+      modern_footer->SetDelegate(device_selector_view);
+      device_selector_view->AddObserver(modern_footer);
+    }
+    return footer_view;
+  }
+
+  // Show a footerview for a Cast item.
+  if (item->SourceType() == media_message_center::SourceType::kCast &&
+      media_router::GlobalMediaControlsCastStartStopEnabled(profile_)) {
+    return std::make_unique<MediaItemUILegacyCastFooterView>(
+        base::BindRepeating(
+            &CastMediaNotificationItem::StopCasting,
+            static_cast<CastMediaNotificationItem*>(item.get())->GetWeakPtr(),
+            entry_point_));
+  }
+
+  // Show a footer view for a local media item when it has an associated Remote
+  // Playback session.
+  if (item->SourceType() !=
+      media_message_center::SourceType::kLocalMediaSession) {
+    return nullptr;
+  }
+  auto route_id = GetRemotePlaybackRouteId(id, profile_);
+  if (route_id.empty()) {
+    return nullptr;
+  }
+  auto stop_casting_cb = base::BindRepeating(
+      [](const std::string& route_id, media_router::MediaRouter* router,
+         global_media_controls::GlobalMediaControlsEntryPoint entry_point) {
+        router->TerminateRoute(route_id);
+        MediaItemUIMetrics::RecordStopCastingMetrics(
+            media_router::MediaCastMode::REMOTE_PLAYBACK, entry_point);
+      },
+      route_id,
+      media_router::MediaRouterFactory::GetApiForBrowserContext(profile_),
+      entry_point_);
+  return std::make_unique<MediaItemUILegacyCastFooterView>(
+      std::move(stop_casting_cb));
+}
+
+std::unique_ptr<MediaItemUIDeviceSelectorView>
+MediaDialogView::BuildDeviceSelector(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item) {
-  const bool is_cast_item =
-      item->SourceType() == media_message_center::SourceType::kCast;
+  if (!ShouldShowDeviceSelectorView(id, item->SourceType(), profile_)) {
+    return nullptr;
+  }
+
   const bool is_local_media_session =
       item->SourceType() ==
       media_message_center::SourceType::kLocalMediaSession;
   const bool gmc_cast_start_stop_enabled =
       media_router::GlobalMediaControlsCastStartStopEnabled(profile_);
-
-  // Show a device selector view for media and supplemental notifications.
-  std::unique_ptr<MediaItemUIDeviceSelectorView> device_selector_view;
-  if (!is_cast_item && (gmc_cast_start_stop_enabled ||
-                        base::FeatureList::IsEnabled(
-                            media::kGlobalMediaControlsSeamlessTransfer))) {
-    const bool show_expand_button =
-        !base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI);
-    std::unique_ptr<media_router::CastDialogController> cast_controller;
-    if (gmc_cast_start_stop_enabled) {
-      cast_controller =
-          is_local_media_session
-              ? service_->CreateCastDialogControllerForSession(id)
-              : service_->CreateCastDialogControllerForPresentationRequest();
-    }
-    device_selector_view = std::make_unique<MediaItemUIDeviceSelectorView>(
-        id, service_, std::move(cast_controller),
-        /* has_audio_output */ is_local_media_session, entry_point_,
-        show_expand_button);
+  const bool show_expand_button =
+      !base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI);
+  std::unique_ptr<media_router::CastDialogController> cast_controller;
+  if (gmc_cast_start_stop_enabled) {
+    cast_controller =
+        is_local_media_session
+            ? service_->CreateCastDialogControllerForSession(id)
+            : service_->CreateCastDialogControllerForPresentationRequest();
   }
 
-  base::RepeatingClosure stop_casting_closure =
-      is_cast_item ? base::BindRepeating(
-                         &CastMediaNotificationItem::StopCasting,
-                         static_cast<CastMediaNotificationItem*>(item.get())
-                             ->GetWeakPtr(),
-                         entry_point_)
-                   : base::NullCallback();
+  return std::make_unique<MediaItemUIDeviceSelectorView>(
+      id, service_, std::move(cast_controller),
+      /* has_audio_output */ is_local_media_session, entry_point_,
+      show_expand_button);
+}
 
-  std::unique_ptr<global_media_controls::MediaItemUIFooter> footer_view;
-  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI)) {
-    footer_view = std::make_unique<MediaItemUIFooterView>(stop_casting_closure);
-
-    if (device_selector_view) {
-      auto* modern_footer =
-          static_cast<MediaItemUIFooterView*>(footer_view.get());
-      modern_footer->SetDelegate(device_selector_view.get());
-      device_selector_view->AddObserver(modern_footer);
-    }
-  } else if (is_cast_item && gmc_cast_start_stop_enabled) {
-    footer_view =
-        std::make_unique<MediaItemUILegacyCastFooterView>(stop_casting_closure);
-  }
+std::unique_ptr<global_media_controls::MediaItemUIView>
+MediaDialogView::BuildMediaItemUIView(
+    const std::string& id,
+    base::WeakPtr<media_message_center::MediaNotificationItem> item) {
+  auto device_selector_view = BuildDeviceSelector(id, item);
+  auto footer_view = BuildFooterView(id, item, device_selector_view.get());
 
   return std::make_unique<global_media_controls::MediaItemUIView>(
       id, item, std::move(footer_view), std::move(device_selector_view));

@@ -167,7 +167,7 @@ class VideoTrackRecorderTest
   MOCK_METHOD0(OnSourceReadyStateEnded, void());
 
   MOCK_METHOD5(OnEncodedVideo,
-               void(const media::WebmMuxer::VideoParameters& params,
+               void(const media::Muxer::VideoParameters& params,
                     std::string encoded_data,
                     std::string encoded_alpha,
                     base::TimeTicks timestamp,
@@ -288,7 +288,6 @@ TEST_P(VideoTrackRecorderTest, VideoEncoding) {
       .Times(1)
       .WillOnce(DoAll(SaveArg<1>(&first_frame_encoded_data),
                       SaveArg<2>(&first_frame_encoded_alpha)));
-  Encode(video_frame, timeticks_now);
 
   // Send another Video Frame.
   const base::TimeTicks timeticks_later = base::TimeTicks::Now();
@@ -298,7 +297,6 @@ TEST_P(VideoTrackRecorderTest, VideoEncoding) {
       .Times(1)
       .WillOnce(DoAll(SaveArg<1>(&second_frame_encoded_data),
                       SaveArg<2>(&second_frame_encoded_alpha)));
-  Encode(video_frame, timeticks_later);
 
   // Send another Video Frame and expect only an OnEncodedVideo() callback.
   const gfx::Size frame_size2(frame_size.width() + kTrackRecorderTestSizeDiff,
@@ -315,6 +313,10 @@ TEST_P(VideoTrackRecorderTest, VideoEncoding) {
       .WillOnce(DoAll(SaveArg<1>(&third_frame_encoded_data),
                       SaveArg<2>(&third_frame_encoded_alpha),
                       RunClosure(run_loop.QuitClosure())));
+  // A test-only TSAN problem is fixed by placing the encodes down here and not
+  // close to the expectation setups.
+  Encode(video_frame, timeticks_now);
+  Encode(video_frame, timeticks_later);
   Encode(video_frame2, base::TimeTicks::Now());
 
   run_loop.Run();
@@ -576,7 +578,7 @@ class VideoTrackRecorderPassthroughTest
   }
 
   MOCK_METHOD5(OnEncodedVideo,
-               void(const media::WebmMuxer::VideoParameters& params,
+               void(const media::Muxer::VideoParameters& params,
                     std::string encoded_data,
                     std::string encoded_alpha,
                     base::TimeTicks timestamp,

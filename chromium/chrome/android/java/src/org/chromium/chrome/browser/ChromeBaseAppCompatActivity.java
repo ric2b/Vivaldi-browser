@@ -31,7 +31,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.base.ServiceTracingProxyProvider;
 import org.chromium.chrome.browser.base.SplitChromeApplication;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.language.GlobalAppLocaleController;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
@@ -41,6 +40,11 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 
 import java.util.LinkedHashSet;
+
+// Vivaldi
+import android.text.TextUtils;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A subclass of {@link AppCompatActivity} that maintains states and objects applied to all
@@ -53,6 +57,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     private NightModeStateProvider mNightModeStateProvider;
     private LinkedHashSet<Integer> mThemeResIds = new LinkedHashSet<>();
     private ServiceTracingProxyProvider mServiceTracingProxyProvider;
+
+    private SharedPreferencesManager.Observer mPreferenceObserver;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -87,6 +93,14 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         // NightMode and other applyOverrides must be done before onCreate in attachBaseContext.
         // https://crbug.com/1139760
         if (applyOverrides(newBase, config)) applyOverrideConfiguration(config);
+
+        // Vivaldi
+        mPreferenceObserver = key -> {
+            if (TextUtils.equals(key, VivaldiPreferences.UI_SCALE_VALUE)) {
+                if (!isFinishing()) recreate();
+            }
+        };
+        VivaldiPreferences.getSharedPreferencesManager().addObserver(mPreferenceObserver);
     }
 
     @Override
@@ -112,6 +126,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             mModalDialogManagerSupplier.get().destroy();
             mModalDialogManagerSupplier.set(null);
         }
+        // Vivaldi
+        VivaldiPreferences.getSharedPreferencesManager().removeObserver(mPreferenceObserver);
         super.onDestroy();
     }
 
@@ -128,6 +144,22 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         BundleUtils.saveLoadedSplits(outState);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(@Nullable Bundle state) {
+        if (state != null) {
+            // Ensure that classes from previously loaded splits can be read from the bundle.
+            // https://crbug.com/1382227
+            ClassLoader splitClassLoader = BundleUtils.getSplitCompatClassLoader();
+            state.setClassLoader(splitClassLoader);
+            // See: https://cs.android.com/search?q=Activity.java%20symbol:onRestoreInstanceState
+            Bundle windowState = state.getBundle("android:viewHierarchyState");
+            if (windowState != null) {
+                windowState.setClassLoader(splitClassLoader);
+            }
+        }
+        super.onRestoreInstanceState(state);
     }
 
     @Override
@@ -191,6 +223,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      */
     @CallSuper
     protected boolean applyOverrides(Context baseContext, Configuration overrideConfig) {
+        adjustDisplayScale(overrideConfig); // Vivaldi
         return NightModeUtils.applyOverridesForNightMode(
                 getNightModeStateProvider(), overrideConfig);
     }
@@ -222,7 +255,9 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      */
     @CallSuper
     protected void applyThemeOverlays() {
+        // Note(david@vivaldi.com): We set the theme here in order to support all Android versions.
         setTheme(R.style.ColorOverlay_ChromiumAndroid);
+
         DynamicColors.applyToActivityIfAvailable(this);
 
         DeferredStartupHandler.getInstance().addDeferredTask(() -> {
@@ -233,26 +268,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             UmaSessionStats.registerSyntheticFieldTrial(
                     "IsDynamicColorAvailable", isDynamicColorAvailable ? "Enabled" : "Disabled");
         });
-
-        // Try to enable browser overscroll when content overscroll is enabled for consistency. This
-        // needs to be in a cached feature because activity startup happens before native is
-        // initialized. Unfortunately content overscroll is read in renderer threads, and these two
-        // are not synchronized. Typically the first time overscroll is enabled, the following will
-        // use the old value and then content will pick up the enabled value, causing one execution
-        // of inconsistency.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                && !ChromeFeatureList.sElasticOverscroll.isEnabled()) {
-            setTheme(R.style.ThemeOverlay_DisableOverscroll);
-        }
-
-        // TODO(https://crbug.com/1345778): Remove these overlays.
-        // We apply an extra theme overlay to override some of the dynamic colors. For example,
-        // android:textColorHighlight is overridden by dynamic colors, preventing us from specifying
-        // the alpha for the selected text highlight. In this case, the overridden colors should
-        // still use dynamic colors, as in the android:textColorHighlight example where we use a
-        // color state list that depends on colorPrimary.
-        setTheme(R.style.ThemeOverlay_DynamicColorOverrides);
-        setTheme(R.style.ThemeOverlay_DynamicButtons);
     }
 
     /**
@@ -291,5 +306,13 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             mServiceTracingProxyProvider.traceSystemServices();
         }
         return service;
+    }
+
+    /** Vivaldi **/
+    public void adjustDisplayScale(Configuration configuration) {
+        if (configuration != null) {
+            configuration.densityDpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
+                    VivaldiPreferences.UI_SCALE_VALUE);
+        }
     }
 }

@@ -10,11 +10,11 @@
 import './descriptor_list_item.js';
 import './expandable_list.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 
 import {connectToDevice} from './device_broker.js';
 import {ExpandableListElement} from './expandable_list.js';
-import {Snackbar, SnackbarType} from './snackbar.js';
+import {showSnackbar, SnackbarType} from './snackbar.js';
 
 /**
  * A list that displays DescriptorListItems.
@@ -40,9 +40,11 @@ export class DescriptorListElement extends ExpandableListElement {
 
   createItem(data) {
     const item = document.createElement('descriptor-list-item');
+    assert(this.deviceAddress_);
+    assert(this.serviceId_);
+    assert(this.characteristicId_);
     item.initialize(
-        data, assert(this.deviceAddress_), assert(this.serviceId_),
-        assert(this.characteristicId_));
+        data, this.deviceAddress_, this.serviceId_, this.characteristicId_);
     return item;
   }
 
@@ -77,7 +79,7 @@ export class DescriptorListElement extends ExpandableListElement {
         }.bind(this))
         .catch(function(error) {
           this.descriptorsRequested_ = false;
-          Snackbar.show(
+          showSnackbar(
               deviceAddress + ': ' + error.message, SnackbarType.ERROR, 'Retry',
               function() {
                 this.load(deviceAddress, serviceId, characteristicId);

@@ -6,7 +6,6 @@
 #define IOS_CHROME_BROWSER_NTP_NEW_TAB_PAGE_TAB_HELPER_H_
 
 #import <UIKit/UIKit.h>
-#include <memory>
 
 #include "base/timer/timer.h"
 #include "ios/chrome/browser/discover_feed/feed_constants.h"
@@ -50,13 +49,6 @@ class NewTabPageTabHelper : public web::WebStateObserver,
   // so the tab helper can be disabled immediately, and before any potential
   // WebStateObserver callback.
   void Deactivate();
-
-  // Sometimes the underlying ios/web page used for the NTP (about://newtab)
-  // takes a long time to load.  Loading any page before the newtab is committed
-  // will leave ios/web in a bad state.  See: crbug.com/925304 for more context.
-  // Remove this when ios/web supports queueing multiple loads during this
-  // state.
-  bool IgnoreLoadRequests() const;
 
   // Returns true if an `url` is either chrome://newtab or about://newtab.
   bool IsNTPURL(const GURL& url);
@@ -110,9 +102,6 @@ class NewTabPageTabHelper : public web::WebStateObserver,
   // Surface.
   BOOL show_start_surface_ = false;
 
-  // `YES` if the NTP's underlying ios/web page is still loading.
-  BOOL ignore_load_requests_ = NO;
-
   // The default feed type of the next NTP.
   FeedType next_ntp_feed_type_;
 
@@ -121,10 +110,6 @@ class NewTabPageTabHelper : public web::WebStateObserver,
 
   // The saved scroll position for navigating back to the NTP.
   CGFloat saved_scroll_position_ = -CGFLOAT_MAX;
-
-  // Ensure the ignore_load_requests_ flag is never set to NO for more than
-  // `kMaximumIgnoreLoadRequestsTime` seconds.
-  std::unique_ptr<base::OneShotTimer> ignore_load_requests_timer_;
 
   WEB_STATE_USER_DATA_KEY_DECL();
 };

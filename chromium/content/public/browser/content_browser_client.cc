@@ -13,11 +13,13 @@
 #include "base/guid.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "content/public/browser/anchor_element_preconnect_delegate.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -31,7 +33,6 @@
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/prefetch_service_delegate.h"
-#include "content/public/browser/quota_permission_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/sms_fetcher.h"
 #include "content/public/browser/speculation_host_delegate.h"
@@ -72,6 +73,10 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "content/public/browser/tts_environment_android.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "content/public/browser/firewall_hole_proxy.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -251,7 +256,7 @@ size_t ContentBrowserClient::GetProcessCountToIgnoreForLimit() {
 }
 
 absl::optional<blink::ParsedPermissionsPolicy>
-ContentBrowserClient::GetPermissionsPolicyForIsolatedApp(
+ContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     content::BrowserContext* browser_context,
     const url::Origin& app_origin) {
   return blink::ParsedPermissionsPolicy();
@@ -334,13 +339,15 @@ ContentBrowserClient::GetAdditionalSiteIsolationModes() {
 
 bool ContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
     BrowserContext* browser_context,
-    const GURL& url) {
+    const GURL& url,
+    bool origin_matches_flag) {
   return false;
 }
 
-bool ContentBrowserClient::IsIsolatedAppsDeveloperModeAllowed(
-    BrowserContext* context) {
-  return true;
+bool ContentBrowserClient::IsIsolatedContextAllowedForUrl(
+    BrowserContext* browser_context,
+    const GURL& lock_url) {
+  return false;
 }
 
 bool ContentBrowserClient::IsGetDisplayMediaSetSelectAllScreensAllowed(
@@ -514,6 +521,7 @@ bool ContentBrowserClient::IsAttributionReportingOperationAllowed(
 
 bool ContentBrowserClient::IsSharedStorageAllowed(
     content::BrowserContext* browser_context,
+    content::RenderFrameHost* rfh,
     const url::Origin& top_frame_origin,
     const url::Origin& accessing_origin) {
   // TODO(crbug.com/1325103): Change this to false and override in
@@ -531,11 +539,6 @@ bool ContentBrowserClient::IsPrivateAggregationAllowed(
 bool ContentBrowserClient::CanSendSCTAuditingReport(
     BrowserContext* browser_context) {
   return false;
-}
-
-scoped_refptr<QuotaPermissionContext>
-ContentBrowserClient::CreateQuotaPermissionContext() {
-  return nullptr;
 }
 
 GeneratedCodeCacheSettings ContentBrowserClient::GetGeneratedCodeCacheSettings(
@@ -850,7 +853,9 @@ bool ContentBrowserClient::IsRendererCodeIntegrityEnabled() {
 }
 
 bool ContentBrowserClient::ShouldEnableAudioProcessHighPriority() {
-  return base::FeatureList::IsEnabled(features::kAudioProcessHighPriorityWin);
+  // TODO(crbug.com/1374069): Delete this method when the
+  // kAudioProcessHighPriorityEnabled enterprise policy is deprecated.
+  return false;
 }
 
 #endif  // BUILDFLAG(IS_WIN)
@@ -998,11 +1003,6 @@ bool ContentBrowserClient::ShouldOverrideUrlLoading(
   return true;
 }
 
-bool ContentBrowserClient::
-    ShouldIgnoreInitialNavigationEntryNavigationStateChangedForLegacySupport() {
-  return false;
-}
-
 bool ContentBrowserClient::SupportsAvoidUnnecessaryBeforeUnloadCheckSync() {
   return true;
 }
@@ -1116,12 +1116,6 @@ ContentBrowserClient::CreateWindowForVideoPictureInPicture(
   return nullptr;
 }
 
-std::unique_ptr<DocumentOverlayWindow>
-ContentBrowserClient::CreateWindowForDocumentPictureInPicture(
-    DocumentPictureInPictureWindowController* controller) {
-  return nullptr;
-}
-
 void ContentBrowserClient::RegisterRendererPreferenceWatcher(
     BrowserContext* browser_context,
     mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher) {
@@ -1223,12 +1217,14 @@ void ContentBrowserClient::AugmentNavigationDownloadPolicy(
     bool user_gesture,
     blink::NavigationDownloadPolicy* download_policy) {}
 
-std::vector<blink::mojom::EpochTopicPtr>
-ContentBrowserClient::GetBrowsingTopicsForJsApi(
+bool ContentBrowserClient::HandleTopicsWebApi(
     const url::Origin& context_origin,
-    RenderFrameHost* main_frame,
-    bool observe) {
-  return {};
+    content::RenderFrameHost* main_frame,
+    browsing_topics::ApiCallerSource caller_source,
+    bool get_topics,
+    bool observe,
+    std::vector<blink::mojom::EpochTopicPtr>& topics) {
+  return false;
 }
 
 bool ContentBrowserClient::IsBluetoothScanningBlocked(
@@ -1272,7 +1268,7 @@ void ContentBrowserClient::IsClipboardPasteContentAllowed(
     const ui::ClipboardFormatType& data_type,
     const std::string& data,
     IsClipboardPasteContentAllowedCallback callback) {
-  std::move(callback).Run(ClipboardPasteContentAllowed(true));
+  std::move(callback).Run(data);
 }
 
 bool ContentBrowserClient::IsClipboardCopyAllowed(
@@ -1328,7 +1324,7 @@ void ContentBrowserClient::OnKeepaliveRequestFinished() {}
 #if BUILDFLAG(IS_MAC)
 bool ContentBrowserClient::SetupEmbedderSandboxParameters(
     sandbox::mojom::Sandbox sandbox_type,
-    sandbox::SeatbeltExecClient* client) {
+    sandbox::SandboxCompiler* compiler) {
   return false;
 }
 #endif  // BUILDFLAG(IS_MAC)
@@ -1349,6 +1345,12 @@ bool ContentBrowserClient::SuppressDifferentOriginSubframeJSDialogs(
     BrowserContext* browser_context) {
   return base::FeatureList::IsEnabled(
       features::kSuppressDifferentOriginSubframeJSDialogs);
+}
+
+std::unique_ptr<AnchorElementPreconnectDelegate>
+ContentBrowserClient::CreateAnchorElementPreconnectDelegate(
+    RenderFrameHost& render_frame_host) {
+  return nullptr;
 }
 
 std::unique_ptr<SpeculationHostDelegate>

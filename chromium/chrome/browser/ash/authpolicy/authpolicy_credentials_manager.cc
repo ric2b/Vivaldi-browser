@@ -30,6 +30,7 @@
 #include "chromeos/ash/components/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/vector_icons/vector_icons.h"
@@ -214,7 +215,7 @@ void AuthPolicyCredentialsManager::ScheduleGetUserStatus() {
   // TODO(rsorokin): This does not re-schedule after wake from sleep
   // (and thus the maximal interval between two calls can be (sleep time +
   // kGetUserStatusCallsInterval)) (see crbug.com/726672).
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, scheduled_get_user_status_call_.callback(),
       kGetUserStatusCallsInterval);
 }
@@ -276,20 +277,19 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
             chrome::AttemptUserExit();
           }));
 
-  std::unique_ptr<message_center::Notification> notification =
-      ash::CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
-          l10n_util::GetStringUTF16(message_id),
-          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
-          GURL(notification_id), notifier_id, data, std::move(delegate),
-          vector_icons::kNotificationWarningIcon,
-          message_center::SystemNotificationWarningLevel::WARNING);
-  notification->SetSystemPriority();
+  message_center::Notification notification = CreateSystemNotification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
+      l10n_util::GetStringUTF16(message_id),
+      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
+      GURL(notification_id), notifier_id, data, std::move(delegate),
+      vector_icons::kNotificationWarningIcon,
+      message_center::SystemNotificationWarningLevel::WARNING);
+  notification.SetSystemPriority();
 
   // Add the notification.
   NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
-      NotificationHandler::Type::TRANSIENT, *notification,
+      NotificationHandler::Type::TRANSIENT, notification,
       /*metadata=*/nullptr);
   shown_notifications_.insert(message_id);
 }

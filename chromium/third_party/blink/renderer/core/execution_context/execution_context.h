@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "v8/include/v8-callbacks.h"
 #include "v8/include/v8-forward.h"
 
@@ -71,6 +72,10 @@ class UkmRecorder;
 namespace v8 {
 class MicrotaskQueue;
 }  // namespace v8
+
+namespace perfetto::protos::pbzero {
+class BlinkExecutionContext;
+}  // namespace perfetto::protos::pbzero
 
 namespace blink {
 
@@ -89,6 +94,7 @@ class FrameOrWorkerScheduler;
 class KURL;
 class LocalDOMWindow;
 class OriginTrialContext;
+class RuntimeFeatureStateOverrideContext;
 class PolicyContainer;
 class PublicURLManager;
 class ResourceFetcher;
@@ -166,6 +172,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual bool IsLayoutWorkletGlobalScope() const { return false; }
   virtual bool IsPaintWorkletGlobalScope() const { return false; }
   virtual bool IsThreadedWorkletGlobalScope() const { return false; }
+  virtual bool IsShadowRealmGlobalScope() const { return false; }
   virtual bool IsJSExecutionForbidden() const { return false; }
 
   // TODO(crbug.com/1335924) Change this method to be pure-virtual and each
@@ -278,7 +285,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   mojom::FrameLifecycleState ContextPauseState() const {
     return lifecycle_state_;
   }
-  bool IsLoadDeferred() const;
+  bool IsContextFrozenOrPaused() const;
 
   // Gets the next id in a circular sequence from 1 to 2^31-1.
   int CircularSequentialID();
@@ -341,6 +348,11 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
     return origin_trial_context_;
   }
 
+  RuntimeFeatureStateOverrideContext* GetRuntimeFeatureStateOverrideContext()
+      const override {
+    return runtime_feature_state_override_context_;
+  }
+
   virtual TrustedTypePolicyFactory* GetTrustedTypes() const { return nullptr; }
   virtual bool RequireTrustedTypes() const;
 
@@ -394,11 +406,10 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual bool CrossOriginIsolatedCapability() const = 0;
 
   // Returns true if scripts within this ExecutionContext are allowed to use
-  // APIs that require the page to be part of an isolated application.
-  // https://github.com/reillyeon/isolated-web-apps
+  // Trusted Context APIs (i.e. annotated with [IsolatedContext] IDL attribute).
   //
   // TODO(mkwst): We need a specification for the necessary restrictions.
-  virtual bool IsolatedApplicationCapability() const = 0;
+  virtual bool IsIsolatedContext() const = 0;
 
   // Returns true if SharedArrayBuffers can be transferred via PostMessage,
   // false otherwise. SharedArrayBuffer allows pages to craft high-precision
@@ -447,6 +458,10 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   bool IsInRequestAnimationFrame() const {
     return is_in_request_animation_frame_;
   }
+
+  // Write a representation of this object into a trace.
+  using Proto = perfetto::protos::pbzero::BlinkExecutionContext;
+  void WriteIntoTrace(perfetto::TracedProto<Proto> proto) const;
 
   // For use by FrameRequestCallbackCollection::ExecuteFrameCallbacks();
   // IsInRequestAnimationFrame() for the corresponding ExecutionContext will
@@ -531,6 +546,10 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   Member<OriginTrialContext> origin_trial_context_;
 
   Member<ContentSecurityPolicy> content_security_policy_;
+
+  Member<RuntimeFeatureStateOverrideContext>
+      runtime_feature_state_override_context_;
+
   bool require_safe_types_ = false;
 };
 

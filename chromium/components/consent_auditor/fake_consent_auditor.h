@@ -50,14 +50,7 @@ class FakeConsentAuditor : public ConsentAuditor {
       const CoreAccountId& account_id,
       const sync_pb::UserConsentTypes::AccountPasswordsConsent& consent)
       override;
-  void RecordAutofillAssistantConsent(
-      const CoreAccountId& account_id,
-      const sync_pb::UserConsentTypes::AutofillAssistantConsent& consent)
-      override;
 
-  void RecordLocalConsent(const std::string& feature,
-                          const std::string& description_text,
-                          const std::string& confirmation_text) override;
   base::WeakPtr<syncer::ModelTypeControllerDelegate> GetControllerDelegate()
       override;
 

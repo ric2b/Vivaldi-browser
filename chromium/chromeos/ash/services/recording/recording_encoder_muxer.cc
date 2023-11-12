@@ -17,6 +17,7 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/muxers/file_webm_muxer_delegate.h"
+#include "media/muxers/muxer.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 namespace recording {
@@ -194,9 +195,41 @@ base::SequenceBound<RecordingEncoderMuxer> RecordingEncoderMuxer::Create(
     const base::FilePath& webm_file_path,
     OnFailureCallback on_failure_callback) {
   return base::SequenceBound<RecordingEncoderMuxer>(
-      std::move(blocking_task_runner), video_encoder_options,
+      std::move(blocking_task_runner), PassKey(), video_encoder_options,
       audio_input_params, std::move(drive_fs_quota_delegate), webm_file_path,
       std::move(on_failure_callback));
+}
+
+RecordingEncoderMuxer::RecordingEncoderMuxer(
+    PassKey,
+    const media::VideoEncoder::Options& video_encoder_options,
+    const media::AudioParameters* audio_input_params,
+    mojo::PendingRemote<mojom::DriveFsQuotaDelegate> drive_fs_quota_delegate,
+    const base::FilePath& webm_file_path,
+    OnFailureCallback on_failure_callback)
+    : on_failure_callback_(std::move(on_failure_callback)),
+      webm_muxer_(media::AudioCodec::kOpus,
+                  /*has_video_=*/true,
+                  /*has_audio_=*/!!audio_input_params,
+                  std::make_unique<RecordingMuxerDelegate>(
+                      webm_file_path,
+                      this,
+                      std::move(drive_fs_quota_delegate))) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (audio_input_params) {
+    media::AudioEncoder::Options audio_encoder_options;
+    audio_encoder_options.codec = media::AudioCodec::kOpus;
+    audio_encoder_options.channels = audio_input_params->channels();
+    audio_encoder_options.sample_rate = audio_input_params->sample_rate();
+    InitializeAudioEncoder(audio_encoder_options);
+  }
+
+  InitializeVideoEncoder(video_encoder_options);
+}
+
+RecordingEncoderMuxer::~RecordingEncoderMuxer() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void RecordingEncoderMuxer::InitializeVideoEncoder(
@@ -278,37 +311,6 @@ void RecordingEncoderMuxer::FlushAndFinalize(base::OnceClosure on_done) {
   } else {
     OnAudioEncoderFlushed(std::move(on_done), media::EncoderStatus::Codes::kOk);
   }
-}
-
-RecordingEncoderMuxer::RecordingEncoderMuxer(
-    const media::VideoEncoder::Options& video_encoder_options,
-    const media::AudioParameters* audio_input_params,
-    mojo::PendingRemote<mojom::DriveFsQuotaDelegate> drive_fs_quota_delegate,
-    const base::FilePath& webm_file_path,
-    OnFailureCallback on_failure_callback)
-    : on_failure_callback_(std::move(on_failure_callback)),
-      webm_muxer_(media::AudioCodec::kOpus,
-                  /*has_video_=*/true,
-                  /*has_audio_=*/!!audio_input_params,
-                  std::make_unique<RecordingMuxerDelegate>(
-                      webm_file_path,
-                      this,
-                      std::move(drive_fs_quota_delegate))) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (audio_input_params) {
-    media::AudioEncoder::Options audio_encoder_options;
-    audio_encoder_options.codec = media::AudioCodec::kOpus;
-    audio_encoder_options.channels = audio_input_params->channels();
-    audio_encoder_options.sample_rate = audio_input_params->sample_rate();
-    InitializeAudioEncoder(audio_encoder_options);
-  }
-
-  InitializeVideoEncoder(video_encoder_options);
-}
-
-RecordingEncoderMuxer::~RecordingEncoderMuxer() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void RecordingEncoderMuxer::InitializeAudioEncoder(
@@ -398,9 +400,9 @@ void RecordingEncoderMuxer::OnVideoEncoderOutput(
     absl::optional<media::VideoEncoder::CodecDescription> codec_description) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  media::WebmMuxer::VideoParameters params(
-      video_visible_rect_sizes_.front(), kMaxFrameRate, media::VideoCodec::kVP8,
-      kColorSpace);
+  media::Muxer::VideoParameters params(video_visible_rect_sizes_.front(),
+                                       kMaxFrameRate, media::VideoCodec::kVP8,
+                                       kColorSpace);
   video_visible_rect_sizes_.pop();
 
   // TODO(crbug.com/1143798): Explore changing the WebmMuxer so it doesn't work

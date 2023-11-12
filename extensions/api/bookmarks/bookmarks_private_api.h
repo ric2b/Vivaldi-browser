@@ -16,8 +16,6 @@ using extensions::BrowserContextKeyedAPIFactory;
 
 namespace extensions {
 
-class MetaInfoChangeFilter;
-
 class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
                             public BrowserContextKeyedAPI {
  public:
@@ -33,18 +31,20 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
  private:
   // bookmarks::BookmarkModelObserver
-  void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override;
+  void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override {
+  }
 
   void BookmarkNodeMoved(BookmarkModel* model,
                          const BookmarkNode* old_parent,
                          size_t old_index,
                          const BookmarkNode* new_parent,
-                         size_t new_index) override;
-  void BookmarkNodeRemoved(BookmarkModel* model,
-                           const BookmarkNode* parent,
-                           size_t old_index,
-                           const BookmarkNode* node,
-                           const std::set<GURL>& no_longer_bookmarked) override;
+                         size_t new_index) override {}
+  void BookmarkNodeRemoved(
+      BookmarkModel* model,
+      const BookmarkNode* parent,
+      size_t old_index,
+      const BookmarkNode* node,
+      const std::set<GURL>& no_longer_bookmarked) override {}
 
   void BookmarkNodeAdded(BookmarkModel* model,
                          const BookmarkNode* parent,
@@ -53,9 +53,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,
-                           const BookmarkNode* node) override;
-  void OnWillChangeBookmarkMetaInfo(BookmarkModel* model,
-                                    const BookmarkNode* node) override;
+                           const BookmarkNode* node) override {}
   void BookmarkMetaInfoChanged(BookmarkModel* model,
                                const BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(BookmarkModel* model,
@@ -71,8 +69,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   content::BrowserContext* browser_context_;
 
   bookmarks::BookmarkModel* bookmark_model_;
-
-  std::unique_ptr<MetaInfoChangeFilter> change_filter_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }

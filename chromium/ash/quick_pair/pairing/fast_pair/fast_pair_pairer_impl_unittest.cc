@@ -5,11 +5,13 @@
 #include "ash/quick_pair/pairing/fast_pair/fast_pair_pairer_impl.h"
 
 #include <memory>
+#include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/quick_pair/common/account_key_failure.h"
 #include "ash/quick_pair/common/device.h"
+#include "ash/quick_pair/common/fast_pair/fast_pair_metrics.h"
 #include "ash/quick_pair/common/logging.h"
 #include "ash/quick_pair/common/pair_failure.h"
 #include "ash/quick_pair/common/protocol.h"
@@ -98,6 +100,23 @@ const char kSavedDeviceUpdateOptInStatusRetroactiveResult[] =
 const char kSavedDeviceUpdateOptInStatusSubsequentResult[] =
     "Bluetooth.ChromeOS.FastPair.SavedDevices.UpdateOptInStatus.Result."
     "SubsequentPairingProtocol";
+constexpr char kInitialSuccessFunnelMetric[] = "FastPair.InitialPairing";
+constexpr char kProtocolPairingStepInitial[] =
+    "FastPair.InitialPairing.Pairing";
+constexpr char kProtocolPairingStepSubsequent[] =
+    "FastPair.SubsequentPairing.Pairing";
+constexpr char kInitializePairingProcessInitial[] =
+    "FastPair.InitialPairing.Initialization";
+constexpr char kInitializePairingProcessSubsequent[] =
+    "FastPair.SubsequentPairing.Initialization";
+constexpr char kInitializePairingProcessRetroactive[] =
+    "FastPair.RetroactivePairing.Initialization";
+constexpr char kInitializePairingProcessFailureReasonInitial[] =
+    "FastPair.InitialPairing.Initialization.FailureReason";
+constexpr char kInitializePairingProcessFailureReasonSubsequent[] =
+    "FastPair.SubsequentPairing.Initialization.FailureReason";
+constexpr char kInitializePairingProcessFailureReasonRetroactive[] =
+    "FastPair.RetroactivePairing.Initialization.FailureReason";
 
 class FakeBluetoothAdapter
     : public testing::NiceMock<device::MockBluetoothAdapter> {
@@ -278,15 +297,12 @@ class FastPairPairerImplTest : public AshTestBase {
     AshTestBase::TearDown();
   }
 
-  void CreateMockDevice(bool fast_pair_v1, Protocol protocol) {
+  void CreateMockDevice(DeviceFastPairVersion version, Protocol protocol) {
     device_ = base::MakeRefCounted<Device>(
         kMetadataId, kBluetoothCanonicalizedAddress, protocol);
     device_->set_classic_address(kBluetoothCanonicalizedAddress);
 
-    if (fast_pair_v1) {
-      device_->SetAdditionalData(Device::AdditionalDataType::kFastPairVersion,
-                                 {1});
-    }
+    device_->set_version(version);
 
     // Need to add a matching mock device to the bluetooth adapter with the
     // same address to mock the relationship between Device and
@@ -306,13 +322,20 @@ class FastPairPairerImplTest : public AshTestBase {
       FastPairHandshake::OnCompleteCallback callback) {
     // This is the only place where data_encryptor_unique_ is used. We assume
     // that CreateHandshake is only called once.
-    auto fake = std::make_unique<FakeFastPairHandshake>(
+    auto fake_fast_pair_handshake = std::make_unique<FakeFastPairHandshake>(
         adapter_, device, std::move(callback),
         std::move(data_encryptor_unique_), std::move(gatt_service_client_));
 
-    fake_fast_pair_handshake_ = fake.get();
+    fake_fast_pair_handshake_ = fake_fast_pair_handshake.get();
 
-    return fake;
+    return fake_fast_pair_handshake;
+  }
+
+  void SetReuseHandshake() {
+    FastPairHandshakeLookup::GetInstance()->Create(adapter_, device_,
+                                                   base::DoNothing());
+    fake_fast_pair_handshake_->set_completed_successfully(
+        /*completed_successfully=*/true);
   }
 
   base::HistogramTester& histogram_tester() { return histogram_tester_; }
@@ -346,10 +369,9 @@ class FastPairPairerImplTest : public AshTestBase {
   }
 
   void RunWriteAccountKeyCallback(
-      absl::optional<device::BluetoothGattService::GattErrorCode> error =
-          absl::nullopt) {
+      absl::optional<AccountKeyFailure> failure = absl::nullopt) {
     fast_pair_gatt_service_factory_.fake_fast_pair_gatt_service_client()
-        ->RunWriteAccountKeyCallback(error);
+        ->RunWriteAccountKeyCallback(failure);
   }
 
   void PairFailedCallback(scoped_refptr<Device> device, PairFailure failure) {
@@ -389,11 +411,20 @@ class FastPairPairerImplTest : public AshTestBase {
     adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   }
 
+  void ExpectStepMetrics(std::string metric,
+                         std::vector<FastPairProtocolPairingSteps> steps) {
+    histogram_tester().ExpectTotalCount(metric, steps.size());
+    for (FastPairProtocolPairingSteps step : steps) {
+      histogram_tester().ExpectBucketCount(metric, step, 1);
+    }
+  }
+
  protected:
   // This is done on-demand to enable setting up mock expectations first.
   void CreatePairer() {
     pairer_ = std::make_unique<FastPairPairerImpl>(
-        adapter_, device_, paired_callback_.Get(),
+        adapter_, device_, handshake_complete_callback_.Get(),
+        paired_callback_.Get(),
         base::BindOnce(&FastPairPairerImplTest::PairFailedCallback,
                        weak_ptr_factory_.GetWeakPtr()),
         account_key_failure_callback_.Get(), pairing_procedure_complete_.Get());
@@ -401,17 +432,49 @@ class FastPairPairerImplTest : public AshTestBase {
 
   void CreatePairerAsFactory() {
     pairer_ = FastPairPairerImpl::Factory::Create(
-        adapter_, device_, paired_callback_.Get(),
+        adapter_, device_, handshake_complete_callback_.Get(),
+        paired_callback_.Get(),
         base::BindOnce(&FastPairPairerImplTest::PairFailedCallback,
                        weak_ptr_factory_.GetWeakPtr()),
         account_key_failure_callback_.Get(), pairing_procedure_complete_.Get());
   }
 
+  void CreateDevice(DeviceFastPairVersion version) {
+    CreateMockDevice(version,
+                     /*protocol=*/Protocol::kFastPairInitial);
+    CreatePairer();
+    if (version == DeviceFastPairVersion::kHigherThanV1) {
+      SetPublicKey();
+      // When pairing starts, if the classic address can't be resolved to
+      // a device then we pair via address.
+      SetGetDeviceNullptr();
+      fake_fast_pair_handshake_->InvokeCallback();
+      base::RunLoop().RunUntilIdle();
+      EXPECT_EQ(GetPairFailure(), absl::nullopt);
+      EXPECT_CALL(paired_callback_, Run);
+      SetDecryptPasskeyForSuccess();
+      NotifyConfirmPasskey();
+      base::RunLoop().RunUntilIdle();
+    }
+  }
+
+  void PerformAndCheckSuccessfulPairingCallbacks() {
+    RunWritePasskeyCallback(kResponseBytes);
+    base::RunLoop().RunUntilIdle();
+    EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
+    EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+    adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+    RunWriteAccountKeyCallback();
+  }
+
+  bool set_handshake_completed_successfully_ = false;
   absl::optional<PairFailure> failure_ = absl::nullopt;
   std::unique_ptr<FakeBluetoothDevice> fake_bluetooth_device_;
   FakeBluetoothDevice* fake_bluetooth_device_ptr_ = nullptr;
   scoped_refptr<FakeBluetoothAdapter> adapter_;
   scoped_refptr<Device> device_;
+  base::MockCallback<base::OnceCallback<void(scoped_refptr<Device>)>>
+      handshake_complete_callback_;
   base::MockCallback<base::OnceCallback<void(scoped_refptr<Device>)>>
       paired_callback_;
   base::MockCallback<
@@ -430,22 +493,56 @@ class FastPairPairerImplTest : public AshTestBase {
   base::WeakPtrFactory<FastPairPairerImplTest> weak_ptr_factory_{this};
 };
 
-TEST_F(FastPairPairerImplTest, NoPairingIfHandshakeFailed) {
+TEST_F(FastPairPairerImplTest, NoPairingIfHandshakeFailed_Initial) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback(PairFailure::kCreateGattConnection);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetPairFailure(), PairFailure::kCreateGattConnection);
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                kInitializePairingProcessFailureReasonInitial,
+                PairFailure::kCreateGattConnection),
+            1);
+}
+
+TEST_F(FastPairPairerImplTest, NoPairingIfHandshakeFailed_Subsequent) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairSubsequent);
+  CreatePairer();
+  fake_fast_pair_handshake_->InvokeCallback(PairFailure::kCreateGattConnection);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), PairFailure::kCreateGattConnection);
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                kInitializePairingProcessFailureReasonSubsequent,
+                PairFailure::kCreateGattConnection),
+            1);
+}
+
+TEST_F(FastPairPairerImplTest, NoPairingIfHandshakeFailed_Retroactive) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairRetroactive);
+  CreatePairer();
+  fake_fast_pair_handshake_->InvokeCallback(PairFailure::kCreateGattConnection);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), PairFailure::kCreateGattConnection);
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                kInitializePairingProcessFailureReasonRetroactive,
+                PairFailure::kCreateGattConnection),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, NoCallbackIsInvokedOnGattSuccess_Initial) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback();
@@ -457,7 +554,7 @@ TEST_F(FastPairPairerImplTest, NoCallbackIsInvokedOnGattSuccess_Retroactive) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairRetroactive);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback();
@@ -469,7 +566,7 @@ TEST_F(FastPairPairerImplTest, NoCallbackIsInvokedOnGattSuccess_Subsequent) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback();
@@ -485,7 +582,7 @@ TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Initial) {
 
   histogram_tester().ExpectTotalCount(kPairDeviceResult, 0);
   histogram_tester().ExpectTotalCount(kPairDeviceErrorReason, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPairFailure();
   CreatePairer();
@@ -494,6 +591,24 @@ TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Initial) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPairingConnect);
   histogram_tester().ExpectTotalCount(kPairDeviceResult, 1);
   histogram_tester().ExpectTotalCount(kPairDeviceErrorReason, 1);
+}
+
+TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Initial_CancelsPairing) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+  SetPairFailure();
+  CreatePairer();
+
+  // Mock that the device was paired unsuccessfully.
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsPaired()).WillOnce(Return(false));
+  fake_fast_pair_handshake_->InvokeCallback();
+  base::RunLoop().RunUntilIdle();
+
+  // Check to make sure that, when pairing fails, we call CancelPairing.
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, CancelPairing()).Times(1);
 }
 
 TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Subsequent) {
@@ -502,7 +617,7 @@ TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Subsequent) {
 
   histogram_tester().ExpectTotalCount(kPairDeviceResult, 0);
   histogram_tester().ExpectTotalCount(kPairDeviceErrorReason, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   SetPairFailure();
   CreatePairer();
@@ -511,30 +626,137 @@ TEST_F(FastPairPairerImplTest, PairByDeviceFailure_Subsequent) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPairingConnect);
   histogram_tester().ExpectTotalCount(kPairDeviceResult, 1);
   histogram_tester().ExpectTotalCount(kPairDeviceErrorReason, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted});
 }
 
 TEST_F(FastPairPairerImplTest, PairByDeviceSuccess_Initial) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful});
+}
+
+TEST_F(FastPairPairerImplTest,
+       PairByDeviceSuccess_Initial_AlreadyClassicPaired) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+  CreatePairer();
+  // Mock that the device is already paired.
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsBonded()).WillOnce(Return(true));
+
+  EXPECT_CALL(paired_callback_, Run);
+  fake_fast_pair_handshake_->InvokeCallback();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), absl::nullopt);
+
+  // For an already classic paired device, we skip right to Account Key writing.
+  EXPECT_CALL(pairing_procedure_complete_, Run);
+  RunWriteAccountKeyCallback();
+  EXPECT_TRUE(IsAccountKeySavedToFootprints());
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kAlreadyPaired,
+                     FastPairProtocolPairingSteps::kPairingComplete});
+}
+
+TEST_F(FastPairPairerImplTest, PairByDeviceSuccess_Initial_AlreadyFastPaired) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+  CreatePairer();
+  // Mock that the device is already fast paired (and saved to Footprints).
+  fast_pair_repository_.SaveMacAddressToAccount(kBluetoothCanonicalizedAddress);
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsBonded()).WillOnce(Return(true));
+
+  // For an already fast paired device, we skip the Account Key writing.
+  EXPECT_CALL(paired_callback_, Run);
+  EXPECT_CALL(pairing_procedure_complete_, Run);
+  fake_fast_pair_handshake_->InvokeCallback();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  EXPECT_EQ(
+      histogram_tester().GetBucketCount(
+          kInitialSuccessFunnelMetric,
+          FastPairInitialSuccessFunnelEvent::kDeviceAlreadyAssociatedToAccount),
+      1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kAlreadyPaired,
+                     FastPairProtocolPairingSteps::kPairingComplete});
+}
+
+TEST_F(FastPairPairerImplTest,
+       PairByDeviceSuccess_Subsequent_AlreadyClassicPaired) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairSubsequent);
+  CreatePairer();
+  // Mock that the device is already paired.
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsBonded()).WillOnce(Return(true));
+
+  EXPECT_CALL(paired_callback_, Run);
+  fake_fast_pair_handshake_->InvokeCallback();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kAlreadyPaired,
+                     FastPairProtocolPairingSteps::kPairingComplete});
+}
+
+TEST_F(FastPairPairerImplTest,
+       PairByDeviceSuccess_Subsequent_AlreadyFastPaired) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairSubsequent);
+  CreatePairer();
+  // Mock that the device is already fast paired (and saved to Footprints).
+  fast_pair_repository_.SaveMacAddressToAccount(kBluetoothCanonicalizedAddress);
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsBonded()).WillOnce(Return(true));
+
+  // For an already fast paired device, we skip the Account Key writing.
+  EXPECT_CALL(paired_callback_, Run);
+  EXPECT_CALL(pairing_procedure_complete_, Run);
+  fake_fast_pair_handshake_->InvokeCallback();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kAlreadyPaired,
+                     FastPairProtocolPairingSteps::kPairingComplete});
 }
 
 TEST_F(FastPairPairerImplTest, PairByDeviceSuccess_Subsequent) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   CreatePairer();
   fake_fast_pair_handshake_->InvokeCallback();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful});
 }
 
 TEST_F(FastPairPairerImplTest, ConnectFailure_Initial) {
@@ -542,7 +764,7 @@ TEST_F(FastPairPairerImplTest, ConnectFailure_Initial) {
   base::RunLoop().RunUntilIdle();
 
   histogram_tester().ExpectTotalCount(kConnectDeviceResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetConnectFailure();
   // When pairing starts, if the classic address can't be resolved to
@@ -554,6 +776,8 @@ TEST_F(FastPairPairerImplTest, ConnectFailure_Initial) {
 
   EXPECT_EQ(GetPairFailure(), PairFailure::kAddressConnect);
   histogram_tester().ExpectTotalCount(kConnectDeviceResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted});
 }
 
 TEST_F(FastPairPairerImplTest, ConnectFailure_Subsequent) {
@@ -561,7 +785,7 @@ TEST_F(FastPairPairerImplTest, ConnectFailure_Subsequent) {
   base::RunLoop().RunUntilIdle();
 
   histogram_tester().ExpectTotalCount(kConnectDeviceResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   SetConnectFailure();
   // When pairing starts, if the classic address can't be resolved to
@@ -572,6 +796,8 @@ TEST_F(FastPairPairerImplTest, ConnectFailure_Subsequent) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetPairFailure(), PairFailure::kAddressConnect);
   histogram_tester().ExpectTotalCount(kConnectDeviceResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted});
 }
 
 TEST_F(FastPairPairerImplTest, ConnectSuccess_Initial) {
@@ -582,7 +808,7 @@ TEST_F(FastPairPairerImplTest, ConnectSuccess_Initial) {
                                       0);
   histogram_tester().ExpectTotalCount(
       kWritePasskeyCharacteristicPairFailureMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -595,6 +821,9 @@ TEST_F(FastPairPairerImplTest, ConnectSuccess_Initial) {
                                       0);
   histogram_tester().ExpectTotalCount(
       kWritePasskeyCharacteristicPairFailureMetric, 0);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful});
 }
 
 TEST_F(FastPairPairerImplTest, ConnectSuccess_Subsequent) {
@@ -605,7 +834,7 @@ TEST_F(FastPairPairerImplTest, ConnectSuccess_Subsequent) {
                                       0);
   histogram_tester().ExpectTotalCount(
       kWritePasskeyCharacteristicPairFailureMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -618,6 +847,9 @@ TEST_F(FastPairPairerImplTest, ConnectSuccess_Subsequent) {
                                       0);
   histogram_tester().ExpectTotalCount(
       kWritePasskeyCharacteristicPairFailureMetric, 0);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful});
 }
 
 TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Initial) {
@@ -630,7 +862,7 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Initial) {
       kWritePasskeyCharacteristicPairFailureMetric, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -650,6 +882,11 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Initial) {
       kWritePasskeyCharacteristicPairFailureMetric, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Subsequent) {
@@ -662,7 +899,7 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Subsequent) {
       kWritePasskeyCharacteristicPairFailureMetric, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -681,6 +918,11 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyFailure_Subsequent) {
       kWritePasskeyCharacteristicPairFailureMetric, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(FastPairPairerImplTest,
@@ -690,7 +932,7 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -707,6 +949,11 @@ TEST_F(FastPairPairerImplTest,
   EXPECT_EQ(GetPairFailure(), PairFailure::kIncorrectPasskeyResponseType);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(
@@ -717,7 +964,7 @@ TEST_F(
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -734,6 +981,11 @@ TEST_F(
   EXPECT_EQ(GetPairFailure(), PairFailure::kIncorrectPasskeyResponseType);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(
@@ -744,7 +996,7 @@ TEST_F(
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -761,6 +1013,11 @@ TEST_F(
   EXPECT_EQ(GetPairFailure(), PairFailure::kIncorrectPasskeyResponseType);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyNoPasskey) {
@@ -769,7 +1026,7 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyNoPasskey) {
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -785,6 +1042,11 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyNoPasskey) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPasskeyDecryptFailure);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(FastPairPairerImplTest,
@@ -794,7 +1056,7 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -811,6 +1073,11 @@ TEST_F(FastPairPairerImplTest,
   EXPECT_EQ(GetPairFailure(), PairFailure::kIncorrectPasskeyResponseType);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse});
 }
 
 TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Initial) {
@@ -819,7 +1086,7 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Initial) {
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -835,6 +1102,12 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Initial) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPasskeyMismatch);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated});
 }
 
 TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Subsequent) {
@@ -843,7 +1116,7 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Subsequent) {
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -859,6 +1132,12 @@ TEST_F(FastPairPairerImplTest, ParseDecryptedPasskeyMismatch_Subsequent) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPasskeyMismatch);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated});
 }
 
 TEST_F(FastPairPairerImplTest, PairedDeviceLost_Initial) {
@@ -867,7 +1146,7 @@ TEST_F(FastPairPairerImplTest, PairedDeviceLost_Initial) {
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -887,6 +1166,13 @@ TEST_F(FastPairPairerImplTest, PairedDeviceLost_Initial) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPairingDeviceLost);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated,
+                     FastPairProtocolPairingSteps::kPasskeyConfirmed});
 }
 
 TEST_F(FastPairPairerImplTest, PairedDeviceLost_Subsequent) {
@@ -895,7 +1181,7 @@ TEST_F(FastPairPairerImplTest, PairedDeviceLost_Subsequent) {
 
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -915,6 +1201,13 @@ TEST_F(FastPairPairerImplTest, PairedDeviceLost_Subsequent) {
   EXPECT_EQ(GetPairFailure(), PairFailure::kPairingDeviceLost);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated,
+                     FastPairProtocolPairingSteps::kPasskeyConfirmed});
 }
 
 TEST_F(FastPairPairerImplTest, PairSuccess_Initial) {
@@ -924,7 +1217,7 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Initial) {
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 0);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -940,17 +1233,27 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Initial) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 1);
+  ExpectStepMetrics(kProtocolPairingStepInitial,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated,
+                     FastPairProtocolPairingSteps::kPasskeyConfirmed,
+                     FastPairProtocolPairingSteps::kPairingComplete});
 }
 
 TEST_F(FastPairPairerImplTest, BleDeviceLostMidPair) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -978,7 +1281,7 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Initial_FactoryCreate) {
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 0);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -994,6 +1297,8 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Initial_FactoryCreate) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 1);
@@ -1015,7 +1320,7 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_FlagEnabled) {
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1032,10 +1337,20 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_FlagEnabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 1);
+  ExpectStepMetrics(kProtocolPairingStepSubsequent,
+                    {FastPairProtocolPairingSteps::kPairingStarted,
+                     FastPairProtocolPairingSteps::kBondSuccessful,
+                     FastPairProtocolPairingSteps::kPasskeyNegotiated,
+                     FastPairProtocolPairingSteps::kRecievedPasskeyResponse,
+                     FastPairProtocolPairingSteps::kPasskeyValidated,
+                     FastPairProtocolPairingSteps::kPasskeyConfirmed,
+                     FastPairProtocolPairingSteps::kPairingComplete});
 }
 
 TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_FlagDisabled) {
@@ -1053,7 +1368,7 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_FlagDisabled) {
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1070,6 +1385,8 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_FlagDisabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 1);
@@ -1090,7 +1407,7 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_StrictFlagDisabled) {
   histogram_tester().ExpectTotalCount(kConfirmPasskeyConfirmTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 0);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1107,6 +1424,8 @@ TEST_F(FastPairPairerImplTest, PairSuccess_Subsequent_StrictFlagDisabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptTime, 1);
   histogram_tester().ExpectTotalCount(kPasskeyCharacteristicDecryptResult, 1);
   histogram_tester().ExpectTotalCount(kConfirmPasskeyAskTime, 1);
@@ -1126,7 +1445,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_FlagEnabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1144,6 +1463,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_FlagEnabled) {
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
   EXPECT_CALL(pairing_procedure_complete_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
   EXPECT_TRUE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
@@ -1163,7 +1487,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_FlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1181,6 +1505,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_FlagDisabled) {
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
   EXPECT_CALL(pairing_procedure_complete_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
   EXPECT_TRUE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
@@ -1199,7 +1528,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_StrictFlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1217,6 +1546,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_StrictFlagDisabled) {
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
   EXPECT_CALL(pairing_procedure_complete_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
   EXPECT_TRUE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
@@ -1229,7 +1563,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_GuestLoggedIn) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1247,8 +1581,14 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_GuestLoggedIn) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kGuestModeDetected),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_KioskAppLoggedIn) {
@@ -1257,7 +1597,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_KioskAppLoggedIn) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1275,6 +1615,8 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_KioskAppLoggedIn) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
 }
@@ -1282,7 +1624,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_KioskAppLoggedIn) {
 TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_NotLoggedIn) {
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1299,6 +1641,8 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_NotLoggedIn) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
 }
@@ -1307,7 +1651,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_Locked) {
   GetSessionControllerClient()->LockScreen();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -1324,6 +1668,8 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Initial_Locked) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
 }
@@ -1339,7 +1685,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_FlagEnabled) {
       nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1356,6 +1702,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_FlagEnabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
 
   // With Subsequent pairing, we expect to save the account key to the
   // Saved Device registry, but not upload the key to Footprints.
@@ -1375,7 +1726,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_FlagDisabled) {
                              features::kFastPairSavedDevicesStrictOptIn});
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1392,6 +1743,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_FlagDisabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
 
   // With Subsequent pairing, we expect to save the account key to the
   // Saved Device registry, but not upload the key to Footprints.
@@ -1410,7 +1766,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_StrictFlagDisabled) {
       /*disabled_features=*/{features::kFastPairSavedDevicesStrictOptIn});
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1427,6 +1783,11 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Subsequent_StrictFlagDisabled) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  // Ensure that the account key is not written to the peripheral until the
+  // peripheral is successfully paired.
+  EXPECT_FALSE(IsAccountKeySavedToFootprints());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
 
   // With Subsequent pairing, we expect to save the account key to the
   // Saved Device registry, but not upload the key to Footprints.
@@ -1448,7 +1809,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Retroactive_FlagEnabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairRetroactive);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1475,7 +1836,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Retroactive_FlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairRetroactive);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1501,7 +1862,7 @@ TEST_F(FastPairPairerImplTest, WriteAccountKey_Retroactive_StrictFlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairRetroactive);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -1528,25 +1889,13 @@ TEST_F(FastPairPairerImplTest, WriteAccountKeyFailure_Initial_GattErrorFailed) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kFailed);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorFailed);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1566,25 +1915,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kUnknown);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorUnknown);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1604,25 +1941,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kInProgress);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattInProgress);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1642,25 +1967,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kInvalidLength);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorInvalidLength);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1680,25 +1993,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kNotPermitted);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorNotPermitted);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1718,25 +2019,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kNotAuthorized);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorNotAuthorized);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1756,25 +2045,13 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kNotPaired);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorNotPaired);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
@@ -1794,53 +2071,74 @@ TEST_F(FastPairPairerImplTest,
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  SetPublicKey();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_CALL(account_key_failure_callback_, Run);
-  RunWriteAccountKeyCallback(
-      device::BluetoothGattService::GattErrorCode::kNotSupported);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorNotSupported);
   EXPECT_FALSE(IsAccountKeySavedToFootprints());
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+}
+
+TEST_F(FastPairPairerImplTest, WriteAccountKeyFailure_Initial_NoCancelPairing) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  fast_pair_repository_.SetOptInStatus(
+      nearby::fastpair::OptInStatus::STATUS_OPTED_OUT);
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      /*enabled_features=*/{},
+      /*disabled_features=*/{features::kFastPairSavedDevices,
+                             features::kFastPairSavedDevicesStrictOptIn});
+  base::RunLoop().RunUntilIdle();
+
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
+  RunWritePasskeyCallback(kResponseBytes);
+  EXPECT_EQ(GetPairFailure(), absl::nullopt);
+  EXPECT_CALL(account_key_failure_callback_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+
+  // Mock that the device was paired successfully.
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, IsPaired()).WillOnce(Return(true));
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
+  RunWriteAccountKeyCallback(AccountKeyFailure::kGattErrorFailed);
+
+  // Check to make sure that, after bonding a device, we don't cancel pairing
+  // (since this causes a paired device to disconnect).
+  EXPECT_CALL(*fake_bluetooth_device_ptr_, CancelPairing()).Times(0);
 }
 
 TEST_F(FastPairPairerImplTest, FastPairVersionOne_DevicePaired) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/true,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  CreatePairer();
+  CreateDevice(DeviceFastPairVersion::kV1);
   EXPECT_EQ(GetSystemTrayClient()->show_bluetooth_pairing_dialog_count(), 1);
   EXPECT_CALL(paired_callback_, Run);
   EXPECT_CALL(pairing_procedure_complete_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kV1, device_->version().value());
   DevicePaired();
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitializePairingProcessInitial,
+                FastPairInitializePairingProcessEvent::kPassedToPairingDialog),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, FastPairVersionOne_DeviceUnpaired) {
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
 
-  CreateMockDevice(/*fast_pair_v1=*/true,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  CreatePairer();
+  CreateDevice(DeviceFastPairVersion::kV1);
   EXPECT_EQ(GetSystemTrayClient()->show_bluetooth_pairing_dialog_count(), 1);
   EXPECT_CALL(paired_callback_, Run).Times(0);
   EXPECT_CALL(pairing_procedure_complete_, Run).Times(0);
+  EXPECT_EQ(DeviceFastPairVersion::kV1, device_->version().value());
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kV1DeviceDetected),
+            1);
   DeviceUnpaired();
 }
 
@@ -1857,22 +2155,10 @@ TEST_F(FastPairPairerImplTest, WriteAccount_OptedOut_FlagEnabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
-
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
   RunWritePasskeyCallback(kResponseBytes);
@@ -1892,26 +2178,23 @@ TEST_F(FastPairPairerImplTest, WriteAccount_OptedIn_FlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
   RunWritePasskeyCallback(kResponseBytes);
   base::RunLoop().RunUntilIdle();
   EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccount_OptedIn_StrictFlagDisabled) {
@@ -1926,26 +2209,18 @@ TEST_F(FastPairPairerImplTest, WriteAccount_OptedIn_StrictFlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
-  RunWritePasskeyCallback(kResponseBytes);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
-  RunWriteAccountKeyCallback();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
+  PerformAndCheckSuccessfulPairingCallbacks();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccount_OptedOut_FlagDisabled) {
@@ -1961,26 +2236,18 @@ TEST_F(FastPairPairerImplTest, WriteAccount_OptedOut_FlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
-  RunWritePasskeyCallback(kResponseBytes);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
-  RunWriteAccountKeyCallback();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
+  PerformAndCheckSuccessfulPairingCallbacks();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccount_OptedOut_StrictFlagDisabled) {
@@ -1995,26 +2262,18 @@ TEST_F(FastPairPairerImplTest, WriteAccount_OptedOut_StrictFlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
-  RunWritePasskeyCallback(kResponseBytes);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
-  RunWriteAccountKeyCallback();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
+  PerformAndCheckSuccessfulPairingCallbacks();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_FlagEnabled) {
@@ -2030,22 +2289,11 @@ TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_FlagEnabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
 
   EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
   RunWritePasskeyCallback(kResponseBytes);
@@ -2065,26 +2313,18 @@ TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_FlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
-                   /*protocol=*/Protocol::kFastPairInitial);
-  SetPublicKey();
-  // When pairing starts, if the classic address can't be resolved to
-  // a device then we pair via address.
-  SetGetDeviceNullptr();
-  CreatePairer();
-  fake_fast_pair_handshake_->InvokeCallback();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(GetPairFailure(), absl::nullopt);
-  EXPECT_CALL(paired_callback_, Run);
-  SetDecryptPasskeyForSuccess();
-  NotifyConfirmPasskey();
-  base::RunLoop().RunUntilIdle();
-  RunWritePasskeyCallback(kResponseBytes);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
-  RunWriteAccountKeyCallback();
+  CreateDevice(DeviceFastPairVersion::kHigherThanV1);
+  PerformAndCheckSuccessfulPairingCallbacks();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_StrictFlagDisabled) {
@@ -2099,7 +2339,7 @@ TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_StrictFlagDisabled) {
 
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -2116,9 +2356,19 @@ TEST_F(FastPairPairerImplTest, WriteAccount_StatusUnknown_StrictFlagDisabled) {
   RunWritePasskeyCallback(kResponseBytes);
   base::RunLoop().RunUntilIdle();
   EXPECT_CALL(pairing_procedure_complete_, Run).Times(1);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            1);
 }
 
 TEST_F(FastPairPairerImplTest, UpdateOptInStatus_InitialPairing) {
@@ -2142,7 +2392,7 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_InitialPairing) {
   // Pair the device via Initial Pairing protocol.
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairInitial);
   SetPublicKey();
   // When pairing starts, if the classic address can't be resolved to
@@ -2160,6 +2410,8 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_InitialPairing) {
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
   EXPECT_CALL(pairing_procedure_complete_, Run);
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
   RunWriteAccountKeyCallback();
 
   // Expect that the user is now opted in.
@@ -2195,7 +2447,7 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_RetroactivePairing) {
   // Retroactive pair
   histogram_tester().ExpectTotalCount(
       kWriteAccountKeyCharacteristicResultMetric, 0);
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairRetroactive);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -2235,7 +2487,7 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_SubsequentPairing) {
       /*success=*/false, 0);
 
   // Subsequent pair
-  CreateMockDevice(/*fast_pair_v1=*/false,
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
                    /*protocol=*/Protocol::kFastPairSubsequent);
   // When pairing starts, if the classic address can't be resolved to
   // a device then we pair via address.
@@ -2252,6 +2504,8 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_SubsequentPairing) {
   RunWritePasskeyCallback(kResponseBytes);
   EXPECT_EQ(GetPairFailure(), absl::nullopt);
   EXPECT_TRUE(IsDevicePaired());
+  EXPECT_EQ(DeviceFastPairVersion::kHigherThanV1, device_->version().value());
+  adapter_->DevicePairedChanged(fake_bluetooth_device_ptr_, true);
 
   // Expect that the user is opted in now
   EXPECT_EQ(nearby::fastpair::OptInStatus::STATUS_OPTED_IN,
@@ -2262,6 +2516,123 @@ TEST_F(FastPairPairerImplTest, UpdateOptInStatus_SubsequentPairing) {
   histogram_tester().ExpectBucketCount(
       kSavedDeviceUpdateOptInStatusSubsequentResult,
       /*success=*/false, 0);
+}
+
+// There are two pairing flows in which PairFailure::kCreateBondTimeout occurs.
+// In this test's scenario, |adapter_| knows of |device_|, so the
+// FastPairPairerImpl object in |fake_fast_pair_handshake_| will attempt and
+// fail to pair with it directly using FastPairPairerImpl::Pair.
+TEST_F(FastPairPairerImplTest, CreateBondTimeout_AdapterHasDeviceAddress) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+  CreatePairer();
+  fake_fast_pair_handshake_->InvokeCallback(PairFailure::kCreateBondTimeout);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), PairFailure::kCreateBondTimeout);
+}
+
+// There are two pairing flows in which PairFailure::kCreateBondTimeout occurs.
+// In this test's scenario, |adapter_| doesn't know of |device_|, so the
+// FastPairPairerImpl object in |fake_fast_pair_handshake_| will attempt and
+// fail to connect with it using FastPairPairerImpl::ConnectDevice.
+TEST_F(FastPairPairerImplTest,
+       CreateBondTimeout_AdapterDoesNotHaveDeviceAddress) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+  SetGetDeviceNullptr();
+  CreatePairer();
+  fake_fast_pair_handshake_->InvokeCallback(PairFailure::kCreateBondTimeout);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(GetPairFailure(), PairFailure::kCreateBondTimeout);
+}
+
+TEST_F(FastPairPairerImplTest, RetroactiveNotLoggedToInitial) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  fast_pair_repository_.SetOptInStatus(
+      nearby::fastpair::OptInStatus::STATUS_OPTED_OUT);
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      /*enabled_features=*/{features::kFastPairSavedDevices},
+      /*disabled_features=*/{features::kFastPairSavedDevicesStrictOptIn});
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairRetroactive);
+  // When pairing starts, if the classic address can't be resolved to
+  // a device then we pair via address.
+  SetGetDeviceNullptr();
+  CreatePairer();
+  fake_fast_pair_handshake_->InvokeCallback();
+  EXPECT_CALL(pairing_procedure_complete_, Run);
+  RunWriteAccountKeyCallback();
+  histogram_tester().ExpectTotalCount(
+      kWriteAccountKeyCharacteristicResultMetric, 1);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kPreparingToWriteAccountKey),
+            0);
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitialSuccessFunnelMetric,
+                FastPairInitialSuccessFunnelEvent::kAccountKeyWritten),
+            0);
+}
+
+TEST_F(FastPairPairerImplTest, HandshakeReused_Initial) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairInitial);
+
+  // Simulate Handshake already created before attempt
+  SetReuseHandshake();
+  SetGetDeviceNullptr();
+  CreatePairer();
+
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitializePairingProcessInitial,
+                FastPairInitializePairingProcessEvent::kHandshakeReused),
+            1);
+}
+
+TEST_F(FastPairPairerImplTest, HandshakeReused_Subsequent) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairSubsequent);
+
+  // Simulate Handshake already created before attempt
+  SetReuseHandshake();
+  SetGetDeviceNullptr();
+  CreatePairer();
+
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitializePairingProcessSubsequent,
+                FastPairInitializePairingProcessEvent::kHandshakeReused),
+            1);
+}
+
+TEST_F(FastPairPairerImplTest, HandshakeReused_Retroactive) {
+  Login(user_manager::UserType::USER_TYPE_REGULAR);
+  base::RunLoop().RunUntilIdle();
+
+  CreateMockDevice(DeviceFastPairVersion::kHigherThanV1,
+                   /*protocol=*/Protocol::kFastPairRetroactive);
+
+  // Simulate Handshake already created before attempt
+  SetReuseHandshake();
+  SetGetDeviceNullptr();
+  CreatePairer();
+
+  EXPECT_EQ(histogram_tester().GetBucketCount(
+                kInitializePairingProcessRetroactive,
+                FastPairInitializePairingProcessEvent::kHandshakeReused),
+            1);
 }
 
 }  // namespace quick_pair

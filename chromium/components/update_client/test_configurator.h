@@ -13,8 +13,11 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/time/time.h"
+#include "components/update_client/buildflags.h"
 #include "components/update_client/configurator.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -76,10 +79,10 @@ class TestConfigurator : public Configurator {
   TestConfigurator& operator=(const TestConfigurator&) = delete;
 
   // Overrides for Configurator.
-  double InitialDelay() const override;
-  int NextCheckDelay() const override;
-  int OnDemandDelay() const override;
-  int UpdateDelay() const override;
+  base::TimeDelta InitialDelay() const override;
+  base::TimeDelta NextCheckDelay() const override;
+  base::TimeDelta OnDemandDelay() const override;
+  base::TimeDelta UpdateDelay() const override;
   std::vector<GURL> UpdateUrl() const override;
   std::vector<GURL> PingUrl() const override;
   std::string GetProdId() const override;
@@ -103,9 +106,12 @@ class TestConfigurator : public Configurator {
       const override;
   absl::optional<bool> IsMachineExternallyManaged() const override;
   UpdaterStateProvider GetUpdaterStateProvider() const override;
+#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
+  absl::optional<base::FilePath> GetCrxCachePath() const override;
+#endif
 
-  void SetOnDemandTime(int seconds);
-  void SetInitialDelay(double seconds);
+  void SetOnDemandTime(base::TimeDelta seconds);
+  void SetInitialDelay(base::TimeDelta seconds);
   void SetDownloadPreference(const std::string& download_preference);
   void SetEnabledCupSigning(bool use_cup_signing);
   void SetUpdateCheckUrl(const GURL& url);
@@ -126,8 +132,8 @@ class TestConfigurator : public Configurator {
 
   class TestPatchService;
 
-  double initial_time_{0};
-  int ondemand_time_{0};
+  base::TimeDelta initial_time_ = base::Seconds(0);
+  base::TimeDelta ondemand_time_ = base::Seconds(0);
   std::string download_preference_;
   bool enabled_cup_signing_;
   raw_ptr<PrefService> pref_service_;  // Not owned by this class.
@@ -142,8 +148,8 @@ class TestConfigurator : public Configurator {
   scoped_refptr<NetworkFetcherFactory> network_fetcher_factory_;
   scoped_refptr<CrxDownloaderFactory> crx_downloader_factory_;
   UpdaterStateProvider updater_state_provider_;
-
   absl::optional<bool> is_machine_externally_managed_;
+  base::ScopedTempDir crx_cache_root_temp_dir_;
 };
 
 }  // namespace update_client

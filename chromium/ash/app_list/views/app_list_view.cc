@@ -21,6 +21,7 @@
 #include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/shell.h"
@@ -123,11 +124,6 @@ class AppListView::StateAnimationMetricsReporter {
       const StateAnimationMetricsReporter&) = delete;
   ~StateAnimationMetricsReporter() = default;
 
-  // Sets target state of the transition for metrics.
-  void SetTargetState(AppListViewState target_state) {
-    target_state_ = target_state;
-  }
-
   // Sets tablet animation transition type for metrics.
   void SetTabletModeAnimationTransition(
       TabletModeAnimationTransition transition) {
@@ -138,36 +134,25 @@ class AppListView::StateAnimationMetricsReporter {
   void Reset();
 
   // Gets a callback to report smoothness.
-  metrics_util::SmoothnessCallback GetReportCallback(bool tablet_mode) {
-    if (tablet_mode) {
-      return base::BindRepeating(
-          &StateAnimationMetricsReporter::RecordMetricsInTablet,
-          std::move(tablet_transition_));
-    }
-    return base::BindRepeating(
-        &StateAnimationMetricsReporter::RecordMetricsInClamshell,
-        std::move(target_state_));
+  metrics_util::SmoothnessCallback GetReportCallback() {
+    return base::BindRepeating(&StateAnimationMetricsReporter::RecordMetrics,
+                               std::move(tablet_transition_));
   }
 
  private:
-  static void RecordMetricsInTablet(
+  static void RecordMetrics(
       absl::optional<TabletModeAnimationTransition> transition,
       int value);
-  static void RecordMetricsInClamshell(
-      absl::optional<AppListViewState> target_state,
-      int value);
 
-  absl::optional<AppListViewState> target_state_;
   absl::optional<TabletModeAnimationTransition> tablet_transition_;
 };
 
 void AppListView::StateAnimationMetricsReporter::Reset() {
   tablet_transition_.reset();
-  target_state_.reset();
 }
 
 // static
-void AppListView::StateAnimationMetricsReporter::RecordMetricsInTablet(
+void AppListView::StateAnimationMetricsReporter::RecordMetrics(
     absl::optional<TabletModeAnimationTransition> tablet_transition,
     int value) {
   UMA_HISTOGRAM_PERCENTAGE("Apps.StateTransition.AnimationSmoothness", value);
@@ -209,38 +194,6 @@ void AppListView::StateAnimationMetricsReporter::RecordMetricsInTablet(
     case TabletModeAnimationTransition::kFadeOutOverview:
       UMA_HISTOGRAM_PERCENTAGE(
           "Apps.HomeLauncherTransition.AnimationSmoothness.FadeOutOverview",
-          value);
-      break;
-  }
-}
-
-// static
-void AppListView::StateAnimationMetricsReporter::RecordMetricsInClamshell(
-    absl::optional<AppListViewState> target_state,
-    int value) {
-  UMA_HISTOGRAM_PERCENTAGE("Apps.StateTransition.AnimationSmoothness", value);
-
-  // It can't ensure the target transition is properly set. Simply give up
-  // reporting per-state metrics in that case. See https://crbug.com/954907.
-  if (!target_state)
-    return;
-
-  switch (*target_state) {
-    case AppListViewState::kClosed:
-      UMA_HISTOGRAM_PERCENTAGE(
-          "Apps.StateTransition.AnimationSmoothness.Close.ClamshellMode",
-          value);
-      break;
-    case AppListViewState::kFullscreenAllApps:
-      UMA_HISTOGRAM_PERCENTAGE(
-          "Apps.StateTransition.AnimationSmoothness.FullscreenAllApps."
-          "ClamshellMode",
-          value);
-      break;
-    case AppListViewState::kFullscreenSearch:
-      UMA_HISTOGRAM_PERCENTAGE(
-          "Apps.StateTransition.AnimationSmoothness.FullscreenSearch."
-          "ClamshellMode",
           value);
       break;
   }
@@ -402,8 +355,8 @@ void AppListView::InitContents() {
       AddChildView(std::make_unique<views::View>()));
 
   auto app_list_main_view = std::make_unique<AppListMainView>(delegate_, this);
-  search_box_view_ =
-      new SearchBoxView(app_list_main_view.get(), delegate_, this);
+  search_box_view_ = new SearchBoxView(app_list_main_view.get(), delegate_,
+                                       /*is_app_list_bubble=*/false);
   search_box_view_->InitializeForFullscreenLauncher();
 
   // Assign |app_list_main_view_| here since it is accessed during Init().
@@ -496,31 +449,24 @@ void AppListView::InitChildWidget() {
   GetViewAccessibility().OverridePreviousFocus(search_box_widget);
 }
 
-void AppListView::Show(AppListViewState preferred_state, bool is_side_shelf) {
+void AppListView::Show(AppListViewState preferred_state) {
   if (!time_shown_.has_value())
     time_shown_ = base::Time::Now();
-  // The opacity of the AppListView may have been manipulated by overview mode,
-  // so reset it before it is shown.
-  GetWidget()->GetLayer()->SetOpacity(1.0f);
-  is_side_shelf_ = is_side_shelf;
 
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
   AddAccelerator(ui::Accelerator(ui::VKEY_BROWSER_BACK, ui::EF_NONE));
 
   UpdateWidget();
 
-  if (!disable_contents_reset_when_showing_) {
+  if (!disable_contents_reset_when_showing_)
     app_list_main_view_->contents_view()->ResetForShow();
-    if (!delegate_->IsInTabletMode())
-      SelectInitialAppsPage();
-  }
 
   SetState(preferred_state);
+  DCHECK(is_fullscreen());
 
   // Ensures that the launcher won't open underneath the a11y keyboard.
   CloseKeyboardIfVisible();
 
-  OnTabletModeChanged(delegate_->IsInTabletMode());
   app_list_main_view_->ShowAppListWhenReady();
 
   UMA_HISTOGRAM_TIMES("Apps.AppListCreationTime",
@@ -531,11 +477,6 @@ void AppListView::Show(AppListViewState preferred_state, bool is_side_shelf) {
 void AppListView::SetDragAndDropHostOfCurrentAppList(
     ApplicationDragAndDropHost* drag_and_drop_host) {
   app_list_main_view_->SetDragAndDropHostOfCurrentAppList(drag_and_drop_host);
-}
-
-void AppListView::Dismiss() {
-  CloseKeyboardIfVisible();
-  delegate_->DismissAppList();
 }
 
 void AppListView::CloseOpenedPage() {
@@ -580,10 +521,7 @@ bool AppListView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   switch (accelerator.key_code()) {
     case ui::VKEY_ESCAPE:
     case ui::VKEY_BROWSER_BACK:
-      // If the ContentsView does not handle the back action, then this is the
-      // top level, so we close the app list.
-      if (!Back() && !delegate_->IsInTabletMode())
-        Dismiss();
+      Back();
       break;
     default:
       NOTREACHED();
@@ -627,7 +565,7 @@ bool AppListView::IsFolderBeingRenamed() {
 }
 
 void AppListView::UpdatePageResetTimer(bool app_list_visibility) {
-  if (app_list_visibility || !delegate_->IsInTabletMode()) {
+  if (app_list_visibility) {
     page_reset_timer_.Stop();
     return;
   }
@@ -640,11 +578,6 @@ void AppListView::UpdatePageResetTimer(bool app_list_visibility) {
 }
 
 gfx::Insets AppListView::GetMainViewInsetsForShelf() const {
-  if (is_side_shelf()) {
-    // Set both horizontal insets so the app list remains centered on the
-    // screen.
-    return gfx::Insets::VH(0, delegate_->GetShelfSize());
-  }
   return gfx::Insets::TLBR(0, 0, delegate_->GetShelfSize(), 0);
 }
 
@@ -690,10 +623,6 @@ void AppListView::HandleClickOrTap(ui::LocatedEvent* event) {
         event->AsGestureEvent()->type() == ui::ET_GESTURE_TWO_FINGER_TAP)) ||
       (event->IsMouseEvent() &&
        event->AsMouseEvent()->IsOnlyRightMouseButton())) {
-    // Don't show menus on empty areas of the AppListView in clamshell mode.
-    if (!delegate_->IsInTabletMode())
-      return;
-
     // Home launcher is shown on top of wallpaper with transparent background.
     // So trigger the wallpaper context menu for the same events.
     gfx::Point onscreen_location(event->location());
@@ -704,15 +633,8 @@ void AppListView::HandleClickOrTap(ui::LocatedEvent* event) {
     return;
   }
 
-  if (!search_box_view_->is_search_box_active() &&
-      delegate_->GetCurrentAppListPage() !=
-          AppListState::kStateEmbeddedAssistant) {
-    if (!delegate_->IsInTabletMode())
-      Dismiss();
-    return;
-  }
-
-  search_box_view_->ClearSearchAndDeactivateSearchBox();
+  if (search_box_view_->is_search_box_active())
+    search_box_view_->ClearSearchAndDeactivateSearchBox();
 }
 
 void AppListView::SetChildViewsForStateTransition(
@@ -727,27 +649,7 @@ void AppListView::SetChildViewsForStateTransition(
   // Do not update the contents view state on closing.
   if (target_state != AppListViewState::kClosed) {
     app_list_main_view_->contents_view()->SetActiveState(
-        AppListState::kStateApps, !is_side_shelf_);
-  }
-
-  if (target_state == AppListViewState::kClosed && is_side_shelf_) {
-    // Reset the search box to be shown again. This is done after the animation
-    // is complete normally, but there is no animation when |is_side_shelf_|.
-    search_box_view_->ClearSearchAndDeactivateSearchBox();
-  }
-}
-
-void AppListView::MaybeIncreasePrivacyInfoRowShownCounts(
-    AppListViewState new_state) {
-  AppListStateTransitionSource transition =
-      GetAppListStateTransitionSource(new_state);
-  switch (transition) {
-    case kFullscreenAllAppsToFullscreenSearch:
-      if (app_list_main_view()->contents_view()->IsShowingSearchResults())
-        delegate_->MaybeIncreaseSuggestedContentInfoShownCount();
-      break;
-    default:
-      break;
+        AppListState::kStateApps, /*animate=*/true);
   }
 }
 
@@ -764,22 +666,11 @@ void AppListView::RecordStateTransitionForUma(AppListViewState new_state) {
 }
 
 void AppListView::MaybeCreateAccessibilityEvent(AppListViewState new_state) {
-  // TODO(crbug.com/1371211): Check if we still need this function in
-  // productivity launcher
-  if (new_state == app_list_state_)
+  if (new_state == app_list_state_ || !delegate_->AppListTargetVisibility())
     return;
 
-  if (!delegate_->AppListTargetVisibility())
-    return;
-
-  switch (new_state) {
-    case AppListViewState::kFullscreenAllApps:
-      a11y_announcer_->AnnounceFullscreenState();
-      break;
-    case AppListViewState::kClosed:
-    case AppListViewState::kFullscreenSearch:
-      break;
-  }
+  if (new_state == AppListViewState::kFullscreenAllApps)
+    a11y_announcer_->AnnounceAppListShown();
 }
 
 void AppListView::EnsureWidgetBoundsMatchCurrentState() {
@@ -925,15 +816,6 @@ void AppListView::OnKeyEvent(ui::KeyEvent* event) {
   RedirectKeyEventToSearchBox(event);
 }
 
-void AppListView::OnTabletModeChanged(bool started) {
-  search_box_view_->OnTabletModeChanged(started);
-  app_list_main_view_->contents_view()->OnTabletModeChanged(started);
-
-  // Refresh the state if the view is not in a fullscreen state.
-  if (started && !is_fullscreen())
-    SetState(app_list_state_);
-}
-
 void AppListView::OnWallpaperColorsChanged() {
   search_box_view_->OnWallpaperColorsChanged();
 }
@@ -1005,7 +887,6 @@ void AppListView::SetState(AppListViewState new_state) {
   state_transition_notifier_->Reset(new_state);
 
   StartAnimationForState(new_state);
-  MaybeIncreasePrivacyInfoRowShownCounts(new_state);
   RecordStateTransitionForUma(new_state);
   app_list_state_ = new_state;
   if (delegate_)
@@ -1067,8 +948,8 @@ void AppListView::OnAppListVisibilityChanged(bool shown) {
 
 base::TimeDelta AppListView::GetStateTransitionAnimationDuration(
     AppListViewState target_state) {
-  if (is_side_shelf_ || (target_state == AppListViewState::kClosed &&
-                         delegate_->ShouldDismissImmediately())) {
+  if (target_state == AppListViewState::kClosed &&
+      delegate_->ShouldDismissImmediately()) {
     return base::Milliseconds(kAppListAnimationDurationImmediateMs);
   }
 
@@ -1086,7 +967,9 @@ void AppListView::StartAnimationForState(AppListViewState target_state) {
   base::TimeDelta animation_duration =
       GetStateTransitionAnimationDuration(target_state);
 
-  ApplyBoundsAnimation(target_state, animation_duration);
+  if (!app_list_features::IsAnimateScaleOnTabletModeTransitionEnabled())
+    ApplyBoundsAnimation(target_state, animation_duration);
+
   app_list_main_view_->contents_view()->OnAppListViewTargetStateChanged(
       target_state);
   app_list_main_view_->contents_view()->AnimateToViewState(target_state,
@@ -1095,14 +978,6 @@ void AppListView::StartAnimationForState(AppListViewState target_state) {
 
 void AppListView::ApplyBoundsAnimation(AppListViewState target_state,
                                        base::TimeDelta duration_ms) {
-  if (is_side_shelf_) {
-    // There is no animation in side shelf.
-    // Mark the state transition as complete directly, as no animations that
-    // for `state_transition_notifier_` to observe are run in this case.
-    state_transition_notifier_->SetTransitionDone();
-    return;
-  }
-
   gfx::Rect target_bounds = GetPreferredWidgetBoundsForState(target_state);
 
   // When closing the view should animate to the shelf bounds. The workspace
@@ -1149,8 +1024,7 @@ void AppListView::ApplyBoundsAnimation(AppListViewState target_state,
   // Reset animation metrics reporter when animation is started.
   ResetTransitionMetricsReporter();
 
-  if (delegate_->IsInTabletMode() &&
-      target_state != AppListViewState::kClosed) {
+  if (target_state != AppListViewState::kClosed) {
     DCHECK(target_state == AppListViewState::kFullscreenAllApps ||
            target_state == AppListViewState::kFullscreenSearch);
     TabletModeAnimationTransition transition_type =
@@ -1159,8 +1033,6 @@ void AppListView::ApplyBoundsAnimation(AppListViewState target_state,
             : TabletModeAnimationTransition::kEnterFullscreenSearch;
     state_animation_metrics_reporter_->SetTabletModeAnimationTransition(
         transition_type);
-  } else {
-    state_animation_metrics_reporter_->SetTargetState(target_state);
   }
 
   ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
@@ -1247,8 +1119,7 @@ int AppListView::GetFullscreenStateHeight() const {
 
 metrics_util::SmoothnessCallback
 AppListView::GetStateTransitionMetricsReportCallback() {
-  return state_animation_metrics_reporter_->GetReportCallback(
-      delegate_->IsInTabletMode());
+  return state_animation_metrics_reporter_->GetReportCallback();
 }
 
 void AppListView::ResetTransitionMetricsReporter() {
@@ -1286,16 +1157,6 @@ void AppListView::OnBoundsAnimationCompleted(AppListViewState target_state) {
   // for state changes with side shelf.
   delegate_->OnStateTransitionAnimationCompleted(target_state,
                                                  was_animation_interrupted);
-}
-
-void AppListView::SetShelfHasRoundedCorners(bool shelf_has_rounded_corners) {
-  if (shelf_has_rounded_corners_ == shelf_has_rounded_corners)
-    return;
-  shelf_has_rounded_corners_ = shelf_has_rounded_corners;
-  absl::optional<base::TimeTicks> animation_end_timestamp;
-  if (GetWidget() && GetWidget()->GetLayer()->GetAnimator()->is_animating()) {
-    animation_end_timestamp = animation_end_timestamp_;
-  }
 }
 
 void AppListView::RedirectKeyEventToSearchBox(ui::KeyEvent* event) {
@@ -1413,12 +1274,10 @@ int AppListView::GetPreferredWidgetYForState(AppListViewState state) const {
     case AppListViewState::kFullscreenSearch:
       return fullscreen_height;
     case AppListViewState::kClosed:
-      // Align the widget y with shelf y to avoid flicker in show animation. In
-      // side shelf mode, the widget y is the top of work area because the
-      // widget does not animate.
-      return (is_side_shelf_ ? work_area_bounds.y()
-                             : work_area_bounds.bottom()) -
-             display.bounds().y();
+      if (app_list_features::IsAnimateScaleOnTabletModeTransitionEnabled())
+        return fullscreen_height;
+      // Align the widget y with shelf y to avoid flicker in show animation.
+      return work_area_bounds.bottom() - display.bounds().y();
   }
 }
 

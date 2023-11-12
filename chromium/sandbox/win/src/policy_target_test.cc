@@ -8,7 +8,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/win/scoped_process_information.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "sandbox/win/src/broker_services.h"
 #include "sandbox/win/src/sandbox.h"
@@ -260,7 +259,8 @@ TEST(PolicyTargetTest, InheritedDesktopPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreateAlternateDesktop(Desktop::kAlternateDesktop);
+  EXPECT_EQ(SBOX_ALL_OK,
+            broker->CreateAlternateDesktop(Desktop::kAlternateDesktop));
 
   ASSERT_TRUE(broker);
 
@@ -315,7 +315,8 @@ TEST(PolicyTargetTest, DesktopPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreateAlternateDesktop(Desktop::kAlternateDesktop);
+  EXPECT_EQ(SBOX_ALL_OK,
+            broker->CreateAlternateDesktop(Desktop::kAlternateDesktop));
 
   ASSERT_TRUE(broker);
 
@@ -380,7 +381,8 @@ TEST(PolicyTargetTest, WinstaPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreateAlternateDesktop(Desktop::kAlternateWinstation);
+  EXPECT_EQ(SBOX_ALL_OK,
+            broker->CreateAlternateDesktop(Desktop::kAlternateWinstation));
 
   ASSERT_TRUE(broker);
 

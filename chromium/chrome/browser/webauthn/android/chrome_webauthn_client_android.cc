@@ -4,7 +4,7 @@
 
 #include "chrome/browser/webauthn/android/chrome_webauthn_client_android.h"
 
-#include "chrome/browser/webauthn/android/conditional_ui_delegate_android.h"
+#include "chrome/browser/webauthn/android/webauthn_request_delegate_android.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 
@@ -15,17 +15,18 @@ ChromeWebAuthnClientAndroid::~ChromeWebAuthnClientAndroid() = default;
 void ChromeWebAuthnClientAndroid::OnWebAuthnRequestPending(
     content::RenderFrameHost* frame_host,
     const std::vector<device::DiscoverableCredentialMetadata>& credentials,
+    bool is_conditional_request,
     base::OnceCallback<void(const std::vector<uint8_t>& id)> callback) {
-  auto* delegate = ConditionalUiDelegateAndroid::GetConditionalUiDelegate(
+  auto* delegate = WebAuthnRequestDelegateAndroid::GetRequestDelegate(
       content::WebContents::FromRenderFrameHost(frame_host));
 
-  delegate->OnWebAuthnRequestPending(frame_host, credentials,
-                                     std::move(callback));
+  delegate->OnWebAuthnRequestPending(
+      frame_host, credentials, is_conditional_request, std::move(callback));
 }
 
 void ChromeWebAuthnClientAndroid::CancelWebAuthnRequest(
     content::RenderFrameHost* frame_host) {
-  auto* delegate = ConditionalUiDelegateAndroid::GetConditionalUiDelegate(
+  auto* delegate = WebAuthnRequestDelegateAndroid::GetRequestDelegate(
       content::WebContents::FromRenderFrameHost(frame_host));
   delegate->CancelWebAuthnRequest(frame_host);
 }

@@ -44,9 +44,12 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "storage/browser/blob/blob_url_store_impl.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_worker_client_added.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
@@ -256,7 +259,8 @@ void SharedWorkerHost::Start(
       worker_client_security_state_->private_network_request_policy =
           DerivePrivateNetworkRequestPolicy(
               worker_client_security_state_->ip_address_space,
-              worker_client_security_state_->is_web_secure_context);
+              worker_client_security_state_->is_web_secure_context,
+              PrivateNetworkRequestContext::kWorker);
     }
     switch (worker_client_security_state_->cross_origin_embedder_policy.value) {
       case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
@@ -467,6 +471,13 @@ void SharedWorkerHost::BindCacheStorageInternal(
                                      std::move(receiver));
 }
 
+void SharedWorkerHost::GetSandboxedFileSystemForBucket(
+    const storage::BucketInfo& bucket,
+    blink::mojom::BucketHost::GetDirectoryCallback callback) {
+  GetProcessHost()->GetSandboxedFileSystemForBucket(bucket.ToBucketLocator(),
+                                                    std::move(callback));
+}
+
 void SharedWorkerHost::AllowFileSystem(
     const GURL& url,
     base::OnceCallback<void(bool)> callback) {
@@ -529,6 +540,19 @@ void SharedWorkerHost::CreateBroadcastChannelProvider(
       std::make_unique<BroadcastChannelProvider>(broadcast_channel_service,
                                                  GetStorageKey()),
       std::move(receiver));
+}
+
+void SharedWorkerHost::CreateBlobUrlStoreProvider(
+    mojo::PendingReceiver<blink::mojom::BlobURLStore> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
+      GetProcessHost()->GetStoragePartition());
+
+  storage_partition_impl->GetBlobUrlRegistry()->AddReceiver(
+      GetStorageKey(), std::move(receiver),
+      storage::BlobURLValidityCheckBehavior::
+          ALLOW_OPAQUE_ORIGIN_STORAGE_KEY_MISMATCH);
 }
 
 void SharedWorkerHost::CreateBucketManagerHost(
@@ -695,6 +719,13 @@ void SharedWorkerHost::AddClient(
         .SetClientSourceId(client_ukm_source_id)
         .SetWorkerType(static_cast<int64_t>(WorkerType::kSharedWorker))
         .Record(ukm_recorder);
+
+    if (blink::IdentifiabilityStudySettings::Get()->IsActive()) {
+      blink::IdentifiabilityStudyWorkerClientAdded(ukm_source_id_)
+          .SetClientSourceId(client_ukm_source_id)
+          .SetWorkerType(blink::IdentifiableSurface::WorkerType::kSharedWorker)
+          .Record(ukm_recorder);
+    }
   }
 
   worker_->Connect(info.connection_request_id, port.ReleaseHandle());

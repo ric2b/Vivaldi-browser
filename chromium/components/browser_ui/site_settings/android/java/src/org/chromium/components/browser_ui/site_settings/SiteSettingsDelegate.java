@@ -66,6 +66,11 @@ public interface SiteSettingsDelegate {
     boolean isPrivacySandboxFirstPartySetsUIFeatureEnabled();
 
     /**
+     * @return true if the PrivacySandboxSettings4 feature is enabled.
+     */
+    boolean isPrivacySandboxSettings4Enabled();
+
+    /**
      * @return The id of the notification channel associated with the given origin.
      */
     // TODO(crbug.com/1069895): Remove this once WebLayer supports notifications.
@@ -168,6 +173,11 @@ public interface SiteSettingsDelegate {
      * Launches the Clear Browsing Data dialog in Settings, if that is possible.
      */
     void launchClearBrowsingDataDialog(Activity currentActivity);
+
+    /**
+     * Called when the desktop site settings page is opened.
+     */
+    void notifyRequestDesktopSiteSettingsPageOpened();
 
     /**
      * Called when the view this delegate is assigned to gets destroyed.

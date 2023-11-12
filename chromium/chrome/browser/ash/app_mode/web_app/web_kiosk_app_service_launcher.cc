@@ -20,8 +20,8 @@ namespace ash {
 
 WebKioskAppServiceLauncher::WebKioskAppServiceLauncher(
     Profile* profile,
-    KioskAppLauncher::Delegate* delegate,
-    const AccountId& account_id)
+    const AccountId& account_id,
+    KioskAppLauncher::Delegate* delegate)
     : KioskAppLauncher(delegate), profile_(profile), account_id_(account_id) {}
 
 WebKioskAppServiceLauncher::~WebKioskAppServiceLauncher() = default;
@@ -55,7 +55,7 @@ void WebKioskAppServiceLauncher::OnWebAppInitializled() {
   // temporary |app_id| which will be changed to the correct |app_id| once the
   // authentication is done. The only key that is safe to be used as identifier
   // for Kiosk web apps is |install_url|.
-  auto app_id = web_app_provider_->registrar().LookUpAppIdByInstallUrl(
+  auto app_id = web_app_provider_->registrar_unsafe().LookUpAppIdByInstallUrl(
       GetCurrentApp()->install_url());
   if (!app_id || app_id->empty()) {
     delegate_->InitializeNetwork();
@@ -64,8 +64,9 @@ void WebKioskAppServiceLauncher::OnWebAppInitializled() {
 
   // If the installed app is a placeholder (similar to failed installation in
   // the old launcher), try to install again to replace it.
-  bool is_placeholder_app = web_app_provider_->registrar().IsPlaceholderApp(
-      app_id.value(), web_app::WebAppManagement::Type::kKiosk);
+  bool is_placeholder_app =
+      web_app_provider_->registrar_unsafe().IsPlaceholderApp(
+          app_id.value(), web_app::WebAppManagement::Type::kKiosk);
   base::UmaHistogramBoolean(kWebAppIsPlaceholderUMA, is_placeholder_app);
   if (is_placeholder_app) {
     SYSLOG(INFO) << "Placeholder app installed. Trying to reinstall...";

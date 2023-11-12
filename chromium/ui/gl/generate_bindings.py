@@ -389,13 +389,6 @@ GL_FUNCTIONS = [
       'GLboolean unpackFlipY, GLboolean unpackPremultiplyAlpha, '
       'GLboolean unpackUnmultiplyAlpha', },
 { 'return_type': 'void',
-  'names': ['glCoverageModulationNV'],
-  'versions': [{ 'name': 'glCoverageModulationNV',
-                 'extensions': ['GL_NV_framebuffer_mixed_samples'] },
-               { 'name': 'glCoverageModulationCHROMIUM',
-                 'extensions': ['GL_CHROMIUM_framebuffer_mixed_samples'] }],
-  'arguments': 'GLenum components'},
-{ 'return_type': 'void',
   'names': ['glCoverFillPathInstancedNV'],
   'versions': [{ 'name': 'glCoverFillPathInstancedNV',
                  'extensions': ['GL_NV_path_rendering'] },
@@ -1780,6 +1773,10 @@ GL_FUNCTIONS = [
   'arguments': 'GLuint program, GLint location, GLsizei count, '
                'GLboolean transpose, const GLfloat* value' },
 { 'return_type': 'void',
+  'versions': [{'name': 'glProvokingVertexANGLE',
+                'extensions': ['GL_ANGLE_provoking_vertex']}],
+  'arguments': 'GLenum provokeMode', },
+{ 'return_type': 'void',
   'versions': [{ 'name': 'glPushDebugGroup' },
                { 'name': 'glPushDebugGroupKHR',
                  'extensions': ['GL_KHR_debug'] }],
@@ -2400,6 +2397,9 @@ EGL_FUNCTIONS = [
   'arguments': 'EGLDisplay dpy, const EGLint* attrib_list, EGLConfig* configs, '
                'EGLint config_size, EGLint* num_config', },
 { 'return_type': 'EGLint',
+  'names': ['eglClientWaitSync'],
+  'arguments': 'EGLDisplay dpy, EGLSync sync, EGLint flags, EGLTime timeout' },
+{ 'return_type': 'EGLint',
   'versions': [{ 'name': 'eglClientWaitSyncKHR',
                  'extensions': [
                    'EGL_KHR_fence_sync',
@@ -2411,10 +2411,21 @@ EGL_FUNCTIONS = [
   'names': ['eglCopyBuffers'],
   'arguments':
       'EGLDisplay dpy, EGLSurface surface, EGLNativePixmapType target', },
+{ 'return_type': 'void*',
+  'versions': [{ 'name': 'eglCopyMetalSharedEventANGLE',
+                 'extensions': [
+                   'EGL_ANGLE_metal_shared_event_sync',
+                 ] }],
+  'arguments': 'EGLDisplay dpy, EGLSync sync', },
 { 'return_type': 'EGLContext',
   'names': ['eglCreateContext'],
   'arguments': 'EGLDisplay dpy, EGLConfig config, EGLContext share_context, '
               'const EGLint* attrib_list', },
+{ 'return_type': 'EGLImage',
+  'names': ['eglCreateImage'],
+  'arguments':
+      'EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClientBuffer buffer, '
+      'const EGLAttrib* attrib_list' },
 { 'return_type': 'EGLImageKHR',
   'versions': [{ 'name': 'eglCreateImageKHR',
                  'extensions':
@@ -2434,6 +2445,14 @@ EGL_FUNCTIONS = [
   'names': ['eglCreatePixmapSurface'],
   'arguments': 'EGLDisplay dpy, EGLConfig config, EGLNativePixmapType pixmap, '
                'const EGLint* attrib_list', },
+{ 'return_type': 'EGLSurface',
+  'names': ['eglCreatePlatformPixmapSurface'],
+  'arguments': 'EGLDisplay dpy, EGLConfig config, void* native_pixmap, '
+               'const EGLAttrib* attrib_list', },
+{ 'return_type': 'EGLSurface',
+  'names': ['eglCreatePlatformWindowSurface'],
+  'arguments': 'EGLDisplay dpy, EGLConfig config, void* native_window, '
+               'const EGLAttrib* attrib_list', },
 { 'return_type': 'EGLStreamKHR',
   'versions': [{ 'name': 'eglCreateStreamKHR',
                  'extensions': ['EGL_KHR_stream'] }],
@@ -2444,6 +2463,9 @@ EGL_FUNCTIONS = [
                       ['EGL_ANGLE_stream_producer_d3d_texture']}],
   'arguments':
       'EGLDisplay dpy, EGLStreamKHR stream, EGLAttrib* attrib_list', },
+{ 'return_type': 'EGLSync',
+  'names': ['eglCreateSync'],
+  'arguments': 'EGLDisplay dpy, EGLenum type, const EGLAttrib* attrib_list' },
 { 'return_type': 'EGLSyncKHR',
   'versions': [{ 'name': 'eglCreateSyncKHR',
                  'extensions': [
@@ -2464,6 +2486,9 @@ EGL_FUNCTIONS = [
   'names': ['eglDestroyContext'],
   'arguments': 'EGLDisplay dpy, EGLContext ctx', },
 { 'return_type': 'EGLBoolean',
+  'names': ['eglDestroyImage'],
+  'arguments': 'EGLDisplay dpy, EGLImage image' },
+{ 'return_type': 'EGLBoolean',
   'versions': [{ 'name' : 'eglDestroyImageKHR',
                  'extensions': ['EGL_KHR_image_base'] }],
   'arguments': 'EGLDisplay dpy, EGLImageKHR image' },
@@ -2474,6 +2499,9 @@ EGL_FUNCTIONS = [
 { 'return_type': 'EGLBoolean',
   'names': ['eglDestroySurface'],
   'arguments': 'EGLDisplay dpy, EGLSurface surface', },
+{ 'return_type': 'EGLBoolean',
+  'names': ['eglDestroySync'],
+  'arguments': 'EGLDisplay dpy, EGLSync sync' },
 { 'return_type': 'EGLBoolean',
   'versions': [{ 'name': 'eglDestroySyncKHR',
                  'extensions': [
@@ -2584,6 +2612,10 @@ EGL_FUNCTIONS = [
   'logging_code': """
   GL_SERVICE_LOG("GL_RESULT: " << reinterpret_cast<void*>(result));
 """, },
+{ 'return_type': 'EGLBoolean',
+  'names': ['eglGetSyncAttrib'],
+  'arguments': 'EGLDisplay dpy, EGLSync sync, EGLint attribute, '
+      'EGLAttrib* value' },
 { 'return_type': 'EGLBoolean',
   'versions': [{ 'name': 'eglGetSyncAttribKHR',
                  'extensions': [
@@ -2786,6 +2818,9 @@ EGL_FUNCTIONS = [
   'names': ['eglWaitNative'],
   'arguments': 'EGLint engine', },
 { 'return_type': 'EGLint',
+  'names': ['eglWaitSync'],
+  'arguments': 'EGLDisplay dpy, EGLSync sync, EGLint flags' },
+{ 'return_type': 'EGLint',
   'versions': [{ 'name': 'eglWaitSyncKHR',
                  'extensions': ['EGL_KHR_wait_sync'] }],
   'arguments': 'EGLDisplay dpy, EGLSyncKHR sync, EGLint flags' },
@@ -2820,7 +2855,6 @@ EGL_EXTENSIONS_EXTRA = [
   'EGL_ANGLE_external_context_and_surface',
   'EGL_ANGLE_iosurface_client_buffer',
   'EGL_ANGLE_keyed_mutex',
-  'EGL_ANGLE_program_cache_control',
   'EGL_ANGLE_robust_resource_initialization',
   'EGL_ANGLE_surface_orientation',
   'EGL_ANGLE_window_fixed_size',
@@ -2838,169 +2872,6 @@ EGL_EXTENSIONS_EXTRA = [
   'EGL_KHR_surfaceless_context',
   'EGL_NV_robustness_video_memory_purge',
   'EGL_NOK_texture_from_pixmap',
-]
-
-GLX_FUNCTIONS = [
-{ 'return_type': 'void',
-  'names': ['glXBindTexImageEXT'],
-  'arguments':
-      'Display* dpy, GLXDrawable drawable, int buffer, int* attribList', },
-{ 'return_type': 'GLXFBConfig*',
-  'names': ['glXChooseFBConfig'],
-  'arguments':
-      'Display* dpy, int screen, const int* attribList, int* nitems', },
-{ 'return_type': 'XVisualInfo*',
-  'names': ['glXChooseVisual'],
-  'arguments': 'Display* dpy, int screen, int* attribList', },
-{ 'return_type': 'void',
-  'names': ['glXCopyContext'],
-  'arguments':
-      'Display* dpy, GLXContext src, GLXContext dst, unsigned long mask', },
-{ 'return_type': 'void',
-  'names': ['glXCopySubBufferMESA'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, '
-               'int x, int y, int width, int height', },
-{ 'return_type': 'GLXContext',
-  'names': ['glXCreateContext'],
-  'arguments':
-      'Display* dpy, XVisualInfo* vis, GLXContext shareList, int direct', },
-{ 'return_type': 'GLXContext',
-  'names': ['glXCreateContextAttribsARB'],
-  'arguments':
-      'Display* dpy, GLXFBConfig config, GLXContext share_context, int direct, '
-      'const int* attrib_list', },
-{ 'return_type': 'GLXPixmap',
-  'names': ['glXCreateGLXPixmap'],
-  'arguments': 'Display* dpy, XVisualInfo* visual, Pixmap pixmap', },
-{ 'return_type': 'GLXContext',
-  'names': ['glXCreateNewContext'],
-  'arguments': 'Display* dpy, GLXFBConfig config, int renderType, '
-               'GLXContext shareList, int direct', },
-{ 'return_type': 'GLXPbuffer',
-  'names': ['glXCreatePbuffer'],
-  'arguments': 'Display* dpy, GLXFBConfig config, const int* attribList', },
-{ 'return_type': 'GLXPixmap',
-  'names': ['glXCreatePixmap'],
-  'arguments': 'Display* dpy, GLXFBConfig config, '
-               'Pixmap pixmap, const int* attribList', },
-{ 'return_type': 'GLXWindow',
-  'names': ['glXCreateWindow'],
-  'arguments':
-      'Display* dpy, GLXFBConfig config, Window win, const int* attribList', },
-{ 'return_type': 'void',
-  'names': ['glXDestroyContext'],
-  'arguments': 'Display* dpy, GLXContext ctx', },
-{ 'return_type': 'void',
-  'names': ['glXDestroyGLXPixmap'],
-  'arguments': 'Display* dpy, GLXPixmap pixmap', },
-{ 'return_type': 'void',
-  'names': ['glXDestroyPbuffer'],
-  'arguments': 'Display* dpy, GLXPbuffer pbuf', },
-{ 'return_type': 'void',
-  'names': ['glXDestroyPixmap'],
-  'arguments': 'Display* dpy, GLXPixmap pixmap', },
-{ 'return_type': 'void',
-  'names': ['glXDestroyWindow'],
-  'arguments': 'Display* dpy, GLXWindow window', },
-{ 'return_type': 'const char*',
-  'names': ['glXGetClientString'],
-  'arguments': 'Display* dpy, int name', },
-{ 'return_type': 'int',
-  'names': ['glXGetConfig'],
-  'arguments': 'Display* dpy, XVisualInfo* visual, int attrib, int* value', },
-{ 'return_type': 'GLXContext',
-  'names': ['glXGetCurrentContext'],
-  'arguments': 'void', },
-{ 'return_type': 'Display*',
-  'names': ['glXGetCurrentDisplay'],
-  'arguments': 'void', },
-{ 'return_type': 'GLXDrawable',
-  'names': ['glXGetCurrentDrawable'],
-  'arguments': 'void', },
-{ 'return_type': 'GLXDrawable',
-  'names': ['glXGetCurrentReadDrawable'],
-  'arguments': 'void', },
-{ 'return_type': 'int',
-  'names': ['glXGetFBConfigAttrib'],
-  'arguments': 'Display* dpy, GLXFBConfig config, int attribute, int* value', },
-{ 'return_type': 'GLXFBConfig',
-  'names': ['glXGetFBConfigFromVisualSGIX'],
-  'arguments': 'Display* dpy, XVisualInfo* visualInfo', },
-{ 'return_type': 'GLXFBConfig*',
-  'names': ['glXGetFBConfigs'],
-  'arguments': 'Display* dpy, int screen, int* nelements', },
-{ 'return_type': 'bool',
-  'names': ['glXGetMscRateOML'],
-  'arguments':
-      'Display* dpy, GLXDrawable drawable, int32_t* numerator, '
-      'int32_t* denominator' },
-{ 'return_type': 'void',
-  'names': ['glXGetSelectedEvent'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, unsigned long* mask', },
-{ 'return_type': 'bool',
-  'names': ['glXGetSyncValuesOML'],
-  'arguments':
-      'Display* dpy, GLXDrawable drawable, int64_t* ust, int64_t* msc, '
-      'int64_t* sbc' },
-{ 'return_type': 'XVisualInfo*',
-  'names': ['glXGetVisualFromFBConfig'],
-  'arguments': 'Display* dpy, GLXFBConfig config', },
-{ 'return_type': 'int',
-  'names': ['glXIsDirect'],
-  'arguments': 'Display* dpy, GLXContext ctx', },
-{ 'return_type': 'int',
-  'names': ['glXMakeContextCurrent'],
-  'arguments':
-      'Display* dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx', },
-{ 'return_type': 'int',
-  'names': ['glXMakeCurrent'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, GLXContext ctx', },
-{ 'return_type': 'int',
-  'names': ['glXQueryContext'],
-  'arguments': 'Display* dpy, GLXContext ctx, int attribute, int* value', },
-{ 'return_type': 'void',
-  'names': ['glXQueryDrawable'],
-  'arguments':
-      'Display* dpy, GLXDrawable draw, int attribute, unsigned int* value', },
-{ 'return_type': 'int',
-  'names': ['glXQueryExtension'],
-  'arguments': 'Display* dpy, int* errorb, int* event', },
-{ 'return_type': 'const char*',
-  'names': ['glXQueryExtensionsString'],
-  'arguments': 'Display* dpy, int screen', },
-{ 'return_type': 'const char*',
-  'names': ['glXQueryServerString'],
-  'arguments': 'Display* dpy, int screen, int name', },
-{ 'return_type': 'int',
-  'names': ['glXQueryVersion'],
-  'arguments': 'Display* dpy, int* maj, int* min', },
-{ 'return_type': 'void',
-  'names': ['glXReleaseTexImageEXT'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, int buffer', },
-{ 'return_type': 'void',
-  'names': ['glXSelectEvent'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, unsigned long mask', },
-{ 'return_type': 'void',
-  'names': ['glXSwapBuffers'],
-  'arguments': 'Display* dpy, GLXDrawable drawable', },
-{ 'return_type': 'void',
-  'names': ['glXSwapIntervalEXT'],
-  'arguments': 'Display* dpy, GLXDrawable drawable, int interval', },
-{ 'return_type': 'void',
-  'names': ['glXSwapIntervalMESA'],
-  'arguments': 'unsigned int interval', },
-{ 'return_type': 'void',
-  'names': ['glXUseXFont'],
-  'arguments': 'Font font, int first, int count, int list', },
-{ 'return_type': 'void',
-  'names': ['glXWaitGL'],
-  'arguments': 'void', },
-{ 'return_type': 'int',
-  'names': ['glXWaitVideoSyncSGI'],
-  'arguments': 'int divisor, int remainder, unsigned int* count', },
-{ 'return_type': 'void',
-  'names': ['glXWaitX'],
-  'arguments': 'void', },
 ]
 
 FUNCTION_SETS = [
@@ -3032,7 +2903,6 @@ FUNCTION_SETS = [
       'EGL_ANGLE_surface_d3d_texture_2d_share_handle',
     ],
   ],
-  [GLX_FUNCTIONS, 'glx', ['GL/glx.h', 'noninclude/GL/glxext.h'], []],
 ]
 
 GLES2_HEADERS_WITH_ENUMS = [
@@ -3870,7 +3740,7 @@ def ParseFunctionsFromHeader(header_file, extensions, versions):
   version_start = re.compile(
       r'#ifndef GL_(ES_|)VERSION((?:_[0-9])+)$')
   extension_start = re.compile(
-      r'#ifndef ((?:GL|EGL|GLX)_[A-Z]+_[a-zA-Z]\w+)')
+      r'#ifndef ((?:GL|EGL)_[A-Z]+_[a-zA-Z]\w+)')
   extension_function = re.compile(r'.+\s+([a-z]+\w+)\s*\(')
   typedef = re.compile(r'typedef .*')
   macro_start = re.compile(r'^#(if|ifdef|ifndef).*')

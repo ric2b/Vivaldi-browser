@@ -4,10 +4,11 @@
 
 // <if expr="is_ios">
 import 'chrome://resources/js/ios/web_ui.js';
+
 // </if>
 
-import {addWebUIListener} from 'chrome://resources/js/cr.m.js';
-import {$} from 'chrome://resources/js/util.js';
+import {addWebUiListener} from 'chrome://resources/js/cr.js';
+import {$} from 'chrome://resources/js/util_ts.js';
 
 // By default this page only records metrics for a given period of time in order
 // to not waste too much memory. This constant defines the default period until
@@ -260,7 +261,7 @@ function setUpPasswordManagerInternals() {
   setUpMarker();
   setUpDownload('password-manager');
   setUpStopRecording();
-  addWebUIListener(
+  addWebUiListener(
       'enable-reset-upm-eviction-button', enableResetUpmEvictionButton);
 }
 
@@ -353,6 +354,7 @@ function setUpDownload(moduleName) {
 // Sets up the top bar with checkboxes to show/hide the different sorts of log
 // event types, a checkbox to enable/disable autoscroll.
 function setUpLogDisplayConfig() {
+  const FAST_CHECKOUT = 'FastCheckout';
   const SCOPES = [
     'Context',
     'Parsing',
@@ -363,7 +365,11 @@ function setUpLogDisplayConfig() {
     'Metrics',
     'AddressProfileFormImport',
     'WebsiteModifiedFieldValue',
+    FAST_CHECKOUT,
   ];
+  const DEFAULT_UNCHECKED_SCOPES = new Set([
+    FAST_CHECKOUT,
+  ]);
   const logDiv = document.getElementById('log-entries');
   const autoScrollInput = document.getElementById('enable-autoscroll');
   const checkboxPlaceholder = document.getElementById('checkbox-placeholder');
@@ -380,7 +386,12 @@ function setUpLogDisplayConfig() {
     const input = document.createElement('input');
     input.setAttribute('type', 'checkbox');
     input.setAttribute('id', `checkbox-${scope}`);
-    input.checked = getUrlHashParam(scope) !== 'n';
+    const urlHashParam = getUrlHashParam(scope);
+    if (DEFAULT_UNCHECKED_SCOPES.has(scope) && urlHashParam === undefined) {
+      input.checked = false;
+    } else {
+      input.checked = getUrlHashParam(scope) !== 'n';
+    }
     function changeHandler() {
       setUrlHashParam(scope, input.checked ? 'y' : 'n');
       const cls = `hide-${scope}`;
@@ -404,13 +415,13 @@ function setUpLogDisplayConfig() {
 }
 
 document.addEventListener('DOMContentLoaded', function(event) {
-  addWebUIListener('enable-reset-cache-button', enableResetCacheButton);
-  addWebUIListener('notify-about-incognito', notifyAboutIncognito);
-  addWebUIListener('notify-about-variations', notifyAboutVariations);
-  addWebUIListener('notify-reset-done', message => showModalDialog(message));
-  addWebUIListener('add-structured-log', addStructuredLog);
-  addWebUIListener('setup-autofill-internals', setUpAutofillInternals);
-  addWebUIListener(
+  addWebUiListener('enable-reset-cache-button', enableResetCacheButton);
+  addWebUiListener('notify-about-incognito', notifyAboutIncognito);
+  addWebUiListener('notify-about-variations', notifyAboutVariations);
+  addWebUiListener('notify-reset-done', message => showModalDialog(message));
+  addWebUiListener('add-structured-log', addStructuredLog);
+  addWebUiListener('setup-autofill-internals', setUpAutofillInternals);
+  addWebUiListener(
       'setup-password-manager-internals', setUpPasswordManagerInternals);
 
   chrome.send('loaded');

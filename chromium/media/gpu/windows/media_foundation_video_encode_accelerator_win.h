@@ -26,9 +26,14 @@
 #include "media/base/win/dxgi_device_manager.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/h264_parser.h"
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+#include "media/video/h265_nalu_parser.h"
+#endif
 #include "media/video/video_encode_accelerator.h"
 
 namespace media {
+
+class VideoRateControlWrapper;
 
 // Media Foundation implementation of the VideoEncodeAccelerator interface for
 // Windows.
@@ -59,6 +64,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   void UseOutputBitstreamBuffer(BitstreamBuffer buffer) override;
   void RequestEncodingParametersChange(const Bitrate& bitrate,
                                        uint32_t framerate) override;
+  void RequestEncodingParametersChange(
+      const VideoBitrateAllocation& bitrate_allocation,
+      uint32_t framerate) override;
   void Destroy() override;
   bool IsGpuFrameResizeSupported() override;
 
@@ -108,6 +116,7 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Populates input sample buffer with contents of a video frame
   HRESULT PopulateInputSampleBuffer(scoped_refptr<VideoFrame> frame);
   HRESULT PopulateInputSampleBufferGpu(scoped_refptr<VideoFrame> frame);
+  HRESULT CopyInputSampleBufferFromGpu(const VideoFrame& frame);
 
   // Assign TemporalID by bitstream or external state machine(based on SVC
   // Spec).
@@ -135,8 +144,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
       std::unique_ptr<BitstreamBufferRef> buffer_ref);
 
   // Changes encode parameters on |encoder_thread_task_runner_|.
-  void RequestEncodingParametersChangeTask(const Bitrate& bitrate,
-                                           uint32_t framerate);
+  void RequestEncodingParametersChangeTask(
+      const VideoBitrateAllocation& bitrate_allocation,
+      uint32_t framerate);
 
   // Destroys encode session on |encoder_thread_task_runner_|.
   void DestroyTask();
@@ -169,6 +179,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
 
   // This parser is used to assign temporalId.
   H264Parser h264_parser_;
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+  H265NaluParser h265_nalu_parser_;
+#endif
 
   gfx::Size input_visible_size_;
   size_t bitstream_buffer_size_;
@@ -176,7 +189,8 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // For recording configured frame rate as we don't dynamically change it.
   // The default value here will be overridden during initialization.
   uint32_t configured_frame_rate_ = 30;
-  Bitrate bitrate_;
+  // Bitrate allocation in bps.
+  VideoBitrateAllocation bitrate_allocation_;
   bool low_latency_mode_;
   int num_temporal_layers_ = 1;
 
@@ -189,6 +203,10 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Group of picture length for encoded output stream, indicates the
   // distance between two key frames.
   uint32_t gop_length_;
+
+  // Video encoder info that includes accelerator name, QP validity, etc.
+  VideoEncoderInfo encoder_info_;
+  bool encoder_info_sent_ = false;
 
   Microsoft::WRL::ComPtr<IMFActivate> activate_;
   Microsoft::WRL::ComPtr<IMFTransform> encoder_;
@@ -228,12 +246,20 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
 
   // DXGI device manager for handling hardware input textures
   scoped_refptr<DXGIDeviceManager> dxgi_device_manager_;
+  // Mapping of dxgi resource needed when HMFT rejects setting D3D11 manager.
+  bool dxgi_resource_mapping_required_ = false;
+  // Staging texture for copying from GPU memory if HMFT does not operate in
+  // D3D11 mode.
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> staging_texture_;
 
   // Preferred adapter for DXGIDeviceManager.
   const CHROME_LUID luid_;
 
   // A buffer used as a scratch space for I420 to NV12 conversion
   std::vector<uint8_t> resize_buffer_;
+
+  // Bitrate controller for CBR encoding.
+  std::unique_ptr<VideoRateControlWrapper> rate_ctrl_;
 
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.

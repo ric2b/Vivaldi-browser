@@ -417,9 +417,9 @@ TEST_F(ChromePasswordManagerClientTest, GetPasswordSyncState) {
   EXPECT_EQ(password_manager::SyncState::kSyncingNormalEncryption,
             client->GetPasswordSyncState());
 
-  // Persistent auth error other than web signout (sync continues active).
+  // Sync paused due to a persistent auth error other than web signout.
   sync_service_->SetPersistentAuthErrorOtherThanWebSignout();
-  EXPECT_EQ(password_manager::SyncState::kSyncingNormalEncryption,
+  EXPECT_EQ(password_manager::SyncState::kNotSyncing,
             client->GetPasswordSyncState());
 
   // Sync paused due to web signout.
@@ -527,7 +527,7 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
 }
 
 TEST_F(ChromePasswordManagerClientTest,
-       SavingAndFillingDisabledConditionsInOffTheRecord) {
+       SavingAndFillingDisabledConditionsInGuestAndIncognitoProfiles) {
   MockPasswordManagerSettingsService* settings_service =
       static_cast<MockPasswordManagerSettingsService*>(
           PasswordManagerSettingsServiceFactory::GetForProfile(profile()));
@@ -547,15 +547,14 @@ TEST_F(ChromePasswordManagerClientTest,
   EXPECT_TRUE(client->IsFillingEnabled(kUrlOn));
   EXPECT_TRUE(client->IsFillingFallbackEnabled(kUrlOn));
 
-  // In guest mode saving is disabled, filling is enabled but there is in fact
-  // nothing to fill, manual filling is disabled.
+  // In guest mode saving, filling and manual filling are disabled.
   profile()->SetGuestSession(true);
   profile()
       ->GetPrimaryOTRProfile(/*create_if_needed=*/true)
       ->AsTestingProfile()
       ->SetGuestSession(true);
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
-  EXPECT_TRUE(client->IsFillingEnabled(kUrlOn));
+  EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingFallbackEnabled(kUrlOn));
 }
 
@@ -1184,8 +1183,6 @@ TEST_F(ChromePasswordManagerClientAndroidTest, FocusedInputChangedGoodFrame) {
 
 TEST_F(ChromePasswordManagerClientAndroidTest,
        FocusedInputChangedFormsNotFetchedMessagesFeature) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      {password_manager::features::kUnifiedPasswordManagerErrorMessages});
   FormData observed_form_data = MakePasswordFormData();
   SetUpGenerationPreconditions(observed_form_data.url);
 
@@ -1205,32 +1202,6 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
       *weak_mock_pwd_controller,
       RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField,
                                  /*is_manual_generation_available=*/false));
-  GetClient()->FocusedInputChanged(
-      driver.get(), observed_form_data.fields[0].unique_renderer_id,
-      FocusedFieldType::kFillablePasswordField);
-}
-
-TEST_F(ChromePasswordManagerClientAndroidTest,
-       FocusedInputChangedFormsNotFetchedWithoutMessagesFeature) {
-  FormData observed_form_data = MakePasswordFormData();
-  SetUpGenerationPreconditions(observed_form_data.url);
-
-  std::unique_ptr<password_manager::ContentPasswordManagerDriver> driver =
-      CreateContentPasswordManagerDriver(main_rfh());
-
-  // Since the test uses a mock store, the consumer won't be called
-  // back with results, which simulates the password forms not being fetched
-  // before the field is focused.
-  driver->GetPasswordManager()->OnPasswordFormsParsed(driver.get(),
-                                                      {observed_form_data});
-
-  MockPasswordAccessoryControllerImpl* weak_mock_pwd_controller =
-      SetUpMockPwdAccessoryForClientUse(driver.get());
-
-  EXPECT_CALL(
-      *weak_mock_pwd_controller,
-      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField,
-                                 /*is_manual_generation_available=*/true));
   GetClient()->FocusedInputChanged(
       driver.get(), observed_form_data.fields[0].unique_renderer_id,
       FocusedFieldType::kFillablePasswordField);

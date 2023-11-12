@@ -78,9 +78,19 @@ VideoDecoderType GetActualPlatformDecoderImplementation(
     }
     case VideoDecoderType::kVaapi: {
       // Allow VaapiVideoDecoder on GL.
-      if (gpu_preferences.gr_context_type == gpu::GrContextType::kGL)
-        return VideoDecoderType::kVaapi;
+      if (gpu_preferences.gr_context_type == gpu::GrContextType::kGL) {
+        if (base::FeatureList::IsEnabled(kVaapiVideoDecodeLinuxGL)) {
+          return VideoDecoderType::kVaapi;
+        } else {
+          return VideoDecoderType::kUnknown;
+        }
+      }
+#if BUILDFLAG(ENABLE_VULKAN)
       if (gpu_preferences.gr_context_type != gpu::GrContextType::kVulkan)
+        return VideoDecoderType::kUnknown;
+      if (!base::FeatureList::IsEnabled(features::kVulkanFromANGLE))
+        return VideoDecoderType::kUnknown;
+      if (!base::FeatureList::IsEnabled(features::kDefaultANGLEVulkan))
         return VideoDecoderType::kUnknown;
       // If Vulkan is active, check Vulkan info if VaapiVideoDecoder is allowed.
       if (!gpu_info.vulkan_info.has_value())
@@ -104,6 +114,9 @@ VideoDecoderType GetActualPlatformDecoderImplementation(
           return VideoDecoderType::kUnknown;
         }
       }
+#else
+      return VideoDecoderType::kUnknown;
+#endif  // BUILDFLAG(ENABLE_VULKAN)
     }
     default:
       return VideoDecoderType::kUnknown;

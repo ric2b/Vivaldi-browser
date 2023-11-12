@@ -23,14 +23,6 @@
 #include "base/android/build_info.h"
 #endif
 
-#if BUILDFLAG(IS_MAC)
-#include "base/mac/mac_util.h"
-#endif
-
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 namespace media::internal {
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -164,7 +156,6 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
             IsSupportedMediaMimeType("application/vnd.apple.mpegurl"));
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/mpegurl"));
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/x-mpegurl"));
-
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp4"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp3"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-mp3"));

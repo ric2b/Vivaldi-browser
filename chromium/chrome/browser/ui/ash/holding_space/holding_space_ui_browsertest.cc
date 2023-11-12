@@ -27,12 +27,19 @@
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
+#include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_locale.h"
 #include "build/build_config.h"
+#include "chrome/browser/ash/app_list/search/files/file_suggest_keyed_service.h"
+#include "chrome/browser/ash/app_list/search/files/file_suggest_keyed_service_factory.h"
+#include "chrome/browser/ash/app_list/search/files/local_file_suggestion_provider.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/file_manager/file_tasks_observer.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_core_service.h"
@@ -42,6 +49,7 @@
 #include "chrome/browser/ui/ash/holding_space/holding_space_browsertest_base.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_downloads_delegate.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_test_util.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/download/public/common/mock_download_item.h"
@@ -49,6 +57,7 @@
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/mock_download_manager.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/window.h"
 #include "ui/base/clipboard/custom_data_helper.h"
@@ -57,6 +66,8 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -97,8 +108,8 @@ std::vector<HoldingSpaceItem::Type> GetHoldingSpaceItemTypes() {
 // Flushes the message loop by posting a task and waiting for it to run.
 void FlushMessageLoop() {
   base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                   run_loop.QuitClosure());
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -457,6 +468,12 @@ class DropTargetView : public views::WidgetDelegateView {
 // Base class for holding space UI browser tests.
 class HoldingSpaceUiBrowserTest : public HoldingSpaceBrowserTestBase {
  public:
+  HoldingSpaceUiBrowserTest() {
+    // TODO(crbug.com/1382945): Parameterize.
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kHoldingSpacePredictability);
+  }
+
   // HoldingSpaceBrowserTestBase:
   void SetUpOnMainThread() override {
     HoldingSpaceBrowserTestBase::SetUpOnMainThread();
@@ -476,6 +493,9 @@ class HoldingSpaceUiBrowserTest : public HoldingSpaceBrowserTestBase {
     // Confirm that holding space model has been emptied for test execution.
     ASSERT_TRUE(HoldingSpaceController::Get()->model()->items().empty());
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace
@@ -1604,12 +1624,12 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
   }
 
   // Updates whether the specified `in_progress_download` of the appropriate
-  // type for Ash or Lacros given test parameterization is dangerous, mixed
-  // content, or might be malicious.
-  void UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  // type for Ash or Lacros given test parameterization is dangerous, insecure,
+  // or might be malicious.
+  void UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       AshOrLacrosDownload* in_progress_download,
       bool is_dangerous,
-      bool is_mixed_content,
+      bool is_insecure,
       bool might_be_malicious) {
     ASSERT_TRUE(is_dangerous || !might_be_malicious);
     switch (GetDownloadTypeToUse()) {
@@ -1627,8 +1647,8 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
                           DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
         ON_CALL(*in_progress_ash_download, IsDangerous())
             .WillByDefault(testing::Return(is_dangerous));
-        ON_CALL(*in_progress_ash_download, IsMixedContent())
-            .WillByDefault(testing::Return(is_mixed_content));
+        ON_CALL(*in_progress_ash_download, IsInsecure())
+            .WillByDefault(testing::Return(is_insecure));
         NotifyObserversAshDownloadUpdated(in_progress_ash_download.get());
         return;
       }
@@ -1643,7 +1663,7 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
                          : crosapi::mojom::DownloadDangerType::
                                kDownloadDangerTypeNotDangerous;
         in_progress_lacros_download->is_dangerous = is_dangerous;
-        in_progress_lacros_download->is_mixed_content = is_mixed_content;
+        in_progress_lacros_download->is_insecure = is_insecure;
         NotifyObserversLacrosDownloadUpdated(in_progress_lacros_download.get());
         return;
       }
@@ -1931,8 +1951,8 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
     lacros_download_item->start_time = base::Time::Now();
     lacros_download_item->is_dangerous = false;
     lacros_download_item->has_is_dangerous = true;
-    lacros_download_item->is_mixed_content = false;
-    lacros_download_item->has_is_mixed_content = true;
+    lacros_download_item->is_insecure = false;
+    lacros_download_item->has_is_insecure = true;
 
     auto* const download_controller_ash = crosapi::CrosapiManager::Get()
                                               ->crosapi_ash()
@@ -2209,10 +2229,10 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiInProgressDownloadsBrowserTest,
             base::UTF16ToUTF8(u"Download paused " + target_file_name));
 
   // Mark the download as dangerous.
-  UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       in_progress_download.get(),
       /*is_dangerous=*/true,
-      /*is_mixed_content=*/false,
+      /*is_insecure=*/false,
       /*might_be_malicious=*/true);
 
   // Because the download is marked as dangerous, that should be indicated in
@@ -2245,9 +2265,9 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiInProgressDownloadsBrowserTest,
             base::UTF16ToUTF8(u"Download scanning " + target_file_name));
 
   // Stop scanning and mark that the download is *not* malicious.
-  UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       in_progress_download.get(), /*is_dangerous=*/true,
-      /*is_mixed_content=*/false, /*might_be_malicious=*/false);
+      /*is_insecure=*/false, /*might_be_malicious=*/false);
 
   // Because the download is *not* malicious, the user will be able to keep/
   // discard the download via notification. That should be indicated in the
@@ -2264,10 +2284,10 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiInProgressDownloadsBrowserTest,
             base::UTF16ToUTF8(u"Confirm download " + target_file_name));
 
   // Mark the download as safe.
-  UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       in_progress_download.get(),
       /*is_dangerous=*/false,
-      /*is_mixed_content=*/false,
+      /*is_insecure=*/false,
       /*might_be_malicious=*/false);
 
   // Because the download is no longer marked as dangerous, that should be
@@ -2284,14 +2304,14 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
             base::UTF16ToUTF8(u"Download paused " + target_file_name));
 
-  // Mark the download as mixed content.
-  UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  // Mark the download as insecure.
+  UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       in_progress_download.get(),
       /*is_dangerous=*/false,
-      /*is_mixed_content=*/true,
+      /*is_insecure=*/true,
       /*might_be_malicious=*/false);
 
-  // Because the download is marked as mixed content, that should be indicated
+  // Because the download is marked as insecure, that should be indicated
   // in the `secondary_label` of the holding space item chip view.
   EXPECT_TRUE(primary_label->GetVisible());
   EXPECT_EQ(primary_label->GetText(), target_file_name);
@@ -2304,14 +2324,14 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
             base::UTF16ToUTF8(u"Download dangerous " + target_file_name));
 
-  // Mark the download as *not* mixed content.
-  UpdateInProgressDownloadIsDangerousMixedContentOrMightBeMalicious(
+  // Mark the download as *not* insecure.
+  UpdateInProgressDownloadIsDangerousInsecureOrMightBeMalicious(
       in_progress_download.get(),
       /*is_dangerous=*/false,
-      /*is_mixed_content=*/false,
+      /*is_insecure=*/false,
       /*might_be_malicious=*/false);
 
-  // Because the download is no longer marked as mixed content, that should be
+  // Because the download is no longer marked as insecure, that should be
   // indicated in the `secondary_label` of the holding space item chip view.
   EXPECT_TRUE(primary_label->GetVisible());
   EXPECT_EQ(primary_label->GetText(), target_file_name);
@@ -2928,7 +2948,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenRecording) {
   capture_mode_test_api.PerformCapture();
   // Record a 100 ms long video.
   base::RunLoop video_recording_time;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, video_recording_time.QuitClosure(), base::Milliseconds(100));
   video_recording_time.Run();
   capture_mode_test_api.StopVideoRecording();
@@ -2953,6 +2973,117 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenRecording) {
   test_api().Show();
   ASSERT_TRUE(test_api().IsShowing());
   EXPECT_EQ(1u, test_api().GetScreenCaptureViews().size());
+}
+
+// Used to check the holding space suggestion feature.
+class HoldingSpaceSuggestionUiBrowserTest : public HoldingSpaceUiBrowserTest {
+ public:
+  HoldingSpaceSuggestionUiBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kHoldingSpaceSuggestions);
+  }
+
+  // HoldingSpaceUiBrowserTest:
+  void SetUpOnMainThread() override {
+    HoldingSpaceUiBrowserTest::SetUpOnMainThread();
+
+    // Initialize `local_file_directory_`.
+    EXPECT_TRUE(local_file_directory_.CreateUniqueTempDirUnderPath(
+        browser()->profile()->GetPath()));
+    EXPECT_TRUE(browser()->profile()->GetMountPoints()->RegisterFileSystem(
+        /*mount_name=*/"archive", storage::kFileSystemTypeLocal,
+        storage::FileSystemMountOption(), GetLocalFileMountPath()));
+  }
+
+  // Creates multiple files and suggests them through service.
+  std::vector<base::FilePath> CreateFileSuggestions(size_t count) {
+    using FileOpenEvent =
+        file_manager::file_tasks::FileTasksObserver::FileOpenEvent;
+    using FileOpenType = file_manager::file_tasks::FileTasksObserver::OpenType;
+
+    base::ScopedAllowBlockingForTesting allow_blocking;
+
+    std::vector<base::FilePath> paths(count);
+    std::vector<FileOpenEvent> open_events;
+    for (auto& path : paths) {
+      EXPECT_TRUE(
+          base::CreateTemporaryFileInDir(GetLocalFileMountPath(), &path));
+      FileOpenEvent e;
+      e.path = path;
+      e.open_type = FileOpenType::kOpen;
+      open_events.push_back(std::move(e));
+    }
+
+    app_list::FileSuggestKeyedServiceFactory::GetInstance()
+        ->GetService(GetProfile())
+        ->local_file_suggestion_provider_for_test()
+        ->OnFilesOpened(open_events);
+    return paths;
+  }
+
+  base::FilePath GetLocalFileMountPath() {
+    return local_file_directory_.GetPath();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  // The directory that hosts local files.
+  base::ScopedTempDir local_file_directory_;
+};
+
+// Verifies suggestion removal through holding space item context menu.
+IN_PROC_BROWSER_TEST_F(HoldingSpaceSuggestionUiBrowserTest, RemoveSuggestion) {
+  // Use zero animation duration so that UI updates are immediate.
+  ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+
+  // Create file suggestions and wait until the suggested files exist in the
+  // holding space model.
+  constexpr size_t kSuggestionFileCount = 3;
+  std::vector<base::FilePath> file_paths =
+      CreateFileSuggestions(kSuggestionFileCount);
+  HoldingSpaceModel* model = HoldingSpaceController::Get()->model();
+  WaitForSuggestionsInModel(
+      model,
+      /*expected_suggestions=*/
+      {{HoldingSpaceItem::Type::kLocalSuggestion, file_paths[0]},
+       {HoldingSpaceItem::Type::kLocalSuggestion, file_paths[1]},
+       {HoldingSpaceItem::Type::kLocalSuggestion, file_paths[2]}});
+
+  test_api().Show();
+
+  // The count of suggestion chips should be equal to that of suggested files.
+  std::vector<views::View*> suggestion_chips = test_api().GetSuggestionChips();
+  ASSERT_EQ(suggestion_chips.size(), kSuggestionFileCount);
+
+  // Select two suggestion chips and open context menu.
+  ASSERT_FALSE(views::MenuController::GetActiveInstance());
+  Click(suggestion_chips.front(), ui::EF_CONTROL_DOWN);
+  RightClick(suggestion_chips[1], ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(views::MenuController::GetActiveInstance());
+
+  // Remove the selected suggestion chips through context menu.
+  auto* menu_item =
+      SelectMenuItemWithCommandId(HoldingSpaceCommandId::kRemoveItem);
+  ASSERT_TRUE(menu_item);
+  Click(menu_item);
+  WaitForSuggestionsInModel(
+      model, /*expected_suggestions=*/{
+          {HoldingSpaceItem::Type::kLocalSuggestion, file_paths[0]}});
+
+  // Remove the remaining suggestion item view through context menu.
+  suggestion_chips = test_api().GetSuggestionChips();
+  ASSERT_EQ(suggestion_chips.size(), 1u);
+  ASSERT_FALSE(views::MenuController::GetActiveInstance());
+  RightClick(suggestion_chips.front());
+  ASSERT_TRUE(views::MenuController::GetActiveInstance());
+  menu_item = SelectMenuItemWithCommandId(HoldingSpaceCommandId::kRemoveItem);
+  ASSERT_TRUE(menu_item);
+  Click(menu_item);
+
+  // There should not be any suggestion item view left.
+  EXPECT_EQ(test_api().GetSuggestionChips().size(), 0u);
 }
 
 }  // namespace ash

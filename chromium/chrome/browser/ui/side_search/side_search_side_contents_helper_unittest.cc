@@ -42,6 +42,9 @@ class MockSideContentsDelegate : public SideSearchSideContentsHelper::Delegate {
   }
   void SidePanelProcessGone() override {}
   content::WebContents* GetTabWebContents() override { return nullptr; }
+  void CarryOverSideSearchStateToNewTab(
+      const GURL& search_url,
+      content::WebContents* new_web_contents) override {}
 
   const GURL& tab_contents_url() const { return tab_contents_url_; }
 
@@ -143,8 +146,7 @@ TEST_F(SideSearchSideContentsHelperTest,
 TEST_F(SideSearchSideContentsHelperTest,
        RedirectionConfigNavigatesTabContents) {
   LoadURL(kNonMatchUrl);
-  EXPECT_TRUE(!GetLastCommittedSideContentsEntry() ||
-              GetLastCommittedSideContentsEntry()->IsInitialEntry());
+  EXPECT_TRUE(GetLastCommittedSideContentsEntry()->IsInitialEntry());
   EXPECT_TRUE(delegate().last_search_url().is_empty());
   EXPECT_EQ(GURL(kNonMatchUrl), delegate().tab_contents_url());
   histogram_tester_.ExpectUniqueSample(
@@ -154,8 +156,7 @@ TEST_F(SideSearchSideContentsHelperTest,
 TEST_F(SideSearchSideContentsHelperTest, EmitsPerJourneyMetrics) {
   // Ensure redirected navigations correctly log navigations
   LoadURL(kNonMatchUrl);
-  EXPECT_TRUE(!GetLastCommittedSideContentsEntry() ||
-              GetLastCommittedSideContentsEntry()->IsInitialEntry());
+  EXPECT_TRUE(GetLastCommittedSideContentsEntry()->IsInitialEntry());
   EXPECT_TRUE(delegate().last_search_url().is_empty());
   EXPECT_EQ(GURL(kNonMatchUrl), delegate().tab_contents_url());
 
@@ -188,8 +189,7 @@ TEST_F(SideSearchSideContentsHelperTest, EmitsPerJourneyMetricsAutotriggered) {
 
   // Ensure redirected navigations correctly log navigations
   LoadURL(kNonMatchUrl);
-  EXPECT_TRUE(!GetLastCommittedSideContentsEntry() ||
-              GetLastCommittedSideContentsEntry()->IsInitialEntry());
+  EXPECT_TRUE(GetLastCommittedSideContentsEntry()->IsInitialEntry());
   EXPECT_TRUE(delegate().last_search_url().is_empty());
   EXPECT_EQ(GURL(kNonMatchUrl), delegate().tab_contents_url());
 
@@ -234,8 +234,7 @@ TEST_F(SideSearchSideContentsHelperTest, EmitsPerJourneyMetricsFromMenuOption) {
 
   // Ensure redirected navigations correctly log navigations
   LoadURL(kNonMatchUrl);
-  EXPECT_TRUE(!GetLastCommittedSideContentsEntry() ||
-              GetLastCommittedSideContentsEntry()->IsInitialEntry());
+  EXPECT_TRUE(GetLastCommittedSideContentsEntry()->IsInitialEntry());
   EXPECT_TRUE(delegate().last_search_url().is_empty());
   EXPECT_EQ(GURL(kNonMatchUrl), delegate().tab_contents_url());
 

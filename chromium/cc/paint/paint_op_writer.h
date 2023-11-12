@@ -6,6 +6,7 @@
 #define CC_PAINT_PAINT_OP_WRITER_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_filter.h"
@@ -169,7 +170,6 @@ class CC_PAINT_EXPORT PaintOpWriter {
              const SkM44& current_ctm);
   void Write(const LightingPointPaintFilter& filter, const SkM44& current_ctm);
   void Write(const LightingSpotPaintFilter& filter, const SkM44& current_ctm);
-  void Write(const StretchPaintFilter& filter, const SkM44& current_ctm);
 
   void Write(const PaintRecord* record,
              const gfx::Rect& playback_rect,
@@ -192,7 +192,7 @@ class CC_PAINT_EXPORT PaintOpWriter {
   raw_ptr<char> memory_ = nullptr;
   size_t size_ = 0u;
   size_t remaining_bytes_ = 0u;
-  const PaintOp::SerializeOptions& options_;
+  const raw_ref<const PaintOp::SerializeOptions> options_;
   bool valid_ = true;
 
   // Indicates that the following security constraints must be applied during

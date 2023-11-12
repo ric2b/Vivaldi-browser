@@ -22,11 +22,13 @@
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
+#include "components/ukm/ukm_consent_state.h"
 #include "components/ukm/ukm_entry_filter.h"
 #include "services/metrics/public/cpp/ukm_decode.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/metrics/public/mojom/ukm_interface.mojom-forward.h"
+#include "ukm_consent_state.h"
 
 namespace metrics {
 class UkmBrowserTestBase;
@@ -55,10 +57,13 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
   UkmRecorderImpl();
   ~UkmRecorderImpl() override;
 
-  // Enables/disables recording control if data is allowed to be collected. The
-  // |extensions| flag separately controls recording of chrome-extension://
-  // URLs; this flag should reflect the "sync extensions" user setting.
-  void EnableRecording(bool extensions);
+  // Enables/disables recording control if data is allowed to be collected.
+  // |state| defines what is allowed to be collected.
+  // See components/ukm/ukm_consent_state.h for details.
+  void UpdateRecording(const ukm::UkmConsentState state);
+  // Enables recording if MSBB is consented.
+  void EnableRecording();
+  // Disables recording without updating the consent state.
   void DisableRecording();
 
   // Controls sampling for testing purposes. Sampling is 1-in-N (N==rate).
@@ -77,6 +82,10 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
   // Deletes stored Sources with the given Source id type and events
   // attributed with these Sources.
   void PurgeRecordingsWithSourceIdType(ukm::SourceIdType source_id_type);
+
+  // Deletes stored Sources with any Source Id related to MSBB. This included
+  // all SourceIds that are not of type APP_ID.
+  void PurgeRecordingsWithMsbbSources();
 
   // Marks a source as no longer needed to be kept alive in memory. The source
   // with given id will be removed from in-memory recordings at the next
@@ -107,8 +116,8 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
   // map.
   void RemoveUkmRecorderObserver(UkmRecorderObserver* observer);
 
-  // Called when UKM allow state changed.
-  void OnUkmAllowedStateChanged(bool allowed);
+  // Called when UKM consent state changed.
+  void OnUkmAllowedStateChanged(UkmConsentState state);
 
   // Sets the sampling seed for testing purposes.
   void SetSamplingSeedForTesting(uint32_t seed) {
@@ -120,6 +129,12 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
   }
 
   bool recording_enabled() const { return recording_enabled_; }
+
+  bool recording_enabled(ukm::UkmConsentType type) const {
+    return recording_state_.Has(type);
+  }
+
+  bool ShouldDropEntryForTesting(mojom::UkmEntry* entry);
 
  protected:
   // Calculates sampled in/out for a specific source/event based on internal
@@ -170,6 +185,9 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
       SourceId source_id,
       const UkmSource::NavigationData& navigation_data) override;
   using UkmRecorder::RecordOtherURL;
+
+  // Get the UkmConsentType associated for a given SourceIdType.
+  static UkmConsentType GetConsentType(SourceIdType type);
 
  private:
   friend ::metrics::UkmBrowserTestBase;
@@ -231,6 +249,9 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
 
   void RecordSource(std::unique_ptr<UkmSource> source);
 
+  // Determines if an UkmEntry should be dropped and records reason if so.
+  bool ShouldDropEntry(mojom::UkmEntry* entry);
+
   // Applies UkmEntryFilter if there is one registered.
   bool ApplyEntryFilter(mojom::UkmEntry* entry);
 
@@ -252,8 +273,8 @@ class COMPONENT_EXPORT(UKM_RECORDER) UkmRecorderImpl : public UkmRecorder {
   // Whether recording new data is currently allowed.
   bool recording_enabled_ = false;
 
-  // Indicates whether recording is enabled for extensions.
-  bool extensions_enabled_ = false;
+  // Whether recording new data is enabled and what type is allowed.
+  ukm::UkmConsentState recording_state_;
 
   // Indicates whether recording continuity has been broken since last report.
   bool recording_is_continuous_ = true;

@@ -51,7 +51,6 @@ import org.chromium.ui.display.DisplayAndroid.DisplayAndroidObserver;
 import org.chromium.ui.gfx.OverlayTransform;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
-import org.chromium.ui.permissions.CachedActivityAndroidPermissionDelegate;
 import org.chromium.ui.permissions.PermissionCallback;
 import org.chromium.ui.widget.Toast;
 
@@ -241,7 +240,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         mAllowChangeRefreshRate = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !isTv(context);
 
         // Multiple refresh rate support is only available on M+.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) recomputeSupportedRefreshRates();
+        recomputeSupportedRefreshRates();
 
         // Temporary solution for flaky tests, see https://crbug.com/767624 for context
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
@@ -576,10 +575,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     }
 
     protected void onActivityPaused() {
-        if (mPermissionDelegate instanceof CachedActivityAndroidPermissionDelegate) {
-            ((CachedActivityAndroidPermissionDelegate) mPermissionDelegate).invalidateCache();
-        }
-
         for (ActivityStateObserver observer : mActivityStateObservers) observer.onActivityPaused();
     }
 
@@ -918,13 +913,11 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     }
 
     @Override
-    @RequiresApi(Build.VERSION_CODES.M)
     public void onCurrentModeChanged(Display.Mode currentMode) {
         recomputeSupportedRefreshRates();
     }
 
     @Override
-    @RequiresApi(Build.VERSION_CODES.M)
     public void onDisplayModesChanged(List<Display.Mode> supportedModes) {
         recomputeSupportedRefreshRates();
     }
@@ -947,7 +940,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     }
 
     @SuppressLint("NewApi") // This should only be called if Display.Mode is available.
-    @RequiresApi(Build.VERSION_CODES.M)
     private void recomputeSupportedRefreshRates() {
         Display.Mode currentMode = mDisplayAndroid.getCurrentMode();
         assert currentMode != null;
@@ -990,7 +982,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
 
     @SuppressLint("NewApi")
     // mSupportedRefreshRateModes should only be set if Display.Mode is available.
-    @RequiresApi(Build.VERSION_CODES.M)
     @CalledByNative
     private float[] getSupportedRefreshRates() {
         if (mSupportedRefreshRateModes == null || !mAllowChangeRefreshRate) return null;
@@ -1024,7 +1015,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
 
     @SuppressLint("NewApi")
     // mSupportedRefreshRateModes should only be set if Display.Mode is available.
-    @RequiresApi(Build.VERSION_CODES.M)
     private int getPreferredModeId(float preferredRefreshRate) {
         if (preferredRefreshRate == 0) return 0;
 

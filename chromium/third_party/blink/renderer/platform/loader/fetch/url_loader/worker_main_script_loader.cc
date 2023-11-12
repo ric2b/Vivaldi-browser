@@ -5,14 +5,14 @@
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/worker_main_script_loader.h"
 
 #include "services/network/public/cpp/header_util.h"
+#include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
-#include "third_party/blink/public/mojom/loader/code_cache.mojom-shared.h"
+#include "third_party/blink/public/mojom/loader/code_cache.mojom-blink.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_url.h"
-#include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/script_cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/worker_main_script_loader_client.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -66,11 +67,10 @@ void WorkerMainScriptLoader::Start(
                        worker_main_script_load_params->redirect_responses);
   }
 
-  WebURLResponse response;
   auto response_head = std::move(worker_main_script_load_params->response_head);
-  WebURLLoader::PopulateURLResponse(
-      WebURL(last_request_url_), *response_head, &response,
-      response_head->ssl_info.has_value(), request_id_);
+  WebURLResponse response =
+      WebURLResponse::Create(WebURL(last_request_url_), *response_head,
+                             response_head->ssl_info.has_value(), request_id_);
   resource_response_ = response.ToResourceResponse();
   resource_load_info_notifier_wrapper_->NotifyResourceResponseReceived(
       std::move(response_head));
@@ -104,8 +104,8 @@ void WorkerMainScriptLoader::Start(
   receiver_.Bind(
       std::move(worker_main_script_load_params->url_loader_client_endpoints
                     ->url_loader_client));
-  receiver_.set_disconnect_handler(base::BindOnce(
-      &WorkerMainScriptLoader::OnConnectionClosed, base::Unretained(this)));
+  receiver_.set_disconnect_handler(WTF::BindOnce(
+      &WorkerMainScriptLoader::OnConnectionClosed, WrapWeakPersistent(this)));
   data_pipe_ = std::move(worker_main_script_load_params->response_body);
 
   client_->OnStartLoadingBody(resource_response_);
@@ -153,6 +153,8 @@ void WorkerMainScriptLoader::OnUploadProgress(
 }
 
 void WorkerMainScriptLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
+  network::RecordOnTransferSizeUpdatedUMA(
+      network::OnTransferSizeUpdatedFrom::kWorkerMainScriptLoader);
 }
 
 void WorkerMainScriptLoader::OnComplete(
@@ -184,7 +186,7 @@ CachedMetadataHandler* WorkerMainScriptLoader::CreateCachedMetadataHandler() {
 
   std::unique_ptr<CachedMetadataSender> cached_metadata_sender =
       CachedMetadataSender::Create(
-          resource_response_, blink::mojom::CodeCacheType::kJavascript,
+          resource_response_, mojom::blink::CodeCacheType::kJavascript,
           SecurityOrigin::Create(initial_request_url_));
   return MakeGarbageCollected<ScriptCachedMetadataHandler>(
       script_encoding_, std::move(cached_metadata_sender));
@@ -205,8 +207,8 @@ void WorkerMainScriptLoader::StartLoadingBody() {
       FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL);
   MojoResult rv =
       watcher_->Watch(data_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-                      base::BindRepeating(&WorkerMainScriptLoader::OnReadable,
-                                          base::Unretained(this)));
+                      WTF::BindRepeating(&WorkerMainScriptLoader::OnReadable,
+                                         WrapWeakPersistent(this)));
   DCHECK_EQ(MOJO_RESULT_OK, rv);
   watcher_->ArmOrNotify();
 }
@@ -310,9 +312,8 @@ void WorkerMainScriptLoader::HandleRedirections(
             ReferrerUtils::NetToMojoReferrerPolicy(
                 redirect_info.new_referrer_policy),
             /*skip_service_worker=*/false);
-    WebURLResponse response;
-    WebURLLoader::PopulateURLResponse(
-        WebURL(last_request_url_), *redirect_response, &response,
+    WebURLResponse response = WebURLResponse::Create(
+        WebURL(last_request_url_), *redirect_response,
         redirect_response->ssl_info.has_value(), request_id_);
     resource_load_info_notifier_wrapper_->NotifyResourceRedirectReceived(
         redirect_info, std::move(redirect_response));

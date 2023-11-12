@@ -14,7 +14,8 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/raw_ref.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -44,6 +45,7 @@
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/trust_token_access_observer.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler.h"
@@ -95,25 +97,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       public mojom::AuthChallengeResponder,
       public mojom::ClientCertificateResponder {
  public:
-  // Enumeration for UMA histograms logged by LogConcerningRequestHeaders().
-  // Entries should not be renumbered and numeric values should never be reused.
-  // Please keep in sync with "NetworkServiceConcerningRequestHeaders" in
-  // src/tools/metrics/histograms/enums.xml.
-  enum class ConcerningHeaderId {
-    kConnection = 0,
-    kCookie = 1,
-    kCookie2 = 2,
-    kContentTransferEncoding = 3,
-    kDate = 4,
-    kExpect = 5,
-    kKeepAlive = 6,
-    kReferer = 7,
-    kTe = 8,
-    kTransferEncoding = 9,
-    kVia = 10,
-    kMaxValue = kVia,
-  };
-
   using DeleteCallback = base::OnceCallback<void(URLLoader* loader)>;
 
   // Holds a sync and async implementation of URLLoaderClient. The sync
@@ -174,6 +157,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       std::unique_ptr<TrustTokenRequestHelperFactory>
           trust_token_helper_factory,
       mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
+      mojo::PendingRemote<mojom::TrustTokenAccessObserver> trust_token_observer,
       mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
           url_loader_network_observer,
       mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
@@ -287,10 +271,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   static const void* const kUserDataKey;
 
-  static void LogConcerningRequestHeaders(
-      const net::HttpRequestHeaders& request_headers,
-      bool added_during_redirect);
-
   static bool HasFetchStreamingUploadBody(const ResourceRequest*);
 
   static absl::optional<net::IsolationInfo> GetIsolationInfo(
@@ -367,6 +347,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       mojom::TrustTokenOperationType type,
       TrustTokenStatusOrRequestHelper status_or_helper);
   void OnDoneBeginningTrustTokenOperation(
+      absl::optional<net::HttpRequestHeaders> headers,
       mojom::TrustTokenOperationStatus status);
   void OnDoneFinalizingTrustTokenOperation(
       mojom::TrustTokenOperationStatus status);
@@ -479,7 +460,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   // URLLoaderFactory is guaranteed to outlive URLLoader, so it is safe to
   // store a raw pointer to mojom::URLLoaderFactoryParams.
-  const mojom::URLLoaderFactoryParams& factory_params_;
+  const raw_ref<const mojom::URLLoaderFactoryParams> factory_params_;
   // This also belongs to URLLoaderFactory and outlives this loader.
   const raw_ptr<mojom::CrossOriginEmbedderPolicyReporter> coep_reporter_;
 
@@ -521,7 +502,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   std::unique_ptr<corb::ResponseAnalyzer> corb_analyzer_;
   bool is_more_corb_sniffing_needed_ = false;
   bool is_more_mime_sniffing_needed_ = false;
-  corb::PerFactoryState& per_factory_corb_state_;
+  const raw_ref<corb::PerFactoryState> per_factory_corb_state_;
 
   std::unique_ptr<ResourceScheduler::ScheduledResourceRequest>
       resource_scheduler_request_handle_;
@@ -548,16 +529,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   bool should_pause_reading_body_ = false;
   // The response body stream is open, but transferring data is paused.
   bool paused_reading_body_ = false;
-
-  // Whether to update |body_read_before_paused_| after the pending read is
-  // completed (or when the response body stream is closed).
-  bool update_body_read_before_paused_ = false;
-  // The number of bytes obtained by the reads initiated before the last
-  // PauseReadingBodyFromNet() call. -1 means the request hasn't been paused.
-  // The body may be read from cache or network. So even if this value is not
-  // -1, we still need to check whether it is from network before reporting it
-  // as BodyReadFromNetBeforePaused.
-  int64_t body_read_before_paused_ = -1;
 
   // This is used to compute the delta since last time received
   // encoded body size was reported to the client.
@@ -617,7 +588,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   absl::optional<mojom::TrustTokenOperationStatus> trust_token_status_;
 
   // Outlives `this`.
-  const cors::OriginAccessList& origin_access_list_;
+  const raw_ref<const cors::OriginAccessList> origin_access_list_;
 
   // Observers bound to this specific URLLoader. There may be observers bound to
   // an URLLoaderFactory as well so these `mojo::Remote`s should not be used
@@ -628,6 +599,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // URLLoaderFactory).
   const mojo::Remote<mojom::CookieAccessObserver> cookie_observer_remote_;
   const raw_ptr<mojom::CookieAccessObserver> cookie_observer_ = nullptr;
+  const mojo::Remote<mojom::TrustTokenAccessObserver>
+      trust_token_observer_remote_;
+  const raw_ptr<mojom::TrustTokenAccessObserver> trust_token_observer_ =
+      nullptr;
   const mojo::Remote<mojom::URLLoaderNetworkServiceObserver>
       url_loader_network_observer_remote_;
   const raw_ptr<mojom::URLLoaderNetworkServiceObserver>
@@ -651,6 +626,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   const bool third_party_cookies_enabled_;
 
   mojo::Remote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer_;
+
+  // Stores cookies passed from the browser process to later add them to the
+  // request. This prevents the network stack from overriding them.
+  bool allow_cookies_from_browser_ = false;
+  std::string cookies_from_browser_;
 
   base::WeakPtrFactory<URLLoader> weak_ptr_factory_{this};
 };

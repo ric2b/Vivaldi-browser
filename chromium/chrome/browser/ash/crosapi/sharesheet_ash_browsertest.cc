@@ -117,7 +117,7 @@ class SharesheetAshBrowserTest : public ash::SystemWebAppIntegrationTest {
  public:
   SharesheetAshBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kLacrosSupport, features::kWebAppsCrosapi}, {});
+        {ash::features::kLacrosSupport, features::kWebAppsCrosapi}, {});
   }
   ~SharesheetAshBrowserTest() override = default;
 
@@ -134,7 +134,7 @@ class SharesheetAshBrowserTest : public ash::SystemWebAppIntegrationTest {
     // The Sample System Web App will be automatically selected from the
     // Sharesheet bubble.
     sharesheet::SharesheetService::SetSelectedAppForTesting(
-        base::UTF8ToUTF16(web_app::kSampleSystemWebAppId));
+        base::UTF8ToUTF16(base::StringPiece{web_app::kSampleSystemWebAppId}));
   }
   void TearDownOnMainThread() override {
     sharesheet::SharesheetService::SetSelectedAppForTesting(std::u16string());

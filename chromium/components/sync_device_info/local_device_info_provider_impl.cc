@@ -71,6 +71,9 @@ const DeviceInfo* LocalDeviceInfoProviderImpl::GetLocalDeviceInfo() const {
     local_device_info_->set_full_hardware_class(full_hardware_class_);
   }
 
+  local_device_info_->set_vivaldi_total_synced_files_size(
+      sync_client_->VivaldiGetSyncedFileStorageSize());
+
   return local_device_info_.get();
 }
 

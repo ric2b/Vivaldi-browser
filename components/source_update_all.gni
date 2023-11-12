@@ -13,7 +13,7 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.h",
     "//vivaldi/components/bookmarks/vivaldi_partners.h",
   ]
-  deps += [ "//vivaldi/components/datasource:dataurl" ]
+  deps += [ "//vivaldi/components/datasource:resource_reader" ]
 }
 
 update_target("//components/history/core/browser:browser") {
@@ -70,5 +70,12 @@ update_target("//components/search_engines:prepopulated_engines_action") {
   outputs = [
     "$root_gen_dir/components/search_engines/prepopulated_engines.cc",
     "$root_gen_dir/components/search_engines/prepopulated_engines.h",
+  ]
+}
+
+update_target("//components/favicon/core:core") {
+  sources += [
+    "//vivaldi/components/favicon/vivaldi_favicons_backend.cc",
+    "//vivaldi/components/favicon/vivaldi_preloaded_favicons.inc",
   ]
 }

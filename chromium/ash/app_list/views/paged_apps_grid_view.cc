@@ -46,7 +46,6 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/views/animation/animation_builder.h"
-#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/view.h"
 #include "ui/views/view_model_utils.h"
 #include "ui/views/widget/widget.h"
@@ -55,11 +54,6 @@ namespace ash {
 namespace {
 
 // Presentation time histogram for apps grid scroll by dragging.
-constexpr char kPageDragScrollInClamshellHistogram[] =
-    "Apps.PaginationTransition.DragScroll.PresentationTime.ClamshellMode";
-constexpr char kPageDragScrollInClamshellMaxLatencyHistogram[] =
-    "Apps.PaginationTransition.DragScroll.PresentationTime.MaxLatency."
-    "ClamshellMode";
 constexpr char kPageDragScrollInTabletHistogram[] =
     "Apps.PaginationTransition.DragScroll.PresentationTime.TabletMode";
 constexpr char kPageDragScrollInTabletMaxLatencyHistogram[] =
@@ -205,37 +199,17 @@ PagedAppsGridView::PagedAppsGridView(
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 
-  view_structure_.Init(PagedViewStructure::Mode::kFullPages);
-
   pagination_model_.SetTransitionDurations(kPageTransitionDuration,
                                            kOverscrollPageTransitionDuration);
   pagination_model_.AddObserver(this);
 
   pagination_controller_ = std::make_unique<PaginationController>(
       &pagination_model_, PaginationController::SCROLL_AXIS_VERTICAL,
-      base::BindRepeating(&AppListRecordPageSwitcherSourceByEventType),
-      IsTabletMode());
+      base::BindRepeating(&AppListRecordPageSwitcherSourceByEventType));
 }
 
 PagedAppsGridView::~PagedAppsGridView() {
   pagination_model_.RemoveObserver(this);
-}
-
-void PagedAppsGridView::OnTabletModeChanged(bool started) {
-  pagination_controller_->set_is_tablet_mode(started);
-
-  // Enable/Disable folder icons's background blur based on tablet mode.
-  for (const auto& entry : view_model()->entries()) {
-    auto* item_view = static_cast<AppListItemView*>(entry.view);
-    if (item_view->item() && item_view->item()->is_folder())
-      item_view->SetBackgroundBlurEnabled(started);
-  }
-
-  // Prevent context menus from remaining open after a transition
-  CancelContextMenusOnCurrentPage();
-
-  // Abort the running reorder animation when the tablet mode updates.
-  MaybeAbortWholeGridAnimation();
 }
 
 void PagedAppsGridView::HandleScrollFromParentView(const gfx::Vector2d& offset,
@@ -252,8 +226,8 @@ void PagedAppsGridView::SetMaxColumnsAndRows(int max_columns,
                                              int max_rows_on_first_page,
                                              int max_rows) {
   DCHECK_LE(max_rows_on_first_page, max_rows);
-  const int first_page_size = TilesPerPage(0);
-  const int default_page_size = TilesPerPage(1);
+  const absl::optional<int> first_page_size = TilesPerPage(0);
+  const absl::optional<int> default_page_size = TilesPerPage(1);
 
   max_rows_on_first_page_ = max_rows_on_first_page;
   max_rows_ = max_rows;
@@ -262,7 +236,6 @@ void PagedAppsGridView::SetMaxColumnsAndRows(int max_columns,
   // Update paging and pulsing blocks if the page sizes have changed.
   if (item_list() && (TilesPerPage(0) != first_page_size ||
                       TilesPerPage(1) != default_page_size)) {
-    view_structure_.LoadFromMetadata();
     UpdatePaging();
     UpdatePulsingBlockViews();
     PreferredSizeChanged();
@@ -273,21 +246,6 @@ void PagedAppsGridView::SetMaxColumnsAndRows(int max_columns,
 // ui::EventHandler:
 
 void PagedAppsGridView::OnGestureEvent(ui::GestureEvent* event) {
-  // If a tap/long-press occurs within a valid tile, it is usually a mistake and
-  // should not close the launcher in clamshell mode. Otherwise, we should let
-  // those events pass to the ancestor views.
-  if (!IsTabletMode() && (event->type() == ui::ET_GESTURE_TAP ||
-                          event->type() == ui::ET_GESTURE_LONG_PRESS)) {
-    if (EventIsBetweenOccupiedTiles(event)) {
-      contents_view_->app_list_view()->CloseKeyboardIfVisible();
-      event->SetHandled();
-    }
-    return;
-  }
-
-  if (!ShouldHandleDragEvent(*event))
-    return;
-
   // Scroll begin events should not be passed to ancestor views from apps grid
   // in our current design. This prevents both ignoring horizontal scrolls in
   // app list, and closing open folders.
@@ -297,102 +255,12 @@ void PagedAppsGridView::OnGestureEvent(ui::GestureEvent* event) {
   }
 }
 
-void PagedAppsGridView::OnMouseEvent(ui::MouseEvent* event) {
-  if (IsTabletMode() || !event->IsLeftMouseButton())
-    return;
-
-  gfx::PointF point_in_root = event->root_location_f();
-
-  switch (event->type()) {
-    case ui::ET_MOUSE_PRESSED:
-      if (!EventIsBetweenOccupiedTiles(event))
-        break;
-      event->SetHandled();
-      mouse_drag_start_point_ = point_in_root;
-      last_mouse_drag_point_ = point_in_root;
-      // Manually send the press event to the AppListView to update drag root
-      // location
-      contents_view_->app_list_view()->OnMouseEvent(event);
-      break;
-    case ui::ET_MOUSE_DRAGGED:
-      if (!ShouldHandleDragEvent(*event)) {
-        // We need to send mouse drag/release events to AppListView explicitly
-        // because AppsGridView handles the mouse press event and gets captured.
-        // Then AppListView cannot receive mouse drag/release events implcitly.
-
-        // Send the fabricated mouse press event to AppListView if AppsGridView
-        // is not in mouse drag yet.
-        gfx::Point drag_location_in_app_list;
-        if (!is_in_mouse_drag_) {
-          ui::MouseEvent press_event(
-              *event, static_cast<views::View*>(this),
-              static_cast<views::View*>(contents_view_->app_list_view()),
-              ui::ET_MOUSE_PRESSED, event->flags());
-          contents_view_->app_list_view()->OnMouseEvent(&press_event);
-
-          is_in_mouse_drag_ = true;
-        }
-
-        drag_location_in_app_list = event->location();
-        ConvertPointToTarget(this, contents_view_->app_list_view(),
-                             &drag_location_in_app_list);
-        event->set_location(drag_location_in_app_list);
-        contents_view_->app_list_view()->OnMouseEvent(event);
-        break;
-      }
-      event->SetHandled();
-      if (!is_in_mouse_drag_) {
-        if (abs(point_in_root.y() - mouse_drag_start_point_.y()) <
-            kMouseDragThreshold) {
-          break;
-        }
-        pagination_controller_->StartMouseDrag(point_in_root -
-                                               mouse_drag_start_point_);
-        is_in_mouse_drag_ = true;
-      }
-
-      if (!is_in_mouse_drag_)
-        break;
-
-      pagination_controller_->UpdateMouseDrag(
-          point_in_root - last_mouse_drag_point_, GetContentsBounds());
-      last_mouse_drag_point_ = point_in_root;
-      break;
-    case ui::ET_MOUSE_RELEASED: {
-      // Calculate |should_handle| before resetting |mouse_drag_start_point_|
-      // because ShouldHandleDragEvent depends on its value.
-      const bool should_handle = ShouldHandleDragEvent(*event);
-
-      is_in_mouse_drag_ = false;
-      mouse_drag_start_point_ = gfx::PointF();
-      last_mouse_drag_point_ = gfx::PointF();
-
-      if (!should_handle) {
-        gfx::Point drag_location_in_app_list = event->location();
-        ConvertPointToTarget(this, contents_view_->app_list_view(),
-                             &drag_location_in_app_list);
-        event->set_location(drag_location_in_app_list);
-        contents_view_->app_list_view()->OnMouseEvent(event);
-        break;
-      }
-      event->SetHandled();
-      pagination_controller_->EndMouseDrag(*event);
-      break;
-    }
-    default:
-      return;
-  }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // views::View:
 
 void PagedAppsGridView::Layout() {
   if (ignore_layout())
     return;
-
-  if (bounds_animator()->IsAnimating())
-    bounds_animator()->Cancel();
 
   if (GetContentsBounds().IsEmpty())
     return;
@@ -476,6 +344,34 @@ int PagedAppsGridView::GetSelectedPage() const {
   return pagination_model_.selected_page();
 }
 
+bool PagedAppsGridView::IsPageFull(size_t page_index) const {
+  const int first_page_size = *TilesPerPage(0);
+  const int default_page_size = *TilesPerPage(1);
+  const size_t last_page_index =
+      first_page_size - 1 + page_index * default_page_size;
+  size_t tiles = view_model()->view_size();
+  return tiles > last_page_index;
+}
+
+GridIndex PagedAppsGridView::GetGridIndexFromIndexInViewModel(int index) const {
+  const int first_page_size = *TilesPerPage(0);
+  if (index < first_page_size)
+    return GridIndex(0, index);
+  const int default_page_size = *TilesPerPage(1);
+  const int offset_from_first_page = index - first_page_size;
+  return GridIndex(1 + (offset_from_first_page / default_page_size),
+                   offset_from_first_page % default_page_size);
+}
+
+int PagedAppsGridView::GetNumberOfPulsingBlocksToShow(int item_count) const {
+  const int tiles_on_first_page = *TilesPerPage(0);
+  if (item_count < tiles_on_first_page)
+    return tiles_on_first_page - item_count;
+
+  const int tiles_per_page = *TilesPerPage(1);
+  return tiles_per_page - (item_count - tiles_on_first_page) % tiles_per_page;
+}
+
 void PagedAppsGridView::MaybeStartCardifiedView() {
   if (!cardified_state_)
     StartAppsGridCardifiedView();
@@ -486,7 +382,7 @@ void PagedAppsGridView::MaybeEndCardifiedView() {
     EndAppsGridCardifiedView();
 }
 
-void PagedAppsGridView::MaybeStartPageFlip() {
+bool PagedAppsGridView::MaybeStartPageFlip() {
   MaybeStartPageFlipTimer(last_drag_point());
 
   if (cardified_state_) {
@@ -496,6 +392,7 @@ void PagedAppsGridView::MaybeStartPageFlip() {
 
     SetHighlightedBackgroundCard(hovered_page);
   }
+  return page_flip_timer_.IsRunning();
 }
 
 void PagedAppsGridView::MaybeStopPageFlip() {
@@ -520,7 +417,7 @@ void PagedAppsGridView::RecordAppMovingTypeMetrics(AppListAppMovingType type) {
                             kMaxAppListAppMovingType);
 }
 
-int PagedAppsGridView::GetMaxRowsInPage(int page) const {
+absl::optional<int> PagedAppsGridView::GetMaxRowsInPage(int page) const {
   return page == 0 ? max_rows_on_first_page_ : max_rows_;
 }
 
@@ -542,12 +439,14 @@ gfx::Vector2d PagedAppsGridView::GetGridCenteringOffset(int page) const {
 void PagedAppsGridView::UpdatePaging() {
   // The grid can have a different number of tiles per page.
   size_t tiles = view_model()->view_size();
+  if (HasExtraSlotForReorderPlaceholder())
+    ++tiles;
   int total_pages = 1;
-  size_t tiles_on_page = TilesPerPage(0);
+  size_t tiles_on_page = *TilesPerPage(0);
   while (tiles > tiles_on_page) {
     tiles -= tiles_on_page;
     ++total_pages;
-    tiles_on_page = TilesPerPage(total_pages - 1);
+    tiles_on_page = *TilesPerPage(total_pages - 1);
   }
   pagination_model_.SetTotalPages(total_pages);
 }
@@ -679,7 +578,7 @@ void PagedAppsGridView::TransitionStarted() {
   pagination_metrics_tracker_ =
       GetWidget()->GetCompositor()->RequestNewThroughputTracker();
   pagination_metrics_tracker_->Start(metrics_util::ForSmoothness(
-      base::BindRepeating(&ReportPaginationSmoothness, IsTabletMode())));
+      base::BindRepeating(&ReportPaginationSmoothness)));
 }
 
 void PagedAppsGridView::TransitionChanged() {
@@ -711,15 +610,9 @@ void PagedAppsGridView::TransitionEnded() {
 void PagedAppsGridView::ScrollStarted() {
   DCHECK(!presentation_time_recorder_);
 
-  if (IsTabletMode()) {
-    presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
-        GetWidget()->GetCompositor(), kPageDragScrollInTabletHistogram,
-        kPageDragScrollInTabletMaxLatencyHistogram);
-  } else {
-    presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
-        GetWidget()->GetCompositor(), kPageDragScrollInClamshellHistogram,
-        kPageDragScrollInClamshellMaxLatencyHistogram);
-  }
+  presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
+      GetWidget()->GetCompositor(), kPageDragScrollInTabletHistogram,
+      kPageDragScrollInTabletMaxLatencyHistogram);
 }
 
 void PagedAppsGridView::ScrollEnded() {
@@ -776,35 +669,10 @@ gfx::Size PagedAppsGridView::GetPageSize() const {
 
 gfx::Size PagedAppsGridView::GetTileGridSizeForPage(int page) const {
   gfx::Rect rect(GetTotalTileSize(page));
-  const int rows = TilesPerPage(page) / cols();
+  const int rows = *TilesPerPage(page) / cols();
   rect.set_size(gfx::Size(rect.width() * cols(), rect.height() * rows));
   rect.Inset(-GetTilePadding(page));
   return rect.size();
-}
-
-bool PagedAppsGridView::ShouldHandleDragEvent(const ui::LocatedEvent& event) {
-  // If |pagination_model_| is empty, don't handle scroll events.
-  if (pagination_model_.total_pages() <= 0)
-    return false;
-
-  DCHECK(event.IsGestureEvent() || event.IsMouseEvent());
-
-  // If the event is a scroll down in clamshell mode on the first page, don't
-  // let |pagination_controller_| handle it. Unless it occurs in a folder.
-  auto calculate_offset = [this](const ui::LocatedEvent& event) -> int {
-    if (event.IsGestureEvent())
-      return event.AsGestureEvent()->details().scroll_y_hint();
-    gfx::PointF root_location = event.root_location_f();
-    return root_location.y() - mouse_drag_start_point_.y();
-  };
-  if ((event.IsMouseEvent() || event.type() == ui::ET_GESTURE_SCROLL_BEGIN) &&
-      !IsTabletMode() &&
-      ((pagination_model_.selected_page() == 0 &&
-        calculate_offset(event) > 0))) {
-    return false;
-  }
-
-  return true;
 }
 
 bool PagedAppsGridView::IsValidPageFlipTarget(int page) const {
@@ -865,7 +733,7 @@ void PagedAppsGridView::OnPageFlipTimer() {
 
   pagination_model_.SelectPage(page_flip_target_, true);
   if (!IsInFolder())
-    RecordPageSwitcherSource(kDragAppToBorder, IsTabletMode());
+    RecordPageSwitcherSource(kDragAppToBorder);
 
   BeginHideCurrentGhostImageView();
 }
@@ -935,10 +803,6 @@ void PagedAppsGridView::AnimateCardifiedState() {
   gfx::Point start_position = items_container()->origin();
   RecenterItemsContainer();
 
-  // Apps might be animating due to drag reorder. Cancel any active animations
-  // so that the cardified state animation can be applied.
-  bounds_animator()->Cancel();
-
   gfx::Vector2d translate_offset(
       0, start_position.y() - items_container()->origin().y());
 
@@ -954,18 +818,15 @@ void PagedAppsGridView::AnimateCardifiedState() {
   views::AnimationBuilder animations;
   cardified_animation_abort_handle_ = animations.GetAbortHandle();
   animations
-      .OnEnded(base::BindOnce(&PagedAppsGridView::MaybeCallOnBoundsAnimatorDone,
+      .OnEnded(base::BindOnce(&PagedAppsGridView::OnCardifiedStateAnimationDone,
                               weak_ptr_factory_.GetWeakPtr()))
       .OnAborted(
-          base::BindOnce(&PagedAppsGridView::MaybeCallOnBoundsAnimatorDone,
+          base::BindOnce(&PagedAppsGridView::OnCardifiedStateAnimationDone,
                          weak_ptr_factory_.GetWeakPtr()))
       .SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
       .Once()
       .SetDuration(base::Milliseconds(kDefaultAnimationDuration));
-
-  DCHECK(!bounds_animation_for_cardified_state_in_progress_);
-  bounds_animation_for_cardified_state_in_progress_ = true;
 
   AnimateAppListItemsForCardifiedState(&animations.GetCurrentSequence(),
                                        translate_offset);
@@ -1052,8 +913,8 @@ void PagedAppsGridView::AnimateAppListItemsForCardifiedState(
 
     if (entry_view->has_pending_row_change()) {
       entry_view->reset_has_pending_row_change();
-      row_change_animator_->AnimateBetweenRows(entry_view, current_bounds,
-                                               target_bounds);
+      row_change_animator_->AnimateBetweenRows(
+          entry_view, current_bounds, target_bounds, animation_sequence);
       continue;
     }
 
@@ -1078,10 +939,7 @@ void PagedAppsGridView::AnimateAppListItemsForCardifiedState(
   }
 }
 
-void PagedAppsGridView::MaybeCallOnBoundsAnimatorDone() {
-  DCHECK(bounds_animation_for_cardified_state_in_progress_);
-  bounds_animation_for_cardified_state_in_progress_ = false;
-
+void PagedAppsGridView::OnCardifiedStateAnimationDone() {
   DestroyLayerItemsIfNotNeeded();
 
   if (layer()->opacity() == 0.0f)
@@ -1333,7 +1191,7 @@ void PagedAppsGridView::AnimateOnNudgeRemoved() {
   }
 
   PrepareItemsForBoundsAnimation();
-  AnimateToIdealBounds();
+  AnimateToIdealBounds(/*top to bottom animation=*/true);
 }
 
 void PagedAppsGridView::SetCardifiedStateEndedTestCallback(

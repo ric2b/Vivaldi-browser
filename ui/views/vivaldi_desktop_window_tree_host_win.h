@@ -12,8 +12,20 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "ui/color/win/accent_color_observer.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #include "ui/views/widget/widget.h"
+
+#define DWMWA_WINDOW_CORNER_PREFERENCE DWORD(33)
+#define DWMWA_BORDER_COLOR DWORD(34)
+
+#define DWMWCP_DEFAULT DWORD(0)
+#define DWMWCP_ROUND DWORD(2)
+
+// Set as window borders, on Win11 and higher if accent-color is not enabled.
+#define VIVALDI_WINDOW_BORDER_DARK RGB(0x37, 0x37, 0x37)
+#define VIVALDI_WINDOW_BORDER_LIGHT RGB(0xAA, 0xAA, 0xAA)
 
 namespace views {
 class DesktopNativeWidgetAura;
@@ -25,15 +37,14 @@ class VivaldiSystemMenuModelBuilder;
 class VivaldiVirtualDesktopHelper;
 
 // A sublass to ensure system menu initialization.
-class VivaldiDesktopWindowTreeHostWin
-    : public views::DesktopWindowTreeHostWin {
+class VivaldiDesktopWindowTreeHostWin : public views::DesktopWindowTreeHostWin {
  public:
   VivaldiDesktopWindowTreeHostWin(
       VivaldiBrowserWindow* window,
       views::DesktopNativeWidgetAura* desktop_native_widget_aura);
   ~VivaldiDesktopWindowTreeHostWin() override;
-  VivaldiDesktopWindowTreeHostWin(
-      const VivaldiDesktopWindowTreeHostWin&) = delete;
+  VivaldiDesktopWindowTreeHostWin(const VivaldiDesktopWindowTreeHostWin&) =
+      delete;
   VivaldiDesktopWindowTreeHostWin& operator=(
       const VivaldiDesktopWindowTreeHostWin&) = delete;
 
@@ -63,22 +74,39 @@ class VivaldiDesktopWindowTreeHostWin
                            HMONITOR monitor) const override;
 
   void SetRoundedWindowCorners(bool enable);
+  void SetWindowAccentColor(COLORREF bordercolor);
+  // Will read the system setting for accent border color and use this if
+  // enabled. If this we will fallback to two predefined colors for dark and
+  // light modes.
+  void UpdateWindowBorderColor(bool is_inactive,
+                               bool check_global_accent = false);
   void UpdateWorkspace();
-
   views::NativeMenuWin* GetSystemMenu();
+  void OnPrefsChanged(const std::string& path);
+  void OnAccentColorUpdated();
+
+  base::CallbackListSubscription subscription_ =
+      ui::AccentColorObserver::Get()->Subscribe(base::BindRepeating(
+          &VivaldiDesktopWindowTreeHostWin::OnAccentColorUpdated,
+          base::Unretained(this)));
 
   raw_ptr<VivaldiBrowserWindow> window_;
 
   std::unique_ptr<VivaldiSystemMenuModelBuilder> menu_model_builder_;
 
+  COLORREF window_border_color_;
+  // If the system has border accent set. This will override our own colors.
+  bool has_accent_set_ = false;
   // The wrapped system menu itself.
   std::unique_ptr<views::NativeMenuWin> system_menu_;
+  std::unique_ptr<base::win::RegKey> dwm_key_;
 
   // This will be null pre Win10.
   scoped_refptr<VivaldiVirtualDesktopHelper> virtual_desktop_helper_;
 
-  base::WeakPtrFactory<VivaldiDesktopWindowTreeHostWin> weak_factory_{
-      this};
+  PrefChangeRegistrar prefs_registrar_;
+
+  base::WeakPtrFactory<VivaldiDesktopWindowTreeHostWin> weak_factory_{this};
 };
 
 #endif  // UI_VIEWS_VIVALDI_DESKTOP_WINDOW_TREE_HOST_WIN_H_

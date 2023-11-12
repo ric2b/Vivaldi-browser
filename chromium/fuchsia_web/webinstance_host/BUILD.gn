@@ -4,9 +4,11 @@
 
 assert(is_fuchsia)
 
+import("//third_party/widevine/cdm/widevine.gni")
+
 visibility = [ ":*" ]
 
-source_set("webinstance_host") {
+source_set("webinstance_host_v1") {
   assert_no_deps = [
     "//content/public/common",
     "//media",
@@ -23,12 +25,13 @@ source_set("webinstance_host") {
   sources = [
     "fuchsia_web_debug_proxy.cc",
     "fuchsia_web_debug_proxy.h",
-    "web_instance_host.cc",
+    "web_instance_host_v1.cc",
   ]
-  public = [ "web_instance_host.h" ]
+  public = [ "web_instance_host_v1.h" ]
   deps = [
     "//base",
     "//base:base_static",
+    "//build:chromecast_buildflags",
     "//components/fuchsia_component_support",
     "//fuchsia_web/common",
     "//fuchsia_web/webengine:switches",
@@ -39,9 +42,13 @@ source_set("webinstance_host") {
     "//third_party/fuchsia-sdk/sdk/pkg/fdio",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/zx",
-    "//third_party/widevine/cdm:headers",
+    "//third_party/widevine/cdm:buildflags",
     "//ui/ozone",
   ]
+  if (enable_widevine) {
+    deps += [ "//third_party/widevine/cdm:headers" ]
+  }
+
   public_deps = [
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
@@ -55,7 +62,7 @@ source_set("webinstance_host_integration_test") {
   visibility += [ "//fuchsia_web/webengine/*" ]
   sources = [ "web_instance_host_integration_test.cc" ]
   deps = [
-    ":webinstance_host",
+    ":webinstance_host_v1",
     "//base",
     "//fuchsia_web/common/test:test_support",
     "//fuchsia_web/webengine:browsertest_core",

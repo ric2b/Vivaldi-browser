@@ -7,15 +7,15 @@ import {CellularSetupPageName} from 'chrome://resources/ash/common/cellular_setu
 import {setESimManagerRemoteForTesting} from 'chrome://resources/ash/common/cellular_setup/mojo_interface_provider.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {ESimManagerRemote} from 'chrome://resources/mojo/chromeos/ash/services/cellular_setup/public/mojom/esim_manager.mojom-webui.js';
-import {CrosNetworkConfigRemote, InhibitReason, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {CrosNetworkConfigRemote, InhibitReason, MAX_NUM_CUSTOM_APNS, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {FakeNetworkConfig} from 'chrome://test/chromeos/fake_network_config_mojom.js';
-import {FakeESimManagerRemote} from 'chrome://test/cr_components/chromeos/cellular_setup/fake_esim_manager_remote.js';
-import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {isVisible} from 'chrome://webui-test/test_util.js';
+import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
+import {FakeESimManagerRemote} from 'chrome://webui-test/cr_components/chromeos/cellular_setup/fake_esim_manager_remote.js';
+import {waitAfterNextRender, waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 suite('InternetPage', function() {
   /** @type {?InternetPageElement} */
@@ -127,6 +127,14 @@ suite('InternetPage', function() {
     return flushAsync();
   }
 
+  async function navigateToApnSubpage() {
+    await navigateToCellularDetailPage();
+    internetPage.shadowRoot.querySelector('settings-internet-detail-page')
+        .shadowRoot.querySelector('#apnSubpageButton')
+        .click();
+    return await flushAsync();
+  }
+
   function init() {
     loadTimeData.overrideValues({
       bypassConnectivityCheck: false,
@@ -156,6 +164,7 @@ suite('InternetPage', function() {
       internetAddWiFi: 'internetAddWiFi',
       internetDetailPageTitle: 'internetDetailPageTitle',
       internetKnownNetworksPageTitle: 'internetKnownNetworksPageTitle',
+      isApnRevampEnabled: false,
     });
 
     mojoApi_ = new FakeNetworkConfig();
@@ -735,6 +744,132 @@ suite('InternetPage', function() {
         assertEquals(knownNetworksPage.networkType, NetworkType.kWiFi);
       });
 
+  test('Navigate to/from APN subpage', async function() {
+    loadTimeData.overrideValues({isApnRevampEnabled: true});
+    await navigateToApnSubpage();
+    assertEquals(Router.getInstance().getCurrentRoute(), routes.APN);
+    assertTrue(!!internetPage.shadowRoot.querySelector('apn-subpage'));
+
+    const windowPopstatePromise = eventToPromise('popstate', window);
+    Router.getInstance().navigateToPreviousRoute();
+    await windowPopstatePromise;
+    await waitBeforeNextRender(internetPage);
+    const detailPage =
+        internetPage.shadowRoot.querySelector('settings-internet-detail-page');
+    await flushAsync();
+
+    assertEquals(
+        detailPage.shadowRoot.querySelector('#apnSubpageButton'),
+        detailPage.shadowRoot.activeElement,
+        'Apn subpage row should be focused');
+  });
+
+  test(
+      'Create apn button opens dialogs and clicking cancel button removes it',
+      async function() {
+        loadTimeData.overrideValues({isApnRevampEnabled: true});
+        await navigateToApnSubpage();
+        const subpage = internetPage.shadowRoot.querySelector('apn-subpage');
+        assertTrue(!!subpage);
+        const apnList = subpage.shadowRoot.querySelector('apn-list');
+        assertTrue(!!apnList);
+        const getApnDetailDialog = () =>
+            apnList.shadowRoot.querySelector('apn-detail-dialog');
+
+        assertFalse(!!getApnDetailDialog());
+        const createCustomApnButton =
+            internetPage.shadowRoot.querySelector('#createCustomApnButton');
+        assertTrue(!!createCustomApnButton);
+        createCustomApnButton.click();
+        await flushAsync();
+
+        assertTrue(!!getApnDetailDialog());
+        const onCloseEventPromise = eventToPromise('close', apnList);
+        const cancelBtn = getApnDetailDialog().shadowRoot.querySelector(
+            '#apnDetailCancelBtn');
+        cancelBtn.click();
+        await onCloseEventPromise;
+
+        assertFalse(!!getApnDetailDialog());
+      });
+
+  test(
+      'Navigate to APN subpage and remove cellular properties.',
+      async function() {
+        loadTimeData.overrideValues({isApnRevampEnabled: true});
+        await navigateToApnSubpage();
+        assertEquals(Router.getInstance().getCurrentRoute(), routes.APN);
+        assertTrue(!!internetPage.shadowRoot.querySelector('apn-subpage'));
+        // We use the same guid as in navigateToCellularDetailPage so that
+        // we trigger onNetworkStateChanged
+        const network = OncMojo.getDefaultManagedProperties(
+            NetworkType.kWiFi, 'cellular1', 'name1');
+        const windowPopstatePromise = eventToPromise('popstate', window);
+        mojoApi_.setManagedPropertiesForTest(network);
+        await windowPopstatePromise;
+        await waitBeforeNextRender(internetPage);
+        // Because there were no cellular properties we call apn_subpage close
+        // which navigates to the previous page.
+        assertEquals(
+            Router.getInstance().getCurrentRoute(), routes.NETWORK_DETAIL);
+      });
+
+  test(
+      'Navigate to APN subpage without providing guid as parameter',
+      async function() {
+        loadTimeData.overrideValues({isApnRevampEnabled: true});
+        await navigateToCellularDetailPage();
+        const windowPopstatePromise = eventToPromise('popstate', window);
+        Router.getInstance().navigateTo(routes.APN);
+        await windowPopstatePromise;
+        await waitBeforeNextRender(internetPage);
+        assertNotEquals(Router.getInstance().getCurrentRoute(), routes.APN);
+      });
+
+  test(
+      'Disable and show tooltip for New APN button when custom APNs limit is' +
+          'reached',
+      async function() {
+        loadTimeData.overrideValues({isApnRevampEnabled: true});
+        await navigateToApnSubpage();
+        const getApnButton = () =>
+            internetPage.shadowRoot.querySelector('#createCustomApnButton');
+        const getApnTooltip = () =>
+            internetPage.shadowRoot.querySelector('#apnTooltip');
+
+        assertTrue(!!getApnButton());
+        assertFalse(!!getApnTooltip());
+        assertFalse(getApnButton().disabled);
+
+        let properties = OncMojo.getDefaultManagedProperties(
+            NetworkType.kCellular, 'cellular1', 'cellular');
+        // We're setting the list of APNs to the max number
+        properties.typeProperties.cellular = {
+          customApnList:
+              Array.apply(null, {length: MAX_NUM_CUSTOM_APNS}).map(_ => {
+                return {
+                  accessPointName: 'apn',
+                };
+              }),
+        };
+        mojoApi_.setManagedPropertiesForTest(properties);
+        await flushAsync();
+
+        assertTrue(!!getApnTooltip());
+        assertTrue(getApnButton().disabled);
+        assertTrue(getApnTooltip().innerHTML.includes(
+            internetPage.i18n('customApnLimitReached')));
+
+        properties = OncMojo.getDefaultManagedProperties(
+            NetworkType.kCellular, 'cellular1', 'cellular');
+        properties.typeProperties.cellular = {
+          customApnList: [],
+        };
+        mojoApi_.setManagedPropertiesForTest(properties);
+        await flushAsync();
+        assertFalse(!!getApnTooltip());
+        assertFalse(getApnButton().disabled);
+      });
   // TODO(stevenjb): Figure out a way to reliably test navigation. Currently
   // such tests are flaky.
 });

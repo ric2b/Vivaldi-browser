@@ -7,7 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -62,7 +62,7 @@ class HyphenationDirectory {
     std::swap(callbacks, callbacks_);
     for (base::OnceCallback<void(const base::FilePath&)>& callback :
          callbacks) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), dir_));
     }
   }
@@ -94,7 +94,7 @@ bool HyphenationComponentInstallerPolicy::RequiresNetworkEncryption() const {
 
 update_client::CrxInstaller::Result
 HyphenationComponentInstallerPolicy::OnCustomInstall(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) {
   return update_client::CrxInstaller::Result(0);  // Nothing custom here.
 }
@@ -104,7 +104,7 @@ void HyphenationComponentInstallerPolicy::OnCustomUninstall() {}
 void HyphenationComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
-    base::Value manifest) {
+    base::Value::Dict manifest) {
   VLOG(1) << "Hyphenation Component ready, version " << version.GetString()
           << " in " << install_dir.value();
   HyphenationDirectory* hyphenation_directory = HyphenationDirectory::Get();
@@ -113,7 +113,7 @@ void HyphenationComponentInstallerPolicy::ComponentReady(
 
 // Called during startup and installation before ComponentReady().
 bool HyphenationComponentInstallerPolicy::VerifyInstallation(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) const {
   return true;
 }

@@ -100,6 +100,7 @@ const char DefaultSearchManager::kSideImageSearchParam[] =
     "side_image_search_param";
 const char DefaultSearchManager::kImageSearchBrandingLabel[] =
     "image_search_branding_label";
+const char DefaultSearchManager::kSearchIntentParams[] = "search_intent_params";
 
 const char DefaultSearchManager::kSafeForAutoReplace[] = "safe_for_autoreplace";
 const char DefaultSearchManager::kInputEncodings[] = "input_encodings";
@@ -261,8 +262,8 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
     return;
   }
 
-  pref_service_->Set(vivaldi_default_pref_,
-                     *TemplateURLDataToDictionary(data));
+  pref_service_->SetDict(vivaldi_default_pref_,
+                         TemplateURLDataToDictionary(data));
 }
 
 void DefaultSearchManager::ClearUserSelectedDefaultSearchEngine() {

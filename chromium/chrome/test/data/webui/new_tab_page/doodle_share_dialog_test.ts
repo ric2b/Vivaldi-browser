@@ -12,11 +12,10 @@ import {installMock} from './test_support.js';
 
 suite('NewTabPageDoodleShareDialogTest', () => {
   let doodleShareDialog: DoodleShareDialogElement;
-  let windowProxy: TestBrowserProxy;
+  let windowProxy: TestBrowserProxy<WindowProxy>;
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     windowProxy = installMock(WindowProxy);
 

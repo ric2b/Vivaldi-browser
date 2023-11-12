@@ -16,8 +16,9 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
@@ -832,7 +833,8 @@ int64_t OfflinePageRequestHandlerTest::SavePage(const GURL& url,
 
   auto archiver = std::make_unique<OfflinePageTestArchiver>(
       nullptr, url, OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED,
-      std::u16string(), file_size, digest, base::ThreadTaskRunnerHandle::Get());
+      std::u16string(), file_size, digest,
+      base::SingleThreadTaskRunner::GetCurrentDefault());
   archiver->set_filename(file_path);
 
   async_operation_completed_ = false;
@@ -854,7 +856,7 @@ std::unique_ptr<KeyedService>
 OfflinePageRequestHandlerTest::BuildTestOfflinePageModel(
     SimpleFactoryKey* key) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      base::ThreadTaskRunnerHandle::Get();
+      base::SingleThreadTaskRunner::GetCurrentDefault();
 
   base::FilePath store_path =
       key->GetPath().Append(chrome::kOfflinePageMetadataDirname);
@@ -926,7 +928,7 @@ void OfflinePageRequestHandlerTest::ReadCompleted(
   response_ = response;
   is_offline_page_set_in_navigation_data_ =
       is_offline_page_set_in_navigation_data;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
 }
 
@@ -1027,7 +1029,7 @@ void OfflinePageURLLoaderBuilder::ReadBody() {
     if (rv == MOJO_RESULT_SHOULD_WAIT) {
       handle_watcher_ = std::make_unique<mojo::SimpleWatcher>(
           FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
-          base::SequencedTaskRunnerHandle::Get());
+          base::SequencedTaskRunner::GetCurrentDefault());
       handle_watcher_->Watch(
           client_->response_body(),
           MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,

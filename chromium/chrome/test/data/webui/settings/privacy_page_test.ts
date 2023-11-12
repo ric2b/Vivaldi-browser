@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ClearBrowsingDataBrowserProxyImpl, ContentSettingsTypes, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {CrLinkRowElement, CrSettingsPrefs, HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyPageBrowserProxyImpl, Route, Router, routes, SettingsPrefsElement, SettingsPrivacyPageElement, StatusAction, SyncStatus, TrustSafetyInteraction} from 'chrome://settings/settings.js';
@@ -90,8 +90,7 @@ suite('PrivacyPage', function() {
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
 
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
@@ -165,60 +164,85 @@ suite('PrivacyPage', function() {
   });
 });
 
-suite('PrivacySandboxEnabled', function() {
-  let page: SettingsPrivacyPageElement;
-  let settingsPrefs: SettingsPrefsElement;
-  let metricsBrowserProxy: TestMetricsBrowserProxy;
+[true, false].forEach(enablePrivacySandbox4 => {
+  const privacySandboxVersion = enablePrivacySandbox4 ? '4' : '';
 
-  suiteSetup(function() {
-    loadTimeData.overrideValues({
-      isPrivacySandboxRestricted: false,
+  suite(`PrivacySandbox${privacySandboxVersion}Enabled`, function() {
+    let page: SettingsPrivacyPageElement;
+    let settingsPrefs: SettingsPrefsElement;
+    let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+    suiteSetup(function() {
+      loadTimeData.overrideValues({
+        isPrivacySandboxRestricted: false,
+      });
+
+      settingsPrefs = document.createElement('settings-prefs');
+      return CrSettingsPrefs.initialized;
     });
 
-    settingsPrefs = document.createElement('settings-prefs');
-    return CrSettingsPrefs.initialized;
-  });
+    setup(function() {
+      metricsBrowserProxy = new TestMetricsBrowserProxy();
+      MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+      document.body.innerHTML = window.trustedTypes!.emptyHTML;
+      page = document.createElement('settings-privacy-page');
+      page.prefs = settingsPrefs.prefs!;
+      document.body.appendChild(page);
+      return flushTasks();
+    });
 
-  setup(function() {
-    metricsBrowserProxy = new TestMetricsBrowserProxy();
-    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
-    page = document.createElement('settings-privacy-page');
-    page.prefs = settingsPrefs.prefs!;
-    document.body.appendChild(page);
-    return flushTasks();
-  });
+    test('privacySandboxRestricted', function() {
+      assertTrue(isChildVisible(page, '#privacySandboxLinkRow'));
+    });
 
-  test('privacySandboxRestricted', function() {
-    assertTrue(isChildVisible(page, '#privacySandboxLinkRow'));
-  });
+    test('privacySandboxRowSublabel', async function() {
+      page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
+      assertTrue(isChildVisible(page, '#privacySandboxLinkRow'));
+      const privacySandboxLinkRow =
+          page.shadowRoot!.querySelector<CrLinkRowElement>(
+              '#privacySandboxLinkRow')!;
+      await flushTasks();
+      assertEquals(
+          loadTimeData.getString(
+              enablePrivacySandbox4 ? 'adPrivacyLinkRowSubLabel' :
+                                      'privacySandboxTrialsEnabled'),
+          privacySandboxLinkRow.subLabel);
 
-  test('privacySandboxRowSublabel', async function() {
-    page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
-    assertTrue(isChildVisible(page, '#privacySandboxLinkRow'));
-    const privacySandboxLinkRow =
-        page.shadowRoot!.querySelector<CrLinkRowElement>(
-            '#privacySandboxLinkRow')!;
-    await flushTasks();
-    assertEquals(
-        loadTimeData.getString('privacySandboxTrialsEnabled'),
-        privacySandboxLinkRow.subLabel);
+      page.set('prefs.privacy_sandbox.apis_enabled_v2.value', false);
+      await flushTasks();
+      assertEquals(
+          loadTimeData.getString(
+              enablePrivacySandbox4 ? 'adPrivacyLinkRowSubLabel' :
+                                      'privacySandboxTrialsDisabled'),
+          privacySandboxLinkRow.subLabel);
+    });
 
-    page.set('prefs.privacy_sandbox.apis_enabled_v2.value', false);
-    await flushTasks();
-    assertEquals(
-        loadTimeData.getString('privacySandboxTrialsDisabled'),
-        privacySandboxLinkRow.subLabel);
-  });
+    test('privacySandboxExternalLink', function() {
+      const privacySandboxLinkRow =
+          page.shadowRoot!.querySelector<CrLinkRowElement>(
+              '#privacySandboxLinkRow');
+      assertTrue(!!privacySandboxLinkRow);
+      assertEquals(enablePrivacySandbox4, !privacySandboxLinkRow.external);
+    });
 
-  test('clickPrivacySandboxRow', async function() {
-    page.shadowRoot!.querySelector<CrLinkRowElement>(
-                        '#privacySandboxLinkRow')!.click();
-    // Ensure UMA is logged.
-    assertEquals(
-        'Settings.PrivacySandbox.OpenedFromSettingsParent',
-        await metricsBrowserProxy.whenCalled('recordAction'));
+    test('clickPrivacySandboxRow', async function() {
+      const privacySandboxLinkRow =
+          page.shadowRoot!.querySelector<HTMLElement>('#privacySandboxLinkRow');
+      assertTrue(!!privacySandboxLinkRow);
+      privacySandboxLinkRow.click();
+      // Ensure UMA is logged.
+      assertEquals(
+          'Settings.PrivacySandbox.OpenedFromSettingsParent',
+          await metricsBrowserProxy.whenCalled('recordAction'));
+
+      // Ensure the correct route has been navigated to when enabling
+      // kPrivacySandboxSettings4.
+      if (enablePrivacySandbox4) {
+        await flushTasks();
+        assertEquals(
+            routes.PRIVACY_SANDBOX, Router.getInstance().getCurrentRoute());
+      }
+    });
   });
 });
 
@@ -236,8 +260,7 @@ suite('PrivacyGuideRowTests', function() {
     loadTimeData.overrideValues({showPrivacyGuide: true});
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
@@ -330,8 +353,7 @@ suite('PrivacyGuide2Disabled', function() {
   setup(function() {
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
@@ -373,8 +395,7 @@ suite('PrivacyPageSound', function() {
     PrivacyPageBrowserProxyImpl.setInstance(testBrowserProxy);
 
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_SOUND);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     document.body.appendChild(page);
     return flushTasks();
@@ -469,8 +490,7 @@ suite('HappinessTrackingSurveys', function() {
   setup(function() {
     testHatsBrowserProxy = new TestHatsBrowserProxy();
     HatsBrowserProxyImpl.setInstance(testHatsBrowserProxy);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
@@ -524,7 +544,7 @@ suite('NotificationPermissionReview', function() {
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
     siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(siteSettingsBrowserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
   });
 
   teardown(function() {

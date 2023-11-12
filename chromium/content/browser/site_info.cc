@@ -24,6 +24,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
 
@@ -363,7 +364,7 @@ SiteInfo::SiteInfo(const GURL& site_url,
                    const GURL& process_lock_url,
                    bool requires_origin_keyed_process,
                    bool is_sandboxed,
-                   int unique_sandbox_id_,
+                   int unique_sandbox_id,
                    const StoragePartitionConfig storage_partition_config,
                    const WebExposedIsolationInfo& web_exposed_isolation_info,
                    bool is_guest,
@@ -375,7 +376,7 @@ SiteInfo::SiteInfo(const GURL& site_url,
       process_lock_url_(process_lock_url),
       requires_origin_keyed_process_(requires_origin_keyed_process),
       is_sandboxed_(is_sandboxed),
-      unique_sandbox_id_(unique_sandbox_id_),
+      unique_sandbox_id_(unique_sandbox_id),
       storage_partition_config_(storage_partition_config),
       web_exposed_isolation_info_(web_exposed_isolation_info),
       is_guest_(is_guest),
@@ -845,8 +846,8 @@ GURL SiteInfo::GetSiteForURLInternal(const IsolationContext& isolation_context,
     // origin, as we should be using the full origin for the SiteInstance, but
     // we don't need to track the origin like we do for OriginAgentCluster.
     if (real_url_info.is_sandboxed &&
-        features::kIsolateSandboxedIframesGroupingParam.Get() ==
-            features::IsolateSandboxedIframesGrouping::kPerOrigin) {
+        blink::features::kIsolateSandboxedIframesGroupingParam.Get() ==
+            blink::features::IsolateSandboxedIframesGrouping::kPerOrigin) {
       return origin.GetURL();
     }
 

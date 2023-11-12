@@ -13,21 +13,17 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
-#include "components/viz/common/resources/resource_format.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_ozone_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/shared_image/skia_gl_image_representation.h"
-#include "gpu/command_buffer/service/shared_image/skia_vk_ozone_image_representation.h"
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "gpu/command_buffer/service/skia_utils.h"
-#include "gpu/vulkan/vulkan_image.h"
-#include "gpu/vulkan/vulkan_implementation.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -41,6 +37,12 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_image_native_pixmap.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/command_buffer/service/shared_image/skia_vk_ozone_image_representation.h"
+#include "gpu/vulkan/vulkan_image.h"
+#include "gpu/vulkan/vulkan_implementation.h"
+#endif  // BUILDFLAG(ENABLE_VULKAN)
 
 #if BUILDFLAG(USE_DAWN)
 #include "gpu/command_buffer/service/shared_image/dawn_ozone_image_representation.h"
@@ -91,8 +93,10 @@ class OzoneImageBacking::OverlayOzoneImageRepresentation
     auto* ozone_backing = static_cast<OzoneImageBacking*>(backing());
     std::vector<gfx::GpuFenceHandle> fences;
     bool need_end_fence;
-    ozone_backing->BeginAccess(/*readonly=*/true, AccessStream::kOverlay,
-                               &fences, need_end_fence);
+    if (!ozone_backing->BeginAccess(/*readonly=*/true, AccessStream::kOverlay,
+                                    &fences, need_end_fence)) {
+      return false;
+    }
     // Always need an end fence when finish reading from overlays.
     DCHECK(need_end_fence);
     if (!fences.empty()) {
@@ -106,23 +110,6 @@ class OzoneImageBacking::OverlayOzoneImageRepresentation
     ozone_backing->EndAccess(/*readonly=*/true, AccessStream::kOverlay,
                              std::move(release_fence));
   }
-
-  gl::GLImage* GetGLImage() override {
-    if (!gl_image_) {
-      gfx::BufferFormat buffer_format = viz::BufferFormat(format());
-      auto pixmap =
-          static_cast<OzoneImageBacking*>(backing())->GetNativePixmap();
-      gl_image_ = base::MakeRefCounted<gl::GLImageNativePixmap>(
-          pixmap->GetBufferSize(), buffer_format);
-      if (backing()->color_space().IsValid())
-        gl_image_->SetColorSpace(backing()->color_space());
-      gl_image_->InitializeForOverlay(pixmap);
-    }
-
-    return gl_image_.get();
-  }
-
-  scoped_refptr<gl::GLImageNativePixmap> gl_image_;
 };
 
 OzoneImageBacking::~OzoneImageBacking() = default;
@@ -145,15 +132,17 @@ std::unique_ptr<DawnImageRepresentation> OzoneImageBacking::ProduceDawn(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     WGPUDevice device,
-    WGPUBackendType backend_type) {
+    WGPUBackendType backend_type,
+    std::vector<WGPUTextureFormat> view_formats) {
 #if BUILDFLAG(USE_DAWN)
   DCHECK(dawn_procs_);
-  WGPUTextureFormat webgpu_format = viz::ToWGPUFormat(format());
+  WGPUTextureFormat webgpu_format = ToWGPUFormat(format());
   if (webgpu_format == WGPUTextureFormat_Undefined) {
     return nullptr;
   }
   return std::make_unique<DawnOzoneImageRepresentation>(
-      manager, this, tracker, device, webgpu_format, pixmap_, dawn_procs_);
+      manager, this, tracker, device, webgpu_format, std::move(view_formats),
+      pixmap_, dawn_procs_);
 #else  // !BUILDFLAG(USE_DAWN)
   return nullptr;
 #endif
@@ -162,25 +151,29 @@ std::unique_ptr<DawnImageRepresentation> OzoneImageBacking::ProduceDawn(
 std::unique_ptr<GLTextureImageRepresentation>
 OzoneImageBacking::ProduceGLTexture(SharedImageManager* manager,
                                     MemoryTypeTracker* tracker) {
-  if (cached_texture_holder_ && cached_texture_holder_->WasContextLost())
-    cached_texture_holder_.reset();
+  if (!cached_texture_holders_.empty() &&
+      cached_texture_holders_[0]->WasContextLost()) {
+    cached_texture_holders_.clear();
+  }
 
   const bool need_cache = workarounds_.cache_texture_in_ozone_backing;
   return GLTextureOzoneImageRepresentation::Create(
       manager, this, tracker, pixmap_, plane_,
-      need_cache ? &cached_texture_holder_ : nullptr);
+      need_cache ? &cached_texture_holders_ : nullptr);
 }
 
 std::unique_ptr<GLTexturePassthroughImageRepresentation>
 OzoneImageBacking::ProduceGLTexturePassthrough(SharedImageManager* manager,
                                                MemoryTypeTracker* tracker) {
-  if (cached_texture_holder_ && cached_texture_holder_->WasContextLost())
-    cached_texture_holder_.reset();
+  if (!cached_texture_holders_.empty() &&
+      cached_texture_holders_[0]->WasContextLost()) {
+    cached_texture_holders_.clear();
+  }
 
   const bool need_cache = workarounds_.cache_texture_in_ozone_backing;
   return GLTexturePassthroughOzoneImageRepresentation::Create(
       manager, this, tracker, pixmap_, plane_,
-      need_cache ? &cached_texture_holder_ : nullptr);
+      need_cache ? &cached_texture_holders_ : nullptr);
 }
 
 std::unique_ptr<SkiaImageRepresentation> OzoneImageBacking::ProduceSkia(
@@ -210,6 +203,7 @@ std::unique_ptr<SkiaImageRepresentation> OzoneImageBacking::ProduceSkia(
     return skia_representation;
   }
   if (context_state->GrContextIsVulkan()) {
+#if BUILDFLAG(ENABLE_VULKAN)
     auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
     gfx::GpuMemoryBufferHandle gmb_handle;
     gmb_handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
@@ -226,6 +220,10 @@ std::unique_ptr<SkiaImageRepresentation> OzoneImageBacking::ProduceSkia(
     return std::make_unique<SkiaVkOzoneImageRepresentation>(
         manager, this, std::move(context_state), std::move(vulkan_image),
         tracker);
+#else
+    NOTREACHED() << "Vulkan is disabled.";
+    return nullptr;
+#endif  // BUILDFLAG(ENABLE_VULKAN)
   }
   NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;

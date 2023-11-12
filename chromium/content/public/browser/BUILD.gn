@@ -1,5 +1,5 @@
 # Copyright 2014 The Chromium Authors
-# Use of this source code is governed by a BSD-style license that can be
+# Use of this source code is governed by a BSD - style license that can be
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
@@ -26,8 +26,11 @@ source_set("browser_sources") {
   # External code should depend on via ":browser" above.
   visibility = [ "//content/*" ]
   sources = [
+    "active_url_message_filter.cc",
+    "active_url_message_filter.h",
     "allow_service_worker_result.cc",
     "allow_service_worker_result.h",
+    "anchor_element_preconnect_delegate.h",
     "attribution_config.h",
     "attribution_reporting.h",
     "audio_service.h",
@@ -167,10 +170,9 @@ source_set("browser_sources") {
     "favicon_status.cc",
     "favicon_status.h",
     "feature_observer_client.h",
-    "federated_identity_active_session_permission_context_delegate.h",
     "federated_identity_api_permission_context_delegate.cc",
     "federated_identity_api_permission_context_delegate.h",
-    "federated_identity_sharing_permission_context_delegate.h",
+    "federated_identity_permission_context_delegate.h",
     "file_select_listener.h",
     "file_system_access_entry_factory.h",
     "file_system_access_permission_context.h",
@@ -204,6 +206,8 @@ source_set("browser_sources") {
     "hid_delegate.h",
     "histogram_fetcher.h",
     "host_zoom_map.h",
+    "identity_request_account.cc",
+    "identity_request_account.h",
     "identity_request_dialog_controller.cc",
     "identity_request_dialog_controller.h",
     "installability_error.cc",
@@ -255,7 +259,6 @@ source_set("browser_sources") {
     "navigation_handle_user_data.h",
     "navigation_throttle.cc",
     "navigation_throttle.h",
-    "navigation_type.h",
     "navigation_ui_data.h",
     "network_context_client_base.h",
     "network_quality_observer_factory.h",
@@ -313,10 +316,11 @@ source_set("browser_sources") {
     "provision_fetcher_impl.h",
     "push_messaging_service.cc",
     "push_messaging_service.h",
-    "quota_permission_context.h",
     "reduce_accept_language_controller_delegate.h",
     "reload_type.h",
     "render_frame_host.h",
+    "render_frame_host_observer.cc",
+    "render_frame_host_observer.h",
     "render_frame_host_receiver_set.h",
     "render_frame_metadata_provider.h",
     "render_process_host.h",
@@ -532,7 +536,7 @@ source_set("browser_sources") {
   ]
 
   allow_circular_includes_from = [
-    # This target is a pair with content/browser. They always go together and
+    # This target is a pair with content / browser.They always go together and
     # include headers from each other.
     "//content/browser",
   ]
@@ -569,6 +573,7 @@ source_set("browser_sources") {
       "android/java_interfaces.h",
       "android/media_url_interceptor_register.cc",
       "android/media_url_interceptor_register.h",
+      "android/message_payload.h",
       "android/message_payload_type.h",
       "android/message_port_helper.h",
       "android/motion_event_action.h",
@@ -596,6 +601,7 @@ source_set("browser_sources") {
 
   if (is_fuchsia) {
     sources += [ "ax_inspect_factory_fuchsia.cc" ]
+    deps += [ "//media/fuchsia/mojom:fuchsia_media" ]
   }
 
   if (is_win) {
@@ -616,8 +622,12 @@ source_set("browser_sources") {
   }
 
   if (is_chromeos) {
-    sources += [ "lock_screen_storage.h" ]
-    deps += [ "//ui/ozone:ozone_switches" ]
+    sources += [
+      "chromeos/multi_capture_service.cc",
+      "chromeos/multi_capture_service.h",
+      "firewall_hole_proxy.h",
+      "lock_screen_storage.h",
+    ]
   }
 
   if (!is_android) {
@@ -633,8 +643,6 @@ source_set("browser_sources") {
   if (is_chromeos_ash) {
     sources += [
       "chromeos/delegate_to_browser_gpu_service_accelerator_factory.h",
-      "chromeos/multi_capture_service.cc",
-      "chromeos/multi_capture_service.h",
       "tts_controller_delegate.cc",
       "tts_controller_delegate.h",
     ]

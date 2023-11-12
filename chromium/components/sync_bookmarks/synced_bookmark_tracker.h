@@ -31,6 +31,10 @@ class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
 
+namespace file_sync {
+class SyncedFileStore;
+}  // namespace file_sync
+
 namespace sync_bookmarks {
 
 class SyncedBookmarkTrackerEntity;
@@ -211,6 +215,11 @@ class SyncedBookmarkTracker {
   absl::optional<int64_t>
   GetMaxVersionAmongIgnoredUpdatesDueToMissingParentForTest() const;
 
+  void set_vivaldi_synced_file_store(
+      file_sync::SyncedFileStore* synced_file_store) {
+    vivaldi_synced_file_store_ = synced_file_store;
+  }
+
  private:
   // Enumeration of possible reasons why persisted metadata are considered
   // corrupted and don't match the bookmark model. Used in UMA metrics. Do not
@@ -305,6 +314,8 @@ class SyncedBookmarkTracker {
   absl::optional<int64_t> num_ignored_updates_due_to_missing_parent_;
   absl::optional<int64_t>
       max_version_among_ignored_updates_due_to_missing_parent_;
+
+  raw_ptr<file_sync::SyncedFileStore> vivaldi_synced_file_store_ = nullptr;
 };
 
 }  // namespace sync_bookmarks

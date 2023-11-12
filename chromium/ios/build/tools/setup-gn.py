@@ -198,9 +198,13 @@ class GnGenerator(object):
       stream.write('  command = %s\n' % NinjaEscapeCommand(gn_command))
       stream.write('  description = Regenerating ninja files\n')
       stream.write('\n')
-      stream.write('build build.ninja: gn\n')
+      stream.write('build build.ninja.stamp: gn\n')
       stream.write('  generator = 1\n')
       stream.write('  depfile = build.ninja.d\n')
+      stream.write('\n')
+      stream.write('build build.ninja: phony build.ninja.stamp\n')
+      stream.write('  generator = 1\n')
+      stream.write('\n')
 
   def WriteBuildNinjaDeps(self, build_dir):
     with open(os.path.join(build_dir, 'build.ninja.d'), 'w') as stream:
@@ -213,7 +217,7 @@ class GnGenerator(object):
       gn_command.append('--ninja-executable=autoninja')
       gn_command.append('--xcode-build-system=new')
       gn_command.append('--xcode-project=%s' % xcode_project_name)
-      gn_command.append('--xcode-additional-files-patterns=*.md')
+      gn_command.append('--xcode-additional-files-patterns=*.md;OWNERS')
       gn_command.append(
           '--xcode-additional-files-roots=' + ';'.join(ADDITIONAL_FILE_ROOTS))
       gn_command.append('--xcode-configs=' + ';'.join(SUPPORTED_CONFIGS))

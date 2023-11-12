@@ -10,6 +10,7 @@
 #include "base/base_switches.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/process.h"
 #include "base/strings/strcat.h"
@@ -50,7 +51,7 @@ class MojoIpczInProcessTestNodeController
 
    private:
     std::unique_ptr<ipcz::test::TestNode> node_;
-    ipcz::test::TestDriver* const driver_;
+    const raw_ptr<ipcz::test::TestDriver> driver_;
   };
 
   MojoIpczInProcessTestNodeController(
@@ -176,9 +177,9 @@ class MojoIpczTestDriver : public ipcz::test::TestDriver {
       parent_process = base::Process(LongToHandle(parent_handle_value));
     }
 #endif  // BUILDFLAG(IS_WIN)
+    const bool is_broker = parent_process.IsValid();
     return Transport::ReleaseAsHandle(Transport::Create(
-        {.source = parent_process.IsValid() ? Transport::kBroker
-                                            : Transport::kNonBroker,
+        {.source = is_broker ? Transport::kBroker : Transport::kNonBroker,
          .destination = Transport::kBroker},
         std::move(endpoint), std::move(parent_process)));
   }

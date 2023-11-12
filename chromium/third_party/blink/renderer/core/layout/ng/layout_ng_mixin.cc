@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
@@ -58,8 +59,6 @@ LayoutNGMixin<Base>::LayoutNGMixin(ContainerNode* node) : Base(node) {
   static_assert(
       std::is_base_of<LayoutBlock, Base>::value,
       "Base class of LayoutNGMixin must be LayoutBlock or derived class.");
-  if (node)
-    Base::GetDocument().IncLayoutBlockCounterNG();
 }
 
 template <typename Base>
@@ -130,119 +129,14 @@ bool LayoutNGMixin<Base>::NodeAtPoint(HitTestResult& result,
 template <typename Base>
 RecalcLayoutOverflowResult LayoutNGMixin<Base>::RecalcLayoutOverflow() {
   Base::CheckIsNotDestroyed();
-
-  RecalcLayoutOverflowResult child_result;
-  // Don't attempt to rebuild the fragment tree or recalculate
-  // scrollable-overflow, layout will do this for us.
-  if (Base::NeedsLayout())
-    return RecalcLayoutOverflowResult();
-
-  if (Base::ChildNeedsLayoutOverflowRecalc())
-    child_result = RecalcChildLayoutOverflow();
-
-  bool should_recalculate_layout_overflow =
-      Base::SelfNeedsLayoutOverflowRecalc() ||
-      child_result.layout_overflow_changed;
-  bool rebuild_fragment_tree = child_result.rebuild_fragment_tree;
-  bool layout_overflow_changed = false;
-
-  if (rebuild_fragment_tree || should_recalculate_layout_overflow) {
-    for (auto& layout_result : Base::layout_results_) {
-      const auto& fragment =
-          To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
-      absl::optional<PhysicalRect> layout_overflow;
-
-      // Recalculate our layout-overflow if a child had its layout-overflow
-      // changed, or if we are marked as dirty.
-      if (should_recalculate_layout_overflow) {
-        const PhysicalRect old_layout_overflow = fragment.LayoutOverflow();
-#if DCHECK_IS_ON()
-        NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
-#endif
-        const PhysicalRect new_layout_overflow =
-            NGLayoutOverflowCalculator::RecalculateLayoutOverflowForFragment(
-                fragment);
-
-        // Set the appropriate flags if the layout-overflow changed.
-        if (old_layout_overflow != new_layout_overflow) {
-          layout_overflow = new_layout_overflow;
-          layout_overflow_changed = true;
-          rebuild_fragment_tree = true;
-        }
-      }
-
-      // Create and set a new result (potentially with an updated
-      // layout-overflow) if either:
-      //  - The layout-overflow changed.
-      //  - An arbitrary descendant had its layout-overflow change (as
-      //    indicated by |rebuild_fragment_tree|).
-      if (rebuild_fragment_tree || layout_overflow) {
-        layout_result = NGLayoutResult::CloneWithPostLayoutFragments(
-            *layout_result, layout_overflow);
-      }
-    }
-    Base::SetLayoutOverflowFromLayoutResults();
-  }
-
-  if (layout_overflow_changed && Base::IsScrollContainer())
-    Base::Layer()->GetScrollableArea()->UpdateAfterOverflowRecalc();
-
-  // Only indicate to our parent that our layout overflow changed if we have:
-  //  - No layout containment applied.
-  //  - No clipping (in both axes).
-  layout_overflow_changed = layout_overflow_changed &&
-                            !Base::ShouldApplyLayoutContainment() &&
-                            !Base::ShouldClipOverflowAlongBothAxis();
-
-  return {layout_overflow_changed, rebuild_fragment_tree};
-}
-
-static void RecalcFragmentLayoutOverflow(RecalcLayoutOverflowResult& result,
-                                         const NGPhysicalFragment& fragment) {
-  for (const auto& child : fragment.PostLayoutChildren()) {
-    if (child->GetLayoutObject()) {
-      if (const auto* box = DynamicTo<NGPhysicalBoxFragment>(child.get())) {
-        if (LayoutBox* owner_box = box->MutableOwnerLayoutBox())
-          result.Unite(owner_box->RecalcLayoutOverflow());
-      }
-    } else {
-      // We enter this branch when the |child| is a fragmentainer.
-      RecalcFragmentLayoutOverflow(result, *child.get());
-    }
-  }
+  DCHECK(!NGDisableSideEffectsScope::IsDisabled());
+  return Base::RecalcLayoutOverflowNG();
 }
 
 template <typename Base>
 RecalcLayoutOverflowResult LayoutNGMixin<Base>::RecalcChildLayoutOverflow() {
   Base::CheckIsNotDestroyed();
-  DCHECK(Base::ChildNeedsLayoutOverflowRecalc());
-  Base::ClearChildNeedsLayoutOverflowRecalc();
-
-#if DCHECK_IS_ON()
-  // We use PostLayout methods to navigate the fragment tree and reach the
-  // corresponding LayoutObjects, so we need to use AllowPostLayoutScope here.
-  NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
-#endif
-  RecalcLayoutOverflowResult result;
-  for (auto& layout_result : Base::layout_results_) {
-    const auto& fragment =
-        To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
-    if (fragment.HasItems()) {
-      for (NGInlineCursor cursor(fragment); cursor; cursor.MoveToNext()) {
-        if (const NGPhysicalBoxFragment* child =
-                cursor.Current()->PostLayoutBoxFragment()) {
-          if (child->GetLayoutObject()->IsBox()) {
-            result.Unite(
-                child->MutableOwnerLayoutBox()->RecalcLayoutOverflow());
-          }
-        }
-      }
-    }
-
-    RecalcFragmentLayoutOverflow(result, fragment);
-  }
-
-  return result;
+  return Base::RecalcChildLayoutOverflowNG();
 }
 
 template <typename Base>

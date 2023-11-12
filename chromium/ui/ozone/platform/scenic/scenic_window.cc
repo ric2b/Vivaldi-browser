@@ -17,6 +17,7 @@
 #include "base/fuchsia/process_context.h"
 #include "base/memory/scoped_refptr.h"
 #include "ui/base/cursor/platform_cursor.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -53,7 +54,6 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
       window_id_(manager_->AddWindow(this)),
       view_ref_(std::move(properties.view_ref_pair.view_ref)),
       view_controller_(std::move(properties.view_controller)),
-      event_dispatcher_(this),
       bounds_(delegate_->ConvertRectToPixels(properties.bounds)) {
   {
     // Send graphics and input endpoints to Scenic. The endpoints are dormant
@@ -227,9 +227,10 @@ bool ScenicWindow::HasCapture() const {
   return has_capture_;
 }
 
-void ScenicWindow::ToggleFullscreen() {
+void ScenicWindow::SetFullscreen(bool fullscreen, int64_t target_display_id) {
   NOTIMPLEMENTED_LOG_ONCE();
-  is_fullscreen_ = !is_fullscreen_;
+  DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
+  is_fullscreen_ = fullscreen;
 }
 
 void ScenicWindow::Maximize() {
@@ -245,7 +246,6 @@ void ScenicWindow::Restore() {
 }
 
 PlatformWindowState ScenicWindow::GetPlatformWindowState() const {
-  NOTIMPLEMENTED_LOG_ONCE();
   if (is_fullscreen_)
     return PlatformWindowState::kFullScreen;
   if (!is_view_attached_)
@@ -381,8 +381,6 @@ void ScenicWindow::OnScenicEvents(
         default:
           break;
       }
-    } else if (event.is_input()) {
-      OnInputEvent(event.input());
     }
   }
 }
@@ -410,16 +408,6 @@ void ScenicWindow::OnViewProperties(
   view_properties_ = properties;
   if (device_pixel_ratio_ > 0.0)
     UpdateSize();
-}
-
-void ScenicWindow::OnInputEvent(const fuchsia::ui::input::InputEvent& event) {
-  if (event.is_focus()) {
-    delegate_->OnActivationChanged(event.focus().focused);
-  } else {
-    // Scenic doesn't care if the input event was handled, so ignore the
-    // "handled" status.
-    std::ignore = event_dispatcher_.ProcessEvent(event);
-  }
 }
 
 void ScenicWindow::OnViewRefFocusedWatchResult(

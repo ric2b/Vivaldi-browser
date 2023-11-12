@@ -118,7 +118,6 @@ class ExtensionActionViewController
   std::unique_ptr<IconWithBadgeImageSource> GetIconImageSourceForTesting(
       content::WebContents* web_contents,
       const gfx::Size& size);
-  bool HasBeenBlockedForTesting(content::WebContents* web_contents) const;
 
  private:
   // New instances should be instantiated with Create().
@@ -177,7 +176,8 @@ class ExtensionActionViewController
 
   // The browser action this view represents. The ExtensionAction is not owned
   // by this class.
-  const raw_ptr<extensions::ExtensionAction> extension_action_;
+  const raw_ptr<extensions::ExtensionAction, DanglingUntriaged>
+      extension_action_;
 
   // The corresponding ExtensionsContainer on the toolbar.
   const raw_ptr<ExtensionsContainer> extensions_container_;

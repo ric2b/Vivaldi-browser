@@ -9,8 +9,9 @@
 #include <string>
 
 #include "ash/ash_export.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/ash_color_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/font.h"
 
 namespace ui {
@@ -29,46 +30,32 @@ namespace ash::bubble_utils {
 // bubble will close and immediately reopen).
 ASH_EXPORT bool ShouldCloseBubbleForEvent(const ui::LocatedEvent& event);
 
-enum class FontName {
-  kGoogleSans,
-  kRoboto,
+// Enumeration of supported typography styles.
+// See "Typography" tab in go/cros-tokens.
+enum class TypographyStyle {
+  kAnnotation1,
+  kBody1,
+  kBody2,
+  kButton1,
+  kButton2,
+  kLabel1,
+  kTitle1,
 };
 
-// Enumeration of supported label styles.
-enum class LabelStyle {
-  kBadge,
-  kBody,
-  kChipBody,
-  kChipTitle,
-  kHeader,
-  kSubheader,
-  kSubtitle,
-};
-
-struct ASH_EXPORT LabelStyleOverrides {
-  LabelStyleOverrides();
-  LabelStyleOverrides(
-      absl::optional<gfx::Font::Weight> font_weight,
-      absl::optional<AshColorProvider::ContentLayerType> text_color);
-  ~LabelStyleOverrides();
-
-  absl::optional<gfx::Font::Weight> font_weight;
-  absl::optional<AshColorProvider::ContentLayerType> text_color;
-};
-
-// Applies the specified `style` to the given `label`.
+// Applies the specified `style` and `text_color` to the given `label`.
 ASH_EXPORT void ApplyStyle(
     views::Label* label,
-    LabelStyle style,
-    const LabelStyleOverrides& overrides = LabelStyleOverrides{});
+    TypographyStyle style,
+    ui::ColorId text_color_id = kColorAshTextColorPrimary);
 
-// Creates a label with optional `text` matching the specified `style`. The
-// label will paint correctly even if it is not added to the view hierarchy.
-// NOTE: `LabelStyleOverrides` can be provided for any necessary overrides.
+// Creates a label with optional `text` and `text_color` matching the specified
+// `style`. The label will paint correctly even if it is not added to the view
+// hierarchy.
 std::unique_ptr<views::Label> CreateLabel(
-    LabelStyle style,
+    TypographyStyle style,
     const std::u16string& text = std::u16string(),
-    const LabelStyleOverrides& overrides = LabelStyleOverrides{});
+    ui::ColorId text_color_id = kColorAshTextColorPrimary);
+
 }  // namespace ash::bubble_utils
 
 #endif  // ASH_BUBBLE_BUBBLE_UTILS_H_

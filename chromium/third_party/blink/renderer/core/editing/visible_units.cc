@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/first_letter_pseudo_element.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -726,9 +727,10 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
       return last_visible.DeprecatedComputePosition();
 
     // skip position in non-laid out or invisible node
-    const LayoutObject* const layout_object =
-        AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode(),
-                                 LayoutObjectSide::kFirstLetterIfOnBoundary);
+    const LayoutObject* const layout_object = AssociatedLayoutObjectOf(
+        *current_node,
+        IsA<Text>(current_node) ? current_pos.OffsetInTextNode() : 0,
+        LayoutObjectSide::kFirstLetterIfOnBoundary);
     if (!layout_object ||
         layout_object->Style()->Visibility() != EVisibility::kVisible) {
       if (boundary_crossed && rule == kCannotCrossEditingBoundary)
@@ -796,10 +798,10 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
           text_layout_object->CaretMaxOffset() + text_start_offset);
     }
 
-    DCHECK_GE(current_pos.OffsetInLeafNode(),
+    DCHECK_GE(current_pos.OffsetInTextNode(),
               static_cast<int>(text_layout_object->TextStartOffset()));
     if (text_layout_object->IsAfterNonCollapsedCharacter(
-            current_pos.OffsetInLeafNode() -
+            current_pos.OffsetInTextNode() -
             text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
   }
@@ -904,8 +906,9 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
       return last_visible.DeprecatedComputePosition();
 
     // skip position in non-laid out or invisible node
-    const LayoutObject* const layout_object =
-        AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode());
+    const LayoutObject* const layout_object = AssociatedLayoutObjectOf(
+        *current_node,
+        IsA<Text>(current_node) ? current_pos.OffsetInTextNode() : 0);
     if (!layout_object ||
         layout_object->Style()->Visibility() != EVisibility::kVisible) {
       if (boundary_crossed && rule == kCannotCrossEditingBoundary)
@@ -940,7 +943,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
     // ignored.
     if (EditingIgnoresContent(*current_node) ||
         IsDisplayInsideTable(current_node)) {
-      if (current_pos.OffsetInLeafNode() <= 0)
+      if (current_pos.AtStartOfNode())
         return PositionTemplate<Strategy>::EditingPositionOf(current_node, 0);
       continue;
     }
@@ -960,10 +963,10 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
           text_layout_object->CaretMinOffset() + text_start_offset);
     }
 
-    DCHECK_GE(current_pos.OffsetInLeafNode(),
+    DCHECK_GE(current_pos.OffsetInTextNode(),
               static_cast<int>(text_layout_object->TextStartOffset()));
     if (text_layout_object->IsBeforeNonCollapsedCharacter(
-            current_pos.OffsetInLeafNode() -
+            current_pos.OffsetInTextNode() -
             text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
   }
@@ -1403,7 +1406,7 @@ gfx::Rect FirstRectForRange(const EphemeralRange& range) {
   const PositionWithAffinity start_position(
       CreateVisiblePosition(range.StartPosition()).DeepEquivalent(),
       TextAffinity::kDownstream);
-  const gfx::Rect start_caret_rect =
+  gfx::Rect start_caret_rect =
       AbsoluteCaretBoundsOf(start_position, &extra_width_to_end_of_line);
   if (start_caret_rect.IsEmpty())
     return gfx::Rect();
@@ -1411,6 +1414,39 @@ gfx::Rect FirstRectForRange(const EphemeralRange& range) {
   const PositionWithAffinity end_position(
       CreateVisiblePosition(range.EndPosition()).DeepEquivalent(),
       TextAffinity::kUpstream);
+
+  if (RuntimeEnabledFeatures::FirstRectForRangeVerticalEnabled()) {
+    const PositionWithAffinity end_position_in_same_line =
+        InSameLine(start_position, end_position) ? end_position
+                                                 : EndOfLine(start_position);
+    gfx::Rect end_caret_rect = AbsoluteCaretBoundsOf(end_position_in_same_line);
+    if (end_caret_rect.IsEmpty())
+      return gfx::Rect();
+
+    // Some tests expect the resultant rectangles don't include caret widths.
+    // e.g.
+    //  - RenderViewImplTest.GetCompositionCharacterBoundsTest
+    //  - LocalFrameTest.CharacterIndexAtPointWithPinchZoom
+    if (start_position.AnchorNode()
+            ->GetComputedStyle()
+            ->IsHorizontalWritingMode()) {
+      end_caret_rect.set_width(0);
+      start_caret_rect.set_width(0);
+    } else {
+      end_caret_rect.set_height(0);
+      start_caret_rect.set_height(0);
+    }
+
+    const gfx::Point left_top = {
+        std::min(start_caret_rect.x(), end_caret_rect.x()),
+        std::min(start_caret_rect.y(), end_caret_rect.y())};
+    const int right =
+        std::max(start_caret_rect.right(), end_caret_rect.right());
+    const int bottom =
+        std::max(start_caret_rect.bottom(), end_caret_rect.bottom());
+    return gfx::Rect(left_top, {right - left_top.x(), bottom - left_top.y()});
+  }
+
   const gfx::Rect end_caret_rect = AbsoluteCaretBoundsOf(end_position);
   if (end_caret_rect.IsEmpty())
     return gfx::Rect();

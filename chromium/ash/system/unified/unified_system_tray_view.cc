@@ -12,7 +12,7 @@
 #include "ash/shell.h"
 #include "ash/system/media/unified_media_controls_container.h"
 #include "ash/system/message_center/ash_message_center_lock_screen_controller.h"
-#include "ash/system/message_center/unified_message_center_view.h"
+#include "ash/system/notification_center/notification_center_view.h"
 #include "ash/system/tray/interacted_by_tap_recorder.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/detailed_view_controller.h"
@@ -284,15 +284,17 @@ void UnifiedSystemTrayView::ShowMediaControls() {
     PreferredSizeChanged();
 }
 
-void UnifiedSystemTrayView::SetDetailedView(views::View* detailed_view) {
+void UnifiedSystemTrayView::SetDetailedView(
+    std::unique_ptr<views::View> detailed_view) {
   auto system_tray_size = system_tray_container_->GetPreferredSize();
   system_tray_container_->SetVisible(false);
 
   detailed_view_container_->RemoveAllChildViews();
-  detailed_view_container_->AddChildView(detailed_view);
+  views::View* view =
+      detailed_view_container_->AddChildView(std::move(detailed_view));
   detailed_view_container_->SetVisible(true);
   detailed_view_container_->SetPreferredSize(system_tray_size);
-  detailed_view->InvalidateLayout();
+  view->InvalidateLayout();
   Layout();
 }
 

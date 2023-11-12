@@ -149,8 +149,7 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
                            bool is_managed,
                            bool persist_on_hover,
                            aura::Window* root_window,
-                           base::RepeatingClosure dismiss_callback,
-                           base::RepeatingClosure expired_callback)
+                           base::RepeatingClosure dismiss_callback)
     : delegate_(delegate),
       text_(text),
       dismiss_text_(dismiss_text),
@@ -164,9 +163,7 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
       display_observer_(std::make_unique<ToastDisplayObserver>(this)),
       root_window_(root_window),
       dismiss_callback_(std::move(dismiss_callback)),
-      expired_callback_(std::move(expired_callback)),
-      widget_size_(overlay_view_->GetPreferredSize()),
-      duration_total_(duration) {
+      widget_size_(overlay_view_->GetPreferredSize()) {
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_POPUP;
   params.name = "ToastOverlay";
@@ -175,10 +172,12 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
   params.accept_events = true;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.bounds = CalculateOverlayBounds();
-  // Show toasts above the app list and below the lock screen.
+  // Notifications show on the bottom right in `kShellWindowId_ShelfContainer`,
+  // we want to be sure to show over them, and below the lock screen.
   params.parent = root_window_->GetChildById(
       show_on_lock_screen ? kShellWindowId_LockSystemModalContainer
-                          : kShellWindowId_SystemModalContainer);
+                          : kShellWindowId_DragImageAndTooltipContainer);
+
   overlay_widget_->Init(std::move(params));
   overlay_widget_->SetVisibilityChangedAnimationsEnabled(true);
   overlay_widget_->SetContentsView(overlay_view_.get());
@@ -192,7 +191,7 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
 
   // Only toasts that expire should be able to persist on hover (i.e. toasts
   // with infinite duration persist regardless of hover).
-  if (persist_on_hover && (duration_total_ != ToastData::kInfiniteDuration)) {
+  if (persist_on_hover && (duration != ToastData::kInfiniteDuration)) {
     hover_observer_ = std::make_unique<ToastHoverObserver>(
         overlay_widget_->GetNativeWindow(),
         base::BindRepeating(&ToastOverlay::OnHoverStateChanged,
@@ -205,8 +204,6 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
 ToastOverlay::~ToastOverlay() {
   keyboard::KeyboardUIController::Get()->RemoveObserver(this);
   overlay_widget_->Close();
-  if (expired_callback_)
-    expired_callback_.Run();
 }
 
 void ToastOverlay::Show(bool visible) {
@@ -229,11 +226,6 @@ void ToastOverlay::Show(bool visible) {
 
     // Notify accessibility about the overlay.
     overlay_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, false);
-
-    time_started_ = base::TimeTicks::Now();
-
-    if (duration_total_ != ToastData::kInfiniteDuration)
-      StartExpirationTimer();
   } else {
     overlay_widget_->Hide();
   }
@@ -259,45 +251,28 @@ bool ToastOverlay::MaybeActivateHighlightedDismissButton() {
   return true;
 }
 
-void ToastOverlay::UpdateToastExpirationTimer(bool is_hovering) {
-  // This function can be called twice on a toast (e.g. the toast that is being
-  // hovered when we are persisting a multi-monitor toast on hover).
-  if (is_hovering != expiration_timer_.IsRunning())
-    return;
-
-  if (is_hovering) {
-    duration_elapsed_ += base::TimeTicks::Now() - time_started_;
-    expiration_timer_.Stop();
-  } else {
-    StartExpirationTimer();
-    time_started_ = base::TimeTicks::Now();
-  }
-}
-
-void ToastOverlay::ResetExpiredCallback() {
-  expired_callback_.Reset();
-}
-
 gfx::Rect ToastOverlay::CalculateOverlayBounds() {
   // If the native window has not been initialized, as in the first call, get
-  // the default root window. Otherwise get the window for this overlay_widget
+  // the default root window. Otherwise get the window for this `overlay_widget`
   // to handle multiple monitors properly.
   auto* window = overlay_widget_->IsNativeWidgetInitialized()
                      ? overlay_widget_->GetNativeWindow()
                      : root_window_;
+
   auto* window_controller = RootWindowController::ForWindow(window);
   auto* hotseat_widget = window_controller->shelf()->hotseat_widget();
 
-  gfx::Rect bounds = GetUserWorkAreaBounds(window);
+  gfx::Rect work_area_bounds = GetUserWorkAreaBounds(window);
 
   if (hotseat_widget)
-    AdjustWorkAreaBoundsForHotseatState(bounds, hotseat_widget);
+    AdjustWorkAreaBoundsForHotseatState(work_area_bounds, hotseat_widget);
 
-  int target_y =
-      bounds.bottom() - widget_size_.height() - ToastOverlay::kOffset;
-  bounds.ClampToCenteredSize(widget_size_);
-  bounds.set_y(target_y);
-  return bounds;
+  return gfx::Rect(
+      gfx::Point(work_area_bounds.right() - widget_size_.width() -
+                     ToastOverlay::kOffset,
+                 work_area_bounds.bottom() - widget_size_.height() -
+                     ToastOverlay::kOffset),
+      widget_size_);
 }
 
 void ToastOverlay::OnButtonClicked() {
@@ -313,25 +288,9 @@ void ToastOverlay::OnHoverStateChanged(bool is_hovering) {
   if (!overlay_widget_->IsVisible())
     return;
 
-  // If `is_hovering` is true, then we want to stop the `expiration_timer_` to
-  // maintain the toast while the hover persists. Otherwise we restart the
-  // timer with the remaining time for the toast.
-  UpdateToastExpirationTimer(is_hovering);
-
   // We want to update the `delegate_` here in case this toast is also
   // displaying on other monitors.
   delegate_->OnToastHoverStateChanged(is_hovering);
-}
-
-void ToastOverlay::OnToastExpired() {
-  Show(/*visible=*/false);
-}
-
-void ToastOverlay::StartExpirationTimer() {
-  DCHECK_GE(duration_total_, duration_elapsed_);
-  expiration_timer_.Start(
-      FROM_HERE, duration_total_ - duration_elapsed_,
-      base::BindOnce(&ToastOverlay::OnToastExpired, base::Unretained(this)));
 }
 
 void ToastOverlay::OnImplicitAnimationsScheduled() {}

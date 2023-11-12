@@ -17,6 +17,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/timer/timer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace device {
@@ -48,6 +49,7 @@ class PairerBrokerImpl final : public PairerBroker {
 
  private:
   void PairFastPairDevice(scoped_refptr<Device> device);
+  void OnFastPairHandshakeComplete(scoped_refptr<Device> device);
   void OnFastPairDevicePaired(scoped_refptr<Device> device);
   void OnFastPairPairingFailure(scoped_refptr<Device> device,
                                 PairFailure failure);
@@ -67,6 +69,10 @@ class PairerBrokerImpl final : public PairerBroker {
   scoped_refptr<device::BluetoothAdapter> adapter_;
   std::unique_ptr<FastPairUnpairHandler> fast_pair_unpair_handler_;
   base::ObserverList<Observer> observers_;
+
+  // Timer to provide a delay after cancelling pairing.
+  base::OneShotTimer cancel_pairing_timer_;
+
   base::WeakPtrFactory<PairerBrokerImpl> weak_pointer_factory_{this};
 };
 

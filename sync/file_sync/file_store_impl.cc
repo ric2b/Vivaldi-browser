@@ -10,13 +10,21 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
 #include "components/base32/base32.h"
+#include "components/datasource/resource_reader.h"
 #include "crypto/sha2.h"
 #include "net/base/mime_sniffer.h"
 
 namespace file_sync {
 namespace {
-constexpr char kunknownFile[] = "Unknown file.";
-constexpr char kMissingContent[] =
+#if BUILDFLAG(IS_ANDROID)
+constexpr char kunknownFile[] = "unknown_file.png";
+constexpr char kMissingContent[] = "unsynced_file.png";
+#else  // BUILDFLAG(IS_ANDROID)
+constexpr char kunknownFile[] = "resources/unknown_file.png";
+constexpr char kMissingContent[] = "resources/unsynced_file.png";
+#endif  // BUILDFLAG(IS_ANDROID)
+constexpr char kunknownFileFallback[] = "Unknown file.";
+constexpr char kMissingContentFallback[] =
     "Placeholder for synced file. Removing this will remove the corresponding "
     "original file in the vivaldi instance that created this. Synchronization "
     "of the file content is not supported yet.";
@@ -24,17 +32,47 @@ constexpr char kMissingContent[] =
 constexpr base::FilePath::CharType kStoreDirectoryName[] =
     FILE_PATH_LITERAL("SyncedFiles");
 
+struct Resources {
+  std::vector<uint8_t> unknown_file;
+  std::string unknown_file_mimetype;
+  std::vector<uint8_t> missing_content;
+  std::string missing_content_mimetype;
+};
+
+const Resources* g_resources = nullptr;
+
+std::vector<uint8_t> ToVector(base::StringPiece str) {
+  return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+std::unique_ptr<Resources> LoadResources() {
+  std::unique_ptr<Resources> resources = std::make_unique<Resources>();
+  ResourceReader unknown_file(kunknownFile);
+  if (unknown_file.IsValid()) {
+    resources->unknown_file = ToVector(unknown_file.as_string_view());
+    resources->unknown_file_mimetype = "image/png";
+  } else {
+    resources->unknown_file = ToVector(kunknownFileFallback);
+    resources->unknown_file_mimetype = "text/plain";
+  }
+  ResourceReader missing_content(kMissingContent);
+  if (missing_content.IsValid()) {
+    resources->missing_content = ToVector(missing_content.as_string_view());
+    resources->missing_content_mimetype = "image/png";
+  } else {
+    resources->missing_content = ToVector(kMissingContentFallback);
+    resources->missing_content_mimetype = "text/plain";
+  }
+
+  return resources;
+}
+
 // This wrapper ensures that we get a copy of the content itself when called
 // on the thread pool, instead of a copy of a span, which wouldn't be
 // thread-safe
 void WriteFileWrapper(base::FilePath path, std::vector<uint8_t> content) {
   base::WriteFile(path, content);
 }
-
-std::vector<uint8_t> VectorFromString(std::string str) {
-  return std::vector<uint8_t>(str.begin(), str.end());
-}
-
 }  // namespace
 
 SyncedFileStoreImpl::SyncedFileStoreImpl(base::FilePath profile_path)
@@ -46,6 +84,16 @@ SyncedFileStoreImpl::SyncedFileStoreImpl(base::FilePath profile_path)
 SyncedFileStoreImpl::~SyncedFileStoreImpl() = default;
 
 void SyncedFileStoreImpl::Load() {
+  static auto resources_loaded = [](std::unique_ptr<Resources> resources) {
+    if (!g_resources)
+      g_resources = resources.release();
+  };
+
+  if (!g_resources) {
+    file_task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&LoadResources),
+        base::BindOnce(resources_loaded));
+  }
   SyncedFileStoreStorage::Load(
       local_store_path_, base::BindOnce(&SyncedFileStoreImpl::OnLoadingDone,
                                         weak_factory_.GetWeakPtr()));
@@ -97,18 +145,33 @@ void SyncedFileStoreImpl::OnLoadingDone(SyncedFilesData files_data) {
   on_loaded_callbacks_.clear();
 }
 
-void SyncedFileStoreImpl::AddLocalFileRef(base::GUID owner_guid,
-                                          syncer::ModelType sync_type,
-                                          std::string checksum) {
+void SyncedFileStoreImpl::DoSetLocalFileRef(base::GUID owner_guid,
+                                            syncer::ModelType sync_type,
+                                            std::string checksum) {
   DCHECK(IsLoaded());
 
-  DCHECK_EQ(0U, checksums_for_local_owners_[sync_type].count(owner_guid));
+  auto existing_mapping =
+      checksums_for_local_owners_[sync_type].find(owner_guid);
+  if (existing_mapping != checksums_for_local_owners_[sync_type].end()) {
+    if (existing_mapping->second == checksum)
+      return;
+
+    RemoveLocalRef(owner_guid, sync_type);
+  }
+
   checksums_for_local_owners_[sync_type][owner_guid] = checksum;
   files_data_[checksum].local_references[sync_type].insert(owner_guid);
   storage_->ScheduleSave();
 }
 
-std::string SyncedFileStoreImpl::AddLocalFile(base::GUID owner_guid,
+void SyncedFileStoreImpl::SetLocalFileRef(base::GUID owner_guid,
+                                          syncer::ModelType sync_type,
+                                          std::string checksum) {
+  DoSetLocalFileRef(owner_guid, sync_type, checksum);
+  storage_->ScheduleSave();
+}
+
+std::string SyncedFileStoreImpl::SetLocalFile(base::GUID owner_guid,
                                               syncer::ModelType sync_type,
                                               std::vector<uint8_t> content) {
   DCHECK(IsLoaded());
@@ -124,11 +187,8 @@ std::string SyncedFileStoreImpl::AddLocalFile(base::GUID owner_guid,
       base32::Base32EncodePolicy::OMIT_PADDING);
 
   checksum += "." + base::NumberToString(content.size());
-  DCHECK(IsLoaded());
+  DoSetLocalFileRef(owner_guid, sync_type, checksum);
   auto& file_data = files_data_[checksum];
-  DCHECK_EQ(0U, checksums_for_local_owners_[sync_type].count(owner_guid));
-  checksums_for_local_owners_[sync_type][owner_guid] = checksum;
-  file_data.local_references[sync_type].insert(owner_guid);
   if (!file_data.content) {
     net::SniffMimeTypeFromLocalData(
         base::StringPiece(reinterpret_cast<char*>(&content[0]), content.size()),
@@ -157,12 +217,20 @@ std::string SyncedFileStoreImpl::AddLocalFile(base::GUID owner_guid,
   return checksum;
 }
 
-void SyncedFileStoreImpl::AddSyncFileRef(std::string owner_sync_id,
+void SyncedFileStoreImpl::SetSyncFileRef(std::string owner_sync_id,
                                          syncer::ModelType sync_type,
                                          std::string checksum) {
   DCHECK(IsLoaded());
 
-  DCHECK_EQ(0U, checksums_for_sync_owners_[sync_type].count(owner_sync_id));
+  auto existing_mapping =
+      checksums_for_sync_owners_[sync_type].find(owner_sync_id);
+  if (existing_mapping != checksums_for_sync_owners_[sync_type].end()) {
+    if (existing_mapping->second == checksum)
+      return;
+
+    RemoveSyncRef(owner_sync_id, sync_type);
+  }
+
   checksums_for_sync_owners_[sync_type][owner_sync_id] = checksum;
   files_data_[checksum].sync_references[sync_type].insert(owner_sync_id);
   storage_->ScheduleSave();
@@ -173,7 +241,7 @@ void SyncedFileStoreImpl::GetFile(std::string checksum,
   DCHECK(IsLoaded());
 
   if (!base::Contains(files_data_, checksum)) {
-    std::move(callback).Run(VectorFromString(kunknownFile));
+    std::move(callback).Run(g_resources->unknown_file);
     return;
   }
 
@@ -184,7 +252,7 @@ void SyncedFileStoreImpl::GetFile(std::string checksum,
   }
 
   if (!file_data.has_content_locally) {
-    std::move(callback).Run(VectorFromString(kMissingContent));
+    std::move(callback).Run(g_resources->missing_content);
     return;
   }
 
@@ -205,11 +273,14 @@ void SyncedFileStoreImpl::GetFile(std::string checksum,
 std::string SyncedFileStoreImpl::GetMimeType(std::string checksum) {
   DCHECK(IsLoaded());
   if (!base::Contains(files_data_, checksum))
+    return g_resources->unknown_file_mimetype;
+  auto& file_data = files_data_.at(checksum);
+  if (!file_data.has_content_locally) {
+    return g_resources->missing_content_mimetype;
+  }
+  if (file_data.mimetype.empty())
     return "text/plain";
-  std::string mimetype = files_data_.at(checksum).mimetype;
-  if (mimetype.empty())
-    return "text/plain";
-  return files_data_.at(checksum).mimetype;
+  return file_data.mimetype;
 }
 
 void SyncedFileStoreImpl::RemoveLocalRef(base::GUID owner_guid,
@@ -298,6 +369,21 @@ void SyncedFileStoreImpl::OnReadContentDone(
 bool SyncedFileStoreImpl::IsLoaded() {
   // We instanciate storage only after loading is done
   return storage_.has_value();
+}
+
+size_t SyncedFileStoreImpl::GetTotalStorageSize() {
+  DCHECK(IsLoaded());
+  size_t total_size = 0;
+  for (const auto& file_data : files_data_) {
+    base::StringPiece name(file_data.first);
+    const size_t size_start = name.find(".");
+    if (size_start != base::StringPiece::npos) {
+      size_t size;
+      if (base::StringToSizeT(name.substr(size_start + 1), &size))
+        total_size += size;
+    }
+  }
+  return total_size;
 }
 
 base::FilePath SyncedFileStoreImpl::GetFilePath(

@@ -53,6 +53,7 @@ GLint DataRowLength(size_t stride, gfx::BufferFormat format) {
       return base::checked_cast<GLint>(stride);
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
+    case gfx::BufferFormat::YUVA_420_TRIPLANAR:
     case gfx::BufferFormat::P010:
       NOTREACHED() << gfx::BufferFormatToString(format);
       return 0;
@@ -180,6 +181,7 @@ absl::optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
     }
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
+    case gfx::BufferFormat::YUVA_420_TRIPLANAR:
     case gfx::BufferFormat::P010:
       NOTREACHED() << gfx::BufferFormatToString(format);
       return absl::nullopt;
@@ -237,13 +239,6 @@ GLImageMemory::~GLImageMemory() {
                                        original_surface_.get());
     glDeleteBuffersARB(1, &buffer_);
   }
-}
-
-// static
-GLImageMemory* GLImageMemory::FromGLImage(GLImage* image) {
-  if (!image || image->GetType() != Type::MEMORY)
-    return nullptr;
-  return static_cast<GLImageMemory*>(image);
 }
 
 bool GLImageMemory::Initialize(const unsigned char* memory,
@@ -483,6 +478,7 @@ bool GLImageMemory::ValidFormat(gfx::BufferFormat format) {
       return true;
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
+    case gfx::BufferFormat::YUVA_420_TRIPLANAR:
     case gfx::BufferFormat::P010:
       return false;
   }
@@ -490,5 +486,10 @@ bool GLImageMemory::ValidFormat(gfx::BufferFormat format) {
   NOTREACHED();
   return false;
 }
+
+GLImageMemoryForTesting::GLImageMemoryForTesting(const gfx::Size& size)
+    : GLImageMemory(size) {}
+
+GLImageMemoryForTesting::~GLImageMemoryForTesting() = default;
 
 }  // namespace gl

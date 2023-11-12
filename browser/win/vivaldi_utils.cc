@@ -122,7 +122,7 @@ namespace vivaldi {
 
 bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   // Allow IO temporarily, since this call will come before UI is displayed.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   if (!vivaldi::IsVivaldiRunning())
     return false;

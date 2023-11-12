@@ -160,6 +160,7 @@ std::set<BucketInfo> BucketInfosFromSqlStatement(sql::Statement& statement) {
 }  // anonymous namespace
 
 const QuotaDatabase::TableSchema QuotaDatabase::kTables[] = {
+    // TODO(crbug.com/1175113): Cleanup kHostQuotaTable.
     {kHostQuotaTable,
      "(host TEXT NOT NULL,"
      " type INTEGER NOT NULL,"
@@ -216,51 +217,6 @@ QuotaDatabase::~QuotaDatabase() {
 }
 
 constexpr char QuotaDatabase::kDatabaseName[];
-
-QuotaErrorOr<int64_t> QuotaDatabase::GetHostQuota(const std::string& host,
-                                                  StorageType type) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened();
-  if (open_error != QuotaError::kNone)
-    return open_error;
-
-  static constexpr char kSql[] =
-      "SELECT quota FROM quota WHERE host = ? AND type = ?";
-  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
-  statement.BindString(0, host);
-  statement.BindInt(1, static_cast<int>(type));
-
-  if (!statement.Step()) {
-    return statement.Succeeded() ? QuotaError::kNotFound
-                                 : QuotaError::kDatabaseError;
-  }
-  return statement.ColumnInt64(0);
-}
-
-QuotaError QuotaDatabase::SetHostQuota(const std::string& host,
-                                       StorageType type,
-                                       int64_t quota) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_GE(quota, 0);
-  QuotaError open_error = EnsureOpened();
-  if (open_error != QuotaError::kNone)
-    return open_error;
-
-  if (quota == 0)
-    return DeleteHostQuota(host, type);
-
-  static constexpr char kSql[] =
-      "INSERT OR REPLACE INTO quota(quota, host, type) VALUES (?, ?, ?)";
-  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
-  statement.BindInt64(0, quota);
-  statement.BindString(1, host);
-  statement.BindInt(2, static_cast<int>(type));
-  if (!statement.Run())
-    return QuotaError::kDatabaseError;
-
-  ScheduleCommit();
-  return QuotaError::kNone;
-}
 
 QuotaErrorOr<BucketInfo> QuotaDatabase::UpdateOrCreateBucket(
     const BucketInitParams& params) {
@@ -610,26 +566,6 @@ QuotaErrorOr<mojom::BucketTableEntryPtr> QuotaDatabase::GetBucketInfo(
   return entry;
 }
 
-QuotaError QuotaDatabase::DeleteHostQuota(const std::string& host,
-                                          StorageType type) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened();
-  if (open_error != QuotaError::kNone)
-    return open_error;
-
-  static constexpr char kSql[] =
-      "DELETE FROM quota WHERE host = ? AND type = ?";
-  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
-  statement.BindString(0, host);
-  statement.BindInt(1, static_cast<int>(type));
-
-  if (!statement.Run())
-    return QuotaError::kDatabaseError;
-
-  ScheduleCommit();
-  return QuotaError::kNone;
-}
-
 QuotaError QuotaDatabase::DeleteBucketData(const BucketLocator& bucket) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   QuotaError open_error = EnsureOpened();
@@ -766,6 +702,24 @@ QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsModifiedBetween(
                     statement.ColumnString(2) == kDefaultBucketName);
   }
   return buckets;
+}
+
+QuotaErrorOr<std::set<BucketInfo>> QuotaDatabase::GetExpiredBuckets() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  QuotaError open_error = EnsureOpened();
+  if (open_error != QuotaError::kNone)
+    return open_error;
+
+  // clang-format off
+  static constexpr char kSql[] =
+      "SELECT " BUCKET_INFO_FIELDS_SELECTOR
+        "FROM buckets "
+        "WHERE expiration > 0 AND expiration < ?";
+  // clang-format on
+
+  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
+  statement.BindTime(0, GetNow());
+  return BucketInfosFromSqlStatement(statement);
 }
 
 bool QuotaDatabase::IsBootstrapped() {
@@ -906,12 +860,19 @@ QuotaError QuotaDatabase::EnsureOpened() {
 
   db_->set_histogram_tag("Quota");
 
-  // UMA logging and don't crash on database errors in DCHECK builds.
-  db_->set_error_callback(
-      base::BindRepeating([](int sqlite_error_code, sql::Statement* statement) {
+  db_->set_error_callback(base::BindRepeating(
+      [](base::RepeatingClosure full_disk_error_callback, int sqlite_error_code,
+         sql::Statement* statement) {
         sql::UmaHistogramSqliteResult("Quota.QuotaDatabaseError",
                                       sqlite_error_code);
-      }));
+
+        if (!full_disk_error_callback.is_null() &&
+            static_cast<sql::SqliteErrorCode>(sqlite_error_code) ==
+                sql::SqliteErrorCode::kFullDisk) {
+          full_disk_error_callback.Run();
+        }
+      },
+      full_disk_error_callback_));
 
   // Migrate an existing database from the old path.
   if (!db_file_path_.empty() && !MoveLegacyDatabase()) {
@@ -1178,6 +1139,11 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::CreateBucketInternal(
   }
 
   return result;
+}
+
+void QuotaDatabase::SetOnFullDiskErrorCallback(
+    const base::RepeatingClosure& callback) {
+  full_disk_error_callback_ = callback;
 }
 
 }  // namespace storage

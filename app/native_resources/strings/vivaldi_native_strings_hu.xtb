@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">Kép új&amp;ratöltése</translation>
 <translation id="1924750141060565109">Tájkép 15</translation>
 <translation id="19598411548897379">Általános</translation>
+<translation id="1973351931613083086">automatikus lejátszás</translation>
 <translation id="1985669426322966465">Szoftverfrissítés</translation>
 <translation id="2079036669923635404">Kattints ide a Vivaldi <ph name="VERSION" /> verziójára frissítéshez.</translation>
 <translation id="2141974047387702305">Hiba lépett fel a frissítése letöltése közben. Ellenőrizd az internetkapcsolatot és próbáld újra.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Kuka</translation>
 <translation id="292258461174562431">Szörny 4</translation>
 <translation id="2923448633003185837">Beillesztés és felkeresés</translation>
+<translation id="2953943267837858202">A videók automatikus lejátszása nem engedélyezett</translation>
 <translation id="2977472760057091832">Hivatkozás megnyitása privát ablakban</translation>
 <translation id="2989805286512600854">Megnyitás új lapon</translation>
 <translation id="3027988479108856431">Sajnos a Yandex beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Yandex ablakot, majd kattints a Folytatás gombra.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Új könyvjelző</translation>
 <translation id="3255747772218936245">Frissítés telepítése</translation>
 <translation id="3259769196742189631">Érvényesítés</translation>
+<translation id="3291915639428159043">Automatikus lejátszás letiltva</translation>
 <translation id="3302905971452834934">Szörny 1</translation>
 <translation id="3334610655141903168">(nincs cím)</translation>
 <translation id="3372505110412186107">A Vivaldi <ph name="VERSION" /> a jelenlegi legfrissebb verzió.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Hivatkozás megnyitása új ablakban</translation>
 <translation id="3588820906588687999">Kép megnyitása új lapon</translation>
 <translation id="3601066750251199488">Szörny 3</translation>
+<translation id="3620979700683094848">A webhelyek automatikusan lejátszhatnak videókat</translation>
 <translation id="3680031241659195730">Új Vivaldi verzió érhető el!</translation>
 <translation id="3708982624815781692">A letöltés megszakítva.</translation>
 <translation id="3732157130969736834">Könyvjelző hivatkozás</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Ne mutassa újra</translation>
 <translation id="4074744496918018786">Kép megnyitása privát ablakban</translation>
+<translation id="410351446219883937">Automatikus lejátszás</translation>
 <translation id="4324492550286218827">Tájkép 2</translation>
 <translation id="4406101500523955324">Megnyitás privát ablakban</translation>
 <translation id="4420816922321010053">Biztos ki akarsz lépni a Vivaldiból?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Kivágás</translation>
 <translation id="7727481996062361502">Frissítés ellenőrzése...</translation>
 <translation id="7793738202466490491">Hozzáadás naptári eseményként</translation>
+<translation id="7834693436815575883">Automatikus lejátszás engedélyezve</translation>
 <translation id="7848222781052558334">Nem sikerült ellenőrizni a letöltött fájlok digitális aláírását.</translation>
 <translation id="7865983598101744945">Kilépés megerősítése</translation>
 <translation id="7957213167373139414">Naptáram</translation>
 <translation id="8027581147000338959">Megnyitás új ablakban</translation>
+<translation id="8044382196220116469">A weboldalak nem játszhatják le automatikusan a videókat</translation>
 <translation id="8099620695029051217">Oldal címének másolása</translation>
 <translation id="8197810018650377191">Könyvjelző oldal</translation>
 <translation id="8261506727792406068">Törlés</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Portáldokumentum vizsgálata</translation>
 <translation id="8768970203213061953">Tájkép 14</translation>
 <translation id="8773635261052182196">Nem fogod többet látni ezeket az értesítéseket. A Vivaldi beállításaiban visszakapcsolhatod.</translation>
+<translation id="8774017153185436870">A webhelyek automatikusan lejátszhatnak videókat</translation>
 <translation id="8813277370772331957">Emlékeztessen később</translation>
 <translation id="8894900864683381599">Hivatkozás web oldalsávhoz adása</translation>
 <translation id="8912720443398351457">Biztos ki akarsz lépni a Vivaldiból?</translation>
 <translation id="8947109330183116400">HTML könyvjelző fájl kiválasztása</translation>
 <translation id="9017566390391482291">Vivaldi profil mappa kiválasztása importáláshoz</translation>
 <translation id="9048058608784130603">Függő <ph name="VERSION" /> frissítés</translation>
+<translation id="9048224371732578627">Videók automatikus lejátszásának engedélyezése</translation>
 <translation id="9065203028668620118">Szerkesztés</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Kép megnyitása mint <ph name="USER" /></translation>

@@ -63,6 +63,11 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
       DLOG(ERROR) << "Sampling of YUV_420 resources must be done per-plane.";
 #endif
       return kRGB_888x_SkColorType;
+    case YUVA_420_TRIPLANAR:
+#if BUILDFLAG(IS_MAC)
+      DLOG(ERROR) << "Sampling of YUVA_420 resources must be done per-plane.";
+#endif
+      return kRGBA_8888_SkColorType;
     case RED_8:
       return kAlpha_8_SkColorType;
     case R16_EXT:
@@ -140,6 +145,8 @@ int BitsPerPixel(ResourceFormat format) {
     case P010:
     case RG16_EXT:
       return 32;
+    case YUVA_420_TRIPLANAR:
+      return 20;
     case RGBA_4444:
     case RGB_565:
     case LUMINANCE_F16:
@@ -159,36 +166,6 @@ int BitsPerPixel(ResourceFormat format) {
   }
   NOTREACHED();
   return 0;
-}
-
-bool HasAlpha(ResourceFormat format) {
-  switch (format) {
-    case RGBA_8888:
-    case RGBA_4444:
-    case BGRA_8888:
-    case ALPHA_8:
-    case RGBA_F16:
-      return true;
-    case LUMINANCE_8:
-    case RGB_565:
-    case BGR_565:
-    case ETC1:
-    case RED_8:
-    case RG_88:
-    case LUMINANCE_F16:
-    case R16_EXT:
-    case RG16_EXT:
-    case RGBX_8888:
-    case BGRX_8888:
-    case RGBA_1010102:
-    case BGRA_1010102:
-    case YVU_420:
-    case YUV_420_BIPLANAR:
-    case P010:
-      return false;
-  }
-  NOTREACHED();
-  return false;
 }
 
 unsigned int GLDataType(ResourceFormat format) {
@@ -214,6 +191,7 @@ unsigned int GLDataType(ResourceFormat format) {
       GL_UNSIGNED_INT_2_10_10_10_REV_EXT,  // BGRA_1010102
       GL_ZERO,                             // YVU_420
       GL_ZERO,                             // YUV_420_BIPLANAR
+      GL_ZERO,                             // YUVA_420_TRIPLANAR
       GL_ZERO,                             // P010
   };
   static_assert(std::size(format_gl_data_type) == (RESOURCE_FORMAT_MAX + 1),
@@ -245,6 +223,7 @@ unsigned int GLDataFormat(ResourceFormat format) {
       GL_RGBA,       // BGRA_1010102
       GL_ZERO,       // YVU_420
       GL_ZERO,       // YUV_420_BIPLANAR
+      GL_ZERO,       // YUVA_420_TRIPLANAR
       GL_ZERO,       // P010
   };
   static_assert(std::size(format_gl_data_format) == (RESOURCE_FORMAT_MAX + 1),
@@ -305,6 +284,8 @@ gfx::BufferFormat BufferFormat(ResourceFormat format) {
       return gfx::BufferFormat::YVU_420;
     case YUV_420_BIPLANAR:
       return gfx::BufferFormat::YUV_420_BIPLANAR;
+    case YUVA_420_TRIPLANAR:
+      return gfx::BufferFormat::YUVA_420_TRIPLANAR;
     case P010:
       return gfx::BufferFormat::P010;
     case ETC1:
@@ -370,6 +351,11 @@ unsigned int TextureStorageFormat(ResourceFormat format,
       DLOG(ERROR) << "Sampling of YUV_420 resources must be done per-plane.";
 #endif
       return GL_RGB8_OES;
+    case YUVA_420_TRIPLANAR:
+#if BUILDFLAG(IS_MAC)
+      DLOG(ERROR) << "Sampling of YUVA_420 resources must be done per-plane.";
+#endif
+      return GL_RGBA8_OES;
     default:
       break;
   }
@@ -417,6 +403,7 @@ bool IsGpuMemoryBufferFormatSupported(ResourceFormat format) {
     case RG16_EXT:
     case YVU_420:
     case YUV_420_BIPLANAR:
+    case YUVA_420_TRIPLANAR:
     case P010:
       return false;
   }
@@ -447,6 +434,7 @@ bool IsBitmapFormatSupported(ResourceFormat format) {
     case BGRA_1010102:
     case YVU_420:
     case YUV_420_BIPLANAR:
+    case YUVA_420_TRIPLANAR:
     case P010:
       return false;
   }
@@ -486,6 +474,8 @@ ResourceFormat GetResourceFormat(gfx::BufferFormat format) {
       return YVU_420;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       return YUV_420_BIPLANAR;
+    case gfx::BufferFormat::YUVA_420_TRIPLANAR:
+      return YUVA_420_TRIPLANAR;
     case gfx::BufferFormat::P010:
       return P010;
   }
@@ -498,10 +488,23 @@ bool GLSupportsFormat(ResourceFormat format) {
     case BGR_565:
     case YVU_420:
     case YUV_420_BIPLANAR:
+    case YUVA_420_TRIPLANAR:
     case P010:
       return false;
     default:
       return true;
+  }
+}
+
+bool IsYuvFormat(ResourceFormat format) {
+  switch (format) {
+    case YVU_420:
+    case YUV_420_BIPLANAR:
+    case YUVA_420_TRIPLANAR:
+    case P010:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -550,6 +553,8 @@ VkFormat ToVkFormatInternal(ResourceFormat format) {
     case LUMINANCE_F16:
       return VK_FORMAT_R16_SFLOAT;
     case P010:
+      return VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+    case YUVA_420_TRIPLANAR:
       break;
   }
   return VK_FORMAT_UNDEFINED;
@@ -567,109 +572,56 @@ VkFormat ToVkFormat(ResourceFormat format) {
 }
 #endif
 
-wgpu::TextureFormat ToDawnFormat(ResourceFormat format) {
-  switch (format) {
-    case RGBA_8888:
-    case RGBX_8888:
-      return wgpu::TextureFormat::RGBA8Unorm;
-    case BGRA_8888:
-    case BGRX_8888:
-      return wgpu::TextureFormat::BGRA8Unorm;
-    case RED_8:
-    case ALPHA_8:
-    case LUMINANCE_8:
-      return wgpu::TextureFormat::R8Unorm;
-    case RG_88:
-      return wgpu::TextureFormat::RG8Unorm;
-    case RGBA_F16:
-      return wgpu::TextureFormat::RGBA16Float;
-    case RGBA_1010102:
-      return wgpu::TextureFormat::RGB10A2Unorm;
-    case YUV_420_BIPLANAR:
-      return wgpu::TextureFormat::R8BG8Biplanar420Unorm;
-    case RGBA_4444:
-    case RGB_565:
-    case BGR_565:
-    case R16_EXT:
-    case RG16_EXT:
-    case BGRA_1010102:
-    case YVU_420:
-    case ETC1:
-    case LUMINANCE_F16:
-    case P010:
-      break;
+SkColorType ToClosestSkColorType(bool gpu_compositing,
+                                 SharedImageFormat format,
+                                 int plane_index) {
+  DCHECK(format.IsValidPlaneIndex(plane_index));
+  if (!gpu_compositing) {
+    // TODO(crbug.com/986405): Remove this assumption and have clients tag
+    // resources with the correct format.
+    // In software compositing we lazily use RGBA_8888 throughout the system,
+    // but actual pixel encodings are the native skia bit ordering, which can be
+    // RGBA or BGRA.
+    return kN32_SkColorType;
   }
-  return wgpu::TextureFormat::Undefined;
-}
+  if (format.is_single_plane()) {
+    return ResourceFormatToClosestSkColorType(gpu_compositing,
+                                              format.resource_format());
+  }
 
-WGPUTextureFormat ToWGPUFormat(ResourceFormat format) {
-  return static_cast<WGPUTextureFormat>(ToDawnFormat(format));
-}
-
-// TODO (hitawala): Add support for multiplanar formats.
-SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
-                                               SharedImageFormat format) {
-  return ResourceFormatToClosestSkColorType(gpu_compositing,
-                                            format.resource_format());
-}
-
-int BitsPerPixel(SharedImageFormat format) {
-  return BitsPerPixel(format.resource_format());
-}
-
-bool HasAlpha(SharedImageFormat format) {
-  return HasAlpha(format.resource_format());
-}
-
-unsigned int GLDataType(SharedImageFormat format) {
-  return GLDataType(format.resource_format());
-}
-
-unsigned int GLDataFormat(SharedImageFormat format) {
-  return GLDataFormat(format.resource_format());
-}
-
-unsigned int GLInternalFormat(SharedImageFormat format) {
-  return GLInternalFormat(format.resource_format());
-}
-
-gfx::BufferFormat BufferFormat(SharedImageFormat format) {
-  return BufferFormat(format.resource_format());
-}
-
-bool IsResourceFormatCompressed(SharedImageFormat format) {
-  return IsResourceFormatCompressed(format.resource_format());
-}
-
-unsigned int TextureStorageFormat(SharedImageFormat format,
-                                  bool use_angle_rgbx_format) {
-  return TextureStorageFormat(format.resource_format(), use_angle_rgbx_format);
-}
-
-bool IsGpuMemoryBufferFormatSupported(SharedImageFormat format) {
-  return IsGpuMemoryBufferFormatSupported(format.resource_format());
-}
-
-bool GLSupportsFormat(SharedImageFormat format) {
-  return GLSupportsFormat(format.resource_format());
-}
-
-#if BUILDFLAG(ENABLE_VULKAN)
-bool HasVkFormat(SharedImageFormat format) {
-  return HasVkFormat(format.resource_format());
-}
-
-VkFormat ToVkFormat(SharedImageFormat format) {
-  return ToVkFormat(format.resource_format());
-}
-#endif
-
-wgpu::TextureFormat ToDawnFormat(SharedImageFormat format) {
-  return ToDawnFormat(format.resource_format());
-}
-
-WGPUTextureFormat ToWGPUFormat(SharedImageFormat format) {
-  return ToWGPUFormat(format.resource_format());
+  auto plane_config = format.plane_config();
+  auto channel_format = format.channel_format();
+  if (format.PrefersExternalSampler()) {
+    switch (channel_format) {
+      case SharedImageFormat::ChannelFormat::k8:
+        return plane_config == SharedImageFormat::PlaneConfig::kY_UV_A
+                   ? kRGBA_8888_SkColorType
+                   : kRGB_888x_SkColorType;
+      case SharedImageFormat::ChannelFormat::k10:
+        return kRGBA_1010102_SkColorType;
+      case SharedImageFormat::ChannelFormat::k16:
+        return kR16G16B16A16_unorm_SkColorType;
+      case SharedImageFormat::ChannelFormat::k16F:
+        return kRGBA_F16_SkColorType;
+    }
+  } else {
+    // No external sampling, format is per plane.
+    int num_channels = format.NumChannelsInPlane(plane_index);
+    DCHECK_GT(num_channels, 0);
+    DCHECK_LE(num_channels, 2);
+    switch (channel_format) {
+      case SharedImageFormat::ChannelFormat::k8:
+        return num_channels == 1 ? kAlpha_8_SkColorType
+                                 : kR8G8_unorm_SkColorType;
+      case SharedImageFormat::ChannelFormat::k10:
+      case SharedImageFormat::ChannelFormat::k16:
+        return num_channels == 1 ? kA16_unorm_SkColorType
+                                 : kR16G16_unorm_SkColorType;
+      case SharedImageFormat::ChannelFormat::k16F:
+        return num_channels == 1 ? kA16_float_SkColorType
+                                 : kR16G16_float_SkColorType;
+    }
+  }
 }
 
 }  // namespace viz

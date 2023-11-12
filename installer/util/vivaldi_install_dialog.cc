@@ -147,7 +147,7 @@ VivaldiInstallDialog::~VivaldiInstallDialog() {
 VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
   if (!InstallUtil::IsOSSupported()) {
     // TODO(jarle@vivaldi.com): Localize
-    MessageBox(nullptr, L"Vivaldi requires Windows 7 or higher.", nullptr,
+    MessageBox(nullptr, L"Vivaldi requires Windows 10 or higher.", nullptr,
                MB_ICONINFORMATION | MB_SETFOREGROUND);
     return INSTALL_DLG_ERROR;
   }

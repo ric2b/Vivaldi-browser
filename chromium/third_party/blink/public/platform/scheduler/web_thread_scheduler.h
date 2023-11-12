@@ -12,7 +12,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
-#include "third_party/blink/public/platform/scheduler/web_rail_mode_observer.h"
 #include "third_party/blink/public/platform/web_common.h"
 
 namespace blink {
@@ -64,17 +63,7 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   // Creates a WebAgentGroupScheduler implementation. Must be called from the
   // main thread.
   virtual std::unique_ptr<WebAgentGroupScheduler>
-  CreateAgentGroupScheduler() = 0;
-
-  // Return the current active AgentGroupScheduler.
-  // When a task which belongs to a specific AgentGroupScheduler is going to be
-  // run, this AgentGroupScheduler becomes the current active
-  // AgentGroupScheduler. And when the task is finished, the current active
-  // AgentGroupScheduler becomes nullptr. So if there is no active
-  // AgentGroupScheduler, this function returns nullptr. This behaviour is
-  // implemented by MainThreadSchedulerImpl’s OnTaskStarted and OnTaskCompleted
-  // hook points. So you can’t use this functionality in task observers.
-  virtual WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() = 0;
+  CreateWebAgentGroupScheduler() = 0;
 
   // Tells the scheduler about the change of renderer visibility status (e.g.
   // "all widgets are hidden" condition). Used mostly for metric purposes.

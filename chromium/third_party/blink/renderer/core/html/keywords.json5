@@ -73,7 +73,7 @@
     "eager",
     "auto",
 
-    // popup attribute (experimental)
+    // popover attribute (experimental)
     // https://github.com/openui/open-ui/blob/main/research/src/pages/popup/popup.research.explainer.mdx
     "auto",
     "hint",
@@ -106,5 +106,10 @@
     // https://github.com/WICG/fenced-frame
     "default",
     "opaque-ads",
+
+    // shadowrootmode attribute
+    // https://github.com/whatwg/html/pull/5465
+    "open",
+    "closed",
   ],
 }

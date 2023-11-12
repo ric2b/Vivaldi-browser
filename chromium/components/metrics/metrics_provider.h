@@ -34,12 +34,19 @@ class MetricsProvider {
   // Called during service initialization to allow the provider to start any
   // async initialization tasks.  The service will wait for the provider to
   // call |done_callback| before generating logs for the current session.
+  // |done_callback| must be run on the same thread that calls |AsyncInit|.
   virtual void AsyncInit(base::OnceClosure done_callback);
 
+  // Called by OnDidCreateMetricsLog() when feature kEmitHistogramsEarlier
+  // is enabled to provide histograms. If histograms are not emitted
+  // successfully or the feature is disabled, it will be called in
+  // ProvideCurrentSessionData().
+  // Returns whether or not histograms are emitted successfully.
+  // This function is temporary for crbug.com/1367008 and should not be used
+  // otherwise.
+  virtual bool ProvideHistograms();
+
   // Called when a new MetricsLog is created.
-  // This can be used to log a histogram that will appear in the log. Not safe
-  // for some other uses, like user actions.
-  // TODO(crbug.com/1171830): Improve this.
   virtual void OnDidCreateMetricsLog();
 
   // Called when metrics recording has been enabled.
@@ -126,18 +133,21 @@ class MetricsProvider {
   virtual void ClearSavedStabilityMetrics();
 
   // Called during regular collection to explicitly load histogram snapshots
-  // using a snapshot manager. PrepareDeltas() will have already been called
-  // and FinishDeltas() will be called later; calls to only PrepareDelta(),
-  // not PrepareDeltas (plural), should be made.
+  // using a snapshot manager. Calls to only PrepareDelta(), not PrepareDeltas()
+  // (plural), should be made.
   virtual void RecordHistogramSnapshots(
       base::HistogramSnapshotManager* snapshot_manager);
 
   // Called during collection of initial metrics to explicitly load histogram
-  // snapshots using a snapshot manager. PrepareDeltas() will have already
-  // been called and FinishDeltas() will be called later; calls to only
-  // PrepareDelta(), not PrepareDeltas (plural), should be made.
+  // snapshots using a snapshot manager. Calls to only PrepareDelta(), not
+  // PrepareDeltas() (plural), should be made.
   virtual void RecordInitialHistogramSnapshots(
       base::HistogramSnapshotManager* snapshot_manager);
+
+ protected:
+  // Used to indicate whether ProvideHistograms() successfully emits histograms
+  // when called in OnDidCreateMetricsLog().
+  bool emitted_ = false;
 };
 
 }  // namespace metrics

@@ -9,10 +9,10 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/kiosk_enable_screen_handler.h"
 
 namespace ash {
+
+class KioskEnableScreenView;
 
 // Representation independent class that controls screen for enabling
 // consumer kiosk mode.
@@ -52,11 +52,5 @@ class KioskEnableScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::KioskEnableScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_KIOSK_ENABLE_SCREEN_H_

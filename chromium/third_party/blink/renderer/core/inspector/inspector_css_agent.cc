@@ -142,7 +142,7 @@ class FrontendOperationScope {
 
 Element* GetPseudoIdAndTag(Element* element,
                            PseudoId& element_pseudo_id,
-                           AtomicString& document_transition_tag) {
+                           AtomicString& view_transition_name) {
   auto* resolved_element = element;
   if (auto* pseudo_element = DynamicTo<PseudoElement>(element)) {
     resolved_element = IsTransitionPseudoElement(pseudo_element->GetPseudoId())
@@ -153,7 +153,7 @@ Element* GetPseudoIdAndTag(Element* element,
       return nullptr;
 
     element_pseudo_id = pseudo_element->GetPseudoId();
-    document_transition_tag = pseudo_element->document_transition_tag();
+    view_transition_name = pseudo_element->view_transition_name();
   }
   return resolved_element;
 }
@@ -1000,9 +1000,8 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
   Element* animating_element = element;
 
   PseudoId element_pseudo_id = kPseudoIdNone;
-  AtomicString document_transition_tag = g_null_atom;
-  element =
-      GetPseudoIdAndTag(element, element_pseudo_id, document_transition_tag);
+  AtomicString view_transition_name = g_null_atom;
+  element = GetPseudoIdAndTag(element, element_pseudo_id, view_transition_name);
   if (!element)
     return Response::ServerError("Pseudo element has no parent");
 
@@ -1020,10 +1019,30 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
 
   CheckPseudoHasCacheScope check_pseudo_has_cache_scope(&document);
   InspectorStyleResolver resolver(element, element_pseudo_id,
-                                  document_transition_tag);
+                                  view_transition_name);
 
   // Matched rules.
   *matched_css_rules = BuildArrayForMatchedRuleList(resolver.MatchedRules());
+
+  // Inherited styles.
+  *inherited_entries =
+      std::make_unique<protocol::Array<protocol::CSS::InheritedStyleEntry>>();
+  for (InspectorCSSMatchedRules* match : resolver.ParentRules()) {
+    std::unique_ptr<protocol::CSS::InheritedStyleEntry> entry =
+        protocol::CSS::InheritedStyleEntry::create()
+            .setMatchedCSSRules(
+                BuildArrayForMatchedRuleList(match->matched_rules))
+            .build();
+    if (match->element->style() && match->element->style()->length()) {
+      InspectorStyleSheetForInlineStyle* style_sheet =
+          AsInspectorStyleSheet(match->element);
+      if (style_sheet) {
+        entry->setInlineStyle(
+            style_sheet->BuildObjectForStyle(style_sheet->InlineStyle()));
+      }
+    }
+    inherited_entries->fromJust()->emplace_back(std::move(entry));
+  }
 
   // Pseudo elements.
   if (element_pseudo_id)
@@ -1046,29 +1065,10 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
                 InspectorDOMAgent::ProtocolPseudoElementType(match->pseudo_id))
             .setMatches(BuildArrayForMatchedRuleList(match->matched_rules))
             .build());
-    if (match->document_transition_tag) {
+    if (match->view_transition_name) {
       pseudo_id_matches->fromJust()->back()->setPseudoIdentifier(
-          match->document_transition_tag);
+          match->view_transition_name);
     }
-  }
-
-  // Inherited styles.
-  *inherited_entries =
-      std::make_unique<protocol::Array<protocol::CSS::InheritedStyleEntry>>();
-  for (InspectorCSSMatchedRules* match : resolver.ParentRules()) {
-    std::unique_ptr<protocol::CSS::InheritedStyleEntry> entry =
-        protocol::CSS::InheritedStyleEntry::create()
-            .setMatchedCSSRules(
-                BuildArrayForMatchedRuleList(match->matched_rules))
-            .build();
-    if (match->element->style() && match->element->style()->length()) {
-      InspectorStyleSheetForInlineStyle* style_sheet =
-          AsInspectorStyleSheet(match->element);
-      if (style_sheet)
-        entry->setInlineStyle(
-            style_sheet->BuildObjectForStyle(style_sheet->InlineStyle()));
-    }
-    inherited_entries->fromJust()->emplace_back(std::move(entry));
   }
 
   *inherited_pseudo_id_matches = std::make_unique<
@@ -1086,9 +1086,9 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
               .setMatches(
                   BuildArrayForMatchedRuleList(pseudo_match->matched_rules))
               .build());
-      if (pseudo_match->document_transition_tag) {
+      if (pseudo_match->view_transition_name) {
         parent_pseudo_element_matches->back()->setPseudoIdentifier(
-            pseudo_match->document_transition_tag);
+            pseudo_match->view_transition_name);
       }
     }
 
@@ -2082,6 +2082,30 @@ InspectorCSSAgent::BuildContainerQueryObject(CSSContainerRule* rule) {
   if (!rule->Name().empty())
     container_query_object->setName(rule->Name());
 
+  PhysicalAxes physical = rule->Selector().GetPhysicalAxes();
+  if (physical != kPhysicalAxisNone) {
+    protocol::DOM::PhysicalAxes physical_proto =
+        protocol::DOM::PhysicalAxesEnum::Horizontal;
+    if (physical == kPhysicalAxisVertical)
+      physical_proto = protocol::DOM::PhysicalAxesEnum::Vertical;
+    else if (physical == kPhysicalAxisBoth)
+      physical_proto = protocol::DOM::PhysicalAxesEnum::Both;
+    else
+      DCHECK(physical == kPhysicalAxisHorizontal);
+    container_query_object->setPhysicalAxes(physical_proto);
+  }
+  LogicalAxes logical = rule->Selector().GetLogicalAxes();
+  if (logical != kLogicalAxisNone) {
+    protocol::DOM::LogicalAxes logical_proto =
+        protocol::DOM::LogicalAxesEnum::Inline;
+    if (logical == kLogicalAxisBlock)
+      logical_proto = protocol::DOM::LogicalAxesEnum::Block;
+    else if (logical == kLogicalAxisBoth)
+      logical_proto = protocol::DOM::LogicalAxesEnum::Both;
+    else
+      DCHECK(logical == kLogicalAxisInline);
+    container_query_object->setLogicalAxes(logical_proto);
+  }
   return container_query_object;
 }
 
@@ -2207,8 +2231,7 @@ void InspectorCSSAgent::FillAncestorData(CSSRule* rule,
   result->setScopes(std::move(scopes_list));
   std::reverse(layers_list.get()->begin(), layers_list.get()->end());
   result->setLayers(std::move(layers_list));
-  if (RuntimeEnabledFeatures::CSSContainerQueriesEnabled())
-    result->setContainerQueries(std::move(container_queries_list));
+  result->setContainerQueries(std::move(container_queries_list));
 }
 
 std::unique_ptr<protocol::CSS::CSSScope> InspectorCSSAgent::BuildScopeObject(
@@ -2578,8 +2601,8 @@ void InspectorCSSAgent::ResetPseudoStates() {
 HeapVector<Member<CSSStyleDeclaration>> InspectorCSSAgent::MatchingStyles(
     Element* element) {
   PseudoId pseudo_id = kPseudoIdNone;
-  AtomicString document_transition_tag = g_null_atom;
-  element = GetPseudoIdAndTag(element, pseudo_id, document_transition_tag);
+  AtomicString view_transition_name = g_null_atom;
+  element = GetPseudoIdAndTag(element, pseudo_id, view_transition_name);
   if (!element)
     return {};
 
@@ -2600,7 +2623,7 @@ HeapVector<Member<CSSStyleDeclaration>> InspectorCSSAgent::MatchingStyles(
 
   HeapVector<Member<CSSStyleRule>> rules =
       FilterDuplicateRules(style_resolver.PseudoCSSRulesForElement(
-          element, pseudo_id, document_transition_tag,
+          element, pseudo_id, view_transition_name,
           StyleResolver::kAllCSSRules));
   HeapVector<Member<CSSStyleDeclaration>> styles;
   if (!pseudo_id && element->style())
@@ -2886,9 +2909,13 @@ Response InspectorCSSAgent::takeCoverageDelta(
       // If the rule comes from an @import'ed file, the `rule_style_sheet` is
       // different from `style_sheet`.
       InspectorStyleSheet* rule_style_sheet = it->value;
-      if (std::unique_ptr<protocol::CSS::RuleUsage> rule_usage_object =
-              rule_style_sheet->BuildObjectForRuleUsage(css_style_rule, true)) {
-        (*result)->emplace_back(std::move(rule_usage_object));
+      CSSRule* rule = css_style_rule;
+      while (rule) {
+        if (std::unique_ptr<protocol::CSS::RuleUsage> rule_usage_object =
+                rule_style_sheet->BuildObjectForRuleUsage(rule, true)) {
+          (*result)->emplace_back(std::move(rule_usage_object));
+        }
+        rule = rule->parentRule();
       }
     }
   }

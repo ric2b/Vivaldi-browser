@@ -8,7 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
@@ -135,17 +135,18 @@ void SearchUserModel::InitAndFetchModel(
   writer.AddUmaFeatures(kSearchUserUMAFeatures.data(),
                         kSearchUserUMAFeatures.size());
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindRepeating(
                      model_updated_callback, kSearchUserSegmentId,
                      std::move(search_user_metadata), kSearchUserModelVersion));
 }
 
-void SearchUserModel::ExecuteModelWithInput(const std::vector<float>& inputs,
-                                            ExecutionCallback callback) {
+void SearchUserModel::ExecuteModelWithInput(
+    const ModelProvider::Request& inputs,
+    ExecutionCallback callback) {
   // Invalid inputs.
   if (inputs.size() != kSearchUserUMAFeatures.size()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
     return;
   }
@@ -164,8 +165,9 @@ void SearchUserModel::ExecuteModelWithInput(const std::vector<float>& inputs,
   }
 
   float result = RANK(segment);
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), result));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), ModelProvider::Response(1, result)));
 }
 
 bool SearchUserModel::ModelAvailable() {

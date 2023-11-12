@@ -28,8 +28,7 @@
 #include "ui/views/test/test_desktop_screen_ozone.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 
-namespace views {
-namespace test {
+namespace views::test {
 namespace {
 
 using ui_controls::DOWN;
@@ -88,6 +87,8 @@ class UIControlsDesktopOzone : public UIControlsAura {
     gfx::Point screen_location(screen_x, screen_y);
     gfx::Point root_location = screen_location;
     aura::Window* root_window = RootWindowForPoint(screen_location);
+    if (root_window == nullptr)
+      return true;
 
     aura::client::ScreenPositionClient* screen_position_client =
         aura::client::GetScreenPositionClient(root_window);
@@ -105,7 +106,6 @@ class UIControlsDesktopOzone : public UIControlsAura {
     DCHECK_EQ(screen, display::Screen::GetScreen());
     screen->set_cursor_screen_point(gfx::Point(screen_x, screen_y));
 
-    bool moved_cursor = false;
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
     if (root_location != root_current_location &&
         ozone_ui_controls_test_helper_->ButtonDownMask() == 0 &&
@@ -115,17 +115,15 @@ class UIControlsDesktopOzone : public UIControlsAura {
       root_window->MoveCursorTo(root_location);
       ozone_ui_controls_test_helper_->RunClosureAfterAllPendingUIEvents(
           std::move(closure));
-      moved_cursor = true;
+      return true;
     }
 #endif
 
-    if (!moved_cursor) {
-      gfx::Point screen_point(root_location);
-      host->ConvertDIPToScreenInPixels(&screen_point);
-      ozone_ui_controls_test_helper_->SendMouseMotionNotifyEvent(
-          host->GetAcceleratedWidget(), root_location, screen_point,
-          std::move(closure));
-    }
+    gfx::Point screen_point(root_location);
+    host->ConvertDIPToScreenInPixels(&screen_point);
+    ozone_ui_controls_test_helper_->SendMouseMotionNotifyEvent(
+        host->GetAcceleratedWidget(), root_location, screen_point,
+        std::move(closure));
     return true;
   }
   bool SendMouseEvents(MouseButton type,
@@ -141,6 +139,9 @@ class UIControlsDesktopOzone : public UIControlsAura {
                                      int accelerator_state) override {
     gfx::Point mouse_loc = aura::Env::GetInstance()->last_mouse_location();
     aura::Window* root_window = RootWindowForPoint(mouse_loc);
+    if (root_window == nullptr)
+      return true;
+
     aura::client::ScreenPositionClient* screen_position_client =
         aura::client::GetScreenPositionClient(root_window);
     if (screen_position_client)
@@ -177,6 +178,9 @@ class UIControlsDesktopOzone : public UIControlsAura {
     else
       root_window = RootWindowForPoint(screen_location);
 
+    if (root_window == nullptr)
+      return true;
+
     ozone_ui_controls_test_helper_->SendTouchEvent(
         root_window->GetHost()->GetAcceleratedWidget(), action, id,
         screen_location, std::move(closure));
@@ -199,8 +203,10 @@ class UIControlsDesktopOzone : public UIControlsAura {
           return window->GetBoundsInScreen().Contains(point) ||
                  window->HasCapture();
         });
-    DCHECK(i != windows.cend()) << "Couldn't find RW for " << point.ToString()
-                                << " among " << windows.size() << " RWs.";
+
+    if (i == windows.cend())
+      return nullptr;
+
     return (*i)->GetRootWindow();
   }
 
@@ -220,5 +226,4 @@ UIControlsAura* CreateUIControlsDesktopAuraOzone() {
   return new UIControlsDesktopOzone();
 }
 
-}  // namespace test
-}  // namespace views
+}  // namespace views::test

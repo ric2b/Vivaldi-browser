@@ -1201,24 +1201,43 @@ void aom_get_blk_sse_sum_c(const int16_t* data,
 unsigned int aom_get_mb_ss_c(const int16_t*);
 #define aom_get_mb_ss aom_get_mb_ss_c
 
-void aom_get_sse_sum_8x8_quad_c(const uint8_t* src_ptr,
-                                int source_stride,
-                                const uint8_t* ref_ptr,
-                                int ref_stride,
-                                unsigned int* sse,
-                                int* sum);
-void aom_get_sse_sum_8x8_quad_neon(const uint8_t* src_ptr,
-                                   int source_stride,
-                                   const uint8_t* ref_ptr,
-                                   int ref_stride,
-                                   unsigned int* sse,
-                                   int* sum);
-RTCD_EXTERN void (*aom_get_sse_sum_8x8_quad)(const uint8_t* src_ptr,
-                                             int source_stride,
-                                             const uint8_t* ref_ptr,
-                                             int ref_stride,
-                                             unsigned int* sse,
-                                             int* sum);
+void aom_get_var_sse_sum_16x16_dual_c(const uint8_t* src_ptr,
+                                      int source_stride,
+                                      const uint8_t* ref_ptr,
+                                      int ref_stride,
+                                      uint32_t* sse16x16,
+                                      unsigned int* tot_sse,
+                                      int* tot_sum,
+                                      uint32_t* var16x16);
+#define aom_get_var_sse_sum_16x16_dual aom_get_var_sse_sum_16x16_dual_c
+
+void aom_get_var_sse_sum_8x8_quad_c(const uint8_t* src_ptr,
+                                    int source_stride,
+                                    const uint8_t* ref_ptr,
+                                    int ref_stride,
+                                    uint32_t* sse8x8,
+                                    int* sum8x8,
+                                    unsigned int* tot_sse,
+                                    int* tot_sum,
+                                    uint32_t* var8x8);
+void aom_get_var_sse_sum_8x8_quad_neon(const uint8_t* src_ptr,
+                                       int source_stride,
+                                       const uint8_t* ref_ptr,
+                                       int ref_stride,
+                                       uint32_t* sse8x8,
+                                       int* sum8x8,
+                                       unsigned int* tot_sse,
+                                       int* tot_sum,
+                                       uint32_t* var8x8);
+RTCD_EXTERN void (*aom_get_var_sse_sum_8x8_quad)(const uint8_t* src_ptr,
+                                                 int source_stride,
+                                                 const uint8_t* ref_ptr,
+                                                 int ref_stride,
+                                                 uint32_t* sse8x8,
+                                                 int* sum8x8,
+                                                 unsigned int* tot_sse,
+                                                 int* tot_sum,
+                                                 uint32_t* var8x8);
 
 void aom_h_predictor_16x16_c(uint8_t* dst,
                              ptrdiff_t y_stride,
@@ -2603,7 +2622,18 @@ uint64_t aom_mse_wxh_16bit_c(uint8_t* dst,
                              int sstride,
                              int w,
                              int h);
-#define aom_mse_wxh_16bit aom_mse_wxh_16bit_c
+uint64_t aom_mse_wxh_16bit_neon(uint8_t* dst,
+                                int dstride,
+                                uint16_t* src,
+                                int sstride,
+                                int w,
+                                int h);
+RTCD_EXTERN uint64_t (*aom_mse_wxh_16bit)(uint8_t* dst,
+                                          int dstride,
+                                          uint16_t* src,
+                                          int sstride,
+                                          int w,
+                                          int h);
 
 void aom_paeth_predictor_16x16_c(uint8_t* dst,
                                  ptrdiff_t y_stride,
@@ -2989,7 +3019,23 @@ unsigned int aom_sad128x128_avg_c(const uint8_t* src_ptr,
                                   const uint8_t* ref_ptr,
                                   int ref_stride,
                                   const uint8_t* second_pred);
-#define aom_sad128x128_avg aom_sad128x128_avg_c
+unsigned int aom_sad128x128_avg_neon(const uint8_t* src_ptr,
+                                     int src_stride,
+                                     const uint8_t* ref_ptr,
+                                     int ref_stride,
+                                     const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad128x128_avg)(const uint8_t* src_ptr,
+                                               int src_stride,
+                                               const uint8_t* ref_ptr,
+                                               int ref_stride,
+                                               const uint8_t* second_pred);
+
+void aom_sad128x128x3d_c(const uint8_t* src_ptr,
+                         int src_stride,
+                         const uint8_t* const ref_ptr[4],
+                         int ref_stride,
+                         uint32_t sad_array[4]);
+#define aom_sad128x128x3d aom_sad128x128x3d_c
 
 void aom_sad128x128x4d_c(const uint8_t* src_ptr,
                          int src_stride,
@@ -3033,7 +3079,23 @@ unsigned int aom_sad128x64_avg_c(const uint8_t* src_ptr,
                                  const uint8_t* ref_ptr,
                                  int ref_stride,
                                  const uint8_t* second_pred);
-#define aom_sad128x64_avg aom_sad128x64_avg_c
+unsigned int aom_sad128x64_avg_neon(const uint8_t* src_ptr,
+                                    int src_stride,
+                                    const uint8_t* ref_ptr,
+                                    int ref_stride,
+                                    const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad128x64_avg)(const uint8_t* src_ptr,
+                                              int src_stride,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              const uint8_t* second_pred);
+
+void aom_sad128x64x3d_c(const uint8_t* src_ptr,
+                        int src_stride,
+                        const uint8_t* const ref_ptr[4],
+                        int ref_stride,
+                        uint32_t sad_array[4]);
+#define aom_sad128x64x3d aom_sad128x64x3d_c
 
 void aom_sad128x64x4d_c(const uint8_t* src_ptr,
                         int src_stride,
@@ -3085,7 +3147,23 @@ unsigned int aom_sad16x16_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad16x16_avg aom_sad16x16_avg_c
+unsigned int aom_sad16x16_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad16x16_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad16x16x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad16x16x3d aom_sad16x16x3d_c
 
 void aom_sad16x16x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3129,7 +3207,23 @@ unsigned int aom_sad16x32_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad16x32_avg aom_sad16x32_avg_c
+unsigned int aom_sad16x32_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad16x32_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad16x32x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad16x32x3d aom_sad16x32x3d_c
 
 void aom_sad16x32x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3173,7 +3267,23 @@ unsigned int aom_sad16x8_avg_c(const uint8_t* src_ptr,
                                const uint8_t* ref_ptr,
                                int ref_stride,
                                const uint8_t* second_pred);
-#define aom_sad16x8_avg aom_sad16x8_avg_c
+unsigned int aom_sad16x8_avg_neon(const uint8_t* src_ptr,
+                                  int src_stride,
+                                  const uint8_t* ref_ptr,
+                                  int ref_stride,
+                                  const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad16x8_avg)(const uint8_t* src_ptr,
+                                            int src_stride,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            const uint8_t* second_pred);
+
+void aom_sad16x8x3d_c(const uint8_t* src_ptr,
+                      int src_stride,
+                      const uint8_t* const ref_ptr[4],
+                      int ref_stride,
+                      uint32_t sad_array[4]);
+#define aom_sad16x8x3d aom_sad16x8x3d_c
 
 void aom_sad16x8x4d_c(const uint8_t* src_ptr,
                       int src_stride,
@@ -3225,7 +3335,23 @@ unsigned int aom_sad32x16_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad32x16_avg aom_sad32x16_avg_c
+unsigned int aom_sad32x16_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad32x16_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad32x16x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad32x16x3d aom_sad32x16x3d_c
 
 void aom_sad32x16x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3269,7 +3395,23 @@ unsigned int aom_sad32x32_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad32x32_avg aom_sad32x32_avg_c
+unsigned int aom_sad32x32_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad32x32_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad32x32x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad32x32x3d aom_sad32x32x3d_c
 
 void aom_sad32x32x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3313,7 +3455,23 @@ unsigned int aom_sad32x64_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad32x64_avg aom_sad32x64_avg_c
+unsigned int aom_sad32x64_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad32x64_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad32x64x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad32x64x3d aom_sad32x64x3d_c
 
 void aom_sad32x64x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3365,7 +3523,23 @@ unsigned int aom_sad4x4_avg_c(const uint8_t* src_ptr,
                               const uint8_t* ref_ptr,
                               int ref_stride,
                               const uint8_t* second_pred);
-#define aom_sad4x4_avg aom_sad4x4_avg_c
+unsigned int aom_sad4x4_avg_neon(const uint8_t* src_ptr,
+                                 int src_stride,
+                                 const uint8_t* ref_ptr,
+                                 int ref_stride,
+                                 const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad4x4_avg)(const uint8_t* src_ptr,
+                                           int src_stride,
+                                           const uint8_t* ref_ptr,
+                                           int ref_stride,
+                                           const uint8_t* second_pred);
+
+void aom_sad4x4x3d_c(const uint8_t* src_ptr,
+                     int src_stride,
+                     const uint8_t* const ref_ptr[4],
+                     int ref_stride,
+                     uint32_t sad_array[4]);
+#define aom_sad4x4x3d aom_sad4x4x3d_c
 
 void aom_sad4x4x4d_c(const uint8_t* src_ptr,
                      int src_stride,
@@ -3409,7 +3583,23 @@ unsigned int aom_sad4x8_avg_c(const uint8_t* src_ptr,
                               const uint8_t* ref_ptr,
                               int ref_stride,
                               const uint8_t* second_pred);
-#define aom_sad4x8_avg aom_sad4x8_avg_c
+unsigned int aom_sad4x8_avg_neon(const uint8_t* src_ptr,
+                                 int src_stride,
+                                 const uint8_t* ref_ptr,
+                                 int ref_stride,
+                                 const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad4x8_avg)(const uint8_t* src_ptr,
+                                           int src_stride,
+                                           const uint8_t* ref_ptr,
+                                           int ref_stride,
+                                           const uint8_t* second_pred);
+
+void aom_sad4x8x3d_c(const uint8_t* src_ptr,
+                     int src_stride,
+                     const uint8_t* const ref_ptr[4],
+                     int ref_stride,
+                     uint32_t sad_array[4]);
+#define aom_sad4x8x3d aom_sad4x8x3d_c
 
 void aom_sad4x8x4d_c(const uint8_t* src_ptr,
                      int src_stride,
@@ -3461,7 +3651,23 @@ unsigned int aom_sad64x128_avg_c(const uint8_t* src_ptr,
                                  const uint8_t* ref_ptr,
                                  int ref_stride,
                                  const uint8_t* second_pred);
-#define aom_sad64x128_avg aom_sad64x128_avg_c
+unsigned int aom_sad64x128_avg_neon(const uint8_t* src_ptr,
+                                    int src_stride,
+                                    const uint8_t* ref_ptr,
+                                    int ref_stride,
+                                    const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad64x128_avg)(const uint8_t* src_ptr,
+                                              int src_stride,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              const uint8_t* second_pred);
+
+void aom_sad64x128x3d_c(const uint8_t* src_ptr,
+                        int src_stride,
+                        const uint8_t* const ref_ptr[4],
+                        int ref_stride,
+                        uint32_t sad_array[4]);
+#define aom_sad64x128x3d aom_sad64x128x3d_c
 
 void aom_sad64x128x4d_c(const uint8_t* src_ptr,
                         int src_stride,
@@ -3505,7 +3711,23 @@ unsigned int aom_sad64x32_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad64x32_avg aom_sad64x32_avg_c
+unsigned int aom_sad64x32_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad64x32_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad64x32x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad64x32x3d aom_sad64x32x3d_c
 
 void aom_sad64x32x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3549,7 +3771,23 @@ unsigned int aom_sad64x64_avg_c(const uint8_t* src_ptr,
                                 const uint8_t* ref_ptr,
                                 int ref_stride,
                                 const uint8_t* second_pred);
-#define aom_sad64x64_avg aom_sad64x64_avg_c
+unsigned int aom_sad64x64_avg_neon(const uint8_t* src_ptr,
+                                   int src_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad64x64_avg)(const uint8_t* src_ptr,
+                                             int src_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             const uint8_t* second_pred);
+
+void aom_sad64x64x3d_c(const uint8_t* src_ptr,
+                       int src_stride,
+                       const uint8_t* const ref_ptr[4],
+                       int ref_stride,
+                       uint32_t sad_array[4]);
+#define aom_sad64x64x3d aom_sad64x64x3d_c
 
 void aom_sad64x64x4d_c(const uint8_t* src_ptr,
                        int src_stride,
@@ -3601,7 +3839,23 @@ unsigned int aom_sad8x16_avg_c(const uint8_t* src_ptr,
                                const uint8_t* ref_ptr,
                                int ref_stride,
                                const uint8_t* second_pred);
-#define aom_sad8x16_avg aom_sad8x16_avg_c
+unsigned int aom_sad8x16_avg_neon(const uint8_t* src_ptr,
+                                  int src_stride,
+                                  const uint8_t* ref_ptr,
+                                  int ref_stride,
+                                  const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad8x16_avg)(const uint8_t* src_ptr,
+                                            int src_stride,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            const uint8_t* second_pred);
+
+void aom_sad8x16x3d_c(const uint8_t* src_ptr,
+                      int src_stride,
+                      const uint8_t* const ref_ptr[4],
+                      int ref_stride,
+                      uint32_t sad_array[4]);
+#define aom_sad8x16x3d aom_sad8x16x3d_c
 
 void aom_sad8x16x4d_c(const uint8_t* src_ptr,
                       int src_stride,
@@ -3645,7 +3899,23 @@ unsigned int aom_sad8x4_avg_c(const uint8_t* src_ptr,
                               const uint8_t* ref_ptr,
                               int ref_stride,
                               const uint8_t* second_pred);
-#define aom_sad8x4_avg aom_sad8x4_avg_c
+unsigned int aom_sad8x4_avg_neon(const uint8_t* src_ptr,
+                                 int src_stride,
+                                 const uint8_t* ref_ptr,
+                                 int ref_stride,
+                                 const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad8x4_avg)(const uint8_t* src_ptr,
+                                           int src_stride,
+                                           const uint8_t* ref_ptr,
+                                           int ref_stride,
+                                           const uint8_t* second_pred);
+
+void aom_sad8x4x3d_c(const uint8_t* src_ptr,
+                     int src_stride,
+                     const uint8_t* const ref_ptr[4],
+                     int ref_stride,
+                     uint32_t sad_array[4]);
+#define aom_sad8x4x3d aom_sad8x4x3d_c
 
 void aom_sad8x4x4d_c(const uint8_t* src_ptr,
                      int src_stride,
@@ -3689,7 +3959,23 @@ unsigned int aom_sad8x8_avg_c(const uint8_t* src_ptr,
                               const uint8_t* ref_ptr,
                               int ref_stride,
                               const uint8_t* second_pred);
-#define aom_sad8x8_avg aom_sad8x8_avg_c
+unsigned int aom_sad8x8_avg_neon(const uint8_t* src_ptr,
+                                 int src_stride,
+                                 const uint8_t* ref_ptr,
+                                 int ref_stride,
+                                 const uint8_t* second_pred);
+RTCD_EXTERN unsigned int (*aom_sad8x8_avg)(const uint8_t* src_ptr,
+                                           int src_stride,
+                                           const uint8_t* ref_ptr,
+                                           int ref_stride,
+                                           const uint8_t* second_pred);
+
+void aom_sad8x8x3d_c(const uint8_t* src_ptr,
+                     int src_stride,
+                     const uint8_t* const ref_ptr[4],
+                     int ref_stride,
+                     uint32_t sad_array[4]);
+#define aom_sad8x8x3d aom_sad8x8x3d_c
 
 void aom_sad8x8x4d_c(const uint8_t* src_ptr,
                      int src_stride,
@@ -4976,7 +5262,23 @@ uint32_t aom_sub_pixel_avg_variance128x128_c(const uint8_t* src_ptr,
                                              int ref_stride,
                                              uint32_t* sse,
                                              const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance128x128 aom_sub_pixel_avg_variance128x128_c
+uint32_t aom_sub_pixel_avg_variance128x128_neon(const uint8_t* src_ptr,
+                                                int source_stride,
+                                                int xoffset,
+                                                int yoffset,
+                                                const uint8_t* ref_ptr,
+                                                int ref_stride,
+                                                uint32_t* sse,
+                                                const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance128x128)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance128x64_c(const uint8_t* src_ptr,
                                             int source_stride,
@@ -4986,7 +5288,23 @@ uint32_t aom_sub_pixel_avg_variance128x64_c(const uint8_t* src_ptr,
                                             int ref_stride,
                                             uint32_t* sse,
                                             const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance128x64 aom_sub_pixel_avg_variance128x64_c
+uint32_t aom_sub_pixel_avg_variance128x64_neon(const uint8_t* src_ptr,
+                                               int source_stride,
+                                               int xoffset,
+                                               int yoffset,
+                                               const uint8_t* ref_ptr,
+                                               int ref_stride,
+                                               uint32_t* sse,
+                                               const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance128x64)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance16x16_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -4996,7 +5314,23 @@ uint32_t aom_sub_pixel_avg_variance16x16_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance16x16 aom_sub_pixel_avg_variance16x16_c
+uint32_t aom_sub_pixel_avg_variance16x16_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance16x16)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance16x32_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5006,7 +5340,23 @@ uint32_t aom_sub_pixel_avg_variance16x32_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance16x32 aom_sub_pixel_avg_variance16x32_c
+uint32_t aom_sub_pixel_avg_variance16x32_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance16x32)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance16x8_c(const uint8_t* src_ptr,
                                           int source_stride,
@@ -5016,7 +5366,23 @@ uint32_t aom_sub_pixel_avg_variance16x8_c(const uint8_t* src_ptr,
                                           int ref_stride,
                                           uint32_t* sse,
                                           const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance16x8 aom_sub_pixel_avg_variance16x8_c
+uint32_t aom_sub_pixel_avg_variance16x8_neon(const uint8_t* src_ptr,
+                                             int source_stride,
+                                             int xoffset,
+                                             int yoffset,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             uint32_t* sse,
+                                             const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance16x8)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance32x16_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5026,7 +5392,23 @@ uint32_t aom_sub_pixel_avg_variance32x16_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance32x16 aom_sub_pixel_avg_variance32x16_c
+uint32_t aom_sub_pixel_avg_variance32x16_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance32x16)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance32x32_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5036,7 +5418,23 @@ uint32_t aom_sub_pixel_avg_variance32x32_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance32x32 aom_sub_pixel_avg_variance32x32_c
+uint32_t aom_sub_pixel_avg_variance32x32_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance32x32)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance32x64_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5046,7 +5444,23 @@ uint32_t aom_sub_pixel_avg_variance32x64_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance32x64 aom_sub_pixel_avg_variance32x64_c
+uint32_t aom_sub_pixel_avg_variance32x64_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance32x64)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance4x4_c(const uint8_t* src_ptr,
                                          int source_stride,
@@ -5056,7 +5470,23 @@ uint32_t aom_sub_pixel_avg_variance4x4_c(const uint8_t* src_ptr,
                                          int ref_stride,
                                          uint32_t* sse,
                                          const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance4x4 aom_sub_pixel_avg_variance4x4_c
+uint32_t aom_sub_pixel_avg_variance4x4_neon(const uint8_t* src_ptr,
+                                            int source_stride,
+                                            int xoffset,
+                                            int yoffset,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            uint32_t* sse,
+                                            const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance4x4)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance4x8_c(const uint8_t* src_ptr,
                                          int source_stride,
@@ -5066,7 +5496,23 @@ uint32_t aom_sub_pixel_avg_variance4x8_c(const uint8_t* src_ptr,
                                          int ref_stride,
                                          uint32_t* sse,
                                          const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance4x8 aom_sub_pixel_avg_variance4x8_c
+uint32_t aom_sub_pixel_avg_variance4x8_neon(const uint8_t* src_ptr,
+                                            int source_stride,
+                                            int xoffset,
+                                            int yoffset,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            uint32_t* sse,
+                                            const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance4x8)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance64x128_c(const uint8_t* src_ptr,
                                             int source_stride,
@@ -5076,7 +5522,23 @@ uint32_t aom_sub_pixel_avg_variance64x128_c(const uint8_t* src_ptr,
                                             int ref_stride,
                                             uint32_t* sse,
                                             const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance64x128 aom_sub_pixel_avg_variance64x128_c
+uint32_t aom_sub_pixel_avg_variance64x128_neon(const uint8_t* src_ptr,
+                                               int source_stride,
+                                               int xoffset,
+                                               int yoffset,
+                                               const uint8_t* ref_ptr,
+                                               int ref_stride,
+                                               uint32_t* sse,
+                                               const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance64x128)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance64x32_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5086,7 +5548,23 @@ uint32_t aom_sub_pixel_avg_variance64x32_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance64x32 aom_sub_pixel_avg_variance64x32_c
+uint32_t aom_sub_pixel_avg_variance64x32_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance64x32)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance64x64_c(const uint8_t* src_ptr,
                                            int source_stride,
@@ -5096,7 +5574,23 @@ uint32_t aom_sub_pixel_avg_variance64x64_c(const uint8_t* src_ptr,
                                            int ref_stride,
                                            uint32_t* sse,
                                            const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance64x64 aom_sub_pixel_avg_variance64x64_c
+uint32_t aom_sub_pixel_avg_variance64x64_neon(const uint8_t* src_ptr,
+                                              int source_stride,
+                                              int xoffset,
+                                              int yoffset,
+                                              const uint8_t* ref_ptr,
+                                              int ref_stride,
+                                              uint32_t* sse,
+                                              const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance64x64)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance8x16_c(const uint8_t* src_ptr,
                                           int source_stride,
@@ -5106,7 +5600,23 @@ uint32_t aom_sub_pixel_avg_variance8x16_c(const uint8_t* src_ptr,
                                           int ref_stride,
                                           uint32_t* sse,
                                           const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance8x16 aom_sub_pixel_avg_variance8x16_c
+uint32_t aom_sub_pixel_avg_variance8x16_neon(const uint8_t* src_ptr,
+                                             int source_stride,
+                                             int xoffset,
+                                             int yoffset,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             uint32_t* sse,
+                                             const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance8x16)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance8x4_c(const uint8_t* src_ptr,
                                          int source_stride,
@@ -5116,7 +5626,23 @@ uint32_t aom_sub_pixel_avg_variance8x4_c(const uint8_t* src_ptr,
                                          int ref_stride,
                                          uint32_t* sse,
                                          const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance8x4 aom_sub_pixel_avg_variance8x4_c
+uint32_t aom_sub_pixel_avg_variance8x4_neon(const uint8_t* src_ptr,
+                                            int source_stride,
+                                            int xoffset,
+                                            int yoffset,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            uint32_t* sse,
+                                            const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance8x4)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_avg_variance8x8_c(const uint8_t* src_ptr,
                                          int source_stride,
@@ -5126,7 +5652,23 @@ uint32_t aom_sub_pixel_avg_variance8x8_c(const uint8_t* src_ptr,
                                          int ref_stride,
                                          uint32_t* sse,
                                          const uint8_t* second_pred);
-#define aom_sub_pixel_avg_variance8x8 aom_sub_pixel_avg_variance8x8_c
+uint32_t aom_sub_pixel_avg_variance8x8_neon(const uint8_t* src_ptr,
+                                            int source_stride,
+                                            int xoffset,
+                                            int yoffset,
+                                            const uint8_t* ref_ptr,
+                                            int ref_stride,
+                                            uint32_t* sse,
+                                            const uint8_t* second_pred);
+RTCD_EXTERN uint32_t (*aom_sub_pixel_avg_variance8x8)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse,
+    const uint8_t* second_pred);
 
 uint32_t aom_sub_pixel_variance128x128_c(const uint8_t* src_ptr,
                                          int source_stride,
@@ -5980,761 +6522,1145 @@ static void setup_rtcd_internal(void) {
   (void)flags;
 
   aom_avg_4x4 = aom_avg_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_avg_4x4 = aom_avg_4x4_neon;
+  }
   aom_avg_8x8 = aom_avg_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_avg_8x8 = aom_avg_8x8_neon;
+  }
   aom_avg_8x8_quad = aom_avg_8x8_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_avg_8x8_quad = aom_avg_8x8_quad_neon;
+  }
   aom_blend_a64_hmask = aom_blend_a64_hmask_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_blend_a64_hmask = aom_blend_a64_hmask_neon;
+  }
   aom_blend_a64_vmask = aom_blend_a64_vmask_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_blend_a64_vmask = aom_blend_a64_vmask_neon;
+  }
   aom_convolve_copy = aom_convolve_copy_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_convolve_copy = aom_convolve_copy_neon;
+  }
   aom_dc_128_predictor_16x16 = aom_dc_128_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_128_predictor_16x16 = aom_dc_128_predictor_16x16_neon;
+  }
   aom_dc_128_predictor_32x32 = aom_dc_128_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_128_predictor_32x32 = aom_dc_128_predictor_32x32_neon;
+  }
   aom_dc_128_predictor_4x4 = aom_dc_128_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_128_predictor_4x4 = aom_dc_128_predictor_4x4_neon;
+  }
   aom_dc_128_predictor_8x8 = aom_dc_128_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_128_predictor_8x8 = aom_dc_128_predictor_8x8_neon;
+  }
   aom_dc_left_predictor_16x16 = aom_dc_left_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_left_predictor_16x16 = aom_dc_left_predictor_16x16_neon;
+  }
   aom_dc_left_predictor_32x32 = aom_dc_left_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_left_predictor_32x32 = aom_dc_left_predictor_32x32_neon;
+  }
   aom_dc_left_predictor_4x4 = aom_dc_left_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_left_predictor_4x4 = aom_dc_left_predictor_4x4_neon;
+  }
   aom_dc_left_predictor_8x8 = aom_dc_left_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_left_predictor_8x8 = aom_dc_left_predictor_8x8_neon;
+  }
   aom_dc_predictor_16x16 = aom_dc_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_predictor_16x16 = aom_dc_predictor_16x16_neon;
+  }
   aom_dc_predictor_32x32 = aom_dc_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_predictor_32x32 = aom_dc_predictor_32x32_neon;
+  }
   aom_dc_predictor_4x4 = aom_dc_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_predictor_4x4 = aom_dc_predictor_4x4_neon;
+  }
   aom_dc_predictor_8x8 = aom_dc_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_predictor_8x8 = aom_dc_predictor_8x8_neon;
+  }
   aom_dc_top_predictor_16x16 = aom_dc_top_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_top_predictor_16x16 = aom_dc_top_predictor_16x16_neon;
+  }
   aom_dc_top_predictor_32x32 = aom_dc_top_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_top_predictor_32x32 = aom_dc_top_predictor_32x32_neon;
+  }
   aom_dc_top_predictor_4x4 = aom_dc_top_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_top_predictor_4x4 = aom_dc_top_predictor_4x4_neon;
+  }
   aom_dc_top_predictor_8x8 = aom_dc_top_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_dc_top_predictor_8x8 = aom_dc_top_predictor_8x8_neon;
+  }
   aom_fdct4x4 = aom_fdct4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_fdct4x4 = aom_fdct4x4_neon;
+  }
   aom_fdct4x4_lp = aom_fdct4x4_lp_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_fdct4x4_lp = aom_fdct4x4_lp_neon;
+  }
   aom_fdct8x8 = aom_fdct8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_fdct8x8 = aom_fdct8x8_neon;
+  }
   aom_get16x16var = aom_get16x16var_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_get16x16var = aom_get16x16var_neon;
+  }
   aom_get4x4sse_cs = aom_get4x4sse_cs_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_get4x4sse_cs = aom_get4x4sse_cs_neon;
+  }
   aom_get8x8var = aom_get8x8var_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_get8x8var = aom_get8x8var_neon;
-  aom_get_sse_sum_8x8_quad = aom_get_sse_sum_8x8_quad_c;
-  if (flags & HAS_NEON)
-    aom_get_sse_sum_8x8_quad = aom_get_sse_sum_8x8_quad_neon;
+  }
+  aom_get_var_sse_sum_8x8_quad = aom_get_var_sse_sum_8x8_quad_c;
+  if (flags & HAS_NEON) {
+    aom_get_var_sse_sum_8x8_quad = aom_get_var_sse_sum_8x8_quad_neon;
+  }
   aom_h_predictor_16x16 = aom_h_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_h_predictor_16x16 = aom_h_predictor_16x16_neon;
+  }
   aom_h_predictor_32x32 = aom_h_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_h_predictor_32x32 = aom_h_predictor_32x32_neon;
+  }
   aom_h_predictor_4x4 = aom_h_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_h_predictor_4x4 = aom_h_predictor_4x4_neon;
+  }
   aom_h_predictor_8x8 = aom_h_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_h_predictor_8x8 = aom_h_predictor_8x8_neon;
+  }
   aom_hadamard_16x16 = aom_hadamard_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_hadamard_16x16 = aom_hadamard_16x16_neon;
+  }
   aom_hadamard_8x8 = aom_hadamard_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_hadamard_8x8 = aom_hadamard_8x8_neon;
+  }
   aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_neon;
+  }
   aom_hadamard_lp_8x8 = aom_hadamard_lp_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_hadamard_lp_8x8 = aom_hadamard_lp_8x8_neon;
+  }
   aom_hadamard_lp_8x8_dual = aom_hadamard_lp_8x8_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_hadamard_lp_8x8_dual = aom_hadamard_lp_8x8_dual_neon;
+  }
   aom_int_pro_col = aom_int_pro_col_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_int_pro_col = aom_int_pro_col_neon;
+  }
   aom_int_pro_row = aom_int_pro_row_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_int_pro_row = aom_int_pro_row_neon;
+  }
   aom_lowbd_blend_a64_d16_mask = aom_lowbd_blend_a64_d16_mask_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lowbd_blend_a64_d16_mask = aom_lowbd_blend_a64_d16_mask_neon;
+  }
   aom_lpf_horizontal_14 = aom_lpf_horizontal_14_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_14 = aom_lpf_horizontal_14_neon;
+  }
   aom_lpf_horizontal_14_dual = aom_lpf_horizontal_14_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_14_dual = aom_lpf_horizontal_14_dual_neon;
+  }
   aom_lpf_horizontal_14_quad = aom_lpf_horizontal_14_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_14_quad = aom_lpf_horizontal_14_quad_neon;
+  }
   aom_lpf_horizontal_4 = aom_lpf_horizontal_4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_4 = aom_lpf_horizontal_4_neon;
+  }
   aom_lpf_horizontal_4_dual = aom_lpf_horizontal_4_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_4_dual = aom_lpf_horizontal_4_dual_neon;
+  }
   aom_lpf_horizontal_4_quad = aom_lpf_horizontal_4_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_4_quad = aom_lpf_horizontal_4_quad_neon;
+  }
   aom_lpf_horizontal_6 = aom_lpf_horizontal_6_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_6 = aom_lpf_horizontal_6_neon;
+  }
   aom_lpf_horizontal_6_dual = aom_lpf_horizontal_6_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_6_dual = aom_lpf_horizontal_6_dual_neon;
+  }
   aom_lpf_horizontal_6_quad = aom_lpf_horizontal_6_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_6_quad = aom_lpf_horizontal_6_quad_neon;
+  }
   aom_lpf_horizontal_8 = aom_lpf_horizontal_8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_8 = aom_lpf_horizontal_8_neon;
+  }
   aom_lpf_horizontal_8_dual = aom_lpf_horizontal_8_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_8_dual = aom_lpf_horizontal_8_dual_neon;
+  }
   aom_lpf_horizontal_8_quad = aom_lpf_horizontal_8_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_horizontal_8_quad = aom_lpf_horizontal_8_quad_neon;
+  }
   aom_lpf_vertical_14 = aom_lpf_vertical_14_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_14 = aom_lpf_vertical_14_neon;
+  }
   aom_lpf_vertical_14_dual = aom_lpf_vertical_14_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_14_dual = aom_lpf_vertical_14_dual_neon;
+  }
   aom_lpf_vertical_14_quad = aom_lpf_vertical_14_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_14_quad = aom_lpf_vertical_14_quad_neon;
+  }
   aom_lpf_vertical_4 = aom_lpf_vertical_4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_4 = aom_lpf_vertical_4_neon;
+  }
   aom_lpf_vertical_4_dual = aom_lpf_vertical_4_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_4_dual = aom_lpf_vertical_4_dual_neon;
+  }
   aom_lpf_vertical_4_quad = aom_lpf_vertical_4_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_4_quad = aom_lpf_vertical_4_quad_neon;
+  }
   aom_lpf_vertical_6 = aom_lpf_vertical_6_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_6 = aom_lpf_vertical_6_neon;
+  }
   aom_lpf_vertical_6_dual = aom_lpf_vertical_6_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_6_dual = aom_lpf_vertical_6_dual_neon;
+  }
   aom_lpf_vertical_6_quad = aom_lpf_vertical_6_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_6_quad = aom_lpf_vertical_6_quad_neon;
+  }
   aom_lpf_vertical_8 = aom_lpf_vertical_8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_8 = aom_lpf_vertical_8_neon;
+  }
   aom_lpf_vertical_8_dual = aom_lpf_vertical_8_dual_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_8_dual = aom_lpf_vertical_8_dual_neon;
+  }
   aom_lpf_vertical_8_quad = aom_lpf_vertical_8_quad_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_lpf_vertical_8_quad = aom_lpf_vertical_8_quad_neon;
+  }
   aom_mse16x16 = aom_mse16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_mse16x16 = aom_mse16x16_neon;
+  }
   aom_mse16x8 = aom_mse16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_mse16x8 = aom_mse16x8_neon;
+  }
   aom_mse8x16 = aom_mse8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_mse8x16 = aom_mse8x16_neon;
+  }
   aom_mse8x8 = aom_mse8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_mse8x8 = aom_mse8x8_neon;
+  }
+  aom_mse_wxh_16bit = aom_mse_wxh_16bit_c;
+  if (flags & HAS_NEON) {
+    aom_mse_wxh_16bit = aom_mse_wxh_16bit_neon;
+  }
   aom_paeth_predictor_16x16 = aom_paeth_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_16x16 = aom_paeth_predictor_16x16_neon;
+  }
   aom_paeth_predictor_16x32 = aom_paeth_predictor_16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_16x32 = aom_paeth_predictor_16x32_neon;
+  }
   aom_paeth_predictor_16x4 = aom_paeth_predictor_16x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_16x4 = aom_paeth_predictor_16x4_neon;
+  }
   aom_paeth_predictor_16x64 = aom_paeth_predictor_16x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_16x64 = aom_paeth_predictor_16x64_neon;
+  }
   aom_paeth_predictor_16x8 = aom_paeth_predictor_16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_16x8 = aom_paeth_predictor_16x8_neon;
+  }
   aom_paeth_predictor_32x16 = aom_paeth_predictor_32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_32x16 = aom_paeth_predictor_32x16_neon;
+  }
   aom_paeth_predictor_32x32 = aom_paeth_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_32x32 = aom_paeth_predictor_32x32_neon;
+  }
   aom_paeth_predictor_32x64 = aom_paeth_predictor_32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_32x64 = aom_paeth_predictor_32x64_neon;
+  }
   aom_paeth_predictor_32x8 = aom_paeth_predictor_32x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_32x8 = aom_paeth_predictor_32x8_neon;
+  }
   aom_paeth_predictor_4x16 = aom_paeth_predictor_4x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_4x16 = aom_paeth_predictor_4x16_neon;
+  }
   aom_paeth_predictor_4x4 = aom_paeth_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_4x4 = aom_paeth_predictor_4x4_neon;
+  }
   aom_paeth_predictor_4x8 = aom_paeth_predictor_4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_4x8 = aom_paeth_predictor_4x8_neon;
+  }
   aom_paeth_predictor_64x16 = aom_paeth_predictor_64x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_64x16 = aom_paeth_predictor_64x16_neon;
+  }
   aom_paeth_predictor_64x32 = aom_paeth_predictor_64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_64x32 = aom_paeth_predictor_64x32_neon;
+  }
   aom_paeth_predictor_64x64 = aom_paeth_predictor_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_64x64 = aom_paeth_predictor_64x64_neon;
+  }
   aom_paeth_predictor_8x16 = aom_paeth_predictor_8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_8x16 = aom_paeth_predictor_8x16_neon;
+  }
   aom_paeth_predictor_8x32 = aom_paeth_predictor_8x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_8x32 = aom_paeth_predictor_8x32_neon;
+  }
   aom_paeth_predictor_8x4 = aom_paeth_predictor_8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_8x4 = aom_paeth_predictor_8x4_neon;
+  }
   aom_paeth_predictor_8x8 = aom_paeth_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_paeth_predictor_8x8 = aom_paeth_predictor_8x8_neon;
+  }
   aom_quantize_b = aom_quantize_b_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_quantize_b = aom_quantize_b_neon;
+  }
   aom_quantize_b_32x32 = aom_quantize_b_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_quantize_b_32x32 = aom_quantize_b_32x32_neon;
+  }
   aom_quantize_b_64x64 = aom_quantize_b_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_quantize_b_64x64 = aom_quantize_b_64x64_neon;
+  }
   aom_sad128x128 = aom_sad128x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad128x128 = aom_sad128x128_neon;
+  }
+  aom_sad128x128_avg = aom_sad128x128_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad128x128_avg = aom_sad128x128_avg_neon;
+  }
   aom_sad128x128x4d = aom_sad128x128x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad128x128x4d = aom_sad128x128x4d_neon;
+  }
   aom_sad128x64 = aom_sad128x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad128x64 = aom_sad128x64_neon;
+  }
+  aom_sad128x64_avg = aom_sad128x64_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad128x64_avg = aom_sad128x64_avg_neon;
+  }
   aom_sad128x64x4d = aom_sad128x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad128x64x4d = aom_sad128x64x4d_neon;
+  }
   aom_sad16x16 = aom_sad16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x16 = aom_sad16x16_neon;
+  }
+  aom_sad16x16_avg = aom_sad16x16_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad16x16_avg = aom_sad16x16_avg_neon;
+  }
   aom_sad16x16x4d = aom_sad16x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x16x4d = aom_sad16x16x4d_neon;
+  }
   aom_sad16x32 = aom_sad16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x32 = aom_sad16x32_neon;
+  }
+  aom_sad16x32_avg = aom_sad16x32_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad16x32_avg = aom_sad16x32_avg_neon;
+  }
   aom_sad16x32x4d = aom_sad16x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x32x4d = aom_sad16x32x4d_neon;
+  }
   aom_sad16x8 = aom_sad16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x8 = aom_sad16x8_neon;
+  }
+  aom_sad16x8_avg = aom_sad16x8_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad16x8_avg = aom_sad16x8_avg_neon;
+  }
   aom_sad16x8x4d = aom_sad16x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad16x8x4d = aom_sad16x8x4d_neon;
+  }
   aom_sad32x16 = aom_sad32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x16 = aom_sad32x16_neon;
+  }
+  aom_sad32x16_avg = aom_sad32x16_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad32x16_avg = aom_sad32x16_avg_neon;
+  }
   aom_sad32x16x4d = aom_sad32x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x16x4d = aom_sad32x16x4d_neon;
+  }
   aom_sad32x32 = aom_sad32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x32 = aom_sad32x32_neon;
+  }
+  aom_sad32x32_avg = aom_sad32x32_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad32x32_avg = aom_sad32x32_avg_neon;
+  }
   aom_sad32x32x4d = aom_sad32x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x32x4d = aom_sad32x32x4d_neon;
+  }
   aom_sad32x64 = aom_sad32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x64 = aom_sad32x64_neon;
+  }
+  aom_sad32x64_avg = aom_sad32x64_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad32x64_avg = aom_sad32x64_avg_neon;
+  }
   aom_sad32x64x4d = aom_sad32x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad32x64x4d = aom_sad32x64x4d_neon;
+  }
   aom_sad4x4 = aom_sad4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad4x4 = aom_sad4x4_neon;
+  }
+  aom_sad4x4_avg = aom_sad4x4_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad4x4_avg = aom_sad4x4_avg_neon;
+  }
   aom_sad4x4x4d = aom_sad4x4x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad4x4x4d = aom_sad4x4x4d_neon;
+  }
   aom_sad4x8 = aom_sad4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad4x8 = aom_sad4x8_neon;
+  }
+  aom_sad4x8_avg = aom_sad4x8_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad4x8_avg = aom_sad4x8_avg_neon;
+  }
   aom_sad4x8x4d = aom_sad4x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad4x8x4d = aom_sad4x8x4d_neon;
+  }
   aom_sad64x128 = aom_sad64x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x128 = aom_sad64x128_neon;
+  }
+  aom_sad64x128_avg = aom_sad64x128_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad64x128_avg = aom_sad64x128_avg_neon;
+  }
   aom_sad64x128x4d = aom_sad64x128x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x128x4d = aom_sad64x128x4d_neon;
+  }
   aom_sad64x32 = aom_sad64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x32 = aom_sad64x32_neon;
+  }
+  aom_sad64x32_avg = aom_sad64x32_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad64x32_avg = aom_sad64x32_avg_neon;
+  }
   aom_sad64x32x4d = aom_sad64x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x32x4d = aom_sad64x32x4d_neon;
+  }
   aom_sad64x64 = aom_sad64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x64 = aom_sad64x64_neon;
+  }
+  aom_sad64x64_avg = aom_sad64x64_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad64x64_avg = aom_sad64x64_avg_neon;
+  }
   aom_sad64x64x4d = aom_sad64x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad64x64x4d = aom_sad64x64x4d_neon;
+  }
   aom_sad8x16 = aom_sad8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x16 = aom_sad8x16_neon;
+  }
+  aom_sad8x16_avg = aom_sad8x16_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad8x16_avg = aom_sad8x16_avg_neon;
+  }
   aom_sad8x16x4d = aom_sad8x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x16x4d = aom_sad8x16x4d_neon;
+  }
   aom_sad8x4 = aom_sad8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x4 = aom_sad8x4_neon;
+  }
+  aom_sad8x4_avg = aom_sad8x4_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad8x4_avg = aom_sad8x4_avg_neon;
+  }
   aom_sad8x4x4d = aom_sad8x4x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x4x4d = aom_sad8x4x4d_neon;
+  }
   aom_sad8x8 = aom_sad8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x8 = aom_sad8x8_neon;
+  }
+  aom_sad8x8_avg = aom_sad8x8_avg_c;
+  if (flags & HAS_NEON) {
+    aom_sad8x8_avg = aom_sad8x8_avg_neon;
+  }
   aom_sad8x8x4d = aom_sad8x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad8x8x4d = aom_sad8x8x4d_neon;
+  }
   aom_sad_skip_128x128 = aom_sad_skip_128x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_128x128 = aom_sad_skip_128x128_neon;
+  }
   aom_sad_skip_128x128x4d = aom_sad_skip_128x128x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_128x128x4d = aom_sad_skip_128x128x4d_neon;
+  }
   aom_sad_skip_128x64 = aom_sad_skip_128x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_128x64 = aom_sad_skip_128x64_neon;
+  }
   aom_sad_skip_128x64x4d = aom_sad_skip_128x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_128x64x4d = aom_sad_skip_128x64x4d_neon;
+  }
   aom_sad_skip_16x16 = aom_sad_skip_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x16 = aom_sad_skip_16x16_neon;
+  }
   aom_sad_skip_16x16x4d = aom_sad_skip_16x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x16x4d = aom_sad_skip_16x16x4d_neon;
+  }
   aom_sad_skip_16x32 = aom_sad_skip_16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x32 = aom_sad_skip_16x32_neon;
+  }
   aom_sad_skip_16x32x4d = aom_sad_skip_16x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x32x4d = aom_sad_skip_16x32x4d_neon;
+  }
   aom_sad_skip_16x8 = aom_sad_skip_16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x8 = aom_sad_skip_16x8_neon;
+  }
   aom_sad_skip_16x8x4d = aom_sad_skip_16x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_16x8x4d = aom_sad_skip_16x8x4d_neon;
+  }
   aom_sad_skip_32x16 = aom_sad_skip_32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x16 = aom_sad_skip_32x16_neon;
+  }
   aom_sad_skip_32x16x4d = aom_sad_skip_32x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x16x4d = aom_sad_skip_32x16x4d_neon;
+  }
   aom_sad_skip_32x32 = aom_sad_skip_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x32 = aom_sad_skip_32x32_neon;
+  }
   aom_sad_skip_32x32x4d = aom_sad_skip_32x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x32x4d = aom_sad_skip_32x32x4d_neon;
+  }
   aom_sad_skip_32x64 = aom_sad_skip_32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x64 = aom_sad_skip_32x64_neon;
+  }
   aom_sad_skip_32x64x4d = aom_sad_skip_32x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_32x64x4d = aom_sad_skip_32x64x4d_neon;
+  }
   aom_sad_skip_4x8 = aom_sad_skip_4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_4x8 = aom_sad_skip_4x8_neon;
+  }
   aom_sad_skip_4x8x4d = aom_sad_skip_4x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_4x8x4d = aom_sad_skip_4x8x4d_neon;
+  }
   aom_sad_skip_64x128 = aom_sad_skip_64x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x128 = aom_sad_skip_64x128_neon;
+  }
   aom_sad_skip_64x128x4d = aom_sad_skip_64x128x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x128x4d = aom_sad_skip_64x128x4d_neon;
+  }
   aom_sad_skip_64x32 = aom_sad_skip_64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x32 = aom_sad_skip_64x32_neon;
+  }
   aom_sad_skip_64x32x4d = aom_sad_skip_64x32x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x32x4d = aom_sad_skip_64x32x4d_neon;
+  }
   aom_sad_skip_64x64 = aom_sad_skip_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x64 = aom_sad_skip_64x64_neon;
+  }
   aom_sad_skip_64x64x4d = aom_sad_skip_64x64x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_64x64x4d = aom_sad_skip_64x64x4d_neon;
+  }
   aom_sad_skip_8x16 = aom_sad_skip_8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_8x16 = aom_sad_skip_8x16_neon;
+  }
   aom_sad_skip_8x16x4d = aom_sad_skip_8x16x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_8x16x4d = aom_sad_skip_8x16x4d_neon;
+  }
   aom_sad_skip_8x8 = aom_sad_skip_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_8x8 = aom_sad_skip_8x8_neon;
+  }
   aom_sad_skip_8x8x4d = aom_sad_skip_8x8x4d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sad_skip_8x8x4d = aom_sad_skip_8x8x4d_neon;
+  }
   aom_satd = aom_satd_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_satd = aom_satd_neon;
+  }
   aom_satd_lp = aom_satd_lp_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_satd_lp = aom_satd_lp_neon;
+  }
   aom_scaled_2d = aom_scaled_2d_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_scaled_2d = aom_scaled_2d_neon;
+  }
   aom_smooth_h_predictor_16x16 = aom_smooth_h_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_16x16 = aom_smooth_h_predictor_16x16_neon;
+  }
   aom_smooth_h_predictor_16x32 = aom_smooth_h_predictor_16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_16x32 = aom_smooth_h_predictor_16x32_neon;
+  }
   aom_smooth_h_predictor_16x4 = aom_smooth_h_predictor_16x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_16x4 = aom_smooth_h_predictor_16x4_neon;
+  }
   aom_smooth_h_predictor_16x64 = aom_smooth_h_predictor_16x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_16x64 = aom_smooth_h_predictor_16x64_neon;
+  }
   aom_smooth_h_predictor_16x8 = aom_smooth_h_predictor_16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_16x8 = aom_smooth_h_predictor_16x8_neon;
+  }
   aom_smooth_h_predictor_32x16 = aom_smooth_h_predictor_32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_32x16 = aom_smooth_h_predictor_32x16_neon;
+  }
   aom_smooth_h_predictor_32x32 = aom_smooth_h_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_32x32 = aom_smooth_h_predictor_32x32_neon;
+  }
   aom_smooth_h_predictor_32x64 = aom_smooth_h_predictor_32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_32x64 = aom_smooth_h_predictor_32x64_neon;
+  }
   aom_smooth_h_predictor_32x8 = aom_smooth_h_predictor_32x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_32x8 = aom_smooth_h_predictor_32x8_neon;
+  }
   aom_smooth_h_predictor_4x16 = aom_smooth_h_predictor_4x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_4x16 = aom_smooth_h_predictor_4x16_neon;
+  }
   aom_smooth_h_predictor_4x4 = aom_smooth_h_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_4x4 = aom_smooth_h_predictor_4x4_neon;
+  }
   aom_smooth_h_predictor_4x8 = aom_smooth_h_predictor_4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_4x8 = aom_smooth_h_predictor_4x8_neon;
+  }
   aom_smooth_h_predictor_64x16 = aom_smooth_h_predictor_64x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_64x16 = aom_smooth_h_predictor_64x16_neon;
+  }
   aom_smooth_h_predictor_64x32 = aom_smooth_h_predictor_64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_64x32 = aom_smooth_h_predictor_64x32_neon;
+  }
   aom_smooth_h_predictor_64x64 = aom_smooth_h_predictor_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_64x64 = aom_smooth_h_predictor_64x64_neon;
+  }
   aom_smooth_h_predictor_8x16 = aom_smooth_h_predictor_8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_8x16 = aom_smooth_h_predictor_8x16_neon;
+  }
   aom_smooth_h_predictor_8x32 = aom_smooth_h_predictor_8x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_8x32 = aom_smooth_h_predictor_8x32_neon;
+  }
   aom_smooth_h_predictor_8x4 = aom_smooth_h_predictor_8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_8x4 = aom_smooth_h_predictor_8x4_neon;
+  }
   aom_smooth_h_predictor_8x8 = aom_smooth_h_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_h_predictor_8x8 = aom_smooth_h_predictor_8x8_neon;
+  }
   aom_smooth_predictor_16x16 = aom_smooth_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_16x16 = aom_smooth_predictor_16x16_neon;
+  }
   aom_smooth_predictor_16x32 = aom_smooth_predictor_16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_16x32 = aom_smooth_predictor_16x32_neon;
+  }
   aom_smooth_predictor_16x4 = aom_smooth_predictor_16x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_16x4 = aom_smooth_predictor_16x4_neon;
+  }
   aom_smooth_predictor_16x64 = aom_smooth_predictor_16x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_16x64 = aom_smooth_predictor_16x64_neon;
+  }
   aom_smooth_predictor_16x8 = aom_smooth_predictor_16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_16x8 = aom_smooth_predictor_16x8_neon;
+  }
   aom_smooth_predictor_32x16 = aom_smooth_predictor_32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_32x16 = aom_smooth_predictor_32x16_neon;
+  }
   aom_smooth_predictor_32x32 = aom_smooth_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_32x32 = aom_smooth_predictor_32x32_neon;
+  }
   aom_smooth_predictor_32x64 = aom_smooth_predictor_32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_32x64 = aom_smooth_predictor_32x64_neon;
+  }
   aom_smooth_predictor_32x8 = aom_smooth_predictor_32x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_32x8 = aom_smooth_predictor_32x8_neon;
+  }
   aom_smooth_predictor_4x16 = aom_smooth_predictor_4x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_4x16 = aom_smooth_predictor_4x16_neon;
+  }
   aom_smooth_predictor_4x4 = aom_smooth_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_4x4 = aom_smooth_predictor_4x4_neon;
+  }
   aom_smooth_predictor_4x8 = aom_smooth_predictor_4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_4x8 = aom_smooth_predictor_4x8_neon;
+  }
   aom_smooth_predictor_64x16 = aom_smooth_predictor_64x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_64x16 = aom_smooth_predictor_64x16_neon;
+  }
   aom_smooth_predictor_64x32 = aom_smooth_predictor_64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_64x32 = aom_smooth_predictor_64x32_neon;
+  }
   aom_smooth_predictor_64x64 = aom_smooth_predictor_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_64x64 = aom_smooth_predictor_64x64_neon;
+  }
   aom_smooth_predictor_8x16 = aom_smooth_predictor_8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_8x16 = aom_smooth_predictor_8x16_neon;
+  }
   aom_smooth_predictor_8x32 = aom_smooth_predictor_8x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_8x32 = aom_smooth_predictor_8x32_neon;
+  }
   aom_smooth_predictor_8x4 = aom_smooth_predictor_8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_8x4 = aom_smooth_predictor_8x4_neon;
+  }
   aom_smooth_predictor_8x8 = aom_smooth_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_predictor_8x8 = aom_smooth_predictor_8x8_neon;
+  }
   aom_smooth_v_predictor_16x16 = aom_smooth_v_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_16x16 = aom_smooth_v_predictor_16x16_neon;
+  }
   aom_smooth_v_predictor_16x32 = aom_smooth_v_predictor_16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_16x32 = aom_smooth_v_predictor_16x32_neon;
+  }
   aom_smooth_v_predictor_16x4 = aom_smooth_v_predictor_16x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_16x4 = aom_smooth_v_predictor_16x4_neon;
+  }
   aom_smooth_v_predictor_16x64 = aom_smooth_v_predictor_16x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_16x64 = aom_smooth_v_predictor_16x64_neon;
+  }
   aom_smooth_v_predictor_16x8 = aom_smooth_v_predictor_16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_16x8 = aom_smooth_v_predictor_16x8_neon;
+  }
   aom_smooth_v_predictor_32x16 = aom_smooth_v_predictor_32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_32x16 = aom_smooth_v_predictor_32x16_neon;
+  }
   aom_smooth_v_predictor_32x32 = aom_smooth_v_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_32x32 = aom_smooth_v_predictor_32x32_neon;
+  }
   aom_smooth_v_predictor_32x64 = aom_smooth_v_predictor_32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_32x64 = aom_smooth_v_predictor_32x64_neon;
+  }
   aom_smooth_v_predictor_32x8 = aom_smooth_v_predictor_32x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_32x8 = aom_smooth_v_predictor_32x8_neon;
+  }
   aom_smooth_v_predictor_4x16 = aom_smooth_v_predictor_4x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_4x16 = aom_smooth_v_predictor_4x16_neon;
+  }
   aom_smooth_v_predictor_4x4 = aom_smooth_v_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_4x4 = aom_smooth_v_predictor_4x4_neon;
+  }
   aom_smooth_v_predictor_4x8 = aom_smooth_v_predictor_4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_4x8 = aom_smooth_v_predictor_4x8_neon;
+  }
   aom_smooth_v_predictor_64x16 = aom_smooth_v_predictor_64x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_64x16 = aom_smooth_v_predictor_64x16_neon;
+  }
   aom_smooth_v_predictor_64x32 = aom_smooth_v_predictor_64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_64x32 = aom_smooth_v_predictor_64x32_neon;
+  }
   aom_smooth_v_predictor_64x64 = aom_smooth_v_predictor_64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_64x64 = aom_smooth_v_predictor_64x64_neon;
+  }
   aom_smooth_v_predictor_8x16 = aom_smooth_v_predictor_8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_8x16 = aom_smooth_v_predictor_8x16_neon;
+  }
   aom_smooth_v_predictor_8x32 = aom_smooth_v_predictor_8x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_8x32 = aom_smooth_v_predictor_8x32_neon;
+  }
   aom_smooth_v_predictor_8x4 = aom_smooth_v_predictor_8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_8x4 = aom_smooth_v_predictor_8x4_neon;
+  }
   aom_smooth_v_predictor_8x8 = aom_smooth_v_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_smooth_v_predictor_8x8 = aom_smooth_v_predictor_8x8_neon;
+  }
   aom_sse = aom_sse_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sse = aom_sse_neon;
+  }
+  aom_sub_pixel_avg_variance128x128 = aom_sub_pixel_avg_variance128x128_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance128x128 = aom_sub_pixel_avg_variance128x128_neon;
+  }
+  aom_sub_pixel_avg_variance128x64 = aom_sub_pixel_avg_variance128x64_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance128x64 = aom_sub_pixel_avg_variance128x64_neon;
+  }
+  aom_sub_pixel_avg_variance16x16 = aom_sub_pixel_avg_variance16x16_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance16x16 = aom_sub_pixel_avg_variance16x16_neon;
+  }
+  aom_sub_pixel_avg_variance16x32 = aom_sub_pixel_avg_variance16x32_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance16x32 = aom_sub_pixel_avg_variance16x32_neon;
+  }
+  aom_sub_pixel_avg_variance16x8 = aom_sub_pixel_avg_variance16x8_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance16x8 = aom_sub_pixel_avg_variance16x8_neon;
+  }
+  aom_sub_pixel_avg_variance32x16 = aom_sub_pixel_avg_variance32x16_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance32x16 = aom_sub_pixel_avg_variance32x16_neon;
+  }
+  aom_sub_pixel_avg_variance32x32 = aom_sub_pixel_avg_variance32x32_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance32x32 = aom_sub_pixel_avg_variance32x32_neon;
+  }
+  aom_sub_pixel_avg_variance32x64 = aom_sub_pixel_avg_variance32x64_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance32x64 = aom_sub_pixel_avg_variance32x64_neon;
+  }
+  aom_sub_pixel_avg_variance4x4 = aom_sub_pixel_avg_variance4x4_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance4x4 = aom_sub_pixel_avg_variance4x4_neon;
+  }
+  aom_sub_pixel_avg_variance4x8 = aom_sub_pixel_avg_variance4x8_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance4x8 = aom_sub_pixel_avg_variance4x8_neon;
+  }
+  aom_sub_pixel_avg_variance64x128 = aom_sub_pixel_avg_variance64x128_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance64x128 = aom_sub_pixel_avg_variance64x128_neon;
+  }
+  aom_sub_pixel_avg_variance64x32 = aom_sub_pixel_avg_variance64x32_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance64x32 = aom_sub_pixel_avg_variance64x32_neon;
+  }
+  aom_sub_pixel_avg_variance64x64 = aom_sub_pixel_avg_variance64x64_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance64x64 = aom_sub_pixel_avg_variance64x64_neon;
+  }
+  aom_sub_pixel_avg_variance8x16 = aom_sub_pixel_avg_variance8x16_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance8x16 = aom_sub_pixel_avg_variance8x16_neon;
+  }
+  aom_sub_pixel_avg_variance8x4 = aom_sub_pixel_avg_variance8x4_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance8x4 = aom_sub_pixel_avg_variance8x4_neon;
+  }
+  aom_sub_pixel_avg_variance8x8 = aom_sub_pixel_avg_variance8x8_c;
+  if (flags & HAS_NEON) {
+    aom_sub_pixel_avg_variance8x8 = aom_sub_pixel_avg_variance8x8_neon;
+  }
   aom_sub_pixel_variance128x128 = aom_sub_pixel_variance128x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance128x128 = aom_sub_pixel_variance128x128_neon;
+  }
   aom_sub_pixel_variance128x64 = aom_sub_pixel_variance128x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance128x64 = aom_sub_pixel_variance128x64_neon;
+  }
   aom_sub_pixel_variance16x16 = aom_sub_pixel_variance16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance16x16 = aom_sub_pixel_variance16x16_neon;
+  }
   aom_sub_pixel_variance16x32 = aom_sub_pixel_variance16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance16x32 = aom_sub_pixel_variance16x32_neon;
+  }
   aom_sub_pixel_variance16x8 = aom_sub_pixel_variance16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance16x8 = aom_sub_pixel_variance16x8_neon;
+  }
   aom_sub_pixel_variance32x16 = aom_sub_pixel_variance32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance32x16 = aom_sub_pixel_variance32x16_neon;
+  }
   aom_sub_pixel_variance32x32 = aom_sub_pixel_variance32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance32x32 = aom_sub_pixel_variance32x32_neon;
+  }
   aom_sub_pixel_variance32x64 = aom_sub_pixel_variance32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance32x64 = aom_sub_pixel_variance32x64_neon;
+  }
   aom_sub_pixel_variance4x4 = aom_sub_pixel_variance4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance4x4 = aom_sub_pixel_variance4x4_neon;
+  }
   aom_sub_pixel_variance4x8 = aom_sub_pixel_variance4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance4x8 = aom_sub_pixel_variance4x8_neon;
+  }
   aom_sub_pixel_variance64x128 = aom_sub_pixel_variance64x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance64x128 = aom_sub_pixel_variance64x128_neon;
+  }
   aom_sub_pixel_variance64x32 = aom_sub_pixel_variance64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance64x32 = aom_sub_pixel_variance64x32_neon;
+  }
   aom_sub_pixel_variance64x64 = aom_sub_pixel_variance64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance64x64 = aom_sub_pixel_variance64x64_neon;
+  }
   aom_sub_pixel_variance8x16 = aom_sub_pixel_variance8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance8x16 = aom_sub_pixel_variance8x16_neon;
+  }
   aom_sub_pixel_variance8x4 = aom_sub_pixel_variance8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance8x4 = aom_sub_pixel_variance8x4_neon;
+  }
   aom_sub_pixel_variance8x8 = aom_sub_pixel_variance8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sub_pixel_variance8x8 = aom_sub_pixel_variance8x8_neon;
+  }
   aom_subtract_block = aom_subtract_block_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_subtract_block = aom_subtract_block_neon;
+  }
   aom_sum_squares_2d_i16 = aom_sum_squares_2d_i16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sum_squares_2d_i16 = aom_sum_squares_2d_i16_neon;
+  }
   aom_sum_sse_2d_i16 = aom_sum_sse_2d_i16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_sum_sse_2d_i16 = aom_sum_sse_2d_i16_neon;
+  }
   aom_v_predictor_16x16 = aom_v_predictor_16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_v_predictor_16x16 = aom_v_predictor_16x16_neon;
+  }
   aom_v_predictor_32x32 = aom_v_predictor_32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_v_predictor_32x32 = aom_v_predictor_32x32_neon;
+  }
   aom_v_predictor_4x4 = aom_v_predictor_4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_v_predictor_4x4 = aom_v_predictor_4x4_neon;
+  }
   aom_v_predictor_8x8 = aom_v_predictor_8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_v_predictor_8x8 = aom_v_predictor_8x8_neon;
+  }
   aom_variance128x128 = aom_variance128x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance128x128 = aom_variance128x128_neon;
+  }
   aom_variance128x64 = aom_variance128x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance128x64 = aom_variance128x64_neon;
+  }
   aom_variance16x16 = aom_variance16x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance16x16 = aom_variance16x16_neon;
+  }
   aom_variance16x32 = aom_variance16x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance16x32 = aom_variance16x32_neon;
+  }
   aom_variance16x8 = aom_variance16x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance16x8 = aom_variance16x8_neon;
+  }
   aom_variance32x16 = aom_variance32x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance32x16 = aom_variance32x16_neon;
+  }
   aom_variance32x32 = aom_variance32x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance32x32 = aom_variance32x32_neon;
+  }
   aom_variance32x64 = aom_variance32x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance32x64 = aom_variance32x64_neon;
+  }
   aom_variance4x4 = aom_variance4x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance4x4 = aom_variance4x4_neon;
+  }
   aom_variance4x8 = aom_variance4x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance4x8 = aom_variance4x8_neon;
+  }
   aom_variance64x128 = aom_variance64x128_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance64x128 = aom_variance64x128_neon;
+  }
   aom_variance64x32 = aom_variance64x32_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance64x32 = aom_variance64x32_neon;
+  }
   aom_variance64x64 = aom_variance64x64_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance64x64 = aom_variance64x64_neon;
+  }
   aom_variance8x16 = aom_variance8x16_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance8x16 = aom_variance8x16_neon;
+  }
   aom_variance8x4 = aom_variance8x4_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance8x4 = aom_variance8x4_neon;
+  }
   aom_variance8x8 = aom_variance8x8_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_variance8x8 = aom_variance8x8_neon;
+  }
   aom_vector_var = aom_vector_var_c;
-  if (flags & HAS_NEON)
+  if (flags & HAS_NEON) {
     aom_vector_var = aom_vector_var_neon;
+  }
 }
 #endif
 

@@ -8,7 +8,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/video_frame.h"
 
@@ -25,6 +24,10 @@ OffloadingVideoEncoder::OffloadingVideoEncoder(
   DCHECK(work_runner_);
   DCHECK(callback_runner_);
   DCHECK_NE(callback_runner_, work_runner_);
+
+  // Tell the inner encoder not to bother wrapping callbacks into separate
+  // runner tasks and call them directly.
+  wrapped_encoder_->DisablePostedCallbacks();
 }
 
 OffloadingVideoEncoder::OffloadingVideoEncoder(
@@ -33,7 +36,7 @@ OffloadingVideoEncoder::OffloadingVideoEncoder(
                              base::ThreadPool::CreateSequencedTaskRunner(
                                  {base::TaskPriority::USER_BLOCKING,
                                   base::WithBaseSyncPrimitives()}),
-                             base::SequencedTaskRunnerHandle::Get()) {}
+                             base::SequencedTaskRunner::GetCurrentDefault()) {}
 
 void OffloadingVideoEncoder::Initialize(VideoCodecProfile profile,
                                         const Options& options,

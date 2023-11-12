@@ -54,6 +54,14 @@ enum class CloseReason {
   kMax = kRejected
 };
 
+bool NearbyShareDialogUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  if (browser_context->IsOffTheRecord())
+    return false;
+  return NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+      browser_context);
+}
+
 NearbyShareDialogUI::NearbyShareDialogUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true) {
   Profile* profile = Profile::FromWebUI(web_ui);
@@ -72,6 +80,7 @@ NearbyShareDialogUI::NearbyShareDialogUI(content::WebUI* web_ui)
                               base::make_span(kNearbyShareDialogResources,
                                               kNearbyShareDialogResourcesSize),
                               IDR_NEARBY_SHARE_DIALOG_NEARBY_SHARE_DIALOG_HTML);
+  html_source->DisableTrustedTypesCSP();
 
   // To use lottie, the worker-src CSP needs to be updated for the web ui that
   // is using it. Since as of now there are only a couple of webuis using
@@ -79,7 +88,8 @@ NearbyShareDialogUI::NearbyShareDialogUI(content::WebUI* web_ui)
   // increases, set this as the default so manual override is no longer
   // required.
   html_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
+      network::mojom::CSPDirectiveName::WorkerSrc,
+      "worker-src blob: chrome://resources 'self';");
 
   html_source->AddBoolean(
       "isOnePageOnboardingEnabled",

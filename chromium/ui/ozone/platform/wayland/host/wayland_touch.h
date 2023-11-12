@@ -59,6 +59,15 @@ class WaylandTouch {
                      int32_t id,
                      wl_fixed_t x,
                      wl_fixed_t y);
+  static void Shape(void* data,
+                    wl_touch* obj,
+                    int32_t id,
+                    wl_fixed_t major,
+                    wl_fixed_t minor);
+  static void Orientation(void* data,
+                          wl_touch* obj,
+                          int32_t id,
+                          wl_fixed_t orientation);
   static void Cancel(void* data, wl_touch* obj);
   static void Frame(void* data, wl_touch* obj);
 

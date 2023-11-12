@@ -1095,11 +1095,8 @@ static bool ValidMpegAudioFrameHeader(const uint8_t* header,
   }
   if (layer == LAYER_1)
     *framesize = ((12000 * bitrate) / sampling_rate + padding) * 4;
-  // TODO(patricia@vivaldi.com) No idea why this is done - I would perfer to drop it
-#if !defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   else
     *framesize = (144000 * bitrate) / sampling_rate + padding;
-#endif
   return (bitrate > 0 && sampling_rate > 0);
 }
 
@@ -1680,48 +1677,6 @@ MediaContainerName DetermineContainer(const uint8_t* buffer, int buffer_size) {
 
   return CONTAINER_UNKNOWN;
 }
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-static bool CheckMP4(const uint8_t* buffer, int buffer_size) {
-  // Reference: Media Type Sniffing draft-ietf-websec-mime-sniff-03
-  // https://tools.ietf.org/html/draft-ietf-websec-mime-sniff-03#page-16
-  RCHECK(buffer_size >= 12);
-  int box_size = Read32(buffer);
-  if (box_size <= 0 || buffer_size < box_size || (box_size % 4 != 0))
-    return false;
-  uint32_t atom_type = Read32(buffer + 4);
-  if (atom_type == TAG('f', 't', 'y', 'p')) {
-    const char mp4_tag[3] = {'m', 'p', '4'};
-    for (int i = 2; i <= box_size / 4 - 1; i++) {
-      if (i == 3)
-        continue;
-      if (buffer_size < 4 * i + 3)
-        return false;  // Buffer ended.
-      if (memcmp(buffer + 4 * i, mp4_tag, 3) == 0)
-        return true;
-    }
-  }
-  return false;
-}
-
-MediaContainerName OperaDetermineContainer(const uint8_t* buffer,
-                                           int buffer_size) {
-  DCHECK(buffer);
-
-  MediaContainerName result = LookupContainerByFirst4(buffer, buffer_size);
-  if (result != CONTAINER_UNKNOWN)
-    return result;
-
-  if (CheckMP4(buffer, buffer_size))
-    // Formally MP4 isn't the same as H264 but we lack proper name.
-    return CONTAINER_H264;
-
-  if (CheckH264(buffer, buffer_size))
-    return CONTAINER_H264;
-
-  return CONTAINER_UNKNOWN;
-}
-#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 
 }  // namespace container_names
 

@@ -23,6 +23,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_NODE_RARE_DATA_H_
 
 #include "base/check_op.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -86,8 +87,8 @@ class NodeData : public GarbageCollected<NodeData> {
     kLastType = kNodeRenderingData
   };
 
-  void Trace(Visitor*) const;
-  void TraceAfterDispatch(blink::Visitor*) const {}
+  virtual ~NodeData() = default;
+  virtual void Trace(Visitor*) const;
 
  protected:
   using BitField = WTF::ConcurrentlyReadBitField<uint16_t>;
@@ -105,6 +106,7 @@ class NodeData : public GarbageCollected<NodeData> {
   explicit NodeData(ClassType sub_type)
       : connected_frame_count_(0),
         element_flags_(0),
+        is_pseudo_element_(false),
         bit_field_(RestyleFlags::encode(0) |
                    ClassTypeData::encode(static_cast<uint8_t>(sub_type))) {}
 
@@ -114,6 +116,7 @@ class NodeData : public GarbageCollected<NodeData> {
 
   uint16_t connected_frame_count_ : kConnectedFrameCountBits;
   uint16_t element_flags_ : kNumberOfElementFlags;
+  bool is_pseudo_element_ : 1;
   BitField bit_field_;
 
   friend struct DowncastTraits<NodeRareData>;
@@ -142,7 +145,7 @@ struct DowncastTraits<ElementRareData> {
   }
 };
 
-class NodeRenderingData final : public NodeData {
+class CORE_EXPORT NodeRenderingData final : public NodeData {
  public:
   NodeRenderingData(LayoutObject*,
                     scoped_refptr<const ComputedStyle> computed_style);
@@ -163,7 +166,7 @@ class NodeRenderingData final : public NodeData {
   static NodeRenderingData& SharedEmptyData();
   bool IsSharedEmptyData() { return this == &SharedEmptyData(); }
 
-  void TraceAfterDispatch(Visitor* visitor) const;
+  void Trace(Visitor*) const override;
 
  private:
   Member<LayoutObject> layout_object_;
@@ -240,8 +243,12 @@ class NodeRareData : public NodeData {
 
   void RegisterScrollTimeline(ScrollTimeline*);
   void UnregisterScrollTimeline(ScrollTimeline*);
+  void InvalidateAssociatedAnimationEffects();
 
-  void TraceAfterDispatch(blink::Visitor*) const;
+  void SetIsPseudoElement(bool value) { is_pseudo_element_ = value; }
+  bool IsPseudoElement() const { return is_pseudo_element_; }
+
+  void Trace(blink::Visitor*) const override;
 
  protected:
   NodeRareData(ClassType class_type, NodeRenderingData* node_layout_data)

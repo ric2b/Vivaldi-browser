@@ -14,12 +14,15 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/ime/ash/text_input_method.h"
 #include "ui/base/ime/ash/text_input_target.h"
 #include "ui/base/ime/ash/typing_session_manager.h"
 #include "ui/base/ime/character_composer.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/input_method_base.h"
 #include "ui/base/ime/text_input_client.h"
+#include "ui/events/event_dispatcher.h"
 
 namespace ui {
 
@@ -77,15 +80,15 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) InputMethodAsh
   bool ClearGrammarFragments(const gfx::Range& range) override;
   bool AddGrammarFragments(
       const std::vector<GrammarFragment>& fragments) override;
-  bool SetSelectionRange(uint32_t start, uint32_t end) override;
   void UpdateCompositionText(const CompositionText& text,
                              uint32_t cursor_pos,
                              bool visible) override;
-  void DeleteSurroundingText(int32_t offset, uint32_t length) override;
+  void DeleteSurroundingText(uint32_t num_char16s_before_cursor,
+                             uint32_t num_char16s_after_cursor) override;
   SurroundingTextInfo GetSurroundingTextInfo() override;
   void SendKeyEvent(KeyEvent* event) override;
   InputMethod* GetInputMethod() override;
-  void ConfirmCompositionText(bool reset_engine, bool keep_selection) override;
+  void ConfirmComposition(bool reset_engine) override;
   bool HasCompositionText() override;
   std::u16string GetCompositionText() override;
   ukm::SourceId GetClientSourceForMetrics() override;
@@ -171,29 +174,13 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) InputMethodAsh
   // Hides the composition text.
   void HidePreeditText();
 
-  // Whether the focused text input client supports inline composition.
-  bool CanComposeInline() const;
-
-  // Check whether text entered into the focused text input client should be
-  // used to improve typing suggestions for the user.
-  bool GetClientShouldDoLearning() const;
-
-  // Gets the text input flags of the focused text input client. Returns
-  // 0 if there is no focused client.
-  int GetTextInputFlags() const;
-
-  // Gets the text input mode of the focused text input client. Returns
-  // ui::TEXT_INPUT_MODE_DEFAULT if there is no focused client.
-  TextInputMode GetTextInputMode() const;
+  TextInputMethod::InputContext GetInputContext() const;
 
   // Called from the engine when it completes processing.
   void ProcessKeyEventDone(ui::KeyEvent* event,
                            ui::ime::KeyEventHandledState handled_state);
 
   bool IsPasswordOrNoneInputFieldFocused();
-
-  // Gets the reason how the focused text input client was focused.
-  TextInputClient::FocusReason GetClientFocusReason() const;
 
   // Gets the bounds of the composition text or cursor in |client|.
   std::vector<gfx::Rect> GetCompositionBounds(const TextInputClient* client);
@@ -235,6 +222,11 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) InputMethodAsh
   bool handling_key_event_ = false;
 
   TypingSessionManager typing_session_manager_;
+
+  // Use by `DispatchKeyEvent` to return a proper event dispatch details
+  // when IME engine's `ProcessKeyEvent` invokes `ProcessKeyEventDone`
+  // synchronously.
+  absl::optional<EventDispatchDetails> dispatch_details_;
 
   // Used for making callbacks.
   base::WeakPtrFactory<InputMethodAsh> weak_ptr_factory_{this};

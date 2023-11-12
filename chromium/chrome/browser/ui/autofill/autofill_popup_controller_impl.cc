@@ -14,7 +14,7 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
@@ -97,7 +97,7 @@ AutofillPopupControllerImpl::~AutofillPopupControllerImpl() = default;
 
 void AutofillPopupControllerImpl::Show(
     const std::vector<Suggestion>& suggestions,
-    bool autoselect_first_suggestion,
+    AutoselectFirstSuggestion autoselect_first_suggestion,
     PopupType popup_type) {
   if (IsMouseLocked()) {
     Hide(PopupHidingReason::kMouseLocked);
@@ -326,6 +326,12 @@ void AutofillPopupControllerImpl::AcceptSuggestion(int index) {
     feature_engagement::TrackerFactory::GetForBrowserContext(
         web_contents_->GetBrowserContext())
         ->NotifyEvent("autofill_virtual_card_suggestion_accepted");
+  }
+
+  absl::optional<std::u16string> announcement =
+      suggestion.acceptance_a11y_announcement;
+  if (announcement) {
+    std::ignore = view_.Call(&AutofillPopupView::AxAnnounce, *announcement);
   }
 
   delegate_->DidAcceptSuggestion(suggestion, index);
@@ -580,7 +586,7 @@ void AutofillPopupControllerImpl::HideViewAndDie() {
   if (self_deletion_weak_ptr_factory_.HasWeakPtrs())
     return;
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](WeakPtr<AutofillPopupControllerImpl> weak_this) {
                        if (weak_this)

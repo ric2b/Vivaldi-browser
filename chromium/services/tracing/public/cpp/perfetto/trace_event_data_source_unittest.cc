@@ -18,6 +18,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/user_metrics.h"
+#include "base/process/current_process.h"
+#include "base/process/current_process_test.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/common/task_annotator.h"
@@ -38,6 +40,7 @@
 #include "services/tracing/public/cpp/perfetto/macros.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/perfetto/producer_test_utils.h"
+#include "services/tracing/public/cpp/perfetto/track_name_recorder.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -67,6 +70,8 @@ namespace tracing {
 namespace {
 
 constexpr char kTestProcess[] = "Browser";
+base::CurrentProcessType kTestProcessType =
+    base::CurrentProcessType::PROCESS_BROWSER;
 constexpr char kTestThread[] = "CrTestMain";
 constexpr const char kCategoryGroup[] = "browser";
 
@@ -100,21 +105,23 @@ class TraceEventDataSourceTest
     old_thread_name_ =
         base::ThreadIdNameManager::GetInstance()->GetNameForCurrentThread();
     base::ThreadIdNameManager::GetInstance()->SetName(kTestThread);
-    old_process_name_ =
-        base::trace_event::TraceLog::GetInstance()->process_name();
-    base::trace_event::TraceLog::GetInstance()->set_process_name(kTestProcess);
+    old_process_name_ = base::test::CurrentProcessForTest::GetName();
+    old_process_type_ = base::test::CurrentProcessForTest::GetType();
+    base::CurrentProcess::GetInstance().SetProcessNameAndType(kTestProcess,
+                                                              kTestProcessType);
     base::trace_event::TraceLog::GetInstance()->SetRecordHostAppPackageName(
         false);
 
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
     PerfettoTracedProcess::GetTaskRunner()->ResetTaskRunnerForTesting(
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
+    TrackNameRecorder::GetInstance();
     CustomEventRecorder::GetInstance();  //->ResetForTesting();
     TraceEventMetadataSource::GetInstance()->ResetForTesting();
 #else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
     PerfettoTracedProcess::GetTaskRunner()->GetOrCreateTaskRunner();
     auto perfetto_wrapper = std::make_unique<base::tracing::PerfettoTaskRunner>(
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     producer_client_ =
         std::make_unique<TestProducerClient>(std::move(perfetto_wrapper));
     TraceEventMetadataSource::GetInstance()->ResetForTesting();
@@ -141,8 +148,8 @@ class TraceEventDataSourceTest
 #endif  // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
     base::ThreadIdNameManager::GetInstance()->SetName(old_thread_name_);
-    base::trace_event::TraceLog::GetInstance()->set_process_name(
-        old_process_name_);
+    base::CurrentProcess::GetInstance().SetProcessNameAndType(
+        old_process_name_, old_process_type_);
 
 #if !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
     TracingUnitTest::TearDown();
@@ -871,6 +878,7 @@ class TraceEventDataSourceTest
 
   std::string old_thread_name_;
   std::string old_process_name_;
+  base::CurrentProcessType old_process_type_;
 };
 
 void HasMetadataValue(const perfetto::protos::ChromeMetadata& entry,
@@ -1094,7 +1102,8 @@ TEST_F(TraceEventDataSourceTest, ActiveProcessesMetadata) {
 TEST_F(TraceEventDataSourceTest, DISABLED_TimestampedTraceEvent) {
   StartTraceEventDataSource();
 
-  auto current_thread_tid = perfetto::ThreadTrack::Current().tid;
+  base::PlatformThreadId current_thread_tid =
+      perfetto::ThreadTrack::Current().tid;
 
   TRACE_EVENT_BEGIN_WITH_ID_TID_AND_TIMESTAMP0(
       kCategoryGroup, "bar", 42, current_thread_tid,
@@ -1104,7 +1113,8 @@ TEST_F(TraceEventDataSourceTest, DISABLED_TimestampedTraceEvent) {
 
   // Thread track for the overridden tid.
   auto* tt_packet = GetFinalizedPacket(packet_index++);
-  ExpectThreadTrack(tt_packet, /*thread_id=*/perfetto::ThreadTrack::Current().tid);
+  ExpectThreadTrack(tt_packet,
+                    /*thread_id=*/perfetto::ThreadTrack::Current().tid);
 
   auto* e_packet = GetFinalizedPacket(packet_index++);
   ExpectTraceEvent(
@@ -1138,9 +1148,9 @@ TEST_F(TraceEventDataSourceTest, InstantTraceEventOnOtherThread) {
 
   INTERNAL_TRACE_EVENT_ADD_WITH_ID_TID_AND_TIMESTAMP(
       TRACE_EVENT_PHASE_INSTANT, kCategoryGroup, "bar",
-      static_cast<uint64_t>(trace_event_internal::kNoId),
-      /*thread_id=*/1, base::TimeTicks() + base::Microseconds(10),
-      /*/flags=*/TRACE_EVENT_SCOPE_THREAD);
+      trace_event_internal::kNoId, base::PlatformThreadId(1),
+      base::TimeTicks() + base::Microseconds(10),
+      /*flags=*/TRACE_EVENT_SCOPE_THREAD);
   size_t packet_index = ExpectStandardPreamble();
 
   // Thread track for the overridden tid.
@@ -1188,9 +1198,8 @@ TEST_F(TraceEventDataSourceTest, EventWithStringArgs) {
 TEST_F(TraceEventDataSourceTest, EventWithCopiedStrings) {
   StartTraceEventDataSource();
 
-  TRACE_EVENT_COPY_INSTANT2(kCategoryGroup, "bar",
-                       TRACE_EVENT_SCOPE_THREAD,
-                       "arg1_name", "arg1_val", "arg2_name", "arg2_val");
+  TRACE_EVENT_COPY_INSTANT2(kCategoryGroup, "bar", TRACE_EVENT_SCOPE_THREAD,
+                            "arg1_name", "arg1_val", "arg2_name", "arg2_val");
 
   size_t packet_index = ExpectStandardPreamble();
 
@@ -1446,8 +1455,8 @@ TEST_F(TraceEventDataSourceTest, TaskExecutionEvent) {
   for (int i = 0; i < 2; ++i) {
     base::PendingTask task;
     task.task = base::DoNothing();
-    task.posted_from =
-        base::Location("my_func", "my_file", 0, /*program_counter=*/&task);
+    task.posted_from = base::Location::CreateForTesting(
+        "my_func", "my_file", 0, /*program_counter=*/&task);
     // TaskAnnotator::RunTask is responsible for emitting the task execution
     // event.
     task_annotator.RunTask("ThreadControllerImpl::RunTask1", task);
@@ -1508,8 +1517,9 @@ TEST_F(TraceEventDataSourceTest, TaskExecutionEventWithoutFunction) {
   base::TaskAnnotator task_annotator;
   base::PendingTask task;
   task.task = base::DoNothing();
-  task.posted_from = base::Location(/*function_name=*/nullptr, "my_file", 0,
-                                    /*program_counter=*/&task);
+  task.posted_from =
+      base::Location::CreateForTesting(/*function_name=*/nullptr, "my_file", 0,
+                                       /*program_counter=*/&task);
 
   // TaskAnnotator::RunTask is responsible for emitting the task execution
   // event.
@@ -1998,20 +2008,19 @@ TEST_F(TraceEventDataSourceTest, FilteringEventWithFlagCopy) {
   // 2). To include dynamic event names despite privacy filtering, we need to
   //     manually `set event()->set_name()`. Java names are a valid use case of
   //     this.
-  TRACE_EVENT_INSTANT(kCategoryGroup, TRACE_STR_COPY(std::string("bar")), "arg1_name",
-                      "arg1_val", "arg2_name", "arg2_val");
+  TRACE_EVENT_INSTANT(kCategoryGroup, TRACE_STR_COPY(std::string("bar")),
+                      "arg1_name", "arg1_val", "arg2_name", "arg2_val");
   TRACE_EVENT_INSTANT(
       kCategoryGroup, nullptr,
       [](perfetto::EventContext& ev) { ev.event()->set_name("javaName"); },
       "arg1_name", "arg1_val", "arg2_name", "arg2_val");
 #else
-  TRACE_EVENT_COPY_INSTANT2(kCategoryGroup, "bar",
-                       TRACE_EVENT_SCOPE_THREAD,
-                       "arg1_name", "arg1_val", "arg2_name", "arg2_val");
-  TRACE_EVENT_COPY_INSTANT2(kCategoryGroup, "javaName",
-                       TRACE_EVENT_SCOPE_THREAD |
-                           TRACE_EVENT_FLAG_JAVA_STRING_LITERALS,
-                       "arg1_name", "arg1_val", "arg2_name", "arg2_val");
+  TRACE_EVENT_COPY_INSTANT2(kCategoryGroup, "bar", TRACE_EVENT_SCOPE_THREAD,
+                            "arg1_name", "arg1_val", "arg2_name", "arg2_val");
+  TRACE_EVENT_COPY_INSTANT2(
+      kCategoryGroup, "javaName",
+      TRACE_EVENT_SCOPE_THREAD | TRACE_EVENT_FLAG_JAVA_STRING_LITERALS,
+      "arg1_name", "arg1_val", "arg2_name", "arg2_val");
 #endif
 
   size_t packet_index = ExpectStandardPreamble(
@@ -2516,12 +2525,11 @@ TEST_F(TraceEventDataSourceTest, HistogramSampleTraceConfigNotEmpty) {
   EXPECT_EQ(e_packet->track_event().chrome_histogram_sample().name_iid(),
             e_packet->interned_data().histogram_names()[0].iid());
   EXPECT_EQ(e_packet->interned_data().histogram_names()[0].name(), "Foo3.Bar3");
-
-  EXPECT_EQ(packet_index, GetFinalizedPacketCount());
 }
 
 TEST_F(TraceEventDataSourceTest, UserActionEvent) {
-  base::SetRecordActionTaskRunner(base::ThreadTaskRunnerHandle::Get());
+  base::SetRecordActionTaskRunner(
+      base::SingleThreadTaskRunner::GetCurrentDefault());
 
   StartTraceEventDataSource(/*privacy_filtering_enabled=*/false,
                             "-*,disabled-by-default-user_action_samples");
@@ -2632,17 +2640,25 @@ TEST_F(TraceEventDataSourceTest, EmptyPacket) {
 TEST_F(TraceEventDataSourceTest, SupportNullptrEventName) {
   StartTraceEventDataSource();
   TRACE_EVENT_INSTANT("browser", nullptr, [&](::perfetto::EventContext& ctx) {
-                          ctx.event()->set_name(std::string("EventName"));
-                        });
+    ctx.event()->set_name(std::string("EventName"));
+  });
   const auto& packets = GetFinalizedPackets();
   ASSERT_GT(packets.size(), 0u);
-  const auto& last_packet = *packets.back();
-  EXPECT_TRUE(last_packet.has_track_event());
-  EXPECT_FALSE(last_packet.track_event().has_name_iid());
-  EXPECT_TRUE(last_packet.track_event().has_name());
-  EXPECT_EQ("EventName", last_packet.track_event().name());
-  EXPECT_TRUE(last_packet.has_interned_data());
-  EXPECT_EQ(0, last_packet.interned_data().event_names().size());
+
+  const perfetto::protos::TracePacket* track_event_packet = nullptr;
+  for (const auto& packet : packets) {
+    if (packet->has_track_event()) {
+      track_event_packet = packet.get();
+      break;
+    }
+  }
+  EXPECT_NE(track_event_packet, nullptr);
+
+  EXPECT_FALSE(track_event_packet->track_event().has_name_iid());
+  EXPECT_TRUE(track_event_packet->track_event().has_name());
+  EXPECT_EQ("EventName", track_event_packet->track_event().name());
+  EXPECT_TRUE(track_event_packet->has_interned_data());
+  EXPECT_EQ(0, track_event_packet->interned_data().event_names().size());
 }
 
 // TODO(eseckler): Add startup tracing unittests.

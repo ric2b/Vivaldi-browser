@@ -15,10 +15,10 @@ import android.widget.TextView;
 import androidx.annotation.DimenRes;
 import androidx.annotation.DrawableRes;
 
-import org.chromium.base.FeatureList;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.components.omnibox.SecurityButtonAnimationDelegate;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
 /**
@@ -100,7 +100,7 @@ class CustomTabToolbarAnimationDelegate {
         final int[] oldLoc = new int[2];
         mUrlBar.getLocationInWindow(oldLoc);
 
-        mUrlBar.requestLayout();
+        ViewUtils.requestLayout(mUrlBar, "CustomTabToolbarAnimationDelegate.startTitleAnimation");
 
         mUrlBar.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override
@@ -151,17 +151,16 @@ class CustomTabToolbarAnimationDelegate {
      * @param securityIconResource  The updated resource to be assigned to the security status icon.
      * When this is null, the icon is animated to the left and faded out.
      */
-    void updateSecurityButton(@DrawableRes int securityIconResource) {
-        if (mUseRotationTransition) {
+    void updateSecurityButton(@DrawableRes int securityIconResource, boolean animate) {
+        if (mUseRotationTransition && animate) {
             mBrandingAnimationDelegate.updateDrawableResource(securityIconResource);
         } else {
             boolean isActualResourceChange = true;
-            if (FeatureList.isNativeInitialized()
-                    && ChromeFeatureList.isEnabled(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES)) {
+            if (ToolbarFeatures.shouldSuppressCaptures()) {
                 isActualResourceChange = securityIconResource != mSecurityIconRes;
             }
-            mSecurityButtonAnimationDelegate.updateSecurityButton(securityIconResource,
-                    /*animate=*/true, isActualResourceChange);
+            mSecurityButtonAnimationDelegate.updateSecurityButton(
+                    securityIconResource, animate, isActualResourceChange);
         }
         mSecurityIconRes = securityIconResource;
     }

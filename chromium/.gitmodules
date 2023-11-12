@@ -154,9 +154,6 @@
 [submodule "third_party/libjpeg_turbo"]
 	path = third_party/libjpeg_turbo
 	url = ../deps/libjpeg_turbo.git
-[submodule "third_party/libjxl/src"]
-	path = third_party/libjxl/src
-	url = ../../external/github.com/libjxl/libjxl.git
 [submodule "third_party/liblouis/src"]
 	path = third_party/liblouis/src
 	url = ../../external/liblouis-github.git
@@ -184,6 +181,9 @@
 [submodule "third_party/lss"]
 	path = third_party/lss
 	url = ../../linux-syscall-support.git
+[submodule "third_party/material_color_utilities/src"]
+	path = third_party/material_color_utilities/src
+	url = ../../external/github.com/material-foundation/material-color-utilities.git
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git

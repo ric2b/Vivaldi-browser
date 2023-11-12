@@ -27,7 +27,6 @@
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/url_formatter/url_formatter.h"
-#import "components/url_param_filter/core/url_param_filterer.h"
 #import "components/version_info/version_info.h"
 #import "components/web_resource/web_resource_pref_names.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
@@ -47,6 +46,7 @@
 #import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_browser_agent.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #import "ios/chrome/browser/crash_report/crash_keys_helper.h"
+#import "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #import "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
 #import "ios/chrome/browser/default_browser/promo_source.h"
@@ -60,6 +60,7 @@
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/main/browser_util.h"
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/policy/policy_watcher_browser_agent.h"
@@ -87,6 +88,7 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/policy_change_commands.h"
@@ -100,6 +102,7 @@
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_coordinator.h"
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/main/browser_interface_provider.h"
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
@@ -135,6 +138,7 @@
 #import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -142,6 +146,8 @@
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_data.h"
+#import "ios/web/public/navigation/navigation_item.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "ios/web/public/web_state.h"
@@ -207,6 +213,54 @@ bool IsSigninForcedByPolicy() {
       GetApplicationContext()->GetLocalState()->GetInteger(
           prefs::kBrowserSigninPolicy));
   return policy_mode == BrowserSigninMode::kForced;
+}
+
+// Internally the NTP URL is about://newtab/.  However, with
+// `url::kAboutScheme`, there's no host value, only a path.  Use this value for
+// matching the NTP.
+const char kAboutNewTabPath[] = "//newtab/";
+
+bool IsNTPURL(const GURL& url) {
+  // `url` can be chrome://newtab/ or about://newtab/ depending on where `url`
+  // comes from (the VisibleURL chrome:// from a navigation item or the actual
+  // webView url about://).  If the url is about://newtab/, there is no origin
+  // to match, so instead check the scheme and the path.
+  return url.DeprecatedGetOriginAsURL() == kChromeUINewTabURL ||
+         (url.SchemeIs(url::kAboutScheme) && url.path() == kAboutNewTabPath);
+}
+
+void InjectNTP(Browser* browser) {
+  // Don't inject an NTP for an empty web state list.
+  if (!browser->GetWebStateList()->count())
+    return;
+
+  // Don't inject an NTP on an NTP.
+  web::WebState* webState = browser->GetWebStateList()->GetActiveWebState();
+  if (IsNTPURL(webState->GetVisibleURL()))
+    return;
+
+  // Queue up start surface with active tab.
+  StartSurfaceRecentTabBrowserAgent* browser_agent =
+      StartSurfaceRecentTabBrowserAgent::FromBrowser(browser);
+  // This may be nil for an incognito browser.
+  if (browser_agent)
+    browser_agent->SaveMostRecentTab();
+
+  // Inject a live NTP.
+  web::WebState::CreateParams create_params(browser->GetBrowserState());
+  std::unique_ptr<web::WebState> web_state =
+      web::WebState::Create(create_params);
+  std::vector<std::unique_ptr<web::NavigationItem>> items;
+  std::unique_ptr<web::NavigationItem> item(web::NavigationItem::Create());
+  item->SetURL(GURL(kChromeUINewTabURL));
+  items.push_back(std::move(item));
+  web_state->GetNavigationManager()->Restore(0, std::move(items));
+  NewTabPageTabHelper::CreateForWebState(web_state.get());
+  NewTabPageTabHelper::FromWebState(web_state.get())->SetShowStartSurface(true);
+  int index = browser->GetWebStateList()->count();
+  browser->GetWebStateList()->InsertWebState(index, std::move(web_state),
+                                             WebStateList::INSERT_ACTIVATE,
+                                             WebStateOpener());
 }
 
 }  // namespace
@@ -899,7 +953,8 @@ bool IsSigninForcedByPolicy() {
   }
 
   // If the application crashed, clear incognito state.
-  if (self.sceneState.appState.postCrashLaunch)
+  if (self.sceneState.appState.postCrashAction ==
+      PostCrashAction::kStashTabsAndShowNTP)
     [self clearIOSSpecificIncognitoData];
 
   [self createInitialUI:[self initialUIMode]];
@@ -959,7 +1014,8 @@ bool IsSigninForcedByPolicy() {
   }
 
   // If the app crashed, always launch in normal mode.
-  if (self.sceneState.appState.postCrashLaunch) {
+  if (self.sceneState.appState.postCrashAction ==
+      PostCrashAction::kStashTabsAndShowNTP) {
     return ApplicationMode::NORMAL;
   }
 
@@ -1008,12 +1064,21 @@ bool IsSigninForcedByPolicy() {
     [self reconcileEulaAsAccepted];
   }
 
-  Browser* browser;
+  Browser* browser = (launchMode == ApplicationMode::INCOGNITO)
+                         ? self.incognitoInterface.browser
+                         : self.mainInterface.browser;
+
+  // Inject a NTP before setting the interface, which will trigger a load of
+  // the current webState.
+  if (self.sceneState.appState.postCrashAction ==
+      PostCrashAction::kShowNTPWithReturnToTab) {
+    DCHECK(base::FeatureList::IsEnabled(kRemoveCrashInfobar));
+    InjectNTP(browser);
+  }
+
   if (launchMode == ApplicationMode::INCOGNITO) {
-    browser = self.incognitoInterface.browser;
     [self setCurrentInterfaceForMode:ApplicationMode::INCOGNITO];
   } else {
-    browser = self.mainInterface.browser;
     [self setCurrentInterfaceForMode:ApplicationMode::NORMAL];
   }
 
@@ -1052,7 +1117,7 @@ bool IsSigninForcedByPolicy() {
     postOpeningAction = self.startupParameters.postOpeningAction;
   }
   return postOpeningAction == NO_ACTION &&
-         !self.sceneState.appState.postCrashLaunch &&
+         GetApplicationContext()->WasLastShutdownClean() &&
          !IsChromeLikelyDefaultBrowser() &&
          !HasUserOpenedSettingsFromFirstRunPromo();
 }
@@ -1377,7 +1442,8 @@ bool IsSigninForcedByPolicy() {
   // Vivaldi
   if (vivaldi::IsVivaldiRunning()){
       [self initializePanelInteractionController];
-      [_panelInteractionController presentPanel:PanelPage::HistoryPage];
+      [_panelInteractionController presentPanel:PanelPage::HistoryPage
+                               withSearchString:nil];
       return;
   }
   // End Vivaldi
@@ -1660,26 +1726,6 @@ bool IsSigninForcedByPolicy() {
       break;
   }
   [self startSigninCoordinatorWithCompletion:command.callback];
-}
-
-- (void)showAdvancedSigninSettingsFromViewController:
-    (UIViewController*)baseViewController {
-  DCHECK(!self.signinCoordinator)
-      << "self.signinCoordinator: "
-      << base::SysNSStringToUTF8([self.signinCoordinator description]);
-  Browser* mainBrowser = self.mainInterface.browser;
-  // If the account is in the decoupled FRE then the user has already signed-in
-  // before opening advanced settings, otherwise they are signed out.
-  // Note that this method should only be used by the FRE.
-  IdentitySigninState signinState =
-      base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)
-          ? IdentitySigninStateSignedInWithSyncDisabled
-          : IdentitySigninStateSignedOut;
-  self.signinCoordinator = [SigninCoordinator
-      advancedSettingsSigninCoordinatorWithBaseViewController:baseViewController
-                                                      browser:mainBrowser
-                                                  signinState:signinState];
-  [self startSigninCoordinatorWithCompletion:nil];
 }
 
 - (void)
@@ -2234,6 +2280,10 @@ bool IsSigninForcedByPolicy() {
       return ^{
         [weakSelf startQRCodeScanner];
       };
+    case START_LENS:
+      return ^{
+        [weakSelf startLens];
+      };
     case FOCUS_OMNIBOX:
       return ^{
         [weakSelf focusOmnibox];
@@ -2269,6 +2319,16 @@ bool IsSigninForcedByPolicy() {
   id<QRScannerCommands> QRHandler = HandlerForProtocol(
       self.currentInterface.browser->GetCommandDispatcher(), QRScannerCommands);
   [QRHandler showQRScanner];
+}
+
+- (void)startLens {
+  if (!self.currentInterface.browser) {
+    return;
+  }
+  id<LensCommands> lensHandler = HandlerForProtocol(
+      self.currentInterface.browser->GetCommandDispatcher(), LensCommands);
+  [lensHandler
+      openInputSelectionForEntrypoint:LensEntrypoint::HomeScreenWidget];
 }
 
 - (void)focusOmnibox {
@@ -2343,7 +2403,9 @@ bool IsSigninForcedByPolicy() {
                 wrappedDismissModalCompletion();
               } else {
                 // Do not open the tab, but still call completion.
-                completion();
+                if (completion) {
+                  completion();
+                }
               }
             }];
       };
@@ -2944,17 +3006,31 @@ bool IsSigninForcedByPolicy() {
 - (void)startSigninCoordinatorWithCompletion:
     (signin_ui::CompletionCallback)completion {
   DCHECK(self.signinCoordinator);
-  if (!signin::IsSigninAllowedByPolicy()) {
-    if (completion) {
-      completion(/*success=*/NO);
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.sceneState.appState.mainBrowserState);
+  switch (authenticationService->GetServiceStatus()) {
+    case AuthenticationService::ServiceStatus::SigninDisabledByPolicy: {
+      if (completion) {
+        completion(/*success=*/NO);
+      }
+      [self.signinCoordinator stop];
+      id<PolicyChangeCommands> handler = HandlerForProtocol(
+          self.signinCoordinator.browser->GetCommandDispatcher(),
+          PolicyChangeCommands);
+      [handler showForceSignedOutPrompt];
+      self.signinCoordinator = nil;
+      return;
     }
-    [self.signinCoordinator stop];
-    id<PolicyChangeCommands> handler = HandlerForProtocol(
-        self.signinCoordinator.browser->GetCommandDispatcher(),
-        PolicyChangeCommands);
-    [handler showForceSignedOutPrompt];
-    self.signinCoordinator = nil;
-    return;
+    case AuthenticationService::ServiceStatus::SigninForcedByPolicy:
+    case AuthenticationService::ServiceStatus::SigninAllowed: {
+      break;
+    }
+    case AuthenticationService::ServiceStatus::SigninDisabledByInternal:
+    case AuthenticationService::ServiceStatus::SigninDisabledByUser: {
+      NOTREACHED();
+      break;
+    }
   }
 
   DCHECK(self.signinCoordinator);
@@ -3207,7 +3283,8 @@ bool IsSigninForcedByPolicy() {
   TabInsertionBrowserAgent::FromBrowser(browser)->InsertWebState(
       urlLoadParams.web_params, nil, false, browser->GetWebStateList()->count(),
       /*in_background=*/false, /*inherit_opener=*/false,
-      /*should_show_start_surface=*/false, url_param_filter::FilterResult());
+      /*should_show_start_surface=*/false,
+      /*should_skip_new_tab_animation=*/urlLoadParams.from_external);
   [self beginActivatingBrowser:browser dismissTabSwitcher:YES focusOmnibox:NO];
 }
 

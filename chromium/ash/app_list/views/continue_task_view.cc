@@ -122,11 +122,16 @@ ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate,
 
   title_ = label_container->AddChildView(
       std::make_unique<views::Label>(std::u16string()));
+  bubble_utils::ApplyStyle(title_, bubble_utils::TypographyStyle::kBody1);
   title_->SetAccessibleName(std::u16string());
   title_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   title_->SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
+
   subtitle_ = label_container->AddChildView(
       std::make_unique<views::Label>(std::u16string()));
+  bubble_utils::ApplyStyle(subtitle_,
+                           bubble_utils::TypographyStyle::kAnnotation1,
+                           kColorAshTextColorSecondary);
   subtitle_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   subtitle_->SetElideBehavior(gfx::ElideBehavior::ELIDE_MIDDLE);
 
@@ -139,8 +144,6 @@ ContinueTaskView::~ContinueTaskView() {}
 
 void ContinueTaskView::OnThemeChanged() {
   views::View::OnThemeChanged();
-  bubble_utils::ApplyStyle(title_, bubble_utils::LabelStyle::kBody);
-  bubble_utils::ApplyStyle(subtitle_, bubble_utils::LabelStyle::kSubtitle);
   UpdateIcon();
   UpdateStyleForTabletMode();
 }
@@ -313,10 +316,8 @@ void ContinueTaskView::OpenResult(int event_flags) {
 
 ContinueTaskView::TaskResultType ContinueTaskView::GetTaskResultType() {
   switch (result()->result_type()) {
-    case AppListSearchResultType::kFileChip:
     case AppListSearchResultType::kZeroStateFile:
       return TaskResultType::kLocalFile;
-    case AppListSearchResultType::kDriveChip:
     case AppListSearchResultType::kZeroStateDrive:
       return TaskResultType::kDriveFile;
     default:

@@ -153,7 +153,7 @@ AXNode* AXNode::GetParentCrossingTreeBoundary() const {
     return parent_;
   const AXTreeManager* manager = GetManager();
   if (manager)
-    return manager->GetParentNodeFromParentTreeAsAXNode();
+    return manager->GetParentNodeFromParentTree();
   return nullptr;
 }
 
@@ -171,12 +171,22 @@ AXNode* AXNode::GetUnignoredParentCrossingTreeBoundary() const {
   if (!unignored_parent) {
     const AXTreeManager* manager = GetManager();
     if (manager)
-      unignored_parent = manager->GetParentNodeFromParentTreeAsAXNode();
+      unignored_parent = manager->GetParentNodeFromParentTree();
   }
   return unignored_parent;
 }
 
-base::stack<AXNode*> AXNode::GetAncestorsCrossingTreeBoundary() const {
+base::queue<AXNode*> AXNode::GetAncestorsCrossingTreeBoundaryAsQueue() const {
+  base::queue<AXNode*> ancestors;
+  AXNode* ancestor = const_cast<AXNode*>(this);
+  while (ancestor) {
+    ancestors.push(ancestor);
+    ancestor = ancestor->GetParentCrossingTreeBoundary();
+  }
+  return ancestors;
+}
+
+base::stack<AXNode*> AXNode::GetAncestorsCrossingTreeBoundaryAsStack() const {
   base::stack<AXNode*> ancestors;
   AXNode* ancestor = const_cast<AXNode*>(this);
   while (ancestor) {
@@ -638,9 +648,10 @@ AXNode* AXNode::GetLowestCommonAncestor(const AXNode& other) {
     return this;
 
   AXNode* common_ancestor = nullptr;
-  base::stack<AXNode*> our_ancestors = GetAncestorsCrossingTreeBoundary();
+  base::stack<AXNode*> our_ancestors =
+      GetAncestorsCrossingTreeBoundaryAsStack();
   base::stack<AXNode*> other_ancestors =
-      other.GetAncestorsCrossingTreeBoundary();
+      other.GetAncestorsCrossingTreeBoundaryAsStack();
   while (!our_ancestors.empty() && !other_ancestors.empty() &&
          our_ancestors.top() == other_ancestors.top()) {
     common_ancestor = our_ancestors.top();
@@ -655,9 +666,10 @@ absl::optional<int> AXNode::CompareTo(const AXNode& other) const {
     return 0;
 
   AXNode* common_ancestor = nullptr;
-  base::stack<AXNode*> our_ancestors = GetAncestorsCrossingTreeBoundary();
+  base::stack<AXNode*> our_ancestors =
+      GetAncestorsCrossingTreeBoundaryAsStack();
   base::stack<AXNode*> other_ancestors =
-      other.GetAncestorsCrossingTreeBoundary();
+      other.GetAncestorsCrossingTreeBoundaryAsStack();
   while (!our_ancestors.empty() && !other_ancestors.empty() &&
          our_ancestors.top() == other_ancestors.top()) {
     common_ancestor = our_ancestors.top();
@@ -1662,12 +1674,12 @@ bool AXNode::IsOrderedSet() const {
 }
 
 // Uses AXTree's cache to calculate node's PosInSet.
-absl::optional<int> AXNode::GetPosInSet() {
+absl::optional<int> AXNode::GetPosInSet() const {
   return tree_->GetPosInSet(*this);
 }
 
 // Uses AXTree's cache to calculate node's SetSize.
-absl::optional<int> AXNode::GetSetSize() {
+absl::optional<int> AXNode::GetSetSize() const {
   return tree_->GetSetSize(*this);
 }
 
@@ -1739,10 +1751,8 @@ bool AXNode::IsIgnoredContainerForOrderedSet() const {
 bool AXNode::IsRowInTreeGrid(const AXNode* ordered_set) const {
   // Tree grid rows have the requirement of being focusable, so we use it to
   // avoid iterating over rows that clearly aren't part of a tree grid.
-  if (GetRole() != ax::mojom::Role::kRow ||
-      !HasState(ax::mojom::State::kFocusable) || !ordered_set) {
+  if (GetRole() != ax::mojom::Role::kRow || !ordered_set || !IsFocusable())
     return false;
-  }
 
   if (ordered_set->GetRole() == ax::mojom::Role::kTreeGrid)
     return true;
@@ -1968,6 +1978,12 @@ bool AXNode::IsLeaf() const {
   if (data().IsAtomicTextField() || IsText())
     return true;
 
+  // Non atomic text fields may have children that we want to expose.
+  // For example, a <div contenteditable> may have child elements such as
+  // more <div>s that we want to expose.
+  if (data().IsNonAtomicTextField())
+    return false;
+
   // Roles whose children are only presentational according to the ARIA and
   // HTML5 Specs should be hidden from screen readers.
   switch (GetRole()) {
@@ -2041,6 +2057,76 @@ bool AXNode::IsLeaf() const {
     default:
       return false;
   }
+}
+
+bool AXNode::IsFocusable() const {
+  return HasState(ax::mojom::State::kFocusable) ||
+         IsLikelyARIAActiveDescendant();
+}
+
+bool AXNode::IsLikelyARIAActiveDescendant() const {
+  // Should be menu item, option, etc.
+  if (!ui::IsLikelyActiveDescendantRole(GetRole()))
+    return false;
+
+  // False if invisible, ignored or disabled.
+  if (IsInvisibleOrIgnored() ||
+      GetIntAttribute(ax::mojom::IntAttribute::kRestriction) ==
+          static_cast<int>(ax::mojom::Restriction::kDisabled)) {
+    return false;
+  }
+
+  // False if no ARIA role -- not a perfect rule, but a reasonable heuristic.
+  if (!HasStringAttribute(ax::mojom::StringAttribute::kRole))
+    return false;
+
+  // False if no id attribute -- nothing to point to.
+  // This requirement may need to be removed if ARIA element reflection is
+  // implemented. HTML attribute serialization must currently be turned on in
+  // order to pass this requirement.
+  if (!HasHtmlAttribute("id"))
+    return false;
+
+  // Finally, check for the required ancestor.
+  for (AXNode* ancestor_node = GetUnignoredParent(); ancestor_node;
+       ancestor_node = ancestor_node->GetUnignoredParent()) {
+    // Check for an ancestor with aria-activedescendant.
+    if (ancestor_node->HasIntAttribute(
+            ax::mojom::IntAttribute::kActivedescendantId)) {
+      return true;
+    }
+    // Check for an ancestor listbox that is controlled by a textfield combobox
+    // that also has an aria-activedescendant.
+    // Note: blink will map aria-owns to aria-controls in the textfield combobox
+    // case as it was the older technique, but treating as an actual aria-owns
+    // makes no sense as a textfield cannot have children.
+    if (ancestor_node->GetRole() == ax::mojom::Role::kListBox) {
+      std::set<AXNodeID> nodes_that_control_this_list =
+          tree()->GetReverseRelations(ax::mojom::IntListAttribute::kControlsIds,
+                                      ancestor_node->id());
+      for (AXNodeID id : nodes_that_control_this_list) {
+        if (AXNode* node = tree()->GetFromId(id)) {
+          if (ui::IsTextField(node->GetRole())) {
+            return node->HasIntAttribute(
+                ax::mojom::IntAttribute::kActivedescendantId);
+          }
+        }
+      }
+    }
+    // TODO(aleventhal) Re-add this once Google Slides no longer needs
+    // special hack where the aria-activedescendant is on a containing
+    // contenteditable, which is currently done in the slides thumb strip for
+    // copy/paste reasons. See matching code in AXPlatformNode win which clears
+    // IA2_STATE_EDITABLE for this case, but requires the descendant tree items
+    // to have the FOCUSABLE state. See also the related dump tree test
+    // aria-focusable-subwidget-not-editable.html.
+    // (IsContainerWithSelectableChildren(ancestor_node->GetRole())) {
+    //   // No need to check more ancestors.
+    //   break;
+    // }
+  }
+
+  return false;
 }
 
 bool AXNode::IsInListMarker() const {
@@ -2195,9 +2281,17 @@ AXNode* AXNode::GetTextFieldInnerEditorElement() const {
 }
 
 AXNode* AXNode::GetSelectionContainer() const {
+  // Avoid walking ancestors if the role cannot support the selectable state.
+  if (!IsSelectSupported(GetRole()))
+    return nullptr;
+  if (IsInvisibleOrIgnored() ||
+      GetIntAttribute(ax::mojom::IntAttribute::kRestriction) ==
+          static_cast<int>(ax::mojom::Restriction::kDisabled)) {
+    return nullptr;
+  }
   for (AXNode* ancestor = const_cast<AXNode*>(this); ancestor;
        ancestor = ancestor->GetUnignoredParent()) {
-    if (IsContainerWithSelectableChildren(ancestor->GetRole()))
+    if (ui::IsContainerWithSelectableChildren(ancestor->GetRole()))
       return ancestor;
   }
   return nullptr;

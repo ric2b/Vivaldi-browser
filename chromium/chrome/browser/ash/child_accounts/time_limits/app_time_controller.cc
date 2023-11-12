@@ -18,6 +18,7 @@
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/child_accounts/child_user_service.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_activity_registry.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_service_wrapper.h"
@@ -29,7 +30,6 @@
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
@@ -37,8 +37,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/app_service/public/cpp/features.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -527,17 +525,10 @@ void AppTimeController::OpenFamilyLinkApp() {
   // Link Help app install page.
   DCHECK(
       apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile_));
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->LaunchAppWithUrl(
-        arc::kPlayStoreAppId, ui::EF_NONE,
-        GURL(ChildUserService::kFamilyLinkHelperAppPlayStoreURL),
-        apps::LaunchSource::kFromChromeInternal);
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->LaunchAppWithUrl(
-        arc::kPlayStoreAppId, ui::EF_NONE,
-        GURL(ChildUserService::kFamilyLinkHelperAppPlayStoreURL),
-        apps::mojom::LaunchSource::kFromChromeInternal);
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->LaunchAppWithUrl(
+      arc::kPlayStoreAppId, ui::EF_NONE,
+      GURL(ChildUserService::kFamilyLinkHelperAppPlayStoreURL),
+      apps::LaunchSource::kFromChromeInternal);
 }
 
 void AppTimeController::ShowNotificationForApp(
@@ -570,8 +561,8 @@ void AppTimeController::ShowNotificationForApp(
   option_fields.fullscreen_visibility =
       message_center::FullscreenVisibility::OVER_USER;
 
-  std::unique_ptr<message_center::Notification> message_center_notification =
-      ash::CreateSystemNotification(
+  message_center::Notification message_center_notification =
+      CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id, title,
           message, notification_source, GURL(),
           message_center::NotifierId(
@@ -588,7 +579,7 @@ void AppTimeController::ShowNotificationForApp(
           message_center::SystemNotificationWarningLevel::NORMAL);
 
   if (icon.has_value()) {
-    message_center_notification->set_icon(
+    message_center_notification.set_icon(
         ui::ImageModel::FromImageSkia(icon.value()));
   }
 
@@ -602,7 +593,7 @@ void AppTimeController::ShowNotificationForApp(
                                       notification_id);
 
   notification_display_service->Display(NotificationHandler::Type::TRANSIENT,
-                                        *message_center_notification,
+                                        message_center_notification,
                                         /*metadata=*/nullptr);
 }
 

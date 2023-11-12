@@ -10,7 +10,6 @@
 #include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -121,7 +120,8 @@ ExclusiveAccessBubbleViews::~ExclusiveAccessBubbleViews() {
   // the popup to synchronously hide, and then asynchronously close and delete
   // itself.
   popup_->Close();
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, popup_.get());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                popup_.get());
   CHECK(!views::WidgetObserver::IsInObserverList());
 }
 
@@ -221,13 +221,13 @@ void ExclusiveAccessBubbleViews::UpdateViewContent(
     accelerator = browser_fullscreen_exit_accelerator_;
   } else {
     accelerator = l10n_util::GetStringUTF16(IDS_APP_ESC_KEY);
-  }
 #if BUILDFLAG(IS_MAC)
-  // Mac keyboards use lowercase for everything except function keys, which are
-  // typically reserved for system use. Since |accelerator| is placed in a box
-  // to make it look like a keyboard key it looks weird to not follow suit.
-  accelerator = base::i18n::ToLower(accelerator);
+    // Mac keyboards use lowercase for the non-letter keys, and since the key is
+    // placed in a box to make it look like a keyboard key it looks weird to not
+    // follow suit.
+    accelerator = base::i18n::ToLower(accelerator);
 #endif
+  }
   view_->UpdateContent(GetInstructionText(accelerator));
 }
 

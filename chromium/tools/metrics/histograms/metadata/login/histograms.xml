@@ -39,6 +39,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Login.ArcBugReportBackupTime" units="ms"
     expires_after="2022-12-25">
+  <obsolete>
+    Removed in M110.
+  </obsolete>
   <owner>mhasank@google.com</owner>
   <owner>arc-core@google.com</owner>
   <summary>
@@ -48,7 +51,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.ArcContinueBootImpulseStatus"
-    enum="ArcContinueBootImpulseStatus" expires_after="2023-02-12">
+    enum="ArcContinueBootImpulseStatus" expires_after="2023-04-16">
   <owner>vsomani@google.com</owner>
   <owner>arc-core@google.com</owner>
   <summary>
@@ -96,24 +99,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.BrowserShutdownTime" units="ms"
-    expires_after="2023-02-22">
+    expires_after="2023-04-23">
   <owner>xiyuan@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
     Tracks the browser process shutdown time from when SIGTERM is sent to the
     browser process to when the browser process group exits (or gets killed by
     SIGABRT).
-  </summary>
-</histogram>
-
-<histogram name="Login.ConsumerNewUsersAllowed" enum="LoginConsumerWhitelist"
-    expires_after="M77">
-  <owner>cmasone@chromium.org</owner>
-  <owner>sumit@chromium.org</owner>
-  <summary>
-    Chrome OS histogram tracking, per consumer sign-in, whether the device owner
-    is allowing arbitrary accounts to be used on the device, or only those on a
-    specific whitelist.
   </summary>
 </histogram>
 
@@ -132,7 +124,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.FailureReason" enum="LoginFailureReason"
-    expires_after="2023-04-05">
+    expires_after="2023-06-04">
   <owner>achuith@chromium.org</owner>
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
@@ -199,7 +191,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.NumberOfUsersOnLoginScreen" units="units"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>mslus@chromium.org</owner>
   <owner>chromeos-commercial-identity@google.com</owner>
   <summary>
@@ -241,7 +233,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.PasswordChanged.ReauthReason" enum="LoginReauthReasons"
-    expires_after="2023-04-05">
+    expires_after="2023-06-04">
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
   <summary>
@@ -251,7 +243,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.PasswordNotChanged.ReauthReason"
-    enum="LoginReauthReasons" expires_after="2023-04-05">
+    enum="LoginReauthReasons" expires_after="2023-06-04">
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
   <summary>
@@ -279,7 +271,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.PromptToCompleteLoginTime" units="ms"
-    expires_after="2023-04-05">
+    expires_after="2023-06-04">
   <owner>antrim@chromium.org</owner>
   <owner>achuith@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
@@ -289,9 +281,9 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Login.PromptToLoginTime" units="ms" expires_after="2023-04-05">
+<histogram name="Login.PromptToLoginTime" units="ms" expires_after="2023-06-04">
   <owner>elijahtaylor@google.com</owner>
-  <owner>yusukes@chromium.org</owner>
+  <owner>khmel@chromium.org</owner>
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
   <summary>
@@ -319,7 +311,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.SessionExitType" enum="LoginSessionExitType"
-    expires_after="2023-03-19">
+    expires_after="2023-05-27">
   <owner>iby@chromium.org</owner>
   <summary>
     Tracks whether a ChromeOS user was logged out because Chrome repeatedly
@@ -328,13 +320,17 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.StateKeyGenerationStatus"
-    enum="LoginStateKeyGenerationStatus" expires_after="M77">
-  <owner>mnissler@chromium.org</owner>
-  <summary>Result of a state key generation operation.</summary>
+    enum="LoginStateKeyGenerationStatus" expires_after="2023-11-01">
+  <owner>sergiyb@chromium.org</owner>
+  <owner>chromeos-commercial-remote-management@chromium.org</owner>
+  <summary>
+    Result of a state key generation operation. Warning: this histogram was
+    expired from 2019-10-22 (M78) to 2023-02-07 (M110); data may be missing.
+  </summary>
 </histogram>
 
 <histogram name="Login.SuccessReason" enum="LoginSuccessReason"
-    expires_after="2023-04-05">
+    expires_after="2023-06-04">
   <owner>achuith@chromium.org</owner>
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
@@ -355,7 +351,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Login.TokenCheckResponseTime" units="ms"
-    expires_after="2023-04-05">
+    expires_after="2023-06-04">
   <owner>antrim@chromium.org</owner>
   <owner>cros-lurs@google.com</owner>
   <summary>

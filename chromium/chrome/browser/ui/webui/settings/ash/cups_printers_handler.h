@@ -82,6 +82,12 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   void HandleGetCupsEnterprisePrintersList(const base::Value::List& args);
   void HandleUpdateCupsPrinter(const base::Value::List& args);
   void HandleRemoveCupsPrinter(const base::Value::List& args);
+  void HandleRetrieveCupsPrinterPpd(const base::Value::List& args);
+  void OnSetUpPrinter(
+      const std::string& callback_id,
+      const std::string& printer_id,
+      const std::string& printer_name,
+      const absl::optional<printing::PrinterSemanticCapsAndDefaults>& caps);
 
   // For a CupsPrinterInfo in |args|, retrieves the relevant PrinterInfo object
   // using an IPP call to the printer.
@@ -92,16 +98,19 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   // was successful. |printer_status| contains the current status of the
   // printer. |make_and_model| is the unparsed printer-make-and-model string.
   // |ipp_everywhere| indicates if configuration using the CUPS IPP Everywhere
-  // driver should be attempted. If |result| is not SUCCESS, the values of
-  // |printer_status|, |make_and_model|, |document_formats|, |ipp_everywhere|,
-  // and |auth_info| are not specified.
+  // driver should be attempted. |client_info_supported| indicates whether the
+  // printer supports all member attributes of the IPP 'client-info' attribute.
+  // If |result| is not SUCCESS, the values of |printer_status|,
+  // |make_and_model|, |document_formats|, |ipp_everywhere|, |auth_info|, and
+  // |client_info_supported| are not specified.
   void OnAutoconfQueried(const std::string& callback_id,
                          printing::PrinterQueryResult result,
                          const printing::PrinterStatus& printer_status,
                          const std::string& make_and_model,
                          const std::vector<std::string>& document_formats,
                          bool ipp_everywhere,
-                         const chromeos::PrinterAuthenticationInfo& auth_info);
+                         const chromeos::PrinterAuthenticationInfo& auth_info,
+                         bool client_info_supported);
 
   // Handles the callback for HandleGetPrinterInfo for a discovered printer.
   void OnAutoconfQueriedDiscovered(
@@ -112,7 +121,8 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
       const std::string& make_and_model,
       const std::vector<std::string>& document_formats,
       bool ipp_everywhere,
-      const chromeos::PrinterAuthenticationInfo& auth_info);
+      const chromeos::PrinterAuthenticationInfo& auth_info,
+      bool client_info_supported);
 
   // Callback for PPD matching attempts;
   void OnPpdResolved(const std::string& callback_id,
@@ -184,6 +194,12 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
 
   // Attempt to add a discovered printer.
   void HandleAddDiscoveredPrinter(const base::Value::List& args);
+
+  // Called when we get a response from
+  // DebugDaemonClient::CupsRetrievePrinterPpd.
+  void OnRetrieveCupsPrinterPpd(const std::string& callback_id,
+                                const std::string& printer_name,
+                                const std::vector<uint8_t>& data);
 
   // Post printer setup callback.
   void OnAddedDiscoveredPrinter(const std::string& callback_id,
@@ -282,10 +298,5 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
 
 }  // namespace settings
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos::settings {
-using ::ash::settings::CupsPrintersHandler;
-}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_CUPS_PRINTERS_HANDLER_H_

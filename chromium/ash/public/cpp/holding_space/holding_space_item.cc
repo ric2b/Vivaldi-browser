@@ -76,7 +76,7 @@ bool HoldingSpaceItem::operator==(const HoldingSpaceItem& rhs) const {
   return type_ == rhs.type_ && id_ == rhs.id_ && file_path_ == rhs.file_path_ &&
          file_system_url_ == rhs.file_system_url_ && text_ == rhs.text_ &&
          secondary_text_ == rhs.secondary_text_ &&
-         secondary_text_color_ == rhs.secondary_text_color_ &&
+         secondary_text_color_id_ == rhs.secondary_text_color_id_ &&
          *image_ == *rhs.image_ && progress_ == rhs.progress_ &&
          in_progress_commands_ == rhs.in_progress_commands_;
 }
@@ -154,9 +154,9 @@ bool HoldingSpaceItem::IsSuggestion(HoldingSpaceItem::Type type) {
 // NOTE: This method must remain in sync with `Serialize()`. If multiple
 // serialization versions are supported, care must be taken to handle each.
 std::unique_ptr<HoldingSpaceItem> HoldingSpaceItem::Deserialize(
-    const base::DictionaryValue& dict,
+    const base::Value::Dict& dict,
     ImageResolver image_resolver) {
-  const absl::optional<int> version = dict.FindIntPath(kVersionPath);
+  const absl::optional<int> version = dict.FindInt(kVersionPath);
   DCHECK(version.has_value() && version.value() == kVersion);
 
   const Type type = DeserializeType(dict);
@@ -173,11 +173,11 @@ std::unique_ptr<HoldingSpaceItem> HoldingSpaceItem::Deserialize(
 // NOTE: This method must remain in sync with `Serialize()`. If multiple
 // serialization versions are supported, care must be taken to handle each.
 const std::string& HoldingSpaceItem::DeserializeId(
-    const base::DictionaryValue& dict) {
-  const absl::optional<int> version = dict.FindIntPath(kVersionPath);
+    const base::Value::Dict& dict) {
+  const absl::optional<int> version = dict.FindInt(kVersionPath);
   DCHECK(version.has_value() && version.value() == kVersion);
 
-  const std::string* id = dict.FindStringPath(kIdPath);
+  const std::string* id = dict.FindString(kIdPath);
   DCHECK(id);
 
   return *id;
@@ -187,12 +187,12 @@ const std::string& HoldingSpaceItem::DeserializeId(
 // NOTE: This method must remain in sync with `Serialize()`. If multiple
 // serialization versions are supported, care must be taken to handle each.
 base::FilePath HoldingSpaceItem::DeserializeFilePath(
-    const base::DictionaryValue& dict) {
-  const absl::optional<int> version = dict.FindIntPath(kVersionPath);
+    const base::Value::Dict& dict) {
+  const absl::optional<int> version = dict.FindInt(kVersionPath);
   DCHECK(version.has_value() && version.value() == kVersion);
 
   const absl::optional<base::FilePath> file_path =
-      base::ValueToFilePath(dict.FindPath(kFilePathPath));
+      base::ValueToFilePath(dict.Find(kFilePathPath));
   DCHECK(file_path.has_value());
 
   return file_path.value();
@@ -202,22 +202,22 @@ base::FilePath HoldingSpaceItem::DeserializeFilePath(
 // NOTE: This method must remain in sync with `Serialize()`. If multiple
 // serialization versions are supported, care must be taken to handle each.
 HoldingSpaceItem::Type HoldingSpaceItem::DeserializeType(
-    const base::DictionaryValue& dict) {
-  const absl::optional<int> version = dict.FindIntPath(kVersionPath);
+    const base::Value::Dict& dict) {
+  const absl::optional<int> version = dict.FindInt(kVersionPath);
   DCHECK(version.has_value() && version.value() == kVersion);
 
-  return static_cast<Type>(dict.FindIntPath(kTypePath).value());
+  return static_cast<Type>(dict.FindInt(kTypePath).value());
 }
 
 // NOTE: This method must remain in sync with `Deserialize()`. The
 // return value will be written to preferences so this implementation must
 // maintain backwards compatibility so long as `kVersion` remains unchanged.
-base::DictionaryValue HoldingSpaceItem::Serialize() const {
-  base::DictionaryValue dict;
-  dict.SetIntPath(kVersionPath, kVersion);
-  dict.SetIntPath(kTypePath, static_cast<int>(type_));
-  dict.SetStringPath(kIdPath, id_);
-  dict.SetPath(kFilePathPath, base::FilePathToValue(file_path_));
+base::Value::Dict HoldingSpaceItem::Serialize() const {
+  base::Value::Dict dict;
+  dict.Set(kVersionPath, kVersion);
+  dict.Set(kTypePath, static_cast<int>(type_));
+  dict.Set(kIdPath, id_);
+  dict.Set(kFilePathPath, base::FilePathToValue(file_path_));
   return dict;
 }
 
@@ -269,12 +269,12 @@ bool HoldingSpaceItem::SetSecondaryText(
   return true;
 }
 
-bool HoldingSpaceItem::SetSecondaryTextColor(
-    const absl::optional<cros_styles::ColorName>& secondary_text_color) {
-  if (secondary_text_color_ == secondary_text_color)
+bool HoldingSpaceItem::SetSecondaryTextColorId(
+    const absl::optional<ui::ColorId>& secondary_text_color_id) {
+  if (secondary_text_color_id_ == secondary_text_color_id)
     return false;
 
-  secondary_text_color_ = secondary_text_color;
+  secondary_text_color_id_ = secondary_text_color_id;
   return true;
 }
 

@@ -8,15 +8,21 @@
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/strings/strcat.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/web_package/signed_web_bundles/ed25519_public_key.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
 #include "components/web_package/web_bundle_builder.h"
 #include "content/public/common/content_features.h"
@@ -25,6 +31,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace web_app {
 
@@ -63,8 +70,6 @@ std::unique_ptr<WebApp> CreateIsolatedWebApp(const GURL& start_url,
   return web_app;
 }
 
-}  // namespace
-
 class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
  public:
   explicit IsolatedWebAppURLLoaderFactoryBrowserTest(
@@ -85,6 +90,11 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUp();
   }
 
+  void TearDown() override {
+    SetTrustedWebBundleIdsForTesting({});
+    InProcessBrowserTest::TearDown();
+  }
+
   std::unique_ptr<KeyedService> CreateWebAppProvider(Profile* profile) {
     auto provider = std::make_unique<FakeWebAppProvider>(profile);
     provider->SetDefaultFakeSubsystems();
@@ -103,36 +113,62 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
                                                          std::move(web_app));
   }
 
+  void TrustWebBundleId() {
+    SetTrustedWebBundleIdsForTesting(
+        {*web_package::SignedWebBundleId::Create(kTestEd25519WebBundleId)});
+  }
+
   base::FilePath SignAndWriteBundleToDisk(
       const std::vector<uint8_t>& unsigned_bundle) {
-    auto signed_bundle = web_package::WebBundleSigner::SignBundle(
-        unsigned_bundle,
-        {web_package::WebBundleSigner::KeyPair::CreateRandom()});
+    web_package::WebBundleSigner::KeyPair key_pair(kTestPublicKey,
+                                                   kTestPrivateKey);
+    auto signed_bundle =
+        web_package::WebBundleSigner::SignBundle(unsigned_bundle, {key_pair});
 
     {
       base::ScopedAllowBlockingForTesting allow_blocking;
-      EXPECT_THAT(temp_dir_.CreateUniqueTempDir(), IsTrue());
+      CHECK(temp_dir_.CreateUniqueTempDir());
       base::FilePath web_bundle_path;
-      EXPECT_THAT(
-          CreateTemporaryFileInDir(temp_dir_.GetPath(), &web_bundle_path),
-          IsTrue());
-      EXPECT_THAT(
+      CHECK(CreateTemporaryFileInDir(temp_dir_.GetPath(), &web_bundle_path));
+
+      CHECK_EQ(
           static_cast<size_t>(base::WriteFile(
               web_bundle_path, reinterpret_cast<char*>(signed_bundle.data()),
               signed_bundle.size())),
-          Eq(signed_bundle.size()));
+          signed_bundle.size());
 
       return web_bundle_path;
     }
   }
 
+  Browser* CreateAppWindow() {
+    AppId app_id = GenerateAppId(/*manifest_id=*/"", kUrl);
+
+    return Browser::Create(Browser::CreateParams::CreateForApp(
+        GenerateApplicationNameFromAppId(app_id),
+        /*trusted_source=*/true, gfx::Rect(), browser()->profile(),
+        /*user_gesture=*/true));
+  }
+
+  content::WebContents* AttachWebContents(Browser* app_window) {
+    app_window->tab_strip_model()->AppendWebContents(
+        content::WebContents::Create(
+            content::WebContents::CreateParams(app_window->profile())),
+        /*foreground=*/true);
+
+    return app_window->tab_strip_model()->GetActiveWebContents();
+  }
+
   void NavigateAndWaitForTitle(const GURL& url,
                                const std::u16string& page_title) {
-    content::TitleWatcher title_watcher(
-        browser()->tab_strip_model()->GetActiveWebContents(), page_title);
+    Browser* app_window = CreateAppWindow();
+    content::TitleWatcher title_watcher(AttachWebContents(app_window),
+                                        page_title);
 
-    content::RenderFrameHost* render_frame_host =
-        ui_test_utils::NavigateToURL(browser(), GURL(kPrimaryUrl));
+    content::RenderFrameHost* render_frame_host = NavigateToURLWithDisposition(
+        app_window, url, WindowOpenDisposition::CURRENT_TAB,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
     ASSERT_THAT(render_frame_host, NotNull());
 
     EXPECT_THAT(title_watcher.WaitAndGetTitle(), Eq(page_title));
@@ -141,18 +177,22 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
 
   void NavigateAndWaitForError(const GURL& url,
                                const std::string& error_messsage) {
+    Browser* app_window = CreateAppWindow();
+
     content::WebContentsConsoleObserver console_observer(
-        browser()->tab_strip_model()->GetActiveWebContents());
+        AttachWebContents(app_window));
     console_observer.SetFilter(base::BindRepeating(
         [](const content::WebContentsConsoleObserver::Message& message) {
           return message.log_level == blink::mojom::ConsoleMessageLevel::kError;
         }));
 
-    content::RenderFrameHost* render_frame_host =
-        ui_test_utils::NavigateToURL(browser(), url);
+    content::RenderFrameHost* render_frame_host = NavigateToURLWithDisposition(
+        app_window, url, WindowOpenDisposition::CURRENT_TAB,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
     ASSERT_THAT(render_frame_host, NotNull());
 
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
     EXPECT_THAT(render_frame_host->IsErrorDocument(), IsTrue());
     EXPECT_THAT(render_frame_host->GetLastCommittedURL(), Eq(url));
     EXPECT_THAT(console_observer.messages().size(), Eq(1ul))
@@ -160,9 +200,9 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
     EXPECT_THAT(console_observer.GetMessageAt(0), Eq(error_messsage));
   }
 
-  const std::string kWebBundleId =
-      "aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac";
-  const std::string kPrimaryUrl = "isolated-app://" + kWebBundleId;
+  const GURL kUrl = GURL(
+      base::StrCat({chrome::kIsolatedAppScheme, url::kStandardSchemeSeparator,
+                    kTestEd25519WebBundleId}));
 
   bool enable_isolated_web_apps_feature_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -173,156 +213,185 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest, LoadsBundle) {
   web_package::WebBundleBuilder builder;
-  builder.AddPrimaryURL(kPrimaryUrl);
-  builder.AddExchange(kPrimaryUrl,
-                      {{":status", "200"}, {"content-type", "text/html"}},
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
                       "<title>Hello Isolated Apps</title>");
   base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
 
   std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
+      kUrl, IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
   RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
 
-  NavigateAndWaitForTitle(GURL(kPrimaryUrl), u"Hello Isolated Apps");
+  NavigateAndWaitForTitle(kUrl, u"Hello Isolated Apps");
 }
 
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest,
                        LoadsSubResourcesFromBundle) {
   web_package::WebBundleBuilder builder;
-  builder.AddPrimaryURL(kPrimaryUrl);
-  builder.AddExchange(kPrimaryUrl,
-                      {{":status", "200"}, {"content-type", "text/html"}},
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
                       "<script src=\"script.js\"></script>");
   builder.AddExchange(
-      kPrimaryUrl + "/script.js",
+      kUrl.Resolve("/script.js"),
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'title from js';");
   base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
 
   std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
+      kUrl, IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
   RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
 
-  NavigateAndWaitForTitle(GURL(kPrimaryUrl), u"title from js");
+  NavigateAndWaitForTitle(kUrl, u"title from js");
 }
 
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest,
                        CanFetchSubresources) {
   web_package::WebBundleBuilder builder;
-  builder.AddPrimaryURL(kPrimaryUrl);
-  builder.AddExchange(kPrimaryUrl,
-                      {{":status", "200"}, {"content-type", "text/html"}},
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
                       R"(
-    <script>
-      fetch('data.txt')
-        .then(res => res.text())
-        .then(data => { console.log(data); document.title = data; })
-        .catch(err => console.error(err));
-    </script>)");
-  builder.AddExchange(kPrimaryUrl + "/data.txt",
+    <script type="text/javascript" src="/script.js"></script>
+)");
+  builder.AddExchange(kUrl.Resolve("/script.js"),
+                      {{":status", "200"}, {"content-type", "text/javascript"}},
+                      R"(
+fetch('title.txt')
+  .then(res => res.text())
+  .then(data => { console.log(data); document.title = data; })
+  .catch(err => console.error(err));
+)");
+  builder.AddExchange(kUrl.Resolve("/title.txt"),
                       {{":status", "200"}, {"content-type", "text/plain"}},
                       "some data");
   base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
 
   std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
+      kUrl, IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
   RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
 
-  NavigateAndWaitForTitle(GURL(kPrimaryUrl), u"some data");
+  NavigateAndWaitForTitle(kUrl, u"some data");
 }
 
+// Disabled due to flakiness. http://crbug.com/1381002
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest,
-                       InvalidStatusCode) {
+                       DISABLED_InvalidStatusCode) {
   web_package::WebBundleBuilder builder;
-  builder.AddPrimaryURL(kPrimaryUrl);
-  builder.AddExchange(kPrimaryUrl,
-                      {{":status", "201"}, {"content-type", "text/html"}},
+  builder.AddExchange(kUrl, {{":status", "201"}, {"content-type", "text/html"}},
                       "<title>Hello Isolated Apps</title>");
   base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
 
   std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
+      kUrl, IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
   RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
 
   NavigateAndWaitForError(
-      GURL(kPrimaryUrl),
+      kUrl,
       "Failed to read response from Signed Web Bundle: The response has an "
       "unsupported HTTP status code: 201 (only status code 200 is allowed).");
 }
 
+// Disabled due to flakiness. http://crbug.com/1381002
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest,
-                       NonExistingResource) {
+                       DISABLED_NonExistingResource) {
   web_package::WebBundleBuilder builder;
-  builder.AddPrimaryURL(kPrimaryUrl);
-  builder.AddExchange(kPrimaryUrl,
-                      {{":status", "200"}, {"content-type", "text/html"}},
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
                       "<title>Hello Isolated Apps</title>");
   base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
 
   std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
+      kUrl, IsolationData{IsolationData::InstalledBundle{.path = bundle_path}});
   RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
 
   NavigateAndWaitForError(
-      GURL(kPrimaryUrl + "/non-existing"),
+      kUrl.Resolve("/non-existing"),
       "Failed to read response from Signed Web Bundle: The Web Bundle does not "
       "contain a response for the provided URL: "
-      "isolated-app://aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac/"
+      "isolated-app://4tkrnsmftl4ggvvdkfth3piainqragus2qbhf7rlz2a3wo3rh4wqaaic/"
       "non-existing");
 }
 
-class IsolatedWebAppURLLoaderFactoryNonExistingBundlesBrowserTest
-    : public IsolatedWebAppURLLoaderFactoryBrowserTest,
-      public testing::WithParamInterface<std::pair<GURL, std::string>> {
- public:
-  IsolatedWebAppURLLoaderFactoryNonExistingBundlesBrowserTest()
-      : url_(std::get<0>(GetParam())),
-        error_message_(std::get<1>(GetParam())) {}
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryBrowserTest,
+                       UrlLoaderFactoryCanUseServiceWorker) {
+  web_package::WebBundleBuilder builder;
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
+                      R"html(
+<html>
+  <head>
+    <script type="text/javascript" src="/script.js"></script>
+  </head>
+</html>
+)html");
+  builder.AddExchange(kUrl.Resolve("/title.txt"),
+                      {{":status", "200"}, {"content-type", "text/plain"}},
+                      "data from web bundle");
+  builder.AddExchange(kUrl.Resolve("/script.js"),
+                      {{":status", "200"}, {"content-type", "text/javascript"}},
+                      R"js(
+const policy = trustedTypes.createPolicy('default', {
+  createScriptURL(url) {
+    return new URL(url, document.baseURI);
+  },
+});
 
- protected:
-  GURL url_;
-  std::string error_message_;
+const wait_for_activated = async (registration) => {
+  const worker = registration.active;
+  if (worker.state == 'activated') {
+    return;
+  }
+
+  await new Promise(resolve => {
+    worker.addEventListener('statechange', () => {
+      if (worker.state = 'activated') {
+        resolve();
+      }
+    });
+  });
 };
 
-IN_PROC_BROWSER_TEST_P(
-    IsolatedWebAppURLLoaderFactoryNonExistingBundlesBrowserTest,
-    NonExistingBundle) {
-  std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
-      GURL(kPrimaryUrl),
-      IsolationData{IsolationData::InstalledBundle{
-          .path =
-              base::FilePath(FILE_PATH_LITERAL("/this/path/does/not/exist"))}});
-  RegisterWebApp(std::move(iwa));
+const register_service_worker = async () => {
+  const registration = await navigator.serviceWorker.register(
+    policy.createScriptURL('service_worker.js'), {
+      scope: '/',
+    }
+  );
 
-  NavigateAndWaitForError(url_, error_message_);
+  await wait_for_activated(await navigator.serviceWorker.ready);
+
+  return registration;
+};
+
+window.addEventListener('load', (async () => {
+  const registration = await register_service_worker();
+  const request = await fetch('title.txt');
+  document.title = await request.text();
+}));
+)js");
+  builder.AddExchange(kUrl.Resolve("/service_worker.js"),
+                      {{":status", "200"}, {"content-type", "text/javascript"}},
+                      R"js(
+addEventListener('fetch', (event) => {
+  event.respondWith((async () => {
+    response = await fetch(event.request);
+    text = await response.text();
+    return new Response(text + ' data from service worker');
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+)js");
+  RegisterWebApp(CreateIsolatedWebApp(
+      GURL(kUrl),
+      IsolationData{IsolationData::InstalledBundle{
+          .path = SignAndWriteBundleToDisk(builder.CreateBundle())}}));
+  TrustWebBundleId();
+
+  NavigateAndWaitForTitle(GURL(kUrl),
+                          u"data from web bundle data from service worker");
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    IsolatedWebAppURLLoaderFactoryNonExistingBundlesBrowserTest,
-    ::testing::Values(
-        std::make_pair(
-            GURL("isolated-app://foo"),
-            "The host of isolated-app:// URLs must be a valid Signed Web "
-            "Bundle ID (got foo): The signed web bundle ID must be exactly 56 "
-            "characters long, but was 3 characters long."),
-        std::make_pair(
-            GURL("isolated-app://"
-                 "9erugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac"),
-            "The host of isolated-app:// URLs must be a valid Signed Web "
-            "Bundle ID (got "
-            "9erugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac): The "
-            "signed web bundle ID must only contain lowercase ASCII characters "
-            "and digits between 2 and 7 (without any padding)."),
-        std::make_pair(
-            GURL("isolated-app://"
-                 "aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac"),
-            "Failed to read response from Signed Web Bundle: Failed to parse "
-            "integrity block: FILE_ERROR_NOT_FOUND")));
-
+}  // namespace
 }  // namespace web_app

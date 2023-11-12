@@ -14,6 +14,7 @@
 #include "base/i18n/rtl.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
 #include "chrome/browser/autofill/autocomplete_history_manager_factory.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/autofill/iban_manager_factory.h"
 #include "chrome/browser/autofill/merchant_promo_code_manager_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
-#include "chrome/browser/autofill/risk_util.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/fast_checkout/fast_checkout_capabilities_fetcher.h"
@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/autofill/payments/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/autofill/payments/credit_card_scanner_controller.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/risk_util.h"
 #include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
@@ -61,15 +62,16 @@
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
+#include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_view.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_internals/log_message.h"
+#include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
-#include "components/autofill_assistant/browser/features.h"
-#include "components/autofill_assistant/browser/public/prefs.h"
-#include "components/autofill_assistant/browser/public/runtime_manager.h"
+#include "components/autofill/core/common/form_interactions_flow.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_setting.h"
@@ -115,6 +117,7 @@
 #include "components/autofill/core/browser/payments/autofill_save_card_infobar_mobile.h"
 #include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_view.h"
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_view.h"
+#include "components/autofill/core/common/logging/log_macros.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
 #include "components/messages/android/messages_feature.h"
@@ -142,9 +145,6 @@
 #endif
 
 namespace autofill {
-
-using AutoselectFirstSuggestion =
-    AutofillClient::PopupOpenArgs::AutoselectFirstSuggestion;
 
 ChromeAutofillClient::~ChromeAutofillClient() {
   // NOTE: It is too late to clean up the autofill popup; that cleanup process
@@ -375,13 +375,13 @@ void ChromeAutofillClient::OnUnmaskOtpVerificationResult(
 
 void ChromeAutofillClient::ShowUnmaskPrompt(
     const CreditCard& card,
-    UnmaskCardReason reason,
-    base::WeakPtr<CardUnmaskDelegate> delegate) {
+    const CardUnmaskPromptOptions& card_unmask_prompt_options,
+        base::WeakPtr<CardUnmaskDelegate> delegate) {
   unmask_controller_.ShowPrompt(
       base::BindOnce(&CreateCardUnmaskPromptView,
                      base::Unretained(&unmask_controller_),
                      base::Unretained(web_contents())),
-      card, reason, delegate);
+      card, card_unmask_prompt_options, delegate);
 }
 
 // TODO(crbug.com/1220990): Refactor this for both CVC and Biometrics flows.
@@ -517,6 +517,15 @@ void ChromeAutofillClient::ShowLocalCardMigrationResults(
                                    delete_local_card_callback);
 }
 
+void ChromeAutofillClient::ConfirmSaveIBANLocally(
+    const IBAN& iban,
+    bool should_show_prompt,
+    LocalSaveIBANPromptCallback callback) {
+  NOTIMPLEMENTED();
+  // TODO(crbug.com/1349109): Implement SaveIBANBubbleController to show
+  // prompt bubble for local save.
+}
+
 void ChromeAutofillClient::ShowWebauthnOfferDialog(
     WebauthnDialogCallback offer_dialog_callback) {
   WebauthnDialogControllerImpl::GetOrCreateForPage(
@@ -570,7 +579,6 @@ void ChromeAutofillClient::OfferVirtualCardOptions(
 #else  // BUILDFLAG(IS_ANDROID)
 void ChromeAutofillClient::ConfirmAccountNameFixFlow(
     base::OnceCallback<void(const std::u16string&)> callback) {
-  DCHECK(!messages::IsSaveCardMessagesUiEnabled());
   CardNameFixFlowViewAndroid* card_name_fix_flow_view_android =
       new CardNameFixFlowViewAndroid(&card_name_fix_flow_controller_,
                                      web_contents());
@@ -583,7 +591,6 @@ void ChromeAutofillClient::ConfirmExpirationDateFixFlow(
     const CreditCard& card,
     base::OnceCallback<void(const std::u16string&, const std::u16string&)>
         callback) {
-  DCHECK(!messages::IsSaveCardMessagesUiEnabled());
   CardExpirationDateFixFlowViewAndroid*
       card_expiration_date_fix_flow_view_android =
           new CardExpirationDateFixFlowViewAndroid(
@@ -600,14 +607,6 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
     LocalSaveCardPromptCallback callback) {
 #if BUILDFLAG(IS_ANDROID)
   DCHECK(options.show_prompt);
-  if (messages::IsSaveCardMessagesUiEnabled()) {
-    save_card_message_controller_android_.Show(
-        web_contents(), options, card, /*legal_message_lines=*/{},
-        GetAccountHolderName(), GetAccountHolderEmail(),
-        /*upload_save_card_callback=*/{},
-        /*local_save_card_callback=*/std::move(callback));
-    return;
-  }
   infobars::ContentInfoBarManager::FromWebContents(web_contents())
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
           std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
@@ -631,15 +630,6 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
     UploadSaveCardPromptCallback callback) {
 #if BUILDFLAG(IS_ANDROID)
   DCHECK(options.show_prompt);
-  if (messages::IsSaveCardMessagesUiEnabled()) {
-    save_card_message_controller_android_.Show(
-        web_contents(), options, card, legal_message_lines,
-        GetAccountHolderName(), GetAccountHolderEmail(),
-        /*upload_save_card_callback=*/
-        std::move(callback),
-        /*local_save_card_callback=*/{});
-    return;
-  }
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(GetProfile());
@@ -710,9 +700,10 @@ void ChromeAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {
 
 bool ChromeAutofillClient::IsFastCheckoutSupported() {
 #if BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(::features::kFastCheckout) ||
-      !base::FeatureList::IsEnabled(
-          autofill_assistant::features::kAutofillAssistant)) {
+  if (!base::FeatureList::IsEnabled(::features::kFastCheckout)) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "not triggered because FastCheckout flag is disabled.";
     return false;
   }
 
@@ -720,26 +711,32 @@ bool ChromeAutofillClient::IsFastCheckoutSupported() {
   // been done to allow for consequent hash dances during consent-less flows.
   if (!GetPrefs()->GetBoolean(
           unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled)) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "not triggered because the client is not MSBB.";
     return false;
   }
 
-  if (!GetPersonalDataManager()->IsAutofillProfileEnabled() ||
-      !GetPersonalDataManager()->IsAutofillCreditCardEnabled()) {
+  if (!GetPersonalDataManager()->IsAutofillProfileEnabled()) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << autofill::LogMessage::kFastCheckout
+        << "not triggered because Autofill profile is disabled.";
+    return false;
+  }
+
+  if (!GetPersonalDataManager()->IsAutofillCreditCardEnabled()) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "if disabled, not triggered Autofill credit card is disabled.";
     return false;
   }
 
   // Not supported on CCTs.
   auto* tab_android = TabAndroid::FromWebContents(web_contents());
   if (tab_android && tab_android->IsCustomTab()) {
-    return false;
-  }
-
-  // Require that the assistant settings flag is on for users with consent. If
-  // a user supports consentless flows, then there is no Assistant UI at any
-  // point in time and turning it off should not affect FC.
-  if (!::features::kFastCheckoutConsentlessExecutionParam.Get() &&
-      !GetPrefs()->GetBoolean(
-          autofill_assistant::prefs::kAutofillAssistantEnabled)) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "not triggered because the tab is CCT.";
     return false;
   }
 
@@ -762,35 +759,20 @@ bool ChromeAutofillClient::IsFastCheckoutTriggerForm(
   // TODO(crbug.com/1356498): Stop calculating the signature once the form
   // signature has been moved to `form_data`.
   // Check browser form's signature and renderer form's signature.
-  return fetcher->IsTriggerFormSupported(form.main_frame_origin,
-                                         CalculateFormSignature(form)) ||
-         fetcher->IsTriggerFormSupported(form.main_frame_origin,
-                                         field.host_form_signature);
-#else
-  NOTREACHED();
-  return false;
-#endif
-}
-
-bool ChromeAutofillClient::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-#if BUILDFLAG(IS_ANDROID)
-  FastCheckoutCapabilitiesFetcher* fetcher =
-      FastCheckoutCapabilitiesFetcherFactory::GetForBrowserContext(
-          GetProfile());
-  if (!fetcher) {
-    return false;
+  FormSignature form_signature = CalculateFormSignature(form);
+  bool is_trigger_form =
+      fetcher->IsTriggerFormSupported(form.main_frame_origin, form_signature) ||
+      fetcher->IsTriggerFormSupported(form.main_frame_origin,
+                                      field.host_form_signature);
+  if (!is_trigger_form) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "not triggered because there is no Fast Checkout support for form "
+           "signatures {"
+        << form_signature.value() << ", " << field.host_form_signature.value()
+        << "} on origin " << form.main_frame_origin.Serialize() << ".";
   }
-  return fetcher->SupportsConsentlessExecution(origin);
-#else
-  NOTREACHED();
-  return false;
-#endif
-}
-
-bool ChromeAutofillClient::FastCheckoutClientSupportsConsentlessExecution() {
-#if BUILDFLAG(IS_ANDROID)
-  return ::features::kFastCheckoutConsentlessExecutionParam.Get();
+  return is_trigger_form;
 #else
   NOTREACHED();
   return false;
@@ -801,18 +783,15 @@ bool ChromeAutofillClient::ShowFastCheckout(
     base::WeakPtr<FastCheckoutDelegate> delegate) {
 #if BUILDFLAG(IS_ANDROID)
   if (delegate->IsShowingFastCheckoutUI()) {
+    LOG_AF(log_manager_.get())
+        << LoggingScope::kFastCheckout << LogMessage::kFastCheckout
+        << "not triggered because Fast Checkout UI is already showing.";
     return false;
   }
 
-  // Don't show Fast Checkout surface while Autofill Assistant's UI is shown.
-  if (IsAutofillAssistantShowing())
-    return false;
-
   const GURL& url = web_contents()->GetLastCommittedURL();
   return FastCheckoutClient::GetOrCreateForWebContents(web_contents())
-      ->Start(delegate, url,
-              FastCheckoutScriptSupportsConsentlessExecution(
-                  url::Origin::Create(url)));
+      ->Start(delegate, url);
 #else
   NOTREACHED();
   return false;
@@ -838,15 +817,12 @@ bool ChromeAutofillClient::IsTouchToFillCreditCardSupported() {
 }
 
 bool ChromeAutofillClient::ShowTouchToFillCreditCard(
-    base::WeakPtr<TouchToFillDelegate> delegate) {
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const autofill::CreditCard* const> cards_to_suggest) {
 #if BUILDFLAG(IS_ANDROID)
-  // Don't show TTF surface while Autofill Assistant's UI is shown.
-  if (IsAutofillAssistantShowing())
-    return false;
-
   return touch_to_fill_credit_card_controller_.Show(
-      std::make_unique<TouchToFillCreditCardViewImpl>(web_contents()),
-      delegate);
+      std::make_unique<TouchToFillCreditCardViewImpl>(web_contents()), delegate,
+      std::move(cards_to_suggest));
 #else
   // Touch To Fill is not supported on Desktop.
   NOTREACHED();
@@ -870,11 +846,6 @@ void ChromeAutofillClient::ShowAutofillPopup(
   // the popup may overlap the focused window (see crbug.com/1239760).
   if (!has_focus_)
     return;
-
-  // Don't show any popups while Autofill Assistant's UI is shown.
-  if (IsAutofillAssistantShowing()) {
-    return;
-  }
 
   // Convert element_bounds to be in screen space.
   gfx::Rect client_area = web_contents()->GetContainerBounds();
@@ -910,7 +881,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
 #endif
 
   popup_controller_->Show(open_args.suggestions,
-                          open_args.autoselect_first_suggestion.value(),
+                          open_args.autoselect_first_suggestion,
                           open_args.popup_type);
 
   // When testing, try to keep popup open when the reason to hide is from an
@@ -975,7 +946,7 @@ void ChromeAutofillClient::UpdatePopup(
   }
 
   // Calling show will reuse the existing view automatically
-  popup_controller_->Show(suggestions, /*autoselect_first_suggestion=*/false,
+  popup_controller_->Show(suggestions, AutoselectFirstSuggestion(false),
                           popup_type);
 }
 
@@ -1033,14 +1004,9 @@ void ChromeAutofillClient::DismissOfferNotification() {
 }
 
 void ChromeAutofillClient::OnVirtualCardDataAvailable(
-    const std::u16string& masked_card_identifier_string,
-    const CreditCard* credit_card,
-    const std::u16string& cvc,
-    const gfx::Image& card_image) {
-  DCHECK(credit_card);
-  DCHECK(!cvc.empty());
-
-  GetFormDataImporter()->CacheFetchedVirtualCard(credit_card->LastFourDigits());
+    const VirtualCardManualFallbackBubbleOptions& options) {
+  GetFormDataImporter()->CacheFetchedVirtualCard(
+      options.virtual_card.LastFourDigits());
 #if BUILDFLAG(IS_ANDROID)
   // Show the virtual card snackbar only if the ManualFillingComponent component
   // is enabled for credit cards.
@@ -1055,8 +1021,7 @@ void ChromeAutofillClient::OnVirtualCardDataAvailable(
   VirtualCardManualFallbackBubbleControllerImpl* controller =
       VirtualCardManualFallbackBubbleControllerImpl::FromWebContents(
           web_contents());
-  controller->ShowBubble(masked_card_identifier_string, credit_card, cvc,
-                         card_image);
+  controller->ShowBubble(options);
 #endif
 }
 
@@ -1080,14 +1045,7 @@ void ChromeAutofillClient::CloseAutofillProgressDialog(
       show_confirmation_before_closing);
 }
 
-bool ChromeAutofillClient::IsAutofillAssistantShowing() {
-  auto* assistant_runtime_manager =
-      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
-  return assistant_runtime_manager && assistant_runtime_manager->GetState() ==
-                                          autofill_assistant::UIState::kShown;
-}
-
-bool ChromeAutofillClient::IsAutocompleteEnabled() {
+bool ChromeAutofillClient::IsAutocompleteEnabled() const {
   return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
@@ -1178,6 +1136,18 @@ LogManager* ChromeAutofillClient::GetLogManager() const {
   return log_manager_.get();
 }
 
+FormInteractionsFlowId
+ChromeAutofillClient::GetCurrentFormInteractionsFlowId() {
+  constexpr base::TimeDelta max_flow_time = base::Minutes(20);
+  base::Time now = AutofillClock::Now();
+
+  if (now - flow_id_date_ > max_flow_time || now < flow_id_date_) {
+    flow_id_ = FormInteractionsFlowId();
+    flow_id_date_ = now;
+  }
+  return flow_id_;
+}
+
 void ChromeAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   risk_util::LoadRiskData(0, web_contents(), std::move(callback));
@@ -1212,9 +1182,6 @@ void ChromeAutofillClient::OnWebContentsLostFocus(
 void ChromeAutofillClient::OnWebContentsFocused(
     content::RenderWidgetHost* render_widget_host) {
   has_focus_ = true;
-#if BUILDFLAG(IS_ANDROID)
-  save_card_message_controller_android_.OnWebContentsFocused();
-#endif
 }
 
 #if !BUILDFLAG(IS_ANDROID)

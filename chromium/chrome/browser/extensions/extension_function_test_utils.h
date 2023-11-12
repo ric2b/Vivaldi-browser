@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/manifest.h"
@@ -76,7 +75,7 @@ bool RunFunction(ExtensionFunction* function,
                  Browser* browser,
                  extensions::api_test_utils::RunFunctionFlags flags);
 bool RunFunction(ExtensionFunction* function,
-                 std::unique_ptr<base::ListValue> args,
+                 base::Value::List args,
                  Browser* browser,
                  extensions::api_test_utils::RunFunctionFlags flags);
 

@@ -20,7 +20,6 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
@@ -96,7 +95,7 @@ class Job : public base::RefCountedThreadSafe<Job>,
           worker_task_runner(worker_task_runner),
           num_outstanding_callbacks(num_outstanding_callbacks) {}
 
-    raw_ptr<ProxyResolverV8> v8_resolver;
+    raw_ptr<ProxyResolverV8, DanglingUntriaged> v8_resolver;
     scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner;
     raw_ptr<int> num_outstanding_callbacks;
   };
@@ -217,7 +216,7 @@ class Job : public base::RefCountedThreadSafe<Job>,
 
   // The Parameters for this Job.
   // Initialized on origin thread and then accessed from both threads.
-  const raw_ptr<const Params> params_;
+  const raw_ptr<const Params, DanglingUntriaged> params_;
 
   std::unique_ptr<ProxyResolverV8Tracing::Bindings> bindings_;
 
@@ -254,13 +253,13 @@ class Job : public base::RefCountedThreadSafe<Job>,
   // -------------------------------------------------------
 
   scoped_refptr<net::PacFileData> script_data_;
-  raw_ptr<std::unique_ptr<ProxyResolverV8>> resolver_out_;
+  raw_ptr<std::unique_ptr<ProxyResolverV8>, DanglingUntriaged> resolver_out_;
 
   // -------------------------------------------------------
   // State specific to GET_PROXY_FOR_URL.
   // -------------------------------------------------------
 
-  raw_ptr<net::ProxyInfo>
+  raw_ptr<net::ProxyInfo, DanglingUntriaged>
       user_results_;  // Owned by caller, lives on origin thread.
   GURL url_;
   net::NetworkAnonymizationKey network_anonymization_key_;
@@ -353,7 +352,7 @@ class ProxyResolverV8TracingImpl : public ProxyResolverV8Tracing {
 
 Job::Job(const Job::Params* params,
          std::unique_ptr<ProxyResolverV8Tracing::Bindings> bindings)
-    : origin_runner_(base::ThreadTaskRunnerHandle::Get()),
+    : origin_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       params_(params),
       bindings_(std::move(bindings)),
       event_(base::WaitableEvent::ResetPolicy::MANUAL,
@@ -369,7 +368,7 @@ void Job::StartCreateV8Resolver(
   CheckIsOnOriginThread();
 
   // |network_anonymization_key_| is not populated, so any resolutions done
-  // while loading the PAC sript will be done with an empty
+  // while loading the PAC script will be done with an empty
   // net::NetworkAnonymizationKey. Since a PAC script is considered trusted, and
   // is loaded once and then handles requests made by multiple
   // NetworkAnonymizationKeys, using an empty key makes sense.

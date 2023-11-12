@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_COMMERCE_CORE_COMMERCE_FEATURE_LIST_H_
 #define COMPONENTS_COMMERCE_CORE_COMMERCE_FEATURE_LIST_H_
 
+#include <string>
+
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
@@ -14,6 +16,10 @@
 #include "url/gurl.h"
 
 class PrefService;
+
+namespace variations {
+class VariationsService;
+}  // namespace variations
 
 namespace commerce {
 
@@ -84,6 +90,12 @@ BASE_DECLARE_FEATURE(kCommerceHintAndroid);
 
 // Feature flag for Merchant Wide promotion.
 BASE_DECLARE_FEATURE(kMerchantWidePromotion);
+
+// Feature flag for Code-based RBD.
+BASE_DECLARE_FEATURE(kCodeBasedRBD);
+
+// Feature flag for DOM-based heuristics for ChromeCart.
+BASE_DECLARE_FEATURE(kChromeCartDomBasedHeuristics);
 
 // Shopping list update interval.
 constexpr base::FeatureParam<base::TimeDelta>
@@ -175,7 +187,7 @@ constexpr base::FeatureParam<std::string> kCheckoutPattern{
     ")"
     "|"
     "(\\w+(checkout|chkout)(s)?)"
-    ")(/|\\.|$|\\?)"
+    ")(#|/|\\.|$|\\?)"
   // clang-format on
 };
 
@@ -189,6 +201,31 @@ constexpr base::FeatureParam<std::string> kCheckoutPatternMapping{
       // Empty JSON string.
       ""
 };
+
+// The following are Feature parameters for DOM-based heuristics for ChromeCart.
+constexpr base::FeatureParam<std::string> kAddToCartButtonTextPattern{
+    &kChromeCartDomBasedHeuristics, "add-to-cart-text-pattern",
+    "(add(ed|ing)?( \\w+)* (to (shopping )?(cart|bag|basket))|(for "
+    "shipping))|(^add$)|(buy now)"};
+
+constexpr base::FeatureParam<std::string> kAddToCartButtonTagPattern{
+    &kChromeCartDomBasedHeuristics, "add-to-cart-tag-pattern",
+    "BUTTON, INPUT, A, SPAN"};
+
+constexpr base::FeatureParam<int> kAddToCartButtonWidthLimit{
+    &kChromeCartDomBasedHeuristics, "add-to-cart-button-width", 700};
+
+constexpr base::FeatureParam<int> kAddToCartButtonHeightLimit{
+    &kChromeCartDomBasedHeuristics, "add-to-cart-button-height", 100};
+
+constexpr base::FeatureParam<base::TimeDelta> kAddToCartButtonActiveTime{
+    &kChromeCartDomBasedHeuristics, "add-to-cart-button-active-time",
+    base::Seconds(5)};
+
+constexpr base::FeatureParam<std::string> kSkipHeuristicsDomainPattern{
+    &kChromeCartDomBasedHeuristics, "skip-heuristics-domain-pattern",
+    // This regex does not match anything.
+    "\\b\\B"};
 
 // The following are Feature params for Discount user consent v2.
 // This indicates the Discount Consent v2 variation on the NTP Cart module.
@@ -314,6 +351,14 @@ bool IsFakeDataEnabled();
 bool isContextualConsentEnabled();
 // Check if the shopping list feature is allowed for enterprise.
 bool IsShoppingListAllowedForEnterprise(PrefService* prefs);
+
+// Get the user's current country code. If access through variations fails,
+// the country_codes component is used.
+std::string GetCurrentCountryCode(variations::VariationsService* variations);
+
+// Check if commerce features are allowed to run for the specified country
+// and locale.
+bool IsEnabledForCountryAndLocale(std::string country, std::string locale);
 
 #if !BUILDFLAG(IS_ANDROID)
 // Get the time delay between discount fetches.

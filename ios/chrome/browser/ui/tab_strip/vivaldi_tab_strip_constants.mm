@@ -22,9 +22,6 @@ NSString* const vTabViewSelectedTintColor =
 // The tint color for the tab view items when the tabs are not selected
 NSString* const vTabViewNotSelectedTintColor =
     @"vivaldi_tab_view_not_selected_tint_color";
-// The image for primary toolbar panel button
-NSString* const vPrimaryToolbarPanelButton =
-    @"vivaldi_primary_toolbar_panel_button";
 
 
 // Corner radius for vivaldi tab view background

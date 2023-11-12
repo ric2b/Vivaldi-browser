@@ -3889,6 +3889,10 @@ static const GLES2Util::EnumToString enum_to_string_table[] = {
         "GL_LAST_VERTEX_CONVENTION_OES",
     },
     {
+        0x8E4F,
+        "GL_PROVOKING_VERTEX_ANGLE",
+    },
+    {
         0x8E50,
         "GL_SAMPLE_LOCATION_NV",
     },
@@ -7006,17 +7010,6 @@ std::string GLES2Util::GetStringCmpFunction(uint32_t value) {
 
 std::string GLES2Util::GetStringCompressedTextureFormat(uint32_t value) {
   return GLES2Util::GetQualifiedEnumString(nullptr, 0, value);
-}
-
-std::string GLES2Util::GetStringCoverageModulationComponents(uint32_t value) {
-  static const EnumToString string_table[] = {
-      {GL_RGB, "GL_RGB"},
-      {GL_RGBA, "GL_RGBA"},
-      {GL_ALPHA, "GL_ALPHA"},
-      {GL_NONE, "GL_NONE"},
-  };
-  return GLES2Util::GetQualifiedEnumString(string_table,
-                                           std::size(string_table), value);
 }
 
 std::string GLES2Util::GetStringDrawMode(uint32_t value) {

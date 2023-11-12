@@ -154,6 +154,13 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
   void OnContainerFileSelected(const std::string& callback_id,
                                const base::FilePath& path);
 
+  // Handle a request for the shared vmdevice info of all known containers
+  void HandleRequestSharedVmDevices(const base::Value::List& args);
+  // Handle a request to query the sharing status of a VmDevice
+  void HandleIsVmDeviceShared(const base::Value::List& args);
+  // Handle a request to set the sharing status of a VmDevice
+  void HandleSetVmDeviceShared(const base::Value::List& args);
+
   Profile* profile_;
   base::CallbackListSubscription adb_sideloading_device_policy_subscription_;
   PrefChangeRegistrar pref_change_registrar_;
@@ -172,10 +179,5 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
 };
 
 }  // namespace ash::settings
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos::settings {
-using ::ash::settings::CrostiniHandler;
-}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_CROSTINI_HANDLER_H_

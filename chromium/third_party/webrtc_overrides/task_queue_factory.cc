@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
+#include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
@@ -21,6 +22,7 @@
 #include "third_party/webrtc/api/units/time_delta.h"
 #include "third_party/webrtc_overrides/coalesced_tasks.h"
 #include "third_party/webrtc_overrides/metronome_source.h"
+#include "third_party/webrtc_overrides/timer_based_tick_provider.h"
 
 namespace blink {
 
@@ -143,7 +145,8 @@ void WebRtcTaskQueue::PostDelayedTask(absl::AnyInvocable<void() &&> task,
   base::TimeTicks target_time =
       base::TimeTicks::Now() + base::Microseconds(delay.us());
   base::TimeTicks snapped_target_time =
-      MetronomeSource::TimeSnappedToNextTick(target_time);
+      TimerBasedTickProvider::TimeSnappedToNextTick(
+          target_time, TimerBasedTickProvider::kDefaultPeriod);
   // The posted task might outlive |this|, but access to |this| is guarded by
   // the ref-counted |is_active_| flag.
   if (coalesced_tasks_.QueueDelayedTask(target_time, std::move(task),
@@ -214,6 +217,10 @@ base::TaskTraits TaskQueuePriority2Traits(
     default:
 #if defined(OS_ANDROID)
       return {base::WithBaseSyncPrimitives()};
+#elif defined(OS_WIN)
+      // On Windows, software encoders need to map HW frames which requires
+      // blocking calls:
+      return {base::MayBlock()};
 #else
       return {};
 #endif

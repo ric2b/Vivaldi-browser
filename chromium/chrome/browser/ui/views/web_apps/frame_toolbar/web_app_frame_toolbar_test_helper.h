@@ -74,6 +74,10 @@ class WebAppFrameToolbarTestHelper {
 
   void TestDraggableRegions();
 
+  // Opens a new popup window from |app_browser_| on |target_url| and returns
+  // the Browser it opened in.
+  Browser* OpenPopup(const std::string& target_url);
+
   Browser* app_browser() { return app_browser_; }
   BrowserView* browser_view() { return browser_view_; }
   BrowserNonClientFrameView* frame_view() { return frame_view_; }
@@ -83,11 +87,12 @@ class WebAppFrameToolbarTestHelper {
   }
 
  private:
-  raw_ptr<Browser> app_browser_ = nullptr;
-  raw_ptr<BrowserView> browser_view_ = nullptr;
-  raw_ptr<BrowserNonClientFrameView> frame_view_ = nullptr;
-  raw_ptr<views::View> root_view_ = nullptr;
-  raw_ptr<WebAppFrameToolbarView> web_app_frame_toolbar_ = nullptr;
+  raw_ptr<Browser, DanglingUntriaged> app_browser_ = nullptr;
+  raw_ptr<BrowserView, DanglingUntriaged> browser_view_ = nullptr;
+  raw_ptr<BrowserNonClientFrameView, DanglingUntriaged> frame_view_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> root_view_ = nullptr;
+  raw_ptr<WebAppFrameToolbarView, DanglingUntriaged> web_app_frame_toolbar_ =
+      nullptr;
 
   GURL LoadTestPageWithDataAndGetURL(
       net::test_server::EmbeddedTestServer* embedded_test_server,

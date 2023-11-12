@@ -43,7 +43,8 @@ enum class StorageAccessResult {
   ACCESS_BLOCKED = 0,
   ACCESS_ALLOWED = 1,
   ACCESS_ALLOWED_STORAGE_ACCESS_GRANT = 2,
-  kMaxValue = ACCESS_ALLOWED_STORAGE_ACCESS_GRANT,
+  ACCESS_ALLOWED_FORCED = 3,
+  kMaxValue = ACCESS_ALLOWED_FORCED,
 };
 // Helper to fire telemetry indicating if a given request for storage was
 // allowed or not by the provided |result|.
@@ -133,8 +134,9 @@ using ParsedRequestCookies = std::vector<ParsedRequestCookie>;
 // Assumes that |header_value| is the cookie header value of a HTTP Request
 // following the cookie-string schema of RFC 6265, section 4.2.1, and returns
 // cookie name/value pairs. If cookie values are presented in double quotes,
-// these will appear in |parsed_cookies| as well. Assumes that the cookie
-// header is written by Chromium and therefore well-formed.
+// these will appear in |parsed_cookies| as well. The cookie header can be
+// written by non-Chromium consumers (such as extensions), so the header may not
+// be well-formed.
 NET_EXPORT void ParseRequestCookieLine(const std::string& header_value,
                                        ParsedRequestCookies* parsed_cookies);
 
@@ -258,6 +260,11 @@ ComputeFirstPartySetMetadataMaybeAsync(
     const CookieAccessDelegate* cookie_access_delegate,
     bool force_ignore_top_frame_party,
     base::OnceCallback<void(FirstPartySetMetadata)> callback);
+
+// Converts a string representing the http request method to its enum
+// representation.
+NET_EXPORT CookieOptions::SameSiteCookieContext::ContextMetadata::HttpMethod
+HttpMethodStringToEnum(const std::string& in);
 
 // Get the SameParty inclusion status. If the cookie is not SameParty, returns
 // kNoSamePartyEnforcement; if the cookie is SameParty but does not have a

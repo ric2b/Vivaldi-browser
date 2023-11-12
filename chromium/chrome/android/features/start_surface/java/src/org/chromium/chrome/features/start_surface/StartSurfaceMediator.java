@@ -58,6 +58,8 @@ import org.chromium.chrome.browser.feed.FeedReliabilityLogger;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensMetrics;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.ntp.NewTabPageLaunchOrigin;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
@@ -67,6 +69,7 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -88,7 +91,8 @@ import org.chromium.ui.util.ColorUtils;
 /** The mediator implements the logic to interact with the surfaces and caller. */
 class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.OnClickListener,
                                       StartSurface.OnTabSelectingListener, BackPressHandler,
-                                      LogoCoordinator.VisibilityObserver {
+                                      LogoCoordinator.VisibilityObserver,
+                                      PauseResumeWithNativeObserver {
     /** Interface to initialize a secondary tasks surface for more tabs. */
     interface SecondaryTasksSurfaceInitializer {
         /**
@@ -128,6 +132,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     private final CallbackController mCallbackController = new CallbackController();
     private final View mLogoContainerView;
     private final boolean mIsFeedGoneImprovementEnabled;
+    private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
 
     // Boolean histogram used to record whether cached
     // ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE is consistent with
@@ -135,6 +140,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     @VisibleForTesting
     static final String FEED_VISIBILITY_CONSISTENCY =
             "Startup.Android.CachedFeedVisibilityConsistency";
+    private static final int LAST_SHOW_TIME_NOT_SET = -1;
     @Nullable
     private ExploreSurfaceCoordinatorFactory mExploreSurfaceCoordinatorFactory;
     @Nullable
@@ -167,6 +173,10 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     private BrowserControlsStateProvider.Observer mBrowserControlsObserver;
     private ActivityStateChecker mActivityStateChecker;
     private OneshotSupplier<StartSurface> mStartSurfaceSupplier;
+
+    // Only used when the start surface refactoring is enabled. It indicates whether the Start
+    // surface homepage is showing when we no longer calculate StartSurfaceState.
+    private boolean mIsHomepageShown;
     /**
      * Whether a pending observer needed be added to the normal TabModel after the TabModel is
      * initialized.
@@ -191,6 +201,9 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     private ViewGroup mTabSwitcherContainer;
     private SnackbarManager mSnackbarManager;
     private boolean mIsNativeInitialized;
+    // The timestamp at which the Start Surface was last shown to the user.
+    private long mLastShownTimeMs = LAST_SHOW_TIME_NOT_SET;
+    private boolean mIsStartSurfaceRefactorEnabled;
 
     StartSurfaceMediator(Controller controller, ViewGroup tabSwitcherContainer,
             TabModelSelector tabModelSelector, @Nullable PropertyModel propertyModel,
@@ -201,7 +214,8 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             OneshotSupplier<StartSurface> startSurfaceSupplier, boolean hadWarmStart,
             JankTracker jankTracker, Runnable initializeMVTilesRunnable,
             Supplier<Tab> parentTabSupplier, View logoContainerView,
-            BackPressManager backPressManager, ViewGroup feedPlaceholderParentView) {
+            BackPressManager backPressManager, ViewGroup feedPlaceholderParentView,
+            ActivityLifecycleDispatcher activityLifecycleDispatcher) {
         mController = controller;
         mTabSwitcherContainer = tabSwitcherContainer;
         mTabModelSelector = tabModelSelector;
@@ -219,12 +233,15 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         mInitializeMVTilesRunnable = initializeMVTilesRunnable;
         mParentTabSupplier = parentTabSupplier;
         mLogoContainerView = logoContainerView;
+        mActivityLifecycleDispatcher = activityLifecycleDispatcher;
+        mActivityLifecycleDispatcher.register(this);
         // We need to check #shouldImproveStartWhenFeedIsDisabled and save it in the constructor
         // here to keep consistent with toolbar's check. This cannot be moved to other places, since
         // FEED_ARTICLES_LIST_VISIBLE may be changed after feed header is rendered, which then
         // causes inconsistency with toolbar's check.
         mIsFeedGoneImprovementEnabled =
                 ReturnToChromeUtil.shouldImproveStartWhenFeedIsDisabled(context);
+        mIsStartSurfaceRefactorEnabled = ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context);
 
         if (mPropertyModel != null) {
             assert mIsStartSurfaceEnabled;
@@ -256,22 +273,20 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             mNormalTabModelObserver = new TabModelObserver() {
                 @Override
                 public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
-                            && mTabModelSelector.getModel(false).getCount() <= 1) {
+                    if (isHomepageShown() && mTabModelSelector.getModel(false).getCount() <= 1) {
                         setTabCarouselVisibility(false);
                     }
                 }
                 @Override
                 public void tabClosureUndone(Tab tab) {
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                    if (isHomepageShown()) {
                         setTabCarouselVisibility(true);
                     }
                 }
 
                 @Override
                 public void restoreCompleted() {
-                    if (!(mPropertyModel.get(IS_SHOWING_OVERVIEW)
-                                && mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE)) {
+                    if (!(mPropertyModel.get(IS_SHOWING_OVERVIEW) && isHomepageShown())) {
                         return;
                     }
                     setTabCarouselVisibility(
@@ -280,8 +295,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
                 @Override
                 public void willAddTab(Tab tab, @TabLaunchType int type) {
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
-                            && type != TabLaunchType.FROM_LONGPRESS_BACKGROUND) {
+                    if (isHomepageShown() && type != TabLaunchType.FROM_LONGPRESS_BACKGROUND) {
                         // Log if the creation of this tab will hide the surface and there is an
                         // ongoing feed launch. If the tab creation is due to a feed card tap, "card
                         // tapped" should already have been logged marking the end of the launch.
@@ -303,10 +317,17 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                     // Updates the visibility of the tab switcher module if it is invisible and a
                     // new Tab is created in the background without hiding the Start surface
                     // homepage.
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
-                            && !mHideOverviewOnTabSelecting
+                    if (isHomepageShown() && !mHideOverviewOnTabSelecting
                             && !mPropertyModel.get(IS_TAB_CAROUSEL_VISIBLE)) {
                         setTabCarouselVisibility(!mIsIncognito);
+                    }
+                }
+
+                @Override
+                public void didSelectTab(Tab tab, int type, int lastId) {
+                    if (type == TabSelectionType.FROM_CLOSE
+                            && UrlUtilities.isNTPUrl(tab.getUrl())) {
+                        setTabCarouselVisibility(false);
                     }
                 }
             };
@@ -337,7 +358,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 @Override
                 public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
                         int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                    if (isHomepageShown()) {
                         // Set the top margin to the top controls min height (indicator height if
                         // it's shown) since the toolbar height as extra margin is handled by top
                         // toolbar placeholder.
@@ -356,7 +377,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                         int bottomControlsHeight, int bottomControlsMinHeight) {
                     // Only pad single pane home page since tabs grid has already been
                     // padded for the bottom bar.
-                    if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                    if (isHomepageShown()) {
                         setBottomMargin(bottomControlsHeight);
                     } else {
                         setBottomMargin(0);
@@ -401,10 +422,15 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
         if (BackPressManager.isEnabled()) {
             backPressManager.addHandler(this, Type.START_SURFACE_MEDIATOR);
-            notifyBackPressStateChanged();
+            if (mPropertyModel != null) {
+                mPropertyModel.addObserver((source, key) -> {
+                    if (key == IS_INCOGNITO) notifyBackPressStateChanged();
+                });
+            }
             mController.getHandleBackPressChangedSupplier().addObserver(
                     (v) -> notifyBackPressStateChanged());
             mController.isDialogVisibleSupplier().addObserver((v) -> notifyBackPressStateChanged());
+            notifyBackPressStateChanged();
         }
     }
 
@@ -430,7 +456,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             // and MV tiles haven't been set.
             if (mController.overviewVisible()) {
                 mOmniboxStub.addUrlFocusChangeListener(mUrlFocusChangeListener);
-                if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                if (isHomepageShown()) {
                     if (mExploreSurfaceCoordinatorFactory != null) {
                         setExploreSurfaceVisibility(!mIsIncognito);
                     }
@@ -445,13 +471,14 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
     void destroy() {
         if (mLogoCoordinator != null) {
-            mLogoCoordinator.removeObserver(this);
             mLogoCoordinator.destroy();
             mLogoCoordinator = null;
         }
         if (mCallbackController != null) {
             mCallbackController.destroy();
         }
+        mayRecordHomepageSessionEnd();
+        mActivityLifecycleDispatcher.unregister(this);
     }
 
     /**
@@ -459,19 +486,13 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
      * @param animate Whether to play an entry animation.
      */
     void show(boolean animate) {
-        assert ReturnToChromeUtil.isStartSurfaceEnabled(mContext)
-                && ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mContext);
+        assert ReturnToChromeUtil.isStartSurfaceEnabled(mContext) && mIsStartSurfaceRefactorEnabled;
 
         // This null check is for testing.
         if (mPropertyModel == null) return;
 
-        // TODO(crbug.com/1347089): When entering the Start surface by tapping back button or other
-        // back gestures, we shouldn't reset the scrolling position. Maybe we could add a boolean
-        // |mResetPosition| and set it as false only when this method is called because of back
-        // actions.
-        mPropertyModel.set(RESET_TASK_SURFACE_HEADER_SCROLL_POSITION, true);
-        mPropertyModel.set(RESET_FEED_SURFACE_SCROLL_POSITION, true);
-        StartSurfaceUserData.getInstance().saveFeedInstanceState(null);
+        mIsHomepageShown = true;
+        notifyShowStateChange();
 
         mIsIncognito = mTabModelSelector.isIncognitoSelected();
         mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
@@ -619,7 +640,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         setStartSurfaceState(state, mLaunchOrigin);
     }
 
-    private void setLaunchOrigin(@NewTabPageLaunchOrigin int launchOrigin) {
+    void setLaunchOrigin(@NewTabPageLaunchOrigin int launchOrigin) {
         if (launchOrigin == NewTabPageLaunchOrigin.WEB_FEED) {
             StartSurfaceUserData.getInstance().saveFeedInstanceState(null);
         }
@@ -633,17 +654,23 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         }
     }
 
+    void resetScrollPosition() {
+        if (mPropertyModel == null) return;
+
+        mPropertyModel.set(RESET_TASK_SURFACE_HEADER_SCROLL_POSITION, true);
+        mPropertyModel.set(RESET_FEED_SURFACE_SCROLL_POSITION, true);
+        StartSurfaceUserData.getInstance().saveFeedInstanceState(null);
+    }
+
     // TODO(crbug.com/1115757): After crrev.com/c/2315823, Overview state and Startsurface state are
     // two different things, audit the wording usage and see if we can rename this method to
     // setStartSurfaceStateInternal.
     private void setOverviewStateInternal() {
-        if (mStartSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE) {
+        if (mStartSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE
+                || mStartSurfaceState == StartSurfaceState.SHOWING_START) {
             // When entering the Start surface by tapping home button or new tab page, we need to
             // reset the scrolling position.
-            mPropertyModel.set(RESET_TASK_SURFACE_HEADER_SCROLL_POSITION, true);
-            mPropertyModel.set(RESET_FEED_SURFACE_SCROLL_POSITION, true);
-            StartSurfaceUserData.getInstance().saveFeedInstanceState(null);
-
+            resetScrollPosition();
         } else if (mStartSurfaceState == StartSurfaceState.SHOWING_TABSWITCHER) {
             maybeDestroyFeedPlaceholder();
             // Set secondary surface visible to make sure tab list recyclerview is updated in time
@@ -652,6 +679,9 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             setSecondaryTasksSurfaceVisibility(
                     /* isVisible= */ true, /* skipUpdateController = */ true);
         } else if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+            if (mPreviousStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER) {
+                mayRecordHomepageSessionBegin();
+            }
             boolean hasNormalTab = getNormalTabCount() > 0;
 
             // If new home surface for home button is enabled, MV tiles and carousel tab switcher
@@ -676,6 +706,9 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 mPendingObserver = true;
             }
         } else if (mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER) {
+            if (mPreviousStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                mayRecordHomepageSessionEnd();
+            }
             setTabCarouselVisibility(false);
             setMVTilesVisibility(false);
             setLogoVisibility(false);
@@ -775,7 +808,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 mOmniboxStub.addUrlFocusChangeListener(mUrlFocusChangeListener);
             }
         }
-
+        mayRecordHomepageSessionBegin();
         mController.showTabSwitcherView(animate);
     }
 
@@ -798,9 +831,18 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         // the TabSelectionEditor dialog. Therefore, we need to check both controllers as well.
         if (mSecondaryTasksSurfaceController != null
                 && mSecondaryTasksSurfaceController.isDialogVisible()) {
-            return mSecondaryTasksSurfaceController.onBackPressed(isOnHomepage);
+            boolean ret = mSecondaryTasksSurfaceController.onBackPressed(isOnHomepage);
+            assert !BackPressManager.isEnabled()
+                    || ret : String.format("Wrong back press state: %s, start surface: %s",
+                                     mSecondaryTasksSurfaceController.getClass().getName(),
+                                     mStartSurfaceState);
+            return ret;
         } else if (mController.isDialogVisible()) {
-            return mController.onBackPressed(isOnHomepage);
+            boolean ret = mController.onBackPressed(isOnHomepage);
+            assert !BackPressManager.isEnabled()
+                    || ret : String.format("Wrong back press state: %s, start surface: %s",
+                                     mController.getClass().getName(), mStartSurfaceState);
+            return ret;
         }
 
         if (mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER) {
@@ -812,7 +854,12 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 ReturnToChromeUtil.recordBackNavigationToStart("FromTabSwitcher");
                 return true;
             } else {
-                return mSecondaryTasksSurfaceController.onBackPressed(isOnHomepage);
+                boolean ret = mSecondaryTasksSurfaceController.onBackPressed(isOnHomepage);
+                assert !BackPressManager.isEnabled()
+                        || ret : String.format("Wrong back press state: %s, start surface: %s",
+                                         mSecondaryTasksSurfaceController.getClass().getName(),
+                                         mStartSurfaceState);
+                return ret;
             }
         }
 
@@ -823,7 +870,15 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             }
         }
 
-        return mController.onBackPressed(isOnHomepage);
+        if (mIsStartSurfaceRefactorEnabled && ReturnToChromeUtil.isStartSurfaceEnabled(mContext)) {
+            return false;
+        }
+
+        boolean ret = mController.onBackPressed(isOnHomepage);
+        assert !BackPressManager.isEnabled()
+                || ret : String.format("Wrong back press state: %s, start surface: %s",
+                                 mController.getClass().getName(), mStartSurfaceState);
+        return ret;
     }
 
     void maybeDestroyFeedPlaceholder() {
@@ -835,8 +890,8 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
     @Override
     public void handleBackPress() {
-        boolean ret = onBackPressedInternal();
-        assert ret;
+        onBackPressedInternal();
+        notifyBackPressStateChanged();
     }
 
     @Override
@@ -920,6 +975,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             }
             setStartSurfaceState(StartSurfaceState.NOT_SHOWN);
             RecordUserAction.record("StartSurface.Hidden");
+            mIsHomepageShown = false;
         }
         for (TabSwitcherViewObserver observer : mObservers) {
             observer.startedHiding();
@@ -1045,7 +1101,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
         if (isVisible) {
             if (mSecondaryTasksSurfacePropertyModel == null) {
-                mSecondaryTasksSurfaceController = mSecondaryTasksSurfaceInitializer.initialize();
+                setSecondaryTasksSurfaceController(mSecondaryTasksSurfaceInitializer.initialize());
             }
             if (mSecondaryTasksSurfacePropertyModel != null) {
                 mSecondaryTasksSurfacePropertyModel.set(IS_FAKE_SEARCH_BOX_VISIBLE, false);
@@ -1063,10 +1119,20 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     }
 
     private void notifyStateChange() {
+        notifyShowStateChange();
+        notifyStartSurfaceStateChange();
+    }
+
+    private void notifyShowStateChange() {
         // StartSurface is being supplied with OneShotSupplier, notification sends after
         // StartSurface is available to avoid missing events. More detail see:
         // https://crrev.com/c/2427428.
-        mController.onHomepageChanged(mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE);
+        mController.onHomepageChanged(isHomepageShown());
+        notifyBackPressStateChanged();
+    }
+
+    // TODO(1347089): Remove this when the Start surface refactoring is enabled by default.
+    private void notifyStartSurfaceStateChange() {
         if (mSecondaryTasksSurfaceController != null) {
             mSecondaryTasksSurfaceController.onHomepageChanged(
                     mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE);
@@ -1076,7 +1142,6 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 observer.onStateChanged(mStartSurfaceState, shouldShowTabSwitcherToolbar());
             }
         });
-        notifyBackPressStateChanged();
     }
 
     private boolean hasFakeSearchBox() {
@@ -1120,19 +1185,6 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         // shouldn't show the tab switcher layout on Start.
         boolean shouldShowTabCarousel =
                 isVisible && !(isSingleTabSwitcher() && isCurrentSelectedTabNTP());
-        // If improving Start surface when Feed is disabled is needed, mvt grid layout is shown. We
-        // need to update the body top margin according to the visibility of carousel tab.
-        // TODO(crbug.com/1360486): After Feed divider is removed, remove this setting top margin
-        // since the body top margin should always be R.dimen.tasks_surface_body_top_margin then.
-        // Also, update |tile_grid_layout_bottom_margin| in NTPLayout to be equal to
-        // |tasks_surface_body_top_margin| too.
-        if (mIsFeedGoneImprovementEnabled) {
-            Resources resources = mContext.getResources();
-            mPropertyModel.set(TASKS_SURFACE_BODY_TOP_MARGIN,
-                    resources.getDimensionPixelSize(shouldShowTabCarousel
-                                    ? R.dimen.tasks_surface_body_top_margin
-                                    : R.dimen.tile_grid_layout_bottom_margin));
-        }
 
         if (shouldShowTabCarousel == mPropertyModel.get(IS_TAB_CAROUSEL_VISIBLE)) return;
 
@@ -1156,7 +1208,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         }
         if (mLogoCoordinator != null) {
             boolean isShowingHomepage = isShowingStartSurfaceHomepage();
-            mLogoCoordinator.maybeLoadSearchProviderLogo(
+            mLogoCoordinator.updateVisibilityAndMaybeCleanUp(
                     isShowingHomepage && isVisible, !isShowingHomepage, false);
         }
     }
@@ -1292,6 +1344,10 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             }
         }
 
+        if (mIsStartSurfaceRefactorEnabled && ReturnToChromeUtil.isStartSurfaceEnabled(mContext)) {
+            return false;
+        }
+
         return Boolean.TRUE.equals(mController.getHandleBackPressChangedSupplier().get());
     }
 
@@ -1345,10 +1401,9 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 });
         mLogoContainerView.setVisibility(View.VISIBLE);
 
-        mLogoCoordinator = new LogoCoordinator(logoClickedCallback,
+        mLogoCoordinator = new LogoCoordinator(mContext, logoClickedCallback,
                 mLogoContainerView.findViewById(R.id.search_provider_logo), true, null, null,
-                isShowingStartSurfaceHomepage());
-        mLogoCoordinator.addObserver(this);
+                isShowingStartSurfaceHomepage(), this);
         return mLogoCoordinator;
     }
 
@@ -1382,5 +1437,50 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                                 R.dimen.single_tab_view_top_margin_for_feed_improvement));
             }
         }
+    }
+
+    @Override
+    public void onResumeWithNative() {
+        mayRecordHomepageSessionBegin();
+    }
+
+    @Override
+    public void onPauseWithNative() {
+        mayRecordHomepageSessionEnd();
+    }
+
+    /** Records UMA for the time spent on Start Surface. */
+    private void recordTimeSpendInStart() {
+        RecordHistogram.recordMediumTimesHistogram(
+                "StartSurface.TimeSpent", System.currentTimeMillis() - mLastShownTimeMs);
+    }
+
+    /**
+     * If mLastShownTimeMs is set as an actual time and hasn't been recorded by other start surface
+     * hiding actions, the recordTimeSpendInStart function will be called. We then reset
+     * mLastShownTimeMs as the default value in case it will be recorded again by another hiding
+     * action.
+     */
+    void mayRecordHomepageSessionEnd() {
+        if (mLastShownTimeMs != LAST_SHOW_TIME_NOT_SET) {
+            recordTimeSpendInStart();
+            mLastShownTimeMs = LAST_SHOW_TIME_NOT_SET;
+        }
+    }
+
+    private void mayRecordHomepageSessionBegin() {
+        if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
+                && mLastShownTimeMs == LAST_SHOW_TIME_NOT_SET) {
+            mLastShownTimeMs = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Returns whether the Start surface homepage is showing.
+     */
+    private boolean isHomepageShown() {
+        return mIsStartSurfaceRefactorEnabled
+                ? mIsHomepageShown
+                : mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE;
     }
 }

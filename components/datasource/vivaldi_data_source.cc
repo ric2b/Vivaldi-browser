@@ -19,9 +19,12 @@
 #include "ui/gfx/image/image_skia.h"
 
 #include "app/vivaldi_constants.h"
+#include "components/datasource/synced_file_data_source.h"
+
+#if !BUILDFLAG(IS_ANDROID)
 #include "components/datasource/css_mods_data_source.h"
 #include "components/datasource/local_image_data_source.h"
-#include "components/datasource/notes_attachment_data_source.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
 #include "components/datasource/desktop_data_source_win.h"
@@ -36,16 +39,17 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile)
       PathType::kDesktopWallpaper,
       std::make_unique<DesktopWallpaperDataClassHandlerWin>());
 #endif  // BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_ANDROID)
   handlers.emplace_back(PathType::kLocalPath,
                         std::make_unique<LocalImageDataClassHandler>(
                             VivaldiImageStore::kPathMappingUrl));
   handlers.emplace_back(PathType::kImage,
                         std::make_unique<LocalImageDataClassHandler>(
                             VivaldiImageStore::kImageUrl));
-  handlers.emplace_back(PathType::kSyncedStore,
-                        std::make_unique<NotesAttachmentDataClassHandler>());
   handlers.emplace_back(PathType::kCSSMod,
                         std::make_unique<CSSModsDataClassHandler>());
+#endif // !BUILDFLAG(IS_ANDROID)
+  handlers.emplace_back(PathType::kSyncedStore, std::make_unique<SyncedFileDataClassHandler>());
 
   data_class_handlers_ =
       base::flat_map<PathType, std::unique_ptr<VivaldiDataClassHandler>>(

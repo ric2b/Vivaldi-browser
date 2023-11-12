@@ -314,8 +314,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       ContextMenuContentType::ITEM_GROUP_MEDIA_AUDIO);
   request.support.video = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_VIDEO);
-  request.support.pictureinpicture =
-      base::FeatureList::IsEnabled(media::kPictureInPicture);
+  request.support.pictureinpicture = true;
   request.support.plugin = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN);
   request.support.canvas = content_type->SupportsGroup(

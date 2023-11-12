@@ -13,10 +13,10 @@
 #include "base/callback.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/worklet_devtools_debug_test_util.h"
@@ -73,6 +73,8 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
       const url::Origin& interest_group_join_origin,
       const absl::optional<std::string>& auction_signals_json,
       const absl::optional<std::string>& per_buyer_signals_json,
+      const absl::optional<GURL>& direct_from_seller_per_buyer_signals,
+      const absl::optional<GURL>& direct_from_seller_auction_signals,
       const absl::optional<base::TimeDelta> per_buyer_timeout,
       const url::Origin& browser_signal_seller_origin,
       const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
@@ -88,6 +90,8 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
       const std::string& interest_group_name,
       const absl::optional<std::string>& auction_signals_json,
       const absl::optional<std::string>& per_buyer_signals_json,
+      const absl::optional<GURL>& direct_from_seller_per_buyer_signals,
+      const absl::optional<GURL>& direct_from_seller_auction_signals,
       const std::string& seller_signals_json,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
@@ -133,7 +137,8 @@ class AuctionV8HelperTest : public testing::Test {
       base::test::TaskEnvironment::TimeSource time_mode =
           base::test::TaskEnvironment::TimeSource::SYSTEM_TIME)
       : task_environment_(time_mode) {
-    helper_ = AuctionV8Helper::Create(base::ThreadTaskRunnerHandle::Get());
+    helper_ = AuctionV8Helper::Create(
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     // Here since we're using the same thread for everything, we need to spin
     // the event loop to let AuctionV8Helper finish initializing "off-thread";
     // normally PostTask semantics will ensure that anything that uses it on its
@@ -242,10 +247,11 @@ class AuctionV8HelperTest : public testing::Test {
     mojo::Remote<auction_worklet::mojom::BidderWorklet> connector_pipe;
 
     helper_->v8_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&DebugConnector::Create, helper_,
-                                  base::SequencedTaskRunnerHandle::Get(),
-                                  std::move(debug_id),
-                                  connector_pipe.BindNewPipeAndPassReceiver()));
+        FROM_HERE,
+        base::BindOnce(&DebugConnector::Create, helper_,
+                       base::SequencedTaskRunner::GetCurrentDefault(),
+                       std::move(debug_id),
+                       connector_pipe.BindNewPipeAndPassReceiver()));
     connector_pipe->ConnectDevToolsAgent(std::move(agent_receiver));
     return connector_pipe;
   }
@@ -1522,6 +1528,40 @@ TEST_F(AuctionV8HelperTest, CloneWasmModule) {
   EXPECT_TRUE(error_msgs.empty());
   ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
   EXPECT_EQ(-1, int_result);
+}
+
+TEST_F(AuctionV8HelperTest, SerializeDeserialize) {
+  {
+    v8::Local<v8::Context> context = helper_->CreateContext();
+    v8::Context::Scope context_scope(context);
+
+    v8::MaybeLocal<v8::Value> result =
+        helper_->Deserialize(context, AuctionV8Helper::SerializedValue());
+    EXPECT_TRUE(result.IsEmpty());
+  }
+
+  {
+    v8::MaybeLocal<v8::Value> in = helper_->CreateValueFromJson(
+        helper_->scratch_context(),
+        R"({"a": false, "b": 42, "c": {"d": [1,2,3] } })");
+    AuctionV8Helper::SerializedValue serialized =
+        helper_->Serialize(helper_->scratch_context(), in.ToLocalChecked());
+    EXPECT_TRUE(serialized.IsOK());
+
+    // Decode in a different context from scratch_context... Multiple times.
+    for (int run = 0; run < 3; ++run) {
+      v8::Local<v8::Context> context = helper_->CreateContext();
+      v8::Context::Scope context_scope(context);
+      v8::MaybeLocal<v8::Value> deserialized =
+          helper_->Deserialize(context, serialized);
+      ASSERT_FALSE(deserialized.IsEmpty());
+      std::string deserialized_as_json;
+      ASSERT_TRUE(helper_->ExtractJson(context, deserialized.ToLocalChecked(),
+                                       &deserialized_as_json));
+      EXPECT_EQ(R"({"a":false,"b":42,"c":{"d":[1,2,3]}})",
+                deserialized_as_json);
+    }
+  }
 }
 
 }  // namespace auction_worklet

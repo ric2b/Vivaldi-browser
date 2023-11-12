@@ -7,7 +7,7 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/accessibility/tray_accessibility.h"
+#include "ash/system/accessibility/accessibility_detailed_view.h"
 #include "ash/system/tray/detailed_view_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -26,10 +26,13 @@ UnifiedAccessibilityDetailedViewController::
   Shell::Get()->accessibility_controller()->RemoveObserver(this);
 }
 
-views::View* UnifiedAccessibilityDetailedViewController::CreateView() {
+std::unique_ptr<views::View>
+UnifiedAccessibilityDetailedViewController::CreateView() {
   DCHECK(!view_);
-  view_ = new AccessibilityDetailedView(detailed_view_delegate_.get());
-  return view_;
+  auto view = std::make_unique<AccessibilityDetailedView>(
+      detailed_view_delegate_.get());
+  view_ = view.get();
+  return view;
 }
 
 std::u16string UnifiedAccessibilityDetailedViewController::GetAccessibleName()

@@ -4,7 +4,7 @@
 
 import {EduCoexistenceBrowserProxyImpl} from 'chrome://chrome-signin/edu_coexistence_browser_proxy.js';
 import {EduCoexistenceController} from 'chrome://chrome-signin/edu_coexistence_controller.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {TestEduCoexistenceBrowserProxy} from './edu_coexistence_test_util.js';
@@ -43,7 +43,7 @@ suite(edu_coexistence_controller_tests.suiteName, function() {
       };
     });
 
-    PolymerTest.clearBody();
+    document.body.innerHTML = window.trustedTypes.emptyHTML;
     // The controller wants an edu-coexistence-ui Polymer component
     // as a parameter.
     appComponent = document.createElement('edu-coexistence-ui');

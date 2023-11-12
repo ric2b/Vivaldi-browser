@@ -28,9 +28,12 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ash/arc/arc_optin_uma.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/optin/arc_terms_of_service_oobe_negotiator.h"
@@ -39,30 +42,33 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ash/arc/test/arc_data_removed_waiter.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/ash/login/ui/fake_login_display_host.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/ash/policy/arc/fake_android_management_client.h"
 #include "chrome/browser/ash/policy/handlers/powerwash_requirements_checker.h"
+#include "chrome/browser/ash/settings/device_settings_cache.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/arc_terms_of_service_screen_handler.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_cryptohome_misc_client.h"
+#include "chromeos/ash/components/login/auth/auth_metrics_recorder.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync/test/fake_sync_change_processor.h"
 #include "components/sync/test/sync_error_factory_mock.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -77,6 +83,10 @@
 #include "net/http/http_status_code.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+// TODO(b/254819616): Replace base::RunLoop().RunUntilIdle() with
+// task_environment_.RunUntilIdle() or Run() & Quit() to make the tests less
+// fragile.
 
 namespace arc {
 
@@ -256,17 +266,25 @@ TEST_F(ArcSessionManagerInLoginScreenTest, StopMiniArcIfNecessary) {
 class ArcSessionManagerTestBase : public testing::Test {
  public:
   ArcSessionManagerTestBase()
-      : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP),
-        user_manager_enabler_(std::make_unique<ash::FakeChromeUserManager>()),
-        test_local_state_(std::make_unique<TestingPrefServiceSimple>()) {
-    arc::prefs::RegisterLocalStatePrefs(test_local_state_->registry());
+      : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP,
+                          base::test::TaskEnvironment::TimeSource::MOCK_TIME),
+        user_manager_enabler_(std::make_unique<ash::FakeChromeUserManager>()) {
+    TestingBrowserProcess::GetGlobal()->SetLocalState(&test_local_state_);
+    arc::prefs::RegisterLocalStatePrefs(test_local_state_.registry());
+    ash::DemoSetupController::RegisterLocalStatePrefs(
+        test_local_state_.registry());
+    ash::device_settings_cache::RegisterPrefs(test_local_state_.registry());
+    user_manager::KnownUser::RegisterPrefs(test_local_state_.registry());
+    auth_metrics_recorder_ = ash::AuthMetricsRecorder::CreateForTesting();
   }
 
   ArcSessionManagerTestBase(const ArcSessionManagerTestBase&) = delete;
   ArcSessionManagerTestBase& operator=(const ArcSessionManagerTestBase&) =
       delete;
 
-  ~ArcSessionManagerTestBase() override = default;
+  ~ArcSessionManagerTestBase() override {
+    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
+  }
 
   void SetUp() override {
     ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
@@ -286,7 +304,7 @@ class ArcSessionManagerTestBase : public testing::Test {
 
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     TestingProfile::Builder profile_builder;
-    profile_builder.SetProfileName("user@gmail.com");
+    profile_builder.SetProfileName("user@example.com");
     profile_builder.SetPath(temp_dir_.GetPath().AppendASCII("TestArcProfile"));
 
     profile_ = profile_builder.Build();
@@ -312,6 +330,10 @@ class ArcSessionManagerTestBase : public testing::Test {
   }
 
  protected:
+  content::BrowserTaskEnvironment& task_environment() {
+    return task_environment_;
+  }
+
   TestingProfile* profile() { return profile_.get(); }
 
   ArcSessionManager* arc_session_manager() {
@@ -346,7 +368,8 @@ class ArcSessionManagerTestBase : public testing::Test {
   std::unique_ptr<ArcSessionManager> arc_session_manager_;
   user_manager::ScopedUserManager user_manager_enabler_;
   base::ScopedTempDir temp_dir_;
-  std::unique_ptr<TestingPrefServiceSimple> test_local_state_;
+  TestingPrefServiceSimple test_local_state_;
+  std::unique_ptr<ash::AuthMetricsRecorder> auth_metrics_recorder_;
 };
 
 class ArcSessionManagerTest : public ArcSessionManagerTestBase {
@@ -433,13 +456,48 @@ TEST_F(ArcSessionManagerTest, SignedInWorkflow) {
   // By default ARC is not enabled.
   EXPECT_EQ(ArcSessionManager::State::STOPPED, arc_session_manager()->state());
 
+  // When signed-in, enabling ARC results in the ACTIVE state.
+  arc_session_manager()->RequestEnable();
+  ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
+}
+
+TEST_F(ArcSessionManagerTest, SignedInWorkflowWithArcOnDemand) {
+  base::HistogramTester histogram_tester;
+
+  // Enable ARC on Demand feature.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(kArcOnDemandFeature);
+  // ARC on Demand is enabled only for managed users.
+  profile()->GetProfilePolicyConnector()->OverrideIsManagedForTesting(true);
+  // ARC on Demand is enabled only on ARCVM.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ash::switches::kEnableArcVm);
+
+  PrefService* const prefs = profile()->GetPrefs();
+  prefs->SetBoolean(prefs::kArcTermsAccepted, true);
+  prefs->SetBoolean(prefs::kArcSignedIn, true);
+  prefs->SetBoolean(prefs::kArcPackagesIsUpToDate, true);
+
+  arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
+
+  // By default ARC is not enabled.
+  EXPECT_EQ(ArcSessionManager::State::STOPPED, arc_session_manager()->state());
+
   // When signed-in, enabling ARC results in the READY state.
   arc_session_manager()->RequestEnable();
   ASSERT_EQ(ArcSessionManager::State::READY, arc_session_manager()->state());
+  histogram_tester.ExpectUniqueSample(
+      "Arc.DelayedActivation.ActivationIsDelayed", true, 1);
+
+  constexpr auto kDelay = base::Minutes(10);
+  task_environment().FastForwardBy(kDelay);
 
   // ARC starts after calling AllowActivation().
   arc_session_manager()->AllowActivation();
   ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
+  histogram_tester.ExpectUniqueTimeSample("Arc.DelayedActivation.Delay", kDelay,
+                                          1);
 }
 
 TEST_F(ArcSessionManagerTest, SignedInWorkflow_ActivationIsAlreadyAllowed) {
@@ -1309,8 +1367,6 @@ class ArcSessionManagerPolicyTest
     // Mocks OOBE environment so that IsArcOobeOptInActive() returns true.
     if (is_oobe_optin()) {
       CreateLoginDisplayHost();
-      TestingBrowserProcess::GetGlobal()->SetLocalState(&pref_service_);
-      user_manager::KnownUser::RegisterPrefs(pref_service_.registry());
     }
   }
 
@@ -1360,7 +1416,6 @@ class ArcSessionManagerPolicyTest
   }
 
   std::unique_ptr<ash::FakeLoginDisplayHost> fake_login_display_host_;
-  TestingPrefServiceSimple pref_service_;
 };
 
 TEST_P(ArcSessionManagerPolicyTest, SkippingTerms) {
@@ -1554,7 +1609,7 @@ TEST_F(ArcSessionManagerPublicSessionTest, AuthFailure) {
 
 class ArcSessionOobeOptInNegotiatorTest
     : public ArcSessionManagerTest,
-      public chromeos::ArcTermsOfServiceScreenView,
+      public ash::ArcTermsOfServiceScreenView,
       public testing::WithParamInterface<bool> {
  public:
   ArcSessionOobeOptInNegotiatorTest() {
@@ -1595,9 +1650,6 @@ class ArcSessionOobeOptInNegotiatorTest
 
     arc_session_manager()->SetProfile(profile());
     arc_session_manager()->Initialize();
-
-    TestingBrowserProcess::GetGlobal()->SetLocalState(&pref_service_);
-    user_manager::KnownUser::RegisterPrefs(pref_service_.registry());
 
     if (IsArcPlayStoreEnabledForProfile(profile()))
       arc_session_manager()->RequestEnable();
@@ -1642,17 +1694,17 @@ class ArcSessionOobeOptInNegotiatorTest
 
   void CloseLoginDisplayHost() { fake_login_display_host_.reset(); }
 
-  chromeos::ArcTermsOfServiceScreenView* view() { return this; }
+  ash::ArcTermsOfServiceScreenView* view() { return this; }
 
  private:
   // ArcTermsOfServiceScreenView:
   void AddObserver(
-      chromeos::ArcTermsOfServiceScreenViewObserver* observer) override {
+      ash::ArcTermsOfServiceScreenViewObserver* observer) override {
     observer_list_.AddObserver(observer);
   }
 
   void RemoveObserver(
-      chromeos::ArcTermsOfServiceScreenViewObserver* observer) override {
+      ash::ArcTermsOfServiceScreenViewObserver* observer) override {
     observer_list_.RemoveObserver(observer);
   }
 
@@ -1665,12 +1717,9 @@ class ArcSessionOobeOptInNegotiatorTest
 
   void Hide() override {}
 
-  void Bind(ash::ArcTermsOfServiceScreen* screen) override {}
-
-  base::ObserverList<chromeos::ArcTermsOfServiceScreenViewObserver>::Unchecked
+  base::ObserverList<ash::ArcTermsOfServiceScreenViewObserver>::Unchecked
       observer_list_;
   std::unique_ptr<ash::FakeLoginDisplayHost> fake_login_display_host_;
-  TestingPrefServiceSimple pref_service_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -1990,6 +2039,31 @@ class ArcTransitionToManagedTest
   ArcTransitionToManagedTest& operator=(const ArcTransitionToManagedTest&) =
       delete;
 
+  void SetUp() override {
+    ArcSessionManagerTest::SetUp();
+    ArcSessionManager::SetUiEnabledForTesting(true);
+
+    const std::string profile_name = profile()->GetProfileUserName();
+    identity_test_environment_.MakeAccountAvailable(profile_name);
+    signin::IdentityManager* identity_manager =
+        identity_test_environment_.identity_manager();
+    CoreAccountId account_id = identity_manager->PickAccountIdForAccount(
+        signin::GetTestGaiaIdForEmail(profile_name), profile_name);
+
+    // Inject a fake AndroidManagementClient to return MANAGED as the result.
+    arc_session_manager()->SetAndroidManagementCheckerFactoryForTesting(
+        base::BindLambdaForTesting([=](Profile* profile, bool retry_on_error) {
+          auto fake_client =
+              std::make_unique<policy::FakeAndroidManagementClient>();
+          fake_client->SetResult(
+              policy::AndroidManagementClient::Result::MANAGED);
+
+          return std::make_unique<ArcAndroidManagementChecker>(
+              profile, identity_manager, account_id, retry_on_error,
+              std::move(fake_client));
+        }));
+  }
+
   bool transition_feature_enabled() const { return std::get<0>(GetParam()); }
 
   bool user_become_managed() const { return std::get<1>(GetParam()); }
@@ -1997,13 +2071,12 @@ class ArcTransitionToManagedTest
   bool ShouldArcTransitionToManaged() const {
     return transition_feature_enabled() && user_become_managed();
   }
+
+ protected:
+  signin::IdentityTestEnvironment identity_test_environment_;
 };
 
 TEST_P(ArcTransitionToManagedTest, TransitionFlow) {
-  // Here we only test OnBackgroundAndroidManagementChecked impl, not the actual
-  // Android management check.
-  ArcSessionManager::EnableCheckAndroidManagementForTesting(false);
-
   // Initialize feature state.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatureState(kEnableUnmanagedToManagedTransitionFeature,
@@ -2024,10 +2097,7 @@ TEST_P(ArcTransitionToManagedTest, TransitionFlow) {
   // Emulate user management state change.
   profile()->GetProfilePolicyConnector()->OverrideIsManagedForTesting(
       user_become_managed());
-
-  // Android management check response.
-  arc_session_manager()->OnBackgroundAndroidManagementCheckedForTesting(
-      ArcAndroidManagementChecker::CheckResult::DISALLOWED);
+  base::RunLoop().RunUntilIdle();
 
   // Verify ARC state and ARC transition value.
   EXPECT_EQ(profile()->GetPrefs()->GetBoolean(prefs::kArcEnabled),

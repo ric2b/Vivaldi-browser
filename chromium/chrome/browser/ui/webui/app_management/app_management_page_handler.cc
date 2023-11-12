@@ -25,14 +25,12 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/app_constants/constants.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list_handle.h"
 #include "components/services/app_service/public/cpp/types_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -51,7 +49,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/session/connection_holder.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -172,14 +170,14 @@ AppManagementPageHandler::AppManagementPageHandler(
   app_registry_cache_observer_.Observe(
       &apps::AppServiceProxyFactory::GetForProfile(profile_)
            ->AppRegistryCache());
-  preferred_apps_list_handle_observer_.Observe(&preferred_apps_list_handle_);
+  preferred_apps_list_handle_observer_.Observe(&*preferred_apps_list_handle_);
 
   // On Chrome OS, file handler updates are already plumbed through
   // `OnAppUpdate()` since the change will also affect the intent filters.
   // There's no need to update twice.
 #if !BUILDFLAG(IS_CHROMEOS)
   auto* provider = web_app::WebAppProvider::GetForWebApps(profile_);
-  registrar_observation_.Observe(&provider->registrar());
+  registrar_observation_.Observe(&provider->registrar_unsafe());
 #endif
 }
 
@@ -271,41 +269,24 @@ void AppManagementPageHandler::SetPinned(const std::string& app_id,
 
 void AppManagementPageHandler::SetPermission(const std::string& app_id,
                                              apps::PermissionPtr permission) {
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
-        app_id, std::move(permission));
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
-        app_id, apps::ConvertPermissionToMojomPermission(permission));
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
+      app_id, std::move(permission));
 }
 
 void AppManagementPageHandler::SetResizeLocked(const std::string& app_id,
                                                bool locked) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (base::FeatureList::IsEnabled(apps::kAppServiceWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetResizeLocked(
-        app_id, locked);
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetResizeLocked(
-        app_id, locked ? apps::mojom::OptionalBool::kTrue
-                       : apps::mojom::OptionalBool::kFalse);
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->SetResizeLocked(
+      app_id, locked);
 #else
   NOTREACHED();
 #endif
 }
 
 void AppManagementPageHandler::Uninstall(const std::string& app_id) {
-  if (base::FeatureList::IsEnabled(apps::kAppServiceUninstallWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->Uninstall(
-        app_id, apps::UninstallSource::kAppManagement,
-        delegate_.GetUninstallAnchorWindow());
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->Uninstall(
-        app_id, apps::mojom::UninstallSource::kAppManagement,
-        delegate_.GetUninstallAnchorWindow());
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->Uninstall(
+      app_id, apps::UninstallSource::kAppManagement,
+      delegate_->GetUninstallAnchorWindow());
 }
 
 void AppManagementPageHandler::OpenNativeSettings(const std::string& app_id) {
@@ -316,7 +297,7 @@ void AppManagementPageHandler::OpenNativeSettings(const std::string& app_id) {
 void AppManagementPageHandler::SetPreferredApp(const std::string& app_id,
                                                bool is_preferred_app) {
   bool is_preferred_app_for_supported_links =
-      preferred_apps_list_handle_.IsPreferredAppForSupportedLinks(app_id);
+      preferred_apps_list_handle_->IsPreferredAppForSupportedLinks(app_id);
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
 
   if (is_preferred_app && !is_preferred_app_for_supported_links) {
@@ -331,7 +312,7 @@ void AppManagementPageHandler::GetOverlappingPreferredApps(
     GetOverlappingPreferredAppsCallback callback) {
   auto intent_filters = GetSupportedLinkIntentFilters(profile_, app_id);
   base::flat_set<std::string> app_ids =
-      preferred_apps_list_handle_.FindPreferredAppsForFilters(intent_filters);
+      preferred_apps_list_handle_->FindPreferredAppsForFilters(intent_filters);
   app_ids.erase(app_id);
   // Remove the use_browser app ID as it's mainly used inside the intent system
   // and is not an app in app management. This prevents an overlap dialog from
@@ -350,17 +331,11 @@ void AppManagementPageHandler::SetWindowMode(const std::string& app_id,
   auto* provider = web_app::WebAppProvider::GetForLocalAppsUnchecked(profile_);
 
   // Changing window mode is not allowed for isolated web apps.
-  if (provider->registrar().IsIsolated(app_id)) {
+  if (provider->registrar_unsafe().IsIsolated(app_id)) {
     NOTREACHED();
   } else {
-    if (base::FeatureList::IsEnabled(apps::kAppServiceWithoutMojom)) {
-      apps::AppServiceProxyFactory::GetForProfile(profile_)->SetWindowMode(
-          app_id, window_mode);
-
-    } else {
-      apps::AppServiceProxyFactory::GetForProfile(profile_)->SetWindowMode(
-          app_id, apps::ConvertWindowModeToMojomWindowMode(window_mode));
-    }
+    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetWindowMode(
+        app_id, window_mode);
   }
 #endif
 }
@@ -372,8 +347,7 @@ void AppManagementPageHandler::SetRunOnOsLoginMode(
   NOTREACHED();
 #else
   apps::AppServiceProxyFactory::GetForProfile(profile_)->SetRunOnOsLoginMode(
-      app_id, apps::ConvertRunOnOsLoginModeToMojomRunOnOsLoginMode(
-                  run_on_os_login_mode));
+      app_id, run_on_os_login_mode);
 #endif
 }
 
@@ -383,13 +357,8 @@ void AppManagementPageHandler::SetFileHandlingEnabled(const std::string& app_id,
       apps::PermissionType::kFileHandling,
       std::make_unique<apps::PermissionValue>(enabled),
       /*is_managed=*/false);
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
-        app_id, std::move(permission));
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
-        app_id, apps::ConvertPermissionToMojomPermission(permission));
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
+      app_id, std::move(permission));
 }
 
 void AppManagementPageHandler::ShowDefaultAppAssociationsUi() {
@@ -417,6 +386,10 @@ void AppManagementPageHandler::OnWebAppFileHandlerApprovalStateChanged(
     return;
 
   page_->OnAppChanged(std::move(app));
+}
+
+void AppManagementPageHandler::OnAppRegistrarDestroyed() {
+  registrar_observation_.Reset();
 }
 
 app_management::mojom::AppPtr AppManagementPageHandler::CreateUIAppPtr(
@@ -463,7 +436,7 @@ app_management::mojom::AppPtr AppManagementPageHandler::CreateUIAppPtr(
   app->hide_resize_locked = !update.ResizeLocked().has_value();
 #endif
   app->is_preferred_app =
-      preferred_apps_list_handle_.IsPreferredAppForSupportedLinks(
+      preferred_apps_list_handle_->IsPreferredAppForSupportedLinks(
           update.AppId());
   app->hide_more_settings = ShouldHideMoreSettings(app->id);
   app->hide_pin_to_shelf =
@@ -554,7 +527,7 @@ app_management::mojom::AppPtr AppManagementPageHandler::CreateUIAppPtr(
 
 #if !BUILDFLAG(IS_CHROMEOS)
   auto* provider = web_app::WebAppProvider::GetForLocalAppsUnchecked(profile_);
-  app->hide_window_mode = provider->registrar().IsIsolated(app->id);
+  app->hide_window_mode = provider->registrar_unsafe().IsIsolated(app->id);
 #endif
 
   app->publisher_id = update.PublisherId();
@@ -570,22 +543,12 @@ void AppManagementPageHandler::OpenStorePage(const std::string& app_id) {
     if (update.InstallSource() == apps::InstallSource::kPlayStore) {
       GURL url("https://play.google.com/store/apps/details?id=" +
                update.PublisherId());
-      if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-        proxy->LaunchAppWithUrl(arc::kPlayStoreAppId, ui::EF_NONE, url,
-                                apps::LaunchSource::kFromChromeInternal);
-      } else {
-        proxy->LaunchAppWithUrl(arc::kPlayStoreAppId, ui::EF_NONE, url,
-                                apps::mojom::LaunchSource::kFromChromeInternal);
-      }
+      proxy->LaunchAppWithUrl(arc::kPlayStoreAppId, ui::EF_NONE, url,
+                              apps::LaunchSource::kFromChromeInternal);
     } else if (update.InstallSource() == apps::InstallSource::kChromeWebStore) {
       GURL url("https://chrome.google.com/webstore/detail/" + update.AppId());
-      if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-        proxy->LaunchAppWithUrl(extensions::kWebStoreAppId, ui::EF_NONE, url,
-                                apps::LaunchSource::kFromChromeInternal);
-      } else {
-        proxy->LaunchAppWithUrl(extensions::kWebStoreAppId, ui::EF_NONE, url,
-                                apps::mojom::LaunchSource::kFromChromeInternal);
-      }
+      proxy->LaunchAppWithUrl(extensions::kWebStoreAppId, ui::EF_NONE, url,
+                              apps::LaunchSource::kFromChromeInternal);
     }
   });
 #endif

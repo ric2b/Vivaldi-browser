@@ -86,7 +86,7 @@ void Process::TerminateCurrentProcessImmediately(int exit_code) {
   ::TerminateProcess(GetCurrentProcess(), static_cast<UINT>(exit_code));
   // There is some ambiguity over whether the call above can return. Rather than
   // hitting confusing crashes later on we should crash right here.
-  IMMEDIATE_CRASH();
+  ImmediateCrash();
 }
 
 bool Process::IsValid() const {
@@ -259,16 +259,12 @@ bool Process::IsProcessBackgrounded() const {
 
 bool Process::SetProcessBackgrounded(bool value) {
   DCHECK(IsValid());
-  // Vista and above introduce a real background mode, which not only
-  // sets the priority class on the threads but also on the IO generated
-  // by it. Unfortunately it can only be set for the calling process.
-  DWORD priority;
-  if (is_current()) {
-    priority = value ? PROCESS_MODE_BACKGROUND_BEGIN :
-                       PROCESS_MODE_BACKGROUND_END;
-  } else {
-    priority = value ? IDLE_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
-  }
+  // Having a process remove itself from background mode is a potential
+  // priority inversion, and having a process put itself in background mode is
+  // broken in Windows 11 22H2. So, it is no longer supported. See
+  // https://crbug.com/1396155 for details.
+  DCHECK(!is_current());
+  const DWORD priority = value ? IDLE_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
 
   return (::SetPriorityClass(Handle(), priority) != 0);
 }

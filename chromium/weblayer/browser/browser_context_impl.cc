@@ -127,6 +127,10 @@ BrowserContextImpl::BrowserContextImpl(ProfileImpl* profile_impl,
   }
 
   site_isolation::SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(this);
+
+  // Ensure the delegate is initialized early to give it time to load its
+  // persistence.
+  GetOriginTrialsControllerDelegate();
 }
 
 BrowserContextImpl::~BrowserContextImpl() {
@@ -235,10 +239,10 @@ BrowserContextImpl::GetOriginTrialsControllerDelegate() {
   return OriginTrialsFactory::GetForBrowserContext(this);
 }
 
-download::InProgressDownloadManager*
-BrowserContextImpl::RetriveInProgressDownloadManager() {
+std::unique_ptr<download::InProgressDownloadManager>
+BrowserContextImpl::RetrieveInProgressDownloadManager() {
   // Override this to provide a connection to the wake lock service.
-  auto* download_manager = new download::InProgressDownloadManager(
+  auto download_manager = std::make_unique<download::InProgressDownloadManager>(
       nullptr, path_,
       path_.empty() ? nullptr
                     : GetDefaultStoragePartition()->GetProtoDatabaseProvider(),
@@ -305,8 +309,6 @@ void BrowserContextImpl::RegisterPrefs(
   pref_registry->RegisterBooleanPref(
       translate::prefs::kOfferTranslateEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  origin_trials::PrefServicePersistenceProvider::RegisterProfilePrefs(
-      pref_registry);
 #if BUILDFLAG(IS_ANDROID)
   site_engagement::SiteEngagementService::RegisterProfilePrefs(pref_registry);
   cdm::MediaDrmStorageImpl::RegisterProfilePrefs(pref_registry);

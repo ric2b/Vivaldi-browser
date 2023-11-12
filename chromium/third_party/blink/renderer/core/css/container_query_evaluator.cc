@@ -33,7 +33,20 @@ PhysicalAxes ContainerTypeAxes(const ComputedStyle& style) {
 bool NameMatches(const ComputedStyle& style,
                  const ContainerSelector& container_selector) {
   const AtomicString& name = container_selector.Name();
-  return name.IsNull() || (style.ContainerName().Contains(name));
+  if (name.IsNull())
+    return true;
+  if (const ScopedCSSNameList* container_name = style.ContainerName()) {
+    const HeapVector<Member<const ScopedCSSName>>& names =
+        container_name->GetNames();
+    for (auto scoped_name : names) {
+      if (scoped_name->GetName() == name) {
+        // TODO(crbug.com/1382790): Should only match if the name's tree scope
+        // is an inclusive-ancestor tree scope of the selector source.
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool TypeMatches(const ComputedStyle& style,
@@ -83,7 +96,7 @@ Element* ContainerQueryEvaluator::FindContainer(
 }
 
 bool ContainerQueryEvaluator::EvalAndAdd(
-    const Element& matching_element,
+    Element* style_container_candidate,
     const StyleRecalcContext& context,
     const ContainerQuery& query,
     ContainerSelectorCache& container_selector_cache,
@@ -95,8 +108,7 @@ bool ContainerQueryEvaluator::EvalAndAdd(
     return false;
 
   Element* starting_element =
-      selects_size ? context.container
-                   : matching_element.ParentOrShadowHostElement();
+      selects_size ? context.container : style_container_candidate;
   Element* container = CachedContainer(starting_element, query.Selector(),
                                        container_selector_cache);
   if (!container)

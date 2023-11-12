@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_tracker.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
@@ -20,6 +20,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
+#include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -93,7 +94,7 @@ class CastMediaRouteProviderTest : public testing::Test {
     provider_ = std::make_unique<CastMediaRouteProvider>(
         provider_remote_.BindNewPipeAndPassReceiver(), std::move(router_remote),
         &media_sink_service_, &app_discovery_service_, &message_handler_,
-        "hash-token", base::SequencedTaskRunnerHandle::Get());
+        "hash-token", base::SequencedTaskRunner::GetCurrentDefault());
 
     base::RunLoop().RunUntilIdle();
   }
@@ -330,7 +331,7 @@ TEST_F(CastMediaRouteProviderTest, GetRemotePlaybackCompatibleSinks) {
   // Enable the feature and it should return sinks compatible with the
   // RemotePlayback MediaSource.
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kMediaRemotingWithoutFullscreen);
+  feature_list.InitAndEnableFeature(media::kMediaRemotingWithoutFullscreen);
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   EXPECT_CALL(mock_router_,

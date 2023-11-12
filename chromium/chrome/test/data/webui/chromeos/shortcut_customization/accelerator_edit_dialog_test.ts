@@ -4,7 +4,6 @@
 
 import 'chrome://shortcut-customization/js/accelerator_edit_dialog.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
-import 'chrome://shortcut-customization/js/accelerator_edit_dialog.js';
 
 import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
@@ -14,7 +13,7 @@ import {AcceleratorEditViewElement} from 'chrome://shortcut-customization/js/acc
 import {AcceleratorInfo, Modifier} from 'chrome://shortcut-customization/js/shortcut_types.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
-import {createUserAccelerator} from './shortcut_customization_test_util.js';
+import {createUserAcceleratorInfo} from './shortcut_customization_test_util.js';
 
 suite('acceleratorEditDialogTest', function() {
   let viewElement: AcceleratorEditDialogElement|null = null;
@@ -30,12 +29,12 @@ suite('acceleratorEditDialogTest', function() {
   });
 
   test('LoadsBasicDialog', async () => {
-    const acceleratorInfo1: AcceleratorInfo = createUserAccelerator(
+    const acceleratorInfo1: AcceleratorInfo = createUserAcceleratorInfo(
         Modifier.CONTROL | Modifier.SHIFT,
         /*key=*/ 71,
         /*keyDisplay=*/ 'g');
 
-    const acceleratorInfo2: AcceleratorInfo = createUserAccelerator(
+    const acceleratorInfo2: AcceleratorInfo = createUserAcceleratorInfo(
         Modifier.CONTROL,
         /*key=*/ 67,
         /*keyDisplay=*/ 'c');
@@ -89,12 +88,12 @@ suite('acceleratorEditDialogTest', function() {
   });
 
   test('AddShortcut', async () => {
-    const acceleratorInfo1: AcceleratorInfo = createUserAccelerator(
+    const acceleratorInfo1: AcceleratorInfo = createUserAcceleratorInfo(
         Modifier.CONTROL | Modifier.SHIFT,
         /*key=*/ 71,
         /*keyDisplay=*/ 'g');
 
-    const acceleratorInfo2: AcceleratorInfo = createUserAccelerator(
+    const acceleratorInfo2: AcceleratorInfo = createUserAcceleratorInfo(
         Modifier.CONTROL | Modifier.SHIFT,
         /*key=*/ 67,
         /*keyDisplay=*/ 'c');

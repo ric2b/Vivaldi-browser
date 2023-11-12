@@ -10,9 +10,43 @@
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
 #include "third_party/blink/renderer/platform/graphics/paint/ref_counted_property_tree_state.h"
 #include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
-#include "third_party/blink/renderer/platform/testing/transformation_matrix_test_helpers.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace blink {
+
+inline gfx::Transform MakeScaleMatrix(double tx, double ty, double tz = 1) {
+  gfx::Transform t;
+  t.Scale3d(tx, ty, tz);
+  return t;
+}
+
+inline gfx::Transform MakeScaleMatrix(double s) {
+  return MakeScaleMatrix(s, s, 1);
+}
+
+inline gfx::Transform MakeTranslationMatrix(double tx,
+                                            double ty,
+                                            double tz = 0) {
+  gfx::Transform t;
+  t.Translate3d(tx, ty, tz);
+  return t;
+}
+
+inline gfx::Transform MakeRotationMatrix(double degrees) {
+  gfx::Transform t;
+  t.Rotate(degrees);
+  return t;
+}
+
+inline gfx::Transform MakeRotationMatrix(double degrees_x,
+                                         double degrees_y,
+                                         double degrees_z) {
+  gfx::Transform t;
+  t.RotateAboutZAxis(degrees_z);
+  t.RotateAboutYAxis(degrees_y);
+  t.RotateAboutXAxis(degrees_x);
+  return t;
+}
 
 // Convenient shorthands.
 inline const TransformPaintPropertyNode& t0() {
@@ -217,7 +251,8 @@ inline scoped_refptr<TransformPaintPropertyNode> Create2DTranslation(
     float x,
     float y) {
   return TransformPaintPropertyNode::Create(
-      parent, TransformPaintPropertyNode::State{gfx::Vector2dF(x, y)});
+      parent, TransformPaintPropertyNode::State{
+                  {gfx::Transform::MakeTranslation(x, y)}});
 }
 
 inline scoped_refptr<TransformPaintPropertyNode> CreateFixedPositionTranslation(
@@ -225,7 +260,8 @@ inline scoped_refptr<TransformPaintPropertyNode> CreateFixedPositionTranslation(
     float offset_x,
     float offset_y,
     const TransformPaintPropertyNode& scroll_translation_for_fixed) {
-  TransformPaintPropertyNode::State state{gfx::Vector2dF(offset_x, offset_y)};
+  TransformPaintPropertyNode::State state{
+      {gfx::Transform::MakeTranslation(offset_x, offset_y)}};
   state.scroll_translation_for_fixed = &scroll_translation_for_fixed;
   state.direct_compositing_reasons = CompositingReason::kFixedPosition;
   return TransformPaintPropertyNode::Create(parent, std::move(state));
@@ -233,7 +269,7 @@ inline scoped_refptr<TransformPaintPropertyNode> CreateFixedPositionTranslation(
 
 inline scoped_refptr<TransformPaintPropertyNode> CreateTransform(
     const TransformPaintPropertyNodeOrAlias& parent,
-    const TransformationMatrix& matrix,
+    const gfx::Transform& matrix,
     const gfx::Point3F& origin = gfx::Point3F(),
     CompositingReasons compositing_reasons = CompositingReason::kNone) {
   TransformPaintPropertyNode::State state{{matrix, origin}};
@@ -243,7 +279,7 @@ inline scoped_refptr<TransformPaintPropertyNode> CreateTransform(
 
 inline scoped_refptr<TransformPaintPropertyNode> CreateAnimatingTransform(
     const TransformPaintPropertyNodeOrAlias& parent,
-    const TransformationMatrix& matrix = TransformationMatrix(),
+    const gfx::Transform& matrix = gfx::Transform(),
     const gfx::Point3F& origin = gfx::Point3F()) {
   TransformPaintPropertyNode::State state{{matrix, origin}};
   state.direct_compositing_reasons =
@@ -259,7 +295,8 @@ inline scoped_refptr<TransformPaintPropertyNode> CreateScrollTranslation(
     float offset_y,
     const ScrollPaintPropertyNode& scroll,
     CompositingReasons compositing_reasons = CompositingReason::kNone) {
-  TransformPaintPropertyNode::State state{gfx::Vector2dF(offset_x, offset_y)};
+  TransformPaintPropertyNode::State state{
+      {gfx::Transform::MakeTranslation(offset_x, offset_y)}};
   state.direct_compositing_reasons = compositing_reasons;
   state.scroll = &scroll;
   return TransformPaintPropertyNode::Create(parent, std::move(state));
@@ -286,7 +323,7 @@ inline scoped_refptr<TransformPaintPropertyNode> CreateScrollTranslation(
       NewUniqueObjectId(), CompositorElementIdNamespace::kScroll);
   scroll_state.main_thread_scrolling_reasons = main_thread_reasons;
   TransformPaintPropertyNode::State translation_state{
-      gfx::Vector2dF(offset_x, offset_y)};
+      {gfx::Transform::MakeTranslation(offset_x, offset_y)}};
   translation_state.direct_compositing_reasons = compositing_reasons;
   translation_state.scroll = ScrollPaintPropertyNode::Create(
       *parent_scroll_translation->ScrollNode(), std::move(scroll_state));

@@ -88,7 +88,7 @@ class X11Window : public PlatformWindow,
   void SetCapture() override;
   void ReleaseCapture() override;
   bool HasCapture() const override;
-  void ToggleFullscreen() override;
+  void SetFullscreen(bool fullscreen, int64_t target_display_id) override;
   void Maximize() override;
   void Minimize() override;
   void Restore() override;
@@ -189,6 +189,8 @@ class X11Window : public PlatformWindow,
                  WmDragHandler::DragFinishedCallback drag_finished_callback,
                  WmDragHandler::LocationDelegate* delegate) override;
   void CancelDrag() override;
+  void UpdateDragImage(const gfx::ImageSkia& image,
+                       const gfx::Vector2d& offset) override;
 
   // XDragDropClient::Delegate
   absl::optional<gfx::AcceleratedWidget> GetDragWidget() override;

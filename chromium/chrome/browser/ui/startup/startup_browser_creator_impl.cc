@@ -54,7 +54,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
-#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_app_from_command_line.h"
+#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_web_app_from_command_line.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -73,8 +73,10 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
+#if BUILDFLAG(ENABLE_UPDATER)
 #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
 #endif
+#endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/win/conflicts/incompatible_applications_updater.h"
@@ -188,7 +190,7 @@ void StartupBrowserCreatorImpl::MaybeToggleFullscreen(Browser* browser) {
 void StartupBrowserCreatorImpl::Launch(
     Profile* profile,
     chrome::startup::IsProcessStartup process_startup,
-    std::unique_ptr<LaunchModeRecorder> launch_mode_recorder) {
+    std::unique_ptr<OldLaunchModeRecorder> launch_mode_recorder) {
   DCHECK(profile);
   profile_ = profile;
 
@@ -197,25 +199,25 @@ void StartupBrowserCreatorImpl::Launch(
   // Check the true process command line for --try-chrome-again=N rather than
   // the one parsed for startup URLs and such.
   if (launch_mode_recorder) {
-    if (!command_line_.GetSwitchValueNative(switches::kTryChromeAgain)
+    if (!command_line_->GetSwitchValueNative(switches::kTryChromeAgain)
              .empty()) {
-      launch_mode_recorder->SetLaunchMode(LaunchMode::kUserExperiment);
+      launch_mode_recorder->SetLaunchMode(OldLaunchMode::kUserExperiment);
     } else {
       launch_mode_recorder->SetLaunchMode(launch_result ==
                                                   LaunchResult::kWithGivenUrls
-                                              ? LaunchMode::kWithUrls
-                                              : LaunchMode::kToBeDecided);
+                                              ? OldLaunchMode::kWithUrls
+                                              : OldLaunchMode::kToBeDecided);
     }
   }
 
-  if (command_line_.HasSwitch(switches::kInstallChromeApp)) {
+  if (command_line_->HasSwitch(switches::kInstallChromeApp)) {
     install_chrome_app::InstallChromeApp(
-        command_line_.GetSwitchValueASCII(switches::kInstallChromeApp));
+        command_line_->GetSwitchValueASCII(switches::kInstallChromeApp));
   }
 
-  web_app::MaybeInstallAppFromCommandLine(command_line_, *profile);
+  web_app::MaybeInstallAppFromCommandLine(*command_line_, *profile);
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) && BUILDFLAG(ENABLE_UPDATER)
   if (process_startup == chrome::startup::IsProcessStartup::kYes) {
     // Check whether the auto-update system needs to be promoted from user
     // to system.
@@ -269,7 +271,8 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     Browser::CreateParams params = Browser::CreateParams(profile_, false);
     params.creation_source = Browser::CreationSource::kStartupCreator;
 #if BUILDFLAG(IS_LINUX)
-    params.startup_id = command_line_.GetSwitchValueASCII("desktop-startup-id");
+    params.startup_id =
+        command_line_->GetSwitchValueASCII("desktop-startup-id");
 #endif
     browser = Browser::Create(params);
   }
@@ -396,7 +399,20 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
   }
   }
 
-  browser->window()->Show();
+#if BUILDFLAG(IS_MAC)
+  // On Mac, LaunchServices will send activation events if necessary.
+  // Prefer not activating non-minimized browser window when opening new tabs,
+  // leaving the activation task to the system.
+  if (process_startup == chrome::startup::IsProcessStartup::kNo &&
+      BrowserList::GetInstance()->GetLastActive() == browser &&
+      !browser->window()->IsMinimized()) {
+    browser->window()->ShowInactive();
+  } else {
+#endif
+    browser->window()->Show();
+#if BUILDFLAG(IS_MAC)
+  }
+#endif
 
   return browser;
 }
@@ -404,7 +420,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
 StartupBrowserCreatorImpl::LaunchResult
 StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
     chrome::startup::IsProcessStartup process_startup) {
-  if (StartupBrowserCreator::ShouldLoadProfileWithoutWindow(command_line_)) {
+  if (StartupBrowserCreator::ShouldLoadProfileWithoutWindow(*command_line_)) {
     // Checking the flags this late in the launch should be redundant.
     // TODO(https://crbug.com/1300109): Remove by M104.
     NOTREACHED();
@@ -472,7 +488,7 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
     // these days with webpages in processes it is less of an issue.
     is_post_crash_launch = false;
 
-    if (!command_line_.HasSwitch(switches::kNoFirstRun)) {
+    if (!command_line_->HasSwitch(switches::kNoFirstRun)) {
       // Using the onboarding logic to add the welcome page early enough.
       welcome_enabled = true;
     }
@@ -498,13 +514,13 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
     behavior_options |= PROCESS_STARTUP;
   if (is_post_crash_launch)
     behavior_options |= IS_POST_CRASH_LAUNCH;
-  if (command_line_.HasSwitch(switches::kOpenInNewWindow))
+  if (command_line_->HasSwitch(switches::kOpenInNewWindow))
     behavior_options |= HAS_NEW_WINDOW_SWITCH;
   if (result.launch_result == LaunchResult::kWithGivenUrls)
     behavior_options |= HAS_CMD_LINE_TABS;
 
   BrowserOpenBehavior behavior = DetermineBrowserOpenBehavior(
-      StartupBrowserCreator::GetSessionStartupPref(command_line_, profile_),
+      StartupBrowserCreator::GetSessionStartupPref(*command_line_, profile_),
       behavior_options);
 
   SessionRestore::BehaviorBitmask restore_options =
@@ -527,7 +543,7 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 
   if (!vivaldi::IsVivaldiRunning()) {
   // Finally, add info bars.
-  AddInfoBarsIfNecessary(browser, profile_, command_line_, is_first_run_,
+  AddInfoBarsIfNecessary(browser, profile_, *command_line_, is_first_run_,
                          /*is_web_app=*/false);
   }
   return result.launch_result;
@@ -568,7 +584,7 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   StartupTabs tabs =
-      provider.GetCommandLineTabs(command_line_, cur_dir_, profile_);
+      provider.GetCommandLineTabs(*command_line_, cur_dir_, profile_);
   LaunchResult launch_result =
       tabs.empty() ? LaunchResult::kNormally : LaunchResult::kWithGivenUrls;
 
@@ -671,14 +687,14 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     // If the user has set the preference indicating URLs to show on opening,
     // read and add those.
     StartupTabs prefs_tabs =
-        provider.GetPreferencesTabs(command_line_, profile_);
+        provider.GetPreferencesTabs(*command_line_, profile_);
     AppendTabs(prefs_tabs, &tabs);
 
     // Potentially add the New Tab Page. Onboarding content is designed to
     // replace (and eventually funnel the user to) the NTP. Note
     // URLs from preferences are explicitly meant to override showing the NTP.
     if (onboarding_tabs.empty() && prefs_tabs.empty())
-      AppendTabs(provider.GetNewTabPageTabs(command_line_, profile_), &tabs);
+      AppendTabs(provider.GetNewTabPageTabs(*command_line_, profile_), &tabs);
 
     // Potentially add a tab appropriate to display the Privacy Sandbox
     // confirmaton dialog on top of. Ideally such a tab will already exist
@@ -691,7 +707,7 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
 
   if (!is_incognito_or_guest) {
   // Maybe add any tabs which the user has previously pinned.
-  AppendTabs(provider.GetPinnedTabs(command_line_, profile_), &tabs);
+  AppendTabs(provider.GetPinnedTabs(*command_line_, profile_), &tabs);
   }
 
   return {std::move(tabs), launch_result};

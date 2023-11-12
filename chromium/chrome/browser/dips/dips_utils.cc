@@ -10,6 +10,48 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
+bool TimestampRange::Update(base::Time time) {
+  bool modified = false;
+
+  if (!first.has_value() || time < first.value()) {
+    first = time;
+    modified = true;
+  }
+
+  if (!last.has_value() || time > last.value()) {
+    last = time;
+    modified = true;
+  }
+
+  return modified;
+}
+
+bool TimestampRange::IsNullOrWithin(TimestampRange other) const {
+  if (first.has_value()) {
+    if (!other.first.has_value() || other.first.value() > first.value()) {
+      return false;
+    }
+  }
+  if (last.has_value()) {
+    if (!other.last.has_value() || other.last.value() < last.value()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+std::ostream& operator<<(std::ostream& os, absl::optional<base::Time> time) {
+  if (time.has_value()) {
+    return os << time.value();
+  }
+  return os << "NULL";
+}
+
+std::ostream& operator<<(std::ostream& os, TimestampRange range) {
+  return os << "[" << range.first << ", " << range.last << "]";
+}
+
 // CookieAccessType:
 base::StringPiece CookieAccessTypeToString(CookieAccessType type) {
   switch (type) {

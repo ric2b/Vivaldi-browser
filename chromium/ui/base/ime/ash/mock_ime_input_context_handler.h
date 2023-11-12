@@ -28,8 +28,8 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) MockIMEInputContextHandler
   };
 
   struct DeleteSurroundingTextArg {
-    int32_t offset;
-    uint32_t length;
+    uint32_t num_char16s_before_cursor;
+    uint32_t num_char16s_after_cursor;
   };
 
   MockIMEInputContextHandler();
@@ -59,12 +59,12 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) MockIMEInputContextHandler
   absl::optional<GrammarFragment> GetGrammarFragmentAtCursor() override;
   bool AddGrammarFragments(
       const std::vector<GrammarFragment>& fragments) override;
-  bool SetSelectionRange(uint32_t start, uint32_t end) override;
-  void DeleteSurroundingText(int32_t offset, uint32_t length) override;
+  void DeleteSurroundingText(uint32_t num_char16s_before_cursor,
+                             uint32_t num_char16s_after_cursor) override;
   SurroundingTextInfo GetSurroundingTextInfo() override;
   void SendKeyEvent(KeyEvent* event) override;
   InputMethod* GetInputMethod() override;
-  void ConfirmCompositionText(bool reset_engine, bool keep_selection) override;
+  void ConfirmComposition(bool reset_engine) override;
   bool HasCompositionText() override;
   std::u16string GetCompositionText() override;
   ukm::SourceId GetClientSourceForMetrics() override;
@@ -75,9 +75,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) MockIMEInputContextHandler
 
   void set_cursor_range(gfx::Range range) { cursor_range_ = range; }
   int commit_text_call_count() const { return commit_text_call_count_; }
-  int set_selection_range_call_count() const {
-    return set_selection_range_call_count_;
-  }
   int update_preedit_text_call_count() const {
     return update_preedit_text_call_count_;
   }
@@ -114,7 +111,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_ASH) MockIMEInputContextHandler
 
  private:
   int commit_text_call_count_;
-  int set_selection_range_call_count_;
   int update_preedit_text_call_count_;
   int delete_surrounding_text_call_count_;
   std::u16string last_commit_text_;

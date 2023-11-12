@@ -5,6 +5,7 @@
 #include "components/sync/engine/events/get_updates_response_event.h"
 
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 
 namespace syncer {
@@ -58,11 +59,12 @@ std::string GetUpdatesResponseEvent::GetDetails() const {
   }
 }
 
-std::unique_ptr<base::DictionaryValue> GetUpdatesResponseEvent::GetProtoMessage(
+base::Value::Dict GetUpdatesResponseEvent::GetProtoMessage(
     bool include_specifics) const {
   return ClientToServerResponseToValue(
-      response_, {.include_specifics = include_specifics,
-                  .include_full_get_update_triggers = false});
+             response_, {.include_specifics = include_specifics,
+                         .include_full_get_update_triggers = false})
+      .TakeDict();
 }
 
 }  // namespace syncer

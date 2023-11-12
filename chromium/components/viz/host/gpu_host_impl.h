@@ -101,7 +101,7 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
     virtual void BindInterface(
         const std::string& interface_name,
         mojo::ScopedMessagePipeHandle interface_pipe) = 0;
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
     virtual void TerminateGpuProcess(const std::string& message) = 0;
 #endif
 
@@ -212,6 +212,8 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
 
 #if BUILDFLAG(IS_WIN)
   mojom::InfoCollectionGpuService* info_collection_gpu_service();
+  void AddChildWindow(gpu::SurfaceHandle parent_window,
+                      gpu::SurfaceHandle child_window);
 #endif
 
   // FEATURE_FORCE_ACCESS_TO_GPU
@@ -220,10 +222,10 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
  private:
   friend class GpuHostImplTestApi;
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   void InitOzone();
   void TerminateGpuProcess(const std::string& message);
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
   std::string GetShaderPrefixKey();
 
@@ -261,8 +263,6 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
 #if BUILDFLAG(IS_WIN)
   void DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) override;
   void DidUpdateDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) override;
-  void SetChildSurface(gpu::SurfaceHandle parent,
-                       gpu::SurfaceHandle child) override;
 #endif
   void GetIsolationKey(int32_t client_id,
                        const blink::WebGPUExecutionContextToken& token,
@@ -279,7 +279,9 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
   void LogFrame(base::Value frame_data) override;
 #endif
 
-  const raw_ptr<Delegate> delegate_;
+  // Can be modified in tests by GpuHostImplTestApi.
+  raw_ptr<Delegate> delegate_;
+
   mojo::Remote<mojom::VizMain> viz_main_;
   const InitParams params_;
 

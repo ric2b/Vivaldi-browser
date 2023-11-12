@@ -20,6 +20,9 @@ import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.chrome.R;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /**
  * A factory that creates text and favicon bitmaps.
  */
@@ -87,6 +90,10 @@ public class TitleBitmapFactory {
         try {
             Bitmap b = Bitmap.createBitmap(
                     mFaviconDimension, mFaviconDimension, Bitmap.Config.ARGB_8888);
+            // Note(david@vivaldi.com): We rather scale the image here with the correct density
+            // instead of using a canvas. This allows us to scale the favicons properly.
+            b = Bitmap.createScaledBitmap(favicon, mFaviconDimension, mFaviconDimension, false);
+            if (!ChromeApplicationImpl.isVivaldi()) {
             Canvas c = new Canvas(b);
             if (favicon.getWidth() > mFaviconDimension || favicon.getHeight() > mFaviconDimension) {
                 float scale = (float) mFaviconDimension
@@ -97,6 +104,7 @@ public class TitleBitmapFactory {
                         Math.round((mFaviconDimension - favicon.getHeight()) / 2.0f));
             }
             c.drawBitmap(favicon, 0, 0, null);
+            }
             return b;
         } catch (OutOfMemoryError ex) {
             Log.e(TAG, "OutOfMemoryError while building favicon texture.");

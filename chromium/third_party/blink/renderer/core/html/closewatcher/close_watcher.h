@@ -7,6 +7,7 @@
 
 #include "base/time/time.h"
 #include "third_party/blink/public/mojom/close_watcher/close_listener.mojom-blink.h"
+#include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
@@ -18,6 +19,7 @@ namespace blink {
 class CloseWatcherOptions;
 class LocalDOMWindow;
 class KeyboardEvent;
+class HTMLDialogElement;
 
 class CloseWatcher final : public EventTargetWithInlineData,
                            public ExecutionContextClient {
@@ -28,15 +30,24 @@ class CloseWatcher final : public EventTargetWithInlineData,
                               CloseWatcherOptions*,
                               ExceptionState&);
 
-  static CloseWatcher* Create(LocalDOMWindow*);
+  // We have a few use counters which we trigger only for the <dialog> case,
+  // where we're trying to determine whether it's web-compatible or not to use
+  // CloseWatcher rules for <dialog>s. (Namely, sometimes closing multiple
+  // <dialog>s with a single close signal, and sometimes skipping cancel
+  // events.) This argument should be removed after web-compatibility is
+  // determined; ultimately the CloseWatcher code should not be aware of the
+  // existence of <dialog>, for good layering.
+  static CloseWatcher* Create(LocalDOMWindow*,
+                              HTMLDialogElement* dialog_for_use_counters);
 
-  explicit CloseWatcher(LocalDOMWindow*);
+  explicit CloseWatcher(LocalDOMWindow*,
+                        HTMLDialogElement* dialog_for_use_counters);
   void Trace(Visitor*) const override;
 
   bool IsClosed() const { return state_ == State::kClosed; }
   bool IsGroupedWithPrevious() const { return grouped_with_previous_; }
 
-  void close();
+  void close(bool* cancel_skipped = nullptr);
   void destroy();
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(cancel, kCancel)
@@ -64,47 +75,35 @@ class CloseWatcher final : public EventTargetWithInlineData,
 
     void Trace(Visitor*) const;
 
-    void DidReceiveUserActivation() {
-      user_activation_time_ = base::TimeTicks::Now();
-    }
-    void ConsumeCloseWatcherCancelability() {
-      last_used_user_activation_time_ = user_activation_time_;
-    }
-    bool CanCloseWatcherFireCancel() const {
-      return last_used_user_activation_time_ != user_activation_time_;
-    }
-
-    void EscapeKeyHandler(KeyboardEvent*);
+    void EscapeKeyHandler(KeyboardEvent*, bool* cancel_skipped);
 
    private:
     // mojom::blink::CloseListener override:
     void Signal() final;
+    void SignalInternal(bool* cancel_skipped);
 
     HeapLinkedHashSet<Member<CloseWatcher>> watchers_;
 
     // Holds a pipe which the service uses to notify this object
     // when the idle state has changed.
     HeapMojoReceiver<mojom::blink::CloseListener, WatcherStack> receiver_;
-
-    // Tracks last use activation time consumed by a close watcher vs. last
-    // time user activation happened:
-    // https://wicg.github.io/close-watcher/#timestamp-of-last-activation-used-for-close-watchers
-    base::TimeTicks user_activation_time_;
-    base::TimeTicks last_used_user_activation_time_;
-
     Member<LocalDOMWindow> window_;
   };
 
  private:
-  static CloseWatcher* CreateInternal(LocalDOMWindow*,
-                                      WatcherStack&,
-                                      CloseWatcherOptions*);
+  static CloseWatcher* CreateInternal(
+      LocalDOMWindow*,
+      WatcherStack&,
+      CloseWatcherOptions*,
+      HTMLDialogElement* dialog_for_use_counters);
 
   enum class State { kActive, kClosed };
   State state_ = State::kActive;
   bool dispatching_cancel_ = false;
   bool grouped_with_previous_ = false;
   bool created_with_user_activation_ = false;
+  Member<AbortSignal::AlgorithmHandle> abort_handle_;
+  Member<HTMLDialogElement> dialog_for_use_counters_;
 };
 
 }  // namespace blink

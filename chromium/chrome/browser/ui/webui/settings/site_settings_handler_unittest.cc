@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/json/values_util.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
@@ -29,6 +30,8 @@
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+#include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/permissions/notification_permission_review_service_factory.h"
 #include "chrome/browser/permissions/notifications_engagement_service_factory.h"
@@ -294,18 +297,8 @@ class SiteSettingsHandlerTest : public testing::Test,
   void RecordNotification(permissions::NotificationsEngagementService* service,
                           GURL url,
                           int daily_avarage_count) {
-    base::Time date = base::Time::Now();
-    base::Time::Exploded date_exploded;
-    date.LocalExplode(&date_exploded);
-    // |day_of_week| returns 0 for Sunday, but NotificationEngagementService
-    // starts counting on Mondays. So here, setting Sunday as 7 to record
-    // notifications correctly and to prevent calculation errors.
-    int day_of_week =
-        !date_exploded.day_of_week ? 7 : date_exploded.day_of_week;
-
-    // Notification count holds in buckets for each monday. So to calculate
-    // necessary notification count, here the day_of_week is calculated.
-    int total_count = day_of_week * daily_avarage_count;
+    // This many notifications were recorded during the past week in total.
+    int total_count = daily_avarage_count * 7;
     service->RecordNotificationDisplayed(url, total_count);
   }
 
@@ -2212,6 +2205,137 @@ TEST_F(SiteSettingsHandlerTest, IncludeWebUISchemesInGetOriginPermissions) {
   }
 }
 
+class PersistentPermissionsSiteSettingsHandlerTest
+    : public SiteSettingsHandlerTest {
+  void SetUp() override {
+    SiteSettingsHandlerTest::SetUp();
+    handler_ = std::make_unique<SiteSettingsHandler>(&profile_);
+    handler_->set_web_ui(web_ui());
+    handler_->AllowJavascript();
+    web_ui()->ClearTrackedCalls();
+  }
+
+  void TearDown() override { handler_->DisallowJavascript(); }
+
+ public:
+  PersistentPermissionsSiteSettingsHandlerTest() {
+    // TODO(crbug.com/1373962): Remove this feature list enabler
+    // when Persistent Permissions is launched.
+
+    // Enable Persisted Permissions.
+    feature_list_.InitAndEnableFeature(
+        features::kFileSystemAccessPersistentPermissions);
+  }
+
+ protected:
+  std::unique_ptr<SiteSettingsHandler> handler_;
+  TestingProfile profile_;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// GetFileSystemGrants() returns the allowed grants for a given origin
+// based on the File System Access persistent permissions policy.
+TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
+       HandleGetFileSystemGrants) {
+  ChromeFileSystemAccessPermissionContext* context =
+      FileSystemAccessPermissionContextFactory::GetForProfile(&profile_);
+
+  auto kTestOrigin1 = url::Origin::Create(GURL("https://www.a.com"));
+  auto kTestOrigin2 = url::Origin::Create(GURL("https://www.b.com"));
+
+  const base::FilePath kTestPath = base::FilePath(FILE_PATH_LITERAL("/a/b/"));
+  const base::FilePath kTestPath2 = base::FilePath(FILE_PATH_LITERAL("/c/d/"));
+  const base::FilePath kTestPath3 = base::FilePath(FILE_PATH_LITERAL("/e/"));
+  const base::FilePath kTestPath4 =
+      base::FilePath(FILE_PATH_LITERAL("/f/g/h/"));
+
+  // Populate the `grants` object with permissions.
+  auto file_read_grant = context->GetPersistedReadPermissionGrantForTesting(
+      kTestOrigin1, kTestPath,
+      ChromeFileSystemAccessPermissionContext::HandleType::kFile);
+  auto file_write_grant = context->GetPersistedWritePermissionGrantForTesting(
+      kTestOrigin2, kTestPath2,
+      ChromeFileSystemAccessPermissionContext::HandleType::kFile);
+  auto directory_read_grant =
+      context->GetPersistedReadPermissionGrantForTesting(
+          kTestOrigin1, kTestPath3,
+          ChromeFileSystemAccessPermissionContext::HandleType::kDirectory);
+  auto directory_write_grant =
+      context->GetPersistedWritePermissionGrantForTesting(
+          kTestOrigin2, kTestPath4,
+          ChromeFileSystemAccessPermissionContext::HandleType::kDirectory);
+
+  EXPECT_EQ(context->GetPermissionGrants(kTestOrigin1).file_read_grants.size(),
+            1UL);
+  EXPECT_EQ(context->GetPermissionGrants(kTestOrigin2).file_read_grants.size(),
+            0UL);
+  EXPECT_EQ(context->GetPermissionGrants(kTestOrigin1).file_write_grants.size(),
+            0UL);
+  EXPECT_EQ(context->GetPermissionGrants(kTestOrigin2).file_write_grants.size(),
+            1UL);
+  EXPECT_EQ(
+      context->GetPermissionGrants(kTestOrigin1).directory_read_grants.size(),
+      1UL);
+  EXPECT_EQ(
+      context->GetPermissionGrants(kTestOrigin2).directory_read_grants.size(),
+      0UL);
+  EXPECT_EQ(
+      context->GetPermissionGrants(kTestOrigin1).directory_write_grants.size(),
+      0UL);
+  EXPECT_EQ(
+      context->GetPermissionGrants(kTestOrigin2).directory_write_grants.size(),
+      1UL);
+
+  url::Origin originToTest = kTestOrigin1;
+  base::Value::List get_file_system_origin_permissions_args;
+  get_file_system_origin_permissions_args.Append(kCallbackId);
+  get_file_system_origin_permissions_args.Append(originToTest.GetURL().spec());
+
+  handler_->HandleGetFileSystemGrants(get_file_system_origin_permissions_args);
+  const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
+  const base::Value::List& grants = data.arg3()->GetList();
+
+  EXPECT_EQ(grants.size(), 2UL);
+
+  EXPECT_FALSE(grants[0].FindKey(site_settings::kIsDirectory)->GetBool());
+  EXPECT_TRUE(grants[1].FindKey(site_settings::kIsDirectory)->GetBool());
+
+  EXPECT_EQ(grants[0].FindKey(site_settings::kDisplayName)->GetString(),
+            FilePathToValue(file_read_grant->GetPath()).GetString());
+  EXPECT_EQ(grants[1].FindKey(site_settings::kDisplayName)->GetString(),
+            FilePathToValue(directory_read_grant->GetPath()).GetString());
+
+  EXPECT_FALSE(grants[0].FindKey(site_settings::kIsWritable)->GetBool());
+  EXPECT_FALSE(grants[1].FindKey(site_settings::kIsWritable)->GetBool());
+
+  originToTest = kTestOrigin2;
+  base::Value::List get_file_system_origin2_permissions_args;
+  get_file_system_origin2_permissions_args.Append(kCallbackId);
+  get_file_system_origin2_permissions_args.Append(originToTest.GetURL().spec());
+
+  handler_->HandleGetFileSystemGrants(get_file_system_origin2_permissions_args);
+  const content::TestWebUI::CallData& origin2_data =
+      *web_ui()->call_data().back();
+  const base::Value::List& origin2_grants = origin2_data.arg3()->GetList();
+
+  EXPECT_EQ(origin2_grants.size(), 2UL);
+
+  EXPECT_FALSE(
+      origin2_grants[0].FindKey(site_settings::kIsDirectory)->GetBool());
+  EXPECT_TRUE(
+      origin2_grants[1].FindKey(site_settings::kIsDirectory)->GetBool());
+
+  EXPECT_EQ(origin2_grants[0].FindKey(site_settings::kDisplayName)->GetString(),
+            FilePathToValue(file_write_grant->GetPath()).GetString());
+  EXPECT_EQ(origin2_grants[1].FindKey(site_settings::kDisplayName)->GetString(),
+            FilePathToValue(directory_write_grant->GetPath()).GetString());
+
+  EXPECT_TRUE(origin2_grants[0].FindKey(site_settings::kIsWritable)->GetBool());
+  EXPECT_TRUE(origin2_grants[1].FindKey(site_settings::kIsWritable)->GetBool());
+}
+
 namespace {
 
 constexpr char kUsbPolicySetting[] = R"(
@@ -2780,6 +2904,45 @@ TEST_P(SiteSettingsHandlerTest, HandleClearUnpartitionedUsage) {
 
   EXPECT_EQ(0, std::distance(handler()->browsing_data_model_->begin(),
                              handler()->browsing_data_model_->end()));
+
+// Clearing Site Specific Media Licenses Tests
+#if BUILDFLAG(IS_WIN)
+  PrefService* user_prefs = profile()->GetPrefs();
+
+  // In the beginning, there should be nothing stored in the origin data.
+  ASSERT_EQ(0u, user_prefs->GetDict(prefs::kMediaCdmOriginData).size());
+
+  base::Value::Dict entry_google;
+  entry_google.Set(
+      "https://www.google.com/",
+      base::UnguessableTokenToValue(base::UnguessableToken::Create()));
+
+  base::Value::Dict entry_example;
+  entry_example.Set(
+      "https://www.example.com/",
+      base::UnguessableTokenToValue(base::UnguessableToken::Create()));
+
+  {
+    ScopedDictPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
+
+    base::Value::Dict& dict = update.Get();
+    dict.Set("https://www.google.com/", std::move(entry_google));
+    dict.Set("https://www.example.com/", std::move(entry_example));
+  }
+  // The code above adds origin data for both google and example.com
+  EXPECT_EQ(2u, user_prefs->GetDict(prefs::kMediaCdmOriginData).size());
+
+  args = base::Value::List();
+  args.Append("https://www.google.com/");
+  handler()->HandleClearUnpartitionedUsage(args);
+
+  // The code clears the origin data for just google.com, so there should still
+  // be the origin data for example.com left.
+  EXPECT_EQ(1u, user_prefs->GetDict(prefs::kMediaCdmOriginData).size());
+  EXPECT_TRUE(user_prefs->GetDict(prefs::kMediaCdmOriginData)
+                  .contains("https://www.example.com/"));
+
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 TEST_F(SiteSettingsHandlerTest, ClearClientHints) {
@@ -2879,21 +3042,20 @@ TEST_F(SiteSettingsHandlerTest, ClearReducedAcceptLanguage) {
   ContentSettingsForOneType accept_language_settings;
 
   std::string language = "en-us";
-  base::Value accept_language_dictionary(base::Value::Type::DICTIONARY);
-  accept_language_dictionary.SetKey("reduce-accept-language",
-                                    base::Value(language));
+  base::Value::Dict accept_language_dictionary;
+  accept_language_dictionary.Set("reduce-accept-language", language);
 
   // Add setting for the hosts.
   for (const auto& host : hosts) {
     host_content_settings_map->SetWebsiteSettingDefaultScope(
         host, GURL(), ContentSettingsType::REDUCED_ACCEPT_LANGUAGE,
-        accept_language_dictionary.Clone());
+        base::Value(accept_language_dictionary.Clone()));
   }
 
   // Clear at the eTLD+1 level and ensure affected origins are cleared.
-  base::Value args(base::Value::Type::LIST);
+  base::Value::List args;
   args.Append("example.com");
-  handler()->HandleClearEtldPlus1DataAndCookies(args.GetList());
+  handler()->HandleClearEtldPlus1DataAndCookies(args);
   host_content_settings_map->GetSettingsForOneType(
       ContentSettingsType::REDUCED_ACCEPT_LANGUAGE, &accept_language_settings);
   EXPECT_EQ(2U, accept_language_settings.size());
@@ -2914,9 +3076,9 @@ TEST_F(SiteSettingsHandlerTest, ClearReducedAcceptLanguage) {
 
   // Clear unpartitioned usage data, which should only affect the specific
   // origin.
-  args.ClearList();
+  args.clear();
   args.Append("https://google.com/");
-  handler()->HandleClearUnpartitionedUsage(args.GetList());
+  handler()->HandleClearUnpartitionedUsage(args);
 
   // Validate the reduce accept language has been cleared.
   host_content_settings_map->GetSettingsForOneType(
@@ -2934,9 +3096,9 @@ TEST_F(SiteSettingsHandlerTest, ClearReducedAcceptLanguage) {
   // Clear unpartitioned usage data through HTTPS scheme, make sure https site
   // reduced accept language have been cleared when the specific origin HTTPS
   // scheme exist.
-  args.ClearList();
+  args.clear();
   args.Append("http://www.google.com/");
-  handler()->HandleClearUnpartitionedUsage(args.GetList());
+  handler()->HandleClearUnpartitionedUsage(args);
 
   // Validate the reduced accept language has been cleared.
   host_content_settings_map->GetSettingsForOneType(
@@ -3356,8 +3518,7 @@ TEST_F(SiteSettingsHandlerTest, PopulateNotificationPermissionReviewData) {
   auto* notification_engagement_service =
       NotificationsEngagementServiceFactory::GetForProfile(profile());
   std::string displayedDate =
-      notification_engagement_service->GetBucketLabelForLastMonday(
-          base::Time::Now());
+      notification_engagement_service->GetBucketLabel(base::Time::Now());
 
   auto* site_engagement_service =
       site_engagement::SiteEngagementServiceFactory::GetForProfile(profile());

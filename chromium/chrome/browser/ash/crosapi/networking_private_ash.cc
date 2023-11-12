@@ -10,6 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/ash/components/network/device_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/networking_private.mojom-forward.h"
 #include "chromeos/crosapi/mojom/networking_private.mojom.h"
@@ -120,17 +121,17 @@ SplitDictionaryAdapterCallback(DictionarySuccessOrFailureCallback callback) {
 using ListValueSuccessOrFailureCallback =
     base::OnceCallback<void(mojom::ListValueSuccessOrErrorReturnPtr)>;
 
-std::pair<base::OnceCallback<void(std::unique_ptr<base::ListValue>)>,
+std::pair<base::OnceCallback<void(base::Value::List)>,
           extensions::NetworkingPrivateDelegate::FailureCallback>
 SplitListValueAdapterCallback(ListValueSuccessOrFailureCallback callback) {
   auto [success, failure] = base::SplitOnceCallback(std::move(callback));
 
   return {base::BindOnce(
               [](ListValueSuccessOrFailureCallback callback,
-                 std::unique_ptr<base::ListValue> result) {
+                 base::Value::List result) {
                 std::move(callback).Run(
                     mojom::ListValueSuccessOrErrorReturn::NewSuccessResult(
-                        std::move(*result).TakeList()));
+                        std::move(result)));
               },
               std::move(success)),
           base::BindOnce(

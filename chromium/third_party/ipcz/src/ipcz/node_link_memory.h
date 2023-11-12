@@ -36,6 +36,8 @@ class NodeLink;
 // between the two endpoint nodes.
 class NodeLinkMemory : public RefCounted {
  public:
+  static constexpr BufferId kPrimaryBufferId{0};
+
   // The maximum number of initial portals supported on ConnectNode() API calls.
   // The first kMaxInitialPortals SublinkIds on a NodeLinkMemory will always be
   // reserved for use by initial portals.
@@ -162,6 +164,7 @@ class NodeLinkMemory : public RefCounted {
       const Fragment& fragment);
 
   const Ref<Node> node_;
+  const bool allow_memory_expansion_for_parcel_data_;
 
   // The underlying BufferPool. Note that this object is itself thread-safe, so
   // access to it is not synchronized by NodeLinkMemory.

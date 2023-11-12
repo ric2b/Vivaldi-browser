@@ -343,16 +343,31 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     return previous_break_token_;
   }
 
-  // Return true if we need to break before or inside any child, doesn't matter
-  // if it's in-flow or not. As long as there are only breaks in parallel flows,
-  // we may continue layout, but when we're done, we'll need to create a break
+  // Return true if a break has been inserted, doesn't matter if it's in the
+  // same flow or not. As long as there are only breaks in parallel flows, we
+  // may continue layout, but when we're done, we'll need to create a break
   // token for this fragment nevertheless, so that we re-enter, descend and
   // resume at the broken children in the next fragmentainer.
-  bool HasChildBreakInside() const {
-    if (!child_break_tokens_.empty())
+  bool HasInsertedChildBreak() const {
+    if (child_break_tokens_.empty())
+      return false;
+    for (const NGBreakToken* child_token : child_break_tokens_) {
+      const auto* block_child_token = DynamicTo<NGBlockBreakToken>(child_token);
+      if (!block_child_token || !block_child_token->IsRepeated())
+        return true;
+    }
+    return false;
+  }
+
+  // Return true if we need to break inside this node, the way things are
+  // currently looking. This should only be called at the end of layout, right
+  // before creating a fragment.
+  bool ShouldBreakInside() const {
+    if (HasInsertedChildBreak())
       return true;
-    // Inline nodes produce a "finished" trailing break token even if we don't
-    // need to block-fragment.
+    // If there's an outgoing inline break-token at this point, and we're about
+    // to finish layout, it means that inline layout needs to continue in the
+    // next fragmentianer.
     if (last_inline_break_token_)
       return true;
     // Grid layout doesn't insert break before tokens, and instead set this bit
@@ -366,11 +381,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool HasInflowChildBreakInside() const {
     return has_inflow_child_break_inside_;
   }
-
-  // Return true if we need to break before or inside any floated child. Floats
-  // are encapsulated by their container if the container establishes a new
-  // block formatting context.
-  bool HasFloatBreakInside() const { return has_float_break_inside_; }
 
   // Report space shortage, i.e. how much more space would have been sufficient
   // to prevent some piece of content from breaking. This information may be
@@ -661,6 +671,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   }
 
   // The |NGFragmentItemsBuilder| for the inline formatting context of this box.
+  bool HasItems() const final { return items_builder_; }
   NGFragmentItemsBuilder* ItemsBuilder() { return items_builder_; }
   void SetItemsBuilder(NGFragmentItemsBuilder* builder) {
     items_builder_ = builder;
@@ -761,7 +772,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_first_for_node_ = true;
   bool did_break_self_ = false;
   bool has_inflow_child_break_inside_ = false;
-  bool has_float_break_inside_ = false;
   bool has_forced_break_ = false;
   bool is_new_fc_ = false;
   bool has_seen_all_children_ = false;

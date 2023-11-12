@@ -13,8 +13,8 @@
 #include "base/clang_profiling_buildflags.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -26,7 +26,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/client_native_pixmap_factory.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -39,12 +39,12 @@ namespace viz {
 namespace {
 
 bool MustSignalGmbConfigReadyForTest() {
-#if defined(USE_OZONE)
-    // Some Ozone platforms (Ozone/X11) require GPU process initialization to
-    // determine GMB support.
-    return ui::OzonePlatform::GetInstance()
-        ->GetPlatformProperties()
-        .fetch_buffer_formats_for_gmb_on_gpu;
+#if BUILDFLAG(IS_OZONE)
+  // Some Ozone platforms (Ozone/X11) require GPU process initialization to
+  // determine GMB support.
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .fetch_buffer_formats_for_gmb_on_gpu;
 #else
   return false;
 #endif
@@ -285,7 +285,7 @@ class HostGpuMemoryBufferManagerTest : public ::testing::Test {
     gpu_memory_buffer_manager_ = std::make_unique<HostGpuMemoryBufferManager>(
         std::move(gpu_service_provider), 1,
         std::move(gpu_memory_buffer_support),
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     if (MustSignalGmbConfigReadyForTest())
       gpu_memory_buffer_manager_->native_configurations_initialized_.Set();
   }
@@ -294,10 +294,10 @@ class HostGpuMemoryBufferManagerTest : public ::testing::Test {
   // Mac and some Ozone platforms). Abort the test in those platforms.
   bool IsNativePixmapConfigSupported() {
     bool native_pixmap_supported = false;
-#if defined(USE_OZONE)
-      native_pixmap_supported =
-          ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
-              gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::GPU_READ);
+#if BUILDFLAG(IS_OZONE)
+    native_pixmap_supported =
+        ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
+            gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::GPU_READ);
 #elif BUILDFLAG(IS_ANDROID)
     native_pixmap_supported =
         base::AndroidHardwareBufferCompat::IsSupportAvailable();
@@ -522,8 +522,8 @@ TEST_F(HostGpuMemoryBufferManagerTest, CancelRequestsForShutdown) {
   // Flush tasks posted back to main thread from CreateGpuMemoryBuffer() to make
   // sure they are harmless.
   base::RunLoop loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                   loop.QuitClosure());
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                           loop.QuitClosure());
   loop.Run();
 }
 

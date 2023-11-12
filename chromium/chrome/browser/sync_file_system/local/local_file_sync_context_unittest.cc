@@ -15,9 +15,9 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/test_future.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/local/canned_syncable_file_system.h"
 #include "chrome/browser/sync_file_system/local/local_file_change_tracker.h"
 #include "chrome/browser/sync_file_system/local/sync_file_system_backend.h"
@@ -73,7 +73,7 @@ class LocalFileSyncContextTest : public testing::Test {
     ASSERT_TRUE(dir_.CreateUniqueTempDir());
     in_memory_env_ = leveldb_chrome::NewMemEnv("LocalFileSyncContextTest");
 
-    ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    ui_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
     io_task_runner_ = content::GetIOThreadTaskRunner({});
     file_task_runner_ = content::GetIOThreadTaskRunner({});
   }
@@ -431,10 +431,10 @@ TEST_F(LocalFileSyncContextTest, CreateDefaultSyncableBucket) {
   EXPECT_EQ(base::File::FILE_OK, file_system.OpenFileSystem());
 
   base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>> future;
-  file_system.quota_manager()->proxy()->GetBucket(
+  file_system.quota_manager()->proxy()->GetBucketForTesting(
       blink::StorageKey::CreateFromStringForTesting(kOrigin1),
       storage::kDefaultBucketName, blink::mojom::StorageType::kSyncable,
-      base::SequencedTaskRunnerHandle::Get(), future.GetCallback());
+      base::SequencedTaskRunner::GetCurrentDefault(), future.GetCallback());
 
   const auto result = future.Take();
   EXPECT_TRUE(result.ok());

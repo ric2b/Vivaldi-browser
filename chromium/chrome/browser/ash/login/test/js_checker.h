@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 
 namespace content {
@@ -19,6 +18,7 @@ class WebContents;
 
 namespace ash {
 namespace test {
+
 class TestConditionWaiter;
 
 using UIPath = std::initializer_list<base::StringPiece>;
@@ -268,14 +268,5 @@ std::string GetAttributeExpression(
 
 }  // namespace test
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos::test {
-using ::ash::test::ExecuteOobeJS;
-using ::ash::test::GetOobeElementPath;
-using ::ash::test::OobeJS;
-using ::ash::test::UIPath;
-}  // namespace chromeos::test
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_TEST_JS_CHECKER_H_

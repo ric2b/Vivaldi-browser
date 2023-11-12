@@ -20,7 +20,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/events/event_constants.h"
@@ -713,7 +712,7 @@ bool XkbKeyboardLayoutEngine::SetCurrentLayoutByNameWithCallback(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&LoadKeymap, layout_name,
-                     base::ThreadTaskRunnerHandle::Get(),
+                     base::SingleThreadTaskRunner::GetCurrentDefault(),
                      std::move(reply_callback)));
 #else
   NOTIMPLEMENTED();
@@ -757,8 +756,9 @@ bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
   if (dom_code == DomCode::NONE)
     return false;
   // Convert DOM physical key to XKB representation.
-  xkb_keycode_t xkb_keycode = key_code_converter_.DomCodeToXkbKeyCode(dom_code);
-  if (xkb_keycode == key_code_converter_.InvalidXkbKeyCode()) {
+  xkb_keycode_t xkb_keycode =
+      key_code_converter_->DomCodeToXkbKeyCode(dom_code);
+  if (xkb_keycode == key_code_converter_->InvalidXkbKeyCode()) {
     LOG(ERROR) << "No XKB keycode for DomCode 0x" << std::hex
                << static_cast<int>(dom_code) << " '"
                << KeycodeConverter::DomCodeToCodeString(dom_code) << "'";

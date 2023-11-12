@@ -61,9 +61,6 @@ FeatureNames FeatureToNames(WebSchedulerTrackedFeature feature) {
     case WebSchedulerTrackedFeature::kOutstandingIndexedDBTransaction:
       return {"OutstandingIndexedDBTransaction",
               "outstanding IndexedDB transaction"};
-    case WebSchedulerTrackedFeature::kRequestedNotificationsPermission:
-      return {"RequestedNotificationsPermission",
-              "requested notifications permission"};
     case WebSchedulerTrackedFeature::kRequestedMIDIPermission:
       return {"RequestedMIDIPermission", "requested midi permission"};
     case WebSchedulerTrackedFeature::kRequestedAudioCapturePermission:
@@ -95,8 +92,6 @@ FeatureNames FeatureToNames(WebSchedulerTrackedFeature feature) {
               "requested storage access permission"};
     case WebSchedulerTrackedFeature::kWebNfc:
       return {"WebNfc", "WebNfc"};
-    case WebSchedulerTrackedFeature::kAppBanner:
-      return {"AppBanner", "AppBanner"};
     case WebSchedulerTrackedFeature::kPrinting:
       return {"Printing", "Printing"};
     case WebSchedulerTrackedFeature::kWebDatabase:
@@ -124,8 +119,12 @@ FeatureNames FeatureToNames(WebSchedulerTrackedFeature feature) {
       return {"InjectedJavascript", "External javascript injected"};
     case WebSchedulerTrackedFeature::kInjectedStyleSheet:
       return {"InjectedStyleSheet", "External systesheet injected"};
+    case WebSchedulerTrackedFeature::kKeepaliveRequest:
+      return {"KeepaliveRequest", "requests with keepalive set"};
     case WebSchedulerTrackedFeature::kDummy:
       return {"Dummy", "Dummy for testing"};
+    case WebSchedulerTrackedFeature::kAuthorizationHeader:
+      return {"AuthorizationHeader", "Authorization header used"};
   }
   return {};
 }
@@ -196,7 +195,6 @@ WebSchedulerTrackedFeatures StickyFeatures() {
       WebSchedulerTrackedFeature::kSubresourceHasCacheControlNoCache,
       WebSchedulerTrackedFeature::kContainsPlugins,
       WebSchedulerTrackedFeature::kDocumentLoaded,
-      WebSchedulerTrackedFeature::kRequestedNotificationsPermission,
       WebSchedulerTrackedFeature::kRequestedMIDIPermission,
       WebSchedulerTrackedFeature::kRequestedAudioCapturePermission,
       WebSchedulerTrackedFeature::kRequestedVideoCapturePermission,
@@ -205,7 +203,6 @@ WebSchedulerTrackedFeatures StickyFeatures() {
       WebSchedulerTrackedFeature::kWebLocks,
       WebSchedulerTrackedFeature::kRequestedStorageAccessGrant,
       WebSchedulerTrackedFeature::kWebNfc,
-      WebSchedulerTrackedFeature::kAppBanner,
       WebSchedulerTrackedFeature::kPrinting,
       WebSchedulerTrackedFeature::kPictureInPicture,
       WebSchedulerTrackedFeature::kIdleManager,
@@ -213,7 +210,9 @@ WebSchedulerTrackedFeatures StickyFeatures() {
       WebSchedulerTrackedFeature::kWebOTPService,
       WebSchedulerTrackedFeature::kInjectedJavascript,
       WebSchedulerTrackedFeature::kInjectedStyleSheet,
-      WebSchedulerTrackedFeature::kDummy);
+      WebSchedulerTrackedFeature::kKeepaliveRequest,
+      WebSchedulerTrackedFeature::kDummy,
+      WebSchedulerTrackedFeature::kAuthorizationHeader);
   return features;
 }
 

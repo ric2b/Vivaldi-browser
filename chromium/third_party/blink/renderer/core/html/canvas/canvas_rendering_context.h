@@ -272,6 +272,9 @@ class CORE_EXPORT CanvasRenderingContext
   }
 
   // WebGL & WebGPU-specific interface
+  virtual void SetHDRConfiguration(
+      gfx::HDRMode hdr_mode,
+      absl::optional<gfx::HDRMetadata> hdr_metadata) {}
   virtual void SetFilterQuality(cc::PaintFlags::FilterQuality) { NOTREACHED(); }
   virtual void Reshape(int width, int height) {}
   virtual int ExternallyAllocatedBufferCountPerPixel() {
@@ -310,6 +313,8 @@ class CORE_EXPORT CanvasRenderingContext
   virtual bool IdentifiabilityEncounteredPartiallyDigestedImage() const {
     return false;
   }
+
+  bool did_print_in_current_task() const { return did_print_in_current_task_; }
 
  protected:
   CanvasRenderingContext(CanvasRenderingContextHost*,

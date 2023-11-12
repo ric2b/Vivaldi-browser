@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_reuse_manager_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -47,7 +48,7 @@ bool IsUnderAdvancedProtection(Profile* profile) {
 class StoreMetricReporterHelper : public base::SupportsUserData::Data {
  public:
   explicit StoreMetricReporterHelper(Profile* profile) : profile_(profile) {
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&StoreMetricReporterHelper::StartMetricsReporting,
                        weak_ptr_factory_.GetWeakPtr()),
@@ -97,19 +98,6 @@ class StoreMetricReporterHelper : public base::SupportsUserData::Data {
 };
 
 }  // namespace
-
-password_manager::PasswordStoreInterface* GetPasswordStore(
-    Profile* profile,
-    bool use_account_store) {
-  if (use_account_store) {
-    return AccountPasswordStoreFactory::GetForProfile(
-               profile, ServiceAccessType::EXPLICIT_ACCESS)
-        .get();
-  }
-  return PasswordStoreFactory::GetForProfile(profile,
-                                             ServiceAccessType::EXPLICIT_ACCESS)
-      .get();
-}
 
 void DelayReportingPasswordStoreMetrics(Profile* profile) {
   profile->SetUserData(kPasswordStoreMetricsReporterKey,

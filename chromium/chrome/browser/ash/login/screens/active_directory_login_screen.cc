@@ -12,9 +12,9 @@
 #include "chrome/browser/ash/login/ui/signin_ui.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/ui/webui/chromeos/login/active_directory_login_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/active_directory_login_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/enrollment_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "chromeos/ash/components/login/auth/public/key.h"
@@ -24,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
+
 namespace {
 
 constexpr char kUserActionCancel[] = "cancel";
@@ -73,7 +74,7 @@ void ActiveDirectoryLoginScreen::HideImpl() {
     view_->Reset();
   authpolicy_login_helper_->CancelRequestsAndRestart();
   error_screen_visible_ = false;
-  error_screen_->SetParentScreen(ash::OOBE_SCREEN_UNKNOWN);
+  error_screen_->SetParentScreen(OOBE_SCREEN_UNKNOWN);
   error_screen_->Hide();
 }
 
@@ -191,7 +192,7 @@ void ActiveDirectoryLoginScreen::UpdateState(NetworkError::ErrorReason reason) {
     if (error_screen_visible_ && error_screen_->GetParentScreen() ==
                                      ActiveDirectoryLoginView::kScreenId) {
       error_screen_visible_ = false;
-      error_screen_->SetParentScreen(ash::OOBE_SCREEN_UNKNOWN);
+      error_screen_->SetParentScreen(OOBE_SCREEN_UNKNOWN);
       error_screen_->Hide();
       if (view_)
         view_->Show();

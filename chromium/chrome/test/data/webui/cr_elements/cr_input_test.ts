@@ -9,6 +9,7 @@ import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.j
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertNotEquals, assertThrows, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, isChildVisible} from 'chrome://webui-test/test_util.js';
+import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 // clang-format on
 
 suite('cr-input', function() {
@@ -20,8 +21,7 @@ suite('cr-input', function() {
   });
 
   function regenerateNewInput() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     crInput = document.createElement('cr-input');
     document.body.appendChild(crInput);
     input = crInput.inputElement;
@@ -279,8 +279,7 @@ suite('cr-input', function() {
      * This function assumes attributes are passed in priority order.
      */
     function testAriaLabel(attributes: string[]) {
-      document.body.innerHTML =
-          window.trustedTypes!.emptyHTML as unknown as string;
+      document.body.innerHTML = window.trustedTypes!.emptyHTML;
       crInput = document.createElement('cr-input');
       attributes.forEach(attribute => {
         // Using their name as the value out of convenience.
@@ -321,7 +320,7 @@ suite('cr-input', function() {
   });
 
   test('slots', function() {
-    document.body.innerHTML = `
+    document.body.innerHTML = getTrustedHTML`
       <cr-input>
         <div slot="inline-prefix" id="inline-prefix">One</div>
         <div slot="suffix" id="suffix">Two</div>

@@ -31,8 +31,10 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/widget_type.h"
+#include "services/device/public/mojom/screen_orientation_lock_types.mojom.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
@@ -563,6 +565,14 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   // RenderWidgetHostView.
   VisibleTimeRequestTrigger* GetVisibleTimeRequestTrigger();
 
+  virtual void EnterFullscreenMode(
+      const blink::mojom::FullscreenOptions& options) {}
+  virtual void ExitFullscreenMode() {}
+  virtual void LockOrientation(
+      device::mojom::ScreenOrientationLockType orientation) {}
+  virtual void UnlockOrientation() {}
+  virtual void SetHasPersistentVideo(bool has_persistent_video) {}
+
   // Vivaldi addition:
   bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
 
@@ -638,7 +648,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
 
   // The model object. Access is protected to allow access to
   // RenderWidgetHostViewChildFrame.
-  raw_ptr<RenderWidgetHostImpl> host_;
+  raw_ptr<RenderWidgetHostImpl, DanglingUntriaged> host_;
 
   // Whether this view is a frame or a popup.
   WidgetType widget_type_ = WidgetType::kFrame;

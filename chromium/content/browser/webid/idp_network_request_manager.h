@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/identity_request_account.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -81,21 +82,15 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kError,
   };
 
-  enum class RevokeResponse {
-    kSuccess,
-    kError,
-  };
-
   struct CONTENT_EXPORT Endpoints {
     Endpoints();
     ~Endpoints();
     Endpoints(const Endpoints&);
 
-    std::string token;
-    std::string accounts;
-    std::string client_metadata;
-    std::string revocation;
-    std::string metrics;
+    GURL token;
+    GURL accounts;
+    GURL client_metadata;
+    GURL metrics;
   };
 
   struct ClientMetadata {
@@ -111,8 +106,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kNone = 0,  // Success
     kOther = 1,
     // Errors triggered by how RP calls FedCM API.
-    kTooManyRequests = 100,
-    kErrorCanceled = 101,
+    kRpFailure = 100,
     // User Failures.
     kUserFailure = 200,
     // Generic IDP Failures.
@@ -124,15 +118,15 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kTokenEndpointInvalidResponse = 402,
   };
 
-  using AccountList = std::vector<content::IdentityRequestAccount>;
+  using AccountList = std::vector<IdentityRequestAccount>;
   using AccountsRequestCallback =
       base::OnceCallback<void(FetchStatus, AccountList)>;
   using DownloadCallback =
       base::OnceCallback<void(std::unique_ptr<std::string> response_body,
                               int response_code)>;
-  using FetchManifestListCallback =
+  using FetchWellKnownCallback =
       base::OnceCallback<void(FetchStatus, const std::set<GURL>&)>;
-  using FetchManifestCallback = base::OnceCallback<
+  using FetchConfigCallback = base::OnceCallback<
       void(FetchStatus, Endpoints, IdentityProviderMetadata)>;
   using FetchClientMetadataCallback =
       base::OnceCallback<void(FetchStatus, ClientMetadata)>;
@@ -140,7 +134,6 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   using ParseJsonCallback =
       base::OnceCallback<void(FetchStatus,
                               data_decoder::DataDecoder::ValueOrError)>;
-  using RevokeCallback = base::OnceCallback<void(RevokeResponse)>;
   using TokenRequestCallback =
       base::OnceCallback<void(FetchStatus, const std::string&)>;
 
@@ -157,20 +150,19 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   IdpNetworkRequestManager(const IdpNetworkRequestManager&) = delete;
   IdpNetworkRequestManager& operator=(const IdpNetworkRequestManager&) = delete;
 
-  // Computes the manifest list URL from the identity provider URL.
-  static absl::optional<GURL> ComputeManifestListUrl(const GURL& url);
+  // Computes the well-known URL from the identity provider URL.
+  static absl::optional<GURL> ComputeWellKnownUrl(const GURL& url);
 
-  // Fetch the manifest list. This is the /.well-known/web-identity file on
+  // Fetch the well-known file. This is the /.well-known/web-identity file on
   // the eTLD+1 calculated from the provider URL, used to check that the
   // provider URL is valid for this eTLD+1.
-  virtual void FetchManifestList(const GURL& provider,
-                                 FetchManifestListCallback);
+  virtual void FetchWellKnown(const GURL& provider, FetchWellKnownCallback);
 
-  // Attempt to fetch the IDP's FedCM parameters from the fedcm.json manifest.
-  virtual void FetchManifest(const GURL& provider,
-                             absl::optional<int> idp_brand_icon_ideal_size,
-                             absl::optional<int> idp_brand_icon_minimum_size,
-                             FetchManifestCallback);
+  // Attempt to fetch the IDP's FedCM parameters from the config file.
+  virtual void FetchConfig(const GURL& provider,
+                           int idp_brand_icon_ideal_size,
+                           int idp_brand_icon_minimum_size,
+                           FetchConfigCallback);
 
   virtual void FetchClientMetadata(const GURL& endpoint,
                                    const std::string& client_id,
@@ -226,12 +218,12 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
 
   std::unique_ptr<network::ResourceRequest> CreateUncredentialedResourceRequest(
       const GURL& target_url,
-      bool send_referrer,
+      bool send_origin,
       bool follow_redirects = false) const;
 
   std::unique_ptr<network::ResourceRequest> CreateCredentialedResourceRequest(
       const GURL& target_url,
-      bool send_referrer) const;
+      bool send_origin) const;
 
   url::Origin relying_party_origin_;
 

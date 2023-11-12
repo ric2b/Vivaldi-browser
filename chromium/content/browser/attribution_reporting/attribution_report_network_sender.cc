@@ -10,6 +10,8 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/values.h"
+#include "content/browser/attribution_reporting/attribution_debug_report.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/browser/attribution_reporting/send_result.h"
@@ -54,8 +56,32 @@ void AttributionReportNetworkSender::SendReport(
     AttributionReport report,
     bool is_debug_report,
     ReportSentCallback sent_callback) {
+  GURL url = report.ReportURL(is_debug_report);
+  base::Value::Dict body = report.ReportBody();
+
+  SendReport(std::move(url), body,
+             base::BindOnce(&AttributionReportNetworkSender::OnReportSent,
+                            base::Unretained(this), std::move(report),
+                            is_debug_report, std::move(sent_callback)));
+}
+
+void AttributionReportNetworkSender::SendReport(
+    AttributionDebugReport report,
+    DebugReportSentCallback callback) {
+  GURL url = report.ReportURL();
+  base::Value::List body = report.ReportBody();
+  SendReport(
+      std::move(url), body,
+      base::BindOnce(&AttributionReportNetworkSender::OnDebugReportSent,
+                     base::Unretained(this),
+                     base::BindOnce(std::move(callback), std::move(report))));
+}
+
+void AttributionReportNetworkSender::SendReport(GURL url,
+                                                base::ValueView report_body,
+                                                UrlLoaderCallback callback) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = report.ReportURL(is_debug_report);
+  resource_request->url = std::move(url);
   resource_request->method = net::HttpRequestHeaders::kPostMethod;
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->load_flags =
@@ -76,13 +102,17 @@ void AttributionReportNetworkSender::SendReport(
             "views with event-level and aggregatable reports without using "
             "cross-site persistent identifiers like third-party cookies."
           trigger:
-            "When a triggered attribution has become eligible for reporting."
+            "When a triggered attribution has become eligible for reporting "
+            "or when an attribution source or trigger registration has failed "
+            "and is eligible for error reporting."
           data:
             "Event-level reports include a high-entropy identifier declared "
             "by the site on which the user clicked on or viewed a source and "
             "a noisy low-entropy data value declared on the destination site."
             "Aggregatable reports include encrypted information generated "
             "from both source-side and trigger-side registrations."
+            "Verbose debug reports include data related to attribution source "
+            "or trigger registration failures."
           destination:OTHER
         }
         policy {
@@ -101,7 +131,7 @@ void AttributionReportNetworkSender::SendReport(
   simple_url_loader_ptr->SetTimeoutDuration(base::Seconds(30));
 
   simple_url_loader_ptr->AttachStringForUpload(
-      SerializeAttributionJson(report.ReportBody()), "application/json");
+      SerializeAttributionJson(report_body), "application/json");
 
   // Retry once on network change. A network change during DNS resolution
   // results in a DNS error rather than a network change error, so retry in
@@ -110,20 +140,16 @@ void AttributionReportNetworkSender::SendReport(
                    network::SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED;
   simple_url_loader_ptr->SetRetryOptions(/*max_retries=*/1, retry_mode);
 
-  // Unretained is safe because the URLLoader is owned by |this| and will be
-  // deleted before |this|.
   simple_url_loader_ptr->DownloadHeadersOnly(
       url_loader_factory_.get(),
-      base::BindOnce(&AttributionReportNetworkSender::OnReportSent,
-                     base::Unretained(this), std::move(it), std::move(report),
-                     is_debug_report, std::move(sent_callback)));
+      base::BindOnce(std::move(callback), std::move(it)));
 }
 
 void AttributionReportNetworkSender::OnReportSent(
-    UrlLoaderList::iterator it,
     AttributionReport report,
     bool is_debug_report,
     ReportSentCallback sent_callback,
+    UrlLoaderList::iterator it,
     scoped_refptr<net::HttpResponseHeaders> headers) {
   network::SimpleURLLoader* loader = it->get();
 
@@ -139,23 +165,48 @@ void AttributionReportNetworkSender::OnReportSent(
           ? Status::kOk
           : !internal_ok ? Status::kInternalError : Status::kExternalError;
 
-  base::UmaHistogramEnumeration(is_debug_report
-                                    ? "Conversions.DebugReport.ReportStatus"
-                                    : "Conversions.ReportStatus2",
-                                status);
+  const char* status_metric;
+  const char* http_response_or_net_error_code_metric;
+  const char* retry_succeed_metric;
+
+  switch (report.GetReportType()) {
+    case AttributionReport::Type::kEventLevel:
+      status_metric = is_debug_report
+                          ? "Conversions.DebugReport.ReportStatusEventLevel"
+                          : "Conversions.ReportStatusEventLevel";
+      http_response_or_net_error_code_metric =
+          is_debug_report
+              ? "Conversions.DebugReport.HttpResponseOrNetErrorCodeEventLevel"
+              : "Conversions.HttpResponseOrNetErrorCodeEventLevel";
+      retry_succeed_metric =
+          is_debug_report
+              ? "Conversions.DebugReport.ReportRetrySucceedEventLevel"
+              : "Conversions.ReportRetrySucceedEventLevel";
+      break;
+    case AttributionReport::Type::kAggregatableAttribution:
+      status_metric = is_debug_report
+                          ? "Conversions.DebugReport.ReportStatusAggregatable"
+                          : "Conversions.ReportStatusAggregatable";
+      http_response_or_net_error_code_metric =
+          is_debug_report
+              ? "Conversions.DebugReport.HttpResponseOrNetErrorCodeAggregatable"
+              : "Conversions.HttpResponseOrNetErrorCodeAggregatable";
+      retry_succeed_metric =
+          is_debug_report
+              ? "Conversions.DebugReport.ReportRetrySucceedAggregatable"
+              : "Conversions.ReportRetrySucceedAggregatable";
+      break;
+  }
+
+  base::UmaHistogramEnumeration(status_metric, status);
 
   // Since net errors are always negative and HTTP errors are always positive,
   // it is fine to combine these in a single histogram.
-  base::UmaHistogramSparse(
-      is_debug_report ? "Conversions.DebugReport.HttpResponseOrNetErrorCode"
-                      : "Conversions.Report.HttpResponseOrNetErrorCode",
-      internal_ok ? response_code : net_error);
+  base::UmaHistogramSparse(http_response_or_net_error_code_metric,
+                           internal_ok ? response_code : net_error);
 
   if (loader->GetNumRetries() > 0) {
-    base::UmaHistogramBoolean(is_debug_report
-                                  ? "Conversions.DebugReport.ReportRetrySucceed"
-                                  : "Conversions.ReportRetrySucceed2",
-                              status == Status::kOk);
+    base::UmaHistogramBoolean(retry_succeed_metric, status == Status::kOk);
   }
 
   loaders_in_progress_.erase(it);
@@ -182,6 +233,19 @@ void AttributionReportNetworkSender::OnReportSent(
       .Run(std::move(report),
            SendResult(report_status, net_error,
                       headers ? headers->response_code() : 0));
+}
+
+void AttributionReportNetworkSender::OnDebugReportSent(
+    base::OnceCallback<void(int status)> callback,
+    UrlLoaderList::iterator it,
+    scoped_refptr<net::HttpResponseHeaders> headers) {
+  // HTTP statuses are positive; network errors are negative.
+  int status = headers ? headers->response_code() : (*it)->NetError();
+  loaders_in_progress_.erase(it);
+  std::move(callback).Run(status);
+
+  // TODO(crbug.com/1371970): Consider recording metric for debug report
+  // sending.
 }
 
 }  // namespace content

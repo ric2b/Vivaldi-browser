@@ -10,11 +10,13 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
-namespace {
-const int kNullWindowState = -1;
-}  // namespace
-
 namespace ash::full_restore {
+
+namespace {
+
+const int kNullWindowState = -1;
+
+}  // namespace
 
 ArcGhostWindowDelegate::ArcGhostWindowDelegate(
     exo::ClientControlledShellSurface* shell_surface,
@@ -45,7 +47,7 @@ void ArcGhostWindowDelegate::OnStateChanged(
     return;
 
   auto* window_state =
-      ash::WindowState::Get(shell_surface_->GetWidget()->GetNativeWindow());
+      WindowState::Get(shell_surface_->GetWidget()->GetNativeWindow());
 
   if (!window_state || !shell_surface_->host_window()->GetRootWindow())
     return;
@@ -90,7 +92,7 @@ void ArcGhostWindowDelegate::OnBoundsChanged(
     bool is_resize,
     int bounds_change) {
   auto* window_state =
-      ash::WindowState::Get(shell_surface_->GetWidget()->GetNativeWindow());
+      WindowState::Get(shell_surface_->GetWidget()->GetNativeWindow());
 
   if (!window_state || !shell_surface_->host_window()->GetRootWindow())
     return;
@@ -119,9 +121,9 @@ void ArcGhostWindowDelegate::OnBoundsChanged(
            requested_state == chromeos::WindowStateType::kSecondarySnapped);
 
     if (requested_state == chromeos::WindowStateType::kPrimarySnapped)
-      shell_surface_->SetSnappedToPrimary();
+      shell_surface_->SetSnapPrimary(chromeos::kDefaultSnapRatio);
     else
-      shell_surface_->SetSnappedToSecondary();
+      shell_surface_->SetSnapSecondary(chromeos::kDefaultSnapRatio);
     // TODO(sstan): Currently the snap state will be ignored. Sync it to ARC.
   }
   shell_surface_->OnSurfaceCommit();

@@ -234,10 +234,10 @@ std::u16string DownloadDangerPromptViews::GetMessageBody() const {
       }
     }
   } else {
-    // If we're mixed content, we show that warning first.
-    if (download_->IsMixedContent()) {
+    // If we're insecurely downloading, show a warning first.
+    if (download_->IsInsecure()) {
       return l10n_util::GetStringFUTF16(
-          IDS_PROMPT_CONFIRM_MIXED_CONTENT_DOWNLOAD,
+          IDS_PROMPT_CONFIRM_INSECURE_DOWNLOAD,
           download_->GetFileNameToReportUser().LossyDisplayName());
     }
     switch (download_->GetDangerType()) {
@@ -270,6 +270,7 @@ void DownloadDangerPromptViews::RunDone(Action action) {
     if (download_->IsDangerous() && !download_->IsDone()) {
       const bool accept = action == DownloadDangerPrompt::ACCEPT;
       RecordDownloadDangerPrompt(accept, *download_);
+      RecordDownloadWarningEvent(action, download_);
       if (!download_->GetURL().is_empty() &&
           !content::DownloadItemUtils::GetBrowserContext(download_)
                ->IsOffTheRecord()) {
@@ -277,7 +278,13 @@ void DownloadDangerPromptViews::RunDone(Action action) {
             show_context_
                 ? ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_BY_API
                 : ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_RECOVERY;
-        SendSafeBrowsingDownloadReport(report_type, accept, download_);
+        // Do not send cancel report under the new trigger condition since it's
+        // not a terminal action.
+        if (!base::FeatureList::IsEnabled(
+                safe_browsing::kSafeBrowsingCsbrrNewDownloadTrigger) ||
+            accept) {
+          SendSafeBrowsingDownloadReport(report_type, accept, download_);
+        }
       }
     }
     download_->RemoveObserver(this);

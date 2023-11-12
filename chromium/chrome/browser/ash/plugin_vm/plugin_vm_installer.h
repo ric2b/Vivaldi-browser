@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_license_checker.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
@@ -212,10 +211,7 @@ class PluginVmInstaller : public KeyedService,
   // Download progress/completion happens in the public methods OnDownload*().
 
   void StartImport();
-  void DetectImageType();
-  void OnImageTypeDetected();
-  // Ran as a blocking task preparing the FD for the ImportDiskImage call.
-  absl::optional<base::ScopedFD> PrepareFD();
+  void OnImageTypeDetected(bool is_iso_image);
   // Calls CreateDiskImage or ImportDiskImage, depending on whether we are
   // creating a new VM from an ISO, or importing a prepared VM image.
   void OnFDPrepared(absl::optional<base::ScopedFD> maybe_fd);
@@ -276,7 +272,6 @@ class PluginVmInstaller : public KeyedService,
   download::BackgroundDownloadService* download_service_ = nullptr;
   State state_ = State::kIdle;
   InstallingState installing_state_ = InstallingState::kInactive;
-  base::TimeTicks setup_start_tick_;
   std::string current_download_guid_;
   base::FilePath downloaded_image_;
   // Used to identify our running import with concierge.

@@ -145,7 +145,7 @@
 <translation id="7434397035092923453">Төмөнкү кардарга колдонуу мүмкүнчүлүгү берилген жок: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Туташкан кардар: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7526139040829362392">Аккаунтту өзгөртүү</translation>
-<translation id="7535110896613603182">Колдонмонун демейки жөндөөлөрүн ачуу</translation>
+<translation id="7535110896613603182">Колдонмонун демейки параметрлерин ачуу</translation>
 <translation id="7628469622942688817">Бул түзмөктө PIN кодду эске сактап коюу.</translation>
 <translation id="7649070708921625228">Жардам</translation>
 <translation id="7658239707568436148">Жокко чыгаруу</translation>
@@ -175,7 +175,7 @@
 <translation id="8386846956409881180">Хост жараксыз OAuth далдаштырма дайындары менен конфигурацияланган.</translation>
 <translation id="8397385476380433240"><ph name="PRODUCT_NAME" /> кызматына уруксат берүү</translation>
 <translation id="8406498562923498210">Chrome Алыскы иштактаңыздын чөйрөсүндө иштетүү үчүн сеансты тандаңыз. (Сеанстардын айрым түрлөрү Chrome Алыскы иштактада жана жергиликтүү консолдо бир учурда аткарууну колдоого албай калышы мүмкүн.)</translation>
-<translation id="8428213095426709021">Жөндөөлөр</translation>
+<translation id="8428213095426709021">Параметрлер</translation>
 <translation id="8445362773033888690">Google Play Store´до карап көрүү</translation>
 <translation id="8509907436388546015">Иштактаны интеграциялоо процесси</translation>
 <translation id="8513093439376855948">Алыскы хост башкаруусу үчүн түпнуска билдирүү алмашуу кызматы</translation>

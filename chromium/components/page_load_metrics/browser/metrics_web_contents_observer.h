@@ -27,10 +27,6 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 
-namespace blink {
-struct MobileFriendliness;
-}  // namespace blink
-
 namespace content {
 class NavigationHandle;
 class RenderFrameHost;
@@ -95,8 +91,8 @@ class MetricsWebContentsObserver
   void OnVisibilityChanged(content::Visibility visibility) override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
+  void RenderFrameHostChanged(content::RenderFrameHost* old_host,
+                              content::RenderFrameHost* new_host) override;
   void FrameDeleted(int frame_tree_node_id) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void MediaStartedPlaying(
@@ -155,7 +151,7 @@ class MetricsWebContentsObserver
       mojom::FrameRenderDataUpdatePtr render_data,
       mojom::CpuTimingPtr cpu_timing,
       mojom::InputTimingPtr input_timing_delta,
-      const absl::optional<blink::MobileFriendliness>& mobile_friendliness,
+      mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
       uint32_t soft_navigation_count);
 
   // Informs the observers of the currently committed primary page load that
@@ -218,7 +214,7 @@ class MetricsWebContentsObserver
       mojom::FrameRenderDataUpdatePtr render_data,
       mojom::CpuTimingPtr cpu_timing,
       mojom::InputTimingPtr input_timing,
-      const absl::optional<blink::MobileFriendliness>& mobile_friendliness,
+      const mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
       uint32_t soft_navigation_count) override;
 
   void SetUpSharedMemoryForSmoothness(
@@ -261,9 +257,9 @@ class MetricsWebContentsObserver
                                           base::TimeTicks timestamp,
                                           bool is_certainly_browser_timestamp);
 
-  // Register / Unregister input event callback to given RenderViewHost
-  void RegisterInputEventObserver(content::RenderViewHost* host);
-  void UnregisterInputEventObserver(content::RenderViewHost* host);
+  // Register / Unregister input event callback to given RenderFrameHost
+  void RegisterInputEventObserver(content::RenderFrameHost* host);
+  void UnregisterInputEventObserver(content::RenderFrameHost* host);
 
   // Notify aborted provisional loads that a new navigation occurred. This is
   // used for more consistent attribution tracking for aborted provisional

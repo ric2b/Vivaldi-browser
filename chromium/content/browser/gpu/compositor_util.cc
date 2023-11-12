@@ -149,10 +149,9 @@ const GpuFeatureData GetGpuFeatureData(
      SafeGetFeatureStatus(gpu_feature_info,
                           gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE),
 #if BUILDFLAG(IS_LINUX)
-     !base::FeatureList::IsEnabled(media::kVaapiVideoDecodeLinux),
-#else
-     command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode),
+     !base::FeatureList::IsEnabled(media::kVaapiVideoDecodeLinux) ||
 #endif  // BUILDFLAG(IS_LINUX)
+         command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode),
      DisableInfo::Problem(
          "Accelerated video decode has been disabled, either via blocklist, "
          "about:flags or the command line."),
@@ -182,12 +181,6 @@ const GpuFeatureData GetGpuFeatureData(
                           gpu::GPU_FEATURE_TYPE_ACCELERATED_GL),
      false /* disabled */, DisableInfo::NotProblem(),
      false /* fallback_to_software */},
-#if BUILDFLAG(IS_MAC)
-    {"metal",
-     SafeGetFeatureStatus(gpu_feature_info, gpu::GPU_FEATURE_TYPE_METAL),
-     !base::FeatureList::IsEnabled(features::kMetal) /* disabled */,
-     DisableInfo::NotProblem(), false /* fallback_to_software */},
-#endif
 #if BUILDFLAG(ENABLE_VULKAN)
     {"vulkan",
      SafeGetFeatureStatus(gpu_feature_info, gpu::GPU_FEATURE_TYPE_VULKAN),

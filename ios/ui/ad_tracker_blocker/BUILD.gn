@@ -1,0 +1,46 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_ad_tracker_blocker") {
+  sources = [
+    "vivaldi_atb_constants.h",
+    "vivaldi_atb_constants.mm",
+    "vivaldi_atb_summery_view_controller.h",
+    "vivaldi_atb_summery_view_controller.mm",
+    "vivaldi_atb_summery_details_view_controller.h",
+    "vivaldi_atb_summery_details_view_controller.mm",
+    "vivaldi_atb_summery_header_view.h",
+    "vivaldi_atb_summery_header_view.mm",
+    "vivaldi_atb_blocked_count_view.h",
+    "vivaldi_atb_blocked_count_view.mm",
+    "vivaldi_atb_blocked_count_view_delegate.h",
+    "vivaldi_atb_setting_options.h",
+    "vivaldi_atb_item.h",
+    "vivaldi_atb_item.mm",
+    "vivaldi_atb_source_type.h",
+    "vivaldi_atb_domain_source_mode.h",
+    "vivaldi_atb_mediator.h",
+    "vivaldi_atb_mediator.mm",
+    "vivaldi_atb_consumer.h",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//base",
+    "//base:i18n",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/util",
+    "//ios/public/provider/chrome/browser",
+    "//vivaldi/ios/ui/ad_tracker_blocker/cells",
+    "//vivaldi/ios/ui/ad_tracker_blocker/settings",
+    "//ios/third_party/material_components_ios",
+    "resources:vivaldi_atb_shield",
+    "resources:vivaldi_atb_settings_selection_check",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

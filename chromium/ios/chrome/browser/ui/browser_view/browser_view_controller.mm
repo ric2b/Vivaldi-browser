@@ -65,7 +65,6 @@
 #import "ios/chrome/browser/ui/default_promo/default_promo_non_modal_presentation_delegate.h"
 #import "ios/chrome/browser/ui/download/download_manager_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
-#import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
@@ -75,6 +74,7 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
 #import "ios/chrome/browser/ui/lens/lens_coordinator.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui.h"
@@ -108,13 +108,13 @@
 #import "ios/chrome/browser/ui/toolbar_container/toolbar_container_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar_container/toolbar_container_features.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/keyboard_observer_helper.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/named_guide_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/upgrade/upgrade_center.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/url_loading/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_observer_bridge.h"
@@ -147,14 +147,19 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
-#include "base/strings/utf_string_conversions.h"
-#include "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
+#import "app/vivaldi_apptools.h"
+#import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
 #import "ios/panel/panel_interaction_controller.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
-#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
-#import "app/vivaldi_apptools.h"
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
@@ -614,6 +619,18 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 #pragma mark - Private Properties
 
 - (BOOL)canShowTabStrip {
+
+  // Vivaldi: For iPad form factor we don't support tabs enable/disable. Hence,
+  // its unnecessary to check the prefs settings whether tabs is enabled or
+  // disabled. The check also comes with an extra operation which can be skipped
+  // for iPads.
+  if (IsVivaldiRunning()) {
+    if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)
+      return IsRegularXRegularSizeClass(self);
+    else
+      return self.isDesktopTabBarEnabled;
+  } // End Vivaldi
+
   return IsRegularXRegularSizeClass(self);
 }
 
@@ -994,6 +1011,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         [[BackgroundTabAnimationView alloc]
             initWithFrame:CGRectMake(0, 0, kAnimatedViewSize, kAnimatedViewSize)
                 incognito:_isOffTheRecord];
+    animatedView.layoutGuideCenter = LayoutGuideCenterForBrowser(self.browser);
     __weak UIView* weakAnimatedView = animatedView;
     auto completionBlock = ^() {
       self.inNewTabAnimation = NO;
@@ -1062,38 +1080,37 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 #pragma mark - UIResponder
 
+// To always be able to register key commands, the VC must be able to become
+// first responder.
 - (BOOL)canBecomeFirstResponder {
   return YES;
 }
 
-- (NSArray<UIKeyCommand*>*)keyCommands {
-  if (![self shouldRegisterKeyboardCommands]) {
-    return nil;
+- (UIResponder*)nextResponder {
+  UIResponder* nextResponder = [super nextResponder];
+  if (_keyCommandsProvider && [self shouldSupportKeyCommands]) {
+    [_keyCommandsProvider respondBetweenViewController:self
+                                          andResponder:nextResponder];
+    return _keyCommandsProvider;
+  } else {
+    return nextResponder;
   }
-
-  UIResponder* firstResponder = GetFirstResponder();
-  BOOL isEditingText =
-      [firstResponder isKindOfClass:[UITextField class]] ||
-      [firstResponder isKindOfClass:[UITextView class]] ||
-      [[KeyboardObserverHelper sharedKeyboardObserver] isKeyboardVisible];
-
-  return [_keyCommandsProvider keyCommandsWithEditingText:isEditingText];
 }
 
-#pragma mark - UIResponder helpers
+#pragma mark - UIResponder Helpers
 
 // Whether the BVC should declare keyboard commands.
 // Since `-keyCommands` can be called by UIKit at any time, no assumptions
 // about the state of `self` can be made; accordingly, if there's anything
 // not initialized (or being torn down), this method should return NO.
-- (BOOL)shouldRegisterKeyboardCommands {
+- (BOOL)shouldSupportKeyCommands {
   if (_isShutdown)
     return NO;
 
   if (!self.browser)
     return NO;
 
-  if ([self presentedViewController])
+  if (self.presentedViewController)
     return NO;
 
   if (_voiceSearchController.visible)
@@ -1154,16 +1171,20 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   [self.contentAreaGestureRecognizer setCancelsTouchesInView:NO];
   [self.contentArea addGestureRecognizer:self.contentAreaGestureRecognizer];
 
+  if (IsVivaldiRunning()) {
+    self.view.backgroundColor = _isOffTheRecord ?
+        [UIColor colorNamed:vPrivateNTPBackgroundColor] :
+        [UIColor colorNamed:vNTPBackgroundColor];
+    NSString* text =
+      l10n_util::GetNSString(IDS_VIVALDI_COPY_TO_NOTE);
+    UIMenuItem* item = [[UIMenuItem alloc]
+                        initWithTitle:text action:@selector(onCopy:)];
+    UIMenuController.sharedMenuController.menuItems =
+                        [NSArray arrayWithObjects: item, nil];
+  } else {
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+  } // End Vivaldi
 
-  // Vivaldi
-  NSString* text =
-    l10n_util::GetNSString(IDS_VIVALDI_COPY_TO_NOTE);
-  UIMenuItem* item = [[UIMenuItem alloc]
-                      initWithTitle:text action:@selector(onCopy:)];
-  UIMenuController.sharedMenuController.menuItems =
-                      [NSArray arrayWithObjects: item, nil];
-  // End Vivaldi
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -1209,6 +1230,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     [self.helpHandler showHelpBubbleIfEligible];
     [self.helpHandler showLongPressHelpBubbleIfEligible];
   }
+
+  // Vivaldi
+  [self startObservingTabSettingChange];
+  // End Vivaldi
+
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1287,6 +1313,15 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   if (!self.browserState || _isShutdown)
     return;
 
+  // Vivaldi: We will not do anything if only device interface mode (dark/light)
+  // changed.
+  BOOL hasUserInterfaceStyleChanged =
+    [previousTraitCollection
+     hasDifferentColorAppearanceComparedToTraitCollection:self.traitCollection];
+  if (hasUserInterfaceStyleChanged)
+    return;
+  // End Vivaldi
+
   self.fullscreenController->BrowserTraitCollectionChangedBegin();
 
   // TODO(crbug.com/527092): - traitCollectionDidChange: is not always forwarded
@@ -1330,11 +1365,19 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   if (self.tabStripView) {
     [self showTabStripView:self.tabStripView];
     [self.tabStripView layoutSubviews];
+
+    if (IsVivaldiRunning()) {
+      [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
+      [self addConstraintsToPrimaryToolbar];
+      [self
+          updateForFullscreenProgress:self.fullscreenController->GetProgress()];
+    } else {
     if (base::FeatureList::IsEnabled(kModernTabStrip)) {
       [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
     } else {
       [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
-    }
+    } // End Vivaldi
+
     _fakeStatusBarView.hidden = ![self canShowTabStrip];
     [self addConstraintsToPrimaryToolbar];
     // If tabstrip is coming back due to a window resize or screen rotation,
@@ -1344,6 +1387,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       [self
           updateForFullscreenProgress:self.fullscreenController->GetProgress()];
     }
+    } // End Vivaldi
   }
 
   [self setNeedsStatusBarAppearanceUpdate];
@@ -1360,6 +1404,25 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // a crash.
   if (_isShutdown)
     return;
+
+  // Vivaldi: We will change the view background color for landscape mode to
+  // match the tab strip background color.
+  if (self.hasValidOrientation && !self.isDevicePortrait) {
+    self.view.backgroundColor = _isOffTheRecord ?
+        UIColor.blackColor :
+        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+  } else {
+    self.view.backgroundColor = _isOffTheRecord ?
+        [UIColor colorNamed:vPrivateNTPBackgroundColor] :
+        [UIColor colorNamed:vNTPBackgroundColor];
+  }
+
+  if (self.canShowTabStrip) {
+    self.tabStripView.hidden = NO;
+  } else {
+    self.tabStripView.hidden = YES;
+  }
+  // End Vivaldi
 
   [self dismissPopups];
 
@@ -1461,8 +1524,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         base::mac::ObjCCastStrict<UINavigationController>(
             viewControllerToPresent);
     if ([navController.topViewController
-            isMemberOfClass:[WelcomeToChromeViewController class]] ||
-        [navController.topViewController
             isKindOfClass:[PromoStyleViewController class]]) {
       self.hideStatusBar = YES;
 
@@ -1559,6 +1620,10 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   [_fakeStatusBarView removeFromSuperview];
   _fakeStatusBarView = nil;
 
+  // Vivaldi: We will install the fake status bar regardless of the settings.
+  // Otherwise, a white status bar is visible while smooth scrolling is
+  // supported which we don't want.
+  if (!IsVivaldiRunning()) {
   if (self.thumbStripEnabled &&
       !ios::provider::IsFullscreenSmoothScrollingSupported()) {
     // A fake status bar on the browser view is not necessary when the thumb
@@ -1569,19 +1634,31 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     // up to behind the tab strip, making the fake status bar necessary.
     return;
   }
+  } // End Vivaldi
 
   CGRect statusBarFrame = CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 0);
   _fakeStatusBarView = [[UIView alloc] initWithFrame:statusBarFrame];
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
+
+  if (IsVivaldiRunning()) {
+    if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET ||
+        self.isDesktopTabBarEnabled) {
+      _fakeStatusBarView.backgroundColor = _isOffTheRecord ?
+        UIColor.blackColor :
+        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+      _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+      DCHECK(self.contentArea);
+      [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
+    } else {
+      _fakeStatusBarView.backgroundColor = _isOffTheRecord ?
+        UIColor.blackColor :
+        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+      [self.view insertSubview:_fakeStatusBarView atIndex:0];
+    }
+  } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
 
-    if (IsVivaldiRunning()) {
-      _fakeStatusBarView.backgroundColor =
-        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
-    } else {
     _fakeStatusBarView.backgroundColor = UIColor.blackColor;
-    } // End Vivaldi
-
     _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     DCHECK(self.contentArea);
     [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
@@ -1591,6 +1668,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     _fakeStatusBarView.backgroundColor = ntp_home::NTPBackgroundColor();
     [self.view insertSubview:_fakeStatusBarView atIndex:0];
   }
+  } // End Vivaldi
+
 }
 
 // Builds the UI parts of tab strip and the toolbar. Does not matter whether
@@ -1620,6 +1699,10 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         HandlerForProtocol(self.commandDispatcher, LoadQueryCommands);
   }
 
+  if (IsVivaldiRunning()) {
+    self.legacyTabStripCoordinator.presentationProvider = self;
+    [self.legacyTabStripCoordinator start];
+  } else {
   // TODO(crbug.com/1329097): Move tab strip setup to BrowserCoordinator.
   // Potentially inject these coordinators as a stopgap.
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
@@ -1630,6 +1713,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       [self.legacyTabStripCoordinator start];
     }
   }
+  } // End Vivaldi
+
 }
 
 // Called by NSNotificationCenter when the view's window becomes key to account
@@ -1658,8 +1743,15 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // TODO(crbug.com/806437): Update implementation such that this calculates the
   // topmost header's height.
   UIView* topmostHeader = [self.headerViews firstObject].view;
+
+  if (IsVivaldiRunning()) {
+    if (primaryToolbar != topmostHeader)
+      return intrinsicHeight + vLocationBarTopPaddingDesktopTab;
+  } else {
   if (primaryToolbar != topmostHeader)
     return intrinsicHeight;
+  } // End Vivaldi
+
   // If the primary toolbar is topmost, subtract the height of the portion of
   // the unsafe area.
   CGFloat unsafeHeight = self.rootSafeAreaInsets.top;
@@ -1853,6 +1945,16 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     // because the tab strip slides behind it when showing the thumb strip.
     UIView* primaryToolbarView =
         self.primaryToolbarCoordinator.viewController.view;
+
+    if (IsVivaldiRunning()) {
+      if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET ||
+          self.isDesktopTabBarEnabled) {
+        [self.view insertSubview:primaryToolbarView
+                    aboveSubview:self.tabStripView];
+      } else {
+        [self.view addSubview:primaryToolbarView];
+      }
+    } else {
     if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       if (base::FeatureList::IsEnabled(kModernTabStrip) &&
           self.tabStripCoordinator) {
@@ -1866,6 +1968,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     } else {
       [self.view addSubview:primaryToolbarView];
     }
+    } // End Vivaldi
 
     // Add the secondary toolbar.
     if (self.secondaryToolbarCoordinator) {
@@ -1892,18 +1995,12 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     NSArray<GuideName*>* guideNames = @[
       kContentAreaGuide,
       kPrimaryToolbarGuide,
-      kBadgeOverflowMenuGuide,
       kOmniboxGuide,
       kOmniboxLeadingImageGuide,
       kOmniboxTextFieldGuide,
-      kBackButtonGuide,
-      kForwardButtonGuide,
       kToolsMenuGuide,
       kTabSwitcherGuide,
-      kNewTabButtonGuide,
       kSecondaryToolbarGuide,
-      kDiscoverFeedHeaderMenuGuide,
-      kPrimaryToolbarLocationViewGuide,
     ];
     AddNamedGuidesToView(guideNames, self.view);
 
@@ -2112,12 +2209,19 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
   }
 
+  // Vivaldi: We would prefer the expanded top toolbar height in every scenario
+  // since we have the location bar always visible.
+  if (IsVivaldiRunning()) {
+    viewportInsets.top = [self expandedTopToolbarHeight];
+  } else {
   // Add toolbar margin to the frame for every scenario except compact-width
   // non-otr, as that is the only case where there isn't a primary toolbar.
   // (see crbug.com/1063173)
   if (!IsSplitToolbarMode(self) || _isOffTheRecord) {
     viewportInsets.top = [self expandedTopToolbarHeight];
   }
+  } // End Vivaldi
+
   return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
 }
 
@@ -2311,8 +2415,9 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
   ReadingListModel* readingModel =
       ReadingListModelFactory::GetForBrowserState(self.browserState);
-  readingModel->AddEntry(URL, base::SysNSStringToUTF8(title),
-                         reading_list::ADDED_VIA_CURRENT_APP);
+  readingModel->AddOrReplaceEntry(URL, base::SysNSStringToUTF8(title),
+                                  reading_list::ADDED_VIA_CURRENT_APP,
+                                  /*estimated_read_time=*/base::TimeDelta());
 }
 
 #pragma mark - Private SingleNTP feature helper methods
@@ -2656,6 +2761,12 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   if (NTPHelper && NTPHelper->IsActive()) {
+
+    // Vivaldi: We will always return zero inset since we will always have the
+    // location bar on top.
+    if (IsVivaldiRunning())
+      return UIEdgeInsetsZero; // End Vivaldi
+
     // If the NTP is active, then it's used as the base view for snapshotting.
     // When the tab strip is visible, or for the incognito NTP, the NTP is laid
     // out between the toolbars, so it should not be inset while snapshotting.
@@ -2866,7 +2977,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 - (BOOL)shouldAllowOverscrollActionsForOverscrollActionsController:
     (OverscrollActionsController*)controller {
-  return !self.toolbarAccessoryPresenter.presenting;
+  // When screeen size is not regular, overscroll actions should be enabled.
+  return !self.toolbarAccessoryPresenter.presenting && !self.canShowTabStrip;
 }
 
 - (UIView*)headerViewForOverscrollActionsController:
@@ -3009,6 +3121,17 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // progress of 1.0 fully shows the headers and a progress of 0.0 fully hides
 // them.
 - (void)updateHeadersForFullscreenProgress:(CGFloat)progress {
+
+  // Vivaldi: Change alpha of these views to match the background color.
+  // Multiplied by 3 to change the alpha faster than the location bar. Otherwise
+  // there is an UI glitch appears where all these views have different alpha
+  // states.
+  // TODO: @prio@vivaldi.com - Implement our own transition animation.
+  if (IsVivaldiRunning()) {
+    self.tabStripView.alpha = progress*3;
+    _fakeStatusBarView.alpha = progress*3;
+  } // End Vivaldi
+
   CGFloat offset =
       AlignValueToPixel((1.0 - progress) * [self primaryToolbarHeightDelta]);
   [self setFramesForHeaders:[self headerViews] atOffset:offset];
@@ -3158,12 +3281,9 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   }
 
   [self.primaryToolbarCoordinator transitionToLocationBarFocusedState:YES];
-
-  _keyCommandsProvider.canDismissModals = YES;
 }
 
 - (void)locationBarDidResignFirstResponder {
-  _keyCommandsProvider.canDismissModals = NO;
   [_sideSwipeController setEnabled:YES];
 
   [self.ntpCoordinator locationBarDidResignFirstResponder];
@@ -3260,15 +3380,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   NewTabPageTabHelper* NTPHelper =
       NewTabPageTabHelper::FromWebState(newWebState);
   if (NTPHelper && NTPHelper->IsActive()) {
-    // If a new web state is inserted, the user has opened a new NTP. Since we
-    // share the NTP coordinator across web states, the feed type could be
-    // different from default, so we reset it.
-    // TODO(crbug.com/1352935): Use NTPHelper in NTPCoordinator.
-    FeedType defaultFeedType = NTPHelper->DefaultFeedType();
-    if (reason == ActiveWebStateChangeReason::Inserted &&
-        self.ntpCoordinator.selectedFeed != defaultFeedType) {
-      [self.ntpCoordinator selectFeedType:defaultFeedType];
-    }
     [self.ntpCoordinator ntpDidChangeVisibility:YES];
   }
 
@@ -3323,9 +3434,28 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     return;
   }
 
+  auto* animationTabHelper = NewTabAnimationTabHelper::FromWebState(webState);
+  BOOL animated =
+      !animationTabHelper || animationTabHelper->ShouldAnimateNewTab();
+  if (animationTabHelper) {
+    // Remove the helper because it isn't needed anymore.
+    NewTabAnimationTabHelper::RemoveFromWebState(webState);
+  }
+
+  // Since we share the NTP coordinator across web states, the feed type could
+  // be different from default, so we reset it.
+  NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
+  if (NTPHelper && NTPHelper->IsActive()) {
+    FeedType defaultFeedType = NTPHelper->DefaultFeedType();
+    if (self.ntpCoordinator.selectedFeed != defaultFeedType) {
+      [self.ntpCoordinator selectFeedType:defaultFeedType];
+    }
+  }
+
   BOOL inBackground =
       !activating ||
-      NewTabPageTabHelper::FromWebState(webState)->ShouldShowStartSurface();
+      NewTabPageTabHelper::FromWebState(webState)->ShouldShowStartSurface() ||
+      !animated;
   [self initiateNewTabAnimationForWebState:webState
                       willOpenInBackground:inBackground];
 }
@@ -3339,14 +3469,16 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // The rest of this function initiates the new tab animation, which is
   // phone-specific.  Call the foreground tab added completion block; for
   // iPhones, this will get executed after the animation has finished.
-  if ([self canShowTabStrip]) {
+  if ([self canShowTabStrip] || background) {
     if (self.foregroundTabWasAddedCompletionBlock) {
       // This callback is called before webState is activated. Dispatch the
       // callback asynchronously to be sure the activation is complete.
       __weak BrowserViewController* weakSelf = self;
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(^{
-            [weakSelf executeAndClearForegroundTabWasAddedCompletionBlock];
+            [weakSelf
+                executeAndClearForegroundTabWasAddedCompletionBlock:!
+                                                                    background];
           }));
     }
     return;
@@ -3371,7 +3503,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 // Helper which execute and then clears `foregroundTabWasAddedCompletionBlock`
 // if it is still set, or does nothing.
-- (void)executeAndClearForegroundTabWasAddedCompletionBlock {
+- (void)executeAndClearForegroundTabWasAddedCompletionBlock:(BOOL)animated {
   // Test existence again as the block may have been deleted.
   ProceduralBlock completion = self.foregroundTabWasAddedCompletionBlock;
   if (!completion)
@@ -3384,7 +3516,13 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // getting run. An example where this would happen is when opening
   // multiple tabs via the "Open URLs in Chrome" Siri Shortcut.
   self.foregroundTabWasAddedCompletionBlock = nil;
-  completion();
+  if (animated) {
+    completion();
+  } else {
+    [UIView performWithoutAnimation:^{
+      completion();
+    }];
+  }
 }
 
 // Helper which starts voice search at the end of new Tab animation if
@@ -3400,7 +3538,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       inForegroundWithCompletion:(ProceduralBlock)completion {
   // Create the new page image, and load with the new tab snapshot except if
   // it is the NTP.
-  UIView* newPage = nil;
+  UIView* newPage = [self viewForWebState:webState];
   GURL tabURL = webState->GetVisibleURL();
   // Toolbar snapshot is only used for the UIRefresh animation.
   UIView* toolbarSnapshot;
@@ -3419,33 +3557,40 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     toolbarSnapshot.frame = [self.contentArea convertRect:toolbarSnapshot.frame
                                                  fromView:self.view];
     [self.contentArea addSubview:toolbarSnapshot];
-    newPage = [self viewForWebState:webState];
-    newPage.userInteractionEnabled = NO;
+
+    // Vivaldi
+    if (!IsVivaldiRunning()) {
     newPage.frame = self.view.bounds;
-    [newPage layoutIfNeeded];
+    } // End Vivaldi
+
   } else {
     if (self.isNTPActiveForCurrentWebState && self.webUsageEnabled) {
-      [self viewForWebState:webState].frame =
-          [self ntpFrameForWebState:self.currentWebState];
+      newPage.frame = [self ntpFrameForWebState:self.currentWebState];
     } else {
-      [self viewForWebState:webState].frame = self.contentArea.bounds;
+      newPage.frame = self.contentArea.bounds;
     }
-    // Setting the frame here doesn't trigger a layout pass. Trigger it manually
-    // if needed. Not triggering it can create problem if the previous frame
-    // wasn't the right one, for example in https://crbug.com/852106.
-    [[self viewForWebState:webState] layoutIfNeeded];
-    newPage = [self viewForWebState:webState];
-    newPage.userInteractionEnabled = NO;
   }
-
+  [newPage layoutIfNeeded];
+  newPage.userInteractionEnabled = NO;
   NSInteger currentAnimationIdentifier = ++_NTPAnimationIdentifier;
 
   // Cleanup steps needed for both UI Refresh and stack-view style animations.
   UIView* webStateView = [self viewForWebState:webState];
+  __weak __typeof(self) weakSelf = self;
   auto commonCompletion = ^{
-    webStateView.frame = self.contentArea.bounds;
+    __strong __typeof(self) strongSelf = weakSelf;
     newPage.userInteractionEnabled = YES;
-    if (currentAnimationIdentifier != self->_NTPAnimationIdentifier) {
+
+    // Check for nil because we need to access an ivar below.
+    if (!strongSelf) {
+      return;
+    }
+
+    // Do not resize the same view.
+    if (webStateView != newPage)
+      webStateView.frame = strongSelf.contentArea.bounds;
+
+    if (currentAnimationIdentifier != strongSelf->_NTPAnimationIdentifier) {
       // Prevent the completion block from being executed if a new animation has
       // started in between. `self.foregroundTabWasAddedCompletionBlock` isn't
       // called because it is overridden when a new animation is started.
@@ -3454,24 +3599,21 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       return;
     }
 
-    self.inNewTabAnimation = NO;
+    strongSelf.inNewTabAnimation = NO;
     // Use the model's currentWebState here because it is possible that it can
     // be reset to a new value before the new Tab animation finished (e.g.
     // if another Tab shows a dialog via `dialogPresenter`). However, that
     // webState's view hasn't been displayed yet because it was in a new tab
     // animation.
-    web::WebState* currentWebState = self.currentWebState;
+    web::WebState* currentWebState = strongSelf.currentWebState;
 
     if (currentWebState) {
-      [self webStateSelected:currentWebState notifyToolbar:NO];
+      [strongSelf webStateSelected:currentWebState notifyToolbar:NO];
     }
     if (completion)
       completion();
 
-    if (self.foregroundTabWasAddedCompletionBlock) {
-      self.foregroundTabWasAddedCompletionBlock();
-      self.foregroundTabWasAddedCompletionBlock = nil;
-    }
+    [strongSelf executeAndClearForegroundTabWasAddedCompletionBlock:YES];
   };
 
   CGPoint origin = [self lastTapPoint];
@@ -3670,7 +3812,16 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // because the CGPointZero above will break reset the offset, but it's not
   // clear what removing that will do.
   tabStripFrame.origin.y = self.headerOffset;
+
+  if (IsVivaldiRunning()) {
+    UIEdgeInsets viewportInsets = self.rootSafeAreaInsets;
+    tabStripFrame.origin.x = viewportInsets.left;
+    tabStripFrame.size.width = CGRectGetWidth([self view].bounds) -
+        (viewportInsets.left + viewportInsets.right);
+  } else {
   tabStripFrame.size.width = CGRectGetWidth([self view].bounds);
+  } // End Vivaldi
+
   [self.tabStripView setFrame:tabStripFrame];
   // The tab strip should be behind the toolbar, because it slides behind the
   // toolbar during the transition to the thumb strip.
@@ -3684,6 +3835,24 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     (FindBarCoordinator*)findBarCoordinator {
   [self setFramesForHeaders:[self headerViews]
                    atOffset:[self currentHeaderOffset]];
+}
+
+- (void)findBarDidAppearForFindBarCoordinator:
+    (FindBarCoordinator*)findBarCoordinator {
+  // When the Find bar is presented, hide underlying elements from VoiceOver.
+  self.contentArea.accessibilityElementsHidden = YES;
+  self.primaryToolbarCoordinator.viewController.view
+      .accessibilityElementsHidden = YES;
+  self.secondaryToolbarContainerView.accessibilityElementsHidden = YES;
+}
+
+- (void)findBarDidDisappearForFindBarCoordinator:
+    (FindBarCoordinator*)findBarCoordinator {
+  // When the Find bar is dismissed, show underlying elements to VoiceOver.
+  self.contentArea.accessibilityElementsHidden = NO;
+  self.primaryToolbarCoordinator.viewController.view
+      .accessibilityElementsHidden = NO;
+  self.secondaryToolbarContainerView.accessibilityElementsHidden = NO;
 }
 
 #pragma mark - LensPresentationDelegate:
@@ -3719,6 +3888,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         NTPHelper->GetNextNTPScrolledToFeed();
   } else {
     [self.ntpCoordinator ntpDidChangeVisibility:NO];
+    // This set needs to come after ntpDidChangeVisibility: so that the previous
+    // state can be cleaned up (e.g. if moving away from the Start surface).
     self.ntpCoordinator.webState = nullptr;
     [self stopNTPIfNeeded];
   }
@@ -3741,6 +3912,77 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 - (web::WebState*)getCurrentWebState {
     return self.currentWebState;
+}
+
+#pragma mark - VIVALDI
+- (void)startObservingTabSettingChange {
+  // Remove the observer if there's any already added.
+  [[NSNotificationCenter defaultCenter]
+    removeObserver:self
+              name:vTabSettingsDidChange
+            object:nil];
+
+  [[NSNotificationCenter defaultCenter]
+    addObserver:self
+       selector:@selector(didUpdateTabSettings)
+           name:vTabSettingsDidChange
+         object:nil];
+}
+
+- (void)didUpdateTabSettings {
+
+  if (self.isDesktopTabBarEnabled) {
+    [self showTabStripView:self.tabStripView];
+    [self.tabStripView layoutSubviews];
+    self.tabStripView.hidden = NO;
+  } else {
+    self.tabStripView.hidden = YES;
+  }
+
+  [self installFakeStatusBar];
+  [self setUpViewLayout:NO];
+  [self addConstraintsToToolbar];
+  [self.primaryToolbarCoordinator updateToolbar];
+
+  if (self.currentWebState) {
+    UIEdgeInsets contentPadding =
+        self.currentWebState->GetWebViewProxy().contentInset;
+    contentPadding.bottom = AlignValueToPixel(
+        self.footerFullscreenProgress * [self secondaryToolbarHeightWithInset]);
+    self.currentWebState->GetWebViewProxy().contentInset = contentPadding;
+  }
+
+  [self
+      updateForFullscreenProgress:self.fullscreenController->GetProgress()];
+  [self updateToolbarState];
+  [self setNeedsStatusBarAppearanceUpdate];
+
+  self.view.backgroundColor = _isOffTheRecord ?
+      [UIColor colorNamed:vPrivateNTPBackgroundColor] :
+      [UIColor colorNamed:vNTPBackgroundColor];
+
+  [self reloadSecondaryToolbarButtonsWithNewTabPage:
+      self.currentWebState->GetVisibleURL() == kChromeUINewTabURL];
+}
+
+/// Returns the setting from prefs for selected tabs mode
+- (BOOL)isDesktopTabBarEnabled {
+  if (!self.browserState)
+    return NO;
+
+  return [VivaldiTabSettingPrefs
+          getDesktopTabsModeWithPrefService:self.browserState->GetPrefs()];
+}
+
+- (void)reloadSecondaryToolbarButtonsWithNewTabPage:(BOOL)isNewTabPage {
+  if (self.secondaryToolbarCoordinator) {
+    SecondaryToolbarView* toolbarView =
+        (SecondaryToolbarView*)
+            [self.secondaryToolbarCoordinator.viewController view];
+    if (toolbarView)
+      [toolbarView reloadButtonsWithNewTabPage:isNewTabPage
+                             desktopTabEnabled:self.canShowTabStrip];
+  }
 }
 
 @end

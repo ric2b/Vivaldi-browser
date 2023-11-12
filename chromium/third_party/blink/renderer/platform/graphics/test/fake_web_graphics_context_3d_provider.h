@@ -86,8 +86,9 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override {
     return webgpu_interface_.get();
   }
+  gpu::ContextSupport* ContextSupport() override { return nullptr; }
 
-  bool BindToCurrentThread() override { return false; }
+  bool BindToCurrentSequence() override { return false; }
   void SetLostContextCallback(base::RepeatingClosure) override {}
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t id)>) override {}

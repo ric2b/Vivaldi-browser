@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_MANAGEMENT_FLOW_CONTROLLER_H_
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_MANAGEMENT_FLOW_CONTROLLER_H_
 
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/views/profiles/profile_management_utils.h"
+#include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 #include "components/signin/public/base/signin_buildflags.h"
 
+class Profile;
 class ProfileManagementStepController;
 class ProfilePickerWebContentsHost;
 
@@ -19,9 +21,9 @@ class ProfilePickerWebContentsHost;
 // `ProfileManagementStepController`s and owned by this object.
 //
 // Typical usage starts with calling `Init()` on the instantiated flow, which
-// will switch to the `initial_step()`. Then as the user interacts with the
-// flow, this controller will handle instantiating and navigating between the
-// steps.
+// will register and switch to the first step. Then as the user interacts with
+// the flow, this controller will handle instantiating and navigating between
+// the next steps.
 class ProfileManagementFlowController {
  public:
   // TODO(https://crbug.com/1358843): Split the steps more granularly across
@@ -38,30 +40,52 @@ class ProfileManagementFlowController {
     // Lacros. Picking an account during the `kLacrosSelectAvailableAccount`
     // flow and the profile creation should be implemented as a standalone step.
     kAccountSelection,
+    // Moves the rest of the flow to a browser tab so that the user can complete
+    // the SAML sign in they started at the previous step.
+    kFinishSamlSignin,
 #endif
     // Renders all post-sign in screens: enterprise management consent, profile
     // switch, sync opt-in, etc.
-    kPostSignInFlow
+    kPostSignInFlow,
+
+    // Renders the beginning of the First Run Experience.
+    kIntro,
   };
 
-  explicit ProfileManagementFlowController(ProfilePickerWebContentsHost* host,
-                                           Step initial_step);
+  // Creates a flow controller that will start showing UI when `Init()`-ed.
+  // `clear_host_callback` will be called if `host` needs to be closed.
+  explicit ProfileManagementFlowController(
+      ProfilePickerWebContentsHost* host,
+      ClearHostClosure clear_host_callback);
   virtual ~ProfileManagementFlowController();
 
-  void Init();
+  // Starts the flow by registering and switching to the first step.
+  // If `step_switch_finished_callback` is provided, it will be called with
+  // `true` when the navigation to the initial step succeeded, or with `false`
+  // otherwise.
+  virtual void Init(StepSwitchFinishedCallback step_switch_finished_callback =
+                        StepSwitchFinishedCallback()) = 0;
 
-  void SwitchToStep(
-      Step step,
-      bool reset_state = false,
-      base::OnceClosure pop_step_callback = base::OnceClosure(),
-      base::OnceCallback<void(bool)> step_switch_finished_callback =
-          base::OnceCallback<void(bool)>());
+  // Instructs a step registered as `step` to be shown.
+  // If `step_switch_finished_callback` is provided, it will be called
+  // with `true` when the navigation to `step` succeeded, or with
+  // `false` otherwise.
+  // Also see `ProfileManagementStepController::Show()`.
+  void SwitchToStep(Step step,
+                    bool reset_state,
+                    StepSwitchFinishedCallback step_switch_finished_callback =
+                        StepSwitchFinishedCallback(),
+                    base::OnceClosure pop_step_callback = base::OnceClosure());
 
   void OnNavigateBackRequested();
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   void OnReloadRequested();
 #endif
+
+  // Cancel the signed-in profile setup and returns back to the main picker
+  // screen (if the original EntryPoint was to open the picker).
+  virtual void CancelPostSignInFlow() = 0;
 
  protected:
   void RegisterStep(Step step,
@@ -71,18 +95,35 @@ class ProfileManagementFlowController {
 
   bool IsStepInitialized(Step step) const;
 
-  Step current_step() const { return current_step_; }
+  // Closes the flow, calling `clear_host_callback_`, which would cause the
+  // `host()` to be deleted.
+  void ExitFlow();
 
-  Step initial_step() const { return initial_step_; }
+  // Opens a browser window for `profile`, closes the flow and then runs
+  // `callback` (if it's non-null).
+  //
+  // Since the flow and its host will be destroyed by the time `callback` runs,
+  // it should be longer lived than these.
+  void FinishFlowAndRunInBrowser(Profile* profile,
+                                 PostHostClearedCallback callback);
+
+  // Will be called at the beginning of `FinishFlowAndRunInBrowser`.
+  //
+  // Subclasses should override it if they want to perform some additional
+  // operations when the flow is closing. If they are going to open a browser
+  // themselves, they should return `true`. The default implementation does
+  // nothing and returns `false`.
+  virtual bool PreFinishWithBrowser();
+
+  Step current_step() const { return current_step_; }
 
   ProfilePickerWebContentsHost* host() { return host_; }
 
  private:
   Step current_step_ = Step::kUnknown;
 
-  Step initial_step_;
-
   raw_ptr<ProfilePickerWebContentsHost> host_;
+  ClearHostClosure clear_host_callback_;
 
   base::flat_map<Step, std::unique_ptr<ProfileManagementStepController>>
       initialized_steps_;

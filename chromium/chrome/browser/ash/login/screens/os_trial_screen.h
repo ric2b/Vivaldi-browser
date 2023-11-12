@@ -7,11 +7,12 @@
 
 #include <string>
 
+#include "base/functional/callback.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/os_trial_screen_handler.h"
 
 namespace ash {
+
+class OsTrialScreenView;
 
 class OsTrialScreen : public BaseScreen {
  public:
@@ -41,11 +42,5 @@ class OsTrialScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::OsTrialScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_OS_TRIAL_SCREEN_H_

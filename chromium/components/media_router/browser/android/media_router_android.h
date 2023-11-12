@@ -142,8 +142,10 @@ class MediaRouterAndroid : public MediaRouterBase {
   void UnregisterMediaSinksObserver(MediaSinksObserver* observer) override;
   void RegisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
   void UnregisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
-  void RegisterRouteMessageObserver(RouteMessageObserver* observer) override;
-  void UnregisterRouteMessageObserver(RouteMessageObserver* observer) override;
+  void RegisterPresentationConnectionMessageObserver(
+      PresentationConnectionMessageObserver* observer) override;
+  void UnregisterPresentationConnectionMessageObserver(
+      PresentationConnectionMessageObserver* observer) override;
 
   void OnPresentationConnectionError(const std::string& route_id);
   void OnRouteRequestError(
@@ -166,7 +168,7 @@ class MediaRouterAndroid : public MediaRouterBase {
                          std::unique_ptr<MediaSinksObserverList>>;
   MediaSinkObservers sinks_observers_;
 
-  base::ObserverList<MediaRoutesObserver>::Unchecked routes_observers_;
+  base::ObserverList<MediaRoutesObserver> routes_observers_;
 
   struct MediaRouteRequest {
     MediaRouteRequest(const MediaSource& source,

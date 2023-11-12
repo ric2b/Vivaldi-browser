@@ -338,7 +338,11 @@ class CORE_EXPORT Node : public EventTarget {
   }
 
   DISABLE_CFI_PERF bool IsPseudoElement() const {
-    return GetPseudoId() != kPseudoIdNone;
+#if DCHECK_IS_ON()
+    DCHECK_EQ(HasRareData() && DataAsNodeRareData()->IsPseudoElement(),
+              GetPseudoId() != kPseudoIdNone);
+#endif
+    return HasRareData() && DataAsNodeRareData()->IsPseudoElement();
   }
   DISABLE_CFI_PERF bool IsBeforePseudoElement() const {
     return GetPseudoId() == kPseudoIdBefore;
@@ -355,7 +359,7 @@ class CORE_EXPORT Node : public EventTarget {
   DISABLE_CFI_PERF bool IsBackdropPseudoElement() const {
     return GetPseudoId() == kPseudoIdBackdrop;
   }
-  DISABLE_CFI_PERF bool IsDocumentTransitionPseudoElement() const {
+  DISABLE_CFI_PERF bool IsViewTransitionPseudoElement() const {
     return IsTransitionPseudoElement(GetPseudoId());
   }
   virtual PseudoId GetPseudoId() const { return kPseudoIdNone; }
@@ -661,6 +665,8 @@ class CORE_EXPORT Node : public EventTarget {
   // This differs from GetTreeScope for shadow clones inside <svg:use/>.
   TreeScope& OriginatingTreeScope() const;
 
+  HashSet<Member<TreeScope>> GetAncestorTreeScopes() const;
+
   bool InActiveDocument() const;
 
   // Returns true if this node is connected to a document, false otherwise.
@@ -772,7 +778,6 @@ class CORE_EXPORT Node : public EventTarget {
   // Note that the following 'inline' functions are not defined in this header,
   // but in node_computed_style.h. Please include that file if you want to use
   // these functions.
-  inline ComputedStyle* MutableComputedStyleForEditingDeprecated() const;
   inline const ComputedStyle* GetComputedStyle() const;
   inline const ComputedStyle& ComputedStyleRef() const;
   bool ShouldSkipMarkingStyleDirty() const;
@@ -1138,6 +1143,9 @@ class CORE_EXPORT Node : public EventTarget {
 
   void SetHasCustomStyleCallbacks() {
     SetFlag(true, kHasCustomStyleCallbacksFlag);
+  }
+  void UnsetHasCustomStyleCallbacks() {
+    SetFlag(false, kHasCustomStyleCallbacksFlag);
   }
 
   void SetTreeScope(TreeScope* scope) { tree_scope_ = scope; }

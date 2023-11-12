@@ -35,7 +35,7 @@ class PrefRegistrySimple;
 namespace base {
 class FeatureList;
 class Version;
-}
+}  // namespace base
 
 namespace metrics {
 class MetricsStateManager;
@@ -178,8 +178,9 @@ class VariationsService
     policy_pref_service_ = service;
   }
 
-  // Exposed for testing.
-  void GetClientFilterableStateForVersionCalledForTesting();
+  // Returns the ClientFilterableState, i.e., the state used to do trial
+  // filtering. Should only be used for testing and debugging purposes.
+  std::unique_ptr<ClientFilterableState> GetClientFilterableStateForVersion();
 
   web_resource::ResourceRequestAllowedNotifier*
   GetResourceRequestAllowedNotifierForTesting() {
@@ -314,7 +315,7 @@ class VariationsService
   void FetchVariationsSeed();
 
   // Notify any observers of this service based on the simulation |result|.
-  void NotifyObservers(const VariationsSeedSimulator::Result& result);
+  void NotifyObservers(const SeedSimulationResult& result);
 
   // Called by SimpleURLLoader when |pending_seed_request_| load completes.
   void OnSimpleLoaderComplete(std::unique_ptr<std::string> response_body);

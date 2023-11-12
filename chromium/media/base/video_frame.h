@@ -16,13 +16,14 @@
 #include "base/callback.h"
 #include "base/check_op.h"
 #include "base/hash/md5.h"
-#include "base/memory/free_deleter.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
+#include "base/process/memory.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
+#include "base/types/id_type.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
@@ -68,6 +69,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     kUPlane = 1,
     kUVPlane = kUPlane,
     kVPlane = 2,
+    kAPlaneTriPlanar = kVPlane,
     kAPlane = 3,
   };
 
@@ -627,9 +629,15 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Returns a human-readable string describing |*this|.
   std::string AsHumanReadableString() const;
 
-  // Unique identifier for this video frame; generated at construction time and
-  // guaranteed to be unique within a single process.
-  int unique_id() const { return unique_id_; }
+  // Unique identifier for this video frame generated at construction time. The
+  // first ID is 1. The identifier is unique within a process % overflows (which
+  // should be impossible in practice with a 64-bit unsigned integer).
+  //
+  // Note: callers may assume that ID will always correspond to a base::IdType
+  // but should not blindly assume that the underlying type will always be
+  // uint64_t (this is free to change in the future).
+  using ID = ::base::IdTypeU64<class VideoFrameIdTag>;
+  ID unique_id() const { return unique_id_; }
 
   // Returns the number of bits per channel.
   size_t BitDepth() const;
@@ -784,7 +792,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   VideoFrameMetadata metadata_;
 
   // Generated at construction time.
-  const int unique_id_;
+  const ID unique_id_;
 
   gfx::ColorSpace color_space_;
   absl::optional<gfx::HDRMetadata> hdr_metadata_;
@@ -793,7 +801,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   absl::optional<gpu::VulkanYCbCrInfo> ycbcr_info_;
 
   // Allocation which makes up |data_| planes for self-allocated frames.
-  std::unique_ptr<uint8_t, base::FreeDeleter> private_data_;
+  std::unique_ptr<uint8_t, base::UncheckedFreeDeleter> private_data_;
 };
 
 }  // namespace media

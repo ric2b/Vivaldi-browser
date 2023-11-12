@@ -24,6 +24,7 @@
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency_impl.h"
 #include "components/viz/service/display_embedder/skia_output_surface_impl.h"
@@ -94,8 +95,9 @@ LayerTreePixelTest::CreateLayerTreeFrameSink(
             worker_ri_type, /*support_locking=*/true);
     // Bind worker context to main thread like it is in production. This is
     // needed to fully initialize the context. Compositor context is bound to
-    // the impl thread in LayerTreeFrameSink::BindToCurrentThread().
-    gpu::ContextResult result = worker_context_provider->BindToCurrentThread();
+    // the impl thread in LayerTreeFrameSink::BindToCurrentSequence().
+    gpu::ContextResult result =
+        worker_context_provider->BindToCurrentSequence();
     DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   }
   static constexpr bool disable_display_vsync = false;
@@ -121,6 +123,8 @@ void LayerTreePixelTest::DrawLayersOnThread(LayerTreeHostImpl* host_impl) {
   if (!use_software_renderer()) {
     viz::RasterContextProvider* worker_context_provider =
         host_impl->layer_tree_frame_sink()->worker_context_provider();
+    viz::RasterContextProvider::ScopedRasterContextLock lock(
+        worker_context_provider);
     EXPECT_EQ(use_accelerated_raster(),
               worker_context_provider->ContextCapabilities().gpu_rasterization);
     EXPECT_EQ(

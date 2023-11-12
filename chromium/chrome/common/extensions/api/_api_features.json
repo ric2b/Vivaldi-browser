@@ -67,8 +67,13 @@
     "channel": "dev"
   },
   "action.isEnabled": {
-    // TODO(https://crbug.com/1189295): Upgrade to stable channel.
-    "channel": "dev"
+    "channel": "stable"
+  },
+  "action.getBadgeTextColor": {
+    "channel": "stable"
+  },
+  "action.setBadgeTextColor": {
+    "channel": "stable"
   },
   "activityLogPrivate": [{
     "dependencies": ["permission:activityLogPrivate"],
@@ -292,10 +297,6 @@
       "chrome-untrusted://media-app/*"
     ]
   }],
-  "cryptotokenPrivate": {
-    "dependencies": ["permission:cryptotokenPrivate"],
-    "contexts": ["blessed_extension"]
-  },
   "dashboardPrivate": {
     "channel": "stable",
     "contexts": ["blessed_extension"],
@@ -520,7 +521,8 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://file-manager/*"
+      "chrome://file-manager/*",
+      "chrome://webui-test/*"
     ]
   }],
   "fileManagerPrivateInternal": [{
@@ -532,20 +534,34 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://file-manager/*"
+      "chrome://file-manager/*",
+      "chrome://webui-test/*"
     ]
   }],
-  "fileSystemProvider": {
+  "fileSystemProvider": [{
     "dependencies": ["permission:fileSystemProvider"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
-  },
-  "fileSystemProviderInternal": {
+    "contexts": ["blessed_extension"]
+  }, {
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://terminal/*"
+    ],
+    "platforms": ["chromeos"]
+  }],
+  "fileSystemProviderInternal": [{
     "internal": true,
     "dependencies": ["permission:fileSystemProvider"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
-  },
+    "contexts": ["blessed_extension"]
+  }, {
+    "internal": true,
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://terminal/*"
+    ],
+    "platforms": ["chromeos"]
+  }],
   "fontSettings": {
     "dependencies": ["permission:fontSettings"],
     "contexts": ["blessed_extension"]
@@ -996,9 +1012,9 @@
     // given the blessed_extension denomination. Confusing.
     "contexts": ["blessed_extension"]
   }, {
-    "channel": "dev",
+    "channel": "stable",
     "contexts": ["web_page"],
-    "matches": ["https://webstore.google.com/*"],
+    "matches": ["https://chromewebstore.google.com/*"],
     "feature_flag": "NewWebstoreDomain"
   }],
   "webviewTag": {
@@ -1015,8 +1031,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://bookmarks/*",
-      "chrome://tab-strip.top-chrome/*",
-      "chrome://file-manager/*"
+      "chrome://tab-strip.top-chrome/*"
     ]
   }, {
     "channel": "stable",

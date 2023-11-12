@@ -81,7 +81,6 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData final
   void Trace(Visitor* visitor) const;
 
   HeapLinkedHashSet<Member<PaintLayer>> sticky_layers_;
-  HeapHashSet<Member<PaintLayer>> anchor_positioned_layers_;
   absl::optional<cc::SnapContainerData> snap_container_data_;
   bool snap_container_data_needs_update_ = true;
   bool needs_resnap_ = false;
@@ -522,17 +521,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
   }
 
   void AddStickyLayer(PaintLayer*);
-  void RemoveStickyLayer(PaintLayer*);
   bool HasStickyLayer(PaintLayer* layer) const {
     return rare_data_ && rare_data_->sticky_layers_.Contains(layer);
   }
   void InvalidateAllStickyConstraints();
   void InvalidatePaintForStickyDescendants();
-
-  // Returns true if the layer is not already added.
-  bool AddAnchorPositionedLayer(PaintLayer*);
-  void InvalidateAllAnchorPositionedLayers();
-  void InvalidatePaintForAnchorPositionedLayers();
 
   uint32_t GetNonCompositedMainThreadScrollingReasons() {
     return non_composited_main_thread_scrolling_reasons_;
@@ -622,10 +615,10 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void RemoveScrollbarsForReconstruction();
 
   void DidUpdateCullRect() {
-    last_cull_rect_update_scroll_offset_ = scroll_offset_;
+    last_cull_rect_update_scroll_position_ = ScrollPosition();
   }
-  ScrollOffset LastCullRectUpdateScrollOffset() const {
-    return last_cull_rect_update_scroll_offset_;
+  gfx::PointF LastCullRectUpdateScrollPosition() const {
+    return last_cull_rect_update_scroll_position_;
   }
 
  private:
@@ -803,7 +796,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   gfx::Rect vertical_scrollbar_visual_rect_;
   gfx::Rect scroll_corner_and_resizer_visual_rect_;
 
-  ScrollOffset last_cull_rect_update_scroll_offset_;
+  gfx::PointF last_cull_rect_update_scroll_position_;
 
   class ScrollingBackgroundDisplayItemClient final
       : public GarbageCollected<ScrollingBackgroundDisplayItemClient>,

@@ -14,6 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_piece_forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
 
@@ -89,9 +90,26 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     kElementNotVisibleAtStartOfStep,
     // An element should have remained visible during a step but did not.
     kElementHiddenDuringStep,
+    // The sequence was explicitly failed as part of a test.
+    kFailedForTesting,
     // Update this if values are added to the enumeration.
-    kMaxValue = kElementHiddenDuringStep
+    kMaxValue = kFailedForTesting
   };
+
+  // Specifies how the context for a step is determined.
+  enum class ContextMode {
+    // Use the initial context for the sequence.
+    kInitial,
+    // Search for the element in any context. Currently can only apply to kShown
+    // steps.
+    kAny,
+    // Inherits the context from the previous step. Cannot be used on the first
+    // step in a sequence.
+    kFromPreviousStep
+  };
+
+  // A step context is either an explicit context or a ContextMode.
+  using StepContext = absl::variant<ElementContext, ContextMode>;
 
   // Callback when a step in the sequence starts. If |element| is no longer
   // available, it will be null.
@@ -112,12 +130,12 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   // each step transition after the previous step's end callback is called, or
   // if the next step's precondition fails (so that it refers to the correct
   // step).
-  using AbortedCallback =
-      base::OnceCallback<void(int active_step,
-                              TrackedElement* last_element,
-                              ElementIdentifier last_id,
-                              StepType last_step_type,
-                              AbortedReason aborted_reason)>;
+  using AbortedCallback = base::OnceCallback<void(int active_step,
+                                                  TrackedElement* last_element,
+                                                  ElementIdentifier last_id,
+                                                  StepType last_step_type,
+                                                  AbortedReason aborted_reason,
+                                                  std::string description)>;
 
   using CompletedCallback = base::OnceClosure;
 
@@ -136,7 +154,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     ElementIdentifier id;
     CustomElementEventType custom_event_type;
     std::string element_name;
-    ElementContext context;
+    StepContext context = ContextMode::kInitial;
 
     // These will always have values when the sequence is built, but can be
     // unspecified during construction. If unspecified, they will be set to
@@ -144,7 +162,6 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     absl::optional<bool> must_be_visible;
     absl::optional<bool> must_remain_visible;
     bool transition_only_on_event = false;
-    bool any_context = false;
 
     StepStartCallback start_callback;
     StepEndCallback end_callback;
@@ -154,15 +171,19 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     // SafeElementReference here, but there are cases where we want to do
     // additional processing if this element goes away, so we'll add the
     // listeners manually instead.
-    raw_ptr<TrackedElement> element = nullptr;
+    raw_ptr<TrackedElement, DanglingUntriaged> element = nullptr;
+
+    // Provides a useful description for debugging that can be read or passed
+    // to the abort callback on failure.
+    std::string description;
   };
 
   // Use a Builder to specify parameters when creating an InteractionSequence.
   class COMPONENT_EXPORT(UI_BASE) Builder {
    public:
     Builder();
-    Builder(const Builder& other) = delete;
-    void operator=(const Builder& other) = delete;
+    Builder(Builder&& other);
+    Builder& operator=(Builder&& other);
     ~Builder();
 
     // Sets the callback if the user exits the sequence early.
@@ -179,6 +200,9 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
 
     // Convenience methods to add a step when using a StepBuilder.
     Builder& AddStep(StepBuilder& step_builder);
+
+    // Convenience method for cases where we don't have an lvalue.
+    Builder& AddStep(StepBuilder&& step_builder);
 
     // Sets the context for this sequence. Must be called if no step is added
     // by element or has had SetContext() called. Typically the initial step of
@@ -200,8 +224,8 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
    public:
     StepBuilder();
     ~StepBuilder();
-    StepBuilder(const StepBuilder& other) = delete;
-    void operator=(StepBuilder& other) = delete;
+    StepBuilder(StepBuilder&& other);
+    StepBuilder& operator=(StepBuilder&& other);
 
     // Sets the unique identifier for this step. Either this or
     // SetElementName() is required for all step types except kCustomEvent.
@@ -212,10 +236,10 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     // step types other than kCustomEvent.
     StepBuilder& SetElementName(const base::StringPiece& name);
 
-    // Sets the context for the element; useful for setting up the initial
-    // element of the sequence if you do not know the context ahead of time.
-    // Prefer to use Builder::SetContext() if possible.
-    StepBuilder& SetContext(ElementContext context);
+    // Sets the context for the step; useful for setting up the initial
+    // element of the sequence if you do not know the context ahead of time, or
+    // to specify that a step should not use the default context.
+    StepBuilder& SetContext(StepContext context);
 
     // Sets the type of step. Required. You must set `event_type` if and only
     // if `step_type` is kCustomEvent.
@@ -253,11 +277,6 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     // timeout, user interaction, etc.)
     StepBuilder& SetTransitionOnlyOnEvent(bool transition_only_on_event);
 
-    // Specifies whether the step can refer to an element in any context.
-    // Not compatible with SetContext() or SetElementName(). Currently only
-    // supported for kShown events.
-    StepBuilder& SetFindElementInAnyContext(bool any_context);
-
     // Sets the callback called at the start of the step.
     StepBuilder& SetStartCallback(StepStartCallback start_callback);
 
@@ -279,6 +298,14 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     // Sets the callback called at the end of the step. Convenience method if
     // you don't need the parameter.
     StepBuilder& SetEndCallback(base::OnceClosure end_callback);
+
+    // Sets the description of the step.
+    StepBuilder& SetDescription(const base::StringPiece& description);
+
+    // Formats the existing description into a new string; allows for adding
+    // modifiers to an existing description. `format_string` should contain
+    // exactly one "%s".
+    StepBuilder& FormatDescription(const base::StringPiece& format_string);
 
     // Builds the step. The builder will not be valid after calling Build().
     std::unique_ptr<Step> Build();
@@ -318,6 +345,9 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   // This is a test-only method since production code applications should
   // always run asynchronously.
   void RunSynchronouslyForTesting();
+
+  // Explicitly fails the sequence.
+  void FailForTesting();
 
   // Assigns an element to a given name. The name is local to this interaction
   // sequence. It is valid for `element` to be null; in this case, we are
@@ -392,9 +422,11 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   // Returns the context for the current sequence.
   ElementContext context() const;
 
-  // Returns the correct context for the target element if present; defaults to
-  // context() if `target` is null.
-  ElementContext GetElementContext(const TrackedElement* target) const;
+  // Updates the next step context from the current based on its StepContext.
+  // Returns an element context if one is determined; null context if the step
+  // allows any context.
+  // Do not call for named elements.
+  ElementContext UpdateNextStepContext();
 
   int active_step_index_ = 0;
   bool missing_first_element_ = false;

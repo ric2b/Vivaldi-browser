@@ -7,12 +7,14 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/thread_debugger.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding_macros.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 
 namespace blink {
 
@@ -93,6 +95,33 @@ std::unique_ptr<SourceLocation> SourceLocation::Clone() const {
       stack_trace_ ? stack_trace_->clone() : nullptr, script_id_));
 }
 
+void SourceLocation::WriteIntoTrace(
+    perfetto::TracedProto<SourceLocation::Proto> proto) const {
+  proto->set_function_name(
+      ToPlatformString(stack_trace_->topFunctionName()).Utf8());
+  proto->set_script_id(stack_trace_->topScriptId());
+  proto->set_url(ToPlatformString(stack_trace_->topSourceURL()).Utf8());
+  proto->set_line_number(stack_trace_->topLineNumber());
+  proto->set_column_number(stack_trace_->topColumnNumber());
+  proto->set_stack_trace(ToString().Utf8());
+
+  // TODO(https://crbug.com/1396277): This should be a WriteIntoTrace function
+  // once v8 has support for perfetto tracing (which is currently missing for v8
+  // chromium).
+  if (stack_trace_) {
+    for (const auto& frame : stack_trace_->frames()) {
+      auto& stack_trace_pb = *(proto->add_stack_frames());
+      stack_trace_pb.set_function_name(
+          ToPlatformString(frame.functionName).Utf8());
+
+      auto& script_location = *(stack_trace_pb.set_script_location());
+      script_location.set_source_url(ToPlatformString(frame.sourceURL).Utf8());
+      script_location.set_line_number(frame.lineNumber);
+      script_location.set_column_number(frame.columnNumber);
+    }
+  }
+}
+
 void SourceLocation::WriteIntoTrace(perfetto::TracedValue context) const {
   // TODO(altimin): Consider replacing nested dict-inside-array with just an
   // array here.
@@ -118,6 +147,22 @@ void SourceLocation::ToTracedValue(TracedValue* value, const char* name) const {
   value->SetString("url", ToPlatformString(stack_trace_->topSourceURL()));
   value->SetInteger("lineNumber", stack_trace_->topLineNumber());
   value->SetInteger("columnNumber", stack_trace_->topColumnNumber());
+
+  value->BeginArray("stackFrames");
+  for (const auto& frame : stack_trace_->frames()) {
+    value->BeginDictionary();
+    value->SetString("functionName", ToPlatformString(frame.functionName));
+
+    value->BeginDictionary("scriptLocation");
+    value->SetString("sourceURL", ToPlatformString(frame.sourceURL));
+    value->SetInteger("lineNumber", frame.lineNumber);
+    value->SetInteger("columnNumber", frame.columnNumber);
+    value->EndDictionary(/*scriptLocation*/);
+
+    value->EndDictionary();
+  }
+  value->EndArray(/*stackFrames*/);
+
   value->EndDictionary();
   value->EndArray();
 }

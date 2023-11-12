@@ -6,8 +6,8 @@ source_set("file_sync") {
     "file_data.h",
     "file_store_impl.cc",
     "file_store_impl.h",
-    "file_store_storage.h",
     "file_store_storage.cc",
+    "file_store_storage.h",
     "file_store.cc",
     "file_store.h",
   ]
@@ -15,6 +15,7 @@ source_set("file_sync") {
   deps = [
     "//base",
     "//components/sync/base",
-    "//net"
+    "//net",
+    "//vivaldi/components/datasource:resource_reader"
   ]
 }

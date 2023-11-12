@@ -25,6 +25,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/switches.h"
 #include "url/origin.h"
 
 namespace content {
@@ -140,8 +142,17 @@ bool SiteIsolationPolicy::UseDedicatedProcessesForAllSites() {
 
 // static
 bool SiteIsolationPolicy::AreIsolatedSandboxedIframesEnabled() {
-  return !IsSiteIsolationDisabled(SiteIsolationMode::kPartialSiteIsolation) &&
-         base::FeatureList::IsEnabled(features::kIsolateSandboxedIframes);
+  // This feature is controlled by kIsolateSandboxedIframes, and depends on
+  // partial Site Isolation being enabled. It also requires new base URL
+  // behavior, so it implicitly causes
+  // blink::features::IsNewBaseUrlInheritanceBehaviorEnabled() to return true,
+  // and can't be enabled if the new base URL behavior has been disabled by
+  // enterprise policy.
+  return base::FeatureList::IsEnabled(
+             blink::features::kIsolateSandboxedIframes) &&
+         !IsSiteIsolationDisabled(SiteIsolationMode::kPartialSiteIsolation) &&
+         !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             blink::switches::kDisableNewBaseUrlInheritanceBehavior);
 }
 
 // static
@@ -327,14 +338,6 @@ void SiteIsolationPolicy::ApplyGlobalIsolatedOrigins() {
 }
 
 // static
-bool SiteIsolationPolicy::IsApplicationIsolationLevelEnabled() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (g_disable_flag_caching_for_tests)
-    return !CreateIsolatedAppOriginSet().empty();
-  return !GetIsolatedAppOriginSet().empty();
-}
-
-// static
 bool SiteIsolationPolicy::ShouldUrlUseApplicationIsolationLevel(
     BrowserContext* browser_context,
     const GURL& url) {
@@ -343,9 +346,8 @@ bool SiteIsolationPolicy::ShouldUrlUseApplicationIsolationLevel(
   bool origin_matches_flag = g_disable_flag_caching_for_tests
                                  ? CreateIsolatedAppOriginSet().contains(origin)
                                  : GetIsolatedAppOriginSet().contains(origin);
-  return origin_matches_flag &&
-         GetContentClient()->browser()->ShouldUrlUseApplicationIsolationLevel(
-             browser_context, url);
+  return GetContentClient()->browser()->ShouldUrlUseApplicationIsolationLevel(
+      browser_context, url, origin_matches_flag);
 }
 
 // static

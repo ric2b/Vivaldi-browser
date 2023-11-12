@@ -48,14 +48,14 @@ class EnterpriseStartupDialogViewBrowserTest : public DialogBrowserTest {
   // On mac, we need to wait until the dialog launched modally before closing
   // it.
   void DismissUi() override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&EnterpriseStartupDialogView::CloseDialog,
                                   base::Unretained(dialog)));
   }
 #endif
 
  private:
-  raw_ptr<EnterpriseStartupDialogView> dialog;
+  raw_ptr<EnterpriseStartupDialogView, DanglingUntriaged> dialog;
 };
 
 IN_PROC_BROWSER_TEST_F(EnterpriseStartupDialogViewBrowserTest,

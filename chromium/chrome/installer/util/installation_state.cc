@@ -12,6 +12,7 @@
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome/installer/util/app_commands.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/util_constants.h"
@@ -93,7 +94,6 @@ bool ProductState::Initialize(bool system_install) {
         old_version_.reset();
     }
 
-    key.ReadValue(google_update::kRegRenameCmdField, &rename_cmd_);
     if (!InitializeCommands(key, &commands_))
       commands_.Clear();
   }
@@ -168,7 +168,6 @@ ProductState& ProductState::CopyFrom(const ProductState& other) {
                          ? new base::Version(*other.old_version_)
                          : nullptr);
   brand_ = other.brand_;
-  rename_cmd_ = other.rename_cmd_;
   uninstall_command_ = other.uninstall_command_;
   oem_install_ = other.oem_install_;
   commands_.CopyFrom(other.commands_);
@@ -186,7 +185,6 @@ void ProductState::Clear() {
   version_.reset();
   old_version_.reset();
   brand_.clear();
-  rename_cmd_.clear();
   oem_install_.clear();
   uninstall_command_ = base::CommandLine(base::CommandLine::NO_PROGRAM);
   commands_.Clear();

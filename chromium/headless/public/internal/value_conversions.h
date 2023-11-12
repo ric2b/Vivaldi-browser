@@ -56,8 +56,8 @@ inline base::Value ToValue(const base::Value& value) {
 }
 
 template <>
-inline base::Value ToValue(const base::DictionaryValue& value) {
-  return ToValue(static_cast<const base::Value&>(value));
+inline base::Value ToValue(const base::Value::Dict& value) {
+  return base::Value(value.Clone());
 }
 
 // Note: Order of the two templates below is important to handle
@@ -126,15 +126,14 @@ struct FromValue<std::string> {
 };
 
 template <>
-struct FromValue<base::DictionaryValue> {
-  static std::unique_ptr<base::DictionaryValue> Parse(const base::Value& value,
-                                                      ErrorReporter* errors) {
-    const base::DictionaryValue* result;
-    if (!value.GetAsDictionary(&result)) {
+struct FromValue<base::Value::Dict> {
+  static absl::optional<base::Value::Dict> Parse(const base::Value& value,
+                                                 ErrorReporter* errors) {
+    if (!value.is_dict()) {
       errors->AddError("dictionary value expected");
-      return nullptr;
+      return absl::nullopt;
     }
-    return result->CreateDeepCopy();
+    return value.GetDict().Clone();
   }
 };
 
@@ -180,7 +179,7 @@ struct FromValue<std::vector<T>> {
       return result;
     }
     errors->Push();
-    for (const auto& item : value.GetListDeprecated())
+    for (const auto& item : value.GetList())
       result.push_back(FromValue<T>::Parse(item, errors));
     errors->Pop();
     return result;

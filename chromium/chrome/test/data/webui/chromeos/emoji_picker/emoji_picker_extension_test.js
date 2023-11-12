@@ -5,10 +5,10 @@
 import {EmojiPicker} from 'chrome://emoji-picker/emoji_picker.js';
 import {EmojiPickerApiProxyImpl} from 'chrome://emoji-picker/emoji_picker_api_proxy.js';
 import {EMOJI_PICKER_READY} from 'chrome://emoji-picker/events.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {assertEquals, assertFalse} from '../../chai_assert.js';
+import {assertEquals, assertFalse} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {completePendingMicrotasks, deepQuerySelector, isGroupButtonActive, timeout, waitForCondition} from './emoji_picker_test_util.js';
 

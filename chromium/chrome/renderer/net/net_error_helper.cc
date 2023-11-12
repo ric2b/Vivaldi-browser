@@ -19,7 +19,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_resource_request_blocked_reason.h"
@@ -188,34 +187,6 @@ void NetErrorHelper::PrepareErrorPage(
                           std::move(alternative_error_page_info), error_html);
 }
 
-std::unique_ptr<network::ResourceRequest> NetErrorHelper::CreatePostRequest(
-    const GURL& url) const {
-  auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = url;
-  resource_request->method = "POST";
-  resource_request->destination = network::mojom::RequestDestination::kEmpty;
-  resource_request->resource_type =
-      static_cast<int>(blink::mojom::ResourceType::kSubResource);
-
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  resource_request->site_for_cookies = frame->GetDocument().SiteForCookies();
-  // The security origin of the error page should exist and be opaque.
-  DCHECK(!frame->GetDocument().GetSecurityOrigin().IsNull());
-  DCHECK(frame->GetDocument().GetSecurityOrigin().IsOpaque());
-  // All requests coming from a renderer process have to use |request_initiator|
-  // that matches the |request_initiator_origin_lock| set by the browser when
-  // creating URLLoaderFactory exposed to the renderer.
-  blink::WebSecurityOrigin origin = frame->GetDocument().GetSecurityOrigin();
-  resource_request->request_initiator = static_cast<url::Origin>(origin);
-  // Since the page is trying to fetch cross-origin resources (which would
-  // be protected by CORB in no-cors mode), we need to ask for CORS.  See also
-  // https://crbug.com/932542.
-  resource_request->mode = network::mojom::RequestMode::kCors;
-  resource_request->headers.SetHeader(net::HttpRequestHeaders::kOrigin,
-                                      origin.ToString().Ascii());
-  return resource_request;
-}
-
 chrome::mojom::NetworkDiagnostics*
 NetErrorHelper::GetRemoteNetworkDiagnostics() {
   if (!remote_network_diagnostics_) {
@@ -248,13 +219,17 @@ LocalizedError::PageState NetErrorHelper::GenerateLocalizedErrorPage(
     bool can_show_network_diagnostics_dialog,
     content::mojom::AlternativeErrorPageOverrideInfoPtr
         alternative_error_page_info,
-    std::string* error_html) const {
+    std::string* error_html) {
   error_html->clear();
   int resource_id = IDR_NET_ERROR_HTML;
   LocalizedError::PageState page_state;
   // If the user is viewing an offline web app then a default page is shown
   // rather than the dino.
-  if (alternative_error_page_info) {
+
+  if (alternative_error_page_info &&
+      alternative_error_page_info->alternative_error_page_params
+          .FindBool(error_page::kOverrideErrorPage)
+          .value_or(false)) {
     DCHECK(base::FeatureList::IsEnabled(features::kPWAsDefaultOfflinePage));
     base::UmaHistogramSparse("Net.ErrorPageCounts.WebAppAlternativeErrorPage",
                              -error.reason());
@@ -264,6 +239,12 @@ LocalizedError::PageState NetErrorHelper::GenerateLocalizedErrorPage(
         error.reason(), error.domain(), error.url(),
         RenderThread::Get()->GetLocale());
   } else {
+    if (alternative_error_page_info) {
+      error_page_params_ =
+          alternative_error_page_info->alternative_error_page_params.Clone();
+    } else {
+      error_page_params_.clear();
+    }
     page_state = LocalizedError::GetPageState(
         error.reason(), error.domain(), error.url(), is_failed_post,
         error.resolve_error_info().is_secure_network_error,
@@ -271,7 +252,8 @@ LocalizedError::PageState NetErrorHelper::GenerateLocalizedErrorPage(
         ChromeRenderThreadObserver::is_incognito_process(),
         IsOfflineContentOnNetErrorFeatureEnabled(), IsAutoFetchFeatureEnabled(),
         IsRunningInForcedAppMode(), RenderThread::Get()->GetLocale(),
-        IsExtensionExtendedErrorCode(error.extended_reason()));
+        IsExtensionExtendedErrorCode(error.extended_reason()),
+        &error_page_params_);
   }
   std::string extracted_string =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
@@ -302,7 +284,8 @@ LocalizedError::PageState NetErrorHelper::UpdateErrorPage(
       ChromeRenderThreadObserver::is_incognito_process(),
       IsOfflineContentOnNetErrorFeatureEnabled(), IsAutoFetchFeatureEnabled(),
       IsRunningInForcedAppMode(), RenderThread::Get()->GetLocale(),
-      IsExtensionExtendedErrorCode(error.extended_reason()));
+      IsExtensionExtendedErrorCode(error.extended_reason()),
+      &error_page_params_);
 
   std::string json;
   JSONWriter::Write(page_state.strings, &json);
@@ -354,6 +337,12 @@ void NetErrorHelper::ReloadFrame() {
 
 void NetErrorHelper::DiagnoseError(const GURL& page_url) {
   GetRemoteNetworkDiagnostics()->RunNetworkDiagnostics(page_url);
+}
+
+void NetErrorHelper::PortalSignin() {
+#if BUILDFLAG(IS_CHROMEOS)
+  GetRemoteNetErrorPageSupport()->ShowPortalSignin();
+#endif
 }
 
 void NetErrorHelper::DownloadPageLater() {

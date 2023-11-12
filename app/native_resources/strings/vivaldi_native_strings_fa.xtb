@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;بارگذاری مجدد تصویر</translation>
 <translation id="1924750141060565109">چشم‌انداز ۱۵</translation>
 <translation id="19598411548897379">عمومی</translation>
+<translation id="1973351931613083086">پخش خودکار</translation>
 <translation id="1985669426322966465">به‌روزرسانی نرم‌افزار</translation>
 <translation id="2079036669923635404">برای به‌روزرسانی ویوالدی به نسخه <ph name="VERSION" /> اینجا را کلیک کنید.</translation>
 <translation id="2141974047387702305">هنگام دانلود فایل‌های به‌روزرسانی خطایی روی داد. لطفاً اتصال اینترنت خود را بررسی کرده و دوباره امتحان کنید.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">زباله</translation>
 <translation id="292258461174562431">هیولا ۴</translation>
 <translation id="2923448633003185837">جایگذاری و اجرا</translation>
+<translation id="2953943267837858202">پخش خودکار ویدیو مجاز نیست</translation>
 <translation id="2977472760057091832">گشودن پیوند در پنجره‌ی خصوصی جدید</translation>
 <translation id="2989805286512600854">در زبانه جدیدی باز کن</translation>
 <translation id="3027988479108856431">متأسفانه، تنظیمات Yandex در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Yandex را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">نشانک جدید</translation>
 <translation id="3255747772218936245">نصب به‌روزرسانی</translation>
 <translation id="3259769196742189631">اعتبارسنجی</translation>
+<translation id="3291915639428159043">پخش خودکار مسدود شد</translation>
 <translation id="3302905971452834934">هیولا ۱</translation>
 <translation id="3334610655141903168">(بدون عنوان)</translation>
 <translation id="3372505110412186107">در حال حاضر، ویوالدی <ph name="VERSION" /> جدیدترین نسخه‌ی موجود است.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">گشودن پیوند در پنجره جدید</translation>
 <translation id="3588820906588687999">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3601066750251199488">هیولا ۳</translation>
+<translation id="3620979700683094848">سایت‌ها می‌توانند به طور خودکار فیلم‌ها را پخش کنند</translation>
 <translation id="3680031241659195730">نسخه‌ی جدید ویوالدی در دسترس است!</translation>
 <translation id="3708982624815781692">دانلود لغو شد.</translation>
 <translation id="3732157130969736834">لینک نشانک</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">ویوالدی</translation>
 <translation id="4073157431025461511">&amp;مجدداً نشان نده</translation>
 <translation id="4074744496918018786">گشودن تصویر در پنجره‌ی خصوصی جدید</translation>
+<translation id="410351446219883937">پخش خودکار</translation>
 <translation id="4324492550286218827">چشم‌انداز ۲</translation>
 <translation id="4406101500523955324">در پنجره‌ای خصوصی جدید باز کن</translation>
 <translation id="4420816922321010053">آیا واقعا می‌خواهید از ویوالدی خارج شوید؟</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">برش</translation>
 <translation id="7727481996062361502">درحال تأیید به‌روزرسانی ...</translation>
 <translation id="7793738202466490491">افزودن به‌عنوان رویداد تقویم</translation>
+<translation id="7834693436815575883">پخش خودکار مجاز است</translation>
 <translation id="7848222781052558334">امضای دیجیتالی پرونده‌های دانلود شده، تأیید نشد.</translation>
 <translation id="7865983598101744945">تأیید خروج</translation>
 <translation id="7957213167373139414">تقویم من</translation>
 <translation id="8027581147000338959">در پنجره‌ای جدید باز کن</translation>
+<translation id="8044382196220116469">به سایت‌ها اجازه‌ی پخش خودکار ویدیوها داده نشود</translation>
 <translation id="8099620695029051217">کپی آدرس صفحه</translation>
 <translation id="8197810018650377191">صفحه‌ی نشانک</translation>
 <translation id="8261506727792406068">حذف</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">بررسی پورتال-سند</translation>
 <translation id="8768970203213061953">چشم‌انداز ۱۴</translation>
 <translation id="8773635261052182196">این اعلانات را دیگر مشاهده نخواهید کرد. مجدداً می‌توانید از طریق تنظیمات ویوالدی آن‌ها را فعال کنید.</translation>
+<translation id="8774017153185436870">سایت‌ها می‌توانند ویدیوها را به صورت خودکار پخش کنند</translation>
 <translation id="8813277370772331957">بعداً یادآوری کن</translation>
 <translation id="8894900864683381599">افزودن لینک به پنل وب</translation>
 <translation id="8912720443398351457">آیا واقعاً می خواهید از ویوالدی خارج شوید؟</translation>
 <translation id="8947109330183116400">انتخاب پرونده‌ی HTML نشانک‌ها</translation>
 <translation id="9017566390391482291">انتخاب پوشه‌ی پروفایل ویوالدی برای وارد کردن</translation>
 <translation id="9048058608784130603">در انتظار به‌روزرسانی <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">مجاز به پخش خودکار ویدیوها</translation>
 <translation id="9065203028668620118">ویرایش</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">گشودن تصویر به عنوان <ph name="USER" /></translation>

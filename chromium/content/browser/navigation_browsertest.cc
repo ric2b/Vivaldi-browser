@@ -148,7 +148,10 @@ class RenderFrameHostImplForHistoryBackInterceptor
  public:
   using RenderFrameHostImpl::RenderFrameHostImpl;
 
-  void GoToEntryAtOffset(int32_t offset, bool has_user_gesture) override {
+  void GoToEntryAtOffset(int32_t offset,
+                         bool has_user_gesture,
+                         absl::optional<blink::scheduler::TaskAttributionId>
+                             soft_navigation_heuristic_task_id) override {
     if (quit_handler_)
       std::move(quit_handler_).Run();
   }
@@ -175,14 +178,15 @@ class RenderFrameHostFactoryForHistoryBackInterceptor
       mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
       const blink::LocalFrameToken& frame_token,
       const blink::DocumentToken& document_token,
+      base::UnguessableToken devtools_frame_token,
       bool renderer_initiated_creation,
       RenderFrameHostImpl::LifecycleStateImpl lifecycle_state,
       scoped_refptr<BrowsingContextState> browsing_context_state) override {
     return base::WrapUnique(new RenderFrameHostImplForHistoryBackInterceptor(
         site_instance, std::move(render_view_host), delegate, frame_tree,
         frame_tree_node, routing_id, std::move(frame_remote), frame_token,
-        document_token, renderer_initiated_creation, lifecycle_state,
-        std::move(browsing_context_state),
+        document_token, devtools_frame_token, renderer_initiated_creation,
+        lifecycle_state, std::move(browsing_context_state),
         frame_tree_node->frame_owner_element_type(), frame_tree_node->parent(),
         frame_tree_node->fenced_frame_status()));
   }
@@ -618,7 +622,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       "Not allowed to load local resource: view-source:about:blank");
 
   EXPECT_EQ(true, EvalJs(web_contents(), "clickViewSourceLink();"));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   // Original page shouldn't navigate away.
   EXPECT_EQ(kUrl, web_contents()->GetLastCommittedURL());
   EXPECT_FALSE(shell()
@@ -642,7 +646,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       "Not allowed to load local resource: googlechrome://");
 
   EXPECT_EQ(true, EvalJs(web_contents(), "clickGoogleChromeLink();"));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   // Original page shouldn't navigate away.
   EXPECT_EQ(kUrl, web_contents()->GetLastCommittedURL());
 }
@@ -1670,7 +1674,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, IPCFlood_GoToEntryAtOffset) {
     }
   )"));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 // Ensure the renderer process doesn't send too many IPC to the browser process
@@ -1697,7 +1701,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, IPCFlood_Navigation) {
     }
   )"));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 // TODO(http://crbug.com/632514): This test currently expects opener downloads
@@ -2532,7 +2536,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
     EXPECT_TRUE(WaitForLoadStop(web_contents()));
 
     // Check Javascript was blocked the first time.
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 3) The iframe navigates elsewhere.
@@ -2549,7 +2553,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
     EXPECT_TRUE(WaitForLoadStop(web_contents()));
 
     // Check Javascript was blocked the second time.
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 }
 
@@ -2586,7 +2590,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
     EXPECT_TRUE(WaitForLoadStop(web_contents()));
 
     // Check Javascript was blocked the first time.
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 3) The iframe navigates elsewhere.
@@ -2603,7 +2607,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
     EXPECT_TRUE(WaitForLoadStop(web_contents()));
 
     // Check Javascript was blocked the second time.
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 }
 
@@ -3126,7 +3130,7 @@ IN_PROC_BROWSER_TEST_F(NavigationCookiesBrowserTest, CookiesInheritedDataUrl) {
         "*Failed to set the 'cookie' property on 'Document': Cookies are "
         "disabled inside 'data:' URLs.*");
     ExecuteScriptAsync(sub_document_1, "document.cookie = 'a=0';");
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 2. Reading a cookie inside a data-URL document is forbidden.
@@ -3136,7 +3140,7 @@ IN_PROC_BROWSER_TEST_F(NavigationCookiesBrowserTest, CookiesInheritedDataUrl) {
         "*Failed to read the 'cookie' property from 'Document': Cookies are "
         "disabled inside 'data:' URLs.*");
     ExecuteScriptAsync(sub_document_1, "document.cookie");
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 3. Set cookie in the main document. No cookies are sent when requested from
@@ -3168,7 +3172,7 @@ IN_PROC_BROWSER_TEST_F(NavigationCookiesBrowserTest, CookiesInheritedDataUrl) {
         "*Failed to set the 'cookie' property on 'Document': Cookies are "
         "disabled inside 'data:' URLs.*");
     ExecuteScriptAsync(sub_document_2, "document.cookie = 'c=0';");
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 6. Reading a cookie inside a data-URL document is still forbidden.
@@ -3178,7 +3182,7 @@ IN_PROC_BROWSER_TEST_F(NavigationCookiesBrowserTest, CookiesInheritedDataUrl) {
         "*Failed to read the 'cookie' property from 'Document': Cookies are "
         "disabled inside 'data:' URLs.*");
     ExecuteScriptAsync(sub_document_2, "document.cookie");
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
   }
 
   // 7. No cookies are sent when requested from the data-URL.
@@ -4083,7 +4087,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 
   // Wait a short amount of time to ensure the page does not scroll.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
   run_loop.Run();
   RunUntilInputProcessed(RenderWidgetHostImpl::From(
@@ -4180,7 +4184,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
   // Wait a short amount of time to ensure the page does not scroll.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
   run_loop.Run();
   RunUntilInputProcessed(RenderWidgetHostImpl::From(
@@ -4239,14 +4243,28 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommitBasic) {
   shell()->LoadURL(url);
   EXPECT_TRUE(manager.WaitForResponse());
   NavigationRequest* navigation = main_frame()->navigation_request();
-  url::Origin origin_to_commit = navigation->GetOriginToCommit();
+  absl::optional<url::Origin> origin_to_commit =
+      navigation->GetOriginToCommit();
+  ASSERT_TRUE(origin_to_commit.has_value());
   manager.WaitForNavigationFinished();
   url::Origin origin_committed = current_frame_host()->GetLastCommittedOrigin();
 
-  EXPECT_FALSE(origin_to_commit.opaque());
+  EXPECT_FALSE(origin_to_commit->opaque());
   EXPECT_FALSE(origin_committed.opaque());
-  EXPECT_EQ(origin_expected, origin_to_commit);
+  EXPECT_EQ(origin_expected, *origin_to_commit);
   EXPECT_EQ(origin_expected, origin_committed);
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommit204) {
+  GURL url = embedded_test_server()->GetURL("a.com", "/nocontent");
+  TestNavigationManager manager(web_contents(), url);
+  shell()->LoadURL(url);
+  EXPECT_TRUE(manager.WaitForResponse());
+  NavigationRequest* navigation = main_frame()->navigation_request();
+  absl::optional<url::Origin> origin_to_commit =
+      navigation->GetOriginToCommit();
+  EXPECT_FALSE(origin_to_commit.has_value());
+  manager.WaitForNavigationFinished();
 }
 
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
@@ -4257,7 +4275,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   shell()->LoadURL(url);
   EXPECT_TRUE(manager.WaitForResponse());
   NavigationRequest* navigation = main_frame()->navigation_request();
-  url::Origin origin_to_commit = navigation->GetOriginToCommit();
+  url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
   manager.WaitForNavigationFinished();
   url::Origin origin_committed = current_frame_host()->GetLastCommittedOrigin();
 
@@ -4282,7 +4300,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_TRUE(manager.WaitForResponse());
   FrameTreeNode* iframe = current_frame_host()->child_at(0);
   NavigationRequest* navigation = iframe->navigation_request();
-  url::Origin origin_to_commit = navigation->GetOriginToCommit();
+  url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
   manager.WaitForNavigationFinished();
   url::Origin origin_committed =
       iframe->current_frame_host()->GetLastCommittedOrigin();
@@ -4334,11 +4352,12 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
    public:
     explicit ShutdownThrottle(WebContents* web_contents,
                               NavigationHandle* handle)
-        : TaskRunnerDeferringThrottle(base::ThreadTaskRunnerHandle::Get(),
-                                      /*defer_start=*/false,
-                                      /*defer_redirect=*/false,
-                                      /*defer_response=*/true,
-                                      handle),
+        : TaskRunnerDeferringThrottle(
+              base::SingleThreadTaskRunner::GetCurrentDefault(),
+              /*defer_start=*/false,
+              /*defer_redirect=*/false,
+              /*defer_response=*/true,
+              handle),
           web_contents_(web_contents) {
       WebContentsObserver::Observe(web_contents_);
     }
@@ -4467,7 +4486,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommitSandboxFromFrame) {
   EXPECT_TRUE(manager.WaitForResponse());
   FrameTreeNode* iframe = current_frame_host()->child_at(0);
   NavigationRequest* navigation = iframe->navigation_request();
-  url::Origin origin_to_commit = navigation->GetOriginToCommit();
+  url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
   manager.WaitForNavigationFinished();
   url::Origin origin_committed =
       iframe->current_frame_host()->GetLastCommittedOrigin();
@@ -4575,7 +4594,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       "Content-Security-Policy-Report-Only: treat-as-public-address");
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 // The Content Security Policy directive 'plugin-types' has been removed. Here
@@ -4595,7 +4614,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       "Content-Security-Policy: plugin-types application/pdf");
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 class SubresourceLoadingTest : public NavigationBrowserTest {
@@ -5217,13 +5236,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceLoadingTest,
   WaitForLoadStop(popup);
 
   // Verify that we are at the initial empty document.
-  if (blink::features::IsInitialNavigationEntryEnabled()) {
-    EXPECT_EQ(1, popup->GetController().GetEntryCount());
-    EXPECT_TRUE(
-        popup->GetController().GetLastCommittedEntry()->IsInitialEntry());
-  } else {
-    EXPECT_EQ(0, popup->GetController().GetEntryCount());
-  }
+  EXPECT_EQ(1, popup->GetController().GetEntryCount());
+  EXPECT_TRUE(popup->GetController().GetLastCommittedEntry()->IsInitialEntry());
   EXPECT_TRUE(
       popup->GetPrimaryFrameTree().root()->is_on_initial_empty_document());
 
@@ -5251,10 +5265,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceLoadingTest,
 
   // Verify that we are at the synchronously committed about:blank document.
   EXPECT_EQ(1, popup->GetController().GetEntryCount());
-  if (blink::features::IsInitialNavigationEntryEnabled()) {
-    EXPECT_TRUE(
-        popup->GetController().GetLastCommittedEntry()->IsInitialEntry());
-  }
+  EXPECT_TRUE(popup->GetController().GetLastCommittedEntry()->IsInitialEntry());
   EXPECT_TRUE(
       popup->GetPrimaryFrameTree().root()->is_on_initial_empty_document());
 
@@ -5496,15 +5507,11 @@ IN_PROC_BROWSER_TEST_F(
 
   // Double-check that the new shell didn't commit any navigation and that it
   // has an opaque origin.
-  if (blink::features::IsInitialNavigationEntryEnabled()) {
-    EXPECT_EQ(1, new_shell->web_contents()->GetController().GetEntryCount());
-    EXPECT_TRUE(new_shell->web_contents()
-                    ->GetController()
-                    .GetLastCommittedEntry()
-                    ->IsInitialEntry());
-  } else {
-    EXPECT_EQ(0, new_shell->web_contents()->GetController().GetEntryCount());
-  }
+  EXPECT_EQ(1, new_shell->web_contents()->GetController().GetEntryCount());
+  EXPECT_TRUE(new_shell->web_contents()
+                  ->GetController()
+                  .GetLastCommittedEntry()
+                  ->IsInitialEntry());
   EXPECT_EQ(GURL(), main_frame->GetLastCommittedURL());
   EXPECT_EQ("null", EvalJs(main_frame, "window.origin"));
 
@@ -5569,10 +5576,8 @@ class NavigationBrowserTestWithPerformanceManager
   }
 };
 
-// TODO(https://crbug.com/1233836): Test is flaky on all platforms.
-IN_PROC_BROWSER_TEST_F(
-    NavigationBrowserTestWithPerformanceManager,
-    DISABLED_BeginNewNavigationAfterCommitNavigationInMainFrame) {
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWithPerformanceManager,
+                       BeginNewNavigationAfterCommitNavigationInMainFrame) {
   if (!AreAllSitesIsolatedForTesting())
     return;
 
@@ -5595,7 +5600,8 @@ IN_PROC_BROWSER_TEST_F(
   // Start a navigation that will create a speculative RFH in the existing
   // render process for b.com.
   ASSERT_TRUE(BeginNavigateToURLFromRenderer(
-      shell(), embedded_test_server()->GetURL("b.com", "/title1.html")));
+      shell(), embedded_test_server()->GetURL(
+                   "b.com", "/infinitely_loading_image.html")));
 
   // Ensure the speculative RFH is in the expected process (i.e. the b.com
   // process that was created for the navigation in the new window earlier).
@@ -5625,18 +5631,8 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(final_url, web_contents->GetLastCommittedURL());
 }
 
-// TODO(crbug.com/1233836): Test is flaky on Mac.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_BeginNewNavigationAfterCommitNavigationInSubFrame \
-  DISABLED_BeginNewNavigationAfterCommitNavigationInSubFrame
-#else
-#define MAYBE_BeginNewNavigationAfterCommitNavigationInSubFrame \
-  BeginNewNavigationAfterCommitNavigationInSubFrame
-#endif
-
-IN_PROC_BROWSER_TEST_F(
-    NavigationBrowserTestWithPerformanceManager,
-    MAYBE_BeginNewNavigationAfterCommitNavigationInSubFrame) {
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWithPerformanceManager,
+                       BeginNewNavigationAfterCommitNavigationInSubFrame) {
   if (!AreAllSitesIsolatedForTesting())
     return;
 
@@ -5665,8 +5661,8 @@ IN_PROC_BROWSER_TEST_F(
   // Start a navigation that will create a speculative RFH in the existing
   // render process for a.com.
   ASSERT_TRUE(BeginNavigateToURLFromRenderer(
-      first_subframe_node,
-      embedded_test_server()->GetURL("a.com", "/title1.html")));
+      first_subframe_node, embedded_test_server()->GetURL(
+                               "a.com", "/infinitely_loading_image.html")));
 
   // Ensure the speculative RFH is in the expected process.
   RenderFrameHostImpl* speculative_render_frame_host =
@@ -5864,7 +5860,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, Bug1210234) {
   EXPECT_EQ(redirection_url, web_contents()->GetLastCommittedURL());
 }
 
-class NavigationBrowserTestAnonymousIframe : public NavigationBrowserTest {
+class NavigationBrowserTestCredentiallessIframe : public NavigationBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     NavigationBrowserTest::SetUpCommandLine(command_line);
@@ -5873,8 +5869,8 @@ class NavigationBrowserTestAnonymousIframe : public NavigationBrowserTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
-                       AnonymousAttributeIsHonoredByNavigation) {
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
+                       CredentiallessAttributeIsHonoredByNavigation) {
   GURL main_url = embedded_test_server()->GetURL("/page_with_iframe.html");
   GURL iframe_url_1 = embedded_test_server()->GetURL("/title1.html");
   GURL iframe_url_2 = embedded_test_server()->GetURL("/title2.html");
@@ -5884,20 +5880,20 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
   EXPECT_EQ(1U, main_frame()->child_count());
   FrameTreeNode* child = main_frame()->child_at(0);
   EXPECT_EQ(iframe_url_1, child->current_url());
-  EXPECT_FALSE(child->anonymous());
-  EXPECT_FALSE(child->current_frame_host()->IsAnonymous());
+  EXPECT_FALSE(child->credentialless());
+  EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
+            EvalJs(child->current_frame_host(), "window.credentialless"));
 
-  // Changes to the iframe 'anonymous' attribute are propagated to the
+  // Changes to the iframe 'credentialless' attribute are propagated to the
   // FrameTreeNode. The RenderFrameHost, however, is updated only on navigation.
   EXPECT_TRUE(
       ExecJs(main_frame(),
-             "document.getElementById('test_iframe').anonymous = true;"));
-  EXPECT_TRUE(child->anonymous());
-  EXPECT_FALSE(child->current_frame_host()->IsAnonymous());
+             "document.getElementById('test_iframe').credentialless = true;"));
+  EXPECT_TRUE(child->credentialless());
+  EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
+            EvalJs(child->current_frame_host(), "window.credentialless"));
 
   // Create a grandchild iframe.
   EXPECT_TRUE(ExecJs(
@@ -5909,13 +5905,13 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
   EXPECT_EQ(1U, child->child_count());
   FrameTreeNode* grandchild = child->child_at(0);
 
-  // The grandchild FrameTreeNode does not set the 'anonymous'
-  // attribute. The grandchild RenderFrameHost is not anonymous, since its
-  // parent RenderFrameHost is not anonymous.
-  EXPECT_FALSE(grandchild->anonymous());
-  EXPECT_FALSE(grandchild->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(false, EvalJs(grandchild->current_frame_host(),
-                          "window.anonymouslyFramed"));
+  // The grandchild FrameTreeNode does not set the 'credentialless'
+  // attribute. The grandchild RenderFrameHost is not credentialless, since its
+  // parent RenderFrameHost is not credentialless.
+  EXPECT_FALSE(grandchild->credentialless());
+  EXPECT_FALSE(grandchild->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(false,
+            EvalJs(grandchild->current_frame_host(), "window.credentialless"));
 
   // Navigate the child iframe same-document. This does not change anything.
   EXPECT_TRUE(ExecJs(main_frame(),
@@ -5923,25 +5919,24 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
                                "        .contentWindow.location.href = $1;",
                                iframe_url_1.Resolve("#here").spec())));
   WaitForLoadStop(web_contents());
-  EXPECT_TRUE(child->anonymous());
-  EXPECT_FALSE(child->current_frame_host()->IsAnonymous());
+  EXPECT_TRUE(child->credentialless());
+  EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
+            EvalJs(child->current_frame_host(), "window.credentialless"));
 
   // Now navigate the child iframe cross-document.
   EXPECT_TRUE(ExecJs(
       main_frame(), JsReplace("document.getElementById('test_iframe').src = $1",
                               iframe_url_2)));
   WaitForLoadStop(web_contents());
-  EXPECT_TRUE(child->anonymous());
-  EXPECT_TRUE(child->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(true,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
-  // An anonymous document has a storage key with a nonce.
+  EXPECT_TRUE(child->credentialless());
+  EXPECT_TRUE(child->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(), "window.credentialless"));
+  // A credentialless document has a storage key with a nonce.
   EXPECT_TRUE(child->current_frame_host()->storage_key().nonce().has_value());
-  base::UnguessableToken anonymous_nonce =
-      current_frame_host()->anonymous_iframes_nonce();
-  EXPECT_EQ(anonymous_nonce,
+  base::UnguessableToken credentialless_nonce =
+      current_frame_host()->credentialless_iframes_nonce();
+  EXPECT_EQ(credentialless_nonce,
             child->current_frame_host()->storage_key().nonce().value());
 
   // Create a grandchild iframe.
@@ -5953,17 +5948,17 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
   EXPECT_EQ(1U, child->child_count());
   grandchild = child->child_at(0);
 
-  // The grandchild does not set the 'anonymous' attribute, but the grandchild
-  // document is anonymous.
-  EXPECT_FALSE(grandchild->anonymous());
-  EXPECT_TRUE(grandchild->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(true, EvalJs(grandchild->current_frame_host(),
-                         "window.anonymouslyFramed"));
+  // The grandchild does not set the 'credentialless' attribute, but the
+  // grandchild document is credentialless.
+  EXPECT_FALSE(grandchild->credentialless());
+  EXPECT_TRUE(grandchild->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(true,
+            EvalJs(grandchild->current_frame_host(), "window.credentialless"));
 
-  // The storage key's nonce is the same for all anonymous documents in the same
-  // page.
+  // The storage key's nonce is the same for all credentialless documents in the
+  // same page.
   EXPECT_TRUE(child->current_frame_host()->storage_key().nonce().has_value());
-  EXPECT_EQ(anonymous_nonce,
+  EXPECT_EQ(credentialless_nonce,
             child->current_frame_host()->storage_key().nonce().value());
 
   // Now navigate the grandchild iframe.
@@ -5971,80 +5966,81 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestAnonymousIframe,
       child, JsReplace("document.getElementById('grandchild_iframe').src = $1",
                        iframe_url_2)));
   WaitForLoadStop(web_contents());
-  EXPECT_TRUE(grandchild->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(true, EvalJs(grandchild->current_frame_host(),
-                         "window.anonymouslyFramed"));
+  EXPECT_TRUE(grandchild->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(true,
+            EvalJs(grandchild->current_frame_host(), "window.credentialless"));
 
   // The storage key's nonce is still the same.
   EXPECT_TRUE(child->current_frame_host()->storage_key().nonce().has_value());
-  EXPECT_EQ(anonymous_nonce,
+  EXPECT_EQ(credentialless_nonce,
             child->current_frame_host()->storage_key().nonce().value());
 
-  // Remove the 'anonymous' attribute from the iframe. This propagates to the
-  // FrameTreeNode. The RenderFrameHost, however, is updated only on navigation.
+  // Remove the 'credentialless' attribute from the iframe. This propagates to
+  // the FrameTreeNode. The RenderFrameHost, however, is updated only on
+  // navigation.
   EXPECT_TRUE(
       ExecJs(main_frame(),
-             "document.getElementById('test_iframe').anonymous = false;"));
-  EXPECT_FALSE(child->anonymous());
-  EXPECT_TRUE(child->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(true,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
+             "document.getElementById('test_iframe').credentialless = false;"));
+  EXPECT_FALSE(child->credentialless());
+  EXPECT_TRUE(child->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(), "window.credentialless"));
   EXPECT_TRUE(child->current_frame_host()->storage_key().nonce().has_value());
-  EXPECT_EQ(anonymous_nonce,
+  EXPECT_EQ(credentialless_nonce,
             child->current_frame_host()->storage_key().nonce().value());
 
   // Create another grandchild iframe. Even if the parent iframe element does
-  // not have the 'anonymous' attribute anymore, the grandchild document is
-  // still loaded inside of an anonymous RenderFrameHost, so it will be
-  // anonymous.
+  // not have the 'credentialless' attribute anymore, the grandchild document is
+  // still loaded inside of a credentialless RenderFrameHost, so it will be
+  // credentialless.
   EXPECT_TRUE(ExecJs(
       child, JsReplace("let grandchild2 = document.createElement('iframe');"
                        "document.body.appendChild(grandchild2);",
                        iframe_url_1)));
   EXPECT_EQ(2U, child->child_count());
   FrameTreeNode* grandchild2 = child->child_at(1);
-  EXPECT_FALSE(grandchild2->anonymous());
-  EXPECT_TRUE(grandchild2->current_frame_host()->IsAnonymous());
-  EXPECT_EQ(true, EvalJs(grandchild2->current_frame_host(),
-                         "window.anonymouslyFramed"));
+  EXPECT_FALSE(grandchild2->credentialless());
+  EXPECT_TRUE(grandchild2->current_frame_host()->IsCredentialless());
+  EXPECT_EQ(true,
+            EvalJs(grandchild2->current_frame_host(), "window.credentialless"));
   EXPECT_TRUE(
       grandchild2->current_frame_host()->storage_key().nonce().has_value());
-  EXPECT_EQ(anonymous_nonce,
+  EXPECT_EQ(credentialless_nonce,
             grandchild2->current_frame_host()->storage_key().nonce().value());
 
   // Navigate the child iframe. Since the iframe element does not set the
-  // 'anonymous' attribute, the resulting RenderFrameHost will not be anonymous.
+  // 'credentialless' attribute, the resulting RenderFrameHost will not be
+  // credentialless.
   EXPECT_TRUE(
       ExecJs(main_frame(),
              JsReplace("document.getElementById('test_iframe').src = $1;",
                        iframe_url_2)));
   WaitForLoadStop(web_contents());
-  EXPECT_FALSE(child->anonymous());
-  EXPECT_FALSE(child->current_frame_host()->IsAnonymous());
+  EXPECT_FALSE(child->credentialless());
+  EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
-            EvalJs(child->current_frame_host(), "window.anonymouslyFramed"));
+            EvalJs(child->current_frame_host(), "window.credentialless"));
   EXPECT_FALSE(child->current_frame_host()->storage_key().nonce().has_value());
 
   // Now navigate the whole page away.
   GURL main_url_b = embedded_test_server()->GetURL(
-      "b.com", "/page_with_anonymous_iframe.html");
+      "b.com", "/page_with_credentialless_iframe.html");
   GURL iframe_url_b = embedded_test_server()->GetURL("b.com", "/title1.html");
   EXPECT_TRUE(NavigateToURL(shell(), main_url_b));
 
-  // The main page has an anonymous child iframe with url `iframe_url_b`.
+  // The main page has a credentialless child iframe with url `iframe_url_b`.
   EXPECT_EQ(1U, main_frame()->child_count());
   FrameTreeNode* child_b = main_frame()->child_at(0);
   EXPECT_EQ(iframe_url_b, child_b->current_url());
-  EXPECT_TRUE(child_b->anonymous());
-  EXPECT_TRUE(child_b->current_frame_host()->IsAnonymous());
+  EXPECT_TRUE(child_b->credentialless());
+  EXPECT_TRUE(child_b->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true,
-            EvalJs(child_b->current_frame_host(), "window.anonymouslyFramed"));
+            EvalJs(child_b->current_frame_host(), "window.credentialless"));
 
   EXPECT_TRUE(child_b->current_frame_host()->storage_key().nonce().has_value());
-  base::UnguessableToken anonymous_nonce_b =
-      current_frame_host()->anonymous_iframes_nonce();
-  EXPECT_NE(anonymous_nonce, anonymous_nonce_b);
-  EXPECT_EQ(anonymous_nonce_b,
+  base::UnguessableToken credentialless_nonce_b =
+      current_frame_host()->credentialless_iframes_nonce();
+  EXPECT_NE(credentialless_nonce, credentialless_nonce_b);
+  EXPECT_EQ(credentialless_nonce_b,
             child_b->current_frame_host()->storage_key().nonce().value());
 }
 
@@ -6159,6 +6155,82 @@ IN_PROC_BROWSER_TEST_F(CacheTransparencyNavigationBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url_main_document));
 
   ExpectCacheNotUsed();
+}
+
+class NavigationBrowserTestWarnSandboxIneffective
+    : public NavigationBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    NavigationBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                    "WarnSandboxIneffective");
+  }
+
+  static constexpr char kSandboxEscapeWarningMessage[] =
+      "An iframe which has both allow-scripts and allow-same-origin for its "
+      "sandbox attribute can remove its sandboxing.";
+};
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWarnSandboxIneffective,
+                       WarnEscapableSandboxSameOrigin) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/empty.html")));
+
+  WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kSandboxEscapeWarningMessage);
+
+  // Create same-origin iframe.
+  EXPECT_TRUE(ExecJs(current_frame_host(), R"(
+      const iframe = document.createElement("iframe");
+      iframe.src = location.href;  // Same-origin iframe.
+      iframe.sandbox = "allow-same-origin allow-scripts";
+      document.body.appendChild(iframe);
+  )"));
+  ASSERT_TRUE(console_observer.Wait());
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWarnSandboxIneffective,
+                       WarnEscapableSandboxCrossOrigin) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/empty.html")));
+
+  WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kSandboxEscapeWarningMessage);
+
+  // Create cross-origin iframe.
+  EXPECT_TRUE(ExecJs(current_frame_host(), R"(
+      const iframe = document.createElement("iframe");
+      // Cross-origin iframe:
+      iframe.src = location.href.replace("a.com", "b.com");
+      iframe.sandbox = "allow-same-origin allow-scripts";
+      document.body.appendChild(iframe);
+  )"));
+
+  EXPECT_TRUE(WaitForLoadStop(web_contents()));
+  EXPECT_EQ(console_observer.messages().size(), 0u);
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWarnSandboxIneffective,
+                       WarnEscapableSandboxSameOriginGrandChild) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/empty.html")));
+
+  WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kSandboxEscapeWarningMessage);
+
+  // Create a same-origin doubly nested sandboxed iframe.
+  EXPECT_TRUE(ExecJs(current_frame_host(), R"(
+      const child = document.createElement("iframe");
+      document.body.appendChild(child);
+
+      const grand_child = child.contentDocument.createElement("iframe");
+      grand_child.src = location.href;
+      grand_child.sandbox = "allow-same-origin allow-scripts";
+      child.contentDocument.body.appendChild(grand_child);
+  )"));
+
+  EXPECT_TRUE(WaitForLoadStop(web_contents()));
+  EXPECT_EQ(console_observer.messages().size(), 0u);
 }
 
 }  // namespace content

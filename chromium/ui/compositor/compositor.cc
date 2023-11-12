@@ -14,6 +14,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/power_monitor/power_monitor.h"
@@ -32,6 +33,7 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
+#include "cc/metrics/custom_metrics_recorder.h"
 #include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/metrics/web_vital_metrics.h"
 #include "cc/trees/layer_tree_host.h"
@@ -240,6 +242,9 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   if (command_line->HasSwitch(cc::switches::kLogOnUIDoubleBackgroundBlur))
     settings.log_on_ui_double_background_blur = true;
 #endif
+
+  settings.enable_shared_image_cache_for_gpu =
+      base::FeatureList::IsEnabled(features::kUIEnableSharedImageCacheForGpu);
 
   animation_host_ = cc::AnimationHost::CreateMainInstance();
 
@@ -766,11 +771,6 @@ void Compositor::NotifyThroughputTrackerResults(
     ReportMetricsForTracker(pair.first, std::move(pair.second));
 }
 
-void Compositor::ReportEventLatency(
-    std::vector<cc::EventLatencyTracker::LatencyData> latencies) {
-  // TODO(crbug.com/1321193): Report EventLatency as appropriate.
-}
-
 void Compositor::DidReceiveCompositorFrameAck() {
   ++activated_frame_count_;
   for (auto& observer : observer_list_)
@@ -893,6 +893,11 @@ void Compositor::SetLayerTreeDebugState(
 void Compositor::RequestPresentationTimeForNextFrame(
     PresentationTimeCallback callback) {
   host_->RequestPresentationTimeForNextFrame(std::move(callback));
+}
+
+void Compositor::RequestSuccessfulPresentationTimeForNextFrame(
+    SuccessfulPresentationTimeCallback callback) {
+  host_->RequestSuccessfulPresentationTimeForNextFrame(std::move(callback));
 }
 
 void Compositor::ReportMetricsForTracker(

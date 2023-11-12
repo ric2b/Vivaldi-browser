@@ -34,9 +34,9 @@ namespace ash {
 namespace input_method {
 namespace {
 
-using ime::TextSuggestion;
-using ime::TextSuggestionMode;
-using ime::TextSuggestionType;
+using ime::AssistiveSuggestion;
+using ime::AssistiveSuggestionMode;
+using ime::AssistiveSuggestionType;
 using EnabledSuggestions = AssistiveSuggesterSwitch::EnabledSuggestions;
 
 const char kUsEnglishEngineId[] = "xkb:us::eng";
@@ -304,7 +304,9 @@ TEST_F(AssistiveSuggesterTest,
 
 TEST_F(AssistiveSuggesterTest,
        AssistiveDiacriticsLongpressFlagDisabled_AssistiveFeatureDisabled) {
-  // Feature flag not enabled by default.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      features::kDiacriticsOnPhysicalKeyboardLongpress);
   SetInputMethodOptions(*profile_, /*predictive_writing_enabled=*/false,
                         /*diacritics_on_longpress_enabled=*/true);
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
@@ -1212,10 +1214,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
 }
 
 TEST_F(AssistiveSuggesterMultiWordTest, OnSuggestionExistShowSuggestion) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1231,10 +1233,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, OnDisabledFlagShouldNotShowSuggestion) {
   feature_list_.InitWithFeatures(
       /*enabled_features=*/{},
       /*disabled_features=*/{features::kAssistMultiWord});
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1252,10 +1254,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, ShouldNotSuggestWhenSwitchDisabled) {
           .multi_word_suggestions = false,
       }),
       nullptr);
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
   assistive_suggester_->OnSurroundingTextChanged(u"", 0, 0);
@@ -1267,10 +1269,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, ShouldNotSuggestWhenSwitchDisabled) {
 
 TEST_F(AssistiveSuggesterMultiWordTest,
        MatchMetricRecordedWhenOneOrMoreSuggestions) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1288,10 +1290,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
   feature_list_.InitWithFeatures(
       /*enabled_features=*/{},
       /*disabled_features=*/{features::kAssistMultiWord});
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1323,10 +1325,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
   assistive_suggester_ = std::make_unique<AssistiveSuggester>(
       suggestion_handler_.get(), profile_.get(),
       std::make_unique<FakeSuggesterSwitch>(EnabledSuggestions{}), nullptr);
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1352,10 +1354,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
 
 TEST_F(AssistiveSuggesterMultiWordTest,
        CoverageMetricRecordedWhenSuggestionShown) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1369,10 +1371,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
 
 TEST_F(AssistiveSuggesterMultiWordTest,
        CoverageMetricRecordedOnceWhenSuggestionShownAndTracked) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1392,14 +1394,14 @@ TEST_F(AssistiveSuggesterMultiWordTest,
 
 TEST_F(AssistiveSuggesterMultiWordTest,
        CoverageMetricRecordedForEverySuggestionShown) {
-  std::vector<TextSuggestion> first_suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "hello there"}};
-  std::vector<TextSuggestion> second_suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kPrediction,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "was"}};
+  std::vector<AssistiveSuggestion> first_suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "hello there"}};
+  std::vector<AssistiveSuggestion> second_suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kPrediction,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "was"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1418,10 +1420,10 @@ TEST_F(AssistiveSuggesterMultiWordTest,
 }
 
 TEST_F(AssistiveSuggesterMultiWordTest, PressingTabShouldAcceptSuggestion) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kCompletion,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "aren\'t you"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kCompletion,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "aren\'t you"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1432,10 +1434,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, PressingTabShouldAcceptSuggestion) {
 }
 
 TEST_F(AssistiveSuggesterMultiWordTest, AltPlusTabShouldNotAcceptSuggestion) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kCompletion,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "aren\'t you"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kCompletion,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "aren\'t you"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1447,10 +1449,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, AltPlusTabShouldNotAcceptSuggestion) {
 }
 
 TEST_F(AssistiveSuggesterMultiWordTest, CtrlPlusTabShouldNotAcceptSuggestion) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kCompletion,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "aren\'t you"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kCompletion,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "aren\'t you"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);
@@ -1462,10 +1464,10 @@ TEST_F(AssistiveSuggesterMultiWordTest, CtrlPlusTabShouldNotAcceptSuggestion) {
 }
 
 TEST_F(AssistiveSuggesterMultiWordTest, ShiftPlusTabShouldNotAcceptSuggestion) {
-  std::vector<TextSuggestion> suggestions = {
-      TextSuggestion{.mode = TextSuggestionMode::kCompletion,
-                     .type = TextSuggestionType::kMultiWord,
-                     .text = "aren\'t you"}};
+  std::vector<AssistiveSuggestion> suggestions = {
+      AssistiveSuggestion{.mode = AssistiveSuggestionMode::kCompletion,
+                          .type = AssistiveSuggestionType::kMultiWord,
+                          .text = "aren\'t you"}};
 
   assistive_suggester_->OnActivate(kUsEnglishEngineId);
   assistive_suggester_->OnFocus(5);

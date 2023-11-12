@@ -94,7 +94,12 @@ InputMethodEngine::InputMethodEngine()
       profile_(nullptr),
       composition_changed_(false),
       commit_text_changed_(false),
-      pref_change_registrar_(nullptr) {}
+      pref_change_registrar_(nullptr),
+      // This is safe because the callback does not outlive
+      // screen_projection_change_monitor_, which is a member of this class.
+      screen_projection_change_monitor_(
+          base::BindRepeating(&InputMethodEngine::OnScreenProjectionChanged,
+                              base::Unretained(this))) {}
 
 InputMethodEngine::~InputMethodEngine() = default;
 
@@ -164,12 +169,11 @@ bool InputMethodEngine::CommitText(int context_id,
   return true;
 }
 
-void InputMethodEngine::ConfirmCompositionText(bool reset_engine,
-                                               bool keep_selection) {
+void InputMethodEngine::ConfirmComposition(bool reset_engine) {
   ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (input_context)
-    input_context->ConfirmCompositionText(reset_engine, keep_selection);
+    input_context->ConfirmComposition(reset_engine);
 }
 
 bool InputMethodEngine::DeleteSurroundingText(int context_id,
@@ -192,7 +196,9 @@ bool InputMethodEngine::DeleteSurroundingText(int context_id,
   ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (input_context) {
-    input_context->DeleteSurroundingText(offset, number_of_chars);
+    const uint32_t before =
+        offset >= 0 ? 0U : static_cast<uint32_t>(-1 * offset);
+    input_context->DeleteSurroundingText(before, number_of_chars - before);
   }
 
   return true;
@@ -206,7 +212,7 @@ bool InputMethodEngine::FinishComposingText(int context_id,
         kErrorWrongContext, context_id, context_id_);
     return false;
   }
-  ConfirmCompositionText(/* reset_engine */ false, /* keep_selection */ true);
+  ConfirmComposition(/* reset_engine */ false);
   return true;
 }
 
@@ -234,7 +240,7 @@ bool InputMethodEngine::SendKeyEvents(int context_id,
     properties[ui::kPropertyFromVK] =
         std::vector<uint8_t>(ui::kPropertyFromVKSize);
     properties[ui::kPropertyFromVK][ui::kPropertyFromVKIsMirroringIndex] =
-        (uint8_t)is_mirroring_;
+        static_cast<uint8_t>(screen_projection_change_monitor_.is_mirroring());
     event_copy.SetProperties(properties);
 
     ui::TextInputTarget* input_context =
@@ -340,7 +346,7 @@ bool InputMethodEngine::SetCompositionRange(
 
   // When there is composition text, commit it to the text field first before
   // changing the composition range.
-  ConfirmCompositionText(/* reset_engine */ false, /* keep_selection */ true);
+  ConfirmComposition(/* reset_engine */ false);
 
   std::vector<ui::ImeTextSpan> text_spans;
   for (const auto& segment : segments) {
@@ -404,7 +410,7 @@ bool InputMethodEngine::SetComposingRange(
 
   // When there is composition text, commit it to the text field first before
   // changing the composition range.
-  ConfirmCompositionText(/* reset_engine */ false, /* keep_selection */ true);
+  ConfirmComposition(/* reset_engine */ false);
 
   std::vector<ui::ImeTextSpan> text_spans;
   for (const auto& segment : segments) {
@@ -446,43 +452,6 @@ bool InputMethodEngine::SetComposingRange(
       static_cast<uint32_t>(start), static_cast<uint32_t>(end), text_spans);
 }
 
-gfx::Range InputMethodEngine::GetAutocorrectRange(int context_id,
-                                                  std::string* error) {
-  if (!IsActive()) {
-    *error = kErrorNotActive;
-    return gfx::Range();
-  }
-  if (context_id != context_id_ || context_id_ == -1) {
-    *error = base::StringPrintf(
-        "%s request context id = %d, current context id = %d",
-        kErrorWrongContext, context_id, context_id_);
-    return gfx::Range();
-  }
-  return GetAutocorrectRange();
-}
-
-gfx::Rect InputMethodEngine::GetAutocorrectCharacterBounds(int context_id,
-                                                           std::string* error) {
-  if (!IsActive()) {
-    *error = kErrorNotActive;
-    return gfx::Rect();
-  }
-  if (context_id != context_id_ || context_id_ == -1) {
-    *error = base::StringPrintf(
-        "%s request context id = %d, current context id = %d",
-        kErrorWrongContext, context_id, context_id_);
-    return gfx::Rect();
-  }
-
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
-  if (!input_context) {
-    return gfx::Rect();
-  }
-
-  return input_context->GetAutocorrectCharacterBounds();
-}
-
 gfx::Rect InputMethodEngine::GetTextFieldBounds(int context_id,
                                                 std::string* error) {
   if (!IsActive()) {
@@ -503,55 +472,6 @@ gfx::Rect InputMethodEngine::GetTextFieldBounds(int context_id,
   }
 
   return input_context->GetTextFieldBounds();
-}
-
-bool InputMethodEngine::SetAutocorrectRange(int context_id,
-                                            const gfx::Range& range,
-                                            std::string* error) {
-  if (!IsActive()) {
-    *error = kErrorNotActive;
-    return false;
-  }
-  if (context_id != context_id_ || context_id_ == -1) {
-    *error = base::StringPrintf(
-        "%s request context id = %d, current context id = %d",
-        kErrorWrongContext, context_id, context_id_);
-    return false;
-  }
-  return SetAutocorrectRange(range);
-}
-
-bool InputMethodEngine::SetSelectionRange(int context_id,
-                                          int start,
-                                          int end,
-                                          std::string* error) {
-  if (!IsActive()) {
-    *error = kErrorNotActive;
-    return false;
-  }
-  if (context_id != context_id_ || context_id_ == -1) {
-    *error = base::StringPrintf(
-        "%s request context id = %d, current context id = %d",
-        kErrorWrongContext, context_id, context_id_);
-    return false;
-  }
-  if (!IsUint32Value(start)) {
-    *error = base::StringPrintf(kErrorInvalidValue, "start", start);
-    return false;
-  }
-  if (!IsUint32Value(end)) {
-    *error = base::StringPrintf(kErrorInvalidValue, "end", end);
-    return false;
-  }
-
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
-  if (!input_context) {
-    return false;
-  }
-
-  return input_context->SetSelectionRange(static_cast<uint32_t>(start),
-                                          static_cast<uint32_t>(end));
 }
 
 void InputMethodEngine::KeyEventHandled(const std::string& extension_id,
@@ -603,7 +523,7 @@ void InputMethodEngine::CancelPendingKeyEvents() {
   pending_key_events_.clear();
 }
 
-void InputMethodEngine::FocusIn(
+void InputMethodEngine::Focus(
     const ui::TextInputMethod::InputContext& input_context) {
   current_input_type_ = input_context.type;
 
@@ -616,14 +536,7 @@ void InputMethodEngine::FocusIn(
   observer_->OnFocus(active_component_id_, context_id_, input_context);
 }
 
-void InputMethodEngine::OnTouch(ui::EventPointerType pointerType) {
-  if (!IsActive() || current_input_type_ == ui::TEXT_INPUT_TYPE_NONE)
-    return;
-
-  observer_->OnTouch(pointerType);
-}
-
-void InputMethodEngine::FocusOut() {
+void InputMethodEngine::Blur() {
   if (!IsActive() || current_input_type_ == ui::TEXT_INPUT_TYPE_NONE)
     return;
 
@@ -634,13 +547,20 @@ void InputMethodEngine::FocusOut() {
   observer_->OnBlur(active_component_id_, context_id);
 }
 
+void InputMethodEngine::OnTouch(ui::EventPointerType pointerType) {
+  if (!IsActive() || current_input_type_ == ui::TEXT_INPUT_TYPE_NONE)
+    return;
+
+  observer_->OnTouch(pointerType);
+}
+
 void InputMethodEngine::Enable(const std::string& component_id) {
   active_component_id_ = component_id;
   observer_->OnActivate(component_id);
   const ui::TextInputMethod::InputContext& input_context =
       ui::IMEBridge::Get()->GetCurrentInputContext();
   current_input_type_ = input_context.type;
-  FocusIn(input_context);
+  Focus(input_context);
 
   InputMethodManager::Get()->GetActiveIMEState()->EnableInputView();
   auto* keyboard_client = ChromeKeyboardControllerClient::Get();
@@ -663,7 +583,7 @@ bool InputMethodEngine::IsActive() const {
 void InputMethodEngine::Disable() {
   std::string last_component_id{active_component_id_};
   active_component_id_.clear();
-  ConfirmCompositionText(/* reset_engine */ true, /* keep_selection */ false);
+  ConfirmComposition(/* reset_engine */ true);
   observer_->OnDeactivated(last_component_id);
 }
 
@@ -738,18 +658,9 @@ void InputMethodEngine::AssistiveWindowButtonClicked(
   observer_->OnAssistiveWindowButtonClicked(button);
 }
 
-void InputMethodEngine::SetMirroringEnabled(bool mirroring_enabled) {
-  if (mirroring_enabled != is_mirroring_) {
-    is_mirroring_ = mirroring_enabled;
-    observer_->OnScreenProjectionChanged(is_mirroring_ || is_casting_);
-  }
-}
-
-void InputMethodEngine::SetCastingEnabled(bool casting_enabled) {
-  if (casting_enabled != is_casting_) {
-    is_casting_ = casting_enabled;
-    observer_->OnScreenProjectionChanged(is_mirroring_ || is_casting_);
-  }
+void InputMethodEngine::AssistiveWindowChanged(
+    const ash::ime::AssistiveWindow& window) {
+  observer_->OnAssistiveWindowChanged(window);
 }
 
 ui::VirtualKeyboardController* InputMethodEngine::GetVirtualKeyboardController()
@@ -1127,28 +1038,6 @@ void InputMethodEngine::UpdateComposition(
   }
 }
 
-gfx::Range InputMethodEngine::GetAutocorrectRange() {
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
-  if (!input_context)
-    return gfx::Range();
-  return input_context->GetAutocorrectRange();
-}
-
-bool InputMethodEngine::SetAutocorrectRange(const gfx::Range& range) {
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
-  if (!input_context)
-    return false;
-
-  // TODO(b/161490813): Remove SetAutocorrectRange from |InputMethodEngine|.
-  //    The only way to set autocorrect range must be through
-  //    |AutocorrectManager|, otherwise it can conflict with
-  //    |AutocorrectManager| functionalities.
-  input_context->SetAutocorrectRange(range, base::DoNothing());
-  return true;
-}
-
 void InputMethodEngine::CommitTextToInputContext(int context_id,
                                                  const std::u16string& text) {
   ui::TextInputTarget* input_context =
@@ -1182,6 +1071,12 @@ void InputMethodEngine::MenuItemToProperty(
   }
 
   // TODO(nona): Support item.children.
+}
+
+void InputMethodEngine::OnScreenProjectionChanged(bool is_projected) {
+  if (observer_) {
+    observer_->OnScreenProjectionChanged(is_projected);
+  }
 }
 
 void InputMethodEngine::NotifyInputMethodExtensionReadyForTesting() {

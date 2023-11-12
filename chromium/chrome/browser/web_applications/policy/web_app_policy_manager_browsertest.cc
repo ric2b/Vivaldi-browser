@@ -10,13 +10,12 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/web_applications/commands/install_from_info_command.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
-#include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -81,17 +80,35 @@ base::Value GetCustomAppIconAndNameItem() {
 
 class WebAppPolicyManagerBrowserTest
     : public InProcessBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   WebAppPolicyManagerBrowserTest() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   void SetUpOnMainThread() override {
@@ -142,9 +159,10 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest, DontOverrideManifest) {
   WebAppPolicyManager& policy_manager =
       WebAppProvider::GetForTest(profile())->policy_manager();
 
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   list.Append(GetCustomAppIconAndNameItem());
-  profile()->GetPrefs()->Set(prefs::kWebAppInstallForceList, std::move(list));
+  profile()->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(list));
 
   // Policy is for kInstallUrl, but we pretend to get a manifest
   // from kStartUrl.
@@ -162,9 +180,10 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest,
   WebAppPolicyManager& policy_manager =
       WebAppProvider::GetForTest(profile())->policy_manager();
 
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   list.Append(GetCustomAppNameItem());
-  profile()->GetPrefs()->Set(prefs::kWebAppInstallForceList, std::move(list));
+  profile()->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(list));
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kInstallUrl)));
   blink::mojom::ManifestPtr manifest = blink::mojom::Manifest::New();
@@ -179,9 +198,10 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest,
   WebAppPolicyManager& policy_manager =
       WebAppProvider::GetForTest(profile())->policy_manager();
 
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   list.Append(GetCustomAppIconItem());
-  profile()->GetPrefs()->Set(prefs::kWebAppInstallForceList, std::move(list));
+  profile()->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(list));
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kInstallUrl)));
   blink::mojom::ManifestPtr manifest = blink::mojom::Manifest::New();
@@ -201,9 +221,10 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest,
       WebAppProvider::GetForTest(profile())->policy_manager();
 
   // Set policy:
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   list.Append(GetCustomAppIconAndNameItem());
-  profile()->GetPrefs()->Set(prefs::kWebAppInstallForceList, std::move(list));
+  profile()->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(list));
 
   // Create manifest:
   blink::mojom::ManifestPtr manifest = blink::mojom::Manifest::New();
@@ -227,11 +248,10 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest,
                                install_info.get());
 
   auto* provider = WebAppProvider::GetForTest(profile());
-  provider->command_manager().ScheduleCommand(
-      std::make_unique<InstallFromInfoCommand>(
-          std::move(install_info), &provider->install_finalizer(),
-          /*overwrite_existing_manifest_fields=*/true,
-          webapps::WebappInstallSource::EXTERNAL_POLICY, base::DoNothing()));
+  provider->scheduler().InstallFromInfo(
+      std::move(install_info),
+      /*overwrite_existing_manifest_fields=*/true,
+      webapps::WebappInstallSource::EXTERNAL_POLICY, base::DoNothing());
 
   externally_installed_app_prefs().Insert(
       GURL(kInstallUrl), GenerateAppId(absl::nullopt, GURL(kStartUrl)),
@@ -278,8 +298,14 @@ IN_PROC_BROWSER_TEST_P(WebAppPolicyManagerBrowserTest, MigratingPolicyApp) {
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         WebAppPolicyManagerBrowserTest,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    WebAppPolicyManagerBrowserTest,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 }  // namespace web_app

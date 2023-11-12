@@ -73,7 +73,7 @@ SCTAuditingHandler::SCTAuditingHandler(NetworkContext* context,
     : owner_network_context_(context),
       pending_reporters_(cache_size),
       persistence_path_(persistence_path),
-      foreground_runner_(base::SequencedTaskRunnerHandle::Get()) {
+      foreground_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {
   if (base::FeatureList::IsEnabled(features::kSCTAuditingRetryReports) &&
       base::FeatureList::IsEnabled(features::kSCTAuditingPersistReports)) {
     // If no persistence path is set, only store pending reporters in memory.
@@ -118,9 +118,8 @@ void SCTAuditingHandler::MaybeEnqueueReport(
   // a valid signature, and thus are expected to be public certificates. If
   // there are no valid SCTs, there's no need to report anything.
   net::SignedCertificateTimestampAndStatusList validated_scts;
-  std::copy_if(
-      signed_certificate_timestamps.begin(),
-      signed_certificate_timestamps.end(), std::back_inserter(validated_scts),
+  base::ranges::copy_if(
+      signed_certificate_timestamps, std::back_inserter(validated_scts),
       [](const auto& sct) { return sct.status == net::ct::SCT_STATUS_OK; });
   if (validated_scts.empty()) {
     return;

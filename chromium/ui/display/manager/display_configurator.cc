@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/syslog_logging.h"
 #include "base/time/time.h"
-#include "chromeos/system/devicemode.h"
+#include "chromeos/ash/components/system/devicemode.h"
 #include "ui/display/display.h"
 #include "ui/display/display_features.h"
 #include "ui/display/display_switches.h"
@@ -915,6 +915,10 @@ void DisplayConfigurator::AddObserver(Observer* observer) {
 
 void DisplayConfigurator::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
+}
+
+bool DisplayConfigurator::HasObserverForTesting(Observer* observer) const {
+  return observers_.HasObserver(observer);
 }
 
 void DisplayConfigurator::MaybeSetRefreshRateThrottleState(

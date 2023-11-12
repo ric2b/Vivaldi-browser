@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
@@ -29,8 +29,7 @@
 #include "extensions/common/extension.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/extensions/default_app_order.h"
-#include "chrome/browser/ui/app_list/page_break_constants.h"
+#include "chrome/browser/ash/extensions/default_app_order.h"
 #endif
 
 namespace extensions {
@@ -193,9 +192,9 @@ void ChromeAppSorting::InitializePageOrdinalMapFromWebApps() {
   if (!web_app_provider)
     return;
 
-  web_app_registrar_ = &web_app_provider->registrar();
-  web_app_sync_bridge_ = &web_app_provider->sync_bridge();
-  app_registrar_observation_.Observe(&web_app_provider->registrar());
+  web_app_registrar_ = &web_app_provider->registrar_unsafe();
+  web_app_sync_bridge_ = &web_app_provider->sync_bridge_unsafe();
+  app_registrar_observation_.Observe(&web_app_provider->registrar_unsafe());
   install_manager_observation_.Observe(&web_app_provider->install_manager());
   InitializePageOrdinalMap(web_app_registrar_->GetAppIds());
 }
@@ -556,7 +555,7 @@ void ChromeAppSorting::OnWebAppsWillBeUpdatedFromSync(
   // returned from GetPageOrdinal() and GetAppLaunchOrdinal() match what is in
   // the internal map representation in this class.
   if (fix_ntp) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ChromeAppSorting::FixNTPOrdinalCollisions,
                                   weak_factory_.GetWeakPtr()));
   }
@@ -703,15 +702,6 @@ void ChromeAppSorting::CreateDefaultOrdinals() {
     default_ordinals_[extension_id].page_ordinal = page_ordinal;
     default_ordinals_[extension_id].app_launch_ordinal = app_launch_ordinal;
     app_launch_ordinal = app_launch_ordinal.CreateAfter();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Default page breaks are installed by default for first-time users so that
-    // we can make default apps span multiple pages in the Launcher without
-    // fully filling those pages. If |extension_id| is of a default page break,
-    // then apps that follow it in the order should have an incremented page
-    // ordinal.
-    if (app_list::IsDefaultPageBreakItem(extension_id))
-      page_ordinal = page_ordinal.CreateAfter();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 }
 

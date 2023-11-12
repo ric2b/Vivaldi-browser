@@ -336,9 +336,6 @@ GL_APICALL void         GL_APIENTRY glSetActiveURLCHROMIUM (const char* url);
 // Extension CHROMIUM_context_visibility_hint
 GL_APICALL void         GL_APIENTRY glContextVisibilityHintCHROMIUM (GLboolean visibility);
 
-// Extension CHROMIUM_framebuffer_mixed_samples
-GL_APICALL void         GL_APIENTRY glCoverageModulationCHROMIUM (GLenumCoverageModulationComponents components);
-
 // Extension KHR_robustness
 GL_APICALL GLenum       GL_APIENTRY glGetGraphicsResetStatusKHR (void);
 
@@ -391,3 +388,6 @@ GL_APICALL void         GL_APIENTRY glBlendFunciOES (GLuint buf, GLenum src, GLe
 GL_APICALL void         GL_APIENTRY glBlendFuncSeparateiOES (GLuint buf, GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
 GL_APICALL void         GL_APIENTRY glColorMaskiOES (GLuint buf, GLboolean r, GLboolean g, GLboolean b, GLboolean a);
 GL_APICALL GLboolean    GL_APIENTRY glIsEnablediOES (GLenum target, GLuint index);
+
+// Extension ANGLE_provoking_vertex
+GL_APICALL void         GL_APIENTRY glProvokingVertexANGLE (GLenum provokeMode);

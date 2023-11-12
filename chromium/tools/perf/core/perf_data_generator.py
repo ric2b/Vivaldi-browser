@@ -262,6 +262,25 @@ FYI_BUILDERS = {
             'pool': 'chrome.tests',
         },
     },
+    'fuchsia-perf-nuc-fyi': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['nuc'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-chrome',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Intel NUC Kit NUC7i5DNHE',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
     'fuchsia-perf-sherlock-fyi': {
         'tests': [{
             'isolate':
@@ -296,6 +315,25 @@ FYI_BUILDERS = {
         'dimension': {
             'cpu': None,
             'device_type': 'Astro',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
+    'fuchsia-perf-nsn': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['nelson'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-wes',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Nelson',
             'os': 'Fuchsia',
             'pool': 'chrome.tests',
         },
@@ -371,12 +409,6 @@ FYI_BUILDERS = {
         },
     },
     'fuchsia-builder-perf-arm64': {
-        'additional_compile_targets': [
-            'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
-            'chromium_builder_perf', 'base_perftests'
-        ],
-    },
-    'fuchsia-builder-perf-fyi': {
         'additional_compile_targets': [
             'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
             'chromium_builder_perf', 'base_perftests'
@@ -900,6 +932,20 @@ BUILDERS = {
             'device_os_flavor': 'google',
         },
     },
+    'android-go-wembley-perf': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_clank_trichrome_bundle',
+        }],
+        'platform':
+        'android-trichrome-bundle',
+        'dimension': {
+            'pool': 'chrome.tests.perf',
+            'os': 'Android',
+            'device_type': 'wembley_2GB',
+            'device_os_flavor': 'google',
+        },
+    },
     'android-new-pixel-perf': {
         'tests': [{
             'isolate':
@@ -1094,7 +1140,7 @@ BUILDERS = {
             'gpu':
             '8086:1626',
             'os':
-            'Mac-12.3',
+            'Mac-12.6.1',
             'pool':
             'chrome.tests.perf',
             'synthetic_product_name':
@@ -1118,7 +1164,7 @@ BUILDERS = {
             'gpu':
             '8086:1626',
             'os':
-            'Mac-10.12.6',
+            'Mac-12.6.1',
             'pool':
             'chrome.tests.perf',
             'synthetic_product_name':
@@ -1232,7 +1278,7 @@ BUILDERS = {
             'gpu':
             '1002:6821-4.0.20-3.2.8',
             'os':
-            'Mac-11.6.1',
+            'Mac-12.6.1',
             'pool':
             'chrome.tests.perf',
             'synthetic_product_name':
@@ -1256,7 +1302,7 @@ BUILDERS = {
             'gpu':
             '1002:6821-4.0.20-3.2.8',
             'os':
-            'Mac-11.6.1',
+            'Mac-12.6.1',
             'pool':
             'chrome.tests.perf',
             'synthetic_product_name':
@@ -1393,6 +1439,8 @@ BUILDERS = {
                     # The magic hostname that resolves to a CrOS device in the test lab
                     '--remote=variable_chromeos_device_hostname',
                 ],
+                'timeout':
+                12 * 60 * 60,  # 12 hours, due to small number of devices
             },
         ],
         'platform':
@@ -1964,12 +2012,12 @@ def generate_performance_test(tester_config, test, builder_name):
       # (crbug.com/1036447), so we must timeout the shards within ~6 hours to
       # allow for other overhead. If the overall builder times out then we
       # don't get data even from the passing shards.
-      'hard_timeout': int(6 * 60 * 60),  # 6 hours timeout for full suite
-      # 5.5 hour timeout. Note that this is effectively the timeout for a
+      'hard_timeout': test.get('timeout', 6 * 60 * 60),  # default 6 hours
+      # This is effectively the timeout for a
       # benchmarking subprocess to run since we intentionally do not stream
       # subprocess output to the task stdout.
       # TODO(crbug.com/865538): Reduce this once we can reduce hard_timeout.
-      'io_timeout': int(6 * 60 * 60),
+      'io_timeout': test.get('timeout', 6 * 60 * 60),
       'dimension_sets': [tester_config['dimension']],
       'service_account': _TESTER_SERVICE_ACCOUNT,
   }

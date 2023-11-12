@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Uncomment as these modules are migrated to Polymer 3.
 import './crostini_page/bruschetta_subpage.js';
 import './crostini_page/crostini_arc_adb.js';
 import './crostini_page/crostini_arc_adb_confirmation_dialog.js';
@@ -31,6 +30,7 @@ import './os_a11y_page/display_and_magnification_page.js';
 import './os_a11y_page/keyboard_and_text_input_page.js';
 import './os_a11y_page/cursor_and_touchpad_page.js';
 import './os_a11y_page/audio_and_captions_page.js';
+import './os_a11y_page/select_to_speak_subpage.js';
 import './os_a11y_page/switch_access_action_assignment_dialog.js';
 import './os_a11y_page/switch_access_action_assignment_pane.js';
 import './os_a11y_page/switch_access_setup_guide_dialog.js';
@@ -52,7 +52,7 @@ import './os_printing_page/cups_add_printer_manufacturer_model_dialog.js';
 import './os_printing_page/cups_edit_printer_dialog.js';
 import './os_printing_page/cups_nearby_printers.js';
 import './os_printing_page/cups_printer_dialog_error.js';
-import './os_printing_page/cups_printer_shared_css.js';
+import './os_printing_page/cups_printer_shared.css.js';
 import './os_printing_page/cups_printers_entry.js';
 import './os_printing_page/cups_printers.js';
 import './os_printing_page/cups_saved_printers.js';

@@ -6,6 +6,7 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -59,17 +60,19 @@ class BrowsingTopicsCalculatorTest : public testing::Test {
 
     host_content_settings_map_ = base::MakeRefCounted<HostContentSettingsMap>(
         &prefs_, /*is_off_the_record=*/false, /*store_last_modified=*/false,
-        /*restore_session=*/false);
+        /*restore_session=*/false, /*should_record_metrics=*/false);
     cookie_settings_ = base::MakeRefCounted<content_settings::CookieSettings>(
         host_content_settings_map_.get(), &prefs_, false, "chrome-extension");
     auto privacy_sandbox_delegate = std::make_unique<
         privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>();
-    privacy_sandbox_delegate->SetUpDefaultResponse(/*restricted=*/false);
+    privacy_sandbox_delegate->SetUpIsPrivacySandboxRestrictedResponse(
+        /*restricted=*/false);
+    privacy_sandbox_delegate->SetUpIsIncognitoProfileResponse(
+        /*incognito=*/false);
     privacy_sandbox_settings_ =
         std::make_unique<privacy_sandbox::PrivacySandboxSettings>(
             std::move(privacy_sandbox_delegate),
-            host_content_settings_map_.get(), cookie_settings_, &prefs_,
-            /*incognito_profile=*/false);
+            host_content_settings_map_.get(), cookie_settings_, &prefs_);
     privacy_sandbox_settings_->SetPrivacySandboxEnabled(true);
 
     topics_site_data_manager_ =
@@ -84,9 +87,9 @@ class BrowsingTopicsCalculatorTest : public testing::Test {
         optimization_guide::TestOptimizationGuideModelProvider>();
     page_content_annotations_service_ =
         std::make_unique<optimization_guide::PageContentAnnotationsService>(
-            "en-US", optimization_guide_model_provider_.get(),
-            history_service_.get(), nullptr, base::FilePath(), nullptr,
-            nullptr);
+            nullptr, "en-US", optimization_guide_model_provider_.get(),
+            history_service_.get(), nullptr, nullptr, nullptr, base::FilePath(),
+            nullptr, nullptr);
 
     page_content_annotations_service_->OverridePageContentAnnotatorForTesting(
         &test_page_content_annotator_);
@@ -124,7 +127,7 @@ class BrowsingTopicsCalculatorTest : public testing::Test {
                          base::Time time) {
     history::HistoryAddPageArgs add_page_args;
     add_page_args.time = time;
-    add_page_args.context_id = reinterpret_cast<history::ContextID>(1);
+    add_page_args.context_id = 1;
 
     for (const std::string& host : hosts) {
       static int nav_entry_id = 0;

@@ -13,6 +13,7 @@
 #include "ash/system/time/calendar_view_controller.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/settings/scoped_timezone_settings.h"
 #include "google_apis/common/api_error_codes.h"
@@ -118,6 +119,7 @@ class CalendarViewEventListViewTest : public AshTestBase {
  private:
   std::unique_ptr<CalendarEventListView> event_list_view_;
   std::unique_ptr<CalendarViewController> controller_;
+  base::test::ScopedFeatureList features_;
 };
 
 TEST_F(CalendarViewEventListViewTest, ShowEvents) {
@@ -215,12 +217,12 @@ TEST_F(CalendarViewEventListViewTest, CheckTimeFormat) {
   CreateEventListView(date);
 
   SetSelectedDate(date);
-  EXPECT_EQ(u"8:30 – 9:30 PM", GetTimeRange(0)->GetText());
-  EXPECT_EQ(u"11:30 – 11:59 PM", GetTimeRange(1)->GetText());
+  EXPECT_EQ(u"8:30\u2009–\u20099:30\u202fPM", GetTimeRange(0)->GetText());
+  EXPECT_EQ(u"11:30\u2009–\u200911:59\u202fPM", GetTimeRange(1)->GetText());
 
   // Select the second day of the multi-day event.
   SetSelectedDate(date_2);
-  EXPECT_EQ(u"12:00 – 12:30 AM", GetTimeRange(0)->GetText());
+  EXPECT_EQ(u"12:00\u2009–\u200912:30\u202fAM", GetTimeRange(0)->GetText());
 
   // Set the time in 24 hour format.
   Shell::Get()->system_tray_model()->SetUse24HourClock(true);
@@ -229,11 +231,11 @@ TEST_F(CalendarViewEventListViewTest, CheckTimeFormat) {
   CreateEventListView(date);
 
   SetSelectedDate(date);
-  EXPECT_EQ(u"20:30 – 21:30", GetTimeRange(0)->GetText());
-  EXPECT_EQ(u"23:30 – 23:59", GetTimeRange(1)->GetText());
+  EXPECT_EQ(u"20:30\u2009–\u200921:30", GetTimeRange(0)->GetText());
+  EXPECT_EQ(u"23:30\u2009–\u200923:59", GetTimeRange(1)->GetText());
 
   SetSelectedDate(date_2);
-  EXPECT_EQ(u"00:00 – 00:30", GetTimeRange(0)->GetText());
+  EXPECT_EQ(u"00:00\u2009–\u200900:30", GetTimeRange(0)->GetText());
 }
 
 TEST_F(CalendarViewEventListViewTest, RefreshEvents) {

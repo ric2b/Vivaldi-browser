@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.page_info;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -19,13 +18,11 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Consumer;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.merchant_viewer.PageInfoStoreInfoController;
 import org.chromium.chrome.browser.merchant_viewer.PageInfoStoreInfoController.StoreInfoActionHandler;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
@@ -66,6 +63,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.function.Consumer;
 
 // Vivaldi
 import androidx.appcompat.content.res.AppCompatResources;
@@ -143,25 +141,6 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
     @Override
     public ModalDialogManager getModalDialogManager() {
         return mModalDialogManagerSupplier.get();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean isInstantAppAvailable(String url) {
-        InstantAppsHandler instantAppsHandler = InstantAppsHandler.getInstance();
-        return instantAppsHandler.isInstantAppAvailable(
-                url, false /* checkHoldback */, false /* includeUserPrefersBrowser */);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Intent getInstantAppIntentForUrl(String url) {
-        InstantAppsHandler instantAppsHandler = InstantAppsHandler.getInstance();
-        return instantAppsHandler.getInstantAppIntentForUrl(url);
     }
 
     /**
@@ -250,14 +229,15 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
             controllers.add(new PageInfoAdPersonalizationController(
                     mainController, adPersonalizationRow, this));
         }
-        if (PageInfoFeatures.PAGE_INFO_HISTORY.isEnabled()) {
-            final Tab tab = TabUtils.fromWebContents(mWebContents);
-            final PageInfoRowView historyRow = new PageInfoRowView(rowWrapper.getContext(), null);
-            historyRow.setId(PageInfoHistoryController.HISTORY_ROW_ID);
-            rowWrapper.addView(historyRow);
-            controllers.add(new PageInfoHistoryController(
-                    mainController, historyRow, this, () -> { return tab; }));
-        }
+
+        // Add history row.
+        final Tab tab = TabUtils.fromWebContents(mWebContents);
+        final PageInfoRowView historyRow = new PageInfoRowView(rowWrapper.getContext(), null);
+        historyRow.setId(PageInfoHistoryController.HISTORY_ROW_ID);
+        rowWrapper.addView(historyRow);
+        controllers.add(new PageInfoHistoryController(
+                mainController, historyRow, this, () -> { return tab; }));
+
         if (PageInfoAboutThisSiteController.isFeatureEnabled()) {
             final PageInfoRowView aboutThisSiteRow =
                     new PageInfoRowView(rowWrapper.getContext(), null);

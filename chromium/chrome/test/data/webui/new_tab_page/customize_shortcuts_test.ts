@@ -15,11 +15,10 @@ import {installMock} from './test_support.js';
 
 suite('NewTabPageCustomizeShortcutsTest', () => {
   let customizeShortcuts: CustomizeShortcutsElement;
-  let handler: TestBrowserProxy;
+  let handler: TestBrowserProxy<PageHandlerRemote>;
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     handler = installMock(
         PageHandlerRemote,

@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente executar os diagnósticos de rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este website contém programas prejudiciais</translation>
 <translation id="1916770123977586577">Para aplicar as definições atualizadas a este website, recarregue esta página</translation>
-<translation id="1973351931613083086">reprodução automática</translation>
 <translation id="1974060860693918893">Avançadas</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A verificar o proxy e a firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido em nome de: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Este website não consegue fornecer uma ligação segura</translation>
 <translation id="2187317261103489799">Detetar (pré-definição)</translation>
 <translation id="2224337661447660594">Sem Internet</translation>
-<translation id="2230458221926704099">Utilize a <ph name="BEGIN_LINK" />aplicação de diagnóstico<ph name="END_LINK" /> para corrigir a ligação</translation>
 <translation id="2292556288342944218">O acesso à Internet está bloqueado</translation>
 <translation id="2317259163369394535">O domínio <ph name="DOMAIN" /> requer um nome de utilizador e uma palavra-passe.</translation>
 <translation id="2337852623177822836">Definição controlada pelo administrador</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Os atacantes poderão estar a tentar roubar as suas informações de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, palavras-passe, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detetada uma alteração de rede.</translation>
 <translation id="2948083400971632585">Pode desativar quaisquer proxies configurados para uma conexão na página de definições.</translation>
-<translation id="2953943267837858202">Reprodução automática de vídeos não permitida</translation>
 <translation id="2991571918955627853">Não pode visitar <ph name="SITE" /> neste momento, porque o website utiliza HSTS. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
 <translation id="3005723025932146533">Mostrar cópia guardada</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Prima o botão recarregar para enviar novamente os dados necessários para carregar a página.</translation>
 <translation id="3234666976984236645">Detetar sempre conteúdo importante neste website</translation>
-<translation id="3291915639428159043">Reprodução automática bloqueada</translation>
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> está inacessível de momento.</translation>
 <translation id="3427092606871434483">Permitir (pré-definição)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">A sua ligação não é privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
-<translation id="3620979700683094848">Websites podem reproduzir vídeo automaticamente</translation>
 <translation id="3630155396527302611">Se já estiver indicado na lista como sendo um programa com permissão para aceder à rede, experimente
     removê-lo da lista e adicioná-lo novamente.</translation>
 <translation id="3658742229777143148">Revisão</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">O cliente e o servidor não suportam uma versão do protocolo SSL ou um conjunto de cifras comum.</translation>
-<translation id="410351446219883937">Reprodução automática</translation>
 <translation id="4116663294526079822">Permitir sempre neste website</translation>
 <translation id="4130226655945681476">Verificar os cabos de rede, o modem e o router</translation>
 <translation id="4151403195736952345">Utilizar pré-definição global (Detetar)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Confirmar nova submissão de formulário</translation>
 <translation id="6569060085658103619">Está a ver a página de uma extensão</translation>
 <translation id="6657585470893396449">Palavra-passe</translation>
-<translation id="6685834062052613830">Termine sessão e conclua a configuração</translation>
 <translation id="6711464428925977395">Existe um problema com o servidor proxy ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">O seu equipamento entrou em suspensão.</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">O software de firewall ou antivírus pode ter bloqueado a ligação.</translation>
 <translation id="7800304661137206267">A ligação é cifrada utilizando <ph name="CIPHER" />, com <ph name="MAC" /> para autenticação de mensagens e <ph name="KX" /> como mecanismo de troca de chaves.</translation>
 <translation id="7834399512844817676">Normalmente, o website <ph name="SITE" /> utiliza encriptação para proteger as suas informações. Quando o Vivaldi tentou estabelecer ligação a <ph name="SITE" /> desta vez, o website devolveu credenciais invulgares e incorretas. Isto pode acontecer quando um utilizador mal intencionado tenta simular ser <ph name="SITE" /> ou quando um ecrã de início de sessão Wi-Fi interrompe a ligação. As suas informações continuam seguras porque o Vivaldi interrompeu a ligação antes de qualquer troca de dados.</translation>
-<translation id="7834693436815575883">Reprodução automática permitida</translation>
 <translation id="7878562273885520351">A sua palavra-passe pode estar comprometida</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
 <translation id="8025119109950072390">Os utilizadores mal intencionados neste website podem enganá-lo/a no sentido de fazer algo perigoso como instalar programas ou revelar as suas informações pessoais (por exemplo, palavras-passe, números de telefone ou cartões de crédito).</translation>
 <translation id="8037357227543935929">Pedir (pré-definição)</translation>
 <translation id="8041940743680923270">Utilizar pré-definição global (Perguntar)</translation>
-<translation id="8044382196220116469">Não permitir que os websites reproduzam vídeos automaticamente</translation>
 <translation id="808894953321890993">Alterar palavra-passe</translation>
 <translation id="8119307142152921512">rastreios e anúncios</translation>
 <translation id="8149426793427495338">O computador entrou em suspensão.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Nome de utilizador</translation>
 <translation id="8703575177326907206">A sua ligação a <ph name="DOMAIN" /> não está cifrada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar o &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estamos a diagnosticar o problema.</translation>
-<translation id="8774017153185436870">Os websites podem reproduzir vídeo automaticamente</translation>
 <translation id="8820817407110198400">Favoritos</translation>
 <translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir para as definições do website</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Estes recursos podem ser vistos por outros utilizadores em trânsito e modificados por um utilizador mal intencionado com o intuito de alterar o comportamento da página.</translation>
-<translation id="9048224371732578627">Permitida a reprodução automática de vídeo</translation>
 <translation id="9062620674789239642">Pode ter sido movido, editado ou eliminado.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9073799351042754113">Escolheu desativar os avisos de segurança para este website.</translation>

@@ -288,7 +288,7 @@ GroupedUpdates GroupValidUpdates(UpdateResponseDataList updates) {
     }
     // Special-case the root folder to avoid reporting an error.
     if (update_entity.server_defined_unique_tag ==
-        syncer::ModelTypeToRootTag(syncer::NOTES)) {
+        syncer::ModelTypeToProtocolRootTag(syncer::NOTES)) {
       continue;
     }
     // Non-root permanent folders don't need further validation.

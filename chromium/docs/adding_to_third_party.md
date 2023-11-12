@@ -22,18 +22,60 @@ there.
 
 To make sure the inclusion of a new third_party project makes sense for the
 Chromium project, you should first obtain
-[Chrome Eng Review](../ENG_REVIEW_OWNERS) approval. Please include the following information in an
-email to chrome-eng-review@google.com:
+[Chrome ATL](../ATL_OWNERS) approval. Please include the following information in an
+email to chrome-atls@google.com:
 * Motivation of your project
 * Design docs
 * Additional checkout size
+   * If the increase is significant (e.g., 20+ MB), can we consider limiting the
+   files to be checked in?
 * Build time increase
-* Binary size increase on Android ([official](https://www.chromium.org/developers/gn-build-configuration)  builds)
+   * If the increase is significant (e.g., 30+ seconds), can we consider making
+   this an optional build target?
+* Binary size increase on Android ([official](https://www.chromium.org/developers/gn-build-configuration) builds)
+   * Any 16 KB increase on Android is flagged on the build bots and
+   justification is needed.
 * Binary size increase on Windows
+* Is this library maintained on all platforms that we will use it on?
+   * If not, will the Chrome org be expected to maintain this for some or all
+   platforms?
+* Does it have any performance / memory implications (esp. on Android)? Was the
+library designed with intended use on Android?
+* Do we really need the library? Is there any alternative such as an existing
+library already in Chromium? If introducing a library with similar functionality
+as existing, will it be easy for another developer to understand which should be
+used where? Will you commit to consolidating uses in Chromium and remove the
+alternative libraries?
+* For desktop (Win/Mac/Linux/ChromeOS), does the dependency introduce closed
+source components (e.g., binaries, WASM binaries, obfuscated code)? If yes,
+please reach out to Chrome ATLs.
 
-Googlers can access [go/chrome-eng-review](https://goto.google.com/chrome-eng-review) and review
-existing topics in g/chrome-eng-review, and can also come to office hours to ask
+
+Googlers can access [go/chrome-atls](https://goto.google.com/chrome-atls) and review
+existing topics in g/chrome-atls, and can also come to office hours to ask
 questions.
+
+### Rust
+
+Rust is allowed for third-party libraries as long as there is a business need,
+which includes the following:
+
+* The Rust implementation is the best (e.g., speed, memory, lack of bugs) or
+only existing implementation available for the third-party library.
+* The Rust implementation allows the operation to move to a higher privileged
+process, and this benefits the product by improving on guardrail metrics (e.g.
+through avoiding process startup, IPC overheads, or C++ memory-unsafety
+mitigations).
+* The Rust implementation can meaningfully reduce our expected risk of
+(memory/crashes/undefined behavior) bugs, when compared to the existing
+third-party library and related C++ code required to use the library. We realize
+assessing risk is quite complex and very nuanced. If this is the criteria by
+which the third-party library is being added, chrome-atls@google.com and
+chrome-rust@google.com may ask for more data.
+
+Support for third-party libraries written in Rust is in active development. If
+the library you wish to add is in Rust, reach out to chrome-rust@google.com
+first.
 
 ### A note on size constraints
 
@@ -43,8 +85,8 @@ have experience from Windows of the binary size impacting successful patch rate 
 as constraints from the Android Ecosystem where APKs included in the system image have hard
 limits on their size due to allocation size of the system partition. For more details and
 guidelines on size increases see
-[//docs/speed/binary_size/binary_size_explainer.md](binary_size_explainer) and Googlers can
-additionally check [go/chrome-binary-size](go/chrome-binary-size)
+[//docs/speed/binary_size/binary_size_explainer.md](speed/binary_size/binary_size_explainer.md) and Googlers can
+additionally check [go/chrome-binary-size](https://goto.google.com/chrome-binary-size)
 
 ## Get the code
 
@@ -186,7 +228,7 @@ false-negatives).
 You need a LICENSE file. Example:
 [//third_party/libjpeg/LICENSE](../third_party/libjpeg/LICENSE).
 
-Run `//tools/licenses.py scan`; this will complain about incomplete or missing
+Run `//tools/licenses/licenses.py scan`; this will complain about incomplete or missing
 data for third_party checkins. We use `licenses.py credits` to generate the
 about:credits page in Google Chrome builds.
 
@@ -201,7 +243,7 @@ following sign-offs. Some of these are accessible to Googlers only.
 Non-Googlers can email one of the people in
 [//third_party/OWNERS](../third_party/OWNERS) for help.
 
-* Make sure you have the approval from Chrome Eng Review as mentioned
+* Make sure you have the approval from Chrome ATLs as mentioned
   [above](#before-you-start).
 * Get security@chromium.org (or chrome-security@google.com, Google-only)
   approval. Email the list with relevant details and a link to the CL.
@@ -214,14 +256,14 @@ Non-Googlers can email one of the people in
   licensing matters. These reviewers may not be able to +1 a change so look for
   verbal approval in the comments. (This list does not receive or deliver
   email, so only use it as a reviewer, not for other communication. Internally,
-  see [cl/221704656](https://cl/221704656) for details about how
+  see [cl/221704656](http://cl/221704656) for details about how
   this is configured.). If you have questions about the third-party process,
   ask one of the [//third_party/OWNERS](../third_party/OWNERS) instead.
 * Lastly, if all other steps are complete, get a positive code review from a
   member of [//third_party/OWNERS](../third_party/OWNERS) to land the change.
 
-Please send separate emails to the eng review and security@chromium.org.
-You can skip the eng review and security@chromium.org when you are only moving
+Please send separate emails to the ATLs and security@chromium.org.
+You can skip the ATL review and security@chromium.org when you are only moving
 existing directories in Chromium to //third_party/.
 
 Subsequent changes don't normally require third-party-owners or security
@@ -241,6 +283,6 @@ That page displays a resource embedded in the browser as part of the
 GRIT file; the actual HTML text is generated in the
 [//components/resources:about_credits](../components/resources/BUILD.gn)
 build target using a template from the output of the
-[//tools/licenses.py](../tools/licenses.py) script. Assuming you've followed
+[//tools/licenses/licenses.py](../tools/licenses/licenses.py) script. Assuming you've followed
 the rules above to ensure that you have the proper LICENSE file and it passes
 the checks, it'll be included automatically.

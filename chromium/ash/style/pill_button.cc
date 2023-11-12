@@ -69,13 +69,14 @@ absl::optional<ui::ColorId> GetDefaultBackgroundColorId(PillButton::Type type) {
 
   switch (type & kButtonColorVariant) {
     case PillButton::kDefault:
-      color_id = is_jellyroll_enabled
-                     ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSysOnBase)
-                     : static_cast<ui::ColorId>(
-                           ash::kColorAshControlBackgroundColorInactive);
+      color_id =
+          is_jellyroll_enabled
+              ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSystemOnBase)
+              : static_cast<ui::ColorId>(
+                    ash::kColorAshControlBackgroundColorInactive);
       break;
     case PillButton::kDefaultElevated:
-      color_id = cros_tokens::kCrosSysSysBaseElevated;
+      color_id = cros_tokens::kCrosSysSystemBaseElevated;
       break;
     case PillButton::kPrimary:
       color_id = is_jellyroll_enabled
@@ -95,11 +96,8 @@ absl::optional<ui::ColorId> GetDefaultBackgroundColorId(PillButton::Type type) {
     case PillButton::kAccent:
       color_id = ash::kColorAshControlBackgroundColorInactive;
       break;
-    case PillButton::kFloating:
-    case PillButton::kAccent | PillButton::kFloating:
-      break;
     default:
-      NOTREACHED() << "Invalid pill button type: " << type;
+      NOTREACHED() << "Invalid and floating pill button type: " << type;
   }
 
   return color_id;
@@ -127,7 +125,7 @@ absl::optional<ui::ColorId> GetDefaultButtonTextIconColorId(
               : static_cast<ui::ColorId>(ash::kColorAshButtonLabelColorPrimary);
       break;
     case PillButton::kSecondary:
-      color_id = cros_tokens::kCrosSysOnPrimaryContainer;
+      color_id = cros_tokens::kCrosSysOnSecondaryContainer;
       break;
     case PillButton::kFloating:
       color_id = is_jellyroll_enabled
@@ -147,6 +145,7 @@ absl::optional<ui::ColorId> GetDefaultButtonTextIconColorId(
     default:
       NOTREACHED() << "Invalid pill button type: " << type;
   }
+
   return color_id;
 }
 
@@ -182,6 +181,9 @@ PillButton::PillButton(PressedCallback callback,
           ? ui::kColorAshLightFocusRing
           : ui::kColorAshFocusRing);
   SetTooltipText(text);
+
+  enabled_changed_subscription_ = AddEnabledChangedCallback(base::BindRepeating(
+      &PillButton::UpdateBackgroundColor, base::Unretained(this)));
 }
 
 PillButton::~PillButton() = default;
@@ -220,17 +222,7 @@ void PillButton::OnThemeChanged() {
     return;
 
   views::LabelButton::OnThemeChanged();
-
-  if (use_light_colors_ && !features::IsDarkLightModeEnabled()) {
-    ScopedLightModeAsDefault scoped_light_mode_as_default;
-    UpdateBackgroundColor();
-    UpdateTextColor();
-    UpdateIconColor();
-  } else {
-    UpdateBackgroundColor();
-    UpdateTextColor();
-    UpdateIconColor();
-  }
+  UpdateTextColor();
 }
 
 gfx::Insets PillButton::GetInsets() const {
@@ -249,22 +241,26 @@ gfx::Insets PillButton::GetInsets() const {
 }
 
 void PillButton::UpdateBackgroundColor() {
-  if (!background())
+  if (IsFloatingPillButton(type_))
     return;
 
-  SkColor background_color;
-  if (background_color_) {
-    background_color = background_color_.value();
-  } else {
-    DCHECK(GetWidget());
-
-    auto default_background_color_id = GetDefaultBackgroundColorId(type_);
-    DCHECK(default_background_color_id);
-    background_color =
-        GetColorProvider()->GetColor(default_background_color_id.value());
+  const int height = GetButtonHeight(type_);
+  if (!GetEnabled()) {
+    SetBackground(views::CreateThemedRoundedRectBackground(
+        cros_tokens::kCrosSysDisabledContainer, height / 2.f));
+    return;
   }
 
-  background()->SetNativeControlColor(background_color);
+  if (background_color_) {
+    SetBackground(views::CreateRoundedRectBackground(background_color_.value(),
+                                                     height / 2.f));
+    return;
+  }
+
+  auto background_color_id = GetDefaultBackgroundColorId(type_);
+  DCHECK(background_color_id);
+  SetBackground(views::CreateThemedRoundedRectBackground(
+      background_color_id.value(), height / 2.f));
 }
 
 void PillButton::SetBackgroundColor(const SkColor background_color) {
@@ -299,8 +295,6 @@ void PillButton::SetPillButtonType(Type type) {
 
   if (GetWidget())
     Init();
-
-  OnThemeChanged();
 }
 
 void PillButton::SetUseDefaultLabelFont() {
@@ -328,61 +322,47 @@ void PillButton::Init() {
     }
   }
 
-  if (!IsFloatingPillButton(type_)) {
-    auto color_id = GetDefaultBackgroundColorId(type_);
-    DCHECK(color_id);
-    SkColor background_color = background_color_.value_or(
-        GetColorProvider()->GetColor(color_id.value()));
-    SetBackground(
-        views::CreateRoundedRectBackground(background_color, height / 2.f));
-  } else {
-    SetBackground(nullptr);
-  }
+  UpdateBackgroundColor();
+  UpdateIconColor();
+  UpdateTextColor();
+
   PreferredSizeChanged();
 }
 
 void PillButton::UpdateTextColor() {
-  SkColor text_color;
-  if (text_color_) {
-    text_color = text_color_.value();
-  } else {
-    DCHECK(GetWidget());
+  // Only update text color when the button is added to a widget.
+  if (!GetWidget())
+    return;
 
-    auto default_text_icon_color_id = GetDefaultButtonTextIconColorId(type_);
-    DCHECK(default_text_icon_color_id);
-
-    text_color =
-        GetColorProvider()->GetColor(default_text_icon_color_id.value());
-  }
-
-  SetEnabledTextColors(text_color);
+  // TODO(crbug.com/1383544): When LabelButton is able to use color ID, directly
+  // use color ID for default text color.
+  auto* color_provider = GetColorProvider();
+  auto default_color_id = GetDefaultButtonTextIconColorId(type_);
+  DCHECK(default_color_id);
+  SetEnabledTextColors(
+      text_color_.value_or(color_provider->GetColor(default_color_id.value())));
   SetTextColor(views::Button::STATE_DISABLED,
-               ColorUtil::GetDisabledColor(text_color));
+               color_provider->GetColor(cros_tokens::kCrosSysDisabled));
 }
 
 void PillButton::UpdateIconColor() {
   if (!IsIconPillButton(type_))
     return;
 
-  SkColor icon_color;
-  if (icon_color_) {
-    icon_color = icon_color_.value();
-  } else {
-    DCHECK(GetWidget());
-
-    auto default_text_icon_color_id = GetDefaultButtonTextIconColorId(type_);
-    DCHECK(default_text_icon_color_id);
-
-    icon_color =
-        GetColorProvider()->GetColor(default_text_icon_color_id.value());
-  }
-
   DCHECK(icon_);
-  SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(*icon_, kIconSize, icon_color));
-  SetImage(views::Button::STATE_DISABLED,
-           gfx::CreateVectorIcon(*icon_, kIconSize,
-                                 ColorUtil::GetDisabledColor(icon_color)));
+  if (icon_color_) {
+    SetImage(views::Button::STATE_NORMAL,
+             gfx::CreateVectorIcon(*icon_, kIconSize, icon_color_.value()));
+  } else {
+    auto default_color_id = GetDefaultButtonTextIconColorId(type_);
+    DCHECK(default_color_id);
+    SetImageModel(views::Button::STATE_NORMAL,
+                  ui::ImageModel::FromVectorIcon(
+                      *icon_, default_color_id.value(), kIconSize));
+  }
+  SetImageModel(views::Button::STATE_DISABLED,
+                ui::ImageModel::FromVectorIcon(
+                    *icon_, cros_tokens::kCrosSysDisabled, kIconSize));
   SetImageLabelSpacing(kIconPillButtonImageLabelSpacingDp);
 }
 

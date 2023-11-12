@@ -16,8 +16,7 @@
 #include "chrome/common/buildflags.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "components/services/app_service/public/cpp/url_handler_info.h"
 #endif
 
@@ -38,6 +37,10 @@ void AwaitStartWebAppProviderAndSubsystems(Profile* profile);
 // Wait until the provided WebAppProvider is ready.
 void WaitUntilReady(WebAppProvider* provider);
 
+// Wait until the provided WebAppProvider is ready and its subsystems startup
+// is complete.
+void WaitUntilWebAppProviderAndSubsystemsReady(WebAppProvider* provider);
+
 AppId InstallDummyWebApp(
     Profile* profile,
     const std::string& app_name,
@@ -56,6 +59,10 @@ AppId InstallWebApp(Profile* profile,
 // Synchronously uninstall a web app. May be used in unit tests and browser
 // tests.
 void UninstallWebApp(Profile* profile, const AppId& app_id);
+
+// Synchronously uninstall all web apps for the given profile. May be used in
+// unit tests and browser tests. Returns `false` if there was a failure.
+bool UninstallAllWebApps(Profile* profile);
 
 }  // namespace test
 }  // namespace web_app

@@ -10,9 +10,9 @@
 #include "ash/webui/media_app_ui/url_constants.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
@@ -48,33 +48,20 @@ void ChromeMediaAppGuestUIDelegate::PopulateLoadTimeData(
   source->AddBoolean("pdfReadonly",
                      !pref_service->GetBoolean(prefs::kPdfAnnotationsEnabled));
   version_info::Channel channel = chrome::GetChannel();
-  source->AddBoolean("colorThemes",
-                     chromeos::features::IsDarkLightModeEnabled());
-  base::Version min_photos_version_for_image(
-      base::GetFieldTrialParamValueByFeature(
-          chromeos::features::kMediaAppPhotosIntegrationImage,
-          "minPhotosVersionForImage"));
-  base::Version min_photos_version_for_video(
-      base::GetFieldTrialParamValueByFeature(
-          chromeos::features::kMediaAppPhotosIntegrationVideo,
-          "minPhotosVersionForVideo"));
-  bool suitable_photos_version = photos_installed && photos_version.IsValid();
-  bool available_for_image = suitable_photos_version &&
-                             min_photos_version_for_image.IsValid() &&
-                             photos_version >= min_photos_version_for_image;
-  bool available_for_video = suitable_photos_version &&
-                             min_photos_version_for_video.IsValid() &&
-                             photos_version >= min_photos_version_for_video;
-  source->AddBoolean("photosAvailableForImage", available_for_image);
-  source->AddBoolean("photosAvailableForVideo", available_for_video);
+  source->AddBoolean("colorThemes", ash::features::IsDarkLightModeEnabled());
+  base::Version min_photos_version("6.12");
+  bool photos_available = photos_installed && photos_version.IsValid() &&
+                          photos_version >= min_photos_version;
+  source->AddBoolean("photosAvailableForImage", photos_available);
+  source->AddBoolean("photosAvailableForVideo", photos_available);
   source->AddBoolean("photosIntegrationImage",
                      base::FeatureList::IsEnabled(
-                         chromeos::features::kMediaAppPhotosIntegrationImage));
+                         ash::features::kMediaAppPhotosIntegrationImage));
   source->AddBoolean("photosIntegrationVideo",
                      base::FeatureList::IsEnabled(
-                         chromeos::features::kMediaAppPhotosIntegrationVideo));
+                         ash::features::kMediaAppPhotosIntegrationVideo));
   bool enable_color_picker_improvements =
-      base::FeatureList::IsEnabled(chromeos::features::kMediaAppCustomColors);
+      base::FeatureList::IsEnabled(ash::features::kMediaAppCustomColors);
   source->AddBoolean("recentColorPalette", enable_color_picker_improvements);
   source->AddBoolean("customColorSelector", enable_color_picker_improvements);
   source->AddBoolean("flagsMenu", channel != version_info::Channel::BETA &&

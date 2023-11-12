@@ -64,12 +64,15 @@
 
 namespace blink {
 
+class AnchorScrollValue;
 class ClipPathOperation;
 class CSSToLengthConversionData;
 class Font;
 class FontBuilder;
 class RotateTransformOperation;
 class ScaleTransformOperation;
+class ScopedCSSName;
+class ScopedCSSValue;
 class StyleAutoColor;
 class StylePath;
 class StyleResolverState;
@@ -126,7 +129,7 @@ class StyleBuilderConverter {
   static T ConvertFlags(StyleResolverState&, const CSSValue&);
   static FontDescription::FamilyDescription ConvertFontFamily(
       StyleResolverState&,
-      const CSSValue&);
+      const ScopedCSSValue&);
   static scoped_refptr<FontFeatureSettings> ConvertFontFeatureSettings(
       StyleResolverState&,
       const CSSValue&);
@@ -155,8 +158,14 @@ class StyleBuilderConverter {
       const CSSValue&);
   static FontVariantNumeric ConvertFontVariantNumeric(StyleResolverState&,
                                                       const CSSValue&);
+  static scoped_refptr<FontVariantAlternates> ConvertFontVariantAlternates(
+      StyleResolverState&,
+      const CSSValue&);
   static FontVariantEastAsian ConvertFontVariantEastAsian(StyleResolverState&,
                                                           const CSSValue&);
+  static FontDescription::FontVariantPosition ConvertFontVariantPosition(
+      StyleResolverState&,
+      const CSSValue&);
   static StyleSelfAlignmentData ConvertSelfOrDefaultAlignmentData(
       StyleResolverState&,
       const CSSValue&);
@@ -175,16 +184,23 @@ class StyleBuilderConverter {
   template <typename T>
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
   static LayoutUnit ConvertBorderWidth(StyleResolverState&, const CSSValue&);
+  static uint16_t ConvertColumnRuleWidth(StyleResolverState&, const CSSValue&);
   static LayoutUnit ConvertLayoutUnit(StyleResolverState&, const CSSValue&);
   static absl::optional<Length> ConvertGapLength(const StyleResolverState&,
                                                  const CSSValue&);
   static Length ConvertLength(const StyleResolverState&, const CSSValue&);
+  static Length ConvertLength(const StyleResolverState&, const ScopedCSSValue&);
   static UnzoomedLength ConvertUnzoomedLength(const StyleResolverState&,
                                               const CSSValue&);
   static float ConvertZoom(const StyleResolverState&, const CSSValue&);
   static Length ConvertLengthOrAuto(const StyleResolverState&, const CSSValue&);
+  static Length ConvertLengthOrAuto(const StyleResolverState&,
+                                    const ScopedCSSValue&);
   static Length ConvertLengthSizing(StyleResolverState&, const CSSValue&);
+  static Length ConvertLengthSizing(StyleResolverState&, const ScopedCSSValue&);
   static Length ConvertLengthMaxSizing(StyleResolverState&, const CSSValue&);
+  static Length ConvertLengthMaxSizing(StyleResolverState&,
+                                       const ScopedCSSValue&);
   static TabSize ConvertLengthOrTabSpaces(StyleResolverState&, const CSSValue&);
   static Length ConvertLineHeight(StyleResolverState&, const CSSValue&);
   static float ConvertNumberOrPercentage(StyleResolverState&, const CSSValue&);
@@ -192,6 +208,10 @@ class StyleBuilderConverter {
                             const CSSValue&);  // clamps to [0,1]
   static AtomicString ConvertNoneOrCustomIdent(StyleResolverState&,
                                                const CSSValue&);
+  static ScopedCSSName* ConvertNoneOrCustomIdent(StyleResolverState&,
+                                                 const ScopedCSSValue&);
+  static AnchorScrollValue* ConvertAnchorScroll(StyleResolverState&,
+                                                const ScopedCSSValue&);
   static StyleInitialLetter ConvertInitialLetter(StyleResolverState&,
                                                  const CSSValue&);
   static StyleOffsetRotation ConvertOffsetRotate(StyleResolverState&,
@@ -306,15 +326,15 @@ class StyleBuilderConverter {
   static ScrollbarGutter ConvertScrollbarGutter(StyleResolverState& state,
                                                 const CSSValue& value);
 
-  static Vector<AtomicString> ConvertContainerName(StyleResolverState&,
-                                                   const CSSValue&);
+  static ScopedCSSNameList* ConvertContainerName(StyleResolverState&,
+                                                 const ScopedCSSValue&);
 
   static absl::optional<StyleIntrinsicLength> ConvertIntrinsicDimension(
       const StyleResolverState&,
       const CSSValue&);
 
-  static AtomicString ConvertPageTransitionTag(StyleResolverState&,
-                                               const CSSValue&);
+  static AtomicString ConvertViewTransitionName(StyleResolverState&,
+                                                const CSSValue&);
 
   // Take a list value for a specified color-scheme, extract flags for known
   // color-schemes and the 'only' modifier, and push the list items into a
@@ -348,8 +368,8 @@ class StyleBuilderConverter {
                                                       const CSSValue&);
   static Vector<TimelineInset> ConvertViewTimelineInset(StyleResolverState&,
                                                         const CSSValue&);
-  static Vector<AtomicString> ConvertViewTimelineName(StyleResolverState&,
-                                                      const CSSValue&);
+  static ScopedCSSNameList* ConvertViewTimelineName(StyleResolverState&,
+                                                    const ScopedCSSValue&);
 };
 
 template <typename T>
@@ -402,7 +422,7 @@ T StyleBuilderConverter::ConvertLineWidth(StyleResolverState& state,
   // pixel thick.  With this change that would instead be rounded up to 2
   // device pixels.  Consider clamping it to device pixels or zoom adjusted CSS
   // pixels instead of raw CSS pixels.
-  double zoomed_result = state.StyleRef().EffectiveZoom() * result;
+  double zoomed_result = state.StyleBuilder().EffectiveZoom() * result;
   if (zoomed_result > 0.0 && zoomed_result < 1.0)
     return 1.0;
   return ClampTo<T>(RoundForImpreciseConversion<T>(result),

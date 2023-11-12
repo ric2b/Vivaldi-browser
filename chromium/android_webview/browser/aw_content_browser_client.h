@@ -88,8 +88,6 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   gfx::ImageSkia GetDefaultFavicon() override;
-  scoped_refptr<content::QuotaPermissionContext> CreateQuotaPermissionContext()
-      override;
   content::GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
       content::BrowserContext* context) override;
   void AllowCertificateError(
@@ -150,6 +148,9 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       content::RenderProcessHost* render_process_host) override;
   void BindMediaServiceReceiver(content::RenderFrameHost* render_frame_host,
                                 mojo::GenericPendingReceiver receiver) override;
+  void RegisterBrowserInterfaceBindersForFrame(
+      content::RenderFrameHost* render_frame_host,
+      mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
   CreateURLLoaderThrottles(
       const network::ResourceRequest& request,
@@ -166,9 +167,6 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                 bool is_outermost_main_frame,
                                 ui::PageTransition transition,
                                 bool* ignore_navigation) override;
-  bool
-  ShouldIgnoreInitialNavigationEntryNavigationStateChangedForLegacySupport()
-      override;
   bool SupportsAvoidUnnecessaryBeforeUnloadCheckSync() override;
   bool CreateThreadPool(base::StringPiece name) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
@@ -245,6 +243,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   CreateSpeechRecognitionManagerDelegate() override;
   bool HasErrorPage(int http_status_code) override;
   bool SuppressDifferentOriginSubframeJSDialogs(
+      content::BrowserContext* browser_context) override;
+  bool ShouldPreconnectNavigation(
       content::BrowserContext* browser_context) override;
   void OnDisplayInsecureContent(content::WebContents* web_contents) override;
 

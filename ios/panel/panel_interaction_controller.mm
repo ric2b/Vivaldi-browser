@@ -1,27 +1,34 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
 #import "ios/panel/panel_interaction_controller.h"
+
 #include <stdint.h>
 
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "base/ios/ios_util.h"
-#include "base/strings/utf_string_conversions.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
-#include "ios/chrome/browser/ui/history/history_coordinator.h"
-#include "ios/chrome/browser/ui/history/history_table_view_controller.h"
+#import "ios/chrome/browser/ui/history/history_coordinator.h"
+#import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/note_interaction_controller.h"
 #import "ios/notes/note_home_view_controller.h"
+#import "ios/panel/panel_constants.h"
+#import "ios/panel/panel_transitioning_delegate.h"
 #import "ios/panel/panel_view_controller.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/panel/sidebar_panel_view_controller.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+
 
 using l10n_util::GetNSString;
 
@@ -57,12 +64,16 @@ enum class PresentedState {
 }
 
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
+@property(nonatomic, strong) PanelTransitioningDelegate* tc;
 
 // The type of view controller that is being presented.
 @property(nonatomic, assign) PresentedState currentPresentedState;
 
+// Panel controller for phone
 @property(nonatomic, strong) PanelViewController* panelController;
-// The delegate provided to |self.panelTabBarController|.
+
+// Panel controller for iPad
+@property(nonatomic, strong) SidebarPanelViewController* sidebarPanelController;
 
 @property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
     handler;
@@ -114,81 +125,122 @@ enum class PresentedState {
 - (void)panelBrowserDismissed {
 
 }
-- (void)presentPanel:(PanelPage)page {
+- (void)presentPanel:(PanelPage)page
+    withSearchString:(NSString*)searchString {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   DCHECK(!self.panelController);
 
-  PanelViewController* panelController = [[PanelViewController alloc] init];
-  self.panelController = panelController;
-  [panelController setModalPresentationStyle:UIModalPresentationPageSheet];
-  [self initializeNoteInteractionController];
+  UIViewController* vc;
+  if (_parentController.isDeviceIPad) {
+      SidebarPanelViewController* sidebar =
+        [[SidebarPanelViewController alloc] init];
+      self.tc = [[PanelTransitioningDelegate alloc] init];
+      sidebar.transitioningDelegate = self.tc;
+      self.sidebarPanelController = sidebar;
+      [self.sidebarPanelController
+       setModalPresentationStyle:UIModalPresentationCustom];
+      self.sidebarPanelController.modalInPresentation = NO;
+      vc = self.sidebarPanelController;
+  } else {
+      PanelViewController* panelController = [[PanelViewController alloc] init];
+      self.panelController = panelController;
+      [panelController setModalPresentationStyle:UIModalPresentationPageSheet];
+      vc = self.panelController;
+  }
+
+  [self initializeNoteInteractionController:vc];
   [_noteInteractionController showNotes];
-  [self initializeBookmarkInteractionController];
+  [self initializeBookmarkInteractionController:vc];
   [_bookmarkInteractionController presentBookmarks];
-  [self showHistory];
+  [self showHistory:vc withSearchString:searchString];
   _noteInteractionController.panelDelegate = self;
   _bookmarkInteractionController.panelDelegate = self;
   self.historyCoordinator.panelDelegate = self;
-  [_panelController setupControllers:
-     (NoteNavigationController*)_noteInteractionController.noteNavigationController
-    withBookmarkController:
-     _bookmarkInteractionController.bookmarkNavigationController
-    andHistoryController:self.historyCoordinator.historyNavigationController];
-  self.panelController.view.backgroundColor =
-    [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
   int index = 0;
   switch (page) {
-      case PanelPage::BookmarksPage: index = 0; break;
-      case PanelPage::NotesPage: index = 1; break;
-      case PanelPage::HistoryPage: index = 2; break;
-  }
-  [self.panelController.segmentControl setSelectedSegmentIndex:index];
-  [self.panelController setIndexForControl:index];
-  if (base::ios::IsRunningOnIOS15OrLater()) {
-      if (@available(iOS 15.0, *)) {
-          UISheetPresentationController* sheetPc =
-            _panelController.sheetPresentationController;
-          sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                              UISheetPresentationControllerDetent.largeDetent];
-          sheetPc.preferredCornerRadius = 20.0;
-          sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
-          sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
-          [_parentController presentViewController:_panelController
-                                        animated:YES
-                                      completion:nil];
-      }
-  } else {
-      [_parentController presentViewController:_panelController
-                                    animated:YES
-                                completion:nil];
+    case PanelPage::BookmarksPage: index = 0; break;
+    case PanelPage::NotesPage: index = 1; break;
+    case PanelPage::HistoryPage: index = 2; break;
   }
 
+  if (_parentController.isDeviceIPad) {
+      [self setupAndPresentiPadPanel:index];
+  } else {
+      [self setupAndPresentPhonePanel:index];
+  }
   self.currentPresentedState = PresentedState::PANEL_BROWSER;
+}
+
+- (void)setupAndPresentiPadPanel:(NSInteger)index {
+    [_sidebarPanelController setupControllers:
+     (NoteNavigationController*)
+       _noteInteractionController.noteNavigationController
+      withBookmarkController:
+       _bookmarkInteractionController.bookmarkNavigationController
+      andHistoryController:self.historyCoordinator.historyNavigationController];
+    self.sidebarPanelController.view.backgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    [self.sidebarPanelController.segmentControl setSelectedSegmentIndex:index];
+    [self.sidebarPanelController setIndexForControl:index];
+    [_parentController presentViewController:self.sidebarPanelController
+                              animated:YES
+                            completion:nil];
+}
+
+- (void)setupAndPresentPhonePanel:(NSInteger)index {
+    [_panelController setupControllers:
+       (NoteNavigationController*)
+     _noteInteractionController.noteNavigationController
+      withBookmarkController:
+       _bookmarkInteractionController.bookmarkNavigationController
+      andHistoryController:self.historyCoordinator.historyNavigationController];
+    self.panelController.view.backgroundColor =
+      [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    [self.panelController.segmentControl setSelectedSegmentIndex:index];
+    [self.panelController setIndexForControl:index];
+    if (@available(iOS 15.0, *)) {
+       UISheetPresentationController* sheetPc =
+            _panelController.sheetPresentationController;
+       sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                            UISheetPresentationControllerDetent.largeDetent];
+       sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
+       sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+       sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+       [_parentController presentViewController:_panelController
+                                       animated:YES
+                                    completion:nil];
+    } else {
+        [_parentController presentViewController:_panelController
+                                    animated:YES
+                                completion:nil];
+    }
 }
 
 #pragma mark - Private
 
-- (void)showHistory {
+- (void)showHistory:(UIViewController*)vc
+   withSearchString:(NSString*)searchString {
   if (!self.historyCoordinator) {
       self.historyCoordinator = [[HistoryCoordinator alloc]
-        initWithBaseViewController:self.panelController
+        initWithBaseViewController:vc
                            browser:_browser];
   }
+  self.historyCoordinator.searchTerms = searchString;
   self.historyCoordinator.loadStrategy = UrlLoadStrategy::NORMAL;
   [self.historyCoordinator start];
 }
 
 // Initializes the note interaction controller if not already initialized.
-- (void)initializeNoteInteractionController {
+- (void)initializeNoteInteractionController:(UIViewController*)vc {
   if (_noteInteractionController)
     return;
   _noteInteractionController =
       [[NoteInteractionController alloc] initWithBrowser:_browser
-                                parentController:self.panelController];
+                                parentController:vc];
 }
 
 // Initializes the bookmark interaction controller if not already initialized.
-- (void)initializeBookmarkInteractionController {
+- (void)initializeBookmarkInteractionController:(UIViewController*)vc {
   if (_bookmarkInteractionController)
     return;
   _bookmarkInteractionController =
@@ -202,7 +254,17 @@ enum class PresentedState {
 }
 
 - (void)panelDismissed {
-    [self.panelController panelDismissed];
+    if (self.panelController) {
+        [self.panelController panelDismissed];
+        self.panelController = nil;
+    }
+    if (self.sidebarPanelController) {
+        [self.sidebarPanelController panelDismissed];
+        if (_parentController.isDeviceIPad) {
+            [self.sidebarPanelController.view removeFromSuperview];
+            [self.sidebarPanelController removeFromParentViewController];
+            self.sidebarPanelController = nil;
+        }
+    }
 }
-
 @end

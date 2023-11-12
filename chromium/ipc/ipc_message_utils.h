@@ -234,7 +234,7 @@ template <>
 struct ParamTraits<unsigned long> {
   typedef unsigned long param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    m->WriteLong(static_cast<long>(p));
+    m->WriteLong(p);
   }
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -543,16 +543,6 @@ struct ParamTraits<std::pair<A, B> > {
 };
 
 // Base ParamTraits ------------------------------------------------------------
-
-template <>
-struct COMPONENT_EXPORT(IPC) ParamTraits<base::DictionaryValue> {
-  typedef base::DictionaryValue param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
 
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<base::Value::Dict> {

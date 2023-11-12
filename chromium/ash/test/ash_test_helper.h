@@ -16,9 +16,10 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/message_center/test_notifier_settings_controller.h"
+#include "ash/test/pixel/ash_pixel_test_init_params.h"
 #include "base/test/scoped_command_line.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/ash/services/bluetooth_config/scoped_bluetooth_config_test_helper.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "ui/aura/test/aura_test_helper.h"
 
 class PrefService;
@@ -47,7 +48,7 @@ namespace ash {
 
 class AppListTestHelper;
 class AmbientAshTestHelper;
-class AshTestUiStabilizer;
+class AshPixelTestHelper;
 class SavedDeskTestHelper;
 class TestKeyboardControllerObserver;
 class TestNewWindowDelegateProvider;
@@ -56,10 +57,6 @@ class TestWallpaperControllerClient;
 namespace input_method {
 class MockInputMethodManager;
 }  // namespace input_method
-
-namespace pixel_test {
-struct InitParams;
-}  // namespace pixel_test
 
 // A helper class that does common initialization required for Ash. Creates a
 // root window and an ash::Shell instance with a test delegate.
@@ -78,7 +75,10 @@ class AshTestHelper : public aura::test::AuraTestHelper {
     PrefService* local_state = nullptr;
 
     // Used only when setting up a pixel diff test.
-    base::raw_ptr<pixel_test::InitParams> pixel_test_init_params = nullptr;
+    absl::optional<pixel_test::InitParams> pixel_test_init_params;
+
+    // True if a fake global `CrasAudioHandler` should be created.
+    bool create_global_cras_audio_handler = true;
   };
 
   // Instantiates/destroys an AshTestHelper. This can happen in a
@@ -201,7 +201,7 @@ class AshTestHelper : public aura::test::AuraTestHelper {
   std::unique_ptr<SavedDeskTestHelper> saved_desk_test_helper_;
 
   // Used only for pixel tests.
-  std::unique_ptr<AshTestUiStabilizer> ui_stabilizer_;
+  std::unique_ptr<AshPixelTestHelper> pixel_test_helper_;
 
   bluetooth_config::ScopedBluetoothConfigTestHelper
       scoped_bluetooth_config_test_helper_;
@@ -209,6 +209,9 @@ class AshTestHelper : public aura::test::AuraTestHelper {
   // InputMethodManager is not owned by this class. It is stored in a
   // global that is registered via InputMethodManager::Initialize().
   input_method::MockInputMethodManager* input_method_manager_ = nullptr;
+
+  // True if a fake global `CrasAudioHandler` should be created.
+  bool create_global_cras_audio_handler_ = true;
 };
 
 }  // namespace ash

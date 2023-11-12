@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import 'chrome://diagnostics/input_list.js';
+import 'chrome://diagnostics/strings.m.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {DiagnosticsBrowserProxyImpl} from 'chrome://diagnostics/diagnostics_browser_proxy.js';
 import {NavigationView} from 'chrome://diagnostics/diagnostics_types.js';
@@ -12,15 +14,17 @@ import {InputCardElement} from 'chrome://diagnostics/input_card.js';
 import {ConnectionType, KeyboardInfo, MechanicalLayout, NumberPadPresence, PhysicalLayout, TopRightKey, TopRowKey, TouchDeviceInfo, TouchDeviceType} from 'chrome://diagnostics/input_data_provider.mojom-webui.js';
 import {InputListElement} from 'chrome://diagnostics/input_list.js';
 import {setInputDataProviderForTesting} from 'chrome://diagnostics/mojo_interface_provider.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isVisible} from '../../test_util.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {isVisible} from '../test_util.js';
 
 import {TestDiagnosticsBrowserProxy} from './test_diagnostics_browser_proxy.js';
 
-export function inputListTestSuite() {
+suite('inputListTestSuite', function() {
   /** @type {?InputListElement} */
   let inputListElement = null;
 
@@ -40,6 +44,9 @@ export function inputListTestSuite() {
 
   setup(() => {
     document.body.innerHTML = '';
+
+    provider.setStartTesterWithClamshellMode();
+    provider.setStartWithLidOpen();
   });
 
   teardown(() => {
@@ -67,6 +74,50 @@ export function inputListTestSuite() {
     const card = inputListElement.shadowRoot.querySelector(
         `input-card[device-type="${deviceType}"]`);
     return /** @type {!InputCardElement} */ (card);
+  }
+
+  /**
+   * openTouchscreenTester is a helper function for some boilerplate code. It
+   * clicks the test button of a touchscreen, then clicks the start testing
+   * button and makes sure canvas dialog is open.
+   * @param touchscreensToInitialize The touchscreens to initialize.
+   * @param isClamshellMode If the tester is opened in clamshell mode.
+   * @returns The touchscreenTester.
+   */
+  async function openTouchscreenTester(
+      touchscreensToInitialize, isClamshellMode = true) {
+    await initializeInputList([], touchscreensToInitialize);
+    if (isClamshellMode) {
+      provider.setStartTesterWithClamshellMode();
+    } else {
+      provider.setStartTesterWithTabletMode();
+    }
+
+    const resolver = new PromiseResolver();
+    const touchscreenTester =
+        inputListElement.shadowRoot.querySelector('touchscreen-tester');
+    const introDialog = touchscreenTester.getDialog('intro-dialog');
+
+    // Mock requestFullscreen function since this API can only be initiated by a
+    // user gesture.
+    introDialog.requestFullscreen = () => {
+      resolver.resolve();
+    };
+
+    const testButton = getCardByDeviceType('touchscreen')
+                           .shadowRoot.querySelector('cr-button');
+    assertTrue(!!testButton);
+    testButton.click();
+    await flushTasks();
+    assertTrue(introDialog.open);
+
+    const getStartedButton = introDialog.querySelector('cr-button');
+    getStartedButton.click();
+    await flushTasks();
+    const canvasDialog = touchscreenTester.getDialog('canvas-dialog');
+    assertTrue(canvasDialog.open);
+
+    return touchscreenTester;
   }
 
   test('InputListPopulated', async () => {
@@ -133,6 +184,85 @@ export function inputListTestSuite() {
     assertTrue(keyboardTester.isOpen());
   });
 
+  test('KeyboardTesterCloseOnLidClosed', async () => {
+    await initializeInputList([fakeKeyboards[0]], []);
+    const testButton =
+        getCardByDeviceType('keyboard').shadowRoot.querySelector('cr-button');
+    assertTrue(!!testButton);
+    testButton.click();
+    await flushTasks();
+
+    const keyboardTester =
+        inputListElement.shadowRoot.querySelector('keyboard-tester');
+    assertTrue(keyboardTester.isOpen());
+
+    const showToastEvent = eventToPromise('show-toast', inputListElement);
+    provider.setLidStateClosed();
+    await flushTasks();
+    assertFalse(keyboardTester.isOpen());
+
+    const e = await showToastEvent;
+    assertEquals(
+        e.detail.message,
+        loadTimeData.getString('inputKeyboardTesterClosedToastLidClosed'));
+  });
+
+  test('KeyboardTesterCloseOnTabletMode', async () => {
+    await initializeInputList([fakeKeyboards[0]], []);
+    const testButton =
+        getCardByDeviceType('keyboard').shadowRoot.querySelector('cr-button');
+    assertTrue(!!testButton);
+    testButton.click();
+    await flushTasks();
+
+    const keyboardTester =
+        inputListElement.shadowRoot.querySelector('keyboard-tester');
+    assertTrue(keyboardTester.isOpen());
+
+    const showToastEvent = eventToPromise('show-toast', inputListElement);
+    provider.startTabletMode();
+    await flushTasks();
+    assertFalse(keyboardTester.isOpen());
+
+    const e = await showToastEvent;
+    assertEquals(
+        e.detail.message,
+        loadTimeData.getString('inputKeyboardTesterClosedToastTabletMode'));
+  });
+
+  test('ShowToastIfKeyboardDisconnectedDuringTest', async () => {
+    await initializeInputList([fakeKeyboards[0]], []);
+    const testButton =
+        getCardByDeviceType('keyboard').shadowRoot.querySelector('cr-button');
+    assertTrue(!!testButton);
+    testButton.click();
+    await flushTasks();
+
+    const keyboardTester =
+        inputListElement.shadowRoot.querySelector('keyboard-tester');
+    assertTrue(keyboardTester.isOpen());
+    const showToastEvent = eventToPromise('show-toast', inputListElement);
+    // Remove keyboard while tester is open.
+    provider.removeFakeConnectedKeyboardById(fakeKeyboards[0].id);
+    await flushTasks();
+    // Verify that the custom event was dispatched
+    const e = await showToastEvent;
+    assertEquals(
+        e.detail.message, loadTimeData.getString('deviceDisconnected'));
+
+    // Verify that tester is closed.
+    assertFalse(keyboardTester.isOpen());
+
+    // Verify that key events are no longer blocked by keyboard-tester.
+    let keyEventReceived = false;
+    inputListElement.addEventListener('keydown', () => keyEventReceived = true);
+    const keyDownEvent = eventToPromise('keydown', inputListElement);
+    keyboardTester.dispatchEvent(new KeyboardEvent(
+        'keydown', {bubbles: true, key: 'A', composed: true}));
+    await keyDownEvent;
+    assertTrue(keyEventReceived);
+  });
+
   test('TouchpadAddAndRemove', async () => {
     /** @type {!TouchDeviceInfo} */
     const fakeTouchpad = {
@@ -156,6 +286,23 @@ export function inputListTestSuite() {
     assertEquals(fakeTouchDevices[0].name, touchpadCard.devices[0].name);
   });
 
+  test('TouchpadTesterShowAndClose', async () => {
+    await initializeInputList([], [fakeTouchDevices[0]]);
+    const touchpadTester =
+        inputListElement.shadowRoot.querySelector('touchpad-tester');
+    assertTrue(!!touchpadTester);
+    assertFalse(touchpadTester.isOpen());
+
+    const testButton =
+        getCardByDeviceType('touchpad').shadowRoot.querySelector('cr-button');
+    assertTrue(!!testButton);
+    testButton.click();
+    await flushTasks();
+
+    assertTrue(touchpadTester.isOpen());
+    assertDeepEquals(fakeTouchDevices[0], touchpadTester.touchpad);
+  });
+
   test('TouchscreenAddAndRemove', async () => {
     /** @type {!TouchDeviceInfo} */
     const fakeTouchscreen = {
@@ -169,18 +316,19 @@ export function inputListTestSuite() {
 
     provider.addFakeConnectedTouchDevice(fakeTouchscreen);
     await flushTasks();
-    assertEquals(2, touchscreenCard.devices.length);
+    assertEquals(3, touchscreenCard.devices.length);
     assertEquals(fakeTouchDevices[1].name, touchscreenCard.devices[0].name);
-    assertEquals(fakeTouchscreen.name, touchscreenCard.devices[1].name);
+    assertEquals(fakeTouchscreen.name, touchscreenCard.devices[2].name);
 
     provider.removeFakeConnectedTouchDeviceById(fakeTouchscreen.id);
     await flushTasks();
-    assertEquals(1, touchscreenCard.devices.length);
+    assertEquals(2, touchscreenCard.devices.length);
     assertEquals(fakeTouchDevices[1].name, touchscreenCard.devices[0].name);
   });
 
   test('TouchscreenTesterShowAndClose', async () => {
     await initializeInputList([], [fakeTouchDevices[1]]);
+    provider.setStartTesterWithClamshellMode();
 
     const resolver = new PromiseResolver();
     let requestFullscreenCalled = 0;
@@ -196,6 +344,15 @@ export function inputListTestSuite() {
       resolver.resolve();
     };
 
+    let eventTrackerRemoveAllCalled = 0;
+    touchscreenTester.getEventTracker().removeAll = () => {
+      eventTrackerRemoveAllCalled++;
+      resolver.resolve();
+    };
+
+    // A11y touch passthrough state is false by default.
+    assertFalse(provider.getA11yTouchPassthroughState());
+
     const testButton = getCardByDeviceType('touchscreen')
                            .shadowRoot.querySelector('cr-button');
     assertTrue(!!testButton);
@@ -203,9 +360,120 @@ export function inputListTestSuite() {
     await flushTasks();
     assertEquals(1, requestFullscreenCalled);
     assertTrue(introDialog.open);
+    assertEquals(
+        /*expectedMoveAppToTestingScreenCalled=*/ 1,
+        provider.getMoveAppToTestingScreenCalled());
 
-    touchscreenTester.shadowRoot.dispatchEvent(new Event('fullscreenchange'));
+    // Click get stated button to open canvas dialog.
+    const getStartedButton = introDialog.querySelector('cr-button');
+    getStartedButton.click();
+    await flushTasks();
     assertFalse(introDialog.open);
+    assertTrue(provider.getA11yTouchPassthroughState());
+
+    const canvasDialog = touchscreenTester.getDialog('canvas-dialog');
+    assertTrue(canvasDialog.open);
+
+    const fullscreenChangeEvent = eventToPromise('fullscreenchange', document);
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await fullscreenChangeEvent;
+
+    assertFalse(canvasDialog.open);
+    assertEquals(
+        /*expectedMoveAppBackToPreviousScreenCalled=*/ 1,
+        provider.getMoveAppBackToPreviousScreenCalled());
+    assertEquals(
+        /*expectedEventTrackerRemoveAllCalled=*/ 1,
+        eventTrackerRemoveAllCalled);
+    assertFalse(provider.getA11yTouchPassthroughState());
+  });
+
+  test('TouchscreenTesterShowAndCloseInTabletMode', async () => {
+    await openTouchscreenTester(
+        /*touchscreensToInitialize=*/[fakeTouchDevices[1]]);
+
+    const resolver = new PromiseResolver();
+    let exitFullscreenCalled = 0;
+    // Mock exitFullscreen call.
+    document.exitFullscreen = () => {
+      exitFullscreenCalled++;
+      resolver.resolve();
+    };
+
+    provider.startTabletMode();
+    await flushTasks();
+
+    const keyEvent = eventToPromise('keydown', window);
+    window.dispatchEvent(new KeyboardEvent('keydown', {key: 'AudioVolumeUp'}));
+    await keyEvent;
+    assertEquals(1, exitFullscreenCalled);
+  });
+
+  test('StartTouchscreenTesterWithClamshellMode', async () => {
+    const touchscreenTester = await openTouchscreenTester(
+        /*touchscreensToInitialize=*/[fakeTouchDevices[1]]);
+
+    assertFalse(touchscreenTester.getIsTabletMode());
+
+    provider.startTabletMode();
+    await flushTasks();
+
+    assertTrue(touchscreenTester.getIsTabletMode());
+    assertTrue(touchscreenTester.getDialog('canvas-dialog').open);
+  });
+
+  test('StartTouchscreenTesterWithTabletMode', async () => {
+    const touchscreenTester = await openTouchscreenTester(
+        /*touchscreensToInitialize=*/[fakeTouchDevices[1]],
+        /*isClamshellMode=*/ false);
+
+    assertTrue(touchscreenTester.getIsTabletMode());
+
+    provider.endTabletMode();
+    await flushTasks();
+
+    assertFalse(touchscreenTester.getIsTabletMode());
+    assertTrue(touchscreenTester.getDialog('canvas-dialog').open);
+  });
+
+  test('OnInternalDisplayPowerStateChanged', async () => {
+    await initializeInputList([], [fakeTouchDevices[1]]);
+
+    assertTrue(getCardByDeviceType('touchscreen').devices[0].testable);
+
+    provider.setInternalDisplayPowerOff();
+    await flushTasks();
+
+    assertFalse(getCardByDeviceType('touchscreen').devices[0].testable);
+
+    provider.setInternalDisplayPowerOn();
+    await flushTasks();
+
+    assertTrue(getCardByDeviceType('touchscreen').devices[0].testable);
+  });
+
+  test('InternalDisplayPowerOffWhileTouchscreenTesterIsRunning', async () => {
+    const touchscreenTester = await openTouchscreenTester(
+        /*touchscreensToInitialize=*/[fakeTouchDevices[1]]);
+
+    // Internal display power off.
+    provider.setInternalDisplayPowerOff();
+    await flushTasks();
+
+    // Tester is expecetd to exit.
+    assertFalse(touchscreenTester.getDialog('canvas-dialog').open);
+  });
+
+  test('TouchscreenDisconnectedWhileTesterIsRunning', async () => {
+    const touchscreenTester = await openTouchscreenTester(
+        /*touchscreensToInitialize=*/[fakeTouchDevices[1]]);
+
+    // Remove touchscreen.
+    provider.removeFakeConnectedTouchDeviceById(fakeTouchDevices[1].id);
+    await flushTasks();
+
+    // Tester is expecetd to exit.
+    assertFalse(touchscreenTester.getDialog('canvas-dialog').open);
   });
 
   test('EmptySectionsHidden', async () => {
@@ -259,4 +527,4 @@ export function inputListTestSuite() {
         /** @type {!Array<!NavigationView>} */
         (diagnosticsBrowserProxy.getArgs('recordNavigation')[0]));
   });
-}
+});

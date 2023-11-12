@@ -295,6 +295,7 @@ enum FileError {
 };
 
 // Errors received from DriveFS to be forwarded to the file manager UI.
+// Next MinVersion: 2
 struct DriveError {
   [Extensible] enum Type {
     kCantUploadStorageFull,
@@ -306,6 +307,10 @@ struct DriveError {
 
   // The path to the file where an error was encountered, if there was one.
   mojo_base.mojom.FilePath path;
+
+  // The stable id of the file where an error was encountered, if there was one.
+  // Note: 0 is an invalid stable id.
+  [MinVersion=1] int64 stable_id = 0;
 };
 
 struct DialogReason {
@@ -483,7 +488,7 @@ struct FileChange {
 };
 
 // Definition of the search request sent to DriveFS.
-// Next MinVersion: 3
+// Next MinVersion: 4
 struct QueryParameters {
   // Where this request should go to.
   enum QuerySource {
@@ -538,6 +543,10 @@ struct QueryParameters {
   // Note: this field is preferred to "mime_type" field above, when processing
   // the query, the "mime_type" will be merged into this "mime_types" field.
   [MinVersion=2] array<string>? mime_types;
+
+  // Only show results that are in the users "My drive" directory excluding
+  // others such as Team drives and trashed files.
+  [MinVersion=3] bool my_drive_results_only = false;
 };
 
 // TODO(crbug.com/896777): Put this inside QueryParameters once linked bug is

@@ -17,6 +17,7 @@ static_library("helper") {
     "//components/paint_preview/buildflags",
     "//components/services/language_detection/public/mojom",
     "//components/translate/content/common",
+    "//vivaldi/extensions/schema",
   ]
   public_deps = [
     "//vivaldi/renderer/mojo:frame_host_service",

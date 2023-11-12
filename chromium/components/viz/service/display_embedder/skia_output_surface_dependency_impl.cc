@@ -9,7 +9,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/task/bind_post_task.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 #include "gpu/command_buffer/service/command_buffer_task_executor.h"
@@ -26,7 +26,8 @@ SkiaOutputSurfaceDependencyImpl::SkiaOutputSurfaceDependencyImpl(
     gpu::SurfaceHandle surface_handle)
     : gpu_service_impl_(gpu_service_impl),
       surface_handle_(surface_handle),
-      client_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+      client_thread_task_runner_(
+          base::SingleThreadTaskRunner::GetCurrentDefault()) {}
 
 SkiaOutputSurfaceDependencyImpl::~SkiaOutputSurfaceDependencyImpl() = default;
 
@@ -103,6 +104,15 @@ gpu::SurfaceHandle SkiaOutputSurfaceDependencyImpl::GetSurfaceHandle() {
   return surface_handle_;
 }
 
+scoped_refptr<gl::Presenter> SkiaOutputSurfaceDependencyImpl::CreatePresenter(
+    base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
+    gl::GLSurfaceFormat format) {
+  DCHECK(!IsOffscreen());
+
+  return gpu::ImageTransportSurface::CreatePresenter(
+      GetSharedContextState()->display(), stub, surface_handle_, format);
+}
+
 scoped_refptr<gl::GLSurface> SkiaOutputSurfaceDependencyImpl::CreateGLSurface(
     base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
     gl::GLSurfaceFormat format) {
@@ -110,13 +120,40 @@ scoped_refptr<gl::GLSurface> SkiaOutputSurfaceDependencyImpl::CreateGLSurface(
     return gl::init::CreateOffscreenGLSurfaceWithFormat(
         GetSharedContextState()->display(), gfx::Size(), format);
   } else {
-    return gpu::ImageTransportSurface::CreateNativeSurface(
+    return gpu::ImageTransportSurface::CreateNativeGLSurface(
         GetSharedContextState()->display(), stub, surface_handle_, format);
   }
 }
 
+base::ScopedClosureRunner SkiaOutputSurfaceDependencyImpl::CachePresenter(
+    gl::Presenter* presenter) {
+  // We're running on the viz thread here. We want to release ref on the
+  // compositor gpu thread because presenters are generally not thread-safe. For
+  // the same reason we don't want to mark them as RefCountedThreadSafe to avoid
+  // confusion and so have to AddRef() on the compositor gpu thread too. It's
+  // safe to just PostTask here because SkiaOutputSurfaceImplOnGpu keeps ref on
+  // its Presenter and can be only destroyed by PostTask from viz thread to gpu
+  // thread which will run after this one.
+  gpu_service_impl_->compositor_gpu_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&gl::Presenter::AddRef, base::Unretained(presenter)));
+
+  auto release_callback = base::BindPostTask(
+      gpu_service_impl_->compositor_gpu_task_runner(),
+      base::BindOnce(&gl::Presenter::Release, base::Unretained(presenter)));
+
+  return base::ScopedClosureRunner(std::move(release_callback));
+}
+
 base::ScopedClosureRunner SkiaOutputSurfaceDependencyImpl::CacheGLSurface(
     gl::GLSurface* surface) {
+  // We're running on the viz thread here. We want to release ref on the
+  // compositor gpu thread because presenters are generally not thread-safe. For
+  // the same reason we don't want to mark them as RefCountedThreadSafe to avoid
+  // confusion and so have to AddRef() on the compositor gpu thread too. It's
+  // safe to just PostTask here because SkiaOutputSurfaceImplOnGpu keeps ref on
+  // its GLSurface and can be only destroyed by PostTask from viz thread to gpu
+  // thread which will run after this one.
   gpu_service_impl_->compositor_gpu_task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&gl::GLSurface::AddRef, base::Unretained(surface)));
@@ -144,14 +181,6 @@ void SkiaOutputSurfaceDependencyImpl::ScheduleDelayedGPUTaskFromGPUThread(
       FROM_HERE, std::move(task), kDelayForDelayedWork);
 }
 
-#if BUILDFLAG(IS_WIN)
-void SkiaOutputSurfaceDependencyImpl::DidCreateAcceleratedSurfaceChildWindow(
-    gpu::SurfaceHandle parent_window,
-    gpu::SurfaceHandle child_window) {
-  gpu_service_impl_->SendCreatedChildWindow(parent_window, child_window);
-}
-#endif
-
 void SkiaOutputSurfaceDependencyImpl::DidLoseContext(
     gpu::error::ContextLostReason reason,
     const GURL& active_url) {
@@ -167,6 +196,10 @@ SkiaOutputSurfaceDependencyImpl::GetGpuBlockedTimeSinceLastSwap() {
 
 bool SkiaOutputSurfaceDependencyImpl::NeedsSupportForExternalStencil() {
   return false;
+}
+
+bool SkiaOutputSurfaceDependencyImpl::IsUsingCompositorGpuThread() {
+  return !!gpu_service_impl_->compositor_gpu_thread();
 }
 
 }  // namespace viz

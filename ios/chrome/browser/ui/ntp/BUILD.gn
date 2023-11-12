@@ -6,6 +6,8 @@ source_set("vivaldi_ntp") {
     "vivaldi_new_tab_page_view_controller.mm",
     "vivaldi_ntp_constants.h",
     "vivaldi_ntp_constants.mm",
+    "vivaldi_speed_dial_constants.h",
+    "vivaldi_speed_dial_constants.mm",
     "vivaldi_speed_dial_item.h",
     "vivaldi_speed_dial_item.mm",
     "vivaldi_speed_dial_container_view.h",
@@ -21,10 +23,12 @@ source_set("vivaldi_ntp") {
     "vivaldi_speed_dial_home_mediator.mm",
     "vivaldi_speed_dial_home_consumer.h",
     "vivaldi_speed_dial_sorting_mode.h",
-    "vivaldi_speed_dial_prefs.h",
-    "vivaldi_speed_dial_prefs.mm",
+    "vivaldi_start_page_prefs.h",
+    "vivaldi_start_page_prefs.mm",
     "vivaldi_private_mode_view.h",
     "vivaldi_private_mode_view.mm",
+    "vivaldi_speed_dial_empty_view.h",
+    "vivaldi_speed_dial_empty_view.mm",
   ]
 
   deps = [
@@ -32,15 +36,14 @@ source_set("vivaldi_ntp") {
     "//base",
     "//base:i18n",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser",
     "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
     "//ios/third_party/material_components_ios",
     "//vivaldi/ios/chrome/browser/ui/ntp/cells",
     "//vivaldi/ios/chrome/browser/ui/ntp/top_menu",
     "resources:vivaldi_ntp_background_color",
+    "resources:vivaldi_private_ntp_background_color",
     "resources:vivaldi_ntp_searchbar_background_color",
-    "resources:vivaldi_ntp_searchbar_text_color",
     "resources:vivaldi_ntp_speed_dial_container_background_color",
     "resources:vivaldi_ntp_speed_dial_cell_background_color",
     "resources:vivaldi_ntp_speed_dial_cell_shadow_color",
@@ -54,6 +57,7 @@ source_set("vivaldi_ntp") {
     "resources:vivaldi_ntp_add_new_speed_dial_folder",
     "resources:vivaldi_private_tab_bg",
     "resources:vivaldi_private_tab_ghost",
+    "resources:vivaldi_ntp_sd_empty_view_icon"
   ]
 
   frameworks = [

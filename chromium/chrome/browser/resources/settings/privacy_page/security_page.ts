@@ -231,8 +231,9 @@ export class SettingsSecurityPageElement extends
       }
     });
 
-    this.registerHelpBubbleIdentifier(
-        'kEnhancedProtectionSettingElementId', 'safeBrowsingEnhanced');
+    this.registerHelpBubble(
+        'kEnhancedProtectionSettingElementId',
+        this.$.safeBrowsingEnhanced.getBubbleAnchor());
   }
 
   /**
@@ -245,7 +246,8 @@ export class SettingsSecurityPageElement extends
       const queryParams = Router.getInstance().getQueryParameters();
       const section = queryParams.get('q');
       if (section === 'enhanced') {
-        this.$.safeBrowsingEnhanced.expanded = true;
+        this.$.safeBrowsingEnhanced.expanded =
+            !loadTimeData.getBoolean('esbSettingsImprovementsEnabled');
         this.$.safeBrowsingStandard.expanded = false;
       }
     }
@@ -306,7 +308,7 @@ export class SettingsSecurityPageElement extends
     Router.getInstance().navigateTo(routes.CERTIFICATES);
     // </if>
     // <if expr="is_win or is_macosx">
-    this.browserProxy_.showManageSSLCertificates();
+    this.browserProxy_.showManageSslCertificates();
     // </if>
     this.metricsBrowserProxy_.recordSettingsPageHistogram(
         PrivacyElementInteractions.MANAGE_CERTIFICATES);
@@ -314,7 +316,7 @@ export class SettingsSecurityPageElement extends
 
   // <if expr="chrome_root_store_supported">
   private onChromeCertificatesClick_() {
-    OpenWindowProxyImpl.getInstance().openURL(
+    OpenWindowProxyImpl.getInstance().openUrl(
         loadTimeData.getString('chromeRootStoreHelpCenterURL'));
   }
   // </if>
@@ -377,10 +379,10 @@ export class SettingsSecurityPageElement extends
   }
 
   // <if expr="is_chromeos">
-  private onOpenChromeOSSecureDnsSettingsClicked_() {
+  private onOpenChromeOsSecureDnsSettingsClicked_() {
     const path =
         loadTimeData.getString('chromeOSPrivacyAndSecuritySectionPath');
-    OpenWindowProxyImpl.getInstance().openURL(`chrome://os-settings/${path}`);
+    OpenWindowProxyImpl.getInstance().openUrl(`chrome://os-settings/${path}`);
   }
   // </if>
 

@@ -20,6 +20,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/safe_ref.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation_traits.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -80,12 +81,17 @@
 #include "ui/gfx/gpu_memory_buffer.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/memory/memory_pressure_listener.h"
 #include "content/public/browser/android/child_process_importance.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "media/mojo/mojom/stable/stable_video_decoder.mojom.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_FUCHSIA)
+#include "media/fuchsia_media_codec_provider_impl.h"
+#endif
 
 namespace base {
 class CommandLine;
@@ -316,6 +322,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const GlobalRenderFrameHostId& render_frame_host_id) override;
   void ResumeSocketManagerForRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) override;
+
+  void SetOsSupportForAttributionReporting(
+      attribution_reporting::mojom::OsSupport os_support) override;
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -577,6 +586,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojo::PendingReceiver<blink::mojom::FileSystemAccessManager> receiver)
       override;
 
+  // Returns an OPFS (origin private file system) associated with
+  // `bucket_locator`.
+  void GetSandboxedFileSystemForBucket(
+      const storage::BucketLocator& bucket_locator,
+      blink::mojom::FileSystemAccessManager::GetSandboxedFileSystemCallback
+          callback) override;
+
   // Binds |receiver| to a NativeIOHost instance indirectly owned by the
   // StoragePartition. Used by frames and workers via BrowserInterfaceBroker.
   void BindNativeIOHost(
@@ -611,6 +627,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // render process host, and is used by workers via `BrowserInterfaceBroker`.
   void BindPushMessaging(
       mojo::PendingReceiver<blink::mojom::PushMessaging> receiver);
+
+#if BUILDFLAG(IS_FUCHSIA)
+  // Binds |receiver| to the FuchsiaMediaCodecProvider instance owned by the
+  // render process host, and is used by workers via BrowserInterfaceBroker.
+  void BindMediaCodecProvider(
+      mojo::PendingReceiver<media::mojom::FuchsiaMediaCodecProvider> receiver)
+      override;
+#endif
 
   // Binds |receiver| to a OneShotBackgroundSyncService instance owned by the
   // StoragePartition associated with the render process host, and is used by
@@ -659,13 +683,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const url::Origin& origin,
       mojo::PendingReceiver<payments::mojom::PaymentManager> receiver) override;
 
-  // Binds |receiver| to the NotificationService instance owned by
-  // |storage_partition_impl_|, and is used by frames and workers via
-  // BrowserInterfaceBroker. |render_frame_id| will identify the RenderFrameHost
-  // when the service belongs to one, `MSG_ROUTING_NONE` for workers.
+  // Binds `creator_type`, `origin`, `receiver` and the information obtained
+  // from the (possibly empty) `rfh_id` to the NotificationService instance
+  // owned by `storage_partition_impl_`, and is used by documents and workers
+  // via BrowserInterfaceBroker.
   void CreateNotificationService(
-      int render_frame_id,
-      const url::Origin& origin,
+      GlobalRenderFrameHostId rfh_id,
+      RenderProcessHost::NotificationServiceCreatorType creator_type,
+      const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::NotificationService> receiver)
       override;
 
@@ -719,6 +744,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory)>;
   static void SetNetworkFactoryForTesting(
       const CreateNetworkFactoryCallback& url_loader_factory_callback);
+
+#if BUILDFLAG(IS_ANDROID)
+  // Notifies the renderer process of memory pressure level.
+  void NotifyMemoryPressureToRenderer(
+      base::MemoryPressureListener::MemoryPressureLevel level);
+#endif
 
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
@@ -1034,7 +1065,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Clients that contribute priority to this process.
   base::flat_set<RenderProcessHostPriorityClient*> priority_clients_;
 
-  ChildProcessLauncherPriority priority_;
+  RenderProcessPriority priority_;
 
   // If this is set then the built-in process priority calculation system is
   // ignored, and an externally computed process priority is used. Set to true
@@ -1141,6 +1172,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
       stable_video_decoder_factory_remote_;
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
+#if BUILDFLAG(IS_FUCHSIA)
+  std::unique_ptr<FuchsiaMediaCodecProviderImpl> media_codec_provider_;
+#endif
+
   // The memory allocator, if any, in which the renderer will write its metrics.
   std::unique_ptr<base::PersistentMemoryAllocator> metrics_allocator_;
 
@@ -1232,5 +1267,24 @@ class CONTENT_EXPORT RenderProcessHostImpl
 };
 
 }  // namespace content
+
+namespace base {
+
+template <>
+struct ScopedObservationTraits<content::RenderProcessHostImpl,
+                               content::RenderProcessHostInternalObserver> {
+  static void AddObserver(
+      content::RenderProcessHostImpl* source,
+      content::RenderProcessHostInternalObserver* observer) {
+    source->AddInternalObserver(observer);
+  }
+  static void RemoveObserver(
+      content::RenderProcessHostImpl* source,
+      content::RenderProcessHostInternalObserver* observer) {
+    source->RemoveInternalObserver(observer);
+  }
+};
+
+}  // namespace base
 
 #endif  // CONTENT_BROWSER_RENDERER_HOST_RENDER_PROCESS_HOST_IMPL_H_

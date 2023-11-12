@@ -6,8 +6,6 @@ package org.chromium.chrome.browser.omaha;
 
 import android.app.Activity;
 import android.app.Instrumentation.ActivityResult;
-import android.content.Context;
-import android.os.Build;
 
 import androidx.test.espresso.intent.Intents;
 import androidx.test.espresso.intent.matcher.IntentMatchers;
@@ -24,7 +22,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
@@ -72,14 +69,14 @@ public class UpdateMenuItemHelperTest {
         }
 
         @Override
-        public String getCurrentlyUsedVersion(Context applicationContext) {
+        public String getCurrentlyUsedVersion() {
             Assert.assertNotNull("Never set the current version", mCurrentVersion);
             mAskedForCurrentVersion = true;
             return mCurrentVersion;
         }
 
         @Override
-        public String getLatestKnownVersion(Context applicationContext) {
+        public String getLatestKnownVersion() {
             Assert.assertNotNull("Never set the latest version", mLatestVersion);
             mAskedForLatestVersion = true;
             return mLatestVersion;
@@ -187,8 +184,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @DisableIf.
-    Build(sdk_is_less_than = Build.VERSION_CODES.M, message = "https://crbug.com/1256725")
     public void testCurrentVersionIsSame() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "1.2.3.4");
     }
@@ -196,8 +191,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @DisableIf.
-    Build(sdk_is_less_than = Build.VERSION_CODES.M, message = "https://crbug.com/1256725")
     public void testCurrentVersionIsNewer() throws Exception {
         checkUpdateMenuItemIsNotShowing("27.0.1453.42", "26.0.1410.49");
     }
@@ -205,8 +198,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @DisableIf.
-    Build(sdk_is_less_than = Build.VERSION_CODES.M, message = "https://crbug.com/1256725")
     public void testNoVersionKnown() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "0");
     }

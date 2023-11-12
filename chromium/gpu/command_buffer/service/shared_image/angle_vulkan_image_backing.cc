@@ -5,18 +5,19 @@
 #include "gpu/command_buffer/service/shared_image/angle_vulkan_image_backing.h"
 
 #include "base/logging.h"
-#include "base/strings/stringprintf.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_image/gl_texture_image_backing_helper.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_image.h"
+#include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
@@ -44,36 +45,45 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
   ~SkiaAngleVulkanImageRepresentation() override = default;
 
   // SkiaImageRepresentation implementation.
-  sk_sp<SkPromiseImageTexture> BeginReadAccess(
+  std::vector<sk_sp<SkPromiseImageTexture>> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
     if (!backing_impl()->BeginAccessSkia(/*readonly=*/true))
-      return nullptr;
-    return backing_impl()->promise_texture_;
+      return {};
+
+    if (!backing_impl()->promise_texture_)
+      return {};
+
+    return {backing_impl()->promise_texture_};
   }
 
   void EndReadAccess() override { backing_impl()->EndAccessSkia(); }
 
-  sk_sp<SkPromiseImageTexture> BeginWriteAccess(
+  std::vector<sk_sp<SkPromiseImageTexture>> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
     if (!backing_impl()->BeginAccessSkia(/*readonly=*/false))
-      return nullptr;
-    return backing_impl()->promise_texture_;
+      return {};
+
+    if (!backing_impl()->promise_texture_)
+      return {};
+
+    return {backing_impl()->promise_texture_};
   }
 
-  sk_sp<SkSurface> BeginWriteAccess(
+  std::vector<sk_sp<SkSurface>> BeginWriteAccess(
       int final_msaa_count,
       const SkSurfaceProps& surface_props,
+      const gfx::Rect& update_rect,
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
-    auto promise_texture =
+    auto promise_textures =
         BeginWriteAccess(begin_semaphores, end_semaphores, end_state);
-    if (!promise_texture)
-      return nullptr;
+    if (promise_textures.empty())
+      return {};
 
     auto surface = backing_impl()->context_state_->GetCachedSkSurface(
         backing_impl()->promise_texture_.get());
@@ -82,8 +92,8 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
     // reuse the cached SkSurface.
     if (!surface || surface_props != surface->props() ||
         final_msaa_count != backing_impl()->surface_msaa_count_) {
-      SkColorType sk_color_type = viz::ResourceFormatToClosestSkColorType(
-          true /* gpu_compositing */, format());
+      SkColorType sk_color_type =
+          viz::ToClosestSkColorType(true /* gpu_compositing */, format());
       surface = SkSurface::MakeFromBackendTexture(
           backing_impl()->gr_context(), backing_impl()->backend_texture_,
           surface_origin(), final_msaa_count, sk_color_type,
@@ -91,7 +101,7 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
       if (!surface) {
         backing_impl()->context_state_->EraseCachedSkSurface(
             backing_impl()->promise_texture_.get());
-        return nullptr;
+        return {};
       }
       backing_impl()->surface_msaa_count_ = final_msaa_count;
       backing_impl()->context_state_->CacheSkSurface(
@@ -101,13 +111,14 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
     [[maybe_unused]] int count = surface->getCanvas()->save();
     DCHECK_EQ(count, 1);
 
-    return surface;
+    write_surface_ = surface;
+    return {surface};
   }
 
-  void EndWriteAccess(sk_sp<SkSurface> surface) override {
-    if (surface) {
-      surface->getCanvas()->restoreToCount(1);
-      surface = nullptr;
+  void EndWriteAccess() override {
+    if (write_surface_) {
+      write_surface_->getCanvas()->restoreToCount(1);
+      write_surface_.reset();
       DCHECK(backing_impl()->context_state_->CachedSkSurfaceIsUnique(
           backing_impl()->promise_texture_.get()));
     }
@@ -118,6 +129,8 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
   AngleVulkanImageBacking* backing_impl() const {
     return static_cast<AngleVulkanImageBacking*>(backing());
   }
+
+  sk_sp<SkSurface> write_surface_;
 };
 
 AngleVulkanImageBacking::AngleVulkanImageBacking(
@@ -187,7 +200,7 @@ bool AngleVulkanImageBacking::Initialize(
   if (usage() & kUsageNeedsColorAttachment) {
     vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    if (viz::IsResourceFormatCompressed(format())) {
+    if (format().IsCompressed()) {
       DLOG(ERROR) << "ETC1 format cannot be used as color attachment.";
       return false;
     }
@@ -216,6 +229,33 @@ bool AngleVulkanImageBacking::Initialize(
   return true;
 }
 
+bool AngleVulkanImageBacking::InitializeWihGMB(
+    gfx::GpuMemoryBufferHandle handle) {
+  auto* vulkan_implementation =
+      context_state_->vk_context_provider()->GetVulkanImplementation();
+  auto* device_queue = context_state_->vk_context_provider()->GetDeviceQueue();
+  DCHECK(vulkan_implementation->CanImportGpuMemoryBuffer(device_queue,
+                                                         handle.type));
+
+  VkFormat vk_format = ToVkFormat(format().resource_format());
+  auto vulkan_image = vulkan_implementation->CreateImageFromGpuMemoryHandle(
+      device_queue, std::move(handle), size(), vk_format, color_space());
+
+  if (!vulkan_image) {
+    return false;
+  }
+
+  vulkan_image_ = std::move(vulkan_image);
+
+  GrVkImageInfo info = CreateGrVkImageInfo(vulkan_image_.get());
+  backend_texture_ = GrBackendTexture(size().width(), size().height(), info);
+  promise_texture_ = SkPromiseImageTexture::Make(backend_texture_);
+
+  SetCleared();
+
+  return true;
+}
+
 SharedImageBackingType AngleVulkanImageBacking::GetType() const {
   return SharedImageBackingType::kAngleVulkan;
 }
@@ -231,7 +271,7 @@ bool AngleVulkanImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
 }
 
 void AngleVulkanImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
-  NOTREACHED();
+  DCHECK(!in_fence);
 }
 
 std::unique_ptr<GLTexturePassthroughImageRepresentation>
@@ -453,7 +493,7 @@ bool AngleVulkanImageBacking::InitializePassthroughTexture() {
   auto egl_image = base::MakeRefCounted<gl::GLImageEGLAngleVulkan>(size());
   if (!egl_image->Initialize(vulkan_image_->image(),
                              &vulkan_image_->create_info(),
-                             viz::GLInternalFormat(format()))) {
+                             GLInternalFormat(format()))) {
     return false;
   }
 
@@ -461,7 +501,7 @@ bool AngleVulkanImageBacking::InitializePassthroughTexture() {
   GLTextureImageBackingHelper::MakeTextureAndSetParameters(
       GL_TEXTURE_2D, /*service_id=*/0,
       /*framebuffer_attachment_angle=*/true, &passthrough_texture, nullptr);
-  passthrough_texture->SetEstimatedSize(estimated_size());
+  passthrough_texture->SetEstimatedSize(GetEstimatedSize());
 
   GLuint texture = passthrough_texture->service_id();
 

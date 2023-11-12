@@ -23,6 +23,7 @@
 #include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
+#include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -537,6 +538,15 @@ absl::optional<GURL> WebAppRegistrar::GetAppPinnedHomeTabUrl(
   return absl::nullopt;
 }
 
+absl::optional<proto::WebAppOsIntegrationState>
+WebAppRegistrar::GetAppCurrentOsIntegrationState(const AppId& app_id) const {
+  const WebApp* web_app = GetAppById(app_id);
+  if (!web_app)
+    return absl::nullopt;
+
+  return web_app->current_os_integration_states();
+}
+
 #if BUILDFLAG(IS_MAC)
 bool WebAppRegistrar::AlwaysShowToolbarInFullscreen(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
@@ -618,13 +628,12 @@ bool WebAppRegistrar::AppsExistWithExternalConfigData() const {
 
 void WebAppRegistrar::Start() {
   // Profile manager can be null in unit tests.
-  if (g_browser_process->profile_manager())
-    g_browser_process->profile_manager()->AddObserver(this);
+  if (ProfileManager* profile_manager = g_browser_process->profile_manager())
+    profile_manager_observation_.Observe(profile_manager);
 }
 
 void WebAppRegistrar::Shutdown() {
-  if (g_browser_process->profile_manager())
-    g_browser_process->profile_manager()->RemoveObserver(this);
+  profile_manager_observation_.Reset();
 }
 
 void WebAppRegistrar::SetSubsystems(
@@ -688,7 +697,8 @@ bool WebAppRegistrar::IsActivelyInstalled(const AppId& app_id) const {
 
 bool WebAppRegistrar::IsIsolated(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->IsStorageIsolated() : false;
+  return web_app && (web_app->IsStorageIsolated() ||
+                     web_app->isolation_data().has_value());
 }
 
 bool WebAppRegistrar::IsInstalledByDefaultManagement(
@@ -1067,6 +1077,10 @@ void WebAppRegistrar::OnProfileMarkedForPermanentDeletion(
   // diverged from the sync server registry and from the on-disk registry
   // (WebAppDatabase/LevelDB and "Web Applications" profile directory).
   registry_profile_being_deleted_ = true;
+}
+
+void WebAppRegistrar::OnProfileManagerDestroying() {
+  profile_manager_observation_.Reset();
 }
 
 WebAppRegistrar::AppSet::AppSet(const WebAppRegistrar* registrar,

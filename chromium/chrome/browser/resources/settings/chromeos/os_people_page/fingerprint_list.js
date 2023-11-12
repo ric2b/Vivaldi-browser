@@ -17,11 +17,11 @@ import '../../settings_shared.css.js';
 import {focusWithoutInk} from 'chrome://resources/ash/common/focus_without_ink_js.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/ash/common/web_ui_listener_behavior.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {Route, Router} from '../../router.js';
+import {Route, Router} from '../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {routes} from '../os_route.js';
@@ -186,12 +186,13 @@ class SettingsFingerprintListElement extends
    * @private
    */
   onFingerprintDeleteTapped_(e) {
-    this.browserProxy_.removeEnrollment(e.model.index).then(success => {
-      if (success) {
-        recordSettingChange();
-        this.updateFingerprintsList_();
-      }
-    });
+    this.browserProxy_.removeEnrollment(e.model.index, this.authToken)
+        .then(success => {
+          if (success) {
+            recordSettingChange();
+            this.updateFingerprintsList_();
+          }
+        });
   }
 
   /**

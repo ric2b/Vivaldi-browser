@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/debug/alias.h"
@@ -25,10 +26,10 @@
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/thread_annotations.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/typed_macros.h"
@@ -45,6 +46,8 @@
 #include "net/base/upload_file_element_reader.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_store.h"
+#include "net/cookies/cookie_util.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/cookies/static_cookie_policy.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -103,8 +106,6 @@
 namespace network {
 
 namespace {
-
-using ConcerningHeaderId = URLLoader::ConcerningHeaderId;
 
 // Cannot use 0, because this means "default" in
 // mojo::core::Core::CreateDataPipe
@@ -240,7 +241,7 @@ class SSLPrivateKeyInternal : public net::SSLPrivateKey {
             net::SSLPrivateKey::SignCallback callback) override {
     std::vector<uint8_t> input_vector(input.begin(), input.end());
     if (!ssl_private_key_ || !ssl_private_key_.is_connected()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(std::move(callback),
                          net::ERR_SSL_CLIENT_AUTH_CERT_NO_PRIVATE_KEY,
@@ -284,22 +285,6 @@ bool ShouldNotifyAboutCookie(net::CookieInclusionStatus status) {
          status.HasExclusionReason(
              net::CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII);
 }
-
-// Concerning headers that consumers probably shouldn't be allowed to set.
-// Gathering numbers on these before adding them to kUnsafeHeaders.
-const struct {
-  const char* name;
-  ConcerningHeaderId histogram_id;
-} kConcerningHeaders[] = {
-    {net::HttpRequestHeaders::kConnection, ConcerningHeaderId::kConnection},
-    {net::HttpRequestHeaders::kCookie, ConcerningHeaderId::kCookie},
-    {"Date", ConcerningHeaderId::kDate},
-    {"Expect", ConcerningHeaderId::kExpect},
-    // The referer is passed in from the caller on a per-request basis, but
-    // there's a separate field for it that should be used instead.
-    {net::HttpRequestHeaders::kReferer, ConcerningHeaderId::kReferer},
-    {"Via", ConcerningHeaderId::kVia},
-};
 
 // Parses AcceptCHFrame and removes client hints already in the headers.
 std::vector<mojom::WebClientHintsType> ComputeAcceptCHFrameHints(
@@ -406,6 +391,56 @@ bool HasHeadersIncompatibleWithSingleKeyedCache(
   return false;
 }
 
+// Retrieves the Cookie header from either `cors_exempt_headers` or `headers`.
+std::string GetCookiesFromHeaders(
+    const net::HttpRequestHeaders& headers,
+    const net::HttpRequestHeaders& cors_exempt_headers) {
+  std::string cookies;
+  if (!cors_exempt_headers.GetHeader(net::HttpRequestHeaders::kCookie,
+                                     &cookies)) {
+    headers.GetHeader(net::HttpRequestHeaders::kCookie, &cookies);
+  }
+  return cookies;
+}
+
+net::HttpRequestHeaders AttachCookies(const net::HttpRequestHeaders& headers,
+                                      const std::string& cookies_from_browser) {
+  DCHECK(!cookies_from_browser.empty());
+
+  // Parse the existing cookie line.
+  std::string old_cookies;
+  headers.GetHeader(net::HttpRequestHeaders::kCookie, &old_cookies);
+  net::cookie_util::ParsedRequestCookies parsed_cookies;
+
+  net::cookie_util::ParseRequestCookieLine(old_cookies, &parsed_cookies);
+  net::cookie_util::ParsedRequestCookies parsed_cookies_from_browser;
+  net::cookie_util::ParseRequestCookieLine(cookies_from_browser,
+                                           &parsed_cookies_from_browser);
+
+  // Add the browser cookies to the request.
+  for (auto cookie : parsed_cookies_from_browser) {
+    DCHECK(!cookie.first.empty());
+
+    // Ensure we're not adding duplicate cookies.
+    auto it = std::find_if(
+        parsed_cookies.begin(), parsed_cookies.end(),
+        [&cookie](const net::cookie_util::ParsedRequestCookie& old_cookie) {
+          return old_cookie.first == cookie.first;
+        });
+    if (it != parsed_cookies.end())
+      continue;
+
+    parsed_cookies.emplace_back(cookie.first, cookie.second);
+  }
+
+  net::HttpRequestHeaders updated_headers = headers;
+  std::string updated_cookies =
+      net::cookie_util::SerializeRequestCookieLine(parsed_cookies);
+  updated_headers.SetHeader(net::HttpRequestHeaders::kCookie, updated_cookies);
+
+  return updated_headers;
+}
+
 }  // namespace
 
 URLLoader::MaybeSyncURLLoaderClient::MaybeSyncURLLoaderClient(
@@ -449,6 +484,7 @@ URLLoader::URLLoader(
     base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder,
     std::unique_ptr<TrustTokenRequestHelperFactory> trust_token_helper_factory,
     mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
+    mojo::PendingRemote<mojom::TrustTokenAccessObserver> trust_token_observer,
     mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
         url_loader_network_observer,
     mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
@@ -473,10 +509,11 @@ URLLoader::URLLoader(
                          std::move(sync_url_loader_client)),
       writable_handle_watcher_(FROM_HERE,
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL,
-                               base::SequencedTaskRunnerHandle::Get()),
-      peer_closed_handle_watcher_(FROM_HERE,
-                                  mojo::SimpleWatcher::ArmingPolicy::MANUAL,
-                                  base::SequencedTaskRunnerHandle::Get()),
+                               base::SequencedTaskRunner::GetCurrentDefault()),
+      peer_closed_handle_watcher_(
+          FROM_HERE,
+          mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+          base::SequencedTaskRunner::GetCurrentDefault()),
       per_factory_corb_state_(context.GetMutableCorbState()),
       devtools_request_id_(request.devtools_request_id),
       request_mode_(request.mode),
@@ -487,12 +524,19 @@ URLLoader::URLLoader(
       custom_proxy_pre_cache_headers_(request.custom_proxy_pre_cache_headers),
       custom_proxy_post_cache_headers_(request.custom_proxy_post_cache_headers),
       fetch_window_id_(request.fetch_window_id),
-      private_network_access_checker_(request, &factory_params_, options_),
+      private_network_access_checker_(
+          request,
+          factory_params_->client_security_state.get(),
+          options_),
       trust_token_helper_factory_(std::move(trust_token_helper_factory)),
       origin_access_list_(context.GetOriginAccessList()),
       cookie_observer_remote_(std::move(cookie_observer)),
       cookie_observer_(PtrOrFallback(cookie_observer_remote_,
                                      context.GetCookieAccessObserver())),
+      trust_token_observer_remote_(std::move(trust_token_observer)),
+      trust_token_observer_(
+          PtrOrFallback(trust_token_observer_remote_,
+                        context.GetTrustTokenAccessObserver())),
       url_loader_network_observer_remote_(
           std::move(url_loader_network_observer)),
       url_loader_network_observer_(
@@ -551,8 +595,8 @@ URLLoader::URLLoader(
   url_request_->set_upgrade_if_insecure(request.upgrade_if_insecure);
 
   auto isolation_info = GetIsolationInfo(
-      factory_params_.isolation_info,
-      factory_params_.automatically_assign_isolation_info, request);
+      factory_params_->isolation_info,
+      factory_params_->automatically_assign_isolation_info, request);
   if (isolation_info)
     url_request_->set_isolation_info(isolation_info.value());
 
@@ -574,7 +618,7 @@ URLLoader::URLLoader(
     url_request_->set_force_main_frame_for_same_site_cookies(true);
   }
 
-  if (factory_params_.disable_secure_dns ||
+  if (factory_params_->disable_secure_dns ||
       (request.trusted_params && request.trusted_params->disable_secure_dns)) {
     url_request_->SetSecureDnsPolicy(net::SecureDnsPolicy::kDisable);
   }
@@ -597,6 +641,8 @@ URLLoader::URLLoader(
 
   if (request.trusted_params) {
     has_user_activation_ = request.trusted_params->has_user_activation;
+    allow_cookies_from_browser_ =
+        request.trusted_params->allow_cookies_from_browser;
   }
 
   throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
@@ -606,7 +652,7 @@ URLLoader::URLLoader(
 
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_, nullptr,
-                          factory_params_, origin_access_list_);
+                          *factory_params_, *origin_access_list_);
 
   if (request.update_first_party_url_on_redirect) {
     url_request_->set_first_party_url_policy(
@@ -669,8 +715,8 @@ URLLoader::URLLoader(
       &URLLoader::NotifyEarlyResponse, base::Unretained(this)));
 
   if (keepalive_ && keepalive_statistics_recorder_) {
-    keepalive_statistics_recorder_->OnLoadStarted(*factory_params_.top_frame_id,
-                                                  keepalive_request_size_);
+    keepalive_statistics_recorder_->OnLoadStarted(
+        *factory_params_->top_frame_id, keepalive_request_size_);
   }
 
   if (request.net_log_reference_info) {
@@ -690,6 +736,13 @@ URLLoader::URLLoader(
   if (request.request_body.get()) {
     OpenFilesForUpload(request);
     return;
+  }
+
+  // Store any cookies passed from the browser process to later attach them to
+  // the request.
+  if (allow_cookies_from_browser_) {
+    cookies_from_browser_ =
+        GetCookiesFromHeaders(request.headers, request.cors_exempt_headers);
   }
 
   BeginTrustTokenOperationIfNecessaryAndThenScheduleStart(request);
@@ -760,8 +813,7 @@ class URLLoader::FileOpenerForUpload {
   static void PostCloseFiles(std::vector<base::File> opened_files) {
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce([](std::vector<base::File>) {},
-                       std::move(opened_files)));
+        base::DoNothingWithBoundArgs(std::move(opened_files)));
   }
 
   void StartOpeningNextBatch() {
@@ -815,7 +867,7 @@ void URLLoader::OpenFilesForUpload(const ResourceRequest& request) {
                    "NetworkContextClient is set.";
     // Defer calling NotifyCompleted to make sure the URLLoader finishes
     // initializing before getting deleted.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&URLLoader::NotifyCompleted,
                        weak_ptr_factory_.GetWeakPtr(), net::ERR_ACCESS_DENIED));
@@ -823,7 +875,7 @@ void URLLoader::OpenFilesForUpload(const ResourceRequest& request) {
   }
   url_request_->LogBlockedBy("Opening Files");
   file_opener_for_upload_ = std::make_unique<FileOpenerForUpload>(
-      std::move(paths), this, factory_params_.process_id,
+      std::move(paths), this, factory_params_->process_id,
       network_context_client_,
       base::BindOnce(&URLLoader::SetUpUpload, base::Unretained(this), request));
 }
@@ -835,7 +887,7 @@ void URLLoader::SetUpUpload(const ResourceRequest& request,
     DCHECK(opened_files.empty());
     // Defer calling NotifyCompleted to make sure the URLLoader finishes
     // initializing before getting deleted.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLLoader::NotifyCompleted,
                                   weak_ptr_factory_.GetWeakPtr(), error_code));
     return;
@@ -863,12 +915,25 @@ void URLLoader::BeginTrustTokenOperationIfNecessaryAndThenScheduleStart(
     return;
   }
 
+  // Trust token operations other than signing cannot be served from cache
+  // because it needs to send the server the Trust Tokens request header and
+  // get the corresponding response header. It is okay to cache the results in
+  // case subsequent requests are made to the same URL in non-trust-token
+  // settings.
+  if (request.trust_token_params->type !=
+      mojom::TrustTokenOperationType::kSigning) {
+    url_request_->SetLoadFlags(url_request_->load_flags() |
+                               net::LOAD_BYPASS_CACHE);
+  }
+
   // Since the request has trust token parameters, |trust_token_helper_factory_|
   // is guaranteed to be non-null by URLLoader's constructor's contract.
   DCHECK(trust_token_helper_factory_);
 
   trust_token_helper_factory_->CreateTrustTokenHelperForRequest(
-      *url_request_, request.trust_token_params.value(),
+      url_request_->isolation_info().top_frame_origin().value_or(url::Origin()),
+      url_request_->extra_request_headers(), request.trust_token_params.value(),
+      url_request_->net_log(),
       base::BindOnce(&URLLoader::OnDoneConstructingTrustTokenHelper,
                      weak_ptr_factory_.GetWeakPtr(),
                      request.trust_token_params->type));
@@ -877,12 +942,27 @@ void URLLoader::BeginTrustTokenOperationIfNecessaryAndThenScheduleStart(
 void URLLoader::OnDoneConstructingTrustTokenHelper(
     mojom::TrustTokenOperationType type,
     TrustTokenStatusOrRequestHelper status_or_helper) {
+  if (trust_token_observer_) {
+    const net::IsolationInfo& isolation_info = url_request_->isolation_info();
+    url::Origin top_frame_origin;
+    if (isolation_info.top_frame_origin()) {
+      top_frame_origin = *isolation_info.top_frame_origin();
+    }
+
+    bool token_operation_unauthorized =
+        status_or_helper.status() ==
+        mojom::TrustTokenOperationStatus::kUnauthorized;
+    trust_token_observer_->OnTrustTokensAccessed(
+        mojom::TrustTokenAccessDetails::New(top_frame_origin,
+                                            token_operation_unauthorized));
+  }
+
   if (!status_or_helper.ok()) {
     trust_token_status_ = status_or_helper.status();
 
     // Defer calling NotifyCompleted to make sure the URLLoader
     // finishes initializing before getting deleted.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLLoader::NotifyCompleted,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   net::ERR_TRUST_TOKEN_OPERATION_FAILED));
@@ -900,12 +980,13 @@ void URLLoader::OnDoneConstructingTrustTokenHelper(
 
   trust_token_helper_ = status_or_helper.TakeOrCrash();
   trust_token_helper_->Begin(
-      url_request_.get(),
+      url_request_->url(),
       base::BindOnce(&URLLoader::OnDoneBeginningTrustTokenOperation,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void URLLoader::OnDoneBeginningTrustTokenOperation(
+    absl::optional<net::HttpRequestHeaders> headers,
     mojom::TrustTokenOperationStatus status) {
   trust_token_status_ = status;
 
@@ -914,10 +995,17 @@ void URLLoader::OnDoneBeginningTrustTokenOperation(
   // Otherwise the DevTools event is always emitted from
   // |OnDoneFinalizingTrustTokenOperation|.
   if (status != mojom::TrustTokenOperationStatus::kOk) {
+    DCHECK(!headers);
     MaybeSendTrustTokenOperationResultToDevTools();
   }
 
   if (status == mojom::TrustTokenOperationStatus::kOk) {
+    DCHECK(headers);
+    for (const auto& header_pair : headers->GetHeaderVector()) {
+      url_request_->SetExtraRequestHeaderByName(
+          header_pair.key, header_pair.value, /*overwrite=*/true);
+    }
+
     ScheduleStart();
   } else if (status == mojom::TrustTokenOperationStatus::kAlreadyExists ||
              status == mojom::TrustTokenOperationStatus::
@@ -927,13 +1015,13 @@ void URLLoader::OnDoneBeginningTrustTokenOperation(
     //
     // Here and below, defer calling NotifyCompleted to make sure the URLLoader
     // finishes initializing before getting deleted.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
             &URLLoader::NotifyCompleted, weak_ptr_factory_.GetWeakPtr(),
             net::ERR_TRUST_TOKEN_OPERATION_SUCCESS_WITHOUT_SENDING_REQUEST));
   } else {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLLoader::NotifyCompleted,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   net::ERR_TRUST_TOKEN_OPERATION_FAILED));
@@ -959,10 +1047,9 @@ void URLLoader::ScheduleStart() {
 URLLoader::~URLLoader() {
   TRACE_EVENT("loading", "URLLoader::~URLLoader",
               perfetto::TerminatingFlow::FromPointer(this));
-  RecordBodyReadFromNetBeforePausedIfNeeded();
   if (keepalive_ && keepalive_statistics_recorder_) {
     keepalive_statistics_recorder_->OnLoadFinished(
-        *factory_params_.top_frame_id, keepalive_request_size_);
+        *factory_params_->top_frame_id, keepalive_request_size_);
   }
 }
 
@@ -998,9 +1085,12 @@ void URLLoader::FollowRedirect(
     return;
   }
 
-  if (!modified_headers.IsEmpty())
-    LogConcerningRequestHeaders(modified_headers,
-                                true /* added_during_redirect */);
+  // Store any cookies passed from the browser process to later attach them to
+  // the request.
+  if (allow_cookies_from_browser_) {
+    cookies_from_browser_ =
+        GetCookiesFromHeaders(modified_headers, modified_cors_exempt_headers);
+  }
 
   deferred_redirect_url_.reset();
   new_redirect_url_ = new_url;
@@ -1030,17 +1120,7 @@ void URLLoader::PauseReadingBodyFromNet() {
   // request indicates that the response was cached, there could still be
   // network activity involved. For example, the response was only partially
   // cached.
-  //
-  // On the other hand, we only report BodyReadFromNetBeforePaused histogram
-  // when we are sure that the response body hasn't been read from cache. This
-  // avoids polluting the histogram data with data points from cached responses.
   should_pause_reading_body_ = true;
-
-  if (read_in_progress_) {
-    update_body_read_before_paused_ = true;
-  } else {
-    body_read_before_paused_ = url_request_->GetRawBodyBytes();
-  }
 }
 
 void URLLoader::ResumeReadingBodyFromNet() {
@@ -1245,8 +1325,6 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
   response->client_address_space =
       private_network_access_checker_.ClientAddressSpace();
 
-  response->has_partitioned_cookie = url_request_->HasPartitionedCookie();
-
   return response;
 }
 
@@ -1272,8 +1350,8 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   const CrossOriginEmbedderPolicy kEmpty;
   // Enforce the Cross-Origin-Resource-Policy (CORP) header.
   const CrossOriginEmbedderPolicy& cross_origin_embedder_policy =
-      factory_params_.client_security_state
-          ? factory_params_.client_security_state->cross_origin_embedder_policy
+      factory_params_->client_security_state
+          ? factory_params_->client_security_state->cross_origin_embedder_policy
           : kEmpty;
 
   if (absl::optional<mojom::BlockedByResponseReason> blocked_reason =
@@ -1302,13 +1380,19 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
 
   SetRequestCredentials(redirect_info.new_url);
 
+  // Clear the Cookie header to ensure that cookies passed in through the
+  // `ResourceRequest` do not persist across redirects.
+  url_request_.get()->RemoveRequestHeaderByName(
+      net::HttpRequestHeaders::kCookie);
+  cookies_from_browser_.clear();
+
   // We may need to clear out old Sec- prefixed request headers. We'll attempt
   // to do this before we re-add any.
   MaybeRemoveSecHeaders(url_request_.get(), redirect_info.new_url);
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_,
-                          &redirect_info.new_url, factory_params_,
-                          origin_access_list_);
+                          &redirect_info.new_url, *factory_params_,
+                          *origin_access_list_);
 
   DCHECK_EQ(emitted_devtools_raw_request_, emitted_devtools_raw_response_);
   response->emitted_extra_info = emitted_devtools_raw_request_;
@@ -1395,7 +1479,7 @@ void URLLoader::OnCertificateRequested(net::URLRequest* unused,
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kIgnoreUrlFetcherCertRequests) &&
-      factory_params_.is_trusted) {
+      factory_params_->is_trusted) {
     ContinueWithoutCertificate();
     return;
   }
@@ -1446,9 +1530,10 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
 
   // Parse and remove the Trust Tokens response headers, if any are expected,
   // potentially failing the request if an error occurs.
-  if (trust_token_helper_) {
+  if (response_ && response_->headers && trust_token_helper_) {
+    DCHECK(response_);
     trust_token_helper_->Finalize(
-        response_.get(),
+        *response_->headers.get(),
         base::BindOnce(&URLLoader::OnDoneFinalizingTrustTokenOperation,
                        weak_ptr_factory_.GetWeakPtr()));
     // |this| may have been deleted.
@@ -1529,8 +1614,8 @@ void URLLoader::ContinueOnResponseStarted() {
   // Enforce the Cross-Origin-Resource-Policy (CORP) header.
   const CrossOriginEmbedderPolicy kEmpty;
   const CrossOriginEmbedderPolicy& cross_origin_embedder_policy =
-      factory_params_.client_security_state
-          ? factory_params_.client_security_state->cross_origin_embedder_policy
+      factory_params_->client_security_state
+          ? factory_params_->client_security_state->cross_origin_embedder_policy
           : kEmpty;
   if (absl::optional<mojom::BlockedByResponseReason> blocked_reason =
           CrossOriginResourcePolicy::IsBlocked(
@@ -1552,7 +1637,7 @@ void URLLoader::ContinueOnResponseStarted() {
   // is allowed to read those, and only the browser process can issue trusted
   // requests.
   std::string fledge_auction_only_signals;
-  if (!factory_params_.is_trusted && response_->headers &&
+  if (!factory_params_->is_trusted && response_->headers &&
       response_->headers->GetNormalizedHeader("X-FLEDGE-Auction-Only",
                                               &fledge_auction_only_signals) &&
       base::EqualsCaseInsensitiveASCII(fledge_auction_only_signals, "true")) {
@@ -1564,8 +1649,8 @@ void URLLoader::ContinueOnResponseStarted() {
 
   // Figure out if we need to sniff (for MIME type detection or for Cross-Origin
   // Read Blocking / CORB).
-  if (factory_params_.is_corb_enabled) {
-    corb_analyzer_ = corb::ResponseAnalyzer::Create(per_factory_corb_state_);
+  if (factory_params_->is_corb_enabled) {
+    corb_analyzer_ = corb::ResponseAnalyzer::Create(*per_factory_corb_state_);
     is_more_corb_sniffing_needed_ = true;
     auto decision =
         corb_analyzer_->Init(url_request_->url(), url_request_->initiator(),
@@ -1665,10 +1750,6 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
       reported_total_encoded_bytes_ = total_encoded_bytes;
     }
   }
-  if (update_body_read_before_paused_) {
-    update_body_read_before_paused_ = false;
-    body_read_before_paused_ = url_request_->GetRawBodyBytes();
-  }
 
   bool complete_read = true;
   if (consumer_handle_.is_valid()) {
@@ -1749,7 +1830,7 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
     CompletePendingWrite(true /* success */);
   }
   if (completed_synchronously) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&URLLoader::ReadMore, weak_ptr_factory_.GetWeakPtr()));
   } else {
@@ -1769,11 +1850,24 @@ int URLLoader::OnBeforeStartTransaction(
     net::NetworkDelegate::OnBeforeStartTransactionCallback callback) {
   if (header_client_) {
     header_client_->OnBeforeSendHeaders(
-        headers,
+        cookies_from_browser_.empty()
+            ? headers
+            : AttachCookies(headers, cookies_from_browser_),
         base::BindOnce(&URLLoader::OnBeforeSendHeadersComplete,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
     return net::ERR_IO_PENDING;
   }
+
+  // Additional cookies were added to the existing headers, so `callback` must
+  // be invoked to ensure that the cookies are included in the request.
+  if (!cookies_from_browser_.empty()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), net::OK,
+                       AttachCookies(headers, cookies_from_browser_)));
+    return net::ERR_IO_PENDING;
+  }
+
   return net::OK;
 }
 
@@ -1817,7 +1911,7 @@ net::UploadProgress URLLoader::GetUploadProgress() const {
 }
 
 int32_t URLLoader::GetProcessId() const {
-  return factory_params_.process_id;
+  return factory_params_->process_id;
 }
 
 void URLLoader::SetEnableReportingRawHeaders(bool allow) {
@@ -1851,42 +1945,6 @@ URLLoader* URLLoader::ForRequest(const net::URLRequest& request) {
   if (!pointer)
     return nullptr;
   return pointer->get();
-}
-
-// static
-void URLLoader::LogConcerningRequestHeaders(
-    const net::HttpRequestHeaders& request_headers,
-    bool added_during_redirect) {
-  net::HttpRequestHeaders::Iterator it(request_headers);
-
-  bool concerning_header_found = false;
-
-  while (it.GetNext()) {
-    for (const auto& header : kConcerningHeaders) {
-      if (base::EqualsCaseInsensitiveASCII(header.name, it.name())) {
-        concerning_header_found = true;
-        if (added_during_redirect) {
-          UMA_HISTOGRAM_ENUMERATION(
-              "NetworkService.ConcerningRequestHeader.HeaderAddedOnRedirect",
-              header.histogram_id);
-        } else {
-          UMA_HISTOGRAM_ENUMERATION(
-              "NetworkService.ConcerningRequestHeader.HeaderPresentOnStart",
-              header.histogram_id);
-        }
-      }
-    }
-  }
-
-  if (added_during_redirect) {
-    UMA_HISTOGRAM_BOOLEAN(
-        "NetworkService.ConcerningRequestHeader.AddedOnRedirect",
-        concerning_header_found);
-  } else {
-    UMA_HISTOGRAM_BOOLEAN(
-        "NetworkService.ConcerningRequestHeader.PresentOnStart",
-        concerning_header_found);
-  }
 }
 
 void URLLoader::OnAuthCredentials(
@@ -2115,10 +2173,24 @@ void URLLoader::DispatchOnRawRequest(
   url_request_->GetLoadTimingInfo(&load_timing_info);
 
   emitted_devtools_raw_request_ = true;
+
+  absl::optional<bool> site_has_cookie_in_other_partition =
+      url_request_->context()->cookie_store()->SiteHasCookieInOtherPartition(
+          net::SchemefulSite(url_request_->url()),
+          net::CookiePartitionKey::FromNetworkIsolationKey(
+              url_request_->isolation_info().network_isolation_key()));
+  network::mojom::OtherPartitionInfoPtr other_partition_info = nullptr;
+  if (site_has_cookie_in_other_partition.has_value()) {
+    other_partition_info = network::mojom::OtherPartitionInfo::New();
+    other_partition_info->site_has_cookie_in_other_partition =
+        *site_has_cookie_in_other_partition;
+  }
+
   devtools_observer_->OnRawRequest(
       devtools_request_id().value(), url_request_->maybe_sent_cookies(),
       std::move(headers), load_timing_info.request_start,
-      private_network_access_checker_.CloneClientSecurityState());
+      private_network_access_checker_.CloneClientSecurityState(),
+      std::move(other_partition_info));
 }
 
 bool URLLoader::DispatchOnRawResponse() {
@@ -2206,22 +2278,6 @@ void URLLoader::OnSSLCertificateErrorResponse(const net::SSLInfo& ssl_info,
 
 bool URLLoader::HasDataPipe() const {
   return pending_write_ || response_body_stream_.is_valid();
-}
-
-void URLLoader::RecordBodyReadFromNetBeforePausedIfNeeded() {
-  if (update_body_read_before_paused_)
-    body_read_before_paused_ = url_request_->GetRawBodyBytes();
-  if (body_read_before_paused_ != -1) {
-    if (!url_request_->was_cached()) {
-      UMA_HISTOGRAM_COUNTS_1M("Network.URLLoader.BodyReadFromNetBeforePaused",
-                              body_read_before_paused_);
-    } else {
-      DVLOG(1) << "The request has been paused, but "
-               << "Network.URLLoader.BodyReadFromNetBeforePaused is not "
-               << "reported because the response body may be from cache. "
-               << "body_read_before_paused_: " << body_read_before_paused_;
-    }
-  }
 }
 
 void URLLoader::ResumeStart() {
@@ -2326,7 +2382,7 @@ URLLoader::BlockResponseForCorbResult URLLoader::BlockResponseForCorb() {
     if (result != MOJO_RESULT_OK) {
       // Defer calling NotifyCompleted to make sure the caller can still access
       // |this|.
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&URLLoader::NotifyCompleted,
                                     weak_ptr_factory_.GetWeakPtr(),
                                     net::ERR_INSUFFICIENT_RESOURCES));
@@ -2374,7 +2430,7 @@ URLLoader::BlockResponseForCorbResult URLLoader::BlockResponseForCorb() {
   // DeleteSelf is posted asynchronously, to make sure that the callers (e.g.
   // URLLoader::OnResponseStarted and/or URLLoader::DidRead instance methods)
   // can still safely dereference |this|.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&URLLoader::DeleteSelf, weak_ptr_factory_.GetWeakPtr()));
   return kWillCancelRequest;
@@ -2455,7 +2511,7 @@ bool URLLoader::ShouldForceIgnoreSiteForCookies(
   // initiated by Chrome Extensions).
   if (request.request_initiator.has_value() &&
       cors::OriginAccessList::AccessState::kAllowed ==
-          origin_access_list_.CheckAccessState(
+          origin_access_list_->CheckAccessState(
               request.request_initiator.value(), request.url)) {
     return true;
   }
@@ -2490,10 +2546,10 @@ bool URLLoader::ShouldForceIgnoreSiteForCookies(
   if (!site_origin.opaque() && request.request_initiator.has_value()) {
     bool site_can_access_target =
         cors::OriginAccessList::AccessState::kAllowed ==
-        origin_access_list_.CheckAccessState(site_origin, request.url);
+        origin_access_list_->CheckAccessState(site_origin, request.url);
     bool site_can_access_initiator =
         cors::OriginAccessList::AccessState::kAllowed ==
-        origin_access_list_.CheckAccessState(
+        origin_access_list_->CheckAccessState(
             site_origin, request.request_initiator->GetURL());
     net::SiteForCookies site_of_initiator =
         net::SiteForCookies::FromOrigin(request.request_initiator.value());
@@ -2523,8 +2579,8 @@ bool URLLoader::ShouldForceIgnoreTopFramePartyForCookies() const {
 
   // The top frame origin must have access to the request URL.
   if (cors::OriginAccessList::AccessState::kAllowed !=
-      origin_access_list_.CheckAccessState(*top_frame_origin,
-                                           url_request_->url())) {
+      origin_access_list_->CheckAccessState(*top_frame_origin,
+                                            url_request_->url())) {
     return false;
   }
 
@@ -2532,8 +2588,8 @@ bool URLLoader::ShouldForceIgnoreTopFramePartyForCookies() const {
   return base::ranges::all_of(
       *party_context,
       [this, &top_frame_origin](const net::SchemefulSite& site) {
-        return origin_access_list_.CheckAccessState(*top_frame_origin,
-                                                    site.GetURL()) ==
+        return origin_access_list_->CheckAccessState(*top_frame_origin,
+                                                     site.GetURL()) ==
                cors::OriginAccessList::AccessState::kAllowed;
       });
 }
@@ -2585,12 +2641,12 @@ bool URLLoader::CoepAllowCredentials(const GURL& url) {
   }
 
   // [spec]: 2. If request’s client is null, then return true.
-  if (!factory_params_.client_security_state)
+  if (!factory_params_->client_security_state)
     return true;
 
   // [spec]: 3. If request’s client’s policy container’s embedder policy’s value
   //            is not "credentialless", then return true.
-  if (factory_params_.client_security_state->cross_origin_embedder_policy
+  if (factory_params_->client_security_state->cross_origin_embedder_policy
           .value != mojom::CrossOriginEmbedderPolicyValue::kCredentialless) {
     return true;
   }

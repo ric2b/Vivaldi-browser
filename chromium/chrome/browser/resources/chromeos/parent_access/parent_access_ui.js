@@ -1,9 +1,9 @@
 // Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import './strings.m.js';
+import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {ParentAccessController} from './parent_access_controller.js';
@@ -23,6 +23,12 @@ const ALLOWED_HOSTS = [
   'google.com',
 ];
 
+/**
+ * The local dev server host, which is the only non-https URL the
+ * webview is permitted to load.
+ */
+const LOCAL_DEV_SERVER_HOST = 'localhost:9879';
+
 class ParentAccessUi extends PolymerElement {
   constructor() {
     super();
@@ -39,6 +45,12 @@ class ParentAccessUi extends PolymerElement {
     return html`{__html_template__}`;
   }
 
+  static get properties() {
+    return {
+      webviewLoading: {type: Boolean, value: true},
+    };
+  }
+
   /**
    * Returns whether the provided request should be allowed.
    * @param {string} url Request that is issued by the webview.
@@ -46,11 +58,10 @@ class ParentAccessUi extends PolymerElement {
    */
   isAllowedRequest(url) {
     const requestUrl = new URL(url);
-    const webviewUrl = new URL(this.webviewUrl_);
 
     // Allow non https only for requests to a local development server webview
     // URL, which would have been specified at the command line.
-    if (requestUrl.host === webviewUrl.host) {
+    if (requestUrl.host === LOCAL_DEV_SERVER_HOST) {
       return true;
     }
 
@@ -82,47 +93,68 @@ class ParentAccessUi extends PolymerElement {
   /** @override */
   ready() {
     super.ready();
+    this.shadowRoot.querySelector('webview').addEventListener(
+        'contentload', () => {
+          this.webviewLoading = false;
+        });
     this.configureUi().then(
         () => {/* success */},
-        origin => {/* TODO(b/200187536): show error page. */});
+        (error) => {
+          this.showErrorPage_();
+        },
+    );
   }
 
   async configureUi() {
     /**
      * @private {string} The initial URL for the webview.
      */
-    this.webviewUrl_ = loadTimeData.getString('webviewUrl');
+    this.webviewUrl_ =
+        (await this.parentAccessUIHandler.getParentAccessURL()).url;
 
-    const eventOriginFilter = loadTimeData.getString('eventOriginFilter');
+    try {
+      const parsedWebviewUrl = new URL(this.webviewUrl_);
+      // Set the filter to accept postMessages from the webviewURL's origin
+      // only.
+      const eventOriginFilter = parsedWebviewUrl.origin;
 
-    const oauthFetchResult = await this.parentAccessUIHandler.getOAuthToken();
-    if (oauthFetchResult.status != GetOAuthTokenStatus.kSuccess) {
-      // TODO(b/200187536): show error page.
+      const oauthFetchResult = await this.parentAccessUIHandler.getOAuthToken();
+      if (oauthFetchResult.status != GetOAuthTokenStatus.kSuccess) {
+        throw new Error('OAuth token was not successfully fetched.');
+      }
+
+      const webview =
+          /** @type {!WebView} */ (this.$.webview);
+      const accessToken = oauthFetchResult.oauthToken;
+
+      // Set up the WebviewManager to handle the configuration and
+      // access control for the webview.
+      this.webview_manager_ = new WebviewManager(webview);
+      this.webview_manager_.setAccessToken(accessToken, (url) => {
+        return this.shouldReceiveAuthHeader(url);
+      });
+      this.webview_manager_.setAllowRequestFn((url) => {
+        return this.isAllowedRequest(url);
+      });
+
+      // Setting the src of the webview triggers the loading process.
+      const url = new URL(this.webviewUrl_);
+      webview.src = url.toString();
+
+      webview.addEventListener('loadabort', () => {
+        this.webviewLoading = false;
+        this.showErrorPage_();
+      });
+
+      // Set up the controller. It will automatically start the initialization
+      // handshake with the hosted content.
+      this.server = new ParentAccessController(
+          webview, url.toString(), eventOriginFilter);
+
+    } catch (e) {
+      this.showErrorPage_();
       return;
     }
-
-    const webview =
-        /** @type {!WebView} */ (this.$.webview);
-    const accessToken = oauthFetchResult.oauthToken;
-
-    // Set up the WebviewManager to handle the configuration and
-    // access control for the webview.
-    this.webview_manager_ = new WebviewManager(webview);
-    this.webview_manager_.setAccessToken(accessToken, (url) => {
-      return this.shouldReceiveAuthHeader(url);
-    });
-    this.webview_manager_.setAllowRequestFn((url) => {
-      return this.isAllowedRequest(url);
-    });
-
-    // Setting the src of the webview triggers the loading process.
-    const url = new URL(this.webviewUrl_);
-    webview.src = url.toString();
-
-    // Set up the controller. It will automatically start the initialization
-    // handshake with the hosted content.
-    this.server =
-        new ParentAccessController(webview, url.toString(), eventOriginFilter);
 
 
     // What follows is the main message handling loop.  The received base64
@@ -148,7 +180,7 @@ class ParentAccessUi extends PolymerElement {
       // the server.
       if (!(parentAccessServerMessage instanceof Object)) {
         console.error('Error initializing ParentAccessController');
-        // TODO(b/200187536): show error page
+        this.showErrorPage_();
         break;
       }
 
@@ -162,18 +194,22 @@ class ParentAccessUi extends PolymerElement {
           }));
           break;
 
-        case ParentAccessServerMessageType.kError:
-          // TODO(b/200187536): show error page
-          break;
-
         case ParentAccessServerMessageType.kIgnore:
           continue;
 
+        case ParentAccessServerMessageType.kError:
         default:
-          // TODO(b/200187536): show error page
+          this.showErrorPage_();
           break;
       }
     }
+  }
+
+  showErrorPage_() {
+    this.dispatchEvent(new CustomEvent('show-error', {
+      bubbles: true,
+      composed: true,
+    }));
   }
 }
 customElements.define(ParentAccessUi.is, ParentAccessUi);

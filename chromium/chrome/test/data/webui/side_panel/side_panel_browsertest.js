@@ -44,6 +44,23 @@ TEST_F('SidePanelBookmarksListTest', 'All', function() {
   mocha.run();
 });
 
+var SidePanelPowerBookmarksListTest = class extends SidePanelBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://read-later.top-chrome/test_loader.html?module=side_panel/bookmarks/power_bookmarks_list_test.js';
+  }
+};
+
+TEST_F('SidePanelPowerBookmarksListTest', 'All', function() {
+  mocha.run();
+});
+
+// TODO(crbug.com/1396268): Flaky on Mac. Re-enable this test.
+GEN('#if BUILDFLAG(IS_MAC)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
 
 var ShoppingListTest = class extends SidePanelBrowserTest {
   /** @override */
@@ -52,7 +69,7 @@ var ShoppingListTest = class extends SidePanelBrowserTest {
   }
 };
 
-TEST_F('ShoppingListTest', 'All', function() {
+TEST_F('ShoppingListTest', 'MAYBE_All', function() {
   mocha.run();
 });
 

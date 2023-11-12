@@ -13,11 +13,13 @@ GEN_INCLUDE([
 ChromeVoxLiveRegionsTest = class extends ChromeVoxNextE2ETest {
   async setUpDeferred() {
     await super.setUpDeferred();
+
+    // Alphabetical based on file path.
     await importModule(
         'ChromeVoxState', '/chromevox/background/chromevox_state.js');
     await importModule('LiveRegions', '/chromevox/background/live_regions.js');
     await importModule('Output', '/chromevox/background/output/output.js');
-    await importModule('QueueMode', '/chromevox/common/tts_interface.js');
+    await importModule('QueueMode', '/chromevox/common/tts_types.js');
 
     window.TreeChangeType = chrome.automation.TreeChangeType;
   }

@@ -6,11 +6,12 @@
 
 import 'chrome://settings/lazy_load.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {IronListElement, PasswordMoveToAccountDialogElement, PasswordsDeviceSectionElement} from 'chrome://settings/lazy_load.js';
 import {PasswordManagerImpl, Router, routes, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 import {createPasswordEntry, PasswordDeviceSectionElementFactory} from './passwords_and_autofill_fake_data.js';
@@ -39,6 +40,9 @@ async function createPasswordsDeviceSection(
   await syncBrowserProxy.whenCalled('getSyncStatus');
   await syncBrowserProxy.whenCalled('getStoredAccounts');
   await passwordManager.whenCalled('isOptedInForAccountStorage');
+  await passwordManager.whenCalled('getSavedPasswordList');
+
+  await flushTasks();
 
   return passwordsDeviceSection;
 }
@@ -73,8 +77,7 @@ suite('PasswordsDeviceSection', function() {
   let elementFactory: PasswordDeviceSectionElementFactory;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.setInstance(passwordManager);
     syncBrowserProxy = new TestSyncBrowserProxy();

@@ -24,7 +24,7 @@ import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
 import {Router} from '../router.js';
 
-import {ChooserType, ContentSettingsTypes, SITE_EXCEPTION_WILDCARD} from './constants.js';
+import {ChooserType, ContentSettingsTypes, CookiesExceptionType, SITE_EXCEPTION_WILDCARD} from './constants.js';
 import {getTemplate} from './site_list_entry.html.js';
 import {SiteSettingsMixin} from './site_settings_mixin.js';
 import {SiteException} from './site_settings_prefs_browser_proxy.js';
@@ -94,6 +94,12 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
         type: Boolean,
         value: false,
       },
+
+      /**
+       * Type of cookies exceptions based on the use of wildcard in the
+       * patterns. See `CookiesExceptionType`.
+       */
+      cookiesExceptionType: String,
     };
   }
 
@@ -103,6 +109,7 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
   private chooserObject: object;
   private showPolicyPrefIndicator_: boolean;
   private allowNavigateToSiteDetail_: boolean;
+  cookiesExceptionType: CookiesExceptionType;
 
   private onShowTooltip_() {
     const indicator =
@@ -132,7 +139,8 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
 
     return this.model.enforcement ===
         chrome.settingsPrivate.Enforcement.ENFORCED ||
-        !(this.readOnlyList || !!this.model.embeddingOrigin);
+        !(this.readOnlyList || !!this.model.embeddingOrigin ||
+          !!this.model.isolatedWebAppName);
   }
 
   private shouldHideActionMenu_(): boolean {
@@ -142,7 +150,8 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
 
     return this.model.enforcement ===
         chrome.settingsPrivate.Enforcement.ENFORCED ||
-        this.readOnlyList || !!this.model.embeddingOrigin;
+        this.readOnlyList || !!this.model.embeddingOrigin ||
+        !!this.model.isolatedWebAppName;
   }
 
   /**
@@ -163,6 +172,9 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
    * or the website whose third parties are also affected.
    */
   private computeDisplayName_(): string {
+    if (this.model.isolatedWebAppName) {
+      return this.model.isolatedWebAppName;
+    }
     if (this.model.embeddingOrigin &&
         this.model.category === ContentSettingsTypes.COOKIES &&
         this.model.origin.trim() === SITE_EXCEPTION_WILDCARD) {
@@ -200,8 +212,12 @@ export class SiteListEntryElement extends SiteListEntryElementBase {
     } else if (this.model.embeddingOrigin) {
       if (this.model.category === ContentSettingsTypes.COOKIES &&
           this.model.origin.trim() === SITE_EXCEPTION_WILDCARD) {
-        description = loadTimeData.getString(
-            'siteSettingsCookiesThirdPartyExceptionLabel');
+        // Apply special label only if cookies exceptions are displayed in the
+        // mixed list.
+        if (this.cookiesExceptionType === CookiesExceptionType.COMBINED) {
+          description = loadTimeData.getString(
+              'siteSettingsCookiesThirdPartyExceptionLabel');
+        }
       } else {
         description = loadTimeData.getStringF(
             'embeddedOnHost', this.sanitizePort(this.model.embeddingOrigin));

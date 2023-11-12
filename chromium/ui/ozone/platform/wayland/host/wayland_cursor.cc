@@ -48,7 +48,7 @@ void WaylandCursor::UpdateBitmap(const std::vector<SkBitmap>& cursor_image,
     return HideCursor();
 
   gfx::Size image_size = gfx::SkISizeToSize(image.dimensions());
-  WaylandShmBuffer buffer(connection_->wayland_buffer_factory(), image_size);
+  WaylandShmBuffer buffer(connection_->buffer_factory(), image_size);
 
   if (!buffer.IsValid()) {
     LOG(ERROR) << "Failed to create SHM buffer for Cursor Bitmap.";
@@ -157,6 +157,7 @@ void WaylandCursor::AttachAndCommit(wl_buffer* buffer,
                         pointer_surface_.get(), hotspot_x_dip, hotspot_y_dip);
 
   wl_surface_damage(pointer_surface_.get(), 0, 0, buffer_width, buffer_height);
+  // Note: should the offset be non-zero, use wl_surface_offset() to set it.
   wl_surface_attach(pointer_surface_.get(), buffer, 0, 0);
   wl_surface_commit(pointer_surface_.get());
 

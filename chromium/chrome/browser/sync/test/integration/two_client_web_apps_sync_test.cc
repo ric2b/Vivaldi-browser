@@ -42,12 +42,16 @@ class DisplayModeChangeWaiter : public AppRegistrarObserver {
   explicit DisplayModeChangeWaiter(WebAppRegistrar& registrar) {
     observation_.Observe(&registrar);
   }
+
   void OnWebAppUserDisplayModeChanged(
       const AppId& app_id,
       UserDisplayMode user_display_mode) override {
     run_loop_.Quit();
   }
+
   void Wait() { run_loop_.Run(); }
+
+  void OnAppRegistrarDestroyed() override { NOTREACHED(); }
 
  private:
   base::RunLoop run_loop_;
@@ -74,7 +78,7 @@ class TwoClientWebAppsSyncTest : public WebAppsSyncTestBase {
   }
 
   const WebAppRegistrar& GetRegistrar(Profile* profile) {
-    return WebAppProvider::GetForTest(profile)->registrar();
+    return WebAppProvider::GetForTest(profile)->registrar_unsafe();
   }
 
   bool AllProfilesHaveSameWebAppIds() {
@@ -389,12 +393,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientWebAppsSyncTest, SyncUsingIconUrlFallback) {
     base::RunLoop run_loop;
     WebAppProvider::GetForTest(dest_profile)
         ->icon_manager()
-        .ReadSmallestIconAny(
-            synced_app_id, 192,
-            base::BindLambdaForTesting([&run_loop](SkBitmap bitmap) {
-              EXPECT_EQ(bitmap.getColor(0, 0), SK_ColorBLUE);
-              run_loop.Quit();
-            }));
+        .ReadSmallestIcon(
+            synced_app_id, {IconPurpose::ANY}, 192,
+            base::BindLambdaForTesting(
+                [&run_loop](IconPurpose purpose, SkBitmap bitmap) {
+                  EXPECT_EQ(purpose, IconPurpose::ANY);
+                  EXPECT_EQ(bitmap.getColor(0, 0), SK_ColorBLUE);
+                  run_loop.Quit();
+                }));
     run_loop.Run();
   }
 
@@ -420,14 +426,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientWebAppsSyncTest, SyncUserDisplayModeChange) {
   EXPECT_TRUE(AllProfilesHaveSameWebAppIds());
 
   auto* provider1 = WebAppProvider::GetForTest(GetProfile(1));
-  WebAppRegistrar& registrar1 = provider1->registrar();
+  WebAppRegistrar& registrar1 = provider1->registrar_unsafe();
   EXPECT_EQ(registrar1.GetAppUserDisplayMode(app_id),
             UserDisplayMode::kStandalone);
 
   DisplayModeChangeWaiter display_mode_change_waiter(registrar1);
-  provider1->sync_bridge().SetAppUserDisplayMode(app_id,
-                                                 UserDisplayMode::kTabbed,
-                                                 /*is_user_action=*/true);
+  provider1->sync_bridge_unsafe().SetAppUserDisplayMode(
+      app_id, UserDisplayMode::kTabbed,
+      /*is_user_action=*/true);
   display_mode_change_waiter.Wait();
 
   EXPECT_EQ(registrar1.GetAppUserDisplayMode(app_id), UserDisplayMode::kTabbed);

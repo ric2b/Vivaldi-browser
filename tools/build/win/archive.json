@@ -27,7 +27,8 @@
       "vivaldi_200_percent.pak",
       "vivaldi_proxy.exe",
       "update_notifier.exe"
-    ]
+    ],
+    "dirs": [ "resources" ]
   },
   "chrome-win32-syms": {
     "files": [

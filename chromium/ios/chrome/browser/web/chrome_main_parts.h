@@ -20,6 +20,13 @@ class ApplicationContextImpl;
 class PrefService;
 class IOSThreadProfiler;
 
+// Vivaldi
+namespace vivaldi {
+class StatsReporter;
+}
+// End Vivaldi
+
+
 class IOSChromeMainParts : public web::WebMainParts {
  public:
   explicit IOSChromeMainParts(const base::CommandLine& parsed_command_line);
@@ -60,6 +67,11 @@ class IOSChromeMainParts : public web::WebMainParts {
   PrefService* local_state_;
 
   IOSChromeFieldTrials ios_field_trials_;
+
+// Vivaldi
+  std::unique_ptr<vivaldi::StatsReporter> stats_reporter_;
+// End Vivaldi
+
 
   // A profiler that periodically samples stack traces. Used to understand
   // thread and process startup and normal behavior.

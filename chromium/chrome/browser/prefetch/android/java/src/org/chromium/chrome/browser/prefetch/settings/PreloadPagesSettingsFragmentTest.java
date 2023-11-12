@@ -7,8 +7,7 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
-import android.view.View;
-
+import androidx.preference.Preference;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -20,14 +19,15 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.components.browser_ui.settings.SettingsFeatureList;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
@@ -39,6 +39,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
  * Tests for {@link PreloadPagesSettingsFragment}.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
+@DoNotBatch(reason = "This test launches a Settings activity")
 public class PreloadPagesSettingsFragmentTest {
     private static final String ASSERT_PRELOAD_PAGES_STATE_RADIO_BUTTON_GROUP =
             "Incorrect Preload Pages state in the radio button group.";
@@ -46,8 +47,6 @@ public class PreloadPagesSettingsFragmentTest {
             "Incorrect radio button checked state.";
     private static final String ASSERT_PRELOAD_PAGES_STATE_NATIVE =
             "Incorrect Preload Pages state from native.";
-    private static final String ASSERT_RADIO_BUTTON_VISIBILITY =
-            "Incorrect radio button visibility.";
 
     @Rule
     public SettingsActivityTestRule<PreloadPagesSettingsFragment> mTestRule =
@@ -61,7 +60,8 @@ public class PreloadPagesSettingsFragmentTest {
 
     private PreloadPagesSettingsFragment mPreloadPagesSettingsFragment;
     private RadioButtonGroupPreloadPagesSettings mPreloadPagesPreference;
-    private TextMessagePreference mManagedTextPreference;
+    private TextMessagePreference mManagedTextPreferenceLegacy;
+    private Preference mManagedDisclaimerText;
 
     @Before
     public void setUp() {
@@ -73,18 +73,35 @@ public class PreloadPagesSettingsFragmentTest {
         mPreloadPagesSettingsFragment = mTestRule.getFragment();
         mPreloadPagesPreference = mPreloadPagesSettingsFragment.findPreference(
                 PreloadPagesSettingsFragment.PREF_PRELOAD_PAGES);
-        mManagedTextPreference = mPreloadPagesSettingsFragment.findPreference(
-                PreloadPagesSettingsFragment.PREF_TEXT_MANAGED);
+        mManagedTextPreferenceLegacy = mPreloadPagesSettingsFragment.findPreference(
+                PreloadPagesSettingsFragment.PREF_TEXT_MANAGED_LEGACY);
+        mManagedDisclaimerText = mPreloadPagesSettingsFragment.findPreference(
+                PreloadPagesSettingsFragment.PREF_MANAGED_DISCLAIMER_TEXT);
         Assert.assertNotNull(
                 "Preload Pages preference should not be null.", mPreloadPagesPreference);
-        Assert.assertNotNull("Text managed preference should not be null.", mManagedTextPreference);
+        Assert.assertNotNull(
+                "Legacy text managed preference should not be null.", mManagedTextPreferenceLegacy);
+        Assert.assertNotNull(
+                "Managed disclaimer text preference should not be null.", mManagedDisclaimerText);
     }
 
     @Test
     @SmallTest
     @Feature({"PreloadPages"})
-    @Features.EnableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testOnStartup() {
+    @Features.EnableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
+    public void testOnStartup_EnableHighlight() {
+        testOnStartupImpl();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"PreloadPages"})
+    @Features.DisableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
+    public void testOnStartup_DisableHighlight() {
+        testOnStartupImpl();
+    }
+
+    private void testOnStartupImpl() {
         launchSettingsActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             @PreloadPagesState
@@ -100,34 +117,32 @@ public class PreloadPagesSettingsFragmentTest {
                     getStandardPreloadingButton().isChecked());
             Assert.assertEquals(ASSERT_RADIO_BUTTON_CHECKED, no_preloading_checked,
                     getNoPreloadingButton().isChecked());
-            Assert.assertFalse(mManagedTextPreference.isVisible());
+            Assert.assertFalse(mManagedTextPreferenceLegacy.isVisible());
+            Assert.assertFalse(mManagedDisclaimerText.isVisible());
         });
     }
 
     @Test
     @SmallTest
     @Feature({"PreloadPages"})
-    @Features.DisableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testOnStartupExtendedPreloadingStateButNotShownInUI() {
-        launchSettingsActivity();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PreloadPagesSettingsBridge.setState(PreloadPagesState.EXTENDED_PRELOADING);
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getExtendedPreloadingButton().getVisibility(), View.INVISIBLE);
-            Assert.assertTrue(getStandardPreloadingButton().isChecked());
-            Assert.assertFalse(getNoPreloadingButton().isChecked());
-            Assert.assertFalse(mManagedTextPreference.isVisible());
-        });
+    @Features.EnableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
+    public void testCheckRadioButtons_EnableHighlight() {
+        testCheckRadioButtonsImpl();
     }
 
     @Test
     @SmallTest
     @Feature({"PreloadPages"})
-    @Features.EnableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testCheckRadioButtons() {
+    @Features.DisableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
+    public void testCheckRadioButtons_DisableHighlight() {
+        testCheckRadioButtonsImpl();
+    }
+
+    public void testCheckRadioButtonsImpl() {
         launchSettingsActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertFalse(mManagedTextPreference.isVisible());
+            Assert.assertFalse(mManagedTextPreferenceLegacy.isVisible());
+            Assert.assertFalse(mManagedDisclaimerText.isVisible());
             // Click the Extended Preloading button.
             getExtendedPreloadingButton().onClick(null);
             Assert.assertEquals(ASSERT_PRELOAD_PAGES_STATE_RADIO_BUTTON_GROUP,
@@ -169,41 +184,6 @@ public class PreloadPagesSettingsFragmentTest {
     @Test
     @SmallTest
     @Feature({"PreloadPages"})
-    @Features.DisableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testCheckRadioButtonsExtendedPreloadingHidden() {
-        launchSettingsActivity();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertFalse(mManagedTextPreference.isVisible());
-            // Click the Standard Preloading button.
-            getStandardPreloadingButton().onClick(null);
-            Assert.assertEquals(ASSERT_PRELOAD_PAGES_STATE_RADIO_BUTTON_GROUP,
-                    PreloadPagesState.STANDARD_PRELOADING, getPreloadPagesState());
-            Assert.assertFalse(
-                    ASSERT_RADIO_BUTTON_CHECKED, getExtendedPreloadingButton().isChecked());
-            Assert.assertTrue(
-                    ASSERT_RADIO_BUTTON_CHECKED, getStandardPreloadingButton().isChecked());
-            Assert.assertFalse(ASSERT_RADIO_BUTTON_CHECKED, getNoPreloadingButton().isChecked());
-            Assert.assertEquals(ASSERT_PRELOAD_PAGES_STATE_NATIVE,
-                    PreloadPagesState.STANDARD_PRELOADING, PreloadPagesSettingsBridge.getState());
-
-            // Click the No Preloading button.
-            getNoPreloadingButton().onClick(null);
-            Assert.assertEquals(ASSERT_PRELOAD_PAGES_STATE_RADIO_BUTTON_GROUP,
-                    PreloadPagesState.NO_PRELOADING, getPreloadPagesState());
-            Assert.assertFalse(
-                    ASSERT_RADIO_BUTTON_CHECKED, getExtendedPreloadingButton().isChecked());
-            Assert.assertFalse(
-                    ASSERT_RADIO_BUTTON_CHECKED, getStandardPreloadingButton().isChecked());
-            Assert.assertTrue(ASSERT_RADIO_BUTTON_CHECKED, getNoPreloadingButton().isChecked());
-            Assert.assertEquals(ASSERT_PRELOAD_PAGES_STATE_NATIVE, PreloadPagesState.NO_PRELOADING,
-                    PreloadPagesSettingsBridge.getState());
-        });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"PreloadPages"})
-    @Features.EnableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
     public void testExtendedPreloadingAuxButtonClicked() {
         launchSettingsActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -232,19 +212,43 @@ public class PreloadPagesSettingsFragmentTest {
     @Test
     @SmallTest
     @Feature({"PreloadPages"})
-    @Features.EnableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
+    @Features.EnableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
     @Policies.Add({
         @Policies.Item(key = "NetworkPredictionOptions",
                 string = "2" /* NetworkPredictionOptions::kDisabled */)
     })
     public void
-    testPreloadingManaged() {
+    testPreloadingManaged_EnableHighlight() {
+        testPreloadingManagedImpl();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"PreloadPages"})
+    @Features.DisableFeatures(SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)
+    @Policies.Add({
+        @Policies.Item(key = "NetworkPredictionOptions",
+                string = "2" /* NetworkPredictionOptions::kDisabled */)
+    })
+    public void
+    testPreloadingManaged_DisableHighlight() {
+        testPreloadingManagedImpl();
+    }
+
+    public void testPreloadingManagedImpl() {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
         launchSettingsActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertTrue(PreloadPagesSettingsBridge.isNetworkPredictionManaged());
-            Assert.assertTrue(mManagedTextPreference.isVisible());
+            if (SettingsFeatureList.isEnabled(
+                        SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)) {
+                Assert.assertFalse(mManagedTextPreferenceLegacy.isVisible());
+                Assert.assertTrue(mManagedDisclaimerText.isVisible());
+            } else {
+                Assert.assertTrue(mManagedTextPreferenceLegacy.isVisible());
+                Assert.assertFalse(mManagedDisclaimerText.isVisible());
+            }
             Assert.assertFalse(getExtendedPreloadingButton().isEnabled());
             Assert.assertFalse(getStandardPreloadingButton().isEnabled());
             Assert.assertFalse(getNoPreloadingButton().isEnabled());
@@ -267,38 +271,6 @@ public class PreloadPagesSettingsFragmentTest {
                     .show(mPreloadPagesSettingsFragment.getActivity(),
                             mPreloadPagesSettingsFragment.getString(R.string.help_context_privacy),
                             Profile.getLastUsedRegularProfile(), null);
-        });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"PreloadPages"})
-    @Features.DisableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testExtendedPreloadingHiddenViaFinch() {
-        launchSettingsActivity();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getExtendedPreloadingButton().getVisibility(), View.INVISIBLE);
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getStandardPreloadingButton().getVisibility(), View.VISIBLE);
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getNoPreloadingButton().getVisibility(), View.VISIBLE);
-        });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"PreloadPages"})
-    @Features.EnableFeatures(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-    public void testExtendedPreloadingShownViaFinch() {
-        launchSettingsActivity();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getExtendedPreloadingButton().getVisibility(), View.VISIBLE);
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getStandardPreloadingButton().getVisibility(), View.VISIBLE);
-            Assert.assertEquals(ASSERT_RADIO_BUTTON_VISIBILITY,
-                    getNoPreloadingButton().getVisibility(), View.VISIBLE);
         });
     }
 

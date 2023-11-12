@@ -6,6 +6,7 @@
 
 #include "base/auto_reset.h"
 #include "base/metrics/field_trial_params.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
@@ -30,12 +31,15 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/event_timing.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
+#include "third_party/blink/renderer/platform/geometry/layout_size.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "ui/display/screen_info.h"
 
 namespace blink {
 
@@ -46,6 +50,11 @@ const char kSkipTouchEventFilterTrial[] = "SkipTouchEventFilter";
 const char kSkipTouchEventFilterTrialProcessParamName[] =
     "skip_filtering_process";
 const char kSkipTouchEventFilterTrialTypeParamName[] = "type";
+
+// Width and height of area of rectangle to hit test for potentially important
+// input fields to write into. This improves the chances of writing into the
+// intended input if the user starts writing close to it.
+const size_t kStylusWritableAdjustmentSizeDip = 30;
 
 size_t ToPointerTypeIndex(WebPointerProperties::PointerType t) {
   return static_cast<size_t>(t);
@@ -105,6 +114,8 @@ void PointerEventManager::Clear() {
   pointer_capture_target_.clear();
   pending_pointer_capture_target_.clear();
   dispatching_pointer_id_ = 0;
+  resize_scrollable_area_.Clear();
+  offset_from_resize_corner_ = LayoutSize();
 }
 
 void PointerEventManager::Trace(Visitor* visitor) const {
@@ -116,6 +127,7 @@ void PointerEventManager::Trace(Visitor* visitor) const {
   visitor->Trace(mouse_event_manager_);
   visitor->Trace(gesture_manager_);
   visitor->Trace(captured_scrollbar_);
+  visitor->Trace(resize_scrollable_area_);
 }
 
 PointerEventManager::PointerEventBoundaryEventDispatcher::
@@ -191,11 +203,20 @@ WebInputEventResult PointerEventManager::DispatchPointerEvent(
   if (frame_ && frame_->DomWindow())
     event_timing = EventTiming::Create(frame_->DomWindow(), *pointer_event);
 
-  if (event_type == event_type_names::kPointerdown) {
+  if (event_type == event_type_names::kPointerdown ||
+      event_type == event_type_names::kPointerover ||
+      event_type == event_type_names::kPointerout) {
     AnchorElementInteractionTracker* tracker =
         frame_->GetDocument()->GetAnchorElementInteractionTracker();
     if (tracker) {
-      tracker->OnPointerDown(*target, *pointer_event);
+      tracker->OnPointerEvent(*target, *pointer_event);
+    }
+  }
+
+  if (Node* target_node = target->ToNode()) {
+    if (event_type == event_type_names::kPointerdown ||
+        event_type == event_type_names::kPointerup) {
+      HTMLElement::HandlePopoverLightDismiss(*pointer_event, *target_node);
     }
   }
 
@@ -357,20 +378,49 @@ void PointerEventManager::HandlePointerInterruption(
 
 bool PointerEventManager::ShouldAdjustPointerEvent(
     const WebPointerEvent& pointer_event) const {
-  return pointer_event.pointer_type ==
-             WebPointerProperties::PointerType::kTouch &&
+  return (pointer_event.pointer_type ==
+              WebPointerProperties::PointerType::kTouch ||
+          ShouldAdjustStylusPointerEvent(pointer_event)) &&
          pointer_event.GetType() == WebInputEvent::Type::kPointerDown &&
          pointer_event_factory_.IsPrimary(pointer_event);
 }
 
-void PointerEventManager::AdjustTouchPointerEvent(
-    WebPointerEvent& pointer_event) {
-  DCHECK(pointer_event.pointer_type ==
-         WebPointerProperties::PointerType::kTouch);
+bool PointerEventManager::ShouldAdjustStylusPointerEvent(
+    const WebPointerEvent& pointer_event) const {
+  return base::FeatureList::IsEnabled(
+             blink::features::kStylusPointerAdjustment) &&
+         (pointer_event.pointer_type ==
+              WebPointerProperties::PointerType::kPen ||
+          pointer_event.pointer_type ==
+              WebPointerProperties::PointerType::kEraser);
+}
+
+void PointerEventManager::AdjustPointerEvent(WebPointerEvent& pointer_event) {
+  DCHECK(
+      pointer_event.pointer_type == WebPointerProperties::PointerType::kTouch ||
+      pointer_event.pointer_type == WebPointerProperties::PointerType::kPen ||
+      pointer_event.pointer_type == WebPointerProperties::PointerType::kEraser);
+
+  float adjustment_width = 0.0f;
+  float adjustment_height = 0.0f;
+  if (pointer_event.pointer_type == WebPointerProperties::PointerType::kTouch) {
+    adjustment_width = pointer_event.width;
+    adjustment_height = pointer_event.height;
+  } else {
+    // Calculate adjustment size for stylus tool types.
+    ChromeClient& chrome_client = frame_->GetChromeClient();
+    float device_scale_factor =
+        chrome_client.GetScreenInfo(*frame_).device_scale_factor;
+
+    float page_scale_factor = frame_->GetPage()->PageScaleFactor();
+    adjustment_width = adjustment_height =
+        kStylusWritableAdjustmentSizeDip *
+        (device_scale_factor / page_scale_factor);
+  }
 
   LayoutSize hit_rect_size = GetHitTestRectForAdjustment(
-      *frame_, LayoutSize(LayoutUnit(pointer_event.width),
-                          LayoutUnit(pointer_event.height)));
+      *frame_,
+      LayoutSize(LayoutUnit(adjustment_width), LayoutUnit(adjustment_height)));
 
   if (hit_rect_size.IsEmpty())
     return;
@@ -388,14 +438,31 @@ void PointerEventManager::AdjustTouchPointerEvent(
       root_frame.GetEventHandler().HitTestResultAtLocation(location, hit_type);
   Node* adjusted_node = nullptr;
   gfx::Point adjusted_point;
-  bool adjusted = frame_->GetEventHandler().BestClickableNodeForHitTestResult(
-      location, hit_test_result, adjusted_point, adjusted_node);
 
-  if (adjusted)
-    pointer_event.SetPositionInWidget(adjusted_point.x(), adjusted_point.y());
+  if (pointer_event.pointer_type == WebPointerProperties::PointerType::kTouch) {
+    bool adjusted = frame_->GetEventHandler().BestClickableNodeForHitTestResult(
+        location, hit_test_result, adjusted_point, adjusted_node);
 
-  frame_->GetEventHandler().CacheTouchAdjustmentResult(
-      pointer_event.unique_touch_event_id, pointer_event.PositionInWidget());
+    if (adjusted)
+      pointer_event.SetPositionInWidget(adjusted_point.x(), adjusted_point.y());
+
+    frame_->GetEventHandler().CacheTouchAdjustmentResult(
+        pointer_event.unique_touch_event_id, pointer_event.PositionInWidget());
+  } else if (pointer_event.pointer_type ==
+                 WebPointerProperties::PointerType::kPen ||
+             pointer_event.pointer_type ==
+                 WebPointerProperties::PointerType::kEraser) {
+    // We don't cache the adjusted point for Stylus in EventHandler to avoid
+    // taps being adjusted; this is intended only for stylus handwriting.
+    bool adjusted =
+        frame_->GetEventHandler().BestStylusWritableNodeForHitTestResult(
+            location, hit_test_result, adjusted_point, adjusted_node);
+
+    // TODO(crbug.com/1399797): Update Stylus pointer icon to indicate writing
+    // can be started when adjustment is about to be done.
+    if (adjusted)
+      pointer_event.SetPositionInWidget(adjusted_point.x(), adjusted_point.y());
+  }
 }
 
 bool PointerEventManager::ShouldFilterEvent(PointerEvent* pointer_event) {
@@ -618,7 +685,7 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
 
   WebPointerEvent pointer_event = event.WebPointerEventInRootFrame();
   if (ShouldAdjustPointerEvent(event))
-    AdjustTouchPointerEvent(pointer_event);
+    AdjustPointerEvent(pointer_event);
   event_handling_util::PointerEventTarget pointer_event_target =
       ComputePointerEventTarget(pointer_event);
 
@@ -651,6 +718,9 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
   }
 
   if (HandleScrollbarTouchDrag(event, pointer_event_target.scrollbar))
+    return WebInputEventResult::kHandledSuppressed;
+
+  if (HandleResizerDrag(pointer_event, pointer_event_target))
     return WebInputEventResult::kHandledSuppressed;
 
   // Any finger lifting is a user gesture only when it wasn't associated with a
@@ -728,6 +798,58 @@ bool PointerEventManager::HandleScrollbarTouchDrag(const WebPointerEvent& event,
     captured_scrollbar_ = nullptr;
 
   return handled;
+}
+
+bool PointerEventManager::HandleResizerDrag(
+    const WebPointerEvent& event,
+    const event_handling_util::PointerEventTarget& pointer_event_target) {
+  switch (event.GetType()) {
+    case WebPointerEvent::Type::kPointerDown: {
+      Node* node = pointer_event_target.target_element;
+      if (!node || !node->GetLayoutObject() ||
+          !node->GetLayoutObject()->EnclosingLayer())
+        return false;
+
+      PaintLayer* layer = node->GetLayoutObject()->EnclosingLayer();
+      if (!layer->GetScrollableArea())
+        return false;
+
+      gfx::Point p =
+          pointer_event_target.target_frame->View()->ConvertFromRootFrame(
+              gfx::ToFlooredPoint(event.PositionInWidget()));
+      if (layer->GetScrollableArea()->IsAbsolutePointInResizeControl(
+              p, kResizerForTouch)) {
+        resize_scrollable_area_ = layer->GetScrollableArea();
+        resize_scrollable_area_->SetInResizeMode(true);
+        frame_->GetPage()->GetChromeClient().SetTouchAction(frame_,
+                                                            TouchAction::kNone);
+        offset_from_resize_corner_ =
+            LayoutSize(resize_scrollable_area_->OffsetFromResizeCorner(p));
+        return true;
+      }
+      break;
+    }
+    case WebInputEvent::Type::kPointerMove: {
+      if (resize_scrollable_area_ && resize_scrollable_area_->InResizeMode()) {
+        gfx::Point pos = gfx::ToRoundedPoint(event.PositionInWidget());
+        resize_scrollable_area_->Resize(pos, offset_from_resize_corner_);
+        return true;
+      }
+      break;
+    }
+    case WebInputEvent::Type::kPointerUp: {
+      if (resize_scrollable_area_ && resize_scrollable_area_->InResizeMode()) {
+        resize_scrollable_area_->SetInResizeMode(false);
+        resize_scrollable_area_.Clear();
+        offset_from_resize_corner_ = LayoutSize();
+        return true;
+      }
+      break;
+    }
+    default:
+      return false;
+  }
+  return false;
 }
 
 WebInputEventResult PointerEventManager::CreateAndDispatchPointerEvent(

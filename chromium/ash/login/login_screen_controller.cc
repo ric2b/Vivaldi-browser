@@ -119,7 +119,7 @@ void LoginScreenController::AuthenticateUserWithPasswordOrPin(
       // true.
       LOG(WARNING) << "crbug.com/1339004 : Dummy auth state";
       authentication_stage_ = AuthenticationStage::kDoAuthenticate;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(&LoginScreenController::OnAuthenticateComplete,
                          weak_factory_.GetWeakPtr(), std::move(callback),
@@ -131,12 +131,11 @@ void LoginScreenController::AuthenticateUserWithPasswordOrPin(
   LOG(WARNING) << "crbug.com/1339004 : started authentication";
   authentication_stage_ = AuthenticationStage::kDoAuthenticate;
 
-  // Checking if the password is only formed of numbers with base::StringToInt
-  // will easily fail due to numeric limits. ContainsOnlyChars is used instead.
-  const bool is_pin =
-      authenticated_by_pin && base::ContainsOnlyChars(password, "0123456789");
+  if (authenticated_by_pin)
+    DCHECK(base::ContainsOnlyChars(password, "0123456789"));
+
   client_->AuthenticateUserWithPasswordOrPin(
-      account_id, password, is_pin,
+      account_id, password, authenticated_by_pin,
       base::BindOnce(&LoginScreenController::OnAuthenticateComplete,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -303,7 +302,7 @@ void LoginScreenController::ShowKioskAppError(const std::string& message) {
                        base::UTF8ToUTF16(message), ToastData::kInfiniteDuration,
                        /*visible_on_lock_screen=*/true,
                        /*has_dismiss_button=*/true);
-  Shell::Get()->toast_manager()->Show(toast_data);
+  Shell::Get()->toast_manager()->Show(std::move(toast_data));
 }
 
 void LoginScreenController::FocusLoginShelf(bool reverse) {

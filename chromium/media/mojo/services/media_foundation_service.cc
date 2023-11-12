@@ -219,6 +219,20 @@ std::string GetTypeString(VideoCodec video_codec,
       /*offsets=*/nullptr);
 }
 
+// Consolidates the information to construct the type string in only one place.
+// This will help us avoid errors in faulty creation of the type string, and
+// centralize from where we call IsTypeSupportedInternal()
+bool IsTypeSupported(VideoCodec video_codec,
+                     absl::optional<AudioCodec> audio_codec,
+                     const FeatureMap& extra_features,
+                     ComPtr<IMFContentDecryptionModuleFactory> cdm_factory,
+                     const std::string& key_system,
+                     bool is_hw_secure) {
+  auto type = GetTypeString(video_codec, audio_codec, extra_features);
+
+  return IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type);
+}
+
 base::flat_set<EncryptionScheme> GetSupportedEncryptionSchemes(
     ComPtr<IMFContentDecryptionModuleFactory> cdm_factory,
     const std::string& key_system,
@@ -227,14 +241,16 @@ base::flat_set<EncryptionScheme> GetSupportedEncryptionSchemes(
     const std::string& robustness) {
   base::flat_set<EncryptionScheme> supported_schemes;
   for (const auto scheme : kAllEncryptionSchemes) {
-    auto type = GetTypeString(
-        video_codec, /*audio_codec=*/absl::nullopt,
-        {{kEncryptionSchemeQueryName, GetName(scheme)},
-         {kEncryptionIvQueryName, base::NumberToString(GetIvSize(scheme))},
-         {kRobustnessQueryName, robustness.c_str()}});
+    const FeatureMap extra_features = {
+        {kEncryptionSchemeQueryName, GetName(scheme)},
+        {kEncryptionIvQueryName, base::NumberToString(GetIvSize(scheme))},
+        {kRobustnessQueryName, robustness.c_str()}};
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type))
+    if (IsTypeSupported(video_codec, /*audio_codec=*/absl::nullopt,
+                        extra_features, cdm_factory, key_system,
+                        is_hw_secure)) {
       supported_schemes.insert(scheme);
+    }
   }
   return supported_schemes;
 }
@@ -304,17 +320,26 @@ absl::optional<CdmCapability> GetCdmCapability(
   // Query video codecs.
   for (const auto video_codec : kAllVideoCodecs) {
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-    // Only query HEVC when the feature is enabled.
+    // Only query encrypted HEVC when the feature is enabled.
     if (video_codec == VideoCodec::kHEVC &&
         !base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport)) {
       continue;
     }
 #endif
 
-    auto type = GetTypeString(video_codec, /*audio_codec=*/absl::nullopt,
-                              {{kRobustnessQueryName, robustness}});
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+    // Only query encrypted Dolby Vision when the feature is enabled.
+    if (video_codec == VideoCodec::kDolbyVision &&
+        !base::FeatureList::IsEnabled(kPlatformEncryptedDolbyVision)) {
+      continue;
+    }
+#endif
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type)) {
+    const FeatureMap extra_features = {{kRobustnessQueryName, robustness}};
+
+    if (IsTypeSupported(video_codec, /*audio_codec=*/absl::nullopt,
+                        extra_features, cdm_factory, key_system,
+                        is_hw_secure)) {
       // IsTypeSupported() does not support querying profiling, in general
       // assume all relevant profiles are supported.
       VideoCodecInfo video_codec_info;
@@ -323,7 +348,7 @@ absl::optional<CdmCapability> GetCdmCapability(
       // lead support is fixed and the query works as expected.
       video_codec_info.supports_clear_lead = false;
 
-#if BUILDFLAG(ENABLE_PLATFORM_DOLBY_VISION) && BUILDFLAG(ENABLE_PLATFORM_HEVC)
+#if BUILDFLAG(ENABLE_PLATFORM_DOLBY_VISION)
       // Dolby Vision on Windows only support profile 4/5/8 now.
       if (video_codec == VideoCodec::kDolbyVision) {
         video_codec_info.supported_profiles = {
@@ -332,6 +357,14 @@ absl::optional<CdmCapability> GetCdmCapability(
             VideoCodecProfile::DOLBYVISION_PROFILE8};
       }
 #endif
+
+      // We check for `!is_hw_secure` because clear lead should always be
+      // supported for software security. When clear lead is supported
+      // for hardware security (b/219818166), we will add a query to
+      // set supports_clear_lead.
+      if (!is_hw_secure) {
+        video_codec_info.supports_clear_lead = true;
+      }
 
       capability.video_codecs.emplace(video_codec, video_codec_info);
     }
@@ -349,11 +382,12 @@ absl::optional<CdmCapability> GetCdmCapability(
   // supported video codecs> + <audio codec> to query the audio capability.
   for (const auto audio_codec : kAllAudioCodecs) {
     const auto& video_codec = capability.video_codecs.begin()->first;
-    auto type = GetTypeString(video_codec, audio_codec,
-                              {{kRobustnessQueryName, robustness}});
+    const FeatureMap extra_features = {{kRobustnessQueryName, robustness}};
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type))
+    if (IsTypeSupported(video_codec, audio_codec, extra_features, cdm_factory,
+                        key_system, is_hw_secure)) {
       capability.audio_codecs.emplace(audio_codec);
+    }
   }
 
   // Query encryption scheme.

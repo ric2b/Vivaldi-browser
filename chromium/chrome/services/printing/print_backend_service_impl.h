@@ -27,6 +27,13 @@
 #include "printing/printing_context.h"
 #include "ui/gfx/native_widget_types.h"
 
+#if BUILDFLAG(IS_WIN)
+#include "base/types/expected.h"
+#include "chrome/services/printing/public/mojom/printer_xml_parser.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#endif  // BUILDFLAG(IS_WIN)
+
 #if !BUILDFLAG(ENABLE_OOP_PRINTING)
 #error "Out-of-process printing must be enabled."
 #endif
@@ -90,7 +97,14 @@ class PrintBackendServiceImpl : public mojom::PrintBackendService {
 
  protected:
   // Common initialization for both production and test instances.
-  void InitCommon(const std::string& locale);
+  void InitCommon(
+#if BUILDFLAG(IS_WIN)
+      const std::string& locale,
+      mojo::PendingRemote<mojom::PrinterXmlParser> remote
+#else
+      const std::string& locale
+#endif  // BUILDFLAG(IS_WIN)
+  );
 
  private:
   friend class PrintBackendServiceTestImpl;
@@ -121,7 +135,14 @@ class PrintBackendServiceImpl : public mojom::PrintBackendService {
   };
 
   // mojom::PrintBackendService implementation:
-  void Init(const std::string& locale) override;
+  void Init(
+#if BUILDFLAG(IS_WIN)
+      const std::string& locale,
+      mojo::PendingRemote<mojom::PrinterXmlParser> remote
+#else
+      const std::string& locale
+#endif  // BUILDFLAG(IS_WIN)
+      ) override;
   void Poke() override;
   void EnumeratePrinters(
       mojom::PrintBackendService::EnumeratePrintersCallback callback) override;
@@ -168,6 +189,7 @@ class PrintBackendServiceImpl : public mojom::PrintBackendService {
 #endif  // BUILDFLAG(IS_WIN)
   void RenderPrintedDocument(
       int32_t document_cookie,
+      uint32_t page_count,
       mojom::MetafileDataType data_type,
       base::ReadOnlySharedMemoryRegion serialized_doc,
       mojom::PrintBackendService::RenderPrintedDocumentCallback callback)
@@ -175,28 +197,29 @@ class PrintBackendServiceImpl : public mojom::PrintBackendService {
   void DocumentDone(
       int32_t document_cookie,
       mojom::PrintBackendService::DocumentDoneCallback callback) override;
+  void Cancel(int32_t document_cookie,
+              mojom::PrintBackendService::CancelCallback callback) override;
 
   // Callbacks from worker functions.
   void OnDidStartPrintingReadyDocument(DocumentHelper& document_helper,
                                        mojom::ResultCode result);
-#if BUILDFLAG(IS_WIN)
-  void OnDidRenderPrintedPage(
-      DocumentHelper& document_helper,
-      mojom::PrintBackendService::RenderPrintedPageCallback callback,
-      mojom::ResultCode result);
-#endif
-  void OnDidRenderPrintedDocument(
-      DocumentHelper& document_helper,
-      mojom::PrintBackendService::RenderPrintedDocumentCallback callback,
-      mojom::ResultCode result);
   void OnDidDocumentDone(
       DocumentHelper& document_helper,
       mojom::PrintBackendService::DocumentDoneCallback callback,
       mojom::ResultCode result);
+  void OnDidCancel(DocumentHelper& document_helper,
+                   mojom::PrintBackendService::CancelCallback callback);
 
   // Utility helpers.
   DocumentHelper* GetDocumentHelper(int document_cookie);
   void RemoveDocumentHelper(DocumentHelper& document_helper);
+
+#if BUILDFLAG(IS_WIN)
+  // Get XPS capabilities for printer `printer_name`, or return
+  // mojom::ResultCode on error.
+  base::expected<XpsCapabilities, mojom::ResultCode> GetXpsCapabilities(
+      const std::string& printer_name);
+#endif  // BUILDFLAG(IS_WIN)
 
   // Crash key is kept at class level so that we can obtain printer driver
   // information for a prior call should the process be terminated by the
@@ -218,6 +241,10 @@ class PrintBackendServiceImpl : public mojom::PrintBackendService {
   std::vector<std::unique_ptr<DocumentHelper>> documents_;
 
   mojo::Receiver<mojom::PrintBackendService> receiver_;
+
+#if BUILDFLAG(IS_WIN)
+  mojo::Remote<mojom::PrinterXmlParser> xml_parser_remote_;
+#endif  // BUILDFLAG(IS_WIN)
 };
 
 }  // namespace printing

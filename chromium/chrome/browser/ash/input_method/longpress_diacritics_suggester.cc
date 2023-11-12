@@ -32,12 +32,49 @@ std::vector<std::u16string> SplitDiacritics(base::StringPiece16 diacritics) {
                            base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 }
 
+std::vector<std::u16string> GetDiacriticsFor(char key_character,
+                                             base::StringPiece engine_id) {
+  // Currently only supporting US English.
+  // TODO(b/260915965): Add support for other engines.
+  if (engine_id != "xkb:us::eng") {
+    return {};
+  }
+
+  // Current diacritics ordering is based on the Gboard ordering so it keeps
+  // distance from target key consistent.
+  // TODO(b/260915965): Add more sets here for other engines.
+  static constexpr auto kUSEnglishDiacriticsMap =
+      base::MakeFixedFlatMap<char, base::StringPiece16>(
+          {{'a', u"à;á;â;ä;æ;ã;å;ā"},
+           {'A', u"À;Á;Â;Ä;Æ;Ã;Å;Ā"},
+           {'c', u"ç"},
+           {'C', u"Ç"},
+           {'e', u"é;è;ê;ë;ē"},
+           {'E', u"É;È;Ê;Ë;Ē"},
+           {'i', u"í;î;ï;ī;ì"},
+           {'I', u"Í;Î;Ï;Ī;Ì"},
+           {'n', u"ñ"},
+           {'N', u"Ñ"},
+           {'o', u"ó;ô;ö;ò;œ;ø;ō;õ"},
+           {'O', u"Ó;Ô;Ö;Ò;Œ;Ø;Ō;Õ"},
+           {'s', u"ß"},
+           {'S', u"ẞ"},
+           {'u', u"ú;û;ü;ù;ū"},
+           {'U', u"Ú;Û;Ü;Ù;Ū"}});
+
+  if (const auto* it = kUSEnglishDiacriticsMap.find(key_character);
+      it != kUSEnglishDiacriticsMap.end()) {
+    return SplitDiacritics(it->second);
+  }
+  return {};
+}
+
 AssistiveWindowButton CreateButtonFor(size_t index,
                                       std::u16string announce_string) {
   AssistiveWindowButton button = {
       .id = ui::ime::ButtonId::kSuggestion,
       .window_type =
-          ui::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion,
+          ash::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion,
       .index = index,
       .announce_string = announce_string,
   };
@@ -77,14 +114,14 @@ bool LongpressDiacriticsSuggester::TrySuggestOnLongpress(char key_character) {
     LOG(ERROR) << "Unable to suggest diacritics on longpress, no context_id";
     return false;
   }
-
-  if (const auto* it = kDefaultDiacriticsMap.find(key_character);
-      it != kDefaultDiacriticsMap.end()) {
+  std::vector<std::u16string> diacritics_candidates =
+      GetDiacriticsFor(key_character, engine_id_);
+  if (!diacritics_candidates.empty()) {
     AssistiveWindowProperties properties;
     properties.type =
-        ui::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion;
+        ash::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion;
     properties.visible = true;
-    properties.candidates = SplitDiacritics(it->second);
+    properties.candidates = diacritics_candidates;
     properties.announce_string =
         l10n_util::GetStringUTF16(IDS_SUGGESTION_DIACRITICS_OPEN);
 
@@ -101,6 +138,10 @@ bool LongpressDiacriticsSuggester::TrySuggestOnLongpress(char key_character) {
   return false;
 }
 
+void LongpressDiacriticsSuggester::SetEngineId(const std::string& engine_id) {
+  engine_id_ = engine_id;
+}
+
 void LongpressDiacriticsSuggester::OnFocus(int context_id) {
   Reset();
   focused_context_id_ = context_id;
@@ -112,7 +153,7 @@ void LongpressDiacriticsSuggester::OnBlur() {
 }
 
 void LongpressDiacriticsSuggester::OnExternalSuggestionsUpdated(
-    const std::vector<ime::TextSuggestion>& suggestions) {
+    const std::vector<ime::AssistiveSuggestion>& suggestions) {
   // Relevant since suggestions are not updated externally.
   return;
 }
@@ -134,10 +175,11 @@ SuggestionStatus LongpressDiacriticsSuggester::HandleKeyEvent(
   }
 
   size_t new_index = 0;
-
+  bool move_next = false;
   switch (code) {
     case kDismissDomCode:
       DismissSuggestion();
+      RecordActionMetric(IMEPKLongpressDiacriticAction::kDismiss);
       return SuggestionStatus::kDismiss;
     case kAcceptDomCode:
       if (highlighted_index_.has_value()) {
@@ -146,15 +188,16 @@ SuggestionStatus LongpressDiacriticsSuggester::HandleKeyEvent(
       }
       return SuggestionStatus::kNotHandled;
     case kNextDomCode:
+    case kTabDomCode:
     case kPreviousDomCode:
+      move_next = (code == kNextDomCode || code == kTabDomCode);
       if (highlighted_index_ == absl::nullopt) {
         // We want the cursor to start at the end if you press back, and at the
         // beginning if you press next.
-        new_index =
-            (code == kNextDomCode) ? 0 : GetCurrentShownDiacritics().size() - 1;
+        new_index = move_next ? 0 : GetCurrentShownDiacritics().size() - 1;
       } else {
         SetButtonHighlighted(*highlighted_index_, false);
-        if (code == kNextDomCode) {
+        if (move_next) {
           new_index =
               (*highlighted_index_ + 1) % GetCurrentShownDiacritics().size();
         } else {
@@ -183,8 +226,13 @@ SuggestionStatus LongpressDiacriticsSuggester::HandleKeyEvent(
         }
       }
 
-      // Dismiss on any unexpected key events.
-      DismissSuggestion();
+      // Commit current text if there is a selection.
+      if (highlighted_index_.has_value()) {
+        AcceptSuggestion(*highlighted_index_);
+      } else {
+        DismissSuggestion();
+        RecordActionMetric(IMEPKLongpressDiacriticAction::kDismiss);
+      }
       // NotHandled is passed so that the IME will let the key event pass
       // through.
       return SuggestionStatus::kNotHandled;
@@ -235,7 +283,7 @@ void LongpressDiacriticsSuggester::DismissSuggestion() {
   std::string error;
   AssistiveWindowProperties properties;
   properties.type =
-      ui::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion;
+      ash::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion;
   properties.visible = false;
   properties.announce_string =
       l10n_util::GetStringUTF16(IDS_SUGGESTION_DIACRITICS_DISMISSED);
@@ -246,7 +294,6 @@ void LongpressDiacriticsSuggester::DismissSuggestion() {
     LOG(ERROR) << "Failed to dismiss suggestion. " << error;
     return;
   }
-  RecordActionMetric(IMEPKLongpressDiacriticAction::kDismiss);
   Reset();
   return;
 }
@@ -260,7 +307,7 @@ bool LongpressDiacriticsSuggester::HasSuggestions() {
   return false;
 }
 
-std::vector<ime::TextSuggestion>
+std::vector<ime::AssistiveSuggestion>
 LongpressDiacriticsSuggester::GetSuggestions() {
   // Unused.
   return {};
@@ -288,14 +335,7 @@ LongpressDiacriticsSuggester::GetCurrentShownDiacritics() {
   if (displayed_window_base_character_ == absl::nullopt) {
     return {};
   }
-
-  if (const auto* it =
-          kDefaultDiacriticsMap.find(*displayed_window_base_character_);
-      it != kDefaultDiacriticsMap.end()) {
-    return SplitDiacritics(it->second);
-  } else {
-    return {};
-  }
+  return GetDiacriticsFor(*displayed_window_base_character_, engine_id_);
 }
 
 void LongpressDiacriticsSuggester::Reset() {

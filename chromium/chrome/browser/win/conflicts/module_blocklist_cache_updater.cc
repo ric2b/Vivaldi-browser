@@ -18,7 +18,6 @@
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
@@ -241,8 +240,8 @@ void ModuleBlocklistCacheUpdater::OnNewModuleFound(
 
   // Determine if the module was in the initial blocklist cache.
   blocking_state.was_in_blocklist_cache =
-      std::binary_search(std::begin(initial_blocklisted_modules_),
-                         std::end(initial_blocklisted_modules_),
+      std::binary_search(std::begin(*initial_blocklisted_modules_),
+                         std::end(*initial_blocklisted_modules_),
                          packed_list_module, internal::ModuleLess());
 
   // Make note of the fact that the module was blocked. It could be that the
@@ -354,8 +353,8 @@ ModuleBlocklistCacheUpdater::DetermineModuleBlockingDecision(
   // Explicitly allowlist modules whose signing cert's Subject field matches the
   // one in the current executable. No attempt is made to check the validity of
   // module signatures or of signing certs.
-  if (exe_certificate_info_.type != CertificateInfo::Type::NO_CERTIFICATE &&
-      exe_certificate_info_.subject ==
+  if (exe_certificate_info_->type != CertificateInfo::Type::NO_CERTIFICATE &&
+      exe_certificate_info_->subject ==
           module_data.inspection_result->certificate_info.subject) {
     return ModuleBlockingDecision::kAllowedSameCertificate;
   }
@@ -415,8 +414,8 @@ void ModuleBlocklistCacheUpdater::StartModuleBlocklistCacheUpdate() {
       CalculateTimeDateStamp(base::Time::Now() - kMaxEntryAge);
 
   // Update the module blocklist cache on a background sequence.
-  base::PostTaskAndReplyWithResult(
-      background_sequence_.get(), FROM_HERE,
+  background_sequence_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&UpdateModuleBlocklistCache, cache_file_path,
                      module_list_filter_, std::move(newly_blocklisted_modules_),
                      std::move(blocked_modules_), kMaxModuleCount,

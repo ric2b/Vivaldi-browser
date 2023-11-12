@@ -82,10 +82,10 @@ class RetroactivePairingDetectorImpl final
 
   // PairerBroker::Observer
   void OnDevicePaired(scoped_refptr<Device> device) override;
-  void OnPairFailure(scoped_refptr<Device> device,
-                     PairFailure failure) override;
   void OnAccountKeyWrite(scoped_refptr<Device> device,
                          absl::optional<AccountKeyFailure> error) override;
+  void OnPairFailure(scoped_refptr<Device> device,
+                     PairFailure failure) override;
 
   // MessageStreamLookup::Observer
   void OnMessageStreamConnected(const std::string& device_address,
@@ -132,10 +132,6 @@ class RetroactivePairingDetectorImpl final
                          const std::string& classic_address);
 
   void RemoveDeviceInformation(const std::string& device_address);
-
-  // The classic pairing addresses of Fast Pair devices that we have already
-  // paired to.
-  base::flat_set<std::string> fast_pair_addresses_;
 
   // The classic pairing addresses of potential Retroactive Pair supported
   // devices that are found in the adapter. We have to store them and wait for a

@@ -24,7 +24,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/test/values_test_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -57,7 +56,7 @@ const char16_t kTestTemplateURLKeyword[] = u"t";
 
 class TestingSchemeClassifier : public AutocompleteSchemeClassifier {
  public:
-  TestingSchemeClassifier() {}
+  TestingSchemeClassifier() = default;
   TestingSchemeClassifier(const TestingSchemeClassifier&) = delete;
   TestingSchemeClassifier& operator=(const TestingSchemeClassifier&) = delete;
 
@@ -202,7 +201,7 @@ void TestProvider::StartPrefetch(const AutocompleteInput& input) {
   }
 
   if (!input.omit_asynchronous_matches()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&TestProvider::OnPrefetchRequestDone,
                                   base::Unretained(this)));
   } else {
@@ -240,7 +239,7 @@ void TestProvider::Start(const AutocompleteInput& input, bool minimal_changes) {
 
   if (!input.omit_asynchronous_matches()) {
     done_ = false;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&TestProvider::OnNonPrefetchRequestDone,
                                   base::Unretained(this)));
   }
@@ -310,7 +309,7 @@ ClassifyTest::ClassifyTest(const std::u16string& text,
                            ACMatchClassifications matches)
     : text_(text), text_is_query_(text_is_query), matches_(matches) {}
 
-ClassifyTest::~ClassifyTest() {}
+ClassifyTest::~ClassifyTest() = default;
 
 ACMatchClassifications ClassifyTest::RunTest(const std::u16string& find_text) {
   return AutocompleteProvider::ClassifyAllMatchesInString(
@@ -387,10 +386,6 @@ class AutocompleteProviderTest : public testing::Test {
   GURL GetDestinationURL(AutocompleteMatch& match,
                          base::TimeDelta query_formulation_time) const;
 
-  // Returns the image from the clipboard as it would be from
-  // AutocompleteController::GetImageFromClipboard().
-  absl::optional<gfx::Image> GetImageFromClipboard() const;
-
   void set_search_provider_field_trial_triggered_in_session(bool val) {
     controller_->search_provider_->set_field_trial_triggered_in_session(val);
   }
@@ -426,11 +421,11 @@ class AutocompleteProviderTest : public testing::Test {
   raw_ptr<MockAutocompleteProviderClient> client_;
   // Used to ensure that |client_| ownership has been passed to |controller_|
   // exactly once.
-  bool client_owned_;
+  bool client_owned_{};
 };
 
 AutocompleteProviderTest::AutocompleteProviderTest()
-    : client_(new MockAutocompleteProviderClient()), client_owned_(false) {
+    : client_(new MockAutocompleteProviderClient()) {
   client_->set_template_url_service(
       std::make_unique<TemplateURLService>(nullptr, 0));
 }
@@ -474,8 +469,7 @@ void AutocompleteProviderTest::ResetControllerWithTestProviders(
   //       don't rely on kResultsPerProvided and default relevance ordering
   //       (B > A).
   RegisterTemplateURL(kTestTemplateURLKeyword,
-                      "http://aqs/{searchTerms}/"
-                      "{google:assistedQueryStats}{google:searchboxStats}");
+                      "http://aqs/{searchTerms}/{google:assistedQueryStats}");
 
   AutocompleteController::Providers providers;
 
@@ -1282,8 +1276,7 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_AssistedQueryStatsOnly) {
 
   // The protocol needs to be https.
   RegisterTemplateURL(kTestTemplateURLKeyword,
-                      "https://aqs/{searchTerms}/"
-                      "{google:assistedQueryStats}{google:searchboxStats}");
+                      "https://aqs/{searchTerms}/{google:assistedQueryStats}");
   url = GetDestinationURL(match, base::Milliseconds(2456));
   EXPECT_TRUE(url.path().empty());
 
@@ -1369,8 +1362,7 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
 
   // The protocol needs to be https.
   RegisterTemplateURL(kTestTemplateURLKeyword,
-                      "https://foo/{searchTerms}/"
-                      "{google:assistedQueryStats}{google:searchboxStats}");
+                      "https://foo/{searchTerms}/{google:assistedQueryStats}");
   url = GetDestinationURL(match, base::Milliseconds(2456));
   EXPECT_TRUE(url.path().empty());
 
@@ -1488,8 +1480,7 @@ TEST_F(AutocompleteProviderTest,
 
   // The protocol needs to be https.
   RegisterTemplateURL(kTestTemplateURLKeyword,
-                      "https://foo/{searchTerms}/"
-                      "{google:assistedQueryStats}{google:searchboxStats}");
+                      "https://foo/{searchTerms}/{google:assistedQueryStats}");
   url = GetDestinationURL(match, base::Milliseconds(2456));
   EXPECT_TRUE(url.path().empty());
 
@@ -1509,20 +1500,14 @@ TEST_F(AutocompleteProviderTest,
   url = GetDestinationURL(match, base::Milliseconds(2456));
   EXPECT_TRUE(url.path().empty());
 
-  // If searchbox_stats is not set, assisted_query_stats is not reported either.
+  // Both assisted_query_stats and searchbox_stats need to have been set.
   match.search_terms_args->assisted_query_stats =
       "chrome.0.69i57j69i58j5l2j0l3j69i59";
-  match.search_terms_args->searchbox_stats.clear_client_name();
-  url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_TRUE(url.path().empty());
-
-  // Both assisted_query_stats and searchbox_stats need to have been set.
-  match.search_terms_args->searchbox_stats.set_client_name("chrome");
   url = GetDestinationURL(match, base::Milliseconds(2456));
   EXPECT_EQ(
       "//"
-      "aqs=chrome.0.69i57j69i58j5l2j0l3j69i59.2456j0j0&gs_lcrp="
-      "EgZjaHJvbWXSAQgyNDU2ajBqMA&",
+      "gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajBqMA&aqs=chrome.0."
+      "69i57j69i58j5l2j0l3j69i59.2456j0j0&",
       url.path());
 }
 

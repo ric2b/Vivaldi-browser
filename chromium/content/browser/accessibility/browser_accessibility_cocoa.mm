@@ -1035,14 +1035,6 @@ bool content::IsNSRange(id value) {
   return [NSValue valueWithPoint:pointInScreen];
 }
 
-// Returns an enum indicating the role from owner_.
-// internal
-- (ax::mojom::Role)internalRole {
-  if ([self instanceActive])
-    return static_cast<ax::mojom::Role>(_owner->GetRole());
-  return ax::mojom::Role::kNone;
-}
-
 - (content::BrowserAccessibility*)owner {
   return _owner;
 }
@@ -1144,7 +1136,8 @@ bool content::IsNSRange(id value) {
       _owner->GetBoolAttribute(ax::mojom::BoolAttribute::kCanvasHasFallback)) {
     cocoa_role = NSAccessibilityGroupRole;
   } else if (_owner->IsTextField() &&
-             _owner->HasState(ax::mojom::State::kMultiline)) {
+             _owner->HasState(ax::mojom::State::kMultiline) &&
+             !_owner->GetData().IsSpinnerTextField()) {
     cocoa_role = NSAccessibilityTextAreaRole;
   } else if (ui::IsImage(_owner->GetRole()) && _owner->GetChildCount()) {
     // An image map is an image with children, and exposed on Mac as a group.
@@ -1258,11 +1251,17 @@ bool content::IsNSRange(id value) {
       return ret;
     }
 
-    // If this container is multi-selectable and the focused child is selected,
-    // add the focused child in the list of selected children first, because
-    // this is how VoiceOver determines where to draw the focus ring around the
-    // active item.
-    if (focusedChild->GetBoolAttribute(ax::mojom::BoolAttribute::kSelected))
+    // If this container is multi-selectable, the focused child should be
+    // the first item in the list of selected children regardless of whether
+    // it is selected or not, because this is how VoiceOver determines where to
+    // draw the focus ring around the active item.
+    //
+    // Not appending this item when focused but not selected would result in
+    // VoiceOver's focus ring jumping to the first selected item. It's unclear
+    // if this is by design or not, but VoiceOver folks confirmed offline that
+    // Safari always append the focused item, whether selected or not, to the
+    // list of selected items.
+    if (GetState(_owner, ax::mojom::State::kMultiselectable))
       [ret addObject:focusedChild->GetNativeViewAccessible()];
   }
 
@@ -1347,9 +1346,7 @@ bool content::IsNSRange(id value) {
   if (ax_range.IsNull())
     return nil;
 
-  // Voiceover expects this range to be backwards in order to read the selected
-  // words correctly.
-  return AXRangeToAXTextMarkerRange(ax_range.AsBackwardRange());
+  return AXRangeToAXTextMarkerRange(std::move(ax_range));
 }
 
 - (NSString*)sortDirection {
@@ -1595,8 +1592,12 @@ bool content::IsNSRange(id value) {
       _owner->manager()
           ->GetManagerForRootFrame()
           ->ToBrowserAccessibilityManagerMac();
-  CHECK(root_manager) << "There should always be a root manager whenever an "
-                         "object is instanceActive.";
+  if (!root_manager) {
+    // TODO(crbug.com/1350583) Find out why this happens -- there should always
+    // be a root manager whenever an object is instanceActive. This used to be a
+    // CHECK() but caused too many crashes, with unknown cause.
+    return nil;
+  }
   CHECK(root_manager->GetParentView());
   return root_manager->GetWindow();  // Can be null for inactive tabs.
 }
@@ -2519,7 +2520,7 @@ bool content::IsNSRange(id value) {
     if ([self internalRole] == ax::mojom::Role::kDateTime)
       return NO;
 
-    return GetState(_owner, ax::mojom::State::kFocusable);
+    return _owner->IsFocusable();
   }
 
   if ([attribute isEqualToString:NSAccessibilityValueAttribute])

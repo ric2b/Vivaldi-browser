@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "base/allocator/buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/cxx17_backports.h"
 #include "base/debug/alias.h"
 #include "base/immediate_crash.h"
@@ -25,9 +26,9 @@
 
 namespace base {
 
-// Defined in memory_mac.mm for macOS + use_allocator="none".  In case of
-// USE_PARTITION_ALLOC_AS_MALLOC, no need to route the call to the system
-// default calloc of macOS.
+// Defined in memory_mac.mm for macOS + use_partition_alloc_as_malloc=false.
+// In case of use_partition_alloc_as_malloc=true, no need to route the call to
+// the system default calloc of macOS.
 #if !BUILDFLAG(IS_APPLE) || BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 bool UncheckedCalloc(size_t num_items, size_t size, void** result) {

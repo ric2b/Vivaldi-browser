@@ -51,20 +51,12 @@ class GuestOsHandler : public ::settings::SettingsPageUIHandler,
                                   const std::string& failure_reason);
 
   Profile* profile_;
-  base::ScopedObservation<CrosUsbDetector,
-                          CrosUsbDeviceObserver,
-                          &CrosUsbDetector::AddUsbDeviceObserver,
-                          &CrosUsbDetector::RemoveUsbDeviceObserver>
+  base::ScopedObservation<CrosUsbDetector, CrosUsbDeviceObserver>
       cros_usb_device_observation_{this};
   // weak_ptr_factory_ should always be last member.
   base::WeakPtrFactory<GuestOsHandler> weak_ptr_factory_{this};
 };
 
 }  // namespace ash::settings
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos::settings {
-using ::ash::settings::GuestOsHandler;
-}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_GUEST_OS_HANDLER_H_

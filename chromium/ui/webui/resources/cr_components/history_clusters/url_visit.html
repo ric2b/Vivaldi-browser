@@ -44,13 +44,14 @@
   #link-container {
     align-items: center;
     display: flex;
+    margin-inline-end: var(--cluster-padding-horizontal);
     min-width: 0;
     outline: none;
-    padding-inline-end: var(--cluster-padding-horizontal);
+    padding-inline: 2px; /* So focus outline does not intersect text */
   }
 
   :host(:hover) #link-container {
-    padding-inline-end: 0;
+    margin-inline-end: 0;
   }
 
   :host-context(.focus-outline-visible) #link-container:focus {
@@ -113,7 +114,8 @@
 <div id="header" on-click="onClick_" on-auxclick="onAuxClick_"
     on-keydown="onKeydown_" on-contextmenu="onContextMenu_">
   <a id="link-container" href="[[visit.normalizedUrl.url]]">
-    <page-favicon url="[[visit.normalizedUrl]]"></page-favicon>
+    <page-favicon url="[[visit.normalizedUrl]]" image-url="[[visit.imageUrl]]">
+    </page-favicon>
     <div id="page-info">
       <div id="title-and-annotations">
         <span id="title" class="truncate"></span>
@@ -134,7 +136,7 @@
 
 <cr-lazy-render id="actionMenu">
   <template>
-    <cr-action-menu role-description="[[i18n('actionMenuDescription]]">
+    <cr-action-menu role-description="[[i18n('actionMenuDescription')]]">
       <button id="removeSelfButton" class="dropdown-item"
           on-click="onRemoveSelfButtonClick_">
         [[i18n('removeFromHistory')]]

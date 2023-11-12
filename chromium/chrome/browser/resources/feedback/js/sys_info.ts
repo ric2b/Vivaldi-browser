@@ -4,8 +4,8 @@
 
 import '../strings.m.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {$} from 'chrome://resources/js/util.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {getRequiredElement} from 'chrome://resources/js/util_ts.js';
 
 /**
  * A queue of a sequence of closures that will incrementally build the sys info
@@ -19,12 +19,45 @@ const tableCreationClosuresQueue: Array<() => void> = [];
  */
 const STANDARD_DELAY_MS: number = 32;
 
+/**
+ * The total count of rows that have an Expand/Collapse button. This is needed
+ * to calculate the aria-pressed state of the global Expand All/Collapse All
+ * buttons.
+ */
+let multilineRowsCount = 0;
+
+/**
+ * Running count of rows that have been expanded to display all lines. This is
+ * needed to calculate the aria-pressed state of the global Expand All/Collapse
+ * All buttons.
+ */
+let expandedRowsCount = 0;
+
+function updateGlobalExpandButtonStates() {
+  const hasExpanded = expandedRowsCount > 0;
+  const hasCollapsed = multilineRowsCount - expandedRowsCount > 0;
+
+  if (hasExpanded && hasCollapsed) {
+    getRequiredElement('expandAllBtn').ariaPressed = 'mixed';
+    getRequiredElement('collapseAllBtn').ariaPressed = 'mixed';
+  } else if (hasExpanded && !hasCollapsed) {
+    getRequiredElement('expandAllBtn').ariaPressed = 'true';
+    getRequiredElement('collapseAllBtn').ariaPressed = 'false';
+  } else if (!hasExpanded && hasCollapsed) {
+    getRequiredElement('expandAllBtn').ariaPressed = 'false';
+    getRequiredElement('collapseAllBtn').ariaPressed = 'true';
+  } else {
+    getRequiredElement('expandAllBtn').ariaPressed = 'false';
+    getRequiredElement('collapseAllBtn').ariaPressed = 'false';
+  }
+}
+
 function getValueDivForButton(button: HTMLElement) {
-  return $(button.id.substr(0, button.id.length - 4));
+  return getRequiredElement(button.id.substr(0, button.id.length - 4));
 }
 
 function getButtonForValueDiv(valueDiv: HTMLElement) {
-  return $(valueDiv.id + '-btn');
+  return getRequiredElement(valueDiv.id + '-btn');
 }
 
 function getSystemInformation():
@@ -56,6 +89,7 @@ function expand(
     // Hide the spinner container.
     (valueCell.firstChild as HTMLElement).hidden = true;
   }, STANDARD_DELAY_MS * delayFactor);
+  expandedRowsCount++;
 }
 
 /**
@@ -69,6 +103,7 @@ function collapse(button: HTMLElement, valueDiv: HTMLElement) {
   // Don't have screen readers announce the empty cell.
   const valueCell = valueDiv.parentNode as HTMLElement;
   valueCell.setAttribute('aria-hidden', 'true');
+  expandedRowsCount--;
 }
 
 /**
@@ -82,6 +117,8 @@ function changeCollapsedStatus(e: Event) {
   } else {
     collapse(button, valueDiv);
   }
+
+  updateGlobalExpandButtonStates();
 }
 
 /**
@@ -99,6 +136,8 @@ function collapseAll() {
       collapse(button, valueDivs[i]!);
     }
   }
+
+  updateGlobalExpandButtonStates();
 }
 
 /**
@@ -116,6 +155,8 @@ function expandAll() {
       expand(button, valueDivs[i]!, i + 1);
     }
   }
+
+  updateGlobalExpandButtonStates();
 }
 
 function createNameCell(key: string): HTMLElement {
@@ -142,6 +183,7 @@ function createButtonCell(key: string, isMultiLine: boolean): HTMLElement {
     button.onclick = changeCollapsedStatus;
     button.textContent = loadTimeData.getString('sysinfoPageExpandBtn');
     buttonCell.appendChild(button);
+    multilineRowsCount++;
   } else {
     // Don't have screen reader read the empty cell.
     buttonCell.setAttribute('aria-hidden', 'true');
@@ -161,7 +203,7 @@ function createValueCell(
   if (isMultiLine) {
     valueCell.className = 'number-collapsed';
     const loadingContainer =
-        $('spinner-container').cloneNode(true) as HTMLElement;
+        getRequiredElement('spinner-container').cloneNode(true) as HTMLElement;
     loadingContainer.setAttribute('id', '' + key + '-value-loading');
     loadingContainer.hidden = true;
     valueCell.appendChild(loadingContainer);
@@ -192,10 +234,11 @@ function createTableRow(key: string, value: string): HTMLElement {
  * Finalize the page after the content has been loaded.
  */
 function finishPageLoading() {
-  $('collapseAllBtn').onclick = collapseAll;
-  $('expandAllBtn').onclick = expandAll;
+  getRequiredElement('collapseAllBtn').onclick = collapseAll;
+  getRequiredElement('expandAllBtn').onclick = expandAll;
 
-  $('spinner-container').hidden = true;
+  getRequiredElement('spinner-container').hidden = true;
+  updateGlobalExpandButtonStates();
 }
 
 /**
@@ -221,7 +264,7 @@ function processQueue() {
  */
 function createTableRowWrapper(key: string, value: string): () => void {
   return function() {
-    $('detailsTable').appendChild(createTableRow(key, value));
+    getRequiredElement('detailsTable').appendChild(createTableRow(key, value));
   };
 }
 

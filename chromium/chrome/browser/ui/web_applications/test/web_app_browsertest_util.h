@@ -88,6 +88,9 @@ ExternallyManagedAppManager::InstallResult ExternallyManagedAppManagerInstall(
 
 // If |proceed_through_interstitial| is true, asserts that a security
 // interstitial is shown, and clicks through it, before returning.
+// Note - this does NOT wait for the given url to load, it just waits for
+// navigation to complete. To ensure the given url is fully loaded, wait for
+// that separately.
 void NavigateToURLAndWait(Browser* browser,
                           const GURL& url,
                           bool proceed_through_interstitial = false);
@@ -132,15 +135,16 @@ class BrowserWaiter : public BrowserListObserver {
   void OnBrowserRemoved(Browser* browser) override;
 
  private:
-  const raw_ptr<Browser> filter_ = nullptr;
+  const raw_ptr<Browser, DanglingUntriaged> filter_ = nullptr;
 
   base::RunLoop added_run_loop_;
-  raw_ptr<Browser> added_browser_ = nullptr;
+  raw_ptr<Browser, DanglingUntriaged> added_browser_ = nullptr;
 
   base::RunLoop removed_run_loop_;
   // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
   // enabled. Triage.
-  raw_ptr<Browser, DegradeToNoOpWhenMTE> removed_browser_ = nullptr;
+  raw_ptr<Browser, DanglingUntriagedDegradeToNoOpWhenMTE> removed_browser_ =
+      nullptr;
 };
 
 class UpdateAwaiter : public WebAppInstallManagerObserver {

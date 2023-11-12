@@ -69,12 +69,13 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   // manager and observes the prompt bubble.
   void InitializePermissionPrompt(
       content::WebContents* web_contents,
-      permissions::PermissionPrompt::Delegate* delegate,
+      base::WeakPtr<permissions::PermissionPrompt::Delegate> delegate,
       base::OnceCallback<void()>);
 
   // Displays a permission prompt using the chip UI.
-  void ShowPermissionPrompt(content::WebContents* web_contents,
-                            permissions::PermissionPrompt::Delegate* delegate);
+  void ShowPermissionPrompt(
+      content::WebContents* web_contents,
+      base::WeakPtr<permissions::PermissionPrompt::Delegate> delegate);
 
   // Chip View.
   OmniboxChipButton* chip() { return chip_; }
@@ -119,7 +120,7 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
 
   views::View* get_prompt_bubble_view_for_testing() {
     CHECK_IS_TEST();
-    return bubble_tracker.view();
+    return bubble_tracker_.view();
   }
 
   absl::optional<permissions::PermissionRequestManager*>
@@ -201,13 +202,17 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   // A timer used to collapse the chip after a delay.
   base::OneShotTimer collapse_timer_;
 
+  // A timer used to delay showing a prompt if a confirmation chip is being
+  // displayed.
+  base::OneShotTimer delay_prompt_timer_;
+
   // The model of a permission prompt if one is present.
   std::unique_ptr<PermissionPromptChipModel> permission_prompt_model_;
 
   absl::optional<permissions::PermissionRequestManager*>
       active_chip_permission_request_manager_;
 
-  views::ViewTracker bubble_tracker;
+  views::ViewTracker bubble_tracker_;
 
   base::WeakPtrFactory<ChipController> weak_factory_{this};
 };

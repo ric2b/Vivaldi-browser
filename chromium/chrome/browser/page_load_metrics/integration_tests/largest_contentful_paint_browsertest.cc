@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -72,7 +73,13 @@ bool compare_candidate_index(const TraceEvent* lhs, const TraceEvent* rhs) {
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(MetricIntegrationTest, LargestContentfulPaint) {
+// TODO(crbug.com/1369012): Fix flakiness.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LargestContentfulPaint DISABLED_LargestContentfulPaint
+#else
+#define MAYBE_LargestContentfulPaint LargestContentfulPaint
+#endif
+IN_PROC_BROWSER_TEST_F(MetricIntegrationTest, MAYBE_LargestContentfulPaint) {
   auto waiter = std::make_unique<page_load_metrics::PageLoadMetricsTestWaiter>(
       web_contents());
   Start();
@@ -106,7 +113,7 @@ IN_PROC_BROWSER_TEST_F(MetricIntegrationTest, LargestContentfulPaint) {
     // std::string function_name = base::StringPrintf("run_test%zu()", i);
     content::EvalJsResult result = EvalJs(web_contents(), test_name[i]);
     EXPECT_EQ("", result.error);
-    const auto& list = result.value.GetListDeprecated();
+    const auto& list = result.value.GetList();
     EXPECT_EQ(1u, list.size());
     const std::string* url = list[0].FindStringPath("url");
     EXPECT_TRUE(url);
@@ -274,6 +281,10 @@ IN_PROC_BROWSER_TEST_F(PageViewportInLCPTest, FullSizeImageInIframe) {
 
 class IsAnimatedLCPTest : public MetricIntegrationTest {
  public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                    "LCPAnimatedImagesWebExposed");
+  }
   void test_is_animated(const char* html_name,
                         blink::LargestContentfulPaintType flag_set,
                         bool expected,
@@ -283,7 +294,8 @@ class IsAnimatedLCPTest : public MetricIntegrationTest {
             web_contents());
     waiter->AddPageExpectation(page_load_metrics::PageLoadMetricsTestWaiter::
                                    TimingField::kLargestContentfulPaint);
-    waiter->AddMinimumCompleteResourcesExpectation(entries);
+    if (entries)
+      waiter->AddMinimumCompleteResourcesExpectation(entries);
     Start();
     Load(html_name);
     EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(), "run_test()").error,
@@ -320,7 +332,15 @@ IN_PROC_BROWSER_TEST_F(
                    /*expected=*/false);
 }
 
-class MouseoverLCPTest : public MetricIntegrationTest {
+// crbug.com/1373885: This test is unreliable on ChromeOS, Linux and Mac
+IN_PROC_BROWSER_TEST_F(IsAnimatedLCPTest,
+                       DISABLED_LargestContentfulPaint_IsVideo) {
+  test_is_animated("/is_video.html", blink::LargestContentfulPaintType::kVideo,
+                   /*expected=*/true, /*entries=*/0);
+}
+
+class MouseoverLCPTest : public MetricIntegrationTest,
+                         public testing::WithParamInterface<bool> {
  public:
   void test_mouseover(const char* html_name,
                       blink::LargestContentfulPaintType flag_set,
@@ -339,8 +359,15 @@ class MouseoverLCPTest : public MetricIntegrationTest {
     waiter->AddMinimumCompleteResourcesExpectation(2);
     Start();
     Load(html_name);
-    EXPECT_EQ(
-        EvalJs(web_contents()->GetPrimaryMainFrame(), "run_test(1)").error, "");
+    std::string background = GetParam() ? "true" : "false";
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(),
+                     "registerMouseover(" + background + ")")
+                  .error,
+              "");
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(),
+                     "run_test(/*expected_entries=*/1)")
+                  .error,
+              "");
 
     // We should wait for the main frame's hit-test data to be ready before
     // sending the mouse events below to avoid flakiness.
@@ -348,6 +375,17 @@ class MouseoverLCPTest : public MetricIntegrationTest {
     // Ensure the compositor thread is aware of the mouse events.
     content::MainThreadFrameObserver frame_observer(GetRenderWidgetHost());
     frame_observer.Wait();
+
+    std::string get_timestamp = R"(
+      (async () => {
+        await new Promise(r => setTimeout(r, 100));
+        const timestamp = performance.now();
+        await new Promise(r => setTimeout(r, 100));
+        return timestamp;
+      })())";
+    double timestamp =
+        EvalJs(web_contents()->GetPrimaryMainFrame(), get_timestamp)
+            .ExtractDouble();
 
     // Simulate a mouse move event which will generate a mouse over event.
     EXPECT_TRUE(
@@ -362,7 +400,6 @@ class MouseoverLCPTest : public MetricIntegrationTest {
                      "run_test(/*entries_expected= */" + entries + ")")
                   .error,
               "");
-
     if (x1 != x2 || y1 != y2) {
       // Wait for 600ms before the second mouse move, as our heuristics wait for
       // 500ms after a mousemove event on an LCP image.
@@ -391,6 +428,17 @@ class MouseoverLCPTest : public MetricIntegrationTest {
     ExpectUKMPageLoadMetricFlagSet(
         PageLoad::kPaintTiming_LargestContentfulPaintTypeName,
         LargestContentfulPaintTypeToUKMFlags(flag_set), expected);
+    // If we never fired an entry for mouseover LCP, we should expect the UKM
+    // timestamps to match that.
+    if (entries == entries2 && entries == "1") {
+      ExpectUKMPageLoadMetricLowerThan(
+          PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name,
+          timestamp);
+    } else {
+      ExpectUKMPageLoadMetricGreaterThan(
+          PageLoad::kPaintTiming_NavigationToLargestContentfulPaint2Name,
+          timestamp);
+    }
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -402,7 +450,9 @@ class MouseoverLCPTest : public MetricIntegrationTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
+INSTANTIATE_TEST_SUITE_P(All, MouseoverLCPTest, ::testing::Values(false, true));
+
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTest,
                        LargestContentfulPaint_MouseoverOverLCPImage) {
   test_mouseover("/mouseover.html",
                  blink::LargestContentfulPaintType::kAfterMouseover,
@@ -413,7 +463,7 @@ IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
                  /*expected=*/true);
 }
 
-IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTest,
                        LargestContentfulPaint_MouseoverOverLCPImageReplace) {
   test_mouseover("/mouseover.html?replace",
                  blink::LargestContentfulPaintType::kAfterMouseover,
@@ -424,7 +474,7 @@ IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
                  /*expected=*/true);
 }
 
-IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTest,
                        LargestContentfulPaint_MouseoverOverBody) {
   test_mouseover("/mouseover.html",
                  blink::LargestContentfulPaintType::kAfterMouseover,
@@ -435,7 +485,7 @@ IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
                  /*expected=*/false);
 }
 
-IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTest,
                        LargestContentfulPaint_MouseoverOverLCPImageThenBody) {
   test_mouseover("/mouseover.html?dispatch",
                  blink::LargestContentfulPaintType::kAfterMouseover,
@@ -444,4 +494,392 @@ IN_PROC_BROWSER_TEST_F(MouseoverLCPTest,
                  /*x1=*/10, /*y1=*/10,
                  /*x2=*/30, /*y2=*/10,
                  /*expected=*/false);
+}
+
+class MouseoverLCPTestWithHeuristicFlag : public MouseoverLCPTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    MouseoverLCPTest::SetUpCommandLine(command_line);
+    feature_list_.InitWithFeatures(
+        {blink::features::kLCPMouseoverHeuristics} /*enabled*/,
+        {} /*disabled*/);
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         MouseoverLCPTestWithHeuristicFlag,
+                         ::testing::Values(false, true));
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTestWithHeuristicFlag,
+                       LargestContentfulPaint_MouseoverOverLCPImageThenBody) {
+  test_mouseover("/mouseover.html?dispatch",
+                 blink::LargestContentfulPaintType::kAfterMouseover,
+                 /*entries=*/"1",
+                 /*entries2=*/"2",
+                 /*x1=*/10, /*y1=*/10,
+                 /*x2=*/30, /*y2=*/10,
+                 /*expected=*/false);
+}
+
+IN_PROC_BROWSER_TEST_P(MouseoverLCPTestWithHeuristicFlag,
+                       LargestContentfulPaint_MouseoverOverLCPImageReplace) {
+  test_mouseover("/mouseover.html?replace",
+                 blink::LargestContentfulPaintType::kAfterMouseover,
+                 /*entries=*/"1",
+                 /*entries2=*/"1",
+                 /*x1=*/10, /*y1=*/10,
+                 /*x2=*/10, /*y2=*/10,
+                 /*expected=*/false);
+}
+
+class LargestContentfulPaintTypeTest : public MetricIntegrationTest {
+ private:
+  std::unique_ptr<page_load_metrics::PageLoadMetricsTestWaiter>
+  AddWaiterAndExpectation(uint32_t expectedResourceCount = 1) {
+    auto waiter =
+        std::make_unique<page_load_metrics::PageLoadMetricsTestWaiter>(
+            web_contents());
+
+    waiter->AddPageExpectation(page_load_metrics::PageLoadMetricsTestWaiter::
+                                   TimingField::kLargestContentfulPaint);
+
+    // Passing expectedResourceCount + 1 as in addition to the elements on the
+    // page, the html page itself is a completed resource.
+    waiter->AddMinimumCompleteResourcesExpectation(expectedResourceCount + 1);
+
+    return waiter;
+  }
+
+  void Navigate(std::string url) {
+    Start();
+    Load(url);
+  }
+
+  void AddImage(const std::string& imgSrc) {
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(),
+                     content::JsReplace("add_image($1)", imgSrc))
+                  .error,
+              "");
+  }
+
+  void AddText(const std::string text) {
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(),
+                     content::JsReplace("add_text($1)", text))
+                  .error,
+              "");
+  }
+
+  void WaitForLcpEmission(int32_t expectedLCPEntryCount = 1) {
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(),
+                     content::JsReplace("wait_for_lcp_entry_emission($1)",
+                                        expectedLCPEntryCount))
+                  .error,
+              "");
+  }
+
+  void WaitForUKMReporting() {
+    std::string script = R"(
+      (
+        async () => {
+          await new Promise(resolve => {
+            setTimeout(resolve, 200);
+          })
+        }
+      )();
+    )";
+
+    EXPECT_EQ(EvalJs(web_contents()->GetPrimaryMainFrame(), script).error, "");
+  }
+
+  // navigate away from the test html page so that metrics are flushed.
+  void NavigateAway(
+      std::unique_ptr<page_load_metrics::PageLoadMetricsTestWaiter> waiter) {
+    // Wait for LCP element to be updated.
+    WaitForUKMReporting();
+
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+
+    waiter->Wait();
+
+    // Wait for UKM metrics to be flushed.
+    WaitForUKMReporting();
+  }
+
+ public:
+  enum class ElementOrder { kImageFirst, kTextFirst };
+  void TestImage(std::string& imgSrc,
+                 blink::LargestContentfulPaintType flagSet) {
+    auto waiter = AddWaiterAndExpectation();
+
+    Navigate("/lcp_type.html");
+
+    AddImage(imgSrc);
+
+    WaitForLcpEmission();
+
+    NavigateAway(std::move(waiter));
+
+    ExpectUKMPageLoadMetricFlagSetExactMatch(
+        PageLoad::kPaintTiming_LargestContentfulPaintTypeName,
+        LargestContentfulPaintTypeToUKMFlags(flagSet));
+  }
+
+  void TestText(std::string& text, blink::LargestContentfulPaintType flagSet) {
+    auto waiter = AddWaiterAndExpectation();
+
+    Navigate("/lcp_type.html");
+
+    AddText(text);
+
+    WaitForLcpEmission();
+
+    NavigateAway(std::move(waiter));
+
+    ExpectUKMPageLoadMetricFlagSetExactMatch(
+        PageLoad::kPaintTiming_LargestContentfulPaintTypeName,
+        LargestContentfulPaintTypeToUKMFlags(flagSet));
+  }
+
+  void TestTextAndImage(ElementOrder elementOrder,
+                        std::string& text,
+                        std::string& imgSrc,
+                        uint32_t expectedLCPEntryCount,
+                        blink::LargestContentfulPaintType flagSet) {
+    auto waiter = AddWaiterAndExpectation(2);
+
+    Navigate("/lcp_type.html");
+
+    if (elementOrder == ElementOrder::kTextFirst) {
+      AddText(text);
+      // Wait for LCP emission for 1st element before adding the 2nd
+      // element.This is to prevent the case that a larger 2nd element replaces
+      // the 1st element as LCP element before an LCP entry is emitted for the
+      // 1st element.
+      if (expectedLCPEntryCount > 1)
+        WaitForLcpEmission();
+      AddImage(imgSrc);
+    } else {
+      AddImage(imgSrc);
+      if (expectedLCPEntryCount > 1)
+        WaitForLcpEmission();
+      AddText(text);
+    }
+
+    WaitForLcpEmission(expectedLCPEntryCount);
+
+    NavigateAway(std::move(waiter));
+
+    ExpectUKMPageLoadMetricFlagSetExactMatch(
+        PageLoad::kPaintTiming_LargestContentfulPaintTypeName,
+        LargestContentfulPaintTypeToUKMFlags(flagSet));
+  }
+
+  void TestVideoDataURI(blink::LargestContentfulPaintType flagSet) {
+    auto waiter = AddWaiterAndExpectation();
+
+    Navigate("/lcp_type_video_data_uri.html");
+
+    WaitForLcpEmission();
+
+    NavigateAway(std::move(waiter));
+
+    ExpectUKMPageLoadMetricFlagSetExactMatch(
+        PageLoad::kPaintTiming_LargestContentfulPaintTypeName,
+        LargestContentfulPaintTypeToUKMFlags(flagSet));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_PNG) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kPNG;
+  std::string imgSrc = "images/blue.png";
+  TestImage(imgSrc, flag_set);
+}
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_JPG) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kJPG;
+  std::string imgSrc = "images/arrow-oriented-upright.jpg";
+  TestImage(imgSrc, flag_set);
+}
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_WebP) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kAnimatedImage |
+                  blink::LargestContentfulPaintType::kWebP;
+  std::string imgSrc = "images/webp-animated.webp";
+  TestImage(imgSrc, flag_set);
+}
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_GIF) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kGIF |
+                  blink::LargestContentfulPaintType::kAnimatedImage;
+  std::string imgSrc = "images/fail.gif";
+  TestImage(imgSrc, flag_set);
+}
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_AVIF) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kAVIF;
+  std::string imgSrc = "images/green.avif";
+  TestImage(imgSrc, flag_set);
+}
+
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, ImageType_SVG) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kSVG;
+  std::string imgSrc = "images/colors.svg";
+  TestImage(imgSrc, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_TextType DISABLED_TextType
+#else
+#define MAYBE_TextType TextType
+#endif
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, MAYBE_TextType) {
+  auto flag_set = blink::LargestContentfulPaintType::kText;
+  std::string text = "This is to test LargestContentfulPaintType::kText";
+  TestText(text, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LargeTextAndImage_TextType DISABLED_LargeTextAndImage_TextType
+#else
+#define MAYBE_LargeTextAndImage_TextType LargeTextAndImage_TextType
+#endif
+// Case when text that is larger and comes before an image. The
+// LargestContentfulPaintType should be those of a text element.
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest,
+                       MAYBE_LargeTextAndImage_TextType) {
+  auto flag_set = blink::LargestContentfulPaintType::kText;
+  std::string text =
+      "This is a text that is larger and comes before an image. The "
+      "LargestContentfulPaintType should be those of a text element.";
+  std::string imgSrc = "images/green-2x2.png";
+
+  // The larger element comes first so 1 LCP entry is expected.
+  TestTextAndImage(ElementOrder::kTextFirst, text, imgSrc, 1, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ImageAndLargeText_TextType DISABLED_ImageAndLargeText_TextType
+#else
+#define MAYBE_ImageAndLargeText_TextType ImageAndLargeText_TextType
+#endif
+// Case when text that is larger and comes after an image. The
+// LargestContentfulPaintType should be those of a text element.
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest,
+                       MAYBE_ImageAndLargeText_TextType) {
+  auto flag_set = blink::LargestContentfulPaintType::kText;
+  std::string text =
+      "This is a text that is larger and comes after an image. The "
+      "LargestContentfulPaintType should be those of a text element.";
+  std::string imgSrc = "images/green-2x2.png";
+
+  // The larger element comes later so 2 LCP entries are expected.
+  TestTextAndImage(ElementOrder::kImageFirst, text, imgSrc, 2, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_TextAndLargeImage_ImageType DISABLED_TextAndLargeImage_ImageType
+#else
+#define MAYBE_TextAndLargeImage_ImageType TextAndLargeImage_ImageType
+#endif
+// Case when a text that is smaller and comes before an Image. The
+// LargestContentfulPaintType should be those of an image element.
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest,
+                       MAYBE_TextAndLargeImage_ImageType) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kGIF |
+                  blink::LargestContentfulPaintType::kAnimatedImage;
+  ;
+  std::string text =
+      "This is a text that is smaller and comes before an image. The "
+      "LargestContentfulPaintType should be those of an image element";
+  std::string imgSrc = "images/fail.gif";
+  TestTextAndImage(ElementOrder::kTextFirst, text, imgSrc, 2, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LargeImageAndText_ImageType DISABLED_LargeImageAndText_ImageType
+#else
+#define MAYBE_LargeImageAndText_ImageType LargeImageAndText_ImageType
+#endif
+// Case when a text that is smaller and comes after an Image. The
+// LargestContentfulPaintType should be those of an image element.
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest,
+                       MAYBE_LargeImageAndText_ImageType) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kGIF |
+                  blink::LargestContentfulPaintType::kAnimatedImage;
+  std::string text =
+      "This is a text that is smaller and comes after an Image. The "
+      "LargestContentfulPaintType should be those of an image element.";
+  std::string imgSrc = "images/fail.gif";
+  TestTextAndImage(ElementOrder::kImageFirst, text, imgSrc, 1, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_DataURIType DISABLED_DataURIType
+#else
+#define MAYBE_DataURIType DataURIType
+#endif
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, MAYBE_DataURIType) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kGIF |
+                  blink::LargestContentfulPaintType::kAnimatedImage |
+                  blink::LargestContentfulPaintType::kDataURI;
+  std::string imgSrc =
+      "data:image/gif;base64,R0lGODdhAgADAKEDAAAA//8AAAD/AP///"
+      "ywAAAAAAgADAAACBEwkAAUAOw==";
+  TestImage(imgSrc, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_DataURIType_SVG DISABLED_DataURIType_SVG
+#else
+#define MAYBE_DataURIType_SVG DataURIType_SVG
+#endif
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest, MAYBE_DataURIType_SVG) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kSVG |
+                  blink::LargestContentfulPaintType::kDataURI;
+  // percent-encoding of the svg url obtained by encodeURIComponent("<svg
+  // xmlns='http://www.w3.org/2000/svg' width='16' height='16'
+  // viewBox='0 0 16 16'><rect stroke-width='2' stroke='black' x='1' y='1'
+  // width='14' height='14'fill='lime'/></svg>"
+  std::string imgSrc =
+      "data:image/"
+      "svg+xml, "
+      "%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%2716%27%"
+      "20height%3D%2716%27%20viewBox%3D%270%200%2016%2016%27%3E%3Crect%20strok"
+      "e-width%3D%272%27%20stroke%3D%27black%27%20x%3D%271%27%20y%3D%271%27%20"
+      "width%3D%2714%27%20height%3D%2714%27%20fill%3D%27lime%27/%3E%3C/svg%3E";
+
+  TestImage(imgSrc, flag_set);
+}
+
+// (https://crbug.com/1385713): Flaky on mac12-arm64-rel M1 Mac CQ.
+// (https://crbug.com/1405307): Flaky on ChromeOS as well.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_DataURIType_Video DISABLED_DataURIType_Video
+#else
+#define MAYBE_DataURIType_Video DataURIType_Video
+#endif
+IN_PROC_BROWSER_TEST_F(LargestContentfulPaintTypeTest,
+                       MAYBE_DataURIType_Video) {
+  auto flag_set = blink::LargestContentfulPaintType::kImage |
+                  blink::LargestContentfulPaintType::kVideo |
+                  blink::LargestContentfulPaintType::kDataURI;
+
+  TestVideoDataURI(flag_set);
 }

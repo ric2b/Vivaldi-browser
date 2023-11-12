@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/web/web_state_delegate_browser_agent.h"
 
 #import "base/strings/sys_string_conversions.h"
-#import "components/url_param_filter/core/url_param_filterer.h"
 #import "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/public/overlay_modality.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
@@ -194,7 +193,7 @@ web::WebState* WebStateDelegateBrowserAgent::OpenURLFromWebState(
           load_params, source, false, TabInsertion::kPositionAutomatically,
           (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB),
           /*inherit_opener=*/false, /*should_show_start_surface=*/false,
-          url_param_filter::FilterResult());
+          /*should_skip_new_tab_animation=*/false);
     }
     case WindowOpenDisposition::CURRENT_TAB: {
       source->GetNavigationManager()->LoadURLWithParams(load_params);
@@ -205,7 +204,7 @@ web::WebState* WebStateDelegateBrowserAgent::OpenURLFromWebState(
           load_params, source, true, TabInsertion::kPositionAutomatically,
           /*in_background=*/false, /*inherit_opener=*/false,
           /*should_show_start_surface=*/false,
-          url_param_filter::FilterResult());
+          /*should_skip_new_tab_animation=*/false);
     }
     default:
       NOTIMPLEMENTED();
@@ -230,6 +229,15 @@ web::JavaScriptDialogPresenter*
 WebStateDelegateBrowserAgent::GetJavaScriptDialogPresenter(
     web::WebState* source) {
   return &java_script_dialog_presenter_;
+}
+
+bool WebStateDelegateBrowserAgent::HandlePermissionsDecisionRequest(
+    web::WebState* source,
+    NSArray<NSNumber*>* permissions,
+    WebStatePermissionDecisionHandler handler) {
+  // TODO(crbug.com/1356768): Show a custom prompt and invoke decision handler
+  // based on user input, and return true.
+  return false;
 }
 
 void WebStateDelegateBrowserAgent::OnAuthRequired(

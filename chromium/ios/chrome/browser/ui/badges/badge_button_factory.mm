@@ -12,12 +12,17 @@
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_overflow_menu_util.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/infobar_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -81,7 +86,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)passwordsSaveBadgeButton {
   UIImage* image =
       UseSymbols()
-          ? CustomSymbolWithPointSize(kPasswordSymbol, kSymbolImagePointSize)
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
           : [UIImage imageNamed:[self passwordKeyAssetName]];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypePasswordSave
@@ -100,7 +105,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)passwordsUpdateBadgeButton {
   UIImage* image =
       UseSymbols()
-          ? CustomSymbolWithPointSize(kPasswordSymbol, kSymbolImagePointSize)
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
           : [UIImage imageNamed:[self passwordKeyAssetName]];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypePasswordUpdate
@@ -119,7 +124,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)saveCardBadgeButton {
   UIImage* image;
   image = UseSymbols() ? DefaultSymbolWithPointSize(kCreditCardSymbol,
-                                                    kSymbolImagePointSize)
+                                                    kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"infobar_save_card_icon"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeSaveCard
@@ -137,7 +142,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)translateBadgeButton {
   UIImage* image;
   image = UseSymbols() ? CustomSymbolWithPointSize(kTranslateSymbol,
-                                                   kSymbolImagePointSize)
+                                                   kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"infobar_translate_icon"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeTranslate
@@ -154,15 +159,24 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 - (BadgeButton*)incognitoBadgeButton {
   BadgeButton* button;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    button =
+        [self createButtonForType:kBadgeTypeIncognito
+                            image:[UIImage imageNamed:@"incognito_badge"]];
+    button.fullScreenImage = [[UIImage imageNamed:@"incognito_small_badge"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    button.tintColor =
+      [[UIColor colorNamed:kTextPrimaryColor] colorWithAlphaComponent:0.5];
+  } else {
   if (UseSymbols()) {
     UIImage* image;
     if (@available(iOS 15, *)) {
-      image = CustomPaletteSymbol(
-          kIncognitoCircleFillSymbol, kSymbolIncognitoPointSize,
-          UIImageSymbolWeightMedium, UIImageSymbolScaleMedium, @[
-            [UIColor colorNamed:kGrey400Color],
-            [UIColor colorNamed:kGrey100Color]
-          ]);
+      image = SymbolWithPalette(
+          CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
+                                    kSymbolIncognitoPointSize),
+          SmallIncognitoPalette());
     } else {
       image = [[UIImage imageNamed:@"incognito_badge_ios14"]
           imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -181,6 +195,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
   }
 
   button.tintColor = [UIColor colorNamed:kTextPrimaryColor];
+  } // End Vivaldi
+
   button.accessibilityTraits &= ~UIAccessibilityTraitButton;
   button.userInteractionEnabled = NO;
   button.accessibilityIdentifier = kBadgeButtonIncognitoAccessibilityIdentifier;
@@ -192,7 +208,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)overflowBadgeButton {
   UIImage* image = UseSymbols()
                        ? DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
-                                                    kSymbolImagePointSize)
+                                                    kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"wrench_badge"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeOverflow
@@ -243,7 +259,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)saveAddressProfileBadgeButton {
   UIImage* image;
   image = UseSymbols() ? DefaultSymbolWithPointSize(kPinFillSymbol,
-                                                    kSymbolImagePointSize)
+                                                    kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"ic_place"];
 
   BadgeButton* button =
@@ -275,10 +291,10 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)permissionsCameraBadgeButton {
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypePermissionsCamera
-                          image:CustomSymbolTemplateWithPointSize(
-                                    kCameraFillSymbol, kSymbolImagePointSize)];
+  BadgeButton* button = [self
+      createButtonForType:kBadgeTypePermissionsCamera
+                    image:CustomSymbolTemplateWithPointSize(
+                              kCameraFillSymbol, kInfobarSymbolPointSize)];
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -293,7 +309,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
   BadgeButton* button = [self
       createButtonForType:kBadgeTypePermissionsMicrophone
                     image:DefaultSymbolTemplateWithPointSize(
-                              kMicrophoneFillSymbol, kSymbolImagePointSize)];
+                              kMicrophoneFillSymbol, kInfobarSymbolPointSize)];
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -307,7 +323,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)createButtonForType:(BadgeType)badgeType image:(UIImage*)image {
   BadgeButton* button = [BadgeButton badgeButtonWithType:badgeType];
   UIImageSymbolConfiguration* symbolConfig = [UIImageSymbolConfiguration
-      configurationWithPointSize:kSymbolImagePointSize
+      configurationWithPointSize:kInfobarSymbolPointSize
                           weight:UIImageSymbolWeightRegular
                            scale:UIImageSymbolScaleMedium];
   [button setPreferredSymbolConfiguration:symbolConfig

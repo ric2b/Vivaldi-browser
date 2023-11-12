@@ -775,6 +775,12 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
         Network::SetCookieBlockedReasonEnum::UserPreferences);
   }
   if (status.HasExclusionReason(
+          net::CookieInclusionStatus::
+              EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET)) {
+    blockedReasons->push_back(
+        Network::SetCookieBlockedReasonEnum::ThirdPartyBlockedInFirstPartySet);
+  }
+  if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::SamePartyFromCrossPartyContext);
@@ -878,6 +884,12 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
           net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
     blockedReasons->push_back(
         Network::CookieBlockedReasonEnum::UserPreferences);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::
+              EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET)) {
+    blockedReasons->push_back(
+        Network::CookieBlockedReasonEnum::ThirdPartyBlockedInFirstPartySet);
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT)) {
@@ -1254,7 +1266,7 @@ void NetworkHandler::SetRenderer(int render_process_host_id,
     browser_context_ = nullptr;
   }
   host_ = frame_host;
-  if (background_sync_restorer_ && storage_partition_)
+  if (background_sync_restorer_)
     background_sync_restorer_->SetStoragePartition(storage_partition_);
 }
 
@@ -1293,19 +1305,15 @@ String BuildReportStatus(const net::ReportingReport::Status status) {
 
 std::vector<GURL> ComputeReportingURLs(RenderFrameHostImpl* frame_host) {
   std::vector<GURL> urls;
-  base::queue<FrameTreeNode*> queue;
-  queue.push(frame_host->frame_tree_node());
-  while (!queue.empty()) {
-    FrameTreeNode* node = queue.front();
-    queue.pop();
-    if (node != frame_host->frame_tree_node() &&
-        node->current_frame_host()->is_local_root_subframe())
-      continue;
-
-    urls.push_back(node->current_url());
-    for (size_t i = 0; i < node->child_count(); ++i)
-      queue.push(node->child_at(i));
-  }
+  frame_host->ForEachRenderFrameHostWithAction(
+      [frame_host, &urls](content::RenderFrameHostImpl* rfh) {
+        if (rfh != frame_host && (rfh->is_local_root_subframe() ||
+                                  &rfh->GetPage() != &frame_host->GetPage())) {
+          return content::RenderFrameHost::FrameIterationAction::kSkipChildren;
+        }
+        urls.push_back(frame_host->GetLastCommittedURL());
+        return content::RenderFrameHost::FrameIterationAction::kContinue;
+      });
   return urls;
 }
 
@@ -1936,8 +1944,12 @@ std::unique_ptr<Network::Response> BuildResponse(
   }
 
   response->SetProtocol(GetProtocol(url, info));
-  response->SetAlternateProtocolUsage(
-      AlternateProtocolUsageToString(info.alternate_protocol_usage));
+  if (info.alternate_protocol_usage !=
+      net::AlternateProtocolUsage::
+          ALTERNATE_PROTOCOL_USAGE_UNSPECIFIED_REASON) {
+    response->SetAlternateProtocolUsage(
+        AlternateProtocolUsageToString(info.alternate_protocol_usage));
+  }
   response->SetRemoteIPAddress(
       net::HostPortPair::FromIPEndPoint(info.remote_endpoint).HostForURL());
   response->SetRemotePort(info.remote_endpoint.port());
@@ -2173,8 +2185,10 @@ void NetworkHandler::NavigationRequestWillBeSent(
   std::string id = nav_request.devtools_navigation_token().ToString();
   double current_ticks = timestamp.since_origin().InSecondsF();
   double current_wall_time = base::Time::Now().ToDoubleT();
-  std::string frame_token =
-      nav_request.frame_tree_node()->devtools_frame_token().ToString();
+  std::string frame_token = nav_request.frame_tree_node()
+                                ->current_frame_host()
+                                ->devtools_frame_token()
+                                .ToString();
 
   const blink::mojom::BeginNavigationParams& begin_params =
       nav_request.begin_params();
@@ -2910,14 +2924,18 @@ void NetworkHandler::OnRequestWillBeSentExtraInfo(
     const net::CookieAccessResultList& request_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers,
     const base::TimeTicks timestamp,
-    const network::mojom::ClientSecurityStatePtr& security_state) {
+    const network::mojom::ClientSecurityStatePtr& security_state,
+    const network::mojom::OtherPartitionInfoPtr& other_partition_info) {
   if (!enabled_)
     return;
 
   frontend_->RequestWillBeSentExtraInfo(
       devtools_request_id, BuildProtocolAssociatedCookies(request_cookie_list),
       GetRawHeaders(request_headers), GetConnectTiming(timestamp),
-      MaybeBuildClientSecurityState(security_state));
+      MaybeBuildClientSecurityState(security_state),
+      other_partition_info
+          ? other_partition_info->site_has_cookie_in_other_partition
+          : Maybe<bool>());
 }
 
 void NetworkHandler::OnResponseReceivedExtraInfo(
@@ -3142,6 +3160,9 @@ String GetTrustTokenOperationStatus(
     case network::mojom::TrustTokenOperationStatus::kUnavailable:
       return protocol::Network::TrustTokenOperationDone::StatusEnum::
           Unavailable;
+    case network::mojom::TrustTokenOperationStatus::kUnauthorized:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          Unauthorized;
     case network::mojom::TrustTokenOperationStatus::kBadResponse:
       return protocol::Network::TrustTokenOperationDone::StatusEnum::
           BadResponse;

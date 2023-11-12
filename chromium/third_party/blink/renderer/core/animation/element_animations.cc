@@ -32,6 +32,7 @@
 
 #include "third_party/blink/renderer/core/css/css_property_equality.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
@@ -39,6 +40,8 @@ namespace blink {
 ElementAnimations::ElementAnimations()
     : animation_style_change_(false),
       composited_background_color_status_(static_cast<unsigned>(
+          CompositedPaintStatus::kNeedsRepaintOrNoAnimation)),
+      composited_clip_path_status_(static_cast<unsigned>(
           CompositedPaintStatus::kNeedsRepaintOrNoAnimation)) {}
 
 ElementAnimations::~ElementAnimations() = default;
@@ -53,6 +56,7 @@ void ElementAnimations::Trace(Visitor* visitor) const {
   visitor->Trace(effect_stack_);
   visitor->Trace(animations_);
   visitor->Trace(worklet_animations_);
+  ElementRareDataField::Trace(visitor);
 }
 
 bool ElementAnimations::UpdateBoxSizeAndCheckTransformAxisAlignment(

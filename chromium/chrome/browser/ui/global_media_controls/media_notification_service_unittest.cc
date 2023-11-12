@@ -17,6 +17,9 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_producer.h"
 #include "chrome/browser/ui/global_media_controls/test_helper.h"
+#include "chrome/browser/ui/media_router/cast_dialog_controller.h"
+#include "chrome/browser/ui/media_router/media_route_starter.h"
+#include "chrome/browser/ui/media_router/query_result_manager.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/global_media_controls/public/media_item_manager.h"
@@ -70,10 +73,6 @@ class MediaNotificationServiceTest : public ChromeRenderViewHostTestHarness {
   }
 
  protected:
-  base::UnguessableToken SimulatePlayingControllableMedia() {
-    return SimulatePlayingControllableMedia(base::UnguessableToken::Create());
-  }
-
   base::UnguessableToken SimulatePlayingControllableMedia(
       base::UnguessableToken id) {
     SimulateFocusGained(id, true);
@@ -119,26 +118,13 @@ class MediaNotificationServiceTest : public ChromeRenderViewHostTestHarness {
     // service, but since the service doesn't run for this test, we'll manually
     // grab the MediaNotificationItem from the MediaNotificationService and
     // set the metadata.
-    auto item =
-        service_->media_session_item_producer_->GetMediaItem(id.ToString());
-    ASSERT_NE(nullptr, item);
+    auto* session_item = GetNotificationSessionItem(id);
+    ASSERT_NE(nullptr, session_item);
 
     media_session::MediaMetadata metadata;
     metadata.title = u"title";
     metadata.artist = u"artist";
-
-    auto* session_item =
-        static_cast<global_media_controls::MediaSessionNotificationItem*>(
-            item.get());
     session_item->MediaSessionMetadataChanged(std::move(metadata));
-  }
-
-  bool HasActiveItems() const {
-    return service_->media_item_manager()->HasActiveItems();
-  }
-
-  bool HasOpenDialog() const {
-    return service_->media_item_manager()->HasOpenDialog();
   }
 
   void SimulateDialogOpened(
@@ -159,6 +145,13 @@ class MediaNotificationServiceTest : public ChromeRenderViewHostTestHarness {
   void SimulateMediaRoutesUpdate(
       const std::vector<media_router::MediaRoute>& routes) {
     service_->cast_notification_producer_->OnRoutesUpdated(routes);
+  }
+
+  global_media_controls::MediaSessionNotificationItem*
+  GetNotificationSessionItem(const base::UnguessableToken& id) {
+    return static_cast<global_media_controls::MediaSessionNotificationItem*>(
+        service_->media_session_item_producer_->GetMediaItem(id.ToString())
+            .get());
   }
 
   MediaNotificationService* service() { return service_.get(); }
@@ -244,11 +237,6 @@ class MediaNotificationServiceCastTest : public MediaNotificationServiceTest {
   GetSupplementalNotification() {
     return service()
         ->presentation_request_notification_producer_->GetNotificationItem();
-  }
-
-  MockWebContentsPresentationManager* GetMockPresentationManager() {
-    return static_cast<MockWebContentsPresentationManager*>(
-        presentation_manager_.get());
   }
 
  private:
@@ -458,4 +446,47 @@ TEST_F(MediaNotificationServiceCastTest,
   EXPECT_CALL(mock_error_cb, Run);
   DeleteContents();
   service()->OnStartPresentationContextCreated(std::move(context));
+}
+
+TEST_F(MediaNotificationServiceCastTest,
+       CreateCastDialogControllerWithRemotePlayback) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(media::kMediaRemotingWithoutFullscreen);
+
+  auto id = SimulatePlayingControllableMediaForWebContents(web_contents());
+  auto* session_item = GetNotificationSessionItem(id);
+  ASSERT_NE(nullptr, session_item);
+
+  // At this point `session_item` has no RemotePlaybackMetadata and there's no
+  // default MediaSource.
+  std::unique_ptr<media_router::CastDialogController> controller_presentation =
+      service()->CreateCastDialogControllerForSession(id.ToString());
+  std::unique_ptr<media_router::MediaRouteStarter> starter =
+      controller_presentation->TakeMediaRouteStarter();
+  const auto* query_result_manager = starter->GetQueryResultManagerForTesting();
+  EXPECT_TRUE(query_result_manager->GetSupportedCastModes().empty());
+
+  // Send MediaSessionInfo with RemotePlaybackMetadata to `session_item`.
+  auto session_info = MediaSessionInfo::New();
+  session_info->remote_playback_metadata =
+      media_session::mojom::RemotePlaybackMetadata::New("vp8", "opus", false,
+                                                        false, "");
+  session_info->is_controllable = true;
+  session_item->MediaSessionInfoChanged(std::move(session_info));
+
+  std::unique_ptr<media_router::CastDialogController>
+      controller_remote_playback =
+          service()->CreateCastDialogControllerForSession(id.ToString());
+  starter = controller_remote_playback->TakeMediaRouteStarter();
+  query_result_manager = starter->GetQueryResultManagerForTesting();
+  const media_router::CastModeSet mode = {
+      media_router::MediaCastMode::REMOTE_PLAYBACK};
+  EXPECT_EQ(mode, query_result_manager->GetSupportedCastModes());
+}
+
+TEST_F(MediaNotificationServiceCastTest, RequestMediaRemoting) {
+  EXPECT_FALSE(service()->OnMediaRemotingRequested("invalid_item_id"));
+  auto id = base::UnguessableToken::Create();
+  SimulatePlayingControllableMedia(id);
+  EXPECT_TRUE(service()->OnMediaRemotingRequested(id.ToString()));
 }

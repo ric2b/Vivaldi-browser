@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_addeventlisteneroptions_boolean.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_eventlisteneroptions.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
+#include "third_party/blink/renderer/core/dom/abort_signal_registry.h"
 #include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
@@ -425,16 +426,6 @@ bool EventTarget::AddEventListenerInternal(
   if (!execution_context)
     return false;
 
-  // Consider `Permissions-Policy: unload`.
-  if (event_type == event_type_names::kUnload &&
-      RuntimeEnabledFeatures::PermissionsPolicyUnloadEnabled(
-          execution_context) &&
-      !execution_context->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kUnload,
-          ReportOptions::kReportOnFailure)) {
-    return false;
-  }
-
   // Unload/Beforeunload handlers are not allowed in fenced frames.
   if (event_type == event_type_names::kUnload ||
       event_type == event_type_names::kBeforeunload) {
@@ -447,6 +438,18 @@ bool EventTarget::AddEventListenerInternal(
         }
       }
     }
+  }
+
+  // Consider `Permissions-Policy: unload`.
+  if (event_type == event_type_names::kUnload &&
+      !execution_context->IsFeatureEnabled(
+          mojom::blink::PermissionsPolicyFeature::kUnload,
+          ReportOptions::kReportOnFailure)) {
+    // If the Permissions-Policy unload feature is not enabled, then unload
+    // should never be disabled.
+    DCHECK(RuntimeEnabledFeatures::PermissionsPolicyUnloadEnabled(
+        execution_context));
+    return false;
   }
 
   if (event_type == event_type_names::kTouchcancel ||
@@ -482,13 +485,17 @@ bool EventTarget::AddEventListenerInternal(
       // pass the |options->capture()| boolean, which is the only thing
       // removeEventListener actually uses to find and remove the event
       // listener.
-      options->signal()->AddAlgorithm(WTF::BindOnce(
-          [](EventTarget* event_target, const AtomicString& event_type,
-             const EventListener* listener, bool capture) {
-            event_target->removeEventListener(event_type, listener, capture);
-          },
-          WrapWeakPersistent(this), event_type, WrapWeakPersistent(listener),
-          options->capture()));
+      AbortSignal::AlgorithmHandle* handle =
+          options->signal()->AddAlgorithm(WTF::BindOnce(
+              [](EventTarget* event_target, const AtomicString& event_type,
+                 const EventListener* listener, bool capture) {
+                event_target->removeEventListener(event_type, listener,
+                                                  capture);
+              },
+              WrapWeakPersistent(this), event_type,
+              WrapWeakPersistent(listener), options->capture()));
+      AbortSignalRegistry::From(*execution_context)
+          ->RegisterAbortAlgorithm(listener, handle);
       if (const LocalDOMWindow* executing_window = ExecutingWindow()) {
         if (const Document* document = executing_window->document()) {
           document->CountUse(WebFeature::kAddEventListenerWithAbortSignal);
@@ -526,6 +533,8 @@ void EventTarget::AddedEventListener(
         UseCounter::Count(
             *document,
             WebFeature::kContentVisibilityAutoStateChangeHandlerRegistered);
+      } else if (event_type == event_type_names::kScrollend) {
+        UseCounter::Count(*document, WebFeature::kScrollend);
       }
     }
   }

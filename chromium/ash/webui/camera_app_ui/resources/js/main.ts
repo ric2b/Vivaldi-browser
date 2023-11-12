@@ -139,7 +139,7 @@ export class App {
     for (const element of dom.getAll('input', HTMLInputElement)) {
       element.addEventListener('keypress', (event) => {
         const e = assertInstanceof(event, KeyboardEvent);
-        if (util.getShortcutIdentifier(e) === 'Enter') {
+        if (util.getKeyboardShortcut(e) === 'Enter') {
           element.click();
         }
       });
@@ -225,7 +225,7 @@ export class App {
           if (ready || !state.get(Mode.SCAN) || hasShownDocIndicator) {
             return;
           }
-          customEffect.showDownloadingDocScanIndicator();
+          customEffect.showDownloadingDocScanIndicator(this.cameraView.root);
           hasShownDocIndicator = true;
         },
       });
@@ -236,7 +236,7 @@ export class App {
           if (state.get(state.State.ENABLE_PTZ) &&
               !localStorage.getBool(LocalStorageKey.PTZ_TOAST_SHOWN)) {
             localStorage.set(LocalStorageKey.PTZ_TOAST_SHOWN, true);
-            customEffect.showPtzToast();
+            customEffect.showPtzToast(this.cameraView.root);
           }
         },
       });
@@ -251,11 +251,11 @@ export class App {
       // Only show new feature indicator for doc scan if it is ready when
       // starting the app.
       localStorage.set(LocalStorageKey.DOC_MODE_TOAST_SHOWN, true);
-      customEffect.showDocScanAvailableIndicator();
+      customEffect.showDocScanAvailableIndicator(this.cameraView.root);
     } else if (!localStorage.getBool(LocalStorageKey.PTZ_TOAST_SHOWN)) {
       if (state.get(state.State.ENABLE_PTZ)) {
         localStorage.set(LocalStorageKey.PTZ_TOAST_SHOWN, true);
-        customEffect.showPtzToast();
+        customEffect.showPtzToast(this.cameraView.root);
       } else {
         registerPtzToast();
       }

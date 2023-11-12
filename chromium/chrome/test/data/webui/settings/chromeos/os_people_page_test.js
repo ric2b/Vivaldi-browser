@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 
 import {AccountManagerBrowserProxyImpl, osPageVisibility, PageStatus, ProfileInfoBrowserProxyImpl, Router, routes, SyncBrowserProxyImpl} from 'chrome://os-settings/chromeos/os_settings.js';
-import {assert} from 'chrome://resources/js/assert.js';
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {TestProfileInfoBrowserProxy} from 'chrome://test/settings/chromeos/test_profile_info_browser_proxy.js';
+import {TestProfileInfoBrowserProxy} from 'chrome://webui-test/settings/chromeos/test_profile_info_browser_proxy.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {TestBrowserProxy} from '../../test_browser_proxy.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 import {TestSyncBrowserProxy} from './test_os_sync_browser_proxy.js';
 
@@ -207,7 +207,8 @@ suite('PeoplePageTests', function() {
     await waitAfterNextRender(peoplePage);
 
     // Make the sync page configurable.
-    const syncPage = peoplePage.shadowRoot.querySelector('settings-sync-page');
+    const syncPage =
+        peoplePage.shadowRoot.querySelector('os-settings-sync-page');
     assert(syncPage);
     syncPage.syncPrefs = {
       customPassphraseAllowed: true,
@@ -227,7 +228,7 @@ suite('PeoplePageTests', function() {
     // Flush to make sure the dropdown expands.
     flush();
     const deepLinkElement =
-        syncPage.shadowRoot.querySelector('settings-sync-encryption-options')
+        syncPage.shadowRoot.querySelector('os-settings-sync-encryption-options')
             .shadowRoot.querySelector('#encryptionRadioGroup')
             .buttons_[0]
             .shadowRoot.querySelector('#button');

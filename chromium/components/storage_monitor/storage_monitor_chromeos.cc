@@ -17,7 +17,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -144,8 +143,8 @@ void StorageMonitorCros::CheckExistingMountPoints() {
 
   for (const auto& mount_point :
        DiskMountManager::GetInstance()->mount_points()) {
-    base::PostTaskAndReplyWithResult(
-        blocking_task_runner.get(), FROM_HERE,
+    blocking_task_runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&MediaStorageUtil::HasDcim,
                        base::FilePath(mount_point.mount_path)),
         base::BindOnce(&StorageMonitorCros::AddMountedPath,
@@ -203,9 +202,9 @@ void StorageMonitorCros::OnMountEvent(
   if (mount_info.mount_type != ash::MountType::kDevice)
     return;
   // Ignore errors.
-  if (error_code != ash::MountError::kNone)
+  if (error_code != ash::MountError::kSuccess)
     return;
-  if (mount_info.mount_error != ash::MountError::kNone)
+  if (mount_info.mount_error != ash::MountError::kSuccess)
     return;
 
   switch (event) {
@@ -270,7 +269,7 @@ bool StorageMonitorCros::GetStorageInfoForPath(
 void NotifyUnmountResult(
     base::OnceCallback<void(StorageMonitor::EjectStatus)> callback,
     ash::MountError error_code) {
-  if (error_code == ash::MountError::kNone)
+  if (error_code == ash::MountError::kSuccess)
     std::move(callback).Run(StorageMonitor::EJECT_OK);
   else
     std::move(callback).Run(StorageMonitor::EJECT_FAILURE);

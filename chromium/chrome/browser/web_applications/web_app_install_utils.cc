@@ -23,6 +23,7 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/flat_tree.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
@@ -477,20 +478,29 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
         static_cast<SkColor>(manifest.background_color), SK_AlphaOPAQUE);
   }
 
-  if (manifest.user_preferences &&
-      manifest.user_preferences->color_scheme_dark) {
-    if (manifest.user_preferences->color_scheme_dark->has_theme_color) {
-      web_app_info->dark_mode_theme_color = SkColorSetA(
-          static_cast<SkColor>(
-              manifest.user_preferences->color_scheme_dark->theme_color),
-          SK_AlphaOPAQUE);
-    }
-    if (manifest.user_preferences->color_scheme_dark->has_background_color) {
-      web_app_info->dark_mode_background_color = SkColorSetA(
-          static_cast<SkColor>(
-              manifest.user_preferences->color_scheme_dark->background_color),
-          SK_AlphaOPAQUE);
-    }
+  if (manifest.has_dark_theme_color) {
+    web_app_info->dark_mode_theme_color = SkColorSetA(
+        static_cast<SkColor>(manifest.dark_theme_color), SK_AlphaOPAQUE);
+  } else if (manifest.user_preferences &&
+             manifest.user_preferences->color_scheme_dark &&
+             manifest.user_preferences->color_scheme_dark->has_theme_color) {
+    web_app_info->dark_mode_theme_color = SkColorSetA(
+        static_cast<SkColor>(
+            manifest.user_preferences->color_scheme_dark->theme_color),
+        SK_AlphaOPAQUE);
+  }
+
+  if (manifest.has_dark_background_color) {
+    web_app_info->dark_mode_background_color = SkColorSetA(
+        static_cast<SkColor>(manifest.dark_background_color), SK_AlphaOPAQUE);
+  } else if (manifest.user_preferences &&
+             manifest.user_preferences->color_scheme_dark &&
+             manifest.user_preferences->color_scheme_dark
+                 ->has_background_color) {
+    web_app_info->dark_mode_background_color = SkColorSetA(
+        static_cast<SkColor>(
+            manifest.user_preferences->color_scheme_dark->background_color),
+        SK_AlphaOPAQUE);
   }
 
   if (manifest.display != DisplayMode::kUndefined)
@@ -822,6 +832,8 @@ webapps::WebappInstallSource ConvertExternalInstallSourceToInstallSource(
       return webapps::WebappInstallSource::KIOSK;
     case ExternalInstallSource::kExternalLockScreen:
       return webapps::WebappInstallSource::EXTERNAL_LOCK_SCREEN;
+    case ExternalInstallSource::kInternalMicrosoft365Setup:
+      return webapps::WebappInstallSource::MICROSOFT_365_SETUP;
   }
 }
 
@@ -843,6 +855,9 @@ webapps::WebappUninstallSource ConvertExternalInstallSourceToUninstallSource(
       return webapps::WebappUninstallSource::kUnknown;
     case ExternalInstallSource::kExternalLockScreen:
       return webapps::WebappUninstallSource::kExternalLockScreen;
+    case ExternalInstallSource::kInternalMicrosoft365Setup:
+      NOTREACHED() << "Microsoft 365 apps should not be unistalled externally";
+      return webapps::WebappUninstallSource::kUnknown;
   }
 }
 
@@ -873,6 +888,9 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     case webapps::WebappInstallSource::EXTERNAL_DEFAULT:
       return WebAppManagement::kDefault;
 
+    case webapps::WebappInstallSource::PRELOADED_OEM:
+      return WebAppManagement::kOem;
+
     case webapps::WebappInstallSource::EXTERNAL_POLICY:
       return WebAppManagement::kPolicy;
 
@@ -888,6 +906,9 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
 
     case webapps::WebappInstallSource::SUB_APP:
       return WebAppManagement::kSubApp;
+
+    case webapps::WebappInstallSource::MICROSOFT_365_SETUP:
+      return WebAppManagement::kOneDriveIntegration;
 
     case webapps::WebappInstallSource::COUNT:
       NOTREACHED();
@@ -921,8 +942,14 @@ void MaybeRegisterOsUninstall(const WebApp* web_app,
   if (!user_installable_before_uninstall && user_installable_after_uninstall) {
     InstallOsHooksOptions options;
     options.os_hooks[OsHookType::kUninstallationViaOsSettings] = true;
-    os_integration_manager.InstallOsHooks(
-        web_app->app_id(), std::move(callback), nullptr, options);
+    auto os_hooks_barrier =
+        OsIntegrationManager::GetBarrierForSynchronize(std::move(callback));
+    // TODO(crbug.com/1401125): Remove InstallOsHooks() once OS integration
+    // sub managers have been implemented.
+    os_integration_manager.InstallOsHooks(web_app->app_id(), os_hooks_barrier,
+                                          nullptr, options);
+    os_integration_manager.Synchronize(
+        web_app->app_id(), base::BindOnce(os_hooks_barrier, OsHooksErrors()));
     return;
   }
 #endif
@@ -944,14 +971,18 @@ void MaybeUnregisterOsUninstall(const WebApp* web_app,
   if (user_installable_before_install && !user_installable_after_install) {
     OsHooksOptions options;
     options[OsHookType::kUninstallationViaOsSettings] = true;
+    // TODO(crbug.com/1401125): Remove UninstallOsHooks() once OS integration
+    // sub managers have been implemented.
     os_integration_manager.UninstallOsHooks(web_app->app_id(), options,
                                             base::DoNothing());
+    os_integration_manager.Synchronize(web_app->app_id(), base::DoNothing());
   }
 #endif
 }
 
 void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
-                             WebApp& web_app) {
+                             WebApp& web_app,
+                             bool skip_icons_on_download_failure) {
   DCHECK(!web_app_info.title.empty());
   web_app.SetName(base::UTF16ToUTF8(web_app_info.title));
 
@@ -988,24 +1019,25 @@ void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
   sync_fallback_data.icon_infos = web_app_info.manifest_icons;
   web_app.SetSyncFallbackData(std::move(sync_fallback_data));
 
-  web_app.SetManifestIcons(web_app_info.manifest_icons);
-  web_app.SetDownloadedIconSizes(
-      IconPurpose::ANY, GetSquareSizePxs(web_app_info.icon_bitmaps.any));
-  web_app.SetDownloadedIconSizes(
-      IconPurpose::MASKABLE,
-      GetSquareSizePxs(web_app_info.icon_bitmaps.maskable));
-  web_app.SetDownloadedIconSizes(
-      IconPurpose::MONOCHROME,
-      GetSquareSizePxs(web_app_info.icon_bitmaps.monochrome));
-  web_app.SetIsGeneratedIcon(web_app_info.is_generated_icon);
+  if (!skip_icons_on_download_failure) {
+    web_app.SetManifestIcons(web_app_info.manifest_icons);
+    web_app.SetDownloadedIconSizes(
+        IconPurpose::ANY, GetSquareSizePxs(web_app_info.icon_bitmaps.any));
+    web_app.SetDownloadedIconSizes(
+        IconPurpose::MASKABLE,
+        GetSquareSizePxs(web_app_info.icon_bitmaps.maskable));
+    web_app.SetDownloadedIconSizes(
+        IconPurpose::MONOCHROME,
+        GetSquareSizePxs(web_app_info.icon_bitmaps.monochrome));
+    web_app.SetIsGeneratedIcon(web_app_info.is_generated_icon);
+    web_app.SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
+    web_app.SetDownloadedShortcutsMenuIconsSizes(
+        GetDownloadedShortcutsMenuIconsSizes(
+            web_app_info.shortcuts_menu_icon_bitmaps));
+  }
 
   web_app.SetStorageIsolated(web_app_info.is_storage_isolated);
   web_app.SetPermissionsPolicy(web_app_info.permissions_policy);
-
-  web_app.SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
-  web_app.SetDownloadedShortcutsMenuIconsSizes(
-      GetDownloadedShortcutsMenuIconsSizes(
-          web_app_info.shortcuts_menu_icon_bitmaps));
 
   if (web_app.file_handler_approval_state() == ApiApprovalState::kAllowed &&
       !AreNewFileHandlersASubsetOfOld(web_app.file_handlers(),
@@ -1067,7 +1099,7 @@ void ApplyParamsToWebAppInstallInfo(const WebAppInstallParams& install_params,
   if (install_params.user_display_mode.has_value())
     web_app_info.user_display_mode = install_params.user_display_mode;
 
-  if (!install_params.override_manifest_id.has_value())
+  if (install_params.override_manifest_id.has_value())
     web_app_info.manifest_id = install_params.override_manifest_id;
 
   // If `additional_search_terms` was a manifest property, it would be

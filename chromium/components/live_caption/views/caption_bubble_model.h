@@ -26,6 +26,8 @@ enum CaptionBubbleErrorType {
 using OnErrorClickedCallback = base::RepeatingCallback<void()>;
 using OnDoNotShowAgainClickedCallback =
     base::RepeatingCallback<void(CaptionBubbleErrorType, bool)>;
+using OnCaptionBubbleClosedCallback =
+    base::RepeatingCallback<void(const std::string&)>;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Caption Bubble Model
@@ -51,7 +53,8 @@ using OnDoNotShowAgainClickedCallback =
 //
 class CaptionBubbleModel {
  public:
-  explicit CaptionBubbleModel(CaptionBubbleContext* context);
+  CaptionBubbleModel(CaptionBubbleContext* context,
+                     OnCaptionBubbleClosedCallback callback);
   ~CaptionBubbleModel();
   CaptionBubbleModel(const CaptionBubbleModel&) = delete;
   CaptionBubbleModel& operator=(const CaptionBubbleModel&) = delete;
@@ -70,12 +73,12 @@ class CaptionBubbleModel {
                OnErrorClickedCallback error_clicked_callback,
                OnDoNotShowAgainClickedCallback error_silenced_callback);
 
-  // Mark the bubble as closed, clear the partial and final text, and alert the
+  // Mark the bubble as closed.
+  void CloseButtonPressed();
+
+  // Clear the partial and final text, and alert the
   // observer.
   void Close();
-
-  // Marks the bubble as open.
-  void Open();
 
   // Clears the partial and final text and alerts the observer.
   void ClearText();
@@ -103,9 +106,11 @@ class CaptionBubbleModel {
   CaptionBubbleErrorType error_type_ = CaptionBubbleErrorType::kGeneric;
 
   // The CaptionBubble observing changes to this model.
-  raw_ptr<CaptionBubble> observer_ = nullptr;
+  raw_ptr<CaptionBubble, DanglingUntriaged> observer_ = nullptr;
 
-  const raw_ptr<CaptionBubbleContext> context_;
+  OnCaptionBubbleClosedCallback caption_bubble_closed_callback_;
+
+  const raw_ptr<CaptionBubbleContext, DanglingUntriaged> context_;
 };
 
 }  // namespace captions

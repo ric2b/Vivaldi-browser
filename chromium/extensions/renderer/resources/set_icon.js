@@ -3,9 +3,8 @@
 // found in the LICENSE file.
 
 var exceptionHandler = require('uncaught_exception_handler');
-var natives = requireNative('setIcon');
-var SetIconCommon = natives.SetIconCommon;
-var inServiceWorker = natives.IsInServiceWorker();
+var SetIconCommon = requireNative('setIcon').SetIconCommon;
+var inServiceWorker = requireNative('utils').isInServiceWorker();
 
 function loadImagePathForServiceWorker(path, callback, failureCallback) {
   let fetchPromise = fetch(path);
@@ -137,11 +136,21 @@ function setIcon(details, callback, failureCallback) {
       var detailKeyCount = 0;
       for (var iconSize in details.path) {
         ++detailKeyCount;
-        loadImagePath(details.path[iconSize], function(size, imageData) {
-          details.imageData[size] = imageData;
-          if (--detailKeyCount == 0)
-            callback(SetIconCommon(details));
-        }.bind(null, iconSize), failureCallback);
+        loadImagePath(
+            details.path[iconSize],
+            function(size, imageData) {
+              details.imageData[size] = imageData;
+              if (--detailKeyCount == 0) {
+                callback(SetIconCommon(details));
+              }
+            }.bind(null, iconSize),
+            function(errorMessage) {
+              if (failureCallback) {
+                failureCallback(errorMessage);
+                // Only report the first error.
+                failureCallback = null;
+              }
+            });
       }
       if (detailKeyCount == 0)
         throw new Error('The path property must not be empty.');

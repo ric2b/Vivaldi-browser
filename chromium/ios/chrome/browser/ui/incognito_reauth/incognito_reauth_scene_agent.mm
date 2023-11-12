@@ -89,6 +89,12 @@
 
   if (!self.isAuthenticationRequired) {
     [self notifyObservers];
+    // If reauthentication is not required, it should be considered a success
+    // for the caller, but do not update the authenticatedSinceLastForeground
+    // as the authentication did not happen.
+    if (completion) {
+      completion(YES);
+    }
     return;
   }
 
@@ -124,7 +130,7 @@
   [self.observers removeObserver:observer];
 }
 
-#pragma mark properties
+#pragma mark - properties
 
 - (void)setAuthenticatedSinceLastForeground:(BOOL)authenticated {
   _authenticatedSinceLastForeground = authenticated;
@@ -178,11 +184,14 @@
     self.authenticatedSinceLastForeground = NO;
   } else if (level >= SceneActivationLevelForegroundInactive) {
     [self updateWindowHasIncognitoContent:sceneState];
-    [self logEnabledHistogramOnce];
     // Close media presentations when the app is foregrounded rather than
     // backgrounded to avoid freezes.
     [self closeMediaPresentations];
   }
+}
+
+- (void)sceneStateDidEnableUI:(SceneState*)sceneState {
+  [self logEnabledHistogramOnce];
 }
 
 #pragma mark - private

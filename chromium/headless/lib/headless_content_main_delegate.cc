@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
+#include "base/process/current_process.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -192,7 +193,7 @@ absl::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
   if (!options()->enable_resource_scheduler)
     command_line->AppendSwitch(::switches::kDisableResourceScheduler);
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   // The headless backend is automatically chosen for a headless build, but also
   // adding it here allows us to run in a non-headless build too.
   command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
@@ -377,8 +378,8 @@ HeadlessContentMainDelegate::RunProcess(
   if (!process_type.empty())
     return std::move(main_function_params);
 
-  base::trace_event::TraceLog::GetInstance()->set_process_name(
-      "HeadlessBrowser");
+  base::CurrentProcess::GetInstance().SetProcessType(
+      base::CurrentProcessType::PROCESS_BROWSER);
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventBrowserProcessSortIndex);
 

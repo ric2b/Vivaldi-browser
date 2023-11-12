@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy_features.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
@@ -59,9 +60,11 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/code_cache_host.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
+#include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 
 namespace blink {
 
@@ -74,7 +77,9 @@ ExecutionContext::ExecutionContext(v8::Isolate* isolate, Agent* agent)
       lifecycle_state_(mojom::FrameLifecycleState::kRunning),
       csp_delegate_(MakeGarbageCollected<ExecutionContextCSPDelegate>(*this)),
       window_interaction_tokens_(0),
-      origin_trial_context_(MakeGarbageCollected<OriginTrialContext>(this)) {
+      origin_trial_context_(MakeGarbageCollected<OriginTrialContext>(this)),
+      runtime_feature_state_override_context_(
+          MakeGarbageCollected<RuntimeFeatureStateOverrideContext>()) {
   DCHECK(agent_);
 }
 
@@ -345,7 +350,7 @@ LoaderFreezeMode ExecutionContext::GetLoaderFreezeMode() const {
   return LoaderFreezeMode::kNone;
 }
 
-bool ExecutionContext::IsLoadDeferred() const {
+bool ExecutionContext::IsContextFrozenOrPaused() const {
   return lifecycle_state_ == mojom::blink::FrameLifecycleState::kPaused ||
          lifecycle_state_ == mojom::blink::FrameLifecycleState::kFrozen;
 }
@@ -550,6 +555,7 @@ void ExecutionContext::Trace(Visitor* visitor) const {
   visitor->Trace(timers_);
   visitor->Trace(origin_trial_context_);
   visitor->Trace(content_security_policy_);
+  visitor->Trace(runtime_feature_state_override_context_);
   MojoBindingContext::Trace(visitor);
   ConsoleLogger::Trace(visitor);
   Supplementable<ExecutionContext>::Trace(visitor);
@@ -659,6 +665,31 @@ bool ExecutionContext::IsFeatureEnabled(
 
 bool ExecutionContext::RequireTrustedTypes() const {
   return require_safe_types_;
+}
+
+namespace {
+using ContextType = ExecutionContext::Proto::ContextType;
+ContextType GetContextType(const ExecutionContext& execution_context) {
+  if (execution_context.IsWorkletGlobalScope()) {
+    return ContextType::WORKLET;
+  } else if (execution_context.IsDedicatedWorkerGlobalScope()) {
+    return ContextType::DEDICATED_WORKER;
+  } else if (execution_context.IsSharedWorkerGlobalScope()) {
+    return ContextType::SHARED_WORKER;
+  } else if (execution_context.IsServiceWorkerGlobalScope()) {
+    return ContextType::SERVICE_WORKER;
+  } else if (execution_context.IsWindow()) {
+    return ContextType::WINDOW;
+  }
+  return ContextType::UNKNOWN_CONTEXT;
+}
+}  // namespace
+
+void ExecutionContext::WriteIntoTrace(
+    perfetto::TracedProto<ExecutionContext::Proto> proto) const {
+  proto->set_url(Url().GetString().Utf8());
+  proto->set_origin(GetSecurityOrigin()->ToString().Utf8());
+  proto->set_type(GetContextType(*this));
 }
 
 }  // namespace blink

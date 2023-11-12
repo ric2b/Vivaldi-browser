@@ -4,16 +4,14 @@
  * found in the LICENSE file.
  */
 
-/* global PaymentRequest:false */
-
 /**
  * Launches the PaymentRequest UI that requests phone number.
  */
-function buy() { // eslint-disable-line no-unused-vars
+function buy() {
   try {
     new PaymentRequest(
         [
-          {supportedMethods: 'https://bobpay.com'},
+          {supportedMethods: 'https://bobpay.test'},
           {
             supportedMethods: 'basic-card',
             data: {supportedNetworks: ['visa']},

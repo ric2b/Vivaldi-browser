@@ -138,7 +138,7 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
   std::string data = kDefaultFallbackImageBase64;
   base::Base64Decode(data, &data);
   scoped_refptr<base::RefCountedMemory> image_data(
-      base::RefCountedString::TakeString(&data));
+      new base::RefCountedString(data));
 
   // Unretained is used because Chromium's URLDataSource and so this
   // class is destroyed on UI thread strictly after all outstanding

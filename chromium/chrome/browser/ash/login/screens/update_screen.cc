@@ -21,7 +21,7 @@
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/update_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -35,6 +35,7 @@
 #define ENABLED_VLOG_LEVEL 1
 
 namespace ash {
+
 namespace {
 
 constexpr const char kUserActionAcceptUpdateOverCellular[] =
@@ -48,11 +49,6 @@ constexpr const char kUserActionOptOutInfoNext[] = "opt-out-info-next";
 
 // Time in seconds after which we initiate reboot.
 constexpr const base::TimeDelta kWaitBeforeRebootTime = base::Seconds(2);
-
-// Delay before showing error message if captive portal is detected.
-// We wait for this delay to let captive portal to perform redirect and show
-// its login page before error message appears.
-constexpr const base::TimeDelta kDelayErrorMessage = base::Seconds(10);
 
 constexpr const base::TimeDelta kDefaultShowDelay = base::Microseconds(400);
 
@@ -90,7 +86,7 @@ void RecordUpdateStages(const base::TimeDelta check_time,
   RecordFinalizeTime(finalize_time);
 }
 
-}  // anonymous namespace
+}  // namespace
 
 // static
 std::string UpdateScreen::GetResultString(Result result) {
@@ -113,8 +109,8 @@ UpdateScreen::UpdateScreen(base::WeakPtr<UpdateView> view,
       view_(std::move(view)),
       error_screen_(error_screen),
       exit_callback_(exit_callback),
-      histogram_helper_(
-          std::make_unique<ErrorScreensHistogramHelper>("Update")),
+      histogram_helper_(std::make_unique<ErrorScreensHistogramHelper>(
+          ErrorScreensHistogramHelper::ErrorParentScreen::kUpdate)),
       version_updater_(std::make_unique<VersionUpdater>(this)),
       wait_before_reboot_time_(kWaitBeforeRebootTime),
       show_delay_(kDefaultShowDelay),
@@ -129,7 +125,7 @@ bool UpdateScreen::MaybeSkip(WizardContext& context) {
     return true;
   }
 
-  if (ash::IsRollbackFlow(context)) {
+  if (IsRollbackFlow(context)) {
     LOG(WARNING)
         << "Skip OOBE Update because enterprise rollback just happened.";
     exit_callback_.Run(VersionUpdater::Result::UPDATE_SKIPPED);
@@ -282,7 +278,7 @@ void UpdateScreen::DelayErrorMessage() {
   if (error_message_timer_.IsRunning())
     return;
 
-  error_message_timer_.Start(FROM_HERE, kDelayErrorMessage, this,
+  error_message_timer_.Start(FROM_HERE, delay_error_message_, this,
                              &UpdateScreen::ShowErrorMessage);
 }
 
@@ -522,7 +518,7 @@ void UpdateScreen::OnAccessibilityStatusChanged(
 }
 
 void UpdateScreen::OnErrorScreenHidden() {
-  error_screen_->SetParentScreen(ash::OOBE_SCREEN_UNKNOWN);
+  error_screen_->SetParentScreen(OOBE_SCREEN_UNKNOWN);
   Show(context());
 }
 

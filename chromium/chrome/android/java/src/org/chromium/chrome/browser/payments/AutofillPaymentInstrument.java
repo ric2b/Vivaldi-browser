@@ -38,9 +38,7 @@ import java.lang.annotation.RetentionPolicy;
 public class AutofillPaymentInstrument extends EditableOption
         implements FullCardRequestDelegate, NormalizedAddressRequestDelegate {
     // Bit field values are identical to CreditCardCompletionStatus fields in
-    // autofill_card_validation.h. Please modify autofill_card_validation.h after changing these
-    // bits since missing fields on both Android and Desktop are recorded in the same UMA metric:
-    // PaymentRequest.MissingPaymentFields.
+    // autofill_card_validation.h. Please modify autofill_card_validation.h after changing these.
     @IntDef({CompletionStatus.COMPLETE, CompletionStatus.CREDIT_CARD_EXPIRED,
             CompletionStatus.CREDIT_CARD_NO_CARDHOLDER, CompletionStatus.CREDIT_CARD_NO_NUMBER,
             CompletionStatus.CREDIT_CARD_NO_BILLING_ADDRESS,
@@ -79,7 +77,7 @@ public class AutofillPaymentInstrument extends EditableOption
      */
     public AutofillPaymentInstrument(WebContents webContents, CreditCard card,
             @Nullable AutofillProfile billingAddress, @Nullable String methodName) {
-        super(card.getGUID(), card.getObfuscatedNumber(), card.getName(), null);
+        super(card.getGUID(), card.getNetworkAndLastFourDigits(), card.getName(), null);
         mWebContents = webContents;
         mCard = card;
         mBillingAddress = billingAddress;
@@ -242,8 +240,9 @@ public class AutofillPaymentInstrument extends EditableOption
         Context context = ContextUtils.getApplicationContext();
         if (context == null) return;
 
-        updateIdentifierLabelsAndIcon(card.getGUID(), card.getObfuscatedNumber(), card.getName(),
-                null, AppCompatResources.getDrawable(context, card.getIssuerIconDrawableId()));
+        updateIdentifierLabelsAndIcon(card.getGUID(), card.getNetworkAndLastFourDigits(),
+                card.getName(), null,
+                AppCompatResources.getDrawable(context, card.getIssuerIconDrawableId()));
         checkAndUpdateCardCompleteness(context);
         assert mIsComplete;
         assert mHasValidNumberAndName;

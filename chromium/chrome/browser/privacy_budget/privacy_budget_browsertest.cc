@@ -58,11 +58,17 @@ class UkmService;
 
 namespace {
 
+using testing::_;
+using testing::AllOf;
+using testing::Contains;
+using testing::Each;
+using testing::Field;
 using testing::IsSupersetOf;
 using testing::Key;
+using testing::Pair;
 using testing::UnorderedElementsAreArray;
 
-uint64_t HashFeature(const blink::mojom::WebFeature& feature) {
+constexpr uint64_t HashFeature(const blink::mojom::WebFeature& feature) {
   return blink::IdentifiableSurface::FromTypeAndToken(
              blink::IdentifiableSurface::Type::kWebFeature, feature)
       .ToUkmMetricHash();
@@ -164,7 +170,6 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
 
 IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestWithTestRecorder,
                        RecordingFeaturesCalledInWorker) {
-  const auto file_path = GetParam();
   ASSERT_TRUE(embedded_test_server()->Start());
 
   content::DOMMessageQueue messages(web_contents());
@@ -185,7 +190,7 @@ IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestWithTestRecorder,
                                    base::BindLambdaForTesting(quit_run_loop));
 
   ASSERT_TRUE(content::NavigateToURL(
-      web_contents(), embedded_test_server()->GetURL(file_path)));
+      web_contents(), embedded_test_server()->GetURL(FilePathXYZ())));
 
   // The document calls a bunch of instrumented functions and sends a message
   // back to the test. Receipt of the message indicates that the script
@@ -195,6 +200,11 @@ IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestWithTestRecorder,
 
   // Wait for the metrics to come down the pipe.
   run_loop.Run();
+
+  // The previously registered callback will be invalid after the test class is
+  // destructed.
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   {});
 
   // Test succeeds if there is no timeout. However, let's recheck the metrics
   // here, so that if there is a timeout we get an output of which metrics are
@@ -212,6 +222,140 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
                       "/privacy_budget/calls_service_worker.html"));
 
+namespace {
+
+using PrivacyBudgetBrowserTestForWorkersClientAdded =
+    PrivacyBudgetBrowserTestWithTestRecorder;
+}  // namespace
+
+IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestForWorkersClientAdded,
+                       WorkersRecordWorkerClientAddedMetrics) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  content::DOMMessageQueue messages(web_contents());
+  base::RunLoop run_loop;
+
+  std::vector<uint64_t> expected_keys = {
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kWorkerClientAdded_ClientSourceId)
+          .ToUkmMetricHash(),
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kWorkerClientAdded_WorkerType)
+          .ToUkmMetricHash(),
+  };
+
+  // We wait for the expected metrics to be reported. Since some of the
+  // metrics are reported from the renderer process, this is the only reliable
+  // way to be sure we waited long enough.
+  auto quit_run_loop = [this, &expected_keys, &run_loop]() {
+    if (GetReportedSurfaceKeys(expected_keys).size() == expected_keys.size())
+      run_loop.Quit();
+  };
+
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   base::BindLambdaForTesting(quit_run_loop));
+
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(), embedded_test_server()->GetURL(FilePathXYZ() + ".html")));
+
+  // The document calls a bunch of instrumented functions and sends a message
+  // back to the test. Receipt of the message indicates that the script
+  // successfully completed.
+  std::string done;
+  ASSERT_TRUE(messages.WaitForMessage(&done));
+
+  // Wait for the metrics to come down the pipe.
+  run_loop.Run();
+
+  // The previously registered callback will be invalid after the test class is
+  // destructed.
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   {});
+
+  // Test succeeds if there is no timeout. However, let's recheck the metrics
+  // here, so that if there is a timeout we get an output of which metrics are
+  // missing.
+  EXPECT_THAT(GetReportedSurfaceKeys(expected_keys),
+              UnorderedElementsAreArray(expected_keys));
+}
+
+IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestForWorkersClientAdded,
+                       ReportWorkerClientAddedMetricForEveryRegisteredClient) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  content::DOMMessageQueue messages(web_contents());
+  base::RunLoop run_loop;
+
+  uint64_t expected_key =
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kWorkerClientAdded_ClientSourceId)
+          .ToUkmMetricHash();
+
+  // We wait for the expected metrics to be reported. Since some of the
+  // metrics are reported from the renderer process, this is the only reliable
+  // way to be sure we waited long enough.
+  auto quit_run_loop = [this, &expected_key, &run_loop]() {
+    if (GetSurfaceKeyCount(expected_key) == 2)
+      run_loop.Quit();
+  };
+
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   base::BindLambdaForTesting(quit_run_loop));
+
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(), embedded_test_server()->GetURL(
+                          FilePathXYZ() + "_with_two_clients.html")));
+
+  // The document calls a bunch of instrumented functions and sends a message
+  // back to the test. Receipt of the message indicates that the script
+  // successfully completed.
+  std::string done;
+  ASSERT_TRUE(messages.WaitForMessage(&done));
+
+  // Wait for the metrics to come down the pipe.
+  run_loop.Run();
+
+  // The previously registered callback will be invalid after the test class is
+  // destructed.
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   {});
+
+  // Test succeeds if there is no timeout.
+  // Both surfaces should come from the same source but have different client
+  // ids.
+  std::vector<const ukm::mojom::UkmEntry*> entries =
+      recorder().GetEntriesByName(ukm::builders::Identifiability::kEntryName);
+
+  base::flat_set<uint64_t> source_ids;
+  base::flat_set<uint64_t> client_source_ids;
+  for (const auto* entry : entries) {
+    for (const auto& metric : entry->metrics) {
+      if (metric.first == expected_key) {
+        source_ids.insert(entry->source_id);
+        client_source_ids.insert(metric.second);
+      }
+    }
+  }
+  EXPECT_EQ(source_ids.size(), 1u);
+  EXPECT_EQ(client_source_ids.size(), 2u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PrivacyBudgetBrowserTestForWorkersClientAddedParameterized,
+    PrivacyBudgetBrowserTestForWorkersClientAdded,
+    ::testing::Values(
+// Shared workers are not supported on Android.
+#if !BUILDFLAG(IS_ANDROID)
+        "/privacy_budget/calls_shared_worker",
+#endif
+        "/privacy_budget/calls_service_worker"));
+
 IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
                        EveryNavigationRecordsDocumentCreatedMetrics) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -219,11 +363,11 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
   content::DOMMessageQueue messages(web_contents());
   base::RunLoop run_loop;
 
-  // We expect 3 entries here generated by the two navigations from the test.
-  // The first navigation adds a document created entry and a web feature entry,
-  // while the second one generates only a document created entry.
+  // We expect 5 entries here generated by the two navigations from the test.
+  // The first navigation adds 2 document created entries and 2 web feature
+  // entries, while the second one generates only a document created entry.
   recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
-                                   BarrierClosure(3u, run_loop.QuitClosure()));
+                                   BarrierClosure(5u, run_loop.QuitClosure()));
 
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(), embedded_test_server()->GetURL(
@@ -239,6 +383,12 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
   // diagnostics.
   SCOPED_TRACE(screen_scrape);
 
+  // Create an empty iframe in the page.
+  EXPECT_TRUE(content::ExecJs(web_contents(),
+                              "let f = document.createElement('iframe');"
+                              "document.body.appendChild(f);"
+                              "f.contentWindow.navigator.userAgent;"));
+
   // Navigating away from the test page causes the document to be unloaded. That
   // will cause any buffered metrics to be flushed.
   content::NavigateToURLBlockUntilNavigationsComplete(web_contents(),
@@ -250,36 +400,62 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
   auto merged_entries = recorder().GetMergedEntriesByName(
       ukm::builders::Identifiability::kEntryName);
 
-  // We expect two merged entries, corresponding to the two navigations.
-  ASSERT_EQ(merged_entries.size(), 2u);
+  // We expect 3 merged entries, corresponding to the 3 documents.
+  ASSERT_EQ(merged_entries.size(), 3u);
 
-  // Each entry in merged_entries corresponds to a committed navigation and they
+  constexpr uint64_t is_main_frame_hash =
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kDocumentCreated_IsMainFrame)
+          .ToUkmMetricHash();
+  constexpr uint64_t is_cross_origin_hash =
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kDocumentCreated_IsCrossOriginFrame)
+          .ToUkmMetricHash();
+  constexpr uint64_t is_cross_site_hash =
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kDocumentCreated_IsCrossSiteFrame)
+          .ToUkmMetricHash();
+  constexpr uint64_t navigation_source_id_hash =
+      blink::IdentifiableSurface::FromTypeAndToken(
+          blink::IdentifiableSurface::Type::kReservedInternal,
+          blink::IdentifiableSurface::ReservedSurfaceMetrics::
+              kDocumentCreated_NavigationSourceId)
+          .ToUkmMetricHash();
+  constexpr uint64_t user_agent_hash =
+      HashFeature(blink::mojom::WebFeature::kNavigatorUserAgent);
+
+  // Each entry in merged_entries corresponds to a committed document and they
   // all should contain the document created metrics.
-  for (auto& it : merged_entries) {
-    EXPECT_THAT(it.second->metrics,
-                IsSupersetOf({
-                    Key(blink::IdentifiableSurface::FromTypeAndToken(
-                            blink::IdentifiableSurface::Type::kReservedInternal,
-                            blink::IdentifiableSurface::ReservedSurfaceMetrics::
-                                kDocumentCreated_IsMainFrame)
-                            .ToUkmMetricHash()),
-                    Key(blink::IdentifiableSurface::FromTypeAndToken(
-                            blink::IdentifiableSurface::Type::kReservedInternal,
-                            blink::IdentifiableSurface::ReservedSurfaceMetrics::
-                                kDocumentCreated_IsCrossOriginFrame)
-                            .ToUkmMetricHash()),
-                    Key(blink::IdentifiableSurface::FromTypeAndToken(
-                            blink::IdentifiableSurface::Type::kReservedInternal,
-                            blink::IdentifiableSurface::ReservedSurfaceMetrics::
-                                kDocumentCreated_IsCrossSiteFrame)
-                            .ToUkmMetricHash()),
-                    Key(blink::IdentifiableSurface::FromTypeAndToken(
-                            blink::IdentifiableSurface::Type::kReservedInternal,
-                            blink::IdentifiableSurface::ReservedSurfaceMetrics::
-                                kDocumentCreated_NavigationSourceId)
-                            .ToUkmMetricHash()),
-                }));
-  }
+  EXPECT_THAT(
+      merged_entries,
+      UnorderedElementsAre(
+          Pair(_, Pointee(Field(&ukm::mojom::UkmEntry::metrics,
+                                IsSupersetOf({Pair(is_main_frame_hash, 1),
+                                              Pair(is_cross_origin_hash, 0),
+                                              Pair(is_cross_site_hash, 0)})))),
+          Pair(_,
+               Pointee(Field(&ukm::mojom::UkmEntry::metrics,
+                             AllOf(IsSupersetOf({Pair(is_main_frame_hash, 0),
+                                                 Pair(is_cross_origin_hash, 0),
+                                                 Pair(is_cross_site_hash, 0)}),
+                                   // The child iframe should also report that
+                                   // it queried the user agent.
+                                   Contains(Key(user_agent_hash)))))),
+          Pair(_,
+               Pointee(Field(&ukm::mojom::UkmEntry::metrics,
+                             IsSupersetOf({Pair(is_main_frame_hash, 1),
+                                           Pair(is_cross_origin_hash, 0),
+                                           Pair(is_cross_site_hash, 0)}))))));
+  EXPECT_THAT(
+      merged_entries,
+      Each(Pair(_, Pointee(Field(&ukm::mojom::UkmEntry::metrics,
+                                 Contains(Key(navigation_source_id_hash)))))));
 }
 
 IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,

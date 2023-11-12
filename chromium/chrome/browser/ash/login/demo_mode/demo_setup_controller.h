@@ -23,7 +23,8 @@ class EnrollmentStatus;
 }
 
 namespace ash {
-class DemoResources;
+
+class DemoComponents;
 
 // Controls enrollment flow for setting up Demo Mode.
 class DemoSetupController
@@ -135,7 +136,8 @@ class DemoSetupController
         EnterpriseEnrollmentHelper::OtherError error);
 
     static DemoSetupError CreateFromComponentError(
-        component_updater::CrOSComponentManager::Error error);
+        component_updater::CrOSComponentManager::Error error,
+        std::string component_name);
 
     DemoSetupError(ErrorCode error_code, RecoveryMethod recovery_method);
     DemoSetupError(ErrorCode error_code,
@@ -176,7 +178,9 @@ class DemoSetupController
 
   // If the current country requires customization, returns an user email that
   // corresponds to the sub organization the device should be enrolled into.
-  // Otherwise, returns an empty string.
+  // If chrome flag "--demo-mode-enrolling-username" is set for test, it
+  // will override the current country-derived user. If neither of above is
+  // true, returns an empty string.
   static std::string GetSubOrganizationEmail();
 
   // Returns a dictionary mapping setup steps to step indices.
@@ -237,15 +241,17 @@ class DemoSetupController
       component_updater::CrOSComponentManager::Error error);
 
  private:
-  // Attempts to load the CrOS component with demo resources for online
-  // enrollment and passes the result to OnDemoResourcesCrOSComponentLoaded().
-  void LoadDemoResourcesCrOSComponent();
+  // Attempts to load the demo SWA and demo resources ChromeOS components  for
+  // online enrollment and pass the results to OnDemoComponentsLoaded().
+  void LoadDemoComponents();
 
-  // Callback to initiate online enrollment once the CrOS component has loaded.
-  // If the component loaded successfully, registers and sets up the device in
+  // Callback to initiate online enrollment once both the demo-mode-resources
+  // (sample photos, Android APKs) and demo-mode-app (demo SWA content) ChromeOS
+  // components have loaded.
+  // If the components loaded successfully, registers and sets up the device in
   // the demo mode domain. If the component couldn't be loaded, demo setup
   // will fail.
-  void OnDemoResourcesCrOSComponentLoaded();
+  void OnDemoComponentsLoaded();
 
   // Called when device is marked as registered and the second part of OOBE flow
   // is completed. This is the last step of demo mode setup flow.
@@ -295,18 +301,12 @@ class DemoSetupController
 
   std::unique_ptr<EnterpriseEnrollmentHelper> enrollment_helper_;
 
-  // The Demo Mode Resources CrOS Component downloaded for online Demo Mode.
-  std::unique_ptr<DemoResources> demo_resources_;
+  // The Demo Mode Resources ChromeOS Component downloaded for online Demo Mode.
+  std::unique_ptr<DemoComponents> demo_components_;
 
   base::WeakPtrFactory<DemoSetupController> weak_ptr_factory_{this};
 };
 
 }  //  namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::DemoSetupController;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_DEMO_MODE_DEMO_SETUP_CONTROLLER_H_

@@ -456,7 +456,7 @@ inline FuchsiaLogSeverity LogSeverityToFuchsiaLogSeverity(
   // LOGGING_VERBOSE levels 3 and higher, or incorrect levels.
   return FUCHSIA_LOG_TRACE;
 }
-#endif  // defined (OS_FUCHSIA)
+#endif  // BUILDFLAG(IS_FUCHSIA)
 
 void WriteToFd(int fd, const char* data, size_t length) {
   size_t bytes_written = 0;
@@ -956,7 +956,7 @@ LogMessage::~LogMessage() {
 #endif
 
       // Crash the process to generate a dump.
-      IMMEDIATE_CRASH();
+      base::ImmediateCrash();
     }
   }
 }
@@ -1194,7 +1194,7 @@ void RawLog(int level, const char* message) {
   }
 
   if (level == LOGGING_FATAL)
-    IMMEDIATE_CRASH();
+    base::ImmediateCrash();
 }
 
 // This was defined at the beginning of this file.

@@ -767,9 +767,9 @@ void AddVivaldiSpecificWorkItems(const installer::InstallParams& install_params,
     return;
 
   const installer::InstallerState& installer_state =
-      install_params.installer_state;
-  const base::FilePath& src_path = install_params.src_path;
-  const base::FilePath& temp_path = install_params.temp_path;
+      *install_params.installer_state;
+  const base::FilePath& src_path = *install_params.src_path;
+  const base::FilePath& temp_path = *install_params.temp_path;
   const base::FilePath& target_path = installer_state.target_path();
 
   base::FilePath update_notifier(

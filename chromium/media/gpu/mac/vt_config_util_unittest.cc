@@ -14,6 +14,7 @@
 #include "media/base/mac/color_space_util_mac.h"
 #include "media/formats/mp4/box_definitions.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/hdr_metadata_mac.h"
 
 namespace {
 
@@ -109,19 +110,30 @@ gfx::ColorSpace ToBT709_APPLE(gfx::ColorSpace cs) {
                          cs.GetMatrixID(), cs.GetRangeID());
 }
 
-void AssertHasEmptyHDRMetadata(CFDictionaryRef fmt) {
-  // We constructed with an empty HDRMetadata, so all values should be zero.
+void AssertHasDefaultHDRMetadata(CFDictionaryRef fmt) {
+  // We constructed with an invalid HDRMetadata, so all values should be
+  // overridden to the default.
+  auto mdcv_expected = gfx::GenerateMasteringDisplayColorVolume(absl::nullopt);
+  auto clli_expected = gfx::GenerateContentLightLevelInfo(absl::nullopt);
+
   auto mdcv = GetDataValue(
       fmt, kCMFormatDescriptionExtension_MasteringDisplayColorVolume);
   ASSERT_EQ(24u, mdcv.size());
-  for (size_t i = 0; i < mdcv.size(); ++i)
-    EXPECT_EQ(0u, mdcv[i]);
+  ASSERT_EQ(24u, CFDataGetLength(mdcv_expected));
+  EXPECT_EQ(0, memcmp(mdcv.data(), CFDataGetBytePtr(mdcv_expected), 24u));
 
   auto clli =
       GetDataValue(fmt, kCMFormatDescriptionExtension_ContentLightLevelInfo);
-  ASSERT_EQ(4u, clli.size());
-  for (size_t i = 0; i < clli.size(); ++i)
-    EXPECT_EQ(0u, clli[i]);
+  ASSERT_EQ(0u, clli.size());
+}
+
+void AssertHasNoHDRMetadata(CFDictionaryRef fmt) {
+  auto mdcv = GetDataValue(
+      fmt, kCMFormatDescriptionExtension_MasteringDisplayColorVolume);
+  auto clli =
+      GetDataValue(fmt, kCMFormatDescriptionExtension_ContentLightLevelInfo);
+  EXPECT_TRUE(mdcv.empty());
+  EXPECT_TRUE(clli.empty());
 }
 
 constexpr char kBitDepthKey[] = "BitsPerComponent";
@@ -172,7 +184,7 @@ TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_PQ) {
   EXPECT_EQ(kCMFormatDescriptionYCbCrMatrix_ITU_R_2020,
             GetCFStrValue(fmt, kCMFormatDescriptionExtension_YCbCrMatrix));
   EXPECT_TRUE(GetBoolValue(fmt, kCMFormatDescriptionExtension_FullRangeVideo));
-  AssertHasEmptyHDRMetadata(fmt);
+  AssertHasDefaultHDRMetadata(fmt);
 }
 
 TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_HLG) {
@@ -193,7 +205,7 @@ TEST(VTConfigUtil, CreateFormatExtensions_H264_BT2020_HLG) {
   EXPECT_EQ(kCMFormatDescriptionYCbCrMatrix_ITU_R_2020,
             GetCFStrValue(fmt, kCMFormatDescriptionExtension_YCbCrMatrix));
   EXPECT_TRUE(GetBoolValue(fmt, kCMFormatDescriptionExtension_FullRangeVideo));
-  AssertHasEmptyHDRMetadata(fmt);
+  AssertHasNoHDRMetadata(fmt);
 }
 
 TEST(VTConfigUtil, CreateFormatExtensions_HDRMetadata) {
@@ -204,10 +216,8 @@ TEST(VTConfigUtil, CreateFormatExtensions_HDRMetadata) {
   auto& cv_metadata = hdr_meta.color_volume_metadata;
   cv_metadata.luminance_min = 0;
   cv_metadata.luminance_max = 1000;
-  cv_metadata.primary_r = gfx::PointF(0.68, 0.32);
-  cv_metadata.primary_g = gfx::PointF(0.2649, 0.69);
-  cv_metadata.primary_b = gfx::PointF(0.15, 0.06);
-  cv_metadata.white_point = gfx::PointF(0.3127, 0.3290);
+  cv_metadata.primaries = {0.6800f, 0.3200f, 0.2649f, 0.6900f,
+                           0.1500f, 0.0600f, 0.3127f, 0.3290f};
 
   base::ScopedCFTypeRef<CFDictionaryRef> fmt(CreateFormatExtensions(
       kCMVideoCodecType_H264, H264PROFILE_MAIN,
@@ -226,14 +236,14 @@ TEST(VTConfigUtil, CreateFormatExtensions_HDRMetadata) {
                                                nullptr));
     mp4::MasteringDisplayColorVolume mdcv_box;
     ASSERT_TRUE(mdcv_box.Parse(box_reader.get()));
-    EXPECT_EQ(mdcv_box.display_primaries_gx, cv_metadata.primary_g.x());
-    EXPECT_EQ(mdcv_box.display_primaries_gy, cv_metadata.primary_g.y());
-    EXPECT_EQ(mdcv_box.display_primaries_bx, cv_metadata.primary_b.x());
-    EXPECT_EQ(mdcv_box.display_primaries_by, cv_metadata.primary_b.y());
-    EXPECT_EQ(mdcv_box.display_primaries_rx, cv_metadata.primary_r.x());
-    EXPECT_EQ(mdcv_box.display_primaries_ry, cv_metadata.primary_r.y());
-    EXPECT_EQ(mdcv_box.white_point_x, cv_metadata.white_point.x());
-    EXPECT_EQ(mdcv_box.white_point_y, cv_metadata.white_point.y());
+    EXPECT_EQ(mdcv_box.display_primaries_gx, cv_metadata.primaries.fGX);
+    EXPECT_EQ(mdcv_box.display_primaries_gy, cv_metadata.primaries.fGY);
+    EXPECT_EQ(mdcv_box.display_primaries_bx, cv_metadata.primaries.fBX);
+    EXPECT_EQ(mdcv_box.display_primaries_by, cv_metadata.primaries.fBY);
+    EXPECT_EQ(mdcv_box.display_primaries_rx, cv_metadata.primaries.fRX);
+    EXPECT_EQ(mdcv_box.display_primaries_ry, cv_metadata.primaries.fRY);
+    EXPECT_EQ(mdcv_box.white_point_x, cv_metadata.primaries.fWX);
+    EXPECT_EQ(mdcv_box.white_point_y, cv_metadata.primaries.fWY);
     EXPECT_EQ(mdcv_box.max_display_mastering_luminance,
               cv_metadata.luminance_max);
     EXPECT_EQ(mdcv_box.min_display_mastering_luminance,

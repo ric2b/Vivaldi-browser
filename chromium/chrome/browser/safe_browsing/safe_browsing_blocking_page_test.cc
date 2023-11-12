@@ -137,7 +137,6 @@ using content::NavigationController;
 using content::RenderFrameHost;
 using content::WebContents;
 using security_interstitials::BaseSafeBrowsingErrorUI;
-using FeatureAndParams = base::test::ScopedFeatureList::FeatureAndParams;
 
 namespace safe_browsing {
 
@@ -351,7 +350,7 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
   ThreatDetails* get_details() { return details_; }
 
  private:
-  raw_ptr<ThreatDetails> details_;
+  raw_ptr<ThreatDetails, DanglingUntriaged> details_;
 };
 
 // A SafeBrowingBlockingPage class that lets us wait until it's hidden.
@@ -458,6 +457,26 @@ class TestSafeBrowsingBlockingPageFactory
         display_options, should_trigger_reporting);
   }
 
+  security_interstitials::SecurityInterstitialPage* CreateEnterpriseWarnPage(
+      BaseUIManager* ui_manager,
+      content::WebContents* web_contents,
+      const GURL& main_frame_url,
+      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
+      override {
+    NOTREACHED();
+    return nullptr;
+  }
+
+  security_interstitials::SecurityInterstitialPage* CreateEnterpriseBlockPage(
+      BaseUIManager* ui_manager,
+      content::WebContents* web_contents,
+      const GURL& main_frame_url,
+      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
+      override {
+    NOTREACHED();
+    return nullptr;
+  }
+
  private:
   bool always_show_back_to_safety_;
 };
@@ -474,7 +493,7 @@ class SafeBrowsingBlockingPageBrowserTest
     const char kTagAndAttributeParamName[] = "tag_attribute_csv";
     std::map<std::string, std::string> parameters = {
         {kTagAndAttributeParamName, "div,foo,div,baz"}};
-    base::test::ScopedFeatureList::FeatureAndParams tag_and_attribute(
+    base::test::FeatureRefAndParams tag_and_attribute(
         safe_browsing::kThreatDomDetailsTagAndAttributeFeature, parameters);
     scoped_feature_list_.InitWithFeaturesAndParameters({tag_and_attribute}, {});
   }
@@ -842,7 +861,8 @@ class SafeBrowsingBlockingPageBrowserTest
 
   base::test::ScopedFeatureList scoped_feature_list_;
   TestSafeBrowsingServiceFactory factory_;
-  raw_ptr<TestSafeBrowsingBlockingPageFactory> raw_blocking_page_factory_;
+  raw_ptr<TestSafeBrowsingBlockingPageFactory, DanglingUntriaged>
+      raw_blocking_page_factory_;
   net::EmbeddedTestServer https_server_;
 };
 
@@ -1772,10 +1792,10 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
                        VerifyEnterpriseAllowlist) {
   GURL url = embedded_test_server()->GetURL(kEmptyPage);
   // Add test server domain into the enterprise allowlist.
-  base::ListValue allowlist;
+  base::Value::List allowlist;
   allowlist.Append(url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
-                                        allowlist);
+  browser()->profile()->GetPrefs()->SetList(
+      prefs::kSafeBrowsingAllowlistDomains, std::move(allowlist));
 
   SetURLThreatType(url, GetThreatType());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
@@ -1794,10 +1814,10 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   GURL url = embedded_test_server()->GetURL(kMaliciousJsPage);
   GURL js_url = embedded_test_server()->GetURL(kMaliciousJs);
   // Add test server domain into the enterprise allowlist.
-  base::ListValue allowlist;
+  base::Value::List allowlist;
   allowlist.Append(url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
-                                        allowlist);
+  browser()->profile()->GetPrefs()->SetList(
+      prefs::kSafeBrowsingAllowlistDomains, std::move(allowlist));
 
   SetURLThreatType(js_url, GetThreatType());
   // Open a new tab to rebind the allowlist to the renderer.
@@ -1934,15 +1954,17 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
       const SafeBrowsingBlockingPageDelayedWarningBrowserTest&) = delete;
 
   void SetUp() override {
-    std::vector<FeatureAndParams> enabled_features{
-        FeatureAndParams(blink::features::kPortals, {}),
-        FeatureAndParams(blink::features::kPortalsCrossOrigin, {}),
+    std::vector<base::test::FeatureRefAndParams> enabled_features{
+        base::test::FeatureRefAndParams(blink::features::kPortals, {}),
+        base::test::FeatureRefAndParams(blink::features::kPortalsCrossOrigin,
+                                        {}),
     };
     if (warning_on_mouse_click_enabled()) {
-      enabled_features.push_back(
-          FeatureAndParams(kDelayedWarnings, {{"mouse", "true"}}));
+      enabled_features.push_back(base::test::FeatureRefAndParams(
+          kDelayedWarnings, {{"mouse", "true"}}));
     } else {
-      enabled_features.push_back(FeatureAndParams(kDelayedWarnings, {}));
+      enabled_features.push_back(
+          base::test::FeatureRefAndParams(kDelayedWarnings, {}));
     }
 
     std::vector<base::test::FeatureRef> disabled_features;
@@ -2055,7 +2077,7 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
  protected:
   // Subclasses can override to enable/disable features in SetUp().
   virtual void GetAdditionalFeatures(
-      std::vector<FeatureAndParams>* enabled_features,
+      std::vector<base::test::FeatureRefAndParams>* enabled_features,
       std::vector<base::test::FeatureRef>* disabled_features) {}
 
   // Initiates a download and waits for it to be completed or cancelled.
@@ -2070,7 +2092,7 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser, GURL("data:application/octet-stream;base64,SGVsbG8=")));
     observer.WaitForNavigationFinished();
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
 
     ASSERT_EQ(1u, console_observer.messages().size());
   }
@@ -2603,7 +2625,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
       "document.getElementById('retry_password_field').value = 'pw';"
       "document.getElementById('retry_submit_button').click()";
   ASSERT_TRUE(content::ExecuteScript(contents, fill_and_submit));
-  observer2.Wait();
+  ASSERT_TRUE(observer2.Wait());
   EXPECT_FALSE(prompt_observer->IsSavePromptShownAutomatically());
   PasswordManagerBrowserTestBase::WaitForPasswordStore(browser());
   AssertNoInterstitial(browser(), false);

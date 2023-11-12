@@ -19,6 +19,9 @@
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
 
+#include "sync/file_sync/file_store.h"
+#include "sync/file_sync/file_store_factory.h"
+
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/webauthn/android/cable_module_android.h"
 #endif
@@ -116,5 +119,10 @@ bool DeviceInfoSyncClientImpl::IsUmaEnabledOnCrOSDevice() const {
 #else
   return false;
 #endif
+}
+
+size_t DeviceInfoSyncClientImpl::VivaldiGetSyncedFileStorageSize() const {
+  return SyncedFileStoreFactory::GetForBrowserContext(profile_)
+      ->GetTotalStorageSize();
 }
 }  // namespace browser_sync

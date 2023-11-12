@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings.h"
@@ -95,8 +96,11 @@ void SetPrintableAreaIfValid(PrintSettings& settings,
 
   // Scale the page size and printable area to device units.
   float x_scale =
-      static_cast<float>(settings.dpi_horizontal()) / kMicronsPerInch;
-  float y_scale = static_cast<float>(settings.dpi_vertical()) / kMicronsPerInch;
+      static_cast<float>(settings.device_units_per_inch_size().width()) /
+      kMicronsPerInch;
+  float y_scale =
+      static_cast<float>(settings.device_units_per_inch_size().height()) /
+      kMicronsPerInch;
   gfx::Size page_size = gfx::ScaleToRoundedSize(size_microns, x_scale, y_scale);
   // Flip the y-axis since the imageable area origin is at the bottom-left,
   // while the gfx::Rect origin is at the top-left.
@@ -256,7 +260,7 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
     settings->set_is_modifiable(is_modifiable.value());
   }
 
-#if BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) && defined(USE_CUPS))
+#if BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_CUPS))
   const base::Value::Dict* advanced_settings =
       job_settings.FindDict(kSettingAdvancedSettings);
   if (advanced_settings) {
@@ -268,7 +272,8 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
         settings->advanced_settings().emplace(item.first, item.second.Clone());
     }
   }
-#endif  // BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) && defined(USE_CUPS))
+#endif  // BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) &&
+        // BUILDFLAG(USE_CUPS))
 
 #if BUILDFLAG(IS_CHROMEOS)
   bool send_user_info =
@@ -278,6 +283,12 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
     const std::string* username = job_settings.FindString(kSettingUsername);
     if (username)
       settings->set_username(*username);
+  }
+
+  const std::string* oauth_token =
+      job_settings.FindString(kSettingChromeOSAccessOAuthToken);
+  if (oauth_token) {
+    settings->set_oauth_token(*oauth_token);
   }
 
   const std::string* pin_value = job_settings.FindString(kSettingPinValue);

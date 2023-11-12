@@ -38,6 +38,7 @@ class TpmChallengeKeyWithTimeout final {
                      TpmChallengeKeyCallback callback,
                      const std::string& challenge,
                      bool register_key,
+                     ::attestation::KeyType key_crypto_type,
                      const std::string& key_name_for_spkac,
                      const absl::optional<std::string>& signals);
 
@@ -52,13 +53,5 @@ class TpmChallengeKeyWithTimeout final {
 
 }  // namespace attestation
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-namespace attestation {
-using ::ash::attestation::TpmChallengeKeyWithTimeout;
-}  // namespace attestation
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_ATTESTATION_TPM_CHALLENGE_KEY_WITH_TIMEOUT_H_

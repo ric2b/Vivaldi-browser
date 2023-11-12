@@ -64,10 +64,8 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   std::string GetDefaultDownloadName() override;
   std::unique_ptr<WebContentsViewDelegate> GetWebContentsViewDelegate(
       WebContents* web_contents) override;
-  bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
-                                             const GURL& url) override;
-  scoped_refptr<content::QuotaPermissionContext> CreateQuotaPermissionContext()
-      override;
+  bool IsIsolatedContextAllowedForUrl(BrowserContext* browser_context,
+                                      const GURL& lock_url) override;
   GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
       content::BrowserContext* context) override;
   base::OnceClosure SelectClientCertificate(
@@ -137,14 +135,13 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   void GetHyphenationDictionary(
       base::OnceCallback<void(const base::FilePath&)>) override;
   bool HasErrorPage(int http_status_code) override;
-  void OnNetworkServiceCreated(
-      network::mojom::NetworkService* network_service) override;
 
   // Turns on features via permissions policy for Isolated App
   // Web Platform Tests.
   absl::optional<blink::ParsedPermissionsPolicy>
-  GetPermissionsPolicyForIsolatedApp(content::BrowserContext* browser_context,
-                                     const url::Origin& app_origin) override;
+  GetPermissionsPolicyForIsolatedWebApp(
+      content::BrowserContext* browser_context,
+      const url::Origin& app_origin) override;
 
   void CreateFeatureListAndFieldTrials();
 
@@ -192,13 +189,6 @@ class ShellContentBrowserClient : public ContentBrowserClient {
     override_web_preferences_callback_ = std::move(callback);
   }
 
-  // Sets a global that enables certificate transparency. Uses a global because
-  // test fixtures don't otherwise have a chance to set this between when the
-  // ShellContentBrowserClient is created and when the StoragePartition creates
-  // the NetworkContext.
-  static void set_enable_expect_ct_for_testing(
-      bool enable_expect_ct_for_testing);
-
  protected:
   // Call this if CreateBrowserMainParts() is overridden in a subclass.
   void set_browser_main_parts(ShellBrowserMainParts* parts) {
@@ -214,8 +204,6 @@ class ShellContentBrowserClient : public ContentBrowserClient {
           cert_verifier_creation_params);
 
  private:
-  class ShellFieldTrials;
-
   std::unique_ptr<PrefService> CreateLocalState();
   // Needed so that content_shell can use fieldtrial_testing_config.
   void SetUpFieldTrials();
@@ -242,7 +230,6 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       nullptr;
 
   std::unique_ptr<PrefService> local_state_;
-  std::unique_ptr<ShellFieldTrials> field_trials_;
 };
 
 // The delay for sending reports when running with --run-web-tests

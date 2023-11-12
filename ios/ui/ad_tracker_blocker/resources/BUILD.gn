@@ -1,0 +1,18 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("vivaldi_atb_shield") {
+  sources = [
+    "vivaldi_atb_shield.imageset/Contents.json",
+    "vivaldi_atb_shield.imageset/vivaldi_atb_shield.pdf",
+    "vivaldi_atb_shield.imageset/vivaldi_atb_shield_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_atb_settings_selection_check") {
+  sources = [
+    "vivaldi_atb_settings_selection_check.imageset/Contents.json",
+    "vivaldi_atb_settings_selection_check.imageset/vivaldi_atb_settings_selection_check.pdf",
+  ]
+}

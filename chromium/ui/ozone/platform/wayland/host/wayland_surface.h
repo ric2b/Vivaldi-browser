@@ -45,7 +45,7 @@ class WaylandSurface {
   using ExplicitReleaseCallback =
       base::OnceCallback<void(wl_buffer*, base::ScopedFD)>;
 
-  WaylandSurface(WaylandConnection* connection, WaylandWindow* ro_window);
+  WaylandSurface(WaylandConnection* connection, WaylandWindow* root_window);
   WaylandSurface(const WaylandSurface&) = delete;
   WaylandSurface& operator=(const WaylandSurface&) = delete;
   ~WaylandSurface();
@@ -59,7 +59,6 @@ class WaylandSurface {
   zcr_blending_v1* blending() const { return blending_.get(); }
 
   uint32_t buffer_id() const { return state_.buffer_id; }
-  int32_t buffer_scale() const { return state_.buffer_scale; }
   float opacity() const { return state_.opacity; }
   bool use_blending() const { return state_.use_blending; }
 
@@ -216,9 +215,10 @@ class WaylandSurface {
   // effect immediately.
   void ForceImmediateStateApplication();
 
-  // Requests to wayland compositor to send key events even if it matches
-  // with the compositor's accelerator keys.
-  void InhibitKeyboardShortcuts();
+  // Asks the Wayland compositor to enable or disable the keyboard shortcuts
+  // inhibition for this surface. i.e: to receive key events even if they match
+  // compositor accelerators, e.g: Alt+Tab, etc.
+  void SetKeyboardShortcutsInhibition(bool enabled);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandWindowTest,
@@ -239,7 +239,7 @@ class WaylandSurface {
 
     wl::Object<zwp_linux_buffer_release_v1> linux_buffer_release;
     // The buffer associated with this explicit release.
-    raw_ptr<wl_buffer> buffer;
+    raw_ptr<wl_buffer, DanglingUntriaged> buffer;
     // The associated release callback with this request.
     ExplicitReleaseCallback explicit_release_callback;
   };
@@ -265,11 +265,12 @@ class WaylandSurface {
     // buffer_handle owning this wl_buffer is destroyed. Accessing this field
     // should ensure wl_buffer exists by calling
     // WaylandBufferManagerHost::EnsureBufferHandle(buffer_id).
-    raw_ptr<wl_buffer> buffer = nullptr;
+    raw_ptr<wl_buffer, DanglingUntriaged> buffer = nullptr;
     gfx::Size buffer_size_px;
 
-    // Current scale factor of a next attached buffer used by the GPU process.
-    int32_t buffer_scale = 1;
+    // The buffer scale refers to the ratio between the buffer size and the
+    // window size. This allows support for high-DPI displays.
+    float buffer_scale_float = 1;
 
     // Transformation for how the compositor interprets the contents of the
     // buffer.
@@ -306,12 +307,20 @@ class WaylandSurface {
     bool contains_video = false;
   };
 
+  // The wayland scale refers to the scale factor used for calls to wayland
+  // apis such as wl_region_add. When SurfaceSubmissionInPixelCoordinates is
+  // true, this is always 1. Otherwise this is buffer_scale_float casted to an
+  // integer.
+  int GetWaylandScale(const State& state);
+
   // Tracks the last sent src and dst values across wayland protocol s.t. we
   // skip resending them when possible.
   wl_fixed_t src_set_[4] = {wl_fixed_from_int(-1), wl_fixed_from_int(-1),
                             wl_fixed_from_int(-1), wl_fixed_from_int(-1)};
   float dst_set_[2] = {-1.f, -1.f};
   // Tracks the last sent surface_scale value s.t. we skip resending.
+  // This is used by wl_surface_set_buffer_scale which only supports integer
+  // scales.
   int32_t surface_scale_set_ = 1;
 
   wl::Object<wl_region> CreateAndAddRegion(
@@ -325,8 +334,6 @@ class WaylandSurface {
   // wl_surface states that are either active or will be active once Commit() is
   // called.
   State state_;
-
-  bool SurfaceSubmissionInPixelCoordinates() const;
 
   // Creates (if not created) the synchronization surface and returns a pointer
   // to it.
@@ -351,6 +358,11 @@ class WaylandSurface {
   base::flat_map<zwp_linux_buffer_release_v1*, ExplicitReleaseInfo>
       linux_buffer_releases_;
   ExplicitReleaseCallback next_explicit_release_request_;
+
+  // A cached copy of connection->SurfaceSubmissionInPixelCoordinates(). While
+  // it is technically possible to handle this value as mutable, in practice
+  // it's constant.
+  const bool surface_submission_in_pixel_coordinates_;
 
   // For top level window, stores outputs that the window is currently rendered
   // at.

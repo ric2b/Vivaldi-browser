@@ -1,0 +1,40 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_sync_settings") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.h",
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.mm",
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h",
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.mm",
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h",
+    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_coordinator.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_coordinator.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_encryption_password_view_controller.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_encryption_password_view_controller.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_login_view_controller.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_login_view_controller.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_mediator.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_mediator.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_command_handler.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_constants.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_constants.mm",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_consumer.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller_model_delegate.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h",
+    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller.mm",
+  ]
+  deps = [
+    "//base",
+    "//services/network/public/mojom",
+    "//vivaldi/ios/ui/settings/resources:sync_autofill",
+    "//vivaldi/ios/ui/settings/resources:sync_bookmarks",
+    "//vivaldi/ios/ui/settings/resources:sync_extensions",
+    "//vivaldi/ios/ui/settings/resources:sync_history",
+    "//vivaldi/ios/ui/settings/resources:sync_notes",
+    "//vivaldi/ios/ui/settings/resources:sync_passwords",
+    "//vivaldi/ios/ui/settings/resources:sync_readinglist",
+    "//vivaldi/ios/ui/settings/resources:sync_settings",
+  ]
+}

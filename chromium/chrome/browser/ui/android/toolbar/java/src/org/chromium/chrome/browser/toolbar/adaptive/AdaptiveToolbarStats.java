@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.toolbar.adaptive;
 import androidx.annotation.IntDef;
 
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor.UiState;
 
 import java.lang.annotation.Retention;
@@ -70,7 +69,7 @@ public class AdaptiveToolbarStats {
         adaptiveToolbarStatePredictor.readFromSegmentationPlatform(result -> {
             RecordHistogram.recordEnumeratedHistogram(
                     "SegmentationPlatform.AdaptiveToolbar.SegmentSelected.Startup", result.second,
-                    AdaptiveToolbarButtonVariant.NUM_ENTRIES);
+                    AdaptiveToolbarButtonVariant.MAX_VALUE + 1);
         });
     }
 

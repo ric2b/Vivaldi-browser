@@ -39,6 +39,9 @@
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 
+// Vivaldi
+#import "ios/ui/activity_services/share_text_data.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -236,5 +239,16 @@
     RecordCancelledScenario(scenario);
   }
 }
+
+// Vivaldi
+- (NSArray<ChromeActivityTextSource*>*)activityItemsForTextData:
+    (ShareTextData*)data {
+    return @[ [[ChromeActivityTextSource alloc] initWithText:data.text ]];
+}
+
+- (NSArray*)applicationActivitiesForTextData:(ShareTextData*)data {
+  return @[  ];
+}
+// End Vivaldi
 
 @end

@@ -15,6 +15,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/prerender_test_util.h"
@@ -33,7 +34,7 @@ namespace {
 
 namespace {
 
-// This is equal to content::PrerenderHost::FinalStatus::kActivated.
+// This is equal to content::PrerenderFinalStatus::kActivated.
 // TODO(crbug.com/1274021): Replace this with the FinalStatus enum value
 // once it is exposed.
 const int kFinalStatusActivated = 0;
@@ -73,6 +74,16 @@ class PrerenderBrowserTest : public PlatformBrowserTest {
 
  private:
   content::test::PrerenderTestHelper prerender_helper_;
+};
+
+class PrerenderHoldbackBrowserTest : public PrerenderBrowserTest {
+ public:
+  PrerenderHoldbackBrowserTest() {
+    feature_list_.InitAndEnableFeature(prefetch::kPreloadingHoldback);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // An end-to-end test of prerendering and activating.
@@ -162,10 +173,18 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, UseCounter) {
       blink::mojom::WebFeature::
           kV8Document_Onprerenderingchange_AttributeSetter,
       0);
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kPageVisits, 1);
 
   // Start a prerender. The API call should be recorded.
   GURL prerender_url = embedded_test_server()->GetURL("/simple.html");
   prerender_helper().AddPrerender(prerender_url);
+  // kPageVisits should have been issued for kPageVisits already, but the value
+  // hasn't been updated due to the update will be delayed until the activation
+  // in the current design. The value is still expected to be one.
+  // Please refer to crrev.com/c/3856942 for implementation details.
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kPageVisits, 1);
 
   // Accessing related attributes should also be recorded.
   ASSERT_TRUE(content::ExecJs(GetActiveWebContents()->GetPrimaryMainFrame(),
@@ -187,6 +206,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, UseCounter) {
       blink::mojom::WebFeature::
           kV8Document_Onprerenderingchange_AttributeSetter,
       1);
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kPageVisits, 2);
 }
 
 // Tests that Prerender2 cannot be triggered when preload setting is disabled.
@@ -199,7 +220,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, DisableNetworkPrediction) {
   PrefService* prefs = chrome_test_utils::GetProfile(this)->GetPrefs();
   prefetch::SetPreloadPagesState(prefs,
                                  prefetch::PreloadPagesState::kNoPreloading);
-  ASSERT_FALSE(prefetch::IsSomePreloadingEnabled(*prefs));
+  ASSERT_EQ(prefetch::IsSomePreloadingEnabled(*prefs),
+            content::PreloadingEligibility::kPreloadingDisabled);
 
   // Attempt to trigger prerendering.
   GURL prerender_url = embedded_test_server()->GetURL("/simple.html?1");
@@ -215,7 +237,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, DisableNetworkPrediction) {
   // Re-enable the setting.
   prefetch::SetPreloadPagesState(
       prefs, prefetch::PreloadPagesState::kStandardPreloading);
-  ASSERT_TRUE(prefetch::IsSomePreloadingEnabled(*prefs));
+  ASSERT_EQ(prefetch::IsSomePreloadingEnabled(*prefs),
+            content::PreloadingEligibility::kEligible);
 
   // Attempt to trigger prerendering again.
   content::test::PrerenderHostRegistryObserver registry_observer(
@@ -226,6 +249,67 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, DisableNetworkPrediction) {
   registry_observer.WaitForTrigger(prerender_url);
   host_id = prerender_helper().GetHostForUrl(prerender_url);
   EXPECT_NE(host_id, content::RenderFrameHost::kNoFrameTreeNodeId);
+}
+
+// Tests that Devtools open overrides PreloadingHoldback on non-Android
+// platforms.
+// TODO(crbug/1391411): revisit for Android platforms.
+#if !BUILDFLAG(IS_ANDROID)
+IN_PROC_BROWSER_TEST_F(PrerenderHoldbackBrowserTest,
+                       PreloadingHoldbackOverridden) {
+  base::HistogramTester histogram_tester;
+
+  // Navigate to an initial page.
+  GURL url = embedded_test_server()->GetURL("/empty.html");
+  ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), url));
+  // Emulating Devtools attached to make PreloadingHoldback overridden.
+  ASSERT_NE(content::DevToolsAgentHost::GetOrCreateFor(GetActiveWebContents()),
+            nullptr);
+
+  PrefService* prefs = chrome_test_utils::GetProfile(this)->GetPrefs();
+  ASSERT_EQ(prefetch::IsSomePreloadingEnabled(*prefs),
+            content::PreloadingEligibility::kPreloadingDisabled);
+
+  // Start a prerender.
+  GURL prerender_url = embedded_test_server()->GetURL("/simple.html");
+  prerender_helper().AddPrerender(prerender_url);
+
+  // Activate.
+  content::TestActivationManager activation_manager(GetActiveWebContents(),
+                                                    prerender_url);
+  ASSERT_TRUE(
+      content::ExecJs(GetActiveWebContents()->GetPrimaryMainFrame(),
+                      content::JsReplace("location = $1", prerender_url)));
+  activation_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(activation_manager.was_activated());
+
+  histogram_tester.ExpectUniqueSample(
+      "Prerender.Experimental.PrerenderHostFinalStatus.SpeculationRule",
+      kFinalStatusActivated, 1);
+}
+#endif
+
+// Tests that Prerender2 cannot be triggered when PreloadingHoldback is not
+// overridden by Devtools.
+IN_PROC_BROWSER_TEST_F(PrerenderHoldbackBrowserTest,
+                       PreloadingHoldbackNotOverridden) {
+  // Navigate to an initial page.
+  GURL url = embedded_test_server()->GetURL("/empty.html");
+  ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), url));
+
+  PrefService* prefs = chrome_test_utils::GetProfile(this)->GetPrefs();
+  ASSERT_EQ(prefetch::IsSomePreloadingEnabled(*prefs),
+            content::PreloadingEligibility::kPreloadingDisabled);
+  content::test::PrerenderHostRegistryObserver registry_observer(
+      *GetActiveWebContents());
+
+  // Attempt to trigger prerendering.
+  GURL prerender_url = embedded_test_server()->GetURL("/simple.html?1");
+  prerender_helper().AddPrerenderAsync(prerender_url);
+  // Since preload setting is disabled, prerender shouldn't be triggered.
+  registry_observer.WaitForTrigger(prerender_url);
+  int host_id = prerender_helper().GetHostForUrl(prerender_url);
+  EXPECT_EQ(host_id, content::RenderFrameHost::kNoFrameTreeNodeId);
 }
 
 }  // namespace

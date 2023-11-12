@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Proovi, kas Windowsi võrgudiagnostika käitamine aitab<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">See sait sisaldab kahjulikke programme</translation>
 <translation id="1916770123977586577">Muudetud seadete saidile rakendamiseks laadi leht uuesti.</translation>
-<translation id="1973351931613083086">automaatesitus</translation>
 <translation id="1974060860693918893">Lisateave</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolli puhverserveri ja tulemüüri seadistust<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Omanik: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">See sait ei saa turvalist ühendust luua</translation>
 <translation id="2187317261103489799">Tuvastatakse (vaikimisi)</translation>
 <translation id="2224337661447660594">Interneti-ühendus puudub</translation>
-<translation id="2230458221926704099">Paranda oma ühendus <ph name="BEGIN_LINK" />diagnostikarakenduse<ph name="END_LINK" /> abil</translation>
 <translation id="2292556288342944218">Juurdepääs Internetile on blokeeritud</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> küsib kasutajanime ja parooli.</translation>
 <translation id="2337852623177822836">Administraatori määratud valik</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Ründajad võivad üritada varastada sinu teavet (nt paroole, sõnumeid või krediitkaardiandmeid) saidilt <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />. <ph name="BEGIN_LEARN_MORE_LINK" />Lisateave<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Tuvastati võrgumuudatus.</translation>
 <translation id="2948083400971632585">Seadete lehel saad keelata kõik ühenduse jaoks seadistatud puhverserverid.</translation>
-<translation id="2953943267837858202">Keelatud automaatselt videosisu esitada</translation>
 <translation id="2991571918955627853">Saiti <ph name="SITE" /> ei saa praegu külastada, sest see kasutab HSTS-i. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
 <translation id="3005723025932146533">Näita salvestatud koopiat</translation>
 <translation id="301521992641321250">Automaatselt blokeeritud</translation>
@@ -62,7 +59,6 @@
     <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Lehe laadimiseks vajalike andmete taassaatmiseks vajuta uuestilaadimise nuppu.</translation>
 <translation id="3234666976984236645">Sellel saidil tuvastatakse alati oluline sisu</translation>
-<translation id="3291915639428159043">Automaatesitus blokeeritud</translation>
 <translation id="3308738399950580893">reklaamid</translation>
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">See ühendus ei ole privaatne</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Peida üksikasjad</translation>
-<translation id="3620979700683094848">Saidid saavad automaatselt videosisu esitada</translation>
 <translation id="3630155396527302611">Kui see on juba loendis kui programm, millele on lubatud võrgujuurdepääs,
       proovi see loendist eemaldada ja siis uuesti lisada.</translation>
 <translation id="3658742229777143148">Redaktsioon</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861">Sait <ph name="HOST_NAME" /> on blokeeritud</translation>
 <translation id="3987940399970879459">Vähem kui 1 MB</translation>
 <translation id="4075732493274867456">Kliendil ja serveril pole ühist toetatud SSL-protokolli versiooni või šifrikomplekti.</translation>
-<translation id="410351446219883937">Automaatesitus</translation>
 <translation id="4116663294526079822">Sellel saidil alati lubatud</translation>
 <translation id="4130226655945681476">Kontrolli võrgukaableid, modemit ja ruuterit</translation>
 <translation id="4151403195736952345">Üldreegli järgi (tuvastatakse)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Vormi andmete taassisestamise kinnitus</translation>
 <translation id="6569060085658103619">See on laienduse leht</translation>
 <translation id="6657585470893396449">Parool</translation>
-<translation id="6685834062052613830">Logi välja ja vii seadistus lõpule</translation>
 <translation id="6711464428925977395">Puhverserveriga on midagi valesti või aadress on vale.</translation>
 <translation id="6757797048963528358">Seade läks unerežiimi.</translation>
 <translation id="6897140037006041989">Kasutajaagent</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">Tulemüür või viirusetõrjetarkvara võis ühenduse blokeerida.</translation>
 <translation id="7800304661137206267">Ühendus on krüptitud šifriga <ph name="CIPHER" />, sõnumite autentimiseks on kasutusel <ph name="MAC" /> ja võtmevahetusmehhanism on <ph name="KX" />.</translation>
 <translation id="7834399512844817676">Tavaliselt kasutab <ph name="SITE" /> sinu teabe kaitsmiseks krüptimist. Kui Vivaldi seekord saidiga <ph name="SITE" /> ühendust luua püüdis, tagastas veebisait ebatavalised ja valed turvatunnused. See võib juhtuda siis, kui ründaja proovib teeselda, et on sait <ph name="SITE" />, või kui Wi-Fi sisselogimisleht on ühendumisele vahele seganud. Sinu teave on endiselt kaitstud, sest Vivaldi katkestas ühenduse enne andmevahetust.</translation>
-<translation id="7834693436815575883">Automaatesitus lubatud</translation>
 <translation id="7878562273885520351">Sinu parool võib olla lekkinud</translation>
 <translation id="7951415247503192394">(32-bitine)</translation>
 <translation id="8025119109950072390">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid ohtlikku tarkvara või avaldaksid oma isiklikke andmeid (nt paroole, telefoninumbreid, krediitkaardi numbreid).</translation>
 <translation id="8037357227543935929">Küsitakse (vaikimisi)</translation>
 <translation id="8041940743680923270">Üldreegli järgi (küsitakse)</translation>
-<translation id="8044382196220116469">Saitidel ei lubata automaatselt videosisu esitada</translation>
 <translation id="808894953321890993">Muuda parooli</translation>
 <translation id="8119307142152921512">jälitajad ja reklaamid</translation>
 <translation id="8149426793427495338">Arvuti läks unerežiimi.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Kasutajanimi</translation>
 <translation id="8703575177326907206">Ühendus domeeniga <ph name="DOMAIN" /> ei ole krüptitud.</translation>
 <translation id="8740359287975076522">Saidi <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-aadressi&lt;/abbr&gt; ei leitud. Probleemi diagnoositakse.</translation>
-<translation id="8774017153185436870">Saidid võivad automaatselt videosisu esitada</translation>
 <translation id="8820817407110198400">Järjehoidjad</translation>
 <translation id="8940028675168378100">Blokeeritud <ph name="BLOCKER_NAME" />ga</translation>
 <translation id="8963117664422609631">Ava saidi seaded</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Eira</translation>
 <translation id="9025348182339809926">(kehtetu)</translation>
 <translation id="9039213469156557790">Peale selle sisaldab leht ka muid ebaturvalisi ressursse. Teistel on võimalik neid ressursse edastamise ajal näha ning ründajatel on võimalik neid muuta, et lehe käitumist mõjutada.</translation>
-<translation id="9048224371732578627">Lubatud automaatselt videosisu esitada</translation>
 <translation id="9062620674789239642">See võidi teisaldada või kustutada, seda võidi muuta.</translation>
 <translation id="9069693763241529744">Laienduse poolt blokeeritud</translation>
 <translation id="9073799351042754113">Oled otsustanud selle saidi puhul turvahoiatused välja lülitada.</translation>

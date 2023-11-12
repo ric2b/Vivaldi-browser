@@ -75,7 +75,8 @@ class AuctionV8DevToolsSession::BreakpointHandler
     return crdtp::DispatchResponse::Success();
   }
 
-  const raw_ptr<v8_inspector::V8InspectorSession> v8_session_;
+  const raw_ptr<v8_inspector::V8InspectorSession, DanglingUntriaged>
+      v8_session_;
   std::set<std::string> instrumentation_breakpoints_;
   SEQUENCE_CHECKER(v8_sequence_checker_);
 };
@@ -156,6 +157,7 @@ AuctionV8DevToolsSession::AuctionV8DevToolsSession(
     int context_group_id,
     const std::string& session_id,
     bool client_expects_binary_responses,
+    bool session_waits_for_debugger,
     mojo::PendingAssociatedRemote<blink::mojom::DevToolsSessionHost> host,
     scoped_refptr<base::SequencedTaskRunner> io_session_receiver_sequence,
     mojo::PendingReceiver<blink::mojom::DevToolsSession> io_session_receiver,
@@ -170,7 +172,10 @@ AuctionV8DevToolsSession::AuctionV8DevToolsSession(
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
   v8_session_ = v8_helper_->inspector()->connect(
       context_group_id_, this /* as V8Inspector::Channel */,
-      v8_inspector::StringView(), v8_inspector::V8Inspector::kFullyTrusted);
+      v8_inspector::StringView(), v8_inspector::V8Inspector::kFullyTrusted,
+      session_waits_for_debugger
+          ? v8_inspector::V8Inspector::kWaitingForDebugger
+          : v8_inspector::V8Inspector::kNotWaitingForDebugger);
   IOSession::Create(
       std::move(io_session_receiver), std::move(io_session_receiver_sequence),
       debug_command_queue_,

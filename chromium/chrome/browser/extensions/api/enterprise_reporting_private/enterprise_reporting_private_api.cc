@@ -10,9 +10,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/task_runner_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
@@ -105,6 +104,7 @@ api::enterprise_reporting_private::ContextInfo ToContextInfo(
   }
   info.browser_version = std::move(signals.browser_version);
   info.built_in_dns_client_enabled = signals.built_in_dns_client_enabled;
+  info.enterprise_profile_id = signals.enterprise_profile_id;
 
   switch (signals.safe_browsing_protection_level) {
     case safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING:
@@ -232,7 +232,7 @@ EnterpriseReportingPrivateGetPersistentSecretFunction::Run() {
           base::BindOnce(
               &EnterpriseReportingPrivateGetPersistentSecretFunction::
                   OnDataRetrieved,
-              this, base::ThreadTaskRunnerHandle::Get())));
+              this, base::SingleThreadTaskRunner::GetCurrentDefault())));
   return RespondLater();
 }
 
@@ -283,7 +283,7 @@ EnterpriseReportingPrivateGetDeviceDataFunction::Run() {
           &RetrieveDeviceData, params->id,
           base::BindOnce(
               &EnterpriseReportingPrivateGetDeviceDataFunction::OnDataRetrieved,
-              this, base::ThreadTaskRunnerHandle::Get())));
+              this, base::SingleThreadTaskRunner::GetCurrentDefault())));
   return RespondLater();
 }
 
@@ -339,7 +339,7 @@ EnterpriseReportingPrivateSetDeviceDataFunction::Run() {
           &StoreDeviceData, params->id, std::move(params->data),
           base::BindOnce(
               &EnterpriseReportingPrivateSetDeviceDataFunction::OnDataStored,
-              this, base::ThreadTaskRunnerHandle::Get())));
+              this, base::SingleThreadTaskRunner::GetCurrentDefault())));
   return RespondLater();
 }
 
@@ -401,21 +401,23 @@ EnterpriseReportingPrivateGetDeviceInfoFunction::ToDeviceInfo(
 ExtensionFunction::ResponseAction
 EnterpriseReportingPrivateGetDeviceInfoFunction::Run() {
 #if BUILDFLAG(IS_WIN)
-  base::PostTaskAndReplyWithResult(
-      base::ThreadPool::CreateCOMSTATaskRunner({}).get(), FROM_HERE,
+  base::ThreadPool::CreateCOMSTATaskRunner({})->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&enterprise_signals::DeviceInfoFetcher::Fetch,
                      enterprise_signals::DeviceInfoFetcher::CreateInstance()),
       base::BindOnce(&EnterpriseReportingPrivateGetDeviceInfoFunction::
                          OnDeviceInfoRetrieved,
                      this));
 #else
-  base::PostTaskAndReplyWithResult(
-      base::ThreadPool::CreateTaskRunner({base::MayBlock()}).get(), FROM_HERE,
-      base::BindOnce(&enterprise_signals::DeviceInfoFetcher::Fetch,
-                     enterprise_signals::DeviceInfoFetcher::CreateInstance()),
-      base::BindOnce(&EnterpriseReportingPrivateGetDeviceInfoFunction::
-                         OnDeviceInfoRetrieved,
-                     this));
+  base::ThreadPool::CreateTaskRunner({base::MayBlock()})
+      ->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(
+              &enterprise_signals::DeviceInfoFetcher::Fetch,
+              enterprise_signals::DeviceInfoFetcher::CreateInstance()),
+          base::BindOnce(&EnterpriseReportingPrivateGetDeviceInfoFunction::
+                             OnDeviceInfoRetrieved,
+                         this));
 #endif  // BUILDFLAG(IS_WIN)
 
   return RespondLater();

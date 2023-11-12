@@ -44,157 +44,13 @@ class ServiceConnectionImpl : public ServiceConnection {
 
  private:
   // ServiceConnection overrides:
-  void GetAvailableRoutines(
-      mojom::CrosHealthdDiagnosticsService::GetAvailableRoutinesCallback
-          callback) override;
-  void GetRoutineUpdate(
-      int32_t id,
-      mojom::DiagnosticRoutineCommandEnum command,
-      bool include_output,
-      mojom::CrosHealthdDiagnosticsService::GetRoutineUpdateCallback callback)
-      override;
-  void RunUrandomRoutine(
-      const absl::optional<base::TimeDelta>& length_seconds,
-      mojom::CrosHealthdDiagnosticsService::RunUrandomRoutineCallback callback)
-      override;
-  void RunBatteryCapacityRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunBatteryCapacityRoutineCallback
-          callback) override;
-  void RunBatteryHealthRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunBatteryHealthRoutineCallback
-          callback) override;
-  void RunSmartctlCheckRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunSmartctlCheckRoutineCallback
-          callback) override;
-  void RunAcPowerRoutine(
-      mojom::AcPowerStatusEnum expected_status,
-      const absl::optional<std::string>& expected_power_type,
-      mojom::CrosHealthdDiagnosticsService::RunAcPowerRoutineCallback callback)
-      override;
-  void RunCpuCacheRoutine(
-      const absl::optional<base::TimeDelta>& exec_duration,
-      mojom::CrosHealthdDiagnosticsService::RunCpuCacheRoutineCallback callback)
-      override;
-  void RunCpuStressRoutine(
-      const absl::optional<base::TimeDelta>& exec_duration,
-      mojom::CrosHealthdDiagnosticsService::RunCpuStressRoutineCallback
-          callback) override;
-  void RunFloatingPointAccuracyRoutine(
-      const absl::optional<base::TimeDelta>& exec_duration,
-      mojom::CrosHealthdDiagnosticsService::
-          RunFloatingPointAccuracyRoutineCallback callback) override;
-  void RunNvmeWearLevelRoutine(
-      uint32_t wear_level_threshold,
-      mojom::CrosHealthdDiagnosticsService::RunNvmeWearLevelRoutineCallback
-          callback) override;
-  void RunNvmeSelfTestRoutine(
-      mojom::NvmeSelfTestTypeEnum nvme_self_test_type,
-      mojom::CrosHealthdDiagnosticsService::RunNvmeSelfTestRoutineCallback
-          callback) override;
-  void RunDiskReadRoutine(
-      mojom::DiskReadRoutineTypeEnum type,
-      base::TimeDelta& exec_duration,
-      uint32_t file_size_mb,
-      mojom::CrosHealthdDiagnosticsService::RunDiskReadRoutineCallback callback)
-      override;
-  void RunPrimeSearchRoutine(
-      const absl::optional<base::TimeDelta>& exec_duration,
-      mojom::CrosHealthdDiagnosticsService::RunPrimeSearchRoutineCallback
-          callback) override;
-  void RunBatteryDischargeRoutine(
-      base::TimeDelta exec_duration,
-      uint32_t maximum_discharge_percent_allowed,
-      mojom::CrosHealthdDiagnosticsService::RunBatteryDischargeRoutineCallback
-          callback) override;
-  void RunBatteryChargeRoutine(
-      base::TimeDelta exec_duration,
-      uint32_t minimum_charge_percent_required,
-      mojom::CrosHealthdDiagnosticsService::RunBatteryChargeRoutineCallback
-          callback) override;
-  void RunMemoryRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunMemoryRoutineCallback callback)
-      override;
-  void RunLanConnectivityRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunLanConnectivityRoutineCallback
-          callback) override;
-  void RunSignalStrengthRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunSignalStrengthRoutineCallback
-          callback) override;
-  void RunGatewayCanBePingedRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunGatewayCanBePingedRoutineCallback
-          callback) override;
-  void RunHasSecureWiFiConnectionRoutine(
-      mojom::CrosHealthdDiagnosticsService::
-          RunHasSecureWiFiConnectionRoutineCallback callback) override;
-  void RunDnsResolverPresentRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunDnsResolverPresentRoutineCallback
-          callback) override;
-  void RunDnsLatencyRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunDnsLatencyRoutineCallback
-          callback) override;
-  void RunDnsResolutionRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunDnsResolutionRoutineCallback
-          callback) override;
-  void RunCaptivePortalRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunCaptivePortalRoutineCallback
-          callback) override;
-  void RunHttpFirewallRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
-          callback) override;
-  void RunHttpsFirewallRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunHttpsFirewallRoutineCallback
-          callback) override;
-  void RunHttpsLatencyRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunHttpsLatencyRoutineCallback
-          callback) override;
-  void RunVideoConferencingRoutine(
-      const absl::optional<std::string>& stun_server_hostname,
-      mojom::CrosHealthdDiagnosticsService::RunVideoConferencingRoutineCallback
-          callback) override;
-  void RunArcHttpRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunArcHttpRoutineCallback callback)
-      override;
-  void RunArcPingRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunArcPingRoutineCallback callback)
-      override;
-  void RunArcDnsResolutionRoutine(
-      mojom::CrosHealthdDiagnosticsService::RunArcDnsResolutionRoutineCallback
-          callback) override;
-  void AddBluetoothObserver(
-      mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> pending_observer)
-      override;
-  void AddLidObserver(mojo::PendingRemote<mojom::CrosHealthdLidObserver>
-                          pending_observer) override;
-  void AddPowerObserver(mojo::PendingRemote<mojom::CrosHealthdPowerObserver>
-                            pending_observer) override;
-  void AddNetworkObserver(
-      mojo::PendingRemote<
-          chromeos::network_health::mojom::NetworkEventsObserver>
-          pending_observer) override;
-  void AddAudioObserver(mojo::PendingRemote<mojom::CrosHealthdAudioObserver>
-                            pending_observer) override;
-  void AddThunderboltObserver(
-      mojo::PendingRemote<mojom::CrosHealthdThunderboltObserver>
-          pending_observer) override;
-  void AddUsbObserver(mojo::PendingRemote<mojom::CrosHealthdUsbObserver>
-                          pending_observer) override;
-  void ProbeTelemetryInfo(
-      const std::vector<mojom::ProbeCategoryEnum>& categories_to_test,
-      mojom::CrosHealthdProbeService::ProbeTelemetryInfoCallback callback)
-      override;
-  void ProbeProcessInfo(pid_t process_id,
-                        mojom::CrosHealthdProbeService::ProbeProcessInfoCallback
-                            callback) override;
-  void ProbeMultipleProcessInfo(
-      const absl::optional<std::vector<uint32_t>>& process_ids,
-      bool ignore_single_process_info,
-      mojom::CrosHealthdProbeService::ProbeMultipleProcessInfoCallback callback)
-      override;
-
-  void GetDiagnosticsService(
+  mojom::CrosHealthdDiagnosticsService* GetDiagnosticsService() override;
+  mojom::CrosHealthdProbeService* GetProbeService() override;
+  mojom::CrosHealthdEventService* GetEventService() override;
+  void BindDiagnosticsService(
       mojo::PendingReceiver<mojom::CrosHealthdDiagnosticsService> service)
       override;
-  void GetProbeService(
+  void BindProbeService(
       mojo::PendingReceiver<mojom::CrosHealthdProbeService> service) override;
   void SetBindNetworkHealthServiceCallback(
       BindNetworkHealthServiceCallback callback) override;
@@ -261,420 +117,48 @@ class ServiceConnectionImpl : public ServiceConnection {
   base::WeakPtrFactory<ServiceConnectionImpl> weak_factory_{this};
 };
 
-void ServiceConnectionImpl::GetAvailableRoutines(
-    mojom::CrosHealthdDiagnosticsService::GetAvailableRoutinesCallback
-        callback) {
+mojom::CrosHealthdDiagnosticsService*
+ServiceConnectionImpl::GetDiagnosticsService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->GetAvailableRoutines(std::move(callback));
+  return cros_healthd_diagnostics_service_.get();
 }
 
-void ServiceConnectionImpl::GetRoutineUpdate(
-    int32_t id,
-    mojom::DiagnosticRoutineCommandEnum command,
-    bool include_output,
-    mojom::CrosHealthdDiagnosticsService::GetRoutineUpdateCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->GetRoutineUpdate(
-      id, command, include_output, std::move(callback));
-}
-
-void ServiceConnectionImpl::RunUrandomRoutine(
-    const absl::optional<base::TimeDelta>& length_seconds,
-    mojom::CrosHealthdDiagnosticsService::RunUrandomRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  mojom::NullableUint32Ptr routine_parameter;
-  if (length_seconds.has_value()) {
-    routine_parameter =
-        mojom::NullableUint32::New(length_seconds.value().InSeconds());
-  }
-  cros_healthd_diagnostics_service_->RunUrandomRoutine(
-      std::move(routine_parameter), std::move(callback));
-}
-
-void ServiceConnectionImpl::RunBatteryCapacityRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunBatteryCapacityRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunBatteryCapacityRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunBatteryHealthRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunBatteryHealthRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunBatteryHealthRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunSmartctlCheckRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunSmartctlCheckRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunSmartctlCheckRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunAcPowerRoutine(
-    mojom::AcPowerStatusEnum expected_status,
-    const absl::optional<std::string>& expected_power_type,
-    mojom::CrosHealthdDiagnosticsService::RunAcPowerRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunAcPowerRoutine(
-      expected_status, expected_power_type, std::move(callback));
-}
-
-void ServiceConnectionImpl::RunCpuCacheRoutine(
-    const absl::optional<base::TimeDelta>& exec_duration,
-    mojom::CrosHealthdDiagnosticsService::RunCpuCacheRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  mojom::NullableUint32Ptr routine_duration;
-  if (exec_duration.has_value()) {
-    routine_duration =
-        mojom::NullableUint32::New(exec_duration.value().InSeconds());
-  }
-  cros_healthd_diagnostics_service_->RunCpuCacheRoutine(
-      std::move(routine_duration), std::move(callback));
-}
-
-void ServiceConnectionImpl::RunCpuStressRoutine(
-    const absl::optional<base::TimeDelta>& exec_duration,
-    mojom::CrosHealthdDiagnosticsService::RunCpuStressRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  mojom::NullableUint32Ptr routine_duration;
-  if (exec_duration.has_value()) {
-    routine_duration =
-        mojom::NullableUint32::New(exec_duration.value().InSeconds());
-  }
-  cros_healthd_diagnostics_service_->RunCpuStressRoutine(
-      std::move(routine_duration), std::move(callback));
-}
-
-void ServiceConnectionImpl::RunFloatingPointAccuracyRoutine(
-    const absl::optional<base::TimeDelta>& exec_duration,
-    mojom::CrosHealthdDiagnosticsService::
-        RunFloatingPointAccuracyRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  mojom::NullableUint32Ptr routine_duration;
-  if (exec_duration.has_value()) {
-    routine_duration =
-        mojom::NullableUint32::New(exec_duration.value().InSeconds());
-  }
-  cros_healthd_diagnostics_service_->RunFloatingPointAccuracyRoutine(
-      std::move(routine_duration), std::move(callback));
-}
-
-void ServiceConnectionImpl::RunNvmeWearLevelRoutine(
-    uint32_t wear_level_threshold,
-    mojom::CrosHealthdDiagnosticsService::RunNvmeWearLevelRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunNvmeWearLevelRoutine(
-      wear_level_threshold, std::move(callback));
-}
-
-void ServiceConnectionImpl::RunNvmeSelfTestRoutine(
-    mojom::NvmeSelfTestTypeEnum self_test_type,
-    mojom::CrosHealthdDiagnosticsService::RunNvmeSelfTestRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunNvmeSelfTestRoutine(
-      self_test_type, std::move(callback));
-}
-
-void ServiceConnectionImpl::RunDiskReadRoutine(
-    mojom::DiskReadRoutineTypeEnum type,
-    base::TimeDelta& exec_duration,
-    uint32_t file_size_mb,
-    mojom::CrosHealthdDiagnosticsService::RunDiskReadRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunDiskReadRoutine(
-      type, exec_duration.InSeconds(), file_size_mb, std::move(callback));
-}
-
-void ServiceConnectionImpl::RunPrimeSearchRoutine(
-    const absl::optional<base::TimeDelta>& exec_duration,
-    mojom::CrosHealthdDiagnosticsService::RunPrimeSearchRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  mojom::NullableUint32Ptr routine_duration;
-  if (exec_duration.has_value()) {
-    routine_duration =
-        mojom::NullableUint32::New(exec_duration.value().InSeconds());
-  }
-  cros_healthd_diagnostics_service_->RunPrimeSearchRoutine(
-      std::move(routine_duration), std::move(callback));
-}
-
-void ServiceConnectionImpl::RunBatteryDischargeRoutine(
-    base::TimeDelta exec_duration,
-    uint32_t maximum_discharge_percent_allowed,
-    mojom::CrosHealthdDiagnosticsService::RunBatteryDischargeRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunBatteryDischargeRoutine(
-      exec_duration.InSeconds(), maximum_discharge_percent_allowed,
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunBatteryChargeRoutine(
-    base::TimeDelta exec_duration,
-    uint32_t minimum_charge_percent_required,
-    mojom::CrosHealthdDiagnosticsService::RunBatteryChargeRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunBatteryChargeRoutine(
-      exec_duration.InSeconds(), minimum_charge_percent_required,
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunMemoryRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunMemoryRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunMemoryRoutine(std::move(callback));
-}
-
-void ServiceConnectionImpl::RunLanConnectivityRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunLanConnectivityRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunLanConnectivityRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunSignalStrengthRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunSignalStrengthRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunSignalStrengthRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunGatewayCanBePingedRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunGatewayCanBePingedRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunGatewayCanBePingedRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunHasSecureWiFiConnectionRoutine(
-    mojom::CrosHealthdDiagnosticsService::
-        RunHasSecureWiFiConnectionRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunHasSecureWiFiConnectionRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunDnsResolverPresentRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunDnsResolverPresentRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunDnsResolverPresentRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunDnsLatencyRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunDnsLatencyRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunDnsLatencyRoutine(std::move(callback));
-}
-
-void ServiceConnectionImpl::RunDnsResolutionRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunDnsResolutionRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunDnsResolutionRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunCaptivePortalRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunCaptivePortalRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunCaptivePortalRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunHttpFirewallRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunHttpFirewallRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunHttpsFirewallRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunHttpsFirewallRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunHttpsFirewallRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunHttpsLatencyRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunHttpsLatencyRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunHttpsLatencyRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunArcHttpRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunArcHttpRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunArcHttpRoutine(std::move(callback));
-}
-
-void ServiceConnectionImpl::RunArcPingRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunArcPingRoutineCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunArcPingRoutine(std::move(callback));
-}
-
-void ServiceConnectionImpl::RunArcDnsResolutionRoutine(
-    mojom::CrosHealthdDiagnosticsService::RunArcDnsResolutionRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunArcDnsResolutionRoutine(
-      std::move(callback));
-}
-
-void ServiceConnectionImpl::RunVideoConferencingRoutine(
-    const absl::optional<std::string>& stun_server_hostname,
-    mojom::CrosHealthdDiagnosticsService::RunVideoConferencingRoutineCallback
-        callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunVideoConferencingRoutine(
-      stun_server_hostname, std::move(callback));
-}
-
-void ServiceConnectionImpl::AddBluetoothObserver(
-    mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddBluetoothObserver(
-      std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddLidObserver(
-    mojo::PendingRemote<mojom::CrosHealthdLidObserver> pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddLidObserver(std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddPowerObserver(
-    mojo::PendingRemote<mojom::CrosHealthdPowerObserver> pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddPowerObserver(std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddNetworkObserver(
-    mojo::PendingRemote<chromeos::network_health::mojom::NetworkEventsObserver>
-        pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddNetworkObserver(std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddAudioObserver(
-    mojo::PendingRemote<mojom::CrosHealthdAudioObserver> pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddAudioObserver(std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddThunderboltObserver(
-    mojo::PendingRemote<mojom::CrosHealthdThunderboltObserver>
-        pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddThunderboltObserver(
-      std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::AddUsbObserver(
-    mojo::PendingRemote<mojom::CrosHealthdUsbObserver> pending_observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdEventServiceIfNeeded();
-  cros_healthd_event_service_->AddUsbObserver(std::move(pending_observer));
-}
-
-void ServiceConnectionImpl::ProbeTelemetryInfo(
-    const std::vector<mojom::ProbeCategoryEnum>& categories_to_test,
-    mojom::CrosHealthdProbeService::ProbeTelemetryInfoCallback callback) {
+mojom::CrosHealthdProbeService* ServiceConnectionImpl::GetProbeService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdProbeServiceIfNeeded();
-  cros_healthd_probe_service_->ProbeTelemetryInfo(categories_to_test,
-                                                  std::move(callback));
+  return cros_healthd_probe_service_.get();
 }
 
-void ServiceConnectionImpl::ProbeProcessInfo(
-    pid_t process_id,
-    mojom::CrosHealthdProbeService::ProbeProcessInfoCallback callback) {
+mojom::CrosHealthdEventService* ServiceConnectionImpl::GetEventService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(process_id > 0);
-  BindCrosHealthdProbeServiceIfNeeded();
-  cros_healthd_probe_service_->ProbeProcessInfo(
-      static_cast<uint32_t>(process_id), std::move(callback));
+  BindCrosHealthdEventServiceIfNeeded();
+  return cros_healthd_event_service_.get();
 }
 
-void ServiceConnectionImpl::ProbeMultipleProcessInfo(
-    const absl::optional<std::vector<uint32_t>>& process_ids,
-    bool ignore_single_process_info,
-    mojom::CrosHealthdProbeService::ProbeMultipleProcessInfoCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindCrosHealthdProbeServiceIfNeeded();
-  cros_healthd_probe_service_->ProbeMultipleProcessInfo(
-      process_ids, ignore_single_process_info, std::move(callback));
-}
-
-void ServiceConnectionImpl::GetDiagnosticsService(
+void ServiceConnectionImpl::BindDiagnosticsService(
     mojo::PendingReceiver<mojom::CrosHealthdDiagnosticsService> service) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (use_service_manager_) {
-    chromeos::mojo_service_manager::GetServiceManagerProxy()->Request(
+    mojo_service_manager::GetServiceManagerProxy()->Request(
         chromeos::mojo_services::kCrosHealthdDiagnostics, absl::nullopt,
         std::move(service).PassPipe());
   } else {
     EnsureCrosHealthdServiceFactoryIsBound();
     cros_healthd_service_factory_->GetDiagnosticsService(std::move(service));
+  }
+}
+
+void ServiceConnectionImpl::BindProbeService(
+    mojo::PendingReceiver<mojom::CrosHealthdProbeService> service) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (use_service_manager_) {
+    mojo_service_manager::GetServiceManagerProxy()->Request(
+        chromeos::mojo_services::kCrosHealthdProbe, absl::nullopt,
+        std::move(service).PassPipe());
+  } else {
+    EnsureCrosHealthdServiceFactoryIsBound();
+    cros_healthd_service_factory_->GetProbeService(std::move(service));
   }
 }
 
@@ -777,19 +261,6 @@ void ServiceConnectionImpl::BindAndSendNetworkDiagnosticsRoutines() {
       std::move(remote));
 }
 
-void ServiceConnectionImpl::GetProbeService(
-    mojo::PendingReceiver<mojom::CrosHealthdProbeService> service) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (use_service_manager_) {
-    chromeos::mojo_service_manager::GetServiceManagerProxy()->Request(
-        chromeos::mojo_services::kCrosHealthdProbe, absl::nullopt,
-        std::move(service).PassPipe());
-  } else {
-    EnsureCrosHealthdServiceFactoryIsBound();
-    cros_healthd_service_factory_->GetProbeService(std::move(service));
-  }
-}
-
 void ServiceConnectionImpl::EnsureCrosHealthdServiceFactoryIsBound() {
   DCHECK(!use_service_manager_)
       << "ServiceFactory is not available in service manager.";
@@ -814,7 +285,7 @@ void ServiceConnectionImpl::BindCrosHealthdDiagnosticsServiceIfNeeded() {
   if (cros_healthd_diagnostics_service_.is_bound())
     return;
 
-  GetDiagnosticsService(
+  BindDiagnosticsService(
       cros_healthd_diagnostics_service_.BindNewPipeAndPassReceiver());
   cros_healthd_diagnostics_service_.set_disconnect_handler(base::BindOnce(
       &ServiceConnectionImpl::OnDisconnect, weak_factory_.GetWeakPtr()));
@@ -826,7 +297,7 @@ void ServiceConnectionImpl::BindCrosHealthdEventServiceIfNeeded() {
     return;
 
   if (use_service_manager_) {
-    chromeos::mojo_service_manager::GetServiceManagerProxy()->Request(
+    mojo_service_manager::GetServiceManagerProxy()->Request(
         chromeos::mojo_services::kCrosHealthdEvent, absl::nullopt,
         cros_healthd_event_service_.BindNewPipeAndPassReceiver().PassPipe());
   } else {
@@ -843,14 +314,13 @@ void ServiceConnectionImpl::BindCrosHealthdProbeServiceIfNeeded() {
   if (cros_healthd_probe_service_.is_bound())
     return;
 
-  GetProbeService(cros_healthd_probe_service_.BindNewPipeAndPassReceiver());
+  BindProbeService(cros_healthd_probe_service_.BindNewPipeAndPassReceiver());
   cros_healthd_probe_service_.set_disconnect_handler(base::BindOnce(
       &ServiceConnectionImpl::OnDisconnect, weak_factory_.GetWeakPtr()));
 }
 
 ServiceConnectionImpl::ServiceConnectionImpl()
-    : use_service_manager_(
-          chromeos::mojo_service_manager::IsServiceManagerBound()) {
+    : use_service_manager_(mojo_service_manager::IsServiceManagerBound()) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 #if !defined(USE_REAL_DBUS_CLIENTS)
   // Creates the fake mojo service if need. This is for browser test to do the

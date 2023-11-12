@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/no_destructor.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -17,6 +17,13 @@
 namespace {
 
 const int64_t kDestroyProfileTimeoutSeconds = 60;
+
+void DestroyOTRProfileWhenAppropriate(base::WeakPtr<Profile> weak_profile) {
+  if (Profile* profile = weak_profile.get()) {
+    ProfileDestroyer::DestroyOTRProfileWhenAppropriateWithTimeout(
+        profile, base::Seconds(kDestroyProfileTimeoutSeconds));
+  }
+}
 
 }  // namespace
 
@@ -40,7 +47,7 @@ Profile* DevToolsBrowserContextManager::GetProfileById(
 
 content::BrowserContext* DevToolsBrowserContextManager::CreateBrowserContext() {
   Profile* original_profile =
-      ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
+      ProfileManager::GetLastUsedProfile()->GetOriginalProfile();
 
   Profile* otr_profile = original_profile->GetOffTheRecordProfile(
       Profile::OTRProfileID::CreateUniqueForDevTools(),
@@ -63,7 +70,7 @@ DevToolsBrowserContextManager::GetBrowserContexts() {
 
 content::BrowserContext*
 DevToolsBrowserContextManager::GetDefaultBrowserContext() {
-  return ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
+  return ProfileManager::GetLastUsedProfile()->GetOriginalProfile();
 }
 
 void DevToolsBrowserContextManager::DisposeBrowserContext(
@@ -95,8 +102,7 @@ void DevToolsBrowserContextManager::DisposeBrowserContext(
   // If no browsers are opened - dispose right away.
   if (!has_opened_browser) {
     StopObservingProfileIfAny(profile);
-    ProfileDestroyer::DestroyProfileWhenAppropriateWithTimeout(
-        profile, base::Seconds(kDestroyProfileTimeoutSeconds));
+    DestroyOTRProfileWhenAppropriate(profile->GetWeakPtr());
     std::move(callback).Run(true, "");
     return;
   }
@@ -138,12 +144,9 @@ void DevToolsBrowserContextManager::OnBrowserRemoved(Browser* browser) {
 
   // We cannot delete immediately here: the profile might still be referenced
   // during the browser tear-down process.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &ProfileDestroyer::DestroyProfileWhenAppropriateWithTimeout,
-          base::Unretained(browser->profile()),
-          base::Seconds(kDestroyProfileTimeoutSeconds)));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&DestroyOTRProfileWhenAppropriate,
+                                browser->profile()->GetWeakPtr()));
 
   std::move(pending_disposal->second).Run(true, "");
   pending_context_disposals_.erase(pending_disposal);

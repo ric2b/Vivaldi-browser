@@ -12,6 +12,12 @@ namespace content {
 
 // Please keep features in alphabetical order.
 
+// When enabled, stops canceling navigation when another navigation commits or
+// starts. This supports the same goal as kQueueNavigationsWhileWaitingForCommit
+// but for the non-queueing parts, and is enabled by default.
+// See https://crbug.com/838348 and https://crbug.com/1220337.
+BASE_DECLARE_FEATURE(kAvoidUnnecessaryNavigationCancellations);
+
 #if BUILDFLAG(IS_ANDROID)
 // Unifies RenderWidgetHostViewAndroid with the other platforms in their usage
 // of OnShowWithPageVisibility. Disabling will revert the refactor and use the
@@ -23,6 +29,9 @@ BASE_DECLARE_FEATURE(kOnShowWithPageVisibility);
 // navigation if the previous navigation is already waiting for commit.
 // See https://crbug.com/838348 and https://crbug.com/1220337.
 BASE_DECLARE_FEATURE(kQueueNavigationsWhileWaitingForCommit);
+
+// (crbug/1377753): Speculatively start service worker before BeforeUnload runs.
+BASE_DECLARE_FEATURE(kSpeculativeServiceWorkerStartup);
 
 // Please keep features in alphabetical order.
 

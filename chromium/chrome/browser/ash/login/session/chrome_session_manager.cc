@@ -14,11 +14,12 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "chrome/browser/ash/account_manager/account_manager_util.h"
+#include "chrome/browser/ash/app_list/app_list_client_impl.h"
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
 #include "chrome/browser/ash/app_mode/kiosk_cryptohome_remover.h"
 #include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/login/chrome_restart_request.h"
-#include "chrome/browser/ash/login/demo_mode/demo_resources.h"
+#include "chrome/browser/ash/login/demo_mode/demo_components.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/login_wizard.h"
@@ -31,11 +32,10 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/ui/app_list/app_list_client_impl.h"
-#include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/lacros_data_backward_migration_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/lacros_data_migration_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/shimless_rma_dialog.h"
+#include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/lacros_data_backward_migration_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/lacros_data_migration_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/shimless_rma_dialog.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
@@ -48,10 +48,13 @@
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/user_manager/common_types.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/common/content_switches.h"
 
 namespace ash {
+
 namespace {
 
 // Starts kiosk app auto launch and shows the splash screen.
@@ -60,7 +63,7 @@ void StartKioskSession() {
   session_manager::SessionManager::Get()->SetSessionState(
       session_manager::SessionState::LOGIN_PRIMARY);
 
-  ShowLoginWizard(chromeos::AppLaunchSplashScreenView::kScreenId);
+  ShowLoginWizard(AppLaunchSplashScreenView::kScreenId);
 
   // Login screen is skipped but 'login-prompt-visible' signal is still needed.
   VLOG(1) << "Kiosk app auto launch >> login-prompt-visible";
@@ -70,7 +73,7 @@ void StartKioskSession() {
 // Starts the login/oobe screen.
 void StartLoginOobeSession() {
   // State will be defined once out-of-box/login branching is complete.
-  ShowLoginWizard(ash::OOBE_SCREEN_UNKNOWN);
+  ShowLoginWizard(OOBE_SCREEN_UNKNOWN);
 
   // Reset reboot after update flag when login screen is shown.
   policy::BrowserPolicyConnectorAsh* connector =
@@ -158,8 +161,8 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     auto* demo_session = DemoSession::Get();
     // In demo session, delay starting user session until the demo
     // session resources have been loaded.
-    if (demo_session && demo_session->started() &&
-        !demo_session->resources()->loaded()) {
+    if (demo_session && demo_session->started() && demo_session->components() &&
+        !demo_session->components()->resources_component_loaded()) {
       demo_session->EnsureResourcesLoaded(
           base::BindOnce(&StartUserSession, user_profile, login_user_id));
       LOG(WARNING) << "Delay demo user session start until demo "
@@ -173,7 +176,7 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
         user_manager->IsStubAccountId(user->GetAccountId())) {
       // Add stub user to Account Manager. (But not when running tests: this
       // allows tests to setup appropriate environment)
-      ash::InitializeAccountManager(
+      InitializeAccountManager(
           user_profile->GetPath(),
           /*initialization_callback=*/base::BindOnce(
               &UpsertStubUserToAccountManager, user_profile, user));
@@ -212,13 +215,13 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
 }
 
 void LaunchShimlessRma() {
-  if (ash::features::IsShimlessRMAFlowEnabled()) {
+  if (features::IsShimlessRMAFlowEnabled()) {
     VLOG(1) << "ChromeSessionManager::LaunchShimlessRma";
   }
   session_manager::SessionManager::Get()->SetSessionState(
       session_manager::SessionState::RMA);
 
-  chromeos::ShimlessRmaDialog::ShowDialog();
+  ShimlessRmaDialog::ShowDialog();
   // Login screen is skipped but 'login-prompt-visible' signal is still
   // needed.
   VLOG(1) << "Shimless RMA app auto launch >> login-prompt-visible";
@@ -227,7 +230,7 @@ void LaunchShimlessRma() {
 
 // The callback invoked when RmadClient determines that RMA is required.
 void OnRmaIsRequiredResponse() {
-  if (ash::features::IsShimlessRMAFlowEnabled()) {
+  if (features::IsShimlessRMAFlowEnabled()) {
     VLOG(1) << "ChromeSessionManager::OnRmaIsRequiredResponse";
   }
   switch (session_manager::SessionManager::Get()->session_state()) {
@@ -246,7 +249,7 @@ void OnRmaIsRequiredResponse() {
     case session_manager::SessionState::LOGIN_SECONDARY:
     case session_manager::SessionState::OOBE: {
       auto* existing_user_controller =
-          ash::ExistingUserController::current_controller();
+          ExistingUserController::current_controller();
       if (!existing_user_controller ||
           !existing_user_controller->IsSigninInProgress()) {
         if (existing_user_controller) {
@@ -256,8 +259,8 @@ void OnRmaIsRequiredResponse() {
         const base::CommandLine& browser_command_line =
             *base::CommandLine::ForCurrentProcess();
         base::CommandLine command_line(browser_command_line);
-        command_line.AppendSwitch(::ash::switches::kLaunchRma);
-        ash::RestartChrome(command_line, ash::RestartChromeReason::kUserless);
+        command_line.AppendSwitch(switches::kLaunchRma);
+        RestartChrome(command_line, RestartChromeReason::kUserless);
         break;
       }
     }
@@ -288,10 +291,10 @@ void ChromeSessionManager::Initialize(
     return;
   }
 
-  if (ash::shimless_rma::IsShimlessRmaAllowed()) {
+  if (shimless_rma::IsShimlessRmaAllowed()) {
     // If we should be in Shimless RMA, start it and skip the rest of
     // initialization.
-    if (ash::shimless_rma::HasLaunchRmaSwitchAndIsAllowed()) {
+    if (shimless_rma::HasLaunchRmaSwitchAndIsAllowed()) {
       LaunchShimlessRma();
       return;
     }
@@ -301,7 +304,7 @@ void ChromeSessionManager::Initialize(
     RmadClient::Get()->SetRmaRequiredCallbackForSessionManager(
         base::BindOnce(&OnRmaIsRequiredResponse));
   } else {
-    if (ash::features::IsShimlessRMAFlowEnabled()) {
+    if (features::IsShimlessRMAFlowEnabled()) {
       VLOG(1) << "ChromeSessionManager::Initialize Shimless RMA is not allowed";
     }
   }
@@ -316,10 +319,8 @@ void ChromeSessionManager::Initialize(
     return;
   }
 
-  if (base::FeatureList::IsEnabled(
-          ash::features::kLacrosProfileBackwardMigration) &&
-      parsed_command_line.HasSwitch(
-          switches::kForceBrowserDataBackwardMigration)) {
+  if (parsed_command_line.HasSwitch(
+          switches::kBrowserDataBackwardMigrationForUser)) {
     LOG(WARNING) << "Ash is running to do browser data backward migration.";
     // Show UI for browser data backward migration. The backward migration
     // itself will be started in `LacrosDataBackwardMigrationScreen::ShowImpl`.
@@ -333,10 +334,11 @@ void ChromeSessionManager::Initialize(
   bool force_login_screen_in_test =
       parsed_command_line.HasSwitch(switches::kForceLoginManagerInTests);
 
-  const std::string cryptohome_id =
-      parsed_command_line.GetSwitchValueASCII(switches::kLoginUser);
+  const user_manager::CryptohomeId cryptohome_id(
+      parsed_command_line.GetSwitchValueASCII(switches::kLoginUser));
+  user_manager::KnownUser known_user(g_browser_process->local_state());
   const AccountId login_account_id(
-      cryptohome::Identification::FromString(cryptohome_id).GetAccountId());
+      known_user.GetAccountIdByCryptohomeId(cryptohome_id));
 
   KioskCryptohomeRemover::RemoveObsoleteCryptohomes();
 

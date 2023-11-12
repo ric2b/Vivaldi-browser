@@ -31,16 +31,12 @@ enum class WebappUninstallSource;
 namespace web_app {
 
 class FullSystemLock;
-class OsIntegrationManager;
-class WebAppIconManager;
-class WebAppInstallManager;
-class WebAppRegistrar;
-class WebAppSyncBridge;
-class WebAppTranslationManager;
+class FullSystemLockDescription;
+class LockDescription;
 class WebAppUninstallJob;
 
 // Uninstall the web app.
-class WebAppUninstallCommand : public WebAppCommand {
+class WebAppUninstallCommand : public WebAppCommandTemplate<FullSystemLock> {
  public:
   using UninstallWebAppCallback =
       base::OnceCallback<void(webapps::UninstallResultCode)>;
@@ -52,20 +48,14 @@ class WebAppUninstallCommand : public WebAppCommand {
       absl::optional<WebAppManagement::Type> management_type_or_all,
       webapps::WebappUninstallSource uninstall_source,
       UninstallWebAppCallback callback,
-      Profile* profile,
-      OsIntegrationManager* os_integration_manager,
-      WebAppSyncBridge* sync_bridge,
-      WebAppIconManager* icon_manager,
-      WebAppRegistrar* registrar,
-      WebAppInstallManager* install_manager,
-      WebAppTranslationManager* translation_manager);
+      Profile* profile);
   ~WebAppUninstallCommand() override;
 
-  void Start() override;
+  void StartWithLock(std::unique_ptr<FullSystemLock> lock) override;
   void OnSyncSourceRemoved() override;
   void OnShutdown() override;
 
-  Lock& lock() const override;
+  LockDescription& lock_description() const override;
   base::Value ToDebugValue() const override;
 
   void SetRemoveManagementTypeCallbackForTesting(
@@ -104,7 +94,9 @@ class WebAppUninstallCommand : public WebAppCommand {
                                  webapps::UninstallResultCode code);
   void MaybeFinishUninstallAndDestruct();
 
+  std::unique_ptr<FullSystemLockDescription> lock_description_;
   std::unique_ptr<FullSystemLock> lock_;
+
   const AppId app_id_;
   base::circular_deque<UninstallInfo> queued_uninstalls_;
   base::flat_map<AppId, webapps::UninstallResultCode> uninstall_results_;
@@ -117,12 +109,6 @@ class WebAppUninstallCommand : public WebAppCommand {
   RemoveManagementTypeCallback management_type_removed_callback_for_testing_;
 
   raw_ptr<PrefService> profile_prefs_;
-  raw_ptr<OsIntegrationManager> os_integration_manager_;
-  raw_ptr<WebAppSyncBridge> sync_bridge_;
-  raw_ptr<WebAppIconManager> icon_manager_;
-  raw_ptr<WebAppRegistrar> registrar_;
-  raw_ptr<WebAppInstallManager> install_manager_;
-  raw_ptr<WebAppTranslationManager> translation_manager_;
 
   base::WeakPtrFactory<WebAppUninstallCommand> weak_factory_{this};
 };

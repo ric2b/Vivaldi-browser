@@ -15,7 +15,6 @@ features:
   dynamic_refresh: false
   per_profile: false
 future_on:
-- android
 - fuchsia
 items:
 - caption: Enable reporting of usage and crash-related data
@@ -23,13 +22,14 @@ items:
 - caption: Disable reporting of usage and crash-related data
   value: false
 owners:
-- file://components/policy/resources/OWNERS
+- file://components/policy/OWNERS
 - zmin@chromium.org
 schema:
   type: boolean
 supported_on:
 - chrome.*:8-
 - ios:88-
+- android:110-
 tags:
 - google-sharing
 type: main

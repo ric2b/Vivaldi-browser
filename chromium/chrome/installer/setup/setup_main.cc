@@ -74,6 +74,7 @@
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
 #include "chrome/installer/setup/user_experiment.h"
+#include "chrome/installer/util/app_command.h"
 #include "chrome/installer/util/conditional_work_item_list.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
 #include "chrome/installer/util/delete_old_versions.h"
@@ -588,9 +589,15 @@ installer::InstallStatus RenameChromeExecutables(
   install_list->AddDeleteRegValueWorkItem(
       reg_root, clients_key, KEY_WOW64_32KEY,
       google_update::kRegCriticalVersionField);
-  install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
-                                          KEY_WOW64_32KEY,
-                                          google_update::kRegRenameCmdField);
+  installer::AppCommand(installer::kCmdRenameChromeExe, {})
+      .AddDeleteAppCommandWorkItems(reg_root, install_list.get());
+  installer::AppCommand(installer::kCmdAlternateRenameChromeExe, {})
+      .AddDeleteAppCommandWorkItems(reg_root, install_list.get());
+
+  if (!installer_state->system_install()) {
+    install_list->AddDeleteRegValueWorkItem(
+        reg_root, clients_key, KEY_WOW64_32KEY, installer::kCmdRenameChromeExe);
+  }
 
   // If a channel was specified by policy, update the "channel" registry value
   // with it so that the browser knows which channel to use, otherwise delete
@@ -852,8 +859,8 @@ bool CreateEulaSentinel() {
 installer::InstallStatus RegisterDevChrome(
     const installer::ModifyParams& modify_params,
     const base::CommandLine& cmd_line) {
-  const InstallationState& original_state = modify_params.installation_state;
-  const base::FilePath& setup_exe = modify_params.setup_path;
+  const InstallationState& original_state = *modify_params.installation_state;
+  const base::FilePath& setup_exe = *modify_params.setup_path;
 
   // Only proceed with registering a dev chrome if no real Chrome installation
   // of the same install mode is present on this system.
@@ -937,10 +944,11 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
                                     const base::CommandLine& cmd_line,
                                     const InitialPreferences& prefs,
                                     int* exit_code) {
-  installer::InstallerState* installer_state = &(modify_params.installer_state);
+  installer::InstallerState* installer_state =
+      &(*modify_params.installer_state);
   installer::InstallationState* original_state =
-      &(modify_params.installation_state);
-  const base::FilePath& setup_exe = modify_params.setup_path;
+      &(*modify_params.installation_state);
+  const base::FilePath& setup_exe = *modify_params.setup_path;
 
   // TODO(gab): Add a local |status| variable which each block below sets;
   // only determine the |exit_code| from |status| at the end (this will allow
@@ -1588,10 +1596,10 @@ int WINAPI wWinMain(HINSTANCE instance,
   if (is_uninstall)
     persistent_histogram_storage.Disable();
 
-  // Check to make sure current system is Win7 or later. If not, log
+  // Check to make sure current system is Win10 or later. If not, log
   // error message and get out.
   if (!InstallUtil::IsOSSupported()) {
-    LOG(ERROR) << "Chrome only supports Windows 7 or later.";
+    LOG(ERROR) << "Chrome only supports Windows 10 or later.";
     installer_state.WriteInstallerResult(installer::OS_NOT_SUPPORTED,
                                          IDS_INSTALL_OS_NOT_SUPPORTED_BASE,
                                          nullptr);

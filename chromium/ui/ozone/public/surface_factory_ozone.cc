@@ -78,7 +78,7 @@ std::unique_ptr<SurfaceOzoneCanvas> SurfaceFactoryOzone::CreateCanvasForWidget(
 
 scoped_refptr<gfx::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(
     gfx::AcceleratedWidget widget,
-    VkDevice vk_device,
+    gpu::VulkanDeviceQueue* device_queue,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -95,7 +95,7 @@ bool SurfaceFactoryOzone::CanCreateNativePixmapForFormat(
 
 void SurfaceFactoryOzone::CreateNativePixmapAsync(
     gfx::AcceleratedWidget widget,
-    VkDevice vk_device,
+    gpu::VulkanDeviceQueue* device_queue,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -128,6 +128,11 @@ void SurfaceFactoryOzone::SetGetProtectedNativePixmapDelegate(
 std::vector<gfx::BufferFormat>
 SurfaceFactoryOzone::GetSupportedFormatsForTexturing() const {
   return std::vector<gfx::BufferFormat>();
+}
+
+absl::optional<gfx::BufferFormat>
+SurfaceFactoryOzone::GetPreferredFormatForSolidColor() const {
+  return absl::nullopt;
 }
 
 }  // namespace ui

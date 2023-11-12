@@ -7,6 +7,7 @@
 <script src="/resources/testharnessreport.js"></script>
 <script src="/scroll-animations/scroll-timelines/testcommon.js"></script>
 <script src="/css/css-animations/support/testcommon.js"></script>
+<script src="support/testcommon.js"></script>
 <style>
   @keyframes anim {
     from { width: 100px; }
@@ -23,6 +24,8 @@
 <script>
 'use strict';
 
+setup(assert_implements_animation_timeline);
+
 async function resetScrollPosition() {
   // Reset to 0 so we don't affect following tests.
   document.scrollingElement.scrollTop = 0;
@@ -35,7 +38,10 @@ promise_test(async t => {
   const scroller = document.scrollingElement;
   t.add_cleanup(resetScrollPosition);
 
-  div.style.animation = 'anim 100s linear paused scroll(root)';
+  div.style.animation = 'anim 100s linear paused';
+  div.style.animationTimeline = 'scroll(root)';
+  await waitForCSSScrollTimelineStyle();
+
   const anim = div.getAnimations()[0];
   await anim.ready;
   assert_percents_equal(anim.currentTime, 0, 'timeline time reset');
@@ -54,7 +60,10 @@ promise_test(async t => {
   const scroller = document.scrollingElement;
   await waitForNextFrame();
 
-  div.style.animation = 'anim 100s linear forwards scroll(root)';
+  div.style.animation = 'anim 100s linear forwards';
+  div.style.animationTimeline = 'scroll(root)';
+  await waitForCSSScrollTimelineStyle();
+
   const anim = div.getAnimations()[0];
   await anim.ready;
   assert_percents_equal(anim.currentTime, 0, 'timeline time reset');

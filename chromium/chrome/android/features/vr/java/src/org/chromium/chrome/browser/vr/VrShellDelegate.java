@@ -217,6 +217,7 @@ public class VrShellDelegate
 
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (!IntentUtils.isTrustedIntentFromSelf(intent)) return;
             ChromeActivity activity = mTargetActivity.get();
             if (activity == null) return;
             getInstance(activity);
@@ -709,6 +710,7 @@ public class VrShellDelegate
         sVrBroadcastReceiver = receiver;
         Intent vrIntent = new Intent(VR_ENTRY_RESULT_ACTION);
         vrIntent.setPackage(activity.getPackageName());
+        IntentUtils.addTrustedIntentExtras(vrIntent);
         return PendingIntent.getBroadcast(activity, 0, vrIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
@@ -866,8 +868,7 @@ public class VrShellDelegate
     }
 
     private int getGvrKeyboardPackageVersion() {
-        return PackageUtils.getPackageVersion(
-                ContextUtils.getApplicationContext(), GVR_KEYBOARD_PACKAGE_ID);
+        return PackageUtils.getPackageVersion(GVR_KEYBOARD_PACKAGE_ID);
     }
 
     protected boolean isVrBrowsingEnabled() {

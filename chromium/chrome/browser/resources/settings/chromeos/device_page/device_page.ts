@@ -10,25 +10,26 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import './audio.js';
 import './display.js';
 import './keyboard.js';
+import './per_device_keyboard.js';
 import './pointers.js';
 import './power.js';
 import './storage.js';
 import './storage_external.js';
 import './stylus.js';
 import '../../prefs/prefs.js';
-import '../../settings_page/settings_animated_pages.js';
-import '../../settings_page/settings_subpage.js';
+import '../os_settings_page/os_settings_animated_pages.js';
+import '../os_settings_page/os_settings_subpage.js';
 import '../../settings_shared.css.js';
 
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Router} from '../../router.js';
 import {routes} from '../os_route.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {Router} from '../router.js';
 
 import {getTemplate} from './device_page.html.js';
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from './device_page_browser_proxy.js';
@@ -40,12 +41,7 @@ interface SettingsDevicePageElement {
 }
 
 const SettingsDevicePageElementBase =
-    mixinBehaviors(
-        [RouteObserverBehavior],
-        I18nMixin(WebUIListenerMixin(PolymerElement))) as {
-      new (): PolymerElement & I18nMixinInterface &
-          WebUIListenerMixinInterface & RouteObserverBehaviorInterface,
-    };
+    RouteObserverMixin(I18nMixin(WebUiListenerMixin(PolymerElement)));
 
 class SettingsDevicePageElement extends SettingsDevicePageElementBase {
   static get is() {
@@ -104,6 +100,17 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
       },
 
       /**
+       * Whether settings should be split per device.
+       */
+      isDeviceSettingsSplitEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableInputDeviceSettingsSplit');
+        },
+        readOnly: true,
+      },
+
+      /**
        * Whether storage management info should be hidden.
        */
       hideStorageInfo_: {
@@ -122,6 +129,10 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
           const map = new Map();
           if (routes.POINTERS) {
             map.set(routes.POINTERS.path, '#pointersRow');
+          }
+          // TODO(@wangdanny): Add route for mouse settings page.
+          if (routes.PER_DEVICE_KEYBOARD) {
+            map.set(routes.PER_DEVICE_KEYBOARD.path, '#perDeviceKeyboardRow');
           }
           if (routes.KEYBOARD) {
             map.set(routes.KEYBOARD.path, '#keyboardRow');
@@ -179,22 +190,22 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
   override connectedCallback() {
     super.connectedCallback();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'has-mouse-changed', this.set.bind(this, 'hasMouse_'));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'has-pointing-stick-changed', this.set.bind(this, 'hasPointingStick_'));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'has-touchpad-changed', this.set.bind(this, 'hasTouchpad_'));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'has-haptic-touchpad-changed',
         this.set.bind(this, 'hasHapticTouchpad_'));
     this.browserProxy_.initializePointers();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'has-stylus-changed', this.set.bind(this, 'hasStylus_'));
     this.browserProxy_.initializeStylus();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'storage-android-enabled-changed',
         this.set.bind(this, 'androidEnabled_'));
     this.browserProxy_.updateAndroidEnabled();
@@ -221,6 +232,13 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
    */
   private onPointersTap_() {
     Router.getInstance().navigateTo(routes.POINTERS);
+  }
+
+  /**
+   * Handler for tapping the mouse and touchpad settings menu item.
+   */
+  private onPerDeviceKeyboardTap_() {
+    Router.getInstance().navigateTo(routes.PER_DEVICE_KEYBOARD);
   }
 
   /**

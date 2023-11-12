@@ -45,26 +45,29 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
+#include "chrome/browser/ash/policy/enrollment/psm/fake_rlwe_client.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/extensions/api/quick_unlock_private/quick_unlock_private_api.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/app_downloading_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/assistant_optin_flow_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/gesture_navigation_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/app_downloading_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/assistant_optin_flow_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gesture_navigation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/marketing_opt_in_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/recommend_apps_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/theme_selection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
-#include "chromeos/ash/components/attestation/attestation_flow_utils.h"
+#include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -89,11 +92,6 @@ enum class ArcState {
   kAcceptTerms,
   kAcceptTermsRecommendAppsNewLayout
 };
-
-bool IsNewRecommendedAppsEnabled() {
-  return features::IsOobeNewRecommendAppsEnabled() &&
-         base::FeatureList::IsEnabled(::features::kAppDiscoveryForOobe);
-}
 
 std::string ArcStateToString(ArcState arc_state) {
   switch (arc_state) {
@@ -287,50 +285,8 @@ void HandleRecommendAppsScreen() {
       .CreateVisibilityWaiter(true, {"recommend-apps", "appsDialog"})
       ->Wait();
 
-  if (IsNewRecommendedAppsEnabled()) {
-    test::OobeJS().ClickOnPath(
-        {"recommend-apps", "appsList", R"(test\\.package)"});
-  } else {
-    test::OobeJS().ExpectPathDisplayed(true, {"recommend-apps", "appView"});
-
-    std::string toggle_apps_script = base::StringPrintf(
-        R"((function() {
-          if (!document.getElementById('recommend-apps-container'))
-            return false;
-          var items =
-              Array.from(document.getElementById('recommend-apps-container')
-                 .querySelectorAll('.item') || [])
-                 .filter(i => '%s' == i.getAttribute('data-packagename'));
-          if (items.length == 0)
-            return false;
-          items.forEach(i => i.querySelector('.image-picker').click());
-          return true;
-        })();)",
-        "test.package");
-
-    const std::string webview_path =
-        test::GetOobeElementPath({"recommend-apps", "appView"});
-    const std::string script = base::StringPrintf(
-        R"((function() {
-          var toggleApp = function() {
-            %s.executeScript({code: `%s`}, r => {
-              if (!r || !r[0]) {
-                setTimeout(toggleApp, 50);
-                return;
-              }
-              window.domAutomationController.send(true);
-            });
-          };
-          toggleApp();
-        })();)",
-        webview_path.c_str(), toggle_apps_script.c_str());
-
-    bool result;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        LoginDisplayHost::default_host()->GetOobeWebContents(), script,
-        &result));
-    EXPECT_TRUE(result);
-  }
+  test::OobeJS().ClickOnPath(
+      {"recommend-apps", "appsList", R"(test\\.package)"});
 
   const std::initializer_list<base::StringPiece> install_button = {
       "recommend-apps", "installButton"};
@@ -466,24 +422,16 @@ class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
 
   // RecommendAppsFetcher:
   void Start() override {
-    if (IsNewRecommendedAppsEnabled()) {
-      base::Value::Dict app;
-      app.Set("packageName", "test.package");
-      app.Set("title", "TestName");
-      base::Value::Dict big_app;
-      big_app.Set("androidApp", std::move(app));
-      base::Value::List app_list;
-      app_list.Append(std::move(big_app));
-      base::Value::Dict response_dict;
-      response_dict.Set("recommendedApp", std::move(app_list));
-      delegate_->OnLoadSuccess(base::Value(std::move(response_dict)));
-      return;
-    }
     base::Value::Dict app;
-    app.Set("package_name", "test.package");
+    app.Set("packageName", "test.package");
+    app.Set("title", "TestName");
+    base::Value::Dict big_app;
+    big_app.Set("androidApp", std::move(app));
     base::Value::List app_list;
-    app_list.Append(std::move(app));
-    delegate_->OnLoadSuccess(base::Value(std::move(app_list)));
+    app_list.Append(std::move(big_app));
+    base::Value::Dict response_dict;
+    response_dict.Set("recommendedApp", std::move(app_list));
+    delegate_->OnLoadSuccess(base::Value(std::move(response_dict)));
   }
 
   void Retry() override { NOTREACHED(); }
@@ -605,13 +553,6 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
       enabled_features.push_back(features::kOobeRemoveShutdownButton);
     } else {
       disabled_features.push_back(features::kOobeRemoveShutdownButton);
-    }
-    if (params_.arc_state == ArcState::kAcceptTermsRecommendAppsNewLayout) {
-      enabled_features.push_back(::features::kAppDiscoveryForOobe);
-      enabled_features.push_back(features::kOobeNewRecommendApps);
-    } else {
-      disabled_features.push_back(::features::kAppDiscoveryForOobe);
-      disabled_features.push_back(features::kOobeNewRecommendApps);
     }
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
@@ -737,7 +678,7 @@ class OobeInteractiveUITest
   void TearDownOnMainThread() override {
     // If the login display is still showing, exit gracefully.
     if (LoginDisplayHost::default_host()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&chrome::AttemptExit));
       RunUntilBrowserProcessQuits();
     }
@@ -789,7 +730,7 @@ void OobeInteractiveUITest::PerformStepsBeforeEnrollmentCheck() {
   RunNetworkSelectionScreenChecks();
   test::TapNetworkSelectionNext();
 
-  if (!chromeos::features::IsOobeConsolidatedConsentEnabled()) {
+  if (!features::IsOobeConsolidatedConsentEnabled()) {
     test::WaitForEulaScreen();
     RunEulaScreenChecks();
     test::TapEulaAccept();
@@ -819,7 +760,7 @@ void OobeInteractiveUITest::PerformSessionSignInSteps(bool is_managed) {
         ->Wait();
   }
 
-  if (chromeos::features::IsOobeConsolidatedConsentEnabled()) {
+  if (features::IsOobeConsolidatedConsentEnabled()) {
     test::WaitForConsolidatedConsentScreen();
     RunConsolidatedConsentScreenChecks();
     test::TapConsolidatedConsentAccept();
@@ -841,7 +782,7 @@ void OobeInteractiveUITest::PerformSessionSignInSteps(bool is_managed) {
     test::ExitPinSetupScreen();
   }
 
-  if (!chromeos::features::IsOobeConsolidatedConsentEnabled() &&
+  if (!features::IsOobeConsolidatedConsentEnabled() &&
       test_setup()->arc_state() != ArcState::kNotAvailable) {
     HandleArcTermsOfServiceScreen();
   }
@@ -919,9 +860,7 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
     AttestationClient::Get()
         ->GetTestInterface()
         ->AllowlistSignSimpleChallengeKey(
-            /*username=*/"",
-            attestation::GetKeyNameForProfile(
-                attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, ""));
+            /*username=*/"", attestation::kEnterpriseEnrollmentKey);
     OobeInteractiveUITest::SetUpOnMainThread();
     policy_test_server_mixin_.ConfigureFakeStatisticsForZeroTouch(
         &fake_statistics_provider_);
@@ -929,11 +868,6 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     OobeInteractiveUITest::SetUpCommandLine(command_line);
-
-    // Enable usage of fake PSM (private set membership) RLWE client (for tests
-    // checking initial enrollment).
-    command_line->AppendSwitch(
-        switches::kEnterpriseUseFakePsmRlweClientForTesting);
 
     command_line->AppendSwitchASCII(
         switches::kEnterpriseEnableInitialEnrollment,
@@ -950,6 +884,11 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
 
 void OobeZeroTouchInteractiveUITest::ZeroTouchEndToEnd() {
   policy_test_server_mixin_.SetupZeroTouchForcedEnrollment();
+
+  WizardController::default_controller()
+      ->GetAutoEnrollmentControllerForTesting()
+      ->SetRlweClientFactoryForTesting(
+          base::BindRepeating(&policy::psm::FakeRlweClient::Create));
 
   PerformStepsBeforeEnrollmentCheck();
 

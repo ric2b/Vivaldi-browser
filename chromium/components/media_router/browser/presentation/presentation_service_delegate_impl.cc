@@ -29,7 +29,7 @@
 #include "components/media_router/browser/presentation/local_presentation_manager.h"
 #include "components/media_router/browser/presentation/local_presentation_manager_factory.h"
 #include "components/media_router/browser/presentation/presentation_media_sinks_observer.h"
-#include "components/media_router/browser/route_message_observer.h"
+#include "components/media_router/browser/presentation_connection_message_observer.h"
 #include "components/media_router/common/media_route.h"
 #include "components/media_router/common/media_sink.h"
 #include "components/media_router/common/media_source.h"
@@ -212,7 +212,11 @@ bool PresentationFrame::HasScreenAvailabilityListenerForTest(
 }
 
 void PresentationFrame::Reset() {
-  for (const auto& pid_route : presentation_id_to_route_) {
+  // Create a copy here to avoid `pid_route` being invalidated while iterating.
+  // `router->DetachRoute()` might cause a Presentation route to be terminated
+  // and removed from `presentation_id_to_route_`.
+  auto presentation_id_to_route_copy(presentation_id_to_route_);
+  for (const auto& pid_route : presentation_id_to_route_copy) {
     if (pid_route.second.is_local_presentation()) {
       auto* local_presentation_manager =
           LocalPresentationManagerFactory::GetOrCreateForWebContents(
@@ -220,7 +224,14 @@ void PresentationFrame::Reset() {
       local_presentation_manager->UnregisterLocalPresentationController(
           pid_route.first, render_frame_host_id_);
     } else {
-      router_->DetachRoute(pid_route.second.media_route_id());
+      // We avoid using `router_` here because it may have been invalidated if
+      // this method is called during profile shutdown. This is a speculative
+      // fix for crbug.com/1219904.
+      MediaRouter* router = MediaRouterFactory::GetApiForBrowserContextIfExists(
+          web_contents_->GetBrowserContext());
+      if (router) {
+        router->DetachRoute(pid_route.second.media_route_id());
+      }
     }
   }
 

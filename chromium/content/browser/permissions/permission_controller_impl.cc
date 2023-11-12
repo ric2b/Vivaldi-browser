@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_BROWSER_PERMISSIONS_PERMISSION_CONTROLLER_IMPL_CC_
-#define CONTENT_BROWSER_PERMISSIONS_PERMISSION_CONTROLLER_IMPL_CC_
-
 #include "content/browser/permissions/permission_controller_impl.h"
+
 #include "base/bind.h"
+#include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -27,12 +26,18 @@ namespace content {
 
 namespace {
 
+constexpr char kPermissionBlockedPortalsMessage[] =
+    "%s permission has been blocked because it was requested inside a "
+    "portal. "
+    "Portals don't currently support permission requests.";
+
+constexpr char kPermissionBlockedFencedFrameMessage[] =
+    "%s permission has been blocked because it was requested inside a fenced "
+    "frame. Fenced frames don't currently support permission requests.";
+
 absl::optional<blink::scheduler::WebSchedulerTrackedFeature>
 PermissionToSchedulingFeature(PermissionType permission_name) {
   switch (permission_name) {
-    case PermissionType::NOTIFICATIONS:
-      return blink::scheduler::WebSchedulerTrackedFeature::
-          kRequestedNotificationsPermission;
     case PermissionType::MIDI:
     case PermissionType::MIDI_SYSEX:
       return blink::scheduler::WebSchedulerTrackedFeature::
@@ -66,22 +71,14 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::AR:
     case PermissionType::VR:
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
-    case PermissionType::WINDOW_PLACEMENT:
+    case PermissionType::WINDOW_MANAGEMENT:
     case PermissionType::LOCAL_FONTS:
     case PermissionType::DISPLAY_CAPTURE:
     case PermissionType::GEOLOCATION:
+    case PermissionType::NOTIFICATIONS:
       return absl::nullopt;
   }
 }
-
-const char kPermissionBlockedPortalsMessage[] =
-    "%s permission has been blocked because it was requested inside a "
-    "portal. "
-    "Portals don't currently support permission requests.";
-
-const char kPermissionBlockedFencedFrameMessage[] =
-    "%s permission has been blocked because it was requested inside a fenced "
-    "frame. Fenced frames don't currently support permission requests.";
 
 void LogPermissionBlockedMessage(PermissionType permission,
                                  content::RenderFrameHost* rfh,
@@ -226,7 +223,8 @@ PermissionControllerImpl::PermissionControllerImpl(
     : browser_context_(browser_context) {}
 
 // TODO(https://crbug.com/1271543): Remove this method and use
-// `PermissionController` instead. static
+// `PermissionController` instead.
+// static
 PermissionControllerImpl* PermissionControllerImpl::FromBrowserContext(
     BrowserContext* browser_context) {
   return static_cast<PermissionControllerImpl*>(
@@ -277,10 +275,14 @@ PermissionControllerImpl::SubscriptionsStatusMap
 PermissionControllerImpl::GetSubscriptionsStatuses(
     const absl::optional<GURL>& origin) {
   SubscriptionsStatusMap statuses;
+
+  if (!origin.has_value()) {
+    return statuses;
+  }
   for (SubscriptionsMap::iterator iter(&subscriptions_); !iter.IsAtEnd();
        iter.Advance()) {
     Subscription* subscription = iter.GetCurrentValue();
-    if (origin.has_value() && subscription->requesting_origin != *origin)
+    if (subscription->requesting_origin != *origin)
       continue;
     statuses[iter.GetCurrentKey()] = GetSubscriptionCurrentValue(*subscription);
   }
@@ -697,6 +699,21 @@ void PermissionControllerImpl::UnsubscribePermissionStatusChange(
   subscriptions_.Remove(subscription_id);
 }
 
-}  // namespace content
+bool PermissionControllerImpl::IsSubscribedToPermissionChangeEvent(
+    blink::PermissionType permission,
+    RenderFrameHost* render_frame_host) {
+  PermissionServiceContext* permission_service_context =
+      PermissionServiceContext::GetForCurrentDocument(render_frame_host);
 
-#endif  // CONTENT_BROWSER_PERMISSIONS_PERMISSION_CONTROLLER_IMPL_CC_
+  return permission_service_context->GetOnchangeEventListeners().find(
+             permission) !=
+         permission_service_context->GetOnchangeEventListeners().end();
+}
+
+void PermissionControllerImpl::NotifyEventListener() {
+  if (onchange_listeners_callback_for_tests_.has_value()) {
+    onchange_listeners_callback_for_tests_.value().Run();
+  }
+}
+
+}  // namespace content

@@ -282,7 +282,8 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
       additional_info(match.additional_info),
       duplicate_matches(match.duplicate_matches),
       query_tiles(match.query_tiles),
-      suggest_tiles(match.suggest_tiles) {}
+      suggest_tiles(match.suggest_tiles),
+      scoring_signals(match.scoring_signals) {}
 
 AutocompleteMatch::AutocompleteMatch(AutocompleteMatch&& match) noexcept {
   *this = std::move(match);
@@ -334,6 +335,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   duplicate_matches = std::move(match.duplicate_matches);
   query_tiles = std::move(match.query_tiles);
   suggest_tiles = std::move(match.suggest_tiles);
+  scoring_signals = std::move(match.scoring_signals);
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
   std::swap(java_match_, match.java_match_);
@@ -403,6 +405,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   duplicate_matches = match.duplicate_matches;
   query_tiles = match.query_tiles;
   suggest_tiles = match.suggest_tiles;
+  scoring_signals = match.scoring_signals;
 
 #if BUILDFLAG(IS_ANDROID)
   // In case the target element previously held a java object, release it.
@@ -464,7 +467,6 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
     case Type::TAB_SEARCH_DEPRECATED:
     case Type::TILE_NAVSUGGEST:
     case Type::OPEN_TAB:
-    case Type::STARTER_PACK:
       return omnibox::kPageIcon;
 
     case Type::SEARCH_SUGGEST: {
@@ -527,6 +529,9 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
 
     case Type::HISTORY_CLUSTER:
       return omnibox::kJourneysIcon;
+
+    case Type::STARTER_PACK:
+      return omnibox::kProductIcon;
 
     case Type::NUM_TYPES:
       // TODO(https://crbug.com/1024114): Replace with NOTREACHED() once fixed.
@@ -788,20 +793,6 @@ bool AutocompleteMatch::IsSearchHistoryType(Type type) {
          type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED;
 }
 
-// static
-bool AutocompleteMatch::IsActionCompatibleType(Type type) {
-  // Note: There is a PEDAL type, but it is deprecated because Pedals always
-  // attach to matches of other types instead of creating dedicated matches.
-  return type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY &&
-         // Attaching to Tail Suggest types looks weird, and is actually
-         // technically wrong because the Pedals annotator (and history clusters
-         // annotator) both use match.contents. If we do want to turn on Actions
-         // for tail suggest in the future, we should switch to using
-         // match.fill_into_edit or maybe page title for URL matches, and come
-         // up with a UI design for the button in the tail suggest layout.
-         type != AutocompleteMatchType::SEARCH_SUGGEST_TAIL;
-}
-
 bool AutocompleteMatch::IsStarterPackType(Type type) {
   return type == AutocompleteMatchType::STARTER_PACK;
 }
@@ -845,21 +836,8 @@ GURL AutocompleteMatch::GURLToStrippedGURL(
     const GURL& url,
     const AutocompleteInput& input,
     const TemplateURLService* template_url_service,
-    const std::u16string& keyword) {
-  static const bool optimize =
-      base::FeatureList::IsEnabled(omnibox::kStrippedGurlOptimization);
-  return optimize ? GURLToStrippedGURLOptimized(url, input,
-                                                template_url_service, keyword)
-                  : GURLToStrippedGURLControl(url, input, template_url_service,
-                                              keyword);
-}
-
-// static
-GURL AutocompleteMatch::GURLToStrippedGURLControl(
-    const GURL& url,
-    const AutocompleteInput& input,
-    const TemplateURLService* template_url_service,
-    const std::u16string& keyword) {
+    const std::u16string& keyword,
+    const bool keep_search_intent_params) {
   if (!url.is_valid())
     return url;
 
@@ -872,106 +850,33 @@ GURL AutocompleteMatch::GURLToStrippedGURLControl(
   GURL stripped_destination_url = url;
 
   // If the destination URL looks like it was generated from a TemplateURL,
-  // remove all substitutions other than the search terms.  This allows us
-  // to eliminate cases like past search URLs from history that differ only
-  // by some obscure query param from each other or from the search/keyword
-  // provider matches.
+  // remove all substitutions other than the search terms and optionally the
+  // search intent params. This allows eliminating cases like past search URLs
+  // from history that differ only by some obscure query param from each other
+  // or from the search/keyword provider matches.
   const TemplateURL* template_url = GetTemplateURLWithKeyword(
       template_url_service, keyword, stripped_destination_url.host());
   if (template_url != nullptr &&
       template_url->SupportsReplacement(
           template_url_service->search_terms_data())) {
-    std::u16string search_terms;
-    if (template_url->ExtractSearchTermsFromURL(
-            stripped_destination_url, template_url_service->search_terms_data(),
-            &search_terms)) {
-      stripped_destination_url =
-          GURL(template_url->url_ref().ReplaceSearchTerms(
-              TemplateURLRef::SearchTermsArgs(search_terms),
-              template_url_service->search_terms_data()));
-    }
-  }
-
-  // |replacements| keeps all the substitutions we're going to make to
-  // from {destination_url} to {stripped_destination_url}.  |need_replacement|
-  // is a helper variable that helps us keep track of whether we need
-  // to apply the replacement.
-  bool needs_replacement = false;
-  GURL::Replacements replacements;
-
-  // Remove the www. prefix from the host.
-  static const char prefix[] = "www.";
-  static const size_t prefix_len = std::size(prefix) - 1;
-  std::string host = stripped_destination_url.host();
-  if (host.compare(0, prefix_len, prefix) == 0 && host.length() > prefix_len) {
-    replacements.SetHostStr(base::StringPiece(host).substr(prefix_len));
-    needs_replacement = true;
-  }
-
-  // Replace https protocol with http, as long as the user didn't explicitly
-  // specify one of the two.
-  if (stripped_destination_url.SchemeIs(url::kHttpsScheme) &&
-      (input.terms_prefixed_by_http_or_https().empty() ||
-       !WordMatchesURLContent(input.terms_prefixed_by_http_or_https(), url))) {
-    replacements.SetSchemeStr(url::kHttpScheme);
-    needs_replacement = true;
-  }
-
-  if (!input.parts().ref.is_nonempty() && url.has_ref()) {
-    replacements.ClearRef();
-    needs_replacement = true;
-  }
-
-  if (needs_replacement)
-    stripped_destination_url =
-        stripped_destination_url.ReplaceComponents(replacements);
-  return stripped_destination_url;
-}
-
-// static
-GURL AutocompleteMatch::GURLToStrippedGURLOptimized(
-    const GURL& url,
-    const AutocompleteInput& input,
-    const TemplateURLService* template_url_service,
-    const std::u16string& keyword) {
-  if (!url.is_valid())
-    return url;
-
-  // Special-case canonicalizing Docs URLs. This logic is self-contained and
-  // will not participate in the TemplateURL canonicalization.
-  GURL docs_url = DocumentProvider::GetURLForDeduping(url);
-  if (docs_url.is_valid())
-    return docs_url;
-
-  GURL stripped_destination_url = url;
-
-  // If the destination URL looks like it was generated from a TemplateURL,
-  // remove all substitutions other than the search terms.  This allows us
-  // to eliminate cases like past search URLs from history that differ only
-  // by some obscure query param from each other or from the search/keyword
-  // provider matches.
-  const TemplateURL* template_url = GetTemplateURLWithKeyword(
-      template_url_service, keyword, stripped_destination_url.host());
-  if (template_url != nullptr &&
-      template_url->SupportsReplacement(
-          template_url_service->search_terms_data())) {
-    static base::LRUCache<std::pair<const TemplateURL*, GURL>, GURL>
-        template_cache(30);
-    const std::pair<const TemplateURL*, GURL> cache_key = {template_url, url};
-    const auto& cached = template_cache.Get(cache_key);
-    if (cached != template_cache.end()) {
-      stripped_destination_url = cached->second;
-    } else {
-      std::u16string search_terms;
-      if (template_url->ExtractSearchTermsFromURL(
-              stripped_destination_url,
-              template_url_service->search_terms_data(), &search_terms)) {
-        stripped_destination_url =
-            GURL(template_url->url_ref().ReplaceSearchTerms(
-                TemplateURLRef::SearchTermsArgs(search_terms),
-                template_url_service->search_terms_data()));
+    static const bool optimize =
+        base::FeatureList::IsEnabled(omnibox::kStrippedGurlOptimization);
+    if (optimize) {
+      using CacheKey = std::tuple<const TemplateURL*, GURL, bool>;
+      static base::LRUCache<CacheKey, GURL> template_cache(30);
+      const CacheKey cache_key = {template_url, url, keep_search_intent_params};
+      const auto& cached = template_cache.Get(cache_key);
+      if (cached != template_cache.end()) {
+        stripped_destination_url = cached->second;
+      } else if (template_url->KeepSearchTermsInURL(
+                     url, template_url_service->search_terms_data(),
+                     keep_search_intent_params, &stripped_destination_url)) {
         template_cache.Put(cache_key, stripped_destination_url);
       }
+    } else {
+      template_url->KeepSearchTermsInURL(
+          url, template_url_service->search_terms_data(),
+          keep_search_intent_params, &stripped_destination_url);
     }
   }
 
@@ -1000,7 +905,7 @@ GURL AutocompleteMatch::GURLToStrippedGURLOptimized(
     needs_replacement = true;
   }
 
-  if (!input.parts().ref.is_nonempty() && url.has_ref()) {
+  if (input.parts().ref.is_empty() && url.has_ref()) {
     replacements.ClearRef();
     needs_replacement = true;
   }
@@ -1095,8 +1000,9 @@ void AutocompleteMatch::ComputeStrippedDestinationURL(
   // the document provider, and overwriting them here would be wasteful and, in
   // the case of the document provider, prevent potential deduping.
   if (stripped_destination_url.is_empty()) {
-    stripped_destination_url = GURLToStrippedGURL(
-        destination_url, input, template_url_service, keyword);
+    stripped_destination_url =
+        GURLToStrippedGURL(destination_url, input, template_url_service,
+                           keyword, /*keep_search_intent_params=*/false);
   }
 }
 
@@ -1108,6 +1014,17 @@ bool AutocompleteMatch::IsDocumentSuggestion() {
   if (docs_url.is_valid())
     stripped_destination_url = docs_url;
   return docs_url.is_valid();
+}
+
+bool AutocompleteMatch::IsActionCompatible() const {
+  return type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY &&
+         // Attaching to Tail Suggest types looks weird, and is actually
+         // technically wrong because the Pedals annotator (and history clusters
+         // annotator) both use match.contents. If we do want to turn on Actions
+         // for tail suggest in the future, we should switch to using
+         // match.fill_into_edit or maybe page title for URL matches, and come
+         // up with a UI design for the button in the tail suggest layout.
+         type != AutocompleteMatchType::SEARCH_SUGGEST_TAIL;
 }
 
 void AutocompleteMatch::GetKeywordUIState(
@@ -1330,38 +1247,6 @@ void AutocompleteMatch::SetAllowedToBeDefault(const AutocompleteInput& input) {
   }
 }
 
-void AutocompleteMatch::SetTailSuggestCommonPrefix(
-    const std::u16string& common_prefix) {
-  // Prevent re-addition of prefix.
-  if (type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL &&
-      tail_suggest_common_prefix.empty()) {
-    tail_suggest_common_prefix = common_prefix;
-  }
-}
-
-void AutocompleteMatch::SetTailSuggestContentPrefix(
-    const std::u16string& common_prefix) {
-  // Prevent re-addition of prefix.
-  if (type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL &&
-      tail_suggest_common_prefix.empty()) {
-    SetTailSuggestCommonPrefix(common_prefix);
-    // Insert an ellipsis before uncommon part.
-    const std::u16string ellipsis = kEllipsis;
-    contents = ellipsis + contents;
-    // If the first class is not already NONE, prepend a NONE class for the new
-    // ellipsis.
-    if (contents_class.empty() ||
-        (contents_class[0].offset == 0 &&
-         contents_class[0].style != ACMatchClassification::NONE)) {
-      contents_class.insert(contents_class.begin(),
-                            {0, ACMatchClassification::NONE});
-    }
-    // Shift existing styles.
-    for (size_t i = 1; i < contents_class.size(); ++i)
-      contents_class[i].offset += ellipsis.size();
-  }
-}
-
 size_t AutocompleteMatch::EstimateMemoryUsage() const {
   size_t res = 0;
 
@@ -1427,9 +1312,8 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
 
   from_previous = from_previous && duplicate_match.from_previous;
 
-  // Take the |action|, if any, so that it will be presented instead of buried.
-  if (!action && duplicate_match.action &&
-      AutocompleteMatch::IsActionCompatibleType(type)) {
+  // Take the `action`, if any, so that it will be presented instead of buried.
+  if (!action && duplicate_match.action && IsActionCompatible()) {
     action = duplicate_match.action;
     duplicate_match.action = nullptr;
   }
@@ -1438,6 +1322,202 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
   if (rich_autocompletion_triggered == RichAutocompletionType::kNone) {
     rich_autocompletion_triggered =
         duplicate_match.rich_autocompletion_triggered;
+  }
+
+  // Merge scoring signals from duplicate match for ML model scoring and
+  // training.
+  if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled()) {
+    MergeScoringSignals(duplicate_match);
+  }
+}
+
+void AutocompleteMatch::MergeScoringSignals(const AutocompleteMatch& other) {
+  // Take the maximum.
+  if (other.scoring_signals.has_typed_count()) {
+    scoring_signals.set_typed_count(std::max(
+        scoring_signals.typed_count(), other.scoring_signals.typed_count()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_visit_count()) {
+    scoring_signals.set_visit_count(std::max(
+        scoring_signals.visit_count(), other.scoring_signals.visit_count()));
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_elapsed_time_last_visit_secs() &&
+      other.scoring_signals.has_elapsed_time_last_visit_secs()) {
+    scoring_signals.set_elapsed_time_last_visit_secs(
+        std::min(scoring_signals.elapsed_time_last_visit_secs(),
+                 other.scoring_signals.elapsed_time_last_visit_secs()));
+  } else if (other.scoring_signals.has_elapsed_time_last_visit_secs()) {
+    scoring_signals.set_elapsed_time_last_visit_secs(
+        other.scoring_signals.elapsed_time_last_visit_secs());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_shortcut_visit_count()) {
+    scoring_signals.set_shortcut_visit_count(
+        std::max(scoring_signals.shortcut_visit_count(),
+                 other.scoring_signals.shortcut_visit_count()));
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_shortest_shortcut_len() &&
+      other.scoring_signals.has_shortest_shortcut_len()) {
+    scoring_signals.set_shortest_shortcut_len(
+        std::min(scoring_signals.shortest_shortcut_len(),
+                 other.scoring_signals.shortest_shortcut_len()));
+  } else if (other.scoring_signals.has_shortest_shortcut_len()) {
+    scoring_signals.set_shortest_shortcut_len(
+        other.scoring_signals.shortest_shortcut_len());
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_elapsed_time_last_shortcut_visit_sec() &&
+      other.scoring_signals.has_elapsed_time_last_shortcut_visit_sec()) {
+    scoring_signals.set_elapsed_time_last_shortcut_visit_sec(
+        std::min(scoring_signals.elapsed_time_last_shortcut_visit_sec(),
+                 other.scoring_signals.elapsed_time_last_shortcut_visit_sec()));
+  } else if (other.scoring_signals.has_elapsed_time_last_shortcut_visit_sec()) {
+    scoring_signals.set_elapsed_time_last_shortcut_visit_sec(
+        other.scoring_signals.elapsed_time_last_shortcut_visit_sec());
+  }
+
+  // Take the OR result.
+  if (other.scoring_signals.has_is_host_only()) {
+    scoring_signals.set_is_host_only(scoring_signals.is_host_only() ||
+                                     other.scoring_signals.is_host_only());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_num_bookmarks_of_url()) {
+    scoring_signals.set_num_bookmarks_of_url(
+        std::max(scoring_signals.num_bookmarks_of_url(),
+                 other.scoring_signals.num_bookmarks_of_url()));
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_first_bookmark_title_match_position() &&
+      other.scoring_signals.has_first_bookmark_title_match_position()) {
+    scoring_signals.set_first_bookmark_title_match_position(
+        std::min(scoring_signals.first_bookmark_title_match_position(),
+                 other.scoring_signals.first_bookmark_title_match_position()));
+  } else if (other.scoring_signals.has_first_bookmark_title_match_position()) {
+    scoring_signals.set_first_bookmark_title_match_position(
+        other.scoring_signals.first_bookmark_title_match_position());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_bookmark_title_match_length()) {
+    scoring_signals.set_total_bookmark_title_match_length(
+        std::max(scoring_signals.total_bookmark_title_match_length(),
+                 other.scoring_signals.total_bookmark_title_match_length()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_num_input_terms_matched_by_bookmark_title()) {
+    scoring_signals.set_num_input_terms_matched_by_bookmark_title(std::max(
+        scoring_signals.num_input_terms_matched_by_bookmark_title(),
+        other.scoring_signals.num_input_terms_matched_by_bookmark_title()));
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_first_url_match_position() &&
+      other.scoring_signals.has_first_url_match_position()) {
+    scoring_signals.set_first_url_match_position(
+        std::min(scoring_signals.first_url_match_position(),
+                 other.scoring_signals.first_url_match_position()));
+  } else if (other.scoring_signals.has_first_url_match_position()) {
+    scoring_signals.set_first_url_match_position(
+        other.scoring_signals.first_url_match_position());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_url_match_length()) {
+    scoring_signals.set_total_url_match_length(
+        std::max(scoring_signals.total_url_match_length(),
+                 other.scoring_signals.total_url_match_length()));
+  }
+
+  // Take the OR result.
+  if (other.scoring_signals.has_host_match_at_word_boundary()) {
+    scoring_signals.set_host_match_at_word_boundary(
+        scoring_signals.host_match_at_word_boundary() ||
+        other.scoring_signals.host_match_at_word_boundary());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_host_match_length()) {
+    scoring_signals.set_total_host_match_length(
+        std::max(scoring_signals.total_host_match_length(),
+                 other.scoring_signals.total_host_match_length()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_path_match_length()) {
+    scoring_signals.set_total_path_match_length(
+        std::max(scoring_signals.total_path_match_length(),
+                 other.scoring_signals.total_path_match_length()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_query_or_ref_match_length()) {
+    scoring_signals.set_total_query_or_ref_match_length(
+        std::max(scoring_signals.total_query_or_ref_match_length(),
+                 other.scoring_signals.total_query_or_ref_match_length()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_total_title_match_length()) {
+    scoring_signals.set_total_title_match_length(
+        std::max(scoring_signals.total_title_match_length(),
+                 other.scoring_signals.total_title_match_length()));
+  }
+
+  // Take the OR result.
+  if (other.scoring_signals.has_has_non_scheme_www_match()) {
+    scoring_signals.set_has_non_scheme_www_match(
+        scoring_signals.has_non_scheme_www_match() ||
+        other.scoring_signals.has_non_scheme_www_match());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_num_input_terms_matched_by_title()) {
+    scoring_signals.set_num_input_terms_matched_by_title(
+        std::max(scoring_signals.num_input_terms_matched_by_title(),
+                 other.scoring_signals.num_input_terms_matched_by_title()));
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_num_input_terms_matched_by_url()) {
+    scoring_signals.set_num_input_terms_matched_by_url(
+        std::max(scoring_signals.num_input_terms_matched_by_url(),
+                 other.scoring_signals.num_input_terms_matched_by_url()));
+  }
+
+  // Take the minimum.
+  if (scoring_signals.has_length_of_url() &&
+      other.scoring_signals.has_length_of_url()) {
+    scoring_signals.set_length_of_url(
+        std::min(scoring_signals.length_of_url(),
+                 other.scoring_signals.length_of_url()));
+  } else if (other.scoring_signals.has_length_of_url()) {
+    scoring_signals.set_length_of_url(other.scoring_signals.length_of_url());
+  }
+
+  // Take the maximum.
+  if (other.scoring_signals.has_site_engagement()) {
+    scoring_signals.set_site_engagement(
+        std::max(scoring_signals.site_engagement(),
+                 other.scoring_signals.site_engagement()));
+  }
+
+  // Take the OR result.
+  if (other.scoring_signals.has_allowed_to_be_default_match()) {
+    scoring_signals.set_allowed_to_be_default_match(
+        scoring_signals.allowed_to_be_default_match() ||
+        other.scoring_signals.allowed_to_be_default_match());
   }
 }
 

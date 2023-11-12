@@ -10,11 +10,13 @@
 #include "ash/public/cpp/projector/projector_annotator_controller.h"
 #include "ash/public/cpp/projector/projector_client.h"
 #include "ash/public/cpp/projector/projector_controller.h"
+#include "ash/public/cpp/projector/speech_recognition_availability.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/speech/speech_recognizer_delegate.h"
 #include "chrome/browser/ui/ash/projector/projector_drivefs_provider.h"
+#include "chrome/browser/ui/ash/projector/projector_soda_installation_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
@@ -45,6 +47,8 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   ~ProjectorClientImpl() override;
 
   // ash::ProjectorClient:
+  ash::SpeechRecognitionAvailability GetSpeechRecognitionAvailability()
+      const override;
   void StartSpeechRecognition() override;
   void StopSpeechRecognition() override;
   bool GetBaseStoragePath(base::FilePath* result) const override;
@@ -112,6 +116,10 @@ class ProjectorClientImpl : public ash::ProjectorClient,
       drive_observation_{this};
 
   ProjectorDriveFsProvider drive_helper_;
+
+  std::unique_ptr<ProjectorSodaInstallationController>
+      soda_installation_controller_;
+
   base::WeakPtrFactory<ProjectorClientImpl> weak_ptr_factory_{this};
 };
 

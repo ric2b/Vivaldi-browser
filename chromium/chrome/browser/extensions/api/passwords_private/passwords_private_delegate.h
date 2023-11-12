@@ -37,15 +37,9 @@ class PasswordsPrivateDelegate : public KeyedService {
 
   using PlaintextPasswordCallback =
       base::OnceCallback<void(absl::optional<std::u16string>)>;
-  using RequestCredentialDetailsCallback = base::OnceCallback<void(
-      absl::optional<api::passwords_private::PasswordUiEntry>)>;
-
-  using RefreshScriptsIfNecessaryCallback = base::OnceClosure;
 
   using StartPasswordCheckCallback =
       base::OnceCallback<void(password_manager::BulkLeakCheckService::State)>;
-
-  using StartAutomatedPasswordChangeCallback = base::OnceCallback<void(bool)>;
 
   ~PasswordsPrivateDelegate() override = default;
 
@@ -53,6 +47,10 @@ class PasswordsPrivateDelegate : public KeyedService {
   using UiEntries = std::vector<api::passwords_private::PasswordUiEntry>;
   using UiEntriesCallback = base::OnceCallback<void(const UiEntries&)>;
   virtual void GetSavedPasswordsList(UiEntriesCallback callback) = 0;
+
+  using CredentialsGroups =
+      std::vector<api::passwords_private::CredentialGroup>;
+  virtual CredentialsGroups GetCredentialGroups() = 0;
 
   // Gets the password exceptions list.
   using ExceptionEntries = std::vector<api::passwords_private::ExceptionEntry>;
@@ -133,9 +131,9 @@ class PasswordsPrivateDelegate : public KeyedService {
   // could be obtained successfully, or absl::nullopt otherwise.
   // |web_contents| The web content object used as the UI; will be used to show
   //     an OS-level authentication dialog if necessary.
-  virtual void RequestCredentialDetails(
-      int id,
-      RequestCredentialDetailsCallback callback,
+  virtual void RequestCredentialsDetails(
+      const std::vector<int>& ids,
+      UiEntriesCallback callback,
       content::WebContents* web_contents) = 0;
 
   // Moves a list of passwords currently stored on the device to being stored in
@@ -198,16 +196,9 @@ class PasswordsPrivateDelegate : public KeyedService {
   virtual bool UnmuteInsecureCredential(
       const api::passwords_private::PasswordUiEntry& credential) = 0;
 
-  // Records that a change password flow was started for |credential| and
-  // whether |is_manual_flow| applies to the flow.
+  // Records that a change password flow was started for |credential|.
   virtual void RecordChangePasswordFlowStarted(
-      const api::passwords_private::PasswordUiEntry& credential,
-      bool is_manual_flow) = 0;
-
-  // Refreshes the cache for automatic password change scripts if that is stale
-  // and runs `callback` once that is complete.
-  virtual void RefreshScriptsIfNecessary(
-      RefreshScriptsIfNecessaryCallback callback) = 0;
+      const api::passwords_private::PasswordUiEntry& credential) = 0;
 
   // Requests to start a check for insecure passwords. Invokes |callback|
   // once a check is running or the request was stopped via StopPasswordCheck().
@@ -218,13 +209,6 @@ class PasswordsPrivateDelegate : public KeyedService {
   // Returns the current status of the password check.
   virtual api::passwords_private::PasswordCheckStatus
   GetPasswordCheckStatus() = 0;
-
-  // Starts an automated password change flow for `credential` and returns
-  // whether the credential was changed successfully by calling `callback` with
-  // a boolean parameter.
-  virtual void StartAutomatedPasswordChange(
-      const api::passwords_private::PasswordUiEntry& credential,
-      StartAutomatedPasswordChangeCallback callback) = 0;
 
   // Returns a pointer to the current instance of InsecureCredentialsManager.
   // Needed to get notified when compromised credentials are written out to
@@ -239,6 +223,9 @@ class PasswordsPrivateDelegate : public KeyedService {
   // successful authentication.
   virtual void SwitchBiometricAuthBeforeFillingState(
       content::WebContents* web_contents) = 0;
+
+  // Triggers a dialog for installing the shortcut for PasswordManager page.
+  virtual void ShowAddShortcutDialog(content::WebContents* web_contents) = 0;
 };
 
 }  // namespace extensions

@@ -18,7 +18,6 @@ _VALID_SWARMING_DIMENSIONS = {
 _DEFAULT_VALID_PERF_POOLS = {
     'chrome.tests.perf',
     'chrome.tests.perf-webview',
-    'chrome.tests.perf-weblayer',
     'chrome.tests.perf-fyi',
     'chrome.tests.perf-webview-fyi',
 }
@@ -34,8 +33,10 @@ _VALID_PERF_POOLS = {
     'chromeos-arm64-generic-lacros-builder-perf': {'chrome.tests'},
     'fuchsia-perf-fyi': {'chrome.tests'},
     'fuchsia-perf-atlas-fyi': {'chrome.tests'},
+    'fuchsia-perf-nuc-fyi': {'chrome.tests'},
     'fuchsia-perf-sherlock-fyi': {'chrome.tests'},
     'fuchsia-perf-ast': {'chrome.tests'},
+    'fuchsia-perf-nsn': {'chrome.tests'},
     'fuchsia-perf-shk': {'chrome.tests'},
     'linux-builder-perf': {'chrome.tests'},
     'mac-arm-builder-perf': {'chrome.tests'},
@@ -69,7 +70,6 @@ def _ValidateSwarmingDimension(builder_name, swarming_dimensions):
         raise ValueError('Invalid perf pool %s in %s' % (v, builder_name))
       if k == 'os' and v == 'Android':
         if (not 'device_type' in dimension.keys() or
-            not 'device_os' in dimension.keys() or
             not 'device_os_flavor' in dimension.keys()):
           raise ValueError(
               'Invalid android dimensions %s in %s' % (v, builder_name))

@@ -4,14 +4,12 @@
  * found in the LICENSE file.
  */
 
-/* global PaymentRequest:false */
-
 /**
  * Launches the PaymentRequest UI that requests email address.
  */
-function buy() { // eslint-disable-line no-unused-vars
+function buy() {
   buyWithMethods([
-    {supportedMethods: 'https://bobpay.com'},
+    {supportedMethods: 'https://bobpay.test'},
     {
       supportedMethods: 'basic-card',
       data: {supportedNetworks: ['visa']},

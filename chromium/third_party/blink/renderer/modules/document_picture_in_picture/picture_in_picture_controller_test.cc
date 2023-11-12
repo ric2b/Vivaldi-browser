@@ -18,14 +18,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_document_picture_in_picture_options.h"
 #include "third_party/blink/renderer/core/css/cssom/css_style_value.h"
 #include "third_party/blink/renderer/core/css/cssom/style_property_map_read_only.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
-#include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/media/html_media_test_helper.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
@@ -34,7 +32,6 @@
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/wait_for_event.h"
 #include "third_party/blink/renderer/modules/document_picture_in_picture/document_picture_in_picture.h"
-#include "third_party/blink/renderer/modules/document_picture_in_picture/document_picture_in_picture_session.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
@@ -43,11 +40,16 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "third_party/blink/renderer/bindings/modules/v8/v8_document_picture_in_picture_options.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 using ::testing::_;
 
 namespace blink {
 
 namespace {
+#if !BUILDFLAG(IS_ANDROID)
 KURL GetOpenerURL() {
   return KURL("https://example.com/");
 }
@@ -58,7 +60,7 @@ enum class CopyStyleSheetOptions {
   kYes,
 };
 
-DocumentPictureInPictureSession* OpenDocumentPictureInPictureSession(
+LocalDOMWindow* OpenDocumentPictureInPictureWindow(
     V8TestingScope& v8_scope,
     Document& document,
     CopyStyleSheetOptions copyStyleSheets,
@@ -67,7 +69,6 @@ DocumentPictureInPictureSession* OpenDocumentPictureInPictureSession(
   EXPECT_EQ(nullptr, controller.pictureInPictureWindow());
 
   // Enable the DocumentPictureInPictureAPI flag.
-  ScopedPictureInPictureAPIForTest scoped_dependency(true);
   ScopedDocumentPictureInPictureAPIForTest scoped_feature(true);
 
   // Get past the LocalDOMWindow::isSecureContext() check.
@@ -111,11 +112,9 @@ DocumentPictureInPictureSession* OpenDocumentPictureInPictureSession(
       script_state, *document.domWindow(), options, resolver,
       v8_scope.GetExceptionState());
 
-  DocumentPictureInPictureSession* pictureInPictureSession =
-      controller.documentPictureInPictureSession();
-
-  return pictureInPictureSession;
+  return controller.documentPictureInPictureWindow();
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -641,87 +640,7 @@ TEST_F(PictureInPictureControllerTestWithWidget, VideoIsNotAllowedIfAutoPip) {
                 .IsElementAllowed(*Video(), /*report_failure=*/false));
 }
 
-TEST_F(PictureInPictureControllerTestWithWidget,
-       AutoEnterAndExitPictureInPicture) {
-  WebMediaPlayer* player = Video()->GetWebMediaPlayer();
-  EXPECT_CALL(Service(),
-              StartSession(player->GetDelegateId(), _, TestSurfaceId(),
-                           player->NaturalSize(), true, _, _, _));
-
-  auto& controller = PictureInPictureControllerImpl::From(GetDocument());
-
-  // Video element must be on the auto-enter list, and playing in full screen.
-  controller.AddToAutoPictureInPictureElementsList(Video());
-  Video()->Play();
-  LocalFrame::NotifyUserActivation(
-      &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  Fullscreen::RequestFullscreen(*Video());
-  GetWebView()->DidEnterFullscreen();
-  ASSERT_EQ(*Video(), Fullscreen::FullscreenElementFrom(GetDocument()));
-
-  // Hiding the page should trigger auto PiP.
-  GetDocument().GetPage()->SetVisibilityState(
-      mojom::blink::PageVisibilityState::kHidden, /*is_initial_state=*/false);
-  MakeGarbageCollected<WaitForEvent>(Video(),
-                                     event_type_names::kEnterpictureinpicture);
-  EXPECT_TRUE(PictureInPictureControllerImpl::From(GetDocument())
-                  .IsPictureInPictureElement(Video()));
-
-  EXPECT_CALL(Service().Session(), Stop(_));
-
-  GetDocument().GetPage()->SetVisibilityState(
-      mojom::blink::PageVisibilityState::kVisible, /*is_initial_state=*/false);
-  MakeGarbageCollected<WaitForEvent>(Video(),
-                                     event_type_names::kLeavepictureinpicture);
-  EXPECT_FALSE(PictureInPictureControllerImpl::From(GetDocument())
-                   .IsPictureInPictureElement(Video()));
-
-  PictureInPictureControllerImpl::From(GetDocument())
-      .RemoveFromAutoPictureInPictureElementsList(Video());
-
-  EXPECT_EQ(nullptr, PictureInPictureControllerImpl::From(GetDocument())
-                         .PictureInPictureElement());
-}
-
-TEST_F(PictureInPictureControllerTestWithWidget,
-       AutoEnterPictureInPictureDuringDocumentPiP) {
-  WebMediaPlayer* player = Video()->GetWebMediaPlayer();
-  EXPECT_CALL(Service(),
-              StartSession(player->GetDelegateId(), _, TestSurfaceId(),
-                           player->NaturalSize(), true, _, _, _))
-      .Times(0);
-
-  auto& controller = PictureInPictureControllerImpl::From(GetDocument());
-
-  // Video element must be on the auto-enter list, and playing in full screen.
-  controller.AddToAutoPictureInPictureElementsList(Video());
-  Video()->Play();
-  LocalFrame::NotifyUserActivation(
-      &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  Fullscreen::RequestFullscreen(*Video());
-  GetWebView()->DidEnterFullscreen();
-  ASSERT_EQ(*Video(), Fullscreen::FullscreenElementFrom(GetDocument()));
-
-  // Hiding the page should not trigger auto PiP if there is a document PiP
-  // window open.
-  V8TestingScope v8_scope;
-  ScriptState* script_state =
-      ToScriptStateForMainWorld(GetDocument().GetFrame());
-  ScriptState::Scope entered_context_scope(script_state);
-  LocalFrame::NotifyUserActivation(
-      &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  auto* session = OpenDocumentPictureInPictureSession(
-      v8_scope, GetDocument(), CopyStyleSheetOptions::kNo);
-  ASSERT_TRUE(session);
-  GetDocument().GetPage()->SetVisibilityState(
-      mojom::blink::PageVisibilityState::kHidden, /*is_initial_state=*/false);
-
-  EXPECT_TRUE(Fullscreen::IsFullscreenElement(*Video()));
-  EXPECT_EQ(nullptr, PictureInPictureControllerImpl::From(GetDocument())
-                         .PictureInPictureElement());
-  base::RunLoop().RunUntilIdle();
-}
-
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(PictureInPictureControllerTestWithWidget,
        DocumentPiPDoesNotAllowVizThrottling) {
   EXPECT_TRUE(GetWidget()->GetMayThrottleIfUndrawnFramesForTesting());
@@ -732,8 +651,8 @@ TEST_F(PictureInPictureControllerTestWithWidget,
   ScriptState::Scope entered_context_scope(script_state);
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                      CopyStyleSheetOptions::kNo);
+  OpenDocumentPictureInPictureWindow(v8_scope, GetDocument(),
+                                     CopyStyleSheetOptions::kNo);
 
   EXPECT_FALSE(GetWidget()->GetMayThrottleIfUndrawnFramesForTesting());
 
@@ -846,25 +765,18 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
   InitializeDocumentPictureInPictureOpener(v8_scope);
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  DocumentPictureInPictureSession* pictureInPictureSession =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kNo);
-  ASSERT_NE(nullptr, pictureInPictureSession);
-  Document* pictureInPictureDocument =
-      pictureInPictureSession->window()->document();
-  ASSERT_NE(nullptr, pictureInPictureDocument);
+  auto* pictureInPictureWindow = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kNo);
+  ASSERT_NE(nullptr, pictureInPictureWindow);
+  Document* document = pictureInPictureWindow->document();
+  ASSERT_NE(nullptr, document);
 
   // The Picture in Picture window's base URL should match the opener.
-  EXPECT_EQ(GetOpenerURL().GetString(),
-            pictureInPictureDocument->BaseURL().GetString());
+  EXPECT_EQ(GetOpenerURL().GetString(), document->BaseURL().GetString());
 
   // By default, CSS should not be copied from the opener, so the background
   // color should be the default.
-  EXPECT_EQ(GetBodyBackgroundColor(v8_scope, pictureInPictureDocument),
-            "rgba(0, 0, 0, 0)");
-
-  auto* document = pictureInPictureSession->window()->document();
-  ASSERT_TRUE(document);
+  EXPECT_EQ(GetBodyBackgroundColor(v8_scope, document), "rgba(0, 0, 0, 0)");
 
   // Verify that move* and resize* don't call through to the chrome client.
   EXPECT_CALL(GetPipChromeClient(), SetWindowRect(_, _)).Times(0);
@@ -873,22 +785,17 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
   document->domWindow()->resizeTo(10, 10);
   document->domWindow()->resizeBy(10, 10);
 
-  // Make sure that the `window` and `document` objects are related, and not the
-  // same as the opener.
-  ASSERT_TRUE(pictureInPictureSession->window());
-  EXPECT_EQ(document, pictureInPictureSession->window()->document());
+  // Make sure that the `document` is not the same as the opener.
   EXPECT_NE(document, &GetDocument());
 
-  // Make sure that the `session` attribute returns the session.
+  // Make sure that the `window` attribute returns the window.
   {
     ScriptState* script_state =
         ToScriptStateForMainWorld(GetDocument().GetFrame());
     ScriptState::Scope entered_context_scope(script_state);
-    EXPECT_EQ(
-        pictureInPictureSession,
-        DocumentPictureInPicture::From(ExecutionContext::From(script_state),
-                                       *GetDocument().domWindow()->navigator())
-            ->session(script_state));
+    EXPECT_EQ(pictureInPictureWindow,
+              DocumentPictureInPicture::From(*GetDocument().domWindow())
+                  ->window(script_state));
   }
 }
 
@@ -898,11 +805,9 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
   InitializeDocumentPictureInPictureOpener(v8_scope);
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  DocumentPictureInPictureSession* pictureInPictureSession =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kYes);
-  Document* pictureInPictureDocument =
-      pictureInPictureSession->window()->document();
+  auto* pictureInPictureWindow = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kYes);
+  Document* pictureInPictureDocument = pictureInPictureWindow->document();
 
   // CSS for a blue background should have been copied from the opener.
   EXPECT_EQ(GetBodyBackgroundColor(v8_scope, pictureInPictureDocument),
@@ -921,11 +826,9 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
 
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  DocumentPictureInPictureSession* pictureInPictureSession =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kYes);
-  Document* pictureInPictureDocument =
-      pictureInPictureSession->window()->document();
+  auto* pictureInPictureWindow = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kYes);
+  Document* pictureInPictureDocument = pictureInPictureWindow->document();
   EXPECT_EQ(GetBodyBackgroundColor(v8_scope, pictureInPictureDocument),
             "rgba(0, 0, 0, 0)");
 }
@@ -934,10 +837,9 @@ TEST_F(PictureInPictureControllerTestWithChromeClient, RequiresUserGesture) {
   V8TestingScope v8_scope;
   InitializeDocumentPictureInPictureOpener(v8_scope);
 
-  DocumentPictureInPictureSession* pictureInPictureSession =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kYes);
-  EXPECT_FALSE(pictureInPictureSession);
+  auto* pictureInPictureWindow = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kYes);
+  EXPECT_FALSE(pictureInPictureWindow);
 }
 
 TEST_F(PictureInPictureControllerTestWithChromeClient,
@@ -947,19 +849,17 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
 
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  DocumentPictureInPictureSession* pictureInPictureSession1 =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kYes);
+  auto* pictureInPictureWindow1 = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kYes);
   LocalFrame::NotifyUserActivation(
       &GetFrame(), mojom::UserActivationNotificationType::kTest);
-  DocumentPictureInPictureSession* pictureInPictureSession2 =
-      OpenDocumentPictureInPictureSession(v8_scope, GetDocument(),
-                                          CopyStyleSheetOptions::kYes);
+  auto* pictureInPictureWindow2 = OpenDocumentPictureInPictureWindow(
+      v8_scope, GetDocument(), CopyStyleSheetOptions::kYes);
 
-  // This should properly return two separate sessions.
-  EXPECT_NE(pictureInPictureSession1, pictureInPictureSession2);
-  EXPECT_NE(nullptr, pictureInPictureSession1);
-  EXPECT_NE(nullptr, pictureInPictureSession2);
+  // This should properly return two windows.
+  EXPECT_NE(nullptr, pictureInPictureWindow1);
+  EXPECT_NE(nullptr, pictureInPictureWindow2);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace blink

@@ -6,6 +6,12 @@
 
 namespace arc {
 
+// Controls whether to always start ARC automatically, or wait for the user's
+// action to start it later in an on-demand manner.
+BASE_FEATURE(kArcOnDemandFeature,
+             "ArcOnDemand",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls ACTION_BOOT_COMPLETED broadcast for third party applications on ARC.
 // When disabled, third party apps will not receive this broadcast.
 BASE_FEATURE(kBootCompletedBroadcastFeature,
@@ -22,11 +28,35 @@ BASE_FEATURE(kDocumentsProviderUnknownSizeFeature,
              "ArcDocumentsProviderUnknownSize",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Controls whether an Android VPN (ArcHostVpn) should be started when a host
+// VPN is started.
+BASE_FEATURE(kEnableArcHostVpn,
+             "ArcHostVpn",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether we automatically send ARCVM into Doze mode
+// when it is mostly idle - even if Chrome is still active.
+BASE_FEATURE(kEnableArcIdleManager,
+             "ArcIdleManager",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether files shared to ARC Nearby Share are shared through the
 // FuseBox filesystem, instead of the default method (through a temporary path
 // managed by file manager).
 BASE_FEATURE(kEnableArcNearbyShareFuseBox,
              "ArcNearbyShareFuseBox",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether to enable ARCVM /data migration. It does not take effect
+// when kEnableVirtioBlkForData is set, in which case virtio-blk is used for
+// /data without going through the migration.
+BASE_FEATURE(kEnableArcVmDataMigration,
+             "ArcVmDataMigration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether WebView Zygote is lazily initialized in ARC.
+BASE_FEATURE(kEnableLazyWebViewInit,
+             "LazyWebViewInit",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether crosvm for ARCVM does per-VM core scheduling on devices with
@@ -80,7 +110,12 @@ BASE_FEATURE(kEnableVirtioBlkForData,
 // Controls whether to pop up ghost window for ARC app before fixup finishes.
 BASE_FEATURE(kFixupWindowFeature,
              "ArcFixupWindowFeature",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Controls whether new UI style for ARC ghost window.
+BASE_FEATURE(kGhostWindowNewStyle,
+             "ArcGhostWindowNewStyle",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Used for overriding config params for the virtio-blk feature above.
 BASE_FEATURE(kVirtioBlkDataConfigOverride,
@@ -118,28 +153,41 @@ const base::FeatureParam<int> kGuestZramSize{&kGuestZram, "size", 0};
 const base::FeatureParam<int> kGuestZramSwappiness{&kGuestZram, "swappiness",
                                                    0};
 
+// Enables/disables ghost when user launch ARC app from shelf/launcher when
+// App already ready for launch.
+BASE_FEATURE(kInstantResponseWindowOpen,
+             "ArcInstantResponseWindowOpen",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables/disables mlock() of guest memory for ARCVM.
 // Often used in combination with kGuestZram.
 BASE_FEATURE(kLockGuestMemory,
              "ArcLockGuestMemory",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Control properties of Logd at boot time. This is only for ARCVM.
-BASE_FEATURE(kLogdConfig,
-             "ArcGuestLogdConfig",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls the size in KB of logd. Only a few sizes are supported,
-// see kLogdConfigSize* private constants in arc_vm_client_adapter.cc.
-// The default set here means "do not override the build setting",
-// which is the same behavior as disabling the feature. Doing it so,
-// we don't need to keep this code up-to-date with the build default.
-const base::FeatureParam<int> kLogdConfigSize{&kLogdConfig, "size", 0};
-
 // Controls keyboard shortcut helper integration feature in ARC.
 BASE_FEATURE(kKeyboardShortcutHelperIntegrationFeature,
              "ArcKeyboardShortcutHelperIntegration",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls ARCVM MGLRU reclaim feature.
+BASE_FEATURE(kMglruReclaim,
+             "ArcMglruReclaim",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls the interval between MGLRU reclaims in milliseconds
+// A value of 0 will disable the MGLRU reclaim feature
+const base::FeatureParam<int> kMglruReclaimInterval{&kMglruReclaim, "interval",
+                                                    0};
+
+// Controls the swappiness of MGLRU reclaims, in the range of 0 to 200
+// 0 means only filecache will be used while 200 means only swap will be used
+// any value in between will be a mix of both
+// The lower the value, the higher the ratio of freeing filecache pages
+// Implementation and a more detailed description can be found in ChromeOS
+// src/third_party/kernel/v5.10-arcvm/mm/vmscan.c
+const base::FeatureParam<int> kMglruReclaimSwappiness{&kMglruReclaim,
+                                                      "swappiness", 0};
 
 // Toggles between native bridge implementations for ARC.
 // Note, that we keep the original feature name to preserve
@@ -183,6 +231,11 @@ BASE_FEATURE(kRtVcpuQuadCore,
 BASE_FEATURE(kSaveRawFilesOnTracing,
              "ArcSaveRawFilesOnTracing",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether to update the O4C list via A2C2.
+BASE_FEATURE(kArcUpdateO4CListViaA2C2,
+             "ArcUpdateO4CListViaA2C2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, unclaimed USB device will be attached to ARCVM by default.
 BASE_FEATURE(kUsbDeviceDefaultAttachToArcVm,
@@ -245,41 +298,6 @@ const base::FeatureParam<int> kVmMemorySizeShiftMiB{&kVmMemorySize, "shift_mib",
 const base::FeatureParam<int> kVmMemorySizeMaxMiB{&kVmMemorySize, "max_mib",
                                                   INT32_MAX};
 
-// Controls whether to use the new limit cache balloon policy. If disabled the
-// old balance available balloon policy is used. If enabled, ChromeOS's Resource
-// Manager (resourced) is able to kill ARCVM apps by sending a memory pressure
-// signal.
-// The limit cache balloon policy inflates the balloon to limit the kernel page
-// cache inside ARCVM if memory in the host is low. See FeatureParams below for
-// the conditions that limit cache. See mOomMinFreeHigh and mOomAdj in
-// frameworks/base/services/core/java/com/android/server/am/ProcessList.java
-// to see how LMKD maps kernel page cache to a priority level of app to kill.
-// To ensure fairness between tab manager discards and ARCVM low memory kills,
-// we want to stop LMKD killing things out of turn. We do this by making sure
-// ARCVM never has it's kernel page cache drop below the level that LMKD will
-// start killing.
-BASE_FEATURE(kVmBalloonPolicy,
-             "ArcVmBalloonPolicy",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// The maximum amount of kernel page cache ARCVM can have when ChromeOS is under
-// moderate memory pressure. 0 for no limit.
-const base::FeatureParam<int> kVmBalloonPolicyModerateKiB{&kVmBalloonPolicy,
-                                                          "moderate_kib", 0};
-
-// The maximum amount of kernel page cache ARCVM can have when ChromeOS is under
-// critical memory pressure. 0 for no limit. The default value of 322560KiB
-// corresponds to the level LMKD will start to kill the lowest priority cached
-// app.
-const base::FeatureParam<int> kVmBalloonPolicyCriticalKiB{
-    &kVmBalloonPolicy, "critical_kib", 322560};
-
-// The maximum amount of kernel page cache ARCVM can have when ChromeOS is
-// reclaiming. 0 for no limit. The default value of 322560KiB corresponds to the
-// level LMKD will start to kill the lowest priority cached app.
-const base::FeatureParam<int> kVmBalloonPolicyReclaimKiB{&kVmBalloonPolicy,
-                                                         "reclaim_kib", 322560};
-
 // Controls experimental key GMS Core and related services protection against to
 // be killed by low memory killer in ARCVM.
 BASE_FEATURE(kVmGmsCoreLowMemoryKillerProtection,
@@ -291,23 +309,5 @@ BASE_FEATURE(kVmGmsCoreLowMemoryKillerProtection,
 BASE_FEATURE(kVmBroadcastPreNotifyANR,
              "ArcVmBroadcastPreAnrHandling",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If set, enable responsive balloon sizing. Concierge will listen on a VSOCK
-// for connections from LMKD in Android. When LMKD is about to kill an App, it
-// will signal the balloon sizing code, which may deflate the balloon instead
-// of killing the app.
-const base::FeatureParam<bool> kVmBalloonPolicyResponsive{&kVmBalloonPolicy,
-                                                          "responsive", true};
-
-// The amount of time LMKD will wait for a response from concierge before
-// killing an app.
-const base::FeatureParam<int> kVmBalloonPolicyResponsiveTimeoutMs{
-    &kVmBalloonPolicy, "responsive_timeout_ms", 100};
-
-// If an app should not be killed, the balloon will be deflated by
-// min(app_size, responsive_max_deflate_bytes), so that large apps don't
-// completely deflate the balloon.
-const base::FeatureParam<int> kVmBalloonPolicyResponsiveMaxDeflateBytes{
-    &kVmBalloonPolicy, "responsive_max_deflate_bytes", 256 * 1024 * 1024};
 
 }  // namespace arc

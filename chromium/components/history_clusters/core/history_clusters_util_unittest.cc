@@ -14,43 +14,85 @@ namespace history_clusters {
 namespace {
 
 TEST(HistoryClustersUtilTest, ComputeURLForDeduping) {
-  EXPECT_EQ(ComputeURLForDeduping(GURL("https://www.google.com/")),
-            "https://google.com/")
-      << "Strip off WWW.";
-  EXPECT_EQ(ComputeURLForDeduping(GURL("http://google.com/")),
-            "https://google.com/")
-      << "Normalizes scheme to https.";
-  EXPECT_EQ(
-      ComputeURLForDeduping(GURL("https://google.com/path?foo=bar#reftag")),
-      "https://google.com/path")
-      << "Strips ref and query, leaves path.";
-  EXPECT_EQ(
-      ComputeURLForDeduping(GURL("http://www.google.com/path?foo=bar#reftag")),
-      "https://google.com/path")
-      << "Does all of the above at once.";
-  EXPECT_EQ(ComputeURLForDeduping(GURL("https://google.com/path")),
-            "https://google.com/path")
-      << "Sanity check when no replacements needed.";
+  {
+    Config config;
+    config.use_host_for_visit_deduping = false;
+    SetConfigForTesting(config);
+
+    EXPECT_EQ(ComputeURLForDeduping(GURL("https://www.google.com/")),
+              "https://google.com/")
+        << "Strip off WWW.";
+    EXPECT_EQ(ComputeURLForDeduping(GURL("http://google.com/")),
+              "https://google.com/")
+        << "Normalizes scheme to https.";
+    EXPECT_EQ(
+        ComputeURLForDeduping(GURL("https://google.com/path?foo=bar#reftag")),
+        "https://google.com/path")
+        << "Strips ref and query, leaves path.";
+    EXPECT_EQ(ComputeURLForDeduping(
+                  GURL("http://www.google.com/path?foo=bar#reftag")),
+              "https://google.com/path")
+        << "Does all of the above at once.";
+    EXPECT_EQ(ComputeURLForDeduping(GURL("https://google.com/path")),
+              "https://google.com/path")
+        << "Sanity check when no replacements needed.";
+  }
+
+  {
+    Config config;
+    config.use_host_for_visit_deduping = true;
+    SetConfigForTesting(config);
+
+    EXPECT_EQ(ComputeURLForDeduping(
+                  GURL("http://www.google.com/path?foo=bar#reftag")),
+              "https://google.com/")
+        << "Does all of the above at once.";
+
+    EXPECT_EQ(ComputeURLForDeduping(GURL("https://google.com/path/")),
+              "https://google.com/")
+        << "Strips path.";
+  }
 }
 
 TEST(HistoryClustersUtilTest, ComputeURLKeywordForLookup) {
-  EXPECT_EQ(ComputeURLKeywordForLookup(GURL("http://www.google.com/")),
-            "http://google.com/")
-      << "Strip off WWW.";
-  EXPECT_EQ(ComputeURLKeywordForLookup(GURL("https://google.com/")),
-            "http://google.com/")
-      << "Normalizes scheme to http.";
-  EXPECT_EQ(
-      ComputeURLKeywordForLookup(GURL("http://google.com/path?foo=bar#reftag")),
-      "http://google.com/path")
-      << "Strips ref and query, leaves path.";
-  EXPECT_EQ(ComputeURLKeywordForLookup(
-                GURL("https://www.google.com/path?foo=bar#reftag")),
-            "http://google.com/path")
-      << "Does all of the above at once.";
-  EXPECT_EQ(ComputeURLKeywordForLookup(GURL("http://google.com/path")),
-            "http://google.com/path")
-      << "Sanity check when no replacements needed.";
+  {
+    Config config;
+    config.use_host_for_visit_deduping = false;
+    SetConfigForTesting(config);
+
+    EXPECT_EQ(ComputeURLKeywordForLookup(GURL("http://www.google.com/")),
+              "http://google.com/")
+        << "Strip off WWW.";
+    EXPECT_EQ(ComputeURLKeywordForLookup(GURL("https://google.com/")),
+              "http://google.com/")
+        << "Normalizes scheme to http.";
+    EXPECT_EQ(ComputeURLKeywordForLookup(
+                  GURL("http://google.com/path?foo=bar#reftag")),
+              "http://google.com/path")
+        << "Strips ref and query, leaves path.";
+    EXPECT_EQ(ComputeURLKeywordForLookup(
+                  GURL("https://www.google.com/path?foo=bar#reftag")),
+              "http://google.com/path")
+        << "Does all of the above at once.";
+    EXPECT_EQ(ComputeURLKeywordForLookup(GURL("http://google.com/path")),
+              "http://google.com/path")
+        << "Sanity check when no replacements needed.";
+  }
+
+  {
+    Config config;
+    config.use_host_for_visit_deduping = true;
+    SetConfigForTesting(config);
+
+    EXPECT_EQ(ComputeURLKeywordForLookup(GURL("https://google.com/path/")),
+              "http://google.com/")
+        << "Strips path.";
+
+    EXPECT_EQ(ComputeURLKeywordForLookup(
+                  GURL("https://www.google.com/path?foo=bar#reftag")),
+              "http://google.com/")
+        << "Does everything at once.";
+  }
 }
 
 TEST(HistoryClustersUtilTest, FilterClustersMatchingQuery) {
@@ -358,6 +400,40 @@ TEST(HistoryClustersUtilTest, CoalesceRelatedSearches) {
   EXPECT_THAT(clusters[0].related_searches,
               testing::ElementsAre("search1", "search2", "search3", "search4",
                                    "search5"));
+}
+
+TEST(HistoryClustersUtilTest, SortClusters) {
+  std::vector<history::Cluster> clusters;
+  // This first cluster is meant to validate that the higher scoring "visit 1"
+  // gets sorted to the top, even though "visit 1" is older than "visit 2".
+  // It's to validate the within-cluster sorting.
+  clusters.push_back(history::Cluster(0,
+                                      {
+                                          GetHardcodedClusterVisit(2, 0.5),
+                                          GetHardcodedClusterVisit(1, 0.9),
+                                      },
+                                      {}));
+  // The second cluster is lower scoring, but newer, because the top visit is
+  // newer. It should be sorted above the first cluster because of reverse
+  // chronological between-cluster sorting.
+  clusters.push_back(history::Cluster(0,
+                                      {
+                                          GetHardcodedClusterVisit(3, 0.1),
+                                      },
+                                      {}));
+
+  SortClusters(&clusters);
+
+  ASSERT_EQ(clusters.size(), 2u);
+
+  auto& visits = clusters[0].visits;
+  ASSERT_EQ(visits.size(), 1u);
+  EXPECT_FLOAT_EQ(visits[0].score, 0.1);
+
+  visits = clusters[1].visits;
+  ASSERT_EQ(visits.size(), 2u);
+  EXPECT_FLOAT_EQ(visits[0].score, 0.9);
+  EXPECT_FLOAT_EQ(visits[1].score, 0.5);
 }
 
 }  // namespace

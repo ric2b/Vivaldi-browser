@@ -586,16 +586,15 @@ base::Version ServiceWorkerTaskQueue::RetrieveRegisteredServiceWorkerVersion(
     return it != off_the_record_registrations_.end() ? it->second
                                                      : base::Version();
   }
-  const base::DictionaryValue* info = nullptr;
-  ExtensionPrefs::Get(browser_context_)
-      ->ReadPrefAsDictionary(extension_id, kPrefServiceWorkerRegistrationInfo,
-                             &info);
+  const base::Value::Dict* info =
+      ExtensionPrefs::Get(browser_context_)
+          ->ReadPrefAsDict(extension_id, kPrefServiceWorkerRegistrationInfo);
   if (!info) {
     return base::Version();
   }
 
   if (const std::string* version_string =
-          info->FindStringKey(kServiceWorkerVersion)) {
+          info->FindString(kServiceWorkerVersion)) {
     return base::Version(*version_string);
   }
   return base::Version();
@@ -608,11 +607,11 @@ void ServiceWorkerTaskQueue::SetRegisteredServiceWorkerInfo(
   if (browser_context_->IsOffTheRecord()) {
     off_the_record_registrations_[extension_id] = version;
   } else {
-    auto info = std::make_unique<base::DictionaryValue>();
-    info->SetStringKey(kServiceWorkerVersion, version.GetString());
+    base::Value::Dict info;
+    info.Set(kServiceWorkerVersion, version.GetString());
     ExtensionPrefs::Get(browser_context_)
         ->UpdateExtensionPref(extension_id, kPrefServiceWorkerRegistrationInfo,
-                              std::move(info));
+                              std::make_unique<base::Value>(std::move(info)));
   }
 }
 

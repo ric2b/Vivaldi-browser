@@ -8,12 +8,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/sequence_checker.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "media/base/media_export.h"
 #include "media/base/timestamp_constants.h"
@@ -90,7 +92,12 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   // indicates whether the R, G, B samples in |rgb_pixels| should be multiplied
   // by alpha. |filter| specifies the chroma upsampling filter used for pixel
   // formats with chroma subsampling. If chroma planes in the pixel format are
-  // not subsampled, |filter| is ignored.
+  // not subsampled, |filter| is ignored. |disable_threading| indicates whether
+  // this method should convert |video_frame| without posting any tasks to
+  // base::ThreadPool, regardless of the frame size. If this method is called
+  // from a task running in base::ThreadPool, setting |disable_threading| to
+  // true can avoid a potential temporary deadlock of base::ThreadPool. See
+  // crbug.com/1402841.
   //
   // NOTE: If |video_frame| doesn't have an alpha plane, all the A samples in
   // |rgb_pixels| will be 255 (equivalent to an alpha of 1.0) and therefore the
@@ -100,7 +107,11 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
                                            void* rgb_pixels,
                                            size_t row_bytes,
                                            bool premultiply_alpha = true,
-                                           FilterMode filter = kFilterNone);
+                                           FilterMode filter = kFilterNone,
+                                           bool disable_threading = false);
+
+  // The output format that ConvertVideoFrameToRGBPixels will write.
+  static viz::ResourceFormat GetRGBPixelsOutputFormat();
 
   // Copy the contents of |video_frame| to |texture| of |destination_gl|.
   //
@@ -201,11 +212,11 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   // not keep a reference to the VideoFrame so necessary data is extracted out
   // of it.
   struct Cache {
-    explicit Cache(int frame_id);
+    explicit Cache(VideoFrame::ID frame_id);
     ~Cache();
 
     // VideoFrame::unique_id() of the videoframe used to generate the cache.
-    int frame_id;
+    VideoFrame::ID frame_id;
 
     // A PaintImage that can be used to draw into a PaintCanvas. This is sized
     // to the visible size of the VideoFrame. Its contents are generated lazily.
@@ -268,7 +279,7 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   cc::PaintImage::Id renderer_stable_id_;
 
   // Used for DCHECKs to ensure method calls executed in the correct thread.
-  base::ThreadChecker thread_checker_;
+  base::SequenceChecker sequence_checker_;
 
   struct YUVTextureCache {
     YUVTextureCache();

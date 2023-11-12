@@ -23,7 +23,7 @@ if (enable_vulkan) {
     if (use_vulkan_xcb) {
       defines += [ "USE_VULKAN_XCB" ]
     }
-    if (ozone_platform_wayland && !use_system_libwayland) {
+    if (ozone_platform_wayland) {
       configs = [ "//third_party/wayland:wayland_config" ]
     }
   }
@@ -96,6 +96,8 @@ if (enable_vulkan) {
       "vulkan_implementation.h",
       "vulkan_instance.cc",
       "vulkan_instance.h",
+      "vulkan_memory.cc",
+      "vulkan_memory.h",
       "vulkan_surface.cc",
       "vulkan_surface.h",
       "vulkan_swap_chain.cc",

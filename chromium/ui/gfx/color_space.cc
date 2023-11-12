@@ -29,6 +29,14 @@ namespace gfx {
 
 namespace {
 
+// Videos that are from a 10 or 12 bit source, but are stored in a 16-bit
+// format (e.g, PIXEL_FORMAT_P016LE) will report having 16 bits per pixel.
+// Assume they have 10 bits per pixel.
+// https://crbug.com/1381100
+int BitDepthWithWorkaroundApplied(int bit_depth) {
+  return bit_depth == 16 ? 10 : bit_depth;
+}
+
 static bool FloatsEqualWithinTolerance(const float* a,
                                        const float* b,
                                        int n,
@@ -151,6 +159,13 @@ ColorSpace::ColorSpace(const SkColorSpace& sk_color_space, bool is_hdr)
 bool ColorSpace::IsValid() const {
   return primaries_ != PrimaryID::INVALID && transfer_ != TransferID::INVALID &&
          matrix_ != MatrixID::INVALID && range_ != RangeID::INVALID;
+}
+
+// static
+ColorSpace ColorSpace::CreateExtendedSRGB10Bit() {
+  return ColorSpace(PrimaryID::P3, TransferID::CUSTOM_HDR, MatrixID::RGB,
+                    RangeID::FULL, nullptr,
+                    &SkNamedTransferFnExt::kSRGBExtended1023Over510, true);
 }
 
 // static
@@ -685,7 +700,6 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace(
       GetPrimaryMatrix(&gamut);
       break;
   }
-
   sk_sp<SkColorSpace> sk_color_space =
       SkColorSpace::MakeRGB(transfer_fn, gamut);
   if (!sk_color_space)
@@ -716,6 +730,22 @@ ColorSpace::RangeID ColorSpace::GetRangeID() const {
 
 bool ColorSpace::HasExtendedSkTransferFn() const {
   return matrix_ == MatrixID::RGB;
+}
+
+bool ColorSpace::IsTransferFunctionEqualTo(
+    const skcms_TransferFunction& fn) const {
+  if (transfer_ == TransferID::PQ)
+    return skcms_TransferFunction_isPQish(&fn);
+  if (transfer_ == TransferID::HLG)
+    return skcms_TransferFunction_isHLGish(&fn);
+  if (!skcms_TransferFunction_isSRGBish(&fn))
+    return false;
+  skcms_TransferFunction transfer_fn;
+  GetTransferFunction(&transfer_fn);
+  return fn.a == transfer_fn.a && fn.b == transfer_fn.b &&
+         fn.c == transfer_fn.c && fn.d == transfer_fn.d &&
+         fn.e == transfer_fn.e && fn.f == transfer_fn.f &&
+         fn.g == transfer_fn.g;
 }
 
 bool ColorSpace::Contains(const ColorSpace& other) const {
@@ -861,6 +891,7 @@ bool ColorSpace::GetTransferFunction(TransferID transfer,
   switch (transfer) {
     case ColorSpace::TransferID::LINEAR:
     case ColorSpace::TransferID::LINEAR_HDR:
+      *fn = SkNamedTransferFn::kLinear;
       return true;
     case ColorSpace::TransferID::GAMMA18:
       fn->g = 1.801f;
@@ -973,6 +1004,7 @@ bool ColorSpace::GetPiecewiseHDRParams(float* sdr_joint,
 }
 
 SkM44 ColorSpace::GetTransferMatrix(int bit_depth) const {
+  bit_depth = BitDepthWithWorkaroundApplied(bit_depth);
   DCHECK_GE(bit_depth, 8);
   // If chroma samples are real numbers in the range of −0.5 to 0.5, an offset
   // of 0.5 is added to get real numbers in the range of 0 to 1. When
@@ -1073,6 +1105,7 @@ SkM44 ColorSpace::GetTransferMatrix(int bit_depth) const {
 }
 
 SkM44 ColorSpace::GetRangeAdjustMatrix(int bit_depth) const {
+  bit_depth = BitDepthWithWorkaroundApplied(bit_depth);
   DCHECK_GE(bit_depth, 8);
   switch (range_) {
     case RangeID::FULL:
@@ -1118,6 +1151,7 @@ SkM44 ColorSpace::GetRangeAdjustMatrix(int bit_depth) const {
 }
 
 bool ColorSpace::ToSkYUVColorSpace(int bit_depth, SkYUVColorSpace* out) const {
+  bit_depth = BitDepthWithWorkaroundApplied(bit_depth);
   switch (matrix_) {
     case MatrixID::BT709:
       *out = range_ == RangeID::FULL ? kRec709_Full_SkYUVColorSpace

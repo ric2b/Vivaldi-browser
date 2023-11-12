@@ -7,7 +7,6 @@
 
 #include <utility>
 
-#include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/browser/preloading/prefetch/prefetch_probe_result.h"
@@ -33,8 +32,22 @@ class PrefetchCookieListener;
 class PrefetchDocumentManager;
 class PrefetchNetworkContext;
 class PrefetchService;
+class PrefetchServingPageMetricsContainer;
+class PrefetchStreamingURLLoader;
 class PrefetchedMainframeResponseContainer;
+class PreloadingAttempt;
 class ProxyLookupClientImpl;
+
+// Holds the relevant size information of the prefetched response. The struct is
+// installed onto `PrefetchContainer`, and gets passed into
+// `PrefetchFromStringURLLoader` to notify the associated `URLLoaderClient` of
+// the actual size of the response, as `PrefetchFromStringURLLoader` is not
+// aware of the prefetched request.
+struct PrefetchResponseSizes {
+  int64_t encoded_data_length;
+  int64_t encoded_body_length;
+  int64_t decoded_body_length;
+};
 
 // This class contains the state for a request to prefetch a specific URL.
 class CONTENT_EXPORT PrefetchContainer {
@@ -56,7 +69,7 @@ class CONTENT_EXPORT PrefetchContainer {
     return std::make_pair(referring_render_frame_host_id_, url_);
   }
 
-  // The ID of the render frame host that triggered the prefetch.
+  // The ID of the RenderFrameHost that triggered the prefetch.
   GlobalRenderFrameHostId GetReferringRenderFrameHostId() const {
     return referring_render_frame_host_id_;
   }
@@ -74,10 +87,11 @@ class CONTENT_EXPORT PrefetchContainer {
   }
 
   // The status of the current prefetch. Note that |HasPrefetchStatus| will be
-  // initially false until |SetPrefetchStatus| is called.
-  void SetPrefetchStatus(PrefetchStatus prefetch_status) {
-    prefetch_status_ = prefetch_status;
-  }
+  // initially false until |SetPrefetchStatus| is called. |SetPrefetchStatus|
+  // also sets |attempt_| PreloadingHoldbackStatus, PreloadingTriggeringOutcome
+  // and PreloadingFailureReason. It is only safe to call after
+  // `OnEligibilityCheckComplete`.
+  void SetPrefetchStatus(PrefetchStatus prefetch_status);
   bool HasPrefetchStatus() const { return prefetch_status_.has_value(); }
   PrefetchStatus GetPrefetchStatus() const;
 
@@ -87,8 +101,10 @@ class CONTENT_EXPORT PrefetchContainer {
       std::unique_ptr<ProxyLookupClientImpl> proxy_lookup_client);
   std::unique_ptr<ProxyLookupClientImpl> ReleaseProxyLookupClient();
 
-  // Whether or not the prefetch was determined to be eligibile
-  void OnEligibilityCheckComplete(bool is_eligible);
+  // Whether or not the prefetch was determined to be eligibile.
+  void OnEligibilityCheckComplete(bool is_eligible,
+                                  absl::optional<PrefetchStatus> status);
+  bool IsEligible() const { return is_eligible_; }
 
   // Whether this prefetch is a decoy. Decoy prefetches will not store the
   // response, and not serve any prefetched resources.
@@ -107,10 +123,12 @@ class CONTENT_EXPORT PrefetchContainer {
   // context must be copied over to the default network context. These functions
   // are used to check and update the status of this process, as well as record
   // metrics about how long this process takes.
+  bool HasIsolatedCookieCopyStarted() const;
   bool IsIsolatedCookieCopyInProgress() const;
   void OnIsolatedCookieCopyStart();
   void OnIsolatedCookiesReadCompleteAndWriteStart();
   void OnIsolatedCookieCopyComplete();
+  void OnInterceptorCheckCookieCopy();
   void SetOnCookieCopyCompleteCallback(base::OnceClosure callback);
 
   // The network context used to make network requests for this prefetch.
@@ -122,6 +140,17 @@ class CONTENT_EXPORT PrefetchContainer {
   void TakeURLLoader(std::unique_ptr<network::SimpleURLLoader> loader);
   network::SimpleURLLoader* GetLoader() { return loader_.get(); }
   void ResetURLLoader();
+
+  // The streaming URL loader used to make the network requests for this
+  // prefetch, and then serve the results. Only used if
+  // |PrefetchUseStreamingURLLoader| is true.
+  void TakeStreamingURLLoader(
+      std::unique_ptr<PrefetchStreamingURLLoader> streaming_loader);
+  PrefetchStreamingURLLoader* GetStreamingLoader() {
+    return streaming_loader_.get();
+  }
+  std::unique_ptr<PrefetchStreamingURLLoader> ReleaseStreamingLoader();
+  void ResetStreamingLoader();
 
   // The |PrefetchDocumentManager| that requested |this|.
   PrefetchDocumentManager* GetPrefetchDocumentManager() const;
@@ -144,8 +173,17 @@ class CONTENT_EXPORT PrefetchContainer {
   // resource.
   void OnPrefetchComplete();
 
-  // Whether or not |this| has a prefetched response.
-  bool HasValidPrefetchedResponse(base::TimeDelta cacheable_duration) const;
+  // Whether or not |PrefetchService| should block until the head of |this| is
+  // received on a navigation to a matching URL.
+  bool ShouldBlockUntilHeadReceived() const;
+
+  // Whether or not |this| is servable.
+  bool IsPrefetchServable(base::TimeDelta cacheable_duration) const;
+
+  // Called when |this| has received prefetched response's head.
+  // Once this is called, we should be able to call GetHead() and receive a
+  // non-null result.
+  void OnPrefetchedResponseHeadReceived();
 
   // |this| takes ownership of the given |prefetched_response|.
   void TakePrefetchedResponse(
@@ -157,12 +195,21 @@ class CONTENT_EXPORT PrefetchContainer {
   std::unique_ptr<PrefetchedMainframeResponseContainer>
   ReleasePrefetchedResponse();
 
+  // Returns the head of the prefetched response. If there is no valid response,
+  // then returns null.
+  const network::mojom::URLResponseHead* GetHead();
+
   // Returns the time between the prefetch request was sent and the time the
   // response headers were received. Not set if the prefetch request hasn't been
   // sent or the response headers haven't arrived.
   absl::optional<base::TimeDelta> GetPrefetchHeaderLatency() const {
     return header_latency_;
   }
+
+  // Allow for the serving page to metrics when changes to the prefetch occur.
+  void SetServingPageMetrics(base::WeakPtr<PrefetchServingPageMetricsContainer>
+                                 serving_page_metrics_container);
+  void UpdateServingPageMetrics();
 
   // Returns request id to be used by DevTools
   const std::string& RequestId() const { return request_id_; }
@@ -180,6 +227,20 @@ class CONTENT_EXPORT PrefetchContainer {
     return devtools_observer_;
   }
 
+  const absl::optional<PrefetchResponseSizes>& GetPrefetchResponseSizes()
+      const {
+    return prefetch_response_sizes_;
+  }
+
+  bool HasPreloadingAttempt() { return !!attempt_; }
+
+  // Simulates a prefetch container that reaches the interceptor. It sets the
+  // `attempt_` to the correct state: `PreloadingEligibility::kEligible`,
+  // `PreloadingHoldbackStatus::kAllowed` and
+  // `PreloadingTriggeringOutcome::kReady`.
+  void SimulateAttemptAtInterceptorForTest();
+  void DisablePrecogLoggingForTest() { attempt_ = nullptr; }
+
  protected:
   friend class PrefetchContainerTest;
 
@@ -190,7 +251,7 @@ class CONTENT_EXPORT PrefetchContainer {
       const network::mojom::URLResponseHead* head);
 
  private:
-  // The ID of the render frame host that triggered the prefetch.
+  // The ID of the RenderFrameHost that triggered the prefetch.
   GlobalRenderFrameHostId referring_render_frame_host_id_;
 
   // The URL that will potentially be prefetched
@@ -218,6 +279,10 @@ class CONTENT_EXPORT PrefetchContainer {
   // there is an existing proxy for |url_| then it is not eligible.
   std::unique_ptr<ProxyLookupClientImpl> proxy_lookup_client_;
 
+  // Whethere or not this prefetch was determined to be eligible to be
+  // prefetched.
+  bool is_eligible_ = false;
+
   // Whether this prefetch is a decoy or not. If the prefetch is a decoy then
   // any prefetched resources will not be served.
   bool is_decoy_ = false;
@@ -232,6 +297,10 @@ class CONTENT_EXPORT PrefetchContainer {
   // The URL loader used to prefetch |url_|.
   std::unique_ptr<network::SimpleURLLoader> loader_;
 
+  // The streaming URL loader used to prefetch and serve |url_|. Only used if
+  // |PrefetchUseStreamingURLLoader| is true.
+  std::unique_ptr<PrefetchStreamingURLLoader> streaming_loader_;
+
   // The prefetched response for |url_|.
   std::unique_ptr<PrefetchedMainframeResponseContainer> prefetched_response_;
 
@@ -241,8 +310,8 @@ class CONTENT_EXPORT PrefetchContainer {
 
   ukm::SourceId ukm_source_id_;
 
-  // The size of the prefetched response.
-  absl::optional<int> data_length_;
+  // The sizes information of the prefetched response.
+  absl::optional<PrefetchResponseSizes> prefetch_response_sizes_;
 
   // The amount  of time it took for the prefetch to complete.
   absl::optional<base::TimeDelta> fetch_duration_;
@@ -275,11 +344,24 @@ class CONTENT_EXPORT PrefetchContainer {
   // A callback that runs once |cookie_copy_status_| is set to |kCompleted|.
   base::OnceClosure on_cookie_copy_complete_callback_;
 
+  // Reference to metrics related to the page that considered using this
+  // prefetch.
+  base::WeakPtr<PrefetchServingPageMetricsContainer>
+      serving_page_metrics_container_;
+
   // Request identifier used by DevTools
   std::string request_id_;
 
   // Weak pointer to DevTools observer
   base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer_;
+
+  // `PreloadingAttempt` is used to track the lifecycle of the preloading event,
+  // and reports various statuses to UKM dashboard. It is initialised along with
+  // `this`, and destroyed when `WCO::DidFinishNavigation` is fired.
+  // `attempt_`'s eligibility is set in `OnEligibilityCheckComplete`, and its
+  // holdback status, triggering outcome and failure reason are set in
+  // `SetPrefetchStatus`.
+  base::WeakPtr<PreloadingAttempt> attempt_;
 
   base::WeakPtrFactory<PrefetchContainer> weak_method_factory_{this};
 };

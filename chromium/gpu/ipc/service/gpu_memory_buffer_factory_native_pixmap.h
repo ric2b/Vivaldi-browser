@@ -23,6 +23,8 @@ class GLImage;
 
 namespace gpu {
 
+class VulkanDeviceQueue;
+
 class GPU_IPC_SERVICE_EXPORT GpuMemoryBufferFactoryNativePixmap
     : public GpuMemoryBufferFactory,
       public ImageFactory {
@@ -63,14 +65,6 @@ class GPU_IPC_SERVICE_EXPORT GpuMemoryBufferFactoryNativePixmap
   ImageFactory* AsImageFactory() override;
 
   // Overridden from ImageFactory:
-  scoped_refptr<gl::GLImage> CreateImageForGpuMemoryBuffer(
-      gfx::GpuMemoryBufferHandle handle,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      const gfx::ColorSpace& color_space,
-      gfx::BufferPlane plane,
-      int client_id,
-      SurfaceHandle surface_handle) override;
   bool SupportsCreateAnonymousImage() const override;
   scoped_refptr<gl::GLImage> CreateAnonymousImage(const gfx::Size& size,
                                                   gfx::BufferFormat format,
@@ -104,7 +98,7 @@ class GPU_IPC_SERVICE_EXPORT GpuMemoryBufferFactoryNativePixmap
       int client_id,
       scoped_refptr<gfx::NativePixmap> pixmap);
 
-  VkDevice GetVulkanDevice();
+  VulkanDeviceQueue* GetVulkanDeviceQueue();
 
   scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider_;
 

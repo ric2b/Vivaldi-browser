@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "chrome/browser/ui/views/page_info/page_info_hover_button.h"
+#include "chrome/browser/ui/views/controls/rich_hover_button.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -33,7 +33,7 @@ PageInfoAdPersonalizationContentView::PageInfoAdPersonalizationContentView(
 
   AddChildView(PageInfoViewFactory::CreateSeparator());
   // TODO(olesiamarukhno): Use correct strings.
-  AddChildView(std::make_unique<PageInfoHoverButton>(
+  AddChildView(std::make_unique<RichHoverButton>(
       base::BindRepeating(
           [](PageInfoAdPersonalizationContentView* view) {
             view->presenter_->RecordPageInfoAction(
@@ -43,8 +43,9 @@ PageInfoAdPersonalizationContentView::PageInfoAdPersonalizationContentView(
           },
           this),
       PageInfoViewFactory::GetSiteSettingsIcon(),
-      IDS_PAGE_INFO_AD_PERSONALIZATION_SUBPAGE_MANAGE_BUTTON, std::u16string(),
-      0,
+      l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_AD_PERSONALIZATION_SUBPAGE_MANAGE_BUTTON),
+      std::u16string(),
       /*tooltip_text=*/std::u16string(), std::u16string(),
       PageInfoViewFactory::GetLaunchIcon()));
 

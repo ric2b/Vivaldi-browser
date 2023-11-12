@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
@@ -38,6 +39,8 @@ using ShortcutLocationCallback =
 // platform_apps/shortcut_manager.(h|cc) to WebAppShortcutManager.
 class WebAppShortcutManager {
  public:
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   WebAppShortcutManager(Profile* profile,
                         WebAppIconManager* icon_manager,
                         WebAppFileHandlerManager* file_handler_manager,
@@ -50,7 +53,6 @@ class WebAppShortcutManager {
                      WebAppRegistrar* registrar);
 
   void Start();
-  void Shutdown();
 
   // Tells the WebAppShortcutManager that no shortcuts should actually be
   // written to the disk.
@@ -64,7 +66,7 @@ class WebAppShortcutManager {
   // Fetch already-updated shortcut data and deploy to OS integration.
   void UpdateShortcuts(const AppId& app_id,
                        base::StringPiece old_name,
-                       base::OnceClosure update_finished_callback);
+                       ResultCallback update_finished_callback);
   void DeleteShortcuts(const AppId& app_id,
                        const base::FilePath& shortcuts_data_dir,
                        std::unique_ptr<ShortcutInfo> shortcut_info,
@@ -113,6 +115,18 @@ class WebAppShortcutManager {
   virtual void GetShortcutInfoForApp(const AppId& app_id,
                                      GetShortcutInfoCallback callback);
 
+  // Sets a callback to be called when this class determines that all shortcuts
+  // for a particular profile need to be rebuild, for example because the app
+  // shortcut version has changed since the last time these were created.
+  // This is used by the legacy extensions based app code in
+  // chrome/browser/web_applications/extensions to ensure those app shortcuts
+  // also get updated. Calling out to that code directly would violate
+  // dependency layering.
+  using UpdateShortcutsForAllAppsCallback =
+      base::RepeatingCallback<void(Profile*, base::OnceClosure)>;
+  static void SetUpdateShortcutsForAllAppsCallback(
+      UpdateShortcutsForAllAppsCallback callback);
+
   using ShortcutCallback = base::OnceCallback<void(const ShortcutInfo*)>;
   static void SetShortcutUpdateCallbackForTesting(ShortcutCallback callback);
 
@@ -136,7 +150,7 @@ class WebAppShortcutManager {
 
   void OnShortcutInfoRetrievedUpdateShortcuts(
       std::u16string old_name,
-      base::OnceClosure update_finished_callback,
+      ResultCallback update_finished_callback,
       std::unique_ptr<ShortcutInfo> info);
 
   void OnShortcutsMenuIconsReadRegisterShortcutsMenu(
@@ -146,14 +160,22 @@ class WebAppShortcutManager {
 
   std::unique_ptr<ShortcutInfo> BuildShortcutInfoForWebApp(const WebApp* app);
 
+  // Schedules a call to UpdateShortcutsForAllAppsNow() if kAppShortcutsVersion
+  // in prefs is less than kCurrentAppShortcutsVersion.
+  void UpdateShortcutsForAllAppsIfNeeded();
+  void UpdateShortcutsForAllAppsNow();
+  void SetCurrentAppShortcutsVersion();
+
   bool suppress_shortcuts_for_testing_ = false;
 
   const raw_ptr<Profile> profile_;
 
   raw_ptr<WebAppRegistrar> registrar_ = nullptr;
   raw_ptr<WebAppIconManager> icon_manager_ = nullptr;
-  raw_ptr<WebAppFileHandlerManager> file_handler_manager_ = nullptr;
-  raw_ptr<WebAppProtocolHandlerManager> protocol_handler_manager_ = nullptr;
+  raw_ptr<WebAppFileHandlerManager, DanglingUntriaged> file_handler_manager_ =
+      nullptr;
+  raw_ptr<WebAppProtocolHandlerManager, DanglingUntriaged>
+      protocol_handler_manager_ = nullptr;
 
   base::WeakPtrFactory<WebAppShortcutManager> weak_ptr_factory_{this};
 };

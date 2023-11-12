@@ -130,7 +130,7 @@ DesktopWindowTreeHostWin::DesktopWindowTreeHostWin(
     : message_handler_(new HWNDMessageHandler(
           this,
           native_widget_delegate->AsWidget()->GetName())),
-      native_widget_delegate_(native_widget_delegate),
+      native_widget_delegate_(native_widget_delegate->AsWidget()->GetWeakPtr()),
       desktop_native_widget_aura_(desktop_native_widget_aura),
       drag_drop_client_(nullptr),
       should_animate_window_close_(false),
@@ -180,7 +180,7 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
 
   ConfigureWindowStyles(message_handler_.get(), params,
                         GetWidget()->widget_delegate(),
-                        native_widget_delegate_);
+                        native_widget_delegate_.get());
 
   HWND parent_hwnd = nullptr;
   if (params.parent && params.parent->GetHost())
@@ -799,6 +799,8 @@ bool DesktopWindowTreeHostWin::HasNonClientView() const {
 }
 
 FrameMode DesktopWindowTreeHostWin::GetFrameMode() const {
+  if (!GetWidget())
+    return FrameMode::SYSTEM_DRAWN;
   return GetWidget()->ShouldUseNativeFrame() ? FrameMode::SYSTEM_DRAWN
                                              : FrameMode::CUSTOM_DRAWN;
 }
@@ -808,11 +810,12 @@ bool DesktopWindowTreeHostWin::HasFrame() const {
 }
 
 void DesktopWindowTreeHostWin::SchedulePaint() {
-  GetWidget()->GetRootView()->SchedulePaint();
+  if (GetWidget())
+    GetWidget()->GetRootView()->SchedulePaint();
 }
 
 bool DesktopWindowTreeHostWin::ShouldPaintAsActive() const {
-  return GetWidget()->ShouldPaintAsActive();
+  return GetWidget() ? GetWidget()->ShouldPaintAsActive() : false;
 }
 
 bool DesktopWindowTreeHostWin::CanResize() const {
@@ -830,7 +833,8 @@ bool DesktopWindowTreeHostWin::CanMinimize() const {
 bool DesktopWindowTreeHostWin::CanActivate() const {
   if (IsModalWindowActive())
     return true;
-  return native_widget_delegate_->CanActivate();
+  return native_widget_delegate_ ? native_widget_delegate_->CanActivate()
+                                 : false;
 }
 
 bool DesktopWindowTreeHostWin::WantsMouseEventsWhenInactive() const {
@@ -838,12 +842,13 @@ bool DesktopWindowTreeHostWin::WantsMouseEventsWhenInactive() const {
 }
 
 bool DesktopWindowTreeHostWin::WidgetSizeIsClientSize() const {
-  const Widget* widget = GetWidget()->GetTopLevelWidget();
+  const Widget* widget =
+      GetWidget() ? GetWidget()->GetTopLevelWidget() : nullptr;
   return IsMaximized() || (widget && widget->ShouldUseNativeFrame());
 }
 
 bool DesktopWindowTreeHostWin::IsModal() const {
-  return native_widget_delegate_->IsModal();
+  return native_widget_delegate_ ? native_widget_delegate_->IsModal() : false;
 }
 
 int DesktopWindowTreeHostWin::GetInitialShowState() const {
@@ -961,7 +966,8 @@ void DesktopWindowTreeHostWin::HandleCreate() {
 
 void DesktopWindowTreeHostWin::HandleDestroying() {
   drag_drop_client_->OnNativeWidgetDestroying(GetHWND());
-  native_widget_delegate_->OnNativeWidgetDestroying();
+  if (native_widget_delegate_)
+    native_widget_delegate_->OnNativeWidgetDestroying();
 
   // Destroy the compositor before destroying the HWND since shutdown
   // may try to swap to the window.
@@ -1000,7 +1006,8 @@ void DesktopWindowTreeHostWin::HandleWorkAreaChanged() {
 }
 
 void DesktopWindowTreeHostWin::HandleVisibilityChanged(bool visible) {
-  native_widget_delegate_->OnNativeWidgetVisibilityChanged(visible);
+  if (native_widget_delegate_)
+    native_widget_delegate_->OnNativeWidgetVisibilityChanged(visible);
 }
 
 void DesktopWindowTreeHostWin::HandleWindowMinimizedOrRestored(bool restored) {
@@ -1233,11 +1240,13 @@ void DesktopWindowTreeHostWin::SetBoundsInDIP(const gfx::Rect& bounds) {
 // DesktopWindowTreeHostWin, private:
 
 Widget* DesktopWindowTreeHostWin::GetWidget() {
-  return native_widget_delegate_->AsWidget();
+  return native_widget_delegate_ ? native_widget_delegate_->AsWidget()
+                                 : nullptr;
 }
 
 const Widget* DesktopWindowTreeHostWin::GetWidget() const {
-  return native_widget_delegate_->AsWidget();
+  return native_widget_delegate_ ? native_widget_delegate_->AsWidget()
+                                 : nullptr;
 }
 
 HWND DesktopWindowTreeHostWin::GetHWND() const {

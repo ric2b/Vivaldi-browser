@@ -15,12 +15,12 @@ import './metrics_consent_toggle_button.js';
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/ash/common/web_ui_listener_behavior.js';
-import {assert} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {Route} from '../../router.js';
+import {Route} from '../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {routes} from '../os_route.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
@@ -31,7 +31,8 @@ import {PrivacyHubBrowserProxy, PrivacyHubBrowserProxyImpl} from './privacy_hub_
 /**
  * These values are persisted to logs and should not be renumbered or re-used.
  * Keep in sync with PrivacyHubNavigationOrigin in
- * tools/metrics/histograms/enums.xml.
+ * tools/metrics/histograms/enums.xml and
+ * ash/system/privacy_hub/privacy_hub_metrics.h.
  */
 export const PrivacyHubNavigationOrigin = {
   SYSTEM_SETTINGS: 0,
@@ -76,12 +77,7 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
   ready() {
     super.ready();
     assert(loadTimeData.getBoolean('showPrivacyHubPage'));
-    this.addWebUIListener('camera-hardware-toggle-changed', (enabled) => {
-      this.setCameraHardwareToggleState_(enabled);
-    });
-    this.browserProxy_.getInitialCameraHardwareToggleState().then((enabled) => {
-      this.setCameraHardwareToggleState_(enabled);
-    });
+
     this.addWebUIListener('microphone-hardware-toggle-changed', (enabled) => {
       this.setMicrophoneHardwareToggleState_(enabled);
     });
@@ -89,14 +85,7 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
         (enabled) => {
           this.setMicrophoneHardwareToggleState_(enabled);
         });
-    this.addWebUIListener(
-        'availability-of-microphone-for-simple-usage-changed', (available) => {
-          this.setMicrophoneForSimpleUsageAvailable_(available);
-        });
-    this.browserProxy_.getInitialAvailabilityOfMicrophoneForSimpleUsage().then(
-        (available) => {
-          this.setMicrophoneForSimpleUsageAvailable_(available);
-        });
+
     this.updateMediaDeviceLists_();
     MediaDevicesProxy.getMediaDevices().addEventListener(
         'devicechange', () => this.updateMediaDeviceLists_());
@@ -124,40 +113,6 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
           Setting.kGeolocationOnOff,
           Setting.kUsageStatsAndCrashReports,
         ]),
-      },
-
-      /** @private {string} */
-      cameraToggleActive_: {
-        type: String,
-        value: '',
-      },
-
-      /** @private {boolean} */
-      microphoneHardwareToggleActive_: {
-        type: Boolean,
-        value: false,
-      },
-
-      /** @private {string} */
-      microphoneToggleSubLabel_: {
-        type: String,
-        computed: 'computeMicrophoneToggleSubLabel_(' +
-            'microphoneHardwareToggleActive_, ' +
-            'microphoneForSimpleUsageAvailable_)',
-      },
-
-      /** @private {boolean} */
-      microphoneForSimpleUsageAvailable_: {
-        type: Boolean,
-        value: false,
-      },
-
-      /** @private {boolean} */
-      shouldDisableMicrophoneToggle_: {
-        type: Boolean,
-        computed: 'computeShouldDisableMicrophoneToggle_(' +
-            'microphoneHardwareToggleActive_, ' +
-            'microphoneForSimpleUsageAvailable_)',
       },
 
       /**
@@ -201,6 +156,19 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
         type: Boolean,
         computed: 'computeIsMicListEmpty_(microphonesConnected_)',
       },
+
+      /** @private {boolean} */
+      microphoneHardwareToggleActive_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /** @private {boolean} */
+      shouldDisableMicrophoneToggle_: {
+        type: Boolean,
+        computed: 'computeShouldDisableMicrophoneToggle_(isMicListEmpty_,  ' +
+            'microphoneHardwareToggleActive_)',
+      },
     };
   }
 
@@ -217,15 +185,21 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
   }
 
   /**
-   * @param {boolean} enabled
+   * @return {boolean} Whether the list of cameras displayed in this page is
+   *     empty.
    * @private
    */
-  setCameraHardwareToggleState_(enabled) {
-    if (enabled) {
-      this.cameraToggleActive_ = this.i18n('cameraToggleSublabelActive');
-    } else {
-      this.cameraToggleActive_ = '';
-    }
+  computeIsCameraListEmpty_() {
+    return this.camerasConnected_.length === 0;
+  }
+
+  /**
+   * @return {boolean} Whether the list of microphones displayed in this page is
+   *     empty.
+   * @private
+   */
+  computeIsMicListEmpty_() {
+    return this.microphonesConnected_.length === 0;
   }
 
   /**
@@ -241,52 +215,11 @@ class SettingsPrivacyHubPage extends SettingsPrivacyHubPageBase {
   }
 
   /**
-   * @return {string} The microphone toggle sublabel.
-   * @private
-   */
-  computeMicrophoneToggleSubLabel_() {
-    if (this.microphoneHardwareToggleActive_) {
-      return this.i18n('microphoneToggleSublabelHWToggleActive');
-    } else if (!this.microphoneForSimpleUsageAvailable_) {
-      return this.i18n('microphoneToggleSublabelNoMicConnected');
-    } else {
-      return '';
-    }
-  }
-
-  /**
-   * @param {boolean} available
-   * @private
-   */
-  setMicrophoneForSimpleUsageAvailable_(available) {
-    this.microphoneForSimpleUsageAvailable_ = available;
-  }
-
-  /**
    * @return {boolean} Whether privacy hub microphone toggle should be disabled.
    * @private
    */
   computeShouldDisableMicrophoneToggle_() {
-    return this.microphoneHardwareToggleActive_ ||
-        !this.microphoneForSimpleUsageAvailable_;
-  }
-
-  /**
-   * @return {boolean} Whether the list of cameras displayed in this page is
-   *     empty.
-   * @private
-   */
-  computeIsCameraListEmpty_() {
-    return (this.camerasConnected_.length === 0);
-  }
-
-  /**
-   * @return {boolean} Whether the list of microphones displayed in this page is
-   *     empty.
-   * @private
-   */
-  computeIsMicListEmpty_() {
-    return (this.microphonesConnected_.length === 0);
+    return this.microphoneHardwareToggleActive_ || this.isMicListEmpty_;
   }
 
   /** @private */

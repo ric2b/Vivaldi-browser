@@ -102,6 +102,7 @@ CSPDirectiveName EffectiveDirectiveForInlineCheck(
     // "navigation":
     // 1. Return script-src-elem. [spec text]
     case ContentSecurityPolicy::InlineType::kScript:
+    case ContentSecurityPolicy::InlineType::kScriptSpeculationRules:
     case ContentSecurityPolicy::InlineType::kNavigation:
       return CSPDirectiveName::ScriptSrcElem;
 
@@ -271,8 +272,7 @@ bool CheckWasmEval(const network::mojom::blink::ContentSecurityPolicy& csp,
       OperativeDirective(csp, CSPDirectiveName::ScriptSrc).source_list;
   return !directive || directive->allow_eval ||
          (SupportsWasmEval(csp, policy) && directive->allow_wasm_eval) ||
-         (RuntimeEnabledFeatures::WebAssemblyCSPEnabled() &&
-          directive->allow_wasm_unsafe_eval);
+         directive->allow_wasm_unsafe_eval;
 }
 
 bool CheckHash(const network::mojom::blink::CSPSourceList* directive,
@@ -295,6 +295,7 @@ bool CheckUnsafeHashesAllowed(
       return CheckUnsafeHashesAllowed(directive);
 
     case ContentSecurityPolicy::InlineType::kScript:
+    case ContentSecurityPolicy::InlineType::kScriptSpeculationRules:
     case ContentSecurityPolicy::InlineType::kStyle:
       return true;
   }
@@ -430,8 +431,10 @@ bool CheckInlineAndReportViolation(
     const String& hash_value,
     CSPDirectiveName effective_type) {
   if (!directive.source_list ||
-      CSPSourceListAllowAllInline(directive.type, *directive.source_list))
+      CSPSourceListAllowAllInline(directive.type, inline_type,
+                                  *directive.source_list)) {
     return true;
+  }
 
   bool is_script = ContentSecurityPolicy::IsScriptInlineType(inline_type);
 
@@ -671,6 +674,7 @@ bool CSPDirectiveListAllowInline(
         break;
 
       case ContentSecurityPolicy::InlineType::kScript:
+      case ContentSecurityPolicy::InlineType::kScriptSpeculationRules:
       case ContentSecurityPolicy::InlineType::kStyleAttribute:
       case ContentSecurityPolicy::InlineType::kStyle:
         hash_value = GetSha256String(content);
@@ -681,6 +685,10 @@ bool CSPDirectiveListAllowInline(
     switch (inline_type) {
       case ContentSecurityPolicy::InlineType::kNavigation:
         message = "run the JavaScript URL";
+        break;
+
+      case ContentSecurityPolicy::InlineType::kScriptSpeculationRules:
+        message = "assert inline speculation-rules";
         break;
 
       case ContentSecurityPolicy::InlineType::kScriptAttribute:
@@ -707,7 +715,8 @@ bool CSPDirectiveListAllowInline(
   }
 
   return !directive.source_list ||
-         CSPSourceListAllowAllInline(directive.type, *directive.source_list);
+         CSPSourceListAllowAllInline(directive.type, inline_type,
+                                     *directive.source_list);
 }
 
 bool CSPDirectiveListShouldCheckEval(
@@ -956,8 +965,11 @@ bool CSPDirectiveListIsScriptRestrictionReasonable(
   // If no `script-src` enforcement occurs, or it allows any and all inline
   // script, the restriction is not reasonable.
   if (!script_src.source_list ||
-      CSPSourceListAllowAllInline(script_src.type, *script_src.source_list))
+      CSPSourceListAllowAllInline(script_src.type,
+                                  ContentSecurityPolicy::InlineType::kScript,
+                                  *script_src.source_list)) {
     return false;
+  }
 
   if (CSPSourceListIsNone(*script_src.source_list))
     return true;

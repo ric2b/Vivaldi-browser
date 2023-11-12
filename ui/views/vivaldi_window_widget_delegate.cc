@@ -85,9 +85,19 @@ class VivaldiWindowClientView : public views::ClientView {
 
   // views::ClientView:
   views::CloseRequestResult OnWindowCloseRequested() override {
-    return (window_->ConfirmWindowClose()
-                ? views::CloseRequestResult::kCanClose
-                : views::CloseRequestResult::kCannotClose);
+    // This is to cach platform closing of windows, Alt+F4
+    views::CloseRequestResult result =
+        (window_->ConfirmWindowClose()
+             ? views::CloseRequestResult::kCanClose
+             : views::CloseRequestResult::kCannotClose);
+
+    // If we are not asking before closing a window we must try to move pinned
+    // tabs as soon as possible.
+    if (!window_->browser()->profile()->GetPrefs()->GetBoolean(
+            vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
+      window_->MovePersistentTabsToOtherWindowIfNeeded();
+    }
+    return result;
   }
 
  private:
@@ -216,7 +226,10 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
 }
 
 std::string VivaldiWindowWidgetDelegate::GetWindowName() const {
-  return chrome::GetWindowName(window_->browser());
+  if (window_->browser()) {
+    return chrome::GetWindowName(window_->browser());
+  }
+  return std::string();
 }
 
 bool VivaldiWindowWidgetDelegate::WidgetHasHitTestMask() const {

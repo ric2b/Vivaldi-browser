@@ -33,10 +33,10 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/policy_container.mojom-blink.h"
-#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/testing/web_url_loader_factory_with_mock.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 
@@ -105,7 +106,8 @@ DummyPageHolder::DummyPageHolder(
       MakeGarbageCollected<LocalFrameView>(*frame_, initial_view_size));
   frame_->View()->GetPage()->GetVisualViewport().SetSize(initial_view_size);
   frame_->Init(/*opener=*/nullptr, DocumentToken(),
-               /*policy_container=*/nullptr, StorageKey());
+               /*policy_container=*/nullptr, StorageKey(),
+               /*document_ukm_source_id=*/ukm::kInvalidSourceId);
 
   CoreInitializer::GetInstance().ProvideModulesToPage(GetPage(),
                                                       base::EmptyString());

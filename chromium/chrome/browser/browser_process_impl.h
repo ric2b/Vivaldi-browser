@@ -206,6 +206,7 @@ class BrowserProcessImpl : public BrowserProcess,
 #if !BUILDFLAG(IS_ANDROID)
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
   HidPolicyAllowedDevices* hid_policy_allowed_devices() override;
+  HidSystemTrayIcon* hid_system_tray_icon() override;
 #endif
 
   BuildState* GetBuildState() override;
@@ -260,8 +261,8 @@ class BrowserProcessImpl : public BrowserProcess,
   const std::unique_ptr<PrefService> local_state_;
 
   // |metrics_services_manager_| owns this.
-  raw_ptr<ChromeMetricsServicesManagerClient> metrics_services_manager_client_ =
-      nullptr;
+  raw_ptr<ChromeMetricsServicesManagerClient, DanglingUntriaged>
+      metrics_services_manager_client_ = nullptr;
 
   // Must be destroyed before |local_state_|.
   std::unique_ptr<metrics_services_manager::MetricsServicesManager>
@@ -420,6 +421,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<SerialPolicyAllowedPorts> serial_policy_allowed_ports_;
   std::unique_ptr<HidPolicyAllowedDevices> hid_policy_allowed_devices_;
+  std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
 
   BuildState build_state_;
 #endif

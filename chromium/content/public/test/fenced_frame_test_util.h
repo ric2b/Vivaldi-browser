@@ -8,6 +8,7 @@
 #include "base/compiler_specific.h"
 #include "base/test/scoped_feature_list.h"
 #include "net/base/net_errors.h"
+#include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom.h"
 
 class GURL;
 
@@ -22,22 +23,23 @@ namespace test {
 // frames.
 class FencedFrameTestHelper {
  public:
-  enum class FencedFrameType { kShadowDOM, kMPArch };
-  explicit FencedFrameTestHelper(
-      FencedFrameType type = FencedFrameType::kMPArch);
+  explicit FencedFrameTestHelper();
   ~FencedFrameTestHelper();
   FencedFrameTestHelper(const FencedFrameTestHelper&) = delete;
   FencedFrameTestHelper& operator=(const FencedFrameTestHelper&) = delete;
 
-  // This method creates a new fenced frame rooted at `fenced_frame_parent` that
-  // is navigated to `url`. This method waits for the navigation to `url` to
-  // commit, and returns the `RenderFrameHost` that committed the navigation if
-  // it succeeded. Otherwise, it returns `nullptr`. See
-  // `NavigationFrameInFencedFrameTree()` documentation for the
+  // This method creates a new fenced frame in `mode` rooted at
+  // `fenced_frame_parent` that is navigated to `url`. This method waits for the
+  // navigation to `url` to commit, and returns the `RenderFrameHost` that
+  // committed the navigation if it succeeded. Otherwise, it returns `nullptr`.
+  // See `NavigationFrameInFencedFrameTree()` documentation for the
   // `expected_error_code` parameter.
-  RenderFrameHost* CreateFencedFrame(RenderFrameHost* fenced_frame_parent,
-                                     const GURL& url,
-                                     net::Error expected_error_code = net::OK);
+  RenderFrameHost* CreateFencedFrame(
+      RenderFrameHost* fenced_frame_parent,
+      const GURL& url,
+      net::Error expected_error_code = net::OK,
+      blink::mojom::FencedFrameMode mode =
+          blink::mojom::FencedFrameMode::kDefault);
 
   // This method is similar to `FencedFrameTestHelper::CreateFencedFrame` but
   // doesn't wait until the fenced frame completes loading.
@@ -65,7 +67,6 @@ class FencedFrameTestHelper {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  FencedFrameType type_;
 };
 
 // This helper method creates a fenced frame urn to url mapping and returns the

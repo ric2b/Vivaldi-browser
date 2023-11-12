@@ -38,6 +38,10 @@
 // Bookmark metadata is changed, i.e. Vivaldi specific Description, Nickname &
 // Speed dial status
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode;
+// Extensive changes in Bookmark is starting.This happens at the time of sync.
+- (void)extensiveBookmarkChangesBeginning;
+// Extensive changes in Bookmark is ended.
+- (void)extensiveBookmarkChangesEnded;
 // End Vivaldi
 
 @end
@@ -80,6 +84,8 @@ class BookmarkModelBridge : public BookmarkModelObserver {
   // Vivaldi
   void BookmarkMetaInfoChanged(BookmarkModel* model,
                                const BookmarkNode* node) override;
+  void ExtensiveBookmarkChangesBeginning(BookmarkModel* model) override;
+  void ExtensiveBookmarkChangesEnded(BookmarkModel* model) override;
   // End Vivaldi
 
   __weak id<BookmarkModelBridgeObserver> observer_;

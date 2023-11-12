@@ -101,7 +101,7 @@ void ExtensionTestingProfile::AddExtension(std::string extension_id,
   extension_service_->AddExtension(extension.get());
 
   extension_prefs_->UpdateExtensionPref(
-      extension_id, "install_time",
+      extension_id, "last_update_time",
       std::make_unique<base::Value>(
           base::NumberToString(install_time.ToInternalValue())));
   extension_prefs_->UpdateExtensionPref(
@@ -110,8 +110,7 @@ void ExtensionTestingProfile::AddExtension(std::string extension_id,
 
 void ExtensionTestingProfile::SetInstallSignature(
     extensions::InstallSignature signature) {
-  base::DictionaryValue signature_dict;
-  signature.ToValue(&signature_dict);
+  base::Value::Dict signature_dict = signature.ToDict();
   extension_prefs_->SetInstallSignature(&signature_dict);
 }
 
@@ -130,7 +129,7 @@ class ExtensionDataCollectionTest : public testing::Test {
     SAFE_BROWSING_AND_EXTENDED_REPORTING,
   };
 
-  ExtensionDataCollectionTest() : profile_number_() {}
+  ExtensionDataCollectionTest() = default;
 
   void SetUp() override {
     testing::Test::SetUp();
@@ -188,7 +187,7 @@ class ExtensionDataCollectionTest : public testing::Test {
   std::unique_ptr<TestingProfileManager> profile_manager_;
 
  private:
-  int profile_number_;
+  int profile_number_ = 0;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;

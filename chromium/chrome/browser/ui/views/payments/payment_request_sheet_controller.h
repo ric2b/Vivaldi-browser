@@ -74,6 +74,9 @@ class PaymentRequestSheetController {
   // destroyed.
   void Stop() { is_active_ = false; }
 
+  // Called when the back button is pressed on the dialog.
+  void BackButtonPressed();
+
  protected:
   // Clears the content part of the view represented by this view controller and
   // calls FillContentView again to re-populate it with updated views.
@@ -126,14 +129,35 @@ class PaymentRequestSheetController {
   // +---------------------------+
   virtual std::unique_ptr<views::View> CreateExtraFooterView();
 
+  // Creates and returns a header for all the sheets in the PaymentRequest
+  // dialog. The header contains an optional back arrow button (if
+  // |ShouldShowHeaderBackArrow| returns true) and a content view created by
+  // |CreateHeaderContentView|. The background is set based on
+  // |GetHeaderBackground|, and its color is used to decide which color to use
+  // to paint the arrow.
+  //
+  // The passed-in `view` must be the `header_view_` - it is only passed as an
+  // argument because this is required by ViewFactory.
+  //
+  // +---------------------------+
+  // | <- | header_content_view  |
+  // +---------------------------+
+  virtual void PopulateSheetHeaderView(views::View* view);
+
   // Creates and returns the view to be inserted in the header, next to the
   // close/back button. This is typically the sheet's title but it can be
   // overriden to return a different kind of view as long as it fits inside the
   // header.
+  //
+  // TODO(crbug.com/1385136): Remove once minimal PaymentHandler UX rolls out
+  // and this override is no longer needed.
   virtual std::unique_ptr<views::View> CreateHeaderContentView(
       views::View* header_view);
 
   // Returns the background to use for the header section of the sheet.
+  //
+  // TODO(crbug.com/1385136): Remove once minimal PaymentHandler UX rolls out
+  // and this override is no longer needed.
   virtual std::unique_ptr<views::Background> GetHeaderBackground(
       views::View* header_view);
 
@@ -169,6 +193,10 @@ class PaymentRequestSheetController {
   // Returns whether the controller should be controlling the UI.
   bool is_active() const { return is_active_; }
 
+  base::WeakPtr<PaymentRequestSheetController> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
  private:
   // Add the primary/secondary buttons to |container|.
   void AddPrimaryButton(views::View* container);
@@ -181,26 +209,25 @@ class PaymentRequestSheetController {
   // values.
   void PerformPrimaryButtonAction(bool* is_enabled);
 
-  virtual void BackButtonPressed();
-
   base::WeakPtr<PaymentRequestSpec> const spec_;
   base::WeakPtr<PaymentRequestState> const state_;
   base::WeakPtr<PaymentRequestDialogView> const dialog_;
 
   // This view is owned by its encompassing ScrollView.
-  raw_ptr<views::View> pane_ = nullptr;
-  raw_ptr<views::View> content_view_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> pane_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> content_view_ = nullptr;
 
   // Hold on to the ScrollView because it must be explicitly laid out in some
   // cases.
-  raw_ptr<views::ScrollView> scroll_ = nullptr;
+  raw_ptr<views::ScrollView, DanglingUntriaged> scroll_ = nullptr;
 
   // Hold on to the primary and secondary buttons to use them as initial focus
   // targets when subclasses don't want to focus anything else.
-  raw_ptr<views::MdTextButton> primary_button_ = nullptr;
-  raw_ptr<views::Button> secondary_button_ = nullptr;
-  raw_ptr<views::View> header_view_ = nullptr;
-  raw_ptr<views::View> header_content_separator_container_ = nullptr;
+  raw_ptr<views::MdTextButton, DanglingUntriaged> primary_button_ = nullptr;
+  raw_ptr<views::Button, DanglingUntriaged> secondary_button_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> header_view_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> header_content_separator_container_ =
+      nullptr;
 
   // Whether the controller should be controlling the UI.
   bool is_active_ = true;

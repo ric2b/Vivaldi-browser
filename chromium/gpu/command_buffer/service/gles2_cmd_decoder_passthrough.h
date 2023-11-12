@@ -16,6 +16,7 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/debug_marker_manager.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -51,12 +52,13 @@ class ContextGroup;
 class GPUTracer;
 class MultiDrawManager;
 class PassthroughAbstractTextureImpl;
+class GLES2ExternalFramebuffer;
 
 struct MappedBuffer {
   GLsizeiptr size;
   GLbitfield original_access;
   GLbitfield filtered_access;
-  uint8_t* map_ptr;
+  raw_ptr<uint8_t> map_ptr;
   int32_t data_shm_id;
   uint32_t data_shm_offset;
 };
@@ -68,13 +70,18 @@ struct PassthroughResources {
   // api is null if we don't have a context (e.g. lost).
   void Destroy(gl::GLApi* api, gl::ProgressReporter* progress_reporter);
 
+#if !BUILDFLAG(IS_ANDROID)
   // Resources stores a shared list of textures pending deletion.
   // If we have don't context when this function is called, we can mark
   // these textures as lost context and drop all references to them.
+  // NOTE: This functionality is exercised only when the decoder is asked to
+  // create textures via CreateAbstractTexture(), an API that does not exist on
+  // Android.
   void DestroyPendingTextures(bool has_context);
 
   // If there are any textures pending destruction.
   bool HasTexturesPendingDestruction() const;
+#endif
 
   // Mappings from client side IDs to service side IDs.
   ClientServiceMap<GLuint, GLuint> texture_id_map;
@@ -134,10 +141,15 @@ struct PassthroughResources {
   // the GLTexturePassthroughImageRepresentation itself.
   base::flat_map<GLuint, SharedImageData> texture_shared_image_map;
 
+#if !BUILDFLAG(IS_ANDROID)
   // A set of yet-to-be-deleted TexturePassthrough, which should be tossed
   // whenever a context switch happens or the resources is destroyed.
+  // NOTE: The concept of "textures pending destruction" is relevant only when
+  // the decoder is asked to create textures via CreateAbstractTexture(), an API
+  // that does not exist on Android.
   base::flat_set<scoped_refptr<TexturePassthrough>>
       textures_pending_destruction;
+#endif
 
   // Mapping of client buffer IDs that are mapped to the shared memory used to
   // back the mapping so that it can be flushed when the buffer is unmapped
@@ -187,6 +199,12 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   void TakeFrontBuffer(const Mailbox& mailbox) override;
 
   void ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
+
+  void SetDefaultFramebufferSharedImage(const Mailbox& mailbox,
+                                        int samples,
+                                        bool preserve,
+                                        bool needs_depth,
+                                        bool needs_stencil) override;
 
   // Resize an offscreen frame buffer.
   bool ResizeOffscreenFramebuffer(const gfx::Size& size) override;
@@ -325,6 +343,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
 
   ErrorState* GetErrorState() override;
 
+#if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<AbstractTexture> CreateAbstractTexture(
       unsigned target,
       unsigned internal_format,
@@ -334,6 +353,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
       int border,
       unsigned format,
       unsigned type) override;
+#endif
 
   void WaitForReadPixels(base::OnceClosure callback) override;
 
@@ -362,10 +382,15 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   const ContextState* GetContextState() override;
   scoped_refptr<ShaderTranslatorInterface> GetTranslator(GLenum type) override;
 
-  void BindImage(uint32_t client_texture_id,
-                 uint32_t texture_target,
-                 gl::GLImage* image,
-                 bool can_bind_to_sampler) override;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  void AttachImageToTextureWithDecoderBinding(uint32_t client_texture_id,
+                                              uint32_t texture_target,
+                                              gl::GLImage* image) override;
+#else
+  void AttachImageToTextureWithClientBinding(uint32_t client_texture_id,
+                                             uint32_t texture_target,
+                                             gl::GLImage* image) override;
+#endif
 
   void OnDebugMessage(GLenum source,
                       GLenum type,
@@ -380,12 +405,24 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   void SetCopyTexImageBlitterForTest(
       CopyTexImageResourceManager* copy_tex_image_blit) override;
 
+#if !BUILDFLAG(IS_ANDROID)
   void OnAbstractTextureDestroyed(PassthroughAbstractTextureImpl*,
                                   scoped_refptr<TexturePassthrough>);
+#endif
 
  private:
   // Allow unittests to inspect internal state tracking
   friend class GLES2DecoderPassthroughTestBase;
+
+  // Attaches |image| to the texture referred to by |client_texture_id|, marking
+  // the image as needing on-demand binding by the decoder if
+  // |can_bind_to_sampler| is false and as not needing on-demand binding by the
+  // decoder otherwise. |can_bind_to_sampler| is always false on Mac/Win and
+  // always true on all other platforms.
+  void BindImageInternal(uint32_t client_texture_id,
+                         uint32_t texture_target,
+                         gl::GLImage* image,
+                         bool can_bind_to_sampler);
 
   const char* GetCommandName(unsigned int command_id) const;
 
@@ -481,6 +518,10 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   error::Error CheckSwapBuffersResult(gfx::SwapResult result,
                                       const char* function_name);
 
+  // Textures can be marked as needing binding only on Android/Windows/Mac, so
+  // all functionality related to binding textures is relevant only on those
+  // platforms.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   // Issue BindTexImage / CopyTexImage calls for |passthrough_texture|, if
   // they're pending.
   void BindOnePendingImage(GLenum target, TexturePassthrough* texture);
@@ -522,12 +563,15 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
       }
     }
   }
+#endif
 
   bool OnlyHasPendingProgramCompletionQueries();
 
+#if !BUILDFLAG(IS_ANDROID)
   // A set of raw pointers to currently living PassthroughAbstractTextures
   // which allow us to properly signal to them when we are destroyed.
   base::flat_set<PassthroughAbstractTextureImpl*> abstract_textures_;
+#endif
 
   int commands_to_process_;
 
@@ -652,7 +696,9 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
     GLuint unit;
     base::WeakPtr<TexturePassthrough> texture;
   };
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   std::vector<TexturePendingBinding> textures_pending_binding_;
+#endif
 
   // State tracking of currently bound buffers
   base::flat_map<GLenum, GLuint> bound_buffers_;
@@ -851,7 +897,8 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   bool offscreen_target_buffer_preserved_;
   std::vector<std::unique_ptr<EmulatedColorBuffer>> in_use_color_textures_;
   std::vector<std::unique_ptr<EmulatedColorBuffer>> available_color_textures_;
-  size_t create_color_buffer_count_for_test_;
+  size_t create_color_buffer_count_for_test_ = 0;
+  std::unique_ptr<GLES2ExternalFramebuffer> external_default_framebuffer_;
 
   // Maximum 2D resource sizes for limiting offscreen framebuffer sizes
   GLint max_renderbuffer_size_ = 0;

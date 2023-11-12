@@ -15,10 +15,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/services/storage/indexed_db/leveldb/leveldb_state.h"
 #include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
 #include "components/services/storage/indexed_db/scopes/leveldb_scope.h"
@@ -136,22 +135,26 @@ leveldb::Status LevelDBScopes::Initialize() {
     // The commit point isn't there, so that scope needs to be reverted.
     // Acquire all locks necessary to undo the scope to prevent user-created
     // scopes for reading or writing changes that will be undone.
-    PartitionedLockRange range;
+    PartitionedLockId lock_id;
     base::flat_set<PartitionedLockManager::PartitionedLockRequest>
         lock_requests;
     lock_requests.reserve(scope_metadata.locks().size());
     for (const auto& lock : scope_metadata.locks()) {
-      range.begin = lock.range().begin();
-      range.end = lock.range().end();
-      lock_requests.emplace(lock.level(), range,
+      lock_id.partition = lock.partition();
+      lock_id.key = lock.key().key();
+      lock_requests.emplace(lock_id,
                             PartitionedLockManager::LockType::kExclusive);
+      if (UNLIKELY(
+              lock_manager_->TestLock(
+                  {lock_id, PartitionedLockManager::LockType::kExclusive}) !=
+              PartitionedLockManager::TestLockResult::kFree)) {
+        return leveldb::Status::Corruption("Invalid locks on disk.");
+      }
     }
     PartitionedLockHolder receiver;
-    bool locks_acquired = lock_manager_->AcquireLocks(
-        std::move(lock_requests), receiver.weak_factory.GetWeakPtr(),
-        base::DoNothing());
-    if (UNLIKELY(!locks_acquired))
-      return leveldb::Status::Corruption("Invalid locks on disk.");
+    lock_manager_->AcquireLocks(std::move(lock_requests),
+                                receiver.weak_factory.GetWeakPtr(),
+                                base::DoNothing());
 
     // AcquireLocks should grant the locks synchronously because
     // 1. There should be no locks acquired before calling this method, and
@@ -206,7 +209,7 @@ leveldb::Status LevelDBScopes::StartRecoveryAndCleanupTasks(
       break;
     case TaskRunnerMode::kUseCurrentSequence:
       revert_runner_ = nullptr;
-      cleanup_runner_ = base::SequencedTaskRunnerHandle::Get();
+      cleanup_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
       break;
   }
 
@@ -230,8 +233,8 @@ leveldb::Status LevelDBScopes::StartRecoveryAndCleanupTasks(
             ? CleanupScopeTask::CleanupMode::kExecuteCleanupTasks
             : CleanupScopeTask::CleanupMode::kIgnoreCleanupTasks,
         max_write_batch_size_bytes_);
-    base::PostTaskAndReplyWithResult(
-        cleanup_runner_.get(), FROM_HERE,
+    cleanup_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&CleanupScopeTask::Run, std::move(cleanup_task)),
         base::BindOnce(&LevelDBScopes::OnCleanupTaskResult,
                        weak_factory_.GetWeakPtr(), base::OnceClosure()));
@@ -278,9 +281,8 @@ leveldb::Status LevelDBScopes::Commit(std::unique_ptr<LevelDBScope> scope,
         level_db_, metadata_key_prefix_, scope->scope_id(),
         CleanupScopeTask::CleanupMode::kExecuteCleanupTasks,
         max_write_batch_size_bytes_);
-    base::PostTaskAndReplyWithResult(
-        cleanup_runner_.get(), FROM_HERE,
-        base::BindOnce(&CleanupScopeTask::Run, std::move(task)),
+    cleanup_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&CleanupScopeTask::Run, std::move(task)),
         base::BindOnce(&LevelDBScopes::OnCleanupTaskResult,
                        weak_factory_.GetWeakPtr(), std::move(on_complete)));
   }
@@ -294,9 +296,8 @@ leveldb::Status LevelDBScopes::Rollback(int64_t scope_id,
       level_db_, metadata_key_prefix_, scope_id, max_write_batch_size_bytes_);
 
   if (revert_runner_) {
-    base::PostTaskAndReplyWithResult(
-        revert_runner_.get(), FROM_HERE,
-        base::BindOnce(&RevertScopeTask::Run, std::move(task)),
+    revert_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&RevertScopeTask::Run, std::move(task)),
         base::BindOnce(&LevelDBScopes::OnRevertTaskResult,
                        weak_factory_.GetWeakPtr(), scope_id, std::move(locks)));
     return leveldb::Status::OK();
@@ -328,9 +329,8 @@ void LevelDBScopes::OnRevertTaskResult(int64_t scope_id,
       level_db_, metadata_key_prefix_, scope_id,
       CleanupScopeTask::CleanupMode::kIgnoreCleanupTasks,
       max_write_batch_size_bytes_);
-  base::PostTaskAndReplyWithResult(
-      cleanup_runner_.get(), FROM_HERE,
-      base::BindOnce(&CleanupScopeTask::Run, std::move(task)),
+  cleanup_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&CleanupScopeTask::Run, std::move(task)),
       base::BindOnce(&LevelDBScopes::OnCleanupTaskResult,
                      weak_factory_.GetWeakPtr(), base::OnceClosure()));
 }

@@ -18,6 +18,8 @@
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test_utils.h"
+
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/user_uninstalled_preinstalled_web_app_prefs.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -31,15 +33,15 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // #include "ash/public/cpp/shelf_model.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace web_app {
 
 class PreinstalledWebAppDuplicationFixerBrowserTest
     : public extensions::ExtensionBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   static GURL install_url() {
     return GURL("https://www.example.com/install_url");
@@ -55,17 +57,32 @@ class PreinstalledWebAppDuplicationFixerBrowserTest
   PreinstalledWebAppDuplicationFixerBrowserTest() {
     PreinstalledWebAppManager::SkipStartupForTesting();
     PreinstalledWebAppDuplicationFixer::SkipStartupForTesting();
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      feature_list_.InitWithFeatures(
-          {features::kPreinstalledWebAppDuplicationFixer,
-           features::kUseWebAppDBInsteadOfExternalPrefs},
-          {});
-    } else {
-      feature_list_.InitWithFeatures(
-          {features::kPreinstalledWebAppDuplicationFixer},
-          {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features{
+        features::kPreinstalledWebAppDuplicationFixer};
+    std::vector<base::test::FeatureRef> disabled_features;
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
   ~PreinstalledWebAppDuplicationFixerBrowserTest() override = default;
 
@@ -113,11 +130,11 @@ class PreinstalledWebAppDuplicationFixerBrowserTest
   }
 
   bool IsWebAppInstalled() const {
-    return provider_->registrar().IsInstalled(web_app_id());
+    return provider_->registrar_unsafe().IsInstalled(web_app_id());
   }
 
   bool IsWebAppExternallyInstalled() {
-    return provider_->registrar().LookupExternalAppId(install_url()) ==
+    return provider_->registrar_unsafe().LookupExternalAppId(install_url()) ==
            web_app_id();
   }
 
@@ -127,7 +144,7 @@ class PreinstalledWebAppDuplicationFixerBrowserTest
   }
 
   bool IsWebAppInSync() const {
-    return provider_->registrar()
+    return provider_->registrar_unsafe()
         .GetAppById(web_app_id())
         ->GetSources()
         .test(WebAppManagement::kSync);
@@ -191,7 +208,7 @@ class PreinstalledWebAppDuplicationFixerBrowserTest
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
  protected:
-  raw_ptr<WebAppProvider> provider_;
+  raw_ptr<WebAppProvider, DanglingUntriaged> provider_;
   base::test::ScopedFeatureList feature_list_;
   ScopedTestingPreinstalledAppData preinstalled_app_data_;
   base::HistogramTester histogram_tester_;
@@ -364,8 +381,14 @@ IN_PROC_BROWSER_TEST_P(PreinstalledWebAppDuplicationFixerBrowserTest,
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         PreinstalledWebAppDuplicationFixerBrowserTest,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    PreinstalledWebAppDuplicationFixerBrowserTest,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 }  // namespace web_app

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -236,8 +237,7 @@ static std::string ContentSettingsTypeToString(
 void SendEventToView(WebViewGuest& guest,
                      const std::string& event_name,
                      base::Value::Dict args) {
-  auto args_value = std::make_unique<base::DictionaryValue>();
-  args_value->GetDict() = std::move(args);
+  base::Value::Dict args_value(std::move(args));
   guest.DispatchEventToView(
       std::make_unique<GuestViewEvent>(event_name, std::move(args_value)));
 }
@@ -1018,8 +1018,8 @@ void WebViewGuest::VivaldiCreateWebContents(
 
     if (!new_contents) {
       // If the guest is embedded inside Vivaldi we cannot set siteinstance on
-      // creation since we want to be able to nagivate away from the initial url
-      // and communicate with the conetent with script injection and
+      // creation since we want to be able to navigate away from the initial url
+      // and communicate with the content with script injection and
       // sendMessage. This was bug VB-87237, caused by
       // https://source.chromium.org/chromium/chromium/src/+/5ce2763c03762e7b84fede080ebca1f5b033967e
       // Note this is also triggered for OpenURLFromTab code paths. Background
@@ -1028,6 +1028,14 @@ void WebViewGuest::VivaldiCreateWebContents(
         WebContents::CreateParams params(context);
         params.guest_delegate = this;
         new_contents = WebContents::Create(params);
+
+        // Let us register protocol handlers from webpanels. Tabs are set up in
+        // TabHelpers::AttachTabHelpers.
+        content_settings::PageSpecificContentSettings::CreateForWebContents(
+            new_contents.get(),
+            std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
+                new_contents.get()));
+
       } else {
         WebContents::CreateParams params(context,
                                          std::move(guest_site_instance));

@@ -17,6 +17,8 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.ui.base.ViewUtils;
 
+// Vivaldi
+import android.view.MotionEvent;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
@@ -179,5 +181,14 @@ public class IncognitoNewTabPageView extends FrameLayout {
      */
     void setIncognitoCookieControlsIconOnclickListener(OnClickListener listener) {
         mDescriptionView.setCookieControlsIconOnclickListener(listener);
+    }
+
+    /** Vivaldi **/
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent e) {
+        // We always gain focus here. This is required if the url bar is focused on newly opened
+        // tabs and we want to dismiss the keyboard.
+        requestFocus();
+        return super.onInterceptTouchEvent(e);
     }
 }

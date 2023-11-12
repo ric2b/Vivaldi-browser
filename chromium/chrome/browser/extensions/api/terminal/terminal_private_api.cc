@@ -24,7 +24,6 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
@@ -61,7 +60,9 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/common/constants.h"
 #include "ui/display/types/display_constants.h"
 
 namespace terminal_private = extensions::api::terminal_private;
@@ -735,13 +736,18 @@ ExtensionFunction::ResponseAction TerminalPrivateGetOSInfoFunction::Run() {
   base::DictionaryValue info;
   info.SetBoolKey("alternative_emulator",
                   base::FeatureList::IsEnabled(
-                      chromeos::features::kTerminalAlternativeEmulator));
+                      ash::features::kTerminalAlternativeEmulator));
+  info.SetBoolKey("multi_profile", base::FeatureList::IsEnabled(
+                                       ash::features::kTerminalMultiProfile));
+  info.SetBoolKey("sftp",
+                  base::FeatureList::IsEnabled(ash::features::kTerminalSftp));
+  info.SetBoolKey("tast",
+                  extensions::ExtensionRegistry::Get(browser_context())
+                      ->enabled_extensions()
+                      .Contains(extension_misc::kGuestModeTestExtensionId));
   info.SetBoolKey(
-      "multi_profile",
-      base::FeatureList::IsEnabled(chromeos::features::kTerminalMultiProfile));
-  info.SetBoolKey("tmux_integration",
-                  base::FeatureList::IsEnabled(
-                      chromeos::features::kTerminalTmuxIntegration));
+      "tmux_integration",
+      base::FeatureList::IsEnabled(ash::features::kTerminalTmuxIntegration));
   return RespondNow(OneArgument(std::move(info)));
 }
 

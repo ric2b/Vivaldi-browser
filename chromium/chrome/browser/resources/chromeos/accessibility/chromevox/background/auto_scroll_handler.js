@@ -10,7 +10,7 @@ import {AutomationUtil} from '../../common/automation_util.js';
 import {constants} from '../../common/constants.js';
 import {CursorUnit} from '../../common/cursors/cursor.js';
 import {CursorRange} from '../../common/cursors/range.js';
-import {TtsSpeechProperties} from '../common/tts_interface.js';
+import {TtsSpeechProperties} from '../common/tts_types.js';
 
 import {ChromeVoxState} from './chromevox_state.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
@@ -44,12 +44,8 @@ export class AutoScrollHandler {
     this.relatedFocusEventHappened_ = false;
   }
 
-  /** @return {!AutoScrollHandler} */
-  static getInstance() {
-    if (!AutoScrollHandler.instance_) {
-      AutoScrollHandler.instance_ = new AutoScrollHandler();
-    }
-    return AutoScrollHandler.instance_;
+  static init() {
+    AutoScrollHandler.instance = new AutoScrollHandler();
   }
 
   /**
@@ -384,5 +380,5 @@ AutoScrollHandler.TIMEOUT_FOCUS_EVENT_DROP_MS = 2000;
  */
 AutoScrollHandler.DELAY_HANDLE_SCROLLED_MS = 150;
 
-/** @private {?AutoScrollHandler} */
-AutoScrollHandler.instance_ = null;
+/** @type {AutoScrollHandler} */
+AutoScrollHandler.instance;

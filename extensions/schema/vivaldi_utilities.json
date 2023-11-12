@@ -673,11 +673,6 @@
             "type": "string",
             "optional": true,
             "description": "The id of theme to store the image as theme background."
-          },
-          "thumbnailBookmarkId": {
-            "type": "string",
-            "optional": true,
-            "description": "The bookmark id where to store the image as a thumbnail."
           }
         }
       },
@@ -992,8 +987,9 @@
           "optional": true,
           "parameters": [
             {
-              "name": "success",
-              "type": "boolean"
+              "description": "The newly created chrome://vivaldi-data url. Empty string on failure.",
+              "name": "url",
+              "type": "string"
             }
           ]
         }
@@ -1974,7 +1970,24 @@
           "name": "callback",
           "parameters": []
         }
+      },
+      {
+        "name": "setProtocolHandling",
+        "type": "function",
+        "description": "Turn on/off protocol handling for web pages.",
+        "parameters": [
+          {
+            "name": "enabled",
+            "type": "boolean",
+            "description": "Turn on/off protocol handling for web pages."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       }
+
     ],
     "events": [
       {

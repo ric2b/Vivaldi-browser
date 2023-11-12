@@ -16,7 +16,6 @@
 
 // INITIALIZER
 + (instancetype)initWithBrowser:(Browser*)browser
-                      bookmarks:(bookmarks::BookmarkModel*)bookmarks
                            item:(VivaldiSpeedDialItem*)item
                          parent:(VivaldiSpeedDialItem*)parent
                       isEditing:(BOOL)isEditing

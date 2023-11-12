@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/webui/settings/site_settings_handler.h"
 
-#include <algorithm>
 #include <set>
 #include <utility>
 #include <vector>
@@ -17,9 +16,11 @@
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
+#include "base/json/values_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
@@ -30,6 +31,8 @@
 #include "chrome/browser/browsing_topics/browsing_topics_service_factory.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+#include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
 #include "chrome/browser/media/unified_autoplay_config.h"
@@ -91,6 +94,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/user_manager/user_manager.h"
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/media/cdm_document_service_impl.h"
 #endif
 
 using extensions::mojom::APIPermissionID;
@@ -345,9 +352,8 @@ int GetNumCookieExceptionsOfTypes(HostContentSettingsMap* map,
                                   const std::set<ContentSetting> types) {
   ContentSettingsForOneType output;
   map->GetSettingsForOneType(ContentSettingsType::COOKIES, &output);
-  return std::count_if(
-      output.begin(), output.end(),
-      [types](const ContentSettingPatternSource setting) {
+  return base::ranges::count_if(
+      output, [types](const ContentSettingPatternSource setting) {
         return types.count(
             content_settings::ValueToContentSetting(setting.setting_value));
       });
@@ -534,6 +540,17 @@ void ConvertSiteGroupMapToList(
     // eTLD+1 is the effective top level domain + 1.
     base::Value::Dict site_group;
     site_group.Set(kEffectiveTopLevelDomainPlus1Name, entry.first);
+
+    // Isolated Web Apps do not support sub domains, so the origins set always
+    // contains only 1 entry.
+    absl::optional<std::string> isolated_web_app_name =
+        site_settings::GetIsolatedWebAppName(profile,
+                                             GURL(entry.second.begin()->first));
+    if (isolated_web_app_name.has_value()) {
+      site_group.Set(site_settings::kIsolatedWebAppName,
+                     isolated_web_app_name.value());
+    }
+
     bool has_installed_pwa = false;
     base::Value::List origin_list;
     for (const auto& origin_is_partitioned : entry.second) {
@@ -1197,6 +1214,10 @@ void SiteSettingsHandler::HandleGetRecentSitePermissions(
     base::Value::Dict recent_site;
     recent_site.Set(site_settings::kOrigin, site_permissions.origin.spec());
     recent_site.Set(site_settings::kIncognito, site_permissions.incognito);
+    if (site_permissions.isolated_web_app_name.has_value()) {
+      recent_site.Set(site_settings::kIsolatedWebAppName,
+                      site_permissions.isolated_web_app_name.value());
+    }
 
     base::Value::List permissions_list;
     for (const auto& p : site_permissions.settings) {
@@ -1386,6 +1407,12 @@ void SiteSettingsHandler::HandleGetOriginPermissions(
     raw_site_exception.Set(site_settings::kIncognito,
                            profile_->IsOffTheRecord());
     raw_site_exception.Set(site_settings::kOrigin, origin);
+    absl::optional<std::string> isolated_web_app_name =
+        site_settings::GetIsolatedWebAppName(profile_, origin_url);
+    if (isolated_web_app_name.has_value()) {
+      raw_site_exception.Set(site_settings::kIsolatedWebAppName,
+                             isolated_web_app_name.value());
+    }
     raw_site_exception.Set(site_settings::kDisplayName, display_name);
     raw_site_exception.Set(site_settings::kSetting, content_setting_string);
     raw_site_exception.Set(site_settings::kSource, source_string);
@@ -1407,10 +1434,27 @@ void SiteSettingsHandler::HandleGetNotificationPermissionReviewList(
   ResolveJavascriptCallback(callback_id, base::Value(std::move(result)));
 }
 
+void SiteSettingsHandler::HandleGetFileSystemGrants(
+    const base::Value::List& args) {
+  CHECK_EQ(2U, args.size());
+  AllowJavascript();
+
+  const base::Value& callback_id = args[0];
+  const std::string& origin_string = args[1].GetString();
+
+  auto url = GURL(origin_string);
+  DCHECK(url.is_valid());
+  const url::Origin& origin = url::Origin::Create(url);
+
+  base::Value::List grants = PopulateFileSystemGrantData(origin);
+
+  ResolveJavascriptCallback(callback_id, grants);
+}
+
 void SiteSettingsHandler::HandleSetOriginPermissions(
     const base::Value::List& args) {
   CHECK_EQ(3U, args.size());
-  std::string origin_string = args[0].GetString();
+  const std::string& origin_string = args[0].GetString();
   const std::string* type_string = args[1].GetIfString();
   std::string value = args[2].GetString();
 
@@ -2014,7 +2058,7 @@ void SiteSettingsHandler::TreeNodesRemoved(ui::TreeModel* model,
 void SiteSettingsHandler::TreeNodeChanged(ui::TreeModel* model,
                                           ui::TreeModelNode* node) {}
 
-void SiteSettingsHandler::TreeModelEndBatch(CookiesTreeModel* model) {
+void SiteSettingsHandler::TreeModelEndBatchDeprecated(CookiesTreeModel* model) {
   ModelBuilt();
 }
 
@@ -2033,15 +2077,15 @@ void SiteSettingsHandler::GetOriginStorage(
   }
 
   for (const auto& entry : *browsing_data_model_) {
-    if (entry.data_details.storage_size == 0)
+    if (entry.data_details->storage_size == 0)
       continue;
 
     // Convert the primary host to an HTTPS url to match expecations for this
     // code.
     GURL host_url(std::string(url::kHttpsScheme) +
-                  url::kStandardSchemeSeparator + entry.primary_host + "/");
+                  url::kStandardSchemeSeparator + *entry.primary_host + "/");
     UpdateDataFromModel(all_sites_map, origin_size_map, host_url,
-                        entry.data_details.storage_size);
+                        entry.data_details->storage_size);
   }
 }
 
@@ -2204,6 +2248,29 @@ void SiteSettingsHandler::RemoveNonTreeModelData(
   // by the model.
   for (const auto& origin : origins)
     browsing_data_model_->RemoveBrowsingData(origin.host(), base::DoNothing());
+
+#if BUILDFLAG(IS_WIN)
+  // Removes any Media License Data associated with the origin that is not
+  // stored in quota nodes. This should only be on Windows as ChromeOS does
+  // not support removing Media License Data per origin, and
+  // site_settings_handler.cc does not handle Android site specific code.
+  // The code for Android site specific code is located in
+  // components/browser_ui/site_settings/android/website_preference_bridge.cc
+  // TODO(b/248311157) - When CrOS supports the ability to delete platform
+  // keys by domain, implement the CrOS specific logic regarding clearing site
+  // specific media license data.
+  // TODO(b/248311157) - When the migration to BrowsingDataModel is finished,
+  // remove this and integrate the media license data removal steps there.
+  auto filter_builder = content::BrowsingDataFilterBuilder::Create(
+      content::BrowsingDataFilterBuilder::Mode::kDelete);
+
+  for (const auto& origin : origins)
+    filter_builder->AddOrigin(origin);
+
+  CdmDocumentServiceImpl::ClearCdmData(
+      profile_, base::Time::Min(), base::Time::Max(),
+      filter_builder->BuildUrlFilter(), base::DoNothing());
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 void SiteSettingsHandler::SetModelsForTesting(
@@ -2277,6 +2344,59 @@ SiteSettingsHandler::PopulateNotificationPermissionReviewData() {
   }
 
   return result;
+}
+
+base::Value::List SiteSettingsHandler::PopulateFileSystemGrantData(
+    const url::Origin& origin) {
+  base::Value::List grants;
+
+  // TODO(crbug.com/1373962): Remove feature flag check after persisted
+  // permissions is fully launched.
+  if (!base::FeatureList::IsEnabled(
+          features::kFileSystemAccessPersistentPermissions))
+    return grants;
+  ChromeFileSystemAccessPermissionContext* permission_context =
+      FileSystemAccessPermissionContextFactory::GetForProfile(profile_);
+
+  ChromeFileSystemAccessPermissionContext::Grants grantObj =
+      permission_context->GetPermissionGrants(origin);
+
+  // Populate the `grants` object with allowed permissions.
+  for (auto& filePath : grantObj.file_read_grants) {
+    base::Value::Dict fileReadGrant;
+    fileReadGrant.Set(site_settings::kDisplayName, FilePathToValue(filePath));
+    fileReadGrant.Set(site_settings::kIsWritable, false);
+    fileReadGrant.Set(site_settings::kIsDirectory, false);
+    grants.Append(base::Value(std::move(fileReadGrant)));
+  }
+
+  for (auto& filePath : grantObj.file_write_grants) {
+    base::Value::Dict fileWriteGrant;
+    fileWriteGrant.Set(site_settings::kDisplayName, FilePathToValue(filePath));
+    fileWriteGrant.Set(site_settings::kIsWritable, true);
+    fileWriteGrant.Set(site_settings::kIsDirectory, false);
+    grants.Append(base::Value(std::move(fileWriteGrant)));
+  }
+
+  for (auto& filePath : grantObj.directory_read_grants) {
+    base::Value::Dict directoryReadGrant;
+    directoryReadGrant.Set(site_settings::kDisplayName,
+                           FilePathToValue(filePath));
+    directoryReadGrant.Set(site_settings::kIsWritable, false);
+    directoryReadGrant.Set(site_settings::kIsDirectory, true);
+    grants.Append(base::Value(std::move(directoryReadGrant)));
+  }
+
+  for (auto& filePath : grantObj.directory_write_grants) {
+    base::Value::Dict directoryWriteGrant;
+    directoryWriteGrant.Set(site_settings::kDisplayName,
+                            FilePathToValue(filePath));
+    directoryWriteGrant.Set(site_settings::kIsWritable, true);
+    directoryWriteGrant.Set(site_settings::kIsDirectory, true);
+    grants.Append(base::Value(std::move(directoryWriteGrant)));
+  }
+
+  return grants;
 }
 
 void SiteSettingsHandler::SendNotificationPermissionReviewList() {

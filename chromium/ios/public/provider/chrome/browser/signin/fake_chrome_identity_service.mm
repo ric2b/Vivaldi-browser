@@ -13,8 +13,9 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "google_apis/gaia/gaia_auth_util.h"
+#import "ios/chrome/browser/signin/fake_account_details_view_controller.h"
+#import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service_constants.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_api.h"
@@ -58,101 +59,16 @@ void SetCachedAvatarForIdentity(id<SystemIdentity> identity, UIImage* avatar) {
 
 }  // anonymous namespace
 
-@interface FakeAccountDetailsViewController : UIViewController {
-  __weak id<SystemIdentity> _identity;
-  UIButton* _removeAccountButton;
-  UIButton* _closeAccountDetailsButton;
-}
-@end
-
-@implementation FakeAccountDetailsViewController
-
-- (instancetype)initWithIdentity:(id<SystemIdentity>)identity {
-  self = [super initWithNibName:nil bundle:nil];
-  if (self) {
-    _identity = identity;
-  }
-  return self;
-}
-
-- (void)dealloc {
-  [_removeAccountButton removeTarget:self
-                              action:@selector(didTapRemoveAccount:)
-                    forControlEvents:UIControlEventTouchUpInside];
-  [_closeAccountDetailsButton removeTarget:self
-                                    action:@selector(didTapCloseAccount:)
-                          forControlEvents:UIControlEventTouchUpInside];
-}
-
-- (void)viewDidLoad {
-  [super viewDidLoad];
-
-  // Obnoxious color, this is a test screen.
-  self.view.backgroundColor = [UIColor orangeColor];
-
-  _removeAccountButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [self addButtonToSubviewWithTitle:@"Remove account"
-                             button:_removeAccountButton
-                             action:@selector(didTapRemoveAccount:)];
-
-  _closeAccountDetailsButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [self addButtonToSubviewWithTitle:@"Close account"
-                             button:_closeAccountDetailsButton
-                             action:@selector(didTapCloseAccount:)];
-}
-
-- (void)viewWillLayoutSubviews {
-  [super viewWillLayoutSubviews];
-
-  CGRect bounds = self.view.bounds;
-  [self sizeButtonToFitWithCenter:CGPointMake(CGRectGetMidX(bounds),
-                                              CGRectGetMinY(bounds))
-                           button:_removeAccountButton];
-  [self sizeButtonToFitWithCenter:CGPointMake(CGRectGetMidX(bounds),
-                                              CGRectGetMidY(bounds))
-                           button:_closeAccountDetailsButton];
-}
-
-#pragma mark - Private
-
-- (void)addButtonToSubviewWithTitle:(NSString*)title
-                             button:(UIButton*)button
-                             action:(SEL)action {
-  [button setTitle:title forState:UIControlStateNormal];
-  [button addTarget:self
-                action:action
-      forControlEvents:UIControlEventTouchUpInside];
-  [self.view addSubview:button];
-}
-
-- (void)sizeButtonToFitWithCenter:(CGPoint)center button:(UIButton*)button {
-  [button setCenter:center];
-  [button sizeToFit];
-}
-
-- (void)didTapRemoveAccount:(id)sender {
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-      ->ForgetIdentity(_identity, ^(NSError*) {
-        [self dismissViewControllerAnimated:YES completion:nil];
-      });
-}
-
-- (void)didTapCloseAccount:(id)sender {
-  [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-@end
-
 namespace ios {
 FakeChromeIdentityService::FakeChromeIdentityService()
     : identities_([[NSMutableArray alloc] init]),
-      capabilitiesByIdentity_([[NSMutableDictionary alloc] init]),
+      capabilities_by_identity_([[NSMutableDictionary alloc] init]),
       _fakeMDMError(false),
       _pendingCallback(0) {
   std::string value =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kAddFakeIdentitiesArg);
-  NSArray* identities = [FakeChromeIdentity identitiesFromBase64String:value];
+  NSArray* identities = [FakeSystemIdentity identitiesFromBase64String:value];
   if (identities) {
     [identities_ addObjectsFromArray:identities];
   }
@@ -177,6 +93,7 @@ FakeChromeIdentityService::PresentAccountDetailsController(
   [viewController presentViewController:accountDetailsViewController
                                animated:animated
                              completion:nil];
+
   return ^(BOOL dismissAnimated) {
     [accountDetailsViewController dismissViewControllerAnimated:dismissAnimated
                                                      completion:nil];
@@ -205,7 +122,7 @@ void FakeChromeIdentityService::ForgetIdentity(
     id<SystemIdentity> identity,
     ForgetIdentityCallback callback) {
   [identities_ removeObject:identity];
-  [capabilitiesByIdentity_ removeObjectForKey:identity.gaiaID];
+  [capabilities_by_identity_ removeObjectForKey:identity.gaiaID];
   FireIdentityListChanged(/*notify_user=*/false);
   if (callback) {
     // Forgetting an identity is normally an asynchronous operation (that
@@ -305,7 +222,7 @@ NSString* FakeChromeIdentityService::GetCachedHostedDomainForIdentity(
 void FakeChromeIdentityService::SimulateForgetIdentityFromOtherApp(
     id<SystemIdentity> identity) {
   [identities_ removeObject:identity];
-  [capabilitiesByIdentity_ removeObjectForKey:identity.gaiaID];
+  [capabilities_by_identity_ removeObjectForKey:identity.gaiaID];
   FireChromeIdentityReload();
 }
 
@@ -318,7 +235,7 @@ void FakeChromeIdentityService::AddManagedIdentities(NSArray* identitiesNames) {
     NSString* email =
         [NSString stringWithFormat:@"%@%@", name, kManagedIdentityEmailSuffix];
     NSString* gaiaID = [NSString stringWithFormat:kIdentityGaiaIDFormat, name];
-    [identities_ addObject:[FakeChromeIdentity identityWithEmail:email
+    [identities_ addObject:[FakeSystemIdentity identityWithEmail:email
                                                           gaiaID:gaiaID
                                                             name:name]];
   }
@@ -328,7 +245,7 @@ void FakeChromeIdentityService::AddIdentities(NSArray* identitiesNames) {
   for (NSString* name in identitiesNames) {
     NSString* email = [NSString stringWithFormat:kIdentityEmailFormat, name];
     NSString* gaiaID = [NSString stringWithFormat:kIdentityGaiaIDFormat, name];
-    [identities_ addObject:[FakeChromeIdentity identityWithEmail:email
+    [identities_ addObject:[FakeSystemIdentity identityWithEmail:email
                                                           gaiaID:gaiaID
                                                             name:name]];
   }
@@ -341,10 +258,11 @@ void FakeChromeIdentityService::AddIdentity(id<SystemIdentity> identity) {
   FireIdentityListChanged(/*notify_user=*/false);
 }
 
-void FakeChromeIdentityService::SetCapabilities(id<SystemIdentity> identity,
-                                                NSDictionary* capabilities) {
+void FakeChromeIdentityService::SetCapabilities(
+    id<SystemIdentity> identity,
+    CapabilitiesDict* capabilities) {
   DCHECK([identities_ containsObject:identity]);
-  [capabilitiesByIdentity_ setObject:capabilities forKey:identity.gaiaID];
+  [capabilities_by_identity_ setObject:capabilities forKey:identity.gaiaID];
 }
 
 void FakeChromeIdentityService::SetFakeMDMError(bool fakeMDMError) {
@@ -368,10 +286,10 @@ void FakeChromeIdentityService::FetchCapabilities(
     NSArray<NSString*>* capabilities,
     ChromeIdentityCapabilitiesFetchCompletionBlock completion) {
   NSMutableDictionary* result = [[NSMutableDictionary alloc] init];
-  NSDictionary* capabilitiesForIdentity =
-      capabilitiesByIdentity_[identity.gaiaID];
+  CapabilitiesDict* capabilitiesForIdentity =
+      capabilities_by_identity_[identity.gaiaID];
   for (NSString* capability : capabilities) {
-    // Set capability result as unknown if not set in capabilitiesByIdentity_.
+    // Set capability result as unknown if not set in capabilities_by_identity_.
     NSNumber* capabilityResult =
         [NSNumber numberWithInt:static_cast<int>(
                                     ChromeIdentityCapabilityResult::kUnknown)];

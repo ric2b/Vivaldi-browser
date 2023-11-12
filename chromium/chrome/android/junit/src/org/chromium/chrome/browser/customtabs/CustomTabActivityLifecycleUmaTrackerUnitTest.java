@@ -25,7 +25,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.customtabs.CustomTabActivityLifecycleUmaTracker.ClientIdentifierType;
+import org.chromium.chrome.browser.customtabs.features.sessionrestore.SessionRestoreUtils.ClientIdentifierType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
@@ -129,7 +129,7 @@ public class CustomTabActivityLifecycleUmaTrackerUnitTest {
         recordPrefForTesting(PACKAGE_A, null, TASK_ID_123);
         CustomTabActivityLifecycleUmaTracker.recordForRetainableSessions(
                 PACKAGE_A, REFERRER_A, 99, mPref, /*launchWithSameUri=*/true);
-        assertNoInteractionRecorded();
+        assertInteractionRecorded(ClientIdentifierType.PACKAGE_NAME);
     }
 
     @Test
@@ -174,7 +174,7 @@ public class CustomTabActivityLifecycleUmaTrackerUnitTest {
     }
 
     private void assertInteractionRecorded(@ClientIdentifierType String expectedSuffix) {
-        String prefix = "CustomTabs.RetainableSessions.TimeBetweenLaunch";
+        String prefix = "CustomTabs.RetainableSessionsV2.TimeBetweenLaunch";
         String[] suffixes = {ClientIdentifierType.REFERRER, ClientIdentifierType.PACKAGE_NAME,
                 ClientIdentifierType.MIXED, ClientIdentifierType.DIFFERENT};
 

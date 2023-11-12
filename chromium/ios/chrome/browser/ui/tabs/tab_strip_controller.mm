@@ -32,6 +32,7 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
@@ -65,8 +66,9 @@
 #import "ui/gfx/image/image.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -128,24 +130,14 @@ UIColor* BackgroundColor() {
     // However, when using the fullscreen provider, the WKWebView extends behind
     // the tab strip. In this case, a clear background would lead to seeing the
     // WKWebView instead of the thumb strip.
-
-    if (IsVivaldiRunning())
-      return ios::provider::IsFullscreenSmoothScrollingSupported()
-                ? [UIColor colorNamed: vTabStripDefaultBackgroundColor]
-                : UIColor.clearColor;
-    // End Vivaldi
-
     return ios::provider::IsFullscreenSmoothScrollingSupported()
                ? UIColor.blackColor
                : UIColor.clearColor;
   }
-
-  if (IsVivaldiRunning())
-    return [UIColor colorNamed: vTabStripDefaultBackgroundColor];
-  // End Vivaldi
-
   return UIColor.blackColor;
 }
+
+const CGFloat kSymbolSize = 18;
 
 }  // namespace
 
@@ -472,7 +464,13 @@ UIColor* BackgroundColor() {
     _view = [[TabStripContainerView alloc] initWithFrame:tabStripFrame];
     _view.autoresizingMask = (UIViewAutoresizingFlexibleWidth |
                               UIViewAutoresizingFlexibleBottomMargin);
+
+    // Vivaldi: We will set the background color after isIncognitoTab is set
+    // since we have different tab bg colors for each mode.
+    if (!IsVivaldiRunning()) {
     _view.backgroundColor = BackgroundColor();
+    } // End Vivaldi
+
     if (UseRTLLayout())
       _view.transform = CGAffineTransformMakeScale(-1, 1);
 
@@ -498,14 +496,20 @@ UIColor* BackgroundColor() {
                                       UIViewAutoresizingFlexibleBottomMargin);
     _buttonNewTab.imageView.contentMode = UIViewContentModeCenter;
 
-    UIImage* buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
-    buttonNewTabImage = [buttonNewTabImage
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    UIImage* buttonNewTabImage;
+    if (UseSymbols()) {
+      buttonNewTabImage = DefaultSymbolWithPointSize(kPlusSymbol, kSymbolSize);
+    } else {
+      buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
+      buttonNewTabImage = [buttonNewTabImage
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
     [_buttonNewTab setImage:buttonNewTabImage forState:UIControlStateNormal];
     [_buttonNewTab.imageView setTintColor:[UIColor colorNamed:kGrey500Color]];
 
     if (IsVivaldiRunning()) {
       [_buttonNewTab.imageView setTintColor: UIColor.whiteColor];
+      _view.backgroundColor = [self BackgroundColor];
     } // End Vivaldi
 
     UIEdgeInsets imageInsets = UIEdgeInsetsMake(
@@ -678,8 +682,15 @@ UIColor* BackgroundColor() {
 
   // Enable user interaction in order to eat touches from views behind it.
   [_dimmingView setUserInteractionEnabled:YES];
+
+  if (IsVivaldiRunning()) {
+    [_dimmingView
+        setBackgroundColor:[[self BackgroundColor] colorWithAlphaComponent:0]];
+  } else {
   [_dimmingView
       setBackgroundColor:[BackgroundColor() colorWithAlphaComponent:0]];
+  } // End Vivaldi
+
   [_dimmingView setAutoresizingMask:(UIViewAutoresizingFlexibleWidth |
                                      UIViewAutoresizingFlexibleHeight)];
   [_tabStripView addSubview:_dimmingView];
@@ -695,8 +706,15 @@ UIColor* BackgroundColor() {
 // Animation helper function to set the _dimmingView background color with
 // alpha.
 - (void)animateDimmingViewBackgroundColorWithAlpha:(CGFloat)alphaComponent {
+
+  if (IsVivaldiRunning()) {
+    [_dimmingView setBackgroundColor:[[self BackgroundColor]
+                                       colorWithAlphaComponent:alphaComponent]];
+  } else {
   [_dimmingView setBackgroundColor:[BackgroundColor()
                                        colorWithAlphaComponent:alphaComponent]];
+  } // End Vivaldi
+
 }
 
 - (void)removeDimmingViewWithAnimation:(BOOL)animate {
@@ -723,11 +741,13 @@ UIColor* BackgroundColor() {
 }
 
 - (void)recordUserMetrics:(id)sender {
-  if (sender == _buttonNewTab)
+  if (sender == _buttonNewTab) {
     base::RecordAction(UserMetricsAction("MobileTabStripNewTab"));
-  else
+    base::RecordAction(UserMetricsAction("MobileTabNewTab"));
+  } else {
     LOG(WARNING) << "Trying to record metrics for unknown sender "
                  << base::SysNSStringToUTF8([sender description]);
+  }
 }
 
 - (void)sendNewTabCommand {
@@ -1800,25 +1820,16 @@ UIColor* BackgroundColor() {
   if (UIAccessibilityIsVoiceOverRunning()) {
     return NO;
   }
+
+  if (IsVivaldiRunning()) {
+    return [self isTabStackEnabled];
+  } else {
   BOOL useTabStacking =
       (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) ||
       !IsCompactWidth(self.view);
   return useTabStacking;
-}
+  } // End Vivaldi
 
-- (void)setUseTabStacking:(BOOL)useTabStacking {
-  if (_useTabStacking == useTabStacking) {
-    return;
-  }
-
-  _useTabStacking = useTabStacking;
-  [self updateScrollViewFrameForTabSwitcherButton];
-  [self updateContentSizeAndRepositionViews];
-  int selectedModelIndex = _webStateList->active_index();
-  if (selectedModelIndex != WebStateList::kInvalidIndex) {
-    [self updateContentOffsetForWebStateIndex:selectedModelIndex
-                                isNewWebState:NO];
-  }
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
@@ -1853,11 +1864,34 @@ UIColor* BackgroundColor() {
   if (currentViewRevealState == ViewRevealState::Hidden) {
     // Reset the background color to cover up the WKWebView if it is behind
     // the tab strip.
+
+    if (IsVivaldiRunning()) {
+      self.view.backgroundColor = [self BackgroundColor];
+    } else {
     self.view.backgroundColor = BackgroundColor();
+    } // End Vivaldi
+
   }
   self.viewHiddenForThumbStrip =
       currentViewRevealState != ViewRevealState::Hidden;
   [self updateViewHidden];
+}
+
+#pragma mark VIVALDI
+- (UIColor*)BackgroundColor {
+  if (_isIncognito) {
+    return UIColor.blackColor;
+  } else {
+    return [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+  }
+}
+
+- (BOOL)isTabStackEnabled {
+  if (!_browser)
+    return NO;
+
+  return [VivaldiTabSettingPrefs getUseTabStackWithPrefService:
+          _browser->GetBrowserState()->GetPrefs()];
 }
 
 @end

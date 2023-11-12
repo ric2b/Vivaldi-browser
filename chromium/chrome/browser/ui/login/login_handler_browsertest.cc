@@ -1979,8 +1979,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest, PromptWithOnlyInitialEntry) {
   content::WebContents* opened_contents =
       browser()->tab_strip_model()->GetWebContentsAt(1);
   NavigationController* opened_controller = &opened_contents->GetController();
-  ASSERT_TRUE(!opened_controller->GetVisibleEntry() ||
-              opened_controller->GetVisibleEntry()->IsInitialEntry());
+  ASSERT_TRUE(opened_controller->GetVisibleEntry()->IsInitialEntry());
   LoginPromptBrowserTestObserver observer;
   observer.Register(content::Source<NavigationController>(opened_controller));
   WindowedAuthNeededObserver auth_needed_waiter(opened_controller);
@@ -2209,7 +2208,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptExtensionBrowserTest,
   GURL test_page = embedded_test_server()->GetURL(kSlowResponse);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_page));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   ASSERT_EQ(1u, console_observer.messages().size());
   EXPECT_EQ(u"onAuthRequired " + base::ASCIIToUTF16(test_page.spec()),
             console_observer.messages()[0].message);

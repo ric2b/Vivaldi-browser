@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -108,11 +109,15 @@ void NetworkSettingsServiceAsh::SetExtensionProxy(
   PrefService* pref_service = GetPrimaryLoggedInUserProfilePrefs();
   DCHECK(pref_service);
 
+  extension_controlling_proxy_.reset();
+
   if (!proxy_config->extension) {
     LOG(ERROR)
         << "Received extension proxy configuration without extension data";
     return;
   }
+
+  extension_controlling_proxy_ = proxy_config->extension.Clone();
 
   // Required to display the extension which is controlling the proxy in the OS
   // Settings > Network > Proxy window.
@@ -184,10 +189,11 @@ void NetworkSettingsServiceAsh::OnPrefChanged() {
 }
 
 void NetworkSettingsServiceAsh::ClearProxyPrefFromUserStore() {
+  extension_controlling_proxy_.reset();
   PrefService* pref_service = GetPrimaryLoggedInUserProfilePrefs();
   DCHECK(pref_service);
-  pref_service->ClearPref(proxy_config::prefs::kProxy);
   pref_service->ClearPref(ash::prefs::kLacrosProxyControllingExtension);
+  pref_service->ClearPref(proxy_config::prefs::kProxy);
 }
 
 void NetworkSettingsServiceAsh::DetermineEffectiveProxy() {
@@ -199,6 +205,8 @@ void NetworkSettingsServiceAsh::DetermineEffectiveProxy() {
                                                                   local_state_)
           .get(),
       cached_wpad_url_);
+
+  new_proxy_config->extension = extension_controlling_proxy_.Clone();
 
   // Trigger a proxy settings sync to Lacros if the proxy configuration changes.
   if (!cached_proxy_config_ ||

@@ -22,6 +22,7 @@
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
+bool tab_strip_redesign_enabled;
 
 namespace android {
 
@@ -32,12 +33,14 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
       scrollable_strip_layer_(cc::Layer::Create()),
       scrim_layer_(cc::SolidColorLayer::Create()),
       new_tab_button_(cc::UIResourceLayer::Create()),
+      new_tab_button_background_(cc::UIResourceLayer::Create()),
       left_fade_(cc::UIResourceLayer::Create()),
       right_fade_(cc::UIResourceLayer::Create()),
       model_selector_button_(cc::UIResourceLayer::Create()),
       write_index_(0),
       content_tree_(nullptr) {
   new_tab_button_->SetIsDrawable(true);
+  new_tab_button_background_->SetIsDrawable(true);
   model_selector_button_->SetIsDrawable(true);
   left_fade_->SetIsDrawable(true);
   right_fade_->SetIsDrawable(true);
@@ -49,11 +52,12 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   scrollable_strip_layer_->SetIsDrawable(true);
   const bool tab_strip_improvements_enabled =
       base::FeatureList::IsEnabled(chrome::android::kTabStripImprovements);
+  tab_strip_redesign_enabled =
+      base::FeatureList::IsEnabled(chrome::android::kTabStripRedesign);
   if (!tab_strip_improvements_enabled) {
     scrollable_strip_layer_->AddChild(new_tab_button_);
   }
 
-  tab_strip_layer_->SetBackgroundColor(SkColors::kBlack);
   tab_strip_layer_->SetIsDrawable(true);
   tab_strip_layer_->AddChild(scrollable_strip_layer_);
 
@@ -61,6 +65,9 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   tab_strip_layer_->AddChild(right_fade_);
   tab_strip_layer_->AddChild(model_selector_button_);
   if (tab_strip_improvements_enabled) {
+    if (tab_strip_redesign_enabled) {
+      tab_strip_layer_->AddChild(new_tab_button_background_);
+    }
     tab_strip_layer_->AddChild(new_tab_button_);
   }
   tab_strip_layer_->AddChild(scrim_layer_);
@@ -135,7 +142,8 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
                                              jfloat width,
                                              jfloat height,
                                              jfloat y_offset,
-                                             jboolean should_readd_background) {
+                                             jboolean should_readd_background,
+                                             jint background_color) {
   gfx::RectF content(0, y_offset, width, height);
   // Note(david@vivaldi.com): We apply a fixed height for the stack strip. The
   // |y_offset| however is only applied to the main strip of which the stacking
@@ -146,6 +154,9 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
   layer()->SetPosition(gfx::PointF(0, y_offset));
   tab_strip_layer_->SetBounds(gfx::Size(width, height));
   scrollable_strip_layer_->SetBounds(gfx::Size(width, height));
+  if (!vivaldi::IsVivaldiRunning()) {
+  tab_strip_layer_->SetBackgroundColor(SkColor4f::FromColor(background_color));
+  }
 
   // Content tree should not be affected by tab strip scene layer visibility.
   if (content_tree_ && !is_stack_strip_) // Vivaldi
@@ -183,7 +194,6 @@ void TabStripSceneLayer::UpdateStripScrim(JNIEnv* env,
     scrim_layer_->SetIsDrawable(false);
     return;
   }
-
   scrim_layer_->SetIsDrawable(true);
   // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
   scrim_layer_->SetBackgroundColor(SkColor4f::FromColor(color));
@@ -196,13 +206,13 @@ void TabStripSceneLayer::UpdateNewTabButton(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj,
     jint resource_id,
+    jint bg_resource_id,
     jfloat x,
     jfloat y,
-    jfloat width,
-    jfloat height,
     jfloat touch_target_offset,
     jboolean visible,
     jint tint,
+    jint background_tint,
     jfloat button_alpha,
     const JavaParamRef<jobject>& jresource_manager) {
   ui::ResourceManager* resource_manager =
@@ -217,16 +227,40 @@ void TabStripSceneLayer::UpdateNewTabButton(
   }
 
   new_tab_button_->SetUIResourceId(button_resource->ui_resource()->id());
-  float left_offset = (width - button_resource->size().width()) / 2;
-  float top_offset = (height - button_resource->size().height()) / 2;
   // The touch target for the new tab button is skewed towards the end of the
   // strip. This ensures that the view itself is correctly aligned without
   // adjusting the touch target.
-  left_offset += touch_target_offset;
-  new_tab_button_->SetPosition(gfx::PointF(x + left_offset, y + top_offset));
+  float left_offset = touch_target_offset;
+
   new_tab_button_->SetBounds(button_resource->size());
   new_tab_button_->SetHideLayerAndSubtree(!visible);
   new_tab_button_->SetOpacity(button_alpha);
+
+  // Set Tab Strip Redesign new tab button background
+  if (tab_strip_redesign_enabled) {
+    ui::Resource* button_background_resource =
+        resource_manager->GetStaticResourceWithTint(bg_resource_id,
+                                                    background_tint, true);
+    float background_left_offset = (button_background_resource->size().width() -
+                                    button_resource->size().width()) /
+                                   2;
+    float background_top_offset = (button_background_resource->size().height() -
+                                   button_resource->size().height()) /
+                                  2;
+    new_tab_button_background_->SetUIResourceId(
+        button_background_resource->ui_resource()->id());
+    new_tab_button_background_->SetPosition(gfx::PointF(x + left_offset, y));
+
+    new_tab_button_background_->SetBounds(button_background_resource->size());
+    new_tab_button_background_->SetHideLayerAndSubtree(!visible);
+    new_tab_button_background_->SetOpacity(button_alpha);
+    new_tab_button_->SetPosition(
+        gfx::PointF(background_left_offset, background_top_offset));
+    new_tab_button_background_->AddChild(new_tab_button_);
+  } else {
+    // Only show new tab button icon when TSR is disabled
+    new_tab_button_->SetPosition(gfx::PointF(x + left_offset, y));
+  }
 }
 
 void TabStripSceneLayer::UpdateModelSelectorButton(
@@ -239,6 +273,7 @@ void TabStripSceneLayer::UpdateModelSelectorButton(
     jfloat height,
     jboolean incognito,
     jboolean visible,
+    jfloat button_alpha,
     const JavaParamRef<jobject>& jresource_manager) {
   ui::ResourceManager* resource_manager =
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
@@ -258,6 +293,7 @@ void TabStripSceneLayer::UpdateModelSelectorButton(
       gfx::PointF(x + left_offset, y + top_offset));
   model_selector_button_->SetBounds(button_resource->size());
   model_selector_button_->SetHideLayerAndSubtree(!visible);
+  model_selector_button_->SetOpacity(button_alpha);
 }
 
 void TabStripSceneLayer::UpdateTabStripLeftFade(
@@ -265,7 +301,8 @@ void TabStripSceneLayer::UpdateTabStripLeftFade(
     const JavaParamRef<jobject>& jobj,
     jint resource_id,
     jfloat opacity,
-    const JavaParamRef<jobject>& jresource_manager) {
+    const JavaParamRef<jobject>& jresource_manager,
+    jint left_fade_color) {
 
   // Hide layer if it's not visible.
   if (opacity == 0.f) {
@@ -276,8 +313,8 @@ void TabStripSceneLayer::UpdateTabStripLeftFade(
   // Set UI resource.
   ui::ResourceManager* resource_manager =
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
-  ui::Resource* fade_resource = resource_manager->GetResource(
-      ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+  ui::Resource* fade_resource = resource_manager->GetStaticResourceWithTint(
+        resource_id, left_fade_color);
   // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
   if (vivaldi::IsVivaldiRunning()) {
     fade_resource = resource_manager->GetStaticResourceWithTint(
@@ -312,7 +349,8 @@ void TabStripSceneLayer::UpdateTabStripRightFade(
     const JavaParamRef<jobject>& jobj,
     jint resource_id,
     jfloat opacity,
-    const JavaParamRef<jobject>& jresource_manager) {
+    const JavaParamRef<jobject>& jresource_manager,
+    jint right_fade_color) {
 
   // Hide layer if it's not visible.
   if (opacity == 0.f) {
@@ -323,8 +361,8 @@ void TabStripSceneLayer::UpdateTabStripRightFade(
   // Set UI resource.
   ui::ResourceManager* resource_manager =
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
-  ui::Resource* fade_resource = resource_manager->GetResource(
-      ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+  ui::Resource* fade_resource = resource_manager->GetStaticResourceWithTint(
+        resource_id, right_fade_color);
   // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
   if (vivaldi::IsVivaldiRunning()) {
     fade_resource = resource_manager->GetStaticResourceWithTint(
@@ -354,9 +392,11 @@ void TabStripSceneLayer::PutStripTabLayer(
     const JavaParamRef<jobject>& jobj,
     jint id,
     jint close_resource_id,
+    jint divider_resource_id,
     jint handle_resource_id,
     jint handle_outline_resource_id,
     jint close_tint,
+    jint divider_tint,
     jint handle_tint,
     jint handle_outline_tint,
     jboolean foreground,
@@ -367,10 +407,14 @@ void TabStripSceneLayer::PutStripTabLayer(
     jfloat width,
     jfloat height,
     jfloat content_offset_x,
+    jfloat divider_offset_x,
+    jfloat bottom_offset_y,
     jfloat close_button_alpha,
+    jfloat divider_alpha,
     jboolean is_loading,
     jfloat spinner_rotation,
     jfloat brightness,
+    jfloat opacity,
     const JavaParamRef<jobject>& jlayer_title_cache,
     const JavaParamRef<jobject>& jresource_manager,
     jfloat tab_alpha, // Vivaldi
@@ -390,11 +434,14 @@ void TabStripSceneLayer::PutStripTabLayer(
   ui::Resource* close_button_resource =
       resource_manager->GetStaticResourceWithTint(close_resource_id,
                                                   close_tint);
-  layer->SetProperties(id, close_button_resource, tab_handle_resource,
-                       tab_handle_outline_resource, foreground, close_pressed,
-                       toolbar_width, x, y, width, height, content_offset_x,
-                       close_button_alpha, is_loading, spinner_rotation,
-                       brightness,
+  ui::Resource* divider_resource = resource_manager->GetStaticResourceWithTint(
+      divider_resource_id, divider_tint, true);
+  layer->SetProperties(id, close_button_resource, divider_resource,
+                       tab_handle_resource, tab_handle_outline_resource,
+                       foreground, close_pressed, toolbar_width, x, y, width,
+                       height, content_offset_x, divider_offset_x,
+                       bottom_offset_y, close_button_alpha, divider_alpha,
+                       is_loading, spinner_rotation, brightness, opacity,
                        tab_alpha, is_shown_as_favicon, title_offset); // Vivaldi
 }
 

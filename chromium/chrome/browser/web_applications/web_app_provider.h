@@ -109,14 +109,25 @@ class WebAppProvider : public KeyedService {
   // Read/write to web app system should use `scheduler()` to guarantee safe
   // access. This is safe to access even if the `WebAppProvider` is not ready.
   WebAppCommandScheduler& scheduler();
+  //  This is safe to access even if the `WebAppProvider` is not ready.
+  WebAppCommandManager& command_manager();
 
   // Web App sub components. These should only be accessed after
   // `on_registry_ready()` is signaled.
 
-  // The app registry model.
+  // Unsafe access to the app registry model. For safe access use locks (see
+  // chrome/browser/web_applications/locks/ for more info).
+  WebAppRegistrar& registrar_unsafe();
+  const WebAppRegistrar& registrar_unsafe() const;
+  // Deprecated use registrar_unsafe instead.
+  // TODO(b/260863458): Remove registrar accessor.
   WebAppRegistrar& registrar();
   const WebAppRegistrar& registrar() const;
-  // The app registry controller.
+  // Unsafe access to the app registry controller. For safe access use locks
+  // (see chrome/browser/web_applications/locks/ for more info).
+  WebAppSyncBridge& sync_bridge_unsafe();
+  // Deprecated use sync_bridge_unsafe instead.
+  // TODO(b/260864090): Remove sync_bridge accessor.
   WebAppSyncBridge& sync_bridge();
   // UIs can use WebAppInstallManager for user-initiated Web Apps install.
   WebAppInstallManager& install_manager();
@@ -144,14 +155,22 @@ class WebAppProvider : public KeyedService {
   OsIntegrationManager& os_integration_manager();
   const OsIntegrationManager& os_integration_manager() const;
 
-  WebAppCommandManager& command_manager();
-
   // KeyedService:
   void Shutdown() override;
 
   // Signals when app registry becomes ready.
   const base::OneShotEvent& on_registry_ready() const {
     return on_registry_ready_;
+  }
+
+  // Signals when external app managers have finished calling
+  // `SynchronizeInstalledApps`, which means that all installs or uninstalls for
+  // external managers have been scheduled. Specifically these calls are
+  // triggered from the PreinstalledWebAppManager and the WebAppPolicyManager.
+  // Note: This does not include the call from the ChromeOS SystemWebAppManager,
+  // which is a separate keyed service.
+  const base::OneShotEvent& on_external_managers_synchronized() const {
+    return on_external_managers_synchronized_;
   }
 
   // Returns whether the app registry is ready.
@@ -198,6 +217,7 @@ class WebAppProvider : public KeyedService {
   std::unique_ptr<WebAppCommandScheduler> command_scheduler_;
 
   base::OneShotEvent on_registry_ready_;
+  base::OneShotEvent on_external_managers_synchronized_;
 
   const raw_ptr<Profile> profile_;
 

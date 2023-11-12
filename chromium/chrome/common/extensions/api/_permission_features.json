@@ -222,14 +222,6 @@
       "06BE211D5F014BAB34BC22D9DDA09C63A81D828E"   // http://crbug.com/946241
     ]
   },
-  "cryptotokenPrivate": {
-    "channel": "stable",
-    "extension_types": ["extension"],
-    "location": "component",
-    "allowlist": [
-      "E24F1786D842E91E74C27929B0B3715A4689A473"  // Cryptotoken
-    ]
-  },
   "debugger": [
     {
       "channel": "stable",
@@ -275,7 +267,7 @@
   "documentScan": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   },
   "downloads": [{
     "channel": "stable",
@@ -594,8 +586,8 @@
     "location": "policy",
     "platforms": ["chromeos"],
     "allowlist": [
-      // https://crbug.com/1233881
-      "EC3DE21E048B67319893889529354DFBFA96FD23",   // Smart Card Connector
+      "EC3DE21E048B67319893889529354DFBFA96FD23",   // https://crbug.com/1233881
+      "A19608AC34215B127FF9D7C006D67F5C8ED8146D",   // https://crbug.com/1233881
       // https://crbug.com/1194693
       "6B748A5C005F21B7CBCF4170C2F883E435DEB511",   // CSSI Smart Card Middleware
       "075FF17D52ED6E3C2E5EC4D99F188E7A25AF47EA"    // Beta CSSI Smart Card Middleware
@@ -610,7 +602,8 @@
     "extension_types": ["platform_app"],
     "platforms": ["chromeos", "lacros"],
     "allowlist": [
-      "EC3DE21E048B67319893889529354DFBFA96FD23"  // Smart Card Connector
+      "EC3DE21E048B67319893889529354DFBFA96FD23",  // https://crbug.com/1233881
+      "A19608AC34215B127FF9D7C006D67F5C8ED8146D"   // https://crbug.com/1233881
     ]
   }],
   "webcamPrivate": {
@@ -626,7 +619,8 @@
       "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/891460
       "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/891460
       "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // http://crbug.com/891460
-    ]
+    ],
+    "platforms": ["chromeos", "lacros"]
   },
   "management": [
     {
@@ -1076,7 +1070,7 @@
   "wmDesksPrivate": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos","lacros"],
     "allowlist": [
       // Extension id hash for API test.
       "74801F84D31D23D08BEA48AB82C6A6120EDB4D45",

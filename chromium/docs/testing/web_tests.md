@@ -191,7 +191,7 @@ to see a full list of options. A few of the most useful options are below:
 A test succeeds when its output matches the pre-defined expected results. If any
 tests fail, the test script will place the actual generated results, along with
 a diff of the actual and expected results, into
-`src/out/Default/layout_test_results/`, and by default launch a browser with a
+`src/out/Default/layout-test-results/`, and by default launch a browser with a
 summary and link to the results/diffs.
 
 The expected results for tests are in the
@@ -312,6 +312,39 @@ The "prefix" value should be unique. Multiple directories with the same flags
 should be listed in the same "bases" list. The "bases" list can be empty,
 in case that we just want to run the real tests under `virtual/<prefix>`
 with the flags without creating any virtual tests.
+
+A virtual test suite can have an optional `exclusive_tests` field to specify
+all (with `"ALL"`) or a subset of `bases` tests that will be exclusively run
+under this virtual suite. The specified base tests will be skipped. Corresponding
+virtual tests under other virtual suites that don't specify the tests in their
+`exclusive_tests` list will be skipped, too. For example (unrelated fields
+are omitted):
+
+```json
+{
+  "prefix": "v1",
+  "bases": ["a"],
+}
+{
+  "prefix": "v2",
+  "bases": ["a/a1", "a/a2"],
+  "exclusive_tests": "ALL",
+}
+{
+  "prefix": "v3",
+  "bases": ["a"],
+  "exclusive_tests": ["a/a1"],
+}
+```
+Suppose there are directories `a/a1`, `a/a2` and `a/a3`, we will run the
+following tests:
+|      Suite |   a/a1  |   a/a2  | a/a3 |
+| ---------: | :-----: | :-----: | :--: |
+|       base | skipped | skipped | run  |
+| virtual/v1 | skipped | skipped | run  |
+| virtual/v2 |   run   |   run   | n/a  |
+| virtual/v3 |   run   | skipped | run  |
+
 
 ### Choosing between flag-specific and virtual test suite
 

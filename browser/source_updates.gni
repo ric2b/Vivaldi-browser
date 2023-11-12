@@ -147,7 +147,7 @@ update_target("//content/public/browser:browser_sources") {
       "//vivaldi/browser/vivaldi_runtime_feature.h",
     ]
     deps += [
-      "//vivaldi/components/datasource:dataurl",
+      "//vivaldi/components/datasource:resource_reader",
       "//vivaldi/prefs:prefs_strings",
     ]
   }

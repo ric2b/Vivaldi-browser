@@ -10,6 +10,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/hotseat_widget.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
 #include "base/i18n/rtl.h"
@@ -46,7 +47,6 @@ gfx::Rect CalculateWidgetBounds(const gfx::Rect& display_bounds,
                                 int nudge_height) {
   bool shelf_hidden = shelf->GetVisibilityState() != SHELF_VISIBLE &&
                       shelf->GetAutoHideState() == SHELF_AUTO_HIDE_HIDDEN;
-
   int x;
   if (base::i18n::IsRTL()) {
     x = display_bounds.right() - nudge_width - kNudgeMargin;
@@ -65,9 +65,11 @@ gfx::Rect CalculateWidgetBounds(const gfx::Rect& display_bounds,
     y = hotseat_widget->GetTargetBounds().y() - nudge_height - kNudgeMargin;
   } else {
     y = display_bounds.bottom() - nudge_height - kNudgeMargin;
-    if ((shelf->alignment() == ShelfAlignment::kBottom && !shelf_hidden) ||
-        shelf->alignment() == ShelfAlignment::kBottomLocked)
+    if ((shelf->alignment() == ShelfAlignment::kBottom ||
+         shelf->alignment() == ShelfAlignment::kBottomLocked) &&
+        !shelf_hidden) {
       y -= ShelfConfig::Get()->shelf_size();
+    }
   }
 
   return gfx::Rect(x, y, nudge_width, nudge_height);
@@ -187,9 +189,6 @@ void SystemNudge::Show() {
   const std::u16string accessibility_text = GetAccessibilityText();
   if (!accessibility_text.empty())
     nudge_view_->GetViewAccessibility().AnnounceText(accessibility_text);
-
-  base::UmaHistogramEnumeration("Ash.NotifierFramework.Nudge.ShownCount",
-                                params_.catalog_name);
 }
 
 void SystemNudge::Close() {

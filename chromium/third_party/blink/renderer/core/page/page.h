@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/heap_observer_set.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -107,19 +108,17 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
  public:
   // Any pages not owned by a web view should be created using this method.
-  static Page* CreateNonOrdinary(
-      ChromeClient& chrome_client,
-      scheduler::WebAgentGroupScheduler& agent_group_scheduler);
+  static Page* CreateNonOrdinary(ChromeClient& chrome_client,
+                                 AgentGroupScheduler& agent_group_scheduler);
 
   // An "ordinary" page is a fully-featured page owned by a web view.
-  static Page* CreateOrdinary(
-      ChromeClient& chrome_client,
-      Page* opener,
-      scheduler::WebAgentGroupScheduler& agent_group_scheduler);
+  static Page* CreateOrdinary(ChromeClient& chrome_client,
+                              Page* opener,
+                              AgentGroupScheduler& agent_group_scheduler);
 
   Page(base::PassKey<Page>,
        ChromeClient& chrome_client,
-       scheduler::WebAgentGroupScheduler& agent_group_scheduler,
+       AgentGroupScheduler& agent_group_scheduler,
        bool is_ordinary);
   Page(const Page&) = delete;
   Page& operator=(const Page&) = delete;
@@ -167,6 +166,13 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // TODO(npm): update the |page_scheduler_| directly in this method.
   void SetMainFrame(Frame*);
   Frame* MainFrame() const { return main_frame_; }
+
+  void SetPreviousMainFrameForLocalSwap(
+      LocalFrame* previous_main_frame_for_local_swap) {
+    previous_main_frame_for_local_swap_ = previous_main_frame_for_local_swap;
+  }
+  Frame* TakePreviousMainFrameForLocalSwap();
+
   // Escape hatch for existing code that assumes that the root frame is
   // always a LocalFrame. With OOPI, this is not always the case. Code that
   // depends on this will generally have to be rewritten to propagate any
@@ -221,11 +227,6 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   }
   const WebWindowFeatures& GetWindowFeatures() const {
     return window_features_;
-  }
-
-  const absl::optional<features::FencedFramesImplementationType>&
-  FencedFramesImplementationType() const {
-    return fenced_frames_impl_;
   }
 
   PageScaleConstraintsSet& GetPageScaleConstraintsSet();
@@ -327,7 +328,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   ScrollbarTheme& GetScrollbarTheme() const;
 
-  scheduler::WebAgentGroupScheduler& GetAgentGroupScheduler() const;
+  AgentGroupScheduler& GetAgentGroupScheduler() const;
   PageScheduler* GetPageScheduler() const;
 
   // PageScheduler::Delegate implementation.
@@ -435,12 +436,25 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // each other, thus keeping each other alive. The call to willBeDestroyed()
   // breaks this cycle, so the frame is still properly destroyed once no
   // longer needed.
+  // Note that the main frame can either be a LocalFrame or a RemoteFrame. When
+  // the main frame is a RemoteFrame, it's possible for the RemoteFrame to not
+  // be connected to any RenderFrameProxyHost on the browser side, if the Page
+  // is a new page created for a provisional main frame. In that case, the main
+  // frame is solely used as a placeholder to be swapped out by the provisional
+  // main frame later on.
+  // See comments in `AgentSchedulingGroup::CreateWebView()` for more details.
   Member<Frame> main_frame_;
 
-  // The type of fenced frames being used.
-  absl::optional<features::FencedFramesImplementationType> fenced_frames_impl_;
+  // When a Page is created for a provisional main frame, which is intended to
+  // do a local main frame swap when its navigation commits, this will point to
+  // the previous Page's main frame. This is so that the provisional main frame
+  // can trigger the detach and "swap out" the previous Page's main frame. This
+  // is a WeakMember because the lifetime of this page and the previous Page
+  // should be independent. If the previous Page gets destroyed, the provisional
+  // Page can still exist (but the browser might trigger its deletion later on).
+  WeakMember<LocalFrame> previous_main_frame_for_local_swap_;
 
-  scheduler::WebAgentGroupScheduler& agent_group_scheduler_;
+  Member<AgentGroupScheduler> agent_group_scheduler_;
   Member<PageAnimator> animator_;
   const Member<AutoscrollController> autoscroll_controller_;
   Member<ChromeClient> chrome_client_;

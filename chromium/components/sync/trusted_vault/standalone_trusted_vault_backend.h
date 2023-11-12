@@ -272,6 +272,28 @@ class StandaloneTrustedVaultBackend
   std::vector<uint8_t> last_added_recovery_method_public_key_for_testing_;
 
   bool device_registration_state_recorded_to_uma_ = false;
+
+  // If GetIsRecoverabilityDegraded() gets invoked before
+  // SetPrimaryAccount(), the execution gets deferred until
+  // SetPrimaryAccount() is invoked. This is possible because
+  // SetPrimaryAccount() is called only once refresh token are loaded and
+  // GetIsRecoverabilityDegraded() could be invoked before that.
+  struct PendingGetIsRecoverabilityDegraded {
+    PendingGetIsRecoverabilityDegraded();
+    PendingGetIsRecoverabilityDegraded(PendingGetIsRecoverabilityDegraded&) =
+        delete;
+    PendingGetIsRecoverabilityDegraded& operator=(
+        PendingGetIsRecoverabilityDegraded&) = delete;
+    PendingGetIsRecoverabilityDegraded(PendingGetIsRecoverabilityDegraded&&);
+    PendingGetIsRecoverabilityDegraded& operator=(
+        PendingGetIsRecoverabilityDegraded&&);
+    ~PendingGetIsRecoverabilityDegraded();
+
+    CoreAccountInfo account_info;
+    base::OnceCallback<void(bool)> completion_callback;
+  };
+  absl::optional<PendingGetIsRecoverabilityDegraded>
+      pending_get_is_recoverability_degraded_;
 };
 
 }  // namespace syncer

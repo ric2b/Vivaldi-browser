@@ -100,7 +100,6 @@ TEST_F(HistoryBackendDBTest, ClearBrowsingData_Downloads) {
   EXPECT_EQ("by_ext_name", downloads[0].by_ext_name);
   EXPECT_EQ("application/vnd.oasis.opendocument.text", downloads[0].mime_type);
   EXPECT_EQ("application/octet-stream", downloads[0].original_mime_type);
-  EXPECT_TRUE(downloads[0].reroute_info_serialized.empty());
 
   db_->QueryDownloads(&downloads);
   EXPECT_EQ(1U, downloads.size());
@@ -253,8 +252,8 @@ TEST_F(HistoryBackendDBTest, MigrateDownloadsReasonPathsAndDangerType) {
       // Implicit dependence on value of kDangerTypeNotDangerous from
       // download_database.cc.
       EXPECT_EQ(0, statement.ColumnInt(4));
-      EXPECT_EQ(nowish.ToInternalValue(), statement.ColumnInt64(5));
-      EXPECT_EQ(nowish.ToInternalValue(), statement.ColumnInt64(6));
+      EXPECT_EQ(nowish, statement.ColumnTime(5));
+      EXPECT_EQ(nowish, statement.ColumnTime(6));
 
       EXPECT_TRUE(statement.Step());
       EXPECT_EQ(2, statement.ColumnInt64(0));
@@ -263,8 +262,8 @@ TEST_F(HistoryBackendDBTest, MigrateDownloadsReasonPathsAndDangerType) {
       EXPECT_EQ("/path/to/some/file", statement.ColumnString(2));
       EXPECT_EQ("/path/to/some/file", statement.ColumnString(3));
       EXPECT_EQ(0, statement.ColumnInt(4));
-      EXPECT_EQ(nowish.ToInternalValue(), statement.ColumnInt64(5));
-      EXPECT_EQ(nowish.ToInternalValue(), statement.ColumnInt64(6));
+      EXPECT_EQ(nowish, statement.ColumnTime(5));
+      EXPECT_EQ(nowish, statement.ColumnTime(6));
 
       EXPECT_FALSE(statement.Step());
     }
@@ -854,69 +853,8 @@ TEST_F(HistoryBackendDBTest, MigrateDownloadsLastAccessTimeAndTransient) {
       sql::Statement s(db.GetUniqueStatement(
           "SELECT last_access_time, transient from downloads"));
       EXPECT_TRUE(s.Step());
-      EXPECT_EQ(base::Time(), base::Time::FromInternalValue(s.ColumnInt64(0)));
+      EXPECT_EQ(base::Time(), s.ColumnTime(0));
       EXPECT_EQ(0, s.ColumnInt(1));
-    }
-  }
-}
-
-// Tests that downloads_reroute_info table are automatically added when
-// migrating to version 46.
-TEST_F(HistoryBackendDBTest, MigrateDownloadsRerouteInfoTable) {
-  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(45));
-  {
-    sql::Database db;
-    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
-  }
-
-  // Re-open the db using the HistoryDatabase, which should migrate to the
-  // current version, creating the downloads_downloads_reroute_info table.
-  CreateBackendAndDatabase();
-  DeleteBackend();
-  {
-    // Re-open the db for manual manipulation.
-    sql::Database db;
-    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
-    // The version should have been updated.
-    int cur_version = HistoryDatabase::GetCurrentVersion();
-    ASSERT_LE(45, cur_version);
-    {
-      sql::Statement s(db.GetUniqueStatement(
-          "SELECT value FROM meta WHERE key = 'version'"));
-      EXPECT_TRUE(s.Step());
-      EXPECT_EQ(cur_version, s.ColumnInt(0));
-    }
-    {
-      // The downloads_downloads_reroute_info table should be ready for use.
-      sql::Statement s1(
-          db.GetUniqueStatement("SELECT COUNT(*) from downloads_reroute_info"));
-      EXPECT_TRUE(s1.Step());
-      EXPECT_EQ(0, s1.ColumnInt(0));
-      sql::Statement statement(db.GetCachedStatement(
-          SQL_FROM_HERE,
-          "INSERT INTO downloads_reroute_info "
-          "(download_id, reroute_info_serialized) VALUES (?, ?)"));
-      int column = 0;
-      statement.BindInt64(column++, 1);       // download_id.
-      statement.BindString(column++, "abc");  // reroute_info_serialized.
-      ASSERT_TRUE(statement.Run());
-    }
-    {
-      // Verify that we can load it back from db.
-      sql::Statement s1(
-          db.GetUniqueStatement("SELECT COUNT(*) from downloads_reroute_info"));
-      EXPECT_TRUE(s1.Step());
-      EXPECT_EQ(1, s1.ColumnInt(0));
-      sql::Statement statement(
-          db.GetCachedStatement(SQL_FROM_HERE,
-                                "SELECT download_id, reroute_info_serialized "
-                                "FROM downloads_reroute_info "
-                                "ORDER BY download_id"));
-      int column = 0;
-      ASSERT_TRUE(statement.Step());
-      EXPECT_EQ(statement.ColumnInt64(column++), 1);  // download_id.
-      EXPECT_EQ(statement.ColumnString(column++),
-                "abc");  // reroute_info_serialized.
     }
   }
 }
@@ -1442,186 +1380,6 @@ TEST_F(HistoryBackendDBTest, DownloadSliceDeletedIfEmpty) {
   EXPECT_EQ(0u, results[0].download_slice_info.size());
 }
 
-TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadRerouteInfoThenRemoveItem) {
-  CreateBackendAndDatabase();
-
-  DownloadRow download;
-  download.current_path = base::FilePath(FILE_PATH_LITERAL("/path/1"));
-  download.target_path = base::FilePath(FILE_PATH_LITERAL("/path/2"));
-  download.url_chain.emplace_back(GURL("http://example.com/a"));
-  download.referrer_url = GURL("http://example.com/referrer");
-  download.site_url = GURL("http://example.com");
-  download.embedder_download_data = "embedder_download_data";
-  download.tab_url = GURL("http://example.com/tab-url");
-  download.tab_referrer_url = GURL("http://example.com/tab-referrer");
-  download.http_method = "GET";
-  download.mime_type = "mime/type";
-  download.original_mime_type = "original/mime-type";
-  download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::Hours(1);
-  download.etag = "etag1";
-  download.last_modified = "last_modified_1";
-  download.received_bytes = 10;
-  download.total_bytes = 1500;
-  download.state = DownloadState::INTERRUPTED;
-  download.danger_type = DownloadDangerType::NOT_DANGEROUS;
-  download.interrupt_reason = kTestDownloadInterruptReasonCrash;
-  download.hash = "hash-value1";
-  download.id = 1;
-  download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
-  download.opened = false;
-  download.last_access_time = download.start_time + base::Hours(5);
-  download.transient = false;
-  download.by_ext_id = "extension-id";
-  download.by_ext_name = "extension-name";
-
-  enterprise_connectors::DownloadItemRerouteInfo reroute_info;
-  reroute_info.set_service_provider(enterprise_connectors::BOX);
-  reroute_info.mutable_box()->set_folder_id("67890");
-  download.reroute_info_serialized = reroute_info.SerializeAsString();
-
-  ASSERT_TRUE(db_->CreateDownload(download));
-  std::vector<DownloadRow> results;
-  db_->QueryDownloads(&results);
-  ASSERT_EQ(1u, results.size());
-  EXPECT_EQ(download, results[0]);
-  enterprise_connectors::DownloadItemRerouteInfo reroute_info_loaded;
-  EXPECT_TRUE(
-      reroute_info_loaded.ParseFromString(results[0].reroute_info_serialized));
-  EXPECT_TRUE(RerouteInfosEqual(reroute_info, reroute_info_loaded))
-      << "Expected: " << reroute_info.DebugString()
-      << "\nActual:" << reroute_info_loaded.DebugString();
-
-  // Update reroute info and trigger an update.
-  reroute_info.mutable_box()->set_file_id("12345");
-  download.reroute_info_serialized = reroute_info.SerializeAsString();
-  ASSERT_TRUE(db_->UpdateDownload(download));
-  db_->QueryDownloads(&results);
-  ASSERT_EQ(1u, results.size());
-  EXPECT_EQ(download, results[0]);
-  EXPECT_TRUE(
-      reroute_info_loaded.ParseFromString(results[0].reroute_info_serialized));
-  EXPECT_TRUE(RerouteInfosEqual(reroute_info, reroute_info_loaded))
-      << "Expected: " << reroute_info.DebugString()
-      << "\nActual:" << reroute_info_loaded.DebugString();
-
-  // Unlock the db for manual manipulation.
-  DeleteBackend();
-  {
-    sql::Database db;
-    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
-    // Verify that there is an entry in the downloads_reroute_info table.
-    sql::Statement statement_query(db.GetCachedStatement(
-        SQL_FROM_HERE,
-        "SELECT download_id, reroute_info_serialized FROM "
-        "downloads_reroute_info ORDER BY download_id"));
-    ASSERT_TRUE(statement_query.Step());
-  }
-  // Lock the db again for Query below.
-  CreateBackendAndDatabase();
-
-  // Remove download item to check that entry in reroute info table is also
-  // deleted.
-  db_->RemoveDownload(results[0].id);
-
-  // Unlock the db for manual manipulation.
-  DeleteBackend();
-  {
-    sql::Database db;
-    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
-    // Verify that the entry has been deleted from the downloads_reroute_info
-    // table.
-    sql::Statement statement_query(db.GetCachedStatement(
-        SQL_FROM_HERE,
-        "SELECT download_id, reroute_info_serialized FROM "
-        "downloads_reroute_info ORDER BY download_id"));
-    ASSERT_FALSE(statement_query.Step());
-  }
-  // Lock the db again for Query below.
-  CreateBackendAndDatabase();
-
-  // Verify that the entry has been removed.
-  db_->QueryDownloads(&results);
-  ASSERT_EQ(0u, results.size());
-}
-
-TEST_F(HistoryBackendDBTest, DownloadRerouteInfoDeletedIfEmpty) {
-  CreateBackendAndDatabase();
-
-  DownloadRow download;
-  download.current_path = base::FilePath(FILE_PATH_LITERAL("/path/1"));
-  download.target_path = base::FilePath(FILE_PATH_LITERAL("/path/2"));
-  download.url_chain.emplace_back(GURL("http://example.com/a"));
-  download.referrer_url = GURL("http://example.com/referrer");
-  download.site_url = GURL("http://example.com");
-  download.embedder_download_data = "embedder_download_data";
-  download.tab_url = GURL("http://example.com/tab-url");
-  download.tab_referrer_url = GURL("http://example.com/tab-referrer");
-  download.http_method = "GET";
-  download.mime_type = "mime/type";
-  download.original_mime_type = "original/mime-type";
-  download.start_time = base::Time::Now();
-  download.end_time = download.start_time + base::Hours(1);
-  download.etag = "etag1";
-  download.last_modified = "last_modified_1";
-  download.received_bytes = 10;
-  download.total_bytes = 1500;
-  download.state = DownloadState::INTERRUPTED;
-  download.danger_type = DownloadDangerType::NOT_DANGEROUS;
-  download.interrupt_reason = kTestDownloadInterruptReasonCrash;
-  download.hash = "hash-value1";
-  download.id = 1;
-  download.guid = "FE672168-26EF-4275-A149-FEC25F6A75F9";
-  download.opened = false;
-  download.last_access_time = download.start_time + base::Hours(5);
-  download.transient = true;
-  download.by_ext_id = "extension-id";
-  download.by_ext_name = "extension-name";
-
-  // Setup with a pre-existing reroute info.
-  enterprise_connectors::DownloadItemRerouteInfo reroute_info;
-  reroute_info.set_service_provider(enterprise_connectors::BOX);
-  reroute_info.mutable_box()->set_folder_id("67890");
-  download.reroute_info_serialized = reroute_info.SerializeAsString();
-  ASSERT_TRUE(db_->CreateDownload(download));
-  std::vector<DownloadRow> results;
-  db_->QueryDownloads(&results);
-  ASSERT_EQ(1u, results.size());
-  EXPECT_EQ(download, results[0]);
-  enterprise_connectors::DownloadItemRerouteInfo reroute_info_loaded;
-  EXPECT_TRUE(
-      reroute_info_loaded.ParseFromString(results[0].reroute_info_serialized));
-  EXPECT_TRUE(RerouteInfosEqual(reroute_info, reroute_info_loaded))
-      << "Expected: " << reroute_info.DebugString()
-      << "\nActual:" << reroute_info_loaded.DebugString();
-
-  // Update with empty reroute_info.
-  download.reroute_info_serialized = std::string();
-  ASSERT_TRUE(db_->UpdateDownload(download));
-
-  // Unlock the db for manual manipulation.
-  DeleteBackend();
-  {
-    sql::Database db;
-    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
-    // Verify that the entry has been deleted from the downloads_reroute_info
-    // table.
-    sql::Statement statement_query(db.GetCachedStatement(
-        SQL_FROM_HERE,
-        "SELECT download_id, reroute_info_serialized FROM "
-        "downloads_reroute_info ORDER BY download_id"));
-    ASSERT_FALSE(statement_query.Step());
-  }
-  // Lock the db again for Query below.
-  CreateBackendAndDatabase();
-
-  // Verify that the entry without reroute info get loaded properly.
-  db_->QueryDownloads(&results);
-  ASSERT_EQ(1u, results.size());
-  EXPECT_EQ(download, results[0]);
-  EXPECT_TRUE(results[0].reroute_info_serialized.empty());
-}
-
 TEST_F(HistoryBackendDBTest, MigratePresentations) {
   // Create the db we want. Use 22 since segments didn't change in that time
   // frame.
@@ -1648,7 +1406,7 @@ TEST_F(HistoryBackendDBTest, MigratePresentations) {
       s.BindInt64(0, url_id);
       s.BindString(1, url.spec());
       s.BindString16(2, title);
-      s.BindInt64(3, segment_time.ToInternalValue());
+      s.BindTime(3, segment_time);
       ASSERT_TRUE(s.Run());
     }
 
@@ -1673,7 +1431,7 @@ TEST_F(HistoryBackendDBTest, MigratePresentations) {
                            "(?, ?, ?, ?)"));
       s.BindInt64(0, 4);  // id.
       s.BindInt64(1, segment_id);
-      s.BindInt64(2, segment_time.ToInternalValue());
+      s.BindTime(2, segment_time);
       s.BindInt(3, 5);  // visit count.
       ASSERT_TRUE(s.Run());
     }
@@ -1758,7 +1516,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
       s.BindInt64(0, url_id1);
       s.BindString(1, url1.spec());
       s.BindString16(2, title1);
-      s.BindInt64(3, segment_time.ToInternalValue());
+      s.BindTime(3, segment_time);
       ASSERT_TRUE(s.Run());
     }
 
@@ -1782,7 +1540,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
           "(?, ?, ?, ?)"));
       s.BindInt64(0, 4);  // id.
       s.BindInt64(1, segment_id1);
-      s.BindInt64(2, segment_time.ToInternalValue());
+      s.BindTime(2, segment_time);
       s.BindInt(3, 11);  // visit count.
       ASSERT_TRUE(s.Run());
     }
@@ -1796,7 +1554,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
       s.BindInt64(0, url_id2);
       s.BindString(1, url2.spec());
       s.BindString16(2, title2);
-      s.BindInt64(3, segment_time.ToInternalValue());
+      s.BindTime(3, segment_time);
       ASSERT_TRUE(s.Run());
     }
 
@@ -1820,7 +1578,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
           "(?, ?, ?, ?)"));
       s.BindInt64(0, 5);  // id.
       s.BindInt64(1, segment_id2);
-      s.BindInt64(2, segment_time.ToInternalValue());
+      s.BindTime(2, segment_time);
       s.BindInt(3, 13);  // visit count.
       ASSERT_TRUE(s.Run());
     }

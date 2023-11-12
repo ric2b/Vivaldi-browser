@@ -29,12 +29,14 @@ ios_app_bundle("showcase") {
 group("features") {
   deps = [
     "//ios/chrome/app:enterprise_app_agent_ui",
+    "//ios/chrome/app:launch_screen_ui",
     "//ios/showcase/alert",
     "//ios/showcase/badges",
     "//ios/showcase/bubble",
     "//ios/showcase/credential_provider",
     "//ios/showcase/default_browser",
     "//ios/showcase/discover_feed_preview",
+    "//ios/showcase/feed_sign_in_promo",
     "//ios/showcase/first_run",
     "//ios/showcase/follow",
     "//ios/showcase/incognito_reauth",

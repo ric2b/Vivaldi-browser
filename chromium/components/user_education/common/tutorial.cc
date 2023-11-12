@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_education/common/help_bubble.h"
@@ -130,6 +131,8 @@ std::unique_ptr<ui::InteractionSequence::Step> Tutorial::StepBuilder::Build(
   std::unique_ptr<ui::InteractionSequence::StepBuilder>
       interaction_sequence_step_builder =
           std::make_unique<ui::InteractionSequence::StepBuilder>();
+
+  interaction_sequence_step_builder->SetContext(step_.context_mode);
 
   if (step_.element_id)
     interaction_sequence_step_builder->SetElementID(step_.element_id);
@@ -279,8 +282,8 @@ std::unique_ptr<Tutorial> Tutorial::Builder::BuildFromDescription(
 
   // Last step doesn't have a progress counter.
   const int max_progress =
-      std::count_if(description.steps.begin(), description.steps.end(),
-                    [](const auto& step) { return step.ShouldShowBubble(); }) -
+      base::ranges::count_if(description.steps,
+                             &TutorialDescription::Step::ShouldShowBubble) -
       1;
 
   int current_step = 0;
@@ -306,7 +309,8 @@ std::unique_ptr<Tutorial> Tutorial::Builder::BuildFromDescription(
       [](int step_number, TutorialService* tutorial_service, int sequence_step,
          ui::TrackedElement* last_element, ui::ElementIdentifier last_id,
          ui::InteractionSequence::StepType last_step_type,
-         ui::InteractionSequence::AbortedReason aborted_reason) {
+         ui::InteractionSequence::AbortedReason aborted_reason,
+         std::string description) {
         tutorial_service->AbortTutorial(step_number);
       },
       current_step, tutorial_service));

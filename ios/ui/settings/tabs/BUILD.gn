@@ -1,0 +1,12 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_tab_settings") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_tab_setting_prefs.h",
+    "vivaldi_tab_setting_prefs.mm",
+  ]
+  deps = [
+    "//base",
+  ]
+}

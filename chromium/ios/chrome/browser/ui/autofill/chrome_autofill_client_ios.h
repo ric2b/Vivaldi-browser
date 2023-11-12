@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
+#include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #import "components/autofill/ios/browser/autofill_client_ios_bridge.h"
 #include "components/infobars/core/infobar_manager.h"
@@ -74,11 +75,11 @@ class ChromeAutofillClientIOS : public AutofillClient {
   const translate::LanguageState* GetLanguageState() override;
   translate::TranslateDriver* GetTranslateDriver() override;
   std::string GetVariationConfigCountryCode() const override;
-
   void ShowAutofillSettings(bool show_credit_card_settings) override;
-  void ShowUnmaskPrompt(const CreditCard& card,
-                        UnmaskCardReason reason,
-                        base::WeakPtr<CardUnmaskDelegate> delegate) override;
+  void ShowUnmaskPrompt(
+      const CreditCard& card,
+      const CardUnmaskPromptOptions& card_unmask_prompt_options,
+      base::WeakPtr<CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
   void ConfirmAccountNameFixFlow(
       base::OnceCallback<void(const std::u16string&)> callback) override;
@@ -108,14 +109,12 @@ class ChromeAutofillClientIOS : public AutofillClient {
   bool IsFastCheckoutSupported() override;
   bool IsFastCheckoutTriggerForm(const FormData& form,
                                  const FormFieldData& field) override;
-  bool FastCheckoutScriptSupportsConsentlessExecution(
-      const url::Origin& origin) override;
-  bool FastCheckoutClientSupportsConsentlessExecution() override;
   bool ShowFastCheckout(base::WeakPtr<FastCheckoutDelegate> delegate) override;
   void HideFastCheckout() override;
   bool IsTouchToFillCreditCardSupported() override;
   bool ShowTouchToFillCreditCard(
-      base::WeakPtr<TouchToFillDelegate> delegate) override;
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const CreditCard* const> cards_to_suggest) override;
   void HideTouchToFillCreditCard() override;
   void ShowAutofillPopup(
       const PopupOpenArgs& open_args,
@@ -129,7 +128,7 @@ class ChromeAutofillClientIOS : public AutofillClient {
   void UpdatePopup(const std::vector<Suggestion>& suggestions,
                    PopupType popup_type) override;
   void HideAutofillPopup(PopupHidingReason reason) override;
-  bool IsAutocompleteEnabled() override;
+  bool IsAutocompleteEnabled() const override;
   bool IsPasswordManagerEnabled() override;
   void PropagateAutofillPredictions(
       AutofillDriver* driver,
@@ -141,14 +140,13 @@ class ChromeAutofillClientIOS : public AutofillClient {
   bool AreServerCardsSupported() const override;
   void ExecuteCommand(int id) override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
+  FormInteractionsFlowId GetCurrentFormInteractionsFlowId() override;
+  LogManager* GetLogManager() const override;
+  bool IsLastQueriedField(FieldGlobalId field_id) override;
 
   // RiskDataLoader:
   void LoadRiskData(
       base::OnceCallback<void(const std::string&)> callback) override;
-
-  LogManager* GetLogManager() const override;
-
-  bool IsQueryIDRelevant(int query_id) override;
 
  private:
   PrefService* pref_service_;

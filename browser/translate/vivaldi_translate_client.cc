@@ -30,7 +30,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/browser/pref_names.h"
@@ -380,13 +379,6 @@ void VivaldiTranslateClient::SetPredefinedTargetLanguage(
 
 bool VivaldiTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateService::IsTranslatableURL(url);
-}
-
-bool VivaldiTranslateClient::IsAutofillAssistantRunning() const {
-  auto* assistant_runtime_manager =
-      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
-  return assistant_runtime_manager && assistant_runtime_manager->GetState() ==
-                                          autofill_assistant::UIState::kShown;
 }
 
 void VivaldiTranslateClient::WebContentsDestroyed() {

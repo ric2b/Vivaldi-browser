@@ -456,8 +456,8 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
 
     // Waits for main thread callback scheduled by `PaintManager`.
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  run_loop.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, run_loop.QuitClosure());
     run_loop.Run();
   }
 
@@ -1785,8 +1785,12 @@ class PdfViewWebPluginWithDocInfoTest : public PdfViewWebPluginTest {
     metadata.Set("keywords", "Keywords");
     metadata.Set("creator", "Creator");
     metadata.Set("producer", "Producer");
-    metadata.Set("creationDate", "5/4/21, 4:12:13 AM");
-    metadata.Set("modDate", "6/4/21, 8:16:17 AM");
+    metadata.Set("creationDate",
+                 "5/4/21, 4:12:13\xE2\x80\xAF"
+                 "AM");
+    metadata.Set("modDate",
+                 "6/4/21, 8:16:17\xE2\x80\xAF"
+                 "AM");
     metadata.Set("pageSize", "13.89 × 16.67 in (portrait)");
     metadata.Set("canSerializeDocument", true);
 
@@ -2211,6 +2215,33 @@ TEST_F(PdfViewWebPluginPrintPreviewTest, HandleResetPrintPreviewModeMessage) {
     "grayscale": false,
     "pageCount": 1,
   })"));
+}
+
+TEST_F(PdfViewWebPluginPrintPreviewTest,
+       HandleResetPrintPreviewModeMessageForPdf) {
+  EXPECT_CALL(*client_ptr_, CreateEngine)
+      .WillOnce([](PDFEngine::Client* client,
+                   PDFiumFormFiller::ScriptOption script_option) {
+        EXPECT_EQ(PDFiumFormFiller::ScriptOption::kNoJavaScript, script_option);
+
+        return std::make_unique<NiceMock<TestPDFiumEngine>>(client);
+      });
+
+  // The UI ID of 1 in the URL is arbitrary.
+  // The page index value of -1, AKA `kCompletePDFIndex`, is required for PDFs.
+  plugin_->OnMessage(ParseMessage(R"({
+    "type": "resetPrintPreviewMode",
+    "url": "chrome-untrusted://print/1/-1/print.pdf",
+    "grayscale": false,
+    "pageCount": 0,
+  })"));
+
+  EXPECT_CALL(*client_ptr_, PostMessage).Times(AnyNumber());
+  EXPECT_CALL(*client_ptr_, PostMessage(base::test::IsJson(R"({
+    "type": "printPreviewLoaded",
+  })")));
+  plugin_->DocumentLoadComplete();
+  pdf_receiver_.FlushForTesting();
 }
 
 TEST_F(PdfViewWebPluginPrintPreviewTest,

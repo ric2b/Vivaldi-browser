@@ -109,7 +109,7 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   return outside;
 }
 
-Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
+Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
   if (current_browser->profile()->IsOffTheRecord()) {
     // Pinned tabs can never be moved to another browser
     return nullptr;
@@ -153,7 +153,8 @@ bool MoveTabToWindow(Browser* source_browser,
                      Browser* target_browser,
                      int tab_index,
                      int* new_index,
-                     int iteration) {
+                     int iteration,
+                     int add_types) {
   DCHECK(source_browser != target_browser);
 
   // Insert the tabs one after another.
@@ -174,7 +175,7 @@ bool MoveTabToWindow(Browser* source_browser,
     *new_index = target_tab_strip->count();
 
   target_tab_strip->InsertWebContentsAt(*new_index, std::move(web_contents),
-                                        AddTabTypes::ADD_PINNED);
+                                        add_types);
 
   return true;
 }

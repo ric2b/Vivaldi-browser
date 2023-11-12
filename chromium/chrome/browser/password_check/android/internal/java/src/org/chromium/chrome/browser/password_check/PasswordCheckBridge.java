@@ -81,12 +81,10 @@ class PasswordCheckBridge {
     private static void insertCredential(CompromisedCredential[] credentials, int index,
             String signonRealm, GURL associatedUrl, String username, String displayOrigin,
             String displayUsername, String password, String passwordChangeUrl, String associatedApp,
-            long creationTime, long lastUsedTime, boolean leaked, boolean phished,
-            boolean hasStartableScript, boolean hasAutoChangeButton) {
-        credentials[index] =
-                new CompromisedCredential(signonRealm, associatedUrl, username, displayOrigin,
-                        displayUsername, password, passwordChangeUrl, associatedApp, creationTime,
-                        lastUsedTime, leaked, phished, hasStartableScript, hasAutoChangeButton);
+            long creationTime, long lastUsedTime, boolean leaked, boolean phished) {
+        credentials[index] = new CompromisedCredential(signonRealm, associatedUrl, username,
+                displayOrigin, displayUsername, password, passwordChangeUrl, associatedApp,
+                creationTime, lastUsedTime, leaked, phished);
     }
 
     /**
@@ -101,21 +99,6 @@ class PasswordCheckBridge {
      */
     void stopCheck() {
         PasswordCheckBridgeJni.get().stopCheck(mNativePasswordCheckBridge);
-    }
-
-    /**
-     *
-     * @return Whether the scripts refreshment is finished.
-     */
-    boolean areScriptsRefreshed() {
-        return PasswordCheckBridgeJni.get().areScriptsRefreshed(mNativePasswordCheckBridge);
-    }
-
-    /**
-     * Invokes scripts refreshment.
-     */
-    void refreshScripts() {
-        PasswordCheckBridgeJni.get().refreshScripts(mNativePasswordCheckBridge);
     }
 
     /**
@@ -191,8 +174,6 @@ class PasswordCheckBridge {
         long create(PasswordCheckBridge passwordCheckBridge);
         void startCheck(long nativePasswordCheckBridge);
         void stopCheck(long nativePasswordCheckBridge);
-        boolean areScriptsRefreshed(long nativePasswordCheckBridge);
-        void refreshScripts(long nativePasswordCheckBridge);
         long getLastCheckTimestamp(long nativePasswordCheckBridge);
         int getCompromisedCredentialsCount(long nativePasswordCheckBridge);
         int getSavedPasswordsCount(long nativePasswordCheckBridge);

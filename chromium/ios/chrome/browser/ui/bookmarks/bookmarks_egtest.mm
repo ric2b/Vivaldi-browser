@@ -511,10 +511,13 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [BookmarkEarlGreyUI verifyFolderCreatedWithTitle:newFolderTitle];
 }
 
-// TODO(crbug.com/801453): Folder name is not commited as expected in this test.
 // Tests the new folder name is committed when "hide keyboard" button is
 // pressed. (iPad specific)
-- (void)DISABLED_testNewFolderNameCommittedWhenKeyboardDismissedOnIpad {
+- (void)testNewFolderNameCommittedWhenKeyboardDismissedOnIpad {
+#if TARGET_IPHONE_SIMULATOR
+  EARL_GREY_TEST_SKIPPED(@"The keyboard is not considered 'dismissed' on "
+                         @"simulator when tapping on 'hide keyboard'.");
+#endif
   // Tablet only (handset keyboard does not have "hide keyboard" button).
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Test not supported on iPhone");
@@ -821,6 +824,34 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
                                                 name:bookmarkTitle];
   [BookmarkEarlGrey
       verifyAbsenceOfBookmarkWithURL:base::SysUTF8ToNSString(firstURL.spec())];
+}
+
+// Test that when bookmark is on edit mode and all entries are deleted outside
+// of that window it automatically quits edit mode.
+- (void)testBookmarksSyncWhenAllEntriesAreCancelled {
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+
+  // Go in edit mode.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kBookmarkHomeTrailingButtonIdentifier)]
+      performAction:grey_tap()];
+
+  // Delete all bookmarks and folders under Mobile Bookmarks.
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1.1"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"French URL"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Second URL"];
+
+  // Check window is still in edit mode (still one bookmark/folder left).
+  [BookmarkEarlGreyUI verifyContextBarInEditMode];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"First URL"];
+
+  // Check window is no more in edit mode (no bookmark/folder left).
+  [BookmarkEarlGreyUI verifyContextBarInDefaultStateWithSelectEnabled:NO
+                                                     newFolderEnabled:YES];
 }
 
 // TODO(crbug.com/695749): Add egtests for:

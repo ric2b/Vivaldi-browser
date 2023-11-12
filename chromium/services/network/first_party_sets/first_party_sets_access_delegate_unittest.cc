@@ -11,11 +11,13 @@
 #include "base/functional/callback_helpers.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "base/version.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/schemeful_site.h"
 #include "net/first_party_sets/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_entry_override.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "net/first_party_sets/first_party_sets_context_config.h"
@@ -83,6 +85,7 @@ class NoopFirstPartySetsAccessDelegateTest : public ::testing::Test {
             /*params=*/nullptr,
             &first_party_sets_manager_) {
     first_party_sets_manager_.SetCompleteSets(net::GlobalFirstPartySets(
+        base::Version("1.2.3"),
         /*entries=*/
         {
             {kSet1Member1, net::FirstPartySetEntry(
@@ -143,6 +146,7 @@ class FirstPartySetsAccessDelegateTest : public ::testing::Test {
                   CreateFirstPartySetsAccessDelegateParams(enabled),
                   &first_party_sets_manager_) {
     first_party_sets_manager_.SetCompleteSets(net::GlobalFirstPartySets(
+        base::Version("1.2.3"),
         /*entries=*/
         {
             {kSet1Member1, net::FirstPartySetEntry(
@@ -296,11 +300,11 @@ TEST_F(AsyncFirstPartySetsAccessDelegateTest, OverrideSets_ComputeMetadata) {
   delegate_remote()->NotifyReady(CreateFirstPartySetsReadyEvent(
       net::FirstPartySetsContextConfig({
           {kSet1Member1,
-           {net::FirstPartySetEntry(kSet3Owner, net::SiteType::kAssociated,
-                                    0)}},
+           net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+               kSet3Owner, net::SiteType::kAssociated, 0))},
           {kSet3Owner,
-           {net::FirstPartySetEntry(kSet3Owner, net::SiteType::kPrimary,
-                                    absl::nullopt)}},
+           net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+               kSet3Owner, net::SiteType::kPrimary, absl::nullopt))},
       }),
       /*cache_filter-*/ absl::nullopt));
 
@@ -317,8 +321,8 @@ TEST_F(AsyncFirstPartySetsAccessDelegateTest, OverrideSets_FindEntries) {
   delegate_remote()->NotifyReady(CreateFirstPartySetsReadyEvent(
       net::FirstPartySetsContextConfig({
           {kSet3Owner,
-           {net::FirstPartySetEntry(kSet3Owner, net::SiteType::kPrimary,
-                                    absl::nullopt)}},
+           net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+               kSet3Owner, net::SiteType::kPrimary, absl::nullopt))},
       }),
       /*cache_filter-*/ absl::nullopt));
 
@@ -333,11 +337,11 @@ class SyncFirstPartySetsAccessDelegateTest
     delegate_remote()->NotifyReady(CreateFirstPartySetsReadyEvent(
         net::FirstPartySetsContextConfig({
             {kSet3Member1,
-             {net::FirstPartySetEntry(kSet3Owner, net::SiteType::kAssociated,
-                                      0)}},
+             net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+                 kSet3Owner, net::SiteType::kAssociated, 0))},
             {kSet3Owner,
-             {net::FirstPartySetEntry(kSet3Owner, net::SiteType::kPrimary,
-                                      absl::nullopt)}},
+             net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+                 kSet3Owner, net::SiteType::kPrimary, absl::nullopt))},
         }),
         net::FirstPartySetsCacheFilter({{kSet1Owner, kClearAtRunId}},
                                        kBrowserRunId)));
@@ -541,8 +545,8 @@ TEST_F(FirstPartySetsAccessDelegateSetToEnabledTest,
   delegate_remote()->NotifyReady(CreateFirstPartySetsReadyEvent(
       net::FirstPartySetsContextConfig(
           {{kSet1Member1,
-            {net::FirstPartySetEntry(kSet2Owner, net::SiteType::kAssociated,
-                                     0)}}}),
+            net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+                kSet2Owner, net::SiteType::kAssociated, 0))}}),
       /*cache_filter-*/ absl::nullopt));
   EXPECT_EQ(future.Get(),
             net::FirstPartySetMetadata(net::SamePartyContext(Type::kSameParty),
@@ -563,8 +567,8 @@ TEST_F(FirstPartySetsAccessDelegateSetToEnabledTest,
   delegate_remote()->NotifyReady(CreateFirstPartySetsReadyEvent(
       net::FirstPartySetsContextConfig(
           {{kSet1Member1,
-            {net::FirstPartySetEntry(kSet2Owner, net::SiteType::kAssociated,
-                                     0)}}}),
+            net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+                kSet2Owner, net::SiteType::kAssociated, 0))}}),
       /*cache_filter-*/ absl::nullopt));
   EXPECT_EQ(
       future.Get(),

@@ -20,9 +20,9 @@
 #include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/test/fake_data_retriever.h"
 #include "chrome/browser/web_applications/test/fake_install_finalizer.h"
@@ -30,10 +30,11 @@
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
@@ -149,7 +150,7 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
     DCHECK(
         base::Contains(next_finalize_install_results_, web_app_info.start_url));
 
-    web_app_info_list_.push_back(web_app_info);
+    web_app_info_list_.push_back(web_app_info.Clone());
     finalize_options_list_.push_back(options);
 
     AppId app_id;
@@ -160,7 +161,7 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
     const GURL& url = web_app_info.start_url;
     bool is_placeholder = web_app_info.is_placeholder;
     WebAppManagement::Type source = options.source;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindLambdaForTesting([&, app_id, url, code, is_placeholder,
                                     source,
@@ -188,7 +189,7 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
                                UninstallWebAppCallback callback) override {
     UnregisterApp(app_id);
 
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
                                   webapps::UninstallResultCode::kSuccess));
   }
@@ -206,7 +207,7 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
     std::tie(app_id, code) = next_uninstall_external_web_app_results_[app_url];
     next_uninstall_external_web_app_results_.erase(app_url);
 
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindLambdaForTesting(
             [&, app_id, code, callback = std::move(callback)]() mutable {
@@ -214,11 +215,6 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
                 UnregisterApp(app_id);
               std::move(callback).Run(code);
             }));
-  }
-
-  void RetryIncompleteUninstalls(
-      const base::flat_set<AppId>& apps_to_uninstall) override {
-    NOTREACHED();
   }
 
   bool CanUserUninstallWebApp(const AppId& app_id) const override {
@@ -275,17 +271,35 @@ class TestExternallyManagedAppInstallFinalizer : public WebAppInstallFinalizer {
 
 class ExternallyManagedAppInstallTaskTest
     : public ChromeRenderViewHostTestHarness,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   ExternallyManagedAppInstallTaskTest() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   ExternallyManagedAppInstallTaskTest(
@@ -300,40 +314,18 @@ class ExternallyManagedAppInstallTaskTest
     url_loader_ = std::make_unique<TestWebAppUrlLoader>();
 
     auto* provider = FakeWebAppProvider::Get(profile());
-
-    auto registrar = std::make_unique<WebAppRegistrarMutable>(profile());
-    registrar_ = registrar.get();
+    provider->SetDefaultFakeSubsystems();
+    registrar_ = &provider->GetRegistrarMutable();
+    command_scheduler_ = &provider->scheduler();
+    ui_manager_ = static_cast<FakeWebAppUiManager*>(&provider->GetUiManager());
 
     auto install_finalizer =
         std::make_unique<TestExternallyManagedAppInstallFinalizer>(
-            registrar.get());
+            &provider->GetRegistrarMutable());
     install_finalizer_ = install_finalizer.get();
-
-    auto command_manager = std::make_unique<WebAppCommandManager>(profile());
-    command_manager_ = command_manager.get();
-
-    auto os_integration_manager = std::make_unique<FakeOsIntegrationManager>(
-        profile(), /*app_shortcut_manager=*/nullptr,
-        /*file_handler_manager=*/nullptr,
-        /*protocol_handler_manager=*/nullptr,
-        /*url_handler_manager*/ nullptr);
-
-    auto ui_manager = std::make_unique<FakeWebAppUiManager>();
-    ui_manager_ = ui_manager.get();
-
-    auto sync_bridge = std::make_unique<WebAppSyncBridge>(registrar.get());
-    sync_bridge->SetSubsystems(&provider->GetDatabaseFactory(),
-                               /*install_delegate=*/nullptr,
-                               command_manager.get());
-
-    provider->SetRegistrar(std::move(registrar));
-    provider->SetSyncBridge(std::move(sync_bridge));
     provider->SetInstallFinalizer(std::move(install_finalizer));
-    provider->SetWebAppUiManager(std::move(ui_manager));
-    provider->SetOsIntegrationManager(std::move(os_integration_manager));
-    provider->SetCommandManager(std::move(command_manager));
 
-    provider->Start();
+    test::AwaitStartWebAppProviderAndSubsystems(profile());
   }
 
  protected:
@@ -350,7 +342,7 @@ class ExternallyManagedAppInstallTaskTest
   TestExternallyManagedAppInstallFinalizer* finalizer() {
     return install_finalizer_;
   }
-  WebAppCommandManager* command_manager() { return command_manager_; }
+  WebAppCommandScheduler* command_scheduler() { return command_scheduler_; }
 
   FakeDataRetriever* data_retriever() { return data_retriever_; }
 
@@ -388,7 +380,7 @@ class ExternallyManagedAppInstallTaskTest
 
     auto task = std::make_unique<ExternallyManagedAppInstallTask>(
         profile(), url_loader_.get(), registrar_, ui_manager_,
-        install_finalizer_, command_manager_, std::move(options));
+        install_finalizer_, command_scheduler_, std::move(options));
     task->SetDataRetrieverFactoryForTesting(
         GetFactoryForRetriever(std::move(data_retriever)));
     return task;
@@ -396,7 +388,7 @@ class ExternallyManagedAppInstallTaskTest
 
  private:
   std::unique_ptr<TestWebAppUrlLoader> url_loader_;
-  raw_ptr<WebAppCommandManager> command_manager_ = nullptr;
+  raw_ptr<WebAppCommandScheduler> command_scheduler_ = nullptr;
   raw_ptr<WebAppRegistrar> registrar_ = nullptr;
   raw_ptr<FakeDataRetriever> data_retriever_ = nullptr;
   raw_ptr<TestExternallyManagedAppInstallFinalizer> install_finalizer_ =
@@ -895,7 +887,7 @@ TEST_P(ExternallyManagedAppInstallTaskTest, InstallURLLoadFailed) {
         ExternalInstallSource::kInternalDefault);
     ExternallyManagedAppInstallTask install_task(
         profile(), &url_loader(), registrar(), ui_manager(), finalizer(),
-        command_manager(), install_options);
+        command_scheduler(), install_options);
     url_loader().SetPrepareForLoadResultLoaded();
     url_loader().SetNextLoadUrlResult(GURL(), result_pair.loader_result);
 
@@ -917,7 +909,7 @@ TEST_P(ExternallyManagedAppInstallTaskTest, InstallFailedWebContentsDestroyed) {
       ExternalInstallSource::kInternalDefault);
   ExternallyManagedAppInstallTask install_task(
       profile(), &url_loader(), registrar(), ui_manager(), finalizer(),
-      command_manager(), install_options);
+      command_scheduler(), install_options);
   url_loader().SetPrepareForLoadResultLoaded();
   url_loader().SetNextLoadUrlResult(
       GURL(), WebAppUrlLoader::Result::kFailedWebContentsDestroyed);
@@ -945,7 +937,7 @@ TEST_P(ExternallyManagedAppInstallTaskTest, InstallWithWebAppInfoSucceeds) {
 
   ExternallyManagedAppInstallTask task(profile(), /*url_loader=*/nullptr,
                                        registrar(), ui_manager(), finalizer(),
-                                       command_manager(), std::move(options));
+                                       command_scheduler(), std::move(options));
 
   finalizer()->SetNextFinalizeInstallResult(
       kWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
@@ -992,7 +984,7 @@ TEST_P(ExternallyManagedAppInstallTaskTest, InstallWithWebAppInfoFails) {
 
   ExternallyManagedAppInstallTask task(profile(), /*url_loader=*/nullptr,
                                        registrar(), ui_manager(), finalizer(),
-                                       command_manager(), std::move(options));
+                                       command_scheduler(), std::move(options));
 
   finalizer()->SetNextFinalizeInstallResult(
       kWebAppUrl, webapps::InstallResultCode::kWriteDataFailed);
@@ -1017,8 +1009,14 @@ TEST_P(ExternallyManagedAppInstallTaskTest, InstallWithWebAppInfoFails) {
   run_loop.Run();
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ExternallyManagedAppInstallTaskTest,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ExternallyManagedAppInstallTaskTest,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 }  // namespace web_app

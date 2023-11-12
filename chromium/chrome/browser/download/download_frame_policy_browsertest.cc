@@ -276,7 +276,7 @@ class DownloadFramePolicyBrowserTest
   std::unique_ptr<content::DownloadTestObserver> download_observer_;
   std::unique_ptr<page_load_metrics::PageLoadMetricsTestWaiter>
       web_feature_waiter_;
-  raw_ptr<content::RenderFrameHost> subframe_rfh_ = nullptr;
+  raw_ptr<content::RenderFrameHost, DanglingUntriaged> subframe_rfh_ = nullptr;
   size_t expected_num_downloads_ = 0;
 };
 
@@ -510,12 +510,9 @@ IN_PROC_BROWSER_TEST_P(OtherFrameNavigationDownloadBrowserTest_AdFrame,
                              is_cross_origin /* is_cross_origin */);
 
   if (!prevent_frame_busting) {
-    // Currently, cross-process navigation doesn't carry the gesture regardless
-    // whether the initiator frame has gesture or not.
-    bool expect_gesture = initiate_with_gesture && !is_cross_origin;
-
     bool expect_download =
-        !block_downloads_in_ad_frame_without_user_activation || expect_gesture;
+        !block_downloads_in_ad_frame_without_user_activation ||
+        initiate_with_gesture;
 
     SetNumDownloadsExpectation(expect_download);
 
@@ -524,7 +521,7 @@ IN_PROC_BROWSER_TEST_P(OtherFrameNavigationDownloadBrowserTest_AdFrame,
     GetWebFeatureWaiter()->AddWebFeatureExpectation(
         blink::mojom::WebFeature::kDownloadInAdFrame);
 
-    if (!expect_gesture) {
+    if (!initiate_with_gesture) {
       GetWebFeatureWaiter()->AddWebFeatureExpectation(
           blink::mojom::WebFeature::kDownloadInAdFrameWithoutUserGesture);
     }

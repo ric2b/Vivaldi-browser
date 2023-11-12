@@ -53,6 +53,7 @@ namespace apps {
 
 class BrowserAppInstanceForwarder;
 class BrowserAppInstanceTracker;
+class WebsiteMetricsServiceLacros;
 
 struct AppLaunchParams;
 
@@ -119,12 +120,6 @@ class AppServiceProxyLacros : public KeyedService,
               int32_t event_flags,
               apps::LaunchSource launch_source,
               apps::WindowInfoPtr window_info = nullptr);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void Launch(const std::string& app_id,
-              int32_t event_flags,
-              apps::mojom::LaunchSource launch_source,
-              apps::mojom::WindowInfoPtr window_info = nullptr);
 
   // Launches the app for the given |app_id| with files from |file_paths|.
   // DEPRECATED. Prefer passing the files in an Intent through
@@ -134,12 +129,6 @@ class AppServiceProxyLacros : public KeyedService,
                           int32_t event_flags,
                           LaunchSource launch_source,
                           std::vector<base::FilePath> file_paths);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void LaunchAppWithFiles(const std::string& app_id,
-                          int32_t event_flags,
-                          apps::mojom::LaunchSource launch_source,
-                          apps::mojom::FilePathsPtr file_paths);
 
   // Launches an app for the given |app_id|, passing |intent| to the app.
   // |event_flags| provides additional context about the action which launch the
@@ -152,15 +141,6 @@ class AppServiceProxyLacros : public KeyedService,
                            LaunchSource launch_source,
                            WindowInfoPtr window_info,
                            base::OnceCallback<void(bool)> callback);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void LaunchAppWithIntent(
-      const std::string& app_id,
-      int32_t event_flags,
-      apps::mojom::IntentPtr intent,
-      apps::mojom::LaunchSource launch_source,
-      apps::mojom::WindowInfoPtr window_info,
-      apps::mojom::Publisher::LaunchAppWithIntentCallback callback);
 
   // Launches an app for the given |app_id|, passing |url| to the app.
   // |event_flags| provides additional context about the action which launch the
@@ -171,22 +151,8 @@ class AppServiceProxyLacros : public KeyedService,
                         int32_t event_flags,
                         GURL url,
                         LaunchSource launch_source,
-                        WindowInfoPtr window_info = nullptr);
-  // TODO(crbug.com/1253250): Will be replaced with LaunchAppWithUrl once the
-  // mojom LaunchAppWithUrl interface is removed.
-  void LaunchAppWithUrlForBind(const std::string& app_id,
-                               int32_t event_flags,
-                               GURL url,
-                               LaunchSource launch_source,
-                               WindowInfoPtr window_info = nullptr);
-
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void LaunchAppWithUrl(const std::string& app_id,
-                        int32_t event_flags,
-                        GURL url,
-                        apps::mojom::LaunchSource launch_source,
-                        apps::mojom::WindowInfoPtr window_info = nullptr);
+                        WindowInfoPtr window_info = nullptr,
+                        LaunchCallback callback = base::DoNothing());
 
   // Launches an app for the given |params.app_id|. The |params| can also
   // contain other param such as launch container, window diposition, etc.
@@ -195,10 +161,6 @@ class AppServiceProxyLacros : public KeyedService,
 
   // Sets |permission| for the app identified by |app_id|.
   void SetPermission(const std::string& app_id, PermissionPtr permission);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void SetPermission(const std::string& app_id,
-                     apps::mojom::PermissionPtr permission);
 
   // Uninstalls an app for the given |app_id|. If |parent_window| is specified,
   // the uninstall dialog will be created as a modal dialog anchored at
@@ -206,30 +168,14 @@ class AppServiceProxyLacros : public KeyedService,
   void Uninstall(const std::string& app_id,
                  UninstallSource uninstall_source,
                  gfx::NativeWindow parent_window);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void Uninstall(const std::string& app_id,
-                 apps::mojom::UninstallSource uninstall_source,
-                 gfx::NativeWindow parent_window);
 
   // Uninstalls an app for the given |app_id| without prompting the user to
   // confirm.
   void UninstallSilently(const std::string& app_id,
                          UninstallSource uninstall_source);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void UninstallSilently(const std::string& app_id,
-                         apps::mojom::UninstallSource uninstall_source);
 
   // Stops the current running app for the given |app_id|.
   void StopApp(const std::string& app_id);
-
-  // Returns the menu items for the given |app_id|. |display_id| is the id of
-  // the display from which the app is launched.
-  void GetMenuModel(const std::string& app_id,
-                    apps::mojom::MenuType menu_type,
-                    int64_t display_id,
-                    apps::mojom::Publisher::GetMenuModelCallback callback);
 
   // Executes a shortcut menu |command_id| and |shortcut_id| for a menu item
   // previously built with GetMenuModel(). |app_id| is the menu app.
@@ -259,7 +205,7 @@ class AppServiceProxyLacros : public KeyedService,
   // exclude the browser apps. If |exclude_browser_tab_apps| is true then
   // exclude apps that open in browser tabs.
   std::vector<IntentLaunchInfo> GetAppsForIntent(
-      const apps::mojom::IntentPtr& intent,
+      const IntentPtr& intent,
       bool exclude_browsers = false,
       bool exclude_browser_tab_apps = true);
 
@@ -285,15 +231,15 @@ class AppServiceProxyLacros : public KeyedService,
   void RemoveSupportedLinksPreference(const std::string& app_id);
 
   void SetWindowMode(const std::string& app_id, WindowMode window_mode);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void SetWindowMode(const std::string& app_id,
-                     apps::mojom::WindowMode window_mode);
 
   web_app::LacrosWebAppsController* LacrosWebAppsControllerForTesting();
 
   void SetCrosapiAppServiceProxyForTesting(
       crosapi::mojom::AppServiceProxy* proxy);
+
+  void SetWebsiteMetricsServiceForTesting(
+      std::unique_ptr<apps::WebsiteMetricsServiceLacros>
+          website_metrics_service);
 
   base::WeakPtr<AppServiceProxyLacros> GetWeakPtr();
 
@@ -378,7 +324,10 @@ class AppServiceProxyLacros : public KeyedService,
   // to provide a common code path to deal with the special case of extensions
   // that are run in both ash and lacros. This is a transient state but requires
   // special handling.
-  void ProxyLaunch(crosapi::mojom::LaunchParamsPtr params);
+  void ProxyLaunch(crosapi::mojom::LaunchParamsPtr params,
+                   LaunchCallback callback = base::DoNothing());
+
+  void InitWebsiteMetrics();
 
   apps::AppRegistryCache app_registry_cache_;
   apps::AppCapabilityAccessCache app_capability_access_cache_;
@@ -415,6 +364,8 @@ class AppServiceProxyLacros : public KeyedService,
   raw_ptr<crosapi::mojom::AppServiceProxy> remote_crosapi_app_service_proxy_ =
       nullptr;
   int crosapi_app_service_proxy_version_ = 0;
+
+  std::unique_ptr<apps::WebsiteMetricsServiceLacros> metrics_service_;
 
   base::WeakPtrFactory<AppServiceProxyLacros> weak_ptr_factory_{this};
 

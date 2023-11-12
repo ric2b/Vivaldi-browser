@@ -23,9 +23,10 @@
 #include "chrome/updater/device_management/dm_policy_builder_for_testing.h"
 #include "chrome/updater/device_management/dm_response_validator.h"
 #include "chrome/updater/device_management/dm_storage.h"
+#include "chrome/updater/net/network.h"
 #include "chrome/updater/policy/service.h"
 #include "chrome/updater/protos/omaha_settings.pb.h"
-#include "chrome/updater/unittest_util.h"
+#include "chrome/updater/util/unittest_util.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/update_client/network.h"
 #include "net/base/url_util.h"
@@ -35,14 +36,6 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if BUILDFLAG(IS_WIN)
-#include "chrome/updater/win/net/network.h"
-#elif BUILDFLAG(IS_MAC)
-#include "chrome/updater/mac/net/network.h"
-#elif BUILDFLAG(IS_LINUX)
-#include "chrome/updater/linux/net/network.h"
-#endif
 
 using base::test::RunClosure;
 
@@ -223,10 +216,11 @@ class DMPolicyFetchRequestCallbackHandler : public DMRequestCallbackHandler {
 
     std::unique_ptr<CachedPolicyInfo> info = storage_->GetCachedPolicyInfo();
     EXPECT_FALSE(info->public_key().empty());
-    if (expect_new_public_key_)
+    if (expect_new_public_key_) {
       EXPECT_EQ(info->public_key(), GetTestKey2()->GetPublicKeyString());
-    else
+    } else {
       EXPECT_EQ(info->public_key(), GetTestKey1()->GetPublicKeyString());
+    }
 
     if (result == DMClient::RequestResult::kSuccess) {
       std::unique_ptr<::wireless_android_enterprise_devicemanagement::
@@ -327,7 +321,7 @@ class DMClientTest : public ::testing::Test {
   net::HttpStatusCode response_http_status_ = net::HTTP_OK;
   std::string response_body_;
 
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_;
 };
 
 class DMRegisterClientTest : public DMClientTest {
@@ -400,8 +394,6 @@ class DMPolicyValidationReportClientTest : public DMClientTest {
   scoped_refptr<DMValidationReportRequestCallbackHandler> callback_handler_;
 };
 
-// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux
-#if !BUILDFLAG(IS_LINUX)
 TEST_F(DMRegisterClientTest, Success) {
   callback_handler_ =
       base::MakeRefCounted<DMRegisterRequestCallbackHandler>(true);
@@ -811,6 +803,5 @@ TEST_F(DMPolicyValidationReportClientTest, NoPayload) {
   PostRequest(PolicyValidationResult());
   run_loop.Run();
 }
-#endif  // !BUILDFLAG(IS_LINUX)
 
 }  // namespace updater

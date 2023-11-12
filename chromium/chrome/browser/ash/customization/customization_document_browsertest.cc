@@ -13,21 +13,21 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/base/locale_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
+#include "chrome/browser/ui/webui/ash/login/l10n_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/system/fake_statistics_provider.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using ash::locale_util::LanguageSwitchResult;
-using ash::locale_util::SwitchLanguageCallback;
-
 namespace ash {
 
 namespace {
+
+using locale_util::LanguageSwitchResult;
+using locale_util::SwitchLanguageCallback;
 
 class LanguageSwitchedWaiter {
  public:
@@ -215,6 +215,8 @@ class CustomizationVPDTest : public InProcessBrowserTest,
         statistics_provider_.get());
     statistics_provider_->SetMachineStatistic("initial_locale", GetParam());
     statistics_provider_->SetMachineStatistic("keyboard_layout", "");
+    statistics_provider_->SetVpdStatus(
+        system::StatisticsProvider::VpdStatus::kValid);
   }
 
  private:

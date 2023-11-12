@@ -33,6 +33,7 @@
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -123,8 +124,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Callback used with HandleClipboardPaste() method.  If the clipboard paste
   // is allowed to proceed, the callback is called with true.  Otherwise the
   // callback is called with false.
-  using ClipboardPasteContentAllowed =
-      RenderFrameHostImpl::ClipboardPasteContentAllowed;
   using IsClipboardPasteContentAllowedCallback =
       RenderFrameHostImpl::IsClipboardPasteContentAllowedCallback;
 
@@ -349,11 +348,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // https://crbug.com/330264.
   virtual void EnsureOpenerProxiesExist(RenderFrameHostImpl* source_rfh) {}
 
-  // Set the |node| frame as focused in the current FrameTree as well as
-  // possibly changing focus in distinct but related inner/outer WebContents.
-  virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstanceGroup* source) {
-  }
-
   // The frame called |window.focus()|.
   virtual void DidCallFocus() {}
 
@@ -532,7 +526,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // unknown data types.
   //
   // The implementation is expected to show UX to the user if needed.  If
-  // shown, the UX should be associated with the specific render frame host.
+  // shown, the UX should be associated with the specific RenderFrameHost.
   //
   // The callback is called, possibly asynchronously, with a status indicating
   // whether the operation is allowed or not.
@@ -576,19 +570,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget);
 
-  // Return true if the popup is shown through WebContentsObserver.
-  // BrowserPluginGuest for the guest WebContents will show the popup on Mac,
-  // then, we should skip to show the popup at RenderViewHostDelegateView.
-  virtual bool ShowPopupMenu(
-      RenderFrameHostImpl* render_frame_host,
-      mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
-      const gfx::Rect& bounds,
-      int32_t item_height,
-      double font_size,
-      int32_t selected_item,
-      std::vector<blink::mojom::MenuItemPtr>* menu_items,
-      bool right_aligned,
-      bool allow_multiple_selection);
+  // Returns true if the popup is shown through WebContentsObserver. Else, the
+  // Android / Mac flavors of `RenderViewHostDelegateView` will show the popup
+  // menu correspondingly, and `WebContentsViewChildFrame` will show the popup
+  // for Mac's GuestView.
+  virtual bool ShowPopupMenu(RenderFrameHostImpl* render_frame_host,
+                             const gfx::Rect& bounds);
 
   virtual void DidLoadResourceFromMemoryCache(
       RenderFrameHostImpl* source,
@@ -641,8 +628,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHostImpl* render_frame_host);
 
   // Returns the PrerenderHostRegistry to start/cancel prerendering. This
-  // doesn't return nullptr except for some tests. This should only be called
-  // when blink::features::IsPrerender2Enabled() is true.
+  // doesn't return nullptr except for some tests.
   virtual PrerenderHostRegistry* GetPrerenderHostRegistry();
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -665,6 +651,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // The load progress for the primary main frame was changed.
   virtual void DidChangeLoadProgressForPrimaryMainFrame() {}
+
+  // Document load in |render_frame_host| failed.
+  virtual void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
+                                    const GURL& url,
+                                    int error_code) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

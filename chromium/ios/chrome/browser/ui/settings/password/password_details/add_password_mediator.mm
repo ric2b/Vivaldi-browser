@@ -17,7 +17,7 @@
 #import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/add_password_details_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/add_password_mediator_delegate.h"
-#import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/settings/password/password_details/add_password_view_controller_delegate.h"
 #import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -49,7 +49,7 @@ bool CheckForDuplicates(
 }
 }
 
-@interface AddPasswordMediator () <PasswordDetailsTableViewControllerDelegate> {
+@interface AddPasswordMediator () <AddPasswordViewControllerDelegate> {
   // Password Check manager.
   IOSChromePasswordCheckManager* _manager;
   // Used to create and run validation tasks.
@@ -100,18 +100,16 @@ bool CheckForDuplicates(
   _validationTaskTracker.reset();
 }
 
-#pragma mark - PasswordDetailsTableViewControllerDelegate
+#pragma mark - AddPasswordTableViewControllerDelegate
 
-- (void)passwordDetailsViewController:
-            (PasswordDetailsTableViewController*)viewController
-               didEditPasswordDetails:(PasswordDetails*)password {
+- (void)addPasswordViewController:(AddPasswordViewController*)viewController
+           didEditPasswordDetails:(PasswordDetails*)password {
   NOTREACHED();
 }
 
-- (void)passwordDetailsViewController:
-            (PasswordDetailsTableViewController*)viewController
-                didAddPasswordDetails:(NSString*)username
-                             password:(NSString*)password {
+- (void)addPasswordViewController:(AddPasswordViewController*)viewController
+            didAddPasswordDetails:(NSString*)username
+                         password:(NSString*)password {
   if (_validationTaskTracker->HasTrackedTasks()) {
     // If the task tracker has pending tasks and the "Save" button is pressed,
     // don't do anything.
@@ -133,7 +131,7 @@ bool CheckForDuplicates(
 
   _manager->GetSavedPasswordsPresenter()->AddCredential(credential);
   [self.delegate setUpdatedPassword:credential];
-  [self.delegate dismissPasswordDetailsTableViewController];
+  [self.delegate dismissAddPasswordTableViewController];
 }
 
 - (void)checkForDuplicates:(NSString*)username {
@@ -173,7 +171,7 @@ bool CheckForDuplicates(
 }
 
 - (void)didCancelAddPasswordDetails {
-  [self.delegate dismissPasswordDetailsTableViewController];
+  [self.delegate dismissAddPasswordTableViewController];
 }
 
 - (void)setWebsiteURL:(NSString*)website {
@@ -188,10 +186,6 @@ bool CheckForDuplicates(
 - (BOOL)isTLDMissing {
   std::string hostname = self.URL.host();
   return hostname.find('.') == std::string::npos;
-}
-
-- (BOOL)isUsernameReused:(NSString*)newUsername {
-  return NO;
 }
 
 @end

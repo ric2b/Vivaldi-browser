@@ -9,18 +9,16 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
 
-template <class T>
-class scoped_refptr;
-
 namespace base {
 class FilePath;
-class SequencedTaskRunner;
+class UpdateableSequencedTaskRunner;
 }  // namespace base
 
 namespace content {
@@ -42,6 +40,39 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
     kOpen,
   };
 
+  // The result of a request to consume some budget. All results other than
+  // `kApproved` enumerate different reasons the request was rejected.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class RequestResult {
+    kApproved = 0,
+    kInsufficientBudget = 1,
+    kRequestedMoreThanTotalBudget = 2,
+    kTooManyPendingCalls = 3,
+    kInvalidRequest = 4,
+    kStorageInitializationFailed = 5,
+    kBadValuesOnDisk = 6,
+    kMaxValue = kBadValuesOnDisk,
+  };
+
+  // Represents the validity status of the stored budget data for the provided
+  // origin and API retrieved during a `ConsumeBudget()` call. In case multiple
+  // statuses apply, the first one encountered/detected will be used.
+  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class BudgetValidityStatus {
+    kValid = 0,
+    kValidAndEmpty = 1,
+    kValidButContainsStaleWindow = 2,
+    kContainsTimestampInFuture = 3,
+    kContainsValueExceedingLimit = 4,
+    kContainsTimestampNotRoundedToHour = 5,
+    kSpansMoreThanADay = 6,
+    kContainsNonPositiveValue = 7,
+    kMaxValue = kContainsNonPositiveValue,
+  };
+
   // Maximum budget allowed to be claimed per-origin per-day per-API.
   static constexpr int kMaxBudgetPerScope = 65536;
 
@@ -60,7 +91,7 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
 
   // `db_task_runner` should not be nullptr.
   PrivateAggregationBudgeter(
-      scoped_refptr<base::SequencedTaskRunner> db_task_runner,
+      scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner,
       bool exclusively_run_in_memory,
       const base::FilePath& path_to_db_dir);
 
@@ -69,9 +100,8 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
       const PrivateAggregationBudgeter& other) = delete;
   virtual ~PrivateAggregationBudgeter();
 
-  // Attempts to consume `budget` for `budget_key`. The callback
-  // `on_done` is then run with `true` if the attempt was successful and
-  // `false` otherwise.
+  // Attempts to consume `budget` for `budget_key`. The callback `on_done` is
+  // then run with the appropriate `RequestResult`.
   //
   // The attempt is rejected if it would cause an origin's daily per-API budget
   // to exceed `kMaxBudgetPerScope` (for the 24-hour period ending at the *end*
@@ -87,7 +117,7 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
   // testing.
   virtual void ConsumeBudget(int budget,
                              const PrivateAggregationBudgetKey& budget_key,
-                             base::OnceCallback<void(bool)> on_done);
+                             base::OnceCallback<void(RequestResult)> on_done);
 
   // Deletes all data in storage for any budgets that could have been set
   // between `delete_begin` and `delete_end` time (inclusive). Note that the
@@ -116,11 +146,12 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
  private:
   void ConsumeBudgetImpl(int additional_budget,
                          const PrivateAggregationBudgetKey& budget_key,
-                         base::OnceCallback<void(bool)> on_done);
+                         base::OnceCallback<void(RequestResult)> on_done);
   void ClearDataImpl(base::Time delete_begin,
                      base::Time delete_end,
                      StoragePartition::StorageKeyMatcherFunction filter,
                      base::OnceClosure done);
+  void OnClearDataComplete();
 
   void ProcessAllPendingCalls();
 
@@ -129,6 +160,15 @@ class CONTENT_EXPORT PrivateAggregationBudgeter {
   // initialized. The size is limited to `kMaxPendingCalls` except that
   // `ClearData()` can store additional tasks beyond that limit.
   std::vector<base::OnceClosure> pending_calls_;
+
+  // The task runner for all private aggregation storage operations. Updateable
+  // to allow for priority to be temporarily increased to `USER_VISIBLE` when a
+  // clear data task is queued or running. Otherwise `BEST_EFFORT` is used.
+  scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner_;
+
+  // How many clear data storage tasks are queued or running currently, i.e.
+  // have been posted but the reply has not been run.
+  int num_pending_clear_data_tasks_ = 0;
 
   // `nullptr` until initialization is complete or if initialization failed.
   // Otherwise, owned by this class until destruction. Iff present,

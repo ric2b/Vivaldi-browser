@@ -8,6 +8,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/web/features.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -34,11 +35,11 @@ namespace {
 
 // Path to two test pages, page1 and page2 with associated contents and titles.
 const char kPageOnePath[] = "/page1.html";
-const char kPageOneContent[] = "page 1 content";
-const char kPageOneTitle[] = "page1";
+const char kPageOneContent[] = "This is the first page.";
+const char kPageOneTitle[] = "The first page title.";
 const char kPageTwoPath[] = "/page2.html";
-const char kPageTwoContent[] = "page 2 content";
-const char kPageTwoTitle[] = "page 2";
+const char kPageTwoContent[] = "This is the second page.";
+const char kPageTwoTitle[] = "The second page title.";
 
 // Path to a test page used to count each page load.
 const char kCountURL[] = "/countme.html";
@@ -215,14 +216,28 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
   [ChromeEarlGrey waitForWebStateContainingText:"Echo"];
 
   // Clear cache, save the session and trigger a crash/activate.
+  // Test with the Crash Infobar.
   [ChromeEarlGrey removeBrowsingCache];
-  [ChromeEarlGrey saveSessionImmediately];
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
-      disabled:{}
-      relaunchPolicy:ForceRelaunchByKilling];
+  [[AppLaunchManager sharedManager]
+      ensureAppLaunchedWithFeaturesEnabled:{}
+                                  disabled:{kRemoveCrashInfobar}
+                            relaunchPolicy:ForceRelaunchByKilling];
   // Restore after crash and confirm the background page is not reloaded.
   [[EarlGrey selectElementWithMatcher:grey_text(@"Restore")]
       performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(echoPage.GetContent())]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebStateContainingText:"Echo"];
+  GREYAssertEqual(1, visitCounter, @"The page should not reload");
+
+  // Clear cache, save the session and trigger a crash/activate.
+  // Test without the Crash Infobar.
+  [ChromeEarlGrey removeBrowsingCache];
+  [[AppLaunchManager sharedManager]
+      ensureAppLaunchedWithFeaturesEnabled:{kRemoveCrashInfobar}
+                                  disabled:{}
+                            relaunchPolicy:ForceRelaunchByKilling];
+  // Restore after crash and confirm the background page is not reloaded.
   [[EarlGrey selectElementWithMatcher:OmniboxText(echoPage.GetContent())]
       assertWithMatcher:grey_notNil()];
   [ChromeEarlGrey waitForWebStateContainingText:"Echo"];
@@ -243,7 +258,6 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
 }
 
 - (void)triggerRestore {
-  [ChromeEarlGrey saveSessionImmediately];
   [[AppLaunchManager sharedManager]
       ensureAppLaunchedWithFeaturesEnabled:{}
                                   disabled:{kStartSurface}

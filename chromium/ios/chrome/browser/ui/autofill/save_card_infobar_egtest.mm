@@ -112,8 +112,6 @@ id<GREYMatcher> UploadBannerMatcher() {
       [self isRunningTest:@selector(testUserData_LocalSave_UserDeclines)] ||
       [self isRunningTest:@selector
             (testOfferLocalSave_FullData_PaymentsDeclines)]) {
-    config.features_disabled.push_back(
-        autofill::features::kAutofillAddressProfileSavePrompt);
   }
   return config;
 }
@@ -204,8 +202,7 @@ id<GREYMatcher> UploadBannerMatcher() {
           kOnReceivedGetUploadDetailsResponseCalled),
     @(CreditCardSaveManagerObserverEvent::kOnOfferLocalSaveCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -214,11 +211,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:LocalBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -242,8 +238,7 @@ id<GREYMatcher> UploadBannerMatcher() {
           kOnReceivedGetUploadDetailsResponseCalled),
     @(CreditCardSaveManagerObserverEvent::kOnOfferLocalSaveCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
 
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
@@ -253,11 +248,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:LocalBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
 
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
@@ -281,8 +275,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled),
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
 
   [self fillAndSubmitFormWithCardDetailsOnly];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
@@ -310,8 +303,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -320,11 +312,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:UploadBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -347,8 +338,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -357,11 +347,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:UploadBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -383,8 +372,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -393,11 +381,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:UploadBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   // Dismiss Infobar banner
   [[EarlGrey selectElementWithMatcher:UploadBannerMatcher()]
       performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
@@ -439,8 +426,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -449,11 +435,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:UploadBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnSentUploadCardRequestCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnSentUploadCardRequestCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   // Tap the banner save button.
   [[EarlGrey selectElementWithMatcher:UploadBannerSaveButtonMatcher()]
       performAction:grey_tap()];
@@ -507,8 +492,7 @@ id<GREYMatcher> UploadBannerMatcher() {
           kOnReceivedGetUploadDetailsResponseCalled),
     @(CreditCardSaveManagerObserverEvent::kOnOfferLocalSaveCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Event was not triggered");
@@ -517,11 +501,10 @@ id<GREYMatcher> UploadBannerMatcher() {
   GREYAssert([self waitForUIElementToAppearWithMatcher:LocalBannerMatcher()],
              @"Save card infobar failed to show.");
 
-  [AutofillAppInterface
-      resetEventWaiterForEvents:@[
-        @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
-      ]
-                        timeout:kWaitForDownloadTimeout.InSecondsF()];
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnStrikeChangeCompleteCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
   // Dismiss infobar banner.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerViewIdentifier)]
@@ -557,8 +540,7 @@ id<GREYMatcher> UploadBannerMatcher() {
           kOnReceivedGetUploadDetailsResponseCalled),
     @(CreditCardSaveManagerObserverEvent::kOnOfferLocalSaveCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
 
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
@@ -603,8 +585,7 @@ id<GREYMatcher> UploadBannerMatcher() {
     @(CreditCardSaveManagerObserverEvent::
           kOnReceivedGetUploadDetailsResponseCalled)
   ]
-                                          timeout:kWaitForDownloadTimeout
-                                                      .InSecondsF()];
+                                          timeout:kWaitForDownloadTimeout];
 
   [self fillAndSubmitForm];
   GREYAssertTrue([AutofillAppInterface waitForEvents],

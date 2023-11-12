@@ -108,6 +108,7 @@ namespace content {
 class BrowserContext;
 class DocumentRef;
 struct GlobalRenderFrameHostId;
+class RenderFrameHostObserver;
 class RenderProcessHost;
 class RenderViewHost;
 class RenderWidgetHost;
@@ -318,6 +319,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Note that this may be different from getting the WebContents' primary main
   // frame. For example, if `this` is in a bfcached or prerendered page, this
   // will return the cached/prerendered page's main RenderFrameHost.
+  // See docs/frame_trees.md for more details.
   virtual RenderFrameHost* GetOutermostMainFrame() = 0;
 
   // Fenced frames (meta-bug https://crbug.com/1111084):
@@ -730,6 +732,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // GetLifecycleState() will crash if it is called on a RenderFrameHost in such
   // a state.  Eventually, we should make sure that embedders only learn about
   // new RenderFrameHosts when they reach the kPendingCommit state.
+  // If you want to use GetLifecycleState to check the state for speculative
+  // RenderFrameHosts, use RenderFrameHost::IsInLifecycleState to avoid crashing
+  // for speculative RenderFrameHosts.
   virtual LifecycleState GetLifecycleState() = 0;
 
   // Returns true if and only if the `lifecycle_state` matches
@@ -921,12 +926,13 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // make sense to attach an inner WebContents to the outer WebContents main
   // frame.
   // Essentially, this method will:
-  //  1- Cancel any ongoing navigation and navigation requests for this frame.
-  //  2- Dispatch beforeunload event on this frame and all of the frame's
+  //  1- Dispatch beforeunload event on this frame and all of the frame's
   //     subframes, and wait for all beforeunload events to complete.
-  //  3- Will create and return a new RenderFrameHost (destroying this one) if
-  //     this RenderFrameHost is a cross-process subframe.
-  // After steps 1-3 are completed, the callback is invoked asynchronously with
+  //  2- Will create and return a new RenderFrameHost (destroying this one) if
+  //     this RenderFrameHost is a cross-process subframe. (Note: This might not
+  //     be needed anymore now that MimeHandlerView's embedded case uses the
+  //     same code path as the full page case. See https://crbug.com/1398111).
+  // After steps 1-2 are completed, the callback is invoked asynchronously with
   // the RenderFrameHost which can be safely used for attaching. This
   // RenderFrameHost could be different than |this| which is the case if this
   // RenderFrameHost is for a cross-process frame. The callback could also be
@@ -1052,9 +1058,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // example, helper methods for MojoJs to better work with Web API objects.
   virtual void EnableMojoJsBindings(mojom::ExtraMojoJsFeaturesPtr features) = 0;
 
-  // Whether the current document is loaded inside an anonymous iframe. Updated
-  // on every cross-document navigation.
-  virtual bool IsAnonymous() const = 0;
+  // Whether the current document is loaded inside iframe credentialless.
+  // Updated on every cross-document navigation.
+  virtual bool IsCredentialless() const = 0;
+
+  // Add and remove observers for state changed events. Observers are
+  // responsible to remove themselves from observer list before they go away.
+  virtual void AddObserver(RenderFrameHostObserver* observer) = 0;
+  virtual void RemoveObserver(RenderFrameHostObserver* observer) = 0;
 
  private:
   // This interface should only be implemented inside content.

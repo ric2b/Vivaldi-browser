@@ -5,13 +5,14 @@
 #include "content/browser/blob_storage/blob_registry_wrapper.h"
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/common/content_features.h"
+#include "net/base/features.h"
 #include "storage/browser/blob/blob_registry_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
-#include "storage/browser/file_system/file_system_context.h"
 
 namespace content {
 
@@ -27,9 +28,6 @@ class BindingDelegate : public storage::BlobRegistryImpl::Delegate {
   bool CanReadFile(const base::FilePath& file) override {
     return security_policy_handle_.CanReadFile(file);
   }
-  bool CanReadFileSystemFile(const storage::FileSystemURL& url) override {
-    return security_policy_handle_.CanReadFileSystemFile(url);
-  }
   bool CanAccessDataForOrigin(const url::Origin& origin) override {
     return security_policy_handle_.CanAccessDataForOrigin(origin);
   }
@@ -43,14 +41,27 @@ class BindingDelegate : public storage::BlobRegistryImpl::Delegate {
 // static
 scoped_refptr<BlobRegistryWrapper> BlobRegistryWrapper::Create(
     scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
-    scoped_refptr<storage::FileSystemContext> file_system_context,
-    scoped_refptr<BlobRegistryWrapper> registry_for_fallback_url_registry) {
+    base::WeakPtr<storage::BlobUrlRegistry> blob_url_registry) {
+  DCHECK(
+      !base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl));
+  scoped_refptr<BlobRegistryWrapper> result(new BlobRegistryWrapper());
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&BlobRegistryWrapper::InitializeOnIOThreadDeprecated,
+                     result, std::move(blob_storage_context),
+                     std::move(blob_url_registry)));
+  return result;
+}
+
+// static
+scoped_refptr<BlobRegistryWrapper> BlobRegistryWrapper::Create(
+    scoped_refptr<ChromeBlobStorageContext> blob_storage_context) {
+  DCHECK(
+      base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl));
   scoped_refptr<BlobRegistryWrapper> result(new BlobRegistryWrapper());
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&BlobRegistryWrapper::InitializeOnIOThread,
-                                result, std::move(blob_storage_context),
-                                std::move(file_system_context),
-                                std::move(registry_for_fallback_url_registry)));
+                                result, std::move(blob_storage_context)));
   return result;
 }
 
@@ -68,30 +79,26 @@ void BlobRegistryWrapper::Bind(
               process_id)));
 }
 
-BlobRegistryWrapper::~BlobRegistryWrapper() {
-  if (owns_bloburlregistry_) {
-    delete url_registry_;
-  }
+BlobRegistryWrapper::~BlobRegistryWrapper() {}
+
+void BlobRegistryWrapper::InitializeOnIOThreadDeprecated(
+    scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
+    base::WeakPtr<storage::BlobUrlRegistry> blob_url_registry) {
+  DCHECK(
+      !base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  blob_registry_ = std::make_unique<storage::BlobRegistryImpl>(
+      blob_storage_context->context()->AsWeakPtr(),
+      std::move(blob_url_registry), GetUIThreadTaskRunner({}));
 }
 
 void BlobRegistryWrapper::InitializeOnIOThread(
-    scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
-    scoped_refptr<storage::FileSystemContext> file_system_context,
-    scoped_refptr<BlobRegistryWrapper> registry_for_fallback_url_registry) {
+    scoped_refptr<ChromeBlobStorageContext> blob_storage_context) {
+  DCHECK(
+      base::FeatureList::IsEnabled(net::features::kSupportPartitionedBlobUrl));
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  // NOTE(andre@vivaldi.com) : BlobRegistryWrapper is created and owned by
-  // StoragePartition. |registry_for_fallback_url_registry| will always be owned
-  // by an embedder and will outlive |this|.
-  if (registry_for_fallback_url_registry) {
-    url_registry_ = registry_for_fallback_url_registry->url_registry();
-  } else {
-    owns_bloburlregistry_ = true;
-    url_registry_ = new storage::BlobUrlRegistry(nullptr);
-  }
-
   blob_registry_ = std::make_unique<storage::BlobRegistryImpl>(
-      blob_storage_context->context()->AsWeakPtr(), url_registry_->AsWeakPtr(),
-      std::move(file_system_context));
+      blob_storage_context->context()->AsWeakPtr());
 }
 
 }  // namespace content

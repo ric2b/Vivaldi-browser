@@ -441,6 +441,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   void BeforeUnloadFired(content::WebContents* source);
 
+  // Move pinned or workspace tabs to remaining window if we have 2 open
+  // windows and close the one with pinned/workspace tabs.
+  void MovePersistentTabsToOtherWindowIfNeeded();
+
  private:
   // Implementation of various interface-like Chromium classes is in this inner
   // class not to pollute with extra details the main class.
@@ -460,9 +464,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   void DeleteThis();
 
-  // Move pinned tabs to remaining window if we have 2 open windows and
-  // close the one with pinned tabs.
-  void MovePinnedTabsToOtherWindowIfNeeded();
 
   void UpdateActivation(bool is_active);
   void OnIconImagesLoaded(gfx::ImageFamily image_family);
@@ -572,6 +573,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // TODO(igor@vivaldi.com): Figure out how to use this on Mac to show the
   // maximized menu there.
   gfx::Rect maximize_button_bounds_;
+
+  bool is_moving_persistent_tabs_ = false;
 
   // The icon family for the task bar and elsewhere.
   gfx::ImageFamily icon_family_;

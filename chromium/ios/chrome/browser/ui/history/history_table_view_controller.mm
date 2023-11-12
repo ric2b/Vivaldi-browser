@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/ui/history/history_ui_delegate.h"
 #import "ios/chrome/browser/ui/history/history_util.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
+#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
@@ -60,10 +61,12 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
-#include "ios/panel/panel_constants.h"
-
+#import "ios/panel/panel_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -154,33 +157,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   return [super initWithStyle:style];
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-  [super viewWillAppear:animated];
-
-  // Vivaldi no need for this workaround any more (chr bug)
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Center search bar's cancel button vertically so it looks centered.
-  // We change the cancel button proxy styles, so we will return it to
-  // default in viewDidDisappear.
-  UIOffset offset =
-      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-  UIBarButtonItem* cancelButton = [UIBarButtonItem
-      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
-  [cancelButton setTitlePositionAdjustment:offset
-                             forBarMetrics:UIBarMetricsDefault];
-  } // Vivaldi
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  [super viewWillDisappear:animated];
-
-  // Restore to default origin offset for cancel button proxy style.
-  UIBarButtonItem* cancelButton = [UIBarButtonItem
-      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
-  [cancelButton setTitlePositionAdjustment:UIOffsetZero
-                             forBarMetrics:UIBarMetricsDefault];
-}
-
 // Vivaldi
 - (void)viewDidLayoutSubviews{
     if (vivaldi::IsVivaldiRunning())
@@ -258,7 +234,10 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // Vivaldi
   if (vivaldi::IsVivaldiRunning()) {
     self.searchController.hidesNavigationBarDuringPresentation = NO;
-    [self setupHeaderWithSearch];
+    if (self.isDeviceIPad)
+      [self setupHeaderWithSearchForIPad];
+    else
+      [self setupHeaderWithSearch];
   }
   // End Vivaldi
 
@@ -274,16 +253,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // Place the search bar in the navigation bar.
   [self updateNavigationBar];
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
-
-  // Vivaldi no need for this workaround any more (chr bug)
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Center search bar and cancel button vertically so it looks centered
-  // in the header when searching.
-  UIOffset offset =
-      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-  self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
-      offset;
-  } // Vivaldi
 }
 
 #pragma mark - TableViewModel
@@ -323,12 +292,16 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   SyncSetupService* syncSetupService =
       SyncSetupServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
+
+  // Vivaldi: We will enter into the block only if sync setup service is created
+  if (vivaldi::IsVivaldiRunning() && syncSetupService) {
   if (syncSetupService->CanSyncFeatureStart() &&
       syncSetupService->IsDataTypeActive(syncer::HISTORY_DELETE_DIRECTIVES) &&
       queryResultsInfo.sync_timed_out) {
     [self showHistoryMatchingQuery:_currentQuery];
     return;
   }
+  } // End Vivaldi
 
   // At this point there has been a response, stop the loading indicator.
   [self stopLoadingIndicatorWithCompletion:nil];
@@ -766,6 +739,23 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   }
 }
 
+#pragma mark - UIResponder
+
+// To always be able to register key commands via -keyCommands, the VC must be
+// able to become first responder.
+- (BOOL)canBecomeFirstResponder {
+  return YES;
+}
+
+- (NSArray*)keyCommands {
+  return @[ UIKeyCommand.cr_close ];
+}
+
+- (void)keyCommand_close {
+  base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
+  [self.delegate dismissHistoryWithCompletion:nil];
+}
+
 #pragma mark - TableViewURLDragDataSource
 
 - (URLInfo*)tableView:(UITableView*)tableView
@@ -1062,11 +1052,19 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     self.navigationItem.searchController = nil;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeNever;
+
+    // Vivaldi
+    if (vivaldi::IsVivaldiRunning())
+      self.searchController.searchBar.hidden = YES;
   } else {
 
     // Vivaldi
     if (!vivaldi::IsVivaldiRunning())
     self.navigationItem.searchController = self.searchController;
+    else
+      self.searchController.searchBar.hidden = NO;
+    // End Vivaldi
+
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
   }
@@ -1241,6 +1239,12 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 // Adds a view as background of the TableView.
 - (void)addEmptyTableViewBackground {
+  if (vivaldi::IsVivaldiRunning()) {
+    [self addEmptyTableViewWithImage:[UIImage imageNamed:
+                                      @"vivaldi_history_empty"]
+            title:l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_TITLE)
+            subtitle:l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_MESSAGE)];
+  } else // End Vivaldi
   [self addEmptyTableViewWithImage:[UIImage imageNamed:@"history_empty"]
                              title:l10n_util::GetNSString(
                                        IDS_IOS_HISTORY_EMPTY_TITLE)
@@ -1414,7 +1418,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
    BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
        initWithBrowser:strongSelf.browser
-              scenario:MenuScenario::kBookmarkEntry];
+              scenario:MenuScenarioHistogram::kBookmarkEntry];
 
  //Disable if in editing mode
   NSMutableArray<UIMenuElement*>* menuElements =
@@ -1446,46 +1450,52 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   return [UIMenu menuWithTitle:@"" children:menuElements];
 }
 
+#pragma mark VIVALDI
+
+- (void)setupSearchBarWithStyle {
+    searchBarContainer = [[UIView alloc] init];
+    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
+    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    [searchBarContainer addSubview:self.searchController.searchBar];
+    self.searchController.searchBar.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.searchController.searchBar.backgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    self.searchController.searchBar.alpha = 1.0;
+    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    [self.searchController.searchBar sizeToFit];
+}
+
+- (void)setupHeaderWithSearchForIPad {
+    [self setupSearchBarWithStyle];
+    self.tableView.tableHeaderView = searchBarContainer;
+    [searchBarContainer.topAnchor
+      constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
+    [searchBarContainer.leadingAnchor
+      constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
+    [searchBarContainer.trailingAnchor
+       constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
+    [searchBarContainer.heightAnchor
+      constraintEqualToConstant:search_bar_height].active = YES;
+    [searchBarContainer.widthAnchor
+      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
+}
+
 - (void)setupHeaderWithSearch {
   UIView* headerView = [[UIView alloc] init];
   headerView.frame = CGRectMake(0, 0,0, panel_header_height);
   UIView* topView = [[UIView alloc] init];
   topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
   [headerView addSubview:topView];
+  [topView fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                                  search_bar_height, 0,0,0)];
 
-  topView.translatesAutoresizingMaskIntoConstraints = NO;
-  [topView.leadingAnchor constraintEqualToAnchor:
-     headerView.leadingAnchor].active = YES;
-  [topView.widthAnchor
-     constraintEqualToAnchor:headerView.widthAnchor].active = YES;
-  [topView.topAnchor constraintEqualToAnchor:
-      headerView.topAnchor].active = YES;
-  [topView.heightAnchor constraintEqualToConstant:panel_top_view_height]
-        .active = YES;
-
-  searchBarContainer = [[UIView alloc] init];
-  searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
-  searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-  [searchBarContainer addSubview:self.searchController.searchBar];
+  [self setupSearchBarWithStyle];
   [headerView addSubview:searchBarContainer];
-  self.searchController.searchBar.autoresizingMask =
-      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  [searchBarContainer.widthAnchor
-   constraintEqualToAnchor:headerView.widthAnchor].active = YES;
-  self.searchController.searchBar.backgroundColor =
-      [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-  self.searchController.searchBar.alpha = 1.0;
-  self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-
-  [searchBarContainer.topAnchor constraintEqualToAnchor:
-      topView.bottomAnchor].active = YES;
-  [searchBarContainer.bottomAnchor constraintEqualToAnchor:
-      headerView.bottomAnchor].active = YES;
-  [searchBarContainer.leadingAnchor constraintEqualToAnchor:
-      headerView.leadingAnchor].active = YES;
-  [searchBarContainer.trailingAnchor constraintEqualToAnchor:
-      headerView.trailingAnchor].active = YES;
+  [searchBarContainer fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                                   search_bar_height, 0, 0, 0)];
   self.tableView.tableHeaderView = headerView;
+
   headerView.translatesAutoresizingMaskIntoConstraints = NO;
   [headerView.leadingAnchor constraintEqualToAnchor:
       self.tableView.leadingAnchor].active = YES;
@@ -1494,10 +1504,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   [headerView.topAnchor constraintEqualToAnchor:
       self.tableView.topAnchor].active = YES;
   [headerView.heightAnchor constraintEqualToConstant:panel_header_height]
-        .active = YES;
+      .active = YES;
   [headerView.widthAnchor
-     constraintEqualToAnchor:self.view.widthAnchor multiplier:1.0].active = YES;
-  [self.searchController.searchBar sizeToFit];
+      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
 }
 
 @end

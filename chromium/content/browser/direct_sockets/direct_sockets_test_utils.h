@@ -29,6 +29,10 @@
 #include "services/network/test/test_udp_socket.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+namespace url {
+class Origin;
+}  // namespace url
+
 namespace content::test {
 
 // Mock Host Resolver for Direct Sockets browsertests.
@@ -43,11 +47,12 @@ class MockHostResolver : public network::mojom::HostResolver {
   MockHostResolver(const MockHostResolver&) = delete;
   MockHostResolver& operator=(const MockHostResolver&) = delete;
 
-  void ResolveHost(network::mojom::HostResolverHostPtr host,
-                   const ::net::NetworkAnonymizationKey& network_isolation_key,
-                   network::mojom::ResolveHostParametersPtr optional_parameters,
-                   ::mojo::PendingRemote<network::mojom::ResolveHostClient>
-                       pending_response_client) override;
+  void ResolveHost(
+      network::mojom::HostResolverHostPtr host,
+      const ::net::NetworkAnonymizationKey& network_anonymization_key,
+      network::mojom::ResolveHostParametersPtr optional_parameters,
+      ::mojo::PendingRemote<network::mojom::ResolveHostClient>
+          pending_response_client) override;
 
   void MdnsListen(
       const ::net::HostPortPair& host,
@@ -194,14 +199,22 @@ std::string WrapAsync(const std::string& script);
 
 // Mock ContentBrowserClient that enableds direct sockets via permissions policy
 // for isolated apps.
-class IsolatedAppContentBrowserClient : public ContentBrowserClient {
+class IsolatedWebAppContentBrowserClient : public ContentBrowserClient {
  public:
+  explicit IsolatedWebAppContentBrowserClient(
+      const url::Origin& isolated_app_origin);
+
   bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
-                                             const GURL& url) override;
+                                             const GURL& url,
+                                             bool origin_matches_flag) override;
 
   absl::optional<blink::ParsedPermissionsPolicy>
-  GetPermissionsPolicyForIsolatedApp(content::BrowserContext* browser_context,
-                                     const url::Origin& app_origin) override;
+  GetPermissionsPolicyForIsolatedWebApp(
+      content::BrowserContext* browser_context,
+      const url::Origin& app_origin) override;
+
+ private:
+  url::Origin isolated_app_origin_;
 };
 
 }  // namespace content::test

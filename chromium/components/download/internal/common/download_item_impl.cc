@@ -40,7 +40,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -536,14 +536,14 @@ void DownloadItemImpl::ValidateDangerousDownload() {
   MaybeCompleteDownload();
 }
 
-void DownloadItemImpl::ValidateMixedContentDownload() {
+void DownloadItemImpl::ValidateInsecureDownload() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!IsDone());
-  DCHECK(IsMixedContent());
+  DCHECK(IsInsecure());
 
   DVLOG(20) << __func__ << "() download=" << DebugString(true);
 
-  mixed_content_status_ = MixedContentStatus::VALIDATED;
+  insecure_download_status_ = InsecureDownloadStatus::VALIDATED;
 
   UpdateObservers();  // TODO(asanka): This is potentially unsafe. The download
                       // may not be in a consistent state or around at all after
@@ -563,8 +563,8 @@ void DownloadItemImpl::StealDangerousDownload(bool delete_file_afterward,
 
   if (delete_file_afterward) {
     if (download_file_) {
-      base::PostTaskAndReplyWithResult(
-          GetDownloadTaskRunner().get(), FROM_HERE,
+      GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
+          FROM_HERE,
           base::BindOnce(&DownloadFileDetach, std::move(download_file_)),
           std::move(callback));
     } else {
@@ -574,8 +574,8 @@ void DownloadItemImpl::StealDangerousDownload(bool delete_file_afterward,
     Remove();
     // Download item has now been deleted.
   } else if (download_file_) {
-    base::PostTaskAndReplyWithResult(
-        GetDownloadTaskRunner().get(), FROM_HERE,
+    GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&MakeCopyOfDownloadFile, download_file_.get()),
         std::move(callback));
   } else {
@@ -769,7 +769,7 @@ void DownloadItemImpl::Rename(const base::FilePath& display_name,
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (display_name.IsAbsolute()) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DownloadItemImpl::RenameDownloadedFileDone,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   std::move(callback), GetFullPath(),
@@ -777,8 +777,8 @@ void DownloadItemImpl::Rename(const base::FilePath& display_name,
     return;
   }
 
-  base::PostTaskAndReplyWithResult(
-      GetDownloadTaskRunner().get(), FROM_HERE,
+  GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&download::RenameDownloadedFile, GetFullPath(),
                      display_name),
       base::BindOnce(&DownloadItemImpl::RenameDownloadedFileDone,
@@ -989,7 +989,7 @@ void DownloadItemImpl::DeleteFile(base::OnceCallback<void(bool)> callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (GetState() != DownloadItem::COMPLETE) {
     // Pass a null WeakPtr so it doesn't call OnDownloadedFileRemoved.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DeleteDownloadedFileDone,
                                   base::WeakPtr<DownloadItemImpl>(),
                                   std::move(callback), false));
@@ -997,15 +997,14 @@ void DownloadItemImpl::DeleteFile(base::OnceCallback<void(bool)> callback) {
   }
   if (GetFullPath().empty() || file_externally_removed_) {
     // Pass a null WeakPtr so it doesn't call OnDownloadedFileRemoved.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DeleteDownloadedFileDone,
                                   base::WeakPtr<DownloadItemImpl>(),
                                   std::move(callback), true));
     return;
   }
-  base::PostTaskAndReplyWithResult(
-      GetDownloadTaskRunner().get(), FROM_HERE,
-      base::BindOnce(&DeleteDownloadedFile, GetFullPath()),
+  GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&DeleteDownloadedFile, GetFullPath()),
       base::BindOnce(&DeleteDownloadedFileDone, weak_ptr_factory_.GetWeakPtr(),
                      std::move(callback)));
 }
@@ -1040,19 +1039,19 @@ bool DownloadItemImpl::IsDangerous() const {
          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE;
 }
 
-bool DownloadItemImpl::IsMixedContent() const {
-  return mixed_content_status_ == MixedContentStatus::WARN ||
-         mixed_content_status_ == MixedContentStatus::BLOCK ||
-         mixed_content_status_ == MixedContentStatus::SILENT_BLOCK;
+bool DownloadItemImpl::IsInsecure() const {
+  return insecure_download_status_ == InsecureDownloadStatus::WARN ||
+         insecure_download_status_ == InsecureDownloadStatus::BLOCK ||
+         insecure_download_status_ == InsecureDownloadStatus::SILENT_BLOCK;
 }
 
 DownloadDangerType DownloadItemImpl::GetDangerType() const {
   return danger_type_;
 }
 
-DownloadItem::MixedContentStatus DownloadItemImpl::GetMixedContentStatus()
-    const {
-  return mixed_content_status_;
+DownloadItem::InsecureDownloadStatus
+DownloadItemImpl::GetInsecureDownloadStatus() const {
+  return insecure_download_status_;
 }
 
 bool DownloadItemImpl::TimeRemaining(base::TimeDelta* remaining) const {
@@ -1615,7 +1614,7 @@ void DownloadItemImpl::Start(
     // We're posting the call to DetermineDownloadTarget() instead of calling it
     // directly to ensure that OnDownloadTargetDetermined() is not called
     // synchronously. See crbug.com/1209856 for more details.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DownloadItemImpl::DetermineDownloadTarget,
                                   weak_ptr_factory_.GetWeakPtr()));
     return;
@@ -1707,7 +1706,7 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
     const base::FilePath& target_path,
     TargetDisposition disposition,
     DownloadDangerType danger_type,
-    MixedContentStatus mixed_content_status,
+    InsecureDownloadStatus insecure_download_status,
     const base::FilePath& intermediate_path,
     const base::FilePath& display_name,
     const std::string& mime_type,
@@ -1749,7 +1748,7 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
   destination_info_.target_path = target_path;
   destination_info_.target_disposition = disposition;
   SetDangerType(danger_type);
-  mixed_content_status_ = mixed_content_status;
+  insecure_download_status_ = insecure_download_status;
   if (!display_name.empty())
     SetDisplayName(display_name);
   if (!mime_type.empty())
@@ -2305,9 +2304,9 @@ bool DownloadItemImpl::IsDownloadReadyForCompletion(
   if (IsDangerous())
     return false;
 
-  // If the download is mixed content, but not yet validated, it's not ready for
+  // If the download is insecure, but not yet validated, it's not ready for
   // completion.
-  if (IsMixedContent())
+  if (IsInsecure())
     return false;
 
   // Check for consistency before invoking delegate. Since there are no pending

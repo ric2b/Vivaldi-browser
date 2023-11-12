@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -312,8 +314,9 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest,
       storage.GetAllProfilesAttributes().front()->GetPath();
   EXPECT_FALSE(singleton_profile_path.empty());
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(singleton_profile_path,
-                                              base::DoNothing());
+  profile_manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+      singleton_profile_path, base::DoNothing(),
+      ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
 
   // Run the message loop until the profile is actually deleted (as indicated
   // by the callback above being called).
@@ -352,7 +355,8 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, DeleteInactiveProfile) {
 
   // Delete inactive profile.
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(new_path, base::DoNothing());
+  profile_manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+      new_path, base::DoNothing(), ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
   profile_deletion_observer.Wait();
 
   // Make sure there only preexisted profile left.
@@ -379,7 +383,7 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, DeleteCurrentProfile) {
   base::FilePath current_profile_path = browser()->profile()->GetPath();
   base::FilePath new_last_used_path = new_profile_path;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Deleting the main profile on Lacros is not allowed.
+  // Deleting the main profile on Lacros is not allwed.
   // Set the current profile to the new profile.
   new_last_used_path = browser()->profile()->GetPath();
   ASSERT_EQ(Browser::GetCreationStatusForProfile(new_profile),
@@ -395,8 +399,9 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, DeleteCurrentProfile) {
 
   // Delete current profile.
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(current_profile_path,
-                                              base::DoNothing());
+  profile_manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+      current_profile_path, base::DoNothing(),
+      ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
   profile_deletion_observer.Wait();
 
   // Make sure a profile created earlier become the only profile.
@@ -446,8 +451,9 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, MAYBE_DeleteAllProfiles) {
     if (Profile::IsMainProfilePath(profile_path))
       continue;
 #endif
-    profile_manager->ScheduleProfileForDeletion(profile_path,
-                                                base::DoNothing());
+    profile_manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+        profile_path, base::DoNothing(),
+        ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
     old_profile_paths.push_back(profile_path);
   }
   profile_deletion_observer.Wait();
@@ -626,24 +632,24 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, PRE_AddMultipleProfiles) {
   EXPECT_EQ(1U, browser_list->size());
 
   // Open a browser window for the first profile.
-  profiles::SwitchToProfile(path_profile1, false);
+  base::test::TestFuture<Profile*> profile1_future;
+  profiles::SwitchToProfile(path_profile1, false,
+                            profile1_future.GetCallback());
+  EXPECT_TRUE(profile1_future.Wait());
   EXPECT_EQ(1U, chrome::GetTotalBrowserCount());
   ASSERT_EQ(1U, browser_list->size());
-  EXPECT_EQ(path_profile1, browser_list->get(0)->profile()->GetPath());
+  EXPECT_EQ(path_profile1, profile1_future.Get()->GetPath());
   // Open a browser window for the second profile.
-  profiles::SwitchToProfile(path_profile2, false);
+  base::test::TestFuture<Profile*> profile2_future;
+  profiles::SwitchToProfile(path_profile2, false,
+                            profile2_future.GetCallback());
+  EXPECT_TRUE(profile2_future.Wait());
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   ASSERT_EQ(2U, browser_list->size());
-  EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
+  EXPECT_EQ(path_profile2, profile2_future.Get()->GetPath());
 }
 
-// TODO(crbug.com/1243925): Fix and re-enable.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#define MAYBE_AddMultipleProfiles DISABLED_AddMultipleProfiles
-#else
-#define MAYBE_AddMultipleProfiles AddMultipleProfiles
-#endif
-IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, MAYBE_AddMultipleProfiles) {
+IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, AddMultipleProfiles) {
   // Verifies that the browser doesn't crash when it is restarted.
 }
 
@@ -767,8 +773,11 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, DeletePasswords) {
   EXPECT_EQ(1u, verify_add.GetPasswords().size());
 
   MultipleProfileDeletionObserver profile_deletion_observer(1U);
-  g_browser_process->profile_manager()->ScheduleProfileForDeletion(
-      profile->GetPath(), base::DoNothing());
+  g_browser_process->profile_manager()
+      ->GetDeleteProfileHelper()
+      .MaybeScheduleProfileForDeletion(
+          profile->GetPath(), base::DoNothing(),
+          ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
   // run_loop.Run();
   profile_deletion_observer.Wait();
 

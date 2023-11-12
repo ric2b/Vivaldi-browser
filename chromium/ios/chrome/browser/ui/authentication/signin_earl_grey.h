@@ -7,11 +7,12 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/compiler_specific.h"
+#import "base/compiler_specific.h"
+#import "ios/chrome/browser/signin/capabilities_dict.h"
 #import "ios/testing/earl_grey/base_eg_test_helper_impl.h"
 
 @protocol GREYMatcher;
-@class FakeChromeIdentity;
+@class FakeSystemIdentity;
 
 namespace signin {
 enum class ConsentLevel;
@@ -25,15 +26,16 @@ enum class ConsentLevel;
 @interface SigninEarlGreyImpl : BaseEGTestHelperImpl
 
 // Adds `fakeIdentity` to the fake identity service.
-- (void)addFakeIdentity:(FakeChromeIdentity*)fakeIdentity;
+- (void)addFakeIdentity:(FakeSystemIdentity*)fakeIdentity;
 
 // Maps `capabilities` to the `fakeIdentity`. Check fails if the
 // `fakeIdentity` has not been added to the fake identity service.
-- (void)setCapabilities:(NSDictionary*)capabilities forIdentity:fakeIdentity;
+- (void)setCapabilities:(ios::CapabilitiesDict*)capabilities
+            forIdentity:fakeIdentity;
 
 // Removes `fakeIdentity` from the fake identity service asynchronously to
 // simulate identity removal from the device.
-- (void)forgetFakeIdentity:(FakeChromeIdentity*)fakeIdentity;
+- (void)forgetFakeIdentity:(FakeSystemIdentity*)fakeIdentity;
 
 // Signs the user out of the primary account. Induces a GREYAssert if the
 // app fails to sign out.
@@ -41,7 +43,7 @@ enum class ConsentLevel;
 
 // Induces a GREYAssert if `fakeIdentity` is not signed in to the active
 // profile.
-- (void)verifySignedInWithFakeIdentity:(FakeChromeIdentity*)fakeIdentity;
+- (void)verifySignedInWithFakeIdentity:(FakeSystemIdentity*)fakeIdentity;
 
 // Induces a GREYAssert if the user is not signed in with `expectedEmail`.
 - (void)verifyPrimaryAccountWithEmail:(NSString*)expectedEmail

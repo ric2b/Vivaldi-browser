@@ -15,8 +15,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ash/lock_screen_apps/lock_screen_apps.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
@@ -190,6 +192,7 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
 
   // ProfileManagerObserver:
   void OnProfileAdded(Profile* profile) override;
+  void OnProfileManagerDestroying() override;
 
   NoteTakingControllerClient* GetNoteTakingControllerClientForTesting() {
     return note_taking_controller_client_.get();
@@ -251,6 +254,9 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
                                      apps::AppRegistryCache::Observer>
       app_registry_observations_{this};
 
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observation_{this};
+
   base::ObserverList<Observer>::Unchecked observers_;
 
   std::unique_ptr<NoteTakingControllerClient> note_taking_controller_client_;
@@ -259,11 +265,5 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace chromeos {
-using ::ash::NoteTakingAppInfo;
-using ::ash::NoteTakingHelper;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_NOTE_TAKING_HELPER_H_

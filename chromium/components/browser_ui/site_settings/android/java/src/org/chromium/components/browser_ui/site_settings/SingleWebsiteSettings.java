@@ -162,6 +162,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 return "vr_permission_list";
             case ContentSettingsType.CLIPBOARD_READ_WRITE:
                 return "clipboard_permission_list";
+            case ContentSettingsType.AUTOPLAY: // Vivaldi
+                return "autoplay_permission_list";
             default:
                 return null;
         }
@@ -453,7 +455,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private Drawable getContentSettingsIcon(@ContentSettingsType int contentSettingsType,
             @ContentSettingValues @Nullable Integer value) {
         return ContentSettingsResources.getContentSettingsIcon(
-                getContext(), contentSettingsType, value);
+                getContext(), contentSettingsType, value, getSiteSettingsDelegate());
     }
 
     /**
@@ -512,6 +514,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 setUpNotificationsPreference(preference, mSite.isEmbargoed(type));
             } else if (type == ContentSettingsType.REQUEST_DESKTOP_SITE) {
                 setUpDesktopSitePreference(preference);
+            } else if (type == ContentSettingsType.AUTOPLAY) { // Vivaldi
+                    setUpAutoplayPreference(preference);
             } else {
                 setupContentSettingsPreference(preference,
                         mSite.getContentSetting(
@@ -524,17 +528,23 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void setUpClearDataPreference() {
         ClearWebsiteStorage preference = findPreference(PREF_CLEAR_DATA);
         long usage = mSite.getTotalUsage();
-        if (usage > 0) {
+        int cookies = mSite.getNumberOfCookies();
+        // Only take cookies into account when the new UI is enabled.
+        if (usage > 0 || (SiteSettingsUtil.isSiteDataImprovementEnabled() && cookies > 0)) {
             boolean appFound = getSiteSettingsDelegate().getOriginsWithInstalledApp().contains(
                     mSite.getAddress().getOrigin());
             Context context = preference.getContext();
-            preference.setTitle(
-                    String.format(context.getString(R.string.origin_settings_storage_usage_brief),
-                            Formatter.formatShortFileSize(context, usage)));
+            if (SiteSettingsUtil.isSiteDataImprovementEnabled()) {
+                preference.setTitle(
+                        SiteSettingsUtil.generateStorageUsageText(context, usage, cookies));
+            } else {
+                preference.setTitle(String.format(
+                        context.getString(R.string.origin_settings_storage_usage_brief),
+                        Formatter.formatShortFileSize(context, usage)));
+            }
             preference.setDataForDisplay(mSite.getTitle(), appFound);
-            if (WebsitePreferenceBridge.isCookieDeletionDisabled(
-                        getSiteSettingsDelegate().getBrowserContextHandle(),
-                        mSite.getAddress().getOrigin())) {
+            if (mSite.isCookieDeletionDisabled(
+                        getSiteSettingsDelegate().getBrowserContextHandle())) {
                 preference.setEnabled(false);
             }
         } else {
@@ -545,7 +555,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void setupResetSitePreference() {
         Preference preference = findPreference(PREF_RESET_SITE);
         int titleResId;
-        if (SiteSettingsFeatureList.isEnabled(SiteSettingsFeatureList.SITE_DATA_IMPROVEMENTS)) {
+        if (SiteSettingsUtil.isSiteDataImprovementEnabled()) {
             titleResId = mHideNonPermissionPreferences ? R.string.page_info_permissions_reset
                                                        : R.string.website_reset_full;
         } else {
@@ -555,9 +565,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         preference.setTitle(titleResId);
         preference.setOrder(mMaxPermissionOrder + 1);
         preference.setOnPreferenceClickListener(this);
-        if (WebsitePreferenceBridge.isCookieDeletionDisabled(
-                    getSiteSettingsDelegate().getBrowserContextHandle(),
-                    mSite.getAddress().getOrigin())) {
+        if (mSite.isCookieDeletionDisabled(getSiteSettingsDelegate().getBrowserContextHandle())) {
             preference.setEnabled(false);
         }
     }
@@ -955,7 +963,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             Preference preference, @ContentSettingValues @Nullable Integer value) {
         @ContentSettingsType
         int contentType = getContentSettingsTypeFromPreferenceKey(preference.getKey());
-        int titleResourceId = ContentSettingsResources.getTitle(contentType);
+        int titleResourceId =
+                ContentSettingsResources.getTitle(contentType, getSiteSettingsDelegate());
 
         if (titleResourceId != 0) {
             preference.setTitle(titleResourceId);
@@ -1242,5 +1251,25 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         if (mObjectPolicyPermissionCount > 0) {
             ManagedPreferencesUtils.showManagedSettingsCannotBeResetToast(getContext());
         }
+    }
+
+    /** Vivaldi **/
+    private void setUpAutoplayPreference(Preference preference) {
+        BrowserContextHandle browserContextHandle =
+                getSiteSettingsDelegate().getBrowserContextHandle();
+        @ContentSettingValues
+        @Nullable
+        Integer currentValue =
+                mSite.getContentSetting(browserContextHandle, ContentSettingsType.AUTOPLAY);
+        // In order to always show the auto play permission, set it up with the default value if it
+        // doesn't have a current value.
+        if (currentValue == null) {
+            currentValue = WebsitePreferenceBridge.isCategoryEnabled(
+                    browserContextHandle, ContentSettingsType.AUTOPLAY)
+                    ? ContentSettingValues.ALLOW
+                    : ContentSettingValues.BLOCK;
+        }
+        // Not possible to embargo AUTOPLAY.
+        setupContentSettingsPreference(preference, currentValue, false /* isEmbargoed */);
     }
 }

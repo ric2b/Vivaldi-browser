@@ -42,8 +42,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 12;
-const int kCompatibleVersionNumber = 12;
+const int kCurrentVersionNumber = 13;
+const int kCompatibleVersionNumber = 13;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -329,6 +329,17 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 11) {
     // Deprecated due column migrated over to end column.
     if (!MigrateCalendarToVersion12()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 12) {
+    // VB-94637 re-sync certain events to update timezone info
+    if (!MigrateCalendarToVersion13()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

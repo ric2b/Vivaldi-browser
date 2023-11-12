@@ -286,7 +286,6 @@ void glCopyTextureCHROMIUMFn(GLuint sourceId,
                              GLboolean unpackFlipY,
                              GLboolean unpackPremultiplyAlpha,
                              GLboolean unpackUnmultiplyAlpha) override {}
-void glCoverageModulationNVFn(GLenum components) override {}
 void glCoverFillPathInstancedNVFn(GLsizei numPaths,
                                   GLenum pathNameType,
                                   const void* paths,
@@ -1187,6 +1186,7 @@ void glProgramUniformMatrix4x3fvFn(GLuint program,
                                    GLsizei count,
                                    GLboolean transpose,
                                    const GLfloat* value) override {}
+void glProvokingVertexANGLEFn(GLenum provokeMode) override {}
 void glPushDebugGroupFn(GLenum source,
                         GLuint id,
                         GLsizei length,

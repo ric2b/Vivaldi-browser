@@ -9,19 +9,18 @@
 
 #include <stddef.h>
 
-#include "base/base_paths.h"
 #include "base/base_switches.h"
-#include "base/containers/contains.h"
-#include "base/debug/alias.h"
-#include "base/debug/stack_trace.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/path_service.h"
 #include "base/pickle.h"
 #include "base/rand_util.h"
 #include "base/strings/string_piece.h"
@@ -40,9 +39,82 @@ namespace {
 // have more control over initialization timing. Leaky.
 FeatureList* g_feature_list_instance = nullptr;
 
-// Tracks whether the FeatureList instance was initialized via an accessor, and
-// which Feature that accessor was for, if so.
-const Feature* g_initialized_from_accessor = nullptr;
+// Tracks access to Feature state before FeatureList registration.
+class EarlyFeatureAccessTracker {
+ public:
+  static EarlyFeatureAccessTracker* GetInstance() {
+    static NoDestructor<EarlyFeatureAccessTracker> instance;
+    return instance.get();
+  }
+
+  // Invoked when `feature` is accessed before FeatureList registration.
+  void AccessedFeature(const Feature& feature) {
+    AutoLock lock(lock_);
+    if (fail_instantly_)
+      Fail(&feature);
+    else if (!feature_)
+      feature_ = &feature;
+  }
+
+  // Asserts that no feature was accessed before FeatureList registration.
+  void AssertNoAccess() {
+    AutoLock lock(lock_);
+    if (feature_)
+      Fail(feature_);
+  }
+
+  // Makes calls to AccessedFeature() fail instantly.
+  void FailOnFeatureAccessWithoutFeatureList() {
+    AutoLock lock(lock_);
+    if (feature_)
+      Fail(feature_);
+    fail_instantly_ = true;
+  }
+
+  // Resets the state of this tracker.
+  void Reset() {
+    AutoLock lock(lock_);
+    feature_ = nullptr;
+    fail_instantly_ = false;
+  }
+
+ private:
+  void Fail(const Feature* feature) {
+    // TODO(crbug.com/1358639): Enable this check on all platforms.
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_NACL)
+    // Create a crash key with the name of the feature accessed too early, to
+    // facilitate crash triage.
+    SCOPED_CRASH_KEY_STRING256("FeatureList", "feature-accessed-too-early",
+                               feature->name);
+#endif  // !BUILDFLAG(IS_NACL)
+    // Fail if DCHECKs are enabled.
+    DCHECK(!feature) << "Accessed feature " << feature->name
+                     << " before FeatureList registration.";
+    // TODO(crbug.com/1383852): When we believe that all early accesses have
+    // been fixed, remove this base::debug::DumpWithoutCrashing() and change the
+    // above DCHECK to a CHECK.
+
+    // The following line is commented to reduce the crash volume while a fix
+    // for crbug.com/1392145 is prepared.
+    // base::debug::DumpWithoutCrashing();
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID) &&
+        // !BUILDFLAG(IS_CHROMEOS)
+  }
+
+  friend class NoDestructor<EarlyFeatureAccessTracker>;
+
+  EarlyFeatureAccessTracker() = default;
+  ~EarlyFeatureAccessTracker() = default;
+
+  Lock lock_;
+
+  // First feature to be accessed before FeatureList registration.
+  raw_ptr<const Feature> feature_ GUARDED_BY(lock_) = nullptr;
+
+  // Whether AccessedFeature() should fail instantly.
+  bool fail_instantly_ GUARDED_BY(lock_) = false;
+};
 
 // Controls whether a feature's override state will be cached in
 // `base::Feature::cached_value`. This field and the associated `base::Feature`
@@ -56,10 +128,6 @@ BASE_FEATURE(kCacheFeatureOverrideState,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if DCHECK_IS_ON()
-// Tracks whether the use of base::Feature is allowed for this module.
-// See ForbidUseForCurrentModule().
-bool g_use_allowed = true;
-
 const char* g_reason_overrides_disallowed = nullptr;
 
 void DCheckOverridesAllowed() {
@@ -108,16 +176,6 @@ struct FeatureEntry {
     return true;
   }
 };
-
-// Some characters are not allowed to appear in feature names or the associated
-// field trial names, as they are used as special characters for command-line
-// serialization. This function checks that the strings are ASCII (since they
-// are used in command-line API functions that require ASCII) and whether there
-// are any reserved characters present, returning true if the string is valid.
-// Only called in DCHECKs.
-bool IsValidFeatureOrFieldTrialName(StringPiece name) {
-  return IsStringASCII(name) && name.find_first_of(",<*") == std::string::npos;
-}
 
 // Splits |text| into two parts by the |separator| where the first part will be
 // returned updated in |first| and the second part will be returned as |second|.
@@ -393,23 +451,22 @@ void FeatureList::GetCommandLineFeatureOverrides(
 
 // static
 bool FeatureList::IsEnabled(const Feature& feature) {
-#if DCHECK_IS_ON()
-  CHECK(g_use_allowed) << "base::Feature not permitted for this module.";
-#endif
   if (!g_feature_list_instance) {
-    g_initialized_from_accessor = &feature;
+    EarlyFeatureAccessTracker::GetInstance()->AccessedFeature(feature);
     return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
   }
   return g_feature_list_instance->IsFeatureEnabled(feature);
 }
 
 // static
+bool FeatureList::IsValidFeatureOrFieldTrialName(StringPiece name) {
+  return IsStringASCII(name) && name.find_first_of(",<*") == std::string::npos;
+}
+
+// static
 absl::optional<bool> FeatureList::GetStateIfOverridden(const Feature& feature) {
-#if DCHECK_IS_ON()
-  CHECK(g_use_allowed) << "base::Feature not permitted for this module.";
-#endif
   if (!g_feature_list_instance) {
-    g_initialized_from_accessor = &feature;
+    EarlyFeatureAccessTracker::GetInstance()->AccessedFeature(feature);
     // If there is no feature list, there can be no overrides.
     return absl::nullopt;
   }
@@ -418,12 +475,8 @@ absl::optional<bool> FeatureList::GetStateIfOverridden(const Feature& feature) {
 
 // static
 FieldTrial* FeatureList::GetFieldTrial(const Feature& feature) {
-#if DCHECK_IS_ON()
-  // See documentation for ForbidUseForCurrentModule.
-  CHECK(g_use_allowed) << "base::Feature not permitted for this module.";
-#endif
   if (!g_feature_list_instance) {
-    g_initialized_from_accessor = &feature;
+    EarlyFeatureAccessTracker::GetInstance()->AccessedFeature(feature);
     return nullptr;
   }
   return g_feature_list_instance->GetAssociatedFieldTrial(feature);
@@ -497,10 +550,7 @@ bool FeatureList::InitializeInstance(
   // If the singleton was previously initialized from within an accessor, we
   // want to prevent callers from reinitializing the singleton and masking the
   // accessor call(s) which likely returned incorrect information.
-  if (g_initialized_from_accessor) {
-    DEBUG_ALIAS_FOR_CSTR(accessor_name, g_initialized_from_accessor->name, 128);
-    CHECK(!g_initialized_from_accessor);
-  }
+  EarlyFeatureAccessTracker::GetInstance()->AssertNoAccess();
   bool instance_existed_before = false;
   if (g_feature_list_instance) {
     if (g_feature_list_instance->initialized_from_command_line_)
@@ -531,10 +581,13 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
   // Note: Intentional leak of global singleton.
   g_feature_list_instance = instance.release();
 
+  EarlyFeatureAccessTracker::GetInstance()->AssertNoAccess();
+
 #if !BUILDFLAG(IS_NACL)
   // Configured first because it takes precedence over the getrandom() trial.
   internal::ConfigureBoringSSLBackedRandBytesFieldTrial();
 #endif
+
 #if BUILDFLAG(IS_ANDROID)
   internal::ConfigureRandBytesFieldTrial();
 #endif
@@ -566,7 +619,7 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
 std::unique_ptr<FeatureList> FeatureList::ClearInstanceForTesting() {
   FeatureList* old_instance = g_feature_list_instance;
   g_feature_list_instance = nullptr;
-  g_initialized_from_accessor = nullptr;
+  EarlyFeatureAccessTracker::GetInstance()->Reset();
   return WrapUnique(old_instance);
 }
 
@@ -579,12 +632,9 @@ void FeatureList::RestoreInstanceForTesting(
 }
 
 // static
-void FeatureList::ForbidUseForCurrentModule() {
-#if DCHECK_IS_ON()
-  // Verify there hasn't been any use prior to being called.
-  DCHECK(!g_initialized_from_accessor);
-  g_use_allowed = false;
-#endif  // DCHECK_IS_ON()
+void FeatureList::FailOnFeatureAccessWithoutFeatureList() {
+  EarlyFeatureAccessTracker::GetInstance()
+      ->FailOnFeatureAccessWithoutFeatureList();
 }
 
 void FeatureList::SetCachingContextForTesting(uint16_t caching_context) {
@@ -824,7 +874,7 @@ void FeatureList::GetFeatureOverridesImpl(std::string* enable_overrides,
       target_list->push_back('*');
     target_list->append(entry.first);
     if (entry.second.field_trial) {
-      auto* const field_trial = entry.second.field_trial;
+      auto* const field_trial = entry.second.field_trial.get();
       target_list->push_back('<');
       target_list->append(field_trial->trial_name());
       if (include_group_name) {

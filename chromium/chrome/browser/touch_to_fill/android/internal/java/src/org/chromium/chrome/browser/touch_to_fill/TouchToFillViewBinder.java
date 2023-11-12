@@ -35,7 +35,6 @@ import android.widget.TextView;
 
 import androidx.appcompat.content.res.AppCompatResources;
 
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.PasswordManagerResourceProviderFactory;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FaviconOrFallback;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
@@ -171,6 +170,11 @@ class TouchToFillViewBinder {
             TextView passwordText = view.findViewById(R.id.password);
             passwordText.setText(credential.getPassword());
             passwordText.setTransformationMethod(new PasswordTransformationMethod());
+
+            String contentDescription = view.getContext().getString(
+                    R.string.touch_to_fill_password_credential_accessibility_description,
+                    credential.getFormattedUsername());
+            view.setContentDescription(contentDescription);
         } else if (propertyKey == SHOW_SUBMIT_BUTTON) {
             // Whether Touch To Fill should auto-submit a form doesn't affect the credentials list.
         } else {
@@ -202,6 +206,10 @@ class TouchToFillViewBinder {
             usernameText.setText(credential.getUsername());
             TextView descriptionText = view.findViewById(R.id.webauthn_credential_context);
             descriptionText.setText(R.string.touch_to_fill_sheet_webauthn_credential_context);
+            String contentDescription = view.getContext().getString(
+                    R.string.touch_to_fill_passkey_credential_accessibility_description,
+                    credential.getUsername());
+            view.setContentDescription(contentDescription);
         } else if (propertyKey == SHOW_WEBAUTHN_SUBMIT_BUTTON) {
             // Ignore.
         } else {
@@ -228,22 +236,14 @@ class TouchToFillViewBinder {
             });
         } else if (propertyKey == SHOW_SUBMIT_BUTTON) {
             TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)) {
-                buttonTitleText.setText(view.getContext().getString(model.get(SHOW_SUBMIT_BUTTON)
-                                ? R.string.touch_to_fill_signin
-                                : R.string.touch_to_fill_continue));
-            } else {
-                buttonTitleText.setText(R.string.touch_to_fill_continue);
-            }
+            buttonTitleText.setText(view.getContext().getString(model.get(SHOW_SUBMIT_BUTTON)
+                            ? R.string.touch_to_fill_signin
+                            : R.string.touch_to_fill_continue));
         } else if (propertyKey == SHOW_WEBAUTHN_SUBMIT_BUTTON) {
             TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)) {
-                buttonTitleText.setText(view.getContext().getString(
-                        model.get(SHOW_WEBAUTHN_SUBMIT_BUTTON) ? R.string.touch_to_fill_signin
-                                                               : R.string.touch_to_fill_continue));
-            } else {
-                buttonTitleText.setText(R.string.touch_to_fill_continue);
-            }
+            buttonTitleText.setText(view.getContext().getString(
+                    model.get(SHOW_WEBAUTHN_SUBMIT_BUTTON) ? R.string.touch_to_fill_signin
+                                                           : R.string.touch_to_fill_continue));
         } else if (propertyKey == FAVICON_OR_FALLBACK || propertyKey == FORMATTED_ORIGIN
                 || propertyKey == CREDENTIAL || propertyKey == WEBAUTHN_CREDENTIAL
                 || propertyKey == WEBAUTHN_FAVICON_OR_FALLBACK) {
@@ -261,7 +261,6 @@ class TouchToFillViewBinder {
      */
     private static String getSubtitle(PropertyModel model, Context context) {
         if (model.get(SHOW_SUBMIT_SUBTITLE)) {
-            assert ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION);
             return String.format(
                     context.getString(model.get(ORIGIN_SECURE)
                                     ? R.string.touch_to_fill_sheet_subtitle_submission

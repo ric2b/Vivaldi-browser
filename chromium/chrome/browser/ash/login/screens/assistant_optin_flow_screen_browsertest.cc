@@ -24,9 +24,9 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/assistant_optin_flow_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/assistant_optin_flow_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_settings.h"
@@ -737,6 +737,47 @@ IN_PROC_BROWSER_TEST_F(AssistantOptInFlowTest, SpeakerIdEnrollment) {
   EXPECT_EQ(assistant::prefs::ConsentStatus::kActivityControlAccepted,
             prefs->GetInteger(assistant::prefs::kAssistantConsentStatus));
   EXPECT_TRUE(prefs->GetBoolean(assistant::prefs::kAssistantHotwordEnabled));
+  EXPECT_TRUE(prefs->GetBoolean(assistant::prefs::kAssistantContextEnabled));
+  EXPECT_EQ(screen_result_.value(), AssistantOptInFlowScreen::Result::NEXT);
+  histogram_tester_.ExpectTotalCount(kAssistantOptInScreenExitReason, 1);
+  histogram_tester_.ExpectTotalCount(kAssistantOptInScreenStepCompletionTime,
+                                     1);
+}
+
+IN_PROC_BROWSER_TEST_F(AssistantOptInFlowTest,
+                       FeatureDisabledDuringSpeakerIdEnrollment) {
+  auto force_lib_assistant_enabled =
+      AssistantOptInFlowScreen::ForceLibAssistantEnabledForTesting(true);
+  assistant_settings_->set_consent_ui_flags(
+      ScopedAssistantSettings::CONSENT_UI_FLAG_SKIP_ACTIVITY_CONTROL);
+  assistant_settings_->set_speaker_id_enrollment_mode(
+      ScopedAssistantSettings::SpeakerIdEnrollmentMode::STEP_BY_STEP);
+
+  SetUpAssistantScreensForTest();
+  AssistantState::Get()->NotifyStatusChanged(assistant::AssistantStatus::READY);
+
+  ShowAssistantOptInFlowScreen();
+
+  OobeScreenWaiter screen_waiter(AssistantOptInFlowScreenView::kScreenId);
+  screen_waiter.Wait();
+
+  test::OobeJS().CreateVisibilityWaiter(true, kAssistantRelatedInfo)->Wait();
+  TapWhenEnabled(kRelatedInfoNextButton);
+
+  PrefService* const prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  prefs->SetBoolean(assistant::prefs::kAssistantEnabled, false);
+
+  test::OobeJS().CreateVisibilityWaiter(true, kAssistantVoiceMatch)->Wait();
+  TapWhenEnabled(kVoiceMatchAgreeButton);
+
+  EXPECT_FALSE(assistant_settings_->IsSpeakerIdEnrollmentActive());
+
+  WaitForScreenExit();
+
+  ExpectCollectedOptIns({});
+  EXPECT_EQ(assistant::prefs::ConsentStatus::kActivityControlAccepted,
+            prefs->GetInteger(assistant::prefs::kAssistantConsentStatus));
+  EXPECT_FALSE(prefs->GetBoolean(assistant::prefs::kAssistantHotwordEnabled));
   EXPECT_TRUE(prefs->GetBoolean(assistant::prefs::kAssistantContextEnabled));
   EXPECT_EQ(screen_result_.value(), AssistantOptInFlowScreen::Result::NEXT);
   histogram_tester_.ExpectTotalCount(kAssistantOptInScreenExitReason, 1);

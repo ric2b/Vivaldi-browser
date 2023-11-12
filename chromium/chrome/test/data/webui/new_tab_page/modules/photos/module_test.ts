@@ -7,21 +7,20 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import {DisableModuleEvent, DismissModuleEvent, photosDescriptor, PhotosModuleElement, PhotosProxy} from 'chrome://new-tab-page/lazy_load.js';
 import {$$, DomIf} from 'chrome://new-tab-page/new_tab_page.js';
 import {PhotosHandlerRemote} from 'chrome://new-tab-page/photos.mojom-webui.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
-import {fakeMetricsPrivate, MetricsTracker} from '../../metrics_test_support.js';
+import {fakeMetricsPrivate, MetricsTracker} from '../../../metrics_test_support.js';
 import {installMock} from '../../test_support.js';
 
 suite('NewTabPageModulesPhotosModuleTest', () => {
-  let handler: TestBrowserProxy;
+  let handler: TestBrowserProxy<PhotosHandlerRemote>;
   let metrics: MetricsTracker;
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     handler = installMock(PhotosHandlerRemote, PhotosProxy.setHandler);
     metrics = fakeMetricsPrivate();
   });

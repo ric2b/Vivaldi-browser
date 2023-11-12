@@ -123,7 +123,8 @@ RENDER_TEST_MODEL_SDK_CONFIGS = {
 }
 
 _BATCH_SUFFIX = '_batch'
-_TEST_BATCH_MAX_GROUP_SIZE = 200
+# If the batch is too big it starts to fail for command line length reasons.
+_LOCAL_TEST_BATCH_MAX_GROUP_SIZE = 200
 
 
 @contextlib.contextmanager
@@ -386,6 +387,17 @@ class LocalDeviceInstrumentationTestRun(
                              self._test_instance.fake_modules, permissions,
                              self._test_instance.additional_locales))
 
+      # Execute any custom setup shell commands
+      if self._test_instance.run_setup_commands:
+
+        @trace_event.traced
+        def run_setup_commands(dev):
+          for cmd in self._test_instance.run_setup_commands:
+            logging.info('Running custom setup shell command: %s', cmd)
+            dev.RunShellCommand(cmd, shell=True, check_return=True)
+
+        steps.append(run_setup_commands)
+
       @trace_event.traced
       def set_debug_app(dev):
         # Set debug app in order to enable reading command line flags on user
@@ -541,6 +553,11 @@ class LocalDeviceInstrumentationTestRun(
       # Remove package-specific configuration
       dev.RunShellCommand(['am', 'clear-debug-app'], check_return=True)
 
+      # Execute any custom teardown shell commands
+      for cmd in self._test_instance.run_teardown_commands:
+        logging.info('Running custom teardown shell command: %s', cmd)
+        dev.RunShellCommand(cmd, shell=True, check_return=True)
+
       valgrind_tools.SetChromeTimeoutScale(dev, None)
 
       # Restore any shared preference files that we stored during setup.
@@ -594,7 +611,16 @@ class LocalDeviceInstrumentationTestRun(
           device, cmdline_file)
 
   #override
-  def _CreateShards(self, tests):
+  def _CreateShardsForDevices(self, tests):
+    """Create shards of tests to run on devices.
+
+    Args:
+      tests: List containing tests or test batches.
+
+    Returns:
+      List of tests or batches.
+    """
+    # Each test or test batch will be a single shard.
     return tests
 
   #override
@@ -647,9 +673,7 @@ class LocalDeviceInstrumentationTestRun(
             batch_name += '|cmd_line_remove:' + ','.join(
                 sorted(annotations['CommandLineFlags$Remove']['value']))
 
-        if not batch_name in batched_tests:
-          batched_tests[batch_name] = []
-        batched_tests[batch_name].append(test)
+        batched_tests.setdefault(batch_name, []).append(test)
       else:
         other_tests.append(test)
 
@@ -662,13 +686,26 @@ class LocalDeviceInstrumentationTestRun(
         return tuple(dict2list(v) for v in d)
       return d
 
+    test_count = sum(
+        [len(test) - 1 for test in tests if self._CountTestsIndividually(test)])
+    test_count += len(tests)
+    if self._test_instance.total_external_shards > 1:
+      # Calculate suitable test batch max group size based on average partition
+      # size. The batch size should be below partition size to balance between
+      # shards. Choose to divide by 3 as it works fine with most of test suite
+      # without increasing too much setup/teardown time for batch tests.
+      test_batch_max_group_size = \
+        max(1, test_count // self._test_instance.total_external_shards // 3)
+    else:
+      test_batch_max_group_size = _LOCAL_TEST_BATCH_MAX_GROUP_SIZE
+
     all_tests = []
     for _, btests in list(batched_tests.items()):
       # Ensure a consistent ordering across external shards.
       btests.sort(key=dict2list)
       all_tests.extend([
-          btests[i:i + _TEST_BATCH_MAX_GROUP_SIZE]
-          for i in range(0, len(btests), _TEST_BATCH_MAX_GROUP_SIZE)
+          btests[i:i + test_batch_max_group_size]
+          for i in range(0, len(btests), test_batch_max_group_size)
       ])
     all_tests.extend(other_tests)
     # Sort all tests by hash.
@@ -993,7 +1030,7 @@ class LocalDeviceInstrumentationTestRun(
 
     # Handle failures by:
     #   - optionally taking a screenshot
-    #   - logging the raw output at INFO level
+    #   - logging the raw output at ERROR level
     #   - clearing the application state while persisting permissions
     if any(r.GetType() not in (base_test_result.ResultType.PASS,
                                base_test_result.ResultType.SKIP)
@@ -1001,9 +1038,9 @@ class LocalDeviceInstrumentationTestRun(
       self._SaveScreenshot(device, screenshot_device_file, test_display_name,
                            results, 'post_test_screenshot')
 
-      logging.info('detected failure in %s. raw output:', test_display_name)
+      logging.error('detected failure in %s. raw output:', test_display_name)
       for l in output:
-        logging.info('  %s', l)
+        logging.error('  %s', l)
       if not self._env.skip_clear_data:
         if self._test_instance.package_info:
           permissions = (self._test_instance.apk_under_test.GetPermissions()
@@ -1461,7 +1498,13 @@ class LocalDeviceInstrumentationTestRun(
     return True
 
   #override
-  def _ShouldShard(self):
+  def _ShouldShardTestsForDevices(self):
+    """Shard tests across several devices.
+
+    Returns:
+      True if tests should be sharded across several devices,
+      False otherwise.
+    """
     return True
 
   @classmethod

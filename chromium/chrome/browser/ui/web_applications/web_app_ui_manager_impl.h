@@ -75,6 +75,12 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
       content::WebContents* web_contents,
       web_app::AppIdentityDialogCallback callback) override;
 
+  base::Value LaunchWebApp(apps::AppLaunchParams params,
+                           LaunchWebAppWindowSetting launch_setting,
+                           Profile& profile,
+                           LaunchWebAppCallback callback,
+                           AppLock& lock) override;
+
   // BrowserListObserver:
   void OnBrowserAdded(Browser* browser) override;
   void OnBrowserRemoved(Browser* browser) override;
@@ -111,7 +117,8 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
   const raw_ptr<Profile> profile_;
 
   raw_ptr<WebAppSyncBridge> sync_bridge_ = nullptr;
-  raw_ptr<OsIntegrationManager> os_integration_manager_ = nullptr;
+  raw_ptr<OsIntegrationManager, DanglingUntriaged> os_integration_manager_ =
+      nullptr;
 
   std::map<AppId, std::vector<base::OnceClosure>> windows_closed_requests_map_;
   std::map<AppId, size_t> num_windows_for_apps_map_;

@@ -12,12 +12,12 @@ import {FeedbackAppPreSubmitAction, FeedbackContext} from 'chrome://os-feedback/
 import {setFeedbackServiceProviderForTesting} from 'chrome://os-feedback/mojo_interface_provider.js';
 import {ShareDataPageElement} from 'chrome://os-feedback/share_data_page.js';
 import {mojoString16ToString, stringToMojoString16} from 'chrome://resources/ash/common/mojo_utils.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
-import {eventToPromise, isVisible} from '../../test_util.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {eventToPromise, isVisible} from '../test_util.js';
 
 /** @type {string} */
 const fakeImageUrl = 'chrome://os_feedback/app_icon_48.png';
@@ -131,9 +131,8 @@ export function shareDataPageTestSuite() {
     assertTrue(page.i18nExists('userEmailLabel'));
     assertEquals('Email', getElementContent('#userEmailLabel'));
 
-    // Verify the role and aria label of the user email dropdown.
+    // Verify the aria label of the user email dropdown.
     const userEmailDropDown = getElement('#userEmailDropDown');
-    assertEquals('listbox', userEmailDropDown.role);
     assertTrue(page.i18nExists('userEmailAriaLabel'));
     assertEquals('Select email', userEmailDropDown.ariaLabel);
 
@@ -216,9 +215,15 @@ export function shareDataPageTestSuite() {
     const userEmailElement = getElement('#userEmail');
     assertTrue(!!userEmailElement);
     assertTrue(isVisible(userEmailElement));
+
+    // The user user consent checkbox should be visible.
+    const consentCheckbox = getElement('#userConsent');
+    assertTrue(!!consentCheckbox);
+    assertTrue(isVisible(consentCheckbox));
   });
 
-  // Test that the email section is hidden when there is no email.
+  // Test that the email section and consent checkbox is hidden
+  // when there is no email.
   test('emailSectionHiddenWithoutEmail', async () => {
     await initializePage();
     page.feedbackContext = fakeEmptyFeedbackContext;
@@ -227,6 +232,11 @@ export function shareDataPageTestSuite() {
     const userEmailElement = getElement('#userEmail');
     assertTrue(!!userEmailElement);
     assertFalse(isVisible(userEmailElement));
+
+    // The user consent checkbox should be hidden.
+    const consentCheckbox = getElement('#userConsent');
+    assertTrue(!!consentCheckbox);
+    assertFalse(isVisible(consentCheckbox));
   });
 
   test('pageUrlPopulated', async () => {

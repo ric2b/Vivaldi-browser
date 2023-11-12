@@ -8,6 +8,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/check_op.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "chrome/android/chrome_jni_headers/TrustedVaultClient_jni.h"
 #include "components/sync/driver/sync_service_utils.h"
@@ -160,7 +161,8 @@ void TrustedVaultClientAndroid::FetchKeys(
 
   // Trigger the fetching keys from the implementation in Java, which will
   // eventually call FetchKeysCompleted().
-  Java_TrustedVaultClient_fetchKeys(env, request_id, java_account_info);
+  Java_TrustedVaultClient_fetchKeys(env, reinterpret_cast<intptr_t>(this),
+                                    request_id, java_account_info);
 }
 
 void TrustedVaultClientAndroid::StoreKeys(
@@ -188,8 +190,8 @@ void TrustedVaultClientAndroid::MarkLocalKeysAsStale(
 
   // The Java implementation will eventually call
   // MarkLocalKeysAsStaleCompleted().
-  Java_TrustedVaultClient_markLocalKeysAsStale(env, request_id,
-                                               java_account_info);
+  Java_TrustedVaultClient_markLocalKeysAsStale(
+      env, reinterpret_cast<intptr_t>(this), request_id, java_account_info);
 }
 
 void TrustedVaultClientAndroid::GetIsRecoverabilityDegraded(
@@ -209,8 +211,8 @@ void TrustedVaultClientAndroid::GetIsRecoverabilityDegraded(
 
   // The Java implementation will eventually call
   // MarkLocalKeysAsStaleCompleted().
-  Java_TrustedVaultClient_getIsRecoverabilityDegraded(env, request_id,
-                                                      java_account_info);
+  Java_TrustedVaultClient_getIsRecoverabilityDegraded(
+      env, reinterpret_cast<intptr_t>(this), request_id, java_account_info);
 }
 
 void TrustedVaultClientAndroid::AddTrustedRecoveryMethod(
@@ -223,6 +225,11 @@ void TrustedVaultClientAndroid::AddTrustedRecoveryMethod(
 
   const CoreAccountInfo account_info =
       gaia_account_info_by_gaia_id_cb_.Run(gaia_id);
+
+  base::UmaHistogramBoolean(
+      "Sync.TrustedVaultJavascriptAddRecoveryMethodUserKnown",
+      account_info != CoreAccountInfo());
+
   if (account_info == CoreAccountInfo()) {
     std::move(cb).Run();
     return;
@@ -243,7 +250,8 @@ void TrustedVaultClientAndroid::AddTrustedRecoveryMethod(
   // The Java implementation will eventually call
   // AddTrustedRecoveryMethodCompleted().
   Java_TrustedVaultClient_addTrustedRecoveryMethod(
-      env, request_id, java_account_info, java_public_key, method_type_hint);
+      env, reinterpret_cast<intptr_t>(this), request_id, java_account_info,
+      java_public_key, method_type_hint);
 }
 
 void TrustedVaultClientAndroid::ClearDataForAccount(

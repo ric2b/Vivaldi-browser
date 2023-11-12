@@ -153,6 +153,9 @@ class CORE_EXPORT NGPhysicalFragment
       return layout_object->IsPositioned();
     return false;
   }
+  bool IsInitialLetterBox() const {
+    return IsCSSBox() && layout_object_->IsInitialLetterBox();
+  }
   // Return true if this is the legend child of a fieldset that gets special
   // treatment (i.e. placed over the block-start border).
   bool IsRenderedLegend() const {
@@ -341,6 +344,21 @@ class CORE_EXPORT NGPhysicalFragment
     return IsCSSBox() && layout_object_->HasNonVisibleOverflow();
   }
 
+  OverflowClipAxes GetOverflowClipAxes() const {
+    if (!IsCSSBox()) {
+      return kNoOverflowClip;
+    }
+    return layout_object_->GetOverflowClipAxes();
+  }
+
+  bool HasNonVisibleBlockOverflow() const {
+    OverflowClipAxes clip_axes = GetOverflowClipAxes();
+    if (Style().IsHorizontalWritingMode()) {
+      return clip_axes & kOverflowClipY;
+    }
+    return clip_axes & kOverflowClipX;
+  }
+
   // True if this is considered a scroll-container. See
   // ComputedStyle::IsScrollContainer() for details.
   bool IsScrollContainer() const {
@@ -394,6 +412,11 @@ class CORE_EXPORT NGPhysicalFragment
   // Return true if this fragment is monolithic, as far as block fragmentation
   // is concerned.
   bool IsMonolithic() const;
+
+  // Returns true this fragment is used as the implicit anchor for another
+  // element in CSS anchor positioning.
+  // Should only be called during layout as it inspects DOM.
+  bool IsImplicitAnchor() const;
 
   // GetLayoutObject should only be used when necessary for compatibility
   // with LegacyLayout.
@@ -641,6 +664,9 @@ class CORE_EXPORT NGPhysicalFragment
 
   bool HasAnchorQuery() const {
     return oof_data_ && !oof_data_->anchor_query.IsEmpty();
+  }
+  bool HasAnchorQueryToPropagate() const {
+    return HasAnchorQuery() || Style().AnchorName() || IsImplicitAnchor();
   }
   const NGPhysicalAnchorQuery* AnchorQuery() const {
     if (!HasAnchorQuery())

@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Znova načítať obrázok</translation>
 <translation id="1924750141060565109">Sahara (Krajina 15)</translation>
 <translation id="19598411548897379">Všeobecný</translation>
+<translation id="1973351931613083086">automatické prehrávanie</translation>
 <translation id="1985669426322966465">Aktualizácia programu</translation>
 <translation id="2079036669923635404">Kliknutím sem aktualizujete prehliadač Vivaldi na verziu <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Pri sťahovaní aktualizácie došlo k chybe. Skontrolujte si prosím svoje internetové pripojenie a skúste to znova neskôr.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Kôš</translation>
 <translation id="292258461174562431">Nezbedník (Príšerka 4)</translation>
 <translation id="2923448633003185837">Prilepiť a prejsť</translation>
+<translation id="2953943267837858202">Nie je povolené automaticky prehrávať video</translation>
 <translation id="2977472760057091832">Otvoriť odkaz v novom súkromnom okne</translation>
 <translation id="2989805286512600854">Otvoriť v novom liste</translation>
 <translation id="3027988479108856431">Ľutujeme, nastavenia prehliadača Yandex nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Yandex. Potom kliknite na tlačidlo Pokračovať.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Nová záložka</translation>
 <translation id="3255747772218936245">Nainštalovať aktualizáciu</translation>
 <translation id="3259769196742189631">Skontrolovať správnosť HTML stránky</translation>
+<translation id="3291915639428159043">Automatické prehrávanie zablokované</translation>
 <translation id="3302905971452834934">Darebák (Príšerka 1)</translation>
 <translation id="3334610655141903168">(žiadny názov)</translation>
 <translation id="3372505110412186107">Verzia <ph name="VERSION" /> prehliadača Vivaldi je aktuálne najnovšia dostupná verzia.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Otvoriť odkaz v novom okne</translation>
 <translation id="3588820906588687999">Otvoriť obrázok v novom liste</translation>
 <translation id="3601066750251199488">Mimozemšťan (Príšerka 3)</translation>
+<translation id="3620979700683094848">Webové stránky môžu automaticky prehrávať videá</translation>
 <translation id="3680031241659195730">Je dostupná nová verzia prehliadača Vivaldi!</translation>
 <translation id="3708982624815781692">Sťahovanie bolo prerušené.</translation>
 <translation id="3732157130969736834">Pridať odkaz do záložiek</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Nabudúce nezobrazovať</translation>
 <translation id="4074744496918018786">Otvoriť obrázok v novom súkromnom okne</translation>
+<translation id="410351446219883937">Automatické prehrávanie</translation>
 <translation id="4324492550286218827">Mestečko (Krajina 2)</translation>
 <translation id="4406101500523955324">Otvoriť v novom súkromnom okne</translation>
 <translation id="4420816922321010053">Naozaj chcete ukončiť prehliadač Vivaldi?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Vystrihnúť</translation>
 <translation id="7727481996062361502">Overovanie aktualizácie...</translation>
 <translation id="7793738202466490491">Pridať ako udalosť kalendára</translation>
+<translation id="7834693436815575883">Automatické prehrávanie povolené</translation>
 <translation id="7848222781052558334">Zlyhanie pri overení digitálneho podpisu stiahnutých súborov.</translation>
 <translation id="7865983598101744945">Potvrdenie k ukončeniu prehliadača</translation>
 <translation id="7957213167373139414">Môj kalendár</translation>
 <translation id="8027581147000338959">Otvoriť v novom okne</translation>
+<translation id="8044382196220116469">Nedovoliť, aby stránky automaticky prehrávali videá</translation>
 <translation id="8099620695029051217">Kopírovať adresu stránky</translation>
 <translation id="8197810018650377191">Pridať stránku do záložiek</translation>
 <translation id="8261506727792406068">Odstrániť</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Preskúmať portal-document</translation>
 <translation id="8768970203213061953">Americká púšť (Krajina 14)</translation>
 <translation id="8773635261052182196">Nebudete už naďalej vidieť tieto upozornenia. Môžete si ich znova zapnúť v nastaveniach Vivaldi.</translation>
+<translation id="8774017153185436870">Webové stránky môžu automaticky prehrávať videá</translation>
 <translation id="8813277370772331957">Pripomenúť neskôr</translation>
 <translation id="8894900864683381599">Pridať odkaz na webový panel</translation>
 <translation id="8912720443398351457">Naozaj chcete ukončiť prehliadač Vivaldi?</translation>
 <translation id="8947109330183116400">Vybrať HTML súbor záložiek</translation>
 <translation id="9017566390391482291">Vybrať profilový priečinok Vivaldi pre import</translation>
 <translation id="9048058608784130603">Čakajúca aktualizácia <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Povolené automatické prehrávanie videa</translation>
 <translation id="9065203028668620118">Upraviť</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Otvoriť obrázok ako <ph name="USER" /></translation>

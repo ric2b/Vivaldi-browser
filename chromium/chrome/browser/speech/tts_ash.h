@@ -6,14 +6,13 @@
 #define CHROME_BROWSER_SPEECH_TTS_ASH_H_
 
 #include <vector>
+
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/unguessable_token.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chromeos/crosapi/mojom/tts.mojom.h"
 #include "content/public/browser/tts_controller.h"
-#include "content/public/browser/tts_utterance.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -21,10 +20,9 @@
 class ProfileManager;
 
 namespace crosapi {
-
-// Implements tts interface to allow Lacros to call ash to handle TTS requests,
-// , manages remote TtsClient objects registered by Lacros, and caches the
-// voices from Lacros.
+// Implements tts interface to allow Lacros to call ash to handle TTS
+// requests, manages remote TtsClient objects registered by Lacros, and
+// caches the voices from Lacros.
 class TtsAsh : public mojom::Tts,
                public content::VoicesChangedDelegate,
                public ProfileManagerObserver {
@@ -42,9 +40,21 @@ class TtsAsh : public mojom::Tts,
   // Returns the browser context id for primary profile.
   base::UnguessableToken GetPrimaryProfileBrowserContextId() const;
 
-  // Returns the cached lacros voices in |out_voices| for |browser_context_id|.
+  // Returns the cached lacros voices in |out_voices| for
+  // |browser_context_id|.
   void GetCrosapiVoices(base::UnguessableToken browser_context_id,
                         std::vector<content::VoiceData>* out_voices);
+
+  // Requests to the associated Lacros speech engine to speak the given
+  // |utterance| with the given |voice|.
+  void SpeakWithLacrosVoice(content::TtsUtterance* utterance,
+                            const content::VoiceData& voice);
+
+  // Requests the associated Lacros speech engine to stop speaking the
+  // |utterance|.
+  void StopRemoteEngine(content::TtsUtterance* utterance);
+
+  void DeletePendingAshUtteranceClient(int utterance_id);
 
   // crosapi::mojom::Tts:
   void RegisterTtsClient(mojo::PendingRemote<mojom::TtsClient> client,
@@ -57,6 +67,7 @@ class TtsAsh : public mojom::Tts,
       mojo::PendingRemote<mojom::TtsUtteranceClient> utterance_client) override;
 
  private:
+  class TtsUtteranceClient;
   // content::VoicesChangedDelegate:
   void OnVoicesChanged() override;
 
@@ -82,10 +93,16 @@ class TtsAsh : public mojom::Tts,
 
   base::UnguessableToken primary_profile_browser_context_id_;
 
+  // Pending Ash Utterance clients (for the Ash uttenrances to be spoken by
+  // Lacros speech engine) by utterance id.
+  // Note: The size of |pending_ash_utterance_clients_| should not be greater
+  // that one, since Ash TtsController process the utterances one at a time in
+  // sequence and  will not send more than 1 utterance to Lacros to be spoken.
+  std::map<int, std::unique_ptr<TtsUtteranceClient>>
+      pending_ash_utterance_clients_;
+
   base::ScopedObservation<content::TtsController,
-                          content::VoicesChangedDelegate,
-                          &content::TtsController::AddVoicesChangedDelegate,
-                          &content::TtsController::RemoveVoicesChangedDelegate>
+                          content::VoicesChangedDelegate>
       voices_changed_observation_{this};
 
   base::ScopedObservation<ProfileManager, ProfileManagerObserver>

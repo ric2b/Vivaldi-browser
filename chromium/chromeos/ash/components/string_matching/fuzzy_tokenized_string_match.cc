@@ -25,10 +25,18 @@ namespace ash::string_matching {
 
 namespace {
 
+using Hits = FuzzyTokenizedStringMatch::Hits;
+
 constexpr double kPartialMatchPenaltyRate = 0.9;
 
 constexpr double kMinScore = 0.0;
 constexpr double kMaxScore = 1.0;
+
+// The maximum supported size for a prefix matching scoring boost.
+constexpr size_t kMaxBoostSize = 2;
+
+// The scale ratio for non exact matching results.
+constexpr double kNonExactMatchScaleRatio = 0.97;
 
 // Returns sorted tokens from a TokenizedString.
 std::vector<std::u16string> ProcessAndSort(const TokenizedString& text) {
@@ -38,6 +46,10 @@ std::vector<std::u16string> ProcessAndSort(const TokenizedString& text) {
   }
   std::sort(result.begin(), result.end());
   return result;
+}
+
+double ScaledRelevance(const double relevance) {
+  return 1.0 - std::pow(0.5, relevance);
 }
 
 }  // namespace
@@ -165,13 +177,11 @@ double FuzzyTokenizedStringMatch::WeightedRatio(const TokenizedString& query,
   const std::u16string query_normalized(base::JoinString(query.tokens(), u" "));
   const std::u16string text_normalized(base::JoinString(text.tokens(), u" "));
 
-  // TODO(crbug.com/1336160): Refactor the calculation flow in this method to
-  // make it easier to understand. For example, there is a long chain of
-  // std::max calls which is difficult to read. And it is confusing to have a
-  // conditional called |use_partial| but to also see |partial_scale| seemingly
-  // unconditionally applied.
-  double weighted_ratio =
-      SequenceMatcher(query_normalized, text_normalized).Ratio();
+  std::vector<double> weighted_ratios;
+  weighted_ratios.emplace_back(
+      SequenceMatcher(query_normalized, text_normalized)
+          .Ratio(/*use_text_length_agnosticism=*/true));
+
   const double length_ratio =
       static_cast<double>(
           std::max(query_normalized.size(), text_normalized.size())) /
@@ -179,7 +189,7 @@ double FuzzyTokenizedStringMatch::WeightedRatio(const TokenizedString& query,
 
   // Use partial if two strings are quite different in sizes.
   const bool use_partial = length_ratio >= 1.5;
-  double partial_scale = 1;
+  double length_ratio_scale = 1;
 
   if (use_partial) {
     // TODO(crbug.com/1336160): Consider scaling |partial_scale| smoothly with
@@ -187,42 +197,57 @@ double FuzzyTokenizedStringMatch::WeightedRatio(const TokenizedString& query,
     //
     // If one string is much much shorter than the other, set |partial_scale| to
     // be 0.6, otherwise set it to be 0.9.
-    partial_scale = length_ratio > 8 ? 0.6 : 0.9;
-    weighted_ratio = std::max(
-        weighted_ratio,
-        PartialRatio(query_normalized, text_normalized) * partial_scale);
+    length_ratio_scale = length_ratio > 8 ? 0.6 : 0.9;
+    weighted_ratios.emplace_back(
+        PartialRatio(query_normalized, text_normalized) * length_ratio_scale);
   }
-  weighted_ratio =
-      std::max(weighted_ratio, TokenSortRatio(query, text, use_partial) *
-                                   unbase_scale * partial_scale);
+  weighted_ratios.emplace_back(TokenSortRatio(query, text, use_partial) *
+                               unbase_scale * length_ratio_scale);
 
   // Do not use partial match for token set because the match between the
   // intersection string and query/text rewrites will always return an extremely
   // high value.
-  weighted_ratio =
-      std::max(weighted_ratio, TokenSetRatio(query, text, false /*partial*/
-                                             ) *
-                                   unbase_scale * partial_scale);
-  return weighted_ratio;
+  weighted_ratios.emplace_back(TokenSetRatio(query, text, false /*partial*/) *
+                               unbase_scale * length_ratio_scale);
+
+  // Return the maximum of all included weighted ratios
+  return *std::max_element(weighted_ratios.begin(), weighted_ratios.end());
 }
 
 double FuzzyTokenizedStringMatch::PrefixMatcher(const TokenizedString& query,
-                                                const TokenizedString& text,
-                                                bool use_acronym_matcher) {
+                                                const TokenizedString& text) {
   string_matching::PrefixMatcher match(query, text);
   match.Match();
-  double relevance = 0.0;
+  return ScaledRelevance(match.relevance());
+}
 
-  // TODO(crbug.com/1336160): Consider refactoring acronym matching to be
-  // separate from FuzzyTokenizedStringMatch.
-  if (use_acronym_matcher) {
-    AcronymMatcher acronym_match = AcronymMatcher(query, text);
-    relevance = std::max(match.relevance(), acronym_match.CalculateRelevance());
-  } else {
-    relevance = match.relevance();
-  }
+double FuzzyTokenizedStringMatch::AcronymMatcher(const TokenizedString& query,
+                                                 const TokenizedString& text) {
+  string_matching::AcronymMatcher match(query, text);
+  const double relevance = match.CalculateRelevance();
+  return ScaledRelevance(relevance);
+}
 
-  return 1.0 - std::pow(0.5, relevance);
+double FuzzyTokenizedStringMatch::PrefixMatcher(
+    const TokenizedString& query,
+    const TokenizedString& text,
+    std::vector<Hits>& hits_vector) {
+  string_matching::PrefixMatcher match(query, text);
+  match.Match();
+
+  hits_vector.emplace_back(match.hits());
+  return ScaledRelevance(match.relevance());
+}
+
+double FuzzyTokenizedStringMatch::AcronymMatcher(
+    const TokenizedString& query,
+    const TokenizedString& text,
+    std::vector<Hits>& hits_vector) {
+  string_matching::AcronymMatcher match(query, text);
+  const double relevance = match.CalculateRelevance();
+
+  hits_vector.emplace_back(match.hits());
+  return ScaledRelevance(relevance);
 }
 
 double FuzzyTokenizedStringMatch::Relevance(const TokenizedString& query_input,
@@ -251,40 +276,60 @@ double FuzzyTokenizedStringMatch::Relevance(const TokenizedString& query_input,
   if (query_size > 0 && query_size == text_size &&
       base::EqualsCaseInsensitiveASCII(query_text, text_text)) {
     hits_.emplace_back(0, query_size);
-    relevance_ = 1.0;
-    return true;
-  }
-
-  // Find |hits_| using SequenceMatcher on original query and text.
-  for (const auto& match :
-       SequenceMatcher(query_text, text_text).GetMatchingBlocks()) {
-    if (match.length > 0) {
-      hits_.emplace_back(match.pos_second_string,
-                         match.pos_second_string + match.length);
-    }
+    return 1.0;
   }
 
   // If the query is much longer than the text then it's often not a match.
   if (query_size >= text_size * 2) {
-    return false;
+    return 0.0;
   }
 
-  const double prefix_score = PrefixMatcher(query, text, use_acronym_matcher);
+  // The |relevances| stores the |relevance_scores| calculated from different
+  // string matching methods. The highest result among them will be returned.
+  std::vector<double> relevances;
+  // The |hits_vector| stores the |hits| calculated from different string
+  // matching methods. The final selected instance corresponds to the hits
+  // generated by the matching algorithm which yielded the highest relevance
+  // score. The final selected instance will be assigned to |hits_| then.
+  std::vector<Hits> hits_vector;
 
-  if (use_weighted_ratio) {
-    // If WeightedRatio is used, |relevance_| is the average of WeightedRatio
-    // and PrefixMatcher scores.
-    relevance_ = (WeightedRatio(query, text) + prefix_score) / 2;
-  } else {
-    // Use simple algorithm to calculate match ratio.
-    relevance_ = (SequenceMatcher(base::i18n::ToLower(query_text),
-                                  base::i18n::ToLower(text_text))
-                      .Ratio() +
-                  prefix_score) /
-                 2;
+  double prefix_score = PrefixMatcher(query, text, hits_vector);
+  // A scoring boost for short prefix matching queries.
+  if (query_size <= kMaxBoostSize && prefix_score > kMinScore) {
+    prefix_score = std::min(
+        1.0, prefix_score + 2.0 / (query_size * (query_size + text_size)));
+  }
+  relevances.emplace_back(prefix_score);
+
+  // Find hits using SequenceMatcher on original query and text.
+  Hits sequence_hits;
+  size_t match_size = 0;
+  for (const auto& match :
+       SequenceMatcher(query_text, text_text).GetMatchingBlocks()) {
+    if (match.length > 0) {
+      match_size += match.length;
+      sequence_hits.emplace_back(match.pos_second_string,
+                                 match.pos_second_string + match.length);
+    }
+  }
+  hits_vector.emplace_back(sequence_hits);
+
+  relevances.emplace_back(
+      use_weighted_ratio ? WeightedRatio(query, text)
+                         : SequenceMatcher(base::i18n::ToLower(query_text),
+                                           base::i18n::ToLower(text_text))
+                               .Ratio(/*use_text_length_agnosticism=*/true));
+  if (use_acronym_matcher) {
+    relevances.emplace_back(AcronymMatcher(query, text, hits_vector));
   }
 
-  return relevance_;
+  size_t best_match_pos =
+      std::max_element(relevances.begin(), relevances.end()) -
+      relevances.begin();
+  hits_ = hits_vector[best_match_pos];
+  return match_size == text_size
+             ? relevances[best_match_pos]
+             : relevances[best_match_pos] * kNonExactMatchScaleRatio;
 }
 
 }  // namespace ash::string_matching

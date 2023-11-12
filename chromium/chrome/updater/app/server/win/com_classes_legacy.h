@@ -17,15 +17,16 @@
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
+#include "base/types/expected.h"
 #include "base/win/win_util.h"
 #include "chrome/updater/app/server/win/updater_legacy_idl.h"
 #include "chrome/updater/policy/service.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/util.h"
+#include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/app_command_runner.h"
 #include "chrome/updater/win/setup/setup_util.h"
-#include "chrome/updater/win/win_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 // Definitions for COM updater classes provided for backward compatibility
@@ -255,7 +256,7 @@ class LegacyAppCommandWebImpl : public IDispatchImpl<IAppCommandWeb> {
   ~LegacyAppCommandWebImpl() override;
 
   base::Process process_;
-  AppCommandRunner app_command_runner_;
+  HResultOr<AppCommandRunner> app_command_runner_;
 
   friend class LegacyAppCommandWebImplTest;
 };

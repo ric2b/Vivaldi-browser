@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/policy_container_host.h"
 
 #include "base/lazy_instance.h"
+#include "base/ranges/algorithm.h"
 #include "content/browser/renderer_host/frame_navigation_entry.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/private_network_access_util.h"
@@ -45,14 +46,12 @@ bool operator==(const PolicyContainerPolicies& lhs,
   return lhs.referrer_policy == rhs.referrer_policy &&
          lhs.ip_address_space == rhs.ip_address_space &&
          lhs.is_web_secure_context == rhs.is_web_secure_context &&
-         std::equal(lhs.content_security_policies.begin(),
-                    lhs.content_security_policies.end(),
-                    rhs.content_security_policies.begin(),
-                    rhs.content_security_policies.end()) &&
+         base::ranges::equal(lhs.content_security_policies,
+                             rhs.content_security_policies) &&
          lhs.cross_origin_opener_policy == rhs.cross_origin_opener_policy &&
          lhs.cross_origin_embedder_policy == rhs.cross_origin_embedder_policy &&
          lhs.sandbox_flags == rhs.sandbox_flags &&
-         lhs.is_anonymous == rhs.is_anonymous &&
+         lhs.is_credentialless == rhs.is_credentialless &&
          lhs.can_navigate_top_without_user_gesture ==
              rhs.can_navigate_top_without_user_gesture;
 }
@@ -106,7 +105,7 @@ std::ostream& operator<<(std::ostream& out,
       << " }";
 
   out << ", sandbox_flags: " << policies.sandbox_flags;
-  out << ", is_anonymous: " << policies.is_anonymous;
+  out << ", is_credentialless: " << policies.is_credentialless;
   out << ", can_navigate_top_without_user_gesture: "
       << policies.can_navigate_top_without_user_gesture;
 
@@ -124,7 +123,7 @@ PolicyContainerPolicies::PolicyContainerPolicies(
     const network::CrossOriginOpenerPolicy& cross_origin_opener_policy,
     const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
     network::mojom::WebSandboxFlags sandbox_flags,
-    bool is_anonymous,
+    bool is_credentialless,
     bool can_navigate_top_without_user_gesture)
     : referrer_policy(referrer_policy),
       ip_address_space(ip_address_space),
@@ -133,7 +132,7 @@ PolicyContainerPolicies::PolicyContainerPolicies(
       cross_origin_opener_policy(cross_origin_opener_policy),
       cross_origin_embedder_policy(cross_origin_embedder_policy),
       sandbox_flags(sandbox_flags),
-      is_anonymous(is_anonymous),
+      is_credentialless(is_credentialless),
       can_navigate_top_without_user_gesture(
           can_navigate_top_without_user_gesture) {}
 
@@ -144,7 +143,7 @@ PolicyContainerPolicies::PolicyContainerPolicies(
       content_security_policies(
           mojo::Clone(policies.content_security_policies)),
       sandbox_flags(policies.sandbox_flags),
-      is_anonymous(policies.is_anonymous),
+      is_credentialless(policies.is_credentialless),
       can_navigate_top_without_user_gesture(
           policies.can_navigate_top_without_user_gesture) {
   cross_origin_embedder_policy.value = policies.cross_origin_embedder_policy;
@@ -162,7 +161,7 @@ PolicyContainerPolicies::PolicyContainerPolicies(
           response_head->parsed_headers->cross_origin_opener_policy,
           response_head->parsed_headers->cross_origin_embedder_policy,
           network::mojom::WebSandboxFlags::kNone,
-          /*is_anonymous=*/false,
+          /*is_credentialless=*/false,
           /*can_navigate_top_without_user_gesture=*/true) {
   for (auto& content_security_policy :
        response_head->parsed_headers->content_security_policy) {
@@ -182,7 +181,7 @@ PolicyContainerPolicies PolicyContainerPolicies::Clone() const {
   return PolicyContainerPolicies(
       referrer_policy, ip_address_space, is_web_secure_context,
       mojo::Clone(content_security_policies), cross_origin_opener_policy,
-      cross_origin_embedder_policy, sandbox_flags, is_anonymous,
+      cross_origin_embedder_policy, sandbox_flags, is_credentialless,
       can_navigate_top_without_user_gesture);
 }
 
@@ -202,7 +201,7 @@ blink::mojom::PolicyContainerPoliciesPtr
 PolicyContainerPolicies::ToMojoPolicyContainerPolicies() const {
   return blink::mojom::PolicyContainerPolicies::New(
       cross_origin_embedder_policy.value, referrer_policy,
-      mojo::Clone(content_security_policies), is_anonymous, sandbox_flags,
+      mojo::Clone(content_security_policies), is_credentialless, sandbox_flags,
       ip_address_space, can_navigate_top_without_user_gesture);
 }
 

@@ -10,6 +10,7 @@
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/url_formatter/url_fixer.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
@@ -18,10 +19,10 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_text_field_view.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/custom_views/vivaldi_text_field_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
@@ -63,13 +64,13 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
               BookmarkFolderViewControllerDelegate> {}
 
 // Textview for speed dial/bookmark name
-@property(nonatomic,weak) VivaldiBookmarkTextFieldView* nameTextView;
+@property(nonatomic,weak) VivaldiTextFieldView* nameTextView;
 // Textview for speed dial/bookmark URL
-@property(nonatomic,weak) VivaldiBookmarkTextFieldView* urlTextView;
+@property(nonatomic,weak) VivaldiTextFieldView* urlTextView;
 // Textview for speed dial/bookmark nickname
-@property(nonatomic,weak) VivaldiBookmarkTextFieldView* nickNameTextView;
+@property(nonatomic,weak) VivaldiTextFieldView* nickNameTextView;
 // Textview for speed dial/bookmark description
-@property(nonatomic,weak) VivaldiBookmarkTextFieldView* descriptionTextView;
+@property(nonatomic,weak) VivaldiTextFieldView* descriptionTextView;
 // A view that holds the parent folder details
 @property(nonatomic,weak) VivaldiBookmarkParentFolderView* parentFolderView;
 // View controller for folder selection.
@@ -115,22 +116,16 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 
 #pragma mark - INITIALIZER
 + (instancetype)initWithBrowser:(Browser*)browser
-                      bookmarks:(bookmarks::BookmarkModel*)bookmarks
                            item:(VivaldiSpeedDialItem*)item
                          parent:(VivaldiSpeedDialItem*)parent
                       isEditing:(BOOL)isEditing
                    allowsCancel:(BOOL)allowsCancel {
   DCHECK(browser);
-  DCHECK(bookmarks);
-  DCHECK(bookmarks->loaded());
   VivaldiBookmarkAddEditURLViewController* controller =
     [[VivaldiBookmarkAddEditURLViewController alloc] initWithBrowser:browser];
   controller.editingItem = item;
   controller.parentItem = parent;
-  controller.bookmarks = bookmarks;
-  if (bookmarks->loaded()) {
-    controller.editingExistingItem = isEditing;
-  }
+  controller.editingExistingItem = isEditing;
   controller.allowsCancel = allowsCancel;
 
   // Construct the folder item from the parent item
@@ -148,6 +143,8 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
     _browser = browser;
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    _bookmarks =
+      ios::BookmarkModelFactory::GetForBrowserState(_browserState);
   }
   return self;
 }
@@ -246,29 +243,29 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 
   NSString* namePlaceholderString =
     l10n_util::GetNSString(IDS_IOS_BOOKMARK_NAME);
-  VivaldiBookmarkTextFieldView* nameTextView =
-    [[VivaldiBookmarkTextFieldView alloc]
+  VivaldiTextFieldView* nameTextView =
+    [[VivaldiTextFieldView alloc]
       initWithPlaceholder:namePlaceholderString];
   _nameTextView = nameTextView;
 
   NSString* urlPlaceholderString = l10n_util::GetNSString(IDS_IOS_BOOKMARK_URL);
-  VivaldiBookmarkTextFieldView* urlTextView =
-    [[VivaldiBookmarkTextFieldView alloc]
+  VivaldiTextFieldView* urlTextView =
+    [[VivaldiTextFieldView alloc]
       initWithPlaceholder:urlPlaceholderString];
   [urlTextView setURLMode];
   _urlTextView = urlTextView;
 
   NSString* nicknamePlaceholderString =
     l10n_util::GetNSString(IDS_IOS_BOOKMARK_NICKNAME);
-  VivaldiBookmarkTextFieldView* nickNameTextView =
-    [[VivaldiBookmarkTextFieldView alloc]
+  VivaldiTextFieldView* nickNameTextView =
+    [[VivaldiTextFieldView alloc]
       initWithPlaceholder:nicknamePlaceholderString];
   _nickNameTextView = nickNameTextView;
 
   NSString* descriptionPlaceholderString =
     l10n_util::GetNSString(IDS_IOS_BOOKMARK_DESCRIPTION);
-  VivaldiBookmarkTextFieldView* descriptionTextView =
-    [[VivaldiBookmarkTextFieldView alloc]
+  VivaldiTextFieldView* descriptionTextView =
+    [[VivaldiTextFieldView alloc]
      initWithPlaceholder:descriptionPlaceholderString];
   _descriptionTextView = descriptionTextView;
 
@@ -428,7 +425,7 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
   [wrapper stopGroupingActions];
   [wrapper resetUndoManagerChanged];
 
-  [self notifyDelegate];
+  [self dismissEditor];
 }
 
 /// Executes when delete button is tapped.
@@ -438,7 +435,7 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
     nodes.insert(self.editingItem.bookmarkNode);
     bookmark_utils_ios::DeleteBookmarks(nodes, self.bookmarks);
   }
-  [self notifyDelegate];
+  [self dismissEditor];
 }
 
 /// Returns whether the URL inserted is a valid URL.
@@ -466,16 +463,8 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
   return self.descriptionTextView.getText;
 }
 
-/// Notify the listerners that the bookmark model is updated and associated UI should be refreshed.
-- (void)notifyDelegate {
-  if (self.delegate)
-    [self.delegate didUpdateBookmarksCollection];
-
-  // Notify the notification subscribers.
-  [[NSNotificationCenter defaultCenter]
-    postNotificationName:vBookmarkDataSourceDidChange
-                  object:self];
-
+/// Dismiss the keyboard and navigate to previous page.
+- (void)dismissEditor {
   [self.view endEditing:YES];
   [self cancel];
 }

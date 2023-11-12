@@ -13,7 +13,6 @@
 namespace network {
 namespace features {
 
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kExpectCTReporting);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kNetworkErrorLogging);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kReporting);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kThrottleDelayable);
@@ -36,7 +35,7 @@ BASE_DECLARE_FEATURE(kMdnsResponderGeneratedNameListing);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kOpaqueResponseBlockingV01);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kOpaqueResponseBlockingV02);
 
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kTrustTokens);
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPrivateStateTokens);
 
 enum class TrustTokenOriginTrialSpec {
   // See the .cc file for definitions.
@@ -48,7 +47,6 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kWebSocketReassembleShortMessages);
@@ -74,10 +72,6 @@ extern uint32_t GetLoaderChunkSize();
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCorsNonWildcardRequestHeadersSupport);
 
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kURLLoaderSyncClient);
-
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kFasterSetCookie);
-
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kBatchSimpleURLLoader);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kNetworkServiceMemoryCache);
@@ -93,6 +87,8 @@ extern const base::FeatureParam<std::string>
     kCacheTransparencyPervasivePayloads;
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kReduceAcceptLanguage);
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kReduceAcceptLanguageOriginTrial);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kDisableResourceScheduler);
 
@@ -101,7 +97,33 @@ BASE_DECLARE_FEATURE(kPrivateNetworkAccessPreflightShortTimeout);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPreconnectInNetworkService);
 
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPrefetchDNSWithURL);
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::FeatureParam<bool> kPrefetchDNSWithURLAllAnchorElements;
+
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPreconnectOnRedirect);
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kOutOfProcessSystemDnsResolution);
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kAccessControlAllowMethodsInCORSPreflightSpecConformant);
+
+// If enabled, then navigation requests should check the match responses in the
+// prefetch cache by using the No-Vary-Search rules if No-Vary-Search header
+// is specified in prefetched responses.
+// Feature Meta bug: crbug.com/1378072.
+// No-Vary-Search explainer:
+//   https://github.com/WICG/nav-speculation/blob/main/no-vary-search.md
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kPrefetchNoVarySearch);
+
+// Enables the `inline-speculation-rules` source support in the
+// Content-Security-Policy for Prerender2.
+// https://crbug.com/1382361
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kPrerender2ContentSecurityPolicyExtensions);
 
 }  // namespace features
 }  // namespace network

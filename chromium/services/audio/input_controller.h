@@ -162,10 +162,9 @@ class InputController final : public StreamMonitor {
 
   // enum used for determining what UMA stats to report.
   enum StreamType {
-    VIRTUAL = 0,
-    HIGH_LATENCY = 1,
-    LOW_LATENCY = 2,
-    FAKE = 3,
+    HIGH_LATENCY = 0,
+    LOW_LATENCY = 1,
+    FAKE = 2,
   };
 
   InputController(const InputController&) = delete;
@@ -251,9 +250,6 @@ class InputController final : public StreamMonitor {
   // Updates the silence state, see enum SilenceState above for state
   // transitions.
   void UpdateSilenceState(bool silence);
-
-  // Logs the silence state as UMA stat.
-  void LogSilenceState(SilenceState value);
 #endif
 
   // Logs the result of creating an InputController.
@@ -318,7 +314,7 @@ class InputController final : public StreamMonitor {
 
   // Pointer to the audio input stream object.
   // Only used on the audio thread.
-  raw_ptr<media::AudioInputStream> stream_ = nullptr;
+  raw_ptr<media::AudioInputStream, DanglingUntriaged> stream_ = nullptr;
 
   // SyncWriter is used only in low-latency mode for synchronous writing.
   const raw_ptr<SyncWriter> sync_writer_;
@@ -340,7 +336,7 @@ class InputController final : public StreamMonitor {
   std::unique_ptr<OutputTapper> output_tapper_;
 #endif
 
-  const raw_ptr<media::UserInputMonitor> user_input_monitor_;
+  const raw_ptr<media::UserInputMonitor, DanglingUntriaged> user_input_monitor_;
 
 #if defined(AUDIO_POWER_MONITORING)
   // Whether the silence state and microphone levels should be checked and sent

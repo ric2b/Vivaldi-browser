@@ -1,6 +1,6 @@
 
 if (!is_ios && !is_android && !(is_linux && (target_cpu == "x86" || target_cpu == "arm" || target_cpu == "arm64")) &&
-    !(is_mac && target_cpu == "arm64")) {
+    !(is_mac && target_cpu == "arm64" && getenv("CHROME_HEADLESS") != "1")) {
   update_target("//base/test:test_support") {
     sources += [
       "//vivaldi/base/test/vivaldi_testinit.cc",

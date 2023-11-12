@@ -570,4 +570,21 @@ void WindowPrivateGetFocusedElementInfoFunction::FocusedElementInfoReceived(
   return Respond(ArgumentList(Results::Create(info)));
 }
 
+ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run() {
+  namespace Results = vivaldi::window_private::IsOnScreenWithNotch::Results;
+  using vivaldi::window_private::IsOnScreenWithNotch::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
+  return RespondNow(ArgumentList(
+    Results::Create(IsWindowOnScreenWithNotch(window))));
+}
+
 }  // namespace extensions

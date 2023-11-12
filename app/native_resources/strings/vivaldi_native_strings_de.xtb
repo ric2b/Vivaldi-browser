@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Bild neu laden</translation>
 <translation id="1924750141060565109">Landschaft 15</translation>
 <translation id="19598411548897379">Allgemein</translation>
+<translation id="1973351931613083086">Automatische Wiedergabe</translation>
 <translation id="1985669426322966465">Software-Aktualisierung</translation>
 <translation id="2079036669923635404">Hier klicken, um Vivaldi auf Version <ph name="VERSION" /> zu aktualisieren.</translation>
 <translation id="2141974047387702305">Beim Herunterladen der Update-Dateien ist ein Fehler aufgetreten. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es später erneut.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Papierkorb</translation>
 <translation id="292258461174562431">Monster 4</translation>
 <translation id="2923448633003185837">Einfügen und aufrufen</translation>
+<translation id="2953943267837858202">Automatische Video-Wiedergabe nicht erlaubt</translation>
 <translation id="2977472760057091832">Link in privatem Fenster öffnen</translation>
 <translation id="2989805286512600854">In neuem Tab öffnen</translation>
 <translation id="3027988479108856431">Leider stehen Ihre Yandex Einstellungen nicht zur Verfügung solange der Browser noch läuft. Um die Einstellungen nach Vivaldi zu importieren, speichern Sie Ihre Dokumente, beenden Sie alle Yandex Fenster und klicken dann auf Fortsetzen.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Neues Lesezeichen</translation>
 <translation id="3255747772218936245">Jetzt installieren</translation>
 <translation id="3259769196742189631">Validieren</translation>
+<translation id="3291915639428159043">Automatische Wiedergabe gesperrt</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(kein Titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> ist derzeit die neueste verfügbare Version.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Link in neuem Fenster öffnen</translation>
 <translation id="3588820906588687999">Bild in neuem Tab öffnen</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3620979700683094848">Webseiten können Videos automatisch abspielen</translation>
 <translation id="3680031241659195730">Eine neue Version von Vivaldi ist verfügbar!</translation>
 <translation id="3708982624815781692">Der Download wurde abgebrochen.</translation>
 <translation id="3732157130969736834">Link zu Lesezeichen</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Nicht mehr anzeigen</translation>
 <translation id="4074744496918018786">Bild in privatem Fenster öffnen</translation>
+<translation id="410351446219883937">Automatisch abspielen</translation>
 <translation id="4324492550286218827">Landschaft 2</translation>
 <translation id="4406101500523955324">In neuem Privaten Fenster öffnen</translation>
 <translation id="4420816922321010053">Wollen Sie Vivaldi wirklich beenden?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Ausschneiden</translation>
 <translation id="7727481996062361502">Verifizierte Aktualisierung…</translation>
 <translation id="7793738202466490491">Als Kalender Ereignis hinzufügen</translation>
+<translation id="7834693436815575883">Automatische Wiedergabe ein</translation>
 <translation id="7848222781052558334">Die digitale Signatur der heruntergeladenen Dateien konnte nicht überprüft werden.</translation>
 <translation id="7865983598101744945">Beenden bestätigen</translation>
 <translation id="7957213167373139414">Mein Kalender</translation>
 <translation id="8027581147000338959">In neuem Fenster öffnen</translation>
+<translation id="8044382196220116469">Webseiten nicht erlauben, Videos automatisch abzuspielen</translation>
 <translation id="8099620695029051217">Seitenadresse kopieren</translation>
 <translation id="8197810018650377191">Lesezeichen Seite</translation>
 <translation id="8261506727792406068">Löschen</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Portaldokument inspizieren</translation>
 <translation id="8768970203213061953">Landschaft 14</translation>
 <translation id="8773635261052182196">Sie werden diese Benachrichtigungen nicht mehr sehen. Sie können sie aber wieder in den Vivaldi-Einstellungen aktivieren.</translation>
+<translation id="8774017153185436870">Seiten können Videos automatisch abspielen</translation>
 <translation id="8813277370772331957">Später erinnern</translation>
 <translation id="8894900864683381599">Link als Web-Paneel hinzufügen</translation>
 <translation id="8912720443398351457">Wollen Sie wirklich Vivaldi beenden?</translation>
 <translation id="8947109330183116400">HTML-Lesezeichen-Datei auswählen</translation>
 <translation id="9017566390391482291">Vivaldi-Profilordner für den Import auswählen</translation>
 <translation id="9048058608784130603">Ausstehendes Update <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Erlaubt, um Videos automatisch abzuspielen</translation>
 <translation id="9065203028668620118">Bearbeiten</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Bild als <ph name="USER" /> öffnen</translation>

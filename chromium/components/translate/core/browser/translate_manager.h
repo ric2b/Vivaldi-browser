@@ -122,9 +122,6 @@ class TranslateManager {
   // Starts the translation process for the page in the |page_lang| language.
   void InitiateTranslation(const std::string& page_lang);
 
-  // Maybe initiates translation when Autofill Assistant has finished.
-  void OnAutofillAssistantFinished();
-
   // Show the translation UI with the target language enforced to |target_lang|.
   // If |auto_translate| is true the page gets translated to the target
   // language.
@@ -204,12 +201,6 @@ class TranslateManager {
   // blink's hrefTranslate attribute existence relies on the result.
   // See https://github.com/dtapuska/html-translate
   static bool IsAvailable(const TranslatePrefs* prefs);
-
-  // Check whether there is specified target, the source and the target are both
-  // supported, and the source and target don't match.
-  static bool IsTranslatableLanguagePair(
-      const std::string& page_language_code,
-      const std::string& target_language_code);
 
   // Returns true if the MATCHES_PREVIOUS_LANGUAGE decision should be overridden
   // and logs the event appropriately.

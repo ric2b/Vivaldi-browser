@@ -11,7 +11,7 @@
 #include "chrome/browser/ash/policy/handlers/device_name_policy_handler.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_service.h"
 #endif
@@ -108,14 +108,12 @@ void GetHostname(DeviceAPIService::GetHostnameCallback callback) {
 
 void GetSerialNumber(DeviceAPIService::GetSerialNumberCallback callback) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  const std::string attribute =
-      chromeos::system::StatisticsProvider::GetInstance()
-          ->GetEnterpriseMachineID();
-  if (attribute.empty())
-    std::move(callback).Run(
-        Result::NewAttribute(absl::optional<std::string>()));
-  else
-    std::move(callback).Run(Result::NewAttribute(attribute));
+  const absl::optional<base::StringPiece> attribute =
+      chromeos::system::StatisticsProvider::GetInstance()->GetMachineID();
+  std::move(callback).Run(Result::NewAttribute(
+      attribute ? absl::optional<std::string>(attribute.value())
+                : absl::nullopt));
+
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(crbug.com/1328100): Replace with crosapi BrowserInitParams.
   chromeos::LacrosService::Get()

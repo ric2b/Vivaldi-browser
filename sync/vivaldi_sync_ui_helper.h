@@ -6,7 +6,10 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/protocol/sync_protocol_error.h"
 
 class Profile;
 
@@ -14,6 +17,35 @@ namespace vivaldi {
 
 class VivaldiSyncServiceImpl;
 class VivaldiAccountManager;
+
+enum EngineState {
+  STOPPED = 0,
+  STARTING,
+  STARTING_SERVER_ERROR,
+  STARTED,
+  CLEARING_DATA,
+  CONFIGURATION_PENDING,
+  FAILED
+};
+
+struct EngineData {
+  EngineData();
+  EngineData(const EngineData& other);
+  ~EngineData();
+
+  EngineState engine_state;
+  syncer::SyncService::DisableReasonSet disable_reasons;
+  syncer::SyncProtocolErrorType protocol_error_type;
+  std::string protocol_error_description;
+  syncer::ClientAction protocol_error_client_action;
+  bool uses_encryption_password;
+  bool needs_decryption_password;
+  bool is_encrypting_everything;
+  bool is_setup_in_progress;
+  bool is_first_setup_complete;
+  bool sync_everything;
+  syncer::UserSelectableTypeSet data_types;
+};
 
 class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
@@ -50,6 +82,7 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   bool RestoreEncryptionToken(const base::StringPiece& token);
 
   CycleData GetCycleData();
+  EngineData GetEngineData();
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;

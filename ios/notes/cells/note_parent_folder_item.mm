@@ -110,7 +110,7 @@
       self.stackView, self.contentView,
       LayoutSides::kLeading | LayoutSides::kTrailing | LayoutSides::kBottom |
           LayoutSides::kTop,
-      ChromeDirectionalEdgeInsetsMake(
+      NSDirectionalEdgeInsetsMake(
           kNoteCellVerticalInset, kNoteCellHorizontalLeadingInset,
           kNoteCellVerticalInset,
           kNoteCellHorizontalAccessoryViewSpacing));

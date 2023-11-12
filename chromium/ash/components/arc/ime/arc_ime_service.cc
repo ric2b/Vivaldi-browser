@@ -319,9 +319,6 @@ void ArcImeService::OnTextInputTypeChanged(
     ui::TextInputType type,
     bool is_personalized_learning_allowed,
     int flags) {
-  if (!ShouldSendUpdateToInputMethod())
-    return;
-
   if (ime_type_ == type &&
       is_personalized_learning_allowed_ == is_personalized_learning_allowed &&
       ime_flags_ == flags) {
@@ -330,6 +327,9 @@ void ArcImeService::OnTextInputTypeChanged(
   ime_type_ = type;
   is_personalized_learning_allowed_ = is_personalized_learning_allowed;
   ime_flags_ = flags;
+
+  if (!ShouldSendUpdateToInputMethod())
+    return;
 
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method)
@@ -657,6 +657,10 @@ bool ArcImeService::ClearGrammarFragments(const gfx::Range& range) {
 
 bool ArcImeService::AddGrammarFragments(
     const std::vector<ui::GrammarFragment>& fragments) {
+  if (!fragments.empty()) {
+    base::UmaHistogramEnumeration("InputMethod.Assistive.Grammar.Count",
+                                  TextInputClient::SubClass::kArcImeService);
+  }
   // TODO(https://crbug.com/1201454): Implement this method.
   NOTIMPLEMENTED_LOG_ONCE();
   return false;

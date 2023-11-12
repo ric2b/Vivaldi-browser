@@ -24,10 +24,10 @@
 #include "chrome/browser/ui/views/bubble_menu_item_factory.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
+#include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/extensions/site_settings_expand_button.h"
-#include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/url_formatter/url_formatter.h"
@@ -57,6 +57,9 @@ namespace {
 
 using UserSiteSetting = extensions::PermissionsManager::UserSiteSetting;
 
+// Tabs indexes.
+constexpr int kSiteAccesssTabIndex = 0;
+constexpr int kExtensionsTabIndex = 1;
 // Radio buttons group id for site access settings.
 constexpr int kGroupId = 1;
 // Button's indexes for site access settings.
@@ -210,7 +213,6 @@ ExtensionsTabbedMenuView::ExtensionsTabbedMenuView(
     views::View* anchor_view,
     Browser* browser,
     ExtensionsContainer* extensions_container,
-    ExtensionsToolbarButton::ButtonType button_type,
     bool allow_pinning)
     : BubbleDialogDelegateView(anchor_view,
                                views::BubbleBorder::Arrow::TOP_RIGHT),
@@ -258,9 +260,8 @@ ExtensionsTabbedMenuView::ExtensionsTabbedMenuView(
 
   Populate();
 
-  // Tabs left to right order is 'site access tab' | 'extensions tab'.
-  tabbed_pane_->SelectTabAt(button_type ==
-                            ExtensionsToolbarButton::ButtonType::kExtensions);
+  // By default menu opens in extension tab.
+  tabbed_pane_->SelectTabAt(kExtensionsTabIndex);
 }
 
 ExtensionsTabbedMenuView::~ExtensionsTabbedMenuView() {
@@ -559,7 +560,8 @@ void ExtensionsTabbedMenuView::CreateSiteAccessTab() {
                       kCustomizeByExtensionIndex))
           .Build();
 
-  CreateTab(tabbed_pane_, 0, IDS_EXTENSIONS_MENU_SITE_ACCESS_TAB_TITLE,
+  CreateTab(tabbed_pane_, kSiteAccesssTabIndex,
+            IDS_EXTENSIONS_MENU_SITE_ACCESS_TAB_TITLE,
             std::move(site_access_content), std::move(site_access_footer));
 }
 
@@ -589,7 +591,8 @@ void ExtensionsTabbedMenuView::CreateExtensionsTab() {
           .CopyAddressTo(&discover_more_button_)
           .Build();
 
-  CreateTab(tabbed_pane_, 1, IDS_EXTENSIONS_MENU_EXTENSIONS_TAB_TITLE,
+  CreateTab(tabbed_pane_, kExtensionsTabIndex,
+            IDS_EXTENSIONS_MENU_EXTENSIONS_TAB_TITLE,
             std::move(installed_items), std::move(installed_tab_footer));
 }
 

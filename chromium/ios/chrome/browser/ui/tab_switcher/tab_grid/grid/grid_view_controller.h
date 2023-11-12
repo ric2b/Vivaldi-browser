@@ -9,13 +9,13 @@
 
 #import "ios/chrome/browser/ui/gestures/layout_switcher.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_theme.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
 @protocol GridContextMenuProvider;
-@protocol GridDragDropHandler;
+@protocol TabCollectionDragDropHandler;
 @protocol GridEmptyView;
 @protocol GridImageDataSource;
 @protocol GridShareableItemsProvider;
@@ -25,6 +25,22 @@
 @protocol PriceCardDataSource;
 @protocol ThumbStripCommands;
 @protocol SuggestedActionsDelegate;
+
+// Key of the UMA IOS.TabSwitcher.DragDropTabs histogram.
+extern const char kUmaDragDropTabs[];
+
+// Values of the UMA IOS.TabSwitcher.DragDropTabs histogram. These values are
+// persisted to logs. Entries should not be renumbered and numeric values should
+// never be reused.
+enum class DragDropTabs {
+  // A tab is dragged.
+  kDragBegin = 0,
+  // A tab is dropped at the same index position.
+  kDragEndAtSameIndex = 1,
+  // A tab is dropped at a new index position
+  kDragEndAtNewIndex = 2,
+  kMaxValue = kDragEndAtNewIndex
+};
 
 // Protocol used to relay relevant user interactions from a grid UI.
 @protocol GridViewControllerDelegate
@@ -70,13 +86,16 @@
 // Tells the delegate that the grid view controller cells did end dragging.
 - (void)gridViewControllerDragSessionDidEnd:
     (GridViewController*)gridViewController;
+// Tells the delegate that the grid view controller did scroll.
+- (void)gridViewControllerScrollViewDidScroll:
+    (GridViewController*)gridViewController;
 
 @end
 
 // A view controller that contains a grid of items.
-@interface GridViewController : UIViewController <GridConsumer,
-                                                  LayoutSwitcher,
+@interface GridViewController : UIViewController <LayoutSwitcher,
                                                   IncognitoReauthConsumer,
+                                                  TabCollectionConsumer,
                                                   ThumbStripSupporting>
 // The gridView is accessible to manage the content inset behavior.
 @property(nonatomic, readonly) UIScrollView* gridView;
@@ -101,7 +120,7 @@
 // Delegate is informed of user interactions in the grid UI.
 @property(nonatomic, weak) id<GridViewControllerDelegate> delegate;
 // Handles drag and drop interactions that involved the model layer.
-@property(nonatomic, weak) id<GridDragDropHandler> dragDropHandler;
+@property(nonatomic, weak) id<TabCollectionDragDropHandler> dragDropHandler;
 // Data source for images.
 @property(nonatomic, weak) id<GridImageDataSource> imageDataSource;
 // Data source for acquiring data to power PriceCardView

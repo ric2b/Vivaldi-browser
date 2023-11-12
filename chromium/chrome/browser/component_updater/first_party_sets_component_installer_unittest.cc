@@ -15,6 +15,7 @@
 #include "base/test/test_future.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
+#include "chrome/browser/first_party_sets/scoped_mock_first_party_sets_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/component_updater/mock_component_updater_service.h"
@@ -47,7 +48,6 @@ class FirstPartySetsComponentInstallerTest : public ::testing::Test {
   }
 
   void SetUp() override {
-    content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
     FirstPartySetsComponentInstallerPolicy::ResetForTesting();
   }
 
@@ -59,6 +59,8 @@ class FirstPartySetsComponentInstallerTest : public ::testing::Test {
 
   base::ScopedTempDir component_install_dir_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  first_party_sets::ScopedMockFirstPartySetsHandler
+      mock_first_party_sets_handler_;
 };
 
 class FirstPartySetsComponentInstallerFeatureEnabledTest
@@ -107,7 +109,7 @@ TEST_F(FirstPartySetsComponentInstallerFeatureEnabledTest,
   base::test::TestFuture<base::Version, base::File> future;
   FirstPartySetsComponentInstallerPolicy(future.GetCallback())
       .ComponentReady(base::Version(), component_install_dir_.GetPath(),
-                      base::Value(base::Value::Type::DICTIONARY));
+                      base::Value::Dict());
 
   std::tuple<base::Version, base::File> got = future.Take();
   EXPECT_FALSE(std::get<0>(got).IsValid());
@@ -147,7 +149,7 @@ TEST_F(FirstPartySetsComponentInstallerFeatureEnabledTest,
                       expectation));
 
   policy->ComponentReady(version, component_install_dir_.GetPath(),
-                         base::Value(base::Value::Type::DICTIONARY));
+                         base::Value::Dict());
 
   std::tuple<base::Version, base::File> got = future.Take();
   EXPECT_TRUE(std::get<0>(got).IsValid());
@@ -178,7 +180,7 @@ TEST_F(FirstPartySetsComponentInstallerFeatureEnabledTest,
                           install_dir.GetPath()),
                       "first party sets content"));
   policy.ComponentReady(base::Version("0.0.1"), install_dir.GetPath(),
-                        base::Value(base::Value::Type::DICTIONARY));
+                        base::Value::Dict());
 
   env_.RunUntilIdle();
 }
@@ -199,8 +201,7 @@ TEST_F(FirstPartySetsComponentInstallerFeatureEnabledTest,
       base::WriteFile(FirstPartySetsComponentInstallerPolicy::GetInstalledPath(
                           dir_v1.GetPath()),
                       sets_v1));
-  policy.ComponentReady(version, dir_v1.GetPath(),
-                        base::Value(base::Value::Type::DICTIONARY));
+  policy.ComponentReady(version, dir_v1.GetPath(), base::Value::Dict());
 
   std::tuple<base::Version, base::File> got = future.Take();
   EXPECT_TRUE(std::get<0>(got).IsValid());
@@ -219,7 +220,7 @@ TEST_F(FirstPartySetsComponentInstallerFeatureEnabledTest,
                           dir_v2.GetPath()),
                       sets_v2));
   policy.ComponentReady(base::Version("0.0.1"), dir_v2.GetPath(),
-                        base::Value(base::Value::Type::DICTIONARY));
+                        base::Value::Dict());
 
   env_.RunUntilIdle();
 }

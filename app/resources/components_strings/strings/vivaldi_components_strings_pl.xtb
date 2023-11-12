@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Spróbuj przeprowadzić diagnostykę sieci systemu Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Ta strona zawiera szkodliwe programy</translation>
 <translation id="1916770123977586577">Załaduj stronę ponownie aby zastosować zaktualizowane ustawienia</translation>
-<translation id="1973351931613083086">autoodtwarzanie</translation>
 <translation id="1974060860693918893">Zaawansowane</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sprawdź serwer proxy i zaporę sieciową<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Wystawiony dla: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Ta witryna nie umożliwia bezpiecznego połączenia</translation>
 <translation id="2187317261103489799">Wykrywaj (domyślnie)</translation>
 <translation id="2224337661447660594">Brak internetu</translation>
-<translation id="2230458221926704099">Napraw połączenie używając <ph name="BEGIN_LINK" />aplikacji diagnostycznej<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Masz zablokowany dostęp do Internetu</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> wymaga nazwy użytkownika i hasła.</translation>
 <translation id="2337852623177822836">Ustawienie kontrolowane przez administratora</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Osoby atakujące mogą próbować wykraść Twoje informacje ze strony <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (na przykład hasła, wiadomości lub dane kart kredytowych). <ph name="BEGIN_LEARN_MORE_LINK" />Więcej informacji<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Wykryto zmianę sieci.</translation>
 <translation id="2948083400971632585">Możesz wyłączyć serwery proxy skonfigurowane dla połączenia w ustawieniach przeglądarki.</translation>
-<translation id="2953943267837858202">Nie zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="2991571918955627853">Nie możesz teraz wejść na stronę <ph name="SITE" />, ponieważ używa ona HSTS. Błędy sieciowe i ataki są zazwyczaj tymczasowe, więc prawdopodobnie strona będzie dostępna później.</translation>
 <translation id="3005723025932146533">Pokaż zapisaną kopię</translation>
 <translation id="301521992641321250">Automatycznie zablokowane</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Naciśnij przycisk odświeżenia strony, by ponownie przesłać dane wymagane do jej wczytania.</translation>
 <translation id="3234666976984236645">Zawsze wykrywaj ważną treść na tej stronie</translation>
-<translation id="3291915639428159043">Autoodtwarzanie zablokowane</translation>
 <translation id="3308738399950580893">reklamy</translation>
 <translation id="3422472998109090673">Strona <ph name="HOST_NAME" /> jest obecnie nieosiągalna.</translation>
 <translation id="3427092606871434483">Zezwalaj (domyślnie)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Połączenie nie jest prywatne</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ukryj szczegóły</translation>
-<translation id="3620979700683094848">Strony mogą automatycznie odtwarzać pliki wideo</translation>
 <translation id="3630155396527302611">Jeśli ten program jest już na liście programów mogących korzystać z sieci,
     spróbuj go z niej usunąć i dodać ponownie.</translation>
 <translation id="3658742229777143148">Rewizja</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861">Strona <ph name="HOST_NAME" /> jest zablokowana</translation>
 <translation id="3987940399970879459">Mniej niż 1 MB</translation>
 <translation id="4075732493274867456">Klient i serwer nie obsługują wspólnej wersji protokołu SSL lub mechanizmu szyfrowania.</translation>
-<translation id="410351446219883937">Autoodtwarzanie</translation>
 <translation id="4116663294526079822">Zawsze zezwalaj na tej stronie</translation>
 <translation id="4130226655945681476">Sprawdź kable sieciowe, modem i router</translation>
 <translation id="4151403195736952345">Użyj globalnego ustawienia domyślnego (Wykrywaj)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Potwierdź ponowne przesłanie formularza</translation>
 <translation id="6569060085658103619">Przeglądasz stronę rozszerzenia</translation>
 <translation id="6657585470893396449">Hasło</translation>
-<translation id="6685834062052613830">Wyloguj się i dokończ konfigurację</translation>
 <translation id="6711464428925977395">Serwer proxy działa nieprawidłowo albo adres jest błędny.</translation>
 <translation id="6757797048963528358">Twój komputer przeszedł w stan uśpienia.</translation>
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">Połączenie mogło zostać zablokowane przez zaporę sieciową lub program antywirusowy.</translation>
 <translation id="7800304661137206267">Przesyłane dane są szyfrowane za pomocą algorytmu <ph name="CIPHER" />. Metoda uwierzytelniania komunikatów to <ph name="MAC" /> a mechanizm wymiany kluczy to <ph name="KX" />.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> zazwyczaj używa szyfrowania do ochrony Twoich informacji. Gdy tym razem przeglądarka Vivaldi próbowała połączyć się ze stroną <ph name="SITE" />, odesłała ona nietypowe i nieprawidłowe dane logowania. Może się tak zdarzyć, gdy pod stronę <ph name="SITE" /> podszywa się osoba atakująca albo gdy ekran logowania do sieci Wi-Fi przerwie połączenie. Twoje informacje są nadal bezpieczne, bo połączenie w Vivaldi zakończyło się przed wymianą jakichkolwiek danych.</translation>
-<translation id="7834693436815575883">Zezwalaj na autoodtwarzanie</translation>
 <translation id="7878562273885520351">Ktoś mógł poznać twoje hasło</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Osoby atakujące tę stronę mogą podstępem nakłonić cię do zrobienia czegoś niebezpiecznego, np. zainstalowania oprogramowania lub ujawnienia danych osobowych (takich jak hasła, numery telefonów czy dane kart kredytowych).</translation>
 <translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8041940743680923270">Użyj globalnej wartości domyślnej (Pytaj)</translation>
-<translation id="8044382196220116469">Nie pozwalaj stroną na automatyczne odtwarzanie plików wideo</translation>
 <translation id="808894953321890993">Zmień hasło</translation>
 <translation id="8119307142152921512">trackery i reklamy</translation>
 <translation id="8149426793427495338">Twój komputer przeszedł w stan uśpienia.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Nazwa użytkownika</translation>
 <translation id="8703575177326907206">Połączenie z witryną <ph name="DOMAIN" /> nie jest szyfrowane.</translation>
 <translation id="8740359287975076522">Nie znaleziono &lt;abbr id="dnsDefinition"&gt;adresu DNS&lt;/abbr&gt; serwera <ph name="HOST_NAME" />. Trwa diagnozowanie problemu.</translation>
-<translation id="8774017153185436870">Strony mogą automatycznie odtwarzać pliki wideo</translation>
 <translation id="8820817407110198400">Zakładki</translation>
 <translation id="8940028675168378100">Zablokowano przez <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Przejdź do ustawień strony</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Ignoruj</translation>
 <translation id="9025348182339809926">(Nieważny)</translation>
 <translation id="9039213469156557790">Ta strona zawiera niezabezpieczone zasoby. Podczas przesyłania danych mogą je wyświetlić inni użytkownicy, a osoby atakujące mogą je zmodyfikować, by zmienić sposób działania strony.</translation>
-<translation id="9048224371732578627">Zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="9062620674789239642">Mógł zostać przeniesiony, edytowany lub usunięty.</translation>
 <translation id="9069693763241529744">Zablokowane przez rozszerzenie</translation>
 <translation id="9073799351042754113">Ostrzeżenia dotyczące zabezpieczeń tej strony zostały wyłączone.</translation>

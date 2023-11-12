@@ -62,18 +62,23 @@ extern NSString* const kBlueColor;
 // shortcuts on the NTP).
 extern NSString* const kBlueHaloColor;
 
-// Blue palette
+// Blue palette.
+extern NSString* const kBlue400Color;
 extern NSString* const kBlue500Color;
 extern NSString* const kBlue600Color;
 extern NSString* const kBlue700Color;
+// Static blue palette (same color for light and dark modes).
+extern NSString* const kStaticBlue400Color;
 
 // Standard green color.
 extern NSString* const kGreenColor;
 
 // Green palette.
 extern NSString* const kGreen50Color;
+extern NSString* const kGreen100Color;
 extern NSString* const kGreen500Color;
 extern NSString* const kGreen700Color;
+extern NSString* const kGreen800Color;
 
 // Standard red color. This is most commonly used for the tint color on
 // destructive controls.
@@ -108,5 +113,7 @@ extern NSString* const kGrey600Color;
 extern NSString* const kGrey700Color;
 extern NSString* const kGrey800Color;
 extern NSString* const kGrey900Color;
+// Static Grey palette (same color for light and dark modes).
+extern NSString* const kStaticGrey300Color;
 
 #endif  // IOS_CHROME_COMMON_UI_COLORS_SEMANTIC_COLOR_NAMES_H_

@@ -7,9 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/check_is_test.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
@@ -86,6 +88,8 @@ WebAppProvider* WebAppProvider::GetForTest(Profile* profile) {
   CHECK_IS_TEST();
 
   WebAppProvider* provider = GetForLocalAppsUnchecked(profile);
+  if (!provider)
+    return nullptr;
 
   if (provider->on_registry_ready().is_signaled())
     return provider;
@@ -137,19 +141,31 @@ void WebAppProvider::Start() {
   StartImpl();
 }
 
-WebAppRegistrar& WebAppProvider::registrar() {
+WebAppRegistrar& WebAppProvider::registrar_unsafe() {
   CheckIsConnected();
   return *registrar_;
+}
+
+const WebAppRegistrar& WebAppProvider::registrar_unsafe() const {
+  CheckIsConnected();
+  return *registrar_;
+}
+
+WebAppRegistrar& WebAppProvider::registrar() {
+  return registrar_unsafe();
 }
 
 const WebAppRegistrar& WebAppProvider::registrar() const {
+  return registrar_unsafe();
+}
+
+WebAppSyncBridge& WebAppProvider::sync_bridge_unsafe() {
   CheckIsConnected();
-  return *registrar_;
+  return *sync_bridge_;
 }
 
 WebAppSyncBridge& WebAppProvider::sync_bridge() {
-  CheckIsConnected();
-  return *sync_bridge_;
+  return sync_bridge_unsafe();
 }
 
 WebAppInstallManager& WebAppProvider::install_manager() {
@@ -208,7 +224,8 @@ const OsIntegrationManager& WebAppProvider::os_integration_manager() const {
 }
 
 WebAppCommandManager& WebAppProvider::command_manager() {
-  CheckIsConnected();
+  // Note: It is OK to access the command manager before connection or start.
+  // Internally it will queue commands to only happen after it has started.
   return *command_manager_;
 }
 
@@ -217,6 +234,7 @@ WebAppCommandScheduler& WebAppProvider::scheduler() {
 }
 
 void WebAppProvider::Shutdown() {
+  command_scheduler_->Shutdown();
   command_manager_->Shutdown();
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
@@ -277,8 +295,7 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
         protocol_handler_manager.get());
 
     std::unique_ptr<UrlHandlerManager> url_handler_manager;
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
     url_handler_manager = std::make_unique<UrlHandlerManagerImpl>(profile);
 #endif
 
@@ -287,8 +304,8 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
         std::move(protocol_handler_manager), std::move(url_handler_manager));
   }
 
-  command_manager_ = std::make_unique<WebAppCommandManager>(profile);
-  command_scheduler_ = std::make_unique<WebAppCommandScheduler>(this);
+  command_manager_ = std::make_unique<WebAppCommandManager>(profile, this);
+  command_scheduler_ = std::make_unique<WebAppCommandScheduler>(*profile, this);
 
   registrar_ = std::move(registrar);
   sync_bridge_ = std::move(sync_bridge);
@@ -297,8 +314,8 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
 void WebAppProvider::ConnectSubsystems() {
   DCHECK(!started_);
 
-  sync_bridge_->SetSubsystems(database_factory_.get(), install_manager_.get(),
-                              command_manager_.get());
+  sync_bridge_->SetSubsystems(database_factory_.get(), command_manager_.get(),
+                              command_scheduler_.get());
   icon_manager_->SetSubsystems(registrar_.get(), install_manager_.get());
   install_finalizer_->SetSubsystems(
       install_manager_.get(), registrar_.get(), ui_manager_.get(),
@@ -312,10 +329,11 @@ void WebAppProvider::ConnectSubsystems() {
   manifest_update_manager_->SetSubsystems(
       install_manager_.get(), registrar_.get(), icon_manager_.get(),
       ui_manager_.get(), install_finalizer_.get(),
-      os_integration_manager_.get(), sync_bridge_.get());
+      os_integration_manager_.get(), sync_bridge_.get(),
+      command_scheduler_.get());
   externally_managed_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(), install_finalizer_.get(),
-      command_manager_.get(), sync_bridge_.get());
+      command_scheduler_.get(), sync_bridge_.get());
   preinstalled_web_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(),
       externally_managed_app_manager_.get());
@@ -328,8 +346,6 @@ void WebAppProvider::ConnectSubsystems() {
   os_integration_manager_->SetSubsystems(sync_bridge_.get(), registrar_.get(),
                                          ui_manager_.get(),
                                          icon_manager_.get());
-
-  command_manager_->SetSubsystems(install_manager_.get());
   connected_ = true;
 }
 
@@ -341,23 +357,36 @@ void WebAppProvider::StartSyncBridge() {
 void WebAppProvider::OnSyncBridgeReady() {
   DCHECK(!on_registry_ready_.is_signaled());
 
-  if (base::FeatureList::IsEnabled(
-          features::kUseWebAppDBInsteadOfExternalPrefs)) {
+  if (base::FeatureList::IsEnabled(features::kMigrateExternalPrefsToWebAppDB)) {
     ExternallyInstalledWebAppPrefs::MigrateExternalPrefData(
         profile_->GetPrefs(), sync_bridge_.get());
   }
   DoMigrateProfilePrefs(profile_);
+
+  // Note: This does not wait for the call from the ChromeOS
+  // SystemWebAppManager, which is a separate keyed service.
+  int num_barrier_calls = 2;
+  base::RepeatingClosure external_manager_barrier = base::BarrierClosure(
+      num_barrier_calls,
+      base::BindOnce(
+          [](base::WeakPtr<WebAppProvider> provider) {
+            if (!provider)
+              return;
+            provider->on_external_managers_synchronized_.Signal();
+          },
+          weak_ptr_factory_.GetWeakPtr()));
 
   registrar_->Start();
   install_finalizer_->Start();
   icon_manager_->Start();
   translation_manager_->Start();
   install_manager_->Start();
-  preinstalled_web_app_manager_->Start();
-  web_app_policy_manager_->Start();
+  preinstalled_web_app_manager_->Start(external_manager_barrier);
+  web_app_policy_manager_->Start(external_manager_barrier);
   manifest_update_manager_->Start();
   os_integration_manager_->Start();
   ui_manager_->Start();
+  command_manager_->Start();
 
   on_registry_ready_.Signal();
   is_registry_ready_ = true;
@@ -365,7 +394,8 @@ void WebAppProvider::OnSyncBridgeReady() {
 
 void WebAppProvider::CheckIsConnected() const {
   DCHECK(connected_) << "Attempted to access Web App subsystem while "
-                        "WebAppProvider is not connected.";
+                        "WebAppProvider is not connected. You may need to wait "
+                        "for on_registry_ready().";
 }
 
 void WebAppProvider::DoMigrateProfilePrefs(Profile* profile) {

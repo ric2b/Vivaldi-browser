@@ -25,7 +25,6 @@ import org.chromium.base.StreamUtil;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
@@ -818,7 +817,7 @@ public class TabPersistentStore {
             Log.w(TAG, "Failed to restore TabState; creating Tab with last known URL.");
             Tab fallbackTab = mTabCreatorManager.getTabCreator(isIncognito)
                                       .createNewTab(new LoadUrlParams(tabToRestore.url),
-                                              TabLaunchType.FROM_RESTORE, null);
+                                              TabLaunchType.FROM_RESTORE, null, restoredIndex);
 
             if (fallbackTab == null) {
                 RecordHistogram.recordEnumeratedHistogram("Tabs.TabRestoreMethod",
@@ -833,8 +832,9 @@ public class TabPersistentStore {
             RecordHistogram.recordEnumeratedHistogram("Tabs.TabRestoreMethod",
                     TabRestoreMethod.CREATE_NEW_TAB, TabRestoreMethod.NUM_ENTRIES);
 
+            // restoredIndex might not be the one used in createNewTab so update accordingly.
             tabId = fallbackTab.getId();
-            model.moveTab(tabId, restoredIndex);
+            restoredIndex = model.indexOf(fallbackTab);
         }
 
         // If the tab is being restored from a merge and its index is 0, then the model being
@@ -1148,10 +1148,6 @@ public class TabPersistentStore {
 
         saveListToFile(getStateDirectory(), mPersistencePolicy.getStateFileName(), listData);
         mLastSavedMetadata = listData;
-        if (LibraryLoader.getInstance().isInitialized()) {
-            RecordHistogram.recordCount1MHistogram(
-                    "Android.TabPersistentStore.MetadataFileSize", listData.length);
-        }
     }
 
     /**

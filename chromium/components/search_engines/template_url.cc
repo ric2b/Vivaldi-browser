@@ -24,6 +24,7 @@
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -199,10 +200,9 @@ std::string YandexSearchPathFromDeviceFormFactor() {
       return "search/touch/";
     case ui::DEVICE_FORM_FACTOR_TABLET:
       return "search/pad/";
-    default:
-      NOTREACHED();
-      return std::string();
   }
+  NOTREACHED();
+  return std::string();
 }
 
 }  // namespace
@@ -733,8 +733,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     replacements->push_back(Replacement(GOOGLE_PREFETCH_SOURCE, start));
   } else if (parameter == "google:RLZ") {
     replacements->push_back(Replacement(GOOGLE_RLZ, start));
-  } else if (parameter == "google:searchboxStats") {
-    replacements->push_back(Replacement(GOOGLE_SEARCHBOX_STATS, start));
   } else if (parameter == "google:searchClient") {
     replacements->push_back(Replacement(GOOGLE_SEARCH_CLIENT, start));
   } else if (parameter == "google:searchFieldtrialParameter") {
@@ -1091,9 +1089,11 @@ std::string TemplateURLRef::HandleReplacements(
         break;
       }
 
-      case GOOGLE_ASSISTED_QUERY_STATS:
+      case GOOGLE_ASSISTED_QUERY_STATS: {
         DCHECK(!replacement.is_post_param);
         if (!search_terms_args.assisted_query_stats.empty()) {
+          DCHECK(search_terms_args.searchbox_stats.ByteSizeLong() > 0)
+              << "searchbox_stats must be set when assisted_query_stats is.";
           // Get the base URL without substituting AQS and gs_lcrp to avoid
           // infinite recursion and unwanted replacement respectively. We need
           // the URL to find out if it meets all AQS requirements (e.g. HTTPS
@@ -1116,11 +1116,10 @@ std::string TemplateURLRef::HandleReplacements(
                     search_terms_args.assisted_query_stats.length()));
           }
         }
-        break;
 
-      case GOOGLE_SEARCHBOX_STATS: {
-        DCHECK(!replacement.is_post_param);
         if (search_terms_args.searchbox_stats.ByteSizeLong() > 0) {
+          DCHECK(!search_terms_args.assisted_query_stats.empty())
+              << "assisted_query_stats must be set when searchbox_stats is.";
           // Get the base URL without substituting gs_lcrp and AQS to avoid
           // infinite recursion and unwanted replacement respectively. We need
           // the URL to find out if it meets all gs_lcrp requirements (e.g.
@@ -1147,6 +1146,8 @@ std::string TemplateURLRef::HandleReplacements(
               base::UmaHistogramCounts1000(
                   "Omnibox.SearchboxStats.Length",
                   static_cast<int>(encoded_searchbox_stats.length()));
+            } else {
+              base::UmaHistogramCounts1000("Omnibox.SearchboxStats.Length", 0);
             }
           }
         }
@@ -1650,6 +1651,38 @@ bool TemplateURL::IsSearchURL(const GURL& url,
   std::u16string search_terms;
   return ExtractSearchTermsFromURL(url, search_terms_data, &search_terms) &&
       !search_terms.empty();
+}
+
+bool TemplateURL::KeepSearchTermsInURL(const GURL& url,
+                                       const SearchTermsData& search_terms_data,
+                                       const bool keep_search_intent_params,
+                                       GURL* result) const {
+  std::u16string search_terms;
+  if (!ExtractSearchTermsFromURL(url, search_terms_data, &search_terms) ||
+      search_terms.empty()) {
+    return false;
+  }
+
+  if (!url_ref().SupportsReplacement(search_terms_data)) {
+    return false;
+  }
+
+  std::vector<std::string> query_params;
+  if (keep_search_intent_params && !data_.search_intent_params.empty()) {
+    for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
+      if (!base::Contains(data_.search_intent_params, it.GetKey())) {
+        continue;
+      }
+      query_params.push_back(base::StrCat({it.GetKey(), "=", it.GetValue()}));
+    }
+  }
+
+  TemplateURLRef::SearchTermsArgs search_terms_args(search_terms);
+  search_terms_args.additional_query_params =
+      base::JoinString(query_params, "&");
+  *result =
+      GURL(url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data));
+  return true;
 }
 
 bool TemplateURL::ReplaceSearchTermsInURL(

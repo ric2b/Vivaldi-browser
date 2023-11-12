@@ -25,11 +25,15 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/attribution_reporting/aggregatable_trigger_data.h"
+#include "components/attribution_reporting/aggregatable_values.h"
+#include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/event_trigger_data.h"
+#include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/suitable_origin.h"
+#include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
-#include "content/browser/attribution_reporting/attribution_aggregatable_trigger_data.h"
-#include "content/browser/attribution_reporting/attribution_aggregatable_values.h"
-#include "content/browser/attribution_reporting/attribution_aggregation_keys.h"
-#include "content/browser/attribution_reporting/attribution_filter_data.h"
 #include "content/browser/attribution_reporting/attribution_observer_types.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_source_type.h"
@@ -63,6 +67,11 @@ using ::testing::Property;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAre;
 
+using AttributionFilterData = ::attribution_reporting::FilterData;
+using AttributionFilters = ::attribution_reporting::Filters;
+
+using ::attribution_reporting::SuitableOrigin;
+
 // Default max number of conversions for a single impression for testing.
 const int kMaxConversions = 3;
 
@@ -73,6 +82,38 @@ StoragePartition::StorageKeyMatcherFunction GetMatcher(
     const url::Origin& to_delete) {
   return base::BindRepeating(std::equal_to<blink::StorageKey>(),
                              blink::StorageKey(to_delete));
+}
+
+MATCHER_P(CreateReportSourceIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.source(), result_listener);
+}
+
+MATCHER_P(CreateReportMaxAttributionsLimitIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.limits().rate_limits_max_attributions,
+                            result_listener);
+}
+
+MATCHER_P(CreateReportAggreggatableBudgetPerSourceIs, matcher, "") {
+  return ExplainMatchResult(
+      matcher, arg.limits().aggregatable_budget_per_source, result_listener);
+}
+
+MATCHER_P(CreateReportMaxAttributionReportingOriginsLimitIs, matcher, "") {
+  return ExplainMatchResult(
+      matcher, arg.limits().rate_limits_max_attribution_reporting_origins,
+      result_listener);
+}
+
+MATCHER_P(CreateReportMaxEventLevelReportsLimitIs, matcher, "") {
+  return ExplainMatchResult(
+      matcher, arg.limits().max_event_level_reports_per_destination,
+      result_listener);
+}
+
+MATCHER_P(CreateReportMaxAggregatableReportsLimitIs, matcher, "") {
+  return ExplainMatchResult(
+      matcher, arg.limits().max_aggregatable_reports_per_destination,
+      result_listener);
 }
 
 }  // namespace
@@ -99,13 +140,15 @@ class AttributionStorageTest : public testing::Test {
     // TOO(apaseltiner): Replace this logic with explicit setting of expected
     // values.
     auto event_trigger = base::ranges::find_if(
-        conversion.event_triggers(),
-        [&](const AttributionTrigger::EventTriggerData& event_trigger) {
+        conversion.registration().event_triggers.vec(),
+        [&](const attribution_reporting::EventTriggerData& event_trigger) {
           return AttributionFiltersMatch(source.common_info().filter_data(),
+                                         source.common_info().source_type(),
                                          event_trigger.filters,
                                          event_trigger.not_filters);
         });
-    CHECK(event_trigger != conversion.event_triggers().end());
+    CHECK(event_trigger !=
+          conversion.registration().event_triggers.vec().end());
 
     return ReportBuilder(AttributionInfoBuilder(source)
                              .SetTime(base::Time::Now())
@@ -184,9 +227,24 @@ TEST_F(AttributionStorageTest,
 
 TEST_F(AttributionStorageTest, ImpressionStoredAndRetrieved_ValuesIdentical) {
   storage()->StoreSource(SourceBuilder().Build());
+  EXPECT_THAT(
+      storage()->GetActiveSources(),
+      ElementsAre(CommonSourceInfoIs(SourceBuilder().BuildCommonInfo())));
+}
+
+TEST_F(AttributionStorageTest, UniqueReportWindowsStored_ValuesIdentical) {
+  storage()->StoreSource(SourceBuilder()
+                             .SetExpiry(base::Days(30))
+                             .SetEventReportWindow(base::Days(15))
+                             .SetAggregatableReportWindow(base::Days(5))
+                             .Build());
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(CommonSourceInfoIs(
-                  SourceBuilder().SetDefaultFilterData().BuildCommonInfo())));
+                  SourceBuilder()
+                      .SetExpiry(base::Days(30))
+                      .SetEventReportWindow(base::Days(15))
+                      .SetAggregatableReportWindow(base::Days(5))
+                      .BuildCommonInfo())));
 }
 
 TEST_F(AttributionStorageTest,
@@ -196,7 +254,8 @@ TEST_F(AttributionStorageTest,
       AllOf(CreateReportEventLevelStatusIs(
                 AttributionTrigger::EventLevelResult::kNoMatchingImpressions),
             NewEventLevelReportIs(absl::nullopt),
-            NewAggregatableReportIs(absl::nullopt)));
+            NewAggregatableReportIs(absl::nullopt),
+            CreateReportSourceIs(absl::nullopt)));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Now()), IsEmpty());
 }
 
@@ -215,16 +274,17 @@ TEST_F(AttributionStorageTest, MultipleImpressionsForConversion_OneConverts) {
 
 TEST_F(AttributionStorageTest,
        CrossOriginSameDomainConversion_ImpressionConverted) {
-  auto impression =
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://sub.a.test")))
-          .Build();
+  auto impression = SourceBuilder()
+                        .SetDestinationOrigin(
+                            *SuitableOrigin::Deserialize("https://sub.a.test"))
+                        .Build();
   storage()->StoreSource(impression);
   EXPECT_EQ(
       AttributionTrigger::EventLevelResult::kSuccess,
       MaybeCreateAndStoreEventLevelReport(
           TriggerBuilder()
-              .SetDestinationOrigin(url::Origin::Create(GURL("https://a.test")))
+              .SetDestinationOrigin(
+                  *SuitableOrigin::Deserialize("https://a.test"))
               .SetReportingOrigin(impression.common_info().reporting_origin())
               .Build()));
 }
@@ -249,6 +309,33 @@ TEST_F(AttributionStorageTest, ImpressionExpired_NoConversionsStored) {
 
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kNoMatchingImpressions,
             MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+}
+
+TEST_F(AttributionStorageTest, ImpressionReportWindowPassed_NoReportGenerated) {
+  storage()->StoreSource(
+      SourceBuilder().SetEventReportWindow(base::Milliseconds(2)).Build());
+  task_environment_.FastForwardBy(base::Milliseconds(3));
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kReportWindowPassed,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+}
+
+TEST_F(AttributionStorageTest,
+       AggregatableReportWindowPassed_NoReportGenerated) {
+  SourceBuilder source_builder = TestAggregatableSourceProvider().GetBuilder();
+
+  storage()->StoreSource(
+      source_builder.SetAggregatableReportWindow(base::Milliseconds(2))
+          .Build());
+
+  task_environment_.FastForwardBy(base::Milliseconds(3));
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(
+          DefaultAggregatableTriggerBuilder().Build()),
+      AllOf(CreateReportEventLevelStatusIs(
+                AttributionTrigger::EventLevelResult::kSuccess),
+            CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kReportWindowPassed)));
 }
 
 TEST_F(AttributionStorageTest, ImpressionExpired_ConversionsStoredPrior) {
@@ -276,10 +363,13 @@ TEST_F(AttributionStorageTest,
   }
 
   // No additional conversion reports should be created.
-  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(DefaultTrigger()),
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
+                  TriggerBuilder().SetTriggerData(20).Build()),
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kPriorityTooLow),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    DroppedEventLevelReportIs(
+                        Optional(EventLevelDataIs(TriggerDataIs(20u))))));
 }
 
 TEST_F(AttributionStorageTest, OneConversion_OneReportScheduled) {
@@ -289,8 +379,8 @@ TEST_F(AttributionStorageTest, OneConversion_OneReportScheduled) {
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(conversion));
 
-  AttributionReport expected_report = GetExpectedEventLevelReport(
-      SourceBuilder().SetDefaultFilterData().BuildStored(), conversion);
+  AttributionReport expected_report =
+      GetExpectedEventLevelReport(SourceBuilder().BuildStored(), conversion);
 
   task_environment_.FastForwardBy(kReportDelay);
 
@@ -301,8 +391,8 @@ TEST_F(AttributionStorageTest, OneConversion_OneReportScheduled) {
 TEST_F(AttributionStorageTest,
        ConversionWithDifferentReportingOrigin_NoReportScheduled) {
   auto impression = SourceBuilder()
-                        .SetReportingOrigin(
-                            url::Origin::Create(GURL("https://different.test")))
+                        .SetReportingOrigin(*SuitableOrigin::Deserialize(
+                            "https://different.test"))
                         .Build();
   storage()->StoreSource(impression);
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kNoMatchingImpressions,
@@ -316,8 +406,8 @@ TEST_F(AttributionStorageTest,
 TEST_F(AttributionStorageTest,
        ConversionWithDifferentConversionOrigin_NoReportScheduled) {
   auto impression = SourceBuilder()
-                        .SetDestinationOrigin(
-                            url::Origin::Create(GURL("https://different.test")))
+                        .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                            "https://different.test"))
                         .Build();
   storage()->StoreSource(impression);
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kNoMatchingImpressions,
@@ -369,7 +459,7 @@ TEST_F(AttributionStorageTest,
 
   auto new_impression =
       SourceBuilder()
-          .SetSourceOrigin(url::Origin::Create(GURL("https://other.test/")))
+          .SetSourceOrigin(*SuitableOrigin::Deserialize("https://other.test/"))
           .Build();
   storage()->StoreSource(new_impression);
 
@@ -405,8 +495,8 @@ TEST_F(AttributionStorageTest,
   auto conversion = DefaultTrigger();
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(conversion));
-  AttributionReport expected_report = GetExpectedEventLevelReport(
-      builder.SetDefaultFilterData().BuildStored(), conversion);
+  AttributionReport expected_report =
+      GetExpectedEventLevelReport(builder.BuildStored(), conversion);
 
   task_environment_.FastForwardBy(kReportDelay);
 
@@ -431,16 +521,16 @@ TEST_F(AttributionStorageTest,
 
   // Store a new impression with a different reporting origin.
   storage()->StoreSource(SourceBuilder()
-                             .SetReportingOrigin(url::Origin::Create(
-                                 GURL("https://different.test")))
+                             .SetReportingOrigin(*SuitableOrigin::Deserialize(
+                                 "https://different.test"))
                              .Build());
 
   // The first impression should still be active and able to convert.
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(conversion));
 
-  AttributionReport expected_report = GetExpectedEventLevelReport(
-      builder.SetDefaultFilterData().BuildStored(), conversion);
+  AttributionReport expected_report =
+      GetExpectedEventLevelReport(builder.BuildStored(), conversion);
 
   // Verify it was the first impression that converted.
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Now()),
@@ -463,8 +553,8 @@ TEST_F(
   builder.SetSourceEventId(10);
   storage()->StoreSource(builder.Build());
 
-  AttributionReport third_expected_conversion = GetExpectedEventLevelReport(
-      builder.SetDefaultFilterData().BuildStored(), conversion);
+  AttributionReport third_expected_conversion =
+      GetExpectedEventLevelReport(builder.BuildStored(), conversion);
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(conversion));
 
@@ -553,21 +643,21 @@ TEST_F(AttributionStorageTest, MaxImpressionsPerOrigin_LimitsStorage) {
 
 TEST_F(AttributionStorageTest, MaxImpressionsPerOrigin_PerOriginNotSite) {
   delegate()->set_max_sources_per_origin(2);
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceOrigin(url::Origin::Create(GURL("https://foo.a.example")))
-          .SetSourceEventId(3)
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceOrigin(url::Origin::Create(GURL("https://foo.a.example")))
-          .SetSourceEventId(5)
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceOrigin(url::Origin::Create(GURL("https://bar.a.example")))
-          .SetSourceEventId(7)
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceOrigin(*SuitableOrigin::Deserialize(
+                                 "https://foo.a.example"))
+                             .SetSourceEventId(3)
+                             .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceOrigin(*SuitableOrigin::Deserialize(
+                                 "https://foo.a.example"))
+                             .SetSourceEventId(5)
+                             .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceOrigin(*SuitableOrigin::Deserialize(
+                                 "https://bar.a.example"))
+                             .SetSourceEventId(7)
+                             .Build());
 
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(SourceEventIdIs(3u), SourceEventIdIs(5u),
@@ -577,8 +667,8 @@ TEST_F(AttributionStorageTest, MaxImpressionsPerOrigin_PerOriginNotSite) {
   // limit of 2.
   EXPECT_EQ(storage()
                 ->StoreSource(SourceBuilder()
-                                  .SetSourceOrigin(url::Origin::Create(
-                                      GURL("https://foo.a.example")))
+                                  .SetSourceOrigin(*SuitableOrigin::Deserialize(
+                                      "https://foo.a.example"))
                                   .SetSourceEventId(9)
                                   .Build())
                 .status,
@@ -586,11 +676,11 @@ TEST_F(AttributionStorageTest, MaxImpressionsPerOrigin_PerOriginNotSite) {
 
   // This impression should be stored, because its origin hasn't hit the limit
   // of 2.
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceOrigin(url::Origin::Create(GURL("https://bar.a.example")))
-          .SetSourceEventId(11)
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceOrigin(*SuitableOrigin::Deserialize(
+                                 "https://bar.a.example"))
+                             .SetSourceEventId(11)
+                             .Build());
 
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(SourceEventIdIs(3u), SourceEventIdIs(5u),
@@ -610,7 +700,9 @@ TEST_F(AttributionStorageTest, MaxEventLevelReportsPerDestination) {
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kSuccess),
                     CreateReportAggregatableStatusIs(
-                        AttributionTrigger::AggregatableResult::kSuccess)));
+                        AttributionTrigger::AggregatableResult::kSuccess),
+                    CreateReportMaxEventLevelReportsLimitIs(absl::nullopt),
+                    CreateReportMaxAggregatableReportsLimitIs(absl::nullopt)));
 
   // Verify that MaxReportsPerDestination is enforced.
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
@@ -620,7 +712,10 @@ TEST_F(AttributionStorageTest, MaxEventLevelReportsPerDestination) {
                             kNoCapacityForConversionDestination),
                     CreateReportAggregatableStatusIs(
                         AttributionTrigger::AggregatableResult::kSuccess),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    DroppedEventLevelReportIs(absl::nullopt),
+                    CreateReportMaxEventLevelReportsLimitIs(1),
+                    CreateReportMaxAggregatableReportsLimitIs(absl::nullopt)));
 }
 
 TEST_F(AttributionStorageTest, MaxAggregatableReportsPerDestination) {
@@ -636,7 +731,9 @@ TEST_F(AttributionStorageTest, MaxAggregatableReportsPerDestination) {
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kSuccess),
                     CreateReportAggregatableStatusIs(
-                        AttributionTrigger::AggregatableResult::kSuccess)));
+                        AttributionTrigger::AggregatableResult::kSuccess),
+                    CreateReportMaxEventLevelReportsLimitIs(absl::nullopt),
+                    CreateReportMaxAggregatableReportsLimitIs(absl::nullopt)));
 
   // Verify that MaxReportsPerDestination is enforced.
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
@@ -646,7 +743,10 @@ TEST_F(AttributionStorageTest, MaxAggregatableReportsPerDestination) {
                     CreateReportAggregatableStatusIs(
                         AttributionTrigger::AggregatableResult::
                             kNoCapacityForConversionDestination),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    DroppedEventLevelReportIs(absl::nullopt),
+                    CreateReportMaxEventLevelReportsLimitIs(absl::nullopt),
+                    CreateReportMaxAggregatableReportsLimitIs(1)));
 }
 
 TEST_F(AttributionStorageTest, ClearDataWithNoMatch_NoDelete) {
@@ -705,7 +805,7 @@ TEST_F(AttributionStorageTest, ClearDataNullFilter) {
 
   for (int i = 0; i < 10; i++) {
     auto origin =
-        url::Origin::Create(GURL(base::StringPrintf("https://%d.com/", i)));
+        *SuitableOrigin::Deserialize(base::StringPrintf("https://%d.com/", i));
     storage()->StoreSource(SourceBuilder(now)
                                .SetExpiry(base::Days(30))
                                .SetSourceOrigin(origin)
@@ -718,7 +818,7 @@ TEST_F(AttributionStorageTest, ClearDataNullFilter) {
   // Convert half of them now, half after another day.
   for (int i = 0; i < 5; i++) {
     auto origin =
-        url::Origin::Create(GURL(base::StringPrintf("https://%d.com/", i)));
+        *SuitableOrigin::Deserialize(base::StringPrintf("https://%d.com/", i));
     EXPECT_EQ(
         AttributionTrigger::EventLevelResult::kSuccess,
         MaybeCreateAndStoreEventLevelReport(TriggerBuilder()
@@ -729,7 +829,7 @@ TEST_F(AttributionStorageTest, ClearDataNullFilter) {
   task_environment_.FastForwardBy(base::Days(1));
   for (int i = 5; i < 10; i++) {
     auto origin =
-        url::Origin::Create(GURL(base::StringPrintf("https://%d.com/", i)));
+        *SuitableOrigin::Deserialize(base::StringPrintf("https://%d.com/", i));
     EXPECT_EQ(
         AttributionTrigger::EventLevelResult::kSuccess,
         MaybeCreateAndStoreEventLevelReport(TriggerBuilder()
@@ -772,8 +872,8 @@ TEST_F(AttributionStorageTest, ClearDataRangeBetweenEvents) {
 
   task_environment_.FastForwardBy(base::Days(1));
 
-  const AttributionReport expected_report = GetExpectedEventLevelReport(
-      builder.SetDefaultFilterData().BuildStored(), conversion);
+  const AttributionReport expected_report =
+      GetExpectedEventLevelReport(builder.BuildStored(), conversion);
 
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(conversion));
@@ -866,12 +966,12 @@ TEST_F(AttributionStorageTest, MaxAttributionsBetweenSites) {
   storage()->StoreSource(source_builder.Build());
 
   auto conversion1 = DefaultTrigger();
-  EXPECT_THAT(
-      storage()->MaybeCreateAndStoreReport(conversion1),
-      AllOf(CreateReportEventLevelStatusIs(
-                AttributionTrigger::EventLevelResult::kSuccess),
-            CreateReportAggregatableStatusIs(
-                AttributionTrigger::AggregatableResult::kNotRegistered)));
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(conversion1),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kNotRegistered),
+                    CreateReportMaxAttributionsLimitIs(absl::nullopt)));
 
   auto conversion2 =
       DefaultAggregatableTriggerBuilder(/*histogram_values=*/{5}).Build();
@@ -879,7 +979,8 @@ TEST_F(AttributionStorageTest, MaxAttributionsBetweenSites) {
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kSuccess),
                     CreateReportAggregatableStatusIs(
-                        AttributionTrigger::AggregatableResult::kSuccess)));
+                        AttributionTrigger::AggregatableResult::kSuccess),
+                    CreateReportMaxAttributionsLimitIs(absl::nullopt)));
 
   // Event-level reports and aggregatable reports share the attribution limit.
   EXPECT_THAT(
@@ -888,11 +989,12 @@ TEST_F(AttributionStorageTest, MaxAttributionsBetweenSites) {
                 AttributionTrigger::EventLevelResult::kExcessiveAttributions),
             CreateReportAggregatableStatusIs(
                 AttributionTrigger::AggregatableResult::kExcessiveAttributions),
-            ReplacedEventLevelReportIs(absl::nullopt)));
+            ReplacedEventLevelReportIs(absl::nullopt),
+            CreateReportMaxAttributionsLimitIs(2),
+            DroppedEventLevelReportIs(absl::nullopt)));
 
-  const auto source = source_builder.SetDefaultFilterData()
-                          .SetAggregatableBudgetConsumed(5)
-                          .BuildStored();
+  const auto source =
+      source_builder.SetAggregatableBudgetConsumed(5).BuildStored();
   auto contributions =
       DefaultAggregatableHistogramContributions(/*histogram_values=*/{5});
   ASSERT_THAT(contributions, SizeIs(1));
@@ -932,7 +1034,9 @@ TEST_F(AttributionStorageTest,
 
   delegate()->set_randomized_response(
       std::vector<AttributionStorageDelegate::FakeReport>{});
-  storage()->StoreSource(TestAggregatableSourceProvider().GetBuilder().Build());
+  AttributionStorage::StoreSourceResult result = storage()->StoreSource(
+      TestAggregatableSourceProvider().GetBuilder().Build());
+  EXPECT_EQ(result.status, StorableSource::Result::kSuccessNoised);
   delegate()->set_randomized_response(absl::nullopt);
 
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
@@ -979,8 +1083,8 @@ TEST_F(AttributionStorageTest, NeverAttributeImpression_RateLimitsNotChanged) {
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kExcessiveAttributions,
             MaybeCreateAndStoreEventLevelReport(conversion));
 
-  const AttributionReport expected_report = GetExpectedEventLevelReport(
-      builder.SetDefaultFilterData().BuildStored(), conversion);
+  const AttributionReport expected_report =
+      GetExpectedEventLevelReport(builder.BuildStored(), conversion);
 
   task_environment_.FastForwardBy(kReportDelay);
 
@@ -1014,8 +1118,7 @@ TEST_F(AttributionStorageTest,
             MaybeCreateAndStoreAggregatableReport(trigger));
 
   const AttributionReport expected_report = GetExpectedAggregatableReport(
-      builder.SetDefaultFilterData()
-          .SetSourceEventId(5)
+      builder.SetSourceEventId(5)
           .SetAttributionLogic(StoredSource::AttributionLogic::kNever)
           .SetPriority(0)
           .SetAggregatableBudgetConsumed(1)
@@ -1077,10 +1180,11 @@ TEST_F(AttributionStorageTest,
     return storage()
         ->StoreSource(
             SourceBuilder()
-                .SetSourceOrigin(url::Origin::Create(GURL(source_origin)))
-                .SetReportingOrigin(url::Origin::Create(GURL(reporting_origin)))
+                .SetSourceOrigin(*SuitableOrigin::Deserialize(source_origin))
+                .SetReportingOrigin(
+                    *SuitableOrigin::Deserialize(reporting_origin))
                 .SetDestinationOrigin(
-                    url::Origin::Create(GURL(destination_origin)))
+                    *SuitableOrigin::Deserialize(destination_origin))
                 .SetExpiry(base::Days(30))
                 .Build())
         .status;
@@ -1111,9 +1215,7 @@ TEST_F(AttributionStorageTest,
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(6));
 }
 
-TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimitAndEmitMetric) {
-  base::HistogramTester histograms;
-
+TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimit) {
   delegate()->set_max_destinations_per_source_site_reporting_origin(1);
   delegate()->set_delete_expired_sources_frequency(base::Milliseconds(10));
 
@@ -1125,10 +1227,11 @@ TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimitAndEmitMetric) {
     return storage()
         ->StoreSource(
             SourceBuilder()
-                .SetSourceOrigin(url::Origin::Create(GURL(source_origin)))
-                .SetReportingOrigin(url::Origin::Create(GURL(reporting_origin)))
+                .SetSourceOrigin(*SuitableOrigin::Deserialize(source_origin))
+                .SetReportingOrigin(
+                    *SuitableOrigin::Deserialize(reporting_origin))
                 .SetDestinationOrigin(
-                    url::Origin::Create(GURL(destination_origin)))
+                    *SuitableOrigin::Deserialize(destination_origin))
                 .SetExpiry(expiry)
                 .Build())
         .status;
@@ -1144,14 +1247,14 @@ TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimitAndEmitMetric) {
       store_source("https://s.test", "https://a.r.test", "https://d2.test"),
       StorableSource::Result::kInsufficientUniqueDestinationCapacity);
 
-  EXPECT_EQ(
-      AttributionTrigger::EventLevelResult::kSuccess,
-      MaybeCreateAndStoreEventLevelReport(
-          TriggerBuilder()
-              .SetReportingOrigin(url::Origin::Create(GURL("https://a.r.test")))
-              .SetDestinationOrigin(
-                  url::Origin::Create(GURL("https://d1.test")))
-              .Build()));
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(
+                TriggerBuilder()
+                    .SetReportingOrigin(
+                        *SuitableOrigin::Deserialize("https://a.r.test"))
+                    .SetDestinationOrigin(
+                        *SuitableOrigin::Deserialize("https://d1.test"))
+                    .Build()));
 
   // Allowed by pending, dropped by unexpired (therefore dropped and not stored).
   EXPECT_EQ(
@@ -1164,31 +1267,19 @@ TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimitAndEmitMetric) {
   EXPECT_EQ(
       store_source("https://s.test", "https://a.r.test", "https://d3.test"),
       StorableSource::Result::kSuccess);
-
-  static constexpr char kMetric[] =
-      "Conversions.UniqueDestinationLimitForUnexpiredSourcesResult";
-
-  // kAllowedByPendingAllowedByUnexpired = 0
-  histograms.ExpectBucketCount(kMetric, 0, 2);
-
-  // kAllowedByPendingDroppedByUnexpired = 1
-  histograms.ExpectBucketCount(kMetric, 1, 1);
-
-  // kDroppedByPendingDroppedByUnexpired = 3
-  histograms.ExpectBucketCount(kMetric, 3, 1);
 }
 
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_AppliesToNavigationSources) {
   delegate()->set_max_destinations_per_source_site_reporting_origin(1);
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example/")))
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example/"))
+                             .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://b.example"))
+                             .Build());
 
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 }
@@ -1196,16 +1287,20 @@ TEST_F(AttributionStorageTest,
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_CountsAllSourceTypes) {
   delegate()->set_max_destinations_per_source_site_reporting_origin(1);
-  storage()->StoreSource(
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example/"))
+                             .SetSourceType(AttributionSourceType::kNavigation)
+                             .Build());
+  AttributionStorage::StoreSourceResult result = storage()->StoreSource(
       SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example/")))
-          .SetSourceType(AttributionSourceType::kNavigation)
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://b.example"))
           .SetSourceType(AttributionSourceType::kEvent)
           .Build());
+  EXPECT_EQ(result.status,
+            StorableSource::Result::kInsufficientUniqueDestinationCapacity);
+  EXPECT_EQ(result.max_destinations_per_source_site_reporting_origin, 1);
 
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 }
@@ -1217,28 +1312,28 @@ TEST_F(AttributionStorageTest,
 
   const base::TimeDelta expiry = base::Milliseconds(5);
 
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example/")))
-          .SetSourceType(AttributionSourceType::kNavigation)
-          .SetExpiry(expiry)
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
-          .SetSourceType(AttributionSourceType::kEvent)
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example/"))
+                             .SetSourceType(AttributionSourceType::kNavigation)
+                             .SetExpiry(expiry)
+                             .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://b.example"))
+                             .SetSourceType(AttributionSourceType::kEvent)
+                             .Build());
 
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
   task_environment_.FastForwardBy(expiry);
   EXPECT_THAT(storage()->GetActiveSources(), IsEmpty());
 
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
-          .SetSourceType(AttributionSourceType::kEvent)
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://b.example"))
+                             .SetSourceType(AttributionSourceType::kEvent)
+                             .Build());
 
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 }
@@ -1314,7 +1409,9 @@ TEST_F(AttributionStorageTest, FalselyAttributeImpression_ReportStored) {
   delegate()->set_randomized_response(
       std::vector<AttributionStorageDelegate::FakeReport>{
           {.trigger_data = 7, .report_time = fake_report_time}});
-  storage()->StoreSource(builder.Build());
+  AttributionStorage::StoreSourceResult result =
+      storage()->StoreSource(builder.Build());
+  EXPECT_EQ(result.status, StorableSource::Result::kSuccessNoised);
   delegate()->set_randomized_response(absl::nullopt);
 
   base::Time trigger_time = base::Time::Now();
@@ -1324,7 +1421,6 @@ TEST_F(AttributionStorageTest, FalselyAttributeImpression_ReportStored) {
           AttributionInfoBuilder(
               builder
                   .SetAttributionLogic(StoredSource::AttributionLogic::kFalsely)
-                  .SetDefaultFilterData()
                   .SetActiveState(StoredSource::ActiveState::
                                       kReachedEventLevelAttributionLimit)
                   .BuildStored())
@@ -1350,7 +1446,7 @@ TEST_F(AttributionStorageTest, FalselyAttributeImpression_ReportStored) {
       storage()->MaybeCreateAndStoreReport(
           DefaultAggregatableTriggerBuilder().Build()),
       AllOf(CreateReportEventLevelStatusIs(
-                AttributionTrigger::EventLevelResult::kNoMatchingImpressions),
+                AttributionTrigger::EventLevelResult::kFalselyAttributedSource),
             CreateReportAggregatableStatusIs(
                 AttributionTrigger::AggregatableResult::kSuccess)));
 
@@ -1363,7 +1459,6 @@ TEST_F(AttributionStorageTest, FalselyAttributeImpression_ReportStored) {
           AttributionInfoBuilder(
               builder
                   .SetAttributionLogic(StoredSource::AttributionLogic::kFalsely)
-                  .SetDefaultFilterData()
                   .SetAggregatableBudgetConsumed(1)
                   .SetActiveState(StoredSource::ActiveState::
                                       kReachedEventLevelAttributionLimit)
@@ -1407,7 +1502,9 @@ TEST_F(AttributionStorageTest, StoreSource_ReturnsMinFakeReportTime) {
     delegate()->set_randomized_response(test_case.randomized_response);
 
     auto result = storage()->StoreSource(SourceBuilder().Build());
-    EXPECT_EQ(result.status, StorableSource::Result::kSuccess);
+    EXPECT_EQ(result.status, test_case.randomized_response
+                                 ? StorableSource::Result::kSuccessNoised
+                                 : StorableSource::Result::kSuccess);
     EXPECT_EQ(result.min_fake_report_time, test_case.expected);
   }
 }
@@ -1424,7 +1521,9 @@ TEST_F(AttributionStorageTest, TriggerPriority) {
                   TriggerBuilder().SetPriority(0).SetTriggerData(20).Build()),
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kSuccess),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    CreateReportSourceIs(Optional(SourceEventIdIs(5u))),
+                    DroppedEventLevelReportIs(absl::nullopt)));
 
   // This conversion should replace the one above because it has a higher
   // priority.
@@ -1434,7 +1533,9 @@ TEST_F(AttributionStorageTest, TriggerPriority) {
                         AttributionTrigger::EventLevelResult::
                             kSuccessDroppedLowerPriority),
                     ReplacedEventLevelReportIs(
-                        Optional(EventLevelDataIs(TriggerDataIs(20u))))));
+                        Optional(EventLevelDataIs(TriggerDataIs(20u)))),
+                    CreateReportSourceIs(Optional(SourceEventIdIs(5u))),
+                    DroppedEventLevelReportIs(absl::nullopt)));
 
   storage()->StoreSource(
       SourceBuilder().SetSourceEventId(7).SetPriority(2).Build());
@@ -1448,7 +1549,10 @@ TEST_F(AttributionStorageTest, TriggerPriority) {
                   TriggerBuilder().SetPriority(0).SetTriggerData(23).Build()),
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::kPriorityTooLow),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    CreateReportSourceIs(Optional(SourceEventIdIs(7u))),
+                    DroppedEventLevelReportIs(
+                        Optional(EventLevelDataIs(TriggerDataIs(23u))))));
 
   task_environment_.FastForwardBy(kReportDelay);
 
@@ -1538,9 +1642,13 @@ TEST_F(AttributionStorageTest, TriggerPriority_DeactivatesImpression) {
 
   // This conversion should not be stored because all reports for the attributed
   // impression were in an earlier window.
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kPriorityTooLow,
-            MaybeCreateAndStoreEventLevelReport(
-                TriggerBuilder().SetPriority(2).Build()));
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(
+          TriggerBuilder().SetPriority(2).Build()),
+      AllOf(CreateReportEventLevelStatusIs(
+                AttributionTrigger::EventLevelResult::kExcessiveReports),
+            DroppedEventLevelReportIs(
+                Optional(EventLevelDataIs(TriggerPriorityIs(2))))));
 
   // As a result, the impression with data 5 should have reached event-level
   // attribution limit.
@@ -1551,16 +1659,16 @@ TEST_F(AttributionStorageTest, TriggerPriority_DeactivatesImpression) {
 }
 
 TEST_F(AttributionStorageTest, DedupKey_Dedups) {
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceEventId(2)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceEventId(2)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://b.example"))
+                             .Build());
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(DedupKeysAre(IsEmpty()), DedupKeysAre(IsEmpty())));
 
@@ -1568,7 +1676,7 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetDedupKey(11)
                     .SetTriggerData(71)
                     .Build()));
@@ -1579,7 +1687,7 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetDedupKey(12)
                     .SetTriggerData(72)
                     .Build()));
@@ -1590,7 +1698,7 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://b.example")))
+                        *SuitableOrigin::Deserialize("https://b.example"))
                     .SetDedupKey(12)
                     .SetTriggerData(73)
                     .Build()));
@@ -1598,7 +1706,8 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
   // Shouldn't be stored because conversion destination and dedup key match.
   auto result = storage()->MaybeCreateAndStoreReport(
       TriggerBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://a.example"))
           .SetDedupKey(11)
           .SetTriggerData(74)
           .Build());
@@ -1611,7 +1720,7 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://b.example")))
+                        *SuitableOrigin::Deserialize("https://b.example"))
                     .SetDedupKey(12)
                     .SetTriggerData(75)
                     .Build()));
@@ -1628,11 +1737,11 @@ TEST_F(AttributionStorageTest, DedupKey_Dedups) {
 }
 
 TEST_F(AttributionStorageTest, DedupKey_DedupsAfterConversionDeletion) {
-  storage()->StoreSource(
-      SourceBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
+  storage()->StoreSource(SourceBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
   task_environment_.FastForwardBy(base::Milliseconds(1));
@@ -1641,7 +1750,7 @@ TEST_F(AttributionStorageTest, DedupKey_DedupsAfterConversionDeletion) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetDedupKey(2)
                     .SetTriggerData(3)
                     .Build()));
@@ -1663,7 +1772,7 @@ TEST_F(AttributionStorageTest, DedupKey_DedupsAfterConversionDeletion) {
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetDedupKey(2)
                     .SetTriggerData(5)
                     .Build()));
@@ -1674,16 +1783,16 @@ TEST_F(AttributionStorageTest, DedupKey_DedupsAfterConversionDeletion) {
 
 TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
   TestAggregatableSourceProvider provider;
-  storage()->StoreSource(
-      provider.GetBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
-  storage()->StoreSource(
-      provider.GetBuilder()
-          .SetSourceEventId(2)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://b.example")))
-          .Build());
+  storage()->StoreSource(provider.GetBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
+  storage()->StoreSource(provider.GetBuilder()
+                             .SetSourceEventId(2)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://b.example"))
+                             .Build());
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(AggregatableDedupKeysAre(IsEmpty()),
                           AggregatableDedupKeysAre(IsEmpty())));
@@ -1692,7 +1801,7 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetAggregatableDedupKey(11)
                     .SetDebugKey(71)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1703,7 +1812,7 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetAggregatableDedupKey(12)
                     .SetDebugKey(72)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1714,7 +1823,7 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://b.example")))
+                        *SuitableOrigin::Deserialize("https://b.example"))
                     .SetAggregatableDedupKey(12)
                     .SetDebugKey(73)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1724,7 +1833,7 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetAggregatableDedupKey(11)
                     .SetDebugKey(74)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1734,7 +1843,7 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://b.example")))
+                        *SuitableOrigin::Deserialize("https://b.example"))
                     .SetAggregatableDedupKey(12)
                     .SetDebugKey(75)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1751,12 +1860,12 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_Dedups) {
 
 TEST_F(AttributionStorageTest,
        AggregatableDedupKey_DedupsAfterConversionDeletion) {
-  storage()->StoreSource(
-      TestAggregatableSourceProvider()
-          .GetBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
+  storage()->StoreSource(TestAggregatableSourceProvider()
+                             .GetBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
   task_environment_.FastForwardBy(base::Milliseconds(1));
@@ -1765,7 +1874,7 @@ TEST_F(AttributionStorageTest,
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetAggregatableDedupKey(2)
                     .SetDebugKey(3)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1787,7 +1896,7 @@ TEST_F(AttributionStorageTest,
             MaybeCreateAndStoreAggregatableReport(
                 DefaultAggregatableTriggerBuilder()
                     .SetDestinationOrigin(
-                        url::Origin::Create(GURL("https://a.example")))
+                        *SuitableOrigin::Deserialize("https://a.example"))
                     .SetAggregatableDedupKey(2)
                     .SetDebugKey(5)
                     .Build(/*generate_event_trigger_data=*/false)));
@@ -1797,16 +1906,17 @@ TEST_F(AttributionStorageTest,
 }
 
 TEST_F(AttributionStorageTest, DedupKey_AggregatableReportNotDedups) {
-  storage()->StoreSource(
-      TestAggregatableSourceProvider()
-          .GetBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
+  storage()->StoreSource(TestAggregatableSourceProvider()
+                             .GetBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
 
   auto result = storage()->MaybeCreateAndStoreReport(
       DefaultAggregatableTriggerBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://a.example"))
           .SetDedupKey(11)
           .Build());
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
@@ -1816,7 +1926,8 @@ TEST_F(AttributionStorageTest, DedupKey_AggregatableReportNotDedups) {
 
   result = storage()->MaybeCreateAndStoreReport(
       DefaultAggregatableTriggerBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://a.example"))
           .SetDedupKey(11)
           .Build());
 
@@ -1827,16 +1938,17 @@ TEST_F(AttributionStorageTest, DedupKey_AggregatableReportNotDedups) {
 }
 
 TEST_F(AttributionStorageTest, AggregatableDedupKey_EventLevelReportNotDedups) {
-  storage()->StoreSource(
-      TestAggregatableSourceProvider()
-          .GetBuilder()
-          .SetSourceEventId(1)
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
-          .Build());
+  storage()->StoreSource(TestAggregatableSourceProvider()
+                             .GetBuilder()
+                             .SetSourceEventId(1)
+                             .SetDestinationOrigin(*SuitableOrigin::Deserialize(
+                                 "https://a.example"))
+                             .Build());
 
   auto result = storage()->MaybeCreateAndStoreReport(
       DefaultAggregatableTriggerBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://a.example"))
           .SetAggregatableDedupKey(11)
           .Build());
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
@@ -1846,7 +1958,8 @@ TEST_F(AttributionStorageTest, AggregatableDedupKey_EventLevelReportNotDedups) {
 
   result = storage()->MaybeCreateAndStoreReport(
       DefaultAggregatableTriggerBuilder()
-          .SetDestinationOrigin(url::Origin::Create(GURL("https://a.example")))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://a.example"))
           .SetAggregatableDedupKey(11)
           .Build());
 
@@ -1966,10 +2079,14 @@ TEST_F(AttributionStorageTest,
   // The next trigger should cause the source to reach event-level attribution
   // limit; the report itself shouldn't be stored as we've already reached the
   // maximum number of event-level reports per source.
-  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(DefaultTrigger()),
-              AllOf(CreateReportEventLevelStatusIs(
-                        AttributionTrigger::EventLevelResult::kPriorityTooLow),
-                    ReplacedEventLevelReportIs(absl::nullopt)));
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(
+          TriggerBuilder().SetTriggerData(20).Build()),
+      AllOf(CreateReportEventLevelStatusIs(
+                AttributionTrigger::EventLevelResult::kExcessiveReports),
+            ReplacedEventLevelReportIs(absl::nullopt),
+            DroppedEventLevelReportIs(
+                Optional(EventLevelDataIs(TriggerDataIs(20u))))));
   EXPECT_THAT(
       storage()->GetActiveSources(),
       ElementsAre(SourceActiveStateIs(
@@ -2079,9 +2196,27 @@ TEST_F(AttributionStorageTest, AdjustOfflineReportTimes_Range) {
                     InitialReportTimeIs(original_report_time)))));
 }
 
+TEST_F(AttributionStorageTest,
+       AdjustOfflineReportTimes_ReturnsMinReportTimeWithoutDelay) {
+  delegate()->set_offline_report_delay_config(absl::nullopt);
+
+  ASSERT_EQ(storage()->AdjustOfflineReportTimes(), absl::nullopt);
+
+  storage()->StoreSource(SourceBuilder().Build());
+  ASSERT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+
+  std::vector<AttributionReport> reports =
+      storage()->GetAttributionReports(base::Time::Max());
+  ASSERT_THAT(reports, SizeIs(1));
+
+  ASSERT_EQ(storage()->AdjustOfflineReportTimes(),
+            reports.front().report_time());
+}
+
 TEST_F(AttributionStorageTest, GetNextEventReportTime) {
-  const auto origin_a = url::Origin::Create(GURL("https://a.example/"));
-  const auto origin_b = url::Origin::Create(GURL("https://b.example/"));
+  const auto origin_a = *SuitableOrigin::Deserialize("https://a.example/");
+  const auto origin_b = *SuitableOrigin::Deserialize("https://b.example/");
 
   EXPECT_EQ(storage()->GetNextReportTime(base::Time::Min()), absl::nullopt);
 
@@ -2192,7 +2327,8 @@ TEST_F(AttributionStorageTest, TriggerDebugKey_RoundTrips) {
 }
 
 TEST_F(AttributionStorageTest, AttributionAggregationKeys_RoundTrips) {
-  auto aggregation_keys = AttributionAggregationKeys::FromKeys({{"key", 345}});
+  auto aggregation_keys =
+      attribution_reporting::AggregationKeys::FromKeys({{"key", 345}});
   ASSERT_TRUE(aggregation_keys.has_value());
   storage()->StoreSource(
       SourceBuilder().SetAggregationKeys(*aggregation_keys).Build());
@@ -2223,21 +2359,21 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerSource) {
 
   auto result = storage()->StoreSource(
       SourceBuilder()
-          .SetReportingOrigin(url::Origin::Create(GURL("https://r1.test")))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r1.test"))
           .SetDebugKey(1)
           .Build());
   ASSERT_EQ(result.status, StorableSource::Result::kSuccess);
 
   result = storage()->StoreSource(
       SourceBuilder()
-          .SetReportingOrigin(url::Origin::Create(GURL("https://r2.test")))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r2.test"))
           .SetDebugKey(2)
           .Build());
   ASSERT_EQ(result.status, StorableSource::Result::kSuccess);
 
   result = storage()->StoreSource(
       SourceBuilder()
-          .SetReportingOrigin(url::Origin::Create(GURL("https://r3.test")))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r3.test"))
           .SetDebugKey(3)
           .Build());
   ASSERT_EQ(result.status, StorableSource::Result::kExcessiveReportingOrigins);
@@ -2257,9 +2393,9 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerAttribution) {
       .max_attributions = std::numeric_limits<int64_t>::max(),
   });
 
-  const auto origin1 = url::Origin::Create(GURL("https://r1.test"));
-  const auto origin2 = url::Origin::Create(GURL("https://r2.test"));
-  const auto origin3 = url::Origin::Create(GURL("https://r3.test"));
+  const auto origin1 = *SuitableOrigin::Deserialize("https://r1.test");
+  const auto origin2 = *SuitableOrigin::Deserialize("https://r2.test");
+  const auto origin3 = *SuitableOrigin::Deserialize("https://r3.test");
 
   SourceBuilder source_builder = TestAggregatableSourceProvider().GetBuilder();
   TriggerBuilder trigger_builder = DefaultAggregatableTriggerBuilder();
@@ -2275,7 +2411,8 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerAttribution) {
       AllOf(CreateReportEventLevelStatusIs(
                 AttributionTrigger::EventLevelResult::kSuccess),
             CreateReportAggregatableStatusIs(
-                AttributionTrigger::AggregatableResult::kSuccess)));
+                AttributionTrigger::AggregatableResult::kSuccess),
+            CreateReportMaxAttributionReportingOriginsLimitIs(absl::nullopt)));
 
   ASSERT_THAT(
       storage()->MaybeCreateAndStoreReport(
@@ -2283,7 +2420,8 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerAttribution) {
       AllOf(CreateReportEventLevelStatusIs(
                 AttributionTrigger::EventLevelResult::kSuccess),
             CreateReportAggregatableStatusIs(
-                AttributionTrigger::AggregatableResult::kSuccess)));
+                AttributionTrigger::AggregatableResult::kSuccess),
+            CreateReportMaxAttributionReportingOriginsLimitIs(absl::nullopt)));
 
   ASSERT_THAT(
       storage()->MaybeCreateAndStoreReport(
@@ -2293,7 +2431,8 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerAttribution) {
               AttributionTrigger::EventLevelResult::kExcessiveReportingOrigins),
           CreateReportAggregatableStatusIs(
               AttributionTrigger::AggregatableResult::
-                  kExcessiveReportingOrigins)));
+                  kExcessiveReportingOrigins),
+          CreateReportMaxAttributionReportingOriginsLimitIs(2)));
 
   // Two event-level reports, two aggregatable reports.
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
@@ -2319,44 +2458,56 @@ TEST_F(AttributionStorageTest, MaxAggregatableBudgetPerSource) {
           .Build());
 
   // A single contribution exceeds the budget.
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{17})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kInsufficientBudget);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{17})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kInsufficientBudget),
+            CreateReportAggreggatableBudgetPerSourceIs(16)));
 
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{2, 5})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kSuccess);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{2, 5})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kSuccess),
+            CreateReportAggreggatableBudgetPerSourceIs(absl::nullopt)));
 
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{10})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kInsufficientBudget);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{10})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kInsufficientBudget),
+            CreateReportAggreggatableBudgetPerSourceIs(16)));
 
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{9})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kSuccess);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{9})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kSuccess),
+            CreateReportAggreggatableBudgetPerSourceIs(absl::nullopt)));
 
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{1})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kInsufficientBudget);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{1})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kInsufficientBudget),
+            CreateReportAggreggatableBudgetPerSourceIs(16)));
 
   // The second source has higher priority and should have capacity.
   storage()->StoreSource(provider.GetBuilder().SetPriority(10).Build());
 
-  EXPECT_EQ(
-      MaybeCreateAndStoreAggregatableReport(DefaultAggregatableTriggerBuilder(
-                                                /*histogram_values=*/{9})
-                                                .Build()),
-      AttributionTrigger::AggregatableResult::kSuccess);
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(DefaultAggregatableTriggerBuilder(
+                                               /*histogram_values=*/{9})
+                                               .Build()),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kSuccess),
+            CreateReportAggreggatableBudgetPerSourceIs(absl::nullopt)));
 }
 
 TEST_F(AttributionStorageTest, BudgetConsumedAfterTriggerIsRetrieved) {
@@ -2377,8 +2528,8 @@ TEST_F(AttributionStorageTest,
        GetAttributionReports_SetsRandomizedTriggerRate) {
   delegate()->set_randomized_response_rates(/*navigation=*/.2, /*event=*/.4);
 
-  const auto origin1 = url::Origin::Create(GURL("https://r1.test"));
-  const auto origin2 = url::Origin::Create(GURL("https://r2.test"));
+  const auto origin1 = *SuitableOrigin::Deserialize("https://r1.test");
+  const auto origin2 = *SuitableOrigin::Deserialize("https://r2.test");
 
   storage()->StoreSource(SourceBuilder()
                              .SetReportingOrigin(origin1)
@@ -2458,8 +2609,8 @@ TEST_F(AttributionStorageTest, SourceEventIdSanitized) {
 TEST_F(AttributionStorageTest, TriggerDataSanitized) {
   delegate()->set_trigger_data_cardinality(/*navigation=*/4, /*event=*/3);
 
-  const auto origin1 = url::Origin::Create(GURL("https://r1.test"));
-  const auto origin2 = url::Origin::Create(GURL("https://r2.test"));
+  const auto origin1 = *SuitableOrigin::Deserialize("https://r1.test");
+  const auto origin2 = *SuitableOrigin::Deserialize("https://r2.test");
 
   storage()->StoreSource(SourceBuilder()
                              .SetReportingOrigin(origin1)
@@ -2493,8 +2644,7 @@ TEST_F(AttributionStorageTest, SourceFilterData_RoundTrips) {
                              .SetSourceType(AttributionSourceType::kNavigation)
                              .Build());
 
-  auto filter_data =
-      AttributionFilterData::FromSourceFilterValues({{"abc", {"x", "y"}}});
+  const auto filter_data = AttributionFilterData::Create({{"abc", {"x", "y"}}});
   ASSERT_TRUE(filter_data.has_value());
 
   storage()->StoreSource(SourceBuilder()
@@ -2502,18 +2652,13 @@ TEST_F(AttributionStorageTest, SourceFilterData_RoundTrips) {
                              .SetSourceType(AttributionSourceType::kEvent)
                              .Build());
 
-  EXPECT_THAT(
-      storage()->GetActiveSources(),
-      ElementsAre(SourceFilterDataIs(AttributionFilterData::CreateForTesting(
-                      {{"source_type", {"navigation"}}})),
-                  SourceFilterDataIs(AttributionFilterData::CreateForTesting({
-                      {"abc", {"x", "y"}},
-                      {"source_type", {"event"}},
-                  }))));
+  EXPECT_THAT(storage()->GetActiveSources(),
+              ElementsAre(SourceFilterDataIs(AttributionFilterData()),
+                          SourceFilterDataIs(filter_data)));
 }
 
 TEST_F(AttributionStorageTest, NoMatchingTriggerData_ReturnsError) {
-  const auto origin = url::Origin::Create(GURL("https://r.test"));
+  const auto origin = *SuitableOrigin::Deserialize("https://r.test");
 
   storage()->StoreSource(SourceBuilder()
                              .SetSourceType(AttributionSourceType::kNavigation)
@@ -2521,23 +2666,32 @@ TEST_F(AttributionStorageTest, NoMatchingTriggerData_ReturnsError) {
                              .SetReportingOrigin(origin)
                              .Build());
 
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kNoMatchingConfigurations,
-            MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
-                origin, origin,
-                /*filters=*/AttributionFilterData(),
-                /*not_filters=*/AttributionFilterData(),
-                /*debug_key=*/absl::nullopt,
-                /*aggregatable_dedup_key=*/absl::nullopt,
-                {AttributionTrigger::EventTriggerData(
-                    /*data=*/11,
-                    /*priority=*/12,
-                    /*dedup_key=*/13,
-                    /*filters=*/
-                    AttributionFilterData::ForSourceType(
-                        AttributionSourceType::kEvent),
-                    /*not_filters=*/AttributionFilterData())},
-                /*aggregatable_trigger_data=*/{},
-                /*aggregatable_values=*/AttributionAggregatableValues())));
+  EXPECT_EQ(
+      AttributionTrigger::EventLevelResult::kNoMatchingConfigurations,
+      MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
+          /*reporting_origin=*/origin,
+          attribution_reporting::TriggerRegistration(
+              /*filters=*/AttributionFilters(),
+              /*not_filters=*/AttributionFilters(),
+              /*debug_key=*/absl::nullopt,
+              /*aggregatable_dedup_key=*/absl::nullopt,
+              *attribution_reporting::EventTriggerDataList::Create(
+                  {attribution_reporting::EventTriggerData(
+                      /*data=*/11,
+                      /*priority=*/12,
+                      /*dedup_key=*/13,
+                      /*filters=*/
+                      AttributionFiltersForSourceType(
+                          AttributionSourceType::kEvent),
+                      /*not_filters=*/AttributionFilters())}),
+              /*aggregatable_trigger_data=*/
+              attribution_reporting::AggregatableTriggerDataList(),
+              /*aggregatable_values=*/
+              attribution_reporting::AggregatableValues(),
+              /*debug_reporting=*/false,
+              ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+          /*destination_origin=*/origin,
+          /*is_within_fenced_frame=*/false)));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
 
@@ -2546,82 +2700,91 @@ TEST_F(AttributionStorageTest, NoMatchingTriggerData_ReturnsError) {
 }
 
 TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
-  const auto origin = url::Origin::Create(GURL("https://r.test"));
+  const auto origin = *SuitableOrigin::Deserialize("https://r.test");
 
   storage()->StoreSource(
       SourceBuilder()
           .SetSourceType(AttributionSourceType::kNavigation)
           .SetDestinationOrigin(origin)
           .SetReportingOrigin(origin)
-          .SetFilterData(*AttributionFilterData::FromSourceFilterValues(
-              {{"abc", {"123"}}}))
+          .SetFilterData(*AttributionFilterData::Create({{"abc", {"123"}}}))
           .Build());
 
-  const std::vector<AttributionTrigger::EventTriggerData> event_triggers = {
+  const std::vector<attribution_reporting::EventTriggerData> event_triggers = {
       // Filters don't match.
-      AttributionTrigger::EventTriggerData(
+      attribution_reporting::EventTriggerData(
           /*data=*/11,
           /*priority=*/12,
           /*dedup_key=*/13,
           /*filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"abc", {"456"}},
           }),
-          /*not_filters=*/AttributionFilterData()),
+          /*not_filters=*/AttributionFilters()),
 
       // Filters match, but negated filters do not.
-      AttributionTrigger::EventTriggerData(
+      attribution_reporting::EventTriggerData(
           /*data=*/21,
           /*priority=*/22,
           /*dedup_key=*/23,
           /*filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"abc", {"123"}},
           }),
           /*not_filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"source_type", {"navigation"}},
           })),
 
       // Filters and negated filters match.
-      AttributionTrigger::EventTriggerData(
+      attribution_reporting::EventTriggerData(
           /*data=*/31,
           /*priority=*/32,
           /*dedup_key=*/33,
           /*filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"abc", {"123"}},
           }),
           /*not_filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"source_type", {"event"}},
           })),
 
       // Filters and negated filters match, but not the first event
       // trigger to match.
-      AttributionTrigger::EventTriggerData(
+      attribution_reporting::EventTriggerData(
           /*data=*/41,
           /*priority=*/42,
           /*dedup_key=*/43,
           /*filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"abc", {"123"}},
           }),
           /*not_filters=*/
-          *AttributionFilterData::FromTriggerFilterValues({
+          *AttributionFilters::Create({
               {"source_type", {"event"}},
           })),
   };
 
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
-            MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
-                origin, origin,
-                /*filters=*/AttributionFilterData(),
-                /*not_filters=*/AttributionFilterData(),
-                /*debug_key=*/absl::nullopt,
-                /*aggregatable_dedup_key=*/absl::nullopt, event_triggers,
-                /*aggregatable_trigger_data=*/{},
-                /*aggregatable_values=*/AttributionAggregatableValues())));
+  EXPECT_EQ(
+      AttributionTrigger::EventLevelResult::kSuccess,
+      MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
+          /*reporting_origin=*/origin,
+          attribution_reporting::TriggerRegistration(
+              /*filters=*/AttributionFilters(),
+              /*not_filters=*/AttributionFilters(),
+              /*debug_key=*/absl::nullopt,
+              /*aggregatable_dedup_key=*/absl::nullopt,
+              *attribution_reporting::EventTriggerDataList::Create(
+                  event_triggers),
+              /*aggregatable_trigger_data=*/
+              attribution_reporting::AggregatableTriggerDataList(),
+              /*aggregatable_values=*/
+              attribution_reporting::AggregatableValues(),
+              /*debug_reporting=*/false,
+              ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+          /*destination_origin=*/origin,
+          /*is_within_fenced_frame=*/false)));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
               ElementsAre(EventLevelDataIs(
@@ -2632,57 +2795,80 @@ TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
 }
 
 TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
-  const auto origin = url::Origin::Create(GURL("https://r.test"));
+  const auto origin = *SuitableOrigin::Deserialize("https://r.test");
 
-  std::vector<AttributionAggregatableTriggerData> aggregatable_trigger_data{
-      AttributionAggregatableTriggerData::CreateForTesting(
-          absl::MakeUint128(/*high=*/1, /*low=*/0),
-          /*source_keys=*/{"0"},
-          /*filters=*/AttributionFilterData(),
-          /*not_filters=*/AttributionFilterData())};
+  std::vector<attribution_reporting::AggregatableTriggerData>
+      aggregatable_trigger_data{
+          *attribution_reporting::AggregatableTriggerData::Create(
+              absl::MakeUint128(/*high=*/1, /*low=*/0),
+              /*source_keys=*/{"0"},
+              /*filters=*/AttributionFilters(),
+              /*not_filters=*/AttributionFilters())};
 
   auto aggregatable_values =
-      AttributionAggregatableValues::CreateForTesting({{"0", 1}});
+      *attribution_reporting::AggregatableValues::Create({{"0", 1}});
 
   storage()->StoreSource(
       SourceBuilder()
           .SetDestinationOrigin(origin)
           .SetReportingOrigin(origin)
-          .SetFilterData(*AttributionFilterData::FromSourceFilterValues(
-              {{"abc", {"123"}}}))
-          .SetAggregationKeys(*AttributionAggregationKeys::FromKeys({{"0", 1}}))
+          .SetFilterData(*AttributionFilterData::Create({{"abc", {"123"}}}))
+          .SetAggregationKeys(
+              *attribution_reporting::AggregationKeys::FromKeys({{"0", 1}}))
           .Build());
 
-  AttributionTrigger trigger1(origin, origin,
-                              /*filters=*/
-                              *AttributionFilterData::FromTriggerFilterValues({
-                                  {"abc", {"456"}},
-                              }),
-                              /*not_filters=*/AttributionFilterData(),
-                              /*debug_key=*/absl::nullopt,
-                              /*aggregatable_dedup_key=*/absl::nullopt,
-                              /*event_triggers=*/{}, aggregatable_trigger_data,
-                              aggregatable_values);
+  AttributionTrigger trigger1(
+      /*reporting_origin=*/origin,
+      attribution_reporting::TriggerRegistration(
+          /*filters=*/
+          *AttributionFilters::Create({
+              {"abc", {"456"}},
+          }),
+          /*not_filters=*/AttributionFilters(),
+          /*debug_key=*/absl::nullopt,
+          /*aggregatable_dedup_key=*/absl::nullopt,
+          /*event_triggers=*/attribution_reporting::EventTriggerDataList(),
+          *attribution_reporting::AggregatableTriggerDataList::Create(
+              aggregatable_trigger_data),
+          aggregatable_values,
+          /*debug_reporting=*/false,
+          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+      /*destination_origin=*/origin, /*is_within_fenced_frame=*/false);
 
-  AttributionTrigger trigger2(origin, origin,
-                              /*filters=*/
-                              *AttributionFilterData::FromTriggerFilterValues({
-                                  {"abc", {"123"}},
-                              }),
-                              /*not_filters=*/AttributionFilterData(),
-                              /*debug_key=*/absl::nullopt,
-                              /*aggregatable_dedup_key=*/absl::nullopt,
-                              /*event_triggers=*/{}, aggregatable_trigger_data,
-                              aggregatable_values);
+  AttributionTrigger trigger2(
+      /*reporting_origin=*/origin,
+      attribution_reporting::TriggerRegistration(
+          /*filters=*/
+          *AttributionFilters::Create({
+              {"abc", {"123"}},
+          }),
+          /*not_filters=*/AttributionFilters(),
+          /*debug_key=*/absl::nullopt,
+          /*aggregatable_dedup_key=*/absl::nullopt,
+          /*event_triggers=*/attribution_reporting::EventTriggerDataList(),
+          *attribution_reporting::AggregatableTriggerDataList::Create(
+              aggregatable_trigger_data),
+          aggregatable_values,
+          /*debug_reporting=*/false,
+          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+      /*destination_origin=*/origin, /*is_within_fenced_frame=*/false);
 
   AttributionTrigger trigger3(
-      origin, origin,
-      /*filters=*/AttributionFilterData(),
-      /*not_filters=*/
-      AttributionFilterData::ForSourceType(AttributionSourceType::kNavigation),
-      /*debug_key=*/absl::nullopt,
-      /*aggregatable_dedup_key=*/absl::nullopt,
-      /*event_triggers=*/{}, aggregatable_trigger_data, aggregatable_values);
+      /*reporting_origin=*/origin,
+      attribution_reporting::TriggerRegistration(
+          /*filters=*/AttributionFilters(),
+          /*not_filters=*/
+          AttributionFiltersForSourceType(AttributionSourceType::kNavigation),
+          /*debug_key=*/absl::nullopt,
+          /*aggregatable_dedup_key=*/absl::nullopt,
+          /*event_triggers=*/attribution_reporting::EventTriggerDataList(),
+          *attribution_reporting::AggregatableTriggerDataList::Create(
+              aggregatable_trigger_data),
+          aggregatable_values,
+          /*debug_reporting=*/false,
+          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+      /*destination_origin=*/origin,
+      /*is_within_fenced_frame=*/false);
 
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger1),
               AllOf(CreateReportEventLevelStatusIs(
@@ -2743,9 +2929,8 @@ TEST_F(AttributionStorageTest, AggregatableAttribution_ReportsScheduled) {
             NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
                 AggregatableHistogramContributionsAre(contributions))))));
 
-  const auto source = source_builder.SetDefaultFilterData()
-                          .SetAggregatableBudgetConsumed(5)
-                          .BuildStored();
+  const auto source =
+      source_builder.SetAggregatableBudgetConsumed(5).BuildStored();
   auto expected_event_level_report =
       GetExpectedEventLevelReport(source, trigger);
   auto expected_aggregatable_report =
@@ -2799,7 +2984,7 @@ TEST_F(
               .SetTriggerData(5)
               .Build()),
       AllOf(CreateReportEventLevelStatusIs(
-                AttributionTrigger::EventLevelResult::kPriorityTooLow),
+                AttributionTrigger::EventLevelResult::kExcessiveReports),
             CreateReportAggregatableStatusIs(
                 AttributionTrigger::AggregatableResult::kSuccess),
             ReplacedEventLevelReportIs(absl::nullopt),
@@ -2807,7 +2992,9 @@ TEST_F(
             NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
                 AggregatableHistogramContributionsAre(
                     DefaultAggregatableHistogramContributions(
-                        /*histogram_values=*/{5})))))));
+                        /*histogram_values=*/{5}))))),
+            DroppedEventLevelReportIs(
+                Optional(EventLevelDataIs(TriggerDataIs(5u))))));
   EXPECT_THAT(
       storage()->GetActiveSources(),
       ElementsAre(SourceActiveStateIs(
@@ -2817,22 +3004,23 @@ TEST_F(
 TEST_F(AttributionStorageTest, AggregatableReportFiltering) {
   storage()->StoreSource(
       SourceBuilder()
-          .SetFilterData(*AttributionFilterData::FromSourceFilterValues(
-              {{"abc", {"123"}}}))
-          .SetAggregationKeys(*AttributionAggregationKeys::FromKeys({{"0", 1}}))
+          .SetFilterData(*AttributionFilterData::Create({{"abc", {"123"}}}))
+          .SetAggregationKeys(
+              *attribution_reporting::AggregationKeys::FromKeys({{"0", 1}}))
           .Build());
 
-  EXPECT_EQ(MaybeCreateAndStoreAggregatableReport(
-                TriggerBuilder()
-                    .SetAggregatableTriggerData(
-                        {AttributionAggregatableTriggerData::CreateForTesting(
-                            absl::MakeUint128(/*high=*/1, /*low=*/0),
-                            /*source_keys=*/{"0"},
-                            /*filters=*/
-                            AttributionFilterData(),
-                            /*not_filters=*/AttributionFilterData())})
-                    .Build()),
-            AttributionTrigger::AggregatableResult::kNoHistograms);
+  EXPECT_EQ(
+      MaybeCreateAndStoreAggregatableReport(
+          TriggerBuilder()
+              .SetAggregatableTriggerData(
+                  {*attribution_reporting::AggregatableTriggerData::Create(
+                      absl::MakeUint128(/*high=*/1, /*low=*/0),
+                      /*source_keys=*/{"0"},
+                      /*filters=*/
+                      AttributionFilters(),
+                      /*not_filters=*/AttributionFilters())})
+              .Build()),
+      AttributionTrigger::AggregatableResult::kNoHistograms);
 }
 
 TEST_F(AttributionStorageTest,
@@ -2875,6 +3063,32 @@ TEST_F(AttributionStorageTest,
   ASSERT_THAT(storage()->GetAttributionReports(base::Time::Max()),
               ElementsAre(ReportSourceIs(SourceEventIdIs(3)),
                           ReportSourceIs(SourceEventIdIs(7))));
+}
+
+TEST_F(AttributionStorageTest, AggregationCoordinator_RoundTrip) {
+  for (auto aggregation_coordinator :
+       {::aggregation_service::mojom::AggregationCoordinator::kAwsCloud}) {
+    storage()->StoreSource(
+        TestAggregatableSourceProvider().GetBuilder().Build());
+
+    EXPECT_THAT(
+        storage()->MaybeCreateAndStoreReport(
+            DefaultAggregatableTriggerBuilder()
+                .SetAggregationCoordinator(aggregation_coordinator)
+                .Build(/*generate_event_trigger_data=*/false)),
+        AllOf(CreateReportAggregatableStatusIs(
+                  AttributionTrigger::AggregatableResult::kSuccess),
+              NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
+                  AggregationCoordinatorIs(aggregation_coordinator))))));
+    EXPECT_THAT(
+        storage()->GetAttributionReports(/*max_report_time=*/base::Time::Max()),
+        ElementsAre(AggregatableAttributionDataIs(
+            AggregationCoordinatorIs(aggregation_coordinator))));
+
+    storage()->ClearData(/*delete_begin=*/base::Time::Min(),
+                         /*delete_end=*/base::Time::Max(),
+                         /*filter=*/base::NullCallback());
+  }
 }
 
 }  // namespace content

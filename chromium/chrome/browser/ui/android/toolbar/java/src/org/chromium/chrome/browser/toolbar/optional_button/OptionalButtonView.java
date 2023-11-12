@@ -29,23 +29,25 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.view.OneShotPreDrawListener;
+import androidx.core.view.ViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.R;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonConstants.TransitionType;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.function.BooleanSupplier;
 
 /**
  * Toolbar button that performs animated transitions between icons.
@@ -215,6 +217,17 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mContentDescription =
                 getContext().getResources().getString(buttonSpec.getContentDescriptionResId());
 
+        // If the button hasn't been laid out then try again before the next draw. This may happen
+        // if the view gets initialized while the activity is not visible (e.g. when a setting
+        // change forces an activity reset).
+        if (!ViewCompat.isLaidOut(this)) {
+            OneShotPreDrawListener.add(this, () -> startTransitionToNewButton(canAnimate));
+        } else {
+            startTransitionToNewButton(canAnimate);
+        }
+    }
+
+    private void startTransitionToNewButton(boolean canAnimate) {
         if (mState == State.HIDDEN && mActionChipLabelString == null) {
             showIcon(canAnimate);
         } else if (canAnimate && mActionChipLabelString != null) {
@@ -357,7 +370,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         // When finished expanding the action chip schedule the collapse transition in 3 seconds.
         if (mState == State.SHOWING_ACTION_CHIP) {
             getHandler().postDelayed(mCollapseActionChipRunnable,
-                    AdaptiveToolbarFeatures.getContextualPageActionDelayMs());
+                    AdaptiveToolbarFeatures.getContextualPageActionDelayMs(mCurrentButtonVariant));
         }
     }
 
@@ -574,7 +587,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mButton.setImageDrawable(mIconDrawable);
         mButton.setVisibility(GONE);
 
-        if (AdaptiveToolbarFeatures.shouldUseAlternativeActionChipColor()) {
+        if (AdaptiveToolbarFeatures.shouldUseAlternativeActionChipColor(mCurrentButtonVariant)) {
             int highlightColor = MaterialColors.getColor(this, R.attr.colorSecondaryContainer);
             mBackground.setColorFilter(highlightColor);
         } else {

@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Wêneyê ji nû ve bar bike</translation>
 <translation id="1924750141060565109">Dîmen 15</translation>
 <translation id="19598411548897379">Giştî</translation>
+<translation id="1973351931613083086">lêdana xweberî</translation>
 <translation id="1985669426322966465">Rojanekirina nermalavê</translation>
 <translation id="2079036669923635404">Ji bo rojanekirina Vivaldiyê ser guhertoya <ph name="VERSION" />-ê li vir bitkîne.</translation>
 <translation id="2141974047387702305">Gava pelên rojanekirinê hatin daxistin çewtiyek çêbû. Ji kerema xwe, girêdana xwe ya înternetê kontrol bike û paşê dîsa biceribîne.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Jêbirdank</translation>
 <translation id="292258461174562431">Hov 4</translation>
 <translation id="2923448633003185837">Pêve bike û biçe</translation>
+<translation id="2953943267837858202">Mafa lêdana xweberî ya vîdyoyan tune ye</translation>
 <translation id="2977472760057091832">Girêdanê di çarçoveyekê taybet de veke</translation>
 <translation id="2989805286512600854">Di rûgerekê nû de veke</translation>
 <translation id="3027988479108856431">Mixabin, sazkariyên Yandex-a te gava gerok dixebite, nayên bikaranîn. Ji bo tu sazkariyên wê bi Vivaldiyê re parve bikî, karê xwe biqedîne û hemû çarçoveyên Yandex-ê bigire. Piştre li "Bidome"yê bitikîne.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Şûnpela nû</translation>
 <translation id="3255747772218936245">Rojanekirinê saz bike</translation>
 <translation id="3259769196742189631">Bipejirîne</translation>
+<translation id="3291915639428159043">Lêdana xweberî astengkirî ye</translation>
 <translation id="3302905971452834934">Hov 1</translation>
 <translation id="3334610655141903168">(sernav tune)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> niha guhertoya herî nû ya berdest e.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Girêdanê di çarçoveyekê nû de veke</translation>
 <translation id="3588820906588687999">Wêneyê di rûgerekê nû de veke</translation>
 <translation id="3601066750251199488">Hov 3</translation>
+<translation id="3620979700683094848">Malper dikarin vîdyoyan bi xweberî lêbidin</translation>
 <translation id="3680031241659195730">Guhertoyekê nû ya Vivaldiyê heye!</translation>
 <translation id="3708982624815781692">Daxistin hate qutkirin.</translation>
 <translation id="3732157130969736834">Girêdanê tevlî şûnpelan bike</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Dîsa nîşan nede</translation>
 <translation id="4074744496918018786">Wêneyê di çarçoveyekê nû de veke</translation>
+<translation id="410351446219883937">Bi xweberî lêbide</translation>
 <translation id="4324492550286218827">Dîmen 2</translation>
 <translation id="4406101500523955324">Di çarçoveyekê taybet a nû de veke</translation>
 <translation id="4420816922321010053">Ma tu bi rastî dixwazî ji Vivaldiyê derkevî?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Jê bike</translation>
 <translation id="7727481996062361502">Rojanekirin tê piştrastkirin...</translation>
 <translation id="7793738202466490491">Wekî bûyera salnameyê tevlî bike</translation>
+<translation id="7834693436815575883">Mafa lêdana xweberî heye</translation>
 <translation id="7848222781052558334">Piştrastkirina îmzeya jimarkî a pelên daxistinê biserneket.</translation>
 <translation id="7865983598101744945">Derketinê bipejirîne</translation>
 <translation id="7957213167373139414">Salnameya min</translation>
 <translation id="8027581147000338959">Di çarçoveyekê nû de veke</translation>
+<translation id="8044382196220116469">Malperan nehêle ku vîdyoyan bi xweberî lêbidin</translation>
 <translation id="8099620695029051217">Navnîşana rûpelê jê bigire</translation>
 <translation id="8197810018650377191">Rûpelê tevlî şûnpelan bike</translation>
 <translation id="8261506727792406068">Jê bibe</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Pelên portalê kontrol bike</translation>
 <translation id="8768970203213061953">Dîmen 14</translation>
 <translation id="8773635261052182196">Êdî tu yê van agahdariyan nebînî. Tu dikarî wan ji sazkariyên Vivaldiyê dîsa çalak bikî.</translation>
+<translation id="8774017153185436870">Malper belkî karibin vîdyoyan bi xweberî lêbidin</translation>
 <translation id="8813277370772331957">Paşê bîne bîra min</translation>
 <translation id="8894900864683381599">Girêdanê tevlî destgeha tevnê bike</translation>
 <translation id="8912720443398351457">Tu bi rastî dixwazî ji Vivaldiyê derkevî?</translation>
 <translation id="8947109330183116400">Pelê şûnpela HTML-yê hilbijêre</translation>
 <translation id="9017566390391482291">Ji bo têxistinê peldanka profîla Vivaldiyê hilbijêre</translation>
 <translation id="9048058608784130603">Li benda rojanekirinê ye <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Maf bide ku vîdyoyan bi xweberî lêbidin</translation>
 <translation id="9065203028668620118">Serrast bike</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Wêneyê veke wekî <ph name="USER" /></translation>

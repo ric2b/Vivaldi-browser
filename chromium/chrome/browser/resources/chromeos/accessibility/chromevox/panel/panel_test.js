@@ -12,6 +12,8 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
+
+    // Alphabetical based on file path.
     await importModule(
         'ChromeVoxState', '/chromevox/background/chromevox_state.js');
     await importModule(
@@ -23,6 +25,7 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
         ['PanelCommand', 'PanelCommandType'],
         '/chromevox/common/panel_command.js');
     await importModule('CursorRange', '/common/cursors/range.js');
+    await importModule('LocalStorage', '/common/local_storage.js');
   }
 
   fireMockEvent(key) {
@@ -49,7 +52,7 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
     // to wait until an update has been made. Swap in our hook, wait, then
     // restore after.
     const makeAssertions = () => {
-      const menu = this.getPanel().activeMenu_;
+      const menu = this.getPanel().instance_.activeMenu_;
       assertEquals(menuMsg, menu.menuMsg);
     };
 
@@ -66,7 +69,7 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
   }
 
   assertActiveMenuItem(menuMsg, menuItemTitle, opt_menuItemShortcut) {
-    const menu = this.getPanel().activeMenu_;
+    const menu = this.getPanel().instance_.activeMenu_;
     const menuItem = menu.items_[menu.activeIndex_];
     assertEquals(menuMsg, menu.menuMsg);
     assertEquals(menuItemTitle, menuItem.menuItemTitle);
@@ -76,14 +79,14 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
   }
 
   assertActiveSearchMenuItem(menuItemTitle) {
-    const searchMenu = this.getPanel().searchMenu;
+    const searchMenu = this.getPanel().instance_.searchMenu_;
     const activeIndex = searchMenu.activeIndex_;
     const activeItem = searchMenu.items_[activeIndex];
     assertEquals(menuItemTitle, activeItem.menuItemTitle);
   }
 
   isMenuTitleMessage(menuTitleMessage) {
-    const menu = this.getPanel().activeMenu_;
+    const menu = this.getPanel().instance_.activeMenu_;
     return menuTitleMessage === menu.menuMsg;
   }
 
@@ -205,7 +208,7 @@ AX_TEST_F(
     'ChromeVoxPanelTest', 'InternationalFormControlsMenu', async function() {
       await this.runWithLoadedTree(this.internationalButtonDoc);
       // Turn on language switching and set available voice list.
-      localStorage['languageSwitching'] = 'true';
+      LocalStorage.set('languageSwitching', true);
       LocaleOutputHelper.instance.availableVoices_ =
           [{'lang': 'en-US'}, {'lang': 'es-ES'}];
       CommandHandlerInterface.instance.onCommand('showFormsList');

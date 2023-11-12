@@ -148,6 +148,8 @@ process is determined by command-line arguments:
         updater is inactive, it may qualify and activate, or uninstall itself.
         If this version of the updater is active, it may check for updates for
         applications, unregister uninstalled applications, and more.
+*   --wake-all
+    *   Runs --wake for every updater version installed in this scope.
 *   --crash-me
     *   Record a backtrace in the log, crash the program, save a crash dump,
         and report the crash.
@@ -371,6 +373,34 @@ To maintain backwards compatibility with
 event that Omaha listens to, so that Omaha processes can shut down gracefully.
 The updater then proceeds to overinstall the Omaha binaries with the updater
 binaries.
+
+### Offline installs
+
+The updater supports offline installations, for which no update check or file
+download is performed against the server during installation. All data is read
+from the files in the directory instead.
+
+Offline installs include:
+* an offline manifest file, which contains the update check response in XML
+  format.
+* app installer.
+
+For online app installs, the update server checks the compatibility between the
+application and the host OS that the install is attempted on.
+
+The updater client has equivalent support for offline installs, where no update
+server is involved.
+
+The `platform`, `arch`, and `min_os_version` attributes in the offline update
+response are used to determine compatibility of the app being installed with the
+host OS.
+
+Omaha 3 offline manifests have `arch` as "x64", but the Chromium functions
+return "x86_64" as the architecture for amd64. The updater accounts for this by
+treating "x64" the same as "x86_64".
+
+For more information, see the
+[protocol document](protocol_3_1.md#update-checks-body-update-check-response-objects-update-check-response-3).
 
 ### Enterprise Enrollment
 The updater may be enrolled with a particular enterprise. Enrollment is
@@ -765,6 +795,10 @@ fail to install.
 ### Logging
 All updater logs are written to `{UPDATER_DATA_DIR}\updater.log`.
 
+After the log reaches 5 MiB in size, the updater will attempt to move it to
+`{UPDATER_DATA_DIR}\updater.log.old` when starting, replacing any existing file
+there. The log rotation may be delayed if another updater process is running.
+
 On macOS for system-scope updaters, `{UPDATER_DATA_DIR}` is
 `/Library/Application Support/{COMPANY_SHORTNAME}/{PRODUCT_FULLNAME}`.
 
@@ -786,8 +820,6 @@ crash handler child process. Each crash handler process is capable of uploading
 crashes.
 
 ### Process Launcher
-(This feature is deprecated, please use the Application Commands feature.)
-
 The feature allows installed products to pre-register and later run elevated
 command lines in the format `c:\program files\foo\exe.exe params`. Multiple
 command lines can be registered per `app_id`.
@@ -801,12 +833,9 @@ also a child of %ProgramFiles% or %ProgramFiles(x86)%. For instance:
 * `"c:\Program Files (x86)\subdir\exe.exe"` is also a valid path.
 
 #### Registration
-Commands are registered in the registry with the following format:
-
-```
-    Update\Clients\{`app_id`}
-        REG_SZ `command_id` == "c:\Program Files\subdir\exe.exe p1 p2"
-```
+Registration is the same as for App commands, except there are no replaceable
+parameters. See
+[App command registration](functional_spec.md#services-application-commands-applicable-to-the-windows-version-of-the-updater-registration).
 
 #### Usage
 Once registered, commands may be invoked using the `LaunchCmdElevated` method in
@@ -827,15 +856,16 @@ applications,  the program path is also a child of %ProgramFiles% or
 * `"c:\Program Files (x86)\subdir\exe.exe"` is also a valid path.
 
 #### Registration
-App commands are registered in the registry with the following formats:
+App commands are registered in the registry with the following format:
 
-* New command layout format:
 ```
     Update\Clients\{`app_id`}\Commands\`command_id`
         REG_SZ "CommandLine" == {command format}
         {optional} REG_DWORD "AutoRunOnOSUpgrade" == {1}
 ```
-* Older command layout format, which may be deprecated in the future:
+
+* There is a deprecated command layout format that is only supported for
+versions of Google Chrome `110.0.5435.0` and below with the `cmd` command id.
 ```
     Update\Clients\{`app_id`}
         REG_SZ `command_id` == {command format}

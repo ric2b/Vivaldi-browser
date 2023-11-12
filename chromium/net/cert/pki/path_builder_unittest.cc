@@ -4,16 +4,11 @@
 
 #include "net/cert/pki/path_builder.h"
 
+#include <algorithm>
+
 #include "base/base_paths.h"
-#include "base/callback_forward.h"
-#include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
-#include "base/test/bind.h"
-#include "base/test/metrics/histogram_tester.h"
-#include "base/test/task_environment.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "net/cert/pem.h"
 #include "net/cert/pki/cert_error_params.h"
@@ -32,12 +27,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/wincrypt_shim.h"
-#include "crypto/scoped_capi_types.h"
-#include "net/cert/internal/trust_store_win.h"
-#endif  // BUILDFLAG(IS_WIN)
-
 namespace net {
 
 // TODO(crbug.com/634443): Assert the errors for each ResultPath.
@@ -52,6 +41,22 @@ using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::SetArgPointee;
 using ::testing::StrictMock;
+
+class DeadlineTestingPathBuilderDelegate : public SimplePathBuilderDelegate {
+ public:
+  DeadlineTestingPathBuilderDelegate(size_t min_rsa_modulus_length_bits,
+                                     DigestPolicy digest_policy)
+      : SimplePathBuilderDelegate(min_rsa_modulus_length_bits, digest_policy) {}
+
+  bool IsDeadlineExpired() override { return deadline_is_expired_; }
+
+  void SetDeadlineExpiredForTesting(bool deadline_is_expired) {
+    deadline_is_expired_ = deadline_is_expired;
+  }
+
+ private:
+  bool deadline_is_expired_ = false;
+};
 
 // AsyncCertIssuerSourceStatic always returns its certs asynchronously.
 class AsyncCertIssuerSourceStatic : public CertIssuerSource {
@@ -79,11 +84,11 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
 
   ~AsyncCertIssuerSourceStatic() override = default;
 
-  void SetAsyncGetCallback(base::RepeatingClosure closure) {
+  void SetAsyncGetCallback(std::function<void()> closure) {
     async_get_callback_ = std::move(closure);
   }
 
-  void AddCert(scoped_refptr<ParsedCertificate> cert) {
+  void AddCert(std::shared_ptr<const ParsedCertificate> cert) {
     static_cert_issuer_source_.AddCert(std::move(cert));
   }
 
@@ -96,8 +101,9 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
     static_cert_issuer_source_.SyncGetIssuersOf(cert, &issuers);
     auto req = std::make_unique<StaticAsyncRequest>(std::move(issuers));
     *out_req = std::move(req);
-    if (!async_get_callback_.is_null())
-      async_get_callback_.Run();
+    if (async_get_callback_) {
+      async_get_callback_();
+    }
   }
   int num_async_gets() const { return num_async_gets_; }
 
@@ -105,7 +111,7 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
   CertIssuerSourceStatic static_cert_issuer_source_;
 
   int num_async_gets_ = 0;
-  base::RepeatingClosure async_get_callback_;
+  std::function<void()> async_get_callback_ = nullptr;
 };
 
 ::testing::AssertionResult ReadTestPem(const std::string& file_name,
@@ -120,7 +126,7 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
 
 ::testing::AssertionResult ReadTestCert(
     const std::string& file_name,
-    scoped_refptr<ParsedCertificate>* result) {
+    std::shared_ptr<const ParsedCertificate>* result) {
   std::string der;
   ::testing::AssertionResult r = ReadTestPem(
       "net/data/ssl/certificates/" + file_name, "CERTIFICATE", &der);
@@ -160,7 +166,7 @@ class TrustStoreThatStoresUserData : public TrustStore {
 };
 
 TEST(PathBuilderResultUserDataTest, ModifyUserDataInConstructor) {
-  scoped_refptr<ParsedCertificate> a_by_b;
+  std::shared_ptr<const ParsedCertificate> a_by_b;
   ASSERT_TRUE(ReadTestCert("multi-root-A-by-B.pem", &a_by_b));
   SimplePathBuilderDelegate delegate(
       1024, SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1);
@@ -185,8 +191,9 @@ TEST(PathBuilderResultUserDataTest, ModifyUserDataInConstructor) {
 class PathBuilderMultiRootTest : public ::testing::Test {
  public:
   PathBuilderMultiRootTest()
-      : delegate_(1024,
-                  SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1) {}
+      : delegate_(
+            1024,
+            DeadlineTestingPathBuilderDelegate::DigestPolicy::kWeakAllowSha1) {}
 
   void SetUp() override {
     ASSERT_TRUE(ReadTestCert("multi-root-A-by-B.pem", &a_by_b_));
@@ -200,10 +207,10 @@ class PathBuilderMultiRootTest : public ::testing::Test {
   }
 
  protected:
-  scoped_refptr<ParsedCertificate> a_by_b_, b_by_c_, b_by_f_, c_by_d_, c_by_e_,
-      d_by_d_, e_by_e_, f_by_e_;
+  std::shared_ptr<const ParsedCertificate> a_by_b_, b_by_c_, b_by_f_, c_by_d_,
+      c_by_e_, d_by_d_, e_by_e_, f_by_e_;
 
-  SimplePathBuilderDelegate delegate_;
+  DeadlineTestingPathBuilderDelegate delegate_;
   der::GeneralizedTime time_ = {2017, 3, 1, 0, 0, 0};
 
   const InitialExplicitPolicy initial_explicit_policy_ =
@@ -615,7 +622,7 @@ TEST_F(PathBuilderMultiRootTest, TestCertIssuerOrdering) {
 
   for (bool reverse_order : {false, true}) {
     SCOPED_TRACE(reverse_order);
-    std::vector<scoped_refptr<ParsedCertificate>> certs = {
+    std::vector<std::shared_ptr<const ParsedCertificate>> certs = {
         b_by_c_, b_by_f_, f_by_e_, c_by_d_, c_by_e_};
     CertIssuerSourceStatic sync_certs;
     if (reverse_order) {
@@ -676,7 +683,6 @@ TEST_F(PathBuilderMultiRootTest, TestIterationLimit) {
       path_builder.SetIterationLimit(5);
     }
 
-    base::HistogramTester histogram_tester;
     auto result = path_builder.Run();
 
     EXPECT_EQ(!insufficient_limit, result.HasValidPath());
@@ -684,14 +690,8 @@ TEST_F(PathBuilderMultiRootTest, TestIterationLimit) {
 
     if (insufficient_limit) {
       EXPECT_EQ(2U, result.iteration_count);
-      EXPECT_THAT(histogram_tester.GetAllSamples(
-                      "Net.CertVerifier.PathBuilderIterationCount"),
-                  ElementsAre(base::Bucket(/*sample=*/2, /*count=*/1)));
     } else {
       EXPECT_EQ(3U, result.iteration_count);
-      EXPECT_THAT(histogram_tester.GetAllSamples(
-                      "Net.CertVerifier.PathBuilderIterationCount"),
-                  ElementsAre(base::Bucket(/*sample=*/3, /*count=*/1)));
     }
   }
 }
@@ -714,24 +714,14 @@ TEST_F(PathBuilderMultiRootTest, TestTrivialDeadline) {
         initial_policy_mapping_inhibit_, initial_any_policy_inhibit_);
     path_builder.AddCertIssuerSource(&sync_certs);
 
-    base::TimeTicks deadline;
-    if (insufficient_limit) {
-      // Set a deadline one millisecond in the past. Path building should fail
-      // since the deadline is already past.
-      deadline = base::TimeTicks::Now() - base::Milliseconds(1);
-    } else {
-      // The other tests in this file exercise the case that |SetDeadline|
-      // isn't called. Therefore set a sufficient limit for the path to be
-      // found.
-      deadline = base::TimeTicks::Now() + base::Days(1);
-    }
-    path_builder.SetDeadline(deadline);
+    // Make the deadline either expired or not.
+    delegate_.SetDeadlineExpiredForTesting(insufficient_limit);
 
     auto result = path_builder.Run();
 
     EXPECT_EQ(!insufficient_limit, result.HasValidPath());
     EXPECT_EQ(insufficient_limit, result.exceeded_deadline);
-    EXPECT_EQ(deadline, path_builder.deadline());
+    EXPECT_EQ(delegate_.IsDeadlineExpired(), insufficient_limit);
 
     if (insufficient_limit) {
       ASSERT_EQ(1U, result.paths.size());
@@ -752,8 +742,6 @@ TEST_F(PathBuilderMultiRootTest, TestTrivialDeadline) {
 }
 
 TEST_F(PathBuilderMultiRootTest, TestDeadline) {
-  base::test::TaskEnvironment task_environment{
-      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   TrustStoreInMemory trust_store;
   trust_store.AddTrustAnchor(d_by_d_);
 
@@ -761,12 +749,12 @@ TEST_F(PathBuilderMultiRootTest, TestDeadline) {
   CertIssuerSourceStatic sync_certs;
   sync_certs.AddCert(b_by_c_);
 
-  // Cert C(D) is supplied asynchronously and will advance time before returning
-  // the async result.
+  // Cert C(D) is supplied asynchronously and will expire the deadline before
+  // returning the async result.
   AsyncCertIssuerSourceStatic async_certs;
   async_certs.AddCert(c_by_d_);
-  async_certs.SetAsyncGetCallback(base::BindLambdaForTesting(
-      [&] { task_environment.FastForwardBy(base::Seconds(2)); }));
+  async_certs.SetAsyncGetCallback(
+      [&] { delegate_.SetDeadlineExpiredForTesting(true); });
 
   CertPathBuilder path_builder(
       a_by_b_, &trust_store, &delegate_, time_, KeyPurpose::ANY_EKU,
@@ -775,15 +763,11 @@ TEST_F(PathBuilderMultiRootTest, TestDeadline) {
   path_builder.AddCertIssuerSource(&sync_certs);
   path_builder.AddCertIssuerSource(&async_certs);
 
-  base::TimeTicks deadline;
-  deadline = base::TimeTicks::Now() + base::Seconds(1);
-  path_builder.SetDeadline(deadline);
-
   auto result = path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
   EXPECT_TRUE(result.exceeded_deadline);
-  EXPECT_EQ(deadline, path_builder.deadline());
+  EXPECT_TRUE(delegate_.IsDeadlineExpired());
 
   // The chain returned should end in c_by_d_, since the deadline would only be
   // checked again after the async results had been checked (since
@@ -893,103 +877,6 @@ TEST_F(PathBuilderMultiRootTest, TestDepthLimitMultiplePaths) {
   EXPECT_EQ(c_by_d_, valid_path->certs[2]);
 }
 
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-
-void AddToStoreWithEKURestriction(HCERTSTORE store,
-                                  const scoped_refptr<ParsedCertificate>& cert,
-                                  LPCSTR usage_identifier) {
-  crypto::ScopedPCCERT_CONTEXT os_cert(CertCreateCertificateContext(
-      X509_ASN_ENCODING, cert->der_cert().UnsafeData(),
-      cert->der_cert().Length()));
-
-  CERT_ENHKEY_USAGE usage;
-  memset(&usage, 0, sizeof(usage));
-  CertSetEnhancedKeyUsage(os_cert.get(), &usage);
-  if (usage_identifier) {
-    CertAddEnhancedKeyUsageIdentifier(os_cert.get(), usage_identifier);
-  }
-  CertAddCertificateContextToStore(store, os_cert.get(), CERT_STORE_ADD_ALWAYS,
-                                   nullptr);
-}
-
-bool AreCertsEq(const scoped_refptr<ParsedCertificate> cert_1,
-                const scoped_refptr<ParsedCertificate> cert_2) {
-  return cert_1 && cert_2 && cert_1->der_cert() == cert_2->der_cert();
-}
-
-// Test to ensure that path building stops when an intermediate cert is
-// encountered that is not usable for TLS because it is explicitly distrusted.
-TEST_F(PathBuilderMultiRootTest, TrustStoreWinOnlyFindTrustedTLSPath) {
-  crypto::ScopedHCERTSTORE root_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-  crypto::ScopedHCERTSTORE intermediate_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-  crypto::ScopedHCERTSTORE disallowed_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-
-  AddToStoreWithEKURestriction(root_store.get(), d_by_d_,
-                               szOID_PKIX_KP_SERVER_AUTH);
-  AddToStoreWithEKURestriction(root_store.get(), e_by_e_,
-                               szOID_PKIX_KP_SERVER_AUTH);
-  AddToStoreWithEKURestriction(intermediate_store.get(), c_by_e_,
-                               szOID_PKIX_KP_SERVER_AUTH);
-  AddToStoreWithEKURestriction(disallowed_store.get(), c_by_d_, nullptr);
-
-  std::unique_ptr<TrustStoreWin> trust_store = TrustStoreWin::CreateForTesting(
-      std::move(root_store), std::move(intermediate_store),
-      std::move(disallowed_store));
-
-  CertPathBuilder path_builder(
-      b_by_c_, trust_store.get(), &delegate_, time_, KeyPurpose::ANY_EKU,
-      initial_explicit_policy_, user_initial_policy_set_,
-      initial_policy_mapping_inhibit_, initial_any_policy_inhibit_);
-
-  // Check all paths.
-  path_builder.SetExploreAllPaths(true);
-
-  auto result = path_builder.Run();
-  ASSERT_TRUE(result.HasValidPath());
-  ASSERT_EQ(1U, result.paths.size());
-  const auto& path = *result.GetBestValidPath();
-  ASSERT_EQ(3U, path.certs.size());
-  EXPECT_TRUE(AreCertsEq(b_by_c_, path.certs[0]));
-  EXPECT_TRUE(AreCertsEq(c_by_e_, path.certs[1]));
-  EXPECT_TRUE(AreCertsEq(e_by_e_, path.certs[2]));
-
-  // Should only be one valid path, the one above.
-  int valid_paths =
-      base::ranges::count_if(result.paths, &CertPathBuilderResultPath::IsValid);
-  ASSERT_EQ(1, valid_paths);
-}
-
-// Test that if an intermediate is untrusted, and it is the only
-// path, then path building should fail, even if the root is enabled for
-// TLS.
-TEST_F(PathBuilderMultiRootTest, TrustStoreWinNoPathEKURestrictions) {
-  crypto::ScopedHCERTSTORE root_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-  crypto::ScopedHCERTSTORE intermediate_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-  crypto::ScopedHCERTSTORE disallowed_store(CertOpenStore(
-      CERT_STORE_PROV_MEMORY, X509_ASN_ENCODING, NULL, 0, nullptr));
-
-  AddToStoreWithEKURestriction(root_store.get(), d_by_d_,
-                               szOID_PKIX_KP_SERVER_AUTH);
-  AddToStoreWithEKURestriction(disallowed_store.get(), c_by_d_, nullptr);
-  std::unique_ptr<TrustStoreWin> trust_store = TrustStoreWin::CreateForTesting(
-      std::move(root_store), std::move(intermediate_store),
-      std::move(disallowed_store));
-
-  CertPathBuilder path_builder(
-      b_by_c_, trust_store.get(), &delegate_, time_, KeyPurpose::ANY_EKU,
-      initial_explicit_policy_, user_initial_policy_set_,
-      initial_policy_mapping_inhibit_, initial_any_policy_inhibit_);
-
-  auto result = path_builder.Run();
-  ASSERT_FALSE(result.HasValidPath());
-}
-#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-
 class PathBuilderKeyRolloverTest : public ::testing::Test {
  public:
   PathBuilderKeyRolloverTest()
@@ -1038,12 +925,12 @@ class PathBuilderKeyRolloverTest : public ::testing::Test {
   //                    |
   //                    v
   //                  target
-  scoped_refptr<ParsedCertificate> target_;
-  scoped_refptr<ParsedCertificate> oldintermediate_;
-  scoped_refptr<ParsedCertificate> newintermediate_;
-  scoped_refptr<ParsedCertificate> oldroot_;
-  scoped_refptr<ParsedCertificate> newroot_;
-  scoped_refptr<ParsedCertificate> newrootrollover_;
+  std::shared_ptr<const ParsedCertificate> target_;
+  std::shared_ptr<const ParsedCertificate> oldintermediate_;
+  std::shared_ptr<const ParsedCertificate> newintermediate_;
+  std::shared_ptr<const ParsedCertificate> oldroot_;
+  std::shared_ptr<const ParsedCertificate> newroot_;
+  std::shared_ptr<const ParsedCertificate> newrootrollover_;
 
   SimplePathBuilderDelegate delegate_;
   der::GeneralizedTime time_;
@@ -1321,7 +1208,7 @@ TEST_F(PathBuilderKeyRolloverTest, ExploreAllPathsWithIterationLimit) {
   struct Expectation {
     int iteration_limit;
     size_t expected_num_paths;
-    std::vector<scoped_refptr<ParsedCertificate>> partial_path;
+    std::vector<std::shared_ptr<const ParsedCertificate>> partial_path;
   } kExpectations[] = {
       // No iteration limit. All possible paths should be built.
       {0, 4, {}},
@@ -1508,7 +1395,7 @@ TEST_F(PathBuilderKeyRolloverTest,
 // CertIssuerSources provide the same certificate.
 TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediates) {
   // Create a separate copy of oldintermediate.
-  scoped_refptr<ParsedCertificate> oldintermediate_dupe(
+  std::shared_ptr<const ParsedCertificate> oldintermediate_dupe(
       ParsedCertificate::Create(
           bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
               oldintermediate_->der_cert().UnsafeData(),
@@ -1574,11 +1461,12 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediates) {
 // SPKI as a trust anchor.
 TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediateAndRoot) {
   // Create a separate copy of newroot.
-  scoped_refptr<ParsedCertificate> newroot_dupe(ParsedCertificate::Create(
-      bssl::UniquePtr<CRYPTO_BUFFER>(
-          CRYPTO_BUFFER_new(newroot_->der_cert().UnsafeData(),
-                            newroot_->der_cert().Length(), nullptr)),
-      {}, nullptr));
+  std::shared_ptr<const ParsedCertificate> newroot_dupe(
+      ParsedCertificate::Create(
+          bssl::UniquePtr<CRYPTO_BUFFER>(
+              CRYPTO_BUFFER_new(newroot_->der_cert().UnsafeData(),
+                                newroot_->der_cert().Length(), nullptr)),
+          {}, nullptr));
 
   // Only newroot is a trusted root.
   TrustStoreInMemory trust_store;
@@ -1646,13 +1534,14 @@ class CertIssuerSourceRequestMover {
 // specified certificate.
 class AppendCertToList {
  public:
-  explicit AppendCertToList(const scoped_refptr<ParsedCertificate>& cert)
+  explicit AppendCertToList(
+      const std::shared_ptr<const ParsedCertificate>& cert)
       : cert_(cert) {}
 
   void operator()(ParsedCertificateList* out) { out->push_back(cert_); }
 
  private:
-  scoped_refptr<ParsedCertificate> cert_;
+  std::shared_ptr<const ParsedCertificate> cert_;
 };
 
 // Test that a single CertIssuerSource returning multiple async batches of
@@ -1767,7 +1656,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
         .WillOnce(Invoke(&req_mover, &CertIssuerSourceRequestMover::MoveIt));
   }
 
-  scoped_refptr<ParsedCertificate> oldintermediate_dupe(
+  std::shared_ptr<const ParsedCertificate> oldintermediate_dupe(
       ParsedCertificate::Create(
           bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
               oldintermediate_->der_cert().UnsafeData(),
@@ -1842,7 +1731,7 @@ class PathBuilderSimpleChainTest : public ::testing::Test {
   // Runs the path builder for the target certificate while |distrusted_cert| is
   // blocked, and |delegate| if non-null.
   CertPathBuilder::Result RunPathBuilder(
-      const scoped_refptr<ParsedCertificate>& distrusted_cert,
+      const std::shared_ptr<const ParsedCertificate>& distrusted_cert,
       CertPathBuilderDelegate* optional_delegate) {
     // Set up the trust store such that |distrusted_cert| is blocked, and
     // the root is trusted (except if it was |distrusted_cert|).
@@ -1892,7 +1781,7 @@ class PathBuilderDistrustTest : public PathBuilderSimpleChainTest {
   // Runs the path builder for the target certificate while |distrusted_cert| is
   // blocked.
   CertPathBuilder::Result RunPathBuilderWithDistrustedCert(
-      const scoped_refptr<ParsedCertificate>& distrusted_cert) {
+      const std::shared_ptr<const ParsedCertificate>& distrusted_cert) {
     return RunPathBuilder(distrusted_cert, nullptr);
   }
 };
@@ -2080,22 +1969,22 @@ TEST_F(PathBuilderCheckPathAfterVerificationTest, SetsDelegateData) {
 TEST(PathBuilderPrioritizationTest, DatePrioritization) {
   std::string test_dir =
       "net/data/path_builder_unittest/validity_date_prioritization/";
-  scoped_refptr<ParsedCertificate> root =
+  std::shared_ptr<const ParsedCertificate> root =
       ReadCertFromFile(test_dir + "root.pem");
   ASSERT_TRUE(root);
-  scoped_refptr<ParsedCertificate> int_ac =
+  std::shared_ptr<const ParsedCertificate> int_ac =
       ReadCertFromFile(test_dir + "int_ac.pem");
   ASSERT_TRUE(int_ac);
-  scoped_refptr<ParsedCertificate> int_ad =
+  std::shared_ptr<const ParsedCertificate> int_ad =
       ReadCertFromFile(test_dir + "int_ad.pem");
   ASSERT_TRUE(int_ad);
-  scoped_refptr<ParsedCertificate> int_bc =
+  std::shared_ptr<const ParsedCertificate> int_bc =
       ReadCertFromFile(test_dir + "int_bc.pem");
   ASSERT_TRUE(int_bc);
-  scoped_refptr<ParsedCertificate> int_bd =
+  std::shared_ptr<const ParsedCertificate> int_bd =
       ReadCertFromFile(test_dir + "int_bd.pem");
   ASSERT_TRUE(int_bd);
-  scoped_refptr<ParsedCertificate> target =
+  std::shared_ptr<const ParsedCertificate> target =
       ReadCertFromFile(test_dir + "target.pem");
   ASSERT_TRUE(target);
 
@@ -2168,28 +2057,28 @@ TEST(PathBuilderPrioritizationTest, DatePrioritization) {
 TEST(PathBuilderPrioritizationTest, KeyIdPrioritization) {
   std::string test_dir =
       "net/data/path_builder_unittest/key_id_prioritization/";
-  scoped_refptr<ParsedCertificate> root =
+  std::shared_ptr<const ParsedCertificate> root =
       ReadCertFromFile(test_dir + "root.pem");
   ASSERT_TRUE(root);
-  scoped_refptr<ParsedCertificate> int_matching_ski_a =
+  std::shared_ptr<const ParsedCertificate> int_matching_ski_a =
       ReadCertFromFile(test_dir + "int_matching_ski_a.pem");
   ASSERT_TRUE(int_matching_ski_a);
-  scoped_refptr<ParsedCertificate> int_matching_ski_b =
+  std::shared_ptr<const ParsedCertificate> int_matching_ski_b =
       ReadCertFromFile(test_dir + "int_matching_ski_b.pem");
   ASSERT_TRUE(int_matching_ski_b);
-  scoped_refptr<ParsedCertificate> int_no_ski_a =
+  std::shared_ptr<const ParsedCertificate> int_no_ski_a =
       ReadCertFromFile(test_dir + "int_no_ski_a.pem");
   ASSERT_TRUE(int_no_ski_a);
-  scoped_refptr<ParsedCertificate> int_no_ski_b =
+  std::shared_ptr<const ParsedCertificate> int_no_ski_b =
       ReadCertFromFile(test_dir + "int_no_ski_b.pem");
   ASSERT_TRUE(int_no_ski_b);
-  scoped_refptr<ParsedCertificate> int_different_ski_a =
+  std::shared_ptr<const ParsedCertificate> int_different_ski_a =
       ReadCertFromFile(test_dir + "int_different_ski_a.pem");
   ASSERT_TRUE(int_different_ski_a);
-  scoped_refptr<ParsedCertificate> int_different_ski_b =
+  std::shared_ptr<const ParsedCertificate> int_different_ski_b =
       ReadCertFromFile(test_dir + "int_different_ski_b.pem");
   ASSERT_TRUE(int_different_ski_b);
-  scoped_refptr<ParsedCertificate> target =
+  std::shared_ptr<const ParsedCertificate> target =
       ReadCertFromFile(test_dir + "target.pem");
   ASSERT_TRUE(target);
 
@@ -2279,37 +2168,37 @@ TEST(PathBuilderPrioritizationTest, KeyIdPrioritization) {
 TEST(PathBuilderPrioritizationTest, TrustAndKeyIdPrioritization) {
   std::string test_dir =
       "net/data/path_builder_unittest/key_id_prioritization/";
-  scoped_refptr<ParsedCertificate> root =
+  std::shared_ptr<const ParsedCertificate> root =
       ReadCertFromFile(test_dir + "root.pem");
   ASSERT_TRUE(root);
-  scoped_refptr<ParsedCertificate> trusted_and_matching =
+  std::shared_ptr<const ParsedCertificate> trusted_and_matching =
       ReadCertFromFile(test_dir + "int_matching_ski_a.pem");
   ASSERT_TRUE(trusted_and_matching);
-  scoped_refptr<ParsedCertificate> matching =
+  std::shared_ptr<const ParsedCertificate> matching =
       ReadCertFromFile(test_dir + "int_matching_ski_b.pem");
   ASSERT_TRUE(matching);
-  scoped_refptr<ParsedCertificate> distrusted_and_matching =
+  std::shared_ptr<const ParsedCertificate> distrusted_and_matching =
       ReadCertFromFile(test_dir + "int_matching_ski_c.pem");
   ASSERT_TRUE(distrusted_and_matching);
-  scoped_refptr<ParsedCertificate> trusted_and_no_match_data =
+  std::shared_ptr<const ParsedCertificate> trusted_and_no_match_data =
       ReadCertFromFile(test_dir + "int_no_ski_a.pem");
   ASSERT_TRUE(trusted_and_no_match_data);
-  scoped_refptr<ParsedCertificate> no_match_data =
+  std::shared_ptr<const ParsedCertificate> no_match_data =
       ReadCertFromFile(test_dir + "int_no_ski_b.pem");
   ASSERT_TRUE(no_match_data);
-  scoped_refptr<ParsedCertificate> distrusted_and_no_match_data =
+  std::shared_ptr<const ParsedCertificate> distrusted_and_no_match_data =
       ReadCertFromFile(test_dir + "int_no_ski_c.pem");
   ASSERT_TRUE(distrusted_and_no_match_data);
-  scoped_refptr<ParsedCertificate> trusted_and_mismatch =
+  std::shared_ptr<const ParsedCertificate> trusted_and_mismatch =
       ReadCertFromFile(test_dir + "int_different_ski_a.pem");
   ASSERT_TRUE(trusted_and_mismatch);
-  scoped_refptr<ParsedCertificate> mismatch =
+  std::shared_ptr<const ParsedCertificate> mismatch =
       ReadCertFromFile(test_dir + "int_different_ski_b.pem");
   ASSERT_TRUE(mismatch);
-  scoped_refptr<ParsedCertificate> distrusted_and_mismatch =
+  std::shared_ptr<const ParsedCertificate> distrusted_and_mismatch =
       ReadCertFromFile(test_dir + "int_different_ski_c.pem");
   ASSERT_TRUE(distrusted_and_mismatch);
-  scoped_refptr<ParsedCertificate> target =
+  std::shared_ptr<const ParsedCertificate> target =
       ReadCertFromFile(test_dir + "target.pem");
   ASSERT_TRUE(target);
 
@@ -2422,22 +2311,22 @@ TEST(PathBuilderPrioritizationTest, TrustAndKeyIdPrioritization) {
 TEST(PathBuilderPrioritizationTest, KeyIdNameAndSerialPrioritization) {
   std::string test_dir =
       "net/data/path_builder_unittest/key_id_name_and_serial_prioritization/";
-  scoped_refptr<ParsedCertificate> root =
+  std::shared_ptr<const ParsedCertificate> root =
       ReadCertFromFile(test_dir + "root.pem");
   ASSERT_TRUE(root);
-  scoped_refptr<ParsedCertificate> root2 =
+  std::shared_ptr<const ParsedCertificate> root2 =
       ReadCertFromFile(test_dir + "root2.pem");
   ASSERT_TRUE(root2);
-  scoped_refptr<ParsedCertificate> int_matching =
+  std::shared_ptr<const ParsedCertificate> int_matching =
       ReadCertFromFile(test_dir + "int_matching.pem");
   ASSERT_TRUE(int_matching);
-  scoped_refptr<ParsedCertificate> int_match_name_only =
+  std::shared_ptr<const ParsedCertificate> int_match_name_only =
       ReadCertFromFile(test_dir + "int_match_name_only.pem");
   ASSERT_TRUE(int_match_name_only);
-  scoped_refptr<ParsedCertificate> int_mismatch =
+  std::shared_ptr<const ParsedCertificate> int_mismatch =
       ReadCertFromFile(test_dir + "int_mismatch.pem");
   ASSERT_TRUE(int_mismatch);
-  scoped_refptr<ParsedCertificate> target =
+  std::shared_ptr<const ParsedCertificate> target =
       ReadCertFromFile(test_dir + "target.pem");
   ASSERT_TRUE(target);
 
@@ -2507,13 +2396,13 @@ TEST(PathBuilderPrioritizationTest, KeyIdNameAndSerialPrioritization) {
 TEST(PathBuilderPrioritizationTest, SelfIssuedPrioritization) {
   std::string test_dir =
       "net/data/path_builder_unittest/self_issued_prioritization/";
-  scoped_refptr<ParsedCertificate> root1 =
+  std::shared_ptr<const ParsedCertificate> root1 =
       ReadCertFromFile(test_dir + "root1.pem");
   ASSERT_TRUE(root1);
-  scoped_refptr<ParsedCertificate> root1_cross =
+  std::shared_ptr<const ParsedCertificate> root1_cross =
       ReadCertFromFile(test_dir + "root1_cross.pem");
   ASSERT_TRUE(root1_cross);
-  scoped_refptr<ParsedCertificate> target =
+  std::shared_ptr<const ParsedCertificate> target =
       ReadCertFromFile(test_dir + "target.pem");
   ASSERT_TRUE(target);
 

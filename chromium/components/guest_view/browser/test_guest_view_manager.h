@@ -86,8 +86,6 @@ class TestGuestViewManager : public GuestViewManager {
   int last_instance_id_removed() const { return last_instance_id_removed_; }
 
   // Returns the list of guests that were created by this manager.
-  void DeprecatedGetGuestWebContentsList(
-      std::vector<content::WebContents*>* guest_web_contents_list);
   void GetGuestRenderFrameHostList(
       std::vector<content::RenderFrameHost*>* guest_render_frame_host_list);
 
@@ -129,7 +127,7 @@ class TestGuestViewManager : public GuestViewManager {
       guest_view_watchers_;
   std::unique_ptr<base::RunLoop> created_run_loop_;
   std::unique_ptr<base::RunLoop> num_created_run_loop_;
-  raw_ptr<GuestViewBase> waiting_for_attach_;
+  raw_ptr<GuestViewBase, DanglingUntriaged> waiting_for_attach_;
   std::unique_ptr<base::RunLoop> attached_run_loop_;
   std::unique_ptr<base::RunLoop> gc_run_loop_;
   base::OnceCallback<void(GuestViewBase*)> will_attach_callback_;
@@ -151,7 +149,7 @@ class TestGuestViewManagerFactory : public GuestViewManagerFactory {
       std::unique_ptr<GuestViewManagerDelegate> delegate) override;
 
  private:
-  raw_ptr<TestGuestViewManager> test_guest_view_manager_;
+  raw_ptr<TestGuestViewManager, DanglingUntriaged> test_guest_view_manager_;
 };
 
 }  // namespace guest_view

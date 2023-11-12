@@ -18,11 +18,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
 #include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_delegate.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
@@ -650,7 +650,8 @@ class ContentAnalysisDelegateAuditOnlyTest : public BaseTest {
         kDmToken));
   }
 
-  ContentAnalysisResponse ConnectorStatusCallback(const base::FilePath& path) {
+  ContentAnalysisResponse ConnectorStatusCallback(const std::string& contents,
+                                                  const base::FilePath& path) {
     // The path succeeds if it is not in the |failures_| maps.
     auto it = failures_.find(path);
     ContentAnalysisResponse response =
@@ -698,7 +699,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, Empty) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -722,7 +723,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringData) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(1u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    ASSERT_EQ(1u, result.text_results.size());
@@ -748,7 +749,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringData2) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(2u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    ASSERT_EQ(2u, result.text_results.size());
@@ -780,7 +781,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringData3) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(2u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    ASSERT_EQ(2u, result.text_results.size());
@@ -807,7 +808,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, PagePrintAllowed) {
       contents(), std::move(data),
       base::BindOnce(
           [](bool* called, const ContentAnalysisDelegate::Data& data,
-             const ContentAnalysisDelegate::Result& result) {
+             ContentAnalysisDelegate::Result& result) {
             EXPECT_EQ(0u, data.text.size());
             EXPECT_EQ(0u, data.paths.size());
             // The page data should no longer be valid since it's moved
@@ -839,7 +840,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, PagePrintBlocked) {
       contents(), std::move(data),
       base::BindOnce(
           [](bool* called, const ContentAnalysisDelegate::Data& data,
-             const ContentAnalysisDelegate::Result& result) {
+             ContentAnalysisDelegate::Result& result) {
             EXPECT_EQ(0u, data.text.size());
             EXPECT_EQ(0u, data.paths.size());
             // The page data should no longer be valid since it's moved
@@ -869,7 +870,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest,
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(1u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -896,7 +897,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest,
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -924,7 +925,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileDataPositiveMalwareVerdict) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -969,7 +970,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileIsEncrypted) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(1u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1013,7 +1014,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileIsEncrypted_PolicyAllows) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(1u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1042,7 +1043,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileDataNegativeMalwareVerdict) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1070,7 +1071,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileDataPositiveDlpVerdict) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1102,7 +1103,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, FileDataNegativeDlpVerdict) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1137,7 +1138,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest,
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    EXPECT_EQ(0u, result.text_results.size());
@@ -1165,7 +1166,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringFileData) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(1u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    ASSERT_EQ(1u, result.text_results.size());
@@ -1197,7 +1198,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringFileDataNoDLP) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(2u, data.text.size());
                    EXPECT_EQ(2u, data.paths.size());
                    ASSERT_EQ(2u, result.text_results.size());
@@ -1230,7 +1231,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringFileDataFailedDLP) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(2u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    ASSERT_EQ(2u, result.text_results.size());
@@ -1274,7 +1275,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(1u, data.text.size());
                    EXPECT_EQ(5u, data.paths.size());
                    ASSERT_EQ(1u, result.text_results.size());
@@ -1337,7 +1338,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, NoDelay) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(1u, data.text.size());
                    EXPECT_EQ(5u, data.paths.size());
                    EXPECT_EQ(1u, result.text_results.size());
@@ -1368,7 +1369,7 @@ TEST_F(ContentAnalysisDelegateAuditOnlyTest, EmptyWait) {
   ScanUpload(contents(), std::move(data),
              base::BindOnce(
                  [](bool* called, const ContentAnalysisDelegate::Data& data,
-                    const ContentAnalysisDelegate::Result& result) {
+                    ContentAnalysisDelegate::Result& result) {
                    EXPECT_EQ(0u, data.text.size());
                    EXPECT_EQ(0u, data.paths.size());
                    ASSERT_EQ(0u, result.text_results.size());
@@ -1413,7 +1414,8 @@ class ContentAnalysisDelegateResultHandlingTest
 
   bool is_cloud() const { return std::get<1>(GetParam()); }
 
-  ContentAnalysisResponse ConnectorStatusCallback(const base::FilePath& path) {
+  ContentAnalysisResponse ConnectorStatusCallback(const std::string& contents,
+                                                  const base::FilePath& path) {
     return FakeContentAnalysisDelegate::SuccessfulResponse({"dlp", "malware"});
   }
 
@@ -1439,21 +1441,20 @@ TEST_P(ContentAnalysisDelegateResultHandlingTest, Test) {
   CreateFilesForTest({FILE_PATH_LITERAL("foo.txt")}, &data);
 
   bool called = false;
-  ScanUpload(
-      contents(), std::move(data),
-      base::BindLambdaForTesting(
-          [this, &called](const ContentAnalysisDelegate::Data& data,
-                          const ContentAnalysisDelegate::Result& result) {
-            EXPECT_EQ(0u, data.text.size());
-            EXPECT_EQ(1u, data.paths.size());
-            EXPECT_EQ(0u, result.text_results.size());
-            EXPECT_EQ(1u, result.paths_results.size());
+  ScanUpload(contents(), std::move(data),
+             base::BindLambdaForTesting(
+                 [this, &called](const ContentAnalysisDelegate::Data& data,
+                                 ContentAnalysisDelegate::Result& result) {
+                   EXPECT_EQ(0u, data.text.size());
+                   EXPECT_EQ(1u, data.paths.size());
+                   EXPECT_EQ(0u, result.text_results.size());
+                   EXPECT_EQ(1u, result.paths_results.size());
 
-            bool expected =
-                ResultShouldAllowDataUse(data.settings, this->result());
-            EXPECT_EQ(expected, result.paths_results[0]);
-            called = true;
-          }));
+                   bool expected =
+                       ResultShouldAllowDataUse(data.settings, this->result());
+                   EXPECT_EQ(expected, result.paths_results[0]);
+                   called = true;
+                 }));
   RunUntilDone();
   EXPECT_TRUE(called);
 
@@ -1475,5 +1476,30 @@ INSTANTIATE_TEST_SUITE_P(
             safe_browsing::BinaryUploadService::Result::UNAUTHORIZED,
             safe_browsing::BinaryUploadService::Result::FILE_ENCRYPTED),
         testing::Bool()));
+
+// Calling GetRequestData() twice should return the same valid region.
+TEST(StringAnalysisRequest, GetRequestData) {
+  std::string contents("contents");
+  StringAnalysisRequest request(AnalysisSettings().cloud_or_local_settings,
+                                contents, base::DoNothing());
+
+  safe_browsing::BinaryUploadService::Request::Data data1;
+  request.GetRequestData(base::BindLambdaForTesting(
+      [&data1](safe_browsing::BinaryUploadService::Result result,
+               safe_browsing::BinaryUploadService::Request::Data data) {
+        data1 = std::move(data);
+      }));
+
+  safe_browsing::BinaryUploadService::Request::Data data2;
+  request.GetRequestData(base::BindLambdaForTesting(
+      [&data2](safe_browsing::BinaryUploadService::Result result,
+               safe_browsing::BinaryUploadService::Request::Data data) {
+        data2 = std::move(data);
+      }));
+
+  ASSERT_EQ(data1.size, data2.size);
+  ASSERT_EQ(data1.size, contents.size());
+  ASSERT_EQ(data1.contents, data2.contents);
+}
 
 }  // namespace enterprise_connectors

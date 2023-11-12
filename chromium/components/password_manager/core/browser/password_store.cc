@@ -20,12 +20,13 @@
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
+#include "components/password_manager/core/browser/affiliation/affiliated_match_helper.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/get_logins_with_affiliations_request_handler.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -78,15 +79,13 @@ void InvokeCallbacksForSuspectedChanges(
 PasswordStore::PasswordStore(std::unique_ptr<PasswordStoreBackend> backend)
     : backend_(std::move(backend)) {}
 
-bool PasswordStore::Init(
+void PasswordStore::Init(
     PrefService* prefs,
-    std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper,
-    base::RepeatingClosure sync_enabled_or_disabled_cb) {
-  main_task_runner_ = base::SequencedTaskRunnerHandle::Get();
+    std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper) {
+  main_task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
   DCHECK(main_task_runner_);
   prefs_ = prefs;
   affiliated_match_helper_ = std::move(affiliated_match_helper);
-  sync_enabled_or_disabled_cb_ = std::move(sync_enabled_or_disabled_cb);
 
   DCHECK(backend_);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
@@ -99,7 +98,6 @@ bool PasswordStore::Init(
           base::BindRepeating(
               &PasswordStore::NotifySyncEnabledOrDisabledOnMainSequence, this)),
       base::BindOnce(&PasswordStore::OnInitCompleted, this));
-  return true;
 }
 
 void PasswordStore::AddLogin(const PasswordForm& form,
@@ -331,7 +329,7 @@ void PasswordStore::ShutdownOnUIThread() {
 
   // Prevent in-flight tasks posted from the backend to invoke the callback
   // after shutdown.
-  sync_enabled_or_disabled_cb_ = base::DoNothing();
+  sync_enabled_or_disabled_cbs_.reset();
 
   // The AffiliationService must be destroyed from the main sequence.
   affiliated_match_helper_.reset();
@@ -355,6 +353,13 @@ void PasswordStore::OnSyncServiceInitialized(
     backend_->OnSyncServiceInitialized(sync_service);
 }
 
+base::CallbackListSubscription PasswordStore::AddSyncEnabledOrDisabledCallback(
+    base::RepeatingClosure sync_enabled_or_disabled_cb) {
+  DCHECK(sync_enabled_or_disabled_cbs_);
+  return sync_enabled_or_disabled_cbs_->Add(
+      std::move(sync_enabled_or_disabled_cb));
+}
+
 PasswordStoreBackend* PasswordStore::GetBackendForTesting() {
   return backend_.get();
 }
@@ -370,9 +375,6 @@ void PasswordStore::OnInitCompleted(bool success) {
   base::UmaHistogramBoolean("PasswordManager.PasswordStoreInitResult", success);
   TRACE_EVENT_NESTABLE_ASYNC_END0(
       "passwords", "PasswordStore::InitOnBackgroundSequence", this);
-
-  if (affiliated_match_helper_)
-    affiliated_match_helper_->Initialize(this);
 }
 
 void PasswordStore::NotifyLoginsChangedOnMainSequence(
@@ -445,7 +447,9 @@ void PasswordStore::NotifyLoginsRetainedOnMainSequence(
 
 void PasswordStore::NotifySyncEnabledOrDisabledOnMainSequence() {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  sync_enabled_or_disabled_cb_.Run();
+  if (sync_enabled_or_disabled_cbs_) {
+    sync_enabled_or_disabled_cbs_->Notify();
+  }
 }
 
 void PasswordStore::UnblocklistInternal(

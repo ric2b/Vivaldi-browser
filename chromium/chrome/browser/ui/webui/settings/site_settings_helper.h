@@ -59,6 +59,7 @@ constexpr char kEmbeddingOrigin[] = "embeddingOrigin";
 constexpr char kIncognito[] = "incognito";
 constexpr char kObject[] = "object";
 constexpr char kDisabled[] = "disabled";
+constexpr char kIsolatedWebAppName[] = "isolatedWebAppName";
 constexpr char kOrigin[] = "origin";
 constexpr char kOriginForFavicon[] = "originForFavicon";
 constexpr char kRecentPermissions[] = "recentPermissions";
@@ -67,7 +68,9 @@ constexpr char kSites[] = "sites";
 constexpr char kPolicyIndicator[] = "indicator";
 constexpr char kSource[] = "source";
 constexpr char kType[] = "type";
+constexpr char kIsDirectory[] = "isDirectory";
 constexpr char kIsEmbargoed[] = "isEmbargoed";
+constexpr char kIsWritable[] = "isWritable";
 constexpr char kNotificationInfoString[] = "notificationInfoString";
 
 enum class SiteSettingSource {
@@ -98,6 +101,17 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories();
 
 // Converts a SiteSettingSource to its string identifier.
 std::string SiteSettingSourceToString(const SiteSettingSource source);
+
+// Helper function to construct a dictionary for a File System exception.
+base::Value::Dict GetFileSystemExceptionForPage(
+    ContentSettingsType content_type,
+    Profile* profile,
+    const std::string& origin,
+    const base::FilePath& file_path,
+    const ContentSetting& setting,
+    const std::string& provider_name,
+    bool incognito,
+    bool is_embargoed = false);
 
 // Helper function to construct a dictionary for an exception.
 base::Value::Dict GetExceptionForPage(
@@ -144,6 +158,11 @@ ContentSetting GetContentSettingForOrigin(
     std::string* source_string,
     const extensions::ExtensionRegistry* extension_registry,
     std::string* display_name);
+
+// Returns URLs with granted entries from the File System Access API.
+void GetFileSystemGrantedEntries(std::vector<base::Value::Dict>* exceptions,
+                                 Profile* profile,
+                                 bool incognito);
 
 // Returns exceptions constructed from the policy-set allowed URLs
 // for the content settings |type| mic or camera.
@@ -192,6 +211,10 @@ base::Value::Dict CreateChooserExceptionObject(
 base::Value::List GetChooserExceptionListFromProfile(
     Profile* profile,
     const ChooserTypeNameEntry& chooser_type);
+
+// Returns the short name of a web app in case of an Isolated Web App.
+absl::optional<std::string> GetIsolatedWebAppName(Profile* profile,
+                                                  GURL origin);
 
 }  // namespace site_settings
 

@@ -45,5 +45,11 @@ if (!is_ios) {
       "//vivaldi/sync/file_sync/file_store_factory.cc",
       "//vivaldi/sync/file_sync/file_store_factory.h",
     ]
+    if (is_android) {
+      sources += [
+        "//vivaldi/sync/file_sync/file_store_android.cc",
+        "//vivaldi/sync/file_sync/file_store_android.h",
+      ]
+    }
   }
 }

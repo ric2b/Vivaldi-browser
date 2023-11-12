@@ -16,7 +16,6 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
-#include "third_party/blink/public/web/web_performance.h"
 #include "third_party/blink/public/web/web_range.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/core/execution_context/remote_security_context.h"
@@ -94,6 +93,7 @@ WebRemoteFrame* WebRemoteFrame::Create(mojom::blink::TreeScopeType scope,
 WebRemoteFrame* WebRemoteFrame::CreateMainFrame(
     WebView* web_view,
     const RemoteFrameToken& frame_token,
+    bool is_loading,
     const base::UnguessableToken& devtools_frame_token,
     WebFrame* opener,
     CrossVariantMojoAssociatedRemote<mojom::blink::RemoteFrameHostInterfaceBase>
@@ -102,7 +102,7 @@ WebRemoteFrame* WebRemoteFrame::CreateMainFrame(
         receiver,
     mojom::FrameReplicationStatePtr replicated_state) {
   return WebRemoteFrameImpl::CreateMainFrame(
-      web_view, frame_token, devtools_frame_token, opener,
+      web_view, frame_token, is_loading, devtools_frame_token, opener,
       std::move(remote_frame_host), std::move(receiver),
       ToBlinkFrameReplicationState(std::move(replicated_state)));
 }
@@ -111,6 +111,7 @@ WebRemoteFrame* WebRemoteFrame::CreateMainFrame(
 WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
     WebView* web_view,
     const RemoteFrameToken& frame_token,
+    bool is_loading,
     const base::UnguessableToken& devtools_frame_token,
     WebFrame* opener,
     mojo::PendingAssociatedRemote<mojom::blink::RemoteFrameHost>
@@ -136,6 +137,9 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
   frame->SetReplicatedState(std::move(replicated_state));
   Frame* opener_frame = opener ? ToCoreFrame(*opener) : nullptr;
   ToCoreFrame(*frame)->SetOpenerDoNotNotify(opener_frame);
+  if (is_loading) {
+    frame->DidStartLoading();
+  }
   return frame;
 }
 
@@ -293,7 +297,6 @@ void WebRemoteFrameImpl::InitializeCoreFrame(
     ancestor_widget = WebLocalFrameImpl::FromFrame(local_frame)->FrameWidget();
   }
 
-  DCHECK(remote_frame_host && remote_frame_receiver);
   SetCoreFrame(MakeGarbageCollected<RemoteFrame>(
       frame_client_.Get(), page, owner, parent_frame, previous_sibling_frame,
       insert_type, GetRemoteFrameToken(), window_agent_factory, ancestor_widget,
@@ -310,6 +313,7 @@ void WebRemoteFrameImpl::InitializeCoreFrame(
 WebRemoteFrameImpl* WebRemoteFrameImpl::CreateRemoteChild(
     mojom::blink::TreeScopeType scope,
     const RemoteFrameToken& frame_token,
+    bool is_loading,
     const base::UnguessableToken& devtools_frame_token,
     WebFrame* opener,
     mojo::PendingAssociatedRemote<mojom::blink::RemoteFrameHost>
@@ -334,6 +338,9 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateRemoteChild(
   child->SetReplicatedState(std::move(replicated_state));
   Frame* opener_frame = opener ? ToCoreFrame(*opener) : nullptr;
   ToCoreFrame(*child)->SetOpenerDoNotNotify(opener_frame);
+  if (is_loading) {
+    child->DidStartLoading();
+  }
   return child;
 }
 

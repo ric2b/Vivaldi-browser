@@ -146,11 +146,6 @@ void DisplayMediaAccessHandler::HandleRequest(
 
   if (request.request_type == blink::MEDIA_DEVICE_UPDATE) {
     DCHECK(!request.requested_video_device_id.empty());
-    // The share-this-tab-instead button is not shown when the screen capture is
-    // initiated with preferCurrentTab: true, so it should not be possible to
-    // reach HandleRequest in that case.
-    DCHECK(request.video_type !=
-           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB);
     ProcessChangeSourceRequest(web_contents, request, std::move(callback));
     return;
   }
@@ -350,6 +345,8 @@ void DisplayMediaAccessHandler::ProcessQueuedPickerRequest(
       blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE;
   picker_params.exclude_system_audio =
       pending_request.request.exclude_system_audio;
+  picker_params.suppress_local_audio_playback =
+      pending_request.request.suppress_local_audio_playback;
   picker_params.restricted_by_policy =
       (capture_level != AllowedScreenCaptureLevel::kUnrestricted);
   picker_params.preferred_display_surface =
@@ -428,8 +425,8 @@ void DisplayMediaAccessHandler::AcceptRequest(
       *stream_devices_set.stream_devices[0];
   std::unique_ptr<content::MediaStreamUI> ui = GetDevicesForDesktopCapture(
       pending_request.request, web_contents, media_id, media_id.audio_share,
-      disable_local_echo, display_notification_,
-      GetApplicationTitle(web_contents), stream_devices);
+      disable_local_echo, pending_request.request.suppress_local_audio_playback,
+      display_notification_, GetApplicationTitle(web_contents), stream_devices);
   UpdateTarget(pending_request.request, media_id);
 
   std::move(pending_request.callback)

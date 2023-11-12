@@ -98,6 +98,8 @@ class HardwareDisplayControllerInfo {
   drmModeCrtc* crtc() const { return crtc_.get(); }
   uint8_t index() const { return index_; }
 
+  ScopedDrmConnectorPtr ReleaseConnector() { return std::move(connector_); }
+
  private:
   ScopedDrmConnectorPtr connector_;
   ScopedDrmCrtcPtr crtc_;
@@ -162,6 +164,10 @@ bool ModeIsInterlaced(const drmModeModeInfo& mode);
 bool IsVrrCapable(int fd, drmModeConnector* connector);
 
 bool IsVrrEnabled(int fd, drmModeCrtc* crtc);
+
+display::VariableRefreshRateState GetVariableRefreshRateState(
+    int fd,
+    HardwareDisplayControllerInfo* info);
 
 uint64_t GetEnumValueForName(int fd, int property_id, const char* str);
 

@@ -4,6 +4,7 @@
 
 import 'chrome://diagnostics/battery_status_card.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {BatteryStatusCardElement} from 'chrome://diagnostics/battery_status_card.js';
 import {getDiagnosticsIcon} from 'chrome://diagnostics/diagnostics_utils.js';
@@ -15,17 +16,17 @@ import {RoutineSectionElement} from 'chrome://diagnostics/routine_section.js';
 import {BatteryChargeStatus, BatteryHealth, BatteryInfo, ExternalPowerSource} from 'chrome://diagnostics/system_data_provider.mojom-webui.js';
 import {RoutineType} from 'chrome://diagnostics/system_routine_controller.mojom-webui.js';
 import {TextBadgeElement} from 'chrome://diagnostics/text_badge.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isChildVisible, isVisible} from '../../test_util.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {isChildVisible, isVisible} from '../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 
 const BATTERY_ICON_PREFIX = 'battery-';
 
-export function batteryStatusCardTestSuite() {
+suite('batteryStatusCardTestSuite', function() {
   /** @type {?BatteryStatusCardElement} */
   let batteryStatusElement = null;
 
@@ -263,4 +264,4 @@ export function batteryStatusCardTestSuite() {
               batteryStatusElement.batteryIcon);
         });
   });
-}
+});

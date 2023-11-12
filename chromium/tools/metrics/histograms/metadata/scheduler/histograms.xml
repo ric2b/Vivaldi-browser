@@ -139,7 +139,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Scheduler.TaskQueueImpl.DelayedIncomingQueueSize"
-    units="tasks" expires_after="2023-02-12">
+    units="tasks" expires_after="2023-04-16">
   <owner>yafroze@google.com</owner>
   <owner>pmonette@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
@@ -154,7 +154,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Scheduler.TaskQueueImpl.PostDelayedTaskDelay" units="ms"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>yafroze@google.com</owner>
   <owner>pmonette@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
@@ -199,7 +199,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Scheduling.Renderer.DeadlineMode"
-    enum="RendererSchedulerDeadlineMode" expires_after="2023-02-26">
+    enum="RendererSchedulerDeadlineMode" expires_after="2023-04-30">
   <owner>weiliangc@chromium.org</owner>
   <owner>chrome-gpu-metrics@chromium.org</owner>
   <summary>
@@ -253,7 +253,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Scheduling.Renderer.FrameProduction.TimeOverused"
-    units="microseconds" expires_after="2023-02-19">
+    units="microseconds" expires_after="2023-04-23">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metrics@chromium.org</owner>
   <summary>
@@ -268,7 +268,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Scheduling.Renderer.FrameProduction.TimeUnused"
-    units="microseconds" expires_after="2023-02-19">
+    units="microseconds" expires_after="2023-04-23">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metrics@chromium.org</owner>
   <summary>
@@ -290,6 +290,19 @@ chromium-metrics-reviews@google.com.
   <summary>
     Number of tasks executed by a SchedulerWorker before it detached. Recorded
     when a SchedulerWorker detaches.
+  </summary>
+</histogram>
+
+<histogram base="true" name="ThreadPool.UnnecessaryWakeup" enum="BooleanHit"
+    expires_after="2023-02-01">
+  <owner>spvw@chromium.org</owner>
+  <owner>gab@chromium.org</owner>
+  <summary>
+    Records a hit when a thread pool worker thread woke up unnecessarily (when
+    the first GetWork called by a WorkerThread post-wakeup doesn't return a
+    task). This count can be compared between experiments aiming to reduce
+    wakeups. Or, it could be used to derive wakeups/{foo} by using UMA formulas
+    against other time-or-event-based metrics.
   </summary>
 </histogram>
 

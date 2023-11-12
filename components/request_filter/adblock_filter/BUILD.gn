@@ -105,7 +105,7 @@ action("package_redirectable_resources") {
   args = [
     "--input_dir", rebase_path(ublock_resources, root_build_dir),
     "--output", rebase_path(resources, root_build_dir),
-    "--exclude", "README.txt", "empty",
+    "--exclude", "README.txt", "empty", "click2load.html", "epicker-ui.html",
     "--add-empty", "noop.css"
   ]
 }

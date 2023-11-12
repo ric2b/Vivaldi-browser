@@ -8,10 +8,9 @@
 #import <ostream>
 
 #import "base/check.h"
-#import "base/feature_list.h"
 #import "base/notreached.h"
 #import "ios/chrome/browser/ui/elements/top_aligned_image_view.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -63,11 +62,6 @@ void PositionView(UIView* view, CGPoint point) {
   frame.origin = point;
   view.frame = frame;
 }
-
-// Kill switch guarding a workaround for crash, see crbug.com/1350976
-BASE_FEATURE(kPreviousTabViewWidthCrash,
-             "PreviousTabViewWidthCrash",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace
 
@@ -137,7 +131,11 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
     } // End Vivaldi
 
     UIView* contentView = self.contentView;
-    contentView.layer.cornerRadius = kGridCellCornerRadius;
+    if (UseSymbols()) {
+      contentView.layer.cornerRadius = kGridCellCornerRadius;
+    } else {
+      contentView.layer.cornerRadius = kLegacyGridCellCornerRadius;
+    }
     contentView.layer.masksToBounds = YES;
 
     // Vivaldi
@@ -178,7 +176,11 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
 
     // Vivaldi: We will not use drop shadow for tab grid items on Vivaldi.
     if (!IsVivaldiRunning()) {
-    self.layer.cornerRadius = kGridCellCornerRadius;
+    if (UseSymbols()) {
+      self.layer.cornerRadius = kGridCellCornerRadius;
+    } else {
+      self.layer.cornerRadius = kLegacyGridCellCornerRadius;
+    }
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 0);
     self.layer.shadowRadius = 4.0f;
@@ -312,12 +314,16 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
   // enough here.
   switch (theme) {
     case GridThemeLight:
-      self.border.layer.borderColor =
-          [UIColor colorNamed:@"grid_theme_selection_tint_color"].CGColor;
+      if (UseSymbols()) {
+        self.border.layer.borderColor =
+            [UIColor colorNamed:kStaticBlue400Color].CGColor;
+      } else {
+        self.border.layer.borderColor =
+            [UIColor colorNamed:@"grid_theme_selection_tint_color"].CGColor;
+      }
       break;
     case GridThemeDark:
-      self.border.layer.borderColor =
-          [UIColor colorNamed:@"grid_theme_dark_selection_tint_color"].CGColor;
+      self.border.layer.borderColor = UIColor.whiteColor.CGColor;
       break;
   }
 
@@ -496,8 +502,8 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
     [titleLabel.trailingAnchor
         constraintEqualToAnchor:closeIconView.leadingAnchor
                        constant:-kGridCellTitleLabelContentInset],
-    [titleLabel.centerYAnchor
-        constraintEqualToAnchor:closeIconView.centerYAnchor],
+    [topBar.topAnchor constraintEqualToAnchor:closeIconView.centerYAnchor
+                                     constant:-kGridCellCloseButtonTopSpacing],
     [closeIconView.trailingAnchor
         constraintEqualToAnchor:topBar.trailingAnchor
                        constant:-kGridCellCloseButtonContentInset],
@@ -512,8 +518,8 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
       [titleLabel.trailingAnchor
           constraintEqualToAnchor:_selectIconView.leadingAnchor
                          constant:-kGridCellTitleLabelContentInset],
-      [titleLabel.centerYAnchor
-          constraintEqualToAnchor:_selectIconView.centerYAnchor],
+      [topBar.topAnchor constraintEqualToAnchor:_selectIconView.topAnchor
+                                       constant:-kGridCellSelectIconTopSpacing],
       [_selectIconView.trailingAnchor
           constraintEqualToAnchor:topBar.trailingAnchor
                          constant:-kGridCellSelectIconContentInset],
@@ -559,7 +565,7 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
     return DefaultSymbolTemplateWithPointSize(kCircleSymbol,
                                               kIconSymbolPointSize);
   }
-  return DefaultSymbolTemplateWithPointSize(kCheckMarkCircleFillSymbol,
+  return DefaultSymbolTemplateWithPointSize(kCheckmarkCircleFillSymbol,
                                             kIconSymbolPointSize);
 }
 
@@ -632,9 +638,15 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
   border.hidden = self.isInSelectionMode;
   border.translatesAutoresizingMaskIntoConstraints = NO;
   border.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
-  border.layer.cornerRadius = kGridCellCornerRadius +
-                              kGridCellSelectionRingGapWidth +
-                              kGridCellSelectionRingTintWidth;
+  if (UseSymbols()) {
+    border.layer.cornerRadius = kGridCellCornerRadius +
+                                kGridCellSelectionRingGapWidth +
+                                kGridCellSelectionRingTintWidth;
+  } else {
+    border.layer.cornerRadius = kLegacyGridCellCornerRadius +
+                                kGridCellSelectionRingGapWidth +
+                                kGridCellSelectionRingTintWidth;
+  }
   border.layer.borderWidth = kGridCellSelectionRingTintWidth;
   [self.selectedBackgroundView addSubview:border];
   _border = border;
@@ -752,12 +764,6 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
   if (!mainTabView.superview)
     [self.contentView addSubview:mainTabView];
   _previousTabViewWidth = mainTabView.frame.size.width;
-  static bool previous_tab_view_width_crash_workaround =
-      base::FeatureList::IsEnabled(kPreviousTabViewWidthCrash);
-  if (previous_tab_view_width_crash_workaround && !_previousTabViewWidth) {
-    UIWindow* window = UIApplication.sharedApplication.windows.firstObject;
-    _previousTabViewWidth = window.bounds.size.width;
-  }
   _mainTabView = mainTabView;
 }
 
@@ -829,12 +835,6 @@ BASE_FEATURE(kPreviousTabViewWidthCrash,
   ScaleView(self.mainTabView, scale);
   ScaleView(self.bottomTabView, scale);
   _previousTabViewWidth = self.mainTabView.frame.size.width;
-  static bool previous_tab_view_width_crash_workaround =
-      base::FeatureList::IsEnabled(kPreviousTabViewWidthCrash);
-  if (previous_tab_view_width_crash_workaround && !_previousTabViewWidth) {
-    UIWindow* window = UIApplication.sharedApplication.windows.firstObject;
-    _previousTabViewWidth = window.bounds.size.width;
-  }
 }
 
 @end

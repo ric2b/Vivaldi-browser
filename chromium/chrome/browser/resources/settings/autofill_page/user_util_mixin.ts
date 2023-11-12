@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {StoredAccount, SyncBrowserProxyImpl, SyncPrefs, SyncStatus} from '../people_page/sync_browser_proxy.js';
@@ -18,8 +18,8 @@ type Constructor<T> = new (...args: any[]) => T;
  */
 export const UserUtilMixin = dedupingMixin(
     <T extends Constructor<PolymerElement>>(superClass: T):
-        (T|WebUIListenerMixinInterface)&Constructor<UserUtilMixinInterface> => {
-          class UserUtilMixin extends WebUIListenerMixin
+        (T|WebUiListenerMixinInterface)&Constructor<UserUtilMixinInterface> => {
+          class UserUtilMixin extends WebUiListenerMixin
           (superClass) {
             static get properties() {
               return {
@@ -110,19 +110,19 @@ export const UserUtilMixin = dedupingMixin(
                 this.syncStatus = syncStatus;
               };
               syncBrowserProxy.getSyncStatus().then(syncStatusChanged);
-              this.addWebUIListener('sync-status-changed', syncStatusChanged);
+              this.addWebUiListener('sync-status-changed', syncStatusChanged);
 
               const syncPrefsChanged = (syncPrefs: SyncPrefs) => {
                 this.syncPrefs = syncPrefs;
               };
-              this.addWebUIListener('sync-prefs-changed', syncPrefsChanged);
+              this.addWebUiListener('sync-prefs-changed', syncPrefsChanged);
               syncBrowserProxy.sendSyncPrefsChanged();
 
               const storedAccountsChanged = (accounts: StoredAccount[]) => {
                 this.storedAccounts_ = accounts;
               };
               syncBrowserProxy.getStoredAccounts().then(storedAccountsChanged);
-              this.addWebUIListener(
+              this.addWebUiListener(
                   'stored-accounts-updated', storedAccountsChanged);
             }
 

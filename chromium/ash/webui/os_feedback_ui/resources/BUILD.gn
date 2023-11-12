@@ -48,6 +48,7 @@ generate_grd("build_grd") {
     "fake_feedback_service_provider.js",
     "feedback_constants.js",
     "feedback_types.js",
+    "feedback_utils.js",
     "index.html",
     "mojo_interface_provider.js",
     "questionnaire.js",
@@ -109,16 +110,16 @@ js_library("fake_data") {
 js_library("fake_help_content_provider") {
   deps = [
     ":feedback_types",
+    "//ash/webui/common/resources:cr.m",
     "//ash/webui/common/resources:fake_method_resolver",
-    "//ui/webui/resources/js:cr.m",
   ]
 }
 
 js_library("fake_feedback_service_provider") {
   deps = [
     ":feedback_types",
+    "//ash/webui/common/resources:cr.m",
     "//ash/webui/common/resources:fake_method_resolver",
-    "//ui/webui/resources/js:cr.m",
   ]
 }
 
@@ -158,7 +159,7 @@ js_library("mojo_interface_provider") {
     ":fake_feedback_service_provider",
     ":fake_help_content_provider",
     ":feedback_types",
-    "//ui/webui/resources/js:cr.m",
+    "//ash/webui/common/resources:cr.m",
   ]
 }
 

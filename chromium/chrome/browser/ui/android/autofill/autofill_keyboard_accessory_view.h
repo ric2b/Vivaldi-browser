@@ -13,7 +13,7 @@
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/autofill/autofill_keyboard_accessory_adapter.h"
+#include "chrome/browser/ui/autofill/autofill_keyboard_accessory_adapter.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 
 namespace autofill {
@@ -39,6 +39,7 @@ class AutofillKeyboardAccessoryView
   bool Initialize() override;
   void Hide() override;
   void Show() override;
+  void AxAnnounce(const std::u16string& text) override;
   void ConfirmDeletion(const std::u16string& confirmation_title,
                        const std::u16string& confirmation_body,
                        base::OnceClosure confirm_deletion) override;

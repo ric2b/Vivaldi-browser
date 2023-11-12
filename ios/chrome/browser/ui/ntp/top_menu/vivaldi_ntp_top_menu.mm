@@ -80,15 +80,22 @@ CGFloat lineSpacing = 12.0;
 - (void)setMenuItemsWithSDFolders:(NSArray*)folders
                   selectedIndex:(NSInteger)selectedIndex {
   self.menuItems = folders;
+  [CATransaction begin];
+  [CATransaction setValue:(id)kCFBooleanTrue
+                   forKey:kCATransactionDisableActions];
   [self.collectionView performBatchUpdates:^{
     [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
-  } completion:nil];
-  [self selectItemWithIndex:selectedIndex];
+  } completion: ^(BOOL finished){
+    [self selectItemWithIndex:selectedIndex animated:NO];
+    [CATransaction commit];
+  }];
 }
 
-- (void)selectItemWithIndex:(NSInteger)index {
+- (void)selectItemWithIndex:(NSInteger)index
+                   animated:(BOOL)animated {
   if (self.menuItems.count > 0) {
-    [self scrollToItemWithIndex:index];
+    [self scrollToItemWithIndex:index
+                       animated:animated];
   }
 }
 
@@ -97,13 +104,19 @@ CGFloat lineSpacing = 12.0;
   [self.collectionView.collectionViewLayout invalidateLayout];
 }
 
+- (void)removeAllItems {
+  self.menuItems = @[];
+  [self.collectionView reloadData];
+}
+
 #pragma mark - PRIVATE METHODS
-- (void)scrollToItemWithIndex:(NSInteger)index {
+- (void)scrollToItemWithIndex:(NSInteger)index
+                     animated:(BOOL)animated {
   NSIndexPath *indexPath = [NSIndexPath indexPathForRow:index
                                               inSection:0];
   [self.collectionView
       selectItemAtIndexPath:indexPath
-                   animated:true
+                   animated:animated
              scrollPosition:UICollectionViewScrollPositionCenteredHorizontally];
 }
 
@@ -132,7 +145,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
       [self.menuItems objectAtIndex:indexPath.row];
     [self.delegate didSelectItem:selectedItem index:indexPath.row];
   }
-  [self scrollToItemWithIndex:indexPath.row];
+  [self scrollToItemWithIndex:indexPath.row animated:YES];
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView
@@ -146,8 +159,9 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
   NSString *selectedItemTitle = selectedItem.title;
   CGSize stringSize =
     [selectedItemTitle
-      sizeWithAttributes:@{NSFontAttributeName:
-                             [UIFont systemFontOfSize:vBodyFontSize]}];
+      sizeWithAttributes:
+       @{NSFontAttributeName:
+          [UIFont preferredFontForTextStyle:UIFontTextStyleBody]}];
   // Adding extra padding with the width for spacing between two items.
   CGFloat width = stringSize.width + textPadding;
 

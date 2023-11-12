@@ -12,16 +12,18 @@
 #include "base/strings/strcat.h"
 #include "base/trace_event/trace_event.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
-#include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+#include "third_party/blink/public/mojom/loader/code_cache.mojom-blink.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/web_code_cache_loader.h"
-#include "third_party/blink/public/platform/web_url_loader.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/platform/loader/fetch/body_text_decoder.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
@@ -31,6 +33,7 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
+#include "third_party/ced/src/compact_enc_det/compact_enc_det.h"
 
 namespace blink {
 namespace {
@@ -374,6 +377,8 @@ void NavigationBodyLoader::OnUploadProgress(int64_t current_position,
 }
 
 void NavigationBodyLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
+  network::RecordOnTransferSizeUpdatedUMA(
+      network::OnTransferSizeUpdatedFrom::kNavigationBodyLoader);
   resource_load_info_notifier_wrapper_->NotifyResourceTransferSizeUpdated(
       transfer_size_diff);
 }
@@ -420,6 +425,12 @@ void NavigationBodyLoader::StartLoadingBodyInBackground(
     bool should_keep_encoded_data) {
   if (!response_body_)
     return;
+
+  // Initializing the map used when detecting encodings is not thread safe.
+  // Initialize on the main thread here to avoid races.
+  // TODO(crbug.com/1384221): Consider making the map thread safe in
+  // third_party/ced/src/util/encodings/encodings.cc.
+  EncodingNameAliasToEncoding("");
 
   off_thread_body_reader_.reset(new OffThreadBodyReader(
       std::move(response_body_), std::move(decoder), weak_factory_.GetWeakPtr(),
@@ -514,7 +525,7 @@ void NavigationBodyLoader::NotifyCompletionIfAppropriate() {
 
   absl::optional<WebURLError> error;
   if (status_.error_code != net::OK) {
-    error = WebURLLoader::PopulateURLError(status_, original_url_);
+    error = WebURLError::Create(status_, original_url_);
   }
 
   resource_load_info_notifier_wrapper_->NotifyResourceLoadCompleted(status_);
@@ -533,10 +544,8 @@ void NavigationBodyLoader::NotifyCompletionIfAppropriate() {
 
 void NavigationBodyLoader::
     BindURLLoaderAndStartLoadingResponseBodyIfPossible() {
-  if (!response_body_ && !off_thread_body_reader_) {
-    DCHECK(base::FeatureList::IsEnabled(features::kEarlyBodyLoad));
+  if (!response_body_ && !off_thread_body_reader_)
     return;
-  }
   // Bind the mojo::URLLoaderClient interface in advance, because we will start
   // to read from the data pipe immediately which may potentially postpone the
   // method calls from the remote. That causes the flakiness of some layout
@@ -609,9 +618,9 @@ void WebNavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
         navigation_params->redirects[i];
     auto& redirect_info = commit_params->redirect_infos[i];
     auto& redirect_response = commit_params->redirect_response[i];
-    WebURLLoader::PopulateURLResponse(
-        url, *redirect_response, &redirect.redirect_response,
-        response_head->ssl_info.has_value(), request_id);
+    redirect.redirect_response =
+        WebURLResponse::Create(url, *redirect_response,
+                               response_head->ssl_info.has_value(), request_id);
     resource_load_info_notifier_wrapper->NotifyResourceRedirectReceived(
         redirect_info, std::move(redirect_response));
     if (url.ProtocolIsData())
@@ -627,9 +636,8 @@ void WebNavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
     url = KURL(redirect_info.new_url);
   }
 
-  WebURLLoader::PopulateURLResponse(
-      url, *response_head, &navigation_params->response,
-      response_head->ssl_info.has_value(), request_id);
+  navigation_params->response = WebURLResponse::Create(
+      url, *response_head, response_head->ssl_info.has_value(), request_id);
   if (url.ProtocolIsData())
     navigation_params->response.SetHttpStatusCode(200);
 

@@ -4,18 +4,18 @@
 <translation id="1075622780330595106">ଆପଣଙ୍କର <ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ନିକଟରେ ବ୍ୟବହୃତ ହୋଇନାହିଁ। ସେଗୁଡ଼ିକୁ ବନ୍ଦ କରିବେ?</translation>
 <translation id="1181037720776840403">କାଢ଼ି ଦିଅନ୍ତୁ</translation>
 <translation id="125153950246128346">ଅନ୍ୟଏକ ଟାବ୍ ଦେଖିବା ପାଇଁ ଟାପ୍ କରନ୍ତୁ</translation>
-<translation id="1302104331113804646">ମୂଲ୍ୟ ଟ୍ରାକ୍ କରିବା ପାଇଁ ସେଟିଂସ୍</translation>
-<translation id="1378979118429748177">ମୂଲ୍ୟରେ ହ୍ରାସ ହେଲେ ସୂଚିତ ହୁଅନ୍ତୁ</translation>
 <translation id="1403228085774130835">ଆପଣ ଆପଣଙ୍କ ବନ୍ଦ କରାଯାଇଥିବା ଟାବଗୁଡ଼ିକୁ Chrome ମୁଖ୍ୟ ମେନୁ ଅଧୀନରେ "ବର୍ତ୍ତମାନର ଟାବଗୁଡ଼ିକ"ରେ ପାଇପାରିବେ</translation>
 <translation id="1455506303394048917">ଏହି ଇନକଗ୍ନିଟୋ ଟାବଗୁଡ଼ିକରେ ଆପଣଙ୍କ କାର୍ଯ୍ୟକଳାପକୁ ଏହି ଡିଭାଇସରୁ ଖାଲି କରିଦିଆଯିବ</translation>
 <translation id="1499635324672558517">ସମସ୍ତ ଇନକଗ୍ନିଟୋ ଟାବକୁ ବନ୍ଦ କରିବେ?</translation>
 <translation id="1657719826150349398">ଟାବ୍‍କୁ ତଳକୁ ମୁଭ୍ କରନ୍ତୁ</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" />ଟି ଟାବ୍}other{<ph name="TABS_COUNT_MANY" />ଟି ଟାବ୍}}</translation>
+<translation id="2050597508048557928">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" />ଟି ଚୟନିତ ଟାବକୁ ବୁକମାର୍କ କରନ୍ତୁ}other{<ph name="TABS_COUNT_MANY" />ଟି ଚୟନିତ ଟାବକୁ ବୁକମାର୍କ କରନ୍ତୁ}}</translation>
 <translation id="2118649612461486615">ଷ୍ଟୋର୍ ସୂଚନା</translation>
 <translation id="2162620598375156287">ବର୍ତ୍ତମାନ <ph name="SOURCE_WEBSITE" />ରେ <ph name="CURRENT_PRICE" /></translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{ଟାବକୁ ଗୋଷ୍ଠୀଭୁକ୍ତ କର ନାହିଁ}other{ଟାବକୁ ଗୋଷ୍ଠୀଭୁକ୍ତ କର ନାହିଁ}}</translation>
 <translation id="2277224997687551299">ଗ୍ରୁପ ନାମ ଏଡିଟ୍ କରନ୍ତୁ</translation>
 <translation id="228946090561406413">{TABS_COUNT,plural, =1{ଗ୍ରୁପରୁ <ph name="TABS_COUNT_ONE" />ଟି ଚୟନିତ ଟାବକୁ କାଢ଼ି ଦିଅନ୍ତୁ।}other{ଗ୍ରୁପରୁ <ph name="TABS_COUNT_MANY" />ଟି ଚୟନିତ ଟାବକୁ କାଢ଼ି ଦିଅନ୍ତୁ।}}</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{ଟାବକୁ ବୁକମାର୍କ କରନ୍ତୁ}other{ଟାବକୁ ବୁକମାର୍କ କରନ୍ତୁ}}</translation>
 <translation id="2479148705183875116">ସେଟିଂସକୁ ଯାଆନ୍ତୁ</translation>
 <translation id="2539705006853443997">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" />ଟି ଟାବ୍ ସଙ୍କୁଚିତ କରନ୍ତୁ।}other{<ph name="TABS_COUNT_MANY" />ଟି ଟାବ୍ ଥିବା ଟାବ୍ ଗ୍ରୁପକୁ ସଙ୍କୁଚିତ କରନ୍ତୁ।}}</translation>
 <translation id="2569352796411618312">ପ୍ରସ୍ତାବ: ଆପଣଙ୍କର <ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ନିକଟରେ ବ୍ୟବହୃତ ହୋଇନାହିଁ। ସେଗୁଡ଼ିକୁ ବନ୍ଦ କରିବେ?</translation>
@@ -34,6 +34,7 @@
 <translation id="3291470810748040983">ଖୋଲା ଥିବା ଏକ ଟାବରେ ମୂଲ୍ୟରେ ହ୍ରାସ ହେବାର ସୂଚନା ଉପଲବ୍ଧ ହେଲେ ଆପଣ ଏକ ଆଲର୍ଟ ପାଇବେ</translation>
 <translation id="3328308545011660196">ପରାମର୍ଶ: <ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ସମ୍ବନ୍ଧିତ ଥିଲା ପରି ଜଣାପଡ଼ୁଛି। ସେଗୁଡ଼ିକୁ ଗ୍ରୁପ୍ କରିବେ?</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
+<translation id="374923079891132274">ସିଟ ପ୍ରିଭ୍ୟୁ ସେୟାର କରିବାକୁ ଥମ୍ବନେଲ।</translation>
 <translation id="3819916404117584598">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" />ଟି ଟାବ୍ ସଙ୍କୁଚିତ କରନ୍ତୁ।}other{<ph name="TITLE_OF_GROUP" />ଟି ଟାବ୍ ଥିବା <ph name="TABS_COUNT_MANY" /> ଟାବ୍ ଗ୍ରୁପକୁ ସଙ୍କୁଚିତ କରନ୍ତୁ।}}</translation>
 <translation id="3882834874697329510">ଖୋଲା ଥିବା ଏକ ଟାବରେ କମ୍ ମୂଲ୍ୟ ସମ୍ବନ୍ଧିତ ସୂଚନା ଉପଲବ୍ଧ ହେଲେ ଆଲର୍ଟ ପାଇବାକୁ ସେଟିଂସରେ "ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ" ଚାଲୁ କରନ୍ତୁ।</translation>
 <translation id="3940195383040445971">ଟାବଗୁଡ଼ିକରେ ମୂଲ୍ୟଗୁଡ଼ିକୁ ଟ୍ରାକ୍ କରନ୍ତୁ</translation>
@@ -58,6 +59,7 @@
 <translation id="5556417849629758491">ଷ୍ଟୋରର ସୂଚନା ଦେଖନ୍ତୁ, ସ୍କ୍ରିନର ଶୀର୍ଷଭାଗର ନିକଟରେ ବିକଳ୍ପ ଉପଲବ୍ଧ ଅଛି</translation>
 <translation id="5558362125926932819"><ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ଥିବା ଟାବ୍ ଗ୍ରୁପକୁ ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="5580090775658607195"><ph name="TAB_COUNT" />ଟି ଟାବ୍ ଏକତ୍ର କରାଯାଇଛି</translation>
+<translation id="5656738671621697952">{TABS_COUNT,plural, =1{Chromeରୁ <ph name="TABS_COUNT_ONE" />ଟି ଲିଙ୍କ}other{Chromeରୁ <ph name="TABS_COUNT_MANY" />ଟି ଲିଙ୍କ}}</translation>
 <translation id="575494663145460764">ମୂଲ୍ୟରେ ହ୍ରାସ ବିଷୟରେ ଆଲର୍ଟ ପାଇବେ?</translation>
 <translation id="58326064309361797">ସେଗୁଡ଼ିକର ଗୋଷ୍ଠୀ କରିବାକୁ ଟାବ୍‌ଗୁଡ଼ିକୁ ଟାଣନ୍ତୁ</translation>
 <translation id="5846292395804797011"><ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ଥିବା <ph name="TITLE_OF_GROUP" /> ଗ୍ରୁପକୁ ବନ୍ଦ କରନ୍ତୁ</translation>
@@ -95,8 +97,8 @@
 <translation id="8205266828577616993">ଟାବ୍‌କୁ ଉପରକୁ ମୁଭ୍ କରନ୍ତୁ</translation>
 <translation id="8304833501377495048">ଟାବ୍ ଷ୍ଟ୍ରିପ୍ ପୁଣି ଦେଖାଇବେ ନାହିଁ?</translation>
 <translation id="83556505225171773">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" />ଟି ଚୟନିତ ଟାବ୍ ବନ୍ଦ କରନ୍ତୁ}other{<ph name="TABS_COUNT_MANY" />ଟି ଚୟନିତ ଟାବ୍ ବନ୍ଦ କରନ୍ତୁ}}</translation>
+<translation id="8398929769197326728">ନୂଆ ଫୋଲ୍ଡର - <ph name="CURRENT_TIMESTAMP_MS" /></translation>
 <translation id="8557923272772633250"><ph name="NUMBER_OF_TABS" />ଟି ଟାବ୍ ଥିବା ଟାବ୍ ଗ୍ରୁପର ବିସ୍ତାର କରନ୍ତୁ।</translation>
-<translation id="860282621117673749">ମୂଲ୍ୟରେ ହ୍ରାସ ବିଷୟରେ ଆଲର୍ଟ</translation>
 <translation id="8714939927607906138">କମ୍ ଦାମ୍</translation>
 <translation id="8749939518995770034">ବନ୍ଦ କରାଯାଇଥିବା ଟାବ୍ ଷ୍ଟ୍ରିପ୍</translation>
 <translation id="8820741577754260431">ଆପଣଙ୍କ ଟାବଗୁଡ଼ିକରେ ମୂଲ୍ୟରେ ହ୍ରାସ ବିଷୟରେ ସୂଚନା ଦେଖନ୍ତୁ</translation>

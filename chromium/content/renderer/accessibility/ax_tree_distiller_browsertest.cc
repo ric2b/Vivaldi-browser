@@ -80,24 +80,40 @@ class AXTreeDistillerTest : public AXTreeDistillerTestBase,
 const TestCase kDistillWebPageTestCases[] = {
     {"simple_page",
      R"HTML(<!doctype html>
-      <body>
+      <body role="main">
         <p>Test</p>
       <body>)HTML",
      {"Test"}},
     /* ----------------------- */
-    {"simple_page_two_paragraphs",
+    {"simple_page_with_main",
      R"HTML(<!doctype html>
-      <body>
+      <body role="main">
+        <h1>Heading</h1>
         <p>Test 1</p>
         <p>Test 2</p>
+        <div role='header'><h2>Header</h2></div>
       <body>)HTML",
-     {"Test 1", "Test 2"}},
+     {"Heading", "Test 1", "Test 2", "Header"}},
+    /* ----------------------- */
+    {"simple_page_with_main_and_article",
+     R"HTML(<!doctype html>
+      <body>
+        <main>
+          <p>Main</p>
+        </main>
+        <div role="article">
+          <p>Article 1</p>
+        </div>
+        <div role="article">
+          <p>Article 2</p>
+        </div>
+      <body>)HTML",
+     {"Main", "Article 1", "Article 2"}},
     /* ----------------------- */
     {"simple_page_no_content",
      R"HTML(<!doctype html>
       <body>
-        <p>
-          <header>Header</header>
+        <main>
           <div role='banner'>Banner</div>
           <div role="navigation'>Navigation</div>
           <audio>Audio</audio>
@@ -107,39 +123,23 @@ const TestCase kDistillWebPageTestCases[] = {
           <div role='complementary'>Complementary</div>
           <div role='content'>Content Info</div>
           <footer>Footer</footer>
-        </p>
+        </main>
       <body>)HTML",
      {}},
     /* ----------------------- */
-    {"simple_page_no_paragraph",
+    {"simple_page_no_main",
      R"HTML(<!doctype html>
       <body>
         <div tabindex='0'>
-          <div>Not paragraph</div>
-          <div>Not paragraph</div>
-        </div>
-        <div tabindex='0'>
+          <p>Paragraph</p>
           <p>Paragraph</p>
         </div>
       <body>)HTML",
-     {"Paragraph"}},
-    /* ----------------------- */
-    {"article_is_node_with_most_paragraphs",
-     R"HTML(<!doctype html>
-      <body>
-        <div tabindex='0'>
-          <p>P1</p>
-        </div>
-        <div tabindex='0'>
-          <p>P2</p>
-          <p>P3</p>
-        </div>
-      <body>)HTML",
-     {"P2", "P3"}},
+     {}},
     /* ----------------------- */
     {"include_paragraphs_in_collapsed_nodes",
      R"HTML(<!doctype html>
-      <body>
+      <body role="main">
         <p>P1</p>
         <div>
           <p>P2</p>
@@ -148,23 +148,41 @@ const TestCase kDistillWebPageTestCases[] = {
       <body>)HTML",
      {"P1", "P2", "P3"}},
     /* ----------------------- */
-    {"node_with_most_paragraphs_may_be_deep_in_tree",
+    {"main_may_be_deep_in_tree",
      R"HTML(<!doctype html>
       <body>
         <p>P1</p>
-        <div tabindex='0'>
+        <main>
           <p>P2</p>
           <p>P3</p>
-        </div>
+        </main>
       <body>)HTML",
      {"P2", "P3"}},
     /* ----------------------- */
     {"paragraph_with_bold",
      R"HTML(<!doctype html>
-      <body>
+      <body role="main">
         <p>Some <b>bolded</b> text</p>
       <body>)HTML",
      {"Some bolded text"}},
+    /* ----------------------- */
+    {"simple_page_nested_article",
+     R"HTML(<!doctype html>
+      <body>
+        <div role="main">
+          <p>Main</p>
+          <div role="article">
+            <p>Article 1</p>
+          </div>
+        </div>
+        <div role="article">
+          <p>Article 2</p>
+          <div role="article">
+            <p>Article 3</p>
+          </div>
+        </div>
+      <body>)HTML",
+     {"Main", "Article 1", "Article 2", "Article 3"}},
 };
 
 TEST_P(AXTreeDistillerTest, DistillsWebPage) {

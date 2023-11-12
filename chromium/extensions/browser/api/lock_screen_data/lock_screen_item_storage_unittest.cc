@@ -21,7 +21,7 @@
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chromeos/login/login_state/login_state.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -186,18 +186,17 @@ class ItemRegistry {
   void RunCallback(DataItem::RegisteredValuesCallback callback) {
     std::move(callback).Run(
         fail_ ? OperationResult::kFailed : OperationResult::kSuccess,
-        ItemsToValue());
+        ItemsToDict());
   }
 
-  std::unique_ptr<base::DictionaryValue> ItemsToValue() {
+  base::Value::Dict ItemsToDict() {
     if (fail_)
-      return nullptr;
+      return base::Value::Dict();
 
-    std::unique_ptr<base::DictionaryValue> result =
-        std::make_unique<base::DictionaryValue>();
+    base::Value::Dict result;
 
     for (const std::string& item_id : items_)
-      result->SetKey(item_id, base::Value(base::Value::Type::DICTIONARY));
+      result.Set(item_id, base::Value::Dict());
 
     return result;
   }
@@ -472,10 +471,10 @@ class LockScreenItemStorageTest : public ExtensionsTest {
     user_prefs::UserPrefs::Set(browser_context(), &testing_pref_service_);
     extensions_browser_client()->set_lock_screen_context(&lock_screen_context_);
 
-    chromeos::LoginState::Initialize();
-    chromeos::LoginState::Get()->SetLoggedInStateAndPrimaryUser(
-        chromeos::LoginState::LOGGED_IN_ACTIVE,
-        chromeos::LoginState::LOGGED_IN_USER_REGULAR, kTestUserIdHash);
+    ash::LoginState::Initialize();
+    ash::LoginState::Get()->SetLoggedInStateAndPrimaryUser(
+        ash::LoginState::LOGGED_IN_ACTIVE,
+        ash::LoginState::LOGGED_IN_USER_REGULAR, kTestUserIdHash);
 
     extension_ = CreateTestExtension(kTestExtensionId);
     item_registry_ = std::make_unique<ItemRegistry>(extension()->id());
@@ -511,7 +510,7 @@ class LockScreenItemStorageTest : public ExtensionsTest {
     item_registry_.reset();
     LockScreenItemStorage::SetItemProvidersForTesting(nullptr, nullptr,
                                                       nullptr);
-    chromeos::LoginState::Shutdown();
+    ash::LoginState::Shutdown();
     ExtensionsTest::TearDown();
   }
 
@@ -747,7 +746,8 @@ class LockScreenItemStorageTest : public ExtensionsTest {
   void GetRegisteredItems(const std::string& extension_id,
                           DataItem::RegisteredValuesCallback callback) {
     if (extension()->id() != extension_id) {
-      std::move(callback).Run(OperationResult::kUnknownExtension, nullptr);
+      std::move(callback).Run(OperationResult::kUnknownExtension,
+                              base::Value::Dict());
       return;
     }
     item_registry_->HandleGetRequest(std::move(callback));

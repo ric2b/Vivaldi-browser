@@ -3002,14 +3002,6 @@ void ContextVisibilityHintCHROMIUM(GLboolean visibility) {
   }
 }
 
-void CoverageModulationCHROMIUM(GLenum components) {
-  gles2::cmds::CoverageModulationCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::CoverageModulationCHROMIUM>();
-  if (c) {
-    c->Init(components);
-  }
-}
-
 void BlendBarrierKHR() {
   gles2::cmds::BlendBarrierKHR* c = GetCmdSpace<gles2::cmds::BlendBarrierKHR>();
   if (c) {
@@ -3239,6 +3231,14 @@ void IsEnablediOES(GLenum target,
   gles2::cmds::IsEnablediOES* c = GetCmdSpace<gles2::cmds::IsEnablediOES>();
   if (c) {
     c->Init(target, index, result_shm_id, result_shm_offset);
+  }
+}
+
+void ProvokingVertexANGLE(GLenum provokeMode) {
+  gles2::cmds::ProvokingVertexANGLE* c =
+      GetCmdSpace<gles2::cmds::ProvokingVertexANGLE>();
+  if (c) {
+    c->Init(provokeMode);
   }
 }
 

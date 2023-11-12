@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
@@ -37,8 +36,6 @@ class Image;
 namespace extensions {
 class ExtensionActionRunner;
 class Extension;
-
-extern const char kIsPrerender2DisabledKey[];
 
 // Per-tab extension helper. Also handles non-extension apps.
 class TabHelper : public content::WebContentsObserver,

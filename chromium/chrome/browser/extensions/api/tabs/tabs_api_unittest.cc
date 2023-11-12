@@ -48,16 +48,15 @@ namespace extensions {
 
 namespace {
 
-std::unique_ptr<base::ListValue> RunTabsQueryFunction(
-    Browser* browser,
-    const Extension* extension,
-    const std::string& query_info) {
+base::Value::List RunTabsQueryFunction(Browser* browser,
+                                       const Extension* extension,
+                                       const std::string& query_info) {
   scoped_refptr<TabsQueryFunction> function(new TabsQueryFunction());
   function->set_extension(extension);
   std::unique_ptr<base::Value> value(
       extension_function_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), query_info, browser, api_test_utils::NONE));
-  return base::ListValue::From(std::move(value));
+  return std::move(*value).TakeList();
 }
 
 // Creates an extension with "tabs" permission.
@@ -296,10 +295,9 @@ TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
 
   // An extension without "tabs" permission will see none of the 3 tabs.
   scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
-  std::unique_ptr<base::ListValue> tabs_list_without_permission(
-      RunTabsQueryFunction(browser(), extension.get(), kTitleAndURLQueryInfo));
-  ASSERT_TRUE(tabs_list_without_permission);
-  EXPECT_EQ(0u, tabs_list_without_permission->GetList().size());
+  base::Value::List tabs_list_without_permission =
+      RunTabsQueryFunction(browser(), extension.get(), kTitleAndURLQueryInfo);
+  EXPECT_EQ(0u, tabs_list_without_permission.size());
 
   // An extension with "tabs" permission however will see the third tab.
   scoped_refptr<const Extension> extension_with_permission =
@@ -309,16 +307,14 @@ TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
                   .Set("name", "Extension with tabs permission")
                   .Set("version", "1.0")
                   .Set("manifest_version", 2)
-                  .Set("permissions", ListBuilder().Append("tabs").Build())
-                  .Build())
+                  .Set("permissions", ListBuilder().Append("tabs").BuildList())
+                  .BuildDict())
           .Build();
-  std::unique_ptr<base::ListValue> tabs_list_with_permission(
-      RunTabsQueryFunction(browser(), extension_with_permission.get(),
-                           kTitleAndURLQueryInfo));
-  ASSERT_TRUE(tabs_list_with_permission);
-  ASSERT_EQ(1u, tabs_list_with_permission->GetList().size());
+  base::Value::List tabs_list_with_permission = RunTabsQueryFunction(
+      browser(), extension_with_permission.get(), kTitleAndURLQueryInfo);
+  ASSERT_EQ(1u, tabs_list_with_permission.size());
 
-  const base::Value& third_tab_info = tabs_list_with_permission->GetList()[0];
+  const base::Value& third_tab_info = tabs_list_with_permission[0];
   ASSERT_TRUE(third_tab_info.is_dict());
   absl::optional<int> third_tab_id = third_tab_info.FindIntKey("id");
   EXPECT_EQ(ExtensionTabUtil::GetTabId(web_contentses[2]), third_tab_id);
@@ -363,18 +359,16 @@ TEST_F(TabsApiUnitTest, QueryWithHostPermission) {
                   .Set("version", "1.0")
                   .Set("manifest_version", 2)
                   .Set("permissions",
-                       ListBuilder().Append("*://www.google.com/*").Build())
-                  .Build())
+                       ListBuilder().Append("*://www.google.com/*").BuildList())
+                  .BuildDict())
           .Build();
 
   {
-    std::unique_ptr<base::ListValue> tabs_list_with_permission(
-        RunTabsQueryFunction(browser(), extension_with_permission.get(),
-                             kTitleAndURLQueryInfo));
-    ASSERT_TRUE(tabs_list_with_permission);
-    ASSERT_EQ(1u, tabs_list_with_permission->GetList().size());
+    base::Value::List tabs_list_with_permission = RunTabsQueryFunction(
+        browser(), extension_with_permission.get(), kTitleAndURLQueryInfo);
+    ASSERT_EQ(1u, tabs_list_with_permission.size());
 
-    const base::Value& third_tab_info = tabs_list_with_permission->GetList()[0];
+    const base::Value& third_tab_info = tabs_list_with_permission[0];
     ASSERT_TRUE(third_tab_info.is_dict());
     absl::optional<int> third_tab_id = third_tab_info.FindIntKey("id");
     EXPECT_EQ(ExtensionTabUtil::GetTabId(web_contentses[2]), third_tab_id);
@@ -383,15 +377,13 @@ TEST_F(TabsApiUnitTest, QueryWithHostPermission) {
   // Try the same without title, first and third tabs will match.
   const char* kURLQueryInfo = "[{\"url\": \"*://www.google.com/*\"}]";
   {
-    std::unique_ptr<base::ListValue> tabs_list_with_permission(
-        RunTabsQueryFunction(browser(), extension_with_permission.get(),
-                             kURLQueryInfo));
-    ASSERT_TRUE(tabs_list_with_permission);
-    ASSERT_EQ(2u, tabs_list_with_permission->GetList().size());
+    base::Value::List tabs_list_with_permission = RunTabsQueryFunction(
+        browser(), extension_with_permission.get(), kURLQueryInfo);
+    ASSERT_EQ(2u, tabs_list_with_permission.size());
 
-    const base::Value& first_tab_info = tabs_list_with_permission->GetList()[0];
+    const base::Value& first_tab_info = tabs_list_with_permission[0];
     ASSERT_TRUE(first_tab_info.is_dict());
-    const base::Value& third_tab_info = tabs_list_with_permission->GetList()[1];
+    const base::Value& third_tab_info = tabs_list_with_permission[1];
     ASSERT_TRUE(third_tab_info.is_dict());
 
     std::vector<int> expected_tabs_ids;
@@ -418,10 +410,10 @@ TEST_F(TabsApiUnitTest, PDFExtensionNavigation) {
       .Set("description", "desc")
       .Set("version", "0.1")
       .Set("manifest_version", 2)
-      .Set("permissions", ListBuilder().Append("tabs").Build());
+      .Set("permissions", ListBuilder().Append("tabs").BuildList());
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(manifest.Build())
+          .SetManifest(manifest.BuildDict())
           .SetID(extension_misc::kPdfExtensionId)
           .Build();
   ASSERT_TRUE(extension);
@@ -528,9 +520,10 @@ TEST_F(TabsApiUnitTest, TabsUpdateJavaScriptUrlNotAllowed) {
                   .Set("name", "Extension with a host permission")
                   .Set("version", "1.0")
                   .Set("manifest_version", 2)
-                  .Set("permissions",
-                       ListBuilder().Append("http://www.example.com/*").Build())
-                  .Build())
+                  .Set("permissions", ListBuilder()
+                                          .Append("http://www.example.com/*")
+                                          .BuildList())
+                  .BuildDict())
           .Build();
   auto function = base::MakeRefCounted<TabsUpdateFunction>();
   function->set_extension(extension);

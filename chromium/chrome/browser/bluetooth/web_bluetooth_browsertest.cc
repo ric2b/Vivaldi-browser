@@ -213,7 +213,7 @@ class FakeBluetoothGattCharacteristic
       // renderer of the change. Do the same for |callback| to ensure
       // StartNotifySession completes after the value change notification is
       // received.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(std::move(callback), std::move(fake_notify_session)));
     } else {
@@ -538,10 +538,12 @@ class WebBluetoothTest : public InProcessBrowserTest {
       global_values_;
   scoped_refptr<FakeBluetoothAdapter> adapter_;
   TestContentBrowserClient browser_client_;
-  raw_ptr<content::ContentBrowserClient> old_browser_client_ = nullptr;
-  raw_ptr<FakeBluetoothGattCharacteristic> characteristic_ = nullptr;
+  raw_ptr<content::ContentBrowserClient, DanglingUntriaged>
+      old_browser_client_ = nullptr;
+  raw_ptr<FakeBluetoothGattCharacteristic, DanglingUntriaged> characteristic_ =
+      nullptr;
 
-  raw_ptr<content::WebContents> web_contents_ = nullptr;
+  raw_ptr<content::WebContents, DanglingUntriaged> web_contents_ = nullptr;
   std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
 
   // Web Bluetooth needs HTTPS to work (a secure context). Moreover,
@@ -755,7 +757,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, NotificationStartValueChangeRead) {
     })())");
 
   const base::Value promise_values = js_values.ExtractList();
-  EXPECT_EQ(2U, promise_values.GetListDeprecated().size());
+  EXPECT_EQ(2U, promise_values.GetList().size());
   EXPECT_EQ(content::ListValueOf(1, 1), js_values);
 }
 

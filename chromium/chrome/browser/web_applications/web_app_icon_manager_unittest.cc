@@ -14,9 +14,10 @@
 #include "base/files/file_enumerator.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
+#include "base/time/time.h"
 #include "chrome/browser/web_applications/test/fake_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
@@ -57,8 +58,6 @@ class WebAppIconManagerTest : public WebAppTest {
     WebAppTest::SetUp();
 
     provider_ = FakeWebAppProvider::Get(profile());
-    provider_->SetDefaultFakeSubsystems();
-
     auto install_manager = std::make_unique<WebAppInstallManager>(profile());
     install_manager_ = install_manager.get();
     provider_->SetInstallManager(std::move(install_manager));
@@ -173,19 +172,6 @@ class WebAppIconManagerTest : public WebAppTest {
     return result;
   }
 
-  SkBitmap ReadSmallestIconAny(const AppId& app_id,
-                               SquareSizePx min_icon_size) {
-    SkBitmap result;
-    base::RunLoop run_loop;
-    icon_manager().ReadSmallestIconAny(
-        app_id, min_icon_size, base::BindLambdaForTesting([&](SkBitmap bitmap) {
-          result = std::move(bitmap);
-          run_loop.Quit();
-        }));
-    run_loop.Run();
-    return result;
-  }
-
   struct PurposeAndData {
     IconPurpose purpose;
     std::vector<uint8_t> data;
@@ -281,7 +267,7 @@ class WebAppIconManagerTest : public WebAppTest {
     run_loop.Run();
   }
 
-  WebAppRegistrar& registrar() { return provider().registrar(); }
+  WebAppRegistrar& registrar() { return provider().registrar_unsafe(); }
   WebAppInstallManager& install_manager() { return *install_manager_; }
   WebAppSyncBridge& sync_bridge() { return provider().sync_bridge(); }
   WebAppIconManager& icon_manager() { return *icon_manager_; }
@@ -679,6 +665,29 @@ TEST_F(WebAppIconManagerTest, ReadAllIcons_AnyOnly) {
   }
 }
 
+TEST_F(WebAppIconManagerTest, ReadAllIconsLastUpdateTime) {
+  auto web_app = test::CreateWebApp();
+  const AppId app_id = web_app->app_id();
+
+  const std::vector<int> sizes_px{icon_size::k256, icon_size::k512};
+  const std::vector<SkColor> colors{SK_ColorGREEN, SK_ColorYELLOW};
+  IconManagerWriteGeneratedIcons(icon_manager(), app_id,
+                                 {{IconPurpose::ANY, sizes_px, colors}});
+
+  web_app->SetDownloadedIconSizes(IconPurpose::ANY, sizes_px);
+
+  AddAppToRegistry(std::move(web_app));
+  base::test::TestFuture<base::flat_map<SquareSizePx, base::Time>> future;
+  {
+    icon_manager().ReadIconsLastUpdateTime(app_id, future.GetCallback());
+    EXPECT_TRUE(future.Wait());
+  }
+  base::flat_map<SquareSizePx, base::Time> time_data_map = future.Get();
+  EXPECT_EQ(2u, time_data_map.size());
+  EXPECT_FALSE(time_data_map[sizes_px[0]].is_null());
+  EXPECT_FALSE(time_data_map[sizes_px[1]].is_null());
+}
+
 TEST_F(WebAppIconManagerTest, ReadAllIcons_AnyAndMaskable) {
   auto web_app = test::CreateWebApp();
   const AppId app_id = web_app->app_id();
@@ -994,15 +1003,17 @@ TEST_F(WebAppIconManagerTest, FindSmallest) {
 
   {
     EXPECT_TRUE(icon_manager().HasSmallestIcon(app_id, {IconPurpose::ANY}, 40));
-    SkBitmap bitmap = ReadSmallestIconAny(app_id, 40);
-    EXPECT_FALSE(bitmap.empty());
-    EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(0, 0));
+    PurposeAndBitmap result = ReadSmallestIcon(app_id, {IconPurpose::ANY}, 40);
+    EXPECT_FALSE(result.bitmap.empty());
+    EXPECT_EQ(IconPurpose::ANY, result.purpose);
+    EXPECT_EQ(SK_ColorGREEN, result.bitmap.getColor(0, 0));
   }
   {
     EXPECT_TRUE(icon_manager().HasSmallestIcon(app_id, {IconPurpose::ANY}, 20));
-    SkBitmap bitmap = ReadSmallestIconAny(app_id, 20);
-    EXPECT_FALSE(bitmap.empty());
-    EXPECT_EQ(SK_ColorBLUE, bitmap.getColor(0, 0));
+    PurposeAndBitmap result = ReadSmallestIcon(app_id, {IconPurpose::ANY}, 20);
+    EXPECT_FALSE(result.bitmap.empty());
+    EXPECT_EQ(IconPurpose::ANY, result.purpose);
+    EXPECT_EQ(SK_ColorBLUE, result.bitmap.getColor(0, 0));
   }
   {
     PurposeAndBitmap result =

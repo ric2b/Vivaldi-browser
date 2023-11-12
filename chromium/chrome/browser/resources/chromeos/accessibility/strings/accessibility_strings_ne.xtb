@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">हालको समय</translation>
 <translation id="1161762950103988776">जम्प</translation>
 <translation id="1164857107703583584">जम्प कमान्डहरू प्रयोग गरी कुनै वेब पेजमा कुशलतापूर्वक नेभिगेट गर्न सकिन्छ।</translation>
+<translation id="116896278675803795">चयन गरिएको सामग्रीका आधारमा स्वतः भाषा बदलियोस्</translation>
 <translation id="1175914831232945926">अङ्कहरू</translation>
 <translation id="1188858454923323853">पूरक</translation>
 <translation id="1189258430971676908">अभ्यास गर्ने क्षेत्र: ड्रप-डाउन सूचीहरू</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">अधिल्लो फारम फाँट</translation>
 <translation id="3393605254399152980">आफूले छोएको वस्तुको प्रतिक्रिया सुन्न एक औँलाले ड्र्याग गर्नुहोस्</translation>
 <translation id="3406283310380167331">फारमहरूको सूची देखाउनुहोस्</translation>
+<translation id="3407726812456125464">चयन गरिएको टेक्स्ट सुन्नुहोस्</translation>
 <translation id="3414400929511680526">एलिस निलो</translation>
 <translation id="3418936350470374046">तल कुनै पनि कक्ष छैन</translation>
 <translation id="3419269701801640163">पेस्ट गरियोस्</translation>
@@ -674,7 +676,7 @@
 <translation id="5534303576632885660">एचडिआर</translation>
 <translation id="5539820223028224601">गेन्स्बोरो</translation>
 <translation id="554893713779400387">श्रुतिलेखन सुविधा टगल गर्नुहोस्</translation>
-<translation id="5549179427201066174">ध्वनि प्रतिक्रिया (earcons) अन गर्नुहोस् वा निष्क्रिय पार्नुहोस्</translation>
+<translation id="5549179427201066174">साउन्ड प्रतिक्रिया (earcons) अन गर्नुहोस् वा निष्क्रिय पार्नुहोस्</translation>
 <translation id="556042886152191864">बटन</translation>
 <translation id="5561345396546889625">अर्को सूची</translation>
 <translation id="5562645715554321347">hdnggrp</translation>

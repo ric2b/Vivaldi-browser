@@ -11,7 +11,6 @@
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/cast_streaming/public/remoting_message_factories.h"
 #include "components/cast_streaming/public/remoting_proto_enum_utils.h"
 #include "components/cast_streaming/public/remoting_proto_utils.h"
@@ -36,14 +35,14 @@ Receiver::Receiver(
     int rpc_handle,
     int remote_handle,
     ReceiverController* receiver_controller,
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& media_task_runner,
     std::unique_ptr<Renderer> renderer,
     base::OnceCallback<void(int)> acquire_renderer_done_cb)
     : rpc_handle_(rpc_handle),
       remote_handle_(remote_handle),
       receiver_controller_(receiver_controller),
       rpc_messenger_(receiver_controller_->rpc_messenger()),
-      main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      main_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       media_task_runner_(media_task_runner),
       renderer_(std::move(renderer)),
       acquire_renderer_done_cb_(std::move(acquire_renderer_done_cb)) {
@@ -109,6 +108,10 @@ base::TimeDelta Receiver::GetMediaTime() {
   return base::TimeDelta();
 }
 
+RendererType Receiver::GetRendererType() {
+  return RendererType::kRemoting;
+}
+
 void Receiver::SendRpcMessageOnMainThread(
     std::unique_ptr<openscreen::cast::RpcMessage> message) {
   // |rpc_messenger_| is owned by |receiver_controller_| which is a singleton
@@ -120,7 +123,7 @@ void Receiver::SendRpcMessageOnMainThread(
 
 void Receiver::OnReceivedRpc(
     std::unique_ptr<openscreen::cast::RpcMessage> message) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(message);
 
   cast_streaming::remoting::DispatchRendererRpcCall(message.get(), this);
@@ -156,7 +159,7 @@ void Receiver::ShouldInitializeRenderer() {
   if (!rpc_initialize_received_ || !init_cb_)
     return;
 
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(renderer_);
   DCHECK(demuxer_);
   renderer_->Initialize(demuxer_, this,
@@ -165,7 +168,7 @@ void Receiver::ShouldInitializeRenderer() {
 }
 
 void Receiver::OnRendererInitialized(PipelineStatus status) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(init_cb_);
   std::move(init_cb_).Run(status);
 
@@ -176,7 +179,7 @@ void Receiver::OnRendererInitialized(PipelineStatus status) {
 }
 
 void Receiver::OnRpcSetPlaybackRate(double playback_rate) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
 
   renderer_->SetPlaybackRate(playback_rate);
 
@@ -193,7 +196,7 @@ void Receiver::OnRpcSetPlaybackRate(double playback_rate) {
 }
 
 void Receiver::OnRpcFlush(uint32_t audio_count, uint32_t video_count) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
 
   receiver_controller_->OnRendererFlush(audio_count, video_count);
 
@@ -209,7 +212,7 @@ void Receiver::OnFlushDone() {
 }
 
 void Receiver::OnRpcStartPlayingFrom(base::TimeDelta time) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
 
   renderer_->StartPlayingFrom(time);
   ScheduleMediaTimeUpdates();
@@ -225,7 +228,7 @@ void Receiver::ScheduleMediaTimeUpdates() {
 }
 
 void Receiver::OnRpcSetVolume(double volume) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   renderer_->SetVolume(volume);
 }
 

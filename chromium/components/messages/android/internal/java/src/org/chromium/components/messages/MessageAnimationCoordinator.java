@@ -4,6 +4,9 @@
 
 package org.chromium.components.messages;
 
+import static org.chromium.components.messages.MessagesMetrics.recordStackingAnimationType;
+import static org.chromium.components.messages.MessagesMetrics.recordThreeStackedScenario;
+
 import android.animation.Animator;
 import android.animation.AnimatorSet;
 
@@ -15,6 +18,9 @@ import org.chromium.base.Log;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.messages.MessageQueueManager.MessageState;
 import org.chromium.components.messages.MessageStateHandler.Position;
+import org.chromium.components.messages.MessagesMetrics.StackingAnimationAction;
+import org.chromium.components.messages.MessagesMetrics.StackingAnimationType;
+import org.chromium.components.messages.MessagesMetrics.ThreeStackedScenario;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,7 +29,7 @@ import java.util.List;
 /**
  * Coordinator for toggling animation when message is about to show or hide.
  */
-public class MessageAnimationCoordinator {
+public class MessageAnimationCoordinator implements SwipeAnimationHandler {
     private static final String TAG = MessageQueueManager.TAG;
     // Animation start delay for the back message for MessageBannerMediator.ENTER_DURATION_MS amount
     // of time, required to show the front message from Position.INVISIBLE to Position.FRONT.
@@ -59,7 +65,7 @@ public class MessageAnimationCoordinator {
         }
         if (mCurrentDisplayedMessage == null) {
             mCurrentDisplayedMessage = candidate;
-            mMessageQueueDelegate.onStartShowing(() -> {
+            mMessageQueueDelegate.onRequestShowing(() -> {
                 if (mCurrentDisplayedMessage == null) {
                     return;
                 }
@@ -82,14 +88,19 @@ public class MessageAnimationCoordinator {
 
                     mAnimatorSet = new AnimatorSet();
                     mAnimatorSet.play(animator);
+                    mAnimatorSet.addListener(new MessageAnimationListener(() -> {
+                        mMessageQueueDelegate.onAnimationEnd();
+                        onFinished.run();
+                    }));
+                    mMessageQueueDelegate.onAnimationStart();
                     mAnimatorStartCallback.onResult(mAnimatorSet);
                 });
                 mLastShownMessage = mCurrentDisplayedMessage;
-                onFinished.run();
             });
         } else {
             Runnable runnable = () -> {
                 mMessageQueueDelegate.onFinishHiding();
+                mMessageQueueDelegate.onAnimationEnd();
                 mCurrentDisplayedMessage = mLastShownMessage = null;
                 onFinished.run();
             };
@@ -107,6 +118,7 @@ public class MessageAnimationCoordinator {
             } else {
                 mAnimatorSet = new AnimatorSet();
                 mAnimatorSet.play(animator);
+                mMessageQueueDelegate.onAnimationStart();
                 mAnimatorSet.addListener(new MessageAnimationListener(runnable));
                 mAnimatorStartCallback.onResult(mAnimatorSet);
             }
@@ -147,94 +159,172 @@ public class MessageAnimationCoordinator {
     public void updateWithStacking(
             @NonNull List<MessageState> candidates, boolean isSuspended, Runnable onFinished) {
         // Wait until the current animation is done, unless we need to hide them immediately.
-        if (!isSuspended && mAnimatorSet.isStarted()) {
+        if (mAnimatorSet.isStarted()) {
+            if (isSuspended) {
+                // crbug.com/1405389: Force animation to end in order to trigger callbacks.
+                mAnimatorSet.end();
+                onFinished.run();
+            }
             return;
         }
-        var cf = mCurrentDisplayedMessages.get(0); // Currently front.
-        var cb = mCurrentDisplayedMessages.get(1); // Currently back.
-        var nf = candidates.get(0); // Next front.
-        var nb = candidates.get(1); // Next back.
+
+        var currentFront = mCurrentDisplayedMessages.get(0); // Currently front.
+        var currentBack = mCurrentDisplayedMessages.get(1); // Currently back.
+        var nextFront = candidates.get(0); // Next front.
+        var nextBack = candidates.get(1); // Next back.
+
+        // If front message is null, then the back one is definitely null.
+        assert !(nextFront == null && nextBack != null);
+        assert !(currentFront == null && currentBack != null);
+        assert !isSuspended || nextFront == null : "when suspending, all messages should be hidden";
+        if (currentFront == nextFront && currentBack == nextBack) {
+            assert currentFront != null
+                    || !mMessageQueueDelegate.isReadyForShowing()
+                : "onFinishHiding should have been executed if no message is showing.";
+            return;
+        }
+
+        if (!isSuspended && !mMessageQueueDelegate.isReadyForShowing()) {
+            // Make sure everything is ready for showing a message, unless messages are about to
+            // be removed immediately. By "showing", it does mean not just triggering a showing
+            // animation, but also holding a message view on screen.
+            // https://crbug.com/1408627: when showing a second message, it is possible the first
+            // message is still waiting for message queue delegate to be ready.
+            // Only request to show a message if not requested yet.
+            if (!mMessageQueueDelegate.isPendingShow()) {
+                mMessageQueueDelegate.onRequestShowing(onFinished);
+            }
+            return;
+        }
+
+        // Similar to above scenario, second message is about trigger another animation while first
+        // message is still waiting its animation to be triggered. Early return to avoid cancelling
+        // that animation accidentally. Second message will be added after its animation is done.
+        if (mContainer.isIsInitializingLayout()) {
+            return;
+        }
+
+        // If both animators will be modified, modify FrontAnimator first, because the back message
+        // relies on the first message in order to adjust its size.
         mFrontAnimator = mBackAnimator = null;
         boolean animate = !isSuspended;
 
-        // If front message is null, then the back one is definitely null.
-        assert !(nf == null && nb != null);
-        assert !(cf == null && cb != null);
-        if (cf == nf && cb == nb) return;
-        if (cf == null) { // Implies that currently back is also null.
-            mFrontAnimator = nf.handler.show(Position.INVISIBLE, Position.FRONT);
-            if (nb != null) {
-                mBackAnimator = nb.handler.show(Position.FRONT, Position.BACK);
+        if (currentFront == null) { // Implies that currently back is also null.
+            recordAnimationAction(StackingAnimationAction.INSERT_AT_FRONT, nextFront);
+            mFrontAnimator = nextFront.handler.show(Position.INVISIBLE, Position.FRONT);
+            if (nextBack != null) {
+                recordAnimationAction(StackingAnimationAction.INSERT_AT_BACK, nextBack);
+                recordStackingAnimationType(StackingAnimationType.SHOW_ALL);
+                mBackAnimator = nextBack.handler.show(Position.FRONT, Position.BACK);
                 if (mBackAnimator != null) {
                     mBackAnimator.setStartDelay(BACK_MESSAGE_START_DELAY_MS);
                 }
+            } else {
+                recordStackingAnimationType(StackingAnimationType.SHOW_FRONT_ONLY);
             }
-        } else if (cf != nf && cf != nb) {
+        } else if (currentFront != nextFront && currentFront != nextBack) {
             // Current displayed front message will be hidden.
-            mFrontAnimator = cf.handler.hide(Position.FRONT, Position.INVISIBLE, animate);
-            if (cb != null) {
-                if (cb == nf) { // Visible front will be dismissed and back one is moved to front.
-                    mBackAnimator = cb.handler.show(Position.BACK, Position.FRONT);
+            recordAnimationAction(StackingAnimationAction.REMOVE_FRONT, currentFront);
+            mFrontAnimator = currentFront.handler.hide(Position.FRONT, Position.INVISIBLE, animate);
+            if (currentBack != null) {
+                if (currentBack == nextFront) { // Visible front will be dismissed and back one is
+                                                // moved to front.
+                    recordAnimationAction(StackingAnimationAction.PUSH_TO_FRONT, currentBack);
+                    recordStackingAnimationType(StackingAnimationType.REMOVE_FRONT_AND_SHOW_BACK);
+                    mBackAnimator = currentBack.handler.show(Position.BACK, Position.FRONT);
+                    if (nextBack != null) {
+                        recordThreeStackedScenario(ThreeStackedScenario.IN_SEQUENCE);
+                    }
                     // Show nb in the next round.
-                    nb = null;
+                    nextBack = null;
                     candidates.set(1, null);
                 } else { // Both visible front and back messages will be replaced.
-                    mBackAnimator = cb.handler.hide(Position.BACK, Position.FRONT, animate);
+                    recordAnimationAction(StackingAnimationAction.REMOVE_BACK, currentBack);
+                    recordStackingAnimationType(StackingAnimationType.REMOVE_ALL);
+                    mBackAnimator =
+                            currentBack.handler.hide(Position.BACK, Position.FRONT, animate);
                     // Hide current displayed two messages and then show other messages
                     // in the next round.
-                    nf = nb = null;
+                    nextFront = nextBack = null;
                     candidates.set(0, null);
                     candidates.set(1, null);
                 }
-            }
-        } else if (cf == nf) {
-            if (cb != null) { // Hide the current back one.
-                mBackAnimator = cb.handler.hide(Position.BACK, Position.FRONT, animate);
             } else {
+                // TODO(crbug.com/1382275): simplify this into one step.
+                // Split the transition: [m1, null] -> [m2, null] into two steps:
+                // [m1, null] -> [null, null] -> [m2, null]
+                nextFront = nextBack = null;
+                candidates.set(0, null);
+                candidates.set(1, null);
+                recordStackingAnimationType(StackingAnimationType.REMOVE_FRONT_ONLY);
+            }
+        } else if (currentFront == nextFront) {
+            if (currentBack != null) { // Hide the current back one.
+                recordAnimationAction(StackingAnimationAction.REMOVE_BACK, currentBack);
+                recordStackingAnimationType(StackingAnimationType.REMOVE_BACK_ONLY);
+                mBackAnimator = currentBack.handler.hide(Position.BACK, Position.FRONT, animate);
+            } else {
+                recordAnimationAction(StackingAnimationAction.INSERT_AT_BACK, nextBack);
+                recordStackingAnimationType(StackingAnimationType.SHOW_BACK_ONLY);
                 // If nb is null, it means candidates and current displayed messages are equal.
-                assert nb != null;
-                mBackAnimator = nb.handler.show(Position.FRONT, Position.BACK);
+                assert nextBack != null;
+                mBackAnimator = nextBack.handler.show(Position.FRONT, Position.BACK);
             }
         } else {
-            assert cf == nb;
-            if (cb != null) {
-                mBackAnimator = cb.handler.hide(Position.BACK, Position.FRONT, animate);
+            assert currentFront == nextBack;
+            if (currentBack != null) {
+                recordAnimationAction(StackingAnimationAction.REMOVE_BACK, currentBack);
+                recordStackingAnimationType(StackingAnimationType.REMOVE_BACK_ONLY);
+                recordThreeStackedScenario(ThreeStackedScenario.HIGH_PRIORITY);
+                mBackAnimator = currentBack.handler.hide(Position.BACK, Position.FRONT, animate);
                 // [m1, m2] -> [m1, null] -> [m3, m1]
                 // In this case, we complete this in 2 steps to avoid manipulating 3 handlers
                 // at any single moment.
-                candidates.set(0, cf);
+                candidates.set(0, currentFront);
                 candidates.set(1, null);
             } else { // Moved the current front to back and show a new front view.
-                mBackAnimator = cf.handler.show(Position.FRONT, Position.BACK);
-                mFrontAnimator = nf.handler.show(Position.INVISIBLE, Position.FRONT);
+                recordAnimationAction(StackingAnimationAction.PUSH_TO_BACK, currentFront);
+                recordAnimationAction(StackingAnimationAction.INSERT_AT_FRONT, nextFront);
+                recordStackingAnimationType(StackingAnimationType.INSERT_AT_FRONT);
+                mFrontAnimator = nextFront.handler.show(Position.INVISIBLE, Position.FRONT);
+                mBackAnimator = currentFront.handler.show(Position.FRONT, Position.BACK);
             }
         }
-        if (cf == null) {
-            // No message is being displayed now: trigger #onStartShowing.
-            mMessageQueueDelegate.onStartShowing(
-                    () -> { triggerStackingAnimation(candidates, onFinished); });
-        } else if (nf == null) {
+
+        if (nextFront == null) {
             // All messages will be hidden: trigger #onFinishHiding.
             Runnable runnable = () -> {
                 mMessageQueueDelegate.onFinishHiding();
-                mCurrentDisplayedMessage = mLastShownMessage = null;
+                mCurrentDisplayedMessages = new ArrayList<>(candidates);
                 onFinished.run();
             };
-            triggerStackingAnimation(candidates, runnable);
+            triggerStackingAnimation(candidates, runnable, mFrontAnimator, mBackAnimator);
         } else {
-            triggerStackingAnimation(candidates, onFinished);
+            assert mMessageQueueDelegate.isReadyForShowing();
+            mCurrentDisplayedMessages = new ArrayList<>(candidates);
+            triggerStackingAnimation(candidates, onFinished, mFrontAnimator, mBackAnimator);
         }
     }
 
-    private void triggerStackingAnimation(List<MessageState> candidates, Runnable onFinished) {
-        mCurrentDisplayedMessages = new ArrayList<>(candidates);
+    private void triggerStackingAnimation(List<MessageState> candidates, Runnable onFinished,
+            Animator frontAnimator, Animator backAnimator) {
         Runnable runnable = () -> {
+            // While the runnable is waiting to be triggered, hiding animation might be triggered:
+            // while the hiding animation is running, declare this runnable as obsolete so that
+            // it won't cancel the hiding animation.
+            if (isAnimatorExpired(frontAnimator, backAnimator)) {
+                return;
+            }
             mAnimatorSet.cancel();
             mAnimatorSet.removeAllListeners();
             mAnimatorSet = new AnimatorSet();
-            mAnimatorSet.play(mFrontAnimator);
-            mAnimatorSet.play(mBackAnimator);
-            mAnimatorSet.addListener(new MessageAnimationListener(onFinished));
+            mAnimatorSet.play(frontAnimator);
+            mAnimatorSet.play(backAnimator);
+            mAnimatorSet.addListener(new MessageAnimationListener(() -> {
+                mMessageQueueDelegate.onAnimationEnd();
+                onFinished.run();
+            }));
+            mMessageQueueDelegate.onAnimationStart();
             mAnimatorStartCallback.onResult(mAnimatorSet);
         };
         if (candidates.get(0) == null) {
@@ -242,6 +332,33 @@ public class MessageAnimationCoordinator {
         } else {
             mContainer.runAfterInitialMessageLayout(runnable);
         }
+    }
+
+    private boolean isAnimatorExpired(Animator frontAnimator, Animator backAnimator) {
+        return mFrontAnimator != frontAnimator || mBackAnimator != backAnimator;
+    }
+
+    @Override
+    public void onSwipeStart() {
+        // Message shouldn't consume swipe for now because animation is running, e.g.:
+        // the front message should not be swiped when back message is running showing animation.
+        assert isSwipeEnabled();
+        mMessageQueueDelegate.onAnimationStart();
+    }
+
+    @Override
+    public boolean isSwipeEnabled() {
+        return !mAnimatorSet.isStarted();
+    }
+
+    @Override
+    public void onSwipeEnd(@Nullable Animator animator) {
+        if (animator == null) {
+            mMessageQueueDelegate.onAnimationEnd();
+            return;
+        }
+        animator.addListener(new MessageAnimationListener(mMessageQueueDelegate::onAnimationEnd));
+        mAnimatorStartCallback.onResult(animator);
     }
 
     void setMessageQueueDelegate(MessageQueueDelegate delegate) {
@@ -259,6 +376,12 @@ public class MessageAnimationCoordinator {
         return mCurrentDisplayedMessages;
     }
 
+    private void recordAnimationAction(
+            @StackingAnimationAction int action, @NonNull MessageState messageState) {
+        MessagesMetrics.recordStackingAnimationAction(
+                action, messageState.handler.getMessageIdentifier());
+    }
+
     class MessageAnimationListener extends CancelAwareAnimatorListener {
         private final Runnable mOnFinished;
 
@@ -271,5 +394,9 @@ public class MessageAnimationCoordinator {
             super.onEnd(animator);
             mOnFinished.run();
         }
+    }
+
+    AnimatorSet getAnimatorSetForTesting() {
+        return mAnimatorSet;
     }
 }

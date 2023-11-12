@@ -112,7 +112,7 @@ const CGFloat kStrokeEndAtApogee = 1;
 - (void)initializeShapeLayers {
 
   // Vivaldi
-  // These shape layers are used as the 'three dots' menu iticonem for the iPad.
+  // These shape layers are used as the 'three dots' menu icon for the iPad.
   // But, we don't need that in Vivaldi since 'three dots' menu icon is replaced
   // 'Vivaldi' icon. Therefore we don't need to render the shape layers.
   if (IsVivaldiRunning())

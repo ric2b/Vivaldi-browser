@@ -5,9 +5,10 @@
 #include "content/browser/loader/navigation_early_hints_manager.h"
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ref.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/storage_partition.h"
@@ -23,6 +24,7 @@
 #include "net/url_request/url_request_job.h"
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/content_security_policy/csp_source_list.h"
+#include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -146,13 +148,13 @@ network::mojom::RequestDestination LinkAsAttributeToRequestDestination(
     const network::mojom::LinkHeaderPtr& link) {
   switch (link->as) {
     case network::mojom::LinkAsAttribute::kUnspecified:
-      // For modulepreload destination should be "script" when `as` is not
-      // specified.
+      // For modulepreload, the request destination should be "script" when `as`
+      // is not specified.
+      // https://html.spec.whatwg.org/multipage/links.html#link-type-modulepreload
       if (link->rel == network::mojom::LinkRelAttribute::kModulePreload) {
         return network::mojom::RequestDestination::kScript;
-      } else {
-        return network::mojom::RequestDestination::kEmpty;
       }
+      return network::mojom::RequestDestination::kEmpty;
     case network::mojom::LinkAsAttribute::kImage:
       return network::mojom::RequestDestination::kImage;
     case network::mojom::LinkAsAttribute::kFont:
@@ -162,8 +164,6 @@ network::mojom::RequestDestination LinkAsAttributeToRequestDestination(
     case network::mojom::LinkAsAttribute::kStyleSheet:
       return network::mojom::RequestDestination::kStyle;
   }
-  NOTREACHED();
-  return network::mojom::RequestDestination::kEmpty;
 }
 
 // Used to determine a priority for a speculative subresource request.
@@ -356,7 +356,10 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
                         OnUploadProgressCallback callback) override {
     NOTREACHED();
   }
-  void OnTransferSizeUpdated(int32_t transfer_size_diff) override {}
+  void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
+    network::RecordOnTransferSizeUpdatedUMA(
+        network::OnTransferSizeUpdatedFrom::kPreloadURLLoaderClient);
+  }
   void OnComplete(const network::URLLoaderCompletionStatus& status) override {
     if (result_.was_canceled || result_.error_code.has_value()) {
       mojo::ReportBadMessage("NEHM_BAD_COMPLETE");
@@ -392,11 +395,11 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
       }
 
       // Delete `this`.
-      owner_.OnPreloadComplete(url_, result_);
+      owner_->OnPreloadComplete(url_, result_);
     }
   }
 
-  NavigationEarlyHintsManager& owner_;
+  const raw_ref<NavigationEarlyHintsManager> owner_;
   const GURL url_;
   const network::mojom::RequestDestination request_destination_;
 
@@ -427,9 +430,8 @@ void NavigationEarlyHintsManager::HandleEarlyHints(
     const network::ResourceRequest& request_for_navigation) {
   // Ignore the second and subsequent responses to avoid situations where
   // policies such as CSP are inconsistent among the first and following
-  // responses.
-  // TODO(https://crbug.com/1305896): Refer to a relevant specification once the
-  // spec discussion is settled.
+  // responses. This behavior is specified by the step 19.5 of
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
   if (was_first_early_hints_received_)
     return;
 
@@ -484,7 +486,7 @@ NavigationEarlyHintsManager::GetNetworkContext() {
   if (network_context_for_testing_)
     return network_context_for_testing_;
 
-  return storage_partition_.GetNetworkContext();
+  return storage_partition_->GetNetworkContext();
 }
 
 void NavigationEarlyHintsManager::MaybePreconnect(
@@ -527,6 +529,13 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
   if (!ShouldHandleResourceHints(link))
     return;
 
+  network::mojom::RequestDestination destination =
+      LinkAsAttributeToRequestDestination(link);
+  // Step 2. If options's destination is not a destination, then return null.
+  // https://html.spec.whatwg.org/multipage/semantics.html#create-a-link-request
+  if (destination == network::mojom::RequestDestination::kEmpty)
+    return;
+
   if (!CheckContentSecurityPolicyForPreload(link, content_security_policies))
     return;
 
@@ -542,7 +551,7 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
   network::ResourceRequest request;
   request.method = net::HttpRequestHeaders::kGetMethod;
   request.priority = CalculateRequestPriority(link);
-  request.destination = LinkAsAttributeToRequestDestination(link);
+  request.destination = destination;
   request.url = link->href;
   request.site_for_cookies = site_for_cookies;
   request.request_initiator = origin_;
@@ -559,7 +568,7 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
 
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles =
       CreateContentBrowserURLLoaderThrottles(
-          request, &browser_context_,
+          request, &*browser_context_,
           base::BindRepeating(&WebContents::FromFrameTreeNodeId,
                               frame_tree_node_id_),
           /*navigation_ui_data=*/nullptr, frame_tree_node_id_);
@@ -569,7 +578,8 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
       shared_loader_factory_, std::move(throttles),
       content::GlobalRequestID::MakeBrowserInitiated().request_id,
       network::mojom::kURLLoadOptionNone, &request, loader_client.get(),
-      kEarlyHintsPreloadTrafficAnnotation, base::ThreadTaskRunnerHandle::Get());
+      kEarlyHintsPreloadTrafficAnnotation,
+      base::SingleThreadTaskRunner::GetCurrentDefault());
 
   inflight_preloads_[request.url] = std::make_unique<InflightPreload>(
       std::move(loader), std::move(loader_client));

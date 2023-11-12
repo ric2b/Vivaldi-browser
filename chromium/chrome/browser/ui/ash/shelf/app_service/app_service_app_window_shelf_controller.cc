@@ -18,16 +18,16 @@
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_window_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
-#include "chrome/browser/ash/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_shelf_utils.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/shelf/app_service/app_service_app_window_arc_tracker.h"
@@ -235,6 +235,10 @@ void AppServiceAppWindowShelfController::OnWindowPropertyChanged(
     StopHandleWindow(window);
     return;
   }
+
+  if (arc_tracker_)
+    arc_tracker_->OnWindowPropertyChanged(window, key, old);
+
   if (key != ash::kShelfIDKey)
     return;
 
@@ -407,7 +411,7 @@ void AppServiceAppWindowShelfController::OnInstanceUpdate(
   if (update.IsCreation()) {
     const std::string& app_id = update.AppId();
     if (GetAppType(app_id) == apps::AppType::kCrostini ||
-        crostini::IsUnmatchedCrostiniShelfAppId(app_id)) {
+        guest_os::IsUnregisteredCrostiniShelfAppId(app_id)) {
       window->SetProperty(aura::client::kAppType,
                           static_cast<int>(ash::AppType::CROSTINI_APP));
     }
@@ -524,9 +528,8 @@ AppWindowBase* AppServiceAppWindowShelfController::GetAppWindow(
 
 std::vector<aura::Window*> AppServiceAppWindowShelfController::GetArcWindows() {
   std::vector<aura::Window*> arc_windows;
-  std::copy_if(window_list_.begin(), window_list_.end(),
-               std::inserter(arc_windows, arc_windows.end()),
-               [](aura::Window* w) { return ash::IsArcWindow(w); });
+  base::ranges::copy_if(window_list_, std::back_inserter(arc_windows),
+                        &ash::IsArcWindow);
   return arc_windows;
 }
 
@@ -593,7 +596,7 @@ void AppServiceAppWindowShelfController::RegisterWindow(
     window->SetProperty(chromeos::kUseOverviewToExitFullscreen, true);
     window->SetProperty(chromeos::kUseOverviewToExitPointerLock, true);
   } else if (crostini::IsCrostiniWindow(window)) {
-    // Permit pointer lock in Crostini (and Bruschetta).
+    window->SetProperty(chromeos::kUseOverviewToExitFullscreen, true);
     window->SetProperty(chromeos::kUseOverviewToExitPointerLock, true);
   }
 

@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_ASH_CROSAPI_KEYSTORE_SERVICE_ASH_H_
 #define CHROME_BROWSER_ASH_CROSAPI_KEYSTORE_SERVICE_ASH_H_
 
+#include <stdint.h>
+
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/platform_keys/platform_keys.h"
+#include "chromeos/crosapi/mojom/keystore_service.mojom-shared.h"
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -59,6 +63,7 @@ class KeystoreServiceAsh : public mojom::KeystoreService, public KeyedService {
       mojom::KeystoreType type,
       const std::vector<uint8_t>& challenge,
       bool migrate,
+      mojom::KeystoreSigningAlgorithmName algorithm,
       ChallengeAttestationOnlyKeystoreCallback callback) override;
   void GetKeyStores(GetKeyStoresCallback callback) override;
   void SelectClientCertificates(
@@ -187,37 +192,6 @@ class KeystoreServiceAsh : public mojom::KeystoreService, public KeyedService {
                             chromeos::platform_keys::Status status);
   static void DidAddKeyTags(AddKeyTagsCallback callback,
                             chromeos::platform_keys::Status status);
-
-  // Parts of deprecated methods.
-  static void DEPRECATED_DidExtensionGenerateKey(
-      DEPRECATED_ExtensionGenerateKeyCallback callback,
-      const std::string& public_key,
-      absl::optional<crosapi::mojom::KeystoreError> error);
-  static void DEPRECATED_DidExtensionSign(
-      DEPRECATED_ExtensionSignCallback callback,
-      const std::string& signature,
-      absl::optional<mojom::KeystoreError> error);
-  static void DEPRECATED_DidGetKeyStores(
-      DEPRECATED_GetKeyStoresCallback callback,
-      std::unique_ptr<std::vector<chromeos::platform_keys::TokenId>>
-          platform_keys_token_ids,
-      chromeos::platform_keys::Status status);
-  static void DEPRECATED_DidGetCertificates(
-      DEPRECATED_GetCertificatesCallback callback,
-      std::unique_ptr<net::CertificateList> certs,
-      chromeos::platform_keys::Status status);
-  static void DEPRECATED_DidImportCertificate(
-      DEPRECATED_AddCertificateCallback callback,
-      chromeos::platform_keys::Status status);
-  static void DEPRECATED_DidRemoveCertificate(
-      DEPRECATED_RemoveCertificateCallback callback,
-      chromeos::platform_keys::Status status);
-  // |challenge_key_ptr| is used as a opaque identifier to match against the
-  // unique_ptr in outstanding_challenges_. It should not be dereferenced.
-  void DEPRECATED_DidChallengeAttestationOnlyKeystore(
-      DEPRECATED_ChallengeAttestationOnlyKeystoreCallback callback,
-      void* challenge_key_ptr,
-      const ash::attestation::TpmChallengeKeyResult& result);
 
   // Can be nullptr, should not be used directly, use GetPlatformKeys() instead.
   // Stores a pointer to a specific PlatformKeysService if it was specified in

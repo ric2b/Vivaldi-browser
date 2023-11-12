@@ -5,6 +5,7 @@
 // clang-format off
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 
+import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 import {CrToggleElement, MOVE_THRESHOLD_PX} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -14,8 +15,7 @@ suite('cr-toggle', function() {
   let toggle: CrToggleElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     toggle = document.createElement('cr-toggle');
     document.body.appendChild(toggle);
     assertNotChecked();
@@ -85,7 +85,7 @@ suite('cr-toggle', function() {
   // Check if setting checked in HTML works, has to use a separate element to
   // ensure that we are testing brand new state.
   test('initiallyCheckedWorks', function() {
-    document.body.innerHTML = ` <cr-toggle checked></cr-toggle> `;
+    document.body.innerHTML = getTrustedHTML`<cr-toggle checked></cr-toggle> `;
     toggle = (document.querySelector('cr-toggle'))!;
     assertChecked();
   });

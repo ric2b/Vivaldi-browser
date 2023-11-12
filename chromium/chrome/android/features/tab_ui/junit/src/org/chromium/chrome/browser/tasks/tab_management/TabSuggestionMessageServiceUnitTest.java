@@ -35,7 +35,6 @@ import org.robolectric.RuntimeEnvironment;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileJni;
@@ -158,12 +157,14 @@ public class TabSuggestionMessageServiceUnitTest {
         verify(mTabSelectionEditorController)
                 .configureToolbar(eq(closeSuggestionActionButtonText), anyInt(), any(),
                         eq(expectedEnablingThreshold), any());
-        verify(mTabSelectionEditorController).show(eq(Arrays.asList(mTab1, mTab2, mTab3)), eq(2));
+        verify(mTabSelectionEditorController)
+                .show(eq(Arrays.asList(mTab1, mTab2, mTab3)), eq(2), eq(null));
 
         tabSuggestion = prepareTabSuggestion(
                 Arrays.asList(mTab1, mTab3), TabSuggestion.TabSuggestionAction.CLOSE);
         mMessageService.review(tabSuggestion, mTabSuggestionFeedbackCallback);
-        verify(mTabSelectionEditorController).show(eq(Arrays.asList(mTab1, mTab3, mTab2)), eq(2));
+        verify(mTabSelectionEditorController)
+                .show(eq(Arrays.asList(mTab1, mTab3, mTab2)), eq(2), eq(null));
     }
 
     @Test
@@ -193,9 +194,9 @@ public class TabSuggestionMessageServiceUnitTest {
 
     @Test
     public void testClosingSuggestionNavigationHandler() {
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_ANDROID, true);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, true);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_SELECTION_EDITOR_V2, true);
+        ChromeFeatureList.sTabGroupsAndroid.setForTesting(true);
+        ChromeFeatureList.sTabGroupsContinuationAndroid.setForTesting(true);
+        ChromeFeatureList.sTabSelectionEditorV2.setForTesting(true);
         List<Tab> suggestedTabs = Arrays.asList(mTab1, mTab2);
         TabSuggestion tabSuggestion =
                 prepareTabSuggestion(suggestedTabs, TabSuggestion.TabSuggestionAction.CLOSE);
@@ -211,9 +212,9 @@ public class TabSuggestionMessageServiceUnitTest {
                 mTabSuggestionFeedbackCallbackArgumentCaptor.getValue();
         assertEquals(tabSuggestion, capturedFeedback.tabSuggestion);
         assertEquals(DISMISSED, capturedFeedback.tabSuggestionResponse);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_ANDROID, null);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, null);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_SELECTION_EDITOR_V2, null);
+        ChromeFeatureList.sTabGroupsAndroid.setForTesting(null);
+        ChromeFeatureList.sTabGroupsContinuationAndroid.setForTesting(null);
+        ChromeFeatureList.sTabSelectionEditorV2.setForTesting(null);
     }
 
     // Tests for grouping suggestion
@@ -229,12 +230,14 @@ public class TabSuggestionMessageServiceUnitTest {
         verify(mTabSelectionEditorController)
                 .configureToolbar(eq(groupSuggestionActionButtonText), anyInt(), any(),
                         eq(expectedEnablingThreshold), any());
-        verify(mTabSelectionEditorController).show(eq(Arrays.asList(mTab1, mTab2, mTab3)), eq(2));
+        verify(mTabSelectionEditorController)
+                .show(eq(Arrays.asList(mTab1, mTab2, mTab3)), eq(2), eq(null));
 
         tabSuggestion = prepareTabSuggestion(
                 Arrays.asList(mTab1, mTab3), TabSuggestion.TabSuggestionAction.GROUP);
         mMessageService.review(tabSuggestion, mTabSuggestionFeedbackCallback);
-        verify(mTabSelectionEditorController).show(eq(Arrays.asList(mTab1, mTab3, mTab2)), eq(2));
+        verify(mTabSelectionEditorController)
+                .show(eq(Arrays.asList(mTab1, mTab3, mTab2)), eq(2), eq(null));
     }
 
     @Test

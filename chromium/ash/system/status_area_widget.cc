@@ -10,6 +10,7 @@
 #include "ash/capture_mode/stop_recording_button_tray.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/tray_background_view_catalog.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/projector/projector_annotation_tray.h"
 #include "ash/public/cpp/shelf_config.h"
@@ -38,6 +39,7 @@
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/video_conference/video_conference_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm_mode/wm_mode_button_tray.h"
@@ -121,6 +123,11 @@ void StatusAreaWidget::Initialize() {
   ime_menu_tray_ = AddTrayButton(std::make_unique<ImeMenuTray>(shelf_));
   virtual_keyboard_tray_ = AddTrayButton(std::make_unique<VirtualKeyboardTray>(
       shelf_, TrayBackgroundViewCatalogName::kVirtualKeyboardStatusArea));
+
+  if (features::IsVcControlsUiEnabled())
+    video_conference_tray_ =
+        AddTrayButton(std::make_unique<VideoConferenceTray>(shelf_));
+
   stop_recording_button_tray_ =
       AddTrayButton(std::make_unique<StopRecordingButtonTray>(shelf_));
 
@@ -135,11 +142,11 @@ void StatusAreaWidget::Initialize() {
     media_tray_ = AddTrayButton(std::make_unique<MediaTray>(shelf_));
   }
 
-  if (chromeos::features::IsEcheSWAEnabled()) {
+  if (features::IsEcheSWAEnabled()) {
     eche_tray_ = AddTrayButton(std::make_unique<EcheTray>(shelf_));
   }
 
-  if (chromeos::features::IsPhoneHubEnabled()) {
+  if (features::IsPhoneHubEnabled()) {
     phone_hub_tray_ = AddTrayButton(std::make_unique<PhoneHubTray>(shelf_));
   }
 
@@ -148,7 +155,7 @@ void StatusAreaWidget::Initialize() {
         AddTrayButton(std::make_unique<WmModeButtonTray>(shelf_));
   }
 
-  if (chromeos::features::IsQsRevampEnabled()) {
+  if (features::IsQsRevampEnabled()) {
     notification_center_tray_ =
         AddTrayButton(std::make_unique<NotificationCenterTray>(shelf_));
     notification_center_tray_->AddObserver(this);
@@ -193,7 +200,10 @@ void StatusAreaWidget::Initialize() {
 
 StatusAreaWidget::~StatusAreaWidget() {
   Shell::Get()->session_controller()->RemoveObserver(this);
-  if (features::IsQsRevampEnabled())
+  // If QsRevamp flag is enabled, `notification_center_tray_` may be null in
+  // some unittests. During the test environment tear-down, removing the
+  // observer will lead to a crash.
+  if (features::IsQsRevampEnabled() && notification_center_tray_)
     notification_center_tray_->RemoveObserver(this);
   status_area_widget_delegate_->Shutdown();
 }
@@ -288,6 +298,7 @@ void StatusAreaWidget::LogVisiblePodCountMetric() {
       case TrayBackgroundViewCatalogName::kLogoutButton:
       case TrayBackgroundViewCatalogName::kVirtualKeyboardStatusArea:
       case TrayBackgroundViewCatalogName::kWmMode:
+      case TrayBackgroundViewCatalogName::kVideoConferenceTray:
         if (!tray_button->GetVisible())
           continue;
         visible_pod_count += 1;

@@ -8,6 +8,7 @@
 #include "base/strings/string_piece.h"
 #include "base/version.h"
 #include "base/win/registry.h"
+#include "chrome/installer/util/app_command.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "installer/util/vivaldi_install_constants.h"
@@ -82,7 +83,7 @@ absl::optional<base::Version> GetPendingUpdateVersion(
 
 // Assuming kChromeNewExe exists alongside the browser executable, return the
 // command to finish the installation. Return an empty string on errors.
-std::wstring GetNewUpdateFinalizeCommand();
+installer::AppCommand GetNewUpdateFinalizeCommand();
 
 // Get the update notifier executable from the given directory. If
 // install_binary_dir is empty, use GetDirectoryOfCurrentExe().

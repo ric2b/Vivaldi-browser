@@ -56,6 +56,7 @@ bool IsUnobscured(const blink::WebElement& element) {
     return false;
 
   blink::HitTestLocation location(interesting_rect);
+
   blink::HitTestResult result =
       local_main_frame->GetEventHandler().HitTestResultAtLocation(
           location, blink::HitTestRequest::kReadOnly |
@@ -77,7 +78,57 @@ bool IsUnobscured(const blink::WebElement& element) {
             ->ContainsIncludingHostElements(**hit_node))
       return true;
   }
+  return false;
+}
 
+bool HasNavigableListeners(blink::WebElement& element) {
+  blink::Element* elm = element.Unwrap<blink::Element>();
+
+  if (!elm) {
+    return false;
+  }
+
+  if (!elm->GetLayoutObject()) {
+    return false;
+  }
+
+  if (elm->HasJSBasedEventListeners(blink::event_type_names::kClick) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeydown) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeypress) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeyup) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kMouseover) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kMouseenter))
+    return true;
+
+  if (elm->GetComputedStyle() && elm->ParentComputedStyle()) {
+    if (elm->GetComputedStyle()->Cursor() == blink::ECursor::kPointer &&
+        elm->ParentComputedStyle()->Cursor() != blink::ECursor::kPointer) {
+      return true;
+    }
+  }
+  if (!elm->IsSVGElement())
+    return false;
+
+  return (elm->HasEventListeners(blink::event_type_names::kFocus) ||
+          elm->HasEventListeners(blink::event_type_names::kBlur) ||
+          elm->HasEventListeners(blink::event_type_names::kFocusin) ||
+          elm->HasEventListeners(blink::event_type_names::kFocusout));
+}
+
+bool HasNavigableTag(blink::WebElement& element) {
+  if (element.GetAttribute("role") == "button") {
+    return true;
+  }
+  if (element.HasHTMLTagName("a")) {
+    if (!element.GetAttribute("href").IsEmpty() || element.IsLink()) {
+      return true;;
+    }
+  } else if (element.HasHTMLTagName("input") ||
+             element.HasHTMLTagName("button") ||
+             element.HasHTMLTagName("select") ||
+             element.HasHTMLTagName("textarea")) {
+    return true;
+  }
   return false;
 }
 
@@ -90,7 +141,7 @@ bool IsTooSmallOrBig(blink::Document* document, gfx::Rect& rect) {
     return true;
   }
 
-  if (rect.width() > clientWidth || rect.height() > clientHeight) {
+  if (rect.width() >= clientWidth || rect.height() >= clientHeight) {
     return true;
   }
 
@@ -229,8 +280,9 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
        element = all_elements.NextItem()) {
     gfx::Rect rect = RevertDeviceScaling(element.BoundsInWidget(), scale);
     blink::Element* elm = element.Unwrap<blink::Element>();
-    if (elm && elm->IsFocusable() && IsUnobscured(element) &&
-        IsVisible(element) && !IsTooSmallOrBig(document, rect)) {
+    if (elm &&
+        (elm->IsFocusable() || HasNavigableListeners(element) ||
+         HasNavigableTag(element))) {
       if (elm->IsFrameOwnerElement()) {
         auto* owner = blink::To<blink::HTMLFrameOwnerElement>(elm);
         blink::LocalFrame* subframe =
@@ -238,10 +290,9 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
         if (subframe) {
           blink::Document* subdocument = subframe->GetDocument();
           GetSpatialNavigationElements(subdocument, scale, spatnav_elements);
-        } else {
-          spatnav_elements.push_back(element);
         }
-      } else {
+      } else if (!IsTooSmallOrBig(document, rect) && IsUnobscured(element) &&
+                 IsVisible(element)) {
         spatnav_elements.push_back(element);
       }
     }

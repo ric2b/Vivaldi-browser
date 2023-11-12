@@ -67,14 +67,6 @@ BASE_FEATURE(kAutofillEnableCvcForVcnYellowPath,
              "AutofillEnableCvcForVcnYellowPath",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, the GetDetailsForEnrollResponseDetails in the
-// UploadCardResponseDetails will be parsed, which will allow the Virtual Card
-// Enrollment flow to skip making a new GetDetailsForEnroll request. This is an
-// optimization to improve the latency of the Virtual Card Enrollment flow.
-BASE_FEATURE(kAutofillEnableGetDetailsForEnrollParsingInUploadCardResponse,
-             "AutofillEnableGetDetailsForEnrollParsingInUploadCardResponse",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, a progress dialog will display while authenticating with FIDO.
 // TODO(crbug.com/1337380): Clean up kAutofillEnableFIDOProgressDialog when it's
 // fully rolled out.
@@ -112,23 +104,11 @@ BASE_FEATURE(kAutofillEnableRemadeDownstreamMetrics,
              "AutofillEnableRemadeDownstreamMetrics",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Controls whether we send billing customer number in GetUploadDetails
-// preflight call.
-BASE_FEATURE(kAutofillEnableSendingBcnInGetUploadDetails,
-             "AutofillEnableSendingBcnInGetUploadDetails",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, if the user interacts with the manual fallback bottom sheet
 // on Android, it'll remain sticky until the user dismisses it.
 BASE_FEATURE(kAutofillEnableStickyManualFallbackForCards,
              "AutofillEnableStickyManualFallbackForCards",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, UnmaskCardRequest will set instrument id, which is Chrome-side
-// field for non-legacy ID.
-BASE_FEATURE(kAutofillEnableUnmaskCardRequestSetInstrumentId,
-             "AutofillEnableUnmaskCardRequestSetInstrumentId",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, the user will have the ability to update the virtual card
 // enrollment of a credit card through their chrome browser after certain
@@ -155,7 +135,7 @@ BASE_FEATURE(kAutofillEnableVirtualCard,
 // eligible the user will be prompted to register the virtual card into FIDO.
 BASE_FEATURE(kAutofillEnableVirtualCardFidoEnrollment,
              "AutofillEnableVirtualCardFidoEnrollment",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, in the payments settings page on desktop, virtual card
 // enrollment management will be provided so that the user can enroll/unenroll a
@@ -174,7 +154,7 @@ BASE_FEATURE(kAutofillEnableVirtualCardMetadata,
 // added before Chrome attempts to show offer again.
 BASE_FEATURE(kAutofillEnforceDelaysInStrikeDatabase,
              "AutofillEnforceDelaysInStrikeDatabase",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, Autofill will attempt to fill IBAN (International Bank Account
 // Number) fields when data is available.
@@ -194,17 +174,17 @@ BASE_FEATURE(kAutofillParseIBANFields,
              "AutofillParseIBANFields",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, Autofill will attempt to find merchant promo/coupon/gift code
-// fields when parsing forms.
-BASE_FEATURE(kAutofillParseMerchantPromoCodeFields,
-             "AutofillParseMerchantPromoCodeFields",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, Autofill will attempt to find standalone CVC fields for VCN
 // card on file when parsing forms.
 BASE_FEATURE(kAutofillParseVcnCardOnFileStandaloneCvcFields,
              "AutofillParseVcnCardOnFileStandaloneCvcFields",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, Expiration and Type titles will be removed from Chrome
+// payment settings page.
+BASE_FEATURE(kAutofillRemoveCardExpirationAndTypeTitles,
+             "AutofillRemoveCardExpirationAndTypeTitles",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, the Save Card infobar will be dismissed by a user initiated
 // navigation other than one caused by submitted form.

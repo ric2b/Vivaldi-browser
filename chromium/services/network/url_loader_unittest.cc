@@ -20,7 +20,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -28,12 +27,13 @@
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "mojo/public/c/system/data_pipe.h"
@@ -159,9 +159,6 @@ URLLoader::DeleteCallback NeverInvokedDeleteLoaderCallback() {
   return base::BindOnce([](URLLoader* /* loader*/) { NOTREACHED(); });
 }
 
-constexpr char kBodyReadFromNetBeforePausedHistogram[] =
-    "Network.URLLoader.BodyReadFromNetBeforePaused";
-
 constexpr char kTestAuthURL[] = "/auth-basic?password=PASS&realm=REALM";
 
 constexpr char kInsecureHost[] = "othersite.test";
@@ -205,7 +202,7 @@ class URLRequestMultipleWritesJob : public net::URLRequestJob {
 
   // net::URLRequestJob implementation:
   void Start() override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLRequestMultipleWritesJob::StartAsync,
                                   weak_factory_.GetWeakPtr()));
   }
@@ -223,7 +220,7 @@ class URLRequestMultipleWritesJob : public net::URLRequestJob {
     }
 
     if (async_reads_) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&URLRequestMultipleWritesJob::ReadRawDataComplete,
                          weak_factory_.GetWeakPtr(), result));
@@ -262,6 +259,7 @@ class MultipleWritesInterceptor : public net::URLRequestInterceptor {
   // URLRequestInterceptor implementation:
   std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
       net::URLRequest* request) const override {
+    EXPECT_FALSE(request->load_flags() & net::LOAD_BYPASS_CACHE);
     return std::make_unique<URLRequestMultipleWritesJob>(
         request, std::move(packets_), net_error_, async_reads_);
   }
@@ -289,7 +287,7 @@ class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
 
   // net::URLRequestJob implementation:
   void Start() override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLRequestEternalSyncReadsJob::StartAsync,
                                   weak_factory_.GetWeakPtr()));
   }
@@ -331,6 +329,7 @@ class EternalSyncReadsInterceptor : public net::URLRequestInterceptor {
   // URLRequestInterceptor implementation:
   std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
       net::URLRequest* request) const override {
+    EXPECT_FALSE(request->load_flags() & net::LOAD_BYPASS_CACHE);
     if (request->url() == GetSingleByteURL()) {
       return std::make_unique<URLRequestEternalSyncReadsJob>(
           request, false /* fill_entire_buffer */);
@@ -365,7 +364,7 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
 
   // net::URLRequestJob implementation:
   void Start() override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLRequestSimulatedCacheJob::StartAsync,
                                   weak_factory_.GetWeakPtr()));
   }
@@ -414,6 +413,7 @@ class SimulatedCacheInterceptor : public net::URLRequestInterceptor {
 
   std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
       net::URLRequest* request) const override {
+    EXPECT_FALSE(request->load_flags() & net::LOAD_BYPASS_CACHE);
     return std::make_unique<URLRequestSimulatedCacheJob>(
         request, simulated_cache_dest_, use_text_plain_);
   }
@@ -468,7 +468,7 @@ class URLRequestFakeTransportInfoJob : public net::URLRequestJob {
 
   // net::URLRequestJob implementation:
   void Start() override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&URLRequestFakeTransportInfoJob::StartAsync,
                                   weak_factory_.GetWeakPtr()));
   }
@@ -568,6 +568,7 @@ class FakeTransportInfoInterceptor : public net::URLRequestInterceptor {
   // URLRequestInterceptor implementation:
   std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
       net::URLRequest* request) const override {
+    EXPECT_FALSE(request->load_flags() & net::LOAD_BYPASS_CACHE);
     return std::make_unique<URLRequestFakeTransportInfoJob>(
         request, transport_info_, second_transport_info_,
         connected_callback_result_observer_);
@@ -595,25 +596,6 @@ CorsErrorStatus InsecurePrivateNetworkCorsErrorStatus(
   return CorsErrorStatus(mojom::CorsError::kInsecurePrivateNetwork,
                          mojom::IPAddressSpace::kUnknown,
                          resource_address_space);
-}
-
-// Returns whether monitoring was successfully set up.
-// |*output_sample| needs to stay valid until monitoring is stopped.
-std::unique_ptr<base::StatisticsRecorder::ScopedHistogramSampleObserver>
-StartMonitorBodyReadFromNetBeforePausedHistogram(
-    const base::RepeatingClosure& quit_closure,
-    base::HistogramBase::Sample* output_sample) {
-  return std::make_unique<
-      base::StatisticsRecorder::ScopedHistogramSampleObserver>(
-      kBodyReadFromNetBeforePausedHistogram,
-      base::BindRepeating(
-          [](const base::RepeatingClosure& quit_closure,
-             base::HistogramBase::Sample* output, const char* histogram_name,
-             uint64_t name_hash, base::HistogramBase::Sample sample) {
-            *output = sample;
-            quit_closure.Run();
-          },
-          quit_closure, output_sample));
 }
 
 std::string CookieOrLineToString(const mojom::CookieOrLinePtr& cookie_or_line) {
@@ -661,9 +643,9 @@ struct URLLoaderOptions {
         std::move(sync_url_loader_client), traffic_annotation, request_id,
         keepalive_request_size, std::move(keepalive_statistics_recorder),
         std::move(trust_token_helper_factory), std::move(cookie_observer),
-        std::move(url_loader_network_observer), std::move(devtools_observer),
-        std::move(accept_ch_frame_observer), third_party_cookies_enabled,
-        cache_transparency_settings);
+        std::move(trust_token_observer), std::move(url_loader_network_observer),
+        std::move(devtools_observer), std::move(accept_ch_frame_observer),
+        third_party_cookies_enabled, cache_transparency_settings);
   }
 
   int32_t options = mojom::kURLLoadOptionNone;
@@ -676,6 +658,8 @@ struct URLLoaderOptions {
   std::unique_ptr<TrustTokenRequestHelperFactory> trust_token_helper_factory;
   mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer =
       mojo::NullRemote();
+  mojo::PendingRemote<mojom::TrustTokenAccessObserver> trust_token_observer =
+      mojo::NullRemote();
   mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
       url_loader_network_observer = mojo::NullRemote();
   mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer =
@@ -683,7 +667,7 @@ struct URLLoaderOptions {
   mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer =
       mojo::NullRemote();
   bool third_party_cookies_enabled = true;
-  CacheTransparencySettings* cache_transparency_settings = nullptr;
+  raw_ptr<CacheTransparencySettings> cache_transparency_settings = nullptr;
 
  private:
   bool used = false;
@@ -1093,7 +1077,7 @@ class URLLoaderTest : public testing::Test {
       if (rv == MOJO_RESULT_SHOULD_WAIT) {
         mojo::SimpleWatcher watcher(
             FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
-            base::SequencedTaskRunnerHandle::Get());
+            base::SequencedTaskRunner::GetCurrentDefault());
         base::RunLoop run_loop;
 
         watcher.Watch(
@@ -2583,7 +2567,7 @@ TEST_F(URLLoaderTest, CloseResponseBodyConsumerBeforeProducer) {
   // (Please note that this doesn't guarantee that the pipe is filled to the
   // point that it is not writable anymore.)
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(100));
   run_loop.Run();
 
@@ -2601,11 +2585,6 @@ TEST_F(URLLoaderTest, CloseResponseBodyConsumerBeforeProducer) {
 TEST_F(URLLoaderTest, PauseReadingBodyFromNetBeforeResponseHeaders) {
   const char* const kPath = "/hello.html";
   const char* const kBodyContents = "This is the data as you requested.";
-
-  base::HistogramBase::Sample output_sample = -1;
-  base::RunLoop histogram_run_loop;
-  auto histogram_callback = StartMonitorBodyReadFromNetBeforePausedHistogram(
-      histogram_run_loop.QuitClosure(), &output_sample);
 
   net::EmbeddedTestServer server;
   net::test_server::ControllableHttpResponse response_controller(&server,
@@ -2647,7 +2626,7 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetBeforeResponseHeaders) {
   // Wait for a little amount of time so that if the loader mistakenly reads
   // response body from the underlying URLRequest, it is easier to find out.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(100));
   run_loop.Run();
 
@@ -2662,19 +2641,12 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetBeforeResponseHeaders) {
 
   delete_run_loop.Run();
   client()->Unbind();
-  histogram_run_loop.Run();
-  EXPECT_EQ(0, output_sample);
 }
 
 TEST_F(URLLoaderTest, PauseReadingBodyFromNetWhenReadIsPending) {
   const char* const kPath = "/hello.html";
   const char* const kBodyContentsFirstHalf = "This is the first half.";
   const char* const kBodyContentsSecondHalf = "This is the second half.";
-
-  base::HistogramBase::Sample output_sample = -1;
-  base::RunLoop histogram_run_loop;
-  auto histogram_callback = StartMonitorBodyReadFromNetBeforePausedHistogram(
-      histogram_run_loop.QuitClosure(), &output_sample);
 
   net::EmbeddedTestServer server;
   net::test_server::ControllableHttpResponse response_controller(&server,
@@ -2722,18 +2694,11 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetWhenReadIsPending) {
 
   delete_run_loop.Run();
   client()->Unbind();
-  histogram_run_loop.Run();
-  EXPECT_LE(0, output_sample);
 }
 
 TEST_F(URLLoaderTest, ResumeReadingBodyFromNetAfterClosingConsumer) {
   const char* const kPath = "/hello.html";
   const char* const kBodyContentsFirstHalf = "This is the first half.";
-
-  base::HistogramBase::Sample output_sample = -1;
-  base::RunLoop histogram_run_loop;
-  auto histogram_callback = StartMonitorBodyReadFromNetBeforePausedHistogram(
-      histogram_run_loop.QuitClosure(), &output_sample);
 
   net::EmbeddedTestServer server;
   net::test_server::ControllableHttpResponse response_controller(&server,
@@ -2775,19 +2740,12 @@ TEST_F(URLLoaderTest, ResumeReadingBodyFromNetAfterClosingConsumer) {
   loader.reset();
   client()->Unbind();
   delete_run_loop.Run();
-  histogram_run_loop.Run();
-  EXPECT_EQ(0, output_sample);
 }
 
 TEST_F(URLLoaderTest, MultiplePauseResumeReadingBodyFromNet) {
   const char* const kPath = "/hello.html";
   const char* const kBodyContentsFirstHalf = "This is the first half.";
   const char* const kBodyContentsSecondHalf = "This is the second half.";
-
-  base::HistogramBase::Sample output_sample = -1;
-  base::RunLoop histogram_run_loop;
-  auto histogram_callback = StartMonitorBodyReadFromNetBeforePausedHistogram(
-      histogram_run_loop.QuitClosure(), &output_sample);
 
   net::EmbeddedTestServer server;
   net::test_server::ControllableHttpResponse response_controller(&server,
@@ -2842,8 +2800,6 @@ TEST_F(URLLoaderTest, MultiplePauseResumeReadingBodyFromNet) {
 
   loader.reset();
   client()->Unbind();
-  histogram_run_loop.Run();
-  EXPECT_LE(0, output_sample);
 }
 
 TEST_F(URLLoaderTest, UploadBytes) {
@@ -3392,54 +3348,6 @@ TEST_F(URLLoaderTest, RedirectFailsOnModifyUnsafeHeader) {
   }
 }
 
-TEST_F(URLLoaderTest, RedirectLogsModifiedConcerningHeader) {
-  using ConcerningHeaderId = URLLoader::ConcerningHeaderId;
-  base::HistogramTester histograms;
-
-  TestURLLoaderClient client;
-
-  ResourceRequest request = CreateResourceRequest(
-      "GET", test_server()->GetURL("/redirect307-to-echo"));
-
-  base::RunLoop delete_run_loop;
-  mojo::Remote<mojom::URLLoader> loader;
-  std::unique_ptr<URLLoader> url_loader;
-  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
-  context().mutable_factory_params().is_corb_enabled = false;
-  url_loader = URLLoaderOptions().MakeURLLoader(
-      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      loader.BindNewPipeAndPassReceiver(), request, client.CreateRemote());
-
-  client.RunUntilRedirectReceived();
-
-  net::HttpRequestHeaders redirect_headers;
-  redirect_headers.SetHeader(net::HttpRequestHeaders::kReferer,
-                             "https://somewhere.test/");
-  redirect_headers.SetHeader("Via", "Albuquerque");
-  loader->FollowRedirect({}, redirect_headers, {}, absl::nullopt);
-
-  client.RunUntilComplete();
-  delete_run_loop.Run();
-
-  EXPECT_TRUE(client.has_received_completion());
-  EXPECT_EQ(net::OK, client.completion_status().error_code);
-
-  histograms.ExpectBucketCount(
-      "NetworkService.ConcerningRequestHeader.AddedOnRedirect", true, 1);
-  histograms.ExpectBucketCount(
-      "NetworkService.ConcerningRequestHeader.AddedOnRedirect", false, 0);
-  for (int i = 0; i < static_cast<int>(ConcerningHeaderId::kMaxValue); ++i) {
-    if (i == static_cast<int>(ConcerningHeaderId::kReferer) ||
-        i == static_cast<int>(ConcerningHeaderId::kVia)) {
-      histograms.ExpectBucketCount(
-          "NetworkService.ConcerningRequestHeader.HeaderAddedOnRedirect", i, 1);
-    } else {
-      histograms.ExpectBucketCount(
-          "NetworkService.ConcerningRequestHeader.HeaderAddedOnRedirect", i, 0);
-    }
-  }
-}
-
 // Test the client can remove headers during a redirect.
 TEST_F(URLLoaderTest, RedirectRemoveHeader) {
   ResourceRequest request = CreateResourceRequest(
@@ -3758,6 +3666,7 @@ class MockHTTPSJobURLRequestInterceptor : public net::URLRequestInterceptor {
   // net::URLRequestInterceptor:
   std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
       net::URLRequest* request) const override {
+    EXPECT_FALSE(request->load_flags() & net::LOAD_BYPASS_CACHE);
     return std::make_unique<MockHTTPSURLRequestJob>(request, std::string(),
                                                     "dummy response", true);
   }
@@ -3976,6 +3885,70 @@ MATCHER_P3(MatchesCookieDetails, type, cookie_or_line, is_include, "") {
                          cookie_or_line),
           testing::Field(&MockCookieObserver::CookieDetails::is_include,
                          is_include)),
+      arg, result_listener);
+}
+
+class MockTrustTokenObserver : public network::mojom::TrustTokenAccessObserver {
+ public:
+  MockTrustTokenObserver() = default;
+  ~MockTrustTokenObserver() override = default;
+
+  struct TrustTokenDetails {
+    explicit TrustTokenDetails(const mojom::TrustTokenAccessDetailsPtr& details)
+        : origin(details->origin), blocked(details->blocked) {}
+
+    url::Origin origin;
+    bool blocked;
+  };
+
+  mojo::PendingRemote<mojom::TrustTokenAccessObserver> GetRemote() {
+    mojo::PendingRemote<mojom::TrustTokenAccessObserver> remote;
+    receivers_.Add(this, remote.InitWithNewPipeAndPassReceiver());
+    return remote;
+  }
+
+  void OnTrustTokensAccessed(
+      mojom::TrustTokenAccessDetailsPtr details) override {
+    observed_tokens_.emplace_back(details);
+    if (wait_for_token_count_ &&
+        observed_tokens().size() >= wait_for_token_count_) {
+      std::move(wait_for_tokens_quit_closure_).Run();
+    }
+  }
+
+  void WaitForTrustTokens(size_t token_count) {
+    if (observed_tokens_.size() < token_count) {
+      wait_for_token_count_ = token_count;
+      base::RunLoop run_loop;
+      wait_for_tokens_quit_closure_ = run_loop.QuitClosure();
+      run_loop.Run();
+    }
+    EXPECT_EQ(observed_tokens_.size(), token_count);
+  }
+
+  void Clone(mojo::PendingReceiver<mojom::TrustTokenAccessObserver> observer)
+      override {
+    receivers_.Add(this, std::move(observer));
+  }
+
+  const std::vector<TrustTokenDetails>& observed_tokens() {
+    return observed_tokens_;
+  }
+
+ private:
+  size_t wait_for_token_count_ = 0;
+  base::OnceClosure wait_for_tokens_quit_closure_;
+  std::vector<TrustTokenDetails> observed_tokens_;
+  mojo::ReceiverSet<mojom::TrustTokenAccessObserver> receivers_;
+};
+
+MATCHER_P2(MatchesTrustTokenDetails, origin, blocked, "") {
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field(&MockTrustTokenObserver::TrustTokenDetails::origin,
+                         origin),
+          testing::Field(&MockTrustTokenObserver::TrustTokenDetails::blocked,
+                         blocked)),
       arg, result_listener);
 }
 
@@ -4357,7 +4330,7 @@ class TestSSLPrivateKey : public net::SSLPrivateKey {
             SignCallback callback) override {
     sign_count_++;
     if (fail_signing_) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback),
                                     net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED,
                                     std::vector<uint8_t>()));
@@ -5680,32 +5653,38 @@ class MockTrustTokenRequestHelper : public TrustTokenRequestHelper {
       delete;
 
   // TrustTokenRequestHelper:
-  void Begin(net::URLRequest* request,
-             base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done)
+  void Begin(const GURL& url,
+             base::OnceCallback<void(absl::optional<net::HttpRequestHeaders>,
+                                     mojom::TrustTokenOperationStatus)> done)
       override {
     DCHECK(on_begin_.has_value());
 
     // Clear storage to crash if the method gets called a second time.
     mojom::TrustTokenOperationStatus result = *on_begin_;
     on_begin_.reset();
+    absl::optional<net::HttpRequestHeaders> headers;
+    if (result == mojom::TrustTokenOperationStatus::kOk)
+      headers.emplace();
 
     switch (operation_synchrony_) {
       case SyncOrAsync::kSync: {
-        OnDoneBeginning(base::BindOnce(std::move(done), result));
+        OnDoneBeginning(
+            base::BindOnce(std::move(done), std::move(headers), result));
         return;
       }
       case SyncOrAsync::kAsync: {
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE,
-            base::BindOnce(&MockTrustTokenRequestHelper::OnDoneBeginning,
-                           base::Unretained(this),
-                           base::BindOnce(std::move(done), result)));
+            base::BindOnce(
+                &MockTrustTokenRequestHelper::OnDoneBeginning,
+                base::Unretained(this),
+                base::BindOnce(std::move(done), std::move(headers), result)));
         return;
       }
     }
   }
 
-  void Finalize(mojom::URLResponseHead* response,
+  void Finalize(net::HttpResponseHeaders& response_headers,
                 base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done)
       override {
     DCHECK(on_finalize_.has_value());
@@ -5720,7 +5699,7 @@ class MockTrustTokenRequestHelper : public TrustTokenRequestHelper {
         return;
       }
       case SyncOrAsync::kAsync: {
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(std::move(done), result));
         return;
       }
@@ -5802,8 +5781,10 @@ class MockTrustTokenRequestHelperFactory
                                                           begin_done_flag)) {}
 
   void CreateTrustTokenHelperForRequest(
-      const net::URLRequest& request,
+      const url::Origin& top_frame_origin,
+      const net::HttpRequestHeaders& headers,
       const mojom::TrustTokenParams& params,
+      const net::NetLogWithSource& net_log,
       base::OnceCallback<void(TrustTokenStatusOrRequestHelper)> done) override {
     if (creation_failure_error_) {
       switch (sync_or_async_) {
@@ -5812,7 +5793,7 @@ class MockTrustTokenRequestHelperFactory
           return;
         }
         case SyncOrAsync::kAsync:
-          base::ThreadTaskRunnerHandle::Get()->PostTask(
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
               FROM_HERE, base::BindOnce(std::move(done),
                                         std::move(*creation_failure_error_)));
           return;
@@ -5825,7 +5806,7 @@ class MockTrustTokenRequestHelperFactory
         return;
       }
       case SyncOrAsync::kAsync:
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(std::move(done), std::move(helper_)));
         return;
     }
@@ -5862,6 +5843,15 @@ class MockTrustTokenDevToolsObserver : public MockDevToolsObserver {
       trust_token_operation_status_ = absl::nullopt;
 };
 
+class ExpectBypassCacheInterceptor : public net::URLRequestInterceptor {
+ public:
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
+    EXPECT_TRUE(request->load_flags() & net::LOAD_BYPASS_CACHE);
+    return nullptr;
+  }
+};
+
 }  // namespace
 
 class URLLoaderSyncOrAsyncTrustTokenOperationTest
@@ -5874,12 +5864,17 @@ class URLLoaderSyncOrAsyncTrustTokenOperationTest
 
  protected:
   ResourceRequest CreateTrustTokenResourceRequest() {
-    ResourceRequest request = CreateResourceRequest(
-        "GET", test_server()->GetURL("/simple_page.html"));
+    GURL request_url = test_server()->GetURL("/simple_page.html");
+    ResourceRequest request = CreateResourceRequest("GET", request_url);
     request.trust_token_params =
         OptionalTrustTokenParams(mojom::TrustTokenParams::New());
     // Set the devtools id to trigger the OnTrustTokenOperationDone call.
     request.devtools_request_id = "TEST";
+
+    // Any Trust Token URLRequest that makes it to Start() should have the
+    // BYPASS_CACHE flag set.
+    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+        request_url, std::make_unique<ExpectBypassCacheInterceptor>());
     return request;
   }
 
@@ -5910,6 +5905,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   MockTrustTokenDevToolsObserver devtools_observer;
 
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.trust_token_helper_factory =
       std::make_unique<MockTrustTokenRequestHelperFactory>(
           mojom::TrustTokenOperationStatus::kOk /* on_begin */,
@@ -5940,6 +5937,11 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   EXPECT_EQ(ReadBody(), expected);
 
   EXPECT_FALSE(client()->response_head()->headers->raw_headers().empty());
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), false)));
 }
 
 // A request with an associated Trust Tokens operation whose Begin step returns
@@ -5961,6 +5963,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   MockTrustTokenDevToolsObserver devtools_observer;
 
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.trust_token_helper_factory =
       std::make_unique<MockTrustTokenRequestHelperFactory>(
           mojom::TrustTokenOperationStatus::kAlreadyExists /* on_begin */,
@@ -5985,6 +5989,11 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
 
   EXPECT_FALSE(client()->response_head());
   EXPECT_FALSE(client()->response_body().is_valid());
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), false)));
 }
 
 // When a request's associated Trust Tokens operation's Begin step fails, the
@@ -6000,6 +6009,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   MockTrustTokenDevToolsObserver devtools_observer;
 
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.trust_token_helper_factory =
       std::make_unique<MockTrustTokenRequestHelperFactory>(
           mojom::TrustTokenOperationStatus::kFailedPrecondition /* on_begin */,
@@ -6024,6 +6035,11 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
 
   EXPECT_FALSE(client()->response_head());
   EXPECT_FALSE(client()->response_body().is_valid());
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), false)));
 }
 
 // When a request's associated Trust Tokens operation's Begin step succeeds but
@@ -6039,6 +6055,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   MockTrustTokenDevToolsObserver devtools_observer;
 
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.trust_token_helper_factory =
       std::make_unique<MockTrustTokenRequestHelperFactory>(
           mojom::TrustTokenOperationStatus::kOk /* on_begin */,
@@ -6061,6 +6079,11 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   // Verify the DevTools event was fired and it has the right status.
   EXPECT_EQ(devtools_observer.trust_token_operation_status(),
             mojom::TrustTokenOperationStatus::kBadResponse);
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), false)));
 }
 
 // When URLLoader receives a  request parameterized to perform a Trust Tokens
@@ -6078,6 +6101,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   MockTrustTokenDevToolsObserver devtools_observer;
 
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.trust_token_helper_factory =
       std::make_unique<MockTrustTokenRequestHelperFactory>(
           mojom::TrustTokenOperationStatus::
@@ -6099,6 +6124,54 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
   // Verify the DevTools event was fired and it has the right status.
   EXPECT_EQ(devtools_observer.trust_token_operation_status(),
             mojom::TrustTokenOperationStatus::kInternalError);
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), false)));
+}
+
+// When URLLoader receives a request that is blocked by policy, the request
+// should fail entirely and report a blocked event to the observer.
+TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
+       HandlesTrustTokenRequestHelperCreationBlocked) {
+  ResourceRequest request = CreateTrustTokenResourceRequest();
+
+  base::RunLoop delete_run_loop;
+  mojo::PendingRemote<mojom::URLLoader> loader_remote;
+  std::unique_ptr<URLLoader> url_loader;
+  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
+  MockTrustTokenDevToolsObserver devtools_observer;
+
+  URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
+  url_loader_options.trust_token_helper_factory =
+      std::make_unique<MockTrustTokenRequestHelperFactory>(
+          mojom::TrustTokenOperationStatus::
+              kUnauthorized /* helper_creation_error */,
+          GetParam());
+  url_loader_options.devtools_observer = devtools_observer.Bind();
+  url_loader = url_loader_options.MakeURLLoader(
+      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      loader_remote.InitWithNewPipeAndPassReceiver(), request,
+      client()->CreateRemote());
+
+  client()->RunUntilComplete();
+  delete_run_loop.Run();
+
+  EXPECT_EQ(client()->completion_status().error_code,
+            net::ERR_TRUST_TOKEN_OPERATION_FAILED);
+  EXPECT_EQ(client()->completion_status().trust_token_operation_status,
+            mojom::TrustTokenOperationStatus::kUnauthorized);
+  // Verify the DevTools event was fired and it has the right status.
+  EXPECT_EQ(devtools_observer.trust_token_operation_status(),
+            mojom::TrustTokenOperationStatus::kUnauthorized);
+
+  trust_token_observer.WaitForTrustTokens(1u);
+  EXPECT_THAT(trust_token_observer.observed_tokens(),
+              testing::ElementsAre(
+                  MatchesTrustTokenDetails(test_server()->GetOrigin(), true)));
 }
 
 TEST_F(URLLoaderTest, OnRawRequestClientSecurityStateFactory) {
@@ -6120,6 +6193,8 @@ TEST_F(URLLoaderTest, OnRawRequestClientSecurityStateFactory) {
   base::RunLoop delete_run_loop;
   mojo::PendingRemote<mojom::URLLoader> loader;
   URLLoaderOptions url_loader_options;
+  MockTrustTokenObserver trust_token_observer;
+  url_loader_options.trust_token_observer = trust_token_observer.GetRemote();
   url_loader_options.devtools_observer = devtools_observer.Bind();
   std::unique_ptr<URLLoader> url_loader = url_loader_options.MakeURLLoader(
       context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
@@ -6807,14 +6882,6 @@ TEST_F(URLLoaderTest, RecordRadioWakeupTrigger_IntervalTooShort) {
 }
 
 #endif  // BUILDFLAG(IS_ANDROID)
-
-TEST_F(URLLoaderTest, HasPartitionedCookie) {
-  TestURLLoaderClient loader_client;
-  ResourceRequest request = CreateResourceRequest(
-      "GET", test_server()->GetURL("/set-cookie?a=b;Partitioned;"));
-  EXPECT_EQ(net::OK, LoadRequest(request));
-  EXPECT_TRUE(client_.response_head()->has_partitioned_cookie);
-}
 
 using ExtraHeaders = std::vector<std::pair<std::string, std::string>>;
 

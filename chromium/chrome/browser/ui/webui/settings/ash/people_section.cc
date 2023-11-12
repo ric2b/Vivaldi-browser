@@ -26,7 +26,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/webui/chromeos/sync/os_sync_handler.h"
+#include "chrome/browser/ui/webui/ash/sync/os_sync_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/account_manager_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/fingerprint_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_features_util.h"
@@ -62,19 +62,20 @@
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace mojom {
-using ::ash::settings::mojom::SearchResultDefaultRank;
-using ::ash::settings::mojom::SearchResultIcon;
-using ::ash::settings::mojom::SearchResultType;
+using ::chromeos::settings::mojom::kMyAccountsSubpagePath;
+using ::chromeos::settings::mojom::kPeopleSectionPath;
+using ::chromeos::settings::mojom::kSyncDeprecatedAdvancedSubpagePath;
+using ::chromeos::settings::mojom::kSyncSetupSubpagePath;
+using ::chromeos::settings::mojom::kSyncSubpagePath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
 }  // namespace mojom
 
 namespace {
-
-using ::ash::IsAccountManagerAvailable;
 
 const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
@@ -192,7 +193,7 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-  if (ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled()) {
+  if (AccountAppsAvailability::IsArcAccountRestrictionsEnabled()) {
     html_source->AddString("accountListDescription",
                            l10n_util::GetStringFUTF16(
                                IDS_SETTINGS_ACCOUNT_MANAGER_LIST_DESCRIPTION_V2,
@@ -227,7 +228,7 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
                           crosapi::browser_util::IsLacrosEnabled());
   html_source->AddBoolean(
       "arcAccountRestrictionsEnabled",
-      ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
+      AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
 }
 
 void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
@@ -280,12 +281,16 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD_LOGIN_LOCK},
       {"recoveryToggleLabel", IDS_SETTINGS_PEOPLE_RECOVERY_TOGGLE_LABEL},
       {"recoveryToggleSubLabel", IDS_SETTINGS_PEOPLE_RECOVERY_TOGGLE_SUB_LABEL},
+      {"recoveryDisableDialogTitle",
+       IDS_SETTINGS_PEOPLE_RECOVERY_DISABLE_DIALOG_TITLE},
+      {"recoveryDisableDialogMessage",
+       IDS_SETTINGS_PEOPLE_RECOVERY_DISABLE_DIALOG_MESSAGE},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddBoolean("quickUnlockEnabled", quick_unlock::IsPinEnabled());
   html_source->AddBoolean("quickUnlockPinAutosubmitFeatureEnabled",
-                          chromeos::features::IsPinAutosubmitFeatureEnabled());
+                          features::IsPinAutosubmitFeatureEnabled());
   html_source->AddBoolean("quickUnlockDisabledByPolicy",
                           quick_unlock::IsPinDisabledByPolicy(
                               pref_service, quick_unlock::Purpose::kAny));
@@ -319,84 +324,16 @@ void AddFingerprintResources(content::WebUIDataSource* html_source,
                              bool are_fingerprint_settings_allowed) {
   html_source->AddBoolean("fingerprintUnlockEnabled",
                           are_fingerprint_settings_allowed);
-  if (are_fingerprint_settings_allowed) {
-    quick_unlock::AddFingerprintResources(html_source);
-  }
 
-  int instruction_id, aria_label_id;
-  bool aria_label_includes_device = false;
-  bool instruction_includes_device = false;
-  using FingerprintLocation = quick_unlock::FingerprintLocation;
-  switch (quick_unlock::GetFingerprintLocation()) {
-    case FingerprintLocation::TABLET_POWER_BUTTON:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_POWER_BUTTON;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_POWER_BUTTON_ARIA_LABEL;
-      break;
-    case FingerprintLocation::KEYBOARD_BOTTOM_LEFT:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_BOTTOM_LEFT_ARIA_LABEL;
-      break;
-    case FingerprintLocation::KEYBOARD_BOTTOM_RIGHT:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_BOTTOM_RIGHT_ARIA_LABEL;
-      break;
-    case FingerprintLocation::KEYBOARD_TOP_RIGHT:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_TOP_RIGHT_ARIA_LABEL;
-      break;
-    case quick_unlock::FingerprintLocation::RIGHT_SIDE:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_RIGHT_SIDE_ARIA_LABEL;
-      aria_label_includes_device = true;
-      break;
-    case quick_unlock::FingerprintLocation::LEFT_SIDE:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_LEFT_SIDE_ARIA_LABEL;
-      aria_label_includes_device = true;
-      break;
-    case FingerprintLocation::LEFT_OF_POWER_BUTTON_TOP_RIGHT:
-      instruction_id =
-          IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LEFT_OF_POWER_BUTTON_TOP_RIGHT;
-      // Use the dialog title as the aria-label, since this location does not
-      // require an aria-label.
-      aria_label_id = IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_TITLE;
-      instruction_includes_device = true;
-      break;
-    case FingerprintLocation::UNKNOWN:
-      instruction_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      aria_label_id =
-          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
-      break;
-  }
-  if (instruction_includes_device) {
-    html_source->AddString("configureFingerprintInstructionLocateScannerStep",
-                           l10n_util::GetStringFUTF16(
-                               instruction_id, ui::GetChromeOSDeviceName()));
-  } else {
-    html_source->AddLocalizedString(
-        "configureFingerprintInstructionLocateScannerStep", instruction_id);
-  }
-  if (aria_label_includes_device) {
-    html_source->AddString(
-        "configureFingerprintScannerStepAriaLabel",
-        l10n_util::GetStringFUTF16(aria_label_id, ui::GetChromeOSDeviceName()));
-  } else {
-    html_source->AddLocalizedString("configureFingerprintScannerStepAriaLabel",
-                                    aria_label_id);
-  }
+  if (are_fingerprint_settings_allowed)
+    quick_unlock::AddFingerprintResources(html_source);
+
+  auto fp_setup_strings = quick_unlock::GetFingerprintDescriptionStrings(
+      quick_unlock::GetFingerprintLocation());
+  html_source->AddString(
+      "configureFingerprintInstructionLocateScannerStep",
+      l10n_util::GetStringFUTF16(fp_setup_strings.description_id,
+                                 ui::GetChromeOSDeviceName()));
 }
 
 void AddSetupFingerprintDialogStrings(content::WebUIDataSource* html_source) {
@@ -447,6 +384,13 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"syncEverythingCheckboxLabel",
        IDS_SETTINGS_SYNC_EVERYTHING_CHECKBOX_LABEL},
+      {"syncAdvancedPageTitle", IDS_SETTINGS_NEW_SYNC_ADVANCED_PAGE_TITLE},
+      {"syncEverythingCheckboxLabel",
+       IDS_SETTINGS_SYNC_EVERYTHING_CHECKBOX_LABEL},
+      {"nonPersonalizedServicesSectionLabel",
+       IDS_SETTINGS_NON_PERSONALIZED_SERVICES_SECTION_LABEL},
+      {"customizeSyncLabel", IDS_SETTINGS_CUSTOMIZE_SYNC},
+      {"syncData", IDS_SETTINGS_SYNC_DATA},
       {"wallpaperCheckboxLabel", IDS_OS_SETTINGS_WALLPAPER_CHECKBOX_LABEL},
       {"osSyncTurnOff", IDS_OS_SETTINGS_SYNC_TURN_OFF},
       {"osSyncSettingsCheckboxLabel",
@@ -458,6 +402,11 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_SYNC_APPS_CHECKBOX_SUBLABEL},
       {"osSyncTurnOn", IDS_OS_SETTINGS_SYNC_TURN_ON},
       {"osSyncFeatureLabel", IDS_OS_SETTINGS_SYNC_FEATURE_LABEL},
+      {"spellingPref", IDS_SETTINGS_SPELLING_PREF},
+      {"spellingDescription", IDS_SETTINGS_SPELLING_PREF_DESC},
+      {"enablePersonalizationLogging", IDS_SETTINGS_ENABLE_LOGGING_PREF},
+      {"enablePersonalizationLoggingDesc",
+       IDS_SETTINGS_ENABLE_LOGGING_PREF_DESC},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -542,7 +491,7 @@ PeopleSection::PeopleSection(Profile* profile,
       identity_manager_(identity_manager),
       pref_service_(pref_service) {
   // No search tags are registered if in guest mode.
-  if (features::IsGuestModeActive())
+  if (IsGuestModeActive())
     return;
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
@@ -561,7 +510,7 @@ PeopleSection::PeopleSection(Profile* profile,
     DCHECK(account_manager_facade_);
     account_manager_facade_observation_.Observe(account_manager_facade_);
     account_apps_availability_ =
-        ash::AccountAppsAvailabilityFactory::GetForProfile(profile);
+        AccountAppsAvailabilityFactory::GetForProfile(profile);
     FetchAccounts();
   }
 
@@ -569,7 +518,7 @@ PeopleSection::PeopleSection(Profile* profile,
 
   // Parental control search tags are added if necessary and do not update
   // dynamically during a user session.
-  if (features::ShouldShowParentalControlSettings(profile))
+  if (ShouldShowParentalControlSettings(profile))
     updater.AddSearchTags(GetParentalSearchConcepts());
 }
 
@@ -647,14 +596,12 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddSetupPinDialogStrings(html_source);
   AddSyncControlsStrings(html_source);
   AddUsersStrings(html_source);
-  AddParentalControlStrings(
-      html_source, features::ShouldShowParentalControlSettings(profile()),
-      supervised_user_service_);
+  AddParentalControlStrings(html_source,
+                            ShouldShowParentalControlSettings(profile()),
+                            supervised_user_service_);
 
-  ::settings::AddSyncControlsStrings(html_source);
-  ::settings::AddSyncAccountControlStrings(html_source);
   ::settings::AddPasswordPromptDialogStrings(html_source);
-  ::settings::AddSyncPageStrings(html_source);
+  ::settings::AddSharedSyncPageStrings(html_source);
 }
 
 void PeopleSection::AddHandlers(content::WebUI* web_ui) {
@@ -677,7 +624,7 @@ void PeopleSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<FingerprintHandler>(profile()));
 
   if (!profile()->IsGuestSession() &&
-      features::ShouldShowParentalControlSettings(profile())) {
+      ShouldShowParentalControlSettings(profile())) {
     web_ui->AddMessageHandler(
         std::make_unique<ParentalControlsHandler>(profile()));
   }
@@ -809,5 +756,4 @@ bool PeopleSection::AreFingerprintSettingsAllowed() {
                                             quick_unlock::Purpose::kAny);
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

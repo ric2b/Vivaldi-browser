@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/sys_byteorder.h"
 #include "base/task/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
@@ -83,8 +84,7 @@ std::vector<uint8_t> GenerateEsdsMagicCookie(
   EncodeDescriptorSize(aac_extra_data.size(),
                        esds->decoder_config.extra_data.size);
 
-  std::copy(aac_extra_data.begin(), aac_extra_data.end(),
-            esds_data.begin() + sizeof(ESDescriptor));
+  base::ranges::copy(aac_extra_data, esds_data.begin() + sizeof(ESDescriptor));
 
   DCHECK(mp4::ESDescriptor().Parse(esds_data));
   return esds_data;
@@ -128,16 +128,25 @@ OSStatus ProvideInputCallback(AudioConverterRef decoder,
 
 }  // namespace
 
-AudioToolboxAudioDecoder::AudioToolboxAudioDecoder() = default;
+// static
+AudioConverterRef
+AudioToolboxAudioDecoder::ScopedAudioConverterRefTraits::Retain(
+    AudioConverterRef converter) {
+  NOTREACHED() << "Only compatible with ASSUME policy";
+  return converter;
+}
 
-AudioToolboxAudioDecoder::~AudioToolboxAudioDecoder() {
-  if (!decoder_)
-    return;
-
-  const auto result = AudioConverterDispose(decoder_);
+// static
+void AudioToolboxAudioDecoder::ScopedAudioConverterRefTraits::Release(
+    AudioConverterRef converter) {
+  const auto result = AudioConverterDispose(converter);
   OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
       << "AudioConverterDispose() failed";
 }
+
+AudioToolboxAudioDecoder::AudioToolboxAudioDecoder() = default;
+
+AudioToolboxAudioDecoder::~AudioToolboxAudioDecoder() = default;
 
 AudioDecoderType AudioToolboxAudioDecoder::GetDecoderType() const {
   return AudioDecoderType::kAudioToolbox;
@@ -160,10 +169,13 @@ void AudioToolboxAudioDecoder::Initialize(const AudioDecoderConfig& config,
     return;
   }
 
+  // This decoder supports re-initialization.
+  decoder_.reset();
+
   output_cb_ = output_cb;
   BindToCurrentLoop(std::move(init_cb))
       .Run(CreateAACDecoder(config)
-               ? OkStatus()
+               ? DecoderStatus::Codes::kOk
                : DecoderStatus::Codes::kFailedToCreateDecoder);
 }
 
@@ -280,7 +292,8 @@ bool AudioToolboxAudioDecoder::CreateAACDecoder(
       output_format.mBitsPerChannel / 8;
 
   // Create the decoder.
-  auto result = AudioConverterNew(&input_format, &output_format, &decoder_);
+  auto result = AudioConverterNew(&input_format, &output_format,
+                                  decoder_.InitializeInto());
   if (result != noErr) {
     OSSTATUS_DLOG(ERROR, result) << "AudioConverterNew() failed";
     return false;

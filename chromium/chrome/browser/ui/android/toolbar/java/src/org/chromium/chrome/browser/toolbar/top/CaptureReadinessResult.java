@@ -8,6 +8,7 @@ import androidx.annotation.IntDef;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.top.ToolbarSnapshotState.ToolbarSnapshotDifference;
 
 import java.lang.annotation.Retention;
@@ -66,7 +67,7 @@ public class CaptureReadinessResult {
         int TAB_SWITCHER_MODE = 10;
         int COMPOSITOR_IN_MOTION = 11;
         // TODO(https://crbug.com/1324678): NATIVE_PAGE.
-        int NUM_ENTRIES = 11;
+        int NUM_ENTRIES = 12;
     }
 
     public static CaptureReadinessResult readyForced() {
@@ -102,6 +103,10 @@ public class CaptureReadinessResult {
     }
 
     public static void logCaptureReasonFromResult(CaptureReadinessResult result) {
+        if (!ToolbarFeatures.shouldRecordSuppressionMetrics()) {
+            return;
+        }
+
         // The Java -> C++ layer makes passing enums tricky so we store the integer value and then
         // convert it to a proto enum on the C++ side. If we pass a -1 we will not set that
         // corresponding field.

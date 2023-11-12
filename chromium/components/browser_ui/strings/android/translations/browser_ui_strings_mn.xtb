@@ -20,6 +20,7 @@
 <translation id="1415402041810619267">URL-г танасан</translation>
 <translation id="1426410128494586442">Тийм</translation>
 <translation id="1446450296470737166">MIDI төхөөрөмжийг бүрэн хянахыг зөвшөөрөх</translation>
+<translation id="1448064542941920355">Томруулалтыг багасгах</translation>
 <translation id="1620510694547887537">Камер</translation>
 <translation id="1633720957382884102">Холбоотой сайтууд</translation>
 <translation id="1644574205037202324">Түүх</translation>
@@ -49,8 +50,8 @@
 <translation id="2079545284768500474">Буцаах</translation>
 <translation id="2091887806945687916">Дуу</translation>
 <translation id="2107397443965016585">Сайтад хамгаалагдсан контент тоглуулахыг зөвшөөрөхөөс өмнө асуух (санал болгосон)</translation>
-<translation id="2146738493024040262">Шуурхай апп-г нээх</translation>
 <translation id="2148716181193084225">Өнөөдөр</translation>
+<translation id="216989819110952009">Дороти болон түүний нөхөд ногоон өнгийн шилээр нүдээ хамгаалсан байсан ч гайхамшигт хотын гялтганах гэрэлд нүд гялбаж байлаа.</translation>
 <translation id="2182457891543959921">Сайтуудад таны эргэн тойрны 3D газрын зургийг үүсгэх эсвэл камерын хөдөлгөөнийг хянахыг зөвшөөрөхийн өмнө асуух (санал болгосон)</translation>
 <translation id="2212565012507486665">Күүкиг зөвшөөрөх</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" />-д камертаа хандахыг зөвшөөрөхийн тулд камерыг мөн <ph name="BEGIN_LINK" />Андройдын тохиргоо<ph name="END_LINK" />-нд асаана уу.</translation>
@@ -64,6 +65,7 @@
 <translation id="2359808026110333948">Цааш</translation>
 <translation id="2379925928934107488">Боломжтой бол Chrome бараан загвар ашигласан тохиолдолд сайтуудад бараан загвар ашиглана уу</translation>
 <translation id="2387895666653383613">Текстийн хэмжээс</translation>
+<translation id="2390272837142897736">Томруулалтыг нэмэх</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> МБ</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> болон бусад <ph name="NUM_MORE" />-г зөвшөөрсөн}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> болон бусад <ph name="NUM_MORE" />-г зөвшөөрсөн}}</translation>
 <translation id="2434158240863470628">Татаж дууссан <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -112,11 +114,13 @@
 <translation id="3248611290851046188">Энэ сайт бусад сайтын танд зар харуулахын тулд ашиглаж болох сонирхлыг тодорхойлно. Энэ сайт мөн танд илүү хамааралтай зар харуулахын тулд таны сонирхлуудыг Chrome-с авдаг.</translation>
 <translation id="3277252321222022663">Сайтуудад мэдрэгчид хандахыг зөвшөөрөх (санал болгосон)</translation>
 <translation id="3285500645985761267">Холбоотой сайтуудад таны бүлэг дэх үйл ажиллагааг харахыг зөвшөөрнө үү</translation>
+<translation id="3295019059349372795">11-р бүлэг: Озын Гайхамшигт Маргад эрдэнийн хот</translation>
 <translation id="3295602654194328831">Мэдээллийг нуух</translation>
 <translation id="3328801116991980348">Сайтын мэдээлэл</translation>
 <translation id="3333961966071413176">Бүх харилцагч</translation>
 <translation id="3362437373201486687">Bluetooth төхөөрөмжүүдийг скан хийж байна</translation>
 <translation id="3386292677130313581">Сайтууд байршил мэдэх зөвшөөрөл авах (санал болгосон)</translation>
+<translation id="3403537308306431953"><ph name="ZOOM_LEVEL" /> %%</translation>
 <translation id="3521663503435878242"><ph name="DOMAIN" />-н сайтууд</translation>
 <translation id="3538390592868664640">Сайтуудад таны эргэн тойрны 3D газрын зургийг үүсгэх эсвэл камерын хөдөлгөөнийг хянахыг хориглох</translation>
 <translation id="3544058026430919413">Таны үйл ажиллагааг бүлэгт хуваалцахын тулд күүки ашиглах боломжтой сайтуудын бүлгийг компаниас тодорхойлох боломжтой. Энэ нь Нууцлалтай горимд унтраалттай.</translation>
@@ -126,6 +130,7 @@
 <translation id="3594780231884063836">Видеоны дууг хаах</translation>
 <translation id="3596414637720633074">Нууцлалтай горимд гуравдагч талын күүкиг блоклох</translation>
 <translation id="3600792891314830896">Дуу тоглуулдаг сайтуудын дууг хаах</translation>
+<translation id="3602290021589620013">Мэдээллийг урьдчилж харах</translation>
 <translation id="3628308229821498208">Санал болгосон хайлтууд</translation>
 <translation id="3744111561329211289">Дэвсгэрт синк хийх</translation>
 <translation id="3763247130972274048">10 секунд алгасахын тулд видеоны зүүн эсвэл баруун талд хоёр товшино уу</translation>
@@ -160,6 +165,7 @@
 <translation id="4402755511846832236">Сайтуудыг таныг энэ төхөөрөмжийг хэзээ идэвхтэй ашиглаж буйг мэдэхийг нь блоклоно</translation>
 <translation id="4428065317363009941">Сонирхсон зарын тохируулга</translation>
 <translation id="4434045419905280838">Попап болон дахин чиглүүлэлт</translation>
+<translation id="4440642537584213025"><ph name="TARGET_DESCRIPTION" />-г дэлгэнэ үү</translation>
 <translation id="445467742685312942">Сайтуудад хамгаалагдсан контент тоглуулахыг зөвшөөрөх</translation>
 <translation id="4468959413250150279">Тодорхой сайтын дууг хаана уу.</translation>
 <translation id="4475912480633855319">{COOKIES,plural, =1{# күүки}other{# күүки}}</translation>
@@ -171,6 +177,7 @@
 <translation id="4645575059429386691">Эцэг, эх нь хариуцаж байна</translation>
 <translation id="4670064810192446073">Виртуал бодит байдал</translation>
 <translation id="4751476147751820511">Хөдөлгөөн эсвэл гэрэл мэдрэгч</translation>
+<translation id="4779083564647765204">Томруулж харах</translation>
 <translation id="4811450222531576619">Үүний эх сурвалж болон сэдвийн талаар мэдэж авах</translation>
 <translation id="4836046166855586901">Сайтыг таныг энэ төхөөрөмжийг хэзээ идэвхтэй ашиглаж буйг мэдэхийг хүссэн үед асууна</translation>
 <translation id="483914009762354899">Энэ домэйн дор байгаа бүх сайтыг оруулах</translation>
@@ -186,7 +193,6 @@
 <translation id="5048398596102334565">Сайтад хөдөлгөөн мэдрэгчид хандахыг зөвшөөрөх (санал болгосон)</translation>
 <translation id="5050380848339752099">Энэ сайт Нууцлалтай горимоос гадуур апптай мэдээлэл хуваалцах гэж байна.</translation>
 <translation id="5063480226653192405">Ашиглалт</translation>
-<translation id="5082281938627763039">Энэ нь <ph name="FPS_MEMBER" />-н болон <ph name="FPS_OWNER" />-н бүлэг сайтууд дахь сайтын күүки, сайтын бусад өгөгдлийг устгана</translation>
 <translation id="5091013926750941408">Мобайл сайт</translation>
 <translation id="509133520954049755">Дэлгэц дээр харагдах байдлаар харах хүсэлт тавих</translation>
 <translation id="5100237604440890931">Задарсан, энд дарж өргөтгөнө үү.</translation>
@@ -200,7 +206,6 @@
 <translation id="528192093759286357">Бүтэн дэлгэцийн горимоос гарахын тулд дээрээс зөөгөөд, буцах товчлуурыг дарна уу.</translation>
 <translation id="5300589172476337783">Харуулах</translation>
 <translation id="5301954838959518834">OK, ойлголоо</translation>
-<translation id="5313967007315987356">Сайт нэмэх</translation>
 <translation id="5317780077021120954">Хадгалах</translation>
 <translation id="5335288049665977812">Сайтад JavaScript-г ажиллуулахыг зөвшөөрөх (санал болгосон)</translation>
 <translation id="534295439873310000">NFC төхөөрөмжүүд</translation>
@@ -234,9 +239,11 @@
 <translation id="5922853908706496913">Таны дэлгэцийг хуваалцаж байна</translation>
 <translation id="5922967540311291836">Гуравдагч талын күүкиг блоклох:</translation>
 <translation id="5939518447894949180">Дахин сэргээх</translation>
+<translation id="5968921426641056619">Веб хаяг оруулна уу</translation>
 <translation id="5975083100439434680">Багасгаж харах</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> - <ph name="WARNING_MESSAGE" /></translation>
 <translation id="6015775454662021376">Таны төхөөрөмж рүү хандах энэ сайтын хандалтыг удирдах</translation>
+<translation id="6018815681665454784">Цэвэрлэж, шинэчлэх үү?</translation>
 <translation id="6040143037577758943">Хаах</translation>
 <translation id="6042308850641462728">Илүү их</translation>
 <translation id="6064125863973209585">Татаж дууссан файл</translation>
@@ -259,6 +266,7 @@
 <translation id="6405650995156823521"><ph name="FIRST_PART" /> • <ph name="SECOND_PART" /></translation>
 <translation id="6439114592976064011">Сайтуудад таны виртуал бодит байдлын төхөөрөмж болон өгөгдлийг ашиглахыг хориглох</translation>
 <translation id="6447842834002726250">Cookies</translation>
+<translation id="6453641458248223456">Үндсэн цэсээс хуудсыг томруулах эсвэл жижгэрүүлээрэй</translation>
 <translation id="6467852467360539617">Өгөгдлийг цуцлаад зөвшөөрлийг шинэчлэх</translation>
 <translation id="6527303717912515753">Хуваалцах</translation>
 <translation id="6545864417968258051">Bluetooth скан хийх</translation>
@@ -299,6 +307,7 @@
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" />-г сонгосон</translation>
 <translation id="7260727271532453612"><ph name="PERMISSION_1" /> болон <ph name="PERMISSION_2" />-г зөвшөөрсөн</translation>
 <translation id="7302486331832100261">Та ихэвчлэн мэдэгдлийг хориглодог. Зөвшөөрөхийн тулд Дэлгэрэнгүй мэдээлэл дээр товшино уу.</translation>
+<translation id="7366415735885268578">Сайт нэмэх</translation>
 <translation id="7383715096023715447"><ph name="DOMAIN" />-н тохиргоо</translation>
 <translation id="7423098979219808738">Эхлээд асуу</translation>
 <translation id="7423538860840206698">Түр санах ойгоос уншихыг хориглосон</translation>
@@ -312,6 +321,10 @@
 <translation id="7641339528570811325">Хайлтын өгөгдлийг цэвэрлэх...</translation>
 <translation id="7649070708921625228">Тусламж</translation>
 <translation id="7658239707568436148">Болих</translation>
+<translation id="7667547420449112975">Озын Гайхамшигт шидтэн</translation>
+<translation id="7690549345586282764">Томруулалтыг харуулах</translation>
+<translation id="7695658402549134106"><ph name="SITE_NAME" />-н сайтын сонголт</translation>
+<translation id="7719367874908701697">Хуудсыг томруулах</translation>
 <translation id="7781829728241885113">Өчигдөр</translation>
 <translation id="7791543448312431591">Нэмэх</translation>
 <translation id="780301667611848630">Үгүй, баярлалаа</translation>
@@ -337,6 +350,7 @@
 <translation id="813082847718468539">Сайтын мэдээллийг үзэх</translation>
 <translation id="8131740175452115882">Батлах</translation>
 <translation id="8154912474061769055">Олон сайтын онцлогууд ажиллахгүй байж болзошгүй</translation>
+<translation id="8168435359814927499">Агуулга</translation>
 <translation id="8197286292360124385"><ph name="PERMISSION_1" />-г зөвшөөрсөн</translation>
 <translation id="8200772114523450471">Сэргээх</translation>
 <translation id="8206354486702514201">Энэ тохиргоог таны админаас идэвхжүүлсэн байна.</translation>
@@ -353,6 +367,7 @@
 <translation id="8380167699614421159">Энэ сайт төвөгтэй эсвэл хуурамч зар харуулдаг</translation>
 <translation id="8394832520002899662">Сайт руу буцахын тулд товшино уу</translation>
 <translation id="8409345997656833551">Нийтлэлийг хялбаршуулсан харагдах байдлаар харуулах боломжтой болох үед мэдэгдэл авна уу</translation>
+<translation id="8423565414844018592">Текстийн хэмжээсийг <ph name="TEXT_SCALING" /> болгож тохируулсан</translation>
 <translation id="8428213095426709021">Тохиргоо</translation>
 <translation id="8441146129660941386">Буцаж хайх</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" />-д таны байршилд хандахыг зөвшөөрөхийн тулд байршлыг мөн <ph name="BEGIN_LINK" />Андройдын тохиргоо<ph name="END_LINK" />-нд асаана уу.</translation>
@@ -383,16 +398,17 @@
 <translation id="8921772741368021346"><ph name="POSITION" /> / <ph name="DURATION" /></translation>
 <translation id="8926666909099850184">Энэ төхөөрөмж дээр NFC унтраалттай байна. Үүнийг <ph name="BEGIN_LINK" />Android-н тохиргоо<ph name="END_LINK" /> хэсэгт асаана уу.</translation>
 <translation id="8928445016601307354">Сайтуудыг NFC төхөөрөмжүүд дээрх мэдээллийг харах болон өөрчлөхийг блоклох</translation>
-<translation id="8941729603749328384">www.example.com</translation>
 <translation id="8958424370300090006">Күүкиг тодорхой сайтад хориглоно уу.</translation>
 <translation id="8959122750345127698">Навигацтай холбогдох боломжгүй байна: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Мартах</translation>
+<translation id="900095568014372589">Сайт дээрх өгөгдмөл текст болон зургийг жижгэрүүлэх эсвэл томруулаарай</translation>
 <translation id="9019902583201351841">Эцэг, эх нь хариуцан удирдаж байна</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9090268041676521955">Энэ сайт таны үйл ажиллагааг харах боломжтой бүлэгт байна. Бүлгийг <ph name="FPS_OWNER" />-с тодорхойлсон</translation>
 <translation id="9106233582039520022">Күүкиг устгах уу?</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> болон бусад <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> болон бусад <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289"><ph name="APP_NAME" />-н зөвшөөрлийг <ph name="BEGIN_LINK" />Андройдын тохиргоо<ph name="END_LINK" />-нд асаана уу.</translation>
+<translation id="9138217887606523162">Одоогийн томруулалт <ph name="ZOOM_LEVEL" /> %% байна</translation>
 <translation id="9162462602695099906">Энэ хуудас аюултай байна</translation>
 <translation id="930525582205581608">Энэ сайтыг мартах уу?</translation>
 <translation id="967624055006145463">Хадгалсан өгөгдөл</translation>

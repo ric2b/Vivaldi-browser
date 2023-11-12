@@ -164,19 +164,25 @@ RenderProcessImpl::RenderProcessImpl()
 
 #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
   SetV8FlagIfFeature(features::kEnableExperimentalWebAssemblyStackSwitching,
-                     "--experimental-wasm-type-reflection");
-  SetV8FlagIfFeature(features::kEnableExperimentalWebAssemblyStackSwitching,
                      "--experimental-wasm-stack-switching");
+  SetV8FlagIfNotFeature(features::kEnableExperimentalWebAssemblyStackSwitching,
+                        "--no-experimental-wasm-stack-switching");
 #endif  // defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
+
+  SetV8FlagIfFeature(features::kWebAssemblyGarbageCollection,
+                     "--experimental-wasm-gc");
+  SetV8FlagIfNotFeature(features::kWebAssemblyGarbageCollection,
+                        "--no-experimental-wasm-gc");
 
   SetV8FlagIfFeature(features::kWebAssemblyLazyCompilation,
                      "--wasm-lazy-compilation");
   SetV8FlagIfNotFeature(features::kWebAssemblyLazyCompilation,
                         "--no-wasm-lazy-compilation");
 
-  SetV8FlagIfFeature(features::kWebAssemblySimd, "--experimental-wasm-simd");
-  SetV8FlagIfNotFeature(features::kWebAssemblySimd,
-                        "--no-experimental-wasm-simd");
+  SetV8FlagIfFeature(features::kWebAssemblyRelaxedSimd,
+                     "--experimental-wasm-relaxed-simd");
+  SetV8FlagIfNotFeature(features::kWebAssemblyRelaxedSimd,
+                        "--no-experimental-wasm-relaxed-simd");
 
   constexpr char kImportAssertionsFlag[] = "--harmony-import-assertions";
   v8::V8::SetFlagsFromString(kImportAssertionsFlag,

@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.test_support;
 
-import android.os.Build;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
@@ -256,9 +255,17 @@ public class PaymentRequestTestBridge {
 
     @CalledByNative
     private static boolean closeDialogForTest() {
+        SecurePaymentConfirmationAuthnController authnUi =
+                PaymentRequestService.getSecurePaymentConfirmationAuthnUiForTesting();
+        if (authnUi != null) return authnUi.cancelForTest();
+
         SecurePaymentConfirmationNoMatchingCredController noMatchingUi =
                 PaymentRequestService.getSecurePaymentConfirmationNoMatchingCredUiForTesting();
-        if (noMatchingUi != null) noMatchingUi.close();
+        if (noMatchingUi != null) {
+            noMatchingUi.close();
+            return true;
+        }
+
         return sUiService == null || sUiService.closeDialogForTest();
     }
 
@@ -271,13 +278,6 @@ public class PaymentRequestTestBridge {
                 PaymentRequestService.getSecurePaymentConfirmationNoMatchingCredUiForTesting();
         if (noMatchingUi != null) return noMatchingUi.optOutForTest();
         return false;
-    }
-
-    @CalledByNative
-    private static boolean isAndroidMarshmallowOrLollipopForTest() {
-        return Build.VERSION.SDK_INT == Build.VERSION_CODES.M
-                || Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP
-                || Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP_MR1;
     }
 
     /**

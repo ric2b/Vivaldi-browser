@@ -4,10 +4,12 @@
 
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "gin/array_buffer.h"
 #include "gin/public/isolate_holder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -18,7 +20,7 @@ class DOMArrayBufferTest : public testing::Test {
     gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
                                    gin::ArrayBufferAllocator::SharedInstance());
     isolate_holder_ = std::make_unique<gin::IsolateHolder>(
-        base::ThreadTaskRunnerHandle::Get(),
+        scheduler::GetSingleThreadTaskRunnerForTesting(),
         gin::IsolateHolder::IsolateType::kBlinkWorkerThread);
   }
 
@@ -31,19 +33,23 @@ class DOMArrayBufferTest : public testing::Test {
 };
 
 TEST_F(DOMArrayBufferTest, TransferredArrayBufferIsDetached) {
+  V8TestingScope v8_scope;
   ArrayBufferContents src(10, 4, ArrayBufferContents::kNotShared,
                           ArrayBufferContents::kZeroInitialize);
   auto* buffer = DOMArrayBuffer::Create(src);
-  ArrayBufferContents dst(nullptr, 0, nullptr);
-  buffer->Transfer(isolate(), dst);
+  ArrayBufferContents dst;
+  ASSERT_TRUE(buffer->Transfer(isolate(), dst, v8_scope.GetExceptionState()));
+  ASSERT_FALSE(v8_scope.GetExceptionState().HadException());
   ASSERT_EQ(true, buffer->IsDetached());
 }
 
 TEST_F(DOMArrayBufferTest, TransferredEmptyArrayBufferIsDetached) {
-  ArrayBufferContents src(nullptr, 0, nullptr);
+  V8TestingScope v8_scope;
+  ArrayBufferContents src;
   auto* buffer = DOMArrayBuffer::Create(src);
-  ArrayBufferContents dst(nullptr, 0, nullptr);
-  buffer->Transfer(isolate(), dst);
+  ArrayBufferContents dst;
+  ASSERT_TRUE(buffer->Transfer(isolate(), dst, v8_scope.GetExceptionState()));
+  ASSERT_FALSE(v8_scope.GetExceptionState().HadException());
   ASSERT_EQ(true, buffer->IsDetached());
 }
 

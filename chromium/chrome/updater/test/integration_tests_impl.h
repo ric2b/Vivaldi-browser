@@ -13,7 +13,6 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -107,6 +106,10 @@ void Uninstall(UpdaterScope scope);
 // `exit_code`. The server should exit a few seconds after.
 void RunWake(UpdaterScope scope, int exit_code);
 
+// Runs the wake-all client and wait for it to exit. Assert that it exits with
+// kErrorOk. The server should exit a few seconds after.
+void RunWakeAll(UpdaterScope scope);
+
 // As RunWake, but runs the wake client for whatever version of the server is
 // active, rather than kUpdaterVersion.
 void RunWakeActive(UpdaterScope scope, int exit_code);
@@ -170,6 +173,12 @@ void SetExistenceCheckerPath(UpdaterScope scope,
                              const base::FilePath& path);
 
 void SetServerStarts(UpdaterScope scope, int value);
+
+// Writes lots of data into the log file.
+void FillLog(UpdaterScope scope);
+
+// Confirms that an old log file exists and that the current log file is small.
+void ExpectLogRotated(UpdaterScope scope);
 
 void ExpectRegistered(UpdaterScope scope, const std::string& app_id);
 

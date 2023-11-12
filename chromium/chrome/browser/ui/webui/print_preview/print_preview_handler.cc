@@ -44,7 +44,6 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_metrics.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
-#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pref_names.h"
@@ -666,9 +665,6 @@ void PrintPreviewHandler::HandleGetPreview(const base::Value::List& args) {
   settings.Set(kPreviewUIID,
                print_preview_ui()->GetIDForPrintPreviewUI().value());
 
-  // Increment request count.
-  ++regenerate_preview_request_count_;
-
   WebContents* initiator = GetInitiator();
   RenderFrameHost* rfh =
       initiator
@@ -711,8 +707,6 @@ void PrintPreviewHandler::HandleGetPreview(const base::Value::List& args) {
 }
 
 void PrintPreviewHandler::HandlePrint(const base::Value::List& args) {
-  ReportRegeneratePreviewRequestCountBeforePrint(
-      regenerate_preview_request_count_);
   CHECK(args[0].is_string());
   const std::string& callback_id = args[0].GetString();
   CHECK(!callback_id.empty());
@@ -808,9 +802,6 @@ void PrintPreviewHandler::HandleShowSystemDialog(
 void PrintPreviewHandler::HandleClosePreviewDialog(
     const base::Value::List& /*args*/) {
   ReportUserActionHistogram(UserActionBuckets::kCancel);
-
-  ReportRegeneratePreviewRequestCountBeforeCancel(
-      regenerate_preview_request_count_);
 }
 
 void PrintPreviewHandler::GetLocaleInformation(base::Value::Dict* settings) {
@@ -1042,14 +1033,13 @@ void PrintPreviewHandler::SendPageCountReady(int page_count,
                     base::Value(request_id), base::Value(fit_to_page_scaling));
 }
 
-void PrintPreviewHandler::SendPageLayoutReady(
-    const base::DictionaryValue& layout,
-    bool has_custom_page_size_style,
-    int request_id) {
+void PrintPreviewHandler::SendPageLayoutReady(base::Value::Dict layout,
+                                              bool has_custom_page_size_style,
+                                              int request_id) {
   if (!ShouldReceiveRendererMessage(request_id))
     return;
 
-  FireWebUIListener("page-layout-ready", layout,
+  FireWebUIListener("page-layout-ready", std::move(layout),
                     base::Value(has_custom_page_size_style));
 }
 
@@ -1079,8 +1069,8 @@ void PrintPreviewHandler::OnPrintPreviewCancelled(int request_id) {
 }
 
 void PrintPreviewHandler::OnPrintRequestCancelled() {
-  base::Value empty(base::Value::Type::LIST);
-  HandleCancelPendingPrintRequest(empty.GetList());
+  base::Value::List empty;
+  HandleCancelPendingPrintRequest(empty);
 }
 
 void PrintPreviewHandler::ClearInitiatorDetails() {

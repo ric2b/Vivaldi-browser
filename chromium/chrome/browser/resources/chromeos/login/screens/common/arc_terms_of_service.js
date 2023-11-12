@@ -13,25 +13,25 @@ import '//resources/js/action_link.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/paper-styles/color.js';
 import '../../components/oobe_icons.m.js';
-import '../../components/common_styles/common_styles.m.js';
+import '../../components/common_styles/oobe_common_styles.m.js';
 import '../../components/common_styles/oobe_dialog_host_styles.m.js';
-import '../../components/dialogs/oobe_adaptive_dialog.m.js';
-import '../../components/dialogs/oobe_loading_dialog.m.js';
-import '../../components/dialogs/oobe_modal_dialog.m.js';
+import '../../components/dialogs/oobe_loading_dialog.js';
 
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
+import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
 import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.m.js';
-import {OobeTextButton} from '../../components/buttons/oobe_text_button.m.js';
-import {OOBE_UI_STATE} from '../../components/display_manager_types.m.js';
-import {getSelectedValue} from '../../components/oobe_select.m.js';
-import {OobeTypes} from '../../components/oobe_types.m.js';
-import {WebViewHelper} from '../../components/web_view_helper.m.js';
-import {CLEAR_ANCHORS_CONTENT_SCRIPT, WebViewLoader} from '../../components/web_view_loader.m.js';
-import {Oobe} from '../../cr_ui.m.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeTextButton} from '../../components/buttons/oobe_text_button.js';
+import {OobeAdaptiveDialog} from '../../components/dialogs/oobe_adaptive_dialog.js';
+import {OobeModalDialog} from '../../components/dialogs/oobe_modal_dialog.js';
+import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
+import {getSelectedValue} from '../../components/oobe_select.js';
+import {OobeTypes} from '../../components/oobe_types.js';
+import {ContentType, WebViewHelper} from '../../components/web_view_helper.js';
+import {CLEAR_ANCHORS_CONTENT_SCRIPT, WebViewLoader} from '../../components/web_view_loader.js';
+import {Oobe} from '../../cr_ui.js';
 
 
 // Enum that describes the current state of the Arc Terms Of Service screen
@@ -59,21 +59,21 @@ const ArcTermsOfserviceBase = mixinBehaviors(
 
 /**
  * @typedef {{
- *   arcBackupRestoreChildPopup: OobeModalDialogElement,
- *   arcBackupRestorePopup: OobeModalDialogElement,
- *   arcLocationServicePopup: OobeModalDialogElement,
- *   arcMetricsPopup: OobeModalDialogElement,
+ *   arcBackupRestoreChildPopup: OobeModalDialog,
+ *   arcBackupRestorePopup: OobeModalDialog,
+ *   arcLocationServicePopup: OobeModalDialog,
+ *   arcMetricsPopup: OobeModalDialog,
  *   arcTosAcceptButton: OobeTextButton,
- *   arcTosDialog: OobeAdaptiveDialogElement,
+ *   arcTosDialog: OobeAdaptiveDialog,
  *   arcTosNextButton: OobeTextButton,
- *   arcTosOverlayPrivacyPolicy: OobeModalDialogElement,
+ *   arcTosOverlayPrivacyPolicy: OobeModalDialog,
  *   arcTosOverlayWebview: WebView,
  *   arcTosRetryButton: OobeTextButton,
  *   arcTosView: WebView,
- *   arcPaiPopup: OobeModalDialogElement,
+ *   arcPaiPopup: OobeModalDialog,
  * }}
  */
- ArcTermsOfserviceBase.$;
+ArcTermsOfserviceBase.$;
 
 /**
  * @polymer
@@ -378,8 +378,8 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
     termsView.addContentScripts([{
       name: 'postProcess',
       matches: [this.getTermsOfServiceHostNameForMatchPattern_() + '/*'],
-      css: {files: ['playstore.css']},
-      js: {files: ['playstore.js']},
+      css: {files: ['arc_support/playstore.css']},
+      js: {files: ['arc_support/playstore.js']},
       run_at: 'document_end',
     }]);
 
@@ -387,7 +387,7 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
     overlayUrl.addContentScripts([{
       name: 'postProcess',
       matches: ['https://support.google.com/*'],
-      css: {files: ['overlay.css']},
+      css: {files: ['arc_support/overlay.css']},
       run_at: 'document_end',
     }]);
   }
@@ -401,7 +401,7 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
       const TERMS_URL = 'chrome://terms/arc/privacy_policy';
       WebViewHelper.loadUrlContentToWebView(
           this.$.arcTosOverlayWebview, TERMS_URL,
-          WebViewHelper.ContentType.PDF);
+          ContentType.PDF);
     } else {
       const overlayWebview = this.$.arcTosOverlayWebview;
       if (this.isDemoModeSetup_()) {
@@ -545,15 +545,15 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
     this.termsOfServiceHostName_ = hostname;
     this.reloadsLeftForTesting_ = 1;
 
-    // Enable loading content script 'playstore.js' when fetching ToS from
-    // the test server.
+    // Enable loading content script 'arc_support/playstore.js' when fetching
+    // ToS from the test server.
     var termsView = this.$.arcTosView;
     termsView.removeContentScripts(['postProcess']);
     termsView.addContentScripts([{
       name: 'postProcess',
       matches: [this.getTermsOfServiceHostNameForMatchPattern_() + '/*'],
-      css: {files: ['playstore.css']},
-      js: {files: ['playstore.js']},
+      css: {files: ['arc_support/playstore.css']},
+      js: {files: ['arc_support/playstore.js']},
       run_at: 'document_end',
     }]);
   }
@@ -615,7 +615,7 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
         const TERMS_URL = 'chrome://terms/arc/terms';
         const webView = this.$.arcTosView;
         WebViewHelper.loadUrlContentToWebView(
-            webView, TERMS_URL, WebViewHelper.ContentType.HTML);
+            webView, TERMS_URL, ContentType.HTML);
         return;
       }
       this.showError_();
@@ -681,7 +681,7 @@ class ArcTermsOfService extends ArcTermsOfserviceBase {
               'Set parameteters failed: ' + chrome.runtime.lastError.message);
         }
       });
-      termsView.insertCSS({file: 'playstore.css'});
+      termsView.insertCSS({file: 'arc_support/playstore.css'});
       this.setTermsViewContentLoadedState_();
     } else {
       // Process online ToS.

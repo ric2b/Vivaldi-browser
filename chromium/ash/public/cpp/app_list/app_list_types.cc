@@ -23,6 +23,7 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
     case AppListSearchResultType::kArcAppShortcut:
     case AppListSearchResultType::kInstantApp:
     case AppListSearchResultType::kGames:
+    case AppListSearchResultType::kZeroStateApp:
       return true;
     case AppListSearchResultType::kUnknown:
     case AppListSearchResultType::kOmnibox:
@@ -30,9 +31,6 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
     case AppListSearchResultType::kAnswerCard:
     case AppListSearchResultType::kZeroStateFile:
     case AppListSearchResultType::kZeroStateDrive:
-    case AppListSearchResultType::kFileChip:
-    case AppListSearchResultType::kDriveChip:
-    case AppListSearchResultType::kAssistantChip:
     case AppListSearchResultType::kOsSettings:
     case AppListSearchResultType::kInternalPrivacyInfo:
     case AppListSearchResultType::kAssistantText:
@@ -47,11 +45,12 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
   }
 }
 
-bool IsContinueSectionResultType(AppListSearchResultType result_type) {
+bool IsZeroStateResultType(AppListSearchResultType result_type) {
   switch (result_type) {
     case AppListSearchResultType::kZeroStateFile:
     case AppListSearchResultType::kZeroStateDrive:
     case AppListSearchResultType::kZeroStateHelpApp:
+    case AppListSearchResultType::kZeroStateApp:
       return true;
     case AppListSearchResultType::kUnknown:
     case AppListSearchResultType::kInstalledApp:
@@ -63,9 +62,6 @@ bool IsContinueSectionResultType(AppListSearchResultType result_type) {
     case AppListSearchResultType::kAnswerCard:
     case AppListSearchResultType::kPlayStoreReinstallApp:
     case AppListSearchResultType::kArcAppShortcut:
-    case AppListSearchResultType::kFileChip:
-    case AppListSearchResultType::kDriveChip:
-    case AppListSearchResultType::kAssistantChip:
     case AppListSearchResultType::kOsSettings:
     case AppListSearchResultType::kInternalPrivacyInfo:
     case AppListSearchResultType::kAssistantText:
@@ -230,11 +226,8 @@ SearchResultTag::SearchResultTag(int styles, uint32_t start, uint32_t end)
 SearchResultAction::SearchResultAction() = default;
 
 SearchResultAction::SearchResultAction(SearchResultActionType type,
-                                       const std::u16string& tooltip_text,
-                                       bool visible_on_hover)
-    : type(type),
-      tooltip_text(tooltip_text),
-      visible_on_hover(visible_on_hover) {}
+                                       const std::u16string& tooltip_text)
+    : type(type), tooltip_text(tooltip_text) {}
 
 SearchResultAction::SearchResultAction(const SearchResultAction& other) =
     default;

@@ -8,17 +8,25 @@
 #include <string>
 #include <vector>
 
+#include "ash/ash_export.h"
 #include "ash/public/cpp/cast_config_controller.h"
 #include "ash/system/tray/tray_detailed_view.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+
+namespace views {
+class View;
+}  // namespace views
 
 namespace ash {
 
 // This view displays a list of cast receivers that can be clicked on and casted
 // to. It is activated by clicking on the chevron inside of
 // |CastSelectDefaultView|.
-class CastDetailedView : public TrayDetailedView,
-                         public CastConfigController::Observer {
+class ASH_EXPORT CastDetailedView : public TrayDetailedView,
+                                    public CastConfigController::Observer {
  public:
+  METADATA_HEADER(CastDetailedView);
+
   explicit CastDetailedView(DetailedViewDelegate* delegate);
 
   CastDetailedView(const CastDetailedView&) = delete;
@@ -29,28 +37,37 @@ class CastDetailedView : public TrayDetailedView,
   // CastConfigController::Observer:
   void OnDevicesUpdated(const std::vector<SinkAndRoute>& devices) override;
 
-  // views::View:
-  const char* GetClassName() const override;
-
   views::View* get_add_access_code_device_for_testing() {
     return add_access_code_device_;
   }
 
  private:
+  friend class CastDetailedViewTest;
+
   void CreateItems();
 
   void UpdateReceiverListFromCachedData();
 
+  // Adds the view shown when no cast devices are available (with QsRevamp).
+  void AddZeroStateView();
+
   // TrayDetailedView:
   void HandleViewClicked(views::View* view) override;
 
+  // Stops casting the route identified by `route_id`.
+  void StopCasting(const std::string& route_id);
+
   // A mapping from the sink id to the receiver/activity data.
   std::map<std::string, SinkAndRoute> sinks_and_routes_;
+
   // A mapping from the view pointer to the associated activity sink id.
   std::map<views::View*, std::string> view_to_sink_map_;
 
   // Special list item that, if clicked, launches the access code casting dialog
   views::View* add_access_code_device_ = nullptr;
+
+  // View shown when no cast devices are available (with QsRevamp).
+  views::View* zero_state_view_ = nullptr;
 };
 
 }  // namespace ash

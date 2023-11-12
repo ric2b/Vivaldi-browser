@@ -16,7 +16,6 @@
 #include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/public/topic_data.h"
 #include "components/invalidation/public/topic_invalidation_map.h"
-#include "components/prefs/pref_service.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 // The sender id is only used to storeand retrieve prefs related to the

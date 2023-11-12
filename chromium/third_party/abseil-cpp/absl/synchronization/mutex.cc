@@ -37,6 +37,8 @@
 #include <atomic>
 #include <cinttypes>
 #include <cstddef>
+#include <cstring>
+#include <iterator>
 #include <thread>  // NOLINT(build/c++11)
 
 #include "absl/base/attributes.h"
@@ -135,25 +137,42 @@ enum DelayMode { AGGRESSIVE, GENTLE };
 struct ABSL_CACHELINE_ALIGNED MutexGlobals {
   absl::once_flag once;
   int spinloop_iterations = 0;
-  int32_t mutex_sleep_limit[2] = {};
+  int32_t mutex_sleep_spins[2] = {};
+  absl::Duration mutex_sleep_time;
 };
+
+absl::Duration MeasureTimeToYield() {
+  absl::Time before = absl::Now();
+  ABSL_INTERNAL_C_SYMBOL(AbslInternalMutexYield)();
+  return absl::Now() - before;
+}
 
 const MutexGlobals &GetMutexGlobals() {
   ABSL_CONST_INIT static MutexGlobals data;
   absl::base_internal::LowLevelCallOnce(&data.once, [&]() {
     const int num_cpus = absl::base_internal::NumCPUs();
     data.spinloop_iterations = num_cpus > 1 ? 1500 : 0;
-    // If this a uniprocessor, only yield/sleep.  Otherwise, if the mode is
+    // If this a uniprocessor, only yield/sleep.
+    // Real-time threads are often unable to yield, so the sleep time needs
+    // to be long enough to keep the calling thread asleep until scheduling
+    // happens.
+    // If this is multiprocessor, allow spinning. If the mode is
     // aggressive then spin many times before yielding.  If the mode is
     // gentle then spin only a few times before yielding.  Aggressive spinning
     // is used to ensure that an Unlock() call, which must get the spin lock
     // for any thread to make progress gets it without undue delay.
     if (num_cpus > 1) {
-      data.mutex_sleep_limit[AGGRESSIVE] = 5000;
-      data.mutex_sleep_limit[GENTLE] = 250;
+      data.mutex_sleep_spins[AGGRESSIVE] = 5000;
+      data.mutex_sleep_spins[GENTLE] = 250;
+      data.mutex_sleep_time = absl::Microseconds(10);
     } else {
-      data.mutex_sleep_limit[AGGRESSIVE] = 0;
-      data.mutex_sleep_limit[GENTLE] = 0;
+      data.mutex_sleep_spins[AGGRESSIVE] = 0;
+      data.mutex_sleep_spins[GENTLE] = 0;
+      data.mutex_sleep_time = MeasureTimeToYield() * 5;
+      data.mutex_sleep_time =
+          std::min(data.mutex_sleep_time, absl::Milliseconds(1));
+      data.mutex_sleep_time =
+          std::max(data.mutex_sleep_time, absl::Microseconds(10));
     }
   });
   return data;
@@ -164,7 +183,8 @@ namespace synchronization_internal {
 // Returns the Mutex delay on iteration `c` depending on the given `mode`.
 // The returned value should be used as `c` for the next call to `MutexDelay`.
 int MutexDelay(int32_t c, int mode) {
-  const int32_t limit = GetMutexGlobals().mutex_sleep_limit[mode];
+  const int32_t limit = GetMutexGlobals().mutex_sleep_spins[mode];
+  const absl::Duration sleep_time = GetMutexGlobals().mutex_sleep_time;
   if (c < limit) {
     // Spin.
     c++;
@@ -177,7 +197,7 @@ int MutexDelay(int32_t c, int mode) {
       c++;
     } else {
       // Then wait.
-      absl::SleepFor(absl::Microseconds(10));
+      absl::SleepFor(sleep_time);
       c = 0;
     }
     ABSL_TSAN_MUTEX_POST_DIVERT(nullptr, 0);
@@ -571,10 +591,15 @@ static SynchLocksHeld *Synch_GetAllLocks() {
 void Mutex::IncrementSynchSem(Mutex *mu, PerThreadSynch *w) {
   if (mu) {
     ABSL_TSAN_MUTEX_PRE_DIVERT(mu, 0);
-  }
-  PerThreadSem::Post(w->thread_identity());
-  if (mu) {
+    // We miss synchronization around passing PerThreadSynch between threads
+    // since it happens inside of the Mutex code, so we need to ignore all
+    // accesses to the object.
+    ABSL_ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
+    PerThreadSem::Post(w->thread_identity());
+    ABSL_ANNOTATE_IGNORE_READS_AND_WRITES_END();
     ABSL_TSAN_MUTEX_POST_DIVERT(mu, 0);
+  } else {
+    PerThreadSem::Post(w->thread_identity());
   }
 }
 
@@ -2762,25 +2787,31 @@ static bool Dereference(void *arg) {
   return *(static_cast<bool *>(arg));
 }
 
-Condition::Condition() {}   // null constructor, used for kTrue only
-const Condition Condition::kTrue;
+ABSL_CONST_INIT const Condition Condition::kTrue;
 
 Condition::Condition(bool (*func)(void *), void *arg)
     : eval_(&CallVoidPtrFunction),
-      function_(func),
-      method_(nullptr),
-      arg_(arg) {}
+      arg_(arg) {
+  static_assert(sizeof(&func) <= sizeof(callback_),
+                "An overlarge function pointer passed to Condition.");
+  StoreCallback(func);
+}
 
 bool Condition::CallVoidPtrFunction(const Condition *c) {
-  return (*c->function_)(c->arg_);
+  using FunctionPointer = bool (*)(void *);
+  FunctionPointer function_pointer;
+  std::memcpy(&function_pointer, c->callback_, sizeof(function_pointer));
+  return (*function_pointer)(c->arg_);
 }
 
 Condition::Condition(const bool *cond)
     : eval_(CallVoidPtrFunction),
-      function_(Dereference),
-      method_(nullptr),
       // const_cast is safe since Dereference does not modify arg
-      arg_(const_cast<bool *>(cond)) {}
+      arg_(const_cast<bool *>(cond)) {
+  using FunctionPointer = bool (*)(void *);
+  const FunctionPointer dereference = Dereference;
+  StoreCallback(dereference);
+}
 
 bool Condition::Eval() const {
   // eval_ == null for kTrue
@@ -2788,14 +2819,15 @@ bool Condition::Eval() const {
 }
 
 bool Condition::GuaranteedEqual(const Condition *a, const Condition *b) {
-  if (a == nullptr) {
+  // kTrue logic.
+  if (a == nullptr || a->eval_ == nullptr) {
     return b == nullptr || b->eval_ == nullptr;
+  }else  if (b == nullptr || b->eval_ == nullptr) {
+    return false;
   }
-  if (b == nullptr || b->eval_ == nullptr) {
-    return a->eval_ == nullptr;
-  }
-  return a->eval_ == b->eval_ && a->function_ == b->function_ &&
-         a->arg_ == b->arg_ && a->method_ == b->method_;
+  // Check equality of the representative fields.
+  return a->eval_ == b->eval_ && a->arg_ == b->arg_ &&
+         !memcmp(a->callback_, b->callback_, sizeof(a->callback_));
 }
 
 ABSL_NAMESPACE_END

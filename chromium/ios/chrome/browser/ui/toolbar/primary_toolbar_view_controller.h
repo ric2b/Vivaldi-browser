@@ -8,6 +8,7 @@
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
+#import "ios/chrome/browser/ui/keyboard/key_command_actions.h"
 #import "ios/chrome/browser/ui/orchestrator/toolbar_animatee.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 
@@ -19,7 +20,13 @@
 @interface PrimaryToolbarViewController
     : AdaptiveToolbarViewController <ActivityServicePositioner,
                                      FullscreenUIElement,
+                                     KeyCommandActions,
                                      ToolbarAnimatee,
+
+                                     // Vivaldi
+                                     ToolbarConsumer,
+                                     // End Vivaldi
+
                                      ViewRevealingAnimatee>
 
 @property(nonatomic, weak) id<PrimaryToolbarViewControllerDelegate> delegate;

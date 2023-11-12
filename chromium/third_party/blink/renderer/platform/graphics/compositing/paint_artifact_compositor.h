@@ -29,7 +29,7 @@
 #endif
 
 namespace cc {
-class DocumentTransitionRequest;
+class ViewTransitionRequest;
 }
 
 namespace blink {
@@ -50,7 +50,7 @@ enum class PaintArtifactCompositorUpdateReason {
   kLocalFrameViewUpdateLayerDebugInfo = 4,
   kLocalFrameViewBenchmarking = 5,
   kDisplayLockContextNeedsPaintArtifactCompositorUpdate = 6,
-  kDocumentTransitionNotifyChanges = 7,
+  kViewTransitionNotifyChanges = 7,
   kFrameCaretSetVisible = 8,
   kFrameCaretPaint = 9,
   kInspectorOverlayAgentDisableFrameOverlay = 10,
@@ -122,7 +122,7 @@ class SynthesizedClip : private cc::ContentLayerClient {
 
  private:
   scoped_refptr<cc::PictureLayer> layer_;
-  GeometryMapper::Translation2DOrMatrix translation_2d_or_matrix_;
+  gfx::Transform projection_;
   bool rrect_is_local_ = false;
   SkRRect rrect_;
   absl::optional<Path> path_;
@@ -147,7 +147,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
   struct ViewportProperties {
     const TransformPaintPropertyNode* overscroll_elasticity_transform = nullptr;
-    const EffectPaintPropertyNode* overscroll_elasticity_effect = nullptr;
     const TransformPaintPropertyNode* page_scale = nullptr;
     const TransformPaintPropertyNode* inner_scroll_translation = nullptr;
     const ClipPaintPropertyNode* outer_clip = nullptr;
@@ -165,7 +164,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       scoped_refptr<const PaintArtifact> artifact,
       const ViewportProperties& viewport_properties,
       const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes,
-      Vector<std::unique_ptr<cc::DocumentTransitionRequest>> requests);
+      Vector<std::unique_ptr<cc::ViewTransitionRequest>> requests);
 
   // Fast-path update where the painting of existing composited layers changed,
   // but property trees and compositing decisions remain the same. See:

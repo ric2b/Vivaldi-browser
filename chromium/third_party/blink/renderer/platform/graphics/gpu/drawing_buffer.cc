@@ -34,6 +34,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/numerics/checked_math.h"
@@ -44,6 +45,7 @@
 #include "components/viz/common/resources/resource_sizes.h"
 #include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
@@ -52,6 +54,7 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "media/base/video_frame.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
@@ -63,6 +66,7 @@
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_provider_wrapper.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -312,8 +316,24 @@ void DrawingBuffer::SetIsInHiddenPage(bool hidden) {
   is_hidden_ = hidden;
   if (is_hidden_)
     recycled_color_buffer_queue_.clear();
+
+  if (base::FeatureList::IsEnabled(features::kCanvasFreeMemoryWhenHidden)) {
+    auto* context_support = ContextProvider()->ContextSupport();
+    if (context_support)
+      context_support->SetAggressivelyFreeResources(hidden);
+  }
+
   gl_->ContextVisibilityHintCHROMIUM(is_hidden_ ? GL_FALSE : GL_TRUE);
   gl_->Flush();
+}
+
+void DrawingBuffer::SetHDRConfiguration(
+    gfx::HDRMode hdr_mode,
+    absl::optional<gfx::HDRMetadata> hdr_metadata) {
+  hdr_mode_ = hdr_mode;
+  hdr_metadata_ = hdr_metadata;
+  if (layer_)
+    layer_->SetHDRConfiguration(hdr_mode_, hdr_metadata_);
 }
 
 void DrawingBuffer::SetFilterQuality(
@@ -700,7 +720,7 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   const auto& sk_image_sync_token =
       transferable_resource.mailbox_holder.sync_token;
 
-  auto sk_color_type = viz::ResourceFormatToClosestSkColorType(
+  auto sk_color_type = viz::ToClosestSkColorType(
       /*gpu_compositing=*/true, transferable_resource.format);
 
   const SkImageInfo sk_image_info = SkImageInfo::Make(
@@ -714,7 +734,8 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
       sk_image_info, transferable_resource.mailbox_holder.texture_target,
       /* is_origin_top_left = */ opengl_flip_y_extension_,
       context_provider_->GetWeakPtr(), base::PlatformThread::CurrentRef(),
-      Thread::Current()->GetDeprecatedTaskRunner(), std::move(release_callback),
+      ThreadScheduler::Current()->CleanupTaskRunner(),
+      std::move(release_callback),
       /*supports_display_compositing=*/true,
       transferable_resource.is_overlay_candidate);
 }
@@ -1164,6 +1185,7 @@ cc::Layer* DrawingBuffer::CcLayer() {
     DCHECK(!(premultiplied_alpha_ && premultiplied_alpha_false_texture_));
     layer_->SetPremultipliedAlpha(premultiplied_alpha_ ||
                                   premultiplied_alpha_false_texture_);
+    layer_->SetHDRConfiguration(hdr_mode_, hdr_metadata_);
     layer_->SetNearestNeighbor(filter_quality_ ==
                                cc::PaintFlags::FilterQuality::kNone);
 
@@ -1255,13 +1277,15 @@ bool DrawingBuffer::ReallocateDefaultFramebuffer(const gfx::Size& size,
     GrSurfaceOrigin origin = opengl_flip_y_extension_
                                  ? kTopLeft_GrSurfaceOrigin
                                  : kBottomLeft_GrSurfaceOrigin;
+    uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2 |
+                     gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+                     gpu::SHARED_IMAGE_USAGE_RASTER;
+    if (gpu::GetPlatformSpecificTextureTarget() == GL_TEXTURE_2D) {
+      usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
+    }
     premultiplied_alpha_false_mailbox_ = sii->CreateSharedImage(
         back_color_buffer_->format, size, back_color_buffer_->color_space,
-        origin, kUnpremul_SkAlphaType,
-        gpu::SHARED_IMAGE_USAGE_GLES2 |
-            gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
-            gpu::SHARED_IMAGE_USAGE_RASTER,
-        gpu::kNullSurfaceHandle);
+        origin, kUnpremul_SkAlphaType, usage, gpu::kNullSurfaceHandle);
     gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
     gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
     premultiplied_alpha_false_texture_ =
@@ -1637,7 +1661,7 @@ sk_sp<SkData> DrawingBuffer::PaintRenderingResultsToDataArray(
   // Readback in native GL byte order (RGBA).
   SkColorType color_type = kRGBA_8888_SkColorType;
   base::CheckedNumeric<size_t> row_bytes = 4;
-  if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled() &&
+  if (RuntimeEnabledFeatures::WebGLDrawingBufferStorageEnabled() &&
       back_color_buffer_->format == viz::RGBA_F16) {
     color_type = kRGBA_F16_SkColorType;
     row_bytes *= 2;
@@ -1708,7 +1732,7 @@ void DrawingBuffer::ReadBackFramebuffer(base::span<uint8_t> pixels,
   expected_data_size *= Size().width();
   expected_data_size *= Size().height();
 
-  if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled() &&
+  if (RuntimeEnabledFeatures::WebGLDrawingBufferStorageEnabled() &&
       color_type == kRGBA_F16_SkColorType) {
     data_type = (webgl_version_ > kWebGL1) ? GL_HALF_FLOAT : GL_HALF_FLOAT_OES;
     expected_data_size *= 2;
@@ -1777,10 +1801,14 @@ void DrawingBuffer::ResolveAndPresentSwapChainIfNeeded() {
     GLuint dest_texture_id = premultiplied_alpha_false_texture_
                                  ? premultiplied_alpha_false_texture_
                                  : back_color_buffer_->texture_id;
+    gl_->BeginSharedImageAccessDirectCHROMIUM(
+        front_color_buffer_->texture_id,
+        GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
     gl_->CopySubTextureCHROMIUM(front_color_buffer_->texture_id, 0,
                                 texture_target_, dest_texture_id, 0, 0, 0, 0, 0,
                                 size_.width(), size_.height(), GL_FALSE,
                                 GL_FALSE, GL_FALSE);
+    gl_->EndSharedImageAccessDirectCHROMIUM(front_color_buffer_->texture_id);
   }
   contents_changed_ = false;
   if (preserve_drawing_buffer_ == kDiscard) {

@@ -59,7 +59,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.Espresso;
 import androidx.test.espresso.NoMatchingViewException;
 import androidx.test.espresso.ViewAssertion;
-import androidx.test.espresso.contrib.AccessibilityChecks;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
@@ -86,12 +85,10 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
@@ -154,6 +151,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         "force-fieldtrials=Study/Group"})
 @EnableFeatures({ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID + "<Study"})
+// TODO(1347089): make this test suite works for testing both TabSwitcherAndStartSurfaceLayout and
+// TabSwitcherLayout.
 @DisableFeatures({ChromeFeatureList.START_SURFACE_REFACTOR})
 @Restriction(
         {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
@@ -199,7 +198,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
 
     @Before
     public void setUp() throws ExecutionException {
-        AccessibilityChecks.enable();
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         // After setUp, Chrome is launched and has one NTP.
         mActivityTestRule.startMainActivityWithURL(NTP_URL);
@@ -296,7 +294,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
-    @DisabledTest(message = "https://crbug.com/1373499")
     public void testSwitchTabModel_ScrollToSelectedTab() throws IOException {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         prepareTabs(10, 0, "about:blank");
@@ -305,7 +302,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         CriteriaHelper.pollUiThread(() -> cta.getCurrentTabModel().isIncognito());
         enterTabSwitcher(cta);
         switchTabModel(cta, false);
-        TabUiTestHelper.verifyAllTabsHaveThumbnail(cta.getCurrentTabModel());
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
         onView(tabSwitcherViewMatcher()).check((v, noMatchException) -> {
             if (noMatchException != null) throw noMatchException;
@@ -414,7 +410,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study")
     @CommandLineFlags.Add({BASE_PARAMS + "/soft-cleanup-delay/2000/cleanup-delay/10000"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.M) // TODO(crbug.com/997065#c8): remove SDK restriction.
     @DisabledTest(message = "https://crbug.com/1207875")
     public void testTabToGridFromLiveTabWarmAnimation() throws InterruptedException {
         assertTrue(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
@@ -439,7 +434,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study")
     @CommandLineFlags.Add({BASE_PARAMS + "/cleanup-delay/10000"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.M) // TODO(crbug.com/997065#c8): remove SDK restriction.
     @DisabledTest(message = "https://crbug.com/1272561")
     public void testTabToGridFromLiveTabSoftAnimation() throws InterruptedException {
         assertTrue(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
@@ -1258,6 +1252,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1297930")
     public void testRecycling_defaultAspectRatio() {
         prepareTabs(10, 0, mUrl);
         ChromeTabUtils.switchTabInCurrentTabModel(mActivityTestRule.getActivity(), 0);
@@ -1677,7 +1672,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         // clang-format on
         // Finish the activity and disable the ChromeFeatureList.TAB_GROUPS_ANDROID flag.
         finishActivity(mActivityTestRule.getActivity());
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_ANDROID, false);
+        ChromeFeatureList.sTabGroupsAndroid.setForTesting(false);
 
         mActivityTestRule.startMainActivityOnBlankPage();
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -1697,7 +1692,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
 
         // Restart activity with tab group enabled, and the tabs should remain as single tabs.
         finishActivity(cta);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GROUPS_ANDROID, true);
+        ChromeFeatureList.sTabGroupsAndroid.setForTesting(true);
         mActivityTestRule.startMainActivityOnBlankPage();
         final ChromeTabbedActivity ctaRestarted = mActivityTestRule.getActivity();
         assertTrue(ctaRestarted.getTabModelSelector()

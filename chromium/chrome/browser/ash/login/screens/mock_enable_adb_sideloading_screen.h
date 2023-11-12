@@ -7,7 +7,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/screens/enable_adb_sideloading_screen.h"
-#include "chrome/browser/ui/webui/chromeos/login/enable_adb_sideloading_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/enable_adb_sideloading_screen_handler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace ash {
@@ -36,12 +36,5 @@ class MockEnableAdbSideloadingScreenView
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::MockEnableAdbSideloadingScreen;
-using ::ash::MockEnableAdbSideloadingScreenView;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_MOCK_ENABLE_ADB_SIDELOADING_SCREEN_H_

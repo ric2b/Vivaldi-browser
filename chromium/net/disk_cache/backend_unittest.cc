@@ -14,12 +14,14 @@
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -27,7 +29,6 @@
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -3576,8 +3577,9 @@ TEST_F(DiskCacheTest, Backend_UsageStatsTimer) {
   // Want to use our thread since we call SyncInit ourselves.
   std::unique_ptr<disk_cache::BackendImpl> cache(
       std::make_unique<disk_cache::BackendImpl>(
-          cache_path_, nullptr, base::ThreadTaskRunnerHandle::Get(),
-          net::DISK_CACHE, nullptr));
+          cache_path_, nullptr,
+          base::SingleThreadTaskRunner::GetCurrentDefault(), net::DISK_CACHE,
+          nullptr));
   ASSERT_TRUE(nullptr != cache.get());
   cache->SetUnitTestMode();
   ASSERT_THAT(cache->SyncInit(), IsOk());
@@ -3593,8 +3595,9 @@ TEST_F(DiskCacheBackendTest, TimerNotCreated) {
   // Want to use our thread since we call SyncInit ourselves.
   std::unique_ptr<disk_cache::BackendImpl> cache(
       std::make_unique<disk_cache::BackendImpl>(
-          cache_path_, nullptr, base::ThreadTaskRunnerHandle::Get(),
-          net::DISK_CACHE, nullptr));
+          cache_path_, nullptr,
+          base::SingleThreadTaskRunner::GetCurrentDefault(), net::DISK_CACHE,
+          nullptr));
   ASSERT_TRUE(nullptr != cache.get());
   cache->SetUnitTestMode();
   ASSERT_NE(net::OK, cache->SyncInit());
@@ -3616,7 +3619,7 @@ TEST_F(DiskCacheBackendTest, Backend_UsageStats) {
   EXPECT_FALSE(stats.empty());
 
   disk_cache::StatsItems::value_type hits("Create hit", "0x1");
-  EXPECT_EQ(1, std::count(stats.begin(), stats.end(), hits));
+  EXPECT_EQ(1, base::ranges::count(stats, hits));
 
   cache_.reset();
 
@@ -3629,7 +3632,7 @@ TEST_F(DiskCacheBackendTest, Backend_UsageStats) {
   cache_->GetStats(&stats);
   EXPECT_FALSE(stats.empty());
 
-  EXPECT_EQ(1, std::count(stats.begin(), stats.end(), hits));
+  EXPECT_EQ(1, base::ranges::count(stats, hits));
 }
 
 void DiskCacheBackendTest::BackendDoomAll() {

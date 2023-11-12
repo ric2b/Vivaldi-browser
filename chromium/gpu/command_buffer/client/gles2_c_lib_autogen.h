@@ -1579,9 +1579,6 @@ void GL_APIENTRY GLES2SetActiveURLCHROMIUM(const char* url) {
 void GL_APIENTRY GLES2ContextVisibilityHintCHROMIUM(GLboolean visibility) {
   gles2::GetGLContext()->ContextVisibilityHintCHROMIUM(visibility);
 }
-void GL_APIENTRY GLES2CoverageModulationCHROMIUM(GLenum components) {
-  gles2::GetGLContext()->CoverageModulationCHROMIUM(components);
-}
 GLenum GL_APIENTRY GLES2GetGraphicsResetStatusKHR() {
   return gles2::GetGLContext()->GetGraphicsResetStatusKHR();
 }
@@ -1691,6 +1688,9 @@ void GL_APIENTRY GLES2ColorMaskiOES(GLuint buf,
 }
 GLboolean GL_APIENTRY GLES2IsEnablediOES(GLenum target, GLuint index) {
   return gles2::GetGLContext()->IsEnablediOES(target, index);
+}
+void GL_APIENTRY GLES2ProvokingVertexANGLE(GLenum provokeMode) {
+  gles2::GetGLContext()->ProvokingVertexANGLE(provokeMode);
 }
 
 namespace gles2 {
@@ -2948,10 +2948,6 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glContextVisibilityHintCHROMIUM),
     },
     {
-        "glCoverageModulationCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glCoverageModulationCHROMIUM),
-    },
-    {
         "glGetGraphicsResetStatusKHR",
         reinterpret_cast<GLES2FunctionPointer>(glGetGraphicsResetStatusKHR),
     },
@@ -3067,6 +3063,10 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glIsEnablediOES",
         reinterpret_cast<GLES2FunctionPointer>(glIsEnablediOES),
+    },
+    {
+        "glProvokingVertexANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(glProvokingVertexANGLE),
     },
     {
         nullptr,

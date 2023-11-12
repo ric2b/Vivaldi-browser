@@ -60,10 +60,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/saml_challenge_key_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/saml_confirm_password_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/saml_challenge_key_handler.h"
+#include "chrome/browser/ui/webui/ash/login/saml_confirm_password_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -122,15 +122,14 @@
 #include "url/gurl.h"
 
 namespace ash {
+
 namespace {
 
 namespace em = ::enterprise_management;
 
 using ::base::test::RunOnceCallback;
-using ::testing::_;
 using ::testing::Invoke;
 using ::testing::NiceMock;
-using ::testing::Return;
 using ::testing::WithArgs;
 
 const test::UIPath kPasswordInput = {"saml-confirm-password", "passwordInput"};
@@ -197,15 +196,16 @@ class SecretInterceptingFakeUserDataAuthClient : public FakeUserDataAuthClient {
   SecretInterceptingFakeUserDataAuthClient& operator=(
       const SecretInterceptingFakeUserDataAuthClient&) = delete;
 
+  // Key-based API for AuthSessions.
+  // TODO(b/260718534): Remove as part of UserAuthFactors cleanup.
   void AuthenticateAuthSession(
       const ::user_data_auth::AuthenticateAuthSessionRequest& request,
       AuthenticateAuthSessionCallback callback) override;
+
   void AddAuthFactor(const ::user_data_auth::AddAuthFactorRequest& request,
                      AddAuthFactorCallback callback) override;
   void AddCredentials(const ::user_data_auth::AddCredentialsRequest& request,
                       AddCredentialsCallback callback) override;
-  void Mount(const ::user_data_auth::MountRequest& request,
-             MountCallback callback) override;
 
   const std::string& salted_hashed_secret() { return salted_hashed_secret_; }
 
@@ -216,6 +216,8 @@ class SecretInterceptingFakeUserDataAuthClient : public FakeUserDataAuthClient {
 SecretInterceptingFakeUserDataAuthClient::
     SecretInterceptingFakeUserDataAuthClient() = default;
 
+// Key-based API for AuthSessions.
+// TODO(b/260718534): Remove as part of UserAuthFactors cleanup.
 void SecretInterceptingFakeUserDataAuthClient::AuthenticateAuthSession(
     const ::user_data_auth::AuthenticateAuthSessionRequest& request,
     AuthenticateAuthSessionCallback callback) {
@@ -223,6 +225,8 @@ void SecretInterceptingFakeUserDataAuthClient::AuthenticateAuthSession(
   FakeUserDataAuthClient::AuthenticateAuthSession(request, std::move(callback));
 }
 
+// Key-based API for AuthSessions.
+// TODO(b/260718534): Remove as part of UserAuthFactors cleanup.
 void SecretInterceptingFakeUserDataAuthClient::AddCredentials(
     const ::user_data_auth::AddCredentialsRequest& request,
     AddCredentialsCallback callback) {
@@ -239,20 +243,19 @@ void SecretInterceptingFakeUserDataAuthClient::AddAuthFactor(
   FakeUserDataAuthClient::AddAuthFactor(request, std::move(callback));
 }
 
-void SecretInterceptingFakeUserDataAuthClient::Mount(
-    const ::user_data_auth::MountRequest& request,
-    MountCallback callback) {
-  if (request.has_authorization()) {
-    salted_hashed_secret_ = request.authorization().key().secret();
-  }
-  FakeUserDataAuthClient::Mount(request, std::move(callback));
-}
-
 }  // namespace
 
 class SamlTestBase : public OobeBaseTest {
  public:
-  SamlTestBase() { fake_gaia_.set_initialize_fake_merge_session(false); }
+  SamlTestBase() {
+    auto cryptohome_client =
+        std::make_unique<SecretInterceptingFakeUserDataAuthClient>();
+    cryptohome_client_ = cryptohome_client.get();
+    FakeUserDataAuthClient::TestApi::OverrideGlobalInstance(
+        std::move(cryptohome_client));
+
+    fake_gaia_.set_initialize_fake_merge_session(false);
+  }
 
   SamlTestBase(const SamlTestBase&) = delete;
   SamlTestBase& operator=(const SamlTestBase&) = delete;
@@ -270,9 +273,6 @@ class SamlTestBase : public OobeBaseTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    // Creates a fake UserDataAuthClient. Will be destroyed in browser shutdown.
-    cryptohome_client_ = new SecretInterceptingFakeUserDataAuthClient();
-
     OobeBaseTest::SetUpInProcessBrowserTestFixture();
   }
 
@@ -753,11 +753,11 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithoutImprovedScraping, ScrapedMultiple) {
   SigninFrameJS().TypeIntoPath("password1", {"Password1"});
   SigninFrameJS().TapOn("Submit");
   // Lands on confirm password screen.
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectHiddenPath(kPasswordConfirmInput);
   // Entering an unknown password should go back to the confirm password screen.
   SendConfirmPassword("wrong_password");
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectHiddenPath(kPasswordConfirmInput);
   // Either scraped password should be able to sign-in.
   SendConfirmPassword("password1");
@@ -833,12 +833,12 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithFeatures, ScrapedNone) {
   SigninFrameJS().TapOn("Submit");
 
   // Lands on confirm password screen with manual input state.
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectTrue("$('saml-confirm-password').isManualInput");
   // Entering passwords that don't match will make us land again in the same
   // page.
   SetManualPasswords("Test1", "Test2");
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectTrue("$('saml-confirm-password').isManualInput");
 
   // Two matching passwords should let the user to sign in.
@@ -926,7 +926,7 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithoutImprovedScraping, PasswordConfirmFlow) {
   SigninFrameJS().TapOn("Submit");
 
   // Lands on confirm password screen with no error message.
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectHiddenPath(kPasswordConfirmInput);
   test::OobeJS().ExpectTrue(
       "!$('saml-confirm-password').$.passwordInput.invalid");
@@ -934,7 +934,7 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithoutImprovedScraping, PasswordConfirmFlow) {
   // Enter an unknown password for the first time should go back to confirm
   // password screen with error message.
   SendConfirmPassword("wrong_password");
-  OobeScreenWaiter(chromeos::SamlConfirmPasswordView::kScreenId).Wait();
+  OobeScreenWaiter(SamlConfirmPasswordView::kScreenId).Wait();
   test::OobeJS().ExpectHiddenPath(kPasswordConfirmInput);
   test::OobeJS().ExpectTrue(
       "$('saml-confirm-password').$.passwordInput.invalid");
@@ -1316,7 +1316,7 @@ void SAMLPolicyTest::SetLoginVideoCaptureAllowedUrls(
 }
 
 void SAMLPolicyTest::ShowGAIALoginForm() {
-  ash::LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
+  LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
   content::DOMMessageQueue message_queue(GetLoginUI()->GetWebContents());
   ASSERT_TRUE(content::ExecuteScript(
@@ -1896,7 +1896,7 @@ void SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture() {
   settings_provider_ = settings_helper_.device_settings();
 
   ON_CALL(mock_attestation_flow_, GetCertificate)
-      .WillByDefault(WithArgs<6>(Invoke(FakeGetCertificateCallbackTrue)));
+      .WillByDefault(WithArgs<7>(Invoke(FakeGetCertificateCallbackTrue)));
 
   // By default make it reply that the certificate is already uploaded.
   ON_CALL(mock_cert_uploader_, WaitForUploadComplete)
@@ -2159,10 +2159,10 @@ class SAMLDeviceTrustTest
 
     if (std::get<1>(GetParam())) {
       enabled_features.push_back(
-          ash::features::kLoginScreenDeviceTrustConnectorEnabled);
+          features::kLoginScreenDeviceTrustConnectorEnabled);
     } else {
       disabled_features.push_back(
-          ash::features::kLoginScreenDeviceTrustConnectorEnabled);
+          features::kLoginScreenDeviceTrustConnectorEnabled);
     }
 
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);

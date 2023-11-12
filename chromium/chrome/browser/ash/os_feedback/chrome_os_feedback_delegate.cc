@@ -178,6 +178,7 @@ void ChromeOsFeedbackDelegate::SendReport(
   feedback_params.load_system_info = report->include_system_logs_and_histograms;
   feedback_params.send_histograms = report->include_system_logs_and_histograms;
   feedback_params.send_bluetooth_logs = report->send_bluetooth_logs;
+  feedback_params.send_tab_titles = report->include_screenshot;
   feedback_params.is_internal_email =
       report->feedback_context->is_internal_account;
 
@@ -318,6 +319,10 @@ void ChromeOsFeedbackDelegate::OpenSystemInfoDialog() {
   GURL systemInfoUrl =
       GURL(base::StrCat({chrome::kChromeUIFeedbackURL, "html/sys_info.html"}));
   OpenWebDialog(systemInfoUrl);
+}
+
+bool ChromeOsFeedbackDelegate::IsChildAccount() {
+  return profile_->IsChild();
 }
 
 void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url) {

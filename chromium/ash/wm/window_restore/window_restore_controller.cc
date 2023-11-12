@@ -15,6 +15,7 @@
 #include "ash/shell.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
@@ -26,7 +27,7 @@
 #include "base/check_op.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/account_id/account_id.h"
 #include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/full_restore_utils.h"
@@ -50,24 +51,15 @@ WindowRestoreController::SaveWindowCallback g_save_window_callback_for_testing;
 
 // The list of possible app window parents.
 constexpr ShellWindowId kAppParentContainers[19] = {
-    kShellWindowId_DefaultContainerDeprecated,
-    kShellWindowId_DeskContainerB,
-    kShellWindowId_DeskContainerC,
-    kShellWindowId_DeskContainerD,
-    kShellWindowId_DeskContainerE,
-    kShellWindowId_DeskContainerF,
-    kShellWindowId_DeskContainerG,
-    kShellWindowId_DeskContainerH,
-    kShellWindowId_DeskContainerI,
-    kShellWindowId_DeskContainerJ,
-    kShellWindowId_DeskContainerK,
-    kShellWindowId_DeskContainerL,
-    kShellWindowId_DeskContainerM,
-    kShellWindowId_DeskContainerN,
-    kShellWindowId_DeskContainerO,
-    kShellWindowId_DeskContainerP,
-    kShellWindowId_AlwaysOnTopContainer,
-    kShellWindowId_FloatContainer,
+    kShellWindowId_DeskContainerA,       kShellWindowId_DeskContainerB,
+    kShellWindowId_DeskContainerC,       kShellWindowId_DeskContainerD,
+    kShellWindowId_DeskContainerE,       kShellWindowId_DeskContainerF,
+    kShellWindowId_DeskContainerG,       kShellWindowId_DeskContainerH,
+    kShellWindowId_DeskContainerI,       kShellWindowId_DeskContainerJ,
+    kShellWindowId_DeskContainerK,       kShellWindowId_DeskContainerL,
+    kShellWindowId_DeskContainerM,       kShellWindowId_DeskContainerN,
+    kShellWindowId_DeskContainerO,       kShellWindowId_DeskContainerP,
+    kShellWindowId_AlwaysOnTopContainer, kShellWindowId_FloatContainer,
     kShellWindowId_UnparentedContainer,
 };
 
@@ -368,7 +360,7 @@ void WindowRestoreController::OnWindowPropertyChanged(aura::Window* window,
     restore_property_clear_callbacks_.emplace(
         window, base::BindOnce(&WindowRestoreController::ClearLaunchedKey,
                                weak_ptr_factory_.GetWeakPtr(), window));
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, restore_property_clear_callbacks_[window].callback(),
         kAllowActivationDelay);
   }
@@ -522,6 +514,7 @@ void WindowRestoreController::RestoreStateTypeAndClearLaunchedKey(
     // Snap the window if necessary.
     auto state_type = window_info->window_state_type;
     if (state_type) {
+      auto* window_state = WindowState::Get(window);
       // Add the window to be tracked by the tablet mode window manager
       // manually. It is normally tracked when it becomes visible, but in snap
       // case we want to track it before it becomes visible. This will allow us
@@ -540,7 +533,11 @@ void WindowRestoreController::RestoreStateTypeAndClearLaunchedKey(
             *state_type == chromeos::WindowStateType::kPrimarySnapped
                 ? WM_EVENT_SNAP_PRIMARY
                 : WM_EVENT_SNAP_SECONDARY);
-        WindowState::Get(window)->OnWMEvent(&snap_event);
+        window_state->OnWMEvent(&snap_event);
+      }
+      if (*state_type == chromeos::WindowStateType::kFloated) {
+        const WMEvent float_event(WM_EVENT_FLOAT);
+        window_state->OnWMEvent(&float_event);
       }
     }
   }
@@ -572,7 +569,7 @@ void WindowRestoreController::RestoreStateTypeAndClearLaunchedKey(
               (app_type == AppType::ARC_APP && is_real_arc_window)
           ? kAllowActivationDelay
           : base::TimeDelta();
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, restore_property_clear_callbacks_[window].callback(), delay);
 }
 

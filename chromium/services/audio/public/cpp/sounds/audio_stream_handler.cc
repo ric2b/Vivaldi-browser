@@ -13,6 +13,7 @@
 #include "base/cancelable_callback.h"
 #include "base/logging.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "media/audio/wav_audio_handler.h"
@@ -50,7 +51,7 @@ class AudioStreamHandler::AudioStreamContainer
         delayed_stop_posted_(false),
         wav_audio_(std::move(wav_audio)) {
     DCHECK(wav_audio_);
-    task_runner_ = base::SequencedTaskRunnerHandle::Get();
+    task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
   }
 
   AudioStreamContainer(const AudioStreamContainer&) = delete;
@@ -118,7 +119,7 @@ class AudioStreamHandler::AudioStreamContainer
   // Following methods could be called from *ANY* thread.
   int Render(base::TimeDelta /* delay */,
              base::TimeTicks /* delay_timestamp */,
-             int /* prior_frames_skipped */,
+             const media::AudioGlitchInfo& /* glitch_info */,
              media::AudioBus* dest) override {
     base::AutoLock al(state_lock_);
     size_t bytes_written = 0;
@@ -171,7 +172,7 @@ class AudioStreamHandler::AudioStreamContainer
 AudioStreamHandler::AudioStreamHandler(
     SoundsManager::StreamFactoryBinder stream_factory_binder,
     const base::StringPiece& wav_data) {
-  task_runner_ = base::SequencedTaskRunnerHandle::Get();
+  task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
   std::unique_ptr<media::WavAudioHandler> wav_audio =
       media::WavAudioHandler::Create(wav_data);
   if (!wav_audio) {

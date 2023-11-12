@@ -27,7 +27,6 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -585,58 +584,6 @@ class DeleteSocketCallback : public TestCompletionCallbackBase {
   }
 
   raw_ptr<StreamSocket> socket_;
-};
-
-// A mock ExpectCTReporter that remembers the latest violation that was
-// reported and the number of violations reported.
-class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
- public:
-  MockExpectCTReporter() = default;
-  ~MockExpectCTReporter() override = default;
-
-  void OnExpectCTFailed(
-      const HostPortPair& host_port_pair,
-      const GURL& report_uri,
-      base::Time expiration,
-      const X509Certificate* validated_certificate_chain,
-      const X509Certificate* served_certificate_chain,
-      const SignedCertificateTimestampAndStatusList&
-          signed_certificate_timestamps,
-      const NetworkAnonymizationKey& network_anonymization_key) override {
-    num_failures_++;
-    host_port_pair_ = host_port_pair;
-    report_uri_ = report_uri;
-    served_certificate_chain_ = served_certificate_chain;
-    validated_certificate_chain_ = validated_certificate_chain;
-    signed_certificate_timestamps_ = signed_certificate_timestamps;
-    network_anonymization_key_ = network_anonymization_key;
-  }
-
-  const HostPortPair& host_port_pair() const { return host_port_pair_; }
-  const GURL& report_uri() const { return report_uri_; }
-  uint32_t num_failures() const { return num_failures_; }
-  const X509Certificate* served_certificate_chain() const {
-    return served_certificate_chain_;
-  }
-  const X509Certificate* validated_certificate_chain() const {
-    return validated_certificate_chain_;
-  }
-  const SignedCertificateTimestampAndStatusList& signed_certificate_timestamps()
-      const {
-    return signed_certificate_timestamps_;
-  }
-  const NetworkAnonymizationKey network_anonymization_key() const {
-    return network_anonymization_key_;
-  }
-
- private:
-  HostPortPair host_port_pair_;
-  GURL report_uri_;
-  uint32_t num_failures_ = 0;
-  raw_ptr<const X509Certificate> served_certificate_chain_;
-  raw_ptr<const X509Certificate> validated_certificate_chain_;
-  SignedCertificateTimestampAndStatusList signed_certificate_timestamps_;
-  NetworkAnonymizationKey network_anonymization_key_;
 };
 
 // A mock CTVerifier that records every call to Verify but doesn't verify
@@ -1597,6 +1544,8 @@ TEST_P(SSLClientSocketVersionTest, ConnectBadValidityIgnoreCertErrors) {
   EXPECT_TRUE(sock_->IsConnected());
 }
 
+// Client certificates are disabled on iOS.
+#if !BUILDFLAG(IS_IOS)
 // Attempt to connect to a page which requests a client certificate. It should
 // return an error code on connect.
 TEST_P(SSLClientSocketVersionTest, ConnectClientAuthCertRequested) {
@@ -1639,6 +1588,7 @@ TEST_P(SSLClientSocketVersionTest, ConnectClientAuthSendNullCert) {
   sock_->Disconnect();
   EXPECT_FALSE(sock_->IsConnected());
 }
+#endif  // !IS_IOS
 
 // TODO(wtc): Add unit tests for IsConnectedAndIdle:
 //   - Server closes an SSL connection (with a close_notify alert message).
@@ -1896,7 +1846,7 @@ TEST_P(SSLClientSocketVersionTest, Write_WithSynchronousErrorNoRead) {
   // TODO(davidben): Avoid the arbitrary timeout?
   int old_write_count = raw_counting_socket->write_count();
   base::RunLoop loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, loop.QuitClosure(), base::Milliseconds(100));
   loop.Run();
   EXPECT_EQ(old_write_count, raw_counting_socket->write_count());
@@ -2437,28 +2387,71 @@ TEST_F(SSLClientSocketTest, CipherSuiteDisables) {
   EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
 }
 
-// Test that connecting to a server only supporting TLS 1.0 will fail and
-// results in ERR_SSL_VERSION_OR_CIPHER_MISMATCH.
-TEST_F(SSLClientSocketTest, TLS1_NotSupported) {
-  SSLServerConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1;
-  config.version_min = SSL_PROTOCOL_VERSION_TLS1;
-  ASSERT_TRUE(StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, config));
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
-}
+// Test that TLS 1.0 and 1.1 are no longer supported.
+TEST_F(SSLClientSocketTest, LegacyTLSVersions) {
+  const struct {
+    uint16_t server_version;
+    absl::optional<uint16_t> client_version_min;
+    bool feature = true;
+    bool expect_error;
+  } kTests[] = {
+      // By default, TLS 1.0 and 1.1 should be disabled and will not be
+      // negotiated.
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1, .expect_error = true},
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1_1, .expect_error = true},
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1,
+       .feature = false,
+       .expect_error = true},
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1_1,
+       .feature = false,
+       .expect_error = true},
 
-// Test that connecting to a server only supporting TLS 1.1 will fail and
-// results in ERR_SSL_VERSION_OR_CIPHER_MISMATCH.
-TEST_F(SSLClientSocketTest, TLS1_1_NotSupported) {
-  SSLServerConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_1;
-  config.version_min = SSL_PROTOCOL_VERSION_TLS1_1;
-  ASSERT_TRUE(StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, config));
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
+      // Even if enabled at the client, TLS 1.0 and 1.1 should be disabled.
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1,
+       .client_version_min = SSL_PROTOCOL_VERSION_TLS1,
+       .expect_error = true},
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1_1,
+       .client_version_min = SSL_PROTOCOL_VERSION_TLS1,
+       .expect_error = true},
+
+      // If `kSSLMinVersionAtLeastTLS12` is disabled, the `version_min` setting
+      // should take effect.
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1,
+       .client_version_min = SSL_PROTOCOL_VERSION_TLS1,
+       .feature = false,
+       .expect_error = false},
+      {.server_version = SSL_PROTOCOL_VERSION_TLS1_1,
+       .client_version_min = SSL_PROTOCOL_VERSION_TLS1,
+       .feature = false,
+       .expect_error = false},
+  };
+  for (const auto& test : kTests) {
+    base::test::ScopedFeatureList feature_list;
+    if (!test.feature) {
+      // TODO(https://crbug.com/1376584): When this feature is removed, this
+      // test can be simplified.
+      feature_list.InitAndDisableFeature(features::kSSLMinVersionAtLeastTLS12);
+    }
+
+    SSLServerConfig config;
+    config.version_max = test.server_version;
+    config.version_min = test.server_version;
+    ASSERT_TRUE(StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, config));
+    int rv;
+
+    if (test.client_version_min) {
+      SSLContextConfig client_context_config;
+      client_context_config.version_min = *test.client_version_min;
+      ssl_config_service_->UpdateSSLConfigAndNotify(client_context_config);
+    }
+
+    ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+    if (test.expect_error) {
+      EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
+    } else {
+      EXPECT_THAT(rv, IsOk());
+    }
+  }
 }
 
 // When creating an SSLClientSocket, it is allowed to pass in a
@@ -2699,6 +2692,8 @@ TEST_P(SSLClientSocketVersionTest, VerifyReturnChainProperlyOrdered) {
   EXPECT_FALSE(sock_->IsConnected());
 }
 
+// Client certificates are disabled on iOS.
+#if !BUILDFLAG(IS_IOS)
 INSTANTIATE_TEST_SUITE_P(TLSVersion,
                          SSLClientSocketCertRequestInfoTest,
                          ValuesIn(GetTLSVersions()));
@@ -2776,6 +2771,7 @@ TEST_P(SSLClientSocketCertRequestInfoTest, CertKeyTypes) {
     EXPECT_EQ(CLIENT_CERT_ECDSA_SIGN, request_info->cert_key_types[1]);
   }
 }
+#endif  // !IS_IOS
 
 // Tests that the Certificate Transparency (RFC 6962) TLS extension is
 // supported.
@@ -3627,6 +3623,8 @@ TEST_F(SSLClientSocketTest, AlpnClientDisabled) {
   EXPECT_EQ(kProtoUnknown, sock_->GetNegotiatedProtocol());
 }
 
+// Client certificates are disabled on iOS.
+#if !BUILDFLAG(IS_IOS)
 // Connect to a server requesting client authentication, do not send
 // any client certificates. It should refuse the connection.
 TEST_P(SSLClientSocketVersionTest, NoCert) {
@@ -3769,6 +3767,7 @@ TEST_F(SSLClientSocketTest, ClearSessionCacheOnClientCertChange) {
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
   EXPECT_THAT(rv, IsError(ERR_BAD_SSL_CLIENT_AUTH_CERT));
 }
+#endif  // !IS_IOS
 
 HashValueVector MakeHashValueVector(uint8_t value) {
   HashValueVector out;
@@ -4016,107 +4015,6 @@ TEST_P(SSLClientSocketVersionTest, IgnoreCertificateErrorsBypassesRequiredCT) {
   EXPECT_TRUE(sock_->IsConnected());
 }
 
-// Test that when CT is required (in this case, by an Expect-CT opt-in), the
-// absence of CT information is a socket error.
-TEST_P(SSLClientSocketVersionTest, CTIsRequiredByExpectCT) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kDynamicExpectCTFeature);
-
-  ASSERT_TRUE(
-      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, GetServerConfig()));
-  scoped_refptr<X509Certificate> server_cert =
-      embedded_test_server()->GetCertificate();
-
-  // Certificate is trusted and chains to a public root.
-  CertVerifyResult verify_result;
-  verify_result.is_issued_by_known_root = true;
-  verify_result.verified_cert = server_cert;
-  verify_result.public_key_hashes =
-      MakeHashValueVector(kGoodHashValueVectorInput);
-  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
-
-  // Set up the Expect-CT opt-in.
-  NetworkAnonymizationKey network_anonymization_key =
-      NetworkAnonymizationKey::CreateTransient();
-  const base::Time current_time(base::Time::Now());
-  const base::Time expiry = current_time + base::Seconds(1000);
-  transport_security_state_->AddExpectCT(
-      host_port_pair().host(), expiry, true /* enforce */,
-      GURL("https://example-report.test"), network_anonymization_key);
-  MockExpectCTReporter reporter;
-  transport_security_state_->SetExpectCTReporter(&reporter);
-
-  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
-      .WillRepeatedly(
-          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
-
-  SSLConfig ssl_config;
-  ssl_config.network_anonymization_key = network_anonymization_key;
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  SSLInfo ssl_info;
-  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
-
-  EXPECT_THAT(rv, IsError(ERR_CERTIFICATE_TRANSPARENCY_REQUIRED));
-  EXPECT_TRUE(ssl_info.cert_status &
-              CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
-  EXPECT_FALSE(sock_->IsConnected());
-
-  EXPECT_EQ(1u, reporter.num_failures());
-  EXPECT_EQ(GURL("https://example-report.test"), reporter.report_uri());
-  EXPECT_EQ(ssl_info.unverified_cert.get(),
-            reporter.served_certificate_chain());
-  EXPECT_EQ(ssl_info.cert.get(), reporter.validated_certificate_chain());
-  EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
-  EXPECT_EQ(network_anonymization_key, reporter.network_anonymization_key());
-
-  transport_security_state_->ClearReportCachesForTesting();
-  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
-      .WillRepeatedly(
-          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
-
-  EXPECT_THAT(rv, IsError(ERR_CERTIFICATE_TRANSPARENCY_REQUIRED));
-  EXPECT_TRUE(ssl_info.cert_status &
-              CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
-  EXPECT_FALSE(sock_->IsConnected());
-
-  EXPECT_EQ(2u, reporter.num_failures());
-  EXPECT_EQ(GURL("https://example-report.test"), reporter.report_uri());
-  EXPECT_EQ(ssl_info.unverified_cert.get(),
-            reporter.served_certificate_chain());
-  EXPECT_EQ(ssl_info.cert.get(), reporter.validated_certificate_chain());
-  EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
-  EXPECT_EQ(network_anonymization_key, reporter.network_anonymization_key());
-
-  // If the connection is CT compliant, then there should be no socket error nor
-  // a report.
-  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
-      .WillRepeatedly(
-          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
-
-  EXPECT_EQ(net::OK, rv);
-  EXPECT_FALSE(ssl_info.cert_status &
-               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
-  EXPECT_TRUE(sock_->IsConnected());
-  EXPECT_EQ(2u, reporter.num_failures());
-
-  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
-      .WillRepeatedly(
-          Return(ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
-
-  EXPECT_EQ(net::OK, rv);
-  EXPECT_FALSE(ssl_info.cert_status &
-               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
-  EXPECT_TRUE(sock_->IsConnected());
-  EXPECT_EQ(2u, reporter.num_failures());
-}
-
 // When both PKP and CT are required for a host, and both fail, the more
 // serious error is that the pin validation failed.
 TEST_P(SSLClientSocketVersionTest, PKPMoreImportantThanCT) {
@@ -4141,7 +4039,7 @@ TEST_P(SSLClientSocketVersionTest, PKPMoreImportantThanCT) {
   transport_security_state_->SetPinningListAlwaysTimelyForTesting(true);
   ScopedTransportSecurityStateSource scoped_security_state_source;
 
-  const char kCTHost[] = "pkp-expect-ct.preloaded.test";
+  const char kCTHost[] = "hsts-hpkp-preloaded.test";
 
   // Set up CT.
   MockRequireCTDelegate require_ct_delegate;
@@ -4746,7 +4644,11 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTReject) {
   rv = WriteAndWait(kRequest);
   EXPECT_EQ(ERR_EARLY_DATA_REJECTED, rv);
 
-  // Retrying the connection should succeed.
+  // Run the event loop so the rejection has reached the TLS session cache.
+  base::RunLoop().RunUntilIdle();
+
+  // Now that the session cache has been updated, retrying the connection
+  // should succeed.
   socket = MakeClient(true);
   ASSERT_THAT(Connect(), IsOk());
   ASSERT_THAT(MakeHTTPRequest(ssl_socket()), IsOk());
@@ -4778,7 +4680,11 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTWrongVersion) {
   rv = WriteAndWait(kRequest);
   EXPECT_EQ(ERR_WRONG_VERSION_ON_EARLY_DATA, rv);
 
-  // Retrying the connection should succeed.
+  // Run the event loop so the rejection has reached the TLS session cache.
+  base::RunLoop().RunUntilIdle();
+
+  // Now that the session cache has been updated, retrying the connection
+  // should succeed.
   socket = MakeClient(true);
   ASSERT_THAT(Connect(), IsOk());
   ASSERT_THAT(MakeHTTPRequest(ssl_socket()), IsOk());
@@ -5429,6 +5335,12 @@ INSTANTIATE_TEST_SUITE_P(All,
                          ValuesIn(kSSLHandshakeDetailsParams));
 
 TEST_P(SSLHandshakeDetailsTest, Metrics) {
+  // TLS 1.0 and 1.1 are unreachable by default.
+  // TODO(https://crbug.com/1376584): When this feature is removed, just delete
+  // the TLS 1.0 and 1.1 test cases.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(features::kSSLMinVersionAtLeastTLS12);
+
   // Enable all test features in the server.
   SSLServerConfig server_config;
   server_config.version_min = SSL_PROTOCOL_VERSION_TLS1;
@@ -5548,6 +5460,8 @@ TEST_F(SSLClientSocketZeroRTTTest, EarlyDataReasonNoResume) {
   int rv = ReadAndWait(buf.get(), 4096);
   EXPECT_EQ(ERR_EARLY_DATA_REJECTED, rv);
 
+  // The histogram may be record asynchronously.
+  base::RunLoop().RunUntilIdle();
   histograms.ExpectUniqueSample(kReasonHistogram,
                                 ssl_early_data_session_not_resumed, 1);
 }

@@ -42,22 +42,23 @@ using SetsMap = FirstPartySetParser::SetsMap;
 
 // Ensures that the string represents an origin that is non-opaque and HTTPS.
 // Returns the registered domain.
-absl::optional<net::SchemefulSite> Canonicalize(base::StringPiece origin_string,
-                                                bool emit_errors) {
+base::expected<net::SchemefulSite, ParseErrorType> Canonicalize(
+    base::StringPiece origin_string,
+    bool emit_errors) {
   const url::Origin origin(url::Origin::Create(GURL(origin_string)));
   if (origin.opaque()) {
     if (emit_errors) {
       LOG(ERROR) << "First-Party Set origin " << origin_string
                  << " is not valid; ignoring.";
     }
-    return absl::nullopt;
+    return base::unexpected(ParseErrorType::kInvalidOrigin);
   }
   if (origin.scheme() != "https") {
     if (emit_errors) {
       LOG(ERROR) << "First-Party Set origin " << origin_string
                  << " is not HTTPS; ignoring.";
     }
-    return absl::nullopt;
+    return base::unexpected(ParseErrorType::kNonHttpsScheme);
   }
   absl::optional<net::SchemefulSite> site =
       net::SchemefulSite::CreateIfHasRegisterableDomain(origin);
@@ -66,10 +67,10 @@ absl::optional<net::SchemefulSite> Canonicalize(base::StringPiece origin_string,
       LOG(ERROR) << "First-Party Set origin " << origin_string
                  << " does not have a valid registered domain; ignoring.";
     }
-    return absl::nullopt;
+    return base::unexpected(ParseErrorType::kInvalidDomain);
   }
 
-  return site;
+  return site.value();
 }
 
 // Struct to hold metadata describing a particular "subset" during parsing.
@@ -103,10 +104,10 @@ base::expected<net::SchemefulSite, ParseErrorType> ParseSiteAndValidate(
   if (!item.is_string())
     return base::unexpected(ParseErrorType::kInvalidType);
 
-  const absl::optional<net::SchemefulSite> maybe_site =
+  const base::expected<net::SchemefulSite, ParseErrorType> maybe_site =
       Canonicalize(item.GetString(), emit_errors);
   if (!maybe_site.has_value())
-    return base::unexpected(ParseErrorType::kInvalidOrigin);
+    return base::unexpected(maybe_site.error());
 
   const net::SchemefulSite& site = *maybe_site;
   if (base::ranges::any_of(
@@ -182,7 +183,7 @@ base::expected<Aliases, ParseError> ParseCctlds(
           ParseSiteAndValidate(item, set_entries, elements, emit_errors);
       if (!alias_or_error.has_value()) {
         return base::unexpected(
-            ParseError(alias_or_error.error(), {kCCTLDsField, site, i}));
+            ParseError(alias_or_error.error(), {kCCTLDsField, site, static_cast<int>(i)}));
       }
 
       const net::SchemefulSite alias = alias_or_error.value();
@@ -195,7 +196,7 @@ base::expected<Aliases, ParseError> ParseCctlds(
         if (warnings) {
           warnings->push_back(
               ParseWarning(ParseWarningType::kAliasNotCctldVariant,
-                           {kCCTLDsField, site, i}));
+                           {kCCTLDsField, site, static_cast<int>(i)}));
         }
         continue;
       }
@@ -212,7 +213,6 @@ base::expected<Aliases, ParseError> ParseCctlds(
 absl::optional<ParseError> ParseSubset(
     const base::Value::Dict& set_declaration,
     const net::SchemefulSite& primary,
-    bool exempt_from_limits,
     const SubsetDescriptor& descriptor,
     const base::flat_set<net::SchemefulSite>& other_sets_sites,
     bool emit_errors,
@@ -230,14 +230,14 @@ absl::optional<ParseError> ParseSubset(
     base::expected<net::SchemefulSite, ParseErrorType> site_or_error =
         ParseSiteAndValidate(item, set_entries, other_sets_sites, emit_errors);
     if (!site_or_error.has_value())
-      return ParseError(site_or_error.error(), {descriptor.field_name, index});
-    if (exempt_from_limits || !descriptor.size_limit.has_value() ||
+      return ParseError(site_or_error.error(), {descriptor.field_name, static_cast<int>(index)});
+    if (!descriptor.size_limit.has_value() ||
         static_cast<int>(index) < descriptor.size_limit.value()) {
       set_entries.emplace_back(
           site_or_error.value(),
           net::FirstPartySetEntry(
               primary, descriptor.site_type,
-              !exempt_from_limits && descriptor.size_limit.has_value()
+              descriptor.size_limit.has_value()
                   ? absl::make_optional(
                         net::FirstPartySetEntry::SiteIndex(index))
                   : absl::nullopt));
@@ -303,8 +303,11 @@ base::expected<SetsAndAliases, ParseError> ParseSet(
            SubsetDescriptor{
                .field_name = kFirstPartySetAssociatedSitesField,
               .site_type = net::SiteType::kAssociated,
-              .size_limit = absl::make_optional(
-                  features::kFirstPartySetsMaxAssociatedSites.Get()),
+              .size_limit =
+                   exempt_from_limits
+                       ? absl::nullopt
+                       : absl::make_optional(
+                             features::kFirstPartySetsMaxAssociatedSites.Get()),
            },
            {
                .field_name = kFirstPartySetServiceSitesField,
@@ -313,8 +316,8 @@ base::expected<SetsAndAliases, ParseError> ParseSet(
            },
        }) {
     if (absl::optional<ParseError> error =
-            ParseSubset(set_declaration, primary, exempt_from_limits,
-                        descriptor, elements, emit_errors, set_entries);
+            ParseSubset(set_declaration, primary, descriptor, elements,
+                        emit_errors, set_entries);
         error.has_value()) {
       return base::unexpected(error.value());
     }
@@ -421,7 +424,12 @@ absl::optional<net::SchemefulSite>
 FirstPartySetParser::CanonicalizeRegisteredDomain(
     const base::StringPiece origin_string,
     bool emit_errors) {
-  return Canonicalize(origin_string, emit_errors);
+  base::expected<net::SchemefulSite, ParseErrorType> maybe_site =
+      Canonicalize(origin_string, emit_errors);
+  if (!maybe_site.has_value()) {
+    return absl::nullopt;
+  }
+  return maybe_site.value();
 }
 
 SetsAndAliases FirstPartySetParser::ParseSetsFromStream(std::istream& input,
@@ -441,7 +449,7 @@ SetsAndAliases FirstPartySetParser::ParseSetsFromStream(std::istream& input,
         *maybe_value, /*exempt_from_limits=*/false, emit_errors, elements,
         /*warnings=*/nullptr);
     if (!parsed.has_value()) {
-      if (parsed.error().type() == ParseErrorType::kInvalidOrigin) {
+      if (parsed.error().type() == ParseErrorType::kInvalidDomain) {
         // Ignore sets that include an invalid domain (which might have been
         // caused by a PSL update), but don't let that break other sets.
         continue;

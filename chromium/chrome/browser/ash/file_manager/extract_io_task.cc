@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/file_manager/extract_io_task.h"
 
+#include <grp.h>
 #include <utility>
 
 #include "base/check_op.h"
@@ -11,16 +12,19 @@
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
+#include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/filesystem_api_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
-#include "chrome/browser/chromeos/fileapi/file_system_backend.h"
+#include "chrome/browser/ash/fileapi/file_system_backend.h"
 #include "chrome/browser/platform_util.h"
 #include "components/services/unzip/content/unzip_service.h"
 #include "components/services/unzip/public/mojom/unzipper.mojom.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/constants/cryptohome.h"
 #include "third_party/zlib/google/redact.h"
 
@@ -54,7 +58,7 @@ ExtractIOTask::ExtractIOTask(
   for (const storage::FileSystemURL& source_url : source_urls_) {
     const base::FilePath source_path = source_url.path();
     if (source_path.MatchesExtension(".zip") &&
-        chromeos::FileSystemBackend::CanHandleURL(source_url)) {
+        ash::FileSystemBackend::CanHandleURL(source_url)) {
       progress_.sources.emplace_back(source_url, absl::nullopt);
     }
   }
@@ -103,19 +107,35 @@ void ExtractIOTask::FinishedExtraction(base::FilePath directory, bool success) {
   }
 }
 
+absl::optional<gid_t> GetDirectoriesOwnerGid() {
+  struct group grp, *result = nullptr;
+  std::vector<char> buffer(16384);
+  getgrnam_r("chronos-access", &grp, buffer.data(), buffer.size(), &result);
+  if (!result) {
+    return absl::nullopt;
+  }
+  return grp.gr_gid;
+}
+
 // Recursively walk directory and set 'u+rwx,g+x,o+x'.
 bool SetDirectoryPermissions(base::FilePath directory, bool success) {
   // Always set permissions in case of error mid-extract.
   base::FileEnumerator traversal(directory, true,
                                  base::FileEnumerator::DIRECTORIES);
+  const absl::optional<gid_t> owner_gid = GetDirectoriesOwnerGid();
   for (base::FilePath current = traversal.Next(); !current.empty();
        current = traversal.Next()) {
     base::SetPosixFilePermissions(current,
                                   base::FILE_PERMISSION_READ_BY_USER |
                                       base::FILE_PERMISSION_WRITE_BY_USER |
                                       base::FILE_PERMISSION_EXECUTE_BY_USER |
+                                      base::FILE_PERMISSION_READ_BY_GROUP |
                                       base::FILE_PERMISSION_EXECUTE_BY_GROUP |
                                       base::FILE_PERMISSION_EXECUTE_BY_OTHERS);
+    // Might not exist in tests.
+    if (owner_gid.has_value()) {
+      HANDLE_EINTR(chown(current.value().c_str(), -1, owner_gid.value()));
+    }
   }
   return success;
 }
@@ -161,8 +181,15 @@ bool CreateExtractionDirectory(const base::FilePath& destination_directory) {
         destination_directory, base::FILE_PERMISSION_READ_BY_USER |
                                    base::FILE_PERMISSION_WRITE_BY_USER |
                                    base::FILE_PERMISSION_EXECUTE_BY_USER |
+                                   base::FILE_PERMISSION_READ_BY_GROUP |
                                    base::FILE_PERMISSION_EXECUTE_BY_GROUP |
                                    base::FILE_PERMISSION_EXECUTE_BY_OTHERS);
+    // Might not exist in tests.
+    const absl::optional<gid_t> owner_gid = GetDirectoriesOwnerGid();
+    if (created_ok && owner_gid.has_value()) {
+      created_ok = (HANDLE_EINTR(chown(destination_directory.value().c_str(),
+                                       -1, owner_gid.value())) == 0);
+    }
   }
   return created_ok;
 }
@@ -264,7 +291,7 @@ void ExtractIOTask::GetExtractedSize(base::FilePath source_file) {
 
 void ExtractIOTask::CheckSizeThenExtract() {
   for (const EntryStatus& source : progress_.sources) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&ExtractIOTask::GetExtractedSize,
                        weak_ptr_factory_.GetWeakPtr(), source.url.path()));
@@ -281,7 +308,7 @@ void ExtractIOTask::Execute(IOTask::ProgressCallback progress_callback,
   progress_callback_.Run(progress_);
   // If the backend can't handle the folder to unpack into or
   // there are no files to extract, finish the operation with an error.
-  if (!chromeos::FileSystemBackend::CanHandleURL(parent_folder_) ||
+  if (!ash::FileSystemBackend::CanHandleURL(parent_folder_) ||
       sizingCount_ == 0) {
     progress_.state = State::kError;
     RecordUmaExtractStatus(ExtractStatus::kUnknownError);
@@ -309,7 +336,7 @@ void ExtractIOTask::Cancel() {
 // Calls the completion callback for the task. |progress_| should not be
 // accessed after calling this.
 void ExtractIOTask::Complete() {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(complete_callback_), std::move(progress_)));
 }

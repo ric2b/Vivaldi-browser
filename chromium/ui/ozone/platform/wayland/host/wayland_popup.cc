@@ -7,6 +7,8 @@
 #include <aura-shell-client-protocol.h>
 
 #include "base/auto_reset.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display.h"
@@ -76,6 +78,15 @@ bool WaylandPopup::CreateShellPopup() {
     return false;
   }
 
+  if (connection()->zaura_shell() && !aura_surface()) {
+    static constexpr zaura_surface_listener zaura_surface_listener = {
+        nullptr, nullptr, nullptr,       nullptr,       &DeskChanged,
+        nullptr, nullptr, &TooltipShown, &TooltipHidden};
+    SetAuraSurface(zaura_shell_get_aura_surface(
+        connection()->zaura_shell()->wl_object(), root_surface()->surface()));
+    zaura_surface_add_listener(aura_surface(), &zaura_surface_listener, this);
+  }
+
   parent_window()->set_child_window(this);
   UpdateDecoration();
   return true;
@@ -93,19 +104,6 @@ void WaylandPopup::UpdateDecoration() {
     decorated_via_aura_popup_ = true;
     shell_popup_->Decorate();
     return;
-  }
-
-  // Decorate the frame using the older protocol. Can be removed once Lacros >=
-  // M107. Reshown popups will not be decorated if |aura_surface_| isn't reset
-  // when server implements the older protocol.
-  if (!aura_surface_) {
-    aura_surface_.reset(zaura_shell_get_aura_surface(
-        connection()->zaura_shell()->wl_object(), root_surface()->surface()));
-  }
-
-  if (shadow_type_ == PlatformWindowShadowType::kDrop) {
-    zaura_surface_set_frame(aura_surface_.get(),
-                            ZAURA_SURFACE_FRAME_TYPE_SHADOW);
   }
 }
 
@@ -136,10 +134,8 @@ void WaylandPopup::Hide() {
     child_window()->Hide();
   WaylandWindow::Hide();
 
-  if (aura_surface_ && wl::get_version_of_object(aura_surface_.get()) >=
-                           ZAURA_SURFACE_RELEASE_SINCE_VERSION) {
-    aura_surface_.reset();
-  }
+  if (IsSupportedOnAuraSurface(ZAURA_SURFACE_RELEASE_SINCE_VERSION))
+    SetAuraSurface(nullptr);
 
   if (shell_popup_) {
     parent_window()->set_child_window(nullptr);
@@ -190,10 +186,11 @@ void WaylandPopup::HandlePopupConfigure(const gfx::Rect& bounds_dip) {
   gfx::Rect pending_bounds_dip(bounds_dip);
   if (pending_bounds_dip.IsEmpty())
     pending_bounds_dip.set_size(GetBoundsInDIP().size());
-  set_pending_bounds_dip(wl::TranslateBoundsToTopLevelCoordinates(
-      pending_bounds_dip, parent_window()->GetBoundsInDIP()));
-  set_pending_size_px(
-      delegate()->ConvertRectToPixels(pending_bounds_dip).size());
+  pending_configure_state_.bounds_dip =
+      wl::TranslateBoundsToTopLevelCoordinates(
+          pending_bounds_dip, parent_window()->GetBoundsInDIP());
+  pending_configure_state_.size_px =
+      delegate()->ConvertRectToPixels(pending_bounds_dip).size();
 }
 
 void WaylandPopup::HandleSurfaceConfigure(uint32_t serial) {
@@ -227,6 +224,62 @@ void WaylandPopup::UpdateWindowMask() {
   root_surface()->set_opaque_region(IsOpaqueWindow() ? &region : nullptr);
 }
 
+void WaylandPopup::PropagateBufferScale(float new_scale) {
+  if (!IsSurfaceConfigured())
+    return;
+
+  if (!last_sent_buffer_scale_ ||
+      last_sent_buffer_scale_.value() != new_scale) {
+    shell_popup()->SetScaleFactor(new_scale);
+    last_sent_buffer_scale_ = new_scale;
+  }
+}
+
+void WaylandPopup::ShowTooltip(const std::u16string& text,
+                               const gfx::Point& position,
+                               const PlatformWindowTooltipTrigger trigger,
+                               const base::TimeDelta show_delay,
+                               const base::TimeDelta hide_delay) {
+  if (IsSupportedOnAuraSurface(ZAURA_SURFACE_SHOW_TOOLTIP_SINCE_VERSION)) {
+    uint32_t zaura_shell_trigger =
+        trigger == PlatformWindowTooltipTrigger::kCursor
+            ? ZAURA_SURFACE_TOOLTIP_TRIGGER_CURSOR
+            : ZAURA_SURFACE_TOOLTIP_TRIGGER_KEYBOARD;
+    zaura_surface_show_tooltip(
+        aura_surface(), base::UTF16ToUTF8(text).c_str(), position.x(),
+        position.y(), zaura_shell_trigger,
+        // Cast `show_delay` and `hide_delay` into int32_t as TimeDelta should
+        // not be larger than what can be handled in int32_t
+        base::saturated_cast<uint32_t>(show_delay.InMilliseconds()),
+        base::saturated_cast<uint32_t>(hide_delay.InMilliseconds()));
+  }
+}
+
+void WaylandPopup::HideTooltip() {
+  if (IsSupportedOnAuraSurface(ZAURA_SURFACE_SHOW_TOOLTIP_SINCE_VERSION)) {
+    zaura_surface_hide_tooltip(aura_surface());
+  }
+}
+
+void WaylandPopup::TooltipShown(void* data,
+                                zaura_surface* surface,
+                                const char* text,
+                                int32_t x,
+                                int32_t y,
+                                int32_t width,
+                                int32_t height) {
+  WaylandPopup* self = static_cast<WaylandPopup*>(data);
+  DCHECK(self);
+  self->delegate()->OnTooltipShownOnServer(base::UTF8ToUTF16(text),
+                                           gfx::Rect(x, y, width, height));
+}
+
+void WaylandPopup::TooltipHidden(void* data, zaura_surface* surface) {
+  WaylandPopup* self = static_cast<WaylandPopup*>(data);
+  DCHECK(self);
+  self->delegate()->OnTooltipHiddenOnServer();
+}
+
 void WaylandPopup::OnCloseRequest() {
   // Before calling OnCloseRequest, the |shell_popup_| must become hidden and
   // only then call OnCloseRequest().
@@ -250,11 +303,10 @@ bool WaylandPopup::IsSurfaceConfigured() {
   return shell_popup() ? shell_popup()->IsConfigured() : false;
 }
 
-void WaylandPopup::SetWindowGeometry(gfx::Rect bounds_dip) {
+void WaylandPopup::SetWindowGeometry(gfx::Size size_dip) {
   DCHECK(shell_popup_);
   const auto insets = GetDecorationInsetsInDIP();
-  shell_popup_->SetWindowGeometry(
-      {{insets.left(), insets.top()}, bounds_dip.size()});
+  shell_popup_->SetWindowGeometry({{insets.left(), insets.top()}, size_dip});
 }
 
 void WaylandPopup::AckConfigure(uint32_t serial) {

@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/capture_mode/capture_mode_types.h"
+#include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/animation/tween.h"
@@ -25,12 +26,16 @@ class Transform;
 }  // namespace gfx
 
 namespace ui {
+class ColorProvider;
 class Layer;
+class LocatedEvent;
 }  // namespace ui
 
 namespace views {
 class View;
 class Widget;
+class Label;
+class BoxLayout;
 }  // namespace views
 
 namespace ash {
@@ -81,6 +86,10 @@ CameraPreviewSnapPosition GetCameraNextVerticalSnapPosition(
     bool going_up);
 
 // Notification Utils //
+// The notification ID prefix used for notifications corresponding to captured
+// images and videos.
+constexpr char kScreenCaptureNotificationId[] = "capture_mode_notification";
+
 // Constants related to the banner view on the image capture notifications.
 constexpr int kBannerHeightDip = 36;
 constexpr int kBannerHorizontalInsetDip = 12;
@@ -100,6 +109,9 @@ std::unique_ptr<views::View> CreateBannerView();
 // Creates the play icon view which shows on top of the video thumbnail in the
 // notification.
 std::unique_ptr<views::View> CreatePlayIconView();
+
+// Returns the local center point of the given `layer`.
+gfx::Point GetLocalCenterPoint(ui::Layer* layer);
 
 // Returns a transform that scales the given `layer` by the given `scale` factor
 // in both X and Y around its local center point.
@@ -166,6 +178,29 @@ bool SetWidgetVisibility(views::Widget* widget,
 // gets the root window associated with the `CursorManager`.
 aura::Window* GetPreferredRootWindow(
     absl::optional<gfx::Point> location_in_screen = absl::nullopt);
+
+// Configures style for the `label_view` in the settings menu.
+void ConfigLabelView(views::Label* label_view);
+
+// Initializes the box layout for the `view` in the settings menu.
+views::BoxLayout* CreateAndInitBoxLayoutForView(views::View* view);
+
+// Gets the notification ID of a screen capture given its filepath.
+ASH_EXPORT std::string GetScreenCaptureNotificationIdForPath(
+    const base::FilePath& path);
+
+// If the privacy indicators feature is enabled, the below functions update the
+// camera and microphone capture mode indicators according to the given values.
+void MaybeUpdateCameraPrivacyIndicator(bool camera_on);
+void MaybeUpdateMicrophonePrivacyIndicator(bool mic_on);
+
+ui::ColorProvider* GetColorProviderForNativeTheme();
+
+// Returns true if the given located `event` is targeted on a window that is a
+// descendant of the given `widget`. Note that `widget` can be provided as null
+// if it no longer exists, in this case this function returns false.
+bool IsEventTargetedOnWidget(const ui::LocatedEvent& event,
+                             views::Widget* widget);
 
 }  // namespace capture_mode_util
 

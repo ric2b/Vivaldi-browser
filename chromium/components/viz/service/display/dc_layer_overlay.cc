@@ -45,7 +45,7 @@ constexpr int kDCLayerFramesDelayedBeforeOverlay = 5;
 // so don't remove entries and make sure to update enums.xml if it changes.
 enum DCLayerResult {
   DC_LAYER_SUCCESS = 0,
-  DC_LAYER_FAILED_UNSUPPORTED_QUAD [[deprecated]] = 1,  // not recorded
+  DC_LAYER_FAILED_UNSUPPORTED_QUAD = 1,  // not recorded
   DC_LAYER_FAILED_QUAD_BLEND_MODE = 2,
   DC_LAYER_FAILED_TEXTURE_NOT_CANDIDATE = 3,
   DC_LAYER_FAILED_OCCLUDED [[deprecated]] = 4,
@@ -62,7 +62,8 @@ enum DCLayerResult {
   DC_LAYER_FAILED_NOT_DAMAGED = 15,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED = 16,
   DC_LAYER_FAILED_HDR_TONE_MAPPING = 17,
-  kMaxValue = DC_LAYER_FAILED_HDR_TONE_MAPPING,
+  DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA = 18,
+  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA,
 };
 
 enum : size_t {
@@ -123,6 +124,15 @@ DCLayerResult ValidateYUVQuad(
       return DC_LAYER_FAILED_BACKDROP_FILTERS;
   }
 
+  // HLG doesn't have the hdr metadata, but we don't want to promote it to
+  // overlay, as VideoProcessor doesn't support HLG tone mapping well between
+  // different gpu vendors, see: https://crbug.com/1144260#c6.
+  // Otherwise, it could be a parser bug like https://crbug.com/1362288 if the
+  // hdr metadata is still missing. We shouldn't promote too for that case.
+  if (quad->video_color_space.IsHDR() && !quad->hdr_metadata.has_value()) {
+    return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA;
+  }
+
   return DC_LAYER_SUCCESS;
 }
 
@@ -146,7 +156,7 @@ void FromYUVQuad(const YUVVideoDrawQuad* quad,
   quad_to_root_transform.PostConcat(transform_to_root_target);
   // Flatten transform to 2D since DirectComposition doesn't support 3D
   // transforms.  This only applies when non axis aligned overlays are enabled.
-  quad_to_root_transform.FlattenTo2d();
+  quad_to_root_transform.Flatten();
   dc_layer->transform = quad_to_root_transform;
 
   if (quad->shared_quad_state->clip_rect) {
@@ -207,7 +217,7 @@ void FromTextureQuad(const TextureDrawQuad* quad,
   quad_to_root_transform.PostConcat(transform_to_root_target);
   // Flatten transform to 2D since DirectComposition doesn't support 3D
   // transforms.  This only applies when non axis aligned overlays are enabled.
-  quad_to_root_transform.FlattenTo2d();
+  quad_to_root_transform.Flatten();
   dc_layer->transform = quad_to_root_transform;
 
   if (quad->shared_quad_state->clip_rect) {
@@ -220,6 +230,7 @@ void FromTextureQuad(const TextureDrawQuad* quad,
   dc_layer->color_space = gfx::ColorSpace::CreateSRGB();
 
   // Both color space and protected_video_type are hard-coded for stream video.
+  // TODO(crbug.com/1384544): Consider using quad->protected_video_type.
   if (quad->is_stream_video) {
     dc_layer->color_space = gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
                                             gfx::ColorSpace::TransferID::BT709);
@@ -473,7 +484,9 @@ DCLayerOverlayProcessor::DCLayerOverlayProcessor(
     bool skip_initialization_for_testing)
     : has_overlay_support_(skip_initialization_for_testing),
       allowed_yuv_overlay_count_(allowed_yuv_overlay_count),
-      debug_settings_(debug_settings) {
+      debug_settings_(debug_settings),
+      no_undamaged_overlay_promotion_(base::FeatureList::IsEnabled(
+          features::kNoUndamagedOverlayPromotion)) {
   if (!skip_initialization_for_testing) {
     UpdateHasHwOverlaySupport();
     UpdateSystemHDRStatus();
@@ -776,14 +789,21 @@ void DCLayerOverlayProcessor::Process(
             has_overlay_support_, allowed_yuv_overlay_count_,
             processed_yuv_overlay_count_, resource_provider);
         yuv_quads_in_quad_list++;
-        if (it->shared_quad_state->overlay_damage_index.has_value() &&
-            !surface_damage_rect_list_[it->shared_quad_state
-                                           ->overlay_damage_index.value()]
-                 .IsEmpty()) {
-          damaged_yuv_quads_in_quad_list++;
+
+        if (no_undamaged_overlay_promotion_) {
+          if (it->shared_quad_state->overlay_damage_index.has_value() &&
+              !surface_damage_rect_list_[it->shared_quad_state
+                                             ->overlay_damage_index.value()]
+                   .IsEmpty()) {
+            damaged_yuv_quads_in_quad_list++;
+            if (result == DC_LAYER_SUCCESS)
+              processed_yuv_overlay_count_++;
+          }
+        } else {
           if (result == DC_LAYER_SUCCESS)
             processed_yuv_overlay_count_++;
         }
+
         break;
       case DrawQuad::Material::kTextureContent: {
         const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
@@ -852,13 +872,18 @@ void DCLayerOverlayProcessor::Process(
   // overlays
   bool reject_overlays = false;
   if (yuv_quads_in_quad_list > 1 && !has_protected_video_or_texture_overlays) {
-    if (damaged_yuv_quads_in_quad_list == processed_yuv_overlay_count_) {
-      frames_since_last_qualified_multi_overlays_++;
+    if (no_undamaged_overlay_promotion_) {
+      if (damaged_yuv_quads_in_quad_list == processed_yuv_overlay_count_) {
+        frames_since_last_qualified_multi_overlays_++;
+      } else {
+        frames_since_last_qualified_multi_overlays_ = 0;
+      }
+      reject_overlays = frames_since_last_qualified_multi_overlays_ <=
+                        kDCLayerFramesDelayedBeforeOverlay;
     } else {
-      frames_since_last_qualified_multi_overlays_ = 0;
+      if (yuv_quads_in_quad_list != processed_yuv_overlay_count_)
+        reject_overlays = true;
     }
-    reject_overlays = frames_since_last_qualified_multi_overlays_ <=
-                      kDCLayerFramesDelayedBeforeOverlay;
   }
 
   // A YUV quad might be rejected later due to not allowed as an underlay.
@@ -890,8 +915,9 @@ void DCLayerOverlayProcessor::Process(
             .IsEmpty();
 
     if (yuv_quads_in_quad_list > allowed_yuv_overlay_count_ &&
-        !has_protected_video_or_texture_overlays &&
-        it->material == DrawQuad::Material::kYuvVideoContent && undamaged) {
+        !has_protected_video_or_texture_overlays && undamaged &&
+        no_undamaged_overlay_promotion_ &&
+        it->material == DrawQuad::Material::kYuvVideoContent) {
       RecordDCLayerResult(DC_LAYER_FAILED_NOT_DAMAGED, it);
       continue;
     }

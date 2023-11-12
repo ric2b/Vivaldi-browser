@@ -13,6 +13,14 @@ import {test} from './test_util_base.js';
 export {test};
 
 /**
+ * Sanitizes the formatted date. Replaces unusual space with normal space.
+ * @param {string} strDate the date already in the string format.
+ * @return {string}
+ */
+export function sanitizeDate(strDate) {
+  return strDate.replace('\u202f', ' ');
+}
+/**
  * Opens the main Files app's window and waits until it is ready.
  *
  * @param {!FilesAppState} appState App state.
@@ -64,7 +72,7 @@ test.util.sync.getFileList = contentWindow => {
       row.querySelector('.filename-label').textContent,
       row.querySelector('.size').textContent,
       row.querySelector('.type').textContent,
-      row.querySelector('.date').textContent,
+      sanitizeDate(row.querySelector('.date').textContent || ''),
     ]);
   }
   return fileList;
@@ -375,13 +383,20 @@ test.util.sync.execCommand = (contentWindow, command) => {
  * @param {Window} contentWindow Window to be tested.
  * @param {Array<Object>} taskList List of tasks to be returned in
  *     fileManagerPrivate.getFileTasks().
+ * @param {boolean}
+ *     isPolicyDefault Whether the default is set by policy.
  * @return {boolean} Always return true.
  */
-test.util.sync.overrideTasks = (contentWindow, taskList) => {
+test.util.sync
+    .overrideTasks = (contentWindow, taskList, isPolicyDefault = false) => {
   const getFileTasks = (entries, onTasks) => {
     // Call onTask asynchronously (same with original getFileTasks).
     setTimeout(() => {
-      onTasks({tasks: taskList});
+      const policyDefaultHandlerStatus = isPolicyDefault ?
+          chrome.fileManagerPrivate.PolicyDefaultHandlerStatus
+              .DEFAULT_HANDLER_ASSIGNED_BY_POLICY :
+          undefined;
+      onTasks({tasks: taskList, policyDefaultHandlerStatus});
     }, 0);
   };
 
@@ -406,15 +421,20 @@ test.util.sync.overrideTasks = (contentWindow, taskList) => {
 /**
  * Obtains the list of executed tasks.
  * @param {Window} contentWindow Window to be tested.
- * @return {Array<!chrome.fileManagerPrivate.FileTaskDescriptor>} List of
- *     executed tasks.
+ * @return {Array<!{{descriptor: chrome.fileManagerPrivate.FileTaskDescriptor,
+ *     fileNames: !Array<string>}}>} List of executed tasks.
  */
 test.util.sync.getExecutedTasks = contentWindow => {
   if (!test.util.executedTasks_) {
     console.error('Please call overrideTasks() first.');
     return null;
   }
-  return test.util.executedTasks_.map(task => task.descriptor);
+  return test.util.executedTasks_.map(task => {
+    return {
+      descriptor: task.descriptor,
+      fileNames: task.entries.map(e => e.name),
+    };
+  });
 };
 
 /**
@@ -422,15 +442,23 @@ test.util.sync.getExecutedTasks = contentWindow => {
  * @param {Window} contentWindow Window to be tested.
  * @param {!chrome.fileManagerPrivate.FileTaskDescriptor} descriptor the task to
  *     check.
+ * @param {!Array<string>} fileNames Name of files that should have been passed
+ *     to the executeTasks().
  * @return {boolean} True if the task was executed.
  */
-test.util.sync.taskWasExecuted = (contentWindow, descriptor) => {
+test.util.sync.taskWasExecuted = (contentWindow, descriptor, fileNames) => {
   if (!test.util.executedTasks_) {
     console.error('Please call overrideTasks() first.');
     return null;
   }
-  return !!test.util.executedTasks_.find(
+  const task = test.util.executedTasks_.find(
       task => util.descriptorEqual(task.descriptor, descriptor));
+  if (!task) {
+    return false;
+  }
+
+  return JSON.stringify(fileNames) ===
+      JSON.stringify(task.entries.map(e => e.name));
 };
 
 /**

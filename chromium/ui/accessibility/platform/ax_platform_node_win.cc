@@ -24,7 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/string_util_win.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "base/win/enum_variant.h"
 #include "base/win/scoped_bstr.h"
@@ -501,7 +501,7 @@ SAFEARRAY* AXPlatformNodeWin::CreateUIAElementsArrayForRelation(
 SAFEARRAY* AXPlatformNodeWin::CreateUIAElementsArrayForReverseRelation(
     const ax::mojom::IntListAttribute& attribute) {
   std::set<AXPlatformNode*> reverse_relations =
-      GetDelegate()->GetReverseRelations(attribute);
+      GetDelegate()->GetSourceNodesForReverseRelations(attribute);
 
   std::vector<int32_t> id_list;
   std::transform(
@@ -2485,7 +2485,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_Target(
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ANNOTATION_GET_TARGET);
   UIA_VALIDATE_CALL_1_ARG(target);
   std::set<AXPlatformNode*> reverse_relations =
-      GetDelegate()->GetReverseRelations(
+      GetDelegate()->GetSourceNodesForReverseRelations(
           ax::mojom::IntListAttribute::kDetailsIds);
 
   // If there is no reverse relation target, IAnnotationProvider
@@ -4375,7 +4375,8 @@ IFACEMETHODIMP AXPlatformNodeWin::get_offsetAtPoint(
     // We don't support when the IA2 coordinate type is parent relative, but
     // we have to return something rather than E_NOTIMPL or screen readers
     // will complain.
-    NOTIMPLEMENTED_LOG_ONCE() << "See http://crbug.com/1010726";
+    // See http://crbug.com/1010726
+    NOTIMPLEMENTED_LOG_ONCE();
     return S_FALSE;
   }
 
@@ -4547,8 +4548,10 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelections(LONG nSelections,
                                                 IA2TextSelection* selections) {
   AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
 
-  COM_OBJECT_VALIDATE_1_ARG(selections);
-  if (nSelections != 1)
+  COM_OBJECT_VALIDATE();
+
+  // Chromium does not currently support more than one selection.
+  if (nSelections != 1 || !selections)
     return E_INVALIDARG;
 
   if (!selections->startObj || !selections->endObj)
@@ -4575,7 +4578,7 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelections(LONG nSelections,
   AXPosition end_position =
       end_node->HypertextOffsetToEndpoint(selections->endOffset)
           ->AsDomSelectionPosition();
-  if (!start_position->IsNullPosition() || end_position->IsNullPosition())
+  if (start_position->IsNullPosition() || end_position->IsNullPosition())
     return E_INVALIDARG;
 
   AXActionData action_data;
@@ -5149,8 +5152,7 @@ HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
 
     case UIA_IsKeyboardFocusablePropertyId:
       result->vt = VT_BOOL;
-      result->boolVal =
-          ShouldNodeHaveFocusableState() ? VARIANT_TRUE : VARIANT_FALSE;
+      result->boolVal = IsFocusable() ? VARIANT_TRUE : VARIANT_FALSE;
       break;
 
     case UIA_IsOffscreenPropertyId:
@@ -5543,7 +5545,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_bulkFetch(
   result.SetKey("height", base::Value(bounds.height()));
   std::string json_result;
   base::JSONWriter::Write(result, &json_result);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SendBulkFetchResponse,
@@ -6703,7 +6705,7 @@ int32_t AXPlatformNodeWin::ComputeIA2State() {
       // listbox widget inside an editor, which they currently do in order to
       // enable paste operations. Eventually this need should go away once IE11
       // support is no longer needed and Slides instead relies on paste events.
-      if (!HasState(ax::mojom::State::kFocusable) ||
+      if (!IsFocusable() ||
           GetBoolAttribute(ax::mojom::BoolAttribute::kNonAtomicTextFieldRoot))
         break;  // Not used with activedescendant, so preserve editable state.
       [[fallthrough]];  // Will clear editable state.
@@ -7319,7 +7321,14 @@ bool AXPlatformNodeWin::IsUIAControl() const {
     return true;
   }  // end of web-content only case.
 
-  return !(IsInvisibleOrIgnored() && !HasState(ax::mojom::State::kFocusable));
+  // TODO(accessibility): This condition is very wide - it returns true for most
+  // elements, except the ones that are explicitly invisible/ignored and not
+  // focusable. We might want to revisit this implementation to match the specs:
+  // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-treeoverview#control-view.
+  //
+  // Also, should we really have a different implementation for Views than for
+  // web content?
+  return !(IsInvisibleOrIgnored() && !IsFocusable());
 }
 
 absl::optional<LONG> AXPlatformNodeWin::ComputeUIALandmarkType() const {
@@ -7419,23 +7428,6 @@ bool AXPlatformNodeWin::IsPlatformCheckable() const {
   return AXPlatformNodeBase::IsPlatformCheckable();
 }
 
-bool AXPlatformNodeWin::ShouldNodeHaveFocusableState() const {
-  if (IsIframe(GetRole()))
-    return false;
-  if (IsPlatformDocument()) {
-    const AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
-    return !parent || parent->GetRole() != ax::mojom::Role::kPortal;
-  }
-
-  switch (GetRole()) {
-    case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kMenuListOption:
-      return HasBoolAttribute(ax::mojom::BoolAttribute::kSelected);
-    default:
-      return HasState(ax::mojom::State::kFocusable);
-  }
-}
-
 int AXPlatformNodeWin::MSAAState() const {
   int msaa_state = 0;
 
@@ -7462,7 +7454,7 @@ int AXPlatformNodeWin::MSAAState() const {
   if (HasState(ax::mojom::State::kExpanded))
     msaa_state |= STATE_SYSTEM_EXPANDED;
 
-  if (ShouldNodeHaveFocusableState())
+  if (IsFocusable())
     msaa_state |= STATE_SYSTEM_FOCUSABLE;
 
   // Built-in autofill and autocomplete wil also set has popup.

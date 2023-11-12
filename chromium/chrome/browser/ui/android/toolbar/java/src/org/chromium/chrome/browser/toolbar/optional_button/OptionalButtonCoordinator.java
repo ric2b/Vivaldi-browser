@@ -15,7 +15,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.FeatureList;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
@@ -32,6 +31,7 @@ import org.chromium.ui.widget.ViewRectProvider;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.function.BooleanSupplier;
 
 /**
  * The coordinator for a button that may appear on the toolbar whose icon and click handler can be
@@ -135,8 +135,9 @@ public class OptionalButtonCoordinator {
         // Dynamic buttons include an action chip resource ID by default regardless of variant.
         if (hasActionChipResourceId) {
             // We should only show the action chip if the action chip variant is enabled.
-            boolean isActionChipVariant =
-                    FeatureList.isInitialized() && AdaptiveToolbarFeatures.shouldShowActionChip();
+            boolean isActionChipVariant = FeatureList.isInitialized()
+                    && AdaptiveToolbarFeatures.shouldShowActionChip(
+                            buttonData.getButtonSpec().getButtonVariant());
             // And if feature engagement allows it.
             boolean shouldShowActionChip = isActionChipVariant
                     && mFeatureEngagementTracker.isInitialized()

@@ -13,12 +13,14 @@
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
+#include "base/values.h"
 #include "chrome/browser/apps/app_service/metrics/app_platform_metrics_utils.h"
 #include "chrome/browser/apps/app_service/metrics/browser_to_tab_list.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
+#include "components/services/app_service/public/protos/app_types.pb.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
 class Profile;
@@ -59,6 +61,9 @@ std::string GetAppTypeHistogramNameV2(apps::AppTypeNameV2 app_type_name);
 
 const std::set<apps::AppTypeName>& GetAppTypeNameSet();
 
+ApplicationInstallTime ConvertInstallTimeToProtoApplicationInstallTime(
+    InstallTime install_time);
+
 // Records metrics when launching apps.
 void RecordAppLaunchMetrics(Profile* profile,
                             AppType app_type,
@@ -95,9 +100,11 @@ class AppPlatformMetrics : public apps::AppRegistryCache::Observer,
                                   AppType app_type,
                                   UninstallSource app_uninstall_source) {}
 
-    // Invoked when app usage metrics are being recorded (every 5 mins).
+    // Invoked when app usage metrics are being recorded (every 5 mins). Since
+    // apps can have multiple instances, we also include the instance id here.
     virtual void OnAppUsage(const std::string& app_id,
                             AppType app_type,
+                            const base::UnguessableToken& instance_id,
                             base::TimeDelta running_time) {}
 
     // Invoked when the `AppPlatformMetrics` component (being observed) is being

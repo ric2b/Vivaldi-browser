@@ -8,9 +8,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/notreached.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api_helpers.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
+#include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/profiles/profile.h"
@@ -167,7 +169,7 @@ ExtensionFunction::ResponseAction PermissionsRemoveFunction::Run() {
       .RevokeOptionalPermissions(
           *extension(), *permissions_to_revoke, PermissionsUpdater::REMOVE_SOFT,
           base::BindOnce(
-              &PermissionsRemoveFunction::Respond, base::RetainedRef(this),
+              &PermissionsRemoveFunction::Respond, this,
               ArgumentList(api::permissions::Remove::Results::Create(true))));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -324,20 +326,20 @@ ExtensionFunction::ResponseAction PermissionsRequestFunction::Run() {
   // test.
   if (auto_confirm_for_tests != DO_NOT_SKIP) {
     prompted_permissions_for_testing_ = total_new_permissions->Clone();
-    if (auto_confirm_for_tests == PROCEED)
+    if (auto_confirm_for_tests == PROCEED) {
       OnInstallPromptDone(ExtensionInstallPrompt::DoneCallbackPayload(
           ExtensionInstallPrompt::Result::ACCEPTED));
-    else if (auto_confirm_for_tests == ABORT)
+    } else if (auto_confirm_for_tests == ABORT) {
       OnInstallPromptDone(ExtensionInstallPrompt::DoneCallbackPayload(
           ExtensionInstallPrompt::Result::USER_CANCELED));
+    }
     return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
   install_ui_ = std::make_unique<ExtensionInstallPrompt>(
       Profile::FromBrowserContext(browser_context()), native_window);
   install_ui_->ShowDialog(
-      base::BindOnce(&PermissionsRequestFunction::OnInstallPromptDone,
-                     base::RetainedRef(this)),
+      base::BindOnce(&PermissionsRequestFunction::OnInstallPromptDone, this),
       extension(), nullptr,
       std::make_unique<ExtensionInstallPrompt::Prompt>(
           ExtensionInstallPrompt::PERMISSIONS_PROMPT),
@@ -350,6 +352,9 @@ ExtensionFunction::ResponseAction PermissionsRequestFunction::Run() {
 
 void PermissionsRequestFunction::OnInstallPromptDone(
     ExtensionInstallPrompt::DoneCallbackPayload payload) {
+  // This dialog doesn't support the "withhold permissions" checkbox.
+  DCHECK_NE(payload.result,
+            ExtensionInstallPrompt::Result::ACCEPTED_WITH_WITHHELD_PERMISSIONS);
   if (payload.result != ExtensionInstallPrompt::Result::ACCEPTED) {
     Respond(ArgumentList(api::permissions::Request::Results::Create(false)));
     return;
@@ -361,14 +366,13 @@ void PermissionsRequestFunction::OnInstallPromptDone(
     permissions_updater.GrantRuntimePermissions(
         *extension(), *requested_withheld_,
         base::BindOnce(&PermissionsRequestFunction::OnRuntimePermissionsGranted,
-                       base::RetainedRef(this)));
+                       this));
   }
   if (requesting_optional_permissions_) {
     permissions_updater.GrantOptionalPermissions(
         *extension(), *requested_optional_,
         base::BindOnce(
-            &PermissionsRequestFunction::OnOptionalPermissionsGranted,
-            base::RetainedRef(this)));
+            &PermissionsRequestFunction::OnOptionalPermissionsGranted, this));
   }
 
   // Grant{Runtime|Optional}Permissions calls above can finish synchronously.

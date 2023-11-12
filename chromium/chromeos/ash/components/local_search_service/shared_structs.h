@@ -76,7 +76,7 @@ struct SearchParams {
   // Relevance score will be calculated as a combination of prefix and fuzzy
   // matching. A Data item is relevant if the overall relevance score is above
   // this threshold. The threshold should be in [0,1].
-  double relevance_threshold = 0.32;
+  double relevance_threshold = 0.64;
   // |prefix_threshold| and |fuzzy_threshold| will be applicable if the backend
   // is kInvertedIndex. When a query term is matched against a Data item, it
   // will be considered relevant if either its prefix score is above
@@ -164,11 +164,5 @@ struct Token {
 };
 
 }  // namespace ash::local_search_service
-
-// TODO(https://crbug.com/1164001): remove when moved to ash.
-namespace chromeos::local_search_service {
-using ::ash::local_search_service::ResponseStatus;
-using ::ash::local_search_service::Result;
-}  // namespace chromeos::local_search_service
 
 #endif  // CHROMEOS_ASH_COMPONENTS_LOCAL_SEARCH_SERVICE_SHARED_STRUCTS_H_

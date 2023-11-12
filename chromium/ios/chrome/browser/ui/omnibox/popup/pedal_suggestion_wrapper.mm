@@ -21,7 +21,7 @@
 
 #pragma mark - AutocompleteSuggestion
 
-// Do not expose any pedal, pretend that this is a normal suggestion.
+/// Do not expose any pedal, pretend that this is a normal suggestion.
 - (id<OmniboxPedal>)pedal {
   return nil;
 }
@@ -44,6 +44,12 @@
 }
 - (BOOL)isClipboardMatch {
   return NO;
+}
+- (NSNumber*)suggestionGroupId {
+  return nil;
+}
+- (NSNumber*)suggestionSectionId {
+  return nil;
 }
 - (BOOL)isTailSuggestion {
   return NO;

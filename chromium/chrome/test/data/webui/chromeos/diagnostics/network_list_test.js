@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://diagnostics/network_list.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {ConnectivityCardElement} from 'chrome://diagnostics/connectivity_card.js';
 import {DiagnosticsBrowserProxyImpl} from 'chrome://diagnostics/diagnostics_browser_proxy.js';
@@ -14,13 +15,13 @@ import {setNetworkHealthProviderForTesting, setSystemRoutineControllerForTesting
 import {NetworkListElement} from 'chrome://diagnostics/network_list.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isVisible} from '../../test_util.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {isVisible} from '../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 import {TestDiagnosticsBrowserProxy} from './test_diagnostics_browser_proxy.js';
 
-export function networkListTestSuite() {
+suite('networkListTestSuite', function() {
   /** @type {?TestDiagnosticsBrowserProxy} */
   let DiagnosticsBrowserProxy = null;
 
@@ -283,4 +284,4 @@ export function networkListTestSuite() {
                     networkListElement.shadowRoot.querySelector(
                         '.diagnostics-network-list-container')))));
   });
-}
+});

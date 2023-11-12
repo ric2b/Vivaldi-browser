@@ -251,12 +251,15 @@ class ShortcutsProviderTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  // Passthrough to the private function in provider_.
-  int CalculateScore(const std::string& terms,
-                     const ShortcutsDatabase::Shortcut& shortcut);
+  // Passthrough to the private `CreateScoredShortcutMatch` function in
+  // provider_.
   int CalculateAggregateScore(
       const std::string& terms,
       const std::vector<const ShortcutsDatabase::Shortcut*>& shortcuts);
+
+  // Passthrough to the private `GetMatches`. Enables populating scoring
+  // signals.
+  void GetMatchesWithScoringSignals(const AutocompleteInput& input);
 
   // ScopedFeatureList needs to be defined before TaskEnvironment, so that it is
   // destroyed after TaskEnvironment, to prevent data races on the
@@ -271,9 +274,18 @@ ShortcutsProviderTest::ShortcutsProviderTest() {
   // `scoped_feature_list_` needs to be initialized as early as possible, to
   // avoid data races caused by tasks on other threads accessing it.
   scoped_feature_list_.Reset();
+  // Even though these are enabled by default on desktop, they aren't enabled by
+  // default on mobile. To avoid having 2 sets of tests around, explicitly
+  // enable them for all platforms for tests.
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{omnibox::kRichAutocompletion,
+        {{"RichAutocompletionAutocompleteTitlesShortcutProvider", "true"},
+         {"RichAutocompletionAutocompleteTitlesMinChar", "3"},
+         {"RichAutocompletionAutocompleteShortcutText", "true"},
+         {"RichAutocompletionAutocompleteShortcutTextMinChar", "3"}}},
+       {omnibox::kShortcutExpanding, {}}},
+      {});
   RichAutocompletionParams::ClearParamsForTesting();
-  scoped_feature_list_.InitWithFeatures({omnibox::kShortcutExpanding},
-                                        {omnibox::kRichAutocompletion});
 }
 
 void ShortcutsProviderTest::SetUp() {
@@ -298,22 +310,21 @@ void ShortcutsProviderTest::TearDown() {
   task_environment_.RunUntilIdle();
 }
 
-int ShortcutsProviderTest::CalculateScore(
-    const std::string& terms,
-    const ShortcutsDatabase::Shortcut& shortcut) {
-  const int max_relevance =
-      ShortcutsProvider::kShortcutsProviderDefaultMaxRelevance;
-  return provider_->CalculateScore(ASCIIToUTF16(terms), shortcut,
-                                   max_relevance);
-}
-
 int ShortcutsProviderTest::CalculateAggregateScore(
     const std::string& terms,
     const std::vector<const ShortcutsDatabase::Shortcut*>& shortcuts) {
   const int max_relevance =
       ShortcutsProvider::kShortcutsProviderDefaultMaxRelevance;
-  return provider_->CalculateAggregateScore(ASCIIToUTF16(terms), shortcuts,
-                                            max_relevance);
+  return provider_
+      ->CreateScoredShortcutMatch(ASCIIToUTF16(terms),
+                                  /*stripped_destination_url=*/GURL(),
+                                  shortcuts, max_relevance)
+      .relevance;
+}
+
+void ShortcutsProviderTest::GetMatchesWithScoringSignals(
+    const AutocompleteInput& input) {
+  provider_->GetMatches(input, /*populate_scoring_signals=*/true);
 }
 
 // Actual tests ---------------------------------------------------------------
@@ -324,7 +335,7 @@ TEST_F(ShortcutsProviderTest, SimpleSingleMatch) {
   ExpectedURLs expected_urls;
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(expected_url, true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls, expected_url,
-                           u"ogle.com");
+                           u"ogle");
 
   // Same test with prevent inline autocomplete.
   expected_urls.clear();
@@ -439,37 +450,31 @@ TEST_F(ShortcutsProviderTest, TrickySingleMatch) {
   RunShortcutsProviderTest(provider_, text, true, expected_urls, expected_url,
                            std::u16string());
 
-  // A foursome of tests to verify that trailing spaces prevent the shortcut
-  // from being allowed to be the default match.  For each of two tests, we
-  // first verify that the match is allowed to be default without the trailing
-  // space but is not allowed to be default with the trailing space.  In both
-  // of these with-trailing-space cases, we actually get an
-  // inline_autocompletion, though it's never used because the match is
-  // prohibited from being default.
+  // A foursome of tests to verify that trailing spaces does not prevent the
+  // shortcut from being allowed to be the default match. For each of two tests,
+  // we try the input with and without the trailing whitespace.
   text = u"trailing1";
   expected_url = "http://trailing1.com/";
   expected_urls.clear();
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(expected_url, true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls, expected_url,
-                           u".com");
+                           u" - Space in Shortcut");
   text = u"trailing1 ";
   expected_urls.clear();
-  expected_urls.push_back(
-      ExpectedURLAndAllowedToBeDefault(expected_url, false));
+  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(expected_url, true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls, expected_url,
-                           u".com");
+                           u"- Space in Shortcut");
   text = u"about:trailing2";
   expected_url = "chrome://trailing2blah/";
   expected_urls.clear();
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(expected_url, true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls, expected_url,
-                           u"blah");
+                           u" ");
   text = u"about:trailing2 ";
   expected_urls.clear();
-  expected_urls.push_back(
-      ExpectedURLAndAllowedToBeDefault(expected_url, false));
+  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(expected_url, true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls, expected_url,
-                           u"blah");
+                           u"");
 }
 
 TEST_F(ShortcutsProviderTest, SimpleSingleMatchKeyword) {
@@ -570,14 +575,14 @@ TEST_F(ShortcutsProviderTest, MultiMatch) {
   ExpectedURLs expected_urls;
   // Scores high because of completion length.
   expected_urls.push_back(
-      ExpectedURLAndAllowedToBeDefault("http://slashdot.org/", false));
+      ExpectedURLAndAllowedToBeDefault("http://slashdot.org/", true));
   // Scores high because of visit count.
   expected_urls.push_back(
-      ExpectedURLAndAllowedToBeDefault("http://sports.yahoo.com/", false));
+      ExpectedURLAndAllowedToBeDefault("http://sports.yahoo.com/", true));
   // Scores high because of visit count but less match span,
   // which is more important.
   expected_urls.push_back(
-      ExpectedURLAndAllowedToBeDefault("http://www.cnn.com/index.html", false));
+      ExpectedURLAndAllowedToBeDefault("http://www.cnn.com/index.html", true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls,
                            "http://slashdot.org/", std::u16string());
 }
@@ -589,18 +594,18 @@ TEST_F(ShortcutsProviderTest, RemoveDuplicates) {
       ExpectedURLAndAllowedToBeDefault("http://duplicate.com/", true));
   // Make sure the URL only appears once in the output list.
   RunShortcutsProviderTest(provider_, text, false, expected_urls,
-                           "http://duplicate.com/", u"icate.com");
+                           "http://duplicate.com/", u"icate");
 }
 
 TEST_F(ShortcutsProviderTest, TypedCountMatches) {
   std::u16string text(u"just");
   ExpectedURLs expected_urls;
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/b.html", false));
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/a.html", false));
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/c.html", false));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/b.html", true));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/a.html", true));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/c.html", true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls,
                            "http://www.testsite.com/b.html", std::u16string());
 }
@@ -608,12 +613,12 @@ TEST_F(ShortcutsProviderTest, TypedCountMatches) {
 TEST_F(ShortcutsProviderTest, FragmentLengthMatches) {
   std::u16string text(u"just a");
   ExpectedURLs expected_urls;
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/d.html", false));
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/e.html", false));
-  expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.testsite.com/f.html", false));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/d.html", true));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/e.html", true));
+  expected_urls.push_back(
+      ExpectedURLAndAllowedToBeDefault("http://www.testsite.com/f.html", true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls,
                            "http://www.testsite.com/d.html", std::u16string());
 }
@@ -622,72 +627,14 @@ TEST_F(ShortcutsProviderTest, DaysAgoMatches) {
   std::u16string text(u"ago");
   ExpectedURLs expected_urls;
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.daysagotest.com/a.html", false));
+      "http://www.daysagotest.com/a.html", true));
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.daysagotest.com/b.html", false));
+      "http://www.daysagotest.com/b.html", true));
   expected_urls.push_back(ExpectedURLAndAllowedToBeDefault(
-      "http://www.daysagotest.com/c.html", false));
+      "http://www.daysagotest.com/c.html", true));
   RunShortcutsProviderTest(provider_, text, false, expected_urls,
                            "http://www.daysagotest.com/a.html",
                            std::u16string());
-}
-
-TEST_F(ShortcutsProviderTest, CalculateScore) {
-  auto shortcut = MakeShortcut(u"test56789012345");
-
-  // Maximal score.
-  const int kMaxScore = CalculateScore("test56789012345", shortcut);
-
-  // When creating or updating shortcuts, their text is set longer than the user
-  // input (see `ShortcutBackend::AddOrUpdateShortcut()`). So `CalculateScore()`
-  // permits up to 10 missing chars before beginning to decrease scores.
-  EXPECT_EQ(CalculateScore("test5678901234", shortcut), kMaxScore);
-  EXPECT_EQ(CalculateScore("test5", shortcut), kMaxScore);
-
-  // Score decreases as percent of the match is decreased.
-  int score_4_chars = CalculateScore("test", shortcut);
-  EXPECT_LT(score_4_chars, kMaxScore);
-  int score_2_chars = CalculateScore("te", shortcut);
-  EXPECT_LT(score_2_chars, score_4_chars);
-  int score_1_char = CalculateScore("t", shortcut);
-  EXPECT_LT(score_1_char, score_2_chars);
-
-  // Should decay with time - one week.
-  shortcut.last_access_time = base::Time::Now() - base::Days(7);
-  int score_week_old = CalculateScore("test56789012345", shortcut);
-  EXPECT_LT(score_week_old, kMaxScore);
-
-  // Should decay more in two weeks.
-  shortcut.last_access_time = base::Time::Now() - base::Days(14);
-  int score_two_weeks_old = CalculateScore("test56789012345", shortcut);
-  EXPECT_LT(score_two_weeks_old, score_week_old);
-
-  // But not if it was actively clicked on. 2 hits slow decaying power.
-  shortcut.number_of_hits = 2;
-  shortcut.last_access_time = base::Time::Now() - base::Days(14);
-  int score_popular_two_weeks_old = CalculateScore("test56789012345", shortcut);
-  EXPECT_LT(score_two_weeks_old, score_popular_two_weeks_old);
-  // But still decayed.
-  EXPECT_LT(score_popular_two_weeks_old, kMaxScore);
-
-  // 3 hits slow decaying power even more.
-  shortcut.number_of_hits = 3;
-  shortcut.last_access_time = base::Time::Now() - base::Days(14);
-  int score_more_popular_two_weeks_old =
-      CalculateScore("test56789012345", shortcut);
-  EXPECT_LT(score_two_weeks_old, score_more_popular_two_weeks_old);
-  EXPECT_LT(score_popular_two_weeks_old, score_more_popular_two_weeks_old);
-  // But still decayed.
-  EXPECT_LT(score_more_popular_two_weeks_old, kMaxScore);
-}
-
-TEST_F(ShortcutsProviderTest, CalculateScore_ShortShortcutText) {
-  // Make sure there's no negative or weird scores when the shortcut text is
-  // shorter than the 3 char adjustment.
-  const int kMaxScore = CalculateScore("test", MakeShortcut(u"test"));
-  auto short_shortcut = MakeShortcut(u"ab");
-  EXPECT_EQ(CalculateScore("ab", short_shortcut), kMaxScore);
-  EXPECT_EQ(CalculateScore("a", short_shortcut), kMaxScore);
 }
 
 TEST_F(ShortcutsProviderTest, DeleteMatch) {
@@ -760,19 +707,7 @@ TEST_F(ShortcutsProviderTest, DoesNotProvideOnFocus) {
   EXPECT_TRUE(provider_->matches().empty());
 }
 
-class ShortcutsProviderAggregateShortcutsTest : public ShortcutsProviderTest {
- public:
-  ShortcutsProviderAggregateShortcutsTest() {
-    // `scoped_feature_list_` needs to be initialized as early as possible, to
-    // avoid data races caused by tasks on other threads accessing it.
-    scoped_feature_list_.Reset();
-    RichAutocompletionParams::ClearParamsForTesting();
-    scoped_feature_list_.InitWithFeatures({omnibox::kAggregateShortcuts},
-                                          {omnibox::kRichAutocompletion});
-  }
-};
-
-TEST_F(ShortcutsProviderAggregateShortcutsTest, GetMatches) {
+TEST_F(ShortcutsProviderTest, GetMatches) {
   {
     // When multiple shortcuts with the same destination URL match the input,
     // they should be scored together (i.e. their visit counts summed, the most
@@ -835,7 +770,28 @@ TEST_F(ShortcutsProviderAggregateShortcutsTest, GetMatches) {
   }
 }
 
-TEST_F(ShortcutsProviderTest, CalculateAggregateScore) {
+TEST_F(ShortcutsProviderTest, GetMatchesWithScoringSignals) {
+  // When multiple shortcuts with the same destination URL match the input,
+  // they should be scored together (i.e. their visit counts summed, the most
+  // recent visit date and shortest text considered).
+  AutocompleteInput input(u"wi", metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  GetMatchesWithScoringSignals(input);
+  const auto& matches = provider_->matches();
+  EXPECT_EQ(matches.size(), 3u);
+  // There are 2 shortcuts with the wilson7 url which have the same aggregate
+  // text length, visit count, and last visit as the 1 winston shortcut.
+  EXPECT_EQ(matches[0].scoring_signals.shortcut_visit_count(), 3);
+  EXPECT_EQ(matches[0].scoring_signals.shortest_shortcut_len(), 7);
+
+  EXPECT_EQ(matches[1].scoring_signals.shortcut_visit_count(), 3);
+  EXPECT_EQ(matches[1].scoring_signals.shortest_shortcut_len(), 7);
+
+  EXPECT_EQ(matches[2].scoring_signals.shortcut_visit_count(), 2);
+  EXPECT_EQ(matches[2].scoring_signals.shortest_shortcut_len(), 7);
+}
+
+TEST_F(ShortcutsProviderTest, Score) {
   const auto days_ago = [](int n) { return base::Time::Now() - base::Days(n); };
 
   // Aggregate score should consider the shortest text length, most recent visit
@@ -850,14 +806,23 @@ TEST_F(ShortcutsProviderTest, CalculateAggregateScore) {
   EXPECT_EQ(score_a, score_b);
   EXPECT_GT(score_a, 0);
 
-  // `CalculateAggregateScore` should give the same scores as `CalculateScore`
-  // when there is only 1 shortcut (i.e. no aggregation).
-  auto score_b_non_aggregate = CalculateScore("a", shortcut_b);
-  EXPECT_EQ(score_b_non_aggregate, score_b);
-
   // Typing more of the text increases score.
   auto score_b_long_query = CalculateAggregateScore("ab", {&shortcut_b});
   EXPECT_GT(score_b_long_query, score_b);
+
+  // When creating or updating shortcuts, their text is set longer than the user
+  // input (see `ShortcutBackend::AddOrUpdateShortcut()`). So `CalculateScore()`
+  // permits up to 10 missing chars before beginning to decrease scores.
+  EXPECT_EQ(CalculateAggregateScore("test56", {&shortcut_a_frequent}),
+            CalculateAggregateScore("test5678901234", {&shortcut_a_frequent}));
+
+  // Make sure there's no negative or weird scores when the shortcut text is
+  // shorter than the 10 char adjustment.
+  const auto shortcut = MakeShortcut(u"test");
+  const int kMaxScore = CalculateAggregateScore("test", {&shortcut});
+  const auto short_shortcut = MakeShortcut(u"ab");
+  EXPECT_EQ(CalculateAggregateScore("ab", {&short_shortcut}), kMaxScore);
+  EXPECT_EQ(CalculateAggregateScore("a", {&short_shortcut}), kMaxScore);
 
   // More recent shortcuts should be scored higher.
   auto shortcut_b_old = MakeShortcut(u"size______12", days_ago(2), 12);
@@ -910,15 +875,23 @@ TEST_F(ShortcutsProviderTest, HistoryClusterSuggestions) {
   const auto matches = provider_->matches();
 
   // Expect 3 (i.e. `provider_max_matches_`) non-cluster matches, and all
-  // cluster matches.
+  // cluster matches. Expect only the non-cluster matches to be allowed to be
+  // default.
   ASSERT_EQ(matches.size(), 7u);
   EXPECT_EQ(matches[0].type, AutocompleteMatchType::HISTORY_URL);
+  EXPECT_EQ(matches[0].allowed_to_be_default_match, true);
   EXPECT_EQ(matches[1].type, AutocompleteMatchType::HISTORY_URL);
+  EXPECT_EQ(matches[1].allowed_to_be_default_match, true);
   EXPECT_EQ(matches[2].type, AutocompleteMatchType::HISTORY_URL);
+  EXPECT_EQ(matches[2].allowed_to_be_default_match, true);
   EXPECT_EQ(matches[3].type, AutocompleteMatchType::HISTORY_CLUSTER);
+  EXPECT_EQ(matches[3].allowed_to_be_default_match, false);
   EXPECT_EQ(matches[4].type, AutocompleteMatchType::HISTORY_CLUSTER);
+  EXPECT_EQ(matches[4].allowed_to_be_default_match, false);
   EXPECT_EQ(matches[5].type, AutocompleteMatchType::HISTORY_CLUSTER);
+  EXPECT_EQ(matches[5].allowed_to_be_default_match, false);
   EXPECT_EQ(matches[6].type, AutocompleteMatchType::HISTORY_CLUSTER);
+  EXPECT_EQ(matches[6].allowed_to_be_default_match, false);
 
   // Expect only non-cluster matches to have capped decrementing scores.
   EXPECT_EQ(matches[1].relevance, matches[0].relevance - 1);
@@ -928,25 +901,23 @@ TEST_F(ShortcutsProviderTest, HistoryClusterSuggestions) {
   EXPECT_EQ(matches[5].relevance, matches[0].relevance);
   EXPECT_EQ(matches[6].relevance, matches[0].relevance);
 
-  // Expect cluster matches to have grouping.
+  // Expect cluster matches to not have grouping.
   EXPECT_EQ(matches[0].suggestion_group_id, absl::nullopt);
   EXPECT_EQ(matches[1].suggestion_group_id, absl::nullopt);
   EXPECT_EQ(matches[2].suggestion_group_id, absl::nullopt);
-  EXPECT_EQ(matches[3].suggestion_group_id, omnibox::GROUP_HISTORY_CLUSTER);
-  EXPECT_EQ(matches[4].suggestion_group_id, omnibox::GROUP_HISTORY_CLUSTER);
-  EXPECT_EQ(matches[5].suggestion_group_id, omnibox::GROUP_HISTORY_CLUSTER);
-  EXPECT_EQ(matches[6].suggestion_group_id, omnibox::GROUP_HISTORY_CLUSTER);
+  EXPECT_EQ(matches[3].suggestion_group_id, absl::nullopt);
+  EXPECT_EQ(matches[4].suggestion_group_id, absl::nullopt);
+  EXPECT_EQ(matches[5].suggestion_group_id, absl::nullopt);
+  EXPECT_EQ(matches[6].suggestion_group_id, absl::nullopt);
 
-  // With `omnibox_history_cluster_provider_free_ranking`, should not have
-  // groups.
-  config.omnibox_history_cluster_provider_free_ranking = true;
+  // With `omnibox_history_cluster_provider_allow_default`, should be allowed
+  // default.
+  config.omnibox_history_cluster_provider_allow_default = true;
   history_clusters::SetConfigForTesting(config);
   provider_->Start(input, false);
-  const auto matches_with_free_ranking = provider_->matches();
-  ASSERT_EQ(matches.size(), matches_with_free_ranking.size());
-  for (size_t i = 0; i < matches.size(); ++i) {
-    EXPECT_EQ(matches[i].contents, matches_with_free_ranking[i].contents);
-    EXPECT_EQ(matches_with_free_ranking[i].suggestion_group_id, absl::nullopt);
-  }
+  const auto matches_with_allow_default = provider_->matches();
+  ASSERT_EQ(matches.size(), matches.size());
+  for (const auto& m : matches_with_allow_default)
+    EXPECT_TRUE(m.allowed_to_be_default_match);
 }
 #endif  // !BUILDFLAG(IS_IOS)

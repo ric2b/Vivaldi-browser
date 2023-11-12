@@ -15,7 +15,6 @@
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
@@ -36,6 +35,8 @@
 #include "components/autofill/core/browser/payments/payments_requests/upload_card_request.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/signin/public/identity_manager/access_token_fetcher.h"
+#include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "components/signin/public/identity_manager/scope_set.h"
@@ -443,7 +444,7 @@ void PaymentsClient::OnSimpleLoaderCompleteInternal(int response_code,
                      error_api_error_reason, "virtual_card_permanent_error")) {
         result =
             AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure;
-      } else if (base::EqualsCaseInsensitiveASCII(error_code, "internal")) {
+      } else if (request_->IsRetryableFailure(error_code)) {
         result = AutofillClient::PaymentsRpcResult::kTryAgainFailure;
       } else if (!error_code.empty() || !request_->IsResponseComplete()) {
         result = AutofillClient::PaymentsRpcResult::kPermanentFailure;

@@ -16,7 +16,6 @@
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_uma.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
-#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "net/base/url_util.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -41,9 +40,7 @@
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/vector_icons.h"
 
-namespace arc {
-
-namespace input_overlay {
+namespace arc::input_overlay {
 
 namespace {
 // If the parent's width smaller than |kParentWidthThreshold|, it uses smaller
@@ -92,10 +89,11 @@ constexpr char kGamePackageName[] = "entry.435412983";
 constexpr char kBoardName[] = "entry.1492517074";
 constexpr char kOsVersion[] = "entry.1961594320";
 
-GURL GetAssembleUrl(DisplayOverlayController& controller) {
+// Pass |package_name| by value because the focus will be changed to the
+// browser.
+GURL GetAssembleUrl(std::string package_name) {
   GURL url(kFeedbackUrl);
-  const auto* package_name = controller.GetPackageName();
-  url = net::AppendQueryParameter(url, kGamePackageName, *package_name);
+  url = net::AppendQueryParameter(url, kGamePackageName, package_name);
   url = net::AppendQueryParameter(url, kBoardName,
                                   base::SysInfo::HardwareModelName());
   url = net::AppendQueryParameter(url, kOsVersion,
@@ -361,7 +359,14 @@ void InputMenuView::Init(const gfx::Size& parent_size) {
     // side.
     x = std::max(0, (parent_size.width() - width()) / 2);
   }
-  SetPosition(gfx::Point(x, entry_view_->y()));
+  int y = entry_view_->y();
+  if (display_overlay_controller_->touch_injector()->allow_reposition() &&
+      (y + height() > parent_size.height())) {
+    // Set the menu at the bottom if there is not enough margin on the bottom
+    // side.
+    y = parent_size.height() - height();
+  }
+  SetPosition(gfx::Point(x, y));
 }
 
 std::unique_ptr<views::View> InputMenuView::BuildSeparator() {
@@ -401,7 +406,7 @@ void InputMenuView::OnEditButtonPressed() {
   }
   RecordInputOverlayCustomizedUsage();
   InputOverlayUkm::RecordInputOverlayCustomizedUsageUkm(
-      *(display_overlay_controller_->GetPackageName()));
+      display_overlay_controller_->GetPackageName());
   // Change display mode, load edit UI per action and overall edit buttons; make
   // sure the following line is at the bottom because edit mode will kill this
   // view.
@@ -413,7 +418,7 @@ void InputMenuView::OnButtonSendFeedbackPressed() {
   if (!display_overlay_controller_)
     return;
 
-  GURL url = GetAssembleUrl(*display_overlay_controller_);
+  GURL url = GetAssembleUrl(display_overlay_controller_->GetPackageName());
   ash::NewWindowDelegate::GetPrimary()->OpenUrl(
       url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
       ash::NewWindowDelegate::Disposition::kNewForegroundTab);
@@ -448,6 +453,4 @@ void InputMenuView::SetCustomToggleColor(views::ToggleButton* toggle) {
       ash::AshColorProvider::ContentLayerType::kSwitchTrackColorInactive));
 }
 
-}  // namespace input_overlay
-
-}  // namespace arc
+}  // namespace arc::input_overlay

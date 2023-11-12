@@ -8,6 +8,7 @@
 #include "base/component_export.h"
 #include "base/files/scoped_file.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation_traits.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/common/dbus_client.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
@@ -279,6 +280,11 @@ class COMPONENT_EXPORT(CONCIERGE) ConciergeClient
       chromeos::DBusMethodCallback<vm_tools::concierge::ListVmsResponse>
           callback) = 0;
 
+  virtual void GetVmLaunchAllowed(
+      const vm_tools::concierge::GetVmLaunchAllowedRequest& request,
+      chromeos::DBusMethodCallback<
+          vm_tools::concierge::GetVmLaunchAllowedResponse> callback) = 0;
+
   // Creates and initializes the global instance. |bus| must not be null.
   static void Initialize(dbus::Bus* bus);
 
@@ -307,6 +313,37 @@ class COMPONENT_EXPORT(CONCIERGE) ConciergeClient
 };
 
 }  // namespace ash
+
+namespace base {
+
+template <>
+struct ScopedObservationTraits<ash::ConciergeClient,
+                               ash::ConciergeClient::VmObserver> {
+  static void AddObserver(ash::ConciergeClient* source,
+                          ash::ConciergeClient::VmObserver* observer) {
+    source->AddVmObserver(observer);
+  }
+  static void RemoveObserver(ash::ConciergeClient* source,
+                             ash::ConciergeClient::VmObserver* observer) {
+    source->RemoveVmObserver(observer);
+  }
+};
+
+template <>
+struct ScopedObservationTraits<ash::ConciergeClient,
+                               ash::ConciergeClient::DiskImageObserver> {
+  static void AddObserver(ash::ConciergeClient* source,
+                          ash::ConciergeClient::DiskImageObserver* observer) {
+    source->AddDiskImageObserver(observer);
+  }
+  static void RemoveObserver(
+      ash::ConciergeClient* source,
+      ash::ConciergeClient::DiskImageObserver* observer) {
+    source->RemoveDiskImageObserver(observer);
+  }
+};
+
+}  // namespace base
 
 // TODO(https://crbug.com/1164001): remove when the migration is finished.
 namespace chromeos {

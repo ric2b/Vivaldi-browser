@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "components/viz/common/quads/aggregated_render_pass_draw_quad.h"
+#include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
@@ -238,33 +239,14 @@ float OverlayCandidateFactory::EstimateVisibleDamage(
       0.f, quad_damage.size().GetArea() - occluded_damage_estimate_total);
 }
 
-// static
-bool OverlayCandidate::RequiresOverlay(const DrawQuad* quad) {
-  // Regular priority hint.
-  switch (quad->material) {
-    case DrawQuad::Material::kTextureContent:
-      return TextureDrawQuad::MaterialCast(quad)->protected_video_type ==
-                 gfx::ProtectedVideoType::kHardwareProtected ||
-             TextureDrawQuad::MaterialCast(quad)->overlay_priority_hint ==
-                 OverlayPriority::kRequired;
-    case DrawQuad::Material::kVideoHole:
-      return true;
-    case DrawQuad::Material::kYuvVideoContent:
-      return YUVVideoDrawQuad::MaterialCast(quad)->protected_video_type ==
-             gfx::ProtectedVideoType::kHardwareProtected;
-    default:
-      return false;
-  }
-}
-
 bool OverlayCandidateFactory::IsOccludedByFilteredQuad(
     const OverlayCandidate& candidate,
     QuadList::ConstIterator quad_list_begin,
     QuadList::ConstIterator quad_list_end,
     const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
         render_pass_backdrop_filters) const {
-  gfx::RectF target_rect = candidate.display_rect;
-  candidate.TransformRectToTargetSpace(target_rect);
+  gfx::RectF target_rect =
+      OverlayCandidate::DisplayRectInTargetSpace(candidate);
   for (auto overlap_iter = quad_list_begin; overlap_iter != quad_list_end;
        ++overlap_iter) {
     if (overlap_iter->material == DrawQuad::Material::kAggregatedRenderPass) {
@@ -369,7 +351,10 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromDrawQuadResource(
         resource_provider_->GetSurfaceId(resource_id).frame_sink_id();
   }
 
-  if (is_delegated_context_) {
+  // |kAggregatedRenderPass| must be clipped in 'PrepareRenderPassOverlay' as
+  // filters can expand display size.
+  if (is_delegated_context_ &&
+      quad->material != DrawQuad::Material::kAggregatedRenderPass) {
     // The delegate might not support specifying |clip_rect| so if not, apply it
     // to the |display_rect| and |uv_rect| directly.
     if (!supports_clip_rect_) {
@@ -493,15 +478,22 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromTextureQuad(
   if (quad->nearest_neighbor)
     return CandidateStatus::kFailNearFilter;
 
-  if (quad->background_color != SkColors::kTransparent &&
-      (quad->background_color != SkColors::kBlack ||
-       quad->ShouldDrawWithBlending())) {
-    // This path can also be used by other platforms like Ash/Chrome, which does
-    // not support overlays with background color. Only LaCros/Wayland supports
-    // that.
-    if (!is_delegated_context_)
-      return CandidateStatus::kFailBlending;
+  if (is_delegated_context_) {
+    // Always convey |background_color| even when transparent. This allows for
+    // the wayland server to make blending optimizations even when the quad is
+    // considered opaque. Specifically Exo will try to ensure the opaqueness of
+    // alpha formats by adding a black background which can cause difficulty in
+    // overlay promotion (see the code in the lines below).
     candidate.color = quad->background_color;
+  } else if (quad->background_color != SkColors::kTransparent &&
+             (quad->background_color != SkColors::kBlack ||
+              quad->ShouldDrawWithBlending())) {
+    // The condition above is very specific to the implementation of DRM/KMS
+    // scanout. An opaque plane with buffer that has buffer element component
+    // alpha will default black for the blend. Basically we can simulate a black
+    // background using the default color when blending an opaque overlay. This
+    // trick, of course, only works for black.
+    return CandidateStatus::kFailBlending;
   }
 
   candidate.uv_rect = BoundingRect(quad->uv_top_left, quad->uv_bottom_right);
@@ -615,10 +607,10 @@ void OverlayCandidateFactory::AssignDamage(const DrawQuad* quad,
                                            OverlayCandidate& candidate) const {
   auto& transform = quad->shared_quad_state->quad_to_target_transform;
   auto damage_rect = GetDamageRect(quad, candidate);
-  auto transformed_damage = damage_rect;
-  gfx::Transform inv;
-  if (transform.GetInverse(&inv)) {
-    transformed_damage = inv.MapRect(transformed_damage);
+  gfx::RectF transformed_damage;
+  if (absl::optional<gfx::RectF> transformed =
+          transform.InverseMapRect(damage_rect)) {
+    transformed_damage = *transformed;
     // The quad's |rect| is in content space. To get to buffer space we need
     // to remove the |rect|'s pixel offset.
     auto buffer_damage_origin =
@@ -666,8 +658,8 @@ gfx::RectF OverlayCandidateFactory::GetDamageRect(
     // original surface. Here the |unassigned_surface_damage_| will contain all
     // unassigned damage and we use it to conservatively estimate the damage for
     // this quad. We limit the damage to the candidates quad rect in question.
-    gfx::RectF intersection = candidate.display_rect;
-    candidate.TransformRectToTargetSpace(intersection);
+    gfx::RectF intersection =
+        OverlayCandidate::DisplayRectInTargetSpace(candidate);
     intersection.Intersect(gfx::RectF(unassigned_surface_damage_));
     return intersection;
   }

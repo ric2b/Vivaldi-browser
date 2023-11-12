@@ -108,11 +108,6 @@ class SessionService : public SessionServiceBase {
                            const tab_groups::TabGroupId& group_id,
                            const tab_groups::TabGroupVisualData* visual_data);
 
-  // Sets the pinned state of the tab.
-  void SetPinnedState(const SessionID& window_id,
-                      const SessionID& tab_id,
-                      bool is_pinned);
-
   void AddTabExtraData(const SessionID& window_id,
                        const SessionID& tab_id,
                        const char* key,
@@ -178,6 +173,7 @@ class SessionService : public SessionServiceBase {
   FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, WorkspaceSavedOnOpened);
   FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, VisibleOnAllWorkspaces);
   FRIEND_TEST_ALL_PREFIXES(NoStartupWindowTest, DontInitSessionServiceForApps);
+  FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, PinnedAfterReset);
 
   using IdToRange = std::map<SessionID, std::pair<int, int>>;
 

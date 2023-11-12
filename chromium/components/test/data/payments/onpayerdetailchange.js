@@ -8,13 +8,13 @@ var gPaymentResponse = null;
 var gRetryPromise = null;
 
 const bobPayMethod = Object.freeze({
-  supportedMethods: 'https://bobpay.com',
+  supportedMethods: 'https://bobpay.test',
 });
 
 /**
  * Launches the PaymentRequest UI
  */
-function buy() { // eslint-disable-line no-unused-vars
+function buy() {
   var options = {
     requestPayerEmail: true,
     requestPayerName: true,
@@ -43,7 +43,7 @@ function buy() { // eslint-disable-line no-unused-vars
  *
  * @param {PaymentValidationErrors} validationErrors Represent validation errors
  */
-function retry(validationErrors) { // eslint-disable-line no-unused-vars
+function retry(validationErrors) {
   if (gPaymentResponse == null) {
     return;
   }

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {dispatchSimpleEvent} from 'chrome://resources/js/cr.m.js';
-import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {dispatchSimpleEvent} from 'chrome://resources/ash/common/cr_deprecated.js';
+import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 
 import {promisify} from '../../common/js/api.js';
 import {util} from '../../common/js/util.js';
@@ -272,7 +272,7 @@ export class VolumeManagerImpl extends EventTarget {
             return;
           }
 
-          case VolumeManagerCommon.VolumeError.ALREADY_MOUNTED: {
+          case VolumeManagerCommon.VolumeError.PATH_ALREADY_MOUNTED: {
             console.warn(
                 `Cannot mount (redacted): Already mounted as '${volumeId}'`);
             console.debug(`Cannot mount '${sourcePath}': Already mounted as '${
@@ -641,5 +641,15 @@ export class VolumeManagerImpl extends EventTarget {
       volumeManagerUtil.validateError(status);
       callEach(request.errorCallbacks, this, [status]);
     }
+  }
+
+  /** @override */
+  hasDisabledVolumes() {
+    return false;
+  }
+
+  /** @override */
+  isDisabled(volume) {
+    return false;
   }
 }

@@ -59,7 +59,7 @@ SavedTabGroupBar::SavedTabGroupBar(Browser* browser,
                        animations_enabled) {}
 
 SavedTabGroupBar::~SavedTabGroupBar() {
-  // remove all buttons from the heirarchy
+  // Remove all buttons from the hierarchy
   RemoveAllButtons();
 
   if (saved_tab_group_model_)
@@ -81,8 +81,10 @@ void SavedTabGroupBar::SavedTabGroupRemovedLocally(
   SavedTabGroupRemoved(removed_group->saved_guid());
 }
 
-void SavedTabGroupBar::SavedTabGroupUpdatedLocally(const base::GUID& guid) {
-  SavedTabGroupUpdated(guid);
+void SavedTabGroupBar::SavedTabGroupUpdatedLocally(
+    const base::GUID& group_guid,
+    const absl::optional<base::GUID>& tab_guid) {
+  SavedTabGroupUpdated(group_guid);
 }
 
 void SavedTabGroupBar::SavedTabGroupReorderedLocally() {
@@ -104,8 +106,10 @@ void SavedTabGroupBar::SavedTabGroupRemovedFromSync(
   SavedTabGroupRemoved(removed_group->saved_guid());
 }
 
-void SavedTabGroupBar::SavedTabGroupUpdatedFromSync(const base::GUID& guid) {
-  SavedTabGroupUpdated(guid);
+void SavedTabGroupBar::SavedTabGroupUpdatedFromSync(
+    const base::GUID& group_guid,
+    const absl::optional<base::GUID>& tab_guid) {
+  SavedTabGroupUpdated(group_guid);
 }
 
 int SavedTabGroupBar::CalculatePreferredWidthRestrictedBy(int max_x) {

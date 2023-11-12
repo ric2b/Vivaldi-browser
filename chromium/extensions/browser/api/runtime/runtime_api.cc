@@ -16,7 +16,6 @@
 #include "base/one_shot_event.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -220,7 +219,7 @@ void RuntimeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,
     return;
 
   // Dispatch the onInstalled event with reason "chrome_update".
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&RuntimeEventRouter::DispatchOnInstalledEvent,
                      browser_context_, extension->id(), base::Version(), true));
@@ -497,7 +496,7 @@ void RuntimeEventRouter::DispatchOnInstalledEvent(
 void RuntimeEventRouter::DispatchOnUpdateAvailableEvent(
     content::BrowserContext* context,
     const std::string& extension_id,
-    const base::DictionaryValue* manifest) {
+    const base::Value::Dict* manifest) {
   ExtensionSystem* system = ExtensionSystem::Get(context);
   if (!system)
     return;
@@ -578,7 +577,7 @@ void RuntimeAPI::OnExtensionInstalledAndLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
     const base::Version& previous_version) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&RuntimeEventRouter::DispatchOnInstalledEvent,
                                 browser_context_, extension->id(),
                                 previous_version, false));
@@ -652,15 +651,10 @@ ExtensionFunction::ResponseAction RuntimeRequestUpdateCheckFunction::Run() {
 
 void RuntimeRequestUpdateCheckFunction::CheckComplete(
     const RuntimeAPIDelegate::UpdateCheckResult& result) {
-  if (result.success) {
-    base::Value::Dict details;
-    details.Set("version", result.version);
-    Respond(TwoArguments(base::Value(result.response),
-                         base::Value(std::move(details))));
-  } else {
-    // HMM(kalman): Why does !success not imply Error()?
-    Respond(OneArgument(base::Value(result.response)));
-  }
+  api::runtime::RequestUpdateCheck::Results::Result return_result;
+  return_result.status = result.status;
+  return_result.version = absl::optional<std::string>(result.version);
+  Respond(OneArgument(base::Value(return_result.ToValue())));
 }
 
 ExtensionFunction::ResponseAction RuntimeRestartFunction::Run() {

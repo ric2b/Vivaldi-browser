@@ -194,7 +194,6 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController, B
                         maybeActivateConditionalTabStrip(ReasonToShow.TAB_SWITCHED);
                     }
                 }
-                if (type == TabSelectionType.FROM_CLOSE) return;
                 if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
                         && getTabsToShowForId(lastId).contains(tab)) {
                     return;
@@ -272,7 +271,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController, B
             @Override
             public void tabClosureUndone(Tab tab) {
                 if (!mIsTabGroupUiVisible || ChromeApplicationImpl.isVivaldi()) {
-                    resetTabStripWithRelatedTabsForId(tab.getId());
+                    // Reset with the current tab as the undone tab may be in the background.
+                    resetTabStripWithRelatedTabsForId(mTabModelSelector.getCurrentTab().getId());
                 }
             }
         };

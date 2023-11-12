@@ -34,7 +34,6 @@
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/scoped_display_for_new_windows.h"
@@ -105,7 +104,7 @@ absl::optional<apps::AppLaunchParams> CreateSystemWebAppLaunchParams(
   DCHECK(provider);
 
   web_app::DisplayMode display_mode =
-      provider->registrar().GetAppEffectiveDisplayMode(app_id.value());
+      provider->registrar_unsafe().GetAppEffectiveDisplayMode(app_id.value());
 
   // TODO(crbug/1113502): Plumb through better launch sources from callsites.
   apps::AppLaunchParams params = apps::CreateAppIdLaunchParamsWithEventFlags(
@@ -163,42 +162,20 @@ void LaunchSystemWebAppAsync(Profile* profile,
   if (!params.launch_paths.empty()) {
     DCHECK(!params.url.has_value())
         << "Launch URL can't be used with launch_paths.";
-    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-      app_service->LaunchAppWithFiles(
-          *app_id, event_flags, params.launch_source, params.launch_paths);
-    } else {
-      app_service->LaunchAppWithFiles(
-          *app_id, event_flags,
-          apps::ConvertLaunchSourceToMojomLaunchSource(params.launch_source),
-          apps::mojom::FilePaths::New(params.launch_paths));
-    }
+    app_service->LaunchAppWithFiles(*app_id, event_flags, params.launch_source,
+                                    params.launch_paths);
     return;
   }
 
   if (params.url) {
     DCHECK(params.url->is_valid());
-    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-      app_service->LaunchAppWithUrl(*app_id, event_flags, *params.url,
-                                    params.launch_source,
-                                    std::move(window_info));
-    } else {
-      app_service->LaunchAppWithUrl(
-          *app_id, event_flags, *params.url,
-          apps::ConvertLaunchSourceToMojomLaunchSource(params.launch_source),
-          apps::ConvertWindowInfoToMojomWindowInfo(window_info));
-    }
+    app_service->LaunchAppWithUrl(*app_id, event_flags, *params.url,
+                                  params.launch_source, std::move(window_info));
     return;
   }
 
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    app_service->Launch(*app_id, event_flags, params.launch_source,
-                        std::move(window_info));
-  } else {
-    app_service->Launch(
-        *app_id, event_flags,
-        apps::ConvertLaunchSourceToMojomLaunchSource(params.launch_source),
-        apps::ConvertWindowInfoToMojomWindowInfo(window_info));
-  }
+  app_service->Launch(*app_id, event_flags, params.launch_source,
+                      std::move(window_info));
 }
 
 Browser* LaunchSystemWebAppImpl(Profile* profile,
@@ -223,7 +200,7 @@ Browser* LaunchSystemWebAppImpl(Profile* profile,
   auto* system_app = swa_manager->GetSystemApp(app_type);
 
 #if BUILDFLAG(IS_CHROMEOS)
-  DCHECK(url.DeprecatedGetOriginAsURL() == provider->registrar()
+  DCHECK(url.DeprecatedGetOriginAsURL() == provider->registrar_unsafe()
                                                .GetAppLaunchUrl(params.app_id)
                                                .DeprecatedGetOriginAsURL() ||
          system_app && system_app->IsUrlInSystemAppScope(url));
@@ -282,19 +259,23 @@ Browser* FindSystemWebAppBrowser(Profile* profile,
   auto* provider = SystemWebAppManager::GetWebAppProvider(profile);
   DCHECK(provider);
 
-  if (!provider->registrar().IsInstalled(app_id.value()))
+  if (!provider->registrar_unsafe().IsInstalled(app_id.value()))
     return nullptr;
 
-  Browser* browser_to_return = nullptr;
-  // Look through all the windows, find a browser for this app. Prefer the app
-  // window that's currently active if there is one.
-  for (auto* browser : *BrowserList::GetInstance()) {
+  // Look through all the windows, find a browser for this app. Prefer the most
+  // recently active app window.
+  BrowserList* const browser_list = BrowserList::GetInstance();
+  const auto end = browser_list->end_browsers_ordered_by_activation();
+  for (auto iter = browser_list->begin_browsers_ordered_by_activation();
+       iter != end; ++iter) {
+    Browser* const browser = *iter;
     if (browser->profile() != profile || browser->type() != browser_type)
       continue;
 
     if (web_app::GetAppIdFromApplicationName(browser->app_name()) !=
-        app_id.value())
+        app_id.value()) {
       continue;
+    }
 
     if (!url.is_empty()) {
       // In case a URL is provided, only allow a browser which shows it.
@@ -304,14 +285,10 @@ Browser* FindSystemWebAppBrowser(Profile* profile,
         continue;
     }
 
-    if (browser->window()->IsActive()) {
-      return browser;
-    }
-
-    browser_to_return = browser;
+    return browser;
   }
 
-  return browser_to_return;
+  return nullptr;
 }
 
 bool IsSystemWebApp(Browser* browser) {

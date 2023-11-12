@@ -6,14 +6,15 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_features.h"
-#include "ash/ime/ime_controller_impl.h"
 #include "ash/public/cpp/test/shell_test_api.h"
+#include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/message_center/unified_message_center_bubble.h"
-#include "ash/system/message_center/unified_message_center_view.h"
+#include "ash/system/notification_center/notification_center_tray.h"
+#include "ash/system/notification_center/notification_center_view.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/time/time_tray_item_view.h"
@@ -21,7 +22,6 @@
 #include "ash/system/unified/ime_mode_view.h"
 #include "ash/system/unified/unified_slider_bubble_controller.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
-#include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -34,7 +34,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/message_center/message_center.h"
 
@@ -79,6 +78,31 @@ class UnifiedSystemTrayTest : public AshTestBase,
     MessageCenter::Get()->RemoveNotification(id, /*by_user=*/false);
   }
 
+  // Show the notification center bubble. This assumes that there is at least
+  // one notification in the notification list. This should only be called when
+  // QsRevamp is enabled.
+  void ShowNotificationBubble() {
+    DCHECK(IsQsRevampEnabled());
+    Shell::Get()
+        ->GetPrimaryRootWindowController()
+        ->shelf()
+        ->GetStatusAreaWidget()
+        ->notification_center_tray()
+        ->ShowBubble();
+  }
+
+  // Hide the notification center bubble. This assumes that it is already shown.
+  // This should only be called when QsRevamp is enabled.
+  void HideNotificationBubble() {
+    DCHECK(IsQsRevampEnabled());
+    Shell::Get()
+        ->GetPrimaryRootWindowController()
+        ->shelf()
+        ->GetStatusAreaWidget()
+        ->notification_center_tray()
+        ->CloseBubble();
+  }
+
   bool IsBubbleShown() {
     return GetPrimaryUnifiedSystemTray()->IsBubbleShown();
   }
@@ -86,10 +110,6 @@ class UnifiedSystemTrayTest : public AshTestBase,
   bool IsSliderBubbleShown() {
     return GetPrimaryUnifiedSystemTray()
         ->slider_bubble_controller_->bubble_widget_;
-  }
-
-  bool MoreThanOneVisibleTrayItem() const {
-    return GetPrimaryUnifiedSystemTray()->MoreThanOneVisibleTrayItem();
   }
 
   UnifiedSliderBubbleController::SliderType GetSliderBubbleType() {
@@ -123,14 +143,6 @@ class UnifiedSystemTrayTest : public AshTestBase,
 
   ImeModeView* ime_mode_view() {
     return GetPrimaryUnifiedSystemTray()->ime_mode_view_;
-  }
-
-  std::list<TrayItemView*> tray_items() {
-    return GetPrimaryUnifiedSystemTray()->tray_items_;
-  }
-
-  views::View* vertical_clock_padding() {
-    return GetPrimaryUnifiedSystemTray()->vertical_clock_padding_;
   }
 
  private:
@@ -281,42 +293,6 @@ TEST_P(UnifiedSystemTrayTest, HorizontalImeAndTimeLabelAlignment) {
   EXPECT_EQ(time_bounds.height(), ime_bounds.height());
 }
 
-TEST_P(UnifiedSystemTrayTest, VerticalClockPadding) {
-  // Padding can only be visible if shelf is vertically aligned.
-  GetPrimaryShelf()->SetAlignment(ShelfAlignment::kLeft);
-
-  // Sets all tray items' visibility to false except TimeView.
-  for (TrayItemView* item : tray_items()) {
-    item->SetVisible(item == time_view());
-  }
-
-  // Only one visible tray item, padding should not be visible.
-  EXPECT_FALSE(vertical_clock_padding()->GetVisible());
-
-  // Sets another tray item visibility to true.
-  ime_mode_view()->SetVisible(true);
-
-  // Two visible tray items, padding should be visible.
-  EXPECT_TRUE(vertical_clock_padding()->GetVisible());
-}
-
-TEST_P(UnifiedSystemTrayTest, VerticalClockPaddingAfterAlignmentChange) {
-  auto* shelf = GetPrimaryShelf();
-
-  // Padding can only be visible if shelf is vertically aligned.
-  shelf->SetAlignment(ShelfAlignment::kLeft);
-
-  // Ensure two tray items are visible, padding should be visible.
-  time_view()->SetVisible(true);
-  ime_mode_view()->SetVisible(true);
-
-  EXPECT_TRUE(vertical_clock_padding()->GetVisible());
-
-  // Padding should not be visible when shelf is horizontal.
-  shelf->SetAlignment(ShelfAlignment::kBottom);
-  EXPECT_FALSE(vertical_clock_padding()->GetVisible());
-}
-
 TEST_P(UnifiedSystemTrayTest, FocusMessageCenter) {
   if (IsQsRevampEnabled())
     return;
@@ -325,7 +301,7 @@ TEST_P(UnifiedSystemTrayTest, FocusMessageCenter) {
   tray->ShowBubble();
 
   auto* message_center_view =
-      tray->message_center_bubble()->message_center_view();
+      tray->message_center_bubble()->notification_center_view();
   auto* focus_manager = message_center_view->GetFocusManager();
 
   AddNotification();
@@ -367,7 +343,7 @@ TEST_P(UnifiedSystemTrayTest, FocusMessageCenter_VoxEnabled) {
   tray->ShowBubble();
 
   auto* message_center_bubble = tray->message_center_bubble();
-  auto* message_center_view = message_center_bubble->message_center_view();
+  auto* message_center_view = message_center_bubble->notification_center_view();
 
   AddNotification();
   AddNotification();
@@ -545,7 +521,7 @@ TEST_P(UnifiedSystemTrayTest, CalendarGoesToMainView) {
 
   // Ensure message center is collapsed when Calendar is not being shown.
   auto* message_center_view =
-      tray->message_center_bubble()->message_center_view();
+      tray->message_center_bubble()->notification_center_view();
   EXPECT_FALSE(tray->IsShowingCalendarView());
   EXPECT_TRUE(message_center_view->collapsed());
 
@@ -562,9 +538,59 @@ TEST_P(UnifiedSystemTrayTest, CalendarGoesToMainView) {
   EXPECT_FALSE(tray->IsShowingCalendarView());
 }
 
+// Tests if the microphone mute toast is displayed when the mute state is
+// toggled by the software switches.
+TEST_P(UnifiedSystemTrayTest, InputMuteStateToggledBySoftwareSwitch) {
+  // The microphone mute toast should not be visible initially.
+  EXPECT_FALSE(IsMicrophoneMuteToastShown());
+
+  CrasAudioHandler* cras_audio_handler = CrasAudioHandler::Get();
+  // Toggling the system input mute state using software switches.
+  cras_audio_handler->SetInputMute(
+      !cras_audio_handler->IsInputMuted(),
+      CrasAudioHandler::InputMuteChangeMethod::kOther);
+
+  // The toast should not be visible as the mute state is toggled using a
+  // software switch.
+  EXPECT_FALSE(IsMicrophoneMuteToastShown());
+}
+
+// Tests if the microphone mute toast is displayed when the mute state is
+// toggled by the keyboard switch.
+TEST_P(UnifiedSystemTrayTest, InputMuteStateToggledByKeyboardSwitch) {
+  // The microphone mute toast should not be visible initially.
+  EXPECT_FALSE(IsMicrophoneMuteToastShown());
+
+  CrasAudioHandler* cras_audio_handler = CrasAudioHandler::Get();
+  // Toggling the system input mute state using the dedicated keyboard button.
+  cras_audio_handler->SetInputMute(
+      !cras_audio_handler->IsInputMuted(),
+      CrasAudioHandler::InputMuteChangeMethod::kKeyboardButton);
+
+  // The toast should be visible as the mute state is toggled using the keyboard
+  // switch.
+  EXPECT_TRUE(IsMicrophoneMuteToastShown());
+}
+
+// Tests if the microphone mute toast is displayed when the mute state is
+// toggled by the hw switch.
+TEST_P(UnifiedSystemTrayTest, InputMuteStateToggledByHardwareSwitch) {
+  // The microphone mute toast should not be visible initially.
+  EXPECT_FALSE(IsMicrophoneMuteToastShown());
+
+  CrasAudioHandler* cras_audio_handler = CrasAudioHandler::Get();
+  // Toggling the input mute state using the hw switch.
+  ui::MicrophoneMuteSwitchMonitor::Get()->SetMicrophoneMuteSwitchValue(
+      !cras_audio_handler->IsInputMuted());
+
+  // The toast should be visible as the mute state is toggled using the hw
+  // switch.
+  EXPECT_TRUE(IsMicrophoneMuteToastShown());
+}
+
 // Tests microphone mute toast is visible only when the device has an
 // internal/external microphone attached.
-TEST_P(UnifiedSystemTrayTest, MicrophoneMuteToastVisibility) {
+TEST_P(UnifiedSystemTrayTest, InputMuteStateToggledButNoMicrophoneAvailable) {
   // Creating an input device for simple usage.
   AudioNode internal_mic;
   internal_mic.is_input = true;
@@ -588,14 +614,18 @@ TEST_P(UnifiedSystemTrayTest, MicrophoneMuteToastVisibility) {
 
   fake_cras_audio_client->SetAudioNodesAndNotifyObserversForTesting(
       {internal_speaker, internal_mic});
-  cras_audio_handler->SetInputMute(!cras_audio_handler->IsInputMuted());
+  cras_audio_handler->SetInputMute(
+      !cras_audio_handler->IsInputMuted(),
+      CrasAudioHandler::InputMuteChangeMethod::kKeyboardButton);
   // The toast should be visible as the input mute has changed and there is a
   // microphone for simple usage attached to the device.
   EXPECT_TRUE(IsMicrophoneMuteToastShown());
 
   fake_cras_audio_client->SetAudioNodesAndNotifyObserversForTesting(
       {internal_speaker});
-  cras_audio_handler->SetInputMute(!cras_audio_handler->IsInputMuted());
+  cras_audio_handler->SetInputMute(
+      !cras_audio_handler->IsInputMuted(),
+      CrasAudioHandler::InputMuteChangeMethod::kKeyboardButton);
   // There is no microphone for simple usage attached to the device. The toast
   // should not be displayed even though the input mute has changed in the
   // backend.
@@ -647,4 +677,37 @@ TEST_P(UnifiedSystemTrayTest, TrayBackgroundColorAfterSwitchToTabletMode) {
             ShelfConfig::Get()->GetShelfControlButtonColor(widget));
 }
 
+// Tests that the bubble automatically hides if it is visible when another
+// bubble becomes visible, and otherwise does not automatically show or hide.
+TEST_P(UnifiedSystemTrayTest, BubbleHideBehavior) {
+  // This hiding behavior only applies when QsRevamp is enabled.
+  if (!IsQsRevampEnabled())
+    return;
+
+  // Basic verification test that the unified system tray bubble can show/hide
+  // itself when no other bubbles are visible.
+  auto* tray = GetPrimaryUnifiedSystemTray();
+  EXPECT_FALSE(IsBubbleShown());
+  tray->ShowBubble();
+  EXPECT_TRUE(IsBubbleShown());
+  tray->CloseBubble();
+  EXPECT_FALSE(IsBubbleShown());
+
+  // Test that the unified system tray bubble automatically hides when it is
+  // currently visible while another bubble becomes visible.
+  AddNotification();
+  tray->ShowBubble();
+  EXPECT_TRUE(IsBubbleShown());
+  ShowNotificationBubble();
+  EXPECT_FALSE(IsBubbleShown());
+
+  // Hide all currently visible bubbles.
+  HideNotificationBubble();
+  EXPECT_FALSE(IsBubbleShown());
+
+  // Test that the unified system tray bubble stays hidden when showing another
+  // bubble.
+  ShowNotificationBubble();
+  EXPECT_FALSE(IsBubbleShown());
+}
 }  // namespace ash

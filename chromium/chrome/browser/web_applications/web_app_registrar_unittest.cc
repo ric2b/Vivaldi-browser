@@ -19,13 +19,16 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/commands/run_on_os_login_command.h"
+#include "chrome/browser/web_applications/isolation_data.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_database_factory.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
@@ -87,15 +90,18 @@ class WebAppRegistrarTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
 
-    command_manager_ = std::make_unique<WebAppCommandManager>(profile());
+    FakeWebAppProvider* provider = FakeWebAppProvider::Get(profile());
+    command_manager_ =
+        std::make_unique<WebAppCommandManager>(profile(), provider);
+    command_scheduler_ =
+        std::make_unique<WebAppCommandScheduler>(*profile(), provider);
     registrar_mutable_ = std::make_unique<WebAppRegistrarMutable>(profile());
     sync_bridge_ = std::make_unique<WebAppSyncBridge>(
         registrar_mutable_.get(), mock_processor_.CreateForwardingProcessor());
     database_factory_ = std::make_unique<FakeWebAppDatabaseFactory>();
 
-    sync_bridge_->SetSubsystems(database_factory_.get(),
-                                /*install_delegate=*/nullptr,
-                                command_manager_.get());
+    sync_bridge_->SetSubsystems(database_factory_.get(), command_manager_.get(),
+                                command_scheduler_.get());
 
     ON_CALL(mock_processor_, IsTrackingMetadata())
         .WillByDefault(testing::Return(true));
@@ -111,6 +117,10 @@ class WebAppRegistrarTest : public WebAppTest {
     if (command_manager_) {
       command_manager_->Shutdown();
       command_manager_.reset();
+    }
+    if (command_scheduler_) {
+      command_scheduler_->Shutdown();
+      command_scheduler_.reset();
     }
     if (registrar_mutable_) {
       registrar_mutable_.reset();
@@ -209,6 +219,7 @@ class WebAppRegistrarTest : public WebAppTest {
   std::unique_ptr<WebAppSyncBridge> sync_bridge_;
   std::unique_ptr<FakeWebAppDatabaseFactory> database_factory_;
   std::unique_ptr<WebAppCommandManager> command_manager_;
+  std::unique_ptr<WebAppCommandScheduler> command_scheduler_;
 
   testing::NiceMock<syncer::MockModelTypeChangeProcessor> mock_processor_;
 };
@@ -891,7 +902,7 @@ TEST_F(WebAppRegistrarTest, CountUserInstalledApps) {
     RegisterApp(std::move(web_app));
   }
 
-  EXPECT_EQ(2, registrar().CountUserInstalledApps());
+  EXPECT_EQ(3, registrar().CountUserInstalledApps());
 }
 
 TEST_F(WebAppRegistrarTest,
@@ -945,7 +956,7 @@ TEST_F(WebAppRegistrarTest, NotLocallyInstalledAppGetsDisplayModeBrowser) {
 }
 
 TEST_F(WebAppRegistrarTest,
-       NotLocallyInstalledAppGetsDisplayModeBrowserEvenForIsolatedApps) {
+       NotLocallyInstalledAppGetsDisplayModeBrowserEvenForIsolatedWebApps) {
   InitSyncBridge();
 
   auto web_app = test::CreateWebApp();
@@ -965,7 +976,7 @@ TEST_F(WebAppRegistrarTest,
 }
 
 TEST_F(WebAppRegistrarTest,
-       IsolatedAppsGetDisplayModeStandaloneRegardlessOfUserSettings) {
+       IsolatedWebAppsGetDisplayModeStandaloneRegardlessOfUserSettings) {
   InitSyncBridge();
 
   std::unique_ptr<WebApp> web_app = test::CreateWebApp();
@@ -976,6 +987,8 @@ TEST_F(WebAppRegistrarTest,
   web_app->SetUserDisplayMode(UserDisplayMode::kBrowser);
   web_app->SetIsLocallyInstalled(true);
   web_app->SetStorageIsolated(true);
+  web_app->SetIsolationData(IsolationData(IsolationData::DevModeProxy{
+      .proxy_url = url::Origin::Create(GURL("http://127.0.0.1:8080"))}));
 
   RegisterApp(std::move(web_app));
 
@@ -1045,92 +1058,6 @@ TEST_F(WebAppRegistrarTest, WindowControlsOverlay) {
 
   sync_bridge().SetAppWindowControlsOverlayEnabled(app_id, false);
   EXPECT_EQ(false, registrar().GetWindowControlsOverlayEnabled(app_id));
-}
-
-TEST_F(WebAppRegistrarTest, AllowedLaunchProtocols) {
-  InitSyncBridge();
-
-  auto web_app = test::CreateWebApp(GURL("https://example.com/path"));
-  const AppId app_id1 = web_app->app_id();
-  const std::string protocol_scheme1 = "test";
-  RegisterApp(std::move(web_app));
-
-  auto web_app2 = test::CreateWebApp(GURL("https://example.com/path2"));
-  const AppId app_id2 = web_app2->app_id();
-  const std::string protocol_scheme2 = "test2";
-  RegisterApp(std::move(web_app2));
-
-  // Test we can add and remove allowed protocols.
-  EXPECT_EQ(false,
-            registrar().IsAllowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  sync_bridge().AddAllowedLaunchProtocol(app_id1, protocol_scheme1);
-  EXPECT_EQ(true,
-            registrar().IsAllowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  sync_bridge().RemoveAllowedLaunchProtocol(app_id1, protocol_scheme1);
-  EXPECT_EQ(false,
-            registrar().IsAllowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  // Test that we can get allowed protocols from multiple web apps.
-  sync_bridge().AddAllowedLaunchProtocol(app_id1, protocol_scheme1);
-  sync_bridge().AddAllowedLaunchProtocol(app_id2, protocol_scheme2);
-
-  {
-    auto allowed_protocols = registrar().GetAllAllowedLaunchProtocols();
-    EXPECT_TRUE(base::Contains(allowed_protocols, protocol_scheme1));
-    EXPECT_TRUE(base::Contains(allowed_protocols, protocol_scheme2));
-
-    sync_bridge().RemoveAllowedLaunchProtocol(app_id2, protocol_scheme2);
-  }
-  {
-    auto allowed_protocols = registrar().GetAllAllowedLaunchProtocols();
-    EXPECT_TRUE(base::Contains(allowed_protocols, protocol_scheme1));
-    EXPECT_FALSE(base::Contains(allowed_protocols, protocol_scheme2));
-  }
-}
-
-TEST_F(WebAppRegistrarTest, DisallowedLaunchProtocols) {
-  InitSyncBridge();
-
-  auto web_app = test::CreateWebApp(GURL("https://example.com/path"));
-  const AppId app_id1 = web_app->app_id();
-  const std::string protocol_scheme1 = "test";
-  RegisterApp(std::move(web_app));
-
-  auto web_app2 = test::CreateWebApp(GURL("https://example.com/path2"));
-  const AppId app_id2 = web_app2->app_id();
-  const std::string protocol_scheme2 = "test2";
-  RegisterApp(std::move(web_app2));
-
-  // Test we can add and remove diallowed protocols.
-  EXPECT_EQ(false,
-            registrar().IsDisallowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  sync_bridge().AddDisallowedLaunchProtocol(app_id1, protocol_scheme1);
-  EXPECT_EQ(true,
-            registrar().IsDisallowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  sync_bridge().RemoveDisallowedLaunchProtocol(app_id1, protocol_scheme1);
-  EXPECT_EQ(false,
-            registrar().IsDisallowedLaunchProtocol(app_id1, protocol_scheme1));
-
-  // Test that we can get disallowed protocols from multiple web apps.
-  sync_bridge().AddDisallowedLaunchProtocol(app_id1, protocol_scheme1);
-  sync_bridge().AddDisallowedLaunchProtocol(app_id2, protocol_scheme2);
-
-  {
-    auto disallowed_protocols = registrar().GetAllDisallowedLaunchProtocols();
-    EXPECT_TRUE(base::Contains(disallowed_protocols, protocol_scheme1));
-    EXPECT_TRUE(base::Contains(disallowed_protocols, protocol_scheme2));
-
-    sync_bridge().RemoveDisallowedLaunchProtocol(app_id2, protocol_scheme2);
-  }
-  {
-    auto disallowed_protocols = registrar().GetAllDisallowedLaunchProtocols();
-    EXPECT_TRUE(base::Contains(disallowed_protocols, protocol_scheme1));
-    EXPECT_FALSE(base::Contains(disallowed_protocols, protocol_scheme2));
-  }
 }
 
 TEST_F(WebAppRegistrarTest, IsRegisteredLaunchProtocol) {

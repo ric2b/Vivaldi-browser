@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Vivaldi. All rights reserved.
+
 #include "browser/stats_reporter_impl.h"
 
 #include <string>

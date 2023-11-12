@@ -6,11 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_CONTROLLER_PAINT_TEST_H_
 
 #include "base/check_op.h"
+#include "cc/paint/paint_op.h"
+#include "cc/paint/paint_op_buffer_iterator.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/cull_rect_updater.h"
-#include "third_party/blink/renderer/core/paint/old_cull_rect_updater.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
@@ -58,10 +59,7 @@ class PaintControllerPaintTestBase : public RenderingTest {
   void UpdateCullRects() {
     DCHECK_EQ(GetDocument().Lifecycle().GetState(),
               DocumentLifecycle::kPrePaintClean);
-    if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled())
-      CullRectUpdater(*GetLayoutView().Layer()).Update();
-    else
-      OldCullRectUpdater(*GetLayoutView().Layer()).Update();
+    CullRectUpdater(*GetLayoutView().Layer()).Update();
   }
 
   void PaintContents(const gfx::Rect& interest_rect) {

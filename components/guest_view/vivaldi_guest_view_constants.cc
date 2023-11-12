@@ -8,5 +8,7 @@ namespace guest_view {
 const char kFileSize[] = "fileSize";
 const char kMimeType[] = "mimeType";
 const char kSuggestedFilename[] = "suggestedFilename";
+const char kProtocolDisplayName[] = "protocolDisplayName";
+const char kSuppressedPrompt[] = "suppressedPrompt";
 
 }  // namespace guest_view

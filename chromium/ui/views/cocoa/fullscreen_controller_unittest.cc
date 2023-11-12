@@ -8,8 +8,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace remote_cocoa {
-namespace test {
+namespace remote_cocoa::test {
 
 using testing::_;
 using testing::Invoke;
@@ -648,7 +647,7 @@ TEST_F(MacFullscreenControllerTest, EnterCrossScreenWhileEntering) {
 
   // Complete the original fullscreen transition. This will check to see if
   // the display we are on is the display we wanted to be on. Seeing that it
-  // isn't it will post a task to exit fullscreen to move to the correct
+  // isn't, it will post a task to exit fullscreen before moving to the correct
   // display.
   EXPECT_CALL(mock_client_, FullscreenControllerGetDisplayId())
       .WillOnce(Return(kDisplay0Id));
@@ -662,8 +661,11 @@ TEST_F(MacFullscreenControllerTest, EnterCrossScreenWhileEntering) {
                                          OnWindowWillExitFullscreen));
   task_environment_.RunUntilIdle();
 
-  // Complete the transition to windowed mode. This will then move the window
-  // and toggle fullscreen.
+  // Complete the transition to windowed mode. This will once again check to see
+  // if the display we are on is the display we wanted to be on. Seeing that it
+  // isn't, it will move to the correct display and toggle fullscreen.
+  EXPECT_CALL(mock_client_, FullscreenControllerGetDisplayId())
+      .WillOnce(Return(kDisplay0Id));
   controller_.OnWindowDidExitFullscreen();
   EXPECT_CALL(mock_client_, FullscreenControllerGetFrameForDisplay(kDisplay1Id))
       .Times(1)
@@ -704,5 +706,4 @@ TEST_F(MacFullscreenControllerTest, EnterCrossScreenWhileEntering) {
   EXPECT_FALSE(controller_.GetTargetFullscreenState());
 }
 
-}  // namespace test
-}  // namespace remote_cocoa
+}  // namespace remote_cocoa::test

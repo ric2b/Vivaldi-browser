@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "base/files/file_path.h"
+#include "chromeos/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "chromeos/ui/base/window_pin_type.h"
 #include "components/version_info/channel.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -40,6 +40,7 @@ class GlanceablesController;
 class GlanceablesDelegate;
 class NearbyShareController;
 class NearbyShareDelegate;
+class SystemSoundsDelegate;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -71,6 +72,10 @@ class ASH_EXPORT ShellDelegate {
       NearbyShareController* controller) const = 0;
 
   virtual std::unique_ptr<DesksTemplatesDelegate> CreateDesksTemplatesDelegate()
+      const = 0;
+
+  // Creates and returns the delegate of the System Sounds feature.
+  virtual std::unique_ptr<SystemSoundsDelegate> CreateSystemSoundsDelegate()
       const = 0;
 
   // Returns the geolocation loader factory used to initialize geolocation

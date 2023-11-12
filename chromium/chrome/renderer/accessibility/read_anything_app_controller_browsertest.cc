@@ -9,6 +9,7 @@
 
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "content/public/renderer/render_frame.h"
+#include "ui/accessibility/ax_node.h"
 
 class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
  public:
@@ -55,8 +56,10 @@ class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
     controller_->OnAXTreeDistilled(snapshot, content_node_ids);
   }
 
-  std::vector<ui::AXNodeID> DisplayNodeIds() {
-    return controller_->DisplayNodeIds();
+  ui::AXNodeID RootId() { return controller_->RootId(); }
+
+  bool DisplayNodeIdsContains(ui::AXNodeID ax_node_id) {
+    return base::Contains(controller_->display_node_ids_, ax_node_id);
   }
 
   std::string FontName() { return controller_->FontName(); }
@@ -87,11 +90,6 @@ class ReadAnythingAppControllerTest : public ChromeRenderViewTest {
     return controller_->GetUrl(ax_node_id);
   }
 
-  bool SelectionContainsNode(ui::AXNodeID ax_node_id) {
-    ui::AXNode* ax_node = controller_->GetAXNode(ax_node_id);
-    return controller_->SelectionContainsNode(ax_node);
-  }
-
   ui::AXTreeUpdate basic_snapshot_;
   ui::AXTreeData basic_tree_data_with_selection_;
 
@@ -120,36 +118,29 @@ TEST_F(ReadAnythingAppControllerTest, Theme) {
   EXPECT_EQ(letter_spacing_value, LetterSpacing());
 }
 
-TEST_F(ReadAnythingAppControllerTest, DisplayNodeIds_NoSelection) {
-  std::vector<ui::AXNodeID> content_node_ids = {2, 4};
-  OnAXTreeDistilled(basic_snapshot_, content_node_ids);
-  EXPECT_EQ(content_node_ids.size(), DisplayNodeIds().size());
-  for (size_t i = 0; i < content_node_ids.size(); i++) {
-    EXPECT_EQ(content_node_ids[i], DisplayNodeIds()[i]);
-  }
+TEST_F(ReadAnythingAppControllerTest, RootIdIsSnapshotRootId) {
+  OnAXTreeDistilled(basic_snapshot_, {1});
+  EXPECT_EQ(1, RootId());
+  OnAXTreeDistilled(basic_snapshot_, {2});
+  EXPECT_EQ(1, RootId());
+  OnAXTreeDistilled(basic_snapshot_, {3});
+  EXPECT_EQ(1, RootId());
+  OnAXTreeDistilled(basic_snapshot_, {4});
+  EXPECT_EQ(1, RootId());
 }
 
-TEST_F(ReadAnythingAppControllerTest,
-       DisplayNodeIds_WithSelectionAndContentNodeIds) {
-  basic_snapshot_.has_tree_data = true;
-  basic_snapshot_.tree_data = basic_tree_data_with_selection_;
-  OnAXTreeDistilled(basic_snapshot_, {2, 4});
-  EXPECT_EQ(1u, DisplayNodeIds().size());
-  EXPECT_EQ(basic_snapshot_.root_id, DisplayNodeIds()[0]);
-}
-
-TEST_F(ReadAnythingAppControllerTest,
-       DisplayNodeIds_WithSelectionButNoContentNodeIds) {
-  basic_snapshot_.has_tree_data = true;
-  basic_snapshot_.tree_data = basic_tree_data_with_selection_;
-  OnAXTreeDistilled(basic_snapshot_, {});
-  EXPECT_EQ(1u, DisplayNodeIds().size());
-  EXPECT_EQ(basic_snapshot_.root_id, DisplayNodeIds()[0]);
-}
-
-TEST_F(ReadAnythingAppControllerTest, GetChildren_NoSelection) {
+TEST_F(ReadAnythingAppControllerTest, GetChildren_NoSelectionOrContentNodes) {
   basic_snapshot_.nodes[2].role = ax::mojom::Role::kNone;
   OnAXTreeDistilled(basic_snapshot_, {});
+  EXPECT_EQ(0u, GetChildren(1).size());
+  EXPECT_EQ(0u, GetChildren(2).size());
+  EXPECT_EQ(0u, GetChildren(3).size());
+  EXPECT_EQ(0u, GetChildren(4).size());
+}
+
+TEST_F(ReadAnythingAppControllerTest, GetChildren_WithContentNodes) {
+  basic_snapshot_.nodes[2].role = ax::mojom::Role::kNone;
+  OnAXTreeDistilled(basic_snapshot_, {1, 2, 3, 4});
   EXPECT_EQ(2u, GetChildren(1).size());
   EXPECT_EQ(0u, GetChildren(2).size());
   EXPECT_EQ(0u, GetChildren(3).size());
@@ -326,25 +317,50 @@ TEST_F(ReadAnythingAppControllerTest, GetUrl) {
   EXPECT_EQ(missing_url, GetUrl(4));
 }
 
-TEST_F(ReadAnythingAppControllerTest, SelectionContainsNode) {
+TEST_F(ReadAnythingAppControllerTest, DisplayNodeIdsContains_Selection) {
   basic_snapshot_.has_tree_data = true;
   basic_snapshot_.tree_data = basic_tree_data_with_selection_;
   OnAXTreeDistilled(basic_snapshot_, {});
-  EXPECT_TRUE(SelectionContainsNode(1));
-  EXPECT_TRUE(SelectionContainsNode(2));
-  EXPECT_TRUE(SelectionContainsNode(3));
-  EXPECT_FALSE(SelectionContainsNode(4));
+  EXPECT_TRUE(DisplayNodeIdsContains(1));
+  EXPECT_TRUE(DisplayNodeIdsContains(2));
+  EXPECT_TRUE(DisplayNodeIdsContains(3));
+  EXPECT_FALSE(DisplayNodeIdsContains(4));
 }
 
-TEST_F(ReadAnythingAppControllerTest, SelectionContainsNode_BackwardSelection) {
+TEST_F(ReadAnythingAppControllerTest,
+       DisplayNodeIdsContains_BackwardSelection) {
   basic_tree_data_with_selection_.sel_is_backward = true;
   basic_tree_data_with_selection_.sel_anchor_object_id = 3;
   basic_tree_data_with_selection_.sel_focus_object_id = 2;
   basic_snapshot_.has_tree_data = true;
   basic_snapshot_.tree_data = basic_tree_data_with_selection_;
   OnAXTreeDistilled(basic_snapshot_, {});
-  EXPECT_TRUE(SelectionContainsNode(1));
-  EXPECT_TRUE(SelectionContainsNode(2));
-  EXPECT_TRUE(SelectionContainsNode(3));
-  EXPECT_FALSE(SelectionContainsNode(4));
+  EXPECT_TRUE(DisplayNodeIdsContains(1));
+  EXPECT_TRUE(DisplayNodeIdsContains(2));
+  EXPECT_TRUE(DisplayNodeIdsContains(3));
+  EXPECT_FALSE(DisplayNodeIdsContains(4));
+}
+
+TEST_F(ReadAnythingAppControllerTest, DisplayNodeIdsContains_ContentNodes) {
+  basic_snapshot_.nodes.resize(6);
+  basic_snapshot_.nodes[3].child_ids = {5, 6};
+  basic_snapshot_.nodes[4].id = 5;
+  basic_snapshot_.nodes[5].id = 6;
+
+  OnAXTreeDistilled(basic_snapshot_, {3, 4});
+  EXPECT_TRUE(DisplayNodeIdsContains(1));
+  EXPECT_FALSE(DisplayNodeIdsContains(2));
+  EXPECT_TRUE(DisplayNodeIdsContains(3));
+  EXPECT_TRUE(DisplayNodeIdsContains(4));
+  EXPECT_TRUE(DisplayNodeIdsContains(5));
+  EXPECT_TRUE(DisplayNodeIdsContains(6));
+}
+
+TEST_F(ReadAnythingAppControllerTest,
+       DisplayNodeIdsContains_NoSelectionOrContentNodes) {
+  OnAXTreeDistilled(basic_snapshot_, {});
+  EXPECT_FALSE(DisplayNodeIdsContains(1));
+  EXPECT_FALSE(DisplayNodeIdsContains(2));
+  EXPECT_FALSE(DisplayNodeIdsContains(3));
+  EXPECT_FALSE(DisplayNodeIdsContains(4));
 }

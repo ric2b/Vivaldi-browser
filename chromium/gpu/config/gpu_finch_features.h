@@ -42,6 +42,8 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kCanvasContextLostInBackground);
 GPU_EXPORT BASE_DECLARE_FEATURE(kGpuProcessHighPriorityWin);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kDisableVideoOverlayIfMoving);
+
+GPU_EXPORT BASE_DECLARE_FEATURE(kNoUndamagedOverlayPromotion);
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -73,6 +75,8 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kEnableDrDc);
 GPU_EXPORT BASE_DECLARE_FEATURE(kForceGpuMainThreadToNormalPriorityDrDc);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kForceRestartGpuKillSwitch);
+
+GPU_EXPORT BASE_DECLARE_FEATURE(kUseGpuSchedulerDfs);
 
 #if BUILDFLAG(IS_ANDROID)
 // This flag is use additionally with kEnableDrDc to enable the feature for

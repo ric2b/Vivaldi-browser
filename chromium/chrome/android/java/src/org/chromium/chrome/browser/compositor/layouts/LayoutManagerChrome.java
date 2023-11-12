@@ -63,8 +63,21 @@ public class LayoutManagerChrome
     protected OverviewListLayout mOverviewListLayout;
     /** A {@link Layout} that should be used when the user is swiping sideways on the toolbar. */
     protected ToolbarSwipeLayout mToolbarSwipeLayout;
-    /** A {@link Layout} that should be used when the user is in the tab switcher. */
+    /**
+     * A {@link Layout} that should be used when the user is in the tab switcher or start surface
+     * when the refactor flag isn't enabled.
+     */
     protected Layout mOverviewLayout;
+    /**
+     * A {@link Layout} that should be used when the user is in the start surface when the refactor
+     * flag is enabled.
+     */
+    protected Layout mStartSurfaceHomeLayout;
+    /**
+     * A {@link Layout} that should be used when the user is in the tab switcher when the refactor
+     * flag is enabled.
+     */
+    protected Layout mTabSwitcherLayout;
 
     // Event Filter Handlers
     private final SwipeHandler mToolbarSwipeHandler;
@@ -112,14 +125,20 @@ public class LayoutManagerChrome
                 if (mOverviewLayout != null) {
                     mOverviewLayout.setTabContentManager(manager);
                 }
+                if (mTabSwitcherLayout != null) {
+                    mTabSwitcherLayout.setTabContentManager(manager);
+                }
+                if (mStartSurfaceHomeLayout != null) {
+                    mStartSurfaceHomeLayout.setTabContentManager(manager);
+                }
                 tabContentManagerSupplier.removeObserver(this);
             }
         });
 
         Context context = host.getContext();
-        if (tabSwitcherSupplier.hasValue()) {
-            assert ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(context);
-            createOverviewLayout(/*startSurface=*/null, tabSwitcherSupplier.get(), jankTracker,
+        if (ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context)) {
+            assert ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context);
+            createOverviewLayout(startSurfaceSupplier.get(), tabSwitcherSupplier.get(), jankTracker,
                     scrimCoordinator, tabSwitcherScrimAnchor);
         } else if (startSurfaceSupplier.hasValue()) {
             createOverviewLayout(startSurfaceSupplier.get(), /*tabSwitcher=*/null, jankTracker,
@@ -140,27 +159,32 @@ public class LayoutManagerChrome
     protected void createOverviewLayout(@Nullable StartSurface startSurface,
             @Nullable TabSwitcher tabSwitcher, @NonNull JankTracker jankTracker,
             ScrimCoordinator scrimCoordinator, ViewGroup tabSwitcherScrimAnchor) {
-        assert mOverviewLayout == null
+        assert mOverviewLayout == null && mTabSwitcherLayout == null
+                && mStartSurfaceHomeLayout == null
                 && TabUiFeatureUtilities.isGridTabSwitcherEnabled(mHost.getContext());
         boolean isRefactorEnabled =
-                ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mHost.getContext());
+                ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mHost.getContext());
+
+        Context context = mHost.getContext();
+        LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
         if (isRefactorEnabled) {
             assert tabSwitcher != null;
             TabManagementDelegate tabManagementDelegate = TabManagementModuleProvider.getDelegate();
             assert tabManagementDelegate != null;
 
-            mOverviewLayout = tabManagementDelegate.createTabSwitcherLayout(mHost.getContext(),
-                    this, mHost.getLayoutRenderHost(), tabSwitcher, jankTracker,
-                    tabSwitcherScrimAnchor, scrimCoordinator);
-            // TODO(crbug.com/1315676): Extends the refactor to allow Start Surface enabled
-            // case. That means we will split "mOverviewLayout" into "mTabSwitcherLayout" and
-            // "mStartSurfaceHomeLayout".
+            mTabSwitcherLayout = tabManagementDelegate.createTabSwitcherLayout(context, this,
+                    renderHost, tabSwitcher, jankTracker, tabSwitcherScrimAnchor, scrimCoordinator);
+
+            if (startSurface != null) {
+                mStartSurfaceHomeLayout = StartSurfaceDelegate.createStartSurfaceHomeLayout(
+                        context, this, renderHost, startSurface);
+            }
         } else {
             assert startSurface != null;
-            mOverviewLayout = StartSurfaceDelegate.createTabSwitcherAndStartSurfaceLayout(
-                    mHost.getContext(), this, mHost.getLayoutRenderHost(), startSurface,
-                    jankTracker, tabSwitcherScrimAnchor, scrimCoordinator);
+            mOverviewLayout = StartSurfaceDelegate.createTabSwitcherAndStartSurfaceLayout(context,
+                    this, renderHost, startSurface, jankTracker, tabSwitcherScrimAnchor,
+                    scrimCoordinator);
         }
 
         if (TabUiFeatureUtilities.isTabletGridTabSwitcherEnabled(mHost.getContext())) {
@@ -180,15 +204,37 @@ public class LayoutManagerChrome
         }
 
         if (mTabContentManagerSupplier.hasValue()) {
-            mOverviewLayout.setTabContentManager(mTabContentManagerSupplier.get());
+            if (mOverviewLayout != null) {
+                mOverviewLayout.setTabContentManager(mTabContentManagerSupplier.get());
+            }
+            if (mTabSwitcherLayout != null) {
+                mTabSwitcherLayout.setTabContentManager(mTabContentManagerSupplier.get());
+            }
+            if (mStartSurfaceHomeLayout != null) {
+                mStartSurfaceHomeLayout.setTabContentManager(mTabContentManagerSupplier.get());
+            }
         }
 
         if (getTabModelSelector() != null) {
-            mOverviewLayout.setTabModelSelector(
-                    getTabModelSelector(), mTabContentManagerSupplier.get());
+            if (mOverviewLayout != null) {
+                mOverviewLayout.setTabModelSelector(
+                        getTabModelSelector(), mTabContentManagerSupplier.get());
+            }
+            if (mTabSwitcherLayout != null) {
+                mTabSwitcherLayout.setTabModelSelector(
+                        getTabModelSelector(), mTabContentManagerSupplier.get());
+            }
+            if (mStartSurfaceHomeLayout != null) {
+                mStartSurfaceHomeLayout.setTabModelSelector(
+                        getTabModelSelector(), mTabContentManagerSupplier.get());
+            }
         }
         if (mFinishNativeInitialization) {
-            mOverviewLayout.onFinishNativeInitialization();
+            if (mOverviewLayout != null) mOverviewLayout.onFinishNativeInitialization();
+            if (mTabSwitcherLayout != null) mTabSwitcherLayout.onFinishNativeInitialization();
+            if (mStartSurfaceHomeLayout != null) {
+                mStartSurfaceHomeLayout.onFinishNativeInitialization();
+            }
         }
     }
 
@@ -242,6 +288,14 @@ public class LayoutManagerChrome
             mOverviewLayout.setTabModelSelector(selector, content);
             mOverviewLayout.onFinishNativeInitialization();
         }
+        if (mTabSwitcherLayout != null) {
+            mTabSwitcherLayout.setTabModelSelector(selector, content);
+            mTabSwitcherLayout.onFinishNativeInitialization();
+        }
+        if (mStartSurfaceHomeLayout != null) {
+            mStartSurfaceHomeLayout.setTabModelSelector(selector, content);
+            mStartSurfaceHomeLayout.onFinishNativeInitialization();
+        }
         mFinishNativeInitialization = true;
     }
 
@@ -250,6 +304,12 @@ public class LayoutManagerChrome
         super.setTabModelSelector(selector);
         if (mOverviewLayout != null) {
             mOverviewLayout.setTabModelSelector(selector, null);
+        }
+        if (mTabSwitcherLayout != null) {
+            mTabSwitcherLayout.setTabModelSelector(selector, null);
+        }
+        if (mStartSurfaceHomeLayout != null) {
+            mStartSurfaceHomeLayout.setTabModelSelector(selector, null);
         }
     }
 
@@ -270,16 +330,20 @@ public class LayoutManagerChrome
             mOverviewLayout.destroy();
             mOverviewLayout = null;
         }
+        if (mTabSwitcherLayout != null) {
+            mTabSwitcherLayout.destroy();
+            mTabSwitcherLayout = null;
+        }
+        if (mStartSurfaceHomeLayout != null) {
+            mStartSurfaceHomeLayout.destroy();
+            mStartSurfaceHomeLayout = null;
+        }
         if (mOverviewListLayout != null) {
             mOverviewListLayout.destroy();
         }
         if (mToolbarSwipeLayout != null) {
             mToolbarSwipeLayout.destroy();
         }
-    }
-
-    private boolean isOverviewLayout(Layout layout) {
-        return layout != null && (layout == mOverviewLayout || layout == mOverviewListLayout);
     }
 
     @Override
@@ -290,6 +354,8 @@ public class LayoutManagerChrome
         } else if (layoutType == LayoutType.TAB_SWITCHER) {
             if (shouldUseAccessibilityTabSwitcher()) {
                 layout = mOverviewListLayout;
+            } else if (mTabSwitcherLayout != null) {
+                layout = mTabSwitcherLayout;
             } else {
                 layout = mOverviewLayout;
             }
@@ -299,6 +365,8 @@ public class LayoutManagerChrome
             if (BuildConfig.IS_VIVALDI && mToolbarSwipeHandler != null)
                 ((ToolbarSwipeHandler) mToolbarSwipeHandler).mScrollDirection =
                         ScrollDirection.UNKNOWN;
+        } else if (layoutType == LayoutType.START_SURFACE) {
+            layout = mStartSurfaceHomeLayout;
         } else {
             layout = super.getLayoutForType(layoutType);
         }
@@ -311,7 +379,8 @@ public class LayoutManagerChrome
 
         boolean accessibilityIsVisible =
                 useAccessibility && getActiveLayout() == mOverviewListLayout;
-        boolean normalIsVisible = getActiveLayout() == mOverviewLayout && mOverviewLayout != null;
+        boolean normalIsVisible = (getActiveLayout() == mOverviewLayout && mOverviewLayout != null)
+                || (getActiveLayout() == mTabSwitcherLayout && mTabSwitcherLayout != null);
 
         // We only want to use the AccessibilityOverviewLayout if the following are all valid:
         // 1. We're already showing the AccessibilityOverviewLayout OR we're using accessibility.
@@ -338,7 +407,9 @@ public class LayoutManagerChrome
 
     @Override
     protected boolean shouldDelayHideAnimation(Layout layoutBeingHidden) {
-        return mEnableAnimations && layoutBeingHidden == mOverviewLayout && mCreatingNtp
+        return mEnableAnimations
+                && (layoutBeingHidden == mOverviewLayout || layoutBeingHidden == mTabSwitcherLayout)
+                && mCreatingNtp
                 && !TabUiFeatureUtilities.isGridTabSwitcherEnabled(mHost.getContext());
     }
 
@@ -351,7 +422,9 @@ public class LayoutManagerChrome
     @Override
     protected boolean shouldShowToolbarAnimationOnHide(Layout layoutBeingHidden, int nextTabId) {
         boolean showAnimation = true;
-        if (mEnableAnimations && layoutBeingHidden == mOverviewLayout) {
+        if (mEnableAnimations
+                && (layoutBeingHidden == mOverviewLayout
+                        || layoutBeingHidden == mTabSwitcherLayout)) {
             final LayoutTab tab = layoutBeingHidden.getLayoutTab(nextTabId);
             showAnimation = tab == null || !tab.showToolbar();
         }
@@ -368,7 +441,7 @@ public class LayoutManagerChrome
 
     @Override
     public void onTabsAllClosing(boolean incognito) {
-        if (!isOverviewLayout(getActiveLayout())) return;
+        if (getActiveLayout() == mStaticLayout) return;
 
         super.onTabsAllClosing(incognito);
     }
@@ -387,6 +460,15 @@ public class LayoutManagerChrome
     @VisibleForTesting
     public Layout getOverviewLayout() {
         return mOverviewLayout;
+    }
+
+    /**
+     * @return The grid tab switcher layout {@link Layout} managed by this class. This is non-null
+     * when the Start surface refactor is enabled.
+     */
+    @VisibleForTesting
+    public Layout getTabSwitcherLayoutForTesting() {
+        return mTabSwitcherLayout;
     }
 
     /**
@@ -465,7 +547,7 @@ public class LayoutManagerChrome
             if (mScrollDirection == ScrollDirection.UNKNOWN) return;
 
             // Vivaldi - Show Overview layout whether address bar is at top or bottom
-            if (mSupportSwipeDown && mOverviewLayout != null
+            if (mSupportSwipeDown && (mOverviewLayout != null || mTabSwitcherLayout != null)
                 && VivaldiUtils.isAddressBarSwipeGestureEnabled()
                 && ((VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.DOWN)
                 || (!VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.UP))) {
@@ -539,7 +621,7 @@ public class LayoutManagerChrome
             if (direction == ScrollDirection.DOWN
                     || (!VivaldiUtils.isTopToolbarOn() && direction == ScrollDirection.UP)) {
                 boolean isAccessibility = ChromeAccessibilityUtil.get().isAccessibilityEnabled();
-                return mOverviewLayout != null && !isAccessibility;
+                return (mOverviewLayout != null || mTabSwitcherLayout != null) && !isAccessibility;
             }
 
             return direction == ScrollDirection.LEFT || direction == ScrollDirection.RIGHT;

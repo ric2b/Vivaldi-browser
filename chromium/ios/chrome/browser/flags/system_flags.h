@@ -58,6 +58,9 @@ bool ShouldAlwaysShowFollowIPH();
 // Whether memory debugging tools are enabled.
 bool IsMemoryDebuggingEnabled();
 
+// Whether omnibox debugging tools are enabled.
+bool IsOmniboxDebuggingEnabled();
+
 // Whether startup crash is enabled.
 bool IsStartupCrashEnabled();
 
@@ -68,9 +71,6 @@ bool IsThirdPartyKeyboardWorkaroundEnabled();
 // Calling this method will reset the flag to false, so the sandbox is cleared
 // only once.
 bool MustClearApplicationGroupSandbox();
-
-// Whether the DCheckIsFatal feature should be disabled.
-bool AreDCHECKCrashesDisabled();
 
 // Returns the name of the promo to be forced to display when the app is
 // launched or resumed. Returns empty string if no promo is to be forced

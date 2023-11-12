@@ -27,8 +27,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/ash/policy/status_collector/child_activity_storage.h"
 #include "chrome/browser/ash/policy/status_collector/interval_map.h"
@@ -37,10 +37,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/settings/timezone_settings.h"
-#include "chromeos/login/login_state/login_state.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/version/version_loader.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
@@ -131,8 +131,8 @@ ChildStatusCollector::ChildStatusCollector(
 
   // Get the task runner of the current thread, so we can queue status responses
   // on this thread.
-  CHECK(base::SequencedTaskRunnerHandle::IsSet());
-  task_runner_ = base::SequencedTaskRunnerHandle::Get();
+  CHECK(base::SequencedTaskRunner::HasCurrentDefault());
+  task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
 
   if (android_status_fetcher_.is_null())
     android_status_fetcher_ = base::BindRepeating(&ReadAndroidStatus);

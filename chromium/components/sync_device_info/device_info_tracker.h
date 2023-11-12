@@ -39,6 +39,7 @@ class DeviceInfoTracker {
     // GUID or this is the first browser startup), it will be updated later
     // during the initial merge.
     virtual void OnDeviceInfoChange() = 0;
+    virtual ~Observer() = default;
   };
 
   // Returns true when DeviceInfo datatype is enabled and syncing.
@@ -54,12 +55,12 @@ class DeviceInfoTracker {
   virtual void AddObserver(Observer* observer) = 0;
   // Unregisters an observer.
   virtual void RemoveObserver(Observer* observer) = 0;
-  // Returns the count of active devices per device type. Deduping logic may be
-  // used internally to prevent double counting for devices that disable sync
-  // and reenable it, but callers should nevertheless consider this an upper
-  // bound per type.
-  virtual std::map<sync_pb::SyncEnums_DeviceType, int>
-  CountActiveDevicesByType() const = 0;
+  // Returns the count of active devices per form factor; identified by the
+  // OsType and the FormFactor. Deduping logic may be used internally to prevent
+  // double counting for devices that disable sync and reenable it, but callers
+  // should nevertheless consider this an upper bound per type.
+  virtual std::map<DeviceInfo::FormFactor, int> CountActiveDevicesByType()
+      const = 0;
   // A function to to allow tests to ensure active devices. If called when the
   // local device info provider is not initialized, will force update after
   // initialization.

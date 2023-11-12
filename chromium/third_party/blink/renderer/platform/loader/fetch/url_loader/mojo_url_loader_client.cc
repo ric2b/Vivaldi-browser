@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
@@ -444,6 +445,12 @@ void MojoURLLoaderClient::OnReceiveRedirect(
     network::mojom::URLResponseHeadPtr response_head) {
   DCHECK(!has_received_response_head_);
   if (freeze_mode_ == WebLoaderFreezeMode::kBufferIncoming) {
+    // Evicting a page from the bfcache and aborting the request is not good for
+    // a request with keepalive set, which is why we block bfcache when we find
+    // such a request.
+    // TODO(crbug.com/1356128): This will not be a problem when we move the
+    // keepalive request infrastructure to the browser process.
+
     EvictFromBackForwardCache(
         blink::mojom::RendererEvictionReason::kNetworkRequestRedirected);
 
@@ -481,6 +488,9 @@ void MojoURLLoaderClient::OnUploadProgress(
 }
 
 void MojoURLLoaderClient::OnTransferSizeUpdated(int32_t transfer_size_diff) {
+  network::RecordOnTransferSizeUpdatedUMA(
+      network::OnTransferSizeUpdatedFrom::kMojoURLLoaderClient);
+
   if (NeedsStoringMessage()) {
     accumulated_transfer_size_diff_during_deferred_ += transfer_size_diff;
   } else {

@@ -46,7 +46,7 @@ void AwAutofillClient::SetSaveFormData(bool enabled) {
   save_form_data_ = enabled;
 }
 
-bool AwAutofillClient::GetSaveFormData() {
+bool AwAutofillClient::GetSaveFormData() const {
   return save_form_data_;
 }
 
@@ -131,7 +131,7 @@ void AwAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {
 
 void AwAutofillClient::ShowUnmaskPrompt(
     const autofill::CreditCard& card,
-    UnmaskCardReason reason,
+    const autofill::CardUnmaskPromptOptions& card_unmask_prompt_options,
     base::WeakPtr<autofill::CardUnmaskDelegate> delegate) {
   NOTIMPLEMENTED();
 }
@@ -203,15 +203,6 @@ bool AwAutofillClient::IsFastCheckoutTriggerForm(
   return false;
 }
 
-bool AwAutofillClient::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-  return false;
-}
-
-bool AwAutofillClient::FastCheckoutClientSupportsConsentlessExecution() {
-  return false;
-}
-
 bool AwAutofillClient::ShowFastCheckout(
     base::WeakPtr<autofill::FastCheckoutDelegate> delegate) {
   NOTREACHED();
@@ -227,7 +218,8 @@ bool AwAutofillClient::IsTouchToFillCreditCardSupported() {
 }
 
 bool AwAutofillClient::ShowTouchToFillCreditCard(
-    base::WeakPtr<autofill::TouchToFillDelegate> delegate) {
+    base::WeakPtr<autofill::TouchToFillDelegate> delegate,
+    base::span<const autofill::CreditCard* const> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -291,7 +283,7 @@ void AwAutofillClient::HideAutofillPopup(autofill::PopupHidingReason reason) {
   Java_AwAutofillClient_hideAutofillPopup(env, obj);
 }
 
-bool AwAutofillClient::IsAutocompleteEnabled() {
+bool AwAutofillClient::IsAutocompleteEnabled() const {
   return GetSaveFormData();
 }
 
@@ -350,6 +342,13 @@ void AwAutofillClient::ExecuteCommand(int id) {
 
 void AwAutofillClient::OpenPromoCodeOfferDetailsURL(const GURL& url) {
   NOTIMPLEMENTED();
+}
+
+autofill::FormInteractionsFlowId
+AwAutofillClient::GetCurrentFormInteractionsFlowId() {
+  // Currently not in use here. See `ChromeAutofillClient` for a proper
+  // implementation.
+  return {};
 }
 
 void AwAutofillClient::LoadRiskData(

@@ -28,6 +28,7 @@
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/infobars/core/infobar.h"
+#import "components/infobars/core/infobar_manager.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/password_generation_frame_helper.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
@@ -242,13 +243,13 @@ void ChromeAutofillClientIOS::ShowAutofillSettings(
 
 void ChromeAutofillClientIOS::ShowUnmaskPrompt(
     const CreditCard& card,
-    UnmaskCardReason reason,
+    const CardUnmaskPromptOptions& card_unmask_prompt_options,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
   unmask_controller_.ShowPrompt(
-      base::BindOnce(&autofill::CreateCardUnmaskPromptViewBridge,
+      base::BindOnce(&CreateCardUnmaskPromptViewBridge,
                      base::Unretained(&unmask_controller_),
                      base::Unretained(base_view_controller_)),
-      card, reason, delegate);
+      card, card_unmask_prompt_options, delegate);
 }
 
 void ChromeAutofillClientIOS::OnUnmaskVerificationResult(
@@ -334,17 +335,41 @@ void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
     const AutofillProfile* original_profile,
     SaveAddressProfilePromptOptions options,
     AddressProfileSavePromptCallback callback) {
-  DCHECK(base::FeatureList::IsEnabled(
-      features::kAutofillAddressProfileSavePrompt));
-    // TODO(crbug.com/1167062): Respect SaveAddressProfilePromptOptions.
-    auto delegate =
-        std::make_unique<AutofillSaveUpdateAddressProfileDelegateIOS>(
-            profile, original_profile,
-            GetApplicationContext()->GetApplicationLocale(),
-            std::move(callback));
-    infobar_manager_->AddInfoBar(std::make_unique<InfoBarIOS>(
-        InfobarType::kInfobarTypeSaveAutofillAddressProfile,
-        std::move(delegate)));
+  // TODO(crbug.com/1167062): Respect SaveAddressProfilePromptOptions.
+  for (size_t i = 0; i < infobar_manager_->infobar_count(); ++i) {
+    AutofillSaveUpdateAddressProfileDelegateIOS* existing_delegate =
+        AutofillSaveUpdateAddressProfileDelegateIOS::FromInfobarDelegate(
+            infobar_manager_->infobar_at(i)->delegate());
+
+    if (existing_delegate) {
+      if (existing_delegate->is_infobar_visible()) {
+        // AutoDecline the new prompt if the existing prompt is visible.
+        std::move(callback).Run(
+            AutofillClient::SaveAddressProfileOfferUserDecision::kAutoDeclined,
+            profile);
+        return;
+      } else {
+        // If the existing prompt is not visible, it means that the user has
+        // closed the prompt of the previous import process using the "Cancel"
+        // button or it has been accepted by the user. A fallback icon is shown
+        // for the user in the omnibox to get back to the prompt. If it is
+        // already accepted by the user, the save button is disabled and the
+        // saved data is shown to user. In both the cases, the original prompt
+        // is replaced by the new one provided that the modal view of the
+        // original infobar is not visible to the user.
+        infobar_manager_->RemoveInfoBar(infobar_manager_->infobar_at(i));
+        break;
+      }
+    }
+  }
+
+  auto delegate = std::make_unique<AutofillSaveUpdateAddressProfileDelegateIOS>(
+      profile, original_profile,
+      GetApplicationContext()->GetApplicationLocale(), std::move(callback));
+
+  infobar_manager_->AddInfoBar(std::make_unique<InfoBarIOS>(
+      InfobarType::kInfobarTypeSaveAutofillAddressProfile,
+      std::move(delegate)));
 }
 
 bool ChromeAutofillClientIOS::HasCreditCardScanFeature() {
@@ -365,15 +390,6 @@ bool ChromeAutofillClientIOS::IsFastCheckoutTriggerForm(
   return false;
 }
 
-bool ChromeAutofillClientIOS::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-  return false;
-}
-
-bool ChromeAutofillClientIOS::FastCheckoutClientSupportsConsentlessExecution() {
-  return false;
-}
-
 bool ChromeAutofillClientIOS::ShowFastCheckout(
     base::WeakPtr<FastCheckoutDelegate> delegate) {
   NOTREACHED();
@@ -389,7 +405,8 @@ bool ChromeAutofillClientIOS::IsTouchToFillCreditCardSupported() {
 }
 
 bool ChromeAutofillClientIOS::ShowTouchToFillCreditCard(
-    base::WeakPtr<TouchToFillDelegate> delegate) {
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const CreditCard* const> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -436,7 +453,7 @@ void ChromeAutofillClientIOS::HideAutofillPopup(PopupHidingReason reason) {
   [bridge_ hideAutofillPopup];
 }
 
-bool ChromeAutofillClientIOS::IsAutocompleteEnabled() {
+bool ChromeAutofillClientIOS::IsAutocompleteEnabled() const {
   return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
@@ -487,18 +504,25 @@ void ChromeAutofillClientIOS::OpenPromoCodeOfferDetailsURL(const GURL& url) {
       /*is_renderer_initiated=*/false));
 }
 
-void ChromeAutofillClientIOS::LoadRiskData(
-    base::OnceCallback<void(const std::string&)> callback) {
-  std::move(callback).Run(
-      base::SysNSStringToUTF8(ios::provider::GetRiskData()));
+FormInteractionsFlowId
+ChromeAutofillClientIOS::GetCurrentFormInteractionsFlowId() {
+  // Currently not in use here. See `ChromeAutofillClient` for a proper
+  // implementation.
+  return {};
 }
 
 LogManager* ChromeAutofillClientIOS::GetLogManager() const {
   return log_manager_.get();
 }
 
-bool ChromeAutofillClientIOS::IsQueryIDRelevant(int query_id) {
-  return [bridge_ isQueryIDRelevant:query_id];
+bool ChromeAutofillClientIOS::IsLastQueriedField(FieldGlobalId field_id) {
+  return [bridge_ isLastQueriedField:field_id];
+}
+
+void ChromeAutofillClientIOS::LoadRiskData(
+    base::OnceCallback<void(const std::string&)> callback) {
+  std::move(callback).Run(
+      base::SysNSStringToUTF8(ios::provider::GetRiskData()));
 }
 
 }  // namespace autofill

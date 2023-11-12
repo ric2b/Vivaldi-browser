@@ -35,6 +35,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "cc/layers/texture_layer.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/config/gpu_finch_features.h"
 
@@ -317,7 +318,8 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
     layer_->SetBlendBackgroundColor(opacity_mode_ != kOpaque);
     layer_->SetNearestNeighbor(resource_host_->FilterQuality() ==
                                cc::PaintFlags::FilterQuality::kNone);
-    layer_->SetHDRMetadata(resource_host_->GetHDRMetadata());
+    layer_->SetHDRConfiguration(resource_host_->GetHDRMode(),
+                                resource_host_->GetHDRMetadata());
   }
   // After the page becomes visible and successfully restored the canvas
   // resource provider, set |lose_context_in_background_| to false.
@@ -370,10 +372,11 @@ void Canvas2DLayerBridge::SetFilterQuality(
                                cc::PaintFlags::FilterQuality::kNone);
 }
 
-void Canvas2DLayerBridge::SetHDRMetadata(
+void Canvas2DLayerBridge::SetHDRConfiguration(
+    gfx::HDRMode hdr_mode,
     absl::optional<gfx::HDRMetadata> hdr_metadata) {
   if (layer_)
-    layer_->SetHDRMetadata(hdr_metadata);
+    layer_->SetHDRConfiguration(hdr_mode, hdr_metadata);
 }
 
 void Canvas2DLayerBridge::SetIsInHiddenPage(bool hidden) {
@@ -383,6 +386,17 @@ void Canvas2DLayerBridge::SetIsInHiddenPage(bool hidden) {
   is_hidden_ = hidden;
   if (ResourceProvider())
     ResourceProvider()->SetResourceRecyclingEnabled(!IsHidden());
+
+  // Conserve memory.
+  if (base::FeatureList::IsEnabled(features::kCanvasFreeMemoryWhenHidden) &&
+      IsAccelerated() && SharedGpuContext::ContextProviderWrapper() &&
+      SharedGpuContext::ContextProviderWrapper()->ContextProvider()) {
+    auto* context_support = SharedGpuContext::ContextProviderWrapper()
+                                ->ContextProvider()
+                                ->ContextSupport();
+    if (context_support)
+      context_support->SetAggressivelyFreeResources(hidden);
+  }
 
   if (!lose_context_in_background_ && !lose_context_in_background_scheduled_ &&
       ResourceProvider() && !context_lost_ && IsHidden() &&
@@ -677,7 +691,13 @@ bool Canvas2DLayerBridge::PrepareTransferableResource(
   if (!IsValid())
     return false;
 
-  FlushRecording();
+  // The beforeprint event listener is sometimes scheduled in the same task
+  // as BeginFrame, which means that this code may sometimes be called between
+  // the event listener and its associated FinalizeFrame call. So in order to
+  // preserve the display list for printing, FlushRecording needs to know
+  // whether any printing occurred in the current task.
+  FlushRecording(resource_host_->PrintedInCurrentTask() ||
+                 resource_host_->IsPrinting());
 
   // If the context is lost, we don't know if we should be producing GPU or
   // software frames, until we get a new context, since the compositor will
@@ -745,8 +765,9 @@ void Canvas2DLayerBridge::FinalizeFrame(bool printing) {
 }
 
 void Canvas2DLayerBridge::DoPaintInvalidation(const gfx::Rect& dirty_rect) {
-  if (layer_ && raster_mode_ == RasterMode::kGPU)
+  if (layer_ && raster_mode_ == RasterMode::kGPU) {
     layer_->SetNeedsDisplayRect(dirty_rect);
+  }
 }
 
 scoped_refptr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot() {

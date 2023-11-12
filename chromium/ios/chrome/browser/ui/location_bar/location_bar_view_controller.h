@@ -12,6 +12,10 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/orchestrator/location_bar_animatee.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
+// End Vivaldi
+
 @class InfobarMetricsRecorder;
 @class LayoutGuideCenter;
 @class OmniboxTextFieldIOS;
@@ -19,6 +23,10 @@
 @protocol ApplicationCommands;
 @protocol LocationBarOffsetProvider;
 @protocol LoadQueryCommands;
+
+// Vivaldi
+@protocol PopupMenuCommands;
+// End Vivaldi
 
 @protocol LocationBarViewControllerDelegate<NSObject>
 
@@ -44,6 +52,9 @@
 // Starts a reverse image search for the image currently in the pasteboard.
 - (void)searchCopiedImage;
 
+// Starts a Lens search for the image currently in the pasteboard.
+- (void)lensCopiedImage;
+
 @end
 
 // The view controller displaying the location bar. Manages the two states of
@@ -67,6 +78,7 @@
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
                               LoadQueryCommands,
+                              PopupMenuCommands, // Vivaldi
                               OmniboxCommands>
     dispatcher;
 
@@ -106,6 +118,14 @@
 // Whether the default search engine supports search-by-image. This controls the
 // edit menu option to do an image search.
 @property(nonatomic, assign) BOOL searchByImageEnabled;
+
+// Whether the default search engine supports Lensing images. This controls the
+// edit menu option to do an image search.
+@property(nonatomic, assign) BOOL lensImageEnabled;
+
+// Vivaldi
+- (LocationBarSteadyView*)steadyView;
+// End Vivaldi
 
 @end
 

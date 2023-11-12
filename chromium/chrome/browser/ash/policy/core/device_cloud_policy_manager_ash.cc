@@ -44,7 +44,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
@@ -101,6 +101,18 @@ DeviceCloudPolicyManagerAsh::DeviceCloudPolicyManagerAsh(
       local_state_(nullptr) {}
 
 DeviceCloudPolicyManagerAsh::~DeviceCloudPolicyManagerAsh() = default;
+
+void DeviceCloudPolicyManagerAsh::Init(SchemaRegistry* registry) {
+  ConfigurationPolicyProvider::Init(registry);
+
+  store()->AddObserver(this);
+
+  // If the underlying store is already initialized, pretend it was loaded now.
+  // Note: It is not enough to just copy OnStoreLoaded's contents here because
+  // subclasses can override it.
+  if (store()->is_initialized())
+    OnStoreLoaded(store());
+}
 
 void DeviceCloudPolicyManagerAsh::Initialize(PrefService* local_state) {
   CHECK(local_state);
@@ -261,26 +273,6 @@ void DeviceCloudPolicyManagerAsh::OnPolicyStoreReady(
   CreateManagedSessionServiceAndReporters();
 }
 
-void DeviceCloudPolicyManagerAsh::Unregister(UnregisterCallback callback) {
-  if (!service()) {
-    LOG(ERROR) << "Tried to unregister but DeviceCloudPolicyManagerAsh is "
-               << "not connected.";
-    std::move(callback).Run(false);
-    return;
-  }
-
-  service()->Unregister(std::move(callback));
-}
-
-void DeviceCloudPolicyManagerAsh::Disconnect() {
-  status_uploader_.reset();
-  syslog_uploader_.reset();
-  heartbeat_scheduler_.reset();
-  core()->Disconnect();
-
-  NotifyDisconnected();
-}
-
 void DeviceCloudPolicyManagerAsh::SetSigninProfileSchemaRegistry(
     SchemaRegistry* schema_registry) {
   DCHECK(!signin_profile_forwarding_schema_registry_);
@@ -299,11 +291,6 @@ void DeviceCloudPolicyManagerAsh::OnStateKeysUpdated() {
 void DeviceCloudPolicyManagerAsh::NotifyConnected() {
   for (auto& observer : observers_)
     observer.OnDeviceCloudPolicyManagerConnected();
-}
-
-void DeviceCloudPolicyManagerAsh::NotifyDisconnected() {
-  for (auto& observer : observers_)
-    observer.OnDeviceCloudPolicyManagerDisconnected();
 }
 
 void DeviceCloudPolicyManagerAsh::NotifyGotRegistry() {

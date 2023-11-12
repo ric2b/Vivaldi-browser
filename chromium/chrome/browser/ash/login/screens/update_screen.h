@@ -16,15 +16,9 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ash/login/error_screens_histogram_helper.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/version_updater/version_updater.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ash/login/wizard_context.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 
 namespace base {
@@ -32,6 +26,9 @@ class TickClock;
 }
 
 namespace ash {
+
+class ErrorScreensHistogramHelper;
+class UpdateView;
 
 // Controller for the update screen.
 //
@@ -82,6 +79,10 @@ class UpdateScreen : public BaseScreen,
   base::OneShotTimer* GetShowTimerForTesting();
   base::OneShotTimer* GetErrorMessageTimerForTesting();
   VersionUpdater* GetVersionUpdaterForTesting();
+
+  void set_delay_for_delayed_timer_for_testing(base::TimeDelta delay) {
+    delay_error_message_ = delay;
+  }
 
   // VersionUpdater::Delegate:
   void OnWaitForRebootTimeElapsed() override;
@@ -242,6 +243,11 @@ class UpdateScreen : public BaseScreen,
 
   base::CallbackListSubscription accessibility_subscription_;
 
+  // Delay before showing error message if captive portal is detected.
+  // We wait for this delay to let captive portal to perform redirect and show
+  // its login page before error message appears.
+  base::TimeDelta delay_error_message_ = base::Seconds(10);
+
   // PowerManagerClient::Observer is used only when screen is shown.
   base::ScopedObservation<chromeos::PowerManagerClient,
                           chromeos::PowerManagerClient::Observer>
@@ -251,17 +257,5 @@ class UpdateScreen : public BaseScreen,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::UpdateScreen;
-}
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace ash {
-using ::chromeos::UpdateScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_UPDATE_SCREEN_H_

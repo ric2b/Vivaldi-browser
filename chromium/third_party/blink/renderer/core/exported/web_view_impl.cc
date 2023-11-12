@@ -154,8 +154,8 @@
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
-#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
@@ -571,7 +571,8 @@ WebViewImpl::WebViewImpl(
       receiver_(this,
                 std::move(page_handle),
                 agent_group_scheduler.DefaultTaskRunner()),
-      session_storage_namespace_id_(session_storage_namespace_id) {
+      session_storage_namespace_id_(session_storage_namespace_id),
+      web_agent_group_scheduler_(agent_group_scheduler) {
   if (receiver_) {
     // Typically, the browser process closes the corresponding peer handle
     // to signal the renderer process to destroy `this`. In certain
@@ -585,7 +586,7 @@ WebViewImpl::WebViewImpl(
     DCHECK(!does_composite_);
   page_ = Page::CreateOrdinary(*chrome_client_,
                                opener ? opener->GetPage() : nullptr,
-                               agent_group_scheduler);
+                               agent_group_scheduler.GetAgentGroupScheduler());
   CoreInitializer::GetInstance().ProvideModulesToPage(
       *page_, session_storage_namespace_id_);
 
@@ -596,8 +597,7 @@ WebViewImpl::WebViewImpl(
   // page.
   SetInsidePortal(is_inside_portal);
 
-  if (fenced_frame_mode && features::IsFencedFramesEnabled() &&
-      features::IsFencedFramesMPArchBased()) {
+  if (fenced_frame_mode && features::IsFencedFramesEnabled()) {
     page_->SetIsMainFrameFencedFrameRoot();
     page_->SetFencedFrameMode(*fenced_frame_mode);
   } else {
@@ -1023,7 +1023,7 @@ WebPagePopupImpl* WebViewImpl::OpenPagePopup(PagePopupClient* client) {
       std::move(widget));
   WebFrameWidgetImpl* opener_widget = web_opener_frame->LocalRootFrameWidget();
 
-  scheduler::WebAgentGroupScheduler& agent_group_scheduler =
+  AgentGroupScheduler& agent_group_scheduler =
       opener_frame->GetPage()->GetPageScheduler()->GetAgentGroupScheduler();
   // The returned WebPagePopup is self-referencing, so the pointer here is not
   // an owning pointer. It is de-referenced by the PopupWidgetHost disconnecting
@@ -1700,8 +1700,12 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
       prefs.scroll_top_left_interop_enabled);
   RuntimeEnabledFeatures::SetAcceleratedSmallCanvasesEnabled(
       !prefs.disable_accelerated_small_canvases);
-  RuntimeEnabledFeatures::SetWebAuthEnabled(!prefs.disable_webauthn);
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+  RuntimeEnabledFeatures::SetWebAuthEnabled(!prefs.disable_webauthn);
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+
   settings->SetForceDarkModeEnabled(prefs.force_dark_mode_enabled);
 
   settings->SetAccessibilityAlwaysShowFocus(prefs.always_show_focus);
@@ -1807,6 +1811,7 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetTouchDragDropEnabled(prefs.touch_drag_drop_enabled);
   settings->SetTouchDragEndContextMenu(prefs.touch_dragend_context_menu);
   settings->SetWebXRImmersiveArAllowed(prefs.webxr_immersive_ar_allowed);
+  settings->SetModalContextMenu(prefs.modal_context_menu);
 
 #if BUILDFLAG(IS_MAC)
   web_view_impl->SetMaximumLegibleScale(
@@ -2043,10 +2048,14 @@ void WebViewImpl::DidAttachRemoteMainFrame(
         mojom::blink::RemoteMainFrameHostInterfaceBase> main_frame_host,
     CrossVariantMojoAssociatedReceiver<
         mojom::blink::RemoteMainFrameInterfaceBase> main_frame) {
-  DCHECK(main_frame_host);
-  DCHECK(main_frame);
   DCHECK(!MainFrameImpl());
   DCHECK(!local_main_frame_host_remote_);
+  // Note that we didn't DCHECK the `main_frame_host` and `main_frame`, because
+  // it's possible for those to be null, in case the remote main frame is a
+  // placeholder RemoteFrame that does not have any browser-side counterpart.
+  // This is possible when the WebView is created in preparation for a main
+  // frame LocalFrame <-> LocalFrame swap. See the comments in
+  // `AgentSchedulingGroup::CreateWebView()` for more details.
 
   RemoteFrame* remote_frame = DynamicTo<RemoteFrame>(GetPage()->MainFrame());
   remote_frame->WasAttachedAsRemoteMainFrame(std::move(main_frame));
@@ -2467,6 +2476,8 @@ void WebViewImpl::SetPageLifecycleStateInternal(
     SetVisibilityState(new_state->visibility, /*is_initial_state=*/false);
   }
   if (storing_in_bfcache) {
+    // TODO(https://crbug.com/1378279): Consider moving this to happen earlier
+    // and together with other page state updates so that the ordering is clear.
     Scheduler()->SetPageBackForwardCached(new_state->is_in_back_forward_cache);
   }
 
@@ -2478,6 +2489,8 @@ void WebViewImpl::SetPageLifecycleStateInternal(
       }
     }
 
+    // TODO(https://crbug.com/1378279): Consider moving this to happen earlier
+    // and together with other page state updates so that the ordering is clear.
     SetPageFrozen(true);
   }
 
@@ -2491,8 +2504,11 @@ void WebViewImpl::SetPageLifecycleStateInternal(
   }
   if (eviction_changed)
     HookBackForwardCacheEviction(new_state->eviction_enabled);
-  if (resuming_page)
+  if (resuming_page) {
+    // TODO(https://crbug.com/1378279): Consider moving this to happen earlier
+    // and together with other page state updates so that the ordering is clear.
     SetPageFrozen(false);
+  }
   if (showing_page) {
     SetVisibilityState(new_state->visibility, /*is_initial_state=*/false);
   }
@@ -2515,6 +2531,8 @@ void WebViewImpl::SetPageLifecycleStateInternal(
 
     DispatchPersistedPageshow(page_restore_params->navigation_start);
 
+    // TODO(https://crbug.com/1378279): Consider moving this to happen earlier
+    // and together with other page state updates so that the ordering is clear.
     Scheduler()->SetPageBackForwardCached(new_state->is_in_back_forward_cache);
     if (MainFrame()->IsWebLocalFrame()) {
       LocalFrame* local_frame = To<LocalFrame>(page->MainFrame());
@@ -2528,6 +2546,8 @@ void WebViewImpl::SetPageLifecycleStateInternal(
   // move SchedulerTrackedFeatures to core/ and remove the back and forth.
   ReportActiveSchedulerTrackedFeatures();
 
+  // TODO(https://crbug.com/1378279): Consider moving this to happen earlier
+  // and together with other page state updates so that the ordering is clear.
   GetPage()->SetPageLifecycleState(std::move(new_state));
 
   // Notify all local frames that we've updated the page lifecycle state.
@@ -2613,15 +2633,15 @@ void WebViewImpl::DispatchPersistedPageshow(base::TimeTicks navigation_start) {
     }
     if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
       auto pageshow_start_time = base::TimeTicks::Now();
+      LocalDOMWindow* window = frame->DomWindow()->ToLocalDOMWindow();
 
-      frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
-          navigation_start);
+      window->DispatchPersistedPageshowEvent(navigation_start);
 
-      if (RuntimeEnabledFeatures::NavigationIdEnabled()) {
+      if (RuntimeEnabledFeatures::NavigationIdEnabled(window)) {
         auto pageshow_end_time = base::TimeTicks::Now();
 
-        WindowPerformance* performance = DOMWindowPerformance::performance(
-            *frame->DomWindow()->ToLocalDOMWindow());
+        WindowPerformance* performance =
+            DOMWindowPerformance::performance(*window);
         DCHECK(performance);
 
         performance->AddBackForwardCacheRestoration(
@@ -2630,8 +2650,7 @@ void WebViewImpl::DispatchPersistedPageshow(base::TimeTicks navigation_start) {
       if (frame->IsOutermostMainFrame()) {
         UMA_HISTOGRAM_BOOLEAN(
             "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
-            frame->DomWindow()->ToLocalDOMWindow()->HasEventListeners(
-                event_type_names::kPageshow));
+            window->HasEventListeners(event_type_names::kPageshow));
       }
     }
   }
@@ -3130,15 +3149,14 @@ void WebViewImpl::SetCompositorDeviceScaleFactorOverride(
   }
 }
 
-void WebViewImpl::SetDeviceEmulationTransform(
-    const TransformationMatrix& transform) {
+void WebViewImpl::SetDeviceEmulationTransform(const gfx::Transform& transform) {
   if (transform == device_emulation_transform_)
     return;
   device_emulation_transform_ = transform;
   UpdateDeviceEmulationTransform();
 }
 
-TransformationMatrix WebViewImpl::GetDeviceEmulationTransform() const {
+gfx::Transform WebViewImpl::GetDeviceEmulationTransform() const {
   return device_emulation_transform_;
 }
 
@@ -3148,7 +3166,7 @@ void WebViewImpl::EnableDeviceEmulation(const DeviceEmulationParams& params) {
 
 void WebViewImpl::ActivateDevToolsTransform(
     const DeviceEmulationParams& params) {
-  TransformationMatrix device_emulation_transform =
+  gfx::Transform device_emulation_transform =
       dev_tools_emulator_->EnableDeviceEmulation(params);
   SetDeviceEmulationTransform(device_emulation_transform);
 }
@@ -3159,7 +3177,7 @@ void WebViewImpl::DisableDeviceEmulation() {
 
 void WebViewImpl::DeactivateDevToolsTransform() {
   dev_tools_emulator_->DisableDeviceEmulation();
-  SetDeviceEmulationTransform(TransformationMatrix());
+  SetDeviceEmulationTransform(gfx::Transform());
 }
 
 void WebViewImpl::PerformCustomContextMenuAction(unsigned action) {
@@ -3294,8 +3312,6 @@ void WebViewImpl::ActivatePrerenderedPage(
     mojom::blink::PrerenderPageActivationParamsPtr
         prerender_page_activation_params,
     ActivatePrerenderedPageCallback callback) {
-  DCHECK(features::IsPrerender2Enabled());
-
   // From here all new documents will have prerendering false.
   GetPage()->SetIsPrerendering(false);
 
@@ -3390,10 +3406,10 @@ void WebViewImpl::UpdateRendererPreferences(
   GetSettings()->SetCaretBrowsingEnabled(
       renderer_preferences_.caret_browsing_enabled);
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   GetSettings()->SetSelectionClipboardBufferAvailable(
       renderer_preferences_.selection_clipboard_buffer_available);
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
   SetExplicitlyAllowedPorts(
       renderer_preferences_.explicitly_allowed_network_ports);
@@ -3610,7 +3626,7 @@ void WebViewImpl::PageScaleFactorChanged() {
     // not, we can enforce that when setting it and DCHECK IsOutermostMainFrame
     // instead.
     if (MainFrameImpl()->IsOutermostMainFrame()) {
-      TransformationMatrix device_emulation_transform =
+      gfx::Transform device_emulation_transform =
           dev_tools_emulator_->OutermostMainFrameScrollOrScaleChanged();
       SetDeviceEmulationTransform(device_emulation_transform);
     }
@@ -3621,7 +3637,7 @@ void WebViewImpl::OutermostMainFrameScrollOffsetChanged() {
   DCHECK(MainFrameImpl());
   DCHECK(MainFrameImpl()->IsOutermostMainFrame());
   if (dev_tools_emulator_->HasViewportOverride()) {
-    TransformationMatrix device_emulation_transform =
+    gfx::Transform device_emulation_transform =
         dev_tools_emulator_->OutermostMainFrameScrollOrScaleChanged();
     SetDeviceEmulationTransform(device_emulation_transform);
   }
@@ -3899,6 +3915,7 @@ void WebViewImpl::CreateRemoteMainFrame(
     const RemoteFrameToken& frame_token,
     const absl::optional<FrameToken>& opener_frame_token,
     mojom::blink::FrameReplicationStatePtr replicated_state,
+    bool is_loading,
     const base::UnguessableToken& devtools_frame_token,
     mojom::blink::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces,
     mojom::blink::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces) {
@@ -3907,7 +3924,7 @@ void WebViewImpl::CreateRemoteMainFrame(
     opener = WebFrame::FromFrameToken(*opener_frame_token);
   // Create a top level WebRemoteFrame.
   WebRemoteFrameImpl::CreateMainFrame(
-      this, frame_token, devtools_frame_token, opener,
+      this, frame_token, is_loading, devtools_frame_token, opener,
       std::move(remote_frame_interfaces->frame_host),
       std::move(remote_frame_interfaces->frame_receiver),
       std::move(replicated_state));
@@ -3918,6 +3935,10 @@ void WebViewImpl::CreateRemoteMainFrame(
   DidAttachRemoteMainFrame(
       std::move(remote_main_frame_interfaces->main_frame_host),
       std::move(remote_main_frame_interfaces->main_frame));
+}
+
+scheduler::WebAgentGroupScheduler& WebViewImpl::GetWebAgentGroupScheduler() {
+  return web_agent_group_scheduler_;
 }
 
 }  // namespace blink

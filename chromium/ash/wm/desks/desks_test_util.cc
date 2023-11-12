@@ -40,25 +40,9 @@ void DeskSwitchAnimationWaiter::Wait() {
   EXPECT_FALSE(controller->AreDesksBeingModified());
 }
 
-void DeskSwitchAnimationWaiter::OnDeskAdded(const Desk* desk) {}
-
-void DeskSwitchAnimationWaiter::OnDeskRemoved(const Desk* desk) {}
-
-void DeskSwitchAnimationWaiter::OnDeskReordered(int old_index, int new_index) {}
-
-void DeskSwitchAnimationWaiter::OnDeskActivationChanged(
-    const Desk* activated,
-    const Desk* deactivated) {}
-
-void DeskSwitchAnimationWaiter::OnDeskSwitchAnimationLaunching() {}
-
 void DeskSwitchAnimationWaiter::OnDeskSwitchAnimationFinished() {
   run_loop_.Quit();
 }
-
-void DeskSwitchAnimationWaiter::OnDeskNameChanged(
-    const Desk* desk,
-    const std::u16string& new_name) {}
 
 void ActivateDesk(const Desk* desk) {
   ASSERT_FALSE(desk->is_active());
@@ -196,7 +180,7 @@ bool GetDeskActionVisibilityForMiniView(const DeskMiniView* mini_view) {
 
 void WaitForMilliseconds(int milliseconds) {
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(milliseconds));
   run_loop.Run();
 }

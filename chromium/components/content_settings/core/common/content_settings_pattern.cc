@@ -122,8 +122,8 @@ typedef ContentSettingsPattern::BuilderInterface BuilderInterface;
 // ////////////////////////////////////////////////////////////////////////////
 // ContentSettingsPattern::Builder
 //
-class ContentSettingsPattern::Builder :
-    public ContentSettingsPattern::BuilderInterface {
+class ContentSettingsPattern::Builder
+    : public ContentSettingsPattern::BuilderInterface {
  public:
   Builder();
 
@@ -264,6 +264,12 @@ bool ContentSettingsPattern::Builder::Canonicalize(PatternParts* parts) {
   if (host_info.IsIPAddress() && parts->has_domain_wildcard)
     return false;
 
+  // A domain wildcard pattern involves exactly one separating dot, inside the
+  // square brackets. This is a common misunderstanding of that pattern that we
+  // want to check for. See: https://crbug.com/823706.
+  if (parts->has_domain_wildcard && base::StartsWith(canonicalized_host, "."))
+    return false;
+
   // Omit a single ending dot as long as there is at least one non-dot character
   // before it, which is in line with the behavior of net::TrimEndingDot; but
   // consider two ending dots an invalid pattern, otherwise canonicalization of
@@ -310,8 +316,7 @@ bool ContentSettingsPattern::Builder::Validate(const PatternParts& parts) {
 
   // If the pattern is for a URL with a non-wildcard domain without a port,
   // test if it is valid.
-  if (IsNonWildcardDomainNonPortScheme(parts.scheme) &&
-      parts.port.empty() &&
+  if (IsNonWildcardDomainNonPortScheme(parts.scheme) && parts.port.empty() &&
       !parts.is_port_wildcard) {
     return true;
   }
@@ -339,10 +344,10 @@ bool ContentSettingsPattern::Builder::Validate(const PatternParts& parts) {
 // ContentSettingsPattern::PatternParts
 //
 ContentSettingsPattern::PatternParts::PatternParts()
-        : is_scheme_wildcard(false),
-          has_domain_wildcard(false),
-          is_port_wildcard(false),
-          is_path_wildcard(false) {}
+    : is_scheme_wildcard(false),
+      has_domain_wildcard(false),
+      is_port_wildcard(false),
+      is_path_wildcard(false) {}
 
 ContentSettingsPattern::PatternParts::PatternParts(const PatternParts& other) =
     default;
@@ -351,10 +356,11 @@ ContentSettingsPattern::PatternParts::PatternParts(PatternParts&& other) =
 
 ContentSettingsPattern::PatternParts::~PatternParts() {}
 
-ContentSettingsPattern::PatternParts& ContentSettingsPattern::PatternParts::
-operator=(const PatternParts& other) = default;
-ContentSettingsPattern::PatternParts& ContentSettingsPattern::PatternParts::
-operator=(PatternParts&& other) = default;
+ContentSettingsPattern::PatternParts&
+ContentSettingsPattern::PatternParts::operator=(const PatternParts& other) =
+    default;
+ContentSettingsPattern::PatternParts&
+ContentSettingsPattern::PatternParts::operator=(PatternParts&& other) = default;
 
 // ////////////////////////////////////////////////////////////////////////////
 // ContentSettingsPattern
@@ -385,8 +391,7 @@ ContentSettingsPattern ContentSettingsPattern::Wildcard() {
 }
 
 // static
-ContentSettingsPattern ContentSettingsPattern::FromURL(
-    const GURL& url) {
+ContentSettingsPattern ContentSettingsPattern::FromURL(const GURL& url) {
   ContentSettingsPattern::Builder builder;
   const GURL* local_url = &url;
   if (url.SchemeIsFileSystem() && url.inner_url()) {
@@ -516,15 +521,12 @@ ContentSettingsPattern ContentSettingsPattern::ToHostOnlyPattern(
   return builder->Build();
 }
 
-ContentSettingsPattern::ContentSettingsPattern()
-  : is_valid_(false) {
-}
+ContentSettingsPattern::ContentSettingsPattern() : is_valid_(false) {}
 
 ContentSettingsPattern::ContentSettingsPattern(PatternParts parts, bool valid)
     : parts_(std::move(parts)), is_valid_(valid) {}
 
-bool ContentSettingsPattern::Matches(
-    const GURL& url) const {
+bool ContentSettingsPattern::Matches(const GURL& url) const {
   // An invalid pattern matches nothing.
   if (!is_valid_)
     return false;
@@ -622,8 +624,7 @@ ContentSettingsPattern::Relation ContentSettingsPattern::Compare(
   // Two invalid patterns are identical in the way they behave. They don't match
   // anything and are represented as an empty string. So it's fair to treat them
   // as identical.
-  if ((this == &other) ||
-      (!is_valid_ && !other.is_valid_))
+  if ((this == &other) || (!is_valid_ && !other.is_valid_))
     return IDENTITY;
 
   if (!is_valid_ && other.is_valid_)

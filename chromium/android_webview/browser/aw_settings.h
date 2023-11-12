@@ -59,6 +59,7 @@ class AwSettings : public content::WebContentsObserver {
   AwSettings(JNIEnv* env, jobject obj, content::WebContents* web_contents);
   ~AwSettings() override;
 
+  bool GetJavaScriptEnabled();
   bool GetJavaScriptCanOpenWindowsAutomatically();
   bool GetAllowThirdPartyCookies();
   MixedContentMode GetMixedContentMode();
@@ -92,6 +93,9 @@ class AwSettings : public content::WebContentsObserver {
   void UpdateRendererPreferencesLocked(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  void UpdateJavaScriptPolicyLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   void UpdateCookiePolicyLocked(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -109,6 +113,8 @@ class AwSettings : public content::WebContentsObserver {
   bool GetAllowFileAccess();
   bool IsForceDarkApplied(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
+  bool PrefersDarkFromTheme(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj);
 
   void SetEnterpriseAuthenticationAppLinkPolicyEnabled(
       JNIEnv* env,
@@ -136,11 +142,14 @@ class AwSettings : public content::WebContentsObserver {
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
 
-  bool renderer_prefs_initialized_;
-  bool javascript_can_open_windows_automatically_;
-  bool allow_third_party_cookies_;
-  bool allow_file_access_;
-  bool enterprise_authentication_app_link_policy_enabled_;
+  bool renderer_prefs_initialized_{false};
+  bool javascript_enabled_{false};
+  bool javascript_can_open_windows_automatically_{false};
+  bool allow_third_party_cookies_{false};
+  bool allow_file_access_{false};
+  // TODO(b/222053757,ayushsha): Change this policy to be by
+  // default false from next Android version(Maybe Android U).
+  bool enterprise_authentication_app_link_policy_enabled_{true};
   MixedContentMode mixed_content_mode_;
 
   scoped_refptr<AwContentsOriginMatcher> xrw_allowlist_matcher_;

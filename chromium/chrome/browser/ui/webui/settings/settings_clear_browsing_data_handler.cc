@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
@@ -24,6 +25,8 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
+#include "chrome/browser/ui/hats/trust_safety_sentiment_service.h"
+#include "chrome/browser/ui/hats/trust_safety_sentiment_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -259,13 +262,16 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
 
   CHECK(args_list[1].is_list());
   const base::Value::List& data_type_list = args_list[1].GetList();
+  auto* sentiment_service = TrustSafetySentimentServiceFactory::GetForProfile(
+      Profile::FromWebUI(web_ui()));
   for (const base::Value& type : data_type_list) {
     const std::string pref_name = type.GetString();
-    BrowsingDataType data_type =
+    absl::optional<BrowsingDataType> data_type =
         browsing_data::GetDataTypeFromDeletionPreference(pref_name);
-    data_type_vector.push_back(data_type);
+    CHECK(data_type);
+    data_type_vector.push_back(*data_type);
 
-    switch (data_type) {
+    switch (*data_type) {
       case BrowsingDataType::HISTORY:
         if (prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory))
           remove_mask |= chrome_browsing_data_remover::DATA_TYPE_HISTORY;
@@ -305,6 +311,11 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
         NOTREACHED();
         break;
     }
+
+    // Inform the T&S sentiment service that this datatype was cleared.
+    if (sentiment_service) {
+      sentiment_service->ClearedBrowsingData(*data_type);
+    }
   }
 
   base::flat_set<BrowsingDataType> data_types(std::move(data_type_vector));
@@ -327,16 +338,14 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
   // Record the circumstances under which passwords are deleted.
   if (data_types.find(BrowsingDataType::PASSWORDS) != data_types.end()) {
     static const BrowsingDataType other_types[] = {
-        BrowsingDataType::HISTORY,        BrowsingDataType::DOWNLOADS,
-        BrowsingDataType::CACHE,          BrowsingDataType::COOKIES,
-        BrowsingDataType::FORM_DATA,      BrowsingDataType::HOSTED_APPS_DATA,
+        BrowsingDataType::HISTORY,   BrowsingDataType::DOWNLOADS,
+        BrowsingDataType::CACHE,     BrowsingDataType::COOKIES,
+        BrowsingDataType::FORM_DATA, BrowsingDataType::HOSTED_APPS_DATA,
     };
-    static size_t num_other_types = std::size(other_types);
-    int checked_other_types =
-        std::count_if(other_types, other_types + num_other_types,
-                      [&data_types](BrowsingDataType type) {
-                        return data_types.find(type) != data_types.end();
-                      });
+    int checked_other_types = base::ranges::count_if(
+        other_types, [&data_types](BrowsingDataType type) {
+          return data_types.find(type) != data_types.end();
+        });
     base::UmaHistogramSparse(
         "History.ClearBrowsingData.PasswordsDeletion.AdditionalDatatypesCount",
         checked_other_types);

@@ -42,7 +42,7 @@ struct CONTENT_EXPORT RenderWidgetTargetResult {
                            bool latched_target);
   ~RenderWidgetTargetResult();
 
-  raw_ptr<RenderWidgetHostViewBase> view = nullptr;
+  raw_ptr<RenderWidgetHostViewBase, DanglingUntriaged> view = nullptr;
   bool should_query_view = false;
   absl::optional<gfx::PointF> target_location = absl::nullopt;
   // When |latched_target| is false, we explicitly hit-tested events instead of
@@ -255,7 +255,8 @@ class RenderWidgetTargeter {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   RenderWidgetHostViewBase* vivaldi_active_down_target_ = nullptr;
 #endif // !IS_ANDROID && !IS_IOS
-  const raw_ptr<Delegate> delegate_;
+
+  const raw_ptr<Delegate, DanglingUntriaged> delegate_;
   base::WeakPtrFactory<RenderWidgetTargeter> weak_ptr_factory_{this};
 };
 

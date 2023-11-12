@@ -63,6 +63,8 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
                                  : kOverflowClipBothAxis;
   }
 
+  void UpdatePlayer(bool is_in_layout);
+
  private:
   void UpdateFromElement() override;
 
@@ -81,15 +83,11 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
 
   void UpdateLayout() override;
 
-  LayoutUnit MinimumReplacedHeight() const override;
-
   bool CanHaveAdditionalCompositingReasons() const override {
     NOT_DESTROYED();
     return true;
   }
   CompositingReasons AdditionalCompositingReasons() const override;
-
-  void UpdatePlayer(bool is_in_layout);
 
   LayoutSize cached_image_size_;
 };

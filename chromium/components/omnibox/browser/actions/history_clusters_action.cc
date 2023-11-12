@@ -98,14 +98,16 @@ GURL GetFullJourneysUrlForQuery(const std::string& query) {
 
 HistoryClustersAction::HistoryClustersAction(
     const std::string& query,
-    const history::ClusterKeywordData& matched_keyword_data)
+    const history::ClusterKeywordData& matched_keyword_data,
+    bool takes_over_match)
     : OmniboxAction(
           OmniboxAction::LabelStrings(
               IDS_OMNIBOX_ACTION_HISTORY_CLUSTERS_SEARCH_HINT,
               IDS_OMNIBOX_ACTION_HISTORY_CLUSTERS_SEARCH_SUGGESTION_CONTENTS,
               IDS_ACC_OMNIBOX_ACTION_HISTORY_CLUSTERS_SEARCH_SUFFIX,
               IDS_ACC_OMNIBOX_ACTION_HISTORY_CLUSTERS_SEARCH),
-          GetFullJourneysUrlForQuery(query)),
+          GetFullJourneysUrlForQuery(query),
+          takes_over_match),
       matched_keyword_data_(matched_keyword_data),
       query_(query) {
 #if BUILDFLAG(IS_ANDROID)
@@ -158,7 +160,7 @@ void HistoryClustersAction::RecordActionShown(size_t position,
 }
 
 void HistoryClustersAction::Execute(ExecutionContext& context) const {
-  if (context.client_.OpenJourneys(query_)) {
+  if (context.client_->OpenJourneys(query_)) {
     // If the client opens Journeys in the Side Panel, we are done.
     return;
   }
@@ -211,11 +213,12 @@ void AttachHistoryClustersActions(
   if (result.empty())
     return;
 
-  // If there's a pedal in `result`, don't add a history cluster action to avoid
-  // over-crowding.
+  // If there's any visible action in `result`, don't add a history cluster
+  // action to avoid over-crowding.
   if (!GetConfig().omnibox_action_with_pedals &&
-      base::ranges::any_of(result,
-                           [](const auto& match) { return match.action; })) {
+      base::ranges::any_of(result, [](const auto& match) {
+        return match.action && !match.action->TakesOverMatch();
+      })) {
     return;
   }
 
@@ -233,9 +236,9 @@ void AttachHistoryClustersActions(
 
   for (auto& match : result) {
     // Skip incompatible matches (like entities) or ones with existing actions.
-    // TODO(manukh): We don't use `AutocompleteMatch::IsActionCompatibleType()`
+    // TODO(manukh): We don't use `AutocompleteMatch::IsActionCompatible()`
     //  because we're not sure if we want to show on entities or not. Once we
-    //  decide, either share `IsActionCompatibleType()` or inline it to its
+    //  decide, either share `IsActionCompatible()` or inline it to its
     //  remaining callsite.
     if (match.action)
       continue;
@@ -252,7 +255,8 @@ void AttachHistoryClustersActions(
           service->DoesQueryMatchAnyCluster(query);
       if (matched_keyword_data) {
         match.action = base::MakeRefCounted<HistoryClustersAction>(
-            query, std::move(matched_keyword_data.value()));
+            query, std::move(matched_keyword_data.value()),
+            /*takes_over_match=*/false);
       }
     } else if (GetConfig().omnibox_action_on_urls) {
       // We do the URL stripping here, because we need it to both execute the
@@ -262,7 +266,8 @@ void AttachHistoryClustersActions(
           history_clusters::ComputeURLKeywordForLookup(match.destination_url);
       if (service->DoesURLMatchAnyCluster(url_keyword)) {
         match.action = base::MakeRefCounted<HistoryClustersAction>(
-            url_keyword, history::ClusterKeywordData());
+            url_keyword, history::ClusterKeywordData(),
+            /*takes_over_match=*/false);
       }
     }
 

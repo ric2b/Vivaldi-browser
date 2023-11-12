@@ -13,10 +13,12 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/dbus/system_clock/system_clock_sync_observation.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/private_membership/src/private_membership_rlwe_client.h"
 
 namespace ash::device_activity {
 
@@ -55,6 +57,10 @@ const char kFresnelQueryRequestEndpoint[] = "/v1/fresnel/psmRlweQuery";
 // Count number of times a state has been entered.
 const char kHistogramStateCount[] = "Ash.DeviceActiveClient.StateCount";
 
+// Record the preserved file state.
+const char kHistogramsPreservedFileState[] =
+    "Ash.DeviceActiveClient.PreservedFileState";
+
 // Duration histogram uses State variant in order to create
 // unique histograms measuring durations by State.
 const char kHistogramDurationPrefix[] = "Ash.DeviceActiveClient.Duration";
@@ -66,6 +72,10 @@ const char kHistogramResponsePrefix[] = "Ash.DeviceActiveClient.Response";
 // Count the number of boolean membership request results.
 const char kDeviceActiveClientQueryMembershipResult[] =
     "Ash.DeviceActiveClient.QueryMembershipResult";
+
+// Record number of successful saves of the preserved file content.
+const char kDeviceActiveClientSavePreservedFileSuccess[] =
+    "Ash.DeviceActiveClient.SavePreservedFileSuccess";
 
 // Record the minute the device activity client transitions out of idle.
 const char kDeviceActiveClientTransitionOutOfIdleMinute[] =
@@ -125,6 +135,11 @@ void RecordQueryMembershipResultBoolean(bool is_member) {
                             is_member);
 }
 
+void RecordSavePreservedFile(bool success) {
+  base::UmaHistogramBoolean(kDeviceActiveClientSavePreservedFileSuccess,
+                            success);
+}
+
 // Return the minute of the current UTC time.
 int GetCurrentMinute() {
   base::Time cur_time = base::Time::Now();
@@ -180,6 +195,13 @@ void RecordResponseStateMetric(DeviceActivityClient::State state,
       HistogramVariantName(kHistogramResponsePrefix, state), response);
 }
 
+// Histogram to record number of each PreservedFileState.
+void RecordPreservedFileState(
+    DeviceActivityClient::PreservedFileState preserved_file_state) {
+  base::UmaHistogramEnumeration(kHistogramsPreservedFileState,
+                                preserved_file_state);
+}
+
 std::unique_ptr<network::ResourceRequest> GenerateResourceRequest(
     const std::string& request_method,
     const GURL& url,
@@ -211,8 +233,10 @@ DeviceActivityClient::DeviceActivityClient(
     std::unique_ptr<base::RepeatingTimer> report_timer,
     const std::string& fresnel_base_url,
     const std::string& api_key,
-    std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases)
-    : network_state_handler_(handler),
+    std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases,
+    base::Time chrome_first_run_time)
+    : chrome_first_run_time_(chrome_first_run_time),
+      network_state_handler_(handler),
       url_loader_factory_(url_loader_factory),
       report_timer_(std::move(report_timer)),
       fresnel_base_url_(fresnel_base_url),
@@ -229,15 +253,15 @@ DeviceActivityClient::DeviceActivityClient(
   report_timer_->Start(FROM_HERE, kTimeToRepeat, this,
                        &DeviceActivityClient::ReportingTriggeredByTimer);
 
-  network_state_handler_->AddObserver(this, FROM_HERE);
-  DefaultNetworkChanged(network_state_handler_->DefaultNetwork());
+  network_state_handler_observer_.Observe(network_state_handler_);
+
+  // Send DBus method to read preserved files for last ping timestamps.
+  GetLastPingDatesStatus();
 }
 
 DeviceActivityClient::~DeviceActivityClient() {
   RecordDeviceActivityMethodCalled(DeviceActivityClient::DeviceActivityMethod::
                                        kDeviceActivityClientDestructor);
-
-  network_state_handler_->RemoveObserver(this, FROM_HERE);
 }
 
 base::RepeatingTimer* DeviceActivityClient::GetReportTimer() {
@@ -259,6 +283,10 @@ void DeviceActivityClient::DefaultNetworkChanged(const NetworkState* network) {
     OnNetworkOffline();
 }
 
+void DeviceActivityClient::OnShuttingDown() {
+  network_state_handler_observer_.Reset();
+}
+
 DeviceActivityClient::State DeviceActivityClient::GetState() const {
   return state_;
 }
@@ -270,6 +298,186 @@ std::vector<DeviceActiveUseCase*> DeviceActivityClient::GetUseCases() const {
     use_cases_ptr.push_back(use_case.get());
   }
   return use_cases_ptr;
+}
+
+private_computing::SaveStatusRequest
+DeviceActivityClient::GetSaveStatusRequest() {
+  // private_computing:
+  private_computing::SaveStatusRequest request;
+
+  for (auto* use_case : GetUseCases()) {
+    private_computing::ActiveStatus status;
+
+    // TODO: Before submission, check handling a last known ts that is
+    // unset / unix::epoch.
+    std::string last_ping_utc_date =
+        use_case->FormatUTCDateString(use_case->GetLastKnownPingTimestamp());
+
+    psm_rlwe::RlweUseCase psm_use_case = use_case->GetPsmUseCase();
+    switch (psm_use_case) {
+      case psm_rlwe::RlweUseCase::CROS_FRESNEL_DAILY:
+        status.set_use_case(
+            private_computing::PrivateComputingUseCase::CROS_FRESNEL_DAILY);
+        status.set_last_ping_utc_date(last_ping_utc_date);
+        break;
+      case psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE:
+        status.set_use_case(private_computing::PrivateComputingUseCase::
+                                CROS_FRESNEL_28DAY_ACTIVE);
+        status.set_last_ping_utc_date(last_ping_utc_date);
+        break;
+      case psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE:
+        break;
+      default:
+        VLOG(1) << "Use case is not supported yet. "
+                << psm_rlwe::RlweUseCase_Name(use_case->GetPsmUseCase());
+        break;
+    }
+
+    if (status.has_use_case()) {
+      *request.add_active_status() = status;
+    }
+  }
+
+  return request;
+}
+
+DeviceActiveUseCase* DeviceActivityClient::GetUseCasePtr(
+    psm_rlwe::RlweUseCase psm_use_case) const {
+  for (auto* use_case : GetUseCases()) {
+    if (use_case->GetPsmUseCase() == psm_use_case)
+      return use_case;
+  }
+
+  VLOG(1) << "Use Case is not supported yet.";
+  return nullptr;
+}
+
+void DeviceActivityClient::SaveLastPingDatesStatus() {
+  RecordDeviceActivityMethodCalled(
+      DeviceActivityClient::DeviceActivityMethod::
+          kDeviceActivityClientSaveLastPingDatesStatus);
+  private_computing::SaveStatusRequest request = GetSaveStatusRequest();
+
+  // Call DBus method with callback to |OnSaveLastPingDatesStatusComplete|.
+  PrivateComputingClient::Get()->SaveLastPingDatesStatus(
+      request,
+      base::BindOnce(&DeviceActivityClient::OnSaveLastPingDatesStatusComplete,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void DeviceActivityClient::OnSaveLastPingDatesStatusComplete(
+    private_computing::SaveStatusResponse response) {
+  RecordDeviceActivityMethodCalled(
+      DeviceActivityClient::DeviceActivityMethod::
+          kDeviceActivityClientOnSaveLastPingDatesStatusComplete);
+  if (response.has_error_message()) {
+    LOG(ERROR) << "Failed to store last ping timestamps with error message: "
+            << response.error_message();
+    RecordSavePreservedFile(false);
+  } else {
+    VLOG(1) << "Successfully stored last ping timestamp to preserved file";
+    RecordSavePreservedFile(true);
+  }
+}
+
+void DeviceActivityClient::GetLastPingDatesStatus() {
+  RecordDeviceActivityMethodCalled(
+      DeviceActivityClient::DeviceActivityMethod::
+          kDeviceActivityClientGetLastPingDatesStatus);
+  PrivateComputingClient::Get()->GetLastPingDatesStatus(
+      base::BindOnce(&DeviceActivityClient::OnGetLastPingDatesStatusFetched,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void DeviceActivityClient::OnGetLastPingDatesStatusFetched(
+    private_computing::GetStatusResponse response) {
+  RecordDeviceActivityMethodCalled(
+      DeviceActivityClient::DeviceActivityMethod::
+          kDeviceActivityClientOnGetLastPingDatesStatusFetched);
+  // Update the last ping timestamps if the preserved file has a valid
+  // timestamp value for the use case.
+  if (!response.has_error_message()) {
+    VLOG(1) << "Successfully read PSM file.";
+    // 1. Iterate FileContent for the active_statuses and update use case
+    // timestamps.
+    for (auto& status : response.active_status()) {
+      std::string last_ping_utc_date = status.last_ping_utc_date();
+      base::Time last_ping_utc_time;
+      bool success = base::Time::FromUTCString(last_ping_utc_date.c_str(),
+                                               &last_ping_utc_time);
+
+      if (!success)
+        continue;
+
+      DeviceActiveUseCase* device_active_use_case_ptr;
+
+      private_computing::PrivateComputingUseCase use_case = status.use_case();
+      switch (use_case) {
+        case private_computing::PrivateComputingUseCase::CROS_FRESNEL_DAILY:
+          device_active_use_case_ptr =
+              GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_DAILY);
+          break;
+        case private_computing::PrivateComputingUseCase::
+            CROS_FRESNEL_28DAY_ACTIVE:
+          device_active_use_case_ptr =
+              GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE);
+          break;
+        case private_computing::PrivateComputingUseCase::
+            CROS_FRESNEL_FIRST_ACTIVE:
+          device_active_use_case_ptr =
+              GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE);
+          break;
+        default:
+          LOG(ERROR) << "PSM use case is not supported yet.";
+          continue;
+      }
+
+      // Crashes may occur due to device_active_use_case_ptr not being defined
+      // at this point.
+      if (device_active_use_case_ptr == nullptr) {
+        LOG(ERROR) << "Device active use case is not defined.";
+        return;
+      }
+
+      if (!device_active_use_case_ptr->IsLastKnownPingTimestampSet()) {
+        RecordPreservedFileState(
+            DeviceActivityClient::PreservedFileState::kReadOkLocalStateEmpty);
+        VLOG(1) << "Updating local pref timestamp value with file timestamp = "
+                << last_ping_utc_time;
+        device_active_use_case_ptr->SetLastKnownPingTimestamp(
+            last_ping_utc_time);
+      } else {
+        RecordPreservedFileState(
+            DeviceActivityClient::PreservedFileState::kReadOkLocalStateSet);
+        VLOG(1) << "Preserved File was read successfully but local state is "
+                   "already set. "
+                << "Device was most likely restarted and not powerwashed, so "
+                   "no need to update local state.";
+      }
+    }
+  } else {
+    base::Time current_time = base::Time::Now();
+    // If the device is not a new device and the local pref is empty, then
+    // record the error count in uma histogram.
+    if ((current_time - chrome_first_run_time_) > base::Days(1)) {
+      DeviceActiveUseCase* device_active_use_case_ptr =
+          GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_DAILY);
+      if (!device_active_use_case_ptr->IsLastKnownPingTimestampSet()) {
+        // Local pref is empty. To avoid when the chrome signout or reboot
+        // to record unnecessary uma hisgtogram.
+        RecordPreservedFileState(
+            DeviceActivityClient::PreservedFileState::kReadFail);
+        LOG(ERROR)
+            << "Preserved File read has failed. State of local states is "
+               "not checked. "
+            << "Error from DBus: " << response.error_message();
+      }
+    }
+  }
+
+  // Always trigger step to check for network status changing after reading the
+  // preserved file.
+  DefaultNetworkChanged(network_state_handler_->DefaultNetwork());
 }
 
 void DeviceActivityClient::ReportingTriggeredByTimer() {
@@ -475,6 +683,27 @@ void DeviceActivityClient::TransitionOutOfIdle(
         }
 
         break;
+      case psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE:
+        // Check membership continues when the cached local state pref
+        // is not set. The local state pref may not be set if the device is
+        // new, powerwashed, recovered, RMA, or the local state was corrupted.
+        if (base::FeatureList::IsEnabled(
+                features::kDeviceActiveClient28DayActiveCheckMembership) &&
+            !current_use_case->IsLastKnownPingTimestampSet()) {
+          TransitionToCheckMembershipOprf(current_use_case);
+          return;
+        }
+
+        // |TransitionToCheckIn| if the local state pref is set.
+        if (base::FeatureList::IsEnabled(
+                features::kDeviceActiveClient28DayActiveCheckIn)) {
+          // During rollout, we perform CheckIn without CheckMembership for
+          // powerwash, recovery, or RMA devices.
+          TransitionToCheckIn(current_use_case);
+          return;
+        }
+
+        break;
       default:
         VLOG(1) << "Use case is not supported yet. "
                 << psm_rlwe::RlweUseCase_Name(
@@ -580,6 +809,13 @@ void DeviceActivityClient::TransitionToCheckMembershipOprf(
 
   // Report UMA histogram for transitioning state to |kCheckingMembershipOprf|.
   RecordStateCountMetric(state_);
+
+  std::vector<psm_rlwe::RlwePlaintextId> psm_ids =
+      current_use_case->GetPsmIdentifiersToQuery();
+
+  // Initializes the PSM rlwe client with the appropriate psm id values that we
+  // want to check membership for. This varies by fixed and n-day use cases.
+  current_use_case->SetPsmRlweClient(psm_ids);
 
   // Generate PSM Oprf request body.
   const auto status_or_oprf_request =
@@ -853,7 +1089,7 @@ void DeviceActivityClient::TransitionToCheckIn(
   }
 
   // Generate Fresnel PSM import request body.
-  device_activity::ImportDataRequest import_request =
+  FresnelImportDataRequest import_request =
       current_use_case->GenerateImportRequestBody();
 
   std::string request_body;
@@ -923,6 +1159,9 @@ void DeviceActivityClient::TransitionToIdle(
     TransitionOutOfIdle(pending_use_cases_.front());
     return;
   }
+
+  // Send DBus method to update last ping timestamps in preserved file.
+  SaveLastPingDatesStatus();
 
   // Report UMA histogram for transitioning state back to |kIdle|.
   RecordStateCountMetric(state_);

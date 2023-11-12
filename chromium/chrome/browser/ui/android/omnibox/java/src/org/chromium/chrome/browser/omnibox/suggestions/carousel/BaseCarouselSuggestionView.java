@@ -14,10 +14,12 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ItemDecoration;
+import androidx.recyclerview.widget.RecyclerView.RecycledViewPool;
 
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 
 /**
@@ -46,9 +48,6 @@ public class BaseCarouselSuggestionView extends LinearLayout {
         mHeader = new HeaderView(context);
         mHeader.setLayoutParams(
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        mHeader.getIconView().setVisibility(GONE);
-        mHeader.setClickable(false);
-        mHeader.setFocusable(false);
         mHeader.setVisibility(View.GONE);
         addView(mHeader);
 
@@ -109,7 +108,7 @@ public class BaseCarouselSuggestionView extends LinearLayout {
 
     /** @return Header TextView element. */
     TextView getHeaderTextView() {
-        return mHeader.getTextView();
+        return mHeader;
     }
 
     /** @return Header element. */
@@ -134,7 +133,7 @@ public class BaseCarouselSuggestionView extends LinearLayout {
      */
     public void setItemSpacingPx(int itemSpacingPx) {
         mItemSpacingPx = itemSpacingPx;
-        mRecyclerView.requestLayout();
+        ViewUtils.requestLayout(mRecyclerView, "BaseCarouselSuggestionView.setItemSpacingPx");
     }
 
     /**
@@ -144,5 +143,18 @@ public class BaseCarouselSuggestionView extends LinearLayout {
      */
     public void setCarouselHorizontalFade(boolean enableFade) {
         mRecyclerView.setHorizontalFadingEdgeEnabled(enableFade);
+    }
+
+    /**
+     * Set the recycler view pool to the carousel view to reduce extra image fetching and jackiness
+     * on carousel rendering.
+     *
+     * @param recycledViewPool the recycled view pool to assign to the recycler view.
+     */
+    void setCarouselRecycledViewPool(RecycledViewPool recycledViewPool) {
+        // TODO(rongtan): Investigate why null assignment causes crashes in Recycler View.
+        if (recycledViewPool != null) {
+            mRecyclerView.setRecycledViewPool(recycledViewPool);
+        }
     }
 }

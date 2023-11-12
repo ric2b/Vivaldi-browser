@@ -27,7 +27,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/color_plane_layout.h"
@@ -170,7 +169,7 @@ base::AtomicRefCount V4L2VideoEncodeAccelerator::num_instances_(0);
 V4L2VideoEncodeAccelerator::V4L2VideoEncodeAccelerator(
     scoped_refptr<V4L2Device> device)
     : can_use_encoder_(num_instances_.Increment() < kMaxNumOfInstances),
-      child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      child_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       native_input_mode_(false),
       output_buffer_byte_size_(0),
       output_format_fourcc_(0),
@@ -288,6 +287,9 @@ void V4L2VideoEncodeAccelerator::InitializeTask(const Config& config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_sequence_checker_);
   TRACE_EVENT0("media,gpu", "V4L2VEA::InitializeTask");
 
+  // Set kInitialized here so that NotifyError() is invoked from here.
+  encoder_state_ = kInitialized;
+
   native_input_mode_ =
       config.storage_type.value_or(Config::StorageType::kShmem) ==
       Config::StorageType::kGpuMemoryBuffer;
@@ -349,7 +351,6 @@ void V4L2VideoEncodeAccelerator::InitializeTask(const Config& config) {
     return;
   }
 
-  encoder_state_ = kInitialized;
   uint32_t bitrate_mode = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR;
   switch (config.bitrate.mode()) {
     case Bitrate::Mode::kConstant:
@@ -1077,7 +1078,7 @@ void V4L2VideoEncodeAccelerator::Enqueue() {
   DCHECK(input_queue_ && output_queue_);
   TRACE_EVENT0("media,gpu", "V4L2VEA::Enqueue");
   DVLOGF(4) << "free_input_buffers: " << input_queue_->FreeBuffersCount()
-            << "input_queue: " << encoder_input_queue_.size();
+            << ", input_queue: " << encoder_input_queue_.size();
 
   bool do_streamon = false;
   // Enqueue all the inputs we can.
@@ -1412,8 +1413,8 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
         NOTIFY_ERROR(kPlatformFailureError);
         return false;
       }
-      frame->AddDestructionObserver(base::BindOnce([](std::vector<uint8_t>) {},
-                                                   std::move(writable_buffer)));
+      frame->AddDestructionObserver(
+          base::DoNothingWithBoundArgs(std::move(writable_buffer)));
       break;
     }
     case V4L2_MEMORY_DMABUF: {

@@ -40,7 +40,10 @@ BASE_DECLARE_FEATURE(kUIExperimentMaxAutocompleteMatches);
 extern const bool kOmniboxMaxURLMatchesEnabledByDefault;
 BASE_DECLARE_FEATURE(kOmniboxMaxURLMatches);
 BASE_DECLARE_FEATURE(kDynamicMaxAutocomplete);
-BASE_DECLARE_FEATURE(kRetainSuggestionsWithHeaders);
+
+// Entity suggestion disambiguation.
+BASE_DECLARE_FEATURE(kDisambiguateEntitySuggestions);
+BASE_DECLARE_FEATURE(kDisambiguateTabMatchingForEntitySuggestions);
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
 BASE_DECLARE_FEATURE(kAdjustLocalHistoryZeroSuggestRelevanceScore);
@@ -48,20 +51,22 @@ BASE_DECLARE_FEATURE(kClobberTriggersContextualWebZeroSuggest);
 BASE_DECLARE_FEATURE(kClobberTriggersSRPZeroSuggest);
 BASE_DECLARE_FEATURE(kFocusTriggersContextualWebZeroSuggest);
 BASE_DECLARE_FEATURE(kFocusTriggersSRPZeroSuggest);
+BASE_DECLARE_FEATURE(kKeepSecondaryZeroSuggest);
 BASE_DECLARE_FEATURE(kLocalHistorySuggestRevamp);
 BASE_DECLARE_FEATURE(kLocalHistoryZeroSuggestBeyondNTP);
 BASE_DECLARE_FEATURE(kOmniboxLocalZeroSuggestAgeThreshold);
 BASE_DECLARE_FEATURE(kOmniboxOnClobberFocusTypeOnContent);
+BASE_DECLARE_FEATURE(kZeroSuggestInMemoryCaching);
 BASE_DECLARE_FEATURE(kZeroSuggestOnNTPForSignedOutUsers);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetching);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnSRP);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnWeb);
-BASE_DECLARE_FEATURE(kZeroSuggestInMemoryCaching);
 // Related, kMaxZeroSuggestMatches.
 
-// On Device Head Suggest.
+// On Device Suggest.
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderIncognito);
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderNonIncognito);
+BASE_DECLARE_FEATURE(kOnDeviceTailModel);
 
 // Provider-specific - These features change the behavior of specific providers.
 BASE_DECLARE_FEATURE(kOmniboxExperimentalSuggestScoring);
@@ -69,8 +74,8 @@ BASE_DECLARE_FEATURE(kDisableCGIParamMatching);
 BASE_DECLARE_FEATURE(kShortBookmarkSuggestions);
 BASE_DECLARE_FEATURE(kShortBookmarkSuggestionsByTotalInputLength);
 BASE_DECLARE_FEATURE(kBookmarkPaths);
-BASE_DECLARE_FEATURE(kAggregateShortcuts);
 BASE_DECLARE_FEATURE(kShortcutExpanding);
+BASE_DECLARE_FEATURE(kShortcutBoost);
 // TODO(crbug.com/1202964): Clean up feature flag used in staged roll-out of
 // various CLs related to the contents/description clean-up work.
 BASE_DECLARE_FEATURE(kStoreTitleInContentsAndUrlInDescription);
@@ -86,16 +91,15 @@ BASE_DECLARE_FEATURE(kAdaptiveSuggestionsCount);
 BASE_DECLARE_FEATURE(kClipboardSuggestionContentHidden);
 BASE_DECLARE_FEATURE(kSuggestionAnswersColorReverse);
 BASE_DECLARE_FEATURE(kMostVisitedTiles);
-BASE_DECLARE_FEATURE(kMostVisitedTilesDynamicSpacing);
 BASE_DECLARE_FEATURE(kMostVisitedTilesTitleWrapAround);
 BASE_DECLARE_FEATURE(kRichAutocompletion);
 BASE_DECLARE_FEATURE(kNtpRealboxPedals);
 BASE_DECLARE_FEATURE(kOmniboxFuzzyUrlSuggestions);
-BASE_DECLARE_FEATURE(kOmniboxHeaderPaddingUpdate);
-BASE_DECLARE_FEATURE(kOmniboxRemoveSuggestionHeaderCapitalization);
-BASE_DECLARE_FEATURE(kOmniboxRemoveSuggestionHeaderChevron);
-BASE_DECLARE_FEATURE(kOmniboxMostVisitedTilesFadingOnTablet);
-BASE_DECLARE_FEATURE(kOmniboxMostVisitedTilesOnSrp);
+BASE_DECLARE_FEATURE(kOmniboxDefaultBrowserPedal);
+BASE_DECLARE_FEATURE(kOmniboxMatchToolbarAndStatusBarColor);
+BASE_DECLARE_FEATURE(kOmniboxMostVisitedTilesAddRecycledViewPool);
+BASE_DECLARE_FEATURE(kUniformRowHeight);
+BASE_DECLARE_FEATURE(kWebUIOmniboxPopup);
 
 // Omnibox UI - these affect the UI or function of the location bar (not the
 // popup).
@@ -104,7 +108,6 @@ BASE_DECLARE_FEATURE(kOmniboxAssistantVoiceSearch);
 // Omnibox & Suggestions UI - these affect both the omnibox and the suggestions
 // popup.
 BASE_DECLARE_FEATURE(kClosePopupWithEscape);
-BASE_DECLARE_FEATURE(kBlurWithEscape);
 
 // Settings Page - these affect the appearance of the Search Engines settings
 // page
@@ -120,6 +123,9 @@ extern const char kDefaultTypedNavigationsToHttpsTimeoutParam[];
 // Omnibox Logging.
 BASE_DECLARE_FEATURE(kReportAssistedQueryStats);
 BASE_DECLARE_FEATURE(kReportSearchboxStats);
+
+// Omnibox ML scoring.
+BASE_DECLARE_FEATURE(kLogUrlScoringSignals);
 
 }  // namespace omnibox
 

@@ -14,11 +14,12 @@
 #include "base/debug/stack_trace.h"
 #include "base/format_macros.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ostream_operators.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/features.h"
@@ -48,14 +49,14 @@ class AutoRemoveKeyFromTaskMap {
                          SoftwareImageDecodeCache::CacheKeyHash>* task_map,
       const SoftwareImageDecodeCache::CacheKey& key)
       : task_map_(task_map), key_(key) {}
-  ~AutoRemoveKeyFromTaskMap() { task_map_->erase(key_); }
+  ~AutoRemoveKeyFromTaskMap() { task_map_->erase(*key_); }
 
  private:
   raw_ptr<std::unordered_map<SoftwareImageDecodeCache::CacheKey,
                              scoped_refptr<TileTask>,
                              SoftwareImageDecodeCache::CacheKeyHash>>
       task_map_;
-  const SoftwareImageDecodeCache::CacheKey& key_;
+  const raw_ref<const SoftwareImageDecodeCache::CacheKey> key_;
 };
 
 class SoftwareImageDecodeTaskImpl : public TileTask {
@@ -119,7 +120,7 @@ class SoftwareImageDecodeTaskImpl : public TileTask {
   ~SoftwareImageDecodeTaskImpl() override = default;
 
  private:
-  raw_ptr<SoftwareImageDecodeCache> cache_;
+  raw_ptr<SoftwareImageDecodeCache, DanglingUntriaged> cache_;
   SoftwareImageDecodeCache::CacheKey image_key_;
   PaintImage paint_image_;
   SoftwareImageDecodeCache::DecodeTaskType task_type_;
@@ -163,10 +164,10 @@ SoftwareImageDecodeCache::SoftwareImageDecodeCache(
   DCHECK_NE(generator_client_id_, PaintImage::kDefaultGeneratorClientId);
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
-  if (base::ThreadTaskRunnerHandle::IsSet()) {
+  if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         this, "cc::SoftwareImageDecodeCache",
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
 }
 
@@ -177,16 +178,22 @@ SoftwareImageDecodeCache::~SoftwareImageDecodeCache() {
 }
 
 ImageDecodeCache::TaskResult SoftwareImageDecodeCache::GetTaskForImageAndRef(
+    ClientId client_id,
     const DrawImage& image,
     const TracingInfo& tracing_info) {
   DCHECK_EQ(tracing_info.task_type, TaskType::kInRaster);
+  DCHECK_EQ(client_id, ImageDecodeCache::kDefaultClientId)
+      << "SoftwareImageDecodeCache cannot be shared between multiple clients.";
   return GetTaskForImageAndRefInternal(image, tracing_info,
                                        DecodeTaskType::USE_IN_RASTER_TASKS);
 }
 
 ImageDecodeCache::TaskResult
 SoftwareImageDecodeCache::GetOutOfRasterDecodeTaskForImageAndRef(
+    ClientId client_id,
     const DrawImage& image) {
+  DCHECK_EQ(client_id, ImageDecodeCache::kDefaultClientId)
+      << "SoftwareImageDecodeCache cannot be shared between multiple clients.";
   return GetTaskForImageAndRefInternal(
       image, TracingInfo(0, TilePriority::NOW, TaskType::kOutOfRaster),
       DecodeTaskType::USE_OUT_OF_RASTER_TASKS);
@@ -543,6 +550,15 @@ bool SoftwareImageDecodeCache::UseCacheForDrawImage(
   }
 
   return false;
+}
+
+ImageDecodeCache::ClientId SoftwareImageDecodeCache::GenerateClientId() {
+  ClientId next_client_id = ImageDecodeCache::GenerateClientId();
+  // The software decode cache cannot be shared between multiple clients. Thus,
+  // this DCHECK helps us to verify the software cache has only a single client
+  // that generated a client id for itself only oce.
+  DCHECK_EQ(ImageDecodeCache::kDefaultClientId, next_client_id);
+  return next_client_id;
 }
 
 DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDraw(

@@ -7,7 +7,9 @@
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "base/numerics/safe_conversions.h"
+#import "base/ranges/algorithm.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_metrics.h"
@@ -33,7 +35,6 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_empty_background.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_editor_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_consumer.h"
@@ -87,6 +88,9 @@
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -118,15 +122,6 @@ typedef NS_ENUM(NSInteger, BookmarksContextBarState) {
 
 // Estimated TableView row height.
 const CGFloat kEstimatedRowHeight = 65.0;
-
-// TableView rows that are hidden by the NavigationBar, causing them to be
-// "visible" for the tableView but not for the user. This is used to calculate
-// the top most visibile table view indexPath row.
-// TODO(crbug.com/879001): This value is aproximate based on the standard (no
-// dynamic type) height. If the dynamic font is too large or too small it will
-// result in a small offset on the cache, in order to prevent this we need to
-// calculate this value dynamically.
-const int kRowsHiddenByNavigationBar = 3;
 
 // Returns a vector of all URLs in `nodes`.
 std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
@@ -215,10 +210,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 // Scrim when search box in focused.
 @property(nonatomic, strong) UIControl* scrimView;
-
-// Background shown when there is no bookmarks or folders at the current root
-// node.
-@property(nonatomic, strong) BookmarkEmptyBackground* emptyTableBackgroundView;
 
 // Illustrated View displayed when the current root node is empty.
 @property(nonatomic, strong) TableViewIllustratedEmptyView* emptyViewBackground;
@@ -374,22 +365,17 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       kBookmarkHomeSearchBarIdentifier;
 
   // Vivaldi
-  if (vivaldi::IsVivaldiRunning())
+  if (IsVivaldiRunning()) {
       self.searchController.hidesNavigationBarDuringPresentation = NO;
-  // End Vivaldi
+      (self.isDeviceIPad) ?
+        [self setupHeaderWithSearchForIPad] : [self setupHeaderWithSearch];
+  } else {
 
   // UIKit needs to know which controller will be presenting the
   // searchController. If we don't add this trying to dismiss while
   // SearchController is active will fail.
-
-  // Vivaldi
-  if (!vivaldi::IsVivaldiRunning())
   self.definesPresentationContext = YES;
-
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning())
-    [self setupHeaderWithSearch];
-  // End Vivaldi
+  } // End Vivaldi
 
   self.scrimView = [[UIControl alloc] init];
   self.scrimView.backgroundColor = [UIColor colorNamed:kScrimBackgroundColor];
@@ -402,20 +388,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // Place the search bar in the navigation bar.
 
   // Vivaldi
-  if (!vivaldi::IsVivaldiRunning())
+  if (!IsVivaldiRunning())
   self.navigationItem.searchController = self.searchController;
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
-
-  // Vivaldi no need for this workaround any more (chr bug)
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Center search bar vertically so it looks centered in the header when
-  // searching.  The cancel button is centered / decentered on
-  // viewWillAppear and viewDidDisappear.
-  UIOffset offset =
-      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-  self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
-      offset;
-  } // Vivaldi
 
   self.searchTerm = @"";
 
@@ -447,29 +422,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if ([self isDisplayingBookmarkRoot]) {
     [self refreshContents];
   }
-
-  // Vivaldi no need for this workaround any more (chr bug)
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Center search bar's cancel button vertically so it looks centered.
-  // We change the cancel button proxy styles, so we will return it to
-  // default in viewDidDisappear.
-  UIOffset offset =
-      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-  UIBarButtonItem* cancelButton = [UIBarButtonItem
-      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
-  [cancelButton setTitlePositionAdjustment:offset
-                             forBarMetrics:UIBarMetricsDefault];
-  } //Vivaldi
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  [super viewWillDisappear:animated];
-
-  // Restore to default origin offset for cancel button proxy style.
-  UIBarButtonItem* cancelButton = [UIBarButtonItem
-      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
-  [cancelButton setTitlePositionAdjustment:UIOffsetZero
-                             forBarMetrics:UIBarMetricsDefault];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -487,7 +439,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
 
   // Vivaldi
-  if (vivaldi::IsVivaldiRunning())
+  if (IsVivaldiRunning())
     self.searchController.searchBar.frame = searchBarContainer.bounds;
   // End Vivaldi
 
@@ -503,18 +455,25 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   [self.sharedState.editingFolderCell stopEdit];
 }
 
-- (NSArray*)keyCommands {
-  __weak BookmarkHomeViewController* weakSelf = self;
-  return @[ [UIKeyCommand cr_keyCommandWithInput:UIKeyInputEscape
-                                   modifierFlags:Cr_UIKeyModifierNone
-                                           title:nil
-                                          action:^{
-                                            [weakSelf navigationBarCancel:nil];
-                                          }] ];
-}
-
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleDefault;
+}
+
+#pragma mark - UIResponder
+
+// To always be able to register key commands via -keyCommands, the VC must be
+// able to become first responder.
+- (BOOL)canBecomeFirstResponder {
+  return YES;
+}
+
+- (NSArray<UIKeyCommand*>*)keyCommands {
+  return @[ UIKeyCommand.cr_close ];
+}
+
+- (void)keyCommand_close {
+  base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
+  [self navigationBarCancel:nil];
 }
 
 #pragma mark - Protected
@@ -589,6 +548,17 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 #pragma mark - BookmarkHomeConsumer
+
+- (void)setTableViewEditing:(BOOL)editing {
+  self.sharedState.currentlyInEditMode = editing;
+  [self setContextBarState:editing ? BookmarksContextBarBeginSelection
+                                   : BookmarksContextBarDefault];
+  self.searchController.searchBar.userInteractionEnabled = !editing;
+  self.searchController.searchBar.alpha =
+      editing ? kTableViewNavigationAlphaForDisabledSearchBar : 1.0;
+
+  self.tableView.dragInteractionEnabled = !editing;
+}
 
 - (void)refreshContents {
   if (self.sharedState.currentlyShowingSearchResults) {
@@ -1147,23 +1117,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // Add custom title.
   viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
 
-  if (vivaldi::IsVivaldiRunning()) {
-      if ([self isDisplayingBookmarkRoot]) {
+  if (IsVivaldiRunning()) {
         viewController.navigationItem.rightBarButtonItem =
           [self customizedDoneTextButton];
-      } else {
+      if (![self isDisplayingBookmarkRoot]) {
         viewController.navigationItem.largeTitleDisplayMode =
             UINavigationItemLargeTitleDisplayModeNever;
         viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
-        UIImage* image = [UIImage systemImageNamed:@"plus"];
-        UIBarButtonItem* plusButton =
-          [[UIBarButtonItem alloc]
-           initWithImage:image
-           style:UIBarButtonItemStyleDone
-           target:self
-           action:@selector(handleAddBarButtonTap)];
-        NSArray* items = @[plusButton, [self customizedDoneButton]];
-        viewController.navigationItem.rightBarButtonItems = items;
       }
       // Add custom title.
       viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
@@ -1288,19 +1248,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   return controller;
 }
 
-// Sets the editing mode for tableView, update context bar and search state
-// accordingly.
-- (void)setTableViewEditing:(BOOL)editing {
-  self.sharedState.currentlyInEditMode = editing;
-  [self setContextBarState:editing ? BookmarksContextBarBeginSelection
-                                   : BookmarksContextBarDefault];
-  self.searchController.searchBar.userInteractionEnabled = !editing;
-  self.searchController.searchBar.alpha =
-      editing ? kTableViewNavigationAlphaForDisabledSearchBar : 1.0;
-
-  self.tableView.dragInteractionEnabled = !editing;
-}
-
 // Row selection of the tableView will be cleared after reloadData.  This
 // function is used to restore the row selection.  It also updates editNodes in
 // case some selected nodes are removed.
@@ -1366,14 +1313,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if (topMostIndexPath.row == 0)
     return 0;
 
-  // To avoid an index out of bounds, check if there are less or equal
-  // kRowsHiddenByNavigationBar than number of visibleIndexPaths.
-  if ([visibleIndexPaths count] <= kRowsHiddenByNavigationBar)
-    return 0;
-
-  // Return the first visible row not covered by the NavigationBar.
-  topMostIndexPath =
-      [visibleIndexPaths objectAtIndex:kRowsHiddenByNavigationBar];
+  // Return the first visible row.
+  topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
   return topMostIndexPath.row;
 }
 
@@ -1450,9 +1391,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   std::vector<const bookmarks::BookmarkNode*> nodes;
   if (self.sharedState.currentlyShowingSearchResults) {
     // Create a vector of edit nodes in the same order as the selected nodes.
-    const std::set<const bookmarks::BookmarkNode*> editNodes =
-        self.sharedState.editNodes;
-    std::copy(editNodes.begin(), editNodes.end(), std::back_inserter(nodes));
+    base::ranges::copy(self.sharedState.editNodes, std::back_inserter(nodes));
   } else {
     // Create a vector of edit nodes in the same order as the nodes in folder.
     for (const auto& child :
@@ -1477,7 +1416,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (void)showScrim {
 
   // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) return;
+  if (IsVivaldiRunning()) return;
   // End Vivaldi
 
   self.navigationController.toolbarHidden = YES;
@@ -1503,7 +1442,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (void)hideScrim {
 
   // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) return;
+  if (IsVivaldiRunning()) return;
   // End Vivaldi
 
   __weak BookmarkHomeViewController* weakSelf = self;
@@ -1595,6 +1534,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 // Shows empty bookmarks background view.
 - (void)showEmptyBackground {
+    if (IsVivaldiRunning()) {
+        if (!self.emptyViewBackground) {
+          self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
+              initWithFrame:self.sharedState.tableView.bounds
+                      image:[UIImage imageNamed:@"vivaldi_bookmarks_empty"]
+                      title:GetNSString(IDS_VIVALDI_BOOKMARK_EMPTY_TITLE)
+                   subtitle:GetNSString(IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE)];
+        }
+    } else // End Vivaldi
     if (!self.emptyViewBackground) {
       self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
           initWithFrame:self.sharedState.tableView.bounds
@@ -1627,6 +1575,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
     self.sharedState.tableView.backgroundView = self.emptyViewBackground;
     self.navigationItem.searchController = nil;
+
+    // Vivaldi
+    self.searchController.searchBar.hidden = YES;
 }
 
 - (void)hideEmptyBackground {
@@ -1641,6 +1592,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
   }
+
+  // Vivaldi
+  self.searchController.searchBar.hidden = NO;
 }
 
 #pragma mark - ContextBarDelegate implementation
@@ -1799,6 +1753,20 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       [self isEditBookmarksEnabled] && [self hasBookmarksOrFolders] &&
       [self isNodeEditableByUser:self.sharedState.tableViewDisplayedRootNode];
 
+  if (vivaldi::IsVivaldiRunning()) {
+      UIImage* image = [UIImage systemImageNamed:@"plus"];
+      UIBarButtonItem* plusButton =
+         [[UIBarButtonItem alloc]
+          initWithImage:image
+          style:UIBarButtonItemStyleDone
+          target:self
+          action:@selector(handleAddBarButtonTap)];
+      [self setToolbarItems:@[ newFolderButton, spaceButton,
+                               plusButton, spaceButton, editButton ]
+                               animated:NO];
+      return;
+  } // End Vivaldi
+
   [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
                animated:NO];
 }
@@ -1863,7 +1831,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                              return;
                            if ([strongSelf isIncognitoForced])
                              return;
-                           auto editNodes = [strongSelf editNodes];
+                           std::vector<const bookmarks::BookmarkNode*>
+                               editNodes = [strongSelf editNodes];
                            [strongSelf openAllURLs:GetUrlsToOpen(editNodes)
                                        inIncognito:NO
                                             newTab:NO];
@@ -1879,7 +1848,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                              return;
                            if (![strongSelf isIncognitoAvailable])
                              return;
-                           auto editNodes = [strongSelf editNodes];
+                           std::vector<const bookmarks::BookmarkNode*>
+                               editNodes = [strongSelf editNodes];
                            [strongSelf openAllURLs:GetUrlsToOpen(editNodes)
                                        inIncognito:YES
                                             newTab:NO];
@@ -2423,11 +2393,11 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
         return [UIMenu menuWithTitle:@"" children:@[]];
 
       // Record that this context menu was shown to the user.
-      RecordMenuShown(MenuScenario::kBookmarkEntry);
+      RecordMenuShown(MenuScenarioHistogram::kBookmarkEntry);
 
       BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
           initWithBrowser:strongSelf.browser
-                 scenario:MenuScenario::kBookmarkEntry];
+                 scenario:MenuScenarioHistogram::kBookmarkEntry];
 
       NSMutableArray<UIMenuElement*>* menuElements =
           [[NSMutableArray alloc] init];
@@ -2521,10 +2491,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
         return [UIMenu menuWithTitle:@"" children:@[]];
 
       // Record that this context menu was shown to the user.
-      RecordMenuShown(MenuScenario::kBookmarkFolder);
+      RecordMenuShown(MenuScenarioHistogram::kBookmarkFolder);
 
       ActionFactory* actionFactory = [[ActionFactory alloc]
-          initWithScenario:MenuScenario::kBookmarkFolder];
+          initWithScenario:MenuScenarioHistogram::kBookmarkFolder];
 
       NSMutableArray<UIMenuElement*>* menuElements =
           [[NSMutableArray alloc] init];
@@ -2655,7 +2625,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
       initWithBrowser:strongSelf.browser
-             scenario:MenuScenario::kBookmarkEntry];
+             scenario:MenuScenarioHistogram::kBookmarkEntry];
 
   //Disable if in editing mode
   NSMutableArray<UIMenuElement*>* menuElements =
@@ -2703,46 +2673,53 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 #pragma mark Vivaldi
 
-- (void)setupHeaderWithSearch {
-    UIView* headerView = [[UIView alloc] init];
-    headerView.frame = CGRectMake(0, 0, 0, panel_header_height);
-    UIView* topView = [[UIView alloc] init];
-    topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
-    [headerView addSubview:topView];
-
-    topView.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [topView.leadingAnchor constraintEqualToAnchor:headerView.leadingAnchor]
-        .active = YES;
-    [topView.topAnchor constraintEqualToAnchor:headerView.topAnchor]
-        .active = YES;
-    [topView.heightAnchor constraintEqualToConstant:panel_top_view_height]
-        .active = YES;
-    [topView.widthAnchor constraintEqualToAnchor:headerView.widthAnchor].
-        active = YES;
-
+- (void)setupSearchBarWithStyle {
     searchBarContainer = [[UIView alloc] init];
     searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
     searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [searchBarContainer addSubview:self.searchController.searchBar];
-    [headerView addSubview:searchBarContainer];
     self.searchController.searchBar.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.searchController.searchBar.backgroundColor =
         [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
     self.searchController.searchBar.alpha = 1.0;
     self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    [self.searchController.searchBar sizeToFit];
+}
 
-    [searchBarContainer.widthAnchor
-      constraintEqualToAnchor:headerView.widthAnchor].active = YES;
-    [searchBarContainer.topAnchor constraintEqualToAnchor:topView.bottomAnchor]
-        .active = YES;
-    [searchBarContainer.bottomAnchor
-     constraintEqualToAnchor:headerView.bottomAnchor].active = YES;
+- (void)setupHeaderWithSearchForIPad {
+    [self setupSearchBarWithStyle];
+    self.tableView.tableHeaderView = searchBarContainer;
+
+    [searchBarContainer.topAnchor
+     constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
     [searchBarContainer.leadingAnchor
-     constraintEqualToAnchor:headerView.leadingAnchor].active = YES;
+     constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
+    [searchBarContainer.trailingAnchor
+     constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
+    [searchBarContainer.heightAnchor
+     constraintEqualToConstant:panel_search_view_height].active = YES;
+    [searchBarContainer.widthAnchor
+     constraintEqualToAnchor:self.view.widthAnchor].active = YES;
+}
 
+- (void)setupHeaderWithSearch {
+    // Setup header view containing empty top view and search beneath
+    // to make space for the segmentcontrol in the parent
+    UIView* headerView = [[UIView alloc] init];
+    headerView.frame = CGRectMake(0, 0, 0, panel_header_height);
+    UIView* topView = [[UIView alloc] init];
+    topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
+    [headerView addSubview:topView];
+    [topView fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                            0, 0, search_bar_height, 0)];
+
+    [self setupSearchBarWithStyle];
+    [headerView addSubview:searchBarContainer];
+    [searchBarContainer fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                            search_bar_height, 0, 0, 0)];
     self.tableView.tableHeaderView = headerView;
+
     headerView.translatesAutoresizingMaskIntoConstraints = NO;
     [headerView.leadingAnchor
      constraintEqualToAnchor:self.tableView.leadingAnchor].active = YES;
@@ -2754,7 +2731,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
      constraintEqualToConstant:panel_header_height].active = YES;
     [headerView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor]
         .active = YES;
-    [self.searchController.searchBar sizeToFit];
 }
 
 - (void)handleAddBarButtonTap {
@@ -2772,7 +2748,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   VivaldiBookmarkAddEditURLViewController* controller =
     [VivaldiBookmarkAddEditURLViewController
      initWithBrowser:self.browser
-           bookmarks:self.bookmarks
                 item:editingItem
               parent:parentItem
            isEditing:isEditing
@@ -2799,7 +2774,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   VivaldiBookmarkAddEditFolderViewController* controller =
     [VivaldiBookmarkAddEditFolderViewController
        initWithBrowser:self.browser
-             bookmarks:self.bookmarks
                   item:editingItem
                 parent:parentItem
              isEditing:isEditing

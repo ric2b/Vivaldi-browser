@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/ash/common/cr_deprecated.js';
+
 import {Command} from './command.js';
-import {define as crUiDefine, decorate, swallowDoubleClick} from 'chrome://resources/js/cr/ui.js';
-import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/js/cr.m.js';
+import {define as crUiDefine, decorate, swallowDoubleClick} from '../../../common/js/ui.js';
 // clang-format on
 
 

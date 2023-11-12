@@ -95,6 +95,16 @@ symbolset("plus_circle_fill") {
   ]
 }
 
+imageset("plus_circle_fill_ios14") {
+  sources = [
+    "plus_circle_fill_ios14.imageset/Contents.json",
+    "plus_circle_fill_ios14.imageset/plus_circle_fill_ios14@2x.png",
+    "plus_circle_fill_ios14.imageset/plus_circle_fill_ios14@3x.png",
+    "plus_circle_fill_ios14.imageset/plus_circle_fill_ios14_dark@2x.png",
+    "plus_circle_fill_ios14.imageset/plus_circle_fill_ios14_dark@3x.png",
+  ]
+}
+
 symbolset("arrow_triangle_slash_circlepath") {
   sources = [
     "arrow_triangle_slash_circlepath.symbolset/Contents.json",
@@ -154,5 +164,44 @@ symbolset("line_downtrend") {
   sources = [
     "line_downtrend.symbolset/Contents.json",
     "line_downtrend.symbolset/line.downtrend.cr.svg",
+  ]
+}
+
+symbolset("shield") {
+  sources = [
+    "shield.symbolset/Contents.json",
+    "shield.symbolset/shield.cr.svg",
+  ]
+}
+
+imageset("tab_grid_new_tab_button_ios14") {
+  sources = [
+    "tab_grid_new_tab_button_ios14.imageset/Contents.json",
+    "tab_grid_new_tab_button_ios14.imageset/tab_grid_new_tab_button_ios14@2x.png",
+    "tab_grid_new_tab_button_ios14.imageset/tab_grid_new_tab_button_ios14@3x.png",
+  ]
+}
+
+imageset("tab_grid_new_tab_button_incognito_ios14") {
+  sources = [
+    "tab_grid_new_tab_button_incognito_ios14.imageset/Contents.json",
+    "tab_grid_new_tab_button_incognito_ios14.imageset/tab_grid_new_tab_button_incognito_ios14@2x.png",
+    "tab_grid_new_tab_button_incognito_ios14.imageset/tab_grid_new_tab_button_incognito_ios14@3x.png",
+  ]
+}
+
+imageset("tab_grid_new_tab_floating_button_ios14") {
+  sources = [
+    "tab_grid_new_tab_floating_button_ios14.imageset/Contents.json",
+    "tab_grid_new_tab_floating_button_ios14.imageset/tab_grid_new_tab_floating_button_ios14@2x.png",
+    "tab_grid_new_tab_floating_button_ios14.imageset/tab_grid_new_tab_floating_button_ios14@3x.png",
+  ]
+}
+
+imageset("tab_grid_new_tab_floating_button_incognito_ios14") {
+  sources = [
+    "tab_grid_new_tab_floating_button_incognito_ios14.imageset/Contents.json",
+    "tab_grid_new_tab_floating_button_incognito_ios14.imageset/tab_grid_new_tab_floating_button_incognito_ios14@2x.png",
+    "tab_grid_new_tab_floating_button_incognito_ios14.imageset/tab_grid_new_tab_floating_button_incognito_ios14@3x.png",
   ]
 }

@@ -1,8 +1,8 @@
 {
-    "project": "chromium-m108",
-    "project_title": "Chromium M108",
-    "ref": "refs/branch-heads/5359",
-    "chrome_project": "chrome-m108",
+    "project": "chromium-m110",
+    "project_title": "Chromium M110",
+    "ref": "refs/branch-heads/5481",
+    "chrome_project": "chrome-m110",
     "branch_types": [
         "standard"
     ]

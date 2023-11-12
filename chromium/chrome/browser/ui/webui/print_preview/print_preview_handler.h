@@ -14,12 +14,10 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/common/buildflags.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/common/print.mojom.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -38,10 +36,6 @@ class LocalPrinter;
 }
 }  // namespace crosapi
 #endif
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace content {
 class WebContents;
@@ -96,7 +90,7 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
                           int request_id);
 
   // Send the default page layout
-  void SendPageLayoutReady(const base::DictionaryValue& layout,
+  void SendPageLayoutReady(base::Value::Dict layout,
                            bool has_custom_page_size_style,
                            int request_id);
 
@@ -260,10 +254,6 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   //     error. None type implies no error.
   void OnPrintResult(const std::string& callback_id,
                      const base::Value& error);
-
-  // A count of how many requests received to regenerate preview data.
-  // Initialized to 0 then incremented and emitted to a histogram.
-  int regenerate_preview_request_count_ = 0;
 
   // Whether we have already logged a failed print preview.
   bool reported_failed_preview_ = false;

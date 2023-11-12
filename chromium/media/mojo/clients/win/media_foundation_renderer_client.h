@@ -58,7 +58,7 @@ class MediaFoundationRendererClient
   using ClientExtension = media::mojom::MediaFoundationRendererClientExtension;
 
   MediaFoundationRendererClient(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> media_task_runner,
       std::unique_ptr<MediaLog> media_log,
       std::unique_ptr<MojoRenderer> mojo_renderer,
       mojo::PendingRemote<RendererExtension> pending_renderer_extension,
@@ -90,6 +90,7 @@ class MediaFoundationRendererClient
       const std::vector<DemuxerStream*>& enabled_tracks,
       base::OnceClosure change_completed_cb) override;
   void OnExternalVideoFrameRequest() override;
+  RendererType GetRendererType() override;
 
   // RendererClient implementation.
   void OnError(PipelineStatus status) override;
@@ -114,15 +115,15 @@ class MediaFoundationRendererClient
   base::TimeDelta GetPreferredRenderInterval() override;
 
   // media::mojom::MediaFoundationRendererClientExtension
+  void InitializeFramePool(
+      mojom::FramePoolInitializationParametersPtr pool_info) override;
   void OnFrameAvailable(const base::UnguessableToken& frame_token,
                         const gfx::Size& size,
                         base::TimeDelta timestamp) override;
-  void InitializeFramePool(
-      mojom::FramePoolInitializationParametersPtr pool_info) override;
-
-  bool IsFrameServerMode() const;
 
  private:
+  bool IsFrameServerMode() const;
+  void OnConnectionError();
   void OnRemoteRendererInitialized(PipelineStatus status);
   void OnOutputRectChange(gfx::Rect output_rect);
   void OnSetOutputRectDone(const gfx::Size& output_size, bool success);
@@ -134,16 +135,16 @@ class MediaFoundationRendererClient
   void OnVideoFrameCreated(scoped_refptr<VideoFrame> video_frame,
                            const gpu::Mailbox& mailbox);
   void OnCdmAttached(bool success);
-  void OnConnectionError();
   void SignalMediaPlayingStateChange(bool is_playing);
   void ObserveMailboxForOverlayState(const gpu::Mailbox& mailbox);
   void OnOverlayStateChanged(const gpu::Mailbox& mailbox, bool promoted);
   void UpdateRenderMode();
+  void OnPaintComplete(const base::UnguessableToken& token);
 
   // This class is constructed on the main thread. Hence we store
   // PendingRemotes so we can bind the Remotes on the media task
   // runner during/after Initialize().
-  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   std::unique_ptr<MediaLog> media_log_;
   std::unique_ptr<MojoRenderer> mojo_renderer_;
   mojo::PendingRemote<RendererExtension> pending_renderer_extension_;
@@ -186,8 +187,6 @@ class MediaFoundationRendererClient
   PipelineStatusCallback init_cb_;
   raw_ptr<CdmContext> cdm_context_ = nullptr;
   CdmAttachedCB cdm_attached_cb_;
-
-  void OnPaintComplete(const base::UnguessableToken& token);
 
   // The MF CDM process does not have access to the mailboxes but it creates the
   // textures. Therefore the MediaFoundationRenderer and the

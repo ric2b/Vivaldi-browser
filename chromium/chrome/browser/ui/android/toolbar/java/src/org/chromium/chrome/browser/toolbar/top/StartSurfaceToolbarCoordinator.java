@@ -15,7 +15,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -36,6 +35,8 @@ import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * The controller for the StartSurfaceToolbar. This class handles all interactions that the
@@ -86,7 +87,7 @@ public class StartSurfaceToolbarCoordinator {
         mShouldCreateLogoInToolbar = shouldCreateLogoInToolbar;
         boolean isTabToGtsFadeAnimationEnabled = isTabToGtsAnimationEnabled
                 && !DeviceClassManager.enableAccessibilityLayout(mStub.getContext());
-        mToolbarMediator = new StartSurfaceToolbarMediator(mPropertyModel,
+        mToolbarMediator = new StartSurfaceToolbarMediator(mStub.getContext(), mPropertyModel,
                 (iphCommandBuilder)
                         -> {
                     // TODO(crbug.com/865801): Replace the null check with an assert after fixing or

@@ -32,6 +32,7 @@ struct AuctionConfig;
 
 namespace content {
 
+class InterestGroupAuctionReporter;
 class InterestGroupManagerImpl;
 
 // An AuctionRunner loads and runs the bidder and seller worklets, along with
@@ -48,6 +49,9 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
 
   // Invoked when a FLEDGE auction is complete.
   //
+  // `manually_aborted` is true only if the auction was successfully interrupted
+  //  by the call to Abort().
+  //
   // `winning_group_id` owner and name of the winning interest group (if any).
   //
   // `render_url` URL of auction winning ad to render. Null if there is no
@@ -56,33 +60,50 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   // `ad_component_urls` is the list of ad component URLs returned by the
   //  winning bidder. Null if there is no winner or no list was returned.
   //
+  // `winning_group_ad_metadata` is the metadata associated with the winning ad,
+  //  to be made available to the interest group in future auctions in the
+  //  `prevWins` field. Empty if there was no winner.
+  //
   // `report_urls` Reporting URLs returned by seller worklet reportResult()
   //  methods and the winning bidder's reportWin() methods, if any.
   //
   // `debug_loss_report_urls` URLs to use for reporting loss result to bidders
-  // and the seller. Empty if no report should be sent.
+  //  and the seller. Empty if no report should be sent.
   //
   // `debug_win_report_urls` URLs to use for reporting win result to bidders and
-  // the seller. Empty if no report should be sent.
+  //  the seller. Empty if no report should be sent.
+  //
+  // `interest_groups_that_bid` is a list of the interest groups that made bids
+  // in the auction. Empty if the auction didn't run to completion.
   //
   // `errors` are various error messages to be used for debugging. These are too
   //  sensitive for the renderers to see.
   //
-  // `manually_aborted` is true only if the auction was successfully interrupted
-  // by the call to Abort().
+  // If k-anonymity enforcement is on, `render_url_without_kanon_enforced`
+  // and `ad_component_urls_without_kanon_enforced` would be set to what the
+  // winner would be without the enforcement. This may be identical to
+  // `render_url` and `ad_component_urls`.
+  //
+  // If k-anonymity simulation is on, `render_url_with_kanon_simulated` and
+  // `ad_component_urls_with_kanon_simulated` are what the winner would be if
+  // k-anonymity was being enforced. This may be identical to `render_url` and
+  // `ad_component_urls`.
   using RunAuctionCallback = base::OnceCallback<void(
       AuctionRunner* auction_runner,
       bool manually_aborted,
       absl::optional<blink::InterestGroupKey> winning_group_id,
       absl::optional<GURL> render_url,
       std::vector<GURL> ad_component_urls,
-      std::vector<GURL> report_urls,
+      std::string winning_group_ad_metadata,
       std::vector<GURL> debug_loss_report_urls,
       std::vector<GURL> debug_win_report_urls,
-      ReportingMetadata ad_beacon_map,
       std::map<url::Origin, PrivateAggregationRequests>
           private_aggregation_requests,
-      std::vector<std::string> errors)>;
+      blink::InterestGroupSet interest_groups_that_bid,
+      base::flat_set<std::string> k_anon_keys_to_join,
+      std::vector<std::string> errors,
+      std::unique_ptr<InterestGroupAuctionReporter>
+          interest_group_auction_reporter)>;
 
   // Returns true if `origin` is allowed to use the interest group API. Will be
   // called on worklet / interest group origins before using them in any
@@ -90,10 +111,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   using IsInterestGroupApiAllowedCallback =
       InterestGroupAuction::IsInterestGroupApiAllowedCallback;
 
-  explicit AuctionRunner(const AuctionRunner&) = delete;
-  AuctionRunner& operator=(const AuctionRunner&) = delete;
-
-  // Runs an entire FLEDGE auction.
+  // Creates an entire FLEDGE auction. Single-use object.
   //
   // Arguments:
   // `auction_worklet_manager` and `interest_group_manager` must remain valid
@@ -125,22 +143,33 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       mojo::PendingReceiver<AbortableAdAuction> abort_receiver,
       RunAuctionCallback callback);
 
+  explicit AuctionRunner(const AuctionRunner&) = delete;
+  AuctionRunner& operator=(const AuctionRunner&) = delete;
+
   ~AuctionRunner() override;
 
   // AbortableAdAuction implementation.
+  void ResolvedPromiseParam(
+      blink::mojom::AuctionAdConfigAuctionIdPtr auction,
+      blink::mojom::AuctionAdConfigField field,
+      const absl::optional<std::string>& json_value) override;
   void Abort() override;
 
   // Fails the auction, invoking `callback_` and prevents any future calls into
   // `this` by closing mojo pipes and disposing of weak pointers. The owner must
   // be able to safely delete `this` when the callback is invoked. May only be
   // invoked if the auction has not yet completed.
-  void FailAuction(bool manually_aborted);
+  //
+  // `interest_groups_that_bid` is a list of the interest groups that bid in the
+  // auction.
+  void FailAuction(bool manually_aborted,
+                   blink::InterestGroupSet interest_groups_that_bid =
+                       blink::InterestGroupSet());
 
  private:
   enum class State {
     kLoadingGroupsPhase,
     kBiddingAndScoringPhase,
-    kReportingPhase,
     kSucceeded,
     kFailed,
   };
@@ -148,6 +177,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   AuctionRunner(
       AuctionWorkletManager* auction_worklet_manager,
       InterestGroupManagerImpl* interest_group_manager,
+      auction_worklet::mojom::KAnonymityBidMode kanon_mode,
       const blink::AuctionConfig& auction_config,
       network::mojom::ClientSecurityStatePtr client_security_state,
       IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback,
@@ -155,7 +185,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       RunAuctionCallback callback);
 
   // Tells `auction_` to start the loading interest groups phase.
-  void StartAuction();
+  void StartAuctionIfReady();
 
   // Invoked asynchronously by `auction_` once all interest groups have loaded.
   // Fails the auction if `success` is false. Otherwise, starts the bidding and
@@ -173,7 +203,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   // the auction. Otherwise, records which interest group won the auction and
   // collects parameters needed to invoke the auction callback.
   void OnReportingPhaseComplete(
-      const blink::InterestGroupSet& interest_groups_that_bid,
+      blink::InterestGroupSet interest_groups_that_bid,
       bool success);
 
   // After an auction completes (success or failure -- wherever `callback_` is
@@ -195,8 +225,15 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   mojo::Receiver<blink::mojom::AbortableAdAuction> abort_receiver_;
 
   // Configuration.
-  blink::AuctionConfig owned_auction_config_;
+
+  // Whether k-anonymity enforcement or simulation (or none) are performed.
+  const auction_worklet::mojom::KAnonymityBidMode kanon_mode_;
+  // Use a smart pointer so can pass ownership to InterestGroupAuctionReporter
+  // without invalidating pointers.
+  std::unique_ptr<blink::AuctionConfig> owned_auction_config_;
+
   RunAuctionCallback callback_;
+  int promise_fields_in_auction_config_;
 
   InterestGroupAuction auction_;
   State state_ = State::kLoadingGroupsPhase;

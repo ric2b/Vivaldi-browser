@@ -14,14 +14,13 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/ash/android_sms/android_sms_app_setup_controller.h"
 #include "chrome/browser/ash/android_sms/android_sms_urls.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/app_service/public/cpp/features.h"
 
 namespace ash {
 namespace android_sms {
@@ -47,19 +46,11 @@ AndroidSmsAppManagerImpl::PwaDelegate::~PwaDelegate() = default;
 
 void AndroidSmsAppManagerImpl::PwaDelegate::OpenApp(Profile* profile,
                                                     const std::string& app_id) {
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
-        app_id,
-        apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
-                            false /* preferred_containner */),
-        apps::LaunchSource::kFromChromeInternal);
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
-        app_id,
-        apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
-                            false /* preferred_containner */),
-        apps::mojom::LaunchSource::kFromChromeInternal);
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
+      app_id,
+      apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                          false /* preferred_containner */),
+      apps::LaunchSource::kFromChromeInternal);
 }
 
 bool AndroidSmsAppManagerImpl::PwaDelegate::TransferItemAttributes(

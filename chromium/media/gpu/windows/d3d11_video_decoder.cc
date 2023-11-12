@@ -18,7 +18,7 @@
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
@@ -40,6 +40,7 @@
 #include "media/gpu/windows/d3d11_video_device_format_support.h"
 #include "media/gpu/windows/supported_profile_helpers.h"
 #include "media/media_buildflags.h"
+#include "ui/gfx/hdr_metadata.h"
 #include "ui/gl/gl_angle_util_win.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/hdr_metadata_helper_win.h"
@@ -127,7 +128,7 @@ D3D11VideoDecoder::D3D11VideoDecoder(
     : media_log_(std::move(media_log)),
       impl_(std::move(impl)),
       gpu_task_runner_(std::move(gpu_task_runner)),
-      decoder_task_runner_(base::SequencedTaskRunnerHandle::Get()),
+      decoder_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       already_initialized_(false),
       gpu_preferences_(gpu_preferences),
       gpu_workarounds_(gpu_workarounds),
@@ -431,7 +432,7 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
     return NotifyError({D3D11Status::Codes::kFailedToGetVideoDevice, hr});
 
   auto video_decoder_or_error = CreateD3D11Decoder();
-  if (video_decoder_or_error.has_error()) {
+  if (!video_decoder_or_error.has_value()) {
     return NotifyError(std::move(video_decoder_or_error).error());
   }
 
@@ -441,6 +442,8 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
   if (!SUCCEEDED(hr)) {
     return NotifyError(D3D11Status::Codes::kFailedToGetDeviceContext);
   }
+
+  LogDecoderAdapterLUID();
 
   // At this point, playback is supported so add a line in the media log to help
   // us figure that out.
@@ -532,7 +535,7 @@ void D3D11VideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
 
   // Post, since we're not supposed to call back before this returns.  It
   // probably doesn't matter since we're in the gpu process anyway.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&D3D11VideoDecoder::DoDecode, weak_factory_.GetWeakPtr()));
 }
@@ -668,7 +671,7 @@ void D3D11VideoDecoder::DoDecode() {
       // if we don't have any picture buffer yet; this might be before the
       // accelerated decoder asked for any.
       auto video_decoder_or_error = CreateD3D11Decoder();
-      if (video_decoder_or_error.has_error()) {
+      if (!video_decoder_or_error.has_value()) {
         return NotifyError(std::move(video_decoder_or_error).error());
       }
       DCHECK(set_accelerator_decoder_cb_);
@@ -685,7 +688,7 @@ void D3D11VideoDecoder::DoDecode() {
     }
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&D3D11VideoDecoder::DoDecode, weak_factory_.GetWeakPtr()));
 }
@@ -738,9 +741,15 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   DCHECK(texture_selector_);
   gfx::Size size = accelerated_video_decoder_->GetPicSize();
 
+  // Some streams may have varying metadata, so bitstream metadata should be
+  // preferred over metadata provide by the configuration.
+  auto hdr_metadata = accelerated_video_decoder_->GetHDRMetadata()
+                          ? accelerated_video_decoder_->GetHDRMetadata()
+                          : config_.hdr_metadata();
+
   gfx::HDRMetadata stream_metadata;
-  if (config_.hdr_metadata())
-    stream_metadata = *config_.hdr_metadata();
+  if (hdr_metadata)
+    stream_metadata = *hdr_metadata;
   // else leave |stream_metadata| default-initialized.  We might use it anyway.
 
   absl::optional<DXGI_HDR_METADATA_HDR10> display_metadata;
@@ -914,8 +923,13 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
 
   frame->metadata().power_efficient = true;
   frame->set_color_space(output_color_space);
-  if (output_color_space.IsHDR())
-    frame->set_hdr_metadata(config_.hdr_metadata());
+  if (output_color_space.IsHDR()) {
+    // Some streams may have varying metadata, so bitstream metadata should be
+    // preferred over metadata provide by the configuration.
+    frame->set_hdr_metadata(picture->hdr_metadata() ? picture->hdr_metadata()
+                                                    : config_.hdr_metadata());
+  }
+
   output_cb_.Run(frame);
   return true;
 }
@@ -992,6 +1006,30 @@ void D3D11VideoDecoder::LogPictureBufferUsage() {
   }
 
   min_unused_buffers_.reset();
+}
+
+void D3D11VideoDecoder::LogDecoderAdapterLUID() {
+  if (!device_)
+    return;
+
+  ComDXGIDevice dxgi_device;
+  HRESULT hr = device_.As(&dxgi_device);
+  if (FAILED(hr))
+    return;
+
+  ComDXGIAdapter dxgi_adapter;
+  hr = dxgi_device->GetAdapter(&dxgi_adapter);
+  if (FAILED(hr))
+    return;
+
+  DXGI_ADAPTER_DESC adapter_desc{};
+  hr = dxgi_adapter->GetDesc(&adapter_desc);
+  if (FAILED(hr))
+    return;
+
+  MEDIA_LOG(INFO, media_log_) << "Selected D3D11VideoDecoder adapter LUID:{"
+                              << adapter_desc.AdapterLuid.HighPart << ", "
+                              << adapter_desc.AdapterLuid.LowPart << "}";
 }
 
 // static

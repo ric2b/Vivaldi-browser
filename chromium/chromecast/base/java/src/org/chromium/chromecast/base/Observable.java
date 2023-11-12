@@ -4,8 +4,10 @@
 
 package org.chromium.chromecast.base;
 
-import org.chromium.base.Consumer;
-import org.chromium.base.Function;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Interface for Observable state.
@@ -36,6 +38,21 @@ public abstract class Observable<T> {
      */
     public final <U> Observable<Both<T, U>> and(Observable<U> other) {
         return flatMap(t -> other.flatMap(u -> just(Both.both(t, u))));
+    }
+
+    /**
+     * Creates an Observable out of the activations of `this` and `other`. An observer that is
+     * subscribed to the result will be subscribed to both `this` and `other` at the same time.
+     *
+     * This combines Observables in the same way that concatenation combines lists. This operation
+     * forms a monoid over Observables with empty() as the identity element. I.e. for all
+     * Observables `x`:
+     *
+     *   x.or(empty()) == x
+     *   empty().or(x) == x
+     */
+    public final Observable<T> or(Observable<T> other) {
+        return make(observer -> Scopes.combine(subscribe(observer), other.subscribe(observer)));
     }
 
     /**
@@ -101,6 +118,13 @@ public abstract class Observable<T> {
      */
     public final Observable<T> filter(Predicate<? super T> predicate) {
         return flatMap(t -> predicate.test(t) ? just(t) : empty());
+    }
+
+    /**
+     * Returns an Observable with its type mapped to Unit.
+     */
+    public final Observable<Unit> opaque() {
+        return map(x -> Unit.unit());
     }
 
     /**

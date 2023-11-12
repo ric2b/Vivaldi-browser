@@ -178,6 +178,13 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // will only be created when use_custom_frame() is true.
   BubbleFrameView* GetBubbleFrameView() const;
 
+  // A helper for accessing the DialogClientView object contained by this
+  // delegate's Window. This function can return nullptr if the |client_view| is
+  // a DialogClientView subclass which also has metadata or overrides
+  // GetClassName().
+  const DialogClientView* GetDialogClientView() const;
+  DialogClientView* GetDialogClientView();
+
   // Helpers for accessing parts of the DialogClientView without needing to know
   // about DialogClientView. Do not call these before OnWidgetInitialized().
   views::LabelButton* GetOkButton() const;
@@ -316,11 +323,6 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   std::unique_ptr<View> DisownFootnoteView();
 
  private:
-  // A helper for accessing the DialogClientView object contained by this
-  // delegate's Window.
-  const DialogClientView* GetDialogClientView() const;
-  DialogClientView* GetDialogClientView();
-
   // Runs a close callback, ensuring that at most one close callback is ever
   // run.
   void RunCloseCallback(base::OnceClosure callback);
@@ -398,8 +400,8 @@ VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, ExtraView)
 VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, FootnoteView)
 VIEW_BUILDER_PROPERTY(bool, FocusTraversesOut)
 VIEW_BUILDER_PROPERTY(bool, EnableArrowKeyTraversal)
-VIEW_BUILDER_PROPERTY(gfx::ImageSkia, Icon)
-VIEW_BUILDER_PROPERTY(gfx::ImageSkia, AppIcon)
+VIEW_BUILDER_PROPERTY(ui::ImageModel, Icon)
+VIEW_BUILDER_PROPERTY(ui::ImageModel, AppIcon)
 VIEW_BUILDER_PROPERTY(ui::ModalType, ModalType)
 VIEW_BUILDER_PROPERTY(bool, OwnedByWidget)
 VIEW_BUILDER_PROPERTY(bool, ShowCloseButton)

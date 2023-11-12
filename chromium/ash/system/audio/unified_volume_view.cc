@@ -7,26 +7,14 @@
 #include <memory>
 #include <utility>
 
-#include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
-#include "ash/style/style_util.h"
+#include "ash/style/icon_button.h"
 #include "ash/system/tray/tray_constants.h"
-#include "base/bind.h"
-#include "base/i18n/rtl.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/color/color_id.h"
-#include "ui/gfx/canvas.h"
-#include "ui/gfx/image/image_skia_operations.h"
-#include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icon_utils.h"
-#include "ui/views/background.h"
-#include "ui/views/border.h"
-#include "ui/views/controls/focus_ring.h"
-#include "ui/views/controls/highlight_path_generator.h"
-#include "ui/views/controls/image_view.h"
-#include "ui/views/layout/box_layout.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/gfx/vector_icon_types.h"
 
 namespace ash {
 
@@ -40,99 +28,26 @@ const gfx::VectorIcon* const kVolumeLevelIcons[] = {
     &kUnifiedMenuVolumeHighIcon,    // Full volume.
 };
 
-// The maximum index of kVolumeLevelIcons.
+// The maximum index of `kVolumeLevelIcons`.
 constexpr int kVolumeLevels = std::size(kVolumeLevelIcons) - 1;
 
-// Get vector icon reference that corresponds to the given volume level. |level|
-// is between 0.0 to 1.0.
+// The maximum index of `kQsVolumeLevelIcons`.
+constexpr int kQsVolumeLevels =
+    std::size(UnifiedVolumeView::kQsVolumeLevelIcons) - 1;
+
+// Get vector icon reference that corresponds to the given volume level. `level`
+// is between 0.0 to 1.0 inclusive.
 const gfx::VectorIcon& GetVolumeIconForLevel(float level) {
-  int index = static_cast<int>(std::ceil(level * kVolumeLevels));
-  if (index < 0)
-    index = 0;
-  else if (index > kVolumeLevels)
-    index = kVolumeLevels;
-  return *kVolumeLevelIcons[index];
+  if (!features::IsQsRevampEnabled()) {
+    int index = static_cast<int>(std::ceil(level * kVolumeLevels));
+    DCHECK(index >= 0 && index <= kVolumeLevels);
+    return *kVolumeLevelIcons[index];
+  }
+
+  int index = static_cast<int>(std::ceil(level * kQsVolumeLevels));
+  DCHECK(index >= 0 && index <= kQsVolumeLevels);
+  return *UnifiedVolumeView::kQsVolumeLevelIcons[index];
 }
-
-// A template class for the UnifiedVolumeView buttons, used by the More button.
-// |T| must be a subtype of |views::Button|.
-template <typename T>
-class UnifiedVolumeViewButton : public T {
- public:
-  static_assert(std::is_base_of<views::Button, T>::value,
-                "T must be a subtype of views::Button");
-
-  // A constructor that forwards |args| to |T|'s constructor, so |args| are the
-  // exact same as required by |T|'s constructor. It sets up the ink drop on the
-  // view.
-  template <typename... Args>
-  explicit UnifiedVolumeViewButton(Args... args)
-      : T(std::forward<Args>(args)...) {
-    StyleUtil::SetUpInkDropForButton(this);
-
-    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                  kTrayItemCornerRadius);
-    T::SetBackground(views::CreateRoundedRectBackground(GetBackgroundColor(),
-                                                        kTrayItemCornerRadius));
-  }
-
-  ~UnifiedVolumeViewButton() override = default;
-
-  void OnThemeChanged() override {
-    T::OnThemeChanged();
-    views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
-    T::background()->SetNativeControlColor(GetBackgroundColor());
-  }
-
-  SkColor GetIconColor() {
-    return AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kButtonIconColor);
-  }
-
-  SkColor GetBackgroundColor() {
-    return AshColorProvider::Get()->GetControlsLayerColor(
-        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
-  }
-};
-
-class MoreButton : public UnifiedVolumeViewButton<views::Button> {
- public:
-  explicit MoreButton(PressedCallback callback)
-      : UnifiedVolumeViewButton(std::move(callback)) {
-    SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal,
-        gfx::Insets((kTrayItemSize -
-                     GetDefaultSizeOfVectorIcon(kUnifiedMenuExpandIcon)) /
-                    2),
-        2));
-
-    more_image_ = AddChildView(std::make_unique<views::ImageView>());
-    more_image_->SetCanProcessEventsWithinSubtree(false);
-    SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO));
-  }
-
-  MoreButton(const MoreButton&) = delete;
-  MoreButton& operator=(const MoreButton&) = delete;
-
-  ~MoreButton() override = default;
-
-  const char* GetClassName() const override { return "MoreButton"; }
-
-  void OnThemeChanged() override {
-    UnifiedVolumeViewButton::OnThemeChanged();
-    const SkColor icon_color = GetIconColor();
-
-    DCHECK(more_image_);
-    auto icon_rotation = base::i18n::IsRTL()
-                             ? SkBitmapOperations::ROTATION_270_CW
-                             : SkBitmapOperations::ROTATION_90_CW;
-    more_image_->SetImage(gfx::ImageSkiaOperations::CreateRotatedImage(
-        CreateVectorIcon(kUnifiedMenuExpandIcon, icon_color), icon_rotation));
-  }
-
- private:
-  views::ImageView* more_image_ = nullptr;
-};
 
 }  // namespace
 
@@ -145,43 +60,62 @@ UnifiedVolumeView::UnifiedVolumeView(
                         controller,
                         kSystemMenuVolumeHighIcon,
                         IDS_ASH_STATUS_TRAY_VOLUME_SLIDER_LABEL),
-      more_button_(new MoreButton(
+      more_button_(AddChildView(std::make_unique<IconButton>(
           base::BindRepeating(&UnifiedVolumeSliderController::Delegate::
                                   OnAudioSettingsButtonClicked,
-                              delegate->weak_ptr_factory_.GetWeakPtr()))) {
+                              delegate->weak_ptr_factory_.GetWeakPtr()),
+          features::IsQsRevampEnabled() ? IconButton::Type::kMediumFloating
+                                        : IconButton::Type::kMedium,
+          &kQuickSettingsRightArrowIcon,
+          IDS_ASH_STATUS_TRAY_AUDIO))) {
   CrasAudioHandler::Get()->AddAudioObserver(this);
-  AddChildView(more_button_);
-  Update(false /* by_user */);
+
+  if (features::IsQsRevampEnabled()) {
+    // TODO(b/257151067): Update the a11y name id.
+    // Adds the live caption button before `more_button_`.
+    AddChildViewAt(
+        std::make_unique<IconButton>(
+            views::Button::PressedCallback(), IconButton::Type::kSmall,
+            &kUnifiedMenuLiveCaptionOffIcon, IDS_ASH_STATUS_TRAY_LIVE_CAPTION,
+            /*is_togglable=*/true,
+            /*has_border=*/true),
+        GetIndexOf(more_button_).value());
+  }
+
+  Update(/*by_user=*/false);
 }
 
 UnifiedVolumeView::~UnifiedVolumeView() {
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
 }
 
-const char* UnifiedVolumeView::GetClassName() const {
-  return "UnifiedVolumeView";
-}
-
 void UnifiedVolumeView::Update(bool by_user) {
-  bool is_muted = CrasAudioHandler::Get()->IsOutputMuted();
   float level = CrasAudioHandler::Get()->GetOutputVolumePercent() / 100.f;
 
-  // To indicate that the volume is muted, set the volume slider to the minimal
-  // visual style.
-  slider()->SetRenderingStyle(
-      is_muted ? views::Slider::RenderingStyle::kMinimalStyle
-               : views::Slider::RenderingStyle::kDefaultStyle);
-  slider()->SetEnabled(!CrasAudioHandler::Get()->IsOutputMutedByPolicy());
+  if (!features::IsQsRevampEnabled()) {
+    bool is_muted = CrasAudioHandler::Get()->IsOutputMuted();
+    // To indicate that the volume is muted, set the volume slider to the
+    // minimal visual style.
+    slider()->SetRenderingStyle(
+        is_muted ? views::Slider::RenderingStyle::kMinimalStyle
+                 : views::Slider::RenderingStyle::kDefaultStyle);
+    slider()->SetEnabled(!CrasAudioHandler::Get()->IsOutputMutedByPolicy());
 
-  // The button should be gray when muted and colored otherwise.
-  button()->SetToggled(!is_muted);
-  button()->SetVectorIcon(is_muted ? kUnifiedMenuVolumeMuteIcon
-                                   : GetVolumeIconForLevel(level));
-  std::u16string state_tooltip_text = l10n_util::GetStringUTF16(
-      is_muted ? IDS_ASH_STATUS_TRAY_VOLUME_STATE_MUTED
-               : IDS_ASH_STATUS_TRAY_VOLUME_STATE_ON);
-  button()->SetTooltipText(l10n_util::GetStringFUTF16(
-      IDS_ASH_STATUS_TRAY_VOLUME, state_tooltip_text));
+    // The button should be gray when muted and colored otherwise.
+    button()->SetToggled(!is_muted);
+    button()->SetVectorIcon(is_muted ? kUnifiedMenuVolumeMuteIcon
+                                     : GetVolumeIconForLevel(level));
+    std::u16string state_tooltip_text = l10n_util::GetStringUTF16(
+        is_muted ? IDS_ASH_STATUS_TRAY_VOLUME_STATE_MUTED
+                 : IDS_ASH_STATUS_TRAY_VOLUME_STATE_ON);
+    button()->SetTooltipText(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_VOLUME, state_tooltip_text));
+  } else {
+    // TODO(b/257151067): Adds tooltip.
+    slider_icon()->SetImage(ui::ImageModel::FromVectorIcon(
+        GetVolumeIconForLevel(level),
+        cros_tokens::kCrosSysSystemOnPrimaryContainer, kQsSliderIconSize));
+  }
 
   // Slider's value is in finer granularity than audio volume level(0.01),
   // there will be a small discrepancy between slider's value and volume level
@@ -198,27 +132,30 @@ void UnifiedVolumeView::Update(bool by_user) {
 
 void UnifiedVolumeView::OnOutputNodeVolumeChanged(uint64_t node_id,
                                                   int volume) {
-  Update(true /* by_user */);
+  Update(/*by_user=*/true);
 }
 
 void UnifiedVolumeView::OnOutputMuteChanged(bool mute_on) {
-  Update(true /* by_user */);
+  Update(/*by_user=*/true);
 }
 
 void UnifiedVolumeView::OnAudioNodesChanged() {
-  Update(true /* by_user */);
+  Update(/*by_user=*/true);
 }
 
 void UnifiedVolumeView::OnActiveOutputNodeChanged() {
-  Update(true /* by_user */);
+  Update(/*by_user=*/true);
 }
 
 void UnifiedVolumeView::OnActiveInputNodeChanged() {
-  Update(true /* by_user */);
+  Update(/*by_user=*/true);
 }
 
 void UnifiedVolumeView::ChildVisibilityChanged(views::View* child) {
   Layout();
 }
+
+BEGIN_METADATA(UnifiedVolumeView, views::View)
+END_METADATA
 
 }  // namespace ash

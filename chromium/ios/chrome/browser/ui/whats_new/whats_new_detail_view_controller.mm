@@ -4,8 +4,11 @@
 
 #import "ios/chrome/browser/ui/whats_new/whats_new_detail_view_controller.h"
 
+#import <ostream>
+
 #import "ios/chrome/browser/ui/elements/instruction_view.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_detail_view_action_handler.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_detail_view_delegate.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -22,7 +25,8 @@
 
 namespace {
 
-constexpr CGFloat kDefaultMargin = 16;
+constexpr CGFloat kDefaultMargin = 32;
+constexpr CGFloat kSubtitleTopMargin = 8;
 constexpr CGFloat kActionsBottomMargin = 10;
 constexpr CGFloat kContentWidthMultiplier = 0.8;
 constexpr CGFloat kButtonHorizontalMargin = 4;
@@ -43,7 +47,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
 
 }  // namespace
 
-@interface WhatsNewDetailViewController ()
+@interface WhatsNewDetailViewController () <UIScrollViewDelegate>
 
 // Visible UI components.
 @property(nonatomic, strong) UIScrollView* scrollView;
@@ -100,6 +104,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  self.scrollView.delegate = self;
   self.view.backgroundColor = [UIColor colorNamed:kPrimaryBackgroundColor];
   UIView* instructionView =
       [[InstructionView alloc] initWithList:self.instructionSteps];
@@ -199,7 +204,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
     // Subtitle contraints.
     [self.subtitleLabel.topAnchor
         constraintEqualToAnchor:self.titleLabel.bottomAnchor
-                       constant:kDefaultMargin],
+                       constant:kSubtitleTopMargin],
     [self.subtitleLabel.centerXAnchor
         constraintEqualToAnchor:scrollContentView.centerXAnchor],
     [self.subtitleLabel.widthAnchor
@@ -235,6 +240,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
 - (void)viewDidDisappear:(BOOL)animated {
   if (self.navigationBar) {
     self.navigationBar.translucent = NO;
+    self.navigationBar.prefersLargeTitles = YES;
     self.navigationBar = nil;
   }
   self.actionHandler = nil;
@@ -258,6 +264,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
 
     self.navigationBar = self.navigationController.navigationBar;
     self.navigationBar.translucent = YES;
+    self.navigationBar.prefersLargeTitles = NO;
   }
 }
 
@@ -290,10 +297,8 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
   if (!_titleLabel) {
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.numberOfLines = 0;
-    UIFont* font = [UIFont preferredFontForTextStyle:UIFontTextStyleLargeTitle];
-    UIFontDescriptor* boldFontDescriptor = [font.fontDescriptor
-        fontDescriptorWithSymbolicTraits:UIFontDescriptorTraitBold];
-    _titleLabel.font = [UIFont fontWithDescriptor:boldFontDescriptor size:0];
+    _titleLabel.font =
+        CreateDynamicFont(UIFontTextStyleTitle1, UIFontWeightBold);
     _titleLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
     _titleLabel.text = self.titleText;
     _titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,7 +317,7 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
     _subtitleLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     _subtitleLabel.numberOfLines = 0;
-    _subtitleLabel.textColor = [UIColor colorNamed:kGrey800Color];
+    _subtitleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _subtitleLabel.text = self.subtitleText;
     _subtitleLabel.textAlignment = NSTextAlignmentCenter;
     _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -393,6 +398,17 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
   return _learnMoreActionButton;
 }
 
+#pragma mark - UIScrollViewDelegate
+
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+  DCHECK_EQ(self.scrollView, scrollView);
+  if ([self shouldRemoveNavBarTranslucent]) {
+    self.navigationBar.translucent = NO;
+  } else {
+    self.navigationBar.translucent = YES;
+  }
+}
+
 #pragma mark - Private
 
 - (void)didTapPrimaryActionButton {
@@ -402,6 +418,14 @@ NSString* const kWhatsNewScrollViewAccessibilityIdentifier =
 - (void)didTaplearnMoreActionButton {
   [self.actionHandler didTapLearnMoreButton:self.learnMoreURL type:self.type];
   [self.delegate dismissWhatsNewDetailView:self];
+}
+
+- (BOOL)shouldRemoveNavBarTranslucent {
+  // The navbar should not be translucent if the user scrolls pass the banner
+  // image.
+  return self.scrollView.contentOffset.y >=
+         self.imageView.bounds.size.height -
+             self.navigationBar.bounds.size.height;
 }
 
 @end

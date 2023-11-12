@@ -47,7 +47,7 @@
 #include "third_party/re2/src/re2/re2.h"
 #include "third_party/zlib/zlib.h"
 
-#if BUILDFLAG(IS_POSIX)
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 // Used by PerfettoSystemBackgroundScenario, nogncheck is required because this
 // is only included and used on Android.
 #include "services/tracing/perfetto/system_test_utils.h"  // nogncheck
@@ -112,7 +112,7 @@ std::unique_ptr<tracing::MockConsumer> CreateDefaultConsumer(
 }
 }  // namespace
 }  // namespace content
-#endif  // BUILDFLAG(IS_POSIX)
+#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
 using base::trace_event::TraceLog;
 
@@ -139,7 +139,7 @@ void WaitForCondition(base::RepeatingCallback<bool()> condition,
   const base::TimeTicks start_time = base::TimeTicks::Now();
   while (!condition.Run() && (base::TimeTicks::Now() - start_time < kTimeout)) {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   }
@@ -230,10 +230,7 @@ class TestBackgroundTracingHelper
     wait_for_scenario_aborted_.Quit();
   }
 
-  void OnTracingEnabled(
-      BackgroundTracingConfigImpl::CategoryPreset preset) override {
-    wait_for_tracing_enabled_.Quit();
-  }
+  void OnTracingEnabled() override { wait_for_tracing_enabled_.Quit(); }
 
   void WaitForScenarioActivated() { wait_for_scenario_activated_.Run(); }
   void WaitForScenarioAborted() { wait_for_scenario_aborted_.Run(); }
@@ -452,7 +449,6 @@ std::unique_ptr<BackgroundTracingConfig> CreateReactiveConfig() {
     base::Value::Dict rules_dict;
     rules_dict.Set("rule", "TRACE_ON_NAVIGATION_UNTIL_TRIGGER_OR_FULL");
     rules_dict.Set("trigger_name", "reactive_test");
-    rules_dict.Set("stop_tracing_on_repeated_reactive", true);
     rules_list.Append(std::move(rules_dict));
   }
   dict.Set("configs", std::move(rules_list));
@@ -1597,250 +1593,6 @@ IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
   EXPECT_TRUE(trace_receiver_helper.trace_received());
 }
 
-// This tests that reactive mode records and terminates with a second trigger.
-IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
-                       ReactiveSecondTriggerTermination) {
-  TestBackgroundTracingHelper background_tracing_helper;
-  TestTraceReceiverHelper trace_receiver_helper;
-
-  std::unique_ptr<BackgroundTracingConfig> config = CreateReactiveConfig();
-
-  BackgroundTracingManager::TriggerHandle handle =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test");
-
-  EXPECT_TRUE(BackgroundTracingManager::GetInstance()
-                  .SetActiveScenarioWithReceiveCallback(
-                      std::move(config),
-                      trace_receiver_helper.get_receive_callback(),
-                      BackgroundTracingManager::NO_DATA_FILTERING));
-
-  TestTriggerHelper trigger_helper;
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-  // second trigger to terminate.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-
-  trace_receiver_helper.WaitForTraceReceived();
-  BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
-  background_tracing_helper.WaitForScenarioAborted();
-
-  EXPECT_TRUE(trace_receiver_helper.trace_received());
-}
-
-// This tests that reactive mode uploads on a second set of triggers.
-IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
-                       ReactiveSecondUpload) {
-  TestBackgroundTracingHelper background_tracing_helper;
-  TestMultipleTraceReceiverHelper trace_receiver_helper;
-
-  std::unique_ptr<BackgroundTracingConfig> config = CreateReactiveConfig();
-
-  BackgroundTracingManager::TriggerHandle handle =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test");
-
-  EXPECT_TRUE(BackgroundTracingManager::GetInstance()
-                  .SetActiveScenarioWithReceiveCallback(
-                      std::move(config),
-                      trace_receiver_helper.get_receive_callback(),
-                      BackgroundTracingManager::NO_DATA_FILTERING));
-
-  background_tracing_helper.WaitForScenarioActivated();
-
-  TestTriggerHelper trigger_helper;
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-
-  // second trigger to terminate.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-
-  trace_receiver_helper.WaitForTraceReceived(0);
-  EXPECT_TRUE(trace_receiver_helper.trace_received(0));
-
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-  // second trigger to terminate.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-
-  trace_receiver_helper.WaitForTraceReceived(1);
-  EXPECT_TRUE(trace_receiver_helper.trace_received(1));
-
-  // Abort the scenario.
-  BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
-  background_tracing_helper.WaitForScenarioAborted();
-}
-
-// This tests that reactive mode only terminates with the same trigger.
-IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
-                       ReactiveSecondTriggerMustMatchForTermination) {
-  TestBackgroundTracingHelper background_tracing_helper;
-  TestTraceReceiverHelper trace_receiver_helper;
-
-  base::Value::Dict dict;
-  dict.Set("mode", "REACTIVE_TRACING_MODE");
-  dict.Set("custom_categories",
-           tracing::TraceStartupConfig::kDefaultStartupCategories);
-
-  base::Value::List rules_list;
-  {
-    base::Value::Dict rules_dict;
-    rules_dict.Set("rule", "TRACE_ON_NAVIGATION_UNTIL_TRIGGER_OR_FULL");
-    rules_dict.Set("trigger_name", "reactive_test1");
-    rules_dict.Set("stop_tracing_on_repeated_reactive", true);
-    rules_dict.Set("trigger_delay", 10);
-    rules_list.Append(std::move(rules_dict));
-  }
-  {
-    base::Value::Dict rules_dict;
-    rules_dict.Set("rule", "TRACE_ON_NAVIGATION_UNTIL_TRIGGER_OR_FULL");
-    rules_dict.Set("trigger_name", "reactive_test2");
-    rules_dict.Set("stop_tracing_on_repeated_reactive", true);
-    rules_dict.Set("trigger_delay", 10);
-    rules_list.Append(std::move(rules_dict));
-  }
-  dict.Set("configs", std::move(rules_list));
-
-  std::unique_ptr<BackgroundTracingConfig> config(
-      BackgroundTracingConfigImpl::FromDict(std::move(dict)));
-
-  BackgroundTracingManager::TriggerHandle handle1 =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test1");
-  BackgroundTracingManager::TriggerHandle handle2 =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test2");
-
-  EXPECT_TRUE(BackgroundTracingManager::GetInstance()
-                  .SetActiveScenarioWithReceiveCallback(
-                      std::move(config),
-                      trace_receiver_helper.get_receive_callback(),
-                      BackgroundTracingManager::NO_DATA_FILTERING));
-
-  background_tracing_helper.WaitForScenarioActivated();
-
-  TestTriggerHelper trigger_helper;
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle1, trigger_helper.receive_closure(true));
-
-  // This is expected to fail since we triggered with handle1.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle2, trigger_helper.receive_closure(false));
-
-  // second trigger to terminate.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle1, trigger_helper.receive_closure(true));
-
-  trace_receiver_helper.WaitForTraceReceived();
-  BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
-  background_tracing_helper.WaitForScenarioAborted();
-
-  EXPECT_TRUE(trace_receiver_helper.trace_received());
-}
-
-// This tests a third trigger in reactive more does not start another trace.
-IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
-                       ReactiveThirdTriggerTimeout) {
-  TestBackgroundTracingHelper background_tracing_helper;
-  TestTraceReceiverHelper trace_receiver_helper;
-
-  std::unique_ptr<BackgroundTracingConfig> config = CreateReactiveConfig();
-
-  BackgroundTracingManager::TriggerHandle handle =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test");
-
-  EXPECT_TRUE(BackgroundTracingManager::GetInstance()
-                  .SetActiveScenarioWithReceiveCallback(
-                      std::move(config),
-                      trace_receiver_helper.get_receive_callback(),
-                      BackgroundTracingManager::NO_DATA_FILTERING));
-
-  background_tracing_helper.WaitForScenarioActivated();
-
-  TestTriggerHelper trigger_helper;
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-  // second trigger to terminate.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(true));
-  // third trigger to trigger again, fails as it is still gathering.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      handle, trigger_helper.receive_closure(false));
-
-  trace_receiver_helper.WaitForTraceReceived();
-  BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
-  background_tracing_helper.WaitForScenarioAborted();
-
-  EXPECT_TRUE(trace_receiver_helper.trace_received());
-}
-
-// This tests that reactive mode only terminates with a repeated trigger
-// if the config specifies that it should.
-// Flaky on all major platforms: crbug.com/1156793.
-IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
-                       DISABLED_ReactiveSecondTriggerIgnored) {
-  TestBackgroundTracingHelper background_tracing_helper;
-  TestTraceReceiverHelper trace_receiver_helper;
-
-  base::Value::Dict dict;
-  dict.Set("mode", "REACTIVE_TRACING_MODE");
-  dict.Set("custom_categories",
-           tracing::TraceStartupConfig::kDefaultStartupCategories);
-
-  base::Value::List rules_list;
-  {
-    base::Value::Dict rules_dict;
-    rules_dict.Set("rule", "TRACE_ON_NAVIGATION_UNTIL_TRIGGER_OR_FULL");
-    rules_dict.Set("trigger_name", "reactive_test");
-    rules_dict.Set("stop_tracing_on_repeated_reactive", false);
-    rules_dict.Set("trigger_delay", 10);
-    rules_list.Append(std::move(rules_dict));
-  }
-  dict.Set("configs", std::move(rules_list));
-
-  std::unique_ptr<BackgroundTracingConfig> config(
-      BackgroundTracingConfigImpl::FromDict(std::move(dict)));
-
-  BackgroundTracingManager::TriggerHandle trigger_handle =
-      BackgroundTracingManager::GetInstance().RegisterTriggerType(
-          "reactive_test");
-
-  EXPECT_TRUE(BackgroundTracingManager::GetInstance()
-                  .SetActiveScenarioWithReceiveCallback(
-                      std::move(config),
-                      trace_receiver_helper.get_receive_callback(),
-                      BackgroundTracingManager::NO_DATA_FILTERING));
-
-  TestTriggerHelper trigger_helper;
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      trigger_handle, trigger_helper.receive_closure(true));
-
-  background_tracing_helper.WaitForTracingEnabled();
-
-  // This is expected to fail since we already triggered.
-  BackgroundTracingManager::GetInstance().TriggerNamedEvent(
-      trigger_handle, trigger_helper.receive_closure(false));
-
-  // Since we specified a delay in the scenario, we should still be tracing
-  // at this point.
-  EXPECT_TRUE(
-      BackgroundTracingManagerImpl::GetInstance().IsTracingForTesting());
-
-  BackgroundTracingManagerImpl::GetInstance()
-      .GetActiveScenarioForTesting()
-      ->FireTimerForTesting();
-
-  trace_receiver_helper.WaitForTraceReceived();
-  BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
-  background_tracing_helper.WaitForScenarioAborted();
-
-  EXPECT_TRUE(trace_receiver_helper.trace_received());
-}
-
 IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
                        SetupStartupTracing) {
   TestBackgroundTracingHelper background_tracing_helper;
@@ -2076,7 +1828,10 @@ IN_PROC_BROWSER_TEST_F(ProtoBackgroundTracingTest, ReceiveCallback) {
   EXPECT_FALSE(checker.stats().has_interned_log_messages);
 }
 
-#if BUILDFLAG(IS_POSIX)
+// In SDK build, SystemProducer is not used. System tracing is done via the
+// tracing muxer, so this test's setup is irrelevant.
+// TODO(khokhlov): Figure out a way to test system tracing in SDK build.
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
                        PerfettoSystemBackgroundScenarioDefaultName) {
   // This test will ensure that a BackgroundTracing scenario set to SYSTEM mode
@@ -2214,6 +1969,6 @@ IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
   // received we won't see any packets and |received_packets()| will be 0.
   EXPECT_LT(0u, system_consumer->received_packets());
 }
-#endif  // BUILDFLAG(IS_POSIX)
+#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
 }  // namespace content

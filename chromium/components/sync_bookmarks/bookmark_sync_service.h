@@ -27,6 +27,10 @@ namespace favicon {
 class FaviconService;
 }
 
+namespace file_sync {
+class SyncedFileStore;
+}  // namespace file_sync
+
 namespace sync_bookmarks {
 class BookmarkModelTypeProcessor;
 
@@ -59,6 +63,11 @@ class BookmarkSyncService : public KeyedService {
   // before the processor starts receiving updates.
   virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
   GetBookmarkSyncControllerDelegate(favicon::FaviconService* favicon_service);
+
+  // For integration tests.
+  void SetBookmarksLimitForTesting(size_t limit);
+
+  void SetVivaldiSyncedFileStore(file_sync::SyncedFileStore* synced_file_store);
 
  private:
   // BookmarkModelTypeProcessor handles communications between sync engine and

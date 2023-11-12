@@ -16,11 +16,9 @@
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/autofill_assistant/core/public/autofill_assistant_intent.h"
+#include "components/autofill/core/common/form_interactions_flow.h"
 
 namespace autofill {
-
-class LogManager;
 
 // Utility to log autofill form events in the relevant histograms depending on
 // the presence of server and/or local data.
@@ -30,7 +28,7 @@ class FormEventLoggerBase {
       const std::string& form_type_name,
       bool is_in_any_main_frame,
       AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
-      LogManager* log_manager);
+      AutofillClient* client);
 
   inline void set_server_record_type_count(size_t server_record_type_count) {
     server_record_type_count_ = server_record_type_count;
@@ -69,9 +67,6 @@ class FormEventLoggerBase {
   void OnTypedIntoNonFilledField();
   void OnEditedAutofilledField();
 
-  void SetAutofillAssistantIntentForFilling(
-      const autofill_assistant::AutofillAssistantIntent intent);
-
   // See BrowserAutofillManager::SuggestionContext for the definitions of the
   // AblationGroup parameters.
   void SetAblationStatus(AblationGroup ablation_group,
@@ -84,7 +79,15 @@ class FormEventLoggerBase {
 
   void Log(FormEvent event, const FormStructure& form) const;
 
-  autofill_assistant::AutofillAssistantIntent autofill_assistant_intent() const;
+  void OnTextFieldDidChange(const FieldGlobalId& field_global_id);
+
+  const FormInteractionCounts& form_interaction_counts() const {
+    return form_interaction_counts_;
+  }
+
+  const FormInteractionsFlowId& form_interactions_flow_id_for_test() const {
+    return flow_id_;
+  }
 
  protected:
   virtual ~FormEventLoggerBase();
@@ -130,6 +133,8 @@ class FormEventLoggerBase {
   // called in the destructor.
   void RecordAblationMetrics();
 
+  void UpdateFlowId();
+
   // Constructor parameters.
   std::string form_type_name_;
   bool is_in_any_main_frame_;
@@ -158,9 +163,14 @@ class FormEventLoggerBase {
   // The last field that was polled for suggestions.
   FormFieldData last_polled_field_;
 
-  // The Autofill Assistant intent triggering Autofill, if existing
-  autofill_assistant::AutofillAssistantIntent intent_ =
-      autofill_assistant::AutofillAssistantIntent::UNDEFINED_INTENT;
+  // Used to count consecutive modifications on the same field as one change.
+  FieldGlobalId last_field_global_id_modified_by_user_;
+  // Keeps counts of Autofill fills and form elements that were modified by the
+  // user.
+  FormInteractionCounts form_interaction_counts_ = {};
+  // Unique random id that is set on the first form interaction and identical
+  // during the flow.
+  FormInteractionsFlowId flow_id_;
 
   // Form types of the submitted form
   DenseSet<FormType> submitted_form_types_;
@@ -170,7 +180,7 @@ class FormEventLoggerBase {
       form_interactions_ukm_logger_;
 
   // Weak reference.
-  const raw_ptr<LogManager> log_manager_;
+  const raw_ref<AutofillClient> client_;
 
   AutofillSyncSigninState sync_state_ = AutofillSyncSigninState::kNumSyncStates;
 };

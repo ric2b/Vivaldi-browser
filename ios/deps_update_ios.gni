@@ -3,7 +3,7 @@
 update_template_instance("//ios/chrome/app:chrome") {
   deps += [
     "//vivaldi/ios/sync",
-    "//vivaldi/prefs:prefs_definitions",
+    "//vivaldi/vivapp:ios_vivaldi_resources",
   ]
 }
 
@@ -13,19 +13,15 @@ update_target("//components/browser_sync:browser_sync") {
   ]
 }
 
-update_target("//ios/chrome/browser:browser_impl") {
-  deps += [
-    "//vivaldi/prefs",
-  ]
-}
-
 update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
   deps -= [
     "resources:toolbar_back",
     "resources:toolbar_forward",
     "resources:toolbar_new_tab_page",
     "resources:toolbar_stop",
+    "resources:toolbar_reload",
     "resources:toolbar_switcher",
+    "resources:toolbar_share",
     "resources:tab_toolbar_button_color_highlighted",
     "resources:tab_toolbar_button_color_highlighted_incognito",
   ]
@@ -36,6 +32,11 @@ update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_stop",
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_switcher",
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_menu",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_panel",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_share",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_more",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_reload",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_search",
     "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted",
     "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted_incognito",
   ]
@@ -181,21 +182,23 @@ update_target("//ios/chrome/browser/ui/ntp:coordinator") {
 }
 
 update_target("//ios/chrome/browser/ui/tabs:tabs") {
+  deps -= [
+    "resources:tabstrip_new_tab",
+  ]
   deps += [
     "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_strip_background_color",
     "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_selected_color",
     "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_not_selected_color",
     "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_selected_tint_color",
     "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_not_selected_tint_color",
-    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_primary_toolbar_panel_button",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:tabstrip_new_tab",
   ]
 }
 
 update_target("//ios/chrome/browser/ui/bookmarks:bookmarks_ui") {
-    deps += [
+  deps += [
     "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmarks_folder",
     "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_speed_dial_folder",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmark_text_field_underline_color",
     "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivald_bookmark_folder_selection_chevron",
     "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivald_bookmark_folder_selection_checkmark",
     "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmark_add_new_folder",
@@ -214,3 +217,44 @@ update_target("//ios/chrome/browser/ui/badges:badges") {
     "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_small_badge",
   ]
 }
+
+update_target("//ios/chrome/browser/ui/location_bar:location_bar") {
+  deps += [
+    "//vivaldi/ios/ui/ad_tracker_blocker:vivaldi_ad_tracker_blocker",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/settings:settings") {
+  deps += [
+    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
+    "//vivaldi/ios/ui/settings/start_page:start_page_settings",
+    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
+    "//vivaldi/ios/ui/settings/resources:main_settings",
+  ]
+}
+
+update_target("//ios/chrome/common/ui/colors:colors") {
+  deps += [
+    "//vivaldi/ios/ui/vivaldi_colors:vivaldi_colors",
+  ]
+}
+
+update_target("//ios/chrome/common/ui/util:util") {
+  deps += [
+    "//vivaldi/ios/ui/custom_views:custom_views",
+  ]
+}
+
+update_target("//ios/chrome/browser/browser_state:browser_state_impl") {
+  deps += [
+    "//vivaldi/browser:default_bookmarks",
+    "//vivaldi/ios/notes:notes"
+  ]
+}
+
+update_target("//ios/chrome/browser/web:web_internal") {
+  deps += [
+    "//vivaldi/browser:stats_reporter"
+  ]
+}
+

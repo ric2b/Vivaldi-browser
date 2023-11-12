@@ -21,14 +21,13 @@ IBANManager::IBANManager(PersonalDataManager* personal_data_manager,
 IBANManager::~IBANManager() = default;
 
 bool IBANManager::OnGetSingleFieldSuggestions(
-    int query_id,
-    bool is_autocomplete_enabled,
-    bool autoselect_first_suggestion,
+    AutoselectFirstSuggestion autoselect_first_suggestion,
     const FormFieldData& field,
+    const AutofillClient& client,
     base::WeakPtr<SuggestionsHandler> handler,
     const SuggestionsContext& context) {
   if (!is_off_the_record_ && personal_data_manager_) {
-    std::vector<IBAN*> ibans = personal_data_manager_->GetIBANs();
+    std::vector<IBAN*> ibans = personal_data_manager_->GetLocalIBANs();
     if (!ibans.empty()) {
       // Rank the IBANs by ranking score (see AutoFillDataModel for details).
       base::Time comparison_time = AutofillClock::Now();
@@ -36,9 +35,9 @@ bool IBANManager::OnGetSingleFieldSuggestions(
           ibans, [comparison_time](const IBAN* iban0, const IBAN* iban1) {
             return iban0->HasGreaterRankingThan(iban1, comparison_time);
           });
-      SendIBANSuggestions(ibans,
-                          QueryHandler(query_id, autoselect_first_suggestion,
-                                       field.value, handler));
+      SendIBANSuggestions(
+          ibans, QueryHandler(field.global_id(), autoselect_first_suggestion,
+                              field.value, handler));
       return true;
     }
   }
@@ -66,15 +65,14 @@ void IBANManager::SendIBANSuggestions(const std::vector<IBAN*>& ibans,
     // Return empty suggestions to query handler. This will result in no
     // suggestions being displayed.
     query_handler.handler_->OnSuggestionsReturned(
-        query_handler.client_query_id_,
-        query_handler.autoselect_first_suggestion_, {});
+        query_handler.field_id_, query_handler.autoselect_first_suggestion_,
+        {});
     return;
   }
 
   // Return suggestions to query handler.
   query_handler.handler_->OnSuggestionsReturned(
-      query_handler.client_query_id_,
-      query_handler.autoselect_first_suggestion_,
+      query_handler.field_id_, query_handler.autoselect_first_suggestion_,
       AutofillSuggestionGenerator::GetSuggestionsForIBANs(ibans));
 }
 

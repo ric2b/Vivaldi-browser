@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/no_destructor.h"
@@ -27,6 +28,7 @@
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/time_domain.h"
 #include "base/task/simple_task_executor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_impl.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind.h"
@@ -38,7 +40,6 @@
 #include "base/threading/thread_checker_impl.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -99,15 +100,15 @@ class TickClockBasedClock : public Clock {
  public:
   explicit TickClockBasedClock(const TickClock* tick_clock)
       : tick_clock_(*tick_clock),
-        start_ticks_(tick_clock_.NowTicks()),
+        start_ticks_(tick_clock_->NowTicks()),
         start_time_(Time::UnixEpoch()) {}
 
   Time Now() const override {
-    return start_time_ + (tick_clock_.NowTicks() - start_ticks_);
+    return start_time_ + (tick_clock_->NowTicks() - start_ticks_);
   }
 
  private:
-  const TickClock& tick_clock_;
+  const raw_ref<const TickClock> tick_clock_;
   const TimeTicks start_ticks_;
   const Time start_time_;
 };
@@ -406,7 +407,7 @@ TaskEnvironment::TaskEnvironment(
                     BindRepeating(&sequence_manager::SequenceManager::
                                       DescribeAllPendingTasks,
                                   Unretained(sequence_manager_.get())))) {
-  CHECK(!base::ThreadTaskRunnerHandle::IsSet());
+  CHECK(!base::SingleThreadTaskRunner::HasCurrentDefault());
   // If |subclass_creates_default_taskrunner| is true then initialization is
   // deferred until DeferredInitFromSubclass().
   if (!subclass_creates_default_taskrunner) {
@@ -418,7 +419,7 @@ TaskEnvironment::TaskEnvironment(
     if (mock_time_domain_)
       sequence_manager_->SetTimeDomain(mock_time_domain_.get());
     simple_task_executor_ = std::make_unique<SimpleTaskExecutor>(task_runner_);
-    CHECK(base::ThreadTaskRunnerHandle::IsSet())
+    CHECK(base::SingleThreadTaskRunner::HasCurrentDefault())
         << "ThreadTaskRunnerHandle should've been set now.";
     CompleteInitialization();
   }

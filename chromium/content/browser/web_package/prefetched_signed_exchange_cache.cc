@@ -13,7 +13,6 @@
 #include "components/link_header_util/link_header_util.h"
 #include "content/browser/loader/cross_origin_read_blocking_checker.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
-#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -38,6 +37,7 @@
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
@@ -497,9 +497,10 @@ class PrefetchedNavigationLoaderInterceptor
         tentative_resource_request.url == exchange_->outer_url()) {
       state_ = State::kOuterRequestRequested;
       std::move(callback).Run(
-          base::MakeRefCounted<SingleRequestURLLoaderFactory>(base::BindOnce(
-              &PrefetchedNavigationLoaderInterceptor::StartRedirectResponse,
-              weak_factory_.GetWeakPtr())));
+          base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
+              base::BindOnce(
+                  &PrefetchedNavigationLoaderInterceptor::StartRedirectResponse,
+                  weak_factory_.GetWeakPtr())));
       return;
     }
     if (tentative_resource_request.url == exchange_->inner_url()) {
@@ -514,9 +515,10 @@ class PrefetchedNavigationLoaderInterceptor
       } else {
         state_ = State::kInnerResponseRequested;
         std::move(callback).Run(
-            base::MakeRefCounted<SingleRequestURLLoaderFactory>(base::BindOnce(
-                &PrefetchedNavigationLoaderInterceptor::StartInnerResponse,
-                weak_factory_.GetWeakPtr())));
+            base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
+                base::BindOnce(
+                    &PrefetchedNavigationLoaderInterceptor::StartInnerResponse,
+                    weak_factory_.GetWeakPtr())));
         return;
       }
     }
@@ -551,7 +553,6 @@ class PrefetchedNavigationLoaderInterceptor
         request.url, request.trusted_params->isolation_info.site_for_cookies(),
         *request.trusted_params->isolation_info.top_frame_origin(),
         std::move(match_options),
-        /*partitioned_cookies_runtime_feature_enabled=*/false,
         base::BindOnce(&PrefetchedNavigationLoaderInterceptor::OnGetCookies,
                        weak_factory_.GetWeakPtr(), std::move(callback),
                        std::move(fallback_callback)));
@@ -570,9 +571,10 @@ class PrefetchedNavigationLoaderInterceptor
     }
     state_ = State::kInnerResponseRequested;
     std::move(callback).Run(
-        base::MakeRefCounted<SingleRequestURLLoaderFactory>(base::BindOnce(
-            &PrefetchedNavigationLoaderInterceptor::StartInnerResponse,
-            weak_factory_.GetWeakPtr())));
+        base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
+            base::BindOnce(
+                &PrefetchedNavigationLoaderInterceptor::StartInnerResponse,
+                weak_factory_.GetWeakPtr())));
   }
 
   void StartRedirectResponse(
@@ -823,7 +825,7 @@ PrefetchedSignedExchangeCache::GetInfoListForNavigation(
     const PrefetchedSignedExchangeCacheEntry& main_exchange,
     const base::Time& verification_time,
     int frame_tree_node_id,
-    const net::NetworkAnonymizationKey& network_isolation_key) {
+    const net::NetworkAnonymizationKey& network_anonymization_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   const url::Origin outer_url_origin =
@@ -859,7 +861,7 @@ PrefetchedSignedExchangeCache::GetInfoListForNavigation(
       ++exchanges_it;
       auto reporter = SignedExchangeReporter::MaybeCreate(
           exchange->outer_url(), main_exchange.outer_url().spec(),
-          *exchange->outer_response(), network_isolation_key,
+          *exchange->outer_response(), network_anonymization_key,
           frame_tree_node_id);
       if (reporter) {
         reporter->set_cert_server_ip_address(

@@ -23,7 +23,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/chromeos/devicetype_utils.h"
-#include "ui/chromeos/strings/network_element_localized_strings_provider.h"
+#include "ui/chromeos/strings/network/network_element_localized_strings_provider.h"
 #include "ui/resources/grit/webui_generated_resources.h"
 
 namespace ash {
@@ -234,6 +234,7 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_BATTERY_CUTOFF_SHUTDOWN_BUTTON},
       {"rmaLogsSaveSuccessText", IDS_SHIMLESS_RMA_LOGS_SAVE_SUCCESS},
       {"rmaLogsSaveFailText", IDS_SHIMLESS_RMA_LOGS_SAVE_FAIL},
+      {"rmaLogsSaveUsbNotFound", IDS_SHIMLESS_RMA_LOGS_SAVE_USB_NOT_FOUND},
       // Powerwash dialog
       {"powerwashDialogTitle", IDS_SHIMLESS_RMA_POWERWASH_DIALOG_TITLE},
       {"powerwashDialogShutdownDescription",
@@ -370,7 +371,7 @@ void AddDevicePlaceholderStrings(content::WebUIDataSource* html_source) {
 void AddFeatureFlags(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "osUpdateEnabled",
-      base::FeatureList::IsEnabled(chromeos::features::kShimlessRMAOsUpdate));
+      base::FeatureList::IsEnabled(features::kShimlessRMAOsUpdate));
 }
 
 }  // namespace

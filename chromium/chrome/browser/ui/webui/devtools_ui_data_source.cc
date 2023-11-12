@@ -251,8 +251,7 @@ void DevToolsDataSource::StartRemoteDataRequest(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: YES
-          cookies_store: "user"
+          cookies_allowed: NO
           setting: "This feature cannot be disabled by settings."
           chrome_policy {
             DeveloperToolsAvailability {
@@ -291,8 +290,7 @@ void DevToolsDataSource::StartCustomDataRequest(
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: YES
-          cookies_store: "user"
+          cookies_allowed: NO
           setting: "This feature cannot be disabled by settings."
           chrome_policy {
             DeveloperToolsAvailability {
@@ -314,6 +312,7 @@ void DevToolsDataSource::StartNetworkRequest(
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = url;
   request->load_flags = load_flags;
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 
   auto request_iter = pending_requests_.emplace(pending_requests_.begin());
   request_iter->callback = std::move(callback);
@@ -332,7 +331,7 @@ scoped_refptr<base::RefCountedMemory> ReadFileForDevTools(
     LOG(ERROR) << "Failed to read " << path;
     return CreateNotFoundResponse();
   }
-  return base::RefCountedString::TakeString(&buffer);
+  return base::MakeRefCounted<base::RefCountedString>(std::move(buffer));
 }
 
 void DevToolsDataSource::StartFileRequest(const std::string& path,
@@ -361,9 +360,9 @@ void DevToolsDataSource::OnLoadComplete(
     std::list<PendingRequest>::iterator request_iter,
     std::unique_ptr<std::string> response_body) {
   std::move(request_iter->callback)
-      .Run(response_body
-               ? base::RefCountedString::TakeString(response_body.get())
-               : CreateNotFoundResponse());
+      .Run(response_body ? base::MakeRefCounted<base::RefCountedString>(
+                               std::move(*response_body))
+                         : CreateNotFoundResponse());
   pending_requests_.erase(request_iter);
 }
 

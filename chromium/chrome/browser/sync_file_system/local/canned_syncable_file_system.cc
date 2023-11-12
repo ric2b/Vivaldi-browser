@@ -5,7 +5,7 @@
 #include "chrome/browser/sync_file_system/local/canned_syncable_file_system.h"
 
 #include <stddef.h>
-#include <algorithm>
+
 #include <iterator>
 #include <utility>
 
@@ -15,10 +15,10 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/file_change.h"
 #include "chrome/browser/sync_file_system/local/local_file_change_tracker.h"
 #include "chrome/browser/sync_file_system/local/local_file_sync_context.h"
@@ -76,7 +76,8 @@ R RunOnThread(base::SingleThreadTaskRunner* task_runner,
       base::BindOnce(std::move(task),
                      base::BindRepeating(
                          &AssignAndQuit<R>,
-                         base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
+                         base::RetainedRef(
+                             base::SingleThreadTaskRunner::GetCurrentDefault()),
                          run_loop.QuitClosure(), base::Unretained(&result))));
   run_loop.Run();
   return result;
@@ -90,7 +91,7 @@ void RunOnThread(base::SingleThreadTaskRunner* task_runner,
       location, std::move(task),
       base::BindOnce(
           base::IgnoreResult(&base::SingleThreadTaskRunner::PostTask),
-          base::ThreadTaskRunnerHandle::Get(), FROM_HERE,
+          base::SingleThreadTaskRunner::GetCurrentDefault(), FROM_HERE,
           run_loop.QuitClosure()));
   run_loop.Run();
 }
@@ -154,7 +155,7 @@ class DirectoryHelper {
                        bool has_more) {
     DCHECK(entries_out);
     entries_out->reserve(entries_out->size() + entries.size());
-    std::copy(entries.begin(), entries.end(), std::back_inserter(*entries_out));
+    base::ranges::copy(entries, std::back_inserter(*entries_out));
 
     if (!has_more)
       std::move(callback_).Run(error);
@@ -265,8 +266,7 @@ void CannedSyncableFileSystem::SetUp() {
   file_system_context_ = FileSystemContext::Create(
       io_task_runner_, file_task_runner_,
       storage::ExternalMountPoints::CreateRefCounted(),
-      std::move(storage_policy),
-      quota_manager_.get() ? quota_manager_proxy_.get() : nullptr,
+      std::move(storage_policy), quota_manager_proxy_.get(),
       std::move(additional_backends),
       std::vector<storage::URLRequestAutoMountHandler>(), data_dir_.GetPath(),
       options);
@@ -305,7 +305,8 @@ File::Error CannedSyncableFileSystem::OpenFileSystem() {
           &CannedSyncableFileSystem::DoOpenFileSystem, base::Unretained(this),
           base::BindOnce(&CannedSyncableFileSystem::DidOpenFileSystem,
                          base::Unretained(this),
-                         base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
+                         base::RetainedRef(
+                             base::SingleThreadTaskRunner::GetCurrentDefault()),
                          run_loop.QuitClosure())));
   run_loop.Run();
 

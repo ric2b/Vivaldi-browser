@@ -42,7 +42,6 @@ import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -86,7 +85,7 @@ public class StartSurfaceNoTabsTest {
     private final boolean mImmediateReturn;
 
     public StartSurfaceNoTabsTest(boolean useInstantStart, boolean immediateReturn) {
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.INSTANT_START, useInstantStart);
+        ChromeFeatureList.sInstantStart.setForTesting(useInstantStart);
 
         mImmediateReturn = immediateReturn;
     }
@@ -131,7 +130,7 @@ public class StartSurfaceNoTabsTest {
 
         onView(withId(R.id.start_tab_switcher_button))
                 .perform(clickAndPressBackIfAccidentallyLongClicked());
-        onViewWaiting(withId(R.id.secondary_tasks_surface_view));
+        StartSurfaceTestUtils.waitForTabSwitcherVisible(mActivityTestRule.getActivity());
         pressBack();
         onViewWaiting(withId(R.id.primary_tasks_surface_view));
     }

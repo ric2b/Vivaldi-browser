@@ -127,6 +127,17 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromDictionary(
     result->image_search_branding_label =
         base::UTF8ToUTF16(*image_search_branding_label);
   }
+  const base::Value::List* additional_params_list =
+      dict.FindList(DefaultSearchManager::kSearchIntentParams);
+  if (additional_params_list) {
+    for (const auto& additional_param_value : *additional_params_list) {
+      const auto* additional_param = additional_param_value.GetIfString();
+      DCHECK(additional_param && !additional_param->empty());
+      if (additional_param && !additional_param->empty()) {
+        result->search_intent_params.push_back(*additional_param);
+      }
+    }
+  }
   absl::optional<bool> safe_for_autoreplace =
       dict.FindBool(DefaultSearchManager::kSafeForAutoReplace);
   if (safe_for_autoreplace) {
@@ -213,94 +224,97 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromDictionary(
   return result;
 }
 
-std::unique_ptr<base::DictionaryValue> TemplateURLDataToDictionary(
-    const TemplateURLData& data) {
-  auto url_dict = std::make_unique<base::DictionaryValue>();
-  url_dict->SetStringKey(DefaultSearchManager::kID,
-                         base::NumberToString(data.id));
-  url_dict->SetStringKey(DefaultSearchManager::kShortName, data.short_name());
-  url_dict->SetStringKey(DefaultSearchManager::kKeyword, data.keyword());
-  url_dict->SetIntKey(DefaultSearchManager::kPrepopulateID,
-                      data.prepopulate_id);
-  url_dict->SetIntKey(DefaultSearchManager::kStarterPackId,
-                      data.starter_pack_id);
-  url_dict->SetStringKey(DefaultSearchManager::kSyncGUID, data.sync_guid);
+base::Value::Dict TemplateURLDataToDictionary(const TemplateURLData& data) {
+  base::Value::Dict url_dict;
+  url_dict.Set(DefaultSearchManager::kID, base::NumberToString(data.id));
+  url_dict.Set(DefaultSearchManager::kShortName, data.short_name());
+  url_dict.Set(DefaultSearchManager::kKeyword, data.keyword());
+  url_dict.Set(DefaultSearchManager::kPrepopulateID, data.prepopulate_id);
+  url_dict.Set(DefaultSearchManager::kStarterPackId, data.starter_pack_id);
+  url_dict.Set(DefaultSearchManager::kSyncGUID, data.sync_guid);
 
-  url_dict->SetStringKey(DefaultSearchManager::kURL, data.url());
-  url_dict->SetStringKey(DefaultSearchManager::kSuggestionsURL,
-                         data.suggestions_url);
-  url_dict->SetStringKey(DefaultSearchManager::kImageURL, data.image_url);
-  url_dict->SetStringKey(DefaultSearchManager::kNewTabURL, data.new_tab_url);
-  url_dict->SetStringKey(DefaultSearchManager::kContextualSearchURL,
-                         data.contextual_search_url);
-  url_dict->SetStringKey(DefaultSearchManager::kFaviconURL,
-                         data.favicon_url.spec());
-  url_dict->SetStringKey(DefaultSearchManager::kOriginatingURL,
-                         data.originating_url.spec());
-  url_dict->SetStringKey(DefaultSearchManager::kLogoURL, data.logo_url.spec());
-  url_dict->SetStringKey(DefaultSearchManager::kDoodleURL,
-                         data.doodle_url.spec());
+  url_dict.Set(DefaultSearchManager::kURL, data.url());
+  url_dict.Set(DefaultSearchManager::kSuggestionsURL, data.suggestions_url);
+  url_dict.Set(DefaultSearchManager::kImageURL, data.image_url);
+  url_dict.Set(DefaultSearchManager::kNewTabURL, data.new_tab_url);
+  url_dict.Set(DefaultSearchManager::kContextualSearchURL,
+               data.contextual_search_url);
+  url_dict.Set(DefaultSearchManager::kFaviconURL, data.favicon_url.spec());
+  url_dict.Set(DefaultSearchManager::kOriginatingURL,
+               data.originating_url.spec());
+  url_dict.Set(DefaultSearchManager::kLogoURL, data.logo_url.spec());
+  url_dict.Set(DefaultSearchManager::kDoodleURL, data.doodle_url.spec());
 
-  url_dict->SetStringKey(DefaultSearchManager::kSearchURLPostParams,
-                         data.search_url_post_params);
-  url_dict->SetStringKey(DefaultSearchManager::kSuggestionsURLPostParams,
-                         data.suggestions_url_post_params);
-  url_dict->SetStringKey(DefaultSearchManager::kImageURLPostParams,
-                         data.image_url_post_params);
-  url_dict->SetStringKey(DefaultSearchManager::kSideSearchParam,
-                         data.side_search_param);
-  url_dict->SetStringKey(DefaultSearchManager::kSideImageSearchParam,
-                         data.side_image_search_param);
-  url_dict->SetStringKey(DefaultSearchManager::kImageSearchBrandingLabel,
-                         data.image_search_branding_label);
+  url_dict.Set(DefaultSearchManager::kSearchURLPostParams,
+               data.search_url_post_params);
+  url_dict.Set(DefaultSearchManager::kSuggestionsURLPostParams,
+               data.suggestions_url_post_params);
+  url_dict.Set(DefaultSearchManager::kImageURLPostParams,
+               data.image_url_post_params);
+  url_dict.Set(DefaultSearchManager::kSideSearchParam, data.side_search_param);
+  url_dict.Set(DefaultSearchManager::kSideImageSearchParam,
+               data.side_image_search_param);
+  url_dict.Set(DefaultSearchManager::kImageSearchBrandingLabel,
+               data.image_search_branding_label);
 
-  url_dict->SetBoolKey(DefaultSearchManager::kSafeForAutoReplace,
-                       data.safe_for_autoreplace);
+  base::Value::List additional_params_list;
+  for (const auto& additional_param : data.search_intent_params) {
+    additional_params_list.Append(additional_param);
+  }
+  url_dict.Set(DefaultSearchManager::kSearchIntentParams,
+               std::move(additional_params_list));
 
-  url_dict->SetStringKey(
-      DefaultSearchManager::kDateCreated,
-      base::NumberToString(data.date_created.ToInternalValue()));
-  url_dict->SetStringKey(
-      DefaultSearchManager::kLastModified,
-      base::NumberToString(data.last_modified.ToInternalValue()));
-  url_dict->SetStringKey(
-      DefaultSearchManager::kLastVisited,
-      base::NumberToString(data.last_visited.ToInternalValue()));
-  url_dict->SetIntKey(DefaultSearchManager::kUsageCount, data.usage_count);
+  url_dict.Set(DefaultSearchManager::kSafeForAutoReplace,
+               data.safe_for_autoreplace);
 
-  base::ListValue alternate_urls;
+  url_dict.Set(DefaultSearchManager::kDateCreated,
+               base::NumberToString(data.date_created.ToInternalValue()));
+  url_dict.Set(DefaultSearchManager::kLastModified,
+               base::NumberToString(data.last_modified.ToInternalValue()));
+  url_dict.Set(DefaultSearchManager::kLastVisited,
+               base::NumberToString(data.last_visited.ToInternalValue()));
+  url_dict.Set(DefaultSearchManager::kUsageCount, data.usage_count);
+
+  base::Value::List alternate_urls;
   for (const auto& alternate_url : data.alternate_urls)
     alternate_urls.Append(alternate_url);
 
-  url_dict->SetKey(DefaultSearchManager::kAlternateURLs,
-                   std::move(alternate_urls));
+  url_dict.Set(DefaultSearchManager::kAlternateURLs, std::move(alternate_urls));
 
-  base::ListValue encodings;
+  base::Value::List encodings;
   for (const auto& input_encoding : data.input_encodings)
     encodings.Append(input_encoding);
-  url_dict->SetKey(DefaultSearchManager::kInputEncodings, std::move(encodings));
+  url_dict.Set(DefaultSearchManager::kInputEncodings, std::move(encodings));
 
-  url_dict->SetBoolKey(DefaultSearchManager::kCreatedByPolicy,
-                       data.created_by_policy);
-  url_dict->SetBoolKey(DefaultSearchManager::kCreatedFromPlayAPI,
-                       data.created_from_play_api);
-  url_dict->SetBoolKey(DefaultSearchManager::kPreconnectToSearchUrl,
-                       data.preconnect_to_search_url);
-  url_dict->SetBoolKey(DefaultSearchManager::kPrefetchLikelyNavigations,
-                       data.prefetch_likely_navigations);
-  url_dict->SetIntKey(DefaultSearchManager::kIsActive,
-                      static_cast<int>(data.is_active));
+  url_dict.Set(DefaultSearchManager::kCreatedByPolicy, data.created_by_policy);
+  url_dict.Set(DefaultSearchManager::kCreatedFromPlayAPI,
+               data.created_from_play_api);
+  url_dict.Set(DefaultSearchManager::kPreconnectToSearchUrl,
+               data.preconnect_to_search_url);
+  url_dict.Set(DefaultSearchManager::kPrefetchLikelyNavigations,
+               data.prefetch_likely_navigations);
+  url_dict.Set(DefaultSearchManager::kIsActive,
+               static_cast<int>(data.is_active));
+
   std::string position;
   std::string position_encoded;
   data.vivaldi_position.SerializeToString(&position);
   base::Base64Encode(position, &position_encoded);
-  url_dict->SetString(DefaultSearchManager::kPosition, position_encoded);
+  url_dict.Set(DefaultSearchManager::kPosition, position_encoded);
+
   return url_dict;
 }
 
 std::unique_ptr<TemplateURLData> TemplateURLDataFromPrepopulatedEngine(
     const TemplateURLPrepopulateData::PrepopulatedEngine& engine) {
-  base::ListValue alternate_urls;
+  std::vector<std::string> search_intent_params;
+  if (engine.search_intent_params) {
+    for (size_t i = 0; i < engine.search_intent_params_size; ++i) {
+      search_intent_params.emplace_back(engine.search_intent_params[i]);
+    }
+  }
+
+  base::Value::List alternate_urls;
   if (engine.alternate_urls) {
     for (size_t i = 0; i < engine.alternate_urls_size; ++i)
       alternate_urls.Append(std::string(engine.alternate_urls[i]));
@@ -322,8 +336,9 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromPrepopulatedEngine(
       ToStringPiece(engine.image_url_post_params),
       ToStringPiece(engine.side_search_param),
       ToStringPiece(engine.side_image_search_param),
-      ToStringPiece(engine.favicon_url), ToStringPiece(engine.encoding),
-      image_search_branding_label, alternate_urls,
+      std::move(search_intent_params), ToStringPiece(engine.favicon_url),
+      ToStringPiece(engine.encoding), image_search_branding_label,
+      alternate_urls,
       ToStringPiece(engine.preconnect_to_search_url) == "ALLOWED",
       ToStringPiece(engine.prefetch_likely_navigations) == "ALLOWED",
       engine.id);
@@ -365,8 +380,9 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
   if (!name.empty() && !keyword.empty() && !search_url.empty() &&
       !favicon_url.empty() && !encoding.empty() && id.has_value()) {
     // These fields are optional.
-    base::Value empty_list;
-    const base::Value* alternate_urls = engine.FindListKey("alternate_urls");
+    base::Value::List empty_list;
+    const base::Value::List* alternate_urls =
+        engine.GetDict().FindList("alternate_urls");
     if (!alternate_urls)
       alternate_urls = &empty_list;
 
@@ -382,6 +398,7 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
     std::string side_search_param;
     std::string side_image_search_param;
     std::u16string image_search_branding_label;
+    std::vector<std::string> search_intent_params;
     std::string preconnect_to_search_url;
     std::string prefetch_likely_navigations;
 
@@ -433,6 +450,16 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
     if (string_value) {
       image_search_branding_label = base::UTF8ToUTF16(*string_value);
     }
+    const base::Value::List* additional_params_list =
+        engine.GetDict().FindList(DefaultSearchManager::kSearchIntentParams);
+    if (additional_params_list) {
+      for (const auto& additional_param_value : *additional_params_list) {
+        const auto* additional_param = additional_param_value.GetIfString();
+        if (additional_param && !additional_param->empty()) {
+          search_intent_params.push_back(*additional_param);
+        }
+      }
+    }
     string_value = engine.FindStringKey("preconnect_to_search_url");
     if (string_value) {
       preconnect_to_search_url = *string_value;
@@ -446,8 +473,8 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
         name, keyword, search_url, suggest_url, image_url, new_tab_url,
         contextual_search_url, logo_url, doodle_url, search_url_post_params,
         suggest_url_post_params, image_url_post_params, side_search_param,
-        side_image_search_param, favicon_url, encoding,
-        image_search_branding_label, *alternate_urls,
+        side_image_search_param, std::move(search_intent_params), favicon_url,
+        encoding, image_search_branding_label, *alternate_urls,
         preconnect_to_search_url.compare("ALLOWED") == 0,
         prefetch_likely_navigations.compare("ALLOWED") == 0, *id);
   }

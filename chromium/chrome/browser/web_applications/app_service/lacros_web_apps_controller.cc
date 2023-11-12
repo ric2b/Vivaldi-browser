@@ -20,7 +20,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_item_constants.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/startup/lacros_first_run_service.h"
+#include "chrome/browser/ui/startup/first_run_service.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
@@ -73,7 +73,6 @@ LacrosWebAppsController::LacrosWebAppsController(Profile* profile)
       provider_(WebAppProvider::GetForWebApps(profile)),
       publisher_helper_(profile,
                         provider_,
-                        /*swa_manager=*/nullptr,
                         this,
                         /*observe_media_requests=*/true) {
   DCHECK(provider_);
@@ -111,7 +110,7 @@ void LacrosWebAppsController::Shutdown() {
 }
 
 WebAppRegistrar& LacrosWebAppsController::registrar() const {
-  return provider_->registrar();
+  return provider_->registrar_unsafe();
 }
 
 void LacrosWebAppsController::SetPublisherForTesting(
@@ -208,8 +207,7 @@ void LacrosWebAppsController::ExecuteContextMenuCommand(
       base::BindOnce(&LacrosWebAppsController::ReturnLaunchResults,
                      weak_ptr_factory_.GetWeakPtr(), std::move(mojo_callback));
 
-  auto* fre_service =
-      LacrosFirstRunServiceFactory::GetForBrowserContext(profile_);
+  auto* fre_service = FirstRunServiceFactory::GetForBrowserContext(profile_);
   if (!fre_service || !fre_service->ShouldOpenFirstRun()) {
     ExecuteContextMenuCommandInternal(app_id, id,
                                       std::move(execution_finished_callback));
@@ -217,7 +215,7 @@ void LacrosWebAppsController::ExecuteContextMenuCommand(
   }
 
   fre_service->OpenFirstRunIfNeeded(
-      LacrosFirstRunService::EntryPoint::kWebAppContextMenu,
+      FirstRunService::EntryPoint::kWebAppContextMenu,
       base::BindOnce(
           &OnOpenPrimaryProfileFirstRunExited,
           std::move(execution_finished_callback),
@@ -230,10 +228,17 @@ void LacrosWebAppsController::ExecuteContextMenuCommandInternal(
     const std::string& app_id,
     const std::string& id,
     CommandFinishedCallback callback) {
-  content::WebContents* web_contents =
-      publisher_helper().ExecuteContextMenuCommand(app_id, id,
-                                                   display::kDefaultDisplayId);
-  std::move(callback).Run({web_contents});
+  // CommandFinishedCallback needs a vector, so this lambda is an adapter to
+  // transform a single WebContents into a vector.
+  publisher_helper().ExecuteContextMenuCommand(
+      app_id, id, display::kDefaultDisplayId,
+      base::BindOnce(
+          [](base::OnceCallback<void(const std::vector<content::WebContents*>&)>
+                 callback,
+             content::WebContents* contents) {
+            std::move(callback).Run({contents});
+          },
+          std::move(callback)));
 }
 
 void LacrosWebAppsController::StopApp(const std::string& app_id) {
@@ -261,8 +266,7 @@ void LacrosWebAppsController::Launch(
       base::BindOnce(&LacrosWebAppsController::ReturnLaunchResults,
                      weak_ptr_factory_.GetWeakPtr(), std::move(mojo_callback));
   auto params = apps::ConvertCrosapiToLaunchParams(launch_params, profile_);
-  auto* fre_service =
-      LacrosFirstRunServiceFactory::GetForBrowserContext(profile_);
+  auto* fre_service = FirstRunServiceFactory::GetForBrowserContext(profile_);
 
   if (!fre_service || !fre_service->ShouldOpenFirstRun()) {
     LaunchInternal(launch_params->app_id, std::move(params),
@@ -271,7 +275,7 @@ void LacrosWebAppsController::Launch(
   }
 
   fre_service->OpenFirstRunIfNeeded(
-      LacrosFirstRunService::EntryPoint::kWebAppLaunch,
+      FirstRunService::EntryPoint::kWebAppLaunch,
       base::BindOnce(&OnOpenPrimaryProfileFirstRunExited,
                      std::move(launch_finished_callback),
                      base::BindOnce(&LacrosWebAppsController::LaunchInternal,
@@ -292,9 +296,17 @@ void LacrosWebAppsController::LaunchInternal(const std::string& app_id,
     return;
   }
 
-  content::WebContents* web_contents =
-      publisher_helper().LaunchAppWithParams(std::move(params));
-  std::move(callback).Run({web_contents});
+  // CommandFinishedCallback needs a vector, so this lambda is an adapter to
+  // transform a single WebContents into a vector.
+  publisher_helper().LaunchAppWithParams(
+      std::move(params),
+      base::BindOnce(
+          [](base::OnceCallback<void(const std::vector<content::WebContents*>&)>
+                 callback,
+             content::WebContents* contents) {
+            std::move(callback).Run({contents});
+          },
+          std::move(callback)));
 }
 
 void LacrosWebAppsController::ReturnLaunchResults(
@@ -306,6 +318,7 @@ void LacrosWebAppsController::ReturnLaunchResults(
   auto launch_result = crosapi::mojom::LaunchResult::New();
   launch_result->instance_id = base::UnguessableToken::Create();
   launch_result->instance_ids = std::vector<base::UnguessableToken>();
+  launch_result->state = crosapi::mojom::LaunchResultState::kSuccess;
 
   // TODO(crbug.com/1144877): Replaced with DCHECK when the app instance tracker
   // flag is turned on.

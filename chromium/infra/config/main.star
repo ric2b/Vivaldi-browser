@@ -26,7 +26,6 @@ lucicfg.config(
         "cq-usage/default.cfg",
         "cq-usage/full.cfg",
         "luci/commit-queue.cfg",
-        "luci/chops-weetbix.cfg",
         "luci/cr-buildbucket.cfg",
         "luci/luci-analysis.cfg",
         "luci/luci-logdog.cfg",
@@ -65,13 +64,6 @@ lucicfg.emit(
     data = io.read_file("luci-analysis.cfg"),
 )
 
-# TODO(b/243488110): Delete when Weetbix renaming to
-# LUCI Analysis complete.
-lucicfg.emit(
-    dest = "luci/chops-weetbix.cfg",
-    data = io.read_file("chops-weetbix.cfg"),
-)
-
 luci.project(
     name = settings.project,
     config_dir = "luci",
@@ -102,7 +94,10 @@ luci.project(
     bindings = [
         luci.binding(
             roles = "role/configs.validator",
-            groups = "project-chromium-try-task-accounts",
+            groups = [
+                "project-chromium-try-task-accounts",
+                "project-chromium-ci-task-accounts",
+            ],
         ),
         # Roles for LUCI Analysis.
         luci.binding(
@@ -115,21 +110,6 @@ luci.project(
         ),
         luci.binding(
             roles = "role/analysis.editor",
-            groups = ["project-chromium-committers", "googlers"],
-        ),
-        # Roles for Weetbix.
-        # TODO(b/243488110): Delete when renaming to
-        # LUCI Analysis complete.
-        luci.binding(
-            roles = "role/weetbix.reader",
-            groups = "all",
-        ),
-        luci.binding(
-            roles = "role/weetbix.queryUser",
-            groups = "authenticated-users",
-        ),
-        luci.binding(
-            roles = "role/weetbix.editor",
             groups = ["project-chromium-committers", "googlers"],
         ),
     ],
@@ -221,6 +201,7 @@ exec("//recipes.star")
 exec("//notifiers.star")
 
 exec("//subprojects/chromium/subproject.star")
+exec("//subprojects/chrome/subproject.star")
 branches.exec("//subprojects/codesearch/subproject.star")
 branches.exec("//subprojects/findit/subproject.star")
 branches.exec("//subprojects/flakiness/subproject.star")

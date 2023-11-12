@@ -90,7 +90,7 @@ std::string TestDataSource::GetContentSecurityPolicy(
   if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
     return "script-src chrome://* 'self';";
   } else if (directive == network::mojom::CSPDirectiveName::WorkerSrc) {
-    return "worker-src blob: 'self';";
+    return "worker-src blob: chrome://resources 'self';";
   } else if (directive ==
                  network::mojom::CSPDirectiveName::RequireTrustedTypesFor ||
              directive == network::mojom::CSPDirectiveName::TrustedTypes) {
@@ -129,7 +129,7 @@ void TestDataSource::ReadFile(
     CHECK(base::ReadFileToString(file_path, &content))
         << url.spec() << "=" << file_path.value();
     scoped_refptr<base::RefCountedString> response =
-        base::RefCountedString::TakeString(&content);
+        base::MakeRefCounted<base::RefCountedString>(std::move(content));
     std::move(callback).Run(response.get());
     return;
   }
@@ -175,6 +175,6 @@ void TestDataSource::ReadFile(
   }
 
   scoped_refptr<base::RefCountedString> response =
-      base::RefCountedString::TakeString(&content);
+      base::MakeRefCounted<base::RefCountedString>(std::move(content));
   std::move(callback).Run(response.get());
 }

@@ -54,7 +54,7 @@ class InstrumentedPackageBuilder(object):
     self._extra_configure_flags = unescape_flags(args.extra_configure_flags)
     self._libdir = args.libdir
     self._package = args.package
-    self._patches = [real_path(patch) for patch in (args.patch or [])]
+    self._patches = [real_path(patch) for patch in args.patch]
     self._pre_build = \
         real_path(args.pre_build) if args.pre_build else None
     self._verbose = args.verbose
@@ -331,9 +331,9 @@ class DebianBuilder(InstrumentedPackageBuilder):
     files_file = os.path.join(self._source_dir, 'debian/files')
 
     for line in open(files_file, 'r').read().splitlines():
-      if not line.endswith('.deb'):
-        continue
       filename, category, section = line.split(' ')
+      if not filename.endswith('.deb'):
+        continue
       pathname = os.path.join(self._source_dir, '..', filename)
       deb_files.append(pathname)
 
@@ -365,6 +365,19 @@ class LibcapBuilder(InstrumentedPackageBuilder):
     # We only care for the contents of LIBDIR.
     self.shell_call('cp %s/* %s/ -rdf' % (self.temp_libdir(),
                                           self.dest_libdir()))
+
+
+class LibcurlBuilder(DebianBuilder):
+  def build_and_install(self):
+    super().build_and_install()
+    # The libcurl packages don't specify a default libcurl.so, but this is
+    # required since libcurl.so is dlopen()ed by crashpad.  Normally,
+    # libcurl.so is installed by one of libcurl-{gnutls,nss,openssl}-dev.
+    # Doing a standalone instrumented build of a dev package is tricky,
+    # so we manually symlink libcurl.so instead.
+    libcurl_so = os.path.join(self.dest_libdir(), 'libcurl.so')
+    if not os.path.exists(libcurl_so):
+      os.symlink('libcurl.so.4', libcurl_so)
 
 
 class Libpci3Builder(InstrumentedPackageBuilder):
@@ -419,7 +432,7 @@ class Libpci3Builder(InstrumentedPackageBuilder):
 class MesonBuilder(InstrumentedPackageBuilder):
   def build_and_install(self):
     meson_flags = {
-      'prefix': '/usr',
+      'prefix': '/',
       'libdir': self._libdir,
       'sbindir': 'bin',
     }
@@ -438,11 +451,6 @@ class MesonBuilder(InstrumentedPackageBuilder):
                     {**self._build_env, 'DESTDIR': self.temp_dir()},
                     cwd=self._source_dir)
     self.post_install()
-
-  # LIBDIR is always relative to the prefix (/usr), so that needs to be added
-  # unlike when using configure.
-  def temp_libdir(self):
-    return os.path.join(self.temp_dir(), 'usr', self._libdir)
 
 
 class CmakeBuilder(InstrumentedPackageBuilder):
@@ -542,7 +550,7 @@ def main():
   parser.add_argument('-v', '--verbose', action='store_true')
   parser.add_argument('--cc')
   parser.add_argument('--cxx')
-  parser.add_argument('--patch', nargs='*')
+  parser.add_argument('--patch', nargs='*', action='extend', default=[])
   # This should be a shell script to run before building specific libraries.
   # This will be run after applying the patches above.
   parser.add_argument('--pre-build', default='')
@@ -568,6 +576,8 @@ def main():
     builder = NSSBuilder(args, clobber)
   elif args.build_method == 'custom_libcap':
     builder = LibcapBuilder(args, clobber)
+  elif args.build_method == 'custom_libcurl':
+    builder = LibcurlBuilder(args, clobber)
   elif args.build_method == 'custom_libpci3':
     builder = Libpci3Builder(args, clobber)
   elif args.build_method == 'debian':

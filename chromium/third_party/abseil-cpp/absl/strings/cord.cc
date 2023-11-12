@@ -35,6 +35,7 @@
 #include "absl/base/port.h"
 #include "absl/container/fixed_array.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/crc/internal/crc_cord_state.h"
 #include "absl/strings/cord_buffer.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/internal/cord_data_edge.h"
@@ -420,6 +421,7 @@ Cord& Cord::operator=(absl::string_view src) {
 // we keep it here to make diffs easier.
 void Cord::InlineRep::AppendArray(absl::string_view src,
                                   MethodIdentifier method) {
+  MaybeRemoveEmptyCrcNode();
   if (src.empty()) return;  // memcpy(_, nullptr, 0) is undefined.
 
   size_t appended = 0;
@@ -479,6 +481,10 @@ inline CordRep* Cord::TakeRep() && {
 template <typename C>
 inline void Cord::AppendImpl(C&& src) {
   auto constexpr method = CordzUpdateTracker::kAppendCord;
+
+  contents_.MaybeRemoveEmptyCrcNode();
+  if (src.empty()) return;
+
   if (empty()) {
     // Since destination is empty, we can avoid allocating a node,
     if (src.contents_.is_tree()) {
@@ -591,6 +597,9 @@ void Cord::Append(T&& src) {
 template void Cord::Append(std::string&& src);
 
 void Cord::Prepend(const Cord& src) {
+  contents_.MaybeRemoveEmptyCrcNode();
+  if (src.empty()) return;
+
   CordRep* src_tree = src.contents_.tree();
   if (src_tree != nullptr) {
     CordRep::Ref(src_tree);
@@ -605,7 +614,9 @@ void Cord::Prepend(const Cord& src) {
 }
 
 void Cord::PrependArray(absl::string_view src, MethodIdentifier method) {
+  contents_.MaybeRemoveEmptyCrcNode();
   if (src.empty()) return;  // memcpy(_, nullptr, 0) is undefined.
+
   if (!contents_.is_tree()) {
     size_t cur_size = contents_.inline_size();
     if (cur_size + src.size() <= InlineRep::kMaxInline) {
@@ -665,6 +676,7 @@ void Cord::RemovePrefix(size_t n) {
   ABSL_INTERNAL_CHECK(n <= size(),
                       absl::StrCat("Requested prefix size ", n,
                                    " exceeds Cord's size ", size()));
+  contents_.MaybeRemoveEmptyCrcNode();
   CordRep* tree = contents_.tree();
   if (tree == nullptr) {
     contents_.remove_prefix(n);
@@ -695,6 +707,7 @@ void Cord::RemoveSuffix(size_t n) {
   ABSL_INTERNAL_CHECK(n <= size(),
                       absl::StrCat("Requested suffix size ", n,
                                    " exceeds Cord's size ", size()));
+  contents_.MaybeRemoveEmptyCrcNode();
   CordRep* tree = contents_.tree();
   if (tree == nullptr) {
     contents_.reduce_size(n);
@@ -842,26 +855,44 @@ inline absl::string_view Cord::InlineRep::FindFlatStartPiece() const {
   return absl::string_view(node->external()->base + offset, length);
 }
 
-void Cord::SetExpectedChecksum(uint32_t crc) {
+void Cord::SetCrcCordState(crc_internal::CrcCordState state) {
   auto constexpr method = CordzUpdateTracker::kSetExpectedChecksum;
-  if (empty()) return;
-
-  if (!contents_.is_tree()) {
+  if (empty()) {
+    contents_.MaybeRemoveEmptyCrcNode();
+    CordRep* rep = CordRepCrc::New(nullptr, std::move(state));
+    contents_.EmplaceTree(rep, method);
+  } else if (!contents_.is_tree()) {
     CordRep* rep = contents_.MakeFlatWithExtraCapacity(0);
-    rep = CordRepCrc::New(rep, crc);
+    rep = CordRepCrc::New(rep, std::move(state));
     contents_.EmplaceTree(rep, method);
   } else {
     const CordzUpdateScope scope(contents_.data_.cordz_info(), method);
-    CordRep* rep = CordRepCrc::New(contents_.data_.as_tree(), crc);
+    CordRep* rep = CordRepCrc::New(contents_.data_.as_tree(), std::move(state));
     contents_.SetTree(rep, scope);
   }
+}
+
+void Cord::SetExpectedChecksum(uint32_t crc) {
+  // Construct a CrcCordState with a single chunk.
+  crc_internal::CrcCordState state;
+  state.mutable_rep()->prefix_crc.push_back(
+      crc_internal::CrcCordState::PrefixCrc(size(), absl::crc32c_t{crc}));
+  SetCrcCordState(std::move(state));
+}
+
+const crc_internal::CrcCordState* Cord::MaybeGetCrcCordState() const {
+  if (!contents_.is_tree() || !contents_.tree()->IsCrc()) {
+    return nullptr;
+  }
+  return &contents_.tree()->crc()->crc_cord_state;
 }
 
 absl::optional<uint32_t> Cord::ExpectedChecksum() const {
   if (!contents_.is_tree() || !contents_.tree()->IsCrc()) {
     return absl::nullopt;
   }
-  return contents_.tree()->crc()->crc;
+  return static_cast<uint32_t>(
+      contents_.tree()->crc()->crc_cord_state.Checksum());
 }
 
 inline int Cord::CompareSlowPath(absl::string_view rhs, size_t compared_size,
@@ -929,6 +960,7 @@ inline int Cord::CompareSlowPath(const Cord& rhs, size_t compared_size,
 }
 
 inline absl::string_view Cord::GetFirstChunk(const Cord& c) {
+  if (c.empty()) return {};
   return c.contents_.FindFlatStartPiece();
 }
 inline absl::string_view Cord::GetFirstChunk(absl::string_view sv) {
@@ -1166,6 +1198,10 @@ absl::string_view Cord::FlattenSlowPath() {
 
 /* static */ bool Cord::GetFlatAux(CordRep* rep, absl::string_view* fragment) {
   assert(rep != nullptr);
+  if (rep->length == 0) {
+    *fragment = absl::string_view();
+    return true;
+  }
   rep = cord_internal::SkipCrcNode(rep);
   if (rep->IsFlat()) {
     *fragment = absl::string_view(rep->flat()->Data(), rep->length);
@@ -1197,6 +1233,7 @@ absl::string_view Cord::FlattenSlowPath() {
     absl::cord_internal::CordRep* rep,
     absl::FunctionRef<void(absl::string_view)> callback) {
   assert(rep != nullptr);
+  if (rep->length == 0) return;
   rep = cord_internal::SkipCrcNode(rep);
 
   if (rep->IsBtree()) {
@@ -1230,8 +1267,12 @@ static void DumpNode(CordRep* rep, bool include_data, std::ostream* os,
     if (include_data) *os << static_cast<void*>(rep);
     *os << "]";
     *os << " " << std::setw(indent) << "";
-    if (rep->IsCrc()) {
-      *os << "CRC crc=" << rep->crc()->crc << "\n";
+    bool leaf = false;
+    if (rep == nullptr) {
+      *os << "NULL\n";
+      leaf = true;
+    } else if (rep->IsCrc()) {
+      *os << "CRC crc=" << rep->crc()->crc_cord_state.Checksum() << "\n";
       indent += kIndentStep;
       rep = rep->crc()->child;
     } else if (rep->IsSubstring()) {
@@ -1239,6 +1280,7 @@ static void DumpNode(CordRep* rep, bool include_data, std::ostream* os,
       indent += kIndentStep;
       rep = rep->substring()->child;
     } else {  // Leaf or ring
+      leaf = true;
       if (rep->IsExternal()) {
         *os << "EXTERNAL [";
         if (include_data)
@@ -1252,6 +1294,8 @@ static void DumpNode(CordRep* rep, bool include_data, std::ostream* os,
       } else {
         CordRepBtree::Dump(rep, /*label=*/ "", include_data, *os);
       }
+    }
+    if (leaf) {
       if (stack.empty()) break;
       rep = stack.back();
       stack.pop_back();
@@ -1297,11 +1341,14 @@ static bool VerifyNode(CordRep* root, CordRep* start_node,
                               node->substring()->child->length,
                           ReportError(root, node));
     } else if (node->IsCrc()) {
-      ABSL_INTERNAL_CHECK(node->crc()->child != nullptr,
-                          ReportError(root, node));
-      ABSL_INTERNAL_CHECK(node->crc()->length == node->crc()->child->length,
-                          ReportError(root, node));
-      worklist.push_back(node->crc()->child);
+      ABSL_INTERNAL_CHECK(
+          node->crc()->child != nullptr || node->crc()->length == 0,
+          ReportError(root, node));
+      if (node->crc()->child != nullptr) {
+        ABSL_INTERNAL_CHECK(node->crc()->length == node->crc()->child->length,
+                            ReportError(root, node));
+        worklist.push_back(node->crc()->child);
+      }
     }
   } while (!worklist.empty());
   return true;

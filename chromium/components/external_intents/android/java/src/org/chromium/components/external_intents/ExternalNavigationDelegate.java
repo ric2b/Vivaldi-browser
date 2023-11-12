@@ -8,20 +8,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
-
 import org.chromium.base.Callback;
-import org.chromium.base.Function;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
-import org.chromium.url.Origin;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 /**
@@ -51,20 +44,6 @@ public interface ExternalNavigationDelegate {
     boolean shouldDisableExternalIntentRequestsForUrl(GURL url);
 
     /**
-     * Returns whether the embedder has custom integration with InstantApps (most embedders will not
-     * have any such integration).
-     */
-    boolean handlesInstantAppLaunchingInternally();
-
-    /**
-     * Dispatches the intent through a proxy activity, so that startActivityForResult can be used
-     * and the intent recipient can verify the caller. Will be invoked only in delegates where
-     * ExternalNavigationDelegate#handlesInstantAppLaunchingInternally() returns true.
-     * @param intent The bare intent we were going to send.
-     */
-    void dispatchAuthenticatedIntent(Intent intent);
-
-    /**
      * Loads a URL as specified by |loadUrlParams| if possible. May fail in exceptional conditions
      * (e.g., if there is no valid tab).
      * @param loadUrlParams parameters of the URL to be loaded
@@ -78,17 +57,11 @@ public interface ExternalNavigationDelegate {
     void maybeSetPendingReferrer(Intent intent, GURL referrerUrl);
 
     /**
-     * Adjusts any desired extras related to intents to instant apps based on the value of
-     * |insIntentToInstantApp}.
-     */
-    void maybeAdjustInstantAppExtras(Intent intent, boolean isIntentToInstantApp);
-
-    /**
      * Invoked for intents with request metadata such as user gesture, whether request is renderer
      * initiated and the initiator origin. Records the information if desired.
      */
-    void maybeSetRequestMetadata(Intent intent, boolean hasUserGesture, boolean isRendererInitiated,
-            @Nullable Origin initiatorOrigin);
+    void maybeSetRequestMetadata(
+            Intent intent, boolean hasUserGesture, boolean isRendererInitiated);
 
     /**
      * Records the pending incognito URL if desired. Called only if the
@@ -100,18 +73,6 @@ public interface ExternalNavigationDelegate {
      * Determine if the application of the embedder is in the foreground.
      */
     boolean isApplicationInForeground();
-
-    /**
-     * Check if the URL should be handled by an instant app, or kick off an async request for an
-     * instant app banner.
-     * @param url The current URL.
-     * @param referrerUrl The referrer URL.
-     * @param isIncomingRedirect Whether we are handling an incoming redirect to an instant app.
-     * @param isSerpReferrer whether the referrer is the SERP.
-     * @return Whether we launched an instant app.
-     */
-    boolean maybeLaunchInstantApp(GURL url, GURL referrerUrl, boolean isIncomingRedirect,
-            boolean isSerpReferrer, Supplier<List<ResolveInfo>> resolveInfoSupplier);
 
     /**
      * @return The WindowAndroid instance associated with this delegate instance.
@@ -167,45 +128,6 @@ public interface ExternalNavigationDelegate {
      */
     boolean isIntentForTrustedCallingApp(
             Intent intent, Supplier<List<ResolveInfo>> resolveInfoSupplier);
-
-    /**
-     * @param intent The intent to launch
-     * @return Whether the Intent points to Autofill Assistant
-     */
-    boolean isIntentToAutofillAssistant(Intent intent);
-
-    /**
-     * Used by isIntentToAutofillAssistantAllowingApp() below.
-     */
-    @IntDef({IntentToAutofillAllowingAppResult.NONE,
-            IntentToAutofillAllowingAppResult.DEFER_TO_APP_NOW,
-            IntentToAutofillAllowingAppResult.DEFER_TO_APP_LATER})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface IntentToAutofillAllowingAppResult {
-        int NONE = 0;
-        // Skip handling with Autofill Assistant and expect an external intent to be launched.
-        int DEFER_TO_APP_NOW = 1;
-        // Skip handling with Autofill Assistant and expect an external intent to be launched after
-        // a redirect.
-        int DEFER_TO_APP_LATER = 2;
-    }
-
-    /**
-     * @param params The external navigation params
-     * @param targetIntent The intent to launch
-     * @param canExternalAppHandleIntent The checker whether or not an external app can handle the
-     * provided intent
-     * @return Whether the Intent to Autofill Assistant allows override with an app.
-     */
-    @IntentToAutofillAllowingAppResult
-    int isIntentToAutofillAssistantAllowingApp(ExternalNavigationParams params, Intent targetIntent,
-            Function<Intent, Boolean> canExternalAppHandleIntent);
-
-    /**
-     * Gives the embedder a chance to handle the intent via the autofill assistant.
-     */
-    boolean handleWithAutofillAssistant(ExternalNavigationParams params, Intent targetIntent,
-            GURL browserFallbackUrl, boolean isGoogleReferrer);
 
     /**
      * Whether WebAPKs should be launched even on the initial Intent.

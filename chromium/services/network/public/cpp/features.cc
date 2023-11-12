@@ -14,12 +14,6 @@
 
 namespace network::features {
 
-// Enables Expect CT reporting, which sends reports for opted-in sites
-// that don't serve sufficient Certificate Transparency information.
-BASE_FEATURE(kExpectCTReporting,
-             "ExpectCTReporting",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kNetworkErrorLogging,
              "NetworkErrorLogging",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -142,10 +136,12 @@ BASE_FEATURE(kOpaqueResponseBlockingV02,
              "OpaqueResponseBlockingV02",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables preprocessing requests with the Trust Tokens API Fetch flags set,
-// and handling their responses, according to the protocol.
+// Enables preprocessing requests with the Private State Tokens API Fetch flags
+// set, and handling their responses, according to the protocol.
 // (See https://github.com/WICG/trust-token-api.)
-BASE_FEATURE(kTrustTokens, "TrustTokens", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kPrivateStateTokens,
+             "TrustTokens",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Determines which Trust Tokens operations require the TrustTokens origin trial
 // active in order to be used. This is runtime-configurable so that the Trust
@@ -173,18 +169,9 @@ const base::FeatureParam<TrustTokenOriginTrialSpec>::Option
          "only-issuance-requires-origin-trial"}};
 const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial{
-        &kTrustTokens, "TrustTokenOperationsRequiringOriginTrial",
+        &kPrivateStateTokens, "TrustTokenOperationsRequiringOriginTrial",
         TrustTokenOriginTrialSpec::kOriginTrialNotRequired,
         &kTrustTokenOriginTrialParamOptions};
-
-// Determines whether Trust Tokens issuance requests should be diverted, at the
-// corresponding issuers' request, to the operating system instead of sent
-// to the issuers' servers.
-//
-// WARNING: If you rename this param, you must update the corresponding flag
-// entry in about_flags.cc.
-const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance{
-    &kTrustTokens, "PlatformProvidedTrustTokenIssuance", false};
 
 BASE_FEATURE(kWebSocketReassembleShortMessages,
              "WebSocketReassembleShortMessages",
@@ -201,7 +188,7 @@ BASE_FEATURE(kSCTAuditingRetryReports,
 
 BASE_FEATURE(kSCTAuditingPersistReports,
              "SCTAuditingPersistReports",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 // The default Mojo ring buffer size, used to send the content body.
@@ -254,18 +241,6 @@ BASE_FEATURE(kCorsNonWildcardRequestHeadersSupport,
              "CorsNonWildcardRequestHeadersSupport",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Whether the sync client optimization is used for communication between the
-// CorsURLLoader and URLLoader.
-BASE_FEATURE(kURLLoaderSyncClient,
-             "URLLoaderSyncClient",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Don't wait for database write before responding to
-// RestrictedCookieManager::SetCookieFromString.
-BASE_FEATURE(kFasterSetCookie,
-             "FasterSetCookie",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Allow batching SimpleURLLoaders when the underlying network state is
 // inactive.
 BASE_FEATURE(kBatchSimpleURLLoader,
@@ -306,6 +281,15 @@ BASE_FEATURE(kReduceAcceptLanguage,
              "ReduceAcceptLanguage",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Gate access to ReduceAcceptLanguage origin trial major code. Currently, All
+// ReduceAcceptLanguage feature codes are guarded by the feature flag
+// kReduceAcceptLanguage. This feature flag is useful on control major code
+// which required to do origin trial. It allows Chrome developers to mitigate
+// issues when exposed codes cause impacts.
+BASE_FEATURE(kReduceAcceptLanguageOriginTrial,
+             "ReduceAcceptLanguageOriginTrial",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Disable ResourceScheduler.
 BASE_FEATURE(kDisableResourceScheduler,
              "DisableResourceScheduler",
@@ -323,9 +307,38 @@ BASE_FEATURE(kPreconnectInNetworkService,
              "PreconnectInNetworkService",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When prefetching a DNS record ensures that the scheme and port are taken
+// into account so that the cache (which is keyed by scheme and port) works
+// for subsequent queries.
+BASE_FEATURE(kPrefetchDNSWithURL,
+             "PrefetchDNSWithURL",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<bool> kPrefetchDNSWithURLAllAnchorElements{
+    &kPrefetchDNSWithURL, "prefetch_dns_all_anchor_elements", true};
+
 // Preconnect to a new origin right when a redirect starts.
 BASE_FEATURE(kPreconnectOnRedirect,
              "PreconnectOnRedirect",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables out-of-process system DNS resolution so getaddrinfo() never runs in
+// the network service sandbox. System DNS resolution will instead be brokered
+// out over Mojo, likely to run in the browser process.
+BASE_FEATURE(kOutOfProcessSystemDnsResolution,
+             "OutOfProcessSystemDnsResolution",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAccessControlAllowMethodsInCORSPreflightSpecConformant,
+             "AccessControlAllowMethodsInCORSPreflightSpecConformant",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchNoVarySearch,
+             "PrefetchNoVarySearch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrerender2ContentSecurityPolicyExtensions,
+             "Prerender2ContentSecurityPolicyExtensions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace network::features

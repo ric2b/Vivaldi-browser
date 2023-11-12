@@ -84,7 +84,7 @@ void PopupMenuHelper::ShowPopupMenu(
 
   {
     // Make sure events can be pumped while the menu is up.
-    base::CurrentThread::ScopedNestableTaskAllower allow;
+    base::CurrentThread::ScopedAllowApplicationTasksInNativeNestedLoop allow;
 
     // One of the events that could be pumped is |window.close()|.
     // User-initiated event-tracking loops protect against this by

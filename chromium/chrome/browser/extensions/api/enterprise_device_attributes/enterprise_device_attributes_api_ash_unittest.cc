@@ -22,7 +22,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/login/login_state/login_state.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/api_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -99,7 +99,7 @@ class EnterpriseDeviceAttributesApiAshTest
     device_attributes_->SetFakeDeviceHostname(kFakeHostname);
 
     crosapi::IdleServiceAsh::DisableForTesting();
-    chromeos::LoginState::Initialize();
+    ash::LoginState::Initialize();
     manager_ = crosapi::CreateCrosapiManagerWithTestRegistry();
     manager_->crosapi_ash()
         ->device_attributes_ash()
@@ -109,7 +109,7 @@ class EnterpriseDeviceAttributesApiAshTest
   void TearDown() override {
     manager_.reset();
     ash::DeviceSettingsTestBase::TearDown();
-    chromeos::LoginState::Shutdown();
+    ash::LoginState::Shutdown();
   }
 
   void AddUser(bool is_affiliated = true) {
@@ -140,7 +140,7 @@ TEST_P(EnterpriseDeviceAttributesApiAshTest, GetDirectoryDeviceIdFunction) {
   auto function = base::MakeRefCounted<
       EnterpriseDeviceAttributesGetDirectoryDeviceIdFunction>();
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value> result =
       api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), /*args=*/"[]", profile_.get());
   ASSERT_TRUE(result->is_string());
@@ -153,7 +153,7 @@ TEST_P(EnterpriseDeviceAttributesApiAshTest, GetDeviceSerialNumberFunction) {
   auto function = base::MakeRefCounted<
       EnterpriseDeviceAttributesGetDeviceSerialNumberFunction>();
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value> result =
       api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), /*args=*/"[]", profile_.get());
   ASSERT_TRUE(result->is_string());
@@ -165,7 +165,7 @@ TEST_P(EnterpriseDeviceAttributesApiAshTest, GetDeviceAssetIdFunction) {
   auto function = base::MakeRefCounted<
       EnterpriseDeviceAttributesGetDeviceAssetIdFunction>();
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value> result =
       api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), /*args=*/"[]", profile_.get());
   ASSERT_TRUE(result->is_string());
@@ -178,7 +178,7 @@ TEST_P(EnterpriseDeviceAttributesApiAshTest,
   auto function = base::MakeRefCounted<
       EnterpriseDeviceAttributesGetDeviceAnnotatedLocationFunction>();
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value> result =
       api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), /*args=*/"[]", profile_.get());
   ASSERT_TRUE(result->is_string());
@@ -191,7 +191,7 @@ TEST_P(EnterpriseDeviceAttributesApiAshTest, GetDeviceHostnameFunction) {
   auto function = base::MakeRefCounted<
       EnterpriseDeviceAttributesGetDeviceHostnameFunction>();
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value> result =
       api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), /*args=*/"[]", profile_.get());
   ASSERT_TRUE(result->is_string());

@@ -9,10 +9,13 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/checked_math.h"
+#include "base/sequence_checker.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
@@ -157,8 +160,8 @@ class ScopedSharedImageAccess {
   }
 
  private:
-  gpu::gles2::GLES2Interface* gl;
-  gpu::raster::RasterInterface* ri;
+  raw_ptr<gpu::gles2::GLES2Interface> gl;
+  raw_ptr<gpu::raster::RasterInterface> ri;
   GLuint texture;
   bool is_shared_image;
 };
@@ -175,6 +178,7 @@ const gpu::MailboxHolder& GetVideoFrameMailboxHolder(VideoFrame* video_frame) {
          PIXEL_FORMAT_XB30 == video_frame->format() ||
          PIXEL_FORMAT_XR30 == video_frame->format() ||
          PIXEL_FORMAT_NV12 == video_frame->format() ||
+         PIXEL_FORMAT_NV12A == video_frame->format() ||
          PIXEL_FORMAT_RGBAF16 == video_frame->format())
       << "Format: " << VideoPixelFormatToString(video_frame->format());
 
@@ -300,8 +304,7 @@ void SynchronizeVideoFrameRead(scoped_refptr<VideoFrame> video_frame,
   gl->EndQueryEXT(GL_COMMANDS_COMPLETED_CHROMIUM);
 
   // |on_query_done_cb| will keep |video_frame| alive.
-  auto on_query_done_cb =
-      base::BindOnce([](scoped_refptr<VideoFrame> video_frame) {}, video_frame);
+  auto on_query_done_cb = base::DoNothingWithBoundArgs(video_frame);
   context_support->SignalQuery(query_id, std::move(on_query_done_cb));
 
   // Delete the query immediately. This will cause |on_query_done_cb| to be
@@ -353,6 +356,14 @@ libyuv::FilterMode ToLibyuvFilterMode(
     case PaintCanvasVideoRenderer::kFilterBilinear:
       return libyuv::kFilterBilinear;
   }
+}
+
+size_t NumConvertVideoFrameToRGBPixelsTasks(const VideoFrame* video_frame) {
+  constexpr size_t kTaskBytes = 1024 * 1024;  // 1 MiB
+  const size_t frame_size = VideoFrame::AllocationSize(
+      video_frame->format(), video_frame->visible_rect().size());
+  const size_t n_tasks = std::max<size_t>(1, frame_size / kTaskBytes);
+  return std::min<size_t>(n_tasks, base::SysInfo::NumberOfProcessors());
 }
 
 void ConvertVideoFrameToRGBPixelsTask(const VideoFrame* video_frame,
@@ -641,6 +652,7 @@ void ConvertVideoFrameToRGBPixelsTask(const VideoFrame* video_frame,
 
     case PIXEL_FORMAT_UYVY:
     case PIXEL_FORMAT_NV21:
+    case PIXEL_FORMAT_NV12A:
     case PIXEL_FORMAT_YUY2:
     case PIXEL_FORMAT_ARGB:
     case PIXEL_FORMAT_BGRA:
@@ -964,7 +976,7 @@ void PaintCanvasVideoRenderer::Paint(
     cc::PaintFlags& flags,
     VideoTransformation video_transformation,
     viz::RasterContextProvider* raster_context_provider) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (flags.getAlpha() == 0) {
     return;
   }
@@ -1331,7 +1343,8 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     void* rgb_pixels,
     size_t row_bytes,
     bool premultiply_alpha,
-    FilterMode filter) {
+    FilterMode filter,
+    bool disable_threading) {
   if (!video_frame->IsMappable()) {
     NOTREACHED() << "Cannot extract pixels from non-CPU frame formats.";
     return;
@@ -1370,13 +1383,8 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
       break;
   }
 
-  constexpr size_t kTaskBytes = 1024 * 1024;  // 1 MiB
-  const size_t n_tasks = std::min<size_t>(
-      std::max<size_t>(
-          1, VideoFrame::AllocationSize(video_frame->format(),
-                                        video_frame->visible_rect().size()) /
-                 kTaskBytes),
-      base::SysInfo::NumberOfProcessors());
+  const size_t n_tasks =
+      disable_threading ? 1 : NumConvertVideoFrameToRGBPixelsTasks(video_frame);
   base::WaitableEvent event;
   base::RepeatingClosure barrier = base::BarrierClosure(
       n_tasks,
@@ -1399,6 +1407,11 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
   }
 }
 
+// static
+viz::ResourceFormat PaintCanvasVideoRenderer::GetRGBPixelsOutputFormat() {
+  return RESOURCE_FORMAT;
+}
+
 bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
     viz::RasterContextProvider* raster_context_provider,
     gpu::gles2::GLES2Interface* destination_gl,
@@ -1411,7 +1424,7 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
     int level,
     bool premultiply_alpha,
     bool flip_y) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(video_frame);
   DCHECK(video_frame->HasTextures());
 
@@ -1509,7 +1522,7 @@ bool PaintCanvasVideoRenderer::UploadVideoFrameToGLTexture(
     unsigned int format,
     unsigned int type,
     bool flip_y) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(video_frame);
   // Support uploading for NV12 and I420 video frame only.
   if (!VideoFrameYUVConverter::IsVideoFrameFormatSupported(*video_frame)) {
@@ -1838,12 +1851,13 @@ bool PaintCanvasVideoRenderer::TexSubImage2D(unsigned target,
 }
 
 void PaintCanvasVideoRenderer::ResetCache() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   cache_.reset();
   yuv_cache_.Reset();
 }
 
-PaintCanvasVideoRenderer::Cache::Cache(int frame_id) : frame_id(frame_id) {}
+PaintCanvasVideoRenderer::Cache::Cache(VideoFrame::ID frame_id)
+    : frame_id(frame_id) {}
 
 PaintCanvasVideoRenderer::Cache::~Cache() = default;
 

@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Versuchen Sie eine Windows Netzwerkdiagnose durchzuführen<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Diese Website enthält schädliche Programme</translation>
 <translation id="1916770123977586577">Laden Sie diese Seite neu, um die aktualisierten Einstellungen für diese Website zu übernehmen</translation>
-<translation id="1973351931613083086">Automatische Wiedergabe</translation>
 <translation id="1974060860693918893">Erweitert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Diese Website kann keine sichere Verbindung bereitstellen</translation>
 <translation id="2187317261103489799">Erkennen (Standardeinstellung)</translation>
 <translation id="2224337661447660594">Kein Internet</translation>
-<translation id="2230458221926704099">Beheben Sie den Verbindungsfehler mithilfe der <ph name="BEGIN_LINK" />Diagnose-App<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Ihre Internetverbindung ist gesperrt</translation>
 <translation id="2317259163369394535">Für <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="2337852623177822836">Einstellung wird von Ihrem Administrator gesteuert</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Angreifer könnten versuchen, Ihre Daten von <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> zu stehlen, zum Beispiel Passwörter, Nachrichten oder Kreditkartendaten. <ph name="BEGIN_LEARN_MORE_LINK" />Weitere Informationen<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Eine Netzwerkänderung ist aufgetreten.</translation>
 <translation id="2948083400971632585">Sie können jeden Proxy, der für eine Verbindung konfiguriert wurde, in den Einstellungen deaktivieren.</translation>
-<translation id="2953943267837858202">Automatische Video-Wiedergabe nicht erlaubt</translation>
 <translation id="2991571918955627853">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da die Website HSTS verwendet. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
 <translation id="3005723025932146533">Gespeicherte Kopie anzeigen</translation>
 <translation id="301521992641321250">Automatisch blockiert</translation>
@@ -62,7 +59,6 @@
       folgt: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Klicken Sie auf die Schaltfläche zum erneuten Laden, um die für das Laden der Seite erforderlichen Daten erneut zu senden.</translation>
 <translation id="3234666976984236645">Wichtige Inhalte auf dieser Website immer erkennen</translation>
-<translation id="3291915639428159043">Automatische Wiedergabe gesperrt</translation>
 <translation id="3308738399950580893">Werbung</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ist momentan nicht erreichbar.</translation>
 <translation id="3427092606871434483">Zulassen (Standardeinstellung)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Dies ist keine sichere Verbindung</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details ausblenden</translation>
-<translation id="3620979700683094848">Webseiten können Videos automatisch abspielen</translation>
 <translation id="3630155396527302611">Falls das Programm schon in der Liste mit erlaubtem Netzwerkzugriff eingetragen ist, entfernen Sie es aus der Liste und fügen Sie es noch einmal hinzu.</translation>
 <translation id="3658742229777143148">Überarbeitung</translation>
 <translation id="3681007416295224113">Zertifikatinformationen</translation>
@@ -84,7 +79,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ist gesperrt</translation>
 <translation id="3987940399970879459">Weniger als 1 MB</translation>
 <translation id="4075732493274867456">Client und Server unterstützen keine gemeinsamen SSL-Protokollversionen oder Verschlüsselungsverfahren.</translation>
-<translation id="410351446219883937">Automatisch abspielen</translation>
 <translation id="4116663294526079822">Auf dieser Website immer zulassen</translation>
 <translation id="4130226655945681476">Prüfen Sie Netzwerkkabel, Modem und Router</translation>
 <translation id="4151403195736952345">Globalen Standard verwenden (Erkennen)</translation>
@@ -157,7 +151,6 @@
 <translation id="6451458296329894277">Erneute Formular-Übermittlung bestätigen</translation>
 <translation id="6569060085658103619">Dies ist eine Erweiterungsseite</translation>
 <translation id="6657585470893396449">Passwort</translation>
-<translation id="6685834062052613830">Abmelden und Einrichtung abschließen</translation>
 <translation id="6711464428925977395">Bei der Verbindungsaufnahme mit dem Proxyserver ist ein Problem aufgetreten oder dessen Adresse ist ungültig.</translation>
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
 <translation id="6897140037006041989">User-Agent</translation>
@@ -188,13 +181,11 @@
 <translation id="7758069387465995638">Möglicherweise wurde die Verbindung von einer Firewall oder Antivirensoftware blockiert.</translation>
 <translation id="7800304661137206267">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt, für die Nachrichtenauthentifizierung wird <ph name="MAC" /> und als Schlüsselaustausch-Mechanismus <ph name="KX" /> verwendet.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
-<translation id="7834693436815575883">Automatische Wiedergabe ein</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
 <translation id="8025119109950072390">Angreifer auf dieser Website können Sie dazu verleiten etwas Gefährliches zu tun, wie die Installation von Software oder die Offenlegung Ihrer persönlichen Daten (z. B. Passwörter, Telefonnummern oder Kreditkartendaten).</translation>
 <translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
-<translation id="8044382196220116469">Webseiten nicht erlauben, Videos automatisch abzuspielen</translation>
 <translation id="808894953321890993">Passwort ändern</translation>
 <translation id="8119307142152921512">Tracker und Werbung</translation>
 <translation id="8149426793427495338">Ihr Computer geht in den Ruhemodus.</translation>
@@ -212,7 +203,6 @@
 <translation id="8503813439785031346">Nutzername</translation>
 <translation id="8703575177326907206">Die Verbindung zu <ph name="DOMAIN" /> ist nicht verschlüsselt.</translation>
 <translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS-Adresse&lt;/abbr&gt; von <ph name="HOST_NAME" /> wurde nicht gefunden. Eine Problemdiagnose wird durchgeführt.</translation>
-<translation id="8774017153185436870">Seiten können Videos automatisch abspielen</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
 <translation id="8940028675168378100">Geblockt von <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Website-Einstellungen aufrufen</translation>
@@ -220,7 +210,6 @@
 <translation id="9008201768610948239">Ignorieren</translation>
 <translation id="9025348182339809926">(Ungültig)</translation>
 <translation id="9039213469156557790">Darüber hinaus enthält diese Seite auch andere Ressourcen, die nicht sicher sind. Diese Ressourcen können von anderen während der Übertragung abgefangen und von einem Angreifer modifiziert werden, um das Verhalten der Seite zu ändern.</translation>
-<translation id="9048224371732578627">Erlaubt, um Videos automatisch abzuspielen</translation>
 <translation id="9062620674789239642">Eventuell wurde sie verschoben, bearbeitet oder gelöscht.</translation>
 <translation id="9069693763241529744">Von einer Erweiterung blockiert</translation>
 <translation id="9073799351042754113">Sie haben die Sicherheitswarnungen für diese Website deaktiviert.</translation>

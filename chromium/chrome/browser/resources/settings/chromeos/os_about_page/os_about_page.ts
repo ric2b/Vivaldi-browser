@@ -16,31 +16,30 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '../../icons.html.js';
 import '../../prefs/prefs.js';
-import '../../settings_page/settings_animated_pages.js';
-import '../../settings_page/settings_section.js';
-import '../../settings_page/settings_subpage.js';
-import '../../settings_page_styles.css.js';
+import '../os_settings_page/os_settings_animated_pages.js';
+import '../os_settings_page/os_settings_section.js';
+import '../os_settings_page/os_settings_subpage.js';
+import '../os_settings_page_styles.css.js';
 import '../../settings_shared.css.js';
-import '../os_icons.js';
+import '../os_settings_icons.html.js';
 import '../os_reset_page/os_powerwash_dialog.js';
 import './detailed_build_info.js';
 import './update_warning_dialog.js';
 
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {parseHtmlSubset} from 'chrome://resources/js/parse_html_subset.js';
+import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
 import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {LifetimeBrowserProxyImpl} from '../../lifetime_browser_proxy.js';
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {Route, Router} from '../../router.js';
+import {Route, Router} from '../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
-import {MainPageBehavior, MainPageBehaviorInterface} from '../main_page_behavior.js';
+import {MainPageMixin, MainPageMixinInterface} from '../main_page_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {routes} from '../os_route.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
 
 import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, RegulatoryInfo, TpmFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
 import {getTemplate} from './os_about_page.html.js';
@@ -62,13 +61,11 @@ const OsSettingsAboutPageBaseElement =
     mixinBehaviors(
         [
           DeepLinkingBehavior,
-          MainPageBehavior,
-          RouteObserverBehavior,
         ],
-        I18nMixin(WebUIListenerMixin(PolymerElement))) as {
-      new (): PolymerElement & DeepLinkingBehaviorInterface &
-          WebUIListenerMixinInterface & MainPageBehaviorInterface &
-          RouteObserverBehaviorInterface & I18nMixinInterface,
+        MainPageMixin(I18nMixin(WebUiListenerMixin(PolymerElement)))) as {
+      new (): PolymerElement & WebUiListenerMixinInterface &
+          I18nMixinInterface & MainPageMixinInterface &
+          DeepLinkingBehaviorInterface,
     };
 
 class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
@@ -337,12 +334,9 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
   }
 
   override currentRouteChanged(newRoute: Route, oldRoute?: Route) {
-    // super.currentRouteChanged() does not produce desired results since
-    // RouteObserverBehavior has higher precedence than MainPageBehavior given
-    // this element's behavior list order. In order to trigger the
-    // MainPageBehavior method, we must directly call it.
+    // MainPageMixin#currentRouteChanged() should be the super class method
     // See https://crbug.com/1324103 for more details.
-    MainPageBehavior.currentRouteChanged.call(this, newRoute, oldRoute);
+    super.currentRouteChanged(newRoute, oldRoute);
 
     // Does not apply to this page.
     if (newRoute !== routes.ABOUT_ABOUT) {
@@ -364,13 +358,13 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
   }
 
   private startListening_() {
-    this.addWebUIListener(
+    this.addWebUiListener(
         'update-status-changed', this.onUpdateStatusChanged_.bind(this));
     this.aboutBrowserProxy_.refreshUpdateStatus();
-    this.addWebUIListener(
+    this.addWebUiListener(
         'tpm-firmware-update-status-changed',
-        this.onTPMFirmwareUpdateStatusChanged_.bind(this));
-    this.aboutBrowserProxy_.refreshTPMFirmwareUpdateStatus();
+        this.onTpmFirmwareUpdateStatusChanged_.bind(this));
+    this.aboutBrowserProxy_.refreshTpmFirmwareUpdateStatus();
   }
 
   private onUpdateStatusChanged_(event: UpdateStatusChangedEvent) {
@@ -470,7 +464,7 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     return this.showFirmwareUpdatesApp_ && this.firmwareUpdateCount_ > 0;
   }
 
-  private getUpdateStatusMessage_(): string {
+  private getUpdateStatusMessage_(): TrustedHTML {
     switch (this.currentUpdateStatusEvent_.status) {
       case UpdateStatus.CHECKING:
       case UpdateStatus.NEED_PERMISSION_TO_UPDATE:
@@ -495,7 +489,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
           return this.i18nAdvanced('aboutUpgradeUpdatingChannelSwitch', {
             substitutions: [
               this.i18nAdvanced(
-                  browserChannelToI18nId(this.targetChannel_, this.isLts_)),
+                      browserChannelToI18nId(this.targetChannel_, this.isLts_))
+                  .toString(),
               progressPercent,
             ],
           });
@@ -525,21 +520,16 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
       case UpdateStatus.DEFERRED:
         return this.i18nAdvanced('aboutUpgradeNotUpToDate');
       default:
-        function formatMessage(msg: string) {
-          return (parseHtmlSubset('<b>' + msg + '</b>', ['br', 'pre'])
-                      .firstChild as HTMLElement)
-              .innerHTML;
-        }
         let result = '';
         const message = this.currentUpdateStatusEvent_.message;
         if (message) {
-          result += formatMessage(message);
+          result += message;
         }
         const connectMessage = this.currentUpdateStatusEvent_.connectionTypes;
         if (connectMessage) {
-          result += '<div>' + formatMessage(connectMessage) + '</div>';
+          result += `<div>${connectMessage}</div>`;
         }
-        return result;
+        return sanitizeInnerHtml(result, {tags: ['br', 'pre']});
     }
   }
 
@@ -614,11 +604,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
 
   private getRelaunchButtonText_(): string {
     if (this.checkStatus_(UpdateStatus.NEARLY_UPDATED)) {
-      if (this.isPowerwash_()) {
-        return this.i18nAdvanced('aboutRelaunchAndPowerwash');
-      } else {
-        return this.i18nAdvanced('aboutRelaunch');
-      }
+      return this.i18n(
+          this.isPowerwash_() ? 'aboutRelaunchAndPowerwash' : 'aboutRelaunch');
     }
     return '';
   }
@@ -659,7 +646,7 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
    * @param showCrostiniLicense True if Crostini is enabled and
    * Crostini UI is allowed.
    */
-  private getAboutProductOsLicense_(showCrostiniLicense: boolean): string {
+  private getAboutProductOsLicense_(showCrostiniLicense: boolean): TrustedHTML {
     return showCrostiniLicense ?
         this.i18nAdvanced('aboutProductOsWithLinuxLicense') :
         this.i18nAdvanced('aboutProductOsLicense');
@@ -691,12 +678,12 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     this.hasCheckedForUpdates_ = false;
   }
 
-  private onTPMFirmwareUpdateStatusChanged_(
+  private onTpmFirmwareUpdateStatusChanged_(
       event: TpmFirmwareUpdateStatusChangedEvent) {
     this.showTPMFirmwareUpdateLineItem_ = event.updateAvailable;
   }
 
-  private onTPMFirmwareUpdateClick_() {
+  private onTpmFirmwareUpdateClick_() {
     this.showTPMFirmwareUpdateDialog_ = true;
   }
 
@@ -722,8 +709,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
 
   private getReportIssueLabel_(): string {
     return loadTimeData.getBoolean('isOsFeedbackEnabled') ?
-        this.i18nAdvanced('aboutSendFeedback') :
-        this.i18nAdvanced('aboutReportAnIssue');
+        this.i18n('aboutSendFeedback') :
+        this.i18n('aboutReportAnIssue');
   }
   // </if>
 

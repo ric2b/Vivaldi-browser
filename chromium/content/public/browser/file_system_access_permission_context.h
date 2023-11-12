@@ -44,6 +44,10 @@ class FileSystemAccessPermissionContext {
     // drag&drop operation. Read access should start out granted, but write
     // access will require a prompt.
     kDragAndDrop,
+    // The path for which a permission grant is requested was not the result of
+    // a user action. This is used for checking additional blocklist check of
+    // a path when obtaining a handle, therefore no prompt needs to be shown.
+    kNone,
   };
 
   // This enum helps distinguish between file or directory File System Access
@@ -153,6 +157,12 @@ class FileSystemAccessPermissionContext {
   // Return the desired title of the file picker for the given `options`.
   virtual std::u16string GetPickerTitle(
       const blink::mojom::FilePickerOptionsPtr& options) = 0;
+
+  // Notifies that the underlying file or directory has been moved and updates
+  // permission grants accordingly.
+  virtual void NotifyEntryMoved(const url::Origin& origin,
+                                const base::FilePath& old_path,
+                                const base::FilePath& new_path) = 0;
 
  protected:
   virtual ~FileSystemAccessPermissionContext() = default;

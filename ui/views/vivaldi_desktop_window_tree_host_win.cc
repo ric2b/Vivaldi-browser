@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2017-2022 Vivaldi Technologies AS. All rights reserved.
 //
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -13,15 +13,22 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/win/windows_version.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
 #include "content/public/browser/browser_thread.h"
 
 #include "app/vivaldi_apptools.h"
+#include "skia/ext/skia_utils_win.h"
+
 #include "ui/base/win/hwnd_metrics.h"
 #include "ui/base/win/shell.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/menu/native_menu_win.h"
 #include "ui/views/vivaldi_system_menu_model_builder.h"
 #include "ui/vivaldi_browser_window.h"
+#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // This is a copy of the class VirtualDesktopHelper in
 // chromium\chrome\browser\ui\views\frame\browser_desktop_window_tree_host_win.cc
@@ -204,7 +211,16 @@ VivaldiDesktopWindowTreeHostWin::VivaldiDesktopWindowTreeHostWin(
     VivaldiBrowserWindow* window,
     views::DesktopNativeWidgetAura* desktop_native_widget_aura)
     : DesktopWindowTreeHostWin(window->GetWidget(), desktop_native_widget_aura),
-      window_(window) {}
+      window_(window) {
+  prefs_registrar_.Init(window_->GetProfile()->GetPrefs());
+  // NOTE(andre@vivaldi.com) : Unretained is safe as this will live along
+  // prefs_registrar_.
+  // dark or light mode
+  prefs_registrar_.Add(
+      vivaldiprefs::kSystemDesktopThemeColor,
+      base::BindRepeating(&VivaldiDesktopWindowTreeHostWin::OnPrefsChanged,
+                          base::Unretained(this)));
+}
 
 VivaldiDesktopWindowTreeHostWin::~VivaldiDesktopWindowTreeHostWin() {}
 
@@ -235,6 +251,12 @@ void VivaldiDesktopWindowTreeHostWin::Show(ui::WindowShowState show_state,
     }
   }
   DesktopWindowTreeHostWin::Show(show_state, restore_bounds);
+}
+
+void VivaldiDesktopWindowTreeHostWin::OnPrefsChanged(const std::string& path) {
+  if (path == vivaldiprefs::kSystemDesktopThemeColor) {
+    UpdateWindowBorderColor(!IsActive(), true);
+  }
 }
 
 std::string VivaldiDesktopWindowTreeHostWin::GetWorkspace() const {
@@ -292,6 +314,10 @@ void VivaldiDesktopWindowTreeHostWin::PostHandleMSG(UINT message,
       // least once as Windows provides no event for when a window is moved to a
       // different virtual desktop, so we handle it here.
       UpdateWorkspace();
+      break;
+    }
+    case WM_ACTIVATE: {
+      UpdateWindowBorderColor(w_param == WA_INACTIVE);
       break;
     }
     case WM_DWMCOLORIZATIONCOLORCHANGED: {
@@ -360,6 +386,64 @@ bool VivaldiDesktopWindowTreeHostWin::HasFrame() const {
 void VivaldiDesktopWindowTreeHostWin::HandleCreate() {
   views::DesktopWindowTreeHostWin::HandleCreate();
   SetRoundedWindowCorners(true);
+  UpdateWindowBorderColor(!IsActive(), true);
+}
+
+void VivaldiDesktopWindowTreeHostWin::OnAccentColorUpdated() {
+  UpdateWindowBorderColor(!IsActive(), true);
+}
+
+void VivaldiDesktopWindowTreeHostWin::UpdateWindowBorderColor(
+    bool is_inactive,
+    bool check_global_accent /*false*/) {
+  // NOTE(andre@vivaldi.com) : The accent_color_inactive_ member is only set in
+  // the AccentColorObserver when the border accent is set. Use this as a flag.
+  if (check_global_accent &&
+      base::win::GetVersion() >= base::win::Version::WIN8) {
+    dwm_key_ = std::make_unique<base::win::RegKey>(
+        HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\DWM", KEY_READ);
+    if (dwm_key_->Valid()) {
+      DWORD accent_color, color_prevalence;
+
+      has_accent_set_ =
+          dwm_key_->ReadValueDW(L"AccentColor", &accent_color) ==
+              ERROR_SUCCESS &&
+          dwm_key_->ReadValueDW(L"ColorPrevalence", &color_prevalence) ==
+              ERROR_SUCCESS &&
+          color_prevalence == 1;
+    }
+  }
+
+  // If the system has accent_color set, this overrides everything.
+  if (has_accent_set_) {
+    if (is_inactive) {
+      absl::optional<SkColor> accent_color_inactive =
+          ui::AccentColorObserver::Get()->accent_color_inactive();
+
+      if (accent_color_inactive) {
+        window_border_color_ = RGB(SkColorGetR(*accent_color_inactive),
+                                   SkColorGetG(*accent_color_inactive),
+                                   SkColorGetB(*accent_color_inactive));
+      } else {
+        window_border_color_ = GetSysColor(CTLCOLOR_STATIC);
+      }
+    } else {
+      absl::optional<SkColor> accent_color =
+          ui::AccentColorObserver::Get()->accent_color();
+      window_border_color_ =
+          RGB(SkColorGetR(*accent_color), SkColorGetG(*accent_color),
+              SkColorGetB(*accent_color));
+    }
+  } else {
+    // System accent border colors are disabled, let dark and light mode decide.
+    bool is_dark_mode =
+        (static_cast<int>(vivaldiprefs::SystemDesktopThemeColorValues::kDark) ==
+         window_->GetProfile()->GetPrefs()->GetInteger(
+             vivaldiprefs::kSystemDesktopThemeColor));
+    window_border_color_ =
+        is_dark_mode ? VIVALDI_WINDOW_BORDER_DARK : VIVALDI_WINDOW_BORDER_LIGHT;
+  }
+  SetWindowAccentColor(window_border_color_);
 }
 
 void VivaldiDesktopWindowTreeHostWin::SetFullscreen(bool fullscreen,
@@ -382,21 +466,22 @@ bool VivaldiDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
 bool VivaldiDesktopWindowTreeHostWin::GetClientAreaInsets(
     gfx::Insets* insets,
     HMONITOR monitor) const {
-  // System window decorations.
-  if (window_->with_native_frame()) {
+  // System window decorations, or maximized windows gets a frame drawn
+  // regardless. Do not set any insets.
+  if (window_->with_native_frame() ) {
     return false;
   }
 
+  // Don't extend the glass in at all if it won't be visible.
   if (GetWidget()->IsFullscreen()) {
-    // In fullscreen mode there is no frame.
     *insets = gfx::Insets();
   } else {
-    // Maximized windows gets a frame drawn regardless. Work around this.
-    if (GetWidget()->IsMaximized()) {
-      const int frame_thickness = ui::GetFrameThickness(monitor);
-      *insets = gfx::Insets::TLBR(frame_thickness, frame_thickness,
-                                  frame_thickness, frame_thickness);
-    }
+    const int frame_thickness =
+        GetWidget()->IsMaximized() ? ui::GetFrameThickness(monitor) : 1;
+    const int top_frame_thickness =
+        GetWidget()->IsMaximized() ? frame_thickness : 0;
+    *insets = gfx::Insets::TLBR(top_frame_thickness, frame_thickness,
+                                frame_thickness, frame_thickness);
   }
   return true;
 }
@@ -404,9 +489,17 @@ bool VivaldiDesktopWindowTreeHostWin::GetClientAreaInsets(
 void VivaldiDesktopWindowTreeHostWin::SetRoundedWindowCorners(
     bool enable_round_corners) {
   if (base::win::GetVersion() >= base::win::Version::WIN11) {
-    DWORD corner_preference = enable_round_corners ? 2   // DWMWCP_ROUND
-                                                   : 0;  // DWMWCP_DEFAULT
-    DwmSetWindowAttribute(GetHWND(), 33,  // DWM_WINDOW_CORNER_PREFERENCE
-                          &corner_preference, sizeof(corner_preference));
+    DWORD corner_preference =
+        enable_round_corners ? DWMWCP_ROUND : DWMWCP_DEFAULT;
+    DwmSetWindowAttribute(GetHWND(), DWMWA_WINDOW_CORNER_PREFERENCE,
+                          &corner_preference, sizeof(DWORD));
+  }
+}
+
+void VivaldiDesktopWindowTreeHostWin::SetWindowAccentColor(
+    COLORREF bordercolor) {
+  if (base::win::GetVersion() >= base::win::Version::WIN11) {
+    DwmSetWindowAttribute(GetHWND(), DWMWA_BORDER_COLOR, &bordercolor,
+                          sizeof(COLORREF));
   }
 }

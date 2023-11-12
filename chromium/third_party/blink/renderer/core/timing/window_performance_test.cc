@@ -156,7 +156,8 @@ class WindowPerformanceTest : public testing::Test {
 
     LocalDOMWindow* window = LocalDOMWindow::From(GetScriptState());
     performance_ = DOMWindowPerformance::performance(*window);
-    performance_->SetTickClockForTesting(test_task_runner_->GetMockTickClock());
+    performance_->SetClocksForTesting(test_task_runner_->GetMockClock(),
+                                      test_task_runner_->GetMockTickClock());
     performance_->time_origin_ = GetTimeOrigin();
     // Stop UKM sampling for testing.
     performance_->GetResponsivenessMetrics().StopUkmSamplingForTesting();
@@ -308,7 +309,7 @@ TEST_F(WindowPerformanceTest, EnsureEntryListOrder) {
     performance_->mark(GetScriptState(), AtomicString::Number(i), nullptr,
                        exception_state);
   }
-  PerformanceEntryVector entries = performance_->getEntries();
+  PerformanceEntryVector entries = performance_->getEntries(GetScriptState());
   EXPECT_EQ(17U, entries.size());
   for (int i = 0; i < 8; i++) {
     EXPECT_EQ(AtomicString::Number(i), entries[i]->name());
@@ -435,7 +436,7 @@ TEST_F(WindowPerformanceTest, FirstInput) {
     }
     SimulateSwapPromise(GetTimeOrigin() + base::Milliseconds(3));
     PerformanceEntryVector firstInputs =
-        performance_->getEntriesByType("first-input");
+        performance_->getEntriesByType(GetScriptState(), "first-input");
     EXPECT_GE(1u, firstInputs.size());
     EXPECT_EQ(input.should_report, firstInputs.size() == 1u);
     ResetPerformance();
@@ -452,9 +453,12 @@ TEST_F(WindowPerformanceTest, FirstInputAfterIgnored) {
                          GetTimeOrigin() + base::Milliseconds(2), 4);
     SimulateSwapPromise(GetTimeOrigin() + base::Milliseconds(3));
   }
-  ASSERT_EQ(1u, performance_->getEntriesByType("first-input").size());
+  ASSERT_EQ(
+      1u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   EXPECT_EQ("mousedown",
-            performance_->getEntriesByType("first-input")[0]->name());
+            performance_->getEntriesByType(GetScriptState(), "first-input")[0]
+                ->name());
 }
 
 // Test that pointerdown followed by pointerup works as a 'firstInput'.
@@ -466,14 +470,20 @@ TEST_F(WindowPerformanceTest, FirstPointerUp) {
   RegisterPointerEvent("pointerdown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      0u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   RegisterPointerEvent("pointerup", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      1u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(
-      1u, performance_->getEntriesByName("pointerdown", "first-input").size());
+      1u, performance_
+              ->getEntriesByName(GetScriptState(), "pointerdown", "first-input")
+              .size());
 }
 
 // When the pointerdown is optimized out, the mousedown works as a
@@ -486,10 +496,14 @@ TEST_F(WindowPerformanceTest, PointerdownOptimizedOut) {
   RegisterPointerEvent("mousedown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      1u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(1u,
-            performance_->getEntriesByName("mousedown", "first-input").size());
+            performance_
+                ->getEntriesByName(GetScriptState(), "mousedown", "first-input")
+                .size());
 }
 
 // Test that pointerdown followed by mousedown, pointerup works as a
@@ -502,18 +516,26 @@ TEST_F(WindowPerformanceTest, PointerdownOnDesktop) {
   RegisterPointerEvent("pointerdown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      0u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   RegisterPointerEvent("mousedown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      0u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   RegisterPointerEvent("pointerup", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
+  EXPECT_EQ(
+      1u,
+      performance_->getEntriesByType(GetScriptState(), "first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(
-      1u, performance_->getEntriesByName("pointerdown", "first-input").size());
+      1u, performance_
+              ->getEntriesByName(GetScriptState(), "pointerdown", "first-input")
+              .size());
 }
 
 TEST_F(WindowPerformanceTest, OneKeyboardInteraction) {
@@ -1589,47 +1611,6 @@ TEST_F(InteractionIdTest, ClickIncorrectPointerId) {
   // Flush UKM logging mojo request.
   RunPendingTasks();
   CheckUKMValues({{40, 60, UserInteractionType::kTapOrClick}});
-}
-
-struct DummyWindowPerformance {
-  std::unique_ptr<DummyPageHolder> page_holder_;
-  Persistent<WindowPerformance> performance_;
-
-  explicit DummyWindowPerformance(const KURL& url) {
-    page_holder_ = std::make_unique<DummyPageHolder>(gfx::Size(800, 600));
-    ScriptState* script_state =
-        ToScriptStateForMainWorld(page_holder_->GetDocument().GetFrame());
-    LocalDOMWindow* window = LocalDOMWindow::From(script_state);
-    performance_ = DOMWindowPerformance::performance(*window);
-  }
-};
-
-namespace {
-
-base::Time fake_time;
-base::Time FakeTimeNow() {
-  return fake_time;
-}
-}  // namespace
-
-class TimeOriginSyncTest : public testing::Test {};
-
-// Test is flaky on all platforms: https://crbug.com/1346004
-TEST_F(TimeOriginSyncTest, DISABLED_TimeOriginStableWhenSystemClockChanges) {
-  base::subtle::ScopedTimeClockOverrides clock_overrides(&FakeTimeNow, nullptr,
-                                                         nullptr);
-  base::TimeTicks before = base::TimeTicks::Now();
-  base::TimeDelta delta = base::Minutes(3);
-  ASSERT_TRUE(base::Time::FromString("10 Jul 2022 10:00 GMT", &fake_time));
-  DummyWindowPerformance perf1(KURL("https://a.com"));
-  perf1.performance_->ResetTimeOriginForTesting(before);
-  ASSERT_TRUE(base::Time::FromString("11 Jul 2023 11:30 GMT", &fake_time));
-  DummyWindowPerformance perf2(KURL("https://b.com"));
-  perf2.performance_->ResetTimeOriginForTesting(before + delta);
-  DOMHighResTimeStamp time_origin_1 = perf1.performance_->timeOrigin();
-  DOMHighResTimeStamp time_origin_2 = perf2.performance_->timeOrigin();
-  EXPECT_EQ(floor(time_origin_1 + delta.InMillisecondsF()),
-            floor(time_origin_2));
 }
 
 }  // namespace blink

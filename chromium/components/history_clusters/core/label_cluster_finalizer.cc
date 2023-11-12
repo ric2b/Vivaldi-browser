@@ -18,6 +18,8 @@
 #include "components/url_formatter/url_formatter.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using LabelSource = history::Cluster::LabelSource;
+
 namespace history_clusters {
 
 LabelClusterFinalizer::LabelClusterFinalizer(

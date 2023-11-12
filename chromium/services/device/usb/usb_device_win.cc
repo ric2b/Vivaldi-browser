@@ -13,7 +13,6 @@
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/device_event_log/device_event_log.h"
 #include "services/device/usb/usb_device_handle_win.h"
 #include "services/device/usb/webusb_descriptors.h"
@@ -47,7 +46,7 @@ void UsbDeviceWin::Open(OpenCallback callback) {
     handles().push_back(device_handle.get());
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(device_handle)));
 }
 
@@ -106,8 +105,10 @@ void UsbDeviceWin::OnReadDescriptors(
   descriptor->device_info->port_number = device_info_->port_number,
   device_info_ = std::move(descriptor->device_info);
 
-  // WinUSB only supports the configuration 1.
-  ActiveConfigurationChanged(1);
+  // The active configuration was set after reading the node connection info
+  // from the hub driver. If it wasn't valid, assume the first configuration.
+  if (!GetActiveConfiguration() && !configurations().empty())
+    ActiveConfigurationChanged(configurations()[0]->configuration_value);
 
   auto string_map = std::make_unique<std::map<uint8_t, std::u16string>>();
   if (descriptor->i_manufacturer)

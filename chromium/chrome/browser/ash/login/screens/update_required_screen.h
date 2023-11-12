@@ -13,15 +13,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
-#include "chromeos/ash/components/network/network_state_handler.h"
-#include "chromeos/ash/components/network/network_state_handler_observer.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ash/login/error_screens_histogram_helper.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/version_updater/version_updater.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "components/user_manager/remove_user_delegate.h"
 
 namespace base {
@@ -29,6 +24,10 @@ class Clock;
 }  // namespace base
 
 namespace ash {
+
+class ErrorScreensHistogramHelper;
+class NetworkStateHandler;
+class UpdateRequiredView;
 
 // Controller for the update required screen.
 class UpdateRequiredScreen : public BaseScreen,
@@ -156,11 +155,5 @@ class UpdateRequiredScreen : public BaseScreen,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::UpdateRequiredScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_UPDATE_REQUIRED_SCREEN_H_

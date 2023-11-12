@@ -690,7 +690,7 @@ TEST_P(PaintPropertyTreeUpdateTest, PerspectiveOriginUpdatesOnSizeChanges) {
   )HTML");
 
   auto* perspective = GetLayoutObjectByElementId("perspective");
-  TransformationMatrix matrix;
+  gfx::Transform matrix;
   matrix.ApplyPerspectiveDepth(100);
   EXPECT_EQ(
       matrix,
@@ -728,7 +728,7 @@ TEST_P(PaintPropertyTreeUpdateTest, TransformUpdatesOnRelativeLengthChanges) {
   EXPECT_EQ(gfx::Vector2dF(50, 100), transform_object->FirstFragment()
                                          .PaintProperties()
                                          ->Transform()
-                                         ->Translation2D());
+                                         ->Get2dTranslation());
 
   transform->setAttribute(html_names::kStyleAttr,
                           "width: 200px; height: 300px;");
@@ -736,7 +736,7 @@ TEST_P(PaintPropertyTreeUpdateTest, TransformUpdatesOnRelativeLengthChanges) {
   EXPECT_EQ(gfx::Vector2dF(100, 150), transform_object->FirstFragment()
                                           .PaintProperties()
                                           ->Transform()
-                                          ->Translation2D());
+                                          ->Get2dTranslation());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, CSSClipDependingOnSize) {
@@ -852,7 +852,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ViewportAddRemoveDeviceEmulationNode) {
   }
 
   // These emulate WebViewImpl::SetDeviceEmulationTransform().
-  GetChromeClient().SetDeviceEmulationTransform(TransformationMatrix());
+  GetChromeClient().SetDeviceEmulationTransform(gfx::Transform());
   visual_viewport.SetNeedsPaintPropertyUpdate();
 
   UpdateAllLifecyclePhasesForTest();
@@ -1383,8 +1383,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ForwardReferencedSVGElementUpdate) {
   EXPECT_EQ(MakeTranslationMatrix(1, 0),
             GeometryMapper::SourceToDestinationProjection(
                 *rect_properties->Transform(),
-                *svg2_properties->PaintOffsetTranslation())
-                .Matrix());
+                *svg2_properties->PaintOffsetTranslation()));
 
   // Change filter which forward references rect, and insert a transform
   // node above rect's transform.
@@ -1405,8 +1404,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ForwardReferencedSVGElementUpdate) {
   EXPECT_EQ(MakeTranslationMatrix(3, 0),
             GeometryMapper::SourceToDestinationProjection(
                 *rect_properties->Transform(),
-                *svg2_properties->PaintOffsetTranslation())
-                .Matrix());
+                *svg2_properties->PaintOffsetTranslation()));
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
@@ -1611,7 +1609,7 @@ TEST_P(PaintPropertyTreeUpdateTest, SubpixelAccumulationAcrossIsolation) {
   EXPECT_EQ(PhysicalOffset(LayoutUnit(10.25), LayoutUnit()),
             parent->FirstFragment().PaintOffset());
   EXPECT_EQ(gfx::Vector2dF(10, 0),
-            isolation_properties->PaintOffsetTranslation()->Translation2D());
+            isolation_properties->PaintOffsetTranslation()->Get2dTranslation());
   EXPECT_EQ(PhysicalOffset(), child->FirstFragment().PaintOffset());
 
   parent_element->setAttribute(html_names::kStyleAttr, "margin-left: 12.75px");
@@ -1620,7 +1618,7 @@ TEST_P(PaintPropertyTreeUpdateTest, SubpixelAccumulationAcrossIsolation) {
   EXPECT_EQ(PhysicalOffset(LayoutUnit(12.75), LayoutUnit()),
             parent->FirstFragment().PaintOffset());
   EXPECT_EQ(gfx::Vector2dF(13, 0),
-            isolation_properties->PaintOffsetTranslation()->Translation2D());
+            isolation_properties->PaintOffsetTranslation()->Get2dTranslation());
   EXPECT_EQ(PhysicalOffset(), child->FirstFragment().PaintOffset());
 }
 
@@ -1643,12 +1641,12 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeDuringAnimation) {
   )HTML");
 
   auto* target = GetLayoutObjectByElementId("target");
-  auto style = ComputedStyle::Clone(target->StyleRef());
+  ComputedStyleBuilder builder(target->StyleRef());
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   // Simulates starting a composite animation.
-  style->SetHasCurrentTransformAnimation(true);
-  style->SetIsRunningTransformAnimationOnCompositor(true);
-  target->SetStyle(std::move(style));
+  builder.SetHasCurrentTransformAnimation(true);
+  builder.SetIsRunningTransformAnimationOnCompositor(true);
+  target->SetStyle(builder.TakeStyle());
   EXPECT_TRUE(target->NeedsPaintPropertyUpdate());
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   UpdateAllLifecyclePhasesExceptPaint();
@@ -1657,7 +1655,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeDuringAnimation) {
       target->FirstFragment().PaintProperties()->Transform();
   ASSERT_TRUE(transform_node);
   EXPECT_TRUE(transform_node->HasActiveTransformAnimation());
-  EXPECT_EQ(TransformationMatrix(), transform_node->Matrix());
+  EXPECT_EQ(gfx::Transform(), transform_node->Matrix());
   EXPECT_EQ(gfx::Point3F(50, 50, 0), transform_node->Origin());
   // Change of animation status should update PaintArtifactCompositor.
   auto* paint_artifact_compositor =
@@ -1668,14 +1666,14 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeDuringAnimation) {
 
   // Simulates changing transform and transform-origin during an animation.
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
-  style = ComputedStyle::Clone(target->StyleRef());
+  builder = ComputedStyleBuilder(target->StyleRef());
   TransformOperations transform;
   transform.Operations().push_back(
       RotateTransformOperation::Create(10, TransformOperation::kRotate));
-  style->SetTransform(transform);
-  style->SetTransformOrigin(TransformOrigin(Length(70, Length::kFixed),
-                                            Length(30, Length::kFixed), 0));
-  target->SetStyle(std::move(style));
+  builder.SetTransform(transform);
+  builder.SetTransformOrigin(
+      TransformOrigin(Length::Fixed(70), Length::Fixed(30), 0));
+  target->SetStyle(builder.TakeStyle());
   EXPECT_TRUE(target->NeedsPaintPropertyUpdate());
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   {
@@ -1699,9 +1697,9 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeDuringAnimation) {
 
   // Simulates changing backface visibility during animation.
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
-  style = ComputedStyle::Clone(target->StyleRef());
-  style->SetBackfaceVisibility(EBackfaceVisibility::kHidden);
-  target->SetStyle(std::move(style));
+  builder = ComputedStyleBuilder(target->StyleRef());
+  builder.SetBackfaceVisibility(EBackfaceVisibility::kHidden);
+  target->SetStyle(builder.TakeStyle());
   EXPECT_TRUE(target->NeedsPaintPropertyUpdate());
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   UpdateAllLifecyclePhasesExceptPaint();
@@ -1738,19 +1736,22 @@ TEST_P(PaintPropertyTreeUpdateTest, FixedPositionCompositing) {
   ASSERT_TRUE(properties);
   auto* paint_offset_translation = properties->PaintOffsetTranslation();
   ASSERT_TRUE(paint_offset_translation);
-  EXPECT_EQ(gfx::Vector2dF(60, 50), paint_offset_translation->Translation2D());
+  EXPECT_EQ(gfx::Vector2dF(60, 50),
+            paint_offset_translation->Get2dTranslation());
   EXPECT_FALSE(paint_offset_translation->HasDirectCompositingReasons());
 
   auto* space = GetDocument().getElementById("space");
   space->setAttribute(html_names::kStyleAttr, "height: 2000px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(gfx::Vector2dF(60, 50), paint_offset_translation->Translation2D());
+  EXPECT_EQ(gfx::Vector2dF(60, 50),
+            paint_offset_translation->Get2dTranslation());
   EXPECT_TRUE(paint_offset_translation->HasDirectCompositingReasons());
   EXPECT_FALSE(properties->Transform());
 
   space->setAttribute(html_names::kStyleAttr, "height: 100px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(gfx::Vector2dF(60, 50), paint_offset_translation->Translation2D());
+  EXPECT_EQ(gfx::Vector2dF(60, 50),
+            paint_offset_translation->Get2dTranslation());
   EXPECT_FALSE(paint_offset_translation->HasDirectCompositingReasons());
 }
 
@@ -1818,7 +1819,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ScrollNonStackingContextContainingStacked) {
   // not a stacking context but contains stacked descendants.
   scroller->setScrollTop(100);
   UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_TRUE(paint_artifact_compositor->NeedsUpdate());
+  EXPECT_FALSE(paint_artifact_compositor->NeedsUpdate());
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(paint_artifact_compositor->NeedsUpdate());
 
@@ -1866,7 +1867,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ScrollOriginChange) {
   auto* child1 = GetLayoutObjectByElementId("child1");
   auto* child2 = GetLayoutObjectByElementId("child2");
   EXPECT_EQ(gfx::Vector2dF(-20, 0),
-            container_properties->ScrollTranslation()->Translation2D());
+            container_properties->ScrollTranslation()->Get2dTranslation());
   EXPECT_EQ(PhysicalOffset(), child1->FirstFragment().PaintOffset());
   EXPECT_EQ(PhysicalOffset(), child2->FirstFragment().PaintOffset());
 
@@ -1874,7 +1875,7 @@ TEST_P(PaintPropertyTreeUpdateTest, ScrollOriginChange) {
       ->setAttribute(html_names::kStyleAttr, "width: 100px");
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(gfx::Vector2dF(-120, 0),
-            container_properties->ScrollTranslation()->Translation2D());
+            container_properties->ScrollTranslation()->Get2dTranslation());
   EXPECT_EQ(PhysicalOffset(100, 0), child1->FirstFragment().PaintOffset());
   EXPECT_EQ(PhysicalOffset(), child2->FirstFragment().PaintOffset());
 }
@@ -1895,14 +1896,16 @@ TEST_P(PaintPropertyTreeUpdateTest, IFrameContainStrictChangeBorderTopWidth) {
       ChildDocument().GetLayoutView()->FirstFragment().PaintProperties();
   ASSERT_TRUE(child_view_properties);
   ASSERT_TRUE(child_view_properties->PaintOffsetTranslation());
-  EXPECT_EQ(gfx::Vector2dF(2, 2),
-            child_view_properties->PaintOffsetTranslation()->Translation2D());
+  EXPECT_EQ(
+      gfx::Vector2dF(2, 2),
+      child_view_properties->PaintOffsetTranslation()->Get2dTranslation());
 
   GetDocument().getElementById("iframe")->setAttribute(
       html_names::kStyleAttr, "border-top-width: 10px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(gfx::Vector2dF(2, 10),
-            child_view_properties->PaintOffsetTranslation()->Translation2D());
+  EXPECT_EQ(
+      gfx::Vector2dF(2, 10),
+      child_view_properties->PaintOffsetTranslation()->Get2dTranslation());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, LocalBorderBoxPropertiesChange) {
@@ -1960,7 +1963,7 @@ TEST_P(PaintPropertyTreeUpdateTest,
 
   auto* div_properties = PaintPropertiesForElement("div");
   ASSERT_TRUE(div_properties);
-  EXPECT_EQ(100, div_properties->Transform()->Translation2D().x());
+  EXPECT_EQ(100, div_properties->Transform()->Get2dTranslation().x());
   auto* div = GetDocument().getElementById("div");
   EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
 
@@ -1970,7 +1973,7 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
 
   UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_EQ(200, div_properties->Transform()->Translation2D().x());
+  EXPECT_EQ(200, div_properties->Transform()->Get2dTranslation().x());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, ChangeMaskOutputClip) {
@@ -1998,6 +2001,86 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeMaskOutputClip) {
   EXPECT_EQ(masked_properties, PaintPropertiesForElement("masked"));
   EXPECT_EQ(DocContentClip(), masked_properties->Mask()->OutputClip());
   EXPECT_TRUE(GetPaintLayerByElementId("masked")->SelfNeedsRepaint());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest,
+       DirectOpacityUpdateSkipsPropertyTreeBuilder) {
+  SetBodyInnerHTML(R"HTML(
+      <div id='div' style="opacity:0.5"></div>
+  )HTML");
+
+  auto* div_properties = PaintPropertiesForElement("div");
+  ASSERT_TRUE(div_properties);
+  EXPECT_EQ(0.5, div_properties->Effect()->Opacity());
+  auto* div = GetDocument().getElementById("div");
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  div->setAttribute(html_names::kStyleAttr, "opacity:0.8");
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  UpdateAllLifecyclePhasesExceptPaint();
+  EXPECT_NEAR(0.8, div_properties->Effect()->Opacity(), 0.001);
+}
+
+TEST_P(PaintPropertyTreeUpdateTest,
+       DirectOpacityAndTransformUpdatesBothExecuted) {
+  SetBodyInnerHTML(R"HTML(
+      <div id='div' style="opacity:0.5; transform:translateX(100px)"></div>
+  )HTML");
+
+  auto* div_properties = PaintPropertiesForElement("div");
+  ASSERT_TRUE(div_properties);
+  EXPECT_EQ(0.5, div_properties->Effect()->Opacity());
+  EXPECT_EQ(100, div_properties->Transform()->Get2dTranslation().x());
+  auto* div = GetDocument().getElementById("div");
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  div->setAttribute(html_names::kStyleAttr,
+                    "opacity:0.8; transform: translateX(200px)");
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  UpdateAllLifecyclePhasesExceptPaint();
+  EXPECT_NEAR(0.8, div_properties->Effect()->Opacity(), 0.001);
+  EXPECT_EQ(200, div_properties->Transform()->Get2dTranslation().x());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest,
+       DirectTransformUpdateSkipsPropertyTreeBuilderForAncestors) {
+  SetBodyInnerHTML(R"HTML(
+    <div id='positioned_ancestor' style="position: relative;">
+      <div id='dom_ancestor'>
+        <div id='div' style="transform:translateX(100px)"></div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* div_properties = PaintPropertiesForElement("div");
+  ASSERT_TRUE(div_properties);
+  EXPECT_EQ(100, div_properties->Transform()->Get2dTranslation().x());
+  auto* div = GetDocument().getElementById("div");
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+  auto* dom_ancestor = GetDocument().getElementById("dom_ancestor");
+  EXPECT_FALSE(dom_ancestor->GetLayoutObject()->NeedsPaintPropertyUpdate());
+  auto* positioned_ancestor =
+      GetDocument().getElementById("positioned_ancestor");
+  EXPECT_FALSE(
+      positioned_ancestor->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  div->setAttribute(html_names::kStyleAttr, "transform: translateX(200px)");
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
+
+  EXPECT_FALSE(div->GetLayoutObject()->NeedsPaintPropertyUpdate());
+  EXPECT_FALSE(dom_ancestor->GetLayoutObject()->NeedsPaintPropertyUpdate());
+  EXPECT_FALSE(
+      positioned_ancestor->GetLayoutObject()->NeedsPaintPropertyUpdate());
+
+  UpdateAllLifecyclePhasesExceptPaint();
+  EXPECT_EQ(200, div_properties->Transform()->Get2dTranslation().x());
 }
 
 }  // namespace blink

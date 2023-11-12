@@ -8,8 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
@@ -32,7 +31,6 @@ namespace ui {
 scoped_refptr<InProcessContextProvider>
 InProcessContextProvider::CreateOffscreen(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    gpu::ImageFactory* image_factory,
     bool is_worker) {
   gpu::ContextCreationAttribs attribs;
   attribs.alpha_size = 8;
@@ -49,17 +47,14 @@ InProcessContextProvider::CreateOffscreen(
   attribs.enable_gles2_interface = !is_worker;
   attribs.enable_oop_rasterization = is_worker;
   return new InProcessContextProvider(attribs, gpu_memory_buffer_manager,
-                                      image_factory, is_worker);
+                                      is_worker);
 }
 
 InProcessContextProvider::InProcessContextProvider(
     const gpu::ContextCreationAttribs& attribs,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    gpu::ImageFactory* image_factory,
     bool support_locking)
-    : support_locking_(support_locking),
-      attribs_(attribs),
-      image_factory_(image_factory) {
+    : support_locking_(support_locking), attribs_(attribs) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   context_thread_checker_.DetachFromThread();
 }
@@ -77,7 +72,7 @@ void InProcessContextProvider::Release() const {
   base::RefCountedThreadSafe<InProcessContextProvider>::Release();
 }
 
-gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
+gpu::ContextResult InProcessContextProvider::BindToCurrentSequence() {
   // This is called on the thread the context will be used.
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
@@ -94,14 +89,14 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
     raster_context_ = std::make_unique<gpu::RasterInProcessContext>();
     bind_result_ = raster_context_->Initialize(
         holder->task_executor(), attribs_, gpu::SharedMemoryLimits(),
-        image_factory_, holder->gpu_service()->gr_shader_cache(), nullptr);
+        holder->gpu_service()->gr_shader_cache(), nullptr);
 
     impl_base_ = raster_context_->GetImplementation();
   } else {
     gles2_context_ = std::make_unique<gpu::GLInProcessContext>();
     bind_result_ = gles2_context_->Initialize(
         viz::TestGpuServiceHolder::GetInstance()->task_executor(), attribs_,
-        gpu::SharedMemoryLimits(), image_factory_);
+        gpu::SharedMemoryLimits());
 
     impl_base_ = gles2_context_->GetImplementation();
   }
@@ -110,7 +105,7 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
     return bind_result_;
 
   cache_controller_ = std::make_unique<viz::ContextCacheController>(
-      impl_base_, base::ThreadTaskRunnerHandle::Get());
+      impl_base_, base::SingleThreadTaskRunner::GetCurrentDefault());
   if (support_locking_)
     cache_controller_->SetLock(GetLock());
 
@@ -196,15 +191,6 @@ void InProcessContextProvider::AddObserver(viz::ContextLostObserver* obs) {
 
 void InProcessContextProvider::RemoveObserver(viz::ContextLostObserver* obs) {
   observers_.RemoveObserver(obs);
-}
-
-uint32_t InProcessContextProvider::GetCopyTextureInternalFormat() {
-  if (attribs_.alpha_size > 0)
-    return GL_RGBA;
-  DCHECK_NE(attribs_.red_size, 0);
-  DCHECK_NE(attribs_.green_size, 0);
-  DCHECK_NE(attribs_.blue_size, 0);
-  return GL_RGB;
 }
 
 void InProcessContextProvider::SendOnContextLost() {

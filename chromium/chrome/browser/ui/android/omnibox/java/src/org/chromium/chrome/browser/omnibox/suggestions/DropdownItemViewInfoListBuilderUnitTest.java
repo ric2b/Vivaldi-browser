@@ -119,7 +119,7 @@ public class DropdownItemViewInfoListBuilderUnitTest {
                 AutocompleteResult.fromCache(actualList, groupsDetails));
 
         verifier.verify(mMockHeaderProcessor, times(1))
-                .populateModel(any(), eq(1), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
+                .populateModel(any(), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestion), any(), eq(0));
         verifier.verify(mMockSuggestionProcessor, times(1))
@@ -172,13 +172,13 @@ public class DropdownItemViewInfoListBuilderUnitTest {
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionWithNoGroup), any(), eq(0));
         verifier.verify(mMockHeaderProcessor, times(1))
-                .populateModel(any(), eq(1), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
+                .populateModel(any(), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup1), any(), eq(1));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup1), any(), eq(2));
         verifier.verify(mMockHeaderProcessor, times(1))
-                .populateModel(any(), eq(2), eq(SECTION_3_EXPANDED_WITH_HEADER.getHeaderText()));
+                .populateModel(any(), eq(SECTION_3_EXPANDED_WITH_HEADER.getHeaderText()));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup2), any(), eq(3));
         verifier.verify(mMockSuggestionProcessor, times(1))
@@ -242,14 +242,14 @@ public class DropdownItemViewInfoListBuilderUnitTest {
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup1), any(), eq(2));
         verifier.verify(mMockHeaderProcessor, times(1))
-                .populateModel(any(), eq(2), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
+                .populateModel(any(), eq(SECTION_2_EXPANDED_WITH_HEADER.getHeaderText()));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup2), any(), eq(3));
         verifier.verify(mMockSuggestionProcessor, times(1))
                 .populateModel(eq(suggestionForGroup2), any(), eq(4));
 
         // Make sure no other headers were ever constructed.
-        verify(mMockHeaderProcessor, times(1)).populateModel(any(), anyInt(), any());
+        verify(mMockHeaderProcessor, times(1)).populateModel(any(), any());
 
         Assert.assertEquals(6, model.size()); // 1 header + 5 suggestions.
 
@@ -403,38 +403,6 @@ public class DropdownItemViewInfoListBuilderUnitTest {
 
         mBuilder.setDropdownHeightWithKeyboardActive(5); // fits one suggestion partiall.
         Assert.assertEquals(1, mBuilder.getVisibleSuggestionsCount(result));
-    }
-
-    @Test
-    @SmallTest
-    public void visibleSuggestions_calculatesPresenceOfConcealedSuggestionsFromDropdownHeight() {
-        mBuilder.onNativeInitialized();
-        final AutocompleteMatch suggestion =
-                AutocompleteMatchBuilder.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
-                        .build();
-        final int viewHeight = 20;
-
-        final AutocompleteResult result = AutocompleteResult.fromCache(
-                Arrays.asList(suggestion, suggestion, suggestion), null);
-        when(mMockSuggestionProcessor.doesProcessSuggestion(any(), anyInt())).thenReturn(true);
-        when(mMockSuggestionProcessor.getMinimumViewHeight()).thenReturn(viewHeight);
-
-        mBuilder.setDropdownHeightWithKeyboardActive(3 * viewHeight);
-        mBuilder.buildDropdownViewInfoList(result);
-        Assert.assertFalse(mBuilder.hasFullyConcealedElements());
-
-        mBuilder.setDropdownHeightWithKeyboardActive(2 * viewHeight);
-        mBuilder.buildDropdownViewInfoList(result);
-        Assert.assertTrue(mBuilder.hasFullyConcealedElements());
-
-        // Third suggestion is partially visible, so counts as visible.
-        mBuilder.setDropdownHeightWithKeyboardActive(3 * viewHeight - 1);
-        mBuilder.buildDropdownViewInfoList(result);
-        Assert.assertFalse(mBuilder.hasFullyConcealedElements());
-
-        mBuilder.setDropdownHeightWithKeyboardActive(2 * viewHeight + 1);
-        mBuilder.buildDropdownViewInfoList(result);
-        Assert.assertFalse(mBuilder.hasFullyConcealedElements());
     }
 
     @Test

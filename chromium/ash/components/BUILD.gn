@@ -13,30 +13,15 @@ assert(is_chromeos_ash, "Non-ChromeOS builds cannot depend on //ash")
 test("ash_components_unittests") {
   use_xvfb = use_xvfb_in_this_config
 
-  sources = [
-    "test/ash_components_test_suite.cc",
-    "test/ash_components_test_suite.h",
-    "test/run_all_unittests.cc",
-  ]
+  sources = [ "test/run_all_unittests.cc" ]
 
   deps = [
     "//ash/components/arc:unit_tests",
     "//ash/components/arc/mojom:unit_tests",
     "//ash/components/arc/session:unit_tests",
-    "//ash/components/fwupd:unit_tests",
-    "//ash/components/peripheral_notification:unit_tests",
-    "//ash/components/phonehub:unit_tests",
-    "//ash/strings",
+    "//base",
     "//base/test:test_support",
+    "//chromeos/ash/components:test_support",
     "//mojo/core/embedder",
-    "//ui/aura",
-    "//ui/gl:test_support",
-    "//ui/lottie",
-  ]
-
-  data_deps = [
-    "//ash/resources:ash_test_resources_100_percent",
-    "//chromeos/strings:chromeos_test_strings",
-    "//ui/resources:ui_test_pak_data",
   ]
 }

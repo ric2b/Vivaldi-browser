@@ -25,25 +25,22 @@ namespace policy {
 
 class DeviceManagementService;
 
-// Indicates the current state of the auto-enrollment check. (Numeric values
-// are just to make reading of log files easier.)
-enum AutoEnrollmentState {
+// Indicates the current state of the auto-enrollment check.
+enum class AutoEnrollmentState {
   // Not yet started.
-  AUTO_ENROLLMENT_STATE_IDLE = 0,
+  kIdle = 0,
   // Working, another event will be fired eventually.
-  AUTO_ENROLLMENT_STATE_PENDING = 1,
+  kPending = 1,
   // Failed to connect to DMServer or to synchronize the system clock.
-  AUTO_ENROLLMENT_STATE_CONNECTION_ERROR = 2,
+  kConnectionError = 2,
   // Connection successful, but the server failed to generate a valid reply.
-  AUTO_ENROLLMENT_STATE_SERVER_ERROR = 3,
+  kServerError = 3,
   // Check completed successfully, enrollment should be triggered.
-  AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT = 4,
+  kEnrollment = 4,
   // Check completed successfully, enrollment not applicable.
-  AUTO_ENROLLMENT_STATE_NO_ENROLLMENT = 5,
-  // Check completed successfully, zero-touch enrollment should be triggered.
-  AUTO_ENROLLMENT_STATE_TRIGGER_ZERO_TOUCH = 6,
+  kNoEnrollment = 5,
   // Check completed successfully, device is disabled.
-  AUTO_ENROLLMENT_STATE_DISABLED = 7,
+  kDisabled = 6,
 };
 
 // Interacts with the device management service and determines whether this
@@ -80,9 +77,7 @@ class AutoEnrollmentClient {
 
     // |progress_callback| will be invoked whenever some significant event
     // happens as part of the protocol, after Start() is invoked. The result of
-    // the protocol will be cached in |local_state|. |power_initial| and
-    // |power_limit| are exponents of power-of-2 values which will be the
-    // initial modulus and the maximum modulus used by this client.
+    // the protocol will be cached in |local_state|.
     virtual std::unique_ptr<AutoEnrollmentClient> CreateForInitialEnrollment(
         const ProgressCallback& progress_callback,
         DeviceManagementService* device_management_service,
@@ -90,8 +85,6 @@ class AutoEnrollmentClient {
         scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
         const std::string& device_serial_number,
         const std::string& device_brand_code,
-        int power_initial,
-        int power_limit,
         std::unique_ptr<psm::RlweDmserverClient> psm_rlwe_dmserver_client) = 0;
   };
 

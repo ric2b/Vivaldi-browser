@@ -13,7 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 
 namespace em = enterprise_management;
 
@@ -98,8 +98,9 @@ std::string GetTimeString(const base::Time& timestamp) {
 }  // namespace
 
 std::string GetSerialNumber() {
-  return chromeos::system::StatisticsProvider::GetInstance()
-      ->GetEnterpriseMachineID();
+  return std::string(chromeos::system::StatisticsProvider::GetInstance()
+                         ->GetMachineID()
+                         .value_or(""));
 }
 
 base::Value::List ConvertExtensionProtoToValue(

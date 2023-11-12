@@ -9,7 +9,7 @@ import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import './navigation_shared_vars.css.js';
 import './page_toolbar.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SelectorItem} from './navigation_selector.js';
@@ -302,6 +302,14 @@ export class NavigationViewPanelElement extends PolymerElement {
       }
       this.shadowRoot.querySelector('page-toolbar').setAttribute('shadow', '');
     }
+  }
+
+  /**
+   * @param {string} selectorId The ID of the section to search for.
+   * @return {boolean}
+   */
+  pageExists(selectorId) {
+    return !!this.selectorItems_.find(({id}) => id === selectorId);
   }
 }
 

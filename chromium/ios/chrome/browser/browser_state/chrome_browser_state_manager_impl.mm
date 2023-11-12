@@ -23,9 +23,9 @@
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/browser_state_info_cache.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state_impl.h"
+#import "ios/chrome/browser/browser_state/constants.h"
 #import "ios/chrome/browser/browser_state/off_the_record_chrome_browser_state_impl.h"
 #import "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
-#import "ios/chrome/browser/chrome_constants.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service_factory.h"
 #import "ios/chrome/browser/paths/paths.h"
@@ -35,6 +35,10 @@
 #import "ios/chrome/browser/signin/account_reconcilor_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
+
+// vivaldi
+#import "ios/chrome/browser/browser_state/vivaldi_post_browser_state_init.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -201,6 +205,10 @@ void ChromeBrowserStateManagerImpl::DoFinalInit(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&BrowserStateSizeTask, path), base::Seconds(112));
+
+// vivaldi
+  vivaldi::PostBrowserStateInit(browser_state);
+// End vivaldi
 
   LogNumberOfBrowserStates(
       GetApplicationContext()->GetChromeBrowserStateManager());

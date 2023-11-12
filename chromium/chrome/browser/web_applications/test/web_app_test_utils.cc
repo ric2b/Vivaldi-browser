@@ -25,11 +25,11 @@
 #include "base/numerics/clamped_math.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -60,6 +60,7 @@
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -311,6 +312,30 @@ std::vector<IconSizes> CreateRandomDownloadedShortcutsMenuIconsSizes(
 
 }  // namespace
 
+std::string GetExternalPrefMigrationTestName(
+    const ::testing::TestParamInfo<ExternalPrefMigrationTestCases>& info) {
+  switch (info.param) {
+    case ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+      return "DisableMigration_ReadFromPrefs";
+    case ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+      return "DisableMigration_ReadFromDB";
+    case ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+      return "EnableMigration_ReadFromPrefs";
+    case ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+      return "EnableMigration_ReadFromDB";
+  }
+}
+
+std::string GetOsIntegrationSubManagersTestName(
+    const ::testing::TestParamInfo<OsIntegrationSubManagersState>& info) {
+  switch (info.param) {
+    case OsIntegrationSubManagersState::kEnabled:
+      return "OSIntegrationSubManagers_Enabled";
+    case OsIntegrationSubManagersState::kDisabled:
+      return "OSIntegrationSubManagers_Disabled";
+  }
+}
+
 std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
                                      WebAppManagement::Type source_type) {
   const AppId app_id = GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
@@ -380,6 +405,14 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   if (random.next_bool()) {
     app->AddSource(WebAppManagement::kCommandLine);
     management_types.push_back(WebAppManagement::kCommandLine);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kOem);
+    management_types.push_back(WebAppManagement::kOem);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kOneDriveIntegration);
+    management_types.push_back(WebAppManagement::kOneDriveIntegration);
   }
 
   // Must always be at least one source.
@@ -622,7 +655,9 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     IsolationDataContent content_types[] = {
         IsolationData::InstalledBundle{.path = path},
         IsolationData::DevModeBundle{.path = path},
-        IsolationData::DevModeProxy{.proxy_url = seed_str},
+        IsolationData::DevModeProxy{
+            .proxy_url = url::Origin::Create(
+                GURL(base::StrCat({"https://proxy-", seed_str, ".com/"})))},
     };
     static_assert(std::size(content_types) == kNumContentTypes);
 
@@ -638,7 +673,7 @@ void TestAcceptDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback), true /*accept*/,
                                 std::move(web_app_info)));
 }
@@ -647,7 +682,7 @@ void TestDeclineDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback),
                                 false /*accept*/, std::move(web_app_info)));
 }
@@ -729,6 +764,17 @@ void AddInstallUrlAndPlaceholderData(PrefService* pref_service,
   prefs.Insert(url, app_id, source);
   prefs.SetIsPlaceholder(url, is_placeholder);
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+ScopedSkipMainProfileCheck::ScopedSkipMainProfileCheck() {
+  EXPECT_FALSE(IsMainProfileCheckSkippedForTesting());
+  SetSkipMainProfileCheckForTesting(/*skip_check=*/true);
+}
+
+ScopedSkipMainProfileCheck::~ScopedSkipMainProfileCheck() {
+  SetSkipMainProfileCheckForTesting(/*skip_check=*/false);
+}
+#endif
 
 }  // namespace test
 }  // namespace web_app

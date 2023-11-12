@@ -8,6 +8,7 @@
 #include <map>
 
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace web_app {
 
@@ -57,7 +58,13 @@ class FakeWebAppUiManager : public WebAppUiManager {
       const SkBitmap& old_icon,
       const SkBitmap& new_icon,
       content::WebContents* web_contents,
-      AppIdentityDialogCallback callback) override {}
+      AppIdentityDialogCallback callback) override;
+
+  base::Value LaunchWebApp(apps::AppLaunchParams params,
+                           LaunchWebAppWindowSetting launch_setting,
+                           Profile& profile,
+                           LaunchWebAppCallback callback,
+                           AppLock& lock) override;
 
  private:
   std::map<AppId, size_t> app_id_to_num_windows_map_;

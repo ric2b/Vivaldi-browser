@@ -105,11 +105,9 @@ TEST_F(CollisionDetectionUtilsTest, AvoidObstaclesAvoidsPopupNotification) {
 }
 
 TEST_F(CollisionDetectionUtilsTest, AvoidObstaclesAvoidsClamshellLauncher) {
-  base::test::ScopedFeatureList feature_list(features::kProductivityLauncher);
-
   UpdateDisplay("1000x900");
   AppListController* app_list_controller = AppListController::Get();
-  app_list_controller->ShowAppList();
+  app_list_controller->ShowAppList(AppListShowSource::kSearchKey);
 
   display::Display display = GetPrimaryDisplay();
   gfx::Rect movement_area = CollisionDetectionUtils::GetMovementArea(display);

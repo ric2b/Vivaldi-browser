@@ -16,10 +16,12 @@ component("device_activity") {
     "//ash/constants:constants",
     "//base",
     "//base:i18n",
+    "//chromeos/ash/components/dbus/private_computing:private_computing",
+    "//chromeos/ash/components/dbus/private_computing:private_computing_proto",
     "//chromeos/ash/components/dbus/session_manager",
     "//chromeos/ash/components/dbus/system_clock:system_clock",
     "//chromeos/ash/components/network",
-    "//chromeos/system",
+    "//chromeos/ash/components/system",
     "//components/policy/core/common",
     "//components/prefs:prefs",
     "//components/version_info",
@@ -50,7 +52,8 @@ component("device_activity") {
     "fresnel_pref_names.h",
     "monthly_use_case_impl.cc",
     "monthly_use_case_impl.h",
-    "trigger.h",
+    "twenty_eight_day_active_use_case_impl.cc",
+    "twenty_eight_day_active_use_case_impl.h",
   ]
 }
 
@@ -64,6 +67,7 @@ source_set("unit_tests") {
     "device_activity_controller_unittest.cc",
     "first_active_use_case_impl_unittest.cc",
     "monthly_use_case_impl_unittest.cc",
+    "twenty_eight_day_active_use_case_impl_unittest.cc",
   ]
 
   deps = [
@@ -72,11 +76,13 @@ source_set("unit_tests") {
     "//ash/constants:constants",
     "//base",
     "//base/test:test_support",
+    "//chromeos/ash/components/dbus/private_computing:private_computing",
+    "//chromeos/ash/components/dbus/private_computing:private_computing_proto",
     "//chromeos/ash/components/dbus/session_manager:session_manager",
     "//chromeos/ash/components/dbus/system_clock:system_clock",
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/network:test_support",
-    "//chromeos/system:system",
+    "//chromeos/ash/components/system",
     "//components/policy/core/common:test_support",
     "//components/prefs:test_support",
     "//components/version_info:channel",
@@ -88,7 +94,12 @@ source_set("unit_tests") {
     "//third_party/private_membership:private_membership",
   ]
 
-  data = [ "//third_party/private_membership/src/internal/testing/regression_test_data/test_data.binarypb" ]
+  data = [
+    "//chromeos/ash/components/device_activity/testing/private_computing_service_test_data.binarypb",
+
+    # TODO(crbug/1393862): Script should binarypb from textpb.
+    "//third_party/private_membership/src/internal/testing/regression_test_data/test_data.binarypb",
+  ]
 }
 
 proto_library("fresnel_service_proto") {

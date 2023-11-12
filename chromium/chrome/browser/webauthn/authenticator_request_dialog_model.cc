@@ -12,11 +12,10 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
-#include "base/process/launch.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -246,7 +245,12 @@ void AuthenticatorRequestDialogModel::
     SetCurrentStep(*pending_step_);
     pending_step_.reset();
   } else if (mechanisms_.empty()) {
-    SetCurrentStep(Step::kErrorNoAvailableTransports);
+    if (base::FeatureList::IsEnabled(device::kWebAuthnNoPasskeysError) &&
+        transport_availability_.transport_list_did_include_internal) {
+      SetCurrentStep(Step::kErrorNoPasskeys);
+    } else {
+      SetCurrentStep(Step::kErrorNoAvailableTransports);
+    }
   } else if (mechanisms_.size() == 1) {
     mechanisms_[0].callback.Run();
   } else if (priority_mechanism_it != mechanisms_.end()) {
@@ -300,12 +304,7 @@ void AuthenticatorRequestDialogModel::
          current_step() == Step::kNotStarted);
 
 #if BUILDFLAG(IS_MAC)
-  // The BLE permission screen is only shown on macOS <= 12 because:
-  //    * System Preferences has been renamed to System Settings, so the
-  //      string on the button would need to be changed.
-  //    * Opening Preferences/Settings at the BLE permissions page is broken.
-  if (transport_availability()->ble_access_denied &&
-      base::mac::IsAtMostOS12()) {
+  if (transport_availability()->ble_access_denied) {
     // |step| is not saved because macOS asks the user to restart Chrome
     // after permission has been granted. So the user will end up retrying
     // the whole WebAuthn request in the new process.
@@ -358,13 +357,8 @@ void AuthenticatorRequestDialogModel::PowerOnBleAdapter() {
 #if BUILDFLAG(IS_MAC)
 void AuthenticatorRequestDialogModel::OpenBlePreferences() {
   DCHECK_EQ(current_step(), Step::kBlePermissionMac);
-
-  base::LaunchOptions opts;
-  opts.disclaim_responsibility = true;
-  base::LaunchProcess({"open",
-                       "x-apple.systempreferences:com.apple.preference."
-                       "security?Privacy_Bluetooth"},
-                      opts);
+  base::mac::OpenSystemSettingsPane(
+      base::mac::SystemSettingsPane::kPrivacySecurity_Bluetooth);
 }
 #endif  // IS_MAC
 
@@ -1066,7 +1060,7 @@ void AuthenticatorRequestDialogModel::DispatchRequestAsyncInternal(
   if (!request_callback_)
     return;
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(request_callback_, authenticator_id));
 }
 
@@ -1265,9 +1259,7 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
   }
 
   // At most one mechanism has priority.
-  DCHECK_LE(std::count_if(mechanisms_.begin(), mechanisms_.end(),
-                          [](const Mechanism& m) { return m.priority; }),
-            1);
+  DCHECK_LE(base::ranges::count_if(mechanisms_, &Mechanism::priority), 1);
 }
 
 void AuthenticatorRequestDialogModel::

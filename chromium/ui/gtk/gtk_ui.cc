@@ -67,9 +67,8 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/ozone/buildflags.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/shell_dialogs/select_file_dialog_linux.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_policy.h"
-#include "ui/shell_dialogs/shell_dialog_linux.h"
 #include "ui/views/window/window_button_order_provider.h"
 
 #if defined(USE_GIO)
@@ -165,9 +164,9 @@ gfx::FontRenderParams GetGtkFontRenderParams() {
   return params;
 }
 
-ui::LinuxUiTheme::WindowFrameAction GetDefaultMiddleClickAction() {
+ui::LinuxUi::WindowFrameAction GetDefaultMiddleClickAction() {
   if (GtkCheckVersion(3, 14))
-    return ui::LinuxUiTheme::WindowFrameAction::kNone;
+    return ui::LinuxUi::WindowFrameAction::kNone;
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   switch (base::nix::GetDesktopEnvironment(env.get())) {
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
@@ -176,9 +175,9 @@ ui::LinuxUiTheme::WindowFrameAction GetDefaultMiddleClickAction() {
       // middle mouse button to create tab groups. We don't support that in
       // Chrome, but at least avoid lowering windows in response to middle
       // clicks to avoid surprising users who expect the KDE behavior.
-      return ui::LinuxUiTheme::WindowFrameAction::kNone;
+      return ui::LinuxUi::WindowFrameAction::kNone;
     default:
-      return ui::LinuxUiTheme::WindowFrameAction::kLower;
+      return ui::LinuxUi::WindowFrameAction::kLower;
   }
 }
 
@@ -210,8 +209,6 @@ GtkUi::GtkUi() : window_frame_actions_() {
 GtkUi::~GtkUi() {
   DCHECK_EQ(g_gtk_ui, this);
   g_gtk_ui = nullptr;
-
-  shell_dialog_linux::Finalize();
 }
 
 // static
@@ -238,12 +235,8 @@ bool GtkUi::Initialize() {
     return false;
   native_theme_ = NativeThemeGtk::instance();
 
-  // This creates an extra thread that may race against GtkInitFromCommandLine,
-  // so this must be done after to avoid the race condition.
-  shell_dialog_linux::Initialize();
-
-  using Action = ui::LinuxUiTheme::WindowFrameAction;
-  using ActionSource = ui::LinuxUiTheme::WindowFrameActionSource;
+  using Action = ui::LinuxUi::WindowFrameAction;
+  using ActionSource = ui::LinuxUi::WindowFrameActionSource;
   window_frame_actions_ = {
       {ActionSource::kDoubleClick, Action::kToggleMaximize},
       {ActionSource::kMiddleClick, GetDefaultMiddleClickAction()},
@@ -440,7 +433,7 @@ void GtkUi::SetWindowButtonOrdering(
   views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
       leading_buttons, trailing_buttons);
 
-  for (auto& observer : window_button_order_observer_list())
+  for (auto& observer : window_button_order_observer_list_)
     observer.OnWindowButtonOrderingChange();
 }
 
@@ -479,7 +472,7 @@ ui::SelectFileDialog* GtkUi::CreateSelectFileDialog(
       std::move(policy));
 }
 
-ui::LinuxUiTheme::WindowFrameAction GtkUi::GetWindowFrameAction(
+ui::LinuxUi::WindowFrameAction GtkUi::GetWindowFrameAction(
     WindowFrameActionSource source) {
   return window_frame_actions_[source];
 }
@@ -496,6 +489,16 @@ bool GtkUi::AnimationsEnabled() const {
   g_object_get(gtk_settings_get_default(), "gtk-enable-animations",
                &animations_enabled, nullptr);
   return animations_enabled;
+}
+
+void GtkUi::AddWindowButtonOrderObserver(
+    ui::WindowButtonOrderObserver* observer) {
+  window_button_order_observer_list_.AddObserver(observer);
+}
+
+void GtkUi::RemoveWindowButtonOrderObserver(
+    ui::WindowButtonOrderObserver* observer) {
+  window_button_order_observer_list_.RemoveObserver(observer);
 }
 
 std::unique_ptr<ui::NavButtonProvider> GtkUi::CreateNavButtonProvider() {

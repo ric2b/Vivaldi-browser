@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.contextmenu.ContextMenuUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
@@ -51,6 +52,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -117,6 +119,14 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                 tab.removeObserver(this);
             }
         });
+    }
+
+    @Override
+    public void openNewTab(GURL url, String extraHeaders, ResourceRequestBody postData,
+            int disposition, boolean isRendererInitiated) {
+        // New tabs are handled by the tab model (see
+        // TabWebContentsDelegateAndroid::OpenURLFromTab().
+        assert false;
     }
 
     @Override
@@ -373,6 +383,14 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     }
 
     @Override
+    public int getVirtualKeyboardHeight() {
+        if (mActivity == null) return 0;
+
+        View rootView = mActivity.getWindow().getDecorView().getRootView();
+        return mTab.getWindowAndroid().getKeyboardDelegate().calculateTotalKeyboardHeight(rootView);
+    }
+
+    @Override
     public void enterFullscreenModeForTab(boolean prefersNavigationBar, boolean prefersStatusBar) {
         if (mFullscreenManager != null) {
             // Vivaldi: We never show the navigation bar in fullscreen.
@@ -484,5 +502,10 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                         .build();
 
         modalDialogManager.showDialog(dialogModel, ModalDialogManager.ModalDialogType.TAB, true);
+    }
+
+    @Override
+    protected boolean isModalContextMenu() {
+        return !ContextMenuUtils.usePopupContextMenuForContext(mActivity);
     }
 }

@@ -41,11 +41,12 @@ source_set("reading_list") {
     "//components/reading_list/core",
     "//components/reading_list/ios",
     "//components/sync",
-    "//ios/chrome/browser",
+    "//ios/chrome/browser/application_context",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/flags:system_flags",
     "//ios/chrome/browser/history",
+    "//ios/chrome/browser/paths",
     "//ios/chrome/browser/sync:model_type_store_service_factory",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/url:constants",
@@ -86,6 +87,23 @@ source_set("reading_list_remover") {
   ]
 }
 
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "reading_list_test_utils.cc",
+    "reading_list_test_utils.h",
+  ]
+  deps = [
+    "//base",
+    "//components/reading_list/core:test_support",
+  ]
+  public_deps = [
+    "//components/keyed_service/core",
+    "//components/reading_list/core",
+    "//ios/web/public",
+  ]
+}
+
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -98,15 +116,16 @@ source_set("unit_tests") {
   ]
   deps = [
     ":distilled_bundle_data",
-    ":fakes",
     ":reading_list",
+    ":test_support",
     "//base",
     "//base/test:test_support",
     "//components/favicon/ios",
     "//components/reading_list/core",
-    "//ios/chrome/browser",
+    "//components/reading_list/core:test_support",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/dom_distiller",
+    "//ios/chrome/browser/paths",
     "//ios/web",
     "//ios/web/public",
     "//ios/web/public/test",
@@ -116,20 +135,6 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//url",
   ]
-}
-
-source_set("fakes") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  testonly = true
-  sources = [
-    "fake_reading_list_model.h",
-    "fake_reading_list_model.mm",
-  ]
-  deps = [
-    "//base",
-    "//components/reading_list/core",
-  ]
-  public_deps = [ "//third_party/abseil-cpp:absl" ]
 }
 
 bundle_data("distilled_bundle_data") {

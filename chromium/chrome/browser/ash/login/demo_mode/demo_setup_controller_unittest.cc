@@ -6,11 +6,13 @@
 
 #include <memory>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
@@ -26,8 +28,8 @@
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -360,6 +362,15 @@ TEST_F(DemoSetupControllerTest, GetSubOrganizationEmailForBlazeyDevice) {
   g_browser_process->local_state()->SetString(prefs::kDemoModeCountry, "foo");
   email = DemoSetupController::GetSubOrganizationEmail();
   EXPECT_EQ(email, "");
+}
+
+TEST_F(DemoSetupControllerTest, GetSubOrganizationEmailForCustomOU) {
+  base::test::ScopedCommandLine command_line;
+  command_line.GetProcessCommandLine()->AppendSwitchASCII(
+      switches::kDemoModeEnrollingUsername, "test-user-name");
+
+  std::string email = DemoSetupController::GetSubOrganizationEmail();
+  EXPECT_EQ(email, "test-user-name@cros-demo-mode.com");
 }
 
 TEST_F(DemoSetupControllerTest, OnlineSuccessWithValidRetailerAndStoreId) {

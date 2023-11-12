@@ -4,6 +4,7 @@
 
 #include "ui/accessibility/platform/inspect/ax_tree_formatter_base.h"
 
+#include "base/containers/contains.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -119,6 +120,9 @@ void AXTreeFormatterBase::RecursiveFormatTree(const base::Value::Dict& dict,
   // Replace literal newlines with "<newline>"
   base::ReplaceChars(line, "\n", "<newline>", &line);
 
+  // Replace U+202f to ASCII SPACE
+  base::ReplaceFirstSubstringAfterOffset(&line, 0, "\u202f", " ");
+
   *contents += line + "\n";
 
   // TODO(accessibility): This can be removed once the UIA tree formatter
@@ -171,9 +175,7 @@ std::vector<AXPropertyNode> AXTreeFormatterBase::PropertyFilterNodesFor(
 
     // Filter out if doesn't match line index (if specified).
     if (!property_node.line_indexes.empty() &&
-        std::find(property_node.line_indexes.begin(),
-                  property_node.line_indexes.end(),
-                  line_index) == property_node.line_indexes.end()) {
+        !base::Contains(property_node.line_indexes, line_index)) {
       continue;
     }
 

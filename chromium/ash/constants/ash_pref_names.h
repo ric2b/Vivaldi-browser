@@ -41,6 +41,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAudioInputDevicesUserPriority[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAudioOutputDevicesUserPriority[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAudioDevicesLastSeen[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEduCoexistenceId[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEduCoexistenceToSVersion[];
@@ -183,6 +185,24 @@ extern const char kAccessibilityDictationLocaleOfflineNudge[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAccessibilityEnhancedNetworkVoicesInSelectToSpeakAllowed[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakBackgroundShading[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakEnhancedNetworkVoices[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakEnhancedVoiceName[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakEnhancedVoicesDialogShown[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakHighlightColor[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakNavigationControls[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakVoiceName[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakVoiceSwitching[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilitySelectToSpeakWordHighlight[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kShouldAlwaysShowAccessibilityMenu[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAltTabPerDesk[];
@@ -266,7 +286,8 @@ extern const char kMessageCenterLockScreenModeHideSensitive[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAmbientColorEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkModeEnabled[];
-COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkLightModeNudge[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDarkLightModeNudgeLeftToShowCount[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkModeScheduleType[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kNightLightEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kNightLightTemperature[];
@@ -326,7 +347,7 @@ extern const char kPowerFastSuspendWhenBacklightsForcedOff[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPowerSmartDimEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPowerAlsLoggingEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPowerQuickDimEnabled[];
-
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPowerQuickLockDelay[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShelfAlignment[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShelfAlignmentLocal[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShelfAutoHideBehavior[];
@@ -411,10 +432,6 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kUsbPeripheralCableSpeedNotificationShown[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kSuggestedContentInfoShownInLauncher[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kSuggestedContentInfoDismissedInLauncher[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAppListReorderNudge[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -497,7 +514,12 @@ extern const char kLoginScreenWebUILazyLoading[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFloatingWorkspaceEnabled[];
 
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFloatingWorkspaceV2Enabled[];
+
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShowPostRebootNotification[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kUsbDetectorNotificationEnabled[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kPersonalizationKeyboardBacklightColor[];
@@ -508,15 +530,15 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAutozoomNudges[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRecoveryFactorBehavior[];
 
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kApnMigratedIccids[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kBackgroundBlur[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kBackgroundReplace[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPortraitRelighting[];
+
 }  // namespace prefs
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the Chrome OS source code
-// directory migration is finished.
-namespace chromeos {
-namespace prefs {
-using namespace ::ash::prefs;
-}
-}  // namespace chromeos
 
 #endif  // ASH_CONSTANTS_ASH_PREF_NAMES_H_

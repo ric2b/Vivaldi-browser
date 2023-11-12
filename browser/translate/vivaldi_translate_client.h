@@ -119,8 +119,6 @@ class VivaldiTranslateClient
 #endif
   void SetPredefinedTargetLanguage(const std::string& translate_language_code);
 
-  bool IsAutofillAssistantRunning() const override;
-
  private:
   explicit VivaldiTranslateClient(content::WebContents* web_contents);
   friend class content::WebContentsUserData<VivaldiTranslateClient>;

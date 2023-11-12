@@ -38,6 +38,9 @@ import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 
 import java.util.List;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 /**
  * A {@link ItemTouchHelper.SimpleCallback} implementation to host the logic for swipe and drag
  * related actions in grid related layouts.
@@ -111,7 +114,11 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
                         || viewHolder.getItemViewType() == TabProperties.UiType.LARGE_MESSAGE
                 ? 0
                 : mDragFlags;
-        final int swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
+        int swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
+        // Note(david@vivaldi.com): Reset the |swipeFlags| when we don't allow swiping.
+        if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SWIPE_TO_CLOSE_TAB, false))
+            swipeFlags = 0;
         mRecyclerView = recyclerView;
         return makeMovementFlags(dragFlags, swipeFlags);
     }

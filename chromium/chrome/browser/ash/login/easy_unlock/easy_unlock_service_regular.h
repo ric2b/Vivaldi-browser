@@ -8,17 +8,15 @@
 #include <memory>
 #include <string>
 
-#include "ash/services/device_sync/proto/cryptauth_api.pb.h"
-#include "ash/services/device_sync/public/cpp/device_sync_client.h"
-#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
-#include "chromeos/ash/components/multidevice/remote_device_ref.h"
-#include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/ash/services/device_sync/proto/cryptauth_api.pb.h"
+#include "chromeos/ash/services/device_sync/public/cpp/device_sync_client.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "components/prefs/pref_change_registrar.h"
 
 namespace base {
@@ -32,8 +30,13 @@ class ProximityAuthProfilePrefManager;
 class Profile;
 
 namespace ash {
+
 class EasyUnlockNotificationController;
 class SmartLockFeatureUsageMetrics;
+
+namespace secure_channel {
+class SecureChannelClient;
+}
 
 // EasyUnlockService instance that should be used for regular, non-signin
 // profiles.
@@ -74,7 +77,7 @@ class EasyUnlockServiceRegular
   // Persists Smart Lock host and local device to prefs, and then informs
   // the base class to potentially update Smart Lock host and local device
   // stored in the TPM.
-  void SetStoredRemoteDevices(const base::ListValue& devices);
+  void SetStoredRemoteDevices(const base::Value::List& devices);
 
   // EasyUnlockService implementation:
   proximity_auth::ProximityAuthPrefManager* GetProximityAuthPrefManager()
@@ -175,11 +178,5 @@ class EasyUnlockServiceRegular
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::EasyUnlockServiceRegular;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_EASY_UNLOCK_EASY_UNLOCK_SERVICE_REGULAR_H_

@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ThemeProviderInterface} from '../personalization_app.mojom-webui.js';
+import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
+
+import {ColorScheme, ThemeProviderInterface} from '../personalization_app.mojom-webui.js';
 import {PersonalizationStore} from '../personalization_store.js';
 
-import {setColorModeAutoScheduleEnabledAction, setDarkModeEnabledAction} from './theme_actions.js';
+import {setColorModeAutoScheduleEnabledAction, setColorSchemeAction, setDarkModeEnabledAction, setStaticColorAction} from './theme_actions.js';
 
 /**
  * @fileoverview contains all of the functions to interact with C++ side through
@@ -21,6 +23,17 @@ export async function initializeData(
   store.dispatch(setColorModeAutoScheduleEnabledAction(enabled));
   const {darkModeEnabled} = await provider.isDarkModeEnabled();
   store.dispatch(setDarkModeEnabledAction(darkModeEnabled));
+  store.endBatchUpdate();
+}
+
+export async function initializeDynamicColorData(
+    provider: ThemeProviderInterface,
+    store: PersonalizationStore): Promise<void> {
+  store.beginBatchUpdate();
+  const {staticColor} = await provider.getStaticColor();
+  store.dispatch(setStaticColorAction(staticColor));
+  const {colorScheme} = await provider.getColorScheme();
+  store.dispatch(setColorSchemeAction(colorScheme));
   store.endBatchUpdate();
 }
 
@@ -40,4 +53,19 @@ export function setColorModeAutoSchedule(
   provider.setColorModeAutoScheduleEnabled(enabled);
   // Dispatch action to highlight auto color mode.
   store.dispatch(setColorModeAutoScheduleEnabledAction(enabled));
+}
+
+export function setColorSchemePref(
+    colorScheme: ColorScheme, provider: ThemeProviderInterface,
+    store: PersonalizationStore) {
+  provider.setColorScheme(colorScheme);
+  store.dispatch(setColorSchemeAction(colorScheme));
+}
+
+export function setStaticColorPref(
+    staticColor: SkColor, provider: ThemeProviderInterface,
+    store: PersonalizationStore) {
+  provider.setStaticColor(staticColor);
+  store.dispatch(setStaticColorAction(staticColor));
+  store.dispatch(setColorSchemeAction(ColorScheme.kStatic));
 }

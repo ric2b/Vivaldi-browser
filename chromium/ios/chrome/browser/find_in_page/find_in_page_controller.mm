@@ -15,7 +15,6 @@
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "ios/chrome/browser/find_in_page/find_in_page_model.h"
 #import "ios/chrome/browser/find_in_page/find_in_page_response_delegate.h"
-#import "ios/chrome/browser/web/dom_altering_lock.h"
 #import "ios/web/public/find_in_page/find_in_page_manager.h"
 #import "ios/web/public/find_in_page/find_in_page_manager_delegate_bridge.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
@@ -36,9 +35,15 @@ namespace {
 // Keeps find in page search term to be shared between different tabs. Never
 // reset, not stored on disk.
 static NSString* gSearchTerm;
+
+// Accessibility announcement delay, so VoiceOver does not cancel the context
+// string announcement when a new match has been selected.
+// TODO(crbug.com/1395828): This is a temporary workaround. The context string
+// announcement might still fail. A retry mechanism needs to be implemented.
+const int64_t kContextStringAnnouncementDelayInNanoseconds = 0.1 * NSEC_PER_SEC;
 }
 
-@interface FindInPageController () <DOMAltering, CRWFindInPageManagerDelegate>
+@interface FindInPageController () <CRWFindInPageManagerDelegate>
 
 // The web view's scroll view.
 - (CRWWebViewScrollViewProxy*)webViewScrollView;
@@ -109,7 +114,6 @@ static NSString* gSearchTerm;
            selector:@selector(findBarTextFieldDidResignFirstResponder:)
                name:kFindBarTextFieldDidResignFirstResponderNotification
              object:nil];
-    DOMAlteringLock::CreateForWebState(_webState);
   }
   return self;
 }
@@ -171,21 +175,12 @@ static NSString* gSearchTerm;
     return;
   }
 
-  __weak FindInPageController* weakSelf = self;
-  ProceduralBlock handler = ^{
-    FindInPageController* strongSelf = weakSelf;
-    if (strongSelf && strongSelf->_webState) {
-      DOMAlteringLock::FromWebState(strongSelf->_webState)->Release(strongSelf);
-    }
-  };
   // Only run FindInPageManager::StopFinding() if there is a string in progress
   // to avoid WKWebView crash on deallocation due to outstanding completion
   // handler.
   if (_findStringStarted) {
       _findInPageManager->StopFinding();
-    _findStringStarted = NO;
-  } else {
-    handler();
+      _findStringStarted = NO;
   }
 }
 
@@ -225,8 +220,24 @@ static NSString* gSearchTerm;
         withContextString:(NSString*)contextString
               forWebState:(web::WebState*)webState {
   if (contextString) {
-    UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification,
-                                    contextString);
+    // TODO(crbug.com/1395828): When tapping the Previous or Next button in the
+    // Find Bar, VoiceOver will trigger the announcement of the title of the
+    // button, usually a fraction of a second after this method is called. As a
+    // result, the announcement triggered by the
+    // `UIAccessibilityAnnouncementNotification` posted here will be interrupted
+    // by the announcement of the button. Setting a delay on posting the context
+    // string announcement notification yields the opposite result i.e. the
+    // expected result: VoiceOver will not read "Previous" or "Next", but read
+    // the new context string instead. This is a temporary workaround. The
+    // context string announcement might still fail. Some kind of retry
+    // mechanism needs to be implemented.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 kContextStringAnnouncementDelayInNanoseconds),
+                   dispatch_get_main_queue(), ^{
+                     UIAccessibilityPostNotification(
+                         UIAccessibilityAnnouncementNotification,
+                         contextString);
+                   });
   }
   // Increment index so that match number show in FindBar ranges from 1...N as
   // opposed to 0...N-1.
@@ -283,16 +294,6 @@ static NSString* gSearchTerm;
   _findInPageDelegateBridge.reset();
   _findInPageManager = nullptr;
   _webState = nullptr;
-}
-
-#pragma mark - DOMAltering Methods
-
-- (BOOL)canReleaseDOMLock {
-  return NO;
-}
-
-- (void)releaseDOMLockWithCompletionHandler:(ProceduralBlock)completionHandler {
-  NOTREACHED();
 }
 
 @end

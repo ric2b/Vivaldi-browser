@@ -232,9 +232,9 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
       aura::Window* gained_active,
       aura::Window* lost_active);
 
-  // Returns true when either the `DesksTemplatesGridWidget` or
+  // Returns true when either the `SavedDeskLibraryView` or
   // `SavedDeskDialog` is the window that is losing activation.
-  bool IsTemplatesUiLosingActivation(aura::Window* lost_active);
+  bool IsSavedDeskUiLosingActivation(aura::Window* lost_active);
 
   // Gets the window which keeps focus for the duration of overview mode.
   aura::Window* GetOverviewFocusWindow();
@@ -290,15 +290,22 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // |active_window_before_overview_|.
   bool IsWindowActiveWindowBeforeOverview(aura::Window* window) const;
 
-  // Shows the desks templates grids on all displays. This will expand desk bars
-  // if they are not already expanded. Focuses the item which matches
+  // Shows the saved desk library. Creates the widget if needed. The desks bar
+  // will be expanded if it isn't already. Focuses the item which matches
   // `item_to_focus` on the display associated with `root_window`.
-  void ShowDesksTemplatesGrids(const base::GUID& item_to_focus,
-                               const std::u16string& saved_desk_name,
-                               aura::Window* const root_window);
+  void ShowSavedDeskLibrary(const base::GUID& item_to_focus,
+                            const std::u16string& saved_desk_name,
+                            aura::Window* const root_window);
 
-  void HideDesksTemplatesGrids();
-  bool IsShowingDesksTemplatesGrid() const;
+  // Hides the saved desk library and reshows the overview items. Updates the
+  // save desk button if we are not exiting overview.
+  void HideSavedDeskLibrary();
+
+  // True if the saved desk library is shown.
+  bool IsShowingSavedDeskLibrary() const;
+
+  // True if the saved desk library will be shown shortly.
+  bool WillShowSavedDeskLibrary() const;
 
   // Updates the focusable overview widgets so that they point to the correct
   // next and previous widgets for a11y purposes. Needs to be updated when a
@@ -306,15 +313,8 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   void UpdateAccessibilityFocus();
 
   // DesksController::Observer:
-  void OnDeskAdded(const Desk* desk) override;
-  void OnDeskRemoved(const Desk* desk) override;
-  void OnDeskReordered(int old_index, int new_index) override;
   void OnDeskActivationChanged(const Desk* activated,
                                const Desk* deactivated) override;
-  void OnDeskSwitchAnimationLaunching() override;
-  void OnDeskSwitchAnimationFinished() override;
-  void OnDeskNameChanged(const Desk* desk,
-                         const std::u16string& new_name) override;
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& display) override;
@@ -347,6 +347,7 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   OverviewDelegate* delegate() { return delegate_; }
 
+  bool ignore_activations() const { return ignore_activations_; }
   void set_ignore_activations(bool ignore_activations) {
     ignore_activations_ = ignore_activations;
   }

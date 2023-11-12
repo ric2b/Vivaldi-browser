@@ -6,12 +6,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <memory>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/task_environment.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_parameters.h"
@@ -95,9 +97,8 @@ class WebmMuxerTest : public TestWithParam<TestParams> {
     return webm_muxer_->delegate_->Write(buf, len);
   }
 
-  WebmMuxer::VideoParameters GetVideoParameters(
-      scoped_refptr<VideoFrame> frame) {
-    WebmMuxer::VideoParameters parameters(frame);
+  Muxer::VideoParameters GetVideoParameters(scoped_refptr<VideoFrame> frame) {
+    Muxer::VideoParameters parameters(*frame);
     parameters.codec = GetParam().video_codec;
     return parameters;
   }
@@ -311,8 +312,8 @@ TEST_P(WebmMuxerTest, OnEncodedAudioTwoFrames) {
 }
 
 TEST_P(WebmMuxerTest, ColorSpaceREC709IsPropagatedToTrack) {
-  WebmMuxer::VideoParameters params(gfx::Size(1, 1), 0, media::VideoCodec::kVP9,
-                                    gfx::ColorSpace::CreateREC709());
+  Muxer::VideoParameters params(gfx::Size(1, 1), 0, media::VideoCodec::kVP9,
+                                gfx::ColorSpace::CreateREC709());
   webm_muxer_->OnEncodedVideo(params, "abab", {}, base::TimeTicks::Now(),
                               true /* keyframe */);
   mkvmuxer::Colour* colour = GetVideoTrackColor();
@@ -323,7 +324,7 @@ TEST_P(WebmMuxerTest, ColorSpaceREC709IsPropagatedToTrack) {
 }
 
 TEST_P(WebmMuxerTest, ColorSpaceExtendedSRGBIsPropagatedToTrack) {
-  WebmMuxer::VideoParameters params(
+  Muxer::VideoParameters params(
       gfx::Size(1, 1), 0, media::VideoCodec::kVP9,
       gfx::ColorSpace(
           gfx::ColorSpace::PrimaryID::BT709, gfx::ColorSpace::TransferID::SRGB,
@@ -338,7 +339,7 @@ TEST_P(WebmMuxerTest, ColorSpaceExtendedSRGBIsPropagatedToTrack) {
 }
 
 TEST_P(WebmMuxerTest, ColorSpaceHDR10IsPropagatedToTrack) {
-  WebmMuxer::VideoParameters params(
+  Muxer::VideoParameters params(
       gfx::Size(1, 1), 0, media::VideoCodec::kVP9,
       gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
                       gfx::ColorSpace::TransferID::PQ,
@@ -355,7 +356,7 @@ TEST_P(WebmMuxerTest, ColorSpaceHDR10IsPropagatedToTrack) {
 }
 
 TEST_P(WebmMuxerTest, ColorSpaceFullRangeHDR10IsPropagatedToTrack) {
-  WebmMuxer::VideoParameters params(
+  Muxer::VideoParameters params(
       gfx::Size(1, 1), 0, media::VideoCodec::kVP9,
       gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
                       gfx::ColorSpace::TransferID::PQ,
@@ -478,12 +479,21 @@ class WebmMuxerTestUnparametrized : public testing::Test {
         base::BindRepeating(&WebmMuxerTestUnparametrized::OnEndMediaSegment,
                             base::Unretained(this)),
         &media_log_);
-    return parser.Parse(muxed_data_.data(), muxed_data_.size());
+    if (!parser.AppendToParseBuffer(muxed_data_.data(), muxed_data_.size())) {
+      return false;
+    }
+
+    // Run the segment parser loop one time with the full size of the appended
+    // data to ensure the parser has had a chance to parse all the appended
+    // bytes. As a result, kSuccessHasMoreData is considered a failure since
+    // there should be no uninspected data remaining after the parse.
+    return StreamParser::ParseStatus::kSuccess ==
+           parser.Parse(muxed_data_.size());
   }
 
   void AddVideoAtOffset(int system_timestamp_offset_ms, bool is_key_frame) {
-    WebmMuxer::VideoParameters params(
-        gfx::Size(1, 1), 0, media::VideoCodec::kVP8, gfx::ColorSpace());
+    Muxer::VideoParameters params(gfx::Size(1, 1), 0, media::VideoCodec::kVP8,
+                                  gfx::ColorSpace());
     webm_muxer_->OnEncodedVideo(
         params, "video_at_offset", "",
         base::TimeTicks() + base::Milliseconds(system_timestamp_offset_ms),
@@ -534,7 +544,7 @@ class WebmMuxerTestUnparametrized : public testing::Test {
 
   void SaveChunkAndInvokeWriteCallback(base::StringPiece chunk) {
     OnWrite();
-    std::copy(chunk.begin(), chunk.end(), std::back_inserter(muxed_data_));
+    base::ranges::copy(chunk, std::back_inserter(muxed_data_));
   }
 
   // Muxed data gets saved here. The content is guaranteed to be finalized first

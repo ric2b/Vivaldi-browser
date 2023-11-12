@@ -29,11 +29,12 @@
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "crypto/chaps_support.h"
 #include "crypto/nss_util_internal.h"
@@ -157,7 +158,7 @@ class ChromeOSTokenManager {
     // NSS is allowed to do IO on the current thread since dispatching
     // to a dedicated thread would still have the affect of blocking
     // the current thread, due to NSS's internal locking requirements
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    ScopedAllowBlockingForNSS allow_blocking;
 
     base::FilePath nssdb_path = GetSoftwareNSSDBPath(path);
     if (!base::CreateDirectory(nssdb_path)) {
@@ -269,8 +270,8 @@ class ChromeOSTokenManager {
       return;
     }
 
-    DCHECK(base::SequencedTaskRunnerHandle::IsSet());
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    DCHECK(base::SequencedTaskRunner::HasCurrentDefault());
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback),
                        /*is_tpm_enabled=*/(state_ == State::kTpmTokenEnabled)));
@@ -388,7 +389,7 @@ class ChromeOSTokenManager {
     if (username_hash.empty()) {
       DVLOG(2) << "empty username_hash";
       if (!callback.is_null()) {
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(std::move(callback), ScopedPK11Slot()));
       }
       return ScopedPK11Slot();
@@ -419,7 +420,7 @@ class ChromeOSTokenManager {
       return;
     }
 
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback),
                        /*system_slot=*/ScopedPK11Slot(

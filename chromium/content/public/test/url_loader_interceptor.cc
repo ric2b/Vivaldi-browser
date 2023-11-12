@@ -24,6 +24,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -31,7 +32,6 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "net/cookies/parsed_cookie.h"
 #include "net/http/http_util.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/network/public/cpp/features.h"
@@ -455,6 +455,11 @@ URLLoaderInterceptor::URLLoaderInterceptor(
           &URLLoaderInterceptor::InterceptNavigationRequestCallback,
           base::Unretained(this)));
 
+  ServiceWorkerContextWrapper::SetURLLoaderFactoryInterceptorForTesting(
+      base::BindRepeating(
+          &URLLoaderInterceptor::InterceptNavigationRequestCallback,
+          base::Unretained(this)));
+
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
     if (use_runloop_) {
       base::RunLoop run_loop;
@@ -496,6 +501,9 @@ URLLoaderInterceptor::~URLLoaderInterceptor() {
 
   NavigationURLLoaderImpl::SetURLLoaderFactoryInterceptorForTesting(
       NavigationURLLoaderImpl::URLLoaderFactoryInterceptor());
+
+  ServiceWorkerContextWrapper::SetURLLoaderFactoryInterceptorForTesting(
+      ServiceWorkerContextWrapper::URLLoaderFactoryInterceptor());
 
   MockRenderProcessHost::SetNetworkFactory(
       MockRenderProcessHost::CreateNetworkFactoryCallback());
@@ -586,14 +594,6 @@ void URLLoaderInterceptor::WriteResponse(
         network::PopulateParsedHeaders(response->headers.get(), *url);
   }
   response->ssl_info = std::move(ssl_info);
-  size_t iter = 0;
-  std::string cookie_line;
-  while (info.headers->EnumerateHeader(&iter, "Set-Cookie", &cookie_line)) {
-    if (net::ParsedCookie(cookie_line).IsPartitioned()) {
-      response->has_partitioned_cookie = true;
-      break;
-    }
-  }
 
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;

@@ -27,15 +27,11 @@ namespace {
 // window has been dragged.
 constexpr int kDistanceFromEdge = 8;
 
-// A window has to be dragged toward the direction of the edge of the screen for
-// a minimum of `kMinDragDistance` to a point within `kScreenEdgeInsetForSnap`
-// of the edge of the screen, or dragged inside `kDistanceEdge` from edge to be
-// snapped.
-constexpr int kMinDragDistance = 96;
-constexpr int kScreenEdgeInsetForSnap = 48;
-
 // The minimum distance that will be considered as a drag event.
 constexpr float kMinimumDragDistance = 5.f;
+
+// Minimum fling velocity required to tuck the window.
+const int kFlingToTuckVelocityThresholdSquared = 800 * 800;
 
 }  // namespace
 
@@ -53,6 +49,11 @@ TabletModeFloatWindowResizer::TabletModeFloatWindowResizer(
 }
 
 TabletModeFloatWindowResizer::~TabletModeFloatWindowResizer() {
+  // `SplitViewDragIndicators` has a default delayed animation. Setting the
+  // state to no drag instantly hides the indicators so we don't see this
+  // delayed hide.
+  split_view_drag_indicators_->SetWindowDraggingState(
+      SplitViewDragIndicators::WindowDraggingState::kNoDrag);
   window_state_->DeleteDragDetails();
 }
 
@@ -87,6 +88,12 @@ void TabletModeFloatWindowResizer::Drag(const gfx::PointF& location_in_parent,
 }
 
 void TabletModeFloatWindowResizer::CompleteDrag() {
+  // We can reach this state if the user hits a state changing accelerator
+  // mid-drag.
+  aura::Window* float_window = GetTarget();
+  if (!WindowState::Get(float_window)->IsFloated())
+    return;
+
   // Revert the drag if the window hasn't moved enough. This will prevent
   // accidental magnetisms.
   const gfx::Vector2dF distance =
@@ -96,7 +103,6 @@ void TabletModeFloatWindowResizer::CompleteDrag() {
     return;
   }
 
-  aura::Window* float_window = GetTarget();
   if (snap_position_ != SplitViewController::SnapPosition::kNone) {
     // Let `SplitViewController` handle windows that should be snapped.
     auto* split_view_controller =
@@ -113,8 +119,6 @@ void TabletModeFloatWindowResizer::CompleteDrag() {
   // `FloatController` will magnetize windows to one of the corners if it
   // remains in float state and not tucked.
   auto* float_controller = Shell::Get()->float_controller();
-  DCHECK(WindowState::Get(float_window)->IsFloated());
-
   float_controller->OnDragCompletedForTablet(float_window,
                                              last_location_in_parent_);
 }
@@ -126,16 +130,29 @@ void TabletModeFloatWindowResizer::RevertDrag() {
 void TabletModeFloatWindowResizer::FlingOrSwipe(ui::GestureEvent* event) {
   DCHECK(window_state_->IsFloated());
   const ui::GestureEventDetails& details = event->details();
-  bool left, up;
+  // Emplace `left` if the gesture has a horizontal component.
+  absl::optional<bool> left;
+  bool up;
   if (event->type() == ui::ET_SCROLL_FLING_START) {
-    left = details.velocity_x() < 0.f;
-    up = details.velocity_y() < 0.f;
+    float velocity_x = details.velocity_x();
+    float velocity_y = details.velocity_y();
+    float fling_amount = velocity_x * velocity_x + velocity_y * velocity_y;
+    // If the fling wasn't large enough, update the window position based on its
+    // drag location.
+    if (fling_amount <= kFlingToTuckVelocityThresholdSquared) {
+      CompleteDrag();
+      return;
+    }
+    if (velocity_x != 0.f) {
+      left.emplace(velocity_x < 0.f);
+    }
+    up = velocity_y < 0.f;
   } else {
     DCHECK_EQ(ui::ET_GESTURE_SWIPE, event->type());
-    left = details.swipe_left();
+    if (details.swipe_left() || details.swipe_right())
+      left.emplace(details.swipe_left());
     up = details.swipe_up();
   }
-
   Shell::Get()->float_controller()->OnFlingOrSwipeForTablet(GetTarget(), left,
                                                             up);
 }

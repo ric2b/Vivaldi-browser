@@ -338,7 +338,6 @@ void WebUIInfoSingleton::ClearReportingEvents() {
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 void WebUIInfoSingleton::AddToDeepScanRequests(
-    const GURL& tab_url,
     bool per_profile_request,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   if (!HasListener())
@@ -351,7 +350,6 @@ void WebUIInfoSingleton::AddToDeepScanRequests(
         base::Time::Now();
   }
 
-  deep_scan_requests_[request.request_token()].tab_url = tab_url;
   deep_scan_requests_[request.request_token()].per_profile_request =
       per_profile_request;
   deep_scan_requests_[request.request_token()].request = request;
@@ -457,7 +455,7 @@ namespace {
 std::string UserReadableTimeFromMillisSinceEpoch(int64_t time_in_milliseconds) {
   base::Time time =
       base::Time::UnixEpoch() + base::Milliseconds(time_in_milliseconds);
-  return base::UTF16ToASCII(base::TimeFormatShortDateAndTime(time));
+  return base::UTF16ToUTF8(base::TimeFormatShortDateAndTime(time));
 }
 
 void AddStoreInfo(const DatabaseManagerInfo::DatabaseInfo::StoreInfo store_info,
@@ -1302,6 +1300,9 @@ base::Value::Dict SerializeDownloadWarningAction(
     case ClientSafeBrowsingReportRequest::DownloadWarningAction::BACK:
       action = "BACK";
       break;
+    case ClientSafeBrowsingReportRequest::DownloadWarningAction::OPEN_SUBPAGE:
+      action = "OPEN_SUBPAGE";
+      break;
   }
   action_dict.Set("action", action);
   action_dict.Set("is_terminal_action",
@@ -1810,6 +1811,9 @@ base::Value::Dict SerializeRTThreatInfo(
     case RTLookupResponse::ThreatInfo::UNCLEAR_BILLING:
       threat_type = "UNCLEAR_BILLING";
       break;
+    case RTLookupResponse::ThreatInfo::MANAGED_POLICY:
+      threat_type = "MANAGED_POLICY";
+      break;
   }
   threat_info_dict.Set("threat_type", threat_type);
 
@@ -1823,6 +1827,12 @@ base::Value::Dict SerializeRTThreatInfo(
       break;
     case RTLookupResponse::ThreatInfo::SAFE:
       verdict_type = "SAFE";
+      break;
+    case RTLookupResponse::ThreatInfo::SUSPICIOUS:
+      verdict_type = "SUSPICIOUS";
+      break;  
+    case RTLookupResponse::ThreatInfo::WARN:
+      verdict_type = "WARN";
       break;
     case RTLookupResponse::ThreatInfo::DANGEROUS:
       verdict_type = "DANGEROUS";
@@ -2125,7 +2135,6 @@ base::Value::Dict SerializeReportingEvent(const base::Value::Dict& event) {
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 std::string SerializeContentAnalysisRequest(
-    const GURL& tab_url,
     bool per_profile_request,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   base::Value::Dict request_dict;
@@ -2166,10 +2175,8 @@ std::string SerializeContentAnalysisRequest(
       request_data.Set("csd", csd_base64);
     }
     request_data.Set("content_type", request.request_data().content_type());
+    request_dict.Set("tab_url", request.request_data().tab_url());
     request_dict.Set("request_data", std::move(request_data));
-  }
-  if (tab_url.is_valid()) {
-    request_dict.Set("tab_url", tab_url.spec());
   }
 
   if (request.has_client_metadata()) {
@@ -2292,8 +2299,7 @@ base::Value::Dict SerializeDeepScanDebugData(const std::string& token,
 
   if (data.request.has_value()) {
     value.Set("request", SerializeContentAnalysisRequest(
-                             data.tab_url, data.per_profile_request,
-                             data.request.value()));
+                             data.per_profile_request, data.request.value()));
   }
 
   if (!data.response_time.is_null()) {

@@ -16,7 +16,6 @@
 #include "ash/style/close_button.h"
 #include "ash/style/pill_button.h"
 #include "ash/style/style_util.h"
-#include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_textfield.h"
 #include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
 #include "ash/wm/desks/templates/saved_desk_grid_view.h"
@@ -34,7 +33,6 @@
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "base/i18n/time_formatting.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -53,7 +51,6 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/highlight_border.h"
-#include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/metadata/view_factory_internal.h"
 #include "ui/views/view.h"
@@ -326,28 +323,21 @@ bool SavedDeskItemView::IsNameBeingModified() const {
   return name_view_->HasFocus();
 }
 
-void SavedDeskItemView::MaybeRemoveNameNumber(
-    const std::u16string& saved_desk_name) {
-  // When there is a matched `saved_desk_name` and existing Template name (ie.
-  // "Desk 1"), creating a new template from "Desk 1" will get auto generated
-  // template name from the frontend as "Desk 1 (1)". To prevent template
-  // duplication, we show the template view name to be "Desk 1" by removing the
-  // appended name number. Saving the template under the new name will trigger
-  // the template replace dialog.
-  if (saved_desk_util::GetSavedDeskPresenter()->FindOtherEntryWithName(
-          saved_desk_name, desk_template().type(), uuid())) {
-    // Replace the name number.
-    name_view_->SetTemporaryName(saved_desk_name);
-    name_view_->SetViewName(saved_desk_name);
-  }
+void SavedDeskItemView::SetDisplayName(const std::u16string& saved_desk_name) {
+  name_view_->SetTemporaryName(saved_desk_name);
+  name_view_->SetViewName(saved_desk_name);
 }
 
 void SavedDeskItemView::MaybeShowReplaceDialog(DeskTemplateType type,
                                                const base::GUID& uuid) {
   // Show replace template dialog. If accepted, replace old template and commit
   // name change.
+  auto* controller = saved_desk_util::GetSavedDeskDialogController();
+  if (!controller)
+    return;
+
   aura::Window* root_window = GetWidget()->GetNativeWindow()->GetRootWindow();
-  saved_desk_util::GetSavedDeskDialogController()->ShowReplaceDialog(
+  controller->ShowReplaceDialog(
       root_window, name_view_->GetText(), type,
       base::BindOnce(&SavedDeskItemView::ReplaceTemplate,
                      weak_ptr_factory_.GetWeakPtr(), uuid),
@@ -360,10 +350,11 @@ void SavedDeskItemView::ReplaceTemplate(const base::GUID& uuid) {
   // get template name collisions. Passing `nullopt` as `record_for_type` since
   // we only record the delete operation when the user specifically deletes an
   // entry.
-  saved_desk_util::GetSavedDeskPresenter()->DeleteEntry(
-      uuid, /*record_for_type=*/absl::nullopt);
-  UpdateTemplateName();
-  RecordReplaceSavedDeskHistogram(desk_template_->type());
+  if (auto* presenter = saved_desk_util::GetSavedDeskPresenter()) {
+    presenter->DeleteEntry(uuid, /*record_for_type=*/absl::nullopt);
+    UpdateTemplateName();
+    RecordReplaceSavedDeskHistogram(desk_template_->type());
+  }
 }
 
 void SavedDeskItemView::RevertTemplateName() {
@@ -459,7 +450,6 @@ void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
   // Assume we should commit the name change unless `HandleKeyEvent` detects the
   // user pressed the escape key.
   should_commit_name_changes_ = true;
-  name_view_->UpdateViewAppearance();
 
   // Hide the hover container when we are modifying the template name.
   hover_container_->SetVisible(false);
@@ -506,7 +496,6 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
   DCHECK_EQ(observed_view, name_view_);
   is_template_name_being_modified_ = false;
   defer_select_all_ = false;
-  name_view_->UpdateViewAppearance();
 
   // Collapse the whitespace for the text first before comparing it or trying to
   // commit the name in order to prevent duplicate name issues.
@@ -541,11 +530,14 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
   // still being activated. In this case, we don't want to show the dialog and
   // activate its associated widget until after the desks bar widget is finished
   // activating. See https://crbug.com/1301759.
-  auto* template_to_replace =
-      saved_desk_util::GetSavedDeskPresenter()->FindOtherEntryWithName(
-          name_view_->GetText(), desk_template().type(), uuid());
+  auto* presenter = saved_desk_util::GetSavedDeskPresenter();
+  if (!presenter)
+    return;
+
+  auto* template_to_replace = presenter->FindOtherEntryWithName(
+      name_view_->GetText(), desk_template().type(), uuid());
   if (template_to_replace) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&SavedDeskItemView::MaybeShowReplaceDialog,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   template_to_replace->type(),
@@ -581,9 +573,11 @@ void SavedDeskItemView::UpdateTemplateName() {
   desk_template_->set_template_name(name_view_->GetText());
   OnTemplateNameChanged(desk_template_->template_name());
 
-  saved_desk_util::GetSavedDeskPresenter()->SaveOrUpdateDeskTemplate(
-      /*is_update=*/true, GetWidget()->GetNativeWindow()->GetRootWindow(),
-      desk_template_->Clone());
+  if (auto* presenter = saved_desk_util::GetSavedDeskPresenter()) {
+    presenter->SaveOrUpdateDeskTemplate(
+        /*is_update=*/true, GetWidget()->GetNativeWindow()->GetRootWindow(),
+        desk_template_->Clone());
+  }
 }
 
 void SavedDeskItemView::OnHoverAnimationEnded() {
@@ -715,13 +709,17 @@ views::View* SavedDeskItemView::TargetForRect(views::View* root,
 }
 
 void SavedDeskItemView::OnDeleteTemplate() {
-  saved_desk_util::GetSavedDeskPresenter()->DeleteEntry(desk_template_->uuid(),
-                                                        desk_template_->type());
+  if (auto* presenter = saved_desk_util::GetSavedDeskPresenter())
+    presenter->DeleteEntry(desk_template_->uuid(), desk_template_->type());
 }
 
 void SavedDeskItemView::OnDeleteButtonPressed() {
   // Show the dialog to confirm the deletion.
-  saved_desk_util::GetSavedDeskDialogController()->ShowDeleteDialog(
+  auto* controller = saved_desk_util::GetSavedDeskDialogController();
+  if (!controller)
+    return;
+
+  controller->ShowDeleteDialog(
       GetWidget()->GetNativeWindow()->GetRootWindow(),
       name_view_->GetAccessibleName(), desk_template_->type(),
       base::BindOnce(&SavedDeskItemView::OnDeleteTemplate,
@@ -738,8 +736,10 @@ void SavedDeskItemView::MaybeLaunchTemplate() {
     return;
   }
 
-  saved_desk_util::GetSavedDeskPresenter()->LaunchSavedDesk(
-      desk_template_->Clone(), GetWidget()->GetNativeWindow()->GetRootWindow());
+  if (auto* presenter = saved_desk_util::GetSavedDeskPresenter()) {
+    presenter->LaunchSavedDesk(desk_template_->Clone(),
+                               GetWidget()->GetNativeWindow()->GetRootWindow());
+  }
 }
 
 void SavedDeskItemView::OnTemplateNameChanged(const std::u16string& new_name) {

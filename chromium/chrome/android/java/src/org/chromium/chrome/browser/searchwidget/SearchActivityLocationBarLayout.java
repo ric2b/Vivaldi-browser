@@ -79,6 +79,9 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
                 backgroundDrawable.setCornerRadius(getResources().getDimensionPixelSize(
                         R.dimen.omnibox_suggestion_bg_round_corner_radius));
             }
+            setPaddingRelative(
+                    getResources().getDimensionPixelSize(R.dimen.location_bar_start_padding_modern),
+                    getPaddingTop(), getPaddingEnd(), getPaddingBottom());
         }
         setBackground(backgroundDrawable);
 

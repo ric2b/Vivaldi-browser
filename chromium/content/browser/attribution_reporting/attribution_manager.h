@@ -9,17 +9,18 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "components/attribution_reporting/os_support.mojom-forward.h"
+#include "components/attribution_reporting/source_registration_error.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
 #include "content/public/browser/storage_partition.h"
+
+namespace attribution_reporting {
+class SuitableOrigin;
+}  // namespace attribution_reporting
 
 namespace base {
 class Time;
 }  // namespace base
-
-namespace url {
-class Origin;
-}  // namespace url
 
 namespace content {
 
@@ -36,6 +37,8 @@ class WebContents;
 class AttributionManager {
  public:
   static AttributionManager* FromWebContents(WebContents* web_contents);
+
+  static attribution_reporting::mojom::OsSupport GetOsSupport();
 
   virtual ~AttributionManager() = default;
 
@@ -76,7 +79,7 @@ class AttributionManager {
   // Called by `AttributionDataHostManagerImpl`.
   virtual void NotifyFailedSourceRegistration(
       const std::string& header_value,
-      const url::Origin& reporting_origin,
+      const attribution_reporting::SuitableOrigin& reporting_origin,
       attribution_reporting::mojom::SourceRegistrationError) = 0;
 
   // Deletes all data in storage for storage keys matching `filter`, between

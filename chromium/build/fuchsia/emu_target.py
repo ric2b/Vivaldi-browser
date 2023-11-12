@@ -17,11 +17,15 @@ import ffx_session
 import pkg_repo
 import target
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                             'test')))
+from compatible_utils import find_image_in_sdk, running_unattended
+
 
 class EmuTarget(target.Target):
   LOCAL_ADDRESS = 'localhost'
 
-  def __init__(self, out_dir, target_cpu, logs_dir):
+  def __init__(self, out_dir, target_cpu, logs_dir, image):
     """out_dir: The directory which will contain the files that are
                    generated to support the emulator deployment.
     target_cpu: The emulated target CPU architecture.
@@ -32,6 +36,27 @@ class EmuTarget(target.Target):
     self._pkg_repo = None
     self._target_context = None
     self._ffx_target = None
+
+    self._pb_path = self._GetPbPath(image)
+    metadata = self._GetEmuMetadata()
+    self._disk_image = metadata['disk_images'][0]
+    self._kernel = metadata['kernel']
+    self._ramdisk = metadata['initial_ramdisk']
+
+  def _GetPbPath(self, image):
+    if not image:
+      image = 'terminal.qemu-%s' % self._target_cpu
+    image_path = find_image_in_sdk(image,
+                                   product_bundle=True,
+                                   sdk_root=os.path.dirname(common.IMAGES_ROOT))
+    if not image_path:
+      raise FileNotFoundError(f'Product bundle {image} is not downloaded. Add '
+                              'the image and run "gclient sync" again.')
+    return image_path
+
+  def _GetEmuMetadata(self):
+    with open(os.path.join(self._pb_path, 'product_bundle.json')) as f:
+      return json.load(f)['data']['manifests']['emu']
 
   def __enter__(self):
     return self
@@ -44,7 +69,7 @@ class EmuTarget(target.Target):
     return os.environ.copy()
 
   def Start(self):
-    if common.IsRunningUnattended() and not self._HasNetworking():
+    if running_unattended() and not self._HasNetworking():
       # Bots may accumulate stale manually-added targets with the same address
       # as the one to be added here. Preemtively remove any unknown targets at
       # this address before starting the emulator and adding it as a target.

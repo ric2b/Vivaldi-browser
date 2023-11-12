@@ -7,7 +7,7 @@
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/ui/follow/first_follow_view_controller.h"
 #import "ios/chrome/browser/ui/follow/followed_web_channel.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_follow_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_navigation_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_view_controller.h"
@@ -30,10 +30,6 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
 
 // An example favicon URL given from the Discover backend.
 static NSString* const kExampleFaviconURL = @"https://www.the-sun.com/";
-
-// Specific symbols used to create favicons.
-NSString* kGlobeSymbol = @"globe";
-NSString* kGlobeAmericaSymbol = @"globe.americas.fill";
 
 // The size of favicon symbol images.
 NSInteger kFaviconSymbolPointSize = 17;
@@ -195,7 +191,7 @@ NSInteger kFaviconSymbolPointSize = 17;
   // default image, then fetching and returning another image.
   UIImage* image1 =
       DefaultSymbolTemplateWithPointSize(kGlobeSymbol, kFaviconSymbolPointSize);
-  UIImage* image2 = DefaultSymbolTemplateWithPointSize(kGlobeAmericaSymbol,
+  UIImage* image2 = DefaultSymbolTemplateWithPointSize(kGlobeAmericasSymbol,
                                                        kFaviconSymbolPointSize);
   completion([FaviconAttributes attributesWithImage:image1]);
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),

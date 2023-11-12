@@ -100,19 +100,17 @@ public class TabBookmarker {
         }
 
         // Defense in depth against the UI being erroneously enabled.
-        BookmarkModel bridge = mBookmarkModelSupplier.get();
-        if (bridge == null || !bridge.isEditBookmarksEnabled()) {
+        final BookmarkModel bookmarkModel = mBookmarkModelSupplier.get();
+        if (bookmarkModel == null || !bookmarkModel.isEditBookmarksEnabled()) {
             assert false;
             return;
         }
 
-        final BookmarkModel bookmarkModel = new BookmarkModel();
         bookmarkModel.finishLoadingBookmarkModel(() -> {
             // Gives up the bookmarking if the tab is being destroyed.
             if (tabToBookmark.isClosing() || !tabToBookmark.isInitialized()
                     || mBottomSheetControllerSupplier.get() == null
                     || mSnackbarManagerSupplier.get() == null) {
-                bookmarkModel.destroy();
                 return;
             }
 
@@ -133,8 +131,6 @@ public class TabBookmarker {
     private void onBookmarkModelLoaded(final Tab tabToBookmark,
             @Nullable final BookmarkItem currentBookmarkItem, final BookmarkModel bookmarkModel,
             @BookmarkType int bookmarkType, boolean fromExplicitTrackUi) {
-        // The BookmarkModel will be destroyed by BookmarkUtils#addOrEditBookmark() when
-        // done.
         BookmarkUtils.addOrEditBookmark(currentBookmarkItem, bookmarkModel, tabToBookmark,
                 mSnackbarManagerSupplier.get(), mBottomSheetControllerSupplier.get(), mActivity,
                 mIsCustomTab, bookmarkType, (newBookmarkId) -> {
@@ -151,8 +147,6 @@ public class TabBookmarker {
                         activity.captureThumbnailForSpeedDial(
                                 bookmarkModel, bookmarkModel.getBookmarkById(newBookmarkId));
                     }
-
-                   bookmarkModel.destroy();
                 }, fromExplicitTrackUi);
     }
 }

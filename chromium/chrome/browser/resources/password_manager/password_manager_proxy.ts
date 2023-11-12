@@ -7,10 +7,15 @@
  * chrome.passwordsPrivate which facilitates testing.
  */
 
-export type SavedPasswordListChangedListener =
-    (entries: chrome.passwordsPrivate.PasswordUiEntry[]) => void;
+export type BlockedSite = chrome.passwordsPrivate.ExceptionEntry;
+
+export type CredentialsChangedListener =
+    (credentials: chrome.passwordsPrivate.PasswordUiEntry[]) => void;
 export type PasswordCheckStatusChangedListener =
     (status: chrome.passwordsPrivate.PasswordCheckStatus) => void;
+export type BlockedSitesListChangedListener = (entries: BlockedSite[]) => void;
+export type PasswordsFileExportProgressListener =
+    (progress: chrome.passwordsPrivate.PasswordExportProgress) => void;
 
 /**
  * Represents different interactions the user can perform on the Password Check
@@ -44,14 +49,26 @@ export interface PasswordManagerProxy {
   /**
    * Add an observer to the list of saved passwords.
    */
-  addSavedPasswordListChangedListener(
-      listener: SavedPasswordListChangedListener): void;
+  addSavedPasswordListChangedListener(listener: CredentialsChangedListener):
+      void;
 
   /**
    * Remove an observer from the list of saved passwords.
    */
-  removeSavedPasswordListChangedListener(
-      listener: SavedPasswordListChangedListener): void;
+  removeSavedPasswordListChangedListener(listener: CredentialsChangedListener):
+      void;
+
+  /**
+   * Add an observer to the list of blocked sites.
+   */
+  addBlockedSitesListChangedListener(listener: BlockedSitesListChangedListener):
+      void;
+
+  /**
+   * Remove an observer from the list of blocked sites.
+   */
+  removeBlockedSitesListChangedListener(
+      listener: BlockedSitesListChangedListener): void;
 
   /**
    * Add an observer to the passwords check status change.
@@ -66,15 +83,40 @@ export interface PasswordManagerProxy {
       listener: PasswordCheckStatusChangedListener): void;
 
   /**
+   * Add an observer to the insecure passwords change.
+   */
+  addInsecureCredentialsListener(listener: CredentialsChangedListener): void;
+
+  /**
+   * Remove an observer to the insecure passwords change.
+   */
+  removeInsecureCredentialsListener(listener: CredentialsChangedListener): void;
+
+  /**
    * Request the list of saved passwords.
    */
   getSavedPasswordList(): Promise<chrome.passwordsPrivate.PasswordUiEntry[]>;
+
+  /**
+   * Request grouped credentials.
+   */
+  getCredentialGroups(): Promise<chrome.passwordsPrivate.CredentialGroup[]>;
+
+  /**
+   * Request the list of blocked sites.
+   */
+  getBlockedSitesList(): Promise<BlockedSite[]>;
 
   /**
    * Requests the current status of the check.
    */
   getPasswordCheckStatus():
       Promise<chrome.passwordsPrivate.PasswordCheckStatus>;
+
+  /**
+   * Requests the latest information about insecure credentials.
+   */
+  getInsecureCredentials(): Promise<chrome.passwordsPrivate.PasswordUiEntry[]>;
 
   /**
    * Requests the start of the bulk password check.
@@ -85,20 +127,88 @@ export interface PasswordManagerProxy {
    * Records a given interaction on the Password Check page.
    */
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction): void;
+
+  /**
+   * Triggers the shortcut creation dialog.
+   */
+  showAddShortcutDialog(): void;
+
+  /**
+   * Gets the list of full (with note and password) credentials for given ids.
+   * @param ids The id for the password entries being retrieved.
+   * @return A promise that resolves to |PasswordUiEntry[]|.
+   */
+  requestCredentialsDetails(ids: number[]):
+      Promise<chrome.passwordsPrivate.PasswordUiEntry[]>;
+
+  /**
+   * Gets the saved password for a given id and reason.
+   * @param id The id for the password entry being being retrieved.
+   * @param reason The reason why the plaintext password is requested.
+   * @return A promise that resolves to the plaintext password.
+   */
+  requestPlaintextPassword(
+      id: number,
+      reason: chrome.passwordsPrivate.PlaintextReason): Promise<string>;
+
+  /**
+   * Should remove the blocked site and notify that the list has changed.
+   * @param id The id for the blocked url entry being removed. No-op if |id|
+   *     is not in the list.
+   */
+  removeBlockedSite(id: number): void;
+
+  /**
+   * Queries the status of any ongoing export.
+   */
+  requestExportProgressStatus():
+      Promise<chrome.passwordsPrivate.ExportProgressStatus>;
+
+  /**
+   * Triggers the dialog for exporting passwords.
+   */
+  exportPasswords(): Promise<void>;
+
+  /**
+   * Add an observer to the export progress.
+   */
+  addPasswordsFileExportProgressListener(
+      listener: PasswordsFileExportProgressListener): void;
+
+  /**
+   * Remove an observer from the export progress.
+   */
+  removePasswordsFileExportProgressListener(
+      listener: PasswordsFileExportProgressListener): void;
+
+  /**
+   * Cancels the export in progress.
+   */
+  cancelExportPasswords(): void;
 }
 
 /**
  * Implementation that accesses the private API.
  */
 export class PasswordManagerImpl implements PasswordManagerProxy {
-  addSavedPasswordListChangedListener(listener:
-                                          SavedPasswordListChangedListener) {
+  addSavedPasswordListChangedListener(listener: CredentialsChangedListener) {
     chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(listener);
   }
 
-  removeSavedPasswordListChangedListener(listener:
-                                             SavedPasswordListChangedListener) {
+  removeSavedPasswordListChangedListener(listener: CredentialsChangedListener) {
     chrome.passwordsPrivate.onSavedPasswordsListChanged.removeListener(
+        listener);
+  }
+
+  addBlockedSitesListChangedListener(listener:
+                                         BlockedSitesListChangedListener) {
+    chrome.passwordsPrivate.onPasswordExceptionsListChanged.addListener(
+        listener);
+  }
+
+  removeBlockedSitesListChangedListener(listener:
+                                            BlockedSitesListChangedListener) {
+    chrome.passwordsPrivate.onPasswordExceptionsListChanged.removeListener(
         listener);
   }
 
@@ -112,36 +222,83 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
         listener);
   }
 
+  addInsecureCredentialsListener(listener: CredentialsChangedListener) {
+    chrome.passwordsPrivate.onInsecureCredentialsChanged.addListener(listener);
+  }
+
+  removeInsecureCredentialsListener(listener: CredentialsChangedListener) {
+    chrome.passwordsPrivate.onInsecureCredentialsChanged.removeListener(
+        listener);
+  }
+
   getSavedPasswordList() {
-    return new Promise<chrome.passwordsPrivate.PasswordUiEntry[]>(resolve => {
-      chrome.passwordsPrivate.getSavedPasswordList(passwords => {
-        resolve(chrome.runtime.lastError ? [] : passwords);
-      });
-    });
+    return chrome.passwordsPrivate.getSavedPasswordList().catch(() => []);
+  }
+
+  getCredentialGroups() {
+    return chrome.passwordsPrivate.getCredentialGroups();
+  }
+
+  getBlockedSitesList() {
+    return chrome.passwordsPrivate.getPasswordExceptionList().catch(() => []);
   }
 
   getPasswordCheckStatus() {
-    return new Promise<chrome.passwordsPrivate.PasswordCheckStatus>(resolve => {
-      chrome.passwordsPrivate.getPasswordCheckStatus(resolve);
-    });
+    return chrome.passwordsPrivate.getPasswordCheckStatus();
+  }
+
+  getInsecureCredentials() {
+    return chrome.passwordsPrivate.getInsecureCredentials();
   }
 
   startBulkPasswordCheck() {
-    return new Promise<void>((resolve, reject) => {
-      chrome.passwordsPrivate.startPasswordCheck(() => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError.message);
-          return;
-        }
-        resolve();
-      });
-    });
+    return chrome.passwordsPrivate.startPasswordCheck();
   }
 
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction) {
     chrome.metricsPrivate.recordEnumerationValue(
         'PasswordManager.BulkCheck.UserAction', interaction,
         PasswordCheckInteraction.COUNT);
+  }
+
+  showAddShortcutDialog() {
+    chrome.passwordsPrivate.showAddShortcutDialog();
+  }
+
+  requestCredentialsDetails(ids: number[]) {
+    return chrome.passwordsPrivate.requestCredentialsDetails(ids);
+  }
+
+  requestPlaintextPassword(
+      id: number, reason: chrome.passwordsPrivate.PlaintextReason) {
+    return chrome.passwordsPrivate.requestPlaintextPassword(id, reason);
+  }
+
+  removeBlockedSite(id: number) {
+    chrome.passwordsPrivate.removePasswordException(id);
+  }
+
+  requestExportProgressStatus() {
+    return chrome.passwordsPrivate.requestExportProgressStatus();
+  }
+
+  exportPasswords() {
+    return chrome.passwordsPrivate.exportPasswords();
+  }
+
+  addPasswordsFileExportProgressListener(
+      listener: PasswordsFileExportProgressListener) {
+    chrome.passwordsPrivate.onPasswordsFileExportProgress.addListener(listener);
+  }
+
+  removePasswordsFileExportProgressListener(
+      listener: PasswordsFileExportProgressListener) {
+    chrome.passwordsPrivate.onPasswordsFileExportProgress.removeListener(
+        listener);
+  }
+
+  cancelExportPasswords() {
+    chrome.passwordsPrivate.cancelExportPasswords();
   }
 
   static getInstance(): PasswordManagerProxy {

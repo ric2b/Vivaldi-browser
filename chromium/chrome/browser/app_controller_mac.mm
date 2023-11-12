@@ -141,11 +141,6 @@
 
 namespace {
 
-// How long we allow a workspace change notification to wait to be
-// associated with a dock activation. The animation lasts 250ms. See
-// applicationShouldHandleReopen:hasVisibleWindows:.
-static const int kWorkspaceChangeTimeoutMs = 500;
-
 // True while AppController is calling chrome::NewEmptyWindow(). We need a
 // global flag here, analogue to StartupBrowserCreator::InProcessStartup()
 // because otherwise the SessionService will try to restore sessions when we
@@ -154,7 +149,8 @@ bool g_is_opening_new_window = false;
 
 // Stores the pending web auth requests (typically while the profile is being
 // loaded) until they are passed to the AuthSessionRequest class.
-NSMutableDictionary* GetPendingWebAuthRequests() API_AVAILABLE(macos(10.15)) {
+NSMutableDictionary<NSUUID*, ASWebAuthenticationSessionRequest*>*
+GetPendingWebAuthRequests() API_AVAILABLE(macos(10.15)) {
   static NSMutableDictionary* g_pending_requests =
       [[NSMutableDictionary alloc] init];
   return g_pending_requests;
@@ -171,10 +167,12 @@ bool IsProfileSignedOut(const base::FilePath& profile_path);
 void BeginHandlingWebAuthenticationSessionRequestWithProfile(
     ASWebAuthenticationSessionRequest* request,
     Profile* profile) API_AVAILABLE(macos(10.15)) {
-  NSUUID* key = [request UUID];
+  NSUUID* key = request.UUID;
   if (![GetPendingWebAuthRequests() objectForKey:key])
     return;  // The request has been canceled, do not start the session.
+
   [GetPendingWebAuthRequests() removeObjectForKey:key];
+
   // If there is no safe profile, |profile| is nullptr, and the session will
   // fail immediately.
   AuthSessionRequest::StartNewAuthSession(request, profile);
@@ -403,7 +401,6 @@ Profile* GetLastProfileMac() {
 - (void)initProfileMenu;
 - (void)updateConfirmToQuitPrefMenuItem:(NSMenuItem*)item;
 - (void)registerServicesMenuTypesTo:(NSApplication*)app;
-- (void)activeSpaceDidChange:(NSNotification*)inNotification;
 - (void)checkForAnyKeyWindows;
 - (BOOL)userWillWaitForInProgressDownloads:(int)downloadCount;
 - (BOOL)shouldQuitWithInProgressDownloads;
@@ -614,13 +611,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
          selector:@selector(windowDidBecomeMain:)
              name:NSWindowDidBecomeMainNotification
            object:nil];
-
-  // Register for space change notifications.
-  [[[NSWorkspace sharedWorkspace] notificationCenter]
-    addObserver:self
-       selector:@selector(activeSpaceDidChange:)
-           name:NSWorkspaceActiveSpaceDidChangeNotification
-         object:nil];
 
   [[[NSWorkspace sharedWorkspace] notificationCenter]
       addObserver:self
@@ -850,23 +840,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   _lastActiveColorProvider = browser->window()->GetColorProvider();
 }
 
-- (void)activeSpaceDidChange:(NSNotification*)notify {
-  if (_reopenTime.is_null() ||
-      ![NSApp isActive] ||
-      (base::TimeTicks::Now() - _reopenTime).InMilliseconds() >
-      kWorkspaceChangeTimeoutMs) {
-    return;
-  }
-
-  // The last applicationShouldHandleReopen:hasVisibleWindows: call
-  // happened during a space change. Now that the change has
-  // completed, raise browser windows.
-  _reopenTime = base::TimeTicks();
-  std::set<gfx::NativeWindow> browserWindows = GetBrowserNativeWindows();
-  if (!browserWindows.empty())
-    FocusWindowSetOnCurrentSpace(browserWindows);
-}
-
 // Called when shutting down or logging out.
 - (void)willPowerOff:(NSNotification*)notify {
   // Don't attempt any shutdown here. Cocoa will shortly call
@@ -1086,10 +1059,13 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   for (Profile* profile : profiles) {
     DownloadCoreService* download_core_service =
         DownloadCoreServiceFactory::GetForBrowserContext(profile);
+    // `DownloadCoreService` can be nullptr for some irregular profiles, e.g.
+    // the System Profile.
     content::DownloadManager* download_manager =
-        (download_core_service->HasCreatedDownloadManager()
-             ? profile->GetDownloadManager()
-             : nullptr);
+        download_core_service &&
+                download_core_service->HasCreatedDownloadManager()
+            ? profile->GetDownloadManager()
+            : nullptr;
     if (download_manager &&
         download_manager->NonMaliciousInProgressCount() > 0) {
       int downloadCount = download_manager->NonMaliciousInProgressCount();
@@ -1717,26 +1693,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   if (hasVisibleWindows  || vivaldi::IsVivaldiRunning()) {
     std::set<gfx::NativeWindow> browserWindows = GetBrowserNativeWindows();
     if (!browserWindows.empty()) {
-      NSWindow* keyWindow = [NSApp keyWindow];
-      if (keyWindow && ![keyWindow isOnActiveSpace]) {
-        // The key window is not on the active space. We must be mid-animation
-        // for a space transition triggered by the dock. Delay the call to
-        // |ui::FocusWindowSet| until the transition completes. Otherwise, the
-        // wrong space's windows get raised, resulting in an off-screen key
-        // window. It does not work to |ui::FocusWindowSet| twice, once here
-        // and once in |activeSpaceDidChange:|, as that appears to break when
-        // the omnibox is focused.
-        //
-        // This check relies on OS X setting the key window to a window on the
-        // target space before calling this method.
-        //
-        // See http://crbug.com/309656.
-        _reopenTime = base::TimeTicks::Now();
-      } else {
-        FocusWindowSetOnCurrentSpace(browserWindows);
-      }
-      // Return NO; we've done (or soon will do) the deminiaturize, so
-      // AppKit shouldn't do anything.
+      FocusWindowSetOnCurrentSpace(browserWindows);
+      // We've performed the unminimize, so AppKit shouldn't do anything.
       return NO;
     }
   }
@@ -1949,7 +1907,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 
   const PrefService* prefService = g_browser_process->local_state();
   bool enabled = prefService->GetBoolean(prefs::kConfirmToQuitEnabled);
-  [item setState:enabled ? NSOnState : NSOffState];
+  [item setState:enabled ? NSControlStateValueOn : NSControlStateValueOff];
 }
 
 - (BOOL)shouldEnableConfirmToQuitPrefMenuItem {
@@ -1961,8 +1919,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 - (void)registerServicesMenuTypesTo:(NSApplication*)app {
   // Note that RenderWidgetHostViewCocoa implements NSServicesRequests which
   // handles requests from services.
-  NSArray* types = @[ base::mac::CFToNSCast(kUTTypeUTF8PlainText) ];
-  [app registerServicesMenuSendTypes:types returnTypes:types];
+  [app registerServicesMenuSendTypes:@[ NSPasteboardTypeString ]
+                         returnTypes:@[ NSPasteboardTypeString ]];
 }
 
 // Returns null if the profile is not loaded in memory.
@@ -2418,10 +2376,11 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   dispatch_async(dispatch_get_main_queue(), ^(void) {
     // Start tracking the pending request, so it's possible to cancel it before
     // the session actually starts.
-    NSUUID* key = [request UUID];
+    NSUUID* key = request.UUID;
     DCHECK(![GetPendingWebAuthRequests() objectForKey:key])
         << "Duplicate ASWebAuthenticationSessionRequest";
     [GetPendingWebAuthRequests() setObject:request forKey:key];
+
     app_controller_mac::RunInLastProfileSafely(
         base::BindOnce(&BeginHandlingWebAuthenticationSessionRequestWithProfile,
                        base::scoped_nsobject<ASWebAuthenticationSessionRequest>(
@@ -2433,10 +2392,24 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 - (void)cancelWebAuthenticationSessionRequest:
     (ASWebAuthenticationSessionRequest*)request API_AVAILABLE(macos(10.15)) {
   dispatch_async(dispatch_get_main_queue(), ^(void) {
-    // Remove the pending request: for the case when the session is not started.
-    [GetPendingWebAuthRequests() removeObjectForKey:[request UUID]];
-    // Cancel the session: for the case when it was already started.
-    AuthSessionRequest::CancelAuthSession(request);
+    NSUUID* key = request.UUID;
+    if ([GetPendingWebAuthRequests() objectForKey:key]) {
+      // Remove the pending request: for the case when the session is not
+      // started.
+      [GetPendingWebAuthRequests() removeObjectForKey:key];
+
+      // Take care of the undocumented requirement (https://crbug.com/1400714)
+      // that -[ASWebAuthenticationSessionRequest cancelWithError:] be called
+      // for authentication sessions canceled by the OS.
+      NSError* error = [NSError
+          errorWithDomain:ASWebAuthenticationSessionErrorDomain
+                     code:ASWebAuthenticationSessionErrorCodeCanceledLogin
+                 userInfo:nil];
+      [request cancelWithError:error];
+    } else {
+      // Cancel the session: for the case when it was already started.
+      AuthSessionRequest::CancelAuthSession(request);
+    }
   });
 }
 
@@ -2484,7 +2457,6 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
   } else if (!browser) {
     // if no browser window exists then create one with no tabs to be filled in.
     browser = Browser::Create(Browser::CreateParams(profile, true));
-    browser->window()->Show();
   }
 
   // Various methods to open URLs that we get in a native fashion. We use

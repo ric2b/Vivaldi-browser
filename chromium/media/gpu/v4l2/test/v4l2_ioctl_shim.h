@@ -8,6 +8,8 @@
 #include <linux/videodev2.h>
 #include <string.h>
 
+#include <set>
+
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -90,7 +92,12 @@ class V4L2Queue {
 
   enum v4l2_buf_type type() const { return type_; }
   uint32_t fourcc() const { return fourcc_; }
+
   gfx::Size display_size() const { return display_size_; }
+  void set_display_size(gfx::Size display_size) {
+    display_size_ = display_size;
+  }
+
   enum v4l2_memory memory() const { return memory_; }
 
   void set_buffers(MmapedBuffers& buffers) { buffers_ = buffers; }
@@ -118,13 +125,27 @@ class V4L2Queue {
     media_request_fd_ = media_request_fd;
   }
 
+  std::set<uint32_t> queued_buffer_indexes() const {
+    return queued_buffer_indexes_;
+  }
+
+  void QueueBufferIndex(uint32_t last_queued_buffer_index) {
+    queued_buffer_indexes_.insert(last_queued_buffer_index);
+  }
+
+  void DequeueBufferIndex(uint32_t index) {
+    queued_buffer_indexes_.erase(index);
+  }
+
+  void DequeueAllBufferIndexes() { queued_buffer_indexes_.clear(); }
+
  private:
   const enum v4l2_buf_type type_;
   const uint32_t fourcc_;
   MmapedBuffers buffers_;
   uint32_t num_buffers_;
   // The size of the image on the screen.
-  const gfx::Size display_size_;
+  gfx::Size display_size_;
   // The size of the encoded frame. Usually has an alignment of 16, 32
   // depending on codec.
   gfx::Size coded_size_;
@@ -135,6 +156,7 @@ class V4L2Queue {
   int media_request_fd_;
   // Tracks which CAPTURE buffer was queued in the previous frame.
   uint32_t last_queued_buffer_index_;
+  std::set<uint32_t> queued_buffer_indexes_;
 };
 
 // V4L2IoctlShim is a shallow wrapper which wraps V4L2 ioctl requests
@@ -143,7 +165,8 @@ class V4L2Queue {
 // https://www.kernel.org/doc/html/v5.10/userspace-api/media/v4l/user-func.html
 class V4L2IoctlShim {
  public:
-  V4L2IoctlShim();
+  // Finds first decoder that can decode |coded_fourcc|
+  V4L2IoctlShim(uint32_t coded_fourcc);
   V4L2IoctlShim(const V4L2IoctlShim&) = delete;
   V4L2IoctlShim& operator=(const V4L2IoctlShim&) = delete;
   ~V4L2IoctlShim();
@@ -173,6 +196,10 @@ class V4L2IoctlShim {
   // Allocates buffers via VIDIOC_REQBUFS for |queue|.
   [[nodiscard]] bool ReqBufs(std::unique_ptr<V4L2Queue>& queue) const;
 
+  // Allocates buffers via VIDIOC_REQBUFS for |queue| with a buffer count.
+  [[nodiscard]] bool ReqBufsWithCount(std::unique_ptr<V4L2Queue>& queue,
+                                      uint32_t count) const;
+
   // Enqueues an empty (capturing) or filled (output) buffer
   // in the driver's incoming |queue|.
   [[nodiscard]] bool QBuf(const std::unique_ptr<V4L2Queue>& queue,
@@ -185,6 +212,9 @@ class V4L2IoctlShim {
 
   // Starts streaming |queue| (via VIDIOC_STREAMON).
   [[nodiscard]] bool StreamOn(const enum v4l2_buf_type type) const;
+
+  // Stops streaming |queue| (via VIDIOC_STREAMOFF).
+  [[nodiscard]] bool StreamOff(const enum v4l2_buf_type type) const;
 
   // Sets the value of controls which specify decoding parameters
   // for each frame.
@@ -232,9 +262,9 @@ class V4L2IoctlShim {
   [[nodiscard]] bool Ioctl(int request_code, T arg) const;
 
   // Decode device file descriptor used for ioctl requests.
-  const base::File decode_fd_;
+  base::File decode_fd_;
   // Media device file descriptor used for ioctl requests.
-  const base::File media_fd_;
+  base::File media_fd_;
 };
 
 }  // namespace v4l2_test

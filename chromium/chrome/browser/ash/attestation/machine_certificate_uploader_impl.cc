@@ -19,6 +19,7 @@
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/attestation/attestation_client.h"
 #include "chromeos/ash/components/dbus/attestation/interface.pb.h"
+#include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "components/account_id/account_id.h"
@@ -28,6 +29,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace ash::attestation {
 
 namespace {
 
@@ -42,12 +45,11 @@ const int kRetryLimit = 100;
 
 void DBusPrivacyCACallback(
     const base::RepeatingCallback<void(const std::string&)> on_success,
-    const base::RepeatingCallback<void(ash::attestation::AttestationStatus)>
-        on_failure,
+    const base::RepeatingCallback<void(AttestationStatus)> on_failure,
     const base::Location& from_here,
-    ash::attestation::AttestationStatus status,
+    AttestationStatus status,
     const std::string& data) {
-  if (status == ash::attestation::ATTESTATION_SUCCESS) {
+  if (status == ATTESTATION_SUCCESS) {
     on_success.Run(data);
     return;
   }
@@ -58,9 +60,6 @@ void DBusPrivacyCACallback(
 }
 
 }  // namespace
-
-namespace ash {
-namespace attestation {
 
 MachineCertificateUploaderImpl::MachineCertificateUploaderImpl(
     policy::CloudPolicyClient* policy_client)
@@ -134,12 +133,14 @@ void MachineCertificateUploaderImpl::Start() {
 void MachineCertificateUploaderImpl::GetNewCertificate() {
   // We can reuse the dbus callback handler logic.
   attestation_flow_->GetCertificate(
-      PROFILE_ENTERPRISE_MACHINE_CERTIFICATE,
-      EmptyAccountId(),  // Not used.
-      std::string(),     // Not used.
-      true,              // Force a new key to be generated.
-      ::attestation::KEY_TYPE_RSA,
-      std::string(),  // Leave key name empty to generate a default name.
+      /*certificate_profile=*/PROFILE_ENTERPRISE_MACHINE_CERTIFICATE,
+      /*account_id=*/EmptyAccountId(),   // Not used.
+      /*request_origin=*/std::string(),  // Not used.
+      /*force_new_key=*/true,            // Force a new key to be generated.
+      /*key_crypto_type=*/::attestation::KEY_TYPE_RSA,
+      /*key_name=*/ash::attestation::kEnterpriseMachineKey,
+      /*profile_specific_data=*/absl::nullopt,
+      /*callback=*/
       base::BindOnce(
           [](const base::RepeatingCallback<void(const std::string&)> on_success,
              const base::RepeatingCallback<void(AttestationStatus)> on_failure,
@@ -280,11 +281,19 @@ void MachineCertificateUploaderImpl::MarkAsUploaded(
 
 void MachineCertificateUploaderImpl::HandleGetCertificateFailure(
     AttestationStatus status) {
-  if (status != ATTESTATION_SERVER_BAD_REQUEST_FAILURE) {
-    Reschedule();
-  } else {
-    certificate_uploaded_ = false;
-    RunCallbacks(certificate_uploaded_.value());
+  switch (status) {
+    case ATTESTATION_UNSPECIFIED_FAILURE:
+      Reschedule();
+      break;
+
+    case ATTESTATION_SERVER_BAD_REQUEST_FAILURE:
+    case ATTESTATION_NOT_AVAILABLE:
+      certificate_uploaded_ = false;
+      RunCallbacks(certificate_uploaded_.value());
+      break;
+
+    case ATTESTATION_SUCCESS:
+      NOTREACHED();
   }
 }
 
@@ -313,5 +322,4 @@ void MachineCertificateUploaderImpl::RunCallbacks(bool status) {
   }
 }
 
-}  // namespace attestation
-}  // namespace ash
+}  // namespace ash::attestation

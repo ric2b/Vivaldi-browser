@@ -1,15 +1,14 @@
 // Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import {assert} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 
 import {resolveIsolatedEntries} from '../../common/js/api.js';
 import {FilesAppState} from '../../common/js/files_app_state.js';
 import {metrics} from '../../common/js/metrics.js';
 import {str, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
-import {xfm} from '../../common/js/xfm.js';
 import {Crostini} from '../../externs/background/crostini.js';
 import {DriveSyncHandler} from '../../externs/background/drive_sync_handler.js';
 import {FileManagerBaseInterface} from '../../externs/background/file_manager_base.js';
@@ -338,7 +337,7 @@ export class FileManagerBase {
    */
   onMountCompletedInternal_(event) {
     const statusOK = event.status === 'success' ||
-        event.status === 'error_path_already_mounted';
+        event.status === VolumeManagerCommon.VolumeError.PATH_ALREADY_MOUNTED;
     const volumeTypeOK = event.volumeMetadata.volumeType ===
             VolumeManagerCommon.VolumeType.PROVIDED &&
         event.volumeMetadata.source === VolumeManagerCommon.Source.FILE;

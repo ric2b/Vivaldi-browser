@@ -90,8 +90,10 @@
 <translation id="2550212893339833758">Memoria trasladada al espacio de intercambio</translation>
 <translation id="2553440850688409052">Ocultar complemento</translation>
 <translation id="26224892172169984">No permitir a los sitios procesar protocolos</translation>
+<translation id="2653275834716714682">Reemplazo de texto</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
+<translation id="2678100101831051676">No se puede transmitir.</translation>
 <translation id="2721037002783622288">&amp;Buscar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Crear acceso directo...</translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
@@ -202,6 +204,7 @@
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Solo el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar aplicaciones y extensiones.</translation>
 <translation id="4613271546271159013">Una extensión ha cambiado la página que se muestra al abrir una pestaña nueva.</translation>
+<translation id="4616405296204756919">Puedes guardar tus contraseñas en cualquier dispositivo. Son almacenadas en el <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">Abrir &amp;video en una pestaña nueva</translation>
 <translation id="4677772697204437347">Memoria de la GPU</translation>
 <translation id="4681930562518940301">Abrir &amp;imagen original en una pestaña nueva</translation>
@@ -235,10 +238,12 @@
 <translation id="5233231016133573565">Cód. de proceso</translation>
 <translation id="5233736638227740678">&amp;Pegar</translation>
 <translation id="5256861893479663409">En todos los sitios</translation>
+<translation id="5260334392110301220">Citado inteligente</translation>
 <translation id="5269977353971873915">Error al imprimir</translation>
 <translation id="5284445933715251131">Continuar descargando</translation>
 <translation id="52912272896845572">El archivo de clave privada es inválido.</translation>
 <translation id="5301954838959518834">Entendido</translation>
+<translation id="5302932258331363306">Mostrar sustituciones</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>
 <translation id="5355926466126177564">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra al buscar desde Omnibox.</translation>
@@ -338,6 +343,7 @@
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7070484045139057854">Puede leer y cambiar datos de sitios</translation>
 <translation id="708060913198414444">C&amp;opiar dirección del audio</translation>
+<translation id="7121728544325372695">Guiones inteligentes</translation>
 <translation id="7175353351958621980">Cargada desde:</translation>
 <translation id="7186088072322679094">Mantener en barra de herramientas</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
@@ -421,6 +427,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto del enlace</translation>
 <translation id="8823704566850948458">Sugerir contraseña...</translation>
+<translation id="883062543841130884">Sustituciones</translation>
 <translation id="8859174528519900719">Submarco: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Abrir enlace en una &amp;ventana nueva</translation>
 <translation id="8915370057835397490">Cargando sugerencia</translation>

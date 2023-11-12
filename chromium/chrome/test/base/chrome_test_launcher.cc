@@ -18,7 +18,7 @@
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
-#include "base/test/allow_check_is_test_to_be_called.h"
+#include "base/test/allow_check_is_test_for_testing.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_file_util.h"
 #include "base/test/test_switches.h"
@@ -252,7 +252,7 @@ int LaunchChromeTests(size_t parallel_jobs,
                       content::TestLauncherDelegate* delegate,
                       int argc,
                       char** argv) {
-  base::test::AllowCheckIsTestToBeCalled();
+  base::test::AllowCheckIsTestForTesting();
 
 #if BUILDFLAG(IS_MAC)
   // Set up the path to the framework so resources can be loaded. This is also
@@ -295,18 +295,7 @@ int LaunchChromeTests(size_t parallel_jobs,
   // Only create this object in the utility process, so that its members don't
   // interfere with other test objects in the browser process.
   std::unique_ptr<content::NetworkServiceTestHelper>
-      network_service_test_helper;
-  if (command_line.GetSwitchValueASCII(switches::kProcessType) ==
-      switches::kUtilityProcess) {
-    network_service_test_helper =
-        std::make_unique<content::NetworkServiceTestHelper>();
-    ChromeContentUtilityClient::SetNetworkBinderCreationCallback(base::BindOnce(
-        [](content::NetworkServiceTestHelper* helper,
-           service_manager::BinderRegistry* registry) {
-          helper->RegisterNetworkBinders(registry);
-        },
-        network_service_test_helper.get()));
-  }
+      network_service_test_helper = content::NetworkServiceTestHelper::Create();
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.

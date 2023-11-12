@@ -25,7 +25,6 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -63,6 +62,7 @@
 #include "components/version_info/version_info.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/ax_event_notification_details.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -105,6 +105,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/identifiability_metrics.h"
@@ -120,6 +121,7 @@
 #include "pdf/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/switches.h"
@@ -220,11 +222,11 @@ class ContextMenuShownObserver {
 
   void OnMenuShown(RenderViewContextMenu* context_menu) {
     shown_ = true;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&RenderViewContextMenuBase::Cancel,
                                   base::Unretained(context_menu)));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  run_loop_.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, run_loop_.QuitClosure());
   }
 
   void Wait() { run_loop_.Run(); }
@@ -350,7 +352,7 @@ class LeftMouseClick {
     mouse_event_.click_count = 1;
     render_frame_host_->GetRenderWidgetHost()->ForwardMouseEvent(mouse_event_);
 
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&LeftMouseClick::SendMouseUp, base::Unretained(this)),
         base::Milliseconds(duration_ms));
@@ -846,18 +848,29 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
 
   TestGuestViewManagerFactory factory_;
   // Note that these are only set if you launch app using LoadAppWithGuest().
-  raw_ptr<guest_view::GuestViewBase> guest_view_;
-  raw_ptr<content::WebContents> embedder_web_contents_;
+  raw_ptr<guest_view::GuestViewBase, DanglingUntriaged> guest_view_;
+  raw_ptr<content::WebContents, DanglingUntriaged> embedder_web_contents_;
 };
 
-class WebViewTest : public WebViewTestBase,
+class WebViewGuestSiteIsolationTest : public WebViewTestBase {
+ public:
+  explicit WebViewGuestSiteIsolationTest(
+      bool site_isolation_for_guests_enabled) {
+    scoped_feature_list_.InitWithFeatureState(
+        features::kSiteIsolationForGuests, site_isolation_for_guests_enabled);
+  }
+  ~WebViewGuestSiteIsolationTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class WebViewTest : public WebViewGuestSiteIsolationTest,
                     public testing::WithParamInterface<bool> {
  public:
-  WebViewTest() {
-    scoped_feature_list_.InitWithFeatureState(features::kSiteIsolationForGuests,
-                                              /*enabled=*/GetParam());
-  }
-  ~WebViewTest() override = default;
+  WebViewTest()
+      : WebViewGuestSiteIsolationTest(
+            /*site_isolation_for_guests_enabled=*/GetParam()) {}
 
   // Provides meaningful param names instead of /0 and /1.
   static std::string DescribeParams(
@@ -2079,10 +2092,42 @@ IN_PROC_BROWSER_TEST_P(WebViewSizeTest, Shim_TestResizeWebviewResizesContent) {
              NO_TEST_SERVER);
 }
 
-class WebViewSSLErrorTest : public WebViewTest {
+class WebViewSSLErrorTest
+    : public WebViewTestBase,
+      public testing::WithParamInterface<testing::tuple<bool, bool>> {
  public:
-  WebViewSSLErrorTest() = default;
+  WebViewSSLErrorTest() {
+    auto [is_site_isolation_enabled, use_interstitials] = GetParam();
+    std::vector<base::test::FeatureRef> enabled_features, disabled_features;
+    if (is_site_isolation_enabled) {
+      enabled_features.push_back(features::kSiteIsolationForGuests);
+    } else {
+      disabled_features.push_back(features::kSiteIsolationForGuests);
+    }
+
+    if (use_interstitials) {
+      disabled_features.push_back(
+          extensions_features::kWebviewTagMPArchBehavior);
+    } else {
+      enabled_features.push_back(
+          extensions_features::kWebviewTagMPArchBehavior);
+    }
+
+    scoped_feature_list_.InitWithFeatures(std::move(enabled_features),
+                                          std::move(disabled_features));
+  }
   ~WebViewSSLErrorTest() override = default;
+
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    auto [is_site_isolation_enabled, use_interstitials] = info.param;
+    return base::StringPrintf(
+        "SiteIsolationForGuests%s_Use%s",
+        is_site_isolation_enabled ? "Enabled" : "Disabled",
+        use_interstitials ? "Interstitial" : "ErrorPage");
+  }
+
+  bool UseInterstitials() { return testing::get<1>(GetParam()); }
 
   // Loads the guest at "web_view/ssl/https_page.html" with an SSL error, and
   // asserts the security interstitial is not displayed for guest through the
@@ -2112,7 +2157,7 @@ class WebViewSSLErrorTest : public WebViewTest {
     ASSERT_TRUE(guest->GetGuestMainFrame()->IsErrorDocument());
     // TODO(1338009): We intend to limit SSL errors to a plain error page
     // instead of an interstitial.
-    ASSERT_TRUE(IsShowingInterstitial(guest->web_contents()));
+    ASSERT_EQ(UseInterstitials(), IsShowingInterstitial(guest->web_contents()));
   }
 
   void LoadEmptyGuest() {
@@ -2161,12 +2206,15 @@ class WebViewSSLErrorTest : public WebViewTest {
       ASSERT_EQ(guest_navi_obs.last_committed_url(), GURL());
     }
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(WebViewSSLErrorTests,
                          WebViewSSLErrorTest,
-                         testing::Bool(),
-                         WebViewTest::DescribeParams);
+                         testing::Combine(testing::Bool(), testing::Bool()),
+                         WebViewSSLErrorTest::DescribeParams);
 
 // Test makes sure that an error document is shown in `<webview>` with an SSL
 // error.
@@ -2322,10 +2370,10 @@ class WebViewHttpsFirstModeTest : public WebViewSSLErrorTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(WebViewTests,
+INSTANTIATE_TEST_SUITE_P(WebViewHttpsFirstModeTests,
                          WebViewHttpsFirstModeTest,
-                         testing::Bool(),
-                         WebViewTest::DescribeParams);
+                         testing::Combine(testing::Bool(), testing::Bool()),
+                         WebViewHttpsFirstModeTest::DescribeParams);
 
 // Tests that loading an HTTPS page in a guest <webview> with HTTPS-First Mode
 // enabled doesn't crash nor shows error page.
@@ -2865,11 +2913,11 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, TestContextMenu) {
 
   auto close_menu_and_stop_run_loop = [](base::OnceClosure closure,
                                          RenderViewContextMenu* context_menu) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&RenderViewContextMenuBase::Cancel,
                                   base::Unretained(context_menu)));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  std::move(closure));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(closure));
   };
 
   base::RunLoop run_loop;
@@ -3365,7 +3413,7 @@ class DownloadManagerWaiter : public content::DownloadManager::Observer {
   ~DownloadManagerWaiter() override { download_manager_->RemoveObserver(this); }
 
   void WaitForInitialized() {
-    if (initialized_)
+    if (initialized_ || download_manager_->IsManagerInitialized())
       return;
     base::RunLoop run_loop;
     quit_closure_ = run_loop.QuitClosure();
@@ -3386,17 +3434,10 @@ class DownloadManagerWaiter : public content::DownloadManager::Observer {
 
 }  // namespace
 
-// TODO(crbug.com/994789): Flaky on MSan, Linux, Chrome OS, and Mac.
-#if defined(MEMORY_SANITIZER) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
-#define MAYBE_DownloadCookieIsolation DISABLED_DownloadCookieIsolation
-#else
-#define MAYBE_DownloadCookieIsolation DownloadCookieIsolation
-#endif
 // Downloads initiated from isolated guest parititons should use their
 // respective cookie stores. In addition, if those downloads are resumed, they
 // should continue to use their respective cookie stores.
-IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_DownloadCookieIsolation) {
+IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(&HandleDownloadRequestWithCookie));
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
@@ -3418,26 +3459,29 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_DownloadCookieIsolation) {
   error_info.stream_offset = 0;
   error_injector->InjectError(error_info);
 
-  std::unique_ptr<content::DownloadTestObserver> interrupted_observer(
-      new content::DownloadTestObserverInterrupted(
-          download_manager, 2,
-          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
+  auto download_op = [&](std::string cookie) {
+    // DownloadTestObserverInterrupted does not seem to reliably wait for
+    // multiple failed downloads, so we perform one download at a time.
+    content::DownloadTestObserverInterrupted interrupted_observer(
+        download_manager, 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
+    EXPECT_TRUE(content::ExecuteScript(
+        web_contents,
+        base::StringPrintf(
+            "startDownload('%s', '%s?cookie=%s')", cookie.c_str(),
+            embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str(),
+            cookie.c_str())));
 
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      base::StringPrintf(
-          "startDownload('first', '%s?cookie=first')",
-          embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
-
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      base::StringPrintf(
-          "startDownload('second', '%s?cookie=second')",
-          embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
+    // This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
+    interrupted_observer.WaitForFinished();
+  };
 
   // Both downloads should fail due to the error that was injected above to the
-  // download manager. This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
-  interrupted_observer->WaitForFinished();
+  // download manager.
+  download_op("first");
+
+  // Note that the second webview uses an in-memory partition.
+  download_op("second");
 
   error_injector->ClearError();
 
@@ -3494,10 +3538,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
 
   content::DownloadManager* download_manager =
       web_contents->GetBrowserContext()->GetDownloadManager();
-  std::unique_ptr<content::DownloadTestObserver> interrupted_observer(
-      new content::DownloadTestObserverInterrupted(
-          download_manager, 2,
-          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
 
   scoped_refptr<content::TestFileErrorInjector> error_injector(
       content::TestFileErrorInjector::Create(download_manager));
@@ -3508,22 +3548,30 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
   error_info.stream_offset = 0;
   error_injector->InjectError(error_info);
 
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      base::StringPrintf(
-          "startDownload('first', '%s?cookie=first')",
-          embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
+  auto download_op = [&](std::string cookie) {
+    // DownloadTestObserverInterrupted does not seem to reliably wait for
+    // multiple failed downloads, so we perform one download at a time.
+    content::DownloadTestObserverInterrupted interrupted_observer(
+        download_manager, 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
 
-  // Note that the second webview uses an in-memory partition.
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      base::StringPrintf(
-          "startDownload('second', '%s?cookie=second')",
-          embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
+    EXPECT_TRUE(content::ExecuteScript(
+        web_contents,
+        base::StringPrintf(
+            "startDownload('%s', '%s?cookie=%s')", cookie.c_str(),
+            embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str(),
+            cookie.c_str())));
+
+    // This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
+    interrupted_observer.WaitForFinished();
+  };
 
   // Both downloads should fail due to the error that was injected above to the
-  // download manager. This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
-  interrupted_observer->WaitForFinished();
+  // download manager.
+  download_op("first");
+
+  // Note that the second webview uses an in-memory partition.
+  download_op("second");
 
   // Wait for both downloads to be stored.
   task_runner->FastForwardUntilNoTasksRemain();
@@ -3531,19 +3579,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
   content::EnsureCookiesFlushed(profile());
 }
 
-// TODO(crbug.com/994789): Flaky on MSan, Linux, and ChromeOS.
-// TODO(crbug.com/1204299): Flaky on Windows. Consistently failing on Mac.
-#if defined(MEMORY_SANITIZER) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
-#define MAYBE_DownloadCookieIsolation_CrossSession \
-  DISABLED_DownloadCookieIsolation_CrossSession
-#else
-#define MAYBE_DownloadCookieIsolation_CrossSession \
-  DownloadCookieIsolation_CrossSession
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
-IN_PROC_BROWSER_TEST_P(WebViewTest,
-                       MAYBE_DownloadCookieIsolation_CrossSession) {
+IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(&HandleDownloadRequestWithCookie));
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
@@ -3594,20 +3630,21 @@ IN_PROC_BROWSER_TEST_P(WebViewTest,
         download->GetRerouteInfo()));
   }
 
-  std::unique_ptr<content::DownloadTestObserver> completion_observer(
-      new content::DownloadTestObserverTerminal(
-          download_manager, 2,
-          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
+  content::DownloadTestObserverTerminal completion_observer(
+      download_manager, 2,
+      content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
 
   for (auto* download : downloads) {
     ASSERT_TRUE(download->CanResume());
     ASSERT_TRUE(download->GetFullPath().empty());
-    EXPECT_EQ(download::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
-              download->GetLastReason());
+    ASSERT_TRUE(download::DOWNLOAD_INTERRUPT_REASON_CRASH ==
+                    download->GetLastReason() ||
+                download::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED ==
+                    download->GetLastReason());
     download->Resume(true);
   }
 
-  completion_observer->WaitForFinished();
+  completion_observer.WaitForFinished();
 
   // Of the two downloads, ?cookie=first will succeed and ?cookie=second will
   // fail. The latter fails because the underlying storage partition was not
@@ -3904,7 +3941,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, LoadDataAPINotRelativeToAnotherExtension) {
   // resort to a timeout here. If |fail_if_webview_navigates| doesn't see a
   // navigation in that time, we consider the test to have passed.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
   run_loop.Run();
   EXPECT_FALSE(fail_if_webview_navigates.navigation_started());
@@ -3955,8 +3992,8 @@ class ClientCertStoreStub : public net::ClientCertStore {
     if (quit_closure_) {
       // Call the quit closure asynchronously, so it's ordered after the cert
       // selector.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                    std::move(quit_closure_));
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, std::move(quit_closure_));
     }
   }
 
@@ -4576,21 +4613,17 @@ IN_PROC_BROWSER_TEST_P(WebViewTestNoDomAutomationController,
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, LoadWebViewAccessibility) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   LoadAppWithGuest("web_view/focus_accessibility");
   content::WebContents* web_contents = GetFirstAppWindowWebContents();
-  content::EnableAccessibilityForWebContents(web_contents);
-  content::WebContents* guest_web_contents = GetGuestWebContents();
-  content::EnableAccessibilityForWebContents(guest_web_contents);
   content::WaitForAccessibilityTreeToContainNodeWithName(web_contents,
                                                          "Guest button");
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   LoadAppWithGuest("web_view/focus_accessibility");
   content::WebContents* web_contents = GetFirstAppWindowWebContents();
-  content::EnableAccessibilityForWebContents(web_contents);
-  content::WebContents* guest_web_contents = GetGuestWebContents();
-  content::EnableAccessibilityForWebContents(guest_web_contents);
 
   // Wait for focus to land on the "root web area" role, representing
   // focus on the main document itself.
@@ -4623,11 +4656,9 @@ IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
 // The test was disabled. See crbug.com/1141313.
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest,
                        DISABLED_FocusAccessibilityNestedFrame) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   LoadAppWithGuest("web_view/focus_accessibility");
   content::WebContents* web_contents = GetFirstAppWindowWebContents();
-  content::EnableAccessibilityForWebContents(web_contents);
-  content::WebContents* guest_web_contents = GetGuestWebContents();
-  content::EnableAccessibilityForWebContents(guest_web_contents);
 
   // Wait for focus to land on the "root web area" role, representing
   // focus on the main document itself.
@@ -4707,11 +4738,10 @@ class WebContentsAccessibilityEventWatcher
 };
 
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, DISABLED_TouchAccessibility) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   LoadAppWithGuest("web_view/touch_accessibility");
   content::WebContents* web_contents = GetFirstAppWindowWebContents();
-  content::EnableAccessibilityForWebContents(web_contents);
   content::WebContents* guest_web_contents = GetGuestWebContents();
-  content::EnableAccessibilityForWebContents(guest_web_contents);
 
   // Listen for accessibility events on both WebContents.
   WebContentsAccessibilityEventWatcher main_event_watcher(
@@ -5563,11 +5593,25 @@ IN_PROC_BROWSER_TEST_P(WebViewPPAPITest, Shim_TestPluginLoadPermission) {
 }
 #endif  // BUILDFLAG(ENABLE_PPAPI)
 
-// Helper class to set up a fake Chrome Web Store URL which can be loaded in
-// tests.
-class WebstoreWebViewTest : public WebViewTest {
+// Domain which the Webstore hosted app is associated with in production.
+constexpr char kWebstoreURL[] = "https://chrome.google.com/";
+// Domain which the new Webstore is associated with in production.
+constexpr char kNewWebstoreURL[] = "https://chromewebstore.google.com/";
+// Domain for testing an overridden Webstore URL.
+constexpr char kWebstoreURLOverride[] = "https://webstore.override.test.com/";
+
+// Helper class for setting up and testing webview behavior with the Chrome
+// Webstore. The tuple param contains the Webstore URL under test and a boolen
+// that is passed to the base class to set if site isolation is enabled for
+// guests.
+class WebstoreWebViewTest
+    : public WebViewGuestSiteIsolationTest,
+      public testing::WithParamInterface<std::tuple<GURL, bool>> {
  public:
-  WebstoreWebViewTest() : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+  WebstoreWebViewTest()
+      : WebViewGuestSiteIsolationTest(::testing::get<1>(GetParam())),
+        https_server_(net::EmbeddedTestServer::TYPE_HTTPS),
+        webstore_url_(std::move(::testing::get<0>(GetParam()))) {}
 
   WebstoreWebViewTest(const WebstoreWebViewTest&) = delete;
   WebstoreWebViewTest& operator=(const WebstoreWebViewTest&) = delete;
@@ -5575,44 +5619,71 @@ class WebstoreWebViewTest : public WebViewTest {
   ~WebstoreWebViewTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    https_server_.ServeFilesFromSourceDirectory("chrome/test/data");
+    // Serve files from the extensions test directory as it has a
+    // /webstore/ directory, which the Webstore hosted app expects for the URL
+    // it is associated with.
+    https_server_.ServeFilesFromSourceDirectory("chrome/test/data/extensions");
     ASSERT_TRUE(https_server_.InitializeAndListen());
 
-    // Override the webstore URL.
     command_line->AppendSwitchASCII(
-        ::switches::kAppsGalleryURL,
-        https_server()->GetURL("chrome.foo.com", "/frame_tree").spec());
+        network::switches::kHostResolverRules,
+        "MAP * " + https_server_.host_port_pair().ToString());
+    // Only override the webstore URL if this test case is testing the override.
+    if (webstore_url().spec() == kWebstoreURLOverride) {
+      command_line->AppendSwitchASCII(::switches::kAppsGalleryURL,
+                                      kWebstoreURLOverride);
+    }
     mock_cert_verifier_.SetUpCommandLine(command_line);
-    WebViewTest::SetUpCommandLine(command_line);
+    WebViewGuestSiteIsolationTest::SetUpCommandLine(command_line);
   }
 
   void SetUpOnMainThread() override {
     https_server_.StartAcceptingConnections();
     mock_cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
-    WebViewTest::SetUpOnMainThread();
+    WebViewGuestSiteIsolationTest::SetUpOnMainThread();
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    WebViewTest::SetUpInProcessBrowserTestFixture();
+    WebViewGuestSiteIsolationTest::SetUpInProcessBrowserTestFixture();
     mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-    WebViewTest::TearDownInProcessBrowserTestFixture();
+    WebViewGuestSiteIsolationTest::TearDownInProcessBrowserTestFixture();
     mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
   }
 
   net::EmbeddedTestServer* https_server() { return &https_server_; }
+  GURL webstore_url() { return webstore_url_; }
+
+  // Provides meaningful param names.
+  static std::string DescribeParams(
+      const testing::TestParamInfo<std::tuple<GURL, bool>>& info) {
+    std::string guest_isolation = ::testing::get<1>(info.param)
+                                      ? "SiteIsolationForGuestsEnabled"
+                                      : "SiteIsolationForGuestsDisabled";
+    GURL webstore_url(std::move(::testing::get<0>(info.param)));
+    if (webstore_url.spec() == kWebstoreURL)
+      return "OldWebstore_" + guest_isolation;
+    if (webstore_url.spec() == kWebstoreURLOverride)
+      return "WebstoreOverride_" + guest_isolation;
+    return "NewWebstore_" + guest_isolation;
+  }
 
  private:
   net::EmbeddedTestServer https_server_;
   content::ContentMockCertVerifier mock_cert_verifier_;
+  GURL webstore_url_;
 };
 
-INSTANTIATE_TEST_SUITE_P(WebViewTests,
-                         WebstoreWebViewTest,
-                         testing::Bool(),
-                         WebViewTest::DescribeParams);
+INSTANTIATE_TEST_SUITE_P(
+    WebViewTests,
+    WebstoreWebViewTest,
+    testing::Combine(testing::Values(GURL(kWebstoreURL),
+                                     GURL(kWebstoreURLOverride),
+                                     GURL(kNewWebstoreURL)),
+                     testing::Bool()),
+    WebstoreWebViewTest::DescribeParams);
 
 // Ensure that an attempt to load Chrome Web Store in a <webview> is blocked
 // and does not result in a renderer kill.  See https://crbug.com/1197674.
@@ -5622,16 +5693,16 @@ IN_PROC_BROWSER_TEST_P(WebstoreWebViewTest, NoRendererKillWithChromeWebStore) {
   ASSERT_TRUE(guest);
 
   // Navigate <webview> to a Chrome Web Store URL.  This should result in an
-  // error and shouldn't lead to a renderer kill.
-  const GURL webstore_url =
-      https_server()->GetURL("chrome.foo.com", "/frame_tree/simple.htm");
+  // error and shouldn't lead to a renderer kill. Note: the webstore hosted app
+  // requires the path to start with /webstore/, so for simplicity we serve a
+  // page from this path for all the different webstore URLs under test.
+  const GURL url = webstore_url().Resolve("/webstore/mock_store.html");
 
   content::TestNavigationObserver error_observer(
-      webstore_url, content::MessageLoopRunner::QuitMode::IMMEDIATE,
+      url, content::MessageLoopRunner::QuitMode::IMMEDIATE,
       /*ignore_uncommitted_navigations=*/false);
   error_observer.WatchExistingWebContents();
-  EXPECT_TRUE(
-      ExecuteScript(guest, "location.href = '" + webstore_url.spec() + "';"));
+  EXPECT_TRUE(ExecuteScript(guest, "location.href = '" + url.spec() + "';"));
   error_observer.Wait();
   EXPECT_FALSE(error_observer.last_navigation_succeeded());
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
@@ -5855,7 +5926,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ErrorPageInSubframe) {
                               "location.href = '" + error_url.spec() + "';"));
     load_observer.Wait();
     EXPECT_FALSE(load_observer.last_navigation_succeeded());
-    EXPECT_TRUE(ChildFrameAt(GetGuestRenderFrameHost(), 0)->IsErrorDocument());
+    auto* error_rfh = ChildFrameAt(GetGuestRenderFrameHost(), 0);
+    EXPECT_TRUE(error_rfh->IsErrorDocument());
+
+    // Double-check that the error page has an opaque origin, and that the
+    // precursor doesn't point to a.test.
+    url::Origin error_origin = error_rfh->GetLastCommittedOrigin();
+    EXPECT_TRUE(error_origin.opaque());
+    EXPECT_FALSE(error_origin.GetTupleOrPrecursorTupleIfOpaque().IsValid());
   }
 }
 
@@ -6125,8 +6203,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ContentScript) {
 
 // Checks that content scripts work in an out-of-process iframe in a <webview>
 // tag.
-// TODO(crbug.com/1363124): Fix flakiness on win10_chromium_x64_rel_ng. The test
-// is also disabled on mac11-arm64-rel using filter.
+// TODO(crbug.com/1363124): Fix flakiness on win-rel. The test is also disabled
+// on mac11-arm64-rel using filter.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_ContentScriptInOOPIF DISABLED_ContentScriptInOOPIF
 #else

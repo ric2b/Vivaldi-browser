@@ -4,6 +4,10 @@ import("//vivaldi/gn/config/version.gni")
 import("//build/config/compiler/pgo/pgo.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
+if (is_win) {
+  import("//build/config/win/visual_studio_version.gni")
+}
+
 if (is_win || is_mac) {
   import("//vivaldi/installer/widevine.gni")
 }
@@ -103,7 +107,7 @@ if (is_win) {
       args += [
         "--sign-executables",
         "--vivaldi-sign-key", vivaldi_signing_key,
-        "--vivaldi-sign-cmd", vivaldi_signing_command,
+        "--vivaldi-sign-cmd", "$windows_sdk_path/bin/$vivaldi_win_sdk_version/x64/signtool.exe",
       ]
     }
     if (enable_widevine_signing) {

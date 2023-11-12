@@ -65,8 +65,9 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_supplement.h"
 #include "third_party/blink/renderer/platform/mhtml/serialized_resource.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 
@@ -113,7 +114,6 @@ class WebBundleGenerationDelegate
   bool ShouldSkipResource(const WebURL& url) override { return false; }
   bool UseBinaryEncoding() override { return false; }
   bool RemovePopupOverlay() override { return false; }
-  bool UsePageProblemDetectors() override { return false; }
 };
 
 class ResourceSnapshotForWebBundleImpl
@@ -401,6 +401,10 @@ LocalFrameMojoHandler::LocalFrameMojoHandler(blink::LocalFrame& frame)
           frame.GetTaskRunner(TaskType::kInternalDefault)));
 #endif
 
+  frame.GetBrowserInterfaceBroker().GetInterface(
+      non_associated_local_frame_host_remote_.BindNewPipeAndPassReceiver(
+          frame.GetTaskRunner(TaskType::kInternalHighPriorityLocalFrame)));
+
   frame.GetRemoteNavigationAssociatedInterfaces()->GetInterface(
       local_frame_host_remote_.BindNewEndpointAndPassReceiver(
           frame.GetTaskRunner(TaskType::kInternalDefault)));
@@ -427,6 +431,7 @@ void LocalFrameMojoHandler::Trace(Visitor* visitor) const {
   visitor->Trace(reporting_service_);
   visitor->Trace(device_posture_provider_service_);
   visitor->Trace(local_frame_host_remote_);
+  visitor->Trace(non_associated_local_frame_host_remote_);
   visitor->Trace(local_frame_receiver_);
   visitor->Trace(main_frame_receiver_);
   visitor->Trace(high_priority_frame_receiver_);
@@ -1230,26 +1235,20 @@ void LocalFrameMojoHandler::GetOpenGraphMetadata(
 
 void LocalFrameMojoHandler::SetNavigationApiHistoryEntriesForRestore(
     mojom::blink::NavigationApiHistoryEntryArraysPtr entry_arrays) {
-  if (NavigationApi* navigation_api =
-          NavigationApi::navigation(*frame_->DomWindow()))
-    navigation_api->SetEntriesForRestore(entry_arrays);
+  frame_->DomWindow()->navigation()->SetEntriesForRestore(entry_arrays);
 }
 
 void LocalFrameMojoHandler::NotifyNavigationApiOfDisposedEntries(
     const WTF::Vector<WTF::String>& keys) {
-  if (NavigationApi* navigation_api =
-          NavigationApi::navigation(*frame_->DomWindow())) {
-    navigation_api->DisposeEntriesForSessionHistoryRemoval(keys);
-  }
+  frame_->DomWindow()->navigation()->DisposeEntriesForSessionHistoryRemoval(
+      keys);
 }
 
 void LocalFrameMojoHandler::TraverseCancelled(
     const String& navigation_api_key,
     mojom::blink::TraverseCancelledReason reason) {
-  if (NavigationApi* navigation_api =
-          NavigationApi::navigation(*frame_->DomWindow())) {
-    navigation_api->TraverseCancelled(navigation_api_key, reason);
-  }
+  frame_->DomWindow()->navigation()->TraverseCancelled(navigation_api_key,
+                                                       reason);
 }
 
 void LocalFrameMojoHandler::AnimateDoubleTapZoom(const gfx::Point& point,
@@ -1420,6 +1419,12 @@ void LocalFrameMojoHandler::UpdateBrowserControlsState(
 
   frame_->GetWidgetForLocalRoot()->UpdateBrowserControlsState(constraints,
                                                               current, animate);
+}
+
+void LocalFrameMojoHandler::SnapshotDocumentForViewTransition(
+    SnapshotDocumentForViewTransitionCallback callback) {
+  ViewTransitionSupplement::SnapshotDocumentForNavigation(
+      *frame_->GetDocument(), std::move(callback));
 }
 
 void LocalFrameMojoHandler::DispatchBeforeUnload(

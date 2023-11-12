@@ -5,7 +5,9 @@
 #include "components/autofill/core/browser/iban_manager.h"
 
 #include "base/guid.h"
+#include "base/test/task_environment.h"
 #include "components/autofill/core/browser/suggestions_context.h"
+#include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,8 +30,8 @@ class MockSuggestionsHandler : public IBANManager::SuggestionsHandler {
 
   MOCK_METHOD(void,
               OnSuggestionsReturned,
-              (int query_id,
-               bool autoselect_first_suggestion,
+              (FieldGlobalId field_id,
+               AutoselectFirstSuggestion autoselect_first_suggestion,
                const std::vector<Suggestion>& suggestions),
               (override));
 
@@ -68,13 +70,14 @@ class IBANManagerTest : public testing::Test {
     return iban_suggestion;
   }
 
+  base::test::TaskEnvironment task_environment_;
   MockSuggestionsHandler suggestions_handler_;
+  TestAutofillClient autofill_client_;
   TestPersonalDataManager personal_data_manager_;
   IBANManager iban_manager_;
 };
 
 TEST_F(IBANManagerTest, ShowsIBANSuggestions) {
-  int test_query_id = 2;
   Suggestion iban_suggestion_0 =
       SetUpIBANAndSuggestion(u"IE12 BOFI 9000 0112 3456 78", u"Nickname 0");
   Suggestion iban_suggestion_1 =
@@ -88,7 +91,7 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions) {
   EXPECT_CALL(
       suggestions_handler_,
       OnSuggestionsReturned(
-          test_query_id, /*autoselect_first_suggestion=*/false,
+          test_field.global_id(), AutoselectFirstSuggestion(false),
           UnorderedElementsAre(
               Field(&Suggestion::main_text, iban_suggestion_0.main_text),
               Field(&Suggestion::main_text, iban_suggestion_1.main_text))))
@@ -98,14 +101,12 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions) {
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      test_query_id, /*is_autocomplete_enabled=*/false,
-      /*autoselect_first_suggestion=*/false, test_field,
+      AutoselectFirstSuggestion(false), test_field, autofill_client_,
       suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
 TEST_F(IBANManagerTest, ShowsIBANSuggestions_OnlyPrefixMatch) {
-  int test_query_id = 2;
   base::StringPiece16 value_0 = u"IE12 BOFI 9000 0112 3456 78";
   Suggestion iban_suggestion_0 = SetUpIBANAndSuggestion(value_0, u"Nickname 0");
   Suggestion iban_suggestion_1 =
@@ -129,8 +130,7 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_OnlyPrefixMatch) {
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      test_query_id, /*is_autocomplete_enabled=*/false,
-      /*autoselect_first_suggestion=*/false, test_field,
+      AutoselectFirstSuggestion(false), test_field, autofill_client_,
       suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
@@ -147,9 +147,9 @@ TEST_F(IBANManagerTest, DoesNotShowIBANsForOffTheRecord) {
 
   // Simulate request for suggestions.
   EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
-      /*query_id=*/2, /*is_autocomplete_enabled=*/true,
-      /*autoselect_first_suggestion=*/false, test_field,
-      suggestions_handler_.GetWeakPtr(), /*context=*/context));
+      AutoselectFirstSuggestion(false), test_field, autofill_client_,
+      suggestions_handler_.GetWeakPtr(),
+      /*context=*/context));
 }
 
 }  // namespace autofill

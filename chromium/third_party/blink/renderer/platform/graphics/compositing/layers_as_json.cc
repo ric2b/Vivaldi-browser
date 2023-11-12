@@ -26,7 +26,7 @@ double RoundCloseToZero(double number) {
   return std::abs(number) < 1e-7 ? 0 : number;
 }
 
-std::unique_ptr<JSONArray> TransformAsJSONArray(const TransformationMatrix& t) {
+std::unique_ptr<JSONArray> TransformAsJSONArray(const gfx::Transform& t) {
   auto array = std::make_unique<JSONArray>();
   for (int c = 0; c < 4; c++) {
     auto col = std::make_unique<JSONArray>();
@@ -125,11 +125,10 @@ int LayersAsJSON::AddTransformJSON(
 
   if (!transform.IsIdentity()) {
     transform_json->SetArray("transform",
-                             TransformAsJSONArray(transform.SlowMatrix()));
+                             TransformAsJSONArray(transform.Matrix()));
   }
 
-  if (!transform.IsIdentityOr2DTranslation() &&
-      !transform.Matrix().IsIdentityOrTranslation()) {
+  if (!transform.Matrix().IsIdentityOrTranslation()) {
     transform_json->SetArray("origin", Point3AsJSONArray(transform.Origin()));
   }
 

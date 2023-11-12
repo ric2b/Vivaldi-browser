@@ -7,7 +7,7 @@ import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -19,7 +19,6 @@ import {Module, ModuleHeight} from './module_descriptor.js';
 import {ModuleRegistry} from './module_registry.js';
 import {ModuleWrapperElement} from './module_wrapper.js';
 import {getTemplate} from './modules.html.js';
-
 
 export type DismissModuleEvent =
     CustomEvent<{message: string, restoreCallback: () => void}>;
@@ -180,10 +179,12 @@ export class ModulesElement extends PolymerElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    assert(this.setDisabledModulesListenerId_);
     NewTabPageProxy.getInstance().callbackRouter.removeListener(
-        assert(this.setDisabledModulesListenerId_!));
+        this.setDisabledModulesListenerId_);
+    assert(this.setModulesFreVisibilityListenerId_);
     NewTabPageProxy.getInstance().callbackRouter.removeListener(
-        assert(this.setModulesFreVisibilityListenerId_!));
+        this.setModulesFreVisibilityListenerId_);
     this.eventTracker_.removeAll();
   }
 
@@ -193,7 +194,7 @@ export class ModulesElement extends PolymerElement {
   }
 
   private appendModuleContainers_(moduleContainers: HTMLElement[]) {
-    this.$.modules.innerHTML = '';
+    this.$.modules.innerHTML = window.trustedTypes!.emptyHTML;
     let shortModuleSiblingsContainer: HTMLElement|null = null;
     this.modulesShownToUser = false;
     moduleContainers.forEach((moduleContainer: HTMLElement, index: number) => {

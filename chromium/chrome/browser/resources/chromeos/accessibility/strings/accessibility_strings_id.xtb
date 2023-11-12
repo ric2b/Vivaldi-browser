@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">Waktu saat ini</translation>
 <translation id="1161762950103988776">Lompat</translation>
 <translation id="1164857107703583584">Perintah lewati dapat digunakan untuk menjelajahi halaman web secara efisien.</translation>
+<translation id="116896278675803795">Ubah bahasa secara otomatis agar cocok dengan konten yang dipilih</translation>
 <translation id="1175914831232945926">Digit</translation>
 <translation id="1188858454923323853">komplementer</translation>
 <translation id="1189258430971676908">Area praktik: Menu drop-down</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">Bidang formulir sebelumnya</translation>
 <translation id="3393605254399152980">Tarik satu jari untuk mendengarkan item yang Anda sentuh</translation>
 <translation id="3406283310380167331">Menampilkan daftar formulir</translation>
+<translation id="3407726812456125464">Dengarkan teks yang dipilih</translation>
 <translation id="3414400929511680526">Alice Blue</translation>
 <translation id="3418936350470374046">Tidak ada sel di bawah</translation>
 <translation id="3419269701801640163">tempel</translation>
@@ -471,7 +473,7 @@
 <translation id="4053520724192563562">Lime Green</translation>
 <translation id="4054936709456751127">sts</translation>
 <translation id="4058278702844053247">Halaman sedang dimuat</translation>
-<translation id="4065205963140826639">Sekarang, coba gunakan Search + Panah Kanan untuk menemukan tombol Berikutnya, lalu tekan Search + Spasi untuk mengekliknya.</translation>
+<translation id="4065205963140826639">Sekarang, coba gunakan Search + Panah Kanan untuk menemukan tombol Berikutnya, lalu tekan Search + Spasi untuk mengkliknya.</translation>
 <translation id="4081085052247739398">{COUNT,plural, =1{TILDE}other{# tanda tilde}}</translation>
 <translation id="409334809956508737">Objek Sebelumnya</translation>
 <translation id="4099274309791143834">dengan submenu</translation>
@@ -507,7 +509,7 @@
 <translation id="4275397969489577657">Aktifkan pencatatan streaming acara</translation>
 <translation id="4278486392851938658">Tidak ada link yang dikunjungi sebelumnya</translation>
 <translation id="4281245629646759298">Light Yellow</translation>
-<translation id="4289540628985791613">Ikhtisar</translation>
+<translation id="4289540628985791613">Ringkasan</translation>
 <translation id="4294967782363273192">Urutkan naik</translation>
 <translation id="4300318234632215983">Mengumumkan URL di belakang link</translation>
 <translation id="4322625298640984693">Sienna</translation>

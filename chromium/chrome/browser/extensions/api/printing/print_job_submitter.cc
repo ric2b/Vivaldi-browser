@@ -12,7 +12,7 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/extensions/api/printing/print_job_controller.h"
@@ -20,7 +20,6 @@
 #include "chrome/browser/printing/printing_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/extensions_dialogs.h"
-#include "chrome/browser/ui/native_window_tracker.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/services/printing/public/mojom/pdf_flattener.mojom.h"
 #include "chrome/services/printing/public/mojom/printing_service.mojom.h"
@@ -39,6 +38,7 @@
 #include "printing/printing_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/native_window_tracker.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crosapi/local_printer_ash.h"
@@ -111,7 +111,7 @@ PrintJobSubmitter::PrintJobSubmitter(
       callback_(std::move(callback)) {
   DCHECK(extension);
   if (native_window)
-    native_window_tracker_ = NativeWindowTracker::Create(native_window);
+    native_window_tracker_ = views::NativeWindowTracker::Create(native_window);
 }
 
 PrintJobSubmitter::~PrintJobSubmitter() {
@@ -259,7 +259,8 @@ void PrintJobSubmitter::ShowPrintJobConfirmationDialog(
     const gfx::Image& extension_icon) {
   // If the browser window was closed during API request handling, change
   // |native_window_| appropriately.
-  if (native_window_tracker_ && native_window_tracker_->WasNativeWindowClosed())
+  if (native_window_tracker_ &&
+      native_window_tracker_->WasNativeWindowDestroyed())
     native_window_ = gfx::kNullNativeWindow;
 
   extensions::ShowPrintJobConfirmationDialog(
@@ -277,7 +278,7 @@ void PrintJobSubmitter::OnPrintJobConfirmationDialogClosed(bool accepted) {
   if (!accepted || !ExtensionRegistry::Get(browser_context_)
                         ->enabled_extensions()
                         .Contains(extension_->id())) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback_), absl::nullopt, nullptr,
                                   nullptr, absl::nullopt));
     return;
@@ -311,7 +312,7 @@ void PrintJobSubmitter::OnFailed() {
 void PrintJobSubmitter::FireErrorCallback(const std::string& error) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(callback_);
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback_), absl::nullopt, nullptr,
                                 nullptr, error));
 }

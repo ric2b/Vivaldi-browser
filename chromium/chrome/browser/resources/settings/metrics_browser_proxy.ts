@@ -113,7 +113,8 @@ export enum SafeBrowsingInteractions {
  * These values are persisted to logs. Entries should not be renumbered and
  * numeric values should never be reused.
  *
- * Must be kept in sync with SettingsPrivacyGuideInteractions in emus.xml.
+ * Must be kept in sync with SettingsPrivacyGuideInteractions in emus.xml and
+ * PrivacyGuideInteractions in privacy_guide/privacy_guide.h.
  */
 export enum PrivacyGuideInteractions {
   WELCOME_NEXT_BUTTON = 0,
@@ -139,7 +140,8 @@ export enum PrivacyGuideInteractions {
  * These values are persisted to logs. Entries should not be renumbered and
  * numeric values should never be reused.
  *
- * Must be kept in sync with SettingsPrivacyGuideSettingsStates in enums.xml.
+ * Must be kept in sync with SettingsPrivacyGuideSettingsStates in enums.xml and
+ * PrivacyGuideSettingsStates in privacy_guide/privacy_guide.h.
  */
 export enum PrivacyGuideSettingsStates {
   MSBB_ON_TO_ON = 0,
@@ -184,7 +186,7 @@ export interface MetricsBrowserProxy {
 
   /**
    * Helper function that calls recordHistogram for the
-   * SafetyCheck.NotificationsModule.Interactions histogram
+   * Settings.SafetyCheck.NotificationsModuleInteractions histogram
    */
   recordSafetyCheckNotificationsModuleInteractionsHistogram(
       interaction: SafetyCheckNotificationsModuleInteractions): void;
@@ -240,14 +242,14 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
   recordSafetyCheckNotificationsListCountHistogram(suggestions: number) {
     chrome.send('metricsHandler:recordInHistogram', [
       'Settings.SafetyCheck.NotificationsListCount',
-      suggestions, 3999 /*max value for Notification suggestions*/,
+      suggestions, 99 /*max value for Notification suggestions*/,
     ]);
   }
 
   recordSafetyCheckNotificationsModuleInteractionsHistogram(
       interaction: SafetyCheckNotificationsModuleInteractions) {
     chrome.send('metricsHandler:recordInHistogram', [
-      'SafetyCheck.NotificationsModule.Interactions',
+      'Settings.SafetyCheck.NotificationsModuleInteractions',
       interaction,
       SafetyCheckNotificationsModuleInteractions.COUNT,
     ]);

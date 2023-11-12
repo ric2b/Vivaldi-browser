@@ -4,9 +4,9 @@
 
 #include "ash/wm/overview/overview_controller.h"
 
-#include <algorithm>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/window_properties.h"
@@ -30,7 +30,8 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
@@ -94,9 +95,15 @@ OverviewEnterExitType MaybeOverrideEnterExitTypeForHomeScreen(
 
 OverviewController::OverviewController()
     : occlusion_pause_duration_for_end_(kOcclusionPauseDurationForEnd),
-      overview_wallpaper_controller_(
-          std::make_unique<OverviewWallpaperController>()),
       delayed_animation_task_delay_(kTransition) {
+  // If the feature `kJellyroll` is enabled, there's no wallpaper blur in
+  // overview mode, thus we don't need to create `OverviewWallpaperController`
+  // which takes care the the wallpaper blur for overview mode.
+  if (!features::IsJellyrollEnabled()) {
+    overview_wallpaper_controller_ =
+        std::make_unique<OverviewWallpaperController>();
+  }
+
   Shell::Get()->activation_client()->AddObserver(this);
 }
 
@@ -184,7 +191,7 @@ void OverviewController::PauseOcclusionTracker() {
 void OverviewController::UnpauseOcclusionTracker(base::TimeDelta delay) {
   reset_pauser_task_.Reset(base::BindOnce(&OverviewController::ResetPauser,
                                           weak_ptr_factory_.GetWeakPtr()));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, reset_pauser_task_.callback(), delay);
 }
 
@@ -197,7 +204,7 @@ void OverviewController::RemoveObserver(OverviewObserver* observer) {
 }
 
 void OverviewController::DelayedUpdateRoundedCornersAndShadow() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&OverviewController::UpdateRoundedCornersAndShadow,
                      weak_ptr_factory_.GetWeakPtr()));
@@ -287,8 +294,8 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
            !WindowState::Get(w)->IsUserPositionable();
   };
   std::vector<aura::Window*> hide_windows(windows.size());
-  auto end = std::copy_if(windows.begin(), windows.end(), hide_windows.begin(),
-                          should_hide_for_overview);
+  auto end = base::ranges::copy_if(windows, hide_windows.begin(),
+                                   should_hide_for_overview);
   hide_windows.resize(end - hide_windows.begin());
   base::EraseIf(windows, window_util::ShouldExcludeForOverview);
   // Overview windows will handle showing their transient related windows, so if
@@ -328,11 +335,10 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
       // during overview exit. Minimized widgets will get created in their
       // place, and those widgets will fade out of overview.
       std::vector<aura::Window*> windows_to_minimize(windows.size());
-      auto it =
-          std::copy_if(windows.begin(), windows.end(),
-                       windows_to_minimize.begin(), [](aura::Window* window) {
-                         return !WindowState::Get(window)->IsMinimized();
-                       });
+      auto it = base::ranges::copy_if(
+          windows, windows_to_minimize.begin(), [](aura::Window* window) {
+            return !WindowState::Get(window)->IsMinimized();
+          });
       windows_to_minimize.resize(
           std::distance(windows_to_minimize.begin(), it));
       window_util::MinimizeAndHideWithoutAnimation(windows_to_minimize);
@@ -356,7 +362,7 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     }
 
     // Don't delete |overview_session_| yet since the stack is still using it.
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
         FROM_HERE, overview_session_.release());
     last_overview_session_time_ = base::Time::Now();
     for (auto& observer : observers_)
@@ -437,9 +443,12 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     // When fading in from home, start animating blur immediately (if animation
     // is required) - with this transition the item widgets are positioned in
     // the overview immediately, so delaying blur start until start animations
-    // finish looks janky.
-    overview_wallpaper_controller_->Blur(
-        /*animate=*/new_type == OverviewEnterExitType::kFadeInEnter);
+    // finish looks janky. If the feature `kJellyroll` is enabled, no need to
+    // set the wallpaper blur.
+    if (!features::IsJellyrollEnabled()) {
+      overview_wallpaper_controller_->Blur(
+          /*animate=*/new_type == OverviewEnterExitType::kFadeInEnter);
+    }
 
     // For app dragging, there are no start animations so add a delay to delay
     // animations observing when the start animation ends, such as the shelf,
@@ -466,24 +475,8 @@ bool OverviewController::CanEnterOverview() {
   if (IsSplitViewDividerDraggedOrAnimated())
     return false;
 
-  // Prevent entering overview if a desk animation is underway. The overview
-  // animation would be completely covered anyway, and doing so could put us in
-  // a strange state. Note that exiting overview is allowed as it is part of the
-  // animation.
-  if (DesksController::Get()->animation()) {
-    // The one exception to this rule is in tablet mode, having a window snapped
-    // to one side. Moving to this desk, we will want to open overview on the
-    // other side. For clamshell we don't need to enter overview as having a
-    // window snapped to one side and showing the wallpaper on the other is
-    // fine.
-    auto* split_view_controller =
-        SplitViewController::Get(Shell::GetPrimaryRootWindow());
-    if (!split_view_controller->InTabletSplitViewMode() ||
-        split_view_controller->state() ==
-            SplitViewController::State::kBothSnapped) {
-      return false;
-    }
-  }
+  if (!DesksController::Get()->CanEnterOverview())
+    return false;
 
   // Don't allow a window overview if the user session is not active (e.g.
   // locked or in user-adding screen) or a modal dialog is open or running in
@@ -515,7 +508,7 @@ bool OverviewController::CanEndOverview(OverviewEnterExitType type) {
     return false;
   }
 
-  return true;
+  return DesksController::Get()->CanEndOverview();
 }
 
 void OverviewController::OnStartingAnimationComplete(bool canceled) {
@@ -523,8 +516,9 @@ void OverviewController::OnStartingAnimationComplete(bool canceled) {
 
   // For kFadeInEnter, wallpaper blur is initiated on transition start,
   // so it doesn't have to be requested again on starting animation end.
-  if (!canceled && overview_session_->enter_exit_overview_type() !=
-                       OverviewEnterExitType::kFadeInEnter) {
+  if (!features::IsJellyrollEnabled() && !canceled &&
+      overview_session_->enter_exit_overview_type() !=
+          OverviewEnterExitType::kFadeInEnter) {
     overview_wallpaper_controller_->Blur(/*animate=*/true);
   }
 
@@ -548,8 +542,10 @@ void OverviewController::OnEndingAnimationComplete(bool canceled) {
 
   // Unblur when animation is completed (or right away if there was no
   // delayed animation) unless it's canceled, in which case, we should keep
-  // the blur. Also resume the activation frame state.
-  if (!canceled) {
+  // the blur. Also resume the activation frame state. No need to unblur the
+  // wallpaper if the feature `kJellyroll` is enabled, since it's not blurred
+  // on overview started.
+  if (!canceled && !features::IsJellyrollEnabled()) {
     overview_wallpaper_controller_->Unblur();
     paint_as_active_lock_.reset();
   }
@@ -562,7 +558,16 @@ void OverviewController::OnEndingAnimationComplete(bool canceled) {
 }
 
 void OverviewController::ResetPauser() {
+  if (!overview_session_) {
+    occlusion_tracker_pauser_.reset();
+    return;
+  }
+
+  // Unpausing the occlusion tracker may trigger window activations.
+  const bool ignore_activations = overview_session_->ignore_activations();
+  overview_session_->set_ignore_activations(true);
   occlusion_tracker_pauser_.reset();
+  overview_session_->set_ignore_activations(ignore_activations);
 }
 
 void OverviewController::UpdateRoundedCornersAndShadow() {

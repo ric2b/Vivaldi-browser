@@ -62,7 +62,7 @@
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/style/content_data.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
@@ -116,9 +116,7 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       is_changed_shortly_after_mouseover_(false),
       has_sizes_attribute_in_img_or_sibling_(false),
       is_lazy_loaded_(false),
-      referrer_policy_(network::mojom::ReferrerPolicy::kDefault) {
-  SetHasCustomStyleCallbacks();
-}
+      referrer_policy_(network::mojom::ReferrerPolicy::kDefault) {}
 
 HTMLImageElement::~HTMLImageElement() = default;
 
@@ -455,13 +453,9 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
 
 LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style,
                                                    LegacyLayout legacy) {
-  const ContentData* content_data = style.GetContentData();
-  if (content_data && content_data->IsImage()) {
-    const StyleImage* content_image =
-        To<ImageContentData>(content_data)->GetImage();
-    bool error_occurred = content_image && content_image->CachedImage() &&
-                          content_image->CachedImage()->ErrorOccurred();
-    if (!error_occurred)
+  if (auto* content_image =
+          DynamicTo<ImageContentData>(style.GetContentData())) {
+    if (!content_image->GetImage()->ErrorOccurred())
       return LayoutObject::CreateObject(this, style, legacy);
   }
 
@@ -511,18 +505,10 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     was_added_to_picture_parent = picture_parent == insertion_point;
   }
 
-  bool image_was_modified = false;
-  if (GetDocument().IsActive() && was_added_to_picture_parent) {
-    ImageCandidate candidate = FindBestFitImageFromPictureParent();
-    if (!candidate.IsEmpty()) {
-      InvalidateAttributeMapping();
-      SetBestFitURLAndDPRFromImageCandidate(candidate);
-      image_was_modified = true;
-    }
-  }
-
-  if (image_was_modified || GetImageLoader().ShouldUpdateOnInsertedInto(
-                                insertion_point, referrer_policy_)) {
+  if (was_added_to_picture_parent) {
+    SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
+  } else if (GetImageLoader().ShouldUpdateOnInsertedInto(insertion_point,
+                                                         referrer_policy_)) {
     GetImageLoader().UpdateFromElement(ImageLoader::kUpdateNormal,
                                        referrer_policy_);
   }
@@ -530,14 +516,18 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
 }
 
 void HTMLImageElement::RemovedFrom(ContainerNode& insertion_point) {
-  InvalidateAttributeMapping();
   if (!form_ || NodeTraversal::HighestAncestorOrSelf(*form_.Get()) !=
                     NodeTraversal::HighestAncestorOrSelf(*this))
     ResetFormOwner();
-  if (listener_) {
+  if (listener_)
     GetDocument().GetMediaQueryMatcher().RemoveViewportListener(listener_);
-    if (auto* picture_parent = DynamicTo<HTMLPictureElement>(parentNode()))
-      picture_parent->RemoveListenerFromSourceChildren();
+  bool was_removed_from_parent = !parentNode();
+  auto* picture_parent = DynamicTo<HTMLPictureElement>(
+      was_removed_from_parent ? &insertion_point : parentNode());
+  if (picture_parent) {
+    picture_parent->RemoveListenerFromSourceChildren();
+    if (was_removed_from_parent)
+      SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
   }
   HTMLElement::RemovedFrom(insertion_point);
 }
@@ -906,6 +896,11 @@ void HTMLImageElement::SetLayoutDisposition(
   DCHECK(!GetDocument().InStyleRecalc());
 
   layout_disposition_ = layout_disposition;
+  if (layout_disposition == LayoutDisposition::kFallbackContent) {
+    SetHasCustomStyleCallbacks();
+  } else {
+    UnsetHasCustomStyleCallbacks();
+  }
 
   if (layout_disposition_ == LayoutDisposition::kFallbackContent) {
     EventDispatchForbiddenScope::AllowUserAgentEvents allow_events;
@@ -922,20 +917,11 @@ void HTMLImageElement::SetLayoutDisposition(
 
 scoped_refptr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject(
     const StyleRecalcContext& style_recalc_context) {
-  switch (layout_disposition_) {
-    case LayoutDisposition::kPrimaryContent:  // Fall through.
-    case LayoutDisposition::kCollapsed:
-      return OriginalStyleForLayoutObject(style_recalc_context);
-    case LayoutDisposition::kFallbackContent: {
-      scoped_refptr<ComputedStyle> style =
-          OriginalStyleForLayoutObject(style_recalc_context);
-      HTMLImageFallbackHelper::CustomStyleForAltText(*this, *style);
-      return style;
-    }
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
+  DCHECK_EQ(layout_disposition_, LayoutDisposition::kFallbackContent);
+  ComputedStyleBuilder builder(
+      *OriginalStyleForLayoutObject(style_recalc_context));
+  HTMLImageFallbackHelper::CustomStyleForAltText(*this, builder);
+  return builder.TakeStyle();
 }
 
 void HTMLImageElement::AssociateWith(HTMLFormElement* form) {

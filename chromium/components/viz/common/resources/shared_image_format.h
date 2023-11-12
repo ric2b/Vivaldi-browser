@@ -7,11 +7,13 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/check.h"
-#include "base/check_op.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/bindings/union_traits.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace viz {
 
@@ -26,49 +28,42 @@ class MultiplanarFormatDataView;
 // ChannelFormat).
 class SharedImageFormat {
  public:
-  /**
-   * Specifies how YUV (and optionally A) are divided among planes. Planes are
-   * separated by underscores in the enum value names. Within each plane the
-   * pixmap/texture channels are mapped to the YUVA channels in the order
-   * specified, e.g. for kY_UV Y is in channel 0 of plane 0, U is in channel 0
-   * of plane 1, and V is in channel 1 of plane 1. Channel ordering within a
-   * pixmap/texture given the channels it contains:
-   * A:                       0:A
-   * Luminance/Gray:          0:Gray
-   * Luminance/Gray + Alpha:  0:Gray, 1:A
-   * RG                       0:R,    1:G
-   * RGB                      0:R,    1:G, 2:B
-   * RGBA                     0:R,    1:G, 2:B, 3:A
-   */
+  // Specifies how YUV (and optionally A) are divided among planes. Planes are
+  // separated by underscores in the enum value names. Within each plane the
+  // pixmap/texture channels are mapped to the YUVA channels in the order
+  // specified, e.g. for kY_UV Y is in channel 0 of plane 0, U is in channel 0
+  // of plane 1, and V is in channel 1 of plane 1.
   enum class PlaneConfig : uint8_t {
-    kY_V_U,  ///< Plane 0: Y, Plane 1: V,  Plane 2: U
-    kY_UV,   ///< Plane 0: Y, Plane 1: UV
+    kY_V_U,   // Plane 0: Y, Plane 1: V,  Plane 2: U
+    kY_UV,    // Plane 0: Y, Plane 1: UV
+    kY_UV_A,  // Plane 0: Y, Plane 1: UV, Plane 2: A
   };
 
-  /**
-   * UV subsampling is also specified in the enum value names using J:a:b
-   * notation (e.g. 4:2:0 is 1/2 horizontal and 1/2 vertical resolution for U
-   * and V). If alpha is present it is not sub- sampled. Note that Subsampling
-   * values other than k444 are only valid with PlaneConfig values that have U
-   * and V in different planes than Y (and A, if present).
-   */
+  // UV subsampling is also specified in the enum value names using J:a:b
+  // notation (e.g. 4:2:0 is 1/2 horizontal and 1/2 vertical resolution for U
+  // and V). If alpha is present it is not subsampled.
   enum class Subsampling : uint8_t {
-    k420,  ///< 1 set of UV values for each 2x2 block of Y values.
+    k420,  // 1 set of UV values for each 2x2 block of Y values.
   };
 
-  /**
-   * 8 bit, 10 bit, 16 bit unorn, 16 bit float channel formats.
-   * Specifies the channel format for Y plane in the YUV (and optionally A)
-   * plane config. The channel format for remaining planes are identified based
-   * on the planes in the PlaneConfig. For individual planes like Y_V_U, U and V
-   * are both 8 bit channel formats whereas for Y_UV, the UV plane contains 2
-   * channels with each being an 8 bit channel format.
-   * TODO(hitawala): Add a helper function that gets the channel format for UV
-   * plane.
-   */
-  enum class ChannelFormat : uint8_t { k8, k10, k16, k16F };
+  // Specifies the channel format for Y plane in the YUV (and optionally A)
+  // plane config. The channel format for remaining planes are identified based
+  // on the planes in the PlaneConfig. For individual planes like Y_V_U, U and V
+  // are both 8 bit channel formats whereas for Y_UV, the UV plane contains 2
+  // channels with each being an 8 bit channel format.
+  // TODO(hitawala): Add a helper function that gets the channel format for UV
+  // plane.
+  enum class ChannelFormat : uint8_t {
+    k8,   // 8 bit unorm
+    k10,  // 10 bit unorm
+    k16,  // 16 bit unorm
+    k16F  // 16 bit float
+  };
 
   static const SharedImageFormat kRGBA_8888;
+  static const SharedImageFormat kBGRA_8888;
+  static const SharedImageFormat kRGBA_F16;
+  static const SharedImageFormat kBGR_565;
 
   SharedImageFormat() = default;
   static constexpr SharedImageFormat SinglePlane(
@@ -103,26 +98,44 @@ class SharedImageFormat {
   }
   bool is_multi_plane() const { return plane_type_ == PlaneType::kMultiPlane; }
 
+  // Stub function that always returns false for preferring external sampler.
+  // TODO(hitawala): Check if external sampler support is needed for clients and
+  // if needed return accordingly.
+  bool PrefersExternalSampler() const { return false; }
+
   // Returns whether the resource format can be used as a software bitmap for
   // export to the display compositor.
   bool IsBitmapFormatSupported() const;
 
-  const char* ToString() const;
+  // Return the number of planes associated with the format.
+  int NumberOfPlanes() const;
 
-  bool operator==(const SharedImageFormat& o) const {
-    if (plane_type_ != o.plane_type())
-      return false;
+  // Returns true is `plane_index` is valid.
+  bool IsValidPlaneIndex(int plane_index) const;
 
-    switch (plane_type_) {
-      case PlaneType::kUnknown:
-        return true;
-      case PlaneType::kSinglePlane:
-        return resource_format() == o.resource_format();
-      case PlaneType::kMultiPlane:
-        return multiplanar_format() == o.multiplanar_format();
-    }
-  }
-  bool operator!=(const SharedImageFormat& o) const { return !operator==(o); }
+  // Returns the size for a plane given `plane_index`.
+  gfx::Size GetPlaneSize(int plane_index, const gfx::Size& size) const;
+
+  // Returns number of channels for a plane for multiplanar formats.
+  int NumChannelsInPlane(int plane_index) const;
+
+  // Returns the bit depth for multiplanar format based on the channel format.
+  int MultiplanarBitDepth() const;
+
+  std::string ToString() const;
+
+  // Returns true if the format contains alpha.
+  bool HasAlpha() const;
+
+  // Returns true if the format is ETC1 compressed.
+  bool IsCompressed() const;
+
+  // Returns true if format is legacy multiplanar ResourceFormat i.e.
+  // YUV_420_BIPLANAR, YVU_420, YUVA_420_TRIPLANAR, P010.
+  bool IsLegacyMultiplanar() const;
+
+  bool operator==(const SharedImageFormat& o) const;
+  bool operator!=(const SharedImageFormat& o) const;
 
  private:
   enum class PlaneType : uint8_t {
@@ -182,10 +195,14 @@ class SharedImageFormat {
   SharedImageFormatUnion format_;
 };
 
-static_assert(sizeof(SharedImageFormat) <= 8);
-
 constexpr SharedImageFormat SharedImageFormat::kRGBA_8888 =
     SharedImageFormat::SinglePlane(ResourceFormat::RGBA_8888);
+constexpr SharedImageFormat SharedImageFormat::kBGRA_8888 =
+    SharedImageFormat::SinglePlane(ResourceFormat::BGRA_8888);
+constexpr SharedImageFormat SharedImageFormat::kRGBA_F16 =
+    SharedImageFormat::SinglePlane(ResourceFormat::RGBA_F16);
+constexpr SharedImageFormat SharedImageFormat::kBGR_565 =
+    SharedImageFormat::SinglePlane(ResourceFormat::BGR_565);
 
 }  // namespace viz
 

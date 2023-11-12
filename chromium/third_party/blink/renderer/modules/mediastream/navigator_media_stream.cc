@@ -58,13 +58,15 @@ class V8Callbacks final : public blink::UserMediaRequest::Callbacks {
     UserMediaRequest::Callbacks::Trace(visitor);
   }
 
-  void OnSuccess(const MediaStreamVector& streams) override {
+  void OnSuccess(const MediaStreamVector& streams,
+                 CaptureController* capture_controller) override {
     DCHECK_EQ(streams.size(), 1u);
     success_callback_->InvokeAndReportException(nullptr, streams[0]);
   }
 
   void OnError(ScriptWrappable* callback_this_value,
-               const V8MediaStreamError* error) override {
+               const V8MediaStreamError* error,
+               CaptureController* capture_controller) override {
     error_callback_->InvokeAndReportException(callback_this_value, error);
   }
 
@@ -124,7 +126,9 @@ void NavigatorMediaStream::getUserMedia(
 
   String error_message;
   if (!request->IsSecureContextUse(error_message)) {
-    request->Fail(UserMediaRequest::Error::kSecurityError, error_message);
+    request->Fail(
+        mojom::blink::MediaStreamRequestResult::INVALID_SECURITY_ORIGIN,
+        error_message);
     RecordIdentifiabilityMetric(
         surface, navigator.GetExecutionContext(),
         IdentifiabilityBenignStringToken(error_message));

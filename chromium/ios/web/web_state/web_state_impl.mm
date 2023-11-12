@@ -225,12 +225,6 @@ void WebStateImpl::ShouldAllowRequest(
                                       std::move(callback));
 }
 
-bool WebStateImpl::ShouldAllowErrorPageToBeDisplayed(NSURLResponse* response,
-                                                     bool for_main_frame) {
-  return RealizedState()->ShouldAllowErrorPageToBeDisplayed(response,
-                                                            for_main_frame);
-}
-
 void WebStateImpl::ShouldAllowResponse(
     NSURLResponse* response,
     WebStatePolicyDecider::ResponseInfo response_info,
@@ -265,15 +259,28 @@ void WebStateImpl::ShowRepostFormWarningDialog(
   RealizedState()->ShowRepostFormWarningDialog(std::move(callback));
 }
 
-void WebStateImpl::RunJavaScriptDialog(
+void WebStateImpl::RunJavaScriptAlertDialog(const GURL& origin_url,
+                                            NSString* message_text,
+                                            base::OnceClosure callback) {
+  RealizedState()->RunJavaScriptAlertDialog(origin_url, message_text,
+                                            std::move(callback));
+}
+
+void WebStateImpl::RunJavaScriptConfirmDialog(
     const GURL& origin_url,
-    JavaScriptDialogType javascript_dialog_type,
+    NSString* message_text,
+    base::OnceCallback<void(bool success)> callback) {
+  RealizedState()->RunJavaScriptConfirmDialog(origin_url, message_text,
+                                              std::move(callback));
+}
+
+void WebStateImpl::RunJavaScriptPromptDialog(
+    const GURL& origin_url,
     NSString* message_text,
     NSString* default_prompt_text,
-    DialogClosedCallback callback) {
-  RealizedState()->RunJavaScriptDialog(origin_url, javascript_dialog_type,
-                                       message_text, default_prompt_text,
-                                       std::move(callback));
+    base::OnceCallback<void(NSString* user_input)> callback) {
+  RealizedState()->RunJavaScriptPromptDialog(
+      origin_url, message_text, default_prompt_text, std::move(callback));
 }
 
 bool WebStateImpl::IsJavaScriptDialogRunning() {
@@ -317,6 +324,12 @@ void WebStateImpl::RetrieveExistingFrames() {
 
 void WebStateImpl::RemoveAllWebFrames() {
   RealizedState()->RemoveAllWebFrames();
+}
+
+void WebStateImpl::RequestPermissionsWithDecisionHandler(
+    NSArray<NSNumber*>* permissions,
+    PermissionDecisionHandler handler) {
+  RealizedState()->RequestPermissionsWithDecisionHandler(permissions, handler);
 }
 
 #pragma mark - WebState implementation
@@ -478,23 +491,10 @@ CRWSessionStorage* WebStateImpl::BuildSessionStorage() {
                         : saved_->GetSessionStorage();
 }
 
-CRWJSInjectionReceiver* WebStateImpl::GetJSInjectionReceiver() const {
-  return LIKELY(pimpl_) ? pimpl_->GetJSInjectionReceiver() : nullptr;
-}
-
 void WebStateImpl::LoadData(NSData* data,
                             NSString* mime_type,
                             const GURL& url) {
   RealizedState()->LoadData(data, mime_type, url);
-}
-
-void WebStateImpl::ExecuteJavaScript(const std::u16string& javascript) {
-  RealizedState()->ExecuteJavaScript(javascript);
-}
-
-void WebStateImpl::ExecuteJavaScript(const std::u16string& javascript,
-                                     JavaScriptResultCallback callback) {
-  RealizedState()->ExecuteJavaScript(javascript, std::move(callback));
 }
 
 void WebStateImpl::ExecuteUserJavaScript(NSString* javascript) {

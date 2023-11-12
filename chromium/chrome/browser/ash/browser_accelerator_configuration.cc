@@ -10,23 +10,24 @@
 namespace ash {
 
 BrowserAcceleratorConfiguration::BrowserAcceleratorConfiguration()
-    : AcceleratorConfiguration(ash::mojom::AcceleratorSource::kBrowser) {}
+    : AcceleratorConfiguration(mojom::AcceleratorSource::kBrowser) {}
 
 BrowserAcceleratorConfiguration::~BrowserAcceleratorConfiguration() = default;
 
-const std::vector<mojom::AcceleratorLayoutInfoPtr>&
-BrowserAcceleratorConfiguration::GetAcceleratorLayoutInfos() {
-  return layout_infos_;
-}
-
-const std::vector<AcceleratorInfo>&
-BrowserAcceleratorConfiguration::GetConfigForAction(
+const std::vector<ui::Accelerator>&
+BrowserAcceleratorConfiguration::GetAcceleratorsForAction(
     AcceleratorActionId action_id) {
   // TODO(jimmyxgong): Implement stub.
-  return accelerator_infos_;
+  return accelerators_;
 }
 
 bool BrowserAcceleratorConfiguration::IsMutable() const {
+  return false;
+}
+
+bool BrowserAcceleratorConfiguration::IsDeprecated(
+    const ui::Accelerator& accelerator) const {
+  // TODO(longbowei): Implement stub.
   return false;
 }
 

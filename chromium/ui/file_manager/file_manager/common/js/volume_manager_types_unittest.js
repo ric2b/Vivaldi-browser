@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {MockFileEntry, MockFileSystem} from './mock_entry.js';
 import {VolumeManagerCommon} from './volume_manager_types.js';
@@ -13,13 +13,6 @@ export function testRootTypeFromVolumeTypeBijection() {
   Object.keys(VolumeManagerCommon.VolumeType).forEach((key) => {
     const volumeType = VolumeManagerCommon.VolumeType[key];
     assertTrue(volumeType !== undefined);
-
-    // The enum is decorated with an isNative() helper. Skip it for the purposes
-    // of this test, since it is not a valid enum value. (This helper breaks the
-    // ability to iterate over enum values, so should probably be removed).
-    if (volumeType === VolumeManagerCommon.VolumeType.isNative) {
-      return;
-    }
 
     // System Internal volumes do not have a corresponding root.
     if (volumeType == VolumeManagerCommon.VolumeType.SYSTEM_INTERNAL) {

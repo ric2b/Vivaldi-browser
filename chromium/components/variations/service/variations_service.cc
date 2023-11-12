@@ -196,8 +196,8 @@ bool GetInstanceManipulations(const net::HttpResponseHeaders* headers,
   *is_gzip_compressed = gzip_im != ims.end();
 
   // The IM field should not have anything but x-bm and gzip.
-  size_t im_count = (*is_delta_compressed ? 1 : 0) +
-      (*is_gzip_compressed ? 1 : 0);
+  size_t im_count =
+      (*is_delta_compressed ? 1 : 0) + (*is_gzip_compressed ? 1 : 0);
   if (im_count != ims.size()) {
     DVLOG(1) << "Unrecognized instance manipulations in "
              << base::JoinString(ims, ",")
@@ -736,8 +736,7 @@ void VariationsService::FetchVariationsSeed() {
   DoActualFetch();
 }
 
-void VariationsService::NotifyObservers(
-    const VariationsSeedSimulator::Result& result) {
+void VariationsService::NotifyObservers(const SeedSimulationResult& result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (result.kill_critical_group_change_count > 0) {
@@ -899,12 +898,10 @@ void VariationsService::PerformSimulationWithVersion(
   const base::ElapsedTimer timer;
 
   auto entropy_providers = state_manager_->CreateEntropyProviders();
-  VariationsSeedSimulator seed_simulator(*entropy_providers);
 
   std::unique_ptr<ClientFilterableState> client_state =
       field_trial_creator_.GetClientFilterableStateForVersion(version);
-  const VariationsSeedSimulator::Result result =
-      seed_simulator.SimulateSeedStudies(seed, *client_state);
+  auto result = SimulateSeedStudies(seed, *client_state, *entropy_providers);
 
   UMA_HISTOGRAM_COUNTS_100("Variations.SimulateSeed.NormalChanges",
                            result.normal_group_change_count);
@@ -927,12 +924,12 @@ void VariationsService::RecordSuccessfulFetch() {
   safe_seed_manager_.RecordSuccessfulFetch(field_trial_creator_.seed_store());
 }
 
-void VariationsService::GetClientFilterableStateForVersionCalledForTesting() {
+std::unique_ptr<ClientFilterableState>
+VariationsService::GetClientFilterableStateForVersion() {
   const base::Version current_version(version_info::GetVersionNumber());
-  if (!current_version.IsValid())
-    return;
-
-  field_trial_creator_.GetClientFilterableStateForVersion(current_version);
+  DCHECK(current_version.IsValid());
+  return field_trial_creator_.GetClientFilterableStateForVersion(
+      current_version);
 }
 
 std::string VariationsService::GetLatestCountry() const {

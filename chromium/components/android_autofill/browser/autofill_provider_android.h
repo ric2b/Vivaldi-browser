@@ -52,8 +52,7 @@ class AutofillProviderAndroid : public AutofillProvider {
       const FormData& form,
       const FormFieldData& field,
       const gfx::RectF& bounding_box,
-      int32_t query_id,
-      bool /*unused_autoselect_first_suggestion*/,
+      AutoselectFirstSuggestion /*unused_autoselect_first_suggestion*/,
       FormElementWasClicked /*unused_form_element_was_clicked*/) override;
   void OnTextFieldDidChange(AndroidAutofillManager* manager,
                             const FormData& form,
@@ -132,11 +131,13 @@ class AutofillProviderAndroid : public AutofillProvider {
 
   void Reset();
 
-  int32_t id_;
   // The form of the current session (queried input or changed select box).
   std::unique_ptr<FormDataAndroid> form_;
   // The field of the current session (queried input or changed select box).
   FieldGlobalId field_id_;
+  // The origin of the field of the current session (cf. `field_id_`). This is
+  // determines which fields are safe to be filled in cross-frame forms.
+  url::Origin triggered_origin_;
   base::WeakPtr<AndroidAutofillManager> manager_;
   JavaObjectWeakGlobalRef java_ref_;
   bool check_submission_;

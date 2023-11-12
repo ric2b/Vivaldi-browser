@@ -27,6 +27,15 @@
 - (void)setShareMenuEnabled:(BOOL)enabled;
 // Sets whether the toolbar is displaying for an NTP.
 - (void)setIsNTP:(BOOL)isNTP;
+
+// Vivaldi
+// Sets whether search or new tab button to show on the secondary toolbar for
+// iPhone. Search button is visible always when desktop tab is enabled, while
+// on disabled search button only visible in new tab page.
+- (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
+                  desktopTabEnabled:(BOOL)desktopTabEnabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_CONSUMER_H_

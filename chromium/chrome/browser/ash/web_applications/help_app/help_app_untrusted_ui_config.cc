@@ -10,7 +10,6 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "ash/shell.h"
 #include "ash/webui/help_app_ui/help_app_untrusted_ui.h"
 #include "ash/webui/help_app_ui/url_constants.h"
@@ -30,8 +29,9 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/system/statistics_provider.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui.h"
@@ -60,18 +60,18 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
   source->AddString("chromeOSVersion", base::SysInfo::OperatingSystemVersion());
   source->AddString("chromeVersion", chrome::kChromeVersion);
   source->AddInteger("channel", static_cast<int>(chrome::GetChannel()));
-  std::string customization_id;
-  std::string hwid;
   chromeos::system::StatisticsProvider* provider =
       chromeos::system::StatisticsProvider::GetInstance();
   // MachineStatistics may not exist for browser tests, but it is fine for these
   // to be empty strings.
-  provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey,
-                                &customization_id);
-  provider->GetMachineStatistic(chromeos::system::kHardwareClassKey, &hwid);
-  source->AddString("customizationId", customization_id);
+  const absl::optional<base::StringPiece> customization_id =
+      provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey);
+  const absl::optional<base::StringPiece> hwid =
+      provider->GetMachineStatistic(chromeos::system::kHardwareClassKey);
+  source->AddString("customizationId",
+                    std::string(customization_id.value_or("")));
   source->AddString("deviceName", ui::GetChromeOSDeviceName());
-  source->AddString("hwid", hwid);
+  source->AddString("hwid", std::string(hwid.value_or("")));
   source->AddString("deviceHelpContentId",
                     base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
                         "device-help-content-id"));

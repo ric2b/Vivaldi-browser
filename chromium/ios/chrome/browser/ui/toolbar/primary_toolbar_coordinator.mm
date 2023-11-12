@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
@@ -36,6 +37,12 @@
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/web/public/navigation/referrer.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -60,6 +67,8 @@
 @property(nonatomic, strong) OmniboxFocusOrchestrator* orchestrator;
 // Whether the omnibox focusing should happen with animation.
 @property(nonatomic, assign) BOOL enableAnimationsForOmniboxFocus;
+// Whether the omnibox is currently focused.
+@property(nonatomic, assign) BOOL locationBarFocused;
 
 @end
 
@@ -91,8 +100,14 @@
   [self setUpLocationBar];
 
   self.viewController = [[PrimaryToolbarViewController alloc] init];
+
+  if (IsVivaldiRunning()) {
+    self.viewController.shouldHideOmniboxOnNTP = NO;
+  } else {
   self.viewController.shouldHideOmniboxOnNTP =
       !self.browser->GetBrowserState()->IsOffTheRecord();
+  } // End Vivaldi
+
   self.viewController.omniboxCommandsHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
   self.viewController.popupMenuCommandsHandler = HandlerForProtocol(
@@ -138,6 +153,13 @@
 #pragma mark - Public
 
 - (id<ActivityServicePositioner>)activityServicePositioner {
+
+  // Vivaldi: We will return location bar here since share button is within
+  // location bar for us.
+  if (IsVivaldiRunning())
+      return [self.locationBarCoordinator activityServicePositioner];
+  // End Vivaldi
+
   return self.viewController;
 }
 
@@ -164,6 +186,7 @@
                       toolbarExpanded:focused && !IsRegularXRegularSizeClass(
                                                      self.viewController)
                              animated:self.enableAnimationsForOmniboxFocus];
+  self.locationBarFocused = focused;
 }
 
 - (id<ViewRevealingAnimatee>)animatee {
@@ -218,7 +241,13 @@
                      ![self showingOmniboxPopup] && !canShowTabStrip &&
                      IsSplitToolbarMode(self.viewController);
 
+  // Vivaldi: We would like to always show the location bar.
+  if (IsVivaldiRunning()) {
+    [self.viewController.view setHidden:NO];
+  } else {
   [self.viewController.view setHidden:hideToolbar];
+  } // End Vivaldi
+
 }
 
 #pragma mark - PrimaryToolbarViewControllerDelegate
@@ -237,6 +266,14 @@
 
 - (void)exitFullscreen {
     FullscreenController::FromBrowser(self.browser)->ExitFullscreen();
+}
+
+- (void)close {
+  if (self.locationBarFocused) {
+    id<ApplicationCommands> applicationCommandsHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ApplicationCommands);
+    [applicationCommandsHandler dismissModalDialogs];
+  }
 }
 
 #pragma mark - NewTabPageControllerDelegate
@@ -264,12 +301,18 @@
 }
 
 - (void)onFakeboxBlur {
+
+  if (IsVivaldiRunning()) {
+    self.viewController.view.hidden = NO;
+  } else {
   // Hide the toolbar if the NTP is currently displayed.
   web::WebState* webState =
       self.browser->GetWebStateList()->GetActiveWebState();
   if (webState && IsVisibleURLNewTabPage(webState)) {
     self.viewController.view.hidden = IsSplitToolbarMode(self.viewController);
   }
+  } // End Vivaldi
+
 }
 
 #pragma mark - ToolbarCommands
@@ -287,6 +330,9 @@
 - (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
   [super updateToolbarForSideSwipeSnapshot:webState];
 
+  if (IsVivaldiRunning()) {
+    [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
+  } else {
   BOOL isNTP = IsVisibleURLNewTabPage(webState);
 
   // Don't do anything for a live non-ntp tab.
@@ -297,6 +343,8 @@
     self.viewController.view.hidden = NO;
     [self.locationBarCoordinator.locationBarViewController.view setHidden:YES];
   }
+  } // End Vivaldi
+
 }
 
 - (void)resetToolbarAfterSideSwipeSnapshot {

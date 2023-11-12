@@ -46,8 +46,8 @@ void LoginApiLockHandler::Authenticate(
     base::OnceCallback<void(bool auth_success)> callback) {
   unlock_in_progress_ = true;
   callback_ = std::move(callback);
-  ScreenLocker::default_screen_locker()->Authenticate(
-      std::make_unique<UserContext>(user_context),
+  ash::ScreenLocker::default_screen_locker()->Authenticate(
+      std::make_unique<ash::UserContext>(user_context),
       base::BindOnce(&LoginApiLockHandler::AuthenticateCallback,
                      weak_factory_.GetWeakPtr()));
 }

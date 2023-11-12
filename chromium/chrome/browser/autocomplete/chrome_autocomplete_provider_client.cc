@@ -45,6 +45,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/history_clusters/core/features.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
@@ -435,9 +436,11 @@ bool ChromeAutocompleteProviderClient::StrippedURLsAreEqual(
     input = &empty_input;
   const TemplateURLService* template_url_service = GetTemplateURLService();
   return AutocompleteMatch::GURLToStrippedGURL(
-             url1, *input, template_url_service, std::u16string()) ==
+             url1, *input, template_url_service, std::u16string(),
+             /*keep_search_intent_params=*/false) ==
          AutocompleteMatch::GURLToStrippedGURL(
-             url2, *input, template_url_service, std::u16string());
+             url2, *input, template_url_service, std::u16string(),
+             /*keep_search_intent_params=*/false);
 }
 
 void ChromeAutocompleteProviderClient::OpenSharingHub() {
@@ -476,8 +479,8 @@ void ChromeAutocompleteProviderClient::CloseIncognitoWindows() {
 bool ChromeAutocompleteProviderClient::OpenJourneys(const std::string& query) {
 #if !BUILDFLAG(IS_ANDROID)
   if (!base::FeatureList::IsEnabled(features::kUnifiedSidePanel) ||
-      !base::FeatureList::IsEnabled(features::kSidePanelJourneys) ||
-      !features::kSidePanelJourneysOpensFromOmnibox.Get()) {
+      !base::FeatureList::IsEnabled(history_clusters::kSidePanelJourneys) ||
+      !history_clusters::kSidePanelJourneysOpensFromOmnibox.Get()) {
     return false;
   }
 

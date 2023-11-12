@@ -5,11 +5,11 @@
 import './characteristic_list_item.js';
 import './expandable_list.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 
 import {connectToDevice} from './device_broker.js';
 import {ExpandableListElement} from './expandable_list.js';
-import {Snackbar, SnackbarType} from './snackbar.js';
+import {showSnackbar, SnackbarType} from './snackbar.js';
 
 export class CharacteristicListElement extends ExpandableListElement {
   constructor() {
@@ -30,7 +30,9 @@ export class CharacteristicListElement extends ExpandableListElement {
 
   createItem(data) {
     const item = document.createElement('characteristic-list-item');
-    item.initialize(data, assert(this.deviceAddress_), assert(this.serviceId_));
+    assert(this.deviceAddress_);
+    assert(this.serviceId_);
+    item.initialize(data, this.deviceAddress_, this.serviceId_);
     return item;
   }
 
@@ -62,7 +64,7 @@ export class CharacteristicListElement extends ExpandableListElement {
         }.bind(this))
         .catch(function(error) {
           this.characteristicsRequested_ = false;
-          Snackbar.show(
+          showSnackbar(
               deviceAddress + ': ' + error.message, SnackbarType.ERROR, 'Retry',
               function() {
                 this.load(deviceAddress, serviceId);

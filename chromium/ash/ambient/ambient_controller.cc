@@ -17,6 +17,7 @@
 #include "ash/ambient/model/ambient_topic_queue_animation_delegate.h"
 #include "ash/ambient/model/ambient_topic_queue_slideshow_delegate.h"
 #include "ash/ambient/resources/ambient_animation_static_resources.h"
+#include "ash/ambient/ui/ambient_animation_frame_rate_controller.h"
 #include "ash/ambient/ui/ambient_animation_progress_tracker.h"
 #include "ash/ambient/ui/ambient_container_view.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
@@ -139,7 +140,7 @@ class AmbientWidgetDelegate : public views::WidgetDelegate {
 
 // static
 void AmbientController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  if (chromeos::features::IsAmbientModeEnabled()) {
+  if (features::IsAmbientModeEnabled()) {
     registry->RegisterStringPref(ash::ambient::prefs::kAmbientBackdropClientId,
                                  std::string());
 
@@ -195,11 +196,12 @@ AmbientController::AmbientController(
   // |SessionController| is initialized before |this| in Shell. Necessary to
   // bind observer here to monitor |OnActiveUserPrefServiceChanged|.
   session_observer_.Observe(Shell::Get()->session_controller());
+  backlights_forced_off_observation_.Observe(
+      Shell::Get()->backlights_forced_off_setter());
 }
 
 AmbientController::~AmbientController() {
-  CloseAllWidgets(/*immediately=*/true);
-  CloseUi();
+  CloseUi(/*immediately=*/true);
 }
 
 void AmbientController::OnAmbientUiVisibilityChanged(
@@ -215,10 +217,6 @@ void AmbientController::OnAmbientUiVisibilityChanged(
       DCHECK(!start_time_);
       start_time_ = base::Time::Now();
 
-      multi_screen_metrics_recorder_ =
-          std::make_unique<AmbientMultiScreenMetricsRecorder>(
-              GetCurrentTheme());
-
       // Cancels the timer upon shown.
       inactivity_timer_.Stop();
 
@@ -231,21 +229,17 @@ void AmbientController::OnAmbientUiVisibilityChanged(
       if (!power_status_observer_.IsObserving())
         power_status_observer_.Observe(PowerStatus::Get());
 
-      if (!user_activity_observer_.IsObserving())
-        user_activity_observer_.Observe(ui::UserActivityDetector::Get());
-
-      // Add observer for assistant interaction model
-      AssistantInteractionController::Get()->GetModel()->AddObserver(this);
-
-      Shell::Get()->AddPreTargetHandler(this);
-
-      StartRefreshingImages();
+      MaybeStartScreenSaver();
       break;
+    case AmbientUiVisibility::kPreview: {
+      MaybeStartScreenSaver();
+      break;
+    }
     case AmbientUiVisibility::kHidden:
     case AmbientUiVisibility::kClosed: {
       bool ambient_ui_was_rendering =
           Shell::GetPrimaryRootWindowController()->HasAmbientWidget();
-      CloseAllWidgets(/*immediately=*/false);
+      CloseAllWidgets(close_widgets_immediately_);
 
       // TODO(wutao): This will clear the image cache currently. It will not
       // work with `kHidden` if the token has expired and ambient mode is shown
@@ -261,6 +255,7 @@ void AmbientController::OnAmbientUiVisibilityChanged(
       // not shown.
       AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
 
+      frame_rate_controller_.reset();
       multi_screen_metrics_recorder_.reset();
 
       // |start_time_| may be empty in case of |AmbientUiVisibility::kHidden| if
@@ -405,8 +400,7 @@ void AmbientController::ScreenIdleStateChanged(
   if (idle_state.off()) {
     DVLOG(1) << "Screen is off, close ambient mode.";
 
-    CloseAllWidgets(/*immediately=*/true);
-    CloseUi();
+    CloseUi(/*immediately=*/true);
     return;
   }
 
@@ -434,6 +428,17 @@ void AmbientController::ScreenIdleStateChanged(
   }
 }
 
+void AmbientController::OnBacklightsForcedOffChanged(bool forced_off) {
+  if (forced_off) {
+    CloseUi(/*immediately=*/true);
+  }
+  if (!forced_off && LockScreen::HasInstance() &&
+      ambient_ui_model_.ui_visibility() == AmbientUiVisibility::kClosed) {
+    // Restart hidden ui if the screen is back on and lockscreen is shown.
+    ShowHiddenUi();
+  }
+}
+
 void AmbientController::SuspendImminent(
     power_manager::SuspendImminent::Reason reason) {
   // If about to suspend, turn everything off. This covers:
@@ -443,8 +448,7 @@ void AmbientController::SuspendImminent(
   // the UI before device goes to suspend. Otherwise when opening lid after
   // lid closed, there may be a flash of the old window before previous
   // closing finished.
-  CloseAllWidgets(/*immediately=*/true);
-  CloseUi();
+  CloseUi(/*immediately=*/true);
   is_suspend_imminent_ = true;
 }
 
@@ -498,6 +502,15 @@ void AmbientController::ShowUi() {
   ambient_ui_model_.SetUiVisibility(AmbientUiVisibility::kShown);
 }
 
+void AmbientController::StartScreenSaverPreview() {
+  if (!IsAmbientModeEnabled()) {
+    LOG(WARNING) << "Ambient mode is not allowed.";
+    return;
+  }
+
+  ambient_ui_model_.SetUiVisibility(AmbientUiVisibility::kPreview);
+}
+
 void AmbientController::ShowHiddenUi() {
   DVLOG(1) << __func__;
 
@@ -519,9 +532,10 @@ void AmbientController::ShowHiddenUi() {
   ambient_ui_model_.SetUiVisibility(AmbientUiVisibility::kHidden);
 }
 
-void AmbientController::CloseUi() {
+void AmbientController::CloseUi(bool immediately) {
   DVLOG(1) << __func__;
 
+  close_widgets_immediately_ = immediately;
   ambient_ui_model_.SetUiVisibility(AmbientUiVisibility::kClosed);
 }
 
@@ -533,7 +547,8 @@ void AmbientController::ToggleInSessionUi() {
 }
 
 bool AmbientController::IsShown() const {
-  return ambient_ui_model_.ui_visibility() == AmbientUiVisibility::kShown;
+  return ambient_ui_model_.ui_visibility() == AmbientUiVisibility::kShown ||
+         ambient_ui_model_.ui_visibility() == AmbientUiVisibility::kPreview;
 }
 
 void AmbientController::AcquireWakeLock() {
@@ -805,7 +820,7 @@ std::unique_ptr<views::Widget> AmbientController::CreateWidget(
       &delegate_, ambient_animation_progress_tracker_.get(),
       AmbientAnimationStaticResources::Create(current_theme,
                                               /*serializable=*/true),
-      multi_screen_metrics_recorder_.get());
+      multi_screen_metrics_recorder_.get(), frame_rate_controller_.get());
   auto* widget_delegate = new AmbientWidgetDelegate();
   widget_delegate->SetInitiallyFocusedView(container_view.get());
 
@@ -833,9 +848,11 @@ std::unique_ptr<views::Widget> AmbientController::CreateWidget(
 
   widget->Show();
 
-  DCHECK(start_time_);
-  ambient::RecordAmbientModeStartupTime(base::Time::Now() - *start_time_,
-                                        current_theme);
+  if (ambient_ui_model_.ui_visibility() == AmbientUiVisibility::kShown) {
+    DCHECK(start_time_);
+    ambient::RecordAmbientModeStartupTime(base::Time::Now() - *start_time_,
+                                          current_theme);
+  }
 
   // Only announce for the primary window.
   if (Shell::GetPrimaryRootWindow() == container->GetRootWindow()) {
@@ -891,22 +908,30 @@ void AmbientController::StopRefreshingImages() {
   ambient_photo_controller_->StopScreenUpdate();
 }
 
+void AmbientController::MaybeStartScreenSaver() {
+  // The screensaver may have already been started.
+  if (ambient_photo_controller_->IsScreenUpdateActive())
+    return;
+
+  if (!user_activity_observer_.IsObserving())
+    user_activity_observer_.Observe(ui::UserActivityDetector::Get());
+
+  // Add observer for assistant interaction model
+  AssistantInteractionController::Get()->GetModel()->AddObserver(this);
+
+  multi_screen_metrics_recorder_ =
+      std::make_unique<AmbientMultiScreenMetricsRecorder>(GetCurrentTheme());
+  frame_rate_controller_ =
+      std::make_unique<AmbientAnimationFrameRateController>(
+          Shell::Get()->frame_throttling_controller());
+
+  Shell::Get()->AddPreTargetHandler(this);
+  StartRefreshingImages();
+}
+
 AmbientAnimationTheme AmbientController::GetCurrentTheme() const {
-  AmbientAnimationTheme current_theme = kDefaultAmbientAnimationTheme;
-  absl::optional<bool> animation_experiment_enabled =
-      base::FeatureList::GetStateIfOverridden(
-          features::kAmbientModeAnimationFeature);
-  if (animation_experiment_enabled.has_value()) {
-    // Allows developers to enable the animation without having to depend on
-    // personalization hub by overriding the dedicated animation experiment.
-    current_theme = animation_experiment_enabled.value()
-                        ? features::kAmbientModeAnimationThemeParam.Get()
-                        : kDefaultAmbientAnimationTheme;
-  } else if (features::IsAmbientModeAnimationEnabled()) {
-    DCHECK(current_theme_from_pref_);
-    current_theme = *current_theme_from_pref_;
-  }
-  return current_theme;
+  DCHECK(current_theme_from_pref_);
+  return *current_theme_from_pref_;
 }
 
 }  // namespace ash

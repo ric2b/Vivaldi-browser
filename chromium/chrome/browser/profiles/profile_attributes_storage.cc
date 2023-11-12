@@ -21,7 +21,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/values.h"
@@ -108,7 +107,7 @@ gfx::Image ReadBitmap(const base::FilePath& image_path) {
   }
 
   gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(
-      base::RefCountedString::TakeString(&image_data));
+      base::MakeRefCounted<base::RefCountedString>(std::move(image_data)));
   if (image.IsEmpty())
     LOG(ERROR) << "Failed to decode PNG file.";
 
@@ -188,10 +187,8 @@ MultiProfileUserType GetMultiProfileUserType(
   if (entries.size() == 1u)
     return MultiProfileUserType::kSingleProfile;
 
-  int active_count = std::count_if(
-      entries.begin(), entries.end(), [](ProfileAttributesEntry* entry) {
-        return ProfileMetrics::IsProfileActive(entry);
-      });
+  int active_count =
+      base::ranges::count_if(entries, &ProfileMetrics::IsProfileActive);
 
   if (active_count <= 1)
     return MultiProfileUserType::kLatentMultiProfile;
@@ -601,9 +598,8 @@ const gfx::Image* ProfileAttributesStorage::LoadAvatarPictureFromPath(
     return nullptr;
   cached_avatar_images_loading_[key] = true;
 
-  base::PostTaskAndReplyWithResult(
-      file_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&ReadBitmap, image_path),
+  file_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&ReadBitmap, image_path),
       base::BindOnce(&ProfileAttributesStorage::OnAvatarPictureLoaded,
                      const_cast<ProfileAttributesStorage*>(this)->AsWeakPtr(),
                      profile_path, key));
@@ -847,9 +843,8 @@ void ProfileAttributesStorage::SaveAvatarImageAtPath(
   if (data->empty()) {
     LOG(ERROR) << "Failed to PNG encode the image.";
   } else {
-    base::PostTaskAndReplyWithResult(
-        file_task_runner_.get(), FROM_HERE,
-        base::BindOnce(&SaveBitmap, std::move(data), image_path),
+    file_task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&SaveBitmap, std::move(data), image_path),
         base::BindOnce(&ProfileAttributesStorage::OnAvatarPictureSaved,
                        AsWeakPtr(), key, profile_path, std::move(callback)));
   }

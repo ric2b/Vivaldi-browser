@@ -32,4 +32,9 @@
   }
 }
 
+- (BOOL)isDeviceIPad {
+    return [UIDevice currentDevice].userInterfaceIdiom
+        == UIUserInterfaceIdiomPad;
+}
+
 @end

@@ -10,8 +10,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://vivnet-st-themes.viv.dc01/*",
-        "https://themes-staging.vivaldi.net/",
+        "https://vivnet-dev-themes.viv.dc01/*",
+        "https://themes.testvivaldi.tech/*",
         "https://themes.vivaldi.net/*"
       ],
       "js": ["theme-store.js"],

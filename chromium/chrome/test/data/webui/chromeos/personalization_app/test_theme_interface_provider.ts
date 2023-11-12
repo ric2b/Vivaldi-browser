@@ -2,23 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ThemeObserverInterface, ThemeObserverRemote, ThemeProviderInterface} from 'chrome://personalization/js/personalization_app.js';
+import {ColorScheme, ThemeObserverInterface, ThemeObserverRemote, ThemeProviderInterface} from 'chrome://personalization/js/personalization_app.js';
+import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
-export class TestThemeProvider extends
-    TestBrowserProxy<ThemeProviderInterface> implements ThemeProviderInterface {
+export class TestThemeProvider extends TestBrowserProxy implements
+    ThemeProviderInterface {
   constructor() {
     super([
       'setThemeObserver',
       'setColorModePref',
       'setColorModeAutoScheduleEnabled',
+      'setColorScheme',
+      'setStaticColor',
+      'getColorScheme',
+      'getStaticColor',
       'isDarkModeEnabled',
       'isColorModeAutoScheduleEnabled',
     ]);
+    this.staticColor = null;
   }
 
   isDarkModeEnabledResponse = true;
   isColorModeAutoScheduleEnabledResponse = true;
+  staticColor: SkColor|null;
+  colorScheme = ColorScheme.kTonalSpot;
 
   themeObserverRemote: ThemeObserverInterface|null = null;
 
@@ -36,6 +44,28 @@ export class TestThemeProvider extends
 
   setColorModeAutoScheduleEnabled(enabled: boolean) {
     this.methodCalled('setColorModeAutoScheduleEnabled', enabled);
+  }
+
+  setColorScheme(colorScheme: ColorScheme) {
+    this.methodCalled('setColorScheme', colorScheme);
+    this.staticColor = null;
+    this.colorScheme = colorScheme;
+  }
+
+  setStaticColor(color: SkColor) {
+    this.methodCalled('setStaticColor', color);
+    this.staticColor = color;
+    this.colorScheme = ColorScheme.kStatic;
+  }
+
+  getColorScheme() {
+    this.methodCalled('getColorScheme');
+    return Promise.resolve({colorScheme: this.colorScheme});
+  }
+
+  getStaticColor() {
+    this.methodCalled('getStaticColor');
+    return Promise.resolve({staticColor: this.staticColor});
   }
 
   isDarkModeEnabled() {

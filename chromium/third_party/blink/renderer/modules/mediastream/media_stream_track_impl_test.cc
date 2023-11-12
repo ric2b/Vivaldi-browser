@@ -81,7 +81,7 @@ TEST_F(MediaStreamTrackImplTest, StopTrackTriggersObservers) {
 
   MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
       "id", MediaStreamSource::StreamType::kTypeVideo, "name",
-      false /* remote */);
+      false /* remote */, MakeMockMediaStreamVideoSource());
   MediaStreamComponent* component =
       MakeGarbageCollected<MediaStreamComponentImpl>(source);
   MediaStreamTrack* track = MakeGarbageCollected<MediaStreamTrackImpl>(
@@ -97,25 +97,12 @@ TEST_F(MediaStreamTrackImplTest, StopTrackTriggersObservers) {
   EXPECT_EQ(testObserver->ObservationCount(), 2);
 }
 
-TEST_F(MediaStreamTrackImplTest, LabelSanitizer) {
-  V8TestingScope v8_scope;
-
-  MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
-      "id", MediaStreamSource::StreamType::kTypeAudio, "Chromiums AirPods",
-      false /* remote */);
-  MediaStreamComponent* component =
-      MakeGarbageCollected<MediaStreamComponentImpl>(source);
-  MediaStreamTrack* track = MakeGarbageCollected<MediaStreamTrackImpl>(
-      v8_scope.GetExecutionContext(), component);
-  EXPECT_EQ(track->label(), "AirPods");
-}
-
 TEST_F(MediaStreamTrackImplTest, StopTrackSynchronouslyDisablesMedia) {
   V8TestingScope v8_scope;
 
   MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
       "id", MediaStreamSource::StreamType::kTypeAudio, "name",
-      false /* remote */);
+      false /* remote */, MakeMockMediaStreamVideoSource());
   auto platform_track =
       std::make_unique<MediaStreamAudioTrack>(true /* is_local_track */);
   MediaStreamAudioTrack* platform_track_ptr = platform_track.get();
@@ -135,7 +122,7 @@ TEST_F(MediaStreamTrackImplTest, MutedStateUpdates) {
 
   MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
       "id", MediaStreamSource::StreamType::kTypeVideo, "name",
-      false /* remote */);
+      /*remote=*/false, /*platform_source=*/nullptr);
   MediaStreamComponent* component =
       MakeGarbageCollected<MediaStreamComponentImpl>(source);
   MediaStreamTrack* track = MakeGarbageCollected<MediaStreamTrackImpl>(
@@ -155,7 +142,7 @@ TEST_F(MediaStreamTrackImplTest, MutedDoesntUpdateAfterEnding) {
 
   MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
       "id", MediaStreamSource::StreamType::kTypeVideo, "name",
-      false /* remote */);
+      false /* remote */, MakeMockMediaStreamVideoSource());
   MediaStreamComponent* component =
       MakeGarbageCollected<MediaStreamComponentImpl>(source);
   MediaStreamTrack* track = MakeGarbageCollected<MediaStreamTrackImpl>(
@@ -247,7 +234,7 @@ TEST_F(MediaStreamTrackImplTest, CloningPreservesConstraints) {
   MediaTrackConstraintSetPlatform basic;
   basic.width.SetMax(240);
   constraints.Initialize(basic, Vector<MediaTrackConstraintSetPlatform>());
-  track->SetConstraints(constraints);
+  track->SetInitialConstraints(constraints);
 
   MediaStreamTrack* clone = track->clone(v8_scope.GetExecutionContext());
   MediaTrackConstraints* clone_constraints = clone->getConstraints();

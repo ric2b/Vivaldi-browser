@@ -32,6 +32,23 @@ void CvPixelBufferReleaseCallback(void* frame_ref,
   reinterpret_cast<const VideoFrame*>(frame_ref)->Release();
 }
 
+// Current list of acceptable CVPixelFormat mappings. If we start supporting
+// RGB frame encoding we'll need to extend this list.
+bool IsAcceptableCvPixelFormat(VideoPixelFormat format, OSType cv_format) {
+  if (format == PIXEL_FORMAT_I420) {
+    return cv_format == kCVPixelFormatType_420YpCbCr8Planar ||
+           cv_format == kCVPixelFormatType_420YpCbCr8PlanarFullRange;
+  }
+  if (format == PIXEL_FORMAT_NV12) {
+    return cv_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+           cv_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
+  }
+  if (format == PIXEL_FORMAT_NV12A) {
+    return cv_format == kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar;
+  }
+  return false;
+}
+
 }  // namespace
 
 MEDIA_EXPORT base::ScopedCFTypeRef<CVPixelBufferRef>
@@ -39,6 +56,7 @@ WrapVideoFrameInCVPixelBuffer(scoped_refptr<VideoFrame> frame) {
   base::ScopedCFTypeRef<CVPixelBufferRef> pixel_buffer;
   if (!frame)
     return pixel_buffer;
+
   const gfx::Rect& visible_rect = frame->visible_rect();
   bool crop_needed = visible_rect != gfx::Rect(frame->coded_size());
 
@@ -46,6 +64,11 @@ WrapVideoFrameInCVPixelBuffer(scoped_refptr<VideoFrame> frame) {
     // If the frame is backed by a pixel buffer, just return that buffer.
     if (frame->CvPixelBuffer()) {
       pixel_buffer.reset(frame->CvPixelBuffer(), base::scoped_policy::RETAIN);
+      if (!IsAcceptableCvPixelFormat(
+              frame->format(), CVPixelBufferGetPixelFormatType(pixel_buffer))) {
+        DLOG(ERROR) << "Dropping CVPixelBuffer w/ incorrect format.";
+        pixel_buffer.reset();
+      }
       return pixel_buffer;
     }
 
@@ -62,6 +85,12 @@ WrapVideoFrameInCVPixelBuffer(scoped_refptr<VideoFrame> frame) {
                         << cv_return;
             pixel_buffer.reset();
           }
+          if (!IsAcceptableCvPixelFormat(
+                  frame->format(),
+                  CVPixelBufferGetPixelFormatType(pixel_buffer))) {
+            DLOG(ERROR) << "Dropping CVPixelBuffer w/ incorrect format.";
+            pixel_buffer.reset();
+          }
           return pixel_buffer;
         }
       }
@@ -72,6 +101,8 @@ WrapVideoFrameInCVPixelBuffer(scoped_refptr<VideoFrame> frame) {
   // and handle like a software frame. There is no memcpy here.
   if (frame->HasGpuMemoryBuffer())
     frame = ConvertToMemoryMappedFrame(std::move(frame));
+  if (!frame)
+    return pixel_buffer;
 
   VLOG(3) << "Returning RAM based CVPixelBuffer.";
 
@@ -86,10 +117,14 @@ WrapVideoFrameInCVPixelBuffer(scoped_refptr<VideoFrame> frame) {
     cv_format = kCVPixelFormatType_420YpCbCr8Planar;
   } else if (video_frame_format == PIXEL_FORMAT_NV12) {
     cv_format = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+  } else if (video_frame_format == PIXEL_FORMAT_NV12A) {
+    cv_format = kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar;
   } else {
-    DLOG(ERROR) << " unsupported frame format: " << video_frame_format;
+    DLOG(ERROR) << "Unsupported frame format: " << video_frame_format;
     return pixel_buffer;
   }
+
+  DCHECK(IsAcceptableCvPixelFormat(video_frame_format, cv_format));
 
   int num_planes = VideoFrame::NumPlanes(video_frame_format);
   DCHECK_LE(num_planes, kMaxPlanes);

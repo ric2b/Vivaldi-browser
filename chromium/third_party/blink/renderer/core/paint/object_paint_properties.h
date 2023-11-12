@@ -145,7 +145,7 @@ class CORE_EXPORT ObjectPaintProperties {
   //         The space created by overflow clip. The translation equals the
   //         offset between the scrolling contents and the scrollable area of
   //         the container, both originated from the top-left corner, so it is
-  //         the sum of scroll position (instead of scroll offset) of the
+  //         the scroll position (instead of scroll offset) of the
   //         ScrollableArea.
   //
   // ... +-[ TransformIsolationNode ]
@@ -319,6 +319,18 @@ class CORE_EXPORT ObjectPaintProperties {
       const TransformPaintPropertyNode::AnimationState& animation_state) {
     return transform_->DirectlyUpdateTransformAndOrigin(
         std::move(transform_and_origin), animation_state);
+  }
+
+  PaintPropertyChangeType DirectlyUpdateOpacity(
+      float opacity,
+      const EffectPaintPropertyNode::AnimationState& animation_state) {
+    // TODO(yotha): Remove this check once we make sure crbug.com/1370268 is
+    // fixed
+    DCHECK(effect_ != nullptr);
+    if (effect_ == nullptr) {
+      return PaintPropertyChangeType::kNodeAddedOrRemoved;
+    }
+    return effect_->DirectlyUpdateOpacity(opacity, animation_state);
   }
 
  private:

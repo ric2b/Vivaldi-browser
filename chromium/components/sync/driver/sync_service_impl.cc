@@ -250,12 +250,6 @@ void SyncServiceImpl::Initialize() {
                          user_settings_->IsFirstSetupComplete(),
                          is_regular_profile_for_uma_);
 
-  if (!HasSyncConsent()) {
-    // Remove after 11/2021. Migration logic to set SyncRequested to false if
-    // the user is signed-out or signed-in but not syncing (crbug.com/1147026).
-    user_settings_->SetSyncRequested(false);
-  }
-
   // Auto-start means the first time the profile starts up, sync should start up
   // immediately. Since IsSyncRequested() is false by default and nobody else
   // will set it, we need to set it here.
@@ -283,11 +277,12 @@ ModelTypeSet SyncServiceImpl::GetRegisteredDataTypesForTest() const {
   return GetRegisteredDataTypes();
 }
 
-bool SyncServiceImpl::HasAnyDatatypeErrorForTest() const {
+bool SyncServiceImpl::HasAnyDatatypeErrorForTest(ModelTypeSet types) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (const auto& data_type_with_error : data_type_error_map_) {
-    if (data_type_with_error.second.error_type() ==
-        syncer::SyncError::DATATYPE_ERROR) {
+  for (auto type : types) {
+    auto it = data_type_error_map_.find(type);
+    if (it != data_type_error_map_.end() &&
+        it->second.error_type() == syncer::SyncError::DATATYPE_ERROR) {
       return true;
     }
   }
@@ -340,8 +335,8 @@ void SyncServiceImpl::CredentialsChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // If the engine isn't allowed to start anymore due to the credentials change,
-  // then shut down. This happens when the user signs out on the web, i.e. we're
-  // in the "Sync paused" state.
+  // then shut down. This happens when there is a persistent auth error (e.g.
+  // the user signs out on the web), which implies the "Sync paused" state.
   if (!IsEngineAllowedToRun()) {
     // If the engine currently exists, then ResetEngine() will notify observers
     // anyway. Otherwise, notify them here. (One relevant case is when entering
@@ -540,7 +535,11 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
       // When aborting as part of shutdown, we should expect an aborted sync
       // configure result, else we'll dcheck when we try to read the sync error.
       expect_sync_configuration_aborted_ = true;
-      data_type_manager_->Stop(shutdown_reason);
+      if (shutdown_reason != ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA ||
+          !base::FeatureList::IsEnabled(
+              kSyncDoNotPropagateBrowserShutdownToDataTypes)) {
+        data_type_manager_->Stop(shutdown_reason);
+      }
     }
     data_type_manager_.reset();
   }

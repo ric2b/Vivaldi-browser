@@ -99,9 +99,12 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "chrome/browser/ui/webui/ash/office_fallback/office_fallback_dialog.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "url/gurl.h"
+
+using storage::FileSystemURL;
 
 class PrefService;
 class Profile;
@@ -123,6 +126,9 @@ extern const char kActionIdWebDriveOfficeWord[];
 extern const char kActionIdWebDriveOfficeExcel[];
 extern const char kActionIdWebDriveOfficePowerPoint[];
 extern const char kActionIdOpenInOffice[];
+extern const char kActionIdOpenWeb[];
+
+extern const char kODFSExtensionId[];
 
 // Task types as explained in the comment above. Search for <task-type>.
 enum TaskType {
@@ -214,14 +220,12 @@ struct TaskDescriptor {
 
 // Describes a task with extra information such as icon URL.
 struct FullTaskDescriptor {
-  FullTaskDescriptor(
-      const TaskDescriptor& task_descriptor,
-      const std::string& task_title,
-      const extensions::api::file_manager_private::Verb task_verb,
-      const GURL& icon_url,
-      bool is_default,
-      bool is_generic_file_handler,
-      bool is_file_extension_match);
+  FullTaskDescriptor(const TaskDescriptor& task_descriptor,
+                     const std::string& task_title,
+                     const GURL& icon_url,
+                     bool is_default,
+                     bool is_generic_file_handler,
+                     bool is_file_extension_match);
 
   FullTaskDescriptor(const FullTaskDescriptor& other);
   FullTaskDescriptor& operator=(const FullTaskDescriptor& other);
@@ -230,9 +234,6 @@ struct FullTaskDescriptor {
   TaskDescriptor task_descriptor;
   // The user-visible title/name of the app/extension/thing to be launched.
   std::string task_title;
-  // Describes different ways the same Task might handle file/s, e.g. open with,
-  // pack with, share with, etc.
-  extensions::api::file_manager_private::Verb task_verb;
   // The icon URL for the task (ex. app icon)
   GURL icon_url;
   // The default task is stored in user preferences and will be used when the
@@ -333,10 +334,25 @@ bool ExecuteFileTask(Profile* profile,
                      const std::vector<storage::FileSystemURL>& file_urls,
                      FileTaskFinishedCallback done);
 
-// Executes QuickOffice file handler for each element of |file_urls|. Returns
-// |false| if the execution cannot be initiated. Otherwise returns |true|.
-bool LaunchQuickOffice(Profile* profile,
+// Executes QuickOffice file handler for each element of |file_urls|.
+void LaunchQuickOffice(Profile* profile,
                        const std::vector<storage::FileSystemURL>& file_urls);
+
+// Executes appropriate task to open the selected `file_urls`.
+// If user's `choice` is `kDialogChoiceQuickOffice`, launch QuickOffice.
+// If user's `choice` is `kDialogChoiceTryAgain`, execute the `task`.
+// If user's `choice` is `kDialogChoiceCancel`, do nothing.
+void OnDialogChoiceReceived(Profile* profile,
+                            const TaskDescriptor& task,
+                            const std::vector<FileSystemURL>& file_urls,
+                            const std::string& choice);
+
+// Shows a new dialog for users to choose what to do next. Returns True
+// if a new dialog has been effectively created.
+bool GetUserFallbackChoice(Profile* profile,
+                           const TaskDescriptor& task,
+                           const std::vector<FileSystemURL>& file_urls,
+                           ash::office_fallback::FallbackReason failure_reason);
 
 // Callback function type for FindAllTypesOfTasks.
 typedef base::OnceCallback<void(
@@ -363,11 +379,33 @@ void ChooseAndSetDefaultTask(Profile* profile,
                              const std::vector<extensions::EntryInfo>& entries,
                              ResultingTasks* resulting_tasks);
 
+bool IsExtensionInstalled(Profile* profile, const std::string& extension_id);
+
 // Returns whether |path| is an HTML file according to its extension.
 bool IsHtmlFile(const base::FilePath& path);
 
 // Returns whether |path| is a MS Office file according to its extension.
 bool IsOfficeFile(const base::FilePath& path);
+
+// TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
+// Updates the default task for each of the office file types. |action_id| must
+// be a valid action registered with the Files app SWA.
+void SetWordFileHandler(Profile* profile, const std::string& action_id);
+void SetExcelFileHandler(Profile* profile, const std::string& action_id);
+void SetPowerPointFileHandler(Profile* profile, const std::string& action_id);
+
+// TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
+// Sets the user preference storing whether the setup flow for office files has
+// ever been completed.
+void SetOfficeSetupComplete(Profile* profile, bool complete = true);
+// Whether or not the setup flow for office files has ever been completed.
+bool OfficeSetupComplete(Profile* profile);
+
+// Sets the user preference storing whether we should always move office files
+// without first asking the user.
+void SetAlwaysMoveOfficeFiles(Profile* profile, bool complete = true);
+// Whether we should always move office files without first asking the user.
+bool AlwaysMoveOfficeFiles(Profile* profile);
 
 }  // namespace file_manager::file_tasks
 

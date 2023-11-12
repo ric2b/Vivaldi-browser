@@ -5,13 +5,12 @@
 #ifndef GPU_IPC_CLIENT_CLIENT_SHARED_IMAGE_INTERFACE_H_
 #define GPU_IPC_CLIENT_CLIENT_SHARED_IMAGE_INTERFACE_H_
 
-#include "base/memory/raw_ptr.h"
-#include "gpu/command_buffer/client/shared_image_interface.h"
-
 #include "base/containers/flat_set.h"
+#include "base/memory/raw_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/ipc/common/surface_handle.h"
 
 namespace gpu {
@@ -33,12 +32,11 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
   void PresentSwapChain(const SyncToken& sync_token,
                         const Mailbox& mailbox) override;
 #if BUILDFLAG(IS_FUCHSIA)
-  void RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
-                                      zx::channel token,
+  void RegisterSysmemBufferCollection(zx::eventpair service_handle,
+                                      zx::channel sysmem_token,
                                       gfx::BufferFormat format,
                                       gfx::BufferUsage usage,
                                       bool register_with_image_pipe) override;
-  void ReleaseSysmemBufferCollection(gfx::SysmemBufferCollectionId id) override;
 #endif  // BUILDFLAG(IS_FUCHSIA)
   SyncToken GenUnverifiedSyncToken() override;
   SyncToken GenVerifiedSyncToken() override;
@@ -60,6 +58,13 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
                             SkAlphaType alpha_type,
                             uint32_t usage,
                             base::span<const uint8_t> pixel_data) override;
+  Mailbox CreateSharedImage(viz::SharedImageFormat format,
+                            const gfx::Size& size,
+                            const gfx::ColorSpace& color_space,
+                            GrSurfaceOrigin surface_origin,
+                            SkAlphaType alpha_type,
+                            uint32_t usage,
+                            gfx::GpuMemoryBufferHandle buffer_handle) override;
   Mailbox CreateSharedImage(gfx::GpuMemoryBuffer* gpu_memory_buffer,
                             GpuMemoryBufferManager* gpu_memory_buffer_manager,
                             gfx::BufferPlane plane,

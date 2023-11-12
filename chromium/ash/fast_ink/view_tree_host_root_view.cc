@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/trees/layer_tree_frame_sink.h"
@@ -209,7 +209,8 @@ class ViewTreeHostRootView::LayerTreeViewTreeFrameSinkHolder
     if (delete_pending_)
       return;
     delete_pending_ = true;
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                  this);
   }
 
   ViewTreeHostRootView* view_;
@@ -367,7 +368,7 @@ void ViewTreeHostRootView::SchedulePaintInRect(const gfx::Rect& rect) {
   pending_paint_ = true;
 
   if (!pending_compositor_frame_ack_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ViewTreeHostRootView::Paint,
                                   weak_ptr_factory_.GetWeakPtr()));
   }
@@ -449,9 +450,8 @@ void ViewTreeHostRootView::SubmitCompositorFrame() {
           buffer_size_, viz::RGBA_8888, is_overlay_candidate_);
   transferable_resource.id = id_generator_.GenerateNextId();
 
-  gfx::Transform buffer_to_target_transform;
-  bool rv = rotate_transform_.GetInverse(&buffer_to_target_transform);
-  DCHECK(rv);
+  gfx::Transform buffer_to_target_transform =
+      rotate_transform_.GetCheckedInverse();
 
   const viz::CompositorRenderPassId kRenderPassId{1};
   auto render_pass = viz::CompositorRenderPass::Create();
@@ -509,7 +509,7 @@ void ViewTreeHostRootView::DidReceiveCompositorFrameAck() {
   pending_compositor_frame_ack_ = false;
 
   if (pending_resource_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&ViewTreeHostRootView::SubmitPendingCompositorFrame,
                        weak_ptr_factory_.GetWeakPtr()));

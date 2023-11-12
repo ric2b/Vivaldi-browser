@@ -15,8 +15,6 @@
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_view_delegate.h"
 #include "ash/app_list/model/search/search_result.h"
-#include "ash/app_list/views/app_list_main_view.h"
-#include "ash/app_list/views/search_box_view.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
@@ -27,6 +25,7 @@
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "base/bind.h"
 #include "base/dcheck_is_on.h"
 #include "base/time/time.h"
@@ -73,12 +72,6 @@ constexpr int kAnswerCardMaxResults = 1;
 // view in the 'ProductivityLauncherSearchView'.
 constexpr int kAnimatedOffsetMultiplier = 4;
 
-size_t GetMaxSearchResultListItems() {
-  if (app_list_features::IsCategoricalSearchEnabled())
-    return kMaxResultsWithCategoricalSearch;
-  return SharedAppListConfig::instance().max_search_result_list_items();
-}
-
 // Maps 'AppListSearchResultCategory' to 'SearchResultListType'.
 SearchResultListView::SearchResultListType CategoryToListType(
     ash::AppListSearchResultCategory category) {
@@ -103,21 +96,19 @@ SearchResultListView::SearchResultListType CategoryToListType(
       return SearchResultListView::SearchResultListType::kGames;
     case ash::AppListSearchResultCategory::kUnknown:
       NOTREACHED();
-      return SearchResultListView::SearchResultListType::kUnified;
+      return SearchResultListView::SearchResultListType::kBestMatch;
   }
 }
 
 }  // namespace
 
 SearchResultListView::SearchResultListView(
-    AppListMainView* main_view,
     AppListViewDelegate* view_delegate,
     SearchResultPageDialogController* dialog_controller,
     SearchResultView::SearchResultViewType search_result_view_type,
     bool animates_result_updates,
     absl::optional<size_t> productivity_launcher_index)
     : SearchResultContainerView(view_delegate),
-      main_view_(main_view),
       view_delegate_(view_delegate),
       animates_result_updates_(animates_result_updates),
       results_container_(new views::View),
@@ -129,6 +120,8 @@ SearchResultListView::SearchResultListView(
   title_label_ = AddChildView(std::make_unique<views::Label>(
       u"", CONTEXT_SEARCH_RESULT_CATEGORY_LABEL, STYLE_PRODUCTIVITY_LAUNCHER));
   title_label_->SetBackgroundColor(SK_ColorTRANSPARENT);
+  title_label_->SetAutoColorReadabilityEnabled(false);
+  title_label_->SetEnabledColorId(kColorAshTextColorSecondary);
   title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
       kPreferredTitleTopMargins, kPreferredTitleHorizontalMargins,
@@ -140,7 +133,7 @@ SearchResultListView::SearchResultListView(
   results_container_->AddChildView(title_label_);
 
   size_t result_count =
-      GetMaxSearchResultListItems() +
+      kMaxResultsWithCategoricalSearch +
       SharedAppListConfig::instance().max_assistant_search_result_list_items();
 
   for (size_t i = 0; i < result_count; ++i) {
@@ -163,9 +156,8 @@ void SearchResultListView::SetListType(SearchResultListType list_type) {
 
   list_type_ = list_type;
   switch (list_type_.value()) {
-    case SearchResultListType::kUnified:
     case SearchResultListType::kAnswerCard:
-      // kUnified and kAnswerCard SearchResultListView do not have labels.
+      // kAnswerCard SearchResultListView do not have labels.
       title_label_->SetText(u"");
       break;
     case SearchResultListType::kBestMatch:
@@ -211,10 +203,8 @@ void SearchResultListView::SetListType(SearchResultListType list_type) {
   }
 
   switch (list_type_.value()) {
-    case SearchResultListType::kUnified:
     case SearchResultListType::kAnswerCard:
-      // Classic SearchResultListView and Productivity Launcher Answer Card do
-      // not have category labels.
+      // Answer Cards do not have category labels.
       title_label_->SetVisible(false);
       break;
     case SearchResultListType::kBestMatch:
@@ -242,10 +232,6 @@ void SearchResultListView::SetListType(SearchResultListType list_type) {
     case SearchResultListType::kAnswerCard:
       DCHECK(search_result_view_type_ ==
              SearchResultView::SearchResultViewType::kAnswerCard);
-      break;
-    case SearchResultListType::kUnified:
-      DCHECK(search_result_view_type_ ==
-             SearchResultView::SearchResultViewType::kClassic);
       break;
     case SearchResultListType::kBestMatch:
     case SearchResultListType::kApps:
@@ -442,11 +428,7 @@ int SearchResultListView::DoUpdate() {
   }
 
   if (!enabled_ || !GetWidget() || !GetWidget()->IsVisible()) {
-    SetVisible(false);
-    for (auto* result_view : search_result_views_) {
-      result_view->SetResult(nullptr);
-      result_view->SetVisible(false);
-    }
+    ResetAndHide();
     return 0;
   }
 
@@ -492,13 +474,6 @@ int SearchResultListView::GetHeightForWidth(int w) const {
   return results_container_->GetHeightForWidth(w);
 }
 
-void SearchResultListView::OnThemeChanged() {
-  SearchResultContainerView::OnThemeChanged();
-  title_label_->SetEnabledColor(
-      AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor, GetWidget()));
-}
-
 void SearchResultListView::SearchResultActivated(SearchResultView* view,
                                                  int event_flags,
                                                  bool by_button_press) {
@@ -532,59 +507,16 @@ void SearchResultListView::SearchResultActionActivated(
         Update();
         break;
       }
-      case SearchResultActionType::kAppend:
-        main_view_->search_box_view()->UpdateQuery(view->result()->title());
-        break;
-      case SearchResultActionType::kSearchResultActionTypeMax:
-        NOTREACHED();
     }
   }
-}
-
-std::vector<SearchResult*> SearchResultListView::GetAssistantResults() {
-  // Only show Assistant results if there are no tiles. There is not enough
-  // room in launcher to display Assistant results if there are tiles visible.
-  bool visible_tiles = !SearchModel::FilterSearchResultsByDisplayType(
-                            results(), SearchResult::DisplayType::kTile,
-                            /*excludes=*/{}, /*max_results=*/1)
-                            .empty();
-
-  if (visible_tiles)
-    return std::vector<SearchResult*>();
-
-  return SearchModel::FilterSearchResultsByFunction(
-      results(),
-      base::BindRepeating(&SearchResultListView::FilterResultsForUnifiedList,
-                          base::Unretained(this),
-                          /*for_assistant_results=*/true),
-      /*max_results=*/
-      SharedAppListConfig::instance().max_assistant_search_result_list_items());
-}
-
-std::vector<SearchResult*> SearchResultListView::GetUnifiedSearchResults() {
-  std::vector<SearchResult*> search_results =
-      SearchModel::FilterSearchResultsByFunction(
-          results(),
-          base::BindRepeating(
-              &SearchResultListView::FilterResultsForUnifiedList,
-              base::Unretained(this), /*for_assistant_results=*/false),
-          GetMaxSearchResultListItems());
-
-  std::vector<SearchResult*> assistant_results = GetAssistantResults();
-
-  search_results.insert(search_results.end(), assistant_results.begin(),
-                        assistant_results.end());
-
-  return search_results;
 }
 
 SearchResult::Category SearchResultListView::GetSearchCategory() {
   DCHECK(list_type_.has_value());
   switch (list_type_.value()) {
-    case SearchResultListType::kUnified:
     case SearchResultListType::kBestMatch:
     case SearchResultListType::kAnswerCard:
-      // Categories are undefined for |kUnified|, |KBestMatch|, and
+      // Categories are undefined for |KBestMatch|, and
       // |kAnswerCard| list types.
       NOTREACHED();
       return SearchResult::Category::kUnknown;
@@ -612,9 +544,6 @@ SearchResult::Category SearchResultListView::GetSearchCategory() {
 std::vector<SearchResult*> SearchResultListView::GetCategorizedSearchResults() {
   DCHECK(enabled_ && list_type_.has_value());
   switch (list_type_.value()) {
-    case SearchResultListType::kUnified:
-      // Use classic search results for the kUnified list view.
-      return GetUnifiedSearchResults();
     case SearchResultListType::kAnswerCard:
       return SearchModel::FilterSearchResultsByFunction(
           results(), base::BindRepeating([](const SearchResult& result) {
@@ -628,7 +557,7 @@ std::vector<SearchResult*> SearchResultListView::GetCategorizedSearchResults() {
           results(),
           base::BindRepeating(&SearchResultListView::FilterBestMatches,
                               base::Unretained(this)),
-          GetMaxSearchResultListItems());
+          kMaxResultsWithCategoricalSearch);
     case SearchResultListType::kApps:
     case SearchResultListType::kAppShortcuts:
     case SearchResultListType::kWeb:
@@ -644,7 +573,7 @@ std::vector<SearchResult*> SearchResultListView::GetCategorizedSearchResults() {
           base::BindRepeating(
               &SearchResultListView::FilterSearchResultsByCategory,
               base::Unretained(this), search_category),
-          GetMaxSearchResultListItems());
+          kMaxResultsWithCategoricalSearch);
   }
 }
 
@@ -671,18 +600,6 @@ std::vector<SearchResult*> SearchResultListView::UpdateResultViews() {
   if (!animates_result_updates_)
     SetVisible(num_results > 0);
   return display_results;
-}
-
-bool SearchResultListView::FilterResultsForUnifiedList(
-    bool for_assistant_results,
-    const SearchResult& result) const {
-  // Filter out results that have been removed from the list by the user.
-  if (removed_results_.count(result.id()))
-    return false;
-  const bool is_assistant_result =
-      result.result_type() == AppListSearchResultType::kAssistantText;
-  return result.display_type() == SearchResultDisplayType::kList &&
-         for_assistant_results == is_assistant_result;
 }
 
 bool SearchResultListView::FilterBestMatches(const SearchResult& result) const {

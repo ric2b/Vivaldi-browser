@@ -78,7 +78,7 @@ void AdverseAdFilterListService::Observe(
 
 void AdverseAdFilterListService::OnProfileAndServicesInitialized() {
   // PathExists() triggers IO restriction.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   blocklist_file_exists_ = base::PathExists(GetDefaultFilePath());
 

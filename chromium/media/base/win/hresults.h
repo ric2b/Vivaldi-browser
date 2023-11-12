@@ -29,6 +29,16 @@ constexpr HRESULT kErrorLoadLibrary =
     MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0xFA06);
 constexpr HRESULT kErrorGetFunctionPointer =
     MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0xFA07);
+constexpr HRESULT kErrorInvalidCdmProxy =
+    MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0xFA08);
+
+// HRESULTs defined by Windows but are not exposed in public header files.
+
+// HRESULT 0x8004CD12 is DRM_E_TEE_INVALID_HWDRM_STATE, which can happen
+// during OS sleep/resume, or moving video to different graphics adapters.
+// When it happens, the HWDRM state is reset.
+constexpr HRESULT DRM_E_TEE_INVALID_HWDRM_STATE =
+    static_cast<HRESULT>(0x8004CD12);
 
 }  // namespace media
 

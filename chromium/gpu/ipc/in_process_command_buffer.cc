@@ -23,7 +23,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
@@ -41,7 +40,6 @@
 #include "gpu/command_buffer/service/gpu_fence_manager.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/gr_shader_cache.h"
-#include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/mailbox_manager_factory.h"
 #include "gpu/command_buffer/service/memory_program_cache.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -172,7 +170,6 @@ InProcessCommandBuffer::CreateCacheUse() {
 
 gpu::ContextResult InProcessCommandBuffer::Initialize(
     const ContextCreationAttribs& attribs,
-    ImageFactory* image_factory,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     gpu::raster::GrShaderCache* gr_shader_cache,
     GpuProcessActivityFlags* activity_flags) {
@@ -185,8 +182,8 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
   client_thread_weak_ptr_ = client_thread_weak_ptr_factory_.GetWeakPtr();
 
   Capabilities capabilities;
-  InitializeOnGpuThreadParams params(attribs, &capabilities, image_factory,
-                                     gr_shader_cache, activity_flags);
+  InitializeOnGpuThreadParams params(attribs, &capabilities, gr_shader_cache,
+                                     activity_flags);
 
   base::OnceCallback<gpu::ContextResult(void)> init_task =
       base::BindOnce(&InProcessCommandBuffer::InitializeOnGpuThread,
@@ -214,7 +211,7 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
         task_executor_->gpu_preferences(),
         context_group_->feature_info()->workarounds(),
         task_executor_->gpu_feature_info(), context_state_.get(),
-        task_executor_->shared_image_manager(), image_factory,
+        task_executor_->shared_image_manager(), /*image_factory=*/nullptr,
         /*is_for_display_compositor=*/false);
   }
 
@@ -238,7 +235,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
             ->GetTracingProcessId();
     memory_tracker = std::make_unique<GpuCommandBufferMemoryTracker>(
         GetCommandBufferID(), client_tracing_id,
-        base::ThreadTaskRunnerHandle::Get(), /* obserer=*/nullptr);
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        /* obserer=*/nullptr);
   }
 
   auto feature_info = base::MakeRefCounted<gles2::FeatureInfo>(
@@ -249,9 +247,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       task_executor_->mailbox_manager(), std::move(memory_tracker),
       task_executor_->shader_translator_cache(),
       task_executor_->framebuffer_completeness_cache(), feature_info,
-      params.attribs.bind_generates_resource, params.image_factory,
-      nullptr /* progress_reporter */, task_executor_->gpu_feature_info(),
-      task_executor_->discardable_manager(),
+      params.attribs.bind_generates_resource, nullptr /* progress_reporter */,
+      task_executor_->gpu_feature_info(), task_executor_->discardable_manager(),
       task_executor_->passthrough_discardable_manager(),
       task_executor_->shared_image_manager());
 
@@ -331,7 +328,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       // RasterDecoder uses the shared context.
       use_virtualized_gl_context_ = false;
 
-      gr_shader_cache_ = params.gr_shader_cache;
+      gr_shader_cache_ = params.gr_shader_cache.get();
 
       if (!context_state_ ||
           !context_state_->MakeCurrent(nullptr, /*needs_gl=*/true)) {
@@ -351,8 +348,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
           this, command_buffer_.get(), task_executor_->outputter(),
           task_executor_->gpu_feature_info(), task_executor_->gpu_preferences(),
           context_group_->memory_tracker(),
-          task_executor_->shared_image_manager(), params.image_factory,
-          context_state_, true /*is_privileged*/));
+          task_executor_->shared_image_manager(), context_state_,
+          true /*is_privileged*/));
     } else {
       // TODO(khushalsagar): A lot of this initialization code is duplicated in
       // GpuChannelManager. Pull it into a common util method.
@@ -393,9 +390,9 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
         return ContextResult::kTransientFailure;
       }
 
-      decoder_.reset(gles2::GLES2Decoder::Create(this, command_buffer_.get(),
-                                                 task_executor_->outputter(),
-                                                 context_group_.get()));
+      decoder_.reset(gles2::GLES2Decoder::Create(
+          this, command_buffer_.get(), task_executor_->outputter(),
+          context_group_.get(), /*image_factory_for_nacl_swapchain=*/nullptr));
       if (use_virtualized_gl_context_) {
         context_ = base::MakeRefCounted<GLContextVirtual>(
             gl_share_group_.get(), real_context.get(), decoder_->AsWeakPtr());

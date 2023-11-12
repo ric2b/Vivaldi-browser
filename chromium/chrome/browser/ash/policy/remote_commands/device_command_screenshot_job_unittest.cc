@@ -13,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
@@ -49,8 +48,8 @@ em::RemoteCommand GenerateScreenshotCommandProto(
   command_proto.set_command_id(unique_id);
   command_proto.set_age_of_command(age_of_command.InMilliseconds());
   std::string payload;
-  base::DictionaryValue root_dict;
-  root_dict.SetStringKey(kUploadUrlFieldName, upload_url);
+  base::Value::Dict root_dict;
+  root_dict.Set(kUploadUrlFieldName, upload_url);
   base::JSONWriter::Write(root_dict, &payload);
   command_proto.set_payload(payload);
   return command_proto;
@@ -101,12 +100,12 @@ void MockUploadJob::Start() {
   DCHECK(delegate_);
   EXPECT_EQ(kMockUploadUrl, upload_url_.spec());
   if (error_code_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&UploadJob::Delegate::OnFailure,
                                   base::Unretained(delegate_), *error_code_));
     return;
   }
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&UploadJob::Delegate::OnSuccess,
                                 base::Unretained(delegate_)));
 }
@@ -170,7 +169,7 @@ void MockScreenshotDelegate::TakeSnapshot(gfx::NativeWindow window,
   const int height = source_rect.height();
   scoped_refptr<base::RefCountedBytes> test_png =
       GenerateTestPNG(width, height);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), test_png));
 }
 
@@ -239,9 +238,9 @@ void DeviceCommandScreenshotTest::InitializeScreenshotJob(
 std::string DeviceCommandScreenshotTest::CreatePayloadFromResultCode(
     DeviceCommandScreenshotJob::ResultCode result_code) {
   std::string payload;
-  base::DictionaryValue root_dict;
+  base::Value::Dict root_dict;
   if (result_code != DeviceCommandScreenshotJob::SUCCESS)
-    root_dict.SetKey(kResultFieldName, base::Value(result_code));
+    root_dict.Set(kResultFieldName, result_code);
   base::JSONWriter::Write(root_dict, &payload);
   return payload;
 }

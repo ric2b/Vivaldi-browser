@@ -21,8 +21,6 @@ declare_args() {
   enable_gpu_service_logging = false
 }
 
-use_glx = ozone_platform_x11
-
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
@@ -41,12 +39,6 @@ buildflag_header("buildflags") {
 
 config("gl_config") {
   defines = []
-  if (use_glx) {
-    defines += [
-      "GL_GLEXT_PROTOTYPES",
-      "USE_GLX",
-    ]
-  }
   if (use_egl) {
     defines += [ "USE_EGL" ]
   }
@@ -95,10 +87,6 @@ component("gl") {
     "gl_image.h",
     "gl_image_memory.cc",
     "gl_image_memory.h",
-    "gl_image_ref_counted_memory.cc",
-    "gl_image_ref_counted_memory.h",
-    "gl_image_shared_memory.cc",
-    "gl_image_shared_memory.h",
     "gl_image_stub.cc",
     "gl_image_stub.h",
     "gl_implementation.cc",
@@ -134,6 +122,8 @@ component("gl") {
     "gpu_switching_manager.h",
     "gpu_timing.cc",
     "gpu_timing.h",
+    "presenter.cc",
+    "presenter.h",
     "progress_reporter.h",
     "scoped_binders.cc",
     "scoped_binders.h",
@@ -151,8 +141,12 @@ component("gl") {
 
   if (is_android) {
     sources += [
+      "android/scoped_a_native_window.cc",
+      "android/scoped_a_native_window.h",
       "android/scoped_java_surface.cc",
       "android/scoped_java_surface.h",
+      "android/scoped_java_surface_control.cc",
+      "android/scoped_java_surface_control.h",
       "android/surface_texture.cc",
       "android/surface_texture.h",
       "android/surface_texture_listener.cc",
@@ -241,6 +235,8 @@ component("gl") {
 
     if (is_android) {
       sources += [
+        "android/egl_fence_utils.cc",
+        "android/egl_fence_utils.h",
         "gl_image_ahardwarebuffer.cc",
         "gl_image_ahardwarebuffer.h",
         "gl_surface_egl_surface_control.cc",
@@ -284,8 +280,6 @@ component("gl") {
       "gl_surface_egl_x11.h",
       "gl_surface_egl_x11_gles2.cc",
       "gl_surface_egl_x11_gles2.h",
-      "gl_surface_glx_x11.cc",
-      "gl_surface_glx_x11.h",
     ]
 
     deps += [
@@ -304,29 +298,6 @@ component("gl") {
       data_deps += [ "//third_party/vulkan-deps/vulkan-loader/src:libvulkan" ]
     }
   }
-  if (use_glx) {
-    sources += [
-      "gl_bindings_autogen_glx.cc",
-      "gl_bindings_autogen_glx.h",
-      "gl_context_glx.cc",
-      "gl_context_glx.h",
-      "gl_glx_api_implementation.cc",
-      "gl_glx_api_implementation.h",
-      "gl_image_glx.cc",
-      "gl_image_glx.h",
-      "gl_image_glx_native_pixmap.cc",
-      "gl_image_glx_native_pixmap.h",
-      "gl_surface_glx.cc",
-      "gl_surface_glx.h",
-      "glx_util.cc",
-      "glx_util.h",
-    ]
-
-    deps += [
-      "//ui/base/x",
-      "//ui/gfx/x",
-    ]
-  }
 
   if (is_win) {
     sources += [
@@ -334,6 +305,8 @@ component("gl") {
       "child_window_win.h",
       "dc_layer_tree.cc",
       "dc_layer_tree.h",
+      "dcomp_presenter.cc",
+      "dcomp_presenter.h",
       "dcomp_surface_proxy.h",
       "dcomp_surface_registry.cc",
       "dcomp_surface_registry.h",
@@ -397,6 +370,7 @@ component("gl") {
       "egl_surface_io_surface.h",
       "gl_context_cgl.cc",
       "gl_context_cgl.h",
+      "gl_display_egl.mm",
       "gl_fence_apple.cc",
       "gl_fence_apple.h",
       "gl_image_io_surface.h",
@@ -412,19 +386,22 @@ component("gl") {
       "Quartz.framework",
     ]
 
-    if (use_egl) {
+    assert(use_egl)
+    data_deps += [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+      "//third_party/mesa_headers",
+    ]
+    if (enable_swiftshader) {
       data_deps += [
-        "//third_party/angle:libEGL",
-        "//third_party/angle:libGLESv2",
-        "//third_party/mesa_headers",
+        "//third_party/swiftshader/src/Vulkan:icd_file",
+        "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
       ]
-      if (enable_swiftshader) {
-        data_deps += [
-          "//third_party/swiftshader/src/Vulkan:icd_file",
-          "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
-        ]
-      }
     }
+
+    deps += [ "//components/metal_util:metal_util_types" ]
+
+    defines += [ "GL_SILENCE_DEPRECATION" ]
   }
   if (is_android) {
     defines += [
@@ -441,7 +418,9 @@ component("gl") {
   }
 }
 
-if (is_mac && use_egl) {
+if (is_mac) {
+  assert(use_egl)
+
   # We need to copy the ANGLE and SwiftShader libraries so that the
   # bundle_data dependencies have a "copy" target type. Otherwise for
   # "shared_library" target types it will try to link things into
@@ -570,8 +549,6 @@ test("gl_unittests") {
 
   sources = [
     "gl_api_unittest.cc",
-    "gl_image_ref_counted_memory_unittest.cc",
-    "gl_image_shared_memory_unittest.cc",
     "gl_surface_format_unittest.cc",
     "gl_version_info_unittest.cc",
     "gpu_timing_unittest.cc",
@@ -589,17 +566,9 @@ test("gl_unittests") {
     ]
   }
 
-  if (use_glx) {
-    sources += [ "glx_api_unittest.cc" ]
-  }
-
-  if (is_mac) {
-    sources += [ "gl_image_io_surface_unittest.cc" ]
-    frameworks = [ "IOSurface.framework" ]
-  }
-
   if (is_win) {
     sources += [
+      "dcomp_presenter_unittest.cc",
       "delegated_ink_point_renderer_gpu_unittest.cc",
       "direct_composition_surface_win_unittest.cc",
       "gl_fence_win_unittest.cc",
@@ -641,12 +610,6 @@ test("gl_unittests") {
     "//third_party/mesa_headers",
   ]
 
-  # TODO(https://crbug.com/789065): this must be moved to Ozone.
-  if (ozone_platform_x11) {
-    sources += [ "gl_context_glx_unittest.cc" ]
-    deps += [ "//ui/gfx/x" ]
-  }
-
   if (is_win) {
     deps += [ "//media/base/win:test_support" ]
     libs = [ "dxguid.lib" ]
@@ -667,6 +630,7 @@ if (is_android) {
 
   generate_jni("gl_jni_headers") {
     sources = [
+      "../android/java/src/org/chromium/ui/gl/ScopedJavaSurfaceControl.java",
       "../android/java/src/org/chromium/ui/gl/SurfaceTextureListener.java",
       "../android/java/src/org/chromium/ui/gl/SurfaceTexturePlatformWrapper.java",
     ]

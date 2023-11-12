@@ -50,6 +50,9 @@ class WebState;
 // Presents the note or folder editor for the given |node|.
 - (void)presentEditorForNode:(const vivaldi::NoteNode*)node;
 
+// Presents the note add view controller
+- (void)presentAddViewController:(const vivaldi::NoteNode*)parent;
+
 // Removes any note modal controller from view if visible.
 // override this method.
 - (void)dismissNoteModalControllerAnimated:(BOOL)animated;

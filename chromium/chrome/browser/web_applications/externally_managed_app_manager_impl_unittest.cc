@@ -14,6 +14,7 @@
 #include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/one_shot_event.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,7 +33,7 @@
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -124,8 +125,8 @@ class TestExternallyManagedAppInstallTaskManager {
       return;
     }
     // Post a task to simulate tasks completing asynchronously.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  std::move(install_request));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(install_request));
   }
 
   void ProcessSavedRequests() {
@@ -205,7 +206,7 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
   std::unique_ptr<ExternallyManagedAppInstallTask> CreateInstallationTask(
       ExternalInstallOptions install_options) override {
     return std::make_unique<TestExternallyManagedAppInstallTask>(
-        this, profile(), &test_url_loader_, test_install_task_manager_,
+        this, profile(), &test_url_loader_, *test_install_task_manager_,
         std::move(install_options));
   }
 
@@ -265,7 +266,7 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
     run_loop.Run();
   }
 
-  FakeWebAppProvider& provider() { return provider_; }
+  FakeWebAppProvider& provider() { return *provider_; }
 
  private:
   class TestExternallyManagedAppInstallTask
@@ -283,7 +284,7 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
               externally_managed_app_manager_impl->registrar(),
               externally_managed_app_manager_impl->ui_manager(),
               externally_managed_app_manager_impl->finalizer(),
-              externally_managed_app_manager_impl->command_manager(),
+              externally_managed_app_manager_impl->command_scheduler(),
               std::move(install_options)),
           externally_managed_app_manager_impl_(
               externally_managed_app_manager_impl),
@@ -331,14 +332,14 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
           install_options().only_use_app_info_factory
               ? install_options().app_info_factory.Run()->start_url
               : install_options().install_url;
-      test_install_task_manager_.RunOrSaveRequest(base::BindLambdaForTesting(
+      test_install_task_manager_->RunOrSaveRequest(base::BindLambdaForTesting(
           [&, install_url, callback = std::move(callback)]() mutable {
             DoInstall(install_url, std::move(callback));
           }));
     }
 
    protected:
-    WebAppRegistrar& registrar() { return provider().registrar(); }
+    WebAppRegistrar& registrar() { return provider().registrar_unsafe(); }
 
     FakeWebAppProvider& provider() {
       return externally_managed_app_manager_impl_->provider();
@@ -347,7 +348,8 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
    private:
     raw_ptr<TestExternallyManagedAppManager>
         externally_managed_app_manager_impl_;
-    TestExternallyManagedAppInstallTaskManager& test_install_task_manager_;
+    const raw_ref<TestExternallyManagedAppInstallTaskManager>
+        test_install_task_manager_;
     raw_ptr<Profile> profile_;
   };
 
@@ -360,7 +362,7 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
         : ExternallyManagedAppRegistrationTaskBase(install_url),
           externally_managed_app_manager_impl_(
               externally_managed_app_manager_impl) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&TestExternallyManagedAppRegistrationTask::OnProgress,
                          weak_ptr_factory_.GetWeakPtr(), install_url));
@@ -386,9 +388,10 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
         weak_ptr_factory_{this};
   };
 
-  FakeWebAppProvider& provider_;
+  const raw_ref<FakeWebAppProvider> provider_;
   TestWebAppUrlLoader test_url_loader_;
-  TestExternallyManagedAppInstallTaskManager& test_install_task_manager_;
+  const raw_ref<TestExternallyManagedAppInstallTaskManager>
+      test_install_task_manager_;
 
   std::vector<ExternalInstallOptions> install_options_list_;
   GURL last_registered_install_url_;
@@ -405,17 +408,35 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManagerImpl {
 
 class ExternallyManagedAppManagerImplTest
     : public WebAppTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   ExternallyManagedAppManagerImplTest() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   ExternallyManagedAppManagerImplTest(
@@ -429,8 +450,6 @@ class ExternallyManagedAppManagerImplTest
     WebAppTest::SetUp();
 
     provider_ = web_app::FakeWebAppProvider::Get(profile());
-    provider_->SetDefaultFakeSubsystems();
-
     auto externally_managed_app_manager_impl =
         std::make_unique<TestExternallyManagedAppManager>(
             profile(), provider(), test_install_task_manager_);
@@ -447,7 +466,7 @@ class ExternallyManagedAppManagerImplTest
   }
 
   void TearDown() override {
-    command_manager().Shutdown();
+    command_scheduler().Shutdown();
     WebAppTest::TearDown();
   }
 
@@ -561,7 +580,7 @@ class ExternallyManagedAppManagerImplTest
     return *externally_managed_app_manager_impl_;
   }
 
-  WebAppRegistrar& registrar() { return provider().registrar(); }
+  WebAppRegistrar& registrar() { return provider().registrar_unsafe(); }
 
   WebAppSyncBridge& sync_bridge() { return provider().sync_bridge(); }
 
@@ -577,9 +596,7 @@ class ExternallyManagedAppManagerImplTest
 
   FakeInstallFinalizer& install_finalizer() { return *install_finalizer_; }
 
-  WebAppCommandManager& command_manager() {
-    return provider().command_manager();
-  }
+  WebAppCommandScheduler& command_scheduler() { return provider().scheduler(); }
 
  private:
   raw_ptr<FakeWebAppProvider> provider_;
@@ -857,17 +874,19 @@ TEST_P(ExternallyManagedAppManagerImplTest,
           }));
 
   base::RunLoop().RunUntilIdle();
+  externally_managed_app_manager_impl().SetNextInstallationTaskResult(
+      kFooWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
 
   externally_managed_app_manager_impl().Install(
       GetInstallOptionsWithWebAppInfo(kFooWebAppUrl),
       base::BindLambdaForTesting(
           [&](const GURL& url,
               ExternallyManagedAppManager::InstallResult result) {
-            EXPECT_EQ(webapps::InstallResultCode::kSuccessAlreadyInstalled,
+            EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall,
                       result.code);
             EXPECT_EQ(kFooWebAppUrl, url);
 
-            EXPECT_EQ(1u, install_run_count());
+            EXPECT_EQ(2u, install_run_count());
             EXPECT_EQ(GetInstallOptionsWithWebAppInfo(kFooWebAppUrl),
                       last_install_options());
 
@@ -977,11 +996,11 @@ TEST_P(ExternallyManagedAppManagerImplTest, Install_ReentrantCallback) {
 
 TEST_P(ExternallyManagedAppManagerImplTest, Install_SerialCallsSameApp) {
   const GURL kFooWebAppUrl("https://foo.example");
-  externally_managed_app_manager_impl().SetNextInstallationTaskResult(
-      kFooWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
   install_finalizer().SetNextUninstallExternalWebAppResult(
       kFooWebAppUrl, webapps::UninstallResultCode::kSuccess);
   {
+    externally_managed_app_manager_impl().SetNextInstallationTaskResult(
+        kFooWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
     auto [url, code] = InstallAndWait(&externally_managed_app_manager_impl(),
                                       GetInstallOptions(kFooWebAppUrl));
 
@@ -993,14 +1012,15 @@ TEST_P(ExternallyManagedAppManagerImplTest, Install_SerialCallsSameApp) {
   }
 
   {
+    externally_managed_app_manager_impl().SetNextInstallationTaskResult(
+        kFooWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
     auto [url, code] = InstallAndWait(&externally_managed_app_manager_impl(),
                                       GetInstallOptions(kFooWebAppUrl));
 
-    EXPECT_EQ(webapps::InstallResultCode::kSuccessAlreadyInstalled, code);
+    EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, code);
     EXPECT_EQ(kFooWebAppUrl, url);
 
-    // The app is already installed so we shouldn't try to install it again.
-    EXPECT_EQ(1u, install_run_count());
+    EXPECT_EQ(2u, install_run_count());
   }
 }
 
@@ -1019,21 +1039,16 @@ TEST_P(ExternallyManagedAppManagerImplTest, Install_ConcurrentCallsSameApp) {
       base::BindLambdaForTesting(
           [&](const GURL& url,
               ExternallyManagedAppManager::InstallResult result) {
-            // kSuccessAlreadyInstalled because the last call to Install gets
-            // higher priority.
-            EXPECT_EQ(webapps::InstallResultCode::kSuccessAlreadyInstalled,
+            EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall,
                       result.code);
             EXPECT_EQ(kFooWebAppUrl, url);
 
-            // Only one installation task should run because the app was already
-            // installed.
-            EXPECT_EQ(1u, install_run_count());
-
+            // Both installation tasks run if the install was triggered
+            // by policy.
+            EXPECT_EQ(2u, install_run_count());
             EXPECT_TRUE(first_callback_ran);
-
             run_loop.Quit();
           }));
-
   externally_managed_app_manager_impl().InstallNow(
       GetInstallOptions(kFooWebAppUrl),
       base::BindLambdaForTesting(
@@ -1046,10 +1061,12 @@ TEST_P(ExternallyManagedAppManagerImplTest, Install_ConcurrentCallsSameApp) {
             EXPECT_EQ(1u, install_run_count());
             EXPECT_EQ(GetInstallOptions(kFooWebAppUrl), last_install_options());
             first_callback_ran = true;
+            externally_managed_app_manager_impl().SetNextInstallationTaskResult(
+                kFooWebAppUrl, webapps::InstallResultCode::kSuccessNewInstall);
           }));
   run_loop.Run();
 
-  EXPECT_EQ(1u, install_run_count());
+  EXPECT_EQ(2u, install_run_count());
   EXPECT_EQ(GetInstallOptions(kFooWebAppUrl), last_install_options());
 }
 
@@ -1734,8 +1751,14 @@ TEST_P(ExternallyManagedAppManagerImplTest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ExternallyManagedAppManagerImplTest,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ExternallyManagedAppManagerImplTest,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 }  // namespace web_app

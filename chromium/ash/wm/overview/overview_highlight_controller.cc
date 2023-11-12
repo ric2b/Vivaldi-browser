@@ -228,8 +228,9 @@ OverviewHighlightController::GetTraversableViews() const {
   // Note that this order matches the order of the chromevox cycling in
   // `OverviewSession::UpdateAccessibilityFocus`.
   for (auto& grid : overview_session_->grid_list()) {
-    // If the grid is visible, we shouldn't try to add any overview items.
-    if (grid->IsShowingDesksTemplatesGrid()) {
+    // If the saved desk library is visible, we shouldn't try to add any
+    // overview items.
+    if (grid->IsShowingSavedDeskLibrary()) {
       SavedDeskLibraryView* desk_library_view = grid->GetSavedDeskLibraryView();
       DCHECK(desk_library_view);
       for (SavedDeskGridView* saved_desk_grid_view :
@@ -269,14 +270,14 @@ OverviewHighlightController::GetTraversableViews() const {
         }
 
         auto* new_desk_button =
-            bar_view->expanded_state_new_desk_button()->inner_button();
+            bar_view->expanded_state_new_desk_button()->GetInnerButton();
         if (new_desk_button->GetEnabled())
           traversable_views.push_back(new_desk_button);
 
         if (auto* desks_templates_button =
                 bar_view->expanded_state_desks_templates_button()) {
           auto* inner_desks_templates_button =
-              desks_templates_button->inner_button();
+              desks_templates_button->GetInnerButton();
           if (desks_templates_button->GetVisible() &&
               inner_desks_templates_button->GetEnabled()) {
             traversable_views.push_back(inner_desks_templates_button);

@@ -156,8 +156,7 @@ bool IsEnhancedProtectionEnabled(const PrefService& prefs) {
     return false;
   // SafeBrowsingEnabled is checked too due to devices being out
   // of sync or not on a version that includes SafeBrowsingEnhanced pref.
-  return base::FeatureList::IsEnabled(kEnhancedProtection) &&
-         prefs.GetBoolean(prefs::kSafeBrowsingEnhanced) &&
+  return prefs.GetBoolean(prefs::kSafeBrowsingEnhanced) &&
          IsSafeBrowsingEnabled(prefs);
 }
 

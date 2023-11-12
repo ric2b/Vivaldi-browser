@@ -1075,7 +1075,6 @@ GLuint GLES2InterfaceStub::GetLastFlushIdCHROMIUM() {
 void GLES2InterfaceStub::SetActiveURLCHROMIUM(const char* /* url */) {}
 void GLES2InterfaceStub::ContextVisibilityHintCHROMIUM(
     GLboolean /* visibility */) {}
-void GLES2InterfaceStub::CoverageModulationCHROMIUM(GLenum /* components */) {}
 GLenum GLES2InterfaceStub::GetGraphicsResetStatusKHR() {
   return 0;
 }
@@ -1155,4 +1154,5 @@ GLboolean GLES2InterfaceStub::IsEnablediOES(GLenum /* target */,
                                             GLuint /* index */) {
   return 0;
 }
+void GLES2InterfaceStub::ProvokingVertexANGLE(GLenum /* provokeMode */) {}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_STUB_IMPL_AUTOGEN_H_

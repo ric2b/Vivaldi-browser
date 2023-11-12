@@ -37,10 +37,9 @@ class SyncedFileStore : public KeyedService {
 
   // Stores a reference to a file with a given |checksum| for a local syncable
   // entity of the given |sync_type|. This can be called whether or not sync is
-  // active and whether or not the entity is synced. The |content| of the file
-  // can be provided if it is available.
-  // Adding more than a single file or reference per owner is invalid.
-  virtual void AddLocalFileRef(base::GUID owner_guid,
+  // active and whether or not the entity is synced.
+  // If the owner already had a reference, it will be replaced.
+  virtual void SetLocalFileRef(base::GUID owner_guid,
                                syncer::ModelType sync_type,
                                std::string checksum) = 0;
 
@@ -48,8 +47,8 @@ class SyncedFileStore : public KeyedService {
   // for a local syncable entity of the given |sync_type|. This can be called
   // whether or not sync is active and whether or not the entity is synced. This
   // returns the checksum that can be used to address the file in future calls.
-  // Adding more than a single file or reference per owner is invalid.
-  virtual std::string AddLocalFile(base::GUID owner_guid,
+  // If the owner already had a reference, it will be replaced.
+  virtual std::string SetLocalFile(base::GUID owner_guid,
                                    syncer::ModelType sync_type,
                                    std::vector<uint8_t> content) = 0;
 
@@ -58,8 +57,8 @@ class SyncedFileStore : public KeyedService {
   // have been committed to the sync server as calling this can trigger an
   // upload attempt. This also indicates that the content may be downloaded from
   // sync if it isn't available locally
-  // Adding more than a single reference per owner is invalid.
-  virtual void AddSyncFileRef(std::string owner_sync_id,
+  // If the owner already had a reference, it will be replaced.
+  virtual void SetSyncFileRef(std::string owner_sync_id,
                               syncer::ModelType sync_type,
                               std::string checksum) = 0;
 
@@ -78,12 +77,15 @@ class SyncedFileStore : public KeyedService {
   // gone to avoid needing to re-download the file if a conflict causes the
   // entity to be resurected.
   virtual void RemoveLocalRef(base::GUID owner_guid,
-                                   syncer::ModelType sync_type) = 0;
+                              syncer::ModelType sync_type) = 0;
 
   virtual void RemoveSyncRef(std::string owner_sync_id,
-                                  syncer::ModelType sync_type) = 0;
+                             syncer::ModelType sync_type) = 0;
 
   virtual void RemoveAllSyncRefsForType(syncer::ModelType sync_type) = 0;
+
+  // Gets the sum of the sizes of all files held by the store.
+  virtual size_t GetTotalStorageSize() = 0;
 };
 }  // namespace file_sync
 

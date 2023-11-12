@@ -119,6 +119,18 @@
   self.historyTableViewController.presentationDelegate =
       self.presentationDelegate;
 
+  if (vivaldi::IsVivaldiRunning()) {
+    UINavigationBarAppearance* transparentAppearance =
+        [[UINavigationBarAppearance alloc] init];
+    [transparentAppearance configureWithTransparentBackground];
+    self.historyNavigationController.navigationBar.standardAppearance =
+      transparentAppearance;
+    self.historyNavigationController.navigationBar.compactAppearance =
+      transparentAppearance;
+    self.historyNavigationController.navigationBar.scrollEdgeAppearance =
+      transparentAppearance;
+  } // End Vivaldi
+
   BOOL useCustomPresentation = YES;
       [self.historyNavigationController
           setModalPresentationStyle:UIModalPresentationFormSheet];
@@ -180,6 +192,13 @@
   // before dismissing, or `self.historyNavigationController` will dismiss that
   // instead of itself.
   [self.historyTableViewController.contextMenuCoordinator stop];
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self.historyNavigationController dismissViewControllerAnimated:YES
+                                                         completion:completion];
+    [self.panelDelegate panelDismissed];
+    self.panelDelegate = nil;
+  } else // End Vivaldi
   [self.historyNavigationController dismissViewControllerAnimated:YES
                                                        completion:completion];
   self.historyNavigationController = nil;
@@ -227,11 +246,11 @@
     HistoryCoordinator* strongSelf = weakSelf;
 
     // Record that this context menu was shown to the user.
-    RecordMenuShown(MenuScenario::kHistoryEntry);
+    RecordMenuShown(MenuScenarioHistogram::kHistoryEntry);
 
     BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
         initWithBrowser:strongSelf.browser
-               scenario:MenuScenario::kHistoryEntry];
+               scenario:MenuScenarioHistogram::kHistoryEntry];
 
     NSMutableArray<UIMenuElement*>* menuElements =
         [[NSMutableArray alloc] init];

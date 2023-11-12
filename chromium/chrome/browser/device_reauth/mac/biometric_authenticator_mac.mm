@@ -7,7 +7,10 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "chrome/browser/browser_process.h"
 #include "components/device_reauth/biometric_authenticator.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "device/fido/mac/touch_id_context.h"
 
 BiometricAuthenticatorMac::BiometricAuthenticatorMac() = default;
@@ -22,6 +25,10 @@ bool BiometricAuthenticatorMac::CanAuthenticate(
                            error:nil];
   base::UmaHistogramBoolean("PasswordManager.CanUseBiometricsMac",
                             is_available);
+  if (is_available) {
+    g_browser_process->local_state()->SetBoolean(
+        password_manager::prefs::kHadBiometricsAvailable, is_available);
+  }
   return is_available;
 }
 
@@ -63,13 +70,14 @@ void BiometricAuthenticatorMac::AuthenticateWithMessage(
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void BiometricAuthenticatorMac::OnAuthenticationCompleted(bool result) {
+void BiometricAuthenticatorMac::OnAuthenticationCompleted(bool success) {
   touch_id_auth_context_ = nullptr;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callback_) {
     return;
   }
+  RecordAuthenticationTimeIfSuccessful(success);
   // No code should be run after the callback as the callback could already be
   // destroying "this".
-  std::move(callback_).Run(RecordAuthenticationResult(result));
+  std::move(callback_).Run(success);
 }

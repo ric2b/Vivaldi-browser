@@ -15,6 +15,7 @@ mojom("mojom") {
     "//skia/public/mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
+    "//ui/gl/mojom",
   ]
 
   cpp_typemaps = [
@@ -29,7 +30,7 @@ mojom("mojom") {
       traits_sources = [ "wayland_overlay_config_mojom_traits.cc" ]
       traits_headers = [ "wayland_overlay_config_mojom_traits.h" ]
       traits_deps = [
-        "//components/crash/core/common:crash_key_lib",
+        "//components/crash/core/common:crash_key",
         "//ui/ozone/platform/wayland:common",
       ]
     },

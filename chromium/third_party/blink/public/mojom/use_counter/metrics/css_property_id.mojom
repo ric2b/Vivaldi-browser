@@ -568,7 +568,7 @@ enum CSSSampleId {
     kFontDisplay = 516,
     kContain = 517,
     kD = 518,
-    kLineHeightStep = 519,
+    // kLineHeightStep = 519,
     kBreakAfter = 520,
     kBreakBefore = 521,
     kBreakInside = 522,
@@ -762,7 +762,7 @@ enum CSSSampleId {
     kFontPalette = 709,
     kBasePalette = 710,
     kOverrideColors = 711,
-    kPageTransitionTag = 712,
+    kViewTransitionName = 712,
     kObjectViewBox = 713,
     kObjectOverflow = 714,
     kToggleGroup = 715,
@@ -785,6 +785,11 @@ enum CSSSampleId {
     kToggleVisibility = 732,
     kInitialLetter = 733,
     kHyphenateLimitChars = 734,
+    kAnimationDelayStart = 735,
+    kAnimationDelayEnd = 736,
+    kFontVariantPosition = 737,
+    kFontVariantAlternates = 738,
+    kBaselineSource = 739,
     // 1. Add new features above this line (don't change the assigned numbers of
     //    the existing items).
     // 2. Run the src/tools/metrics/histograms/update_use_counter_css.py script

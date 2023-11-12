@@ -46,6 +46,7 @@ HTMLTemplateElement::HTMLTemplateElement(Document& document)
 HTMLTemplateElement::~HTMLTemplateElement() = default;
 
 DocumentFragment* HTMLTemplateElement::ContentInternal() const {
+  DCHECK(!declarative_shadow_root_);
   if (!content_ && GetExecutionContext())
     content_ = MakeGarbageCollected<TemplateContentDocumentFragment>(
         GetDocument().EnsureTemplateDocument(),
@@ -55,10 +56,24 @@ DocumentFragment* HTMLTemplateElement::ContentInternal() const {
 }
 
 DocumentFragment* HTMLTemplateElement::content() const {
+  DCHECK(!declarative_shadow_root_);
   return IsDeclarativeShadowRoot() ? nullptr : ContentInternal();
 }
 
+bool HTMLTemplateElement::IsNonStreamingDeclarativeShadowRoot() const {
+  if (declarative_shadow_root_type_ == DeclarativeShadowRootType::kOpen ||
+      declarative_shadow_root_type_ == DeclarativeShadowRootType::kClosed) {
+    DCHECK(!declarative_shadow_root_);
+    return true;
+  }
+  if (declarative_shadow_root_type_ == DeclarativeShadowRootType::kNone)
+    return false;
+  DCHECK(RuntimeEnabledFeatures::StreamingDeclarativeShadowDOMEnabled());
+  return false;
+}
+
 DocumentFragment* HTMLTemplateElement::DeclarativeShadowContent() const {
+  DCHECK(IsNonStreamingDeclarativeShadowRoot());
   return IsDeclarativeShadowRoot() ? ContentInternal() : nullptr;
 }
 
@@ -82,6 +97,7 @@ void HTMLTemplateElement::DidMoveToNewDocument(Document& old_document) {
 
 void HTMLTemplateElement::Trace(Visitor* visitor) const {
   visitor->Trace(content_);
+  visitor->Trace(declarative_shadow_root_);
   HTMLElement::Trace(visitor);
 }
 

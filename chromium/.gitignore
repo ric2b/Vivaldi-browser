@@ -80,8 +80,11 @@ vs-chromium-project.txt
 /.settings/
 /.vs/
 # Visual Studio Code
-.vscode/
-.vscode-server/
+# No trailing slash to also ignore symlinks, which is useful in conjunction with
+# gclient-new-workdir.
+.vscode
+.vscode-server
+
 /_out
 /android_emulator_sdk
 /ash/ash_unittests_run.xml
@@ -240,6 +243,7 @@ vs-chromium-project.txt
 /ios/third_party/earl_grey2/src
 /ios/third_party/edo/src
 /ios/third_party/gtx/src
+/ios/third_party/lottie/src
 /ios/third_party/material_components_ios/src
 /ios/third_party/material_font_disk_loader_ios/src
 /ios/third_party/material_internationalization_ios/src

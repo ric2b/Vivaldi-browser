@@ -16,6 +16,7 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -84,12 +85,12 @@ class WaylandWindowDragController::ExtendedDragSource {
     auto* surface = window ? window->root_surface()->surface() : nullptr;
     zcr_extended_drag_source_v1_drag(source_.get(), surface, offset.x(),
                                      offset.y());
-    connection_.Flush();
+    connection_->Flush();
   }
 
  private:
   wl::Object<zcr_extended_drag_source_v1> source_;
-  WaylandConnection& connection_;
+  const raw_ref<WaylandConnection> connection_;
 };
 
 WaylandWindowDragController::WaylandWindowDragController(
@@ -100,7 +101,7 @@ WaylandWindowDragController::WaylandWindowDragController(
     : connection_(connection),
       data_device_manager_(device_manager),
       data_device_(device_manager->GetDevice()),
-      window_manager_(connection_->wayland_window_manager()),
+      window_manager_(connection_->window_manager()),
       pointer_delegate_(pointer_delegate),
       touch_delegate_(touch_delegate) {
   DCHECK(data_device_);
@@ -114,24 +115,20 @@ bool WaylandWindowDragController::StartDragSession() {
   if (state_ != State::kIdle)
     return true;
 
-  auto serial = connection_->serial_tracker().GetSerial(
-      {wl::SerialType::kTouchPress, wl::SerialType::kMousePress});
-  if (!serial.has_value()) {
-    LOG(ERROR) << "Failed to retrieve touch/mouse press serial.";
+  // TODO(crbug.com/1246529): Drop the heuristic below which detects the "drag
+  // source" info in favor of having it injected by the upper level layers.
+  auto [serial, origin] = GetSerialAndOrigin();
+  if (!serial || !origin) {
+    LOG(ERROR) << "Failed to retrieve dnd serial / origin window.";
     return false;
   }
 
   DVLOG(1) << "Starting DND session.";
   state_ = State::kAttached;
+  origin_window_ = origin;
   drag_source_ = serial->type == wl::SerialType::kTouchPress
                      ? DragSource::kTouch
                      : DragSource::kMouse;
-
-  origin_window_ = window_manager_->GetCurrentPointerOrTouchFocusedWindow();
-  if (!origin_window_) {
-    LOG(ERROR) << "Failed to get origin window.";
-    return false;
-  }
 
   DCHECK(!data_source_);
   data_source_ = data_device_manager_->CreateSource(this);
@@ -271,12 +268,15 @@ void WaylandWindowDragController::OnDragMotion(const gfx::PointF& location) {
     pointer_delegate_->OnPointerMotionEvent(
         location, wl::EventDispatchPolicy::kImmediate);
   } else {
-    base::TimeTicks timestamp = base::TimeTicks::Now();
-    auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
-    DCHECK_EQ(touch_pointer_ids.size(), 1u);
-    touch_delegate_->OnTouchMotionEvent(location, timestamp,
-                                        touch_pointer_ids[0],
-                                        wl::EventDispatchPolicy::kImmediate);
+    const auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
+    LOG_IF(WARNING, touch_pointer_ids.size() != 1u)
+        << "Unexpected touch drag motion. Active touch_points: "
+        << touch_pointer_ids.size();
+    if (!touch_pointer_ids.empty()) {
+      touch_delegate_->OnTouchMotionEvent(location, base::TimeTicks::Now(),
+                                          touch_pointer_ids[0],
+                                          wl::EventDispatchPolicy::kImmediate);
+    }
   }
 }
 
@@ -323,18 +323,18 @@ void WaylandWindowDragController::OnDragLeave() {
     pointer_delegate_->OnPointerMotionEvent(
         {pointer_location_.x(), -1}, wl::EventDispatchPolicy::kImmediate);
   } else {
-    base::TimeTicks timestamp = base::TimeTicks::Now();
-    auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
-    DCHECK_EQ(touch_pointer_ids.size(), 1u);
-
-    // If an user starts dragging a tab horizontally with touch, Chrome enters
-    // in "horizontal snapping" mode (see ScrollSnapController for details).
-    // Hence, in case of touch driven dragging, use a higher negative dy
-    // to work around the threshold in ScrollSnapController otherwise,
-    // the drag event is discarded.
-    touch_delegate_->OnTouchMotionEvent(
-        {pointer_location_.x(), kHorizontalRailExitThreshold}, timestamp,
-        touch_pointer_ids[0], wl::EventDispatchPolicy::kImmediate);
+    const auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
+    if (!touch_pointer_ids.empty()) {
+      // If an user starts dragging a tab horizontally with touch, Chrome enters
+      // in "horizontal snapping" mode (see ScrollSnapController for details).
+      // Hence, in case of touch driven dragging, use a higher negative dy
+      // to work around the threshold in ScrollSnapController otherwise,
+      // the drag event is discarded.
+      touch_delegate_->OnTouchMotionEvent(
+          {pointer_location_.x(), kHorizontalRailExitThreshold},
+          base::TimeTicks::Now(), touch_pointer_ids[0],
+          wl::EventDispatchPolicy::kImmediate);
+    }
   }
 }
 
@@ -500,11 +500,12 @@ void WaylandWindowDragController::HandleDropAndResetState() {
           wl::EventDispatchPolicy::kImmediate);
     }
   } else {
-    auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
-    DCHECK_EQ(touch_pointer_ids.size(), 1u);
-    touch_delegate_->OnTouchReleaseEvent(base::TimeTicks::Now(),
-                                         touch_pointer_ids[0],
-                                         wl::EventDispatchPolicy::kImmediate);
+    const auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
+    if (!touch_pointer_ids.empty()) {
+      touch_delegate_->OnTouchReleaseEvent(base::TimeTicks::Now(),
+                                           touch_pointer_ids[0],
+                                           wl::EventDispatchPolicy::kImmediate);
+    }
   }
 
   pointer_grab_owner_ = nullptr;
@@ -570,6 +571,22 @@ bool WaylandWindowDragController::IsExtendedDragAvailableInternal() const {
 std::ostream& operator<<(std::ostream& out,
                          WaylandWindowDragController::State state) {
   return out << static_cast<int>(state);
+}
+
+std::pair<absl::optional<wl::Serial>, WaylandWindow*>
+WaylandWindowDragController::GetSerialAndOrigin() {
+  std::pair<absl::optional<wl::Serial>, WaylandWindow*> result{};
+  for (auto type : {wl::SerialType::kTouchPress, wl::SerialType::kMousePress}) {
+    auto serial = connection_->serial_tracker().GetSerial(type);
+    auto* window = type == wl::SerialType::kTouchPress
+                       ? window_manager_->GetCurrentTouchFocusedWindow()
+                       : window_manager_->GetCurrentPointerFocusedWindow();
+    if (window && serial &&
+        (!result.first || serial->timestamp > result.first->timestamp)) {
+      result = {serial, window};
+    }
+  }
+  return result;
 }
 
 }  // namespace ui

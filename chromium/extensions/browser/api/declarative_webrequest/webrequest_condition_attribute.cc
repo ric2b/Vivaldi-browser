@@ -14,6 +14,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "extensions/browser/api/declarative/deduping_factory.h"
@@ -31,7 +32,6 @@
 #include "net/http/http_util.h"
 
 using base::CaseInsensitiveCompareASCII;
-using base::ListValue;
 using base::Value;
 
 namespace helpers = extension_web_request_api_helpers;
@@ -419,8 +419,9 @@ bool HeaderMatcher::StringMatchTest::Matches(
              base::StartsWith(str, data_, case_sensitive_);
     case kContains:
       if (case_sensitive_ == base::CompareCase::INSENSITIVE_ASCII) {
-        return std::search(str.begin(), str.end(), data_.begin(), data_.end(),
-                           CaseInsensitiveCompareASCII<char>()) != str.end();
+        return base::ranges::search(str, data_,
+                                    CaseInsensitiveCompareASCII<char>()) !=
+               str.end();
       } else {
         return str.find(data_) != std::string::npos;
       }
@@ -710,9 +711,9 @@ WebRequestConditionAttributeStages::
 
 namespace {
 
-// Reads strings stored in |value|, which is expected to be a ListValue, and
-// sets corresponding bits (see RequestStage) in |out_stages|. Returns true on
-// success, false otherwise.
+// Reads strings stored in |value|, which is expected to be a Value of type
+// LIST, and sets corresponding bits (see RequestStage) in |out_stages|.
+// Returns true on success, false otherwise.
 bool ParseListOfStages(const base::Value& value, int* out_stages) {
   if (!value.is_list())
     return false;

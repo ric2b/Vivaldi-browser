@@ -50,6 +50,7 @@ namespace extensions {
 class TabMutingHandler;
 
 bool IsTabMuted(const content::WebContents* web_contents);
+bool IsTabInAWorkspace(const content::WebContents* web_contents);
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
@@ -111,6 +112,7 @@ class VivaldiPrivateTabObserver
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
+
   void WebContentsDestroyed() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;

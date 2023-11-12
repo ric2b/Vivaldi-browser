@@ -64,6 +64,7 @@ class PaymentHandlerWebFlowViewController
   void FillContentView(views::View* content_view) override;
   bool ShouldShowPrimaryButton() override;
   bool ShouldShowSecondaryButton() override;
+  void PopulateSheetHeaderView(views::View* view) override;
   std::unique_ptr<views::View> CreateHeaderContentView(
       views::View* header_view) override;
   std::unique_ptr<views::Background> GetHeaderBackground(
@@ -95,8 +96,8 @@ class PaymentHandlerWebFlowViewController
   DeveloperConsoleLogger log_;
   raw_ptr<Profile> profile_;
   GURL target_;
-  raw_ptr<views::ProgressBar> progress_bar_ = nullptr;
-  raw_ptr<views::View> separator_ = nullptr;
+  raw_ptr<views::ProgressBar, DanglingUntriaged> progress_bar_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> separator_ = nullptr;
   PaymentHandlerOpenWindowCallback first_navigation_complete_callback_;
   // Used to present modal dialog triggered from the payment handler web view,
   // e.g. an authenticator dialog.

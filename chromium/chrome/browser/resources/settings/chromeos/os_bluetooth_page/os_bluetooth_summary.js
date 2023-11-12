@@ -20,7 +20,7 @@ import {BluetoothSystemProperties, BluetoothSystemState, DeviceConnectionState, 
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
-import {Router} from '../../router.js';
+import {Router} from '../router.js';
 import {routes} from '../os_route.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
 import {RouteOriginBehavior, RouteOriginBehaviorInterface} from '../route_origin_behavior.js';
@@ -125,9 +125,6 @@ class SettingsBluetoothSummaryElement extends
 
   /** @private */
   onSystemPropertiesChanged_() {
-    if (this.isToggleDisabled_()) {
-      return;
-    }
     this.isBluetoothToggleOn_ =
         this.systemProperties.systemState === BluetoothSystemState.kEnabled ||
         this.systemProperties.systemState === BluetoothSystemState.kEnabling;
@@ -142,6 +139,12 @@ class SettingsBluetoothSummaryElement extends
    */
   onBluetoothToggleChanged_(newValue, oldValue) {
     if (oldValue === undefined) {
+      return;
+    }
+    // If the toggle value changed but the toggle is disabled, the change came
+    // from CrosBluetoothConfig, not the user. Don't attempt to update the
+    // enabled state.
+    if (this.isToggleDisabled_()) {
       return;
     }
     getBluetoothConfig().setBluetoothEnabledState(this.isBluetoothToggleOn_);

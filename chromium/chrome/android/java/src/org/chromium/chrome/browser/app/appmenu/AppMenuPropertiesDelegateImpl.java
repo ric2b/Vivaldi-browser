@@ -56,7 +56,6 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
-import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.share.ShareHelper;
@@ -222,7 +221,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     layoutStateProvider -> { mLayoutStateProvider = layoutStateProvider; }));
         }
 
-        if (!ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mContext)
+        if (!ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mContext)
                 && startSurfaceSupplier != null
                 && ReturnToChromeUtil.isStartSurfaceEnabled(mContext)) {
             mStartSurfaceSupplier = startSurfaceSupplier;
@@ -329,7 +328,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     @VisibleForTesting
     boolean isInStartSurfaceHomepage() {
-        if (ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mContext)) {
+        if (ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mContext)) {
             return mLayoutStateProvider != null
                     && mLayoutStateProvider.isLayoutVisible(LayoutType.START_SURFACE);
         }
@@ -437,6 +436,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // Multiple menu items shouldn't be enabled when the currentTab is null. Use a flag to
         // indicate whether the current Tab isn't null.
         boolean isCurrentTabNotNull = currentTab != null;
+        // Vivaldi
+        boolean hasWebContents = isCurrentTabNotNull
+                && !currentTab.isNativePage() && currentTab.getWebContents() != null;
 
         GURL url = isCurrentTabNotNull ? currentTab.getUrl() : GURL.emptyGURL();
         final boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
@@ -543,8 +545,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             // Check Vivaldi only menu items for null returns.
             MenuItem cloneTabMenuItem = menu.findItem(R.id.vivaldi_clone_tab_menu_id);
             if (cloneTabMenuItem != null)
-                cloneTabMenuItem.setVisible(isCurrentTabNotNull
-                        && !currentTab.isNativePage() && currentTab.getWebContents() != null);
+                cloneTabMenuItem.setVisible(hasWebContents);
 
             MenuItem launchGameMenuItem = menu.findItem(R.id.launch_game_menu_id);
             if (launchGameMenuItem != null)
@@ -569,8 +570,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 .setVisible(isCurrentTabNotNull
                         && shouldShowPaintPreview(isChromeScheme, currentTab, isIncognito));
 
-        // Enable image descriptions if touch exploration is currently enabled.
-        if (ImageDescriptionsController.getInstance().shouldShowImageDescriptionsMenuItem()) {
+        // Enable image descriptions if touch exploration is currently enabled, but not on the
+        // native NTP or Start surface.
+        if (isCurrentTabNotNull && shouldShowWebContentsDependentMenuItem(currentTab)
+                && ImageDescriptionsController.getInstance()
+                           .shouldShowImageDescriptionsMenuItem()) {
             menu.findItem(R.id.get_image_descriptions_id).setVisible(true);
 
             int titleId = R.string.menu_stop_image_descriptions;
@@ -591,29 +595,30 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             menu.findItem(R.id.get_image_descriptions_id).setVisible(false);
         }
 
-        // Conditionally add the Zoom menu item.
-        menu.findItem(R.id.page_zoom_id).setVisible(PageZoomCoordinator.shouldShowMenuItem());
+        // Conditionally add the Zoom menu item, but not on the native NTP or on Start surface.
+        menu.findItem(R.id.page_zoom_id)
+                .setVisible(isCurrentTabNotNull
+                        && shouldShowWebContentsDependentMenuItem(currentTab)
+                        && PageZoomCoordinator.shouldShowMenuItem()
+                        && hasWebContents);
 
         // Disable find in page on the native NTP or on Start surface.
         menu.findItem(R.id.find_in_page_id)
-                .setVisible(isCurrentTabNotNull && shouldShowFindInPage(currentTab));
+                .setVisible(
+                        isCurrentTabNotNull && shouldShowWebContentsDependentMenuItem(currentTab));
 
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.share_menu_id).setEnabled(
-                    currentTab != null && !currentTab.isNativePage()
-                    && mShareUtils.shouldEnableShare(currentTab));
+                    hasWebContents && mShareUtils.shouldEnableShare(currentTab));
             MenuItem capturePageMenuItem = menu.findItem(R.id.capture_page_id);
             if (capturePageMenuItem != null)
                 capturePageMenuItem.setVisible(!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
-                        && isCurrentTabNotNull
-                        && !currentTab.isNativePage()
-                        && currentTab.getWebContents() != null);
+                        && hasWebContents);
         }
 
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.page_actions_id)
-                    .setVisible(isCurrentTabNotNull
-                            && !currentTab.isNativePage() && currentTab.getWebContents() != null);
+                    .setVisible(hasWebContents);
         }
 
         // Prepare translate menu button.
@@ -624,8 +629,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                         isChromeScheme, isFileScheme, isContentScheme, isIncognito, url));
 
         if (ChromeApplicationImpl.isVivaldi())
-            updateRequestDesktopSiteMenuItem(menu, currentTab, isCurrentTabNotNull
-                    && !currentTab.isNativePage(), isChromeScheme);
+            updateRequestDesktopSiteMenuItem(menu, currentTab, hasWebContents, isChromeScheme);
         else
         updateRequestDesktopSiteMenuItem(menu, currentTab, true /* can show */, isChromeScheme);
 
@@ -649,26 +653,21 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (ChromeApplicationImpl.isVivaldi())
             menu.findItem(R.id.managed_by_standard_menu_id).setVisible(false);
 
-        if (ChromeApplicationImpl.isVivaldi()) {
-            // Note: There is no menu bar in tablet, hence remove edit option
-            if (mIsTablet) {
-                menu.findItem(R.id.menu_vivaldi_edit_menu).setVisible(false);
-            } else {
-                MenuItem menuItem;
-                int[] menuBarItemIds = VivaldiMenuUtils.getMenuItems(mContext);
-                // Remove menu items already included in menu bar from main menu to avoid duplicates
-                // and reduce menu length.
-                for (int menuId : menuBarItemIds) {
-                    // Note: We don't remove add to bookmarks as an exception since it makes it
-                    // easier to find the option.
-                    if (menuId == R.id.bookmark_this_page_id) continue;
-                    menuItem = menu.findItem(menuId);
-                    if (menuItem != null) menuItem.setVisible(false);
-                    if (menuId == R.id.share_menu_id)
-                        menu.findItem(R.id.share_row_menu_id).setVisible(false);
-                    if (menuId == R.id.request_desktop_site_id)
-                        menu.findItem(R.id.request_desktop_site_row_menu_id).setVisible(false);
-                }
+        if (ChromeApplicationImpl.isVivaldi() && !mIsTablet) {
+            MenuItem menuItem;
+            int[] menuBarItemIds = VivaldiMenuUtils.getMenuItems(mContext);
+            // Remove menu items already included in menu bar from main menu to avoid duplicates
+            // and reduce menu length.
+            for (int menuId : menuBarItemIds) {
+                // Note: We don't remove add to bookmarks as an exception since it makes it
+                // easier to find the option.
+                if (menuId == R.id.bookmark_this_page_id) continue;
+                menuItem = menu.findItem(menuId);
+                if (menuItem != null) menuItem.setVisible(false);
+                if (menuId == R.id.share_menu_id)
+                    menu.findItem(R.id.share_row_menu_id).setVisible(false);
+                if (menuId == R.id.request_desktop_site_id)
+                    menu.findItem(R.id.request_desktop_site_row_menu_id).setVisible(false);
             }
         }
     }
@@ -715,10 +714,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                             > 1;
         }
 
-        boolean isPriceTrackingVisible = isOverviewModeMenu
-                && PriceTrackingUtilities.shouldShowPriceTrackingMenu()
-                && !DeviceClassManager.enableAccessibilityLayout(mContext) && !isIncognito;
-        boolean isPriceTrackingEnabled = isPriceTrackingVisible;
         boolean hasItemBetweenDividers = false;
 
         for (int i = 0; i < menu.size(); ++i) {
@@ -769,10 +764,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             if (item.getItemId() == R.id.menu_select_tabs) {
                 item.setVisible(isMenuSelectTabsVisible);
                 item.setEnabled(isMenuSelectTabsEnabled);
-            }
-            if (item.getItemId() == R.id.track_prices_row_menu_id) {
-                item.setVisible(isPriceTrackingVisible);
-                item.setEnabled(isPriceTrackingEnabled);
             }
             if (item.getItemId() == R.id.close_all_tabs_menu_id) {
                 boolean hasTabs = mTabModelSelector.getTotalTabCount() > 0;
@@ -959,9 +950,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     /**
      * @param currentTab The currentTab for which the app menu is showing.
-     * @return Whether the find in page menu item should be displayed.
+     * @return Whether the currentTab should show an app menu item that requires a webContents.
+     *         This will return false for the Start service or native NTP, and true otherwise.
      */
-    protected boolean shouldShowFindInPage(@NonNull Tab currentTab) {
+    protected boolean shouldShowWebContentsDependentMenuItem(@NonNull Tab currentTab) {
         return !currentTab.isNativePage() && currentTab.getWebContents() != null;
     }
 
@@ -1178,18 +1170,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     @Override
-    public void recordHighlightedMenuItemShown(@Nullable @IdRes Integer menuItemId) {
-        RecordHistogram.recordEnumeratedHistogram("Mobile.AppMenu.HighlightMenuItem.Shown",
-                getUmaEnumForMenuItem(menuItemId), AppMenuHighlightItem.NUM_ENTRIES);
-    }
-
-    @Override
-    public void recordHighlightedMenuItemClicked(@Nullable @IdRes Integer menuItemId) {
-        RecordHistogram.recordEnumeratedHistogram("Mobile.AppMenu.HighlightMenuItem.Clicked",
-                getUmaEnumForMenuItem(menuItemId), AppMenuHighlightItem.NUM_ENTRIES);
-    }
-
-    @Override
     public boolean isMenuIconAtStart() {
         return false;
     }
@@ -1344,7 +1324,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // If price tracking isn't enabled or the page isn't eligible, then hide both items.
         if (!ShoppingFeatures.isShoppingListEnabled()
                 || !PowerBookmarkUtils.isPriceTrackingEligible(currentTab)
-                || mIsTypeSpecificBookmarkItemRowPresent) {
+                || mIsTypeSpecificBookmarkItemRowPresent || !mBookmarkModelSupplier.hasValue()) {
             startPriceTrackingMenuItem.setVisible(false);
             stopPriceTrackingMenuItem.setVisible(false);
             return;
@@ -1422,10 +1402,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         }
         // Vivaldi: Disable desktop request menu item if the global 'always desktop mode' is on.
         // This setting overrides the request menu choice.
-        Profile profile = mTabModelSelector.getCurrentModel().getProfile();
-        if (TabUtils.isDesktopSiteGlobalEnabled(profile)) {
-            requestMenuLabel.setEnabled(false);
-            requestMenuCheck.setEnabled(false);
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            Profile profile = mTabModelSelector.getCurrentModel().getProfile();
+            if (TabUtils.isDesktopSiteGlobalEnabled(profile)) {
+                requestMenuLabel.setEnabled(false);
+                requestMenuCheck.setEnabled(false);
+            }
         }
     }
 

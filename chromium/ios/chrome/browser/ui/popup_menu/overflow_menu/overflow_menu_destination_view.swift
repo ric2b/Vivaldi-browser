@@ -47,6 +47,9 @@ struct OverflowMenuDestinationButton: ButtonStyle {
     /// The width of the badge circle.
     static let badgeWidth: CGFloat = 10
 
+    /// The width of the new label badge.
+    static let newLabelBadgeWidth: CGFloat = 20
+
     /// The width of the badge border.
     static let badgeBorderWidth: CGFloat = 2
   }
@@ -131,11 +134,11 @@ struct OverflowMenuDestinationButton: ButtonStyle {
   }
 
   var newBadgeOffsetX: CGFloat {
-    return Dimensions.iconWidth - (Dimensions.badgeWidth - 2)
+    return Dimensions.iconWidth - (Dimensions.newLabelBadgeWidth - 10)
   }
 
   var newBadgeOffsetY: CGFloat {
-    return -Dimensions.iconWidth + (Dimensions.badgeWidth - 2)
+    return -Dimensions.iconWidth + (Dimensions.newLabelBadgeWidth - 10)
   }
 
   var newLabelString: String {
@@ -161,13 +164,14 @@ struct OverflowMenuDestinationButton: ButtonStyle {
             )
             // Pad the color circle by 0.5, otherwise the color shows up faintly
             // around the border.
-            .background(Circle().foregroundColor(.blue500).padding(0.5))
+            .background(Circle().foregroundColor(.blue600).padding(0.5))
             .frame(width: Dimensions.badgeWidth, height: Dimensions.badgeWidth)
             .offset(x: Dimensions.iconWidth / 2, y: -Dimensions.iconWidth / 2)
         } else if destination.badge == .newLabel {
           Image(systemName: "seal.fill")
+            .resizable()
             .foregroundColor(.blue600)
-            .frame(width: Dimensions.badgeWidth, height: Dimensions.badgeWidth)
+            .frame(width: Dimensions.newLabelBadgeWidth, height: Dimensions.newLabelBadgeWidth)
             .offset(x: newBadgeOffsetX, y: newBadgeOffsetY)
             .overlay {
               if !newLabelString.isEmpty {

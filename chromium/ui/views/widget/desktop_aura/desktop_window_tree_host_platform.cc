@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/notreached.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/client/aura_constants.h"
@@ -27,6 +27,7 @@
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/extensions/workspace_extension.h"
@@ -34,6 +35,7 @@
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_move_loop_handler.h"
 #include "ui/views/corewm/tooltip_aura.h"
+#include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget_aura_utils.h"
@@ -143,7 +145,7 @@ ui::PlatformWindowInitProperties ConvertWidgetInitParamsToInitProperties(
   if (params.parent && params.parent->GetHost())
     properties.parent_widget = params.parent->GetHost()->GetAcceleratedWidget();
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   if (ui::OzonePlatform::GetInstance()
           ->GetPlatformProperties()
           .set_parent_for_non_top_level_windows) {
@@ -199,7 +201,7 @@ SkPath GetWindowMask(const Widget* widget) {
 DesktopWindowTreeHostPlatform::DesktopWindowTreeHostPlatform(
     internal::NativeWidgetDelegate* native_widget_delegate,
     DesktopNativeWidgetAura* desktop_native_widget_aura)
-    : native_widget_delegate_(native_widget_delegate),
+    : native_widget_delegate_(native_widget_delegate->AsWidget()->GetWeakPtr()),
       desktop_native_widget_aura_(desktop_native_widget_aura),
       window_move_client_(this) {}
 
@@ -357,7 +359,7 @@ void DesktopWindowTreeHostPlatform::Close() {
   // we don't destroy the window before the callback returned (as the caller
   // may delete ourselves on destroy and the ATL callback would still
   // dereference us when the callback returns).
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&DesktopWindowTreeHostPlatform::CloseNow,
                                 close_widget_factory_.GetWeakPtr()));
 }
@@ -366,14 +368,15 @@ void DesktopWindowTreeHostPlatform::CloseNow() {
   if (!platform_window())
     return;
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   SetWmDropHandler(platform_window(), nullptr);
 #endif
 
   platform_window()->PrepareForShutdown();
 
   ReleaseCapture();
-  native_widget_delegate_->OnNativeWidgetDestroying();
+  if (native_widget_delegate_)
+    native_widget_delegate_->OnNativeWidgetDestroying();
 
   // If we have children, close them. Use a copy for iteration because they'll
   // remove themselves.
@@ -701,14 +704,8 @@ void DesktopWindowTreeHostPlatform::FrameTypeChanged() {
 
 void DesktopWindowTreeHostPlatform::SetFullscreen(bool fullscreen,
                                                   int64_t target_display_id) {
-  // TODO(crbug.com/1034783) Support `target_display_id` on this platform.
-  DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
-
-  if (IsFullscreen() == fullscreen)
-    return;
-
   auto weak_ptr = GetWeakPtr();
-  platform_window()->ToggleFullscreen();
+  platform_window()->SetFullscreen(fullscreen, target_display_id);
   if (!weak_ptr)
     return;
 
@@ -968,6 +965,11 @@ Widget* DesktopWindowTreeHostPlatform::GetWidget() {
 
 const Widget* DesktopWindowTreeHostPlatform::GetWidget() const {
   return native_widget_delegate_->AsWidget();
+}
+
+views::corewm::TooltipController*
+DesktopWindowTreeHostPlatform::tooltip_controller() {
+  return desktop_native_widget_aura_->tooltip_controller();
 }
 
 void DesktopWindowTreeHostPlatform::ScheduleRelayout() {

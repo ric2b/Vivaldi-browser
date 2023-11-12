@@ -105,10 +105,6 @@ BASE_FEATURE(kPartitionSSLSessionsByNetworkIsolationKey,
              "PartitionSSLSessionsByNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPartitionExpectCTStateByNetworkIsolationKey,
-             "PartitionExpectCTStateByNetworkIsolationKey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPartitionNelAndReportingByNetworkIsolationKey,
              "PartitionNelAndReportingByNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -120,25 +116,6 @@ BASE_FEATURE(kEnableDoubleKeyNetworkAnonymizationKey,
 BASE_FEATURE(kEnableCrossSiteFlagNetworkAnonymizationKey,
              "EnableCrossSiteFlagNetworkAnonymizationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kExpectCTPruning,
-             "ExpectCTPruning",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-NET_EXPORT extern const base::FeatureParam<int>
-    kExpectCTPruneMax(&kExpectCTPruning, "ExpectCTPruneMax", 2000);
-NET_EXPORT extern const base::FeatureParam<int>
-    kExpectCTPruneMin(&kExpectCTPruning, "ExpectCTPruneMin", 1800);
-NET_EXPORT extern const base::FeatureParam<int> kExpectCTSafeFromPruneDays(
-    &kExpectCTPruning,
-    "ExpectCTSafeFromPruneDays",
-    40);
-NET_EXPORT extern const base::FeatureParam<int> kExpectCTMaxEntriesPerNik(
-    &kExpectCTPruning,
-    "ExpectCTMaxEntriesPerNik",
-    20);
-NET_EXPORT extern const base::FeatureParam<int>
-    kExpectCTPruneDelaySecs(&kExpectCTPruning, "ExpectCTPruneDelaySecs", 60);
 
 BASE_FEATURE(kTLS13KeyUpdate,
              "TLS13KeyUpdate",
@@ -156,6 +133,15 @@ BASE_FEATURE(kPostQuantumCECPQ2SomeDomains,
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<std::string>
     kPostQuantumCECPQ2Prefix(&kPostQuantumCECPQ2SomeDomains, "prefix", "a");
+
+// This is feature-gated, but enabled, to act as a kill switch, in case there
+// are unforeseen consequences to fully removing TLS 1.0/1.1.
+//
+// TODO(https://crbug.com/1376584): Remove this feature and all TLS 1.0/1.1
+// support code.
+BASE_FEATURE(kSSLMinVersionAtLeastTLS12,
+             "SSLMinVersionAtLeastTLS12",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNetUnusedIdleSocketTimeout,
              "NetUnusedIdleSocketTimeout",
@@ -178,20 +164,21 @@ BASE_FEATURE(kCertDualVerificationTrialFeature,
 #if BUILDFLAG(IS_MAC)
 const base::FeatureParam<int> kCertDualVerificationTrialImpl{
     &kCertDualVerificationTrialFeature, "impl", 0};
-const base::FeatureParam<int> kCertDualVerificationTrialCacheSize{
-    &kCertDualVerificationTrialFeature, "cachesize", 0};
 #endif /* BUILDFLAG(IS_MAC) */
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 BASE_FEATURE(kChromeRootStoreUsed,
              "ChromeRootStoreUsed",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 #if BUILDFLAG(IS_MAC)
 const base::FeatureParam<int> kChromeRootStoreSysImpl{&kChromeRootStoreUsed,
                                                       "sysimpl", 0};
-const base::FeatureParam<int> kChromeRootStoreSysCacheSize{
-    &kChromeRootStoreUsed, "syscachesize", 0};
 #endif /* BUILDFLAG(IS_MAC) */
 #endif /* BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED) */
 
@@ -262,16 +249,9 @@ BASE_FEATURE(kSamePartyAttributeEnabled,
 BASE_FEATURE(kPartitionedCookies,
              "PartitionedCookies",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kPartitionedCookiesBypassOriginTrial,
-             "PartitionedCookiesBypassOriginTrial",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNoncedPartitionedCookies,
              "NoncedPartitionedCookies",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kExtraCookieValidityChecks,
-             "ExtraCookieValidityChecks",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRecordRadioWakeupTrigger,
@@ -303,7 +283,7 @@ BASE_FEATURE(kOptimisticBlockfileWrite,
 // Read as much of the net::URLRequest as there is space in the Mojo data pipe.
 BASE_FEATURE(kOptimizeNetworkBuffers,
              "OptimizeNetworkBuffers2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<int> kOptimizeNetworkBuffersBytesReadLimit{
     &kOptimizeNetworkBuffers, "bytes_read_limit", 64 * 1024};
@@ -324,7 +304,7 @@ const base::FeatureParam<int> kOptimizeNetworkBuffersMinInputStreamReadSize{
 const base::FeatureParam<int>
     kOptimizeNetworkBuffersMaxInputStreamBytesToReadWhenAvailableUnknown{
         &kOptimizeNetworkBuffers, "max_input_stream_bytes_available_unknown",
-        32 * 1024};
+        2 * 1024};
 
 const base::FeatureParam<int>
     kOptimizeNetworkBuffersFilterSourceStreamBufferSize{
@@ -355,6 +335,14 @@ const base::FeatureParam<bool> kStorageAccessAPIAutoDenyOutsideFPS{
 BASE_FEATURE(kThirdPartyStoragePartitioning,
              "ThirdPartyStoragePartitioning",
              base::FEATURE_DISABLED_BY_DEFAULT);
+// Whether to use the new code paths needed to support partitioning Blob URLs.
+// This exists as a kill-switch in case an issue is identified with the Blob
+// URL implementation that causes breakage.
+// TODO(https://crbug.com/1407944): Kill-switch activated - investigate cause of
+// increased renderer hangs.
+BASE_FEATURE(kSupportPartitionedBlobUrl,
+             "SupportPartitionedBlobUrl",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAlpsParsing, "AlpsParsing", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -377,5 +365,15 @@ BASE_FEATURE(kEnableWebsocketsOverHttp3,
 BASE_FEATURE(kUseNAT64ForIPv4Literal,
              "UseNAT64ForIPv4Literal",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kBlockNewForbiddenHeaders,
+             "BlockNewForbiddenHeaders",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_WIN)
+BASE_FEATURE(kPlatformKeyProbeSHA256,
+             "PlatformKeyProbeSHA256",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 }  // namespace net::features

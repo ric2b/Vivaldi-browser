@@ -6,6 +6,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/rule_set.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -16,15 +17,15 @@ namespace blink {
 namespace {
 
 unsigned Specificity(const String& selector_text) {
-  CSSSelectorList selector_list =
+  CSSSelectorList* selector_list =
       css_test_helpers::ParseSelectorList(selector_text);
-  return selector_list.First()->Specificity();
+  return selector_list->First()->Specificity();
 }
 
 bool HasLinkOrVisited(const String& selector_text) {
-  CSSSelectorList selector_list =
+  CSSSelectorList* selector_list =
       css_test_helpers::ParseSelectorList(selector_text);
-  return selector_list.First()->HasLinkOrVisited();
+  return selector_list->First()->HasLinkOrVisited();
 }
 
 }  // namespace
@@ -162,12 +163,17 @@ TEST(CSSSelector, Specificity_Has) {
   EXPECT_EQ(Specificity(".a :has(.c#d, .e)"), Specificity(".a .c#d"));
   EXPECT_EQ(Specificity(":has(.e+.f, .g>.b, .h)"), Specificity(".e+.f"));
   EXPECT_EQ(Specificity(".a :has(.e+.f, .g>.b, .h#i)"), Specificity(".a .h#i"));
-  EXPECT_EQ(Specificity(".a+:has(.b+span.f, :has(.c>.e, .g))"),
-            Specificity(".a+.b+span.f"));
   EXPECT_EQ(Specificity("div > :has(div, div:where(span:where(.b ~ .c)))"),
             Specificity("div > div"));
   EXPECT_EQ(Specificity(":has(.c + .c + .c, .b + .c:not(span), .b + .c + .e)"),
             Specificity(".c + .c + .c"));
+
+  {
+    ScopedCSSPseudoHasNonForgivingParsingForTest scoped_feature(false);
+
+    EXPECT_EQ(Specificity(".a+:has(.b+span.f, :has(.c>.e, .g))"),
+              Specificity(".a+.b+span.f"));
+  }
 }
 
 TEST(CSSSelector, HasLinkOrVisited) {
@@ -217,21 +223,21 @@ TEST(CSSSelector, CueDefaultNamespace) {
 }
 
 TEST(CSSSelector, CopyInvalidList) {
-  CSSSelectorList list;
-  EXPECT_FALSE(list.IsValid());
-  EXPECT_FALSE(list.Copy().IsValid());
+  CSSSelectorList* list = CSSSelectorList::Empty();
+  EXPECT_FALSE(list->IsValid());
+  EXPECT_FALSE(list->Copy()->IsValid());
 }
 
 TEST(CSSSelector, CopyValidList) {
-  CSSSelectorList list = css_test_helpers::ParseSelectorList(".a");
-  EXPECT_TRUE(list.IsValid());
-  EXPECT_TRUE(list.Copy().IsValid());
+  CSSSelectorList* list = css_test_helpers::ParseSelectorList(".a");
+  EXPECT_TRUE(list->IsValid());
+  EXPECT_TRUE(list->Copy()->IsValid());
 }
 
 TEST(CSSSelector, FirstInInvalidList) {
-  CSSSelectorList list;
-  EXPECT_FALSE(list.IsValid());
-  EXPECT_FALSE(list.First());
+  CSSSelectorList* list = CSSSelectorList::Empty();
+  EXPECT_FALSE(list->IsValid());
+  EXPECT_FALSE(list->First());
 }
 
 }  // namespace blink

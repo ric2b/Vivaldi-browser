@@ -8,8 +8,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/background.h"
 
-namespace arc {
-namespace input_overlay {
+namespace arc::input_overlay {
 namespace {
 // UI specs.
 constexpr SkColor kEditModeBgColor = SkColorSetA(SK_ColorBLACK, 0x99);
@@ -24,6 +23,8 @@ InputMappingView::InputMappingView(
   SetBounds(content_bounds.x(), content_bounds.y(), content_bounds.width(),
             content_bounds.height());
   for (auto& action : actions) {
+    if (action->deleted())
+      continue;
     auto view = action->CreateView(display_overlay_controller_);
     if (view)
       AddChildView(std::move(view));
@@ -70,6 +71,7 @@ void InputMappingView::OnActionRemoved(Action* action) {
     if (action != action_view->action())
       continue;
 
+    action->set_action_view(nullptr);
     RemoveChildViewT(action_view);
     break;
   }
@@ -106,5 +108,4 @@ void InputMappingView::OnGestureEvent(ui::GestureEvent* event) {
   }
 }
 
-}  // namespace input_overlay
-}  // namespace arc
+}  // namespace arc::input_overlay

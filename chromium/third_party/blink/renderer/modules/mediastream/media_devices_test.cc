@@ -93,7 +93,7 @@ class MockMediaDevicesDispatcherHost final
           .push_back(device_info);
 
       device_info.device_id = kFakeAudioInputDeviceId2;
-      device_info.label = "X's AirPods";
+      device_info.label = "Fake Audio Input 2";
       device_info.group_id = kFakeCommonGroupId2;
       enumeration[static_cast<size_t>(
                       blink::mojom::blink::MediaDeviceType::MEDIA_AUDIO_INPUT)]
@@ -148,7 +148,7 @@ class MockMediaDevicesDispatcherHost final
           .push_back(device_info);
 
       device_info.device_id = kFakeAudioOutputDeviceId2;
-      device_info.label = "X's AirPods";
+      device_info.label = "Fake Audio Input 2";
       device_info.group_id = kFakeCommonGroupId2;
       enumeration[static_cast<size_t>(
                       blink::mojom::blink::MediaDeviceType::MEDIA_AUDIO_OUTPUT)]
@@ -337,6 +337,18 @@ class MediaDevicesTest : public PageTestBase {
     return scoped_feature_list_;
   }
 
+  void ExpectEnumerateDevicesHistogramReport(
+      EnumerateDevicesResult expected_result) {
+    histogram_tester_.ExpectTotalCount(
+        "Media.MediaDevices.EnumerateDevices.Result", 1);
+    histogram_tester_.ExpectUniqueSample(
+        "Media.MediaDevices.EnumerateDevices.Result", expected_result, 1);
+    histogram_tester_.ExpectTotalCount(
+        "Media.MediaDevices.EnumerateDevices.Latency", 1);
+    // Legacy latency histogram.
+    histogram_tester_.ExpectTotalCount(kEnumerateDevicesLatencyHistogram, 1);
+  }
+
  private:
   ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
   std::unique_ptr<MockMediaDevicesDispatcherHost> dispatcher_host_;
@@ -347,6 +359,7 @@ class MediaDevicesTest : public PageTestBase {
   bool listener_connection_error_ = false;
   Persistent<MediaDevices> media_devices_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  HistogramTester histogram_tester_;
 };
 
 TEST_F(MediaDevicesTest, GetUserMediaCanBeCalled) {
@@ -366,7 +379,6 @@ TEST_F(MediaDevicesTest, GetUserMediaCanBeCalled) {
 
 TEST_F(MediaDevicesTest, EnumerateDevices) {
   V8TestingScope scope;
-  HistogramTester histogram_tester;
   auto* media_devices = GetMediaDevices(*GetDocument().domWindow());
   media_devices->SetEnumerateDevicesCallbackForTesting(WTF::BindOnce(
       &MediaDevicesTest::DevicesEnumerated, WTF::Unretained(this)));
@@ -378,7 +390,7 @@ TEST_F(MediaDevicesTest, EnumerateDevices) {
   EXPECT_TRUE(devices_enumerated());
   EXPECT_EQ(7u, device_infos().size());
 
-  histogram_tester.ExpectTotalCount(kEnumerateDevicesLatencyHistogram, 1);
+  ExpectEnumerateDevicesHistogramReport(EnumerateDevicesResult::kOk);
 
   // Audio input device with matched output ID.
   Member<MediaDeviceInfo> device = device_infos()[0];
@@ -387,7 +399,7 @@ TEST_F(MediaDevicesTest, EnumerateDevices) {
   EXPECT_FALSE(device->label().empty());
   EXPECT_FALSE(device->groupId().empty());
 
-  // Audio input device with Airpods label.
+  // Audio input device with second matched output ID
   device = device_infos()[1];
   EXPECT_FALSE(device->deviceId().empty());
   EXPECT_EQ("audioinput", device->kind());
@@ -421,7 +433,7 @@ TEST_F(MediaDevicesTest, EnumerateDevices) {
   EXPECT_FALSE(device->label().empty());
   EXPECT_FALSE(device->groupId().empty());
 
-  // Audio output device with Airpods label.
+  // Second audio output device
   device = device_infos()[6];
   EXPECT_FALSE(device->deviceId().empty());
   EXPECT_EQ("audiooutput", device->kind());
@@ -432,19 +444,10 @@ TEST_F(MediaDevicesTest, EnumerateDevices) {
   EXPECT_EQ(device_infos()[0]->groupId(), device_infos()[3]->groupId());
   EXPECT_EQ(device_infos()[0]->groupId(), device_infos()[5]->groupId());
   EXPECT_NE(device_infos()[2]->groupId(), device_infos()[5]->groupId());
-
-  // Verify device labels do not expose user's information.
-  EXPECT_EQ(device_infos()[1]->label(), "AirPods");
-  EXPECT_EQ(device_infos()[6]->label(), "AirPods");
-
-  // Verify the code does not change non-sensitive device labels.
-  EXPECT_EQ(device_infos()[0]->label(), "Fake Audio Input 1");
-  EXPECT_EQ(device_infos()[3]->label(), "Fake Video Input 1");
 }
 
 TEST_F(MediaDevicesTest, EnumerateDevicesAfterConnectionError) {
   V8TestingScope scope;
-  HistogramTester histogram_tester;
   auto* media_devices = GetMediaDevices(*GetDocument().domWindow());
   media_devices->SetEnumerateDevicesCallbackForTesting(WTF::BindOnce(
       &MediaDevicesTest::DevicesEnumerated, WTF::Unretained(this)));
@@ -464,7 +467,8 @@ TEST_F(MediaDevicesTest, EnumerateDevicesAfterConnectionError) {
   EXPECT_TRUE(dispatcher_host_connection_error());
   EXPECT_FALSE(devices_enumerated());
 
-  histogram_tester.ExpectTotalCount(kEnumerateDevicesLatencyHistogram, 1);
+  ExpectEnumerateDevicesHistogramReport(
+      EnumerateDevicesResult::kErrorMediaDevicesDispatcherHostDisconnected);
 }
 
 TEST_F(MediaDevicesTest, SetCaptureHandleConfigAfterConnectionError) {
@@ -509,6 +513,7 @@ TEST_F(MediaDevicesTest, EnumerateDevicesBeforeConnectionError) {
   platform()->RunUntilIdle();
   EXPECT_TRUE(dispatcher_host_connection_error());
   EXPECT_TRUE(devices_enumerated());
+  ExpectEnumerateDevicesHistogramReport(EnumerateDevicesResult::kOk);
 }
 
 TEST_F(MediaDevicesTest, ObserveDeviceChangeEvent) {
@@ -814,14 +819,19 @@ TEST_F(MediaDevicesTest, ProduceCropIdWithValidElement) {
   }
 }
 
+// kRegionCaptureExperimentalSubtypes is default-enabled,
+// functioning as a killswitch in case a regression is discovered
+// when cropping to an element other than a <div> or <iframe>,
+// in which case we can *partially* disable Region Capture.
+// This test ensures the continued viability of this killswitch.
 TEST_F(MediaDevicesTest, ProduceCropIdRejectedIfUnsupportedElementType) {
   V8TestingScope scope;
   auto* media_devices = GetMediaDevices(*GetDocument().domWindow());
   ASSERT_TRUE(media_devices);
 
-  // Currently if the experimental subtypes feature is not enabled, only
-  // <div> and <iframe> are supported.
   scoped_feature_list().Reset();
+  scoped_feature_list().InitAndDisableFeature(
+      blink::features::kRegionCaptureExperimentalSubtypes);
   SetBodyContent(R"HTML(
     <button id='test-button'>Click!</button>
   )HTML");

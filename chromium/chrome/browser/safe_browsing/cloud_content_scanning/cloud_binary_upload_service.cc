@@ -9,11 +9,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
+#include "chrome/browser/policy/management_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -123,12 +123,11 @@ bool CanUseAccessToken(const BinaryUploadService::Request& request,
   if (IsConsumerScanRequest(request))
     return false;
 
-    // Allow the access token to be used on unmanaged devices, but not on
-    // managed devices that aren't affiliated.
-#if !BUILDFLAG(IS_CHROMEOS)
-  if (!policy::BrowserDMTokenStorage::Get()->RetrieveDMToken().is_valid())
+  // Allow the access token to be used on unmanaged devices, but not on
+  // managed devices that aren't affiliated.
+  if (!policy::IsDeviceCloudManaged())
     return true;
-#endif
+
   return chrome::enterprise_util::IsProfileAffiliated(profile);
 }
 
@@ -221,6 +220,12 @@ void CloudBinaryUploadService::MaybeAcknowledge(std::unique_ptr<Ack> ack) {
   // Nothing to do for cloud upload service.
 }
 
+void CloudBinaryUploadService::MaybeCancelRequests(
+    std::unique_ptr<CancelRequests> cancel) {
+  // Nothing to do for cloud upload service.
+  // TODO(1374944): Might consider canceling requests in `request_queue_`.
+}
+
 void CloudBinaryUploadService::MaybeUploadForDeepScanningCallback(
     std::unique_ptr<CloudBinaryUploadService::Request> request,
     bool authorized) {
@@ -249,6 +254,7 @@ void CloudBinaryUploadService::UploadForDeepScanning(
 
   bool is_auth_request = request->IsAuthRequest();
   Request* raw_request = request.get();
+  raw_request->StartRequest();
   active_requests_[raw_request] = std::move(request);
   start_times_[raw_request] = base::TimeTicks::Now();
 
@@ -389,8 +395,7 @@ void CloudBinaryUploadService::OnGetRequestData(Request* request,
   upload_request->set_access_token(request->access_token());
 
   WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->tab_url(), request->per_profile_request(),
-      request->content_analysis_request());
+      request->per_profile_request(), request->content_analysis_request());
 
   // |request| might have been deleted by the call to Start() in tests, so don't
   // dereference it afterwards.
@@ -484,8 +489,7 @@ void CloudBinaryUploadService::FinishRequest(
   // We add the request here in case we never actually uploaded anything, so it
   // wasn't added in OnGetRequestData
   WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->tab_url(), request->per_profile_request(),
-      request->content_analysis_request());
+      request->per_profile_request(), request->content_analysis_request());
   WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       active_tokens_[request], ResultToString(result), response);
 

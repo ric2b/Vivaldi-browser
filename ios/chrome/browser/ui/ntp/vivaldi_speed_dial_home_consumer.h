@@ -6,11 +6,17 @@
 // SpeedDialHomeConsumer provides methods that allow mediators to update the UI.
 @protocol SpeedDialHomeConsumer
 
+/// Notifies the subscriber to refresh the laid out contents.
+- (void)refreshContents;
+
 /// Notifies the subscriber to refresh the top menu items.
 - (void)refreshMenuItems:(NSArray*)items;
 
 /// Notifies the subscriber to refresh the children of the speed dial folders.
 - (void)refreshChildItems:(NSArray*)items;
+
+/// Notifies the subscriber to refresh the layout when style is changed.
+- (void)reloadLayout;
 
 @end
 

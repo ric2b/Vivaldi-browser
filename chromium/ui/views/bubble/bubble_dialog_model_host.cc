@@ -17,7 +17,6 @@
 #include "ui/base/models/dialog_model_field.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/accessibility/accessibility_paint_checks.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -248,15 +247,14 @@ class BubbleDialogModelHost::ContentsView : public BoxLayoutView {
         parent_->model_->dark_mode_icon(parent_->GetPassKey());
     if (!dark_mode_icon.IsEmpty() &&
         color_utils::IsDark(parent_->GetBackgroundColor())) {
-      parent_->SetIcon(dark_mode_icon.GetImage().AsImageSkia());
+      parent_->SetIcon(dark_mode_icon);
       return;
     }
-    parent_->SetIcon(
-        parent_->model_->icon(GetPassKey()).GetImage().AsImageSkia());
+    parent_->SetIcon(parent_->model_->icon(GetPassKey()));
   }
 
  private:
-  const raw_ptr<BubbleDialogModelHost> parent_;
+  const raw_ptr<BubbleDialogModelHost, DanglingUntriaged> parent_;
 };
 
 class BubbleDialogModelHost::LayoutConsensusView : public View {
@@ -434,8 +432,7 @@ BubbleDialogModelHost::BubbleDialogModelHost(
   }
 
   if (!model_->icon(GetPassKey()).IsEmpty()) {
-    // TODO(pbos): Consider adding ImageModel support to SetIcon().
-    SetIcon(model_->icon(GetPassKey()).GetImage().AsImageSkia());
+    SetIcon(model_->icon(GetPassKey()));
     SetShowIcon(true);
   }
 
@@ -797,12 +794,6 @@ void BubbleDialogModelHost::AddOrUpdateTextfield(
   // TODO(pbos): Support updates to the existing model.
 
   auto textfield = std::make_unique<Textfield>();
-  // TODO(crbug.com/1218186): Remove this, this is in place temporarily to be
-  // able to submit accessibility checks, but this focusable View needs to
-  // add a name so that the screen reader knows what to announce. The
-  // placeholder name may need to be pushed into DialogModel, unless we can tie
-  // this to the label. Maybe SetAssociatedField on Textfield is sufficient?
-  textfield->SetProperty(kSkipAccessibilityPaintChecks, true);
   textfield->SetAccessibleName(
       model_field->accessible_name(GetPassKey()).empty()
           ? model_field->label(GetPassKey())
@@ -901,7 +892,7 @@ BubbleDialogModelHost::FindDialogModelHostField(ui::DialogModelField* field) {
     if (info.dialog_model_field == field)
       return info;
   }
-  NOTREACHED();
+  // TODO(pbos): `field` could correspond to a button.
   return {};
 }
 
@@ -917,8 +908,8 @@ BubbleDialogModelHost::FindDialogModelHostField(View* view) {
 
 View* BubbleDialogModelHost::GetTargetView(
     const DialogModelHostField& field_view_info) {
-  return field_view_info.focusable_view ? field_view_info.focusable_view
-                                        : field_view_info.field_view;
+  return field_view_info.focusable_view ? field_view_info.focusable_view.get()
+                                        : field_view_info.field_view.get();
 }
 
 bool BubbleDialogModelHost::DialogModelLabelRequiresStyledLabel(

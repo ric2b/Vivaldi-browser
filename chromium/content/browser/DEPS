@@ -13,11 +13,13 @@ include_rules = [
   "+components/file_access",
   "+components/filename_generation",
   "+components/permissions/features.h",
+  "+components/power_monitor",
   "+components/services/font",
   "+components/services/filesystem",
   "+components/services/quarantine/test_support.h",
   "+components/services/quarantine/quarantine.h",
   "+components/services/screen_ai/buildflags",
+  "+components/services/screen_ai/public/cpp",
   "+components/services/storage",
   "+components/services/storage/public",
   "+components/session_manager/core",
@@ -121,6 +123,8 @@ include_rules = [
   "+third_party/blink/public/web/web_drag_status.h",
   "+third_party/blink/public/web/web_serialized_script_value_version.h",
   "+third_party/blink/public/mojom/frame/tree_scope_type.mojom.h",
+
+  "+tools/v8_context_snapshot/buildflags.h",
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

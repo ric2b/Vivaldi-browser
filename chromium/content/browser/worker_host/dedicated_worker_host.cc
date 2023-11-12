@@ -49,15 +49,12 @@
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/mojom/blocked_by_response_reason.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "storage/browser/blob/blob_url_store_impl.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
-
-#if BUILDFLAG(IS_FUCHSIA)
-#include "content/browser/renderer_host/media/media_resource_provider_fuchsia.h"
-#endif
 
 namespace content {
 
@@ -221,7 +218,7 @@ void DedicatedWorkerHost::StartScriptLoad(
   auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
       worker_process_host_->GetStoragePartition());
 
-  // Get nearest ancestor render frame host in order to determine the
+  // Get nearest ancestor RenderFrameHost in order to determine the
   // top-frame origin to use for the network isolation key.
   RenderFrameHostImpl* nearest_ancestor_render_frame_host =
       RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
@@ -307,7 +304,7 @@ void DedicatedWorkerHost::StartScriptLoad(
   network::mojom::ClientSecurityStatePtr client_security_state;
   if (creator_render_frame_host) {
     client_security_state =
-        creator_render_frame_host->BuildClientSecurityState();
+        creator_render_frame_host->BuildClientSecurityStateForWorkers();
   } else {
     client_security_state = creator_worker->client_security_state()->Clone();
   }
@@ -406,7 +403,8 @@ void DedicatedWorkerHost::DidStartScriptLoad(
       worker_client_security_state_->private_network_request_policy =
           DerivePrivateNetworkRequestPolicy(
               worker_client_security_state_->ip_address_space,
-              worker_client_security_state_->is_web_secure_context);
+              worker_client_security_state_->is_web_secure_context,
+              PrivateNetworkRequestContext::kWorker);
     } else {
       // Preserve incorrect functionality if PNA is not enabled.
       worker_client_security_state_ =
@@ -729,6 +727,18 @@ void DedicatedWorkerHost::CreateBroadcastChannelProvider(
       std::move(receiver));
 }
 
+void DedicatedWorkerHost::CreateBlobUrlStoreProvider(
+    mojo::PendingReceiver<blink::mojom::BlobURLStore> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
+      GetProcessHost()->GetStoragePartition());
+
+  storage_partition_impl->GetBlobUrlRegistry()->AddReceiver(
+      GetStorageKey(), std::move(receiver),
+      storage::BlobURLValidityCheckBehavior::
+          ALLOW_OPAQUE_ORIGIN_STORAGE_KEY_MISMATCH);
+}
+
 void DedicatedWorkerHost::CreateCodeCacheHost(
     mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver) {
   // Create a new CodeCacheHostImpl and bind it to the given receiver.
@@ -753,24 +763,6 @@ void DedicatedWorkerHost::BindSerialService(
   ancestor_render_frame_host->BindSerialService(std::move(receiver));
 }
 #endif
-
-#if BUILDFLAG(IS_FUCHSIA)
-void DedicatedWorkerHost::BindFuchsiaMediaResourceProvider(
-    mojo::PendingReceiver<media::mojom::FuchsiaMediaResourceProvider>
-        receiver) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderFrameHostImpl* ancestor_render_frame_host =
-      RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
-  if (!ancestor_render_frame_host) {
-    // The ancestor frame may have already been closed. In that case, the worker
-    // will soon be terminated too, so abort the connection.
-    return;
-  }
-
-  MediaResourceProviderFuchsia::Bind(ancestor_render_frame_host,
-                                     std::move(receiver));
-}
-#endif  // BUILDFLAG(IS_FUCHSIA)
 
 void DedicatedWorkerHost::CreateBucketManagerHost(
     mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) {
@@ -1004,6 +996,13 @@ void DedicatedWorkerHost::BindCacheStorageInternal(
   worker_process_host_->BindCacheStorage(cross_origin_embedder_policy(),
                                          std::move(coep_reporter),
                                          bucket_locator, std::move(receiver));
+}
+
+void DedicatedWorkerHost::GetSandboxedFileSystemForBucket(
+    const storage::BucketInfo& bucket,
+    blink::mojom::BucketHost::GetDirectoryCallback callback) {
+  GetProcessHost()->GetSandboxedFileSystemForBucket(bucket.ToBucketLocator(),
+                                                    std::move(callback));
 }
 
 blink::scheduler::WebSchedulerTrackedFeatures

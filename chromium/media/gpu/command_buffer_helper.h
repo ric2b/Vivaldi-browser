@@ -51,6 +51,20 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
   CommandBufferHelper(const CommandBufferHelper&) = delete;
   CommandBufferHelper& operator=(const CommandBufferHelper&) = delete;
 
+  // Waits for a SyncToken, then runs |done_cb|.
+  //
+  // |done_cb| may be destructed without running if the stub is destroyed.
+  //
+  // TODO(sandersd): Currently it is possible to lose the stub while
+  // PictureBufferManager is waiting for all picture buffers, which results in a
+  // decoding softlock. Notification of wait failure (or just context/stub lost)
+  // is probably necessary.
+  // TODO(blundell): Consider inlining this method in the one Android caller and
+  // eliminating this class being built on Android altogether.
+  virtual void WaitForSyncToken(gpu::SyncToken sync_token,
+                                base::OnceClosure done_cb) = 0;
+
+#if !BUILDFLAG(IS_ANDROID)
   // Gets the associated GLContext.
   //
   // Used by DXVAVDA to test for D3D11 support, and by V4L2VDA to create
@@ -106,14 +120,21 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
   // Sets the cleared flag on level 0 of the texture.
   virtual void SetCleared(GLuint service_id) = 0;
 
-  // Binds level 0 of the texture to an image.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  // Binds level 0 of the texture to an unbound image.
   //
-  // If the sampler binding already exists, set |client_managed| to true.
-  // Otherwise set it to false, and BindTexImage()/CopyTexImage() will be called
-  // when the texture is used.
-  virtual bool BindImage(GLuint service_id,
-                         gl::GLImage* image,
-                         bool client_managed) = 0;
+  // BindTexImage()/CopyTexImage() will be called when the texture is used.
+  virtual bool BindDecoderManagedImage(GLuint service_id,
+                                       gl::GLImage* image) = 0;
+#else
+  // Binds level 0 of the texture to an image for which the sampler binding
+  // already exists.
+  //
+  // BindTexImage()/CopyTexImage() will *not* be called when the texture is
+  // used.
+  virtual bool BindClientManagedImage(GLuint service_id,
+                                      gl::GLImage* image) = 0;
+#endif
 
   // Creates a mailbox for a texture.
   //
@@ -121,17 +142,6 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
   // current implementation returns an empty (zero) mailbox. One solution would
   // be to add a HasStub() method, and not define behavior when it is false.
   virtual gpu::Mailbox CreateMailbox(GLuint service_id) = 0;
-
-  // Waits for a SyncToken, then runs |done_cb|.
-  //
-  // |done_cb| may be destructed without running if the stub is destroyed.
-  //
-  // TODO(sandersd): Currently it is possible to lose the stub while
-  // PictureBufferManager is waiting for all picture buffers, which results in a
-  // decoding softlock. Notification of wait failure (or just context/stub lost)
-  // is probably necessary.
-  virtual void WaitForSyncToken(gpu::SyncToken sync_token,
-                                base::OnceClosure done_cb) = 0;
 
   // Set the callback to be called when our stub is destroyed. This callback
   // may not change the current context.
@@ -142,6 +152,7 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
 
   // Does this command buffer support ARB_texture_rectangle.
   virtual bool SupportsTextureRectangle() const = 0;
+#endif
 
  protected:
   explicit CommandBufferHelper(

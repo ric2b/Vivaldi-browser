@@ -40,11 +40,16 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/default_tick_clock.h"
+#include "base/types/pass_key.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
+
+namespace internal {
+class SequenceManagerThreadDelegate;
+}
 
 namespace trace_event {
 class ConvertableToTraceFormat;
@@ -61,7 +66,15 @@ namespace internal {
 
 class TaskQueueImpl;
 class DefaultWakeUpQueue;
+class SequenceManagerImpl;
 class ThreadControllerImpl;
+
+// A private factory method for SequenceManagerThreadDelegate which is
+// equivalent to sequence_manager::CreateUnboundSequenceManager() but returns
+// the underlying impl.
+std::unique_ptr<SequenceManagerImpl> CreateUnboundSequenceManagerImpl(
+    PassKey<base::internal::SequenceManagerThreadDelegate>,
+    SequenceManager::Settings settings);
 
 // The task queue manager provides N task queues and a selector interface for
 // choosing which task queue to service next. Each task queue consists of two
@@ -86,20 +99,6 @@ class BASE_EXPORT SequenceManagerImpl
   SequenceManagerImpl(const SequenceManagerImpl&) = delete;
   SequenceManagerImpl& operator=(const SequenceManagerImpl&) = delete;
   ~SequenceManagerImpl() override;
-
-  // Assume direct control over current thread and create a SequenceManager.
-  // This function should be called only once per thread.
-  // This function assumes that a task execution environment is already
-  // initialized for the current thread.
-  static std::unique_ptr<SequenceManagerImpl> CreateOnCurrentThread(
-      SequenceManager::Settings settings = SequenceManager::Settings());
-
-  // Create an unbound SequenceManager (typically for a future thread). The
-  // SequenceManager can be initialized on the current thread and then needs to
-  // be bound and initialized on the target thread by calling one of the Bind*()
-  // methods.
-  static std::unique_ptr<SequenceManagerImpl> CreateUnbound(
-      SequenceManager::Settings settings);
 
   // Initializes the state of all the sequence manager features. Must be invoked
   // after FeatureList initialization.
@@ -141,8 +140,6 @@ class BASE_EXPORT SequenceManagerImpl
   scoped_refptr<TaskQueue> CreateTaskQueue(
       const TaskQueue::Spec& spec) override;
   std::string DescribeAllPendingTasks() const override;
-  std::unique_ptr<NativeWorkHandle> OnNativeWorkPending(
-      TaskQueue::QueuePriority priority) override;
   void PrioritizeYieldingToNative(base::TimeTicks prioritize_until) override;
   void EnablePeriodicYieldingToNative(base::TimeDelta interval) override;
   void AddTaskObserver(TaskObserver* task_observer) override;
@@ -223,13 +220,40 @@ class BASE_EXPORT SequenceManagerImpl
   friend class ::base::sequence_manager::SequenceManagerForTest;
 
  private:
-  class NativeWorkHandleImpl;
-
   // Returns the SequenceManager running the
   // current thread. It must only be used on the thread it was obtained.
   // Only to be used by CurrentThread for the moment
   static SequenceManagerImpl* GetCurrent();
   friend class ::base::CurrentThread;
+
+  // Factory friends to call into private creation methods.
+  friend std::unique_ptr<SequenceManager>
+      sequence_manager::CreateSequenceManagerOnCurrentThread(
+          SequenceManager::Settings);
+  friend std::unique_ptr<SequenceManager>
+  sequence_manager::CreateSequenceManagerOnCurrentThreadWithPump(
+      std::unique_ptr<MessagePump> message_pump,
+      SequenceManager::Settings);
+  friend std::unique_ptr<SequenceManager>
+      sequence_manager::CreateUnboundSequenceManager(SequenceManager::Settings);
+  friend std::unique_ptr<SequenceManagerImpl>
+      sequence_manager::internal::CreateUnboundSequenceManagerImpl(
+          PassKey<base::internal::SequenceManagerThreadDelegate>,
+          SequenceManager::Settings);
+
+  // Assume direct control over current thread and create a SequenceManager.
+  // This function should be called only once per thread.
+  // This function assumes that a task execution environment is already
+  // initialized for the current thread.
+  static std::unique_ptr<SequenceManagerImpl> CreateOnCurrentThread(
+      SequenceManager::Settings settings);
+
+  // Create an unbound SequenceManager (typically for a future thread). The
+  // SequenceManager can be initialized on the current thread and then needs to
+  // be bound and initialized on the target thread by calling one of the Bind*()
+  // methods.
+  static std::unique_ptr<SequenceManagerImpl> CreateUnbound(
+      SequenceManager::Settings settings);
 
   enum class ProcessTaskResult {
     kDeferred,
@@ -340,10 +364,6 @@ class BASE_EXPORT SequenceManagerImpl
     // If non-null, invoked the next time OnSystemIdle() completes without
     // scheduling additional work.
     OnceClosure on_next_idle_callback;
-
-    // By default native work is not prioritized at all.
-    std::multiset<TaskQueue::QueuePriority> pending_native_work{
-        TaskQueue::kBestEffortPriority};
   };
 
   void CompleteInitializationOnBoundThread();
@@ -421,10 +441,6 @@ class BASE_EXPORT SequenceManagerImpl
   // in SelectNextTask().
   absl::optional<SelectedTask> SelectNextTaskImpl(LazyNow& lazy_now,
                                                   SelectTaskOption option);
-
-  // Check if a task of priority |priority| should run given the pending set of
-  // native work.
-  bool ShouldRunTaskOfPriority(TaskQueue::QueuePriority priority) const;
 
   // Returns a wake-up for the next delayed task which is not ripe for
   // execution, or nullopt if `option` is `kSkipDelayedTask` or there

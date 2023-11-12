@@ -16,8 +16,8 @@ import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {listenOnce} from 'chrome://resources/js/util.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {listenOnce} from 'chrome://resources/js/util_ts.js';
 
 import {Bookmark} from './bookmark_type.js';
 import {BrowserApi} from './browser_api.js';
@@ -287,6 +287,10 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     return BACKGROUND_COLOR;
   }
 
+  setPluginSrc(plugin: HTMLEmbedElement) {
+    plugin.src = this.browserApi!.getStreamInfo().streamUrl;
+  }
+
   init(browserApi: BrowserApi) {
     this.initInternal(
         browserApi, this.$.scroller, this.$.sizer, this.$.content);
@@ -449,6 +453,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       const result =
           await this.pluginController_!.save(SaveRequestType.ANNOTATION);
       // Data always exists when save is called with requestType = ANNOTATION.
+      assert(result);
 
       record(UserAction.ENTER_ANNOTATION_MODE);
       this.annotationMode_ = true;
@@ -500,43 +505,52 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     this.currentController.setDisplayAnnotations(e.detail);
   }
 
-  private onPresentClick_() {
+  private async enterPresentationMode_(): Promise<void> {
     const scroller = this.$.scroller;
 
     this.viewport.saveZoomState();
 
-    Promise
-        .all([
-          eventToPromise('fullscreenchange', scroller),
-          scroller.requestFullscreen(),
-        ])
-        .then(() => {
-          this.forceFit(FittingType.FIT_TO_HEIGHT);
+    await Promise.all([
+      eventToPromise('fullscreenchange', scroller),
+      scroller.requestFullscreen(),
+    ]);
 
-          // Switch viewport's wheel behavior.
-          this.viewport.setPresentationMode(true);
+    this.forceFit(FittingType.FIT_TO_HEIGHT);
 
-          // Set presentation mode, which restricts the content to read only
-          // (e.g. disable forms and links).
-          this.pluginController_!.setPresentationMode(true);
+    // Switch viewport's wheel behavior.
+    this.viewport.setPresentationMode(true);
 
-          // Revert back to the normal state when exiting Presentation mode.
-          eventToPromise('fullscreenchange', scroller).then(() => {
-            assert(document.fullscreenElement === null);
-            this.viewport.setPresentationMode(false);
-            this.pluginController_!.setPresentationMode(false);
+    // Set presentation mode, which restricts the content to read only
+    // (e.g. disable forms and links).
+    this.pluginController_!.setPresentationMode(true);
 
-            // Ensure that directional keys still work after exiting.
-            this.shadowRoot!.querySelector('embed')!.focus();
-
-            // Set zoom back to original zoom before presentation mode.
-            this.viewport.restoreZoomState();
-          });
-
-          // Nothing else to do here. The viewport will be updated as a result
-          // of a 'resize' event callback.
-        });
+    // Nothing else to do here. The viewport will be updated as a result
+    // of a 'resize' event callback.
   }
+
+  private exitPresentationMode_(): void {
+    // Revert back to the normal state when exiting Presentation mode.
+    assert(document.fullscreenElement === null);
+    this.viewport.setPresentationMode(false);
+    this.pluginController_!.setPresentationMode(false);
+
+    // Ensure that directional keys still work after exiting.
+    this.shadowRoot!.querySelector('embed')!.focus();
+
+    // Set zoom back to original zoom before presentation mode.
+    this.viewport.restoreZoomState();
+  }
+
+  private async onPresentClick_() {
+    await this.enterPresentationMode_();
+
+    // When fullscreen changes, it means that the user exited Presentation
+    // mode.
+    await eventToPromise('fullscreenchange', this.$.scroller);
+
+    this.exitPresentationMode_();
+  }
+
 
   private onPropertiesClick_() {
     assert(!this.showPropertiesDialog_);
@@ -569,9 +583,9 @@ export class PdfViewerElement extends PdfViewerBaseElement {
    * @param message Message received from the plugin containing the x and y to
    *     navigate to in screen coordinates.
    */
-  private goToPageAndXY_(
+  private goToPageAndXy_(
       origin: ChangePageOrigin, page: number, message: Point) {
-    this.viewport.goToPageAndXY(page, message.x, message.y);
+    this.viewport.goToPageAndXy(page, message.x, message.y);
     if (origin === ChangePageOrigin.BOOKMARK) {
       record(UserAction.FOLLOW_BOOKMARK);
     }
@@ -632,7 +646,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     this.pluginController_!.getPasswordComplete(event.detail.password);
   }
 
-  updateUIForViewportChange() {
+  updateUiForViewportChange() {
     // Update toolbar elements.
     this.clockwiseRotations_ = this.viewport.getClockwiseRotations();
     this.pageNo_ = this.viewport.getMostVisiblePage() + 1;
@@ -926,7 +940,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
   private onChangePageAndXy_(e: CustomEvent<ChangePageAndXyDetail>) {
     const point = this.viewport.convertPageToScreen(e.detail.page, e.detail);
-    this.goToPageAndXY_(e.detail.origin, e.detail.page, point);
+    this.goToPageAndXy_(e.detail.origin, e.detail.page, point);
   }
 
   private onNavigate_(e: CustomEvent<NavigateDetail>) {

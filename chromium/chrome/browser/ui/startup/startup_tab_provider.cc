@@ -15,12 +15,16 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "components/custom_handlers/protocol_handler.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
@@ -559,15 +563,41 @@ StartupTabProviderImpl::ParseTabFromCommandLineArg(
       return {CommandLineTabsPresent::kYes, std::move(url)};
     }
   } else {
-    // NOTE(bjorgvin@vivaldi.com): VB-35394 Map mailto: URL to internal URL
 #if !BUILDFLAG(IS_ANDROID)
     if (base::StartsWith(arg, FILE_PATH_LITERAL("mailto:"))) {
-      std::string internal_mailto_url =
-          vivaldi::kVivaldiMailURL + ("?path=composer&mailto=" +
+      if (maybe_profile == nullptr) {
+        return {CommandLineTabsPresent::kUnknown, GURL()};
+      }
+      // NOTE(bjorgvin@vivaldi.com): VB-35394 Map mailto: URL to internal URL
+      bool is_default_protocol_handler_registered = false;
+      custom_handlers::ProtocolHandlerRegistry* registry =
+          ProtocolHandlerRegistryFactory::GetForBrowserContext(maybe_profile);
+
+      if (registry == nullptr) {
+        return {CommandLineTabsPresent::kUnknown, GURL()};
+      }
+
+      std::vector<std::string> protocols;
+      registry->GetRegisteredProtocols(&protocols);
+
+      for (const auto& protocol : protocols) {
+        custom_handlers::ProtocolHandlerRegistry::ProtocolHandlerList handlers =
+            registry->GetHandlersFor(protocol);
+
+        if (protocol == "mailto") {
+          GURL url(protocol + "://");
+          is_default_protocol_handler_registered =
+              shell_integration::IsDefaultProtocolClient(protocol);
+        }
+      }
+      if (!is_default_protocol_handler_registered) {
+        std::string internal_mailto_url =
+            vivaldi::kVivaldiMailURL +
+            ("?path=composer&mailto=" +
             base::EscapeQueryParamValue(base::FilePath(arg).MaybeAsASCII(),
-                                       true));
-      return {CommandLineTabsPresent::kYes,
-              GURL(internal_mailto_url)};
+                                        true));
+        return {CommandLineTabsPresent::kYes, GURL(internal_mailto_url)};
+      }
     }
 #endif
 

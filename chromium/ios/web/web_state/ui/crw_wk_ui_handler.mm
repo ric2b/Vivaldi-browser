@@ -7,10 +7,11 @@
 #import "base/logging.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/web/common/features.h"
 #import "ios/web/navigation/wk_navigation_action_util.h"
 #import "ios/web/navigation/wk_navigation_util.h"
+#import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/ui/context_menu_params.h"
-#import "ios/web/public/ui/java_script_dialog_type.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/web_state/ui/crw_wk_ui_handler_delegate.h"
 #import "ios/web/web_state/user_interaction_state.h"
@@ -19,6 +20,7 @@
 #import "ios/web/webui/mojo_facade.h"
 #import "net/base/mac/url_conversions.h"
 #import "url/gurl.h"
+#import "url/origin.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -84,21 +86,32 @@ enum class PermissionRequest {
                                (void (^)(WKPermissionDecision decision))
                                    decisionHandler API_AVAILABLE(ios(15.0)) {
   PermissionRequest request;
+  NSArray<NSNumber*>* permissionsRequested;
   switch (type) {
     case WKMediaCaptureTypeCamera:
       request = PermissionRequest::RequestCamera;
+      permissionsRequested = @[ @(web::PermissionCamera) ];
       break;
     case WKMediaCaptureTypeMicrophone:
       request = PermissionRequest::RequestMicrophone;
+      permissionsRequested = @[ @(web::PermissionMicrophone) ];
       break;
     case WKMediaCaptureTypeCameraAndMicrophone:
       request = PermissionRequest::RequestCameraAndMicrophone;
+      permissionsRequested =
+          @[ @(web::PermissionCamera), @(web::PermissionMicrophone) ];
       break;
   }
   base::UmaHistogramEnumeration(kPermissionRequestsHistogram, request);
-  web::GetWebClient()->WillDisplayMediaCapturePermissionPrompt(
-      self.webStateImpl);
-  decisionHandler(WKPermissionDecisionPrompt);
+  if (web::features::IsFullscreenAPIEnabled()) {
+    [webView closeAllMediaPresentationsWithCompletionHandler:^{
+      [self displayPromptForPermissions:permissionsRequested
+                    withDecisionHandler:decisionHandler];
+    }];
+    return;
+  }
+  [self displayPromptForPermissions:permissionsRequested
+                withDecisionHandler:decisionHandler];
 }
 
 - (WKWebView*)webView:(WKWebView*)webView
@@ -174,13 +187,16 @@ enum class PermissionRequest {
     runJavaScriptAlertPanelWithMessage:(NSString*)message
                       initiatedByFrame:(WKFrameInfo*)frame
                      completionHandler:(void (^)())completionHandler {
-  [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_ALERT
-                 initiatedByFrame:frame
-                          message:message
-                      defaultText:nil
-                       completion:^(BOOL, NSString*) {
-                         completionHandler();
-                       }];
+  DCHECK(completionHandler);
+  GURL requestURL = net::GURLWithNSURL(frame.request.URL);
+  if (![self shouldPresentJavaScriptDialogForRequestURL:requestURL
+                                            isMainFrame:frame.mainFrame]) {
+    completionHandler();
+    return;
+  }
+
+  self.webStateImpl->RunJavaScriptAlertDialog(
+      requestURL, message, base::BindOnce(completionHandler));
 }
 
 - (void)webView:(WKWebView*)webView
@@ -188,15 +204,17 @@ enum class PermissionRequest {
                         initiatedByFrame:(WKFrameInfo*)frame
                        completionHandler:
                            (void (^)(BOOL result))completionHandler {
-  [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_CONFIRM
-                 initiatedByFrame:frame
-                          message:message
-                      defaultText:nil
-                       completion:^(BOOL success, NSString*) {
-                         if (completionHandler) {
-                           completionHandler(success);
-                         }
-                       }];
+  DCHECK(completionHandler);
+
+  GURL requestURL = net::GURLWithNSURL(frame.request.URL);
+  if (![self shouldPresentJavaScriptDialogForRequestURL:requestURL
+                                            isMainFrame:frame.mainFrame]) {
+    completionHandler(NO);
+    return;
+  }
+
+  self.webStateImpl->RunJavaScriptConfirmDialog(
+      requestURL, message, base::BindOnce(completionHandler));
 }
 
 - (void)webView:(WKWebView*)webView
@@ -213,15 +231,17 @@ enum class PermissionRequest {
     return;
   }
 
-  [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_PROMPT
-                 initiatedByFrame:frame
-                          message:prompt
-                      defaultText:defaultText
-                       completion:^(BOOL, NSString* input) {
-                         if (completionHandler) {
-                           completionHandler(input);
-                         }
-                       }];
+  DCHECK(completionHandler);
+
+  GURL requestURL = net::GURLWithNSURL(frame.request.URL);
+  if (![self shouldPresentJavaScriptDialogForRequestURL:requestURL
+                                            isMainFrame:frame.mainFrame]) {
+    completionHandler(nil);
+    return;
+  }
+
+  self.webStateImpl->RunJavaScriptPromptDialog(
+      requestURL, prompt, defaultText, base::BindOnce(completionHandler));
 }
 
 - (void)webView:(WKWebView*)webView
@@ -256,40 +276,49 @@ enum class PermissionRequest {
 
 #pragma mark - Helper
 
-// Helper to respond to `webView:runJavaScript...| delegate methods.
-// `completionHandler` must not be nil.
-- (void)runJavaScriptDialogOfType:(web::JavaScriptDialogType)type
-                 initiatedByFrame:(WKFrameInfo*)frame
-                          message:(NSString*)message
-                      defaultText:(NSString*)defaultText
-                       completion:(void (^)(BOOL, NSString*))completionHandler {
-  DCHECK(completionHandler);
-
-  // JavaScript dialogs should not be presented if there is no information about
-  // the requesting page's URL.
-  GURL requestURL = net::GURLWithNSURL(frame.request.URL);
-  if (!requestURL.is_valid()) {
-    completionHandler(NO, nil);
+// Helper that displays a prompt to the user that asks for access to
+// `permissions`.
+- (void)displayPromptForPermissions:(NSArray<NSNumber*>*)permissions
+                withDecisionHandler:
+                    (void (^)(WKPermissionDecision decision))handler
+    API_AVAILABLE(ios(15.0)) {
+  web::WebStateImpl* webStateImpl = self.webStateImpl;
+  if (!webStateImpl) {
+    // If the web state doesn't exist, it is likely that the web view isn't
+    // visible to the user, or that some other issue has happened. Deny
+    // permission.
+    handler(WKPermissionDecisionDeny);
     return;
   }
+  web::GetWebClient()->WillDisplayMediaCapturePermissionPrompt(webStateImpl);
+  if (web::features::IsMediaPermissionsControlEnabled()) {
+    webStateImpl->RequestPermissionsWithDecisionHandler(permissions, handler);
+  } else {
+    handler(WKPermissionDecisionPrompt);
+  }
+}
 
-  if (self.webStateImpl->GetVisibleURL().DeprecatedGetOriginAsURL() !=
-          requestURL.DeprecatedGetOriginAsURL() &&
-      frame.mainFrame) {
+// Helper that returns whether or not a dialog should be presented for a
+// frame with `requestURL`.
+- (BOOL)shouldPresentJavaScriptDialogForRequestURL:(const GURL&)requestURL
+                                       isMainFrame:(BOOL)isMainFrame {
+  // JavaScript dialogs should not be presented if there is no information about
+  // the requesting page's URL.
+  if (!requestURL.is_valid()) {
+    return NO;
+  }
+
+  if (isMainFrame && url::Origin::Create(self.webStateImpl->GetVisibleURL()) !=
+                         url::Origin::Create(requestURL)) {
     // Dialog was requested by web page's main frame, but visible URL has
     // different origin. This could happen if the user has started a new
     // browser initiated navigation. There is no value in showing dialogs
     // requested by page, which this WebState is about to leave. But presenting
     // the dialog can lead to phishing and other abusive behaviors.
-    completionHandler(NO, nil);
-    return;
+    return NO;
   }
 
-  self.webStateImpl->RunJavaScriptDialog(
-      requestURL, type, message, defaultText,
-      base::BindOnce(^(bool success, NSString* input) {
-        completionHandler(success, input);
-      }));
+  return YES;
 }
 
 @end

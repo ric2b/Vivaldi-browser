@@ -45,6 +45,7 @@
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_variant.h"
 #include "base/win/win_util.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/updater/app/server/win/com_classes.h"
 #include "chrome/updater/app/server/win/updater_idl.h"
@@ -55,12 +56,13 @@
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/test/integration_tests_impl.h"
-#include "chrome/updater/unittest_util.h"
-#include "chrome/updater/unittest_util_win.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/unittest_util.h"
+#include "chrome/updater/util/unittest_util_win.h"
+#include "chrome/updater/util/util.h"
+#include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/task_scheduler.h"
 #include "chrome/updater/win/test/test_executables.h"
@@ -68,7 +70,6 @@
 #include "chrome/updater/win/ui/l10n_util.h"
 #include "chrome/updater/win/ui/resources/updater_installer_strings.h"
 #include "chrome/updater/win/win_constants.h"
-#include "chrome/updater/win/win_util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -89,14 +90,24 @@ enum class CheckInstallationVersions {
   kCheckActiveAndSxS = 1,
 };
 
+// Creates an instance of the class specified by `clsid` in a local server.
+template <typename ComInterface>
+HRESULT CreateLocalServer(GUID clsid,
+                          Microsoft::WRL::ComPtr<ComInterface>& server) {
+  // crbug.com/1259178 - there is known race condition between the COM server
+  // shutdown and server start up.
+  base::PlatformThread::Sleep(kCreateUpdaterInstanceDelay);
+  return ::CoCreateInstance(clsid, nullptr, CLSCTX_LOCAL_SERVER,
+                            IID_PPV_ARGS(&server));
+}
+
 // Returns the root directory where the updater product is installed. This
 // is the parent directory where the versioned directories of the
 // updater instances are.
 absl::optional<base::FilePath> GetProductPath(UpdaterScope scope) {
   base::FilePath app_data_dir;
-  if (!base::PathService::Get(scope == UpdaterScope::kSystem
-                                  ? base::DIR_PROGRAM_FILES
-                                  : base::DIR_LOCAL_APP_DATA,
+  if (!base::PathService::Get(IsSystemInstall(scope) ? base::DIR_PROGRAM_FILES
+                                                     : base::DIR_LOCAL_APP_DATA,
                               &app_data_dir)) {
     return absl::nullopt;
   }
@@ -235,7 +246,7 @@ void CheckInstallation(UpdaterScope scope,
       EXPECT_TRUE(base::CommandLine::FromString(uninstall_cmd_line_string)
                       .HasSwitch(kUninstallIfUnusedSwitch));
 
-      if (scope == UpdaterScope::kUser) {
+      if (!IsSystemInstall(scope)) {
         std::wstring run_updater_wake_command;
         EXPECT_EQ(ERROR_SUCCESS,
                   base::win::RegKey(root, REGSTR_PATH_RUN, KEY_READ)
@@ -255,7 +266,7 @@ void CheckInstallation(UpdaterScope scope,
 
       EXPECT_FALSE(RegKeyExists(root, UPDATER_KEY));
 
-      if (scope == UpdaterScope::kUser) {
+      if (!IsSystemInstall(scope)) {
         EXPECT_FALSE(base::win::RegKey(root, REGSTR_PATH_RUN, KEY_READ)
                          .HasValue(GetTaskNamePrefix(scope).c_str()));
       }
@@ -268,21 +279,22 @@ void CheckInstallation(UpdaterScope scope,
                                                     : std::vector<CLSID>())) {
     EXPECT_EQ(is_installed,
               RegKeyExistsCOM(root, GetComServerClsidRegistryPath(clsid)));
-    if (scope == UpdaterScope::kSystem) {
+    if (IsSystemInstall(scope)) {
       EXPECT_EQ(is_installed,
                 RegKeyExistsCOM(root, GetComServerAppidRegistryPath(clsid)));
     }
   }
 
-  for (const IID& iid : JoinVectors(
-           GetSideBySideInterfaces(),
-           is_active_and_sxs ? GetActiveInterfaces() : std::vector<IID>())) {
+  for (const IID& iid :
+       JoinVectors(GetSideBySideInterfaces(scope),
+                   is_active_and_sxs ? GetActiveInterfaces(scope)
+                                     : std::vector<IID>())) {
     EXPECT_EQ(is_installed, RegKeyExistsCOM(root, GetComIidRegistryPath(iid)));
     EXPECT_EQ(is_installed,
               RegKeyExistsCOM(root, GetComTypeLibRegistryPath(iid)));
   }
 
-  if (scope == UpdaterScope::kSystem) {
+  if (IsSystemInstall(scope)) {
     for (const bool is_internal_service : {false, true}) {
       if (!is_active_and_sxs && !is_internal_service)
         continue;
@@ -305,10 +317,11 @@ void CheckInstallation(UpdaterScope scope,
     ASSERT_EQ(task_info.exec_actions.size(), 1u);
     EXPECT_STREQ(
         task_info.exec_actions[0].arguments.c_str(),
-        base::StrCat(
-            {L"--wake ", scope == UpdaterScope::kSystem ? L"--system " : L"",
-             L"--enable-logging "
-             L"--vmodule=*/chrome/updater/*=2,*/components/winhttp/*=2"})
+        base::StrCat({L"--wake ", IsSystemInstall(scope) ? L"--system " : L"",
+                      L"--enable-logging "
+                      L"--vmodule=*/components/winhttp/*=2,"
+                      L"*/components/update_client/*=2,"
+                      L"*/chrome/updater/*=2"})
             .c_str());
   }
 
@@ -338,22 +351,22 @@ bool IsUpdaterRunning() {
   return test::IsProcessRunning(GetExecutableRelativePath().value());
 }
 
-void SleepFor(int seconds) {
-  VLOG(2) << "Sleeping " << seconds << " seconds...";
-  base::WaitableEvent().TimedWait(base::Seconds(seconds));
+void SleepFor(const base::TimeDelta& interval) {
+  VLOG(2) << "Sleeping " << interval.InSecondsF() << " seconds...";
+  base::PlatformThread::Sleep(interval);
   VLOG(2) << "Sleep complete.";
 }
 
 void SetupAppCommand(UpdaterScope scope,
                      const std::wstring& app_id,
                      const std::wstring& command_id,
+                     const std::wstring& parameters,
                      base::ScopedTempDir& temp_dir) {
   base::CommandLine cmd_exe_command_line(base::CommandLine::NO_PROGRAM);
   SetupCmdExe(scope, cmd_exe_command_line, temp_dir);
   CreateAppCommandRegistry(
       scope, app_id, command_id,
-      base::StrCat(
-          {cmd_exe_command_line.GetCommandLineString(), L" /c \"exit %1\""}));
+      base::StrCat({cmd_exe_command_line.GetCommandLineString(), parameters}));
 }
 
 base::Process LaunchOfflineInstallProcess(bool is_legacy_install,
@@ -376,7 +389,7 @@ base::Process LaunchOfflineInstallProcess(bool is_legacy_install,
         base::StrCat({build_legacy_switch(updater::kLoggingModuleSwitch), L"=",
                       base::ASCIIToWide(updater::kLoggingModuleSwitchValue)}),
 
-        install_scope == UpdaterScope::kSystem
+        IsSystemInstall(install_scope)
             ? build_legacy_switch(updater::kSystemSwitch)
             : L"",
 
@@ -401,7 +414,7 @@ base::Process LaunchOfflineInstallProcess(bool is_legacy_install,
     install_cmd.AppendSwitch(kEnableLoggingSwitch);
     install_cmd.AppendSwitchASCII(kLoggingModuleSwitch,
                                   kLoggingModuleSwitchValue);
-    if (install_scope == UpdaterScope::kSystem)
+    if (IsSystemInstall(install_scope))
       install_cmd.AppendSwitch(kSystemSwitch);
 
     install_cmd.AppendSwitchNative(
@@ -557,6 +570,8 @@ absl::optional<base::FilePath> GetDataDirPath(UpdaterScope scope) {
 }
 
 void Clean(UpdaterScope scope) {
+  VLOG(0) << __func__;
+
   CleanProcesses();
 
   const HKEY root = UpdaterScopeToHKeyRoot(scope);
@@ -575,22 +590,22 @@ void Clean(UpdaterScope scope) {
   for (const CLSID& clsid :
        JoinVectors(GetSideBySideServers(scope), GetActiveServers(scope))) {
     EXPECT_TRUE(DeleteRegKeyCOM(root, GetComServerClsidRegistryPath(clsid)));
-    if (scope == UpdaterScope::kSystem)
+    if (IsSystemInstall(scope))
       EXPECT_TRUE(DeleteRegKeyCOM(root, GetComServerAppidRegistryPath(clsid)));
   }
 
-  for (const IID& iid :
-       JoinVectors(GetSideBySideInterfaces(), GetActiveInterfaces())) {
+  for (const IID& iid : JoinVectors(GetSideBySideInterfaces(scope),
+                                    GetActiveInterfaces(scope))) {
     EXPECT_TRUE(DeleteRegKeyCOM(root, GetComIidRegistryPath(iid)));
     EXPECT_TRUE(DeleteRegKeyCOM(root, GetComTypeLibRegistryPath(iid)));
   }
 
-  if (scope == UpdaterScope::kUser) {
+  if (!IsSystemInstall(scope)) {
     base::win::RegKey(root, REGSTR_PATH_RUN, KEY_WRITE)
         .DeleteValue(GetTaskNamePrefix(scope).c_str());
   }
 
-  if (scope == UpdaterScope::kSystem) {
+  if (IsSystemInstall(scope)) {
     for (const bool is_internal_service : {true, false}) {
       EXPECT_TRUE(DeleteService(GetServiceName(is_internal_service)));
     }
@@ -605,26 +620,21 @@ void Clean(UpdaterScope scope) {
   EXPECT_TRUE(
       task_scheduler->FindFirstTaskName(GetTaskNamePrefix(scope)).empty());
 
-  absl::optional<base::FilePath> path = GetProductPath(scope);
-  EXPECT_TRUE(path);
-  if (path)
-    EXPECT_TRUE(base::DeletePathRecursively(*path));
-  path = GetDataDirPath(scope);
-  EXPECT_TRUE(path);
-  if (path)
-    EXPECT_TRUE(base::DeletePathRecursively(*path));
-
   const absl::optional<base::FilePath> target_path =
       GetGoogleUpdateExePath(scope);
   if (target_path)
     base::DeleteFile(*target_path);
+
+  absl::optional<base::FilePath> path = GetProductPath(scope);
+  ASSERT_TRUE(path);
+  ASSERT_TRUE(base::DeletePathRecursively(*path)) << *path;
 }
 
 void EnterTestMode(const GURL& url) {
   ASSERT_TRUE(ExternalConstantsBuilder()
                   .SetUpdateURL(std::vector<std::string>{url.spec()})
                   .SetUseCUP(false)
-                  .SetInitialDelay(0.1)
+                  .SetInitialDelay(base::Milliseconds(100))
                   .SetCrxVerifierFormat(crx_file::VerifierFormat::CRX3)
                   .SetOverinstallTimeout(base::Seconds(11))
                   .Modify());
@@ -668,7 +678,7 @@ void Uninstall(UpdaterScope scope) {
   // Uninstallation involves a race with the uninstall.cmd script and the
   // process exit. Sleep to allow the script to complete its work.
   // TODO(crbug.com/1217765): Figure out a way to replace this.
-  SleepFor(5);
+  SleepFor(base::Seconds(5));
 }
 
 void SetActive(UpdaterScope /*scope*/, const std::string& id) {
@@ -723,7 +733,7 @@ bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
 // typelib.
 void VerifyInterfacesRegistryEntries(UpdaterScope scope) {
   for (const auto is_internal : {true, false}) {
-    for (const auto& iid : GetInterfaces(is_internal)) {
+    for (const auto& iid : GetInterfaces(is_internal, scope)) {
       const HKEY root = UpdaterScopeToHKeyRoot(scope);
       const std::wstring iid_reg_path = GetComIidRegistryPath(iid);
       const std::wstring typelib_reg_path = GetComTypeLibRegistryPath(iid);
@@ -777,23 +787,27 @@ void VerifyInterfacesRegistryEntries(UpdaterScope scope) {
 // legacy interfaces are available. Failure to query these interfaces indicates
 // an issue with typelib registration.
 void ExpectInterfacesRegistered(UpdaterScope scope) {
-  {  // IUpdater, IGoogleUpdate3Web and IAppBundleWeb.
+  {
+    // IUpdater, IGoogleUpdate3Web and IAppBundleWeb.
     // The block is necessary so that updater_server goes out of scope and
     // releases the prefs lock before updater_internal_server tries to acquire
     // it to mode-check.
     Microsoft::WRL::ComPtr<IUnknown> updater_server;
-    ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(
-        scope == UpdaterScope::kSystem ? __uuidof(UpdaterSystemClass)
-                                       : __uuidof(UpdaterUserClass),
-        nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&updater_server)));
+    ASSERT_HRESULT_SUCCEEDED(
+        CreateLocalServer(IsSystemInstall(scope) ? __uuidof(UpdaterSystemClass)
+                                                 : __uuidof(UpdaterUserClass),
+                          updater_server));
     Microsoft::WRL::ComPtr<IUpdater> updater;
-    EXPECT_HRESULT_SUCCEEDED(updater_server.As(&updater));
+    EXPECT_HRESULT_SUCCEEDED(
+        updater_server.CopyTo(IsSystemInstall(scope) ? __uuidof(IUpdaterSystem)
+                                                     : __uuidof(IUpdaterUser),
+                              IID_PPV_ARGS_Helper(&updater)));
 
     Microsoft::WRL::ComPtr<IUnknown> updater_legacy_server;
-    ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(
-        scope == UpdaterScope::kSystem ? __uuidof(GoogleUpdate3WebSystemClass)
-                                       : __uuidof(GoogleUpdate3WebUserClass),
-        nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&updater_legacy_server)));
+    ASSERT_HRESULT_SUCCEEDED(CreateLocalServer(
+        IsSystemInstall(scope) ? __uuidof(GoogleUpdate3WebSystemClass)
+                               : __uuidof(GoogleUpdate3WebUserClass),
+        updater_legacy_server));
     Microsoft::WRL::ComPtr<IGoogleUpdate3Web> google_update;
     ASSERT_HRESULT_SUCCEEDED(updater_legacy_server.As(&google_update));
     Microsoft::WRL::ComPtr<IAppBundleWeb> app_bundle;
@@ -802,14 +816,18 @@ void ExpectInterfacesRegistered(UpdaterScope scope) {
     EXPECT_HRESULT_SUCCEEDED(dispatch.As(&app_bundle));
   }
 
-  {  // IUpdaterInternal.
+  {
+    // IUpdaterInternal.
     Microsoft::WRL::ComPtr<IUnknown> updater_internal_server;
-    ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(
-        scope == UpdaterScope::kSystem ? __uuidof(UpdaterInternalSystemClass)
-                                       : __uuidof(UpdaterInternalUserClass),
-        nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&updater_internal_server)));
+    ASSERT_HRESULT_SUCCEEDED(CreateLocalServer(
+        IsSystemInstall(scope) ? __uuidof(UpdaterInternalSystemClass)
+                               : __uuidof(UpdaterInternalUserClass),
+        updater_internal_server));
     Microsoft::WRL::ComPtr<IUpdaterInternal> updater_internal;
-    EXPECT_HRESULT_SUCCEEDED(updater_internal_server.As(&updater_internal));
+    EXPECT_HRESULT_SUCCEEDED(updater_internal_server.CopyTo(
+        IsSystemInstall(scope) ? __uuidof(IUpdaterInternalSystem)
+                               : __uuidof(IUpdaterInternalUser),
+        IID_PPV_ARGS_Helper(&updater_internal)));
   }
 
   VerifyInterfacesRegistryEntries(scope);
@@ -819,8 +837,10 @@ void ExpectMarshalInterfaceSucceeds(UpdaterScope scope) {
   // Create proxy/stubs for the IUpdaterInternal interface.
   // Look up the ProxyStubClsid32.
   CLSID psclsid = {};
-  EXPECT_HRESULT_SUCCEEDED(
-      ::CoGetPSClsid(__uuidof(IUpdaterInternal), &psclsid));
+  REFIID iupdaterinternal_iid = IsSystemInstall(scope)
+                                    ? __uuidof(IUpdaterInternalSystem)
+                                    : __uuidof(IUpdaterInternalUser);
+  EXPECT_HRESULT_SUCCEEDED(::CoGetPSClsid(iupdaterinternal_iid, &psclsid));
   EXPECT_EQ(base::ToUpperASCII(base::win::WStringFromGUID(psclsid)),
             L"{00020424-0000-0000-C000-000000000046}");
 
@@ -832,14 +852,14 @@ void ExpectMarshalInterfaceSucceeds(UpdaterScope scope) {
   // Create the interface proxy.
   Microsoft::WRL::ComPtr<IRpcProxyBuffer> proxy_buffer;
   Microsoft::WRL::ComPtr<IUpdaterInternal> object;
-  EXPECT_HRESULT_SUCCEEDED(
-      psfb->CreateProxy(nullptr, __uuidof(IUpdaterInternal), &proxy_buffer,
-                        IID_PPV_ARGS_Helper(&object)));
+  EXPECT_HRESULT_SUCCEEDED(psfb->CreateProxy(nullptr, iupdaterinternal_iid,
+                                             &proxy_buffer,
+                                             IID_PPV_ARGS_Helper(&object)));
 
   // Create the interface stub.
   Microsoft::WRL::ComPtr<IRpcStubBuffer> stub_buffer;
   EXPECT_HRESULT_SUCCEEDED(
-      psfb->CreateStub(__uuidof(IUpdaterInternal), nullptr, &stub_buffer));
+      psfb->CreateStub(iupdaterinternal_iid, nullptr, &stub_buffer));
 
   // Marshal and unmarshal an IUpdaterInternal object.
   Microsoft::WRL::ComPtr<IUpdaterInternal> updater_internal;
@@ -849,7 +869,7 @@ void ExpectMarshalInterfaceSucceeds(UpdaterScope scope) {
 
   Microsoft::WRL::ComPtr<IStream> stream;
   EXPECT_HRESULT_SUCCEEDED(::CoMarshalInterThreadInterfaceInStream(
-      __uuidof(IUpdaterInternal), updater_internal.Get(), &stream));
+      iupdaterinternal_iid, updater_internal.Get(), &stream));
 
   base::WaitableEvent unmarshal_complete_event;
 
@@ -858,16 +878,18 @@ void ExpectMarshalInterfaceSucceeds(UpdaterScope scope) {
           FROM_HERE,
           base::BindOnce(
               [](Microsoft::WRL::ComPtr<IStream> stream,
-                 base::WaitableEvent& event) {
+                 REFIID iupdaterinternal_iid, base::WaitableEvent& event) {
                 const base::ScopedClosureRunner signal_event(base::BindOnce(
                     [](base::WaitableEvent& event) { event.Signal(); },
                     std::ref(event)));
 
                 Microsoft::WRL::ComPtr<IUpdaterInternal> updater_internal;
                 EXPECT_HRESULT_SUCCEEDED(::CoUnmarshalInterface(
-                    stream.Get(), IID_PPV_ARGS(&updater_internal)));
+                    stream.Get(), iupdaterinternal_iid,
+                    IID_PPV_ARGS_Helper(&updater_internal)));
               },
-              stream, std::ref(unmarshal_complete_event)));
+              stream, iupdaterinternal_iid,
+              std::ref(unmarshal_complete_event)));
 
   EXPECT_TRUE(
       unmarshal_complete_event.TimedWait(TestTimeouts::action_max_timeout()));
@@ -876,10 +898,10 @@ void ExpectMarshalInterfaceSucceeds(UpdaterScope scope) {
 void InitializeBundle(UpdaterScope scope,
                       Microsoft::WRL::ComPtr<IAppBundleWeb>& bundle_web) {
   Microsoft::WRL::ComPtr<IGoogleUpdate3Web> update3web;
-  ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(
-      scope == UpdaterScope::kSystem ? __uuidof(GoogleUpdate3WebSystemClass)
-                                     : __uuidof(GoogleUpdate3WebUserClass),
-      nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&update3web)));
+  ASSERT_HRESULT_SUCCEEDED(CreateLocalServer(
+      IsSystemInstall(scope) ? __uuidof(GoogleUpdate3WebSystemClass)
+                             : __uuidof(GoogleUpdate3WebUserClass),
+      update3web));
 
   Microsoft::WRL::ComPtr<IAppBundleWeb> bundle;
   Microsoft::WRL::ComPtr<IDispatch> dispatch;
@@ -1072,18 +1094,17 @@ void ExpectLegacyUpdate3WebSucceeds(UpdaterScope scope,
 }
 
 void SetupLaunchCommandElevated(const std::wstring& app_id,
+                                const std::wstring& name,
+                                const std::wstring& pv,
                                 const std::wstring& command_id,
                                 const std::wstring& command_parameters,
                                 base::ScopedTempDir& temp_dir) {
   base::CommandLine cmd_exe_command_line(base::CommandLine::NO_PROGRAM);
   SetupCmdExe(UpdaterScope::kSystem, cmd_exe_command_line, temp_dir);
-  EXPECT_EQ(
-      CreateAppClientKey(UpdaterScope::kSystem, app_id)
-          .WriteValue(command_id.c_str(),
-                      base::StrCat({cmd_exe_command_line.GetCommandLineString(),
-                                    command_parameters.c_str()})
-                          .c_str()),
-      ERROR_SUCCESS);
+  CreateLaunchCmdElevatedRegistry(
+      app_id, name, pv, command_id,
+      base::StrCat({cmd_exe_command_line.GetCommandLineString(),
+                    command_parameters.c_str()}));
 }
 
 void DeleteLaunchCommandElevated(const std::wstring& app_id,
@@ -1093,41 +1114,62 @@ void DeleteLaunchCommandElevated(const std::wstring& app_id,
             ERROR_SUCCESS);
 }
 
-void ExpectLegacyProcessLauncherSucceeds(UpdaterScope scope) {
-  // ProcessLauncher is only implemented for kSystem at the moment.
-  if (scope != UpdaterScope::kSystem)
-    return;
-
-  Microsoft::WRL::ComPtr<IProcessLauncher> process_launcher;
-  ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(__uuidof(ProcessLauncherClass),
-                                              nullptr, CLSCTX_LOCAL_SERVER,
-                                              IID_PPV_ARGS(&process_launcher)));
-
-  constexpr wchar_t kAppId1[] = L"{831EF4D0-B729-4F61-AA34-91526481799D}";
-  constexpr wchar_t kCommandId[] = L"CmdExit0";
+HRESULT ProcessLaunchCmdElevated(
+    Microsoft::WRL::ComPtr<IProcessLauncher> process_launcher,
+    const std::wstring& appid,
+    const std::wstring& commandid,
+    const int expected_exit_code) {
   ULONG_PTR proc_handle = 0;
-  DWORD caller_proc_id = ::GetCurrentProcessId();
+  HRESULT hr = process_launcher->LaunchCmdElevated(
+      appid.c_str(), commandid.c_str(), ::GetCurrentProcessId(), &proc_handle);
+  if (FAILED(hr))
+    return hr;
 
-  // Succeeds when the command is present in the registry.
-  base::ScopedTempDir temp_dir;
-  SetupLaunchCommandElevated(kAppId1, kCommandId, L" /c \"exit 5420\"",
-                             temp_dir);
-  EXPECT_HRESULT_SUCCEEDED(process_launcher->LaunchCmdElevated(
-      kAppId1, kCommandId, caller_proc_id, &proc_handle));
   EXPECT_NE(static_cast<ULONG_PTR>(0), proc_handle);
 
-  base::Process process = base::Process(reinterpret_cast<HANDLE>(proc_handle));
+  const base::Process process(reinterpret_cast<HANDLE>(proc_handle));
   int exit_code = 0;
   EXPECT_TRUE(process.WaitForExitWithTimeout(TestTimeouts::action_max_timeout(),
                                              &exit_code));
-  EXPECT_EQ(exit_code, 5420);
+  EXPECT_EQ(exit_code, expected_exit_code);
+
+  return hr;
+}
+
+void ExpectLegacyProcessLauncherSucceeds(UpdaterScope scope) {
+  // ProcessLauncher is only implemented for kSystem at the moment.
+  if (!IsSystemInstall(scope))
+    return;
+
+  Microsoft::WRL::ComPtr<IProcessLauncher> process_launcher;
+  ASSERT_HRESULT_SUCCEEDED(
+      CreateLocalServer(__uuidof(ProcessLauncherClass), process_launcher));
+
+  constexpr wchar_t kAppId1[] = L"{831EF4D0-B729-4F61-AA34-91526481799D}";
+  constexpr wchar_t kCommandId[] = L"cmd";
+
+  // Succeeds when the command is present in the registry.
+  base::ScopedTempDir temp_dir;
+  SetupLaunchCommandElevated(kAppId1, L"" BROWSER_PRODUCT_NAME_STRING,
+                             L"1.0.0.0", kCommandId, L" /c \"exit 5420\"",
+                             temp_dir);
+
+  // Succeeds when the command is present in the registry.
+  ASSERT_HRESULT_SUCCEEDED(
+      ProcessLaunchCmdElevated(process_launcher, kAppId1, kCommandId, 5420));
 
   DeleteLaunchCommandElevated(kAppId1, kCommandId);
+  EXPECT_EQ(
+      HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND),
+      ProcessLaunchCmdElevated(process_launcher, kAppId1, kCommandId, 5420));
 
-  EXPECT_EQ(HRESULT_FROM_WIN32(ERROR_BAD_COMMAND),
-            process_launcher->LaunchCmdElevated(kAppId1, kCommandId,
-                                                caller_proc_id, &proc_handle));
-  EXPECT_EQ(static_cast<ULONG_PTR>(0), proc_handle);
+  base::ScopedTempDir app_command_temp_dir;
+  SetupAppCommand(scope, kAppId1, kCommandId, L" /c \"exit 11555\"",
+                  app_command_temp_dir);
+  ASSERT_HRESULT_SUCCEEDED(
+      ProcessLaunchCmdElevated(process_launcher, kAppId1, kCommandId, 11555));
+
+  DeleteAppClientKey(scope, kAppId1);
 }
 
 void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
@@ -1142,7 +1184,7 @@ void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
   const std::wstring appid = base::UTF8ToWide(app_id);
   const std::wstring commandid = base::UTF8ToWide(command_id);
 
-  SetupAppCommand(scope, appid, commandid, temp_dir);
+  SetupAppCommand(scope, appid, commandid, L" /c \"exit %1\"", temp_dir);
 
   Microsoft::WRL::ComPtr<IAppBundleWeb> bundle;
   InitializeBundle(scope, bundle);
@@ -1230,10 +1272,10 @@ void ExpectPolicyStatusValues(
 
 void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope) {
   Microsoft::WRL::ComPtr<IUnknown> policy_status_server;
-  ASSERT_HRESULT_SUCCEEDED(::CoCreateInstance(
-      scope == UpdaterScope::kSystem ? __uuidof(PolicyStatusSystemClass)
-                                     : __uuidof(PolicyStatusUserClass),
-      nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&policy_status_server)));
+  ASSERT_HRESULT_SUCCEEDED(CreateLocalServer(
+      IsSystemInstall(scope) ? __uuidof(PolicyStatusSystemClass)
+                             : __uuidof(PolicyStatusUserClass),
+      policy_status_server));
   Microsoft::WRL::ComPtr<IPolicyStatus2> policy_status2;
   ASSERT_HRESULT_SUCCEEDED(policy_status_server.As(&policy_status2));
 
@@ -1501,8 +1543,7 @@ void RunOfflineInstall(UpdaterScope scope,
       installer_path,
       [](UpdaterScope scope, const std::string& app_client_state_key,
          const std::wstring& event_name) -> std::string {
-        const std::string reg_hive =
-            scope == UpdaterScope::kSystem ? "HKLM" : "HKCU";
+        const std::string reg_hive = IsSystemInstall(scope) ? "HKLM" : "HKCU";
 
         base::CommandLine post_install_cmd(GetTestProcessCommandLine(scope));
         post_install_cmd.AppendSwitchNative(kTestEventToSignal, event_name);

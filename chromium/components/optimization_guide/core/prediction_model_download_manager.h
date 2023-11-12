@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/download/public/background_service/download_params.h"
+#include "components/optimization_guide/core/prediction_model_store.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -25,6 +26,7 @@ namespace optimization_guide {
 
 class PredictionModelDownloadClient;
 class PredictionModelDownloadObserver;
+class PredictionModelStore;
 
 namespace proto {
 class PredictionModel;
@@ -51,6 +53,8 @@ class PredictionModelDownloadManager {
   PredictionModelDownloadManager(
       download::BackgroundDownloadService* download_service,
       const base::FilePath& models_dir_path,
+      PredictionModelStore* prediction_model_store,
+      const proto::ModelCacheKey& model_cache_key,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner);
   virtual ~PredictionModelDownloadManager();
   PredictionModelDownloadManager(const PredictionModelDownloadManager&) =
@@ -75,10 +79,6 @@ class PredictionModelDownloadManager {
 
   // Returns whether the downloader can download models.
   virtual bool IsAvailableForDownloads() const;
-
-  // Returns the basename of the model info file when it is packaged in a crx
-  // archive.
-  static base::FilePath::StringType ModelInfoFileName();
 
   // Adds and removes observers.
   //
@@ -153,6 +153,7 @@ class PredictionModelDownloadManager {
   // Must be invoked on the UI thread.
   void NotifyModelReady(
       absl::optional<proto::OptimizationTarget> optimization_target,
+      const base::FilePath& base_model_dir,
       const absl::optional<proto::PredictionModel>& model);
 
   // Notifies |observers_| that a model download failed for
@@ -181,6 +182,12 @@ class PredictionModelDownloadManager {
 
   // The path to the dir containing models.
   base::FilePath models_dir_path_;
+
+  // The optimization guide model store. Not owned. Should outlive |this|.
+  raw_ptr<PredictionModelStore> prediction_model_store_;
+
+  // The ModelCacheKey that the user profile for |this| is associated with.
+  const proto::ModelCacheKey model_cache_key_;
 
   // Background thread where download file processing should be performed.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;

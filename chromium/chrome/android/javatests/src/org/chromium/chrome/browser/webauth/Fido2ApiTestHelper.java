@@ -20,6 +20,7 @@ import com.google.common.io.BaseEncoding;
 import org.junit.Assert;
 
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.blink.mojom.AuthenticatorAttachment;
 import org.chromium.blink.mojom.AuthenticatorSelectionCriteria;
 import org.chromium.blink.mojom.CableAuthentication;
@@ -47,7 +48,10 @@ import org.chromium.payments.mojom.PaymentCurrencyAmount;
 import org.chromium.url.internal.mojom.Origin;
 import org.chromium.url.mojom.Url;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 
 /* NO_BUILDER:
@@ -315,6 +319,28 @@ public class Fido2ApiTestHelper {
         Intent intent = new Intent();
         intent.putExtra(Fido2Api.CREDENTIAL_EXTRA, TEST_AUTHENTICATOR_PASSKEY_ATTESTATION_RESPONSE);
         return intent;
+    }
+
+    private static Intent intentFromPath(String path) {
+        byte[] response;
+        try {
+            response = Files.readAllBytes(Paths.get(UrlUtils.getTestFilePath(path)));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        Intent intent = new Intent();
+        intent.putExtra(Fido2Api.CREDENTIAL_EXTRA, response);
+        return intent;
+    }
+
+    public static Intent createSuccessfulMakeCredentialIntentWithAttestation() {
+        // This blob is too large (9KB) to reasonably include as a literal.
+        return intentFromPath("webauthn/android_make_credential_bundle_with_attestation");
+    }
+
+    public static Intent createSuccessfulMakeCredentialIntentWithCredProps() {
+        return intentFromPath("webauthn/android_make_credential_bundle_with_credprops_rk_true");
     }
 
     /**

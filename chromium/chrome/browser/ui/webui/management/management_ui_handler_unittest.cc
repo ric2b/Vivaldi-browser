@@ -13,14 +13,16 @@
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
-
+#include "base/task/single_thread_task_runner.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
 #include "chrome/browser/ui/webui/management/management_ui_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/dm_token.h"
@@ -39,6 +41,7 @@
 #include "extensions/common/extension_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -59,6 +62,9 @@
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
+#include "chrome/browser/net/secure_dns_config.h"
+#include "chrome/browser/net/stub_resolver_config_reader.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -69,8 +75,8 @@
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_handler.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/onc/onc_pref_names.h"
@@ -84,11 +90,12 @@
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/fake_user_manager.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 #include "ui/chromeos/devicetype_utils.h"
 #else
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/mock_user_cloud_policy_store.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
@@ -114,7 +121,7 @@ struct ContextualManagementSourceUpdate {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   std::u16string management_overview;
   std::u16string update_required_eol;
-  bool show_proxy_server_privacy_disclosure;
+  bool show_monitored_network_privacy_disclosure;
 #else
   std::u16string browser_management_notice;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -248,7 +255,7 @@ class TestManagementUIHandler : public ManagementUIHandler {
 // TODO(1071436, marcgrimme): refactor so that ChromeOS and non ChromeOS part is
 // better separated.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-using TestingBaseClass = chromeos::DeviceSettingsTestBase;
+using TestingBaseClass = ash::DeviceSettingsTestBase;
 #else
 using TestingBaseClass = testing::Test;
 #endif
@@ -321,8 +328,8 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     extracted_.management_overview = ExtractPathFromDict(data, "overview");
     extracted_.update_required_eol = ExtractPathFromDict(data, "eolMessage");
     absl::optional<bool> showProxyDisclosure =
-        data.FindBool("showProxyServerPrivacyDisclosure");
-    extracted_.show_proxy_server_privacy_disclosure =
+        data.FindBool("showMonitoredNetworkPrivacyDisclosure");
+    extracted_.show_monitored_network_privacy_disclosure =
         showProxyDisclosure.has_value() && showProxyDisclosure.value();
 #else
     extracted_.browser_management_notice =
@@ -342,6 +349,9 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     bool report_crash_info;
     bool report_app_info_and_activity;
     bool report_dlp_events;
+    bool report_audio_status;
+    bool report_device_peripherals;
+    bool device_report_xdr_events;
     bool upload_enabled;
     bool printing_send_username_and_filename;
     bool crostini_report_usage;
@@ -365,6 +375,9 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     setup_config_.report_crash_info = default_value;
     setup_config_.report_app_info_and_activity = default_value;
     setup_config_.report_dlp_events = default_value;
+    setup_config_.report_audio_status = default_value;
+    setup_config_.report_device_peripherals = default_value;
+    setup_config_.device_report_xdr_events = default_value;
     setup_config_.upload_enabled = default_value;
     setup_config_.printing_send_username_and_filename = default_value;
     setup_config_.crostini_report_usage = default_value;
@@ -379,15 +392,19 @@ class ManagementUIHandlerTests : public TestingBaseClass {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void SetUp() override {
-    DeviceSettingsTestBase::SetUp();
     install_attributes_ = std::make_unique<ash::ScopedStubInstallAttributes>(
         ash::StubInstallAttributes::CreateUnset());
+    DeviceSettingsTestBase::SetUp();
 
     crostini_features_ = std::make_unique<crostini::FakeCrostiniFeatures>();
     SetUpConnectManager();
     network_handler_test_helper_ =
         std::make_unique<ash::NetworkHandlerTestHelper>();
     ash::NetworkMetadataStore::RegisterPrefs(user_prefs_.registry());
+    stub_resolver_config_reader_ =
+        std::make_unique<StubResolverConfigReader>(&local_state_);
+    SystemNetworkContextManager::set_stub_resolver_config_reader_for_testing(
+        stub_resolver_config_reader_.get());
     // The |DeviceSettingsTestBase| setup above instantiates
     // |FakeShillManagerClient| with a default environment which will post
     // tasks on the current thread to setup a initial network configuration with
@@ -406,7 +423,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     std::unique_ptr<policy::DeviceCloudPolicyStoreAsh> store =
         std::make_unique<policy::DeviceCloudPolicyStoreAsh>(
             device_settings_service_.get(), install_attributes_->Get(),
-            base::ThreadTaskRunnerHandle::Get());
+            base::SingleThreadTaskRunner::GetCurrentDefault());
     manager_ = std::make_unique<TestDeviceCloudPolicyManagerAsh>(
         std::move(store), &state_keys_broker_);
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
@@ -426,6 +443,13 @@ class ManagementUIHandlerTests : public TestingBaseClass {
         ash::CrosSettingsProvider::TRUSTED);
     settings_.device_settings()->SetBoolean(ash::kSystemLogUploadEnabled,
                                             GetTestConfig().upload_enabled);
+    settings_.device_settings()->SetBoolean(
+        ash::kReportDeviceAudioStatus, GetTestConfig().report_audio_status);
+    settings_.device_settings()->SetBoolean(
+        ash::kReportDevicePeripherals,
+        GetTestConfig().report_device_peripherals);
+    settings_.device_settings()->SetBoolean(
+        ash::kDeviceReportXDREvents, GetTestConfig().device_report_xdr_events);
     profile_->GetPrefs()->SetBoolean(
         prefs::kPrintingSendUsernameAndFilenameEnabled,
         GetTestConfig().printing_send_username_and_filename);
@@ -492,8 +516,8 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     return extracted_.update_required_eol;
   }
 
-  bool GetShowProxyServerPrivacyDisclosure() const {
-    return extracted_.show_proxy_server_privacy_disclosure;
+  bool GetShowMonitoredNetworkPrivacyDisclosure() const {
+    return extracted_.show_monitored_network_privacy_disclosure;
   }
 #else
 
@@ -552,7 +576,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     return std::make_unique<policy::UserCloudPolicyManager>(
         std::move(store), base::FilePath(),
         /*cloud_external_data_manager=*/nullptr,
-        base::ThreadTaskRunnerHandle::Get(),
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
         network::TestNetworkConnectionTracker::CreateGetter());
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -569,6 +593,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
   std::unique_ptr<crostini::FakeCrostiniFeatures> crostini_features_;
   TestingPrefServiceSimple local_state_;
   TestingPrefServiceSimple user_prefs_;
+  std::unique_ptr<StubResolverConfigReader> stub_resolver_config_reader_;
   std::unique_ptr<TestDeviceCloudPolicyManagerAsh> manager_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   policy::ServerBackedStateKeysBroker state_keys_broker_;
@@ -694,7 +719,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_NOT_MANAGED_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE));
 }
@@ -712,7 +739,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_BROWSER_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringUTF16(IDS_MANAGEMENT_SUBTITLE));
   EXPECT_TRUE(GetManaged());
@@ -732,7 +761,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_BROWSER_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringUTF16(IDS_MANAGEMENT_SUBTITLE));
   EXPECT_TRUE(GetManaged());
@@ -757,7 +788,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_NOT_MANAGED_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE));
   EXPECT_FALSE(GetManaged());
@@ -777,7 +810,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_NOT_MANAGED_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE));
   EXPECT_FALSE(GetManaged());
@@ -801,7 +836,9 @@ TEST_F(ManagementUIHandlerTests,
   EXPECT_EQ(GetBrowserManagementNotice(),
             l10n_util::GetStringFUTF16(
                 IDS_MANAGEMENT_BROWSER_NOTICE,
-                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                base::EscapeForHTML(l10n_util::GetStringUTF16(
+                    IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
   EXPECT_EQ(GetPageSubtitle(),
             l10n_util::GetStringFUTF16(IDS_MANAGEMENT_SUBTITLE_MANAGED_BY,
                                        base::UTF8ToUTF16(domain)));
@@ -1006,6 +1043,8 @@ TEST_F(ManagementUIHandlerTests, AllEnabledDeviceReportingInfo) {
   const std::map<std::string, std::string> expected_elements = {
       {kManagementReportActivityTimes, "device activity"},
       {kManagementReportNetworkData, "device"},
+      {kManagementReportDeviceAudioStatus, "device"},
+      {kManagementReportDevicePeripherals, "peripherals"},
       {kManagementReportHardwareData, "device statistics"},
       {kManagementReportCrashReports, "crash report"},
       {kManagementReportAppInfoAndActivity, "app info and activity"},
@@ -1029,6 +1068,8 @@ TEST_F(ManagementUIHandlerTests,
   const std::map<std::string, std::string> expected_elements = {
       {kManagementReportActivityTimes, "device activity"},
       {kManagementReportNetworkData, "device"},
+      {kManagementReportDeviceAudioStatus, "device"},
+      {kManagementReportDevicePeripherals, "peripherals"},
       {kManagementReportHardwareData, "device statistics"},
       {kManagementReportCrashReports, "crash report"},
       {kManagementReportAppInfoAndActivity, "app info and activity"},
@@ -1082,7 +1123,65 @@ TEST_F(ManagementUIHandlerTests,
   ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
 }
 
-TEST_F(ManagementUIHandlerTests, ShowProxyServerDisclosure) {
+TEST_F(ManagementUIHandlerTests, ReportDeviceAudioStatusEnabled) {
+  ResetTestConfig(false);
+  GetTestConfig().report_audio_status = true;
+  const base::Value::List info = SetUpForReportingInfo();
+  const std::map<std::string, std::string> expected_elements = {
+      {kManagementReportActivityTimes, "device activity"},
+      {kManagementReportDeviceAudioStatus, "device"}};
+
+  ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
+}
+
+TEST_F(ManagementUIHandlerTests, ReportDevicePeripheralsEnabled) {
+  ResetTestConfig(false);
+  GetTestConfig().report_device_peripherals = true;
+  const base::Value::List info = SetUpForReportingInfo();
+  const std::map<std::string, std::string> expected_elements = {
+      {kManagementReportActivityTimes, "device activity"},
+      {kManagementReportDevicePeripherals, "peripherals"}};
+
+  ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
+}
+
+TEST_F(ManagementUIHandlerTests, ReportDeviceXdrEventsEnabled) {
+  ResetTestConfig(false);
+  GetTestConfig().device_report_xdr_events = true;
+  const base::Value::List info = SetUpForReportingInfo();
+  const std::map<std::string, std::string> expected_elements = {
+      {kManagementReportActivityTimes, "device activity"},
+      {kManagementReportAppInfoAndActivity, "app info and activity"}};
+
+  ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
+}
+
+TEST_F(ManagementUIHandlerTests,
+       ShowPrivacyDisclosureForSecureDnsWithIdentifiers) {
+  ResetTestConfig();
+  local_state_.Set(prefs::kDnsOverHttpsMode,
+                   base::Value(SecureDnsConfig::kModeSecure));
+  local_state_.Set(prefs::kDnsOverHttpsSalt, base::Value("test-salt"));
+  local_state_.Set(prefs::kDnsOverHttpsTemplatesWithIdentifiers,
+                   base::Value("www.test-dns.com"));
+
+  // Owned by |scoped_user_manager|.
+  auto user_manager = std::make_unique<user_manager::FakeUserManager>();
+  user_manager->set_local_state(&local_state_);
+  // The DNS templates with identifiers only work is a user is logged in.
+  const AccountId account_id(AccountId::FromUserEmailGaiaId(kUser, kGaiaId));
+  user_manager->AddUser(account_id);
+  user_manager::ScopedUserManager scoper(std::move(user_manager));
+
+  base::RunLoop().RunUntilIdle();
+
+  GetTestConfig().managed_device = true;
+  SetUpProfileAndHandler();
+
+  EXPECT_TRUE(GetShowMonitoredNetworkPrivacyDisclosure());
+}
+
+TEST_F(ManagementUIHandlerTests, ShowPrivacyDisclosureForActiveProxy) {
   ResetTestConfig();
   // Set pref to use a proxy.
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(user_prefs_.registry());
@@ -1095,7 +1194,7 @@ TEST_F(ManagementUIHandlerTests, ShowProxyServerDisclosure) {
   GetTestConfig().managed_device = true;
   SetUpProfileAndHandler();
 
-  EXPECT_TRUE(GetShowProxyServerPrivacyDisclosure());
+  EXPECT_TRUE(GetShowMonitoredNetworkPrivacyDisclosure());
 }
 
 TEST_F(ManagementUIHandlerTests, ProxyServerDisclosureDeviceOffline) {
@@ -1115,14 +1214,14 @@ TEST_F(ManagementUIHandlerTests, ProxyServerDisclosureDeviceOffline) {
       ash::ShillServiceClient::Get()->GetTestInterface();
   for (const auto* const network : networks) {
     service->SetServiceProperty(network->path(), shill::kStateProperty,
-                                base::Value(shill::kStateOffline));
+                                base::Value(shill::kStateIdle));
   }
   base::RunLoop().RunUntilIdle();
 
   GetTestConfig().managed_device = true;
   SetUpProfileAndHandler();
 
-  EXPECT_FALSE(GetShowProxyServerPrivacyDisclosure());
+  EXPECT_FALSE(GetShowMonitoredNetworkPrivacyDisclosure());
 
   ash::NetworkHandler::Get()->NetworkHandler::ShutdownPrefServices();
 }
@@ -1140,7 +1239,7 @@ TEST_F(ManagementUIHandlerTests, HideProxyServerDisclosureForDirectProxy) {
   GetTestConfig().managed_device = true;
   SetUpProfileAndHandler();
 
-  EXPECT_FALSE(GetShowProxyServerPrivacyDisclosure());
+  EXPECT_FALSE(GetShowMonitoredNetworkPrivacyDisclosure());
 
   ash::NetworkHandler::Get()->NetworkHandler::ShutdownPrefServices();
 }

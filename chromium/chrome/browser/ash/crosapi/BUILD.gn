@@ -85,6 +85,8 @@ source_set("crosapi") {
     "crosapi_manager.h",
     "crosapi_util.cc",
     "crosapi_util.h",
+    "desk_ash.cc",
+    "desk_ash.h",
     "desk_template_ash.cc",
     "desk_template_ash.h",
     "device_attributes_ash.cc",
@@ -121,6 +123,8 @@ source_set("crosapi") {
     "file_system_provider_service_ash.h",
     "files_app_launcher.cc",
     "files_app_launcher.h",
+    "firewall_hole_ash.cc",
+    "firewall_hole_ash.h",
     "force_installed_tracker_ash.cc",
     "force_installed_tracker_ash.h",
     "fullscreen_controller_ash.cc",
@@ -145,6 +149,8 @@ source_set("crosapi") {
     "kiosk_session_service_ash.h",
     "lacros_availability_policy_observer.cc",
     "lacros_availability_policy_observer.h",
+    "lacros_data_backward_migration_mode_policy_observer.cc",
+    "lacros_data_backward_migration_mode_policy_observer.h",
     "local_printer_ash.cc",
     "local_printer_ash.h",
     "login_ash.cc",
@@ -155,12 +161,16 @@ source_set("crosapi") {
     "login_state_ash.h",
     "message_center_ash.cc",
     "message_center_ash.h",
+    "metrics_ash.cc",
+    "metrics_ash.h",
     "metrics_reporting_ash.cc",
     "metrics_reporting_ash.h",
     "migration_progress_tracker.cc",
     "migration_progress_tracker.h",
     "move_migrator.cc",
     "move_migrator.h",
+    "multi_capture_service_ash.cc",
+    "multi_capture_service_ash.h",
     "native_theme_service_ash.cc",
     "native_theme_service_ash.h",
     "network_change_ash.cc",
@@ -174,8 +184,12 @@ source_set("crosapi") {
     "networking_private_ash.h",
     "parent_access_ash.cc",
     "parent_access_ash.h",
+    "persistent_forced_extension_keep_alive.cc",
+    "persistent_forced_extension_keep_alive.h",
     "policy_service_ash.cc",
     "policy_service_ash.h",
+    "power_ash.cc",
+    "power_ash.h",
     "prefs_ash.cc",
     "prefs_ash.h",
     "remoting_ash.cc",
@@ -258,9 +272,11 @@ source_set("crosapi") {
     "//chrome/browser/ash:print_job_info_proto",
     "//chrome/browser/ash/system_web_apps/types:types",
     "//chrome/browser/ash/telemetry_extension",
+    "//chrome/browser/ash/video_conference",
     "//chrome/browser/image_decoder:image_decoder",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui/ash/system_web_apps",
+    "//chrome/browser/ui/webui/ash/parent_access:mojo_bindings",
     "//chrome/browser/ui/webui/settings/chromeos/constants:mojom",
     "//chrome/browser/web_applications",
     "//chrome/common",
@@ -279,8 +295,10 @@ source_set("crosapi") {
     "//chromeos/ash/components/dbus/userdataauth:userdataauth_proto",
     "//chromeos/ash/components/install_attributes",
     "//chromeos/ash/components/login/auth",
+    "//chromeos/ash/components/login/login_state",
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/settings",
+    "//chromeos/ash/components/system",
     "//chromeos/ash/components/tpm",
     "//chromeos/components/cdm_factory_daemon:cdm_factory_daemon_browser",
     "//chromeos/components/certificate_provider:certificate_provider",
@@ -291,13 +309,11 @@ source_set("crosapi") {
     "//chromeos/crosapi/cpp:crosapi_constants",
     "//chromeos/crosapi/mojom",
     "//chromeos/dbus/power",
-    "//chromeos/login/login_state",
     "//chromeos/printing",
     "//chromeos/services/machine_learning/public/cpp",
     "//chromeos/services/network_config/public/cpp",
     "//chromeos/startup",
     "//chromeos/startup:constants",
-    "//chromeos/system",
     "//chromeos/ui/wm:wm",
     "//chromeos/version",
     "//components/arc",
@@ -316,6 +332,7 @@ source_set("crosapi") {
     "//components/services/app_service/public/cpp:instance_update",
     "//components/session_manager/core",
     "//components/ukm:ukm",
+    "//components/user_prefs:user_prefs",
     "//components/version_info:channel",
     "//content/public/common",
     "//extensions/browser/api",
@@ -327,6 +344,7 @@ source_set("crosapi") {
     "//printing/backend",
     "//remoting/host/chromeos:remoting_service",
     "//services/data_decoder/public/cpp:cpp",
+    "//services/device/wake_lock/power_save_blocker",
     "//services/video_capture/public/cpp:cpp",
     "//services/video_capture/public/mojom",
     "//ui/base",
@@ -339,13 +357,13 @@ source_set("crosapi") {
 
   # local_printer_ash.cc includes
   # chrome/browser/ash/printing/print_management/printing_manager.h, which in
-  # turn requires //ash/webui/print_management/mojom to generate the Mojo
-  # headers referenced by printing_manager.h.
+  # turn requires //chromeos/components/print_management/mojom to generate the
+  # Mojo headers referenced by printing_manager.h.
   # Ideally, //chrome/browser/ash can just make
-  # //ash/webui/print_management/mojom a public_deps entry, and this target can
-  # depend on //chrome/browser/ash. However, that creates a circular
+  # //chromeos/components/print_management/mojom a public_deps entry, and this
+  # target can depend on //chrome/browser/ash. However, that creates a circular
   # dependency, so add this indirect dependency to make it work as intended.
-  deps += [ "//ash/webui/print_management/mojom" ]
+  deps += [ "//chromeos/components/print_management/mojom" ]
 
   public_deps = [
     ":browser_util",
@@ -375,8 +393,8 @@ source_set("test_support") {
   deps = [
     ":crosapi",
     "//ash",
-    "//ash/app_list:app_list",
-    "//chrome/browser/chromeos:test_support",
+    "//ash/app_list",
+    "//chrome/browser/ash:test_support",
     "//chrome/test:test_support",
     "//chromeos/ash/components/dbus/shill",
     "//chromeos/crosapi/mojom",
@@ -390,6 +408,7 @@ source_set("unit_tests") {
 
   sources = [
     "audio_service_ash_unittest.cc",
+    "browser_data_back_migrator_unittest.cc",
     "browser_data_migrator_unittest.cc",
     "browser_data_migrator_util_unittest.cc",
     "browser_loader_unittest.cc",
@@ -412,6 +431,7 @@ source_set("unit_tests") {
     "geolocation_service_ash_unittest.cc",
     "keystore_service_ash_unittest.cc",
     "lacros_availability_policy_observer_unittest.cc",
+    "lacros_data_backward_migration_mode_policy_observer_unittest.cc",
     "local_printer_ash_unittest.cc",
     "login_screen_storage_ash_unittest.cc",
     "login_state_ash_unittest.cc",
@@ -420,6 +440,8 @@ source_set("unit_tests") {
     "move_migrator_unittest.cc",
     "network_settings_translation_unittest.cc",
     "networking_attributes_ash_unittest.cc",
+    "parent_access_ash_unittest.cc",
+    "persistent_forced_extension_keep_alive_unittest.cc",
     "prefs_ash_unittest.cc",
     "test_local_printer_ash.cc",
     "test_local_printer_ash.h",
@@ -439,6 +461,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_config",
     "//base/test:test_support",
+    "//chrome/browser/ash:test_support",
     "//chrome/browser/chromeos:test_support",
     "//chrome/common/printing",
     "//chrome/test:test_support",
@@ -446,16 +469,17 @@ source_set("unit_tests") {
     "//chromeos/ash/components/dbus/audio",
     "//chromeos/ash/components/dbus/shill",
     "//chromeos/ash/components/dbus/upstart",
+    "//chromeos/ash/components/login/login_state",
+    "//chromeos/ash/components/system",
     "//chromeos/crosapi/cpp:cpp",
     "//chromeos/crosapi/cpp:crosapi_constants",
-    "//chromeos/login/login_state",
     "//chromeos/printing",
     "//chromeos/startup:constants",
-    "//chromeos/system",
     "//components/component_updater:test_support",
     "//components/session_manager/core",
     "//printing/backend",
     "//printing/backend:test_support",
     "//testing/gtest:gtest",
+    "//ui/display:test_support",
   ]
 }

@@ -5,11 +5,11 @@
 import {InternetPageBrowserProxyImpl, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {ActivationStateType, CrosNetworkConfigRemote, InhibitReason, ManagedProperties, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, NetworkType, OncSource, PolicySource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {FakeNetworkConfig} from 'chrome://test/chromeos/fake_network_config_mojom.js';
+import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -103,6 +103,13 @@ suite('InternetDetailPage', function() {
     return result;
   }
 
+  function getHiddenToggle() {
+    if (loadTimeData.getBoolean('enableHiddenNetworkMigration')) {
+      return internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+    }
+    return internetDetailPage.shadowRoot.querySelector('#hiddenToggleLegacy');
+  }
+
   /**
    * @param {boolean} isSimLocked
    */
@@ -151,6 +158,7 @@ suite('InternetDetailPage', function() {
       internetDetailPageTitle: 'internetDetailPageTitle',
       internetKnownNetworksPageTitle: 'internetKnownNetworksPageTitle',
       showMeteredToggle: true,
+      isApnRevampEnabled: false,
     });
 
     PolymerTest.clearBody();
@@ -377,8 +385,7 @@ suite('InternetDetailPage', function() {
 
       internetDetailPage.init('wifi_user_guid', 'WiFi', 'wifi_user');
       return flushAsync().then(() => {
-        const hiddenToggle =
-            internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+        const hiddenToggle = getHiddenToggle();
         assertTrue(!!hiddenToggle);
         assertTrue(hiddenToggle.checked);
       });
@@ -398,8 +405,7 @@ suite('InternetDetailPage', function() {
 
       internetDetailPage.init('wifi_user_guid', 'WiFi', 'wifi_user');
       return flushAsync().then(() => {
-        const hiddenToggle =
-            internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+        const hiddenToggle = getHiddenToggle();
         assertTrue(!!hiddenToggle);
         assertFalse(hiddenToggle.checked);
       });
@@ -418,10 +424,50 @@ suite('InternetDetailPage', function() {
 
       internetDetailPage.init('wifi_user_guid', 'WiFi', 'wifi_user');
       return flushAsync().then(() => {
-        const hiddenToggle =
-            internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+        const hiddenToggle = getHiddenToggle();
         assertFalse(!!hiddenToggle);
       });
+    });
+
+    // Syntactic sugar for running test twice with different values for the
+    // apnRevamp feature flag.
+    [true, false].forEach(shouldEnableHiddenNetworkMigration => {
+      test(
+          'Hidden toggle is shown in a different location depending on feature flag',
+          async () => {
+            loadTimeData.overrideValues({
+              enableHiddenNetworkMigration: shouldEnableHiddenNetworkMigration,
+            });
+
+            init();
+            mojoApi_.resetForTest();
+            mojoApi_.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
+            const wifiNetwork =
+                getManagedProperties(NetworkType.kWiFi, 'wifi_user');
+            wifiNetwork.source = OncSource.kUser;
+            wifiNetwork.connectable = true;
+
+            mojoApi_.setManagedPropertiesForTest(wifiNetwork);
+
+            internetDetailPage.init('wifi_user_guid', 'WiFi', 'wifi_user');
+
+            return flushAsync().then(() => {
+              const enableHiddenNetworkMigration =
+                  loadTimeData.getBoolean('enableHiddenNetworkMigration');
+              const hiddenToggle =
+                  internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+              const hiddenToggleLegacy =
+                  internetDetailPage.shadowRoot.querySelector(
+                      '#hiddenToggleLegacy');
+              if (loadTimeData.getBoolean('enableHiddenNetworkMigration')) {
+                assertTrue(!!hiddenToggle);
+                assertFalse(!!hiddenToggleLegacy);
+              } else {
+                assertFalse(!!hiddenToggle);
+                assertTrue(!!hiddenToggleLegacy);
+              }
+            });
+          });
     });
 
     test('Proxy Unshared', function() {
@@ -1012,8 +1058,7 @@ suite('InternetDetailPage', function() {
 
       internetDetailPage.init('cellular_guid', 'Cellular', 'cellular');
       return flushAsync().then(() => {
-        const hiddenToggle =
-            internetDetailPage.shadowRoot.querySelector('#hiddenToggle');
+        const hiddenToggle = getHiddenToggle();
         assertFalse(!!hiddenToggle);
       });
     });
@@ -1378,6 +1423,34 @@ suite('InternetDetailPage', function() {
       assertFalse(!!internetDetailPage.shadowRoot.querySelector(
           'network-proxy-section'));
     });
+    // Syntactic sugar for running test twice with different values for the
+    // apnRevamp feature flag.
+    [true, false].forEach(isApnRevampEnabled => {
+      test('Show/Hide APN row correspondingly to ApnRevamp flag', async () => {
+        loadTimeData.overrideValues({isApnRevampEnabled});
+        init();
+        mojoApi_.setNetworkTypeEnabledState(NetworkType.kCellular, true);
+        const apnName = 'test';
+        const cellularNetwork =
+            getManagedProperties(NetworkType.kCellular, 'cellular');
+        cellularNetwork.typeProperties.cellular.connectedApn = {};
+        cellularNetwork.typeProperties.cellular.connectedApn.accessPointName =
+            apnName;
+        mojoApi_.setManagedPropertiesForTest(cellularNetwork);
+        internetDetailPage.init('cellular_guid', 'Cellular', 'cellular');
+        await flushAsync();
+        const crLink =
+            internetDetailPage.shadowRoot.querySelector('#apnSubpageButton');
+        const apn =
+            crLink ? crLink.shadowRoot.querySelector('#subLabel') : null;
+        if (isApnRevampEnabled) {
+          assertTrue(!!apn);
+          assertEquals(apn.textContent.trim(), apnName);
+        } else {
+          assertFalse(!!apn);
+        }
+      });
+    });
   });
 
   suite('DetailsPageEthernet', function() {
@@ -1452,8 +1525,18 @@ suite('InternetDetailPage', function() {
           assertTrue(!!tetherDialog);
           assertFalse(tetherDialog.$.dialog.open);
 
+          let showTetherDialogFinished;
+          const showTetherDialogPromise = new Promise((resolve) => {
+            showTetherDialogFinished = resolve;
+          });
+          const showTetherDialog = internetDetailPage.showTetherDialog_;
+          internetDetailPage.showTetherDialog_ = () => {
+            showTetherDialog.call(internetDetailPage);
+            showTetherDialogFinished();
+          };
+
           connect.click();
-          await flushAsync();
+          await showTetherDialogPromise;
           assertTrue(tetherDialog.$.dialog.open);
         });
 

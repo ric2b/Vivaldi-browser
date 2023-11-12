@@ -74,11 +74,18 @@ class BrowserURLLoaderThrottle::CheckerOnIO
         can_check_high_confidence_allowlist_(
             can_check_high_confidence_allowlist),
         url_lookup_service_metric_suffix_(url_lookup_service_metric_suffix),
-        url_lookup_service_(url_lookup_service) {
+        url_lookup_service_(url_lookup_service),
+        creation_time_(base::TimeTicks::Now()) {
     content::WebContents* contents = web_contents_getter_.Run();
     if (!!contents) {
       last_committed_url_ = contents->GetLastCommittedURL();
     }
+  }
+
+  ~CheckerOnIO() {
+    base::UmaHistogramMediumTimes(
+        "SafeBrowsing.BrowserThrottle.CheckerOnIOLifetime",
+        base::TimeTicks::Now() - creation_time_);
   }
 
   // Starts the initial safe browsing check. This check and future checks may be
@@ -194,6 +201,7 @@ class BrowserURLLoaderThrottle::CheckerOnIO
   std::string url_lookup_service_metric_suffix_;
   GURL last_committed_url_;
   base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service_;
+  base::TimeTicks creation_time_;
 };
 
 // static
@@ -261,9 +269,14 @@ void BrowserURLLoaderThrottle::WillStartRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(0u, pending_checks_);
   DCHECK(!blocked_);
+  base::UmaHistogramBoolean(
+      "SafeBrowsing.BrowserThrottle.WillStartRequestAfterWillProcessResponse",
+      will_process_response_count_ > 0);
 
   original_url_ = request->url;
   pending_checks_++;
+  start_request_time_ = base::TimeTicks::Now();
+  is_start_request_called_ = true;
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&BrowserURLLoaderThrottle::CheckerOnIO::Start,
                                 io_checker_->AsWeakPtr(), request->headers,
@@ -281,6 +294,11 @@ void BrowserURLLoaderThrottle::WillRedirectRequest(
     net::HttpRequestHeaders* /* modified_headers */,
     net::HttpRequestHeaders* /* modified_cors_exempt_headers */) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  base::UmaHistogramBoolean(
+      "SafeBrowsing.BrowserThrottle."
+      "WillRedirectRequestAfterWillProcessResponse",
+      will_process_response_count_ > 0);
+
   if (blocked_) {
     // OnCheckUrlResult() has set |blocked_| to true and called
     // |delegate_->CancelWithError|, but this method is called before the
@@ -305,6 +323,11 @@ void BrowserURLLoaderThrottle::WillProcessResponse(
     network::mojom::URLResponseHead* response_head,
     bool* defer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  will_process_response_count_++;
+  base::UmaHistogramCounts100(
+      "SafeBrowsing.BrowserThrottle.WillProcessResponseCount",
+      will_process_response_count_);
+
   if (blocked_) {
     // OnCheckUrlResult() has set |blocked_| to true and called
     // |delegate_->CancelWithError|, but this method is called before the
@@ -317,6 +340,12 @@ void BrowserURLLoaderThrottle::WillProcessResponse(
   base::UmaHistogramBoolean(
       "SafeBrowsing.BrowserThrottle.IsCheckCompletedOnProcessResponse",
       check_completed);
+  if (is_start_request_called_) {
+    base::UmaHistogramTimes(
+        "SafeBrowsing.BrowserThrottle.IntervalBetweenStartAndProcess",
+        base::TimeTicks::Now() - start_request_time_);
+    is_start_request_called_ = false;
+  }
 
   if (check_completed)
     return;

@@ -33,6 +33,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -524,7 +525,7 @@ void AssistantInteractionControllerImpl::OnSuggestionPressed(
     // and destroy |suggestion| in the process. Failure to post in this case
     // would cause any subsequent observers of this suggestion chip event to
     // receive a deleted pointer.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&AssistantController::OpenUrl,
                        AssistantController::Get()->GetWeakPtr(),
@@ -828,7 +829,10 @@ void AssistantInteractionControllerImpl::StopActiveInteraction(
   // Abort any request in progress.
   screen_context_request_factory_.InvalidateWeakPtrs();
 
-  assistant_->StopActiveInteraction(cancel_conversation);
+  if (AssistantState::Get()->assistant_status() ==
+      assistant::AssistantStatus::READY) {
+    assistant_->StopActiveInteraction(cancel_conversation);
+  }
 
   // Because we are stopping an interaction in progress, we discard any pending
   // response for it that is cached to prevent it from being committed when the

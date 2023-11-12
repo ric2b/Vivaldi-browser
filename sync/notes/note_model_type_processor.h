@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/callback_forward.h"
@@ -51,7 +52,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                         syncer::UpdateResponseDataList updates,
                         absl::optional<sync_pb::GarbageCollectionDirective>
                             gc_directive) override;
-
+  void StorePendingInvalidations(
+      std::vector<sync_pb::ModelTypeState::Invalidation> invalidations_to_store)
+      override;
   // ModelTypeControllerDelegate implementation.
   void OnSyncStarting(const syncer::DataTypeActivationRequest& request,
                       StartCallback start_callback) override;
@@ -83,6 +86,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   const SyncedNoteTracker* GetTrackerForTest() const;
   bool IsConnectedForTest() const;
 
+  // Reset max notes till which sync is enabled.
+  void SetMaxNotesTillSyncEnabledForTest(size_t limit);
+
   base::WeakPtr<syncer::ModelTypeControllerDelegate> GetWeakPtr();
 
  private:
@@ -105,9 +111,14 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                syncer::UpdateResponseDataList updates);
 
   // Instantiates the required objects to track metadata and starts observing
-  // changes from the note model.
+  // changes from the note model. Note that this does not include tracking
+  // of metadata fields managed by the processor but only those tracked by the
+  // note tracker.
   void StartTrackingMetadata();
   void StopTrackingMetadata();
+
+  // Resets note tracker in addition to stopping metadata tracking.
+  void StopTrackingMetadataAndResetTracker();
 
   // Creates a DictionaryValue for local and remote debugging information about
   // |node| and appends it to |all_nodes|. It does the same for child nodes
@@ -150,6 +161,14 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // note-loading process.
   std::unique_ptr<SyncedNoteTracker> note_tracker_;
 
+  // Maintains whether the count of remote updates downloaded on the latest
+  // initial merge exceeded the limit. Note that this is set only when limit is
+  // active, i.e. the feature is enabled. Also note that this would only be
+  // relevant where note_tracker is null, since this can be set only in an
+  // error case and in an error case, we clear the tracker(or it remains
+  // uninitialized).
+  bool last_initial_merge_remote_updates_exceeded_limit_ = false;
+
   // GUID string that identifies the sync client and is received from the sync
   // engine.
   std::string cache_guid_;
@@ -157,6 +176,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   syncer::ModelErrorHandler error_handler_;
 
   std::unique_ptr<NotesModelObserverImpl> notes_model_observer_;
+
+  // This member variable exists only to allow tests to override the limit.
+  size_t max_notes_till_sync_enabled_;
 
   // WeakPtrFactory for this processor for ModelTypeController.
   base::WeakPtrFactory<NoteModelTypeProcessor> weak_ptr_factory_for_controller_{

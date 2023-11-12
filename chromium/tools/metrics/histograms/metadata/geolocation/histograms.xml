@@ -98,7 +98,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Geolocation.NetworkLocationRequest.Event"
-    enum="NetworkLocationRequestEvent" expires_after="2023-02-12">
+    enum="NetworkLocationRequestEvent" expires_after="2023-04-16">
   <owner>mattreynolds@chromium.org</owner>
   <owner>device-dev@chromium.org</owner>
   <summary>
@@ -110,14 +110,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Geolocation.NetworkLocationRequest.NetError"
-    enum="NetErrorCodes" expires_after="2023-02-12">
+    enum="NetErrorCodes" expires_after="2023-04-16">
   <owner>JamesHollyer@chromium.org</owner>
   <owner>device-dev@chromium.org</owner>
   <summary>Network errors in NetworkLocationRequest.</summary>
 </histogram>
 
 <histogram name="Geolocation.NetworkLocationRequest.ResponseCode"
-    enum="HttpResponseCode" expires_after="2023-02-12">
+    enum="HttpResponseCode" expires_after="2023-04-16">
   <owner>mattreynolds@chromium.org</owner>
   <owner>device-dev@chromium.org</owner>
   <summary>
@@ -188,28 +188,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Records the backoff level when the Location Settings Dialog is suppressed
     due to backoff.
-  </summary>
-</histogram>
-
-<histogram name="Geolocation.Timeout" units="ms" expires_after="M85">
-  <owner>mattreynolds@chromium.org</owner>
-  <owner>deviceapi-team@google.com</owner>
-  <summary>
-    Counts Geolocation request timeout values, bucketing by timeout duration.
-    This is recorded for all requests upon creation, see
-    Geolocation.TimeoutExpired for timeouts that actually expired.
-  </summary>
-</histogram>
-
-<histogram name="Geolocation.TimeoutExpired" units="ms"
-    expires_after="2020-02-01">
-  <owner>mattreynolds@chromium.org</owner>
-  <owner>deviceapi-team@google.com</owner>
-  <summary>
-    Counts Geolocation request timeout expirations, bucketing by timeout
-    duration. This means no position was received within the allowed time from
-    the browser process due to e.g. a slow network or an unresponsive system
-    location provider.
   </summary>
 </histogram>
 

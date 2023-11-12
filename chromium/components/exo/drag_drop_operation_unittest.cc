@@ -6,13 +6,14 @@
 
 #include <memory>
 
+#include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/exo/buffer.h"
 #include "components/exo/data_exchange_delegate.h"
 #include "components/exo/data_source.h"
@@ -29,11 +30,7 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point_f.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/drag_drop/drag_drop_controller.h"
 #include "url/gurl.h"
-#endif
 
 namespace exo {
 namespace {
@@ -69,7 +66,7 @@ class DragDropOperationTest : public test::ExoTestBase,
   void OnDragStarted() override {
     drag_start_count_++;
     if (!drag_blocked_callback_.is_null()) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(drag_blocked_callback_));
     }
   }
@@ -143,7 +140,6 @@ TEST_F(DragDropOperationTest, DeleteDuringDragging) {
   EXPECT_FALSE(operation);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(DragDropOperationTest, DragDropFromPopup) {
   static_cast<ash::DragDropController*>(
       aura::client::GetDragDropClient(ash::Shell::GetPrimaryRootWindow()))
@@ -432,7 +428,5 @@ TEST_F(DragDropOperationTest, DragDropCheckSourceFromNonLacros) {
 
   ::testing::Mock::VerifyAndClearExpectations(dlp_controller.get());
 }
-
-#endif
 
 }  // namespace exo

@@ -4,17 +4,29 @@
 
 #include "third_party/blink/renderer/modules/compute_pressure/pressure_observer.h"
 
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_observer_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_record.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_source.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/compute_pressure/pressure_observer_manager.h"
+#include "third_party/blink/renderer/modules/compute_pressure/pressure_record.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
+
+namespace {
+
+constexpr char kFeaturePolicyBlocked[] =
+    "Access to the feature \"compute pressure\" is disallowed by permissions "
+    "policy.";
+
+}  // namespace
 
 PressureObserver::PressureObserver(V8PressureUpdateCallback* observer_callback,
                                    PressureObserverOptions* options,
@@ -43,14 +55,24 @@ Vector<V8PressureSource> PressureObserver::supportedSources() {
       {V8PressureSource(V8PressureSource::Enum::kCpu)});
 }
 
-void PressureObserver::observe(ScriptState* script_state,
-                               V8PressureSource source,
-                               ExceptionState& exception_state) {
+ScriptPromise PressureObserver::observe(ScriptState* script_state,
+                                        V8PressureSource source,
+                                        ExceptionState& exception_state) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (execution_context->IsContextDestroyed()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "Execution context is detached.");
-    return;
+    return ScriptPromise();
+  }
+
+  // Checks whether the document is allowed by Permissions Policy to call
+  // Compute Pressure API.
+  if (!execution_context->IsFeatureEnabled(
+          mojom::blink::PermissionsPolicyFeature::kComputePressure,
+          ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                      kFeaturePolicyBlocked);
+    return ScriptPromise();
   }
 
   if (!manager_) {
@@ -58,24 +80,17 @@ void PressureObserver::observe(ScriptState* script_state,
     manager_ = PressureObserverManager::From(*window);
   }
 
-  manager_->AddObserver(source, this);
+  return manager_->AddObserver(source, this, script_state, exception_state);
 }
 
-// TODO(crbug.com/1306819): Unobserve is supposed to only stop observing
-// one source but should continue to observe other sources.
-// For now, since "cpu" is the only source, unobserve() has the same
-// functionality as disconnect().
 void PressureObserver::unobserve(V8PressureSource source) {
   // Wrong order of calls.
   if (!manager_)
     return;
 
-  // TODO(crbug.com/1306819):
-  // 1. observer needs to be dequeued from active observer list of
-  // requested source.
-  // 2. observer records from the source need to be removed from `records_`
-  // For now 'cpu' is the only source.
+  // https://wicg.github.io/compute-pressure/#the-unobserve-method
   manager_->RemoveObserver(source, this);
+  last_record_map_[static_cast<size_t>(source.AsEnum())].Clear();
   switch (source.AsEnum()) {
     case V8PressureSource::Enum::kCpu:
       records_.clear();
@@ -88,7 +103,10 @@ void PressureObserver::disconnect() {
   if (!manager_)
     return;
 
+  // https://wicg.github.io/compute-pressure/#the-disconnect-method
   manager_->RemoveObserverFromAllSources(this);
+  for (auto& last_record : last_record_map_)
+    last_record.Clear();
   records_.clear();
 }
 
@@ -112,11 +130,8 @@ void PressureObserver::OnUpdate(ExecutionContext* execution_context,
   if (!HasChangeInData(source, state, factors))
     return;
 
-  auto* record = PressureRecord::Create();
-  record->setSource(V8PressureSource(source));
-  record->setFactors(factors);
-  record->setState(V8PressureState(state));
-  record->setTime(timestamp);
+  auto* record =
+      MakeGarbageCollected<PressureRecord>(source, state, factors, timestamp);
 
   last_record_map_[static_cast<size_t>(source)] = record;
 

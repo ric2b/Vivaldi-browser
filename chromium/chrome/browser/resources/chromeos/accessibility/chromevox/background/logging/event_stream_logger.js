@@ -6,6 +6,7 @@
  * @fileoverview Creates event stream logger.
  */
 
+import {LocalStorage} from '../../../common/local_storage.js';
 import {BridgeConstants} from '../../common/bridge_constants.js';
 import {BridgeHelper} from '../../common/bridge_helper.js';
 import {EventLog} from '../../common/log_types.js';
@@ -19,21 +20,16 @@ const Constants = BridgeConstants.EventStreamLogger;
 
 export class EventStreamLogger {
   constructor(node) {
-    /**
-     * @type {!chrome.automation.AutomationNode}
-     */
+    /** @private {!AutomationNode} */
     this.node_ = node;
 
-    /**
-     * @type {function(!chrome.automation.AutomationEvent): void}
-     * @private
-     */
-    this.watcher_ = this.eventStreamLogging.bind(this);
+    /** @private {function(!AutomationEvent): void} */
+    this.watcher_ = event => this.eventStreamLogging(event);
   }
 
   /**
    * Adds eventStreamLogging to this handler.
-   * @param {chrome.automation.EventType} eventType
+   * @param {EventType} eventType
    * @protected
    */
   addWatcher_(eventType) {
@@ -42,7 +38,7 @@ export class EventStreamLogger {
 
   /**
    * Removes eventStreamLogging from this handler.
-   * @param {chrome.automation.EventType} eventType
+   * @param {EventType} eventType
    * @protected
    */
   removeWatcher_(eventType) {
@@ -50,16 +46,16 @@ export class EventStreamLogger {
   }
 
   /**
-   * @param {!chrome.automation.AutomationEvent} evt
+   * @param {!AutomationEvent} evt
    */
   eventStreamLogging(evt) {
     const eventLog = new EventLog(evt);
-    LogStore.getInstance().writeLog(eventLog);
+    LogStore.instance.writeLog(eventLog);
     console.log(eventLog.toString());
   }
 
   /**
-   * @param {chrome.automation.EventType} eventType
+   * @param {EventType} eventType
    * @param {boolean} checked
    */
   notifyEventStreamFilterChanged(eventType, checked) {
@@ -70,43 +66,33 @@ export class EventStreamLogger {
     }
   }
 
-  /**
-   * @param {boolean} checked
-   */
+  /** @param {boolean} checked */
   notifyEventStreamFilterChangedAll(checked) {
-    for (const type in chrome.automation.EventType) {
-      if (localStorage[chrome.automation.EventType[type]] === 'true') {
-        this.notifyEventStreamFilterChanged(
-            chrome.automation.EventType[type], checked);
+    for (const type in EventType) {
+      if (LocalStorage.get(EventType[type])) {
+        this.notifyEventStreamFilterChanged(EventType[type], checked);
       }
     }
   }
 
-  /**
-   * Initializes global state for EventStreamLogger.
-   * @private
-   */
-  static init_() {
+  /** Initializes global state for EventStreamLogger. */
+  static init() {
     chrome.automation.getDesktop(function(desktop) {
       EventStreamLogger.instance = new EventStreamLogger(desktop);
       EventStreamLogger.instance.notifyEventStreamFilterChangedAll(
-          localStorage['enableEventStreamLogging'] === 'true');
+          LocalStorage.get('enableEventStreamLogging'));
+
+      BridgeHelper.registerHandler(
+          Constants.TARGET, Constants.Action.NOTIFY_EVENT_STREAM_FILTER_CHANGED,
+          (name, enabled) =>
+              EventStreamLogger.instance.notifyEventStreamFilterChanged(
+                  name, enabled));
     });
   }
 }
-
 
 /**
  * Global instance.
  * @type {EventStreamLogger}
  */
 EventStreamLogger.instance;
-
-
-EventStreamLogger.init_();
-
-BridgeHelper.registerHandler(
-    Constants.TARGET, Constants.Action.NOTIFY_EVENT_STREAM_FILTER_CHANGED,
-    (name, enabled) =>
-        EventStreamLogger.instance.notifyEventStreamFilterChanged(
-            name, enabled));

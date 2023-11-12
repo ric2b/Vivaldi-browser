@@ -433,22 +433,21 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
 
   DVLOG(3) << "Parsing feature config for " << feature->name;
 
+  // Client-side configuration is used under any of the following circumstances:
+  // - The UseClientConfigIPH feature flag is enabled
+  // - There are no field trial parameters set for the feature
+  // - The field trial configuration is empty
+  //
+  // Note that the "empty configuration = use client-side" is quite useful, as
+  // it means that json field trial configs, Finch configurations, and tests can
+  // simply enable a feature engagement feature, and it will default to using
+  // the client-side configuration; there is no need to duplicate a standard
+  // configuration in more than one place.
   std::map<std::string, std::string> params;
-
-  // Check the use client configuration flag; if enabled, client configuration
-  // will be used and server configuration will be ignored.
-  bool use_client_config = base::FeatureList::IsEnabled(kUseClientConfigIPH);
-  bool result = !use_client_config &&
-                base::GetFieldTrialParamsByFeature(*feature, &params);
-
-  // No |result| means that there was no server side configuration, or the
-  // feature was disabled. The feature could be disabled either because it
-  // is not configured to be base::FEATURE_ENABLED_BY_DEFAULT, or it has been
-  // disabled from the server.
-  if (!result) {
-    // Some features have a checked in client side configuration, and for those
-    // use that and and record success, otherwise fall back to invalid
-    // configuration below.
+  if (base::FeatureList::IsEnabled(kUseClientConfigIPH) ||
+      !base::GetFieldTrialParamsByFeature(*feature, &params) ||
+      params.empty()) {
+    // Try to read the client-side configuration.
     if (MaybeAddClientSideFeatureConfig(feature)) {
       stats::RecordConfigParsingEvent(
           stats::ConfigParsingEvent::SUCCESS_FROM_SOURCE);
@@ -456,8 +455,8 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
       return;
     }
 
-    // No server-side, nor client side configuration available, but the feature
-    // was passed in as one of all the feature available, so give it an invalid
+    // No server-side nor client side configuration is available, but the
+    // feature was on the list of available features, so give it an invalid
     // config.
     FeatureConfig& config = configs_[feature->name];
     config.valid = false;
@@ -655,6 +654,33 @@ ChromeVariationsConfiguration::GetRegisteredFeatures() const {
   for (const auto& element : configs_)
     features.push_back(element.first);
   return features;
+}
+
+const GroupConfig& ChromeVariationsConfiguration::GetGroupConfig(
+    const base::Feature& group) const {
+  auto it = group_configs_.find(group.name);
+  DCHECK(it != group_configs_.end());
+  return it->second;
+}
+
+const GroupConfig& ChromeVariationsConfiguration::GetGroupConfigByName(
+    const std::string& group_name) const {
+  auto it = group_configs_.find(group_name);
+  DCHECK(it != group_configs_.end());
+  return it->second;
+}
+
+const Configuration::GroupConfigMap&
+ChromeVariationsConfiguration::GetRegisteredGroupConfigs() const {
+  return group_configs_;
+}
+
+const std::vector<std::string>
+ChromeVariationsConfiguration::GetRegisteredGroups() const {
+  std::vector<std::string> groups;
+  for (const auto& element : group_configs_)
+    groups.push_back(element.first);
+  return groups;
 }
 
 }  // namespace feature_engagement

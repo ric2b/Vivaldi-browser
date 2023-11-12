@@ -43,6 +43,10 @@ class SyncSetupInProgressHandle {
 
   ~SyncSetupInProgressHandle();
 
+  SyncSetupInProgressHandle(const SyncSetupInProgressHandle&) = delete;
+  SyncSetupInProgressHandle& operator=(const SyncSetupInProgressHandle&) =
+      delete;
+
  private:
   base::OnceClosure on_destroy_;
 };
@@ -148,8 +152,8 @@ class SyncService : public KeyedService {
     // Sync is inactive, e.g. due to enterprise policy, or simply because there
     // is no authenticated user.
     DISABLED,
-    // Sync is paused, e.g. because the user signed out on the web, and the
-    // engine is inactive.
+    // Sync is paused, e.g. because there is a persistent auth error (e.g. user
+    // signed out on the web on desktop), and the engine is inactive.
     PAUSED,
     // Sync's startup was deferred, so that it doesn't slow down browser
     // startup. Once the deferral time (usually 10s) expires, or something

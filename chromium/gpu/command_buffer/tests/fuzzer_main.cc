@@ -40,7 +40,6 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_context_egl.h"
 #include "ui/gl/gl_context_stub.h"
-#include "ui/gl/gl_image_ref_counted_memory.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_stub_api.h"
 #include "ui/gl/gl_surface.h"
@@ -50,7 +49,7 @@
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -325,7 +324,7 @@ class CommandBufferSetup {
     [[maybe_unused]] auto* command_line =
         base::CommandLine::ForCurrentProcess();
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
     ui::OzonePlatform::InitializeForGPU(ui::OzonePlatform::InitParams());
 #endif
 
@@ -446,8 +445,7 @@ class CommandBufferSetup {
     decoder_.reset(raster::RasterDecoder::Create(
         command_buffer_.get(), command_buffer_->service(), &outputter_,
         gpu_feature_info, gpu_preferences_, nullptr /* memory_tracker */,
-        shared_image_manager_.get(), /*image_factory=*/nullptr, context_state_,
-        true /* is_privileged */));
+        shared_image_manager_.get(), context_state_, true /* is_privileged */));
 #else
     context_->MakeCurrent(surface_.get());
     // GLES2Decoder may Initialize feature_info differently than
@@ -458,13 +456,13 @@ class CommandBufferSetup {
         gpu_preferences_, true, &mailbox_manager_, nullptr /* memory_tracker */,
         &translator_cache_, &completeness_cache_, decoder_feature_info,
         config_.attrib_helper.bind_generates_resource,
-        nullptr /* image_factory */, nullptr /* progress_reporter */,
-        gpu_feature_info, discardable_manager_.get(),
-        passthrough_discardable_manager_.get(), shared_image_manager_.get());
+        nullptr /* progress_reporter */, gpu_feature_info,
+        discardable_manager_.get(), passthrough_discardable_manager_.get(),
+        shared_image_manager_.get());
     auto* context = context_.get();
     decoder_.reset(gles2::GLES2Decoder::Create(
         command_buffer_.get(), command_buffer_->service(), &outputter_,
-        context_group.get()));
+        context_group.get(), /*image_factory_for_nacl_swapchain=*/nullptr));
 #endif
 
     decoder_->GetLogger()->set_log_synthesized_gl_errors(false);

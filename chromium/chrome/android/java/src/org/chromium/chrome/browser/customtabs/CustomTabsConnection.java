@@ -36,7 +36,6 @@ import org.json.JSONObject;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.FeatureList;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
@@ -58,8 +57,11 @@ import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.browserservices.PostMessageHandler;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.SessionHandler;
+import org.chromium.chrome.browser.customtabs.features.sessionrestore.SessionRestoreManager;
+import org.chromium.chrome.browser.customtabs.features.sessionrestore.SessionRestoreManagerImpl;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
@@ -72,6 +74,7 @@ import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.components.variations.SyntheticTrialAnnotationMode;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -181,6 +184,9 @@ public class CustomTabsConnection {
     static final String GET_GREATEST_SCROLL_PERCENTAGE = "getGreatestScrollPercentage";
     @VisibleForTesting
     static final String GREATEST_SCROLL_PERCENTAGE_KEY = "greatestScrollPercentage";
+    private static final MutableFlagWithSafeDefault sRealTimeEngagementFlag =
+            new MutableFlagWithSafeDefault(
+                    ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS, false);
 
     @IntDef({ParallelRequestStatus.NO_REQUEST, ParallelRequestStatus.SUCCESS,
             ParallelRequestStatus.FAILURE_NOT_INITIALIZED,
@@ -212,6 +218,8 @@ public class CustomTabsConnection {
             "Chrome not initialized", "Not authorized", "Invalid URL", "Invalid referrer",
             "Invalid referrer for session"};
 
+    private static final String SYNTHETIC_FIELDTRIAL_CCT_EXPERIMENT_OVERRIDE =
+            "CCT_EXPERIMENT_OVERRIDE";
     private static CustomTabsConnection sInstance;
     private @Nullable String mTrustedPublisherUrlPackage;
 
@@ -226,8 +234,22 @@ public class CustomTabsConnection {
     @Nullable
     private Callback<CustomTabsSessionToken> mDisconnectCallback;
     private @Nullable Supplier<Integer> mGreatestScrollPercentageSupplier;
+    @Nullable
+    private SessionRestoreManager mSessionRestoreManager;
 
     private volatile ChainedTasks mWarmupTasks;
+
+    // Caches the previous height reported via |onResized|. Used for extraCallback
+    // |ON_RESIZED_CALLLBACK| which cares about height only.
+    private int mPrevHeight;
+
+    /** Whether Dynamic Features are enabled. CCT Intents can override the feature set. */
+    private boolean mIsDynamicIntentFeatureOverridesEnabled =
+            ChromeFeatureList.sCctIntentFeatureOverrides.isEnabled();
+    @Nullable
+    private List<String> mDynamicEnabledFeatures;
+    @Nullable
+    private List<String> mDynamicDisabledFeatures;
 
     /**
      * <strong>DO NOT CALL</strong>
@@ -427,7 +449,7 @@ public class CustomTabsConnection {
 
         // (1)
         if (!initialized) {
-            tasks.add(UiThreadTaskTraits.BOOTSTRAP, () -> {
+            tasks.add(UiThreadTaskTraits.DEFAULT, () -> {
                 try (TraceEvent e = TraceEvent.scoped("CustomTabsConnection.initializeBrowser()")) {
                     initializeBrowser(ContextUtils.getApplicationContext());
                     ChromeBrowserInitializer.getInstance().initNetworkChangeNotifier();
@@ -438,7 +460,7 @@ public class CustomTabsConnection {
 
         // (2)
         if (mayCreateSpareWebContents && !mHiddenTabHolder.hasHiddenTab()) {
-            tasks.add(UiThreadTaskTraits.BOOTSTRAP, () -> {
+            tasks.add(UiThreadTaskTraits.DEFAULT, () -> {
                 // Temporary fix for https://crbug.com/797832.
                 // TODO(lizeb): Properly fix instead of papering over the bug, this code should
                 // not be scheduled unless startup is done. See https://crbug.com/797832.
@@ -450,7 +472,7 @@ public class CustomTabsConnection {
         }
 
         // (3)
-        tasks.add(UiThreadTaskTraits.BOOTSTRAP, () -> {
+        tasks.add(UiThreadTaskTraits.DEFAULT, () -> {
             try (TraceEvent e = TraceEvent.scoped("InitializeViewHierarchy")) {
                 WarmupManager.getInstance().initializeViewHierarchy(
                         ContextUtils.getApplicationContext(),
@@ -459,7 +481,7 @@ public class CustomTabsConnection {
         });
 
         if (!initialized) {
-            tasks.add(UiThreadTaskTraits.BOOTSTRAP, () -> {
+            tasks.add(UiThreadTaskTraits.DEFAULT, () -> {
                 try (TraceEvent e = TraceEvent.scoped("WarmupInternalFinishInitialization")) {
                     // (4)
                     Profile profile = Profile.getLastUsedRegularProfile();
@@ -474,7 +496,7 @@ public class CustomTabsConnection {
             });
         }
 
-        tasks.add(UiThreadTaskTraits.BOOTSTRAP, () -> notifyWarmupIsDone(uid));
+        tasks.add(UiThreadTaskTraits.DEFAULT, () -> notifyWarmupIsDone(uid));
         tasks.start(false);
         mWarmupTasks = tasks;
         return true;
@@ -532,6 +554,17 @@ public class CustomTabsConnection {
     @VisibleForTesting
     public Tab getHiddenTab() {
         return mHiddenTabHolder != null ? mHiddenTabHolder.getHiddenTab() : null;
+    }
+
+    /* Return the SessionRestoreManager for session restore. */
+    public @Nullable SessionRestoreManager getSessionRestoreManager() {
+        if (!ChromeFeatureList.sCctRetainableStateInMemory.isEnabled()) {
+            return null;
+        }
+        if (mSessionRestoreManager == null) {
+            mSessionRestoreManager = new SessionRestoreManagerImpl();
+        }
+        return mSessionRestoreManager;
     }
 
     private boolean preconnectUrls(List<Bundle> likelyBundles) {
@@ -649,9 +682,7 @@ public class CustomTabsConnection {
         Bundle result = null;
         switch (commandName) {
             case GET_GREATEST_SCROLL_PERCENTAGE:
-                if (!FeatureList.isInitialized()
-                        || !ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                if (!isDynamicFeatureEnabled(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
                     break;
                 }
                 Integer percentage = mGreatestScrollPercentageSupplier != null
@@ -1093,9 +1124,8 @@ public class CustomTabsConnection {
         return mClientManager.getClientPackageNameForSession(session);
     }
 
-    /** @return Whether the client of the {@code session} is a first-party application. */
-    public boolean isSessionFirstParty(CustomTabsSessionToken session) {
-        String packageName = getClientPackageNameForSession(session);
+    /** @return Whether the given package name is that of a first-party application. */
+    public boolean isFirstParty(String packageName) {
         if (packageName == null) return false;
         return ExternalAuthUtils.getInstance().isGoogleSigned(packageName);
     }
@@ -1174,26 +1204,29 @@ public class CustomTabsConnection {
     /**
      * Called when a resizable Custom Tab is resized.
      */
-    public void onResized(@Nullable CustomTabsSessionToken session, int size) {
+    public void onResized(@Nullable CustomTabsSessionToken session, int height, int width) {
         Bundle args = new Bundle();
-        args.putInt(ON_RESIZED_SIZE_EXTRA, size);
+        if (height != mPrevHeight) {
+            args.putInt(ON_RESIZED_SIZE_EXTRA, height);
 
-        // TODO(crbug.com/1366844): Deprecate the extra callback.
-        if (safeExtraCallback(session, ON_RESIZED_CALLBACK, args) && mLogRequests) {
-            logCallback("extraCallback(" + ON_RESIZED_CALLBACK + ")", args);
+            // TODO(crbug.com/1366844): Deprecate the extra callback.
+            if (safeExtraCallback(session, ON_RESIZED_CALLBACK, args) && mLogRequests) {
+                logCallback("extraCallback(" + ON_RESIZED_CALLBACK + ")", args);
+            }
+            mPrevHeight = height;
         }
 
         CustomTabsCallback callback = mClientManager.getCallbackForSession(session);
         if (callback == null) return;
         try {
-            callback.onActivityResized(size, args);
+            callback.onActivityResized(height, width, args);
         } catch (Exception e) {
             // Catching all exceptions is really bad, but we need it here,
             // because Android exposes us to client bugs by throwing a variety
             // of exceptions. See crbug.com/517023.
             return;
         }
-        logCallback("onActivityResized()", size);
+        logCallback("onActivityResized()", "(" + height + "x" + width + ")");
     }
 
     /**
@@ -1270,6 +1303,121 @@ public class CustomTabsConnection {
         }
         logCallback("onNavigationEvent()", navigationEvent);
         return true;
+    }
+
+    /** Resets dynamic experiment features that can be enabled/disabled via an Intent. */
+    @VisibleForTesting
+    void resetDynamicFeatures() {
+        mDynamicEnabledFeatures = null;
+        mDynamicDisabledFeatures = null;
+    }
+
+    /**
+     * Does setup of dynamic experiment features that can be enabled/disabled via an Intent.
+     * @param intent The {@link Intent} that is active, to be scanned for enable/disable Extras.
+     * @return Whether the setup will actually change the active feature set.
+     */
+    boolean setupDynamicFeatures(Intent intent) {
+        if (!mIsDynamicIntentFeatureOverridesEnabled
+                || (!IncognitoCustomTabIntentDataProvider.isIntentFromFirstParty(intent)
+                        && !CommandLine.getInstance().hasSwitch(
+                                "cct-client-firstparty-override"))) {
+            return false;
+        }
+        return setupDynamicFeaturesInternal(intent);
+    }
+
+    @VisibleForTesting
+    boolean setupDynamicFeaturesInternal(Intent intent) {
+        // TODO(https://crbug.com/1401098) Add support for separate dynamic experiments per session!
+        // Early exits if any CCT client app has already set or cleared dynamic experiments.
+        if (mDynamicEnabledFeatures != null || mDynamicDisabledFeatures != null) return false;
+
+        ArrayList<String> enabledExperiments = IntentUtils.safeGetStringArrayListExtra(
+                intent, CustomTabIntentDataProvider.EXPERIMENTS_ENABLE);
+        ArrayList<String> disabledExperiments = IntentUtils.safeGetStringArrayListExtra(
+                intent, CustomTabIntentDataProvider.EXPERIMENTS_DISABLE);
+        if (!areExperimentsSupported(enabledExperiments, disabledExperiments)) return false;
+
+        mDynamicEnabledFeatures = enabledExperiments;
+        mDynamicDisabledFeatures = disabledExperiments;
+        if (UmaSessionStats.isMetricsServiceAvailable()) {
+            boolean isEnabling = enabledExperiments != null;
+            String groupPrefix = isEnabling ? "Enable_" : "Disable_";
+            List<String> featuresUsed = isEnabling ? enabledExperiments : disabledExperiments;
+            String groupName = groupPrefix + String.join("_", featuresUsed);
+            UmaSessionStats.registerSyntheticFieldTrial(
+                    SYNTHETIC_FIELDTRIAL_CCT_EXPERIMENT_OVERRIDE, groupName,
+                    SyntheticTrialAnnotationMode.CURRENT_LOG);
+        } else {
+            Log.w(TAG, "The Metrics Service is not available, so no synthetic field trial");
+        }
+        return true;
+    }
+
+    /**
+     * Determines whether the given enable and disable features are currently supported.
+     * @param enabledExperiments A list of Features to enable.
+     * @param disabledExperiments A list of Features to disable.
+     * @return Whether this set of Features is allowed to be overridden by an Intent.
+     */
+    @VisibleForTesting
+    boolean areExperimentsSupported(
+            List<String> enabledExperiments, List<String> disabledExperiments) {
+        boolean enableEngagement = enabledExperiments != null
+                && enabledExperiments.contains(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS);
+        boolean enableBranding = enabledExperiments != null
+                && enabledExperiments.contains(ChromeFeatureList.CCT_BRAND_TRANSPARENCY);
+        boolean disableEngagement = disabledExperiments != null
+                && disabledExperiments.contains(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS);
+        boolean disableBranding = disabledExperiments != null
+                && disabledExperiments.contains(ChromeFeatureList.CCT_BRAND_TRANSPARENCY);
+        // We currently only support having a set of two features: the Engagement Signals Feature
+        // and the Branding Feature.
+        return (enableBranding && enableEngagement) || (disableBranding && disableEngagement);
+    }
+
+    /**
+     * Determines if the given Feature is enabled after factoring in active Intent overrides.
+     * @see #setupDynamicFeatures
+     * @param featureName The Feature to check if it's enabled.
+     * @return Whether the given Feature is effectively enabled given active overrides.
+     */
+    public boolean isDynamicFeatureEnabled(String featureName) {
+        if (mIsDynamicIntentFeatureOverridesEnabled) {
+            assert featureName.equals(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)
+                    || featureName.equals(ChromeFeatureList.CCT_BRAND_TRANSPARENCY)
+                : "Unsupported Feature";
+            if (mDynamicEnabledFeatures != null && mDynamicEnabledFeatures.contains(featureName)) {
+                return true;
+            }
+            if (mDynamicDisabledFeatures != null
+                    && mDynamicDisabledFeatures.contains(featureName)) {
+                return false;
+            }
+        }
+        if (featureName.equals(ChromeFeatureList.CCT_BRAND_TRANSPARENCY)) {
+            return ChromeFeatureList.sCctBrandTransparency.isEnabled();
+        }
+        if (featureName.equals(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+            return sRealTimeEngagementFlag.isEnabled();
+        }
+        Log.e(TAG, "Unsupported Feature!");
+        return false;
+    }
+
+    @VisibleForTesting
+    void setIsDynamicFeaturesEnabled(boolean isDynamicFeaturesEnabled) {
+        mIsDynamicIntentFeatureOverridesEnabled = isDynamicFeaturesEnabled;
+    }
+
+    /**
+     * Returns whether the given feature is enabled with Intent overrides.
+     * @param featureName The feature to check.
+     * @return Whether the feature is enabled with Intent overrides.
+     */
+    public boolean isDynamicFeatureEnabledWithOverrides(String featureName) {
+        return mDynamicEnabledFeatures != null && mDynamicEnabledFeatures.contains(featureName);
     }
 
     /**
@@ -1682,7 +1830,7 @@ public class CustomTabsConnection {
 
     public static void createSpareWebContents() {
         if (SysUtils.isLowEndDevice()) return;
-        WarmupManager.getInstance().createSpareWebContents(WarmupManager.FOR_CCT);
+        WarmupManager.getInstance().createSpareWebContents();
     }
 
     public boolean receiveFile(

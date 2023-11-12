@@ -19,6 +19,7 @@
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_fullscreen_controller.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
 #include "components/remote_cocoa/app_shim/remote_cocoa_app_shim_export.h"
+#include "components/remote_cocoa/common/native_widget_ns_window.mojom-shared.h"
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
 #include "components/remote_cocoa/common/text_input_host.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -145,8 +146,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // Called by the NSWindowDelegate when the system control tint changes.
   void OnSystemControlTintChanged();
 
-  // Called by the NSWindowDelegate on a scale factor or color space change.
-  void OnBackingPropertiesChanged();
+  // Called by the NSWindowDelegate on screen, scale, or color space changes.
+  void OnScreenOrBackingPropertiesChanged();
 
   // Called by the NSWindowDelegate when the window becomes or resigns key.
   void OnWindowKeyStatusChangedTo(bool is_key);
@@ -288,8 +289,11 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
       uint64_t fullscreen_overlay_widget_id,
       EnableImmersiveFullscreenCallback callback) override;
   void DisableImmersiveFullscreen() override;
-  void UpdateToolbarVisibility(bool always_show) override;
+  void UpdateToolbarVisibility(
+      remote_cocoa::mojom::ToolbarVisibilityStyle style) override;
   void OnTopContainerViewBoundsChanged(const gfx::Rect& bounds) override;
+  void ImmersiveFullscreenRevealLock() override;
+  void ImmersiveFullscreenRevealUnlock() override;
   void SetCanGoBack(bool can_go_back) override;
   void SetCanGoForward(bool can_go_back) override;
 
@@ -300,6 +304,9 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // Compute the window and content size, and forward them to |host_|. This will
   // update widget and compositor size.
   void UpdateWindowGeometry();
+
+  // Move `child_windows_` to `target`.
+  void MoveChildrenTo(NativeWidgetNSWindowBridge* target);
 
  private:
   friend class views::test::BridgedNativeWidgetTestApi;
@@ -337,9 +344,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
 
   // Returns true if window restoration data exists from session restore.
   bool HasWindowRestorationData();
-
-  // Returns true if the window is fullscreen.
-  bool IsFullscreen();
 
   // CocoaMouseCaptureDelegate:
   bool PostCapturedEvent(NSEvent* event) override;

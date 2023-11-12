@@ -48,7 +48,6 @@
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/base/features.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
@@ -621,20 +620,18 @@ class CookieTreeQuotaNode : public CookieTreeNode {
         container->quota_helper_->DeleteHostData(
             quota_info_->host, blink::mojom::StorageType::kTemporary);
       }
-      if (quota_info_->persistent_usage > 0) {
-        container->quota_helper_->DeleteHostData(
-            quota_info_->host, blink::mojom::StorageType::kPersistent);
-      }
       if (quota_info_->syncable_usage > 0) {
         container->quota_helper_->DeleteHostData(
             quota_info_->host, blink::mojom::StorageType::kSyncable);
       }
-      container->quota_helper_->RevokeHostQuota(quota_info_->host);
       container->quota_info_list_.erase(quota_info_);
     }
   }
   DetailedInfo GetDetailedInfo() const override {
     return DetailedInfo().InitQuota(&*quota_info_);
+  }
+  int64_t InclusiveSize() const override {
+    return quota_info_->temporary_usage + quota_info_->syncable_usage;
   }
 
  private:
@@ -1712,7 +1709,7 @@ void CookiesTreeModel::NotifyObserverBeginBatch() {
   // Only notify the model once if we're batching in a nested manner.
   if (batches_started_++ == 0) {
     for (Observer& observer : cookies_observer_list_)
-      observer.TreeModelBeginBatch(this);
+      observer.TreeModelBeginBatchDeprecated(this);
   }
 }
 
@@ -1727,7 +1724,7 @@ void CookiesTreeModel::MaybeNotifyBatchesEnded() {
   if (batches_ended_ == batches_started_ &&
       batches_seen_ == batches_expected_) {
     for (Observer& observer : cookies_observer_list_)
-      observer.TreeModelEndBatch(this);
+      observer.TreeModelEndBatchDeprecated(this);
     SetBatchExpectation(0, true);
   }
 }
@@ -1758,8 +1755,8 @@ std::unique_ptr<CookiesTreeModel> CookiesTreeModel::CreateForProfileDeprecated(
   // If partitioned storage is enabled, the quota node is used to represent all
   // types of quota managed storage. If not, the quota node type is excluded as
   // it is represented by other types.
-  bool use_quota_only = base::FeatureList::IsEnabled(
-      net::features::kThirdPartyStoragePartitioning);
+  bool use_quota_only =
+      blink::StorageKey::IsThirdPartyStoragePartitioningEnabled();
 
   // Types managed by Quota:
   auto database_helper =

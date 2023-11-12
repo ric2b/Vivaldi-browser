@@ -29,9 +29,7 @@ if (is_win) {
   }
 
   update_target("//chrome/installer/setup:lib") {
-    sources -= [
-      "vivaldi_behaviors.cc", # wrong path
-    ]
+    sources -= [ "${branding_path_product}_behaviors.cc" ]
     sources += [
       "//vivaldi/installer/vivaldi_behaviors.cc",
     ]

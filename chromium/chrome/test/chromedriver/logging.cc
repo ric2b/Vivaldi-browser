@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/test/chromedriver/capabilities.h"
 #include "chrome/test/chromedriver/chrome/console_logger.h"
@@ -195,28 +196,27 @@ WebDriverLog::WebDriverLog(const std::string& type, Log::Level min_level)
 
 WebDriverLog::~WebDriverLog() {
   size_t sum = 0;
-  for (const std::unique_ptr<base::ListValue>& batch : batches_of_entries_)
-    sum += batch->GetList().size();
+  for (const base::Value::List& batch : batches_of_entries_)
+    sum += batch.size();
   VLOG(1) << "Log type '" << type_ << "' lost " << sum
           << " entries on destruction";
 }
 
-std::unique_ptr<base::ListValue> WebDriverLog::GetAndClearEntries() {
-  std::unique_ptr<base::ListValue> ret;
+base::Value::List WebDriverLog::GetAndClearEntries() {
   if (batches_of_entries_.empty()) {
-    ret = std::make_unique<base::ListValue>();
     emptied_ = true;
+    return base::Value::List();
   } else {
-    ret = std::move(batches_of_entries_.front());
+    base::Value::List list = std::move(batches_of_entries_.front());
     batches_of_entries_.pop_front();
     emptied_ = false;
+    return list;
   }
-  return ret;
 }
 
-bool GetFirstErrorMessageFromList(const base::ListValue* list,
+bool GetFirstErrorMessageFromList(const base::Value::List& list,
                                   std::string* message) {
-  for (const auto& entry : list->GetList()) {
+  for (const auto& entry : list) {
     if (entry.is_dict()) {
       const base::Value::Dict& log_entry = entry.GetDict();
       const std::string* level = log_entry.FindString("level");
@@ -234,8 +234,8 @@ bool GetFirstErrorMessageFromList(const base::ListValue* list,
 
 std::string WebDriverLog::GetFirstErrorMessage() const {
   std::string message;
-  for (const std::unique_ptr<base::ListValue>& list : batches_of_entries_)
-    if (GetFirstErrorMessageFromList(list.get(), &message))
+  for (const base::Value::List& list : batches_of_entries_)
+    if (GetFirstErrorMessageFromList(list, &message))
       break;
   return message;
 }
@@ -254,11 +254,10 @@ void WebDriverLog::AddEntryTimestamped(const base::Time& timestamp,
     log_entry_dict.Set("source", source);
   log_entry_dict.Set("message", message);
   if (batches_of_entries_.empty() ||
-      batches_of_entries_.back()->GetList().size() >=
-          internal::kMaxReturnedEntries) {
-    batches_of_entries_.push_back(std::make_unique<base::ListValue>());
+      batches_of_entries_.back().size() >= internal::kMaxReturnedEntries) {
+    batches_of_entries_.push_back(base::Value::List());
   }
-  batches_of_entries_.back()->Append(base::Value(std::move(log_entry_dict)));
+  batches_of_entries_.back().Append(std::move(log_entry_dict));
 }
 
 bool WebDriverLog::Emptied() const {
@@ -285,17 +284,17 @@ bool InitLogging(uint16_t port) {
     g_log_level = Log::kInfo;
     base::FilePath log_path = cmd_line->GetSwitchValuePath("log-path");
 
-    const base::FilePath::CharType* logMode = FILE_PATH_LITERAL("w");
+    const base::FilePath::CharType* log_mode = FILE_PATH_LITERAL("w");
     if (cmd_line->HasSwitch("append-log")) {
-        logMode = FILE_PATH_LITERAL("a");
+      log_mode = FILE_PATH_LITERAL("a");
     }
   if (cmd_line->HasSwitch("readable-timestamp")) {
     readable_timestamp = true;
   }
 #if BUILDFLAG(IS_WIN)
-  FILE* redir_stderr = _wfreopen(log_path.value().c_str(), logMode, stderr);
+  FILE* redir_stderr = _wfreopen(log_path.value().c_str(), log_mode, stderr);
 #else
-    FILE* redir_stderr = freopen(log_path.value().c_str(), logMode, stderr);
+  FILE* redir_stderr = freopen(log_path.value().c_str(), log_mode, stderr);
 #endif
     if (!redir_stderr) {
       printf("Failed to redirect stderr to log file.\n");

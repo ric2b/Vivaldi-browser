@@ -7,9 +7,7 @@
 
 #include <fuzzer/FuzzedDataProvider.h>
 
-#include "content/browser/speech/audio_encoder.h"
-
-using content::AudioChunk;
+#include "components/speech/audio_encoder.h"
 
 // Copied from speech_recognition_engine.cc.
 const int kDefaultConfigSampleRate = 8000;
@@ -17,23 +15,28 @@ const int kDefaultConfigBitsPerSample = 16;
 const int kAudioSampleRate = 16000;
 const int kAudioPacketIntervalMs = 100;
 
+const int kDefaultConfigBytesPerSample = kDefaultConfigBitsPerSample / 8;
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   FuzzedDataProvider provider(data, size);
-  content::AudioEncoder encoder(kDefaultConfigSampleRate,
-                                kDefaultConfigBitsPerSample);
+  AudioEncoder encoder(kDefaultConfigSampleRate, kDefaultConfigBitsPerSample);
 
   while (provider.remaining_bytes()) {
     std::string chunk_str =
         provider.ConsumeRandomLengthString(provider.remaining_bytes());
+    if (chunk_str.size() % kDefaultConfigBytesPerSample) {
+      // `AudioChunk` expects the data size to be divisible by sample size.
+      continue;
+    }
     scoped_refptr<AudioChunk> chunk =
         new AudioChunk(reinterpret_cast<const uint8_t*>(chunk_str.data()),
-                       chunk_str.size(), kDefaultConfigBitsPerSample / 8);
+                       chunk_str.size(), kDefaultConfigBytesPerSample);
     encoder.Encode(*chunk);
   }
 
   size_t sample_count = kAudioSampleRate * kAudioPacketIntervalMs / 1000;
   scoped_refptr<AudioChunk> dummy_chunk = new AudioChunk(
-      sample_count * sizeof(int16_t), kDefaultConfigBitsPerSample / 8);
+      sample_count * sizeof(int16_t), kDefaultConfigBytesPerSample);
   encoder.Encode(*dummy_chunk.get());
   encoder.Flush();
   scoped_refptr<AudioChunk> encoded_data(encoder.GetEncodedDataAndClear());

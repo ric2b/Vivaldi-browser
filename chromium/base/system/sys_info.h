@@ -30,6 +30,12 @@ namespace base {
 BASE_EXPORT BASE_DECLARE_FEATURE(kNumberOfCoresWithCpuSecurityMitigation);
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// Strings for environment variables.
+BASE_EXPORT extern const char kLsbReleaseKey[];
+BASE_EXPORT extern const char kLsbReleaseTimeKey[];
+#endif
+
 namespace debug {
 FORWARD_DECLARE_TEST(SystemMetricsTest, ParseMeminfo);
 }
@@ -45,6 +51,13 @@ class BASE_EXPORT SysInfo {
   // SetIsCpuSecurityMitigationsEnabled() has been invoked to indicate that CPU
   // security mitigations are enabled on Mac.
   static int NumberOfProcessors();
+
+  // Returns the number of the most efficient logical processors for the current
+  // application. This is typically e-cores on Intel hybrid architecture, or
+  // LITTLE cores on ARM bit.LITTLE architecture.
+  // Returns 0 on symmetric architecture or when it failed to recognize.
+  // This function will cache the result value in its implementation.
+  static int NumberOfEfficientProcessors();
 
   // Return the number of bytes of physical memory on the current machine.
   // If low-end device mode is manually enabled via command line flag, this
@@ -237,6 +250,7 @@ class BASE_EXPORT SysInfo {
   FRIEND_TEST_ALL_PREFIXES(SysInfoTest, AmountOfAvailablePhysicalMemory);
   FRIEND_TEST_ALL_PREFIXES(debug::SystemMetricsTest, ParseMeminfo);
 
+  static int NumberOfEfficientProcessorsImpl();
   static uint64_t AmountOfPhysicalMemoryImpl();
   static uint64_t AmountOfAvailablePhysicalMemoryImpl();
   static bool IsLowEndDeviceImpl();

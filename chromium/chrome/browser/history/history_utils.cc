@@ -8,8 +8,10 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_constants.h"
+
 bool CanAddURLToHistory(const GURL& url) {
-  if (!url.is_valid())
+  if (!url.is_valid() || url.host() == vivaldi::kVivaldiAppId)
     return false;
 
   // TODO: We should allow kChromeUIScheme URLs if they have been explicitly

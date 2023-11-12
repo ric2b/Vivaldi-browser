@@ -10,8 +10,8 @@
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 
@@ -138,6 +138,20 @@ export class UserPreview extends WithPersonalizationStore {
 
     console.error('Unknown image type received');
     return '';
+  }
+
+  /**
+   * Creates style string with static background image url for default user
+   * images . Static image loads faster and will provide a smooth experience
+   * when the animated image complete loading.
+   */
+  private getImgBackgroudStyle_(url: Url|null): string {
+    // Only add background image for default user images.
+    if (!this.image_ || this.image_.invalidImage || !this.image_.defaultImage) {
+      return '';
+    }
+
+    return `background-image: url('` + url + `&staticEncode=true')`;
   }
 
   private shouldShowDeprecatedImageSourceInfo_(image: UserImage|null): boolean {

@@ -261,7 +261,7 @@ void RenderViewHostImpl::GetPlatformSpecificPrefs(
   // TODO(crbug.com/1066605): Consider exposing this as a FIDL parameter.
   prefs->focus_ring_color = SK_AlphaTRANSPARENT;
 #endif
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   prefs->selection_clipboard_buffer_available =
       ui::Clipboard::IsSupportedClipboardBuffer(
           ui::ClipboardBuffer::kSelection);
@@ -429,8 +429,9 @@ bool RenderViewHostImpl::CreateRenderView(
   params->opener_frame_token = opener_frame_token;
   params->replication_state =
       frame_tree_node->current_replication_state().Clone();
-  params->devtools_main_frame_token = frame_tree_node->devtools_frame_token();
-  DCHECK_EQ(frame_tree_node->frame_tree(), frame_tree_);
+  params->devtools_main_frame_token =
+      frame_tree_node->current_frame_host()->devtools_frame_token();
+  DCHECK_EQ(&frame_tree_node->frame_tree(), frame_tree_);
   params->is_prerendering = frame_tree_->is_prerendering();
 
   if (main_rfh) {
@@ -472,6 +473,20 @@ bool RenderViewHostImpl::CreateRenderView(
 
     local_frame_params->subresource_loader_factories =
         main_rfh->CreateSubresourceLoaderFactoriesForInitialEmptyDocument();
+
+    if (is_speculative_ &&
+        frame_tree_node->current_frame_host()->IsRenderFrameLive() &&
+        frame_tree_node->current_frame_host()->GetSiteInstance()->group() ==
+            &*site_instance_group_) {
+      // The speculative RenderViewHost has the same SiteInstanceGroup as the
+      // current RenderFrameHost. This means when the speculative
+      // RenderFrameHost commits, it must do a local RenderFrame swap with the
+      // previous RenderFrame. Pass down the frame token of the current
+      // RenderFrameHost, so that the speculative RenderFrame can find the right
+      // RenderFrame.
+      local_frame_params->previous_frame_token =
+          frame_tree_node->current_frame_host()->GetFrameToken();
+    }
 
     params->main_frame = mojom::CreateMainFrameUnion::NewLocalParams(
         std::move(local_frame_params));
@@ -555,6 +570,7 @@ void RenderViewHostImpl::SetFrameTree(FrameTree& frame_tree) {
   frame_tree_->UnregisterRenderViewHost(render_view_host_map_id_, this);
   frame_tree_ = &frame_tree;
   frame_tree_->RegisterRenderViewHost(render_view_host_map_id_, this);
+  render_widget_host_->SetFrameTree(frame_tree);
 }
 
 void RenderViewHostImpl::EnterBackForwardCache() {
@@ -725,14 +741,6 @@ void RenderViewHostImpl::ClosePage() {
 
   if (IsRenderViewLive() && !SuddenTerminationAllowed()) {
     close_timeout_->Start(kUnloadTimeout);
-
-    // TODO(creis): Should this be moved to Shutdown?  It may not be called for
-    // RenderViewHosts that have been swapped out.
-#if !BUILDFLAG(IS_ANDROID)
-    static_cast<HostZoomMapImpl*>(
-        HostZoomMap::Get(GetMainRenderFrameHost()->GetSiteInstance()))
-        ->WillCloseRenderView(GetProcess()->GetID(), GetRoutingID());
-#endif
 
     GetMainRenderFrameHost()->GetAssociatedLocalMainFrame()->ClosePage(
         base::BindOnce(&RenderViewHostImpl::OnPageClosed,
@@ -927,10 +935,22 @@ std::vector<viz::SurfaceId> RenderViewHostImpl::CollectSurfaceIdsForEviction() {
   RenderFrameHostImpl* rfh = GetMainRenderFrameHost();
   if (!rfh || !rfh->IsActive())
     return {};
+
   FrameTreeNode* root = rfh->frame_tree_node();
-  FrameTree* tree = root->frame_tree();
+  FrameTree& tree = root->frame_tree();
+
+  // Inner tree nodes are used for several purposes, e.g. fenced frames,
+  // <webview>, portals and PDF. These may have a compositor surface as well, in
+  // which case we need to explore not the outer node only, but the inner ones
+  // as well.
+  FrameTree::NodeRange node_range =
+      base::FeatureList::IsEnabled(
+          features::kInnerFrameCompositorSurfaceEviction)
+          ? tree.NodesIncludingInnerTreeNodes()
+          : tree.SubtreeNodes(root);
+
   std::vector<viz::SurfaceId> ids;
-  for (FrameTreeNode* node : tree->SubtreeNodes(root)) {
+  for (FrameTreeNode* node : node_range) {
     if (!node->current_frame_host()->is_local_root())
       continue;
     RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
@@ -942,6 +962,7 @@ std::vector<viz::SurfaceId> RenderViewHostImpl::CollectSurfaceIdsForEviction() {
       ids.push_back(id);
     view->set_is_evicted();
   }
+
   return ids;
 }
 

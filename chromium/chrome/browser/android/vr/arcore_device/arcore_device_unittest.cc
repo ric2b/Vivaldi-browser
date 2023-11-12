@@ -35,8 +35,8 @@ class StubArImageTransport : public ArImageTransport {
       : ArImageTransport(std::move(mailbox_bridge)) {}
 
   void Initialize(WebXrPresentationState*,
-                  base::OnceClosure callback) override {
-    std::move(callback).Run();
+                  XrInitStatusCallback callback) override {
+    std::move(callback).Run(true);
   }
 
   // TODO(lincolnfrog): test verify this somehow.
@@ -147,7 +147,7 @@ class StubCompositorFrameSink
       viz::mojom::RootCompositorFrameSinkParamsPtr root_params)
       : sink_client_(std::move(root_params->compositor_frame_sink_client)),
         display_client_(std::move(root_params->display_client)),
-        task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+        task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
     root_params->compositor_frame_sink.EnableUnassociatedUsage();
     root_params->display_private.EnableUnassociatedUsage();
     root_params->external_begin_frame_controller.EnableUnassociatedUsage();
@@ -248,7 +248,8 @@ class StubXrFrameSinkClient : public XrFrameSinkClient {
     // this call comes from the ArCompositorFrameSink, which only runs on the Gl
     // thread, we know that the mojo bindings were opened on this thread. So,
     // we make this the thread to create/destroy the StubCompositorFrameSink on.
-    mojo_thread_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    mojo_thread_task_runner_ =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
     compositor_frame_sink_ =
         std::make_unique<StubCompositorFrameSink>(std::move(root_params));
     std::move(on_initialized).Run();

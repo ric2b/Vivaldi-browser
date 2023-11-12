@@ -3,7 +3,7 @@
     padding: 0 var(--cr-controlled-by-spacing);
   }
 </style>
-<settings-animated-pages id="pages" section="multidevice"
+<os-settings-animated-pages id="pages" section="multidevice"
     focus-config="[[focusConfig_]]">
   <div route-path="default">
     <div id="multidevice-item"
@@ -60,6 +60,7 @@
         <cr-button class="margin-matches-padding"
             on-click="handleButtonClick_"
             aria-describedby="multideviceSubLabel"
+            aria-label="[[getButtonA11yLabel_(pageContentData)]]"
             deep-link-focus-id$="[[Setting.kSetUpMultiDevice]]
                 [[Setting.kVerifyMultiDeviceSetup]]">
           [[getButtonText_(pageContentData)]]
@@ -85,8 +86,8 @@
             on-click="nearbyShareClick_">
           <iron-icon icon="os-settings:nearby-share">
           </iron-icon>
-          <div id="nearbyShareLabel" class="middle settings-box-text">
-            <div aria-hidden="true">
+          <div class="middle settings-box-text">
+            <div id="nearbyShareLabel" aria-hidden="true">
               $i18n{nearbyShareTitle}
             </div>
             <template is="dom-if" if="[[showNearbyShareOnOffString_(
@@ -159,32 +160,23 @@
     </template>
   </div>
   <template is="dom-if" route-path="/multidevice/features" restamp>
-    <settings-subpage page-title="[[getLabelText_(pageContentData)]]">
+    <os-settings-subpage page-title="[[getLabelText_(pageContentData)]]">
       <settings-multidevice-subpage
           page-content-data="[[pageContentData]]">
       </settings-multidevice-subpage>
-    </settings-subpage>
-  </template>
-  <template is="dom-if" route-path="/multidevice/features/smartLock"
-      restamp>
-    <settings-subpage page-title="$i18n{easyUnlockSectionTitle}">
-      <settings-multidevice-smartlock-subpage
-          prefs="{{prefs}}"
-          page-content-data="[[pageContentData]]">
-      </settings-multidevice-smartlock-subpage>
-    </settings-subpage>
+    </os-settings-subpage>
   </template>
   <template is="dom-if" if="[[isNearbyShareSupported_]]" restamp>
     <template is="dom-if" route-path="/multidevice/nearbyshare" restamp>
-      <settings-subpage page-title="$i18n{nearbyShareTitle}">
+      <os-settings-subpage page-title="$i18n{nearbyShareTitle}">
         <settings-nearby-share-subpage settings="{{settings}}"
             prefs="{{prefs}}"
             is-settings-retreived="[[isSettingsRetreived]]">
         </settings-nearby-share-subpage>
-      </settings-subpage>
+      </os-settings-subpage>
     </template>
   </template>
-</settings-animated-pages>
+</os-settings-animated-pages>
 <template is="dom-if" if="[[showPasswordPromptDialog_]]" restamp>
   <settings-password-prompt-dialog id="multidevicePasswordPrompt"
       on-token-obtained="onTokenObtained_">

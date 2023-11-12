@@ -82,6 +82,12 @@
 // Removes `fakeOmniboxTarget` from the view hierarchy.
 - (void)removeFakeOmniboxTarget;
 
+// Vivaldi
+/// Update the vivaldi more actions based on web context. This is only available
+/// for iPhone landscape mode.
+- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_PRIMARY_TOOLBAR_VIEW_H_

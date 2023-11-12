@@ -32,11 +32,6 @@ media patches to Chromium.
 * `ffmpeg` - Build scripts to adjust ffmpeg build configuration and
   audio decoders that implement FFmpeg decoding interface using OS API,
   see [**FFmpeg**][2] and [**Audio**][3]
-* `ipc_demuxer` - Older code to play media via OS demuxing API. It is
-  not used by default since Vivaldi 5.3 release and since Vivaldi 5.4
-  requires `--enable-ipc-demuxer` switch to the browser to be activated
-  at run time. The plan is to remove this code and related patches to
-  Chromium for Vivaldi 5.6 or 5.7 releases, see [**IPCDemuxer**][6].
 * `sandbox` - Sandbox changes to enable access to OS media API, see
   [**Sandbox**][5]
 
@@ -47,11 +42,9 @@ The directory contains the following files:
 * README.md : This document
 
 All changes to Chromium are inside C++ preprocessor #ifdef blocks with
-either `USE_SYSTEM_PROPRIETARY_CODECS` define or with
-`VIVALDI_USE_SYSTEM_MEDIA_DEMUXER` define for older IPC demuxer code. In
-addition GN build scripts use `system_proprietary_codecs` and
-`vivaldi_use_system_media_demuxer` flags controlling if the
-corresponding changes are enabled during compilation.
+either `USE_SYSTEM_PROPRIETARY_CODECS` define. In
+addition GN build scripts use `system_proprietary_codecs` flags controlling
+if the corresponding changes are enabled during compilation.
 
 ## References
 
@@ -67,4 +60,3 @@ corresponding changes are enabled during compilation.
 [3]: docs/audio_decoders.md
 [4]: docs/video_decoders.md
 [5]: docs/sandbox_media_changes.md
-[6]: ipc_demuxer/README.md

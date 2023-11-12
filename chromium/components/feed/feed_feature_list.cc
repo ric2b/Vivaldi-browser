@@ -73,6 +73,9 @@ BASE_FEATURE(kXsurfaceMetricsReporting,
 BASE_FEATURE(kReliabilityLogging,
              "FeedReliabilityLogging",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedHeaderStickToTop,
+             "FeedHeaderStickToTop",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kFeedInteractiveRefresh,
              "FeedInteractiveRefresh",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -130,7 +133,7 @@ BASE_FEATURE(kPersonalizeFeedUnsignedUsers,
 
 BASE_FEATURE(kPersonalizeFeedNonSyncUsers,
              "PersonalizeFeedNonSyncUsers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 signin::ConsentLevel GetConsentLevelNeededForPersonalizedFeed() {
   if (!base::FeatureList::IsEnabled(kPersonalizeFeedNonSyncUsers))
@@ -146,15 +149,13 @@ BASE_FEATURE(kShareCrowButton,
              "ShareCrowButton",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kIsAblated, "FeedAblation", base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kFeedCloseRefresh,
              "FeedCloseRefresh",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 const base::FeatureParam<int> kFeedCloseRefreshDelayMinutes{
     &kFeedCloseRefresh, "delay_minutes", 30};
 const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction{
-    &kFeedCloseRefresh, "require_interaction", false};
+    &kFeedCloseRefresh, "require_interaction", true};
 
 BASE_FEATURE(kFeedNoViewCache,
              "FeedNoViewCache",
@@ -196,4 +197,15 @@ BASE_FEATURE(kFeedExperimentIDTagging,
              "FeedExperimentIDTagging",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kFeedShowSignInCommand,
+             "FeedShowSignInCommand",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedPerformanceStudy,
+             "FeedPerformanceStudy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSyntheticCapabilities,
+             "FeedSyntheticCapabilities",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace feed

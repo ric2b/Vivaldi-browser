@@ -4,9 +4,7 @@
 
 #include "third_party/blink/renderer/core/fetch/headers.h"
 
-#include "third_party/blink/renderer/bindings/core/v8/v8_iterator_result_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_bytestringbytestringrecord_bytestringsequencesequence.h"
-#include "third_party/blink/renderer/core/dom/iterator.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -18,37 +16,34 @@
 
 namespace blink {
 
-namespace {
+Headers::HeadersIterationSource::HeadersIterationSource(Headers* headers)
+    : headers_list_(headers->HeaderList()->SortAndCombine()),
+      headers_(headers) {}
 
-class HeadersIterationSource final
-    : public PairIterable<String, IDLString, String, IDLString>::
-          IterationSource {
- public:
-  explicit HeadersIterationSource(const FetchHeaderList* headers)
-      : headers_(headers->SortAndCombine()), current_(0) {}
+void Headers::HeadersIterationSource::ResetHeaderList() {
+  headers_list_ = headers_->HeaderList()->SortAndCombine();
+}
 
-  bool Next(ScriptState* script_state,
-            String& key,
-            String& value,
-            ExceptionState& exception) override {
-    // This simply advances an index and returns the next value if any; the
-    // iterated list is not exposed to script so it will never be mutated
-    // during iteration.
-    if (current_ >= headers_.size())
-      return false;
+bool Headers::HeadersIterationSource::FetchNextItem(ScriptState* script_state,
+                                                    String& key,
+                                                    String& value,
+                                                    ExceptionState& exception) {
+  // This simply advances an index and returns the next value if any;
+  if (current_ >= headers_list_.size())
+    return false;
 
-    const FetchHeaderList::Header& header = headers_.at(current_++);
-    key = header.first;
-    value = header.second;
-    return true;
-  }
+  const FetchHeaderList::Header& header = headers_list_.at(current_++);
+  key = header.first;
+  value = header.second;
+  return true;
+}
 
- private:
-  Vector<std::pair<String, String>> headers_;
-  wtf_size_t current_;
-};
+void Headers::HeadersIterationSource::Trace(Visitor* visitor) const {
+  visitor->Trace(headers_);
+  PairSyncIterable<Headers>::IterationSource::Trace(visitor);
+}
 
-}  // namespace
+Headers::HeadersIterationSource::~HeadersIterationSource() = default;
 
 Headers* Headers::Create(ScriptState* script_state, ExceptionState&) {
   return MakeGarbageCollected<Headers>();
@@ -108,7 +103,7 @@ void Headers::append(ScriptState* script_state,
   }
   // "4. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && cors::IsForbiddenRequestHeader(name, value))
     return;
   // 5. Otherwise, if guard is |request-no-cors|:
   if (guard_ == kRequestNoCorsGuard) {
@@ -143,6 +138,10 @@ void Headers::append(ScriptState* script_state,
   // request headers from this."
   if (guard_ == kRequestNoCorsGuard)
     RemovePrivilegedNoCorsRequestHeaders();
+  // "9. Notify active iterators about the modification."
+  for (auto& iter : iterators_) {
+    iter->ResetHeaderList();
+  }
 }
 
 void Headers::remove(ScriptState* script_state,
@@ -165,9 +164,9 @@ void Headers::remove(ScriptState* script_state,
     UseCounter::Count(execution_context,
                       WebFeature::kFetchSetCookieInRequestGuardedHeaders);
   }
-  // "3. Otherwise, if guard is |request| and |name| is a forbidden header
-  //     name, return."
-  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
+  // "3. Otherwise, if guard is |request| and (|name|, '') is a forbidden
+  //     request header, return."
+  if (guard_ == kRequestGuard && cors::IsForbiddenRequestHeader(name, ""))
     return;
   // "4. Otherwise, if the context object’s guard is |request-no-cors|, |name|
   //     is not a no-CORS-safelisted request-header name, and |name| is not a
@@ -192,6 +191,10 @@ void Headers::remove(ScriptState* script_state,
   // request headers from this."
   if (guard_ == kRequestNoCorsGuard)
     RemovePrivilegedNoCorsRequestHeaders();
+  // "9. Notify active iterators about the modification."
+  for (auto& iter : iterators_) {
+    iter->ResetHeaderList();
+  }
 }
 
 String Headers::get(const String& name, ExceptionState& exception_state) {
@@ -249,9 +252,9 @@ void Headers::set(ScriptState* script_state,
     UseCounter::Count(execution_context,
                       WebFeature::kFetchSetCookieInRequestGuardedHeaders);
   }
-  // "4. Otherwise, if guard is |request| and |name| is a forbidden header
-  //     name, return."
-  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
+  // "4. Otherwise, if guard is |request| and (|name|, |value|) is a forbidden
+  //     request header, return."
+  if (guard_ == kRequestGuard && cors::IsForbiddenRequestHeader(name, value))
     return;
   // "5. Otherwise, if guard is |request-no-CORS| and |name|/|value| is not a
   //     no-CORS-safelisted header, return."
@@ -271,6 +274,10 @@ void Headers::set(ScriptState* script_state,
   // request headers from this."
   if (guard_ == kRequestNoCorsGuard)
     RemovePrivilegedNoCorsRequestHeaders();
+  // "9. Notify active iterators about the modification."
+  for (auto& iter : iterators_) {
+    iter->ResetHeaderList();
+  }
 }
 
 // This overload is not called directly by Web APIs, but rather by other C++
@@ -356,12 +363,16 @@ Headers::Headers(FetchHeaderList* header_list)
 
 void Headers::Trace(Visitor* visitor) const {
   visitor->Trace(header_list_);
+  visitor->Trace(iterators_);
   ScriptWrappable::Trace(visitor);
 }
 
-PairIterable<String, IDLString, String, IDLString>::IterationSource*
-Headers::StartIteration(ScriptState*, ExceptionState&) {
-  return MakeGarbageCollected<HeadersIterationSource>(header_list_);
+PairSyncIterable<Headers>::IterationSource* Headers::CreateIterationSource(
+    ScriptState*,
+    ExceptionState&) {
+  auto* iter = MakeGarbageCollected<HeadersIterationSource>(this);
+  iterators_.insert(iter);
+  return iter;
 }
 
 }  // namespace blink

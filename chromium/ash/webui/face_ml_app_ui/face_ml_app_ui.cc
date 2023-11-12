@@ -16,9 +16,10 @@
 #include "ui/webui/webui_allowlist.h"
 
 namespace ash {
-
-FaceMLAppUI::FaceMLAppUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui) {
+FaceMLAppUI::FaceMLAppUI(content::WebUI* web_ui,
+                         std::unique_ptr<FaceMLUserProvider> user_provider)
+    : ui::MojoWebUIController(web_ui),
+      user_provider_(std::move(user_provider)) {
   auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
   content::WebUIDataSource* trusted_source =
       content::WebUIDataSource::CreateAndAdd(browser_context,
@@ -43,15 +44,16 @@ FaceMLAppUI::FaceMLAppUI(content::WebUI* web_ui)
 
   // Register common permissions for chrome-untrusted://face-ml pages.
   auto* webui_allowlist = WebUIAllowlist::GetOrCreate(browser_context);
-  const url::Origin untrusted_origin =
-      url::Origin::Create(GURL(kChromeUIFaceMLAppUntrustedURL));
+  const url::Origin origin = url::Origin::Create(GURL(kChromeUIFaceMLAppURL));
   webui_allowlist->RegisterAutoGrantedPermissions(
-      untrusted_origin, {
-                            ContentSettingsType::COOKIES,
-                            ContentSettingsType::JAVASCRIPT,
-                            ContentSettingsType::IMAGES,
-                            ContentSettingsType::SOUND,
-                        });
+      origin, {
+                  ContentSettingsType::COOKIES,
+                  ContentSettingsType::DISPLAY_CAPTURE,
+                  ContentSettingsType::JAVASCRIPT,
+                  ContentSettingsType::IMAGES,
+                  ContentSettingsType::MEDIASTREAM_CAMERA,
+                  ContentSettingsType::SOUND,
+              });
 }
 
 FaceMLAppUI::~FaceMLAppUI() = default;
@@ -74,7 +76,7 @@ void FaceMLAppUI::CreatePageHandler(
 void FaceMLAppUI::WebUIPrimaryPageChanged(content::Page& page) {
   // Create a new page handler for each document load. This avoids sharing
   // states when WebUIController is reused for same-origin navigations.
-  face_ml_page_handler_ = std::make_unique<FaceMLPageHandler>();
+  face_ml_page_handler_ = std::make_unique<FaceMLPageHandler>(this);
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(FaceMLAppUI)

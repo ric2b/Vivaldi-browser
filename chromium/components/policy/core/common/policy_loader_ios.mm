@@ -107,14 +107,14 @@ void PolicyLoaderIOS::InitOnBackgroundThread() {
                                                 taskRunner:task_runner()];
 }
 
-std::unique_ptr<PolicyBundle> PolicyLoaderIOS::Load() {
-  std::unique_ptr<PolicyBundle> bundle(new PolicyBundle());
+PolicyBundle PolicyLoaderIOS::Load() {
+  PolicyBundle bundle;
   NSDictionary* configuration = [[NSUserDefaults standardUserDefaults]
       dictionaryForKey:kPolicyLoaderIOSConfigurationKey];
-  LoadNSDictionaryToPolicyBundle(configuration, bundle.get());
+  LoadNSDictionaryToPolicyBundle(configuration, &bundle);
 
   const PolicyNamespace chrome_ns(POLICY_DOMAIN_CHROME, std::string());
-  size_t count = bundle->Get(chrome_ns).size();
+  size_t count = bundle.Get(chrome_ns).size();
   UMA_HISTOGRAM_COUNTS_100("Enterprise.IOSPolicies", count);
 
   return bundle;
@@ -139,14 +139,14 @@ void PolicyLoaderIOS::LoadNSDictionaryToPolicyBundle(NSDictionary* dictionary,
   // CFPropertyListRef.
   std::unique_ptr<base::Value> value =
       PropertyToValue((__bridge CFPropertyListRef)(dictionary));
-  base::DictionaryValue* dict = NULL;
-  if (value && value->GetAsDictionary(&dict)) {
-    PolicyMap& map = bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, ""));
-    for (const auto it : dict->DictItems()) {
-      map.Set(it.first, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-              POLICY_SOURCE_PLATFORM,
-              ConvertPolicyDataIfNecessary(it.first, it.second), nullptr);
-    }
+  if (!value || !value->is_dict())
+    return;
+
+  PolicyMap& map = bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, ""));
+  for (const auto it : value->GetDict()) {
+    map.Set(it.first, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+            POLICY_SOURCE_PLATFORM,
+            ConvertPolicyDataIfNecessary(it.first, it.second), nullptr);
   }
 }
 

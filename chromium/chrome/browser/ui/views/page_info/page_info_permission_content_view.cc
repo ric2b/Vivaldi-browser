@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/page_info/page_info_hover_button.h"
+#include "chrome/browser/ui/views/controls/rich_hover_button.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "components/permissions/permission_util.h"
 #include "components/strings/grit/components_strings.h"
@@ -103,14 +103,16 @@ PageInfoPermissionContentView::PageInfoPermissionContentView(
 
   AddChildView(PageInfoViewFactory::CreateSeparator());
   // TODO(crbug.com/1225563): Consider to use permission specific text.
-  AddChildView(std::make_unique<PageInfoHoverButton>(
+  AddChildView(std::make_unique<RichHoverButton>(
       base::BindRepeating(
           [](PageInfoPermissionContentView* view) {
             view->presenter_->OpenContentSettingsExceptions(view->type_);
           },
           this),
       PageInfoViewFactory::GetSiteSettingsIcon(),
-      IDS_PAGE_INFO_PERMISSIONS_SUBPAGE_MANAGE_BUTTON, std::u16string(), 0,
+      l10n_util::GetStringUTF16(
+          IDS_PAGE_INFO_PERMISSIONS_SUBPAGE_MANAGE_BUTTON),
+      std::u16string(),
       l10n_util::GetStringUTF16(
           IDS_PAGE_INFO_PERMISSIONS_SUBPAGE_MANAGE_BUTTON_TOOLTIP),
       std::u16string(), PageInfoViewFactory::GetLaunchIcon()));

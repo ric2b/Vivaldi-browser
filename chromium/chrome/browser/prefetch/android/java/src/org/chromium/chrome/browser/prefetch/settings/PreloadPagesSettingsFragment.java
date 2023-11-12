@@ -10,10 +10,10 @@ import android.os.Bundle;
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
+import org.chromium.components.browser_ui.settings.SettingsFeatureList;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 
@@ -25,7 +25,9 @@ public class PreloadPagesSettingsFragment extends PreloadPagesSettingsFragmentBa
                    RadioButtonGroupPreloadPagesSettings.OnPreloadPagesStateDetailsRequested,
                    Preference.OnPreferenceChangeListener {
     @VisibleForTesting
-    static final String PREF_TEXT_MANAGED = "text_managed";
+    static final String PREF_MANAGED_DISCLAIMER_TEXT = "managed_disclaimer_text";
+    @VisibleForTesting
+    static final String PREF_TEXT_MANAGED_LEGACY = "text_managed_legacy";
     @VisibleForTesting
     static final String PREF_PRELOAD_PAGES = "preload_pages_radio_button_group";
 
@@ -39,13 +41,6 @@ public class PreloadPagesSettingsFragment extends PreloadPagesSettingsFragmentBa
     public static String getPreloadPagesSummaryString(Context context) {
         @PreloadPagesState
         int preloadPagesState = PreloadPagesSettingsBridge.getState();
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SHOW_EXTENDED_PRELOADING_SETTING)
-                && preloadPagesState == PreloadPagesState.EXTENDED_PRELOADING) {
-            // If the extended preloading UI setting is disabled, show "Standard
-            // Preloading" as a substitute.
-            preloadPagesState = PreloadPagesState.STANDARD_PRELOADING;
-        }
-        String preloadPagesStateString = "";
         if (preloadPagesState == PreloadPagesState.EXTENDED_PRELOADING) {
             return context.getString(R.string.preload_pages_extended_preloading_title);
         }
@@ -69,10 +64,20 @@ public class PreloadPagesSettingsFragment extends PreloadPagesSettingsFragmentBa
         mPreloadPagesPreference.setManagedPreferenceDelegate(managedPreferenceDelegate);
         mPreloadPagesPreference.setOnPreferenceChangeListener(this);
 
-        TextMessagePreference textManaged = findPreference(PREF_TEXT_MANAGED);
-        textManaged.setManagedPreferenceDelegate(managedPreferenceDelegate);
-        textManaged.setVisible(managedPreferenceDelegate.isPreferenceClickDisabledByPolicy(
-                mPreloadPagesPreference));
+        Preference managedDisclaimerText = findPreference(PREF_MANAGED_DISCLAIMER_TEXT);
+        TextMessagePreference textManagedLegacy = findPreference(PREF_TEXT_MANAGED_LEGACY);
+        boolean managedTextVisible = managedPreferenceDelegate.isPreferenceClickDisabledByPolicy(
+                mPreloadPagesPreference);
+
+        if (SettingsFeatureList.isEnabled(
+                    SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID)) {
+            textManagedLegacy.setVisible(false);
+            managedDisclaimerText.setVisible(managedTextVisible);
+        } else {
+            textManagedLegacy.setManagedPreferenceDelegate(managedPreferenceDelegate);
+            textManagedLegacy.setVisible(managedTextVisible);
+            managedDisclaimerText.setVisible(false);
+        }
     }
 
     @Override
@@ -101,7 +106,7 @@ public class PreloadPagesSettingsFragment extends PreloadPagesSettingsFragmentBa
     private ChromeManagedPreferenceDelegate createManagedPreferenceDelegate() {
         return preference -> {
             String key = preference.getKey();
-            assert PREF_TEXT_MANAGED.equals(key)
+            assert PREF_MANAGED_DISCLAIMER_TEXT.equals(key) || PREF_TEXT_MANAGED_LEGACY.equals(key)
                     || PREF_PRELOAD_PAGES.equals(key) : "Wrong preference key: " + key;
             return PreloadPagesSettingsBridge.isNetworkPredictionManaged();
         };

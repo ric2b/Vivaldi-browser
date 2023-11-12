@@ -315,7 +315,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   const ServiceWorkerToken& GetServiceWorkerToken() const { return token_; }
   WorkerToken GetWorkerToken() const final { return token_; }
   bool CrossOriginIsolatedCapability() const final;
-  bool IsolatedApplicationCapability() const final;
+  bool IsIsolatedContext() const final;
   ExecutionContextToken GetExecutionContextToken() const final {
     return token_;
   }
@@ -497,6 +497,8 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       DispatchContentDeleteEventCallback callback) override;
   void Ping(PingCallback callback) override;
   void SetIdleDelay(base::TimeDelta delay) override;
+  void AddKeepAlive() override;
+  void ClearKeepAlive() override;
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel,
                            const String& message) override;
   void ExecuteScriptForTest(const String& script,

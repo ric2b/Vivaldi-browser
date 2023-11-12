@@ -35,11 +35,11 @@
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/login/login_state/login_state.h"
 #include "chromeos/startup/startup_switches.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
@@ -74,19 +74,22 @@ class TestBrowserService : public crosapi::mojom::BrowserService {
 
   void NewWindow(bool incognito,
                  bool should_trigger_session_restore,
+                 int64_t target_display_id,
                  NewWindowCallback callback) override {}
   void NewWindowForDetachingTab(
       const std::u16string& tab_id,
       const std::u16string& group_id,
       NewWindowForDetachingTabCallback closure) override {}
   void NewFullscreenWindow(const GURL& url,
+                           int64_t target_display_id,
                            NewFullscreenWindowCallback callback) override {}
-  void NewGuestWindow(NewGuestWindowCallback callback) override {}
+  void NewGuestWindow(int64_t target_display_id,
+                      NewGuestWindowCallback callback) override {}
   void NewTab(bool should_trigger_session_restore,
               NewTabCallback callback) override {}
   void NewTabWithoutParameter(
       NewTabWithoutParameterCallback callback) override {}
-  void Launch(LaunchCallback callback) override {}
+  void Launch(int64_t target_display_id, LaunchCallback callback) override {}
   void OpenUrl(const GURL& url,
                crosapi::mojom::OpenUrlParamsPtr params,
                OpenUrlCallback callback) override {}
@@ -191,9 +194,9 @@ TEST_F(TestMojoConnectionManagerTest, ConnectMultipleClients) {
   content::BrowserTaskEnvironment task_environment{
       base::test::TaskEnvironment::MainThreadType::IO};
 
-  chromeos::LoginState::Initialize();
+  ash::LoginState::Initialize();
   base::ScopedClosureRunner login_state_teardown(
-      base::BindOnce(&chromeos::LoginState::Shutdown));
+      base::BindOnce(&ash::LoginState::Shutdown));
 
   // Constructing CrosapiManager requires ProfileManager.
   // Also, constructing BrowserInitParams requires local state prefs.

@@ -47,6 +47,7 @@ class Rect;
 }  // namespace gfx
 
 namespace ash {
+
 class AccessibilityExtensionLoader;
 class Dictation;
 class PumpkinInstaller;
@@ -389,6 +390,8 @@ class AccessibilityManager
       base::RepeatingCallback<void()> observer);
   void SetCaretBoundsObserverForTest(
       base::RepeatingCallback<void(const gfx::Rect&)> observer);
+  void SetMagnifierBoundsObserverForTest(
+      base::RepeatingCallback<void()> observer);
   void SetSwitchAccessKeysForTest(const std::set<int>& action_keys,
                                   const std::string& pref_name);
 
@@ -428,8 +431,10 @@ class AccessibilityManager
   void PostLoadAccessibilityCommon();
   void PostUnloadAccessibilityCommon();
 
+  void UpdateEnhancedNetworkTts();
   void LoadEnhancedNetworkTts();
   void UnloadEnhancedNetworkTts();
+  void PostLoadEnhancedNetworkTts();
 
   void UpdateAlwaysShowMenuFromPref();
   void OnLargeCursorChanged();
@@ -516,13 +521,18 @@ class AccessibilityManager
   bool ShouldShowSodaSucceededNotificationForDictation();
   bool ShouldShowSodaFailedNotificationForDictation(
       speech::LanguageCode language_code);
-  void ShowSodaDownloadNotificationForDictation(bool succeeded);
+
+  // Updates the Dictation notification according to DLC states. Assumes that
+  // it's only called when a Dictation-related DLC has downloaded (or failed to
+  // download).
+  void UpdateDictationNotification();
 
   void ShowDictationLanguageUpgradedNudge(const std::string& locale);
   speech::LanguageCode GetDictationLanguageCode();
 
   void CreateChromeVoxPanel();
 
+  // Pumpkin-related methods.
   void OnPumpkinInstalled(bool success);
   void OnPumpkinError(const std::string& error);
   void OnPumpkinDataCreated(
@@ -532,7 +542,7 @@ class AccessibilityManager
   void OnAppTerminating();
 
   // Returns a full file path given a DLC.
-  base::FilePath DlcTypeToPath(
+  base::FilePath TtsDlcTypeToPath(
       ::extensions::api::accessibility_private::DlcType dlc);
 
   // Profile which has the current a11y context.
@@ -612,11 +622,12 @@ class AccessibilityManager
   bool dictation_triggered_by_user_ = false;
   bool ignore_dictation_locale_pref_change_ = false;
 
-  base::RepeatingCallback<void()> focus_ring_observer_for_test_;
   base::RepeatingCallback<void()> highlights_observer_for_test_;
   base::RepeatingCallback<void()> select_to_speak_state_observer_for_test_;
   base::RepeatingCallback<void(const gfx::Rect&)>
       caret_bounds_observer_for_test_;
+  base::RepeatingCallback<void()> magnifier_bounds_observer_for_test_;
+  base::OnceClosure enhanced_network_tts_waiter_for_test_;
 
   // Used to set the audio focus enforcement type for ChromeVox.
   mojo::Remote<media_session::mojom::AudioFocusManager> audio_focus_manager_;
@@ -638,19 +649,11 @@ class AccessibilityManager
   friend class DictationTest;
   friend class SwitchAccessTest;
   friend class AccessibilityManagerTest;
-  friend class AccessibilityManagerSodaTest;
+  friend class AccessibilityManagerDlcTest;
   friend class AccessibilityManagerDictationDialogTest;
   friend class AccessibilityManagerNoOnDeviceSpeechRecognitionTest;
 };
 
 }  // namespace ash
 
-// TODO(https://crbug.com/1164001): remove after the Chrome OS source code
-// directory migration is finished.
-namespace chromeos {
-using ::ash::AccessibilityManager;
-using ::ash::AccessibilityNotificationType;
-using ::ash::AccessibilityStatusEventDetails;
-using ::ash::PlaySoundOption;
-}  // namespace chromeos
 #endif  // CHROME_BROWSER_ASH_ACCESSIBILITY_ACCESSIBILITY_MANAGER_H_

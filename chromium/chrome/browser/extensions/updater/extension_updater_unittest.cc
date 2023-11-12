@@ -29,10 +29,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "build/branding_buildflags.h"
@@ -41,6 +41,8 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_sync_data.h"
+#include "chrome/browser/extensions/fake_crx_installer.h"
+#include "chrome/browser/extensions/mock_crx_installer.h"
 #include "chrome/browser/extensions/test_extension_prefs.h"
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -290,14 +292,13 @@ class MockService : public TestExtensionService {
                             const std::string* update_url,
                             ManifestLocation location) {
     for (int i = 1; i <= count; i++) {
-      base::DictionaryValue manifest;
-      manifest.SetStringPath(manifest_keys::kVersion,
-                             base::StringPrintf("%d.0.0.0", i));
-      manifest.SetStringPath(manifest_keys::kName,
-                             base::StringPrintf("Extension %d.%d", id, i));
-      manifest.SetIntPath(manifest_keys::kManifestVersion, 2);
+      base::Value::Dict manifest;
+      manifest.Set(manifest_keys::kVersion, base::StringPrintf("%d.0.0.0", i));
+      manifest.Set(manifest_keys::kName,
+                   base::StringPrintf("Extension %d.%d", id, i));
+      manifest.Set(manifest_keys::kManifestVersion, 2);
       if (update_url)
-        manifest.SetStringPath(manifest_keys::kUpdateURL, *update_url);
+        manifest.Set(manifest_keys::kUpdateURL, *update_url);
       scoped_refptr<Extension> e =
           prefs_->AddExtensionWithManifest(manifest, location);
       ASSERT_TRUE(e.get() != nullptr);
@@ -446,24 +447,24 @@ class ServiceForDownloadTests : public MockService {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
       : MockService(prefs, url_loader_factory) {}
 
-  // Add a fake crx installer to be returned by a call to UpdateExtension()
-  // with a specific ID.  Caller keeps ownership of |crx_installer|.
-  void AddFakeCrxInstaller(const std::string& id, CrxInstaller* crx_installer) {
+  // Add a fake crx installer to be returned by a call to
+  // CreateUpdateInstaller() with a specific ID.
+  void AddFakeCrxInstaller(const std::string& id,
+                           scoped_refptr<CrxInstaller> crx_installer) {
     fake_crx_installers_[id] = crx_installer;
   }
 
-  bool UpdateExtension(const CRXFileInfo& file,
-                       bool file_ownership_passed,
-                       CrxInstaller** out_crx_installer) override {
+  scoped_refptr<extensions::CrxInstaller> CreateUpdateInstaller(
+      const extensions::CRXFileInfo& file,
+      bool file_ownership_passed) override {
     extension_id_ = file.extension_id;
     install_path_ = file.path;
 
     if (base::Contains(fake_crx_installers_, extension_id_)) {
-      *out_crx_installer = fake_crx_installers_[extension_id_];
-      return true;
+      return fake_crx_installers_[extension_id_];
     }
 
-    return false;
+    return nullptr;
   }
 
   PendingExtensionManager* pending_extension_manager() override {
@@ -478,11 +479,8 @@ class ServiceForDownloadTests : public MockService {
   const base::FilePath& install_path() const { return install_path_; }
 
  private:
-  // Hold the set of ids that UpdateExtension() should fake success on.
-  // UpdateExtension(id, ...) will return true iff fake_crx_installers_
-  // contains key |id|.  |out_install_notification_source| will be set
-  // to Source<CrxInstaller(fake_crx_installers_[i]).
-  std::map<std::string, CrxInstaller*> fake_crx_installers_;
+  // Hold the set of ids that CreateUpdateInstaller() returns.
+  std::map<std::string, scoped_refptr<CrxInstaller>> fake_crx_installers_;
 
   std::string extension_id_;
   base::FilePath install_path_;
@@ -583,7 +581,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
   void SetUp() override {
     prefs_ = std::make_unique<TestExtensionPrefs>(
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
 
   void TearDown() override {
@@ -1632,10 +1630,25 @@ class ExtensionUpdaterTest : public testing::Test {
                                  base::FilePath(), false);
     ExtensionService* extension_service =
         ExtensionSystem::Get(&profile)->extension_service();
-    scoped_refptr<CrxInstaller> fake_crx_installer(
-        CrxInstaller::CreateSilent(extension_service));
-    fake_crx_installer->set_expected_id(kTestExtensionId);
-    fake_crx_installer->set_expected_hash(hash);
+    scoped_refptr<MockCrxInstaller> mock_installer =
+        base::MakeRefCounted<MockCrxInstaller>(extension_service);
+
+    // Do nothing when called the first time, by ExtensionUpdater
+    // But do the real action when called later on by this test code.
+    EXPECT_CALL(*mock_installer, InstallCrxFile(_))
+        .WillOnce(Return())
+        .WillOnce([&mock_installer](const CRXFileInfo& info) {
+          return mock_installer->CrxInstaller::InstallCrxFile(info);
+        });
+    // Just let the real CrxInstaller implementation have the callback.
+    EXPECT_CALL(*mock_installer, AddInstallerCallback(_))
+        .WillOnce(Invoke([&](CrxInstaller::InstallerResultCallback callback) {
+          mock_installer->CrxInstaller::AddInstallerCallback(
+              std::move(callback));
+        }));
+
+    mock_installer->set_expected_id(kTestExtensionId);
+    mock_installer->set_expected_hash(hash);
 
     // Create mock extension service for test. We need this mock service so that
     // the extension updater process can be intercepted before the installer
@@ -1643,7 +1656,7 @@ class ExtensionUpdaterTest : public testing::Test {
     std::unique_ptr<ServiceForDownloadTests> service =
         std::make_unique<ServiceForDownloadTests>(prefs_.get(),
                                                   helper.url_loader_factory());
-    service->AddFakeCrxInstaller(kTestExtensionId, fake_crx_installer.get());
+    service->AddFakeCrxInstaller(kTestExtensionId, mock_installer);
 
     ExtensionUpdater updater(service.get(), service->extension_prefs(),
                              service->pref_service(), service->profile(),
@@ -1741,10 +1754,14 @@ class ExtensionUpdaterTest : public testing::Test {
 
     LoadErrorReporter::Init(false);
 
+    updater.SetExtensionCacheForTesting(&test_extension_cache);
     CRXFileInfo crx_info(filename, GetTestVerifierFormat());
     crx_info.extension_id = kTestExtensionId;
     crx_info.expected_hash = hash;
-    fake_crx_installer->InstallCrxFile(crx_info);
+
+    // This time call the real InstallCrxFile implementation (see expectation
+    // set above for mock_installer).
+    mock_installer->InstallCrxFile(crx_info);
 
     content::RunAllTasksUntilIdle();
 
@@ -1975,9 +1992,9 @@ class ExtensionUpdaterTest : public testing::Test {
   }
 
   // Two extensions are updated.  If |updates_start_running| is true, the
-  // mock extensions service has UpdateExtension(...) return true, and
-  // the test is responsible for creating fake CrxInstallers.  Otherwise,
-  // UpdateExtension() returns false, signaling install failures.
+  // mock extensions service has CreateUpdateInstaller(...) return the
+  // fake CrxInstallers created by the test.  Otherwise, CreateUpdateInstaller()
+  // returns nullptr, signaling install failures.
   void TestMultipleExtensionDownloading(bool updates_start_running) {
     ExtensionDownloaderTestHelper helper;
     ServiceForDownloadTests service(prefs_.get(), helper.url_loader_factory());
@@ -2036,18 +2053,19 @@ class ExtensionUpdaterTest : public testing::Test {
     ExtensionService* extension_service =
         ExtensionSystem::Get(&profile)->extension_service();
 
-    scoped_refptr<CrxInstaller> fake_crx1(
-        CrxInstaller::CreateSilent(extension_service));
-    scoped_refptr<CrxInstaller> fake_crx2(
-        CrxInstaller::CreateSilent(extension_service));
+    scoped_refptr<FakeCrxInstaller> fake_crx1 =
+        base::MakeRefCounted<FakeCrxInstaller>(extension_service);
+    scoped_refptr<FakeCrxInstaller> fake_crx2 =
+        base::MakeRefCounted<FakeCrxInstaller>(extension_service);
 
     if (updates_start_running) {
-      // Add fake CrxInstaller to be returned by service.UpdateExtension().
-      service.AddFakeCrxInstaller(id1, fake_crx1.get());
-      service.AddFakeCrxInstaller(id2, fake_crx2.get());
+      // Add mock CrxInstaller to be returned by
+      // service.CreateUpdateInstaller().
+      service.AddFakeCrxInstaller(id1, fake_crx1);
+      service.AddFakeCrxInstaller(id2, fake_crx2);
     } else {
-      // If we don't add fake CRX installers, the mock service fakes a failure
-      // starting the install.
+      // If we don't add mock CRX installers, the mock service will just return
+      // nullptr, meaning a failure.
     }
 
     helper.test_url_loader_factory().AddResponse(
@@ -2077,13 +2095,15 @@ class ExtensionUpdaterTest : public testing::Test {
                   testing::UnorderedElementsAre(id1, id2));
 
       // Fake install notice.  This should end the first installation.
-      fake_crx1->NotifyCrxInstallComplete(CrxInstallError(
+      fake_crx1->RunInstallerCallbacks(CrxInstallError(
           CrxInstallErrorType::OTHER, CrxInstallErrorDetail::NONE));
+      content::RunAllTasksUntilIdle();
       EXPECT_THAT(GetRunningInstallIds(updater),
                   testing::UnorderedElementsAre(id2));
 
-      fake_crx2->NotifyCrxInstallComplete(CrxInstallError(
+      fake_crx2->RunInstallerCallbacks(CrxInstallError(
           CrxInstallErrorType::OTHER, CrxInstallErrorDetail::NONE));
+      content::RunAllTasksUntilIdle();
     }
     EXPECT_THAT(GetRunningInstallIds(updater), testing::IsEmpty());
   }
@@ -2134,7 +2154,7 @@ class ExtensionUpdaterTest : public testing::Test {
     // Set up 2 mock extensions, one with a google.com update url and one
     // without.
     prefs_ = std::make_unique<TestExtensionPrefs>(
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     ExtensionDownloaderTestHelper helper;
     ServiceForManifestTests service(prefs_.get(), helper.url_loader_factory());
     ExtensionList tmp;

@@ -45,6 +45,8 @@ public class WebLayerOriginVerifierTest {
     private int mUid = Process.myUid();
     private Origin mHttpsOrigin = Origin.create("https://www.example.com");
     private Origin mHttpOrigin = Origin.create("http://www.android.com");
+    private Origin mHttpLocalhostOrigin = Origin.create("http://localhost:1234/");
+    private boolean mStrictLocalhostVerification;
 
     private WebLayerOriginVerifier mHandleAllUrlsVerifier;
 
@@ -80,13 +82,25 @@ public class WebLayerOriginVerifierTest {
         }
     }
 
+    private class TestWebLayerOriginVerifier extends WebLayerOriginVerifier {
+        public TestWebLayerOriginVerifier(String packageName, String relationship,
+                WebLayerVerificationResultStore verificationResultStore) {
+            super(packageName, relationship, verificationResultStore);
+        }
+
+        @Override
+        boolean getStrictLocalhostVerificationFromManifest() {
+            return mStrictLocalhostVerification;
+        }
+    }
+
     @Before
     public void setUp() throws Exception {
         OriginVerifierUnitTestSupport.registerPackageWithSignature(
                 shadowOf(ApplicationProvider.getApplicationContext().getPackageManager()),
                 PACKAGE_NAME, mUid);
 
-        mHandleAllUrlsVerifier = new WebLayerOriginVerifier(PACKAGE_NAME,
+        mHandleAllUrlsVerifier = new TestWebLayerOriginVerifier(PACKAGE_NAME,
                 "delegate_permission/common.handle_all_urls",
                 WebLayerVerificationResultStore.getInstance());
 
@@ -123,6 +137,45 @@ public class WebLayerOriginVerifierTest {
                 () -> mHandleAllUrlsVerifier.start(resultListener, null, mHttpOrigin));
         mVerificationResultLatch.await();
         Assert.assertFalse(resultListener.isVerified());
+    }
+
+    @Test
+    public void testHttpLocalhostVerificationAllowed() throws Exception {
+        Mockito.doAnswer(args -> {
+                   Assert.fail("verifyOrigin was unexpectedly called.");
+                   return true;
+               })
+                .when(mMockOriginVerifierJni)
+                .verifyOrigin(ArgumentMatchers.anyLong(), Mockito.any(),
+                        ArgumentMatchers.anyString(), Mockito.any(), ArgumentMatchers.anyString(),
+                        ArgumentMatchers.anyString(), Mockito.any());
+        TestOriginVerificationListener resultListener =
+                new TestOriginVerificationListener(mVerificationResultLatch);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mHandleAllUrlsVerifier.start(resultListener, null, mHttpLocalhostOrigin));
+        mVerificationResultLatch.await();
+        Assert.assertTrue(resultListener.isVerified());
+    }
+
+    @Test
+    public void testHttpLocalhostVerificationNotSkippedWithFlag() throws Exception {
+        mStrictLocalhostVerification = true;
+        Mockito.doAnswer(args -> {
+                   mHandleAllUrlsVerifier.onOriginVerificationResult(
+                           args.getArgument(4), RelationshipCheckResult.SUCCESS);
+                   return true;
+               })
+                .when(mMockOriginVerifierJni)
+                .verifyOrigin(ArgumentMatchers.anyLong(), Mockito.any(),
+                        ArgumentMatchers.anyString(), Mockito.any(), ArgumentMatchers.anyString(),
+                        ArgumentMatchers.anyString(), Mockito.any());
+
+        TestOriginVerificationListener resultListener =
+                new TestOriginVerificationListener(mVerificationResultLatch);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mHandleAllUrlsVerifier.start(resultListener, null, mHttpLocalhostOrigin));
+        mVerificationResultLatch.await();
+        Assert.assertTrue(resultListener.isVerified());
     }
 
     @Test

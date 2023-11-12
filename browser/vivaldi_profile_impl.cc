@@ -6,6 +6,7 @@
 #include "base/strings/string_split.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/pref_names.h"
@@ -17,6 +18,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_version_info.h"
+#include "browser/removed_partners_tracker.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
@@ -28,8 +30,8 @@
 #include "components/page_actions/page_actions_service_factory.h"
 #include "components/ping_block/ping_block.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
-#include "components/request_filter/request_filter_manager_factory.h"
 #include "components/request_filter/request_filter_manager.h"
+#include "components/request_filter/request_filter_manager_factory.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
@@ -157,8 +159,16 @@ void VivaldiInitProfile(Profile* profile) {
   PerformUpdates(profile);
 
   if (vivaldi::IsVivaldiRunning()) {
+    bookmarks::BookmarkModel* bookmarks_model =
+        BookmarkModelFactory::GetForBrowserContext(profile);
+    if (bookmarks_model)
+      vivaldi_partners::RemovedPartnersTracker::Create(profile->GetPrefs(),
+                                                       bookmarks_model);
+
     // Manages its own lifetime.
     new VivaldiProfileObserver(profile);
+    content::URLDataSource::Add(profile,
+                                std::make_unique<VivaldiDataSource>(profile));
   }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -179,8 +189,6 @@ void VivaldiInitProfile(Profile* profile) {
 
   content::URLDataSource::Add(
       profile, std::make_unique<VivaldiThumbDataSource>(profile));
-  content::URLDataSource::Add(profile,
-                              std::make_unique<VivaldiDataSource>(profile));
   content::URLDataSource::Add(profile,
                               std::make_unique<VivaldiWebSource>(profile));
 

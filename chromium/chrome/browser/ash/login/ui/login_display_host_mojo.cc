@@ -17,7 +17,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
@@ -41,11 +41,12 @@
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_password_changed_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/lacros_data_migration_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_password_changed_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/lacros_data_migration_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/os_install_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_fatal_error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -325,7 +326,7 @@ void LoginDisplayHostMojo::OnStartSignInScreen() {
   // LoginScreenClientImpl is initialized as it is a common dependency.
   if (!LoginScreenClientImpl::HasInstance()) {
     // TODO(jdufault): Add a timeout here / make sure we do not post infinitely.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&LoginDisplayHostMojo::OnStartSignInScreen,
                                   weak_factory_.GetWeakPtr()));
     return;
@@ -653,7 +654,7 @@ void LoginDisplayHostMojo::OnPasswordChangeDetected(
 }
 
 void LoginDisplayHostMojo::OnOldEncryptionDetected(
-    const UserContext& user_context,
+    std::unique_ptr<UserContext> user_context,
     bool has_incomplete_migration) {}
 
 void LoginDisplayHostMojo::OnCurrentScreenChanged(OobeScreenId current_screen,

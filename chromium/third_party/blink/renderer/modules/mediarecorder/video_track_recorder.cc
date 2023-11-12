@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "media/base/bind_to_current_loop.h"
@@ -353,7 +353,7 @@ void VideoTrackRecorderImpl::Encoder::StartFrameEncode(
     base::TimeTicks capture_timestamp) {
   // Cache the thread sending frames on first frame arrival.
   if (!origin_task_runner_.get())
-    origin_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    origin_task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
 
   DCHECK_CALLED_ON_VALID_SEQUENCE(origin_sequence_checker_);
   if (paused_)
@@ -441,14 +441,18 @@ void VideoTrackRecorderImpl::Encoder::RetrieveFrameOnEncodingTaskRunner(
     // PaintCanvasVideoRenderer requires these settings to work.
     Platform::ContextAttributes attributes;
     attributes.enable_raster_interface = true;
+    attributes.prefer_low_power_gpu = true;
+
+    // TODO(crbug.com/1240756): This line can be removed once OOPR-Canvas has
+    // shipped on all platforms
     attributes.support_grcontext = true;
 
     Platform::GraphicsInfo info;
-    encoder_thread_context_ = CreateContextProviderOnWorkerThread(
+    encoder_thread_context_ = CreateOffscreenGraphicsContext3DProvider(
         attributes, &info, KURL("chrome://VideoTrackRecorderImpl"));
 
     if (encoder_thread_context_ &&
-        !encoder_thread_context_->BindToCurrentThread()) {
+        !encoder_thread_context_->BindToCurrentSequence()) {
       encoder_thread_context_ = nullptr;
     }
   }
@@ -542,20 +546,6 @@ void VideoTrackRecorderImpl::Encoder::RetrieveFrameOnEncodingTaskRunner(
   EncodeOnEncodingTaskRunner(std::move(frame), capture_timestamp);
 }
 
-// static
-void VideoTrackRecorderImpl::Encoder::OnFrameEncodeCompleted(
-    const OnEncodedVideoInternalCB& on_encoded_video_cb,
-    const media::WebmMuxer::VideoParameters& params,
-    std::string data,
-    std::string alpha_data,
-    base::TimeTicks capture_timestamp,
-    bool keyframe) {
-  DVLOG(1) << (keyframe ? "" : "non ") << "keyframe " << data.length() << "B, "
-           << capture_timestamp << " ms";
-  on_encoded_video_cb.Run(params, std::move(data), std::move(alpha_data),
-                          capture_timestamp, keyframe);
-}
-
 void VideoTrackRecorderImpl::Encoder::SetPaused(bool paused) {
   if (!encoding_task_runner_->RunsTasksInCurrentSequence()) {
     PostCrossThreadTask(
@@ -578,6 +568,8 @@ VideoTrackRecorderImpl::Encoder::ConvertToI420ForSoftwareEncoder(
 
   if (frame->GetGpuMemoryBuffer())
     frame = media::ConvertToMemoryMappedFrame(frame);
+  if (!frame)
+    return nullptr;
 
   scoped_refptr<media::VideoFrame> i420_frame = frame_pool_.CreateFrame(
       media::VideoPixelFormat::PIXEL_FORMAT_I420, frame->coded_size(),
@@ -901,10 +893,10 @@ void VideoTrackRecorderPassthrough::HandleEncodedVideoFrame(
   auto span = encoded_frame->Data();
   const char* span_begin = reinterpret_cast<const char*>(span.data());
   std::string data(span_begin, span_begin + span.size());
-  media::WebmMuxer::VideoParameters params(encoded_frame->Resolution(),
-                                           /*framerate=*/0.0f,
-                                           /*codec=*/encoded_frame->Codec(),
-                                           color_space);
+  media::Muxer::VideoParameters params(encoded_frame->Resolution(),
+                                       /*frame_rate=*/0.0f,
+                                       /*codec=*/encoded_frame->Codec(),
+                                       color_space);
   callback_.Run(params, std::move(data), {}, estimated_capture_time,
                 encoded_frame->IsKeyFrame());
 }

@@ -186,7 +186,7 @@ const char kManagedUiLearnMoreUrl[] =
     "https://support.google.com/chrome/?p=is_chrome_managed";
 #endif
 
-const char kMixedContentDownloadBlockingLearnMoreUrl[] =
+const char kInsecureDownloadBlockingLearnMoreUrl[] =
     "https://support.google.com/chrome/?p=mixed_content_downloads";
 
 const char kMyActivityUrlInClearBrowsingData[] =
@@ -230,7 +230,7 @@ const char kPaymentMethodsURL[] =
     "home?utm_source=chrome&utm_medium=settings&utm_campaign=chrome-payment#"
     "paymentMethods";
 
-const char kPaymentMethodsLearnMoreURL[] =
+const char kAddressesAndPaymentMethodsLearnMoreURL[] =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/answer/"
     "142893?visit_id=636857416902558798-696405304&p=settings_autofill&rd=1";
@@ -390,7 +390,7 @@ const char kArcPrivacyPolicyPathFormat[] = "arc_tos/%s/privacy_policy.pdf";
 const char kEolNotificationURL[] = "https://www.google.com/chromebook/older/";
 
 const char kAutoUpdatePolicyURL[] =
-    "http://support.google.com/chrome/a?p=auto-update-policy";
+    "https://support.google.com/chrome/a?p=auto-update-policy";
 
 const char kGoogleNameserversLearnMoreURL[] =
     "https://developers.google.com/speed/public-dns";
@@ -433,6 +433,9 @@ const char kOsSettingsSearchHelpURL[] =
 const char kPeripheralDataAccessHelpURL[] =
     "https://support.google.com/chromebook?p=connect_thblt_usb4_accy";
 
+const char kSelectToSpeakLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=select_to_speak";
+
 const char kTPMFirmwareUpdateLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=tpm_update";
 
@@ -455,7 +458,7 @@ const char kWifiSyncLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=wifisync";
 
 const char kWifiHiddenNetworkURL[] =
-    "http://support.google.com/chromebook?p=hidden_networks";
+    "https://support.google.com/chromebook?p=hidden_networks";
 
 const char kNearbyShareLearnMoreURL[] =
     "https://support.google.com/chromebook?p=nearby_share";
@@ -506,10 +509,8 @@ const char kChromeAppsDeprecationLearnMoreURL[] =
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-// TODO(b/1339340): add help center link when help center link is created.
 const char kChromeRootStoreSettingsHelpCenterURL[] =
-    "https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/"
-    "chrome_root_store/root_store.md";
+    "https://support.google.com/chrome?p=root_store";
 #endif
 
 }  // namespace chrome

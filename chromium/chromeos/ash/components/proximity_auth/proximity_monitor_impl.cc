@@ -9,12 +9,12 @@
 #include <memory>
 #include <utility>
 
-#include "ash/services/secure_channel/public/cpp/client/client_channel.h"
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/proximity_auth/metrics.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/client_channel.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
@@ -92,7 +92,7 @@ void ProximityMonitorImpl::UpdatePollingState() {
 
     // Polling can re-entrantly call back into this method, so make sure to
     // schedule the next polling iteration prior to executing the current one.
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(
             &ProximityMonitorImpl::PerformScheduledUpdatePollingState,

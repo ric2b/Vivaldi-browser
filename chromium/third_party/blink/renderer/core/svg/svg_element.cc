@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/animation/svg_interpolation_environment.h"
 #include "third_party/blink/renderer/core/animation/svg_interpolation_types_map.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
@@ -368,7 +369,6 @@ void SVGElement::RemovedFrom(ContainerNode& root_parent) {
       corresponding_element->RemoveInstance(this);
       SvgRareData()->SetCorrespondingElement(nullptr);
     }
-    RebuildAllIncomingReferences();
     RemoveAllIncomingReferences();
   }
 
@@ -684,7 +684,7 @@ struct AnimatedPropertyTypeHashTraits : HashTraits<AnimatedPropertyType> {
 
 using AttributeToPropertyTypeMap = HashMap<QualifiedName,
                                            AnimatedPropertyType,
-                                           DefaultHash<QualifiedName>::Hash,
+                                           DefaultHash<QualifiedName>,
                                            HashTraits<QualifiedName>,
                                            AnimatedPropertyTypeHashTraits>;
 AnimatedPropertyType SVGElement::AnimatedPropertyTypeForCSSAttribute(
@@ -791,6 +791,15 @@ bool SVGElement::IsPresentationAttribute(const QualifiedName& name) const {
          CSSPropertyID::kInvalid;
 }
 
+namespace {
+
+bool ProbablyUrlFunction(const AtomicString& value) {
+  return value.length() > 5 && value.Is8Bit() &&
+         memcmp(value.Characters8(), "url(", 4) == 0;
+}
+
+}  // namespace
+
 void SVGElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
@@ -798,7 +807,36 @@ void SVGElement::CollectStyleForPresentationAttribute(
   CSSPropertyID property_id =
       CssPropertyIdForSVGAttributeName(GetExecutionContext(), name);
   if (property_id > CSSPropertyID::kInvalid) {
-    AddPropertyToPresentationAttributeStyle(style, property_id, value);
+    if ((property_id == CSSPropertyID::kFill ||
+         property_id == CSSPropertyID::kClipPath) &&
+        ProbablyUrlFunction(value)) {
+      // Cache CSSURIValue objects for a given attribute value string. If other
+      // presentation attributes change repeatedly while the fill or clip-path
+      // stay the same, we still recreate the presentation attribute style for
+      // the mentioned attributes/properties. Cache them to avoid expensive url
+      // parsing and resolution.
+      //
+      // Alternatively, we could start to update SVG presentation attribute
+      // style synchronously. See https://crbug.com/1375215
+      StyleEngine& engine = GetDocument().GetStyleEngine();
+      if (const CSSValue* cached_value =
+              engine.GetCachedFillOrClipPathURIValue(value)) {
+        AddPropertyToPresentationAttributeStyle(style, property_id,
+                                                *cached_value);
+      } else {
+        AddPropertyToPresentationAttributeStyle(style, property_id, value);
+        if (unsigned count = style->PropertyCount()) {
+          // Cache the value if it was added.
+          CSSPropertyValueSet::PropertyReference last_decl =
+              style->PropertyAt(--count);
+          if (last_decl.Id() == property_id) {
+            engine.AddCachedFillOrClipPathURIValue(value, last_decl.Value());
+          }
+        }
+      }
+    } else {
+      AddPropertyToPresentationAttributeStyle(style, property_id, value);
+    }
   } else if (name.Matches(xml_names::kLangAttr)) {
     if (RuntimeEnabledFeatures::LangAttributeAwareSvgTextEnabled())
       MapLanguageAttributeToLocale(value, style);
@@ -923,7 +961,6 @@ void SVGElement::AttributeChanged(const AttributeModificationParams& params) {
   Element::AttributeChanged(params);
 
   if (params.name == html_names::kIdAttr) {
-    RebuildAllIncomingReferences();
     InvalidateInstances();
     return;
   }
@@ -934,19 +971,19 @@ void SVGElement::AttributeChanged(const AttributeModificationParams& params) {
   if (params.name == html_names::kStyleAttr)
     return;
 
+  CSSPropertyID prop_id =
+      CssPropertyIdForSVGAttributeName(GetExecutionContext(), params.name);
+  if (prop_id > CSSPropertyID::kInvalid) {
+    InvalidateInstances();
+    return;
+  }
+
   SvgAttributeChanged({params.name, params.reason});
   UpdateWebAnimatedAttributeOnBaseValChange(params.name);
 }
 
 void SVGElement::SvgAttributeChanged(const SvgAttributeChangedParams& params) {
   const QualifiedName& attr_name = params.name;
-  CSSPropertyID prop_id = SVGElement::CssPropertyIdForSVGAttributeName(
-      GetExecutionContext(), attr_name);
-  if (prop_id > CSSPropertyID::kInvalid) {
-    InvalidateInstances();
-    return;
-  }
-
   if (attr_name == html_names::kClassAttr) {
     ClassAttributeChanged(AtomicString(class_name_->CurrentValue()->Value()));
     InvalidateInstances();
@@ -992,7 +1029,7 @@ void SVGElement::EnsureAttributeAnimValUpdated() {
 }
 
 void SVGElement::SynchronizeSVGAttribute(const QualifiedName& name) const {
-  DCHECK(GetElementData());
+  DCHECK(HasElementData());
   DCHECK(GetElementData()->svg_attributes_are_dirty());
   if (name == AnyQName()) {
     for (SVGAnimatedPropertyBase* property :
@@ -1261,28 +1298,6 @@ SVGElementSet& SVGElement::GetDependencyTraversalVisitedSet() {
   DEFINE_STATIC_LOCAL(Persistent<SVGElementSet>, invalidating_dependencies,
                       (MakeGarbageCollected<SVGElementSet>()));
   return *invalidating_dependencies;
-}
-
-void SVGElement::RebuildAllIncomingReferences() {
-  if (!HasSVGRareData())
-    return;
-
-  const SVGElementSet& incoming_references =
-      SvgRareData()->IncomingReferences();
-
-  // Iterate on a snapshot as |incoming_references| may be altered inside loop.
-  HeapVector<Member<SVGElement>> incoming_references_snapshot(
-      incoming_references);
-
-  // Force rebuilding the |source_element| so it knows about this change.
-  const SvgAttributeChangedParams params(
-      svg_names::kHrefAttr, AttributeModificationReason::kDirectly);
-  for (SVGElement* source_element : incoming_references_snapshot) {
-    // Before rebuilding |source_element| ensure it was not removed from under
-    // us.
-    if (incoming_references.Contains(source_element))
-      source_element->SvgAttributeChanged(params);
-  }
 }
 
 void SVGElement::RemoveAllIncomingReferences() {

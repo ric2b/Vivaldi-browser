@@ -13,12 +13,12 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_libevent.h"
-#include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_checker.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/ozone/platform/wayland/test/global_object.h"
 #include "ui/ozone/platform/wayland/test/mock_wp_presentation.h"
 #include "ui/ozone/platform/wayland/test/mock_xdg_shell.h"
-#include "ui/ozone/platform/wayland/test/mock_zaura_shell.h"
 #include "ui/ozone/platform/wayland/test/mock_zwp_linux_dmabuf.h"
 #include "ui/ozone/platform/wayland/test/test_alpha_compositing.h"
 #include "ui/ozone/platform/wayland/test/test_compositor.h"
@@ -30,10 +30,12 @@
 #include "ui/ozone/platform/wayland/test/test_surface_augmenter.h"
 #include "ui/ozone/platform/wayland/test/test_viewporter.h"
 #include "ui/ozone/platform/wayland/test/test_wp_pointer_gestures.h"
+#include "ui/ozone/platform/wayland/test/test_zaura_shell.h"
 #include "ui/ozone/platform/wayland/test/test_zcr_stylus.h"
 #include "ui/ozone/platform/wayland/test/test_zcr_text_input_extension.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_linux_explicit_synchronization.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_text_input_manager.h"
+#include "ui/ozone/platform/wayland/test/test_zxdg_output_manager.h"
 
 struct wl_client;
 struct wl_display;
@@ -47,18 +49,31 @@ struct DisplayDeleter {
 };
 
 // Server configuration related enums and structs.
-enum class ShellVersion { kV6, kStable };
 enum class PrimarySelectionProtocol { kNone, kGtk, kZwp };
 enum class CompositorVersion { kV3, kV4 };
 enum class ShouldUseExplicitSynchronizationProtocol { kNone, kUse };
+enum class EnableAuraShellProtocol { kEnabled, kDisabled };
 
 struct ServerConfig {
-  ShellVersion shell_version = ShellVersion::kStable;
   CompositorVersion compositor_version = CompositorVersion::kV4;
   PrimarySelectionProtocol primary_selection_protocol =
       PrimarySelectionProtocol::kNone;
   ShouldUseExplicitSynchronizationProtocol use_explicit_synchronization =
       ShouldUseExplicitSynchronizationProtocol::kUse;
+  EnableAuraShellProtocol enable_aura_shell =
+      EnableAuraShellProtocol::kDisabled;
+  bool surface_submission_in_pixel_coordinates = true;
+};
+
+class TestWaylandServerThread;
+
+// A custom listener that holds wl_listener and the pointer to a test_server.
+struct TestServerListener {
+ public:
+  explicit TestServerListener(TestWaylandServerThread* server)
+      : test_server(server) {}
+  wl_listener listener;
+  const raw_ptr<TestWaylandServerThread> test_server;
 };
 
 class TestSelectionDeviceManager;
@@ -75,9 +90,6 @@ class TestWaylandServerThread : public base::Thread,
 
   ~TestWaylandServerThread() override;
 
-  // TODO(1365887): This shouldn't really exist.
-  static void FlushClientForResource(wl_resource* resource);
-
   // Starts the test Wayland server thread. If this succeeds, the WAYLAND_SOCKET
   // environment variable will be set to the string representation of a file
   // descriptor that a client can connect to. The caller is responsible for
@@ -87,25 +99,29 @@ class TestWaylandServerThread : public base::Thread,
   // (stable) are supported.
   bool Start(const ServerConfig& config);
 
-  // Pauses the server thread when it becomes idle.
-  void Pause();
+  // Runs 'callback' or 'closure' on the server thread; blocks until the
+  // callable is run and all pending Wayland requests and events are delivered.
+  void RunAndWait(base::OnceCallback<void(TestWaylandServerThread*)> callback);
+  void RunAndWait(base::OnceClosure closure);
 
-  // Resumes the server thread after flushing client connections.
-  void Resume();
-
-  // Initializes and returns WpPresentation.
-  MockWpPresentation* EnsureWpPresentation();
+  // Returns WpPresentation. If it hasn't been initialized yet, initializes that
+  // first and then returns.
+  MockWpPresentation* EnsureAndGetWpPresentation();
   // Initializes and returns SurfaceAugmenter.
   TestSurfaceAugmenter* EnsureSurfaceAugmenter();
 
   template <typename T>
   T* GetObject(uint32_t id) {
+    // All the protocol calls must be made on the correct thread.
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     wl_resource* resource = wl_client_get_object(client_, id);
     return resource ? T::FromResource(resource) : nullptr;
   }
 
   TestOutput* CreateAndInitializeOutput() {
     auto output = std::make_unique<TestOutput>();
+    if (output_.aura_shell_enabled())
+      output->set_aura_shell_enabled();
     output->Initialize(display());
 
     TestOutput* output_ptr = output.get();
@@ -116,7 +132,7 @@ class TestWaylandServerThread : public base::Thread,
   TestDataDeviceManager* data_device_manager() { return &data_device_manager_; }
   TestSeat* seat() { return &seat_; }
   MockXdgShell* xdg_shell() { return &xdg_shell_; }
-  MockZAuraShell* zaura_shell() { return &zaura_shell_; }
+  TestZAuraShell* zaura_shell() { return &zaura_shell_; }
   TestOutput* output() { return &output_; }
   TestZcrTextInputExtensionV1* text_input_extension_v1() {
     return &zcr_text_input_extension_v1_;
@@ -144,25 +160,44 @@ class TestWaylandServerThread : public base::Thread,
 
   wl_client* client() const { return client_; }
 
+  void OnClientDestroyed(wl_client* client);
+
+  // Returns next available serial. Must be called on the server thread.
+  uint32_t GetNextSerial() const;
+  // Returns next available timestamp. Suitable for events sent from the server
+  // the client. Must be called on the server thread.
+  uint32_t GetNextTime();
+
  private:
   void SetupOutputs();
   bool SetupPrimarySelectionManager(PrimarySelectionProtocol protocol);
   bool SetupExplicitSynchronizationProtocol(
       ShouldUseExplicitSynchronizationProtocol usage);
-  void DoPause();
 
   std::unique_ptr<base::MessagePump> CreateMessagePump();
+
+  // Executes the closure and flushes the server event queue. Must be run on
+  // server's thread.
+  void DoRun(base::OnceClosure closure);
 
   // base::MessagePumpLibevent::FdWatcher
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
+  // wl_protocol_logger. Whenever there is a call to a protocol from the server
+  // side, the logger is invoked. This is handy as we can use this to verify all
+  // the protocol calls happen only when the server thread is not running. This
+  // helps to avoid thread races as the client runs on a different from the
+  // server tread.
+  static void ProtocolLogger(void* user_data,
+                             enum wl_protocol_logger_type direction,
+                             const struct wl_protocol_logger_message* message);
+
   std::unique_ptr<wl_display, DisplayDeleter> display_;
+  TestServerListener client_destroy_listener_;
   raw_ptr<wl_client> client_ = nullptr;
   raw_ptr<wl_event_loop> event_loop_ = nullptr;
-
-  base::WaitableEvent pause_event_;
-  base::WaitableEvent resume_event_;
+  raw_ptr<wl_protocol_logger> protocol_logger_ = nullptr;
 
   // Represent Wayland global objects
   // Compositor version is selected dynamically by server config but version is
@@ -179,9 +214,9 @@ class TestWaylandServerThread : public base::Thread,
   TestOverlayPrioritizer overlay_prioritizer_;
   TestSurfaceAugmenter surface_augmenter_;
   TestSeat seat_;
+  TestZXdgOutputManager zxdg_output_manager_;
   MockXdgShell xdg_shell_;
-  MockZxdgShellV6 zxdg_shell_v6_;
-  MockZAuraShell zaura_shell_;
+  TestZAuraShell zaura_shell_;
   TestZcrStylus zcr_stylus_;
   TestZcrTextInputExtensionV1 zcr_text_input_extension_v1_;
   TestZwpTextInputManagerV1 zwp_text_input_manager_v1_;
@@ -196,6 +231,8 @@ class TestWaylandServerThread : public base::Thread,
   base::MessagePumpLibevent::FdWatchController controller_;
 
   raw_ptr<OutputDelegate> output_delegate_ = nullptr;
+
+  THREAD_CHECKER(thread_checker_);
 };
 
 class TestWaylandServerThread::OutputDelegate {

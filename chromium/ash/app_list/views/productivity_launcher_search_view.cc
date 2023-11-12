@@ -102,13 +102,14 @@ ProductivityLauncherSearchView::ProductivityLauncherSearchView(
     new_container->SetResults(
         AppListModelProvider::Get()->search_model()->results());
     new_container->set_delegate(this);
+    new_container->SetVisible(false);
     result_container_views_.push_back(new_container);
   };
 
   // kAnswerCard is always the first list view shown.
   auto* answer_card_container =
       scroll_contents->AddChildView(std::make_unique<SearchResultListView>(
-          /*main_view=*/nullptr, view_delegate, dialog_controller_,
+          view_delegate, dialog_controller_,
           SearchResultView::SearchResultViewType::kAnswerCard,
           /*animates_result_updates=*/true, absl::nullopt));
   answer_card_container->SetListType(
@@ -118,7 +119,7 @@ ProductivityLauncherSearchView::ProductivityLauncherSearchView(
   // kBestMatch is always the second list view shown.
   auto* best_match_container =
       scroll_contents->AddChildView(std::make_unique<SearchResultListView>(
-          /*main_view=*/nullptr, view_delegate, dialog_controller_,
+          view_delegate, dialog_controller_,
           SearchResultView::SearchResultViewType::kDefault,
           /*animated_result_updates=*/true, absl::nullopt));
   best_match_container->SetListType(
@@ -143,7 +144,7 @@ ProductivityLauncherSearchView::ProductivityLauncherSearchView(
   for (size_t i = 0; i < category_count; ++i) {
     auto* result_container =
         scroll_contents->AddChildView(std::make_unique<SearchResultListView>(
-            /*main_view=*/nullptr, view_delegate, dialog_controller_,
+            view_delegate, dialog_controller_,
             SearchResultView::SearchResultViewType::kDefault,
             /*animates_result_updates=*/true, i));
     add_result_container(result_container);
@@ -268,6 +269,15 @@ void ProductivityLauncherSearchView::OnSearchResultContainerResultsChanged() {
   }
 }
 
+void ProductivityLauncherSearchView::VisibilityChanged(View* starting_from,
+                                                       bool is_visible) {
+  if (!is_visible) {
+    result_selection_controller_->ClearSelection();
+    for (auto* container : result_container_views_)
+      container->ResetAndHide();
+  }
+}
+
 void ProductivityLauncherSearchView::GetAccessibleNodeData(
     ui::AXNodeData* node_data) {
   if (!GetVisible())
@@ -305,6 +315,9 @@ void ProductivityLauncherSearchView::OnActiveAppListModelsChanged(
 }
 
 void ProductivityLauncherSearchView::UpdateForNewSearch(bool search_active) {
+  for (auto* container : result_container_views_)
+    container->SetActive(search_active);
+
   if (app_list_features::IsDynamicSearchUpdateAnimationEnabled()) {
     if (search_active) {
       // Scan result_container_views_ to see if there are any in progress

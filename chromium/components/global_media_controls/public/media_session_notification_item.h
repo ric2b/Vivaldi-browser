@@ -46,6 +46,9 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionNotificationItem
     // The given item should be destroyed.
     virtual void RemoveItem(const std::string& id) = 0;
 
+    // The given item's UI should be refreshed.
+    virtual void RefreshItem(const std::string& id) = 0;
+
     // The given button has been pressed, and therefore the action should be
     // recorded.
     virtual void LogMediaSessionActionButtonPressed(
@@ -101,6 +104,7 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionNotificationItem
   media_message_center::SourceType SourceType() override;
   void SetVolume(float volume) override {}
   void SetMute(bool mute) override;
+  bool RequestMediaRemoting() override;
 
   // Stops the media session.
   void Stop();
@@ -125,21 +129,28 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionNotificationItem
 
   bool frozen() const { return frozen_; }
 
+  // Returns nullptr if `remote_playback_disabled` is true in `session_info_`.
+  media_session::mojom::RemotePlaybackMetadataPtr GetRemotePlaybackMetadata();
+
   void FlushForTesting();
 
-  void SetMediaControllerForTesting(
-      mojo::Remote<media_session::mojom::MediaController> controller) {
-    media_controller_remote_ = std::move(controller);
-  }
-
  private:
+  FRIEND_TEST_ALL_PREFIXES(MediaSessionNotificationItemTest,
+                           GetSessionMetadata);
+  FRIEND_TEST_ALL_PREFIXES(MediaSessionNotificationItemTest,
+                           GetMediaSessionActions);
+
   media_session::MediaMetadata GetSessionMetadata() const;
+  base::flat_set<media_session::mojom::MediaSessionAction>
+  GetMediaSessionActions() const;
 
   bool ShouldShowNotification() const;
 
   void MaybeUnfreeze();
 
-  void Unfreeze();
+  void UnfreezeNonArtwork();
+
+  void UnfreezeArtwork();
 
   bool HasActions() const;
 
@@ -148,6 +159,8 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionNotificationItem
   void OnFreezeTimerFired();
 
   void MaybeHideOrShowNotification();
+
+  void UpdateViewCommon();
 
   const raw_ptr<Delegate> delegate_;
 
@@ -202,10 +215,6 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionNotificationItem
   // True if we're currently frozen and the frozen view contains non-null
   // artwork.
   bool frozen_with_artwork_ = false;
-
-  // True if we have the necessary metadata to unfreeze, but we're waiting for
-  // new artwork to load.
-  bool waiting_for_artwork_ = false;
 
   // The timer that will notify the controller to destroy this item after it
   // has been frozen for a certain period of time.

@@ -17,7 +17,7 @@ import './startup_url_dialog.js';
 
 import {CrScrollableMixin} from 'chrome://resources/cr_elements/cr_scrollable_mixin.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {EDIT_STARTUP_URL_EVENT} from './startup_url_entry.js';
@@ -26,7 +26,7 @@ import {StartupPageInfo, StartupUrlsPageBrowserProxy, StartupUrlsPageBrowserProx
 
 
 const SettingsStartupUrlsPageElementBase =
-    CrScrollableMixin(WebUIListenerMixin(PolymerElement));
+    CrScrollableMixin(WebUiListenerMixin(PolymerElement));
 
 export class SettingsStartupUrlsPageElement extends
     SettingsStartupUrlsPageElementBase {
@@ -76,7 +76,7 @@ export class SettingsStartupUrlsPageElement extends
   override connectedCallback() {
     super.connectedCallback();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'update-startup-pages', (startupPages: StartupPageInfo[]) => {
           // If an "edit" URL dialog was open, close it, because the underlying
           // page might have just been removed (and model indices have changed

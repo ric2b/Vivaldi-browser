@@ -90,8 +90,10 @@
 <translation id="2550212893339833758">Skiptiminni</translation>
 <translation id="2553440850688409052">Fela þessa viðbót</translation>
 <translation id="26224892172169984">Ekki leyfa síðum að sjá um samskiptasnið</translation>
+<translation id="2653275834716714682">Útskipting texta</translation>
 <translation id="2662876636500006917">Chrome vefverslun</translation>
 <translation id="2678063897982469759">Endurvirkja</translation>
+<translation id="2678100101831051676">Mistókst að varpa.</translation>
 <translation id="2721037002783622288">&amp;Leita að mynd með <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Búa til flýtileið...</translation>
 <translation id="2785873697295365461">Skráalýsingar</translation>
@@ -202,6 +204,7 @@
 <translation id="4593021220803146968">&amp;Fara á <ph name="URL" /></translation>
 <translation id="4595560905247879544">Öppum og viðbótum getur aðeins verið breytt af stjórnanda (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Viðbót hefur breytt því hvaða síða er sýnd þegar þú opnar nýjan flipa.</translation>
+<translation id="4616405296204756919">Þú getur notað vistuð lykilorð á hvaða tæki sem er. Þau eru vistuð í <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Opna myndband í nýjum flipa</translation>
 <translation id="4677772697204437347">GPU minni</translation>
 <translation id="4681930562518940301">Opna upphaflega &amp;mynd í nýjum flipa</translation>
@@ -235,10 +238,12 @@
 <translation id="5233231016133573565">Auðkennisnúmer ferlis</translation>
 <translation id="5233736638227740678">&amp;Líma</translation>
 <translation id="5256861893479663409">Á öllum síðum</translation>
+<translation id="5260334392110301220">Snjallar gæsalappir</translation>
 <translation id="5269977353971873915">Prentun mistókst</translation>
 <translation id="5284445933715251131">Halda áfram niðurhali</translation>
 <translation id="52912272896845572">Einkalyklaskrá er ógild.</translation>
 <translation id="5301954838959518834">Allt í lagi, náði því</translation>
+<translation id="5302932258331363306">Sýna innsetningar</translation>
 <translation id="5317780077021120954">Vista</translation>
 <translation id="5334142896108694079">Skyndiminni skriptu</translation>
 <translation id="5355926466126177564">Viðbótin "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar leitað er í veffangasvæði.</translation>
@@ -338,6 +343,7 @@
 <translation id="7053983685419859001">Hamla</translation>
 <translation id="7070484045139057854">Getur lesið og breytt gögnum síðu</translation>
 <translation id="708060913198414444">V&amp;ista veffang hljóðskrár</translation>
+<translation id="7121728544325372695">Snjöll bandstrik</translation>
 <translation id="7175353351958621980">Hlaðið frá:</translation>
 <translation id="7186088072322679094">Geyma í tækjastiku</translation>
 <translation id="7287143125007575591">Aðgangi hafnað.</translation>
@@ -421,6 +427,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8808478386290700967">Vefverslun</translation>
 <translation id="8823514049557262177">Afrita hlekk te&amp;xta</translation>
 <translation id="8823704566850948458">Stinga upp á lykilorði...</translation>
+<translation id="883062543841130884">Innsetningar</translation>
 <translation id="8859174528519900719">Undirgluggi: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Opna hlekk í nýjum &amp;glugga</translation>
 <translation id="8915370057835397490">Hleð tillögum</translation>

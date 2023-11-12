@@ -24,15 +24,15 @@ const int64_t kFolderNone = -1;
 @implementation NotePathCache
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
-  registry->RegisterInt64Pref(vivaldiprefs::kIosNoteCachedFolderId, kFolderNone);
-  registry->RegisterIntegerPref(vivaldiprefs::kIosNoteCachedTopMostRow, 0);
+  registry->RegisterInt64Pref(vivaldiprefs::kVivaldiNoteCachedFolderId, kFolderNone);
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiNoteCachedTopMostRow, 0);
 }
 
 + (void)cacheNoteTopMostRowWithPrefService:(PrefService*)prefService
                                       folderId:(int64_t)folderId
                                     topMostRow:(int)topMostRow {
-  prefService->SetInt64(vivaldiprefs::kIosNoteCachedFolderId, folderId);
-  prefService->SetInteger(vivaldiprefs::kIosNoteCachedTopMostRow, topMostRow);
+  prefService->SetInt64(vivaldiprefs::kVivaldiNoteCachedFolderId, folderId);
+  prefService->SetInteger(vivaldiprefs::kVivaldiNoteCachedTopMostRow, topMostRow);
 }
 
 + (BOOL)getNoteTopMostRowCacheWithPrefService:(PrefService*)prefService
@@ -42,7 +42,7 @@ const int64_t kFolderNone = -1;
                                        topMostRow:(int*)topMostRow {
   if (!folderId) return NO;
 
-  *folderId = prefService->GetInt64(vivaldiprefs::kIosNoteCachedFolderId);
+  *folderId = prefService->GetInt64(vivaldiprefs::kVivaldiNoteCachedFolderId);
 
   // If the cache was at root node, consider it as nothing was cached.
   if (*folderId == kFolderNone || *folderId == model->root_node()->id())
@@ -55,12 +55,12 @@ const int64_t kFolderNone = -1;
   if (!note)
     return NO;
 
-  *topMostRow = prefService->GetInteger(vivaldiprefs::kIosNoteCachedTopMostRow);
+  *topMostRow = prefService->GetInteger(vivaldiprefs::kVivaldiNoteCachedTopMostRow);
   return YES;
 }
 
 + (void)clearNoteTopMostRowCacheWithPrefService:(PrefService*)prefService {
-  prefService->SetInt64(vivaldiprefs::kIosNoteCachedFolderId, kFolderNone);
+  prefService->SetInt64(vivaldiprefs::kVivaldiNoteCachedFolderId, kFolderNone);
 }
 
 @end

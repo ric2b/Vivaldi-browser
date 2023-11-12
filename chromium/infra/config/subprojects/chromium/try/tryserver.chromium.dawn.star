@@ -4,22 +4,21 @@
 """Definitions of builders in the tryserver.chromium.swangle builder group."""
 
 load("//lib/branches.star", "branches")
-load("//lib/builders.star", "goma", "os")
+load("//lib/builders.star", "goma", "os", "reclient")
 load("//lib/consoles.star", "consoles")
 load("//lib/try.star", "try_")
 
 try_.defaults.set(
     builder_group = "tryserver.chromium.dawn",
-    builderless = False,
     executable = try_.DEFAULT_EXECUTABLE,
-    execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
-    goma_backend = goma.backend.RBE_PROD,
+    builderless = False,
     os = os.LINUX_DEFAULT,
     pool = try_.DEFAULT_POOL,
     service_account = try_.gpu.SERVICE_ACCOUNT,
-
-    # TODO(crbug.com/1362440): remove this.
-    omit_python2 = False,
+    execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
+    goma_backend = goma.backend.RBE_PROD,
+    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
+    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -34,23 +33,23 @@ try_.builder(
         "ci/Dawn Android arm DEPS Release (Pixel 4)",
     ],
     main_list_view = "try",
-    tryjob = try_.job(
-        location_filters = [
-            "content/test/gpu/.+",
-            "gpu/.+",
-            "testing/buildbot/chromium.dawn.json",
-            "third_party/blink/renderer/modules/webgpu/.+",
-            "third_party/blink/web_tests/external/wpt/webgpu/.+",
-            "third_party/blink/web_tests/wpt_internal/webgpu/.+",
-            "third_party/blink/web_tests/WebGPUExpectations",
-            "third_party/dawn/.+",
-            "third_party/webgpu-cts/.+",
-            "tools/clang/scripts/update.py",
-            "ui/gl/features.gni",
-        ],
-    ),
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+    tryjob = try_.job(
+        location_filters = [
+            cq.location_filter(path_regexp = "content/test/gpu/.+"),
+            cq.location_filter(path_regexp = "gpu/.+"),
+            cq.location_filter(path_regexp = "testing/buildbot/chromium.dawn.json"),
+            cq.location_filter(path_regexp = "third_party/blink/renderer/modules/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/external/wpt/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/wpt_internal/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/WebGPUExpectations"),
+            cq.location_filter(path_regexp = "third_party/dawn/.+"),
+            cq.location_filter(path_regexp = "third_party/webgpu-cts/.+"),
+            cq.location_filter(path_regexp = "tools/clang/scripts/update.py"),
+            cq.location_filter(path_regexp = "ui/gl/features.gni"),
+        ],
     ),
 )
 
@@ -63,23 +62,24 @@ try_.builder(
         "ci/Dawn Linux x64 DEPS Release (NVIDIA)",
     ],
     main_list_view = "try",
-    tryjob = try_.job(
-        location_filters = [
-            "content/test/gpu/.+",
-            "gpu/.+",
-            "testing/buildbot/chromium.dawn.json",
-            "third_party/blink/renderer/modules/webgpu/.+",
-            "third_party/blink/web_tests/external/wpt/webgpu/.+",
-            "third_party/blink/web_tests/wpt_internal/webgpu/.+",
-            "third_party/blink/web_tests/WebGPUExpectations",
-            "third_party/dawn/.+",
-            "third_party/webgpu-cts/.+",
-            "tools/clang/scripts/update.py",
-            "ui/gl/features.gni",
-        ],
-    ),
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+    tryjob = try_.job(
+        location_filters = [
+            cq.location_filter(path_regexp = "content/test/gpu/.+"),
+            cq.location_filter(path_regexp = "gpu/.+"),
+            cq.location_filter(path_regexp = "testing/buildbot/chromium.dawn.json"),
+            cq.location_filter(path_regexp = "third_party/blink/renderer/modules/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/external/wpt/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/wpt_internal/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/WebGPUExpectations"),
+            cq.location_filter(path_regexp = "third_party/dawn/.+"),
+            cq.location_filter(path_regexp = "third_party/webgpu-cts/.+"),
+            cq.location_filter(path_regexp = "tools/clang/scripts/update.py"),
+            cq.location_filter(path_regexp = "ui/gl/features.gni"),
+        ],
     ),
 )
 
@@ -88,28 +88,29 @@ try_.builder(
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
     mirrors = [
         "ci/Dawn Mac x64 DEPS Builder",
-        "ci/Dawn Mac x64 DEPS Release (AMD)",
+        # Not enough capacity on Mac AMD https://crbug.com/1380184.
+        # "ci/Dawn Mac x64 DEPS Release (AMD)",
         "ci/Dawn Mac x64 DEPS Release (Intel)",
     ],
-    main_list_view = "try",
     os = os.MAC_ANY,
-    tryjob = try_.job(
-        location_filters = [
-            "content/test/gpu/.+",
-            "gpu/.+",
-            "testing/buildbot/chromium.dawn.json",
-            "third_party/blink/renderer/modules/webgpu/.+",
-            "third_party/blink/web_tests/external/wpt/webgpu/.+",
-            "third_party/blink/web_tests/wpt_internal/webgpu/.+",
-            "third_party/blink/web_tests/WebGPUExpectations",
-            "third_party/dawn/.+",
-            "third_party/webgpu-cts/.+",
-            "tools/clang/scripts/update.py",
-            "ui/gl/features.gni",
-        ],
-    ),
+    main_list_view = "try",
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+    tryjob = try_.job(
+        location_filters = [
+            cq.location_filter(path_regexp = "content/test/gpu/.+"),
+            cq.location_filter(path_regexp = "gpu/.+"),
+            cq.location_filter(path_regexp = "testing/buildbot/chromium.dawn.json"),
+            cq.location_filter(path_regexp = "third_party/blink/renderer/modules/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/external/wpt/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/wpt_internal/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/WebGPUExpectations"),
+            cq.location_filter(path_regexp = "third_party/dawn/.+"),
+            cq.location_filter(path_regexp = "third_party/webgpu-cts/.+"),
+            cq.location_filter(path_regexp = "tools/clang/scripts/update.py"),
+            cq.location_filter(path_regexp = "ui/gl/features.gni"),
+        ],
     ),
 )
 
@@ -121,25 +122,26 @@ try_.builder(
         "ci/Dawn Win10 x64 DEPS Release (Intel HD 630)",
         "ci/Dawn Win10 x64 DEPS Release (NVIDIA)",
     ],
-    main_list_view = "try",
     os = os.WINDOWS_ANY,
-    tryjob = try_.job(
-        location_filters = [
-            "content/test/gpu/.+",
-            "gpu/.+",
-            "testing/buildbot/chromium.dawn.json",
-            "third_party/blink/renderer/modules/webgpu/.+",
-            "third_party/blink/web_tests/external/wpt/webgpu/.+",
-            "third_party/blink/web_tests/wpt_internal/webgpu/.+",
-            "third_party/blink/web_tests/WebGPUExpectations",
-            "third_party/dawn/.+",
-            "third_party/webgpu-cts/.+",
-            "tools/clang/scripts/update.py",
-            "ui/gl/features.gni",
-        ],
-    ),
+    main_list_view = "try",
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+    tryjob = try_.job(
+        location_filters = [
+            cq.location_filter(path_regexp = "content/test/gpu/.+"),
+            cq.location_filter(path_regexp = "gpu/.+"),
+            cq.location_filter(path_regexp = "testing/buildbot/chromium.dawn.json"),
+            cq.location_filter(path_regexp = "third_party/blink/renderer/modules/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/external/wpt/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/wpt_internal/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/WebGPUExpectations"),
+            cq.location_filter(path_regexp = "third_party/dawn/.+"),
+            cq.location_filter(path_regexp = "third_party/webgpu-cts/.+"),
+            cq.location_filter(path_regexp = "tools/clang/scripts/update.py"),
+            cq.location_filter(path_regexp = "ui/gl/features.gni"),
+        ],
     ),
 )
 
@@ -151,25 +153,26 @@ try_.builder(
         "ci/Dawn Win10 x86 DEPS Release (Intel HD 630)",
         "ci/Dawn Win10 x86 DEPS Release (NVIDIA)",
     ],
-    main_list_view = "try",
     os = os.WINDOWS_ANY,
-    tryjob = try_.job(
-        location_filters = [
-            "content/test/gpu/.+",
-            "gpu/.+",
-            "testing/buildbot/chromium.dawn.json",
-            "third_party/blink/renderer/modules/webgpu/.+",
-            "third_party/blink/web_tests/external/wpt/webgpu/.+",
-            "third_party/blink/web_tests/wpt_internal/webgpu/.+",
-            "third_party/blink/web_tests/WebGPUExpectations",
-            "third_party/dawn/.+",
-            "third_party/webgpu-cts/.+",
-            "tools/clang/scripts/update.py",
-            "ui/gl/features.gni",
-        ],
-    ),
+    main_list_view = "try",
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+    tryjob = try_.job(
+        location_filters = [
+            cq.location_filter(path_regexp = "content/test/gpu/.+"),
+            cq.location_filter(path_regexp = "gpu/.+"),
+            cq.location_filter(path_regexp = "testing/buildbot/chromium.dawn.json"),
+            cq.location_filter(path_regexp = "third_party/blink/renderer/modules/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/external/wpt/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/wpt_internal/webgpu/.+"),
+            cq.location_filter(path_regexp = "third_party/blink/web_tests/WebGPUExpectations"),
+            cq.location_filter(path_regexp = "third_party/dawn/.+"),
+            cq.location_filter(path_regexp = "third_party/webgpu-cts/.+"),
+            cq.location_filter(path_regexp = "tools/clang/scripts/update.py"),
+            cq.location_filter(path_regexp = "ui/gl/features.gni"),
+        ],
     ),
 )
 
@@ -190,6 +193,7 @@ try_.builder(
         "ci/Dawn Linux x64 Release (Intel UHD 630)",
         "ci/Dawn Linux x64 Release (NVIDIA)",
     ],
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
     ),
@@ -197,6 +201,12 @@ try_.builder(
 
 try_.builder(
     name = "mac-dawn-rel",
+    mirrors = [
+        "ci/Dawn Mac x64 Builder",
+        # Not enough capacity on Mac AMD https://crbug.com/1380184.
+        # "ci/Dawn Mac x64 Release (AMD)",
+        "ci/Dawn Mac x64 Release (Intel)",
+    ],
     os = os.MAC_ANY,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
@@ -205,6 +215,10 @@ try_.builder(
 
 try_.builder(
     name = "dawn-try-mac-amd-exp",
+    mirrors = [
+        "ci/Dawn Mac x64 Builder",
+        "ci/Dawn Mac x64 Experimental Release (AMD)",
+    ],
     builderless = True,
     os = os.MAC_ANY,
     pool = "luci.chromium.gpu.mac.retina.amd.try",
@@ -215,6 +229,10 @@ try_.builder(
 
 try_.builder(
     name = "dawn-try-mac-intel-exp",
+    mirrors = [
+        "ci/Dawn Mac x64 Builder",
+        "ci/Dawn Mac x64 Experimental Release (Intel)",
+    ],
     builderless = True,
     os = os.MAC_ANY,
     pool = "luci.chromium.gpu.mac.mini.intel.try",
@@ -224,13 +242,44 @@ try_.builder(
 )
 
 try_.builder(
-    name = "win-dawn-rel",
+    name = "dawn-try-win-x64-intel-exp",
+    mirrors = [
+        "ci/Dawn Win10 x64 Builder",
+        "ci/Dawn Win10 x64 Experimental Release (Intel)",
+    ],
+    builderless = True,
     os = os.WINDOWS_ANY,
+    pool = "luci.chromium.gpu.win10.intel.try",
+    goma_backend = None,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
+    name = "dawn-try-win-x86-intel-exp",
+    mirrors = [
+        "ci/Dawn Win10 x86 Builder",
+        "ci/Dawn Win10 x86 Experimental Release (Intel)",
+    ],
+    builderless = True,
+    os = os.WINDOWS_ANY,
+    pool = "luci.chromium.gpu.win10.intel.try",
+    goma_backend = None,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
+    name = "win-dawn-rel",
     mirrors = [
         "ci/Dawn Win10 x64 Builder",
         "ci/Dawn Win10 x64 Release (Intel HD 630)",
         "ci/Dawn Win10 x64 Release (NVIDIA)",
     ],
+    os = os.WINDOWS_ANY,
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
     ),
@@ -238,12 +287,13 @@ try_.builder(
 
 try_.builder(
     name = "dawn-try-win10-x86-rel",
-    os = os.WINDOWS_ANY,
     mirrors = [
         "ci/Dawn Win10 x86 Builder",
         "ci/Dawn Win10 x86 Release (Intel HD 630)",
         "ci/Dawn Win10 x86 Release (NVIDIA)",
     ],
+    os = os.WINDOWS_ANY,
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
     ),
@@ -251,10 +301,11 @@ try_.builder(
 
 try_.builder(
     name = "dawn-try-win10-x64-asan-rel",
-    os = os.WINDOWS_ANY,
     mirrors = [
         "ci/Dawn Win10 x64 ASAN Release",
     ],
+    os = os.WINDOWS_ANY,
+    goma_backend = None,
     test_presentation = resultdb.test_presentation(
         grouping_keys = ["status", "v.test_suite", "v.gpu"],
     ),

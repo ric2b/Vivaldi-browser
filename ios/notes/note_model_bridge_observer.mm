@@ -52,7 +52,7 @@ void NoteModelBridge::NotesNodeMoved(vivaldi::NotesModel* model,
 void NoteModelBridge::NotesNodeAdded(vivaldi::NotesModel* model,
                                             const vivaldi::NoteNode* parent,
                                             size_t index) {
-  [observer_ noteNodeChildrenChanged:parent];
+   [observer_ noteNodeChildrenChanged:parent];
 }
 
 void NoteModelBridge::NotesNodeRemoved(

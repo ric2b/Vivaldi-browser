@@ -44,7 +44,6 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.FeedPlaceholderLayout;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
@@ -109,7 +108,7 @@ public class StartSurfaceMVTilesTest {
     private FakeMostVisitedSites mMostVisitedSites;
 
     public StartSurfaceMVTilesTest(boolean useInstantStart, boolean immediateReturn) {
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.INSTANT_START, useInstantStart);
+        ChromeFeatureList.sInstantStart.setForTesting(useInstantStart);
 
         mUseInstantStart = useInstantStart;
         mImmediateReturn = immediateReturn;
@@ -126,7 +125,7 @@ public class StartSurfaceMVTilesTest {
         if (isInstantReturn()) {
             // Assume start surface is shown immediately, and the LayoutStateObserver may miss the
             // first onFinishedShowing event.
-            mCurrentlyActiveLayout = LayoutType.TAB_SWITCHER;
+            mCurrentlyActiveLayout = StartSurfaceTestUtils.getStartSurfaceLayoutType();
         }
 
         mLayoutObserver = new LayoutStateProvider.LayoutStateObserver() {
@@ -156,7 +155,7 @@ public class StartSurfaceMVTilesTest {
             StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
         }
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        StartSurfaceTestUtils.waitForOverviewVisible(
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(
                 mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
         StartSurfaceTestUtils.launchFirstMVTile(cta, /* currentTabCount = */ 1);
         if (isInstantReturn()) {
@@ -166,7 +165,7 @@ public class StartSurfaceMVTilesTest {
         }
         // Press back button should close the tab opened from the Start surface.
         StartSurfaceTestUtils.pressBack(mActivityTestRule);
-        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(cta);
         assertThat(cta.getTabModelSelector().getCurrentModel().getCount(), equalTo(1));
     }
 
@@ -181,7 +180,7 @@ public class StartSurfaceMVTilesTest {
         if (!mImmediateReturn) {
             StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
         }
-        StartSurfaceTestUtils.waitForOverviewVisible(mLayoutChangedCallbackHelper,
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(mLayoutChangedCallbackHelper,
                 mCurrentlyActiveLayout, mActivityTestRule.getActivity());
 
         SiteSuggestion siteToDismiss = mMostVisitedSites.getCurrentSites().get(1);
@@ -214,7 +213,7 @@ public class StartSurfaceMVTilesTest {
             StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
         }
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        StartSurfaceTestUtils.waitForOverviewVisible(
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(
                 mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
 
         SiteSuggestion siteToOpen = mMostVisitedSites.getCurrentSites().get(1);
@@ -224,7 +223,8 @@ public class StartSurfaceMVTilesTest {
         TabUiTestHelper.verifyTabModelTabCount(cta, 1, 0);
         invokeContextMenu(tileView, ContextMenuManager.ContextMenuItemId.OPEN_IN_NEW_TAB);
         // This tab should be opened in the background.
-        Assert.assertTrue(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
+        Assert.assertTrue(cta.getLayoutManager().isLayoutVisible(
+                StartSurfaceTestUtils.getStartSurfaceLayoutType()));
         // Verifies a new tab is created.
         TabUiTestHelper.verifyTabModelTabCount(cta, 2, 0);
     }
@@ -239,7 +239,7 @@ public class StartSurfaceMVTilesTest {
             StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
         }
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        StartSurfaceTestUtils.waitForOverviewVisible(
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(
                 mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
 
         SiteSuggestion siteToOpen = mMostVisitedSites.getCurrentSites().get(1);

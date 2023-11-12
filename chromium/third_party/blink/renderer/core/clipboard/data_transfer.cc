@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/core/page/drag_image.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/cull_rect_updater.h"
-#include "third_party/blink/renderer/core/paint/old_cull_rect_updater.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_painter.h"
@@ -61,6 +60,7 @@
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
 
@@ -128,8 +128,6 @@ class DraggedNodeImageBuilder {
     cull_rect.Offset(
         gfx::Vector2dF(layer->GetLayoutObject().FirstFragment().PaintOffset()));
     OverriddenCullRectScope cull_rect_scope(
-        *layer, CullRect(gfx::ToEnclosingRect(cull_rect)));
-    OverriddenOldCullRectScope old_cull_rect_scope(
         *layer, CullRect(gfx::ToEnclosingRect(cull_rect)));
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
 

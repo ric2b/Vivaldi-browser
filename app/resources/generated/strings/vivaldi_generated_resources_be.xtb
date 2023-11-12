@@ -90,8 +90,10 @@
 <translation id="2550212893339833758">Віртуальная памяць (swap)</translation>
 <translation id="2553440850688409052">Схаваць убудову</translation>
 <translation id="26224892172169984">Забараніць сайтам апрацоўваць пратаколы</translation>
+<translation id="2653275834716714682">Замена тэксту</translation>
 <translation id="2662876636500006917">Сеціўная крама Chrome</translation>
 <translation id="2678063897982469759">Уключыць зноў</translation>
+<translation id="2678100101831051676">Не ўдалося запусціць трансляцыю.</translation>
 <translation id="2721037002783622288">&amp;Знайсці выяву ў <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Стварыць цэтлік...</translation>
 <translation id="2785873697295365461">Дэскрыптары файлаў</translation>
@@ -202,6 +204,7 @@
 <translation id="4593021220803146968">&amp;Перайсці да <ph name="URL" /></translation>
 <translation id="4595560905247879544">Змяняць праграмы і пашырэнні можа толькі кіраўнік (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Пашырэнне змяніла старонку, якая паказваецца пры адкрыцці новай укладкі.</translation>
+<translation id="4616405296204756919">Вы можаце выкарыстоўваць захаваныя паролі на любой прыладзе. Яны захоўваюцца ў <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Адкрыць відэа ў новай укладцы</translation>
 <translation id="4677772697204437347">Памяць GPU</translation>
 <translation id="4681930562518940301">Адкрыць арыгінал &amp;выявы ў новай укладцы</translation>
@@ -235,10 +238,12 @@
 <translation id="5233231016133573565">Ідэнтыфікатар працэсу</translation>
 <translation id="5233736638227740678">&amp;Уставіць</translation>
 <translation id="5256861893479663409">На ўсіх сайтах</translation>
+<translation id="5260334392110301220">Разумныя двукоссі</translation>
 <translation id="5269977353971873915">Не атрымалася надрукаваць</translation>
 <translation id="5284445933715251131">Працягнуць спампоўванне</translation>
 <translation id="52912272896845572">Хібны файл прыватнага ключа.</translation>
 <translation id="5301954838959518834">Зразумела</translation>
+<translation id="5302932258331363306">Паказваць прапановы замены</translation>
 <translation id="5317780077021120954">Захаваць</translation>
 <translation id="5334142896108694079">Кэш скрыпта</translation>
 <translation id="5355926466126177564">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла сістэму пошуку.</translation>
@@ -338,6 +343,7 @@
 <translation id="7053983685419859001">Заблакаваць</translation>
 <translation id="7070484045139057854">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="708060913198414444">С&amp;капіяваць адрас аўдыё</translation>
+<translation id="7121728544325372695">Разумныя пераносы</translation>
 <translation id="7175353351958621980">Загружана з:</translation>
 <translation id="7186088072322679094">Трымаць на панэлі</translation>
 <translation id="7287143125007575591">Достут забаронены.</translation>
@@ -420,6 +426,7 @@
 <translation id="8808478386290700967">Сеціўная крама</translation>
 <translation id="8823514049557262177">Скапіяваць т&amp;экст спасылкі</translation>
 <translation id="8823704566850948458">Прапаноўваць пароль...</translation>
+<translation id="883062543841130884">Замены</translation>
 <translation id="8859174528519900719">Падфрэйм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Адкрыць спасылку ў новым &amp;акне</translation>
 <translation id="8915370057835397490">Загрузка прапановы</translation>

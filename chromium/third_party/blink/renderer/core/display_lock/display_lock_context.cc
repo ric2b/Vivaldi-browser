@@ -15,7 +15,6 @@
 #include "third_party/blink/renderer/core/display_lock/content_visibility_auto_state_change_event.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
-#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/css_toggle.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -34,6 +33,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 #include "third_party/blink/renderer/core/style/toggle_trigger.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -556,11 +556,33 @@ void DisplayLockContext::UpgradeForcedScope(ForcedPhase old_phase,
 
 void DisplayLockContext::ScheduleStateChangeEventIfNeeded() {
   if (state_ == EContentVisibility::kAuto &&
-      RuntimeEnabledFeatures::ContentVisibilityAutoStateChangeEventEnabled()) {
-    element_->EnqueueEvent(
-        *ContentVisibilityAutoStateChangeEvent::Create(
-            event_type_names::kContentvisibilityautostatechange, is_locked_),
-        TaskType::kMiscPlatformAPI);
+      RuntimeEnabledFeatures::ContentVisibilityAutoStateChangeEventEnabled() &&
+      !state_change_task_pending_) {
+    document_->GetExecutionContext()
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
+        ->PostTask(
+            FROM_HERE,
+            WTF::BindOnce(&DisplayLockContext::DispatchStateChangeEventIfNeeded,
+                          WrapPersistent(this)));
+    state_change_task_pending_ = true;
+  }
+}
+
+void DisplayLockContext::DispatchStateChangeEventIfNeeded() {
+  DCHECK(state_change_task_pending_);
+  state_change_task_pending_ = false;
+  // If we're not connected to view, reset the state that we reported so that we
+  // can report it again on insertion.
+  if (!ConnectedToView()) {
+    last_notified_skipped_state_.reset();
+    return;
+  }
+
+  if (!last_notified_skipped_state_ ||
+      *last_notified_skipped_state_ != is_locked_) {
+    last_notified_skipped_state_ = is_locked_;
+    element_->DispatchEvent(*ContentVisibilityAutoStateChangeEvent::Create(
+        event_type_names::kContentvisibilityautostatechange, is_locked_));
   }
 }
 
@@ -1161,11 +1183,10 @@ void DisplayLockContext::ResetAndDetermineIfAncestorIsSharedElement() {
   if (!ConnectedToView())
     return;
 
-  auto* supplement = DocumentTransitionSupplement::FromIfExists(*document_);
-  if (!supplement)
+  auto* transition = ViewTransitionUtils::GetActiveTransition(*document_);
+  if (!transition)
     return;
 
-  auto* transition = supplement->GetTransition();
   bool has_shared_element_ancestor = false;
   for (auto* candidate = element_.Get(); candidate;
        candidate = FlatTreeTraversal::ParentElement(*candidate)) {
@@ -1316,6 +1337,7 @@ void DisplayLockContext::NotifyRenderAffectingStateChanged() {
 void DisplayLockContext::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
   visitor->Trace(document_);
+  ElementRareDataField::Trace(visitor);
 }
 
 void DisplayLockContext::SetShouldUnlockAutoForPrint(bool flag) {

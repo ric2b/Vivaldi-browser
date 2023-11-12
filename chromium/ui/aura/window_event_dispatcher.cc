@@ -10,11 +10,11 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
-#include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "cc/metrics/custom_metrics_recorder.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
@@ -133,7 +133,7 @@ void WindowEventDispatcher::RepostEvent(const ui::LocatedEvent* event) {
   }
 
   if (held_repostable_event_) {
-    base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
         FROM_HERE,
         base::BindOnce(
             base::IgnoreResult(&WindowEventDispatcher::DispatchHeldEvents),
@@ -222,7 +222,7 @@ void WindowEventDispatcher::ReleasePointerMoves() {
       // dispatching another one may not be safe/expected.  Instead we post a
       // task, that we may cancel if HoldPointerMoves is called again before it
       // executes.
-      base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
           FROM_HERE,
           base::BindOnce(
               base::IgnoreResult(&WindowEventDispatcher::DispatchHeldEvents),
@@ -496,11 +496,6 @@ void WindowEventDispatcher::OnEventProcessingStarted(ui::Event* event) {
     return;
   }
 
-  if (host_->compositor()) {
-    event_metrics_monitors_.push_back(
-        CreateScropedMetricsMonitorForEvent(*event));
-  }
-
   // The held events are already in |window()|'s coordinate system. So it is
   // not necessary to apply the transform to convert from the host's
   // coordinate system to |window()|'s coordinate system.
@@ -510,18 +505,30 @@ void WindowEventDispatcher::OnEventProcessingStarted(ui::Event* event) {
   observer_notifiers_.push(std::make_unique<ObserverNotifier>(this, *event));
 }
 
-void WindowEventDispatcher::OnEventProcessingFinished(ui::Event* event) {
+void WindowEventDispatcher::OnEventProcessingFinished(
+    ui::Event* event,
+    ui::EventTarget* target,
+    const ui::EventDispatchDetails& details) {
   if (in_shutdown_)
     return;
 
   observer_notifiers_.pop();
-  if (host_->compositor()) {
-    std::unique_ptr<cc::EventsMetricsManager::ScopedMonitor> monitor =
-        std::move(event_metrics_monitors_.back());
-    event_metrics_monitors_.pop_back();
-    if (event->handled())
-      monitor->SetSaveMetrics();
-  }
+}
+
+bool WindowEventDispatcher::ShouldReportEventLatency(
+    ui::EventTarget* target,
+    const ui::EventDispatchDetails& details) {
+  // If a target getting destroyed, we expect ui::Compositor has a frame to
+  // reflect it.
+  if (details.target_destroyed)
+    return true;
+  if (details.dispatcher_destroyed || !target)
+    return false;
+  const aura::Window* target_window = static_cast<aura::Window*>(target);
+  const std::string& name = target_window->GetName();
+  // We shouldn't report the latency in ui::Compositor for exo windows and aura
+  // windows backing web contents.
+  return name != "RenderWidgetHostViewAura" && !base::StartsWith(name, "Exo");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -534,6 +541,11 @@ bool WindowEventDispatcher::CanDispatchToTarget(ui::EventTarget* target) {
 ui::EventDispatchDetails WindowEventDispatcher::PreDispatchEvent(
     ui::EventTarget* target,
     ui::Event* event) {
+  if (host_->compositor() && cc::CustomMetricRecorder::Get()) {
+    event_metrics_monitors_.push_back(
+        CreateScropedMetricsMonitorForEvent(*event));
+  }
+
   Window* target_window = static_cast<Window*>(target);
   CHECK(window()->Contains(target_window));
 
@@ -602,9 +614,20 @@ ui::EventDispatchDetails WindowEventDispatcher::PostDispatchEvent(
                 touchevent.unique_event_id(), event.result(),
                 false /* is_source_touch_event_set_blocking */, window);
 
-        return ProcessGestures(window, std::move(gestures));
+        details = ProcessGestures(window, std::move(gestures));
       }
     }
+  }
+
+  // Note this must run after processing events corresponding to the event
+  // monitor creation code in PreDispatchEvent to track latencies properly.
+  if (!details.dispatcher_destroyed && host_->compositor() &&
+      cc::CustomMetricRecorder::Get()) {
+    std::unique_ptr<cc::EventsMetricsManager::ScopedMonitor> monitor =
+        std::move(event_metrics_monitors_.back());
+    event_metrics_monitors_.pop_back();
+    if (event.handled() && ShouldReportEventLatency(target, details))
+      monitor->SetSaveMetrics();
   }
 
   return details;
@@ -833,7 +856,7 @@ void WindowEventDispatcher::PostSynthesizeMouseMove() {
   if (synthesize_mouse_move_ || in_shutdown_)
     return;
   synthesize_mouse_move_ = true;
-  base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
       FROM_HERE,
       base::BindOnce(
           base::IgnoreResult(&WindowEventDispatcher::SynthesizeMouseMoveEvent),

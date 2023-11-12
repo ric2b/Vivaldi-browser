@@ -8,13 +8,13 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "extensions/browser/extensions_test.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class Value;
-class DictionaryValue;
 }
 
 namespace content {
@@ -58,19 +58,7 @@ class ApiUnitTest : public ExtensionsTest {
   // See also the RunFunction* methods in extension_function_test_utils.h.
 
   // Return the function result as a base::Value.
-  std::unique_ptr<base::Value> RunFunctionAndReturnValue(
-      ExtensionFunction* function,
-      const std::string& args);
-
-  // Return the function result as a base::DictionaryValue, or NULL.
-  // This will EXPECT-fail if the result is not a DictionaryValue.
-  std::unique_ptr<base::DictionaryValue> RunFunctionAndReturnDictionary(
-      ExtensionFunction* function,
-      const std::string& args);
-
-  // Return the function result as a base::Value, or NULL.
-  // This will EXPECT-fail if the result Value is not a list.
-  std::unique_ptr<base::Value> RunFunctionAndReturnList(
+  absl::optional<base::Value> RunFunctionAndReturnValue(
       ExtensionFunction* function,
       const std::string& args);
 

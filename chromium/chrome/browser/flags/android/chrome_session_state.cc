@@ -17,7 +17,7 @@ using chrome::android::DarkModeState;
 using chrome::android::MultipleUserProfilesState;
 
 namespace {
-ActivityType activity_type = ActivityType::kUndeclared;
+ActivityType activity_type = ActivityType::kPreFirstTab;
 bool is_in_multi_window_mode = false;
 DarkModeState dark_mode_state = DarkModeState::kUnknown;
 MultipleUserProfilesState multiple_user_profiles_state =
@@ -32,11 +32,6 @@ const char kLastActivityTypePref[] =
 namespace chrome {
 namespace android {
 
-// TODO(b/182286787): A/B experiment monitoring session/activity resume order.
-BASE_FEATURE(kFixedUmaSessionResumeOrder,
-             "FixedUmaSessionResumeOrder",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 CustomTabsVisibilityHistogram GetCustomTabsVisibleValue(
     ActivityType activity_type) {
   switch (activity_type) {
@@ -47,7 +42,7 @@ CustomTabsVisibilityHistogram GetCustomTabsVisibleValue(
     case ActivityType::kCustomTab:
     case ActivityType::kTrustedWebActivity:
       return VISIBLE_CUSTOM_TAB;
-    case ActivityType::kUndeclared:
+    case ActivityType::kPreFirstTab:
       return NO_VISIBLE_TAB;
   }
   NOTREACHED();
@@ -64,15 +59,13 @@ void SetInitialActivityTypeForTesting(ActivityType type) {
 
 void SetActivityType(PrefService* local_state, ActivityType type) {
   DCHECK(local_state);
-  DCHECK_NE(type, ActivityType::kUndeclared);
+  DCHECK_NE(type, ActivityType::kPreFirstTab);
 
   ActivityType prev_activity_type = activity_type;
   activity_type = type;
 
-  // EmitActivityTypeHistograms on first SetActivityType call if using the fixed
-  // uma session restore order (b/182286787).
-  if (prev_activity_type == ActivityType::kUndeclared &&
-      base::FeatureList::IsEnabled(kFixedUmaSessionResumeOrder)) {
+  // EmitActivityTypeHistograms on first SetActivityType call.
+  if (prev_activity_type == ActivityType::kPreFirstTab) {
     EmitActivityTypeHistograms(activity_type);
     SaveActivityTypeToLocalState(local_state, activity_type);
   }
@@ -81,12 +74,6 @@ void SetActivityType(PrefService* local_state, ActivityType type) {
 }
 
 ActivityType GetActivityType() {
-  // TODO(b/182286787): With old session resume order, the initial state is
-  // kTabbed.
-  if (activity_type == ActivityType::kUndeclared &&
-      !base::FeatureList::IsEnabled(kFixedUmaSessionResumeOrder)) {
-    activity_type = ActivityType::kTabbed;
-  }
   return activity_type;
 }
 

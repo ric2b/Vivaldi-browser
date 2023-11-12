@@ -47,7 +47,7 @@ void WaitForNotesModelToLoad(NotesModel* model) {
   if (model->loaded())
     return;
   base::RunLoop run_loop;
-  base::CurrentThread::ScopedNestableTaskAllower allow;
+  base::CurrentThread::ScopedAllowApplicationTasksInNativeNestedLoop allow;
 
   NotesLoadObserver observer(run_loop.QuitClosure());
   model->AddObserver(&observer);

@@ -33,11 +33,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/optional_trace_event.h"
 #include "base/trace_event/trace_event.h"
@@ -457,7 +455,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
 #endif
           frame_token_message_queue_.get()),
       frame_sink_id_(base::checked_cast<uint32_t>(
-                         agent_scheduling_group_.GetProcess()->GetID()),
+                         agent_scheduling_group_->GetProcess()->GetID()),
                      base::checked_cast<uint32_t>(routing_id_)),
       power_mode_input_voter_(
           power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
@@ -481,7 +479,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
 
   std::pair<RoutingIDWidgetMap::iterator, bool> result =
       g_routing_id_widget_map.Get().insert(std::make_pair(
-          RenderWidgetHostID(agent_scheduling_group_.GetProcess()->GetID(),
+          RenderWidgetHostID(agent_scheduling_group_->GetProcess()->GetID(),
                              routing_id_),
           this));
   CHECK(result.second) << "Inserting a duplicate item!";
@@ -490,14 +488,14 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
   // To avoid leaking any instance. They self-delete when their renderer process
   // is gone.
   if (self_owned_)
-    agent_scheduling_group_.GetProcess()->AddObserver(this);
+    agent_scheduling_group_->GetProcess()->AddObserver(this);
 
   render_process_blocked_state_changed_subscription_ =
-      agent_scheduling_group_.GetProcess()->RegisterBlockStateChangedCallback(
+      agent_scheduling_group_->GetProcess()->RegisterBlockStateChangedCallback(
           base::BindRepeating(
               &RenderWidgetHostImpl::RenderProcessBlockedStateChanged,
               base::Unretained(this)));
-  agent_scheduling_group_.GetProcess()->AddPriorityClient(this);
+  agent_scheduling_group_->GetProcess()->AddPriorityClient(this);
 
   SetupInputRouter();
 
@@ -607,7 +605,7 @@ const base::TimeDelta RenderWidgetHostImpl::kActivationNotificationExpireTime =
     base::Milliseconds(300);
 
 RenderProcessHost* RenderWidgetHostImpl::GetProcess() {
-  return agent_scheduling_group_.GetProcess();
+  return agent_scheduling_group_->GetProcess();
 }
 
 int RenderWidgetHostImpl::GetRoutingID() {
@@ -877,6 +875,8 @@ void RenderWidgetHostImpl::WasShown(
 
   // If we navigated in background, clear the displayed graphics of the
   // previous page before going visible.
+  // TODO(crbug.com/1396336): Checking if there is a content rendering timeout
+  // running isn't ideal for seeing if the tab navigated in the background.
   ForceFirstFrameAfterNavigationTimeout();
   RestartInputEventAckTimeoutIfNecessary();
 
@@ -1007,8 +1007,6 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   const bool is_frame_widget = !self_owned_;
 
   blink::VisualProperties visual_properties;
-
-  // Note: Later in this method, ScreenInfo rects might be overridden!
   visual_properties.screen_infos = GetScreenInfos();
   auto& current_screen_info = visual_properties.screen_infos.mutable_current();
 
@@ -1058,14 +1056,15 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
 
   visual_properties.new_size = view_->GetRequestedRendererSize();
 
-  // While in fullscreen mode, set the ScreenInfo rects to match the view size.
-  // This is needed because web authors often assume screen.width/height are
-  // identical to window.innerWidth/innerHeight while a page is in fullscreen,
-  // and this is not always true for some browser UI features.
-  // https://crbug.com/1060795
-  if (visual_properties.is_fullscreen_granted) {
-    current_screen_info.rect.set_size(visual_properties.new_size);
-    current_screen_info.available_rect.set_size(visual_properties.new_size);
+  // While in fullscreen, provide the view size as a ScreenInfo size override.
+  // This lets `window.screen` provide viewport dimensions while the frame is
+  // fullscreen as a speculative site compatibility measure, because web authors
+  // may assume that screen dimensions match window.innerWidth/innerHeight while
+  // a page is fullscreen, but that is not always true. crbug.com/1367416
+  if (visual_properties.is_fullscreen_granted &&
+      !base::FeatureList::IsEnabled(
+          blink::features::kFullscreenScreenSizeMatchesDisplay)) {
+    current_screen_info.size_override = visual_properties.new_size;
   }
 
   // This widget is for a frame that is the main frame of the outermost frame
@@ -1102,6 +1101,8 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
         gfx::Rect(view_->GetCompositorViewportPixelSize());
     visual_properties.window_controls_overlay_rect =
         delegate_->GetWindowsControlsOverlayRect();
+    visual_properties.virtual_keyboard_resize_height_physical_px =
+        delegate_->GetVirtualKeyboardResizeHeight();
   } else {
     visual_properties.compositor_viewport_pixel_rect =
         properties_from_parent_local_root_.compositor_viewport;
@@ -2377,10 +2378,14 @@ bool RenderWidgetHostImpl::IsKeyboardLocked() const {
   return view_ ? view_->IsKeyboardLocked() : false;
 }
 
+bool RenderWidgetHostImpl::IsContentRenderingTimeoutRunning() const {
+  return new_content_rendering_timeout_ &&
+         new_content_rendering_timeout_->IsRunning();
+}
+
 void RenderWidgetHostImpl::GetContentRenderingTimeoutFrom(
     RenderWidgetHostImpl* other) {
-  if (other->new_content_rendering_timeout_ &&
-      other->new_content_rendering_timeout_->IsRunning()) {
+  if (other->IsContentRenderingTimeoutRunning()) {
     new_content_rendering_timeout_->Start(
         other->new_content_rendering_timeout_->GetCurrentDelay());
   }
@@ -3374,7 +3379,7 @@ void RenderWidgetHostImpl::OnTouchEventAck(
 }
 
 bool RenderWidgetHostImpl::IsIgnoringInputEvents() const {
-  return agent_scheduling_group_.GetProcess()->IsBlocked() || !delegate_ ||
+  return agent_scheduling_group_->GetProcess()->IsBlocked() || !delegate_ ||
          delegate_->ShouldIgnoreInputEvents();
 }
 
@@ -3445,7 +3450,7 @@ void RenderWidgetHostImpl::GotResponseToForceRedraw(int snapshot_id) {
   // snapshot will actually pick up that content. Insert a manual delay of
   // 1/6th of a second (to simulate 10 frames at 60 fps) before actually
   // taking the snapshot.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&RenderWidgetHostImpl::WindowSnapshotReachedScreen,
                      weak_factory_.GetWeakPtr(), snapshot_id),
@@ -3672,8 +3677,7 @@ void RenderWidgetHostImpl::ProgressFlingIfNeeded(base::TimeTicks current_time) {
 }
 
 void RenderWidgetHostImpl::ForceFirstFrameAfterNavigationTimeout() {
-  if (!new_content_rendering_timeout_ ||
-      !new_content_rendering_timeout_->IsRunning()) {
+  if (!IsContentRenderingTimeoutRunning()) {
     return;
   }
   new_content_rendering_timeout_->Stop();

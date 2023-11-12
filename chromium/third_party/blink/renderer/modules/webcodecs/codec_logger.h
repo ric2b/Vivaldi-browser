@@ -85,9 +85,8 @@ class MODULES_EXPORT CodecLogger final {
       parent_media_log_->Stop();
       // This task runner may be destroyed without running tasks, so don't use
       // DeleteSoon() which can leak the log. See https://crbug.com/1376851.
-      task_runner_->PostTask(
-          FROM_HERE, base::BindOnce([](std::unique_ptr<media::MediaLog>) {},
-                                    std::move(parent_media_log_)));
+      task_runner_->PostTask(FROM_HERE, base::DoNothingWithBoundArgs(
+                                            std::move(parent_media_log_)));
     }
   }
 
@@ -134,7 +133,7 @@ class MODULES_EXPORT CodecLogger final {
 
   // Records the first media::Status passed to MakeException.
   typename StatusImpl::Codes status_code() const {
-    return status_code_.value_or(StatusImpl::Traits::DefaultEnumValue());
+    return status_code_.value_or(StatusImpl::Codes::kOk);
   }
 
  private:

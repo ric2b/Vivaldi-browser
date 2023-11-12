@@ -32,6 +32,9 @@ namespace {
 struct RequestCookieParsingTest {
   std::string str;
   base::StringPairs parsed;
+  // Used for malformed cookies where the parsed-then-serialized string does not
+  // match the original string.
+  std::string serialized;
 };
 
 void CheckParse(const std::string& str,
@@ -250,6 +253,47 @@ TEST(CookieUtilTest, TestRequestCookieParsing) {
   }
 }
 
+TEST(CookieUtilTest, TestRequestCookieParsing_Malformed) {
+  std::vector<RequestCookieParsingTest> tests;
+
+  // Missing equal sign.
+  tests.emplace_back();
+  tests.back().str = "key";
+  tests.back().parsed.emplace_back(
+      std::make_pair(std::string("key"), std::string()));
+  tests.back().serialized = "key=";
+
+  // Quoted value with unclosed quote.
+  tests.emplace_back();
+  tests.back().str = "key=\"abcdef";
+
+  // Quoted value with unclosed quote followed by regular value.
+  tests.emplace_back();
+  tests.back().str = "key=\"abcdef; otherkey=1234";
+
+  // Quoted value with unclosed quote followed by another quoted value.
+  tests.emplace_back();
+  tests.back().str = "key=\"abcdef; otherkey=\"1234\"";
+  tests.back().parsed.emplace_back(
+      std::make_pair(std::string("key"), std::string("\"abcdef; otherkey=\"")));
+  tests.back().parsed.emplace_back(
+      std::make_pair(std::string("234\""), std::string()));
+  tests.back().serialized = "key=\"abcdef; otherkey=\"; 234\"=";
+
+  // Regular value followed by quoted value with unclosed quote.
+  tests.emplace_back();
+  tests.back().str = "key=abcdef; otherkey=\"1234";
+  tests.back().parsed.emplace_back(
+      std::make_pair(std::string("key"), std::string("abcdef")));
+  tests.back().serialized = "key=abcdef";
+
+  for (size_t i = 0; i < tests.size(); i++) {
+    SCOPED_TRACE(testing::Message() << "Test " << i);
+    CheckParse(tests[i].str, tests[i].parsed);
+    CheckSerialize(tests[i].parsed, tests[i].serialized);
+  }
+}
+
 TEST(CookieUtilTest, CookieDomainAndPathToURL) {
   struct {
     std::string domain;
@@ -361,6 +405,8 @@ using SameSiteCookieContext = CookieOptions::SameSiteCookieContext;
 using ContextType = CookieOptions::SameSiteCookieContext::ContextType;
 using ContextRedirectTypeBug1221316 = CookieOptions::SameSiteCookieContext::
     ContextMetadata::ContextRedirectTypeBug1221316;
+using HttpMethod =
+    CookieOptions::SameSiteCookieContext::ContextMetadata::HttpMethod;
 
 MATCHER_P2(ContextTypeIsWithSchemefulMode, context_type, schemeful, "") {
   return context_type == (schemeful ? arg.schemeful_context() : arg.context());
@@ -368,7 +414,8 @@ MATCHER_P2(ContextTypeIsWithSchemefulMode, context_type, schemeful, "") {
 
 // Checks for the expected metadata related to context downgrades from
 // cross-site redirects.
-MATCHER_P4(CrossSiteRedirectMetadataCorrectWithSchemefulMode,
+MATCHER_P5(CrossSiteRedirectMetadataCorrectWithSchemefulMode,
+           method,
            context_type_without_chain,
            context_type_with_chain,
            redirect_type_with_chain,
@@ -381,6 +428,13 @@ MATCHER_P4(CrossSiteRedirectMetadataCorrectWithSchemefulMode,
 
   if (metadata.redirect_type_bug_1221316 != redirect_type_with_chain)
     return false;
+
+  // http_method_bug_1221316 is only set when there is a context downgrade.
+  if (metadata.cross_site_redirect_downgrade !=
+          ContextDowngradeType::kNoDowngrade &&
+      metadata.http_method_bug_1221316 != method) {
+    return false;
+  }
 
   switch (metadata.cross_site_redirect_downgrade) {
     case ContextDowngradeType::kNoDowngrade:
@@ -440,11 +494,12 @@ class CookieUtilComputeSameSiteContextTest
   }
 
   auto CrossSiteRedirectMetadataCorrect(
+      HttpMethod method,
       ContextType context_type_without_chain,
       ContextType context_type_with_chain,
       ContextRedirectTypeBug1221316 redirect_type_with_chain) const {
     return CrossSiteRedirectMetadataCorrectWithSchemefulMode(
-        context_type_without_chain, context_type_with_chain,
+        method, context_type_without_chain, context_type_with_chain,
         redirect_type_with_chain, IsSchemeful());
   }
 
@@ -1091,15 +1146,17 @@ TEST_P(CookieUtilComputeSameSiteContextTest, ForRequest_Redirect) {
     for (const std::vector<GURL>& url_chain : url_chains) {
       for (const SiteForCookies& site_for_cookies : sites_for_cookies) {
         for (const absl::optional<url::Origin>& initiator : initiators) {
-          EXPECT_THAT(cookie_util::ComputeSameSiteContextForRequest(
-                          test_case.method, url_chain, site_for_cookies,
-                          initiator, false /* is_main_frame_navigation */,
-                          false /* force_ignore_site_for_cookies */),
-                      AllOf(ContextTypeIs(expected_context_type),
-                            CrossSiteRedirectMetadataCorrect(
-                                test_case.expected_context_type_without_chain,
-                                test_case.expected_context_type,
-                                test_case.expected_redirect_type_with_chain)))
+          EXPECT_THAT(
+              cookie_util::ComputeSameSiteContextForRequest(
+                  test_case.method, url_chain, site_for_cookies, initiator,
+                  false /* is_main_frame_navigation */,
+                  false /* force_ignore_site_for_cookies */),
+              AllOf(ContextTypeIs(expected_context_type),
+                    CrossSiteRedirectMetadataCorrect(
+                        cookie_util::HttpMethodStringToEnum(test_case.method),
+                        test_case.expected_context_type_without_chain,
+                        test_case.expected_context_type,
+                        test_case.expected_redirect_type_with_chain)))
               << UrlChainToString(url_chain) << " "
               << site_for_cookies.ToDebugString() << " "
               << (initiator ? initiator->Serialize() : "nullopt");
@@ -1114,6 +1171,7 @@ TEST_P(CookieUtilComputeSameSiteContextTest, ForRequest_Redirect) {
                   ContextTypeIs(
                       expected_context_type_for_main_frame_navigation),
                   CrossSiteRedirectMetadataCorrect(
+                      cookie_util::HttpMethodStringToEnum(test_case.method),
                       test_case
                           .expected_context_type_for_main_frame_navigation_without_chain,
                       test_case.expected_context_type_for_main_frame_navigation,
@@ -1359,7 +1417,11 @@ TEST_P(CookieUtilComputeSameSiteContextTest, ForResponse_Redirect) {
                           false /* is_main_frame_navigation */,
                           false /* force_ignore_site_for_cookies */),
                       AllOf(ContextTypeIs(expected_context_type),
+                            // The 'method' field is kept empty because it's
+                            // only used to check http_method_bug_1221316 which
+                            // is always empty for responses.
                             CrossSiteRedirectMetadataCorrect(
+                                HttpMethod::kUnset,
                                 test_case.expected_context_type_without_chain,
                                 test_case.expected_context_type,
                                 test_case.expected_redirect_type_with_chain)))
@@ -1377,6 +1439,7 @@ TEST_P(CookieUtilComputeSameSiteContextTest, ForResponse_Redirect) {
                   ContextTypeIs(
                       expected_context_type_for_main_frame_navigation),
                   CrossSiteRedirectMetadataCorrect(
+                      HttpMethod::kUnset,
                       test_case
                           .expected_context_type_for_main_frame_navigation_without_chain,
                       test_case.expected_context_type_for_main_frame_navigation,

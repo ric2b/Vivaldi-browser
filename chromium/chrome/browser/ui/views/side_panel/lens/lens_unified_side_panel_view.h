@@ -19,7 +19,6 @@ class WebContents;
 namespace views {
 class Separator;
 class WebView;
-class MdTextButton;
 }  // namespace views
 
 namespace lens {
@@ -39,6 +38,7 @@ class LensUnifiedSidePanelView : public views::FlexLayoutView,
 
   // views::View
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   content::WebContents* GetWebContents();
 
@@ -60,8 +60,6 @@ class LensUnifiedSidePanelView : public views::FlexLayoutView,
   bool IsLaunchButtonEnabledForTesting();
 
  private:
-  void CreateAndInstallFooter();
-
   TemplateURLService* GetTemplateURLService();
 
   bool IsDefaultSearchProviderGoogle();
@@ -93,7 +91,6 @@ class LensUnifiedSidePanelView : public views::FlexLayoutView,
   raw_ptr<views::Separator> separator_;
   raw_ptr<views::WebView> loading_indicator_web_view_;
   raw_ptr<views::WebView> web_view_;
-  raw_ptr<views::MdTextButton> launch_button_;
 
   // Copy of the most recent URL params to open.
   std::unique_ptr<content::OpenURLParams> side_panel_url_params_;

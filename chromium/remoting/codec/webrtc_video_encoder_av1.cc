@@ -10,6 +10,7 @@
 #include "base/system/sys_info.h"
 #include "remoting/base/cpu_utils.h"
 #include "remoting/base/util.h"
+#include "remoting/codec/utils.h"
 #include "third_party/libaom/source/libaom/aom/aom_image.h"
 #include "third_party/libaom/source/libaom/aom/aomcx.h"
 #include "third_party/libyuv/include/libyuv/convert_from_argb.h"
@@ -43,10 +44,6 @@ WebrtcVideoEncoderAV1::WebrtcVideoEncoderAV1()
   ConfigureCodecParams();
 }
 WebrtcVideoEncoderAV1::~WebrtcVideoEncoderAV1() = default;
-
-void WebrtcVideoEncoderAV1::SetLosslessEncode(bool want_lossless) {
-  NOTIMPLEMENTED();
-}
 
 void WebrtcVideoEncoderAV1::SetLosslessColor(bool want_lossless) {
   if (want_lossless != lossless_color_) {
@@ -423,6 +420,16 @@ void WebrtcVideoEncoderAV1::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
   auto encoded_frame = std::make_unique<EncodedFrame>();
   encoded_frame->dimensions = frame_size;
   encoded_frame->codec = webrtc::kVideoCodecAV1;
+  encoded_frame->profile = config_.g_profile;
+  if (params.key_frame) {
+    encoded_frame->encoded_rect_width = frame_size.width();
+    encoded_frame->encoded_rect_height = frame_size.height();
+  } else {
+    const webrtc::DesktopRect bounding_rectangle =
+        GetBoundingRect(updated_region);
+    encoded_frame->encoded_rect_width = bounding_rectangle.width();
+    encoded_frame->encoded_rect_height = bounding_rectangle.height();
+  }
 
   while (!got_data) {
     const aom_codec_cx_pkt_t* aom_packet =

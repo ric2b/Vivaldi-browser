@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
@@ -35,10 +35,8 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
-#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -180,6 +178,12 @@ void ExtensionTelemetryService::RecordSignalType(
       "SafeBrowsing.ExtensionTelemetry.Signals.SignalType", signal_type);
 }
 
+void ExtensionTelemetryService::RecordSignalDiscarded(
+    ExtensionSignalType signal_type) {
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.ExtensionTelemetry.Signals.Discarded", signal_type);
+}
+
 void ExtensionTelemetryService::OnPrefChanged() {
   SetEnabled(IsEnhancedProtectionEnabled(*pref_service_));
 }
@@ -272,7 +276,7 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
     }
     // Post this task with a delay to avoid running right at Chrome startup
     // when a lot of other startup tasks are running.
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&ExtensionTelemetryService::StartUploadCheck,
                        weak_factory_.GetWeakPtr()),
@@ -312,7 +316,7 @@ void ExtensionTelemetryService::Shutdown() {
 }
 
 bool ExtensionTelemetryService::SignalDataPresent() {
-  return (extension_store_.empty());
+  return (extension_store_.size() > 0);
 }
 
 void ExtensionTelemetryService::AddSignal(
@@ -332,12 +336,16 @@ void ExtensionTelemetryService::AddSignal(
     // cleared after each telemetry report is sent to keep the data fresh.
     const extensions::Extension* extension =
         extension_registry_->GetInstalledExtension(signal->extension_id());
-    // The signal is added synchronously and it should never be reported for
-    // a non-existent extension.
-    DCHECK(extension);
+    // Do a sanity check on the returned extension object and abort if it is
+    // invalid.
+    if (!extension) {
+      RecordSignalDiscarded(signal_type);
+      return;
+    }
     extension_store_.emplace(signal->extension_id(),
                              GetExtensionInfoForReport(*extension));
   }
+
   for (auto* processor : signal_subscribers_[signal_type]) {
     // Pass the signal as reference instead of relinquishing ownership to the
     // signal processor.
@@ -603,7 +611,7 @@ ExtensionTelemetryService::GetExtensionInfoForReport(
   extension_info->set_name(extension.name());
   extension_info->set_version(extension.version().GetString());
   extension_info->set_install_timestamp_msec(
-      extension_prefs_->GetInstallTime(extension.id()).ToJavaTime());
+      extension_prefs_->GetLastUpdateTime(extension.id()).ToJavaTime());
   extension_info->set_is_default_installed(
       extension.was_installed_by_default());
   extension_info->set_is_oem_installed(extension.was_installed_by_oem());

@@ -16,6 +16,9 @@ import org.chromium.ui.LayoutInflaterUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * This class creates the model for permission dialog.
  */
@@ -40,7 +43,10 @@ class PermissionDialogModel {
                 .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, delegate.getPrimaryButtonText())
                 .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, delegate.getSecondaryButtonText())
                 .with(ModalDialogProperties.CONTENT_DESCRIPTION, delegate.getMessageText())
-                .with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, true)
+                .with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY,
+                        // Vivaldi: For OEM automotive this can give a false positive
+                        // and trigger the FilteredTouchEventDialog. Ref. POLE-67.
+                        !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
                 .with(ModalDialogProperties.TOUCH_FILTERED_CALLBACK, touchFilteredCallback)
                 .build();
     }

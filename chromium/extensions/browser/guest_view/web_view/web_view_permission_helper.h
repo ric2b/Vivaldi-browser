@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/web_contents.h"
@@ -18,10 +19,6 @@
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 
 #include "content/public/browser/web_contents_delegate.h"
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace extensions {
 
@@ -60,7 +57,7 @@ class WebViewPermissionHelper {
   using RequestMap = std::map<int, PermissionResponseInfo>;
 
   int RequestPermission(WebViewPermissionType permission_type,
-                        const base::DictionaryValue& request_info,
+                        base::Value::Dict request_info,
                         PermissionResponseCallback callback,
                         bool allowed_by_default);
 
@@ -68,6 +65,13 @@ class WebViewPermissionHelper {
       content::RenderFrameHost* rfh);
   static WebViewPermissionHelper* FromRenderFrameHostId(
       const content::GlobalRenderFrameHostId& rfh_id);
+
+  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
+                               const std::string& protocol,
+                               const GURL& url,
+                               bool user_gesture);
+
+  void OnProtocolPermissionResponse(bool allow, const std::string& user_input);
 
   void RequestMediaAccessPermission(content::WebContents* source,
                                     const content::MediaStreamRequest& request,

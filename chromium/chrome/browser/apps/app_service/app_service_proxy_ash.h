@@ -14,6 +14,8 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_reader.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_writer.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_base.h"
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
@@ -86,9 +88,6 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   void Uninstall(const std::string& app_id,
                  UninstallSource uninstall_source,
                  gfx::NativeWindow parent_window) override;
-  void Uninstall(const std::string& app_id,
-                 apps::mojom::UninstallSource uninstall_source,
-                 gfx::NativeWindow parent_window) override;
   void OnApps(std::vector<AppPtr> deltas,
               AppType app_type,
               bool should_notify_initialized) override;
@@ -110,11 +109,6 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   // Set whether resize lock is enabled for the app identified by |app_id|.
   void SetResizeLocked(const std::string& app_id, bool locked);
 
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void SetResizeLocked(const std::string& app_id,
-                       apps::mojom::OptionalBool locked);
-
   // Sets |extension_apps_| and |web_apps_| to observe the ARC apps to set the
   // badge on the equivalent Chrome app's icon, when ARC is available.
   void SetArcIsRegistered();
@@ -126,13 +120,6 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
                            LaunchSource launch_source,
                            WindowInfoPtr window_info,
                            LaunchCallback callback) override;
-  void LaunchAppWithIntent(
-      const std::string& app_id,
-      int32_t event_flags,
-      apps::mojom::IntentPtr intent,
-      apps::mojom::LaunchSource launch_source,
-      apps::mojom::WindowInfoPtr window_info,
-      apps::mojom::Publisher::LaunchAppWithIntentCallback callback) override;
 
   base::WeakPtr<AppServiceProxyAsh> GetWeakPtr();
 
@@ -145,6 +132,12 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
       std::unique_ptr<apps::AppPlatformMetricsService>
           app_platform_metrics_service);
   void RegisterPublishersForTesting();
+  void ReadIconsForTesting(AppType app_type,
+                           const std::string& app_id,
+                           int32_t size_in_dip,
+                           const IconKey& icon_key,
+                           IconType icon_type,
+                           LoadIconCallback callback);
 
  private:
   // For access to Initialize.
@@ -251,20 +244,41 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
                                     WindowInfoPtr window_info,
                                     LaunchCallback callback,
                                     bool is_allowed);
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  void LaunchAppWithMojoIntentIfAllowed(
-      const std::string& app_id,
-      int32_t event_flags,
-      apps::mojom::IntentPtr intent,
-      apps::mojom::LaunchSource launch_source,
-      apps::mojom::WindowInfoPtr window_info,
-      apps::mojom::Publisher::LaunchAppWithIntentCallback callback,
-      bool is_allowed);
+
+  bool ShouldReadIcons() override;
+
+  // Reads icon image files from the local app_service icon directory on disk.
+  void ReadIcons(AppType app_type,
+                 const std::string& app_id,
+                 int32_t size_in_dip,
+                 const IconKey& icon_key,
+                 IconType icon_type,
+                 LoadIconCallback callback) override;
+
+  // Invoked after reading icon image files from the local disk. If failed
+  // reading the icon data, calls 'icon_writer' to fetch the icon data.
+  void OnIconRead(AppType app_type,
+                  const std::string& app_id,
+                  int32_t size_in_dip,
+                  IconEffects icon_effects,
+                  IconType icon_type,
+                  LoadIconCallback callback,
+                  IconValuePtr iv);
+
+  // Invoked after writing icon image files to the local disk.
+  void OnIconInstalled(const std::string& app_id,
+                       int32_t size_in_dip,
+                       IconEffects icon_effects,
+                       IconType icon_type,
+                       LoadIconCallback callback,
+                       bool install_success);
 
   SubscriberCrosapi* crosapi_subscriber_ = nullptr;
 
   std::unique_ptr<PublisherHost> publisher_host_;
+
+  AppIconReader icon_reader_;
+  AppIconWriter icon_writer_;
 
   bool arc_is_registered_ = false;
 

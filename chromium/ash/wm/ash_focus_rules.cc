@@ -172,7 +172,7 @@ aura::Window* AshFocusRules::GetNextActivatableWindow(
   // not yet active, so we need to check for the existence of the overview
   // controller.
   if (overview_controller && overview_controller->InOverviewSession() &&
-      overview_controller->overview_session()->IsTemplatesUiLosingActivation(
+      overview_controller->overview_session()->IsSavedDeskUiLosingActivation(
           ignore)) {
     starting_window =
         overview_controller->overview_session()->GetOverviewFocusWindow();
@@ -240,9 +240,13 @@ aura::Window* AshFocusRules::GetTopmostWindowToActivateInContainer(
     aura::Window* ignore) const {
   for (aura::Window* child : base::Reversed(container->children())) {
     WindowState* window_state = WindowState::Get(child);
+    // A floated window should not be activatable if it's hidden on an inactive
+    // desk.
     if (child != ignore && window_state->CanActivate() &&
-        !window_state->IsMinimized())
+        !window_state->IsMinimized() &&
+        !(window_state->IsFloated() && !child->IsVisible())) {
       return child;
+    }
   }
   return nullptr;
 }

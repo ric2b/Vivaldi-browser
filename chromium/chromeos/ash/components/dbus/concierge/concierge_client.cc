@@ -11,7 +11,7 @@
 #include "base/check_op.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "dbus/bus.h"
@@ -228,7 +228,7 @@ class ConciergeClientImpl : public ConciergeClient {
 
     if (!writer.AppendProtoAsArrayOfBytes(request)) {
       LOG(ERROR) << "Failed to encode AttachUsbDeviceRequest protobuf";
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
       return;
     }
@@ -275,6 +275,14 @@ class ConciergeClientImpl : public ConciergeClient {
     CallMethod(concierge::kListVmsMethod, request, std::move(callback));
   }
 
+  void GetVmLaunchAllowed(
+      const vm_tools::concierge::GetVmLaunchAllowedRequest& request,
+      chromeos::DBusMethodCallback<concierge::GetVmLaunchAllowedResponse>
+          callback) override {
+    CallMethod(concierge::kGetVmLaunchAllowedMethod, request,
+               std::move(callback));
+  }
+
   void Init(dbus::Bus* bus) override {
     concierge_proxy_ = bus->GetObjectProxy(
         concierge::kVmConciergeServiceName,
@@ -317,7 +325,7 @@ class ConciergeClientImpl : public ConciergeClient {
 
     if (!writer.AppendProtoAsArrayOfBytes(request)) {
       LOG(ERROR) << "Failed to encode protobuf for " << method_name;
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
       return;
     }

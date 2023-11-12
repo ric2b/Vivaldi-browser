@@ -5,11 +5,15 @@
 #include "services/network/public/cpp/first_party_sets_mojom_traits.h"
 
 #include "base/containers/flat_map.h"
+#include "base/ranges/algorithm.h"
 #include "base/types/optional_util.h"
+#include "base/version.h"
+#include "mojo/public/cpp/base/version_mojom_traits.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "net/base/schemeful_site.h"
 #include "net/first_party_sets/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_entry_override.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "net/first_party_sets/first_party_sets_context_config.h"
@@ -148,21 +152,47 @@ bool StructTraits<network::mojom::GlobalFirstPartySetsDataView,
                   net::GlobalFirstPartySets>::
     Read(network::mojom::GlobalFirstPartySetsDataView sets,
          net::GlobalFirstPartySets* out_sets) {
+  base::Version public_sets_version;
+  if (!sets.ReadPublicSetsVersion(&public_sets_version))
+    return false;
+
   base::flat_map<net::SchemefulSite, net::FirstPartySetEntry> entries;
-  if (!sets.ReadSets(&entries))
+  if (public_sets_version.IsValid() && !sets.ReadSets(&entries))
     return false;
 
   base::flat_map<net::SchemefulSite, net::SchemefulSite> aliases;
-  if (!sets.ReadAliases(&aliases))
+  if (public_sets_version.IsValid() && !sets.ReadAliases(&aliases))
     return false;
+
+  if (!base::ranges::all_of(aliases, [&](const auto& pair) {
+        return entries.contains(pair.second);
+      })) {
+    return false;
+  }
 
   net::FirstPartySetsContextConfig manual_config;
   if (!sets.ReadManualConfig(&manual_config))
     return false;
 
-  *out_sets =
-      net::GlobalFirstPartySets(entries, aliases, std::move(manual_config));
+  *out_sets = net::GlobalFirstPartySets(std::move(public_sets_version), entries,
+                                        aliases, std::move(manual_config));
 
+  return true;
+}
+
+bool StructTraits<network::mojom::FirstPartySetEntryOverrideDataView,
+                  net::FirstPartySetEntryOverride>::
+    Read(network::mojom::FirstPartySetEntryOverrideDataView override,
+         net::FirstPartySetEntryOverride* out) {
+  absl::optional<net::FirstPartySetEntry> entry;
+  if (!override.ReadEntry(&entry))
+    return false;
+
+  if (entry.has_value()) {
+    *out = net::FirstPartySetEntryOverride(entry.value());
+  } else {
+    *out = net::FirstPartySetEntryOverride();
+  }
   return true;
 }
 
@@ -170,7 +200,7 @@ bool StructTraits<network::mojom::FirstPartySetsContextConfigDataView,
                   net::FirstPartySetsContextConfig>::
     Read(network::mojom::FirstPartySetsContextConfigDataView config,
          net::FirstPartySetsContextConfig* out_config) {
-  base::flat_map<net::SchemefulSite, absl::optional<net::FirstPartySetEntry>>
+  base::flat_map<net::SchemefulSite, net::FirstPartySetEntryOverride>
       customizations;
   if (!config.ReadCustomizations(&customizations))
     return false;

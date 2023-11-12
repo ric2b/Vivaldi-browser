@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 499 tests; 483 PASS, 16 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 501 tests; 484 PASS, 17 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS idl_test setup
 PASS idl_test validation
 PASS Test driver for asyncInitCertificate
@@ -41,7 +41,7 @@ PASS RTCPeerConnection interface: attribute connectionState
 PASS RTCPeerConnection interface: attribute canTrickleIceCandidates
 PASS RTCPeerConnection interface: operation restartIce()
 PASS RTCPeerConnection interface: operation getConfiguration()
-FAIL RTCPeerConnection interface: operation setConfiguration(optional RTCConfiguration) assert_equals: property has wrong .length expected 0 but got 1
+PASS RTCPeerConnection interface: operation setConfiguration(optional RTCConfiguration)
 PASS RTCPeerConnection interface: operation close()
 PASS RTCPeerConnection interface: attribute onnegotiationneeded
 PASS RTCPeerConnection interface: attribute onicecandidate
@@ -166,6 +166,7 @@ PASS RTCIceCandidate interface: attribute relatedAddress
 PASS RTCIceCandidate interface: attribute relatedPort
 PASS RTCIceCandidate interface: attribute usernameFragment
 FAIL RTCIceCandidate interface: attribute relayProtocol assert_true: The prototype object must have a property "relayProtocol" expected true got false
+FAIL RTCIceCandidate interface: attribute url assert_true: The prototype object must have a property "url" expected true got false
 PASS RTCIceCandidate interface: operation toJSON()
 PASS RTCIceCandidate must be primary interface of new RTCIceCandidate({ sdpMid: 1 })
 PASS Stringification of new RTCIceCandidate({ sdpMid: 1 })
@@ -184,6 +185,7 @@ PASS RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit 
 PASS RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit property "relatedPort" with the proper type
 PASS RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit property "usernameFragment" with the proper type
 FAIL RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit property "relayProtocol" with the proper type assert_inherits: property "relayProtocol" not found in prototype chain
+FAIL RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit property "url" with the proper type assert_inherits: property "url" not found in prototype chain
 PASS RTCIceCandidate interface: new RTCIceCandidate({ sdpMid: 1 }) must inherit property "toJSON()" with the proper type
 PASS RTCIceCandidate interface: toJSON operation on new RTCIceCandidate({ sdpMid: 1 })
 PASS RTCPeerConnectionIceEvent interface: existence and properties of interface object

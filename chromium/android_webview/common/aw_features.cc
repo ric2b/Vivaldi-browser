@@ -11,6 +11,14 @@ namespace features {
 
 // Alphabetical:
 
+// Enables package name logging for the most popular WebView embedders that are
+// on a dynamically generated allowlist.
+// The filtering for package names will be done on the server side using this
+// flag
+BASE_FEATURE(kWebViewAppsPackageNamesServerSideAllowlist,
+             "WebViewAppsPackageNamesServerSideAllowlist",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enable brotli compression support in WebView.
 BASE_FEATURE(kWebViewBrotliSupport,
              "WebViewBrotliSupport",
@@ -26,6 +34,12 @@ BASE_FEATURE(kWebViewCheckReturnResources,
 BASE_FEATURE(kWebViewConnectionlessSafeBrowsing,
              "WebViewConnectionlessSafeBrowsing",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Cache origins which have camera/mic permissions approved to allow subsequent
+// calls to enumerate devices to return device labels.
+BASE_FEATURE(kWebViewEnumerateDevicesCache,
+             "WebViewEnumerateDevicesCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable WebView to automatically darken the page in FORCE_DARK_AUTO mode if
 // the app's theme is dark.
@@ -46,6 +60,11 @@ BASE_FEATURE(kWebViewDisplayCutout,
 // WebView clients.
 BASE_FEATURE(kWebViewEmptyComponentLoaderPolicy,
              "WebViewEmptyComponentLoaderPolicy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable dns-prefetch and preconnect in link tags and HTTP header.
+BASE_FEATURE(kWebViewEnableDnsPrefetchAndPreconnect,
+             "WebViewEnableDnsPrefetchAndPreconnect",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, passive mixed content (Audio/Video/Image subresources loaded
@@ -69,11 +88,6 @@ BASE_FEATURE(kWebViewJavaJsBridgeMojo,
              "WebViewJavaJsBridgeMojo",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, connections using legacy TLS 1.0/1.1 versions are allowed.
-BASE_FEATURE(kWebViewLegacyTlsSupport,
-             "WebViewLegacyTlsSupport",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Measure the number of pixels occupied by one or more WebViews as a
 // proportion of the total screen size. Depending on the number of
 // WebVieaws and the size of the screen this might be expensive so
@@ -81,12 +95,12 @@ BASE_FEATURE(kWebViewLegacyTlsSupport,
 // measured.
 BASE_FEATURE(kWebViewMeasureScreenCoverage,
              "WebViewMeasureScreenCoverage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Field trial feature for controlling support of Origin Trials on WebView.
 BASE_FEATURE(kWebViewOriginTrials,
              "WebViewOriginTrials",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether to record size of the embedding app's data directory to the UMA
 // histogram Android.WebView.AppDataDirectorySize.
@@ -99,13 +113,6 @@ BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
 BASE_FEATURE(kWebViewSuppressDifferentOriginSubframeJSDialogs,
              "WebViewSuppressDifferentOriginSubframeJSDialogs",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Only synthesize page load for URL spoof prevention at most once, on initial
-// main document access (instead on every NavigationStateChanged call that
-// invalidates the URL after).
-BASE_FEATURE(kWebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess,
-             "WebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // A Feature used for WebView variations tests. Not used in production.
 BASE_FEATURE(kWebViewTestFeature,
@@ -145,6 +152,11 @@ BASE_FEATURE(kWebViewXRequestedWithHeaderManifestAllowList,
 // This persists client hints between top-level navigations.
 BASE_FEATURE(kWebViewClientHintsControllerDelegate,
              "WebViewClientHintsControllerDelegate",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// This enables image drage out for Webview.
+BASE_FEATURE(kWebViewImageDrag,
+             "WebViewImageDrag",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

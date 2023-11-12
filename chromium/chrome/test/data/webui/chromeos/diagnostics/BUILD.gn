@@ -6,22 +6,23 @@ import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
   is_polymer3 = true
-  closure_flags =
-      default_closure_args + mojom_js_args + [
-        "browser_resolver_prefix_replacements=\"chrome://diagnostics/=" +
-            rebase_path("//ash/webui/diagnostics_ui/resources/",
-                        root_build_dir) + "\"",
-        "js_module_root=" +
-            rebase_path("//chrome/test/data/webui/", root_build_dir),
-        "js_module_root=./gen/chrome/test/data/webui/",
-      ]
+  closure_flags = default_closure_args + mojom_js_args + [
+                    "browser_resolver_prefix_replacements=\"chrome://diagnostics/=" + rebase_path(
+                            "//ash/webui/diagnostics_ui/resources/",
+                            root_build_dir) + "\"",
+                    "browser_resolver_prefix_replacements=\"chrome://webui-test/chromeos/=" + rebase_path(
+                            "//chrome/test/data/webui/chromeos/",
+                            root_build_dir) + "\"",
+                    "js_module_root=" + rebase_path("//chrome/test/data/webui/",
+                                                    root_build_dir),
+                    "js_module_root=./gen/chrome/test/data/webui/",
+                  ]
   deps = [
     ":battery_status_card_test",
     ":connectivity_card_test",
     ":cpu_card_test",
     ":data_point_test",
     ":diagnostics_app_test",
-    ":diagnostics_app_unified_test",
     ":diagnostics_sticky_banner_test",
     ":diagnostics_test_utils",
     ":diagnostics_utils_test",
@@ -49,29 +50,30 @@ js_type_check("closure_compile") {
     ":system_page_test",
     ":test_diagnostics_browser_proxy",
     ":text_badge_test",
+    ":touchpad_tester_test",
     ":wifi_info_test",
   ]
 }
 
 js_library("battery_status_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
+    "//ash/webui/common/resources:load_time_data.m",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:battery_status_card",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
     "//ash/webui/diagnostics_ui/resources:routine_group",
     "//ash/webui/diagnostics_ui/resources:routine_section",
-    "//ui/webui/resources/js:load_time_data.m",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
 
 js_library("cellular_info_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:cellular_info",
     "//ash/webui/diagnostics_ui/resources:diagnostics_utils",
@@ -80,8 +82,8 @@ js_library("cellular_info_test") {
 
 js_library("connectivity_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:connectivity_card",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
@@ -93,21 +95,21 @@ js_library("connectivity_card_test") {
 
 js_library("cpu_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
+    "//ash/webui/common/resources:load_time_data.m",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:cpu_card",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:routine_section",
-    "//ui/webui/resources/js:load_time_data.m",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
 
 js_library("data_point_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/resources:data_point",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
@@ -116,8 +118,8 @@ js_library("data_point_test") {
 js_library("diagnostics_app_test") {
   deps = [
     ":test_diagnostics_browser_proxy",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_app",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
@@ -129,8 +131,8 @@ js_library("diagnostics_app_test") {
 
 js_library("diagnostics_network_icon_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_network_icon",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
@@ -141,22 +143,17 @@ js_library("diagnostics_network_icon_test") {
 
 js_library("diagnostics_sticky_banner_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/resources:diagnostics_sticky_banner",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
 
-js_library("diagnostics_app_unified_test") {
-  deps = []
-  externs_list = [ "$externs_path/mocha-2.5.js" ]
-}
-
 js_library("diagnostics_test_utils") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:battery_status_card",
     "//ash/webui/diagnostics_ui/resources:cpu_card",
@@ -177,7 +174,7 @@ js_library("diagnostics_test_utils") {
 
 js_library("diagnostics_utils_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_utils",
   ]
@@ -185,17 +182,26 @@ js_library("diagnostics_utils_test") {
 
 js_library("drawing_provider_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:drawing_provider",
   ]
 }
 
+js_library("drawing_provider_utils_test") {
+  deps = [
+    "..:chai_assert",
+    "..:test_util",
+    "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
+    "//ash/webui/diagnostics_ui/resources:drawing_provider_utils",
+  ]
+}
+
 js_library("ethernet_info_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:ethernet_info",
   ]
@@ -203,7 +209,7 @@ js_library("ethernet_info_test") {
 
 js_library("fake_network_health_provider_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
@@ -213,7 +219,7 @@ js_library("fake_network_health_provider_test") {
 
 js_library("fake_system_data_provider_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
@@ -223,7 +229,7 @@ js_library("fake_system_data_provider_test") {
 
 js_library("fake_system_routine_controller_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_system_routine_controller",
@@ -232,7 +238,7 @@ js_library("fake_system_routine_controller_test") {
 
 js_library("frequency_channel_utils_test") {
   deps = [
-    "../../:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:frequency_channel_utils",
   ]
@@ -240,8 +246,8 @@ js_library("frequency_channel_utils_test") {
 
 js_library("input_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:fake_data",
     "//ash/webui/diagnostics_ui/resources:input_card",
@@ -251,8 +257,8 @@ js_library("input_card_test") {
 
 js_library("input_list_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:fake_data",
     "//ash/webui/diagnostics_ui/resources:input_list",
@@ -263,8 +269,8 @@ js_library("input_list_test") {
 js_library("ip_config_info_drawer_test") {
   deps = [
     ":test_diagnostics_browser_proxy",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:ip_config_info_drawer",
@@ -274,9 +280,9 @@ js_library("ip_config_info_drawer_test") {
 
 js_library("keyboard_tester_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:mock_controller",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:mock_controller.m",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:keyboard_tester",
   ]
@@ -285,8 +291,8 @@ js_library("keyboard_tester_test") {
 
 js_library("memory_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:diagnostics_utils",
@@ -300,7 +306,7 @@ js_library("memory_card_test") {
 
 js_library("mojo_interface_provider_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_network_health_provider",
@@ -311,8 +317,8 @@ js_library("mojo_interface_provider_test") {
 
 js_library("network_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:network_card",
   ]
@@ -321,8 +327,8 @@ js_library("network_card_test") {
 
 js_library("network_info_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:network_info",
   ]
@@ -332,8 +338,8 @@ js_library("network_info_test") {
 js_library("network_list_test") {
   deps = [
     ":test_diagnostics_browser_proxy",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
@@ -346,8 +352,8 @@ js_library("network_list_test") {
 
 js_library("network_troubleshooting_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:network_troubleshooting",
   ]
@@ -356,8 +362,8 @@ js_library("network_troubleshooting_test") {
 
 js_library("overview_card_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
@@ -369,8 +375,8 @@ js_library("overview_card_test") {
 js_library("percent_bar_chart_test") {
   deps = [
     ":diagnostics_test_utils",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:percent_bar_chart",
   ]
@@ -379,15 +385,15 @@ js_library("percent_bar_chart_test") {
 js_library("realtime_cpu_chart_test") {
   deps = [
     ":diagnostics_test_utils",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/resources:realtime_cpu_chart",
   ]
 }
 
 js_library("routine_group_test") {
   deps = [
-    "../..:chai_assert",
+    "..:chai_assert",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:diagnostics_utils",
@@ -398,8 +404,8 @@ js_library("routine_group_test") {
 
 js_library("routine_list_executor_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_system_routine_controller",
@@ -409,8 +415,8 @@ js_library("routine_list_executor_test") {
 
 js_library("routine_result_entry_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_system_routine_controller",
@@ -423,8 +429,8 @@ js_library("routine_result_entry_test") {
 js_library("routine_result_list_test") {
   deps = [
     ":diagnostics_test_utils",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_system_routine_controller",
@@ -438,8 +444,8 @@ js_library("routine_result_list_test") {
 js_library("routine_section_test") {
   deps = [
     ":diagnostics_test_utils",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:diagnostics_utils",
@@ -459,8 +465,8 @@ js_library("routine_section_test") {
 js_library("system_page_test") {
   deps = [
     ":test_diagnostics_browser_proxy",
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_types",
     "//ash/webui/diagnostics_ui/resources:fake_data",
@@ -473,7 +479,7 @@ js_library("system_page_test") {
 
 js_library("test_diagnostics_browser_proxy") {
   deps = [
-    "../..:test_browser_proxy",
+    "..:test_browser_proxy",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:diagnostics_browser_proxy",
   ]
@@ -481,8 +487,8 @@ js_library("test_diagnostics_browser_proxy") {
 
 js_library("text_badge_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:text_badge",
   ]
@@ -490,17 +496,27 @@ js_library("text_badge_test") {
 
 js_library("touchscreen_tester_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:touchscreen_tester",
   ]
 }
 
+js_library("touchpad_tester_test") {
+  deps = [
+    "..:chai_assert",
+    "..:test_util",
+    "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
+    "//ash/webui/diagnostics_ui/resources:touchpad_tester",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+}
+
 js_library("wifi_info_test") {
   deps = [
-    "../..:chai_assert",
-    "../..:test_util",
+    "..:chai_assert",
+    "..:test_util",
     "//ash/webui/diagnostics_ui/mojom:mojom_webui_js",
     "//ash/webui/diagnostics_ui/resources:wifi_info",
   ]

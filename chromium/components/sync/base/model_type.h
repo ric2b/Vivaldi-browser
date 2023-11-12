@@ -112,6 +112,8 @@ enum ModelType {
   USER_EVENTS,
   // Commit only user consents.
   USER_CONSENTS,
+  // Segmentation data.
+  SEGMENTATION,
   // Tabs sent between devices.
   SEND_TAB_TO_SELF,
   // Commit only security events.
@@ -138,6 +140,13 @@ enum ModelType {
   PRINTERS_AUTHORIZATION_SERVERS,
   // Contact information from the Google Address Storage.
   CONTACT_INFO,
+  // A tab group saved by a user. Currently only supported on desktop platforms
+  // (Linux, Mac, Windows, ChromeOS).
+  SAVED_TAB_GROUP,
+
+  // Power bookmarks are features associated with bookmarks(i.e. notes, price
+  // tracking). Their life cycle are synced with bookmarks.
+  POWER_BOOKMARK,
 
   // Notes items
   NOTES,
@@ -241,6 +250,9 @@ enum class ModelTypeForHistograms {
   kPrintersAuthorizationServers = 52,
   kContactInfo = 53,
   kAutofillWalletUsage = 54,
+  kSegmentation = 55,
+  kSavedTabGroups = 56,
+  kPowerBookmark = 57,
 
   // Vivaldi
   kNotes = 300,
@@ -262,14 +274,14 @@ constexpr ModelTypeSet ProtocolTypes() {
       NOTES,
       BOOKMARKS, PREFERENCES, PASSWORDS, AUTOFILL_PROFILE, AUTOFILL,
       AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_METADATA, AUTOFILL_WALLET_OFFER,
-      AUTOFILL_WALLET_USAGE, THEMES, TYPED_URLS, EXTENSIONS,
-      SEARCH_ENGINES, SESSIONS, APPS, APP_SETTINGS, EXTENSION_SETTINGS,
+      AUTOFILL_WALLET_USAGE, THEMES, TYPED_URLS, EXTENSIONS, SEARCH_ENGINES,
+      SESSIONS, APPS, APP_SETTINGS, EXTENSION_SETTINGS,
       HISTORY_DELETE_DIRECTIVES, DICTIONARY, DEVICE_INFO, PRIORITY_PREFERENCES,
       SUPERVISED_USER_SETTINGS, APP_LIST, ARC_PACKAGE, PRINTERS, READING_LIST,
       USER_EVENTS, NIGORI, USER_CONSENTS, SEND_TAB_TO_SELF, SECURITY_EVENTS,
       WEB_APPS, WIFI_CONFIGURATIONS, OS_PREFERENCES, OS_PRIORITY_PREFERENCES,
       SHARING_MESSAGE, WORKSPACE_DESK, HISTORY, PRINTERS_AUTHORIZATION_SERVERS,
-      CONTACT_INFO);
+      CONTACT_INFO, SAVED_TAB_GROUP, POWER_BOOKMARK);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -427,13 +439,18 @@ std::ostream& operator<<(std::ostream& out, ModelTypeSet model_type_set);
 // Generates a base::Value::List from |model_types|.
 base::Value::List ModelTypeSetToValue(ModelTypeSet model_types);
 
-// Returns a string corresponding to the syncable tag for this datatype.
-std::string ModelTypeToRootTag(ModelType type);
+// Returns a string corresponding to the root tag as exposed in the sync
+// protocol as the root entity's ID, which makes the root entity trivially
+// distinguishable from regular entities. Note that the existence of a root
+// entity in the sync protocol is a legacy artifact, and modern clients ignore
+// it except for bookmarks and Nigori. For this reason, the server may or may
+// not return the root entity.
+std::string ModelTypeToProtocolRootTag(ModelType model_type);
 
-// Returns root_tag for |model_type| in ModelTypeInfo.
-// Difference with ModelTypeToRootTag(), this just simply returns root_tag in
-// ModelTypeInfo.
-const char* GetModelTypeRootTag(ModelType model_type);
+// As opposed to ModelTypeToProtocolRootTag(), this returns a string that isn't
+// exposed in the sync protocol, but that is still stable and thus can be used
+// for local persistence. It is guaranteed to be lowercase.
+const char* GetModelTypeLowerCaseRootTag(ModelType model_type);
 
 // Convert a real model type to a notification type (used for
 // subscribing to server-issued notifications).  Returns true iff

@@ -10,13 +10,6 @@
 
 namespace ash {
 
-// Default color used when wallpaper customized color is not available for
-// searchbox, #000 at 87% opacity.
-constexpr SkColor kDefaultSearchboxColor = gfx::kGoogleGrey200;
-
-constexpr SkColor kDefaultSearchboxPlaceholderTextColor =
-    SkColorSetARGB(0xDE, 0x00, 0x00, 0x00);
-
 // The horizontal padding of the box layout of the search box.
 constexpr int kSearchBoxPadding = 12;
 
@@ -29,9 +22,8 @@ constexpr int kSearchBoxBorderCornerRadius = 24;
 // The background border corner radius of the expanded search box.
 constexpr int kSearchBoxBorderCornerRadiusSearchResult = 20;
 
-// The background border corner radius of the active/expanded search box with
-// productivity launcher enabled.
-constexpr int kExpandedSearchBoxCornerRadiusForProductivityLauncher = 28;
+// The background border corner radius of the active/expanded search box.
+constexpr int kExpandedSearchBoxCornerRadius = 28;
 
 // Preferred height of search box.
 constexpr int kSearchBoxPreferredHeight = 48;

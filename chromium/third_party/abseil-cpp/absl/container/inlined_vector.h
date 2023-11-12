@@ -97,14 +97,11 @@ class InlinedVector {
   using DisableIfAtLeastForwardIterator = absl::enable_if_t<
       !inlined_vector_internal::IsAtLeastForwardIterator<Iterator>::value, int>;
 
-  struct MemcpyPolicy {};
-  struct ElementwiseAssignPolicy {};
-  struct ElementwiseConstructPolicy {};
-
-  using MoveAssignmentPolicy = absl::conditional_t<
-      IsMemcpyOk<A>::value, MemcpyPolicy,
-      absl::conditional_t<IsMoveAssignOk<A>::value, ElementwiseAssignPolicy,
-                          ElementwiseConstructPolicy>>;
+  using MemcpyPolicy = typename Storage::MemcpyPolicy;
+  using ElementwiseAssignPolicy = typename Storage::ElementwiseAssignPolicy;
+  using ElementwiseConstructPolicy =
+      typename Storage::ElementwiseConstructPolicy;
+  using MoveAssignmentPolicy = typename Storage::MoveAssignmentPolicy;
 
  public:
   using allocator_type = A;
@@ -664,10 +661,22 @@ class InlinedVector {
     ABSL_HARDENING_ASSERT(pos <= end());
 
     value_type dealias(std::forward<Args>(args)...);
+    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102329#c2
+    // It appears that GCC thinks that since `pos` is a const pointer and may
+    // point to uninitialized memory at this point, a warning should be
+    // issued. But `pos` is actually only used to compute an array index to
+    // write to.
+#if !defined(__clang__) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     return storage_.Insert(pos,
                            IteratorValueAdapter<A, MoveIterator<A>>(
                                MoveIterator<A>(std::addressof(dealias))),
                            1);
+#if !defined(__clang__) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
   }
 
   // `InlinedVector::emplace_back(...)`

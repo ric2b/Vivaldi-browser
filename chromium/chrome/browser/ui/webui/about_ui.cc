@@ -24,7 +24,6 @@
 #include "base/strings/escape.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -76,7 +75,7 @@
 #include "chrome/browser/component_updater/cros_component_manager.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/language/core/common/locale_util.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #endif
@@ -150,12 +149,12 @@ std::string ReadDeviceRegionFromVpd() {
   std::string region = "us";
   chromeos::system::StatisticsProvider* provider =
       chromeos::system::StatisticsProvider::GetInstance();
-  bool region_found =
-      provider->GetMachineStatistic(chromeos::system::kRegionKey, &region);
-  if (region_found) {
+  if (const absl::optional<base::StringPiece> region_statistic =
+          provider->GetMachineStatistic(chromeos::system::kRegionKey)) {
     // We only need the first part of the complex region codes like ca.ansi.
-    std::vector<std::string> region_pieces = base::SplitString(
-        region, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> region_pieces =
+        base::SplitString(region_statistic.value(), ".", base::TRIM_WHITESPACE,
+                          base::SPLIT_WANT_NONEMPTY);
     if (!region_pieces.empty())
       region = region_pieces[0];
   } else {
@@ -264,7 +263,7 @@ class ChromeOSTermsHandler
               IDS_TERMS_HTML);
     }
     std::move(callback_).Run(
-        base::RefCountedString::TakeString(std::move(contents_)));
+        base::MakeRefCounted<base::RefCountedString>(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -336,7 +335,7 @@ class ChromeOSCreditsHandler
               IDR_OS_CREDITS_HTML);
     }
     std::move(callback_).Run(
-        base::RefCountedString::TakeString(std::move(contents_)));
+        base::MakeRefCounted<base::RefCountedString>(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -355,7 +354,7 @@ void OnBorealisCreditsLoaded(content::URLDataSource::GotDataCallback callback,
     credits_html = l10n_util::GetStringUTF8(IDS_BOREALIS_CREDITS_PLACEHOLDER);
   }
   std::move(callback).Run(
-      base::RefCountedString::TakeString(std::move(credits_html)));
+      base::MakeRefCounted<base::RefCountedString>(std::move(credits_html)));
 }
 
 void HandleBorealisCredits(Profile* profile,
@@ -440,7 +439,7 @@ class CrostiniCreditsHandler
       contents_ = l10n_util::GetStringUTF8(IDS_CROSTINI_CREDITS_PLACEHOLDER);
     }
     std::move(callback_).Run(
-        base::RefCountedString::TakeString(std::move(contents_)));
+        base::MakeRefCounted<base::RefCountedString>(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -724,9 +723,7 @@ void AboutUIHTMLSource::StartDataRequest(
 void AboutUIHTMLSource::FinishDataRequest(
     const std::string& html,
     content::URLDataSource::GotDataCallback callback) {
-  std::string html_copy(html);
-  std::move(callback).Run(
-      base::RefCountedString::TakeString(std::move(html_copy)));
+  std::move(callback).Run(base::MakeRefCounted<base::RefCountedString>(html));
 }
 
 std::string AboutUIHTMLSource::GetMimeType(const GURL& url) {

@@ -87,6 +87,43 @@ constexpr char kDailyUpdateUrlPathB[] =
 constexpr char kDailyUpdateUrlPathC[] =
     "/interest_group/daily_update_partial_c.json";
 
+// Returns a basic bidder script that sends reports to
+// kOriginStringA/report_bidder.
+std::string BasicBiddingReportScript() {
+  return base::StringPrintf(R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+function reportWin(
+    auctionSignals, perBuyerSignals, sellerSignals, browserSignals) {
+  sendReportTo('%s/report_bidder');
+}
+                            )",
+                            kOriginStringA);
+}
+
+// Returns a basic seller script that sends reports to
+// kOriginStringA/report_seller.
+std::string BasicSellerReportScript() {
+  return base::StringPrintf(R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+function reportResult(auctionConfig, browserSignals) {
+  sendReportTo('%s/report_seller');
+  return {
+    'success': true,
+    'signalsForWinner': {'signalForWinner': 1},
+    'reportUrl': '%s/report_seller',
+  };
+}
+                            )",
+                            kOriginStringA, kOriginStringA);
+}
+
 class AllowInterestGroupContentBrowserClient : public TestContentBrowserClient {
  public:
   explicit AllowInterestGroupContentBrowserClient() = default;
@@ -261,6 +298,27 @@ class NetworkResponder {
     return stored_url_loader_client_.is_connected();
   }
 
+  void WaitForNumReports(size_t num_reports) {
+    base::RunLoop run_loop;
+    {
+      base::AutoLock auto_lock(lock_);
+      DCHECK(!quit_report_wait_loop_callback_);
+      EXPECT_LE(report_count_, num_reports);
+      if (report_count_ >= num_reports)
+        return;
+      waiting_for_report_count_ = num_reports;
+      quit_report_wait_loop_callback_ = run_loop.QuitClosure();
+    }
+
+    run_loop.Run();
+
+    {
+      base::AutoLock auto_lock(lock_);
+      waiting_for_report_count_ = 0;
+      EXPECT_EQ(report_count_, num_reports);
+    }
+  }
+
  private:
   bool RequestHandler(URLLoaderInterceptor::RequestParams* params) {
     base::AutoLock auto_lock(lock_);
@@ -293,17 +351,17 @@ class NetworkResponder {
     // request.
     const auto report_it = report_map_.find(params->url_request.url.path());
     if (report_it != report_map_.end()) {
-      report_count_++;
       URLLoaderInterceptor::WriteResponse(
           kFledgeReportHeaders, report_it->second, params->client.get());
       sent_reports_.push_back(params->url_request.url.path());
+      OnReportSent();
       return true;
     }
 
     if ((params->url_request.url.path() == store_url_loader_client_url_path_)) {
       CHECK(!stored_url_loader_client_);
       stored_url_loader_client_ = std::move(params->client);
-      report_count_++;
+      OnReportSent();
       return true;
     }
 
@@ -345,6 +403,12 @@ class NetworkResponder {
     }
 
     return false;
+  }
+
+  void OnReportSent() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
+    ++report_count_;
+    if (waiting_for_report_count_ == report_count_)
+      std::move(quit_report_wait_loop_callback_).Run();
   }
 
   // Handles network requests for interest group updates and scripts.
@@ -422,6 +486,10 @@ class NetworkResponder {
   size_t update_count_ GUARDED_BY(lock_) = 0;
 
   size_t report_count_ GUARDED_BY(lock_) = 0;
+
+  // Used to wait for a specific number of reports.
+  size_t waiting_for_report_count_ GUARDED_BY(lock_) = 0;
+  base::OnceClosure quit_report_wait_loop_callback_ GUARDED_BY(lock_);
 };
 
 // AuctionProcessManager that allows running auctions in-proc.
@@ -463,6 +531,36 @@ class SameProcessAuctionProcessManager : public AuctionProcessManager {
       auction_worklet_services_;
 };
 
+class TestKAnonymityServiceDelegate : public KAnonymityServiceDelegate {
+ public:
+  TestKAnonymityServiceDelegate() = default;
+
+  void JoinSet(std::string id,
+               base::OnceCallback<void(bool)> callback) override {
+    join_ids_.push_back(id);
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), true));
+  }
+
+  void QuerySets(
+      std::vector<std::string> ids,
+      base::OnceCallback<void(std::vector<bool>)> callback) override {
+    // Return that nothing is k-anonymous.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback),
+                                  std::vector<bool>(ids.size(), false)));
+  }
+
+  base::TimeDelta GetJoinInterval() override { return base::Seconds(1); }
+
+  base::TimeDelta GetQueryInterval() override { return base::Seconds(1); }
+
+  const std::vector<std::string>& join_ids() const { return join_ids_; }
+
+ private:
+  std::vector<std::string> join_ids_;
+};
+
 }  // namespace
 
 // Tests the interest group management functionality of AdAuctionServiceImpl --
@@ -479,6 +577,8 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
                               blink::features::kAdInterestGroupAPI,
                               blink::features::kFledge},
         /*disabled_features=*/{});
+    fenced_frame_feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kFencedFrames, {{"implementation_type", "mparch"}});
     old_content_browser_client_ =
         SetBrowserClientForTesting(&content_browser_client_);
   }
@@ -499,6 +599,9 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     // the auction "processes" in-process instead.
     manager_->set_auction_process_manager_for_testing(
         std::make_unique<SameProcessAuctionProcessManager>());
+    manager_->set_k_anonymity_manager_for_testing(
+        std::make_unique<InterestGroupKAnonymityManager>(manager_.get(),
+                                                         &k_anon_delegate_));
   }
 
   void TearDown() override {
@@ -550,15 +653,35 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     return interest_group->interest_group.priority;
   }
 
-  absl::optional<GURL> ConvertFencedFrameURNToURL(const GURL& urn_url) {
+  // Retrieves the FencedFrameProperties for the specified URN from the main
+  // frame. Returns nullopt if no such URN exists.
+  absl::optional<FencedFrameProperties> GetFencedFramePropertiesForURN(
+      const GURL& urn_url) {
     TestFencedFrameURLMappingResultObserver observer;
     FencedFrameURLMapping& fenced_frame_urls_map =
         static_cast<RenderFrameHostImpl*>(main_rfh())
             ->GetPage()
             .fenced_frame_urls_map();
-    absl::optional<FencedFrameURLMapping::PendingAdComponentsMap> ignored;
     fenced_frame_urls_map.ConvertFencedFrameURNToURL(urn_url, &observer);
-    return observer.mapped_url();
+    return observer.fenced_frame_properties();
+  }
+
+  absl::optional<GURL> ConvertFencedFrameURNToURL(const GURL& urn_url) {
+    auto properties = GetFencedFramePropertiesForURN(urn_url);
+    if (properties && properties->mapped_url_.has_value()) {
+      return properties->mapped_url_->GetValueIgnoringVisibility();
+    }
+    return absl::nullopt;
+  }
+
+  // Invokes the callback for the provided URN in the scope of the main frame,
+  // as would happen if it were navigated to. Doesn't use NavigationSimulator
+  // because it doesn't seem capable of triggering URN swaps. Integration tests
+  // cover actual swap cases.
+  void InvokeCallbackForURN(const GURL& urn_url) {
+    auto properties = GetFencedFramePropertiesForURN(urn_url);
+    ASSERT_TRUE(properties);
+    properties->on_navigate_callback_.Run();
   }
 
   // Creates a new AdAuctionServiceImpl and use it to try and join
@@ -668,34 +791,42 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
   absl::optional<GURL> RunAdAuctionAndFlushForFrame(
       const blink::AuctionConfig& auction_config,
       RenderFrameHost* rfh) {
-    mojo::Remote<blink::mojom::AdAuctionService> interest_service;
+    // Use a new service for each call. Keep the service alive as some calls
+    // (e.g., sending reports via the URN callback) require it not be deleted.
+    ad_auction_service_.reset();
     AdAuctionServiceImpl::CreateMojoService(
-        rfh, interest_service.BindNewPipeAndPassReceiver());
+        rfh, ad_auction_service_.BindNewPipeAndPassReceiver());
 
     base::RunLoop run_loop;
-    absl::optional<GURL> maybe_url;
-    interest_service->RunAdAuction(
+    absl::optional<blink::FencedFrame::RedactedFencedFrameConfig> maybe_config;
+    ad_auction_service_->RunAdAuction(
         auction_config, mojo::NullReceiver(),
         base::BindLambdaForTesting(
-            [&run_loop, &maybe_url](bool manually_aborted,
-                                    const absl::optional<GURL>& result) {
+            [&run_loop, &maybe_config](
+                bool manually_aborted,
+                const absl::optional<
+                    blink::FencedFrame::RedactedFencedFrameConfig>& config) {
               EXPECT_FALSE(manually_aborted);
-              maybe_url = result;
+              maybe_config = config;
               run_loop.Quit();
             }));
-    interest_service.FlushForTesting();
+    ad_auction_service_.FlushForTesting();
     run_loop.Run();
-    return maybe_url;
+    if (!maybe_config) {
+      return absl::nullopt;
+    }
+    CHECK(maybe_config->urn().has_value());
+    return maybe_config->urn();
   }
 
-  // Like RunAdAuctionAndFlushForFrame(), but uses the render frame host of the
+  // Like RunAdAuctionAndFlushForFrame(), but uses the RenderFrameHost of the
   // main frame.
   absl::optional<GURL> RunAdAuctionAndFlush(
       const blink::AuctionConfig& auction_config) {
     return RunAdAuctionAndFlushForFrame(auction_config, main_rfh());
   }
 
-  // Like UpdateInterestGroupNoFlushForFrame, but uses the render frame host of
+  // Like UpdateInterestGroupNoFlushForFrame, but uses the RenderFrameHost of
   // the main frame.
   void UpdateInterestGroupNoFlush() {
     UpdateInterestGroupNoFlushForFrame(main_rfh());
@@ -740,6 +871,13 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     run_loop.Run();
   }
 
+  // Destroy the AdAuctionService, if there is one.
+  void DestroyAdAuctionService() { ad_auction_service_.reset(); }
+
+  const std::vector<std::string>& GetKAnonJoinedIds() const {
+    return k_anon_delegate_.join_ids();
+  }
+
  protected:
   const GURL kUrlA = GURL(kOriginStringA);
   const url::Origin kOriginA = url::Origin::Create(kUrlA);
@@ -762,8 +900,10 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
   const GURL kUpdateUrlNoUpdate = kUrlNoUpdate.Resolve(kDailyUpdateUrlPath);
 
   base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedFeatureList fenced_frame_feature_list_;
 
   AllowInterestGroupContentBrowserClient content_browser_client_;
+  TestKAnonymityServiceDelegate k_anon_delegate_;
   raw_ptr<ContentBrowserClient> old_content_browser_client_ = nullptr;
   raw_ptr<InterestGroupManagerImpl> manager_;
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
@@ -771,6 +911,8 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
   // Must be destroyed before RenderViewHostTestHarness::TearDown().
   std::unique_ptr<NetworkResponder> network_responder_{
       std::make_unique<NetworkResponder>()};
+
+  mojo::Remote<blink::mojom::AdAuctionService> ad_auction_service_;
 };
 
 // Check basic success case.
@@ -918,12 +1060,14 @@ TEST_F(AdAuctionServiceImplTest, FixExpiryOnJoin) {
 // The server JSON updates all fields that can be updated.
 TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
   network_responder_->RegisterUpdateResponse(
-      kDailyUpdateUrlPath, base::StringPrintf(R"({
+      kDailyUpdateUrlPath,
+      base::StringPrintf(R"({
 "priority": 1.59,
 "enableBiddingSignalsPrioritization": true,
 "priorityVector": {"old1": 2, "new1": 1.1},
 "prioritySignalsOverrides": {"old2": 1, "new1": 1.1,
                              "browserSignals.reserved":-1},
+"sellerCapabilities": {"%s": ["latencyStats"], "*": ["interestGroupCounts"]},
 "biddingLogicUrl": "%s/interest_group/new_bidding_logic.js",
 "biddingWasmHelperUrl":"%s/interest_group/new_bidding_wasm_helper_url.wasm",
 "trustedBiddingSignalsUrl":
@@ -936,14 +1080,20 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
                   "metadata": {"new_c": "d"}
                  }]
 })",
-                                              kOriginStringA, kOriginStringA,
-                                              kOriginStringA, kOriginStringA));
+                         kOriginStringA, kOriginStringA, kOriginStringA,
+                         kOriginStringA, kOriginStringA));
 
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.priority = 2.0;
   interest_group.enable_bidding_signals_prioritization = false;
   interest_group.priority_vector = {{{"old1", 1}, {"old2", 2}}};
   interest_group.priority_signals_overrides = {{{"old1", 1}, {"old2", 2}}};
+  interest_group.seller_capabilities.emplace();
+  interest_group.seller_capabilities->insert(std::make_pair(
+      kOriginA,
+      blink::InterestGroup::SellerCapabilities::kInterestGroupCounts));
+  interest_group.all_sellers_capabilities =
+      blink::InterestGroup::SellerCapabilities::kLatencyStats;
   interest_group.daily_update_url = kUpdateUrlA;
   interest_group.bidding_url = kBiddingLogicUrlA;
   interest_group.trusted_bidding_signals_url = kTrustedBiddingSignalsUrlA;
@@ -981,6 +1131,12 @@ TEST_F(AdAuctionServiceImplTest, UpdateAllUpdatableFields) {
   EXPECT_EQ(group.priority_signals_overrides,
             expected_priority_signals_overrides);
 
+  EXPECT_EQ(group.all_sellers_capabilities,
+            blink::InterestGroup::SellerCapabilities::kInterestGroupCounts);
+  ASSERT_TRUE(group.seller_capabilities);
+  ASSERT_EQ(group.seller_capabilities->size(), 1u);
+  EXPECT_EQ(group.seller_capabilities->at(kOriginA),
+            blink::InterestGroup::SellerCapabilities::kLatencyStats);
   ASSERT_TRUE(group.bidding_url.has_value());
   EXPECT_EQ(group.bidding_url->spec(),
             base::StringPrintf("%s/interest_group/new_bidding_logic.js",
@@ -1701,6 +1857,46 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidPriorityCancelsAllUpdates) {
   ASSERT_EQ(groups.size(), 1u);
   const auto& group = groups[0].interest_group;
   EXPECT_EQ(group.priority, 2.0);
+  EXPECT_EQ(group.bidding_url, kBiddingLogicUrlA);
+}
+
+// The `sellerCapabilities` field has an invalid capability. The entire update
+// should get cancelled, since updates are atomic.
+TEST_F(AdAuctionServiceImplTest,
+       UpdateInvalidSellerCapabilitiesCancelsAllUpdates) {
+  network_responder_->RegisterUpdateResponse(
+      kDailyUpdateUrlPath, base::StringPrintf(R"({
+"sellerCapabilities": {"%s": ["latencyStats"], "*": ["interestGroupCounts",
+                                                     "invalidCapability"]},
+"biddingLogicUrl": "%s/interest_group/new_bidding_logic.js"
+})",
+                                              kOriginStringA, kOriginStringA));
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.daily_update_url = kUpdateUrlA;
+  interest_group.bidding_url = kBiddingLogicUrlA;
+  interest_group.trusted_bidding_signals_url = kTrustedBiddingSignalsUrlA;
+  interest_group.trusted_bidding_signals_keys.emplace();
+  interest_group.trusted_bidding_signals_keys->push_back("key1");
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  UpdateInterestGroupNoFlush();
+  task_environment()->RunUntilIdle();
+
+  // Check that the seller capabilities and bidding logic URL didn't change.
+  std::vector<StorageInterestGroup> groups =
+      GetInterestGroupsForOwner(kOriginA);
+  ASSERT_EQ(groups.size(), 1u);
+  const auto& group = groups[0].interest_group;
+  EXPECT_EQ(group.all_sellers_capabilities,
+            blink::InterestGroup::SellerCapabilitiesType());
+  EXPECT_FALSE(group.seller_capabilities);
   EXPECT_EQ(group.bidding_url, kBiddingLogicUrlA);
 }
 
@@ -3639,11 +3835,92 @@ function scoreAd(
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render"));
+
+  // Running the auction alone should not result in updating the interest
+  // group's bid count or previous win list, no matter how much time passes.
+  task_environment()->RunUntilIdle();
+  auto storage_interest_group =
+      GetInterestGroup(interest_group.owner, interest_group.name);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(0, storage_interest_group->bidding_browser_signals->bid_count);
+  EXPECT_EQ(0u,
+            storage_interest_group->bidding_browser_signals->prev_wins.size());
+
+  // Invoking the URN callback (which is done when the result is loaded in a
+  // frame) updates those fields.
+  InvokeCallbackForURN(*auction_result);
+  storage_interest_group =
+      GetInterestGroup(interest_group.owner, interest_group.name);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
+  ASSERT_EQ(1u,
+            storage_interest_group->bidding_browser_signals->prev_wins.size());
+  ASSERT_EQ(
+      R"({"render_url":"https://example.com/render"})",
+      storage_interest_group->bidding_browser_signals->prev_wins[0]->ad_json);
+
+  // The auction should also trigger a k-anon "join" for the winning ad.
+  EXPECT_THAT(GetKAnonJoinedIds(),
+              ::testing::UnorderedElementsAre(
+                  KAnonKeyForAdBid(interest_group,
+                                   interest_group.ads.value()[0].render_url),
+                  KAnonKeyForAdNameReporting(interest_group,
+                                             interest_group.ads.value()[0])));
+}
+
+// Add an interest group, and run an ad auction. Seller rejects the bid. Bid
+// count should be updated.
+TEST_F(AdAuctionServiceImplTest, RunAdAuctionSellerRejectsBid) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return -1;
+}
+)";
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  EXPECT_EQ(auction_result, absl::nullopt);
+
+  // The bid count should be updated immediately, since theere's no URN to wait
+  // to be loaded in a frame.
+  auto storage_interest_group =
+      GetInterestGroup(interest_group.owner, interest_group.name);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
+  EXPECT_EQ(0u,
+            storage_interest_group->bidding_browser_signals->prev_wins.size());
+
+  // The auction should not trigger any k-anon "joins".
+  EXPECT_THAT(GetKAnonJoinedIds(), ::testing::UnorderedElementsAre());
 }
 
 // Run ad auction when number of urn mappings has reached limit, the action
@@ -3694,8 +3971,7 @@ function scoreAd(
   GURL url("https://a.test");
   fenced_frame_url_mapping_test_peer.FillMap(url);
 
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   // Auction failed because the number of urn mappings has reached limit.
   ASSERT_EQ(auction_result, absl::nullopt);
 }
@@ -3745,8 +4021,7 @@ function scoreAd(
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render"));
@@ -3805,8 +4080,7 @@ function scoreAd(
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_EQ(auction_result, absl::nullopt);
 
   // Now that the auction has completed, check that the interest group updated.
@@ -3858,8 +4132,7 @@ function generateBid(
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kMissingScriptPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_EQ(auction_result, absl::nullopt);
 
   // Now that the auction has completed, check that the interest group updated.
@@ -3918,8 +4191,7 @@ function scoreAd(
   auction_config.seller = kOriginNoUpdate;
   auction_config.decision_logic_url = kUrlNoUpdate.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginNoUpdate};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render"));
@@ -4025,8 +4297,7 @@ function scoreAd(
   component_auction.non_shared_params.interest_group_buyers = {kOriginC};
   auction_config.non_shared_params.component_auctions.emplace_back(
       std::move(component_auction));
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render2"));
@@ -4129,8 +4400,7 @@ function scoreAd(
   component_auction.non_shared_params.interest_group_buyers = {kOriginC};
   auction_config.non_shared_params.component_auctions.emplace_back(
       std::move(component_auction));
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render1"));
@@ -4235,8 +4505,7 @@ function scoreAd(
   component_auction.non_shared_params.interest_group_buyers = {kOriginC};
   auction_config.non_shared_params.component_auctions.emplace_back(
       std::move(component_auction));
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_EQ(auction_result, absl::nullopt);
 
   // Now that the auction has completed, check that the interest groups updated.
@@ -4264,40 +4533,12 @@ function scoreAd(
 // test). Reporting should continue even after the page navigated away. Timeout
 // works for report requests.
 TEST_F(AdAuctionServiceImplTest, SendReports) {
-  const std::string kBiddingScript = base::StringPrintf(R"(
-function generateBid(
-    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
-    browserSignals) {
-  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
-}
-function reportWin(
-    auctionSignals, perBuyerSignals, sellerSignals, browserSignals) {
-  sendReportTo('%s/report_bidder');
-}
-  )",
-                                                        kOriginStringA);
-
-  const std::string kDecisionScript =
-      base::StringPrintf(R"(
-function scoreAd(
-    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
-  return bid;
-}
-function reportResult(auctionConfig, browserSignals) {
-  sendReportTo('%s/report_seller');
-  return {
-    'success': true,
-    'signalsForWinner': {'signalForWinner': 1},
-    'reportUrl': '%s/report_seller',
-  };
-}
-)",
-                         kOriginStringA, kOriginStringA);
-
   manager_->set_reporting_interval_for_testing(base::Seconds(5));
   manager_->set_max_active_report_requests_for_testing(1);
-  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
-  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
   network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
   network_responder_->RegisterStoreUrlLoaderClient("/report_seller");
 
@@ -4315,9 +4556,9 @@ function reportResult(auctionConfig, browserSignals) {
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
-  EXPECT_NE(auction_result, absl::nullopt);
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
 
   task_environment()->FastForwardBy(base::Seconds(30) - base::Seconds(1));
   // There should only be the seller report, and the bidder report request is
@@ -4331,6 +4572,11 @@ function reportResult(auctionConfig, browserSignals) {
   EXPECT_FALSE(network_responder_->RemoteIsConnected());
   // Reporting should continue even after the page navigated away.
   NavigateAndCommit(kUrlB);
+  // Navigating away normally deletes the AdAuctionServiceImpl. With this test
+  // fixture, however, the frame doesn't own the service so have to delete it
+  // manually.
+  DestroyAdAuctionService();
+
   task_environment()->FastForwardBy(base::Seconds(1));
   // The next request will not be sent when it's less than 5 seconds after the
   // previous request completed.
@@ -4342,44 +4588,203 @@ function reportResult(auctionConfig, browserSignals) {
   EXPECT_EQ(network_responder_->ReportCount(), 2u);
 }
 
+// Check that reports aren't sent until the URN to URL callback is invoked.
+TEST_F(AdAuctionServiceImplTest, SendReportsWaitsForCallback) {
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
+  network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
+  network_responder_->RegisterReportResponse("/report_seller", /*response=*/"");
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+
+  // Nothing should happen until the URN's callback is invoked.
+  task_environment()->FastForwardBy(base::Days(1));
+  EXPECT_EQ(network_responder_->ReportCount(), 0u);
+
+  InvokeCallbackForURN(*auction_result);
+  network_responder_->WaitForNumReports(2);
+}
+
+// Make sure the report-sending logic can handle two auctions with a delay
+// between them. This is regression test for https://crbug.com/1379234.
+TEST_F(AdAuctionServiceImplTest, SendReportsTwoAuctionsWithDelay) {
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
+  network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
+  network_responder_->RegisterReportResponse("/report_seller", /*response=*/"");
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.expiry = base::Time::Now() + base::Days(2);
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+  network_responder_->WaitForNumReports(2u);
+
+  // Chrome runs for a day.
+  task_environment()->FastForwardBy(base::Days(1));
+  // Should have been no other pending reports.
+  EXPECT_EQ(network_responder_->ReportCount(), 2u);
+
+  // Re-running the auction should result in 2 more reports.
+  auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+  network_responder_->WaitForNumReports(4u);
+}
+
+// Test that if one auction completes after another's reports have been sent,
+// but before the report interval has elapsed, its requests still respect the
+// report interval.
+TEST_F(AdAuctionServiceImplTest, SendReportsTwoAuctionsRespectsReportInterval) {
+  manager_->set_reporting_interval_for_testing(base::Seconds(5));
+  manager_->set_max_active_report_requests_for_testing(1);
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
+  network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
+  network_responder_->RegisterReportResponse("/report_seller", /*response=*/"");
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.expiry = base::Time::Now() + base::Days(2);
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  base::Time start_time = base::Time::Now();
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  EXPECT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+
+  // First report should be sent immediately.
+  network_responder_->WaitForNumReports(1u);
+  EXPECT_EQ(base::TimeDelta(), base::Time::Now() - start_time);
+  // Second report should be sent after the reporting interval.
+  network_responder_->WaitForNumReports(2u);
+  EXPECT_EQ(base::Seconds(5), base::Time::Now() - start_time);
+
+  // Time passes that's less than the reporting interval. This shouldn't have
+  // any effect on when the next report is sent. That is, the reporting interval
+  // for the next report starts when the previous report was sent, not when the
+  // next report is queued.
+  task_environment()->FastForwardBy(base::Seconds(2));
+
+  // Re-running the auction should result in 2 more reports.
+  auction_result = RunAdAuctionAndFlush(auction_config);
+  EXPECT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
+
+  // The third report (first report for the second auction) should be only be
+  // sent after the reporting interval has elapsed again, starting from when the
+  // second report was sent.
+  network_responder_->WaitForNumReports(3u);
+  EXPECT_EQ(base::Seconds(10), base::Time::Now() - start_time);
+  // Second report of the second auction should wait for yet another reporting
+  // interval.
+  network_responder_->WaitForNumReports(4u);
+  EXPECT_EQ(base::Seconds(15), base::Time::Now() - start_time);
+}
+
+// Check that reports are sent (And there's no UAF when invoking the URN
+// callback) if the AdAuctionService is deleted before a URN is navigated to.
+//
+// This isn't a common case, but can happen if an auction runs in an iframe,
+// which is then closed, and then the URN is loaded in a fenced frame.
+//
+// It can also potentially happen when navigating away from a page that run an
+// auction is racing against loading a URN in a frame within the page.
+//
+// It can also happen if a compromised renderer closes the Mojo pipe to its
+// AdAuctionService.
+TEST_F(AdAuctionServiceImplTest, ReportsSentAfterServiceDestruction) {
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
+  network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
+  network_responder_->RegisterReportResponse("/report_seller", /*response=*/"");
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+
+  // Destroy the auction service Mojo pipe, and wait for the underlying service
+  // to be destroyed.
+  DestroyAdAuctionService();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(network_responder_->ReportCount(), 0u);
+
+  // Invoking the callback should not crash and should result in two reports
+  // being sent.
+  InvokeCallbackForURN(*auction_result);
+  network_responder_->WaitForNumReports(2);
+}
+
 // Similar to SendReports() above, but with one report request failed instead of
 // timed out. Following report requests should still be send after previous ones
 // failed.
 TEST_F(AdAuctionServiceImplTest, SendReportsOneReportFailed) {
-  const std::string kBiddingScript = base::StringPrintf(R"(
-function generateBid(
-    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
-    browserSignals) {
-  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
-}
-function reportWin(
-    auctionSignals, perBuyerSignals, sellerSignals, browserSignals) {
-  sendReportTo('%s/report_bidder');
-}
-  )",
-                                                        kOriginStringA);
-
-  const std::string kDecisionScript =
-      base::StringPrintf(R"(
-function scoreAd(
-    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
-  return bid;
-}
-function reportResult(auctionConfig, browserSignals) {
-  sendReportTo('%s/report_seller');
-  return {
-    'success': true,
-    'signalsForWinner': {'signalForWinner': 1},
-    'reportUrl': '%s/report_seller',
-  };
-}
-)",
-                         kOriginStringA, kOriginStringA);
-
   manager_->set_reporting_interval_for_testing(base::Seconds(5));
   manager_->set_max_active_report_requests_for_testing(1);
-  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
-  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
   network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
   network_responder_->FailRequestWithError("/report_seller",
                                            net::ERR_CONNECTION_FAILED);
@@ -4398,9 +4803,9 @@ function reportResult(auctionConfig, browserSignals) {
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
-  EXPECT_NE(auction_result, absl::nullopt);
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
 
   // There should be no report since the seller report failed, and the bidder
   // report request is not fetched yet.
@@ -4484,9 +4889,9 @@ function reportResult(auctionConfig, browserSignals) {
 
     auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
     auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-    absl::optional<GURL> auction_result =
-        RunAdAuctionAndFlush(std::move(auction_config));
-    EXPECT_NE(auction_result, absl::nullopt);
+    absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+    ASSERT_NE(auction_result, absl::nullopt);
+    InvokeCallbackForURN(*auction_result);
   }
 
   // There should be one report sent already, since there's no delay for the
@@ -4509,44 +4914,16 @@ function reportResult(auctionConfig, browserSignals) {
 }
 
 TEST_F(AdAuctionServiceImplTest, SendReportsMaxReportRoundDuration) {
-  const std::string kBiddingScript = base::StringPrintf(R"(
-function generateBid(
-    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
-    browserSignals) {
-  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
-}
-function reportWin(
-    auctionSignals, perBuyerSignals, sellerSignals, browserSignals) {
-  sendReportTo('%s/report_bidder');
-}
-  )",
-                                                        kOriginStringA);
-
-  const std::string kDecisionScript =
-      base::StringPrintf(R"(
-function scoreAd(
-    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
-  return bid;
-}
-function reportResult(auctionConfig, browserSignals) {
-  sendReportTo('%s/report_seller');
-  return {
-    'success': true,
-    'signalsForWinner': {'signalForWinner': 1},
-    'reportUrl': '%s/report_seller',
-  };
-}
-)",
-                         kOriginStringA, kOriginStringA);
-
   // `max_reporting_round_duration_` is set lower than `reporting_interval_` so
   // that we can exceed the max round duration with pending unsent reports.
   manager_->set_reporting_interval_for_testing(base::Seconds(5));
   manager_->set_max_reporting_round_duration_for_testing(base::Seconds(1));
   manager_->set_max_active_report_requests_for_testing(1);
 
-  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
-  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath,
+                                             BasicBiddingReportScript());
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath,
+                                             BasicSellerReportScript());
   network_responder_->RegisterReportResponse("/report_bidder", /*response=*/"");
   network_responder_->RegisterReportResponse("/report_seller", /*response=*/"");
 
@@ -4565,12 +4942,12 @@ function reportResult(auctionConfig, browserSignals) {
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
   absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
-  EXPECT_NE(auction_result, absl::nullopt);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
 
-  task_environment()->FastForwardBy(base::Seconds(2));
-  // There should only be the seller report, and the bidder report request is
-  // waiting in the report queue.
-  EXPECT_EQ(network_responder_->ReportCount(), 1u);
+  // Wait for the seller report to be sent.
+  network_responder_->WaitForNumReports(1);
+  // The bidder report request should still be waiting in the report queue.
   EXPECT_EQ(manager_->report_queue_length_for_testing(), 1u);
 
   // Run a second auction while the first auction's reporting is in progress.
@@ -4579,7 +4956,8 @@ function reportResult(auctionConfig, browserSignals) {
   auction_config2.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config2.non_shared_params.interest_group_buyers = {kOriginA};
   auction_result = RunAdAuctionAndFlush(auction_config2);
-  EXPECT_NE(auction_result, absl::nullopt);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
   // Two more reports are enqueued.
   EXPECT_EQ(manager_->report_queue_length_for_testing(), 3u);
 
@@ -4590,6 +4968,10 @@ function reportResult(auctionConfig, browserSignals) {
   EXPECT_EQ(network_responder_->ReportCount(), 1u);
   EXPECT_EQ(manager_->report_queue_length_for_testing(), 0u);
 
+  // Set `max_reporting_round_duration_` high enough so that the auction's two
+  // reports can be sent successfully.
+  manager_->set_max_reporting_round_duration_for_testing(base::Seconds(20));
+
   // Run a third auction after report queue is cleared, to make sure further
   // auction's reports can be normally enqueued and sent again.
   blink::AuctionConfig auction_config3;
@@ -4597,11 +4979,9 @@ function reportResult(auctionConfig, browserSignals) {
   auction_config3.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config3.non_shared_params.interest_group_buyers = {kOriginA};
   auction_result = RunAdAuctionAndFlush(auction_config3);
-  EXPECT_NE(auction_result, absl::nullopt);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
 
-  // Set `max_reporting_round_duration_` high enough so that the auction's two
-  // reports can be sent successfully.
-  manager_->set_max_reporting_round_duration_for_testing(base::Seconds(20));
   task_environment()->FastForwardBy(base::Seconds(20));
   // Two more reports from the third auction are sent.
   EXPECT_EQ(network_responder_->ReportCount(), 3u);
@@ -5165,8 +5545,7 @@ function scoreAd(
   auction_config.seller = kOriginA;
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   ASSERT_NE(auction_result, absl::nullopt);
   EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
             GURL("https://example.com/render"));
@@ -5374,9 +5753,9 @@ function reportResult() {}
         base::BindLambdaForTesting(
             [&one_auction_complete](
                 bool manually_aborted,
-                const absl::optional<GURL>& ignored_result) {
-              one_auction_complete.Run();
-            }));
+                const absl::optional<
+                    blink::FencedFrame::RedactedFencedFrameConfig>&
+                    ignored_config) { one_auction_complete.Run(); }));
   }
   run_loop.Run();
 
@@ -5542,7 +5921,7 @@ class AdAuctionServiceImplBiddingAndScoringDebugReportingAPIEnabledTest
 // Allowing sending multiple reports in parallel, instead of only allowing
 // sending one at a time.
 TEST_F(AdAuctionServiceImplBiddingAndScoringDebugReportingAPIEnabledTest,
-       SendReportsMaxiumActive) {
+       SendReportsMaximumActive) {
   // Use interest group name as bid value.
   const std::string kBiddingScript =
       base::StringPrintf(R"(
@@ -5620,7 +5999,8 @@ function reportResult(auctionConfig, browserSignals) {
     auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
     auction_config.non_shared_params.interest_group_buyers = {kOriginA};
     absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
-    EXPECT_NE(auction_result, absl::nullopt);
+    ASSERT_NE(auction_result, absl::nullopt);
+    InvokeCallbackForURN(*auction_result);
   }
 
   task_environment()->FastForwardBy(base::Seconds(3));
@@ -5731,8 +6111,7 @@ function scoreAd(
             EXPECT_EQ(budget_key.origin(), kOriginA);
           }));
 
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_NE(auction_result, absl::nullopt);
 }
 
@@ -5796,9 +6175,9 @@ function scoreAd(
       browser_client,
       LogWebFeatureForCurrentPage(
           testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge));
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
-  EXPECT_NE(auction_result, absl::nullopt);
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  ASSERT_NE(auction_result, absl::nullopt);
+  InvokeCallbackForURN(*auction_result);
 }
 
 // TODO(crbug.com/1356654): Update when use counter coverage is improved.
@@ -5851,8 +6230,7 @@ function scoreAd(
       LogWebFeatureForCurrentPage(
           testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge))
       .Times(0);
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
 
   // There should've been a sendHistogramReport() error.
   EXPECT_EQ(auction_result, absl::nullopt);
@@ -5905,8 +6283,7 @@ function scoreAd(
   auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
   auction_config.non_shared_params.interest_group_buyers = {kOriginA};
 
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
 
   // privateAggregation should cause a ReferenceError.
   EXPECT_EQ(auction_result, absl::nullopt);
@@ -5962,11 +6339,144 @@ function scoreAd(
           testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge))
       .Times(0);
 
-  absl::optional<GURL> auction_result =
-      RunAdAuctionAndFlush(std::move(auction_config));
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
 
   // privateAggregation should cause a ReferenceError.
   EXPECT_EQ(auction_result, absl::nullopt);
 }
+
+class AdAuctionServiceImplKAnonTest
+    : public AdAuctionServiceImplTest,
+      public ::testing::WithParamInterface<
+          auction_worklet::mojom::KAnonymityBidMode> {
+ public:
+  AdAuctionServiceImplKAnonTest() {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (kanon_mode()) {
+      case auction_worklet::mojom::KAnonymityBidMode::kEnforce:
+        enabled_features.push_back(blink::features::kFledgeConsiderKAnonymity);
+        enabled_features.push_back(blink::features::kFledgeEnforceKAnonymity);
+        break;
+      case auction_worklet::mojom::KAnonymityBidMode::kSimulate:
+        enabled_features.push_back(blink::features::kFledgeConsiderKAnonymity);
+        disabled_features.push_back(blink::features::kFledgeEnforceKAnonymity);
+        break;
+      case auction_worklet::mojom::KAnonymityBidMode::kNone:
+        disabled_features.push_back(blink::features::kFledgeConsiderKAnonymity);
+        disabled_features.push_back(blink::features::kFledgeEnforceKAnonymity);
+        break;
+    }
+
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
+
+  auction_worklet::mojom::KAnonymityBidMode kanon_mode() { return GetParam(); }
+
+ protected:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Add an interest group with a non-k-anonymous ad and run an ad auction.
+TEST_P(AdAuctionServiceImplKAnonTest, RunAdAuctionNotKAnon) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+  EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+  absl::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
+  switch (kanon_mode()) {
+    case auction_worklet::mojom::KAnonymityBidMode::kNone:
+    case auction_worklet::mojom::KAnonymityBidMode::kSimulate: {
+      ASSERT_NE(auction_result, absl::nullopt);
+      EXPECT_EQ(ConvertFencedFrameURNToURL(*auction_result),
+                GURL("https://example.com/render"));
+
+      // Running the auction alone should not result in updating the interest
+      // group's bid count, previous win list or trigger k-anon joins, no matter
+      // how much time passes.
+      task_environment()->RunUntilIdle();
+      auto storage_interest_group =
+          GetInterestGroup(interest_group.owner, interest_group.name);
+      ASSERT_TRUE(storage_interest_group);
+      EXPECT_EQ(0, storage_interest_group->bidding_browser_signals->bid_count);
+      EXPECT_EQ(
+          0u,
+          storage_interest_group->bidding_browser_signals->prev_wins.size());
+      EXPECT_THAT(GetKAnonJoinedIds(), ::testing::UnorderedElementsAre());
+
+      // Invoking the URN callback (which is done when the result is loaded in a
+      // frame) updates those fields.
+      InvokeCallbackForURN(*auction_result);
+      storage_interest_group =
+          GetInterestGroup(interest_group.owner, interest_group.name);
+      ASSERT_TRUE(storage_interest_group);
+      EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->bid_count);
+      ASSERT_EQ(
+          1u,
+          storage_interest_group->bidding_browser_signals->prev_wins.size());
+      ASSERT_EQ(R"({"render_url":"https://example.com/render"})",
+                storage_interest_group->bidding_browser_signals->prev_wins[0]
+                    ->ad_json);
+      EXPECT_THAT(
+          GetKAnonJoinedIds(),
+          ::testing::UnorderedElementsAre(
+              KAnonKeyForAdBid(interest_group,
+                               interest_group.ads.value()[0].render_url),
+              KAnonKeyForAdNameReporting(interest_group,
+                                         interest_group.ads.value()[0])));
+      break;
+    }
+    case auction_worklet::mojom::KAnonymityBidMode::kEnforce: {
+      // The auction should fail because there were no k-anonymous bids.
+      // Since the auction failed, everything should update immediately.
+      EXPECT_FALSE(auction_result);
+      task_environment()->RunUntilIdle();
+      EXPECT_THAT(
+          GetKAnonJoinedIds(),
+          ::testing::UnorderedElementsAre(
+              KAnonKeyForAdBid(interest_group,
+                               interest_group.ads.value()[0].render_url),
+              KAnonKeyForAdNameReporting(interest_group,
+                                         interest_group.ads.value()[0])));
+      break;
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no label */,
+    AdAuctionServiceImplKAnonTest,
+    ::testing::Values(auction_worklet::mojom::KAnonymityBidMode::kNone,
+                      auction_worklet::mojom::KAnonymityBidMode::kSimulate,
+                      auction_worklet::mojom::KAnonymityBidMode::kEnforce));
 
 }  // namespace content

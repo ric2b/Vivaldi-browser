@@ -10,12 +10,14 @@
 #include <set>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
+#include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_service.pb.h"
@@ -54,11 +56,12 @@ class GuestOsSharePath : public KeyedService,
                                    const std::string& failure_reason)>;
   class Observer {
    public:
-    virtual void OnShare(const std::string& vm_name,
-                         const base::FilePath& path,
-                         bool persist) = 0;
+    virtual void OnPersistedPathRegistered(const std::string& vm_name,
+                                           const base::FilePath& path) = 0;
     virtual void OnUnshare(const std::string& vm_name,
                            const base::FilePath& path) = 0;
+    virtual void OnGuestRegistered(const guest_os::GuestId& guest) = 0;
+    virtual void OnGuestUnregistered(const guest_os::GuestId& guest) = 0;
   };
 
   static GuestOsSharePath* GetForProfile(Profile* profile);
@@ -81,16 +84,16 @@ class GuestOsSharePath : public KeyedService,
   // be automatically shared at container startup. Callback receives path mapped
   // in container, success bool and failure reason string.
   void SharePath(const std::string& vm_name,
+                 uint32_t seneschal_server_handle,
                  const base::FilePath& path,
-                 bool persist,
                  SharePathCallback callback);
 
   // Share specified absolute |paths| with vm. If |persist| is set, the paths
   // will be automatically shared at container startup. Callback receives
   // success bool and failure reason string of the first error.
   void SharePaths(const std::string& vm_name,
+                  uint32_t seneschal_server_handle,
                   std::vector<base::FilePath> paths,
-                  bool persist,
                   SuccessCallback callback);
 
   // Unshare specified |path| with |vm_name|.  If |unpersist| is set, the path
@@ -102,7 +105,7 @@ class GuestOsSharePath : public KeyedService,
                    SuccessCallback callback);
 
   // Returns true the first time it is called on this service.
-  bool GetAndSetFirstForSession();
+  bool GetAndSetFirstForSession(const std::string& vm_name);
 
   // Get list of all shared paths for the specified VM.
   std::vector<base::FilePath> GetPersistedSharedPaths(
@@ -111,11 +114,12 @@ class GuestOsSharePath : public KeyedService,
   // Share all paths configured in prefs for the specified VM.
   // Called at container startup.  Callback is invoked once complete.
   void SharePersistedPaths(const std::string& vm_name,
+                           uint32_t seneschal_server_handle,
                            SuccessCallback callback);
 
-  // Save |path| into prefs for |vm_name|.
-  void RegisterPersistedPath(const std::string& vm_name,
-                             const base::FilePath& path);
+  // Save |paths| into prefs for |vm_name|.
+  void RegisterPersistedPaths(const std::string& vm_name,
+                              const std::vector<base::FilePath>& path);
 
   // Returns true if |path| or a parent is shared with |vm_name|.
   bool IsPathShared(const std::string& vm_name, base::FilePath path) const;
@@ -145,6 +149,18 @@ class GuestOsSharePath : public KeyedService,
   // Visible for testing.
   void PathDeleted(const base::FilePath& path);
 
+  // Registers `guest` with this service, so methods which take a VmType will
+  // operate on it.
+  void RegisterGuest(const GuestId& guest);
+
+  // Unregisters `guest` so it no longer is included by methods taking a
+  // `VmType`.
+  void UnregisterGuest(const GuestId& guest);
+
+  // Returns the list of guests which are currently registered with this
+  // service.
+  const base::flat_set<GuestId>& ListGuests();
+
   // Allow seneschal callback to be overridden for testing.
   void set_seneschal_callback_for_testing(SeneschalCallback callback) {
     seneschal_callback_ = std::move(callback);
@@ -152,8 +168,8 @@ class GuestOsSharePath : public KeyedService,
 
  private:
   void CallSeneschalSharePath(const std::string& vm_name,
+                              uint32_t seneschal_server_handle,
                               const base::FilePath& path,
-                              bool persist,
                               SharePathCallback callback);
 
   void CallSeneschalUnsharePath(const std::string& vm_name,
@@ -174,12 +190,15 @@ class GuestOsSharePath : public KeyedService,
   Profile* profile_;
   // Task runner for FilePathWatchers to be created, run, and be destroyed on.
   scoped_refptr<base::SequencedTaskRunner> file_watcher_task_runner_;
-  bool first_for_session_ = true;
+
+  // List of VMs GetAndSetFirstForSession has been called on.
+  std::set<std::string> first_for_session_;
 
   // Allow seneschal callback to be overridden for testing.
   SeneschalCallback seneschal_callback_;
   base::ObserverList<Observer>::Unchecked observers_;
   std::map<base::FilePath, SharedPathInfo> shared_paths_;
+  base::flat_set<GuestId> guests_;
 
   base::WeakPtrFactory<GuestOsSharePath> weak_ptr_factory_{this};
 };  // class

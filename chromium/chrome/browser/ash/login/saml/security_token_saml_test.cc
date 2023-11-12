@@ -26,8 +26,8 @@
 #include "chrome/browser/certificate_provider/test_certificate_provider_extension.h"
 #include "chrome/browser/policy/extension_force_install_mixin.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
@@ -44,6 +44,7 @@
 #include "url/gurl.h"
 
 namespace ash {
+
 namespace {
 
 // Pattern for the DeviceLoginScreenAutoSelectCertificateForUrls admin policy
@@ -78,9 +79,9 @@ SecurityTokenSamlTest::SecurityTokenSamlTest()
                       &gaia_mixin_,
                       /*client_cert_authorities=*/{GetClientCertCaName()}) {
   if (GetParam()) {
-    scoped_feature_list_.InitAndEnableFeature(ash::features::kUseAuthFactors);
+    scoped_feature_list_.InitAndEnableFeature(features::kUseAuthFactors);
   } else {
-    scoped_feature_list_.InitAndDisableFeature(ash::features::kUseAuthFactors);
+    scoped_feature_list_.InitAndDisableFeature(features::kUseAuthFactors);
   }
   // Allow the forced installation of extensions in the background.
   needs_background_networking_ = true;

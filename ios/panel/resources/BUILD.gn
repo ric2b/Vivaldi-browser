@@ -1,0 +1,66 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("vivaldi_bookmarks_empty") {
+  sources = [
+    "vivaldi_bookmarks_empty.imageset/Contents.json",
+    "vivaldi_bookmarks_empty.imageset/vivaldi_bookmarks_empty.pdf"
+    ]
+}
+
+imageset("vivaldi_notes_empty") {
+  sources = [
+    "vivaldi_notes_empty.imageset/Contents.json",
+    "vivaldi_notes_empty.imageset/vivaldi_notes_empty.pdf"
+  ]
+}
+
+imageset("vivaldi_history_empty") {
+  sources = [
+    "vivaldi_history_empty.imageset/Contents.json",
+    "vivaldi_history_empty.imageset/vivaldi_history_empty.pdf"
+  ]
+}
+
+imageset("bookmark_panel") {
+  sources = [
+    "bookmark_panel.imageset/Contents.json",
+    "bookmark_panel.imageset/bookmark_panel.pdf"
+  ]
+}
+
+imageset("history_panel") {
+  sources = [
+    "history_panel.imageset/Contents.json",
+    "history_panel.imageset/history_panel.pdf"
+  ]
+}
+
+imageset("notes_panel") {
+  sources = [
+    "notes_panel.imageset/Contents.json",
+    "notes_panel.imageset/notes_panel.pdf"
+  ]
+}
+
+imageset("bookmark_panel_active") {
+  sources = [
+    "bookmark_panel_active.imageset/Contents.json",
+    "bookmark_panel_active.imageset/bookmark_panel_active.pdf"
+  ]
+}
+
+imageset("history_panel_active") {
+  sources = [
+    "history_panel_active.imageset/Contents.json",
+    "history_panel_active.imageset/history_panel_active.pdf"
+  ]
+}
+
+imageset("notes_panel_active") {
+  sources = [
+    "notes_panel_active.imageset/Contents.json",
+    "notes_panel_active.imageset/notes_panel_active.pdf"
+  ]
+}

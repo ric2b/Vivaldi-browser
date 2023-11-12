@@ -7,14 +7,14 @@
  *     ChromeVox state, to avoid direct dependencies on the Background
  *     object and to facilitate mocking for tests.
  */
+import {constants} from '../../common/constants.js';
 import {CursorRange} from '../../common/cursors/range.js';
 import {BrailleKeyEvent} from '../common/braille/braille_key_types.js';
 import {NavBraille} from '../common/braille/nav_braille.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
 import {BridgeHelper} from '../common/bridge_helper.js';
-import {TtsSpeechProperties} from '../common/tts_interface.js';
+import {TtsSpeechProperties} from '../common/tts_types.js';
 
-import {TtsBackground} from './tts_background.js';
 import {UserActionMonitor} from './user_action_monitor.js';
 
 /**
@@ -43,6 +43,11 @@ export class ChromeVoxState {
     }
   }
 
+  /** @return {!Promise} */
+  static ready() {
+    return ChromeVoxState.readyPromise_;
+  }
+
   /** Can be overridden to initialize values and state when first created. */
   init() {}
 
@@ -56,11 +61,6 @@ export class ChromeVoxState {
    * @protected
    */
   getCurrentRange() {
-    return null;
-  }
-
-  /** @return {TtsBackground} */
-  get backgroundTts() {
     return null;
   }
 
@@ -101,12 +101,6 @@ export class ChromeVoxState {
    */
   set pageSel(newPageSel) {}
 
-  /** @return {number} */
-  get typingEcho() {}
-
-  /** @param {number} newTypingEcho */
-  set typingEcho(newTypingEcho) {}
-
   /**
    * Navigate to the given range - it both sets the range and outputs it.
    * @param {!CursorRange} range The new range.
@@ -130,11 +124,6 @@ export class ChromeVoxState {
    * @return {boolean} True if evt was processed.
    */
   onBrailleKeyEvent(evt, content) {}
-
-  /**
-   * Forces the reading of the next change to the clipboard.
-   */
-  readNextClipboardDataChange() {}
 }
 
 /** @type {ChromeVoxState} */
@@ -143,11 +132,16 @@ ChromeVoxState.instance;
 /** @type {!Array<ChromeVoxStateObserver>} */
 ChromeVoxState.observers = [];
 
+/** @type {!Object<string, constants.Point>} */
+ChromeVoxState.position = {};
+
+/** @protected {function()} */
+ChromeVoxState.resolveReadyPromise_;
+/** @private {!Promise} */
+ChromeVoxState.readyPromise_ =
+    new Promise(resolve => ChromeVoxState.resolveReadyPromise_ = resolve);
+
 BridgeHelper.registerHandler(
     BridgeConstants.ChromeVoxState.TARGET,
     BridgeConstants.ChromeVoxState.Action.CLEAR_CURRENT_RANGE,
     () => ChromeVoxState.instance.setCurrentRange(null));
-BridgeHelper.registerHandler(
-    BridgeConstants.ChromeVoxState.TARGET,
-    BridgeConstants.ChromeVoxState.Action.UPDATE_PUNCTUATION_ECHO,
-    echo => ChromeVoxState.instance.backgroundTts.updatePunctuationEcho(echo));

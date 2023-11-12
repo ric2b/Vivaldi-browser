@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/policy/policy_ui_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -35,8 +36,11 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
     {"labelAssetId", IDS_POLICY_LABEL_ASSET_ID},
     {"labelClientId", IDS_POLICY_LABEL_CLIENT_ID},
     {"labelDirectoryApiId", IDS_POLICY_LABEL_DIRECTORY_API_ID},
+    {"labelError", IDS_POLICY_LABEL_ERROR},
     {"labelGaiaId", IDS_POLICY_LABEL_GAIA_ID},
     {"labelIsAffiliated", IDS_POLICY_LABEL_IS_AFFILIATED},
+    {"labelLastCloudReportSentTimestamp",
+     IDS_POLICY_LABEL_LAST_CLOUD_REPORT_SENT_TIMESTAMP},
     {"labelLocation", IDS_POLICY_LABEL_LOCATION},
     {"labelMachineEnrollmentDomain",
      IDS_POLICY_LABEL_MACHINE_ENROLLMENT_DOMAIN},
@@ -48,6 +52,7 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
     {"labelIsOffHoursActive", IDS_POLICY_LABEL_IS_OFFHOURS_ACTIVE},
     {"labelPoliciesPush", IDS_POLICY_LABEL_PUSH_POLICIES},
     {"labelPrecedence", IDS_POLICY_LABEL_PRECEDENCE},
+    {"labelProfileId", IDS_POLICY_LABEL_PROFILE_ID},
     {"labelRefreshInterval", IDS_POLICY_LABEL_REFRESH_INTERVAL},
     {"labelStatus", IDS_POLICY_LABEL_STATUS},
     {"labelTimeSinceLastFetchAttempt",
@@ -70,14 +75,16 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
     {"showUnset", IDS_POLICY_SHOW_UNSET},
     {"signinProfile", IDS_POLICY_SIGNIN_PROFILE},
     {"status", IDS_POLICY_STATUS},
+    {"statusErrorManagedNoPolicy", IDS_POLICY_STATUS_ERROR_MANAGED_NO_POLICY},
     {"statusDevice", IDS_POLICY_STATUS_DEVICE},
     {"statusMachine", IDS_POLICY_STATUS_MACHINE},
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"statusUpdater", IDS_POLICY_STATUS_UPDATER},
 #endif
     {"statusUser", IDS_POLICY_STATUS_USER},
-    {"labelLastCloudReportSentTimestamp",
-     IDS_POLICY_LABEL_LAST_CLOUD_REPORT_SENT_TIMESTAMP},
+#if !BUILDFLAG(IS_CHROMEOS)
+    {"uploadReport", IDS_UPLOAD_REPORT},
+#endif  // !BUILDFLAG(IS_CHROMEOS)
   };
   source->AddLocalizedStrings(kStrings);
 

@@ -66,6 +66,7 @@ void AutozoomControllerImpl::Toggle() {
   SetState(state_ == cros::mojom::CameraAutoFramingState::OFF
                ? cros::mojom::CameraAutoFramingState::ON_SINGLE
                : cros::mojom::CameraAutoFramingState::OFF);
+  SystemNudgeController::RecordNudgeAction(NudgeCatalogName::kAutozoom);
 }
 
 void AutozoomControllerImpl::AddObserver(AutozoomObserver* observer) {
@@ -126,11 +127,12 @@ void AutozoomControllerImpl::InitFromUserPrefs() {
 
 void AutozoomControllerImpl::OnActiveClientChange(
     cros::mojom::CameraClientType type,
-    bool is_active) {
+    bool is_new_active_client,
+    const base::flat_set<std::string>& active_device_ids) {
   bool orig_control_enabled = IsAutozoomControlEnabled();
-  if (is_active) {
+  if (is_new_active_client) {
     active_camera_client_count_++;
-  } else {
+  } else if (active_device_ids.empty()) {
     DCHECK(active_camera_client_count_ > 0);
     active_camera_client_count_--;
   }

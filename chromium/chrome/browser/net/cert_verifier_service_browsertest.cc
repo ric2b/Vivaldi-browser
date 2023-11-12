@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/cert_verifier_configuration.h"
 #include "chrome/common/buildflags.h"
@@ -43,15 +44,17 @@ class CertVerifierServiceChromeRootStoreFeaturePolicyTest
 
   void SetPolicyValue(bool value) {
     policy::PolicyMap policies;
+#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
     SetPolicy(&policies, policy::key::kChromeRootStoreEnabled,
               base::Value(value));
+#endif
     UpdateProviderPolicy(policies);
   }
 
   void ExpectUseChromeRootStoreCorrect(bool use_chrome_root_store) {
     {
       cert_verifier::mojom::CertVerifierServiceParamsPtr params =
-          GetChromeCertVerifierServiceParams();
+          GetChromeCertVerifierServiceParams(/*local_state=*/nullptr);
       ASSERT_TRUE(params);
       EXPECT_EQ(use_chrome_root_store, params->use_chrome_root_store);
     }
@@ -61,7 +64,7 @@ class CertVerifierServiceChromeRootStoreFeaturePolicyTest
     SetPolicyValue(!use_chrome_root_store);
     {
       cert_verifier::mojom::CertVerifierServiceParamsPtr params =
-          GetChromeCertVerifierServiceParams();
+          GetChromeCertVerifierServiceParams(/*local_state=*/nullptr);
       ASSERT_TRUE(params);
       EXPECT_EQ(use_chrome_root_store, params->use_chrome_root_store);
     }

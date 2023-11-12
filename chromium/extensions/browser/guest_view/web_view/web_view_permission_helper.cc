@@ -6,36 +6,40 @@
 
 #include <utility>
 
+#include "app/vivaldi_apptools.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/metrics/user_metrics.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "components/guest_view/browser/guest_view_event.h"
-#include "content/public/browser/render_process_host.h"
-#include "extensions/browser/api/extensions_api_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_constants.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-#include "ppapi/buildflags/buildflags.h"
-#include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
-#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
-
-#include "app/vivaldi_apptools.h"
-#include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
+#include "components/custom_handlers/register_protocol_handler_permission_request.h"
+#include "components/guest_view/browser/guest_view_event.h"
+#include "components/guest_view/vivaldi_guest_view_constants.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/content/vivaldi_tab_check.h"
 
 using base::UserMetricsAction;
@@ -76,6 +80,8 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return "microphone_and_camera";
     case WEB_VIEW_PERMISSION_TYPE_SENSORS:
       return "sensors";
+    case WEB_VIEW_PROTOCOL_HANDLING:
+      return "protocol_handling";
     default:
       NOTREACHED();
       return std::string();
@@ -317,13 +323,97 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     }
   }
 
-  base::DictionaryValue request_info;
-  request_info.SetStringKey(guest_view::kUrl, request.security_origin.spec());
+  base::Value::Dict request_info;
+  request_info.Set(guest_view::kUrl, request.security_origin.spec());
   RequestPermission(
-      request_type, request_info,
+      request_type, std::move(request_info),
       base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
                      weak_factory_.GetWeakPtr(), request, std::move(callback)),
       default_media_access_permission_);
+}
+
+void WebViewPermissionHelper::RegisterProtocolHandler(
+    content::RenderFrameHost* requesting_frame,
+    const std::string& protocol,
+    const GURL& url,
+    bool user_gesture) {
+  custom_handlers::ProtocolHandler handler =
+      custom_handlers::ProtocolHandler::CreateProtocolHandler(
+          protocol, url, blink::ProtocolHandlerSecurityLevel::kStrict);
+
+  custom_handlers::ProtocolHandlerRegistry* registry =
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(
+          web_view_guest()->web_contents()->GetBrowserContext());
+
+  DCHECK(handler.IsValid());
+
+  if (registry->SilentlyHandleRegisterHandlerRequest(handler)) {
+    return;
+  }
+
+  auto* page_content_settings_delegate =
+      chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+          web_view_guest()->web_contents());
+
+  page_content_settings_delegate->set_pending_protocol_handler(handler);
+  page_content_settings_delegate->set_previous_protocol_handler(
+      registry->GetHandlerFor(handler.protocol()));
+
+  //base::DictionaryValue request_info;
+  base::Value::Dict request_info;
+  request_info.Set(guest_view::kUrl, url.spec());
+
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+
+  std::u16string protocolDisplay = handler.GetProtocolDisplayName();
+  request_info.Set(guest_view::kProtocolDisplayName, protocolDisplay);
+  request_info.Set(guest_view::kSuppressedPrompt, !user_gesture);
+  args->SetStringKey(webview::kPermission,
+                     PermissionTypeToString(WEB_VIEW_PROTOCOL_HANDLING));
+  WebViewPermissionType request_type = WEB_VIEW_PROTOCOL_HANDLING;
+
+  RequestPermission(
+      request_type, std::move(request_info),
+      base::BindOnce(&WebViewPermissionHelper::OnProtocolPermissionResponse,
+                     weak_factory_.GetWeakPtr()),
+      default_media_access_permission_);
+}
+
+void WebViewPermissionHelper::OnProtocolPermissionResponse(
+    bool allow,
+    const std::string& user_input) {
+  custom_handlers::ProtocolHandlerRegistry* registry =
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(
+          web_view_guest()->web_contents()->GetBrowserContext());
+
+  auto* content_settings =
+      chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+          web_view_guest()->web_contents());
+
+  auto pending_handler = content_settings->pending_protocol_handler();
+
+  if (allow) {
+    registry->RemoveIgnoredHandler(pending_handler);
+
+    registry->OnAcceptRegisterProtocolHandler(pending_handler);
+    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+        web_view_guest()->web_contents())
+        ->set_pending_protocol_handler_setting(CONTENT_SETTING_ALLOW);
+
+  } else {
+    registry->OnIgnoreRegisterProtocolHandler(pending_handler);
+    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+        web_view_guest()->web_contents())
+        ->set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
+
+    auto previous_handler = content_settings->previous_protocol_handler();
+
+    if (previous_handler.IsEmpty()) {
+      registry->ClearDefault(pending_handler.protocol());
+    } else {
+      registry->OnAcceptRegisterProtocolHandler(previous_handler);
+    }
+  }
 }
 
 bool WebViewPermissionHelper::CheckMediaAccessPermission(
@@ -439,7 +529,7 @@ void WebViewPermissionHelper::RequestFileSystemPermission(
 
 int WebViewPermissionHelper::RequestPermission(
     WebViewPermissionType permission_type,
-    const base::DictionaryValue& request_info,
+    base::Value::Dict request_info,
     PermissionResponseCallback callback,
     bool allowed_by_default) {
   // If there are too many pending permission requests then reject this request.
@@ -449,7 +539,7 @@ int WebViewPermissionHelper::RequestPermission(
     // objects held by the permission request are not destroyed immediately
     // after creation. This is to allow those same objects to be accessed again
     // in the same scope without fear of use after freeing.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), allowed_by_default, std::string()));
     return webview::kInvalidPermissionRequestID;
@@ -458,9 +548,9 @@ int WebViewPermissionHelper::RequestPermission(
   int request_id = next_permission_request_id_++;
   pending_permission_requests_[request_id] = PermissionResponseInfo(
       std::move(callback), permission_type, allowed_by_default);
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetKey(webview::kRequestInfo, request_info.Clone());
-  args->SetIntKey(webview::kRequestId, request_id);
+  base::Value::Dict args;
+  args.Set(webview::kRequestInfo, std::move(request_info));
+  args.Set(webview::kRequestId, request_id);
   switch (permission_type) {
     case WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW: {
       web_view_guest_->DispatchEventToView(std::make_unique<GuestViewEvent>(
@@ -473,8 +563,7 @@ int WebViewPermissionHelper::RequestPermission(
       break;
     }
     default: {
-      args->SetStringKey(webview::kPermission,
-                         PermissionTypeToString(permission_type));
+      args.Set(webview::kPermission, PermissionTypeToString(permission_type));
       web_view_guest_->DispatchEventToView(std::make_unique<GuestViewEvent>(
           webview::kEventPermissionRequest, std::move(args)));
       break;

@@ -7,6 +7,7 @@
 #import <LocalAuthentication/LAContext.h>
 #import <memory>
 
+#import "base/mac/foundation_util.h"
 #import "base/memory/ptr_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
@@ -34,6 +35,7 @@
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/components/security_interstitials/https_only_mode/feature.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -56,8 +58,6 @@ BOOL DeviceSupportsAuthentication() {
 }
 
 struct PrivacyTableViewControllerTestConfig {
-  // Tests should run with Enhanced Protection flag enabled.
-  bool enhancedProtectionEnabled;
   // Tests should run with Third-party intents in Incognito flag enabled.
   bool thirdPartyIntentsInIncognitoEnabled;
   // Available of Incognito mode tests should run with.
@@ -92,15 +92,6 @@ class PrivacyTableViewControllerTest
     std::pair<std::vector<base::test::FeatureRef>,
               std::vector<base::test::FeatureRef>>
         enabledDisabledFeatures;
-
-    // Explicitly enable/disable Enhanced Protection flag.
-    if (GetParam().enhancedProtectionEnabled) {
-      enabledDisabledFeatures.first.push_back(
-          safe_browsing::kEnhancedProtection);
-    } else {
-      enabledDisabledFeatures.second.push_back(
-          safe_browsing::kEnhancedProtection);
-    }
 
     // Explicitly enable/disable Third-party intents in Incognito flag.
     if (GetParam().thirdPartyIntentsInIncognitoEnabled) {
@@ -144,6 +135,8 @@ class PrivacyTableViewControllerTest
       [[NSUserDefaults standardUserDefaults]
           removeObjectForKey:kSpdyProxyEnabled];
     }
+    [base::mac::ObjCCastStrict<PrivacyTableViewController>(controller())
+        settingsWillBeDismissed];
     ChromeTableViewControllerTest::TearDown();
   }
 
@@ -186,8 +179,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 3;
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
+  int expectedNumberOfSections = 4;
+  if (base::FeatureList::IsEnabled(
+          security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
   if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
@@ -203,12 +197,19 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
       currentSection, 0);
 
   // SafeBrowsing section.
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
+  currentSection++;
+  EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
+  CheckTextCellTextAndDetailText(
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_SAFE_BROWSING_TITLE),
+      SafeBrowsingDetailText(), 1, 0);
+
+  // HTTPS-Only Mode section.
+  if (base::FeatureList::IsEnabled(
+          security_interstitials::features::kHttpsOnlyMode)) {
     currentSection++;
-    EXPECT_EQ(currentSection, NumberOfItemsInSection(1));
-    CheckTextCellTextAndDetailText(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_SAFE_BROWSING_TITLE),
-        SafeBrowsingDetailText(), 1, 0);
+    EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
+    CheckSwitchCellStateAndTextWithId(
+        NO, IDS_IOS_SETTINGS_HTTPS_ONLY_MODE_TITLE, currentSection, 0);
   }
 
   // WebServices section.
@@ -254,15 +255,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   }
 
   // Testing section index and text of the privacy footer.
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
-        /* section= */ expectedNumberOfSections - 1);
-  } else {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
-        /* section= */ 0);
-  }
+  CheckSectionFooter(
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
+      /* section= */ expectedNumberOfSections - 1);
 }
 
 // Tests PrivacyTableViewController sets the correct privacy footer for a
@@ -274,8 +269,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncDisabled) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 3;
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
+  int expectedNumberOfSections = 4;
+  if (base::FeatureList::IsEnabled(
+          security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
   if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
@@ -284,15 +280,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncDisabled) {
   EXPECT_EQ(expectedNumberOfSections, NumberOfSections());
 
   // Testing section index and text of the privacy footer.
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
-        /* section= */ expectedNumberOfSections - 1);
-  } else {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
-        /* section= */ 0);
-  }
+  CheckSectionFooter(
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
+      /* section= */ expectedNumberOfSections - 1);
 }
 
 // Tests PrivacyTableViewController sets the correct privacy footer for a
@@ -305,8 +295,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncEnabled) {
   CreateController();
   CheckController();
 
-  int expectedNumberOfSections = 3;
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
+  int expectedNumberOfSections = 4;
+  if (base::FeatureList::IsEnabled(
+          security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
   if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
@@ -315,15 +306,9 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncEnabled) {
   EXPECT_EQ(expectedNumberOfSections, NumberOfSections());
 
   // Testing section index and text of the privacy footer.
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_SYNC_AND_GOOGLE_SERVICES_FOOTER),
-        /* section= */ expectedNumberOfSections - 1);
-  } else {
-    CheckSectionFooter(
-        l10n_util::GetNSString(IDS_IOS_PRIVACY_SYNC_AND_GOOGLE_SERVICES_FOOTER),
-        /* section= */ 0);
-  }
+  CheckSectionFooter(
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_SYNC_AND_GOOGLE_SERVICES_FOOTER),
+      /* section= */ expectedNumberOfSections - 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -331,27 +316,21 @@ INSTANTIATE_TEST_SUITE_P(
     PrivacyTableViewControllerTest,
     testing::Values(
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ false,
             /* thirdPartyIntentsInIncognitoEnabled= */ false,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ true,
             /* thirdPartyIntentsInIncognitoEnabled= */ false,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ false,
             /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ true,
             /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ true,
             /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kDisabled},
         PrivacyTableViewControllerTestConfig{
-            /* enhancedProtectionEnabled= */ true,
             /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kForced}));
 

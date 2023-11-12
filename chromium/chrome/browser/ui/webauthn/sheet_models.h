@@ -152,6 +152,20 @@ class AuthenticatorNoAvailableTransportsErrorModel
   std::u16string GetStepDescription() const override;
 };
 
+class AuthenticatorNoPasskeysErrorModel : public AuthenticatorSheetModelBase {
+ public:
+  using AuthenticatorSheetModelBase::AuthenticatorSheetModelBase;
+
+ private:
+  // AuthenticatorSheetModelBase:
+  bool IsBackButtonVisible() const override;
+  std::u16string GetCancelButtonLabel() const override;
+  const gfx::VectorIcon& GetStepIllustration(
+      ImageColorScheme color_scheme) const override;
+  std::u16string GetStepTitle() const override;
+  std::u16string GetStepDescription() const override;
+};
+
 class AuthenticatorNotRegisteredErrorModel
     : public AuthenticatorSheetModelBase {
  public:
@@ -315,7 +329,6 @@ class AuthenticatorPaaskSheetModel : public AuthenticatorSheetModelBase {
   std::u16string GetStepDescription() const override;
   ui::MenuModel* GetOtherMechanismsMenuModel() override;
   void OnBack() override;
-  bool IsOtherMechanismButtonVisible() const override;
 
   std::unique_ptr<OtherMechanismsMenuModel> other_mechanisms_menu_model_;
 };
@@ -336,7 +349,6 @@ class AuthenticatorAndroidAccessorySheetModel
   std::u16string GetStepTitle() const override;
   std::u16string GetStepDescription() const override;
   ui::MenuModel* GetOtherMechanismsMenuModel() override;
-  bool IsOtherMechanismButtonVisible() const override;
 
   std::unique_ptr<OtherMechanismsMenuModel> other_mechanisms_menu_model_;
 };

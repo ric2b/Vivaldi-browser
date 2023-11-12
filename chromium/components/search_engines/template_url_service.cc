@@ -13,6 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
+#include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -1029,6 +1030,37 @@ GURL TemplateURLService::GenerateSearchURLForDefaultSearchProvider(
                           : GURL();
 }
 
+absl::optional<TemplateURLService::SearchMetadata>
+TemplateURLService::ExtractSearchMetadata(const GURL& url) const {
+  if (!loaded()) {
+    return absl::nullopt;
+  }
+
+  const TemplateURL* template_url = GetTemplateURLForHost(url.host());
+
+  std::u16string search_terms;
+  bool is_valid_search_url = template_url &&
+                             template_url->ExtractSearchTermsFromURL(
+                                 url, search_terms_data(), &search_terms) &&
+                             !search_terms.empty();
+  if (!is_valid_search_url) {
+    return absl::nullopt;
+  }
+
+  const std::u16string& normalized_search_query =
+      base::i18n::ToLower(base::CollapseWhitespace(search_terms, false));
+  TemplateURLRef::SearchTermsArgs search_terms_args(normalized_search_query);
+  const TemplateURLRef& search_url_ref = template_url->url_ref();
+  if (!search_url_ref.SupportsReplacement(search_terms_data())) {
+    return absl::nullopt;
+  }
+
+  return SearchMetadata{
+      GURL(search_url_ref.ReplaceSearchTerms(search_terms_args,
+                                             search_terms_data())),
+      base::i18n::ToLower(base::CollapseWhitespace(search_terms, false))};
+}
+
 bool TemplateURLService::IsSideSearchSupportedForDefaultSearchProvider() const {
   const TemplateURL* default_provider = GetDefaultSearchProvider();
   return default_provider && default_provider->IsSideSearchSupported();
@@ -1097,10 +1129,11 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
   DCHECK(!prepopulated_urls.empty());
   std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> dsp;
   std::transform(default_search_provider_.begin(),
-                 default_search_provider_.end(), dsp.begin(),
-                 [](const raw_ptr<TemplateURL>& ptr) { return ptr.get(); });
+    default_search_provider_.end(), dsp.begin(),
+    [](const raw_ptr<TemplateURL, DanglingUntriaged>& ptr) { return ptr.get(); });
   ActionsFromCurrentData actions(CreateActionsFromCurrentPrepopulateData(
       &prepopulated_urls, template_urls_, dsp));
+
   // Remove items.
   for (auto i = actions.removed_engines.begin();
        i < actions.removed_engines.end(); ++i)
@@ -1770,8 +1803,8 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
 
   // Past bugs might have caused either of these fields to be empty.  Just
   // delete this data off the server.
-  // Vivaldi addition: We use the unique position filed to detect turls added to
-  // sync before we started actively using the template url code for ourselves-
+  // Vivaldi addition: We use the unique position field to detect turls added to
+  // sync before we started actively using the template url code for ourselves.
   // Any of those old turls can be disposed of.
   if (specifics.url().empty() || specifics.sync_guid().empty() || (!specifics.unique_position().has_custom_compressed_v1() && !existing_turl)) {
     change_list->push_back(

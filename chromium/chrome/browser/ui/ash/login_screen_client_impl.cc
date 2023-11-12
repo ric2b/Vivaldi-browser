@@ -20,8 +20,6 @@
 #include "chrome/browser/ash/login/login_auth_recorder.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/reauth_stats.h"
-#include "chrome/browser/ash/login/saml/in_session_password_sync_manager.h"
-#include "chrome/browser/ash/login/saml/in_session_password_sync_manager_factory.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/login_display_host_webui.h"
@@ -31,8 +29,8 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/ash/in_session_password_change/lock_screen_reauth_dialogs.h"
-#include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
+#include "chrome/browser/ui/webui/ash/lock_screen_reauth/lock_screen_reauth_dialogs.h"
+#include "chrome/browser/ui/webui/ash/login/l10n_util.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/ash/components/settings/cros_settings_provider.h"
@@ -40,6 +38,7 @@
 #include "components/user_manager/remove_user_delegate.h"
 #include "components/user_manager/user_names.h"
 #include "ui/base/ime/ash/input_method_manager.h"
+
 namespace {
 using ash::SupervisedAction;
 
@@ -153,7 +152,7 @@ ash::ParentCodeValidationResult LoginScreenClientImpl::ValidateParentAccessCode(
     const AccountId& account_id,
     const std::string& access_code,
     base::Time validation_time) {
-  return chromeos::parent_access::ParentAccessService::Get()
+  return ash::parent_access::ParentAccessService::Get()
       .ValidateParentAccessCode(account_id, access_code, validation_time);
 }
 
@@ -219,7 +218,7 @@ void LoginScreenClientImpl::ShowGaiaSignin(const AccountId& prefilled_account) {
   auto supervised_action = prefilled_account.empty()
                                ? SupervisedAction::kAddUser
                                : SupervisedAction::kReauth;
-  if (chromeos::parent_access::ParentAccessService::Get().IsApprovalRequired(
+  if (ash::parent_access::ParentAccessService::Get().IsApprovalRequired(
           supervised_action)) {
     // Show the client native parent access widget and processed to GAIA signin
     // flow in |OnParentAccessValidation| when validation success.
@@ -268,7 +267,7 @@ void LoginScreenClientImpl::LaunchPublicSession(
 void LoginScreenClientImpl::RequestPublicSessionKeyboardLayouts(
     const AccountId& account_id,
     const std::string& locale) {
-  chromeos::GetKeyboardLayoutsForLocale(
+  ash::GetKeyboardLayoutsForLocale(
       base::BindOnce(&LoginScreenClientImpl::SetPublicSessionKeyboardLayout,
                      weak_ptr_factory_.GetWeakPtr(), account_id, locale),
       locale, ash::input_method::InputMethodManager::Get());
@@ -406,16 +405,10 @@ void LoginScreenClientImpl::OnParentAccessValidation(
 void LoginScreenClientImpl::ShowGaiaSigninInternal(
     const AccountId& prefilled_account) {
   if (ash::LoginDisplayHost::default_host()) {
+    // Login screen case.
     ash::LoginDisplayHost::default_host()->ShowGaiaDialog(prefilled_account);
   } else {
-    const user_manager::User* user =
-        user_manager::UserManager::Get()->FindUser(prefilled_account);
-    Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(user);
-    DCHECK(session_manager::SessionManager::Get()->IsScreenLocked());
-    auto* password_sync_manager =
-        ash::InSessionPasswordSyncManagerFactory::GetForProfile(profile);
-    if (password_sync_manager) {
-      password_sync_manager->CreateAndShowDialog();
-    }
+    // Lock screen case.
+    ash::LockScreenStartReauthDialog::Show();
   }
 }

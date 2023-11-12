@@ -33,10 +33,13 @@
 #import "ios/chrome/browser/ui/badges/badge_view_controller.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
+#import "ios/chrome/browser/ui/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
+#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_consumer.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_mediator.h"
@@ -62,6 +65,7 @@
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
@@ -69,6 +73,14 @@
 #import "services/network/public/cpp/resource_request.h"
 #import "ui/base/device_form_factor.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_view_controller.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -98,8 +110,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
-// Coordinator for the omnibox popup.
-@property(nonatomic, strong) OmniboxPopupCoordinator* omniboxPopupCoordinator;
 // Mediator for the badges displayed in the LocationBar.
 @property(nonatomic, strong) BadgeMediator* badgeMediator;
 // ViewController for the badges displayed in the LocationBar.
@@ -161,6 +171,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   // clean up.
   self.viewController.dispatcher =
       static_cast<id<ActivityServiceCommands, ApplicationCommands,
+                     PopupMenuCommands, // Vivaldi
                      LoadQueryCommands, OmniboxCommands>>(
           self.browser->GetCommandDispatcher());
   self.viewController.voiceSearchEnabled =
@@ -175,6 +186,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       [[OmniboxCoordinator alloc] initWithBaseViewController:nil
                                                      browser:self.browser];
   self.omniboxCoordinator.editController = _editController.get();
+  self.omniboxCoordinator.presenterDelegate = self.popupPresenterDelegate;
   [self.omniboxCoordinator start];
 
   [self.omniboxCoordinator.managedViewController
@@ -187,15 +199,13 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       didMoveToParentViewController:self.viewController];
   self.viewController.offsetProvider = [self.omniboxCoordinator offsetProvider];
 
-  self.omniboxPopupCoordinator = [self.omniboxCoordinator
-      createPopupCoordinator:self.popupPresenterDelegate];
-  [self.omniboxPopupCoordinator start];
-
   // Create button factory that wil be used by the ViewController to get
   // BadgeButtons for a BadgeType.
   BadgeButtonFactory* buttonFactory = [[BadgeButtonFactory alloc] init];
   self.badgeViewController =
       [[BadgeViewController alloc] initWithButtonFactory:buttonFactory];
+  self.badgeViewController.layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
   [self.viewController addChildViewController:self.badgeViewController];
   [self.viewController setBadgeView:self.badgeViewController.view];
   [self.badgeViewController didMoveToParentViewController:self.viewController];
@@ -244,7 +254,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     return;
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
   // The popup has to be destroyed before the location bar.
-  [self.omniboxPopupCoordinator stop];
   [self.omniboxCoordinator stop];
   [self.badgeMediator disconnect];
   self.badgeMediator = nil;
@@ -265,11 +274,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (BOOL)omniboxPopupHasAutocompleteResults {
-  return self.omniboxPopupCoordinator.hasResults;
+  return self.omniboxCoordinator.popupCoordinator.hasResults;
 }
 
 - (BOOL)showingOmniboxPopup {
-  return self.omniboxPopupCoordinator.isOpen;
+  return self.omniboxCoordinator.popupCoordinator.isOpen;
 }
 
 - (BOOL)isOmniboxFirstResponder {
@@ -345,15 +354,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)focusOmnibox {
-  // TODO(crbug.com/931284): Temporary workaround for intermediate broken state
-  // in the NTP.  Remove this once crbug.com/899827 is fixed.
-  if (self.webState) {
-    NewTabPageTabHelper* NTPHelper =
-        NewTabPageTabHelper::FromWebState(self.webState);
-    if (NTPHelper && NTPHelper->IsActive() && NTPHelper->IgnoreLoadRequests()) {
-      return;
-    }
-  }
   // Dismiss the edit menu.
   [[UIMenuController sharedMenuController] hideMenu];
 
@@ -361,10 +361,16 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   // before focusing the omnibox.
   if (IsVisibleURLNewTabPage([self webState]) &&
       !self.browserState->IsOffTheRecord()) {
+
+    if (IsVivaldiRunning()) {
+      [self.omniboxCoordinator focusOmnibox];
+    } else {
     id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler =
         HandlerForProtocol(self.browser->GetCommandDispatcher(),
                            BrowserCoordinatorCommands);
     [browserCoordinatorCommandsHandler focusFakebox];
+    } // End Vivaldi
+
   } else {
     [self.omniboxCoordinator focusOmnibox];
   }
@@ -435,21 +441,18 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)searchCopiedImage {
+  __weak LocationBarCoordinator* weakSelf = self;
   ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
-      base::BindOnce(^(absl::optional<gfx::Image> optionalImage) {
-        if (!optionalImage) {
-          return;
-        }
-        UIImage* image = optionalImage.value().ToUIImage();
-        web::NavigationManager::WebLoadParams webParams =
-            ImageSearchParamGenerator::LoadParamsForImage(
-                image, ios::TemplateURLServiceFactory::GetForBrowserState(
-                           self.browser->GetBrowserState()));
-        UrlLoadParams params = UrlLoadParams::InCurrentTab(webParams);
+      base::BindOnce(^(absl::optional<gfx::Image> image) {
+        [weakSelf searchImage:std::move(image) usingLens:NO];
+      }));
+}
 
-        UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
-
-        [self cancelOmniboxEdit];
+- (void)lensCopiedImage {
+  __weak LocationBarCoordinator* weakSelf = self;
+  ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
+      base::BindOnce(^(absl::optional<gfx::Image> image) {
+        [weakSelf searchImage:std::move(image) usingLens:YES];
       }));
 }
 
@@ -461,6 +464,10 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)updateSearchByImageSupported:(BOOL)searchByImageSupported {
   self.viewController.searchByImageEnabled = searchByImageSupported;
+}
+
+- (void)updateLensImageSupported:(BOOL)lensImageSupported {
+  self.viewController.lensImageEnabled = lensImageSupported;
 }
 
 #pragma mark - LocationBarSteadyViewConsumer
@@ -541,5 +548,95 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       addInteraction:[[UIDragInteraction alloc]
                          initWithDelegate:self.dragDropHandler]];
 }
+
+- (void)searchImage:(absl::optional<gfx::Image>)optionalImage
+          usingLens:(BOOL)usingLens {
+  if (!optionalImage)
+    return;
+
+  // If the Browser has been destroyed, then the UI should
+  // no longer be active. Return early to avoid crashing.
+  Browser* browser = self.browser;
+  if (!browser)
+    return;
+
+  UIImage* image = optionalImage->ToUIImage();
+  if (usingLens) {
+    id<LensCommands> handler =
+        HandlerForProtocol(browser->GetCommandDispatcher(), LensCommands);
+    SearchImageWithLensCommand* command = [[SearchImageWithLensCommand alloc]
+        initWithImage:image
+           entryPoint:LensEntrypoint::OmniboxPostCapture];
+    [handler searchImageWithLens:command];
+  } else {
+    web::NavigationManager::WebLoadParams webParams =
+        ImageSearchParamGenerator::LoadParamsForImage(
+            image, ios::TemplateURLServiceFactory::GetForBrowserState(
+                       browser->GetBrowserState()));
+    UrlLoadParams params = UrlLoadParams::InCurrentTab(webParams);
+    UrlLoadingBrowserAgent::FromBrowser(browser)->Load(params);
+  }
+
+  [self cancelOmniboxEdit];
+}
+
+
+#pragma mark - VIVALDI
+
+- (void)showTrackerBlockerManager {
+
+  web::WebState* currentWebState =
+      self.browser->GetWebStateList()->GetActiveWebState();
+
+  // In some cases it seems that the share sheet is triggered while no tab is
+  // present (probably due to a timing issue).
+  if (!currentWebState)
+    return;
+
+  // Retrieve the current page's URL.
+  __weak __typeof(self) weakSelf = self;
+  GURL visibleURL = self.webState->GetVisibleURL();
+  activity_services::RetrieveCanonicalUrl(self.webState,
+    base::BindOnce(^(const GURL& URL) {
+      const GURL& pageURL = !URL.is_empty() ? URL : visibleURL;
+      if (!pageURL.is_valid() || !pageURL.SchemeIsHTTPOrHTTPS())
+        return;
+      NSString* urlString = base::SysUTF8ToNSString(pageURL.spec());
+      NSURL* nsURL = [NSURL URLWithString:urlString];
+      NSString* host = [nsURL host];
+      if (!host)
+        return;
+      [weakSelf presentTrackerBlockerManagerWithHost:host];
+    }));
+}
+
+- (void)presentTrackerBlockerManagerWithHost:(NSString*)host {
+  VivaldiATBSummeryViewController* controller =
+    [[VivaldiATBSummeryViewController alloc] initWithBrowser:self.browser
+                                                        host:host];
+  UINavigationController* navController =
+    [[UINavigationController alloc] initWithRootViewController:controller];
+
+  if (@available(iOS 15.0, *)) {
+    UISheetPresentationController* sheetPc =
+      navController.sheetPresentationController;
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                        UISheetPresentationControllerDetent.largeDetent];
+    sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+    sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+    [self.viewController presentViewController:navController
+                       animated:YES
+                     completion:nil];
+  } else {
+    [self.viewController presentViewController:navController
+                       animated:YES
+                     completion:nil];
+  }
+}
+
+- (id<ActivityServicePositioner>)activityServicePositioner {
+  return [self.viewController steadyView];
+}
+// End Vivaldi
 
 @end

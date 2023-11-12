@@ -15,10 +15,6 @@
 #include "media/filters/chunk_demuxer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-#include "base/files/file_path.h"
-#endif
-
 namespace media {
 
 // Indicates that the whole file should be appended.
@@ -37,11 +33,7 @@ class TestMediaSource {
   TestMediaSource(const std::string& filename,
                   const std::string& mimetype,
                   size_t initial_append_size,
-                  bool initial_sequence_mode = false
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-                  , const base::FilePath& full_filename = {}
-#endif
-  );
+                  bool initial_sequence_mode = false);
   // Same as the constructor above, but use GetMimeTypeForFile() to get the mime
   // type.
   TestMediaSource(const std::string& filename,
@@ -111,10 +103,6 @@ class TestMediaSource {
     expected_append_result_ = expectation;
   }
 
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  const base::FilePath file_path() { return file_path_; }
-#endif
-
   void InitSegmentReceived(std::unique_ptr<MediaTracks> tracks);
   MOCK_METHOD1(InitSegmentReceivedMock, void(std::unique_ptr<MediaTracks>&));
 
@@ -128,9 +116,6 @@ class TestMediaSource {
   size_t current_position_;
   size_t initial_append_size_;
   bool initial_sequence_mode_;
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  base::FilePath file_path_;
-#endif
   std::string mimetype_;
   raw_ptr<ChunkDemuxer> chunk_demuxer_;
   std::unique_ptr<Demuxer> owned_chunk_demuxer_;

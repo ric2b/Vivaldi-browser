@@ -36,20 +36,15 @@ namespace {
 
 const char kPerfCommandDelimiter[] = " ";
 
-const char kPerfCyclesCmd[] = "-- record -a -e cycles -c 1000003";
 const char kPerfCyclesHGCmd[] = "-- record -a -e cycles:HG -c 1000003";
-const char kPerfFPCallgraphCmd[] = "-- record -a -e cycles -g -c 4000037";
 const char kPerfFPCallgraphHGCmd[] = "-- record -a -e cycles:HG -g -c 4000037";
 const char kPerfLBRCallgraphCmd[] =
     "-- record -a -e cycles -c 6000011 --call-graph lbr";
-const char kPerfCyclesPPPCmd[] = "-- record -a -e cycles:ppp -c 1000003";
 const char kPerfCyclesPPPHGCmd[] = "-- record -a -e cycles:pppHG -c 1000003";
-const char kPerfFPCallgraphPPPCmd[] =
-    "-- record -a -e cycles:ppp -g -c 4000037";
 const char kPerfFPCallgraphPPPHGCmd[] =
     "-- record -a -e cycles:pppHG -g -c 4000037";
 const char kPerfLBRCallgraphPPPCmd[] =
-    "-- record -a -e cycles:ppp -c 4000037 --call-graph lbr";
+    "-- record -a -e cycles:ppp -c 6000011 --call-graph lbr";
 const char kPerfLBRCmd[] = "-- record -a -e r20c4 -b -c 800011";
 const char kPerfLBRCmdAtom[] = "-- record -a -e rc4 -b -c 800011";
 const char kPerfITLBMissCyclesCmdIvyBridge[] =
@@ -61,6 +56,14 @@ const char kPerfITLBMissCyclesCmdAtom[] =
 const char kPerfITLBMissCyclesCmdTremont[] = "-- record -a -e r1085 -c 30001";
 const char kPerfLLCMissesCmd[] = "-- record -a -e r412e -g -c 30007";
 const char kPerfLLCMissesPreciseCmd[] = "-- record -a -e r412e:pp -g -c 30007";
+const char kPerfDTLBMissesDAPGoldmont[] =
+    "-- record -a -e mem_uops_retired.dtlb_miss_loads:pp -c 2003 -d";
+const char kPerfDTLBMissesDAPTremont[] = "-- record -a -e r11d0:pp -c 2003 -d";
+const char kPerfDTLBMissesDAPHaswell[] =
+    "-- record -a -e mem_uops_retired.stlb_miss_loads:pp -c 2003 -d";
+const char kPerfDTLBMissesDAPSkylake[] =
+    "-- record -a -e mem_inst_retired.stlb_miss_loads:pp -c 2003 -d";
+
 const char kPerfETMCmd[] =
     "--run_inject --inject_args inject;--itrace=i512il;--strip -- record -a -e "
     "cs_etm/autofdo/";
@@ -496,9 +499,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_IvyBridge) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   EXPECT_TRUE(base::Contains(cmds, kPerfLBRCmd,
                              &RandomSelector::WeightAndValue::value));
@@ -506,24 +509,6 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_IvyBridge) {
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdIvyBridge,
                              &RandomSelector::WeightAndValue::value));
-}
-
-TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_IvyBridge_HostAndGuest) {
-  feature_list_.InitAndEnableFeature(kCWPCollectionOnHostAndGuest);
-  CPUIdentity cpuid;
-  cpuid.arch = "x86_64";
-  cpuid.vendor = "GenuineIntel";
-  cpuid.family = 0x06;
-  cpuid.model = 0x3a;  // IvyBridge
-  cpuid.model_name = "";
-  cpuid.release = "3.8.11";
-  std::vector<RandomSelector::WeightAndValue> cmds =
-      internal::GetDefaultCommandsForCpuModel(cpuid, "");
-  ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
 }
 
 TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_SandyBridge) {
@@ -537,9 +522,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_SandyBridge) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   EXPECT_TRUE(base::Contains(cmds, kPerfLBRCmd,
                              &RandomSelector::WeightAndValue::value));
@@ -560,9 +545,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Haswell) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   // No LBR callstacks because the kernel is old.
   EXPECT_FALSE(base::Contains(cmds, kPerfLBRCallgraphCmd,
@@ -572,6 +557,8 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Haswell) {
   EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesCmd,
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdIvyBridge,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPHaswell,
                              &RandomSelector::WeightAndValue::value));
 }
 
@@ -586,9 +573,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Skylake) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 3UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   // We have both FP and LBR based callstacks.
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
   EXPECT_EQ(cmds[2].value, kPerfLBRCallgraphCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
@@ -598,35 +585,11 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Skylake) {
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdSkylake,
                              &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPSkylake,
+                             &RandomSelector::WeightAndValue::value));
 }
 
 TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Tigerlake) {
-  CPUIdentity cpuid;
-  cpuid.arch = "x86_64";
-  cpuid.vendor = "GenuineIntel";
-  cpuid.family = 0x06;
-  cpuid.model = 0x8C;  // Tigerlake
-  cpuid.model_name = "";
-  cpuid.release = "5.4.64";
-  std::vector<RandomSelector::WeightAndValue> cmds =
-      internal::GetDefaultCommandsForCpuModel(cpuid, "");
-  ASSERT_GE(cmds.size(), 3UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesPPPCmd);
-  // We have both FP and LBR based callstacks.
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[2].value, kPerfLBRCallgraphPPPCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
-  EXPECT_TRUE(base::Contains(cmds, kPerfLBRCmd,
-                             &RandomSelector::WeightAndValue::value));
-  EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesCmd,
-                             &RandomSelector::WeightAndValue::value));
-  EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdSkylake,
-                             &RandomSelector::WeightAndValue::value));
-}
-
-TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Tigerlake_HostAndGuest) {
-  feature_list_.InitAndEnableFeature(kCWPCollectionOnHostAndGuest);
   CPUIdentity cpuid;
   cpuid.arch = "x86_64";
   cpuid.vendor = "GenuineIntel";
@@ -643,6 +606,14 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Tigerlake_HostAndGuest) {
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
   EXPECT_EQ(cmds[2].value, kPerfLBRCallgraphPPPCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfLBRCmd,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesCmd,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdSkylake,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPSkylake,
+                             &RandomSelector::WeightAndValue::value));
 }
 
 TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Goldmont) {
@@ -656,9 +627,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Goldmont) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   // No LBR callstacks because the microarchitecture doesn't support it.
   EXPECT_FALSE(base::Contains(cmds, kPerfLBRCallgraphCmd,
@@ -668,6 +639,8 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Goldmont) {
   EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesPreciseCmd,
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdAtom,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPGoldmont,
                              &RandomSelector::WeightAndValue::value));
 }
 
@@ -682,9 +655,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_GoldmontPlus) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesPPPCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesPPPHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   // No LBR callstacks because the microarchitecture doesn't support it.
   EXPECT_FALSE(base::Contains(cmds, kPerfLBRCallgraphCmd,
@@ -694,6 +667,8 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_GoldmontPlus) {
   EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesPreciseCmd,
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdSkylake,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPGoldmont,
                              &RandomSelector::WeightAndValue::value));
 }
 
@@ -708,18 +683,19 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Tremont) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesPPPHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
-  // No LBR callstacks because the microarchitecture doesn't support it.
-  EXPECT_FALSE(base::Contains(cmds, kPerfLBRCallgraphCmd,
-                              &RandomSelector::WeightAndValue::value));
-  EXPECT_FALSE(base::Contains(cmds, kPerfLBRCmdAtom,
-                              &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfLBRCallgraphPPPCmd,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfLBRCmd,
+                             &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfLLCMissesPreciseCmd,
                              &RandomSelector::WeightAndValue::value));
   EXPECT_TRUE(base::Contains(cmds, kPerfITLBMissCyclesCmdTremont,
+                             &RandomSelector::WeightAndValue::value));
+  EXPECT_TRUE(base::Contains(cmds, kPerfDTLBMissesDAPTremont,
                              &RandomSelector::WeightAndValue::value));
 }
 
@@ -733,9 +709,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Excavator) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   EXPECT_FALSE(base::Contains(cmds, kPerfLLCMissesCmd,
                               &RandomSelector::WeightAndValue::value))
@@ -752,9 +728,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_Arm32) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   EXPECT_FALSE(
       base::Contains(cmds, kPerfLBRCmd, &RandomSelector::WeightAndValue::value))
@@ -786,23 +762,6 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_Arm64) {
       << "ARM64 does not support this command";
 }
 
-TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_Arm64_HostAndGuest) {
-  feature_list_.InitAndEnableFeature(kCWPCollectionOnHostAndGuest);
-  CPUIdentity cpuid;
-  cpuid.arch = "aarch64";
-  cpuid.vendor = "";
-  cpuid.family = 0;
-  cpuid.model = 0;
-  cpuid.model_name = "";
-  std::vector<RandomSelector::WeightAndValue> cmds =
-      internal::GetDefaultCommandsForCpuModel(cpuid, "");
-  ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
-  EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
-}
-
 TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_Arm64_ETM) {
   feature_list_.InitAndEnableFeature(kCWPCollectsETM);
   CPUIdentity cpuid;
@@ -832,9 +791,9 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_x86_32) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   ASSERT_GE(cmds.size(), 2UL);
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   EXPECT_FALSE(
       base::Contains(cmds, kPerfLBRCmd, &RandomSelector::WeightAndValue::value))
@@ -854,7 +813,7 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnArch_Unknown) {
   std::vector<RandomSelector::WeightAndValue> cmds =
       internal::GetDefaultCommandsForCpuModel(cpuid, "");
   EXPECT_EQ(1UL, cmds.size());
-  EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
+  EXPECT_EQ(cmds[0].value, kPerfCyclesHGCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
 }
 

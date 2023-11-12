@@ -54,7 +54,10 @@ source_set("lib") {
     "regkey.h",
   ]
 
-  deps = [ "//build:branding_buildflags" ]
+  deps = [
+    "//build:branding_buildflags",
+    "//chrome/browser/chrome_for_testing:buildflags",
+  ]
 
   if (skip_archive_compression) {
     defines = [ "SKIP_ARCHIVE_COMPRESSION" ]
@@ -143,7 +146,7 @@ action("mini_installer_archive") {
     "--resource_file_path",
     rebase_path(packed_files_rc_file, root_build_dir),
     "--target_arch=$current_cpu",
-    "--distribution=_${branding_path_component}",
+    "--distribution=_${branding_path_product}",
     "--output_dir",
     rebase_path(root_out_dir, root_build_dir),
     "--chrome_runtime_deps",

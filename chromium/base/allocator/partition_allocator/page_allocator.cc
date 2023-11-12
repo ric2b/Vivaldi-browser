@@ -350,7 +350,9 @@ bool ReserveAddressSpace(size_t size) {
   internal::ScopedGuard guard(GetReserveLock());
   if (!s_reservation_address) {
     uintptr_t mem = internal::SystemAllocPages(
-        0, size, PageAccessibilityConfiguration::kInaccessible,
+        0, size,
+        PageAccessibilityConfiguration(
+            PageAccessibilityConfiguration::kInaccessible),
         PageTag::kChromium);
     if (mem) {
       // We guarantee this alignment when reserving address space.
@@ -387,5 +389,19 @@ uint32_t GetAllocPageErrorCode() {
 size_t GetTotalMappedSize() {
   return g_total_mapped_address_space;
 }
+
+#if BUILDFLAG(IS_WIN)
+namespace {
+bool g_retry_on_commit_failure = false;
+}
+
+void SetRetryOnCommitFailure(bool retry_on_commit_failure) {
+  g_retry_on_commit_failure = retry_on_commit_failure;
+}
+
+bool GetRetryOnCommitFailure() {
+  return g_retry_on_commit_failure;
+}
+#endif
 
 }  // namespace partition_alloc

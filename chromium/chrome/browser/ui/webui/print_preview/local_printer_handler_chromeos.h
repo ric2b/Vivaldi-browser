@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
@@ -49,7 +50,7 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
 
   // Returns a LocalDestinationInfo object (defined in
   // chrome/browser/resources/print_preview/data/local_parsers.js).
-  static base::Value PrinterToValue(
+  static base::Value::Dict PrinterToValue(
       const crosapi::mojom::LocalDestinationInfo& printer);
 
   // Returns a CapabilitiesResponse object (defined in
@@ -84,6 +85,11 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
                               scoped_refptr<base::RefCountedMemory> print_data,
                               PrinterHandler::PrintCallback callback,
                               const absl::optional<std::string>& username);
+  void OnOAuthTokenReady(
+      base::Value::Dict settings,
+      scoped_refptr<base::RefCountedMemory> print_data,
+      PrinterHandler::PrintCallback callback,
+      crosapi::mojom::GetOAuthAccessTokenResultPtr oauth_result);
 
   const raw_ptr<content::WebContents> preview_web_contents_;
   raw_ptr<crosapi::mojom::LocalPrinter> local_printer_ = nullptr;

@@ -7,16 +7,22 @@
 #include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/system/message_center/ash_message_popup_collection.h"
+#include "ash/system/message_center/ash_notification_view.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animation_stopped_waiter.h"
+#include "ui/events/test/event_generator.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/message_center/views/message_popup_view.h"
+#include "ui/views/animation/slide_out_controller.h"
 
 using message_center::kIdSuffixForGroupContainerNotification;
 using message_center::MessageCenter;
@@ -71,6 +77,7 @@ class NotificationGroupingControllerTest : public AshTestBase {
     message_center::NotifierId notifier_id;
     notifier_id.profile_id = "abc@gmail.com";
     notifier_id.type = message_center::NotifierType::WEB_PAGE;
+    notifier_id.url = origin_url;
     auto notification = std::make_unique<Notification>(
         message_center::NOTIFICATION_TYPE_SIMPLE, id_out,
         u"id" + base::NumberToString16(notifications_counter_),
@@ -94,6 +101,30 @@ class NotificationGroupingControllerTest : public AshTestBase {
         message_center::RichNotificationData(), nullptr);
     notifications_counter_++;
     return notification;
+  }
+
+  void GenerateGestureEvent(const ui::GestureEventDetails& details,
+                            views::SlideOutController* slide_out_controller) {
+    ui::GestureEvent gesture_event(0, 0, ui::EF_NONE, base::TimeTicks(),
+                                   details);
+    slide_out_controller->OnGestureEvent(&gesture_event);
+
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void GenerateSwipe(int swipe_amount,
+                     views::SlideOutController* slide_out_controller) {
+    GenerateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN),
+                         slide_out_controller);
+    GenerateGestureEvent(
+        ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, swipe_amount, 0),
+        slide_out_controller);
+    GenerateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_END),
+                         slide_out_controller);
+  }
+
+  views::SlideOutController* GetSlideOutController(AshNotificationView* view) {
+    return view->slide_out_controller_for_test();
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -354,6 +385,130 @@ TEST_F(NotificationGroupingControllerTest,
   // Make sure the second notification is still there.
   EXPECT_FALSE(message_center->FindNotificationById(id0));
   EXPECT_TRUE(message_center->FindNotificationById(id1));
+}
+
+// Regression test for b/251686768. Tests that a grouped notification is
+// correctly dismissed when swiped in the collapse state rather than moved into
+// the center of the screen. Also, tests that the correct notifications are
+// dismissed by swiping in the expanded state.
+TEST_F(NotificationGroupingControllerTest, NotificationSwipeGestureBehavior) {
+  auto* message_center = MessageCenter::Get();
+  std::string parent_id, id0, id1, id2, id3;
+  const GURL url(u"http://test-url.com/");
+
+  id0 = AddNotificationWithOriginUrl(url);
+  id1 = AddNotificationWithOriginUrl(url);
+  id2 = AddNotificationWithOriginUrl(url);
+  id3 = AddNotificationWithOriginUrl(url);
+
+  parent_id = id0 + kIdSuffixForGroupContainerNotification;
+
+  AshNotificationView* parent_message_view = static_cast<AshNotificationView*>(
+      GetPopupView(parent_id)->message_view());
+
+  auto* message_view_2 =
+      GetPopupView(parent_id)->message_view()->FindGroupNotificationView(id2);
+  auto* message_view_3 =
+      GetPopupView(parent_id)->message_view()->FindGroupNotificationView(id3);
+
+  parent_message_view->ToggleExpand();
+  EXPECT_TRUE(parent_message_view->IsExpanded());
+
+  // Swiping out a group child notification while the parent notification is
+  // expanded should only slide and remove the group child notification.
+  GenerateSwipe(300, GetSlideOutController(
+                         static_cast<AshNotificationView*>(message_view_3)));
+  EXPECT_FALSE(message_center->FindNotificationById(id3));
+  EXPECT_TRUE(message_center->FindNotificationById(parent_id));
+
+  parent_message_view->ToggleExpand();
+  EXPECT_FALSE(parent_message_view->IsExpanded());
+
+  // Swiping out a group child notification while the parent notification is
+  // collapsed should slide and remove the entire group notification including
+  // the parent and other child notifications.
+  GenerateSwipe(300, GetSlideOutController(
+                         static_cast<AshNotificationView*>(message_view_2)));
+
+  EXPECT_FALSE(message_center->FindNotificationById(parent_id));
+  EXPECT_FALSE(message_center->FindNotificationById(id1));
+  EXPECT_FALSE(message_center->FindNotificationById(id2));
+}
+
+// Regression test for b/251684908. Tests that a duplicate `AddNotification`
+// event does not cause the associated notification popup to be dismissed or the
+// original notification to be grouped incorrectly.
+TEST_F(NotificationGroupingControllerTest, DuplicateAddNotificationNotGrouped) {
+  std::string id = AddNotificationWithOriginUrl(GURL(u"http://test-url.com/"));
+
+  auto* popup = GetPopupView(id);
+  EXPECT_TRUE(popup->GetVisible());
+
+  auto* message_center = message_center::MessageCenter::Get();
+
+  // Add a copy of the original notification.
+  auto* original_notification = message_center->FindNotificationById(id);
+  message_center->AddNotification(
+      std::make_unique<Notification>(*original_notification));
+
+  // Add a new notification to force an update to all notification popups.
+  AddNotificationWithOriginUrl(GURL(u"http://other-url.com/"));
+
+  // Make sure the popup for the `original_notification` still exists and is
+  // visible. Also, make sure the `original_notification` was not grouped.
+  EXPECT_TRUE(GetPopupView(id));
+  EXPECT_TRUE(popup->GetVisible());
+  EXPECT_FALSE(message_center->FindNotificationById(id)->group_child());
+}
+
+TEST_F(NotificationGroupingControllerTest, ChildNotificationUpdate) {
+  auto* message_center = MessageCenter::Get();
+  std::string id0, id1, id2;
+  const GURL url(u"http://test-url.com/");
+  id0 = AddNotificationWithOriginUrl(url);
+  id1 = AddNotificationWithOriginUrl(url);
+
+  EXPECT_TRUE(message_center->FindNotificationById(id0)->group_child());
+
+  // Update the notification.
+  auto notification = MakeNotification(id2, url);
+  auto updated_notification =
+      std::make_unique<Notification>(id0, *notification.get());
+  message_center->UpdateNotification(id0, std::move(updated_notification));
+
+  // Make sure the updated notification is still a group child.
+  EXPECT_TRUE(message_center->FindNotificationById(id0)->group_child());
+}
+
+// When the last child of the group notification is removed, its parent
+// notification should be removed as well. We are testing in the case where
+// there is no popup or notification center is not showing.
+TEST_F(NotificationGroupingControllerTest, ChildNotificationRemove) {
+  auto* message_center = MessageCenter::Get();
+  std::string id0, id1;
+  const GURL url(u"http://test-url.com/");
+  id0 = AddNotificationWithOriginUrl(url);
+  id1 = AddNotificationWithOriginUrl(url);
+  std::string id_parent = id0 + kIdSuffixForGroupContainerNotification;
+
+  // Toggle the system tray to dismiss all popups.
+  GetPrimaryUnifiedSystemTray()->ShowBubble();
+  GetPrimaryUnifiedSystemTray()->CloseBubble();
+
+  EXPECT_EQ(3u, message_center->GetVisibleNotifications().size());
+
+  // Remove one child. Parent notification is still retained.
+  message_center->RemoveNotification(id1, /*by_user=*/false);
+  EXPECT_EQ(2u, message_center->GetVisibleNotifications().size());
+  EXPECT_TRUE(message_center->FindNotificationById(id_parent));
+  EXPECT_FALSE(message_center->FindNotificationById(id1));
+  EXPECT_TRUE(message_center->FindNotificationById(id0));
+
+  // Remove the last child notification. Parent notification should be removed.
+  message_center->RemoveNotification(id0, /*by_user=*/false);
+  EXPECT_EQ(0u, message_center->GetVisibleNotifications().size());
+  EXPECT_FALSE(message_center->FindNotificationById(id_parent));
+  EXPECT_FALSE(message_center->FindNotificationById(id0));
 }
 
 }  // namespace ash

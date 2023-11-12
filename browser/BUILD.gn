@@ -19,6 +19,7 @@ static_library("browser") {
     ]
   }
   deps = [
+    ":default_bookmarks",
     "//vivaldi/prefs:browser_prefs",
 
     #"//vivaldi/base",
@@ -33,16 +34,13 @@ static_library("browser") {
     "//chrome/common:buildflags",
     "//chrome/common:non_code_constants",
 
-    "//components/bookmarks/browser",
     "//components/keyed_service/content",
-    "//components/metrics:metrics",
     "//components/os_crypt:os_crypt",
     "//components/renderer_context_menu",
     "//components/search_engines",
     "//components/strings:components_chromium_strings",
     "//components/strings:components_google_chrome_strings",
     "//components/strings:components_strings",
-    "//components/version_info:generate_version_info",
    # "//content/browser",
     "//crypto:crypto",
     "//skia:skia",
@@ -74,10 +72,6 @@ static_library("browser") {
     ]
   }
   sources = [
-    "stats_reporter_impl.cc",
-    "stats_reporter_impl.h",
-    "stats_reporter.cc",
-    "stats_reporter.h",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
     "../components/ping_block/ping_block.cc",
@@ -86,34 +80,15 @@ static_library("browser") {
     "translate/vivaldi_translate_language_list.h",
     "translate/vivaldi_translate_server_request.cc",
     "translate/vivaldi_translate_server_request.h",
-    "vivaldi_default_bookmarks.cc",
-    "vivaldi_default_bookmarks.h",
-    "vivaldi_gitignore.cc",
     "translate/vivaldi_translate_client.cc",
     "translate/vivaldi_translate_client.h",
     "translate/vivaldi_translate_frame_binder.cc",
     "translate/vivaldi_translate_frame_binder.h",
+    "vivaldi_default_bookmarks_updater_client_impl.cc",
+    "vivaldi_default_bookmarks_updater_client_impl.h",
+    "vivaldi_gitignore.cc",
   ]
-  if (is_android) {
-    sources += [
-      "stats_reporter_impl_android.cc",
-    ]
-  }
-  if (is_linux) {
-    sources += [
-      "stats_reporter_impl_linux.cc",
-    ]
-  }
-  if (is_mac) {
-    sources += [
-      "stats_reporter_impl_mac.mm",
-    ]
-  }
-  if (is_win) {
-    sources += [
-      "stats_reporter_impl_win.cc",
-    ]
-  }
+
   if (!is_android) {
     sources += [
       "../app/vivaldi_command_controller.cpp",
@@ -189,4 +164,89 @@ source_set("init_sparkle") {
     "//base:base_static",
     "//url",
   ]
+}
+
+source_set("default_bookmarks") {
+  sources = [
+    "vivaldi_default_bookmarks.cc",
+    "vivaldi_default_bookmarks.h",
+    "removed_partners_tracker.cc",
+    "removed_partners_tracker.h",
+  ]
+
+  public_deps=[
+    "//vivaldi/components/bookmarks:bookmark_locales_include",
+    "//components/bookmarks/browser",
+  ]
+
+  deps= [
+    "//base:base",
+    "//components/favicon/core",
+    "//components/prefs",
+    "//ui/base",
+    "//vivaldi/components/datasource:resource_reader",
+    "//vivaldi/prefs:prefs_files_generator",
+  ]
+}
+
+source_set("stats_reporter") {
+  sources= [
+    "stats_reporter_impl.cc",
+    "stats_reporter_impl.h",
+    "stats_reporter.cc",
+    "stats_reporter.h",
+  ]
+
+  if (is_android) {
+    sources += [
+      "stats_reporter_impl_android.cc",
+    ]
+  }
+  if (is_linux) {
+    sources += [
+      "stats_reporter_impl_linux.cc",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "stats_reporter_impl_mac.mm",
+    ]
+  }
+  if (is_win) {
+    sources += [
+      "stats_reporter_impl_win.cc",
+    ]
+  }
+
+  deps= [
+    "//base",
+    "//components/metrics",
+    "//components/prefs",
+    "//components/version_info:generate_version_info",
+    "//net",
+    "//net/traffic_annotation",
+    "//services/network/public/cpp",
+    "//ui/display:display",
+    "//vivaldi/prefs:prefs_strings",
+  ]
+
+  if (!is_ios) {
+    sources += [
+      "stats_reporter_impl_content.cc",
+    ]
+
+    deps += [
+      "//chrome/browser:browser_process",
+      "//components/embedder_support:browser_util",
+    ]
+  } else {
+    sources += [
+      "stats_reporter_impl_ios.mm",
+    ]
+
+    deps += [
+      "//ios/chrome/browser/application_context",
+      "//ios/web/public",
+    ]
+  }
 }

@@ -10,7 +10,7 @@
 #include "chrome/browser/ash/arc/optin/arc_optin_preference_handler_observer.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
-#include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
 
 namespace arc {
 class ArcOptInPreferenceHandler;
@@ -35,6 +35,19 @@ class ConsolidatedConsentScreen
 
     // Consolidated Consent screen skipped.
     NOT_APPLICABLE,
+  };
+
+  // The result of the cryptohome recovery opt-in.
+  // These values are logged to UMA
+  // ("OOBE.ConsolidatedConsentScreen.RecoveryOptInResult"). Entries should not
+  // be renumbered and numeric values should never be reused.
+  enum class RecoveryOptInResult {
+    kNotSupported = 0,
+    kUserOptIn = 1,
+    kUserOptOut = 2,
+    kPolicyOptIn = 3,
+    kPolicyOptOut = 4,
+    kMaxValue = kPolicyOptOut,
   };
 
   class Observer : public base::CheckedObserver {
@@ -131,11 +144,5 @@ class ConsolidatedConsentScreen
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash ::ConsolidatedConsentScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_CONSOLIDATED_CONSENT_SCREEN_H_

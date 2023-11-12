@@ -23,13 +23,19 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_host_resolver.h"
+#include "content/utility/services.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/address_family.h"
+#include "net/base/address_list.h"
 #include "net/base/ip_address.h"
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/dns/host_resolver_system_task.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/public/dns_over_https_server_config.h"
 #include "net/http/transport_security_state.h"
@@ -47,6 +53,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/network_service_test.mojom.h"
 #include "services/network/sct_auditing/sct_auditing_cache.h"
 #include "services/network/sct_auditing/sct_auditing_reporter.h"
 
@@ -514,6 +521,18 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   void MockCertVerifierSetDefaultResult(
       int32_t default_result,
       MockCertVerifierSetDefaultResultCallback callback) override {
+    // TODO(crbug.com/1377734): Since testing/variations/
+    // fieldtrial_testing_config.json changes the command line flags after
+    // ContentBrowserTest::SetUpCommandLine() and NetworkServiceTest
+    // instantiation, MockCertVerifierSetDefaultResult can be called without
+    // `mock_cert_verifier_` initialization.
+    // Actually since all mock cert verification tests call this function first,
+    // we should remove the set up using the command line flags.
+    if (!mock_cert_verifier_) {
+      mock_cert_verifier_ = std::make_unique<net::MockCertVerifier>();
+      network::NetworkContext::SetCertVerifierForTesting(
+          mock_cert_verifier_.get());
+    }
     mock_cert_verifier_->set_default_result(default_result);
     std::move(callback).Run();
   }
@@ -712,6 +731,25 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run(rv == static_cast<int>(kRequest.size()));
   }
 
+  void ResolveOwnHostnameWithSystemDns(
+      ResolveOwnHostnameWithSystemDnsCallback callback) override {
+    std::unique_ptr<net::HostResolverSystemTask> system_task =
+        net::HostResolverSystemTask::CreateForOwnHostname(
+            net::AddressFamily::ADDRESS_FAMILY_UNSPECIFIED, 0);
+    net::HostResolverSystemTask* system_task_ptr = system_task.get();
+    auto forward_system_dns_results =
+        [](std::unique_ptr<net::HostResolverSystemTask>,
+           net::SystemDnsResultsCallback callback,
+           const net::AddressList& addr_list, int os_error, int net_error) {
+          std::move(callback).Run(addr_list, os_error, net_error);
+        };
+    auto results_cb = base::BindOnce(
+        std::move(forward_system_dns_results), std::move(system_task),
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            std::move(callback), net::AddressList(), 0, net::ERR_ABORTED));
+    system_task_ptr->Start(std::move(results_cb));
+  }
+
  private:
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
@@ -754,20 +792,35 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
 };
 
 NetworkServiceTestHelper::NetworkServiceTestHelper()
-    : network_service_test_impl_(new NetworkServiceTestImpl) {}
+    : network_service_test_impl_(new NetworkServiceTestImpl) {
+  static bool is_created = false;
+  DCHECK(!is_created) << "NetworkServiceTestHelper shouldn't be created twice.";
+  is_created = true;
+}
 
 NetworkServiceTestHelper::~NetworkServiceTestHelper() = default;
+
+std::unique_ptr<NetworkServiceTestHelper> NetworkServiceTestHelper::Create() {
+  if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kUtilitySubType) == network::mojom::NetworkService::Name_) {
+    std::unique_ptr<NetworkServiceTestHelper> helper(
+        new NetworkServiceTestHelper());
+    SetNetworkBinderCreationCallbackForTesting(
+        base::BindOnce(&NetworkServiceTestHelper::RegisterNetworkBinders,
+                       base::Unretained(helper.get())));
+    return helper;
+  }
+  return nullptr;
+}
 
 void NetworkServiceTestHelper::RegisterNetworkBinders(
     service_manager::BinderRegistry* registry) {
   registry->AddInterface(base::BindRepeating(
-      &NetworkServiceTestHelper::BindNetworkServiceTestReceiver,
+      [](NetworkServiceTestHelper* helper,
+         mojo::PendingReceiver<network::mojom::NetworkServiceTest> receiver) {
+        helper->network_service_test_impl_->BindReceiver(std::move(receiver));
+      },
       base::Unretained(this)));
-}
-
-void NetworkServiceTestHelper::BindNetworkServiceTestReceiver(
-    mojo::PendingReceiver<network::mojom::NetworkServiceTest> receiver) {
-  network_service_test_impl_->BindReceiver(std::move(receiver));
 }
 
 }  // namespace content

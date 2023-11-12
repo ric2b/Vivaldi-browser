@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.media;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
@@ -34,6 +33,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.MathUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
@@ -51,8 +51,6 @@ import org.chromium.media_session.mojom.MediaSessionAction;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.WindowAndroid;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 
@@ -71,11 +69,6 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
     // Used to determine the media controls state. (e.g. microphone on/off)
     private static final String CONTROL_STATE =
             "org.chromium.chrome.browser.media.PictureInPictureActivity.ControlState";
-
-    // Used to verify Pre-T that the broadcast sender was Chrome. This extra can be removed when the
-    // min supported version is Android T.
-    private static final String EXTRA_RECEIVER_TOKEN =
-            "org.chromium.chrome.browser.media.PictureInPictureActivity.ReceiverToken";
 
     // Use for passing unique window id to each PictureInPictureActivity instance.
     private static final String NATIVE_POINTER_KEY =
@@ -302,7 +295,8 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
         private RemoteAction createRemoteAction(int requestCode, int action, int iconResourceId,
                 int titleResourceId, Boolean controlState) {
             Intent intent = new Intent(MEDIA_ACTION);
-            intent.putExtra(EXTRA_RECEIVER_TOKEN, mMediaSessionReceiver.hashCode());
+            intent.setPackage(getApplicationContext().getPackageName());
+            IntentUtils.addTrustedIntentExtras(intent);
             intent.putExtra(CONTROL_TYPE, action);
             intent.putExtra(NATIVE_POINTER_KEY, mNativeOverlayWindowAndroid);
             if (controlState != null) {
@@ -323,6 +317,8 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
     private class MediaSessionBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (!IntentUtils.isTrustedIntentFromSelf(intent)) return;
+
             long nativeOverlayWindowAndroid = intent.getLongExtra(NATIVE_POINTER_KEY, 0);
             if (nativeOverlayWindowAndroid != mNativeOverlayWindowAndroid
                     || mNativeOverlayWindowAndroid == 0) {
@@ -330,10 +326,6 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
             }
 
             if (intent.getAction() == null || !intent.getAction().equals(MEDIA_ACTION)) return;
-            if (!intent.hasExtra(EXTRA_RECEIVER_TOKEN)
-                    || intent.getIntExtra(EXTRA_RECEIVER_TOKEN, 0) != this.hashCode()) {
-                return;
-            }
 
             Boolean controlState = intent.hasExtra(CONTROL_STATE)
                     ? intent.getBooleanExtra(CONTROL_STATE, true)
@@ -373,13 +365,22 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
 
     private class InitiatorTabObserver extends EmptyTabObserver {
         @Override
+        public void onClosingStateChanged(Tab tab, boolean closing) {
+            if (closing) {
+                PictureInPictureActivity.this.onExitPictureInPicture(/*closeByNative=*/false);
+            }
+        }
+
+        @Override
         public void onDestroyed(Tab tab) {
-            if (tab.isClosing()) PictureInPictureActivity.this.finish();
+            if (tab.isClosing()) {
+                PictureInPictureActivity.this.onExitPictureInPicture(/*closeByNative=*/false);
+            }
         }
 
         @Override
         public void onCrash(Tab tab) {
-            PictureInPictureActivity.this.finish();
+            PictureInPictureActivity.this.onExitPictureInPicture(/*closeByNative=*/false);
         }
     }
 
@@ -407,22 +408,7 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
                                                           .setSourceRectHint(bounds)
                                                           .setAspectRatio(aspectRatio)
                                                           .build();
-            // Use reflection to access ActivityOptions#makeLaunchIntoPip
-            // TODO(crbug.com/1331593): Do not use reflection, with a new sdk.
-            try {
-                Method methodMakeEnterContentPip = ActivityOptions.class.getMethod(
-                        "makeLaunchIntoPip", PictureInPictureParams.class);
-                ActivityOptions opts = (ActivityOptions) methodMakeEnterContentPip.invoke(
-                        ActivityOptions.class, params);
-                optionsBundle = (opts != null) ? opts.toBundle() : null;
-            } catch (NoSuchMethodException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            }
-            return optionsBundle;
+            return ActivityOptions.makeLaunchIntoPip(params).toBundle();
         }
     };
 
@@ -487,8 +473,8 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
         // Finish the activity if OverlayWindowAndroid has already been destroyed
         // or InitiatorTab has been destroyed by user or crashed.
         if (mNativeOverlayWindowAndroid != sPendingNativeOverlayWindowAndroid
-                || !isInitiatorTabAlive()) {
-            this.finish();
+                || TabUtils.getActivity(mInitiatorTab) == null) {
+            onExitPictureInPicture(/*closeByNative=*/false);
             return;
         }
         sPendingNativeOverlayWindowAndroid = 0;
@@ -520,14 +506,35 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
-        if (mCompositorView != null) mCompositorView.destroy();
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    public void onPictureInPictureModeChanged(
+            boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        if (isInPictureInPictureMode) return;
+        PictureInPictureActivityJni.get().onBackToTab(mNativeOverlayWindowAndroid);
+        onExitPictureInPicture(/*closeByNative=*/false);
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
+    protected ActivityWindowAndroid createWindowAndroid() {
+        return new ActivityWindowAndroid(
+                this, /* listenToActivityState= */ true, getIntentRequestTracker());
+    }
+
+    @CalledByNative
+    public void close() {
+        onExitPictureInPicture(/*closeByNative=*/true);
+    }
+
+    private void onExitPictureInPicture(boolean closeByNative) {
+        if (!closeByNative && mNativeOverlayWindowAndroid != 0) {
+            PictureInPictureActivityJni.get().destroy(mNativeOverlayWindowAndroid);
+        }
+
+        if (mCompositorView != null) {
+            mCompositorView.destroy();
+            mCompositorView = null;
+        }
 
         if (mMediaSessionReceiver != null) {
             unregisterReceiver(mMediaSessionReceiver);
@@ -539,42 +546,7 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
             mInitiatorTab = null;
         }
         mTabObserver = null;
-    }
 
-    @Override
-    @RequiresApi(api = Build.VERSION_CODES.O)
-    public void onPictureInPictureModeChanged(
-            boolean isInPictureInPictureMode, Configuration newConfig) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        if (isInPictureInPictureMode) return;
-        PictureInPictureActivityJni.get().onBackToTab(mNativeOverlayWindowAndroid);
-        this.finish();
-    }
-
-    @Override
-    protected ActivityWindowAndroid createWindowAndroid() {
-        return new ActivityWindowAndroid(
-                this, /* listenToActivityState= */ true, getIntentRequestTracker());
-    }
-
-    @SuppressLint("NewApi")
-    private boolean isInitiatorTabAlive() {
-        if (mInitiatorTab == null) return false;
-
-        ActivityManager activityManager =
-                (ActivityManager) ContextUtils.getApplicationContext().getSystemService(
-                        Context.ACTIVITY_SERVICE);
-        for (ActivityManager.AppTask appTask : activityManager.getAppTasks()) {
-            if (appTask.getTaskInfo().id == TabUtils.getActivity(mInitiatorTab).getTaskId()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    @CalledByNative
-    public void close() {
         this.finish();
     }
 
@@ -679,7 +651,6 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
 
         intent.putExtra(NATIVE_POINTER_KEY, nativeOverlayWindowAndroid);
 
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Bundle optionsBundle = null;
         // Clamp the aspect ratio, which is okay even if they're unspecified.  We do this first in
         // case the width clamps to 0.  In that case, it's ignored as if it weren't given.
@@ -722,7 +693,7 @@ public class PictureInPictureActivity extends AsyncInitializationActivity {
             PictureInPictureActivity pipActivity = (PictureInPictureActivity) activity;
             if (nativeOverlayWindowAndroid == pipActivity.getNativeOverlayWindowAndroid()) {
                 pipActivity.resetNativeOverlayWindowAndroid();
-                pipActivity.finish();
+                pipActivity.onExitPictureInPicture(/*closeByNative=*/true);
             }
         }
     }

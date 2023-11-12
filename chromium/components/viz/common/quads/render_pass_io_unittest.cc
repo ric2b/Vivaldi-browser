@@ -91,7 +91,7 @@ TEST(RenderPassIOTest, FilterOperations) {
     EXPECT_EQ(SkColors::kYellow,
               render_pass1->backdrop_filters.at(0).drop_shadow_color());
     EXPECT_EQ(gfx::Point(1.0f, 2.0f),
-              render_pass1->backdrop_filters.at(0).drop_shadow_offset());
+              render_pass1->backdrop_filters.at(0).offset());
     EXPECT_EQ(cc::FilterOperation::INVERT,
               render_pass1->backdrop_filters.at(1).type());
     EXPECT_EQ(0.64f, render_pass1->backdrop_filters.at(1).amount());
@@ -134,7 +134,6 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
                             gradient_mask),
         gfx::Rect(5, 20, 1000, 200), false, 0.5f, SkBlendMode::kDstOver, 101);
     sqs1->is_fast_rounded_corner = true;
-    sqs1->de_jelly_delta_y = 0.7f;
   }
   base::Value dict0 = CompositorRenderPassToDict(*render_pass0);
   auto render_pass1 = CompositorRenderPassFromDict(dict0);
@@ -156,7 +155,6 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_EQ(SkBlendMode::kSrcOver, sqs0->blend_mode);
     EXPECT_EQ(0, sqs0->sorting_context_id);
     EXPECT_FALSE(sqs0->is_fast_rounded_corner);
-    EXPECT_EQ(0.0f, sqs0->de_jelly_delta_y);
 
     const SharedQuadState* sqs1 =
         render_pass1->shared_quad_state_list.ElementAt(1);
@@ -182,7 +180,6 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_EQ(SkBlendMode::kDstOver, sqs1->blend_mode);
     EXPECT_EQ(101, sqs1->sorting_context_id);
     EXPECT_TRUE(sqs1->is_fast_rounded_corner);
-    EXPECT_EQ(0.7f, sqs1->de_jelly_delta_y);
   }
   base::Value dict1 = CompositorRenderPassToDict(*render_pass1);
   EXPECT_EQ(dict0, dict1);

@@ -11,6 +11,7 @@
 #include "base/test/task_environment.h"
 #include "components/history_clusters/core/clustering_test_utils.h"
 #include "components/history_clusters/core/config.h"
+#include "components/history_clusters/core/history_clusters_util.h"
 #include "components/history_clusters/core/on_device_clustering_features.h"
 #include "components/optimization_guide/core/entity_metadata_provider.h"
 #include "components/optimization_guide/core/new_optimization_guide_decider.h"
@@ -29,7 +30,7 @@ class TestSiteEngagementScoreProvider
     : public site_engagement::SiteEngagementScoreProvider {
  public:
   TestSiteEngagementScoreProvider() = default;
-  ~TestSiteEngagementScoreProvider() = default;
+  ~TestSiteEngagementScoreProvider() override = default;
 
   double GetScore(const GURL& url) const override {
     ++count_get_score_invocations_;
@@ -133,7 +134,6 @@ class OnDeviceClusteringWithoutContentBackendTest : public ::testing::Test {
     config_.keyword_filter_on_noisy_visits = true;
     config_.keyword_filter_on_entity_aliases = true;
     config_.max_entity_aliases_in_keywords = 100;
-    config_.should_label_clusters = false;
     config_.entity_relevance_threshold = 60;
     config_.should_check_hosts_to_skip_clustering_for = true;
     SetConfigForTesting(config_);
@@ -167,6 +167,8 @@ class OnDeviceClusteringWithoutContentBackendTest : public ::testing::Test {
         visits);
     run_loop.Run();
 
+    // Sort clusters here for easier verification.
+    SortClusters(&clusters);
     return clusters;
   }
 
@@ -227,11 +229,6 @@ TEST_F(OnDeviceClusteringWithoutContentBackendTest,
               ElementsAre(ElementsAre(testing::VisitResult(2, 1.0),
                                       testing::VisitResult(1, 1.0))));
   ASSERT_EQ(result_clusters.size(), 1u);
-  EXPECT_FALSE(result_clusters[0].label.has_value());
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
 }
 
 TEST_F(OnDeviceClusteringWithoutContentBackendTest,
@@ -254,14 +251,6 @@ TEST_F(OnDeviceClusteringWithoutContentBackendTest,
   EXPECT_THAT(testing::ToVisitResults(result_clusters),
               ElementsAre(ElementsAre(testing::VisitResult(2, 1.0),
                                       testing::VisitResult(1, 1.0))));
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 0, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 0, 1);
 }
 
 TEST_F(OnDeviceClusteringWithoutContentBackendTest, ClusterTwoVisitsTiedByURL) {
@@ -282,14 +271,6 @@ TEST_F(OnDeviceClusteringWithoutContentBackendTest, ClusterTwoVisitsTiedByURL) {
   EXPECT_THAT(testing::ToVisitResults(result_clusters),
               ElementsAre(ElementsAre(testing::VisitResult(
                   2, 1.0, {history::DuplicateClusterVisit{1}}))));
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 0, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 0, 1);
 }
 
 TEST_F(OnDeviceClusteringWithoutContentBackendTest, DedupeClusters) {
@@ -378,23 +359,6 @@ TEST_F(OnDeviceClusteringWithoutContentBackendTest, MultipleClusters) {
                                   4, 1.0, {history::DuplicateClusterVisit{1}}),
                               testing::VisitResult(2, 1.0)),
                   ElementsAre(testing::VisitResult(3, 1.0))));
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 0, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 0, 1);
-
-  // This is coming from the Journeys page so expect that the per-cluster
-  // metrics are not collected.
-  histogram_tester.ExpectTotalCount(
-      "History.Clusters.Backend.ClusterContainsSearch", 0);
-  histogram_tester.ExpectTotalCount(
-      "History.Clusters.Backend.NumKeywordsPerCluster", 0);
-  histogram_tester.ExpectTotalCount(
-      "History.Clusters.Backend.NumVisitsPerCluster", 0);
 }
 
 TEST_F(OnDeviceClusteringWithoutContentBackendTest,
@@ -428,27 +392,6 @@ TEST_F(OnDeviceClusteringWithoutContentBackendTest,
               ElementsAre(ElementsAre(testing::VisitResult(3, 1.0)),
                           ElementsAre(testing::VisitResult(2, 1.0),
                                       testing::VisitResult(1, 1.0))));
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 0, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 0, 1);
-
-  // This is coming from the keyword cache generation so expect that the
-  // per-cluster metrics are collected.
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterContainsSearch", false, 2);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster", 0, 2);
-  histogram_tester.ExpectTotalCount(
-      "History.Clusters.Backend.NumVisitsPerCluster", 2);
-  histogram_tester.ExpectBucketCount(
-      "History.Clusters.Backend.NumVisitsPerCluster", 1, 1);
-  histogram_tester.ExpectBucketCount(
-      "History.Clusters.Backend.NumVisitsPerCluster", 2, 1);
 }
 
 class OnDeviceClusteringWithContentBackendTest
@@ -577,10 +520,6 @@ TEST_F(OnDeviceClusteringWithContentBackendTest,
                   ElementsAre(testing::VisitResult(
                                   4, 1.0, {history::DuplicateClusterVisit{1}}),
                               testing::VisitResult(2, 1.0))));
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
 }
 
 class OnDeviceClusteringWithAllTheBackendsTest
@@ -625,23 +564,13 @@ TEST_F(OnDeviceClusteringWithAllTheBackendsTest, EntityOnMidBlocklist) {
   visit2.visit_row.visit_duration = base::Seconds(20);
   visits.push_back(visit2);
 
-  history::AnnotatedVisit visit3 = testing::CreateDefaultAnnotatedVisit(
-      10, GURL("https://nonexistentreferrer.com/"));
-  visit3.referring_visit_of_redirect_chain_start = 6;
-  visit3.content_annotations.model_annotations.entities = {{"irrelevant", 100}};
-  visits.push_back(visit3);
-
   std::vector<history::Cluster> result_clusters =
       ClusterVisits(ClusteringRequestSource::kJourneysPage, visits);
+  EXPECT_EQ(result_clusters.size(), 1u);
 
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 2, 1);
+  // Cluster 1 should have 1 keyword with the "blockedentity" being blocked.
+  EXPECT_THAT(result_clusters[0].GetKeywords(),
+              UnorderedElementsAre(u"alias-unblocked", u"rewritten-unblocked"));
 }
 
 TEST_F(OnDeviceClusteringWithAllTheBackendsTest,
@@ -710,7 +639,8 @@ TEST_F(OnDeviceClusteringWithAllTheBackendsTest,
                   .model_annotations.entities.empty());
   EXPECT_TRUE(third_result_visit.annotated_visit.content_annotations
                   .model_annotations.categories.empty());
-  EXPECT_TRUE(cluster.keyword_to_data_map.empty());
+  // Search query terms are keywords.
+  EXPECT_THAT(cluster.GetKeywords(), UnorderedElementsAre(u"nometadata"));
 
   history::Cluster cluster2 = result_clusters.at(1);
   ASSERT_EQ(cluster2.visits.size(), 1u);
@@ -733,18 +663,10 @@ TEST_F(OnDeviceClusteringWithAllTheBackendsTest,
   // The second visit should have a URL.
   EXPECT_EQ(cluster2.visits.at(0).duplicate_visits.at(0).url,
             GURL("http://default-engine.com/?q=foo&otherstuff"));
-  // Cluster should have 2 keywords.
+  // Cluster should have 3 keywords with the search term "foo" included.
   EXPECT_THAT(cluster2.GetKeywords(),
-              UnorderedElementsAre(u"rewritten-foo", u"alias-foo"));
+              UnorderedElementsAre(u"rewritten-foo", u"alias-foo", u"foo"));
 
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Min", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.ClusterSize.Max", 1, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Min", 0, 1);
-  histogram_tester.ExpectUniqueSample(
-      "History.Clusters.Backend.NumKeywordsPerCluster.Max", 2, 1);
   histogram_tester.ExpectTotalCount(
       "History.Clusters.Backend.BatchEntityLookupLatency2", 1);
   histogram_tester.ExpectUniqueSample(

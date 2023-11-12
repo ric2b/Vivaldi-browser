@@ -17,6 +17,7 @@
 #include "ash/projector/test/mock_projector_ui_controller.h"
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
+#include "ash/public/cpp/projector/speech_recognition_availability.h"
 #include "ash/public/cpp/test/mock_projector_client.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -34,12 +35,15 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/branding_buildflags.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/ash/components/dbus/audio/audio_node.h"
 #include "chromeos/ash/components/dbus/audio/fake_cras_audio_client.h"
 #include "media/mojo/mojom/speech_recognition_result.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/icu/source/common/unicode/locid.h"
+#include "third_party/icu/source/common/unicode/utypes.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
@@ -124,16 +128,14 @@ class ProjectorMetadataControllerForTest : public ProjectorMetadataController {
 class ProjectorControllerTest : public AshTestBase {
  public:
   ProjectorControllerTest()
-      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kProjector, features::kProjectorAnnotator}, {});
-  }
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
 
   ProjectorControllerTest(const ProjectorControllerTest&) = delete;
   ProjectorControllerTest& operator=(const ProjectorControllerTest&) = delete;
 
   // AshTestBase:
   void SetUp() override {
+    InitFeatureFlags();
     AshTestBase::SetUp();
 
     controller_ =
@@ -150,9 +152,12 @@ class ProjectorControllerTest : public AshTestBase {
     controller_->SetProjectorMetadataControllerForTest(
         std::move(mock_metadata_controller));
 
+    SpeechRecognitionAvailability availability;
+    availability.on_device_availability =
+        OnDeviceRecognitionAvailability::kAvailable;
+    ON_CALL(mock_client_, GetSpeechRecognitionAvailability)
+        .WillByDefault(testing::Return(availability));
     controller_->SetClient(&mock_client_);
-    controller_->OnSpeechRecognitionAvailabilityChanged(
-        SpeechRecognitionAvailability::kAvailable);
   }
 
   void InitializeRealMetadataController() {
@@ -165,6 +170,31 @@ class ProjectorControllerTest : public AshTestBase {
   }
 
  protected:
+  virtual void InitFeatureFlags() {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kProjector, features::kProjectorAnnotator}, {});
+  }
+
+  void InitFakeMic(bool mic_present) {
+    if (!mic_present) {
+      CrasAudioHandler::Get()->SetActiveInputNodes({});
+      return;
+    }
+
+    const AudioNodeInfo kInternalMic[] = {
+        {true, 55555, "Fake Mic", "INTERNAL_MIC", "Internal Mic"}};
+    const AudioNode audio_node =
+        AudioNode(kInternalMic->is_input, kInternalMic->id,
+                  /*has_v2_stable_device_id=*/false, kInternalMic->id,
+                  /*stable_device_id_v2=*/0, kInternalMic->device_name,
+                  kInternalMic->type, kInternalMic->name, /*active=*/false,
+                  /*plugged_time=*/0, /*max_supported_channels=*/1,
+                  /*audio_effect=*/1, /*number_of_volume_steps=*/25);
+    FakeCrasAudioClient::Get()->SetAudioNodesForTesting({audio_node});
+
+    CrasAudioHandler::Get()->SetActiveInputNodes({kInternalMic->id});
+  }
+
   MockProjectorUiController* mock_ui_controller_ = nullptr;
   MockProjectorMetadataController* mock_metadata_controller_ = nullptr;
   ProjectorMetadataControllerForTest* metadata_controller_;
@@ -173,7 +203,6 @@ class ProjectorControllerTest : public AshTestBase {
   base::HistogramTester histogram_tester_;
   base::ScopedTempDir temp_dir_;
 
- private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -196,24 +225,14 @@ TEST_F(ProjectorControllerTest, OnAudioNodesChanged) {
   ON_CALL(mock_client_, IsDriveFsMounted())
       .WillByDefault(testing::Return(true));
 
-  const AudioNodeInfo kInternalMic[] = {
-      {true, 55555, "Fake Mic", "INTERNAL_MIC", "Internal Mic"}};
-  const AudioNode audio_node =
-      AudioNode(kInternalMic->is_input, kInternalMic->id,
-                /*has_v2_stable_device_id=*/false, kInternalMic->id,
-                /*stable_device_id_v2=*/0, kInternalMic->device_name,
-                kInternalMic->type, kInternalMic->name, /*active=*/false,
-                /*plugged_time=*/0, /*max_supported_channels=*/1,
-                /*audio_effect=*/1, /*number_of_volume_steps=*/25);
-  FakeCrasAudioClient::Get()->SetAudioNodesForTesting({audio_node});
-
-  CrasAudioHandler::Get()->SetActiveInputNodes({kInternalMic->id});
+  InitFakeMic(/*mic_present=*/true);
   EXPECT_CALL(mock_client_,
               OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
-                  NewScreencastPreconditionState::kEnabled, {})));
+                  NewScreencastPreconditionState::kEnabled,
+                  {NewScreencastPreconditionReason::kEnabledBySoda})));
   controller_->OnAudioNodesChanged();
 
-  CrasAudioHandler::Get()->SetActiveInputNodes({});
+  InitFakeMic(/*mic_present=*/false);
   EXPECT_CALL(mock_client_,
               OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
                   NewScreencastPreconditionState::kDisabled,
@@ -222,13 +241,46 @@ TEST_F(ProjectorControllerTest, OnAudioNodesChanged) {
 }
 
 TEST_F(ProjectorControllerTest, OnSpeechRecognitionAvailabilityChanged) {
-  controller_->OnSpeechRecognitionAvailabilityChanged(
-      SpeechRecognitionAvailability::kAvailable);
-  EXPECT_TRUE(controller_->IsEligible());
+  SpeechRecognitionAvailability availability;
 
-  controller_->OnSpeechRecognitionAvailabilityChanged(
-      SpeechRecognitionAvailability::kOnDeviceSpeechRecognitionNotSupported);
-  EXPECT_FALSE(controller_->IsEligible());
+  // Soda is not available.
+  availability.use_on_device = true;
+  availability.on_device_availability =
+      OnDeviceRecognitionAvailability::kSodaNotAvailable;
+  ON_CALL(mock_client_, GetSpeechRecognitionAvailability)
+      .WillByDefault(testing::Return(availability));
+  ON_CALL(mock_client_, IsDriveFsMounted())
+      .WillByDefault(testing::Return(true));
+  EXPECT_CALL(mock_client_,
+              OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
+                  NewScreencastPreconditionState::kDisabled,
+                  {NewScreencastPreconditionReason::
+                       kOnDeviceSpeechRecognitionNotSupported})));
+  controller_->OnSpeechRecognitionAvailabilityChanged();
+
+  // Soda is available.
+  availability.on_device_availability =
+      OnDeviceRecognitionAvailability::kAvailable;
+  ON_CALL(mock_client_, GetSpeechRecognitionAvailability)
+      .WillByDefault(testing::Return(availability));
+  EXPECT_CALL(mock_client_,
+              OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
+                  NewScreencastPreconditionState::kEnabled,
+                  {NewScreencastPreconditionReason::kEnabledBySoda})));
+  controller_->OnSpeechRecognitionAvailabilityChanged();
+
+  // Server based available.
+  availability.use_on_device = false;
+  availability.server_based_availability =
+      ServerBasedRecognitionAvailability::kAvailable;
+  ON_CALL(mock_client_, GetSpeechRecognitionAvailability)
+      .WillByDefault(testing::Return(availability));
+  EXPECT_CALL(mock_client_,
+              OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
+                  NewScreencastPreconditionState::kEnabled,
+                  {NewScreencastPreconditionReason::
+                       kEnabledByServerSideSpeechRecognition})));
+  controller_->OnSpeechRecognitionAvailabilityChanged();
 }
 
 TEST_F(ProjectorControllerTest, EnableAnnotatorTool) {
@@ -292,7 +344,8 @@ TEST_F(ProjectorControllerTest, RecordingEnded) {
         EXPECT_CALL(
             mock_client_,
             OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
-                NewScreencastPreconditionState::kEnabled, {})))
+                NewScreencastPreconditionState::kEnabled,
+                {NewScreencastPreconditionReason::kEnabledBySoda})))
             .Times(0);
         EXPECT_CALL(mock_client_, StopSpeechRecognition())
             .WillOnce(testing::Invoke(
@@ -362,7 +415,8 @@ TEST_P(ProjectorOnDlpRestrictionCheckedAtVideoEndTest, WrapUpRecordingOnce) {
         EXPECT_CALL(
             mock_client_,
             OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
-                NewScreencastPreconditionState::kEnabled, {})));
+                NewScreencastPreconditionState::kEnabled,
+                {NewScreencastPreconditionReason::kEnabledBySoda})));
 
         const std::string expected_screencast_name =
             "Screencast 2021-01-02 20.02.10";

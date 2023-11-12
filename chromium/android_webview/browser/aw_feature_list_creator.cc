@@ -32,6 +32,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/embedder_support/android/metrics/android_metrics_service_client.h"
 #include "components/embedder_support/origin_trials/origin_trial_prefs.h"
+#include "components/embedder_support/origin_trials/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/persistent_histograms.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
@@ -62,6 +63,10 @@ bool g_signature_verification_enabled = true;
 // These prefs go in the JsonPrefStore, and will persist across runs. Other
 // prefs go in the InMemoryPrefStore, and will be lost when the process ends.
 const char* const kPersistentPrefsAllowlist[] = {
+    // Origin Trial config overrides.
+    embedder_support::prefs::kOriginTrialPublicKey,
+    embedder_support::prefs::kOriginTrialDisabledFeatures,
+    embedder_support::prefs::kOriginTrialDisabledTokens,
     // Randomly-generated GUID which pseudonymously identifies uploaded metrics.
     metrics::prefs::kMetricsClientID,
     // Random seed value for variation's entropy providers. Used to assign
@@ -205,18 +210,18 @@ void AwFeatureListCreator::SetUpFieldTrials() {
   std::unique_ptr<variations::SeedResponse> seed;
   base::Time seed_date;  // Initializes to null time.
   if (seed_proto) {
-    seed = std::make_unique<variations::SeedResponse>();
-    seed->data = seed_proto->seed_data();
-    seed->signature = seed_proto->signature();
-    seed->country = seed_proto->country();
-    seed->date = seed_proto->date();
-    seed->is_gzip_compressed = seed_proto->is_gzip_compressed();
-
     // We set the seed fetch time to when the service downloaded the seed rather
     // than base::Time::Now() because we want to compute seed freshness based on
     // the initial download time, which happened in the service at some earlier
     // point.
-    seed_date = base::Time::FromJavaTime(seed->date);
+    seed_date = base::Time::FromJavaTime(seed_proto->date());
+
+    seed = std::make_unique<variations::SeedResponse>();
+    seed->data = seed_proto->seed_data();
+    seed->signature = seed_proto->signature();
+    seed->country = seed_proto->country();
+    seed->date = seed_date;
+    seed->is_gzip_compressed = seed_proto->is_gzip_compressed();
   }
 
   client_ = std::make_unique<AwVariationsServiceClient>();

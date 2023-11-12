@@ -17,14 +17,14 @@ import '../../prefs/prefs.js';
 import '../../settings_shared.css.js';
 import '../../settings_vars.css.js';
 
-import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
-import {Route, Router} from '../../router.js';
 import {assertExists} from '../assert_extras.js';
 import {OSPageVisibility} from '../os_page_visibility.js';
 import {routes} from '../os_route.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {Route, Router} from '../router.js';
 
 import {getTemplate} from './os_settings_main.html.js';
 
@@ -39,10 +39,7 @@ interface OsSettingsMainElement {
   };
 }
 
-const OsSettingsMainElementBase =
-    mixinBehaviors([RouteObserverBehavior], PolymerElement) as {
-      new (): PolymerElement & RouteObserverBehaviorInterface,
-    };
+const OsSettingsMainElementBase = RouteObserverMixin(PolymerElement);
 
 class OsSettingsMainElement extends OsSettingsMainElementBase {
   static get is() {

@@ -40,12 +40,6 @@ _NAMED_TYPE_INFO = {
       'GL_LINEAR_MIPMAP_LINEAR',
     ],
   },
-  'CoverageModulationComponents': {
-    'type': 'GLenum',
-    'valid': [
-      'GL_RGB', 'GL_RGBA', 'GL_ALPHA', 'GL_NONE'
-    ],
-  },
   'FramebufferTarget': {
     'type': 'GLenum',
     'valid': [
@@ -1869,13 +1863,6 @@ _FUNCTION_INFO = {
     'unit_test': False,
     'es3': True,
   },
-  'CoverageModulationCHROMIUM': {
-    'type': 'StateSet',
-    'state': 'CoverageModulationCHROMIUM',
-    'decoder_func': 'glCoverageModulationNV',
-    'extension': 'CHROMIUM_framebuffer_mixed_samples',
-    'extension_flag': 'chromium_framebuffer_mixed_samples',
-  },
   'CreateAndConsumeTextureCHROMIUM': {
     'type': 'NoCommand',
     'extension': "CHROMIUM_texture_mailbox",
@@ -3092,6 +3079,11 @@ _FUNCTION_INFO = {
     'client_test': False,
     'extension': "CHROMIUM_texture_mailbox",
     'trace_level': 1,
+  },
+  'ProvokingVertexANGLE': {
+    'extension_flag': 'angle_provoking_vertex',
+    'unit_test': False,
+    'extension': 'ANGLE_provoking_vertex',
   },
   'RenderbufferStorage': {
     'decoder_func': 'DoRenderbufferStorage',

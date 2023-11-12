@@ -14,8 +14,11 @@ import test_runner
 import test_runner_errors
 import xcode_util
 
-
-OUTPUT_DISABLED_TESTS_TEST_ARG = '--write-compiled-tests-json-to-writable-path'
+# Including this test arg will have the gTest launcher generate
+# an info file containing all the compiled tests for this test run
+# This should be on by default
+GENERATE_COMPILED_GTESTS_FILE_TEST_ARG = (
+    '--write-compiled-tests-json-to-writable-path')
 
 
 def get_gtest_filter(included, excluded):
@@ -131,6 +134,10 @@ class GTestsApp(object):
     self.host_app_path = kwargs.get('host_app_path')
     self.inserted_libs = kwargs.get('inserted_libs') or []
 
+  def _additional_inserted_libs(self):
+    """Returns additional libraries to add to inserted_libs."""
+    return []
+
   def remove_gtest_sharding_env_vars(self):
     """Removes sharding related env vars from self.env_vars."""
     for env_var_key in ['GTEST_SHARD_INDEX', 'GTEST_TOTAL_SHARDS']:
@@ -200,9 +207,11 @@ class GTestsApp(object):
         }
     }
 
-    if self.inserted_libs:
+    inserted_libs = self.inserted_libs.copy()
+    inserted_libs.extend(self._additional_inserted_libs())
+    if inserted_libs:
       module_data['TestingEnvironmentVariables'][
-          'DYLD_INSERT_LIBRARIES'] = ':'.join(self.inserted_libs)
+          'DYLD_INSERT_LIBRARIES'] = ':'.join(inserted_libs)
 
     xctestrun_data = {module: module_data}
     gtest_filter = []
@@ -219,6 +228,8 @@ class GTestsApp(object):
 
     if self.env_vars:
       xctestrun_data[module].update({'EnvironmentVariables': self.env_vars})
+
+    self.test_args.append(GENERATE_COMPILED_GTESTS_FILE_TEST_ARG)
     if self.test_args:
       xctestrun_data[module].update({'CommandLineArguments': self.test_args})
 
@@ -279,8 +290,6 @@ class GTestsApp(object):
     # TODO(crbug.com/1123681): Move all_tests to class var. Set all_tests,
     # disabled_tests values in initialization to avoid multiple calls to otool.
     all_tests = []
-    # Only store the tests when there is the test arg.
-    store_disabled_tests = OUTPUT_DISABLED_TESTS_TEST_ARG in self.test_args
     self.disabled_tests = []
     for test_class, test_method in shard_util.fetch_test_names(
         self.test_app_path,
@@ -299,7 +308,7 @@ class GTestsApp(object):
       if not included or test_name in included or test_class in included:
         if test_method.startswith('test'):
           all_tests.append(test_name)
-        elif store_disabled_tests:
+        else:
           self.disabled_tests.append(test_name)
     return all_tests
 
@@ -337,10 +346,6 @@ class EgtestsApp(GTestsApp):
     Raises:
       AppNotFoundError: If the given app does not exist
     """
-    inserted_libs = list(kwargs.get('inserted_libs') or [])
-    inserted_libs.append('__PLATFORMS__/iPhoneSimulator.platform/Developer/'
-                         'usr/lib/libXCTestBundleInject.dylib')
-    kwargs['inserted_libs'] = inserted_libs
     super(EgtestsApp, self).__init__(egtests_app, **kwargs)
 
   def _xctest_path(self):
@@ -364,6 +369,17 @@ class EgtestsApp(GTestsApp):
     if not plugin_xctest:
       raise test_runner.XCTestPlugInNotFoundError(plugin_xctest)
     return plugin_xctest.replace(self.test_app_path, '')
+
+  def _additional_inserted_libs(self):
+    """Returns additional libraries to add to inserted_libs."""
+    libs = [
+        '__PLATFORMS__/iPhoneSimulator.platform/Developer/'
+        'usr/lib/libXCTestBundleInject.dylib'
+    ]
+    for child in os.listdir(self.test_app_path):
+      if child.startswith('libclang_rt.asan'):
+        libs.append(os.path.join('@executable_path', child))
+    return libs
 
   def command(self, out_dir, destination, shards):
     """Returns the command that launches tests for EG Tests.
@@ -517,6 +533,7 @@ class DeviceXCTestUnitTestsApp(GTestsApp):
       self.test_args.append('--gtest_repeat=%s' % self.repeat_count)
 
     self.test_args.append('--gmock_verbose=error')
+    self.test_args.append(GENERATE_COMPILED_GTESTS_FILE_TEST_ARG)
 
     xctestrun_data['TestTargetName'].update(
         {'CommandLineArguments': self.test_args})
@@ -628,6 +645,7 @@ class SimulatorXCTestUnitTestsApp(GTestsApp):
       self.test_args.append('--gtest_repeat=%s' % self.repeat_count)
 
     self.test_args.append('--gmock_verbose=error')
+    self.test_args.append(GENERATE_COMPILED_GTESTS_FILE_TEST_ARG)
 
     xctestrun_data['TestTargetName'].update(
         {'CommandLineArguments': self.test_args})

@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/clear_for_opaque_raster.h"
+#include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/scoped_raster_flags.h"
 #include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
@@ -70,25 +71,6 @@ void PaintOpBufferSerializer::Serialize(const PaintOpBuffer* buffer,
   Save(canvas.get(), params);
   SerializePreamble(canvas.get(), preamble, params);
   SerializeBuffer(canvas.get(), buffer, offsets);
-  RestoreToCount(canvas.get(), saveCount, params);
-}
-
-void PaintOpBufferSerializer::SerializeAndDestroy(
-    PaintOpBuffer* buffer,
-    const std::vector<size_t>* offsets,
-    const Preamble& preamble) {
-  std::unique_ptr<SkCanvas> canvas = MakeAnalysisCanvas(options_);
-
-  // These PlaybackParams use the initial (identity) canvas matrix, as they are
-  // only used for serializing the preamble and the initial save / final restore
-  // SerializeBuffer will create its own PlaybackParams based on the
-  // post-preamble canvas.
-  PlaybackParams params = MakeParams(canvas.get());
-
-  int saveCount = canvas->getSaveCount();
-  Save(canvas.get(), params);
-  SerializePreamble(canvas.get(), preamble, params);
-  SerializeBufferAndDestroy(canvas.get(), buffer, offsets);
   RestoreToCount(canvas.get(), saveCount, params);
 }
 
@@ -203,7 +185,7 @@ void PaintOpBufferSerializer::SerializePreamble(SkCanvas* canvas,
 
 bool PaintOpBufferSerializer::WillSerializeNextOp(const PaintOp& op,
                                                   SkCanvas* canvas,
-                                                  PlaybackParams params,
+                                                  const PlaybackParams& params,
                                                   uint8_t alpha) {
   // Skip ops outside the current clip if they have images. This saves
   // performing an unnecessary expensive decode.
@@ -288,31 +270,6 @@ void PaintOpBufferSerializer::SerializeBuffer(
   }
 }
 
-void PaintOpBufferSerializer::SerializeBufferAndDestroy(
-    SkCanvas* canvas,
-    PaintOpBuffer* buffer,
-    const std::vector<size_t>* offsets) {
-  DCHECK(buffer);
-  // This updates the original_ctm to reflect the canvas transformation at
-  // start of this call to SerializeBuffer.
-  PlaybackParams params = MakeParams(canvas);
-  bool destroy_op_only = false;
-
-  for (PaintOpBuffer::PlaybackFoldingIterator iter(buffer, offsets); iter;
-       ++iter) {
-    PaintOp& op = const_cast<PaintOp&>(*iter);
-    if (!destroy_op_only) {
-      // If serialization failed, destroy PaintOps in |buffer|.
-      destroy_op_only = !WillSerializeNextOp(op, canvas, params, iter.alpha());
-    }
-    op.DestroyThis();
-  }
-
-  // Each PaintOp in |buffer| is destroyed. Update the flag |ops_destroyed| to
-  // true, so it skip calling destruction in PaintOpsBuffer::Reset().
-  const_cast<PaintOpBuffer*>(buffer)->MarkOpsDestroyed();
-}
-
 bool PaintOpBufferSerializer::SerializeOpWithFlags(
     SkCanvas* canvas,
     const PaintOpWithFlags& flags_op,
@@ -353,7 +310,7 @@ bool PaintOpBufferSerializer::SerializeOp(SkCanvas* canvas,
   }
 
   DCHECK_GE(bytes, 4u);
-  DCHECK_EQ(bytes % PaintOpBuffer::PaintOpAlign, 0u);
+  DCHECK_EQ(bytes % PaintOpBuffer::kPaintOpAlign, 0u);
   return true;
 }
 

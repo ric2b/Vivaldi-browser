@@ -4,20 +4,18 @@
 
 source_set("passwords") {
   sources = [
-    "save_password_infobar_banner_overlay_mediator.h",
-    "save_password_infobar_banner_overlay_mediator.mm",
-    "update_password_infobar_banner_overlay_mediator.h",
-    "update_password_infobar_banner_overlay_mediator.mm",
+    "password_infobar_banner_overlay_mediator.h",
+    "password_infobar_banner_overlay_mediator.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
     "//base",
+    "//components/password_manager/core/common:features",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/overlays",
     "//ios/chrome/browser/overlays/public/infobar_banner",
-    "//ios/chrome/browser/ui/icons:infobar_icons",
     "//ios/chrome/browser/ui/icons:symbols",
     "//ios/chrome/browser/ui/infobars/banners",
     "//ios/chrome/browser/ui/overlays/infobar_banner:mediators",
@@ -27,10 +25,7 @@ source_set("passwords") {
 
 source_set("unit_tests") {
   testonly = true
-  sources = [
-    "save_password_infobar_banner_overlay_mediator_unittest.mm",
-    "update_password_infobar_banner_overlay_mediator_unittest.mm",
-  ]
+  sources = [ "password_infobar_banner_overlay_mediator_unittest.mm" ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
@@ -51,7 +46,6 @@ source_set("unit_tests") {
     "//ios/chrome/browser/passwords:infobar_delegates",
     "//ios/chrome/browser/passwords/test",
     "//ios/chrome/browser/ui:feature_flags",
-    "//ios/chrome/browser/ui/icons:infobar_icons",
     "//ios/chrome/browser/ui/icons:symbols",
     "//ios/chrome/browser/ui/infobars/banners/test",
     "//ios/chrome/browser/ui/infobars/test",

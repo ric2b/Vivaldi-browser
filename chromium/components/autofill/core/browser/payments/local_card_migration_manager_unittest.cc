@@ -91,7 +91,7 @@ class LocalCardMigrationManagerTest : public testing::Test {
         new TestFormDataImporter(
             &autofill_client_, payments_client_,
             std::unique_ptr<CreditCardSaveManager>(credit_card_save_manager_),
-            &personal_data(), "en-US",
+            /*iban_save_manager=*/nullptr, &personal_data(), "en-US",
             std::unique_ptr<LocalCardMigrationManager>(
                 local_card_migration_manager_));
     autofill_client_.set_test_form_data_importer(
@@ -859,12 +859,12 @@ TEST_F(LocalCardMigrationManagerTest, DeleteLocalCardViaMigrationDialog) {
                      test::NextYear().c_str(), "1", guid);
 
   const std::string guid_str = guid.AsLowercaseString();
-  EXPECT_TRUE(personal_data().GetCreditCardWithGUID(guid_str.c_str()));
+  EXPECT_TRUE(personal_data().GetCreditCardByGUID(guid_str));
 
   local_card_migration_manager_->OnUserDeletedLocalCardViaMigrationDialog(
       guid_str);
 
-  EXPECT_FALSE(personal_data().GetCreditCardWithGUID(guid_str.c_str()));
+  EXPECT_FALSE(personal_data().GetCreditCardByGUID(guid_str));
 }
 
 // Use one local card with more valid local cards available, don't show prompt

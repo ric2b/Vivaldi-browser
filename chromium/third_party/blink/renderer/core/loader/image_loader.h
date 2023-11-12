@@ -61,6 +61,10 @@ class CORE_EXPORT ImageLoader : public GarbageCollected<ImageLoader>,
     // document, or when DOM mutations trigger a new load. Starts loading if a
     // load hasn't already been started.
     kUpdateNormal,
+    // This is the behavior when the update is triggered by the lazy loading
+    // mechanism. We can't update synchronously, because doing so may invalidate
+    // style, which is forbidden from lazy load callbacks.
+    kUpdateFromMicrotask,
     // This should be the update behavior when the resource was changed (via
     // 'src', 'srcset' or 'sizes'). Starts a new load even if a previous load of
     // the same resource have failed, to match Firefox's behavior.
@@ -142,11 +146,13 @@ class CORE_EXPORT ImageLoader : public GarbageCollected<ImageLoader>,
 
   // force_blocking ensures that the image will block the load event.
   void LoadDeferredImage(network::mojom::ReferrerPolicy,
-                         bool force_blocking = false);
+                         bool force_blocking = false,
+                         bool update_from_microtask = false);
 
  protected:
   void ImageChanged(ImageResourceContent*, CanDeferInvalidation) override;
   void ImageNotifyFinished(ImageResourceContent*) override;
+  ResourcePriority ComputeResourcePriority() const override;
 
  private:
   class Task;
@@ -184,7 +190,7 @@ class CORE_EXPORT ImageLoader : public GarbageCollected<ImageLoader>,
   void DispatchPendingLoadEvent(std::unique_ptr<IncrementLoadEventDelayCount>);
   void DispatchPendingErrorEvent(std::unique_ptr<IncrementLoadEventDelayCount>);
 
-  LayoutImageResource* GetLayoutImageResource();
+  LayoutImageResource* GetLayoutImageResource() const;
   void UpdateLayoutObject();
 
   // Note: SetImage.*() are not a simple setter.

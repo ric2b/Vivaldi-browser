@@ -29,16 +29,19 @@ BASE_EXPORT bool IsRunningOnIOS14OrLater();
 // TODO(crbug.com/1227419): Remove once minimum supported version is at least 15
 BASE_EXPORT bool IsRunningOnIOS15OrLater();
 
+// Returns whether the operating system is iOS 16 or later.
+BASE_EXPORT bool IsRunningOnIOS16OrLater();
+
 // Returns whether the operating system is at the given version or later.
 BASE_EXPORT bool IsRunningOnOrLater(int32_t major,
                                     int32_t minor,
                                     int32_t bug_fix);
 
-// Returns whether iOS is signalling that an RTL text direction should be used
+// Returns whether iOS is signaling that an RTL text direction should be used
 // regardless of the current locale. This should not return true if the current
 // language is a "real" RTL language such as Arabic or Urdu; it should only
 // return true in cases where the RTL text direction has been forced (for
-// example by using the "RTL Psuedolanguage" option when launching from XCode).
+// example by using the "RTL Pseudolanguage" option when launching from Xcode).
 BASE_EXPORT bool IsInForcedRTL();
 
 // Stores the |path| of the ICU dat file in a global to be referenced later by

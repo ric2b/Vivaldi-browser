@@ -134,13 +134,6 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
     const String& mime_type,
     const String& codecs) {
   const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER) && BUILDFLAG(IS_MAC)
-  // Some containers are known to be partially supported.
-  if (ascii_mime_type == "video/quicktime")
-    return kMaybeSupported;
-#endif
-
   std::vector<std::string> codec_vector;
   media::SplitCodecs(ToASCIIOrEmpty(codecs), &codec_vector);
   return static_cast<SupportsType>(

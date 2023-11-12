@@ -27,13 +27,9 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
 
-#if defined(USE_GLX)
-#include "ui/gl/glx_util.h"
-#endif  // defined(USE_GLX)
-
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/buildflags.h"
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
 #if BUILDFLAG(IS_ANDROID)
 #include <android/native_window_jni.h>
@@ -359,14 +355,14 @@ EGLDisplay GetDisplayFromType(
       extra_display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
       extra_display_attribs.push_back(
           EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE);
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
       extra_display_attribs.push_back(
           EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
       extra_display_attribs.push_back(
           EGL_PLATFORM_VULKAN_DISPLAY_MODE_HEADLESS_ANGLE);
 #endif  // BUILDFLAG(OZONE_PLATFORM_X11)
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
       return GetPlatformANGLEDisplay(
           display, EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, enabled_angle_features,
           disabled_angle_features, extra_display_attribs);
@@ -520,6 +516,17 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
                         bool supports_angle_metal,
                         const base::CommandLine* command_line,
                         std::vector<DisplayType>* init_displays) {
+  // Check which experiment groups we're in. Check these early in the function
+  // so that finch assigns a group before the final decision to use the API is
+  // made. If we check too late, it will appear that some users are missing from
+  // the group if they are falling back to another path due to crashes or
+  // missing support.
+  bool default_angle_opengl =
+      base::FeatureList::IsEnabled(features::kDefaultANGLEOpenGL);
+  bool default_angle_metal =
+      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal);
+  bool default_angle_vulkan = features::IsDefaultANGLEVulkan();
+
   // If we're already requesting software GL, make sure we don't fallback to the
   // GPU
   bool forceSoftwareGL = IsSoftwareGLImplementation(GetGLImplementationParts());
@@ -543,19 +550,16 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   // experiment is enabled, try creating OpenGL displays first.
   // TODO(oetuaho@nvidia.com): Only enable this path on specific GPUs with a
   // blocklist entry. http://crbug.com/693090
-  if (supports_angle_opengl && use_angle_default &&
-      base::FeatureList::IsEnabled(features::kDefaultANGLEOpenGL)) {
+  if (supports_angle_opengl && use_angle_default && default_angle_opengl) {
     AddInitDisplay(init_displays, ANGLE_OPENGL);
     AddInitDisplay(init_displays, ANGLE_OPENGLES);
   }
 
-  if (supports_angle_metal && use_angle_default &&
-      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal)) {
+  if (supports_angle_metal && use_angle_default && default_angle_metal) {
     AddInitDisplay(init_displays, ANGLE_METAL);
   }
 
-  if (supports_angle_vulkan && use_angle_default &&
-      features::IsDefaultANGLEVulkan()) {
+  if (supports_angle_vulkan && use_angle_default && default_angle_vulkan) {
     AddInitDisplay(init_displays, ANGLE_VULKAN);
   }
 
@@ -680,12 +684,6 @@ GLDisplayPlatform* GLDisplay::GetAs() {
       type_checked = std::is_same<GLDisplayPlatform, GLDisplayEGL>::value;
 #endif  // defined(USE_EGL)
       break;
-
-    case X11:
-#if defined(USE_GLX)
-      type_checked = std::is_same<GLDisplayPlatform, GLDisplayX11>::value;
-#endif  // defined(USE_GLX)
-      break;
   }
   if (type_checked)
     return static_cast<GLDisplayPlatform*>(this);
@@ -697,11 +695,6 @@ GLDisplayPlatform* GLDisplay::GetAs() {
 template EXPORT_TEMPLATE_DEFINE(GL_EXPORT)
     GLDisplayEGL* GLDisplay::GetAs<GLDisplayEGL>();
 #endif  // defined(USE_EGL)
-
-#if defined(USE_GLX)
-template EXPORT_TEMPLATE_DEFINE(GL_EXPORT)
-    GLDisplayX11* GLDisplay::GetAs<GLDisplayX11>();
-#endif  // defined(USE_GLX)
 
 #if defined(USE_EGL)
 GLDisplayEGL::EGLGpuSwitchingObserver::EGLGpuSwitchingObserver(
@@ -744,6 +737,10 @@ void GLDisplayEGL::Shutdown() {
   egl_surfaceless_context_supported_ = false;
   egl_context_priority_supported_ = false;
   egl_android_native_fence_sync_supported_ = false;
+
+#if BUILDFLAG(IS_MAC)
+  CleanupMetalSharedEvent();
+#endif
 }
 
 bool GLDisplayEGL::IsInitialized() const {
@@ -1020,22 +1017,5 @@ void GLDisplayEGL::InitializeCommon() {
 #endif  // BUILDFLAG(IS_ANDROID)
 }
 #endif  // defined(USE_EGL)
-
-#if defined(USE_GLX)
-GLDisplayX11::GLDisplayX11(uint64_t system_device_id)
-    : GLDisplay(system_device_id, X11) {}
-
-GLDisplayX11::~GLDisplayX11() = default;
-
-void* GLDisplayX11::GetDisplay() const {
-  return x11::Connection::Get()->GetXlibDisplay();
-}
-
-void GLDisplayX11::Shutdown() {}
-
-bool GLDisplayX11::IsInitialized() const {
-  return true;
-}
-#endif  // defined(USE_GLX)
 
 }  // namespace gl

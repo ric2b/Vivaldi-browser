@@ -20,10 +20,12 @@
 #include "ui/views/win/hwnd_util.h"
 
 #include "app/vivaldi_constants.h"
+#include "chrome/installer/util/shell_util.h"
+#include "installer/vivaldi_install_modes.h"
 
 namespace {
 
-void PinShortcutToTaskbarOnWorkerThread(const std::wstring& app_name) {
+void PinShortcutToTaskbarOnWorkerThread(const std::wstring& app_model_id) {
   const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
   const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 
@@ -33,27 +35,36 @@ void PinShortcutToTaskbarOnWorkerThread(const std::wstring& app_name) {
 
   DWORD reg_pin_to_taskbar_enabled = 0;
   key_ptt.ReadValueDW(kVivaldiPinToTaskbarValue, &reg_pin_to_taskbar_enabled);
-  if (reg_pin_to_taskbar_enabled != 0) {
-    wchar_t system_buffer[MAX_PATH] = {0};
-    if (FAILED(SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL,
-                               SHGFP_TYPE_CURRENT, system_buffer)))
-      return;
 
-    base::FilePath shortcut_link(system_buffer);
-    shortcut_link = shortcut_link.AppendASCII("Vivaldi.lnk");
-    // now apply the correct app id for the shortcut link
-    base::win::ShortcutProperties props;
-    props.set_app_id(app_name);
-    props.options = base::win::ShortcutProperties::PROPERTIES_APP_ID;
-    bool success = base::win::CreateOrUpdateShortcutLink(
-        shortcut_link, props, base::win::ShortcutOperation::kUpdateExisting);
-    if (success) {
-      // pin the modified shortcut link to the taskbar
-      success = PinShortcutToTaskbar(shortcut_link);
-      if (success) {
-        // only pin once, typically on first run
-        key_ptt.WriteValue(kVivaldiPinToTaskbarValue, DWORD(0));
-      }
+  if (reg_pin_to_taskbar_enabled != 0) {
+    base::FilePath current_exe_path;
+    if (!base::PathService::Get(base::FILE_EXE, &current_exe_path)) {
+      NOTREACHED();
+      return;
+    }
+    ShellUtil::ShortcutProperties shortcut_properties(ShellUtil::CURRENT_USER);
+    ShellUtil::AddDefaultShortcutProperties(current_exe_path,
+                                            &shortcut_properties);
+    // This is used to identify which jumplist that is updated. See
+    // JumpList::CreateNewJumpListAndNotifyOS etc.
+    shortcut_properties.set_app_id(app_model_id);
+    shortcut_properties.set_shortcut_name(L"Vivaldi");
+
+    const CLSID toast_activator_clsid =
+        vivaldi::GetOrGenerateToastActivatorCLSID(&current_exe_path);
+    shortcut_properties.set_toast_activator_clsid(toast_activator_clsid);
+    shortcut_properties.set_pin_to_taskbar(true);
+
+    ShellUtil::ShortcutLocation location =
+        ShellUtil::SHORTCUT_LOCATION_START_MENU_ROOT;
+    ShellUtil::ShortcutOperation operation =
+        ShellUtil::SHELL_SHORTCUT_CREATE_IF_NO_SYSTEM_LEVEL;
+    bool pinned = false;
+    bool success = ShellUtil::CreateOrUpdateShortcut(
+        location, shortcut_properties, operation, &pinned);
+    if (success && pinned) {
+      // only pin once, typically on first run
+      key_ptt.WriteValue(kVivaldiPinToTaskbarValue, DWORD(0));
     }
   }
 }
@@ -64,17 +75,18 @@ void InitializeForJumpList(Profile* profile, HWND hwnd) {
   std::wstring app_name = base::UTF8ToWide(
       web_app::GenerateApplicationNameFromAppId(vivaldi::kVivaldiAppId));
 
-  std::wstring app_model_id = shell_integration::win::GetAppUserModelIdForApp(
-      app_name, profile->GetPath());
+  std::wstring app_model_id =
+      shell_integration::win::GetAppUserModelIdForBrowser(profile->GetPath());
+
   ui::win::SetAppIdForWindow(app_model_id, hwnd);
   // web_app::UpdateRelaunchDetailsForApp removed as it would change
   // the name of the running app to vivaldi_proxy.exe. See VB-72821.
 
-  if (base::win::GetVersion() < base::win::Version::WIN10) {
+  if (CanPinShortcutToTaskbar()) {
     // This is not available on Windows 10 and later.
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock()},
-        base::BindOnce(&PinShortcutToTaskbarOnWorkerThread, app_name));
+        base::BindOnce(&PinShortcutToTaskbarOnWorkerThread, app_model_id));
   }
 }
 

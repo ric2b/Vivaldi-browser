@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {AutocompleteMatch} from '../realbox.mojom-webui.js';
+import {AutocompleteMatch} from '../omnibox.mojom-webui.js';
 
 import {getTemplate} from './realbox_icon.html.js';
 
 const DOCUMENT_MATCH_TYPE: string = 'document';
-
-export type AutocompleteMatchWithImageData =
-    AutocompleteMatch&{faviconDataUrl?: string, imageDataUrl?: string};
+const HISTORY_CLUSTER_MATCH_TYPE: string = 'history-cluster';
 
 export interface RealboxIconElement {
   $: {
@@ -41,7 +40,7 @@ export class RealboxIconElement extends PolymerElement {
       /** Used as a background image on #icon if non-empty. */
       backgroundImage: {
         type: String,
-        computed: `computeBackgroundImage_(match.faviconDataUrl, match)`,
+        computed: `computeBackgroundImage_(match.*)`,
         reflectToAttribute: true,
       },
 
@@ -97,7 +96,17 @@ export class RealboxIconElement extends PolymerElement {
 
       imageSrc_: {
         type: String,
-        computed: `computeImageSrc_(match.imageDataUrl, match)`,
+        computed: `computeImageSrc_(match.imageUrl, match)`,
+        observer: 'onImageSrcChanged_',
+      },
+
+      /**
+       * Flag indicating whether or not an image is loading. This is used to
+       * show a placeholder color while the image is loading.
+       */
+      imageLoading_: {
+        type: Boolean,
+        value: false,
       },
     };
   }
@@ -110,31 +119,34 @@ export class RealboxIconElement extends PolymerElement {
   match: AutocompleteMatch;
   private iconStyle_: string;
   private imageSrc_: string;
+  private imageLoading_: boolean;
 
   //============================================================================
   // Helpers
   //============================================================================
 
   private computeBackgroundImage_(): string {
-    // If the match is a navigation one and has a favicon loaded, display that
-    // as background image. Otherwise, display the colored SVG icon for
-    // 'document' matches.
-    // If 'google_g' is the default icon, display that as background image when
-    // there is no match or the match is not a navigation one. Otherwise, don't
-    // use a background image (use a mask image instead).
     if (this.match && !this.match.isSearchType) {
-      if ((this.match as AutocompleteMatchWithImageData).faviconDataUrl) {
-        return (this.match as AutocompleteMatchWithImageData).faviconDataUrl!;
-      } else if (this.match.type === DOCUMENT_MATCH_TYPE) {
-        return this.match.iconUrl;
-      } else {
-        return '';
+      if (this.match.type !== DOCUMENT_MATCH_TYPE &&
+          this.match.type !== HISTORY_CLUSTER_MATCH_TYPE) {
+        return getFaviconForPageURL(
+            this.match.destinationUrl.url, /* isSyncedUrlForHistoryUi= */ false,
+            /* remoteIconUrlForUma= */ '', /* size= */ 32,
+            /* forceLightMode= */ true);
       }
-    } else if (this.defaultIcon === 'realbox/icons/google_g.svg') {
-      return this.defaultIcon;
-    } else {
-      return '';
+
+      if (this.match.type === DOCUMENT_MATCH_TYPE) {
+        return `url(${this.match.iconUrl})`;
+      }
     }
+
+    if (this.defaultIcon === 'realbox/icons/google_g.svg') {
+      // The google_g.svg is a fully colored icon, so it needs to be displayed
+      // as a background image as mask images will mask the colors.
+      return `url(${this.defaultIcon})`;
+    }
+
+    return '';
   }
 
   private computeIsAnswer_(): boolean {
@@ -143,46 +155,52 @@ export class RealboxIconElement extends PolymerElement {
 
   private computeMaskImage_(): string {
     if (this.match && (!this.match.isRichSuggestion || !this.inSearchbox)) {
-      return this.match.iconUrl;
+      return `url(${this.match.iconUrl})`;
     } else {
-      return this.defaultIcon;
+      return `url(${this.defaultIcon})`;
     }
   }
 
   private computeIconStyle_(): string {
-    // Use a background image if applicabale. Otherwise use a mask image.
+    // Use a background image if applicable. Otherwise use a mask image.
     if (this.backgroundImage) {
-      return `background-image: url(${this.backgroundImage});` +
+      return `background-image: ${this.backgroundImage};` +
           `background-color: transparent;`;
     } else {
-      return `-webkit-mask-image: url(${this.maskImage});`;
+      return `-webkit-mask-image: ${this.maskImage};`;
     }
   }
 
   private computeImageSrc_(): string {
-    if (!this.match) {
+    if (!this.match || !this.match.imageUrl) {
       return '';
     }
 
-    if ((this.match as AutocompleteMatchWithImageData).imageDataUrl) {
-      return (this.match as AutocompleteMatchWithImageData).imageDataUrl!;
-    } else if (
-        this.match.imageUrl && this.match.imageUrl.startsWith('data:image/')) {
-      // zero-prefix matches come with the image content in |match.imageUrl|.
+    if (this.match.imageUrl.startsWith('data:image/')) {
+      // Zero-prefix matches come with the image content in |match.imageUrl|.
       return this.match.imageUrl;
-    } else {
-      return '';
     }
+
+    return `chrome://image?${this.match.imageUrl}`;
   }
 
-  private containerBgColor_(imageSrc: string, imageDominantColor: string):
+  private containerBgColor_(imageDominantColor: string, imageLoading: boolean):
       string {
     // If the match has an image dominant color, show that color in place of the
     // image until it loads. This helps the image appear to load more smoothly.
-    return (!imageSrc && imageDominantColor) ?
+    return (imageLoading && imageDominantColor) ?
         // .25 opacity matching c/b/u/views/omnibox/omnibox_match_cell_view.cc.
         `${imageDominantColor}40` :
-        '';
+        'transparent';
+  }
+
+  private onImageSrcChanged_() {
+    // If imageSrc_ changes to a new truthy value, a new image is being loaded.
+    this.imageLoading_ = !!this.imageSrc_;
+  }
+
+  private onImageLoad_() {
+    this.imageLoading_ = false;
   }
 }
 

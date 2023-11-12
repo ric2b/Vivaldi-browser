@@ -16,6 +16,7 @@
 #include "services/network/public/cpp/cross_origin_opener_policy_parser.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/link_header_parser.h"
+#include "services/network/public/cpp/no_vary_search_header_parser.h"
 #include "services/network/public/cpp/origin_agent_cluster_parser.h"
 #include "services/network/public/cpp/supports_loading_mode/supports_loading_mode_parser.h"
 #include "services/network/public/cpp/timing_allow_origin_parser.h"
@@ -86,7 +87,9 @@ mojom::ParsedHeadersPtr PopulateParsedHeaders(
   }
 #endif
 
-  if (base::FeatureList::IsEnabled(network::features::kReduceAcceptLanguage)) {
+  if (base::FeatureList::IsEnabled(network::features::kReduceAcceptLanguage) ||
+      base::FeatureList::IsEnabled(
+          network::features::kReduceAcceptLanguageOriginTrial)) {
     std::string variants;
     if (headers->GetNormalizedHeader("Variants", &variants)) {
       parsed_headers->variants_headers = ParseVariantsHeaders(variants);
@@ -97,6 +100,14 @@ mojom::ParsedHeadersPtr PopulateParsedHeaders(
           ParseContentLanguages(content_language);
     }
   }
+
+  // We're not checking that PrefetchNoVarySearch is enabled on the
+  // renderer side through the Origin Trial, as the network service
+  // doesn't know anything about blink.
+  // The code here only parses the No-Vary-Search header if it is present.
+  if (base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch))
+    parsed_headers->no_vary_search = ParseNoVarySearch(*headers);
+
   return parsed_headers;
 }
 

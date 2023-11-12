@@ -25,6 +25,7 @@ class UserNoteInstance;
 class SidePanelRegistry;
 class UserNoteView;
 class BrowserView;
+class TabStripModel;
 
 namespace user_notes {
 class UserNoteInstance;
@@ -106,6 +107,7 @@ class UserNoteUICoordinator : public user_notes::UserNotesUI,
   void CreateSidePanelEntry(SidePanelRegistry* global_registry);
   void ScrollToNote();
   std::unique_ptr<views::View> CreateUserNotesView();
+  std::unique_ptr<views::View> CreateUserNotesWebUIView();
   void Invalidate();
 
   raw_ptr<Browser> browser_;

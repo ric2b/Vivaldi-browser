@@ -5,7 +5,7 @@
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
 
 #include <drm_fourcc.h>
-#include <algorithm>
+
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -13,6 +13,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -212,7 +213,7 @@ bool HardwareDisplayPlaneManager::AssignOverlayPlanes(
       auto* current = hw_planes_iter->get();
       if (IsCompatible(current, plane, crtc_id)) {
         hw_plane = current;
-        ++hw_planes_iter; // bump so we don't assign the same plane twice
+        ++hw_planes_iter;  // bump so we don't assign the same plane twice
         break;
       }
     }
@@ -363,6 +364,19 @@ bool HardwareDisplayPlaneManager::SetGammaCorrection(
   return CommitGammaCorrection(*crtc_props);
 }
 
+bool HardwareDisplayPlaneManager::SetVrrEnabled(uint32_t crtc_id,
+                                                bool vrr_enabled) {
+  const auto crtc_index = LookupCrtcIndex(crtc_id);
+  if (!crtc_index) {
+    LOG(ERROR) << "Unknown CRTC ID=" << crtc_id;
+    return false;
+  }
+
+  CrtcState* crtc_state = &crtc_state_[*crtc_index];
+  crtc_state->properties.vrr_enabled.value = vrr_enabled;
+  return true;
+}
+
 bool HardwareDisplayPlaneManager::InitializeCrtcState() {
   ScopedDrmResourcesPtr resources(drm_->GetResources());
   if (!resources) {
@@ -408,6 +422,8 @@ bool HardwareDisplayPlaneManager::InitializeCrtcState() {
                           &state.properties.out_fence_ptr);
     GetDrmPropertyForName(drm_, props.get(), "BACKGROUND_COLOR",
                           &state.properties.background_color);
+    GetDrmPropertyForName(drm_, props.get(), kVrrEnabledPropertyName,
+                          &state.properties.vrr_enabled);
 
     num_crtcs_with_out_fence_ptr += (state.properties.out_fence_ptr.id != 0);
 
@@ -518,9 +534,8 @@ ui::HardwareCapabilities HardwareDisplayPlaneManager::GetHardwareCapabilities(
 
   ui::HardwareCapabilities hc;
   hc.is_valid = true;
-  hc.num_overlay_capable_planes = std::count_if(
-      planes_.begin(), planes_.end(),
-      [crtc_id](const std::unique_ptr<HardwareDisplayPlane>& plane) {
+  hc.num_overlay_capable_planes = base::ranges::count_if(
+      planes_, [crtc_id](const std::unique_ptr<HardwareDisplayPlane>& plane) {
         return plane->type() != DRM_PLANE_TYPE_CURSOR &&
                plane->CanUseForCrtcId(crtc_id);
       });

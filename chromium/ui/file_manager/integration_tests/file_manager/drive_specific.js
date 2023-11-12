@@ -343,7 +343,7 @@ testcase.drivePinMultiple = async () => {
   await remoteCall.waitForElementLost(
       appId, '#file-list .dim-offline[file-name="world.ogv"]');
   await remoteCall.waitForElement(
-      appId, '#file-list .pinned[file-name="world.ogv"] .detail-pinned');
+      appId, '#file-list .pinned[file-name="world.ogv"] .inline-status');
 
   // Select world.ogv by itself.
   await remoteCall.waitAndClickElement(
@@ -411,7 +411,7 @@ testcase.drivePinHosted = async () => {
   await remoteCall.waitForElementLost(
       appId, '#file-list .dim-offline[file-name="hello.txt"]');
   await remoteCall.waitForElement(
-      appId, '#file-list .pinned[file-name="hello.txt"] .detail-pinned');
+      appId, '#file-list .pinned[file-name="hello.txt"] .inline-status');
 
   // Test Document.gdoc should not be pinned however.
   await remoteCall.waitForElement(
@@ -468,7 +468,7 @@ testcase.drivePinFileMobileNetwork = async () => {
   // Check: File is pinned.
   await remoteCall.waitForElement(appId, '[command="#toggle-pinned"][checked]');
   await remoteCall.waitForElement(
-      appId, '#file-list .pinned[file-name="hello.txt"] .detail-pinned');
+      appId, '#file-list .pinned[file-name="hello.txt"] .inline-status');
   await waitForNotification('disabled-mobile-sync');
   await sendTestMessage({
     name: 'clickNotificationButton',
@@ -889,18 +889,18 @@ testcase.driveOfflineInfoBannerWithoutFlag = async () => {
 };
 
 /**
- * Tests that the inline file sync icons are displayed in Drive as files
- * start syncing.
+ * Tests that the inline file sync "in progress" icon is displayed in Drive as
+ * the file starts syncing then disappears as it finishes syncing.
  */
-testcase.driveInlineSyncStatus = async () => {
+testcase.driveInlineSyncStatusSingleFile = async () => {
   const toBeUploaded = new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'video.ogv',
     thumbnailFileName: 'image.png',
-    targetPath: 'world.ogv',
+    targetPath: 'toBeUploaded.ogv',
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
-    nameText: 'world.ogv',
+    nameText: 'toBeUploaded.ogv',
     sizeText: '59 KB',
     typeText: 'OGG video',
     availableOffline: true,
@@ -910,19 +910,19 @@ testcase.driveInlineSyncStatus = async () => {
   const appId =
       await setupAndWaitUntilReady(RootPath.DRIVE, [], [toBeUploaded]);
 
-  // Fake syncing the file to Drive.
+  // Fake the file starting to sync.
   await sendTestMessage({
     name: 'setDriveFileSyncStatus',
     path: `/root/${toBeUploaded.targetPath}`,
     syncStatus: 'in_progress',
   });
 
-  const syncStatusQuery = '[data-sync-status=in_progress]';
+  const syncInProgressQuery = '[data-sync-status=in_progress]';
 
   // Verify the "sync in progress" icon is displayed.
-  await remoteCall.waitForElement(appId, syncStatusQuery);
+  await remoteCall.waitForElement(appId, syncInProgressQuery);
 
-  // Fake completing the file sync.
+  // Fake the file finishing syncing.
   await sendTestMessage({
     name: 'setDriveFileSyncStatus',
     path: `/root/${toBeUploaded.targetPath}`,
@@ -930,7 +930,102 @@ testcase.driveInlineSyncStatus = async () => {
   });
 
   // Verify the "sync in progress" icon is no longer displayed.
-  await remoteCall.waitForElementLost(appId, syncStatusQuery);
+  await remoteCall.waitForElementLost(appId, syncInProgressQuery);
+};
+
+/**
+ * Tests that the inline file sync icons are displayed in Drive on parent
+ * folders containing entries and that child entries' statuses are aggregated
+ * respecting the order of precedence (failed > in progress > completed).
+ */
+testcase.driveInlineSyncStatusParentFolder = async () => {
+  const parentDir = new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'some_folder',
+    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+    nameText: 'some_folder',
+    sizeText: '--',
+    typeText: 'Folder',
+  });
+
+  const toBeUploaded = new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'video.ogv',
+    thumbnailFileName: 'image.png',
+    targetPath: 'some_folder/toBeUploaded.ogv',
+    mimeType: 'video/ogg',
+    lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
+    nameText: 'toBeUploaded.ogv',
+    sizeText: '59 KB',
+    typeText: 'OGG video',
+    availableOffline: true,
+  });
+
+  const toFailUploading = new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'video.ogv',
+    thumbnailFileName: 'image.png',
+    targetPath: 'some_folder/toFailUploading.ogv',
+    mimeType: 'video/ogg',
+    lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
+    nameText: 'toFailUploading.ogv',
+    sizeText: '59 KB',
+    typeText: 'OGG video',
+    availableOffline: true,
+  });
+
+  // Open Files app on Drive and copy over entry to be uploaded.
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DRIVE, [], [parentDir, toBeUploaded, toFailUploading]);
+
+  // Fake syncing both files to Drive.
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toBeUploaded.targetPath}`,
+    syncStatus: 'in_progress',
+  });
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toFailUploading.targetPath}`,
+    syncStatus: 'in_progress',
+  });
+  // States:
+  // toBeUploaded - syncing in progress
+  // toFailUploading - syncing in progress
+
+  const syncInProgressQuery = '[data-sync-status=in_progress]';
+  const syncFailedQuery = '[data-sync-status=error]';
+
+  // Verify the "sync in progress" icon is displayed in the parent folder.
+  await remoteCall.waitForElement(appId, syncInProgressQuery);
+
+  // Fake toFailUploading.ogv failing to sync to Drive.
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toFailUploading.targetPath}`,
+    syncStatus: 'error',
+  });
+  // States:
+  // toBeUploaded - syncing in progress
+  // toFailUploading - syncing failed
+
+  // Verify the "sync failed" icon is displayed in the parent folder.
+  // (failed > in progress)
+  await remoteCall.waitForElement(appId, syncFailedQuery);
+
+  // Fake some/path/world.ogv finishing syncing.
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toBeUploaded.targetPath}`,
+    syncStatus: 'completed',
+  });
+  // States:
+  // toBeUploaded - syncing completed
+  // toFailUploading - syncing failed
+
+  // Verify the "sync failed" icon is still displayed in the parent folder.
+  // (failed > completed)
+  await remoteCall.waitForElement(appId, syncFailedQuery);
 };
 
 /**
@@ -1074,4 +1169,41 @@ testcase.driveEnableDocsOfflineDialogDisappearsOnUnmount = async () => {
 
   // Check: the Enable Docs Offline dialog should disappear.
   await remoteCall.waitForElementLost(appId, '.cr-dialog-container.shown');
+};
+
+/**
+ * Tests that when deleting a file on Google Drive the dialog has no mention of
+ * permanent deletion (as the files aren't pemanently deleted but go to Google
+ * Drive trash instead).
+ */
+testcase.driveDeleteDialogDoesntMentionPermanentDelete = async () => {
+  // Open Files app on Drive.
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE, []);
+
+  // Wait for the "hello.txt" file to appear.
+  const helloTxtSelector = '#file-list [file-name="photos"]';
+  await remoteCall.waitAndClickElement(appId, helloTxtSelector);
+
+  // Ensure the move-to-trash command is hidden and disabled on Google Drive and
+  // then click the enabled delete button
+  await remoteCall.waitForElement(appId, '#move-to-trash[hidden][disabled]');
+  await remoteCall.waitAndClickElement(
+      appId, '#delete-button:not([hidden]):not([disabled])');
+
+  // Check: the dialog 'Cancel' button should be focused by default.
+  const dialogDefaultButton =
+      await remoteCall.waitForElement(appId, '.cr-dialog-cancel:focus');
+  chrome.test.assertEq('Cancel', dialogDefaultButton.text);
+
+  // Check: the dialog has no mention in the text of "permanent".
+  const dialogText = await remoteCall.waitForElement(appId, '.cr-dialog-text');
+  chrome.test.assertFalse(dialogText.text.toLowerCase().includes('permanent'));
+
+  // The dialog 'Delete' button should be only contain the text "Delete".
+  const dialogDeleteButton =
+      await remoteCall.waitAndClickElement(appId, '.cr-dialog-ok');
+  chrome.test.assertEq('Delete', dialogDeleteButton.text);
+
+  // Wait for completion of file deletion.
+  await remoteCall.waitForElementLost(appId, helloTxtSelector);
 };

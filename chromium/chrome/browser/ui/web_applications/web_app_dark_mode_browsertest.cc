@@ -7,7 +7,7 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/web_applications/manifest_update_task.h"
+#include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -94,16 +94,19 @@ IN_PROC_BROWSER_TEST_F(WebAppDarkModeBrowserTest, ColorSchemeDarkSet) {
       "Blink.UseCounter.Features",
       blink::mojom::WebFeature::kWebAppManifestUserPreferences, 1);
 
-  EXPECT_EQ(provider().registrar().GetAppThemeColor(app_id).value(),
+  EXPECT_EQ(provider().registrar_unsafe().GetAppThemeColor(app_id).value(),
             SK_ColorBLUE);
-  EXPECT_EQ(provider().registrar().GetAppBackgroundColor(app_id).value(),
+  EXPECT_EQ(provider().registrar_unsafe().GetAppBackgroundColor(app_id).value(),
             SK_ColorBLUE);
 
-  EXPECT_EQ(provider().registrar().GetAppDarkModeThemeColor(app_id).value(),
-            SK_ColorRED);
   EXPECT_EQ(
-      provider().registrar().GetAppDarkModeBackgroundColor(app_id).value(),
+      provider().registrar_unsafe().GetAppDarkModeThemeColor(app_id).value(),
       SK_ColorRED);
+  EXPECT_EQ(provider()
+                .registrar_unsafe()
+                .GetAppDarkModeBackgroundColor(app_id)
+                .value(),
+            SK_ColorRED);
 }
 
 IN_PROC_BROWSER_TEST_F(WebAppDarkModeBrowserTest, NoUserPreferences) {
@@ -171,27 +174,24 @@ constexpr char kTestManifestBody[] = R"({
   }],
   "theme_color": "#0000FF",
   "background_color": "#0000FF",
-  "user_preferences": {
-    "color_scheme_dark": {
-      "theme_color": "#FF0000",
-      "background_color": "#FF0000"
-    }
-  }
+  "theme_colors":
+    [{"color": "#FF0000", "media": "(prefers-color-scheme: dark) "}],
+  "background_colors":
+    [{"color": "#FF0000", "media": "(prefers-color-scheme: dark) "}]
 })";
 
 // Generated from script:
 // $ tools/origin_trials/generate_token.py http://127.0.0.1:8000
-// "WebAppDarkMode" --expire-timestamp=2000000000
+// "WebAppDarkModeV2" --expire-timestamp=2000000000
 constexpr char kOriginTrialToken[] =
-    "A5gReAn4Vcyi41JIfRKliAfE8tKDVpNCK7Xjo5S2XxgkuXNY+"
-    "gapsR9MqlZWWiBAmUsNcHSjqG+"
-    "phM2z3ZNQQAMAAABWeyJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMTo4MDAwIiwgImZlYXR1c"
-    "mUiOiAiV2ViQXBwRGFya01vZGUiLCAiZXhwaXJ5IjogMjAwMDAwMDAwMH0=";
+    "A5O53Hwkh/37AxAgFN9SgIEMr4QMDuI+vdiwHK5Y1sRbupzDwml5TUobj4smxm21Rk8RyjU/"
+    "geQ68fYc05rZ7AwAAABYeyJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMTo4MDAwIiwgImZlYX"
+    "R1cmUiOiAiV2ViQXBwRGFya01vZGVWMiIsICJleHBpcnkiOiAyMDAwMDAwMDAwfQ==";
 
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(WebAppDarkModeOriginTrialBrowserTest, OriginTrial) {
-  ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
+  ManifestUpdateManager::BypassWindowCloseWaitingForTesting() = true;
 
   bool serve_token = true;
   content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
@@ -225,11 +225,13 @@ IN_PROC_BROWSER_TEST_F(WebAppDarkModeOriginTrialBrowserTest, OriginTrial) {
 
   // Origin trial should grant the app access.
   WebAppProvider& provider = *WebAppProvider::GetForTest(browser()->profile());
-  EXPECT_EQ(provider.registrar().GetAppById(app_id)->dark_mode_theme_color(),
-            SK_ColorRED);
   EXPECT_EQ(
-      provider.registrar().GetAppById(app_id)->dark_mode_background_color(),
+      provider.registrar_unsafe().GetAppById(app_id)->dark_mode_theme_color(),
       SK_ColorRED);
+  EXPECT_EQ(provider.registrar_unsafe()
+                .GetAppById(app_id)
+                ->dark_mode_background_color(),
+            SK_ColorRED);
 
   // Open the page again with the token missing.
   {
@@ -243,11 +245,13 @@ IN_PROC_BROWSER_TEST_F(WebAppDarkModeOriginTrialBrowserTest, OriginTrial) {
 
   // The app should update to no longer have dark mode colors defined without
   // the origin trial.
-  EXPECT_EQ(provider.registrar().GetAppById(app_id)->dark_mode_theme_color(),
-            absl::nullopt);
   EXPECT_EQ(
-      provider.registrar().GetAppById(app_id)->dark_mode_background_color(),
+      provider.registrar_unsafe().GetAppById(app_id)->dark_mode_theme_color(),
       absl::nullopt);
+  EXPECT_EQ(provider.registrar_unsafe()
+                .GetAppById(app_id)
+                ->dark_mode_background_color(),
+            absl::nullopt);
 }
 
 }  // namespace web_app

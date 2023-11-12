@@ -20,12 +20,8 @@ class MockIdpNetworkRequestManager : public IdpNetworkRequestManager {
   MockIdpNetworkRequestManager& operator=(const MockIdpNetworkRequestManager&) =
       delete;
 
-  MOCK_METHOD2(FetchManifestList, void(const GURL&, FetchManifestListCallback));
-  MOCK_METHOD4(FetchManifest,
-               void(const GURL&,
-                    absl::optional<int>,
-                    absl::optional<int>,
-                    FetchManifestCallback));
+  MOCK_METHOD2(FetchWellKnown, void(const GURL&, FetchWellKnownCallback));
+  MOCK_METHOD4(FetchConfig, void(const GURL&, int, int, FetchConfigCallback));
   MOCK_METHOD3(FetchClientMetadata,
                void(const GURL&,
                     const std::string&,
@@ -37,6 +33,14 @@ class MockIdpNetworkRequestManager : public IdpNetworkRequestManager {
                     const std::string&,
                     const std::string&,
                     TokenRequestCallback));
+  MOCK_METHOD5(SendSuccessfulTokenRequestMetrics,
+               void(const GURL&,
+                    base::TimeDelta,
+                    base::TimeDelta,
+                    base::TimeDelta,
+                    base::TimeDelta));
+  MOCK_METHOD2(SendFailedTokenRequestMetrics,
+               void(const GURL&, MetricsEndpointErrorCode code));
   MOCK_METHOD2(SendLogout, void(const GURL& logout_url, LogoutCallback));
 };
 

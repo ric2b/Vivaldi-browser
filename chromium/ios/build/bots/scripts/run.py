@@ -213,7 +213,9 @@ class Runner():
             test_args=self.test_args,
             use_clang_coverage=self.args.use_clang_coverage,
             env_vars=env_vars,
-            video_plugin_option=self.args.record_video)
+            video_plugin_option=self.args.record_video,
+            output_disabled_tests=self.args.output_disabled_tests,
+        )
       elif self.args.variations_seed_path != 'NO_PATH':
         tr = variations_runner.VariationsSimulatorParallelTestRunner(
             self.args.app,
@@ -263,6 +265,7 @@ class Runner():
             use_clang_coverage=self.args.use_clang_coverage,
             wpr_tools_path=self.args.wpr_tools_path,
             xctest=self.args.xctest,
+            output_disabled_tests=self.args.output_disabled_tests,
         )
       elif self.args.xcodebuild_device_runner and self.args.xctest:
         tr = xcodebuild_runner.DeviceXcodeTestRunner(
@@ -275,7 +278,9 @@ class Runner():
             retries=self.args.retries,
             test_cases=self.args.test_cases,
             test_args=self.test_args,
-            env_vars=env_vars)
+            env_vars=env_vars,
+            output_disabled_tests=self.args.output_disabled_tests,
+        )
       else:
         tr = test_runner.DeviceTestRunner(
             self.args.app,
@@ -288,6 +293,7 @@ class Runner():
             test_args=self.test_args,
             test_cases=self.args.test_cases,
             xctest=self.args.xctest,
+            output_disabled_tests=self.args.output_disabled_tests,
         )
 
       logging.info("Using test runner %s" % type(tr).__name__)
@@ -306,7 +312,8 @@ class Runner():
       # Swarming infra marks device status unavailable for any device related
       # issue using this return code.
       return 3
-    except test_runner.SimulatorNotFoundError as e:
+    except (test_runner.SimulatorNotFoundError,
+            test_runner.HostIsDownError) as e:
       # This means there's probably some issue in simulator runtime so we don't
       # want to cache it anymore (when it's in new Xcode format).
       self.should_move_xcode_runtime_to_cache = False
@@ -592,6 +599,11 @@ class Runner():
             'test cases by specifying failed_only. More options coming soon...'
         ),
         metavar='record-video',
+    )
+    parser.add_argument(
+        '--output-disabled-tests',
+        action='store_true',
+        help='Whether or not disabled test should be included in test output.',
     )
 
     def load_from_json(args):

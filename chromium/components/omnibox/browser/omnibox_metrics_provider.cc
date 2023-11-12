@@ -18,6 +18,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -185,7 +186,7 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
   omnibox_event->set_is_popup_open(log.is_popup_open && !log.is_paste_and_go);
   omnibox_event->set_is_paste_and_go(log.is_paste_and_go);
 
-  for (auto i(log.result.begin()); i != log.result.end(); ++i) {
+  for (auto i(log.result->begin()); i != log.result->end(); ++i) {
     OmniboxEventProto::Suggestion* suggestion = omnibox_event->add_suggestion();
     const auto provider_type = i->provider->AsOmniboxEventProviderType();
     suggestion->set_provider(provider_type);
@@ -201,6 +202,11 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
 
     suggestion->set_has_tab_match(i->has_tab_match.value_or(false));
     suggestion->set_is_keyword_suggestion(i->from_keyword);
+
+    if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled() &&
+        !AutocompleteMatch::IsSearchType(i->type)) {
+      suggestion->mutable_scoring_signals()->CopyFrom(i->scoring_signals);
+    }
   }
   for (auto i(log.providers_info.begin()); i != log.providers_info.end(); ++i) {
     OmniboxEventProto::ProviderInfo* provider_info =
@@ -220,10 +226,10 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
 
 void OmniboxMetricsProvider::RecordOmniboxOpenedURLClientSummarizedResultType(
     const OmniboxLog& log) {
-  if (log.selected_index < 0 || log.selected_index >= log.result.size())
+  if (log.selected_index < 0 || log.selected_index >= log.result->size())
     return;
 
-  auto autocomplete_match = log.result.match_at(log.selected_index);
+  auto autocomplete_match = log.result->match_at(log.selected_index);
   auto omnibox_event_result_type =
       autocomplete_match.AsOmniboxEventResultType();
   auto client_summarized_result_type =

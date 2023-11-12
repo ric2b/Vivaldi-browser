@@ -7,6 +7,7 @@
 
 #include "chrome/browser/ui/webid/account_selection_view.h"
 
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/webid/account_selection_bubble_view.h"
 #include "chrome/browser/ui/views/webid/identity_provider_display_data.h"
@@ -35,13 +36,10 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // AccountSelectionView:
   void Show(
       const std::string& rp_etld_plus_one,
-      const absl::optional<std::string>& iframe_etld_plus_one,
       const std::vector<content::IdentityProviderData>& identity_provider_data,
       Account::SignInMode sign_in_mode) override;
-  void ShowFailureDialog(
-      const std::string& rp_etld_plus_one,
-      const std::string& idp_etld_plus_one,
-      const absl::optional<std::string>& iframe_url_for_display) override;
+  void ShowFailureDialog(const std::string& rp_etld_plus_one,
+                         const std::string& idp_etld_plus_one) override;
 
   // content::WebContentsObserver
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -60,8 +58,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   virtual views::Widget* CreateBubble(
       Browser* browser,
       const std::u16string& rp_etld_plus_one,
-      const absl::optional<std::u16string>& idp_title,
-      const absl::optional<std::u16string>& iframe_url_for_display);
+      const absl::optional<std::u16string>& idp_title);
 
   // Returns AccountSelectionBubbleViewInterface for bubble views::Widget.
   virtual AccountSelectionBubbleViewInterface* GetBubbleView();
@@ -87,7 +84,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // AccountSelectionBubbleView::Observer:
   void OnAccountSelected(const Account& account,
                          const IdentityProviderDisplayData& idp_data) override;
-  void OnLinkClicked(const GURL& url) override;
+  void OnLinkClicked(LinkType link_type, const GURL& url) override;
   void OnBackButtonClicked() override;
   void OnCloseButtonClicked() override;
 
@@ -104,11 +101,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   std::vector<IdentityProviderDisplayData> idp_data_list_;
 
-  // The string corresponding to the URL for the RP shown in the title. By
-  // default, this is the main frame of the page where FedCM is invoked.
-  // However, if FedCM is invoked from an iframe and the invocation uses
-  // showRequester="both", then this will be set to that iframe's URL.
-  std::u16string rp_in_title_;
+  std::u16string rp_for_display_;
 
   State state_{State::ACCOUNT_PICKER};
 
@@ -116,6 +109,8 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   bool notify_delegate_of_dismiss_{true};
 
   base::WeakPtr<views::Widget> bubble_widget_;
+
+  base::WeakPtrFactory<FedCmAccountSelectionView> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_WEBID_FEDCM_ACCOUNT_SELECTION_VIEW_DESKTOP_H_

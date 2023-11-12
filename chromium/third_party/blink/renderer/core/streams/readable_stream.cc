@@ -4,11 +4,11 @@
 
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/iterable.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_iterator_result_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_get_reader_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_writable_pair.h"
@@ -239,7 +239,7 @@ class ReadableStream::PipeToEngine final
       }
 
       //   c. Add abortAlgorithm to signal.
-      signal->AddAlgorithm(
+      abort_handle_ = signal->AddAlgorithm(
           MakeGarbageCollected<PipeToAbortAlgorithm>(this, signal));
     }
 
@@ -282,6 +282,7 @@ class ReadableStream::PipeToEngine final
     visitor->Trace(promise_);
     visitor->Trace(last_write_);
     visitor->Trace(shutdown_error_);
+    visitor->Trace(abort_handle_);
   }
 
  private:
@@ -478,9 +479,8 @@ class ReadableStream::PipeToEngine final
     auto* isolate = script_state_->GetIsolate();
     v8::Local<v8::Value> value;
     bool done = false;
-    bool unpack_succeeded =
-        V8UnpackIteratorResult(script_state_, result.As<v8::Object>(), &done)
-            .ToLocal(&value);
+    bool unpack_succeeded = V8UnpackIterationResult(
+        script_state_, result.As<v8::Object>(), &value, &done);
     DCHECK(unpack_succeeded);
     if (done) {
       ReadableClosed();
@@ -717,8 +717,16 @@ class ReadableStream::PipeToEngine final
       ReadableStreamDefaultReader::Release(script_state_, default_reader);
     }
 
-    // TODO(ricea): Implement signal.
     // d. If signal is not undefined, remove abortAlgorithm from signal.
+    //
+    // An abort algorithm is only added if the signal provided to pipeTo is not
+    // undefined *and* not aborted, which means `abort_handle_` can be null if
+    // signal is not undefined.
+    if (abort_handle_) {
+      auto* signal = pipe_options_->Signal();
+      DCHECK(signal);
+      signal->RemoveAlgorithm(abort_handle_);
+    }
 
     v8::Local<v8::Value> error;
     if (error_maybe.ToLocal(&error)) {
@@ -820,6 +828,7 @@ class ReadableStream::PipeToEngine final
   Member<ReadableStreamDefaultReader> reader_;
   Member<WritableStreamDefaultWriter> writer_;
   Member<StreamPromiseResolver> promise_;
+  Member<AbortSignal::AlgorithmHandle> abort_handle_;
   TraceWrapperV8Reference<v8::Promise> last_write_;
   Action shutdown_action_;
   TraceWrapperV8Reference<v8::Value> shutdown_error_;
@@ -920,9 +929,8 @@ class ReadableStream::TeeEngine::PullAlgorithm final : public StreamAlgorithm {
       // "Get" operations cannot have side-effects.
       v8::Local<v8::Value> value;
       bool done = false;
-      bool unpack_succeeded =
-          V8UnpackIteratorResult(script_state, result.As<v8::Object>(), &done)
-              .ToLocal(&value);
+      bool unpack_succeeded = V8UnpackIterationResult(
+          script_state, result.As<v8::Object>(), &value, &done);
       CHECK(unpack_succeeded);
 
       //   vi. Assert: Type(done) is Boolean.

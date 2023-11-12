@@ -36,7 +36,7 @@ CHROME_PATCH_FILE_SUFFIX = "_patch"  # prefixed by options.output_name
 COMPRESSED_ARCHIVE_SUFFIX = ".packed.7z"
 
 COMPRESSED_FILE_EXT = ".packed.7z"     # extension of patch archive file
-COURGETTE_EXEC = "courgette.exe"
+COURGETTE_EXEC = "courgette64.exe"
 MINI_INSTALLER_INPUT_FILE = "packed_files.txt"
 PATCH_FILE_EXT = '.diff'
 SETUP_EXEC = "setup.exe"
@@ -194,6 +194,7 @@ def SignTarget(options, target):
   signcommand = ([options.vivaldi_sign_cmd,
       "sign",
       "/v",
+      "/fd", "SHA256",
     ] +
     options.vivaldi_sign_key.split()+
     [
@@ -727,7 +728,7 @@ def _ParseOptions():
   parser.add_option('-l', '--last_chrome_installer',
       help='Generate differential installer. The value of this parameter '
            'specifies the directory that contains base versions of '
-           'setup.exe, courgette.exe (if --diff_algorithm is COURGETTE) '
+           'setup.exe, courgette64.exe (if --diff_algorithm is COURGETTE) '
            '& chrome.7z.')
   parser.add_option('-f', '--setup_exe_format', default='COMPRESSED',
       help='How setup.exe should be included {COMPRESSED|DIFF|FULL}.')

@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "content/public/browser/web_contents.h"
@@ -702,16 +703,6 @@ IN_PROC_BROWSER_TEST_F(
                 app_profile, extension_misc::kChromeVoxExtensionId,
                 kGetFromStorageAPI));
 
-  // Store data in localStorage and verify that it is saved.
-  constexpr char kSetAndReadFromLocalStorage[] = R"(
-      localStorage.setItem('test2', 'testValue2');
-      domAutomationController.send(localStorage.getItem('test2'));
-    )";
-  EXPECT_EQ("testValue2",
-            extensions::browsertest_util::ExecuteScriptInBackgroundPage(
-                app_profile, extension_misc::kChromeVoxExtensionId,
-                kSetAndReadFromLocalStorage));
-
   // The data should persist when extension is restarted.
   AccessibilityManager::Get()->EnableSpokenFeedback(false);
   test::SpeechMonitor speech_monitor2;
@@ -724,18 +715,12 @@ IN_PROC_BROWSER_TEST_F(
             extensions::browsertest_util::ExecuteScriptInBackgroundPage(
                 app_profile, extension_misc::kChromeVoxExtensionId,
                 kGetFromStorageAPI));
-
-  constexpr char kGetFromLocalStorage[] =
-      R"( domAutomationController.send(localStorage.getItem('test2'));)";
-  EXPECT_EQ("testValue2",
-            extensions::browsertest_util::ExecuteScriptInBackgroundPage(
-                app_profile, extension_misc::kChromeVoxExtensionId,
-                kGetFromLocalStorage));
 }
 
+// TODO(crbug.com/1395435): Re-enable this test
 IN_PROC_BROWSER_TEST_F(
     KioskDeviceOwnedTest,
-    AccessibilityExtensionsResetTheirStateUponSessionRestart) {
+    DISABLED_AccessibilityExtensionsResetTheirStateUponSessionRestart) {
   test::SpeechMonitor speech_monitor;
   StartAppLaunchFromLoginScreen(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);

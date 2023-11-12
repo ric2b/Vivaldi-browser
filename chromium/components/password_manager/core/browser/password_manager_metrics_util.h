@@ -77,6 +77,7 @@ enum UIDismissalReason {
 // and PasswordLeakDetectionDialogType in enums.xml.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// In case of adding a new type, NEXT VALUE: 4.
 enum class LeakDialogType {
   // The user is asked to visit the Password Checkup.
   kCheckup = 0,
@@ -85,10 +86,9 @@ enum class LeakDialogType {
   // The user is asked to visit the Password Checkup and change the password for
   // the current site.
   kCheckupAndChange = 2,
-  // The user is asked to let Chrome automatically change their password for the
-  // current site.
-  kChangeAutomatically = 3,
-  kMaxValue = kChangeAutomatically,
+  // This value has been deprecated as part of APC removal.
+  // kChangeAutomatically = 3,
+  kMaxValue = kCheckupAndChange,
 };
 
 // Enum recording the dismissal reason of the data breach dialog which is shown
@@ -97,13 +97,15 @@ enum class LeakDialogType {
 //
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// In case of adding a new type, NEXT VALUE: 5.
 enum class LeakDialogDismissalReason {
   kNoDirectInteraction = 0,
   kClickedClose = 1,
   kClickedCheckPasswords = 2,
   kClickedOk = 3,
-  kClickedChangePasswordAutomatically = 4,
-  kMaxValue = kClickedChangePasswordAutomatically,
+  // This type has been deprecated as part of APC removal.
+  // kClickedChangePasswordAutomatically = 4,
+  kMaxValue = kClickedOk,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -120,7 +122,7 @@ enum FormDeserializationStatus {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-// Metrics: "PasswordManager.PasswordSyncState2"
+// Metrics: "PasswordManager.PasswordSyncState3"
 enum class PasswordSyncState {
   kSyncingOk = 0,
   kNotSyncingFailedRead = 1,
@@ -468,23 +470,6 @@ enum class PasswordCheckInteraction {
   kChangePasswordAutomatically = 9,
   // Must be last.
   kMaxValue = kChangePasswordAutomatically,
-};
-
-// Represents the (automatic password change) scripts cache state and the UI
-// reaction to it encountered on opening the password check subpage on Desktop.
-// These values are persisted to logs. Always keep this enum in sync with the
-// corresponding `PasswordCheckScriptsCacheState` in enums.xml.
-enum class PasswordCheckScriptsCacheState {
-  // The cache is already fresh and does not need to be refetched.
-  kCacheFresh = 0,
-  // The cache is stale, but none of the credentials has a password change
-  // script and therefore no UI update was triggered.
-  kCacheStaleAndNoUiUpdate = 1,
-  // The cache is stale and at least one of the credential has a password change
-  // script. A UI update was triggered (but, if the credential was already known
-  // to be compromised, the UI may not have changed).
-  kCacheStaleAndUiUpdate = 2,
-  kMaxValue = kCacheStaleAndUiUpdate
 };
 
 // Represents different user interactions related to adding credential from the

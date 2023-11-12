@@ -22,7 +22,7 @@ import './live_caption_section.js';
 
 // </if>
 
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
@@ -38,7 +38,7 @@ import {CaptionsBrowserProxyImpl} from './captions_browser_proxy.js';
 // </if>
 
 const SettingsA11yPageElementBase =
-    WebUIListenerMixin(BaseMixin(PolymerElement));
+    WebUiListenerMixin(BaseMixin(PolymerElement));
 
 class SettingsA11yPageElement extends SettingsA11yPageElementBase {
   static get is() {
@@ -138,7 +138,7 @@ class SettingsA11yPageElement extends SettingsA11yPageElementBase {
   override ready() {
     super.ready();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'screen-reader-state-changed',
         (hasScreenReader: boolean) =>
             this.onScreenReaderStateChanged_(hasScreenReader));
@@ -182,13 +182,7 @@ class SettingsA11yPageElement extends SettingsA11yPageElementBase {
 
   // <if expr="is_chromeos">
   private onManageSystemAccessibilityFeaturesTap_() {
-    if (loadTimeData.valueExists(
-            'isAccessibilityOSSettingsVisibilityEnabled') &&
-        loadTimeData.getBoolean('isAccessibilityOSSettingsVisibilityEnabled')) {
-      window.location.href = 'chrome://os-settings/osAccessibility';
-    } else {
-      window.location.href = 'chrome://os-settings/manageAccessibility';
-    }
+    window.location.href = 'chrome://os-settings/osAccessibility';
   }
   // </if>
 

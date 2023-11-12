@@ -7,7 +7,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/crostini/crostini_simple_types.h"
-#include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
+#include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 
 class Profile;
 
@@ -60,10 +60,5 @@ class CrostiniUpgraderDialog : public SystemWebDialogDelegate {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::CrostiniUpgraderDialog;
-}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_ASH_CROSTINI_UPGRADER_CROSTINI_UPGRADER_DIALOG_H_

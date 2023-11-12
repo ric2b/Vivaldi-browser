@@ -26,7 +26,6 @@
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/config/gpu_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gl/gl_image_stub.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_mock.h"
 #include "ui/gl/gl_surface_stub.h"
@@ -51,16 +50,6 @@ using ::testing::SetArgPointee;
 using ::testing::SetArgPointee;
 using ::testing::StrEq;
 using ::testing::StrictMock;
-
-namespace {
-class EmulatingRGBImageStub : public gl::GLImageStub {
- protected:
-  ~EmulatingRGBImageStub() override = default;
-  bool EmulatingRGB() const override {
-    return true;
-  }
-};
-}  // namespace
 
 namespace gpu {
 namespace gles2 {
@@ -3368,7 +3357,6 @@ class MockGLImage : public gl::GLImage {
   MOCK_METHOD3(CopyTexSubImage,
                bool(unsigned, const gfx::Point&, const gfx::Rect&));
   MOCK_METHOD1(SetColorSpace, void(const gfx::ColorSpace&));
-  MOCK_METHOD0(Flush, void());
   MOCK_METHOD3(OnMemoryDump,
                void(base::trace_event::ProcessMemoryDump*,
                     uint64_t,

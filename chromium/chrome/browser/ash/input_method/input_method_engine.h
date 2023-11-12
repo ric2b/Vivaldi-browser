@@ -18,6 +18,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/input_method/assistive_window_properties.h"
 #include "chrome/browser/ash/input_method/input_method_engine_observer.h"
+#include "chrome/browser/ash/input_method/screen_projection_change_monitor.h"
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -44,6 +45,10 @@ struct SuggestionDetails;
 }  // namespace ui
 
 namespace ash {
+namespace ime {
+struct AssistiveWindow;
+}  // namespace ime
+
 namespace input_method {
 
 struct AssistiveWindowProperties;
@@ -133,7 +138,7 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
 
   // Notifies InputContextHandler to commit any composition text.
   // Set |reset_engine| to false if the event was from the extension.
-  void ConfirmCompositionText(bool reset_engine, bool keep_selection);
+  void ConfirmComposition(bool reset_engine);
 
   // Deletes |number_of_chars| unicode characters as the basis of |offset| from
   // the surrounding text. The |offset| is relative position based on current
@@ -184,21 +189,11 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
                          const std::vector<SegmentInfo>& segments,
                          std::string* error);
 
-  gfx::Range GetAutocorrectRange(int context_id, std::string* error);
-
-  gfx::Rect GetAutocorrectCharacterBounds(int context_id, std::string* error);
-
   gfx::Rect GetTextFieldBounds(int context_id, std::string* error);
 
   bool SetAutocorrectRange(int context_id,
                            const gfx::Range& range,
                            std::string* error);
-
-  // Set the current selection range.
-  bool SetSelectionRange(int context_id,
-                         int start,
-                         int end,
-                         std::string* error);
 
   // Called when a key event is handled.
   void KeyEventHandled(const std::string& extension_id,
@@ -225,8 +220,8 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
   }
 
   // ui::TextInputMethod overrides.
-  void FocusIn(const ui::TextInputMethod::InputContext& input_context) override;
-  void FocusOut() override;
+  void Focus(const ui::TextInputMethod::InputContext& input_context) override;
+  void Blur() override;
   void OnTouch(ui::EventPointerType pointerType) override;
   void Enable(const std::string& component_id) override;
   void Disable() override;
@@ -243,8 +238,7 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
   void CandidateClicked(uint32_t index) override;
   void AssistiveWindowButtonClicked(
       const ui::ime::AssistiveWindowButton& button) override;
-  void SetMirroringEnabled(bool mirroring_enabled) override;
-  void SetCastingEnabled(bool casting_enabled) override;
+  void AssistiveWindowChanged(const ash::ime::AssistiveWindow& window) override;
   ui::VirtualKeyboardController* GetVirtualKeyboardController() const override;
   bool IsReadyForTesting() override;
 
@@ -305,15 +299,6 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
   // Hides the input view window (from API call).
   void HideInputView();
 
-  // Notifies the InputContextHandler that the autocorrect range should
-  // be updated and the autocorrect text has updated.
-  // Sets the autocorrect range to be `range`. The `range` is in bytes.
-  // TODO(b/171924748): Improve documentation for this function all the way down
-  // the stack.
-  bool SetAutocorrectRange(const gfx::Range& range);
-
-  gfx::Range GetAutocorrectRange();
-
   void NotifyInputMethodExtensionReadyForTesting();
 
  protected:
@@ -349,6 +334,8 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
   void MenuItemToProperty(const InputMethodManager::MenuItem& item,
                           ui::ime::InputMethodMenuItem* property);
 
+  void OnScreenProjectionChanged(bool is_projected);
+
   // The current candidate window.
   ui::CandidateWindow candidate_window_;
 
@@ -363,12 +350,6 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
 
   // Mapping of candidate id to index.
   std::map<int, int> candidate_indexes_;
-
-  // Whether the screen is in mirroring mode.
-  bool is_mirroring_ = false;
-
-  // Whether the desktop is being casted.
-  bool is_casting_ = false;
 
   ui::TextInputType current_input_type_;
 
@@ -407,6 +388,8 @@ class InputMethodEngine : virtual public ui::TextInputMethod,
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
   base::Value::Dict input_method_settings_snapshot_;
+
+  ScreenProjectionChangeMonitor screen_projection_change_monitor_;
 
   bool is_ready_for_testing_ = false;
 

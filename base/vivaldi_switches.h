@@ -25,7 +25,6 @@ SWITCHES_EXPORT extern const char kAutoTestMode[];
 SWITCHES_EXPORT extern const char kDisableVivaldi[];
 SWITCHES_EXPORT extern const char kRunningVivaldi[];
 
-SWITCHES_EXPORT extern const char kVivaldiEnableIPCDemuxer[];
 SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
 SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 #if defined(COMPONENT_BUILD)

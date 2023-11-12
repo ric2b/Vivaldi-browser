@@ -588,11 +588,13 @@ void VisitAnnotationsDatabase::AddClusters(
                                  "INSERT INTO cluster_keywords"
                                  "(cluster_id,keyword,type,score,collections)"
                                  "VALUES(?,?,?,?,?)"));
-  sql::Statement cluster_visit_duplicates_statement(
-      GetDB().GetCachedStatement(SQL_FROM_HERE,
-                                 "INSERT INTO cluster_visit_duplicates"
-                                 "(visit_id,duplicate_visit_id)"
-                                 "VALUES(?,?)"));
+  // INSERT OR IGNORE, because these rows are not keyed on `cluster_id`, so it's
+  // difficult to guarantee complete cleanup. https://crbug.com/1383274
+  sql::Statement cluster_visit_duplicates_statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "INSERT OR IGNORE INTO cluster_visit_duplicates"
+      "(visit_id,duplicate_visit_id)"
+      "VALUES(?,?)"));
 
   for (const auto& cluster : clusters) {
     if (cluster.visits.empty())
@@ -668,6 +670,54 @@ void VisitAnnotationsDatabase::AddClusters(
       }
     }
   }
+}
+
+int64_t VisitAnnotationsDatabase::ReserveNextClusterId() {
+  sql::Statement clusters_statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "INSERT INTO clusters"
+      "(should_show_on_prominent_ui_surfaces,label,raw_label)"
+      "VALUES(?,?,?)"));
+  // Tentatively set all clusters as visible.
+  clusters_statement.BindBool(0, true);
+  clusters_statement.BindString16(1, u"");
+  clusters_statement.BindString16(2, u"");
+  if (!clusters_statement.Run()) {
+    DVLOG(0) << "Failed to execute 'clusters' insert statement";
+  }
+  return GetDB().GetLastInsertRowId();
+}
+
+void VisitAnnotationsDatabase::AddVisitsToCluster(
+    int64_t cluster_id,
+    const std::vector<ClusterVisit>& visits) {
+  DCHECK_GT(cluster_id, 0);
+  sql::Statement clusters_and_visits_statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "INSERT INTO clusters_and_visits"
+      "(cluster_id,visit_id,score,engagement_score,url_for_deduping,"
+      "normalized_url,url_for_display)"
+      "VALUES(?,?,?,?,?,?,?)"));
+
+  // Insert each visit into 'clusters_and_visits'.
+  base::ranges::for_each(visits, [&](const auto& visit) {
+    DCHECK_GT(visit.annotated_visit.visit_row.visit_id, 0);
+    clusters_and_visits_statement.Reset(true);
+    clusters_and_visits_statement.BindInt64(0, cluster_id);
+    clusters_and_visits_statement.BindInt64(
+        1, visit.annotated_visit.visit_row.visit_id);
+    // Tentatively score everything as 1.0.
+    clusters_and_visits_statement.BindDouble(2, 1.0);
+    clusters_and_visits_statement.BindDouble(3, visit.engagement_score);
+    clusters_and_visits_statement.BindString(4, visit.url_for_deduping.spec());
+    clusters_and_visits_statement.BindString(5, visit.normalized_url.spec());
+    clusters_and_visits_statement.BindString16(6, visit.url_for_display);
+    if (!clusters_and_visits_statement.Run()) {
+      DVLOG(0) << "Failed to execute 'clusters_and_visits' insert statement:  "
+               << "cluster_id = " << cluster_id
+               << ", visit_id = " << visit.annotated_visit.visit_row.visit_id;
+    }
+  });
 }
 
 Cluster VisitAnnotationsDatabase::GetCluster(int64_t cluster_id) {
@@ -838,12 +888,33 @@ void VisitAnnotationsDatabase::DeleteClusters(
   sql::Statement cluster_keywords_statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE, "DELETE FROM cluster_keywords WHERE cluster_id=?"));
 
+  sql::Statement cluster_visit_duplicates_statement(
+      GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                 "DELETE FROM cluster_visit_duplicates "
+                                 "WHERE visit_id=? OR duplicate_visit_id=?"));
+
   for (auto cluster_id : cluster_ids) {
     clusters_statement.Reset(true);
     clusters_statement.BindInt64(0, cluster_id);
     if (!clusters_statement.Run()) {
       DVLOG(0) << "Failed to execute clusters delete statement:  "
                << "cluster_id = " << cluster_id;
+    }
+
+    // Delete all duplicates for these visits, because clusters are recreated.
+    // Note that this cleanup implicitly assumes that no two clusters have the
+    // same visits inside. In practice, this is true. The previous status-quo
+    // was to leave these rows around, but that causes UNIQUE constraint
+    // violations. https://crbug.com/1383274
+    for (auto visit_id : GetVisitIdsInCluster(cluster_id)) {
+      cluster_visit_duplicates_statement.Reset(true);
+      cluster_visit_duplicates_statement.BindInt64(0, visit_id);
+      cluster_visit_duplicates_statement.BindInt64(1, visit_id);
+      if (!cluster_visit_duplicates_statement.Run()) {
+        DVLOG(0)
+            << "Failed to execute cluster_visit_duplicates delete statement:  "
+            << "visit_id = " << visit_id;
+      }
     }
 
     clusters_and_visits_statement.Reset(true);
@@ -859,12 +930,6 @@ void VisitAnnotationsDatabase::DeleteClusters(
       DVLOG(0) << "Failed to execute cluster_keywords delete statement:  "
                << "cluster_id = " << cluster_id;
     }
-
-    // TODO(manukh): (Maybe) for each visit deleted from 'clusters_and_visits',
-    //  delete the visits from 'cluster_visit_duplicates'. This is a maybe
-    //  because even though we compute visit duplicates during clustering, it's
-    //  not dependent on the cluster; 2 duplicate visits are duplicates
-    //  regardless of what cluster they belong to.
   }
 }
 

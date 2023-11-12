@@ -92,7 +92,7 @@ class FlatlandSurface : public ui::PlatformWindowSurface {
       return buffer_collection_id < other_id.buffer_collection_id;
     }
 
-    base::UnguessableToken buffer_collection_id;
+    zx_koid_t buffer_collection_id;
     uint32_t buffer_index;
   };
 
@@ -101,11 +101,12 @@ class FlatlandSurface : public ui::PlatformWindowSurface {
   struct FlatlandIds {
     fuchsia::ui::composition::ContentId image_id;
     fuchsia::ui::composition::TransformId transform_id;
+    gfx::Size image_size;
   };
 
   void OnGetLayout(fuchsia::ui::composition::LayoutInfo info);
 
-  void RemoveBufferCollection(FlatlandPixmapId pixmap_id);
+  void RemovePixmapResources(FlatlandPixmapId pixmap_id);
 
   void OnPresentComplete(zx_time_t actual_presentation_time);
 
@@ -141,11 +142,12 @@ class FlatlandSurface : public ui::PlatformWindowSurface {
   fuchsia::ui::composition::ParentViewportWatcherPtr parent_viewport_watcher_;
   fuchsia::ui::composition::ChildViewWatcherPtr main_plane_view_watcher_;
   absl::optional<gfx::Size> logical_size_;
+  absl::optional<float> device_pixel_ratio_;
 
   // FlatlandSurface might receive a Present() call before OnGetLayout(),
   // because the present loop is tied to the parent Flatland instance in
-  // FlatlandWindow. There is no |logical_size_| in that case, so we should hold
-  // onto the Present until receiving |logical_size_|.
+  // FlatlandWindow. There is no |logical_size_| or |device_pixel_ratio_| in
+  // that case, so we should hold onto the Present until receiving them.
   std::vector<base::OnceClosure> pending_present_closures_;
 
   FlatlandSurfaceFactory* const flatland_surface_factory_;

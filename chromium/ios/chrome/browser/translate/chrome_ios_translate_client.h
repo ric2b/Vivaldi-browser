@@ -65,7 +65,6 @@ class ChromeIOSTranslateClient
                        translate::TranslateErrors error_type,
                        bool triggered_from_menu) override;
   bool IsTranslatableURL(const GURL& url) override;
-  bool IsAutofillAssistantRunning() const override;
 
  private:
   friend class web::WebStateUserData<ChromeIOSTranslateClient>;
@@ -96,8 +95,8 @@ class ChromeIOSTranslateClient
   // WebStateDestroyed has been called.
   web::WebState* web_state_ = nullptr;
 
-  std::unique_ptr<translate::TranslateManager> translate_manager_;
   translate::IOSTranslateDriver translate_driver_;
+  std::unique_ptr<translate::TranslateManager> translate_manager_;
 
   // Metrics recorder for page load events.
   std::unique_ptr<translate::TranslateMetricsLogger> translate_metrics_logger_;

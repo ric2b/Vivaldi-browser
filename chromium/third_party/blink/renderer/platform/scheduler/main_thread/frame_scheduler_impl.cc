@@ -25,7 +25,6 @@
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/find_in_page_budget_pool_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_web_scheduling_task_queue_impl.h"
@@ -557,7 +556,7 @@ FrameSchedulerImpl::ControlTaskRunner() {
   return main_thread_scheduler_->ControlTaskRunner();
 }
 
-WebAgentGroupScheduler* FrameSchedulerImpl::GetAgentGroupScheduler() {
+AgentGroupScheduler* FrameSchedulerImpl::GetAgentGroupScheduler() {
   return parent_page_scheduler_
              ? &parent_page_scheduler_->GetAgentGroupScheduler()
              : nullptr;
@@ -617,24 +616,43 @@ void FrameSchedulerImpl::ResetForNavigation() {
   back_forward_cache_disabling_feature_tracker_.Reset();
 }
 
-void FrameSchedulerImpl::OnStartedUsingFeature(
+void FrameSchedulerImpl::OnStartedUsingNonStickyFeature(
     SchedulingPolicy::Feature feature,
-    const SchedulingPolicy& policy) {
+    const SchedulingPolicy& policy,
+    std::unique_ptr<SourceLocation> source_location,
+    SchedulingAffectingFeatureHandle* handle) {
   if (policy.disable_aggressive_throttling)
     OnAddedAggressiveThrottlingOptOut();
-  if (policy.disable_back_forward_cache)
-    back_forward_cache_disabling_feature_tracker_.Add(feature);
+  if (policy.disable_back_forward_cache) {
+    back_forward_cache_disabling_feature_tracker_.AddNonStickyFeature(
+        feature, std::move(source_location), handle);
+  }
   if (policy.disable_align_wake_ups)
     DisableAlignWakeUpsForProcess();
 }
 
-void FrameSchedulerImpl::OnStoppedUsingFeature(
+void FrameSchedulerImpl::OnStartedUsingStickyFeature(
     SchedulingPolicy::Feature feature,
-    const SchedulingPolicy& policy) {
+    const SchedulingPolicy& policy,
+    std::unique_ptr<SourceLocation> source_location) {
   if (policy.disable_aggressive_throttling)
+    OnAddedAggressiveThrottlingOptOut();
+  if (policy.disable_back_forward_cache) {
+    back_forward_cache_disabling_feature_tracker_.AddStickyFeature(
+        feature, std::move(source_location));
+  }
+  if (policy.disable_align_wake_ups)
+    DisableAlignWakeUpsForProcess();
+}
+
+void FrameSchedulerImpl::OnStoppedUsingNonStickyFeature(
+    SchedulingAffectingFeatureHandle* handle) {
+  if (handle->GetPolicy().disable_aggressive_throttling)
     OnRemovedAggressiveThrottlingOptOut();
-  if (policy.disable_back_forward_cache)
-    back_forward_cache_disabling_feature_tracker_.Remove(feature);
+  if (handle->GetPolicy().disable_back_forward_cache) {
+    back_forward_cache_disabling_feature_tracker_.Remove(
+        handle->GetFeatureAndJSLocationBlockingBFCache());
+  }
 }
 
 base::WeakPtr<FrameScheduler> FrameSchedulerImpl::GetWeakPtr() {
@@ -1163,7 +1181,7 @@ FrameSchedulerImpl::GetActiveFeaturesTrackedForBackForwardCacheMetricsMask()
 }
 
 base::WeakPtr<FrameOrWorkerScheduler>
-FrameSchedulerImpl::GetSchedulingAffectingFeatureWeakPtr() {
+FrameSchedulerImpl::GetFrameOrWorkerSchedulerWeakPtr() {
   // We reset feature sets upon frame navigation, so having a document-bound
   // weak pointer ensures that the feature handle associated with previous
   // document can't influence the new one.

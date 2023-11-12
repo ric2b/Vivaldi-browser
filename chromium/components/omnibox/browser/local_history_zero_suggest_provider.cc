@@ -49,8 +49,12 @@ namespace {
 std::u16string GetSearchTermsFromURL(const GURL& url,
                                      TemplateURLService* template_url_service) {
   DCHECK(template_url_service);
+  const TemplateURL* default_provider =
+      template_url_service->GetDefaultSearchProvider();
+  DCHECK(default_provider);
+
   std::u16string search_terms;
-  template_url_service->GetDefaultSearchProvider()->ExtractSearchTermsFromURL(
+  default_provider->ExtractSearchTermsFromURL(
       url, template_url_service->search_terms_data(), &search_terms);
   return base::i18n::ToLower(base::CollapseWhitespace(search_terms, false));
 }
@@ -240,8 +244,8 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
         /*input_text=*/base::ASCIIToUTF16(std::string()));
 
     // If the appropriate header text and section are not provided by the server
-    // the default omnibox::SECTION_LOCAL_HISTORY_ZPS will be used and the local
-    // history zero-prefix suggestions will be shown without a header.
+    // the default omnibox::SECTION_PERSONALIZED_ZERO_SUGGEST will be used and
+    // the local history zero-prefix suggestions will be shown without a header.
     suggestion.set_suggestion_group_id(
         omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST);
 

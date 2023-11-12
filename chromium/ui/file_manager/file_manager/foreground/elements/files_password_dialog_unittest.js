@@ -6,8 +6,8 @@ import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {assertEquals, assertFalse, assertNotReached} from 'chrome://webui-test/chai_assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {assertEquals, assertFalse, assertNotReached} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {waitUntil} from '../../common/js/test_error_reporting.js';
 
@@ -25,20 +25,6 @@ let input;
 let cancel;
 /** @type {!CrButtonElement} */
 let unlock;
-
-/**
- * Mock LoadTimeData strings.
- */
-export function setUpPage() {
-  window.loadTimeData.getString = id => {
-    switch (id) {
-      case 'PASSWORD_DIALOG_INVALID':
-        return 'Invalid password';
-      default:
-        return id;
-    }
-  };
-}
 
 /**
  * Adds a FilesPasswordDialog element to the page.

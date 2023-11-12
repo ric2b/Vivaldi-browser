@@ -70,12 +70,12 @@
       $i18n{addLanguages}
     </cr-button>
   </div>
-  <div class="list-frame vertical-list">
+  <div class="list-frame vertical-list" role="list">
     <template is="dom-repeat" items="[[languages.enabled]]">
       <div class$="list-item [[getLanguageItemClass_(
           item.language.code, language.prospectiveUILanguage)]]
           [[isTranslationTarget_(item.language.code,
-          languages.translateTarget)]]">
+          languages.translateTarget)]]" role="listitem">
         <div class="start cr-padded-text">
           <div title="[[item.language.nativeDisplayName]]">
             [[formatIndex_(index)]]. [[item.language.displayName]]
@@ -85,7 +85,7 @@
           </div>
 <if expr="is_win">
           <div class="explain-selected"
-              hidden="[[!isProspectiveUILanguage_(
+              hidden="[[!isProspectiveUiLanguage_(
                   item.language.code,
                   languages.prospectiveUILanguage)]]">
             $i18n{isDisplayedInThisLanguage}
@@ -125,11 +125,11 @@
 <if expr="is_win">
         <cr-checkbox id="uiLanguageItem"
             class="dropdown-item"
-            checked="[[isProspectiveUILanguage_(
+            checked="[[isProspectiveUiLanguage_(
                 detailLanguage_.language.code,
                 languages.prospectiveUILanguage)]]"
-            on-change="onUILanguageChange_"
-            disabled="[[disableUILanguageCheckbox_(
+            on-change="onUiLanguageChange_"
+            disabled="[[disableUiLanguageCheckbox_(
                 detailLanguage_, languages.prospectiveUILanguage)]]">
           <span>
             $i18n{displayInThisLanguage}

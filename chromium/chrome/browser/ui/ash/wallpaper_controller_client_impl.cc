@@ -43,6 +43,7 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
+#include "chrome/browser/ash/wallpaper/wallpaper_drivefs_delegate_impl.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -118,11 +119,11 @@ user_manager::UserType GetUserType(const AccountId& id) {
 // So this function gives WallpaperManager independent hashing method to break
 // this dependency.
 std::string HashWallpaperFilesIdStr(const std::string& files_id_unhashed) {
-  chromeos::SystemSaltGetter* salt_getter = chromeos::SystemSaltGetter::Get();
+  ash::SystemSaltGetter* salt_getter = ash::SystemSaltGetter::Get();
   DCHECK(salt_getter);
 
   // System salt must be defined at this point.
-  const chromeos::SystemSaltGetter::RawSalt* salt = salt_getter->GetRawSalt();
+  const ash::SystemSaltGetter::RawSalt* salt = salt_getter->GetRawSalt();
   if (!salt)
     LOG(FATAL) << "WallpaperManager HashWallpaperFilesIdStr(): no salt!";
 
@@ -131,8 +132,7 @@ std::string HashWallpaperFilesIdStr(const std::string& files_id_unhashed) {
   std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(),
                  ::tolower);
   std::vector<uint8_t> data = *salt;
-  std::copy(files_id_unhashed.begin(), files_id_unhashed.end(),
-            std::back_inserter(data));
+  base::ranges::copy(files_id_unhashed, std::back_inserter(data));
   base::SHA1HashBytes(data.data(), data.size(), binmd);
   std::string result = base::HexEncode(binmd, sizeof(binmd));
   std::transform(result.begin(), result.end(), result.begin(), ::tolower);
@@ -141,8 +141,8 @@ std::string HashWallpaperFilesIdStr(const std::string& files_id_unhashed) {
 
 // Returns true if wallpaper files id can be returned successfully.
 bool CanGetFilesId() {
-  return chromeos::SystemSaltGetter::IsInitialized() &&
-         chromeos::SystemSaltGetter::Get()->GetRawSalt();
+  return ash::SystemSaltGetter::IsInitialized() &&
+         ash::SystemSaltGetter::Get()->GetRawSalt();
 }
 
 void GetFilesIdSaltReady(
@@ -348,16 +348,6 @@ void WallpaperControllerClientImpl::SetOnlineWallpaperIfExists(
                                                     std::move(callback));
 }
 
-void WallpaperControllerClientImpl::SetOnlineWallpaperFromData(
-    const ash::OnlineWallpaperParams& params,
-    const std::string& image_data,
-    ash::WallpaperController::SetWallpaperCallback callback) {
-  if (!IsKnownUser(params.account_id))
-    return;
-  wallpaper_controller_->SetOnlineWallpaperFromData(params, image_data,
-                                                    std::move(callback));
-}
-
 void WallpaperControllerClientImpl::SetCustomizedDefaultWallpaperPaths(
     const base::FilePath& customized_default_small_path,
     const base::FilePath& customized_default_large_path) {
@@ -518,7 +508,7 @@ base::FilePath WallpaperControllerClientImpl::GetWallpaperPathFromDriveFs(
 void WallpaperControllerClientImpl::GetFilesId(
     const AccountId& account_id,
     base::OnceCallback<void(const std::string&)> files_id_callback) const {
-  chromeos::SystemSaltGetter::Get()->AddOnSystemSaltReady(base::BindOnce(
+  ash::SystemSaltGetter::Get()->AddOnSystemSaltReady(base::BindOnce(
       &GetFilesIdSaltReady, account_id, std::move(files_id_callback)));
 }
 
@@ -535,13 +525,13 @@ bool WallpaperControllerClientImpl::IsWallpaperSyncEnabled(
   syncer::SyncUserSettings* user_settings = sync_service->GetUserSettings();
   return user_settings->IsSyncAllOsTypesEnabled() ||
          profile->GetPrefs()->GetBoolean(
-             chromeos::settings::prefs::kSyncOsWallpaper);
+             ash::settings::prefs::kSyncOsWallpaper);
 }
 
 void WallpaperControllerClientImpl::OnVolumeMounted(
     ash::MountError error_code,
     const file_manager::Volume& volume) {
-  if (error_code != ash::MountError::kNone) {
+  if (error_code != ash::MountError::kSuccess) {
     return;
   }
   if (volume.type() != file_manager::VolumeType::VOLUME_TYPE_GOOGLE_DRIVE) {
@@ -573,6 +563,8 @@ void WallpaperControllerClientImpl::DeviceWallpaperImageFilePathChanged() {
 
 void WallpaperControllerClientImpl::InitController() {
   wallpaper_controller_->SetClient(this);
+  wallpaper_controller_->SetDriveFsDelegate(
+      std::make_unique<ash::WallpaperDriveFsDelegateImpl>());
 
   base::FilePath user_data;
   CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));

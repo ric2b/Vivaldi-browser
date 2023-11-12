@@ -33,11 +33,12 @@ export class ParseStrategy {
     return this.enabled;
   }
 
-  /**
-   * Refreshes this strategy when the locale changes.
-   * TODO(https://crbug.com/1258190): Implement this in PumpkinParseStrategy
-   * once we land SandboxedPumpkinTagger.
-   */
+  /** @param {boolean} enabled */
+  setEnabled(enabled) {
+    this.enabled = enabled;
+  }
+
+  /** Refreshes this strategy when the locale changes. */
   refresh() {}
 
   /**

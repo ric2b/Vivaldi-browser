@@ -42,6 +42,7 @@
 <translation id="1682634494516646069">Google Chrome non pode ler nin escribir no seu directorio de datos:
 
 <ph name="USER_DATA_DIRECTORY" /></translation>
+<translation id="1691802391966922744">{COUNT,plural, =1{O teu administrador configurou Chrome para que se peche cando estea inactivo durante máis de 1 minuto.}other{O teu administrador configurou Chrome para que se peche cando estea inactivo durante máis de # minutos.}}</translation>
 <translation id="1698376642261615901">Google Chrome é un navegador web que executa aplicacións e páxinas web á velocidade da luz. É rápido, estable e fácil de utilizar. Busca na web con máis seguranza grazas á protección contra software malicioso e phishing integrada en Google Chrome.</translation>
 <translation id="1713301662689114961">{0,plural, =1{Chrome reiniciarase en 1 hora}other{Chrome reiniciarase en # horas}}</translation>
 <translation id="1734234790201236882">Chrome gardará este contrasinal na túa Conta de Google. Non terás que recordalo.</translation>
@@ -83,7 +84,6 @@
 <translation id="2401189691232800402">Sistema Chrome OS</translation>
 <translation id="2467438592969358367">Google Chrome quere exportar os teus contrasinais. Escribe o teu contrasinal de Windows para permitir esta acción.</translation>
 <translation id="2485422356828889247">Desinstalar</translation>
-<translation id="2494974097748878569">Asistente de Google en Chrome</translation>
 <translation id="2534507159460261402">Google Pay (copiouse en Chrome)</translation>
 <translation id="2559253115192232574">Máis tarde, un sitio que visites pode consultarlle a Chrome os teus intereses para personalizar os anuncios que se che mostren. Chrome pode compartir ata 3 intereses.</translation>
 <translation id="2563121210305478421">Queres reiniciar Chrome?</translation>
@@ -128,6 +128,7 @@
 <translation id="3140883423282498090">Os cambios terán efecto a próxima vez que reinicies Google Chrome.</translation>
 <translation id="3149510190863420837">Aplicacións de Chrome</translation>
 <translation id="3169523567916669830">Durante as probas, podes ver e eliminar temas de interese que usan os sitios para mostrarche anuncios. Chrome estima os teus intereses en función do teu historial de navegación recente.</translation>
+<translation id="3211604354460514046">{NUM_DEVICES,plural, =1{Google Chrome está conectado a un dispositivo de interface humana}other{Google Chrome está conectado a dispositivos de interface humana}}</translation>
 <translation id="3245429137663807393">Se, ademais, compartes os informes de uso de Chrome, neles inclúense os URL que visitas</translation>
 <translation id="3282568296779691940">Iniciar sesión en Chrome</translation>
 <translation id="3286538390144397061">Reiniciar agora</translation>
@@ -258,6 +259,7 @@ Google Chrome non pode recuperar a túa configuración.</translation>
 <translation id="5941711191222866238">Minimizar</translation>
 <translation id="5941830788786076944">Converter Google Chrome no navegador predeterminado</translation>
 <translation id="6003112304606738118">Descargando… Tempo restante: <ph name="HOURS" /> h</translation>
+<translation id="6022388122721048220">{0,plural, =0{Chrome pecharase agora.}=1{Chrome pecharase en 1 segundo.}other{Chrome pecharase en # segundos.}}</translation>
 <translation id="6040143037577758943">Pechar</translation>
 <translation id="6070348360322141662">Para obter unha maior seguranza, Google Chrome encriptará os teus datos</translation>
 <translation id="608006075545470555">Engadir un perfil de traballo a este navegador</translation>
@@ -287,7 +289,6 @@ Google Chrome non pode recuperar a túa configuración.</translation>
 <translation id="6739177684496155661">Queres continuar nun perfil de Chrome novo?</translation>
 <translation id="6750954913813541382">Para corrixir erros ortográficos, Chrome enviaralle a Google o texto que escribas no navegador</translation>
 <translation id="677276454032249905">Queres saír de Chrome de todas formas?</translation>
-<translation id="6785872064505734160">O Asistente de Google en Chrome pode completar accións por ti nos sitios web</translation>
 <translation id="683440813066116847">Regra de entrada para Google Chrome Canary para permitir tráfico mDNS.</translation>
 <translation id="6881299373831449287">Actualizando Chrome</translation>
 <translation id="6885412569789873916">Aplicacións de Chrome Beta</translation>
@@ -370,6 +371,7 @@ Pódense aplicar a esta conta os permisos que xa lles concedeses aos sitios web 
 <translation id="8349795646647783032"><ph name="BEGIN_BOLD" />Como usamos estes datos?<ph name="END_BOLD" /> Os sitios poden almacenar con Chrome información sobre os teus intereses. Por exemplo, se visitas un sitio para comprar zapatillas deportivas para un maratón, ese sitio podería determinar que che interesa correr maratóns. Máis tarde, se visitas un sitio distinto que che permite rexistrarte para participar nunha carreira, pode mostrárseche nel un anuncio de zapatillas deportivas baseado nos teus intereses.</translation>
 <translation id="8370517070665726704">Copyright <ph name="YEAR" /> Google LLC. Todos os dereitos reservados.</translation>
 <translation id="8383226135083126309"><ph name="BEGIN_BOLD" />Como usamos estes datos?<ph name="END_BOLD" /> Chrome pode facer unha estimación dos teus intereses. Máis tarde, un sitio que visites pode consultarlle a Chrome os teus intereses para personalizar os anuncios que se che mostren.</translation>
+<translation id="8387459386171870978">Seguir usando Chrome</translation>
 <translation id="8394720698884623075">Comproba enderezos URL cunha lista de sitios non seguros almacenada en Chrome</translation>
 <translation id="840084489713044809">Google Chrome quere exportar os teus contrasinais.</translation>
 <translation id="8416347857511542594">Máis información sobre a personalización de anuncios en Chrome</translation>
@@ -401,6 +403,7 @@ Pódense aplicar a esta conta os permisos que xa lles concedeses aos sitios web 
 <translation id="8825634023950448068">Para protexer a túa privacidade, eliminamos automaticamente os teus intereses cuxa antigüidade sexa superior a 4 semanas. Algúns poderían volver incluírse na lista ao seguires navegando. Se Chrome se trabuca ou non queres ver certos anuncios, podes quitar un interese.</translation>
 <translation id="8834965163890861871">Google Chrome está tentando editar os contrasinais. Escribe o teu contrasinal de Windows para permitir esta acción.</translation>
 <translation id="884296878221830158">Tamén controla que páxina se mostra ao iniciar Chrome ou ao facer clic no botón Inicio.</translation>
+<translation id="8847000024471094355">Chrome está inactivo</translation>
 <translation id="8862326446509486874">Non tes os dereitos apropiados para efectuar a instalación a nivel do sistema. Tenta volver executar o instalador como administrador.</translation>
 <translation id="8914504000324227558">Reiniciar Chrome</translation>
 <translation id="8922193594870374009">Para enviar un número desde <ph name="ORIGIN" /> ao teu teléfono Android, inicia sesión en Chrome nos dous dispositivos.</translation>

@@ -13,7 +13,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.Uri;
-import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
@@ -357,7 +356,7 @@ public class DownloadUtils {
         // It's ok to use blocking calls on main thread here, since the user is waiting to open or
         // share the file to other apps.
         boolean isOnSDCard = DownloadDirectoryProvider.isDownloadOnSDCard(filePath);
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_FILE_PROVIDER) && isOnSDCard) {
+        if (isOnSDCard) {
             // Use custom file provider to generate content URI for download on SD card.
             return DownloadFileProvider.createContentUri(filePath);
         }
@@ -372,9 +371,7 @@ public class DownloadUtils {
      * @return URI for other apps to use the file via {@link android.content.ContentResolver}.
      */
     public static Uri getUriForOtherApps(String filePath) {
-        // Some old Samsung devices with Android M- must use file URI. See https://crbug.com/705748.
-        return Build.VERSION.SDK_INT > Build.VERSION_CODES.M ? getUriForItem(filePath)
-                                                             : Uri.fromFile(new File(filePath));
+        return getUriForItem(filePath);
     }
 
     @CalledByNative

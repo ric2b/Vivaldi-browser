@@ -21,8 +21,8 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
-#include "chromeos/system/statistics_provider.h"
 #include "chromeos/version/version_loader.h"
 #include "components/version_info/version_info.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -161,27 +161,27 @@ std::string VersionInfoUpdater::GetDeviceIdsLabel() {
   std::string device_ids_text;
 
   // Get the attested device ID and add the ZTE indication and the ID if needed.
-  std::string attested_device_id;
-  system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-      chromeos::system::kAttestedDeviceIdKey, &attested_device_id);
+  const absl::optional<base::StringPiece> attested_device_id =
+      system::StatisticsProvider::GetInstance()->GetMachineStatistic(
+          chromeos::system::kAttestedDeviceIdKey);
   // Start with the ZTE indication and the attested device ID if it exists.
-  if (!attested_device_id.empty()) {
+  if (attested_device_id && !attested_device_id->empty()) {
     device_ids_text.append(kZteReady);
     // Always append the attested device ID.
     device_ids_text.append(" ");
     device_ids_text.append(kAttestedDeviceIdPrefix);
-    device_ids_text.append(attested_device_id);
+    device_ids_text.append(std::string(attested_device_id.value()));
   }
 
   // Get the serial number and add it.
-  std::string serial_number =
-      system::StatisticsProvider::GetInstance()->GetEnterpriseMachineID();
-  if (!serial_number.empty()) {
+  const absl::optional<base::StringPiece> serial_number =
+      system::StatisticsProvider::GetInstance()->GetMachineID();
+  if (serial_number && !serial_number->empty()) {
     if (!device_ids_text.empty())
       device_ids_text.append(" ");
     // Append the serial number.
     device_ids_text.append(kSerialNumberPrefix);
-    device_ids_text.append(serial_number);
+    device_ids_text.append(std::string(serial_number.value()));
   }
 
   return device_ids_text;

@@ -30,35 +30,54 @@ import '../../controls/controlled_button.js';
 import '../../controls/settings_toggle_button.js';
 import '../../prefs/prefs.js';
 import './cellular_roaming_toggle_button.js';
-import './internet_shared_css.js';
+import './internet_shared.css.js';
 import './network_proxy_section.js';
 import './settings_traffic_counters.js';
 import './tether_connection_dialog.js';
 
-import {isActiveSim} from 'chrome://resources/ash/common/network/cellular_utils.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {isActiveSim, processDeviceState} from 'chrome://resources/ash/common/network/cellular_utils.js';
 import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/ash/common/network/cr_policy_network_behavior_mojo.js';
 import {MojoInterfaceProvider, MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {NetworkListenerBehavior, NetworkListenerBehaviorInterface} from 'chrome://resources/ash/common/network/network_listener_behavior.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
-import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/ash/common/web_ui_listener_behavior.js';
-import {assert} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {ActivationStateType, ApnProperties, ConfigProperties, CrosNetworkConfigRemote, FilterType, GlobalPolicy, HiddenSsidMode, IPConfigProperties, ManagedProperties, NetworkStateProperties, NO_LIMIT, ProxySettings, SecurityType, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, IPConfigType, NetworkType, OncSource, PolicySource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {afterNextRender, flush, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {SyncBrowserProxyImpl} from '../../people_page/sync_browser_proxy.js';
-import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {OsSyncBrowserProxy, OsSyncBrowserProxyImpl, OsSyncPrefs} from '../os_people_page/os_sync_browser_proxy.js';
 import {routes} from '../os_route.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {Route, Router} from '../router.js';
 
 import {InternetPageBrowserProxy, InternetPageBrowserProxyImpl} from './internet_page_browser_proxy.js';
-import {TetherConnectionDialogElement} from './tether_connection_dialog.js';
+
+/**
+ * TODO(crbug/1315757) The following type definitions are only needed for
+ * Closure compiler and can be removed when this file is converted to TS.
+ *
+ * @constructor
+ * @extends {HTMLElement}
+ */
+export function CellularRoamingToggleButtonElement() {}
+/** @return {?CrToggleElement} */
+CellularRoamingToggleButtonElement.prototype.getCellularRoamingToggle =
+    function() {};
+
+/**
+ * @constructor
+ * @extends {HTMLElement}
+ */
+export function TetherConnectionDialogElement() {}
+TetherConnectionDialogElement.prototype.open = function() {};
+TetherConnectionDialogElement.prototype.close = function() {};
 
 /**
  * @constructor
@@ -324,6 +343,15 @@ class SettingsInternetDetailPageElement extends
         computed: 'computeDisabled_(deviceState_.*)',
       },
 
+      /** @private */
+      enableHiddenNetworkMigration_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('enableHiddenNetworkMigration') &&
+              loadTimeData.getBoolean('enableHiddenNetworkMigration');
+        },
+      },
+
       /**
        * Return true if captivePortalUI2022 feature flag is enabled.
        * @private
@@ -333,6 +361,18 @@ class SettingsInternetDetailPageElement extends
         value() {
           return loadTimeData.valueExists('captivePortalUI2022') &&
               loadTimeData.getBoolean('captivePortalUI2022');
+        },
+      },
+
+      /**
+       * Return true if apnRevamp feature flag is enabled.
+       * @private
+       */
+      isApnRevampEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('isApnRevampEnabled') &&
+              loadTimeData.getBoolean('isApnRevampEnabled');
         },
       },
 
@@ -487,7 +527,9 @@ class SettingsInternetDetailPageElement extends
     if (settingId === Setting.kCellularRoaming) {
       this.afterRenderShowDeepLink(
           settingId,
-          () => this.shadowRoot.querySelector('cellular-roaming-toggle-button')
+          () => /** @type {CellularRoamingToggleButtonElement} */ (
+                    this.shadowRoot.querySelector(
+                        'cellular-roaming-toggle-button'))
                     .getCellularRoamingToggle());
       // Stop deep link attempt since we completed it manually.
       return false;
@@ -592,6 +634,18 @@ class SettingsInternetDetailPageElement extends
     const name = queryParams.get('name') || type;
     this.init(guid, type, name);
 
+    // If we are getting back from APN subpage set focus to the APN subpage
+    // row.
+    if (oldRoute === routes.APN &&
+        Router.getInstance().lastRouteChangeWasPopstate()) {
+      this.didSetFocus_ = true;
+      afterNextRender(this, () => {
+        const element = this.shadowRoot.querySelector('#apnSubpageButton');
+        if (element) {
+          element.focus();
+        }
+      });
+    }
     this.attemptDeepLink();
   }
 
@@ -748,25 +802,6 @@ class SettingsInternetDetailPageElement extends
     }
   }
 
-  /**
-   * Returns true if all significant DeviceState fields match. Ignores
-   * |scanning| which can be noisy and is handled separately.
-   * @param {!OncMojo.DeviceStateProperties} a
-   * @param {!OncMojo.DeviceStateProperties} b
-   * @return {boolean}
-   * @private
-   */
-  deviceStatesMatch_(a, b) {
-    return a.type === b.type && a.macAddress === b.macAddress &&
-        a.simAbsent === b.simAbsent && a.deviceState === b.deviceState &&
-        a.managedNetworkAvailable === b.managedNetworkAvailable &&
-        OncMojo.ipAddressMatch(a.ipv4Address, b.ipv4Address) &&
-        OncMojo.ipAddressMatch(a.ipv6Address, b.ipv6Address) &&
-        OncMojo.simLockStatusMatch(a.simLockStatus, b.simLockStatus) &&
-        OncMojo.simInfosMatch(a.simInfos, b.simInfos) &&
-        a.inhibitReason === b.inhibitReason;
-  }
-
   /** @private */
   getDeviceState_() {
     if (!this.managedProperties_) {
@@ -782,34 +817,9 @@ class SettingsInternetDetailPageElement extends
         return;
       }
 
-      const devices = response.result;
-      const newDeviceState =
-          devices.find(device => device.type === type) || null;
-      let shouldGetNetworkDetails = false;
-      if (!this.deviceState_ || !newDeviceState) {
-        this.deviceState_ = newDeviceState;
-        shouldGetNetworkDetails = !!this.deviceState_;
-      } else if (!this.deviceStatesMatch_(this.deviceState_, newDeviceState)) {
-        // Only request a network state update if the deviceState changed.
-        shouldGetNetworkDetails =
-            this.deviceState_.deviceState !== newDeviceState.deviceState;
-        this.deviceState_ = newDeviceState;
-      } else if (this.deviceState_.scanning !== newDeviceState.scanning) {
-        // Update just the scanning state to avoid interrupting other parts of
-        // the UI (e.g. custom IP addresses or nameservers).
-        this.deviceState_.scanning = newDeviceState.scanning;
-        // Cellular properties are not updated while scanning (since they
-        // may be invalid), so request them on scan completion.
-        if (type === NetworkType.kCellular) {
-          shouldGetNetworkDetails = true;
-        }
-      } else if (type === NetworkType.kCellular) {
-        // If there are no device state property changes but type is
-        // cellular, then always fetch network details. This is because
-        // for cellular networks, some shill device level properties are
-        // represented at network level in ONC.
-        shouldGetNetworkDetails = true;
-      }
+      const {deviceState, shouldGetNetworkDetails} =
+          processDeviceState(type, response.result, this.deviceState_);
+      this.deviceState_ = deviceState;
       if (shouldGetNetworkDetails) {
         this.getNetworkDetails_();
       }
@@ -1308,7 +1318,7 @@ class SettingsInternetDetailPageElement extends
   }
 
   /**
-   * @param {!ManagedProperties} managedProperties
+   * @param {!ManagedProperties|undefined} managedProperties
    * @return {boolean}
    * @private
    */
@@ -1373,6 +1383,24 @@ class SettingsInternetDetailPageElement extends
          !!managedNetworkAvailable) ||
         (!!hexSsid && !!globalPolicy.blockedHexSsids &&
          globalPolicy.blockedHexSsids.includes(hexSsid));
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowApnRow_() {
+    return this.isApnRevampEnabled_ &&
+        this.isCellular_(this.managedProperties_);
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowApnList_() {
+    return !this.isApnRevampEnabled_ &&
+        this.isCellular_(this.managedProperties_);
   }
 
   /**
@@ -1970,6 +1998,33 @@ class SettingsInternetDetailPageElement extends
     this.setMojoNetworkProperties_(config);
   }
 
+  /**
+   * @return {string}
+   * @private
+   */
+  getApnRowSubLabel_() {
+    if (!this.isCellular_(this.managedProperties_) ||
+        !this.managedProperties_.typeProperties.cellular.connectedApn) {
+      return '';
+    }
+
+    return this.managedProperties_.typeProperties.cellular.connectedApn
+        .accessPointName;
+  }
+
+  /**
+   * @private
+   */
+  onApnRowClicked_() {
+    if (!this.isCellular_(this.managedProperties_)) {
+      console.error(
+          'APN row should only be visible when cellular is available.');
+      return;
+    }
+    const params = new URLSearchParams();
+    params.append('guid', this.guid);
+    Router.getInstance().navigateTo(routes.APN, params);
+  }
 
   /**
    * Event triggered when the IP Config or NameServers element changes.
@@ -2123,35 +2178,49 @@ class SettingsInternetDetailPageElement extends
   }
 
   /**
-   * @param {!ManagedProperties} managedProperties
-   * @param {!GlobalPolicy} globalPolicy
-   * @param {boolean} managedNetworkAvailable
    * @return {boolean} True if the Hidden checkbox should be shown.
    * @private
    */
-  showHiddenNetwork_(managedProperties, globalPolicy, managedNetworkAvailable) {
+  showHiddenNetwork_() {
     if (!this.showHiddenToggle_) {
       return false;
     }
 
-    if (!managedProperties) {
+    if (!this.managedProperties_) {
       return false;
     }
 
-    if (managedProperties.type !== NetworkType.kWiFi) {
+    if (this.managedProperties_.type !== NetworkType.kWiFi) {
       return false;
     }
 
-    if (!this.isRemembered_(managedProperties)) {
+    if (!this.isRemembered_(this.managedProperties_)) {
       return false;
     }
 
     if (this.isBlockedByPolicy_(
-            managedProperties, globalPolicy, managedNetworkAvailable)) {
+            this.managedProperties_, this.globalPolicy,
+            this.managedNetworkAvailable)) {
       return false;
     }
 
     return true;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showHiddenNetworkToggleLegacy_() {
+    return this.showHiddenNetwork_() && !this.enableHiddenNetworkMigration_;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showHiddenNetworkToggleMoved_() {
+    return this.showHiddenNetwork_() && this.enableHiddenNetworkMigration_;
   }
 
   /**

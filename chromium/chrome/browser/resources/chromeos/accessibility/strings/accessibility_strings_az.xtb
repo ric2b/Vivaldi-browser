@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">Cari vaxt</translation>
 <translation id="1161762950103988776">Keçid</translation>
 <translation id="1164857107703583584">Veb səhifədə səmərəli qaydada naviqasiya etmək üçün keçid əmrlərindən istifadə etmək mümkündür.</translation>
+<translation id="116896278675803795">Seçilmiş kontentə uyğunlaşmaq üçün dili avtomatik olaraq dəyişdirin</translation>
 <translation id="1175914831232945926">Rəqəmlər</translation>
 <translation id="1188858454923323853">əlavə</translation>
 <translation id="1189258430971676908">Təcrübə sahəsi: Aşağıya açılan siyahılar</translation>
@@ -114,7 +115,7 @@
 <translation id="1653266918374749391">Əvvəlki 3-cü səviyyə başlığı</translation>
 <translation id="1657616855184033958">Tədbir yayım filtrlərini göstərin</translation>
 <translation id="1659072772017912254">Yoxlanılmayıb</translation>
-<translation id="1666326070478924810">Seç və Dinlə Ayarları</translation>
+<translation id="1666326070478924810">Seçib səsləndirmə ayarları</translation>
 <translation id="1674262202423278359">ChromeVox Naviqasiya</translation>
 <translation id="16777221443363124">Menyu paneli</translation>
 <translation id="1680732992526857724"><ph name="NAME" />, yandırın</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">Əvvəlki forma sahəsi</translation>
 <translation id="3393605254399152980">Nəyə toxunduğunuzu eşitmək üçün bir barmaqla çəkin</translation>
 <translation id="3406283310380167331">Formaların siyahısını göstərin</translation>
+<translation id="3407726812456125464">Seçilmiş mətni dinləyin</translation>
 <translation id="3414400929511680526">Alice Mavisi</translation>
 <translation id="3418936350470374046">Aşağıda heç bir xana yoxdur</translation>
 <translation id="3419269701801640163">əlavə edin</translation>
@@ -977,7 +979,7 @@
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">Əvvəlki radio düyməsi</translation>
 <translation id="7696631298608145306">növbəti sözə keçin</translation>
-<translation id="7701040980221191251">Heç bir</translation>
+<translation id="7701040980221191251">Heç biri</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Təbii səs</translation>
 <translation id="7714340021005120797">Sonrakı kombo xanası yoxdur</translation>
@@ -987,7 +989,7 @@
 <translation id="773906353055481349">Xanalarla hərəkət etmək üçün oxlarla Search+Ctrl+Alt düymələrinə basın</translation>
 <translation id="7746976083433980639"><ph name="ACTION" /> - <ph name="LABEL" /></translation>
 <translation id="7763537600611320912"><ph name="FILE_NAME" /> faylının endirilməsi başlandı</translation>
-<translation id="7768784765476638775">Seç və Dinlə</translation>
+<translation id="7768784765476638775">Seçib səsləndirmə</translation>
 <translation id="7776293189010177726">ChromeVox menyularını açın</translation>
 <translation id="7799302833060027366">Riyazi elementləri araşdırmaq üçün yuxarı, aşağı, sol və ya sağ düyməni basın</translation>
 <translation id="7800558923657349506">Epiloq</translation>

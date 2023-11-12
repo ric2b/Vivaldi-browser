@@ -53,12 +53,10 @@
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/types_util.h"
-#include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/api/app_runtime.h"
@@ -215,24 +213,12 @@ NoteTakingHelper::LaunchResult LaunchWebAppInternal(const std::string& app_id,
   // Apps in 'kDefaultAllowedAppIds' might not have a note-taking intent filter.
   // They can just launch without the intent.
   if (has_note_taking_intent_filter) {
-    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-      apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithIntent(
-          app_id, ui::EF_NONE, apps_util::CreateCreateNoteIntent(),
-          apps::LaunchSource::kFromShelf, nullptr, base::DoNothing());
-    } else {
-      apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithIntent(
-          app_id, ui::EF_NONE,
-          apps::ConvertIntentToMojomIntent(apps_util::CreateCreateNoteIntent()),
-          apps::mojom::LaunchSource::kFromShelf, nullptr, {});
-    }
+    apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithIntent(
+        app_id, ui::EF_NONE, apps_util::CreateCreateNoteIntent(),
+        apps::LaunchSource::kFromShelf, nullptr, base::DoNothing());
   } else {
-    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-      apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
-          app_id, ui::EF_NONE, apps::LaunchSource::kFromShelf);
-    } else {
-      apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
-          app_id, ui::EF_NONE, apps::mojom::LaunchSource::kFromShelf);
-    }
+    apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
+        app_id, ui::EF_NONE, apps::LaunchSource::kFromShelf);
   }
 
   return NoteTakingHelper::LaunchResult::WEB_APP_SUCCESS;
@@ -453,6 +439,10 @@ void NoteTakingHelper::OnProfileAdded(Profile* profile) {
   }
 }
 
+void NoteTakingHelper::OnProfileManagerDestroying() {
+  profile_manager_observation_.Reset();
+}
+
 NoteTakingHelper::NoteTakingHelper()
     : launch_chrome_app_callback_(
           base::BindRepeating(&apps::LaunchPlatformAppWithAction)),
@@ -472,7 +462,7 @@ NoteTakingHelper::NoteTakingHelper()
       kDefaultAllowedAppIds + std::size(kDefaultAllowedAppIds));
 
   // Track profiles so we can observe their app registries.
-  g_browser_process->profile_manager()->AddObserver(this);
+  profile_manager_observation_.Observe(g_browser_process->profile_manager());
   play_store_enabled_ = false;
   for (Profile* profile :
        g_browser_process->profile_manager()->GetLoadedProfiles()) {
@@ -521,9 +511,6 @@ NoteTakingHelper::NoteTakingHelper()
 
 NoteTakingHelper::~NoteTakingHelper() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  g_browser_process->profile_manager()->RemoveObserver(this);
-
   // ArcSessionManagerTest shuts down ARC before NoteTakingHelper.
   if (arc::ArcSessionManager::Get())
     arc::ArcSessionManager::Get()->RemoveObserver(this);

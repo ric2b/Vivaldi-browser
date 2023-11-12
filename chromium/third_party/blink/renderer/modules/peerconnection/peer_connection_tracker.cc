@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "build/chromecast_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
@@ -109,7 +110,8 @@ String SerializeServers(
 String SerializePeerConnectionMediaConstraints(
     const webrtc::PeerConnectionInterface::RTCConfiguration& config) {
   StringBuilder builder;
-#if BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA) && BUILDFLAG(ENABLE_CAST_RECEIVER)
+  // TODO(crbug.com/804275): Delete when Fuchsia no longer needs it.
   if (config.enable_dtls_srtp.has_value()) {
     if (builder.length())
       builder.Append(", ");
@@ -1190,6 +1192,52 @@ void PeerConnectionTracker::TrackGetUserMediaFailure(
   DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
 
   peer_connection_tracker_host_->GetUserMediaFailure(
+      user_media_request->request_id(), error, error_message);
+}
+
+void PeerConnectionTracker::TrackGetDisplayMedia(
+    UserMediaRequest* user_media_request) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+
+  peer_connection_tracker_host_->GetDisplayMedia(
+      user_media_request->request_id(), user_media_request->Audio(),
+      user_media_request->Video(),
+      SerializeGetUserMediaMediaConstraints(
+          user_media_request->AudioConstraints()),
+      SerializeGetUserMediaMediaConstraints(
+          user_media_request->VideoConstraints()));
+}
+
+void PeerConnectionTracker::TrackGetDisplayMediaSuccess(
+    UserMediaRequest* user_media_request,
+    MediaStream* stream) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+
+  // Serialize audio and video track information (id and label) or an
+  // empty string when there is no such track.
+  String audio_track_info =
+      stream->getAudioTracks().empty()
+          ? String("")
+          : String("id:") + stream->getAudioTracks()[0]->id() +
+                String(" label:") + stream->getAudioTracks()[0]->label();
+  String video_track_info =
+      stream->getVideoTracks().empty()
+          ? String("")
+          : String("id:") + stream->getVideoTracks()[0]->id() +
+                String(" label:") + stream->getVideoTracks()[0]->label();
+
+  peer_connection_tracker_host_->GetDisplayMediaSuccess(
+      user_media_request->request_id(), stream->id(), audio_track_info,
+      video_track_info);
+}
+
+void PeerConnectionTracker::TrackGetDisplayMediaFailure(
+    UserMediaRequest* user_media_request,
+    const String& error,
+    const String& error_message) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+
+  peer_connection_tracker_host_->GetDisplayMediaFailure(
       user_media_request->request_id(), error, error_message);
 }
 

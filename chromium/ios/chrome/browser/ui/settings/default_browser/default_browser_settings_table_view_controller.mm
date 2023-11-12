@@ -17,6 +17,12 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -42,6 +48,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 };
 
 }  // namespace
+
+@interface DefaultBrowserSettingsTableViewController () {
+  // Whether Settings have been dismissed.
+  BOOL _settingsAreDismissed;
+}
+@end
 
 @implementation DefaultBrowserSettingsTableViewController
 
@@ -107,8 +119,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[TableViewDetailIconItem alloc] initWithType:ItemTypeSelectChromeStep];
   selectChromeStepItem.text =
       l10n_util::GetNSString(IDS_IOS_SETTINGS_SELECT_CHROME_STEP);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    selectChromeStepItem.iconImage =
+        [UIImage imageNamed:vAboutSetting];
+  } else {
   selectChromeStepItem.iconImage =
       [UIImage imageNamed:kSelectChromeStepImageName];
+  } // End Vivaldi
+
   [self.tableViewModel addItem:selectChromeStepItem
        toSectionWithIdentifier:SectionIdentifierSteps];
 
@@ -125,12 +144,30 @@ typedef NS_ENUM(NSInteger, ItemType) {
        toSectionWithIdentifier:SectionIdentifierOpenSettings];
 }
 
+#pragma mark - SettingsControllerProtocol
+
+- (void)reportDismissalUserAction {
+}
+
+- (void)reportBackUserAction {
+}
+
+- (void)settingsWillBeDismissed {
+  DCHECK(!_settingsAreDismissed);
+
+  // No-op as there are no C++ objects or observers.
+
+  _settingsAreDismissed = YES;
+}
+
 #pragma mark UITableViewDelegate
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [super tableView:tableView
                      cellForRowAtIndexPath:indexPath];
+  if (_settingsAreDismissed)
+    return cell;
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
   if (itemType == ItemTypeOpenSettingsStep ||

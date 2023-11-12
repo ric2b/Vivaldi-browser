@@ -10,7 +10,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -510,47 +509,6 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest, DisallowWebRequestToSharedResources) {
                                                      shared_resource_url)));
 }
 
-class WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled
-    : public WebUISecurityTest {
- public:
-  WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled() {
-    feature_list_.InitAndEnableFeature(features::kWebUIReportOnlyTrustedTypes);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Verify Report-Only Trusted Types won't block assignment to a dangerous sink,
-// but logs warning
-IN_PROC_BROWSER_TEST_F(WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled,
-                       DoNotBlockSinkAssignmentOnReportOnlyTrustedTypes) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL test_url(GetWebUIURL("web-ui/title1.html"));
-
-  EXPECT_TRUE(NavigateToURL(shell(), test_url));
-
-  const char kDangerousSinkUse[] =
-      "(() => {"
-      "  try {"
-      "    document.body.innerHTML = 1;"
-      "    throw 'Assignment should have blocked';"
-      "  } catch(e) {"
-      "    return 'Assignment blocked';"
-      "  }"
-      "})();";
-  {
-    WebContentsConsoleObserver console_observer(shell()->web_contents());
-    console_observer.SetPattern(
-        "This document requires 'TrustedHTML' assignment.");
-
-    EXPECT_EQ("Assignment blocked",
-              EvalJs(shell(), kDangerousSinkUse, EXECUTE_SCRIPT_DEFAULT_OPTIONS,
-                     1 /* world_id */));
-    console_observer.Wait();
-  }
-}
-
 namespace {
 class UntrustedSourceWithCorsSupport : public URLDataSource {
  public:
@@ -577,10 +535,8 @@ class UntrustedSourceWithCorsSupport : public URLDataSource {
   void StartDataRequest(const GURL& url,
                         const WebContents::Getter& wc_getter,
                         GotDataCallback callback) override {
-    std::string dummy_html = "<html><body>dummy</body></html>";
-    scoped_refptr<base::RefCountedString> response =
-        base::RefCountedString::TakeString(&dummy_html);
-    std::move(callback).Run(response.get());
+    std::move(callback).Run(base::MakeRefCounted<base::RefCountedString>(
+        std::string("<html><body>dummy</body></html>")));
   }
 
  private:
@@ -684,7 +640,7 @@ IN_PROC_BROWSER_TEST_F(
     WebContentsConsoleObserver console_observer(shell()->web_contents());
     EXPECT_EQ("Failed to fetch",
               PerformFetch(shell(), untrusted_url2, FetchMode::CORS));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
     EXPECT_EQ(console_observer.GetMessageAt(0),
               base::StringPrintf(
                   "Refused to connect to '%s' because it violates the "
@@ -698,7 +654,7 @@ IN_PROC_BROWSER_TEST_F(
     WebContentsConsoleObserver console_observer(shell()->web_contents());
     EXPECT_EQ("Failed to fetch",
               PerformFetch(shell(), untrusted_url2, FetchMode::NO_CORS));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
     EXPECT_EQ(console_observer.GetMessageAt(0),
               base::StringPrintf(
                   "Refused to connect to '%s' because it violates the "
@@ -751,7 +707,7 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest,
     WebContentsConsoleObserver console_observer(shell()->web_contents());
     EXPECT_EQ("Failed to fetch",
               PerformFetch(shell(), chrome_url, FetchMode::CORS));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
     EXPECT_EQ(
         console_observer.GetMessageAt(0),
         base::StringPrintf(
@@ -763,7 +719,7 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest,
     WebContentsConsoleObserver console_observer(shell()->web_contents());
     EXPECT_EQ("Failed to fetch",
               PerformFetch(shell(), chrome_url, FetchMode::NO_CORS));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
     EXPECT_EQ(
         console_observer.GetMessageAt(0),
         base::StringPrintf(
@@ -839,7 +795,7 @@ IN_PROC_BROWSER_TEST_F(
 
   WebContentsConsoleObserver console_observer(shell()->web_contents());
   EXPECT_EQ("error", PerformXHRRequest(shell(), untrusted_url2));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   EXPECT_EQ(console_observer.GetMessageAt(0),
             base::StringPrintf(
                 "Refused to connect to '%s' because it violates the "
@@ -888,7 +844,7 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest,
 
   WebContentsConsoleObserver console_observer(shell()->web_contents());
   EXPECT_EQ("error", PerformXHRRequest(shell(), chrome_url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   EXPECT_EQ(console_observer.GetMessageAt(0),
             base::StringPrintf("Not allowed to load local resource: %s",
                                chrome_url.spec().c_str()));

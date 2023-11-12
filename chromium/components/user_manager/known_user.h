@@ -12,7 +12,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "base/version.h"
+#include "components/user_manager/common_types.h"
 #include "components/user_manager/user_manager_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -20,10 +22,6 @@ class AccountId;
 enum class AccountType;
 class PrefRegistrySimple;
 class PrefService;
-
-namespace base {
-class Value;
-}
 
 namespace user_manager {
 
@@ -125,6 +123,8 @@ class USER_MANAGER_EXPORT KnownUser final {
                          const std::string& id,
                          const AccountType& account_type);
 
+  AccountId GetAccountIdByCryptohomeId(const CryptohomeId& cryptohome_id);
+
   // Saves |account_id| into known users. Tries to commit the change on disk.
   // Use only if account_id is not yet in the known user list. Important if
   // Chrome crashes shortly after starting a session. Cryptohome should be able
@@ -188,7 +188,8 @@ class USER_MANAGER_EXPORT KnownUser final {
   // can be used by this user to authenticate. The getter returns a null value
   // when the property isn't present. For the format of the value, refer to
   // chromeos/ash/components/login/auth/challenge_response/known_user_pref_utils.h.
-  void SetChallengeResponseKeys(const AccountId& account_id, base::Value value);
+  void SetChallengeResponseKeys(const AccountId& account_id,
+                                base::Value::List value);
 
   base::Value GetChallengeResponseKeys(const AccountId& account_id);
 
@@ -270,7 +271,7 @@ class USER_MANAGER_EXPORT KnownUser final {
 
   // Performs a lookup of properties associated with |account_id|. Returns
   // nullptr if not found.
-  const base::Value* FindPrefs(const AccountId& account_id) const;
+  const base::Value::Dict* FindPrefs(const AccountId& account_id) const;
 
   // Removes all user preferences associated with |account_id|.
   // Not exported as code should not be calling this outside this component
@@ -288,20 +289,6 @@ class USER_MANAGER_EXPORT KnownUser final {
   const base::raw_ptr<PrefService> local_state_;
 };
 
-// Legacy interface of KnownUsersDatabase.
-// TODO(https://crbug.com/1150434): Migrate callers and remove this.
-namespace known_user {
-// Methods for storage/retrieval of per-user properties in Local State.
-
-// Returns the list of known AccountIds.
-// TODO(https://crbug.com/1150434): Deprecated, use
-// KnownUser::GetKnownAccountIds instead.
-std::vector<AccountId> USER_MANAGER_EXPORT GetKnownAccountIds();
-
-AccountId USER_MANAGER_EXPORT
-GetPlatformKnownAccountId(const std::string& user_email);
-
-}  // namespace known_user
 }  // namespace user_manager
 
 #endif  // COMPONENTS_USER_MANAGER_KNOWN_USER_H_

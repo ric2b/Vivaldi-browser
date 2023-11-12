@@ -35,10 +35,6 @@ base::Value NetLogSettingsParams(const quic::SettingsFrame& frame) {
 
 base::Value NetLogPriorityUpdateParams(const quic::PriorityUpdateFrame& frame) {
   base::Value::Dict dict;
-  dict.Set("type", frame.prioritized_element_type ==
-                           quic::PrioritizedElementType::REQUEST_STREAM
-                       ? "request_stream"
-                       : "push_stream");
   dict.Set("prioritized_element_id",
            NetLogNumberValue(frame.prioritized_element_id));
   dict.Set("priority_field_value", frame.priority_field_value);
@@ -153,6 +149,7 @@ void QuicHttp3Logger::OnSettingsFrameReceived(
                               frame.values.size() + 1, /* min = */ 1,
                               /* max = */ 10, /* buckets = */ 10);
   int reserved_identifier_count = 0;
+  bool settings_extended_connect_enabled = false;
   for (const auto& value : frame.values) {
     if (value.first == quic::SETTINGS_QPACK_MAX_TABLE_CAPACITY) {
       UMA_HISTOGRAM_COUNTS_1M(
@@ -163,6 +160,8 @@ void QuicHttp3Logger::OnSettingsFrameReceived(
     } else if (value.first == quic::SETTINGS_QPACK_BLOCKED_STREAMS) {
       UMA_HISTOGRAM_COUNTS_1000(
           "Net.QuicSession.ReceivedSettings.BlockedStreams", value.second);
+    } else if (value.first == quic::SETTINGS_ENABLE_CONNECT_PROTOCOL) {
+      settings_extended_connect_enabled = value.second == 1;
     } else if (value.first >= 0x21 && value.first % 0x1f == 2) {
       // Reserved setting identifiers are defined at
       // https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-defined-settings-parameters.
@@ -177,6 +176,9 @@ void QuicHttp3Logger::OnSettingsFrameReceived(
       "Net.QuicSession.ReceivedSettings.ReservedCountPlusOne",
       reserved_identifier_count + 1, /* min = */ 1,
       /* max = */ 5, /* buckets = */ 5);
+  UMA_HISTOGRAM_BOOLEAN(
+      "Net.QuicSession.ReceivedSettings.EnableExtendedConnect",
+      settings_extended_connect_enabled);
 
   if (!net_log_.IsCapturing())
     return;

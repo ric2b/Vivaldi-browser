@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
+#include "components/autofill/core/browser/test_utils/vote_uploads_test_matchers.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
@@ -182,6 +183,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_METHOD(signin::IdentityManager*, GetIdentityManager, (), (override));
   MOCK_METHOD(PrefService*, GetPrefs, (), (const, override));
   MOCK_METHOD(const GURL&, GetLastCommittedURL, (), (const, override));
+  MOCK_METHOD(url::Origin, GetLastCommittedOrigin, (), (const, override));
   MOCK_METHOD(WebAuthnCredentialsDelegate*,
               GetWebAuthnCredentialsDelegateForDriver,
               (PasswordManagerDriver*),
@@ -457,6 +459,8 @@ class PasswordFormManagerTest : public testing::Test,
 
     ON_CALL(client_, GetLastCommittedURL())
         .WillByDefault(ReturnRef(observed_form_.url));
+    ON_CALL(client_, GetLastCommittedOrigin)
+        .WillByDefault(Return(url::Origin::Create(observed_form_.url)));
     ON_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
         .WillByDefault(Return(&webauthn_credentials_delegate_));
     ON_CALL(webauthn_credentials_delegate_, IsWebAuthnAutofillEnabled)
@@ -2160,9 +2164,9 @@ TEST_P(PasswordFormManagerTest, iOSUpdateStateWithoutPresaving) {
 
   // Check that nothing is saved on changing password, in case when there was no
   // pre-saving.
-  EXPECT_CALL(form_saver, Save(_, _, _)).Times(0);
-  EXPECT_TRUE(form_manager_->UpdateStateOnUserInput(
-      observed_form_.unique_renderer_id, password_field, new_field_value));
+  EXPECT_CALL(form_saver, Save).Times(0);
+  form_manager_->UpdateStateOnUserInput(observed_form_.unique_renderer_id,
+                                        password_field, new_field_value);
 
   EXPECT_EQ(new_field_value,
             form_manager_->observed_form()->fields[kPasswordFieldIndex].value);

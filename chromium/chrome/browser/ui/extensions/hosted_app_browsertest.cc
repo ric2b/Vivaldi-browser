@@ -186,7 +186,7 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
         https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     scoped_feature_list_.InitWithFeatures({}, {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      features::kWebAppsCrosapi, chromeos::features::kLacrosPrimary,
+      features::kWebAppsCrosapi, ash::features::kLacrosPrimary,
 #endif
           predictors::kSpeculativePreconnectFeature
     });
@@ -319,13 +319,13 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
   web_app::WebAppRegistrar& registrar() {
     auto* provider = web_app::WebAppProvider::GetForTest(profile());
     CHECK(provider);
-    return provider->registrar();
+    return provider->registrar_unsafe();
   }
 
   apps::AppServiceTest& app_service_test() { return app_service_test_; }
 
   std::string app_id_;
-  raw_ptr<Browser> app_browser_;
+  raw_ptr<Browser, DanglingUntriaged> app_browser_;
 
   AppType app_type() const { return app_type_; }
 
@@ -897,7 +897,7 @@ class HostedAppProcessModelTest : public HostedOrWebAppTest {
  protected:
   bool should_swap_for_cross_site_;
 
-  raw_ptr<extensions::ProcessMap> process_map_;
+  raw_ptr<extensions::ProcessMap, DanglingUntriaged> process_map_;
 
   GURL same_dir_url_;
   GURL diff_dir_url_;

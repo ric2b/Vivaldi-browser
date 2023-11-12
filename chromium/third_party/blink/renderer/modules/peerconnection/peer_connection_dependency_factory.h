@@ -190,7 +190,6 @@ class MODULES_EXPORT PeerConnectionDependencyFactory
   std::unique_ptr<IpcPacketSocketFactory> socket_factory_;
 
   rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
-  scoped_refptr<MetronomeSource> metronome_source_;
 
   // Dispatches all P2P sockets.
   Member<P2PSocketDispatcher> p2p_socket_dispatcher_;
@@ -200,8 +199,6 @@ class MODULES_EXPORT PeerConnectionDependencyFactory
   media::GpuVideoAcceleratorFactories* gpu_factories_;
 
   WebrtcVideoPerfReporter webrtc_video_perf_reporter_;
-
-  bool encode_decode_capabilities_reported_ = false;
 
   THREAD_CHECKER(thread_checker_);
 };

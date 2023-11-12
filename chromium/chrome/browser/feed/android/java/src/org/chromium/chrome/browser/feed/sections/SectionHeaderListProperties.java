@@ -49,18 +49,29 @@ public class SectionHeaderListProperties {
             new PropertyModel.WritableObjectPropertyKey<>();
     public static final PropertyModel.WritableObjectPropertyKey<View> EXPANDING_DRAWER_VIEW_KEY =
             new PropertyModel.WritableObjectPropertyKey<>();
+    public static final PropertyModel
+            .WritableObjectPropertyKey<View> STICKY_HEADER_EXPANDING_DRAWER_VIEW_KEY =
+            new PropertyModel.WritableObjectPropertyKey<>();
     public static final PropertyModel.ReadableIntPropertyKey TOOLBAR_HEIGHT_PX =
             new PropertyModel.ReadableIntPropertyKey();
+    /** Visibility state for the sticky header. */
+    public static final PropertyModel.WritableBooleanPropertyKey STICKY_HEADER_VISIBLILITY_KEY =
+            new PropertyModel.WritableBooleanPropertyKey();
+    /** Mutable margin of the sticky header in the start surface. */
+    public static final PropertyModel.WritableIntPropertyKey STICKY_HEADER_MUTABLE_MARGIN_KEY =
+            new PropertyModel.WritableIntPropertyKey();
 
     public static PropertyModel create(@Px int toolbarHeight) {
         return new PropertyModel
                 .Builder(IS_SECTION_ENABLED_KEY, SECTION_HEADERS_KEY, CURRENT_TAB_INDEX_KEY,
                         ON_TAB_SELECTED_CALLBACK_KEY, MENU_MODEL_LIST_KEY, MENU_DELEGATE_KEY,
                         IS_TAB_MODE_KEY, IS_LOGO_KEY, INDICATOR_VIEW_VISIBILITY_KEY,
-                        EXPANDING_DRAWER_VIEW_KEY, TOOLBAR_HEIGHT_PX)
+                        EXPANDING_DRAWER_VIEW_KEY, TOOLBAR_HEIGHT_PX, STICKY_HEADER_VISIBLILITY_KEY,
+                        STICKY_HEADER_EXPANDING_DRAWER_VIEW_KEY, STICKY_HEADER_MUTABLE_MARGIN_KEY)
                 .with(SECTION_HEADERS_KEY, new PropertyListModel<>())
                 .with(INDICATOR_VIEW_VISIBILITY_KEY, ViewVisibility.INVISIBLE)
                 .with(TOOLBAR_HEIGHT_PX, toolbarHeight)
+                .with(STICKY_HEADER_VISIBLILITY_KEY, false)
                 .build();
     }
 }

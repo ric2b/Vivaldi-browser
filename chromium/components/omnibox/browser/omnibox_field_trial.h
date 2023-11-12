@@ -140,54 +140,8 @@ bool HasDynamicFieldTrialGroupPrefix(const char* group_prefix);
 void GetActiveSuggestFieldTrialHashes(std::vector<uint32_t>* field_trial_hash);
 
 // ---------------------------------------------------------
-// For the AutocompleteController "stop timer" field trial.
-
-// Returns the duration to be used for the AutocompleteController's stop
-// timer.  Returns the default value of 1.5 seconds if the stop timer
-// override experiment isn't active or if parsing the experiment-provided
-// duration fails.
-base::TimeDelta StopTimerFieldTrialDuration();
-
-// ---------------------------------------------------------
-// For the OmniboxLocalZeroSuggestAgeThreshold field trial.
-
-// Returns the age threshold since the last visit in order to consider a
-// normalized keyword search term as a zero-prefix suggestion.
-base::Time GetLocalHistoryZeroSuggestAgeThreshold();
-
-// ---------------------------------------------------------
-// For the ShortcutsScoringMaxRelevance experiment that's part of the
-// bundled omnibox field trial.
-
-// If the user is in an experiment group that, given the provided
-// |current_page_classification| context, changes the maximum relevance
-// ShortcutsProvider::CalculateScore() is supposed to assign, extract
-// that maximum relevance score and put in in |max_relevance|.  Returns
-// true on a successful extraction.  CalculateScore()'s return value is
-// a product of this maximum relevance score and some attenuating factors
-// that are all between 0 and 1.  (Note that Shortcuts results may have
-// their scores reduced later if the assigned score is higher than allowed
-// for non-inlineable results.  Shortcuts results are not allowed to be
-// inlined.)
-bool ShortcutsScoringMaxRelevance(
-    metrics::OmniboxEventProto::PageClassification current_page_classification,
-    int* max_relevance);
-
-// ---------------------------------------------------------
 // For the SearchHistory experiment that's part of the bundled omnibox
 // field trial.
-
-// Returns true if the user is in the experiment group that, given the
-// provided |current_page_classification| context, scores search history
-// query suggestions less aggressively so that they don't inline.
-bool SearchHistoryPreventInlining(
-    metrics::OmniboxEventProto::PageClassification current_page_classification);
-
-// Returns true if the user is in the experiment group that, given the
-// provided |current_page_classification| context, disables all query
-// suggestions from search history.
-bool SearchHistoryDisable(
-    metrics::OmniboxEventProto::PageClassification current_page_classification);
 
 // ---------------------------------------------------------
 // For the DemoteByType experiment that's part of the bundled omnibox field
@@ -361,15 +315,50 @@ extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsCounterfactual;
 extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsLowEndBypass;
 // Indicates whether to support transpose edit operations in fuzzy search.
 extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsTranspose;
+// The minimum length of input that will be checked for fuzzy URL
+// suggestions. Note, this is a threshold independent of the fuzzy
+// search tolerance schedule.
+extern const base::FeatureParam<int> kFuzzyUrlSuggestionsMinInputLength;
+
+// The *Penalty* parameters below provide control over how fuzzy matches
+// are penalized according to input length. The relevance from the source
+// match is reduced because the match is inexact (typo-corrected) but
+// when the input is very short, such corrections are more likely and
+// therefore confidence is lower. Hence the high penalty is applied
+// to the shortest inputs and the low is applied to longer inputs, with
+// a linear taper for input length to smooth the effect.
+
+// Highest penalty percentage that will be applied to fuzzy URL suggestions.
+extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyHigh;
+// Lowest penalty percentage that will be applied to fuzzy URL suggestions.
+extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyLow;
+// The number of input characters between where the high penalty will be
+// applied and where the low penalty will be applied.
+extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyTaperLength;
+
+// Returns true if the default browser pedal feature is enabled.
+bool IsDefaultBrowserPedalEnabled();
+
+// Indicates whether the default browser pedal can be used when the
+// shell_integration API indicates the system sets default browser
+// interactively, e.g. by bringing up system settings.
+extern const base::FeatureParam<bool> kDefaultBrowserPedalInteractive;
+// Indicates whether the default browser pedal can be used when the
+// shell_integration API indicates the system sets default browser
+// without any further user interaction, i.e. "unattended".
+extern const base::FeatureParam<bool> kDefaultBrowserPedalUnattended;
 
 // Simply a convenient wrapper for testing a flag. Used downstream for an
 // assortment of keyword mode experiments.
 bool IsExperimentalKeywordModeEnabled();
 
-// On Device Head Suggestions feature and its helper functions.
+// On Device Suggestions feature and its helper functions.
+// TODO(crbug.com/1307005): clean up head suggest flags once crbug.com/1307005
+// no longer happens.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
 bool IsOnDeviceHeadSuggestEnabledForNonIncognito();
 bool IsOnDeviceHeadSuggestEnabledForAnyMode();
+bool IsOnDeviceTailSuggestEnabled();
 // Functions can be used in both non-incognito and incognito.
 std::string OnDeviceHeadModelLocaleConstraint(bool is_incognito);
 
@@ -380,6 +369,15 @@ bool ShouldDisableCGIParamMatching();
 // If true, enables a "starter pack" of @history, @bookmarks, and @settings
 // scopes for Site Search.
 bool IsSiteSearchStarterPackEnabled();
+
+// Omnibox UI simplification - uniform row heights.
+// Returns true if the feature to enable uniform row height is enabled.
+bool IsUniformRowHeightEnabled();
+// Specifies the row height in pixels for omnibox suggestions.
+extern const base::FeatureParam<int> kSuggestionRowHeight;
+// Specifies the vertical margin to use in one-line rich entity and answer
+// suggestions.
+extern const base::FeatureParam<int> kRichSuggestionVerticalMargin;
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -396,7 +394,6 @@ bool IsSiteSearchStarterPackEnabled();
 extern const char kBundledExperimentFieldTrialName[];
 // Rule names used by the bundled experiment.
 extern const char kDisableProvidersRule[];
-extern const char kShortcutsScoringMaxRelevanceRule[];
 extern const char kSearchHistoryRule[];
 extern const char kDemoteByTypeRule[];
 extern const char kHQPBookmarkValueRule[];
@@ -437,11 +434,6 @@ extern const char kHQPExperimentalScoringTopicalityThresholdParam[];
 // urls indexed for suggestions.
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam[];
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
-
-// Parameter name determining the age threshold for local zero-prefix
-// suggestions. The value of this parameter should be parsable as an unsigned
-// integer, which will be used to specify the age threshold in days.
-extern const char kOmniboxLocalZeroSuggestAgeThresholdParam[];
 
 // Parameter names used by num suggestion experiments.
 extern const char kMaxZeroSuggestMatchesParam[];
@@ -535,6 +527,13 @@ bool IsZeroSuggestPrefetchingEnabled();
 bool IsZeroSuggestPrefetchingEnabledInContext(
     metrics::OmniboxEventProto::PageClassification page_classification);
 
+// Determines the age threshold in days for local zero-prefix suggestions.
+extern const base::FeatureParam<int> kOmniboxLocalZeroSuggestAgeThresholdParam;
+
+// Returns the age threshold since the last visit in order to consider a
+// normalized keyword search term as a zero-prefix suggestion.
+base::Time GetLocalHistoryZeroSuggestAgeThreshold();
+
 // Whether duplicative visits should be ignored for local history zero-suggest.
 // A duplicative visit is a visit to the same search term in an interval smaller
 // than kAutocompleteDuplicateVisitIntervalThreshold.
@@ -593,6 +592,12 @@ extern const base::FeatureParam<bool>
 // (e.g. @bookmarks, @history) provided by the Builtin Provider.
 extern const base::FeatureParam<int> kSiteSearchStarterPackRelevanceScore;
 
+// Document provider.
+// The max number of low quality doc suggestions to show. Docs are considered
+// low quality if they're neither owned nor fully contain the input in their
+// titles and owners.
+extern const base::FeatureParam<int> kDocumentProviderMaxLowQualitySuggestions;
+
 // Domain suggestions.
 // The minimum number of unique URLs a domain needs to be considered highly
 // visited.
@@ -615,6 +620,14 @@ extern const base::FeatureParam<int> kDomainSuggestionsTypedVisitCapPerVisit;
 extern const base::FeatureParam<int> kDomainSuggestionsMinInputLength;
 // The maximum number of matches per domain to suggest.
 extern const base::FeatureParam<int> kDomainSuggestionsMaxMatchesPerDomain;
+// The scoring factor used to boost HQP suggestions from highly visited domains.
+// A value of 1 is the control behavior. A value of 2 will boost scores, but not
+// necessarily double them due to how HQP maps the factors to actual scores.
+extern const base::FeatureParam<double> kDomainSuggestionsScoreFactor;
+
+// ---------------------------------------------------------
+// For logging Omnibox scoring signals for training machine learning models.
+bool IsLogUrlScoringSignalsEnabled();
 
 // New params should be inserted above this comment. They should be ordered
 // consistently with `omnibox_features.h`. They should be formatted as:

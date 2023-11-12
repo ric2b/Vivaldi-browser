@@ -9,6 +9,10 @@
 
 #include "chrome/browser/profiles/profile_selections.h"
 
+namespace profiles::testing {
+class ScopedProfileSelectionsForFactoryTesting;
+}
+
 // Purpose of this API:
 // Provide a Profile type specific implementation logic for
 // `KeyedServiceFactory` under chrome/.
@@ -73,18 +77,10 @@ class ProfileKeyedServiceFactory : public BrowserContextKeyedServiceFactory {
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const final;
 
-  // Since `ProfileKeyedServiceFactory` API uses `ProfileSelections`, there is
-  // still no way to prevent the creation of services for ChromeOS irregular
-  // profiles, with `ProfileSelections`. In order not to create services with
-  // these specific conditions, returning nullptr in `BuildServiceInstanceFor()`
-  // is accepted despite the recommendataion in
-  // `BrowserContextKeyedServiceFactory::BuildServiceInstanceFor()` until the
-  // API is adapted (crbug/1284664).
-  KeyedService* BuildServiceInstanceFor(
-      content::BrowserContext* context) const override = 0;
-
  private:
-  const ProfileSelections profile_selections_;
+  friend class profiles::testing::ScopedProfileSelectionsForFactoryTesting;
+
+  ProfileSelections profile_selections_;
 };
 
 #endif  // !CHROME_BROWSER_PROFILES_PROFILE_KEYED_SERVICE_FACTORY_H_

@@ -186,6 +186,7 @@ class ExitNotifier : public ui::EventHandler,
   ExitNotifier& operator=(const ExitNotifier&) = delete;
 
   ~ExitNotifier() override {
+    want_pointer_capture_notification_ = false;
     OnExitFullscreen();
     ClosePointerCaptureNotification();
   }
@@ -460,9 +461,6 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(ExitNotifier, kExitNotifierKey, nullptr)
 ExitNotifier* GetExitNotifier(UILockController* controller,
                               aura::Window* window,
                               bool create) {
-  if (!base::FeatureList::IsEnabled(chromeos::features::kExoLockNotification))
-    return nullptr;
-
   if (!window)
     return nullptr;
 

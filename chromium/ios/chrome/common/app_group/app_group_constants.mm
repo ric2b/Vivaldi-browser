@@ -7,6 +7,7 @@
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/version_info/version_info.h"
+#import "ios/chrome/common/app_group/app_group_helper.h"
 #import "ios/chrome/common/ios_app_bundle_id_prefix_buildflags.h"
 
 #include "app/vivaldi_apptools.h"
@@ -44,8 +45,12 @@ const char kChromeAppGroupNewTabCommand[] = "newtab";
 const char kChromeAppGroupFocusOmniboxCommand[] = "focusomnibox";
 const char kChromeAppGroupIncognitoSearchCommand[] = "incognitosearch";
 const char kChromeAppGroupQRScannerCommand[] = "qrscanner";
+const char kChromeAppGroupLensCommand[] = "lens";
 
 const char kChromeAppGroupSupportsSearchByImage[] = "supportsSearchByImage";
+const char kChromeAppGroupIsGoogleDefaultSearchEngine[] =
+    "isGoogleDefaultSearchEngine";
+const char kChromeAppGroupEnableLensInWidget[] = "enableLensInWidget";
 
 const char kChromeAppClientID[] = "ClientID";
 const char kUserMetricsEnabledDate[] = "UserMetricsEnabledDate";
@@ -75,13 +80,7 @@ NSString* ApplicationGroup() {
     return [NSString stringWithFormat:@"group.%s.browser",
                                     BUILDFLAG(IOS_APP_BUNDLE_ID_PREFIX), nil];
   }
-  NSBundle* bundle = [NSBundle mainBundle];
-  NSString* group = [bundle objectForInfoDictionaryKey:@"KSApplicationGroup"];
-  if (![group length]) {
-    return [NSString stringWithFormat:@"group.%s.chrome",
-                                      BUILDFLAG(IOS_APP_BUNDLE_ID_PREFIX), nil];
-  }
-  return group;
+  return [AppGroupHelper applicationGroup];
 }
 
 NSString* CommonApplicationGroup() {
@@ -120,18 +119,7 @@ NSUserDefaults* GetCommonGroupUserDefaults() {
 }
 
 NSUserDefaults* GetGroupUserDefaults() {
-  NSString* applicationGroup = ApplicationGroup();
-  if (applicationGroup) {
-    NSUserDefaults* defaults =
-        [[NSUserDefaults alloc] initWithSuiteName:applicationGroup];
-    if (defaults)
-      return defaults;
-  }
-
-  // On a device, the entitlements should always provide an application group to
-  // the application. This is not the case on simulator.
-  DCHECK(TARGET_IPHONE_SIMULATOR);
-  return [NSUserDefaults standardUserDefaults];
+  return [AppGroupHelper groupUserDefaults];
 }
 
 NSURL* LegacyShareExtensionItemsFolder() {

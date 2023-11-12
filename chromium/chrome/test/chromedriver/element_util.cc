@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -24,7 +23,7 @@
 #include "chrome/test/chromedriver/net/timeout.h"
 #include "chrome/test/chromedriver/session.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/webdriver/atoms.h"
+#include "third_party/selenium-atoms/atoms.h"
 
 namespace {
 
@@ -93,12 +92,12 @@ bool ParseFromValue(base::Value* value, WebRect* rect) {
   return true;
 }
 
-std::unique_ptr<base::DictionaryValue> CreateValueFrom(const WebRect& rect) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetIntKey("left", rect.X());
-  dict->SetIntKey("top", rect.Y());
-  dict->SetIntKey("width", rect.Width());
-  dict->SetIntKey("height", rect.Height());
+base::Value::Dict CreateValueFrom(const WebRect& rect) {
+  base::Value::Dict dict;
+  dict.Set("left", static_cast<int>(rect.X()));
+  dict.Set("top", static_cast<int>(rect.Y()));
+  dict.Set("width", static_cast<int>(rect.Width()));
+  dict.Set("height", static_cast<int>(rect.Height()));
   return dict;
 }
 
@@ -121,7 +120,7 @@ Status VerifyElementClickable(
     return status;
   base::Value::List args;
   args.Append(CreateElement(element_id));
-  args.Append(base::Value::FromUniquePtrValue(CreateValueFrom(location)));
+  args.Append(CreateValueFrom(location));
   std::unique_ptr<base::Value> result;
   status = CallAtomsJs(
       frame, web_view, webdriver::atoms::IS_ELEMENT_CLICKABLE,
@@ -163,7 +162,7 @@ Status ScrollElementRegionIntoViewHelper(
   base::Value::List args;
   args.Append(CreateElement(element_id));
   args.Append(center);
-  args.Append(base::Value::FromUniquePtrValue(CreateValueFrom(region)));
+  args.Append(CreateValueFrom(region));
   std::unique_ptr<base::Value> result;
   status = web_view->CallFunction(
       frame, webdriver::atoms::asString(webdriver::atoms::GET_LOCATION_IN_VIEW),
@@ -350,10 +349,10 @@ base::Value CreateShadowRoot(const std::string& shadow_root_id) {
   return CreateElementCommon(kShadowRootKey, shadow_root_id);
 }
 
-std::unique_ptr<base::DictionaryValue> CreateValueFrom(const WebPoint& point) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetIntKey("x", point.x);
-  dict->SetIntKey("y", point.y);
+base::Value::Dict CreateValueFrom(const WebPoint& point) {
+  base::Value::Dict dict;
+  dict.Set("x", static_cast<int>(point.x));
+  dict.Set("y", static_cast<int>(point.y));
   return dict;
 }
 
@@ -364,7 +363,7 @@ Status FindElementCommon(int interval_ms,
                          WebView* web_view,
                          const base::Value::Dict& params,
                          std::unique_ptr<base::Value>* value,
-                         bool isShadowRoot) {
+                         bool is_shadow_root) {
   const std::string* strategy = params.FindString("using");
   if (!strategy)
     return Status(kInvalidArgument, "'using' must be a string");
@@ -380,7 +379,7 @@ Status FindElementCommon(int interval_ms,
    * We have them disabled for now.
    * https://github.com/w3c/webdriver/issues/1610
    */
-  if (isShadowRoot && (*strategy == "tag name" || *strategy == "xpath")) {
+  if (is_shadow_root && (*strategy == "tag name" || *strategy == "xpath")) {
     return Status(kInvalidArgument, "invalid locator");
   }
 
@@ -398,7 +397,7 @@ Status FindElementCommon(int interval_ms,
   base::Value::List arguments;
   arguments.Append(std::move(locator));
   if (root_element_id) {
-    if (isShadowRoot)
+    if (is_shadow_root)
       arguments.Append(CreateShadowRoot(*root_element_id));
     else
       arguments.Append(CreateElement(*root_element_id));
@@ -486,7 +485,7 @@ Status GetActiveElement(Session* session,
   return status;
 }
 
-Status HasFocus(Session* session, WebView* web_view, bool* hasFocus) {
+Status HasFocus(Session* session, WebView* web_view, bool* has_focus) {
   std::unique_ptr<base::Value> value;
   Status status = web_view->EvaluateScript(
       session->GetCurrentFrameId(), "document.hasFocus()", false, &value);
@@ -494,7 +493,7 @@ Status HasFocus(Session* session, WebView* web_view, bool* hasFocus) {
     return status;
   if (!value->is_bool())
     return Status(kUnknownError, "document.hasFocus() returns non-boolean");
-  *hasFocus = value->GetBool();
+  *has_focus = value->GetBool();
   return Status(kOk);
 }
 

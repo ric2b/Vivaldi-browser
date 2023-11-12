@@ -19,8 +19,7 @@ suite('toolbar tests', function() {
       }
     }
 
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     toolbar = document.createElement('downloads-toolbar');
     SearchService.setInstance(new TestSearchService());
     document.body.appendChild(toolbar);
@@ -73,7 +72,7 @@ suite('toolbar tests', function() {
   test('undo is not shown when removing only dangerous items', () => {
     toolbar.items = [
       createDownload({isDangerous: true}),
-      createDownload({isMixedContent: true}),
+      createDownload({isInsecure: true}),
     ];
     toastManager.show('', /* hideSlotted= */ false);
     assertFalse(toastManager.slottedHidden);
@@ -88,7 +87,7 @@ suite('toolbar tests', function() {
     toolbar.items = [
       createDownload(),
       createDownload({isDangerous: true}),
-      createDownload({isMixedContent: true}),
+      createDownload({isInsecure: true}),
     ];
     toastManager.show('', /* hideSlotted= */ true);
     assertTrue(toastManager.slottedHidden);

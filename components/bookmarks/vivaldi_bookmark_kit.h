@@ -67,6 +67,7 @@ const std::string& GetDescription(const BookmarkNode* node);
 const base::GUID GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
 const base::GUID GetPartner(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode* node);
+const std::string& GetThumbnail(const BookmarkNode::MetaInfoMap& meta_info_map);
 
 bool IsSeparator(const BookmarkNode* node);
 

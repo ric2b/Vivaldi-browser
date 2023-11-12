@@ -13,7 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -64,6 +64,8 @@ MerchantInfo::MerchantInfo(MerchantInfo&&) = default;
 MerchantInfo::~MerchantInfo() = default;
 
 ShoppingService::ShoppingService(
+    const std::string& country_on_startup,
+    const std::string& locale_on_startup,
     bookmarks::BookmarkModel* bookmark_model,
     optimization_guide::NewOptimizationGuideDecider* opt_guide,
     PrefService* pref_service,
@@ -73,7 +75,9 @@ ShoppingService::ShoppingService(
         commerce_subscription_db::CommerceSubscriptionContentProto>*
         subscription_proto_db,
     power_bookmarks::PowerBookmarkService* power_bookmark_service)
-    : opt_guide_(opt_guide),
+    : country_on_startup_(country_on_startup),
+      locale_on_startup_(locale_on_startup),
+      opt_guide_(opt_guide),
       pref_service_(pref_service),
       bookmark_model_(bookmark_model),
       power_bookmark_service_(power_bookmark_service),
@@ -108,16 +112,16 @@ ShoppingService::ShoppingService(
         account_checker_.get());
   }
 
-  if (bookmark_model) {
+  if (bookmark_model_) {
     shopping_bookmark_observer_ =
         std::make_unique<ShoppingBookmarkModelObserver>(
             bookmark_model, this, subscriptions_manager_.get());
-  }
 
-  if (power_bookmark_service_ && IsProductInfoApiEnabled()) {
-    shopping_power_bookmark_data_provider_ =
-        std::make_unique<ShoppingPowerBookmarkDataProvider>(
-            power_bookmark_service_, this);
+    if (power_bookmark_service_ && IsProductInfoApiEnabled()) {
+      shopping_power_bookmark_data_provider_ =
+          std::make_unique<ShoppingPowerBookmarkDataProvider>(
+              bookmark_model_, power_bookmark_service_, this);
+    }
   }
 
   bookmark_update_manager_ = std::make_unique<BookmarkUpdateManager>(
@@ -310,7 +314,7 @@ void ShoppingService::GetProductInfoForUrl(const GURL& url,
     absl::optional<ProductInfo> info;
     // Make a copy based on the cached value.
     info.emplace(*cached_info);
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), url, info));
     return;
   }
@@ -432,7 +436,7 @@ std::unique_ptr<ProductInfo> ShoppingService::OptGuideResultToProductInfo(
   if (!parsed_any.has_value() || !price_data.IsInitialized())
     return nullptr;
 
-  commerce::BuyableProduct buyable_product = price_data.buyable_product();
+  const commerce::BuyableProduct buyable_product = price_data.buyable_product();
 
   std::unique_ptr<ProductInfo> info = std::make_unique<ProductInfo>();
 
@@ -463,6 +467,29 @@ std::unique_ptr<ProductInfo> ShoppingService::OptGuideResultToProductInfo(
 
   if (buyable_product.has_country_code())
     info->country_code = buyable_product.country_code();
+
+  // Check to see if there was a price drop associated with this product. Those
+  // prices take priority over what BuyableProduct has.
+  if (price_data.has_product_update()) {
+    const commerce::ProductPriceUpdate price_update =
+        price_data.product_update();
+
+    // Both new and old price should exist and have the same currency code.
+    bool currency_codes_match = price_update.new_price().currency_code() ==
+                                price_update.old_price().currency_code();
+
+    if (price_update.has_new_price() &&
+        info->currency_code == price_update.new_price().currency_code() &&
+        currency_codes_match) {
+      info->amount_micros = price_update.new_price().amount_micros();
+    }
+    if (price_update.has_old_price() &&
+        info->currency_code == price_update.old_price().currency_code() &&
+        currency_codes_match) {
+      info->previous_amount_micros.emplace(
+          price_update.old_price().amount_micros());
+    }
+  }
 
   return info;
 }
@@ -697,6 +724,21 @@ bool ShoppingService::IsShoppingListEligible(AccountChecker* account_checker,
   }
 
   return true;
+}
+
+void ShoppingService::IsClusterIdTrackedByUser(
+    uint64_t cluster_id,
+    base::OnceCallback<void(bool)> callback) {
+  if (!subscriptions_manager_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false));
+    return;
+  }
+
+  CommerceSubscription sub(
+      SubscriptionType::kPriceTrack, IdentifierType::kProductClusterId,
+      base::NumberToString(cluster_id), ManagementType::kUserManaged);
+  subscriptions_manager_->IsSubscribed(std::move(sub), std::move(callback));
 }
 
 base::WeakPtr<ShoppingService> ShoppingService::AsWeakPtr() {

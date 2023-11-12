@@ -33,7 +33,7 @@ using testing::SaveArg;
 // list.
 template <typename T>
 std::string ParamsToJSON(const T& params) {
-  base::ListValue params_value;
+  base::Value::List params_value;
   params_value.Append(base::Value(params.ToValue()));
   std::string params_json_string;
   EXPECT_TRUE(base::JSONWriter::Write(params_value, &params_json_string));
@@ -86,7 +86,7 @@ class FeedbackPrivateApiUnittest : public FeedbackPrivateApiUnittestBase {
     scoped_refptr<FeedbackPrivateReadLogSourceFunction> function =
         base::MakeRefCounted<FeedbackPrivateReadLogSourceFunction>();
 
-    std::unique_ptr<base::Value> result_value =
+    absl::optional<base::Value> result_value =
         RunFunctionAndReturnValue(function.get(), ParamsToJSON(params));
     if (!result_value)
       return testing::AssertionFailure() << "No result";
@@ -137,7 +137,7 @@ class FeedbackPrivateApiUnittest : public FeedbackPrivateApiUnittestBase {
 
     auto function = base::MakeRefCounted<FeedbackPrivateSendFeedbackFunction>();
 
-    std::unique_ptr<base::Value> result_value =
+    absl::optional<base::Value> result_value =
         RunFunctionAndReturnValue(function.get(), args);
     EXPECT_TRUE(result_value);
 

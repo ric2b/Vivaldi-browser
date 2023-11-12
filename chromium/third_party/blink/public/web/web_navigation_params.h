@@ -14,9 +14,12 @@
 #include "services/network/public/mojom/link_header.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
+#include "services/network/public/mojom/url_response_head.mojom-shared.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/frame/view_transition_state.h"
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -28,7 +31,6 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_fenced_frame_reporting.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
 #include "third_party/blink/public/platform/web_policy_container.h"
@@ -41,6 +43,7 @@
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -102,6 +105,10 @@ struct BLINK_EXPORT WebNavigationInfo {
 
   // Whether the navigation initiator frame is an ad frame.
   bool initiator_frame_is_ad = false;
+
+  // Whether there is ad script in stack when the navigation is initiated. Note
+  // that will also be true if the initiator frame is ad.
+  bool is_ad_script_in_stack = false;
 
   // Whether this is a navigation in the opener frame initiated
   // by the window.open'd frame.
@@ -322,15 +329,18 @@ struct BLINK_EXPORT WebNavigationParams {
 
   // The origin in which a navigation should commit. When provided, Blink
   // should use this origin directly and not compute locally the new document
-  // origin.
+  // origin. It is currently only specified on error document navigations, where
+  // the origin should be an opaque origin based on the URL that failed to load.
   //
   // TODO(https://crbug.com/888079): Always provide origin_to_commit.
   WebSecurityOrigin origin_to_commit;
 
   // The storage key of the document that will be created by the navigation.
-  // This is compatible with the `origin_to_commit`. Until the browser will be
-  // able to compute the `origin_to_commit` in all cases
-  // (https://crbug.com/888079), this is actually just a provisional
+  // This is compatible with the origin that the browser calculates for this
+  // navigation. Currently, the final origin used by a navigation is still
+  // determined by the renderer, except when `origin_to_commit` above is set.
+  // Until the browser is able to compute the origin accurately in all cases
+  // (see https://crbug.com/888079), this is actually just a provisional
   // `storage_key`. The final storage key is computed by the document loader
   // taking into account the origin computed by the renderer.
   StorageKey storage_key;
@@ -465,7 +475,7 @@ struct BLINK_EXPORT WebNavigationParams {
   // reporting metadata which in turn is a map from the event type to the
   // reporting url. Null, otherwise.
   // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  absl::optional<WebFencedFrameReporting> fenced_frame_reporting;
+  absl::optional<FencedFrame::FencedFrameReporting> fenced_frame_reporting;
 
   // Whether the current context would be allowed to create an opaque-ads
   //  frame (based on the browser-side calculations). See
@@ -487,6 +497,23 @@ struct BLINK_EXPORT WebNavigationParams {
   // language negotiation on the top-level document, all subresource requests
   // will inherit the Accept-Language header value of the top-level document.
   WebString reduced_accept_language;
+
+  // Carries on the `navigational_delivery_type` in `NavigationParam` on the
+  // renderer side.
+  network::mojom::NavigationDeliveryType navigation_delivery_type =
+      network::mojom::NavigationDeliveryType::kDefault;
+
+  // Provides cached state from the previous Document that will be replaced by
+  // this navigation for a ViewTransition.
+  absl::optional<ViewTransitionState> view_transition_state;
+
+  // If this is a navigation to an "opaque-ads" fenced frame through an ad
+  // auction, this stores the collection of properties that were loaded into a
+  // fenced frame to specify its behavior. This is read into an inner
+  // `FencedFrameConfig` object to give a fenced frame access to the
+  // components associated with the winning bid in an auction.
+  absl::optional<FencedFrame::RedactedFencedFrameProperties>
+      fenced_frame_properties;
 };
 
 }  // namespace blink

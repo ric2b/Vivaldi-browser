@@ -11,7 +11,10 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+#include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -73,22 +76,6 @@ void RecordOutcomeSample(RequestOutcome outcome) {
   base::UmaHistogramEnumeration("API.StorageAccess.RequestOutcome", outcome);
 }
 
-StorageAccessRequestType GetStorageAccessRequestType(
-    const GURL& requesting_origin,
-    const GURL& embedding_origin,
-    content::RenderFrameHost* render_frame_host) {
-  // `requestStorageAccessForOrigin` can only be called from the main frame, and
-  // standard `requestStorageAccess` calls pass the same origin for requesting
-  // and embedding in a top-level context. Any `requestStorageAccessForOrigin`
-  // calls passing the same origin as the current page are automatically granted
-  // upstream.
-  if (render_frame_host->IsInPrimaryMainFrame() &&
-      requesting_origin != embedding_origin) {
-    return StorageAccessRequestType::kRequestStorageAccessForOrigin;
-  }
-  return StorageAccessRequestType::kRequestStorageAccess;
-}
-
 }  // namespace
 
 StorageAccessGrantPermissionContext::StorageAccessGrantPermissionContext(
@@ -142,23 +129,21 @@ void StorageAccessGrantPermissionContext::DecidePermission(
     return;
   }
 
-  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(id.global_render_frame_host_id());
   DCHECK(rfh);
-  StorageAccessRequestType request_type =
-      GetStorageAccessRequestType(requesting_origin, embedding_origin, rfh);
 
-  return browser_context()
-      ->GetDefaultStoragePartition()
-      ->GetNetworkContext()
+  net::SchemefulSite embedding_site(embedding_origin);
+
+  first_party_sets::FirstPartySetsPolicyServiceFactory::GetForBrowserContext(
+      browser_context())
       ->ComputeFirstPartySetMetadata(
-          net::SchemefulSite(requesting_origin),
-          net::SchemefulSite(embedding_origin), /*party_context=*/{},
+          net::SchemefulSite(requesting_origin), &embedding_site,
+          /*party_context=*/{},
           base::BindOnce(&StorageAccessGrantPermissionContext::
                              CheckForAutoGrantOrAutoDenial,
                          weak_factory_.GetWeakPtr(), id, requesting_origin,
-                         embedding_origin, user_gesture, request_type,
-                         std::move(callback)));
+                         embedding_origin, user_gesture, std::move(callback)));
 }
 
 void StorageAccessGrantPermissionContext::CheckForAutoGrantOrAutoDenial(
@@ -166,7 +151,6 @@ void StorageAccessGrantPermissionContext::CheckForAutoGrantOrAutoDenial(
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     bool user_gesture,
-    const StorageAccessRequestType request_type,
     permissions::BrowserPermissionCallback callback,
     net::FirstPartySetMetadata metadata) {
   // We should only run this method if something might need the FPS metadata.
@@ -188,10 +172,8 @@ void StorageAccessGrantPermissionContext::CheckForAutoGrantOrAutoDenial(
       if (net::features::kStorageAccessAPIAutoGrantInFPS.Get()) {
         // Service domains are not allowed to request storage access on behalf
         // of other domains, even in the same First-Party Set.
-        if (request_type ==
-                StorageAccessRequestType::kRequestStorageAccessForOrigin &&
-            metadata.top_frame_entry()->site_type() ==
-                net::SiteType::kService) {
+        if (metadata.top_frame_entry()->site_type() ==
+            net::SiteType::kService) {
           NotifyPermissionSetInternal(id, requesting_origin, embedding_origin,
                                       std::move(callback),
                                       /*persist=*/true, CONTENT_SETTING_BLOCK,
@@ -231,11 +213,10 @@ void StorageAccessGrantPermissionContext::UseImplicitGrantOrPrompt(
       ContentSettingsType::STORAGE_ACCESS, &implicit_grants,
       content_settings::SessionModel::UserSession);
 
-  const int existing_implicit_grants =
-      std::count_if(implicit_grants.begin(), implicit_grants.end(),
-                    [requesting_origin](const auto& entry) {
-                      return entry.primary_pattern.Matches(requesting_origin);
-                    });
+  const int existing_implicit_grants = base::ranges::count_if(
+      implicit_grants, [requesting_origin](const auto& entry) {
+        return entry.primary_pattern.Matches(requesting_origin);
+      });
 
   // If we have fewer grants than our limit, we can just set an implicit grant
   // now and skip prompting the user.
@@ -272,8 +253,10 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSet(
     permissions::BrowserPermissionCallback callback,
     bool persist,
     ContentSetting content_setting,
-    bool is_one_time) {
+    bool is_one_time,
+    bool is_final_decision) {
   DCHECK(!is_one_time);
+  DCHECK(is_final_decision);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   NotifyPermissionSetInternal(
       id, requesting_origin, embedding_origin, std::move(callback), persist,
@@ -330,8 +313,19 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
   // This permission was allowed so store it either ephemerally or more
   // permanently depending on if the allow came from a prompt or automatic
   // grant.
-  settings_map->SetContentSettingDefaultScope(
-      requesting_origin, embedding_origin, ContentSettingsType::STORAGE_ACCESS,
+  const net::SchemefulSite embedding_site(embedding_origin);
+  const GURL embedding_site_as_url = embedding_site.GetURL();
+  ContentSettingsPattern secondary_site_pattern =
+      ContentSettingsPattern::CreateBuilder()
+          ->WithScheme(embedding_site_as_url.scheme())
+          ->WithDomainWildcard()
+          ->WithHost(embedding_site_as_url.host())
+          ->WithPathWildcard()
+          ->WithPortWildcard()
+          ->Build();
+  settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURLNoWildcard(requesting_origin),
+      secondary_site_pattern, ContentSettingsType::STORAGE_ACCESS,
       content_setting, implicit_result ? ephemeral_grant : durable_grant);
 
   ContentSettingsForOneType grants;

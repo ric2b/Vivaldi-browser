@@ -120,35 +120,6 @@ GetFileTypeAssociationsHandledByWebAppForDisplay(Profile* profile,
 std::vector<std::u16string> TransformFileExtensionsForDisplay(
     const std::set<std::string>& extensions);
 
-// Updates the approved or disallowed protocol list for the given app. If
-// necessary, it also updates the protocol registration with the OS.
-void PersistProtocolHandlersUserChoice(
-    Profile* profile,
-    const AppId& app_id,
-    const GURL& protocol_url,
-    bool allowed,
-    base::OnceClosure update_finished_callback);
-
-// Updates the File Handling API approval state for the given app. If
-// necessary, it also updates the registration with the OS.
-void PersistFileHandlersUserChoice(Profile* profile,
-                                   const AppId& app_id,
-                                   bool allowed,
-                                   base::OnceClosure update_finished_callback);
-
-// Updates the file handler registration with the OS to match the app's
-// settings. Note that this tries to avoid extra work by no-oping if the current
-// OS state matches what is calculated to be the desired stated. For example, if
-// Chromium has already registered file handlers with the OS, and finds that
-// file handlers *should* be registered with the OS, this function will no-op.
-// This will not account for what the current file handlers actually are. The
-// actual set of file handlers can only change on app update, and that path must
-// go through `OsIntegrationManager::UpdateOsHooks()`, which always clobbers and
-// renews the entire set of OS-registered file handlers (and other OS hooks).
-void UpdateFileHandlerOsIntegration(WebAppProvider* provider,
-                                    const AppId& app_id,
-                                    base::OnceClosure update_finished_callback);
-
 // Check if only |specified_sources| exist in the |sources|
 bool HasAnySpecifiedSourcesAndNoOtherSources(WebAppSources sources,
                                              WebAppSources specified_sources);
@@ -174,7 +145,9 @@ bool IsWebAppsCrosapiEnabled();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // Allow user web apps on profiles other than the main profile.
-void SkipMainProfileCheckForTesting();
+void SetSkipMainProfileCheckForTesting(bool skip_check);
+
+bool IsMainProfileCheckSkippedForTesting();
 #endif
 
 constexpr char kAppSettingsPageEntryPointsHistogramName[] =
@@ -197,8 +170,8 @@ enum class AppSettingsPageEntryPoint {
 // window (for app_display_mode 'standalone' or 'fullscreen'), or a minimal-ui
 // window (for app_display_mode 'browser' or 'minimal-ui').
 //
-// |is_isolated| overrides browser display mode for isolated apps because they
-// can't be open as a tab.
+// |is_isolated| overrides browser display mode for Isolated Web Apps because
+// they can't be open as a tab.
 DisplayMode ResolveEffectiveDisplayMode(
     DisplayMode app_display_mode,
     const std::vector<DisplayMode>& app_display_mode_overrides,

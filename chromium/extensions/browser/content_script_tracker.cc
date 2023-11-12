@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/typed_macros.h"
 #include "components/guest_view/browser/guest_view_base.h"
@@ -87,7 +88,7 @@ class RenderProcessHostUserData : public base::SupportsUserData::Data {
   // base::SupportsUserData::Data override:
   ~RenderProcessHostUserData() override {
     TRACE_EVENT_END("extensions", perfetto::Track::FromPointer(this),
-                    ChromeTrackEvent::kRenderProcessHost, process_);
+                    ChromeTrackEvent::kRenderProcessHost, *process_);
   }
 
   bool HasContentScript(const ExtensionId& extension_id) const {
@@ -98,7 +99,7 @@ class RenderProcessHostUserData : public base::SupportsUserData::Data {
     TRACE_EVENT_INSTANT(
         "extensions",
         "ContentScriptTracker::RenderProcessHostUserData::AddContentScript",
-        ChromeTrackEvent::kRenderProcessHost, process_,
+        ChromeTrackEvent::kRenderProcessHost, *process_,
         ChromeTrackEvent::kChromeExtensionId,
         ExtensionIdForTracing(extension_id));
     content_scripts_.insert(extension_id);
@@ -116,7 +117,7 @@ class RenderProcessHostUserData : public base::SupportsUserData::Data {
     TRACE_EVENT_BEGIN("extensions",
                       "ContentScriptTracker::RenderProcessHostUserData",
                       perfetto::Track::FromPointer(this),
-                      ChromeTrackEvent::kRenderProcessHost, process_);
+                      ChromeTrackEvent::kRenderProcessHost, *process_);
   }
 
   static const char* kUserDataKey;
@@ -133,7 +134,7 @@ class RenderProcessHostUserData : public base::SupportsUserData::Data {
   std::set<content::RenderFrameHost*> frames_;
 
   // Only used for tracing.
-  content::RenderProcessHost& process_;
+  const raw_ref<content::RenderProcessHost> process_;
 };
 
 const char* RenderProcessHostUserData::kUserDataKey =

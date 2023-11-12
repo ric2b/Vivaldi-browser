@@ -5,7 +5,7 @@
 /** @fileoverview Handles interprocess communication for the privacy page. */
 
 // clang-format off
-import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {sendWithPromise} from 'chrome://resources/js/cr.js';
 // clang-format on
 
 export interface MetricsReporting {
@@ -43,6 +43,14 @@ export interface SecureDnsSetting {
   mode: SecureDnsMode;
   config: string;
   managementMode: SecureDnsUiManagementMode;
+  // <if expr="chromeos_ash">
+  // Indicates if the templates URI contain user identifiers configured via
+  // policy.
+  dohWithIdentifiersActive: boolean;
+  // The template URI with plain text identifiers. In the effective template
+  // URI `config` the identifiers are hashed and hex encoded.
+  configForDisplay: string;
+  // </if>
 }
 
 export interface PrivacyPageBrowserProxy {
@@ -54,7 +62,7 @@ export interface PrivacyPageBrowserProxy {
 
   // <if expr="is_win or is_macosx">
   /** Invokes the native certificate manager (used by win and mac). */
-  showManageSSLCertificates(): void;
+  showManageSslCertificates(): void;
 
   // </if>
 
@@ -100,7 +108,7 @@ export class PrivacyPageBrowserProxyImpl implements PrivacyPageBrowserProxy {
   }
 
   // <if expr="is_win or is_macosx">
-  showManageSSLCertificates() {
+  showManageSslCertificates() {
     chrome.send('showManageSSLCertificates');
   }
   // </if>

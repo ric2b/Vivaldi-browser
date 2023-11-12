@@ -14,16 +14,15 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_constants.h"
-#include "components/datasource/resource_reader.h"
 
 namespace vivaldi_data_url_utils {
 
 const char* const kTypeNames[PathTypeCount] = {
-    "local-image",       // kLocalPath
-    "thumbnail",         // kImage, for historical reasons the name is not image
-    "css-mods",          // kCCSMod
-    "synced-store",      // kSyncedStore
-    "desktop-image",     // kDesktopWallpaper
+    "local-image",    // kLocalPath
+    "thumbnail",      // kImage, for historical reasons the name is not image
+    "css-mods",       // kCCSMod
+    "synced-store",   // kSyncedStore
+    "desktop-image",  // kDesktopWallpaper
 };
 
 static_assert(sizeof(kTypeNames) / sizeof(kTypeNames[0]) ==
@@ -95,7 +94,7 @@ absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
 
   // Short-circuit relative resource URLs to avoid the warning below as resource
   // URL is a relative URL.
-  if (ResourceReader::IsResourceURL(url))
+  if (IsResourceURL(url))
     return absl::nullopt;
 
   GURL gurl(url);
@@ -116,6 +115,19 @@ absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
   return ParsePath(gurl.path_piece(), data);
 }
 
+bool IsResourceURL(base::StringPiece url,
+                                   std::string* resource_path) {
+  base::StringPiece prefix(kResourceUrlPrefix);
+  if (!base::StartsWith(url, prefix))
+    return false;
+  if (resource_path) {
+    // Just strip the first slash.
+    static_assert(kResourceUrlPrefix[0] == '/', "starts with a slash");
+    resource_path->assign(url.data() + 1, url.size() - 1);
+  }
+  return true;
+}
+
 bool isOldFormatThumbnailId(base::StringPiece id) {
   int64_t bookmark_id;
   return id.length() <= 20 && base::StringToInt64(id, &bookmark_id) &&
@@ -125,6 +137,20 @@ bool isOldFormatThumbnailId(base::StringPiece id) {
 bool IsBookmarkCaptureUrl(base::StringPiece url) {
   absl::optional<PathType> type = ParseUrl(url);
   return type == PathType::kImage;
+}
+
+bool IsLocalPathUrl(base::StringPiece url) {
+  absl::optional<PathType> type = ParseUrl(url);
+  return type == PathType::kLocalPath;
+}
+
+absl::optional<std::string> GetSyncedStoreChecksumForUrl(
+    base::StringPiece url) {
+  std::string data;
+  absl::optional<PathType> type = ParseUrl(url, &data);
+  if (type != PathType::kSyncedStore)
+    return absl::nullopt;
+  return data;
 }
 
 std::string MakeUrl(PathType type, base::StringPiece data) {

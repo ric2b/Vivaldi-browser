@@ -27,6 +27,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.support.test.InstrumentationRegistry;
+import android.support.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
+import android.support.test.runner.lifecycle.Stage;
 import android.util.Base64;
 import android.view.View;
 import android.view.ViewGroup;
@@ -180,27 +182,65 @@ public class StartSurfaceTestUtils {
                 CriteriaHelper.DEFAULT_POLLING_INTERVAL);
         Assert.assertTrue(LibraryLoader.getInstance().isInitialized());
         ChromeTabbedActivity cta = activityTestRule.getActivity();
-        StartSurfaceTestUtils.waitForOverviewVisible(cta);
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(cta);
     }
 
     /**
-     * Wait for the start surface homepage or tab switcher page visible.
+     * Wait for the start surface homepage visible.
      * @param cta The ChromeTabbedActivity under test.
      */
-    public static void waitForOverviewVisible(ChromeTabbedActivity cta) {
-        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+    public static void waitForStartSurfaceVisible(ChromeTabbedActivity cta) {
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), getStartSurfaceLayoutType());
     }
 
     /**
-     * Wait for the start surface homepage or tab switcher page visible.
+     * Wait for the tab switcher page visible.
+     * @param cta The ChromeTabbedActivity under test.
+     */
+    public static void waitForTabSwitcherVisible(ChromeTabbedActivity cta) {
+        if (ChromeFeatureList.sStartSurfaceRefactor.isEnabled()) {
+            LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+        } else {
+            // TODO(1347089): Removes here when the Start surface refactoring is enabled by default.
+            onViewWaiting(withId(R.id.secondary_tasks_surface_view));
+        }
+    }
+
+    public static @LayoutType int getStartSurfaceLayoutType() {
+        return ChromeFeatureList.sStartSurfaceRefactor.isEnabled() ? LayoutType.START_SURFACE
+                                                                   : LayoutType.TAB_SWITCHER;
+    }
+
+    /**
+     * Wait for the start surface homepage visible.
      * @param layoutChangedCallbackHelper The call back function to help check whether layout is
      *         changed.
      * @param currentlyActiveLayout The current active layout.
      * @param cta The ChromeTabbedActivity under test.
      */
-    public static void waitForOverviewVisible(CallbackHelper layoutChangedCallbackHelper,
+    public static void waitForStartSurfaceVisible(CallbackHelper layoutChangedCallbackHelper,
             @LayoutType int currentlyActiveLayout, ChromeTabbedActivity cta) {
-        if (currentlyActiveLayout == LayoutType.TAB_SWITCHER) {
+        waitForLayoutVisible(layoutChangedCallbackHelper, currentlyActiveLayout, cta,
+                getStartSurfaceLayoutType());
+    }
+
+    /**
+     * Wait for the tab switcher page visible.
+     * @param layoutChangedCallbackHelper The call back function to help check whether layout is
+     *         changed.
+     * @param currentlyActiveLayout The current active layout.
+     * @param cta The ChromeTabbedActivity under test.
+     */
+    public static void waitForTabSwitcherVisible(CallbackHelper layoutChangedCallbackHelper,
+            @LayoutType int currentlyActiveLayout, ChromeTabbedActivity cta) {
+        waitForLayoutVisible(
+                layoutChangedCallbackHelper, currentlyActiveLayout, cta, LayoutType.TAB_SWITCHER);
+    }
+
+    private static void waitForLayoutVisible(CallbackHelper layoutChangedCallbackHelper,
+            @LayoutType int currentlyActiveLayout, ChromeTabbedActivity cta,
+            @LayoutType int layoutType) {
+        if (currentlyActiveLayout == layoutType) {
             StartSurfaceTestUtils.waitForTabModel(cta);
             return;
         }
@@ -322,7 +362,7 @@ public class StartSurfaceTestUtils {
         // Drag the Feed header title to scroll the toolbar to the top.
         int toY = -cta.getResources().getDimensionPixelOffset(R.dimen.toolbar_height_no_shadow);
         TestTouchUtils.dragCompleteView(InstrumentationRegistry.getInstrumentation(),
-                cta.findViewById(R.id.header_title), 0, 0, 0, toY, 1);
+                cta.findViewById(R.id.header_title), 0, 0, 0, toY, 10);
 
         // The start surface toolbar should be scrolled up and not be displayed.
         CriteriaHelper.pollInstrumentationThread(
@@ -333,9 +373,6 @@ public class StartSurfaceTestUtils {
 
         // Toolbar layout view should show.
         onViewWaiting(withId(R.id.toolbar));
-        // The home button shouldn't show on homepage whether it's scrolled or not.
-        onView(withId(R.id.home_button))
-                .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
 
         // The start surface toolbar should be scrolled up and not be displayed.
         onView(withId(R.id.tab_switcher_toolbar)).check(matches(not(isDisplayed())));
@@ -363,7 +400,8 @@ public class StartSurfaceTestUtils {
     public static void pressBack(ChromeTabbedActivityTestRule activityTestRule) {
         // ChromeTabbedActivity expects the native libraries to be loaded when back is pressed.
         activityTestRule.waitForActivityNativeInitializationComplete();
-        TestThreadUtils.runOnUiThreadBlocking(() -> activityTestRule.getActivity().onBackPressed());
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> activityTestRule.getActivity().getOnBackPressedDispatcher().onBackPressed());
     }
 
     /**
@@ -422,17 +460,13 @@ public class StartSurfaceTestUtils {
     }
 
     /**
-     * Click "more_tabs" to navigate to tab switcher surface.
+     * Click the tab switcher button to navigate to tab switcher surface.
      * @param cta The ChromeTabbedActivity under test.
      */
-    public static void clickMoreTabs(ChromeTabbedActivity cta) {
-        // Note that onView(R.id.more_tabs).perform(click()) can not be used since it requires 90
-        // percent of the view's area is displayed to the users. However, this view has negative
-        // margin which makes the percentage is less than 90.
-        // TODO(crbug.com/1186752): Investigate whether this would be a problem for real users.
+    public static void clickTabSwitcherButton(ChromeTabbedActivity cta) {
         try {
             TestThreadUtils.runOnUiThreadBlocking(
-                    () -> cta.findViewById(R.id.more_tabs).performClick());
+                    () -> cta.findViewById(R.id.start_tab_switcher_button).performClick());
         } catch (ExecutionException e) {
             fail("Failed to tap 'more tabs' " + e.toString());
         }
@@ -455,13 +489,8 @@ public class StartSurfaceTestUtils {
      */
     public static List<SiteSuggestion> createFakeSiteSuggestions() {
         List<SiteSuggestion> siteSuggestions = new ArrayList<>();
-        siteSuggestions.add(new SiteSuggestion("0 EXPLORE_SITES",
-                // Use pre-serialized GURL to avoid loading native.
-                JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL), TileTitleSource.UNKNOWN,
-                TileSource.EXPLORE, TileSectionType.PERSONALIZED));
-
         String urlTemplate = JUnitTestGURLs.getGURL(JUnitTestGURLs.URL_1_NUMERAL).serialize();
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             siteSuggestions.add(new SiteSuggestion(String.valueOf(i),
                     // Use pre-serialized GURL to avoid loading native.
                     GURL.deserialize(urlTemplate.replace("www.1.com", "www." + i + ".com")),
@@ -502,6 +531,25 @@ public class StartSurfaceTestUtils {
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         device.pressHome();
         ChromeApplicationTestUtils.waitUntilChromeInBackground();
+    }
+
+    /**
+     * Presses the back button and verifies that Chrome goes to the background.
+     */
+    public static void pressBackAndVerifyChromeToBackground(ChromeTabbedActivityTestRule testRule) {
+        // Verifies Chrome is closed.
+        try {
+            pressBack(testRule);
+        } catch (Exception e) {
+        } finally {
+            CriteriaHelper.pollUiThread(
+                    ()
+                            -> ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(
+                                       testRule.getActivity())
+                            == Stage.STOPPED,
+                    "Tapping back button should close Chrome.", MAX_TIMEOUT_MS,
+                    CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        }
     }
 
     /**

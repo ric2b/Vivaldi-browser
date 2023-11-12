@@ -8,7 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
-#include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace ash {
@@ -41,12 +41,5 @@ class MockConsolidatedConsentScreenView : public ConsolidatedConsentScreenView {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::MockConsolidatedConsentScreen;
-using ::ash::MockConsolidatedConsentScreenView;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_MOCK_CONSOLIDATED_CONSENT_SCREEN_H_

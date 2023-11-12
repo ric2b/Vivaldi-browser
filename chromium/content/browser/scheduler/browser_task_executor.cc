@@ -10,8 +10,8 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
 #include "base/task/deferred_sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits_extension.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -136,17 +136,6 @@ QueueType BaseBrowserTaskExecutor::GetQueueType(
     DCHECK_LT(task_type, BrowserTaskType::kBrowserTaskType_Last);
 
     switch (task_type) {
-      case BrowserTaskType::kBootstrap:
-        if (base::FeatureList::IsEnabled(
-                ::features::kTreatBootstrapAsDefault)) {
-          // Defer to traits.priority() below rather than executing this task on
-          // the dedicated bootstrap queue.
-          break;
-        }
-
-        // Note we currently ignore the priority for bootstrap tasks.
-        return QueueType::kBootstrap;
-
       case BrowserTaskType::kUserInput:
         if (base::FeatureList::IsEnabled(
                 features::kBrowserPrioritizeInputQueue)) {
@@ -204,7 +193,7 @@ BrowserTaskExecutor::~BrowserTaskExecutor() = default;
 
 // static
 void BrowserTaskExecutor::Create() {
-  DCHECK(!base::ThreadTaskRunnerHandle::IsSet());
+  DCHECK(!base::SingleThreadTaskRunner::HasCurrentDefault());
   CreateInternal(std::make_unique<BrowserUIThreadScheduler>(),
                  std::make_unique<BrowserIOThreadDelegate>());
   Get()->ui_thread_executor_->BindToCurrentThread();
@@ -268,11 +257,7 @@ void BrowserTaskExecutor::ResetForTesting() {
 
 // static
 void BrowserTaskExecutor::PostFeatureListSetup() {
-  DCHECK(Get()->browser_ui_thread_handle_);
-  DCHECK(Get()->browser_io_thread_handle_);
   DCHECK(Get()->ui_thread_executor_);
-  Get()->browser_ui_thread_handle_->PostFeatureListInitializationSetup();
-  Get()->browser_io_thread_handle_->PostFeatureListInitializationSetup();
   Get()->ui_thread_executor_->PostFeatureListSetup();
 }
 

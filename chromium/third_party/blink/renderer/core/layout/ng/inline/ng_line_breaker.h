@@ -194,6 +194,7 @@ class CORE_EXPORT NGLineBreaker {
 
   void HandleFloat(const NGInlineItem&,
                    NGLineInfo*);
+  void HandleInitialLetter(const NGInlineItem&, NGLineInfo*);
   void HandleOutOfFlowPositioned(const NGInlineItem&, NGLineInfo*);
 
   void HandleOpenTag(const NGInlineItem&, NGLineInfo*);
@@ -262,6 +263,9 @@ class CORE_EXPORT NGLineBreaker {
   NGInlineNode node_;
 
   NGLineBreakerMode mode_;
+
+  // True if node_ is an initial letter box.
+  const bool is_initial_letter_box_;
 
   // True if node_ is an SVG <text>.
   const bool is_svg_text_;

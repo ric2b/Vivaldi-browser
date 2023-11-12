@@ -17,16 +17,16 @@
 #include "base/format_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "chrome/android/chrome_jni_headers/PersonalDataManager_jni.h"
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
+#include "chrome/browser/autofill/android/jni_headers/PersonalDataManager_jni.h"
+#include "chrome/browser/autofill/autofill_popup_controller_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/validation_rules_storage_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/autofill/autofill_popup_controller_utils.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
@@ -116,28 +116,32 @@ class FullCardRequester : public FullCardRequest::ResultDelegate,
     jdelegate_.Reset(env, jdelegate);
 
     if (!card_) {
-      OnFullCardRequestFailed(FullCardRequest::FailureType::GENERIC_FAILURE);
+      OnFullCardRequestFailed(card_->record_type(),
+                              FullCardRequest::FailureType::GENERIC_FAILURE);
       return;
     }
 
     content::WebContents* contents =
         content::WebContents::FromJavaWebContents(jweb_contents);
     if (!contents) {
-      OnFullCardRequestFailed(FullCardRequest::FailureType::GENERIC_FAILURE);
+      OnFullCardRequestFailed(card_->record_type(),
+                              FullCardRequest::FailureType::GENERIC_FAILURE);
       return;
     }
 
     ContentAutofillDriverFactory* factory =
         ContentAutofillDriverFactory::FromWebContents(contents);
     if (!factory) {
-      OnFullCardRequestFailed(FullCardRequest::FailureType::GENERIC_FAILURE);
+      OnFullCardRequestFailed(card_->record_type(),
+                              FullCardRequest::FailureType::GENERIC_FAILURE);
       return;
     }
 
     ContentAutofillDriver* driver =
         factory->DriverForFrame(contents->GetPrimaryMainFrame());
     if (!driver) {
-      OnFullCardRequestFailed(FullCardRequest::FailureType::GENERIC_FAILURE);
+      OnFullCardRequestFailed(card_->record_type(),
+                              FullCardRequest::FailureType::GENERIC_FAILURE);
       return;
     }
 
@@ -166,6 +170,7 @@ class FullCardRequester : public FullCardRequest::ResultDelegate,
 
   // payments::FullCardRequest::ResultDelegate:
   void OnFullCardRequestFailed(
+      CreditCard::RecordType card_type,
       FullCardRequest::FailureType failure_type) override {
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_FullCardRequestDelegate_onFullCardError(env, jdelegate_);
@@ -247,7 +252,9 @@ PersonalDataManagerAndroid::CreateJavaCreditCardFromNative(
       ConvertUTF16ToJavaString(env, card.nickname()),
       url::GURLAndroid::FromNativeGURL(env, card.card_art_url()),
       static_cast<jint>(card.virtual_card_enrollment_state()),
-      ConvertUTF16ToJavaString(env, card.product_description()));
+      ConvertUTF16ToJavaString(env, card.product_description()),
+      ConvertUTF16ToJavaString(env, card.CardNameForAutofillDisplay()),
+      ConvertUTF16ToJavaString(env, card.ObfuscatedLastFourDigits()));
 }
 
 // static

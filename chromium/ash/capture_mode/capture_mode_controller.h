@@ -89,6 +89,7 @@ class ASH_EXPORT CaptureModeController
   }
   CaptureModeType type() const { return type_; }
   CaptureModeSource source() const { return source_; }
+  RecordingType recording_type() const { return recording_type_; }
   CaptureModeSession* capture_mode_session() const {
     return capture_mode_session_.get();
   }
@@ -98,6 +99,7 @@ class ASH_EXPORT CaptureModeController
            (video_recording_watcher_ &&
             !video_recording_watcher_->is_shutting_down());
   }
+  bool enable_demo_tools() const { return enable_demo_tools_; }
 
   // Returns true if a capture mode session is currently active. If you only
   // need to call this method, but don't need the rest of the controller, use
@@ -112,16 +114,26 @@ class ASH_EXPORT CaptureModeController
   // `AudioCaptureAllowed` policy.
   bool IsAudioCaptureDisabledByPolicy() const;
 
-  // Sets the capture source/type, which will be applied to an ongoing capture
-  // session (if any), or to a future capture session when Start() is called.
+  // Sets the capture source/type, and recording type, which will be applied to
+  // an ongoing capture session (if any), or to a future capture session when
+  // Start() is called.
   void SetSource(CaptureModeSource source);
   void SetType(CaptureModeType type);
+  void SetRecordingType(RecordingType recording_type);
 
   // Sets the audio recording flag, which will be applied to any future
   // recordings (cannot be set mid recording), or to a future capture mode
   // session when Start() is called. The effective enabled state takes into
   // account the `AudioCaptureAllowed` policy.
-  void EnableAudioRecording(bool enable_audio_recording);
+  void EnableAudioRecording(bool enable_audio_recording) {
+    enable_audio_recording_ = enable_audio_recording;
+  }
+
+  // Sets the flag to enable the demo tools feature, which will be applied to
+  // any future recordings (cannot be set mid recording), or to a future capture
+  // mode session when Start() is called. Currently the demo tools feature is
+  // behind the feature flag.
+  void EnableDemoTools(bool enable) { enable_demo_tools_ = enable; }
 
   // Starts a new capture session with the most-recently used |type_| and
   // |source_|. Also records what |entry_type| that started capture mode.
@@ -253,6 +265,11 @@ class ASH_EXPORT CaptureModeController
   // video recording right away for testing purposes.
   void StartVideoRecordingImmediatelyForTesting();
 
+  // Restores the capture mode configurations that include the `type_`,
+  // `source_` and `enable_audio_recording_` if any of them gets overridden in
+  // the projector-initiated capture mode session.
+  void MaybeRestoreCachedCaptureConfigurations();
+
   CaptureModeDelegate* delegate_for_testing() const { return delegate_.get(); }
   VideoRecordingWatcher* video_recording_watcher_for_testing() const {
     return video_recording_watcher_.get();
@@ -261,6 +278,15 @@ class ASH_EXPORT CaptureModeController
  private:
   friend class CaptureModeTestApi;
   friend class VideoRecordingWatcher;
+
+  // Contains the cached normal capture mode configurations that will be used
+  // for configurations restoration when switching from the projector-initiated
+  // capture mode session if needed.
+  struct CaptureSessionConfigs {
+    CaptureModeType type;
+    CaptureModeSource source;
+    bool audio_on;
+  };
 
   // Called by |video_recording_watcher_| when the display on which recording is
   // happening changes its bounds such as on display rotation or device scale
@@ -475,6 +501,7 @@ class ASH_EXPORT CaptureModeController
 
   CaptureModeType type_ = CaptureModeType::kImage;
   CaptureModeSource source_ = CaptureModeSource::kRegion;
+  RecordingType recording_type_ = RecordingType::kWebM;
 
   // A blocking task runner for file IO operations.
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
@@ -564,6 +591,13 @@ class ASH_EXPORT CaptureModeController
 
   // True in the scope of BeginVideoRecording().
   bool is_initializing_recording_ = false;
+
+  absl::optional<CaptureSessionConfigs> cached_normal_session_configs_;
+
+  // Remember the user preference of whether to enable demo tools feature or
+  // not in video recording mode, between sessions. Initially, this value is set
+  // to false, ensuring that this is an opt-in feature.
+  bool enable_demo_tools_ = false;
 
   base::WeakPtrFactory<CaptureModeController> weak_ptr_factory_{this};
 };

@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -1625,7 +1626,7 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
   EXPECT_TRUE(
       NavigateToURLFromRenderer(child_frame_node1, isolated_suborigin_url));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 
   EXPECT_NE(root->current_frame_host()->GetSiteInstance(),
             child_frame_node1->current_frame_host()->GetSiteInstance());
@@ -1699,7 +1700,7 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
   EXPECT_TRUE(
       NavigateToURLFromRenderer(child_frame_node1, isolated_suborigin_url));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 
   EXPECT_EQ(root->current_frame_host()->GetSiteInstance(),
             child_frame_node1->current_frame_host()->GetSiteInstance());
@@ -2429,11 +2430,11 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest, FrameTreeTest) {
                           ->GetIsolationContext(),
                       isolated_origin, MakeOACIsolationState(false))
                   .requires_origin_keyed_process());
-  // Verify that the tab2 child frame is on the initial NavigationEntry (or
-  // has no NavigationEntry if InitialNavigationEntry is disabled).
-  NavigationEntry* current_entry =
-      tab2_shell->web_contents()->GetController().GetLastCommittedEntry();
-  EXPECT_TRUE(!current_entry || current_entry->IsInitialEntry());
+  // Verify that the tab2 child frame is on the initial NavigationEntry.
+  EXPECT_TRUE(tab2_shell->web_contents()
+                  ->GetController()
+                  .GetLastCommittedEntry()
+                  ->IsInitialEntry());
 
   // Now, create a second frame in tab2 and navigate it to
   // `isolated_origin_url`. Even though isolation is requested, it should not
@@ -2549,14 +2550,14 @@ class InjectIsolationRequestingNavigation
     // Performa a navigation of `tab2_` to `url_`. `url_` should request
     // isolation.
     test_framework_->SetHeaderValue("?1");
-    EXPECT_TRUE(NavigateToURL(tab2_, url_));
+    EXPECT_TRUE(NavigateToURL(tab2_, *url_));
 
     return true;
   }
 
   raw_ptr<OriginIsolationOptInHeaderTest> test_framework_;
   raw_ptr<Shell, DanglingUntriaged> tab2_;
-  const GURL& url_;
+  const raw_ref<const GURL> url_;
   bool was_called_ = false;
 };
 

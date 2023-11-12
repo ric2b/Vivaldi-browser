@@ -4,6 +4,7 @@
 
 #include "content/browser/back_forward_cache_browsertest.h"
 
+#include <climits>
 #include <unordered_map>
 
 #include "base/callback_helpers.h"
@@ -13,14 +14,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece_forward.h"
-#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/common/task_annotator.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
@@ -160,18 +160,28 @@ void BackForwardCacheBrowserTest::SetUpCommandLine(
   // TODO(sreejakshetty): Initialize ScopedFeatureLists from test constructor.
   EnableFeatureAndSetParams(features::kBackForwardCache,
                             "TimeToLiveInBackForwardCacheInSeconds", "3600");
+  // Entry to the cache can be slow during testing and cause flakiness.
+  DisableFeature(features::kBackForwardCacheEntryTimeout);
   EnableFeatureAndSetParams(features::kBackForwardCache,
                             "message_handling_when_cached", "log");
   EnableFeatureAndSetParams(
       blink::features::kLogUnexpectedIPCPostedToBackForwardCachedDocuments,
       "delay_before_tracking_ms", "0");
+  // Allow unlimited network during tests. Override this if you want to test the
+  // network limiting.
   EnableFeatureAndSetParams(blink::features::kLoadingTasksUnfreezable,
                             "max_buffered_bytes_per_process",
-                            base::NumberToString(kMaxBufferedBytesPerProcess));
+                            base::NumberToString(INT_MAX));
+  EnableFeatureAndSetParams(blink::features::kLoadingTasksUnfreezable,
+                            "grace_period_to_finish_loading_in_seconds",
+                            base::NumberToString(INT_MAX));
+  // Enable capturing not-restored-reasons tree.
   EnableFeatureAndSetParams(
-      blink::features::kLoadingTasksUnfreezable,
-      "grace_period_to_finish_loading_in_seconds",
-      base::NumberToString(kGracePeriodToFinishLoading.InSeconds()));
+      blink::features::kBackForwardCacheSendNotRestoredReasons, "", "");
+
+  // Do not trigger NotReached() for JavaScript execution.
+  DisableFeature(
+      blink::features::kBackForwardCacheNotReachedOnJavaScriptExecution);
 #if BUILDFLAG(IS_ANDROID)
   EnableFeatureAndSetParams(features::kBackForwardCache,
                             "process_binding_strength", "NORMAL");
@@ -200,7 +210,7 @@ void BackForwardCacheBrowserTest::TearDownInProcessBrowserTestFixture() {
 }
 
 void BackForwardCacheBrowserTest::SetupFeaturesAndParameters() {
-  std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled_features;
+  std::vector<base::test::FeatureRefAndParams> enabled_features;
 
   for (const auto& [feature_ref, params] : features_with_params_) {
     enabled_features.emplace_back(*feature_ref, params);
@@ -379,6 +389,53 @@ void BackForwardCacheBrowserTest::NavigateAndBlock(GURL url,
   ASSERT_TRUE(current_frame_host()->IsErrorDocument());
 }
 
+ReasonsMatcher BackForwardCacheBrowserTest::MatchesNotRestoredReasons(
+    const testing::Matcher<blink::mojom::BFCacheBlocked>& blocked,
+    const absl::optional<SameOriginMatcher>& same_origin_details) {
+  return testing::Pointee(testing::AllOf(
+      testing::Field("blocked",
+                     &blink::mojom::BackForwardCacheNotRestoredReasons::blocked,
+                     blocked),
+      testing::Field(
+          "same_origin_details",
+          &blink::mojom::BackForwardCacheNotRestoredReasons::
+              same_origin_details,
+          same_origin_details.has_value()
+              ? same_origin_details.value()
+              : testing::Property(
+                    "is_null",
+                    &blink::mojom::SameOriginBfcacheNotRestoredDetailsPtr::
+                        is_null,
+                    true))));
+}
+
+SameOriginMatcher BackForwardCacheBrowserTest::MatchesSameOriginDetails(
+    const testing::Matcher<std::string>& id,
+    const testing::Matcher<std::string>& name,
+    const testing::Matcher<std::string>& src,
+    const testing::Matcher<std::string>& url,
+    const std::vector<testing::Matcher<std::string>>& reasons,
+    const std::vector<ReasonsMatcher>& children) {
+  return testing::Pointee(testing::AllOf(
+      testing::Field(
+          "id", &blink::mojom::SameOriginBfcacheNotRestoredDetails::id, id),
+      testing::Field("name",
+                     &blink::mojom::SameOriginBfcacheNotRestoredDetails::name,
+                     name),
+      testing::Field(
+          "src", &blink::mojom::SameOriginBfcacheNotRestoredDetails::src, src),
+      testing::Field(
+          "url", &blink::mojom::SameOriginBfcacheNotRestoredDetails::url, url),
+      testing::Field(
+          "reasons",
+          &blink::mojom::SameOriginBfcacheNotRestoredDetails::reasons,
+          testing::UnorderedElementsAreArray(reasons)),
+      testing::Field(
+          "children",
+          &blink::mojom::SameOriginBfcacheNotRestoredDetails::children,
+          testing::ElementsAreArray(children))));
+}
+
 std::initializer_list<RenderFrameHostImpl*> Elements(
     std::initializer_list<RenderFrameHostImpl*> t) {
   return t;
@@ -441,11 +498,29 @@ class ThemeColorObserver : public WebContentsObserver {
  public:
   explicit ThemeColorObserver(WebContents* contents)
       : WebContentsObserver(contents) {}
-  void DidChangeThemeColor() override { observed_ = true; }
+
+  // Can only be called once.
+  [[nodiscard]] bool WaitUntilThemeColorChange() {
+    CHECK(!loop_);
+    loop_ = std::make_unique<base::RunLoop>();
+    if (observed_) {
+      return true;
+    }
+    loop_->Run();
+    return observed_;
+  }
+
+  void DidChangeThemeColor() override {
+    observed_ = true;
+    if (loop_) {
+      loop_->Quit();
+    }
+  }
 
   bool did_fire() const { return observed_; }
 
  private:
+  std::unique_ptr<base::RunLoop> loop_;
   bool observed_ = false;
 };
 
@@ -461,14 +536,15 @@ PageLifecycleStateManagerTestDelegate::
     manager_->SetDelegateForTesting(nullptr);
 }
 
-void PageLifecycleStateManagerTestDelegate::WaitForInBackForwardCacheAck() {
+bool PageLifecycleStateManagerTestDelegate::WaitForInBackForwardCacheAck() {
   DCHECK(manager_);
   if (manager_->last_acknowledged_state().is_in_back_forward_cache) {
-    return;
+    return true;
   }
   base::RunLoop loop;
   store_in_back_forward_cache_ack_received_ = loop.QuitClosure();
   loop.Run();
+  return manager_->last_acknowledged_state().is_in_back_forward_cache;
 }
 
 void PageLifecycleStateManagerTestDelegate::OnStoreInBackForwardCacheSent(
@@ -653,12 +729,10 @@ IN_PROC_BROWSER_TEST_F(HighCacheSizeBackForwardCacheBrowserTest,
   // 1) Navigate to A.
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
   RenderFrameHostImplWrapper rfh_a(current_frame_host());
-  RenderFrameDeletedObserver delete_observer(rfh_a.get());
 
   // 2) Navigate to B.
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
   RenderFrameHostImplWrapper rfh_b(current_frame_host());
-  RenderFrameDeletedObserver delete_observer_rfh_b(rfh_b.get());
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
 
   // 3) Navigate to C, which has a beforeunload handler that never finishes.
@@ -688,7 +762,7 @@ IN_PROC_BROWSER_TEST_F(HighCacheSizeBackForwardCacheBrowserTest,
   // the BFCache restore navigation to B from step 5, which is currently waiting
   // for a BeforeUnloadCompleted call.
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         root->navigator().BeforeUnloadCompleted(root, true /* proceed */,
                                                 base::TimeTicks::Now());
@@ -980,15 +1054,15 @@ IN_PROC_BROWSER_TEST_F(
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
 
   // 1) Navigate to A.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  ASSERT_TRUE(NavigateToURL(shell(), url_a));
   WaitForFirstVisuallyNonEmptyPaint(shell()->web_contents());
   RenderFrameHostImpl* rfh_a = current_frame_host();
   RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a);
 
   // 2) Navigate to B.
-  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  ASSERT_TRUE(NavigateToURL(shell(), url_b));
   ASSERT_FALSE(delete_observer_rfh_a.deleted());
-  EXPECT_TRUE(rfh_a->IsInBackForwardCache());
+  ASSERT_TRUE(rfh_a->IsInBackForwardCache());
   WaitForFirstVisuallyNonEmptyPaint(shell()->web_contents());
 
   // 3) Navigate to back to A.
@@ -1006,21 +1080,19 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   GURL url_a(embedded_test_server()->GetURL("a.com", "/theme_color.html"));
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
 
-  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  ASSERT_TRUE(NavigateToURL(shell(), url_a));
   WaitForFirstVisuallyNonEmptyPaint(web_contents());
-  RenderFrameHostImpl* rfh_a = current_frame_host();
-  RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a);
+  RenderFrameHostImplWrapper rfh_a(current_frame_host());
   EXPECT_EQ(web_contents()->GetThemeColor(), 0xFFFF0000u);
 
-  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  ASSERT_TRUE(NavigateToURL(shell(), url_b));
   WaitForFirstVisuallyNonEmptyPaint(web_contents());
-  ASSERT_FALSE(delete_observer_rfh_a.deleted());
-  EXPECT_TRUE(rfh_a->IsInBackForwardCache());
+  ASSERT_TRUE(rfh_a->IsInBackForwardCache());
   EXPECT_EQ(web_contents()->GetThemeColor(), absl::nullopt);
 
   ThemeColorObserver observer(web_contents());
   ASSERT_TRUE(HistoryGoBack(web_contents()));
-  EXPECT_TRUE(observer.did_fire());
+  ASSERT_TRUE(observer.WaitUntilThemeColorChange());
   EXPECT_EQ(web_contents()->GetThemeColor(), 0xFFFF0000u);
 }
 
@@ -1584,13 +1656,8 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 // Disabled on Linux and Win because of flakiness, see crbug.com/1170802.
 // TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
 // complete.
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || BUILDFLAG(IS_WIN)
-#define MAYBE_PagehideRunsWhenPageIsHidden DISABLED_PagehideRunsWhenPageIsHidden
-#else
-#define MAYBE_PagehideRunsWhenPageIsHidden PagehideRunsWhenPageIsHidden
-#endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
-                       MAYBE_PagehideRunsWhenPageIsHidden) {
+                       PagehideRunsWhenPageIsHidden) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_2(embedded_test_server()->GetURL("b.com", "/title2.html"));
@@ -1600,7 +1667,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 
   // 1) Navigate to |url_1| and hide the tab.
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
-  RenderFrameHostImpl* main_frame_1 = web_contents->GetPrimaryMainFrame();
+  RenderFrameHostImplWrapper main_frame_1(web_contents->GetPrimaryMainFrame());
   // We need to set it to Visibility::VISIBLE first in case this is the first
   // time the visibility is updated.
   web_contents->UpdateWebContentsVisibility(Visibility::VISIBLE);
@@ -1610,7 +1677,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   // Create a pagehide handler that sets item "pagehide_storage" and a
   // visibilitychange handler that sets item "visibilitychange_storage" in
   // localStorage.
-  EXPECT_TRUE(ExecJs(main_frame_1,
+  EXPECT_TRUE(ExecJs(main_frame_1.get(),
                      R"(
     localStorage.setItem('pagehide_storage', 'not_dispatched');
     var dispatched_pagehide = false;
@@ -1633,7 +1700,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   )"));
   // |visibilitychange_storage| should be set to its initial correct value.
   EXPECT_EQ("not_dispatched",
-            GetLocalStorage(main_frame_1, "visibilitychange_storage"));
+            GetLocalStorage(main_frame_1.get(), "visibilitychange_storage"));
 
   // 2) Navigate cross-site to |url_2|. We need to navigate cross-site to make
   // sure we won't run pagehide and visibilitychange during new page's commit,
@@ -2186,7 +2253,7 @@ IN_PROC_BROWSER_TEST_F(
     params_capturer.Wait();
     EXPECT_TRUE(params_capturer.has_user_gesture());
     EXPECT_TRUE(root->current_frame_host()
-                    ->last_navigation_started_with_transient_activation());
+                    ->last_committed_common_params_has_user_gesture());
   }
   RenderFrameHostImpl* rfh_a = current_frame_host();
 
@@ -2194,7 +2261,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
   EXPECT_FALSE(root->current_frame_host()
-                   ->last_navigation_started_with_transient_activation());
+                   ->last_committed_common_params_has_user_gesture());
 
   // 3) GoBack to A. RenderFrameHost of A should be restored from the
   // back-forward cache, and "has_user_gesture" is set to false correctly.
@@ -2213,7 +2280,7 @@ IN_PROC_BROWSER_TEST_F(
     // The navigation doesn't have user gesture.
     EXPECT_FALSE(params_capturer.has_user_gesture());
     EXPECT_FALSE(root->current_frame_host()
-                     ->last_navigation_started_with_transient_activation());
+                     ->last_committed_common_params_has_user_gesture());
   }
 
   // 4) Same-document navigation to A#foo without user gesture. At this point
@@ -2228,7 +2295,7 @@ IN_PROC_BROWSER_TEST_F(
     // The navigation doesn't have user gesture.
     EXPECT_FALSE(params_capturer.has_user_gesture());
     EXPECT_FALSE(root->current_frame_host()
-                     ->last_navigation_started_with_transient_activation());
+                     ->last_committed_common_params_has_user_gesture());
   }
 }
 

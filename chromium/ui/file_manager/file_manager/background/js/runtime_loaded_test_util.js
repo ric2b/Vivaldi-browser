@@ -7,7 +7,7 @@
  * extension under test at runtime to populate testing functionality.
  */
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {metrics} from '../../common/js/metrics.js';
 import {util} from '../../common/js/util.js';
@@ -1140,16 +1140,6 @@ test.util.async.getVolumesCount = callback => {
   });
 };
 
-/**
- * Sets/Resets a flag that causes file copy operations to always fail in test.
- * @param {boolean} enable True to force errors.
- * @suppress {checkTypes} Remove suppress when migrating Files app. This is only
- *     used for Files app.
- */
-test.util.sync.forceErrorsOnFileOperations = (contentWindow, enable) => {
-  window.background.forceFileOperationErrorForTest(enable);
-  return enable;
-};
 
 /**
  * Updates the preferences.

@@ -27,13 +27,13 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.TRANSLATION_Y;
 
 import android.animation.Animator;
+import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
@@ -57,6 +57,8 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelAnimatorFactory;
 
+import java.util.function.BooleanSupplier;
+
 /** The mediator implements interacts between the views and the caller. */
 class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserver {
     private final PropertyModel mPropertyModel;
@@ -75,6 +77,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private final boolean mShouldFetchDoodle;
     private final ButtonDataProvider mIdentityDiscController;
     private final boolean mShouldCreateLogoInToolbar;
+    private final Context mContext;
 
     private TabModelSelector mTabModelSelector;
     private TabCountProvider mTabCountProvider;
@@ -94,7 +97,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private Animator mAlphaAnimator;
     private Callback<Boolean> mFinishedTransitionCallback;
 
-    StartSurfaceToolbarMediator(PropertyModel model,
+    StartSurfaceToolbarMediator(Context context, PropertyModel model,
             Callback<IPHCommandBuilder> showIdentityIPHCallback,
             boolean hideIncognitoSwitchWhenNoTabs, MenuButtonCoordinator menuButtonCoordinator,
             ButtonDataProvider identityDiscController,
@@ -122,6 +125,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
         mShouldCreateLogoInToolbar = shouldCreateLogoInToolbar;
         mIsRefactorEnabled = isRefactorEnabled;
         mFinishedTransitionCallback = finishedTransitionCallback;
+        mContext = context;
 
         mShouldShowTabSwitcherButtonOnHomepage = shouldShowTabSwitcherButtonOnHomepage;
 
@@ -216,7 +220,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
 
     /** Returns whether it's on a normal tab. */
     private boolean isOnATab() {
-        return mIsRefactorEnabled ? mLayoutType == LayoutType.BROWSING
+        return mIsRefactorEnabled ? (!isOnHomepage() && !isOnGridTabSwitcher())
                                   : mStartSurfaceState == StartSurfaceState.NOT_SHOWN;
     }
 
@@ -325,9 +329,9 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     void onLogoViewReady(LogoView logoView) {
         if (!mShouldCreateLogoInToolbar) return;
 
-        mLogoCoordinator = new LogoCoordinator(mLogoClickedCallback, logoView, mShouldFetchDoodle,
-                /*onLogoAvailableCallback=*/null,
-                /*onCachedLogoRevalidatedRunnable=*/null, isOnHomepage());
+        mLogoCoordinator = new LogoCoordinator(mContext, mLogoClickedCallback, logoView,
+                mShouldFetchDoodle, /*onLogoAvailableCallback=*/null,
+                /*onCachedLogoRevalidatedRunnable=*/null, isOnHomepage(), null);
 
         // The logo view may be ready after native is initialized, so we need to call
         // mLogoCoordinator.initWithNative() here in case that initLogoNative() skip it.
@@ -382,7 +386,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private void updateLogoVisibility() {
         if (mLogoCoordinator == null) return;
 
-        mLogoCoordinator.maybeLoadSearchProviderLogo(isOnHomepage(),
+        mLogoCoordinator.updateVisibilityAndMaybeCleanUp(isOnHomepage(),
                 isOnATab() || isOnGridTabSwitcher()
                         || mStartSurfaceState == StartSurfaceState.DISABLED,
                 /*animationEnabled*/ false);

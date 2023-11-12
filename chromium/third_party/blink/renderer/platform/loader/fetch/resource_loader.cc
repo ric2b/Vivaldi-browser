@@ -91,6 +91,7 @@
 #include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "url/url_constants.h"
@@ -316,9 +317,10 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
   // through ResourceLoader.
   url_loader->Freeze(LoaderFreezeMode::kStrict);
 
-  WebCodeCacheLoader::FetchCodeCacheCallback callback = base::BindOnce(
-      &ResourceLoader::CodeCacheRequest::DidReceiveCachedCode,
-      weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(), resource_loader);
+  WebCodeCacheLoader::FetchCodeCacheCallback callback =
+      WTF::BindOnce(&ResourceLoader::CodeCacheRequest::DidReceiveCachedCode,
+                    weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(),
+                    WrapWeakPersistent(resource_loader));
   auto cache_type = resource_loader->GetCodeCacheType();
   code_cache_loader_->FetchFromCodeCache(cache_type, url_, std::move(callback));
   return true;
@@ -462,11 +464,16 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
   // If they are keepalive request && their responses are not observable to web
   // content, we can have them survive without breaking web content when the
   // page is put into BackForwardCache.
-  auto& request = resource_->GetResourceRequest();
+  const auto& request = resource_->GetResourceRequest();
   auto request_context = request.GetRequestContext();
-  if (!RequestContextObserveResponse(request_context)) {
-    if (auto* frame_or_worker_scheduler =
-            fetcher->GetFrameOrWorkerScheduler()) {
+  if (auto* frame_or_worker_scheduler = fetcher->GetFrameOrWorkerScheduler()) {
+    if (!base::FeatureList::IsEnabled(
+            features::kBackForwardCacheWithKeepaliveRequest) &&
+        request.GetKeepalive()) {
+      frame_or_worker_scheduler->RegisterStickyFeature(
+          SchedulingPolicy::Feature::kKeepaliveRequest,
+          {SchedulingPolicy::DisableBackForwardCache()});
+    } else if (!RequestContextObserveResponse(request_context)) {
       // Only when this feature is turned on and the loading tasks keep being
       // processed and the data is queued up on the renderer, a page can stay in
       // BackForwardCache with network requests.
@@ -943,7 +950,7 @@ void ResourceLoader::DidReceiveCachedMetadata(mojo_base::BigBuffer data) {
   resource_->SetSerializedCachedMetadata(std::move(data));
 }
 
-blink::mojom::CodeCacheType ResourceLoader::GetCodeCacheType() const {
+mojom::blink::CodeCacheType ResourceLoader::GetCodeCacheType() const {
   const auto& request = resource_->GetResourceRequest();
   if (request.GetRequestDestination() ==
       network::mojom::RequestDestination::kEmpty) {
@@ -1204,6 +1211,13 @@ void ResourceLoader::DidReceiveData(const char* data, int length) {
                              base::make_span(data, length));
   }
   resource_->AppendData(data, length);
+
+  // This value should not be exposed for opaque responses.
+  if (resource_->response_.WasFetchedViaServiceWorker() &&
+      resource_->response_.GetType() !=
+          network::mojom::FetchResponseType::kOpaque) {
+    received_body_length_from_service_worker_ += length;
+  }
 }
 
 void ResourceLoader::DidReceiveTransferSizeUpdate(int transfer_size_diff) {
@@ -1232,6 +1246,11 @@ void ResourceLoader::DidFinishLoading(
     int64_t decoded_body_length,
     bool should_report_corb_blocking,
     absl::optional<bool> pervasive_payload_requested) {
+  if (resource_->response_.WasFetchedViaServiceWorker()) {
+    encoded_body_length = received_body_length_from_service_worker_;
+    decoded_body_length = received_body_length_from_service_worker_;
+  }
+
   resource_->SetEncodedDataLength(encoded_data_length);
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);

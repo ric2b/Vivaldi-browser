@@ -92,7 +92,7 @@ using TokenToSessionTabGroup =
 // The following functions create sequentialized change commands which are
 // used to reconstruct the current/previous session state.
 // It is up to the caller to delete the returned SessionCommand* object.
-SESSIONS_EXPORT bool VivaldiCreateTabsAndWindows(
+SESSIONS_EXPORT void VivaldiCreateTabsAndWindows(
     const std::vector<std::unique_ptr<sessions::SessionCommand>>& data,
     IdToSessionTab* tabs,
     TokenToSessionTabGroup* tab_groups,

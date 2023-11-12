@@ -350,9 +350,13 @@ void ToolbarView::Init() {
   avatar_ = AddChildView(std::make_unique<AvatarToolbarButton>(browser_view_));
   bool show_avatar_toolbar_button = true;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // ChromeOS only badges Incognito and Guest icons in the browser window.
-  show_avatar_toolbar_button = browser_->profile()->IsIncognitoProfile() ||
-                               browser_->profile()->IsGuestSession();
+  // ChromeOS only badges Incognito, Guest, and captive portal signin icons in
+  // the browser window.
+  show_avatar_toolbar_button =
+      browser_->profile()->IsIncognitoProfile() ||
+      browser_->profile()->IsGuestSession() ||
+      (browser_->profile()->IsOffTheRecord() &&
+       browser_->profile()->GetOTRProfileID().IsCaptivePortal());
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   show_avatar_toolbar_button = !profiles::IsPublicSession();
 #endif
@@ -787,13 +791,13 @@ SkColor ToolbarView::GetDefaultColorForSeverity(
     case AppMenuIconController::Severity::NONE:
       return GetColorProvider()->GetColor(kColorToolbarButtonIcon);
     case AppMenuIconController::Severity::LOW:
-      color_id = ui::kColorAlertLowSeverity;
+      color_id = kColorAppMenuHighlightSeverityLow;
       break;
     case AppMenuIconController::Severity::MEDIUM:
-      color_id = ui::kColorAlertMediumSeverity;
+      color_id = kColorAppMenuHighlightSeverityMedium;
       break;
     case AppMenuIconController::Severity::HIGH:
-      color_id = ui::kColorAlertHighSeverity;
+      color_id = kColorAppMenuHighlightSeverityHigh;
       break;
   }
   return GetColorProvider()->GetColor(color_id);

@@ -68,7 +68,7 @@ class CORE_EXPORT HTMLProgressElement final : public HTMLElement {
   void DidElementStateChange();
   void DidAddUserAgentShadowRoot(ShadowRoot&) override;
   bool IsDeterminate() const;
-  void SetValueWidthPercentage(double) const;
+  void SetInlineSizePercentage(double) const;
 
   Member<Element> value_;
 };

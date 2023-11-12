@@ -38,18 +38,19 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.Callback;
 import org.chromium.base.FeatureList;
 import org.chromium.base.FeatureList.TestValues;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator.TransitionType;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
+
+import java.util.function.BooleanSupplier;
 /**
  * Unit tests for OptionalButtonCoordinator.
  */
@@ -211,7 +212,7 @@ public class OptionalButtonCoordinatorTest {
     public void testUpdateButton_actionChipResourceIdGetsRemovedWhenNotInVariant() {
         TestValues testValues = new TestValues();
         testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.CONTEXTUAL_PAGE_ACTIONS, "action_chip", "false");
+                ChromeFeatureList.CONTEXTUAL_PAGE_ACTION_PRICE_TRACKING, "action_chip", "false");
         FeatureList.setTestValues(testValues);
 
         Drawable iconDrawable = mock(Drawable.class);
@@ -236,7 +237,7 @@ public class OptionalButtonCoordinatorTest {
     public void testUpdateButton_actionChipResourceIdGetsRemovedByFeatureEngagement() {
         TestValues testValues = new TestValues();
         testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.CONTEXTUAL_PAGE_ACTIONS, "action_chip", "true");
+                ChromeFeatureList.CONTEXTUAL_PAGE_ACTION_PRICE_TRACKING, "action_chip", "true");
         FeatureList.setTestValues(testValues);
 
         doReturn(true).when(mMockTracker).isInitialized();
@@ -266,7 +267,7 @@ public class OptionalButtonCoordinatorTest {
     public void testUpdateButton_actionChipResourceIdGetsKeptByFeatureEngagement() {
         TestValues testValues = new TestValues();
         testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.CONTEXTUAL_PAGE_ACTIONS, "action_chip", "true");
+                ChromeFeatureList.CONTEXTUAL_PAGE_ACTION_PRICE_TRACKING, "action_chip", "true");
         FeatureList.setTestValues(testValues);
 
         doReturn(true).when(mMockTracker).isInitialized();

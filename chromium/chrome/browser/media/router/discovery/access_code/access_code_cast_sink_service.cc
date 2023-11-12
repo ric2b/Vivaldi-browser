@@ -9,7 +9,6 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_pref_updater.h"
@@ -89,7 +88,7 @@ AccessCodeCastSinkService::AccessCodeCastSinkService(
       media_routes_observer_(
           std::make_unique<AccessCodeMediaRoutesObserver>(media_router, this)),
       cast_media_sink_service_impl_(cast_media_sink_service_impl),
-      task_runner_(base::SequencedTaskRunnerHandle::Get()),
+      task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       network_monitor_(network_monitor),
       prefs_(prefs),
       identity_manager_(IdentityManagerFactory::GetForProfile(profile_)) {
@@ -172,7 +171,37 @@ void AccessCodeCastSinkService::AccessCodeMediaRoutesObserver::OnRoutesUpdated(
                       new_routes.begin(), new_routes.end(),
                       std::inserter(removed_routes, removed_routes.end()));
 
+  std::vector<MediaRoute::Id> added_routes;
+  std::set_difference(new_routes.begin(), new_routes.end(),
+                      previous_routes_.begin(), previous_routes_.end(),
+                      std::inserter(added_routes, removed_routes.end()));
+
   previous_routes_ = new_routes;
+
+  if (added_routes.size() > 0) {
+    auto new_route_id = *added_routes.begin();
+
+    // Only record the start time for local routes
+    bool is_route_local = false;
+    for (const auto& route : routes) {
+      if (route.media_route_id() == new_route_id && route.is_local()) {
+        is_route_local = true;
+      }
+    }
+
+    access_code_sink_service_->GetCastMediaSinkServiceImpl()
+        ->task_runner()
+        ->PostTaskAndReplyWithResult(
+            FROM_HERE,
+            base::BindOnce(
+                &CastMediaSinkServiceImpl::GetSinkById,
+                base::Unretained(
+                    access_code_sink_service_->GetCastMediaSinkServiceImpl()),
+                MediaRoute::GetSinkIdFromMediaRouteId(new_route_id)),
+            base::BindOnce(&AccessCodeCastSinkService::HandleMediaRouteAdded,
+                           access_code_sink_service_->GetWeakPtr(),
+                           new_route_id, is_route_local));
+  }
 
   // No routes were removed.
   if (removed_routes.empty())
@@ -185,19 +214,28 @@ void AccessCodeCastSinkService::AccessCodeMediaRoutesObserver::OnRoutesUpdated(
   auto first = removed_routes.begin();
   removed_route_id_ = *first;
 
-  base::PostTaskAndReplyWithResult(
-      access_code_sink_service_->GetCastMediaSinkServiceImpl()
-          ->task_runner()
-          .get(),
-      FROM_HERE,
-      base::BindOnce(
-          &CastMediaSinkServiceImpl::GetSinkById,
-          base::Unretained(
-              access_code_sink_service_->GetCastMediaSinkServiceImpl()),
-          MediaRoute::GetSinkIdFromMediaRouteId(removed_route_id_)),
-      base::BindOnce(
-          &AccessCodeCastSinkService::HandleMediaRouteRemovedByAccessCode,
-          access_code_sink_service_->GetWeakPtr()));
+  auto route_start_times =
+      access_code_sink_service_->current_route_start_times_;
+  auto route_start_time_iterator = route_start_times.find(removed_route_id_);
+  if (route_start_time_iterator != route_start_times.end()) {
+    base::Time route_start_time = route_start_time_iterator->second;
+    AccessCodeCastMetrics::RecordRouteDuration(base::Time::Now() -
+                                               route_start_time);
+    route_start_times.erase(removed_route_id_);
+  }
+
+  access_code_sink_service_->GetCastMediaSinkServiceImpl()
+      ->task_runner()
+      ->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(
+              &CastMediaSinkServiceImpl::GetSinkById,
+              base::Unretained(
+                  access_code_sink_service_->GetCastMediaSinkServiceImpl()),
+              MediaRoute::GetSinkIdFromMediaRouteId(removed_route_id_)),
+          base::BindOnce(
+              &AccessCodeCastSinkService::HandleMediaRouteRemovedByAccessCode,
+              access_code_sink_service_->GetWeakPtr()));
 }
 
 bool AccessCodeCastSinkService::IsSinkValidAccessCodeSink(
@@ -232,6 +270,21 @@ void AccessCodeCastSinkService::HandleMediaRouteRemovedByAccessCode(
       base::BindOnce(&AccessCodeCastSinkService::OnAccessCodeRouteRemoved,
                      weak_ptr_factory_.GetWeakPtr(), sink),
       kExpirationDelay);
+}
+
+void AccessCodeCastSinkService::HandleMediaRouteAdded(
+    const MediaRoute::Id route_id,
+    const bool is_route_local,
+    const MediaSinkInternal* sink) {
+  if (!IsSinkValidAccessCodeSink(sink))
+    return;
+
+  if (is_route_local) {
+    current_route_start_times_[route_id] = base::Time::Now();
+  }
+
+  AccessCodeCastMetrics::RecordAccessCodeRouteStarted(
+      GetAccessCodeDeviceDurationPref(profile_));
 }
 
 void AccessCodeCastSinkService::OnAccessCodeRouteRemoved(
@@ -285,8 +338,8 @@ void AccessCodeCastSinkService::AddSinkToMediaRouter(
       << "Must have a valid CastMediaSinkServiceImpl!";
 
   // Check to see if the media sink already exists in the media router.
-  base::PostTaskAndReplyWithResult(
-      cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+  cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::HasSink,
                      base::Unretained(cast_media_sink_service_impl_),
                      sink.id()),
@@ -332,6 +385,24 @@ void AccessCodeCastSinkService::OpenChannelIfNecessary(
         "needs to be opened.",
         sink.id());
 
+    // Only refresh data if this new sink came from typing in an access code.
+    if (sink.cast_data().discovery_type ==
+        CastDiscoveryType::kAccessCodeManualEntry) {
+      // We can't store the sink by ID, since that will pull the outdated
+      // information already in the media router.
+      StoreSinkInPrefs(&sink);
+      SetExpirationTimer(&sink);
+
+      // Get the existing sink to we can update its info.
+      cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(&CastMediaSinkServiceImpl::GetSinkById,
+                         base::Unretained(cast_media_sink_service_impl_),
+                         sink.id()),
+          base::BindOnce(&AccessCodeCastSinkService::UpdateExistingSink,
+                         weak_ptr_factory_.GetWeakPtr(), sink));
+    }
+
     std::move(add_sink_callback).Run(AddSinkResultCode::OK, sink.id());
     return;
   }
@@ -362,8 +433,8 @@ void AccessCodeCastSinkService::OpenChannelIfNecessary(
     // For all other cases (such as remembered devices), just use the default
     // parameters that the CastMediaSinkServiceImpl already uses.
     default: {
-      base::PostTaskAndReplyWithResult(
-          cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+      cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+          FROM_HERE,
           base::BindOnce(&CastMediaSinkServiceImpl::CreateCastSocketOpenParams,
                          base::Unretained(cast_media_sink_service_impl_), sink),
           base::BindOnce(&AccessCodeCastSinkService::OpenChannelWithParams,
@@ -464,8 +535,8 @@ void AccessCodeCastSinkService::CheckMediaSinkForExpiration(
 
 void AccessCodeCastSinkService::StoreSinkInPrefsById(
     const MediaSink::Id sink_id) {
-  base::PostTaskAndReplyWithResult(
-      cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+  cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::GetSinkById,
                      base::Unretained(cast_media_sink_service_impl_), sink_id),
       base::BindOnce(&AccessCodeCastSinkService::StoreSinkInPrefs,
@@ -523,8 +594,8 @@ void AccessCodeCastSinkService::ResetExpirationTimers() {
 
 void AccessCodeCastSinkService::SetExpirationTimerById(
     const MediaSink::Id sink_id) {
-  base::PostTaskAndReplyWithResult(
-      cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+  cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::GetSinkById,
                      base::Unretained(cast_media_sink_service_impl_), sink_id),
       base::BindOnce(&AccessCodeCastSinkService::SetExpirationTimer,
@@ -675,8 +746,8 @@ void AccessCodeCastSinkService::ExpireSink(const MediaSink::Id& sink_id) {
   RemoveSinkIdFromAllEntries(sink_id);
   // Must find the sink from media router for removal since it has more total
   // information.
-  base::PostTaskAndReplyWithResult(
-      cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+  cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::GetSinkById,
                      base::Unretained(cast_media_sink_service_impl_), sink_id),
       base::BindOnce(
@@ -705,6 +776,25 @@ void AccessCodeCastSinkService::RemoveAndDisconnectMediaSinkFromRouter(
       base::BindOnce(&CastMediaSinkServiceImpl::DisconnectAndRemoveSink,
                      base::Unretained(cast_media_sink_service_impl_), *sink),
       kExpirationDelay);
+}
+
+void AccessCodeCastSinkService::UpdateExistingSink(
+    const MediaSinkInternal& new_sink,
+    const MediaSinkInternal* existing_sink) {
+  // AddOrUpdate takes time, so avoid calling it if we can
+  if (existing_sink->sink().name() == new_sink.sink().name() &&
+      existing_sink->cast_data().capabilities ==
+          new_sink.cast_data().capabilities)
+    return;
+
+  MediaSinkInternal existing_sink_copy = *existing_sink;
+  existing_sink_copy.sink().set_name(new_sink.sink().name());
+  auto capabilities = new_sink.cast_data().capabilities;
+  existing_sink_copy.cast_data().capabilities = capabilities;
+  cast_media_sink_service_impl_->task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&CastMediaSinkServiceImpl::AddOrUpdateSink,
+                                base::Unretained(cast_media_sink_service_impl_),
+                                existing_sink_copy));
 }
 
 void AccessCodeCastSinkService::RemoveSinkIdFromAllEntries(
@@ -761,8 +851,8 @@ void AccessCodeCastSinkService::RemoveAndDisconnectExistingSinksOnNetwork() {
     // There are no active routes for this sink so it is safe to remove from the
     // media router. Must find the sink from media router for removal since it
     // has more total information.
-    base::PostTaskAndReplyWithResult(
-        cast_media_sink_service_impl_->task_runner().get(), FROM_HERE,
+    cast_media_sink_service_impl_->task_runner()->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&CastMediaSinkServiceImpl::GetSinkById,
                        base::Unretained(cast_media_sink_service_impl_),
                        sink_id),

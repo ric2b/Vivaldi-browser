@@ -8,11 +8,13 @@
 #include <vector>
 
 #include "base/cxx17_backports.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "net/http/structured_headers.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -25,6 +27,14 @@ const char kPrefersColorSchemeLight[] = "light";
 
 const char kPrefersReducedMotionNoPreference[] = "no-preference";
 const char kPrefersReducedMotionReduce[] = "reduce";
+
+const char* const kWebEffectiveConnectionTypeMapping[] = {
+    "4g" /* Unknown */, "4g" /* Offline */, "slow-2g" /* Slow 2G */,
+    "2g" /* 2G */,      "3g" /* 3G */,      "4g" /* 4G */
+};
+
+const size_t kWebEffectiveConnectionTypeMappingCount =
+    std::size(kWebEffectiveConnectionTypeMapping);
 
 ClientHintToNameMap MakeClientHintToNameMap() {
   return {
@@ -192,6 +202,16 @@ ParseClientHintToDelegatedThirdPartiesHeader(const std::string& header,
       return result;
     }
   }
+}
+
+// static
+void LogClientHintsPersistenceMetrics(
+    const base::TimeTicks& persistence_started,
+    std::size_t hints_stored) {
+  base::UmaHistogramTimes("ClientHints.StoreLatency",
+                          base::TimeTicks::Now() - persistence_started);
+  base::UmaHistogramExactLinear("ClientHints.UpdateEventCount", 1, 2);
+  base::UmaHistogramCounts100("ClientHints.UpdateSize", hints_stored);
 }
 
 }  // namespace network

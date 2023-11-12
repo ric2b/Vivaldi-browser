@@ -140,20 +140,20 @@ public class TabSwitcherDrawable extends TintedDrawable {
      */
     public static TabSwitcherDrawable createTabSwitcherDrawableForBottomBar(Context context) {
         Drawable drawable = ContextCompat.getDrawable(context,
-                R.drawable.vivaldi_bottom_nav_tab_counter_56dp);
+                R.drawable.vivaldi_nav_tab_counter_56dp);
         return createTabSwitcherDrawableFromSVG(context, BrandedColorScheme.APP_DEFAULT, drawable);
     }
 
     public static TabSwitcherDrawable createTabSwitcherDrawableForTopToolBar(Context context) {
         Drawable drawable = ContextCompat.getDrawable(context,
-                R.drawable.vivaldi_bottom_nav_tab_counter_56dp_v2);
+                R.drawable.vivaldi_nav_tab_counter_56dp);
         return createTabSwitcherDrawableFromSVG(context, BrandedColorScheme.APP_DEFAULT, drawable);
 
     }
 
     public static TabSwitcherDrawable createTabSwitcherDrawableFromSVG(Context context) {
         Drawable drawable = ContextCompat.getDrawable(context,
-                        R.drawable.vivaldi_tab_switch_tab_counter_48dp);
+                        R.drawable.vivaldi_nav_tab_counter_56dp);
         return createTabSwitcherDrawableFromSVG(context, BrandedColorScheme.APP_DEFAULT, drawable);
     }
 
@@ -172,6 +172,8 @@ public class TabSwitcherDrawable extends TintedDrawable {
         }
         Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
                 drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        // Note(david@vivaldi.com): Apply current density to the image.
+        bitmap.setDensity(context.getResources().getDisplayMetrics().densityDpi);
         Canvas canvas = new Canvas(bitmap);
         drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
         drawable.draw(canvas);

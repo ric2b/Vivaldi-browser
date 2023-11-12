@@ -18,11 +18,10 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/mojo/mojom/speech_recognition.mojom.h"
+#include "third_party/icu/source/common/unicode/locid.h"
 
 namespace ash {
 namespace {
-
-constexpr char kEnglishLanguage[] = "en";
 
 // Writes the given |data| in a file with |path|. Returns true if saving
 // succeeded, or false otherwise.
@@ -39,6 +38,14 @@ bool SaveFile(const std::string& content, const base::FilePath& path) {
   return base::WriteFile(path, content);
 }
 
+const std::string GetFormattedLangauge(const icu::Locale& locale) {
+  const std::string language = locale.getLanguage();
+  if (language == "zh") {
+    return "zh_TW";
+  }
+  return language;
+}
+
 }  // namespace
 
 ProjectorMetadataController::ProjectorMetadataController() = default;
@@ -47,10 +54,8 @@ ProjectorMetadataController::~ProjectorMetadataController() = default;
 
 void ProjectorMetadataController::OnRecordingStarted() {
   metadata_ = std::make_unique<ProjectorMetadata>();
-
-  // TODO(b/200960615) When multi-language support is available for speech
-  // recognition, get the language from the speech recognition service.
-  metadata_->SetCaptionLanguage(kEnglishLanguage);
+  metadata_->SetCaptionLanguage(
+      GetFormattedLangauge(icu::Locale::getDefault()));
 }
 
 void ProjectorMetadataController::RecordTranscription(

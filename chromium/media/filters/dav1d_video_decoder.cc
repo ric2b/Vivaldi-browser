@@ -11,9 +11,10 @@
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
@@ -255,8 +256,8 @@ void Dav1dVideoDecoder::Reset(base::OnceClosure reset_cb) {
   dav1d_flush(dav1d_decoder_);
 
   if (bind_callbacks_)
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     std::move(reset_cb));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(reset_cb));
   else
     std::move(reset_cb).Run();
 }
@@ -362,8 +363,7 @@ bool Dav1dVideoDecoder::DecodeBuffer(scoped_refptr<DecoderBuffer> buffer) {
 
     // When we use bind mode, our image data is dependent on the Dav1dPicture,
     // so we must ensure it stays alive along enough.
-    frame->AddDestructionObserver(
-        base::BindOnce([](ScopedPtrDav1dPicture) {}, std::move(p)));
+    frame->AddDestructionObserver(base::DoNothingWithBoundArgs(std::move(p)));
     output_cb_.Run(std::move(frame));
   }
 

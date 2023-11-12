@@ -12,13 +12,14 @@ ChromeVoxSmartStickyModeTest = class extends ChromeVoxNextE2ETest {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
-    await importModule(
-        'ChromeVoxBackground', '/chromevox/background/classic_background.js');
+
+    // Alphabetical based on file path.
     await importModule(
         'ChromeVoxState', '/chromevox/background/chromevox_state.js');
-    await importModule('CursorRange', '/common/cursors/range.js');
+    await importModule('ChromeVoxPrefs', '/chromevox/background/prefs.js');
     await importModule(
         'SmartStickyMode', '/chromevox/background/smart_sticky_mode.js');
+    await importModule('CursorRange', '/common/cursors/range.js');
     this.ssm_ = new SmartStickyMode();
     // Deregister from actual range changes.
     ChromeVoxState.removeObserver(this.ssm_);
@@ -54,8 +55,7 @@ AX_TEST_F(
 
       // First, turn on sticky mode and try changing range to various parts of
       // the document.
-      ChromeVoxBackground.setPref(
-          'sticky', true /* value */, true /* announce */);
+      ChromeVoxPrefs.instance.setAndAnnounceStickyPref(true);
       this.assertDidTurnOffForNode(input);
       this.assertDidTurnOffForNode(textarea);
       this.assertDidNotTurnOffForNode(p);
@@ -80,8 +80,7 @@ AX_TEST_F(
     async function() {
       const root = await this.runWithLoadedTree(this.relationsDoc);
       const [p, input, textarea, contenteditable, ul1, ul2] = root.children;
-      ChromeVoxBackground.setPref(
-          'sticky', true /* value */, true /* announce */);
+      ChromeVoxPrefs.instance.setAndAnnounceStickyPref(true);
 
       // Mix in calls to turn on / off sticky mode while moving the range
       // around.
@@ -95,8 +94,7 @@ AX_TEST_F(
 
       // Make sure sticky mode is on again. This call doesn't impact our
       // instance of SmartStickyMode.
-      ChromeVoxBackground.setPref(
-          'sticky', true /* value */, true /* announce */);
+      ChromeVoxPrefs.instance.setAndAnnounceStickyPref(true);
 
       // Mix in more sticky mode user commands and move to related nodes.
       this.assertDidTurnOffForNode(contenteditable);
@@ -131,28 +129,28 @@ AX_TEST_F(
           .expectSpeech('Sticky mode enabled')
           .call(doCmd('nextFormField'))
           .expectSpeech('Edit text')
-          .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+          .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()))
           .call(doCmd('nextFormField'))
           .expectSpeech('Button')
           .call(doCmd('previousFormField'))
           .expectSpeech('Edit text')
-          .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+          .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()))
           .call(doCmd('previousObject'))
           .expectSpeech('start')
           .call(doCmd('nextEditText'))
           .expectSpeech('Edit text')
-          .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+          .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()))
           .call(doCmd('nextObject'))
           .expectSpeech('Button')
           .call(doCmd('previousEditText'))
           .expectSpeech('Edit text')
-          .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+          .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()))
           .call(doCmd('nextObject'))
           .expectSpeech('Button')
           .call(doCmd('previousObject'))
           .expectSpeech('Sticky mode disabled')
           .expectSpeech('Edit text')
-          .call(() => assertFalse(ChromeVox.isStickyModeOn()));
+          .call(() => assertFalse(ChromeVoxPrefs.isStickyModeOn()));
       await mockFeedback.replay();
     });
 
@@ -170,12 +168,12 @@ AX_TEST_F(
           .expectEarcon(Earcon.SMART_STICKY_MODE_OFF)
           .expectSpeech('Sticky mode disabled')
           .expectSpeech('Edit text')
-          .call(() => assertFalse(ChromeVox.isStickyModeOn()))
+          .call(() => assertFalse(ChromeVoxPrefs.isStickyModeOn()))
           .call(doCmd('nextObject'))
           .expectEarcon(Earcon.SMART_STICKY_MODE_ON)
           .expectSpeech('Sticky mode enabled')
           .expectSpeech('Button')
-          .call(() => assertTrue(ChromeVox.isStickyModeOn()));
+          .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()));
       await mockFeedback.replay();
     });
 
@@ -194,10 +192,10 @@ AX_TEST_F('ChromeVoxSmartStickyModeTest', 'ContinuousRead', async function() {
       .call(doCmd('nextObject'))
       .expectNextSpeechUtteranceIsNot('Sticky mode disabled')
       .expectSpeech('Edit text')
-      .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+      .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()))
       .call(doCmd('nextObject'))
       .expectNextSpeechUtteranceIsNot('Sticky mode enabled')
       .expectSpeech('Button')
-      .call(() => assertTrue(ChromeVox.isStickyModeOn()));
+      .call(() => assertTrue(ChromeVoxPrefs.isStickyModeOn()));
   await mockFeedback.replay();
 });

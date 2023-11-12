@@ -359,6 +359,9 @@ void BrowserFrameMac::PopulateCreateWindowParams(
     // Hosted apps draw their own window title.
     if (browser_view_->GetIsWebAppType())
       params->window_title_hidden = true;
+  } else if (browser_view_->GetIsPictureInPictureType()) {
+    params->window_class = remote_cocoa::mojom::WindowClass::kFrameless;
+    params->style_mask = NSWindowStyleMaskFullSizeContentView;
   } else {
     params->window_class = remote_cocoa::mojom::WindowClass::kDefault;
   }
@@ -433,7 +436,7 @@ views::Widget::InitParams BrowserFrameMac::GetWidgetParams() {
 }
 
 bool BrowserFrameMac::UseCustomFrame() const {
-  return false;
+  return browser_view_->GetIsPictureInPictureType();
 }
 
 bool BrowserFrameMac::UsesNativeSystemMenu() const {

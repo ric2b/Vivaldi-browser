@@ -6,10 +6,6 @@ package org.chromium.weblayer_private.test;
 
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.view.View;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.fragment.app.FragmentManager;
 
@@ -160,11 +156,6 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
     }
 
     @Override
-    public boolean canBrowserControlsScroll(ITab tab) {
-        return ((TabImpl) tab).canBrowserControlsScrollForTesting();
-    }
-
-    @Override
     public void setIgnoreMissingKeyForTranslateManager(boolean ignore) {
         TestWebLayerImplJni.get().setIgnoreMissingKeyForTranslateManager(ignore);
     }
@@ -178,19 +169,6 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
     @Override
     public boolean canInfoBarContainerScroll(ITab tab) {
         return ((TabImpl) tab).canInfoBarContainerScrollForTesting();
-    }
-
-    @Override
-    public String getDisplayedUrl(IObjectWrapper /* View */ view) {
-        View urlBarView = ObjectWrapper.unwrap(view, View.class);
-        assert (urlBarView instanceof LinearLayout);
-        LinearLayout urlBarLayout = (LinearLayout) urlBarView;
-        assert (urlBarLayout.getChildCount() == 2);
-
-        View textView = urlBarLayout.getChildAt(1);
-        assert (textView instanceof TextView);
-        TextView urlBarTextView = (TextView) textView;
-        return urlBarTextView.getText().toString();
     }
 
     @Override
@@ -252,18 +230,6 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
         } catch (ExecutionException e) {
             return true;
         }
-    }
-
-    @Override
-    public IObjectWrapper getSecurityButton(IObjectWrapper /* View */ view) {
-        View urlBarView = ObjectWrapper.unwrap(view, View.class);
-        assert (urlBarView instanceof LinearLayout);
-        LinearLayout urlBarLayout = (LinearLayout) urlBarView;
-        assert (urlBarLayout.getChildCount() == 2);
-
-        View securityIconView = urlBarLayout.getChildAt(0);
-        assert (securityIconView instanceof ImageView);
-        return ObjectWrapper.wrap((ImageView) securityIconView);
     }
 
     @Override

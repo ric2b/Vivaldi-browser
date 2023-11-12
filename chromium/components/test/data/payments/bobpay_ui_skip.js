@@ -4,8 +4,6 @@
  * found in the LICENSE file.
  */
 
-/* global PaymentRequest:false */
-
 /**
  * Launches the PaymentRequest UI with Bob Pay as the only payment method.
  *
@@ -14,10 +12,10 @@
  * the UI skip optimization, skipping its own UI enterily and going directly to
  * Bob Pay.
  */
-function buy() { // eslint-disable-line no-unused-vars
+function buy() {
   try {
     new PaymentRequest(
-        [{supportedMethods: 'https://bobpay.com'}],
+        [{supportedMethods: 'https://bobpay.test'}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}})
         .show()
         .then(function(resp) {
@@ -43,10 +41,10 @@ function buy() { // eslint-disable-line no-unused-vars
  * Launches the PaymentRequest UI with Bob Pay as the only payment method, then
  * tells the browser that the transaction has failed.
  */
-function buyFail() { // eslint-disable-line no-unused-vars
+function buyFail() {
   try {
     new PaymentRequest(
-        [{supportedMethods: 'https://bobpay.com'}],
+        [{supportedMethods: 'https://bobpay.test'}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}})
         .show()
         .then(function(resp) {
@@ -70,10 +68,10 @@ function buyFail() { // eslint-disable-line no-unused-vars
  * Launches the PaymentRequest UI with Bob Pay as the only payment method but
  * requesting the payer's email as to disable skip ui.
  */
-function buyWithRequestedEmail() { // eslint-disable-line no-unused-vars
+function buyWithRequestedEmail() {
   try {
     new PaymentRequest(
-        [{supportedMethods: 'https://bobpay.com'}],
+        [{supportedMethods: 'https://bobpay.test'}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}},
         {requestPayerEmail: true})
         .show()

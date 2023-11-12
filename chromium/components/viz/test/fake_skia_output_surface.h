@@ -26,7 +26,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
  public:
   static std::unique_ptr<FakeSkiaOutputSurface> Create3d() {
     auto provider = TestContextProvider::Create();
-    provider->BindToCurrentThread();
+    provider->BindToCurrentSequence();
     return base::WrapUnique(new FakeSkiaOutputSurface(std::move(provider)));
   }
 
@@ -77,7 +77,8 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
       base::OnceClosure on_finished,
       base::OnceCallback<void(gfx::GpuFenceHandle)> return_release_fence_cb,
       bool is_overlay) override;
-  void MakePromiseSkImage(ImageContext* image_context) override;
+  void MakePromiseSkImage(ImageContext* image_context,
+                          const gfx::ColorSpace& yuv_color_space) override;
   sk_sp<SkImage> MakePromiseSkImageFromRenderPass(
       const AggregatedRenderPassId& id,
       const gfx::Size& size,
@@ -117,7 +118,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
   std::unique_ptr<ImageContext> CreateImageContext(
       const gpu::MailboxHolder& holder,
       const gfx::Size& size,
-      ResourceFormat format,
+      SharedImageFormat format,
       bool concurrent_reads,
       const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
       sk_sp<SkColorSpace> color_space,

@@ -5,14 +5,15 @@
 #ifndef CONTENT_BROWSER_PRELOADING_PRERENDER_PRERENDER_METRICS_H_
 #define CONTENT_BROWSER_PRELOADING_PRERENDER_PRERENDER_METRICS_H_
 
+#include <cstdint>
 #include <string>
 
 #include "base/time/time.h"
+#include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/preloading/prerender/prerender_host.h"
-#include "content/browser/preloading/prerender/prerender_host_registry.h"
-#include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/public/browser/prerender_trigger_type.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace content {
 
@@ -46,6 +47,43 @@ enum class PrerenderCrossOriginRedirectionMismatch {
   kMaxValue = kSchemeHostPortMismatch
 };
 
+// Assembles PrerenderHostFinalStatus with a detailed explanation if applicable.
+// Some FinalStatus enums cover multiple sub cases. To explain them in detail,
+// some explanations can be attached to the status.
+class PrerenderCancellationReason {
+ public:
+  using DetailedReasonVariant =
+      absl::variant<absl::monostate, uint64_t, std::string>;
+
+  static PrerenderCancellationReason BuildForDisallowActivationState(
+      uint64_t disallow_activation_reason);
+
+  static PrerenderCancellationReason BuildForMojoBinderPolicy(
+      const std::string& interface_name);
+
+  explicit PrerenderCancellationReason(PrerenderFinalStatus final_status);
+  ~PrerenderCancellationReason();
+
+  PrerenderCancellationReason(PrerenderCancellationReason&& reason);
+
+  // Reports UMA and UKM metrics.
+  void ReportMetrics(PrerenderTriggerType trigger_type,
+                     const std::string& embedder_histogram_suffix) const;
+
+  PrerenderFinalStatus final_status() const { return final_status_; }
+
+  // This is mainly used for displaying a detailed reason on devtools panel.
+  std::string ToDevtoolReasonString() const;
+
+ private:
+  PrerenderCancellationReason(PrerenderFinalStatus final_status,
+                              DetailedReasonVariant explanation);
+
+  const PrerenderFinalStatus final_status_;
+
+  const DetailedReasonVariant explanation_;
+};
+
 // Used by PrerenderNavigationThrottle. This is a breakdown enum for
 // PrerenderCrossOriginRedirectionMismatch.kSchemePortMismatch.
 // These values are persisted to logs. Entries should not be renumbered and
@@ -67,14 +105,6 @@ enum class PrerenderCrossOriginRedirectionDomain {
   kMaxValue = kCrossDomain
 };
 
-void RecordPrerenderCancelledInterface(
-    const std::string& interface_name,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix);
-
-void RecordPrerenderReasonForInactivePageRestriction(uint16_t reason,
-                                                     RenderFrameHostImpl& rfh);
-
 void RecordPrerenderTriggered(ukm::SourceId ukm_id);
 
 void RecordPrerenderActivationTime(
@@ -82,13 +112,17 @@ void RecordPrerenderActivationTime(
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
 
-// Records the status to UMA and UKM, and reports the status other than
-// kActivated to DevTools. In the attributes, `initiator_ukm_id` represents the
-// page that starts prerendering. `prerendered_ukm_id` represents the
-// prerendered page and is valid after the page is activated.
-void RecordPrerenderHostFinalStatus(PrerenderHost::FinalStatus status,
-                                    const PrerenderAttributes& attributes,
-                                    ukm::SourceId prerendered_ukm_id);
+// Used by failing prerender attempts. Records the status to UMA and UKM, and
+// reports the failing reason to devtools. In the attributes, `initiator_ukm_id`
+// represents the page that starts prerendering.
+void RecordFailedPrerenderFinalStatus(
+    const PrerenderCancellationReason& cancellation_reason,
+    const PrerenderAttributes& attributes);
+
+// Records a success activation to UMA and UKM.
+// `prerendered_ukm_id` is the UKM ID of the activated page.
+void ReportSuccessActivation(const PrerenderAttributes& attributes,
+                             ukm::SourceId prerendered_ukm_id);
 
 // Records which navigation parameters are different between activation and
 // initial prerender navigation when activation fails.
@@ -114,6 +148,22 @@ void RecordPrerenderRedirectionProtocolChange(
 // page.
 void RecordPrerenderRedirectionDomain(
     PrerenderCrossOriginRedirectionDomain domain_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
+// Takes the headers of incoming navigation which can potentially activate a
+// prerendering navigation as the input, and compares them with the prerendering
+// navigation's. The comparison is order-insensitive and case-insensitive,
+// unlike converting the headers to strings and comparing the strings naively.
+// For each mismatch case, this function reports a record to UMA, so that we can
+// track the use of each header and tell if prerender sets all headers as
+// expected.
+// Assuming the given headers mismatch, this function will report a record if it
+// finds that everything matches. This record will be used to ensure the current
+// activation logic which compares the headers in strings is correct.
+void CONTENT_EXPORT AnalyzePrerenderActivationHeader(
+    net::HttpRequestHeaders potential_activation_headers,
+    net::HttpRequestHeaders prerender_headers,
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
 

@@ -8,7 +8,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -73,7 +72,7 @@ class WebAppFileHandlingTestBase : public WebAppControllerBrowserTest {
     return provider()->os_integration_manager().file_handler_manager();
   }
 
-  WebAppRegistrar& registrar() { return provider()->registrar(); }
+  WebAppRegistrar& registrar() { return provider()->registrar_unsafe(); }
 
   GURL GetSecureAppURL() {
     return https_server()->GetURL("app.com", "/ssl/google.html");
@@ -264,7 +263,7 @@ class WebAppFileHandlingBrowserTest : public WebAppFileHandlingTestBase {
   TestServerRedirectHandle redirect_handle_;
   base::test::ScopedFeatureList feature_list_{
       blink::features::kFileHandlingAPI};
-  raw_ptr<content::WebContents> web_contents_;
+  raw_ptr<content::WebContents, DanglingUntriaged> web_contents_;
   std::unique_ptr<content::WebContentsDestroyedWatcher> destroyed_watcher_;
 };
 
@@ -556,7 +555,7 @@ IN_PROC_BROWSER_TEST_P(WebAppFileHandlingIconBrowserTest, Basic) {
       embedded_test_server()->GetURL("/web_app_file_handling/icons_app.html"));
   const AppId app_id = InstallWebAppFromManifest(browser(), app_url);
   auto* provider = WebAppProvider::GetForTest(browser()->profile());
-  const WebApp* web_app = provider->registrar().GetAppById(app_id);
+  const WebApp* web_app = provider->registrar_unsafe().GetAppById(app_id);
   ASSERT_TRUE(web_app);
 
   ASSERT_EQ(1U, web_app->file_handlers().size());

@@ -217,11 +217,12 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
   });
 
   apiFunctions.setHandleRequest(
-      'getDisallowedTransfers', function(entries, destinationEntry, callback) {
+      'getDisallowedTransfers',
+      function(entries, destinationEntry, isMove, callback) {
         var sourceUrls = entries.map(getEntryURL);
         var destinationUrl = getEntryURL(destinationEntry);
         fileManagerPrivateInternal.getDisallowedTransfers(
-            sourceUrls, destinationUrl, callback);
+            sourceUrls, destinationUrl, isMove, callback);
       });
 
   apiFunctions.setHandleRequest(
@@ -230,14 +231,6 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
         fileManagerPrivateInternal.getDlpMetadata(
             sourceUrls, callback);
       });
-
-  apiFunctions.setHandleRequest('startCopy', function(
-        entry, parentEntry, newName, callback) {
-    var url = getEntryURL(entry);
-    var parentUrl = getEntryURL(parentEntry);
-    fileManagerPrivateInternal.startCopy(
-        url, parentUrl, newName, callback);
-  });
 
   apiFunctions.setHandleRequest(
       'zipSelection',
@@ -434,5 +427,25 @@ bindingUtil.registerEventArgumentMassager(
           outputs[i] = GetExternalFileEntry(outputs[i]);
         }
       }
+      dispatch(args);
+    });
+
+bindingUtil.registerEventArgumentMassager(
+    'fileManagerPrivate.onIndividualFileTransfersUpdated',
+    function(args, dispatch) {
+      // Convert the entry arguments into real Entry objects.
+      args[0].forEach(fileStatus => {
+        fileStatus.entry = GetExternalFileEntry(fileStatus.entry);
+      })
+      dispatch(args);
+    });
+
+bindingUtil.registerEventArgumentMassager(
+    'fileManagerPrivate.onIndividualPinTransfersUpdated',
+    function(args, dispatch) {
+      // Convert the entry arguments into real Entry objects.
+      args[0].forEach(fileStatus => {
+        fileStatus.entry = GetExternalFileEntry(fileStatus.entry);
+      })
       dispatch(args);
     });

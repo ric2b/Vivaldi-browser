@@ -43,7 +43,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
-#include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
+#include "chrome/browser/ui/webui/ash/login/l10n_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
@@ -74,6 +74,7 @@
 #define ENABLED_VLOG_LEVEL 1
 
 namespace ash {
+
 namespace {
 
 const char kWakeLockReason[] = "TPMLockedIssue";
@@ -522,11 +523,6 @@ UserAvatar UserSelectionScreen::BuildAshUserAvatarForUser(
     avatar.bytes.assign(avatar_data.begin(), avatar_data.end());
   };
 
-  // After the default avatar images are moved to cloud, the user
-  // should have image bytes when using default images.
-  CHECK(!ash::features::IsAvatarsCloudMigrationEnabled() ||
-        !user.HasDefaultImage() || user.has_image_bytes());
-
   // After the avatar cloud migration, remove the second if case.
   if (user.has_image_bytes()) {
     avatar.bytes.assign(
@@ -753,14 +749,14 @@ void UserSelectionScreen::ShowBannerMessage(const std::u16string& message,
 void UserSelectionScreen::ShowUserPodCustomIcon(
     const AccountId& account_id,
     const proximity_auth::ScreenlockBridge::UserPodCustomIconInfo& icon_info) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp))
+  if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp))
     return;
 
   view_->ShowUserPodCustomIcon(account_id, icon_info);
 }
 
 void UserSelectionScreen::HideUserPodCustomIcon(const AccountId& account_id) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp))
+  if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp))
     return;
 
   view_->HideUserPodCustomIcon(account_id);
@@ -768,14 +764,14 @@ void UserSelectionScreen::HideUserPodCustomIcon(const AccountId& account_id) {
 
 void UserSelectionScreen::SetSmartLockState(const AccountId& account_id,
                                             SmartLockState state) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp)) {
+  if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp)) {
     view_->SetSmartLockState(account_id, state);
   }
 }
 
 void UserSelectionScreen::NotifySmartLockAuthResult(const AccountId& account_id,
                                                     bool success) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp)) {
+  if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp)) {
     view_->NotifySmartLockAuthResult(account_id, success);
   }
 }

@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
@@ -26,11 +27,10 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
 #include "components/prefs/pref_filter.h"
+#include "components/prefs/prefs_features.h"
 
 // Result returned from internal read tasks.
 struct JsonPrefStore::ReadResult {
@@ -59,6 +59,13 @@ bool BackupPrefsFile(const base::FilePath& path) {
   const bool bad_existed = base::PathExists(bad);
   base::Move(path, bad);
   return bad_existed;
+}
+
+bool PrefStoreBackgroundSerializationEnabledOrFeatureListUnavailable() {
+  // TODO(crbug.com/1364606#c12): Ensure that this is not invoked before
+  // FeatureList initialization.
+  return !base::FeatureList::GetInstance() ||
+         base::FeatureList::IsEnabled(kPrefStoreBackgroundSerialization);
 }
 
 PersistentPrefStore::PrefReadError HandleReadErrors(
@@ -143,6 +150,23 @@ const char* GetHistogramSuffix(const base::FilePath& path) {
       "Secure_Preferences", "Preferences", "Local_State"};
   const char* const* it = base::ranges::find(kAllowList, spaceless_basename);
   return it != kAllowList.end() ? *it : "";
+}
+
+bool DoSerialize(const base::Value& value,
+                 const base::FilePath& path,
+                 std::string* output) {
+  JSONStringValueSerializer serializer(output);
+  serializer.set_pretty_print(false);
+  const bool success = serializer.Serialize(value);
+  if (!success) {
+    // Failed to serialize prefs file. Backup the existing prefs file and
+    // crash.
+    BackupPrefsFile(path);
+    CHECK(false) << "Failed to serialize preferences : " << path
+                 << "\nBacked up under "
+                 << path.ReplaceExtension(kBadExtension);
+  }
+  return success;
 }
 
 }  // namespace
@@ -292,9 +316,8 @@ void JsonPrefStore::ReadPrefsAsync(ReadErrorDelegate* error_delegate) {
   error_delegate_.reset(error_delegate);
 
   // Weakly binds the read task so that it doesn't kick in during shutdown.
-  base::PostTaskAndReplyWithResult(
-      file_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&ReadPrefsFromDisk, path_),
+  file_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&ReadPrefsFromDisk, path_),
       base::BindOnce(&JsonPrefStore::OnFileRead, AsWeakPtr()));
 }
 
@@ -341,6 +364,17 @@ void JsonPrefStore::ReportValueChanged(const std::string& key, uint32_t flags) {
     observer.OnPrefValueChanged(key);
 
   ScheduleWrite(flags);
+}
+
+void JsonPrefStore::PerformPreserializationTasks() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  pending_lossy_write_ = false;
+  if (pref_filter_) {
+    OnWriteCallbackPair callbacks =
+        pref_filter_->FilterSerializeData(prefs_.get());
+    if (!callbacks.first.is_null() || !callbacks.second.is_null())
+      RegisterOnNextWriteSynchronousCallbacks(std::move(callbacks));
+  }
 }
 
 void JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback(
@@ -393,7 +427,7 @@ void JsonPrefStore::RegisterOnNextSuccessfulWriteReply(
             base::BindOnce(
                 &JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback,
                 AsWeakPtr()),
-            base::SequencedTaskRunnerHandle::Get()));
+            base::SequencedTaskRunner::GetCurrentDefault()));
   }
 }
 
@@ -410,11 +444,7 @@ void JsonPrefStore::RegisterOnNextWriteSynchronousCallbacks(
           base::BindOnce(
               &JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback,
               AsWeakPtr()),
-          base::SequencedTaskRunnerHandle::Get()));
-}
-
-void JsonPrefStore::ClearMutableValues() {
-  NOTIMPLEMENTED();
+          base::SequencedTaskRunner::GetCurrentDefault()));
 }
 
 void JsonPrefStore::OnStoreDeletionFromDisk() {
@@ -483,32 +513,14 @@ JsonPrefStore::~JsonPrefStore() {
 }
 
 bool JsonPrefStore::SerializeData(std::string* output) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  PerformPreserializationTasks();
+  return DoSerialize(*prefs_, path_, output);
+}
 
-  pending_lossy_write_ = false;
-
-  if (pref_filter_) {
-    OnWriteCallbackPair callbacks =
-        pref_filter_->FilterSerializeData(prefs_.get());
-    if (!callbacks.first.is_null() || !callbacks.second.is_null())
-      RegisterOnNextWriteSynchronousCallbacks(std::move(callbacks));
-  }
-
-  JSONStringValueSerializer serializer(output);
-  // Not pretty-printing prefs shrinks pref file size by ~30%. To obtain
-  // readable prefs for debugging purposes, you can dump your prefs into any
-  // command-line or online JSON pretty printing tool.
-  serializer.set_pretty_print(false);
-  const bool success = serializer.Serialize(*prefs_);
-  if (!success) {
-    // Failed to serialize prefs file. Backup the existing prefs file and
-    // crash.
-    BackupPrefsFile(path_);
-    CHECK(false) << "Failed to serialize preferences : " << path_
-                 << "\nBacked up under "
-                 << path_.ReplaceExtension(kBadExtension);
-  }
-  return success;
+base::ImportantFileWriter::BackgroundDataProducerCallback
+JsonPrefStore::GetSerializedDataProducerForBackgroundSequence() {
+  PerformPreserializationTasks();
+  return base::BindOnce(&DoSerialize, prefs_->Clone(), path_);
 }
 
 void JsonPrefStore::FinalizeFileRead(
@@ -547,6 +559,8 @@ void JsonPrefStore::ScheduleWrite(uint32_t flags) {
 
   if (flags & LOSSY_PREF_WRITE_FLAG)
     pending_lossy_write_ = true;
+  else if (PrefStoreBackgroundSerializationEnabledOrFeatureListUnavailable())
+    writer_.ScheduleWriteWithBackgroundDataSerializer(this);
   else
     writer_.ScheduleWrite(this);
 }

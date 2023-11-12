@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {decorate} from 'chrome://resources/js/cr/ui.js';
+import {decorate} from '../../../common/js/ui.js';
 
 import {ArrayDataModel} from '../../../common/js/array_data_model.js';
 
 import {List} from './list.js';
 
-import {assertEquals} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 // clang-format on
 

@@ -7,8 +7,9 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import {AcceleratorLookupManager} from 'chrome://shortcut-customization/js/accelerator_lookup_manager.js';
 import {fakeAcceleratorConfig, fakeLayoutInfo} from 'chrome://shortcut-customization/js/fake_data.js';
 import {FakeShortcutProvider} from 'chrome://shortcut-customization/js/fake_shortcut_provider.js';
-import {AcceleratorInfo, AcceleratorKeys, AcceleratorSource, AcceleratorState, Modifier} from 'chrome://shortcut-customization/js/shortcut_types.js';
-import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {Accelerator, AcceleratorCategory, AcceleratorSource, AcceleratorState, DefaultAcceleratorInfo, Modifier, MojoAccelerator, MojoAcceleratorInfo} from 'chrome://shortcut-customization/js/shortcut_types.js';
+import {areAcceleratorsEqual, createEmptyAccelInfoFromAccel} from 'chrome://shortcut-customization/js/shortcut_utils.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 suite('acceleratorLookupManagerTest', function() {
   let provider: FakeShortcutProvider|null = null;
@@ -38,318 +39,406 @@ suite('acceleratorLookupManagerTest', function() {
   }
 
   function replaceAndVerify(
-      source: AcceleratorSource, action: number, oldKeys: AcceleratorKeys,
-      newKeys: AcceleratorKeys) {
-    const uuid = getManager().getAcceleratorFromKeys(JSON.stringify(oldKeys));
-    getManager().replaceAccelerator(source, action, oldKeys, newKeys);
+      source: AcceleratorSource, action: number, oldAccel: Accelerator,
+      newAccelInfo: DefaultAcceleratorInfo) {
+    const uuid = getManager().getAcceleratorIdFromReverseLookup(oldAccel);
+    getManager().replaceAccelerator(source, action, oldAccel, newAccelInfo);
 
     // Verify that the old accelerator is no longer part of the reverse
     // lookup.
     assertEquals(
-        undefined,
-        getManager().getAcceleratorFromKeys(JSON.stringify(oldKeys)));
+        undefined, getManager().getAcceleratorIdFromReverseLookup(oldAccel));
     // Verify the replacement accelerator is in the reverse lookup.
     assertEquals(
-        uuid, getManager().getAcceleratorFromKeys(JSON.stringify(newKeys)));
+        uuid,
+        getManager().getAcceleratorIdFromReverseLookup(
+            newAccelInfo.layoutProperties.defaultAccelerator.accelerator));
   }
 
   function addAndVerify(
-      source: AcceleratorSource, action: number, newKeys: AcceleratorKeys) {
-    getManager().addAccelerator(source, action, newKeys);
+      source: AcceleratorSource, action: number,
+      newAccelInfo: DefaultAcceleratorInfo) {
+    getManager().addAccelerator(source, action, newAccelInfo);
 
     // Verify that the new accelerator is in the reverse lookup.
     assertEquals(
         `${source}-${action}`,
-        getManager().getAcceleratorFromKeys(JSON.stringify(newKeys)));
+        getManager().getAcceleratorIdFromReverseLookup(
+            newAccelInfo.layoutProperties.defaultAccelerator.accelerator));
   }
 
   test('AcceleratorLookupDefaultFake', () => {
     // TODO(jimmyxgong): Remove this test once real data is ready.
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
-      for (const [source, accelMap] of fakeAcceleratorConfig) {
-        for (const [action, accelInfos] of accelMap) {
-          const actualAccels = getManager().getAccelerators(source, action);
-          assertDeepEquals(accelInfos, actualAccels);
+      for (const [source, accelMap] of Object.entries(fakeAcceleratorConfig)) {
+        // When calling Object.entries on an object with optional enum keys,
+        // TypeScript considers the values to be possibly undefined.
+        // This guard lets us use this value later as if it were not undefined.
+        if (!accelMap) {
+          continue;
+        }
+        for (const [action, configAccelInfoArr] of Object.entries(accelMap)) {
+          const managerAccelInfoArr =
+              getManager().getAcceleratorInfos(source, action);
+          // The AcceleratorLookupManager processes the MojoAcceleratorConfig
+          // into an AcceleratorConfig. Since the Mojo types (MojoAccelerator,
+          // MojoAcceleratorInfo) have different properties from the non-Mojo
+          // types, we only expect the properties in common to be equal.
+          for (let i = 0; i < configAccelInfoArr.length; i++) {
+            const managerAccel =
+                managerAccelInfoArr[i] as DefaultAcceleratorInfo;
+            const configAccel: MojoAcceleratorInfo =
+                configAccelInfoArr[i] as MojoAcceleratorInfo;
+            assertEquals(managerAccel.type, configAccel.type);
+            assertEquals(managerAccel.locked, configAccel.locked);
+            assertEquals(managerAccel.state, configAccel.state);
+            assertNotEquals(
+                managerAccel.layoutProperties.defaultAccelerator.keyDisplay,
+                configAccel.layoutProperties?.defaultAccelerator?.keyDisplay);
+            assertEquals(
+                managerAccel.layoutProperties.defaultAccelerator.accelerator
+                    .keyCode,
+                configAccel?.layoutProperties?.defaultAccelerator?.accelerator
+                    .keyCode);
+            assertEquals(
+                managerAccel.layoutProperties.defaultAccelerator.accelerator
+                    .modifiers,
+                configAccel?.layoutProperties?.defaultAccelerator?.accelerator
+                    .modifiers);
+            assertFalse(Object.hasOwn(
+                (managerAccel.layoutProperties.defaultAccelerator.accelerator as
+                 Accelerator),
+                'keyState'));
+            assertTrue(Object.hasOwn(
+                (configAccel.layoutProperties.defaultAccelerator!.accelerator as
+                 Accelerator),
+                'keyState'));
+            assertFalse(Object.hasOwn(
+                (managerAccel.layoutProperties.defaultAccelerator.accelerator as
+                 Accelerator),
+                'timeStamp'));
+            assertTrue(Object.hasOwn(
+                (configAccel.layoutProperties.defaultAccelerator!.accelerator as
+                 Accelerator),
+                'timeStamp'));
+          }
         }
       }
     });
   });
 
-  test('GetLayoutInfoDefaultFake', () => {
+  test('GetLayoutInfoDefaultFakeWithAccelerators', async () => {
     // TODO(jimmyxgong): Remove this test once real data is ready.
-    getProvider().setFakeLayoutInfo(fakeLayoutInfo);
-    return getProvider().getLayoutInfo().then((result) => {
-      assertDeepEquals(fakeLayoutInfo, result);
 
-      getManager().setAcceleratorLayoutLookup(result);
+    // First, initialize the accelerators into the AcceleratorLookupManager.
+    getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
+    const {config: accelConfig} = await getProvider().getAccelerators();
+    getManager().setAcceleratorLookup(accelConfig);
 
-      // 2 layout infos for ChromeOS (Window Management, Virtual Desks).
-      assertEquals(2, getManager().getSubcategories(/*ChromeOS=*/ 0)!.size);
-      // 1 layout infos for Browser (Tabs).
-      assertEquals(1, getManager().getSubcategories(/*Browser=*/ 1)!.size);
+    // Then, initialize the layout infos into the AcceleratorLookupManager.
+    getProvider().setFakeAcceleratorLayoutInfos(fakeLayoutInfo);
+    return getProvider().getAcceleratorLayoutInfos().then((result) => {
+      assertDeepEquals(fakeLayoutInfo, result.layoutInfos);
+
+      getManager().setAcceleratorLayoutLookup(result.layoutInfos);
+
+      // We expect 2 subcategories for kTabsAndWindows: kGeneral and
+      // kSystemApps.
+      assertEquals(
+          2,
+          getManager().getSubcategories(
+                          AcceleratorCategory.kTabsAndWindows)!.size);
+      // We expect 1 subcategory for kWindowsAndDesk: kSystemControl.
+      assertEquals(
+          1,
+          getManager().getSubcategories(
+                          AcceleratorCategory.kPageAndWebBrowser)!.size);
+    });
+  });
+
+  test('GetLayoutInfoDefaultFakeNoAccelerators', () => {
+    // TODO(jimmyxgong): Remove this test once real data is ready.
+    getProvider().setFakeAcceleratorLayoutInfos(fakeLayoutInfo);
+    return getProvider().getAcceleratorLayoutInfos().then((result) => {
+      assertDeepEquals(fakeLayoutInfo, result.layoutInfos);
+
+      getManager().setAcceleratorLayoutLookup(result.layoutInfos);
+
+      // If accelerators have not been initialized into the
+      // AcceleratorLookupManager, we expect the subcategories to be undefined.
+      assertEquals(
+          undefined,
+          getManager().getSubcategories(AcceleratorCategory.kTabsAndWindows));
+      assertEquals(
+          undefined,
+          getManager().getSubcategories(
+              AcceleratorCategory.kPageAndWebBrowser));
     });
   });
 
   test('ReplaceBasicAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator.
       const expectedAction = 1;
-      const ashMap = fakeAcceleratorConfig.get(AcceleratorSource.ASH);
-      const snapWindowRightAccels = ashMap!.get(expectedAction);
+      const ashMap = fakeAcceleratorConfig[AcceleratorSource.kAsh];
+      const snapWindowRightAccels = ashMap![expectedAction];
       assertTrue(!!snapWindowRightAccels);
       // Modifier.Alt + key::221 (']')
-      const oldAccel = snapWindowRightAccels[0]!.accelerator;
+      const oldAccel = snapWindowRightAccels[0]!.layoutProperties!
+                           .defaultAccelerator!.accelerator;
 
-      const expectedNewAccel = /** @type {!AcceleratorKeys} */ ({
+      const expectedNewAccel: Accelerator = {
         modifiers: Modifier.CONTROL,
-        key: 79,
-        keyDisplay: 'o',
-      });
+        keyCode: 79,
+      };
 
       // Sanity check that new accel is not in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(expectedNewAccel)));
+          getManager().getAcceleratorIdFromReverseLookup(expectedNewAccel));
 
       replaceAndVerify(
-          AcceleratorSource.ASH, expectedAction, oldAccel, expectedNewAccel);
+          AcceleratorSource.kAsh, expectedAction, oldAccel,
+          createEmptyAccelInfoFromAccel(expectedNewAccel));
 
       // Check that the accelerator got updated in the lookup.
-      let lookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, expectedAction);
-      // Replacing a default shortcut should not remove the default. Expect a
-      // new accelerator to be added instead.
+      let lookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, expectedAction);
+      // Replacing a default shortcut should not remove the default. Expect
+      // a new accelerator to be added instead.
       assertEquals(2, lookup.length);
-      assertEquals(
-          JSON.stringify(expectedNewAccel),
-          JSON.stringify(lookup[1]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          expectedNewAccel,
+          lookup[1]!.layoutProperties.defaultAccelerator.accelerator));
 
       // Replace the new accelerator with the "ALT + ]" default accelerator.
-      const expectedNewDefaultAccel = /** @type {!AcceleratorKeys} */ ({
+      const expectedNewDefaultAccel: Accelerator = {
         modifiers: Modifier.ALT,
-        key: 221,
-        keyDisplay: ']',
-      });
+        keyCode: 221,
+      };
 
       // Sanity check that new accel is not in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(expectedNewDefaultAccel)));
+          getManager().getAcceleratorIdFromReverseLookup(
+              expectedNewDefaultAccel));
       replaceAndVerify(
-          AcceleratorSource.ASH, expectedAction, expectedNewAccel,
-          expectedNewDefaultAccel);
+          AcceleratorSource.kAsh, expectedAction, expectedNewAccel,
+          createEmptyAccelInfoFromAccel(expectedNewDefaultAccel));
 
       // Check that the accelerator got updated in the lookup.
-      lookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, expectedAction);
+      lookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, expectedAction);
       // Expect only one accelerator since the previous accelerator has been
       // removed but the default accelerator has been re-enabled.
       assertEquals(1, lookup.length);
-      assertEquals(
-          JSON.stringify(expectedNewDefaultAccel),
-          JSON.stringify(lookup[0]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          expectedNewDefaultAccel,
+          lookup[0]!.layoutProperties.defaultAccelerator.accelerator));
     });
   });
 
   test('ReplacePreexistingAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator, the action that will be overridden.
       const snapWindowRightAction = 1;
-      const ashMap = fakeAcceleratorConfig!.get(AcceleratorSource.ASH) as
-          Map<number, AcceleratorInfo[]>;
-      const snapWindowRightAccels =
-          ashMap!.get(snapWindowRightAction) as AcceleratorInfo[];
+      const ashMap = fakeAcceleratorConfig![AcceleratorSource.kAsh];
+      const snapWindowRightAccels = ashMap![snapWindowRightAction];
       // Modifier.Alt + key::221 (']')
-      const overridenAccel = snapWindowRightAccels[0]!.accelerator;
+      const overridenAccel = snapWindowRightAccels![0]!.layoutProperties!
+                                 .defaultAccelerator!.accelerator;
 
       // Replace New Desk shortcut with Alt+']'.
       const newDeskAction = 2;
-      const oldNewDeskAccels = ashMap!.get(newDeskAction) as AcceleratorInfo[];
-      const oldNewDeskAccel = oldNewDeskAccels[0]!.accelerator;
+      const oldNewDeskAccels = ashMap![newDeskAction];
+      const oldNewDeskAccel = oldNewDeskAccels![0]!.layoutProperties!
+                                  .defaultAccelerator!.accelerator;
 
       replaceAndVerify(
-          AcceleratorSource.ASH, newDeskAction, oldNewDeskAccel,
-          overridenAccel);
+          AcceleratorSource.kAsh, newDeskAction, oldNewDeskAccel,
+          createEmptyAccelInfoFromAccel(overridenAccel));
 
       // Verify that the New Desk shortcut now has the ALT + ']' accelerator.
-      const newDeskLookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, newDeskAction);
+      const newDeskLookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, newDeskAction);
       assertEquals(2, newDeskLookup.length);
-      assertEquals(
-          JSON.stringify(overridenAccel),
-          JSON.stringify(newDeskLookup[1]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          overridenAccel,
+          newDeskLookup[1]!.layoutProperties.defaultAccelerator.accelerator));
 
       // There should still be 1 accelerator for snapWindowRight, but the
       // default should be disabled.
-      const snapWindowRightLookup = getManager().getAccelerators(
-          AcceleratorSource.ASH, snapWindowRightAction);
+      const snapWindowRightLookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, snapWindowRightAction);
       assertEquals(1, snapWindowRightLookup.length);
       assertEquals(
-          AcceleratorState.DISABLED_BY_USER, snapWindowRightLookup[0]!.state);
+          AcceleratorState.kDisabledByUser, snapWindowRightLookup[0]!.state);
     });
   });
 
   test('AddBasicAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator from kAsh[1]!.
       const expectedAction = 1;
 
-      const expectedNewAccel = /** @type {!AcceleratorKeys} */ ({
+      const expectedNewAccel: Accelerator = {
         modifiers: Modifier.CONTROL,
-        key: 79,
-        keyDisplay: 'o',
-      });
+        keyCode: 79,
+      };
 
       // Sanity check that new accel is not in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(expectedNewAccel)));
+          getManager().getAcceleratorIdFromReverseLookup(expectedNewAccel));
 
-      addAndVerify(AcceleratorSource.ASH, expectedAction, expectedNewAccel);
+      addAndVerify(
+          AcceleratorSource.kAsh, expectedAction,
+          createEmptyAccelInfoFromAccel(expectedNewAccel));
 
       // Check that the accelerator got updated in the lookup.
-      const lookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, expectedAction);
+      const lookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, expectedAction);
       assertEquals(2, lookup.length);
-      assertEquals(
-          JSON.stringify(expectedNewAccel),
-          JSON.stringify(lookup[1]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          expectedNewAccel,
+          lookup[1]!.layoutProperties.defaultAccelerator.accelerator));
     });
   });
 
   test('AddExistingAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator, the action that will be overridden.
       const snapWindowRightAction = 1;
-      const ashMap = fakeAcceleratorConfig!.get(AcceleratorSource.ASH) as
-          Map<number, AcceleratorInfo[]>;
+      const ashMap = fakeAcceleratorConfig[AcceleratorSource.kAsh];
       const snapWindowRightAccels =
-          ashMap!.get(snapWindowRightAction) as AcceleratorInfo[];
+          ashMap![snapWindowRightAction] as MojoAcceleratorInfo[];
       // Modifier.Alt + key::221 (']')
-      const overridenAccel = snapWindowRightAccels[0]!.accelerator;
+      const overridenAccel =
+          snapWindowRightAccels[0]!.layoutProperties!.defaultAccelerator!
+              .accelerator as MojoAccelerator;
 
       // Replace New Desk shortcut with Alt+']'.
       const newDeskAction = 2;
 
-      addAndVerify(AcceleratorSource.ASH, newDeskAction, overridenAccel);
+      addAndVerify(
+          AcceleratorSource.kAsh, newDeskAction,
+          createEmptyAccelInfoFromAccel(overridenAccel));
 
       // Verify that the New Desk shortcut now has the ALT + ']' accelerator.
-      const newDeskLookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, newDeskAction);
+      const newDeskLookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, newDeskAction);
       assertEquals(2, newDeskLookup.length);
-      assertEquals(
-          JSON.stringify(overridenAccel),
-          JSON.stringify(newDeskLookup[1]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          overridenAccel,
+          newDeskLookup[1]!.layoutProperties.defaultAccelerator.accelerator));
 
       // Replacing a default accelerator should not remove it but rather disable
       // it.
-      const snapWindowRightLookup = getManager().getAccelerators(
-          AcceleratorSource.ASH, snapWindowRightAction);
+      const snapWindowRightLookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, snapWindowRightAction);
       assertEquals(1, snapWindowRightLookup.length);
       assertEquals(
-          AcceleratorState.DISABLED_BY_USER, snapWindowRightLookup[0]!.state);
+          AcceleratorState.kDisabledByUser, snapWindowRightLookup[0]!.state);
     });
   });
 
   test('RemoveDefaultAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator from kAsh[1].
       const expectedAction = 1;
 
       // Initially there is only one accelerator for Snap Window Right.
-      const lookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, expectedAction);
+      const lookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, expectedAction);
       assertEquals(1, lookup.length);
 
       // Remove the accelerator.
-      const removedAccelerator = lookup[0]!.accelerator;
+      const removedAccelerator =
+          lookup[0]!.layoutProperties.defaultAccelerator.accelerator;
       getManager().removeAccelerator(
-          AcceleratorSource.ASH, expectedAction, removedAccelerator);
+          AcceleratorSource.kAsh, expectedAction, removedAccelerator);
 
       // Removing a default accelerator only disables it.
       assertEquals(1, lookup.length);
-      assertEquals(AcceleratorState.DISABLED_BY_USER, lookup[0]!.state);
+      assertEquals(AcceleratorState.kDisabledByUser, lookup[0]!.state);
 
       // Removed accelerator should not appear in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(removedAccelerator)));
+          getManager().getAcceleratorIdFromReverseLookup(removedAccelerator));
     });
   });
 
   test('AddAndRemoveAccelerator', () => {
     getProvider().setFakeAcceleratorConfig(fakeAcceleratorConfig);
-    return getProvider().getAllAcceleratorConfig().then((result) => {
-      assertDeepEquals(fakeAcceleratorConfig, result);
+    return getProvider().getAccelerators().then((result) => {
+      assertDeepEquals(fakeAcceleratorConfig, result.config);
 
-      getManager().setAcceleratorLookup(result);
+      getManager().setAcceleratorLookup(result.config);
 
       // Get Snap Window Right accelerator from kAsh[1]!.
       const expectedAction = 1;
 
       // Initially there is only one accelerator for Snap Window Right.
-      const lookup =
-          getManager().getAccelerators(AcceleratorSource.ASH, expectedAction);
+      const lookup = getManager().getAcceleratorInfos(
+          AcceleratorSource.kAsh, expectedAction);
       assertEquals(1, lookup.length);
 
-      const expectedNewAccel = /** @type {!AcceleratorKeys} */ ({
+      const expectedNewAccel: Accelerator = {
         modifiers: Modifier.CONTROL,
-        key: 79,
-        keyDisplay: 'o',
-      });
+        keyCode: 79,
+      };
 
       // Sanity check that new accel is not in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(expectedNewAccel)));
+          getManager().getAcceleratorIdFromReverseLookup(expectedNewAccel));
 
-      addAndVerify(AcceleratorSource.ASH, expectedAction, expectedNewAccel);
+      addAndVerify(
+          AcceleratorSource.kAsh, expectedAction,
+          createEmptyAccelInfoFromAccel(expectedNewAccel));
 
       // Check that the accelerator got updated in the lookup.
       assertEquals(2, lookup.length);
-      assertEquals(
-          JSON.stringify(expectedNewAccel),
-          JSON.stringify(lookup[1]!.accelerator));
+      assertTrue(areAcceleratorsEqual(
+          expectedNewAccel,
+          lookup[1]!.layoutProperties.defaultAccelerator.accelerator));
 
       // Remove the accelerator.
-      const removedAccelerator = lookup[1]!.accelerator;
+      const removedAccelerator =
+          lookup[1]!.layoutProperties.defaultAccelerator.accelerator;
       getManager().removeAccelerator(
-          AcceleratorSource.ASH, expectedAction, removedAccelerator);
+          AcceleratorSource.kAsh, expectedAction, removedAccelerator);
 
       // Expect only 1 accelerator.
       assertEquals(1, lookup.length);
@@ -357,8 +446,7 @@ suite('acceleratorLookupManagerTest', function() {
       // Removed accelerator should not appear in the reverse lookup.
       assertEquals(
           undefined,
-          getManager().getAcceleratorFromKeys(
-              JSON.stringify(removedAccelerator)));
+          getManager().getAcceleratorIdFromReverseLookup(removedAccelerator));
     });
   });
 });

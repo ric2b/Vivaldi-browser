@@ -1238,27 +1238,4 @@ bool FaviconDatabase::IsFaviconDBStructureIncorrect() {
   return !db_.IsSQLValid("SELECT id, url, icon_type FROM favicons");
 }
 
-void FaviconDatabase::DeleteVivaldiPreloadedFavicons() {
-  // Restrict to vivaldi preloaded bitmaps (i.e. with last_requested == -1).
-  // This is called once on starutp to cleanup preloaded favicons before
-  // setting them up anew, so not worth caching.
-  sql::Statement vivaldi_icons(db_.GetUniqueStatement(
-      "SELECT favicons.id "
-      "FROM favicons "
-      "JOIN favicon_bitmaps ON (favicon_bitmaps.icon_id = favicons.id) "
-      "WHERE (favicon_bitmaps.last_requested = ?)"));
-  vivaldi_icons.BindInt64(0, -1);
-
-  std::set<favicon_base::FaviconID> icon_ids;
-
-  while (vivaldi_icons.Step()) {
-    icon_ids.insert(vivaldi_icons.ColumnInt64(0));
-  }
-
-  for (favicon_base::FaviconID icon_id : icon_ids) {
-    DeleteFavicon(icon_id);
-    DeleteIconMappingsForFaviconId(icon_id);
-  }
-}
-
 }  // namespace favicon

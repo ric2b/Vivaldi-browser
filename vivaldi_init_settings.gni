@@ -14,11 +14,13 @@ import("//build/toolchain/rbe.gni")
 declare_overrides() {
   if(!is_ios) {
     branding_path_component = "vivaldi"
+    branding_path_product = "vivaldi"
   } else {
     # We use google_chrome strings
     # IOS do not have other ways to select the string
     # However, the variable is only used to select the variant strings
     branding_path_component = "google_chrome"
+    branding_path_product = "google_chrome"
   }
   branding_file_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
 
@@ -80,7 +82,7 @@ declare_overrides() {
   if (is_mac) {
     use_system_xcode = true
     #if (getenv("CHROME_HEADLESS") == "1") {
-    #  mac_use_sdk = "12.1"
+    #  mac_use_sdk = "12.3"
     #}
   }
 
@@ -110,5 +112,7 @@ declare_overrides() {
 
     ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_icons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
+
+    ios_chrome_links_with_lottie_framework=false
   }
 }

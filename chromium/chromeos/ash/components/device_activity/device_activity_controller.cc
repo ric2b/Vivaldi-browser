@@ -16,6 +16,7 @@
 #include "chromeos/ash/components/device_activity/first_active_use_case_impl.h"
 #include "chromeos/ash/components/device_activity/fresnel_pref_names.h"
 #include "chromeos/ash/components/device_activity/monthly_use_case_impl.h"
+#include "chromeos/ash/components/device_activity/twenty_eight_day_active_use_case_impl.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -100,6 +101,8 @@ void DeviceActivityController::RegisterPrefs(PrefRegistrySimple* registry) {
                              unix_epoch);
   registry->RegisterTimePref(
       prefs::kDeviceActiveLastKnownFirstActivePingTimestamp, unix_epoch);
+  registry->RegisterTimePref(
+      prefs::kDeviceActiveLastKnown28DayActivePingTimestamp, unix_epoch);
 }
 
 // static
@@ -156,23 +159,25 @@ DeviceActivityController::DeviceActivityController(
     const ChromeDeviceMetadataParameters& chrome_passed_device_params,
     PrefService* local_state,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    base::TimeDelta start_up_delay)
-    : chrome_passed_device_params_(chrome_passed_device_params),
+    base::Time chrome_first_run_time)
+    : chrome_first_run_time_(chrome_first_run_time),
+      chrome_passed_device_params_(chrome_passed_device_params),
       statistics_provider_(
           chromeos::system::StatisticsProvider::GetInstance()) {
   DeviceActivityClient::RecordDeviceActivityMethodCalled(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerConstructor);
 
+  DCHECK(local_state);
   DCHECK(!g_ash_device_activity_controller);
   g_ash_device_activity_controller = this;
 
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&device_activity::DeviceActivityController::Start,
                      weak_factory_.GetWeakPtr(), local_state,
                      url_loader_factory),
-      start_up_delay);
+      DeviceActivityController::DetermineStartUpDelay(chrome_first_run_time));
 }
 
 DeviceActivityController::~DeviceActivityController() {
@@ -243,6 +248,9 @@ void DeviceActivityController::OnMachineStatisticsLoaded(
   use_cases.push_back(std::make_unique<MonthlyUseCaseImpl>(
       psm_device_active_secret, chrome_passed_device_params_, local_state,
       std::make_unique<PsmDelegateImpl>()));
+  use_cases.push_back(std::make_unique<TwentyEightDayActiveUseCaseImpl>(
+      psm_device_active_secret, chrome_passed_device_params_, local_state,
+      std::make_unique<PsmDelegateImpl>()));
   use_cases.push_back(std::make_unique<FirstActiveUseCaseImpl>(
       psm_device_active_secret, chrome_passed_device_params_, local_state,
       std::make_unique<PsmDelegateImpl>()));
@@ -250,7 +258,8 @@ void DeviceActivityController::OnMachineStatisticsLoaded(
   da_client_network_ = std::make_unique<DeviceActivityClient>(
       NetworkHandler::Get()->network_state_handler(), url_loader_factory,
       std::make_unique<base::RepeatingTimer>(), kFresnelBaseUrl,
-      google_apis::GetFresnelAPIKey(), std::move(use_cases));
+      google_apis::GetFresnelAPIKey(), std::move(use_cases),
+      chrome_first_run_time_);
 }
 
 void DeviceActivityController::Stop() {

@@ -6,16 +6,16 @@ import './icons.html.js';
 import './mojo_api.js';
 import './multidevice_setup_shared.css.js';
 import './ui_page.js';
-import '//resources/js/cr.m.js';
+import '//resources/ash/common/cr.m.js';
 import '//resources/cr_elements/cr_lottie/cr_lottie.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 
+import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {WebUIListenerBehavior} from '//resources/ash/common/web_ui_listener_behavior.js';
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {ConnectivityStatus} from 'chrome://resources/mojo/ash/services/device_sync/public/mojom/device_sync.mojom-webui.js';
-import {HostDevice} from 'chrome://resources/mojo/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-webui.js';
+import {ConnectivityStatus} from 'chrome://resources/mojo/chromeos/ash/services/device_sync/public/mojom/device_sync.mojom-webui.js';
+import {HostDevice} from 'chrome://resources/mojo/chromeos/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-webui.js';
 
 import {MultiDeviceSetupDelegate} from './multidevice_setup_delegate.js';
 import {getTemplate} from './start_setup_page.html.js';
@@ -122,6 +122,8 @@ Polymer({
     this.addWebUIListener(
         'multidevice_setup.initializeSetupFlow',
         () => this.initializeSetupFlow_());
+
+    this.addAccessibilityLabel_();
   },
 
   /**
@@ -133,7 +135,12 @@ Polymer({
         .setPlay(enabled);
   },
 
-  /** @private */
+  /**
+   * Since web links cannot be opened in OOBE as there is no web browser, this
+   * attaches a listener to open a webview modal in OOBE when "Learn More" links
+   * are clicked.
+   * @private
+   */
   initializeSetupFlow_() {
     // The "Learn More" links are inside a grdp string, so we cannot actually
     // add an onclick handler directly to the html. Instead, grab the two and
@@ -144,6 +151,23 @@ Polymer({
     for (let i = 0; i < helpArticleLinks.length; i++) {
       helpArticleLinks[i].onclick = this.fire.bind(
           this, 'open-learn-more-webview-requested', helpArticleLinks[i].href);
+    }
+  },
+
+  /**
+   * Adds ARIA description to "Learn More" links since the link tag is embedded
+   * in the grdp string without additional attributes.
+   * @private
+   */
+  addAccessibilityLabel_() {
+    // Since the "Learn More" links are inside a grdp string, we add the
+    // attribute here.
+    const helpArticleLinks = [
+      this.$$('#multidevice-summary-message a'),
+    ];
+    for (let i = 0; i < helpArticleLinks.length; i++) {
+      helpArticleLinks[i].setAttribute(
+          'aria-describedby', 'multidevice-summary-message');
     }
   },
 

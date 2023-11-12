@@ -11,6 +11,8 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_metrics_logger.h"
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
+#include "chrome/browser/image_service/image_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -34,7 +37,8 @@
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_prefs.h"
-#include "components/history_clusters/core/query_clusters_state.h"
+#include "components/history_clusters/ui/query_clusters_state.h"
+#include "components/image_service/image_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
@@ -123,6 +127,9 @@ mojom::URLVisitPtr VisitToMojom(Profile* profile,
   auto visit_mojom = mojom::URLVisit::New();
   visit_mojom->normalized_url = visit.normalized_url;
   visit_mojom->url_for_display = base::UTF16ToUTF8(visit.url_for_display);
+  if (!visit.image_url.is_empty()) {
+    visit_mojom->image_url = visit.image_url;
+  }
 
   // Add the raw URLs and visit times so the UI can perform deletion.
   auto& annotated_visit = visit.annotated_visit;
@@ -330,14 +337,17 @@ void HistoryClustersHandler::OpenHistoryCluster(
   if (!browser)
     return;
 
-  // Used to determine if default behavior should be open in current tab or new
-  // tab since it differs for side panel.
-  const bool in_side_panel = history_clusters_side_panel_embedder_ != nullptr;
+  // In the Side Panel, the default is the current tab. From History WebUI, the
+  // default is a new foreground tab.
+  WindowOpenDisposition default_disposition =
+      history_clusters_side_panel_embedder_
+          ? WindowOpenDisposition::CURRENT_TAB
+          : WindowOpenDisposition::NEW_FOREGROUND_TAB;
 
   WindowOpenDisposition open_location = ui::DispositionFromClick(
-      /*middle_button=*/!in_side_panel, click_modifiers->alt_key,
+      click_modifiers->middle_button, click_modifiers->alt_key,
       click_modifiers->ctrl_key, click_modifiers->meta_key,
-      click_modifiers->shift_key);
+      click_modifiers->shift_key, default_disposition);
   content::OpenURLParams params(url, content::Referrer(), open_location,
                                 ui::PAGE_TRANSITION_AUTO_BOOKMARK,
                                 /*is_renderer_initiated=*/false);
@@ -378,8 +388,11 @@ void HistoryClustersHandler::StartQueryClusters(const std::string& query,
   // request the first batch of clusters.
   auto* history_clusters_service =
       HistoryClustersServiceFactory::GetForBrowserContext(profile_);
+  auto* image_service =
+      image_service::ImageServiceFactory::GetForBrowserContext(profile_);
   query_clusters_state_ = std::make_unique<QueryClustersState>(
-      history_clusters_service->GetWeakPtr(), query, recluster);
+      history_clusters_service->GetWeakPtr(), image_service->GetWeakPtr(),
+      query, recluster);
   LoadMoreClusters(query);
 }
 
@@ -387,9 +400,8 @@ void HistoryClustersHandler::LoadMoreClusters(const std::string& query) {
   if (query_clusters_state_) {
     DCHECK_EQ(query, query_clusters_state_->query());
     query_clusters_state_->LoadNextBatchOfClusters(
-        base::BindOnce(&QueryClustersResultToMojom, profile_)
-            .Then(base::BindOnce(&HistoryClustersHandler::OnClustersQueryResult,
-                                 weak_ptr_factory_.GetWeakPtr())));
+        base::BindOnce(&HistoryClustersHandler::SendClustersToPage,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -503,8 +515,14 @@ Profile* HistoryClustersHandler::GetProfile() {
   return profile_;
 }
 
-void HistoryClustersHandler::OnClustersQueryResult(
-    mojom::QueryResultPtr query_result) {
+void HistoryClustersHandler::SendClustersToPage(
+    const std::string& query,
+    const std::vector<history::Cluster> clusters_batch,
+    bool can_load_more,
+    bool is_continuation) {
+  auto query_result =
+      QueryClustersResultToMojom(profile_, query, std::move(clusters_batch),
+                                 can_load_more, is_continuation);
   page_->OnClustersQueryResult(std::move(query_result));
 
   // The user loading their first set of clusters should start the timer for

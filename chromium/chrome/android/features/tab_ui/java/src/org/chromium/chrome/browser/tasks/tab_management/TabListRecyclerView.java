@@ -29,6 +29,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.DefaultItemAnimator;
@@ -39,6 +40,7 @@ import org.chromium.base.Log;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -251,7 +253,8 @@ class TabListRecyclerView
                 }
                 // TODO(crbug.com/972157): remove this band-aid after we know why GTS is invisible.
                 if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled()) {
-                    requestLayout();
+                    ViewUtils.requestLayout(TabListRecyclerView.this,
+                            "TabListRecyclerView.startShowing.AnimatorListenerAdapter.onAnimationEnd");
                 }
             }
         });
@@ -531,6 +534,63 @@ class TabListRecyclerView
         // Get the relative position.
         componentRect.offset(-recyclerViewRect.left, -recyclerViewRect.top);
         return componentRect;
+    }
+
+    /**
+     * A structure for holding the a recycler view position and offset.
+     */
+    public static class RecyclerViewPosition {
+        private int mPosition;
+        private int mOffset;
+
+        /**
+         * @param position The position of the first visible item in the recyclerView.
+         * @param offset The scroll offset of the recyclerView;
+         */
+        public RecyclerViewPosition(int position, int offset) {
+            mPosition = position;
+            mOffset = offset;
+        }
+
+        /**
+         * @return the position of the first visible item in the RecyclerView.
+         */
+        public int getPosition() {
+            return mPosition;
+        }
+
+        /**
+         * @return the offset from the first item in the RecyclerView.
+         */
+        public int getOffset() {
+            return mOffset;
+        }
+    }
+
+    /**
+     * @return the position and offset of the first visible element in the list.
+     */
+    @NonNull
+    RecyclerViewPosition getRecyclerViewPosition() {
+        GridLayoutManager layoutManager = (GridLayoutManager) getLayoutManager();
+        int position = layoutManager.findFirstVisibleItemPosition();
+        int offset = 0;
+        if (position != RecyclerView.NO_POSITION) {
+            View firstVisibleView = layoutManager.findViewByPosition(position);
+            if (firstVisibleView != null) {
+                offset = firstVisibleView.getTop();
+            }
+        }
+        return new RecyclerViewPosition(position, offset);
+    }
+
+    /**
+     * @param recyclerViewPosition the position and offset to scroll the recycler view to.
+     */
+    void setRecyclerViewPosition(@NonNull RecyclerViewPosition recyclerViewPosition) {
+        ((GridLayoutManager) getLayoutManager())
+                .scrollToPositionWithOffset(
+                        recyclerViewPosition.getPosition(), recyclerViewPosition.getOffset());
     }
 
     /**

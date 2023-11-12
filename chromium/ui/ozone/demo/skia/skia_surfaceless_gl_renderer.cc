@@ -24,6 +24,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/gpu_fence.h"
+#include "ui/gfx/native_pixmap.h"
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
@@ -79,7 +80,9 @@ class SurfacelessSkiaGlRenderer::BufferWrapper {
   BufferWrapper();
   ~BufferWrapper();
 
-  gl::GLImage* image() const { return image_.get(); }
+  scoped_refptr<gfx::NativePixmap> image() const {
+    return image_->GetNativePixmap();
+  }
   SkSurface* sk_surface() const { return sk_surface_.get(); }
 
   bool Initialize(GrDirectContext* gr_context,
@@ -119,12 +122,11 @@ bool SurfacelessSkiaGlRenderer::BufferWrapper::Initialize(
           ->GetSurfaceFactoryOzone()
           ->CreateNativePixmap(widget, nullptr, size, format,
                                gfx::BufferUsage::SCANOUT);
-  auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
-  if (!image->Initialize(std::move(pixmap))) {
+  image_ = gl::GLImageNativePixmap::Create(size, format, std::move(pixmap));
+  if (!image_) {
     LOG(ERROR) << "Failed to create GLImage";
     return false;
   }
-  image_ = image;
 
   glBindTexture(GL_TEXTURE_2D, gl_tex_);
   image_->BindTexImage(GL_TEXTURE_2D);

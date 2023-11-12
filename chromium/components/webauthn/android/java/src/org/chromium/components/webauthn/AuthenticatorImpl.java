@@ -5,7 +5,6 @@
 package org.chromium.components.webauthn;
 
 import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.util.Pair;
@@ -13,7 +12,6 @@ import android.util.Pair;
 import androidx.annotation.RequiresApi;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.PackageUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.blink.mojom.Authenticator;
@@ -96,8 +94,7 @@ public final class AuthenticatorImpl implements Authenticator {
         mSupportLevel = supportLevel;
         mOrigin = mRenderFrameHost.getLastCommittedOrigin();
 
-        Context context = ContextUtils.getApplicationContext();
-        mGmsCorePackageVersion = PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME);
+        mGmsCorePackageVersion = PackageUtils.getPackageVersion(GMSCORE_PACKAGE_NAME);
     }
 
     public static void overrideFido2CredentialRequestForTesting(Fido2CredentialRequest request) {
@@ -228,7 +225,8 @@ public final class AuthenticatorImpl implements Authenticator {
     @Override
     public void isConditionalMediationAvailable(
             final IsConditionalMediationAvailable_Response callback) {
-        if (mGmsCorePackageVersion < GMSCORE_MIN_VERSION) {
+        if (mGmsCorePackageVersion < GMSCORE_MIN_VERSION
+                || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             callback.call(false);
             return;
         }
@@ -246,8 +244,10 @@ public final class AuthenticatorImpl implements Authenticator {
 
     @Override
     public void cancel() {
-        // This is not implemented for anything other than Conditional UI getAssertion requests,
-        // since there is no way to cancel a request that has already triggered gmscore UI.
+        // This is not implemented for anything other than getAssertion requests, since there is
+        // no way to cancel a request that has already triggered gmscore UI. Get requests can be
+        // cancelled if they are pending conditional UI requests, or if they are discoverable
+        // credential requests with the account selector being shown to the user.
         if (!mIsOperationPending || mGetAssertionCallback == null) {
             return;
         }

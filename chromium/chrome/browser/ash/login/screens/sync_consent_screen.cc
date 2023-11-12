@@ -26,6 +26,7 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -129,7 +130,7 @@ void SyncConsentScreen::MaybeLaunchSyncConsentSettings(Profile* profile) {
       // Settings. We delay showing chrome sync settings by
       // kSyncConsentSettingsShowDelay to make the settings tab shows on top of
       // the restored tabs and windows.
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(
               [](Profile* profile) {
@@ -436,7 +437,9 @@ void SyncConsentScreen::SetSyncEverythingEnabled(bool enabled) {
   if (enabled != sync_settings->IsSyncEverythingEnabled()) {
     syncer::UserSelectableTypeSet empty_set;
     sync_settings->SetSelectedTypes(enabled, empty_set);
+  }
 
+  if (enabled != sync_settings->IsSyncAllOsTypesEnabled()) {
     syncer::UserSelectableOsTypeSet os_empty_set;
     sync_settings->SetSelectedOsTypes(enabled, os_empty_set);
   }

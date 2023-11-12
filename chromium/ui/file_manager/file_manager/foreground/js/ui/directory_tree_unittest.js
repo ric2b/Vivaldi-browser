@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {MockVolumeManager} from '../../../background/js/mock_volume_manager.js';
 import {DialogType} from '../../../common/js/dialog_type.js';
@@ -23,7 +24,7 @@ import {MockFolderShortcutDataModel} from '../mock_folder_shortcut_data_model.js
 import {MockNavigationListModel} from '../mock_navigation_list_model.js';
 import {NavigationListModel, NavigationModelFakeItem, NavigationModelItemType, NavigationSection} from '../navigation_list_model.js';
 
-import {DirectoryTree, EntryListItem} from './directory_tree.js';
+import {DirectoryTree, EntryListItem, SubDirectoryItem} from './directory_tree.js';
 
 /** @type {!MockVolumeManager} */
 let volumeManager;
@@ -69,9 +70,7 @@ let mockChrome;
 
 // Set up test components.
 export function setUp() {
-  // Mock LoadTimeData strings.
-  window.loadTimeData.getString = id => id;
-  window.loadTimeData.resetForTesting({
+  loadTimeData.overrideValues({
     FILES_TRASH_ENABLED: false,
     UNIFIED_MEDIA_VIEW_ENABLED: false,
     GUEST_OS: false,
@@ -618,6 +617,135 @@ export function testUpdateSubElementsFromList() {
 }
 
 /**
+ * Test case for updateSubElementsFromList.
+ *
+ * If some of the volumes under MyFiles are disabled, this should be reflected
+ * in the directory model as well: the children shouldn't be loaded, and
+ * clicking on the item or the expand icon shouldn't do anything.
+ */
+export async function testUpdateSubElementsAndroidDisabled(done) {
+  const recentItem = null;
+  const shortcutListModel = new MockFolderShortcutDataModel([]);
+  const androidAppListModel = createFakeAndroidAppListModel([]);
+
+  // Create Android 'Play files' volume and set as disabled.
+  volumeManager.volumeInfoList.add(MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.ANDROID_FILES, 'android_files:droid'));
+  volumeManager.isDisabled = (volume) => {
+    return (volume === VolumeManagerCommon.VolumeType.ANDROID_FILES);
+  };
+
+  const treeModel = new NavigationListModel(
+      volumeManager, shortcutListModel.asFolderShortcutsDataModel(), recentItem,
+      directoryModel, androidAppListModel, DialogType.FULL_PAGE);
+
+  // Populate the directory tree with the mock filesystem.
+  let directoryTree = createElements();
+  const mockMetadata = createMockMetadataModel();
+  DirectoryTree.decorate(
+      directoryTree, directoryModel, volumeManager, mockMetadata,
+      fileOperationManager, true);
+  directoryTree.dataModel = treeModel;
+
+  // Coerce to DirectoryTree type and update the tree.
+  directoryTree = /** @type {!DirectoryTree} */ (directoryTree);
+  directoryTree.updateSubElementsFromList(true);
+
+  const myFilesItem = directoryTree.items[0];
+  await waitUntil(() => myFilesItem.items.length === 1);
+  const androidItem = /** @type {!SubDirectoryItem} */ (myFilesItem.items[0]);
+  assertEquals('android_files:droid', androidItem.label);
+  assertTrue(androidItem.disabled);
+  assertFalse(androidItem.hasChildren);
+
+  // Clicking on the item shouldn't select it.
+  androidItem.click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  assertFalse(androidItem.selected);
+
+  // The item shouldn't be expanded.
+  let isExpanded = androidItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+  // Clicking on the expand icon shouldn't expand.
+  androidItem.querySelector('.expand-icon').click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  isExpanded = androidItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+
+  done();
+}
+
+/**
+ * Test case for updateSubElementsFromList.
+ *
+ * If removable volumes are disabled, they should be allowed to mount/unmount,
+ * but cannot be selected or expanded.
+ */
+export async function testUpdateSubElementsRemovableDisabled(done) {
+  const recentItem = null;
+  const shortcutListModel = new MockFolderShortcutDataModel([]);
+  const androidAppListModel = createFakeAndroidAppListModel([]);
+
+  // Set removable volumes as disabled.
+  volumeManager.isDisabled = (volume) => {
+    return (volume === VolumeManagerCommon.VolumeType.REMOVABLE);
+  };
+
+  const treeModel = new NavigationListModel(
+      volumeManager, shortcutListModel.asFolderShortcutsDataModel(), recentItem,
+      directoryModel, androidAppListModel, DialogType.FULL_PAGE);
+
+  // Populate the directory tree with the mock filesystem.
+  let directoryTree = createElements();
+  const mockMetadata = createMockMetadataModel();
+  DirectoryTree.decorate(
+      directoryTree, directoryModel, volumeManager, mockMetadata,
+      fileOperationManager, true);
+  directoryTree.dataModel = treeModel;
+
+  // Coerce to DirectoryTree type and update the tree.
+  directoryTree = /** @type {!DirectoryTree} */ (directoryTree);
+  directoryTree.updateSubElementsFromList(true);
+
+  // There are 2 volumes at first.
+  assertEquals(2, getDirectoryTreeItemLabels(directoryTree).length);
+
+  // Mount a removable volume.
+  const removableVolume = MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.REMOVABLE, 'removable',
+      str('REMOVABLE_DIRECTORY_LABEL'));
+  volumeManager.volumeInfoList.add(removableVolume);
+
+  // Asserts that a removable directory is added after the update.
+  directoryTree.updateSubElementsFromList(false);
+  assertEquals(3, getDirectoryTreeItemLabels(directoryTree).length);
+
+  const removableItem = directoryTree.items[2];
+  assertEquals(str('REMOVABLE_DIRECTORY_LABEL'), removableItem.label);
+  assertTrue(removableItem.disabled);
+  assertFalse(removableItem.hasChildren);
+  // Clicking on the item shouldn't select it.
+  removableItem.click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  assertFalse(removableItem.selected);
+  // The item shouldn't be expanded.
+  let isExpanded = removableItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+  // Clicking on the expand icon shouldn't expand.
+  removableItem.querySelector('.expand-icon').click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  isExpanded = removableItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+
+  // Unmount the removable and assert that it's removed from the directory tree.
+  volumeManager.volumeInfoList.remove('removable');
+  directoryTree.updateSubElementsFromList(false);
+  assertEquals(2, getDirectoryTreeItemLabels(directoryTree).length);
+
+  done();
+}
+
+/**
  * Test adding the first team drive for a user.
  * Team Drives subtree should be shown after the change notification is
  * delivered.
@@ -792,7 +920,7 @@ export function testAddFirstComputer(callback) {
 
 /**
  * Test removing the last computer for a user.
- * Computerss subtree should be removed after the change notification is
+ * Computers subtree should be removed after the change notification is
  * delivered.
  *
  * @param {!function(boolean)} callback A callback function which is called with
@@ -1101,4 +1229,59 @@ export function testAriaExpanded(callback) {
             downloadsItem.querySelector('.tree-children').getAttribute('role'));
       }),
       callback);
+}
+
+/**
+ * Test a disabled drive volume.
+ *
+ * If drive is disabled, this should be reflected in the directory model as
+ * well: the children shouldn't be loaded, and clicking on the item or the
+ * expand icon shouldn't do anything.
+ */
+export async function testDriveDisabled(done) {
+  // Setup My Drive and Downloads and one folder inside each of them.
+  fakeFileSystemURLEntries['filesystem:drive/root/folder1'] =
+      MockDirectoryEntry.create(driveFileSystem, '/root/folder1');
+  const downloadsFileSystem = volumeManager.volumeInfoList.item(1).fileSystem;
+  fakeFileSystemURLEntries['filesystem:downloads/folder1'] =
+      MockDirectoryEntry.create(downloadsFileSystem, '/folder1');
+
+  // Populate the directory tree with the mock filesystem.
+  let directoryTree = createElements();
+  directoryTree.metadataModel = createMockMetadataModel();
+  const mockMetadata = createMockMetadataModel();
+  DirectoryTree.decorate(
+      directoryTree, directoryModel, volumeManager, mockMetadata,
+      fileOperationManager, true);
+  directoryTree.dataModel = new MockNavigationListModel(volumeManager);
+
+  // Coerce to DirectoryTree type and draw the tree.
+  directoryTree = /** @type {!DirectoryTree} */ (directoryTree);
+  directoryTree.redraw(true);
+
+  // Set the drive to be disabled. We do it here since it's already added when
+  // the MockVolumeManager is created.
+  const driveItem = directoryTree.items[0];
+  driveItem.disabled = true;
+  directoryTree.redraw(true);
+
+  assertEquals(str('DRIVE_DIRECTORY_LABEL'), driveItem.label);
+  assertTrue(driveItem.disabled);
+  assertFalse(driveItem.hasChildren);
+
+  // Clicking on the item shouldn't select it.
+  driveItem.click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  assertFalse(driveItem.selected);
+
+  // The item shouldn't be expanded.
+  let isExpanded = driveItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+  // Clicking on the expand icon shouldn't expand.
+  driveItem.querySelector('.expand-icon').click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  isExpanded = driveItem.getAttribute('aria-expanded') || 'false';
+  assertEquals('false', isExpanded);
+
+  done();
 }

@@ -48,7 +48,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_iterator_result_value.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/properties/css_unresolved_property.h"
@@ -58,7 +57,6 @@
 #include "third_party/blink/renderer/core/dom/dom_string_list.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
-#include "third_party/blink/renderer/core/dom/iterator.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/range.h"
@@ -2020,6 +2018,32 @@ Node* Internals::touchNodeAdjustedToBestContextMenuNode(
   return target_node;
 }
 
+Node* Internals::touchNodeAdjustedToBestStylusWritableNode(
+    int x,
+    int y,
+    int width,
+    int height,
+    Document* document,
+    ExceptionState& exception_state) {
+  DCHECK(document);
+  if (!document->GetFrame()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
+                                      "The document provided is invalid.");
+    return nullptr;
+  }
+
+  HitTestLocation location;
+  HitTestResult result;
+  HitTestRect(location, result, x, y, width, height, document);
+  Node* target_node = nullptr;
+  gfx::Point adjusted_point;
+  document->GetFrame()
+      ->GetEventHandler()
+      .BestStylusWritableNodeForHitTestResult(location, result, adjusted_point,
+                                              target_node);
+  return target_node;
+}
+
 int Internals::lastSpellCheckRequestSequence(Document* document,
                                              ExceptionState& exception_state) {
   SpellCheckRequester* requester = GetSpellCheckRequester(document);
@@ -3142,8 +3166,8 @@ DOMArrayBuffer* Internals::serializeObject(
 ScriptValue Internals::deserializeBuffer(v8::Isolate* isolate,
                                          DOMArrayBuffer* buffer) const {
   scoped_refptr<SerializedScriptValue> serialized_value =
-      SerializedScriptValue::Create(static_cast<const char*>(buffer->Data()),
-                                    buffer->ByteLength());
+      SerializedScriptValue::Create(base::make_span(
+          static_cast<const uint8_t*>(buffer->Data()), buffer->ByteLength()));
   return ScriptValue(isolate, serialized_value->Deserialize(isolate));
 }
 
@@ -3583,7 +3607,8 @@ Vector<String> Internals::getCSSPropertyLonghands() const {
   Vector<String> result;
   for (CSSPropertyID property : CSSPropertyIDList()) {
     const CSSProperty& property_class = CSSProperty::Get(property);
-    if (property_class.IsLonghand()) {
+    if (property_class.IsWebExposed(document_->GetExecutionContext()) &&
+        property_class.IsLonghand()) {
       result.push_back(property_class.GetPropertyNameString());
     }
   }
@@ -3594,7 +3619,8 @@ Vector<String> Internals::getCSSPropertyShorthands() const {
   Vector<String> result;
   for (CSSPropertyID property : CSSPropertyIDList()) {
     const CSSProperty& property_class = CSSProperty::Get(property);
-    if (property_class.IsShorthand()) {
+    if (property_class.IsWebExposed(document_->GetExecutionContext()) &&
+        property_class.IsShorthand()) {
       result.push_back(property_class.GetPropertyNameString());
     }
   }
@@ -3605,8 +3631,11 @@ Vector<String> Internals::getCSSPropertyAliases() const {
   Vector<String> result;
   for (CSSPropertyID alias : kCSSPropertyAliasList) {
     DCHECK(IsPropertyAlias(alias));
-    result.push_back(CSSUnresolvedProperty::GetAliasProperty(alias)
-                         ->GetPropertyNameString());
+    const CSSUnresolvedProperty* property_class =
+        CSSUnresolvedProperty::GetAliasProperty(alias);
+    if (property_class->IsWebExposed(document_->GetExecutionContext())) {
+      result.push_back(property_class->GetPropertyNameString());
+    }
   }
   return result;
 }
@@ -3735,10 +3764,6 @@ Vector<String> Internals::supportedTextEncodingLabels() const {
 
 void Internals::simulateRasterUnderInvalidations(bool enable) {
   RasterInvalidationTracking::SimulateRasterUnderInvalidations(enable);
-}
-
-unsigned Internals::LifecycleUpdateCount() const {
-  return document_->View()->LifecycleUpdateCountForTesting();
 }
 
 void Internals::DisableIntersectionObserverThrottleDelay() const {

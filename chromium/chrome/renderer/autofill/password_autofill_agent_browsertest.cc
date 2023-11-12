@@ -50,10 +50,6 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "components/autofill/core/common/autofill_features.h"
-#endif
-
 #if BUILDFLAG(IS_WIN)
 #include "third_party/blink/public/web/win/web_font_rendering.h"
 #endif
@@ -2774,7 +2770,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationTriggered_TypedPassword) {
 
   SetFoundFormEligibleForGeneration(
       password_generation_, GetMainFrame()->GetDocument(),
-      "password" /* new_password_id */, nullptr /* confirm_password_id*/);
+      /*new_password_id=*/"password", /*confirm_password_id=*/nullptr);
 
   // Generation event is triggered due to focus events.
   EXPECT_CALL(fake_pw_client_, GenerationElementLostFocus())
@@ -2796,7 +2792,7 @@ TEST_F(PasswordAutofillAgentTest,
 
   SetFoundFormEligibleForGeneration(
       password_generation_, GetMainFrame()->GetDocument(),
-      "password" /* new_password_id */, nullptr /* confirm_password_id*/);
+      /*new_password_id=*/"password", /*confirm_password_id=*/nullptr);
   // Simulate the user clicks on a password field, that leads to showing
   // generaiton pop-up. GeneratedPasswordAccepted can't be called without it.
   FocusElement(kPasswordName);
@@ -2817,7 +2813,7 @@ TEST_F(PasswordAutofillAgentTest,
   // A user generates password.
   SetFoundFormEligibleForGeneration(
       password_generation_, GetMainFrame()->GetDocument(),
-      "password" /* new_password_id */, nullptr /* confirm_password_id*/);
+      /*new_password_id=*/"password", /*confirm_password_id=*/nullptr);
   // Simulate the user clicks on a password field, that leads to showing
   // generaiton pop-up. GeneratedPasswordAccepted can't be called without it.
   FocusElement(kPasswordName);
@@ -2882,10 +2878,10 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
   SimulateOnFillPasswordForm(fill_data_);
 
   // Simulate generation triggering.
-  SetFoundFormEligibleForGeneration(
-      password_generation_, GetMainFrame()->GetDocument(),
-      "new_password" /* new_password_id */,
-      "confirm_password" /* confirm_password_id*/);
+  SetFoundFormEligibleForGeneration(password_generation_,
+                                    GetMainFrame()->GetDocument(),
+                                    /*new_password_id=*/"new_password",
+                                    /*confirm_password_id=*/"confirm_password");
 
   // Simulate the field being clicked to start typing. This should trigger
   // generation but not password autofill.

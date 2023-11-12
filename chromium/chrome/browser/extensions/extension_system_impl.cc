@@ -67,13 +67,13 @@
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_update_install_gate.h"
+#include "chrome/browser/ash/extensions/device_local_account_management_policy_provider.h"
+#include "chrome/browser/ash/extensions/extensions_permissions_tracker.h"
+#include "chrome/browser/ash/extensions/signin_screen_policy_provider.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/extensions/device_local_account_management_policy_provider.h"
-#include "chrome/browser/chromeos/extensions/extensions_permissions_tracker.h"
-#include "chrome/browser/chromeos/extensions/signin_screen_policy_provider.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chromeos/login/login_state/login_state.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -261,8 +261,8 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   // Skip loading session extensions if we are not in a user session or if the
   // profile is the sign-in or lock screen app profile, which don't correspond
   // to a user session.
-  skip_session_extensions = !chromeos::LoginState::Get()->IsUserLoggedIn() ||
-                            !ash::ProfileHelper::IsRegularProfile(profile_);
+  skip_session_extensions = !ash::LoginState::Get()->IsUserLoggedIn() ||
+                            !ash::ProfileHelper::IsUserProfile(profile_);
   if (chrome::IsRunningInForcedAppMode()) {
     extension_service_->component_loader()->
         AddDefaultComponentExtensionsForKioskMode(skip_session_extensions);
@@ -455,7 +455,7 @@ void ExtensionSystemImpl::InstallUpdate(
 
   scoped_refptr<CrxInstaller> installer = CrxInstaller::CreateSilent(service);
   installer->set_delete_source(true);
-  installer->set_installer_callback(std::move(install_update_callback));
+  installer->AddInstallerCallback(std::move(install_update_callback));
   installer->set_install_immediately(install_immediately);
   installer->UpdateExtensionFromUnpackedCrx(extension_id, public_key,
                                             unpacked_dir);
@@ -483,8 +483,8 @@ void ExtensionSystemImpl::RegisterExtensionWithRequestContexts(
     base::OnceClosure callback) {
   base::Time install_time;
   if (extension->location() != mojom::ManifestLocation::kComponent) {
-    install_time = ExtensionPrefs::Get(profile_)->
-        GetInstallTime(extension->id());
+    install_time =
+        ExtensionPrefs::Get(profile_)->GetLastUpdateTime(extension->id());
   }
   bool incognito_enabled = util::IsIncognitoEnabled(extension->id(), profile_);
 

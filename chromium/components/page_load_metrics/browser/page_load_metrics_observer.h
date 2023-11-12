@@ -26,14 +26,6 @@
 
 namespace page_load_metrics {
 
-// Get bucketed value of viewport initial scale from given MobileFriendliness
-// metrics.
-int GetBucketedViewportInitialScale(const blink::MobileFriendliness& mf);
-
-// Get bucketed value of hardcoded viewport width from given MobileFriendliness
-// metrics.
-int GetBucketedViewportHardcodedWidth(const blink::MobileFriendliness& mf);
-
 // Information related to whether an associated action, such as a navigation or
 // an abort, was initiated by a user. Clicking a link or tapping on a UI
 // element are examples of user initiation actions.
@@ -90,18 +82,6 @@ struct PageRenderData {
   // dependent (see comments on page_render_data_ and main_frame_render_data_
   // in PageLoadMetricsUpdateDispatcher).
   float layout_shift_score_before_input_or_scroll = 0;
-
-  // How many LayoutBlock instances were created.
-  uint64_t all_layout_block_count = 0;
-
-  // How many LayoutNG-based LayoutBlock instances were created.
-  uint64_t ng_layout_block_count = 0;
-
-  // How many times LayoutObject::UpdateLayout() is called.
-  uint64_t all_layout_call_count = 0;
-
-  // How many times LayoutNG-based LayoutObject::UpdateLayout() is called.
-  uint64_t ng_layout_call_count = 0;
 };
 
 // Information related to layout shift normalization for different strategies.
@@ -167,12 +147,13 @@ class PageLoadMetricsObserver : public PageLoadMetricsObserverInterface {
   void OnTimingUpdate(content::RenderFrameHost* subframe_rfh,
                       const mojom::PageLoadTiming& timing) override {}
   void OnSoftNavigationCountUpdated() override {}
-  void OnMobileFriendlinessUpdate(
-      const blink::MobileFriendliness& mobile_friendliness) override {}
   void OnInputTimingUpdate(
       content::RenderFrameHost* subframe_rfh,
       const mojom::InputTiming& input_timing_delta) override {}
-  void OnPageInputTimingUpdate(uint64_t num_input_events) override {}
+  void OnPageInputTimingUpdate(uint64_t num_interactions,
+                               uint64_t num_input_events) override {}
+  void OnPageRenderDataUpdate(const mojom::FrameRenderDataUpdate& render_data,
+                              bool is_main_frame) override {}
   void OnSubFrameRenderDataUpdate(
       content::RenderFrameHost* subframe_rfh,
       const mojom::FrameRenderDataUpdate& render_data) override {}

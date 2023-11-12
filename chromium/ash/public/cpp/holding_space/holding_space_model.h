@@ -18,6 +18,7 @@
 #include "base/callback.h"
 #include "base/observer_list.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/color/color_id.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -80,10 +81,10 @@ class ASH_PUBLIC_EXPORT HoldingSpaceModel {
     ScopedItemUpdate& SetSecondaryText(
         const absl::optional<std::u16string>& secondary_text);
 
-    // Sets the color for the secondary text that should be shown for the item
-    // and returns a reference to `this`.
-    ScopedItemUpdate& SetSecondaryTextColor(
-        const absl::optional<cros_styles::ColorName>& secondary_text_color);
+    // Sets the color id for the secondary text that should be shown for the
+    // item and returns a reference to `this`.
+    ScopedItemUpdate& SetSecondaryTextColorId(
+        const absl::optional<ui::ColorId>& secondary_text_color);
 
     // Sets the text that should be shown for the item and returns a reference
     // to `this`. If absent, the lossy display name of the backing file will be
@@ -104,8 +105,7 @@ class ASH_PUBLIC_EXPORT HoldingSpaceModel {
         in_progress_commands_;
     absl::optional<HoldingSpaceProgress> progress_;
     absl::optional<absl::optional<std::u16string>> secondary_text_;
-    absl::optional<absl::optional<cros_styles::ColorName>>
-        secondary_text_color_;
+    absl::optional<absl::optional<ui::ColorId>> secondary_text_color_id_;
     absl::optional<absl::optional<std::u16string>> text_;
     bool invalidate_image_ = false;
   };
@@ -127,6 +127,10 @@ class ASH_PUBLIC_EXPORT HoldingSpaceModel {
   // Removes multiple holding space items from the model.
   void RemoveItems(const std::set<std::string>& ids);
 
+  // Similar to `RemoveItem()` but returns the unique pointer to the removed
+  // item. If the specified item does not exist in the model, returns `nullptr`.
+  std::unique_ptr<HoldingSpaceItem> TakeItem(const std::string& id);
+
   // Fully initializes a partially initialized holding space item using the
   // provided `file_system_url`. The item will be removed if `file_system_url`
   // is empty.
@@ -138,9 +142,10 @@ class ASH_PUBLIC_EXPORT HoldingSpaceModel {
   std::unique_ptr<ScopedItemUpdate> UpdateItem(const std::string& id);
 
   // Removes all holding space items from the model for which the specified
-  // `predicate` returns true.
+  // `predicate` returns true. Returns the unique pointers to the items removed
+  // from the model.
   using Predicate = base::RepeatingCallback<bool(const HoldingSpaceItem*)>;
-  void RemoveIf(Predicate predicate);
+  std::vector<std::unique_ptr<HoldingSpaceItem>> RemoveIf(Predicate predicate);
 
   // Invalidates image representations for items for which the specified
   // `predicate` returns true.

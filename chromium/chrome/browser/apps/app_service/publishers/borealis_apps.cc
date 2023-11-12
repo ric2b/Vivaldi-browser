@@ -141,9 +141,13 @@ void BorealisApps::CallWithBorealisAllowed(
       base::BindOnce(
           [](base::OnceCallback<void(bool)> callback,
              borealis::BorealisFeatures::AllowStatus allow_status) {
-            std::move(callback).Run(
-                allow_status ==
-                borealis::BorealisFeatures::AllowStatus::kAllowed);
+            bool allowed = allow_status ==
+                           borealis::BorealisFeatures::AllowStatus::kAllowed;
+            if (!allowed) {
+              LOG(WARNING) << "Borealis not allowed: "
+                           << static_cast<int>(allow_status);
+            }
+            std::move(callback).Run(allowed);
           },
           std::move(callback)));
 }
@@ -381,12 +385,8 @@ void BorealisApps::Launch(const std::string& app_id,
 
 void BorealisApps::LaunchAppWithParams(AppLaunchParams&& params,
                                        LaunchCallback callback) {
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    Launch(params.app_id, ui::EF_NONE, LaunchSource::kUnknown, nullptr);
-  } else {
-    Launch(params.app_id, ui::EF_NONE, apps::mojom::LaunchSource::kUnknown,
-           nullptr);
-  }
+  Launch(params.app_id, ui::EF_NONE, LaunchSource::kUnknown, nullptr);
+
   // TODO(crbug.com/1244506): Add launch return value.
   std::move(callback).Run(LaunchResult());
 }
@@ -454,36 +454,6 @@ void BorealisApps::Connect(
 
   CallWithBorealisAllowed(base::BindOnce(&BorealisApps::SetUpSpecialAppsMojom,
                                          weak_factory_.GetWeakPtr()));
-}
-
-void BorealisApps::Launch(const std::string& app_id,
-                          int32_t event_flags,
-                          apps::mojom::LaunchSource launch_source,
-                          apps::mojom::WindowInfoPtr window_info) {
-  borealis::BorealisService::GetForProfile(profile_)->AppLauncher().Launch(
-      app_id, base::DoNothing());
-}
-
-void BorealisApps::SetPermission(const std::string& app_id,
-                                 apps::mojom::PermissionPtr permission_ptr) {
-  SetPermission(app_id, ConvertMojomPermissionToPermission(permission_ptr));
-}
-
-void BorealisApps::Uninstall(const std::string& app_id,
-                             apps::mojom::UninstallSource uninstall_source,
-                             bool clear_site_data,
-                             bool report_abuse) {
-  borealis::BorealisService::GetForProfile(profile_)
-      ->AppUninstaller()
-      .Uninstall(app_id, base::DoNothing());
-}
-
-void BorealisApps::GetMenuModel(const std::string& app_id,
-                                apps::mojom::MenuType menu_type,
-                                int64_t display_id,
-                                GetMenuModelCallback callback) {
-  GetMenuModel(app_id, ConvertMojomMenuTypeToMenuType(menu_type), display_id,
-               MenuItemsToMojomMenuItemsCallback(std::move(callback)));
 }
 
 void BorealisApps::OnRegistryUpdated(

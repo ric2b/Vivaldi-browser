@@ -10,7 +10,6 @@ import android.os.Build.VERSION_CODES;
 import androidx.annotation.IntDef;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Predicate;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -21,6 +20,8 @@ import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.content_public.browser.WebContents;
+
+import java.util.function.Predicate;
 
 /**
  * The back press handler as the final step of back press handling. This is always enabled in order
@@ -127,9 +128,10 @@ public class MinimizeAppAndCloseTabBackPressHandler implements BackPressHandler,
     private static boolean shouldUseSystemBack() {
         // https://developer.android.com/about/versions/12/behavior-changes-all#back-press
         // Starting from 12, root launcher activities are no longer finished on Back press.
-        boolean isAtLeastS = (sVersionForTesting == null ? VERSION.SDK_INT : sVersionForTesting)
-                >= VERSION_CODES.S;
-        return isAtLeastS
+        // Limiting to T, since some OEMs seem to still finish activity on 12.
+        boolean isAtLeastT = (sVersionForTesting == null ? VERSION.SDK_INT : sVersionForTesting)
+                >= VERSION_CODES.TIRAMISU;
+        return isAtLeastT
                 && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                         ChromeFeatureList.BACK_GESTURE_REFACTOR, "system_back", false);
     }

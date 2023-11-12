@@ -42,6 +42,7 @@ class ElementInternals;
 class ExceptionState;
 class FormAssociated;
 class HTMLFormElement;
+class HTMLSelectMenuElement;
 class KeyboardEvent;
 class V8UnionStringTreatNullAsEmptyStringOrTrustedScript;
 
@@ -56,6 +57,37 @@ enum class ContentEditableType {
   kContentEditable,
   kNotContentEditable,
   kPlaintextOnly,
+};
+
+enum class PopoverValueType {
+  kNone,
+  kAuto,
+  kManual,
+};
+constexpr const char* kPopoverTypeValueAuto = "auto";
+constexpr const char* kPopoverTypeValueManual = "manual";
+
+enum class PopoverTriggerAction {
+  kNone,
+  kToggle,
+  kShow,
+  kHide,
+};
+
+enum class HidePopoverFocusBehavior {
+  kNone,
+  kFocusPreviousElement,
+};
+
+enum class HidePopoverForcingLevel {
+  kHideAfterAnimations,
+  kHideImmediately,
+};
+
+enum class PopoverAncestorType {
+  kDefault,
+  kNewPopover,
+  kInclusive,
 };
 
 class CORE_EXPORT HTMLElement : public Element {
@@ -155,12 +187,14 @@ class CORE_EXPORT HTMLElement : public Element {
 
   virtual String AltText() const { return String(); }
 
+  // unclosedOffsetParent doesn't return Elements which are closed shadow hidden
+  // from this element. offsetLeftForBinding and offsetTopForBinding have their
+  // values adjusted for this as well.
+  Element* unclosedOffsetParent();
   int offsetLeftForBinding();
   int offsetTopForBinding();
   int offsetWidthForBinding();
   int offsetHeightForBinding();
-
-  Element* unclosedOffsetParent();
 
   ElementInternals* attachInternals(ExceptionState& exception_state);
   virtual FormAssociated* ToFormAssociatedOrNull() { return nullptr; }
@@ -179,6 +213,47 @@ class CORE_EXPORT HTMLElement : public Element {
 
   // https://html.spec.whatwg.org/C/#potentially-render-blocking
   virtual bool IsPotentiallyRenderBlocking() const { return false; }
+
+  // Popover API related functions.
+  void UpdatePopoverAttribute(String);
+  bool HasPopoverAttribute() const;
+  PopoverValueType PopoverType() const;
+  bool popoverOpen() const;
+  const char* IsPopoverNotReady(PopoverTriggerAction action,
+                                DOMExceptionCode& exception_code) const;
+  bool IsPopoverReady(PopoverTriggerAction action) const;
+  void togglePopover(ExceptionState& exception_state);
+  void togglePopover(bool force, ExceptionState& exception_state);
+  void showPopover(ExceptionState& exception_state);
+  void hidePopover(ExceptionState& exception_state);
+  void HidePopoverInternal(HidePopoverFocusBehavior focus_behavior,
+                           HidePopoverForcingLevel forcing_level);
+  void PopoverHideFinishIfNeeded();
+  static const HTMLElement* NearestOpenAncestralPopover(const Node&,
+                                                        PopoverAncestorType);
+
+  // Retrieves the element pointed to by this element's 'anchor' content
+  // attribute, if that element exists, and if this element is a popover.
+  Element* anchorElement() const;
+  void ResetPopoverAnchorObserver();
+  void PopoverAnchorElementChanged();
+  static void HandlePopoverLightDismiss(const Event& event, const Node& node);
+  void InvokePopover(Element* invoker);
+  void SetPopoverFocusOnShow();
+  // This hides all visible popovers up to, but not including,
+  // |endpoint|. If |endpoint| is nullptr, all popovers are hidden.
+  static void HideAllPopoversUntil(const HTMLElement*,
+                                   Document&,
+                                   HidePopoverFocusBehavior,
+                                   HidePopoverForcingLevel);
+
+  void SetOwnerSelectMenuElement(HTMLSelectMenuElement* element);
+  HTMLSelectMenuElement* ownerSelectMenuElement() const;
+
+  bool DispatchFocusEvent(
+      Element* old_focused_element,
+      mojom::blink::FocusType,
+      InputDeviceCapabilities* source_capabilities) override;
 
  protected:
   enum AllowPercentage { kDontAllowPercentageValues, kAllowPercentageValues };
@@ -267,6 +342,9 @@ class CORE_EXPORT HTMLElement : public Element {
   void OnNonceAttrChanged(const AttributeModificationParams&);
 
   void ReparseAttribute(const AttributeModificationParams&);
+
+  int AdjustedOffsetForZoom(LayoutUnit);
+  int OffsetTopOrLeft(bool top);
 };
 
 template <typename T>

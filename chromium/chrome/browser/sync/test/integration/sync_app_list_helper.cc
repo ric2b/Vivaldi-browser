@@ -8,13 +8,13 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
+#include "chrome/browser/ash/app_list/chrome_app_list_item.h"
+#include "chrome/browser/ash/app_list/chrome_app_list_model_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
-#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
-#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_system.h"
@@ -41,15 +41,6 @@ void SyncAppListHelper::SetupIfNecessary(SyncTest* test) {
   for (Profile* profile : test_->GetAllProfiles()) {
     extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(
         true /* extensions_enabled */);
-    if (test_->UseVerifier() && profile == test_->verifier()) {
-      // The default page break items are only installed for first-time users.
-      // The verifier() profile doesn't get initialized with remote sync data,
-      // and hence the default page breaks are not installed for it. We have to
-      // install them manually to avoid a mismatch when comparing the verifier()
-      // against other client profiles.
-      app_list::AppListSyncableServiceFactory::GetForProfile(profile)
-          ->InstallDefaultPageBreaksForTest();
-    }
   }
 
   setup_completed_ = true;

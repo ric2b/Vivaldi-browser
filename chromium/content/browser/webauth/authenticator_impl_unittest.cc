@@ -29,6 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_command_line.h"
@@ -175,10 +176,6 @@ constexpr char kTestOrigin1[] = "https://a.google.com";
 constexpr char kTestOrigin2[] = "https://acme.org";
 constexpr char kTestRelyingPartyId[] = "google.com";
 constexpr char kExtensionScheme[] = "chrome-extension";
-constexpr char kCryptotokenOrigin[] =
-    "chrome-extension://kmendfapggjehodndflmmgagdbamhnfd";
-constexpr char kTestExtensionOrigin[] =
-    "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
 static constexpr char kCorpCrdOrigin[] =
     "https://remotedesktop.corp.google.com";
 
@@ -784,18 +781,6 @@ TEST_F(AuthenticatorImplTest, ClientDataJSONSerialization) {
           false,
       },
       {
-          ClientDataRequestType::kU2fRegister,
-          GetTestOrigin(),
-          {1, 2, 3, 4},
-          true,
-      },
-      {
-          ClientDataRequestType::kU2fSign,
-          GetTestOrigin(),
-          {1, 2, 3, 4, 5},
-          true,
-      },
-      {
           ClientDataRequestType::kPaymentGet,
           GetTestOrigin(),
           {1, 2, 3},
@@ -815,14 +800,6 @@ TEST_F(AuthenticatorImplTest, ClientDataJSONSerialization) {
     std::string type_key;
     std::string expected_type;
     switch (test.type) {
-      case ClientDataRequestType::kU2fRegister:
-        type_key = "typ";
-        expected_type = "navigator.id.finishEnrollment";
-        break;
-      case ClientDataRequestType::kU2fSign:
-        type_key = "typ";
-        expected_type = "navigator.id.getAssertion";
-        break;
       case ClientDataRequestType::kWebAuthnCreate:
         type_key = "type";
         expected_type = "webauthn.create";
@@ -1044,186 +1021,6 @@ TEST_F(AuthenticatorImplTest, AppIdExtensionValues) {
                                                   test_case.claimed_authority);
     EXPECT_TRUE(test_status == AuthenticatorStatus::INVALID_DOMAIN ||
                 test_status == test_case.expected_status);
-  }
-}
-
-// Verify that a request coming from Cryptotoken bypasses origin checks.
-TEST_F(AuthenticatorImplTest, CryptotokenBypass) {
-  {
-    NavigateAndCommit(GURL(kCryptotokenOrigin));
-    // First, verify that the Cryptotoken request succeeds with the appid.
-    PublicKeyCredentialRequestOptionsPtr options =
-        GetTestPublicKeyCredentialRequestOptions();
-    options->relying_party_id = std::string(kTestOrigin1);
-
-    // Inject a registration for the URL (which is a U2F AppID).
-    ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-        options->allow_credentials[0].id, kTestOrigin1));
-
-    options->appid = kTestOrigin1;
-
-    GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
-    EXPECT_EQ(result.response->echo_appid_extension, true);
-    EXPECT_EQ(result.response->appid_extension, true);
-  }
-
-  {
-    ResetVirtualDevice();
-    NavigateAndCommit(GURL(kTestExtensionOrigin));
-    // Next, verify that other extensions cannot bypass the origin checks.
-    PublicKeyCredentialRequestOptionsPtr options =
-        GetTestPublicKeyCredentialRequestOptions();
-    options->relying_party_id = std::string(kTestOrigin1);
-
-    // Inject a registration for the URL (which is a U2F AppID).
-    ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-        options->allow_credentials[0].id, kTestOrigin1));
-
-    options->appid = kTestOrigin1;
-
-    EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
-              AuthenticatorStatus::INVALID_PROTOCOL);
-  }
-}
-
-// MakeCredential requests from cryptotoken to a U2F authenticator should
-// succeed.
-TEST_F(AuthenticatorImplTest, CryptoTokenMakeCredentialU2fDevice) {
-  virtual_device_factory_->SetSupportedProtocol(device::ProtocolVersion::kU2f);
-
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  PublicKeyCredentialCreationOptionsPtr options =
-      GetTestPublicKeyCredentialCreationOptions();
-  options->relying_party.id = kTestOrigin1;
-
-  EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
-            AuthenticatorStatus::SUCCESS);
-}
-
-// MakeCredential requests from cryptotoken to an authentictor that does not
-// support U2F should fail.
-TEST_F(AuthenticatorImplTest, CryptoTokenMakeCredentialCtap2Device) {
-  virtual_device_factory_->SetSupportedProtocol(
-      device::ProtocolVersion::kCtap2);
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-
-  PublicKeyCredentialCreationOptionsPtr options =
-      GetTestPublicKeyCredentialCreationOptions();
-  options->relying_party.id = kTestOrigin1;
-
-  EXPECT_EQ(
-      AuthenticatorMakeCredentialAndWaitForTimeout(std::move(options)).status,
-      AuthenticatorStatus::NOT_ALLOWED_ERROR);
-}
-
-// GetAssertion requests from cryptotoken to a U2F/CTAP authenticator should
-// use the U2F interface.
-TEST_F(AuthenticatorImplTest, CryptoTokenMakeCredentialDualProtocolDevice) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  virtual_device_factory_->SetSupportedProtocol(
-      device::ProtocolVersion::kCtap2);
-  device::VirtualCtap2Device::Config config;
-  config.u2f_support = true;
-  virtual_device_factory_->SetCtap2Config(config);
-
-  PublicKeyCredentialCreationOptionsPtr options =
-      GetTestPublicKeyCredentialCreationOptions();
-  options->relying_party.id = kTestOrigin1;
-
-  EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
-            AuthenticatorStatus::SUCCESS);
-  ASSERT_EQ(virtual_device_factory_->mutable_state()->registrations.size(), 1u);
-  EXPECT_TRUE(virtual_device_factory_->mutable_state()
-                  ->registrations.begin()
-                  ->second.is_u2f);
-}
-
-// GetAssertion requests from cryptotoken to a U2F authenticator should
-// succeed.
-TEST_F(AuthenticatorImplTest, CryptoTokenGetAssertionU2fDevice) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  virtual_device_factory_->SetSupportedProtocol(device::ProtocolVersion::kU2f);
-
-  PublicKeyCredentialRequestOptionsPtr options =
-      GetTestPublicKeyCredentialRequestOptions();
-  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-      options->allow_credentials[0].id, kTestOrigin1));
-  options->appid = kTestOrigin1;
-
-  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
-            AuthenticatorStatus::SUCCESS);
-}
-
-// GetAssertion requests from cryptotoken to an authentictor that does not
-// support U2F should fail.
-TEST_F(AuthenticatorImplTest, CryptoTokenGetAssertionCtap2Device) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  virtual_device_factory_->SetSupportedProtocol(
-      device::ProtocolVersion::kCtap2);
-
-  PublicKeyCredentialRequestOptionsPtr options =
-      GetTestPublicKeyCredentialRequestOptions();
-  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-      options->allow_credentials[0].id, kTestOrigin1));
-  options->appid = kTestOrigin1;
-
-  EXPECT_EQ(
-      AuthenticatorGetAssertionAndWaitForTimeout(std::move(options)).status,
-      AuthenticatorStatus::NOT_ALLOWED_ERROR);
-}
-
-// GetAssertion requests from cryptotoken should challenge credential on a
-// U2F/CTAP authenticator via the U2F interface.
-TEST_F(AuthenticatorImplTest, CryptoTokenGetAssertionDualProtocolDevice) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  virtual_device_factory_->SetSupportedProtocol(
-      device::ProtocolVersion::kCtap2);
-  device::VirtualCtap2Device::Config config;
-  config.u2f_support = true;
-  config.ignore_u2f_credentials = true;
-  virtual_device_factory_->SetCtap2Config(config);
-
-  PublicKeyCredentialRequestOptionsPtr options =
-      GetTestPublicKeyCredentialRequestOptions();
-  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-      options->allow_credentials[0].id, kTestOrigin1));
-  options->appid = kTestOrigin1;
-
-  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
-            AuthenticatorStatus::SUCCESS);
-}
-
-// Test that Cryptotoken requests should only be dispatched to USB
-// authenticators.
-TEST_F(AuthenticatorImplTest, CryptotokenUsbOnly) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-
-  // caBLE and platform discoveries cannot be instantiated through
-  // VirtualFidoDeviceFactory, so we don't test them here.
-  for (const device::FidoTransportProtocol transport :
-       {device::FidoTransportProtocol::kUsbHumanInterfaceDevice,
-        device::FidoTransportProtocol::kBluetoothLowEnergy,
-        device::FidoTransportProtocol::kNearFieldCommunication}) {
-    SCOPED_TRACE(::testing::Message()
-                 << "transport=" << device::ToString(transport));
-
-    ResetVirtualDevice();
-    virtual_device_factory_->SetSupportedProtocol(
-        device::ProtocolVersion::kU2f);
-    virtual_device_factory_->SetTransport(transport);
-    virtual_device_factory_->mutable_state()->transport = transport;
-
-    PublicKeyCredentialCreationOptionsPtr options =
-        GetTestPublicKeyCredentialCreationOptions();
-
-    if (transport == device::FidoTransportProtocol::kUsbHumanInterfaceDevice) {
-      EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
-                AuthenticatorStatus::SUCCESS);
-    } else {
-      EXPECT_EQ(AuthenticatorMakeCredentialAndWaitForTimeout(std::move(options))
-                    .status,
-                AuthenticatorStatus::NOT_ALLOWED_ERROR);
-    }
   }
 }
 
@@ -1569,7 +1366,7 @@ TEST_F(AuthenticatorImplTest, NavigationDuringOperation) {
   // Simulate a navigation while waiting for the user to press the token.
   virtual_device_factory_->mutable_state()->simulate_press_callback =
       base::BindLambdaForTesting([&](device::VirtualFidoDevice* device) {
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindLambdaForTesting(
                            [&]() { NavigateAndCommit(GURL(kTestOrigin2)); }));
         return false;
@@ -1767,7 +1564,7 @@ class TestWebAuthenticationRequestProxy : public WebAuthenticationRequestProxy {
     current_request_id_++;
     observations_.num_isuvpaa++;
     if (config_.resolve_callbacks) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), config_.is_uvpaa));
       return current_request_id_;
     }
@@ -1799,8 +1596,8 @@ class TestWebAuthenticationRequestProxy : public WebAuthenticationRequestProxy {
                              WebAuthnDOMExceptionDetails::New(
                                  config_.request_error_name, "message"),
                              nullptr);
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     std::move(callback));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
   }
 
   void RunPendingGetCallback() {
@@ -1815,8 +1612,8 @@ class TestWebAuthenticationRequestProxy : public WebAuthenticationRequestProxy {
                              WebAuthnDOMExceptionDetails::New(
                                  config_.request_error_name, "message"),
                              nullptr);
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     std::move(callback));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
   }
 
   void RunPendingIsUvpaaCallback() {
@@ -1898,6 +1695,12 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
     return caller_origin == remote_desktop_client_override_origin;
   }
 
+  bool IsSecurityLevelAcceptableForWebAuthn(
+      content::RenderFrameHost* rfh,
+      const url::Origin& origin) override {
+    return is_webauthn_security_level_acceptable;
+  }
+
   // If set, the return value of IsUVPAA() will be overridden with this value.
   // Platform-specific implementations will not be invoked.
   absl::optional<bool> is_uvpaa_override;
@@ -1919,6 +1722,9 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
 
   // The return value of the focus check issued at the end of a request.
   bool is_focused = true;
+
+  // The return value of IsSecurityLevelAcceptableForWebAuthn.
+  bool is_webauthn_security_level_acceptable = true;
 
 #if BUILDFLAG(IS_MAC)
   // Configuration data for the macOS platform authenticator.
@@ -2346,6 +2152,60 @@ class AuthenticatorContentBrowserClientTest : public AuthenticatorImplTest {
 
   raw_ptr<ContentBrowserClient> old_client_ = nullptr;
 };
+
+TEST_F(AuthenticatorContentBrowserClientTest, MakeCredentialTLSError) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->is_webauthn_security_level_acceptable = false;
+  PublicKeyCredentialCreationOptionsPtr options =
+      GetTestPublicKeyCredentialCreationOptions();
+  EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
+            AuthenticatorStatus::CERTIFICATE_ERROR);
+}
+
+TEST_F(AuthenticatorContentBrowserClientTest, GetAssertionTLSError) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->is_webauthn_security_level_acceptable = false;
+  PublicKeyCredentialRequestOptionsPtr options =
+      GetTestPublicKeyCredentialRequestOptions();
+  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
+            AuthenticatorStatus::CERTIFICATE_ERROR);
+}
+
+TEST_F(AuthenticatorContentBrowserClientTest,
+       MakeCredentialSkipTLSCheckWithVirtualEnvironment) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  content::AuthenticatorEnvironmentImpl::GetInstance()
+      ->EnableVirtualAuthenticatorFor(
+          static_cast<content::RenderFrameHostImpl*>(main_rfh())
+              ->frame_tree_node(),
+          /*enable_ui=*/false);
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->is_webauthn_security_level_acceptable = false;
+  PublicKeyCredentialCreationOptionsPtr options =
+      GetTestPublicKeyCredentialCreationOptions();
+  EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
+            AuthenticatorStatus::SUCCESS);
+}
+
+TEST_F(AuthenticatorContentBrowserClientTest,
+       GetAssertionSkipTLSCheckWithVirtualEnvironment) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  content::AuthenticatorEnvironmentImpl::GetInstance()
+      ->EnableVirtualAuthenticatorFor(
+          static_cast<content::RenderFrameHostImpl*>(main_rfh())
+              ->frame_tree_node(),
+          /*enable_ui=*/false);
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->is_webauthn_security_level_acceptable = false;
+  PublicKeyCredentialRequestOptionsPtr options =
+      GetTestPublicKeyCredentialRequestOptions();
+  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
+      options->allow_credentials[0].id, kTestRelyingPartyId));
+  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
+            AuthenticatorStatus::SUCCESS);
+}
 
 // Test that credentials can be created and used from an extension origin when
 // permitted by the delegate.
@@ -2794,46 +2654,6 @@ TEST_F(AuthenticatorContentBrowserClientTest,
   };
 
   RunTestCases(kTests);
-}
-
-TEST_F(AuthenticatorContentBrowserClientTest,
-       GoogleLegacyAppidSupportEnterpriseAttestation) {
-  // When the googleLegacyAppidSupport extension is used, individual attestation
-  // decisions should key off the AppId, not the RP ID.
-  constexpr char kGstaticAppId[] =
-      "https://www.gstatic.com/securitykey/origins.json";
-  test_client_.GetTestWebAuthenticationDelegate()
-      ->permit_individual_attestation_for_rp_id = kGstaticAppId;
-
-  const char kStandardCommonName[] = "U2F Attestation";
-  const char kIndividualCommonName[] = "Individual Cert";
-  virtual_device_factory_->mutable_state()->attestation_cert_common_name =
-      kStandardCommonName;
-  virtual_device_factory_->mutable_state()
-      ->individual_attestation_cert_common_name = kIndividualCommonName;
-
-  NavigateAndCommit(GURL("https://accounts.google.com"));
-
-  PublicKeyCredentialCreationOptionsPtr options =
-      GetTestPublicKeyCredentialCreationOptions();
-  options->relying_party.id = "google.com";
-  options->google_legacy_app_id_support = true;
-  options->attestation = ::device::AttestationConveyancePreference::
-      kEnterpriseIfRPListedOnAuthenticator;
-
-  auto result = AuthenticatorMakeCredential(std::move(options));
-  ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-
-  const device::AuthenticatorData auth_data =
-      AuthDataFromMakeCredentialResponse(result.response);
-  absl::optional<Value> attestation_value =
-      Reader::Read(result.response->attestation_object);
-  ASSERT_TRUE(attestation_value);
-  ASSERT_TRUE(attestation_value->is_map());
-  const auto& attestation = attestation_value->GetMap();
-
-  ExpectMapHasKeyWithStringValue(attestation, "fmt", "fido-u2f");
-  ExpectCertificateContainingSubstring(attestation, kIndividualCommonName);
 }
 
 TEST_F(AuthenticatorContentBrowserClientTest, BlockedAttestation) {
@@ -3393,45 +3213,6 @@ TEST_F(AuthenticatorContentBrowserClientTest, IsUVPAAOverride) {
     cb.WaitForCallback();
     EXPECT_EQ(is_uvpaa, cb.value());
   }
-}
-
-TEST_F(AuthenticatorContentBrowserClientTest,
-       CryptotokenBypassesAttestationConsentPrompt) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-
-  virtual_device_factory_->SetSupportedProtocol(device::ProtocolVersion::kU2f);
-  PublicKeyCredentialCreationOptionsPtr options =
-      GetTestPublicKeyCredentialCreationOptions();
-  // Despite the direct attestation conveyance preference, the request delegate
-  // is not asked for attestation consent. Hence the request will succeed,
-  // despite the handler denying all attestation consent prompts.
-  options->attestation = device::AttestationConveyancePreference::kDirect;
-  test_client_.attestation_consent = AttestationConsent::NOT_USED;
-
-  EXPECT_EQ(AuthenticatorMakeCredential(std::move(options)).status,
-            AuthenticatorStatus::SUCCESS);
-}
-
-TEST_F(AuthenticatorContentBrowserClientTest,
-       CableCredentialWithoutCableExtension) {
-  // Exercise the case where a credential is marked as "cable" but no caBLE
-  // extension is provided. The AuthenticatorRequestClientDelegate should see no
-  // transports, which triggers it to cancel the request. (Outside of a testing
-  // environment, Chrome's AuthenticatorRequestClientDelegate will show an
-  // informative error and wait for the user to cancel the request.)
-  NavigateAndCommit(GURL(kTestOrigin1));
-
-  PublicKeyCredentialRequestOptionsPtr options =
-      GetTestPublicKeyCredentialRequestOptions();
-  std::vector<uint8_t> id(32u, 1u);
-  base::flat_set<device::FidoTransportProtocol> transports{
-      device::FidoTransportProtocol::kHybrid};
-  options->allow_credentials.clear();
-  options->allow_credentials.emplace_back(device::CredentialType::kPublicKey,
-                                          std::move(id), std::move(transports));
-
-  EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
-            AuthenticatorStatus::NOT_ALLOWED_ERROR);
 }
 
 // AuthenticatorImplRemoteDesktopClientOverrideTest exercises the
@@ -4788,126 +4569,6 @@ TEST_F(AuthenticatorImplTest, MinPINLength) {
   }
 }
 
-TEST_F(AuthenticatorImplTest, GoogleLegacyAppidSupport) {
-  struct TestCase {
-    std::string url;
-    bool google_legacy_app_id_support;
-    std::string rp_id;
-    AuthenticatorStatus expected;
-    enum { kU2f, kWebAuthn } credential_type;
-    std::string application_parameter_url;
-  };
-  static const TestCase kTestCases[] = {
-      // accounts.google.com can create regular WebAuthn credentials.
-      {
-          "https://accounts.google.com",
-          false,
-          "google.com",
-          AuthenticatorStatus::SUCCESS,
-          TestCase::kWebAuthn,
-          "google.com",
-      },
-      // accounts.google.com can exercise googleLegacyAppidSupport to get a U2F
-      // credential with a hard-coded appId.
-      {
-          "https://accounts.google.com",
-          true,
-          "google.com",
-          AuthenticatorStatus::SUCCESS,
-          TestCase::kU2f,
-          "https://www.gstatic.com/securitykey/origins.json",
-      },
-      // login.corp.google.com also can make WebAuthn credentials.
-      {
-          "https://login.corp.google.com",
-          false,
-          "google.com",
-          AuthenticatorStatus::SUCCESS,
-          TestCase::kWebAuthn,
-          "google.com",
-      },
-      // login.corp.google.com also can exercise googleLegacyAppidSupport,
-      // yielding a different appId.
-      {
-          "https://login.corp.google.com",
-          true,
-          "google.com",
-          AuthenticatorStatus::SUCCESS,
-          TestCase::kU2f,
-          "https://www.gstatic.com/securitykey/a/google.com/origins.json",
-      },
-      // On other origins, googleLegacyAppidSupport has no effect.
-      {
-          "https://example.com",
-          true,
-          "example.com",
-          AuthenticatorStatus::SUCCESS,
-          TestCase::kWebAuthn,
-          "example.com",
-      },
-      // RP ID checks are still enforced with the extension set.
-      {
-          "https://accounts.google.com",
-          true,
-          "example.com",
-          AuthenticatorStatus::BAD_RELYING_PARTY_ID,
-      },
-      {
-          "https://example.com",
-          true,
-          "google.com",
-          AuthenticatorStatus::BAD_RELYING_PARTY_ID,
-      },
-  };
-  int i = 0;
-  for (const auto& test_case : kTestCases) {
-    SCOPED_TRACE(testing::Message() << i++ << ": " << test_case.url << " "
-                                    << test_case.google_legacy_app_id_support
-                                    << " " << test_case.rp_id);
-    ResetVirtualDevice();
-    NavigateAndCommit(GURL(test_case.url));
-
-    device::VirtualCtap2Device::Config config;
-    config.u2f_support = true;
-    virtual_device_factory_->SetCtap2Config(config);
-
-    PublicKeyCredentialCreationOptionsPtr options =
-        GetTestPublicKeyCredentialCreationOptions();
-    options->relying_party.id = test_case.rp_id;
-    options->google_legacy_app_id_support =
-        test_case.google_legacy_app_id_support;
-
-    auto result = AuthenticatorMakeCredential(std::move(options));
-    ASSERT_EQ(result.status, test_case.expected);
-
-    if (test_case.expected != AuthenticatorStatus::SUCCESS) {
-      continue;
-    }
-
-    ASSERT_EQ(virtual_device_factory_->mutable_state()->registrations.size(),
-              1u);
-
-    const std::string client_data_json(
-        result.response->info->client_data_json.data(),
-        result.response->info->client_data_json.data() +
-            result.response->info->client_data_json.size());
-    EXPECT_EQ(virtual_device_factory_->mutable_state()
-                  ->registrations.begin()
-                  ->second.is_u2f,
-              test_case.credential_type == TestCase::kU2f);
-    // Requests use the type key for WebAuthn rather than U2F API registration,
-    // even if googleLegacyAppidSupport is set.
-    EXPECT_TRUE(
-        base::StartsWith(client_data_json, R"({"type":"webauthn.create")"))
-        << client_data_json;
-    EXPECT_EQ(virtual_device_factory_->mutable_state()
-                  ->registrations.begin()
-                  ->second.application_parameter,
-              device::fido_parsing_utils::CreateSHA256Hash(
-                  test_case.application_parameter_url));
-  }
-}
-
 // Regression test for crbug.com/1257281.
 // Tests that a request is not cancelled when an authenticator returns
 // CTAP2_ERR_KEEPALIVE_CANCEL after selecting another authenticator for a
@@ -4980,6 +4641,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyMakeCredential) {
   for (const bool dpk_support : {false, true}) {
     device::VirtualCtap2Device::Config config;
     config.device_public_key_support = dpk_support;
+    config.backup_eligible = true;
     // None attestation is needed because, otherwise, zeroing the AAGUID
     // invalidates the DPK signature.
     config.none_attestation = true;
@@ -5013,6 +4675,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest,
 
   device::VirtualCtap2Device::Config config;
   config.device_public_key_support = true;
+  config.backup_eligible = true;
   virtual_device_factory_->SetCtap2Config(config);
 
   PublicKeyCredentialCreationOptionsPtr options =
@@ -5025,6 +4688,34 @@ TEST_F(AuthenticatorDevicePublicKeyTest,
   ASSERT_FALSE(HasDevicePublicKeyExtensionInAuthenticatorData(result.response));
 }
 
+TEST_F(AuthenticatorDevicePublicKeyTest,
+       DevicePublicKeyMakeCredentialRequiresBackupEligible) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  for (const bool backup_eligible : {false, true}) {
+    device::VirtualCtap2Device::Config config;
+    config.device_public_key_support = true;
+    config.none_attestation = true;
+    config.backup_eligible = backup_eligible;
+    virtual_device_factory_->SetCtap2Config(config);
+
+    PublicKeyCredentialCreationOptionsPtr options =
+        GetTestPublicKeyCredentialCreationOptions();
+    options->device_public_key = blink::mojom::DevicePublicKeyRequest::New();
+    MakeCredentialResult result =
+        AuthenticatorMakeCredential(std::move(options));
+
+    if (backup_eligible) {
+      ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+      ASSERT_TRUE(static_cast<bool>(result.response->device_public_key));
+      ASSERT_TRUE(
+          HasDevicePublicKeyExtensionInAuthenticatorData(result.response));
+    } else {
+      ASSERT_EQ(result.status, AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    }
+  }
+}
+
 TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyGetAssertion) {
   NavigateAndCommit(GURL(kTestOrigin1));
 
@@ -5032,6 +4723,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyGetAssertion) {
   for (const bool dpk_support : {false, true}) {
     device::VirtualCtap2Device::Config config;
     config.device_public_key_support = dpk_support;
+    config.backup_eligible = true;
     virtual_device_factory_->SetCtap2Config(config);
 
     PublicKeyCredentialRequestOptionsPtr options =
@@ -5055,6 +4747,36 @@ TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyGetAssertion) {
   }
 }
 
+TEST_F(AuthenticatorDevicePublicKeyTest,
+       DevicePublicKeyGetAssertionRequiresBackupEligible) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  bool credential_injected = false;
+  for (const bool backup_eligible : {false, true}) {
+    device::VirtualCtap2Device::Config config;
+    config.device_public_key_support = true;
+    config.backup_eligible = backup_eligible;
+    virtual_device_factory_->SetCtap2Config(config);
+
+    PublicKeyCredentialRequestOptionsPtr options =
+        GetTestPublicKeyCredentialRequestOptions();
+    if (!credential_injected) {
+      ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
+          options->allow_credentials[0].id, kTestRelyingPartyId));
+      credential_injected = true;
+    }
+    options->device_public_key = blink::mojom::DevicePublicKeyRequest::New();
+    GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
+
+    if (backup_eligible) {
+      ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+      ASSERT_TRUE(static_cast<bool>(result.response->device_public_key));
+    } else {
+      ASSERT_EQ(result.status, AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    }
+  }
+}
+
 TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyBadResponse) {
   NavigateAndCommit(GURL(kTestOrigin1));
 
@@ -5064,6 +4786,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest, DevicePublicKeyBadResponse) {
 
     device::VirtualCtap2Device::Config config;
     config.device_public_key_support = true;
+    config.backup_eligible = true;
     // None attestation is needed because, otherwise, zeroing the AAGUID
     // invalidates the DPK signature.
     config.none_attestation = true;
@@ -5223,6 +4946,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest,
 
     device::VirtualCtap2Device::Config config;
     config.device_public_key_support = true;
+    config.backup_eligible = true;
     config.device_public_key_always_return_attestation = test.has_attestation;
     config.device_public_key_always_return_enterprise_attestation =
         test.enterprise_attestation_returned;
@@ -5328,6 +5052,7 @@ TEST_F(AuthenticatorDevicePublicKeyTest,
 
     device::VirtualCtap2Device::Config config;
     config.device_public_key_support = true;
+    config.backup_eligible = true;
     config.device_public_key_always_return_attestation = test.has_attestation;
     config.device_public_key_always_return_enterprise_attestation =
         test.enterprise_attestation_returned;
@@ -5376,14 +5101,14 @@ class UVTestAuthenticatorClientDelegate
       base::OnceCallback<void(std::u16string)> provide_pin_cb) override {
     *collected_pin_ = true;
     *min_pin_length_ = options.min_pin_length;
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(provide_pin_cb), kTestPIN16));
   }
 
   void StartBioEnrollment(base::OnceClosure next_callback) override {
     *did_bio_enrollment_ = true;
     if (cancel_bio_enrollment_) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(next_callback));
       return;
     }
@@ -5392,7 +5117,7 @@ class UVTestAuthenticatorClientDelegate
 
   void OnSampleCollected(int remaining_samples) override {
     if (remaining_samples <= 0) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(bio_callback_));
     }
   }
@@ -5556,7 +5281,7 @@ class PINTestAuthenticatorRequestDelegate
     std::u16string pin = std::move(expected_.front().pin);
     expected_.pop_front();
 
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(provide_pin_cb), std::move(pin)));
   }
 
@@ -5929,40 +5654,6 @@ TEST_F(PINAuthenticatorImplTest, MakeCredentialAlwaysUv) {
   EXPECT_TRUE(HasUV(result.response));
 }
 
-TEST_F(PINAuthenticatorImplTest, MakeCredentialAlwaysUvU2fOnly) {
-  // Test that even if an authenticator is reporting alwaysUv = 1, cryptotoken
-  // requests don't try getting a PinUvAuthToken.
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-
-  for (bool internal_uv : {true, false}) {
-    SCOPED_TRACE(::testing::Message() << "internal_uv=" << internal_uv);
-    device::VirtualCtap2Device::Config config;
-    config.internal_uv_support = internal_uv;
-    config.u2f_support = internal_uv;
-    config.always_uv = true;
-    config.pin_support = true;
-    virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
-    virtual_device_factory_->SetCtap2Config(config);
-
-    PublicKeyCredentialCreationOptionsPtr options = make_credential_options(
-        device::UserVerificationRequirement::kDiscouraged);
-    if (internal_uv) {
-      MakeCredentialResult result =
-          AuthenticatorMakeCredential(std::move(options));
-      EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-      EXPECT_FALSE(HasUV(result.response));
-    } else {
-      MakeCredentialResult result =
-          AuthenticatorMakeCredentialAndWaitForTimeout(std::move(options));
-      EXPECT_EQ(result.status, AuthenticatorStatus::NOT_ALLOWED_ERROR);
-    }
-
-    // Look at the permissions to verify that a PinUvAuthToken was not obtained.
-    EXPECT_EQ(
-        virtual_device_factory_->mutable_state()->pin_uv_token_permissions, 0);
-  }
-}
-
 TEST_F(PINAuthenticatorImplTest, MakeCredentialMinPINLengthNewPIN) {
   // Test that an authenticator advertising a min PIN length other than the
   // default makes it all the way to CollectPIN when setting a new PIN.
@@ -6316,41 +6007,6 @@ TEST_F(PINAuthenticatorImplTest, GetAssertionAlwaysUv) {
   EXPECT_TRUE(HasUV(result.response));
 }
 
-TEST_F(PINAuthenticatorImplTest, GetAssertionAlwaysUvU2fOnly) {
-  // Test that even if an authenticator is reporting alwaysUv = 1, cryptotoken
-  // requests don't try getting a PinUvAuthToken.
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  PublicKeyCredentialRequestOptionsPtr options =
-      get_credential_options(device::UserVerificationRequirement::kDiscouraged);
-  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-      options->allow_credentials[0].id, kTestRelyingPartyId));
-
-  for (bool internal_uv : {true, false}) {
-    SCOPED_TRACE(::testing::Message() << "internal_uv=" << internal_uv);
-    device::VirtualCtap2Device::Config config;
-    config.internal_uv_support = internal_uv;
-    config.u2f_support = internal_uv;
-    config.always_uv = true;
-    config.pin_support = true;
-    virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
-    virtual_device_factory_->SetCtap2Config(config);
-
-    if (internal_uv) {
-      GetAssertionResult result = AuthenticatorGetAssertion(options.Clone());
-      EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-      EXPECT_FALSE(HasUV(result.response));
-    } else {
-      GetAssertionResult result =
-          AuthenticatorGetAssertionAndWaitForTimeout(options.Clone());
-      EXPECT_EQ(result.status, AuthenticatorStatus::NOT_ALLOWED_ERROR);
-    }
-
-    // Look at the permissions to verify that a PinUvAuthToken was not obtained.
-    EXPECT_EQ(
-        virtual_device_factory_->mutable_state()->pin_uv_token_permissions, 0);
-  }
-}
-
 TEST_F(PINAuthenticatorImplTest, MakeCredentialNoSupportedAlgorithm) {
   NavigateAndCommit(GURL(kTestOrigin1));
 
@@ -6659,27 +6315,6 @@ TEST_F(InternalUVAuthenticatorImplTest, MakeCredentialFallBackToPin) {
   EXPECT_EQ(device::kMinPinLength, test_client_.min_pin_length);
 }
 
-TEST_F(InternalUVAuthenticatorImplTest, MakeCredentialCryptotoken) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-
-  for (const auto fingerprints_enrolled : {false, true}) {
-    SCOPED_TRACE(::testing::Message()
-                 << "fingerprints_enrolled=" << fingerprints_enrolled);
-    virtual_device_factory_->mutable_state()->fingerprints_enrolled =
-        fingerprints_enrolled;
-    EXPECT_EQ(AuthenticatorMakeCredential(
-                  make_credential_options(
-                      device::UserVerificationRequirement::kPreferred))
-                  .status,
-              AuthenticatorStatus::SUCCESS);
-    // The credential should have been created over U2F.
-    for (const auto& registration :
-         virtual_device_factory_->mutable_state()->registrations) {
-      EXPECT_TRUE(registration.second.is_u2f);
-    }
-  }
-}
-
 // Test making a credential on an authenticator that supports biometric
 // enrollment but has no fingerprints enrolled.
 TEST_F(InternalUVAuthenticatorImplTest, MakeCredentialInlineBioEnrollment) {
@@ -6829,24 +6464,6 @@ TEST_F(InternalUVAuthenticatorImplTest, GetAssertionFallbackToPIN) {
   EXPECT_TRUE(HasUV(result.response));
   EXPECT_TRUE(test_client_.collected_pin);
   EXPECT_EQ(device::kMinPinLength, test_client_.min_pin_length);
-}
-
-TEST_F(InternalUVAuthenticatorImplTest, GetAssertionCryptotoken) {
-  NavigateAndCommit(GURL(kCryptotokenOrigin));
-  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
-      get_credential_options()->allow_credentials[0].id, kTestRelyingPartyId));
-
-  for (const auto fingerprints_enrolled : {false, true}) {
-    SCOPED_TRACE(::testing::Message()
-                 << "fingerprints_enrolled=" << fingerprints_enrolled);
-    virtual_device_factory_->mutable_state()->fingerprints_enrolled =
-        fingerprints_enrolled;
-    EXPECT_EQ(AuthenticatorGetAssertion(
-                  get_credential_options(
-                      device::UserVerificationRequirement::kPreferred))
-                  .status,
-              AuthenticatorStatus::SUCCESS);
-  }
 }
 
 class UVTokenAuthenticatorImplTest : public UVAuthenticatorImplTest {
@@ -7121,7 +6738,7 @@ class BlockingAuthenticatorRequestDelegate
   bool DoesBlockRequestOnFailure(InterestingFailureReason reason) override {
     // Post a task to cancel the request to give the second authenticator a
     // chance to return a status from the cancelled request.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, std::move(cancel_callback_));
     return true;
   }
@@ -7212,7 +6829,7 @@ TEST_F(BlockingDelegateAuthenticatorImplTest, PostCancelMessage) {
       base::BindLambdaForTesting([&](VirtualFidoDevice* ignore) -> bool {
         // If asked for a fingerprint, fail the makeCredential request by
         // simulating a matched excluded credential by the other authenticator.
-        base::SequencedTaskRunnerHandle::Get()->PostTask(
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(std::move(state_1->transact_callback),
                                       std::vector<uint8_t>{static_cast<uint8_t>(
                                           device::CtapDeviceResponseCode::
@@ -7285,7 +6902,7 @@ class ResidentKeyTestAuthenticatorRequestDelegate
   void CollectPIN(
       CollectPINOptions options,
       base::OnceCallback<void(std::u16string)> provide_pin_cb) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(provide_pin_cb), kTestPIN16));
   }
 
@@ -7330,7 +6947,7 @@ class ResidentKeyTestAuthenticatorRequestDelegate
         });
     ASSERT_TRUE(selected != responses.end());
 
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), std::move(*selected)));
   }
 
@@ -9027,6 +8644,7 @@ class AuthenticatorCableV2Test
     ret.include_credential_in_assertion_response =
         VirtualCtap2Device::Config::IncludeCredential::ALWAYS;
     ret.device_public_key_support = true;
+    ret.backup_eligible = true;
     // None attestation is needed because, otherwise, zeroing the AAGUID
     // invalidates the DPK signature.
     ret.none_attestation = true;

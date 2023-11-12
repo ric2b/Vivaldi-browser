@@ -119,6 +119,27 @@ TEST(AccessCodeCastMetricsTest, RecordAccessCodeNotFoundCount) {
                                     3);
 }
 
+TEST(AccessCodeCastMetricsTest, RecordAccessCodeRouteStarted) {
+  base::HistogramTester histogram_tester;
+
+  AccessCodeCastMetrics::RecordAccessCodeRouteStarted(base::Seconds(0));
+  histogram_tester.ExpectBucketCount(
+      "AccessCodeCast.Discovery.DeviceDurationOnRoute", 0, 1);
+
+  // Ensure the functions properly converts duration to seconds
+  AccessCodeCastMetrics::RecordAccessCodeRouteStarted(
+      base::Milliseconds(10000));
+  histogram_tester.ExpectBucketCount(
+      "AccessCodeCast.Discovery.DeviceDurationOnRoute", 10, 1);
+  AccessCodeCastMetrics::RecordAccessCodeRouteStarted(
+      base::Milliseconds(20000));
+  histogram_tester.ExpectBucketCount(
+      "AccessCodeCast.Discovery.DeviceDurationOnRoute", 20, 1);
+
+  histogram_tester.ExpectTotalCount(
+      "AccessCodeCast.Discovery.DeviceDurationOnRoute", 3);
+}
+
 TEST(AccessCodeCastMetricsTest, RecordDialogLoadTime) {
   base::HistogramTester histogram_tester;
 
@@ -176,6 +197,24 @@ TEST(AccessCodeCastMetricsTest, RecordRememberedDevicesCount) {
   AccessCodeCastMetrics::RecordRememberedDevicesCount(500);
   histogram_tester.ExpectBucketCount(
       "AccessCodeCast.Discovery.RememberedDevicesCount", 100, 2);
+}
+
+TEST(AccessCodeCastMetricsTest, RecordRouteDuration) {
+  base::HistogramTester histogram_tester;
+  char histogram[] = "AccessCodeCast.Session.RouteDuration";
+
+  AccessCodeCastMetrics::RecordRouteDuration(base::Milliseconds(1));
+  // The custom times histogram has a minimum value of 1 second.
+  histogram_tester.ExpectTimeBucketCount(histogram, base::Seconds(1), 1);
+
+  AccessCodeCastMetrics::RecordRouteDuration(base::Minutes(5));
+  histogram_tester.ExpectTimeBucketCount(histogram, base::Minutes(5), 1);
+
+  AccessCodeCastMetrics::RecordRouteDuration(base::Hours(10));
+  // The custom times histogram has a maximum value of 8 hours.
+  histogram_tester.ExpectTimeBucketCount(histogram, base::Hours(8), 1);
+
+  histogram_tester.ExpectTotalCount(histogram, 3);
 }
 
 TEST(AccessCodeCastMetricsTest, CheckMetricsEnums) {

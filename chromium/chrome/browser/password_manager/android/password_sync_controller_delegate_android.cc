@@ -6,6 +6,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/password_manager/core/browser/android_backend_error.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -30,8 +31,10 @@ std::string BuildCredentialManagerNotificationMetricName(
 }  // namespace
 
 PasswordSyncControllerDelegateAndroid::PasswordSyncControllerDelegateAndroid(
-    std::unique_ptr<PasswordSyncControllerDelegateBridge> bridge)
-    : bridge_(std::move(bridge)) {
+    std::unique_ptr<PasswordSyncControllerDelegateBridge> bridge,
+    base::OnceClosure on_sync_shutdown)
+    : bridge_(std::move(bridge)),
+      on_sync_shutdown_(std::move(on_sync_shutdown)) {
   DCHECK(bridge_);
   bridge_->SetConsumer(weak_ptr_factory_.GetWeakPtr());
 }
@@ -42,7 +45,7 @@ PasswordSyncControllerDelegateAndroid::
 std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
 PasswordSyncControllerDelegateAndroid::CreateProxyModelControllerDelegate() {
   return std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindRepeating(
           &PasswordSyncControllerDelegateAndroid::GetWeakPtrToBaseClass,
           base::Unretained(this)));
@@ -141,6 +144,14 @@ void PasswordSyncControllerDelegateAndroid::OnStateChanged(
     bridge_->NotifyCredentialManagerWhenNotSyncing();
     credential_manager_sync_setting_ = IsSyncEnabled(false);
   }
+}
+
+void PasswordSyncControllerDelegateAndroid::OnSyncShutdown(
+    syncer::SyncService* sync) {
+  sync_service_ = nullptr;
+  if (!on_sync_shutdown_)
+    return;
+  std::move(on_sync_shutdown_).Run();
 }
 
 void PasswordSyncControllerDelegateAndroid::OnCredentialManagerNotified() {

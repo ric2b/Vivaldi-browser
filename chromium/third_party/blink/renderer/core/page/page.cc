@@ -145,18 +145,16 @@ HeapVector<Member<Page>> Page::RelatedPages() {
   return result;
 }
 
-Page* Page::CreateNonOrdinary(
-    ChromeClient& chrome_client,
-    scheduler::WebAgentGroupScheduler& agent_group_scheduler) {
+Page* Page::CreateNonOrdinary(ChromeClient& chrome_client,
+                              AgentGroupScheduler& agent_group_scheduler) {
   return MakeGarbageCollected<Page>(base::PassKey<Page>(), chrome_client,
                                     agent_group_scheduler,
                                     /*is_ordinary=*/false);
 }
 
-Page* Page::CreateOrdinary(
-    ChromeClient& chrome_client,
-    Page* opener,
-    scheduler::WebAgentGroupScheduler& agent_group_scheduler) {
+Page* Page::CreateOrdinary(ChromeClient& chrome_client,
+                           Page* opener,
+                           AgentGroupScheduler& agent_group_scheduler) {
   Page* page = MakeGarbageCollected<Page>(base::PassKey<Page>(), chrome_client,
                                           agent_group_scheduler,
                                           /*is_ordinary=*/true);
@@ -179,15 +177,10 @@ Page* Page::CreateOrdinary(
 
 Page::Page(base::PassKey<Page>,
            ChromeClient& chrome_client,
-           scheduler::WebAgentGroupScheduler& agent_group_scheduler,
+           AgentGroupScheduler& agent_group_scheduler,
            bool is_ordinary)
     : SettingsDelegate(std::make_unique<Settings>()),
       main_frame_(nullptr),
-      fenced_frames_impl_(
-          features::IsFencedFramesEnabled()
-              ? absl::optional<features::FencedFramesImplementationType>(
-                    features::kFencedFramesImplementationTypeParam.Get())
-              : absl::nullopt),
       agent_group_scheduler_(agent_group_scheduler),
       animator_(MakeGarbageCollected<PageAnimator>(*this)),
       autoscroll_controller_(MakeGarbageCollected<AutoscrollController>(*this)),
@@ -228,8 +221,7 @@ Page::Page(base::PassKey<Page>,
   DCHECK(!AllPages().Contains(this));
   AllPages().insert(this);
 
-  page_scheduler_ =
-      agent_group_scheduler.AsAgentGroupScheduler().CreatePageScheduler(this);
+  page_scheduler_ = agent_group_scheduler_->CreatePageScheduler(this);
   // The scheduler should be set before the main frame.
   DCHECK(!main_frame_);
   if (auto* virtual_time_controller =
@@ -336,6 +328,12 @@ void Page::SetMainFrame(Frame* main_frame) {
   main_frame_ = main_frame;
 
   page_scheduler_->SetIsMainFrameLocal(main_frame->IsLocalFrame());
+}
+
+Frame* Page::TakePreviousMainFrameForLocalSwap() {
+  Frame* frame = previous_main_frame_for_local_swap_;
+  previous_main_frame_for_local_swap_ = nullptr;
+  return frame;
 }
 
 LocalFrame* Page::DeprecatedLocalMainFrame() const {
@@ -955,11 +953,13 @@ void Page::Trace(Visitor* visitor) const {
   visitor->Trace(link_highlight_);
   visitor->Trace(spatial_navigation_controller_);
   visitor->Trace(main_frame_);
+  visitor->Trace(previous_main_frame_for_local_swap_);
   visitor->Trace(plugin_data_);
   visitor->Trace(validation_message_client_);
   visitor->Trace(plugins_changed_observers_);
   visitor->Trace(next_related_page_);
   visitor->Trace(prev_related_page_);
+  visitor->Trace(agent_group_scheduler_);
   Supplementable<Page>::Trace(visitor);
 }
 
@@ -1034,8 +1034,8 @@ ScrollbarTheme& Page::GetScrollbarTheme() const {
   return ScrollbarTheme::GetTheme();
 }
 
-scheduler::WebAgentGroupScheduler& Page::GetAgentGroupScheduler() const {
-  return agent_group_scheduler_;
+AgentGroupScheduler& Page::GetAgentGroupScheduler() const {
+  return *agent_group_scheduler_;
 }
 
 PageScheduler* Page::GetPageScheduler() const {

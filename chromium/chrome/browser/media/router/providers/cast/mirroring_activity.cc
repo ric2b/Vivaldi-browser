@@ -10,19 +10,25 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/media/router/data_decoder_util.h"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/providers/cast/cast_activity_manager.h"
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/browser/media_router_factory.h"
+#include "components/media_router/browser/presentation/web_contents_presentation_manager.h"
 #include "components/media_router/common/discovery/media_sink_internal.h"
 #include "components/media_router/common/mojom/media_router.mojom.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_util.h"
@@ -31,6 +37,12 @@
 #include "components/media_router/common/route_request_result.h"
 #include "components/mirroring/mojom/session_parameters.mojom-forward.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/presentation_request.h"
+#include "content/public/browser/web_contents.h"
+#include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/ip_address.h"
@@ -101,6 +113,11 @@ absl::optional<MirroringActivity::MirroringType> GetMirroringType(
   if (source.IsDesktopMirroringSource())
     return MirroringActivity::MirroringType::kDesktop;
 
+  if (base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen) &&
+      source.IsRemotePlaybackSource()) {
+    return MirroringActivity::MirroringType::kTab;
+  }
+
   if (!source.url().is_valid()) {
     NOTREACHED() << "Invalid source: " << source;
     return absl::nullopt;
@@ -109,7 +126,7 @@ absl::optional<MirroringActivity::MirroringType> GetMirroringType(
   if (source.IsCastPresentationUrl()) {
     const auto cast_source = CastMediaSource::FromMediaSource(source);
     if (cast_source && cast_source->ContainsStreamingApp()) {
-      // Site-initiated Mirroring has a Cast Presentatino URL and contains
+      // Site-initiated Mirroring has a Cast Presentation URL and contains
       // StreamingApp. We should return Tab Mirroring here.
       return MirroringActivity::MirroringType::kTab;
     } else {
@@ -122,6 +139,51 @@ absl::optional<MirroringActivity::MirroringType> GetMirroringType(
 
   NOTREACHED() << "Invalid source: " << source;
   return absl::nullopt;
+}
+
+// TODO(crbug.com/1363512): Remove support for sender side letterboxing.
+bool ShouldForceLetterboxing(base::StringPiece model_name) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "disable-cast-letterboxing")) {
+    return false;
+  }
+  return model_name.find("Nest Hub") != base::StringPiece::npos;
+}
+
+void AutoSwitchToFlingingIfNeeded(const std::string& sink_id,
+                                  int frame_tree_node_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  auto* web_contents =
+      content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  if (!web_contents)
+    return;
+
+  base::WeakPtr<WebContentsPresentationManager>
+      web_contents_presentation_manager =
+          WebContentsPresentationManager::Get(web_contents);
+  if (!web_contents_presentation_manager ||
+      !web_contents_presentation_manager->HasDefaultPresentationRequest()) {
+    return;
+  }
+
+  auto* media_router = MediaRouterFactory::GetApiForBrowserContextIfExists(
+      web_contents->GetBrowserContext());
+  if (!media_router)
+    return;
+
+  const auto& presentation_request =
+      web_contents_presentation_manager->GetDefaultPresentationRequest();
+  const auto source_id =
+      MediaSource::ForPresentationUrl(presentation_request.presentation_urls[0])
+          .id();
+  bool incognito = web_contents->GetBrowserContext()->IsOffTheRecord();
+  media_router->JoinRoute(
+      source_id, kAutoJoinPresentationId, presentation_request.frame_origin,
+      web_contents,
+      base::BindOnce(&WebContentsPresentationManager::OnPresentationResponse,
+                     std::move(web_contents_presentation_manager),
+                     presentation_request),
+      base::TimeDelta(), incognito);
 }
 
 }  // namespace
@@ -273,6 +335,27 @@ void MirroringActivity::LogErrorMessage(const std::string& message) {
   logger_->LogError(media_router::mojom::LogCategory::kMirroring,
                     kLoggerComponent, message, route_.media_sink_id(),
                     route_.media_source().id(), route_.presentation_id());
+}
+
+void MirroringActivity::OnSourceChanged() {
+  host_->GetTabSourceId(base::BindOnce(&MirroringActivity::UpdateSourceTab,
+                                       weak_ptr_factory_.GetWeakPtr()));
+}
+
+void MirroringActivity::UpdateSourceTab(int32_t frame_tree_node_id) {
+  if (frame_tree_node_id == -1 || frame_tree_node_id == frame_tree_node_id_)
+    return;
+
+  session_tracker_->OnSourceChanged(route_.media_route_id(),
+                                    frame_tree_node_id_, frame_tree_node_id);
+  frame_tree_node_id_ = frame_tree_node_id;
+
+  // Posting to UI thread, as while obtaining WebContents instance through
+  // `FromFrameTreeNodeId()`, a call to `GloballyFindByID()` would happen and
+  // that is only allowed on UI thread.
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&AutoSwitchToFlingingIfNeeded,
+                                route_.media_sink_id(), frame_tree_node_id_));
 }
 
 void MirroringActivity::OnMessage(mirroring::mojom::CastMessagePtr message) {
@@ -454,10 +537,13 @@ void MirroringActivity::OnSessionSet(const CastSession& session) {
   DCHECK(channel_to_service_receiver_);
 
   host_->Start(
-      SessionParameters::New(session_type, cast_data_.ip_endpoint.address(),
-                             cast_data_.model_name, session.destination_id(),
-                             message_handler_->source_id(),
-                             cast_source->target_playout_delay()),
+      SessionParameters::New(
+          session_type, cast_data_.ip_endpoint.address(), cast_data_.model_name,
+          sink_.sink().name(), session.destination_id(),
+          message_handler_->source_id(), cast_source->target_playout_delay(),
+          route().media_source().IsRemotePlaybackSource(),
+          GetMirroringRefreshInterval(),
+          ShouldForceLetterboxing(cast_data_.model_name)),
       std::move(observer_remote), std::move(channel_remote),
       std::move(channel_to_service_receiver_));
 }

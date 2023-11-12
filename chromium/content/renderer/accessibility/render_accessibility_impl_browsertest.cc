@@ -266,42 +266,6 @@ class RenderAccessibilityImplTest : public RenderViewTest {
 
   ~RenderAccessibilityImplTest() override = default;
 
-  void ScheduleSendPendingAccessibilityEvents() {
-    GetRenderAccessibilityImpl()->ScheduleSendPendingAccessibilityEvents();
-  }
-
-  void ExpectScheduleStatusScheduledDeferred() {
-    EXPECT_EQ(GetRenderAccessibilityImpl()->event_schedule_status_,
-              RenderAccessibilityImpl::EventScheduleStatus::kScheduledDeferred);
-  }
-
-  void ExpectScheduleStatusScheduledImmediate() {
-    EXPECT_EQ(
-        GetRenderAccessibilityImpl()->event_schedule_status_,
-        RenderAccessibilityImpl::EventScheduleStatus::kScheduledImmediate);
-  }
-
-  void ExpectScheduleStatusWaitingForAck() {
-    EXPECT_EQ(GetRenderAccessibilityImpl()->event_schedule_status_,
-              RenderAccessibilityImpl::EventScheduleStatus::kWaitingForAck);
-  }
-
-  void ExpectScheduleStatusNotWaiting() {
-    EXPECT_EQ(GetRenderAccessibilityImpl()->event_schedule_status_,
-              RenderAccessibilityImpl::EventScheduleStatus::kNotWaiting);
-  }
-
-  void ExpectScheduleModeDeferEvents() {
-    EXPECT_EQ(GetRenderAccessibilityImpl()->event_schedule_mode_,
-              RenderAccessibilityImpl::EventScheduleMode::kDeferEvents);
-  }
-
-  void ExpectScheduleModeProcessEventsImmediately() {
-    EXPECT_EQ(
-        GetRenderAccessibilityImpl()->event_schedule_mode_,
-        RenderAccessibilityImpl::EventScheduleMode::kProcessEventsImmediately);
-  }
-
  protected:
   RenderFrameImpl* frame() {
     return static_cast<RenderFrameImpl*>(RenderViewTest::GetMainRenderFrame());
@@ -326,8 +290,6 @@ class RenderAccessibilityImplTest : public RenderViewTest {
     EXPECT_FALSE(document.IsNull());
     WebAXObject root_obj = WebAXObject::FromWebDocument(document);
     EXPECT_FALSE(root_obj.IsNull());
-    GetRenderAccessibilityImpl()->HandleAXEvent(
-        ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
     SendPendingAccessibilityEvents();
   }
 
@@ -348,7 +310,7 @@ class RenderAccessibilityImplTest : public RenderViewTest {
     // Ensure that a valid RenderAccessibilityImpl object is created and
     // associated to the RenderFrame, so that calls from tests to methods of
     // RenderAccessibilityImpl will work.
-    frame()->SetAccessibilityModeForTest(ui::kAXModeWebContentsOnly.mode());
+    frame()->SetAccessibilityModeForTest(ui::kAXModeWebContentsOnly.flags());
   }
 
   void TearDown() override {
@@ -362,7 +324,7 @@ class RenderAccessibilityImplTest : public RenderViewTest {
   }
 
   void SetMode(ui::AXMode mode) {
-    frame()->GetRenderAccessibilityManager()->SetMode(mode.mode());
+    frame()->GetRenderAccessibilityManager()->SetMode(mode);
   }
 
   ui::AXTreeUpdate GetLastAccUpdate() {
@@ -397,7 +359,8 @@ class RenderAccessibilityImplTest : public RenderViewTest {
     // be able to properly check later on the nodes that have been updated, and
     // also wait for the mojo messages to be processed once they are sent.
     task_environment_.RunUntilIdle();
-    GetRenderAccessibilityImpl()->SendPendingAccessibilityEvents();
+    GetRenderAccessibilityImpl()->ScheduleImmediateAXUpdate();
+    GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
     task_environment_.RunUntilIdle();
   }
 
@@ -429,8 +392,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   ClearHandledUpdates();
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(root_obj, false);
   SendPendingAccessibilityEvents();
   EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
   {
@@ -446,8 +408,6 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   document = GetMainFrame()->GetDocument();
   root_obj = WebAXObject::FromWebDocument(document);
   ClearHandledUpdates();
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(6, CountAccessibilityNodesSentToBrowser());
 
@@ -463,170 +423,6 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
       ui::AXEvent(first_child.AxID(), ax::mojom::Event::kFocus));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(6, CountAccessibilityNodesSentToBrowser());
-}
-
-TEST_F(RenderAccessibilityImplTest, TestDeferred) {
-  constexpr char html[] = R"HTML(
-      <body>
-        <div>
-          a
-        </div>
-      </body>
-      )HTML";
-  LoadHTML(html);
-  task_environment_.RunUntilIdle();
-
-  // We should have had load complete. Subsequent events are deferred unless
-  // there is a user interaction.
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-
-  // Simulate a page load to test deferred behavior.
-  GetRenderAccessibilityImpl()->DidCommitProvisionalLoad(
-      ui::PageTransition::PAGE_TRANSITION_LINK);
-  ClearHandledUpdates();
-  WebDocument document = GetMainFrame()->GetDocument();
-  EXPECT_FALSE(document.IsNull());
-  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
-  EXPECT_FALSE(root_obj.IsNull());
-
-  // No events should have been scheduled or sent.
-  ExpectScheduleStatusNotWaiting();
-  ExpectScheduleModeDeferEvents();
-
-  // Send a non-interactive event, it should be scheduled with a delay.
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLocationChanged));
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-
-  task_environment_.RunUntilIdle();
-  // Ensure event is not sent as it is scheduled with a delay.
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-
-  // Perform action, causing immediate event processing.
-  ui::AXActionData action;
-  action.action = ax::mojom::Action::kFocus;
-  GetRenderAccessibilityImpl()->PerformAction(action);
-  ScheduleSendPendingAccessibilityEvents();
-
-  // Once in immediate mode, stays in immediate mode until events are sent.
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLocationChanged));
-  ExpectScheduleStatusScheduledImmediate();
-  ExpectScheduleModeProcessEventsImmediately();
-
-  // Once events have been sent, defer next batch.
-  ScheduleSendPendingAccessibilityEvents();
-  task_environment_.RunUntilIdle();
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-
-  const std::vector<ax::mojom::Event> kNonInteractiveEvents = {
-      ax::mojom::Event::kAriaAttributeChanged,
-      ax::mojom::Event::kChildrenChanged,
-      ax::mojom::Event::kDocumentTitleChanged,
-      ax::mojom::Event::kExpandedChanged,
-      ax::mojom::Event::kHide,
-      ax::mojom::Event::kLayoutComplete,
-      ax::mojom::Event::kLocationChanged,
-      ax::mojom::Event::kMenuListValueChanged,
-      ax::mojom::Event::kRowCollapsed,
-      ax::mojom::Event::kRowCountChanged,
-      ax::mojom::Event::kRowExpanded,
-      ax::mojom::Event::kScrollPositionChanged,
-      ax::mojom::Event::kScrolledToAnchor,
-      ax::mojom::Event::kSelectedChildrenChanged,
-      ax::mojom::Event::kShow,
-      ax::mojom::Event::kTextChanged};
-
-  for (ax::mojom::Event event : kNonInteractiveEvents) {
-    // Send an interactive event, it should be scheduled with a delay.
-    GetRenderAccessibilityImpl()->HandleAXEvent(
-        ui::AXEvent(root_obj.AxID(), event));
-    ExpectScheduleModeDeferEvents();
-  }
-
-  ScheduleSendPendingAccessibilityEvents();
-  ExpectScheduleStatusScheduledDeferred();
-
-  const std::vector<ax::mojom::Event> kInteractiveEvents = {
-      ax::mojom::Event::kActiveDescendantChanged,
-      ax::mojom::Event::kBlur,
-      ax::mojom::Event::kCheckedStateChanged,
-      ax::mojom::Event::kClicked,
-      ax::mojom::Event::kDocumentSelectionChanged,
-      ax::mojom::Event::kFocus,
-      ax::mojom::Event::kHover,
-      ax::mojom::Event::kLoadComplete,
-      ax::mojom::Event::kValueChanged};
-
-  for (ax::mojom::Event event : kInteractiveEvents) {
-    // Once events have been sent, defer next batch.
-    task_environment_.RunUntilIdle();
-    ExpectScheduleModeDeferEvents();
-    ExpectScheduleStatusScheduledDeferred();
-
-    // Send an interactive event, it should be scheduled with a delay.
-    GetRenderAccessibilityImpl()->HandleAXEvent(
-        ui::AXEvent(root_obj.AxID(), event));
-    ExpectScheduleModeProcessEventsImmediately();
-    ExpectScheduleStatusScheduledImmediate();
-
-    ScheduleSendPendingAccessibilityEvents();
-  }
-
-  task_environment_.RunUntilIdle();
-
-  // Event has been sent, no longer waiting on ack.
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-}
-
-TEST_F(RenderAccessibilityImplTest, TestChangesOnFocusModeAreImmediate) {
-  LoadHTML(R"HTML(
-      <body>
-        <div id=a tabindex=0>
-          a
-        </div>
-        <script>document.getElementById('a').focus();</script>
-      </body>
-      )HTML");
-  task_environment_.RunUntilIdle();
-
-  // We should have had load complete. Subsequent events are deferred unless
-  // there is a user interaction.
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
-
-  // Simulate a page load to test deferred behavior.
-  GetRenderAccessibilityImpl()->DidCommitProvisionalLoad(
-      ui::PageTransition::PAGE_TRANSITION_LINK);
-  ClearHandledUpdates();
-  WebDocument document = GetMainFrame()->GetDocument();
-  EXPECT_FALSE(document.IsNull());
-  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
-  EXPECT_FALSE(root_obj.IsNull());
-
-  WebAXObject html = root_obj.ChildAt(0);
-  WebAXObject body = html.ChildAt(0);
-  WebAXObject node_a = body.ChildAt(0);
-
-  // No events should have been scheduled or sent.
-  ExpectScheduleStatusNotWaiting();
-  ExpectScheduleModeDeferEvents();
-
-  // Marking the focused object dirty causes changes to be sent immediately.
-  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(node_a, false);
-  ExpectScheduleStatusScheduledImmediate();
-  ExpectScheduleModeProcessEventsImmediately();
-
-  task_environment_.RunUntilIdle();
-
-  // Event has been sent, no longer waiting on ack.
-  ExpectScheduleStatusScheduledDeferred();
-  ExpectScheduleModeDeferEvents();
 }
 
 TEST_F(RenderAccessibilityImplTest, HideAccessibilityObject) {
@@ -655,22 +451,21 @@ TEST_F(RenderAccessibilityImplTest, HideAccessibilityObject) {
   WebAXObject node_b = node_a.ChildAt(0);
   WebAXObject node_c = node_b.ChildAt(0);
 
+  // Send a childrenChanged on "A".
+  ClearHandledUpdates();
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(node_a, false);
+
   // Hide node "B" ("C" stays visible).
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'hidden';");
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
 
-  // Send a childrenChanged on "A".
-  ClearHandledUpdates();
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(node_a.AxID(), ax::mojom::Event::kChildrenChanged));
   SendPendingAccessibilityEvents();
   ui::AXTreeUpdate update = GetLastAccUpdate();
   ASSERT_EQ(2U, update.nodes.size());
 
   // Since ignored nodes are included in the ax tree with State::kIgnored set,
   // "C" is NOT reparented, only the changed nodes are re-serialized.
-  // "A" updates because it handled Event::kChildrenChanged
+  // "A" updates because it handled dirty object
   // "B" updates because its State::kIgnored has changed
   EXPECT_EQ(0, update.node_id_to_clear);
   EXPECT_EQ(node_a.AxID(), update.nodes[0].id);
@@ -705,21 +500,19 @@ TEST_F(RenderAccessibilityImplTest, ShowAccessibilityObject) {
   WebAXObject node_b = node_a.ChildAt(0);
   WebAXObject node_c = node_b.ChildAt(0);
 
-  // Show node "B", then send a childrenChanged on "A".
+  // Send a childrenChanged on "A" and show node "B",
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(node_a, false);
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'visible';");
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
 
   ClearHandledUpdates();
 
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(node_a.AxID(), ax::mojom::Event::kChildrenChanged));
   SendPendingAccessibilityEvents();
   ui::AXTreeUpdate update = GetLastAccUpdate();
 
   // Since ignored nodes are included in the ax tree with State::kIgnored set,
   // "C" is NOT reparented, only the changed nodes are re-serialized.
-  // "A" updates because it handled Event::kChildrenChanged
+  // "A" updates because it handled the dirty
   // "B" updates because its State::kIgnored has changed
   ASSERT_EQ(2U, update.nodes.size());
   EXPECT_EQ(0, update.node_id_to_clear);
@@ -776,6 +569,7 @@ TEST_F(RenderAccessibilityImplTest, TestBoundsForFixedNodeAfterScroll) {
   std::string js("window.scrollTo(0, " + base::NumberToString(scroll_offset_y) +
                  ");");
   ExecuteJavaScriptForTests(js.c_str());
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
 
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
@@ -844,6 +638,7 @@ TEST_F(RenderAccessibilityImplTest, TestBoundsForMultipleFixedNodeAfterScroll) {
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
   GetRenderAccessibilityImpl()->HandleAXEvent(
       ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kScrollPositionChanged));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
   SendPendingAccessibilityEvents();
 
   EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
@@ -1032,6 +827,48 @@ class BlinkAXActionTargetTest : public RenderAccessibilityImplTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+TEST_F(BlinkAXActionTargetTest, TestSetRangeValue) {
+  constexpr char html[] = R"HTML(
+      <body>
+        <input type=range min=1 value=2 max=3 step=1>
+      </body>
+      )HTML";
+  LoadHTMLAndRefreshAccessibilityTree(html);
+
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
+  WebAXObject html_elem = root_obj.ChildAt(0);
+  WebAXObject body = html_elem.ChildAt(0);
+  WebAXObject input_range = body.ChildAt(0);
+
+  float value = 0.0f;
+  EXPECT_TRUE(input_range.ValueForRange(&value));
+  EXPECT_EQ(2.0f, value);
+  std::unique_ptr<ui::AXActionTarget> input_range_action_target =
+      AXActionTargetFactory::CreateFromNodeId(document, nullptr,
+                                              input_range.AxID());
+  EXPECT_EQ(ui::AXActionTarget::Type::kBlink,
+            input_range_action_target->GetType());
+
+  std::string value_to_set("1.0");
+  {
+    ui::AXActionData action_data;
+    action_data.action = ax::mojom::Action::kSetValue;
+    action_data.value = value_to_set;
+    EXPECT_TRUE(input_range.PerformAction(action_data));
+  }
+  EXPECT_TRUE(input_range.ValueForRange(&value));
+  EXPECT_EQ(1.0f, value);
+
+  SendPendingAccessibilityEvents();
+  EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
+  {
+    // Make sure it's the input range object that was updated.
+    ui::AXTreeUpdate update = GetLastAccUpdate();
+    EXPECT_EQ(input_range.AxID(), update.nodes[0].id);
+  }
+}
+
 TEST_F(BlinkAXActionTargetTest, TestMethods) {
   // Exercise the methods on BlinkAXActionTarget to ensure they have the
   // expected effects.
@@ -1147,6 +984,11 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   }
   EXPECT_TRUE(input_range.IsFocused());
 
+  // Increment/decrement actions produce synthesized keydown and keyup events,
+  // and the keyup event is delayed 100ms to look more natural. We need to wait
+  // for them to happen to finish the test cleanly in the TearDown phase.
+  task_environment_.FastForwardBy(base::Seconds(1));
+
   gfx::RectF expected_bounds;
   blink::WebAXObject offset_container;
   gfx::Transform container_transform;
@@ -1169,7 +1011,7 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   EXPECT_FALSE(IsSelected(option));
   EXPECT_TRUE(option_action_target->SetSelected(true));
   // Selecting option requires layout to be clean.
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
   EXPECT_TRUE(IsSelected(option));
 #endif
 
@@ -1183,7 +1025,7 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   EXPECT_EQ(value_to_set, input_text.GetValueForControl().Utf8());
 
   // Setting selection requires layout to be clean.
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
 
   EXPECT_TRUE(text_one_action_target->SetSelection(
       text_one_action_target.get(), 3, text_two_action_target.get(), 4));
@@ -1293,7 +1135,7 @@ TEST_F(AXImageAnnotatorTest, OnImageAdded) {
   // Show node "B".
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'visible';");
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
   ClearHandledUpdates();
 
   // This should update the annotations of all images on the page, including the
@@ -1350,7 +1192,7 @@ TEST_F(AXImageAnnotatorTest, OnImageUpdated) {
 
   // Update node "A".
   ExecuteJavaScriptForTests("document.querySelector('img').src = 'test2.jpg';");
-  ASSERT_TRUE(WebAXObject::MaybeUpdateLayoutAndCheckValidity(document));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
 
   ClearHandledUpdates();
   // This should update the annotations of all images on the page, including the
@@ -1423,8 +1265,7 @@ TEST_F(RenderAccessibilityImplUKMTest, TestFireUKMs) {
   // No URL-keyed metrics should be fired after we send one event.
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(root_obj, false);
   SendPendingAccessibilityEvents();
   EXPECT_EQ(0, ukm_recorder()->calls());
   histogram_tester.ExpectTotalCount(
@@ -1433,8 +1274,7 @@ TEST_F(RenderAccessibilityImplUKMTest, TestFireUKMs) {
   // No URL-keyed metrics should be fired even after an event that takes
   // 300 ms, but we should now have something to send.
   // This must be >= kMinSerializationTimeToSendInMS
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(root_obj, false);
   SendPendingAccessibilityEvents();
   SetTimeDelayForNextSerialize(base::Milliseconds(300));
   EXPECT_EQ(0, ukm_recorder()->calls());
@@ -1444,8 +1284,7 @@ TEST_F(RenderAccessibilityImplUKMTest, TestFireUKMs) {
   // After 1000 seconds have passed, the next time we send an event we should
   // send URL-keyed metrics.
   task_environment_.FastForwardBy(base::Seconds(1000));
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(root_obj, false);
   SendPendingAccessibilityEvents();
   EXPECT_EQ(1, ukm_recorder()->calls());
   histogram_tester.ExpectTotalCount(
@@ -1454,8 +1293,7 @@ TEST_F(RenderAccessibilityImplUKMTest, TestFireUKMs) {
   // Send another event that takes a long (simulated) time to serialize.
   // This must be >= kMinSerializationTimeToSend
   SetTimeDelayForNextSerialize(base::Milliseconds(200));
-  GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+  GetRenderAccessibilityImpl()->MarkWebAXObjectDirty(root_obj, false);
   SendPendingAccessibilityEvents();
   histogram_tester.ExpectTotalCount(
       "Accessibility.Performance.SendPendingAccessibilityEvents", 4);

@@ -62,4 +62,18 @@
   return self;
 }
 
+// Vivaldi
+- (instancetype)initWithText:(NSString*)text
+                    title:(NSString*)title
+                    scenario:(ActivityScenario)scenario {
+    DCHECK(text);
+    DCHECK(title);
+    if (self = [self initWithScenario:scenario]) {
+        _noteText = text;
+        _additionalText = title;
+    }
+    return self;
+}
+// End Vivaldi
+
 @end

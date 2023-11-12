@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Coordinate2d} from './coordinate2d.js';
@@ -34,7 +34,7 @@ export interface PageLayoutInfo {
   printableAreaHeight: number;
 }
 
-const PrintPreviewDocumentInfoElementBase = WebUIListenerMixin(PolymerElement);
+const PrintPreviewDocumentInfoElementBase = WebUiListenerMixin(PolymerElement);
 
 export class PrintPreviewDocumentInfoElement extends
     PrintPreviewDocumentInfoElementBase {
@@ -107,11 +107,11 @@ export class PrintPreviewDocumentInfoElement extends
   override connectedCallback() {
     super.connectedCallback();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'page-count-ready',
         (pageCount: number, previewResponseId: number, scaling: number) =>
             this.onPageCountReady_(pageCount, previewResponseId, scaling));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'page-layout-ready',
         (pageLayout: PageLayoutInfo, hasCustomPageSizeStyle: boolean) =>
             this.onPageLayoutReady_(pageLayout, hasCustomPageSizeStyle));

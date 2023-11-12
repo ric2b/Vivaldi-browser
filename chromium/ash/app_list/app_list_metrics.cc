@@ -28,12 +28,8 @@ namespace ash {
 int g_continue_file_removals_in_session = 0;
 
 // The UMA histogram that logs smoothness of pagination animation.
-constexpr char kPaginationTransitionAnimationSmoothness[] =
-    "Apps.PaginationTransition.AnimationSmoothness";
 constexpr char kPaginationTransitionAnimationSmoothnessInTablet[] =
     "Apps.PaginationTransition.AnimationSmoothness.TabletMode";
-constexpr char kPaginationTransitionAnimationSmoothnessInClamshell[] =
-    "Apps.PaginationTransition.AnimationSmoothness.ClamshellMode";
 
 // The UMA histogram that logs which state search results are opened from.
 constexpr char kAppListSearchResultOpenSourceHistogram[] =
@@ -47,27 +43,14 @@ constexpr char kCardifiedStateAnimationSmoothnessExit[] =
     "Apps.AppList.CardifiedStateAnimation.AnimationSmoothness."
     "ExitCardifiedState";
 
-// The UMA hisotogram that logs the action user performs on zero state
-// search result.
-constexpr char kAppListZeroStateSearchResultUserActionHistogram[] =
-    "Apps.AppList.ZeroStateSearchResultUserActionType";
-
-// The UMA histogram that logs user's decision (remove or cancel) for zero state
-// search result removal confirmation.
-constexpr char kAppListZeroStateSearchResultRemovalHistogram[] =
-    "Apps.AppList.ZeroStateSearchResultRemovalDecision";
-
 // The UMA histogram that logs user's decision (remove or cancel) for search
-// result removal confirmation. Recorded if productivity launcher is enabled, in
-// which case search result removal is enabled outside zero state search.
-// Otherwise, the dialog result is reported using
-// `kAppListZeroStateSearchResultRemovalHistogram`.
+// result removal confirmation. Result removal is enabled outside zero state
+// search.
 constexpr char kSearchResultRemovalDialogDecisionHistogram[] =
     "Apps.AppList.SearchResultRemovalDecision";
 
 // The base UMA histogram that logs app launches within the HomeLauncher (tablet
-// mode AppList), and the fullscreen AppList (when ProductivityLauncher is
-// disabled in clamshell mode) and the Shelf.
+// mode AppList) and the Shelf.
 constexpr char kAppListAppLaunched[] = "Apps.AppListAppLaunchedV2";
 
 // UMA histograms that log app launches within the app list, and the shelf.
@@ -160,8 +143,7 @@ AppLaunchedMetricParams::AppLaunchedMetricParams(
 
 AppLaunchedMetricParams::~AppLaunchedMetricParams() = default;
 
-void AppListRecordPageSwitcherSourceByEventType(ui::EventType type,
-                                                bool is_tablet_mode) {
+void AppListRecordPageSwitcherSourceByEventType(ui::EventType type) {
   AppListPageSwitcherSource source;
 
   switch (type) {
@@ -184,20 +166,12 @@ void AppListRecordPageSwitcherSourceByEventType(ui::EventType type,
       NOTREACHED();
       return;
   }
-  RecordPageSwitcherSource(source, is_tablet_mode);
+  RecordPageSwitcherSource(source);
 }
 
-void RecordPageSwitcherSource(AppListPageSwitcherSource source,
-                              bool is_tablet_mode) {
+void RecordPageSwitcherSource(AppListPageSwitcherSource source) {
   UMA_HISTOGRAM_ENUMERATION("Apps.AppListPageSwitcherSource", source,
                             kMaxAppListPageSwitcherSource);
-  if (is_tablet_mode) {
-    UMA_HISTOGRAM_ENUMERATION("Apps.AppListPageSwitcherSource.TabletMode",
-                              source, kMaxAppListPageSwitcherSource);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION("Apps.AppListPageSwitcherSource.ClamshellMode",
-                              source, kMaxAppListPageSwitcherSource);
-  }
 }
 
 void RecordSearchResultOpenSource(const SearchResult* result,
@@ -216,18 +190,6 @@ void RecordSearchResultOpenSource(const SearchResult* result,
       ApplistSearchResultOpenedSource::kMaxApplistSearchResultOpenedSource);
 }
 
-void RecordZeroStateSearchResultUserActionHistogram(
-    ZeroStateSearchResultUserActionType action) {
-  UMA_HISTOGRAM_ENUMERATION(kAppListZeroStateSearchResultUserActionHistogram,
-                            action);
-}
-
-void RecordZeroStateSearchResultRemovalHistogram(
-    SearchResultRemovalConfirmation removal_decision) {
-  UMA_HISTOGRAM_ENUMERATION(kAppListZeroStateSearchResultRemovalHistogram,
-                            removal_decision);
-}
-
 void RecordSearchResultRemovalDialogDecision(
     SearchResultRemovalConfirmation removal_decision) {
   base::UmaHistogramEnumeration(kSearchResultRemovalDialogDecisionHistogram,
@@ -242,7 +204,7 @@ std::string GetAppListOpenMethod(AppListShowSource source) {
     case AppListShowSource::kSearchKeyFullscreen_DEPRECATED:
       return "SearchKey";
     case AppListShowSource::kShelfButton:
-    case AppListShowSource::kShelfButtonFullscreen_DEPRACTED:
+    case AppListShowSource::kShelfButtonFullscreen_DEPRECATED:
       return "HomeButton";
     case AppListShowSource::kSwipeFromShelf:
       return "Swipe";
@@ -250,6 +212,7 @@ std::string GetAppListOpenMethod(AppListShowSource source) {
       return "Scroll";
     case AppListShowSource::kTabletMode:
     case AppListShowSource::kAssistantEntryPoint:
+    case AppListShowSource::kBrowser:
       return "Others";
   }
   NOTREACHED();
@@ -272,8 +235,6 @@ void RecordPeriodicAppListMetrics() {
   AppListItemList* const item_list = model->top_level_item_list();
   for (size_t i = 0; i < item_list->item_count(); ++i) {
     AppListItem* item = item_list->item_at(i);
-    if (item->is_page_break())
-      continue;
     number_of_root_level_items++;
 
     // Item is a folder.
@@ -320,7 +281,7 @@ void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,
     base::UmaHistogramEnumeration(kAppLaunchInClamshell, launched_from);
   }
 
-  if (features::IsProductivityLauncherEnabled() && !is_tablet_mode) {
+  if (!is_tablet_mode) {
     if (!app_list_shown) {
       UMA_HISTOGRAM_ENUMERATION(kAppListAppLaunchedClosed, launched_from);
     } else {
@@ -333,9 +294,7 @@ void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,
 
   switch (app_list_state) {
     case AppListViewState::kClosed:
-      DCHECK(!features::IsProductivityLauncherEnabled());
-      // Only exists in clamshell mode with ProductivityLauncher disabled.
-      UMA_HISTOGRAM_ENUMERATION(kAppListAppLaunchedClosed, launched_from);
+      NOTREACHED();
       break;
     case AppListViewState::kFullscreenAllApps:
       if (is_tablet_mode) {
@@ -475,17 +434,9 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
   return false;
 }
 
-void ReportPaginationSmoothness(bool is_tablet_mode, int smoothness) {
-  UMA_HISTOGRAM_PERCENTAGE(kPaginationTransitionAnimationSmoothness,
+void ReportPaginationSmoothness(int smoothness) {
+  UMA_HISTOGRAM_PERCENTAGE(kPaginationTransitionAnimationSmoothnessInTablet,
                            smoothness);
-
-  if (is_tablet_mode) {
-    UMA_HISTOGRAM_PERCENTAGE(kPaginationTransitionAnimationSmoothnessInTablet,
-                             smoothness);
-  } else {
-    UMA_HISTOGRAM_PERCENTAGE(
-        kPaginationTransitionAnimationSmoothnessInClamshell, smoothness);
-  }
 }
 
 void ReportCardifiedSmoothness(bool is_entering_cardified, int smoothness) {
@@ -549,10 +500,6 @@ void ResetContinueSectionFileRemovedCountForTest() {
 }
 
 void RecordHideContinueSectionMetric() {
-  // The continue section is a productivity launcher feature.
-  if (!features::IsProductivityLauncherEnabled())
-    return;
-
   const bool hide_continue_section =
       Shell::Get()->app_list_controller()->ShouldHideContinueSection();
   if (Shell::Get()->IsInTabletMode()) {

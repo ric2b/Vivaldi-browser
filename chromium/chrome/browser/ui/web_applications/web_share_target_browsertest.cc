@@ -43,8 +43,8 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
-#include "chrome/browser/chromeos/fileapi/recent_file.h"
-#include "chrome/browser/chromeos/fileapi/recent_model.h"
+#include "chrome/browser/ash/fileapi/recent_file.h"
+#include "chrome/browser/ash/fileapi/recent_model.h"
 #include "chrome/browser/sharesheet/sharesheet_service.h"
 #include "storage/browser/file_system/file_system_context.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -148,7 +148,7 @@ class FakeSharesheet : public crosapi::mojom::Sharesheet {
       override {}
   void CloseBubble(const std::string& window_id) override {}
 
-  raw_ptr<Profile> profile_ = nullptr;
+  raw_ptr<Profile, DanglingUntriaged> profile_ = nullptr;
   web_app::AppId selected_app_id_;
 };
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -185,14 +185,13 @@ class WebShareTargetBrowserTest : public WebAppControllerBrowserTest {
     const scoped_refptr<storage::FileSystemContext> file_system_context =
         file_manager::util::GetFileSystemContextForRenderFrameHost(
             profile(), contents->GetPrimaryMainFrame());
-    chromeos::RecentModel::GetForProfile(profile())->GetRecentFiles(
+    ash::RecentModel::GetForProfile(profile())->GetRecentFiles(
         file_system_context.get(),
         /*origin=*/GURL(),
-        /*file_type=*/chromeos::RecentModel::FileType::kAll,
+        /*file_type=*/ash::RecentModel::FileType::kAll,
         /*invalidate_cache=*/false,
         base::BindLambdaForTesting(
-            [&result,
-             &run_loop](const std::vector<chromeos::RecentFile>& files) {
+            [&result, &run_loop](const std::vector<ash::RecentFile>& files) {
               result = files.size();
               run_loop.Quit();
             }));
@@ -350,7 +349,7 @@ IN_PROC_BROWSER_TEST_F(WebShareTargetBrowserTest, PostLink) {
   const AppId app_id = web_app::InstallWebAppFromManifest(browser(), app_url);
   const apps::ShareTarget* share_target =
       WebAppProvider::GetForTest(browser()->profile())
-          ->registrar()
+          ->registrar_unsafe()
           .GetAppShareTarget(app_id);
   EXPECT_EQ(share_target->method, apps::ShareTarget::Method::kPost);
   EXPECT_EQ(share_target->enctype, apps::ShareTarget::Enctype::kFormUrlEncoded);
@@ -381,7 +380,7 @@ IN_PROC_BROWSER_TEST_F(WebShareTargetBrowserTest, GetLink) {
   const AppId app_id = web_app::InstallWebAppFromManifest(browser(), app_url);
   const apps::ShareTarget* share_target =
       WebAppProvider::GetForTest(browser()->profile())
-          ->registrar()
+          ->registrar_unsafe()
           .GetAppShareTarget(app_id);
   EXPECT_EQ(share_target->method, apps::ShareTarget::Method::kGet);
   EXPECT_EQ(share_target->enctype, apps::ShareTarget::Enctype::kFormUrlEncoded);

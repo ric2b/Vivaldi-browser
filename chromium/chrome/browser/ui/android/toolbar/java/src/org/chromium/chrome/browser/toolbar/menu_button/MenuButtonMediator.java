@@ -273,6 +273,9 @@ class MenuButtonMediator implements AppMenuObserver {
 
         mAppMenuButtonHelperSupplier.set(mAppMenuButtonHelper);
         mAppMenuPropertiesDelegate = appMenuCoordinator.getAppMenuPropertiesDelegate();
+
+        //Vivaldi
+        mAppMenuHandler.setIsInOverviewModeSupplier(mIsInOverviewModeSupplier);
     }
 
     /**

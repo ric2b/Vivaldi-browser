@@ -37,12 +37,6 @@ AutofillManager* GetAutofillManager(RenderFrameHost* render_frame_host) {
   return autofill_driver->autofill_manager();
 }
 
-bool IsCctRetainingStateEnabled() {
-  static bool enabled =
-      base::FeatureList::IsEnabled(chrome::android::kCCTRetainingState);
-  return enabled;
-}
-
 }  // namespace
 
 AutofillObserverImpl::AutofillObserverImpl(
@@ -104,8 +98,6 @@ void TabInteractionRecorderAndroid::RenderFrameHostStateChanged(
     RenderFrameHost* render_frame_host,
     RenderFrameHost::LifecycleState old_state,
     RenderFrameHost::LifecycleState new_state) {
-  if (!IsCctRetainingStateEnabled())
-    return;
   if (old_state == RenderFrameHost::LifecycleState::kActive) {
     rfh_observer_map_.erase(render_frame_host->GetGlobalId());
   } else if (new_state == RenderFrameHost::LifecycleState::kActive &&
@@ -116,8 +108,6 @@ void TabInteractionRecorderAndroid::RenderFrameHostStateChanged(
 
 void TabInteractionRecorderAndroid::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!IsCctRetainingStateEnabled())
-    return;
   if (has_form_interactions_)
     return;
   if (!navigation_handle->IsSameDocument() &&
@@ -173,6 +163,10 @@ jboolean TabInteractionRecorderAndroid::DidGetUserInteraction(
 jboolean TabInteractionRecorderAndroid::HadInteraction(JNIEnv* env) const {
   bool has_interaction = has_form_interactions() || HasNavigatedFromFirstPage();
   return static_cast<jboolean>(has_interaction);
+}
+
+void TabInteractionRecorderAndroid::Reset(JNIEnv* env) {
+  has_form_interactions_ = false;
 }
 
 ScopedJavaLocalRef<jobject> JNI_TabInteractionRecorder_GetFromTab(

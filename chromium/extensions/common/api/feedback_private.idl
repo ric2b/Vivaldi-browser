@@ -102,12 +102,21 @@ namespace feedbackPrivate {
     boolean? showQuestionnaire;
   };
 
-  // Status of the sending of a feedback report.
+  // Possible statuses that can result from sending feedback.
   enum Status {success, delayed};
 
-  // The type of the landing page shown to the user when the feedback report is
-  // successfully sent, if one should be shown.
+  // Landing page types that can be shown after sending feedback.
   enum LandingPageType {normal, techstop, noLandingPage};
+
+  // Result returned from a $(ref:sendFeedback) call.
+  dictionary SendFeedbackResult {
+    // Status of the sending of a feedback report.
+    Status status;
+
+    // The type of landing page shown to the use when the feedback report is
+    // successfully sent, if one should be shown.
+    LandingPageType landingPageType;
+  };
 
   // Allowed log sources on Chrome OS.
   enum LogSource {
@@ -151,6 +160,9 @@ namespace feedbackPrivate {
     uptime
   };
 
+  // Source of the feedback.
+  enum FeedbackSource {quickoffice};
+
   // Input parameters for a readLogSource() call.
   dictionary ReadLogSourceParams {
     // The log source from which to read.
@@ -189,7 +201,7 @@ namespace feedbackPrivate {
   callback GetUserEmailCallback = void(DOMString email);
   callback GetSystemInformationCallback =
       void(SystemInformation[] systemInformation);
-  callback SendFeedbackCallback = void(Status status, LandingPageType type);
+  callback SendFeedbackCallback = void(SendFeedbackResult result);
   callback ReadLogSourceCallback = void (ReadLogSourceResult result);
 
   interface Functions {
@@ -199,6 +211,9 @@ namespace feedbackPrivate {
     // Returns the system information dictionary.
     static void getSystemInformation(GetSystemInformationCallback callback);
 
+    // Opens the feedback report window.
+    static void openFeedback(FeedbackSource source);
+
     // Sends a feedback report.
     // |loadSystemInfo|: Optional flag when present and is true, the backend
     // should load system information before sending the report. This is added
@@ -206,10 +221,10 @@ namespace feedbackPrivate {
     // information is slow.
     // |formOpenTime|: The epoch time when the feedback form was opened. This is
     // used for metrics.
-    static void sendFeedback(FeedbackInfo feedback,
-                             optional boolean loadSystemInfo,
-                             optional double formOpenTime,
-                             SendFeedbackCallback callback);
+    [supportsPromises] static void sendFeedback(FeedbackInfo feedback,
+                                                optional boolean loadSystemInfo,
+                                                optional double formOpenTime,
+                                                SendFeedbackCallback callback);
 
     // Reads from a log source indicated by <code>source</code>.
     // <p>If <code>incremental</code> is false:

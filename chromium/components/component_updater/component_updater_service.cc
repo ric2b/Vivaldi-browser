@@ -5,6 +5,7 @@
 #include "components/component_updater/component_updater_service.h"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,16 +13,18 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "components/component_updater/component_installer.h"
 #include "components/component_updater/component_updater_service_internal.h"
 #include "components/component_updater/component_updater_utils.h"
 #include "components/component_updater/pref_names.h"
@@ -126,6 +129,18 @@ void CrxUpdateService::RemoveObserver(Observer* observer) {
   update_client_->RemoveObserver(observer);
 }
 
+base::Version CrxUpdateService::GetRegisteredVersion(
+    const std::string& app_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  base::Version registered_version =
+      std::make_unique<update_client::PersistedData>(
+          config_->GetPrefService(), config_->GetActivityDataService())
+          ->GetProductVersion(app_id);
+
+  return (registered_version.IsValid()) ? registered_version
+                                        : base::Version(kNullVersion);
+}
+
 void CrxUpdateService::Start() {
   DCHECK(thread_checker_.CalledOnValidThread());
   VLOG(1) << "CrxUpdateService starting up. "
@@ -135,8 +150,7 @@ void CrxUpdateService::Start() {
           << config_->NextCheckDelay() << " seconds. ";
 
   scheduler_->Schedule(
-      base::Seconds(config_->InitialDelay()),
-      base::Seconds(config_->NextCheckDelay()),
+      config_->InitialDelay(), config_->NextCheckDelay(),
       base::BindRepeating(
           base::IgnoreResult(&CrxUpdateService::CheckForUpdates),
           base::Unretained(this)),
@@ -307,7 +321,7 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
 
   if (!GetComponent(id)) {
     if (!callback.is_null()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback),
                                     update_client::Error::INVALID_ARGUMENT));
     }
@@ -327,7 +341,7 @@ bool CrxUpdateService::OnDemandUpdateWithCooldown(const std::string& id) {
   if (component_state && !component_state->last_check.is_null()) {
     base::TimeDelta delta =
         base::TimeTicks::Now() - component_state->last_check;
-    if (delta < base::Seconds(config_->OnDemandDelay()))
+    if (delta < config_->OnDemandDelay())
       return false;
   }
 
@@ -367,8 +381,8 @@ bool CrxUpdateService::CheckForUpdates(
                             UPDATE_TYPE_COUNT);
 
   if (components_order_.empty()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  std::move(on_finished));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(on_finished));
     return true;
   }
 
@@ -443,7 +457,7 @@ void CrxUpdateService::OnUpdateComplete(Callback callback,
   }
 
   if (!callback.is_null()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), error));
   }
 }

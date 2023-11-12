@@ -117,6 +117,10 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
   size_t pending_slow_checks_ = 0;
   bool blocked_ = false;
 
+  // The time when |WillStartRequest| is called.
+  base::TimeTicks start_request_time_;
+  bool is_start_request_called_ = false;
+
   // The time when we started deferring the request.
   base::TimeTicks defer_start_time_;
   bool deferred_ = false;
@@ -136,6 +140,9 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
 
   // Whether real time lookup is enabled for the user.
   bool real_time_lookup_enabled_;
+
+  // Tracks how many times |WillProcessResponse| is called.
+  int will_process_response_count_ = 0;
 
   base::WeakPtrFactory<BrowserURLLoaderThrottle> weak_factory_{this};
 };

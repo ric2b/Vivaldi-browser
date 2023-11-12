@@ -14,7 +14,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
@@ -22,12 +21,28 @@
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace blink {
 
 namespace {
+
+// Removing headers won't work if we intend to remove the headers for the new
+// requests because all previous headers will be merge into the new header if
+// there is no overrides in the new header.
+// Remove Accept-Language header from `modified_headers` before we merge
+// incoming new headers. This helps us avoid inheriting headers which need to be
+// removed in the new requests.
+void RemoveModifiedHeadersBeforeMerge(
+    net::HttpRequestHeaders* modified_headers) {
+  if (base::FeatureList::IsEnabled(
+          network::features::kReduceAcceptLanguageOriginTrial)) {
+    DCHECK(modified_headers);
+    modified_headers->RemoveHeader(net::HttpRequestHeaders::kAcceptLanguage);
+  }
+}
 
 // Merges |removed_headers_B| into |removed_headers_A|.
 void MergeRemovedHeaders(std::vector<std::string>* removed_headers_A,
@@ -250,7 +265,7 @@ class ThrottlingURLLoader::ForwardingThrottleDelegate
     const raw_ptr<ForwardingThrottleDelegate> owner_;
   };
 
-  raw_ptr<ThrottlingURLLoader> loader_;
+  raw_ptr<ThrottlingURLLoader, DanglingUntriaged> loader_;
   const raw_ptr<URLLoaderThrottle> throttle_;
 };
 
@@ -319,8 +334,8 @@ ThrottlingURLLoader::~ThrottlingURLLoader() {
 
     auto throttles =
         std::make_unique<std::vector<ThrottleEntry>>(std::move(throttles_));
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
-                                                    std::move(throttles));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(throttles));
   }
 }
 
@@ -346,6 +361,7 @@ void ThrottlingURLLoader::ResetForFollowRedirect(
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers) {
   MergeRemovedHeaders(&removed_headers_, removed_headers);
+  RemoveModifiedHeadersBeforeMerge(&modified_headers_);
   modified_headers_.MergeFrom(modified_headers);
   modified_cors_exempt_headers_.MergeFrom(modified_cors_exempt_headers);
   // Call UpdateRequestHeaders() after headers are merged.
@@ -375,6 +391,7 @@ void ThrottlingURLLoader::FollowRedirect(
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers) {
   MergeRemovedHeaders(&removed_headers_, removed_headers);
+  RemoveModifiedHeadersBeforeMerge(&modified_headers_);
   modified_headers_.MergeFrom(modified_headers);
   modified_cors_exempt_headers_.MergeFrom(modified_cors_exempt_headers);
 
@@ -795,6 +812,7 @@ void ThrottlingURLLoader::OnReceiveRedirect(
         return;
 
       MergeRemovedHeaders(&removed_headers_, removed_headers);
+      RemoveModifiedHeadersBeforeMerge(&modified_headers_);
       modified_headers_.MergeFrom(modified_headers);
       modified_cors_exempt_headers_.MergeFrom(modified_cors_exempt_headers);
     }
@@ -819,6 +837,11 @@ void ThrottlingURLLoader::OnReceiveRedirect(
   request.site_for_cookies = redirect_info.new_site_for_cookies;
   request.referrer = GURL(redirect_info.new_referrer);
   request.referrer_policy = redirect_info.new_referrer_policy;
+  if (request.trusted_params) {
+    request.trusted_params->isolation_info =
+        request.trusted_params->isolation_info.CreateForRedirect(
+            url::Origin::Create(request.url));
+  }
 
   // TODO(dhausknecht) at this point we do not actually know if we commit to the
   // redirect or if it will be cancelled. FollowRedirect would be a more
@@ -842,6 +865,8 @@ void ThrottlingURLLoader::OnUploadProgress(
 void ThrottlingURLLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
   DCHECK_EQ(DEFERRED_NONE, deferred_stage_);
   DCHECK(!loader_completed_);
+  network::RecordOnTransferSizeUpdatedUMA(
+      network::OnTransferSizeUpdatedFrom::kThrottlingURLLoader);
 
   forwarding_client_->OnTransferSizeUpdated(transfer_size_diff);
 }

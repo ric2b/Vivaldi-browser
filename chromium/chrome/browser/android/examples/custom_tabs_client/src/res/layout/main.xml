@@ -368,11 +368,11 @@
             android:layout_marginBottom="16dp">
 
             <CheckBox
-                android:id="@+id/pcct_resizable_checkbox"
+                android:id="@+id/pcct_height_resizable_checkbox"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked = "true"
-                android:text="@string/pcct_resizable_text" />
+                android:text="@string/pcct_height_resizable_text" />
 
             <CheckBox
                 android:id="@+id/bottom_toolbar_checkbox"
@@ -403,5 +403,18 @@
                 android:checked = "true"
                 android:text="@string/url_hiding_text" />
         </LinearLayout>
+        <CheckBox
+            android:id="@+id/force_engagement_signals_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked = "false"
+            android:text="@string/force_engagement_signals" />
+
+        <CheckBox
+            android:id="@+id/background_interact_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked = "true"
+            android:text="@string/background_interact_text" />
     </LinearLayout>
 </ScrollView>

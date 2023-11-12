@@ -8,10 +8,10 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "chrome/browser/ui/webui/chromeos/login/app_downloading_screen_handler.h"
 
 namespace ash {
+
+class AppDownloadingScreenView;
 
 // This is App Downloading screen that tells the user the selected Android apps
 // are being downloaded.
@@ -43,11 +43,5 @@ class AppDownloadingScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// migration is finished.
-namespace chromeos {
-using ::ash::AppDownloadingScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_APP_DOWNLOADING_SCREEN_H_

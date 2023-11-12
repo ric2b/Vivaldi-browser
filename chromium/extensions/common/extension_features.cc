@@ -52,20 +52,6 @@ BASE_FEATURE(kAllowSharedArrayBuffersUnconditionally,
              "AllowSharedArrayBuffersUnconditionally",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Loads the CryptoToken component extension, which implements the deprecated
-// U2F Security Key API.
-// TODO(1224886): Delete together with CryptoToken code.
-BASE_FEATURE(kLoadCryptoTokenExtension,
-             "LoadCryptoTokenExtension",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the CryptoToken component extension to receive messages. This flag
-// has no effect unless `kLoadCryptoTokenExtension` is also enabled.
-// TODO(1224886): Delete together with CryptoToken code.
-BASE_FEATURE(kU2FSecurityKeyAPI,
-             "U2FSecurityKeyAPI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // When enabled, causes Manifest V3 (and greater) extensions to use structured
 // cloning (instead of JSON serialization) for extension messaging, except when
 // communicating with native messaging hosts.
@@ -114,26 +100,51 @@ BASE_FEATURE(kAvoidEarlyExtensionScriptContextCreation,
 // The feature enabling offscreen documents in Manifest V3 extensions.
 BASE_FEATURE(kExtensionsOffscreenDocuments,
              "ExtensionsOffscreenDocuments",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, allows APIs used by the webstore to be exposed on the URL for the
 // new webstore.
-// TODO(crbug.com/1338235): Before this starts to be rolled out to end users, we
-// need to ensure the new domain has all the special handling we do for the
-// current webstore enabled on it.
 BASE_FEATURE(kNewWebstoreDomain,
              "NewWebstoreDomain",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Side panel API availability.
 BASE_FEATURE(kExtensionSidePanelIntegration,
              "ExtensionSidePanelIntegration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable fileSystemProvider and fileSystemProviderInternal APIs in service
-// workers.
-BASE_FEATURE(kExtensionsFSPInServiceWorkers,
-             "ExtensionsFSPInServiceWorkers",
+// File Handlers.
+BASE_FEATURE(kFileHandlersMV3,
+             "FileHandlersMV3",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// IsValidSourceUrl enforcement for ExtensionHostMsg_OpenChannelToExtension IPC.
+BASE_FEATURE(kExtensionSourceUrlEnforcement,
+             "ExtensionSourceUrlEnforcement",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Controls the <webview> tag behaviour changes proposed as part of the guest
+// view MPArch migration. See
+// https://docs.google.com/document/d/1RVbtvklXUg9QCNvMT0r-1qDwJNeQFGoTCOD1Ur9mDa4/edit?usp=sharing
+// for details.
+BASE_FEATURE(kWebviewTagMPArchBehavior,
+             "WebviewTagMPArchBehavior",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, only manifest v3 extensions is allowed while v2 will be disabled.
+// Note that this feature is now only checked by `ExtensionManagement` which
+// represents enterprise extension configurations. Flip the feature will block
+// mv2 extension by default but the error messages will improperly mention
+// enterprise policy.
+BASE_FEATURE(kExtensionsManifestV3Only,
+             "kExtensionsManifestV3Only",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the minimum MV3 Content-Security-Policy will include
+// 'inline-speculation-rules' source in the script-src.
+// See https://crbug.com/1382361 to track the launch status.
+BASE_FEATURE(kMinimumMV3CSPWithInlineSpeculationRules,
+             "MinimumMV3CSPWithInlineSpeculationRules",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace extensions_features

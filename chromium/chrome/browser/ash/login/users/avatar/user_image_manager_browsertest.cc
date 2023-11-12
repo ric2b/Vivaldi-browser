@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -21,6 +22,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -305,11 +307,14 @@ class UserImageManagerTestBase : public LoginManagerTest,
       controllable_http_response_;
 
   FakeGaiaMixin fake_gaia_{&mixin_host_};
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class UserImageManagerTest : public UserImageManagerTestBase {
  public:
   UserImageManagerTest() {
+    feature_list_.InitAndEnableFeature(ash::features::kAvatarsCloudMigration);
     login_manager_mixin_.AppendRegularUsers(1);
     test_account_id1_ = login_manager_mixin_.users()[0].account_id;
   }
@@ -368,20 +373,15 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserDefaultImageIndex) {
       user_manager::UserManager::Get()->FindUser(test_account_id1_);
   ASSERT_TRUE(user);
 
-  const gfx::ImageSkia& default_image =
-      default_user_image::GetDefaultImageDeprecated(
-          default_user_image::kFirstDefaultImageIndex);
+  UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
 
-  run_loop_ = std::make_unique<base::RunLoop>();
   UserImageManager* user_image_manager =
       ChromeUserManager::Get()->GetUserImageManager(test_account_id1_);
   user_image_manager->SaveUserDefaultImageIndex(
       default_user_image::kFirstDefaultImageIndex);
-  run_loop_->Run();
 
   EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(default_user_image::kFirstDefaultImageIndex, user->image_index());
-  EXPECT_TRUE(test::AreImagesEqual(default_image, user->GetImage()));
   ExpectUserImageInfo(test_account_id1_,
                       default_user_image::kFirstDefaultImageIndex,
                       base::FilePath());
@@ -537,6 +537,7 @@ class UserImageManagerPolicyTest : public UserImageManagerTestBase,
  protected:
   UserImageManagerPolicyTest()
       : owner_key_util_(new ownership::MockOwnerKeyUtil()) {
+    feature_list_.InitAndEnableFeature(ash::features::kAvatarsCloudMigration);
     login_manager_.AppendManagedUsers(1);
     enterprise_account_id_ = login_manager_.users()[0].account_id;
     cryptohome_id_ = cryptohome::CreateAccountIdentifierFromAccountId(
@@ -627,7 +628,7 @@ class UserImageManagerPolicyTest : public UserImageManagerTestBase,
 // Verifies that the user image can be set through policy. Also verifies that
 // after the policy has been cleared, the user is able to choose a different
 // image.
-IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, DISABLED_SetAndClear) {
+IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, SetAndClear) {
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(enterprise_account_id_);
   ASSERT_TRUE(user);
@@ -664,6 +665,8 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, DISABLED_SetAndClear) {
   EXPECT_EQ(policy_image_.width(), saved_image.width());
   EXPECT_EQ(policy_image_.height(), saved_image.height());
 
+  UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
+
   // Clear policy. Verify that the user image switches to a random default
   // image.
   user_policy_.payload().Clear();
@@ -679,36 +682,28 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, DISABLED_SetAndClear) {
 
   const int default_image_index = user->image_index();
   EXPECT_TRUE(user->HasDefaultImage());
-  ASSERT_LE(default_user_image::kFirstDefaultImageIndex, default_image_index);
-  ASSERT_GT(default_user_image::kFirstDefaultImageIndex +
-                default_user_image::kDefaultImagesCount,
-            default_image_index);
-  const gfx::ImageSkia& default_image =
-      default_user_image::GetDefaultImageDeprecated(default_image_index);
-  EXPECT_TRUE(test::AreImagesEqual(default_image, user->GetImage()));
+  EXPECT_TRUE(default_user_image::IsValidIndex(default_image_index));
+  EXPECT_TRUE(default_user_image::IsInCurrentImageSet(default_image_index));
   ExpectUserImageInfo(enterprise_account_id_, default_image_index,
-                      GetUserImagePath(enterprise_account_id_, "jpg"));
+                      base::FilePath());
 
   // Choose a different user image. Verify that the chosen user image is set and
   // persisted.
   const int user_image_index =
-      default_user_image::kFirstDefaultImageIndex +
-      (default_image_index - default_user_image::kFirstDefaultImageIndex + 1) %
-          default_user_image::kDefaultImagesCount;
-  const gfx::ImageSkia& user_image =
-      default_user_image::GetDefaultImageDeprecated(user_image_index);
+      default_image_index == default_user_image::kFirstDefaultImageIndex
+          ? default_user_image::kFirstDefaultImageIndex + 1
+          : default_user_image::kFirstDefaultImageIndex;
+  EXPECT_TRUE(default_user_image::IsValidIndex(user_image_index));
+  EXPECT_TRUE(default_user_image::IsInCurrentImageSet(user_image_index));
 
-  run_loop_ = std::make_unique<base::RunLoop>();
   UserImageManager* user_image_manager =
       ChromeUserManager::Get()->GetUserImageManager(enterprise_account_id_);
   user_image_manager->SaveUserDefaultImageIndex(user_image_index);
-  run_loop_->Run();
 
   EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(user_image_index, user->image_index());
-  EXPECT_TRUE(test::AreImagesEqual(user_image, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_, user_image_index,
-                      GetUserImagePath(enterprise_account_id_, "jpg"));
+                      base::FilePath());
 }
 
 // Verifies that when the user chooses a user image and a different image is
@@ -725,22 +720,17 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PolicyOverridesUser) {
   policy::CloudPolicyStore* store = GetStoreForUser(user);
   ASSERT_TRUE(store);
 
+  UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
+
   // Choose a user image. Verify that the chosen user image is set and
   // persisted.
-  const gfx::ImageSkia& default_image =
-      default_user_image::GetDefaultImageDeprecated(
-          default_user_image::kFirstDefaultImageIndex);
-
-  run_loop_ = std::make_unique<base::RunLoop>();
   UserImageManager* user_image_manager =
       ChromeUserManager::Get()->GetUserImageManager(enterprise_account_id_);
   user_image_manager->SaveUserDefaultImageIndex(
       default_user_image::kFirstDefaultImageIndex);
-  run_loop_->Run();
 
   EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(default_user_image::kFirstDefaultImageIndex, user->image_index());
-  EXPECT_TRUE(test::AreImagesEqual(default_image, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_,
                       default_user_image::kFirstDefaultImageIndex,
                       base::FilePath());

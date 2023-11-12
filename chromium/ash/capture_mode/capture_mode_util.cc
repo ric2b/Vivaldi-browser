@@ -19,6 +19,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
+#include "ash/system/privacy/privacy_indicators_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/check.h"
 #include "base/notreached.h"
@@ -43,6 +44,12 @@ namespace {
 constexpr int kBannerViewTopRadius = 0;
 constexpr int kBannerViewBottomRadius = 8;
 constexpr float kScaleUpFactor = 0.8f;
+
+// The app IDs used for the capture mode camera and microphone recording privacy
+// indicators.
+constexpr char kCameraPrivacyIndicatorId[] = "system-capture-mode-camera";
+constexpr char kMicrophonePrivacyIndicatorId[] =
+    "system-capture-mode-microphone";
 
 // Returns the target visibility of the camera preview, given the
 // `confine_bounds_short_side_length`. The out parameter
@@ -69,11 +76,6 @@ bool CalculateCameraPreviewTargetVisibility(
   return !controller->IsActive() ||
          controller->capture_mode_session()
              ->CalculateCameraPreviewTargetVisibility();
-}
-
-// Returns the local center point of the given `layer`.
-gfx::Point GetLocalCenterPoint(ui::Layer* layer) {
-  return gfx::Rect(layer->GetTargetBounds().size()).CenterPoint();
 }
 
 void FadeInWidget(views::Widget* widget,
@@ -226,7 +228,7 @@ void TriggerAccessibilityAlert(int message_id) {
 }
 
 void TriggerAccessibilityAlertSoon(const std::string& message) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &AccessibilityControllerImpl::TriggerAccessibilityAlertWithMessage,
@@ -346,6 +348,10 @@ std::unique_ptr<views::View> CreatePlayIconView() {
   play_view->SetBackground(views::CreateThemedRoundedRectBackground(
       kColorAshShieldAndBase80, kPlayIconBackgroundCornerRadiusDip));
   return play_view;
+}
+
+gfx::Point GetLocalCenterPoint(ui::Layer* layer) {
+  return gfx::Rect(layer->GetTargetBounds().size()).CenterPoint();
 }
 
 gfx::Transform GetScaleTransformAboutCenter(ui::Layer* layer, float scale) {
@@ -468,6 +474,54 @@ aura::Window* GetPreferredRootWindow(
   // but will have the correct id.
   DCHECK_NE(display::kInvalidDisplayId, display_id);
   return Shell::GetRootWindowForDisplayId(display_id);
+}
+
+void ConfigLabelView(views::Label* label_view) {
+  label_view->SetEnabledColorId(kColorAshTextColorPrimary);
+  label_view->SetBackgroundColor(SK_ColorTRANSPARENT);
+  label_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  label_view->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_MIDDLE);
+}
+
+views::BoxLayout* CreateAndInitBoxLayoutForView(views::View* view) {
+  auto* box_layout = view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+      capture_mode::kBetweenChildSpacing));
+  box_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  return box_layout;
+}
+
+std::string GetScreenCaptureNotificationIdForPath(const base::FilePath& path) {
+  DCHECK(!path.empty());
+  return base::StringPrintf("%s-%s", kScreenCaptureNotificationId,
+                            path.BaseName().value().c_str());
+}
+
+void MaybeUpdateCameraPrivacyIndicator(bool camera_on) {
+  if (features::IsPrivacyIndicatorsEnabled()) {
+    UpdatePrivacyIndicatorsView(kCameraPrivacyIndicatorId, camera_on,
+                                /*is_microphone_used=*/false);
+  }
+}
+
+void MaybeUpdateMicrophonePrivacyIndicator(bool mic_on) {
+  if (features::IsPrivacyIndicatorsEnabled()) {
+    UpdatePrivacyIndicatorsView(kMicrophonePrivacyIndicatorId,
+                                /*is_camera_used=*/false, mic_on);
+  }
+}
+
+ui::ColorProvider* GetColorProviderForNativeTheme() {
+  auto* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  return ui::ColorProviderManager::Get().GetColorProviderFor(
+      native_theme->GetColorProviderKey(nullptr));
+}
+
+bool IsEventTargetedOnWidget(const ui::LocatedEvent& event,
+                             views::Widget* widget) {
+  auto* target = static_cast<aura::Window*>(event.target());
+  return widget && widget->GetNativeWindow()->Contains(target);
 }
 
 }  // namespace ash::capture_mode_util

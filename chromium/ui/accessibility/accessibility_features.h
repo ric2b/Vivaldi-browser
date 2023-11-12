@@ -98,6 +98,14 @@ AX_BASE_EXPORT bool IsDictationOfflineAvailable();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
     kExperimentalAccessibilityDictationWithPumpkin);
 
+// Returns true if Dictation with context checking is enabled.
+AX_BASE_EXPORT bool
+IsExperimentalAccessibilityDictationContextCheckingEnabled();
+
+// Enables Context Checking with the accessibility Dictation feature.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kExperimentalAccessibilityDictationContextChecking);
+
 // Returns true if dictation with pumpkin is enabled.
 AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationWithPumpkinEnabled();
 
@@ -116,23 +124,13 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(
 // enabled.
 AX_BASE_EXPORT bool IsExperimentalAccessibilityGoogleTtsLanguagePacksEnabled();
 
-// Enables high-quality, network-based voices in Select-to-speak.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kEnhancedNetworkVoices);
+// Enables Select-to-Speak voice switching.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kExperimentalAccessibilitySelectToSpeakVoiceSwitching);
 
-// Returns true if network-based voices are enabled in Select-to-speak.
-AX_BASE_EXPORT bool IsEnhancedNetworkVoicesEnabled();
-
-// Enables improved Accessibility OS Settings visibility.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityOSSettingsVisibility);
-
-// Returns true if improved Accessibility OS Settings visibility is enabled.
-AX_BASE_EXPORT bool IsAccessibilityOSSettingsVisibilityEnabled();
-
-// Enables the experimental Accessibility Service.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityService);
-
-// Returns true if the Accessibility Service enabled.
-AX_BASE_EXPORT bool IsAccessibilityServiceEnabled();
+// Returns true if the Select-to-Speak voice switching feature is enabled.
+AX_BASE_EXPORT bool
+IsExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled();
 
 // Enables the experimental color enhancements settings.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
@@ -154,6 +152,20 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilitySelectToSpeakPrefsMigration);
 
 // Returns true if AccessibilitySelectToSpeakPrefsMigration enabled.
 AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakPrefsMigrationEnabled();
+
+// Enables AccessibilitySelectToSpeakContextMenuOption.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kAccessibilitySelectToSpeakContextMenuOption);
+
+// Returns true if AccessibilitySelectToSpeakContextMenuOption is enabled.
+AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakContextMenuOptionEnabled();
+
+// Enables AccessibilitySelectToSpeakHoverTextImprovements.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kAccessibilitySelectToSpeakHoverTextImprovements);
+
+// Returns true if AccessibilitySelectToSpeakHoverTextImprovements is enabled.
+AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakHoverTextImprovementsEnabled();
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -216,28 +228,12 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingWithScreen2x);
 // distills web pages using an ML model.
 AX_BASE_EXPORT bool IsReadAnythingWithScreen2xEnabled();
 
-// Enables using Screen AI library to add metadata for accessibility tools.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kScreenAI);
-
-// Returns true if Screen AI Visual Annotations feature is enabled. This feature
-// uses a local machine intelligence library to process browser screenshots and
-// add metadata to the accessibility tree.
-AX_BASE_EXPORT bool IsScreenAIVisualAnnotationsEnabled();
-
 // Returns true if Screen AI Service is needed as either
 // ScreenAIVisualAnnotations or ReadAnythingWithScreen2x are enabled.
 AX_BASE_EXPORT bool IsScreenAIServiceNeeded();
 
 // If enabled, ScreenAI library writes some debug data in /tmp.
 AX_BASE_EXPORT bool IsScreenAIDebugModeEnabled();
-
-// If enabled, ScreenAI library uses Layout Extraction output, and if disabled,
-// uses OCR output.
-// TODO(https://crbug.com/1278249): Remove this flag after the two outputs are
-// merged in the library.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kScreenAIUseLayoutExtraction);
-
-AX_BASE_EXPORT bool IsScreenAIUseLayoutExtractionEnabled();
 
 // Enables a feature whereby inaccessible (i.e. untagged) PDFs are made
 // accessible using an optical character recognition service. Due to the size of
@@ -248,6 +244,22 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kPdfOcr);
 // and the resulting text, together with its layout information, will be added
 // to the accessibility tree.
 AX_BASE_EXPORT bool IsPdfOcrEnabled();
+
+// Enables a feature whereby inaccessible surfaces such as canvases are made
+// accessible using a local machine intelligence service.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kLayoutExtraction);
+
+// Returns true if Layout Extraction feature is enabled. This feature uses a
+// local machine intelligence library to process screenshots and adds metadata
+// to the accessibility tree.
+AX_BASE_EXPORT bool IsLayoutExtractionEnabled();
+
+// Enables the experimental Accessibility Service.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityService);
+
+// Returns true if the Accessibility Service enabled.
+AX_BASE_EXPORT bool IsAccessibilityServiceEnabled();
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace features

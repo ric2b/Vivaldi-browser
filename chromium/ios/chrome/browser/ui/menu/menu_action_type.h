@@ -48,11 +48,14 @@ enum class MenuActionType {
   SearchCopiedImage = 36,
   VisitCopiedLink = 37,
   SearchCopiedText = 38,
+  PinTab = 39,
+  UnpinTab = 40,
+
   // Vivaldi
-  NewNote = 39,
-  NewFolder = 40,
-  ClearHistory = 41,
-  Done = 42,
+  NewNote,
+  NewFolder,
+  ClearHistory,
+  Done,
   kMaxValue = Done
 };
 

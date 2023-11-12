@@ -20,7 +20,8 @@ html {
   --google-blue-400: rgb(102, 157, 246);
   --google-blue-500-rgb: 66, 133, 244;
   --google-blue-500: rgb(var(--google-blue-500-rgb));
-  --google-blue-600: rgb(26, 115, 232);
+  --google-blue-600-rgb: 26, 115, 232;
+  --google-blue-600: rgb(var(--google-blue-600-rgb));
   --google-blue-700: rgb(25, 103, 210);
   --google-grey-100: rgb(241, 243, 244);
   --google-grey-200-rgb: 232, 234, 237;
@@ -40,8 +41,8 @@ html {
   --secondary-color: var(--google-grey-700);
   --warning-color: var(--google-red-700);
 
+  --focus-shadow-color: rgba(var(--google-blue-600-rgb), 0.4);
   --input-background: var(--google-grey-100);
-  --keyboard-focus-ring: rgba(var(--google-blue-500-rgb), 0.4);
   --link-color: var(--google-blue-700);
   --separator-color: rgba(0, 0, 0, .06);
   --toolbar-color: white;
@@ -57,8 +58,8 @@ html {
     --secondary-color: var(--google-grey-500);
     --warning-color: var(--google-red-300);
 
+    --focus-shadow-color: rgba(var(--google-blue-300-rgb), 0.4);
     --input-background: rgba(0, 0, 0, .3);
-    --keyboard-focus-ring: rgba(var(--google-blue-300-rgb), 0.4);
     --link-color: var(--google-blue-300);
     --separator-color: rgba(255, 255, 255, .1);
     --toolbar-color: var(--google-grey-900-white-4-percent);
@@ -109,6 +110,11 @@ button {
 #flagsTemplate {
   flex: 1;
   padding: calc(60px + 1rem) var(--side-padding) 8px;
+}
+
+:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-shadow-color);
+  outline: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -194,11 +200,6 @@ button {
   #search::placeholder {
     color: rgba(var(--google-grey-200-rgb), .51);
   }
-}
-
-#search:focus {
-  border-color: var(--interactive-color);
-  outline: 0;
 }
 
 .clear-search {
@@ -327,7 +328,7 @@ button:not(.primary):hover {
 
 
 .match,
-.referenced h3 {
+.referenced h2 {
   /* This UI is intentionally the same in light and dark mode. */
   background: yellow;
   color: var(--google-grey-900);
@@ -413,43 +414,46 @@ textarea {
 
 .tabs {
   display: flex;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  position: relative;
-  text-align: left; /* csschecker-disable-line left-right */
   width: 100%;
 }
 
-.tabs li {
-  display: block;
-  flex: 1 1 auto;
-  width: 50%;
-}
-
 .tab {
-  border-bottom: 1px solid currentColor;
   color: var(--secondary-color);
   cursor: pointer;
   display: block;
+  flex: 1;
   font-size: 1rem;
   font-weight: normal;
   padding: 14px 21px;
   position: relative;
   text-align: center;
   text-decoration: none;
-  top: 4px;
-  transition: all 200ms var(--ease-in-out);
+  transition: color 200ms var(--ease-in-out);
   user-select: none;
+  width: 50%;
   z-index: 1;
 }
 
-.tabs .selected .tab,
-.tabs .selected .tab:focus {
-  border-bottom-width: 2px;
+.tab::before {
+  background: currentColor;
+  bottom: 0;
+  content: '';
+  display: block;
+  height: 1px;
+  left: 0;
+  position: absolute;
+  transition: height 200ms var(--ease-in-out);
+  width: 100%;
+}
+
+.tabs .tab.selected,
+.tabs .tab.selected:focus {
   color: var(--interactive-color);
-  padding-top: 17px;
-  top: 0;
+}
+
+.tabs .tab.selected::before,
+.tabs .tab.selected:focus::before {
+  height: 2px;
 }
 
 html:not(.focus-outline-visible) .tab:focus {
@@ -521,10 +525,6 @@ button.primary {
 
 button.primary:-webkit-any(:active, :hover) {
   background: var(--google-blue-600);
-}
-
-html.focus-outline-visible button.primary:focus {
-  box-shadow: 0 0 0 1px var(--keyboard-focus-ring);
 }
 
 #version {

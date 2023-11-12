@@ -14,7 +14,7 @@
 
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/values.h"
 #include "extensions/browser/api/api_resource_manager.h"
 #include "extensions/browser/api/usb/usb_device_manager.h"
@@ -76,7 +76,7 @@ class UsbTransferFunction : public UsbConnectionFunction {
   ~UsbTransferFunction() override;
 
   void OnCompleted(device::mojom::UsbTransferStatus status,
-                   std::unique_ptr<base::DictionaryValue> transfer_info);
+                   base::Value::Dict transfer_info);
   void OnTransferInCompleted(device::mojom::UsbTransferStatus status,
                              base::span<const uint8_t> data);
   void OnTransferOutCompleted(device::mojom::UsbTransferStatus status);

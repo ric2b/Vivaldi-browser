@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
+#import "ios/chrome/browser/ui/tab_switcher/pinned_tabs/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_menu_actions_data_source.h"
@@ -62,7 +63,7 @@
 
 - (UIContextMenuConfiguration*)
     contextMenuConfigurationForGridCell:(GridCell*)gridCell
-                           menuScenario:(MenuScenario)scenario {
+                           menuScenario:(MenuScenarioHistogram)scenario {
   __weak __typeof(self) weakSelf = self;
 
   UIContextMenuActionProvider actionProvider =
@@ -85,7 +86,8 @@
 }
 
 - (NSArray<UIMenuElement*>*)menuElementsForGridCell:(GridCell*)gridCell
-                                       menuScenario:(MenuScenario)scenario {
+                                       menuScenario:
+                                           (MenuScenarioHistogram)scenario {
   // Record that this context menu was shown to the user.
   RecordMenuShown(scenario);
 
@@ -110,6 +112,17 @@
                           scenario:ActivityScenario::TabGridItem
                           fromView:gridCell];
                     }]];
+    }
+
+    if (IsPinnedTabsEnabled()) {
+      if ([self.contextMenuDelegate
+              respondsToSelector:@selector(pinTabWithIdentifier:incognito:)]) {
+        [menuElements addObject:[actionFactory actionToPinTabWithBlock:^{
+                        [self.contextMenuDelegate
+                            pinTabWithIdentifier:gridCell.itemIdentifier
+                                       incognito:self.incognito];
+                      }]];
+      }
     }
 
     if (item.URL.SchemeIsHTTPOrHTTPS() &&
@@ -155,8 +168,8 @@
 
   // Thumb strip and search results menus don't support tab selection.
   BOOL scenarioDisablesSelection =
-      scenario == MenuScenario::kTabGridSearchResult ||
-      scenario == MenuScenario::kThumbStrip;
+      scenario == MenuScenarioHistogram::kTabGridSearchResult ||
+      scenario == MenuScenarioHistogram::kThumbStrip;
   if (!scenarioDisablesSelection &&
       [self.contextMenuDelegate respondsToSelector:@selector(selectTabs)]) {
     [menuElements addObject:[actionFactory actionToSelectTabsWithBlock:^{
@@ -179,6 +192,7 @@
 
 - (void)browserDestroyed:(Browser*)browser {
   DCHECK_EQ(browser, self.browser);
+  _browserObserver.reset();
   self.browser = nullptr;
 }
 

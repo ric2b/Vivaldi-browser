@@ -20,12 +20,12 @@ import '../settings_shared.css.js';
 
 import {CrButtonElement} from '//resources/cr_elements/cr_button/cr_button.js';
 import {assert} from '//resources/js/assert_ts.js';
-import {WebUIListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
 import {DomRepeatEvent, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
 import {PrefsMixin} from '../prefs/prefs_mixin.js';
-import {Route, Router} from '../router.js';
+import {Router} from '../router.js';
 
 import {getTemplate} from './sync_account_control.html.js';
 import {StatusAction, StoredAccount, SyncBrowserProxy, SyncBrowserProxyImpl, SyncStatus} from './sync_browser_proxy.js';
@@ -39,7 +39,7 @@ export interface SettingsSyncAccountControlElement {
 }
 
 const SettingsSyncAccountControlElementBase =
-    WebUIListenerMixin(PrefsMixin(PolymerElement));
+    WebUiListenerMixin(PrefsMixin(PolymerElement));
 
 export class SettingsSyncAccountControlElement extends
     SettingsSyncAccountControlElementBase {
@@ -163,7 +163,7 @@ export class SettingsSyncAccountControlElement extends
 
     this.syncBrowserProxy_.getStoredAccounts().then(
         this.handleStoredAccounts_.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'stored-accounts-updated', this.handleStoredAccounts_.bind(this));
   }
 
@@ -349,8 +349,7 @@ export class SettingsSyncAccountControlElement extends
 
   private onErrorButtonTap_() {
     const router = Router.getInstance();
-    const routes =
-        router.getRoutes() as {SIGN_OUT: Route, SYNC: Route, ABOUT: Route};
+    const routes = router.getRoutes();
     switch (this.syncStatus.statusAction) {
       // <if expr="not chromeos_ash">
       case StatusAction.REAUTHENTICATE:
@@ -405,7 +404,7 @@ export class SettingsSyncAccountControlElement extends
   private onTurnOffButtonTap_() {
     /* This will route to people_page's disconnect dialog. */
     const router = Router.getInstance();
-    router.navigateTo((router.getRoutes() as {SIGN_OUT: Route}).SIGN_OUT);
+    router.navigateTo(router.getRoutes().SIGN_OUT);
   }
 
   private onMenuButtonTap_() {

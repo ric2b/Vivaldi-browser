@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,6 +98,8 @@ chrome.passwordsPrivate.ImportEntryStatus = {
   LONG_USERNAME: 'LONG_USERNAME',
   CONFLICT_PROFILE: 'CONFLICT_PROFILE',
   CONFLICT_ACCOUNT: 'CONFLICT_ACCOUNT',
+  LONG_NOTE: 'LONG_NOTE',
+  LONG_CONCATENATED_NOTE: 'LONG_CONCATENATED_NOTE',
 };
 
 /**
@@ -140,7 +142,16 @@ chrome.passwordsPrivate.CompromisedInfo;
 
 /**
  * @typedef {{
+ *   name: string,
+ *   url: string
+ * }}
+ */
+chrome.passwordsPrivate.DomainInfo;
+
+/**
+ * @typedef {{
  *   urls: !chrome.passwordsPrivate.UrlCollection,
+ *   affiliatedDomains: (!Array<!chrome.passwordsPrivate.DomainInfo>|undefined),
  *   username: string,
  *   password: (string|undefined),
  *   federationText: (string|undefined),
@@ -149,11 +160,19 @@ chrome.passwordsPrivate.CompromisedInfo;
  *   isAndroidCredential: boolean,
  *   note: (string|undefined),
  *   changePasswordUrl: (string|undefined),
- *   hasStartableScript: boolean,
  *   compromisedInfo: (!chrome.passwordsPrivate.CompromisedInfo|undefined)
  * }}
  */
 chrome.passwordsPrivate.PasswordUiEntry;
+
+/**
+ * @typedef {{
+ *   name: string,
+ *   iconUrl: string,
+ *   entries: !Array<!chrome.passwordsPrivate.PasswordUiEntry>
+ * }}
+ */
+chrome.passwordsPrivate.CredentialGroup;
 
 /**
  * @typedef {{
@@ -174,6 +193,7 @@ chrome.passwordsPrivate.PasswordExportProgress;
 /**
  * @typedef {{
  *   state: !chrome.passwordsPrivate.PasswordCheckState,
+ *   totalNumberOfPasswords: (number|undefined),
  *   alreadyProcessed: (number|undefined),
  *   remainingInQueue: (number|undefined),
  *   elapsedTimeSinceLastCheck: (string|undefined)
@@ -253,15 +273,16 @@ chrome.passwordsPrivate.undoRemoveSavedPasswordOrException = function() {};
 chrome.passwordsPrivate.requestPlaintextPassword = function(id, reason, callback) {};
 
 /**
- * Returns the PasswordUiEntry (with |password| field filled) corresponding to
- * |id|. Note that on some operating systems, this call may result in an
- * OS-level reauthentication. Once the PasswordUiEntry has been fetched, it will
- * be returned via |callback|.
- * @param {number} id The id for the password entry being being retrieved.
- * @param {function(!chrome.passwordsPrivate.PasswordUiEntry): void} callback
- *     The callback that gets invoked with the retrieved PasswordUiEntry.
+ * Returns the PasswordUiEntries (with |password|, |note| field filled)
+ * corresponding to |ids|. Note that on some operating systems, this call may
+ * result in an OS-level reauthentication. Once the PasswordUiEntry has been
+ * fetched, it will be returned via |callback|.
+ * @param {!Array<number>} ids Ids for the password entries being retrieved.
+ * @param {function(!Array<!chrome.passwordsPrivate.PasswordUiEntry>): void}
+ *     callback The callback that gets invoked with the retrieved
+ *     PasswordUiEntries.
  */
-chrome.passwordsPrivate.requestCredentialDetails = function(id, callback) {};
+chrome.passwordsPrivate.requestCredentialsDetails = function(ids, callback) {};
 
 /**
  * Returns the list of saved passwords.
@@ -269,6 +290,13 @@ chrome.passwordsPrivate.requestCredentialDetails = function(id, callback) {};
  *     callback Called with the list of saved passwords.
  */
 chrome.passwordsPrivate.getSavedPasswordList = function(callback) {};
+
+/**
+ * Returns the list of Credential groups.
+ * @param {function(!Array<!chrome.passwordsPrivate.CredentialGroup>): void}
+ *     callback Called with the list of groups.
+ */
+chrome.passwordsPrivate.getCredentialGroups = function(callback) {};
 
 /**
  * Returns the list of password exceptions.
@@ -359,17 +387,9 @@ chrome.passwordsPrivate.unmuteInsecureCredential = function(credential, callback
  * Records that a change password flow was started for |credential|.
  * @param {!chrome.passwordsPrivate.PasswordUiEntry} credential The credential
  *     for which the flow was triggered.
- * @param {boolean} isManualFlow
  * @param {function(): void=} callback
  */
-chrome.passwordsPrivate.recordChangePasswordFlowStarted = function(credential, isManualFlow, callback) {};
-
-/**
- * Refreshes the cache for automatic password change scripts if it is stale.
- * Invokes `callback` on completion.
- * @param {function(): void=} callback
- */
-chrome.passwordsPrivate.refreshScriptsIfNecessary = function(callback) {};
+chrome.passwordsPrivate.recordChangePasswordFlowStarted = function(credential, callback) {};
 
 /**
  * Starts a check for insecure passwords. Invokes |callback| on completion.
@@ -389,15 +409,6 @@ chrome.passwordsPrivate.stopPasswordCheck = function(callback) {};
  *     callback
  */
 chrome.passwordsPrivate.getPasswordCheckStatus = function(callback) {};
-
-/**
- * Starts an automated password change for |credential|. Invokes |callback| on
- * completion with a boolean parameter that signals whether the credential was
- * changed successfully.
- * @param {!chrome.passwordsPrivate.PasswordUiEntry} credential
- * @param {function(boolean): void=} callback
- */
-chrome.passwordsPrivate.startAutomatedPasswordChange = function(credential, callback) {};
 
 /**
  * Requests whether the account store is a default location for saving
@@ -434,10 +445,15 @@ chrome.passwordsPrivate.addPassword = function(options, callback) {};
 chrome.passwordsPrivate.extendAuthValidity = function(callback) {};
 
 /**
- * Starts system authentication. If successful changes
- * `kBiometricAuthenticationBeforeFilling` value.
+ * Switches Biometric authentication before filling state after successful
+ * authentication.
  */
 chrome.passwordsPrivate.switchBiometricAuthBeforeFillingState = function() {};
+
+/**
+ * Shows a dialog for creating a shortcut for the Password Manager page.
+ */
+chrome.passwordsPrivate.showAddShortcutDialog = function() {};
 
 /**
  * Fired when the saved passwords list has changed, meaning that an entry has

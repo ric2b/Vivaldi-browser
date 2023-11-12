@@ -31,7 +31,8 @@ TutorialDescription::Step::Step(
     ui::CustomElementEventType event_type_,
     absl::optional<bool> must_remain_visible_,
     bool transition_only_on_event_,
-    TutorialDescription::NameElementsCallback name_elements_callback_)
+    TutorialDescription::NameElementsCallback name_elements_callback_,
+    ContextMode context_mode_)
     : title_text_id(title_text_id_),
       body_text_id(body_text_id_),
       step_type(step_type_),
@@ -41,7 +42,8 @@ TutorialDescription::Step::Step(
       arrow(arrow_),
       must_remain_visible(must_remain_visible_),
       transition_only_on_event(transition_only_on_event_),
-      name_elements_callback(name_elements_callback_) {
+      name_elements_callback(name_elements_callback_),
+      context_mode(context_mode_) {
   DCHECK(!title_text_id || body_text_id)
       << "Tutorial bubble should not have a title without body text.";
 }

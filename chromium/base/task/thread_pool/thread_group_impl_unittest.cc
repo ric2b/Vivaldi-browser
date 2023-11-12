@@ -79,6 +79,7 @@ class ThreadGroupImplImplTestBase : public ThreadGroup::Delegate {
         tracked_ref_factory_(this) {}
 
   void CommonTearDown() {
+    delayed_task_manager_.Shutdown();
     service_thread_.Stop();
     task_tracker_.FlushForTesting();
     if (thread_group_)
@@ -1533,7 +1534,7 @@ TEST_P(ThreadGroupImplOverCapacityTest, VerifyCleanup) {
 
   if (GetParam() == ReclaimType::DELAYED_RECLAIM) {
     // Note: one worker above capacity will not get cleaned up since it's on the
-    // top of the idle stack.
+    // front of the idle set.
     thread_group_->WaitForWorkersCleanedUpForTesting(kLocalMaxTasks - 1);
     EXPECT_EQ(kLocalMaxTasks + 1, thread_group_->NumberOfWorkersForTesting());
     threads_continue.Signal();

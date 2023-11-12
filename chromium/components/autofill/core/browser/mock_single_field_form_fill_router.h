@@ -11,6 +11,8 @@
 
 namespace autofill {
 
+class AutofillClient;
+
 class MockSingleFieldFormFillRouter : public SingleFieldFormFillRouter {
  public:
   explicit MockSingleFieldFormFillRouter(
@@ -27,10 +29,9 @@ class MockSingleFieldFormFillRouter : public SingleFieldFormFillRouter {
               (override));
   MOCK_METHOD(bool,
               OnGetSingleFieldSuggestions,
-              (int query_id,
-               bool is_autocomplete_enabled,
-               bool autoselect_first_suggestion,
+              (AutoselectFirstSuggestion autoselect_first_suggestion,
                const FormFieldData& field,
+               const AutofillClient& client,
                base::WeakPtr<SingleFieldFormFiller::SuggestionsHandler> handler,
                const SuggestionsContext& context),
               (override));

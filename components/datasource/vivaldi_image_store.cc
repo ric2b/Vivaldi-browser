@@ -24,6 +24,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "components/base32/base32.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -41,6 +42,8 @@
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_theme_io.h"
 #include "prefs/vivaldi_gen_prefs.h"
+#include "sync/file_sync/file_store.h"
+#include "sync/file_sync/file_store_factory.h"
 
 namespace {
 
@@ -51,6 +54,7 @@ constexpr const char* const kCanonicalExtensions[] = {
     "jpg",
     "png",
     "webp",
+    "svg",
     // clang-format on
 };
 
@@ -70,6 +74,7 @@ const char* const kAllowedMimeTypes[] = {
     "image/jpeg",
     "image/png",
     "image/webp",
+    "image/svg+xml",
     // clang-format on
 };
 
@@ -341,7 +346,7 @@ std::string VivaldiImageStore::GetMappingJSONOnFileThread() {
 
   // TODO(igor@vivaldi.com): Write the mapping file even if there are no
   // entries. This allows in future to write a URL format converter for
-  // bookamrks and a add a version field to the file. Then presence of the file
+  // bookmarks and a add a version field to the file. Then presence of the file
   // without the version string will indicate the need for converssion.
 
   base::Value::Dict items;
@@ -445,6 +450,9 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
   std::string id;
   UsedIds used_ids;
 
+  std::vector<std::pair<base::GUID, std::string>>
+      bookmark_thumbnail_ids_to_migrate;
+
   // Find all data url ids in bookmarks.
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
       bookmark_model->root_node());
@@ -452,7 +460,12 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
     const bookmarks::BookmarkNode* node = iterator.Next();
     std::string thumbnail_url = vivaldi_bookmark_kit::GetThumbnail(node);
     if (ParseDataUrl(thumbnail_url, url_kind, id)) {
-      used_ids[url_kind].push_back(std::move(id));
+      if (url_kind != VivaldiImageStore::kPathMappingUrl) {
+        used_ids[url_kind].push_back(std::move(id));
+      } else {
+        bookmark_thumbnail_ids_to_migrate.push_back(
+            std::pair(node->guid(), std::move(id)));
+      }
     }
   }
 
@@ -472,6 +485,14 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
   // base::Unretained() is OK as the callback is only called inside the callee.
   vivaldi_theme_io::EnumerateUserThemeUrls(
       prefs, base::BindRepeating(check_url, base::Unretained(&used_ids)));
+
+  if (!bookmark_thumbnail_ids_to_migrate.empty()) {
+    sequence_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &VivaldiImageStore::MigrateCustomBookmarkThumbnailsOnFileThread,
+            this, std::move(bookmark_thumbnail_ids_to_migrate)));
+  }
 
   sequence_task_runner_->PostTask(
       FROM_HERE,
@@ -531,6 +552,44 @@ void VivaldiImageStore::RemoveUnusedUrlDataOnFileThread(UsedIds used_ids) {
   }
 }
 
+void VivaldiImageStore::MigrateCustomBookmarkThumbnailsOnFileThread(
+    std::vector<std::pair<base::GUID, std::string>> ids_to_migrate) {
+  for (auto& id_to_migrate : ids_to_migrate) {
+    auto node = path_id_map_.extract(id_to_migrate.second);
+    if (!node)
+      continue;
+
+    auto content = base::ReadFileToBytes(node.mapped());
+    if (!content)
+      continue;
+
+    ui_thread_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&VivaldiImageStore::
+                           FinishCustomBookmarkThumbnailMigrationOnUIThread,
+                       this, id_to_migrate.first, std::move(*content)));
+  }
+}
+
+void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
+    base::GUID bookmark_guid,
+    std::vector<uint8_t> content) {
+  auto* bookmarks_model = GetBookmarkModel();
+  const bookmarks::BookmarkNode* bookmark =
+      bookmarks::GetBookmarkNodeByGUID(bookmarks_model, bookmark_guid);
+
+  if (!bookmark)
+    return;
+
+  std::string checksum =
+      SyncedFileStoreFactory::GetForBrowserContext(profile_)->SetLocalFile(
+          bookmark_guid, syncer::BOOKMARKS, std::move(content));
+  vivaldi_bookmark_kit::SetBookmarkThumbnail(
+      bookmarks_model, bookmark->id(),
+      vivaldi_data_url_utils::MakeUrl(
+          vivaldi_data_url_utils::PathType::kSyncedStore, checksum));
+}
+
 void VivaldiImageStore::AddNewbornUrlOnFileThread(base::StringPiece data_url) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
   file_thread_newborn_urls_.push_back(
@@ -569,7 +628,7 @@ void VivaldiImageStore::UpdateMapping(content::BrowserContext* browser_context,
   DCHECK(api);
   if (!api) {
     LOG(ERROR) << "No API";
-    std::move(callback).Run(false);
+    std::move(callback).Run(std::string());
     return;
   }
 
@@ -618,26 +677,25 @@ void VivaldiImageStore::FinishStoreImageOnUIThread(StoreImageCallback callback,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // profile are null on shutdown.
-  bool success = false;
   if (!profile_) {
     LOG(ERROR) << "shutdown started";
   } else if (place.IsBookmarkId()) {
     if (bookmarks::BookmarkModel* bookmark_model = GetBookmarkModel()) {
-      success = vivaldi_bookmark_kit::SetBookmarkThumbnail(
+      vivaldi_bookmark_kit::SetBookmarkThumbnail(
           bookmark_model, place.GetBookmarkId(), data_url);
     }
   } else if (place.IsBackgroundUserImage()) {
     profile_->GetPrefs()->SetString(vivaldiprefs::kThemeBackgroundUserImage,
                                     data_url);
-    success = true;
   } else if (place.IsThemeId()) {
-    success = vivaldi_theme_io::StoreImageUrl(profile_->GetPrefs(),
-                                              place.GetThemeId(), data_url);
+    vivaldi_theme_io::StoreImageUrl(profile_->GetPrefs(),
+                                    place.GetThemeId(), data_url);
   } else {
-    NOTREACHED();
+    // This happens vivaldi.utilities.storeImage is used to save a toolbar
+    // button image. The JS side is responsible for saving the URL to prefs.
   }
-  ForgetNewbornUrl(std::move(data_url));
-  std::move(callback).Run(success);
+  ForgetNewbornUrl(data_url);
+  std::move(callback).Run(data_url);
 }
 
 // static
@@ -706,7 +764,7 @@ void VivaldiImageStore::CaptureBookmarkThumbnail(
   VivaldiImageStore* api = FromBrowserContext(browser_context);
   DCHECK(api);
   if (!api) {
-    std::move(ui_thread_callback).Run(false);
+    std::move(ui_thread_callback).Run(std::string());
     return;
   }
   ImagePlace place;
@@ -730,7 +788,7 @@ void VivaldiImageStore::StoreImage(
   VivaldiImageStore* api = FromBrowserContext(browser_context);
   DCHECK(api);
   if (!api) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(std::string());
     return;
   }
 

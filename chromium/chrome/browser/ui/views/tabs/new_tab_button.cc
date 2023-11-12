@@ -10,6 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -30,6 +31,7 @@
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -76,6 +78,8 @@ NewTabButton::NewTabButton(TabStrip* tab_strip, PressedCallback callback)
       this, std::make_unique<NewTabButton::HighlightPathGenerator>());
 
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+
+  SetProperty(views::kElementIdentifierKey, kNewTabButtonElementId);
 }
 
 NewTabButton::~NewTabButton() {
@@ -114,6 +118,21 @@ SkColor NewTabButton::GetForegroundColor() const {
 void NewTabButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   ImageButton::OnBoundsChanged(previous_bounds);
   ink_drop_container_->SetBoundsRect(GetLocalBounds());
+}
+
+void NewTabButton::AddedToWidget() {
+  paint_as_active_subscription_ =
+      GetWidget()->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+          &NewTabButton::FrameColorsChanged, base::Unretained(this)));
+}
+
+void NewTabButton::RemovedFromWidget() {
+  paint_as_active_subscription_ = {};
+}
+
+void NewTabButton::OnThemeChanged() {
+  views::ImageButton::OnThemeChanged();
+  FrameColorsChanged();
 }
 
 #if BUILDFLAG(IS_WIN)

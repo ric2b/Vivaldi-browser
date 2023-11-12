@@ -5,6 +5,7 @@
 #include "chrome/browser/enterprise/connectors/analysis/local_binary_upload_service.h"
 
 #include "base/callback_helpers.h"
+#include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
 #include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_sdk_manager.h"
 #include "chrome/test/base/testing_profile.h"
@@ -22,6 +23,8 @@ using ::testing::NiceMock;
 using ::testing::NotNull;
 using ::testing::Return;
 using ::testing::SaveArg;
+
+constexpr char kFakeUserActionId[] = "1234567890";
 
 class MockRequest : public BinaryUploadService::Request {
  public:
@@ -193,7 +196,13 @@ TEST_F(LocalBinaryUploadServiceTest, SomeRequestsArePending) {
   EXPECT_EQ(1u, lbus.GetPendingRequestCountForTesting());
 }
 
-TEST_F(LocalBinaryUploadServiceTest, PendingRequestsGetProcessed) {
+// Flaky on mac and linux, http://crbug.com/1365018
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#define MAYBE_PendingRequestsGetProcessed DISABLED_PendingRequestsGetProcessed
+#else
+#define MAYBE_PendingRequestsGetProcessed PendingRequestsGetProcessed
+#endif
+TEST_F(LocalBinaryUploadServiceTest, MAYBE_PendingRequestsGetProcessed) {
   LocalBinaryUploadService lbus;
 
   content_analysis::sdk::ContentAnalysisResponse response;
@@ -332,4 +341,65 @@ TEST_F(LocalBinaryUploadServiceTest, FailureAfterTooManyRetries) {
   EXPECT_EQ(BinaryUploadService::Result::UPLOAD_FAILURE, result);
 }
 
+TEST_F(LocalBinaryUploadServiceTest, CancelRequests) {
+  LocalAnalysisSettings local;
+  local.local_path = "local_system_path";
+  local.user_specific = false;
+
+  CloudOrLocalAnalysisSettings cloud_or_local(local);
+  LocalBinaryUploadService lbus;
+
+  // Add one more request than the max number of concurrent active requests.
+  // The remaining one should be pending.
+  LocalAnalysisSettings settings(local);
+  for (size_t i = 0; i < LocalBinaryUploadService::kMaxActiveCount + 1; ++i) {
+    auto request = std::make_unique<MockRequest>(base::DoNothing(), settings);
+    request->set_user_action_id(kFakeUserActionId);
+    lbus.MaybeUploadForDeepScanning(std::move(request));
+  }
+
+  EXPECT_EQ(LocalBinaryUploadService::kMaxActiveCount,
+            lbus.GetActiveRequestCountForTesting());
+  EXPECT_EQ(1u, lbus.GetPendingRequestCountForTesting());
+
+  auto cr = std::make_unique<LocalBinaryUploadService::CancelRequests>(
+      cloud_or_local);
+  cr->set_user_action_id(kFakeUserActionId);
+  lbus.MaybeCancelRequests(std::move(cr));
+
+  EXPECT_EQ(0u, lbus.GetActiveRequestCountForTesting());
+  EXPECT_EQ(0u, lbus.GetPendingRequestCountForTesting());
+
+  task_environment_.RunUntilIdle();
+
+  FakeContentAnalysisSdkClient* fake_client_ptr =
+      fake_sdk_manager_.GetFakeClient({local.local_path, local.user_specific});
+  EXPECT_EQ(kFakeUserActionId,
+            fake_client_ptr->GetCancelRequests().user_action_id());
+}
+
+TEST_F(LocalBinaryUploadServiceTest,
+       ClientDestroyedWhenCancelStatusIsAbnormal) {
+  fake_sdk_manager_.SetClientCancelStatus(-1);
+
+  LocalAnalysisSettings local;
+  local.local_path = "local_system_path";
+  local.user_specific = false;
+
+  CloudOrLocalAnalysisSettings cloud_or_local(local);
+  content_analysis::sdk::Client::Config config{local.local_path,
+                                               local.user_specific};
+  LocalBinaryUploadService lbus;
+
+  auto cr = std::make_unique<LocalBinaryUploadService::CancelRequests>(
+      cloud_or_local);
+  cr->set_user_action_id("1234567890");
+  lbus.MaybeCancelRequests(std::move(cr));
+
+  EXPECT_TRUE(fake_sdk_manager_.HasClientForTesting(config));
+
+  task_environment_.RunUntilIdle();
+
+  EXPECT_FALSE(fake_sdk_manager_.HasClientForTesting(config));
+}
 }  // namespace enterprise_connectors

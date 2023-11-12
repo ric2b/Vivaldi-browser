@@ -17,7 +17,6 @@
 #include "mojo/core/core.h"
 #include "mojo/core/ipcz_driver/data_pipe.h"
 #include "mojo/core/ipcz_driver/invitation.h"
-#include "mojo/core/ipcz_driver/message_wrapper.h"
 #include "mojo/core/ipcz_driver/object.h"
 #include "mojo/core/ipcz_driver/shared_buffer.h"
 #include "mojo/core/ipcz_driver/transmissible_platform_handle.h"
@@ -96,23 +95,32 @@ struct IPCZ_ALIGN(8) TransportHeader {
   // Indicates whether the remote process on the other end of this transport
   // is the same process sending this object.
   bool is_same_remote_process;
+
+  // See notes on equivalent fields defined on Transport. Note that serialized
+  // transports endpoints with `is_peer_trusted` set to true can only be
+  // accepted from transports which are themselves trusted.
+  bool is_peer_trusted;
+  bool is_trusted_by_peer;
 };
 
 #if BUILDFLAG(IS_WIN)
 // Encodes a Windows HANDLE value for transmission within a serialized driver
 // object payload. See documentation on HandleOwner above for general notes
-// about how handles are communicated over IPC on Windows.
-void EncodeHandle(PlatformHandle& handle,
+// about how handles are communicated over IPC on Windows. Returns true on
+// success, with the encoded handle value in `out_handle`. Returns false if
+// handle duplication failed.
+bool EncodeHandle(PlatformHandle& handle,
                   const base::Process& remote_process,
                   HandleOwner handle_owner,
-                  HANDLE& out_handle) {
+                  HANDLE& out_handle,
+                  bool is_remote_process_untrusted) {
   DCHECK(handle.is_valid());
   if (handle_owner == HandleOwner::kSender) {
     // Nothing to do when sending handles that belong to us. The recipient must
     // be sufficiently privileged and equipped to duplicate such handles to
     // itself.
     out_handle = handle.ReleaseHandle();
-    return;
+    return true;
   }
 
   // To encode a handle that already belongs to the recipient, we must first
@@ -121,10 +129,17 @@ void EncodeHandle(PlatformHandle& handle,
   // handle to the remote process.
   DCHECK_EQ(handle_owner, HandleOwner::kRecipient);
   DCHECK(remote_process.IsValid());
-  BOOL result = ::DuplicateHandle(
-      ::GetCurrentProcess(), handle.ReleaseHandle(), remote_process.Handle(),
-      &out_handle, 0, FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
-  DCHECK(result);
+#if BUILDFLAG(IS_WIN)
+  if (is_remote_process_untrusted) {
+    // TODO(https://crbug.com/1335974): Implement additional constraints
+    // regarding what type of handles may or may not be transferred to untrusted
+    // processes.
+  }
+#endif
+
+  return ::DuplicateHandle(::GetCurrentProcess(), handle.ReleaseHandle(),
+                           remote_process.Handle(), &out_handle, 0, FALSE,
+                           DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
 }
 
 // Decodes a Windows HANDLE value from a transmission containing a serialized
@@ -132,12 +147,14 @@ void EncodeHandle(PlatformHandle& handle,
 // how handles are communicated over IPC on Windows.
 PlatformHandle DecodeHandle(HANDLE handle,
                             const base::Process& remote_process,
-                            Transport::EndpointType sender_type,
-                            HandleOwner handle_owner) {
+                            HandleOwner handle_owner,
+                            Transport& from_transport) {
   if (handle_owner == HandleOwner::kRecipient) {
-    if (sender_type != Transport::kBroker) {
+    if (from_transport.destination_type() != Transport::kBroker &&
+        !from_transport.is_peer_trusted()) {
       // Do not trust non-broker endpoints to send handles which already belong
-      // to us.
+      // to us, unless the transport is explicitly marked as trustworthy (e.g.
+      // is connected to a known elevated process.)
       return PlatformHandle();
     }
     return PlatformHandle(base::win::ScopedHandle(handle));
@@ -164,10 +181,15 @@ scoped_refptr<base::SingleThreadTaskRunner>& GetIOTaskRunnerStorage() {
 
 Transport::Transport(EndpointTypes endpoint_types,
                      Channel::Endpoint endpoint,
-                     base::Process remote_process)
+                     base::Process remote_process,
+                     bool is_remote_process_untrusted)
     : endpoint_types_(endpoint_types),
       remote_process_(std::move(remote_process)),
-      inactive_endpoint_(std::move(endpoint)) {}
+#if BUILDFLAG(IS_WIN)
+      is_remote_process_untrusted_(is_remote_process_untrusted),
+#endif
+      inactive_endpoint_(std::move(endpoint)) {
+}
 
 // static
 scoped_refptr<Transport> Transport::Create(EndpointTypes endpoint_types,
@@ -374,7 +396,8 @@ IpczResult Transport::SerializeObject(ObjectBase& object,
   header.reserved[2] = 0;
 
   const HandleOwner handle_owner =
-      remote_process_.IsValid() && source_type() == kBroker
+      remote_process_.IsValid() &&
+              (source_type() == kBroker || is_trusted_by_peer())
           ? HandleOwner::kRecipient
           : HandleOwner::kSender;
   header.handle_owner = handle_owner;
@@ -398,17 +421,18 @@ IpczResult Transport::SerializeObject(ObjectBase& object,
     return IPCZ_RESULT_INVALID_ARGUMENT;
   }
 
+  bool ok = true;
   for (size_t i = 0; i < object_num_handles; ++i) {
 #if BUILDFLAG(IS_WIN)
-    EncodeHandle(platform_handles[i], remote_process_, handle_owner,
-                 handle_data[i]);
+    ok &= EncodeHandle(platform_handles[i], remote_process_, handle_owner,
+                       handle_data[i], is_remote_process_untrusted_);
 #else
     handles[i] = TransmissiblePlatformHandle::ReleaseAsHandle(
         base::MakeRefCounted<TransmissiblePlatformHandle>(
             std::move(platform_handles[i])));
 #endif
   }
-  return IPCZ_RESULT_OK;
+  return ok ? IPCZ_RESULT_OK : IPCZ_RESULT_INVALID_ARGUMENT;
 }
 
 IpczResult Transport::DeserializeObject(
@@ -451,8 +475,8 @@ IpczResult Transport::DeserializeObject(
   platform_handles->resize(num_handles);
   for (size_t i = 0; i < num_handles; ++i) {
 #if BUILDFLAG(IS_WIN)
-    platform_handles[i] = DecodeHandle(handle_data[i], remote_process_,
-                                       destination_type(), handle_owner);
+    platform_handles[i] =
+        DecodeHandle(handle_data[i], remote_process_, handle_owner, *this);
 #else
     platform_handles[i] =
         TransmissiblePlatformHandle::TakeFromHandle(handles[i])->TakeHandle();
@@ -483,12 +507,6 @@ IpczResult Transport::DeserializeObject(
 
     case ObjectBase::kDataPipe:
       object = DataPipe::Deserialize(object_data, object_handles);
-      break;
-
-    case ObjectBase::kMessageWrapper:
-      // Deserialize as a dummy object. This will be ignored. See comments
-      // within MessageWrapper and MojoRead/WriteMessageIpcz.
-      object = base::MakeRefCounted<MessageWrapper>();
       break;
 
     default:
@@ -529,6 +547,8 @@ bool Transport::Serialize(Transport& transmitter,
   auto& header = *reinterpret_cast<TransportHeader*>(data.data());
   header.destination_type = destination_type();
   header.is_same_remote_process = remote_process_.is_current();
+  header.is_peer_trusted = is_peer_trusted();
+  header.is_trusted_by_peer = is_trusted_by_peer();
 
 #if BUILDFLAG(IS_WIN)
   if (ShouldSerializeProcessHandle(transmitter)) {
@@ -567,14 +587,24 @@ scoped_refptr<Transport> Transport::Deserialize(
     process = base::Process(handles[1].ReleaseHandle());
   }
 #endif
+  const bool is_source_trusted = from_transport.is_peer_trusted() ||
+                                 from_transport.destination_type() == kBroker;
+  const bool is_new_peer_trusted = header.is_peer_trusted;
+  if (is_new_peer_trusted && !is_source_trusted) {
+    // Untrusted transports cannot send us trusted transports.
+    return nullptr;
+  }
   if (header.is_same_remote_process &&
       from_transport.remote_process().IsValid()) {
     process = from_transport.remote_process().Duplicate();
   }
-  return Create({.source = from_transport.source_type(),
-                 .destination = header.destination_type},
-                PlatformChannelEndpoint(std::move(handles[0])),
-                std::move(process));
+  auto transport = Create({.source = from_transport.source_type(),
+                           .destination = header.destination_type},
+                          PlatformChannelEndpoint(std::move(handles[0])),
+                          std::move(process));
+  transport->set_is_peer_trusted(is_new_peer_trusted);
+  transport->set_is_trusted_by_peer(header.is_trusted_by_peer);
+  return transport;
 }
 
 bool Transport::IsIpczTransport() const {
@@ -631,8 +661,8 @@ bool Transport::CanTransmitHandles() const {
 #if BUILDFLAG(IS_WIN)
   // On Windows, we can transmit handles only if at least one endpoint is a
   // broker, or if we have a handle to the remote process.
-  return remote_process_.IsValid() || destination_type() == kBroker ||
-         source_type() == kBroker;
+  return destination_type() == kBroker || source_type() == kBroker ||
+         (remote_process_.IsValid() && is_trusted_by_peer());
 #else
   return true;
 #endif
@@ -641,7 +671,8 @@ bool Transport::CanTransmitHandles() const {
 bool Transport::ShouldSerializeProcessHandle(Transport& transmitter) const {
 #if BUILDFLAG(IS_WIN)
   return remote_process_.IsValid() && !remote_process_.is_current() &&
-         transmitter.destination_type() == kBroker;
+         (transmitter.destination_type() == kBroker ||
+          transmitter.is_peer_trusted());
 #else
   // We have no need for the process handle on other platforms.
   return false;

@@ -4,13 +4,16 @@
 
 package org.chromium.chrome.browser.segmentation_platform;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider;
 import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider.DistillabilityObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
 
 /** Provides reader mode signal for showing contextual page action for a given tab. */
 public class ReaderModeActionProvider implements ContextualPageActionController.ActionProvider {
@@ -40,11 +43,16 @@ public class ReaderModeActionProvider implements ContextualPageActionController.
 
     @Override
     public void onActionShown(Tab tab, @AdaptiveToolbarButtonVariant int action) {
-        if (action == AdaptiveToolbarButtonVariant.READER_MODE) {
+        if (tab == null) return;
+        if (action != AdaptiveToolbarButtonVariant.READER_MODE) return;
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (tab.isDestroyed()) return;
+
             tab.getUserDataHost()
                     .getUserData(ReaderModeManager.USER_DATA_KEY)
                     .setReaderModeUiShown();
-        }
+        }, /* delayMillis= */ 500);
     }
 
     private void notifyActionAvailable(boolean isDistillable, boolean isMobileOptimized, Tab tab,

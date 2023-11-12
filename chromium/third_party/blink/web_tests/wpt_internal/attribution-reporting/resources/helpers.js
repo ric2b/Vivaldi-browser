@@ -11,6 +11,7 @@ const attribution_reporting_promise_test = (f, name) =>
       t.add_cleanup(() => resetAttributionReports(aggregatableReportsUrl));
       t.add_cleanup(() => resetAttributionReports(eventLevelDebugReportsUrl));
       t.add_cleanup(() => resetAttributionReports(aggregatableDebugReportsUrl));
+      t.add_cleanup(() => resetAttributionReports(verboseDebugReportsUrl));
       return f(t);
     }, name);
 
@@ -22,6 +23,10 @@ const aggregatableReportsUrl =
     '/.well-known/attribution-reporting/report-aggregate-attribution';
 const aggregatableDebugReportsUrl =
     '/.well-known/attribution-reporting/debug/report-aggregate-attribution';
+const verboseDebugReportsUrl =
+    '/.well-known/attribution-reporting/debug/verbose';
+
+const attributionDebugCookie = 'ar_debug=1;Secure;HttpOnly;SameSite=None;Path=/';
 
 /**
  * Method to clear the stash. Takes the URL as parameter. This could be for
@@ -57,6 +62,7 @@ const blankURLWithHeaders = (headers, status) => {
 };
 
 const eligibleHeader = 'Attribution-Reporting-Eligible';
+const supportHeader = 'Attribution-Reporting-Support';
 
 const registerAttributionSrc = async (t, {
   source,
@@ -174,6 +180,10 @@ const registerAttributionSrc = async (t, {
       if (eligible !== null) {
         headers[eligibleHeader] = eligible;
       }
+      const support = searchParams.get('support');
+      if (support !== null) {
+        headers[supportHeader] = support;
+      }
       await fetch(url, {headers});
       return 'event';
     case 'xhr':
@@ -220,6 +230,8 @@ const pollAggregatableReports = interval =>
     pollAttributionReports(aggregatableReportsUrl, interval);
 const pollAggregatableDebugReports = interval =>
     pollAttributionReports(aggregatableDebugReportsUrl, interval);
+const pollVerboseDebugReports = interval =>
+    pollAttributionReports(verboseDebugReportsUrl, interval);
 
 const validateReportHeaders = headers => {
   assert_array_equals(headers['content-type'], ['application/json']);

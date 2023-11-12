@@ -4,7 +4,6 @@
 
 #include "content/renderer/render_frame_impl.h"
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -34,6 +33,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
@@ -54,7 +54,9 @@
 #include "cc/trees/ukm_manager.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_navigation_policy.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/debug_utils.h"
+#include "content/common/features.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.mojom.h"
 #include "content/common/main_frame_counter.h"
@@ -160,6 +162,7 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
+#include "third_party/blink/public/mojom/frame/view_transition_state.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
@@ -190,7 +193,6 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
-#include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/public/platform/web_url_request_util.h"
 #include "third_party/blink/public/platform/web_url_response.h"
@@ -213,7 +215,7 @@
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
-#include "third_party/blink/public/web/web_performance.h"
+#include "third_party/blink/public/web/web_performance_metrics_for_nested_contexts.h"
 #include "third_party/blink/public/web/web_picture_in_picture_window_options.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
@@ -490,9 +492,8 @@ void FillNavigationParamsRequest(
         blink::WebNavigationParams::PrefetchedSignedExchange>>();
 
     for (const auto& exchange : commit_params.prefetched_signed_exchanges) {
-      blink::WebURLResponse web_response;
-      blink::WebURLLoader::PopulateURLResponse(
-          exchange->inner_url, *exchange->inner_response, &web_response,
+      blink::WebURLResponse web_response = blink::WebURLResponse::Create(
+          exchange->inner_url, *exchange->inner_response,
           false /* report_security_info*/, -1 /* request_id */);
       navigation_params->prefetched_signed_exchanges.emplace_back(
           std::make_unique<
@@ -728,8 +729,7 @@ class MHTMLPartsGenerationDelegate
     DCHECK(std::is_sorted(params_.digests_of_uris_to_skip.begin(),
                           params_.digests_of_uris_to_skip.end()));
     // URLs are not duplicated.
-    DCHECK(std::adjacent_find(params_.digests_of_uris_to_skip.begin(),
-                              params_.digests_of_uris_to_skip.end()) ==
+    DCHECK(base::ranges::adjacent_find(params_.digests_of_uris_to_skip) ==
            params_.digests_of_uris_to_skip.end());
   }
 
@@ -758,10 +758,6 @@ class MHTMLPartsGenerationDelegate
 
   bool RemovePopupOverlay() override {
     return params_.mhtml_popup_overlay_removal;
-  }
-
-  bool UsePageProblemDetectors() override {
-    return params_.mhtml_problem_detection;
   }
 
  private:
@@ -1038,28 +1034,30 @@ void FillMiscNavigationParams(
         NavigationApiHistoryEntryPtrToWebHistoryItem(*entry));
   }
 
-  if (commit_params.ad_auction_components) {
-    DCHECK_EQ(blink::kMaxAdAuctionAdComponents,
-              commit_params.ad_auction_components->size());
-    navigation_params->ad_auction_components.emplace();
-    for (const GURL& urn : *commit_params.ad_auction_components) {
-      // `ad_auction_components` must be a list of URNs, to avoid leaking data.
-      DCHECK(urn.SchemeIs(url::kUrnScheme));
-      navigation_params->ad_auction_components->push_back(blink::WebURL(urn));
-    }
-  }
+  if (commit_params.fenced_frame_properties) {
+    navigation_params->fenced_frame_properties =
+        std::move(commit_params.fenced_frame_properties);
 
-  if (commit_params.fenced_frame_reporting_metadata) {
-    navigation_params->fenced_frame_reporting.emplace();
-    for (const auto& [destination, metadata] :
-         commit_params.fenced_frame_reporting_metadata->metadata) {
-      base::flat_map<blink::WebString, blink::WebURL> data;
-      for (const auto& [event_type, url] : metadata) {
-        data.emplace(blink::WebString::FromUTF8(event_type),
-                     blink::WebURL(url));
+    if (commit_params.fenced_frame_properties->nested_urn_config_pairs() &&
+        commit_params.fenced_frame_properties->nested_urn_config_pairs()
+            ->potentially_opaque_value.has_value()) {
+      const auto& nested_urn_config_pairs_value =
+          commit_params.fenced_frame_properties->nested_urn_config_pairs()
+              ->potentially_opaque_value.value();
+      DCHECK_EQ(blink::kMaxAdAuctionAdComponents,
+                nested_urn_config_pairs_value.size());
+      navigation_params->ad_auction_components.emplace();
+      for (const auto& nested_urn_config_pair : nested_urn_config_pairs_value) {
+        const GURL& urn = nested_urn_config_pair.first;
+        DCHECK(urn.SchemeIs(url::kUrnScheme));
+        navigation_params->ad_auction_components->push_back(blink::WebURL(urn));
       }
-      navigation_params->fenced_frame_reporting->metadata.emplace(
-          destination, std::move(data));
+    }
+
+    if (commit_params.fenced_frame_properties->reporting_metadata()) {
+      navigation_params->fenced_frame_reporting =
+          commit_params.fenced_frame_properties->reporting_metadata()
+              ->potentially_opaque_value;
     }
   }
 
@@ -1100,8 +1098,6 @@ void PropagatePageZoomToNewlyAttachedFrame(blink::WebView* web_view,
 void CallClientDeferMediaLoad(base::WeakPtr<RenderFrameImpl> frame,
                               bool has_played_media_before,
                               base::OnceClosure closure) {
-  DCHECK(blink::features::IsPrerender2Enabled());
-
   if (!frame)
     return;
   GetContentClient()->renderer()->DeferMediaLoad(
@@ -1506,7 +1502,6 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
       is_for_nested_main_frame, is_for_scalable_page,
       /*hidden=*/true);
   web_frame_widget->InitializeCompositing(
-      agent_scheduling_group.agent_group_scheduler(),
       params->widget_params->visual_properties.screen_infos,
       /*settings=*/nullptr);
 
@@ -1562,6 +1557,7 @@ void RenderFrameImpl::CreateFrame(
         browser_interface_broker,
     mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
         associated_interface_provider,
+    blink::WebView* web_view,
     const absl::optional<blink::FrameToken>& previous_frame_token,
     const absl::optional<blink::FrameToken>& opener_frame_token,
     const absl::optional<blink::FrameToken>& parent_frame_token,
@@ -1577,12 +1573,11 @@ void RenderFrameImpl::CreateFrame(
   // TODO(danakj): Split this method into two pieces. The first block makes a
   // WebLocalFrame and collects the `blink::WebView` and RenderFrame for it. The
   // second block uses that to make a RenderWidget, if needed.
-  blink::WebView* web_view = nullptr;
   RenderFrameImpl* render_frame = nullptr;
   blink::WebLocalFrame* web_frame = nullptr;
   if (!previous_frame_token) {
     // TODO(alexmos): This path is currently used only:
-    // 1) When recreating a RenderFrame after a crash.
+    // 1) When recreating a non-main RenderFrame after a crash.
     // 2) In tests that issue this IPC directly.
     // These two cases should be cleaned up to also pass a previous_frame_token,
     // which would allow removing this branch altogether.  See
@@ -1603,7 +1598,13 @@ void RenderFrameImpl::CreateFrame(
           blink::WebFrame::FromFrameToken(previous_sibling_frame_token.value());
     }
 
+    // `web_view` would only be set by the function caller when creating a
+    // provisional local main frame for a new WebView, which is handled in the
+    // other branch of this if clause. Meanwhile, this branch handles subframe
+    // creation case only, and we should use the parent's WebView in that case.
+    CHECK(!web_view);
     web_view = parent_web_frame->View();
+
     // Create the RenderFrame and WebLocalFrame, linking the two.
     render_frame = RenderFrameImpl::Create(
         agent_scheduling_group, routing_id, std::move(frame_receiver),
@@ -1636,10 +1637,21 @@ void RenderFrameImpl::CreateFrame(
     if (!previous_web_frame)
       return;
 
-    web_view = previous_web_frame->View();
     // This path is creating a local frame. It may or may not be a local root,
-    // depending if the frame's parent is local or remote. It may also be the
-    // main frame, as in the case where a navigation to the current process'
+    // depending on whether the frame's parent is local or remote. It may also
+    // be the main frame, which will be a provisional frame that can either
+    // replace a remote main frame in the same WebView or a local main frame in
+    // a different WebView.
+    if (web_view) {
+      // When a `web_view` is set by the caller, it must be for a provisional
+      // main frame that will do a local frame swap. In this case, the WebView
+      // must be different from the previous frame's WebView.
+      CHECK(!previous_web_frame->Parent());
+      CHECK_NE(web_view, previous_web_frame->View());
+    } else {
+      // When not set explicitly, reuse the previous frame's WebView.
+      web_view = previous_web_frame->View();
+    }
     render_frame = RenderFrameImpl::Create(
         agent_scheduling_group, routing_id, std::move(frame_receiver),
         std::move(browser_interface_broker),
@@ -1647,7 +1659,7 @@ void RenderFrameImpl::CreateFrame(
     web_frame = blink::WebLocalFrame::CreateProvisional(
         render_frame, render_frame->blink_interface_registry_.get(),
         frame_token, previous_web_frame, replicated_state->frame_policy,
-        WebString::FromUTF8(replicated_state->name));
+        WebString::FromUTF8(replicated_state->name), web_view);
     // The new |web_frame| is a main frame iff the previous frame was.
     DCHECK_EQ(!previous_web_frame->Parent(), !web_frame->Parent());
     // Clone the current unique name so web tests that log frame unique names
@@ -1698,7 +1710,6 @@ void RenderFrameImpl::CreateFrame(
         /*is_for_scalable_page=*/!is_for_nested_main_frame,
         /*hidden=*/true);
     web_frame_widget->InitializeCompositing(
-        agent_scheduling_group.agent_group_scheduler(),
         widget_params->visual_properties.screen_infos,
         /*settings=*/nullptr);
 
@@ -1741,7 +1752,6 @@ void RenderFrameImpl::CreateFrame(
         /*is_for_scalable_page=*/false,
         /*hidden=*/true);
     web_frame_widget->InitializeCompositing(
-        agent_scheduling_group.agent_group_scheduler(),
         widget_params->visual_properties.screen_infos,
         /*settings=*/nullptr);
 
@@ -1927,12 +1937,6 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
                                   GetBrowserInterfaceBroker());
   }
 
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kDomAutomationController))
-    enabled_bindings_ |= BINDINGS_POLICY_DOM_AUTOMATION;
-  if (command_line.HasSwitch(switches::kStatsCollectionController))
-    enabled_bindings_ |= BINDINGS_POLICY_STATS_COLLECTION;
   frame_request_blocker_ = blink::WebFrameRequestBlocker::Create();
 
   // Bind this class to mojom::Frame and to the message router for legacy IPC.
@@ -2574,11 +2578,12 @@ void RenderFrameImpl::CommitNavigation(
     mojo::PendingRemote<blink::mojom::CodeCacheHost> code_cache_host,
     mojom::CookieManagerInfoPtr cookie_manager_info,
     mojom::StorageInfoPtr storage_info,
-    blink::mojom::BackForwardCacheNotRestoredReasonsPtr not_restored_reasons,
     mojom::NavigationClient::CommitNavigationCallback commit_callback) {
   DCHECK(navigation_client_impl_);
   DCHECK(!blink::IsRendererDebugURL(common_params->url));
   DCHECK(!NavigationTypeUtils::IsSameDocument(common_params->navigation_type));
+  // `origin_to_commit` must only be set on failed navigations.
+  CHECK(!commit_params->origin_to_commit);
   LogCommitHistograms(commit_params->commit_sent, is_main_frame_);
 
   AssertNavigationCommits assert_navigation_commits(
@@ -2607,11 +2612,15 @@ void RenderFrameImpl::CommitNavigation(
       !!(common_params->transition & ui::PAGE_TRANSITION_CLIENT_REDIRECT);
   auto navigation_params = std::make_unique<WebNavigationParams>(
       document_token, devtools_navigation_token);
+  navigation_params->navigation_delivery_type =
+      commit_params->navigation_delivery_type;
   navigation_params->is_client_redirect = is_client_redirect;
   FillMiscNavigationParams(*common_params, *commit_params,
                            navigation_params.get());
   navigation_params->policy_container =
       ToWebPolicyContainer(std::move(policy_container));
+  navigation_params->view_transition_state =
+      std::move(commit_params->view_transition_state);
 
   if (frame_->IsOutermostMainFrame() && permissions_policy) {
     navigation_params->permissions_policy_override = permissions_policy;
@@ -2624,7 +2633,7 @@ void RenderFrameImpl::CommitNavigation(
       std::move(controller_service_worker_info), std::move(container_info),
       std::move(prefetch_loader_factory), std::move(code_cache_host),
       std::move(cookie_manager_info), std::move(storage_info),
-      std::move(document_state), std::move(not_restored_reasons));
+      std::move(document_state));
 
   // Handle a navigation that has a non-empty `data_url_as_string`, or perform
   // a "loadDataWithBaseURL" navigation, which is different from a normal data:
@@ -2745,7 +2754,6 @@ void RenderFrameImpl::CommitNavigationWithParams(
     mojom::CookieManagerInfoPtr cookie_manager_info,
     mojom::StorageInfoPtr storage_info,
     std::unique_ptr<DocumentState> document_state,
-    blink::mojom::BackForwardCacheNotRestoredReasonsPtr not_restored_reasons,
     std::unique_ptr<WebNavigationParams> navigation_params) {
   if (common_params->url.IsAboutSrcdoc()) {
     WebNavigationParams::FillStaticResponse(navigation_params.get(),
@@ -2766,13 +2774,11 @@ void RenderFrameImpl::CommitNavigationWithParams(
   if (commit_params->is_view_source)
     frame_->EnableViewSourceMode(true);
 
-  if (not_restored_reasons) {
+  if (commit_params->not_restored_reasons) {
     // Save the Back/Forward Cache NotRestoredReasons struct to WebLocalFrame to
     // report for PerformanceNavigationTiming API.
-    frame_->SetNotRestoredReasons(std::move(not_restored_reasons));
-    // For cross-document main frame history navigations, |not_restored_reasons|
-    // should be populated and has blocking reasons.
-    DCHECK(frame_->HasBlockingReasons());
+    frame_->SetNotRestoredReasons(
+        std::move(commit_params->not_restored_reasons));
   }
 
   // Note: this intentionally does not call |Detach()| before |reset()|. If
@@ -2864,6 +2870,8 @@ void RenderFrameImpl::CommitFailedNavigation(
                "RenderFrameImpl::CommitFailedNavigation", "id", routing_id_);
   DCHECK(navigation_client_impl_);
   DCHECK(!NavigationTypeUtils::IsSameDocument(common_params->navigation_type));
+  // `origin_to_commit` must be set on failed navigations.
+  CHECK(commit_params->origin_to_commit);
 
   AssertNavigationCommits assert_navigation_commits(
       this, kMayReplaceInitialEmptyDocument);
@@ -2982,6 +2990,9 @@ void RenderFrameImpl::CommitFailedNavigation(
   navigation_params->policy_container =
       ToWebPolicyContainer(std::move(policy_container));
 
+  navigation_params->view_transition_state =
+      std::move(commit_params->view_transition_state);
+
   // The error page load (not to confuse with a failed load of original page)
   // was not initiated through BeginNavigation, therefore
   // |was_initiated_in_this_frame| is false.
@@ -3076,6 +3087,9 @@ void RenderFrameImpl::CommitSameDocumentNavigation(
         !!(common_params->transition & ui::PAGE_TRANSITION_CLIENT_REDIRECT);
     bool started_with_transient_activation = common_params->has_user_gesture;
     bool is_browser_initiated = commit_params->is_browser_initiated;
+    absl::optional<blink::scheduler::TaskAttributionId>
+        soft_navigation_heuristic_task_id =
+            commit_params->soft_navigation_heuristic_task_id;
 
     WebSecurityOrigin initiator_origin;
     if (common_params->initiator_origin)
@@ -3096,7 +3110,7 @@ void RenderFrameImpl::CommitSameDocumentNavigation(
     commit_status = frame_->CommitSameDocumentNavigation(
         url, load_type, item_for_history_navigation, is_client_redirect,
         started_with_transient_activation, initiator_origin,
-        is_browser_initiated);
+        is_browser_initiated, soft_navigation_heuristic_task_id);
 
     // The load of the URL can result in this frame being removed. Use a
     // WeakPtr as an easy way to detect whether this has occured. If so, this
@@ -3152,8 +3166,12 @@ void RenderFrameImpl::UpdateSubresourceLoaderFactories(
     // hosts a document that isn't related to a real navigation (i.e. if an
     // initial empty document should "inherit" the factories from its
     // opener/parent).
+    // NOTE(andre@vivaldi.com) : SynchronouslyCommitAboutBlankForBug778318 set
+    // navigation_commit_state_ to NavigationCommitState::kNone.
+    if (!vivaldi::IsVivaldiRunning()) {
     DCHECK_EQ(NavigationCommitState::kInitialEmptyDocument,
               navigation_commit_state_);
+    }  // IsVivaldiRunning
 
     auto partial_bundle =
         base::MakeRefCounted<blink::ChildURLLoaderFactoryBundle>();
@@ -3440,6 +3458,7 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
     const blink::WebFrameOwnerProperties& frame_owner_properties,
     blink::FrameOwnerElementType frame_owner_element_type,
     blink::WebPolicyContainerBindParams policy_container_bind_params,
+    ukm::SourceId document_ukm_source_id,
     FinishChildFrameCreationFn finish_creation) {
   // Tracing analysis uses this to find main frames when this value is
   // MSG_ROUTING_NONE, and build the frame tree otherwise.
@@ -3496,7 +3515,7 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
       associated_interface_provider.InitWithNewEndpointAndPassReceiver(), scope,
       name.Utf8(), frame_unique_name, is_created_by_script, frame_policy,
       blink::mojom::FrameOwnerProperties::From(frame_owner_properties),
-      frame_owner_element_type);
+      frame_owner_element_type, document_ukm_source_id);
 
   // Create the RenderFrame and WebLocalFrame, linking the two.
   RenderFrameImpl* child_render_frame = RenderFrameImpl::Create(
@@ -3634,11 +3653,9 @@ void RenderFrameImpl::DidCreateDocumentLoader(
         ServiceWorkerNetworkProviderForFrame::CreateInvalidInstance());
   }
 
-  // Set the code cache host earlier if the kEarlyCodeCache feature is enabled
-  // to allow fetching the code cache as soon as possible.
-  if (base::FeatureList::IsEnabled(blink::features::kEarlyCodeCache)) {
-    document_loader->SetCodeCacheHost(std::move(pending_code_cache_host_));
-  }
+  // Set the code cache host earlier to allow fetching the code cache as soon as
+  // possible.
+  document_loader->SetCodeCacheHost(std::move(pending_code_cache_host_));
 }
 
 void RenderFrameImpl::DidCommitNavigation(
@@ -3691,6 +3708,13 @@ void RenderFrameImpl::DidCommitNavigation(
   TRACE_EVENT2("navigation,rail", "RenderFrameImpl::didCommitProvisionalLoad",
                "id", routing_id_, "url",
                GetLoadingUrl().possibly_invalid_spec());
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kWaitForDebuggerOnNavigation)) {
+    std::string renderer =
+        base::StrCat({"Renderer url=\"",
+                      TrimURL(GetLoadingUrl().possibly_invalid_spec()), "\""});
+    content::WaitForDebugger(renderer);
+  }
 
   // Generate a new embedding token on each document change.
   GetWebFrame()->SetEmbeddingToken(base::UnguessableToken::Create());
@@ -3749,17 +3773,6 @@ void RenderFrameImpl::DidCommitNavigation(
   ui::PageTransition transition =
       GetTransitionType(frame_->GetDocumentLoader(), IsMainFrame(),
                         GetWebView()->IsFencedFrameRoot());
-
-  // When NavigationThreadingOptimizations feature is not enabled
-  // pending_code_cache_host_ could be nullptr. In such cases the code cache
-  // host interface is requested lazily via BrowserInterfaceBroker when
-  // required. When pending_code_cache_host_ is nullptr this method just resets
-  // any earlier code cache host interface. Since we are committing a new
-  // navigation any interfaces requested prior to this point should not be used.
-  if (!base::FeatureList::IsEnabled(blink::features::kEarlyCodeCache)) {
-    frame_->GetDocumentLoader()->SetCodeCacheHost(
-        std::move(pending_code_cache_host_));
-  }
 
   // TODO(crbug.com/888079): Turn this into a DCHECK for origin equality when
   // the linked bug is fixed. Currently sometimes the browser and renderer
@@ -3828,20 +3841,24 @@ void RenderFrameImpl::DidCommitDocumentReplacementNavigation(
 }
 
 void RenderFrameImpl::DidClearWindowObject() {
-  v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
-                                 v8::MicrotasksScope::kDoNotRunMicrotasks);
-
   if (enabled_bindings_ & BINDINGS_POLICY_WEB_UI)
     WebUIExtension::Install(frame_);
 
-  if (enabled_bindings_ & BINDINGS_POLICY_DOM_AUTOMATION)
-    DomAutomationController::Install(this, frame_);
-
-  if (enabled_bindings_ & BINDINGS_POLICY_STATS_COLLECTION)
-    StatsCollectionController::Install(frame_);
-
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
+
+  // DOM automation bindings that allows the JS content to send JSON-encoded
+  // data back to automation in the browser process. By default this isn't
+  // allowed unless the process has been started up with the --dom-automation
+  // switch.
+  if (command_line.HasSwitch(switches::kDomAutomationController))
+    DomAutomationController::Install(this, frame_);
+
+  // Bindings that allows the JS content to retrieve a variety of internal
+  // metrics. By default this isn't allowed unless the process has been started
+  // with the --enable-stats-collection-bindings switch.
+  if (command_line.HasSwitch(switches::kStatsCollectionController))
+    StatsCollectionController::Install(frame_);
 
   if (command_line.HasSwitch(cc::switches::kEnableGpuBenchmarking))
     GpuBenchmarking::Install(weak_factory_.GetWeakPtr());
@@ -3961,6 +3978,8 @@ void RenderFrameImpl::DidFinishSameDocumentNavigation(
   same_document_params->is_client_redirect = is_client_redirect;
   same_document_params->started_with_transient_activation =
       document_loader->LastNavigationHadTransientUserActivation();
+  same_document_params->should_replace_current_entry =
+      document_loader->ReplacesCurrentHistoryItem();
   DidCommitNavigationInternal(
       commit_type, transition,
       blink::ParsedPermissionsPolicy(),     // permissions_policy_header
@@ -4208,7 +4227,6 @@ void RenderFrameImpl::WillSendRequestInternal(
     }
   }
 
-  WebDocument frame_document = frame_->GetDocument();
   if (!request.GetURLRequestExtraData())
     request.SetURLRequestExtraData(
         base::MakeRefCounted<blink::WebURLRequestExtraData>());
@@ -4318,6 +4336,15 @@ void RenderFrameImpl::DidObserveLoadingBehavior(
     observer.DidObserveLoadingBehavior(behavior);
 }
 
+void RenderFrameImpl::DidObserveSubresourceLoad(
+    uint32_t number_of_subresources_loaded,
+    uint32_t number_of_subresource_loads_handled_by_service_worker) {
+  for (auto& observer : observers_)
+    observer.DidObserveSubresourceLoad(
+        number_of_subresources_loaded,
+        number_of_subresource_loads_handled_by_service_worker);
+}
+
 void RenderFrameImpl::DidObserveNewFeatureUsage(
     const blink::UseCounterFeature& feature) {
   for (auto& observer : observers_)
@@ -4336,18 +4363,10 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
     observer.DidObserveLayoutShift(score, after_input_or_scroll);
 }
 
-void RenderFrameImpl::DidObserveLayoutNg(uint32_t all_block_count,
-                                         uint32_t ng_block_count,
-                                         uint32_t all_call_count,
-                                         uint32_t ng_call_count) {
-  for (auto& observer : observers_)
-    observer.DidObserveLayoutNg(all_block_count, ng_block_count, all_call_count,
-                                ng_call_count);
-}
-
 void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
                                              int world_id) {
   v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
+                                 context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
        enable_mojo_js_bindings_) &&
@@ -4474,6 +4493,14 @@ void RenderFrameImpl::NotifyWebAXObjectMarkedDirty(
       ->NotifyWebAXObjectMarkedDirty(obj);
 }
 
+void RenderFrameImpl::AXReadyCallback() {
+  if (!IsAccessibilityEnabled())
+    return;
+
+  render_accessibility_manager_->GetRenderAccessibilityImpl()
+      ->AXReadyCallback();
+}
+
 void RenderFrameImpl::AddObserver(RenderFrameObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -4549,8 +4576,6 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   params->http_status_code = response.HttpStatusCode();
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
-  params->should_replace_current_entry =
-      document_loader->ReplacesCurrentHistoryItem();
   params->post_id = -1;
   params->embedding_token = embedding_token;
   params->origin_calculation_debug_info =
@@ -4575,7 +4600,7 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   params->did_create_new_entry =
       (commit_type == blink::kWebStandardCommit) ||
       (commit_type == blink::kWebHistoryInertCommit && !frame_->Parent() &&
-       params->should_replace_current_entry &&
+       document_loader->ReplacesCurrentHistoryItem() &&
        !navigation_state->WasWithinSameDocument());
 
   WebDocument frame_document = frame_->GetDocument();
@@ -4711,10 +4736,13 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
   }
   params->request_id = document_state->request_id();
 
-  params->unload_start = GetWebFrame()->Performance().UnloadStart();
-  params->unload_end = GetWebFrame()->Performance().UnloadEnd();
-  params->commit_navigation_end =
-      GetWebFrame()->Performance().CommitNavigationEnd();
+  params->unload_start =
+      GetWebFrame()->PerformanceMetricsForNestedContexts().UnloadStart();
+  params->unload_end =
+      GetWebFrame()->PerformanceMetricsForNestedContexts().UnloadEnd();
+  params->commit_navigation_end = GetWebFrame()
+                                      ->PerformanceMetricsForNestedContexts()
+                                      .CommitNavigationEnd();
 
   return params;
 }
@@ -5030,9 +5058,6 @@ void RenderFrameImpl::BeginNavigation(
   // (we currently do that in DocumentLoader), all the empty checks can be
   // removed, since they already account for an empty url.
 
-  // Blink is asking whether to navigate to a new URL.
-  // This is fine normally, except if we're showing UI from one security
-  // context and they're trying to navigate to a different context.
   const GURL& url = info->url_request.Url();
   TRACE_EVENT2("navigation", "RenderFrameImpl::BeginNavigation", "url",
                url.possibly_invalid_spec(), "navigation_type",
@@ -5146,86 +5171,16 @@ void RenderFrameImpl::BeginNavigation(
     }
   }
 
-  if (info->navigation_policy == blink::kWebNavigationPolicyCurrentTab) {
-    // Execute the BeforeUnload event. If asked not to proceed or the frame is
-    // destroyed, ignore the navigation.
-    // Keep a WeakPtr to this RenderFrameHost to detect if executing the
-    // BeforeUnload event destroyed this frame.
-    base::WeakPtr<RenderFrameImpl> weak_self = weak_factory_.GetWeakPtr();
-
-    base::TimeTicks renderer_before_unload_start = base::TimeTicks::Now();
-    if (!frame_->DispatchBeforeUnloadEvent(info->navigation_type ==
-                                           blink::kWebNavigationTypeReload) ||
-        !weak_self) {
-      return;
-    }
-    base::TimeTicks renderer_before_unload_end = base::TimeTicks::Now();
-
-    if (!info->form.IsNull()) {
-      for (auto& observer : observers_)
-        observer.WillSubmitForm(info->form);
-    }
-
-    if (mhtml_body_loader_client_) {
-      mhtml_body_loader_client_->Detach();
-      mhtml_body_loader_client_.reset();
-    }
-
-    // In certain cases, Blink re-navigates to about:blank when creating a new
-    // browsing context (when opening a new window or creating an iframe) and
-    // expects the navigation to complete synchronously.
-    // TODO(https://crbug.com/1215096): Remove the synchronous about:blank
-    // navigation.
-    bool should_do_synchronous_about_blank_navigation =
-        // Mainly a proxy for checking about:blank, even though it can match
-        // other things like about:srcdoc (or any empty document schemes that
-        // are registered).
-        // TODO(https://crbug.com/1215096): Tighten the condition to only accept
-        // about:blank or an empty URL which defaults to about:blank, per the
-        // spec:
-        // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element:about:blank
-        WebDocumentLoader::WillLoadUrlAsEmpty(url) &&
-        // The navigation method must be "GET". This is to avoid issues like
-        // https://crbug.com/1210653, where a form submits to about:blank
-        // targeting a new window using a POST. The browser never expects this
-        // to happen synchronously because it only expects the synchronous
-        // about:blank navigation to originate from browsing context creation,
-        // which will always be GET requests.
-        info->url_request.HttpMethod().Equals("GET") &&
-        // If the frame has committed or even started a navigation before, this
-        // navigation can't possibly be triggered by browsing context creation,
-        // which would have triggered the navigation synchronously as the first
-        // navigation in this frame. Note that we check both
-        // IsOnInitialEmptyDocument() and `first_navigation_in_render_frame`
-        // here because `first_navigation_in_render_frame` only tracks the state
-        // in this *RenderFrame*, so it will be true even if this navigation
-        // happens on a frame that has existed before in another process (e.g.
-        // an <iframe> pointing to a.com being navigated to a cross-origin
-        // about:blank document that happens in a new frame). Meanwhile,
-        // IsOnInitialEmptyDocument() tracks the state of the frame, so it will
-        // be true in the aforementioned case and we would not do a synchronous
-        // commit here.
-        frame_->IsOnInitialEmptyDocument() &&
-        first_navigation_in_render_frame &&
-        // If this is a subframe history navigation that should be sent to the
-        // browser, don't commit it synchronously.
-        !is_history_navigation_in_new_child_frame;
-
-    if (should_do_synchronous_about_blank_navigation) {
-      for (auto& observer : observers_)
-        observer.DidStartNavigation(url, info->navigation_type);
-      SynchronouslyCommitAboutBlankForBug778318(std::move(info));
-      return;
-    }
-
-    // Everything else is handled asynchronously by the browser process through
-    // BeginNavigation.
-    BeginNavigationInternal(
-        std::move(info), is_history_navigation_in_new_child_frame,
-        renderer_before_unload_start, renderer_before_unload_end);
-    return;
+  if (frame_->IsOutermostMainFrame() && url.SchemeIsHTTPOrHTTPS() &&
+      !url.is_empty() &&
+      base::FeatureList::IsEnabled(kSpeculativeServiceWorkerStartup)) {
+    frame_->WillPotentiallyStartOutermostMainFrameNavigation(url);
   }
 
+  // Depending on navigation policy, send one of three IPCs to the browser
+  // process: DownloadURL handles downloads, OpenURL handles all navigations
+  // that will end up in a different tab/window, and BeginNavigation handles
+  // everything else.
   if (info->navigation_policy == blink::kWebNavigationPolicyDownload) {
     mojo::PendingRemote<blink::mojom::BlobURLToken> blob_url_token =
         CloneBlobURLToken(info->blob_url_token);
@@ -5233,9 +5188,88 @@ void RenderFrameImpl::BeginNavigation(
     frame_->DownloadURL(info->url_request,
                         network::mojom::RedirectMode::kFollow,
                         std::move(blob_url_token));
-  } else {
-    OpenURL(std::move(info));
+    return;
   }
+  if (info->navigation_policy != blink::kWebNavigationPolicyCurrentTab) {
+    OpenURL(std::move(info));
+    return;
+  }
+
+  // Execute the BeforeUnload event. If asked not to proceed or the frame is
+  // destroyed, ignore the navigation.
+  // Keep a WeakPtr to this RenderFrameHost to detect if executing the
+  // BeforeUnload event destroyed this frame.
+  base::WeakPtr<RenderFrameImpl> weak_self = weak_factory_.GetWeakPtr();
+
+  base::TimeTicks renderer_before_unload_start = base::TimeTicks::Now();
+  if (!frame_->DispatchBeforeUnloadEvent(info->navigation_type ==
+                                         blink::kWebNavigationTypeReload) ||
+      !weak_self) {
+    return;
+  }
+  base::TimeTicks renderer_before_unload_end = base::TimeTicks::Now();
+
+  if (!info->form.IsNull()) {
+    for (auto& observer : observers_)
+      observer.WillSubmitForm(info->form);
+  }
+
+  if (mhtml_body_loader_client_) {
+    mhtml_body_loader_client_->Detach();
+    mhtml_body_loader_client_.reset();
+  }
+
+  // In certain cases, Blink re-navigates to about:blank when creating a new
+  // browsing context (when opening a new window or creating an iframe) and
+  // expects the navigation to complete synchronously.
+  // TODO(https://crbug.com/1215096): Remove the synchronous about:blank
+  // navigation.
+  bool should_do_synchronous_about_blank_navigation =
+      // Mainly a proxy for checking about:blank, even though it can match
+      // other things like about:srcdoc (or any empty document schemes that
+      // are registered).
+      // TODO(https://crbug.com/1215096): Tighten the condition to only accept
+      // about:blank or an empty URL which defaults to about:blank, per the
+      // spec:
+      // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element:about:blank
+      WebDocumentLoader::WillLoadUrlAsEmpty(url) &&
+      // The navigation method must be "GET". This is to avoid issues like
+      // https://crbug.com/1210653, where a form submits to about:blank
+      // targeting a new window using a POST. The browser never expects this
+      // to happen synchronously because it only expects the synchronous
+      // about:blank navigation to originate from browsing context creation,
+      // which will always be GET requests.
+      info->url_request.HttpMethod().Equals("GET") &&
+      // If the frame has committed or even started a navigation before, this
+      // navigation can't possibly be triggered by browsing context creation,
+      // which would have triggered the navigation synchronously as the first
+      // navigation in this frame. Note that we check both
+      // IsOnInitialEmptyDocument() and `first_navigation_in_render_frame`
+      // here because `first_navigation_in_render_frame` only tracks the state
+      // in this *RenderFrame*, so it will be true even if this navigation
+      // happens on a frame that has existed before in another process (e.g.
+      // an <iframe> pointing to a.com being navigated to a cross-origin
+      // about:blank document that happens in a new frame). Meanwhile,
+      // IsOnInitialEmptyDocument() tracks the state of the frame, so it will
+      // be true in the aforementioned case and we would not do a synchronous
+      // commit here.
+      frame_->IsOnInitialEmptyDocument() && first_navigation_in_render_frame &&
+      // If this is a subframe history navigation that should be sent to the
+      // browser, don't commit it synchronously.
+      !is_history_navigation_in_new_child_frame;
+
+  if (should_do_synchronous_about_blank_navigation) {
+    for (auto& observer : observers_)
+      observer.DidStartNavigation(url, info->navigation_type);
+    SynchronouslyCommitAboutBlankForBug778318(std::move(info));
+    return;
+  }
+
+  // Everything else is handled asynchronously by the browser process through
+  // BeginNavigation.
+  BeginNavigationInternal(
+      std::move(info), is_history_navigation_in_new_child_frame,
+      renderer_before_unload_start, renderer_before_unload_end);
 }
 
 void RenderFrameImpl::SynchronouslyCommitAboutBlankForBug778318(
@@ -5270,7 +5304,11 @@ void RenderFrameImpl::SynchronouslyCommitAboutBlankForBug778318(
   // https://html.spec.whatwg.org/multipage/browsers.html#creating-a-new-browsing-context,
   // which sets the new Document's `referrer` member to the initiator frame's
   // full unredacted URL, in the case of new browsing context creation.
-  if (info->initiator_frame_token.has_value()) {
+  //
+  // The initiator might no longer exist however, in which case we cannot get
+  // its document's full URL to use as the referrer.
+  if (info->initiator_frame_token.has_value() &&
+      WebFrame::FromFrameToken(info->initiator_frame_token.value())) {
     WebFrame* initiator =
         WebFrame::FromFrameToken(info->initiator_frame_token.value());
     DCHECK(initiator->IsWebLocalFrame());
@@ -5452,6 +5490,11 @@ void RenderFrameImpl::OpenURL(std::unique_ptr<blink::WebNavigationInfo> info) {
       info->url_request.RequestorOrigin().CanAccess(
           frame_->GetSecurityOrigin()),
       has_download_sandbox_flag, from_ad);
+
+  params->initiator_activation_and_ad_status =
+      blink::GetNavigationInitiatorActivationAndAdStatus(
+          info->url_request.HasUserGesture(), info->is_ad_script_in_stack);
+
   GetFrameHost()->OpenURL(std::move(params));
 }
 
@@ -5624,14 +5667,14 @@ void RenderFrameImpl::BeginNavigationInternal(
     observer.DidStartNavigation(info->url_request.Url(), info->navigation_type);
   browser_side_navigation_pending_ = true;
 
-  blink::WebURLRequest& request = info->url_request;
-
   // Set SiteForCookies.
   WebDocument frame_document = frame_->GetDocument();
-  if (info->frame_type == blink::mojom::RequestContextFrameType::kTopLevel)
-    request.SetSiteForCookies(net::SiteForCookies::FromUrl(request.Url()));
-  else
-    request.SetSiteForCookies(frame_document.SiteForCookies());
+  if (info->frame_type == blink::mojom::RequestContextFrameType::kTopLevel) {
+    info->url_request.SetSiteForCookies(
+        net::SiteForCookies::FromUrl(info->url_request.Url()));
+  } else {
+    info->url_request.SetSiteForCookies(frame_document.SiteForCookies());
+  }
 
   ui::PageTransition transition_type = GetTransitionType(
       ui::PAGE_TRANSITION_LINK,
@@ -5653,8 +5696,8 @@ void RenderFrameImpl::BeginNavigationInternal(
   // TODO(clamy): Make sure that navigation requests are not modified somewhere
   // else in blink.
   bool for_outermost_main_frame = frame_->IsOutermostMainFrame();
-  WillSendRequestInternal(request, for_outermost_main_frame, transition_type,
-                          ForRedirect(false));
+  WillSendRequestInternal(info->url_request, for_outermost_main_frame,
+                          transition_type, ForRedirect(false));
 
   if (!info->url_request.GetURLRequestExtraData()) {
     info->url_request.SetURLRequestExtraData(
@@ -5720,6 +5763,11 @@ void RenderFrameImpl::BeginNavigationInternal(
             -1 /* render_process_id, to be filled in the browser process */));
   }
 
+  blink::mojom::NavigationInitiatorActivationAndAdStatus
+      initiator_activation_and_ad_status =
+          blink::GetNavigationInitiatorActivationAndAdStatus(
+              info->url_request.HasUserGesture(), info->is_ad_script_in_stack);
+
   blink::mojom::BeginNavigationParamsPtr begin_navigation_params =
       blink::mojom::BeginNavigationParams::New(
           info->initiator_frame_token,
@@ -5734,7 +5782,8 @@ void RenderFrameImpl::BeginNavigationInternal(
               ? info->url_request.TrustTokenParams()->Clone()
               : nullptr,
           info->impression, renderer_before_unload_start,
-          renderer_before_unload_end, web_bundle_token_params);
+          renderer_before_unload_end, web_bundle_token_params,
+          initiator_activation_and_ad_status);
 
   mojo::PendingAssociatedRemote<mojom::NavigationClient>
       navigation_client_remote;
@@ -5986,7 +6035,7 @@ int RenderFrameImpl::GetEnabledBindings() {
 }
 
 void RenderFrameImpl::SetAccessibilityModeForTest(ui::AXMode new_mode) {
-  render_accessibility_manager_->SetMode(new_mode.mode());
+  render_accessibility_manager_->SetMode(new_mode);
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -6108,11 +6157,11 @@ void RenderFrameImpl::SetWebURLLoaderFactoryOverrideForTest(
 
 scoped_refptr<blink::ChildURLLoaderFactoryBundle>
 RenderFrameImpl::CloneLoaderFactories() {
-  auto bundle_info = base::WrapUnique(
+  auto pending_bundle = base::WrapUnique(
       static_cast<blink::TrackedChildPendingURLLoaderFactoryBundle*>(
           GetLoaderFactoryBundle()->Clone().release()));
   return base::MakeRefCounted<blink::TrackedChildURLLoaderFactoryBundle>(
-      std::move(bundle_info));
+      std::move(pending_bundle));
 }
 
 blink::scheduler::WebAgentGroupScheduler&
@@ -6218,6 +6267,10 @@ WebView* RenderFrameImpl::CreateNewWindow(
       // so its value here is irrelevant.
       /*openee_can_access_opener_origin=*/true,
       !GetWebFrame()->IsAllowedToDownload(), GetWebFrame()->IsAdFrame());
+
+  params->initiator_activation_and_ad_status =
+      blink::GetNavigationInitiatorActivationAndAdStatus(
+          request.HasUserGesture(), GetWebFrame()->IsAdScriptInStack());
 
   // We preserve this information before sending the message since |params| is
   // moved on send.

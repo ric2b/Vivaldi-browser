@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "content/browser/service_worker/service_worker_test_utils.h"
+#include "base/memory/raw_ref.h"
 
 #include <algorithm>
 #include <map>
@@ -98,7 +99,6 @@ class FakeNavigationClient : public mojom::NavigationClient {
       mojo::PendingRemote<blink::mojom::CodeCacheHost> code_cache_host,
       mojom::CookieManagerInfoPtr cookie_manager_info,
       mojom::StorageInfoPtr storage_info,
-      blink::mojom::BackForwardCacheNotRestoredReasonsPtr not_restored_reasons,
       CommitNavigationCallback callback) override {
     std::move(on_received_callback_).Run(std::move(container_info));
     std::move(callback).Run(MinimalDidCommitNavigationLoadParams(), nullptr);
@@ -137,28 +137,28 @@ class ResourceWriter {
         meta_data_(meta_data) {}
 
   void Start(WriteToDiskCacheCallback callback) {
-    DCHECK(storage_.is_connected());
+    DCHECK(storage_->is_connected());
     callback_ = std::move(callback);
-    storage_->GetNewResourceId(base::BindOnce(&ResourceWriter::DidGetResourceId,
-                                              base::Unretained(this)));
+    (*storage_)->GetNewResourceId(base::BindOnce(
+        &ResourceWriter::DidGetResourceId, base::Unretained(this)));
   }
 
   void StartWithResourceId(int64_t resource_id,
                            WriteToDiskCacheCallback callback) {
-    DCHECK(storage_.is_connected());
+    DCHECK(storage_->is_connected());
     callback_ = std::move(callback);
     DidGetResourceId(resource_id);
   }
 
  private:
   void DidGetResourceId(int64_t resource_id) {
-    DCHECK(storage_.is_connected());
+    DCHECK(storage_->is_connected());
     DCHECK_NE(resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
 
     resource_id_ = resource_id;
-    storage_->CreateResourceWriter(resource_id,
-                                   body_writer_.BindNewPipeAndPassReceiver());
-    storage_->CreateResourceMetadataWriter(
+    (*storage_)->CreateResourceWriter(
+        resource_id, body_writer_.BindNewPipeAndPassReceiver());
+    (*storage_)->CreateResourceMetadataWriter(
         resource_id, metadata_writer_.BindNewPipeAndPassReceiver());
 
     auto response_head = network::mojom::URLResponseHead::New();
@@ -198,7 +198,8 @@ class ResourceWriter {
         resource_id_, script_url_, body_.size()));
   }
 
-  const mojo::Remote<storage::mojom::ServiceWorkerStorageControl>& storage_;
+  const raw_ref<const mojo::Remote<storage::mojom::ServiceWorkerStorageControl>>
+      storage_;
   const GURL script_url_;
   const std::vector<std::pair<std::string, std::string>> headers_;
   const std::string body_;
@@ -261,7 +262,6 @@ void ServiceWorkerRemoteContainerEndpoint::BindForWindow(
       base::UnguessableToken::Create(),
       std::vector<blink::ParsedPermissionsPolicyDeclaration>(),
       CreateStubPolicyContainer(), mojo::NullRemote(), nullptr, nullptr,
-      /*not_restored_reasons=*/nullptr,
       base::BindOnce(
           [](mojom::DidCommitProvisionalLoadParamsPtr validated_params,
              mojom::DidCommitProvisionalLoadInterfaceParamsPtr
@@ -921,7 +921,7 @@ void ReadDataPipeInternal(mojo::DataPipeConsumerHandle handle,
         std::move(quit_closure).Run();
         return;
       case MOJO_RESULT_SHOULD_WAIT:
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(&ReadDataPipeInternal, handle, result,
                                       std::move(quit_closure)));
         return;

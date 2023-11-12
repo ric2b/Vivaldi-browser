@@ -22,6 +22,8 @@ interface SpeculationHost {
   // sent.
   UpdateSpeculationCandidates(
       array<SpeculationCandidate> candidates);
+  // Enables matching prefetches according to No-Vary-Search response headers.
+  EnableNoVarySearchSupport();
 };
 
 // The action that is proposed.
@@ -36,6 +38,12 @@ enum SpeculationTargetHint {
   kNoHint,
   kBlank,
   kSelf,
+};
+
+// Shows how eager the developer is to perform the speculation action.
+enum SpeculationEagerness {
+  kDefault,
+  kEager,
 };
 
 // A single candidate: a URL, an action, a referrer, and any associated
@@ -60,4 +68,8 @@ struct SpeculationCandidate {
   // The hint to be used to decide a target browsing context where preloaded
   // resource will be used. This is kNoHint for actions other than `kPrerender`.
   SpeculationTargetHint target_browsing_context_name_hint = kNoHint;
+
+  // The eagerness level to be used by link selection heuristics to select the
+  // candidate.
+  SpeculationEagerness eagerness = kDefault;
 };

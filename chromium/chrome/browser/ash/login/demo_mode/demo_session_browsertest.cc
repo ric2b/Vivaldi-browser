@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_process_platform_part_test_api_chromeos.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -240,7 +241,7 @@ class DemoSessionLoginTest : public LoginManagerTest,
  public:
   DemoSessionLoginTest() {
     login_manager_mixin_.set_should_launch_browser(true);
-    scoped_feature_list_.InitAndEnableFeature(ash::features::kDemoModeSWA);
+    scoped_feature_list_.InitAndEnableFeature(chromeos::features::kDemoModeSWA);
     BrowserList::AddObserver(this);
   }
 
@@ -330,7 +331,7 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest, DemoSWALaunchesOnSessionStartup) {
 
   // Verify that the Demo SWA has been opened
   Browser* demo_app_browser =
-      ash::FindSystemWebAppBrowser(profile, SystemWebAppType::DEMO_MODE);
+      FindSystemWebAppBrowser(profile, SystemWebAppType::DEMO_MODE);
   ASSERT_TRUE(demo_app_browser);
 }
 

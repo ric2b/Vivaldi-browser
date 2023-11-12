@@ -37,6 +37,7 @@ void AddRecordToStorage(scoped_refptr<StorageModuleInterface> storage,
                         Priority priority,
                         std::string dm_token,
                         Destination destination,
+                        int64_t reserved_space,
                         ReportQueue::RecordProducer record_producer,
                         StorageModuleInterface::EnqueueCallback callback) {
   // Generate record data.
@@ -50,6 +51,9 @@ void AddRecordToStorage(scoped_refptr<StorageModuleInterface> storage,
   Record record;
   *record.mutable_data() = std::move(record_result.ValueOrDie());
   record.set_destination(destination);
+  if (reserved_space > 0L) {
+    record.set_reserved_space(reserved_space);
+  }
 
   // |record| with no DM token is assumed to be associated with device DM token
   if (!dm_token.empty()) {
@@ -106,7 +110,8 @@ void ReportQueueImpl::AddProducedRecord(RecordProducer record_producer,
       FROM_HERE, {base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&AddRecordToStorage, storage_, priority,
                      config_->dm_token(), config_->destination(),
-                     std::move(record_producer), std::move(callback)));
+                     config_->reserved_space(), std::move(record_producer),
+                     std::move(callback)));
 }
 
 void ReportQueueImpl::Flush(Priority priority, FlushCallback callback) {
@@ -279,47 +284,26 @@ base::OnceCallback<void(StatusOr<std::unique_ptr<ReportQueue>>)>
 SpeculativeReportQueueImpl::PrepareToAttachActualQueue() const {
   return base::BindPostTask(
       sequenced_task_runner_,
-      base::BindOnce(
-          [](base::WeakPtr<SpeculativeReportQueueImpl> speculative_queue,
-             StatusOr<std::unique_ptr<ReportQueue>> actual_queue_result) {
-            if (!speculative_queue) {
-              return;  // Speculative queue was destructed in a meantime.
-            }
-            // Set actual queue for the speculative queue to use
-            // (asynchronously).
-            speculative_queue->AttachActualQueue(
-                std::move(std::move(actual_queue_result)));
-          },
-          weak_ptr_factory_.GetMutableWeakPtr()));
+      base::BindOnce(&SpeculativeReportQueueImpl::AttachActualQueue,
+                     weak_ptr_factory_.GetMutableWeakPtr()));
 }
 
 void SpeculativeReportQueueImpl::AttachActualQueue(
     StatusOr<std::unique_ptr<ReportQueue>> status_or_actual_queue) {
-  sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::WeakPtr<SpeculativeReportQueueImpl> self,
-             StatusOr<std::unique_ptr<ReportQueue>> status_or_actual_queue) {
-            if (!self) {
-              return;
-            }
-            DCHECK_CALLED_ON_VALID_SEQUENCE(self->sequence_checker_);
-            if (self->actual_report_queue_.has_value()) {
-              // Already attached, do nothing.
-              return;
-            }
-            if (!status_or_actual_queue.ok()) {
-              // Failed to create actual queue.
-              // Flush all pending records with this status.
-              self->PurgePendingProducers(status_or_actual_queue.status());
-              return;
-            }
-            // Actual report queue succeeded, store it (never to change later).
-            self->actual_report_queue_ =
-                std::move(status_or_actual_queue.ValueOrDie());
-            self->EnqueuePendingRecordProducers();
-          },
-          weak_ptr_factory_.GetWeakPtr(), std::move(status_or_actual_queue)));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (actual_report_queue_.has_value()) {
+    // Already attached, do nothing.
+    return;
+  }
+  if (!status_or_actual_queue.ok()) {
+    // Failed to create actual queue.
+    // Flush all pending records with this status.
+    PurgePendingProducers(status_or_actual_queue.status());
+    return;
+  }
+  // Actual report queue succeeded, store it (never to change later).
+  actual_report_queue_ = std::move(status_or_actual_queue.ValueOrDie());
+  EnqueuePendingRecordProducers();
 }
 
 void SpeculativeReportQueueImpl::PurgePendingProducers(Status status) const {

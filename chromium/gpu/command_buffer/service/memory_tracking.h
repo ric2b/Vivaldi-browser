@@ -11,6 +11,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_peak_memory.h"
@@ -61,8 +62,8 @@ class GPU_EXPORT MemoryTracker {
 // texture, or renderbuffer) and forward the result to a specified
 // MemoryTracker. MemoryTypeTracker is thread-safe, but it must not outlive the
 // MemoryTracker which will be notified on the sequence the MemoryTypeTracker
-// was created on (if base::SequencedTaskRunnerHandle::IsSet()), or on the task
-// runner specified (for testing).
+// was created on (if base::SequencedTaskRunner::HasCurrentDefault()), or on the
+// task runner specified (for testing).
 class GPU_EXPORT MemoryTypeTracker {
  public:
   explicit MemoryTypeTracker(MemoryTracker* memory_tracker);
@@ -84,7 +85,7 @@ class GPU_EXPORT MemoryTypeTracker {
  private:
   void TrackMemoryAllocatedChange(int64_t delta);
 
-  const raw_ptr<MemoryTracker> memory_tracker_;
+  const raw_ptr<MemoryTracker, DanglingUntriaged> memory_tracker_;
 
   size_t mem_represented_ GUARDED_BY(lock_) = 0;
   mutable base::Lock lock_;

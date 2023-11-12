@@ -110,8 +110,8 @@ class NoteModelMerger {
   // matched by GUID. They are guaranteed to have the same type and URL (if
   // applicable).
   struct GuidMatch {
-    const vivaldi::NoteNode* local_node;
-    const RemoteTreeNode* remote_node;
+    raw_ptr<const vivaldi::NoteNode> local_node;
+    raw_ptr<const RemoteTreeNode> remote_node;
   };
 
   // Constructs the remote note tree to be merged. Each entry in the

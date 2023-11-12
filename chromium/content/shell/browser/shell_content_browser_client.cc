@@ -7,15 +7,21 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "build/build_config.h"
@@ -59,7 +65,6 @@
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
 #include "content/shell/browser/shell_paths.h"
-#include "content/shell/browser/shell_quota_permission_context.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
 #include "content/shell/common/shell_controller.test-mojom.h"
 #include "content/shell/common/shell_switches.h"
@@ -112,8 +117,6 @@ namespace content {
 namespace {
 
 ShellContentBrowserClient* g_browser_client = nullptr;
-
-bool g_enable_expect_ct_for_testing = false;
 
 #if BUILDFLAG(IS_ANDROID)
 int GetCrashSignalFD(const base::CommandLine& command_line) {
@@ -204,21 +207,27 @@ void BindNetworkHintsHandler(
                                                        std::move(receiver));
 }
 
+base::flat_set<url::Origin> GetIsolatedContextOriginSetFromFlag() {
+  std::string cmdline_origins(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kIsolatedContextOrigins));
+
+  std::vector<base::StringPiece> origin_strings = base::SplitStringPiece(
+      cmdline_origins, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  base::flat_set<url::Origin> origin_set;
+  for (const base::StringPiece& origin_string : origin_strings) {
+    url::Origin allowed_origin = url::Origin::Create(GURL(origin_string));
+    if (!allowed_origin.opaque()) {
+      origin_set.insert(allowed_origin);
+    } else {
+      LOG(ERROR) << "Error parsing IsolatedContext origin: " << origin_string;
+    }
+  }
+  return origin_set;
+}
+
 }  // namespace
-
-class ShellContentBrowserClient::ShellFieldTrials
-    : public variations::PlatformFieldTrials {
- public:
-  ShellFieldTrials() = default;
-  ~ShellFieldTrials() override = default;
-
-  // variations::PlatformFieldTrials:
-  void SetUpFieldTrials() override {}
-  void SetUpFeatureControllingFieldTrials(
-      bool has_seed,
-      const variations::EntropyProviders& entropy_providers,
-      base::FeatureList* feature_list) override {}
-};
 
 std::string GetShellUserAgent() {
   if (base::FeatureList::IsEnabled(blink::features::kFullUserAgent))
@@ -386,18 +395,12 @@ ShellContentBrowserClient::GetWebContentsViewDelegate(
   return CreateShellWebContentsViewDelegate(web_contents);
 }
 
-bool ShellContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
+bool ShellContentBrowserClient::IsIsolatedContextAllowedForUrl(
     BrowserContext* browser_context,
-    const GURL& url) {
-  // Enable application isolation level to allow restricted APIs in WPT.
-  // Note that this will not turn on application isolation for all URLs; the
-  // content layer will still run its own checks.
-  return true;
-}
-
-scoped_refptr<content::QuotaPermissionContext>
-ShellContentBrowserClient::CreateQuotaPermissionContext() {
-  return new ShellQuotaPermissionContext();
+    const GURL& lock_url) {
+  static base::flat_set<url::Origin> isolated_context_origins =
+      GetIsolatedContextOriginSetFromFlag();
+  return isolated_context_origins.contains(url::Origin::Create(lock_url));
 }
 
 GeneratedCodeCacheSettings
@@ -625,11 +628,6 @@ ShellContentBrowserClient::off_the_record_browser_context() {
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
-void ShellContentBrowserClient::set_enable_expect_ct_for_testing(
-    bool enable_expect_ct_for_testing) {
-  g_enable_expect_ct_for_testing = enable_expect_ct_for_testing;
-}
-
 void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
     BrowserContext* context,
     network::mojom::NetworkContextParams* context_params,
@@ -644,11 +642,6 @@ void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
           "cors_exempt_header_list");
   if (!exempt_header.empty())
     context_params->cors_exempt_header_list.push_back(exempt_header);
-
-  if (g_enable_expect_ct_for_testing) {
-    context_params->enforce_chrome_ct_policy = true;
-    context_params->enable_expect_ct_reporting = true;
-  }
 }
 
 void ShellContentBrowserClient::GetHyphenationDictionary(
@@ -701,14 +694,16 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager =
       metrics::MetricsStateManager::Create(
           local_state_.get(), &enabled_state_provider, std::wstring(),
-          path.AppendASCII("Local State"));
-  metrics_state_manager->InstantiateFieldTrialList(
-      cc::switches::kEnableGpuBenchmarking);
+          path.AppendASCII("Local State"), metrics::StartupVisibility::kUnknown,
+          {
+              .force_benchmarking_mode =
+                  base::CommandLine::ForCurrentProcess()->HasSwitch(
+                      cc::switches::kEnableGpuBenchmarking),
+          });
+  metrics_state_manager->InstantiateFieldTrialList();
 
   std::vector<std::string> variation_ids;
   auto feature_list = std::make_unique<base::FeatureList>();
-
-  field_trials_ = std::make_unique<ShellFieldTrials>();
 
   std::unique_ptr<variations::SeedResponse> initial_seed;
 #if BUILDFLAG(IS_ANDROID)
@@ -733,36 +728,19 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
   // Since this is a test-only code path, some arguments to SetUpFieldTrials are
   // null.
   // TODO(crbug/1248066): Consider passing a low entropy source.
+  variations::PlatformFieldTrials platform_field_trials;
   field_trial_creator.SetUpFieldTrials(
       variation_ids,
       command_line->GetSwitchValueASCII(
           variations::switches::kForceVariationIds),
       content::GetSwitchDependentFeatureOverrides(*command_line),
-      std::move(feature_list), metrics_state_manager.get(), field_trials_.get(),
-      &safe_seed_manager,
+      std::move(feature_list), metrics_state_manager.get(),
+      &platform_field_trials, &safe_seed_manager,
       /*low_entropy_source_value=*/absl::nullopt);
 }
 
-void ShellContentBrowserClient::OnNetworkServiceCreated(
-    network::mojom::NetworkService* network_service) {
-  // Explicitly configure Certificate Transparency with no logs, but with
-  // a fresh enough log update time that policy enforcement will still be
-  // run. This does not use base::GetBuildTime(), as that may cause certain
-  // checks to be disabled if too far in the past. Callers that set
-  // `g_enable_expect_ct_reporting` are expected to simulate CT verification
-  // using `MockCertVerifier` (otherwise CT validation would fail due to the
-  // empty log list).
-  if (g_enable_expect_ct_for_testing) {
-    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-    network_service->UpdateCtLogList(
-        std::vector<network::mojom::CTLogInfoPtr>(), base::Time::Now(),
-        run_loop.QuitClosure());
-    run_loop.Run();
-  }
-}
-
 absl::optional<blink::ParsedPermissionsPolicy>
-ShellContentBrowserClient::GetPermissionsPolicyForIsolatedApp(
+ShellContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     content::BrowserContext* browser_context,
     const url::Origin& app_origin) {
   blink::ParsedPermissionsPolicyDeclaration decl(

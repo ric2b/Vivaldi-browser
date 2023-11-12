@@ -28,7 +28,7 @@
 #include "chrome/browser/consent_auditor/consent_auditor_test_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/consent_auditor/fake_consent_auditor.h"
 #include "content/public/test/browser_test.h"
@@ -144,6 +144,8 @@ inline constexpr char kArcTosWebviewFirstLoadResult[] =
 inline constexpr char kPrivacyPolicyFirstLoadResult[] =
     "OOBE.WebViewLoader.FirstLoadResult."
     "ConsolidatedConsentPrivacyPolicyWebview";
+inline constexpr char kRecoveryOptInResultHistogram[] =
+    "OOBE.ConsolidatedConsentScreen.RecoveryOptInResult";
 
 ArcPlayTermsOfServiceConsent BuildArcPlayTermsOfServiceConsent(
     const std::string& tos_content) {
@@ -336,6 +338,7 @@ IN_PROC_BROWSER_TEST_F(ConsolidatedConsentScreenTest, Accept) {
       "AcceptedRegular",
       1);
 
+  histogram_tester_.ExpectTotalCount(kRecoveryOptInResultHistogram, 1);
   histogram_tester_.ExpectTotalCount(kGoogleEulaWebviewFirstLoadResult, 1);
   histogram_tester_.ExpectTotalCount(kCrosEulaWebviewFirstLoadResult, 1);
 

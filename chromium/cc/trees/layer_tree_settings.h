@@ -181,9 +181,6 @@ class CC_EXPORT LayerTreeSettings {
   // Defaults to true.
   bool enable_occlusion = true;
 
-  // Whether experimental de-jelly effect is allowed.
-  bool allow_de_jelly_effect = false;
-
   // Whether the compositor should attempt to sync with the scroll handlers
   // before submitting a frame.
   bool enable_synchronized_scrolling = true;
@@ -216,9 +213,6 @@ class CC_EXPORT LayerTreeSettings {
   // to find the link to the Fluent Scrollbar spec and related CLs.
   bool enable_fluent_scrollbar = false;
 
-  // This corresponds to the ScrollUpdateOptimizations feature.
-  bool enable_scroll_update_optimizations = false;
-
   // Whether to disable the frame rate limit in the scheduler.
   bool disable_frame_rate_limit = false;
 
@@ -226,6 +220,10 @@ class CC_EXPORT LayerTreeSettings {
   // not be synchronized at the beginning of the frame because main frames were
   // being deferred.
   bool skip_commits_if_not_synchronizing_compositor_state = true;
+
+  // Enables shared image cache for gpu.
+  // TODO(crbug.com/1378251): not ready to be used by renderer cc instance yet.
+  bool enable_shared_image_cache_for_gpu = false;
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

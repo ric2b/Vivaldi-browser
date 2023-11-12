@@ -11,12 +11,12 @@ import {BookmarksApiProxyImpl} from 'chrome://read-later.top-chrome/bookmarks/bo
 import {ACTION_BUTTON_TRACK_IMAGE, ACTION_BUTTON_UNTRACK_IMAGE, LOCAL_STORAGE_EXPAND_STATUS_KEY, ShoppingListElement} from 'chrome://read-later.top-chrome/bookmarks/commerce/shopping_list.js';
 import {BookmarkProductInfo} from 'chrome://read-later.top-chrome/bookmarks/commerce/shopping_list.mojom-webui.js';
 import {ShoppingListApiProxyImpl} from 'chrome://read-later.top-chrome/bookmarks/commerce/shopping_list_api_proxy.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
-import {fakeMetricsPrivate, MetricsTracker} from '../../metrics_test_support.js';
+import {fakeMetricsPrivate, MetricsTracker} from '../../../metrics_test_support.js';
 import {TestBookmarksApiProxy} from '../test_bookmarks_api_proxy.js';
 
 import {TestShoppingListApiProxy} from './test_shopping_list_api_proxy.js';
@@ -115,8 +115,7 @@ suite('SidePanelShoppingListTest', () => {
   }
 
   setup(async () => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     metrics = fakeMetricsPrivate();
 

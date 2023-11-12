@@ -16,6 +16,9 @@
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "components/named_mojo_ipc_server/connection_info.h"
+#include "components/named_mojo_ipc_server/endpoint_options.h"
+#include "components/named_mojo_ipc_server/named_mojo_ipc_server.h"
 #include "components/webrtc/thread_wrapper.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
@@ -23,7 +26,7 @@
 #include "remoting/host/host_config.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/ipc_constants.h"
-#include "remoting/host/mojo_ipc/mojo_ipc_server.h"
+#include "remoting/host/mojo_caller_security_checker.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/host_stub.h"
 #include "remoting/protocol/ice_connection_to_client.h"
@@ -33,6 +36,9 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
+
+#include "base/strings/stringprintf.h"
+#include "base/win/win_util.h"
 #endif
 
 using remoting::protocol::ConnectionToClient;
@@ -43,29 +49,29 @@ namespace remoting {
 namespace {
 
 const net::BackoffEntry::Policy kDefaultBackoffPolicy = {
-  // Number of initial errors (in sequence) to ignore before applying
-  // exponential back-off rules.
-  5,
+    // Number of initial errors (in sequence) to ignore before applying
+    // exponential back-off rules.
+    5,
 
-  // Initial delay for exponential back-off in ms.
-  2000,
+    // Initial delay for exponential back-off in ms.
+    2000,
 
-  // Factor by which the waiting time will be multiplied.
-  2,
+    // Factor by which the waiting time will be multiplied.
+    2,
 
-  // Fuzzing percentage. ex: 10% will spread requests randomly
-  // between 90%-100% of the calculated time.
-  0,
+    // Fuzzing percentage. ex: 10% will spread requests randomly
+    // between 90%-100% of the calculated time.
+    0,
 
-  // Maximum amount of time we are willing to delay our request in ms.
-  -1,
+    // Maximum amount of time we are willing to delay our request in ms.
+    -1,
 
-  // Time to keep an entry from being discarded even when it
-  // has no significant state, -1 to never discard.
-  -1,
+    // Time to keep an entry from being discarded even when it
+    // has no significant state, -1 to never discard.
+    -1,
 
-  // Don't use initial delay unless the last request was an error.
-  false,
+    // Don't use initial delay unless the last request was an error.
+    false,
 };
 
 }  // namespace
@@ -125,8 +131,36 @@ void ChromotingHost::StartChromotingHostServices() {
   DCHECK(!ipc_server_);
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-  ipc_server_ = std::make_unique<MojoIpcServer<mojom::ChromotingHostServices>>(
-      GetChromotingHostServicesServerName(), this);
+  named_mojo_ipc_server::EndpointOptions options;
+  options.server_name = GetChromotingHostServicesServerName();
+#if BUILDFLAG(IS_WIN)
+  // TODO(crbug.com/1378803): Make Windows hosts work with non-isolated
+  // connections.
+  options.message_pipe_id =
+      named_mojo_ipc_server::EndpointOptions::kUseIsolatedConnection;
+
+  // Create a named pipe owned by the current user (the LocalService account
+  // (SID: S-1-5-19) when running in the network process) which is available
+  // to all authenticated users.
+  // presubmit: allow wstring
+  std::wstring user_sid;
+  if (!base::win::GetUserSidString(&user_sid)) {
+    LOG(ERROR) << "Failed to get user SID string.";
+    return;
+  }
+  options.security_descriptor = base::StringPrintf(
+      L"O:%lsG:%lsD:(A;;GA;;;AU)", user_sid.c_str(), user_sid.c_str());
+#else
+  options.message_pipe_id = kChromotingHostServicesMessagePipeId;
+#endif
+  ipc_server_ = std::make_unique<
+      named_mojo_ipc_server::NamedMojoIpcServer<mojom::ChromotingHostServices>>(
+      options, base::BindRepeating(&IsTrustedMojoEndpoint)
+                   .Then(base::BindRepeating(
+                       [](mojom::ChromotingHostServices* impl, bool trusted) {
+                         return trusted ? impl : nullptr;
+                       },
+                       base::Unretained(this))));
   ipc_server_->StartServer();
   HOST_LOG << "ChromotingHostServices IPC server has been started.";
 #else
@@ -157,7 +191,8 @@ void ChromotingHost::OnSessionAuthenticating(ClientSession* client) {
   // authenticates. This allows the backoff to protect from parallel
   // connection attempts as well as sequential ones.
   if (login_backoff_.ShouldRejectRequest()) {
-    LOG(WARNING) << "Disconnecting client " << client->client_jid() << " due to"
+    LOG(WARNING) << "Disconnecting client " << client->client_jid()
+                 << " due to"
                     " an overload of failed login attempts.";
     client->DisconnectSession(protocol::HOST_OVERLOAD);
     return;
@@ -263,8 +298,8 @@ void ChromotingHost::BindSessionServices(
 }
 
 void ChromotingHost::OnIncomingSession(
-      protocol::Session* session,
-      protocol::SessionManager::IncomingSessionResponse* response) {
+    protocol::Session* session,
+    protocol::SessionManager::IncomingSessionResponse* response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(started_);
 

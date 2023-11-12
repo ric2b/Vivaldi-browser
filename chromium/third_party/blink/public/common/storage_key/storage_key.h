@@ -93,14 +93,22 @@ class BLINK_COMMON_EXPORT StorageKey {
   static StorageKey CreateFromStringForTesting(const std::string& origin);
 
   // Takes in two url::Origin types representing origin and top-level site and
-  // returns a StorageKey with a nullptr nonce and a kSameSite AncestorChainBit.
-  // NOTE: For use in tests only.
+  // returns a StorageKey with a nullptr nonce and an AncestorChainBit set based
+  // on whether `origin` and `top_level_site` are schemeful-same-site. NOTE: The
+  // approach used by this method for calculating the AncestorChainBit is
+  // different than what's done in production code, where the whole frame tree
+  // is used. In other words, this method cannot be used to create a StorageKey
+  // corresponding to a first-party iframe with a cross-site ancestor (e.g.,
+  // "a.com" -> "b.com" -> "a.com"). To create a StorageKey for that scenario,
+  // use the StorageKey constructor that has an AncestorChainBit parameter.
   static StorageKey CreateForTesting(const url::Origin& origin,
                                      const url::Origin& top_level_site);
 
-  // Takes in a url::Origin type and a net::SchemefulSite type and returns a
-  // StorageKey with a nullptr nonce and a kSameSite AncestorChainBit. NOTE: For
-  // use in tests only.
+  // Takes in a url::Origin `origin` and a net::SchemefulSite `top_level_site`
+  // and returns a StorageKey with a nullptr nonce and an AncestorChainBit set
+  // based on whether `origin` and `top_level_site` are schemeful-same-site. See
+  // the note in `CreateForTesting()` above regarding how the AncestorChainBit
+  // is calculated by this method.
   static StorageKey CreateForTesting(const url::Origin& origin,
                                      const net::SchemefulSite& top_level_site);
 
@@ -182,6 +190,18 @@ class BLINK_COMMON_EXPORT StorageKey {
   // Cast a storage key to a cookie partition key. If cookie partitioning is not
   // enabled, then it will always return nullopt.
   const absl::optional<net::CookiePartitionKey> ToCookiePartitionKey() const;
+
+  // Checks whether this StorageKey matches a given origin for the purposes of
+  // clearing site data. This method should only be used in trusted contexts,
+  // such as extensions browsingData API or settings UIs, as opposed to the
+  // untrusted ones, such as the Clear-Site-Data header (where the entire
+  // storage key should be matched exactly).
+  // For first-party contexts, this matches on the `origin`; for third-party,
+  // this matches on the `top_level_site`. This is done to prevent clearing
+  // first-party data for a.example.com when only b.example.com needs to be
+  // cleared. The 3P partitioned data for the entire example.com will be cleared
+  // in contrast to that.
+  bool MatchesOriginForTrustedStorageDeletion(const url::Origin& origin) const;
 
  private:
   // This enum represents the different type of encodable partitioning

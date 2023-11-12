@@ -5,27 +5,53 @@
 #ifndef CHROME_BROWSER_SUPERVISED_USER_KIDS_CHROME_MANAGEMENT_KIDS_EXTERNAL_FETCHER_H_
 #define CHROME_BROWSER_SUPERVISED_USER_KIDS_CHROME_MANAGEMENT_KIDS_EXTERNAL_FETCHER_H_
 
-#include "base/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kids_access_token_fetcher.h"
 #include "chrome/browser/supervised_user/kids_chrome_management/kidschromemanagement_messages.pb.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+// -----------------------------------------------------------------------------
+// Usage documentation
+// -----------------------------------------------------------------------------
+//
+// Overview: KidsExternalFetcher provides an interface for generic fetchers that
+// use classes to represent Request and Response objects. The default mechanism
+// under the hood takes care of the fetch process, including:
+// * obtaining the right access token,
+// * serializing the request and parsing the response,
+// * submitting metrics.
+//
+// If you want to create new fetcher factory method, then some implementation
+// details must be provided in order to enable fetching for said <Request,
+// Response> pair. The new fetcher factory should have at least the following
+// arguments: signin::IdentityManager, network::SharedURLLoaderFactory, url of
+// the endpoint and consuming callback provided.
+//
+// In the corresponding cc file, there should be:
+// * a traffic annotation tag for the request, assuming that one Request
+// represents one API endpoint, in the implementation cc file (example:
+// GetDefaultNetworkTrafficAnnotationTag),
+// * a request path method for the request (example: GetPathForRequest),
+// * a metrics key constructing method (example: CreateMetricKey).
+
 // Holds the status of the fetch. The callback's response will be set iff the
 // status is ok.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 class KidsExternalFetcherStatus {
  public:
   enum State {
-    NO_ERROR,                   // No error.
-    GOOGLE_SERVICE_AUTH_ERROR,  // Error occurred during the access token
-                                // fetching phase. See GetGoogleServiceAuthError
-                                // for details.
-    HTTP_ERROR,        // The request was performed, but http returned errors.
-    INVALID_RESPONSE,  // The request was performed without error, but http
-                       // response could not be processed or was unexpected.
+    NO_ERROR = 0,                   // No error.
+    GOOGLE_SERVICE_AUTH_ERROR = 1,  // Error occurred during the access token
+                                    // fetching phase. See
+                                    // GetGoogleServiceAuthError for details.
+    HTTP_ERROR = 2,  // The request was performed, but http returned errors.
+    INVALID_RESPONSE = 3,  // The request was performed without error, but http
+                           // response could not be processed or was unexpected.
+    kMaxValue = INVALID_RESPONSE,  // keep last, required for metrics.
   };
   // Status might be used in base::expected context as possible error, since it
   // contains two error-enabled attributes which are copyable / assignable.
@@ -48,6 +74,11 @@ class KidsExternalFetcherStatus {
   // KidsExternalFetcherStatus::IsOk iff google_service_auth_error_.state() ==
   // NONE and state_ == NONE
   bool IsOk() const;
+  // Indicates whether the status is not ok, but is worth retrying because it
+  // might go away.
+  bool IsTransientError() const;
+  // Indicates whether the status is not ok and there is no point in retrying.
+  bool IsPersistentError() const;
 
   State state() const;
   const class GoogleServiceAuthError& google_service_auth_error() const;

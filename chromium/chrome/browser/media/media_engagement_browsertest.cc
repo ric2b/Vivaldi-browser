@@ -22,7 +22,7 @@
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
-#include "chrome/browser/preloading/prefetch/no_state_prefetch/prerender_test_utils.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
@@ -105,7 +105,7 @@ class WasRecentlyAudibleWatcher {
     }
   }
 
-  const raw_ptr<RecentlyAudibleHelper> audible_helper_;
+  const raw_ptr<RecentlyAudibleHelper, DanglingUntriaged> audible_helper_;
 
   base::RepeatingTimer timer_;
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -797,7 +797,7 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementBrowserTest, MAYBE_Ignored) {
 
   std::unique_ptr<prerender::NoStatePrefetchHandle> no_state_prefetch_handle =
       no_state_prefetch_manager->StartPrefetchingFromOmnibox(
-          url, storage_namespace, gfx::Size(640, 480));
+          url, storage_namespace, gfx::Size(640, 480), nullptr);
 
   ASSERT_EQ(no_state_prefetch_handle->contents(), test_prerender->contents());
 

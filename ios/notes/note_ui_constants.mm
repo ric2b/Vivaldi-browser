@@ -8,8 +8,8 @@
 
 NSString* const kNoteHomeViewContainerIdentifier =
     @"kNoteHomeViewContainerIdentifier";
-NSString* const kNoteEditViewContainerIdentifier =
-    @"kNoteEditViewContainerIdentifier";
+NSString* const kNoteAddEditViewContainerIdentifier =
+    @"kNoteAddEditViewContainerIdentifier";
 NSString* const kNoteFolderEditViewContainerIdentifier =
     @"kNoteFolderEditViewContainerIdentifier";
 NSString* const kNoteFolderCreateViewContainerIdentifier =

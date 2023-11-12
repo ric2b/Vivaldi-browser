@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_audio_latency_hint.h"
+#include "third_party/blink/public/platform/web_audio_sink_descriptor.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
@@ -29,18 +30,23 @@ constexpr unsigned kDefaultNumberOfInputChannels = 2;
 }  // namespace
 
 scoped_refptr<RealtimeAudioDestinationHandler>
-RealtimeAudioDestinationHandler::Create(AudioNode& node,
-                                        const WebAudioLatencyHint& latency_hint,
-                                        absl::optional<float> sample_rate) {
+RealtimeAudioDestinationHandler::Create(
+    AudioNode& node,
+    const WebAudioSinkDescriptor& sink_descriptor,
+    const WebAudioLatencyHint& latency_hint,
+    absl::optional<float> sample_rate) {
   return base::AdoptRef(
-      new RealtimeAudioDestinationHandler(node, latency_hint, sample_rate));
+      new RealtimeAudioDestinationHandler(node, sink_descriptor, latency_hint,
+                                          sample_rate));
 }
 
 RealtimeAudioDestinationHandler::RealtimeAudioDestinationHandler(
     AudioNode& node,
+    const WebAudioSinkDescriptor& sink_descriptor,
     const WebAudioLatencyHint& latency_hint,
     absl::optional<float> sample_rate)
     : AudioDestinationHandler(node),
+      sink_descriptor_(sink_descriptor),
       latency_hint_(latency_hint),
       sample_rate_(sample_rate),
       allow_pulling_audio_graph_(false),
@@ -293,12 +299,36 @@ int RealtimeAudioDestinationHandler::GetFramesPerBuffer() const {
 }
 
 void RealtimeAudioDestinationHandler::CreatePlatformDestination() {
-  platform_destination_ = AudioDestination::Create(
-      *this, ChannelCount(), latency_hint_, sample_rate_,
-      Context()->GetDeferredTaskHandler().RenderQuantumFrames());
+  DCHECK(IsMainThread());
+
+  if (base::FeatureList::IsEnabled(features::kWebAudioSinkSelection)) {
+    platform_destination_ = AudioDestination::Create(
+        *this, sink_descriptor_, ChannelCount(), latency_hint_, sample_rate_,
+        Context()->GetDeferredTaskHandler().RenderQuantumFrames());
+  } else {
+    WebAudioSinkDescriptor
+        sink_descriptor(String(""), sink_descriptor_.Token());
+    platform_destination_ = AudioDestination::Create(
+        *this, sink_descriptor, ChannelCount(), latency_hint_, sample_rate_,
+        Context()->GetDeferredTaskHandler().RenderQuantumFrames());
+  }
+
+  // TODO(crbug.com/991981): Can't query `GetCallbackBufferSize()` here because
+  // creating the destination is not a synchronous process. When anything
+  // touches the destination information between this call and
+  // `StartPlatformDestination()` can lead to a crash.
+  TRACE_EVENT0("webaudio",
+               "RealtimeAudioDestinationHandler::CreatePlatformDestination");
 }
 
 void RealtimeAudioDestinationHandler::StartPlatformDestination() {
+  TRACE_EVENT1("webaudio",
+               "RealtimeAudioDestinationHandler::StartPlatformDestination",
+               "sink information (when starting a new destination)",
+               audio_utilities::GetSinkInfoForTracing(
+                  sink_descriptor_, latency_hint_,
+                  sample_rate_.has_value() ? sample_rate_.value() : -1,
+                  MaxChannelCount(), GetCallbackBufferSize()));
   DCHECK(IsMainThread());
 
   if (platform_destination_->IsPlaying()) {
@@ -332,6 +362,27 @@ void RealtimeAudioDestinationHandler::StopPlatformDestination() {
   if (platform_destination_->IsPlaying()) {
     platform_destination_->Stop();
   }
+}
+
+void RealtimeAudioDestinationHandler::SetSinkDescriptor(
+    const WebAudioSinkDescriptor& sink_descriptor,
+    media::OutputDeviceStatusCB callback) {
+  TRACE_EVENT1("webaudio", "RealtimeAudioDestinationHandler::SetSinkDescriptor",
+               "sink information (when descriptor change requested)",
+               audio_utilities::GetSinkInfoForTracing(
+                  sink_descriptor, latency_hint_,
+                  sample_rate_.has_value() ? sample_rate_.value() : -1,
+                  MaxChannelCount(), GetCallbackBufferSize()));
+  DCHECK(IsMainThread());
+
+  // Stop the current sink and create a new with the provided sink descriptor.
+  StopPlatformDestination();
+  sink_descriptor_ = sink_descriptor;
+  CreatePlatformDestination();
+  StartPlatformDestination();
+
+  // Currently we assume that the recreation request never fails.
+  std::move(callback).Run(media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_OK);
 }
 
 }  // namespace blink

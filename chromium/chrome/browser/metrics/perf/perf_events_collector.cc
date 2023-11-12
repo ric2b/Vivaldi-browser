@@ -4,7 +4,6 @@
 
 #include "chrome/browser/metrics/perf/perf_events_collector.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -12,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -19,7 +19,6 @@
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/metrics/perf/cpu_identity.h"
 #include "chrome/browser/metrics/perf/process_type_collector.h"
 #include "chrome/browser/metrics/perf/windowed_incognito_observer.h"
@@ -31,13 +30,9 @@
 
 namespace metrics {
 
-BASE_FEATURE(kCWPCollectionOnHostAndGuest,
-             "CWPCollectionOnHostAndGuest",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kCWPCollectsETM,
              "CWPCollectsETM",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 
@@ -122,7 +117,7 @@ void ExtractVersionNumbers(const std::string& version,
 
 // Returns if a micro-architecture supports the cycles:ppp event.
 bool MicroarchitectureHasCyclesPPPEvent(const std::string& uarch) {
-  return uarch == "Goldmont" || uarch == "GoldmontPlus" ||
+  return uarch == "Goldmont" || uarch == "GoldmontPlus" || uarch == "Tremont" ||
          uarch == "Broadwell" || uarch == "Kabylake" || uarch == "Tigerlake";
 }
 
@@ -138,7 +133,7 @@ bool KernelReleaseHasPEBSFlushingFix(const std::string& release) {
 // Returns if a micro-architecture supports LBR callgraph profiling.
 bool MicroarchitectureHasLBRCallgraph(const std::string& uarch) {
   return uarch == "Haswell" || uarch == "Broadwell" || uarch == "Skylake" ||
-         uarch == "Kabylake" || uarch == "Tigerlake";
+         uarch == "Kabylake" || uarch == "Tigerlake" || uarch == "Tremont";
 }
 
 // Returns if a kernel release supports LBR callgraph profiling.
@@ -153,13 +148,8 @@ const char kPerfCommandDelimiter[] = " ";
 
 // Collect precise=3 (:ppp) cycle events on microarchitectures and kernels that
 // support it.
-const char kPerfCyclesPPPCmd[] = "-- record -a -e cycles:ppp -c 1000003";
-
-const char kPerfFPCallgraphPPPCmd[] =
-    "-- record -a -e cycles:ppp -g -c 4000037";
-
 const char kPerfLBRCallgraphPPPCmd[] =
-    "-- record -a -e cycles:ppp -c 4000037 --call-graph lbr";
+    "-- record -a -e cycles:ppp -c 6000011 --call-graph lbr";
 
 const char kPerfCyclesPPPHGCmd[] = "-- record -a -e cycles:pppHG -c 1000003";
 
@@ -167,11 +157,7 @@ const char kPerfFPCallgraphPPPHGCmd[] =
     "-- record -a -e cycles:pppHG -g -c 4000037";
 
 // Collect default (imprecise) cycle events everywhere else.
-const char kPerfCyclesCmd[] = "-- record -a -e cycles -c 1000003";
-
 const char kPerfCyclesHGCmd[] = "-- record -a -e cycles:HG -c 1000003";
-
-const char kPerfFPCallgraphCmd[] = "-- record -a -e cycles -g -c 4000037";
 
 const char kPerfFPCallgraphHGCmd[] = "-- record -a -e cycles:HG -g -c 4000037";
 
@@ -209,11 +195,34 @@ const char kPerfDTLBMissCyclesCmdAtom[] =
 
 // TLB miss cycles using raw PMU event codes.
 const char kPerfITLBMissCyclesCmdTremont[] = "-- record -a -e r1085 -c 30001";
-const char kPerfDTLBMissCyclesCmdTremont[] = "-- record -a -e r1008 -c 350003";
+const char kPerfDTLBMissCyclesCmdTremont[] =
+    "-- record -a -e r1008 -g -c 350003";
 
 const char kPerfLLCMissesCmd[] = "-- record -a -e r412e -g -c 30007";
 // Precise events (request zero skid) for last level cache misses.
 const char kPerfLLCMissesPreciseCmd[] = "-- record -a -e r412e:pp -g -c 30007";
+
+// Atom CPUs starting with Goldmont and big Intel cores starting with Haswell
+// support Data Linear Address in PEBS. Collecting data addresses requires the
+// use of precise events.
+//
+// On Goldmont & GoldmontPlus.
+const char kPerfDTLBMissesDAPGoldmont[] =
+    "-- record -a -e mem_uops_retired.dtlb_miss_loads:pp -c 2003 -d";
+
+// Tremont on kernel 5.4 doesn't support the event name, but it supports the raw
+// event code.
+// AlderLake on kernel 5.10 doesn't support the event name, but it supports the
+// raw event code.
+const char kPerfDTLBMissesDAPTremont[] = "-- record -a -e r11d0:pp -c 2003 -d";
+
+// On Haswell, Broadwell.
+const char kPerfDTLBMissesDAPHaswell[] =
+    "-- record -a -e mem_uops_retired.stlb_miss_loads:pp -c 2003 -d";
+
+// On big Intel cores from Skylake forward.
+const char kPerfDTLBMissesDAPSkylake[] =
+    "-- record -a -e mem_inst_retired.stlb_miss_loads:pp -c 2003 -d";
 
 // ETM for ARM boards including trogdor and herobrine.
 const char kPerfETMCmd[] =
@@ -232,9 +241,10 @@ const std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_x86_64(
   const char* itlb_miss_cycles_cmd = kPerfITLBMissCyclesCmdIvyBridge;
   const char* dtlb_miss_cycles_cmd = kPerfDTLBMissCyclesCmdIvyBridge;
   const char* lbr_cmd = kPerfLBRCmd;
-  const char* cycles_cmd = kPerfCyclesCmd;
-  const char* fp_callgraph_cmd = kPerfFPCallgraphCmd;
+  const char* cycles_cmd = kPerfCyclesHGCmd;
+  const char* fp_callgraph_cmd = kPerfFPCallgraphHGCmd;
   const char* lbr_callgraph_cmd = kPerfLBRCallgraphCmd;
+  const char* dap_dtlb_miss_cmd = nullptr;
 
   if (cpu_uarch == "Skylake" || cpu_uarch == "Kabylake" ||
       cpu_uarch == "Tigerlake" || cpu_uarch == "GoldmontPlus") {
@@ -254,27 +264,33 @@ const std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_x86_64(
       cpu_uarch == "Goldmont" || cpu_uarch == "GoldmontPlus") {
     lbr_cmd = kPerfLBRCmdAtom;
   }
-  if (base::FeatureList::IsEnabled(kCWPCollectionOnHostAndGuest)) {
-    cycles_cmd = kPerfCyclesHGCmd;
-    fp_callgraph_cmd = kPerfFPCallgraphHGCmd;
+  if (cpu_uarch == "Skylake" || cpu_uarch == "Kabylake" ||
+      cpu_uarch == "Tigerlake" || cpu_uarch == "IceLake" ||
+      cpu_uarch == "CometLake") {
+    dap_dtlb_miss_cmd = kPerfDTLBMissesDAPSkylake;
+  } else if (cpu_uarch == "Goldmont" || cpu_uarch == "GoldmontPlus") {
+    dap_dtlb_miss_cmd = kPerfDTLBMissesDAPGoldmont;
+  } else if (cpu_uarch == "Haswell" || cpu_uarch == "Broadwell") {
+    dap_dtlb_miss_cmd = kPerfDTLBMissesDAPHaswell;
+  } else if (cpu_uarch == "Tremont" || cpu_uarch == "AlderLake") {
+    dap_dtlb_miss_cmd = kPerfDTLBMissesDAPTremont;
   }
+
   if (MicroarchitectureHasCyclesPPPEvent(cpu_uarch)) {
-    fp_callgraph_cmd = kPerfFPCallgraphPPPCmd;
-    if (base::FeatureList::IsEnabled(kCWPCollectionOnHostAndGuest)) {
-      fp_callgraph_cmd = kPerfFPCallgraphPPPHGCmd;
-    }
+    fp_callgraph_cmd = kPerfFPCallgraphPPPHGCmd;
     // Enable precise events for cycles.flat and cycles.lbr only if the kernel
     // has the fix for flushing PEBS on context switch.
     if (KernelReleaseHasPEBSFlushingFix(cpuid.release)) {
-      cycles_cmd = kPerfCyclesPPPCmd;
+      cycles_cmd = kPerfCyclesPPPHGCmd;
       lbr_callgraph_cmd = kPerfLBRCallgraphPPPCmd;
-      if (base::FeatureList::IsEnabled(kCWPCollectionOnHostAndGuest)) {
-        cycles_cmd = kPerfCyclesPPPHGCmd;
-      }
     }
   }
 
-  cmds.emplace_back(WeightAndValue(50.0, cycles_cmd));
+  if (dap_dtlb_miss_cmd != nullptr) {
+    cmds.emplace_back(45.0, cycles_cmd);
+  } else {
+    cmds.emplace_back(50.0, cycles_cmd);
+  }
 
   // Haswell and newer big Intel cores support LBR callstack profiling. This
   // requires kernel support, which was added in kernel 4.4, and it was
@@ -285,10 +301,14 @@ const std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_x86_64(
   // the callstack.
   if (MicroarchitectureHasLBRCallgraph(cpu_uarch) &&
       KernelReleaseHasLBRCallgraph(cpuid.release)) {
-    cmds.emplace_back(WeightAndValue(10.0, fp_callgraph_cmd));
-    cmds.emplace_back(WeightAndValue(10.0, lbr_callgraph_cmd));
+    cmds.emplace_back(10.0, fp_callgraph_cmd);
+    cmds.emplace_back(10.0, lbr_callgraph_cmd);
   } else {
-    cmds.emplace_back(WeightAndValue(20.0, fp_callgraph_cmd));
+    cmds.emplace_back(20.0, fp_callgraph_cmd);
+  }
+
+  if (dap_dtlb_miss_cmd != nullptr) {
+    cmds.emplace_back(5.0, dap_dtlb_miss_cmd);
   }
 
   if (cpu_uarch == "IvyBridge" || cpu_uarch == "Haswell" ||
@@ -297,21 +317,16 @@ const std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_x86_64(
       cpu_uarch == "Tigerlake" || cpu_uarch == "Silvermont" ||
       cpu_uarch == "Airmont" || cpu_uarch == "Goldmont" ||
       cpu_uarch == "GoldmontPlus" || cpu_uarch == "Tremont") {
-    if (cpu_uarch == "Tremont") {
-      cmds.emplace_back(WeightAndValue(12.5, itlb_miss_cycles_cmd));
-      cmds.emplace_back(WeightAndValue(12.5, dtlb_miss_cycles_cmd));
-    } else {
-      cmds.emplace_back(WeightAndValue(15.0, lbr_cmd));
-      cmds.emplace_back(WeightAndValue(5.0, itlb_miss_cycles_cmd));
-      cmds.emplace_back(WeightAndValue(5.0, dtlb_miss_cycles_cmd));
-    }
+    cmds.emplace_back(15.0, lbr_cmd);
+    cmds.emplace_back(5.0, itlb_miss_cycles_cmd);
+    cmds.emplace_back(5.0, dtlb_miss_cycles_cmd);
     // Record precise events on last level cache misses whenever the hardware
     // supports.
     if (cpu_uarch == "Goldmont" || cpu_uarch == "GoldmontPlus" ||
         cpu_uarch == "Tremont") {
-      cmds.emplace_back(WeightAndValue(5.0, kPerfLLCMissesPreciseCmd));
+      cmds.emplace_back(5.0, kPerfLLCMissesPreciseCmd);
     } else {
-      cmds.emplace_back(WeightAndValue(5.0, kPerfLLCMissesCmd));
+      cmds.emplace_back(5.0, kPerfLLCMissesCmd);
     }
     return cmds;
   }
@@ -319,10 +334,10 @@ const std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_x86_64(
   // non-Intel CPUs such as AMD, since the event code provided for LLC is
   // Intel specific.
   if (cpuid.vendor == "GenuineIntel") {
-    cmds.emplace_back(WeightAndValue(25.0, cycles_cmd));
-    cmds.emplace_back(WeightAndValue(5.0, kPerfLLCMissesCmd));
+    cmds.emplace_back(25.0, cycles_cmd);
+    cmds.emplace_back(5.0, kPerfLLCMissesCmd);
   } else {
-    cmds.emplace_back(WeightAndValue(30.0, cycles_cmd));
+    cmds.emplace_back(30.0, cycles_cmd);
   }
   return cmds;
 }
@@ -334,12 +349,12 @@ std::vector<RandomSelector::WeightAndValue> GetDefaultCommands_aarch64(
 
   if (base::FeatureList::IsEnabled(kCWPCollectsETM) &&
       (model == "TROGDOR" || model == "STRONGBAD" || model == "HEROBRINE")) {
-    cmds.emplace_back(WeightAndValue(50.0, kPerfCyclesHGCmd));
-    cmds.emplace_back(WeightAndValue(20.0, kPerfFPCallgraphHGCmd));
-    cmds.emplace_back(WeightAndValue(30.0, kPerfETMCmd));
+    cmds.emplace_back(50.0, kPerfCyclesHGCmd);
+    cmds.emplace_back(20.0, kPerfFPCallgraphHGCmd);
+    cmds.emplace_back(30.0, kPerfETMCmd);
   } else {
-    cmds.emplace_back(WeightAndValue(80.0, kPerfCyclesHGCmd));
-    cmds.emplace_back(WeightAndValue(20.0, kPerfFPCallgraphHGCmd));
+    cmds.emplace_back(80.0, kPerfCyclesHGCmd);
+    cmds.emplace_back(20.0, kPerfFPCallgraphHGCmd);
   }
   return cmds;
 }
@@ -362,22 +377,13 @@ std::vector<RandomSelector::WeightAndValue> GetDefaultCommandsForCpuModel(
   std::vector<WeightAndValue> cmds;
   if (cpuid.arch == "x86" ||     // 32-bit x86, or...
       cpuid.arch == "armv7l") {  // ARM32
-    if (base::FeatureList::IsEnabled(kCWPCollectionOnHostAndGuest)) {
-      cmds.emplace_back(WeightAndValue(80.0, kPerfCyclesHGCmd));
-      cmds.emplace_back(WeightAndValue(20.0, kPerfFPCallgraphHGCmd));
-    } else {
-      cmds.emplace_back(WeightAndValue(80.0, kPerfCyclesCmd));
-      cmds.emplace_back(WeightAndValue(20.0, kPerfFPCallgraphCmd));
-    }
+    cmds.emplace_back(80.0, kPerfCyclesHGCmd);
+    cmds.emplace_back(20.0, kPerfFPCallgraphHGCmd);
     return cmds;
   }
 
   // Unknown CPUs
-  if (base::FeatureList::IsEnabled(kCWPCollectionOnHostAndGuest)) {
-    cmds.emplace_back(WeightAndValue(1.0, kPerfCyclesHGCmd));
-  } else {
-    cmds.emplace_back(WeightAndValue(1.0, kPerfCyclesCmd));
-  }
+  cmds.emplace_back(1.0, kPerfCyclesHGCmd);
   return cmds;
 }
 
@@ -395,7 +401,7 @@ void PerfCollector::SetUp() {
   // current sequence.
   debugd_client_provider_ = std::make_unique<ash::DebugDaemonClientProvider>();
 
-  auto task_runner = base::SequencedTaskRunnerHandle::Get();
+  auto task_runner = base::SequencedTaskRunner::GetCurrentDefault();
   base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
@@ -566,9 +572,9 @@ void PerfCollector::ParseOutputProtoIfValid(
   }
   if (has_cycles) {
     // Store CPU max frequencies in the sampled profile.
-    std::copy(max_frequencies_mhz_.begin(), max_frequencies_mhz_.end(),
-              google::protobuf::RepeatedFieldBackInserter(
-                  sampled_profile->mutable_cpu_max_frequency_mhz()));
+    base::ranges::copy(max_frequencies_mhz_,
+                       google::protobuf::RepeatedFieldBackInserter(
+                           sampled_profile->mutable_cpu_max_frequency_mhz()));
   }
 
   bool posted = base::ThreadPool::PostTaskAndReply(

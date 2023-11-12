@@ -3,11 +3,10 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {isWindows} from 'chrome://resources/js/cr.m.js';
 import {LanguageHelper, LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {CrSettingsPrefs} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
+import {fakeDataBind, flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {FakeLanguageSettingsPrivate, getFakeLanguagePrefs} from './fake_language_settings_private.js';
 import {FakeSettingsPrivate} from './fake_settings_private.js';
@@ -30,11 +29,10 @@ suite('settings-languages', function() {
 
   suiteSetup(function() {
     CrSettingsPrefs.deferInitialization = true;
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
   });
 
-  setup(function() {
+  setup(async function() {
     const settingsPrefs = document.createElement('settings-prefs');
     const settingsPrivate = new FakeSettingsPrivate(getFakeLanguagePrefs());
     settingsPrefs.initialize(
@@ -55,12 +53,13 @@ suite('settings-languages', function() {
 
     // Prefs would normally be data-bound to settings-languages.
     fakeDataBind(settingsPrefs, settingsLanguages, 'prefs');
+    await flushTasks();
 
     document.body.appendChild(settingsLanguages);
-    return languageHelper.whenReady().then(function() {
-      return isWindows ? browserProxy.whenCalled('getProspectiveUILanguage') :
-                         Promise.resolve();
-    });
+    await languageHelper.whenReady();
+    // <if expr="is_win">
+    await browserProxy.whenCalled('getProspectiveUiLanguage');
+    // </if>
   });
 
   test('languages model', function() {

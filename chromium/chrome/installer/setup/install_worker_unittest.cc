@@ -15,6 +15,7 @@
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "chrome/browser/chrome_for_testing/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/install_static/test/scoped_install_details.h"
@@ -271,6 +272,8 @@ class InstallWorkerTest : public testing::Test {
 // Tests
 //------------------------------------------------------------------------------
 
+// Chrome for Testing does not support system-level installations.
+#if !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 TEST_F(InstallWorkerTest, TestInstallChromeSystem) {
   const bool system_level = true;
   NiceMock<MockWorkItemList> work_item_list;
@@ -318,6 +321,7 @@ TEST_F(InstallWorkerTest, TestInstallChromeSystem) {
 
   AddInstallWorkItems(install_params, &work_item_list);
 }
+#endif
 
 // Tests for installer::AddUpdateBrandCodeWorkItem().
 //------------------------------------------------------------------------------
@@ -436,3 +440,90 @@ INSTANTIATE_TEST_SUITE_P(AddUpdateBrandCodeWorkItemTest,
                          AddUpdateBrandCodeWorkItemTest,
                          Combine(Bool(), Bool(), Bool()),
                          AddUpdateBrandCodeWorkItemTestParamToString());
+
+// Test for installer::AddOldWerHelperRegistrationCleanupItems().
+
+class ChromeWerDllRegistryTest : public testing::Test {
+ public:
+  ~ChromeWerDllRegistryTest() override = default;
+
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(
+        registry_overrides_.OverrideRegistry(HKEY_LOCAL_MACHINE));
+  }
+
+ private:
+  registry_util::RegistryOverrideManager registry_overrides_;
+};
+
+TEST_F(ChromeWerDllRegistryTest, AddOldWerHelperRegistrationCleanupItems) {
+  const base::FilePath target_path(L"C:\\TargetPath");
+  const HKEY root_key = HKEY_LOCAL_MACHINE;
+  const std::wstring wer_registry_path = installer::GetWerHelperRegistryPath();
+
+  std::unique_ptr<WorkItemList> work_item_list(WorkItem::CreateWorkItemList());
+  installer::AddWerHelperRegistration(
+      root_key,
+      installer::GetWerHelperPath(target_path, base::Version("0.0.0.1")),
+      work_item_list.get());
+  installer::AddWerHelperRegistration(
+      root_key,
+      installer::GetWerHelperPath(target_path, base::Version("0.0.0.2")),
+      work_item_list.get());
+
+  const base::FilePath another_path(
+      L"C:\\AnotherPath\\0.0.0.3\\chrome_wer.dll");
+  installer::AddWerHelperRegistration(root_key, another_path,
+                                      work_item_list.get());
+  const base::FilePath path_with_invalid_version(
+      L"C:\\TargetPath\\a.b.c.d\\chrome_wer.dll");
+  installer::AddWerHelperRegistration(root_key, path_with_invalid_version,
+                                      work_item_list.get());
+  const base::FilePath path_with_another_dll(
+      L"C:\\TargetPath\\0.0.0.4\\another_wer.dll");
+  installer::AddWerHelperRegistration(root_key, path_with_another_dll,
+                                      work_item_list.get());
+
+  ASSERT_TRUE(work_item_list->Do());
+  {
+    base::win::RegistryValueIterator value_iter(
+        root_key, wer_registry_path.c_str(), WorkItem::kWow64Default);
+    ASSERT_TRUE(value_iter.Valid());
+    EXPECT_EQ(value_iter.ValueCount(), 5u);
+    for (; value_iter.Valid(); ++value_iter) {
+      const std::wstring value_name(value_iter.Name());
+      if (value_name ==
+              installer::GetWerHelperPath(target_path, base::Version("0.0.0.1"))
+                  .value() ||
+          value_name ==
+              installer::GetWerHelperPath(target_path, base::Version("0.0.0.2"))
+                  .value() ||
+          value_name == another_path.value() ||
+          value_name == path_with_invalid_version.value() ||
+          value_name == path_with_another_dll.value()) {
+        continue;
+      }
+      FAIL() << "Invalid registry value encountered: " << value_name;
+    }
+  }
+
+  work_item_list.reset(WorkItem::CreateWorkItemList());
+  installer::AddOldWerHelperRegistrationCleanupItems(root_key, target_path,
+                                                     work_item_list.get());
+  ASSERT_TRUE(work_item_list->Do());
+  {
+    base::win::RegistryValueIterator value_iter(
+        root_key, wer_registry_path.c_str(), WorkItem::kWow64Default);
+    ASSERT_TRUE(value_iter.Valid());
+    EXPECT_EQ(value_iter.ValueCount(), 3u);
+    for (; value_iter.Valid(); ++value_iter) {
+      const std::wstring value_name(value_iter.Name());
+      if (value_name == another_path.value() ||
+          value_name == path_with_invalid_version.value() ||
+          value_name == path_with_another_dll.value()) {
+        continue;
+      }
+      FAIL() << "Invalid registry value encountered: " << value_name;
+    }
+  }
+}

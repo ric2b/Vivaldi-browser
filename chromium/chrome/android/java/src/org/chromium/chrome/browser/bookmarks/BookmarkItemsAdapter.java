@@ -22,12 +22,10 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkRow.Location;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFactory;
-import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.signin.PersonalizedSigninPromoView;
@@ -83,8 +81,6 @@ public class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkLis
 
     // Keep track of the currently highlighted bookmark - used for "show in folder" action.
     private BookmarkId mHighlightedBookmark;
-
-    private SubscriptionsManager mSubscriptionsManager;
 
     /** Vivaldi **/
     private SortOrder mSortOrder = SortOrder.MANUAL;
@@ -150,11 +146,6 @@ public class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkLis
                         GlobalDiscardableReferencePool.getReferencePool());
         mCommerceSubscriptionsServiceFactory = new CommerceSubscriptionsServiceFactory();
         mSnackbarManager = snackbarManager;
-
-        if (ShoppingFeatures.isShoppingListEnabled()) {
-            mSubscriptionsManager = mCommerceSubscriptionsServiceFactory.getForLastUsedProfile()
-                                            .getSubscriptionsManager();
-        }
     }
 
     /**
@@ -270,8 +261,7 @@ public class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkLis
                 if (BookmarkFeatures.isBookmarksVisualRefreshEnabled()) {
                     vh = createViewHolderHelper(parent, R.layout.power_bookmark_shopping_item_row);
                     ((PowerBookmarkShoppingItemRow) vh.itemView)
-                            .init(mImageFetcher, mDelegate.getModel(), mSubscriptionsManager,
-                                    mSnackbarManager);
+                            .init(mImageFetcher, mDelegate.getModel(), mSnackbarManager);
                 } else {
                     vh = createViewHolderHelper(parent, R.layout.bookmark_item_row);
                 }

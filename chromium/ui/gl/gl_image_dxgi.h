@@ -23,9 +23,6 @@ class GL_EXPORT GLImageDXGI : public GLImage {
  public:
   GLImageDXGI(const gfx::Size& size, EGLStreamKHR stream);
 
-  // Safe downcast. Returns nullptr on failure.
-  static GLImageDXGI* FromGLImage(GLImage* image);
-
   // GLImage implementation.
   BindOrCopy ShouldBindOrCopy() override;
   bool BindTexImage(unsigned target) override;
@@ -33,7 +30,6 @@ class GL_EXPORT GLImageDXGI : public GLImage {
   bool CopyTexSubImage(unsigned target,
                        const gfx::Point& offset,
                        const gfx::Rect& rect) override;
-  void Flush() override;
   unsigned GetInternalFormat() override;
   unsigned GetDataType() override;
   gfx::Size GetSize() override;

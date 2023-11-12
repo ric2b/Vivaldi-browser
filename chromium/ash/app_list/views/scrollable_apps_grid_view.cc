@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_model_utils.h"
@@ -57,7 +56,6 @@ ScrollableAppsGridView::ScrollableAppsGridView(
                    keyboard_controller),
       scroll_view_(parent_scroll_view) {
   DCHECK(scroll_view_);
-  view_structure_.Init(PagedViewStructure::Mode::kSinglePage);
 }
 
 ScrollableAppsGridView::~ScrollableAppsGridView() {
@@ -71,9 +69,6 @@ void ScrollableAppsGridView::SetMaxColumns(int max_cols) {
 void ScrollableAppsGridView::Layout() {
   if (ignore_layout())
     return;
-
-  if (bounds_animator()->IsAnimating())
-    bounds_animator()->Cancel();
 
   if (GetContentsBounds().IsEmpty())
     return;
@@ -115,11 +110,15 @@ gfx::Insets ScrollableAppsGridView::GetTilePadding(int page) const {
 
 gfx::Size ScrollableAppsGridView::GetTileGridSize() const {
   // AppListItemList may contain page break items, so use the view_model().
-  size_t items = view_model()->view_size();
+  size_t items = view_model()->view_size() + pulsing_blocks_model().view_size();
   // Tests sometimes start with 0 items. Ensure space for at least 1 item.
   if (items == 0) {
     items = 1;
   }
+
+  if (HasExtraSlotForReorderPlaceholder())
+    ++items;
+
   const bool is_last_row_full = (items % cols() == 0);
   const int rows = is_last_row_full ? items / cols() : items / cols() + 1;
   gfx::Size tile_size = GetTotalTileSize(/*page=*/0);
@@ -134,6 +133,21 @@ int ScrollableAppsGridView::GetTotalPages() const {
 
 int ScrollableAppsGridView::GetSelectedPage() const {
   return 0;
+}
+
+bool ScrollableAppsGridView::IsPageFull(size_t page_index) const {
+  return false;
+}
+
+GridIndex ScrollableAppsGridView::GetGridIndexFromIndexInViewModel(
+    int index) const {
+  return GridIndex(0, index);
+}
+
+int ScrollableAppsGridView::GetNumberOfPulsingBlocksToShow(
+    int item_count) const {
+  const int residue = item_count % cols();
+  return cols() + (residue ? cols() - residue : 0);
 }
 
 bool ScrollableAppsGridView::MaybeAutoScroll() {
@@ -276,10 +290,8 @@ void ScrollableAppsGridView::RecordAppMovingTypeMetrics(
                             kMaxAppListAppMovingType);
 }
 
-int ScrollableAppsGridView::GetMaxRowsInPage(int page) const {
-  // Return an arbitrary large number, chosen to be small enough
-  // that cols*rows_per_page will not overflow.
-  return 100000;
+absl::optional<int> ScrollableAppsGridView::GetMaxRowsInPage(int page) const {
+  return absl::nullopt;
 }
 
 gfx::Vector2d ScrollableAppsGridView::GetGridCenteringOffset(int page) const {

@@ -22,6 +22,7 @@
 #include "media/capture/video_capture_types.h"
 #include "media/webrtc/constants.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mediastream/media_stream_controls.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
@@ -168,23 +169,6 @@ std::string GetOnTrackStartedLogString(
   return str.Utf8();
 }
 
-void InitializeAudioTrackControls(UserMediaRequest* user_media_request,
-                                  TrackControls* track_controls) {
-  track_controls->stream_type = user_media_request->AudioMediaStreamType();
-  if (user_media_request->MediaRequestType() ==
-      UserMediaRequestType::kDisplayMediaSet) {
-    track_controls->requested = false;
-  } else {
-    track_controls->requested = true;
-  }
-}
-
-void InitializeVideoTrackControls(UserMediaRequest* user_media_request,
-                                  TrackControls* track_controls) {
-  track_controls->stream_type = user_media_request->VideoMediaStreamType();
-  track_controls->requested = true;
-}
-
 bool IsSameDevice(const MediaStreamDevice& device,
                   const MediaStreamDevice& other_device) {
   return device.id == other_device.id && device.type == other_device.type &&
@@ -252,8 +236,7 @@ void SurfaceAudioProcessingSettings(MediaStreamSource* source) {
 template <typename T>
 std::vector<T> ToStdVector(const Vector<T>& format_vector) {
   std::vector<T> formats;
-  std::copy(format_vector.begin(), format_vector.end(),
-            std::back_inserter(formats));
+  base::ranges::copy(format_vector, std::back_inserter(formats));
   return formats;
 }
 
@@ -268,6 +251,44 @@ Vector<blink::VideoInputDeviceCapabilities> ToVideoInputDeviceCapabilities(
   }
 
   return capabilities;
+}
+
+String ErrorCodeToString(MediaStreamRequestResult result) {
+  switch (result) {
+    case MediaStreamRequestResult::PERMISSION_DENIED:
+      return "Permission denied";
+    case MediaStreamRequestResult::PERMISSION_DISMISSED:
+      return "Permission dismissed";
+    case MediaStreamRequestResult::INVALID_STATE:
+      return "Invalid state";
+    case MediaStreamRequestResult::NO_HARDWARE:
+      return "Requested device not found";
+    case MediaStreamRequestResult::INVALID_SECURITY_ORIGIN:
+      return "Invalid security origin";
+    case MediaStreamRequestResult::TAB_CAPTURE_FAILURE:
+      return "Error starting tab capture";
+    case MediaStreamRequestResult::SCREEN_CAPTURE_FAILURE:
+      return "Error starting screen capture";
+    case MediaStreamRequestResult::CAPTURE_FAILURE:
+      return "Error starting capture";
+    case MediaStreamRequestResult::TRACK_START_FAILURE_AUDIO:
+      return "Could not start audio source";
+    case MediaStreamRequestResult::TRACK_START_FAILURE_VIDEO:
+      return "Could not start video source";
+    case MediaStreamRequestResult::NOT_SUPPORTED:
+      return "Not supported";
+    case MediaStreamRequestResult::FAILED_DUE_TO_SHUTDOWN:
+      return "Failed due to shutdown";
+    case MediaStreamRequestResult::KILL_SWITCH_ON:
+      return "";
+    case MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED:
+      return "Permission denied by system";
+    case MediaStreamRequestResult::DEVICE_IN_USE:
+      return "Device in use";
+    default:
+      NOTREACHED();
+      return "";
+  }
 }
 
 }  // namespace
@@ -592,8 +613,14 @@ void UserMediaProcessor::SetupAudioInput() {
       current_request_info_->stream_controls();
   stream_controls->exclude_system_audio = request->exclude_system_audio();
 
+  stream_controls->suppress_local_audio_playback =
+      request->suppress_local_audio_playback();
+
   TrackControls& audio_controls = stream_controls->audio;
-  InitializeAudioTrackControls(request, &audio_controls);
+  audio_controls.stream_type =
+      (request->MediaRequestType() == UserMediaRequestType::kDisplayMediaSet)
+          ? MediaStreamType::NO_SERVICE
+          : request->AudioMediaStreamType();
 
   if (audio_controls.stream_type == MediaStreamType::DISPLAY_AUDIO_CAPTURE) {
     SelectAudioSettings(request, {blink::AudioDeviceCaptureCapability()});
@@ -667,7 +694,7 @@ void UserMediaProcessor::SelectAudioSettings(
   if (!IsCurrentRequestInfo(user_media_request))
     return;
 
-  DCHECK(current_request_info_->stream_controls()->audio.requested);
+  DCHECK(current_request_info_->stream_controls()->audio.requested());
   SendLogMessage(base::StringPrintf("SelectAudioSettings({request_id=%d})",
                                     current_request_info_->request_id()));
   auto settings = SelectSettingsAudioCapture(
@@ -761,7 +788,7 @@ void UserMediaProcessor::SetupVideoInput() {
       request->VideoConstraints().ToString().Utf8().c_str()));
 
   auto& video_controls = current_request_info_->stream_controls()->video;
-  InitializeVideoTrackControls(request, &video_controls);
+  video_controls.stream_type = request->VideoMediaStreamType();
 
   StreamControls* const stream_controls =
       current_request_info_->stream_controls();
@@ -829,7 +856,7 @@ void UserMediaProcessor::SelectVideoDeviceSettings(
   if (!IsCurrentRequestInfo(user_media_request))
     return;
 
-  DCHECK(current_request_info_->stream_controls()->video.requested);
+  DCHECK(current_request_info_->stream_controls()->video.requested());
   DCHECK(blink::IsDeviceMediaType(
       current_request_info_->stream_controls()->video.stream_type));
   SendLogMessage(base::StringPrintf("SelectVideoDeviceSettings. request_id=%d.",
@@ -1641,7 +1668,10 @@ void UserMediaProcessor::OnCreateNativeTracksCompleted(
   if (result == MediaStreamRequestResult::OK) {
     GetUserMediaRequestSucceeded(request_info->descriptors(),
                                  request_info->request());
-    GetMediaStreamDispatcherHost()->OnStreamStarted(label);
+    if (!base::FeatureList::IsEnabled(
+            blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
+      GetMediaStreamDispatcherHost()->OnStreamStarted(label);
+    }
   } else {
     GetUserMediaRequestFailed(result, constraint_name);
 
@@ -1743,71 +1773,13 @@ void UserMediaProcessor::DelayedGetUserMediaRequestFailed(
     case MediaStreamRequestResult::NUM_MEDIA_REQUEST_RESULTS:
       NOTREACHED();
       return;
-    case MediaStreamRequestResult::PERMISSION_DENIED:
-      user_media_request->Fail(UserMediaRequest::Error::kPermissionDenied,
-                               "Permission denied");
-      return;
-    case MediaStreamRequestResult::PERMISSION_DISMISSED:
-      user_media_request->Fail(UserMediaRequest::Error::kPermissionDismissed,
-                               "Permission dismissed");
-      return;
-    case MediaStreamRequestResult::INVALID_STATE:
-      user_media_request->Fail(UserMediaRequest::Error::kInvalidState,
-                               "Invalid state");
-      return;
-    case MediaStreamRequestResult::NO_HARDWARE:
-      user_media_request->Fail(UserMediaRequest::Error::kDevicesNotFound,
-                               "Requested device not found");
-      return;
-    case MediaStreamRequestResult::INVALID_SECURITY_ORIGIN:
-      user_media_request->Fail(UserMediaRequest::Error::kSecurityError,
-                               "Invalid security origin");
-      return;
-    case MediaStreamRequestResult::TAB_CAPTURE_FAILURE:
-      user_media_request->Fail(UserMediaRequest::Error::kTabCapture,
-                               "Error starting tab capture");
-      return;
-    case MediaStreamRequestResult::SCREEN_CAPTURE_FAILURE:
-      user_media_request->Fail(UserMediaRequest::Error::kScreenCapture,
-                               "Error starting screen capture");
-      return;
-    case MediaStreamRequestResult::CAPTURE_FAILURE:
-      user_media_request->Fail(UserMediaRequest::Error::kCapture,
-                               "Error starting capture");
-      return;
     case MediaStreamRequestResult::CONSTRAINT_NOT_SATISFIED:
       user_media_request->FailConstraint(constraint_name, "");
       return;
-    case MediaStreamRequestResult::TRACK_START_FAILURE_AUDIO:
-      user_media_request->Fail(UserMediaRequest::Error::kTrackStart,
-                               "Could not start audio source");
-      return;
-    case MediaStreamRequestResult::TRACK_START_FAILURE_VIDEO:
-      user_media_request->Fail(UserMediaRequest::Error::kTrackStart,
-                               "Could not start video source");
-      return;
-    case MediaStreamRequestResult::NOT_SUPPORTED:
-      user_media_request->Fail(UserMediaRequest::Error::kNotSupported,
-                               "Not supported");
-      return;
-    case MediaStreamRequestResult::FAILED_DUE_TO_SHUTDOWN:
-      user_media_request->Fail(UserMediaRequest::Error::kFailedDueToShutdown,
-                               "Failed due to shutdown");
-      return;
-    case MediaStreamRequestResult::KILL_SWITCH_ON:
-      user_media_request->Fail(UserMediaRequest::Error::kKillSwitchOn, "");
-      return;
-    case MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED:
-      user_media_request->Fail(UserMediaRequest::Error::kSystemPermissionDenied,
-                               "Permission denied by system");
-      return;
-    case MediaStreamRequestResult::DEVICE_IN_USE:
-      user_media_request->Fail(UserMediaRequest::Error::kDeviceInUse,
-                               "Device in use");
+    default:
+      user_media_request->Fail(result, ErrorCodeToString(result));
       return;
   }
-  NOTREACHED();
-  user_media_request->Fail(UserMediaRequest::Error::kPermissionDenied, "");
 }
 
 MediaStreamSource* UserMediaProcessor::FindLocalSource(
@@ -1831,8 +1803,9 @@ MediaStreamSource* UserMediaProcessor::InitializeSourceObject(
                                            : MediaStreamSource::kTypeVideo;
 
   auto* source = MakeGarbageCollected<MediaStreamSource>(
-      String::FromUTF8(device.id), type, String::FromUTF8(device.name),
-      false /* remote */, std::move(platform_source));
+      String::FromUTF8(device.id), device.display_id, type,
+      String::FromUTF8(device.name), false /* remote */,
+      std::move(platform_source));
   if (device.group_id)
     source->SetGroupId(String::FromUTF8(*device.group_id));
   return source;

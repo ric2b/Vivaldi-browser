@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {AppManagementStore, updateSelectedAppId} from 'chrome://os-settings/chromeos/os_settings.js';
+import {AppType, InstallSource} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {replaceBody, replaceStore, setupFakeHandler} from './test_util.js';
@@ -23,8 +24,8 @@ suite('<app-management-app-details-item>', () => {
 
   test('PWA type', async function() {
     const options = {
-      type: apps.mojom.AppType.kWeb,
-      installSource: apps.mojom.InstallSource.kUnknown,
+      type: AppType.kWeb,
+      installSource: InstallSource.kUnknown,
     };
 
     // Add PWA app, and make it the currently selected app.
@@ -42,17 +43,17 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'Web App');
   });
 
   test('Android type', async function() {
     const options = {
-      type: apps.mojom.AppType.kArc,
-      installSource: apps.mojom.InstallSource.kUnknown,
+      type: AppType.kArc,
+      installSource: InstallSource.kUnknown,
     };
 
     // Add Android app, and make it the currently selected app.
@@ -70,17 +71,17 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'Android App');
   });
 
   test('Chrome type', async function() {
     const options = {
-      type: apps.mojom.AppType.kChromeApp,
-      installSource: apps.mojom.InstallSource.kUnknown,
+      type: AppType.kChromeApp,
+      installSource: InstallSource.kUnknown,
     };
 
     // Add Chrome app, and make it the currently selected app.
@@ -98,17 +99,17 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'Chrome App');
   });
 
   test('Chrome App from web store', async function() {
     const options = {
-      type: apps.mojom.AppType.kChromeApp,
-      installSource: apps.mojom.InstallSource.kChromeWebStore,
+      type: AppType.kChromeApp,
+      installSource: InstallSource.kChromeWebStore,
     };
 
     // Add Chrome app, and make it the currently selected app.
@@ -126,17 +127,17 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'Chrome App installed from <a href="#">Chrome Web Store</a>');
   });
 
   test('Android App from play store', async function() {
     const options = {
-      type: apps.mojom.AppType.kArc,
-      installSource: apps.mojom.InstallSource.kPlayStore,
+      type: AppType.kArc,
+      installSource: InstallSource.kPlayStore,
     };
 
     // Add Chrome app, and make it the currently selected app.
@@ -154,16 +155,16 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'Android App installed from <a href="#">Google Play Store</a>');
   });
 
   test('System type', async function() {
     const options = {
-      type: apps.mojom.AppType.kSystemWeb,
+      type: AppType.kSystemWeb,
     };
 
     // Add System app, and make it the currently selected app.
@@ -181,16 +182,16 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'System App');
   });
 
   test('system install source', async function() {
     const options = {
-      installSource: apps.mojom.InstallSource.kSystem,
+      installSource: InstallSource.kSystem,
     };
 
     // Add System app, and make it the currently selected app.
@@ -208,16 +209,16 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#type-and-source'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#typeAndSource'));
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#type-and-source')
+        appDetailsItem.shadowRoot.querySelector('#typeAndSource')
             .textContent.trim(),
         'ChromeOS System App');
   });
 
   test('Chrome app version', async function() {
     const options = {
-      type: apps.mojom.AppType.kChromeApp,
+      type: AppType.kChromeApp,
       version: '17.2',
     };
 
@@ -243,7 +244,7 @@ suite('<app-management-app-details-item>', () => {
 
   test('Android app version', async function() {
     const options = {
-      type: apps.mojom.AppType.kArc,
+      type: AppType.kArc,
       version: '13.1.52',
     };
 
@@ -269,14 +270,14 @@ suite('<app-management-app-details-item>', () => {
 
   test('Android type storage', async function() {
     const options = {
-      type: apps.mojom.AppType.kArc,
-      installSource: apps.mojom.InstallSource.kUnknown,
+      type: AppType.kArc,
+      installSource: InstallSource.kUnknown,
       appSize: '17 MB',
     };
 
     const options2 = {
-      type: apps.mojom.AppType.kArc,
-      installSource: apps.mojom.InstallSource.kUnknown,
+      type: AppType.kArc,
+      installSource: InstallSource.kUnknown,
       appSize: '17 MB',
       dataSize: '124.6 GB',
     };
@@ -297,12 +298,12 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#storage-title'));
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#app-size'));
-    assertFalse(!!appDetailsItem.shadowRoot.querySelector('#data-size'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#storageTitle'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#appSize'));
+    assertFalse(!!appDetailsItem.shadowRoot.querySelector('#dataSize'));
 
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#app-size').textContent.trim(),
+        appDetailsItem.shadowRoot.querySelector('#appSize').textContent.trim(),
         'App size: 17 MB');
 
     AppManagementStore.getInstance().dispatch(updateSelectedAppId(app2.id));
@@ -317,16 +318,15 @@ suite('<app-management-app-details-item>', () => {
     fakeHandler.flushPipesForTesting();
     flushTasks();
 
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#storage-title'));
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#app-size'));
-    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#data-size'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#storageTitle'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#appSize'));
+    assertTrue(!!appDetailsItem.shadowRoot.querySelector('#dataSize'));
 
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#app-size').textContent.trim(),
+        appDetailsItem.shadowRoot.querySelector('#appSize').textContent.trim(),
         'App size: 17 MB');
     assertEquals(
-        appDetailsItem.shadowRoot.querySelector('#data-size')
-            .textContent.trim(),
+        appDetailsItem.shadowRoot.querySelector('#dataSize').textContent.trim(),
         'Data stored in app: 124.6 GB');
   });
 });

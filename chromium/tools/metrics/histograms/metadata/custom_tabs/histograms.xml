@@ -36,7 +36,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.AutoclosedSessionDuration" units="ms"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>jinsukkim@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>cct-team@google.com</owner>
@@ -65,7 +65,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Branding.BrandingCheckDuration" units="ms"
-    expires_after="2023-02-09">
+    expires_after="2023-04-16">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -77,7 +77,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Branding.BrandingDecision"
-    enum="CustomTabsBrandingDecision" expires_after="2023-02-09">
+    enum="CustomTabsBrandingDecision" expires_after="2023-04-16">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -109,8 +109,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.Branding.NumberOfClients" units="count"
+    expires_after="2023-06-11">
+  <owner>wenyufu@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    For every CCT launch, Chrome will start an async task in the background
+    checking the last time branding is shown for the client app. Records the
+    number of package names of CCT client apps that had the branding shown after
+    each CCT launched. Record after the branding decision is made, on Android
+    CCT only.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.ClientAppId" enum="ClientAppId"
-    expires_after="2023-04-02">
+    expires_after="2023-06-04">
   <owner>yusufo@chromium.org</owner>
   <summary>
     Android: AppId declared by the launching application in EXTRA_APPLICATION_ID
@@ -122,7 +135,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ClientAppId.Incognito" enum="ClientAppId"
-    expires_after="M110">
+    expires_after="M114">
   <owner>roagarwal@chromium.org</owner>
   <owner>chrome-incognito@google.com</owner>
   <owner>cct-team@google.com</owner>
@@ -159,7 +172,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.CloseCause" enum="CustomTabsCloseCause"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>jinsukkim@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>cct-team@google.com</owner>
@@ -208,7 +221,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.DetachedResourceRequest.FinalStatus"
-    enum="NetErrorCodes" expires_after="2023-02-26">
+    enum="NetErrorCodes" expires_after="2023-04-30">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -230,8 +243,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.FeatureUsage" enum="CustomTabsFeatureUsed"
+    expires_after="2023-06-30">
+  <owner>donnd@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Records each feature of a Chrome Custom Tab when that feature is used. A
+    single key feature - &quot;Sessions&quot; - is logged once per CCT Session,
+    and no other feature enum may be logged more frequently. This provides a
+    single large list of features and their percentage usage (one or more times
+    per session) right in the UMA timeline. Recorded during a CCT Session.
+    Android only.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.HadInteractionOnClose" enum="Boolean"
-    expires_after="2023-02-12">
+    expires_after="2023-04-16">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -242,7 +269,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ImmersiveModeConfirmationsSettingConfirmed"
-    enum="Boolean" expires_after="2023-03-15">
+    enum="Boolean" expires_after="2023-05-14">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -265,7 +292,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.IncognitoCCTCallerId" enum="IncognitoCCTCallerId"
-    expires_after="2023-03-12">
+    expires_after="2023-05-14">
   <owner>roagarwal@chromium.org</owner>
   <owner>chrome-incognito@google.com</owner>
   <owner>cct-team@google.com</owner>
@@ -353,7 +380,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PostMessage.RequestPostMessageChannel"
-    enum="Boolean" expires_after="2023-02-26">
+    enum="Boolean" expires_after="2023-06-04">
   <owner>sinansahin@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -385,7 +412,20 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ResizeType" enum="CustomTabsResizeType"
-    expires_after="2023-03-12">
+    expires_after="2023-05-14">
+  <obsolete>
+    Deprecated 2022-11. Replaced by CustomTabs.ResizeType2
+  </obsolete>
+  <owner>kgrosu@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    When a Partial Custom Tab has been resized by the user log if it is an
+    expansion or a minimization of the tab.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.ResizeType2" enum="CustomTabsResizeType2"
+    expires_after="2023-05-14">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -395,16 +435,16 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="CustomTabs.RetainableSessions.TimeBetweenLaunch{IdentifierType}"
+    name="CustomTabs.RetainableSessionsV2.TimeBetweenLaunch{IdentifierType}"
     units="seconds" expires_after="2023-02-12">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
-    When a CCT session is launched, if it is launch with the same Uri and same
-    taskId, record the duration between previous CCT closure and current CCT
-    launch. Recorded on CCT launch.
+    When a CCT session is launched, if it is launched with same URL and has the
+    same package name or the same taskId + referrer combo, record the duration
+    between previous CCT closure and current CCT launch. Recorded on CCT launch.
 
-    A CCT can be defined as retainable if: 1) it is launching with the same Uri
+    A CCT can be defined as retainable if 1) it is launching with the same URL
     as the most recently closed CCT; 2) it is launched from the same embedded
     app as the most recently closed CCT; 3) the most recently closed CCT had
     user interactions. See &quot;CustomTabs.HadInteractionOnClose&quot; for
@@ -427,7 +467,8 @@ chromium-metrics-reviews@google.com.
         summary="Apps not consistently using CCT services. Referrer and
                  package are used together."/>
     <variant name=".PackageName"
-        summary="Apps using CCT services. Package name is used as identifier."/>
+        summary="Apps that provide package name. Package name is used as
+                 identifier."/>
     <variant name=".Referrer"
         summary="Apps not connecting with CCT services. Activity referrer is
                  used as identifier."/>
@@ -435,7 +476,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.SessionDisconnectStatus"
-    enum="CustomTabsSessionDisconnectStatus" expires_after="2023-03-15">
+    enum="CustomTabsSessionDisconnectStatus" expires_after="2023-05-14">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -478,31 +519,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="CustomTabs.SpareWebContents.Status2"
-    enum="SpareWebContentsStatus2" expires_after="2020-12-20">
-  <owner>lizeb@chromium.org</owner>
-  <owner>mthiesse@chromium.org</owner>
-  <summary>
-    Android: When a spare WebContents is created from Custom Tabs, record
-    creation, and whether it was used by CCT, stolen by another Chrome Activity,
-    killed or destroyed. Creation is recorded to get the &quot;abandoned&quot;
-    case, that is when Chrome is killed before the renderer. Starting with M84
-    this is is also recorded for webapps/WebAPKs. Filter the platform for just
-    CCT/TWA data.
-  </summary>
-</histogram>
-
-<histogram name="CustomTabs.SpareWebContents.TimeBeforeDeath" units="ms"
-    expires_after="2020-05-10">
-  <owner>lizeb@chromium.org</owner>
-  <summary>
-    Android: When a spare WebContents is created from Custom Tabs, record how
-    long is took before the render process was killed. Starting with M84 this is
-    is also recorded for webapps/WebAPKs. Filter the platform for just CCT/TWA
-    data.
-  </summary>
-</histogram>
-
 <histogram name="CustomTabs.SpeculationStatusOnStart"
     enum="CustomTabsSpeculationStatusOnStart" expires_after="2021-02-14">
   <owner>lizeb@chromium.org</owner>
@@ -529,6 +545,33 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.TabCounts.OnClosingAllTabs" units="count"
+    expires_after="2023-06-04">
+  <owner>wenyufu@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only for Android. Records the number of tabs closed when closing
+    all the tabs (e.g. via hitting the close button). Only recorded when closing
+    is initiated by the user, so if custom tab is killed while in the background
+    this will not be recorded.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.TabCounts.UniqueTabsSeen" units="count"
+    expires_after="2023-06-04">
+  <owner>wenyufu@chromium.org</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only for Android. Records the number of unique tabs open in the
+    current custom tab session, when a new tab is opened. The count of this
+    histogram includes the initial tab being opened, and can be recorded more
+    than once in the same session.
+
+    Do not record nor increase the count when switching into the previous tab
+    (e.g. create new tab, close, and land onto an existing tab).
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.Visible" enum="VisibleTab" expires_after="never">
 <!-- expires-never: Used to classify UMA reports by the dashboards. -->
 
@@ -548,7 +591,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.WarmupStateOnLaunch" enum="WarmupStateOnLaunch"
-    expires_after="2023-03-26">
+    expires_after="2023-05-27">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Recorded only on Android. Reports whether warmup() has been called when a
@@ -599,7 +642,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ExtraCommandSuccess.{command}"
-    enum="BooleanSuccess" expires_after="2022-11-23">
+    enum="BooleanSuccess" expires_after="2023-11-01">
   <owner>mvanouwerkerk@google.com</owner>
   <owner>peconn@chromium.org</owner>
   <owner>
@@ -662,7 +705,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.Notification.PermissionRequestResult"
-    enum="ContentSetting" expires_after="2022-12-04">
+    enum="ContentSetting" expires_after="2023-11-01">
   <owner>mvanouwerkerk@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
   <owner>

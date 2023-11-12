@@ -129,6 +129,13 @@ void AutomationInternalCustomBindings::OnMessageReceived(
 
 void AutomationInternalCustomBindings::AddRoutes() {
   automation_v8_bindings_->AddV8Routes();
+
+  // Extensions specific routes.
+  ObjectBackedNativeHandler::RouteHandlerFunction(
+      "IsInteractPermitted", "automation",
+      base::BindRepeating(
+          &AutomationInternalCustomBindings::IsInteractPermitted,
+          base::Unretained(this)));
 }
 
 void AutomationInternalCustomBindings::Invalidate() {
@@ -146,12 +153,14 @@ AutomationInternalCustomBindings::GetAutomationV8Bindings() const {
   return automation_v8_bindings_.get();
 }
 
-bool AutomationInternalCustomBindings::IsInteractPermitted() const {
+void AutomationInternalCustomBindings::IsInteractPermitted(
+    const v8::FunctionCallbackInfo<v8::Value>& args) const {
   const Extension* extension = context()->extension();
   CHECK(extension);
   const AutomationInfo* automation_info = AutomationInfo::Get(extension);
   CHECK(automation_info);
-  return automation_info->interact;
+  args.GetReturnValue().Set(
+      v8::Boolean::New(GetIsolate(), automation_info->interact));
 }
 
 void AutomationInternalCustomBindings::StartCachingAccessibilityTrees() {
@@ -212,16 +221,11 @@ v8::Local<v8::Context> AutomationInternalCustomBindings::GetContext() const {
 
 void AutomationInternalCustomBindings::RouteHandlerFunction(
     const std::string& name,
-    AutomationV8Router::HandlerFunction handler_function) {
-  ObjectBackedNativeHandler::RouteHandlerFunction(name, handler_function);
-}
-
-void AutomationInternalCustomBindings::RouteHandlerFunction(
-    const std::string& name,
-    const std::string& api_name,
-    AutomationV8Router::HandlerFunction handler_function) {
-  ObjectBackedNativeHandler::RouteHandlerFunction(name, api_name,
-                                                  handler_function);
+    scoped_refptr<ui::V8HandlerFunctionWrapper> handler_function_wrapper) {
+  ObjectBackedNativeHandler::RouteHandlerFunction(
+      name, "automation",
+      base::BindRepeating(&ui::V8HandlerFunctionWrapper::RunV8,
+                          handler_function_wrapper));
 }
 
 ui::TreeChangeObserverFilter
@@ -249,19 +253,6 @@ void AutomationInternalCustomBindings::DispatchEvent(
     const base::Value::List& event_args) const {
   bindings_system_->DispatchEventInContext(event_name, event_args, nullptr,
                                            context());
-
-  if (notify_event_for_testing_.is_null() ||
-      event_name != "automationInternal.onAccessibilityEvent") {
-    return;
-  }
-  // Find the event type within the event_params for the test.
-  const base::Value::Dict* dict = event_args[0].GetIfDict();
-  DCHECK(dict);
-  const std::string* event_type_string = dict->FindString("eventType");
-  DCHECK(event_type_string);
-  api::automation::EventType event_type =
-      api::automation::ParseEventType(*event_type_string);
-  notify_event_for_testing_.Run(event_type);
 }
 
 std::string

@@ -47,8 +47,8 @@ SharedStorageManager::SharedStorageManager(
           base::BindRepeating(&SharedStorageManager::OnMemoryPressure,
                               base::Unretained(this),
                               base::DoNothing()))) {
-  timer_.Start(FROM_HERE, options_->stale_origin_purge_initial_interval,
-               base::BindOnce(&SharedStorageManager::PurgeStaleOrigins,
+  timer_.Start(FROM_HERE, options_->stale_purge_initial_interval,
+               base::BindOnce(&SharedStorageManager::PurgeStale,
                               weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -263,6 +263,57 @@ void SharedStorageManager::GetCreationTime(
                              std::move(new_callback));
 }
 
+void SharedStorageManager::GetMetadata(
+    url::Origin context_origin,
+    base::OnceCallback<void(MetadataResult)> callback) {
+  DCHECK(callback);
+  DCHECK(database_);
+  auto new_callback = base::BindOnce(
+      [](base::WeakPtr<SharedStorageManager> manager,
+         base::OnceCallback<void(MetadataResult)> callback,
+         MetadataResult metadata) {
+        if (manager) {
+          // We'll count it as failure if any of the operation results failed.
+          OperationResult op_result =
+              (metadata.length != -1 &&
+               (metadata.time_result == OperationResult::kSuccess ||
+                metadata.time_result == OperationResult::kNotFound) &&
+               metadata.budget_result == OperationResult::kSuccess)
+                  ? OperationResult::kSuccess
+                  : OperationResult::kSqlError;
+          if (metadata.time_result == OperationResult::kInitFailure ||
+              metadata.budget_result == OperationResult::kInitFailure) {
+            op_result = OperationResult::kInitFailure;
+          }
+          manager->OnOperationResult(op_result);
+        }
+        std::move(callback).Run(std::move(metadata));
+      },
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
+
+  database_->GetMetadata(std::move(context_origin), std::move(new_callback));
+}
+
+void SharedStorageManager::GetEntriesForDevTools(
+    url::Origin context_origin,
+    base::OnceCallback<void(EntriesResult)> callback) {
+  DCHECK(callback);
+  DCHECK(database_);
+  auto new_callback = base::BindOnce(
+      [](base::WeakPtr<SharedStorageManager> manager,
+         base::OnceCallback<void(EntriesResult)> callback,
+         EntriesResult entries) {
+        if (manager) {
+          manager->OnOperationResult(entries.result);
+        }
+        std::move(callback).Run(std::move(entries));
+      },
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
+
+  database_->GetEntriesForDevTools(std::move(context_origin),
+                                   std::move(new_callback));
+}
+
 void SharedStorageManager::SetOnDBDestroyedCallbackForTesting(
     base::OnceCallback<void(bool)> callback) {
   DCHECK(callback);
@@ -287,6 +338,15 @@ void SharedStorageManager::OverrideSpecialStoragePolicyForTesting(
   static_cast<AsyncSharedStorageDatabaseImpl*>(database_.get())
       ->OverrideSpecialStoragePolicyForTesting(  // IN-TEST
           special_storage_policy);
+}
+
+void SharedStorageManager::OverrideClockForTesting(base::Clock* clock,
+                                                   base::OnceClosure callback) {
+  DCHECK(callback);
+  DCHECK(database_);
+  static_cast<AsyncSharedStorageDatabaseImpl*>(database_.get())
+      ->OverrideClockForTesting(  // IN-TEST
+          clock, std::move(callback));
 }
 
 void SharedStorageManager::OverrideDatabaseForTesting(
@@ -391,25 +451,18 @@ SharedStorageManager::GetOperationResultCallback(
       weak_ptr_factory_.GetWeakPtr(), std::move(callback));
 }
 
-void SharedStorageManager::PurgeStaleOrigins() {
-  // TODO(crbug.com/1317487): Move this DCHECK for
-  // `options_->origin_staleness_threshold` to `SharedStorageOptions` after
-  // removing the parameter from `SharedStorageDatabase::PurgeStaleOrigins()`
-  // and passing into the database constructor instead.
-  DCHECK(!options_->origin_staleness_threshold.is_zero());
+void SharedStorageManager::PurgeStale() {
   DCHECK(database_);
-
-  database_->PurgeStaleOrigins(
-      base::BindOnce(&SharedStorageManager::OnStaleOriginsPurged,
-                     weak_ptr_factory_.GetWeakPtr()));
+  database_->PurgeStale(base::BindOnce(&SharedStorageManager::OnStalePurged,
+                                       weak_ptr_factory_.GetWeakPtr()));
 }
 
-void SharedStorageManager::OnStaleOriginsPurged(OperationResult result) {
+void SharedStorageManager::OnStalePurged(OperationResult result) {
   DCHECK(database_);
   OnOperationResult(result);
 
-  timer_.Start(FROM_HERE, options_->stale_origin_purge_recurring_interval,
-               base::BindOnce(&SharedStorageManager::PurgeStaleOrigins,
+  timer_.Start(FROM_HERE, options_->stale_purge_recurring_interval,
+               base::BindOnce(&SharedStorageManager::PurgeStale,
                               weak_ptr_factory_.GetWeakPtr()));
 }
 

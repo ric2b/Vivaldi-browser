@@ -195,10 +195,11 @@ class CONTENT_EXPORT TtsControllerImpl
   TtsControllerDelegate* GetTtsControllerDelegate();
   void SetTtsControllerDelegateForTesting(TtsControllerDelegate* delegate);
   TtsControllerDelegate* delegate_ = nullptr;
-  RemoteTtsEngineDelegate* remote_engine_delegate_ = nullptr;
 #endif
 
-  raw_ptr<TtsEngineDelegate> engine_delegate_ = nullptr;
+  raw_ptr<RemoteTtsEngineDelegate> remote_engine_delegate_ = nullptr;
+
+  raw_ptr<TtsEngineDelegate, DanglingUntriaged> engine_delegate_ = nullptr;
 
   bool stop_speaking_when_hidden_ = false;
 
@@ -213,7 +214,7 @@ class CONTENT_EXPORT TtsControllerImpl
 
   // A pointer to the platform implementation of text-to-speech, for
   // dependency injection.
-  raw_ptr<TtsPlatform> tts_platform_ = nullptr;
+  raw_ptr<TtsPlatform, DanglingUntriaged> tts_platform_ = nullptr;
 
   // A queue of utterances to speak after the current one finishes.
   std::list<std::unique_ptr<TtsUtterance>> utterance_list_;

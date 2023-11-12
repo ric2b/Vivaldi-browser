@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
@@ -18,12 +19,17 @@
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "ui/gfx/image/image_family.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_linux.h"
 #endif  // BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/web_applications/app_shim_registry_mac.h"
+#endif
 
 namespace base {
 class TaskRunner;
@@ -93,6 +99,12 @@ struct ShortcutOverrideForTesting
   // std::string mime_types_file_contents;
 #endif
 
+  // Records all registration events for a given app id & protocol list. Due to
+  // simplification on the OS-side, unregistrations are not recorded, and
+  // instead this list can be checked for an empty registration.
+  std::vector<std::tuple<AppId, std::vector<std::string>>>
+      protocol_scheme_registrations;
+
  private:
   friend class base::RefCountedThreadSafe<ShortcutOverrideForTesting>;
 
@@ -140,6 +152,13 @@ struct ShortcutInfo {
   // for all profiles. The app itself has a profile switcher that may be used
   // to open windows for the various profiles. This is relevant only on macOS.
   bool is_multi_profile = false;
+
+#if BUILDFLAG(IS_MAC)
+  // On Mac OS creating shortcuts also needs some of this information for other
+  // profiles if this is a multi profile app.
+  using HandlerInfo = AppShimRegistry::HandlerInfo;
+  std::map<base::FilePath, HandlerInfo> handlers_per_profile;
+#endif
 
  private:
   // Since gfx::ImageFamily |favicon| has a non-thread-safe reference count in
@@ -275,19 +294,20 @@ void DeleteMultiProfileShortcutsForApp(const std::string& app_id);
 // platform specific implementation of the UpdateAllShortcuts function, and
 // is executed on the FILE thread. On Windows, this also updates shortcuts in
 // the pinned taskbar directories.
-void UpdatePlatformShortcuts(const base::FilePath& shortcut_data_path,
-                             const std::u16string& old_app_title,
-                             const ShortcutInfo& shortcut_info);
+// Returns true if update was performed successfully and false otherwise
+Result UpdatePlatformShortcuts(const base::FilePath& shortcut_data_path,
+                               const std::u16string& old_app_title,
+                               const ShortcutInfo& shortcut_info);
 
 // Run an IO task on a worker thread. Ownership of |shortcut_info| transfers
 // to a closure that deletes it on the UI thread when the task is complete.
 // Tasks posted here run with BEST_EFFORT priority and block shutdown.
 void PostShortcutIOTask(base::OnceCallback<void(const ShortcutInfo&)> task,
                         std::unique_ptr<ShortcutInfo> shortcut_info);
-void PostShortcutIOTaskAndReply(
-    base::OnceCallback<void(const ShortcutInfo&)> task,
+void PostShortcutIOTaskAndReplyWithResult(
+    base::OnceCallback<Result(const ShortcutInfo&)> task,
     std::unique_ptr<ShortcutInfo> shortcut_info,
-    base::OnceClosure reply);
+    ResultCallback reply);
 
 // The task runner for running shortcut tasks. On Windows this will be a task
 // runner that permits access to COM libraries. Shortcut tasks typically deal

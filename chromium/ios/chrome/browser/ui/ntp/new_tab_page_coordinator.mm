@@ -18,6 +18,7 @@
 #import "components/search_engines/default_search_manager.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/tests_hook.h"
@@ -46,6 +47,7 @@
 #import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
@@ -67,11 +69,14 @@
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_navigation_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_menu_commands.h"
+#import "ios/chrome/browser/ui/ntp/feed_promos/feed_sign_in_promo_coordinator.h"
+#import "ios/chrome/browser/ui/ntp/feed_sign_in_promo_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_wrapper_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_content_delegate.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator+private.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_follow_delegate.h"
@@ -80,8 +85,8 @@
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-#import "ios/chrome/browser/voice/voice_search_availability.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
@@ -92,27 +97,32 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_new_tab_page_view_controller.h"
+#import "app/vivaldi_apptools.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/chrome/app/application_delegate/url_opener.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
+#import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_new_tab_page_view_controller.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
-#include "url/gurl.h"
+#import "ios/chrome/browser/web_state_list/all_web_state_observation_forwarder.h"
+#import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/web/public/web_state_observer_bridge.h"
+#import "url/gurl.h"
 
+using bookmarks::BookmarkModel;
+using vivaldi_bookmark_kit::SetNodeThumbnail;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// Flag to enable the checking of new content for the Follow Feed.
-BASE_FEATURE(kEnableCheckForNewFollowContent,
-             "EnableCheckForNewFollowContent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-}  // namespace
 
 @interface NewTabPageCoordinator () <AppStateObserver,
                                      BooleanObserver,
@@ -123,6 +133,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
                                      FeedDelegate,
                                      FeedManagementNavigationDelegate,
                                      FeedMenuCommands,
+                                     FeedSignInPromoDelegate,
                                      FeedWrapperViewControllerDelegate,
                                      IdentityManagerObserverBridgeDelegate,
                                      NewTabPageContentDelegate,
@@ -131,10 +142,8 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
                                      OverscrollActionsControllerDelegate,
                                      PrefObserverDelegate,
                                      SceneStateObserver,
+                                     CRWWebStateObserver,
                                      VivaldiNewTabPageViewControllerDelegate> {
-  // Helper object managing the availability of the voice search feature.
-  VoiceSearchAvailability _voiceSearchAvailability;
-
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
@@ -146,6 +155,17 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
   // Observes changes in the DiscoverFeed.
   std::unique_ptr<DiscoverFeedObserverBridge> _discoverFeedObserverBridge;
+
+  // Vivaldi
+  WebStateList* _webStateList;
+  // Bridges C++ WebStateObserver methods to this new tab page coordinator.
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
+  // Forwards observer methods for all WebStates in the WebStateList monitored
+  // by the new tab page coordinator.
+  std::unique_ptr<AllWebStateObservationForwarder>
+      _allWebStateObservationForwarder;
+  // End Vivaldi
+
 }
 
 // Coordinator for the ContentSuggestions.
@@ -207,6 +227,10 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 // handles the actions related to them.
 @property(nonatomic, strong) LinkPreviewCoordinator* linkPreviewCoordinator;
 
+// The Coordinator to display Sign In promo UI.
+@property(nonatomic, strong)
+    FeedSignInPromoCoordinator* feedSignInPromoCoordinator;
+
 // The view controller representing the NTP feed header.
 @property(nonatomic, strong) FeedHeaderViewController* feedHeaderViewController;
 
@@ -240,6 +264,17 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 // Currently selected feed. Redefined to readwrite.
 @property(nonatomic, assign, readwrite) FeedType selectedFeed;
 
+// Vivaldi
+// Bookmarks model that holds all the bookmarks data
+@property (assign,nonatomic) BookmarkModel* bookmarks;
+// The user's browser state model used.
+@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The item that was tapped from speed dial page
+@property(nonatomic, strong) VivaldiSpeedDialItem* currentItem;
+// Should take snapshot for the current web state.
+@property(nonatomic, assign) BOOL captureSnapshot;
+// End Vivaldi
+
 @end
 
 @implementation NewTabPageCoordinator
@@ -255,6 +290,19 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   self = [super initWithBaseViewController:nil browser:browser];
   if (self) {
     _containerViewController = [[UIViewController alloc] init];
+
+    // Vivaldi
+    _browserState =
+        browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    _bookmarks = ios::BookmarkModelFactory::GetForBrowserState(_browserState);
+
+    _webStateList = browser->GetWebStateList();
+    _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
+    _allWebStateObservationForwarder =
+        std::make_unique<AllWebStateObservationForwarder>(
+            _webStateList, _webStateObserver.get());
+    // End Vivaldi
+
   }
   return self;
 }
@@ -280,6 +328,10 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
     return;
   }
 
+  if (IsVivaldiRunning()) {
+    [self initializeServices];
+    [self configureVivaldiNTPViewController];
+  } else {
   [self initializeServices];
   [self initializeNTPComponents];
   [self startObservers];
@@ -296,6 +348,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   [self configureContentSuggestionsCoordinator];
   [self configureFeedMetricsRecorder];
   [self configureNTPViewController];
+  } // End Vivaldi
 
   self.started = YES;
 }
@@ -333,7 +386,16 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   self.feedHeaderViewController.ntpDelegate = nil;
   self.feedHeaderViewController = nil;
   self.feedTopSectionCoordinator.ntpDelegate = nil;
+  [self.feedTopSectionCoordinator stop];
   self.feedTopSectionCoordinator = nil;
+
+  if (self.feedSignInPromoCoordinator) {
+    [self.feedSignInPromoCoordinator stop];
+    self.feedSignInPromoCoordinator = nil;
+  }
+
+  [self.linkPreviewCoordinator stop];
+  self.linkPreviewCoordinator = nil;
 
   self.alertCoordinator = nil;
   self.authService = nil;
@@ -416,16 +478,14 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   if (self.browser->GetBrowserState()->IsOffTheRecord()) {
     return;
   }
-  NamedGuide* menuButtonGuide =
-      [NamedGuide guideWithName:kDiscoverFeedHeaderMenuGuide
-                           view:self.feedHeaderViewController.menuButton];
-
-  menuButtonGuide.constrainedView = self.feedHeaderViewController.menuButton;
+  [LayoutGuideCenterForBrowser(self.browser)
+      referenceView:self.feedHeaderViewController.menuButton
+          underName:kDiscoverFeedHeaderMenuGuide];
 }
 
 - (void)updateFollowingFeedHasUnseenContent:(BOOL)hasUnseenContent {
   if (![self isFollowingFeedAvailable] ||
-      !base::FeatureList::IsEnabled(kEnableCheckForNewFollowContent)) {
+      !IsDotEnabledForNewFollowedContent()) {
     return;
   }
   if ([self doesFollowingFeedHaveContent]) {
@@ -436,7 +496,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
 - (void)handleFeedModelDidEndUpdates:(FeedType)feedType {
   DCHECK(self.ntpViewController);
-  if (!self.feedViewController) {
+  if (!self.feedViewController || !self.ntpViewController.viewDidAppear) {
     return;
   }
   // When the visible feed has been updated, recalculate the minimum NTP height.
@@ -448,12 +508,8 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
 - (void)ntpDidChangeVisibility:(BOOL)visible {
   if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
+    [self updateStartForVisibilityChange:visible];
     if (visible && self.started) {
-      if (NewTabPageTabHelper::FromWebState(self.webState)
-              ->ShouldShowStartSurface()) {
-        self.headerController.isStartShowing = YES;
-        [self.contentSuggestionsCoordinator configureStartSurfaceIfNeeded];
-      }
       if ([self isFollowingFeedAvailable]) {
         self.ntpViewController.shouldScrollIntoFeed = self.shouldScrollIntoFeed;
         self.shouldScrollIntoFeed = NO;
@@ -548,16 +604,13 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   self.sceneInForeground =
       sceneState.activationLevel >= SceneActivationLevelForegroundInactive;
 
-  // Only handle app state for the new First Run UI.
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
-    AppState* appState = sceneState.appState;
-    [appState addObserver:self];
+  AppState* appState = sceneState.appState;
+  [appState addObserver:self];
 
-    // Do not focus on omnibox for voice over if there are other screens to
-    // show.
-    if (appState.initStage < InitStageFinal) {
-      self.headerController.focusOmniboxWhenViewAppears = NO;
-    }
+  // Do not focus on omnibox for voice over if there are other screens to
+  // show.
+  if (appState.initStage < InitStageFinal) {
+    self.headerController.focusOmniboxWhenViewAppears = NO;
   }
 }
 
@@ -565,18 +618,17 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 - (void)initializeNTPComponents {
   self.ntpViewController = [[NewTabPageViewController alloc] init];
   self.ntpMediator = [[NTPHomeMediator alloc]
-             initWithWebState:self.webState
-           templateURLService:self.templateURLService
-                    URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
-                  authService:self.authService
-              identityManager:IdentityManagerFactory::GetForBrowserState(
-                                  self.browser->GetBrowserState())
-        accountManagerService:ChromeAccountManagerServiceFactory::
-                                  GetForBrowserState(
-                                      self.browser->GetBrowserState())
-                   logoVendor:ios::provider::CreateLogoVendor(self.browser,
-                                                              self.webState)
-      voiceSearchAvailability:&_voiceSearchAvailability];
+           initWithWebState:self.webState
+         templateURLService:self.templateURLService
+                  URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
+                authService:self.authService
+            identityManager:IdentityManagerFactory::GetForBrowserState(
+                                self.browser->GetBrowserState())
+      accountManagerService:ChromeAccountManagerServiceFactory::
+                                GetForBrowserState(
+                                    self.browser->GetBrowserState())
+                 logoVendor:ios::provider::CreateLogoVendor(self.browser,
+                                                            self.webState)];
   self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
   self.headerSynchronizer = [[ContentSuggestionsHeaderSynchronizer alloc]
       initWithCollectionController:self.ntpViewController
@@ -597,10 +649,6 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   self.ntpViewController.feedHeaderViewController =
       self.feedHeaderViewController;
 
-  if ([self isFeedTopSectionVisible]) {
-    self.feedTopSectionCoordinator = [self createFeedTopSectionCoordinator];
-  }
-
   // Requests feeds here if the correct flags and prefs are enabled.
   if ([self shouldFeedBeVisible]) {
     if ([self isFollowingFeedAvailable]) {
@@ -615,6 +663,12 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
     } else {
       self.feedViewController = [self discoverFeed];
     }
+  }
+
+  // Feed top section visibility is based on feed visibility, so this should
+  // always be below the block that sets `feedViewController`.
+  if ([self isFeedTopSectionVisible]) {
+    self.feedTopSectionCoordinator = [self createFeedTopSectionCoordinator];
   }
 }
 
@@ -642,6 +696,10 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   self.headerController.toolbarDelegate = self.toolbarDelegate;
   self.headerController.baseViewController = self.baseViewController;
   self.headerController.collectionSynchronizer = self.headerSynchronizer;
+  if (NewTabPageTabHelper::FromWebState(self.webState)
+          ->ShouldShowStartSurface()) {
+    self.headerController.isStartShowing = YES;
+  }
 }
 
 // Configures `self.ntpMediator`.
@@ -707,24 +765,6 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 - (void)configureMainViewControllerUsing:
     (UIViewController*)containedViewController {
 
-  // Vivaldi
-  // Set custom view controller as main view controller for vivaldi
-  if (IsVivaldiRunning()) {
-    VivaldiNewTabPageViewController* newVC =
-        [[VivaldiNewTabPageViewController alloc] initWithBrowser:self.browser];
-    [newVC
-        willMoveToParentViewController:self.containerViewController];
-    [self.containerViewController addChildViewController:newVC];
-    [self.containerViewController.view addSubview:newVC.view];
-    [newVC
-        didMoveToParentViewController:self.containerViewController];
-
-    newVC.view.translatesAutoresizingMaskIntoConstraints = NO;
-    newVC.delegate = self;
-    AddSameConstraints(newVC.view,
-                       self.containerViewController.view);
-    self.containedViewController = newVC;
-  } else {
   [containedViewController
       willMoveToParentViewController:self.containerViewController];
   [self.containerViewController addChildViewController:containedViewController];
@@ -737,7 +777,6 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
                      self.containerViewController.view);
 
   self.containedViewController = containedViewController;
-  } // End Vivaldi
 }
 
 #pragma mark - Properties
@@ -779,13 +818,18 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   [self.alertCoordinator stop];
   self.alertCoordinator = nil;
 
+  // This button is in a container view that itself is in FeedHeaderVC's main
+  // view. In order to anchor the alert view correctly, we need to provide the
+  // button's frame as well as its superview which is the coordinate system
+  // for the frame.
+  UIButton* menuButton = self.feedHeaderViewController.menuButton;
   self.alertCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.ntpViewController
                          browser:self.browser
                            title:nil
                          message:nil
-                            rect:self.feedHeaderViewController.menuButton.frame
-                            view:self.feedHeaderViewController.view];
+                            rect:menuButton.frame
+                            view:menuButton.superview];
   __weak NewTabPageCoordinator* weakSelf = self;
 
   // Item for toggling the feed on/off.
@@ -852,7 +896,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
 - (UIViewController*)discoverFeedPreviewWithURL:(const GURL)URL {
   std::string referrerURL = base::GetFieldTrialParamValueByFeature(
-      kEnableDiscoverFeedPreview, kDiscoverReferrerParameter);
+      kOverrideFeedSettings, kFeedSettingDiscoverReferrerParameter);
   if (referrerURL.empty()) {
     referrerURL = kDefaultDiscoverReferrer;
   }
@@ -897,12 +941,16 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 - (void)handleFeedSelected:(FeedType)feedType {
   DCHECK([self isFollowingFeedAvailable]);
 
+  if (self.selectedFeed == feedType) {
+    return;
+  }
+
   self.selectedFeed = feedType;
 
   // Saves scroll position before changing feed.
   CGFloat scrollPosition = [self.ntpViewController scrollPosition];
 
-  if (feedType == FeedTypeFollowing) {
+  if (feedType == FeedTypeFollowing && IsDotEnabledForNewFollowedContent()) {
     // Clears dot and notifies service that the Following feed content has
     // been seen.
     [self.feedHeaderViewController
@@ -951,6 +999,10 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
          self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
 }
 
+- (NSUInteger)lastVisibleFeedCardIndex {
+  return [self.feedWrapperViewController lastVisibleFeedCardIndex];
+}
+
 #pragma mark - FeedDelegate
 
 - (void)contentSuggestionsWasUpdated {
@@ -980,6 +1032,29 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   [self.ntpMediator handleVisitSiteFromFollowManagementList:url];
 }
 
+#pragma mark - FeedSignInPromoDelegate
+
+- (void)showSignInPromoUI {
+  // Show a sign-in promo half sheet.
+  self.feedSignInPromoCoordinator = [[FeedSignInPromoCoordinator alloc]
+      initWithBaseViewController:self.ntpViewController
+                         browser:self.browser];
+  [self.feedSignInPromoCoordinator start];
+}
+
+- (void)showSignInUI {
+  // Show sign-in and sync page.
+  const signin_metrics::AccessPoint access_point =
+      signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_BOTTOM_PROMO;
+  id<ApplicationCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  ShowSigninCommand* command = [[ShowSigninCommand alloc]
+      initWithOperation:AuthenticationOperationSigninAndSync
+            accessPoint:access_point];
+  signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
+  [handler showSignin:command baseViewController:self.ntpViewController];
+}
+
 #pragma mark - FeedWrapperViewControllerDelegate
 
 - (void)updateTheme {
@@ -996,11 +1071,12 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 }
 
 - (BOOL)isContentHeaderSticky {
-  return [self isFollowingFeedAvailable] && [self isFeedHeaderVisible];
+  return [self isFollowingFeedAvailable] && [self isFeedHeaderVisible] &&
+         !IsStickyHeaderDisabledForFollowingFeed();
 }
 
-- (void)feedTopSectionHasChangedVisibility:(BOOL)visible {
-  [self.feedTopSectionCoordinator feedTopSectionHasChangedVisibility:visible];
+- (void)signinPromoHasChangedVisibility:(BOOL)visible {
+  [self.feedTopSectionCoordinator signinPromoHasChangedVisibility:visible];
 }
 
 #pragma mark - NewTabPageDelegate
@@ -1145,13 +1221,11 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
 - (void)appState:(AppState*)appState
     didTransitionFromInitStage:(InitStage)previousInitStage {
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
-    if (previousInitStage == InitStageFirstRun) {
-      self.headerController.focusOmniboxWhenViewAppears = YES;
-      [self.headerController focusAccessibilityOnOmnibox];
+  if (previousInitStage == InitStageFirstRun) {
+    self.headerController.focusOmniboxWhenViewAppears = YES;
+    [self.headerController focusAccessibilityOnOmnibox];
 
-      [appState removeObserver:self];
-    }
+    [appState removeObserver:self];
   }
 }
 
@@ -1237,6 +1311,25 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 
   prefService->SetBoolean(prefs::kNTPContentSuggestionsForSupervisedUserEnabled,
                           !value);
+}
+
+- (void)updateStartForVisibilityChange:(BOOL)visible {
+  if (visible && self.started &&
+      NewTabPageTabHelper::FromWebState(self.webState)
+          ->ShouldShowStartSurface()) {
+    // Start is being shown on an existing NTP, so configure it
+    // appropriately.
+    self.headerController.isStartShowing = YES;
+    [self.contentSuggestionsCoordinator configureStartSurfaceIfNeeded];
+  }
+  if (!visible && NewTabPageTabHelper::FromWebState(self.webState)
+                      ->ShouldShowStartSurface()) {
+    // This means the NTP going away was showing Start. Reset configuration
+    // since it should not show Start after disappearing.
+    NewTabPageTabHelper::FromWebState(self.webState)
+        ->SetShowStartSurface(false);
+    self.headerController.isStartShowing = NO;
+  }
 }
 
 // Updates the visible property based on viewPresented and sceneInForeground
@@ -1340,7 +1433,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
 // TODO(crbug.com/1331010): The feed top section may include content that is not
 // the signin promo, which may need to be visible when the user is signed in.
 - (BOOL)isFeedTopSectionVisible {
-  return IsDiscoverFeedTopSyncPromoEnabled() && [self shouldFeedBeVisible] &&
+  return IsDiscoverFeedTopSyncPromoEnabled() && [self isFeedVisible] &&
          self.authService &&
          !self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
 }
@@ -1384,6 +1477,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   viewControllerConfig.browser = self.browser;
   viewControllerConfig.scrollDelegate = self.ntpViewController;
   viewControllerConfig.previewDelegate = self;
+  viewControllerConfig.signInPromoDelegate = self;
 
   return viewControllerConfig;
 }
@@ -1467,8 +1561,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   DCHECK(!self.browser->GetBrowserState()->IsOffTheRecord());
   if (!_feedHeaderViewController) {
     BOOL followingSegmentDotVisible = NO;
-    if (base::FeatureList::IsEnabled(kEnableCheckForNewFollowContent) &&
-        IsWebChannelsEnabled()) {
+    if (IsDotEnabledForNewFollowedContent() && IsWebChannelsEnabled()) {
       // Only show the dot if the user follows available publishers.
       followingSegmentDotVisible =
           [self doesFollowingFeedHaveContent] &&
@@ -1480,6 +1573,7 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
            followingSegmentDotVisible:followingSegmentDotVisible];
     _feedHeaderViewController.feedControlDelegate = self;
     _feedHeaderViewController.ntpDelegate = self;
+    _feedHeaderViewController.feedMetricsRecorder = self.feedMetricsRecorder;
     [_feedHeaderViewController.menuButton
                addTarget:self
                   action:@selector(openFeedMenu)
@@ -1488,14 +1582,28 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   return _feedHeaderViewController;
 }
 
-// Vivaldi
 #pragma mark - VIVALDI
--(void)didTapSearchBar {
-  // Open search result page focusing the search bar
-  [self focusFakebox];
+- (void)configureVivaldiNTPViewController {
+  VivaldiNewTabPageViewController* newVC =
+      [[VivaldiNewTabPageViewController alloc] initWithBrowser:self.browser];
+  [newVC
+      willMoveToParentViewController:self.containerViewController];
+  [self.containerViewController addChildViewController:newVC];
+  [self.containerViewController.view addSubview:newVC.view];
+  [newVC
+      didMoveToParentViewController:self.containerViewController];
+
+  newVC.delegate = self;
+  newVC.popupMenuCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PopupMenuCommands);
+  [newVC.view fillSuperview];
+  self.containedViewController = newVC;
 }
 
--(void)didTapSpeedDial:(VivaldiSpeedDialItem *) item {
+- (void)didTapSpeedDial:(VivaldiSpeedDialItem*)item
+       captureSnapshot:(BOOL)captureSnapshot {
+  self.currentItem = item;
+  self.captureSnapshot = captureSnapshot;
   // Resign the edit mode of omnibox
   id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), OmniboxCommands);
@@ -1505,6 +1613,37 @@ BASE_FEATURE(kEnableCheckForNewFollowContent,
   UrlLoadParams params = UrlLoadParams::InCurrentTab(item.url);
   params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
-} // End Vivaldi
+}
+
+- (void)storeSpeedDialThumbnail:(UIImage*)snapshot {
+  NSString* snapshotPath = [[NSFileManager defaultManager]
+                            storeThumbnailFromSnapshot:snapshot
+                            SDItem:_currentItem];
+  const std::string imagePathU16 = base::SysNSStringToUTF8(snapshotPath);
+  SetNodeThumbnail(self.bookmarks,
+                   _currentItem.bookmarkNode,
+                   imagePathU16);
+  _captureSnapshot = NO;
+}
+
+#pragma mark - CRWWebStateObserver
+
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  if (!webState || !_captureSnapshot ||
+      !_currentItem || !_currentItem.bookmarkNode)
+    return;
+
+  if (success) {
+    web::WebState* currentWebState =
+        self.browser->GetWebStateList()->GetActiveWebState();
+    if (currentWebState) {
+      SnapshotTabHelper::FromWebState(currentWebState)
+      ->UpdateSnapshotWithCallback(^(UIImage* snapshot) {
+        [self storeSpeedDialThumbnail:snapshot];
+      });
+    }
+  }
+}
+// End Vivaldi
 
 @end

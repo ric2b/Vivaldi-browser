@@ -27,13 +27,14 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionUtil;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.toolbar.R;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarPrefs;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFeatureList;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 
 /**
@@ -42,7 +43,8 @@ import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 @EnableFeatures({ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2})
-@DisableFeatures({ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR})
+@DisableFeatures({ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR,
+        SettingsFeatureList.HIGHLIGHT_MANAGED_PREF_DISCLAIMER_ANDROID})
 public class AdaptiveToolbarPreferenceFragmentTest {
     @Rule
     public TestRule mProcessor = new Features.JUnitProcessor();
@@ -155,7 +157,7 @@ public class AdaptiveToolbarPreferenceFragmentTest {
     }
 
     private boolean isRestUnchecked(@AdaptiveToolbarButtonVariant int selectedType) {
-        for (int i = 0; i < AdaptiveToolbarButtonVariant.NUM_ENTRIES; i++) {
+        for (int i = 0; i <= AdaptiveToolbarButtonVariant.MAX_VALUE; i++) {
             RadioButtonWithDescription button = getButton(i);
             if (i != selectedType && button != null && button.isChecked()) {
                 return false;

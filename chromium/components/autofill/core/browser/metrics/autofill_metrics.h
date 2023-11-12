@@ -12,25 +12,26 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_profile_import_process.h"
 #include "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
-#include "components/autofill/core/browser/metrics/form_interactions_counter.h"
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
-#include "components/autofill_assistant/core/public/autofill_assistant_intent.h"
 #include "components/security_state/core/security_state.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -46,6 +47,8 @@ namespace autofill {
 class AutofillField;
 class CreditCard;
 class FormEventLoggerBase;
+
+struct FormGroupFillingStats;
 
 // A given maximum is enforced to minimize the number of buckets generated.
 extern const int kMaxBucketsCount;
@@ -137,7 +140,8 @@ class AutofillMetrics {
     kStreetAddress = 8,
     kDependentLocality = 9,
     kHonorificPrefix = 10,
-    kMaxValue = kHonorificPrefix
+    kCompany = 11,
+    kMaxValue = kCompany
   };
 
   // Metric to measure if a submitted card's expiration date matches the same
@@ -210,18 +214,13 @@ class AutofillMetrics {
     // requested the issuer to send an OTP, and we can not move on to the next
     // step in this flow.
     kDismissedByServerRequestFailure = 4,
-    kMaxValue = kDismissedByServerRequestFailure,
-  };
-
-  enum CreditCardUploadFeedbackMetric {
-    // The loading indicator animation which indicates uploading is in progress
-    // is successfully shown.
-    CREDIT_CARD_UPLOAD_FEEDBACK_LOADING_ANIMATION_SHOWN,
-    // The credit card icon with the saving failure badge is shown.
-    CREDIT_CARD_UPLOAD_FEEDBACK_FAILURE_ICON_SHOWN,
-    // The failure icon is clicked and the save card failure bubble is shown.
-    CREDIT_CARD_UPLOAD_FEEDBACK_FAILURE_BUBBLE_SHOWN,
-    NUM_CREDIT_CARD_UPLOAD_FEEDBACK_METRICS,
+    // User accepted a challenge option in the
+    // CardUnmaskAuthenticationSelectionDialog that does not require a server
+    // call to get to the next step in this flow. For instance, in the CVC case,
+    // we can go directly to the CVC input dialog after the user selects the
+    // challenge option.
+    kDismissedByUserAcceptanceNoServerRequestNeeded = 5,
+    kMaxValue = kDismissedByUserAcceptanceNoServerRequestNeeded,
   };
 
   // Metrics measuring how well we predict field types.  These metric values are
@@ -714,9 +713,7 @@ class AutofillMetrics {
     // If present, the ZIP must be valid (if verifiable).
     ZIP_VALID_REQUIREMENT_FULFILLED = 16,
     ZIP_VALID_REQUIREMENT_VIOLATED = 17,
-    // If present, the phone number must be valid (if verifiable).
-    PHONE_VALID_REQUIREMENT_FULFILLED = 18,
-    PHONE_VALID_REQUIREMENT_VIOLATED = 19,
+    // 18 and 19 are deprecated, as phone numbers are not a requirement anymore.
     // Indicates the overall status of the import requirements check.
     OVERALL_REQUIREMENT_FULFILLED = 20,
     OVERALL_REQUIREMENT_VIOLATED = 21,
@@ -875,6 +872,33 @@ class AutofillMetrics {
     kMaxValue = kOtpMismatchError,
   };
 
+  // The filling status of an autofilled field.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class FieldFillingStatus {
+    // The field was filled and accepted.
+    kAccepted = 0,
+    // The field was filled and corrected to a value of the same type.
+    kCorrectedToSameType = 1,
+    // The field was filled and corrected to a value of a different type.
+    kCorrectedToDifferentType = 2,
+    // The field was filled and corrected to a value of an unknown type.
+    kCorrectedToUnknownType = 3,
+    // The field was filled and the value was cleared afterwards.
+    kCorrectedToEmpty = 4,
+    // The field was manually filled to a value of the same type as the
+    // field was predicted to.
+    kManuallyFilledToSameType = 5,
+    // The field was manually filled to a value of a different type as the field
+    // was predicted to.
+    kManuallyFilledToDifferentType = 6,
+    // The field was manually filled to a value of an unknown type.
+    kManuallyFilledToUnknownType = 7,
+    // The field was left empty.
+    kLeftEmpty = 8,
+    kMaxValue = kLeftEmpty
+  };
+
   // Utility class for determining the seamlessness of a credit card fill.
   class CreditCardSeamlessness {
    public:
@@ -975,14 +999,14 @@ class AutofillMetrics {
                           AutofillFormSubmittedState state,
                           const base::TimeTicks& form_parsed_timestamp,
                           FormSignature form_signature,
-                          const FormInteractionCounts& form_interaction_counts,
-                          autofill_assistant::AutofillAssistantIntent intent);
+                          const FormInteractionCounts& form_interaction_counts);
     void LogKeyMetrics(const DenseSet<FormType>& form_types,
                        bool data_to_fill_available,
                        bool suggestions_shown,
                        bool edited_autofilled_field,
                        bool suggestion_filled,
-                       autofill_assistant::AutofillAssistantIntent intent);
+                       const FormInteractionCounts& form_interaction_counts,
+                       const FormInteractionsFlowId& flow_id);
     void LogFormEvent(FormEvent form_event,
                       const DenseSet<FormType>& form_types,
                       const base::TimeTicks& form_parsed_timestamp);
@@ -999,6 +1023,14 @@ class AutofillMetrics {
         const FormSignature form_signature,
         const AutofillField& field,
         ServerFieldType old_type);
+
+    // Logs a hash of the `sectioning_signature` for a specific
+    // `form_signature`. This is useful for detecting sites where different
+    // sectioning algorithms yield different results. Emitted every time
+    // sectioning is performed and only when
+    // `AutofillUseParameterizedSectioning` is enabled.
+    void LogSectioningHash(FormSignature form_signature,
+                           uint32_t sectioning_signature);
 
    private:
     bool CanLog() const;
@@ -1076,17 +1108,16 @@ class AutofillMetrics {
   static void LogCardUnmaskAuthenticationSelectionDialogResultMetric(
       CardUnmaskAuthenticationSelectionDialogResultMetric metric);
 
-  // Logs true every time the Card Unmask Authentication Selection Dialog is
-  // shown.
-  static void LogCardUnmaskAuthenticationSelectionDialogShown();
+  // Logs the number of challenge options shown every time the Card Unmask
+  // Authentication Selection Dialog is shown.
+  static void LogCardUnmaskAuthenticationSelectionDialogShown(
+      size_t number_of_challenge_options);
 
   static void LogCreditCardInfoBarMetric(
       InfoBarMetric metric,
       bool is_uploading,
       AutofillClient::SaveCreditCardOptions options);
   static void LogCreditCardFillingInfoBarMetric(InfoBarMetric metric);
-  static void LogCreditCardUploadFeedbackMetric(
-      CreditCardUploadFeedbackMetric metric);
   static void LogScanCreditCardPromptMetric(ScanCreditCardPromptMetric metric);
   static void LogProgressDialogResultMetric(
       bool is_canceled_by_user,
@@ -1214,7 +1245,8 @@ class AutofillMetrics {
 
   // Logs |event| to the unmask prompt events histogram.
   static void LogUnmaskPromptEvent(UnmaskPromptEvent event,
-                                   bool has_valid_nickname);
+                                   bool has_valid_nickname,
+                                   CreditCard::RecordType card_type);
 
   // Logs |event| to cardholder name fix flow prompt events histogram.
   static void LogCardholderNameFixFlowPromptEvent(
@@ -1387,16 +1419,22 @@ class AutofillMetrics {
   // Log the fact that an autocomplete popup was shown.
   static void OnAutocompleteSuggestionsShown();
 
-  // Log the number of autocomplete entries that were cleaned-up as a result
-  // of the Autocomplete Retention Policy.
-  static void LogNumberOfAutocompleteEntriesCleanedUp(int nb_entries);
-
   // Log how many autofilled fields in a given form were edited before the
   // submission or when the user unfocused the form (depending on
   // |observed_submission|).
   static void LogNumberOfEditedAutofilledFields(
       size_t num_edited_autofilled_fields,
       bool observed_submission);
+
+  // Logs the `filling_stats` of the fields within a `form_type`. The filling
+  // status consistent of the number of accepted, corrected or and unfilled
+  // fields.
+  static void LogFieldFillingStats(FormType form_type,
+                                   const FormGroupFillingStats& filling_stats);
+
+  // Logs the number of sections and the number of fields/section.
+  static void LogSectioningMetrics(
+      const base::flat_map<Section, size_t>& fields_per_section);
 
   // This should be called each time a server response is parsed for a form.
   static void LogServerResponseHasDataForForm(bool has_data);
@@ -1415,27 +1453,19 @@ class AutofillMetrics {
       const base::TimeTicks& form_parsed_timestamp,
       FormSignature form_signature,
       FormInteractionsUkmLogger* form_interactions_ukm_logger,
-      const FormInteractionCounts& form_interaction_counts,
-      const autofill_assistant::AutofillAssistantIntent intent);
+      const FormInteractionCounts& form_interaction_counts);
 
   // Logs if every non-empty field in a submitted form was filled by Autofill.
   // If |is_address| an address was filled, otherwise it was a credit card.
   static void LogAutofillPerfectFilling(bool is_address, bool perfect_filling);
 
-  // Log across how many frames the detected and/or autofilled [credit card]
-  // fields of a submitted form are distributed.
-  static void LogNumberOfFramesWithDetectedFields(size_t num_frames);
-  static void LogNumberOfFramesWithDetectedCreditCardFields(size_t num_frames);
-  static void LogNumberOfFramesWithAutofilledCreditCardFields(
-      size_t num_frames);
-
   struct LogCreditCardSeamlessnessParam {
-    const FormEventLoggerBase& event_logger;
-    const FormStructure& form;
-    const AutofillField& field;
-    const base::flat_set<FieldGlobalId>& newly_filled_fields;
-    const base::flat_set<FieldGlobalId>& safe_fields;
-    ukm::builders::Autofill_CreditCardFill& builder;
+    const raw_ref<const FormEventLoggerBase> event_logger;
+    const raw_ref<const FormStructure> form;
+    const raw_ref<const AutofillField> field;
+    const raw_ref<const base::flat_set<FieldGlobalId>> newly_filled_fields;
+    const raw_ref<const base::flat_set<FieldGlobalId>> safe_fields;
+    const raw_ref<ukm::builders::Autofill_CreditCardFill> builder;
   };
 
   // Logs several metrics about seamlessness. These are qualitative and bitmask
@@ -1474,9 +1504,6 @@ class AutofillMetrics {
   // This should be called when the user selects the Form-Not-Secure warning
   // suggestion to show an explanation of the warning.
   static void LogShowedHttpNotSecureExplanation();
-
-  // Logs if an autocomplete query was created for a field.
-  static void LogAutocompleteQuery(bool created);
 
   // Logs if there is any suggestions for an autocomplete query.
   static void LogAutocompleteSuggestions(bool has_suggestions);
@@ -1760,11 +1787,34 @@ class AutofillMetrics {
       PredictionState prediction_state,
       AutocompleteState autocomplete_state);
 
-  // Logs a field's server and heuristic type on form submit. This is only used
-  // for fields with autocomplete=garbage.
+  // Logs a field's server and heuristic type on form submit into a histogram
+  // corresponding to the field's `autocomplete_state`.
   static void LogAutocompletePredictionCollisionTypes(
+      AutocompleteState autocomplete_state,
       ServerFieldType server_type,
       ServerFieldType heuristic_types);
+
+  // Logs whether a heuristic detection for an NUMERIC_QUANTITY collides with a
+  // server prediction.
+  static void LogNumericQuantityCollidesWithServerPrediction(bool collision);
+
+  // Logs if the filling of a field was accepted even though it had a
+  // NUMERIC_QUANTITY. This metric is only emitted if the feature to grant the
+  // heuristic precedence is disabled.
+  static void LogAcceptedFilledFieldWithNumericQuantityHeuristicPrediction(
+      bool accepted);
+
+  // Returns the histogram string for the passed in
+  // `AutofillClient::PaymentsRpcCardType` or `CreditCard::RecordType`, starting
+  // with a period.
+  static std::string GetHistogramStringForCardType(
+      absl::variant<AutofillClient::PaymentsRpcCardType, CreditCard::RecordType>
+          card_type);
+
+  // Logs the context menu impressions based on the autofill type as well as
+  // based on the autocomplete type.
+  static void LogContextMenuImpressions(ServerFieldType field_type,
+                                        AutocompleteState autocomplete_state);
 
  private:
   static void Log(AutocompleteEvent event);

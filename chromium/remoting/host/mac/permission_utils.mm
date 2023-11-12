@@ -16,8 +16,8 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "remoting/base/string_resources.h"
 #include "ui/base/cocoa/permissions_utils.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -62,11 +62,8 @@ void ShowAccessibilityPermissionDialog() {
   [alert setAlertStyle:NSAlertStyleWarning];
   [alert_window makeKeyWindow];
   if ([alert runModal] == NSAlertFirstButtonReturn) {
-    // Launch the Security and Preferences pane with Accessibility selected.
-    [[NSWorkspace sharedWorkspace]
-        openURL:
-            [NSURL URLWithString:@"x-apple.systempreferences:com.apple."
-                                 @"preference.security?Privacy_Accessibility"]];
+    base::mac::OpenSystemSettingsPane(
+        base::mac::SystemSettingsPane::kPrivacySecurity_Accessibility);
   }
 }
 
@@ -101,11 +98,8 @@ void ShowScreenRecordingPermissionDialog() {
   [alert setAlertStyle:NSAlertStyleWarning];
   [alert_window makeKeyWindow];
   if ([alert runModal] == NSAlertFirstButtonReturn) {
-    // Launch the Security and Preferences pane with Accessibility selected.
-    [[NSWorkspace sharedWorkspace]
-        openURL:
-            [NSURL URLWithString:@"x-apple.systempreferences:com.apple."
-                                 @"preference.security?Privacy_ScreenCapture"]];
+    base::mac::OpenSystemSettingsPane(
+        base::mac::SystemSettingsPane::kPrivacySecurity_ScreenRecording);
   }
 }
 
@@ -173,7 +167,7 @@ bool CanCaptureAudio() {
 
 void RequestAudioCapturePermission(base::OnceCallback<void(bool)> callback) {
   if (@available(macOS 10.14, *)) {
-    auto task_runner = base::SequencedTaskRunnerHandle::Get();
+    auto task_runner = base::SequencedTaskRunner::GetCurrentDefault();
     __block auto block_callback = std::move(callback);
     [AVCaptureDevice
         requestAccessForMediaType:AVMediaTypeAudio

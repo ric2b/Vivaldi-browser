@@ -88,7 +88,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
         if (!mHasClearedOmniboxForFocus) {
             mHasClearedOmniboxForFocus = true;
             if (BuildConfig.IS_VIVALDI)
-                mUrlBarDelegate.setOmniboxEditingText(suggestion.getUrl().getSpec());
+                mUrlBarDelegate.setOmniboxEditingText(suggestion.getUrl().getSpec(), false);
             else
             mUrlBarDelegate.setOmniboxEditingText("");
         }

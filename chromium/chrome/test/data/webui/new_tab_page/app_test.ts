@@ -6,34 +6,33 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {counterfactualLoad, LensUploadDialogElement, Module, ModuleDescriptor, ModuleRegistry} from 'chrome://new-tab-page/lazy_load.js';
 import {$$, AppElement, BackgroundManager, BrowserCommandProxy, CustomizeDialogPage, NewTabPageProxy, NtpElement, VoiceAction, WindowProxy} from 'chrome://new-tab-page/new_tab_page.js';
-import {PageCallbackRouter, PageHandlerRemote, PageInterface} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import {PageCallbackRouter, PageHandlerRemote, PageRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {Command, CommandHandlerRemote} from 'chrome://resources/js/browser_command/browser_command.mojom-webui.js';
-import {isMac} from 'chrome://resources/js/cr.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {isMac} from 'chrome://resources/js/platform.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {fakeMetricsPrivate, MetricsTracker} from './metrics_test_support.js';
+import {fakeMetricsPrivate, MetricsTracker} from './../metrics_test_support.js';
 import {assertNotStyle, assertStyle, createBackgroundImage, createTheme, installMock} from './test_support.js';
 
 suite('NewTabPageAppTest', () => {
   let app: AppElement;
-  let windowProxy: TestBrowserProxy;
-  let handler: TestBrowserProxy;
-  let callbackRouterRemote: PageHandlerRemote&PageInterface;
+  let windowProxy: TestBrowserProxy<WindowProxy>;
+  let handler: TestBrowserProxy<PageHandlerRemote>;
+  let callbackRouterRemote: PageRemote;
   let metrics: MetricsTracker;
-  let moduleRegistry: TestBrowserProxy;
-  let backgroundManager: TestBrowserProxy;
+  let moduleRegistry: TestBrowserProxy<ModuleRegistry>;
+  let backgroundManager: TestBrowserProxy<BackgroundManager>;
   let moduleResolver: PromiseResolver<Module[]>;
 
   const url: URL = new URL(location.href);
 
   setup(async () => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     windowProxy = installMock(WindowProxy);
     handler = installMock(
@@ -49,6 +48,7 @@ suite('NewTabPageAppTest', () => {
     handler.setResultFor('getDoodle', Promise.resolve({
       doodle: null,
     }));
+    handler.setResultFor('getModulesIdNames', Promise.resolve({data: []}));
     windowProxy.setResultMapperFor('matchMedia', () => ({
                                                    addListener() {},
                                                    removeListener() {},
@@ -590,13 +590,13 @@ suite('NewTabPageAppTest', () => {
       const barElement = document.createElement('div');
       moduleResolver.resolve([
         {
-          descriptor: new ModuleDescriptor(
-              'foo', 'foo', () => Promise.resolve(fooElement)),
+          descriptor:
+              new ModuleDescriptor('foo', () => Promise.resolve(fooElement)),
           element: fooElement,
         },
         {
-          descriptor: new ModuleDescriptor(
-              'bar', 'bar', () => Promise.resolve(barElement)),
+          descriptor:
+              new ModuleDescriptor('bar', () => Promise.resolve(barElement)),
           element: barElement,
         },
       ]);

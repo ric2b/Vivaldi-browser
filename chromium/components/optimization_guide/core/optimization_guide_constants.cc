@@ -4,6 +4,8 @@
 
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 
+#include "app/vivaldi_constants.h"
+
 namespace optimization_guide {
 
 const base::FilePath::CharType kUnindexedHintsFileName[] =
@@ -12,10 +14,10 @@ const base::FilePath::CharType kUnindexedHintsFileName[] =
 const char kRulesetFormatVersionString[] = "1.0.0";
 
 const char kOptimizationGuideServiceGetHintsDefaultURL[] =
-    "https://optimizationguide-pa.googleapis.com/v1:GetHints";
+    KNOWN_404("/v1:GetHints");
 
 const char kOptimizationGuideServiceGetModelsDefaultURL[] =
-    "https://optimizationguide-pa.googleapis.com/v1:GetModels";
+    KNOWN_404("/v1:GetModels");
 
 const char kLoadedHintLocalHistogramString[] =
     "OptimizationGuide.LoadedHint.Result";

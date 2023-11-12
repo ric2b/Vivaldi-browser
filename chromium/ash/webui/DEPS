@@ -7,8 +7,15 @@ include_rules = [
   "+content/public/common",
   "+content/public/test",
 
+  "+chromeos/ash/components/install_attributes",
   "+chromeos/ash/services/cros_healthd/public/cpp",
   "+chromeos/ash/services/cros_healthd/public/mojom",
   "+mojo/core/embedder",
   "+ui/webui",
 ]
+
+specific_include_rules = {
+  ".*test\.cc": [
+    "+chromeos/ash/components/test",
+  ],
+}

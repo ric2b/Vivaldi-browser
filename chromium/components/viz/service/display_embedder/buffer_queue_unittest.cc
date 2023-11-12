@@ -19,8 +19,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
+using ::testing::Contains;
 using ::testing::Expectation;
 using ::testing::Ne;
+using ::testing::Not;
 using ::testing::Return;
 
 namespace viz {
@@ -105,12 +107,13 @@ class BufferQueueTest : public ::testing::Test {
     return true;
   }
 
-  void SendDamagedFrame(const gfx::Rect& damage) {
+  gpu::Mailbox SendDamagedFrame(const gfx::Rect& damage) {
     // We don't care about the GL-level implementation here, just how it uses
     // damage rects.
-    buffer_queue_->GetCurrentBuffer();
+    auto mailbox = buffer_queue_->GetCurrentBuffer();
     buffer_queue_->SwapBuffers(damage);
     buffer_queue_->SwapBuffersComplete();
+    return mailbox;
   }
 
   void SendFullFrame() { SendDamagedFrame(gfx::Rect(buffer_queue_->size_)); }
@@ -502,6 +505,90 @@ TEST_F(BufferQueueTest, EnsureMinNumberOfBuffers) {
   // will also have small damage.
   EXPECT_EQ(buffer_queue_->CurrentBufferDamage(), small_damage);
   SendDamagedFrame(small_damage);
+}
+
+TEST_F(BufferQueueTest, GetLastSwappedBuffer) {
+  // No images allocated, so zero-mailbox is returned.
+  EXPECT_TRUE(buffer_queue_->GetLastSwappedBuffer().IsZero());
+
+  // After reshape we'll get the last buffer in the queue.
+  EXPECT_TRUE(buffer_queue_->Reshape(screen_size, kBufferQueueColorSpace,
+                                     kBufferQueueFormat));
+  gpu::Mailbox last_swapped1 = buffer_queue_->GetLastSwappedBuffer();
+  EXPECT_FALSE(last_swapped1.IsZero());
+
+  // The last swapped buffer won't change until calling SwapBuffersComplete.
+  gpu::Mailbox mailbox1 = buffer_queue_->GetCurrentBuffer();
+  EXPECT_NE(last_swapped1, mailbox1);
+  EXPECT_EQ(last_swapped1, buffer_queue_->GetLastSwappedBuffer());
+  buffer_queue_->SwapBuffers(screen_rect);
+  EXPECT_EQ(last_swapped1, buffer_queue_->GetLastSwappedBuffer());
+  buffer_queue_->SwapBuffersComplete();
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox1);
+
+  // Swap another frame. Last swapped only updates after SwapBuffersComplete().
+  gpu::Mailbox mailbox2 = buffer_queue_->GetCurrentBuffer();
+  buffer_queue_->SwapBuffers(screen_rect);
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox1);
+  buffer_queue_->SwapBuffersComplete();
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox2);
+
+  // Swap a third frame. Last swapped only updates after SwapBuffersComplete().
+  gpu::Mailbox mailbox3 = buffer_queue_->GetCurrentBuffer();
+  // The third mailbox is the first one we got from GetLastSwappedBuffer().
+  EXPECT_EQ(mailbox3, last_swapped1);
+  buffer_queue_->SwapBuffers(screen_rect);
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox2);
+  buffer_queue_->SwapBuffersComplete();
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox3);
+
+  // Empty swap, Last swapped stays the same.
+  buffer_queue_->SwapBuffers(gfx::Rect());
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox3);
+  buffer_queue_->SwapBuffersComplete();
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox3);
+
+  // Swap a fourth frame. Last swapped only updates after SwapBuffersComplete().
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mailbox1);
+  buffer_queue_->SwapBuffers(screen_rect);
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox3);
+  buffer_queue_->SwapBuffersComplete();
+  EXPECT_EQ(buffer_queue_->GetLastSwappedBuffer(), mailbox1);
+}
+
+TEST_F(BufferQueueTest, RecreateBuffers) {
+  EXPECT_TRUE(buffer_queue_->Reshape(screen_size, kBufferQueueColorSpace,
+                                     kBufferQueueFormat));
+  auto mb1 = SendDamagedFrame(small_damage);
+  auto mb2 = SendDamagedFrame(small_damage);
+  auto mb3 = SendDamagedFrame(small_damage);
+  std::vector<gpu::Mailbox> original_buffers = {mb1, mb2, mb3};
+
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb1);
+  buffer_queue_->SwapBuffers(small_damage);
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb2);
+  buffer_queue_->SwapBuffers(small_damage);
+
+  buffer_queue_->RecreateBuffers();
+  buffer_queue_->SwapBuffersComplete();  // mb1
+
+  auto mb4 = buffer_queue_->GetCurrentBuffer();
+  EXPECT_THAT(original_buffers, Not(Contains(mb4)));
+  buffer_queue_->SwapBuffers(small_damage);
+
+  buffer_queue_->SwapBuffersComplete();  // mb2
+
+  auto mb5 = buffer_queue_->GetCurrentBuffer();
+  EXPECT_THAT(original_buffers, Not(Contains(mb5)));
+  buffer_queue_->SwapBuffers(small_damage);
+  buffer_queue_->SwapBuffersComplete();  // mb4
+  buffer_queue_->SwapBuffersComplete();  // mb5
+
+  auto mb6 = SendDamagedFrame(small_damage);
+  EXPECT_THAT(original_buffers, Not(Contains(mb6)));
+
+  // New queue of buffers loops.
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb4);
 }
 
 }  // namespace viz

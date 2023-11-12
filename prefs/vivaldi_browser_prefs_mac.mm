@@ -52,6 +52,14 @@ base::Value GetPlatformComputedDefault(const std::string& path) {
     return base::Value(getSystemHighlightColor());
   }
 
+  if (path == vivaldiprefs::kSystemMacMenubarVisibleInFullscreen) {
+    return base::Value(getMenubarVisibleInFullscreen());
+  }
+
+  if (path == vivaldiprefs::kSystemMacHideMenubar) {
+    return base::Value(getHideMenubar());
+  }
+
   return base::Value();
 }
 

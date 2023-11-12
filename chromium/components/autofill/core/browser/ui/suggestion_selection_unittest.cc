@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 #include "components/autofill/core/browser/ui/suggestion_selection.h"
 
-#include <algorithm>
 #include <iterator>
 
 #include "base/guid.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -58,10 +58,10 @@ void ExpectSameElements(const std::vector<T*>& expectations,
   std::vector<T*> results_copy = results;
   std::sort(results_copy.begin(), results_copy.end(), CompareElements<T>);
 
-  EXPECT_EQ(std::mismatch(results_copy.begin(), results_copy.end(),
-                          expectations_copy.begin(), ElementsEqual<T>)
-                .first,
-            results_copy.end());
+  EXPECT_EQ(
+      base::ranges::mismatch(results_copy, expectations_copy, ElementsEqual<T>)
+          .first,
+      results_copy.end());
 }
 
 }  // anonymous namespace
@@ -287,6 +287,28 @@ TEST_F(SuggestionSelectionTest, GetUniqueSuggestions_EmptyMatchingProfiles) {
 
   ASSERT_EQ(0U, unique_matched_profiles.size());
   ASSERT_EQ(0U, unique_suggestions.size());
+}
+
+// Tests that `kAccount` profiles are preferred over `kLocalOrSyncable` profile
+// in case of a duplicate.
+TEST_F(SuggestionSelectionTest, GetUniqueSuggestions_kAccount) {
+  // Create two profiles that only differ by their source.
+  const auto account_profile = CreateProfileUniquePtr("FirstName");
+  account_profile->set_source_for_testing(AutofillProfile::Source::kAccount);
+  const auto local_profile = CreateProfileUniquePtr("FirstName");
+  local_profile->set_source_for_testing(
+      AutofillProfile::Source::kLocalOrSyncable);
+  // Place `account_profile` behind `local_profile`.
+  std::vector<AutofillProfile*> profiles = {local_profile.get(),
+                                            account_profile.get()};
+
+  std::vector<AutofillProfile*> unique_matched_profiles;
+  GetUniqueSuggestions({}, comparator_, app_locale_, profiles,
+                       CreateSuggestions(profiles, NAME_FIRST),
+                       &unique_matched_profiles);
+  // Usually, duplicates are resolved in favour of the earlier profile. Expect
+  // that this is not the case when profiles of different sources are involved.
+  EXPECT_THAT(unique_matched_profiles, ElementsAre(account_profile.get()));
 }
 
 TEST_F(SuggestionSelectionTest, RemoveProfilesNotUsedSinceTimestamp) {

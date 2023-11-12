@@ -187,14 +187,14 @@ void BrowserNonClientFrameViewChromeOS::Init() {
 
   if (browser_view()->GetIsWebAppType() &&
       (!browser->is_type_app_popup() ||
-       browser_view()->AppUsesWindowControlsOverlay())) {
+       browser_view()->AppUsesWindowControlsOverlay() ||
+       browser_view()->AppUsesBorderlessMode())) {
     // Add the container for extra web app buttons (e.g app menu button).
     set_web_app_frame_toolbar(AddChildView(
         std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
+    if (AppIsBorderlessPwa())
+      UpdateBorderlessModeEnabled();
   }
-
-  if (AppIsBorderlessPwa())
-    UpdateBorderlessModeEnabled();
 
   browser_view()->immersive_mode_controller()->AddObserver(this);
 }
@@ -295,15 +295,10 @@ SkColor BrowserNonClientFrameViewChromeOS::GetFrameColor(
   SkColor fallback_color = chromeos::kDefaultFrameColor;
 
   if (chromeos::features::IsDarkLightModeEnabled() && GetWidget()) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    bool use_debug_colors = base::FeatureList::IsEnabled(
-        ash::features::kSemanticColorsDebugOverride);
-#else
-    bool use_debug_colors = false;
-#endif
-    fallback_color = cros_styles::ResolveColor(
-        cros_styles::ColorName::kBgColor,
-        GetNativeTheme()->ShouldUseDarkColors(), use_debug_colors);
+    // TODO(skau): Migrate to ColorProvider.
+    fallback_color =
+        cros_styles::ResolveColor(cros_styles::ColorName::kBgColor,
+                                  GetNativeTheme()->ShouldUseDarkColors());
   }
 
   return color.value_or(fallback_color);

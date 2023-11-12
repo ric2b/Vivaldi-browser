@@ -31,8 +31,10 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
@@ -49,6 +51,7 @@
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/interpolated_transform.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -207,8 +210,8 @@ class TrayBackgroundView::TrayBackgroundViewSessionChangeHandler
   // in the current task sequence are run.
   void DisableShowAnimationInSequence() {
     base::ScopedClosureRunner callback = tray_->DisableShowAnimation();
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     callback.Release());
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, callback.Release());
   }
 
   TrayBackgroundView* const tray_;
@@ -273,6 +276,8 @@ void TrayBackgroundView::SetPressedCallback(
     base::RepeatingCallback<void(const ui::Event& event)> pressed_callback) {
   pressed_callback_ = std::move(pressed_callback);
 }
+
+void TrayBackgroundView::OnTrayActivated(const ui::Event& event) {}
 
 TrayBackgroundView::~TrayBackgroundView() {
   Shell::Get()->system_tray_model()->virtual_keyboard()->RemoveObserver(this);
@@ -785,6 +790,11 @@ gfx::Rect TrayBackgroundView::GetBackgroundBounds() const {
 bool TrayBackgroundView::PerformAction(const ui::Event& event) {
   base::UmaHistogramEnumeration("Ash.StatusArea.TrayBackgroundView.Pressed",
                                 catalog_name_);
+
+  base::ScopedClosureRunner scoped_runner(
+      base::BindOnce(&TrayBackgroundView::OnTrayActivated,
+                     base::Unretained(this), std::cref(event)));
+
   // `pressed_callback_` can be provided to override default press handling.
   if (pressed_callback_) {
     pressed_callback_.Run(event);

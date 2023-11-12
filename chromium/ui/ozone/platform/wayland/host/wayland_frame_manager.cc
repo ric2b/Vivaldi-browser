@@ -62,6 +62,7 @@ uint32_t GetPresentationKindFlags(uint32_t flags) {
 
 WaylandFrame::WaylandFrame(
     uint32_t frame_id,
+    int64_t seq,
     WaylandSurface* root_surface,
     wl::WaylandOverlayConfig root_config,
     base::circular_deque<
@@ -72,7 +73,8 @@ WaylandFrame::WaylandFrame(
       root_config(std::move(root_config)),
       subsurfaces_to_overlays(std::move(subsurfaces_to_overlays)),
       submission_acked(false),
-      presentation_acked(false) {}
+      presentation_acked(false),
+      seq(seq) {}
 
 WaylandFrame::WaylandFrame(
     WaylandSurface* root_surface,
@@ -93,6 +95,8 @@ WaylandFrameManager::WaylandFrameManager(WaylandWindow* window,
     : window_(window), connection_(connection), weak_factory_(this) {
   if (!connection->zaura_shell() ||
       connection->zaura_shell()->HasBugFix(1358908)) {
+    // TODO(msisov): if this gets removed at some point, the
+    // WaylandSurfaceFactoryTest can also stop sending this bug fix.
     potential_compositor_buffer_lock = false;
   }
 }
@@ -111,7 +115,7 @@ void WaylandFrameManager::RecordFrame(std::unique_ptr<WaylandFrame> frame) {
   // time this frame is played back if |pending_frames_| is not empty.
   // Otherwise, there is no point to ensure wl_buffers exist as
   // MaybeProcessPendingFrame will do that as well.
-  if (!connection_->wayland_buffer_factory()->CanCreateDmabufImmed() &&
+  if (!connection_->buffer_factory()->CanCreateDmabufImmed() &&
       !pending_frames_.empty()) {
     buffer_pending_creation =
         EnsureWlBuffersExist(*frame) && !frame->buffer_lost;
@@ -155,9 +159,8 @@ void WaylandFrameManager::MaybeProcessPendingFrame() {
   const bool has_buffer_pending_creation = EnsureWlBuffersExist(*frame);
   // There are wl_buffers missing, need to wait.
   if (has_buffer_pending_creation && !frame->buffer_lost) {
-    DLOG_IF(FATAL,
-            has_buffer_pending_creation &&
-                connection_->wayland_buffer_factory()->CanCreateDmabufImmed())
+    DLOG_IF(FATAL, has_buffer_pending_creation &&
+                       connection_->buffer_factory()->CanCreateDmabufImmed())
         << "Buffers should have been created immediately.";
     return;
   }
@@ -334,7 +337,7 @@ void WaylandFrameManager::ApplySurfaceConfigure(
       &WaylandFrameManager::FeedbackDiscarded};
 
   surface->set_buffer_transform(config.transform);
-  surface->set_surface_buffer_scale(ceil(config.surface_scale_factor));
+  surface->set_surface_buffer_scale(config.surface_scale_factor);
   surface->set_buffer_crop(config.crop_rect);
   surface->set_viewport_destination(config.bounds_rect.size());
   surface->set_opacity(config.opacity);
@@ -426,7 +429,7 @@ void WaylandFrameManager::ApplySurfaceConfigure(
 void WaylandFrameManager::FrameCallbackDone(void* data,
                                             struct wl_callback* callback,
                                             uint32_t time) {
-  WaylandFrameManager* self = static_cast<WaylandFrameManager*>(data);
+  auto* self = static_cast<WaylandFrameManager*>(data);
   DCHECK(self);
   self->OnFrameCallback(callback);
 }
@@ -454,7 +457,7 @@ void WaylandFrameManager::FeedbackPresented(
     uint32_t seq_hi,
     uint32_t seq_lo,
     uint32_t flags) {
-  WaylandFrameManager* self = static_cast<WaylandFrameManager*>(data);
+  auto* self = static_cast<WaylandFrameManager*>(data);
   DCHECK(self);
   self->OnPresentation(
       wp_presentation_feedback,
@@ -468,7 +471,7 @@ void WaylandFrameManager::FeedbackPresented(
 void WaylandFrameManager::FeedbackDiscarded(
     void* data,
     struct wp_presentation_feedback* wp_presentation_feedback) {
-  WaylandFrameManager* self = static_cast<WaylandFrameManager*>(data);
+  auto* self = static_cast<WaylandFrameManager*>(data);
   DCHECK(self);
   self->OnPresentation(wp_presentation_feedback,
                        gfx::PresentationFeedback::Failure(),

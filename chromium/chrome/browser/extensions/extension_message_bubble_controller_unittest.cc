@@ -203,7 +203,7 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
                             .Set("name", std::string("Extension " + index))
                             .Set("version", "1.0")
                             .Set("manifest_version", 2)
-                            .Build());
+                            .BuildDict());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -224,8 +224,8 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
             .Set("manifest_version", 2)
             .Set("browser_action", DictionaryBuilder()
                                        .Set("default_title", "Default title")
-                                       .Build())
-            .Build());
+                                       .BuildDict())
+            .BuildDict());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -247,8 +247,8 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
                             .Set("chrome_settings_overrides",
                                  DictionaryBuilder()
                                      .Set("homepage", "http://www.google.com")
-                                     .Build())
-                            .Build());
+                                     .BuildDict())
+                            .BuildDict());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -270,10 +270,11 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
             .Set("manifest_version", 2)
             .Set("chrome_settings_overrides",
                  DictionaryBuilder()
-                     .Set("startup_pages",
-                          ListBuilder().Append("http://www.google.com").Build())
-                     .Build())
-            .Build());
+                     .Set("startup_pages", ListBuilder()
+                                               .Append("http://www.google.com")
+                                               .BuildList())
+                     .BuildDict())
+            .BuildDict());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -294,8 +295,8 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
             .Set("version", "1.0")
             .Set("manifest_version", 2)
             .Set("chrome_url_overrides",
-                 DictionaryBuilder().Set("newtab", "Default.html").Build())
-            .Build());
+                 DictionaryBuilder().Set("newtab", "Default.html").BuildDict())
+            .BuildDict());
 
     builder.SetLocation(location);
     builder.SetID(id);
@@ -316,8 +317,8 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
             .Set("name", std::string("Extension " + index))
             .Set("version", "1.0")
             .Set("manifest_version", 2)
-            .Set("permissions", ListBuilder().Append("proxy").Build())
-            .Build());
+            .Set("permissions", ListBuilder().Append("proxy").BuildList())
+            .BuildDict());
 
     builder.SetLocation(location);
     builder.SetID(id);
@@ -720,11 +721,6 @@ TEST_F(ExtensionMessageBubbleTest, ShowDevModeBubbleOncePerOriginalProfile) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 TEST_F(ExtensionMessageBubbleTest, SettingsApiControllerTest) {
-#if BUILDFLAG(IS_MAC)
-  // On Mac, this API is limited to trunk.
-  ScopedCurrentChannel scoped_channel(version_info::Channel::UNKNOWN);
-#endif  // BUILDFLAG(IS_MAC)
-
   Init();
 
   for (int i = 0; i < 3; ++i) {
@@ -1001,7 +997,7 @@ void SetInstallTime(const std::string& extension_id,
                     const base::Time& time,
                     ExtensionPrefs* prefs) {
   std::string time_str = base::NumberToString(time.ToInternalValue());
-  prefs->UpdateExtensionPref(extension_id, "install_time",
+  prefs->UpdateExtensionPref(extension_id, "last_update_time",
                              std::make_unique<base::Value>(time_str));
 }
 

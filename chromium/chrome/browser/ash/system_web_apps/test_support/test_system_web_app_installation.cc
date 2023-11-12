@@ -23,6 +23,8 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/common/url_constants.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/webui/webui_allowlist.h"
 
 namespace ash {
@@ -110,8 +112,11 @@ UnittestingSystemAppDelegate::GetAppIdsToUninstallAndReplace() const {
 gfx::Size UnittestingSystemAppDelegate::GetMinimumWindowSize() const {
   return minimum_window_size_;
 }
-bool UnittestingSystemAppDelegate::ShouldReuseExistingWindow() const {
-  return single_window_;
+Browser* UnittestingSystemAppDelegate::GetWindowForLaunch(
+    Profile* profile,
+    const GURL& url) const {
+  return single_window_ ? SystemWebAppDelegate::GetWindowForLaunch(profile, url)
+                        : nullptr;
 }
 bool UnittestingSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
   return show_new_window_menu_option_;
@@ -190,6 +195,9 @@ bool UnittestingSystemAppDelegate::IsUrlInSystemAppScope(
 }
 bool UnittestingSystemAppDelegate::PreferManifestBackgroundColor() const {
   return prefer_manifest_background_color_;
+}
+bool UnittestingSystemAppDelegate::UseSystemThemeColor() const {
+  return use_system_theme_color_;
 }
 #if BUILDFLAG(IS_CHROMEOS)
 bool UnittestingSystemAppDelegate::ShouldAnimateThemeChanges() const {
@@ -273,6 +281,9 @@ void UnittestingSystemAppDelegate::SetPreferManifestBackgroundColor(
     bool value) {
   prefer_manifest_background_color_ = value;
 }
+void UnittestingSystemAppDelegate::SetUseSystemThemeColor(bool value) {
+  use_system_theme_color_ = value;
+}
 #if BUILDFLAG(IS_CHROMEOS)
 void UnittestingSystemAppDelegate::SetShouldAnimateThemeChanges(bool value) {
   should_animate_theme_changes_ = value;
@@ -348,6 +359,20 @@ GenerateWebAppInstallInfoForTestAppUntrusted() {
   auto info = GenerateWebAppInstallInfoForTestApp();
   info->start_url = GURL("chrome-untrusted://test-system-app/pwa.html");
   info->scope = GURL("chrome-untrusted://test-system-app/");
+  return info;
+}
+
+std::unique_ptr<WebAppInstallInfo> GenerateWebAppInstallInfoWithValidIcons() {
+  const SquareSizePx icon_size = 256;
+  auto info = GenerateWebAppInstallInfoForTestApp();
+  info->manifest_icons.emplace_back(info->start_url.Resolve("test.png"),
+                                    icon_size);
+
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(icon_size, icon_size, true);
+  bitmap.eraseColor(SK_ColorBLUE);
+  info->icon_bitmaps.any[icon_size] = bitmap;
+
   return info;
 }
 
@@ -781,6 +806,19 @@ TestSystemWebAppInstallation::SetUpAppWithColors(
       new TestSystemWebAppInstallation(std::move(delegate)));
 }
 
+// static
+std::unique_ptr<TestSystemWebAppInstallation>
+TestSystemWebAppInstallation::SetUpAppWithValidIcons() {
+  auto delegate = std::make_unique<UnittestingSystemAppDelegate>(
+      SystemWebAppType::SETTINGS, "Test",
+      GURL("chrome://test-system-app/pwa.html"), base::BindRepeating([]() {
+        return GenerateWebAppInstallInfoWithValidIcons();
+      }));
+
+  return base::WrapUnique(
+      new TestSystemWebAppInstallation(std::move(delegate)));
+}
+
 std::unique_ptr<KeyedService>
 TestSystemWebAppInstallation::CreateWebAppProvider(Profile* profile) {
   profile_ = profile;
@@ -804,17 +842,12 @@ TestSystemWebAppInstallation::CreateSystemWebAppManager(
                          profile);
   }
 
-  web_app::WebAppProvider* provider =
-      web_app::WebAppProvider::GetForLocalAppsUnchecked(profile);
-  DCHECK(provider);
-
   auto system_web_app_manager = std::make_unique<SystemWebAppManager>(profile);
 
   system_web_app_manager->SetSystemAppsForTesting(
       std::move(system_app_delegates_));
   system_web_app_manager->SetUpdatePolicyForTesting(update_policy_);
 
-  system_web_app_manager->ConnectSubsystems(provider);
   system_web_app_manager->ScheduleStart();
 
   const url::Origin app_origin = url::Origin::Create(delegate->GetInstallUrl());
@@ -831,16 +864,11 @@ TestSystemWebAppInstallation::CreateSystemWebAppManagerWithNoSystemWebApps(
   // `CreateWebAppProvider` gets called first and assigns `profile_`.
   DCHECK_EQ(profile_, profile);
 
-  web_app::WebAppProvider* provider =
-      web_app::WebAppProvider::GetForLocalAppsUnchecked(profile);
-  DCHECK(provider);
-
   auto system_web_app_manager = std::make_unique<SystemWebAppManager>(profile);
 
   system_web_app_manager->SetSystemAppsForTesting({});
   system_web_app_manager->SetUpdatePolicyForTesting(update_policy_);
 
-  system_web_app_manager->ConnectSubsystems(provider);
   system_web_app_manager->ScheduleStart();
 
   return system_web_app_manager;
@@ -852,8 +880,8 @@ void TestSystemWebAppInstallation::WaitForAppInstall() {
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Wait one execution loop for on_apps_synchronized() to be
         // called on all listeners.
-        base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                      run_loop.QuitClosure());
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, run_loop.QuitClosure());
       }));
   run_loop.Run();
 }
@@ -866,7 +894,7 @@ web_app::AppId TestSystemWebAppInstallation::GetAppId() {
 
 const GURL& TestSystemWebAppInstallation::GetAppUrl() {
   return web_app::WebAppProvider::GetForTest(profile_)
-      ->registrar()
+      ->registrar_unsafe()
       .GetAppStartUrl(GetAppId());
 }
 

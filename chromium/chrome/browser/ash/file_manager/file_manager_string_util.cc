@@ -14,9 +14,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
@@ -345,6 +349,16 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("TRASH_NUDGE_LABEL", IDS_FILE_BROWSER_TRASH_NUDGE_LABEL);
   SET_STRING("CONFIRM_DELETE_ONE", IDS_FILE_BROWSER_CONFIRM_DELETE_ONE);
   SET_STRING("CONFIRM_DELETE_SOME", IDS_FILE_BROWSER_CONFIRM_DELETE_SOME);
+  SET_STRING("CONFIRM_PERMANENTLY_DELETE_ONE_TITLE",
+             IDS_FILE_BROWSER_CONFIRM_PERMANENTLY_DELETE_ONE_TITLE);
+  SET_STRING("CONFIRM_PERMANENTLY_DELETE_SOME_TITLE",
+             IDS_FILE_BROWSER_CONFIRM_PERMANENTLY_DELETE_SOME_TITLE);
+  SET_STRING("CONFIRM_PERMANENTLY_DELETE_ONE_DESC",
+             IDS_FILE_BROWSER_CONFIRM_PERMANENTLY_DELETE_ONE_DESC);
+  SET_STRING("CONFIRM_PERMANENTLY_DELETE_SOME_DESC",
+             IDS_FILE_BROWSER_CONFIRM_PERMANENTLY_DELETE_SOME_DESC);
+  SET_STRING("PERMANENTLY_DELETE_FOREVER",
+             IDS_FILE_BROWSER_PERMANENTLY_DELETE_FOREVER);
   SET_STRING("CANT_RESTORE_SINGLE_ITEM",
              IDS_FILE_BROWSER_CANT_RESTORE_TRASHED_SINGLE_ITEM);
   SET_STRING("CANT_RESTORE_MULTIPLE_ITEMS_SAME_PARENTS",
@@ -354,12 +368,12 @@ void AddStringsGeneric(base::Value::Dict* dict) {
       IDS_FILE_BROWSER_CANT_RESTORE_TRASHED_MULTIPLE_ITEMS_DIFFERENT_PARENTS);
   SET_STRING("CANT_RESTORE_SOME_ITEMS",
              IDS_FILE_BROWSER_CANT_RESTORE_TRASHED_SOME_ITEMS);
+  SET_STRING("CONFLICT_DIALOG_MESSAGE",
+             IDS_FILE_BROWSER_CONFLICT_DIALOG_MESSAGE);
   SET_STRING("CONFLICT_DIALOG_APPLY_TO_ALL",
              IDS_FILE_BROWSER_CONFLICT_DIALOG_APPLY_TO_ALL);
   SET_STRING("CONFLICT_DIALOG_KEEP_BOTH",
              IDS_FILE_BROWSER_CONFLICT_DIALOG_KEEP_BOTH);
-  SET_STRING("CONFLICT_DIALOG_MESSAGE",
-             IDS_FILE_BROWSER_CONFLICT_DIALOG_MESSAGE);
   SET_STRING("CONFLICT_DIALOG_REPLACE",
              IDS_FILE_BROWSER_CONFLICT_DIALOG_REPLACE);
   SET_STRING("COPY_BUTTON_LABEL", IDS_FILE_BROWSER_COPY_BUTTON_LABEL);
@@ -465,6 +479,10 @@ void AddStringsGeneric(base::Value::Dict* dict) {
              IDS_FILE_BROWSER_FOLDER_SHARED_WITH_PLUGIN_VM);
   SET_STRING("FOLDER_SHARED_WITH_PLUGIN_VM_PLURAL",
              IDS_FILE_BROWSER_FOLDER_SHARED_WITH_PLUGIN_VM_PLURAL);
+  SET_STRING("FOLDER_SHARED_WITH_BRUSCHETTA",
+             IDS_FILE_BROWSER_FOLDER_SHARED_WITH_BRUSCHETTA);
+  SET_STRING("FOLDER_SHARED_WITH_BRUSCHETTA_PLURAL",
+             IDS_FILE_BROWSER_FOLDER_SHARED_WITH_BRUSCHETTA_PLURAL);
   SET_STRING("FORMATTING_FINISHED_FAILURE_MESSAGE",
              IDS_FORMATTING_FINISHED_FAILURE_MESSAGE);
   SET_STRING("FORMATTING_FINISHED_SUCCESS_MESSAGE",
@@ -748,6 +766,35 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("SEARCH_A11Y_RESULT", IDS_FILE_BROWSER_SEARCH_A11Y_RESULT);
   SET_STRING("SEARCH_A11Y_CLEAR_SEARCH",
              IDS_FILE_BROWSER_SEARCH_A11Y_CLEAR_SEARCH);
+  SET_STRING("SEARCH_OPTIONS_LOCATION_EVERYWHERE",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_EVERYWHERE);
+  SET_STRING("SEARCH_OPTIONS_LOCATION_THIS_CHROMEBOOK",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_THIS_CHROMEBOOK);
+  SET_STRING("SEARCH_OPTIONS_LOCATION_THIS_FOLDER",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_THIS_FOLDER);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_ALL_TIME",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_ALL_TIME);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_TODAY",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_TODAY);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_YESTERDAY",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_YESTERDAY);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_LAST_WEEK",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_LAST_WEEK);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_LAST_MONTH",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_LAST_MONTH);
+  SET_STRING("SEARCH_OPTIONS_RECENCY_LAST_YEAR",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_RECENCY_LAST_YEAR);
+  SET_STRING("SEARCH_OPTIONS_TYPES_ALL_TYPES",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_TYPES_ALL_TYPES);
+  SET_STRING("SEARCH_OPTIONS_TYPES_AUDIO",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_TYPES_AUDIO);
+  SET_STRING("SEARCH_OPTIONS_TYPES_DOCUMENTS",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_TYPES_DOCUMENTS);
+  SET_STRING("SEARCH_OPTIONS_TYPES_IMAGES",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_TYPES_IMAGES);
+  SET_STRING("SEARCH_OPTIONS_TYPES_VIDEOS",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_TYPES_VIDEOS);
+
   SET_STRING("SELECT_ALL_COMMAND_LABEL",
              IDS_FILE_BROWSER_SELECT_ALL_COMMAND_LABEL);
   SET_STRING("SHOW_PROVIDERS_BUTTON_LABEL",
@@ -768,6 +815,10 @@ void AddStringsGeneric(base::Value::Dict* dict) {
              IDS_FILE_BROWSER_SHARE_WITH_PLUGIN_VM_BUTTON_LABEL);
   SET_STRING("MANAGE_PLUGIN_VM_SHARING_BUTTON_LABEL",
              IDS_FILE_BROWSER_MANAGE_PLUGIN_VM_SHARING_BUTTON_LABEL);
+  SET_STRING("SHARE_WITH_BRUSCHETTA_BUTTON_LABEL",
+             IDS_FILE_BROWSER_SHARE_WITH_BRUSCHETTA_BUTTON_LABEL);
+  SET_STRING("MANAGE_BRUSCHETTA_SHARING_BUTTON_LABEL",
+             IDS_FILE_BROWSER_MANAGE_BRUSCHETTA_SHARING_BUTTON_LABEL);
   SET_STRING(
       "UNABLE_TO_DROP_IN_PLUGIN_VM_DIRECTORY_NOT_SHARED_MESSAGE",
       IDS_FILE_BROWSER_UNABLE_TO_DROP_IN_PLUGIN_VM_DIRECTORY_NOT_SHARED_MESSAGE);
@@ -805,6 +856,12 @@ void AddStringsGeneric(base::Value::Dict* dict) {
              IDS_FILE_BROWSER_SHARE_ROOT_FOLDER_WITH_PLUGIN_VM);
   SET_STRING("SHARE_ROOT_FOLDER_WITH_PLUGIN_VM_DRIVE",
              IDS_FILE_BROWSER_SHARE_ROOT_FOLDER_WITH_PLUGIN_VM_DRIVE);
+  SET_STRING("SHARE_ROOT_FOLDER_WITH_BRUSCHETTA_TITLE",
+             IDS_FILE_BROWSER_SHARE_ROOT_FOLDER_WITH_BRUSCHETTA_TITLE);
+  SET_STRING("SHARE_ROOT_FOLDER_WITH_BRUSCHETTA",
+             IDS_FILE_BROWSER_SHARE_ROOT_FOLDER_WITH_BRUSCHETTA);
+  SET_STRING("SHARE_ROOT_FOLDER_WITH_BRUSCHETTA_DRIVE",
+             IDS_FILE_BROWSER_SHARE_ROOT_FOLDER_WITH_BRUSCHETTA_DRIVE);
   SET_STRING("SIZE_BYTES", IDS_FILE_BROWSER_SIZE_BYTES);
   SET_STRING("SIZE_COLUMN_LABEL", IDS_FILE_BROWSER_SIZE_COLUMN_LABEL);
   SET_STRING("COLUMN_ASC_SORT_MESSAGE",
@@ -873,7 +930,8 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("TASK_OPEN_GDOC", IDS_FILE_BROWSER_TASK_OPEN_GDOC);
   SET_STRING("TASK_OPEN_GSHEET", IDS_FILE_BROWSER_TASK_OPEN_GSHEET);
   SET_STRING("TASK_OPEN_GSLIDES", IDS_FILE_BROWSER_TASK_OPEN_GSLIDES);
-  SET_STRING("TASK_OPEN_OFFICE", IDS_FILE_BROWSER_TASK_OPEN_OFFICE);
+  SET_STRING("TASK_OPEN_MICROSOFT_365",
+             IDS_FILE_BROWSER_TASK_OPEN_MICROSOFT_365);
   SET_STRING("TASK_VIEW", IDS_FILE_BROWSER_TASK_VIEW);
   SET_STRING("THUMBNAIL_VIEW_TOOLTIP", IDS_FILE_BROWSER_THUMBNAIL_VIEW_TOOLTIP);
   SET_STRING("TIME_REMAINING_ESTIMATE",
@@ -1041,43 +1099,31 @@ void AddFileManagerFeatureStrings(const std::string& locale,
             base::FeatureList::IsEnabled(arc::kUsbStorageUIFeature));
   dict->Set("ARC_ENABLE_VIRTIO_BLK_FOR_DATA",
             base::FeatureList::IsEnabled(arc::kEnableVirtioBlkForData));
-  dict->Set("CROSTINI_ENABLED",
-            crostini::CrostiniFeatures::Get()->IsEnabled(profile));
-  dict->Set("PLUGIN_VM_ENABLED",
-            plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile));
   dict->Set("FILES_SEARCH_V2",
-            base::FeatureList::IsEnabled(chromeos::features::kFilesSearchV2));
+            base::FeatureList::IsEnabled(ash::features::kFilesSearchV2));
   dict->Set("FILES_TRASH_ENABLED",
-            base::FeatureList::IsEnabled(chromeos::features::kFilesTrash));
+            base::FeatureList::IsEnabled(ash::features::kFilesTrash));
   dict->Set("DRIVE_DSS_PIN_ENABLED",
             base::FeatureList::IsEnabled(
-                chromeos::features::kDriveFsBidirectionalNativeMessaging));
+                ash::features::kDriveFsBidirectionalNativeMessaging));
+  dict->Set("FILTERS_IN_RECENTS_V2_ENABLED",
+            base::FeatureList::IsEnabled(ash::features::kFiltersInRecentsV2));
   dict->Set(
-      "FILTERS_IN_RECENTS_V2_ENABLED",
-      base::FeatureList::IsEnabled(chromeos::features::kFiltersInRecentsV2));
-  dict->Set("FILES_SINGLE_PARTITION_FORMAT_ENABLED",
-            base::FeatureList::IsEnabled(
-                chromeos::features::kFilesSinglePartitionFormat));
-  dict->Set("EXTRACT_ARCHIVE", base::FeatureList::IsEnabled(
-                                   chromeos::features::kFilesExtractArchive));
-  dict->Set(
-      "FILES_APP_EXPERIMENTAL",
-      base::FeatureList::IsEnabled(chromeos::features::kFilesAppExperimental));
-
-  dict->Set("FUSEBOX",
-            base::FeatureList::IsEnabled(chromeos::features::kFuseBox));
+      "FILES_SINGLE_PARTITION_FORMAT_ENABLED",
+      base::FeatureList::IsEnabled(ash::features::kFilesSinglePartitionFormat));
+  dict->Set("FILES_APP_EXPERIMENTAL",
+            base::FeatureList::IsEnabled(ash::features::kFilesAppExperimental));
 
   dict->Set("FUSEBOX_DEBUG",
-            base::FeatureList::IsEnabled(chromeos::features::kFuseBoxDebug));
+            base::FeatureList::IsEnabled(ash::features::kFuseBoxDebug));
 
-  dict->Set("DRIVEFS_MIRRORING",
-            chromeos::features::IsDriveFsMirroringEnabled());
+  dict->Set("DRIVEFS_MIRRORING", ash::features::IsDriveFsMirroringEnabled());
 
-  dict->Set("INLINE_SYNC_STATUS",
-            chromeos::features::IsInlineSyncStatusEnabled());
+  dict->Set("INLINE_SYNC_STATUS", ash::features::IsInlineSyncStatusEnabled());
 
-  dict->Set("GUEST_OS",
-            base::FeatureList::IsEnabled(chromeos::features::kGuestOsFiles));
+  dict->Set("GUEST_OS", true);
+
+  dict->Set("JELLY", base::FeatureList::IsEnabled(ash::features::kJelly));
 
   if (base::FeatureList::IsEnabled(features::kDataLeakPreventionPolicy) &&
       base::FeatureList::IsEnabled(
@@ -1092,4 +1138,15 @@ void AddFileManagerFeatureStrings(const std::string& locale,
 
   dict->Set("UI_LOCALE", locale);
   dict->Set("WEEK_START_FROM", GetLocaleBasedWeekStart());
+  base::Value::List vms;
+  auto* share_path = guest_os::GuestOsSharePath::GetForProfile(profile);
+  if (share_path) {
+    for (const auto& guest : share_path->ListGuests()) {
+      base::Value::Dict d;
+      d.Set("vmName", guest.vm_name);
+      d.Set("containerName", guest.container_name);
+      vms.Append(std::move(d));
+    }
+  }
+  dict->Set("VMS_FOR_SHARING", std::move(vms));
 }

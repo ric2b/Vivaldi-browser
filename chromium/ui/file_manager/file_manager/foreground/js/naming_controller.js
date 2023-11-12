@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {getFile} from '../../common/js/api.js';
+import {getKeyModifiers} from '../../common/js/dom_utils.js';
 import {strf, UserCanceledError, util} from '../../common/js/util.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 
@@ -232,7 +233,7 @@ export class NamingController {
       event.stopPropagation();
     }
 
-    switch (util.getKeyModifiers(event) + event.key) {
+    switch (getKeyModifiers(event) + event.key) {
       case 'Escape':
         this.cancelRename_();
         event.preventDefault();

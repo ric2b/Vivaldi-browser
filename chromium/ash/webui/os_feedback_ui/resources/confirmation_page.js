@@ -13,6 +13,7 @@ import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v
 
 import {FeedbackFlowState} from './feedback_flow.js';
 import {FeedbackAppPostSubmitAction, FeedbackServiceProviderInterface, SendReportStatus} from './feedback_types.js';
+import {showScrollingEffects} from './feedback_utils.js';
 import {getFeedbackServiceProvider} from './mojo_interface_provider.js';
 
 /**
@@ -134,7 +135,7 @@ export class ConfirmationPageElement extends ConfirmationPageElementBase {
   handleLinkClicked_(e) {
     e.stopPropagation();
 
-    switch (e.target.id) {
+    switch (e.currentTarget.id) {
       case 'diagnostics':
         this.feedbackServiceProvider_.openDiagnosticsApp();
         this.handleEmitMetrics_(
@@ -154,7 +155,7 @@ export class ConfirmationPageElement extends ConfirmationPageElementBase {
             FeedbackAppPostSubmitAction.kOpenChromebookCommunity);
         break;
       default:
-        console.warn('unexpected caller id: ', e.target.id);
+        console.warn('unexpected caller id: ', e.currentTarget.id);
     }
   }
 
@@ -163,6 +164,18 @@ export class ConfirmationPageElement extends ConfirmationPageElementBase {
       this.isFirstAction = false;
       this.feedbackServiceProvider_.recordPostSubmitAction(action);
     }
+  }
+
+  focusPageTitle() {
+    this.shadowRoot.querySelector('#pageTitle').focus();
+  }
+
+  /**
+   * @param {!Event} event
+   * @protected
+   */
+  onContainerScroll_(event) {
+    showScrollingEffects(event, this);
   }
 }
 

@@ -57,7 +57,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/system/fake_statistics_provider.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #endif
 
 namespace safe_browsing {
@@ -143,6 +143,8 @@ class FakeBinaryUploadService : public BinaryUploadService {
     ++num_acks_;
     ASSERT_TRUE(base::Contains(requests_tokens_, ack->ack().request_token()));
   }
+
+  void MaybeCancelRequests(std::unique_ptr<CancelRequests> cancel) override {}
 
   void SetResponse(const base::FilePath& path,
                    BinaryUploadService::Result result,
@@ -471,6 +473,11 @@ TEST_F(DeepScanningRequestAllFeaturesEnabledTest,
                   .request_data()
                   .url(),
               download_url_.spec());
+    EXPECT_EQ(download_protection_service_.GetFakeBinaryUploadService()
+                  ->last_request()
+                  .request_data()
+                  .tab_url(),
+              GURL("https://example.com"));
     EXPECT_EQ(download_protection_service_.GetFakeBinaryUploadService()
                   ->last_request()
                   .request_data()
@@ -1832,6 +1839,11 @@ TEST_F(DeepScanningRequestAllFeaturesEnabledTest, PopulatesRequest) {
                 .request_data()
                 .content_type(),
             "application/octet-stream");
+  EXPECT_EQ(download_protection_service_.GetFakeBinaryUploadService()
+                ->last_request()
+                .request_data()
+                .tab_url(),
+            GURL("https://example.com"));
 }
 
 }  // namespace safe_browsing

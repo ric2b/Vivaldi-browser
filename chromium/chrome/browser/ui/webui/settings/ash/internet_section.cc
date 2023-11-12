@@ -30,16 +30,31 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
-#include "ui/chromeos/strings/network_element_localized_strings_provider.h"
-
-namespace chromeos {
-namespace settings {
+#include "ui/chromeos/strings/network/network_element_localized_strings_provider.h"
 
 // TODO(https://crbug.com/1164001): remove after migrating to ash.
+namespace ash::network_config {
+namespace mojom = chromeos::network_config::mojom;
+}
+
+namespace ash::settings {
+
 namespace mojom {
-using ::ash::settings::mojom::SearchResultDefaultRank;
-using ::ash::settings::mojom::SearchResultIcon;
-using ::ash::settings::mojom::SearchResultType;
+using ::chromeos::settings::mojom::kApnSubpagePath;
+using ::chromeos::settings::mojom::kCellularDetailsSubpagePath;
+using ::chromeos::settings::mojom::kCellularNetworksSubpagePath;
+using ::chromeos::settings::mojom::kEthernetDetailsSubpagePath;
+using ::chromeos::settings::mojom::kHotspotSubpagePath;
+using ::chromeos::settings::mojom::kKnownNetworksSubpagePath;
+using ::chromeos::settings::mojom::kMobileDataNetworksSubpagePath;
+using ::chromeos::settings::mojom::kNetworkSectionPath;
+using ::chromeos::settings::mojom::kTetherDetailsSubpagePath;
+using ::chromeos::settings::mojom::kVpnDetailsSubpagePath;
+using ::chromeos::settings::mojom::kWifiDetailsSubpagePath;
+using ::chromeos::settings::mojom::kWifiNetworksSubpagePath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
 }  // namespace mojom
 
 namespace {
@@ -421,7 +436,9 @@ const std::vector<SearchConcept>& GetInstantTetheringSearchConcepts() {
        mojom::SearchResultIcon::kInstantTethering,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kMobileDataNetworks}},
+       {.subpage = mojom::Subpage::kMobileDataNetworks},
+       {IDS_OS_SETTINGS_TAG_INSTANT_MOBILE_NETWORKS_ALT1,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -608,8 +625,7 @@ InternetSection::InternetSection(Profile* profile,
   updater.AddSearchTags(GetNetworkSearchConcepts());
 
   // Receive updates when devices (e.g., Ethernet, Wi-Fi) go on/offline.
-  ash::GetNetworkConfigService(
-      cros_network_config_.BindNewPipeAndPassReceiver());
+  GetNetworkConfigService(cros_network_config_.BindNewPipeAndPassReceiver());
   cros_network_config_->AddObserver(receiver_.BindNewPipeAndPassRemote());
 
   // Fetch initial list of devices and active networks.
@@ -840,6 +856,16 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_REFRESHING_PROFILE_LIST},
       {"cellularNetworkResettingESim",
        IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_RESETTING_ESIM},
+      {"hotspotPageTitle", IDS_SETTINGS_INTERNET_HOTSPOT},
+      {"hotspotToggleA11yLabel",
+       IDS_SETTINGS_INTERNET_HOTSPOT_TOGGLE_A11Y_LABEL},
+      {"hotspotSummaryStateOn", IDS_SETTINGS_INTERNET_HOTSPOT_SUMMARY_STATE_ON},
+      {"hotspotSummaryStateOff",
+       IDS_SETTINGS_INTERNET_HOTSPOT_SUMMARY_STATE_OFF},
+      {"hotspotEnabledA11yLabel",
+       IDS_SETTINGS_INTERNET_HOTSPOT_ENABLED_A11Y_LABEL},
+      {"hotspotDisabledA11yLabel",
+       IDS_SETTINGS_INTERNET_HOTSPOT_DISABLED_A11Y_LABEL},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -850,13 +876,13 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   ui::network_element::AddErrorLocalizedStrings(html_source);
   cellular_setup::AddNonStringLoadTimeData(html_source);
   cellular_setup::AddLocalizedStrings(html_source);
-  chromeos::network_health::AddResources(html_source);
-  chromeos::traffic_counters::AddResources(html_source);
+  network_health::AddResources(html_source);
+  traffic_counters::AddResources(html_source);
 
   html_source->AddBoolean(
       "bypassConnectivityCheck",
       base::FeatureList::IsEnabled(
-          ash::features::kCellularBypassESimInstallationConnectivityCheck));
+          features::kCellularBypassESimInstallationConnectivityCheck));
   html_source->AddBoolean("showTechnologyBadge",
                           !ash::features::IsSeparateNetworkIconsEnabled());
   html_source->AddBoolean("captivePortalUI2022",
@@ -867,6 +893,8 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showHiddenToggle",
       base::FeatureList::IsEnabled(::features::kShowHiddenNetworkToggle));
+  html_source->AddBoolean("isHotspotEnabled",
+                          ash::features::IsHotspotEnabled());
 
   html_source->AddString("networkGoogleNameserversLearnMoreUrl",
                          chrome::kGoogleNameserversLearnMoreURL);
@@ -898,6 +926,13 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "tetherNetworkNotSetup",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_INTERNET_TETHER_NOT_SETUP_WITH_LEARN_MORE_LINK,
+          GetHelpUrlWithBoard(chrome::kInstantTetheringLearnMoreURL)));
+  // TODO(b/259623645): Replace learn more link with hotspot url once it is
+  // ready.
+  html_source->AddString(
+      "hotspotSubpageSubtitle",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_INTERNET_HOTSPOT_SUBTITLE_WITH_LEARN_MORE_LINK,
           GetHelpUrlWithBoard(chrome::kInstantTetheringLearnMoreURL)));
 }
 
@@ -982,7 +1017,6 @@ void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                                       mojom::Subpage::kKnownNetworks);
   generator->RegisterNestedAltSetting(mojom::Setting::kForgetWifiNetwork,
                                       mojom::Subpage::kKnownNetworks);
-
   // Mobile data. Used for both Cellular and Instant Tethering networks.
   generator->RegisterTopLevelSubpage(IDS_SETTINGS_INTERNET_MOBILE_DATA_NETWORKS,
                                      mojom::Subpage::kMobileDataNetworks,
@@ -1007,6 +1041,18 @@ void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::kCellularDetailsSubpagePath);
   RegisterNestedSettingBulk(mojom::Subpage::kCellularDetails,
                             GetCellularDetailsSettings(), generator);
+
+  // Hotspot details.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_INTERNET_HOTSPOT_DETAILS, mojom::Subpage::kHotspotDetails,
+      mojom::SearchResultIcon::kCellular,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kHotspotSubpagePath);
+
+  // APN.
+  generator->RegisterNestedSubpage(
+      IDS_SETTINGS_INTERNET_NETWORK_ACCESS_POINT, mojom::Subpage::kApn,
+      mojom::Subpage::kCellularDetails, mojom::SearchResultIcon::kCellular,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kApnSubpagePath);
 
   // Instant Tethering. Although this is a multi-device feature, its UI resides
   // in the network section.
@@ -1245,5 +1291,4 @@ void InternetSection::OnNetworkList(
   }
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

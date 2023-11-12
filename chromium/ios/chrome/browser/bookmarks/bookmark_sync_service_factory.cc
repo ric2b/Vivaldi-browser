@@ -11,6 +11,8 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 
+#include "ios/sync/file_store_factory.h"
+
 namespace ios {
 
 // static
@@ -31,7 +33,8 @@ BookmarkSyncServiceFactory::BookmarkSyncServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "BookmarkSyncServiceFactory",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 BookmarkSyncServiceFactory::~BookmarkSyncServiceFactory() {}
@@ -45,6 +48,8 @@ BookmarkSyncServiceFactory::BuildServiceInstanceFor(
       new sync_bookmarks::BookmarkSyncService(
           BookmarkUndoServiceFactory::GetForBrowserStateIfExists(
               browser_state)));
+  bookmark_sync_service->SetVivaldiSyncedFileStore(
+      SyncedFileStoreFactory::GetForBrowserState(browser_state));
   return bookmark_sync_service;
 }
 

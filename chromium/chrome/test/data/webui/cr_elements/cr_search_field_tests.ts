@@ -23,8 +23,7 @@ suite('cr-search-field', function() {
   }
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     // Ensure svg, which is referred to by a relative URL, is loaded from
     // chrome://resources and not chrome://test
     const base = document.createElement('base');
@@ -52,7 +51,8 @@ suite('cr-search-field', function() {
     // Need to attach listener event before the element is created, to catch
     // the unnecessary initial event.
     document.body.addEventListener('search-changed', onSearchChanged);
-    document.body.innerHTML = '<cr-search-field></cr-search-field>';
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(document.createElement('cr-search-field'));
     // Remove event listener on |body| so that other tests are not affected.
     document.body.removeEventListener('search-changed', onSearchChanged);
   });

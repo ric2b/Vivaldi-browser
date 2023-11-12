@@ -55,6 +55,12 @@ void ClientControlledShellSurfaceDelegate::OnStateChanged(
     case chromeos::WindowStateType::kFullscreen:
       shell_surface_->SetFullscreen(true);
       break;
+    case chromeos::WindowStateType::kPinned:
+      shell_surface_->SetPinned(chromeos::WindowPinType::kPinned);
+      break;
+    case chromeos::WindowStateType::kTrustedPinned:
+      shell_surface_->SetPinned(chromeos::WindowPinType::kTrustedPinned);
+      break;
     default:
       NOTIMPLEMENTED();
       break;
@@ -98,9 +104,9 @@ void ClientControlledShellSurfaceDelegate::OnBoundsChanged(
            requested_state == chromeos::WindowStateType::kSecondarySnapped);
 
     if (requested_state == chromeos::WindowStateType::kPrimarySnapped)
-      shell_surface_->SetSnappedToPrimary();
+      shell_surface_->SetSnapPrimary(chromeos::kDefaultSnapRatio);
     else
-      shell_surface_->SetSnappedToSecondary();
+      shell_surface_->SetSnapSecondary(chromeos::kDefaultSnapRatio);
   }
 
   Commit();

@@ -89,14 +89,14 @@ class AutofillDriver {
   // Forwards |data| to the renderer which shall preview or fill the values of
   // |data|'s fields into the relevant DOM elements.
   //
-  // |query_id| is the id of the renderer's original request for the data.
-  //
   // |action| is the action the renderer should perform with the |data|.
   //
   // |triggered_origin| is the origin of the field on which Autofill was
   // triggered, and |field_type_map| contains the type predictions of the fields
   // that may be previewed or filled; these two parameters can be taken into
-  // account to decide which fields to preview or fill across frames.
+  // account to decide which fields to preview or fill across frames. See
+  // FormForest::GetRendererFormsOfBrowserForm() for the details on Autofill's
+  // security policy.
   //
   // Returns the ids of those fields that are safe to fill according to the
   // security policy for cross-frame previewing and filling. This is a subset of
@@ -105,7 +105,6 @@ class AutofillDriver {
   //
   // This method is a no-op if the renderer is not currently available.
   virtual std::vector<FieldGlobalId> FillOrPreviewForm(
-      int query_id,
       mojom::RendererFormDataAction action,
       const FormData& data,
       const url::Origin& triggered_origin,

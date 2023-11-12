@@ -42,9 +42,11 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/web/web_picture_in_picture_window_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
+#include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -115,6 +117,7 @@
 #include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/create_window.h"
@@ -126,6 +129,7 @@
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+#include "third_party/blink/renderer/core/timing/soft_navigation_heuristics.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
@@ -158,6 +162,24 @@ bool IsRunningMicrotasks(ScriptState* script_state) {
     return microtask_queue->IsRunningMicrotasks();
   return v8::MicrotasksScope::IsRunningMicrotasks(script_state->GetIsolate());
 }
+
+void SetCurrentTaskAsCallbackParent(CallbackFunctionBase* callback) {
+  ScriptState* script_state = callback->CallbackRelevantScriptState();
+  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+  if (tracker && script_state->World().IsMainWorld()) {
+    callback->SetParentTaskId(tracker->RunningTaskAttributionId(script_state));
+  }
+}
+
+int RequestAnimationFrame(Document* document,
+                          V8FrameRequestCallback* callback,
+                          bool legacy) {
+  SetCurrentTaskAsCallbackParent(callback);
+  auto* frame_callback = MakeGarbageCollected<V8FrameCallback>(callback);
+  frame_callback->SetUseLegacyTimeBase(legacy);
+  return document->RequestAnimationFrame(frame_callback);
+}
+
 }  // namespace
 
 class LocalDOMWindow::NetworkStateObserver final
@@ -228,6 +250,21 @@ void LocalDOMWindow::Initialize() {
 void LocalDOMWindow::ResetWindowAgent(WindowAgent* agent) {
   GetAgent()->DetachContext(this);
   ResetAgent(agent);
+  if (document_)
+    document_->ResetAgent(*agent);
+
+  // This is only called on Android WebView, we need to reassign the microtask
+  // queue if there already is one for the associated context. There shouldn't
+  // be any other worlds with Android WebView so using the MainWorld is fine.
+  auto* microtask_queue = agent->event_loop()->microtask_queue();
+  if (microtask_queue) {
+    v8::HandleScope handle_scope(GetIsolate());
+    v8::Local<v8::Context> main_world_context =
+        ToV8ContextMaybeEmpty(GetFrame(), DOMWrapperWorld::MainWorld());
+    if (!main_world_context.IsEmpty())
+      main_world_context->SetMicrotaskQueue(microtask_queue);
+  }
+
   GetAgent()->AttachContext(this);
 }
 
@@ -522,8 +559,11 @@ scoped_refptr<base::SingleThreadTaskRunner> LocalDOMWindow::GetTaskRunner(
   // In most cases, the ExecutionContext will get us to a relevant Frame. In
   // some cases, though, there isn't a good candidate (most commonly when either
   // the passed-in document or the ExecutionContext used to be attached to a
-  // Frame but has since been detached).
-  return Thread::Current()->GetDeprecatedTaskRunner();
+  // Frame but has since been detached) so we will use the default task runner
+  // of the AgentGroupScheduler that created this window.
+  return To<WindowAgent>(GetAgent())
+      ->GetAgentGroupScheduler()
+      .DefaultTaskRunner();
 }
 
 void LocalDOMWindow::ReportPermissionsPolicyViolation(
@@ -772,11 +812,6 @@ Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init) {
   document_ = init.CreateDocument();
   document_->Initialize();
 
-  // If early body loading is turned on, UpdateDocument() will be called right
-  // after the body starts loading.
-  if (!base::FeatureList::IsEnabled(features::kEarlyBodyLoad))
-    GetScriptController().UpdateDocument();
-
   document_->GetViewportData().UpdateViewportDescription();
 
   auto* frame_scheduler = GetFrame()->GetFrameScheduler();
@@ -882,14 +917,41 @@ void LocalDOMWindow::DispatchPagehideEvent(
 
 void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
                                             const String& new_url) {
+  DCHECK(GetFrame());
+  if (GetFrame()->IsMainFrame()) {
+    if (auto* script_state = ToScriptStateForMainWorld(GetFrame())) {
+      // script_state can be nullptr here.
+      // TODO(yoav): get a better understanding of when this happens and add a
+      // test to guard against this.
+      SoftNavigationHeuristics* heuristics =
+          SoftNavigationHeuristics::From(*this);
+      heuristics->SawURLChange(script_state, new_url);
+    }
+  }
   // https://html.spec.whatwg.org/C/#history-traversal
   EnqueueWindowEvent(*HashChangeEvent::Create(old_url, new_url),
                      TaskType::kDOMManipulation);
 }
 
 void LocalDOMWindow::DispatchPopstateEvent(
-    scoped_refptr<SerializedScriptValue> state_object) {
+    scoped_refptr<SerializedScriptValue> state_object,
+    absl::optional<scheduler::TaskAttributionId>
+        soft_navigation_heuristics_task_id) {
   DCHECK(GetFrame());
+  // This unique_ptr maintains the TaskScope alive for the lifetime of the
+  // method.
+  std::unique_ptr<scheduler::TaskAttributionTracker::TaskScope>
+      task_attribution_scope;
+  if (soft_navigation_heuristics_task_id) {
+    ScriptState* script_state = ToScriptStateForMainWorld(GetFrame());
+    DCHECK(ThreadScheduler::Current());
+    auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+    if (script_state && tracker) {
+      task_attribution_scope = tracker->CreateTaskScope(
+          script_state, soft_navigation_heuristics_task_id,
+          scheduler::TaskAttributionTracker::TaskScopeType::kPopState);
+    }
+  }
   DispatchEvent(*PopStateEvent::Create(std::move(state_object), history()));
 }
 
@@ -1023,7 +1085,9 @@ Screen* LocalDOMWindow::screen() {
     int64_t display_id =
         frame ? frame->GetChromeClient().GetScreenInfo(*frame).display_id
               : Screen::kInvalidDisplayId;
-    screen_ = MakeGarbageCollected<Screen>(this, display_id);
+    screen_ = MakeGarbageCollected<Screen>(
+        this, display_id, /*use_size_override=*/
+        !RuntimeEnabledFeatures::FullscreenScreenSizeMatchesDisplayEnabled());
   }
   return screen_.Get();
 }
@@ -1036,40 +1100,40 @@ History* LocalDOMWindow::history() {
 
 BarProp* LocalDOMWindow::locationbar() {
   if (!locationbar_) {
-    locationbar_ = MakeGarbageCollected<BarProp>(this, BarProp::kLocationbar);
+    locationbar_ = MakeGarbageCollected<BarProp>(this);
   }
   return locationbar_.Get();
 }
 
 BarProp* LocalDOMWindow::menubar() {
   if (!menubar_)
-    menubar_ = MakeGarbageCollected<BarProp>(this, BarProp::kMenubar);
+    menubar_ = MakeGarbageCollected<BarProp>(this);
   return menubar_.Get();
 }
 
 BarProp* LocalDOMWindow::personalbar() {
   if (!personalbar_) {
-    personalbar_ = MakeGarbageCollected<BarProp>(this, BarProp::kPersonalbar);
+    personalbar_ = MakeGarbageCollected<BarProp>(this);
   }
   return personalbar_.Get();
 }
 
 BarProp* LocalDOMWindow::scrollbars() {
   if (!scrollbars_) {
-    scrollbars_ = MakeGarbageCollected<BarProp>(this, BarProp::kScrollbars);
+    scrollbars_ = MakeGarbageCollected<BarProp>(this);
   }
   return scrollbars_.Get();
 }
 
 BarProp* LocalDOMWindow::statusbar() {
   if (!statusbar_)
-    statusbar_ = MakeGarbageCollected<BarProp>(this, BarProp::kStatusbar);
+    statusbar_ = MakeGarbageCollected<BarProp>(this);
   return statusbar_.Get();
 }
 
 BarProp* LocalDOMWindow::toolbar() {
   if (!toolbar_)
-    toolbar_ = MakeGarbageCollected<BarProp>(this, BarProp::kToolbar);
+    toolbar_ = MakeGarbageCollected<BarProp>(this);
   return toolbar_.Get();
 }
 
@@ -1083,6 +1147,12 @@ Navigator* LocalDOMWindow::navigator() {
   if (!navigator_)
     navigator_ = MakeGarbageCollected<Navigator>(this);
   return navigator_.Get();
+}
+
+NavigationApi* LocalDOMWindow::navigation() {
+  if (!navigation_)
+    navigation_ = MakeGarbageCollected<NavigationApi>(this);
+  return navigation_.Get();
 }
 
 void LocalDOMWindow::SchedulePostMessage(PostedMessage* posted_message) {
@@ -1205,6 +1275,10 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     }
   }
 
+  if (!event->CanDeserializeIn(this)) {
+    event = MessageEvent::CreateError(event->origin(), event->source());
+  }
+
   if (GetFrame() && GetFrame()->GetPage() &&
       GetFrame()->GetPage()->DispatchedPagehideAndStillHidden() &&
       !document()->UnloadEventInProgress()) {
@@ -1249,11 +1323,7 @@ Element* LocalDOMWindow::frameElement() const {
   if (!GetFrame())
     return nullptr;
 
-  FrameOwner* owner = GetFrame()->Owner();
-  if (owner && owner->GetFramePolicy().is_fenced)
-    return nullptr;
-
-  return DynamicTo<HTMLFrameOwnerElement>(owner);
+  return DynamicTo<HTMLFrameOwnerElement>(GetFrame()->Owner());
 }
 
 void LocalDOMWindow::print(ScriptState* script_state) {
@@ -1860,16 +1930,12 @@ void LocalDOMWindow::resizeTo(int width, int height) const {
 }
 
 int LocalDOMWindow::requestAnimationFrame(V8FrameRequestCallback* callback) {
-  auto* frame_callback = MakeGarbageCollected<V8FrameCallback>(callback);
-  frame_callback->SetUseLegacyTimeBase(false);
-  return document()->RequestAnimationFrame(frame_callback);
+  return RequestAnimationFrame(document(), callback, /*legacy=*/false);
 }
 
 int LocalDOMWindow::webkitRequestAnimationFrame(
     V8FrameRequestCallback* callback) {
-  auto* frame_callback = MakeGarbageCollected<V8FrameCallback>(callback);
-  frame_callback->SetUseLegacyTimeBase(true);
-  return document()->RequestAnimationFrame(frame_callback);
+  return RequestAnimationFrame(document(), callback, /*legacy=*/true);
 }
 
 void LocalDOMWindow::cancelAnimationFrame(int id) {
@@ -1877,11 +1943,7 @@ void LocalDOMWindow::cancelAnimationFrame(int id) {
 }
 
 void LocalDOMWindow::queueMicrotask(V8VoidFunction* callback) {
-  ScriptState* script_state = callback->CallbackRelevantScriptState();
-  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
-  if (tracker && script_state->World().IsMainWorld()) {
-    callback->SetParentTaskId(tracker->RunningTaskAttributionId(script_state));
-  }
+  SetCurrentTaskAsCallbackParent(callback);
   GetAgent()->event_loop()->EnqueueMicrotask(
       WTF::BindOnce(&V8VoidFunction::InvokeAndReportException,
                     WrapPersistent(callback), nullptr));
@@ -1893,6 +1955,7 @@ bool LocalDOMWindow::originAgentCluster() const {
 
 int LocalDOMWindow::requestIdleCallback(V8IdleRequestCallback* callback,
                                         const IdleRequestOptions* options) {
+  SetCurrentTaskAsCallbackParent(callback);
   if (!GetFrame())
     return 0;
   return document_->RequestIdleCallback(V8IdleTask::Create(callback), options);
@@ -2127,6 +2190,8 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
     return nullptr;
 
   UseCounter::Count(*entered_window, WebFeature::kDOMWindowOpen);
+  entered_window->CountUseOnlyInCrossOriginIframe(
+      WebFeature::kDOMWindowOpenCrossOriginIframe);
   if (!features.empty())
     UseCounter::Count(*entered_window, WebFeature::kDOMWindowOpenFeatures);
 
@@ -2284,6 +2349,7 @@ void LocalDOMWindow::Trace(Visitor* visitor) const {
   visitor->Trace(media_);
   visitor->Trace(custom_elements_);
   visitor->Trace(external_);
+  visitor->Trace(navigation_);
   visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
   visitor->Trace(current_event_);
@@ -2306,8 +2372,8 @@ bool LocalDOMWindow::CrossOriginIsolatedCapability() const {
              mojom::blink::PermissionsPolicyFeature::kCrossOriginIsolated);
 }
 
-bool LocalDOMWindow::IsolatedApplicationCapability() const {
-  return Agent::IsIsolatedApplication();
+bool LocalDOMWindow::IsIsolatedContext() const {
+  return Agent::IsIsolatedContext();
 }
 
 ukm::UkmRecorder* LocalDOMWindow::UkmRecorder() {
@@ -2355,11 +2421,11 @@ void LocalDOMWindow::DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {
   BackForwardCacheBufferLimitTracker::Get().DidBufferBytes(num_bytes);
 }
 
-bool LocalDOMWindow::anonymouslyFramed() const {
+bool LocalDOMWindow::credentialless() const {
   return GetExecutionContext()
       ->GetPolicyContainer()
       ->GetPolicies()
-      .is_anonymous;
+      .is_credentialless;
 }
 
 bool LocalDOMWindow::IsInFencedFrame() const {

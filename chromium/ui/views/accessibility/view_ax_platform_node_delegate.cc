@@ -14,7 +14,7 @@
 #include "base/containers/adapters.h"
 #include "base/lazy_instance.h"
 #include "base/ranges/algorithm.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_dummy_tree_manager.h"
@@ -114,7 +114,8 @@ void PostFlushEventQueueTaskIfNecessary() {
   if (!g_is_queueing_events) {
     g_is_queueing_events = true;
     base::OnceCallback<void()> cb = base::BindOnce(&FlushQueue);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(cb));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                                std::move(cb));
   }
 }
 
@@ -865,9 +866,8 @@ ViewAXPlatformNodeDelegate::GetChildWidgets() const {
   Widget::GetAllOwnedWidgets(widget->GetNativeView(), &owned_widgets);
 
   std::vector<Widget*> visible_widgets;
-  std::copy_if(owned_widgets.cbegin(), owned_widgets.cend(),
-               std::back_inserter(visible_widgets),
-               [](const Widget* child) { return child->IsVisible(); });
+  base::ranges::copy_if(owned_widgets, std::back_inserter(visible_widgets),
+                        &Widget::IsVisible);
 
   // Focused child widgets should take the place of the web page they cover in
   // the accessibility tree.

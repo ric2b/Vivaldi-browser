@@ -67,14 +67,15 @@ class CalculationValueHandleMap {
 
   void DecrementRef(int index) {
     DCHECK(map_.Contains(index));
-    const CalculationValue* value = map_.at(index);
-    if (value->HasOneRef()) {
+    auto iter = map_.find(index);
+    if (iter->value->HasOneRef()) {
       // Force the CalculationValue destructor early to avoid a potential
       // recursive call inside HashMap remove().
-      map_.Set(index, nullptr);
+      iter->value = nullptr;
+      // |iter| may be invalidated during the CalculationValue destructor.
       map_.erase(index);
     } else {
-      value->Release();
+      iter->value->Release();
     }
   }
 
@@ -89,8 +90,8 @@ static CalculationValueHandleMap& CalcHandles() {
 }
 
 Length::Length(scoped_refptr<const CalculationValue> calc)
-    : quirk_(false), type_(kCalculated), is_float_(false) {
-  int_value_ = CalcHandles().insert(std::move(calc));
+    : quirk_(false), type_(kCalculated) {
+  calculation_handle_ = CalcHandles().insert(std::move(calc));
 }
 
 Length Length::BlendMixedTypes(const Length& from,
@@ -193,18 +194,6 @@ bool Length::IsCalculatedEqual(const Length& o) const {
           GetCalculationValue() == o.GetCalculationValue());
 }
 
-absl::optional<LayoutUnit> Length::AnchorEvaluator::EvaluateAnchor(
-    const AtomicString& anchor_name,
-    AnchorValue anchor_value) const {
-  return absl::nullopt;
-}
-
-absl::optional<LayoutUnit> Length::AnchorEvaluator::EvaluateAnchorSize(
-    const AtomicString& anchor_name,
-    AnchorSizeValue anchor_size_value) const {
-  return absl::nullopt;
-}
-
 bool Length::HasAnchorQueries() const {
   return IsCalculated() && GetCalculationValue().HasAnchorQueries();
 }
@@ -222,10 +211,11 @@ String Length::ToString() const {
   else
     builder.Append("?");
   builder.Append(", ");
-  if (is_float_)
-    builder.AppendNumber(float_value_);
-  else
-    builder.AppendNumber(int_value_);
+  if (IsCalculated()) {
+    builder.AppendNumber(calculation_handle_);
+  } else {
+    builder.AppendNumber(value_);
+  }
   if (quirk_)
     builder.Append(", Quirk");
   builder.Append(")");

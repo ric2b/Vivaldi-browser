@@ -17,11 +17,12 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/capture/video/mock_video_capture_device_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,9 +31,9 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/buildflags.h"
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -173,7 +174,7 @@ class FakeScreenCapturer : public webrtc::DesktopCapturer {
     }
 
     if (run_callback_asynchronously_) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&FakeScreenCapturer::RunCallback,
                                     weak_factory_.GetWeakPtr(),
                                     webrtc::DesktopCapturer::Result::SUCCESS,
@@ -275,7 +276,7 @@ TEST_F(DesktopCaptureDeviceTest, Capture) {
       webrtc::DesktopCapturer::CreateScreenCapturer(
           webrtc::DesktopCaptureOptions::CreateDefault()));
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #if !BUILDFLAG(OZONE_PLATFORM_X11)
   // webrtc::DesktopCapturer is only supported on Ozone X11 by default.
   // TODO(webrtc/13429): Enable for Wayland.
@@ -284,7 +285,7 @@ TEST_F(DesktopCaptureDeviceTest, Capture) {
   if (!capturer)
     return;
 #endif  // !BUILDFLAG(OZONE_PLATFORM_X11)
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
   CreateScreenCaptureDevice(std::move(capturer));
 
@@ -596,7 +597,8 @@ class DesktopCaptureDeviceThrottledTest : public DesktopCaptureDeviceTest {
     EXPECT_CALL(*client, OnStarted())
         .WillOnce(InvokeWithoutArgs([this, &task_runner,
                                      &message_loop_task_runner] {
-          message_loop_task_runner = base::ThreadTaskRunnerHandle::Get();
+          message_loop_task_runner =
+              base::SingleThreadTaskRunner::GetCurrentDefault();
           task_runner = new base::TestMockTimeTaskRunner(
               base::Time::Now(), base::TimeTicks::Now(),
               base::TestMockTimeTaskRunner::Type::kStandalone);

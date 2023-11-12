@@ -24,10 +24,10 @@ AXContext::~AXContext() {
 AXObjectCache& AXContext::GetAXObjectCache() {
   DCHECK(document_);
   DCHECK(document_->IsActive());
-
-  DCHECK_EQ(
-      ax_mode_.mode(),
-      document_->ExistingAXObjectCache()->GetAXMode().mode() & ax_mode_.mode());
+  DCHECK(document_->ExistingAXObjectCache());
+  DCHECK_EQ(ax_mode_.flags(),
+            document_->ExistingAXObjectCache()->GetAXMode().flags() &
+                ax_mode_.flags());
 
   return *document_->ExistingAXObjectCache();
 }
@@ -46,9 +46,9 @@ void AXContext::SetAXMode(const ui::AXMode& mode) {
   ax_mode_ = mode;
   document_->AXContextModeChanged();
 
-  DCHECK_EQ(
-      ax_mode_.mode(),
-      document_->ExistingAXObjectCache()->GetAXMode().mode() & ax_mode_.mode());
+  DCHECK_EQ(ax_mode_.flags(),
+            document_->ExistingAXObjectCache()->GetAXMode().flags() &
+                ax_mode_.flags());
 }
 
 }  // namespace blink

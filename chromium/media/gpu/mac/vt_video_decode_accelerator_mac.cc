@@ -23,6 +23,7 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/scoped_policy.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
@@ -31,9 +32,9 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -43,7 +44,6 @@
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/shared_image/gl_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/limits.h"
@@ -54,6 +54,7 @@
 #include "media/gpu/mac/vt_config_util.h"
 #include "media/video/h264_level_limits.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image_io_surface.h"
 #include "ui/gl/gl_implementation.h"
@@ -78,7 +79,7 @@ base::AtomicSequenceNumber g_memory_dump_ids;
 // A sequence of shared memory ids for CVPixelBufferRefs.
 base::AtomicSequenceNumber g_cv_pixel_buffer_ids;
 
-// Only H.264 with 4:2:0 chroma sampling is supported.
+// The video codec profiles that are supported.
 constexpr VideoCodecProfile kSupportedProfiles[] = {
     H264PROFILE_BASELINE, H264PROFILE_EXTENDED, H264PROFILE_MAIN,
     H264PROFILE_HIGH,
@@ -88,10 +89,10 @@ constexpr VideoCodecProfile kSupportedProfiles[] = {
 
     // These are only supported on macOS 11+.
     HEVCPROFILE_MAIN, HEVCPROFILE_MAIN10, HEVCPROFILE_MAIN_STILL_PICTURE,
-    // This is partially supported on macOS 11+, Apple Silicon Mac only supports
-    // 8 ~ 10 bit 400, 420, 422, 444 HW decoding, and Intel Mac supports 8 ~ 12
-    // bit 400, 420, 422 SW decoding, 444 content is decodable but has a green
-    // stripe issue.
+
+    // This is partially supported on macOS 11+, Apple Silicon Mac supports
+    // 8 ~ 10 bit 400, 420, 422, 444 HW decoding, Intel Mac supports 8 ~ 12
+    // bit 400, 420, 422, 444 SW decoding.
     HEVCPROFILE_REXT,
 
     // TODO(sandersd): Hi10p fails during
@@ -160,7 +161,7 @@ base::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
   // macOS support 8 bit (they actually only recommand main profile)
   // HEVC with alpha layer well.
   if (has_alpha)
-    pixel_format = kCVPixelFormatType_32BGRA;
+    pixel_format = kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar;
 
 #define CFINT(i) CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &i)
   base::ScopedCFTypeRef<CFNumberRef> cf_pixel_format(CFINT(pixel_format));
@@ -633,7 +634,7 @@ VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
       workarounds_(workarounds),
       // Non media/ use cases like PPAPI may not provide a MediaLog.
       media_log_(media_log ? media_log->Clone() : nullptr),
-      gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      gpu_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       decoder_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::TaskPriority::USER_VISIBLE})),
       decoder_weak_this_factory_(this),
@@ -665,6 +666,7 @@ bool VTVideoDecodeAccelerator::OnMemoryDump(
 
   // Dump output pictures (decoded frames for which PictureReady() has been
   // called already).
+  // TODO(sandersd): Dump SharedImages also.
   for (const auto& [texture_id, picture_info] : picture_info_map_) {
     for (const auto& gl_image : picture_info->gl_images) {
       std::string dump_name =
@@ -1055,17 +1057,21 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
       }
 
       case H264NALU::kSEIMessage: {
-        H264SEIMessage sei_msg;
-        result = h264_parser_.ParseSEI(&sei_msg);
-        if (result == H264Parser::kOk &&
-            sei_msg.type == H264SEIMessage::kSEIRecoveryPoint &&
-            sei_msg.recovery_point.recovery_frame_cnt == 0) {
-          // We only support immediate recovery points. Supporting future points
-          // would require dropping |recovery_frame_cnt| frames when needed.
-          frame->has_recovery_point = true;
-        }
         nalus.push_back(nalu);
         data_size += kNALUHeaderLength + nalu.size;
+        H264SEI sei;
+        result = h264_parser_.ParseSEI(&sei);
+        if (result != H264Parser::kOk)
+          break;
+        for (auto& sei_msg : sei.msgs) {
+          if (sei_msg.type == H264SEIMessage::kSEIRecoveryPoint &&
+              sei_msg.recovery_point.recovery_frame_cnt == 0) {
+            // We only support immediate recovery points. Supporting
+            // future points would require dropping |recovery_frame_cnt|
+            // frames when needed.
+            frame->has_recovery_point = true;
+          }
+        }
         break;
       }
 
@@ -1432,15 +1438,34 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
       }
 
       case H265NALU::PREFIX_SEI_NUT: {
-        H265SEIMessage sei_msg;
-        result = hevc_parser_.ParseSEI(&sei_msg);
-        if (result == H265Parser::kOk &&
-            sei_msg.type == H265SEIMessage::kSEIAlphaChannelInfo &&
-            sei_msg.alpha_channel_info.alpha_channel_cancel_flag == 0) {
-          has_alpha_ = true;
-        }
         nalus.push_back(nalu);
         data_size += kNALUHeaderLength + nalu.size;
+        H265SEI sei;
+        result = hevc_parser_.ParseSEI(&sei);
+        if (result != H265Parser::kOk)
+          break;
+        for (auto& sei_msg : sei.msgs) {
+          switch (sei_msg.type) {
+            case H265SEIMessage::kSEIAlphaChannelInfo:
+              has_alpha_ =
+                  sei_msg.alpha_channel_info.alpha_channel_cancel_flag == 0;
+              break;
+            case H265SEIMessage::kSEIMasteringDisplayInfo:
+              if (!config_.hdr_metadata)
+                config_.hdr_metadata = gfx::HDRMetadata();
+              sei_msg.mastering_display_info.PopulateColorVolumeMetadata(
+                  config_.hdr_metadata->color_volume_metadata);
+              break;
+            case H265SEIMessage::kSEIContentLightLevelInfo:
+              if (!config_.hdr_metadata)
+                config_.hdr_metadata = gfx::HDRMetadata();
+              sei_msg.content_light_level_info.PopulateHDRMetadata(
+                  config_.hdr_metadata.value());
+              break;
+            default:
+              break;
+          }
+        }
         break;
       }
 
@@ -1565,6 +1590,7 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
 
   if (frame->is_idr)
     waiting_for_idr_ = false;
+  frame->hdr_metadata = config_.hdr_metadata;
 
   // If no IDR has been seen yet, skip decoding. Note that Flash sends
   // configuration changes as a bitstream with only SPS/PPS/VPS; we don't print
@@ -1937,8 +1963,7 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
     picture_info->scoped_shared_images.clear();
   } else {
     gl_client_.bind_image.Run(picture_info->client_texture_id,
-                              gpu::GetPlatformSpecificTextureTarget(), nullptr,
-                              false);
+                              gpu::GetPlatformSpecificTextureTarget(), nullptr);
   }
   picture_info->gl_images.clear();
   picture_info->bitstream_id = 0;
@@ -2132,11 +2157,9 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
     // Request new pictures.
     picture_size_ = frame.image_size;
 
-    // ARGB is required to make alpha video has a non-transparent background
-    // when playing in PiP mode.
     if (has_alpha_) {
-      buffer_format_ = gfx::BufferFormat::BGRA_8888;
-      picture_format_ = PIXEL_FORMAT_ARGB;
+      buffer_format_ = gfx::BufferFormat::YUVA_420_TRIPLANAR;
+      picture_format_ = PIXEL_FORMAT_NV12A;
     } else if (config_.profile == VP9PROFILE_PROFILE2 ||
                config_.profile == HEVCPROFILE_MAIN10 ||
                config_.profile == HEVCPROFILE_REXT) {
@@ -2180,77 +2203,58 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
       planes.push_back(gfx::BufferPlane::Y);
       planes.push_back(gfx::BufferPlane::UV);
       break;
-    case PIXEL_FORMAT_ARGB:
-      planes.push_back(gfx::BufferPlane::DEFAULT);
+    case PIXEL_FORMAT_NV12A:
+      planes.push_back(gfx::BufferPlane::Y);
+      planes.push_back(gfx::BufferPlane::UV);
+      planes.push_back(gfx::BufferPlane::A);
       break;
     default:
       NOTREACHED();
       break;
   }
   for (size_t plane = 0; plane < planes.size(); ++plane) {
-    const gfx::Size plane_size(
-        CVPixelBufferGetWidthOfPlane(frame.image.get(), plane),
-        CVPixelBufferGetHeightOfPlane(frame.image.get(), plane));
-    gfx::BufferFormat plane_buffer_format =
-        gpu::GetPlaneBufferFormat(planes[plane], buffer_format_);
-    const viz::ResourceFormat viz_resource_format =
-        viz::GetResourceFormat(plane_buffer_format);
-    const GLenum gl_format = viz::GLDataFormat(viz_resource_format);
-
-    scoped_refptr<gl::GLImageIOSurface> gl_image(
-        gl::GLImageIOSurface::Create(plane_size));
-    if (!gl_image->InitializeWithCVPixelBuffer(
-            frame.image.get(), plane,
-            gfx::GenericSharedMemoryId(g_cv_pixel_buffer_ids.GetNext()),
-            plane_buffer_format, color_space)) {
-      NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
-                    SFT_PLATFORM_ERROR);
-    }
-
     if (picture_info->uses_shared_images) {
       gpu::SharedImageStub* shared_image_stub = client_->GetSharedImageStub();
-      DCHECK(shared_image_stub);
-      const uint32_t shared_image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                                          gpu::SHARED_IMAGE_USAGE_SCANOUT;
-      gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
-
-      gpu::GLTextureImageBackingHelper::InitializeGLTextureParams gl_params;
-      // ANGLE-on-Metal exposes IOSurfaces via GL_TEXTURE_2D. Be robust to that.
-      gl_params.target = gl_client_.supports_arb_texture_rectangle
-                             ? GL_TEXTURE_RECTANGLE_ARB
-                             : GL_TEXTURE_2D;
-      gl_params.internal_format = gl_format;
-      gl_params.format = gl_format;
-      gl_params.type = GL_UNSIGNED_BYTE;
-      gl_params.is_cleared = true;
-
-      // Making the GL context current before performing below shared image
-      // tasks.
-      // TODO(vikassoni) : Remove if making context current is not required.
-      if (!gl_client_.make_context_current.Run()) {
-        DLOG(ERROR) << "Failed to make context current";
+      if (!shared_image_stub) {
+        DLOG(ERROR) << "Failed to get SharedImageStub";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
         return false;
       }
 
-      auto shared_image = std::make_unique<gpu::GLImageBacking>(
-          gl_image, mailbox,
-          viz::SharedImageFormat::SinglePlane(viz_resource_format), plane_size,
-          color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
-          shared_image_usage, gl_params, gl_client_.is_passthrough);
+      const gfx::Size frame_size(CVPixelBufferGetWidth(frame.image.get()),
+                                 CVPixelBufferGetHeight(frame.image.get()));
+      const uint32_t shared_image_usage =
+          gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+          gpu::SHARED_IMAGE_USAGE_SCANOUT |
+          gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX |
+          gpu::SHARED_IMAGE_USAGE_RASTER | gpu::SHARED_IMAGE_USAGE_GLES2;
+      GLenum target = gl_client_.supports_arb_texture_rectangle
+                          ? GL_TEXTURE_RECTANGLE_ARB
+                          : GL_TEXTURE_2D;
 
-      const bool success = shared_image_stub->factory()->RegisterBacking(
-          std::move(shared_image));
+      gfx::GpuMemoryBufferHandle handle;
+      handle.id = gfx::GpuMemoryBufferHandle::kInvalidId;
+      handle.type = gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER;
+      handle.io_surface.reset(CVPixelBufferGetIOSurface(frame.image),
+                              base::scoped_policy::RETAIN);
+
+      gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
+      bool success = shared_image_stub->CreateSharedImage(
+          mailbox, /*client_id=*/0, std::move(handle), buffer_format_,
+          planes[plane], frame_size, color_space, kTopLeft_GrSurfaceOrigin,
+          kOpaque_SkAlphaType, shared_image_usage);
       if (!success) {
-        DLOG(ERROR) << "Failed to register shared image";
+        DLOG(ERROR) << "Failed to create shared image";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
         return false;
       }
 
       // Wrap the destroy callback in a lambda that ensures that it be called on
-      // the appropriate thread.
+      // the appropriate thread. Retain the image buffer so that VideoToolbox
+      // will not reuse the IOSurface as long as the SharedImage is alive.
       auto destroy_shared_image_lambda =
           [](gpu::SharedImageStub::SharedImageDestructionCallback callback,
+             base::ScopedCFTypeRef<CVImageBufferRef> image,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
             task_runner->PostTask(FROM_HERE, base::BindOnce(std::move(callback),
                                                             gpu::SyncToken()));
@@ -2258,22 +2262,38 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
       auto destroy_shared_image_callback = base::BindOnce(
           destroy_shared_image_lambda,
           shared_image_stub->GetSharedImageDestructionCallback(mailbox),
-          gpu_task_runner_);
+          frame.image, gpu_task_runner_);
       picture_info->scoped_shared_images.push_back(
           scoped_refptr<Picture::ScopedSharedImage>(
               new Picture::ScopedSharedImage(
-                  mailbox, gl_params.target,
-                  std::move(destroy_shared_image_callback))));
+                  mailbox, target, std::move(destroy_shared_image_callback))));
     } else {
+      const gfx::Size plane_size(
+          CVPixelBufferGetWidthOfPlane(frame.image.get(), plane),
+          CVPixelBufferGetHeightOfPlane(frame.image.get(), plane));
+      gfx::BufferFormat plane_buffer_format =
+          gpu::GetPlaneBufferFormat(planes[plane], buffer_format_);
+
+      scoped_refptr<gl::GLImageIOSurface> gl_image(
+          gl::GLImageIOSurface::Create(plane_size));
+      if (!gl_image->InitializeWithCVPixelBuffer(
+              frame.image.get(), plane,
+              gfx::GenericSharedMemoryId(g_cv_pixel_buffer_ids.GetNext()),
+              plane_buffer_format, color_space)) {
+        NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
+                      SFT_PLATFORM_ERROR);
+      }
+
       if (!gl_client_.bind_image.Run(picture_info->client_texture_id,
                                      gpu::GetPlatformSpecificTextureTarget(),
-                                     gl_image, false)) {
+                                     gl_image)) {
         DLOG(ERROR) << "Failed to bind image";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
         return false;
       }
+
+      picture_info->gl_images.push_back(gl_image);
     }
-    picture_info->gl_images.push_back(gl_image);
   }
   picture_info->bitstream_id = frame.bitstream_id;
   available_picture_ids_.pop_back();
@@ -2282,24 +2302,25 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
            << "bitstream_id=" << frame.bitstream_id << ")";
   Picture picture(picture_id, frame.bitstream_id, gfx::Rect(frame.image_size),
                   color_space, true);
-  // The GLImageIOSurface keeps the IOSurface alive as long as it exists, but
-  // bound textures do not, and they can outlive the GLImageIOSurface if they
-  // are deleted in the command buffer before they are used by the platform GL
-  // implementation. (https://crbug.com/930479#c69)
+  // Bound textures can outlive the GLImageBacking if they are deleted in the
+  // command buffer before they are used by the platform GL implementation
+  // (https://crbug.com/930479#c69). Thus a fence is required whenever a GLImage
+  // is bound, but we can't know in advance whether that will happen.
   //
-  // A fence is required whenever a GLImage is bound, but we can't know in
-  // advance whether that will happen.
-  //
-  // TODO(sandersd): Can GLImageIOSurface be responsible for fences, so that
+  // TODO(sandersd): Can GLImageBacking be responsible for fences, so that
   // we don't need to use them when the image is never bound? Bindings are
   // typically only created when WebGL is in use.
   picture.set_read_lock_fences_enabled(true);
-  for (size_t plane = 0; plane < planes.size(); ++plane) {
-    picture.set_scoped_shared_image(picture_info->scoped_shared_images[plane],
-                                    plane);
+  if (frame.hdr_metadata)
+    picture.set_hdr_metadata(frame.hdr_metadata);
+  if (picture_info->uses_shared_images) {
+    for (size_t plane = 0; plane < planes.size(); ++plane) {
+      picture.set_scoped_shared_image(picture_info->scoped_shared_images[plane],
+                                      plane);
+    }
+    if (picture_format_ == PIXEL_FORMAT_NV12)
+      picture.set_is_webgpu_compatible(true);
   }
-  if (picture_format_ == PIXEL_FORMAT_NV12)
-    picture.set_is_webgpu_compatible(true);
 
   client_->PictureReady(std::move(picture));
   return true;

@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_piece.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -64,8 +64,8 @@ FileStreamForwarder::~FileStreamForwarder() {
   if (!callback_.is_null())  // Aborted before completion.
     NotifyCompleted(false);
   // Use the task runner to close the FD.
-  task_runner_->PostTask(
-      FROM_HERE, base::BindOnce([](base::ScopedFD fd) {}, std::move(fd_dest_)));
+  task_runner_->PostTask(FROM_HERE,
+                         base::DoNothingWithBoundArgs(std::move(fd_dest_)));
 }
 
 void FileStreamForwarder::DestroyOnIOThread() {
@@ -115,8 +115,8 @@ void FileStreamForwarder::OnReadCompleted(int result) {
   remaining_size_ -= result;
   DCHECK_GE(remaining_size_, 0);
 
-  base::PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE,
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(
           [](int fd, scoped_refptr<net::IOBuffer> buf, int size) {
             const bool result = base::WriteFileDescriptor(

@@ -14,7 +14,7 @@ import './album_list_element.js';
 import './art_album_dialog_element.js';
 import '../../css/common.css.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 
 import {AmbientModeAlbum, TopicSource} from '../personalization_app.mojom-webui.js';
 import {PersonalizationRouter} from '../personalization_router_element.js';
@@ -87,7 +87,8 @@ export class AlbumsSubpage extends WithPersonalizationStore {
 
   private getTitleInnerHtml_(): string {
     if (this.topicSource === TopicSource.kGooglePhotos) {
-      return this.i18nAdvanced('ambientModeAlbumsSubpageGooglePhotosTitle');
+      return this.i18nAdvanced('ambientModeAlbumsSubpageGooglePhotosTitle')
+          .toString();
     } else {
       return this.i18n('ambientModeTopicSourceArtGalleryDescription');
     }

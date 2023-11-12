@@ -416,7 +416,7 @@ ProcessInitialPreferencesResult ProcessInitialPreferences(
   if (initial_prefs.get()) {
     // Don't show EULA when running in headless mode since this would
     // effectively block the UI because there is no one to accept it.
-    if (!headless::IsChromeNativeHeadless() &&
+    if (!headless::IsHeadlessMode() &&
         !internal::ShowPostInstallEULAIfNeeded(initial_prefs.get())) {
       return EULA_EXIT_NOW;
     }
@@ -430,8 +430,7 @@ ProcessInitialPreferencesResult ProcessInitialPreferences(
 
     if (!chrome_prefs::InitializePrefsFromMasterPrefs(
             profiles::GetDefaultProfileDir(user_data_dir),
-            base::DictionaryValue::From(std::make_unique<base::Value>(
-                std::move(initial_dictionary))))) {
+            std::move(initial_dictionary))) {
       DLOG(ERROR) << "Failed to initialize from initial preferences.";
     }
 

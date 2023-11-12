@@ -20,8 +20,8 @@ class SearchUserModel : public ModelProvider {
   ~SearchUserModel() override = default;
 
   // Disallow copy/assign.
-  SearchUserModel(SearchUserModel&) = delete;
-  SearchUserModel& operator=(SearchUserModel&) = delete;
+  SearchUserModel(const SearchUserModel&) = delete;
+  SearchUserModel& operator=(const SearchUserModel&) = delete;
 
   static std::unique_ptr<Config> GetConfig();
 
@@ -33,7 +33,7 @@ class SearchUserModel : public ModelProvider {
   // ModelProvider implementation.
   void InitAndFetchModel(
       const ModelUpdatedCallback& model_updated_callback) override;
-  void ExecuteModelWithInput(const std::vector<float>& inputs,
+  void ExecuteModelWithInput(const ModelProvider::Request& inputs,
                              ExecutionCallback callback) override;
   bool ModelAvailable() override;
 };

@@ -21,6 +21,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "base/supports_user_data.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_undo_provider.h"
@@ -43,6 +44,10 @@ struct FaviconImageResult;
 
 namespace query_parser {
 enum class MatchingAlgorithm;
+}
+
+namespace file_sync {
+class SyncedFileStore;
 }
 
 namespace bookmarks {
@@ -73,7 +78,8 @@ struct TitledUrlMatch;
 // You should NOT directly create a BookmarkModel, instead go through the
 // BookmarkModelFactory.
 class BookmarkModel : public BookmarkUndoProvider,
-                      public KeyedService {
+                      public KeyedService,
+                      public base::SupportsUserData {
  public:
   explicit BookmarkModel(std::unique_ptr<BookmarkClient> client);
 
@@ -352,6 +358,11 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Vivaldi: Returns the 'trash' node. This is NULL until loaded.
   const BookmarkNode* trash_node() const { return trash_node_; }
 
+  void set_vivaldi_synced_file_store(
+      file_sync::SyncedFileStore* synced_file_store) {
+    vivaldi_synced_file_store_ = synced_file_store;
+  }
+
  private:
   friend class BookmarkCodecTest;
   friend class BookmarkModelFaviconTest;
@@ -375,6 +386,9 @@ class BookmarkModel : public BookmarkUndoProvider,
 
   // Called when done loading. Updates internal state and notifies observers.
   void DoneLoading(std::unique_ptr<BookmarkLoadDetails> details);
+
+  // Vivaldi specific: Finishes loading once the synced file store is loaded.
+  void OnVivaldiSyncedFilesStoreLoaded(std::unique_ptr<BookmarkLoadDetails> details);
 
   // Adds the `node` at `parent` in the specified `index` and notifies its
   // observers. `added_by_user` is true when a new bookmark was added by the
@@ -443,11 +457,12 @@ class BookmarkModel : public BookmarkUndoProvider,
   // |owned_root_|. Once loading has completed, |owned_root_| is destroyed and
   // this is set to url_index_->root(). |owned_root_| is done as lots of
   // existing code assumes the root is non-null while loading.
-  raw_ptr<BookmarkNode> root_ = nullptr;
+  raw_ptr<BookmarkNode, DanglingUntriaged> root_ = nullptr;
 
-  raw_ptr<BookmarkPermanentNode> bookmark_bar_node_ = nullptr;
-  raw_ptr<BookmarkPermanentNode> other_node_ = nullptr;
-  raw_ptr<BookmarkPermanentNode> mobile_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> bookmark_bar_node_ =
+      nullptr;
+  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> other_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> mobile_node_ = nullptr;
 
   // The maximum ID assigned to the bookmark nodes in the model.
   int64_t next_node_id_ = 1;
@@ -477,13 +492,14 @@ class BookmarkModel : public BookmarkUndoProvider,
 
   std::set<std::string> non_cloned_keys_;
 
-  raw_ptr<BookmarkUndoDelegate> undo_delegate_ = nullptr;
+  raw_ptr<BookmarkUndoDelegate, DanglingUntriaged> undo_delegate_ = nullptr;
   std::unique_ptr<BookmarkUndoDelegate> empty_undo_delegate_;
 
   scoped_refptr<ModelLoader> model_loader_;
 
   friend class VivaldiBookmarkModelFriend;
   BookmarkPermanentNode* trash_node_ = nullptr;
+  raw_ptr<file_sync::SyncedFileStore> vivaldi_synced_file_store_ = nullptr;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

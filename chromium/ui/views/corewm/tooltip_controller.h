@@ -10,11 +10,11 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "base/time/time.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/window_observer.h"
+#include "ui/aura/window_tracker.h"
 #include "ui/events/event_handler.h"
-#include "ui/gfx/geometry/point.h"
 #include "ui/views/corewm/tooltip.h"
 #include "ui/views/views_export.h"
 #include "ui/wm/public/activation_change_observer.h"
@@ -24,9 +24,20 @@ namespace aura {
 class Window;
 }
 
+namespace base {
+class TimeDelta;
+}
+
+namespace gfx {
+class Point;
+class Rect;
+}  // namespace gfx
+
 namespace wm {
 class ActivationClient;
+class TooltipObserver;
 }
+
 namespace views::corewm {
 
 class Tooltip;
@@ -52,6 +63,9 @@ class VIEWS_EXPORT TooltipController
   TooltipController& operator=(const TooltipController&) = delete;
 
   ~TooltipController() override;
+
+  void AddObserver(wm::TooltipObserver* observer);
+  void RemoveObserver(wm::TooltipObserver* observer);
 
   // Overridden from wm::TooltipClient.
   int GetMaxWidth(const gfx::Point& location) const override;
@@ -85,6 +99,14 @@ class VIEWS_EXPORT TooltipController
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Called when tooltip is shown/hidden on server.
+  // This is only used for Lacros whose tooltip is handled on server-side.
+  void OnTooltipShownOnServer(const std::u16string& text,
+                              const gfx::Rect& bounds);
+  void OnTooltipHiddenOnServer();
+#endif  // BUILDFLA(IS_CHROMEOS_LACROS)
+
  private:
   friend class test::TooltipControllerTestHelper;
 
@@ -101,8 +123,9 @@ class VIEWS_EXPORT TooltipController
   // Returns true if the cursor is visible.
   bool IsCursorVisible() const;
 
-  // Get the delay after which the tooltip should be hidden.
-  base::TimeDelta GetHideTooltipTimeout();
+  // Get the delay after which the tooltip should be shown/hidden.
+  base::TimeDelta GetShowTooltipDelay();
+  base::TimeDelta GetHideTooltipDelay();
 
   // Sets observed window to |target| if it is different from existing window.
   // Calls RemoveObserver on the existing window if it is not NULL.
@@ -129,6 +152,11 @@ class VIEWS_EXPORT TooltipController
   // to hide it until the cursor moves to another window.
   bool ShouldHideBecauseMouseWasOncePressed();
 
+  aura::Window* tooltip_window_at_mouse_press() {
+    auto& windows = tooltip_window_at_mouse_press_tracker_.windows();
+    return windows.empty() ? nullptr : windows[0];
+  }
+
   // The window on which we are currently listening for events. When there's a
   // keyboard-triggered visible tooltip, its value is set to the tooltip parent
   // window. Otherwise, it's following the cursor.
@@ -145,8 +173,8 @@ class VIEWS_EXPORT TooltipController
   // The tooltip should stay hidden after a mouse press event on the view until
   // the cursor moves to another view.
   std::u16string tooltip_text_at_mouse_press_;
-  raw_ptr<aura::Window, DanglingUntriaged> tooltip_window_at_mouse_press_ =
-      nullptr;
+  // NOTE: this either has zero or one window.
+  aura::WindowTracker tooltip_window_at_mouse_press_tracker_;
 
   // Location of the last events in |tooltip_window_|'s coordinates.
   gfx::Point last_mouse_loc_;
@@ -154,6 +182,11 @@ class VIEWS_EXPORT TooltipController
 
   // Whether tooltips can be displayed or not.
   bool tooltips_enabled_ = true;
+
+  // Whether tooltip should be skip delay before showing.
+  // This may be set to true only for testing.
+  // Do NOT override this value except from TooltipControllerTestHelper.
+  bool skip_show_delay_for_testing_ = false;
 
   // Web content tooltips should be shown indefinitely and those added on Views
   // should be hidden automatically after a timeout. This map stores the timeout

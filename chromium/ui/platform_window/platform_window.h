@@ -71,7 +71,13 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindow
   virtual void ReleaseCapture() = 0;
   virtual bool HasCapture() const = 0;
 
-  virtual void ToggleFullscreen() = 0;
+  // Enters or exits fullscreen when `fullscreen` is true or false respectively.
+  // This operation may have no effect if the window is already in the specified
+  // state. `target_display_id` indicates the display where the window should be
+  // shown fullscreen when entering into fullscreen; display::kInvalidDisplayId
+  // indicates that no display was specified, so the current display may be
+  // used.
+  virtual void SetFullscreen(bool fullscreen, int64_t target_display_id) = 0;
   virtual void Maximize() = 0;
   virtual void Minimize() = 0;
   virtual void Restore() = 0;
@@ -199,6 +205,21 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindow
   // Notifies the DE that the app is done loading, so that it can dismiss any
   // loading animations.
   virtual void NotifyStartupComplete(const std::string& startup_id);
+
+  // Shows tooltip with this platform window as a parent window.
+  // `position` is relative to this platform window.
+  // `show_delay` and `hide_delay` specify the delay before showing or hiding
+  // tooltip on server side. `show_delay` may be set to zero only for testing.
+  // If `hide_delay` is zero, the tooltip will not be hidden by timer on server
+  // side.
+  virtual void ShowTooltip(const std::u16string& text,
+                           const gfx::Point& position,
+                           const PlatformWindowTooltipTrigger trigger,
+                           const base::TimeDelta show_delay,
+                           const base::TimeDelta hide_delay) {}
+
+  // Hides tooltip.
+  virtual void HideTooltip() {}
 };
 
 }  // namespace ui

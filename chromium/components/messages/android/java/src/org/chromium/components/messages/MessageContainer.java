@@ -16,13 +16,15 @@ import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat;
 
+import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
-import org.chromium.ui.base.ViewUtils;
 
 /**
  * Container holding messages.
  */
 public class MessageContainer extends FrameLayout {
+    private static final String TAG = "MessageContainer";
+
     interface MessageContainerA11yDelegate {
         void onA11yFocused();
         void onA11yFocusCleared();
@@ -30,6 +32,7 @@ public class MessageContainer extends FrameLayout {
     }
 
     private MessageContainerA11yDelegate mA11yDelegate;
+    private boolean mIsInitializingLayout;
 
     public MessageContainer(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -82,7 +85,6 @@ public class MessageContainer extends FrameLayout {
 
         // TODO(crbug.com/1178965): clipChildren should be set to false only when the message is in
         // motion.
-        ViewUtils.setAncestorsShouldClipChildren(this, false);
     }
 
     /**
@@ -96,12 +98,15 @@ public class MessageContainer extends FrameLayout {
         super.removeView(view);
         if (getChildCount() == 0) {
             mA11yDelegate = null;
-            ViewUtils.setAncestorsShouldClipChildren(this, true);
         }
     }
 
     public int getMessageBannerHeight() {
         assert getChildCount() > 0;
+        // TODO(https://crbug.com/1382275): remove this log after fix.
+        if (getChildAt(0) == null) {
+            Log.w(TAG, "Null child in message container; child count %s", getChildCount());
+        }
         return getChildAt(0).getHeight();
     }
 
@@ -120,6 +125,13 @@ public class MessageContainer extends FrameLayout {
         mA11yDelegate = a11yDelegate;
     }
 
+    View getSiblingView(View current) {
+        assert getChildCount() > 1;
+        int idx = indexOfChild(current);
+        assert idx != -1;
+        return getChildAt(1 - idx);
+    }
+
     /**
      * Runs a {@link Runnable} after the message's initial layout. If the view is already laid out,
      * the {@link Runnable} will be called immediately.
@@ -129,10 +141,12 @@ public class MessageContainer extends FrameLayout {
         View view = getChildAt(0);
         assert view != null;
         if (view.getHeight() > 0) {
+            mIsInitializingLayout = false;
             runnable.run();
             return;
         }
 
+        mIsInitializingLayout = true;
         view.addOnLayoutChangeListener(new OnLayoutChangeListener() {
             @Override
             public void onLayoutChange(View v, int left, int top, int right, int bottom,
@@ -141,8 +155,18 @@ public class MessageContainer extends FrameLayout {
 
                 runnable.run();
                 v.removeOnLayoutChangeListener(this);
+                mIsInitializingLayout = false;
             }
         });
+    }
+
+    /**
+     * Returns whether container is initializing its layout for a new added view. Clients should not
+     * call {@link #runAfterInitialMessageLayout(Runnable)} when it returns true.
+     * @return True if it is initializing layout.
+     */
+    public boolean isIsInitializingLayout() {
+        return mIsInitializingLayout;
     }
 
     /**

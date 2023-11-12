@@ -5,10 +5,11 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_POLICY_WEB_APP_POLICY_MANAGER_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_POLICY_WEB_APP_POLICY_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_manager.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/render_frame_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -63,7 +65,7 @@ class WebAppPolicyManager {
   void SetSystemWebAppDelegateMap(
       const ash::SystemWebAppDelegateMap* system_web_apps_delegate_map);
 
-  void Start();
+  void Start(base::OnceClosure initialization_complete);
 
   void ReinstallPlaceholderAppIfNecessary(const GURL& url);
 
@@ -132,7 +134,7 @@ class WebAppPolicyManager {
 
   void RefreshPolicyInstalledApps();
 #if BUILDFLAG(IS_CHROMEOS)
-  void RefreshPolicyInstalledIsolatedApps();
+  void RefreshPolicyInstalledIsolatedWebApps();
 #endif
   void RefreshPolicySettings();
   void OnAppsSynchronized(
@@ -170,9 +172,10 @@ class WebAppPolicyManager {
       nullptr;
   raw_ptr<WebAppRegistrar> app_registrar_ = nullptr;
   raw_ptr<WebAppSyncBridge> sync_bridge_ = nullptr;
-  raw_ptr<const ash::SystemWebAppDelegateMap> system_web_apps_delegate_map_ =
+  raw_ptr<const ash::SystemWebAppDelegateMap, DanglingUntriaged>
+      system_web_apps_delegate_map_ = nullptr;
+  raw_ptr<OsIntegrationManager, DanglingUntriaged> os_integration_manager_ =
       nullptr;
-  raw_ptr<OsIntegrationManager> os_integration_manager_ = nullptr;
 
   PrefChangeRegistrar pref_change_registrar_;
   PrefChangeRegistrar local_state_pref_change_registrar_;
@@ -197,6 +200,9 @@ class WebAppPolicyManager {
   std::unique_ptr<WebAppSetting> default_settings_;
 
   ExternallyInstalledWebAppPrefs externally_installed_app_prefs_;
+#if BUILDFLAG(IS_CHROMEOS)
+  std::unique_ptr<IsolatedWebAppPolicyManager> iwa_policy_manager_;
+#endif
 
   base::WeakPtrFactory<WebAppPolicyManager> weak_ptr_factory_{this};
 };

@@ -16,7 +16,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -174,7 +173,7 @@ class PendingTaskWaiter : public content::WebContentsObserver {
 
   void CheckStopWaitingPeriodically() {
     EndLoopIfCanStopWaiting();
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&PendingTaskWaiter::CheckStopWaitingPeriodically,
                        weak_factory_.GetWeakPtr()),
@@ -365,7 +364,7 @@ class NoCommittedNavigationWebContentsObserver
     auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
     content::NavigationEntry* current_entry =
         web_contents->GetController().GetLastCommittedEntry();
-    if (!current_entry || current_entry->IsInitialEntry()) {
+    if (current_entry->IsInitialEntry()) {
       did_update_favicon_url_with_no_committed_navigation_ = true;
     }
   }
@@ -968,7 +967,7 @@ IN_PROC_BROWSER_TEST_F(ContentFaviconDriverTestWithAutoupgradesDisabled,
 
   PendingTaskWaiter waiter(web_contents());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), favicon_page));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   waiter.Wait();
 
   EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
@@ -1013,6 +1012,22 @@ IN_PROC_BROWSER_TEST_F(ContentFaviconDriverTest, SVGFavicon) {
   waiter.Wait();
 
   auto result = GetFaviconForPageURL(url, favicon_base::IconType::kFavicon, 16);
+  EXPECT_EQ(gfx::Size(16, 16), result.pixel_size);
+  EXPECT_NE(nullptr, result.bitmap_data);
+}
+
+IN_PROC_BROWSER_TEST_F(ContentFaviconDriverTest, SizesAny) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url =
+      embedded_test_server()->GetURL("/favicon/page_with_sizes_any.html");
+  GURL expected_icon_url = embedded_test_server()->GetURL("/favicon/icon.svg");
+
+  PendingTaskWaiter waiter(web_contents());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  waiter.Wait();
+
+  auto result = GetFaviconForPageURL(url, favicon_base::IconType::kFavicon, 16);
+  EXPECT_EQ(expected_icon_url, result.icon_url);
   EXPECT_EQ(gfx::Size(16, 16), result.pixel_size);
   EXPECT_NE(nullptr, result.bitmap_data);
 }

@@ -30,8 +30,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
-#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
-#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
@@ -46,10 +44,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/commerce/core/commerce_feature_list.h"
-#include "components/commerce/core/proto/price_tracking.pb.h"
-#include "components/commerce/core/shopping_service.h"
 #include "components/dom_distiller/core/url_utils.h"
-#include "components/optimization_guide/proto/hints.pb.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #include "components/prefs/pref_service.h"
@@ -113,34 +108,55 @@ std::unique_ptr<icu::Collator> GetICUCollator() {
   return collator_;
 }
 
+// The key used to connect the instance of the bookmark bridge to the bookmark
+// model.
+const char kBookmarkBridgeUserDataKey[] = "bookmark_bridge";
 }  // namespace
 
-BookmarkBridge::BookmarkBridge(JNIEnv* env,
-                               const JavaRef<jobject>& obj,
-                               const JavaRef<jobject>& j_profile)
-    : weak_java_ref_(env, obj),
-      bookmark_model_(nullptr),
-      managed_bookmark_service_(nullptr),
-      partner_bookmarks_shim_(nullptr),
-      weak_ptr_factory_(this) {
+ScopedJavaLocalRef<jobject> JNI_BookmarkBridge_GetForProfile(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_profile) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  profile_ = ProfileAndroid::FromProfileAndroid(j_profile);
+
+  Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
+  if (!profile)
+    return nullptr;
+
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
+  if (!model)
+    return nullptr;
+
+  BookmarkBridge* bookmark_bridge = static_cast<BookmarkBridge*>(
+      model->GetUserData(kBookmarkBridgeUserDataKey));
+
+  if (!bookmark_bridge) {
+    bookmark_bridge = new BookmarkBridge(
+        profile, model, ManagedBookmarkServiceFactory::GetForProfile(profile),
+        PartnerBookmarksShim::BuildForBrowserContext(
+            chrome::GetBrowserContextRedirectedInIncognito(profile)),
+        ReadingListManagerFactory::GetForBrowserContext(profile));
+    model->SetUserData(kBookmarkBridgeUserDataKey,
+                       base::WrapUnique(bookmark_bridge));
+  }
+
+  return ScopedJavaLocalRef(bookmark_bridge->GetJavaBookmarkModel());
+}
+
+BookmarkBridge::BookmarkBridge(
+    Profile* profile,
+    BookmarkModel* model,
+    bookmarks::ManagedBookmarkService* managed_bookmark_service,
+    PartnerBookmarksShim* partner_bookmarks_shim,
+    ReadingListManager* reading_list_manager)
+    : profile_(profile),
+      bookmark_model_(model),
+      managed_bookmark_service_(managed_bookmark_service),
+      partner_bookmarks_shim_(partner_bookmarks_shim),
+      reading_list_manager_(reading_list_manager),
+      weak_ptr_factory_(this) {
   profile_observation_.Observe(profile_.get());
-  bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(profile_);
-  managed_bookmark_service_ =
-      ManagedBookmarkServiceFactory::GetForProfile(profile_);
-  opt_guide_ = OptimizationGuideKeyedServiceFactory::GetForProfile(profile_);
-
-  // Registers the notifications we are interested.
   bookmark_model_->AddObserver(this);
-
-  // Create the partner Bookmarks shim as early as possible (but don't attach).
-  partner_bookmarks_shim_ = PartnerBookmarksShim::BuildForBrowserContext(
-      chrome::GetBrowserContextRedirectedInIncognito(profile_));
   partner_bookmarks_shim_->AddObserver(this);
-
-  reading_list_manager_ =
-      ReadingListManagerFactory::GetForBrowserContext(profile_);
   reading_list_manager_->AddObserver(this);
 
   pref_change_registrar_.Init(profile_->GetPrefs());
@@ -156,6 +172,9 @@ BookmarkBridge::BookmarkBridge(JNIEnv* env,
   // up to date.
   if (bookmark_model_->IsDoingExtensiveChanges())
     ExtensiveBookmarkChangesBeginning(bookmark_model_);
+
+  java_bookmark_model_ = Java_BookmarkBridge_createBookmarkModel(
+      base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this));
 }
 
 BookmarkBridge::~BookmarkBridge() {
@@ -170,14 +189,8 @@ BookmarkBridge::~BookmarkBridge() {
 }
 
 void BookmarkBridge::Destroy(JNIEnv*, const JavaParamRef<jobject>&) {
-  delete this;
-}
-
-static jlong JNI_BookmarkBridge_Init(JNIEnv* env,
-                                     const JavaParamRef<jobject>& obj,
-                                     const JavaParamRef<jobject>& j_profile) {
-  BookmarkBridge* bridge = new BookmarkBridge(env, obj, j_profile);
-  return reinterpret_cast<intptr_t>(bridge);
+  // This will call the destructor because the user data is a unique pointer.
+  bookmark_model_->RemoveUserData(kBookmarkBridgeUserDataKey);
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -192,15 +205,6 @@ BookmarkBridge::GetBookmarkIdForWebContents(
   if (!web_contents)
     return nullptr;
 
-  // TODO(https://crbug.com/1023759): We currently don't have a separate tab
-  // model for incognito CCTs and incognito Tabs. So for incognito CCTs, the
-  // incognito Tabs profile is passed to initialize BookmarkBridge, but here the
-  // incognito CCT profile is used.
-  // This DCHECK should be updated to compare profile objects instead of their
-  // OTR state.
-  DCHECK_EQ(profile_->IsOffTheRecord(),
-            Profile::FromBrowserContext(web_contents->GetBrowserContext())
-                ->IsOffTheRecord());
   GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
       web_contents->GetLastCommittedURL());
 
@@ -599,6 +603,8 @@ void BookmarkBridge::SetBookmarkTitle(JNIEnv* env,
 
   if (partner_bookmarks_shim_->IsPartnerBookmark(bookmark)) {
     partner_bookmarks_shim_->RenameBookmark(bookmark, title);
+  } else if (reading_list_manager_->IsReadingListBookmark(bookmark)) {
+    reading_list_manager_->SetTitle(bookmark->url(), title);
   } else {
     bookmark_model_->SetTitle(bookmark, title,
                               bookmarks::metrics::BookmarkEditSource::kUser);
@@ -699,7 +705,6 @@ void BookmarkBridge::GetBookmarksForFolder(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& j_folder_id_obj,
-    const JavaParamRef<jobject>& j_callback_obj,
     const JavaParamRef<jobject>& j_result_obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(IsLoaded());
@@ -726,11 +731,6 @@ void BookmarkBridge::GetBookmarksForFolder(
     ExtractBookmarkNodeInformation(
         partner_bookmarks_shim_->GetPartnerBookmarksRoot(), j_result_obj);
   }
-
-  if (j_callback_obj) {
-    Java_BookmarksCallback_onBookmarksAvailable(env, j_callback_obj,
-                                                folder_id_obj, j_result_obj);
-  }
 }
 
 jboolean BookmarkBridge::IsFolderVisible(JNIEnv* env,
@@ -748,37 +748,6 @@ jboolean BookmarkBridge::IsFolderVisible(JNIEnv* env,
   const BookmarkNode* node =
       partner_bookmarks_shim_->GetNodeByID(static_cast<long>(id));
   return partner_bookmarks_shim_->IsReachable(node);
-}
-
-void BookmarkBridge::GetCurrentFolderHierarchy(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_folder_id_obj,
-    const JavaParamRef<jobject>& j_callback_obj,
-    const JavaParamRef<jobject>& j_result_obj) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(IsLoaded());
-
-  long folder_id = JavaBookmarkIdGetId(env, j_folder_id_obj);
-  int type = JavaBookmarkIdGetType(env, j_folder_id_obj);
-  const BookmarkNode* folder = GetFolderWithFallback(folder_id, type);
-
-  if (!folder->is_folder() || !IsReachable(folder))
-    return;
-
-  // Recreate the java bookmarkId object due to fallback.
-  ScopedJavaLocalRef<jobject> folder_id_obj = JavaBookmarkIdCreateBookmarkId(
-      env, folder->id(), GetBookmarkType(folder));
-
-  // Get the folder hierarchy.
-  const BookmarkNode* node = folder;
-  while (node) {
-    ExtractBookmarkNodeInformation(node, j_result_obj);
-    node = GetParentNode(node);
-  }
-
-  Java_BookmarksCallback_onBookmarksFolderHierarchyAvailable(
-      env, j_callback_obj, folder_id_obj, j_result_obj);
 }
 
 void BookmarkBridge::SearchBookmarks(JNIEnv* env,
@@ -1129,11 +1098,11 @@ bool BookmarkBridge::IsEditBookmarksEnabled() const {
 
 void BookmarkBridge::EditBookmarksEnabledChanged() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
+  if (!java_bookmark_model_)
     return;
-  Java_BookmarkBridge_editBookmarksEnabledChanged(env, obj);
+
+  Java_BookmarkBridge_editBookmarksEnabledChanged(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 bool BookmarkBridge::IsEditable(const BookmarkNode* node) const {
@@ -1208,28 +1177,23 @@ bool BookmarkBridge::IsFolderAvailable(const BookmarkNode* folder) const {
 }
 
 void BookmarkBridge::NotifyIfDoneLoading() {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkModelLoaded(env, obj);
+
+  Java_BookmarkBridge_bookmarkModelLoaded(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 // ------------- Observer-related methods ------------- //
 
+// Called when there are changes to the bookmark model. It is most
+// likely changes to the partner bookmarks.
 void BookmarkBridge::BookmarkModelChanged() {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  // Called when there are changes to the bookmark model. It is most
-  // likely changes to the partner bookmarks.
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkModelChanged(env, obj);
+  Java_BookmarkBridge_bookmarkModelChanged(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 void BookmarkBridge::BookmarkModelLoaded(BookmarkModel* model,
@@ -1249,15 +1213,12 @@ void BookmarkBridge::BookmarkNodeMoved(BookmarkModel* model,
                                        size_t old_index,
                                        const BookmarkNode* new_parent,
                                        size_t new_index) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
   Java_BookmarkBridge_bookmarkNodeMoved(
-      env, obj, CreateJavaBookmark(old_parent), static_cast<int>(old_index),
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
+      CreateJavaBookmark(old_parent), static_cast<int>(old_index),
       CreateJavaBookmark(new_parent), static_cast<int>(new_index));
 }
 
@@ -1265,15 +1226,12 @@ void BookmarkBridge::BookmarkNodeAdded(BookmarkModel* model,
                                        const BookmarkNode* parent,
                                        size_t index,
                                        bool added_by_user) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkNodeAdded(env, obj, CreateJavaBookmark(parent),
-                                        static_cast<int>(index));
+  Java_BookmarkBridge_bookmarkNodeAdded(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
+      CreateJavaBookmark(parent), static_cast<int>(index));
 }
 
 void BookmarkBridge::BookmarkNodeRemoved(BookmarkModel* model,
@@ -1281,76 +1239,59 @@ void BookmarkBridge::BookmarkNodeRemoved(BookmarkModel* model,
                                          size_t old_index,
                                          const BookmarkNode* node,
                                          const std::set<GURL>& removed_urls) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkNodeRemoved(env, obj, CreateJavaBookmark(parent),
-                                          static_cast<int>(old_index),
-                                          CreateJavaBookmark(node));
+  Java_BookmarkBridge_bookmarkNodeRemoved(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
+      CreateJavaBookmark(parent), static_cast<int>(old_index),
+      CreateJavaBookmark(node));
 }
 
 void BookmarkBridge::BookmarkAllUserNodesRemoved(
     BookmarkModel* model,
     const std::set<GURL>& removed_urls) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkAllUserNodesRemoved(env, obj);
+  Java_BookmarkBridge_bookmarkAllUserNodesRemoved(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 void BookmarkBridge::BookmarkNodeChanged(BookmarkModel* model,
                                          const BookmarkNode* node) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkNodeChanged(env, obj, CreateJavaBookmark(node));
+  Java_BookmarkBridge_bookmarkNodeChanged(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
+      CreateJavaBookmark(node));
 }
 
 void BookmarkBridge::BookmarkNodeChildrenReordered(BookmarkModel* model,
                                                    const BookmarkNode* node) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_bookmarkNodeChildrenReordered(env, obj,
-                                                    CreateJavaBookmark(node));
+  Java_BookmarkBridge_bookmarkNodeChildrenReordered(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
+      CreateJavaBookmark(node));
 }
 
 void BookmarkBridge::ExtensiveBookmarkChangesBeginning(BookmarkModel* model) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_extensiveBookmarkChangesBeginning(env, obj);
+  Java_BookmarkBridge_extensiveBookmarkChangesBeginning(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 void BookmarkBridge::ExtensiveBookmarkChangesEnded(BookmarkModel* model) {
-  if (!IsLoaded())
+  if (!IsLoaded() || !java_bookmark_model_)
     return;
 
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_BookmarkBridge_extensiveBookmarkChangesEnded(env, obj);
+  Java_BookmarkBridge_extensiveBookmarkChangesEnded(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 void BookmarkBridge::PartnerShimChanged(PartnerBookmarksShim* shim) {
@@ -1405,93 +1346,16 @@ void BookmarkBridge::OnProfileWillBeDestroyed(Profile* profile) {
   DestroyJavaObject();
 }
 
-void BookmarkBridge::GetUpdatedProductPrices(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobjectArray>& gurls,
-    const JavaParamRef<jobject>& callback) {
-  std::vector<GURL> urls;
-  for (int i = 0; i < env->GetArrayLength(gurls.obj()); i++) {
-    urls.push_back(*url::GURLAndroid::ToNativeGURL(
-        env, ScopedJavaLocalRef<jobject>(
-                 env, env->GetObjectArrayElement(gurls.obj(), i))));
-  }
-
-  CHECK(opt_guide_);
-
-  opt_guide_->CanApplyOptimizationOnDemand(
-      urls, {optimization_guide::proto::OptimizationType::PRICE_TRACKING},
-      optimization_guide::proto::RequestContext::CONTEXT_BOOKMARKS,
-      base::BindRepeating(&BookmarkBridge::OnProductPriceUpdated,
-                          weak_ptr_factory_.GetWeakPtr(),
-                          ScopedJavaGlobalRef<jobject>(callback)));
-}
-
-void BookmarkBridge::OnProductPriceUpdated(
-    ScopedJavaGlobalRef<jobject> callback,
-    const GURL& url,
-    const base::flat_map<
-        optimization_guide::proto::OptimizationType,
-        optimization_guide::OptimizationGuideDecisionWithMetadata>& decisions) {
-  JNIEnv* env = AttachCurrentThread();
-
-  if (!decisions.contains(
-          optimization_guide::proto::OptimizationType::PRICE_TRACKING)) {
-    return;
-  }
-
-  auto iter = decisions.find(
-      optimization_guide::proto::OptimizationType::PRICE_TRACKING);
-
-  if (iter == decisions.cend())
-    return;
-
-  optimization_guide::OptimizationGuideDecisionWithMetadata decision =
-      iter->second;
-
-  // Only fire the callback for price tracking info if successful.
-  if (decision.decision !=
-      optimization_guide::OptimizationGuideDecision::kTrue) {
-    return;
-  }
-
-  if (decision.metadata.any_metadata().has_value()) {
-    absl::optional<commerce::PriceTrackingData> parsed_any =
-        optimization_guide::ParsedAnyMetadata<commerce::PriceTrackingData>(
-            decision.metadata.any_metadata().value());
-
-    if (!parsed_any.has_value())
-      return;
-
-    commerce::PriceTrackingData price_tracking_data = parsed_any.value();
-
-    bool has_price = price_tracking_data.IsInitialized() &&
-                     price_tracking_data.has_buyable_product() &&
-                     price_tracking_data.buyable_product().has_current_price();
-
-    if (has_price) {
-      commerce::ProductPrice price =
-          price_tracking_data.buyable_product().current_price();
-
-      int size = price.ByteSize();
-      std::vector<uint8_t> data;
-      data.resize(size);
-      price.SerializeToArray(data.data(), size);
-
-      Java_BookmarkBridge_onProductPriceUpdated(
-          env, weak_java_ref_.get(env),
-          url::GURLAndroid::FromNativeGURL(env, url),
-          base::android::ToJavaByteArray(env, data.data(), size), callback);
-    }
-  }
+ScopedJavaGlobalRef<jobject> BookmarkBridge::GetJavaBookmarkModel() {
+  return java_bookmark_model_;
 }
 
 void BookmarkBridge::DestroyJavaObject() {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
-  if (obj.is_null())
+  if (!java_bookmark_model_)
     return;
-  Java_BookmarkBridge_destroyFromNative(env, obj);
+
+  Java_BookmarkBridge_destroyFromNative(
+      AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
 }
 
 // Vivaldi additions

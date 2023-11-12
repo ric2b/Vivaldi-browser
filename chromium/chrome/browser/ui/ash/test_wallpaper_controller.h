@@ -8,6 +8,7 @@
 #include "ash/public/cpp/wallpaper/google_photos_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
+#include "ash/public/cpp/wallpaper/wallpaper_drivefs_delegate.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
 #include "base/files/file_path.h"
 #include "base/observer_list.h"
@@ -68,9 +69,15 @@ class TestWallpaperController : public ash::WallpaperController {
   update_current_wallpaper_layout_layout() const {
     return update_current_wallpaper_layout_layout_;
   }
+  void add_dedup_key_to_wallpaper_info(const std::string& dedup_key) {
+    if (wallpaper_info_.has_value())
+      wallpaper_info_->dedup_key = dedup_key;
+  }
 
   // ash::WallpaperController:
   void SetClient(ash::WallpaperControllerClient* client) override;
+  void SetDriveFsDelegate(
+      std::unique_ptr<ash::WallpaperDriveFsDelegate> drivefs_delegate) override;
   void Init(const base::FilePath& user_data,
             const base::FilePath& wallpapers,
             const base::FilePath& custom_wallpapers,
@@ -91,11 +98,10 @@ class TestWallpaperController : public ash::WallpaperController {
                           SetWallpaperCallback callback) override;
   void SetOnlineWallpaperIfExists(const ash::OnlineWallpaperParams& params,
                                   SetWallpaperCallback callback) override;
-  void SetOnlineWallpaperFromData(const ash::OnlineWallpaperParams& params,
-                                  const std::string& image_data,
-                                  SetWallpaperCallback callback) override;
   void SetGooglePhotosWallpaper(const ash::GooglePhotosWallpaperParams& params,
                                 SetWallpaperCallback callback) override;
+  void SetGooglePhotosDailyRefreshAlbumId(const AccountId& account_id,
+                                          const std::string& album_id) override;
   std::string GetGooglePhotosDailyRefreshAlbumId(
       const AccountId& account_id) const override;
   bool SetDailyGooglePhotosWallpaperIdCache(

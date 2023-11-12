@@ -76,6 +76,8 @@ namespace ash {
   E_CPONLY(kColorAshAppStateIndicatorColorInactive) \
   /* Color for the shelf drag handle in tablet mode. */ \
   E_CPONLY(kColorAshShelfHandleColor) \
+  E_CPONLY(kColorAshShelfTooltipBackgroundColor) \
+  E_CPONLY(kColorAshShelfTooltipForegroundColor) \
   E_CPONLY(kColorAshSliderColorActive) \
   E_CPONLY(kColorAshSliderColorInactive) \
   E_CPONLY(kColorAshRadioColorActive) \
@@ -114,7 +116,14 @@ namespace ash {
   /* Color for dialog background in arc */ \
   E_CPONLY(kColorAshDialogBackgroundColor) \
   /* Color for disabled button icon */ \
-  E_CPONLY(kColorAshButtonIconDisabledColor)
+  E_CPONLY(kColorAshButtonIconDisabledColor) \
+  E_CPONLY(kColorAshIconSecondaryDisabledColor) \
+  E_CPONLY(kColorAshIconPrimaryDisabledColor) \
+  E_CPONLY(KColorAshTextDisabledColor) \
+  /* Color for icon of the blocked bluetooth device */ \
+  E_CPONLY(kColorAshIconColorBlocked)\
+  /* Color for icon in title of app streaming bubble */ \
+  E_CPONLY(kColorAshEcheIconColorStreaming)
 
 #include "ui/color/color_id_macros.inc"
 

@@ -47,4 +47,17 @@ BookmarkSyncService::GetBookmarkSyncControllerDelegate(
   return bookmark_model_type_processor_->GetWeakPtr();
 }
 
+void BookmarkSyncService::SetBookmarksLimitForTesting(size_t limit) {
+  bookmark_model_type_processor_
+      ->SetMaxBookmarksTillSyncEnabledForTest(  // IN-TEST
+          limit);
+}
+
+void BookmarkSyncService::SetVivaldiSyncedFileStore(
+    file_sync::SyncedFileStore* synced_file_store) {
+  if (bookmark_model_type_processor_)
+    bookmark_model_type_processor_->set_vivaldi_synced_file_store(
+        synced_file_store);
+}
+
 }  // namespace sync_bookmarks

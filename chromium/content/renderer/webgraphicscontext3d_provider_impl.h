@@ -22,6 +22,7 @@ class ContextProviderCommandBuffer;
 }  // namespace viz
 
 namespace gpu {
+class ContextSupport;
 class GLHelper;
 }  // namespace gpu
 
@@ -42,11 +43,12 @@ class WebGraphicsContext3DProviderImpl
   ~WebGraphicsContext3DProviderImpl() override;
 
   // WebGraphicsContext3DProvider implementation.
-  bool BindToCurrentThread() override;
+  bool BindToCurrentSequence() override;
   gpu::InterfaceBase* InterfaceBase() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::raster::RasterInterface* RasterInterface() override;
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override;
+  gpu::ContextSupport* ContextSupport() override;
   bool IsContextLost() override;
   GrDirectContext* GetGrContext() override;
   const gpu::Capabilities& GetCapabilities() const override;

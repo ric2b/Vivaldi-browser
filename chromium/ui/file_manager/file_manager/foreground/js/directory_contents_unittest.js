@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertEquals, assertFalse} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertFalse} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {installMockChrome} from '../../common/js/mock_chrome.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
@@ -14,23 +14,10 @@ import {FileFilter, RecentContentScanner} from './directory_contents.js';
 
 /**
  * Mock chrome APIs.
- * @type {Object}
+ * @type {!Object}
  */
 const mockChrome = {
-  runtime: {lastError: ''},
   fileManagerPrivate: {
-    SearchType: {
-      ALL: 'ALL',
-      SHARED_WITH_ME: 'SHARED_WITH_ME',
-      EXCLUDE_DIRECTORIES: 'EXCLUDE_DIRECTORIES',
-      OFFLINE: 'OFFLINE',
-    },
-    SourceRestriction: {
-      ANY_SOURCE: 'any_source',
-    },
-    RecentFileType: {
-      ALL: 'all',
-    },
     getRecentFiles:
         (sourceRestriction, fileType, invalidateCache, callback) => {
           /** @type {!Array<!FileEntry>} */

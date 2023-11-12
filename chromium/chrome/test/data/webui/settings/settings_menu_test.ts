@@ -15,8 +15,7 @@ suite('SettingsMenu', function() {
   let settingsMenu: SettingsMenuElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     settingsMenu = document.createElement('settings-menu');
     settingsMenu.pageVisibility = pageVisibility;
     document.body.appendChild(settingsMenu);
@@ -32,8 +31,7 @@ suite('SettingsMenu', function() {
   test('clearsUrlSearchParam', function() {
     // As of iron-selector 2.x, need to force iron-selector to update before
     // clicking items on it, or wait for 'iron-items-changed'
-    const ironSelector =
-        settingsMenu.shadowRoot!.querySelector('iron-selector')!;
+    const ironSelector = settingsMenu.$.menu;
     ironSelector.forceSynchronousItemUpdate();
 
     const urlParams = new URLSearchParams('search=foo');
@@ -56,8 +54,7 @@ suite('SettingsMenuReset', function() {
   let settingsMenu: SettingsMenuElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     Router.getInstance().navigateTo(routes.RESET, undefined);
     settingsMenu = document.createElement('settings-menu');
     document.body.appendChild(settingsMenu);

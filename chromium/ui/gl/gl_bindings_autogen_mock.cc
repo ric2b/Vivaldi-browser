@@ -933,18 +933,6 @@ MockGLInterface::Mock_glCoverStrokePathNV(GLuint name, GLenum coverMode) {
 }
 
 void GL_BINDING_CALL
-MockGLInterface::Mock_glCoverageModulationCHROMIUM(GLenum components) {
-  MakeGlMockFunctionUnique("glCoverageModulationCHROMIUM");
-  interface_->CoverageModulationNV(components);
-}
-
-void GL_BINDING_CALL
-MockGLInterface::Mock_glCoverageModulationNV(GLenum components) {
-  MakeGlMockFunctionUnique("glCoverageModulationNV");
-  interface_->CoverageModulationNV(components);
-}
-
-void GL_BINDING_CALL
 MockGLInterface::Mock_glCreateMemoryObjectsEXT(GLsizei n,
                                                GLuint* memoryObjects) {
   MakeGlMockFunctionUnique("glCreateMemoryObjectsEXT");
@@ -3983,6 +3971,12 @@ MockGLInterface::Mock_glProgramUniformMatrix4x3fv(GLuint program,
 }
 
 void GL_BINDING_CALL
+MockGLInterface::Mock_glProvokingVertexANGLE(GLenum provokeMode) {
+  MakeGlMockFunctionUnique("glProvokingVertexANGLE");
+  interface_->ProvokingVertexANGLE(provokeMode);
+}
+
+void GL_BINDING_CALL
 MockGLInterface::Mock_glPushDebugGroup(GLenum source,
                                        GLuint id,
                                        GLsizei length,
@@ -5635,11 +5629,6 @@ MockGLInterface::GetGLProcAddress(const char* name) {
         Mock_glCoverStrokePathInstancedNV);
   if (strcmp(name, "glCoverStrokePathNV") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glCoverStrokePathNV);
-  if (strcmp(name, "glCoverageModulationCHROMIUM") == 0)
-    return reinterpret_cast<GLFunctionPointerType>(
-        Mock_glCoverageModulationCHROMIUM);
-  if (strcmp(name, "glCoverageModulationNV") == 0)
-    return reinterpret_cast<GLFunctionPointerType>(Mock_glCoverageModulationNV);
   if (strcmp(name, "glCreateMemoryObjectsEXT") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glCreateMemoryObjectsEXT);
@@ -6552,6 +6541,8 @@ MockGLInterface::GetGLProcAddress(const char* name) {
   if (strcmp(name, "glProgramUniformMatrix4x3fv") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glProgramUniformMatrix4x3fv);
+  if (strcmp(name, "glProvokingVertexANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glProvokingVertexANGLE);
   if (strcmp(name, "glPushDebugGroup") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glPushDebugGroup);
   if (strcmp(name, "glPushDebugGroupKHR") == 0)

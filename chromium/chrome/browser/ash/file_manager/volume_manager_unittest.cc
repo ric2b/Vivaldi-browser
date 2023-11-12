@@ -22,12 +22,14 @@
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_running_on_chromeos.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/file_manager/fake_disk_mount_manager.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/ash/file_system_provider/service.h"
@@ -412,7 +414,7 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
                 ->GetMountPointPath()
                 .AsUTF8Unsafe(),
             event.device_path);
-  EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->OnFileSystemBeingUnmounted();
 
@@ -423,7 +425,7 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
                 ->GetMountPointPath()
                 .AsUTF8Unsafe(),
             event.device_path);
-  EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -719,22 +721,22 @@ TEST_F(VolumeManagerTest, OnMountEvent_MountingAndUnmounting) {
                                                  ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                 ash::MountError::kNone, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   ASSERT_EQ(1U, observer.events().size());
   LoggingObserver::Event event = observer.events()[0];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                 ash::MountError::kNone, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   ASSERT_EQ(2U, observer.events().size());
   event = observer.events()[1];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -753,7 +755,7 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
                                                  ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                 ash::MountError::kNone, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   LoggingObserver observer;
 
@@ -765,20 +767,20 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
 
     // After resume, the device is unmounted and then mounted.
     volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                   ash::MountError::kNone, kMountPoint);
+                                   ash::MountError::kSuccess, kMountPoint);
 
     // Observe what happened for the mount event.
     volume_manager()->AddObserver(&observer);
 
     volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                   ash::MountError::kNone, kMountPoint);
+                                   ash::MountError::kSuccess, kMountPoint);
   }
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -791,7 +793,7 @@ TEST_F(VolumeManagerTest, OnMountEvent_UnmountingWithoutMounting) {
                                                  ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                 ash::MountError::kNone, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   // Unmount event for a disk not mounted in this manager is not reported.
   ASSERT_EQ(0U, observer.events().size());
@@ -804,7 +806,8 @@ TEST_F(VolumeManagerTest, OnFormatEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_STARTED,
-                                  ash::FormatError::kNone, "device1", "label1");
+                                  ash::FormatError::kSuccess, "device1",
+                                  "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -821,7 +824,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_STARTED,
-                                  ash::FormatError::kUnknown, "device1",
+                                  ash::FormatError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -839,7 +842,8 @@ TEST_F(VolumeManagerTest, OnFormatEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                                  ash::FormatError::kNone, "device1", "label1");
+                                  ash::FormatError::kSuccess, "device1",
+                                  "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -865,7 +869,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                                  ash::FormatError::kUnknown, "device1",
+                                  ash::FormatError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -892,7 +896,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_STARTED,
-                                     ash::PartitionError::kNone, "device1",
+                                     ash::PartitionError::kSuccess, "device1",
                                      "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -910,8 +914,8 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_STARTED,
-                                     ash::PartitionError::kUnknown, "device1",
-                                     "label1");
+                                     ash::PartitionError::kUnknownError,
+                                     "device1", "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -928,7 +932,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_COMPLETED,
-                                     ash::PartitionError::kNone, "device1",
+                                     ash::PartitionError::kSuccess, "device1",
                                      "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -946,8 +950,8 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_COMPLETED,
-                                     ash::PartitionError::kUnknown, "device1",
-                                     "label1");
+                                     ash::PartitionError::kUnknownError,
+                                     "device1", "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -983,7 +987,7 @@ TEST_F(VolumeManagerTest, OnExternalStorageDisabledChanged) {
       "failed_unmount", "", "", {}, ash::MountType::kDevice,
       ash::MountAccessMode::kReadWrite, base::DoNothing());
   disk_mount_manager_->FailUnmountRequest("failed_unmount",
-                                          ash::MountError::kUnknown);
+                                          ash::MountError::kUnknownError);
 
   // Initially, there are four mount points.
   ASSERT_EQ(4U, disk_mount_manager_->mount_points().size());
@@ -1165,12 +1169,12 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
 
   // Mount a USB stick.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, ash::MountError::kNone,
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
       {"/removable/usb", "/removable/usb", ash::MountType::kDevice});
 
   // Mount a zip archive in the stick.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, ash::MountError::kNone,
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
       {"/removable/usb/1.zip", "/archive/1", ash::MountType::kArchive});
   base::WeakPtr<Volume> volume = volume_manager()->FindVolumeById("archive:1");
   ASSERT_TRUE(volume.get());
@@ -1179,7 +1183,7 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
 
   // Mount a zip archive in the previous zip archive.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, ash::MountError::kNone,
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
       {"/archive/1/2.zip", "/archive/2", ash::MountType::kArchive});
   base::WeakPtr<Volume> second_volume =
       volume_manager()->FindVolumeById("archive:2");
@@ -1190,7 +1194,7 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
   // A zip file is mounted from other profile. It must be ignored in the current
   // VolumeManager.
   volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                 ash::MountError::kNone,
+                                 ash::MountError::kSuccess,
                                  {"/other/profile/drive/folder/3.zip",
                                   "/archive/3", ash::MountType::kArchive});
   base::WeakPtr<Volume> third_volume =
@@ -1217,26 +1221,41 @@ TEST_F(VolumeManagerTest, MTPPlugAndUnplug) {
       FILE_PATH_LITERAL("/dummy/device/location2"), u"label2", u"vendor2",
       u"model2", 12345 /* size */);
 
-  // Attach
+  // Attach: expect mount events for the MTP and fusebox MTP volumes.
   volume_manager()->OnRemovableStorageAttached(info);
-  ASSERT_EQ(1u, observer.events().size());
+  ASSERT_EQ(2u, observer.events().size());
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, observer.events()[0].type);
+  EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, observer.events()[1].type);
 
+  // The MTP volume should be mounted.
   base::WeakPtr<Volume> volume = volume_manager()->FindVolumeById("mtp:model");
   ASSERT_TRUE(volume);
+  EXPECT_EQ("", volume->file_system_type());
   EXPECT_EQ(VOLUME_TYPE_MTP, volume->type());
 
-  // Non MTP events from storage monitor are ignored.
+  // The fusebox MTP volume should be mounted.
+  const auto fusebox_volume_id = base::StrCat({util::kFuseBox, "mtp:model"});
+  base::WeakPtr<Volume> fusebox_volume =
+      volume_manager()->FindVolumeById(fusebox_volume_id);
+  ASSERT_TRUE(fusebox_volume);
+  EXPECT_EQ(util::kFuseBox, fusebox_volume->file_system_type());
+  EXPECT_EQ(VOLUME_TYPE_MTP, fusebox_volume->type());
+
+  // Non MTP attach events from storage monitor are ignored.
   volume_manager()->OnRemovableStorageAttached(non_mtp_info);
-  EXPECT_EQ(1u, observer.events().size());
+  EXPECT_EQ(2u, observer.events().size());
 
-  // Detach
+  // Detach: there should be two more events, bringing the total to four.
   volume_manager()->OnRemovableStorageDetached(info);
-  ASSERT_EQ(2u, observer.events().size());
+  ASSERT_EQ(4u, observer.events().size());
   EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED,
-            observer.events()[1].type);
+            observer.events()[2].type);
+  EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED,
+            observer.events()[3].type);
 
+  // The unmount events should remove the MTP and fusebox MTP volumes.
   EXPECT_FALSE(volume);
+  EXPECT_FALSE(fusebox_volume);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -1246,7 +1265,8 @@ TEST_F(VolumeManagerTest, OnRenameEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_STARTED,
-                                  ash::RenameError::kNone, "device1", "label1");
+                                  ash::RenameError::kSuccess, "device1",
+                                  "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -1263,7 +1283,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_STARTED,
-                                  ash::RenameError::kUnknown, "device1",
+                                  ash::RenameError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1281,7 +1301,8 @@ TEST_F(VolumeManagerTest, OnRenameEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_COMPLETED,
-                                  ash::RenameError::kNone, "device1", "label1");
+                                  ash::RenameError::kSuccess, "device1",
+                                  "label1");
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
@@ -1306,7 +1327,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_COMPLETED,
-                                  ash::RenameError::kUnknown, "device1",
+                                  ash::RenameError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1335,7 +1356,7 @@ TEST_F(VolumeManagerTest, OnArcPlayStoreEnabledChanged_Enabled) {
   unsigned index = 0;
   for (const auto& event : observer.events()) {
     EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
-    EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+    EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
     if (index < 4) {
       EXPECT_EQ(arc::GetMediaViewVolumeId(arc_volume_ids[index]),
                 event.volume_id);
@@ -1366,7 +1387,7 @@ TEST_F(VolumeManagerTest, OnArcPlayStoreEnabledChanged_Disabled) {
   unsigned index = 0;
   for (const auto& event : observer.events()) {
     EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED, event.type);
-    EXPECT_EQ(ash::MountError::kNone, event.mount_error);
+    EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
     if (index < 4) {
       EXPECT_EQ(arc::GetMediaViewVolumeId(arc_volume_ids[index]),
                 event.volume_id);

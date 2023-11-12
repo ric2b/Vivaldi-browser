@@ -86,7 +86,7 @@ public final class Website implements WebsiteEntry {
                 && !mEmbedder.getTitle().equals(SITE_WILDCARD);
     }
 
-    private WebsiteAddress getMainAddress() {
+    public WebsiteAddress getMainAddress() {
         if (representsThirdPartiesOnSite()) {
             return mEmbedder;
         }
@@ -243,6 +243,14 @@ public final class Website implements WebsiteEntry {
             } else {
                 RecordUserAction.record("SoundContentSetting.UnmuteBy.SiteSettings");
             }
+        } else if (type == ContentSettingsType.AUTOPLAY) { // Vivaldi
+            // It is possible to set the permission without having an existing exception,
+            // because we always show the autoplay permission in Site Settings.
+            if (exception == null) {
+                exception = new ContentSettingException(ContentSettingsType.AUTOPLAY,
+                        getAddress().getHost(), value, "", /*isEmbargoed=*/false);
+                setContentSettingException(type, exception);
+            }
         }
         // We want to call setContentSetting even after explicitly setting
         // mContentSettingException above because this will trigger the actual change
@@ -363,5 +371,11 @@ public final class Website implements WebsiteEntry {
     @Override
     public boolean matches(String search) {
         return getTitle().contains(search);
+    }
+
+    @Override
+    public boolean isCookieDeletionDisabled(BrowserContextHandle browserContextHandle) {
+        return WebsitePreferenceBridge.isCookieDeletionDisabled(
+                browserContextHandle, mOrigin.getOrigin());
     }
 }

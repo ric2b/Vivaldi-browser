@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Recarregar imagem</translation>
 <translation id="1924750141060565109">Paisagem 15</translation>
 <translation id="19598411548897379">Genérico</translation>
+<translation id="1973351931613083086">reprodução automática</translation>
 <translation id="1985669426322966465">Atualização de software</translation>
 <translation id="2079036669923635404">Clique aqui para atualizar o Vivaldi para a versão <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ocorreu um erro ao transferir ficheiros de atualização. Verifique a sua ligação à internet e tente novamente mais tarde.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Lixo</translation>
 <translation id="292258461174562431">Monstro 4</translation>
 <translation id="2923448633003185837">Colar e ir</translation>
+<translation id="2953943267837858202">Reprodução automática de vídeos não permitida</translation>
 <translation id="2977472760057091832">Abrir ligação numa nova janela privada</translation>
 <translation id="2989805286512600854">Abrir num novo separador</translation>
 <translation id="3027988479108856431">Infelizmente, as suas definições do Yandex não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Yandex. Depois, clique em Continuar.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Novo favorito</translation>
 <translation id="3255747772218936245">Instalar atualização</translation>
 <translation id="3259769196742189631">Validar</translation>
+<translation id="3291915639428159043">Reprodução automática bloqueada</translation>
 <translation id="3302905971452834934">Monstro 1</translation>
 <translation id="3334610655141903168">(sem título)</translation>
 <translation id="3372505110412186107">O Vivaldi <ph name="VERSION" /> é, neste momento, a versão mais recente disponível.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Abrir ligação numa nova janela</translation>
 <translation id="3588820906588687999">Abrir imagem num novo separador</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
+<translation id="3620979700683094848">Websites podem reproduzir vídeo automaticamente</translation>
 <translation id="3680031241659195730">Está disponível uma nova versão do Vivaldi!</translation>
 <translation id="3708982624815781692">A transferência foi cancelada.</translation>
 <translation id="3732157130969736834">Adicionar ligação aos favoritos</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Não mostrar novamente</translation>
 <translation id="4074744496918018786">Abrir imagem numa nova janela privada</translation>
+<translation id="410351446219883937">Reprodução automática</translation>
 <translation id="4324492550286218827">Paisagem 2</translation>
 <translation id="4406101500523955324">Abrir numa nova janela privada</translation>
 <translation id="4420816922321010053">Quer mesmo sair do Vivaldi?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7727481996062361502">A verificar atualização...</translation>
 <translation id="7793738202466490491">Adicionar como evento de calendário</translation>
+<translation id="7834693436815575883">Reprodução automática permitida</translation>
 <translation id="7848222781052558334">Falha ao verificar a assinatura digital dos ficheiros transferidos.</translation>
 <translation id="7865983598101744945">Confirmar saída</translation>
 <translation id="7957213167373139414">O meu calendário</translation>
 <translation id="8027581147000338959">Abrir numa nova janela</translation>
+<translation id="8044382196220116469">Não permitir que os websites reproduzam vídeos automaticamente</translation>
 <translation id="8099620695029051217">Copiar endereço da página</translation>
 <translation id="8197810018650377191">Adicionar página aos favoritos</translation>
 <translation id="8261506727792406068">Eliminar</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Inspecionar portal-document</translation>
 <translation id="8768970203213061953">Paisagem 14</translation>
 <translation id="8773635261052182196">Não voltará a ver estas notificações. Poderá reativá-las nas definições do Vivaldi.</translation>
+<translation id="8774017153185436870">Os websites podem reproduzir vídeo automaticamente</translation>
 <translation id="8813277370772331957">Lembrar mais tarde</translation>
 <translation id="8894900864683381599">Adicionar ligação aos Painéis Web</translation>
 <translation id="8912720443398351457">Quer mesmo fechar o Vivaldi?</translation>
 <translation id="8947109330183116400">Selecionar um ficheiro HTML de favoritos</translation>
 <translation id="9017566390391482291">Selecionar a pasta do perfil do Vivaldi para importar</translation>
 <translation id="9048058608784130603">Atualização pendente <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Permitida a reprodução automática de vídeo</translation>
 <translation id="9065203028668620118">Editar</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Abrir imagem como <ph name="USER" /></translation>

@@ -4,6 +4,7 @@
 
 #include "sandbox/policy/win/sandbox_test_utils.h"
 
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/win/security_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,7 +20,7 @@ std::vector<base::win::Sid> GetCapabilitySids(
     const std::initializer_list<std::wstring>& capabilities) {
   std::vector<base::win::Sid> sids;
   for (const auto& capability : capabilities) {
-    sids.push_back(*base::win::Sid::FromNamedCapability(capability.c_str()));
+    sids.push_back(base::win::Sid::FromNamedCapability(capability));
   }
   return sids;
 }
@@ -38,10 +39,7 @@ std::wstring GetAccessAllowedForCapabilities(
 void EqualSidList(const std::vector<base::win::Sid>& left,
                   const std::vector<base::win::Sid>& right) {
   EXPECT_EQ(left.size(), right.size());
-  auto result = std::mismatch(left.cbegin(), left.cend(), right.cbegin(),
-                              [](const auto& left_sid, const auto& right_sid) {
-                                return left_sid == right_sid;
-                              });
+  auto result = base::ranges::mismatch(left, right);
   EXPECT_EQ(result.first, left.cend());
 }
 

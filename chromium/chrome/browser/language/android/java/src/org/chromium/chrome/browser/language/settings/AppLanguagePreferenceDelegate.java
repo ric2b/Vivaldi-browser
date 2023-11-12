@@ -34,7 +34,7 @@ public class AppLanguagePreferenceDelegate {
 
     private SnackbarManager mSnackbarManager;
     private Snackbar mSnackbar;
-    private SnackbarController mStackbarController;
+    private SnackbarController mSnackbarController;
     // Preference representing the current app language.
     private LanguageItemPickerPreference mPreference;
     // Activity representing the {@link LanguageSettings} preferences.
@@ -46,7 +46,7 @@ public class AppLanguagePreferenceDelegate {
      * @param action RestartAction handler to restart Chrome from the Snackbar.
      */
     public void setRestartAction(RestartAction action) {
-        mStackbarController = new SuccessSnackbarControllerImpl(action);
+        mSnackbarController = new SuccessSnackbarControllerImpl(action);
     }
 
     /**
@@ -67,6 +67,7 @@ public class AppLanguagePreferenceDelegate {
      */
     public void maybeShowSnackbar() {
         if (mSnackbar != null && mSnackbarManager.canShowSnackbar()) {
+            mSnackbarManager.setParentView(mActivity.findViewById(android.R.id.content));
             mSnackbarManager.showSnackbar(mSnackbar);
             mSnackbar = null;
         }
@@ -137,12 +138,12 @@ public class AppLanguagePreferenceDelegate {
      * the Snackbar, and if not possible save the Snackbar to show later.
      */
     private void makeAndShowRestartSnackbar() {
-        mSnackbarManager.dismissSnackbars(mStackbarController);
+        mSnackbarManager.dismissSnackbars(mSnackbarController);
         String displayName = mPreference.getLanguageItem().getDisplayName();
         Resources resources = mActivity.getResources();
         Snackbar snackbar =
                 Snackbar.make(resources.getString(R.string.languages_infobar_ready, displayName),
-                                mStackbarController, Snackbar.TYPE_PERSISTENT,
+                                mSnackbarController, Snackbar.TYPE_PERSISTENT,
                                 Snackbar.UMA_LANGUAGE_SPLIT_RESTART)
                         .setAction(resources.getString(R.string.languages_infobar_restart), null);
         snackbar.setSingleLine(false);

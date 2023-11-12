@@ -12,7 +12,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window.h"
@@ -78,7 +78,7 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
   void SetCapture() override {}
   void ReleaseCapture() override {}
   bool HasCapture() const override { return false; }
-  void ToggleFullscreen() override {}
+  void SetFullscreen(bool fullscreen, int64_t target_display_id) override {}
   void Maximize() override {}
   void Minimize() override {}
   void Restore() override {}
@@ -108,7 +108,7 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
                  WmDragHandler::LocationDelegate* delegate) override {
     drag_finished_callback_ = std::move(callback);
     source_data_ = std::make_unique<OSExchangeData>(data.provider().Clone());
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&FakePlatformWindow::ProcessDrag, base::Unretained(this),
                        std::move(source_data_), operation));
@@ -120,6 +120,9 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
   }
 
   void CancelDrag() override { drag_loop_quit_closure_.Run(); }
+
+  void UpdateDragImage(const gfx::ImageSkia& image,
+                       const gfx::Vector2d& offset) override {}
 
   void OnDragEnter(const gfx::PointF& point,
                    std::unique_ptr<OSExchangeData> data,
@@ -175,8 +178,7 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
 // DragDropDelegate which counts the number of each type of drag-drop event.
 class FakeDragDropDelegate : public aura::client::DragDropDelegate {
  public:
-  FakeDragDropDelegate()
-      : num_enters_(0), num_updates_(0), num_exits_(0), num_drops_(0) {}
+  FakeDragDropDelegate() = default;
 
   FakeDragDropDelegate(const FakeDragDropDelegate&) = delete;
   FakeDragDropDelegate& operator=(const FakeDragDropDelegate&) = delete;
@@ -226,10 +228,10 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
     output_drag_op = destination_operation_;
   }
 
-  int num_enters_;
-  int num_updates_;
-  int num_exits_;
-  int num_drops_;
+  int num_enters_ = 0;
+  int num_updates_ = 0;
+  int num_exits_ = 0;
+  int num_drops_ = 0;
   std::unique_ptr<ui::OSExchangeData> received_data_;
   DragOperation destination_operation_;
   int last_event_flags_ = ui::EF_NONE;

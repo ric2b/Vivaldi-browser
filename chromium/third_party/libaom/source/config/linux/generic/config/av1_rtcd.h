@@ -223,29 +223,21 @@ int64_t av1_calc_frame_error_c(const uint8_t* const ref,
                                int p_stride);
 #define av1_calc_frame_error av1_calc_frame_error_c
 
-void av1_calc_indices_dim1_c(const int* data,
-                             const int* centroids,
+void av1_calc_indices_dim1_c(const int16_t* data,
+                             const int16_t* centroids,
                              uint8_t* indices,
+                             int64_t* total_dist,
                              int n,
                              int k);
 #define av1_calc_indices_dim1 av1_calc_indices_dim1_c
 
-void av1_calc_indices_dim2_c(const int* data,
-                             const int* centroids,
+void av1_calc_indices_dim2_c(const int16_t* data,
+                             const int16_t* centroids,
                              uint8_t* indices,
+                             int64_t* total_dist,
                              int n,
                              int k);
 #define av1_calc_indices_dim2 av1_calc_indices_dim2_c
-
-double av1_compute_cross_correlation_c(unsigned char* im1,
-                                       int stride1,
-                                       int x1,
-                                       int y1,
-                                       unsigned char* im2,
-                                       int stride2,
-                                       int x2,
-                                       int y2);
-#define av1_compute_cross_correlation av1_compute_cross_correlation_c
 
 void av1_convolve_2d_scale_c(const uint8_t* src,
                              int src_stride,
@@ -975,16 +967,16 @@ void cdef_copy_rect8_16bit_to_16bit_c(uint16_t* dst,
                                       int dstride,
                                       const uint16_t* src,
                                       int sstride,
-                                      int v,
-                                      int h);
+                                      int width,
+                                      int height);
 #define cdef_copy_rect8_16bit_to_16bit cdef_copy_rect8_16bit_to_16bit_c
 
 void cdef_copy_rect8_8bit_to_16bit_c(uint16_t* dst,
                                      int dstride,
                                      const uint8_t* src,
                                      int sstride,
-                                     int v,
-                                     int h);
+                                     int width,
+                                     int height);
 #define cdef_copy_rect8_8bit_to_16bit cdef_copy_rect8_8bit_to_16bit_c
 
 void cdef_filter_16_0_c(void* dst16,

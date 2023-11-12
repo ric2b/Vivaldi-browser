@@ -4,18 +4,18 @@
 <translation id="1075622780330595106"><ph name="NUMBER_OF_TABS" /> av flikarna har inte använts på länge. Vill du stänga dem?</translation>
 <translation id="1181037720776840403">Ta bort</translation>
 <translation id="125153950246128346">Tryck för att visa en annan flik</translation>
-<translation id="1302104331113804646">Inställningar för prisbevakning</translation>
-<translation id="1378979118429748177">Få aviseringar om prissänkning</translation>
 <translation id="1403228085774130835">Du hittar flikar som du har stängt under Senaste flikarna i Chromes huvudmeny</translation>
 <translation id="1455506303394048917">Aktivitet på de här inkognitoflikarna tas bort från enheten</translation>
 <translation id="1499635324672558517">Vill du stänga alla inkognitoflikar?</translation>
 <translation id="1657719826150349398">Flytta fliken nedåt</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> flik}other{<ph name="TABS_COUNT_MANY" /> flikar}}</translation>
+<translation id="2050597508048557928">{TABS_COUNT,plural, =1{Infoga bokmärke för <ph name="TABS_COUNT_ONE" /> vald flik}other{Infoga bokmärken för <ph name="TABS_COUNT_MANY" /> valda flikar}}</translation>
 <translation id="2118649612461486615">Butiksinformation</translation>
 <translation id="2162620598375156287">Nu <ph name="CURRENT_PRICE" /> på <ph name="SOURCE_WEBSITE" /></translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{Dela upp flik}other{Dela upp flikar}}</translation>
 <translation id="2277224997687551299">Redigera gruppnamn</translation>
 <translation id="228946090561406413">{TABS_COUNT,plural, =1{Ta bort <ph name="TABS_COUNT_ONE" /> markerad flik från gruppen.}other{Ta bort <ph name="TABS_COUNT_MANY" /> markerade flikar från gruppen.}}</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Infoga bokmärke för flik}other{Infoga bokmärken för flikar}}</translation>
 <translation id="2479148705183875116">Öppna inställningarna</translation>
 <translation id="2539705006853443997">{TABS_COUNT,plural, =1{Komprimera <ph name="TABS_COUNT_ONE" /> flik.}other{Komprimera flikgruppen med <ph name="TABS_COUNT_MANY" /> flikar.}}</translation>
 <translation id="2569352796411618312">Förslag: <ph name="NUMBER_OF_TABS" /> av flikarna har inte använts på länge. Vill du stänga dem?</translation>
@@ -34,6 +34,7 @@
 <translation id="3291470810748040983">Du får en avisering när det finns ett lägre pris på en öppen flik</translation>
 <translation id="3328308545011660196">Förslag: <ph name="NUMBER_OF_TABS" /> flikar verkar höra ihop. Vill du gruppera dem?</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
+<translation id="374923079891132274">Miniatyr för förhandsgranskning av delningsblad.</translation>
 <translation id="3819916404117584598">{TABS_COUNT,plural, =1{Komprimera <ph name="TABS_COUNT_ONE" /> flik.}other{Komprimera flikgruppen <ph name="TITLE_OF_GROUP" /> med <ph name="TABS_COUNT_MANY" /> flikar.}}</translation>
 <translation id="3882834874697329510">Aktivera aviseringar i inställningarna om du vill få en avisering när det finns ett lägre pris på en öppen flik.</translation>
 <translation id="3940195383040445971">Bevaka priser på flikar</translation>
@@ -58,6 +59,7 @@
 <translation id="5556417849629758491">Visa butiksinformation. Alternativet visas högt upp på skärmen</translation>
 <translation id="5558362125926932819">Stäng flikgruppen med <ph name="NUMBER_OF_TABS" /> flikar</translation>
 <translation id="5580090775658607195"><ph name="TAB_COUNT" /> flikar har grupperats</translation>
+<translation id="5656738671621697952">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> länk från Chrome}other{<ph name="TABS_COUNT_MANY" /> länkar från Chrome}}</translation>
 <translation id="575494663145460764">Vill du få aviseringar om sänkt pris?</translation>
 <translation id="58326064309361797">Gruppera flikar genom att dra dem</translation>
 <translation id="5846292395804797011">Stäng gruppen <ph name="TITLE_OF_GROUP" /> med <ph name="NUMBER_OF_TABS" /> flikar</translation>
@@ -95,8 +97,8 @@
 <translation id="8205266828577616993">Flytta fliken uppåt</translation>
 <translation id="8304833501377495048">Vill du sluta visa flikhuvudet?</translation>
 <translation id="83556505225171773">{TABS_COUNT,plural, =1{Stäng <ph name="TABS_COUNT_ONE" /> vald flik}other{Stäng <ph name="TABS_COUNT_MANY" /> valda flikar}}</translation>
+<translation id="8398929769197326728">Ny mapp – <ph name="CURRENT_TIMESTAMP_MS" /></translation>
 <translation id="8557923272772633250">Utöka flikgruppen med <ph name="NUMBER_OF_TABS" /> flikar.</translation>
-<translation id="860282621117673749">Aviseringar om prissänkning</translation>
 <translation id="8714939927607906138">Lägre pris</translation>
 <translation id="8749939518995770034">Flikhuvudet har stängts</translation>
 <translation id="8820741577754260431">Se sänkta priser på flikar</translation>

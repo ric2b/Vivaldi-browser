@@ -19,15 +19,15 @@ class QueryTilesModel : public ModelProvider {
   ~QueryTilesModel() override = default;
 
   // Disallow copy/assign.
-  QueryTilesModel(QueryTilesModel&) = delete;
-  QueryTilesModel& operator=(QueryTilesModel&) = delete;
+  QueryTilesModel(const QueryTilesModel&) = delete;
+  QueryTilesModel& operator=(const QueryTilesModel&) = delete;
 
   static std::unique_ptr<Config> GetConfig();
 
   // ModelProvider implementation.
   void InitAndFetchModel(
       const ModelUpdatedCallback& model_updated_callback) override;
-  void ExecuteModelWithInput(const std::vector<float>& inputs,
+  void ExecuteModelWithInput(const ModelProvider::Request& inputs,
                              ExecutionCallback callback) override;
   bool ModelAvailable() override;
 };

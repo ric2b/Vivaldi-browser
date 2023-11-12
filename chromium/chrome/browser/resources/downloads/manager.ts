@@ -18,7 +18,7 @@ import {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_
 import {FindShortcutMixin} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {Debouncer, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -214,8 +214,8 @@ export class DownloadsManagerElement extends DownloadsManagerElementBase {
         loadTimeData.getBoolean('allowDeletingHistory') &&
         this.items_.some(
             ({state}) => state !== States.DANGEROUS &&
-                state !== States.MIXED_CONTENT &&
-                state !== States.IN_PROGRESS && state !== States.PAUSED);
+                state !== States.INSECURE && state !== States.IN_PROGRESS &&
+                state !== States.PAUSED);
 
     if (this.inSearchMode_) {
       this.announcerDebouncer_ = Debouncer.debounce(
@@ -281,7 +281,7 @@ export class DownloadsManagerElement extends DownloadsManagerElementBase {
 
     this.mojoHandler_.clearAll();
     const canUndo =
-        this.items_.some(data => !data.isDangerous && !data.isMixedContent);
+        this.items_.some(data => !data.isDangerous && !data.isInsecure);
     getToastManager().show(
         loadTimeData.getString('toastClearedAll'),
         /* hideSlotted= */ !canUndo);

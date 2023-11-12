@@ -32,6 +32,7 @@ class MenuModel;
 namespace views {
 namespace test {
 class ComboboxTestApi;
+class InteractionTestUtilSimulatorViews;
 }
 
 class MenuRunner;
@@ -113,6 +114,7 @@ class VIEWS_EXPORT Combobox : public View,
 
   void SetBorderColorId(ui::ColorId color_id);
   void SetBackgroundColorId(ui::ColorId color_id);
+  void SetForegroundColorId(ui::ColorId color_id);
 
   // Sets whether there should be ink drop highlighting on hover/press.
   void SetEventHighlighting(bool should_highlight);
@@ -166,6 +168,7 @@ class VIEWS_EXPORT Combobox : public View,
 
  private:
   friend class test::ComboboxTestApi;
+  friend class test::InteractionTestUtilSimulatorViews;
 
   // Updates the border according to the current node_data.
   void UpdateBorder();
@@ -196,9 +199,6 @@ class VIEWS_EXPORT Combobox : public View,
   int MaybeAdjustWidthForCheckmarks(int original_width) const;
 
   void OnContentSizeMaybeChanged();
-
-  // Handles the clicking event.
-  void HandleClickEvent();
 
   PrefixSelector* GetPrefixSelector();
 
@@ -240,6 +240,9 @@ class VIEWS_EXPORT Combobox : public View,
 
   // Overriding ColorId for the combobox border.
   absl::optional<ui::ColorId> border_color_id_;
+
+  // Overriding ColorId for the combobox foreground (text and caret icon).
+  absl::optional<ui::ColorId> foreground_color_id_;
 
   // The accessible name of this combobox.
   std::u16string accessible_name_;

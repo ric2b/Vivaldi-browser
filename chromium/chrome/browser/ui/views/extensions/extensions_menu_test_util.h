@@ -38,12 +38,8 @@ class ExtensionsMenuTestUtil : public ExtensionActionTestHelper {
   gfx::NativeView GetPopupNativeView() override;
   bool HasPopup() override;
   bool HidePopup() override;
-  void SetWidth(int width) override;
   ExtensionsContainer* GetExtensionsContainer() override;
   void WaitForExtensionsContainerLayout() override;
-  std::unique_ptr<ExtensionActionTestHelper> CreateOverflowBar(
-      Browser* browser) override;
-  void LayoutForOverflowBar() override;
   // TODO(devlin): Some of these popup methods have a common implementation
   // between this and ExtensionActionTestHelperViews. It would make sense to
   // extract them (since they aren't dependent on the extension action UI
@@ -69,8 +65,9 @@ class ExtensionsMenuTestUtil : public ExtensionActionTestHelper {
 
   std::unique_ptr<Wrapper> wrapper_;
 
-  const raw_ptr<Browser> browser_;
-  raw_ptr<ExtensionsToolbarContainer> extensions_container_ = nullptr;
+  const raw_ptr<Browser, DanglingUntriaged> browser_;
+  raw_ptr<ExtensionsToolbarContainer, DanglingUntriaged> extensions_container_ =
+      nullptr;
 
   // Helps make sure that |menu_view_| set to null when destroyed by the widget
   // or via manual means.

@@ -6,43 +6,38 @@
 import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {AutofillAssistantBrowserProxyImpl, SettingsPersonalizationOptionsElement} from 'chrome://settings/lazy_load.js';
+import {SettingsPersonalizationOptionsElement} from 'chrome://settings/lazy_load.js';
 import {PrivacyPageVisibility} from 'chrome://settings/page_visibility.js';
-import {loadTimeData, PrivacyPageBrowserProxyImpl, SettingsToggleButtonElement, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+import {loadTimeData, PrivacyPageBrowserProxyImpl, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {isVisible} from 'chrome://webui-test/test_util.js';
 // <if expr="not is_chromeos">
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
+
 // </if>
 
 import {TestPrivacyPageBrowserProxy} from './test_privacy_page_browser_proxy.js';
 import {TestSyncBrowserProxy} from './test_sync_browser_proxy.js';
-import {TestAutofillAssistantBrowserProxy} from './test_autofill_assistant_browser_proxy.js';
 
 // clang-format on
 
 suite('PersonalizationOptionsTests_AllBuilds', function() {
   let testBrowserProxy: TestPrivacyPageBrowserProxy;
   let syncBrowserProxy: TestSyncBrowserProxy;
-  let autofillAssistantBrowserProxy: TestAutofillAssistantBrowserProxy;
   let customPageVisibility: PrivacyPageVisibility;
   let testElement: SettingsPersonalizationOptionsElement;
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
       driveSuggestAvailable: true,
-      isAutomatedPasswordChangeEnabled: true,
       signinAvailable: true,
       changePriceEmailNotificationsEnabled: true,
     });
   });
 
   function buildTestElement() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     testElement = document.createElement('settings-personalization-options');
     testElement.prefs = {
-      autofill_assistant: {enabled: {value: false}},
       signin: {
         allowed_on_next_startup:
             {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true},
@@ -62,9 +57,6 @@ suite('PersonalizationOptionsTests_AllBuilds', function() {
     PrivacyPageBrowserProxyImpl.setInstance(testBrowserProxy);
     syncBrowserProxy = new TestSyncBrowserProxy();
     SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
-    autofillAssistantBrowserProxy = new TestAutofillAssistantBrowserProxy();
-    AutofillAssistantBrowserProxyImpl.setInstance(
-        autofillAssistantBrowserProxy);
     buildTestElement();
   });
 
@@ -236,74 +228,6 @@ suite('PersonalizationOptionsTests_AllBuilds', function() {
   });
   // </if>
 
-  test('autofillAssistantAvailable', function() {
-    // If the user is not logged in, the element is hidden.
-    testElement.syncStatus = {
-      signedIn: false,
-      statusAction: StatusAction.NO_ACTION,
-    };
-    flush();
-    assertFalse(isVisible(testElement.shadowRoot!.querySelector(
-        '#enableAutofillAssistantToggle')));
-
-    // For logged in users, the toggle appears.
-    testElement.syncStatus = {
-      signedIn: true,
-      statusAction: StatusAction.NO_ACTION,
-    };
-    flush();
-    assertTrue(isVisible(testElement.shadowRoot!.querySelector(
-        '#enableAutofillAssistantToggle')));
-  });
-
-  test('autofillAssistant toggle', async function() {
-    testElement.syncStatus = {
-      signedIn: true,
-      statusAction: StatusAction.NO_ACTION,
-    };
-    flush();
-
-    // Initially, the toggle is off.
-    const toggle =
-        testElement.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-            '#enableAutofillAssistantToggle');
-    assertTrue(!!toggle);
-    assertFalse(toggle.checked);
-
-    // Clicking it leads to a consent prompt.
-    toggle.click();
-    await (autofillAssistantBrowserProxy.whenCalled('promptForConsent'));
-    // The TestAutofillAssistantBrowserProxy simulates accepting the prompt.
-    assertTrue(toggle.checked);
-    assertTrue(testElement.prefs.autofill_assistant.enabled.value);
-
-    // Clicking it again turns it off and logs that consent was revoked.
-    toggle.click();
-    await (autofillAssistantBrowserProxy.whenCalled('revokeConsent'));
-    assertFalse(toggle.checked);
-    assertFalse(testElement.prefs.autofill_assistant.enabled.value);
-  });
-
-  test('autofillAssistantUnavailable', function() {
-    loadTimeData.overrideValues({'isAutomatedPasswordChangeEnabled': false});
-    buildTestElement();  // Rebuild the element after modifying loadTimeData.
-    assertFalse(isVisible(testElement.shadowRoot!.querySelector(
-        '#enableAutofillAssistantToggle')));
-  });
-
-  test('priceEmailNotificationsToggleShown', function() {
-    assertFalse(!!testElement.shadowRoot!.querySelector(
-        '#priceEmailNotificationsToggle'));
-
-    testElement.syncStatus = {
-      signedIn: true,
-      statusAction: StatusAction.NO_ACTION,
-    };
-    flush();
-    assertTrue(!!testElement.shadowRoot!.querySelector(
-        '#priceEmailNotificationsToggle'));
-  });
-
   test('priceEmailNotificationsToggleHidden', function() {
     loadTimeData.overrideValues(
         {'changePriceEmailNotificationsEnabled': false});
@@ -329,8 +253,7 @@ suite('PersonalizationOptionsTests_OfficialBuild', function() {
   setup(function() {
     testBrowserProxy = new TestPrivacyPageBrowserProxy();
     PrivacyPageBrowserProxyImpl.setInstance(testBrowserProxy);
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     testElement = document.createElement('settings-personalization-options');
     document.body.appendChild(testElement);
   });
@@ -339,14 +262,12 @@ suite('PersonalizationOptionsTests_OfficialBuild', function() {
     testElement.remove();
   });
 
+  // On ChromeOS Ash, the spellcheck toggle is in OS Settings, not browser
+  // settings. TODO (https://www.crbug.com/1396704): Add this test in the OS
+  // settings test for the OS version of personalization options, once OS
+  // Settings supports TypeScript tests.
+  // <if expr="not chromeos_ash">
   test('Spellcheck toggle', function() {
-    // <if expr="chromeos_ash">
-    // On ChromeOS spellcheck toggle is shown in OS settings only.
-    loadTimeData.overrideValues({
-      isOSSettings: true,
-    });
-    // </if>
-
     testElement.prefs = {
       profile: {password_manager_leak_detection: {value: true}},
       safebrowsing:
@@ -357,10 +278,6 @@ suite('PersonalizationOptionsTests_OfficialBuild', function() {
     const shadowRoot = testElement.shadowRoot!;
     assertFalse(
         shadowRoot.querySelector<HTMLElement>('#spellCheckControl')!.hidden);
-    // <if expr="chromeos_ash">
-    assertTrue(
-        shadowRoot.querySelector<HTMLElement>('#spellCheckLink')!.hidden);
-    // </if>
 
     testElement.prefs = {
       profile: {password_manager_leak_detection: {value: true}},
@@ -386,13 +303,11 @@ suite('PersonalizationOptionsTests_OfficialBuild', function() {
     shadowRoot.querySelector<HTMLElement>('#spellCheckControl')!.click();
     assertTrue(testElement.prefs.spellcheck.use_spelling_service.value);
   });
+  // </if>
 
-  // Spellcheck link is shown on Chrome OS in Browser settings only.
+  // Only the spellcheck link is shown on Chrome OS in Browser settings.
   // <if expr="chromeos_ash">
   test('Spellcheck link', function() {
-    loadTimeData.overrideValues({
-      isOSSettings: false,
-    });
     testElement.prefs = {
       profile: {password_manager_leak_detection: {value: true}},
       safebrowsing:

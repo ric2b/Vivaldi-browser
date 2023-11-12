@@ -86,6 +86,7 @@
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/known_ports.h"
 #include "third_party/blink/renderer/platform/weborigin/origin_access_entry.h"
@@ -107,6 +108,9 @@ constexpr base::TimeDelta kKeepaliveLoadersTimeout = base::Seconds(30);
 
 // Timeout for link preloads to be used after window.onload
 static constexpr base::TimeDelta kUnusedPreloadTimeout = base::Seconds(3);
+
+static constexpr char kCrossDocumentCachedResource[] =
+    "Blink.MemoryCache.CrossDocumentCachedResource2";
 
 #define RESOURCE_HISTOGRAM_PREFIX "Blink.MemoryCache.RevalidationPolicy."
 
@@ -572,29 +576,39 @@ ResourceFetcher::IsControlledByServiceWorker() const {
   return properties_->GetControllerServiceWorkerMode();
 }
 
-bool ResourceFetcher::ResourceNeedsLoad(Resource* resource,
-                                        const FetchParameters& params,
-                                        RevalidationPolicy policy) {
-  // MHTML documents should not trigger actual loads (i.e. all resource requests
-  // should be fulfilled by the MHTML archive).
-  if (archive_)
-    return false;
-
+bool ResourceFetcher::ShouldDeferResource(ResourceType type,
+                                          const FetchParameters& params) const {
   // Defer a font load until it is actually needed unless this is a link
   // preload.
-  if (resource->GetType() == ResourceType::kFont && !params.IsLinkPreload())
-    return false;
+  if (type == ResourceType::kFont && !params.IsLinkPreload())
+    return true;
 
   // Defer loading images either when:
   // - images are disabled
   // - instructed to defer loading images from network
-  if (resource->GetType() == ResourceType::kImage &&
-      (ShouldDeferImageLoad(resource->Url()) ||
+  if (type == ResourceType::kImage &&
+      (ShouldDeferImageLoad(params.Url()) ||
        params.GetImageRequestBehavior() ==
            FetchParameters::ImageRequestBehavior::kDeferImageLoad)) {
-    return false;
+    return true;
   }
-  return policy != RevalidationPolicy::kUse || resource->StillNeedsLoad();
+
+  return false;
+}
+
+bool ResourceFetcher::ResourceAlreadyLoadStarted(Resource* resource,
+                                                 RevalidationPolicy policy) {
+  return policy == RevalidationPolicy::kUse && resource &&
+         !resource->StillNeedsLoad();
+}
+
+bool ResourceFetcher::ResourceNeedsLoad(Resource* resource,
+                                        RevalidationPolicy policy,
+                                        bool should_defer) const {
+  // MHTML documents should not trigger actual loads (i.e. all resource requests
+  // should be fulfilled by the MHTML archive).
+  return !archive_ && !should_defer &&
+         !ResourceAlreadyLoadStarted(resource, policy);
 }
 
 void ResourceFetcher::DidLoadResourceFromMemoryCache(
@@ -746,9 +760,33 @@ void ResourceFetcher::MakePreloadedResourceBlockOnloadIfNeeded(
   }
 }
 
+ResourceFetcher::RevalidationPolicyForMetrics
+ResourceFetcher::MapToPolicyForMetrics(RevalidationPolicy policy,
+                                       Resource* resource,
+                                       bool should_defer) {
+  if (should_defer && !ResourceAlreadyLoadStarted(resource, policy)) {
+    return RevalidationPolicyForMetrics::kDefer;
+  }
+  // A resource in memory cache but not yet loaded is a deferred resource
+  // created in previous loads.
+  if (policy == RevalidationPolicy::kUse && resource->StillNeedsLoad()) {
+    return RevalidationPolicyForMetrics::kPreviouslyDeferredLoad;
+  }
+  switch (policy) {
+    case RevalidationPolicy::kUse:
+      return RevalidationPolicyForMetrics::kUse;
+    case RevalidationPolicy::kRevalidate:
+      return RevalidationPolicyForMetrics::kRevalidate;
+    case RevalidationPolicy::kReload:
+      return RevalidationPolicyForMetrics::kReload;
+    case RevalidationPolicy::kLoad:
+      return RevalidationPolicyForMetrics::kLoad;
+  }
+}
+
 void ResourceFetcher::UpdateMemoryCacheStats(
     Resource* resource,
-    RevalidationPolicy policy,
+    RevalidationPolicyForMetrics policy,
     const FetchParameters& params,
     const ResourceFactory& factory,
     bool is_static_data,
@@ -1131,8 +1169,12 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     }
   }
 
-  UpdateMemoryCacheStats(resource, policy, params, factory, is_static_data,
-                         same_top_frame_site_resource_cached);
+  // Use factory.GetType() since resource can be nullptr here.
+  bool should_defer = ShouldDeferResource(factory.GetType(), params);
+
+  UpdateMemoryCacheStats(
+      resource, MapToPolicyForMetrics(policy, resource, should_defer), params,
+      factory, is_static_data, same_top_frame_site_resource_cached);
 
   switch (policy) {
     case RevalidationPolicy::kReload:
@@ -1149,11 +1191,18 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
           resource->ShouldRevalidateStaleResponse()) {
         ScheduleStaleRevalidate(resource);
       }
-
       break;
   }
   DCHECK(resource);
   DCHECK_EQ(resource->GetType(), resource_type);
+
+  // in_cached_resources_map is checked to detect Resources shared across
+  // Documents, in the same way as features::kScopeMemoryCachePerContext.
+  if (!is_static_data && policy == RevalidationPolicy::kUse &&
+      !in_cached_resources_map) {
+    base::UmaHistogramEnumeration(kCrossDocumentCachedResource,
+                                  resource->GetType());
+  }
 
   if (policy != RevalidationPolicy::kUse)
     resource->VirtualTimePauser() = std::move(pauser);
@@ -1217,7 +1266,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   // loading immediately. If revalidation policy was determined as |Revalidate|,
   // the resource was already initialized for the revalidation here, but won't
   // start loading.
-  if (ResourceNeedsLoad(resource, params, policy)) {
+  if (ResourceNeedsLoad(resource, policy, should_defer)) {
     if (!StartLoad(resource,
                    std::move(params.MutableResourceRequest().MutableBody()),
                    load_blocking_policy, params.GetRenderBlockingBehavior())) {
@@ -1293,15 +1342,25 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
   // TODO(http://crbug.com/1252983): Revert this to DCHECK.
   CHECK(loader_factory_);
 
-  // Set |unfreezable_task_runner| to the thread task-runner for keepalive
-  // fetches because we want it to keep running even after the frame is
-  // detached. It's pretty fragile to do that with the
-  // |unfreezable_task_runner_| that's saved in the ResourceFetcher, because
-  // that task runner is frame-associated.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      unfreezable_task_runner_;
+  if (request.GetKeepalive()) {
+    // Set the `task_runner` to the `AgentGroupScheduler`'s task-runner for
+    // keepalive fetches because we want it to keep running even after the
+    // frame is detached. It's pretty fragile to do that with the
+    // `unfreezable_task_runner_` that's saved in the ResourceFetcher, because
+    // that task runner is frame-associated.
+    if (auto* frame_or_worker_scheduler = GetFrameOrWorkerScheduler()) {
+      if (auto* frame_scheduler =
+              frame_or_worker_scheduler->ToFrameScheduler()) {
+        task_runner =
+            frame_scheduler->GetAgentGroupScheduler()->DefaultTaskRunner();
+      }
+    }
+  }
+
   return loader_factory_->CreateURLLoader(
-      ResourceRequest(request), options, freezable_task_runner_,
-      request.GetKeepalive() ? Thread::Current()->GetDeprecatedTaskRunner()
-                             : unfreezable_task_runner_,
+      ResourceRequest(request), options, freezable_task_runner_, task_runner,
       WebBackForwardCacheLoaderHelper(back_forward_cache_loader_helper_));
 }
 
@@ -1945,6 +2004,28 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
                                          bool should_report_corb_blocking) {
   DCHECK(resource);
 
+  // kRaw might not be subresource, and we do not need them.
+  if (resource->GetType() != ResourceType::kRaw) {
+    ++number_of_subresources_loaded_;
+    if (resource->GetResponse().WasFetchedViaServiceWorker()) {
+      ++number_of_subresource_loads_handled_by_service_worker_;
+    }
+
+    if (IsControlledByServiceWorker() ==
+        mojom::blink::ControllerServiceWorkerMode::kControlled) {
+      if (resource->GetResponse().WasFetchedViaServiceWorker()) {
+        base::UmaHistogramEnumeration("ServiceWorker.Subresource.Handled.Type",
+                                      resource->GetType());
+      } else {
+        base::UmaHistogramEnumeration(
+            "ServiceWorker.Subresource.Fallbacked.Type", resource->GetType());
+      }
+    }
+  }
+  context_->UpdateSubresourceLoadMetrics(
+      number_of_subresources_loaded_,
+      number_of_subresource_loads_handled_by_service_worker_);
+
   DCHECK_LE(inflight_keepalive_bytes, inflight_keepalive_bytes_);
   inflight_keepalive_bytes_ -= inflight_keepalive_bytes;
 
@@ -2053,6 +2134,19 @@ void ResourceFetcher::MoveResourceLoaderToNonBlocking(ResourceLoader* loader) {
 bool ResourceFetcher::StartLoad(Resource* resource) {
   DCHECK(resource->GetType() == ResourceType::kFont ||
          resource->GetType() == ResourceType::kImage);
+  // Currently the metrics collection codes are duplicated here and in
+  // UpdateMemoryCacheStats() because we have two calling paths for triggering a
+  // load here and RequestResource().
+  // TODO(https://crbug.com/1376866): Consider merging the duplicated code.
+  if (resource->GetType() == ResourceType::kFont) {
+    base::UmaHistogramEnumeration(
+        RESOURCE_HISTOGRAM_PREFIX "Font",
+        RevalidationPolicyForMetrics::kPreviouslyDeferredLoad);
+  } else {
+    base::UmaHistogramEnumeration(
+        RESOURCE_HISTOGRAM_PREFIX "Image",
+        RevalidationPolicyForMetrics::kPreviouslyDeferredLoad);
+  }
   return StartLoad(resource, ResourceRequestBody(),
                    ImageLoadBlockingPolicy::kDefault,
                    RenderBlockingBehavior::kNonBlocking);
@@ -2182,10 +2276,45 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
     if (!resource->IsLoading())
       continue;
 
-    ResourcePriority resource_priority = resource->PriorityFromObservers();
+    auto priorities = resource->PriorityFromObservers();
+    ResourcePriority resource_priority = priorities.first;
     ResourceLoadPriority computed_load_priority = ComputeLoadPriority(
         ResourceType::kImage, resource->GetResourceRequest(),
         resource_priority.visibility);
+
+    ResourcePriority resource_priority_excluding_image_loader =
+        priorities.second;
+    ResourceLoadPriority computed_load_priority_excluding_image_loader =
+        ComputeLoadPriority(
+            ResourceType::kImage, resource->GetResourceRequest(),
+            resource_priority_excluding_image_loader.visibility);
+
+    // When enabled, `priority` is used, which considers the resource priority
+    // via ImageLoader, i.e. ImageResourceContent
+    // -> ImageLoader (as ImageResourceObserver)
+    // -> LayoutImageResource
+    // -> LayoutObject.
+    //
+    // The same priority is considered in `priority_excluding_image_loader` via
+    // ImageResourceContent
+    // -> LayoutObject (as ImageResourceObserver),
+    // but the LayoutObject might be not registered yet as an
+    // ImageResourceObserver while loading.
+    // See https://crbug.com/1369823 for details.
+    static const bool fix_enabled =
+        base::FeatureList::IsEnabled(features::kImageLoadingPrioritizationFix);
+
+    if (computed_load_priority !=
+        computed_load_priority_excluding_image_loader) {
+      // Mark pages affected by this fix for performance evaluation.
+      use_counter_->CountUse(
+          WebFeature::kEligibleForImageLoadingPrioritizationFix);
+    }
+    if (!fix_enabled) {
+      resource_priority = resource_priority_excluding_image_loader;
+      computed_load_priority = computed_load_priority_excluding_image_loader;
+    }
+
     // Only boost the priority of an image, never lower it. This ensures that
     // there isn't priority churn if images move in and out of the viewport, or
     // are displayed more than once, both in and out of the viewport.

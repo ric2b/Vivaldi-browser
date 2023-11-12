@@ -21,9 +21,9 @@
 #import "components/metrics/demographics/demographic_metrics_provider.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/prefs/pref_service.h"
+#import "components/search_engines/template_url_service.h"
 #import "components/sync/base/pref_names.h"
 #import "components/unified_consent/unified_consent_service.h"
-#import "components/url_param_filter/core/url_param_classifications_loader.h"
 #import "components/variations/variations_associated_data.h"
 #import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/app/main_controller.h"
@@ -32,14 +32,19 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/search_engines/search_engines_util.h"
+#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_utils_test_support.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
@@ -54,7 +59,6 @@
 #import "ios/chrome/test/app/window_test_util.h"
 #import "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/testing/hardware_keyboard_util.h"
 #import "ios/testing/nserror_util.h"
 #import "ios/testing/open_url_context.h"
@@ -75,6 +79,7 @@
 #import "ios/web/public/web_state.h"
 #import "net/base/mac/url_conversions.h"
 #import "services/metrics/public/cpp/ukm_recorder.h"
+#import "ui/base/device_form_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -208,10 +213,6 @@ NSString* SerializedValue(const base::Value* value) {
       ->Reload();
 }
 
-+ (NamedGuide*)guideWithName:(GuideName*)name view:(UIView*)view {
-  return [NamedGuide guideWithName:name view:view];
-}
-
 + (void)openURLFromExternalApp:(NSString*)URL {
   chrome_test_util::OpenChromeFromExternalApp(
       GURL(base::SysNSStringToUTF8(URL)));
@@ -261,10 +262,6 @@ NSString* SerializedValue(const base::Value* value) {
         @"Fail to simulate tab backgrounding.");
   }
   return nil;
-}
-
-+ (void)saveSessionImmediately {
-  chrome_test_util::SaveSessionImmediately();
 }
 
 + (NSError*)setCurrentTabsToBeColdStartTabs {
@@ -861,7 +858,7 @@ NSString* SerializedValue(const base::Value* value) {
       base::SysNSStringToUTF8(GUID));
 }
 
-+ (void)signInWithoutSyncWithIdentity:(FakeChromeIdentity*)identity {
++ (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity {
   chrome_test_util::SignInWithoutSync(identity);
 }
 
@@ -877,15 +874,34 @@ NSString* SerializedValue(const base::Value* value) {
   chrome_test_util::StopSync();
 }
 
-+ (NSError*)waitForSyncInitialized:(BOOL)isInitialized
-                       syncTimeout:(NSTimeInterval)timeout {
++ (NSError*)waitForSyncEngineInitialized:(BOOL)isInitialized
+                             syncTimeout:(base::TimeDelta)timeout {
   bool success = WaitUntilConditionOrTimeout(timeout, ^{
-    return chrome_test_util::IsSyncInitialized() == isInitialized;
+    return chrome_test_util::IsSyncEngineInitialized() == isInitialized;
   });
   if (!success) {
     NSString* errorDescription =
         [NSString stringWithFormat:@"Sync must be initialized: %@",
                                    isInitialized ? @"YES" : @"NO"];
+    return testing::NSErrorWithLocalizedDescription(errorDescription);
+  }
+  return nil;
+}
+
++ (NSError*)waitForSyncFeatureEnabled:(BOOL)isEnabled
+                          syncTimeout:(base::TimeDelta)timeout {
+  bool success = WaitUntilConditionOrTimeout(timeout, ^{
+    ChromeBrowserState* browser_state =
+        chrome_test_util::GetOriginalBrowserState();
+    DCHECK(browser_state);
+    syncer::SyncService* syncService =
+        SyncServiceFactory::GetForBrowserState(browser_state);
+    return syncService->IsSyncFeatureEnabled() == isEnabled;
+  });
+  if (!success) {
+    NSString* errorDescription =
+        [NSString stringWithFormat:@"Sync feature must be enabled: %@",
+                                   isEnabled ? @"YES" : @"NO"];
     return testing::NSErrorWithLocalizedDescription(errorDescription);
   }
   return nil;
@@ -1091,8 +1107,13 @@ NSString* SerializedValue(const base::Value* value) {
 }
 
 + (BOOL)isUseLensToSearchForImageEnabled {
+  TemplateURLService* service =
+      ios::TemplateURLServiceFactory::GetForBrowserState(
+          chrome_test_util::GetOriginalBrowserState());
   return base::FeatureList::IsEnabled(kUseLensToSearchForImage) &&
-         ios::provider::IsLensSupported();
+         ios::provider::IsLensSupported() &&
+         ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET &&
+         search_engines::SupportsSearchImageWithLens(service);
 }
 
 + (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber {
@@ -1102,6 +1123,10 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (BOOL)isWebChannelsEnabled {
   return base::FeatureList::IsEnabled(kEnableWebChannels);
+}
+
++ (BOOL)isSFSymbolEnabled {
+  return UseSymbols();
 }
 
 #pragma mark - ContentSettings
@@ -1196,10 +1221,12 @@ NSString* SerializedValue(const base::Value* value) {
 #pragma mark - Keyboard Command Utilities
 
 + (NSInteger)registeredKeyCommandCount {
-  UIViewController* mainViewController =
+  UIViewController* browserViewController =
       chrome_test_util::GetMainController()
           .interfaceProvider.mainInterface.viewController;
-  return mainViewController.keyCommands.count;
+  // The BVC delegates its key commands to its next responder,
+  // KeyCommandsProvider.
+  return browserViewController.nextResponder.keyCommands.count;
 }
 
 + (void)simulatePhysicalKeyboardEvent:(NSString*)input
@@ -1236,7 +1263,7 @@ NSString* SerializedValue(const base::Value* value) {
 #pragma mark - Watcher utilities
 
 // Delay between two watch cycles.
-const NSTimeInterval kWatcherCycleDelay = 0.2;
+constexpr base::TimeDelta kWatcherCycleDelay = base::Milliseconds(200);
 
 // Set of buttons being watched for.
 NSMutableSet* watchingButtons;
@@ -1247,7 +1274,7 @@ NSMutableSet* watchedButtons;
 int watchRunNumber = 0;
 
 + (void)watchForButtonsWithLabels:(NSArray<NSString*>*)labels
-                          timeout:(NSTimeInterval)timeout {
+                          timeout:(base::TimeDelta)timeout {
   watchRunNumber++;
   watchedButtons = [NSMutableSet set];
   watchingButtons = [NSMutableSet set];
@@ -1272,13 +1299,12 @@ int watchRunNumber = 0;
 // be accessed from there. Scheduling directly on the main
 // thread would let EG to try to drain the main thread queue without
 // success.
-+ (void)scheduleNextWatchForButtonsWithTimeout:(NSTimeInterval)timeout
++ (void)scheduleNextWatchForButtonsWithTimeout:(base::TimeDelta)timeout
                                      runNumber:(int)runNumber {
   dispatch_queue_t background_queue =
       dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
   dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW,
-                    (int64_t)(kWatcherCycleDelay * NSEC_PER_SEC)),
+      dispatch_time(DISPATCH_TIME_NOW, kWatcherCycleDelay.InNanoseconds()),
       background_queue, ^{
         dispatch_async(dispatch_get_main_queue(), ^{
           if (!watchingButtons.count || runNumber != watchRunNumber)
@@ -1287,7 +1313,7 @@ int watchRunNumber = 0;
           [self findButtonsWithLabelsInViews:[UIApplication sharedApplication]
                                                  .windows];
 
-          if (watchingButtons.count && timeout > 0.0) {
+          if (watchingButtons.count && timeout.is_positive()) {
             [self scheduleNextWatchForButtonsWithTimeout:timeout -
                                                          kWatcherCycleDelay
                                                runNumber:runNumber];
@@ -1326,17 +1352,7 @@ int watchRunNumber = 0;
 #pragma mark - Default Browser Promo Utilities
 
 + (void)clearDefaultBrowserPromoData {
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  NSArray<NSString*>* keys = @[
-    @"lastTimeUserInteractedWithFullscreenPromo",
-    @"userHasInteractedWithFullscreenPromo",
-    @"userHasInteractedWithTailoredFullscreenPromo",
-    @"userInteractedWithNonModalPromoCount",
-    @"remindMeLaterPromoActionInteraction",
-  ];
-  for (NSString* key in keys) {
-    [defaults removeObjectForKey:key];
-  }
+  ClearDefaultBrowserPromoData();
 }
 
 + (void)copyURLToPasteBoard {
@@ -1348,18 +1364,6 @@ int watchRunNumber = 0;
   chrome_test_util::GetMainController().appState.shouldShowDefaultBrowserPromo =
       NO;
   LogUserInteractionWithFullscreenPromo();
-}
-#pragma mark - Url Param Classification utilities
-
-+ (void)setUrlParamClassifications:(NSString*)contents {
-  std::string file_contents = base::SysNSStringToUTF8(contents);
-  url_param_filter::ClassificationsLoader::GetInstance()->ReadClassifications(
-      file_contents);
-}
-
-+ (void)resetUrlParamClassifications {
-  url_param_filter::ClassificationsLoader::GetInstance()
-      ->ResetListsForTesting();
 }
 
 @end

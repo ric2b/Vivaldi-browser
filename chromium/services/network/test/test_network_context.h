@@ -28,6 +28,7 @@
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/oblivious_http_request.mojom.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "services/network/public/mojom/tcp_socket.mojom.h"
@@ -144,19 +145,6 @@ class TestNetworkContext : public mojom::NetworkContext {
 #endif
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void SetCTPolicy(mojom::CTPolicyPtr ct_policy) override {}
-  void AddExpectCT(
-      const std::string& domain,
-      base::Time expiry,
-      bool enforce,
-      const GURL& report_uri,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
-      AddExpectCTCallback callback) override {}
-  void SetExpectCTTestReport(const GURL& report_uri,
-                             SetExpectCTTestReportCallback callback) override {}
-  void GetExpectCTState(
-      const std::string& domain,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
-      GetExpectCTStateCallback callback) override {}
   void SetCTLogListAlwaysTimelyForTesting() override {}
   void SetSCTAuditingMode(mojom::SCTAuditingMode mode) override {}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
@@ -275,6 +263,9 @@ class TestNetworkContext : public mojom::NetworkContext {
       mojo::PendingReceiver<mojom::MdnsResponder> responder_receiver) override {
   }
   void ResetURLLoaderFactories() override {}
+  void GetViaObliviousHttp(
+      mojom::ObliviousHttpRequestPtr request,
+      mojo::PendingRemote<mojom::ObliviousHttpClient>) override {}
   void ForceReloadProxyConfig(
       ForceReloadProxyConfigCallback callback) override {}
   void ClearBadProxiesCache(ClearBadProxiesCacheCallback callback) override {}
@@ -311,11 +302,6 @@ class TestNetworkContext : public mojom::NetworkContext {
       const std::string& realm,
       LookupProxyAuthCredentialsCallback callback) override {}
 #endif
-  void ComputeFirstPartySetMetadata(
-      const net::SchemefulSite& site,
-      const absl::optional<net::SchemefulSite>& top_frame_site,
-      const std::vector<net::SchemefulSite>& party_context,
-      ComputeFirstPartySetMetadataCallback callback) override {}
 };
 
 }  // namespace network

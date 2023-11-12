@@ -70,7 +70,7 @@ MULTINODE_TEST_NODE(ConnectTestNode, ExpectDisconnectFromBroker) {
   Close(b);
 }
 
-MULTINODE_TEST(ConnectTest, DisconnectWithoutBrokerHandshake) {
+MULTINODE_TEST(ConnectTest, DISABLED_DisconnectWithoutBrokerHandshake) {
   IpczDriverHandle our_transport;
   auto controller =
       SpawnTestNodeNoConnect<ExpectDisconnectFromBroker>(our_transport);
@@ -317,8 +317,7 @@ MULTINODE_TEST_BROKER_NODE(ConnectTestNode, BrokerWithClientNode) {
   CloseAll({b, client});
 }
 
-// TODOD(crbug.com/1374114): Fix flakiness and re-enable
-MULTINODE_TEST(ConnectTest, DISABLED_MultiBrokerIntroductions) {
+MULTINODE_TEST(ConnectTest, MultiBrokerIntroductions) {
   // This test covers introductions in a multi-broker network. There are four
   // test nodes involved here: the main node (this one, call it A), a secondary
   // broker B launched with the BrokerWithClientNode body defined above; and

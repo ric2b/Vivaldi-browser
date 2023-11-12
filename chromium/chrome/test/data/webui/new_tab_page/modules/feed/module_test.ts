@@ -14,11 +14,10 @@ import {isVisible} from 'chrome://webui-test/test_util.js';
 import {installMock} from '../../test_support.js';
 
 suite('NewTabPageModulesFeedModuleTest', () => {
-  let handler: TestBrowserProxy;
+  let handler: TestBrowserProxy<FeedHandlerRemote>;
 
   setup(() => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     handler = installMock(FeedHandlerRemote, FeedProxy.setHandler);
   });
 

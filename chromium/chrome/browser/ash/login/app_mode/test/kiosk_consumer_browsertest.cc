@@ -16,8 +16,8 @@
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/ui/webui/chromeos/login/kiosk_autolaunch_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/local_state_error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/kiosk_autolaunch_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/local_state_error_screen_handler.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,7 +84,7 @@ IN_PROC_BROWSER_TEST_F(KioskConsumerTest, AutolaunchWarningCancel) {
   EXPECT_FALSE(KioskAppManager::Get()->GetAutoLaunchApp().empty());
   EXPECT_FALSE(KioskAppManager::Get()->IsAutoLaunchEnabled());
 
-  ShowLoginWizard(ash::OOBE_SCREEN_UNKNOWN);
+  ShowLoginWizard(OOBE_SCREEN_UNKNOWN);
   OobeScreenWaiter(KioskAutolaunchScreenView::kScreenId).Wait();
 
   // Wait for the auto launch warning come up.
@@ -103,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(KioskConsumerTest, AutolaunchWarningConfirm) {
   EXPECT_FALSE(KioskAppManager::Get()->GetAutoLaunchApp().empty());
   EXPECT_FALSE(KioskAppManager::Get()->IsAutoLaunchEnabled());
 
-  ShowLoginWizard(ash::OOBE_SCREEN_UNKNOWN);
+  ShowLoginWizard(OOBE_SCREEN_UNKNOWN);
   OobeScreenWaiter(KioskAutolaunchScreenView::kScreenId).Wait();
 
   // Wait for the auto launch warning come up.
@@ -130,7 +130,7 @@ IN_PROC_BROWSER_TEST_F(KioskConsumerTest, AutolaunchWarningConfirm) {
 IN_PROC_BROWSER_TEST_F(KioskConsumerTest, NoConsumerAutoLaunchWhenUntrusted) {
   EnableConsumerKioskMode();
   ReloadAutolaunchKioskApps();
-  ShowLoginWizard(ash::OOBE_SCREEN_UNKNOWN);
+  ShowLoginWizard(OOBE_SCREEN_UNKNOWN);
   OobeScreenWaiter(KioskAutolaunchScreenView::kScreenId).Wait();
 
   WaitForAutoLaunchWarning(/*visibility=*/true);

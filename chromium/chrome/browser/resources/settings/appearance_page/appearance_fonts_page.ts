@@ -9,7 +9,7 @@ import '../settings_shared.css.js';
 import '../controls/settings_dropdown_menu.js';
 
 import {SliderTick} from 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
@@ -59,15 +59,11 @@ export class SettingsAppearanceFontsPageElement extends PolymerElement {
       // The font appearance menu to configure the "math" generic family is only
       // relevant if CSSFontFamilyMath is enabled. Also, it requires MathMLCore
       // to be enabled in order to properly display the mathematical formula
-      // used in the preview. Both of them are implied by the experimental web
-      // platform features flag, so rely on that flag to decide when to enable
-      // the menu.
-      // TODO(https://crbug.com/1321001): Display the menu unconditionally when
-      // MathMLCore is enabled by default.
+      // used in the preview. CSSFontFamilyMath is implied by MathMLCore so we
+      // just rely on the latter flag to decide when to enable the menu.
       cssFontFamilyMathMenuEnabled_: {
         type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures'),
+        value: () => loadTimeData.getBoolean('enableMathMLCore'),
       },
 
       fontOptions_: Object,

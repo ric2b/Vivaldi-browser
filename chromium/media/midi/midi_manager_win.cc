@@ -218,7 +218,7 @@ ScopedMIDIHDR CreateMIDIHDR(size_t size) {
 
 ScopedMIDIHDR CreateMIDIHDR(const std::vector<uint8_t>& data) {
   ScopedMIDIHDR hdr(CreateMIDIHDR(data.size()));
-  std::copy(data.begin(), data.end(), hdr->lpData);
+  base::ranges::copy(data, hdr->lpData);
   return hdr;
 }
 
@@ -712,7 +712,7 @@ MidiManagerWin::MidiManagerWin(MidiService* service)
   CHECK_EQ(kInvalidInstanceId, g_active_instance_id);
 
   // Obtains the task runner for the current thread that hosts this instnace.
-  thread_runner_ = base::ThreadTaskRunnerHandle::Get();
+  thread_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
 }
 
 MidiManagerWin::~MidiManagerWin() {

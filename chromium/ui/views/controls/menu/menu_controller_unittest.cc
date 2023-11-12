@@ -63,7 +63,7 @@
 #include "ui/views/controls/menu/menu_pre_target_handler.h"
 #endif
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/buildflags.h"
 #include "ui/ozone/public/ozone_platform.h"
 #if BUILDFLAG(OZONE_PLATFORM_X11)
@@ -79,14 +79,13 @@
 #include "base/win/windows_version.h"
 #endif
 
-namespace views {
-namespace test {
+namespace views::test {
 namespace {
 
 using ::ui::mojom::DragOperation;
 
 bool ShouldIgnoreScreenBoundsForMenus() {
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   // Some platforms, such as Wayland, disallow client applications to manipulate
   // global screen coordinates, requiring menus to be positioned relative to
   // their parent windows. See comment in ozone_platform_wayland.cc.
@@ -221,8 +220,7 @@ class GestureTestWidget : public Widget {
 class TestDragDropClient : public aura::client::DragDropClient {
  public:
   explicit TestDragDropClient(base::RepeatingClosure callback)
-      : start_drag_and_drop_callback_(std::move(callback)),
-        drag_in_progress_(false) {}
+      : start_drag_and_drop_callback_(std::move(callback)) {}
 
   TestDragDropClient(const TestDragDropClient&) = delete;
   TestDragDropClient& operator=(const TestDragDropClient&) = delete;
@@ -236,6 +234,10 @@ class TestDragDropClient : public aura::client::DragDropClient {
                                  const gfx::Point& screen_location,
                                  int allowed_operations,
                                  ui::mojom::DragEventSource source) override;
+#if BUILDFLAG(IS_LINUX)
+  void UpdateDragImage(const gfx::ImageSkia& image,
+                       const gfx::Vector2d& offset) override {}
+#endif
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 
@@ -245,7 +247,7 @@ class TestDragDropClient : public aura::client::DragDropClient {
 
  private:
   base::RepeatingClosure start_drag_and_drop_callback_;
-  bool drag_in_progress_;
+  bool drag_in_progress_ = false;
 };
 
 DragOperation TestDragDropClient::StartDragAndDrop(
@@ -3180,6 +3182,69 @@ TEST_F(MenuControllerTest, SetSelectionIndices_NestedButtons) {
   EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
 }
 
+TEST_F(MenuControllerTest, SetSelectionIndices_ChildrenChanged) {
+#if BUILDFLAG(IS_WIN)
+  // TODO(crbug.com/1286137): This test is consistently failing on Win11.
+  if (base::win::OSInfo::GetInstance()->version() >=
+      base::win::Version::WIN11) {
+    GTEST_SKIP() << "Skipping test for WIN11_21H2 and greater";
+  }
+#endif
+  AddButtonMenuItems(/*single_child=*/false);
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  MenuItemView* item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+  MenuItemView* const item5 = menu_item()->GetSubmenu()->GetMenuItemAt(4);
+  Button* const button1 = Button::AsButton(item5->children()[0]);
+  Button* const button2 = Button::AsButton(item5->children()[1]);
+  Button* const button3 = Button::AsButton(item5->children()[2]);
+  OpenMenu(menu_item());
+
+  auto expect_coordinates = [](View* v, absl::optional<int> pos,
+                               absl::optional<int> size) {
+    ui::AXNodeData data;
+    v->GetViewAccessibility().GetAccessibleNodeData(&data);
+    if (pos.has_value()) {
+      EXPECT_EQ(pos.value(),
+                data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+    } else {
+      EXPECT_FALSE(data.HasIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+    }
+    if (size.has_value()) {
+      EXPECT_EQ(size.value(),
+                data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+    } else {
+      EXPECT_FALSE(data.HasIntAttribute(ax::mojom::IntAttribute::kSetSize));
+    }
+  };
+
+  expect_coordinates(item1, 1, 7);
+  expect_coordinates(item2, 2, 7);
+  expect_coordinates(item3, 3, 7);
+  expect_coordinates(item4, 4, 7);
+  expect_coordinates(button1, 5, 7);
+  expect_coordinates(button2, 6, 7);
+  expect_coordinates(button3, 7, 7);
+
+  // Simulate a menu model update.
+  item1->SetEnabled(false);
+  button1->SetEnabled(false);
+  MenuItemView* item6 = menu_item()->AppendMenuItem(6, u"Six");
+  menu_item()->RemoveMenuItem(item2);
+  item2 = nullptr;
+  MenuChildrenChanged(menu_item());
+
+  // Verify that disabled menu items no longer have PosInSet or SetSize.
+  expect_coordinates(item1, absl::nullopt, absl::nullopt);
+  expect_coordinates(button1, absl::nullopt, absl::nullopt);
+  expect_coordinates(item3, 1, 5);
+  expect_coordinates(item4, 2, 5);
+  expect_coordinates(button2, 3, 5);
+  expect_coordinates(button3, 4, 5);
+  expect_coordinates(item6, 5, 5);
+}
+
 // Tests that a menu opened asynchronously, will notify its
 // MenuControllerDelegate when accessibility performs a do default action.
 TEST_F(MenuControllerTest, AccessibilityDoDefaultCallsAccept) {
@@ -3355,5 +3420,4 @@ TEST_F(ExecuteCommandWithoutClosingMenuTest, OnReturnKey) {
             menu_item()->GetSubmenu()->GetMenuItemAt(0)->GetCommand());
 }
 
-}  // namespace test
-}  // namespace views
+}  // namespace views::test

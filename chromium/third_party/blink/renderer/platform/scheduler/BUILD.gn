@@ -12,6 +12,8 @@ if (is_android) {
 
 blink_platform_sources("scheduler") {
   sources = [
+    "common/auto_advancing_virtual_time_domain.cc",
+    "common/auto_advancing_virtual_time_domain.h",
     "common/back_forward_cache_disabling_feature_tracker.cc",
     "common/back_forward_cache_disabling_feature_tracker.h",
     "common/cancelable_closure_holder.cc",
@@ -34,6 +36,8 @@ blink_platform_sources("scheduler") {
     "common/scheduler_helper.cc",
     "common/scheduler_helper.h",
     "common/scheduling_lifecycle_state.cc",
+    "common/scoped_time_source_override.cc",
+    "common/scoped_time_source_override.h",
     "common/simple_main_thread_scheduler.cc",
     "common/simple_main_thread_scheduler.h",
     "common/single_thread_idle_task_runner.cc",
@@ -67,8 +71,6 @@ blink_platform_sources("scheduler") {
     "main_thread/agent_group_scheduler_impl.cc",
     "main_thread/agent_group_scheduler_impl.h",
     "main_thread/attribution_group.h",
-    "main_thread/auto_advancing_virtual_time_domain.cc",
-    "main_thread/auto_advancing_virtual_time_domain.h",
     "main_thread/deadline_task_runner.cc",
     "main_thread/deadline_task_runner.h",
     "main_thread/find_in_page_budget_pool_controller.cc",
@@ -111,6 +113,7 @@ blink_platform_sources("scheduler") {
     "main_thread/use_case.h",
     "main_thread/user_model.cc",
     "main_thread/user_model.h",
+    "main_thread/web_agent_group_scheduler.cc",
     "main_thread/web_scoped_virtual_time_pauser.cc",
     "main_thread/widget_scheduler_impl.cc",
     "main_thread/widget_scheduler_impl.h",
@@ -120,6 +123,8 @@ blink_platform_sources("scheduler") {
     "public/cooperative_scheduling_manager.h",
     "public/dummy_schedulers.h",
     "public/event_loop.h",
+    "public/feature_and_js_location_blocking_bfcache.cc",
+    "public/feature_and_js_location_blocking_bfcache.h",
     "public/frame_or_worker_scheduler.h",
     "public/frame_scheduler.h",
     "public/frame_status.h",
@@ -226,12 +231,14 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "common/auto_advancing_virtual_time_domain_unittest.cc",
     "common/back_forward_cache_disabling_feature_tracker_unittest.cc",
     "common/cooperative_scheduling_manager_unittest.cc",
     "common/idle_helper_unittest.cc",
     "common/metrics_helper_unittest.cc",
     "common/post_cancellable_task_unittest.cc",
     "common/scheduler_helper_unittest.cc",
+    "common/scoped_time_source_override_unittest.cc",
     "common/thread_load_tracker_unittest.cc",
     "common/thread_unittest.cc",
     "common/throttling/budget_pool_unittest.cc",
@@ -239,7 +246,6 @@ source_set("unit_tests") {
     "common/tracing_helper_unittest.cc",
     "common/ukm_task_sampler_unittest.cc",
     "common/worker_pool_unittest.cc",
-    "main_thread/auto_advancing_virtual_time_domain_unittest.cc",
     "main_thread/deadline_task_runner_unittest.cc",
     "main_thread/frame_scheduler_impl_unittest.cc",
     "main_thread/frame_task_queue_controller_unittest.cc",

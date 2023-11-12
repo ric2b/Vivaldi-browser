@@ -10,6 +10,7 @@ import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "media/mojo/mojom/video_encoder_info.mojom";
+import "sandbox/policy/mojom/sandbox.mojom";
 
 // This file is the Mojo version of the media::VideoEncodeAccelerator interface
 // and describes the communication between a Client and a remote "service"
@@ -62,6 +63,31 @@ interface VideoEncodeAcceleratorProvider {
   // Get a VideoEncodeAccelerator supported profiles.
   GetVideoEncodeAcceleratorSupportedProfiles()
       => (array<VideoEncodeAcceleratorSupportedProfile> profiles);
+};
+
+// This interface allows the browser process to broker
+// VideoEncodeAcceleratorProvider connection requests on behalf of a renderer.
+// The browser creates the mojo pipe and gives the receiver to a utility
+// process. The expected usage is as follows:
+//
+// 1) The browser process receives a request from a renderer process to bind a
+//    pending_receiver<VideoEncodeAcceleratorProvider>.
+//
+// 2) To satisfy that request, the browser process first starts a utility
+//    process that hosts a VideoEncodeAcceleratorProviderFactory if it hasn't
+//    already done so -- note that each renderer process should get its own
+//    corresponding utility process.
+//
+// 3) The browser process calls CreateVideoEncodeAcceleratorProvider() passing
+//    the pending_receiver<VideoEncodeAcceleratorProvider> received from the
+//    renderer process.
+[EnableIf=is_linux_or_chromeos,
+ServiceSandbox=sandbox.mojom.Sandbox.kHardwareVideoEncoding]
+interface VideoEncodeAcceleratorProviderFactory {
+  // Creates a VideoEncodeAcceleratorProvider and should be called by the
+  // browser process.
+  CreateVideoEncodeAcceleratorProvider(
+        pending_receiver<VideoEncodeAcceleratorProvider> receiver);
 };
 
 // This defines a mojo transport format used in the
@@ -129,6 +155,13 @@ struct VideoEncodeAcceleratorConfig {
     kGpuMemoryBuffer,
   };
 
+  // See media::VideoEncodeAccelerator::Config::EncoderType
+  enum EncoderType {
+    kHardware,
+    kSoftware,
+    kNoPreference,
+  };
+
   VideoPixelFormat input_format;
   gfx.mojom.Size input_visible_size;
   VideoCodecProfile output_profile;
@@ -146,6 +179,7 @@ struct VideoEncodeAcceleratorConfig {
   array<SpatialLayer> spatial_layers;
   InterLayerPredMode inter_layer_pred;
   bool require_low_delay;
+  EncoderType required_encoder_type;
 };
 
 interface VideoEncodeAccelerator {
@@ -199,8 +233,9 @@ interface VideoEncodeAccelerator {
   Flush() => (bool result);
 };
 
-// H264Metadata, Vp8Metadata, Vp9Metadata define mojo transport formats for
-// media::H264Metadata, media::Vp8Metadata and media::Vp9Metadata, respectively.
+// H264Metadata, H265metadata, Vp8Metadata, Vp9Metadata and Av1Metadata define
+// mojo transport formats for media::H264Metadata, H265Metadata,
+// media::Vp8Metadata, media::Vp9Metadata and media::Av1Metadata, respectively.
 // See the structures defined video_encode_accelerator.h for the descriptions of
 // the variables.
 // Either of them is filled in GPU process only in the case of temporal/spatial
@@ -212,6 +247,12 @@ interface VideoEncodeAccelerator {
 // process in BitstreamBufferReady() call.
 struct H264Metadata {
   uint8 temporal_idx;
+  bool layer_sync;
+};
+
+struct H265Metadata {
+  uint8 temporal_idx;
+  uint8 spatial_idx;
   bool layer_sync;
 };
 
@@ -246,6 +287,7 @@ struct Av1Metadata {
 // Codec specific metadata.
 union CodecMetadata {
   H264Metadata h264;
+  H265Metadata h265;
   Vp8Metadata vp8;
   Vp9Metadata vp9;
   Av1Metadata av1;

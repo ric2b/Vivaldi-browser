@@ -28,7 +28,6 @@ import android.content.Context;
 import androidx.annotation.Px;
 
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillComponent.UserAction;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
@@ -80,8 +79,9 @@ class TouchToFillMediator {
         mDesiredIconSize = desiredIconSize;
     }
 
-    void showCredentials(GURL url, boolean isOriginSecure, List<Credential> credentials,
-            List<WebAuthnCredential> webAuthnCredentials, boolean triggerSubmission) {
+    void showCredentials(GURL url, boolean isOriginSecure,
+            List<WebAuthnCredential> webAuthnCredentials, List<Credential> credentials,
+            boolean triggerSubmission) {
         assert credentials != null;
         mModel.set(ON_CLICK_MANAGE, this::onManagePasswordSelected);
         mModel.set(MANAGE_BUTTON_TEXT, getManageButtonText(credentials, webAuthnCredentials));
@@ -133,14 +133,7 @@ class TouchToFillMediator {
                     : mContext.getString(R.string.touch_to_fill_sheet_title_passkey);
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)
-                || PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
-            return mContext.getString(R.string.touch_to_fill_sheet_uniform_title);
-        }
-
-        return mContext.getString((credentials.size() == 1)
-                        ? R.string.touch_to_fill_sheet_title_single
-                        : R.string.touch_to_fill_sheet_title);
+        return mContext.getString(R.string.touch_to_fill_sheet_uniform_title);
     }
 
     private String getManageButtonText(

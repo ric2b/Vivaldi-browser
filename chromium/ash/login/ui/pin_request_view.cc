@@ -300,9 +300,6 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
 
   add_spacer(kDescriptionToAccessCodeDistanceDp);
 
-  auto* color_provider = GetColorProvider();
-  LoginPalette palette = CreateDefaultLoginPalette(color_provider);
-
   // Access code input view.
   if (request.pin_length.has_value()) {
     CHECK_GT(request.pin_length.value(), 0);
@@ -313,7 +310,7 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
         base::BindRepeating(&PinRequestView::SubmitCode,
                             base::Unretained(this)),
         base::BindRepeating(&PinRequestView::OnBack, base::Unretained(this)),
-        request.obscure_pin, palette.pin_input_text_color));
+        request.obscure_pin));
     access_code_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
   } else {
     auto flex_code_input = std::make_unique<FlexCodeInput>(
@@ -322,7 +319,7 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
         base::BindRepeating(&PinRequestView::SubmitCode,
                             base::Unretained(this)),
         base::BindRepeating(&PinRequestView::OnBack, base::Unretained(this)),
-        request.obscure_pin, palette.pin_input_text_color);
+        request.obscure_pin);
     flex_code_input->SetAccessibleName(default_accessible_title_);
     access_code_view_ = AddChildView(std::move(flex_code_input));
   }
@@ -333,7 +330,6 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
   // passing a null |on_submit| callback.
   pin_keyboard_view_ =
       new LoginPinView(LoginPinView::Style::kAlphanumeric,
-                       CreateDefaultLoginPalette(color_provider),
                        base::BindRepeating(&AccessCodeInput::InsertDigit,
                                            base::Unretained(access_code_view_)),
                        base::BindRepeating(&AccessCodeInput::Backspace,
@@ -534,7 +530,7 @@ void PinRequestView::OnInputChange(bool last_field_active, bool complete) {
 
     // Moving focus is delayed by using PostTask to allow for proper
     // a11y announcements.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&PinRequestView::FocusSubmitButton,
                                   weak_ptr_factory_.GetWeakPtr()));
   }
@@ -544,14 +540,6 @@ void PinRequestView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   views::View::GetAccessibleNodeData(node_data);
   node_data->role = ax::mojom::Role::kDialog;
   node_data->SetName(default_accessible_title_);
-}
-
-void PinRequestView::OnThemeChanged() {
-  views::DialogDelegateView::OnThemeChanged();
-  auto* color_provider = GetColorProvider();
-  access_code_view_->SetInputColor(
-      color_provider->GetColor(kColorAshTextColorPrimary));
-  pin_keyboard_view_->UpdatePalette(CreateDefaultLoginPalette(color_provider));
 }
 
 // If |pin_keyboard_always_enabled_| is not set, pin keyboard is only shown in

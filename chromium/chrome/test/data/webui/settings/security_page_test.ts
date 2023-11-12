@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {SafeBrowsingSetting, SettingsSecurityPageElement} from 'chrome://settings/lazy_load.js';
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Router, routes, SafeBrowsingInteractions, SecureDnsMode} from 'chrome://settings/settings.js';
@@ -66,8 +66,7 @@ suite('CrSettingsSecurityPageTest', function() {
     openWindowProxy = new TestOpenWindowProxy();
     OpenWindowProxyImpl.setInstance(openWindowProxy);
     // </if>
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-security-page');
     page.prefs = pagePrefs();
     document.body.appendChild(page);
@@ -84,7 +83,7 @@ suite('CrSettingsSecurityPageTest', function() {
   // <if expr="is_macosx or is_win">
   test('NativeCertificateManager', function() {
     page.shadowRoot!.querySelector<HTMLElement>('#manageCertificates')!.click();
-    return testPrivacyBrowserProxy.whenCalled('showManageSSLCertificates');
+    return testPrivacyBrowserProxy.whenCalled('showManageSslCertificates');
   });
   // </if>
 
@@ -94,7 +93,7 @@ suite('CrSettingsSecurityPageTest', function() {
         page.shadowRoot!.querySelector<HTMLElement>('#chromeCertificates');
     assertTrue(!!row);
     row.click();
-    const url = await openWindowProxy.whenCalled('openURL');
+    const url = await openWindowProxy.whenCalled('openUrl');
     assertEquals(url, loadTimeData.getString('chromeRootStoreHelpCenterURL'));
   });
   // </if>
@@ -615,8 +614,7 @@ suite('CrSettingsSecurityPageTest_FlagsDisabled', function() {
   });
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-security-page');
     page.prefs = pagePrefs();
     document.body.appendChild(page);

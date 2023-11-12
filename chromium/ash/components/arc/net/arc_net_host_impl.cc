@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/net/cert_manager.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
@@ -23,6 +24,7 @@
 #include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 #include "chromeos/ash/components/dbus/patchpanel/patchpanel_service.pb.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/network/client_cert_util.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/managed_network_configuration_handler.h"
@@ -34,7 +36,6 @@
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
-#include "chromeos/login/login_state/login_state.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -84,7 +85,7 @@ ash::NetworkProfileHandler* GetNetworkProfileHandler() {
 
 const ash::NetworkProfile* GetNetworkProfile() {
   return GetNetworkProfileHandler()->GetProfileForUserhash(
-      chromeos::LoginState::Get()->primary_user_hash());
+      ash::LoginState::Get()->primary_user_hash());
 }
 
 std::vector<const ash::NetworkState*> GetHostActiveNetworks() {
@@ -189,7 +190,7 @@ arc::mojom::ConnectionStateType TranslateConnectionState(
 
   // The remaining cases defined in shill dbus-constants are legacy values from
   // Flimflam and are not expected to be encountered. These are: kStateCarrier,
-  // kStateActivationFailure, and kStateOffline.
+  // and kStateOffline.
   NOTREACHED() << "Unknown connection state: " << state;
   return arc::mojom::ConnectionStateType::NOT_CONNECTED;
 }
@@ -362,6 +363,7 @@ arc::mojom::NetworkConfigurationPtr TranslateNetworkProperties(
         TranslateWiFiSecurity(network_state->security_class());
     mojo->wifi->frequency = network_state->frequency();
     mojo->wifi->signal_strength = network_state->signal_strength();
+    mojo->wifi->rssi = network_state->rssi();
     if (shill_dict) {
       mojo->wifi->hidden_ssid =
           shill_dict->FindBoolPath(shill::kWifiHiddenSsid).value_or(false);
@@ -620,6 +622,18 @@ void ArcNetHostImpl::OnConnectionReady() {
 
   // Listen on network configuration changes.
   ash::PatchPanelClient::Get()->AddObserver(this);
+
+  SetUpFlags();
+}
+
+void ArcNetHostImpl::SetUpFlags() {
+  auto* net_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->net(), SetUpFlag);
+  if (!net_instance)
+    return;
+
+  net_instance->SetUpFlag(arc::mojom::Flag::ENABLE_ARC_HOST_VPN,
+                          base::FeatureList::IsEnabled(arc::kEnableArcHostVpn));
 }
 
 void ArcNetHostImpl::OnConnectionClosed() {
@@ -710,7 +724,6 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
   std::unique_ptr<base::DictionaryValue> wifi_dict(new base::DictionaryValue);
   std::unique_ptr<base::DictionaryValue> ipconfig_dict(
       new base::DictionaryValue);
-  std::unique_ptr<base::DictionaryValue> proxy_dict(new base::DictionaryValue);
 
   if (!cfg->hexssid.has_value() || !cfg->details) {
     NET_LOG(ERROR)
@@ -776,28 +789,10 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
     ipconfig_dict->SetKey(onc::ipconfig::kRoutingPrefix,
                           base::Value(cfg->static_ipv4_config->prefix_length));
   }
-  // Set up proxy info. If proxy auto discovery pac url is available,
-  // we set up proxy auto discovery pac url, otherwise we set up
-  // host, port and exclusion list.
   if (cfg->http_proxy) {
-    if (cfg->http_proxy->get_pac_url_proxy()) {
-      proxy_dict->SetKey(onc::proxy::kType, base::Value(onc::proxy::kPAC));
-      proxy_dict->SetKey(
-          onc::proxy::kPAC,
-          base::Value(cfg->http_proxy->get_pac_url_proxy()->pac_url.spec()));
-    } else {
-      std::unique_ptr<base::DictionaryValue> manual(new base::DictionaryValue);
-      manual->SetKey(onc::proxy::kHost,
-                     base::Value(cfg->http_proxy->get_manual_proxy()->host));
-      manual->SetKey(onc::proxy::kPort,
-                     base::Value(cfg->http_proxy->get_manual_proxy()->port));
-      manual->SetKey(onc::proxy::kExcludeDomains,
-                     TranslateStringListToValue(std::move(
-                         cfg->http_proxy->get_manual_proxy()->exclusion_list)));
-      proxy_dict->SetKey(onc::proxy::kType, base::Value(onc::proxy::kManual));
-      proxy_dict->SetKey(onc::proxy::kManual,
-                         base::Value::FromUniquePtrValue(std::move(manual)));
-    }
+    properties->GetDict().Set(
+        onc::network_config::kProxySettings,
+        TranslateProxyConfiguration(cfg->http_proxy));
   }
 
   // Set up meteredness based on meteredOverride config from mojom.
@@ -813,12 +808,8 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
         onc::network_config::kStaticIPConfig,
         base::Value::FromUniquePtrValue(std::move(ipconfig_dict)));
   }
-  if (!proxy_dict->DictEmpty()) {
-    properties->SetKey(onc::network_config::kProxySettings,
-                       base::Value::FromUniquePtrValue(std::move(proxy_dict)));
-  }
 
-  std::string user_id_hash = chromeos::LoginState::Get()->primary_user_hash();
+  std::string user_id_hash = ash::LoginState::Get()->primary_user_hash();
   // TODO(crbug.com/730593): Remove SplitOnceCallback() by updating
   // the callee interface.
   auto split_callback = base::SplitOnceCallback(std::move(callback));
@@ -1060,7 +1051,10 @@ ArcNetHostImpl::TranslateVpnConfigurationToOnc(
 
   top_dict->SetKey(onc::network_config::kVPN,
                    base::Value::FromUniquePtrValue(std::move(vpn_dict)));
-
+  if (cfg.http_proxy) {
+    top_dict->SetKey(onc::network_config::kProxySettings,
+                     base::Value(TranslateProxyConfiguration(cfg.http_proxy)));
+  }
   return top_dict;
 }
 
@@ -1078,7 +1072,7 @@ void ArcNetHostImpl::AndroidVpnConnected(
     return;
   }
 
-  std::string user_id_hash = chromeos::LoginState::Get()->primary_user_hash();
+  std::string user_id_hash = ash::LoginState::Get()->primary_user_hash();
   GetManagedConfigurationHandler()->CreateConfiguration(
       user_id_hash, *properties,
       base::BindOnce(&ArcNetHostImpl::ConnectArcVpn,
@@ -1257,8 +1251,40 @@ void ArcNetHostImpl::TranslatePasspointCredentialsToDictWithEapTranslated(
                   cred->metered);
   dict.SetStringKey(shill::kPasspointCredentialsAndroidPackageNameProperty,
                     cred->package_name);
+  if (cred->friendly_name.has_value()) {
+    dict.SetStringKey(shill::kPasspointCredentialsFriendlyNameProperty,
+                      cred->friendly_name.value());
+  }
+  dict.SetStringKey(
+      shill::kPasspointCredentialsExpirationTimeMillisecondsProperty,
+      base::NumberToString(cred->subscription_expiration_time_ms));
 
   std::move(callback).Run(std::move(dict));
+}
+
+// Set up proxy configuration. If proxy auto discovery pac url is available,
+// we set up proxy auto discovery pac url, otherwise we set up
+// host, port and exclusion list.
+base::Value::Dict ArcNetHostImpl::TranslateProxyConfiguration(
+    const arc::mojom::ArcProxyInfoPtr& http_proxy) {
+  base::Value::Dict proxy_dict;
+  if (http_proxy->is_pac_url_proxy()) {
+    proxy_dict.Set(onc::proxy::kType, onc::proxy::kPAC);
+    proxy_dict.Set(onc::proxy::kPAC,
+                   http_proxy->get_pac_url_proxy()->pac_url.spec());
+  } else {
+    base::Value::Dict manual;
+    manual.Set(onc::proxy::kHost,
+               base::Value(http_proxy->get_manual_proxy()->host));
+    manual.Set(onc::proxy::kPort,
+               base::Value(http_proxy->get_manual_proxy()->port));
+    manual.Set(onc::proxy::kExcludeDomains,
+               TranslateStringListToValue(
+                   std::move(http_proxy->get_manual_proxy()->exclusion_list)));
+    proxy_dict.Set(onc::proxy::kType, onc::proxy::kManual);
+    proxy_dict.Set(onc::proxy::kManual, std::move(manual));
+  }
+  return proxy_dict;
 }
 
 void ArcNetHostImpl::AddPasspointCredentials(

@@ -14,6 +14,7 @@
 #include "base/compiler_specific.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/debug/alias.h"
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/switches.h"
@@ -33,12 +34,11 @@
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_fence.h"
-#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_surface.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
 namespace {
 base::TimeTicks g_last_reshape_failure = base::TimeTicks();
@@ -87,12 +87,13 @@ class SkiaOutputDeviceBufferQueue::OverlayData {
   }
 
   bool IsInUseByWindowServer() const {
+#if BUILDFLAG(IS_MAC)
     if (!scoped_read_access_)
       return false;
-    auto* gl_image = scoped_read_access_->gl_image();
-    if (!gl_image)
-      return false;
-    return gl_image->IsInUseByWindowServer();
+    return scoped_read_access_->IsInUseByWindowServer();
+#else
+    return false;
+#endif
   }
 
   void Ref() { ++ref_; }
@@ -141,7 +142,7 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
       presenter_(std::move(presenter)),
       context_state_(deps->GetSharedContextState()),
       representation_factory_(representation_factory) {
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   capabilities_.needs_background_image = ui::OzonePlatform::GetInstance()
                                              ->GetPlatformRuntimeProperties()
                                              .needs_background_image;
@@ -149,15 +150,17 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
       ui::OzonePlatform::GetInstance()
           ->GetPlatformRuntimeProperties()
           .supports_non_backed_solid_color_buffers;
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.preserve_buffer_content = true;
   capabilities_.only_invalidates_damage_rect = false;
   capabilities_.number_of_buffers = 3;
 
+  capabilities_.renderer_allocates_images =
+      ::features::ShouldRendererAllocateImages();
+
 #if BUILDFLAG(IS_ANDROID)
-  capabilities_.renderer_allocates_images = true;
   if (::features::IncreaseBufferCountForHighFrameRate()) {
     capabilities_.number_of_buffers = 5;
   }
@@ -238,8 +241,10 @@ void SkiaOutputDeviceBufferQueue::PageFlipComplete(
     if (!displayed_image_->GetPresentCount()) {
       available_images_.push_back(displayed_image_);
       // Call BeginWriteSkia() for the next frame here to avoid some expensive
-      // operations on the critical code path.
-      if (!available_images_.front()->sk_surface()) {
+      // operations on the critical code path. Do this only if we wrote to an
+      // image this frame (if we did not, assume we will not for the next
+      // frame).
+      if (!available_images_.front()->sk_surface() && image) {
         // BeginWriteSkia() may alter GL's state.
         context_state_->set_need_context_state_reset(true);
         available_images_.front()->BeginWriteSkia(sample_count_);
@@ -249,6 +254,16 @@ void SkiaOutputDeviceBufferQueue::PageFlipComplete(
 
   displayed_image_ = image;
   swap_completion_callbacks_.pop_front();
+
+  // If there is no displayed image, then purge one available image.
+  if (base::FeatureList::IsEnabled(features::kBufferQueueImageSetPurgeable)) {
+    if (!displayed_image_) {
+      for (auto* image_to_discard : available_images_) {
+        if (image_to_discard->SetPurgeable())
+          break;
+      }
+    }
+  }
 }
 
 void SkiaOutputDeviceBufferQueue::FreeAllSurfaces() {
@@ -331,24 +346,11 @@ SkiaOutputDeviceBufferQueue::GetOrCreateOverlayData(const gpu::Mailbox& mailbox,
     return nullptr;
   }
 
-  // Fuchsia does not provide a GLImage overlay.
-#if BUILDFLAG(IS_FUCHSIA)
-  const bool needs_gl_image = false;
-#else
-  const bool needs_gl_image = true;
-#endif  // BUILDFLAG(IS_FUCHSIA)
-
-  // TODO(penghuang): do not depend on GLImage.
-  auto shared_image_access =
-      shared_image->BeginScopedReadAccess(needs_gl_image);
+  auto shared_image_access = shared_image->BeginScopedReadAccess();
   if (!shared_image_access) {
     LOG(ERROR) << "Could not access SharedImage for read.";
     return nullptr;
   }
-
-  // TODO(penghuang): do not depend on GLImage.
-  DLOG_IF(FATAL, needs_gl_image && !shared_image_access->gl_image())
-      << "Cannot get GLImage.";
 
   bool result;
   std::tie(it, result) = overlays_.emplace(std::move(shared_image),
@@ -380,7 +382,7 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
 
   for (const auto& overlay : overlays) {
     auto mailbox = overlay.mailbox;
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
     if (overlay.is_solid_color) {
       DCHECK(overlay.color.has_value());
       DCHECK(capabilities_.supports_non_backed_solid_color_overlays);
@@ -456,7 +458,7 @@ void SkiaOutputDeviceBufferQueue::SwapBuffers(BufferPresentedCallback feedback,
   // Thus it is safe to use |base::Unretained(this)|.
   // Bind submitted_image_->GetWeakPtr(), since the |submitted_image_| could
   // be released due to reshape() or destruction.
-  auto data = std::move(frame.data);
+  auto data = frame.data;
   swap_completion_callbacks_.emplace_back(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
@@ -466,7 +468,7 @@ void SkiaOutputDeviceBufferQueue::SwapBuffers(BufferPresentedCallback feedback,
   committed_overlay_mailboxes_.clear();
 
   presenter_->SwapBuffers(swap_completion_callbacks_.back()->callback(),
-                          std::move(feedback), std::move(data));
+                          std::move(feedback), data);
   std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
 }
 
@@ -496,7 +498,7 @@ void SkiaOutputDeviceBufferQueue::PostSubBuffer(
   // Thus it is safe to use |base::Unretained(this)|.
   // Bind submitted_image_->GetWeakPtr(), since the |submitted_image_| could
   // be released due to reshape() or destruction.
-  auto data = std::move(frame.data);
+  auto data = frame.data;
   swap_completion_callbacks_.emplace_back(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
@@ -506,7 +508,7 @@ void SkiaOutputDeviceBufferQueue::PostSubBuffer(
   committed_overlay_mailboxes_.clear();
 
   presenter_->PostSubBuffer(rect, swap_completion_callbacks_.back()->callback(),
-                            std::move(feedback), std::move(data));
+                            std::move(feedback), data);
   std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
 }
 
@@ -528,7 +530,7 @@ void SkiaOutputDeviceBufferQueue::CommitOverlayPlanes(
   // Thus it is safe to use |base::Unretained(this)|.
   // Bind submitted_image_->GetWeakPtr(), since the |submitted_image_| could
   // be released due to reshape() or destruction.
-  auto data = std::move(frame.data);
+  auto data = frame.data;
   swap_completion_callbacks_.emplace_back(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
@@ -538,7 +540,7 @@ void SkiaOutputDeviceBufferQueue::CommitOverlayPlanes(
   committed_overlay_mailboxes_.clear();
 
   presenter_->CommitOverlayPlanes(swap_completion_callbacks_.back()->callback(),
-                                  std::move(feedback), std::move(data));
+                                  std::move(feedback), data);
   std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
 }
 
@@ -573,7 +575,7 @@ void SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers(
 
   std::vector<gpu::Mailbox> released_overlays;
   auto on_overlay_release =
-#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
       [&released_overlays](const OverlayData& overlay) {
         // Right now, only macOS needs to return maliboxes of released
         // overlays, so SkiaRenderer can unlock resources for them.

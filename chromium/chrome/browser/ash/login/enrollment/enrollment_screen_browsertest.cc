@@ -24,18 +24,22 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
-#include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/tpm_error_screen_handler.h"
+#include "chrome/common/chrome_paths.h"
 #include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/test/chromeos_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
+
 namespace {
+
 constexpr char kEnterpriseEnrollment[] = "enterprise-enrollment";
 
 const test::UIPath kEnterpriseEnrollmentDialogue = {kEnterpriseEnrollment,
@@ -52,6 +56,7 @@ const test::UIPath kEnterpriseEnrollmentSkipDialogueSkip = {
 
 const test::UIPath kEnrollmentTPMCheckCancelButton = {
     "enterprise-enrollment", "step-tpm-checking", "cancelButton"};
+
 }  // namespace
 
 using ::testing::_;
@@ -76,7 +81,7 @@ class EnrollmentScreenTest : public OobeBaseTest {
     // usually done in chrome main, which has not happened yet.
     base::FilePath user_data_dir;
     EXPECT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
-    ash::RegisterStubPathOverrides(user_data_dir);
+    RegisterStubPathOverrides(user_data_dir);
 
     return true;
   }
@@ -725,7 +730,7 @@ class EnrollmentScreenChromadMigrationTest : public EnrollmentScreenTest {
       return false;
 
     base::FilePath preinstalled_components_dir;
-    EXPECT_TRUE(base::PathService::Get(ash::DIR_PREINSTALLED_COMPONENTS,
+    EXPECT_TRUE(base::PathService::Get(DIR_PREINSTALLED_COMPONENTS,
                                        &preinstalled_components_dir));
 
     base::FilePath preserve_dir =

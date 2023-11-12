@@ -234,7 +234,7 @@ FilterOperations FilterOperationResolver::CreateFilterOperations(
             conversion_data, &state, filter_value->Item(0));
         // TODO(fs): Resolve 'currentcolor' when constructing the filter chain.
         if (shadow.GetColor().IsCurrentColor()) {
-          shadow.OverrideColor(state.Style()->GetCurrentColor());
+          shadow.OverrideColor(state.StyleBuilder().GetCurrentColor());
         }
         operations.Operations().push_back(
             MakeGarbageCollected<DropShadowFilterOperation>(shadow));
@@ -263,12 +263,12 @@ FilterOperations FilterOperationResolver::CreateOffscreenFilterOperations(
   float zoom = 1.0f;
   CSSToLengthConversionData::FontSizes font_sizes(
       kOffScreenCanvasEmFontSize, kOffScreenCanvasRemFontSize, &font, zoom);
+  CSSToLengthConversionData::LineHeightSize line_height_size;
   CSSToLengthConversionData::ViewportSize viewport_size(0, 0);
   CSSToLengthConversionData::ContainerSizes container_sizes;
   CSSToLengthConversionData conversion_data(
-      nullptr /* element_style */, nullptr /* parent_style */,
-      WritingMode::kHorizontalTb, font_sizes, viewport_size, container_sizes,
-      1 /* zoom */);
+      nullptr /* element_style */, WritingMode::kHorizontalTb, font_sizes,
+      line_height_size, viewport_size, container_sizes, 1 /* zoom */);
 
   for (auto& curr_value : To<CSSValueList>(in_value)) {
     if (curr_value->IsURIValue())

@@ -163,7 +163,6 @@ static const MimeInfo kPrimaryMappings[] = {
     {"image/avif", "avif"},
     {"image/gif", "gif"},
     {"image/jpeg", "jpeg,jpg"},
-    {"image/jxl", "jxl"},
     {"image/png", "png"},
     {"image/apng", "png,apng"},
     {"image/svg+xml", "svg,svgz"},
@@ -261,7 +260,7 @@ static const char* FindMimeType(const MimeInfo (&mappings)[num_mappings],
 }
 
 static base::FilePath::StringType StringToFilePathStringType(
-    const base::StringPiece& string_piece) {
+    base::StringPiece string_piece) {
 #if BUILDFLAG(IS_WIN)
   return base::UTF8ToWide(string_piece);
 #else
@@ -667,7 +666,6 @@ static const char* const kStandardImageTypes[] = {"image/avif",
                                                   "image/gif",
                                                   "image/ief",
                                                   "image/jpeg",
-                                                  "image/jxl",
                                                   "image/webp",
                                                   "image/pict",
                                                   "image/pipeg",
@@ -759,7 +757,7 @@ void GetExtensionsFromHardCodedMappings(
     if (base::StartsWith(cur_mime_type, mime_type,
                          base::CompareCase::INSENSITIVE_ASCII) &&
         (prefix_match || (cur_mime_type.length() == mime_type.length()))) {
-      for (const base::StringPiece& this_extension : base::SplitStringPiece(
+      for (base::StringPiece this_extension : base::SplitStringPiece(
                mapping.extensions, ",", base::TRIM_WHITESPACE,
                base::SPLIT_WANT_ALL)) {
         extensions->insert(StringToFilePathStringType(this_extension));

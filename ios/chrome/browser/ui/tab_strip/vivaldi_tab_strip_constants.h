@@ -17,8 +17,6 @@ extern NSString* const vTabViewNotSelectedBackgroundColor;
 extern NSString* const vTabViewSelectedTintColor;
 // The tint color for the tab view items when the tabs are not selected
 extern NSString* const vTabViewNotSelectedTintColor;
-// The image for primary toolbar panel button
-extern NSString* const vPrimaryToolbarPanelButton;
 
 #pragma mark - SIZES
 // Corner radius for vivaldi tab view background

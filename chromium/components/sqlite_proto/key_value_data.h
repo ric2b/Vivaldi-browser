@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -41,7 +43,9 @@ struct FakeCompare {
 // KeyValueTable<T>. The current implementation caches all the
 // data in the memory. The cache size is limited by the |max_num_entries|
 // parameter, using the Compare function to decide which entries should
-// be evicted.
+// be evicted. The data is written back to disk periodically and some updates
+// might be lost on shutdown. To prevent this data loss, one can call
+// `FlushDataToDisk()` before shutting down.
 //
 // NOTE: If the data store is larger than the maximum cache size, it
 // will be pruned on construction to satisfy the size invariant specified
@@ -95,6 +99,13 @@ class KeyValueData {
   // Deletes all entries from the database.
   void DeleteAllData();
 
+  // Force cached updates to be immediately flushed to disk.
+  void FlushDataToDisk();
+
+  // As above, but runs `on_done` when all tasks have finished flushing to disk,
+  // including any previously posted tasks.
+  void FlushDataToDisk(base::OnceClosure on_done);
+
  private:
   struct EntryCompare : private Compare {
     bool operator()(const std::pair<std::string, T>& lhs,
@@ -104,8 +115,6 @@ class KeyValueData {
   };
 
   enum class DeferredOperation { kUpdate, kDelete };
-
-  void FlushDataToDisk();
 
   scoped_refptr<TableManager> manager_;
   base::WeakPtr<KeyValueTable<T>> backend_table_;
@@ -255,6 +264,16 @@ void KeyValueData<T, Compare>::FlushDataToDisk() {
   }
 
   deferred_updates_.clear();
+}
+
+template <typename T, typename Compare>
+void KeyValueData<T, Compare>::FlushDataToDisk(base::OnceClosure on_done) {
+  FlushDataToDisk();
+
+  // Wait for all tasks posted to the task runner before now to complete. This
+  // accounts for any previously scheduled updates as well.
+  manager_->ScheduleDBTaskWithReply(FROM_HERE, base::DoNothing(),
+                                    std::move(on_done));
 }
 
 }  // namespace sqlite_proto

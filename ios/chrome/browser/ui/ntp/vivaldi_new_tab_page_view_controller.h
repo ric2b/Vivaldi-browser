@@ -9,9 +9,10 @@
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
 
 @protocol VivaldiNewTabPageViewControllerDelegate
-- (void)didTapSearchBar;
-- (void)didTapSpeedDial:(VivaldiSpeedDialItem*)item;
+- (void)didTapSpeedDial:(VivaldiSpeedDialItem*)item
+        captureSnapshot:(BOOL)captureSnapshot;
 @end
+@protocol PopupMenuCommands;
 
 // The controller holds the fake search bar and the view controller that
 // contains the speed dial folder menu and the child pages.
@@ -23,6 +24,8 @@
 
 // DELEGATE
 @property(nonatomic,weak) id<VivaldiNewTabPageViewControllerDelegate> delegate;
+// Popup menu commands handler for the ViewController.
+@property(nonatomic, weak) id<PopupMenuCommands> popupMenuCommandsHandler;
 
 @end
 

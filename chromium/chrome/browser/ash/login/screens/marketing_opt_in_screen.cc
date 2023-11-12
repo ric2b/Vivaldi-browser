@@ -30,8 +30,8 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/gesture_navigation_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gesture_navigation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/marketing_opt_in_screen_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -41,6 +41,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
+
 namespace {
 
 constexpr char kUserActionGetStarted[] = "get-started";
@@ -280,8 +281,7 @@ void MarketingOptInScreen::SetCountryFromTimezoneIfAvailable(
 
 void MarketingOptInScreen::SetA11yNavigationButtonsEnabled(bool enabled) {
   ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
-      ash::prefs::kAccessibilityTabletModeShelfNavigationButtonsEnabled,
-      enabled);
+      prefs::kAccessibilityTabletModeShelfNavigationButtonsEnabled, enabled);
   a11y_nav_buttons_toggle_metrics_reporter_timer_.Start(
       FROM_HERE, base::Seconds(10),
       base::BindOnce(&RecordShowShelfNavigationButtonsValueChange, enabled));

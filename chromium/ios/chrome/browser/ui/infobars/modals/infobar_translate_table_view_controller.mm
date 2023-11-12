@@ -6,6 +6,11 @@
 
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
+#import "components/translate/core/browser/translate_pref_names.h"
+#import "components/translate/core/common/translate_util.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_constants.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_translate_modal_constants.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_translate_modal_delegate.h"
@@ -36,7 +41,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeShowOriginalButton,
 };
 
-@interface InfobarTranslateTableViewController ()
+@interface InfobarTranslateTableViewController () <PrefObserverDelegate>
 
 // InfobarTranslateModalDelegate for this ViewController.
 @property(nonatomic, strong) id<InfobarTranslateModalDelegate>
@@ -45,6 +50,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // Prefs updated by `modalConsumer`.
 // The source language from which to translate.
 @property(nonatomic, copy) NSString* sourceLanguage;
+// Whether the source language is unknown.
+@property(nonatomic, assign) BOOL sourceLanguageIsUnknown;
 // The target language to which to translate.
 @property(nonatomic, copy) NSString* targetLanguage;
 // YES if the pref is set to enable the Translate button.
@@ -66,15 +73,31 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // YES if the pref is set to never translate the current site.
 @property(nonatomic, assign) BOOL isSiteOnNeverPromptList;
 
+// The button item to "Always translate" the source language.
+@property(nonatomic, strong) TableViewTextButtonItem* alwaysTranslateSourceItem;
+// The button item to "Never translate" the source language.
+@property(nonatomic, strong) TableViewTextButtonItem* neverTranslateSourceItem;
+// The button item to "Never translate" the site.
+@property(nonatomic, strong) TableViewTextButtonItem* neverTranslateSiteItem;
+
 @end
 
-@implementation InfobarTranslateTableViewController
+@implementation InfobarTranslateTableViewController {
+  // Weak pointer to the prefService to monitor translate settings.
+  raw_ptr<PrefService> _prefService;
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar _prefChangeRegistrar;
+}
 
 - (instancetype)initWithDelegate:
-    (id<InfobarTranslateModalDelegate>)modalDelegate {
+                    (id<InfobarTranslateModalDelegate>)modalDelegate
+                     prefService:(PrefService*)prefService {
   self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     _infobarModalDelegate = modalDelegate;
+    _prefService = prefService;
   }
   return self;
 }
@@ -97,14 +120,28 @@ typedef NS_ENUM(NSInteger, ItemType) {
   cancelButton.accessibilityIdentifier = kInfobarModalCancelButton;
   self.navigationItem.leftBarButtonItem = cancelButton;
   self.navigationController.navigationBar.prefersLargeTitles = NO;
+
+  _prefChangeRegistrar.Init(_prefService);
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+  _prefObserverBridge->ObserveChangesForPreference(
+      translate::prefs::kOfferTranslateEnabled, &_prefChangeRegistrar);
   [self loadModel];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
-  // Only call delegate method if the modal is being dismissed, if this VC is
-  // inside a NavigationController we need to check if the NavigationController
-  // is being dismissed.
+  // Only cleanup and call delegate method if the modal is being dismissed, if
+  // this VC is inside a NavigationController we need to check if the
+  // NavigationController is being dismissed.
   if ([self.navigationController isBeingDismissed] || [self isBeingDismissed]) {
+    // Remove pref changes registrations.
+    _prefChangeRegistrar.RemoveAll();
+
+    // Remove observer bridges.
+    _prefObserverBridge.reset();
+
+    // Detach C++ objects.
+    _prefService = nullptr;
+
     [self.infobarModalDelegate modalInfobarWasDismissed:self];
   }
   [super viewDidDisappear:animated];
@@ -120,7 +157,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)loadModel {
   [super loadModel];
-
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierContent];
 
@@ -174,38 +210,103 @@ typedef NS_ENUM(NSInteger, ItemType) {
         toSectionWithIdentifier:SectionIdentifierContent];
   }
 
-  TableViewTextButtonItem* alwaysTranslateSourceItem =
+  self.alwaysTranslateSourceItem =
       [self textButtonItemForType:ItemTypeAlwaysTranslateSource
                        buttonText:[self shouldAlwaysTranslateButtonText]];
-  alwaysTranslateSourceItem.buttonTextColor = [UIColor colorNamed:kBlueColor];
-  alwaysTranslateSourceItem.buttonBackgroundColor = [UIColor clearColor];
-  alwaysTranslateSourceItem.buttonAccessibilityIdentifier =
+  self.alwaysTranslateSourceItem.buttonAccessibilityIdentifier =
       kTranslateInfobarModalAlwaysTranslateButtonAXId;
-  [model addItem:alwaysTranslateSourceItem
+
+  [model addItem:self.alwaysTranslateSourceItem
       toSectionWithIdentifier:SectionIdentifierContent];
 
   if (self.shouldDisplayNeverTranslateLanguageButton) {
-    TableViewTextButtonItem* neverTranslateSourceItem = [self
+    self.neverTranslateSourceItem = [self
         textButtonItemForType:ItemTypeNeverTranslateSource
                    buttonText:[self shouldNeverTranslateSourceButtonText]];
-    neverTranslateSourceItem.buttonTextColor = [UIColor colorNamed:kBlueColor];
-    neverTranslateSourceItem.buttonBackgroundColor = [UIColor clearColor];
-    neverTranslateSourceItem.buttonAccessibilityIdentifier =
+    self.neverTranslateSourceItem.buttonAccessibilityIdentifier =
         kTranslateInfobarModalNeverTranslateButtonAXId;
-    [model addItem:neverTranslateSourceItem
+    [model addItem:self.neverTranslateSourceItem
         toSectionWithIdentifier:SectionIdentifierContent];
   }
 
   if (self.shouldDisplayNeverTranslateSiteButton) {
-    TableViewTextButtonItem* neverTranslateSiteItem =
+    self.neverTranslateSiteItem =
         [self textButtonItemForType:ItemTypeNeverTranslateSite
                          buttonText:[self shouldNeverTranslateSiteButtonText]];
-    neverTranslateSiteItem.buttonTextColor = [UIColor colorNamed:kBlueColor];
-    neverTranslateSiteItem.buttonBackgroundColor = [UIColor clearColor];
-    neverTranslateSiteItem.buttonAccessibilityIdentifier =
+    self.neverTranslateSiteItem.buttonAccessibilityIdentifier =
         kTranslateInfobarModalNeverTranslateSiteButtonAXId;
-    [model addItem:neverTranslateSiteItem
+    [model addItem:self.neverTranslateSiteItem
         toSectionWithIdentifier:SectionIdentifierContent];
+  }
+  [self updatePersistentButtonsAndReconfigure:NO];
+}
+
+- (void)updatePersistentButtonsAndReconfigure:(BOOL)reconfigure {
+  // With Force translate, always/never translate source can be disabled in 2
+  // scenarios:
+  // - if settings for translate is disabled
+  // - if source language is unknown
+  // Without Force translate, keep the current behavior and have button enabled.
+  BOOL buttonDisabled =
+      translate::IsForceTranslateEnabled() &&
+      (![self isTranslateEnabled] || self.sourceLanguageIsUnknown);
+  NSMutableArray* toReconfigure = [[NSMutableArray alloc] init];
+
+  if (self.alwaysTranslateSourceItem) {
+    self.alwaysTranslateSourceItem.buttonTextColor =
+        [UIColor colorNamed:kBlueColor];
+    self.alwaysTranslateSourceItem.buttonBackgroundColor = [UIColor clearColor];
+    self.alwaysTranslateSourceItem.enabled = !self.sourceLanguageIsUnknown;
+    if (buttonDisabled) {
+      DCHECK(translate::IsForceTranslateEnabled());
+      self.alwaysTranslateSourceItem.dimBackgroundWhenDisabled = NO;
+      self.alwaysTranslateSourceItem.buttonTextColor =
+          [UIColor tertiaryLabelColor];
+      self.alwaysTranslateSourceItem.buttonBackgroundColor =
+          [UIColor clearColor];
+    }
+    [toReconfigure addObject:self.alwaysTranslateSourceItem];
+  }
+
+  if (self.neverTranslateSourceItem) {
+    self.neverTranslateSourceItem.buttonTextColor =
+        [UIColor colorNamed:kBlueColor];
+    self.neverTranslateSourceItem.buttonBackgroundColor = [UIColor clearColor];
+
+    self.neverTranslateSourceItem.enabled = !self.sourceLanguageIsUnknown;
+    if (buttonDisabled) {
+      DCHECK(translate::IsForceTranslateEnabled());
+      self.neverTranslateSourceItem.dimBackgroundWhenDisabled = NO;
+
+      self.neverTranslateSourceItem.buttonTextColor =
+          [UIColor tertiaryLabelColor];
+      self.neverTranslateSourceItem.buttonBackgroundColor =
+          [UIColor clearColor];
+    }
+    [toReconfigure addObject:self.neverTranslateSourceItem];
+  }
+
+  if (self.neverTranslateSiteItem) {
+    self.neverTranslateSiteItem.buttonTextColor =
+        [UIColor colorNamed:kBlueColor];
+    self.neverTranslateSiteItem.buttonBackgroundColor = [UIColor clearColor];
+    // With Force translate, button can be disabled in 1 scenario1:
+    // - if settings for translate is disabled
+    // Without Force translate, keep the current behavior and have button
+    // enabled.
+    BOOL neverTranslateSiteButtonDisabled =
+        translate::IsForceTranslateEnabled() && ![self isTranslateEnabled];
+    if (neverTranslateSiteButtonDisabled) {
+      DCHECK(translate::IsForceTranslateEnabled());
+      self.neverTranslateSiteItem.dimBackgroundWhenDisabled = NO;
+      self.neverTranslateSiteItem.buttonTextColor =
+          [UIColor tertiaryLabelColor];
+      self.neverTranslateSiteItem.buttonBackgroundColor = [UIColor clearColor];
+    }
+    [toReconfigure addObject:self.neverTranslateSiteItem];
+  }
+  if (reconfigure && toReconfigure.count) {
+    [self reconfigureCellsForItems:toReconfigure];
   }
 }
 
@@ -213,6 +314,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)setupModalViewControllerWithPrefs:(NSDictionary*)prefs {
   self.sourceLanguage = prefs[kSourceLanguagePrefKey];
+  self.sourceLanguageIsUnknown =
+      [prefs[kSourceLanguageIsUnknownPrefKey] boolValue];
   self.targetLanguage = prefs[kTargetLanguagePrefKey];
   self.enableTranslateActionButton =
       [prefs[kEnableTranslateButtonPrefKey] boolValue];
@@ -347,6 +450,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return 0;
 }
 
+#pragma mark - PrefObserverDelegate
+
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == translate::prefs::kOfferTranslateEnabled) {
+    [self updatePersistentButtonsAndReconfigure:YES];
+  }
+}
+
+- (BOOL)isTranslateEnabled {
+  if ([self isBeingDismissed]) {
+    return NO;
+  }
+  return _prefService->GetBoolean(translate::prefs::kOfferTranslateEnabled);
+}
+
 #pragma mark - Private
 
 - (TableViewTextEditItem*)textEditItemForType:(ItemType)itemType
@@ -387,7 +505,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // Returns the text of the modal button allowing the user to always translate
 // the source language or revert back to offering to translate.
 - (NSString*)shouldAlwaysTranslateButtonText {
-  NSString* sourceLanguage = self.sourceLanguage;
+  NSString* sourceLanguage =
+      self.sourceLanguageIsUnknown ? @"" : self.sourceLanguage;
   if (self.shouldAlwaysTranslate) {
     return l10n_util::GetNSStringF(
         IDS_IOS_TRANSLATE_INFOBAR_OFFER_TRANSLATE_SOURCE_BUTTON_TITLE,
@@ -402,7 +521,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // Returns the text of the modal button allowing the user to never translate the
 // source language or revert back to offering to translate.
 - (NSString*)shouldNeverTranslateSourceButtonText {
-  NSString* sourceLanguage = self.sourceLanguage;
+  NSString* sourceLanguage =
+      self.sourceLanguageIsUnknown ? @"" : self.sourceLanguage;
   if (self.isTranslatableLanguage) {
     return l10n_util::GetNSStringF(
         IDS_IOS_TRANSLATE_INFOBAR_NEVER_TRANSLATE_SOURCE_BUTTON_TITLE,

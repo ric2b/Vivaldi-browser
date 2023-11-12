@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
+import android.os.Build;
 import android.widget.CompoundButton;
 
 import androidx.annotation.Nullable;
@@ -15,7 +16,9 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.PowerBookmarkMetrics.PriceTrackingState;
+import org.chromium.chrome.browser.commerce.PriceTrackingUtils;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
 import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
@@ -41,7 +44,7 @@ public class BookmarkSaveFlowMediator
     private boolean mWasBookmarkMoved;
     private SubscriptionsManager mSubscriptionsManager;
     private CommerceSubscription mSubscription;
-    private Callback<Integer> mSubscriptionsManagerCallback;
+    private Callback<Boolean> mSubscriptionsManagerCallback;
     private String mFolderName;
 
     /**
@@ -149,16 +152,22 @@ public class BookmarkSaveFlowMediator
 
     void handleNotificationSwitchToggle(CompoundButton view, boolean toggled) {
         if (mSubscriptionsManagerCallback == null) {
-            mSubscriptionsManagerCallback = mCallbackController.makeCancelable((Integer status) -> {
-                setPriceTrackingToggleVisualsOnly(
-                        status == SubscriptionsManager.StatusCode.OK && view.isChecked());
-                setPriceTrackingNotificationUiEnabled(status == SubscriptionsManager.StatusCode.OK);
-            });
+            mSubscriptionsManagerCallback =
+                    mCallbackController.makeCancelable((Boolean success) -> {
+                        setPriceTrackingToggleVisualsOnly(success && view.isChecked());
+                        setPriceTrackingNotificationUiEnabled(success);
+                    });
         }
 
+        // Make sure the notification channel is initialized when the user tracks a product.
+        // TODO(crbug.com/1382191): Add a SubscriptionsObserver in the PriceDropNotificationManager
+        // and initialize the channel there.
+        if (toggled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PriceDropNotificationManagerFactory.create().createNotificationChannel();
+        }
         setPriceTrackingIconForEnabledState(toggled);
-        PowerBookmarkUtils.setPriceTrackingEnabled(mSubscriptionsManager, mBookmarkModel,
-                mBookmarkId, toggled, mSubscriptionsManagerCallback);
+        PriceTrackingUtils.setPriceTrackingStateForBookmark(Profile.getLastUsedRegularProfile(),
+                mBookmarkId.getId(), toggled, mSubscriptionsManagerCallback);
         PowerBookmarkMetrics.reportBookmarkSaveFlowPriceTrackingState(toggled
                         ? PriceTrackingState.PRICE_TRACKING_ENABLED
                         : PriceTrackingState.PRICE_TRACKING_DISABLED);

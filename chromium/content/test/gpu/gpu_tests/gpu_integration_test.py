@@ -31,9 +31,9 @@ _SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION = ['win10']
 _SUPPORTED_WIN_GPU_VENDORS = [0x8086, 0x10de, 0x1002]
 _SUPPORTED_WIN_AMD_GPUS = [0x6613, 0x699f, 0x7340]
 _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_OVERLAYS = [0x7340]
-_SUPPORTED_WIN_INTEL_GPUS = [0x5912, 0x3e92]
-_SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS = [0x5912, 0x3e92]
-_SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS = [0x5912, 0x3e92]
+_SUPPORTED_WIN_INTEL_GPUS = [0x5912, 0x3e92, 0x9bc5]
+_SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
+_SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
 # Hardware overlays are disabled in 26.20.100.8141 per crbug.com/1079393#c105
 _UNSUPPORTED_WIN_INTEL_GPU_DRIVERS_WITH_NV12_OVERLAYS = ['5912-26.20.100.8141']
 
@@ -602,15 +602,11 @@ class GpuIntegrationTest(
       self._RestartBrowser('Restarting browser to clear process crash count.')
     return retval
 
-  @staticmethod
-  def _IsIntel(vendor_id: int) -> bool:
-    return vendor_id == 0x8086
-
   def _IsIntelGPUActive(self) -> bool:
     gpu = self.browser.GetSystemInfo().gpu
     # The implementation of GetSystemInfo guarantees that the first entry in the
     # GPU devices list is the active GPU.
-    return self._IsIntel(gpu.devices[0].vendor_id)
+    return gpu_helper.IsIntel(gpu.devices[0].vendor_id)
 
   def _IsDualGPUMacLaptop(self) -> bool:
     if sys.platform != 'darwin':
@@ -623,11 +619,11 @@ class GpuIntegrationTest(
       self.fail('Target machine must have a GPU')
     if len(gpu.devices) != 2:
       return False
-    if (self._IsIntel(gpu.devices[0].vendor_id)
-        and not self._IsIntel(gpu.devices[1].vendor_id)):
+    if (gpu_helper.IsIntel(gpu.devices[0].vendor_id)
+        and not gpu_helper.IsIntel(gpu.devices[1].vendor_id)):
       return True
-    if (not self._IsIntel(gpu.devices[0].vendor_id)
-        and self._IsIntel(gpu.devices[1].vendor_id)):
+    if (not gpu_helper.IsIntel(gpu.devices[0].vendor_id)
+        and gpu_helper.IsIntel(gpu.devices[1].vendor_id)):
       return True
     return False
 
@@ -830,11 +826,14 @@ class GpuIntegrationTest(
             gpu_device_tag = '%s-%s' % (gpu_vendor, gpu_device_id)
           if ii == 0 or gpu_vendor != 'intel':
             gpu_tags.extend([gpu_vendor, gpu_device_tag])
-            # This acts as a way to add expectations for Intel Gen9 GPUs
-            # without resorting to the more generic "intel" tag.
-            if gpu_vendor == 'intel' and (gpu_device_id & 0xFF00) in (
-                0x1900, 0x3100, 0x3E00, 0x5900, 0x5A00, 0x9B00):
+          # This acts as a way to add expectations for Intel GPUs without
+          # resorting to the more generic "intel" tag.
+          if ii == 0 and gpu_vendor == 'intel':
+            if gpu_helper.IsIntelGen9(gpu_device_id):
               gpu_tags.extend(['intel-gen-9'])
+            elif gpu_helper.IsIntelGen12(gpu_device_id):
+              gpu_tags.extend(['intel-gen-12'])
+
       # all spaces and underscores in the tag will be replaced by dashes
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
 
@@ -846,6 +845,7 @@ class GpuIntegrationTest(
     display_server = gpu_helper.GetDisplayServer(browser.browser_type)
     if display_server:
       tags.append(display_server)
+    tags = gpu_helper.ReplaceTags(tags)
     return tags
 
   @classmethod
@@ -889,10 +889,11 @@ class GpuIntegrationTest(
         'android-not-webview',
         # These GPUs are analogous to a particular device, and specifying the
         # device name is clearer.
+        'arm-mali-g52',  # android-sm-a135m
         'arm-mali-t860',  # chromeos-board-kevin
-        'qualcomm-adreno-(tm)-330',  # android-nexus-5
         'qualcomm-adreno-(tm)-418',  # android-nexus-5x
         'qualcomm-adreno-(tm)-540',  # android-pixel-2
+        'qualcomm-adreno-(tm)-610',  # android-sm-a235m
         'qualcomm-adreno-(tm)-640',  # android-pixel-4
         'arm-mali-g78',  # android-pixel-6
         'nvidia-nvidia-tegra',  # android-shield-android-tv
@@ -900,14 +901,7 @@ class GpuIntegrationTest(
         'vmware,-0x1050',  # ChromeOS VMs
         'mesa/x.org',  # ChromeOS VMs
         'mesa/x.org-0x1050',  # ChromeOS VMs
-        # Fuchsia VMs
-        ('google-angle-(vulkan-1.1.0(swiftshader-device-('
-         'llvm-7.0.1)-(0x0000c0de)))'),
-        ('google-angle-(vulkan-1.1.0(swiftshader-device-('
-         'llvm-10.0.0)-(0x0000c0de)))'),
-        ('google-vulkan-1.1.0-(swiftshader-device-('
-         'llvm-10.0.0)-(0x0000c0de))'),
-        'google-0xc0de',
+        'google-vulkan',  # SwiftShader/google-0xc0de
         'chromium-os',  # ChromeOS
         'cros-chrome',  # ChromeOS
         'web-engine-shell',  # Fuchsia

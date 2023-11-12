@@ -11,6 +11,7 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/passwords/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_bulk_leak_check_service_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
@@ -23,8 +24,6 @@ namespace {
 using password_manager::CredentialUIEntry;
 using password_manager::InsecureType;
 using password_manager::LeakCheckCredential;
-using SavedPasswordsView =
-    password_manager::SavedPasswordsPresenter::SavedPasswordsView;
 using State = password_manager::BulkLeakCheckServiceInterface::State;
 
 // Key used to attach UserData to a LeakCheckCredential.
@@ -77,14 +76,19 @@ PasswordCheckState ConvertBulkCheckState(State state) {
 IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
     ChromeBrowserState* browser_state)
     : browser_state_(browser_state),
-      password_store_(IOSChromePasswordStoreFactory::GetForBrowserState(
+      profile_store_(IOSChromePasswordStoreFactory::GetForBrowserState(
+          browser_state,
+          ServiceAccessType::EXPLICIT_ACCESS)),
+      account_store_(IOSChromeAccountPasswordStoreFactory::GetForBrowserState(
           browser_state,
           ServiceAccessType::EXPLICIT_ACCESS)),
       saved_passwords_presenter_(
           IOSChromeAffiliationServiceFactory::GetForBrowserState(browser_state),
-          password_store_),
+          profile_store_,
+          account_store_),
       insecure_credentials_manager_(&saved_passwords_presenter_,
-                                    password_store_),
+                                    profile_store_,
+                                    account_store_),
       bulk_leak_check_service_adapter_(
           &saved_passwords_presenter_,
           IOSChromeBulkLeakCheckServiceFactory::GetForBrowserState(
@@ -154,8 +158,7 @@ IOSChromePasswordCheckManager::GetUnmutedCompromisedCredentials() const {
   return compromised_crendentials;
 }
 
-void IOSChromePasswordCheckManager::OnSavedPasswordsChanged(
-    SavedPasswordsView) {
+void IOSChromePasswordCheckManager::OnSavedPasswordsChanged() {
   // Observing saved passwords to update possible kNoPasswords state.
   NotifyPasswordCheckStatusChanged();
   if (!std::exchange(is_initialized_, true) && start_check_on_init_) {

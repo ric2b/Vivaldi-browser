@@ -76,7 +76,7 @@ std::string
 #if DCHECK_IS_ON()
   return "extension management policy controlled settings";
 #else
-  IMMEDIATE_CRASH();
+  base::ImmediateCrash();
 #endif
 }
 
@@ -126,6 +126,15 @@ bool StandardManagementPolicyProvider::UserMayLoad(
   if (installation_mode == ExtensionManagement::INSTALLATION_BLOCKED ||
       installation_mode == ExtensionManagement::INSTALLATION_REMOVED) {
     return ReturnLoadError(extension, error);
+  }
+
+  if (!settings_->IsAllowedManifestVersion(extension)) {
+    if (error) {
+      *error = l10n_util::GetStringFUTF16(
+          IDS_EXTENSION_MANIFEST_VERSION_NOT_SUPPORTED,
+          base::UTF8ToUTF16(extension->name()));
+    }
+    return false;
   }
 
   return true;

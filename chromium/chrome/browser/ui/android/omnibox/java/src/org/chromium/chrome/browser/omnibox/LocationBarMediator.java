@@ -7,12 +7,13 @@ package org.chromium.chrome.browser.omnibox;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.annotation.SuppressLint;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.text.TextUtils;
-import android.util.Property;
+import android.util.FloatProperty;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.View.OnKeyListener;
@@ -28,7 +29,6 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.metrics.TimingMetric;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -83,6 +83,7 @@ import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import android.app.Activity;
@@ -132,28 +133,28 @@ class LocationBarMediator
         void recordNavigationOnNtp(String url, int transition);
     }
 
-    private final Property<LocationBarMediator, Float> mUrlFocusChangeFractionProperty =
-            new Property<LocationBarMediator, Float>(Float.class, "") {
+    private final FloatProperty<LocationBarMediator> mUrlFocusChangeFractionProperty =
+            new FloatProperty<LocationBarMediator>("") {
                 @Override
                 public Float get(LocationBarMediator object) {
                     return mUrlFocusChangeFraction;
                 }
 
                 @Override
-                public void set(LocationBarMediator object, Float value) {
+                public void setValue(LocationBarMediator object, float value) {
                     setUrlFocusChangeFraction(value);
                 }
             };
 
-    private final Property<LocationBarMediator, Float> mWidthChangeFractionPropertyTablet =
-            new Property<LocationBarMediator, Float>(Float.class, "") {
+    private final FloatProperty<LocationBarMediator> mWidthChangeFractionPropertyTablet =
+            new FloatProperty<LocationBarMediator>("") {
                 @Override
                 public Float get(LocationBarMediator object) {
                     return ((LocationBarTablet) mLocationBarLayout).getWidthChangeFraction();
                 }
 
                 @Override
-                public void set(LocationBarMediator object, Float value) {
+                public void setValue(LocationBarMediator object, float value) {
                     ((LocationBarTablet) mLocationBarLayout).setWidthChangeAnimationFraction(value);
                 }
             };
@@ -344,8 +345,8 @@ class LocationBarMediator
             templateUrlService.addObserver(this);
         }
         mAssistantVoiceSearchServiceSupplier.set(new AssistantVoiceSearchService(mContext,
-                ExternalAuthUtils.getInstance(), templateUrlService, GSAState.getInstance(mContext),
-                this, SharedPreferencesManager.getInstance(),
+                ExternalAuthUtils.getInstance(), templateUrlService, GSAState.getInstance(), this,
+                SharedPreferencesManager.getInstance(),
                 IdentityServicesProvider.get().getIdentityManager(
                         Profile.getLastUsedRegularProfile()),
                 AccountManagerFacadeProvider.getInstance()));
@@ -1179,6 +1180,7 @@ class LocationBarMediator
         mOmniboxPrerender.clear(profile);
     }
 
+    @SuppressLint("GestureBackNavigation")
     private boolean handleKeyEvent(View view, int keyCode, KeyEvent event) {
         boolean isRtl = view.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         if (mAutocompleteCoordinator.handleKeyEvent(keyCode, event)) {

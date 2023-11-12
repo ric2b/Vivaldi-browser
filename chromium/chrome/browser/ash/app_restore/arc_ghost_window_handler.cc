@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ash/app_restore/arc_ghost_window_handler.h"
 
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_restore/arc_ghost_window_shell_surface.h"
 #include "chrome/browser/ash/app_restore/arc_window_utils.h"
 #include "chrome/browser/ash/arc/window_predictor/window_predictor_utils.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "components/app_restore/app_restore_data.h"
 #include "components/app_restore/full_restore_utils.h"
@@ -68,6 +68,9 @@ ArcGhostWindowHandler::~ArcGhostWindowHandler() {
     auto* lifetime_manager = exo::WMHelper::GetInstance()->GetLifetimeManager();
     if (lifetime_manager)
       lifetime_manager->RemoveObserver(this);
+  }
+  for (auto& observer : observer_list_) {
+    observer.OnGhostWindowHandlerDestroy();
   }
   g_instance = nullptr;
 }

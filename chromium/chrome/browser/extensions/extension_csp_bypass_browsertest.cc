@@ -88,17 +88,21 @@ class ExtensionCSPBypassTest : public ExtensionBrowserTest {
     content::RenderFrameHost* rfh = web_contents()->GetPrimaryMainFrame();
     std::string code = base::StringPrintf(
         R"(
-        var s = document.createElement('script');
-        s.src = '%s';
-        s.onload = function() {
+        function canLoadScript() {
+          const s = document.createElement('script');
+          try {
+            s.src = '%s';
+            document.body.appendChild(s);
+          } catch(e) {
+            // Blocked by TrustedTypes CSP.
+            return false;
+          }
+
           // Not blocked by CSP.
-          window.domAutomationController.send(true);
-        };
-        s.onerror = function() {
-          // Blocked by CSP.
-          window.domAutomationController.send(false);
-        };
-        document.body.appendChild(s);)",
+          return true;
+        }
+        window.domAutomationController.send(canLoadScript());
+        )",
         extension->GetResourceURL("script.js").spec().c_str());
     bool script_loaded = false;
     EXPECT_TRUE(ExecuteScriptAndExtractBool(rfh, code, &script_loaded));
@@ -133,8 +137,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionCSPBypassTest, LoadWebAccessibleScript) {
   EXPECT_TRUE(CanLoadScript(ext_without_permission));
 
   // chrome-extension:-URLs can never bypass CSP in WebUI.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
-                                           GURL(chrome::kChromeUISettingsURL)));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), GURL(chrome::kChromeUIExtensionsURL)));
 
   EXPECT_FALSE(CanLoadScript(component_ext_with_permission));
   EXPECT_FALSE(CanLoadScript(component_ext_without_permission));
@@ -221,7 +225,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCSPBypassTest, FrameAncestors) {
   ASSERT_TRUE(content::NavigateToURL(web_contents(), popup_url));
 
   // The iframe must be blocked because of CSP.
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   content::RenderFrameHost* main_frame = web_contents()->GetPrimaryMainFrame();
   content::RenderFrameHost* child_frame = ChildFrameAt(main_frame, 0);
   EXPECT_EQ(popup_url, main_frame->GetLastCommittedURL());

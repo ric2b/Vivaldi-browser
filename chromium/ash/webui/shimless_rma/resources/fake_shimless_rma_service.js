@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '/file_path.mojom-lite.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
+import './file_path.mojom-lite.js';
 
 import {FakeMethodResolver} from 'chrome://resources/ash/common/fake_method_resolver.js';
 import {FakeObservables} from 'chrome://resources/ash/common/fake_observables.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {CalibrationComponentStatus, CalibrationObserverRemote, CalibrationOverallStatus, CalibrationSetupInstruction, CalibrationStatus, Component, ComponentType, ErrorObserverRemote, ExternalDiskStateObserverRemote, FinalizationError, FinalizationObserverRemote, FinalizationStatus, HardwareVerificationStatusObserverRemote, HardwareWriteProtectionStateObserverRemote, OsUpdateObserverRemote, OsUpdateOperation, PowerCableStateObserverRemote, ProvisioningError, ProvisioningObserverRemote, ProvisioningStatus, QrCode, RmadErrorCode, ShimlessRmaServiceInterface, ShutdownMethod, State, StateResult, UpdateErrorCode, UpdateRoFirmwareObserverRemote, UpdateRoFirmwareStatus, WriteProtectDisableCompleteAction} from './shimless_rma_types.js';
 
@@ -360,7 +361,7 @@ export class FakeShimlessRmaService {
   }
 
   /**
-   * @return {!Promise<!{qrCode: QrCode}>}
+   * @return {!Promise<!{qrCodeData: !Array<number>}>}
    */
   getRsuDisableWriteProtectChallengeQrCode() {
     return this.methods_.resolveMethod(
@@ -368,11 +369,11 @@ export class FakeShimlessRmaService {
   }
 
   /**
-   * @param {!QrCode} qrCode
+   * @param {!Array<number>} qrCodeData
    */
-  setGetRsuDisableWriteProtectChallengeQrCodeResponse(qrCode) {
+  setGetRsuDisableWriteProtectChallengeQrCodeResponse(qrCodeData) {
     this.methods_.setResult(
-        'getRsuDisableWriteProtectChallengeQrCode', {qrCode: qrCode});
+        'getRsuDisableWriteProtectChallengeQrCode', {qrCodeData: qrCodeData});
   }
 
   /**
@@ -390,24 +391,6 @@ export class FakeShimlessRmaService {
   writeProtectManuallyDisabled() {
     return this.getNextStateForMethod_(
         'writeProtectManuallyDisabled', State.kWaitForManualWPDisable);
-  }
-
-  /**
-   * @return {!Promise<!{displayUrl: string, qrCode: ?QrCode}>}
-   */
-  getWriteProtectManuallyDisabledInstructions() {
-    return this.methods_.resolveMethod(
-        'getWriteProtectManuallyDisabledInstructions');
-  }
-
-  /**
-   * @param {string} displayUrl
-   * @param {!QrCode} qrCode
-   */
-  setGetWriteProtectManuallyDisabledInstructionsResult(displayUrl, qrCode) {
-    this.methods_.setResult(
-        'getWriteProtectManuallyDisabledInstructions',
-        {displayUrl: displayUrl, qrCode: qrCode});
   }
 
   /** @return {!Promise<!{action: !WriteProtectDisableCompleteAction}>} */
@@ -1302,9 +1285,6 @@ export class FakeShimlessRmaService {
     this.methods_.register('setRsuDisableWriteProtectCode');
 
     this.methods_.register('writeProtectManuallyDisabled');
-    this.methods_.register('getWriteProtectManuallyDisabledInstructions');
-    this.methods_.register(
-        'setGetWriteProtectManuallyDisabledInstructionsResult');
 
     this.methods_.register('getWriteProtectDisableCompleteAction');
     this.methods_.register('confirmManualWpDisableComplete');

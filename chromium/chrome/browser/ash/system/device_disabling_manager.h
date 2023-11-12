@@ -45,7 +45,7 @@ namespace system {
 //   2) If a session is in progress, the session is terminated. After Chrome has
 //      restarted on the login screen, the disabled screen is shown per 1).
 //   This ensures that when a device is disabled, there is never any user
-//   session running in the backround.
+//   session running in the background.
 //   When the device is re-enabled, Chrome is restarted once more to resume the
 //   regular login screen flows from a known-good point.
 class DeviceDisablingManager {
@@ -152,13 +152,5 @@ class DeviceDisablingManager {
 
 }  // namespace system
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when Chrome OS code migration is
-// done.
-namespace chromeos {
-namespace system {
-using ::ash::system::DeviceDisablingManager;
-}  // namespace system
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_SYSTEM_DEVICE_DISABLING_MANAGER_H_

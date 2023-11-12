@@ -85,6 +85,7 @@ class WEBDATA_EXPORT WebDatabase {
 
   bool MigrateToVersion58DropWebAppsAndIntents();
   bool MigrateToVersion79DropLoginsTable();
+  bool MigrateToVersion105DropIbansTable();
 
   sql::Database db_;
   sql::MetaTable meta_table_;

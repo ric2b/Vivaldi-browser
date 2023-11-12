@@ -4,9 +4,9 @@
 
 import {ImageLoaderClient} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/image_loader_client.js';
 import {LoadImageRequest, LoadImageResponse, LoadImageResponseStatus} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/load_image_request.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
-import {DialogType} from '../../common/js/dialog_type.js';
+import {DialogType, isModal} from '../../common/js/dialog_type.js';
 import {FileType} from '../../common/js/file_type.js';
 import {str, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
@@ -156,7 +156,7 @@ export class QuickViewController {
    */
   init_(quickView) {
     this.quickView_ = quickView;
-    this.quickView_.isModal = DialogType.isModal(this.dialogType_);
+    this.quickView_.isModal = isModal(this.dialogType_);
 
     this.quickView_.setAttribute('files-ng', '');
 
@@ -487,7 +487,7 @@ export class QuickViewController {
    * @private
    */
   async onMetadataLoaded_(entry, items, fileTasks, canDelete) {
-    const tasks = fileTasks.getTaskItems();
+    const tasks = fileTasks.getAnnotatedTasks();
 
     const params =
         await this.getQuickViewParameters_(entry, items, tasks, canDelete);

@@ -10,11 +10,12 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/common/channel_info.h"
 #include "chromeos/ash/components/dbus/chromebox_for_meetings/cfm_hotline_client.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/version_info/version_info.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -244,10 +245,10 @@ void DeviceInfoService::GetMachineStatisticsInfo(
 
   auto stat_info = mojom::MachineStatisticsInfo::New();
 
-  std::string value;
-  if (chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-          chromeos::system::kHardwareClassKey, &value)) {
-    stat_info->hwid = std::move(value);
+  if (const absl::optional<base::StringPiece> hwid =
+          chromeos::system::StatisticsProvider::GetInstance()
+              ->GetMachineStatistic(chromeos::system::kHardwareClassKey)) {
+    stat_info->hwid = std::string(hwid.value());
   }
 
   std::move(callback).Run(std::move(stat_info));
@@ -257,7 +258,7 @@ void DeviceInfoService::GetMachineStatisticsInfo(
 
 DeviceInfoService::DeviceInfoService()
     : service_adaptor_(mojom::MeetDevicesInfo::Name_, this),
-      task_runner_(base::SequencedTaskRunnerHandle::Get()),
+      task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       on_machine_statistics_loaded_(false) {
   CfmHotlineClient::Get()->AddObserver(this);
   current_policy_info_.reset();

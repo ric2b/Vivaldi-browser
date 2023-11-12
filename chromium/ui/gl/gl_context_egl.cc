@@ -8,9 +8,9 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-
 #include "third_party/khronos/EGL/egl.h"
 #include "third_party/khronos/EGL/eglext.h"
 #include "ui/gl/egl_util.h"
@@ -19,6 +19,10 @@
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_surface_egl.h"
+
+#if BUILDFLAG(IS_APPLE)
+#include "base/mac/mac_util.h"
+#endif
 
 #ifndef EGL_CHROMIUM_create_context_bind_generates_resource
 #define EGL_CHROMIUM_create_context_bind_generates_resource 1
@@ -86,11 +90,6 @@
 #define EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE 0x3481
 #endif /* EGL_ANGLE_context_virtualization */
 
-#ifndef EGL_ANGLE_program_cache_control
-#define EGL_ANGLE_program_cache_control 1
-#define EGL_CONTEXT_PROGRAM_BINARY_CACHE_ENABLED_ANGLE 0x3459
-#endif /* EGL_ANGLE_program_cache_control */
-
 using ui::GetLastEGLErrorString;
 
 namespace gl {
@@ -103,8 +102,7 @@ namespace {
 bool ChangeContextAttributes(std::vector<EGLint>& context_attributes,
                              EGLint attribute,
                              EGLint value) {
-  auto iter = std::find(context_attributes.begin(), context_attributes.end(),
-                        attribute);
+  auto iter = base::ranges::find(context_attributes, attribute);
   if (iter != context_attributes.end()) {
     ++iter;
     if (iter != context_attributes.end()) {
@@ -179,6 +177,18 @@ bool GLContextEGL::Initialize(GLSurface* compatible_surface,
   }
 
   bool is_swangle = IsSoftwareGLImplementation(GetGLImplementationParts());
+
+#if BUILDFLAG(IS_APPLE)
+  if (is_swangle && attribs.webgl_compatibility_context &&
+      base::mac::GetCPUType() == base::mac::CPUType::kArm) {
+    // crbug.com/1378476: LLVM 10 is used as the JIT compiler for SwiftShader,
+    // which doesn't fully support ARM. Disable Swiftshader on ARM CPUs for
+    // WebGL until LLVM is upgraded.
+    DVLOG(1) << __FUNCTION__
+             << ": Software WebGL contexts are not supported on ARM MacOS.";
+    return false;
+  }
+#endif
 
   if (gl_display_->ext->b_EGL_EXT_create_context_robustness || is_swangle) {
     DVLOG(1) << "EGL_EXT_create_context_robustness supported.";
@@ -312,14 +322,6 @@ bool GLContextEGL::Initialize(GLSurface* compatible_surface,
     context_attributes.push_back(EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE);
     context_attributes.push_back(
         static_cast<EGLint>(attribs.angle_context_virtualization_group_number));
-  }
-
-  // Skia manages program cache by itself.
-  // For WebGL program, it should manage program by itself too.
-  if (gl_display_->ext->b_EGL_ANGLE_program_cache_control) {
-    context_attributes.push_back(
-        EGL_CONTEXT_PROGRAM_BINARY_CACHE_ENABLED_ANGLE);
-    context_attributes.push_back(EGL_FALSE);
   }
 
   // Append final EGL_NONE to signal the context attributes are finished

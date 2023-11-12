@@ -25,7 +25,6 @@
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
 
-class NativeWindowTracker;
 class Profile;
 class WebAppUninstallDialogViews;
 
@@ -36,6 +35,7 @@ enum class WebappUninstallSource;
 
 namespace views {
 class Checkbox;
+class NativeWindowTracker;
 }
 
 // The dialog's view, owned by the views framework.
@@ -68,7 +68,7 @@ class WebAppUninstallDialogDelegateView : public views::DialogDelegateView {
   void OnDialogAccepted();
   void OnDialogCanceled();
 
-  raw_ptr<WebAppUninstallDialogViews> dialog_;
+  raw_ptr<WebAppUninstallDialogViews, DanglingUntriaged> dialog_;
 
   raw_ptr<views::Checkbox> checkbox_ = nullptr;
   gfx::ImageSkia image_;
@@ -79,7 +79,7 @@ class WebAppUninstallDialogDelegateView : public views::DialogDelegateView {
   // The dialog needs start_url copy even if app gets uninstalled.
   GURL app_start_url_;
 
-  const raw_ptr<Profile> profile_;
+  const raw_ptr<Profile, DanglingUntriaged> profile_;
 
   webapps::WebappUninstallSource uninstall_source_;
 };
@@ -134,7 +134,7 @@ class WebAppUninstallDialogViews
   base::OnceClosure dialog_shown_callback_for_testing_;
 
   // Tracks whether |parent_| got destroyed.
-  std::unique_ptr<NativeWindowTracker> parent_window_tracker_;
+  std::unique_ptr<views::NativeWindowTracker> parent_window_tracker_;
 
   base::ScopedObservation<web_app::WebAppInstallManager,
                           web_app::WebAppInstallManagerObserver>
@@ -144,7 +144,7 @@ class WebAppUninstallDialogViews
 
   // The web app we are showing the dialog for.
   web_app::AppId app_id_;
-  const raw_ptr<Profile> profile_;
+  const raw_ptr<Profile, DanglingUntriaged> profile_;
 
   THREAD_CHECKER(thread_checker_);
 

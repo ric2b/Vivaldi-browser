@@ -29,11 +29,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/fuchsia/element_manager_impl.h"
 #include "chrome/browser/fuchsia/switches.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/fuchsia_component_support/feedback_registration.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "content/public/common/content_switches.h"
@@ -42,6 +44,34 @@
 #include "ui/platform_window/fuchsia/initialize_presenter_api_view.h"
 
 namespace {
+
+// Registers product data for the Chrome browser Component. This should only
+// be called once per browser instance, and the calling thread must have an
+// async_dispatcher.
+void RegisterChromeProductData() {
+  // The URL cannot be obtained programmatically - see fxbug.dev/51490.
+  constexpr char kComponentUrl[] =
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      "fuchsia-pkg://chrome.com/chrome#meta/chrome.cm";
+#else
+      "fuchsia-pkg://chromium.org/chrome#meta/chrome.cm";
+#endif
+
+  constexpr char kCrashProductName[] = "Chrome_Fuchsia";
+
+  constexpr char kFeedbackAnnotationsNamespace[] =
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      "google-chrome";
+#else
+      "chromium";
+#endif
+
+  fuchsia_component_support::RegisterProductDataForCrashReporting(
+      kComponentUrl, kCrashProductName);
+
+  fuchsia_component_support::RegisterProductDataForFeedback(
+      kFeedbackAnnotationsNamespace);
+}
 
 // Checks the supported ozone platform with Scenic if no arg is specified.
 // TODO(fxbug.dev/94001): Delete this after Flatland migration is completed.
@@ -540,7 +570,8 @@ class ChromeBrowserMainPartsFuchsia::UseGraphicalPresenter final {
     fuchsia::element::ViewSpec view_spec;
     view_spec.set_view_holder_token(std::move(view_holder_token));
     view_spec.set_view_ref(std::move(view_ref));
-    view_spec.set_annotations(fidl::Clone(element_manager_->GetAnnotations()));
+    view_spec.set_annotations(
+        element_manager_->annotations_manager().GetAnnotations());
     graphical_presenter_->PresentView(std::move(view_spec), nullptr,
                                       view_controller.NewRequest(),
                                       [](auto result) {});
@@ -554,7 +585,8 @@ class ChromeBrowserMainPartsFuchsia::UseGraphicalPresenter final {
     fuchsia::element::ViewSpec view_spec;
     view_spec.set_viewport_creation_token(std::move(viewport_creation_token));
     view_spec.set_view_ref(std::move(view_ref_pair.view_ref));
-    view_spec.set_annotations(fidl::Clone(element_manager_->GetAnnotations()));
+    view_spec.set_annotations(
+        element_manager_->annotations_manager().GetAnnotations());
     graphical_presenter_->PresentView(std::move(view_spec), nullptr,
                                       view_controller.NewRequest(),
                                       [](auto result) {});
@@ -644,6 +676,12 @@ int ChromeBrowserMainPartsFuchsia::PreEarlyInitialization() {
   HandleOzonePlatformArgs();
   HandleCFv2Argument();
   return ChromeBrowserMainParts::PreEarlyInitialization();
+}
+
+void ChromeBrowserMainPartsFuchsia::PostCreateMainMessageLoop() {
+  RegisterChromeProductData();
+
+  ChromeBrowserMainParts::PostCreateMainMessageLoop();
 }
 
 int ChromeBrowserMainPartsFuchsia::PreMainMessageLoopRun() {

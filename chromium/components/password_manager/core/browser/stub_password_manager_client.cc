@@ -89,10 +89,6 @@ PasswordReuseManager* StubPasswordManagerClient::GetPasswordReuseManager()
   return nullptr;
 }
 
-PasswordScriptsFetcher* StubPasswordManagerClient::GetPasswordScriptsFetcher() {
-  return nullptr;
-}
-
 MockPasswordChangeSuccessTracker*
 StubPasswordManagerClient::GetPasswordChangeSuccessTracker() {
   return &password_change_success_tracker_;
@@ -182,10 +178,6 @@ bool StubPasswordManagerClient::IsNewTabPage() const {
 
 FieldInfoManager* StubPasswordManagerClient::GetFieldInfoManager() const {
   return nullptr;
-}
-
-bool StubPasswordManagerClient::IsAutofillAssistantUIVisible() const {
-  return false;
 }
 
 version_info::Channel StubPasswordManagerClient::GetChannel() const {

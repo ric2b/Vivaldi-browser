@@ -31,6 +31,7 @@ class LaunchReliabilityLogger {
   NetworkRequestId LogFeedRequestStart();
   NetworkRequestId LogActionsUploadRequestStart();
   NetworkRequestId LogWebFeedRequestStart();
+  NetworkRequestId LogSingleWebFeedRequestStart();
   void LogRequestSent(NetworkRequestId id, base::TimeTicks timestamp);
   void LogResponseReceived(NetworkRequestId id,
                            int64_t server_receive_timestamp_ns,
@@ -57,7 +58,7 @@ class LaunchReliabilityLogger {
       feedwire::DiscoverLaunchResult result);
 
  private:
-  raw_ptr<StreamSurfaceSet> surfaces_;
+  raw_ptr<StreamSurfaceSet, DanglingUntriaged> surfaces_;
   NetworkRequestId::Generator request_id_gen_;
 };
 

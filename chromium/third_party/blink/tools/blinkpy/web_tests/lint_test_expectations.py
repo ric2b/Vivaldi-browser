@@ -29,6 +29,7 @@
 import contextlib
 import json
 import logging
+import posixpath
 import optparse
 import re
 import traceback
@@ -39,11 +40,8 @@ from blinkpy.common.system.log_utils import configure_logging
 from blinkpy.web_tests.models.test_expectations import (TestExpectations,
                                                         ParseError)
 from blinkpy.web_tests.models.typ_types import ResultType
-from blinkpy.web_tests.port.android import (ANDROID_DISABLED_TESTS,
-                                            ANDROID_WEBLAYER)
+from blinkpy.web_tests.port.android import ANDROID_DISABLED_TESTS
 from blinkpy.web_tests.port.factory import platform_options
-
-from functools import reduce
 
 _log = logging.getLogger(__name__)
 
@@ -235,13 +233,6 @@ def _check_never_fix_tests(host, port, path, expectations):
             return False
         if skip_exp.is_glob and pass_exp.test.startswith(skip_exp.test[:-1]):
             return True
-        base_test = port.lookup_virtual_test_base(pass_exp.test)
-        if not base_test:
-            return False
-        if base_test == skip_exp.test:
-            return True
-        if skip_exp.is_glob and base_test.startswith(skip_exp.test[:-1]):
-            return True
         return False
 
     failures = []
@@ -259,11 +250,33 @@ def _check_never_fix_tests(host, port, path, expectations):
                 pass_validly_overrides_skip(exp, expectations[j])
                 for j in range(i - 1, 0, -1)):
             continue
-        error = (
-            "{}:{} {}: The [ Pass ] entry must override a previous [ Skip ]"
-            " entry with a more specific test name or tags".format(
-                host.filesystem.basename(path), exp.lineno, exp.test))
+
+        if port.lookup_virtual_test_base(exp.test):
+            error = (
+                "{}:{} {}: Please use 'exclusive_tests' in VirtualTestSuites to"
+                " skip base tests of a virtual suite".format(
+                    host.filesystem.basename(path), exp.lineno, exp.test))
+        else:
+            error = (
+                "{}:{} {}: The [ Pass ] entry must override a previous [ Skip ]"
+                " entry with a more specific test name or tags".format(
+                    host.filesystem.basename(path), exp.lineno, exp.test))
         failures.append(error)
+    return failures
+
+
+def _check_skip_in_test_expectations(host, path, expectations):
+    if not path.endswith('TestExpectations'):
+        return []
+
+    failures = []
+    for exp in expectations:
+        if exp.results == set([ResultType.Skip]):
+            error = (
+                '{}:{} Single [ Skip ] is not allowed in TestExpectations. '
+                'See comments at the beginning of the file for details.'.
+                format(host.filesystem.basename(path), exp.lineno))
+            failures.append(error)
     return failures
 
 
@@ -281,6 +294,7 @@ def _check_expectations(host, port, path, test_expectations, options,
     failures.extend(_check_never_fix_tests(host, port, path, expectations))
     failures.extend(
         _check_stable_webexposed_not_disabled(host, path, expectations))
+    failures.extend(_check_skip_in_test_expectations(host, path, expectations))
     # TODO(crbug.com/1080691): Change this to failures once
     # wpt_expectations_updater is fixed.
     warnings.extend(
@@ -312,6 +326,13 @@ def check_virtual_test_suites(host, options):
     virtual_suites = port.virtual_test_suites()
     virtual_suites.sort(key=lambda s: s.full_prefix)
 
+    wpt_tests = set()
+    for wpt_dir in port.WPT_DIRS:
+        with contextlib.suppress(FileNotFoundError):
+            wpt_tests.update(
+                posixpath.join(wpt_dir, url)
+                for url in port.wpt_manifest(wpt_dir).all_urls())
+
     failures = []
     for suite in virtual_suites:
         suite_comps = suite.full_prefix.split(port.TEST_PATH_SEPARATOR)
@@ -339,19 +360,42 @@ def check_virtual_test_suites(host, options):
                 continue
             base_comps = base.split(port.TEST_PATH_SEPARATOR)
             absolute_base = port.abspath_for_test(base)
-            if fs.isfile(absolute_base):
+            if fs.isfile(absolute_base) or base in wpt_tests:
                 del base_comps[-1]
             elif not fs.isdir(absolute_base):
                 failure = 'Base "{}" in virtual suite "{}" must refer to a real file or directory'.format(
                     base, prefix)
                 failures.append(failure)
                 continue
+
+            if port.skipped_due_to_exclusive_virtual_tests(suite.full_prefix +
+                                                           base):
+                failure = (
+                    'Base "{}" in virtual suite "{}" is in exclusive_tests '
+                    'of other virtual suites. It will be skipped. '
+                    'Either remove the base or list the base in this '
+                    'suite\'s exclusive_tests.'.format(base, prefix))
+                failures.append(failure)
+                continue
+
             comps = [web_tests_dir] + suite_comps + base_comps + ['README.txt']
             path_to_readme_txt = fs.join(*comps)
             if (not fs.exists(path_to_readme_md)
                     and not fs.exists(path_to_readme_txt)):
                 failure = '"{}" and "{}" are both missing (each virtual suite must have one).'.format(
                     path_to_readme_txt, path_to_readme_md)
+                failures.append(failure)
+
+        for exclusive_test in suite.exclusive_tests:
+            if not fs.exists(port.abspath_for_test(exclusive_test)):
+                failure = 'Exclusive_tests entry "{}" in virtual suite "{}" must refer to a real file or directory'.format(
+                    exclusive_test, prefix)
+                failures.append(failure)
+            elif not any(
+                    port.normalize_test_name(exclusive_test).startswith(base)
+                    for base in normalized_bases):
+                failure = 'Exclusive_tests entry "{}" in virtual suite "{}" is not a subset of bases'.format(
+                    exclusive_test, prefix)
                 failures.append(failure)
 
     return failures

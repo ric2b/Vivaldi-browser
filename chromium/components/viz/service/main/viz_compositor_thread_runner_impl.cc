@@ -32,7 +32,7 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "ui/gfx/switches.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -52,7 +52,7 @@ std::unique_ptr<VizCompositorThreadType> CreateAndStartCompositorThread() {
 
   std::unique_ptr<base::Thread> thread;
   base::Thread::Options thread_options;
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   auto* platform = ui::OzonePlatform::GetInstance();
   thread_options.message_pump_type =
       platform->GetPlatformProperties().message_pump_type_for_viz_compositor;
@@ -119,7 +119,7 @@ void VizCompositorThreadRunnerImpl::CreateHintSessionFactoryOnCompositorThread(
   auto hint_session_factory = HintSessionFactory::Create(std::move(thread_ids));
   // Written this way so finch only considers the experiment active on device
   // which supports hint session.
-  if (hint_session_factory && features::IsAdpfEnabled()) {
+  if (hint_session_factory) {
     hint_session_factory_ = std::move(hint_session_factory);
     *wake_up_closure = base::BindPostTask(
         task_runner_,

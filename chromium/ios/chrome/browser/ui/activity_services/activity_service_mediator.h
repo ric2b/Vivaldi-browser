@@ -30,6 +30,10 @@ class PrefService;
 @class ShareFileData;
 class WebNavigationBrowserAgent;
 
+// Vivaldi
+@class ShareTextData;
+// End Vivaldi
+
 // Mediator used to generate activities.
 @interface ActivityServiceMediator : NSObject
 
@@ -73,6 +77,17 @@ class WebNavigationBrowserAgent;
 // the given `data`.
 - (NSArray<ChromeActivityImageSource*>*)activityItemsForImageData:
     (ShareImageData*)data;
+
+// Vivaldi
+// Generates an array of activity items to be shared via an activity view for
+// the given `data`.
+- (NSArray<ChromeActivityImageSource*>*)activityItemsForTextData:
+    (ShareTextData*)data;
+
+// Generates an array of activities to be added to the activity view for the
+// given `data`.
+- (NSArray*)applicationActivitiesForTextData:(ShareTextData*)data;
+// End Vivaldi
 
 // Generates an array of activities to be added to the activity view for the
 // given `data`.

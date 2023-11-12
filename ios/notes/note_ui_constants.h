@@ -12,7 +12,7 @@
 // Accessibility identifier of the Note Home View container.
 extern NSString* const kNoteHomeViewContainerIdentifier;
 // Accessibility identifier of the Note Edit View container.
-extern NSString* const kNoteEditViewContainerIdentifier;
+extern NSString* const kNoteAddEditViewContainerIdentifier;
 // Accessibility identifier of the Note Folder Edit View container.
 extern NSString* const kNoteFolderEditViewContainerIdentifier;
 // Accessibility identifier of the Note Folder Create View container.

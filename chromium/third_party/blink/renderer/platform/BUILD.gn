@@ -8,6 +8,7 @@ import("//build/compiled_action.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/nocompile.gni")
 import("//media/media_options.gni")
 import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
@@ -69,6 +70,28 @@ blink_python_runner("runtime_enabled_features") {
   ]
 }
 
+blink_python_runner("runtime_feature_state_override_context") {
+  script = "../build/scripts/make_runtime_feature_state_override_context.py"
+
+  inputs = scripts_for_json5_files + [
+             "../build/scripts/make_runtime_feature_state_override_context.py",
+             "runtime_enabled_features.json5",
+             "../build/scripts/templates/runtime_feature_state_override_context.h.tmpl",
+             "../build/scripts/templates/runtime_feature_state_override_context.cc.tmpl",
+           ]
+  outputs = [
+    "$blink_platform_output_dir/runtime_feature_state/runtime_feature_state_override_context.h",
+    "$blink_platform_output_dir/runtime_feature_state/runtime_feature_state_override_context.cc",
+  ]
+
+  args = [
+    rebase_path("runtime_enabled_features.json5", root_build_dir),
+    "--output_dir",
+    rebase_path("$blink_platform_output_dir/runtime_feature_state",
+                root_build_dir),
+  ]
+}
+
 blink_python_runner("color_data") {
   script = "../build/scripts/gperf.py"
 
@@ -121,6 +144,7 @@ group("make_platform_generated") {
     ":color_data",
     ":font_family_names",
     ":runtime_enabled_features",
+    ":runtime_feature_state_override_context",
     "//third_party/blink/renderer/platform/network:make_generated",
   ]
 }
@@ -276,12 +300,10 @@ component("platform") {
     "audio/audio_delay_dsp_kernel.h",
     "audio/audio_destination.cc",
     "audio/audio_destination.h",
-    "audio/audio_destination_consumer.h",
     "audio/audio_dsp_kernel.cc",
     "audio/audio_dsp_kernel.h",
     "audio/audio_dsp_kernel_processor.cc",
     "audio/audio_dsp_kernel_processor.h",
-    "audio/audio_file_reader.h",
     "audio/audio_io_callback.h",
     "audio/audio_processor.cc",
     "audio/audio_processor.h",
@@ -425,6 +447,8 @@ component("platform") {
     "bindings/source_location.h",
     "bindings/string_resource.cc",
     "bindings/string_resource.h",
+    "bindings/sync_iterator_base.cc",
+    "bindings/sync_iterator_base.h",
     "bindings/thread_debugger.cc",
     "bindings/thread_debugger.h",
     "bindings/to_v8.h",
@@ -612,6 +636,8 @@ component("platform") {
     "fonts/font_smoothing_mode.h",
     "fonts/font_unique_name_lookup.cc",
     "fonts/font_unique_name_lookup.h",
+    "fonts/font_variant_alternates.cc",
+    "fonts/font_variant_alternates.h",
     "fonts/font_variant_east_asian.cc",
     "fonts/font_variant_east_asian.h",
     "fonts/font_variant_numeric.cc",
@@ -622,7 +648,6 @@ component("platform") {
     "fonts/generic_font_family_settings.cc",
     "fonts/generic_font_family_settings.h",
     "fonts/glyph_metrics_map.h",
-    "fonts/lock_for_parallel_text_shaping.h",
     "fonts/ng_text_fragment_paint_info.cc",
     "fonts/ng_text_fragment_paint_info.h",
     "fonts/opentype/font_format_check.cc",
@@ -646,6 +671,7 @@ component("platform") {
     "fonts/opentype/variable_axes_names.h",
     "fonts/orientation_iterator.cc",
     "fonts/orientation_iterator.h",
+    "fonts/resolved_font_features.h",
     "fonts/script_run_iterator.cc",
     "fonts/script_run_iterator.h",
     "fonts/segmented_font_data.cc",
@@ -836,7 +862,6 @@ component("platform") {
     "graphics/decoding_image_generator.h",
     "graphics/deferred_image_decoder.cc",
     "graphics/deferred_image_decoder.h",
-    "graphics/document_transition_shared_element_id.h",
     "graphics/dom_node_id.h",
     "graphics/draw_looper_builder.cc",
     "graphics/draw_looper_builder.h",
@@ -1116,6 +1141,7 @@ component("platform") {
     "graphics/video_frame_sink_bundle.h",
     "graphics/video_frame_submitter.cc",
     "graphics/video_frame_submitter.h",
+    "graphics/view_transition_shared_element_id.h",
     "graphics/viz_util.cc",
     "graphics/viz_util.h",
     "graphics/web_graphics_context_3d_provider_util.cc",
@@ -1129,6 +1155,8 @@ component("platform") {
     "image-decoders/bmp/bmp_image_decoder.h",
     "image-decoders/bmp/bmp_image_reader.cc",
     "image-decoders/bmp/bmp_image_reader.h",
+    "image-decoders/exif_reader.cc",
+    "image-decoders/exif_reader.h",
     "image-decoders/fast_shared_buffer_reader.cc",
     "image-decoders/fast_shared_buffer_reader.h",
     "image-decoders/gif/gif_image_decoder.cc",
@@ -1251,7 +1279,6 @@ component("platform") {
     "p2p/mdns_responder_adapter.h",
     "p2p/network_list_manager.h",
     "p2p/network_list_observer.h",
-    "p2p/network_manager_uma.cc",
     "p2p/network_manager_uma.h",
     "p2p/port_allocator.cc",
     "p2p/port_allocator.h",
@@ -1322,6 +1349,10 @@ component("platform") {
     "peerconnection/two_keys_adapter_map.h",
     "peerconnection/video_codec_factory.cc",
     "peerconnection/video_codec_factory.h",
+    "peerconnection/vsync_provider.cc",
+    "peerconnection/vsync_provider.h",
+    "peerconnection/vsync_tick_provider.cc",
+    "peerconnection/vsync_tick_provider.h",
     "peerconnection/webrtc_audio_sink.cc",
     "peerconnection/webrtc_audio_sink.h",
     "peerconnection/webrtc_decoding_info_handler.cc",
@@ -1436,8 +1467,6 @@ component("platform") {
     "transforms/skew_transform_operation.h",
     "transforms/transform_operations.cc",
     "transforms/transform_operations.h",
-    "transforms/transformation_matrix.cc",
-    "transforms/transformation_matrix.h",
     "transforms/translate_transform_operation.cc",
     "transforms/translate_transform_operation.h",
     "video_capture/video_capture_impl.cc",
@@ -1545,7 +1574,8 @@ component("platform") {
   # Add in the generated files.
   sources += get_target_outputs(":character_data") +
              get_target_outputs(":color_data") +
-             get_target_outputs(":font_family_names")
+             get_target_outputs(":font_family_names") +
+             get_target_outputs(":runtime_feature_state_override_context")
 
   foreach(_output, get_target_outputs(":runtime_enabled_features")) {
     if (get_path_info(_output, "extension") != "pickle") {
@@ -1572,8 +1602,6 @@ component("platform") {
       "mac/color_mac.mm",
       "mac/graphics_context_canvas.h",
       "mac/graphics_context_canvas.mm",
-      "mac/web_core_ns_cell_extras.h",
-      "mac/web_core_ns_cell_extras.mm",
       "text/locale_mac.h",
       "text/locale_mac.mm",
       "theme/web_theme_engine_mac.cc",
@@ -1780,15 +1808,6 @@ component("platform") {
     deps += [ "//third_party/libavif" ]
   }
 
-  if (enable_jxl_decoder) {
-    sources += [
-      "image-decoders/jxl/jxl_image_decoder.cc",
-      "image-decoders/jxl/jxl_image_decoder.h",
-    ]
-
-    deps += [ "//third_party/libjxl:libjxl" ]
-  }
-
   if (current_cpu == "x86" || current_cpu == "x64") {
     deps += [ ":blink_x86_avx" ]
     sources += [ "audio/cpu/x86/audio_delay_dsp_kernel_sse2.cc" ]
@@ -1884,7 +1903,6 @@ static_library("test_support") {
     "testing/testing_platform_support.h",
     "testing/testing_platform_support_with_mock_scheduler.cc",
     "testing/testing_platform_support_with_mock_scheduler.h",
-    "testing/transformation_matrix_test_helpers.h",
     "testing/unit_test_helpers.cc",
     "testing/unit_test_helpers.h",
     "testing/url_test_helpers.cc",
@@ -1922,6 +1940,7 @@ static_library("test_support") {
     "//testing/gmock",
     "//testing/gtest:gtest",
     "//testing/perf",
+    "//third_party/blink/public:test_headers",
     "//third_party/blink/renderer/platform/blob:test_support",
     "//third_party/blink/renderer/platform/heap:test_support",
     "//third_party/blink/renderer/platform/loader:test_support",
@@ -2035,6 +2054,7 @@ source_set("blink_platform_unittests_sources") {
     "fonts/typesetting_features_test.cc",
     "fonts/unicode_range_set_test.cc",
     "fonts/utf16_ragel_iterator_test.cc",
+    "geometry/calculation_expression_node_test.cc",
     "geometry/float_polygon_test.cc",
     "geometry/float_rounded_rect_test.cc",
     "geometry/layout_rect_test.cc",
@@ -2043,6 +2063,7 @@ source_set("blink_platform_unittests_sources") {
     "geometry/length_test.cc",
     "graphics/accelerated_static_bitmap_image_test.cc",
     "graphics/bitmap_image_test.cc",
+    "graphics/color_test.cc",
     "graphics/compositing/chunk_to_layer_mapper_test.cc",
     "graphics/compositing/paint_artifact_compositor_test.cc",
     "graphics/compositing/paint_chunks_to_cc_layer_test.cc",
@@ -2128,6 +2149,7 @@ source_set("blink_platform_unittests_sources") {
     "mojo/string16_mojom_traits_test.cc",
     "p2p/filtering_network_manager_test.cc",
     "p2p/ipc_network_manager_test.cc",
+    "peerconnection/bridge_ice_controller_test.cc",
     "peerconnection/coalesced_tasks_test.cc",
     "peerconnection/linear_histogram_test.cc",
     "peerconnection/low_precision_timer_test.cc",
@@ -2144,7 +2166,9 @@ source_set("blink_platform_unittests_sources") {
     "peerconnection/stats_collecting_encoder_test.cc",
     "peerconnection/stats_collector_test.cc",
     "peerconnection/task_queue_factory_test.cc",
+    "peerconnection/timer_based_tick_provider_test.cc",
     "peerconnection/two_keys_adapter_map_unittest.cc",
+    "peerconnection/vsync_tick_provider_test.cc",
     "peerconnection/webrtc_audio_sink_test.cc",
     "peerconnection/webrtc_decoding_info_handler_test.cc",
     "peerconnection/webrtc_encoding_info_handler_test.cc",
@@ -2175,7 +2199,6 @@ source_set("blink_platform_unittests_sources") {
     "transforms/affine_transform_test.cc",
     "transforms/rotation_test.cc",
     "transforms/transform_operations_test.cc",
-    "transforms/transformation_matrix_test.cc",
     "video_capture/gpu_memory_buffer_test_support.cc",
     "video_capture/gpu_memory_buffer_test_support.h",
     "video_capture/video_capture_impl_test.cc",
@@ -2224,10 +2247,6 @@ source_set("blink_platform_unittests_sources") {
     sources += [ "image-decoders/avif/avif_image_decoder_test.cc" ]
   }
 
-  if (enable_jxl_decoder) {
-    sources += [ "image-decoders/jxl/jxl_image_decoder_test.cc" ]
-  }
-
   sources += [ "testing/run_all_tests.cc" ]
 
   configs += [
@@ -2255,6 +2274,7 @@ source_set("blink_platform_unittests_sources") {
     "//services/viz/public/mojom",
     "//skia",
     "//skia:skcms",
+    "//skia:test_fonts",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party:freetype_harfbuzz",
@@ -2268,7 +2288,6 @@ source_set("blink_platform_unittests_sources") {
     "//third_party/blink/renderer/platform/scheduler:unit_tests",
     "//third_party/blink/renderer/platform/wtf",
     "//third_party/libavif:libavif",
-    "//third_party/libjxl:libjxl",
     "//third_party/libyuv",
     "//third_party/webrtc/api/task_queue:task_queue_test",
     "//third_party/webrtc_overrides:metronome_like_task_queue_test",
@@ -2290,12 +2309,6 @@ source_set("blink_platform_unittests_sources") {
   defines = [ "INSIDE_BLINK" ]
   if (use_minikin_hyphenation) {
     defines += [ "USE_MINIKIN_HYPHENATION" ]
-  }
-
-  if (is_fuchsia) {
-    deps += [ "//skia:test_fonts_cfv2" ]
-  } else {
-    deps += [ "//skia:test_fonts" ]
   }
 }
 
@@ -2412,6 +2425,7 @@ test("blink_fuzzer_unittests") {
     "//base/test:test_support",
     "//gin:gin",
     "//mojo/core/embedder:embedder",
+    "//skia:test_fonts",
     "//third_party/blink/public:test_support",
   ]
 
@@ -2424,14 +2438,11 @@ test("blink_fuzzer_unittests") {
   }
 
   if (is_fuchsia) {
-    deps += [ "//skia:test_fonts_cfv2" ]
     test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
     additional_manifest_fragments = [
       "//build/config/fuchsia/test/test_fonts.shard.test-cml",
       "//build/config/fuchsia/test/mark_vmo_executable.shard.test-cml",
     ]
-  } else {
-    deps += [ "//skia:test_fonts" ]
   }
 }
 
@@ -2663,4 +2674,21 @@ source_set("unit_tests") {
     "//third_party/blink/public:test_headers",
   ]
   public_deps = [ "//gpu:raster" ]
+}
+
+if (enable_nocompile_tests) {
+  nocompile_test("blink_platform_nocompile_tests") {
+    sources = [ "wtf/functional_test.nc" ]
+
+    deps = [
+      ":platform",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//testing/gtest",
+    ]
+
+    # Since the nocompile test is not able to inspect the contents of
+    # include_dirs, we need to specify the v8 include dir manually.
+    include_dirs = [ "//v8/include" ]
+  }
 }

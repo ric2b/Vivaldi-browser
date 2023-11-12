@@ -19,7 +19,8 @@ enum class DesksCreationRemovalSource {
   kSaveAndRecall = 5,
   kApi = 6,
   kEnsureDefaultDesk = 7,
-  kMaxValue = kEnsureDefaultDesk,
+  kFloatingWorkspace = 8,
+  kMaxValue = kFloatingWorkspace,
 };
 
 // These values are logged to UMA. Entries should not be renumbered and
@@ -56,6 +57,13 @@ enum class DesksSwitchSource {
 
 constexpr char kNewDeskHistogramName[] = "Ash.Desks.NewDesk2";
 constexpr char kDeskSwitchHistogramName[] = "Ash.Desks.DesksSwitch";
+
+constexpr char kNumberOfCustomNamesHistogramName[] =
+    "Ash.Desks.CustomNameCount";
+constexpr char kPercentageOfCustomNamesHistogramName[] =
+    "Ash.Desks.CustomNamePercentage";
+constexpr char kCustomNameCreatedHistogramName[] =
+    "Ash.Desks.CustomNameCreated";
 
 }  // namespace ash
 

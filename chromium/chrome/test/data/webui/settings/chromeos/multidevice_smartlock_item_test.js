@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 import {MultiDeviceBrowserProxyImpl, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceSettingsMode, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 import {createFakePageContentData, TestMultideviceBrowserProxy} from './test_multidevice_browser_proxy.js';
 
@@ -192,18 +192,6 @@ suite('Multidevice', function() {
         featureItem = smartLockItem.shadowRoot.querySelector('#smartLockItem');
         assertFalse(!!featureItem);
       });
-
-  // TODO(b/227674947): Delete this test case when Sign in with Smart Lock is
-  // removed.
-  test('clicking item with verified host opens subpage', function() {
-    initializeElement();
-    const featureItem =
-        smartLockItem.shadowRoot.querySelector('#smartLockItem');
-    assertTrue(!!featureItem);
-    expectRouteOnClick(
-        featureItem.shadowRoot.querySelector('#linkWrapper'),
-        routes.SMART_LOCK);
-  });
 
   test('feature toggle click event handled', function() {
     initializeElement();

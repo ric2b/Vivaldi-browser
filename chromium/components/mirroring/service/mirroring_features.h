@@ -12,21 +12,18 @@
 namespace mirroring {
 namespace features {
 
-COMPONENT_EXPORT(MIRRORING_SERVICE) BASE_DECLARE_FEATURE(kCastStreamingAv1);
-
-COMPONENT_EXPORT(MIRRORING_SERVICE) BASE_DECLARE_FEATURE(kCastStreamingVp9);
-
-COMPONENT_EXPORT(MIRRORING_SERVICE)
-BASE_DECLARE_FEATURE(kCastUseBlocklistForRemotingQuery);
-
-COMPONENT_EXPORT(MIRRORING_SERVICE)
-BASE_DECLARE_FEATURE(kCastForceEnableRemotingQuery);
-
 // TODO(crbug.com/1363512): Remove support for sender side letterboxing.
 COMPONENT_EXPORT(MIRRORING_SERVICE)
 BASE_DECLARE_FEATURE(kCastDisableLetterboxing);
 
-bool IsCastStreamingAV1Enabled();
+// TODO(crbug.com/1198616): Remove model name checks for querying receiver
+// capabilities.
+COMPONENT_EXPORT(MIRRORING_SERVICE)
+BASE_DECLARE_FEATURE(kCastDisableModelNameCheck);
+
+// TODO(crbug.com/1394392): Remove this feature after launch.
+COMPONENT_EXPORT(MIRRORING_SERVICE)
+BASE_DECLARE_FEATURE(kCastFastRefreshFrames);
 
 }  // namespace features
 }  // namespace mirroring

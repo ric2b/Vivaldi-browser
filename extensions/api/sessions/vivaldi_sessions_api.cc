@@ -54,7 +54,7 @@ base::FilePath GenerateFilename(Profile* profile,
                                 const std::string session_name,
                                 bool unique_name) {
   // PathExists() triggers IO restriction.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
   std::string temp_session_name(session_name);
   int cnt = 2;
   char number_string[kNumberBufferSize];
@@ -201,14 +201,13 @@ void SessionsPrivateGetAllFunction::SendResponse(
     sessions::IdToSessionWindow windows;
     SessionID active_window_id = SessionID::InvalidValue();
 
-    if (sessions::VivaldiCreateTabsAndWindows(session_entry->commands, &tabs,
-                                              &tab_groups, &windows,
-                                              &active_window_id)) {
-      session_entry->item->tabs = tabs.size();
-      session_entry->item->windows = windows.size();
+    sessions::VivaldiCreateTabsAndWindows(session_entry->commands, &tabs,
+      &tab_groups, &windows,
+      &active_window_id);
+    session_entry->item->tabs = tabs.size();
+    session_entry->item->windows = windows.size();
 
-      retval.push_back(std::move(*session_entry->item));
-    }
+    retval.push_back(std::move(*session_entry->item));
   }
   Respond(ArgumentList(Results::Create(retval)));
 }
@@ -226,7 +225,7 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
     return RespondNow(Error("No such window"));
   }
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   ::vivaldi::SessionOptions opts;
   if (params->options.has_value()) {
@@ -258,7 +257,7 @@ ExtensionFunction::ResponseAction SessionsPrivateDeleteFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   int error_code = SessionErrorCodes::kNoError;

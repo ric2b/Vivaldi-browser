@@ -13,10 +13,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_change_registrar.h"
 
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/management_transition_screen_handler.h"
-
 namespace ash {
+
+class ManagementTransitionScreenView;
 
 class ManagementTransitionScreen : public BaseScreen {
  public:
@@ -66,11 +65,5 @@ class ManagementTransitionScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::ManagementTransitionScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_MANAGEMENT_TRANSITION_SCREEN_H_

@@ -279,6 +279,28 @@ typedef void (GL_APIENTRYP PFNGLBLITFRAMEBUFFERCHROMIUMPROC) (GLint srcX0, GLint
 #endif
 #endif /* GL_ANGLE_rgbx_internal_format */
 
+/* GL_ANGLE_provoking_vertex */
+#ifndef GL_ANGLE_provoking_vertex
+#define GL_ANGLE_provoking_vertex 1
+
+#ifndef GL_FIRST_VERTEX_CONVENTION_ANGLE
+#define GL_FIRST_VERTEX_CONVENTION_ANGLE 0x8E4D
+#endif
+
+#ifndef GL_LAST_VERTEX_CONVENTION_ANGLE
+#define GL_LAST_VERTEX_CONVENTION_ANGLE 0x8E4E
+#endif
+
+#ifndef GL_PROVOKING_VERTEX_ANGLE
+#define GL_PROVOKING_VERTEX_ANGLE 0x8E4F
+#endif
+
+#ifdef GL_GLEXT_PROTOTYPES
+GL_APICALL void GL_APIENTRY glProvokingVertexANGLE(GLenum provokeMode);
+#endif
+typedef void(GL_APIENTRYP PFNGLPROVOKINGVERTEXANGLEPROC)(GLenum provokeMode);
+#endif /* GL_ANGLE_provoking_vertex */
+
 /* GL_CHROMIUM_async_pixel_transfers */
 #ifndef GL_CHROMIUM_async_pixel_transfers
 #define GL_CHROMIUM_async_pixel_transfers 1
@@ -680,16 +702,6 @@ typedef GLint(GL_APIENTRYP PFNGLGETFRAGDATAINDEXEXT)(GLuint program,
 #define GL_ONE_MINUS_SRC1_ALPHA_EXT 0x88FB
 #define GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT 0x88FC
 #endif /* GL_EXT_blend_func_extended */
-
-#ifndef GL_CHROMIUM_framebuffer_mixed_samples
-#define GL_CHROMIUM_framebuffer_mixed_samples 1
-typedef void(GL_APIENTRYP PFNGLCOVERAGEMODULATIONCHROMIUMPROC)(
-    GLenum components);
-#ifdef GL_GLEXT_PROTOTYPES
-GL_APICALL void GL_APIENTRY glCoverageModulationCHROMIUM(GLenum components);
-#endif
-#define GL_COVERAGE_MODULATION_CHROMIUM 0x9332
-#endif /* GL_CHROMIUM_framebuffer_mixed_samples */
 
 #ifndef GL_ARB_occlusion_query
 #define GL_ARB_occlusion_query 1

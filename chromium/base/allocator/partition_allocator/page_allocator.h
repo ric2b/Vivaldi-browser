@@ -34,12 +34,12 @@ struct PageAccessibilityConfiguration {
   };
 
 #if BUILDFLAG(ENABLE_PKEYS)
-  constexpr PageAccessibilityConfiguration(Permissions permissions)
+  explicit constexpr PageAccessibilityConfiguration(Permissions permissions)
       : permissions(permissions), pkey(0) {}
   constexpr PageAccessibilityConfiguration(Permissions permissions, int pkey)
       : permissions(permissions), pkey(pkey) {}
 #else
-  constexpr PageAccessibilityConfiguration(Permissions permissions)
+  explicit constexpr PageAccessibilityConfiguration(Permissions permissions)
       : permissions(permissions) {}
 #endif  // BUILDFLAG(ENABLE_PKEYS)
 
@@ -351,6 +351,15 @@ PA_COMPONENT_EXPORT(PARTITION_ALLOC) uint32_t GetAllocPageErrorCode();
 // PageAllocator. These pages may or may not be committed. This is mostly useful
 // to assess address space pressure.
 PA_COMPONENT_EXPORT(PARTITION_ALLOC) size_t GetTotalMappedSize();
+
+#if BUILDFLAG(IS_WIN)
+// Sets whether to retry the allocation of pages when a commit failure
+// happens. This doesn't cover cases where the system is out of address space,
+// or reaches another limit.
+PA_COMPONENT_EXPORT(PARTITION_ALLOC)
+void SetRetryOnCommitFailure(bool retry_on_commit_failure);
+bool GetRetryOnCommitFailure();
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace partition_alloc
 

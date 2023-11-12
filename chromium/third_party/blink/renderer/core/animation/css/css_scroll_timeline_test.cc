@@ -6,9 +6,11 @@
 
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer_registry.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -29,6 +31,11 @@ class CSSScrollTimelineTest : public PageTestBase,
 
   DocumentAnimations& GetDocumentAnimations() const {
     return GetDocument().GetDocumentAnimations();
+  }
+
+  const HeapHashSet<WeakMember<ScrollSnapshotClient>>&
+  GetUnvalidatedTimelines() {
+    return GetFrame().GetUnvalidatedScrollSnapshotClientsForTesting();
   }
 };
 
@@ -114,7 +121,8 @@ TEST_F(CSSScrollTimelineTest, MultipleLifecyclePasses) {
       }
       #element {
         color: red;
-        animation: anim 10s timeline;
+        animation: anim 10s;
+        animation-timeline: timeline;
       }
     </style>
     <div id=scroller>
@@ -189,8 +197,7 @@ TEST_F(CSSScrollTimelineTest, ResizeObserverTriggeredTimelines) {
     <div id=main></div>
   )HTML");
 
-  ASSERT_TRUE(
-      GetDocumentAnimations().GetUnvalidatedTimelinesForTesting().empty());
+  ASSERT_TRUE(GetUnvalidatedTimelines().empty());
 
   Element* element = MakeGarbageCollected<HTMLDivElement>(GetDocument());
   element->setAttribute(blink::html_names::kIdAttr, "element");
@@ -210,31 +217,7 @@ TEST_F(CSSScrollTimelineTest, ResizeObserverTriggeredTimelines) {
   observer->observe(element);
 
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(1u,
-            GetDocumentAnimations().GetUnvalidatedTimelinesForTesting().size());
-}
-
-TEST_F(CSSScrollTimelineTest, DocumentScrollerInQuirksMode) {
-  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
-
-  SetBodyInnerHTML(R"HTML(
-    <style>
-    @keyframes anim {
-      from { z-index: 100; }
-      to { z-index: 100; }
-    }
-    #element {
-      animation: anim 10s forwards scroll(root);
-    }
-    </style>
-    <div id=element></div>
-  )HTML");
-
-  Element* element = GetDocument().getElementById("element");
-  ASSERT_TRUE(element);
-
-  EXPECT_EQ(100, element->GetComputedStyle()->ZIndex());
-  // Don't crash.
+  EXPECT_EQ(1u, GetUnvalidatedTimelines().size());
 }
 
 }  // namespace blink

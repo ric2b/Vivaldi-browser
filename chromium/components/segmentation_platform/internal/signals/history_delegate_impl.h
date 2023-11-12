@@ -21,10 +21,9 @@
 
 namespace history {
 class HistoryService;
-}
+}  // namespace history
 
 namespace segmentation_platform {
-
 // Provides an API to query history service to check if an URL exists.
 class HistoryDelegateImpl : public UrlSignalHandler::HistoryDelegate {
  public:
@@ -32,8 +31,8 @@ class HistoryDelegateImpl : public UrlSignalHandler::HistoryDelegate {
                       UrlSignalHandler* url_signal_handler);
 
   ~HistoryDelegateImpl() override;
-  HistoryDelegateImpl(HistoryDelegateImpl&) = delete;
-  HistoryDelegateImpl& operator=(HistoryDelegateImpl&) = delete;
+  HistoryDelegateImpl(const HistoryDelegateImpl&) = delete;
+  HistoryDelegateImpl& operator=(const HistoryDelegateImpl&) = delete;
 
   // Called by history observer when URLs are added/removed in the history
   // database, useful to store a cache of recent visits.
@@ -52,14 +51,11 @@ class HistoryDelegateImpl : public UrlSignalHandler::HistoryDelegate {
 
   raw_ptr<history::HistoryService> history_service_;
 
-  // The task tracker for the HistoryService callbacks, destroyed after observer
-  // is unregistered.
+  // The task tracker for the HistoryService callbacks, destroyed after
+  // observer is unregistered.
   base::CancelableTaskTracker task_tracker_;
 
-  base::ScopedObservation<UrlSignalHandler,
-                          UrlSignalHandler::HistoryDelegate,
-                          &UrlSignalHandler::AddHistoryDelegate,
-                          &UrlSignalHandler::RemoveHistoryDelegate>
+  base::ScopedObservation<UrlSignalHandler, UrlSignalHandler::HistoryDelegate>
       ukm_db_observation_{this};
 
   // List of URLs visited in the current session.

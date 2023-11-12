@@ -89,8 +89,8 @@ void StreamsPrivateAPI::SendExecuteMimeTypeHandlerEvent(
   bool is_in_webview = WebViewGuest::FromWebContents(web_contents) != nullptr;
 
   int tab_id = web_contents->GetOuterWebContents() && !is_in_webview
-                    ? SessionID::InvalidValue().id()
-                    : ExtensionTabUtil::GetTabId(web_contents);
+                   ? SessionID::InvalidValue().id()
+                   : ExtensionTabUtil::GetTabId(web_contents);
 
   std::unique_ptr<StreamContainer> stream_container(
       new StreamContainer(tab_id, embedded, handler_url, extension_id,

@@ -85,6 +85,7 @@ class CodeGenContext(object):
             "interface": None,
             "namespace": None,
             "observable_array": None,
+            "sync_iterator": None,
             "typedef": None,
             "union": None,
 
@@ -230,7 +231,7 @@ class CodeGenContext(object):
     @property
     def class_like(self):
         return (self.callback_interface or self.dictionary or self.interface
-                or self.namespace)
+                or self.namespace or self.sync_iterator)
 
     @property
     def does_override_idl_return_type(self):
@@ -284,6 +285,15 @@ class CodeGenContext(object):
         if self.operation_group:
             return self.operation_group[0].return_type.unwrap().is_promise
         return False
+
+    @property
+    def logging_target(self):
+        return (self.attribute or self.constant or self.constructor
+                or self.constructor_group or self.dict_member
+                or (self.legacy_window_alias or self.exposed_construct)
+                or self.operation or self.operation_group
+                or (self.stringifier and self.stringifier.operation)
+                or self._indexed_or_named_property)
 
     @property
     def may_throw_exception(self):

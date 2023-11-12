@@ -14,7 +14,9 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import '../settings_shared.css.js';
 import './recent_site_permissions.js';
+import './unused_site_permissions.js';
 
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -24,6 +26,7 @@ import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
 import {Router} from '../router.js';
 import {ContentSettingsTypes} from '../site_settings/constants.js';
+import {SiteSettingsPermissionsBrowserProxy, SiteSettingsPermissionsBrowserProxyImpl, UnusedSitePermissions} from '../site_settings/site_settings_permissions_browser_proxy.js';
 
 import {CategoryListItem} from './site_settings_list.js';
 import {getTemplate} from './site_settings_page.html.js';
@@ -276,6 +279,14 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       disabledLabel: 'siteSettingsSerialPortsBlocked',
     },
     {
+      route: routes.SITE_SETTINGS_SITE_DATA,
+      id: Id.SITE_DATA,
+      // TODO(crbug/1378703): Replace label.
+      label: 'privacyPageTitle',
+      icon: 'settings:database',
+      shouldShow: () => loadTimeData.getBoolean('isPrivacySandboxSettings4'),
+    },
+    {
       route: routes.SITE_SETTINGS_SOUND,
       id: Id.SOUND,
       label: 'siteSettingsSound',
@@ -341,7 +352,10 @@ function buildItemListFromIds(orderedIdList: ContentSettingsTypes[]):
   return orderedList;
 }
 
-export class SettingsSiteSettingsPageElement extends PolymerElement {
+const SettingsSiteSettingsPageElementBase = WebUiListenerMixin(PolymerElement);
+
+export class SettingsSiteSettingsPageElement extends
+    SettingsSiteSettingsPageElementBase {
   static get is() {
     return 'settings-site-settings-page';
   }
@@ -405,6 +419,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
               Id.PROTECTED_CONTENT,
               Id.MIXEDSCRIPT,
               Id.FEDERATED_IDENTITY_API,
+              Id.SITE_DATA,
             ]),
           };
         },
@@ -418,7 +433,35 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
       permissionsExpanded_: Boolean,
       contentExpanded_: Boolean,
       noRecentSitePermissions_: Boolean,
+
+      showUnusedSitePermissions_: {
+        type: Boolean,
+        value: false,
+      },
+
+      unusedSitePermissionsEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean(
+              'safetyCheckUnusedSitePermissionsEnabled');
+        },
+      },
     };
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+
+    this.addWebUiListener(
+        'unused-permission-review-list-maybe-changed',
+        (sites: UnusedSitePermissions[]) =>
+            this.onUnusedSitePermissionListChanged_(sites));
+
+    this.siteSettingsPermissionsBrowserProxy_
+        .getRevokedUnusedSitePermissionsList()
+        .then(
+            (sites: UnusedSitePermissions[]) =>
+                this.onUnusedSitePermissionListChanged_(sites));
   }
 
   prefs: Object;
@@ -426,6 +469,11 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
   private permissionsExpanded_: boolean;
   private contentExpanded_: boolean;
   private noRecentSitePermissions_: boolean;
+  private showUnusedSitePermissions_: boolean;
+  private unusedSitePermissionsEnabled_: boolean;
+  private siteSettingsPermissionsBrowserProxy_:
+      SiteSettingsPermissionsBrowserProxy =
+          SiteSettingsPermissionsBrowserProxyImpl.getInstance();
 
   private lists_: {
     all: CategoryListItem[],
@@ -448,6 +496,19 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
 
   private onSiteSettingsAllClick_() {
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
+  }
+
+  private onUnusedSitePermissionListChanged_(permissions:
+                                                 UnusedSitePermissions[]) {
+    // The unused site permissions review is shown when there are items to
+    // review (provided the feature is enabled). Once visible it remains that
+    // way to show completion info, even if the list is emptied.
+    if (this.showUnusedSitePermissions_) {
+      return;
+    }
+
+    this.showUnusedSitePermissions_ =
+        this.unusedSitePermissionsEnabled_ && permissions.length > 0;
   }
 
   /** @return Class for the all site settings link */

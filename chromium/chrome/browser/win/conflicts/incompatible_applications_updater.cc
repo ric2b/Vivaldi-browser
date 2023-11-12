@@ -33,35 +33,29 @@
 namespace {
 
 // Serializes a vector of IncompatibleApplications to JSON.
-base::Value ConvertToDictionary(
+base::Value::Dict ConvertToDictionary(
     const std::vector<IncompatibleApplicationsUpdater::IncompatibleApplication>&
         applications) {
-  base::Value result(base::Value::Type::DICTIONARY);
+  base::Value::Dict result;
 
   for (const auto& application : applications) {
-    base::Value element(base::Value::Type::DICTIONARY);
+    base::Value::Dict element;
 
     // The registry location is necessary to quickly figure out if that
     // application is still installed on the computer.
-    element.SetKey(
-        "registry_is_hkcu",
-        base::Value(application.info.registry_root == HKEY_CURRENT_USER));
-    element.SetKey(
-        "registry_key_path",
-        base::Value(base::WideToUTF8(application.info.registry_key_path)));
-    element.SetKey(
-        "registry_wow64_access",
-        base::Value(static_cast<int>(application.info.registry_wow64_access)));
+    element.Set("registry_is_hkcu",
+                application.info.registry_root == HKEY_CURRENT_USER);
+    element.Set("registry_key_path",
+                base::WideToUTF8(application.info.registry_key_path));
+    element.Set("registry_wow64_access",
+                static_cast<int>(application.info.registry_wow64_access));
 
     // And then the actual information needed to display a warning to the user.
-    element.SetKey("allow_load",
-                   base::Value(application.blocklist_action->allow_load()));
-    element.SetKey("type",
-                   base::Value(application.blocklist_action->message_type()));
-    element.SetKey("message_url",
-                   base::Value(application.blocklist_action->message_url()));
+    element.Set("allow_load", application.blocklist_action->allow_load());
+    element.Set("type", application.blocklist_action->message_type());
+    element.Set("message_url", application.blocklist_action->message_url());
 
-    result.SetKey(base::WideToUTF8(application.info.name), std::move(element));
+    result.Set(base::WideToUTF8(application.info.name), std::move(element));
   }
 
   return result;
@@ -135,17 +129,17 @@ bool IsValidApplication(
 // |state_application_names|.
 void RemoveStaleApplications(
     const std::vector<std::string>& stale_application_names) {
-  // Early exit because DictionaryPrefUpdate will write to the pref even if it
+  // Early exit because ScopedDictPrefUpdate will write to the pref even if it
   // doesn't contain a value.
   if (stale_application_names.empty())
     return;
 
-  DictionaryPrefUpdate update(g_browser_process->local_state(),
+  ScopedDictPrefUpdate update(g_browser_process->local_state(),
                               prefs::kIncompatibleApplications);
-  base::Value* existing_applications = update.Get();
+  base::Value::Dict& existing_applications = update.Get();
 
   for (const auto& application_name : stale_application_names) {
-    bool removed = existing_applications->RemoveKey(application_name);
+    bool removed = existing_applications.Remove(application_name);
     DCHECK(removed);
   }
 }
@@ -206,15 +200,16 @@ void UpdateIncompatibleApplications(
 
   // The conversion of the accumulated applications to a json dictionary takes
   // care of eliminating duplicates.
-  base::Value new_applications = ConvertToDictionary(incompatible_applications);
+  base::Value::Dict new_applications =
+      ConvertToDictionary(incompatible_applications);
 
   // Update the existing dictionary.
-  DictionaryPrefUpdate update(g_browser_process->local_state(),
+  ScopedDictPrefUpdate update(g_browser_process->local_state(),
                               prefs::kIncompatibleApplications);
-  base::Value* existing_applications = update.Get();
-  for (auto&& element : new_applications.DictItems()) {
-    existing_applications->SetKey(std::move(element.first),
-                                  std::move(element.second));
+  base::Value::Dict& existing_applications = update.Get();
+  for (auto&& element : new_applications) {
+    existing_applications.Set(std::move(element.first),
+                              std::move(element.second));
   }
 }
 
@@ -355,8 +350,8 @@ void IncompatibleApplicationsUpdater::OnNewModuleFound(
   // Explicitly allowlist modules whose signing cert's Subject field matches the
   // one in the current executable. No attempt is made to check the validity of
   // module signatures or of signing certs.
-  if (exe_certificate_info_.type != CertificateInfo::Type::NO_CERTIFICATE &&
-      exe_certificate_info_.subject ==
+  if (exe_certificate_info_->type != CertificateInfo::Type::NO_CERTIFICATE &&
+      exe_certificate_info_->subject ==
           module_data.inspection_result->certificate_info.subject) {
     warning_decision = ModuleWarningDecision::kAllowedSameCertificate;
     return;
@@ -415,7 +410,7 @@ void IncompatibleApplicationsUpdater::OnNewModuleFound(
   // Then check if it can be tied to an installed application on the user's
   // computer.
   std::vector<InstalledApplications::ApplicationInfo> associated_applications;
-  bool tied_to_app = installed_applications_.GetInstalledApplications(
+  bool tied_to_app = installed_applications_->GetInstalledApplications(
       module_key.module_path, &associated_applications);
   UMA_HISTOGRAM_BOOLEAN("ThirdPartyModules.Uninstallable", tied_to_app);
   if (!tied_to_app) {

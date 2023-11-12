@@ -55,7 +55,6 @@ const CGFloat kTableViewSeparatorInsetWithIcon = 60;
   [super viewDidLoad];
 
   [self.tableView setBackgroundColor:self.styler.tableViewBackgroundColor];
-  [self.tableView setSeparatorColor:self.styler.cellSeparatorColor];
   [self.tableView
       setSeparatorInset:UIEdgeInsetsMake(0, kTableViewSeparatorInsetWithIcon, 0,
                                          0)];
@@ -164,6 +163,20 @@ const CGFloat kTableViewSeparatorInsetWithIcon = 60;
                                                      image:image
                                                      title:title
                                                   subtitle:subtitle];
+}
+
+- (void)addEmptyTableViewWithImage:(UIImage*)image
+                             title:(NSString*)title
+                attributedSubtitle:(NSAttributedString*)subtitle
+                          delegate:(id<TableViewIllustratedEmptyViewDelegate>)
+                                       delegate {
+  TableViewIllustratedEmptyView* illustratedEmptyView =
+      [[TableViewIllustratedEmptyView alloc] initWithFrame:self.view.bounds
+                                                     image:image
+                                                     title:title
+                                        attributedSubtitle:subtitle];
+  illustratedEmptyView.delegate = delegate;
+  self.emptyView = illustratedEmptyView;
 }
 
 - (void)updateEmptyTableViewAccessibilityLabel:(NSString*)newLabel {

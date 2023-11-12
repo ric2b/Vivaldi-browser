@@ -39,8 +39,8 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -70,6 +70,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
+
 namespace {
 
 using ::net::test_server::BasicHttpResponse;
@@ -258,7 +259,7 @@ class OAuth2Test : public OobeBaseTest {
     // makes OAuth2Test.MergeSession test flaky http://crbug.com/408867.
     command_line->AppendSwitch(syncer::kDisableSync);
     // Skip post login screens.
-    command_line->AppendSwitch(ash::switches::kOobeSkipPostLogin);
+    command_line->AppendSwitch(switches::kOobeSkipPostLogin);
   }
 
   void RegisterAdditionalRequestHandlers() override {

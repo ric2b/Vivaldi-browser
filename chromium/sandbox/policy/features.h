@@ -20,18 +20,22 @@ SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kNetworkServiceSandbox);
 #endif
 
 #if BUILDFLAG(IS_WIN)
-SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kWinSboxDisableKtmComponent);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kWinSboxDisableExtensionPoints);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kGpuAppContainer);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kGpuLPAC);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kRendererAppContainer);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kSharedSandboxPolicies);
+SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kChromePipeLockdown);
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kSpectreVariant2Mitigation);
 SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kForceSpectreVariant2Mitigation);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_MAC)
+SANDBOX_POLICY_EXPORT BASE_DECLARE_FEATURE(kCacheMacSandboxProfiles);
+#endif  // BUILDFLAG(IS_MAC)
 
 // Returns whether the network sandbox is enabled for the current platform
 // configuration. This might be overridden by the content embedder so prefer

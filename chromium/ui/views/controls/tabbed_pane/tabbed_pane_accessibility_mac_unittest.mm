@@ -17,8 +17,7 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 
-namespace views {
-namespace test {
+namespace views::test {
 
 namespace {
 
@@ -75,8 +74,9 @@ class TabbedPaneAccessibilityMacTest : public WidgetTest {
     WidgetTest::TearDown();
   }
 
-  Tab* GetTabAt(size_t index) {
-    return static_cast<Tab*>(tabbed_pane_->tab_strip_->children()[index]);
+  TabbedPaneTab* GetTabAt(size_t index) {
+    return static_cast<TabbedPaneTab*>(
+        tabbed_pane_->tab_strip_->children()[index]);
   }
 
   id<NSAccessibility> A11yElementAtPoint(const gfx::Point& point) {
@@ -180,5 +180,4 @@ TEST_F(TabbedPaneAccessibilityMacTest, WritableValue) {
   EXPECT_TRUE(GetTabAt(0)->selected());
 }
 
-}  // namespace test
-}  // namespace views
+}  // namespace views::test

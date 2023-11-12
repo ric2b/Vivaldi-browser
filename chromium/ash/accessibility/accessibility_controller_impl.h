@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/accessibility/a11y_feature_type.h"
 #include "ash/ash_export.h"
 #include "ash/constants/ash_constants.h"
 #include "ash/public/cpp/accessibility_controller.h"
@@ -66,16 +67,20 @@ enum class A11yNotificationType {
   kSpokenFeedbackEnabled,
   // Shown when braille display is connected while spoken feedback is enabled.
   kBrailleDisplayConnected,
+  // Shown when all Dictation-related DLCs have downloaded successfully.
+  kDictationAllDlcsDownloaded,
+  // Shown when all Dictation-related DLCs failed to download.
+  kDictationNoDlcsDownloaded,
+  // Shown when the Pumpkin DLC (but no other DLCs) have downloaded.
+  kDicationOnlyPumpkinDownloaded,
+  // Shown when the SODA DLC (but no other DLCs) have downloaded.
+  kDictationOnlySodaDownloaded,
   // Shown when braille display is connected while spoken feedback is not
   // enabled yet. Note: in this case braille display connected would enable
   // spoken feedback.
   kSpokenFeedbackBrailleEnabled,
   // Shown when Switch Access is enabled.
   kSwitchAccessEnabled,
-  // Shown when speech recognition files download successfully.
-  kSpeechRecognitionFilesDownloaded,
-  // Shown when speech recognition files download fails.
-  kSpeechRecognitionFilesFailed,
 };
 
 // The controller for accessibility features in ash. Features can be enabled
@@ -85,34 +90,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
                                                public SessionObserver,
                                                public TabletModeObserver {
  public:
-  enum FeatureType {
-    kAutoclick = 0,
-    kCaretHighlight,
-    kCursorColor,
-    kCursorHighlight,
-    kDictation,
-    kDockedMagnifier,
-    kFloatingMenu,
-    kFocusHighlight,
-    kFullscreenMagnifier,
-    kHighContrast,
-    kLargeCursor,
-    kLiveCaption,
-    kMonoAudio,
-    kSelectToSpeak,
-    kSpokenFeedback,
-    kStickyKeys,
-    kSwitchAccess,
-    kVirtualKeyboard,
-
-    kFeatureCount,
-    kNoConflictingFeature
-  };
-
   // Common interface for all features.
   class Feature {
    public:
-    Feature(FeatureType type,
+    Feature(A11yFeatureType type,
             const std::string& pref_name,
             const gfx::VectorIcon* icon,
             AccessibilityControllerImpl* controller);
@@ -120,7 +101,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     Feature& operator=(Feature const&) = delete;
     virtual ~Feature();
 
-    FeatureType type() const { return type_; }
+    A11yFeatureType type() const { return type_; }
     // Tries to set the feature to |enabled| by setting the user pref.
     // Setting feature to be enabled can fail in following conditions:
     // - there is a higher priority pref(managed), which overrides this value.
@@ -133,13 +114,14 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     const gfx::VectorIcon& icon() const;
 
     void UpdateFromPref();
-    void SetConflictingFeature(FeatureType feature);
+    void SetConflictingFeature(A11yFeatureType feature);
 
    protected:
-    const FeatureType type_;
+    const A11yFeatureType type_;
     // Some features cannot be enabled while others are on. When a conflicting
     // feature is enabled, we cannot enable current feature.
-    FeatureType conflicting_feature_ = FeatureType::kNoConflictingFeature;
+    A11yFeatureType conflicting_feature_ =
+        A11yFeatureType::kNoConflictingFeature;
     bool enabled_ = false;
     const std::string pref_name_;
     const gfx::VectorIcon* icon_;
@@ -162,7 +144,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // associated with accelerators.
   class FeatureWithDialog : public Feature {
    public:
-    FeatureWithDialog(FeatureType type,
+    FeatureWithDialog(A11yFeatureType type,
                       const std::string& pref_name,
                       const gfx::VectorIcon* icon,
                       const Dialog& dialog,
@@ -211,7 +193,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void AddObserver(AccessibilityObserver* observer);
   void RemoveObserver(AccessibilityObserver* observer);
 
-  Feature& GetFeature(FeatureType feature) const;
+  Feature& GetFeature(A11yFeatureType feature) const;
 
   base::WeakPtr<AccessibilityControllerImpl> GetWeakPtr();
 
@@ -445,8 +427,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void EnableChromeVoxVolumeSlideGesture() override;
   void UpdateDictationButtonOnSpeechRecognitionDownloadChanged(
       int download_progress) override;
-  void ShowSpeechRecognitionDownloadNotificationForDictation(
-      bool succeeded,
+  void ShowNotificationForDictation(
+      DictationNotificationType type,
       const std::u16string& display_language) override;
   void UpdateDictationBubble(
       bool visible,
@@ -509,7 +491,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void CreateAccessibilityFeatures();
 
   // Propagates the state of |feature| according to |feature->enabled()|.
-  void OnFeatureChanged(FeatureType feature);
+  void OnFeatureChanged(A11yFeatureType feature);
 
   // TabletModeObserver:
   void OnTabletModeStarted() override;
@@ -520,7 +502,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void ObservePrefs(PrefService* prefs);
 
   // Updates the actual feature status based on the prefs value.
-  void UpdateFeatureFromPref(FeatureType feature);
+  void UpdateFeatureFromPref(A11yFeatureType feature);
 
   void UpdateAutoclickDelayFromPref();
   void UpdateAutoclickEventTypeFromPref();
@@ -559,7 +541,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // Client interface in chrome browser.
   AccessibilityControllerClient* client_ = nullptr;
 
-  std::unique_ptr<Feature> features_[kFeatureCount];
+  // Features are indexed by A11yFeatureType cast to int.
+  std::unique_ptr<Feature> features_[kA11yFeatureTypeCount];
 
   base::TimeDelta autoclick_delay_;
   int large_cursor_size_in_dip_ = kDefaultLargeCursorSize;

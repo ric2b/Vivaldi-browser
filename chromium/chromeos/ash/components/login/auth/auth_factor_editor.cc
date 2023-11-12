@@ -20,6 +20,7 @@
 #include "chromeos/ash/components/login/auth/cryptohome_parameter_utils.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/login/auth/recovery/service_constants.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/user_manager/user.h"
 
@@ -242,8 +243,16 @@ void AuthFactorEditor::ReplaceContextKey(std::unique_ptr<UserContext> context,
   DCHECK(!context->GetAuthSessionId().empty());
   DCHECK(context->HasReplacementKey());
   DCHECK(!context->IsUsingPin());
-  DCHECK_NE(context->GetReplacementKey()->GetKeyType(),
-            Key::KEY_TYPE_PASSWORD_PLAIN);
+  DCHECK(!context->GetKey()->GetLabel().empty());
+
+  if (context->GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN ||
+      context->GetReplacementKey()->GetKeyType() ==
+          Key::KEY_TYPE_PASSWORD_PLAIN) {
+    SystemSaltGetter::Get()->GetSystemSalt(base::BindOnce(
+        &AuthFactorEditor::HashContextKeyAndReplace, weak_factory_.GetWeakPtr(),
+        std::move(context), std::move(callback)));
+    return;
+  }
 
   LOGIN_LOG(EVENT) << "Replacing key from context "
                    << context->GetReplacementKey()->GetKeyType();
@@ -288,6 +297,22 @@ void AuthFactorEditor::ReplaceContextKey(std::unique_ptr<UserContext> context,
       request, base::BindOnce(&AuthFactorEditor::OnUpdateCredential,
                               weak_factory_.GetWeakPtr(), std::move(context),
                               std::move(callback)));
+}
+
+void AuthFactorEditor::HashContextKeyAndReplace(
+    std::unique_ptr<UserContext> context,
+    AuthOperationCallback callback,
+    const std::string& system_salt) {
+  if (context->GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN) {
+    context->GetKey()->Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
+                                 system_salt);
+  }
+  if (context->GetReplacementKey()->GetKeyType() ==
+      Key::KEY_TYPE_PASSWORD_PLAIN) {
+    context->GetReplacementKey()->Transform(
+        Key::KEY_TYPE_SALTED_SHA256_TOP_HALF, system_salt);
+  }
+  ReplaceContextKey(std::move(context), std::move(callback));
 }
 
 void AuthFactorEditor::AddPinFactor(std::unique_ptr<UserContext> context,
@@ -401,7 +426,10 @@ void AuthFactorEditor::AddRecoveryFactor(std::unique_ptr<UserContext> context,
   // TODO(crbug.com/1310312): The public key will likely be hardcoded, although
   //  perhaps configurable via a command line switch for testing.
   cryptohome::AuthFactorInput input(
-      cryptohome::AuthFactorInput::RecoveryCreation{"STUB MEDIATOR PUB KEY"});
+      cryptohome::AuthFactorInput::RecoveryCreation{
+          .pub_key = GetRecoveryHsmPublicKey(),
+          .user_gaia_id = context->GetGaiaID(),
+          .device_user_id = context->GetDeviceId()});
 
   cryptohome::SerializeAuthFactor(factor, request.mutable_auth_factor());
   cryptohome::SerializeAuthInput(ref, input, request.mutable_auth_input());
@@ -474,6 +502,12 @@ void AuthFactorEditor::OnListAuthFactors(
   }
   cryptohome::AuthFactorsSet supported_factors;
   for (const auto proto_type : reply->supported_auth_factors()) {
+    // TODO(crbug.com/1406025): This is temporary workaround on the client side
+    // before issue is fixed on the cryptohome side.
+    //  AUTH_FACTOR_TYPE_LEGACY_FINGERPRINT is not supported for editing anyhow.
+    if (proto_type == user_data_auth::AUTH_FACTOR_TYPE_LEGACY_FINGERPRINT) {
+      continue;
+    }
     cryptohome::AuthFactorType type = cryptohome::ConvertFactorTypeFromProto(
         static_cast<user_data_auth::AuthFactorType>(proto_type));
     if (type == cryptohome::AuthFactorType::kUnknownLegacy) {

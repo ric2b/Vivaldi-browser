@@ -17,9 +17,9 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "dbus/object_path.h"
@@ -114,13 +114,13 @@ GetAdvertisementMonitorApplicationManger() {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 void ScheduleAsynchronousCancelPairing(BluetoothDevice* device) {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BluetoothDevice::CancelPairing,
                                 base::Unretained(device)));
 }
 
 void ScheduleAsynchronousRejectPairing(BluetoothDevice* device) {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BluetoothDevice::RejectPairing,
                                 base::Unretained(device)));
 }
@@ -2254,6 +2254,47 @@ TEST_F(BluetoothBlueZTest, DeviceAddressChanged) {
 
   EXPECT_EQ(std::string(kNewAddress), devices[idx]->GetAddress());
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(BluetoothBlueZTest, DeviceBondedChanged) {
+  // Simulate a change of bonded state of a device.
+  GetAdapter();
+
+  BluetoothAdapter::DeviceList devices = adapter_->GetDevices();
+  ASSERT_EQ(2U, devices.size());
+
+  int idx = GetDeviceIndexByAddress(
+      devices, bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress);
+  ASSERT_NE(-1, idx);
+  ASSERT_EQ(bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress,
+            devices[idx]->GetAddress());
+  ASSERT_EQ(true, devices[idx]->IsBonded());
+
+  // Install an observer; expect the DeviceBondedChanged method to be called
+  // when we change the bonded state of the device.
+  TestBluetoothAdapterObserver observer(adapter_);
+
+  bluez::FakeBluetoothDeviceClient::Properties* properties =
+      fake_bluetooth_device_client_->GetProperties(dbus::ObjectPath(
+          bluez::FakeBluetoothDeviceClient::kPairedDevicePath));
+
+  properties->bonded.ReplaceValue(false);
+
+  EXPECT_EQ(1, observer.device_changed_count());
+  EXPECT_EQ(1, observer.device_bonded_changed_count());
+  EXPECT_FALSE(observer.device_new_bonded_status());
+  EXPECT_EQ(devices[idx], observer.last_device());
+
+  // Change the bonded state back to true to examine the consistent behavior of
+  // DevicePairedChanged method.
+  properties->bonded.ReplaceValue(true);
+
+  EXPECT_EQ(2, observer.device_changed_count());
+  EXPECT_EQ(2, observer.device_bonded_changed_count());
+  EXPECT_TRUE(observer.device_new_bonded_status());
+  EXPECT_EQ(devices[idx], observer.last_device());
+}
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 TEST_F(BluetoothBlueZTest, DevicePairedChanged) {

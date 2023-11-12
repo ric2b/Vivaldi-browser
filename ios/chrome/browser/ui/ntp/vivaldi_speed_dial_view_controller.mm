@@ -4,6 +4,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -11,8 +12,10 @@
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_container_view.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_home_mediator.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
@@ -103,7 +106,6 @@
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   [self startObservingDeviceOrientationChange];
-  [self startObservingDataSourceChange];
   [self loadSpeedDialViews];
 }
 
@@ -143,7 +145,7 @@
 
 #pragma mark - PRIVATE
 
-/// Create and start mediator to load the speed dial items in the menu and on the body.
+/// Create and start mediator to load the speed dial folder items
 - (void)loadSpeedDialViews {
   BOOL loadable = self.bookmarks->loaded() &&
                   self.currentItem;
@@ -170,20 +172,8 @@
 - (void)handleDeviceOrientationChange:(NSNotification*)note {
   if (!self.hasValidOrientation)
     return;
-  [self.speedDialContainerView setDeviceOrientation:!self.isDevicePortrait];
-}
-
-/// Set up observer to notify whenever the bookmark collection is modified
-- (void)startObservingDataSourceChange {
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(refreshUI)
-                                               name:vBookmarkDataSourceDidChange
-                                             object:nil];
-
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(refreshUI)
-                                               name:vBookmarkDidMoveOutOfFolder
-                                             object:nil];
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
+                                         isLandscape:!self.isDevicePortrait];
 }
 
 /// Refresh the UI when data source is updated.
@@ -195,21 +185,27 @@
 - (void)removeObservers {
   [[NSNotificationCenter defaultCenter]
      removeObserver:self
-               name:vBookmarkDataSourceDidChange
-             object:nil];
-  [[NSNotificationCenter defaultCenter]
-     removeObserver:self
                name:UIDeviceOrientationDidChangeNotification
-             object:nil];
-  [[NSNotificationCenter defaultCenter]
-     removeObserver:self
-               name:vBookmarkDidMoveOutOfFolder
              object:nil];
   self.mediator.consumer = nil;
   [self.mediator disconnect];
 }
 
+/// Returns current layout style for start page
+- (VivaldiStartPageLayoutStyle)currentLayoutStyle {
+  return [VivaldiStartPagePrefs
+          getStartPageLayoutStyleWithPrefService:self.browserState->GetPrefs()];
+}
+
 #pragma mark - SPEED DIAL HOME CONSUMER
+
+- (void)refreshContents {
+  BOOL loadable = self.bookmarks->loaded() &&
+                  self.currentItem;
+  if (!loadable)
+    return;
+  [self.mediator computeSpeedDialChildItems:self.currentItem];
+}
 
 - (void)refreshMenuItems:(NSArray*)items {
   // No op here since there's no menu in this view.
@@ -222,7 +218,13 @@
   [self.speedDialContainerView configureWith:items
                                       parent:self.currentItem
                                faviconLoader:self.faviconLoader
+                                 layoutStyle:[self currentLayoutStyle]
                            deviceOrientation:!self.isDevicePortrait];
+}
+
+- (void)reloadLayout {
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
+                                         isLandscape:!self.isDevicePortrait];
 }
 
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_VIEW_DELEGATE

@@ -12,14 +12,14 @@
 #include "components/metrics/metrics_switches.h"
 #include "components/prefs/pref_service.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/jni_android.h"
+#include "components/metrics/jni_headers/LowEntropySource_jni.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
 namespace metrics {
 
 namespace {
-
-// The argument used to generate a non-identifying entropy source. We want no
-// more than 13 bits of entropy, so use this max to return a number in the range
-// [0, 7999] as the entropy source (12.97 bits of entropy).
-const int kMaxLowEntropySize = 8000;
 
 // Generates a new non-identifying entropy source used to seed persistent
 // activities. Make it static so that the new low entropy source value will
@@ -27,10 +27,16 @@ const int kMaxLowEntropySize = 8000;
 // new low entropy source value to prefs multiple times, it stays the same
 // value.
 int GenerateLowEntropySource() {
+#if BUILDFLAG(IS_ANDROID)
+  // Note: As in the non-Android case below, the Java implementation also uses
+  // a static cache, so subsequent invocations will return the same value.
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_LowEntropySource_generateLowEntropySource(env);
+#else
   static const int low_entropy_source =
-      base::RandInt(0, kMaxLowEntropySize - 1);
-  ;
+      base::RandInt(0, EntropyState::kMaxLowEntropySize - 1);
   return low_entropy_source;
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 // Generates a new non-identifying low entropy source using the same method
@@ -38,10 +44,16 @@ int GenerateLowEntropySource() {
 // used for statistical validation, and *not* for randomization or experiment
 // assignment.
 int GeneratePseudoLowEntropySource() {
+#if BUILDFLAG(IS_ANDROID)
+  // Note: As in the non-Android case below, the Java implementation also uses
+  // a static cache, so subsequent invocations will return the same value.
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_LowEntropySource_generatePseudoLowEntropySource(env);
+#else
   static const int pseudo_low_entropy_source =
-      base::RandInt(0, kMaxLowEntropySize - 1);
-  ;
+      base::RandInt(0, EntropyState::kMaxLowEntropySize - 1);
   return pseudo_low_entropy_source;
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 }  // namespace

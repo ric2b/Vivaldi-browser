@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://diagnostics/strings.m.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
+
 import {convertKibToGibDecimalString, getNetworkCardTitle, getRoutineGroups, getSignalStrength, getSubnetMaskFromRoutingPrefix, setDisplayStateInTitleForTesting} from 'chrome://diagnostics/diagnostics_utils.js';
 import {NetworkType} from 'chrome://diagnostics/network_health_provider.mojom-webui.js';
 import {RoutineGroup} from 'chrome://diagnostics/routine_group.js';
 import {RoutineType} from 'chrome://diagnostics/system_routine_controller.mojom-webui.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
-export function diagnosticsUtilsTestSuite() {
+suite('diagnosticsUtilsTestSuite', function() {
   test('ProperlyConvertsKibToGib', () => {
     assertEquals('0', convertKibToGibDecimalString(0, 0));
     assertEquals('0.00', convertKibToGibDecimalString(0, 2));
@@ -131,4 +134,4 @@ export function diagnosticsUtilsTestSuite() {
     assertEquals(getSignalStrength(63), 'Good (63)');
     assertEquals(getSignalStrength(98), 'Excellent (98)');
   });
-}
+});

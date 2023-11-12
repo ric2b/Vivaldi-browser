@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_SUPERVISED_USER_KIDS_CHROME_MANAGEMENT_KIDS_PROFILE_MANAGER_H_
 #define CHROME_BROWSER_SUPERVISED_USER_KIDS_CHROME_MANAGEMENT_KIDS_PROFILE_MANAGER_H_
 
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_piece.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/kids_chrome_management/kidschromemanagement_messages.pb.h"
@@ -13,7 +15,7 @@
 // A helper utility to manage the Profile properties consistently.
 class KidsProfileManager {
  public:
-  // An invididual property which can be read and written.
+  // An individual property which can be read and written.
   class Property {
    public:
     Property() = delete;
@@ -24,7 +26,7 @@ class KidsProfileManager {
     bool GetBool() const;
 
    private:
-    KidsProfileManager* manager_;
+    raw_ptr<KidsProfileManager> manager_;
     base::StringPiece property_path_;
   };
 
@@ -39,6 +41,7 @@ class KidsProfileManager {
               base::StringPiece gaiaID_property_path,
               base::StringPiece profileURL_property_path,
               base::StringPiece imageURL_property_path);
+    ~Custodian();
     void Clear();
     void Update(const kids_chrome_management::FamilyMember& family_member);
 
@@ -54,8 +57,10 @@ class KidsProfileManager {
   KidsProfileManager(PrefService& pref_service,
 
                      Profile& profile);
+  ~KidsProfileManager();
   void UpdateChildAccountStatus(bool is_child_account);
   bool IsChildAccountStatusKnown() const;
+  bool IsChildAccount() const;
   void SetFirstCustodian(kids_chrome_management::FamilyMember member);
   void SetSecondCustodian(kids_chrome_management::FamilyMember member);
 
@@ -65,9 +70,10 @@ class KidsProfileManager {
   Property supervised_user_id_;
   Property child_account_status_known_;
 
-  PrefService& pref_service_;
-  Profile& profile_;  // TODO(b/252793687): Remove once child status can be
-                      // controlled in code and tests via identity manager.
+  const raw_ref<PrefService> pref_service_;
+  const raw_ref<Profile>
+      profile_;  // TODO(b/252793687): Remove once child status can be
+                 // controlled in code and tests via identity manager.
 };
 
 #endif  // CHROME_BROWSER_SUPERVISED_USER_KIDS_CHROME_MANAGEMENT_KIDS_PROFILE_MANAGER_H_

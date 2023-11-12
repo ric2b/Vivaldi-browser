@@ -24,12 +24,13 @@
 #include "base/fuchsia/scoped_fx_logger.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/timer/timer.h"
+#include "build/chromecast_buildflags.h"
 #include "components/media_control/browser/media_blocker.h"
 #include "components/on_load_script_injector/browser/on_load_script_injector_host.h"
 #include "components/url_rewrite/browser/url_request_rewrite_rules_manager.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "fuchsia_web/webengine/browser/accessibility_bridge.h"
 #include "fuchsia_web/webengine/browser/event_filter.h"
 #include "fuchsia_web/webengine/browser/frame_permission_controller.h"
 #include "fuchsia_web/webengine/browser/navigation_controller_impl.h"
@@ -46,12 +47,15 @@ namespace content {
 class FromRenderFrameHost;
 }  // namespace content
 
-class ReceiverSessionClient;
 class ContextImpl;
 class FrameWindowTreeHost;
 class FrameLayoutManager;
 class MediaPlayerImpl;
 class NavigationPolicyHandler;
+
+#if BUILDFLAG(ENABLE_CAST_RECEIVER)
+class ReceiverSessionClient;
+#endif
 
 // Implementation of fuchsia.web.Frame based on content::WebContents.
 class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
@@ -111,6 +115,12 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
     return explicit_sites_filter_error_page_;
   }
 
+  // Override |blink_prefs| with settings defined in |content_settings_|.
+  //
+  // This method is called when WebPreferences is first created and when it is
+  // recomputed.
+  void OverrideWebPreferences(blink::web_pref::WebPreferences* web_prefs);
+
   // Accessors required by tests.
   zx::unowned_channel GetBindingChannelForTest() const;
   content::WebContents* web_contents_for_test() const {
@@ -120,25 +130,6 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   FrameWindowTreeHost* window_tree_host_for_test() {
     return window_tree_host_.get();
   }
-
-  // Accessibility bridge accessor/setter methods.
-  // TODO(crbug.com/1291330): Remove the three methods below.
-  void set_use_v2_accessibility_bridge(bool use_v2_accessibility_bridge) {
-    use_v2_accessibility_bridge_ = use_v2_accessibility_bridge;
-  }
-  AccessibilityBridge* accessibility_bridge_for_test() const {
-    return accessibility_bridge_.get();
-  }
-  void set_semantics_manager_for_test(
-      fuchsia::accessibility::semantics::SemanticsManager* semantics_manager) {
-    semantics_manager_for_test_ = semantics_manager;
-  }
-
-  // Override |blink_prefs| with settings defined in |content_settings_|.
-  //
-  // This method is called when WebPreferences is first created and when it is
-  // recomputed.
-  void OverrideWebPreferences(blink::web_pref::WebPreferences* web_prefs);
 
   void set_window_size_for_test(gfx::Size size) {
     window_size_for_test_ = size;
@@ -210,6 +201,7 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   // Destroys |this| and sends the FIDL |error| to the client.
   void CloseAndDestroyFrame(zx_status_t error);
 
+#if BUILDFLAG(ENABLE_CAST_RECEIVER)
   // Determines whether |message| is a Cast Streaming message and if so, handles
   // it. Returns whether it handled the message, regardless of whether that was
   // successful. If true is returned, |callback| has been called. Returns false
@@ -220,9 +212,10 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
                                        PostMessageCallback* callback);
 
   void MaybeStartCastStreaming(content::NavigationHandle* navigation_handle);
+#endif
 
-  // Updates zoom level for the specified |render_view_host|.
-  void UpdateRenderViewZoomLevel(content::RenderViewHost* render_view_host);
+  // Updates zoom level for the specified |render_frame_host|.
+  void UpdateRenderFrameZoomLevel(content::RenderFrameHost* render_frame_host);
 
   // Helper method for connecting to AccessibilityBridge on
   // |accessibility_bridge_|.
@@ -281,23 +274,15 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
                           std::string web_origin,
                           fuchsia::web::PermissionState state) override;
   void SetBlockMediaLoading(bool blocked) override;
-  void MediaStartedPlaying(const MediaPlayerInfo& video_type,
-                           const content::MediaPlayerId& id) override;
-  void MediaStoppedPlaying(
-      const MediaPlayerInfo& video_type,
-      const content::MediaPlayerId& id,
-      WebContentsObserver::MediaStoppedReason reason) override;
   void GetPrivateMemorySize(GetPrivateMemorySizeCallback callback) override;
   void SetNavigationPolicyProvider(
       fuchsia::web::NavigationPolicyProviderParams params,
       fidl::InterfaceHandle<fuchsia::web::NavigationPolicyProvider> provider)
       override;
-  void SetPreferredTheme(fuchsia::settings::ThemeType theme) override;
-  void SetPageScale(float scale) override;
   void SetContentAreaSettings(
       fuchsia::web::ContentAreaSettings settings) override;
   void ResetContentAreaSettings() override;
-  void OnThemeManagerError();
+  void Close(fuchsia::web::FrameCloseRequest request) override;
 
   // content::WebContentsDelegate implementation.
   void CloseContents(content::WebContents* source) override;
@@ -342,16 +327,29 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void RenderFrameCreated(content::RenderFrameHost* frame_host) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
+  void RenderFrameHostChanged(content::RenderFrameHost* old_host,
+                              content::RenderFrameHost* new_host) override;
   void DidFirstVisuallyNonEmptyPaint() override;
   void ResourceLoadComplete(
       content::RenderFrameHost* render_frame_host,
       const content::GlobalRequestID& request_id,
       const blink::mojom::ResourceLoadInfo& resource_load_info) override;
+  void MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                           const content::MediaPlayerId& id) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& video_type,
+      const content::MediaPlayerId& id,
+      WebContentsObserver::MediaStoppedReason reason) override;
 
+  // Notified whenever the pixel scale of the `Frame`'s `View` changes.
   void OnPixelScaleUpdate(float pixel_scale);
+
+  // Called by the `accessibility_bridge_` in response to changes in the
+  // system's "semantics mode" setting.
   void SetAccessibilityEnabled(bool enabled);
+
+  // Called by `theme_manager_` if it is unable to determine the system theme.
+  void OnThemeManagerError();
 
   const std::unique_ptr<content::WebContents> web_contents_;
   ContextImpl* const context_;
@@ -376,12 +374,7 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   // Owned via |window_tree_host_|.
   FrameLayoutManager* layout_manager_ = nullptr;
 
-  // TODO(crbug.com/1291330): Remove acessibility_bridge_ and
-  // semantics_manager_for_test_.
-  std::unique_ptr<AccessibilityBridge> accessibility_bridge_;
-  fuchsia::accessibility::semantics::SemanticsManager*
-      semantics_manager_for_test_ = nullptr;
-  std::unique_ptr<ui::AccessibilityBridgeFuchsiaImpl> v2_accessibility_bridge_;
+  std::unique_ptr<ui::AccessibilityBridgeFuchsiaImpl> accessibility_bridge_;
 
   // Test settings.
   absl::optional<gfx::Size> window_size_for_test_;
@@ -405,7 +398,6 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   gfx::Size render_size_override_;
 
   std::unique_ptr<MediaPlayerImpl> media_player_;
-  std::unique_ptr<ReceiverSessionClient> receiver_session_client_;
   on_load_script_injector::OnLoadScriptInjectorHost<uint64_t> script_injector_;
 
   fidl::Binding<fuchsia::web::Frame> binding_;
@@ -422,9 +414,12 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
   inspect::Node inspect_node_;
   const inspect::StringProperty inspect_name_property_;
 
-  // TODO(crbug.com/1291330): Remove.
-  // Used to control which accessibility bridge version is live.
-  bool use_v2_accessibility_bridge_ = true;
+#if BUILDFLAG(ENABLE_CAST_RECEIVER)
+  std::unique_ptr<ReceiverSessionClient> receiver_session_client_;
+#endif
+
+  // Used to implement graceful `Close()` with `timeout` specified.
+  base::OneShotTimer close_page_timeout_;
 
   base::WeakPtrFactory<FrameImpl> weak_factory_{this};
 };

@@ -17,8 +17,6 @@
 #include "components/bookmarks/browser/model_loader.h"
 #include "components/history/core/browser/history_service.h"
 
-#include "app/vivaldi_constants.h"
-
 ChromeHistoryClient::ChromeHistoryClient(
     bookmarks::BookmarkModel* bookmark_model)
     : bookmark_model_(bookmark_model) {
@@ -48,8 +46,9 @@ void ChromeHistoryClient::Shutdown() {
   StopObservingBookmarkModel();
 }
 
-bool ChromeHistoryClient::CanAddURL(const GURL& url) {
-  return CanAddURLToHistory(url) && url.host() != vivaldi::kVivaldiAppId;
+history::CanAddURLCallback ChromeHistoryClient::GetThreadSafeCanAddURLCallback()
+    const {
+  return base::BindRepeating(&CanAddURLToHistory);
 }
 
 void ChromeHistoryClient::NotifyProfileError(sql::InitStatus init_status,

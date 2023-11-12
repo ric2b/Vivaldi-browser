@@ -20,7 +20,7 @@ using l10n_util::GetNSString;
 namespace {
 // Padding for the search bar
 // In order: Top, Left, Bottom, Right
-UIEdgeInsets searchBarPadding = UIEdgeInsetsMake(8, 8, 0, 8);
+UIEdgeInsets searchBarPadding = UIEdgeInsetsMake(8, 12, 0, 12);
 // Padding for speed dial toggle
 UIEdgeInsets speedDialTogglePadding = UIEdgeInsetsMake(0, 0, 8, 4);
 // Padding for the speed dial selection label
@@ -111,7 +111,8 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
   speedDialSelectionLabel.text = titleString;
   speedDialSelectionLabel.accessibilityLabel = titleString;
   speedDialSelectionLabel.textColor = UIColor.labelColor;
-  speedDialSelectionLabel.font = [UIFont systemFontOfSize:vBodyFontSize];
+  speedDialSelectionLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   speedDialSelectionLabel.numberOfLines = 1;
   speedDialSelectionLabel.textAlignment = NSTextAlignmentLeft;
 

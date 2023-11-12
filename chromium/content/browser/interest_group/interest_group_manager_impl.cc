@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
@@ -88,6 +89,18 @@ std::unique_ptr<network::SimpleURLLoader> BuildSimpleUrlLoader(
   simple_url_loader->SetTimeoutDuration(base::Seconds(30));
   return simple_url_loader;
 }
+
+std::vector<InterestGroupManager::InterestGroupDataKey>
+ConvertOwnerJoinerPairsToDataKeys(
+    std::vector<std::pair<url::Origin, url::Origin>> owner_joiner_pairs) {
+  std::vector<InterestGroupManager::InterestGroupDataKey> data_keys;
+  for (auto& key : owner_joiner_pairs) {
+    data_keys.emplace_back(
+        InterestGroupManager::InterestGroupDataKey{key.first, key.second});
+  }
+  return data_keys;
+}
+
 }  // namespace
 
 InterestGroupManagerImpl::ReportRequest::ReportRequest() = default;
@@ -122,6 +135,23 @@ InterestGroupManagerImpl::~InterestGroupManagerImpl() = default;
 void InterestGroupManagerImpl::GetAllInterestGroupJoiningOrigins(
     base::OnceCallback<void(std::vector<url::Origin>)> callback) {
   impl_.AsyncCall(&InterestGroupStorage::GetAllInterestGroupJoiningOrigins)
+      .Then(std::move(callback));
+}
+
+void InterestGroupManagerImpl::GetAllInterestGroupDataKeys(
+    base::OnceCallback<void(std::vector<InterestGroupDataKey>)> callback) {
+  impl_.AsyncCall(&InterestGroupStorage::GetAllInterestGroupOwnerJoinerPairs)
+      .Then(base::BindOnce(&ConvertOwnerJoinerPairsToDataKeys)
+                .Then(std::move(callback)));
+}
+
+void InterestGroupManagerImpl::RemoveInterestGroupsByDataKey(
+    InterestGroupDataKey data_key,
+    base::OnceClosure callback) {
+  impl_
+      .AsyncCall(
+          &InterestGroupStorage::RemoveInterestGroupsMatchingOwnerAndJoiner)
+      .WithArgs(data_key.owner, data_key.joining_origin)
       .Then(std::move(callback));
 }
 
@@ -176,17 +206,6 @@ void InterestGroupManagerImpl::JoinInterestGroup(blink::InterestGroup group,
           weak_factory_.GetWeakPtr()));
 }
 
-void InterestGroupManagerImpl::
-    QueueKAnonymityUpdateForInterestGroupFromJoinInterestGroup(
-        absl::optional<StorageInterestGroup> maybe_group) {
-  // We just joined the group, so it must exist.
-  // We don't need to worry about the DB size limit, since older groups
-  // are removed first.
-  DCHECK(maybe_group);
-  if (maybe_group)
-    QueueKAnonymityUpdateForInterestGroup(*maybe_group);
-}
-
 void InterestGroupManagerImpl::LeaveInterestGroup(
     const blink::InterestGroupKey& group_key,
     const ::url::Origin& main_frame) {
@@ -210,17 +229,6 @@ void InterestGroupManagerImpl::UpdateInterestGroupsOfOwners(
       owners, std::move(client_security_state));
 }
 
-void InterestGroupManagerImpl::set_max_update_round_duration_for_testing(
-    base::TimeDelta delta) {
-  update_manager_.set_max_update_round_duration_for_testing(delta);  // IN-TEST
-}
-
-void InterestGroupManagerImpl::set_max_parallel_updates_for_testing(
-    int max_parallel_updates) {
-  update_manager_.set_max_parallel_updates_for_testing(  // IN-TEST
-      max_parallel_updates);
-}
-
 void InterestGroupManagerImpl::RecordInterestGroupBids(
     const blink::InterestGroupSet& group_keys) {
   for (const auto& group_key : group_keys) {
@@ -240,8 +248,9 @@ void InterestGroupManagerImpl::RecordInterestGroupWin(
       .WithArgs(group_key, std::move(ad_json));
 }
 
-void InterestGroupManagerImpl::RegisterAdAsWon(const GURL& render_url) {
-  k_anonymity_manager_->RegisterAdAsWon(render_url);
+void InterestGroupManagerImpl::RegisterAdKeysAsJoined(
+    base::flat_set<std::string> keys) {
+  k_anonymity_manager_->RegisterAdKeysAsJoined(std::move(keys));
 }
 
 void InterestGroupManagerImpl::GetInterestGroup(
@@ -269,7 +278,9 @@ void InterestGroupManagerImpl::GetInterestGroupsForOwner(
     base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback) {
   impl_.AsyncCall(&InterestGroupStorage::GetInterestGroupsForOwner)
       .WithArgs(owner)
-      .Then(std::move(callback));
+      .Then(
+          base::BindOnce(&InterestGroupManagerImpl::OnGetInterestGroupsComplete,
+                         weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void InterestGroupManagerImpl::DeleteInterestGroupData(
@@ -290,6 +301,81 @@ void InterestGroupManagerImpl::GetLastMaintenanceTimeForTesting(
     base::RepeatingCallback<void(base::Time)> callback) const {
   impl_.AsyncCall(&InterestGroupStorage::GetLastMaintenanceTimeForTesting)
       .Then(std::move(callback));
+}
+
+void InterestGroupManagerImpl::EnqueueReports(
+    const std::vector<GURL>& report_urls,
+    const std::vector<GURL>& debug_win_report_urls,
+    const std::vector<GURL>& debug_loss_report_urls,
+    const url::Origin& frame_origin,
+    network::mojom::ClientSecurityStatePtr client_security_state,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  // For memory usage reasons, purge the queue if it has at least
+  // `max_report_queue_length_` entries at the time we're about to add new
+  // entries.
+  if (report_requests_.size() >=
+      static_cast<unsigned int>(max_report_queue_length_)) {
+    report_requests_.clear();
+  }
+
+  EnqueueReportsInternal(report_urls, frame_origin, client_security_state,
+                         "SendReportToReport", url_loader_factory);
+  EnqueueReportsInternal(debug_loss_report_urls, frame_origin,
+                         client_security_state, "DebugLossReport",
+                         url_loader_factory);
+  EnqueueReportsInternal(debug_win_report_urls, frame_origin,
+                         client_security_state, "DebugWinReport",
+                         url_loader_factory);
+
+  while (!report_requests_.empty() &&
+         num_active_ < max_active_report_requests_) {
+    ++num_active_;
+    TrySendingOneReport();
+  }
+}
+
+void InterestGroupManagerImpl::SetInterestGroupPriority(
+    const blink::InterestGroupKey& group_key,
+    double priority) {
+  impl_.AsyncCall(&InterestGroupStorage::SetInterestGroupPriority)
+      .WithArgs(group_key, priority);
+}
+
+void InterestGroupManagerImpl::UpdateInterestGroupPriorityOverrides(
+    const blink::InterestGroupKey& group_key,
+    base::flat_map<std::string,
+                   auction_worklet::mojom::PrioritySignalsDoublePtr>
+        update_priority_signals_overrides) {
+  impl_.AsyncCall(&InterestGroupStorage::UpdateInterestGroupPriorityOverrides)
+      .WithArgs(group_key, std::move(update_priority_signals_overrides));
+}
+
+void InterestGroupManagerImpl::ClearPermissionsCache() {
+  permissions_checker_.ClearCache();
+}
+
+void InterestGroupManagerImpl::QueueKAnonymityUpdateForInterestGroup(
+    const StorageInterestGroup& group) {
+  k_anonymity_manager_->QueryKAnonymityForInterestGroup(group);
+}
+
+void InterestGroupManagerImpl::UpdateKAnonymity(
+    const StorageInterestGroup::KAnonymityData& data) {
+  impl_.AsyncCall(&InterestGroupStorage::UpdateKAnonymity).WithArgs(data);
+}
+
+void InterestGroupManagerImpl::GetLastKAnonymityReported(
+    const std::string& key,
+    base::OnceCallback<void(absl::optional<base::Time>)> callback) {
+  impl_.AsyncCall(&InterestGroupStorage::GetLastKAnonymityReported)
+      .WithArgs(key)
+      .Then(std::move(callback));
+}
+
+void InterestGroupManagerImpl::UpdateLastKAnonymityReported(
+    const std::string& key) {
+  impl_.AsyncCall(&InterestGroupStorage::UpdateLastKAnonymityReported)
+      .WithArgs(key);
 }
 
 void InterestGroupManagerImpl::OnJoinInterestGroupPermissionsChecked(
@@ -355,6 +441,17 @@ void InterestGroupManagerImpl::ReportUpdateFailed(
       .WithArgs(group_key, parse_failure);
 }
 
+void InterestGroupManagerImpl::OnGetInterestGroupsComplete(
+    base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback,
+    std::vector<StorageInterestGroup> groups) {
+  for (const auto& group : groups) {
+    NotifyInterestGroupAccessed(InterestGroupObserverInterface::kLoaded,
+                                group.interest_group.owner.Serialize(),
+                                group.interest_group.name);
+  }
+  std::move(callback).Run(std::move(groups));
+}
+
 void InterestGroupManagerImpl::NotifyInterestGroupAccessed(
     InterestGroupObserverInterface::AccessType type,
     const std::string& owner_origin,
@@ -368,11 +465,11 @@ void InterestGroupManagerImpl::NotifyInterestGroupAccessed(
   }
 }
 
-void InterestGroupManagerImpl::HandleReports(
+void InterestGroupManagerImpl::EnqueueReportsInternal(
     const std::vector<GURL>& report_urls,
     const url::Origin& frame_origin,
-    network::mojom::ClientSecurityStatePtr client_security_state,
-    const std::string& name,
+    const network::mojom::ClientSecurityStatePtr& client_security_state,
+    const char* name,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   for (const GURL& report_url : report_urls) {
     auto report_request = std::make_unique<ReportRequest>();
@@ -385,70 +482,21 @@ void InterestGroupManagerImpl::HandleReports(
   }
 }
 
-void InterestGroupManagerImpl::EnqueueReports(
-    const std::vector<GURL>& report_urls,
-    const std::vector<GURL>& debug_win_report_urls,
-    const std::vector<GURL>& debug_loss_report_urls,
-    const url::Origin& frame_origin,
-    network::mojom::ClientSecurityStatePtr client_security_state,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
-  // For memory usage reasons, purge the queue if it has no less than
-  // `max_report_queue_length_` entries at the time we're about to add new
-  // entries.
-  if (report_requests_.size() >=
-      static_cast<unsigned int>(max_report_queue_length_)) {
-    report_requests_.clear();
-  }
-
-  HandleReports(std::move(report_urls), frame_origin,
-                client_security_state.Clone(), "SendReportToReport",
-                url_loader_factory);
-  HandleReports(std::move(debug_loss_report_urls), frame_origin,
-                client_security_state.Clone(), "DebugLossReport",
-                url_loader_factory);
-  HandleReports(std::move(debug_win_report_urls), frame_origin,
-                client_security_state.Clone(), "DebugWinReport",
-                url_loader_factory);
-  if (!report_requests_.empty())
-    SendReports();
-}
-
-void InterestGroupManagerImpl::ClearPermissionsCache() {
-  permissions_checker_.ClearCache();
-}
-
-void InterestGroupManagerImpl::SendReports() {
-  if (reporting_started_ == base::TimeTicks::Min()) {
-    // It appears we're staring a new reporting round; mark the time we started
-    // the round.
-    reporting_started_ = base::TimeTicks::Now();
-  }
-
-  while (!report_requests_.empty() &&
-         num_active_ < max_active_report_requests_) {
-    num_active_++;
-    TrySendingOneReport();
-  }
-}
-
 void InterestGroupManagerImpl::TrySendingOneReport() {
-  if (base::TimeTicks::Now() - reporting_started_ >
-      max_reporting_round_duration_) {
-    // We've been reporting for too long; delete all pending reports in the
-    // queue.
-    // TODO(qingxinwu): maybe add UMA metrics to learn how often this happens.
-    report_requests_.clear();
-    reporting_started_ = base::TimeTicks::Min();
-  }
+  DCHECK_GT(num_active_, 0);
 
   if (report_requests_.empty()) {
-    DCHECK_GT(num_active_, 0);
-    num_active_--;
-    if (num_active_ == 0) {
-      // This reporting round is finished, there's no more work to do.
-      reporting_started_ = base::TimeTicks::Min();
-    }
+    --num_active_;
+    if (num_active_ == 0)
+      timeout_timer_.Stop();
     return;
+  }
+
+  if (!timeout_timer_.IsRunning()) {
+    timeout_timer_.Start(
+        FROM_HERE, max_reporting_round_duration_,
+        base::BindOnce(&InterestGroupManagerImpl::TimeoutReports,
+                       base::Unretained(this)));
   }
 
   std::unique_ptr<ReportRequest> report_request =
@@ -480,76 +528,27 @@ void InterestGroupManagerImpl::OnOneReportSent(
     scoped_refptr<net::HttpResponseHeaders> response_headers) {
   DCHECK_GT(num_active_, 0);
 
-  if (!report_requests_.empty()) {
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&InterestGroupManagerImpl::TrySendingOneReport,
-                       weak_factory_.GetWeakPtr()),
-        reporting_interval_);
-    return;
-  }
-  num_active_--;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&InterestGroupManagerImpl::TrySendingOneReport,
+                     weak_factory_.GetWeakPtr()),
+      reporting_interval_);
 }
 
-void InterestGroupManagerImpl::set_max_active_report_requests_for_testing(
-    int max_active_report_requests) {
-  max_active_report_requests_ = max_active_report_requests;
+void InterestGroupManagerImpl::TimeoutReports() {
+  // TODO(qingxinwu): maybe add UMA metrics to learn how often this happens.
+  report_requests_.clear();
 }
 
-void InterestGroupManagerImpl::SetInterestGroupPriority(
-    const blink::InterestGroupKey& group_key,
-    double priority) {
-  impl_.AsyncCall(&InterestGroupStorage::SetInterestGroupPriority)
-      .WithArgs(group_key, priority);
-}
-
-void InterestGroupManagerImpl::UpdateInterestGroupPriorityOverrides(
-    const blink::InterestGroupKey& group_key,
-    base::flat_map<std::string,
-                   auction_worklet::mojom::PrioritySignalsDoublePtr>
-        update_priority_signals_overrides) {
-  impl_.AsyncCall(&InterestGroupStorage::UpdateInterestGroupPriorityOverrides)
-      .WithArgs(group_key, std::move(update_priority_signals_overrides));
-}
-
-void InterestGroupManagerImpl::QueueKAnonymityUpdateForInterestGroup(
-    const StorageInterestGroup& group) {
-  k_anonymity_manager_->QueryKAnonymityForInterestGroup(group);
-  k_anonymity_manager_->RegisterInterestGroupAsJoined(group.interest_group);
-}
-
-void InterestGroupManagerImpl::UpdateKAnonymity(
-    const StorageInterestGroup::KAnonymityData& data) {
-  impl_.AsyncCall(&InterestGroupStorage::UpdateKAnonymity).WithArgs(data);
-}
-
-void InterestGroupManagerImpl::GetLastKAnonymityReported(
-    const std::string& key,
-    base::OnceCallback<void(absl::optional<base::Time>)> callback) {
-  impl_.AsyncCall(&InterestGroupStorage::GetLastKAnonymityReported)
-      .WithArgs(key)
-      .Then(std::move(callback));
-}
-
-void InterestGroupManagerImpl::UpdateLastKAnonymityReported(
-    const std::string& key) {
-  impl_.AsyncCall(&InterestGroupStorage::UpdateLastKAnonymityReported)
-      .WithArgs(key);
-}
-
-void InterestGroupManagerImpl::set_max_report_queue_length_for_testing(
-    int max_queue_length) {
-  max_report_queue_length_ = max_queue_length;
-}
-
-void InterestGroupManagerImpl::set_max_reporting_round_duration_for_testing(
-    base::TimeDelta max_reporting_round_duration) {
-  max_reporting_round_duration_ = max_reporting_round_duration;
-}
-
-void InterestGroupManagerImpl::set_reporting_interval_for_testing(
-    base::TimeDelta interval) {
-  reporting_interval_ = interval;
+void InterestGroupManagerImpl::
+    QueueKAnonymityUpdateForInterestGroupFromJoinInterestGroup(
+        absl::optional<StorageInterestGroup> maybe_group) {
+  // We just joined the group, so it must exist.
+  // We don't need to worry about the DB size limit, since older groups
+  // are removed first.
+  DCHECK(maybe_group);
+  if (maybe_group)
+    QueueKAnonymityUpdateForInterestGroup(*maybe_group);
 }
 
 }  // namespace content

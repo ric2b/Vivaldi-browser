@@ -10,19 +10,20 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
-#include "third_party/blink/renderer/core/css/parser/arena.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
+#include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
 
 namespace blink {
 
 class Color;
 class CSSParserObserver;
-class CSSParserSelector;
+class CSSSelector;
 class CSSSelectorList;
 class Element;
 class ExecutionContext;
 class ImmutableCSSPropertyValueSet;
+class StyleRule;
 class StyleRuleBase;
 class StyleRuleKeyframe;
 class StyleSheetContents;
@@ -30,9 +31,6 @@ class CSSValue;
 class CSSPrimitiveValue;
 enum class ParseSheetResult;
 enum class SecureContextMode;
-
-// See css_selector_parser.h.
-using CSSSelectorVector = Vector<ArenaUniquePtr<CSSParserSelector>>;
 
 // This class serves as the public API for the css/parser subsystem
 class CORE_EXPORT CSSParser {
@@ -52,13 +50,16 @@ class CORE_EXPORT CSSParser {
           CSSDeferPropertyParsing::kNo,
       bool allow_import_rules = true,
       std::unique_ptr<CachedCSSTokenizer> tokenizer = nullptr);
-  static CSSSelectorVector ParseSelector(const CSSParserContext*,
-                                         StyleSheetContents*,
-                                         const String&,
-                                         Arena&);
-  static CSSSelectorList ParsePageSelector(const CSSParserContext&,
-                                           StyleSheetContents*,
-                                           const String&);
+  // See CSSSelectorParser for lifetime of the returned value.
+  static base::span<CSSSelector> ParseSelector(
+      const CSSParserContext*,
+      StyleRule* parent_rule_for_nesting,
+      StyleSheetContents*,
+      const String&,
+      HeapVector<CSSSelector>& arena);
+  static CSSSelectorList* ParsePageSelector(const CSSParserContext&,
+                                            StyleSheetContents*,
+                                            const String&);
   static bool ParseDeclarationList(const CSSParserContext*,
                                    MutableCSSPropertyValueSet*,
                                    const String&);
@@ -102,7 +103,9 @@ class CORE_EXPORT CSSParser {
   static ImmutableCSSPropertyValueSet*
   ParseInlineStyleDeclaration(const String&, CSSParserMode, SecureContextMode);
 
-  static std::unique_ptr<Vector<double>> ParseKeyframeKeyList(const String&);
+  static std::unique_ptr<Vector<KeyframeOffset>> ParseKeyframeKeyList(
+      const CSSParserContext*,
+      const String&);
   static StyleRuleKeyframe* ParseKeyframeRule(const CSSParserContext*,
                                               const String&);
 

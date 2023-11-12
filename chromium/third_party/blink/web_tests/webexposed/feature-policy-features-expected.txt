@@ -29,10 +29,10 @@ ch-viewport-width
 ch-width
 clipboard-read
 clipboard-write
+compute-pressure
 cross-origin-isolated
 direct-sockets
 display-capture
-document-domain
 encrypted-media
 execution-while-not-rendered
 execution-while-out-of-viewport
@@ -56,6 +56,7 @@ publickey-credentials-get
 screen-wake-lock
 serial
 shared-autofill
+smart-card
 storage-access
 sync-xhr
 unload

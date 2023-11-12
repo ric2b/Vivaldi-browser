@@ -20,16 +20,16 @@ class MultitaskMenuView;
 namespace ash {
 
 class TabletModeMultitaskMenuEventHandler;
+class TabletModeMultitaskMenuView;
 
-// The container of the multitask menu. Creates and owns the multitask menu
-// widget.
-class ASH_EXPORT TabletModeMultitaskMenu : aura::WindowObserver,
+// Creates and maintains the multitask menu. Responsible for showing,
+// hiding, and animating the menu.
+class ASH_EXPORT TabletModeMultitaskMenu : public aura::WindowObserver,
                                            public views::WidgetObserver,
                                            public display::DisplayObserver {
  public:
   TabletModeMultitaskMenu(TabletModeMultitaskMenuEventHandler* event_handler,
-                          aura::Window* window,
-                          base::RepeatingClosure hide_menu);
+                          aura::Window* window);
 
   TabletModeMultitaskMenu(const TabletModeMultitaskMenu&) = delete;
   TabletModeMultitaskMenu& operator=(const TabletModeMultitaskMenu&) = delete;
@@ -38,15 +38,21 @@ class ASH_EXPORT TabletModeMultitaskMenu : aura::WindowObserver,
 
   aura::Window* window() { return window_; }
 
-  views::Widget* multitask_menu_widget() {
-    return multitask_menu_widget_.get();
-  }
+  views::Widget* widget() { return widget_.get(); }
 
-  // Show the menu using a slide down animation.
-  void AnimateShow();
+  // Performs a slide down animation on the menu if `show` is true, otherwise
+  // slide up animation.
+  void Animate(bool show);
 
-  // Close the menu using a slide up animation.
-  void AnimateClose();
+  // Performs a fade out animation and closes the menu. Called when tap outside
+  // the menu dismisses it.
+  void AnimateFadeOut();
+
+  // Actions called by the event handler, where `initial_y` and `current_y` are
+  // in `window_`'s coordinates.
+  void BeginDrag(float initial_y);
+  void UpdateDrag(float current_y);
+  void EndDrag();
 
   // Calls the event handler to destroy `this`.
   void Reset();
@@ -68,8 +74,14 @@ class ASH_EXPORT TabletModeMultitaskMenu : aura::WindowObserver,
   // `this`.
   TabletModeMultitaskMenuEventHandler* event_handler_;
 
-  // The window associated with this multitask menu.
+  // The window that opened this multitask menu.
   aura::Window* window_ = nullptr;
+
+  // Widget implementation that is created and maintained by `this`.
+  views::UniqueWidgetPtr widget_ = std::make_unique<views::Widget>();
+
+  // The contents view of the above widget.
+  raw_ptr<TabletModeMultitaskMenuView> menu_view_ = nullptr;
 
   // Window observer for `window_`.
   base::ScopedObservation<aura::Window, aura::WindowObserver> observed_window_{
@@ -79,9 +91,6 @@ class ASH_EXPORT TabletModeMultitaskMenu : aura::WindowObserver,
       widget_observation_{this};
 
   display::ScopedOptionalDisplayObserver display_observer_{this};
-
-  views::UniqueWidgetPtr multitask_menu_widget_ =
-      std::make_unique<views::Widget>();
 
   base::WeakPtrFactory<TabletModeMultitaskMenu> weak_factory_{this};
 };

@@ -194,8 +194,12 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
   out->scroll_top_left_interop_enabled = data.scroll_top_left_interop_enabled();
   out->disable_accelerated_small_canvases =
       data.disable_accelerated_small_canvases();
+#endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
   out->disable_webauthn = data.disable_webauthn();
-#endif
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+
   out->force_dark_mode_enabled = data.force_dark_mode_enabled();
   out->default_minimum_page_scale_factor =
       data.default_minimum_page_scale_factor();
@@ -218,6 +222,7 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
   out->webxr_immersive_ar_allowed = data.webxr_immersive_ar_allowed();
   out->renderer_wide_named_frame_lookup =
       data.renderer_wide_named_frame_lookup();
+  out->modal_context_menu = data.modal_context_menu();
 
   // Vivaldi
   out->allow_tab_cycle_from_webpage_into_ui =

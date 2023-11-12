@@ -6,6 +6,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
+#include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
 #include "ash/shell.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
@@ -17,9 +18,12 @@
 #include "ash/webui/personalization_app/personalization_app_user_provider.h"
 #include "ash/webui/personalization_app/personalization_app_wallpaper_provider.h"
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
@@ -139,6 +143,7 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AVATAR_ARIA_LABEL_CLOSE_CAMERA},
       {"ariaLabelWebcamVideo",
        IDS_PERSONALIZATION_APP_AVATAR_ARIA_LABEL_WEBCAM_VIDEO},
+      {"avatarNetworkError", IDS_PERSONALIZATION_APP_AVATAR_NETWORK_ERROR},
 
       // Ambient mode related string.
       {"screensaverLabel", IDS_PERSONALIZATION_APP_SCREENSAVER_LABEL},
@@ -198,8 +203,14 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_MULTIPLE_ALBUMS_DESC},
       {"ambientModeMainPageZeroStateMessage",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_MAIN_PAGE_ZERO_STATE_MESSAGE},
+      {"ambientModeMainPageZeroStateMessageV2",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_MAIN_PAGE_ZERO_STATE_MESSAGE_V2},
+      {"ambientModeMainPageEnterpriseUserMessage",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_MAIN_PAGE_ENTERPRISE_USER_MESSAGE},
       {"ambientModeTurnOnLabel",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_TURN_ON_LABEL},
+      {"ambientModeLearnMoreLabel",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_LEARN_MORE_LABEL},
       {"ariaLabelChangeScreensaver",
        IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_SCREENSAVER},
       {"ambientModeNetworkError",
@@ -259,6 +270,10 @@ void AddStrings(content::WebUIDataSource* source) {
   source->EnableReplaceI18nInJS();
 }
 
+bool ShouldHandleWebUIRequest(const std::string& path) {
+  return base::StartsWith(path, "wallpaper.jpg");
+}
+
 }  // namespace
 
 PersonalizationAppUI::PersonalizationAppUI(
@@ -281,12 +296,18 @@ PersonalizationAppUI::PersonalizationAppUI(
       web_ui->GetWebContents()->GetBrowserContext(),
       kChromeUIPersonalizationAppHost);
 
+  // Supply a custom wallpaper image.
+  source->SetRequestFilter(
+      base::BindRepeating(&ShouldHandleWebUIRequest),
+      base::BindRepeating(&PersonalizationAppUI::HandleWebUIRequest,
+                          weak_ptr_factory_.GetWeakPtr()));
+
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test chrome://webui-test "
       "'self';");
 
-  // TODO(crbug.com/1098690): Trusted Type Polymer
+  // TODO(crbug.com/1400799): Enable TrustedTypes.
   source->DisableTrustedTypesCSP();
 
   AddResources(source);
@@ -336,11 +357,7 @@ void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
                      features::IsWallpaperFullScreenPreviewEnabled());
 
   source->AddBoolean("isGooglePhotosIntegrationEnabled",
-                     features::IsWallpaperGooglePhotosIntegrationEnabled() &&
-                         wallpaper_provider_->IsEligibleForGooglePhotos());
-
-  source->AddBoolean("isAmbientModeAnimationEnabled",
-                     features::IsAmbientModeAnimationEnabled());
+                     wallpaper_provider_->IsEligibleForGooglePhotos());
 
   source->AddBoolean("isDarkLightModeEnabled",
                      features::IsDarkLightModeEnabled());
@@ -356,6 +373,23 @@ void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
                      features::IsAvatarsCloudMigrationEnabled());
 
   source->AddBoolean("isJellyEnabled", features::IsJellyEnabled());
+
+  source->AddBoolean("isScreenSaverPreviewEnabled",
+                     features::IsScreenSaverPreviewEnabled());
+
+  source->AddBoolean("isAmbientSubpageUIChangeEnabled",
+                     features::IsAmbientSubpageUIChangeEnabled());
+
+  // TODO(b/258838122): update when the screen saver policy code is ready.
+  source->AddBoolean("isAmbientModeManaged", false);
+}
+
+void PersonalizationAppUI::HandleWebUIRequest(
+    const std::string& path,
+    content::WebUIDataSource::GotDataCallback callback) {
+  DCHECK(base::Contains(path, "?key="))
+      << "wallpaper key must be provided to prevent browser cache collisions";
+  wallpaper_provider_->GetWallpaperAsJpegBytes(std::move(callback));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(PersonalizationAppUI)

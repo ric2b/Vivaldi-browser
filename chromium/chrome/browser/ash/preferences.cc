@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -31,6 +30,7 @@
 #include "chrome/browser/ash/input_method/input_method_persistence.h"
 #include "chrome/browser/ash/input_method/input_method_syncer.h"
 #include "chrome/browser/ash/login/consolidated_consent_field_trial.h"
+#include "chrome/browser/ash/login/hid_detection_revamp_field_trial.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -49,11 +49,12 @@
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine.pb.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/system/devicemode.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/ash/components/timezone/timezone_resolver.h"
 #include "chromeos/components/disks/disks_prefs.h"
-#include "chromeos/system/devicemode.h"
-#include "chromeos/system/statistics_provider.h"
 #include "components/drive/drive_pref_names.h"
 #include "components/feedback/content/content_tracing_manager.h"
 #include "components/language/core/browser/pref_names.h"
@@ -145,6 +146,10 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       ::prefs::kLacrosLaunchSwitch,
       static_cast<int>(crosapi::browser_util::LacrosAvailability::kUserChoice));
+  registry->RegisterIntegerPref(
+      ::prefs::kLacrosSelection,
+      static_cast<int>(
+          crosapi::browser_util::LacrosSelectionPolicy::kUserChoice));
   registry->RegisterStringPref(::prefs::kLacrosDataBackwardMigrationMode, "");
   registry->RegisterBooleanPref(prefs::kDeviceSystemWideTracingEnabled, true);
   registry->RegisterBooleanPref(
@@ -153,9 +158,11 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kChromadToCloudMigrationEnabled, false);
   registry->RegisterBooleanPref(prefs::kLoginScreenWebUILazyLoading, false);
   registry->RegisterBooleanPref(::prefs::kConsumerAutoUpdateToggle, true);
+  registry->RegisterBooleanPref(::prefs::kHindiInscriptLayoutEnabled, false);
 
   RegisterLocalStatePrefs(registry);
   ash::consolidated_consent_field_trial::RegisterLocalStatePrefs(registry);
+  ash::hid_detection_revamp_field_trial::RegisterLocalStatePrefs(registry);
 }
 
 // static
@@ -266,6 +273,11 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableMirrorSync, false);
   registry->RegisterStringPref(drive::prefs::kDriveFsMirrorSyncMachineRootId,
                                "");
+  // Do not sync kDriveFsBulkPinningEnabled as this maintains files that are
+  // locally pinned to this device and should not sync the state across multiple
+  // devices.
+  registry->RegisterBooleanPref(drive::prefs::kDriveFsBulkPinningEnabled,
+                                false);
   // We don't sync ::prefs::kLanguageCurrentInputMethod and PreviousInputMethod
   // because they're just used to track the logout state of the device.
   registry->RegisterStringPref(::prefs::kLanguageCurrentInputMethod, "");
@@ -539,6 +551,8 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kFilesAppTrashEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+
+  registry->RegisterBooleanPref(prefs::kUsbDetectorNotificationEnabled, true);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -1137,6 +1151,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       PeripheralNotificationManager::Get()->SetPcieTunnelingAllowedState(value);
     }
     PciguardClient::Get()->SendExternalPciDevicesPermissionState(value);
+    TypecdClient::Get()->SetPeripheralDataAccessPermissionState(value);
   }
 }
 

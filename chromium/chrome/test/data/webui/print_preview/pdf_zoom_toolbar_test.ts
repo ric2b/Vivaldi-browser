@@ -8,7 +8,6 @@ import {FittingType} from 'chrome://print/pdf/constants.js';
 import {ViewerZoomButtonElement} from 'chrome://print/pdf/elements/viewer-zoom-button.js';
 import {ViewerZoomToolbarElement} from 'chrome://print/pdf/elements/viewer-zoom-toolbar.js';
 import {CrIconButtonElement} from 'chrome://print/print_preview.js';
-import {assert} from 'chrome://resources/js/assert.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -33,8 +32,7 @@ suite(pdf_zoom_toolbar_test.suiteName, function() {
   const fitPageIcon: string = 'fullscreen-exit';
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     zoomToolbar = document.createElement('viewer-zoom-toolbar');
     document.body.appendChild(zoomToolbar);
@@ -47,7 +45,7 @@ suite(pdf_zoom_toolbar_test.suiteName, function() {
    * Test that the zoom toolbar toggles between showing the fit-to-page and
    * fit-to-width buttons.
    */
-  test(assert(pdf_zoom_toolbar_test.TestNames.Toggle), async () => {
+  test(pdf_zoom_toolbar_test.TestNames.Toggle, async () => {
     // Initial: Show fit-to-page.
     assertTrue(button.ironIcon!.endsWith(fitPageIcon));
 
@@ -99,7 +97,7 @@ suite(pdf_zoom_toolbar_test.suiteName, function() {
     assertTrue(button.ironIcon!.endsWith(fitWidthIcon));
   });
 
-  test(assert(pdf_zoom_toolbar_test.TestNames.ForceFitToPage), async () => {
+  test(pdf_zoom_toolbar_test.TestNames.ForceFitToPage, async () => {
     // Initial: Show fit-to-page.
     assertTrue(button.ironIcon!.endsWith(fitPageIcon));
 

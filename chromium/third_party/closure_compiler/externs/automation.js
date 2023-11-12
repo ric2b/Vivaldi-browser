@@ -405,6 +405,7 @@ chrome.automation.ActionType = {
   INCREMENT: 'increment',
   INTERNAL_INVALIDATE_TREE: 'internalInvalidateTree',
   LOAD_INLINE_TEXT_BOXES: 'loadInlineTextBoxes',
+  LONG_CLICK: 'longClick',
   REPLACE_SELECTED_TEXT: 'replaceSelectedText',
   RESUME_MEDIA: 'resumeMedia',
   SCROLL_BACKWARD: 'scrollBackward',
@@ -415,6 +416,7 @@ chrome.automation.ActionType = {
   SCROLL_UP: 'scrollUp',
   SCROLL_TO_MAKE_VISIBLE: 'scrollToMakeVisible',
   SCROLL_TO_POINT: 'scrollToPoint',
+  SCROLL_TO_POSITION_AT_ROW_COLUMN: 'scrollToPositionAtRowColumn',
   SET_ACCESSIBILITY_FOCUS: 'setAccessibilityFocus',
   SET_SCROLL_OFFSET: 'setScrollOffset',
   SET_SELECTION: 'setSelection',
@@ -426,7 +428,6 @@ chrome.automation.ActionType = {
   START_DUCKING_MEDIA: 'startDuckingMedia',
   STOP_DUCKING_MEDIA: 'stopDuckingMedia',
   SUSPEND_MEDIA: 'suspendMedia',
-  LONG_CLICK: 'longClick',
 };
 
 /**
@@ -465,7 +466,7 @@ chrome.automation.DescriptionFromType = {
   ARIA_DESCRIPTION: 'ariaDescription',
   ATTRIBUTE_EXPLICITLY_EMPTY: 'attributeExplicitlyEmpty',
   BUTTON_LABEL: 'buttonLabel',
-  POPUP_ELEMENT: 'popupElement',
+  POPOVER_ATTRIBUTE: 'popoverAttribute',
   RELATED_ELEMENT: 'relatedElement',
   RUBY_ANNOTATION: 'rubyAnnotation',
   SUMMARY: 'summary',
@@ -2367,7 +2368,7 @@ chrome.automation.AutomationNode.prototype.suspendMedia = function() {};
  * Simulates long click on node.
  * @see https://developer.chrome.com/extensions/automation#method-longClick
  */
- chrome.automation.AutomationNode.prototype.longClick = function() {};
+chrome.automation.AutomationNode.prototype.longClick = function() {};
 
 /**
  * Scrolls this scrollable container backward.

@@ -13,7 +13,9 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/icon_button.h"
 #include "ash/system/media/media_notification_provider.h"
 #include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
@@ -29,6 +31,7 @@
 #include "components/prefs/pref_service.h"
 #include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
@@ -99,6 +102,31 @@ enum PinState {
 class GlobalMediaControlsTitleView : public views::View {
  public:
   GlobalMediaControlsTitleView() {
+    auto* box_layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, kTitleViewInsets));
+    box_layout->set_minimum_cross_axis_size(kTitleViewHeight);
+    box_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+
+    title_label_ = AddChildView(std::make_unique<views::Label>());
+    title_label_->SetText(
+        l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE));
+    title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
+    title_label_->SetAutoColorReadabilityEnabled(false);
+    title_label_->SetFontList(views::Label::GetDefaultFontList().Derive(
+        kTitleFontSizeIncrease, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+
+    // Media tray should always be pinned to shelf when we are opening the
+    // dialog.
+    DCHECK(MediaTray::IsPinnedToShelf());
+    pin_button_ = AddChildView(std::make_unique<MediaTray::PinButton>());
+
+    box_layout->SetFlexForView(title_label_, 1);
+  }
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
     SetBorder(views::CreatePaddedBorder(
         views::CreateSolidSidedBorder(
             gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
@@ -107,35 +135,15 @@ class GlobalMediaControlsTitleView : public views::View {
         gfx::Insets::TLBR(kMenuSeparatorVerticalPadding, 0,
                           kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
                           0)));
-
-    auto* box_layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal, kTitleViewInsets));
-    box_layout->set_minimum_cross_axis_size(kTitleViewHeight);
-    box_layout->set_cross_axis_alignment(
-        views::BoxLayout::CrossAxisAlignment::kCenter);
-
-    auto* title_label = AddChildView(std::make_unique<views::Label>());
-    title_label->SetText(
-        l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE));
-    title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    title_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+    title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kTextColorPrimary));
-    title_label->SetAutoColorReadabilityEnabled(false);
-    title_label->SetFontList(views::Label::GetDefaultFontList().Derive(
-        kTitleFontSizeIncrease, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
-
-    // Media tray should always be pinned to shelf when we are opening the
-    // dialog.
-    DCHECK(MediaTray::IsPinnedToShelf());
-    pin_button_ = AddChildView(std::make_unique<MediaTray::PinButton>());
-
-    box_layout->SetFlexForView(title_label, 1);
   }
 
   views::Button* pin_button() { return pin_button_; }
 
  private:
-  MediaTray::PinButton* pin_button_ = nullptr;
+  views::ImageButton* pin_button_ = nullptr;
+  views::Label* title_label_ = nullptr;
 };
 
 }  // namespace
@@ -177,7 +185,7 @@ MediaTray::PinButton::PinButton()
     : IconButton(
           base::BindRepeating(&PinButton::ButtonPressed,
                               base::Unretained(this)),
-          IconButton::Type::kSmall,
+          IconButton::Type::kMedium,
           MediaTray::IsPinnedToShelf() ? &kPinnedIcon : &kUnpinnedIcon,
           MediaTray::IsPinnedToShelf()
               ? IDS_ASH_GLOBAL_MEDIA_CONTROLS_PINNED_BUTTON_TOOLTIP_TEXT
@@ -207,10 +215,12 @@ MediaTray::MediaTray(Shelf* shelf)
 
   Shell::Get()->session_controller()->AddObserver(this);
 
+  tray_container()->SetMargin(kMediaTrayPadding, 0);
   auto icon = std::make_unique<views::ImageView>();
   icon->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_ASH_GLOBAL_MEDIA_CONTROLS_BUTTON_TOOLTIP_TEXT));
-  tray_container()->SetMargin(kMediaTrayPadding, 0);
+  icon->SetImage(ui::ImageModel::FromVectorIcon(kGlobalMediaControlsIcon,
+                                                kColorAshIconColorPrimary));
   icon_ = tray_container()->AddChildView(std::move(icon));
 }
 
@@ -250,12 +260,8 @@ void MediaTray::HandleLocaleChange() {
       IDS_ASH_GLOBAL_MEDIA_CONTROLS_BUTTON_TOOLTIP_TEXT));
 }
 
-bool MediaTray::PerformAction(const ui::Event& event) {
-  if (bubble_)
-    CloseBubble();
-  else
-    ShowBubble();
-  return true;
+views::Widget* MediaTray::GetBubbleWidget() const {
+  return bubble_ ? bubble_->GetBubbleWidget() : nullptr;
 }
 
 void MediaTray::ShowBubble() {
@@ -276,7 +282,7 @@ void MediaTray::ShowBubble() {
   init_params.corner_radius = kTrayItemCornerRadius;
   init_params.reroute_event_handler = true;
 
-  TrayBubbleView* bubble_view = new TrayBubbleView(init_params);
+  auto bubble_view = std::make_unique<TrayBubbleView>(init_params);
 
   auto* title_view = bubble_view->AddChildView(
       std::make_unique<GlobalMediaControlsTitleView>());
@@ -288,7 +294,8 @@ void MediaTray::ShowBubble() {
       MediaNotificationProvider::Get()->GetMediaNotificationListView(
           kMenuSeparatorWidth));
 
-  bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
+  bubble_ = std::make_unique<TrayBubbleWrapper>(this);
+  bubble_->ShowBubble(std::move(bubble_view));
   SetIsActive(true);
 
   base::UmaHistogramBoolean("Media.CrosGlobalMediaControls.RepeatUsageOnShelf",
@@ -418,13 +425,6 @@ void MediaTray::AnchorUpdated() {
 
   bubble_->GetBubbleView()->SetAnchorRect(
       shelf()->GetStatusAreaWidget()->GetMediaTrayAnchorRect());
-}
-
-void MediaTray::OnThemeChanged() {
-  TrayBackgroundView::OnThemeChanged();
-  icon_->SetImage(gfx::CreateVectorIcon(
-      kGlobalMediaControlsIcon,
-      TrayIconColor(Shell::Get()->session_controller()->GetSessionState())));
 }
 
 }  // namespace ash

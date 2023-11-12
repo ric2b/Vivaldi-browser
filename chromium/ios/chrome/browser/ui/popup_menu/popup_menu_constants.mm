@@ -23,6 +23,8 @@ NSString* const kToolsMenuStop = @"kToolsMenuStop";
 NSString* const kToolsMenuNewTabId = @"kToolsMenuNewTabId";
 NSString* const kToolsMenuNewWindowId = @"kToolsMenuNewWindowId";
 NSString* const kToolsMenuNewIncognitoTabId = @"kToolsMenuNewIncognitoTabId";
+NSString* const kToolsMenuPinTabId = @"kToolsMenuPinTabId";
+NSString* const kToolsMenuUnpinTabId = @"kToolsMenuUnpinTabId";
 NSString* const kToolsMenuCloseAllTabsId = @"kToolsMenuCloseAllTabsId";
 NSString* const kToolsMenuCloseAllIncognitoTabsId =
     @"kToolsMenuCloseAllIncognitoTabsId";
@@ -40,6 +42,7 @@ NSString* const kToolsMenuRequestDesktopId = @"kToolsMenuRequestDesktopId";
 NSString* const kToolsMenuSettingsId = @"kToolsMenuSettingsId";
 NSString* const kToolsMenuSettingsActionId = @"kToolsMenuSettingsActionId";
 NSString* const kToolsMenuHelpId = @"kToolsMenuHelpId";
+NSString* const kToolsMenuLensCopiedImage = @"kToolsMenuLensCopiedImage";
 NSString* const kToolsMenuRequestMobileId = @"kToolsMenuRequestMobileId";
 NSString* const kToolsMenuReadLater = @"kToolsMenuReadLater";
 NSString* const kToolsMenuAddToBookmarks = @"kToolsMenuAddToBookmarks";

@@ -100,6 +100,7 @@ def get_variables(a_checkout_os=None):
 
 
   global_vars = {
+    "checkout_src_internal": False,
     "checkout_pgo_profiles": False,
     checkout_os: True,
     "checkout_pgo_profiles": False,

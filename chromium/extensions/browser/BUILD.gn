@@ -5,26 +5,32 @@
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//extensions/buildflags/buildflags.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 assert(enable_extensions)
 
+# The overarching "build all the things" for the browser side of the
+# //extensions module. In particular, this includes:
+# - The core extensions system
+# - The API implementations for the given platform and gn args
+# - The glue to fit them together (though some of this is left to the
+#   embedder).
+# Typically, embedders should depend on this, rather than any of the
+# subtargets.
 group("browser") {
   public_deps = [
     "//extensions/browser:browser_context_keyed_service_factories",
     "//extensions/browser:browser_sources",
-    "//extensions/browser/api:api_registration",
-  ]
 
-  # Includes all API implementations and the ExtensionsApiClient
-  # interface. Moving an API from src/chrome to src/extensions implies
-  # it can be cleanly disabled with enable_extensions=false.
-  public_deps += [
+    # Includes all API implementations and the ExtensionsApiClient
+    # interface. Moving an API from src/chrome to src/extensions implies
+    # it can be cleanly disabled with enable_extensions=false.
     "//extensions/browser/api",
-    "//extensions/browser/api:api_implementations",
   ]
 }
 
-# Isolate the instantiation of BrowserContextKeyedServiceFactories.
+# A group of helpers to instantiate the set of all browser context keyed service
+# factories, including both the API methods and core system services.
 source_set("browser_context_keyed_service_factories") {
   visibility = [ ":*" ]
 
@@ -33,17 +39,35 @@ source_set("browser_context_keyed_service_factories") {
     "browser_context_keyed_service_factories.h",
   ]
 
+  deps = [
+    "//extensions/browser:core_keyed_service_factories",
+    "//extensions/browser/api:api_keyed_service_factories",
+  ]
+}
+
+# A helper to instantiate all the necessary core system keyed services
+# factories.
+source_set("core_keyed_service_factories") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "core_browser_context_keyed_service_factories.cc",
+    "core_browser_context_keyed_service_factories.h",
+  ]
+
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
-    "//build:chromeos_buildflags",
     "//extensions/browser:browser_sources",
-    "//extensions/browser/api",
-    "//extensions/browser/api:api_implementations",
     "//extensions/browser/updater",
   ]
 }
 
+# The set of all sources that are related to the core extensions system.
+# Ideally, this would be isolated from all API targets (so that APIs are "leaf
+# nodes" and could be easily toggled on-and-off through dependencies for
+# different platforms).
+# See also https://crbug.com/883570.
 source_set("browser_sources") {
   visibility = [ "./*" ]
 
@@ -52,7 +76,8 @@ source_set("browser_sources") {
     "activity.h",
     "allowlist_state.h",
 
-    # TODO(ghazale): anything under api/ should be moved out of this target.
+    # TODO(https://crbug.com/883570): Anything under api/ should be moved out of
+    # this target.
     "api/activity_log/web_request_constants.cc",
     "api/activity_log/web_request_constants.h",
     "api/api_resource.cc",
@@ -83,8 +108,6 @@ source_set("browser_sources") {
     "api/declarative_net_request/composite_matcher.h",
     "api/declarative_net_request/constants.cc",
     "api/declarative_net_request/constants.h",
-    "api/declarative_net_request/declarative_net_request_api.cc",
-    "api/declarative_net_request/declarative_net_request_api.h",
     "api/declarative_net_request/extension_url_pattern_index_matcher.cc",
     "api/declarative_net_request/extension_url_pattern_index_matcher.h",
     "api/declarative_net_request/file_backed_ruleset_source.cc",
@@ -123,8 +146,6 @@ source_set("browser_sources") {
     "api/declarative_net_request/ruleset_source.h",
     "api/declarative_net_request/utils.cc",
     "api/declarative_net_request/utils.h",
-    "api/declarative_net_request/web_contents_helper.cc",
-    "api/declarative_net_request/web_contents_helper.h",
     "api/declarative_webrequest/request_stage.cc",
     "api/declarative_webrequest/request_stage.h",
     "api/declarative_webrequest/webrequest_action.cc",
@@ -332,6 +353,8 @@ source_set("browser_sources") {
     "extension_prefs_factory.h",
     "extension_prefs_helper.cc",
     "extension_prefs_helper.h",
+    "extension_prefs_helper_factory.cc",
+    "extension_prefs_helper_factory.h",
     "extension_prefs_observer.h",
     "extension_prefs_scope.h",
     "extension_protocols.cc",
@@ -557,6 +580,7 @@ source_set("browser_sources") {
     "//components/permissions:permissions_common",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/safe_browsing/core/common",
     "//components/services/unzip/content",
     "//components/services/unzip/public/cpp",
     "//components/sessions",
@@ -627,7 +651,7 @@ source_set("browser_sources") {
   if (is_chromeos_ash) {
     deps += [
       "//chrome/browser/ash/crosapi:browser_util",
-      "//chromeos/login/login_state",
+      "//chromeos/ash/components/login/login_state",
     ]
   }
 
@@ -656,21 +680,10 @@ source_set("browser_sources") {
   ]
 }
 
-# NOTE: This is separate from ":browser" because it depends on
-# //extensions/browser/api:api_registration, which in turn depends on
-# :browser.
-source_set("core_api_provider") {
-  sources = [
-    "core_extensions_browser_api_provider.cc",
-    "core_extensions_browser_api_provider.h",
-  ]
-
-  deps = [
-    ":browser",
-    "//extensions/browser/api:api_registration",
-  ]
-}
-
+# The set of all browsertests for anything defined under the
+# //extensions/browser module. Note that, unlike the production build targets
+# above, this is a monolithic target that includes all tests for both the core
+# system and relevant APIs.
 source_set("browser_tests") {
   testonly = true
   sources = [
@@ -742,17 +755,18 @@ source_set("browser_tests") {
       "//chromeos/ash/components/dbus/media_analytics",
       "//chromeos/ash/components/dbus/media_analytics:media_perception_proto",
       "//chromeos/ash/components/dbus/upstart",
+      "//chromeos/ash/components/login/login_state",
       "//chromeos/ash/components/network",
       "//chromeos/dbus/permission_broker",
       "//chromeos/dbus/power",
       "//chromeos/dbus/power:power_manager_proto",
-      "//chromeos/login/login_state",
       "//components/crash/content/browser/error_reporting:mock_crash_endpoint",
       "//extensions/common:mojom",
     ]
   }
 }
 
+# The set of sources that are needed for both browser and unit tests.
 source_set("test_support") {
   testonly = true
   sources = [
@@ -816,6 +830,10 @@ source_set("test_support") {
   }
 }
 
+# The set of all unittests for anything defined under the //extensions/browser
+# module. Note that, unlike the production build targets above, this is a
+# monolithic target that includes all tests for both the core system and
+# relevant APIs.
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -829,6 +847,7 @@ source_set("unit_tests") {
     "api/declarative/deduping_factory_unittest.cc",
     "api/declarative/rules_registry_unittest.cc",
     "api/declarative_net_request/composite_matcher_unittest.cc",
+    "api/declarative_net_request/declarative_net_request_prefs_helper_unittest.cc",
     "api/declarative_net_request/file_sequence_helper_unittest.cc",
     "api/declarative_net_request/flat_ruleset_indexer_unittest.cc",
     "api/declarative_net_request/indexed_rule_unittest.cc",
@@ -986,10 +1005,10 @@ source_set("unit_tests") {
       "//chromeos/ash/components/dbus/media_analytics:media_perception_proto",
       "//chromeos/ash/components/dbus/shill",
       "//chromeos/ash/components/dbus/upstart",
+      "//chromeos/ash/components/login/login_state",
       "//chromeos/ash/components/network:test_support",
       "//chromeos/dbus/permission_broker",
       "//chromeos/dbus/power",
-      "//chromeos/login/login_state",
       "//components/feedback",
       "//components/prefs:prefs",
       "//extensions/shell:app_shell_lib",
@@ -1001,5 +1020,34 @@ source_set("unit_tests") {
     "//extensions/browser/extension_function_histogram_value.h",
     "//tools/metrics/histograms/enums.xml",
     "//extensions/browser/api/declarative_net_request/flat/extension_ruleset.fbs",
+  ]
+}
+
+fuzzer_test("extension_file_highlighter_fuzzer") {
+  sources = [ "file_highlighter_fuzzer.cc" ]
+  deps = [
+    ":browser",
+    "//base",
+  ]
+}
+
+fuzzer_test("extension_web_request_form_data_parser_fuzzer") {
+  sources = [ "api/web_request/form_data_parser_fuzzer.cc" ]
+  deps = [
+    ":browser",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("extension_declarative_net_request_indexed_rule_fuzzer") {
+  sources = [ "api/declarative_net_request/indexed_rule_fuzzer.cc" ]
+  deps = [
+    ":browser",
+    "//base",
+    "//extensions/common",
+    "//extensions/common/api",
+    "//third_party/abseil-cpp:absl",
+    "//url",
   ]
 }

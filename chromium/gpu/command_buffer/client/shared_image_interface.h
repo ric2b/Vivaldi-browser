@@ -10,6 +10,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/gpu_export.h"
@@ -17,6 +18,7 @@
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 #include "ui/gfx/buffer_types.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 #if !BUILDFLAG(IS_NACL)
 #include "ui/gfx/native_pixmap.h"
@@ -25,12 +27,12 @@
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include <lib/zx/channel.h>
+#include <lib/zx/eventpair.h>
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 namespace gfx {
 class ColorSpace;
 class GpuFence;
-class GpuMemoryBuffer;
 class Size;
 }  // namespace gfx
 
@@ -76,6 +78,26 @@ class GPU_EXPORT SharedImageInterface {
                                     SkAlphaType alpha_type,
                                     uint32_t usage,
                                     base::span<const uint8_t> pixel_data) = 0;
+
+  // Creates a shared image out an existing buffer. The buffer described by
+  // `buffer_handle` must hold all planes based `format` and `size. `usage` is a
+  // combination of |SharedImageUsage| bits that describes which API(s) the
+  // image will be used with.
+  //
+  // SharedImageInterface keeps ownership of the image until
+  // `DestroySharedImage()` is called or the interface itself is destroyed (e.g.
+  // the GPU channel is lost).
+  //
+  // NOTE: `format` must be a multi-planar format. This is temporary until
+  // support is added for single-planar formats here.
+  virtual Mailbox CreateSharedImage(
+      viz::SharedImageFormat format,
+      const gfx::Size& size,
+      const gfx::ColorSpace& color_space,
+      GrSurfaceOrigin surface_origin,
+      SkAlphaType alpha_type,
+      uint32_t usage,
+      gfx::GpuMemoryBufferHandle buffer_handle) = 0;
 
   // Creates a shared image out of a GpuMemoryBuffer, using |color_space|.
   // |usage| is a combination of |SharedImageUsage| bits that describes which
@@ -166,25 +188,22 @@ class GPU_EXPORT SharedImageInterface {
                                 const Mailbox& mailbox) = 0;
 
 #if BUILDFLAG(IS_FUCHSIA)
-  // Registers a sysmem buffer collection. While the collection exists (i.e.
-  // between RegisterSysmemBufferCollection() and
-  // ReleaseSysmemBufferCollection()) the caller can use CreateSharedImage() to
-  // create shared images from the buffer in the collection by setting
-  // |buffer_collection_id| and |buffer_index| fields in NativePixmapHandle,
-  // wrapping it in GpuMemoryBufferHandle and then creating GpuMemoryBuffer from
-  // that handle.
-  // If |register_with_image_pipe| field is set, a new ImagePipe is created and
-  // |token| is duped to collect ImagePipe constraints. SysmemBufferCollection
-  // is then available for direct presentation.
+  // Registers a sysmem buffer collection. `service_handle` contains a handle
+  // for the eventpair that controls the lifetime of the collection. The
+  // collection will be destroyed when all peer handles for that eventpair are
+  // destroyed (i.e. when `ZX_EVENTPAIR_PEER_CLOSED` is signaled on that
+  // handle). The caller can use CreateSharedImage() to create shared images
+  // from the buffer in the collection by setting `buffer_collection_handle` and
+  // `buffer_index` fields in NativePixmapHandle, wrapping it in
+  // GpuMemoryBufferHandle and then creating a GpuMemoryBuffer from that handle.
+  // If `register_with_image_pipe` field is set, the collection is shared with a
+  // new ImagePipe, which allows it to display these images as overlays.
   virtual void RegisterSysmemBufferCollection(
-      gfx::SysmemBufferCollectionId id,
-      zx::channel token,
+      zx::eventpair service_handle,
+      zx::channel sysmem_token,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
       bool register_with_image_pipe) = 0;
-
-  virtual void ReleaseSysmemBufferCollection(
-      gfx::SysmemBufferCollectionId id) = 0;
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
   // Generates an unverified SyncToken that is released after all previous

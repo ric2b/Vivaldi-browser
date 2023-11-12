@@ -134,7 +134,7 @@ TEST_F(GrammarManagerTest, HandlesSingleGrammarCheckResult) {
                          &mock_suggestion_handler);
   base::HistogramTester histogram_tester;
 
-  manager.OnFocus(1, /*text_input_flags=*/0);
+  manager.OnFocus(1, ui::SpellcheckMode::kUnspecified);
   manager.OnSurroundingTextChanged(u"", 0, 0);
   manager.OnSurroundingTextChanged(u"There is error.", 0, 0);
   task_environment_.FastForwardBy(base::Milliseconds(2500));
@@ -155,7 +155,7 @@ TEST_F(GrammarManagerTest, RecordsUnderlinesMetricsWithoutDups) {
                          &mock_suggestion_handler);
   base::HistogramTester histogram_tester;
 
-  manager.OnFocus(1, /*text_input_flags=*/0);
+  manager.OnFocus(1, ui::SpellcheckMode::kUnspecified);
   manager.OnSurroundingTextChanged(u"", 0, 0);
   manager.OnSurroundingTextChanged(u"There is error error", 0, 0);
   task_environment_.FastForwardBy(base::Milliseconds(2500));
@@ -175,7 +175,7 @@ TEST_F(GrammarManagerTest, DoesNotRunGrammarCheckOnTextFieldWithSpellcheckOff) {
                          &mock_suggestion_handler);
   base::HistogramTester histogram_tester;
 
-  manager.OnFocus(1, ui::TEXT_INPUT_FLAG_SPELLCHECK_OFF);
+  manager.OnFocus(1, ui::SpellcheckMode::kDisabled);
   manager.OnSurroundingTextChanged(u"", 0, 0);
   manager.OnSurroundingTextChanged(u"There is error.", 0, 0);
   task_environment_.FastForwardBy(base::Milliseconds(2500));
@@ -287,7 +287,7 @@ TEST_F(GrammarManagerTest, ShowsAndDismissesGrammarSuggestion) {
   task_environment_.FastForwardBy(base::Milliseconds(2500));
 
   AssistiveWindowProperties expected_properties;
-  expected_properties.type = ui::ime::AssistiveWindowType::kGrammarSuggestion;
+  expected_properties.type = ash::ime::AssistiveWindowType::kGrammarSuggestion;
   expected_properties.candidates = {u"correct"};
   expected_properties.visible = true;
   expected_properties.announce_string = kShowGrammarSuggestionMessage;
@@ -347,7 +347,7 @@ TEST_F(GrammarManagerTest, DismissesSuggestionWhenSelectingARange) {
   task_environment_.FastForwardBy(base::Milliseconds(2500));
 
   AssistiveWindowProperties expected_properties;
-  expected_properties.type = ui::ime::AssistiveWindowType::kGrammarSuggestion;
+  expected_properties.type = ash::ime::AssistiveWindowType::kGrammarSuggestion;
   expected_properties.candidates = {u"correct"};
   expected_properties.visible = true;
   expected_properties.announce_string = kShowGrammarSuggestionMessage;
@@ -384,7 +384,7 @@ TEST_F(GrammarManagerTest, HighlightsAndCommitsGrammarSuggestionWithTab) {
 
   ui::ime::AssistiveWindowButton suggestion_button{
       .id = ui::ime::ButtonId::kSuggestion,
-      .window_type = ui::ime::AssistiveWindowType::kGrammarSuggestion,
+      .window_type = ash::ime::AssistiveWindowType::kGrammarSuggestion,
       .announce_string = kSuggestionButtonMessage,
   };
   EXPECT_CALL(mock_suggestion_handler,
@@ -400,8 +400,8 @@ TEST_F(GrammarManagerTest, HighlightsAndCommitsGrammarSuggestionWithTab) {
       mock_ime_input_context_handler_.delete_surrounding_text_call_count(), 1);
   auto deleteSurroundingTextArg =
       mock_ime_input_context_handler_.last_delete_surrounding_text_arg();
-  EXPECT_EQ(deleteSurroundingTextArg.offset, 9);
-  EXPECT_EQ(deleteSurroundingTextArg.length, 5u);
+  EXPECT_EQ(deleteSurroundingTextArg.num_char16s_before_cursor, 1u);
+  EXPECT_EQ(deleteSurroundingTextArg.num_char16s_after_cursor, 4u);
 
   EXPECT_EQ(mock_ime_input_context_handler_.commit_text_call_count(), 1);
   EXPECT_EQ(mock_ime_input_context_handler_.last_commit_text(), u"correct");
@@ -429,7 +429,7 @@ TEST_F(GrammarManagerTest, HighlightsAndCommitsGrammarSuggestionWithUpArrow) {
 
   ui::ime::AssistiveWindowButton suggestion_button{
       .id = ui::ime::ButtonId::kSuggestion,
-      .window_type = ui::ime::AssistiveWindowType::kGrammarSuggestion,
+      .window_type = ash::ime::AssistiveWindowType::kGrammarSuggestion,
       .announce_string = kSuggestionButtonMessage,
   };
   EXPECT_CALL(mock_suggestion_handler,
@@ -445,8 +445,8 @@ TEST_F(GrammarManagerTest, HighlightsAndCommitsGrammarSuggestionWithUpArrow) {
       mock_ime_input_context_handler_.delete_surrounding_text_call_count(), 1);
   auto deleteSurroundingTextArg =
       mock_ime_input_context_handler_.last_delete_surrounding_text_arg();
-  EXPECT_EQ(deleteSurroundingTextArg.offset, 9);
-  EXPECT_EQ(deleteSurroundingTextArg.length, 5u);
+  EXPECT_EQ(deleteSurroundingTextArg.num_char16s_before_cursor, 1u);
+  EXPECT_EQ(deleteSurroundingTextArg.num_char16s_after_cursor, 4u);
 
   EXPECT_EQ(mock_ime_input_context_handler_.commit_text_call_count(), 1);
   EXPECT_EQ(mock_ime_input_context_handler_.last_commit_text(), u"correct");
@@ -475,12 +475,12 @@ TEST_F(GrammarManagerTest, IgnoresGrammarSuggestion) {
 
   ui::ime::AssistiveWindowButton suggestion_button{
       .id = ui::ime::ButtonId::kSuggestion,
-      .window_type = ui::ime::AssistiveWindowType::kGrammarSuggestion,
+      .window_type = ash::ime::AssistiveWindowType::kGrammarSuggestion,
       .announce_string = kSuggestionButtonMessage,
   };
   ui::ime::AssistiveWindowButton ignore_button{
       .id = ui::ime::ButtonId::kIgnoreSuggestion,
-      .window_type = ui::ime::AssistiveWindowType::kGrammarSuggestion,
+      .window_type = ash::ime::AssistiveWindowType::kGrammarSuggestion,
       .announce_string = kIgnoreButtonMessage,
   };
 

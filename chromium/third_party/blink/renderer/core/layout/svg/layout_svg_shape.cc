@@ -347,7 +347,8 @@ AffineTransform LayoutSVGShape::ComputeRootTransform() const {
   const LayoutObject* root = this;
   while (root && !root->IsSVGRoot())
     root = root->Parent();
-  return LocalToAncestorTransform(To<LayoutSVGRoot>(root)).ToAffineTransform();
+  return AffineTransform::FromTransform(
+      LocalToAncestorTransform(To<LayoutSVGRoot>(root)));
 }
 
 AffineTransform LayoutSVGShape::ComputeNonScalingStrokeTransform() const {
@@ -375,7 +376,7 @@ void LayoutSVGShape::UpdateNonScalingStrokeData() {
   const AffineTransform transform = ComputeNonScalingStrokeTransform();
   auto& rare_data = EnsureRareData();
   if (rare_data.non_scaling_stroke_transform_ != transform) {
-    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kStyle);
+    SetShouldDoFullPaintInvalidation();
     rare_data.non_scaling_stroke_transform_ = transform;
   }
 

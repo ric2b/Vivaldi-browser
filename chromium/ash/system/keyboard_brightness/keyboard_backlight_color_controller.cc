@@ -13,11 +13,15 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/keyboard_brightness/keyboard_backlight_color_nudge_controller.h"
+#include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-shared.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "chromeos/dbus/power/power_manager_client.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/session_manager_types.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace ash {
@@ -46,13 +50,15 @@ bool ShouldUseDefaultColor(SkColor color) {
 KeyboardBacklightColorController::KeyboardBacklightColorController()
     : keyboard_backlight_color_nudge_controller_(
           std::make_unique<KeyboardBacklightColorNudgeController>()) {
-  wallpaper_controller_observation_.Observe(WallpaperController::Get());
+  Shell::Get()->rgb_keyboard_manager()->AddObserver(this);
 }
 
-KeyboardBacklightColorController::~KeyboardBacklightColorController() = default;
+KeyboardBacklightColorController::~KeyboardBacklightColorController() {
+  Shell::Get()->rgb_keyboard_manager()->RemoveObserver(this);
+}
 
 // static
-void KeyboardBacklightColorController::RegisterProfilePrefs(
+void KeyboardBacklightColorController::RegisterPrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kPersonalizationKeyboardBacklightColor,
@@ -64,6 +70,7 @@ void KeyboardBacklightColorController::SetBacklightColor(
     const AccountId& account_id) {
   DisplayBacklightColor(backlight_color);
   SetBacklightColorPref(backlight_color, account_id);
+  MaybeToggleOnKeyboardBrightness();
 }
 
 personalization_app::mojom::BacklightColor
@@ -73,14 +80,47 @@ KeyboardBacklightColorController::GetBacklightColor(
   if (account_id.empty())
     return personalization_app::mojom::BacklightColor::kWallpaper;
   auto* pref_service = GetUserPrefService(account_id);
-  if (!pref_service) {
-    // TODO(b/238463679): Migrate to local state pref. There may be a timing
-    // issue that results in null pref service. Defaults to |kWallpaper| when
-    // that happens.
-    return personalization_app::mojom::BacklightColor::kWallpaper;
-  }
+  DCHECK(pref_service);
   return static_cast<personalization_app::mojom::BacklightColor>(
       pref_service->GetInteger(prefs::kPersonalizationKeyboardBacklightColor));
+}
+
+void KeyboardBacklightColorController::OnRgbKeyboardSupportedChanged(
+    bool supported) {
+  if (supported) {
+    if (!session_observer_.IsObserving()) {
+      auto* session_controller = Shell::Get()->session_controller();
+      DCHECK(session_controller);
+
+      session_observer_.Observe(session_controller);
+
+      // Since |session_observer_| does not start observing until after Chrome
+      // is initially started, the rgb keyboard needs to be initiallized based
+      // on state from the |SessionController|.
+      OnSessionStateChanged(session_controller->GetSessionState());
+      if (session_controller->IsActiveUserSessionStarted()) {
+        OnActiveUserPrefServiceChanged(
+            session_controller->GetActivePrefService());
+      }
+    }
+    if (!wallpaper_controller_observation_.IsObserving()) {
+      auto* wallpaper_controller = Shell::Get()->wallpaper_controller();
+      DCHECK(wallpaper_controller);
+
+      wallpaper_controller_observation_.Observe(wallpaper_controller);
+
+      // Since |wallpaper_controller_observation_| does not start observering
+      // until after Chrome is initially started, the rgb keyboard needs to be
+      // initialized to match the wallpaper if the colors have been calculated
+      // before.
+      if (wallpaper_controller->GetKMeanColor() != kInvalidWallpaperColor) {
+        OnWallpaperColorsChanged();
+      }
+    }
+  } else {
+    session_observer_.Reset();
+    wallpaper_controller_observation_.Reset();
+  }
 }
 
 void KeyboardBacklightColorController::OnSessionStateChanged(
@@ -151,6 +191,23 @@ void KeyboardBacklightColorController::SetBacklightColorPref(
   GetUserPrefService(account_id)
       ->SetInteger(prefs::kPersonalizationKeyboardBacklightColor,
                    static_cast<int>(backlight_color));
+}
+
+void KeyboardBacklightColorController::MaybeToggleOnKeyboardBrightness() {
+  DVLOG(1) << __func__ << " getting keyboard brightness";
+  chromeos::PowerManagerClient::Get()->GetKeyboardBrightnessPercent(
+      base::BindOnce(
+          &KeyboardBacklightColorController::KeyboardBrightnessPercentReceived,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void KeyboardBacklightColorController::KeyboardBrightnessPercentReceived(
+    absl::optional<double> percentage) {
+  if (!percentage.has_value() || percentage.value() == 0.0) {
+    DVLOG(1) << __func__ << " Toggling on the keyboard brightness.";
+    // TODO(b/244139677): Calls API to turn on the keyboard brightness.
+    keyboard_brightness_on_for_testing_ = true;
+  }
 }
 
 }  // namespace ash

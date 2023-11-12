@@ -19,9 +19,12 @@ import ("//vivaldi/gn/config/product_configs.gni")
 declare_args() {
   vivaldi_signing_id = ""
   vivaldi_signing_key = ""
-  vivaldi_signing_command = ""
   vivaldi_notarize_account = ""
   vivaldi_notarize_password = ""
+}
+
+if (is_win) {
+  vivaldi_win_sdk_version = "10.0.20348.0"
 }
 
 default_chrome_lint_targets = ["//chrome/android:chrome_public_apk__lint"]

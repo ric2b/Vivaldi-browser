@@ -13,54 +13,38 @@
 #error "This file requires ARC support."
 #endif
 
+#pragma mark - Feature declarations
+
 BASE_FEATURE(kEnableDiscoverFeedPreview,
              "EnableDiscoverFeedPreview",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDiscoverFeedGhostCardsEnabled,
-             "DiscoverFeedGhostCardsEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableDiscoverFeedDiscoFeedEndpoint,
-             "EnableDiscoFeedEndpoint",
+BASE_FEATURE(kEnableDiscoverFeedGhostCards,
+             "EnableDiscoverFeedGhostCards",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableDiscoverFeedStaticResourceServing,
              "EnableDiscoverFeedStaticResourceServing",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableDiscoverFeedDiscoFeedEndpoint,
+             "EnableDiscoFeedEndpoint",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnableDiscoverFeedTopSyncPromo,
              "EnableDiscoverFeedTopSyncPromo",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kFollowingFeedDefaultSortType,
-             "FollowingFeedDefaultSortType",
+BASE_FEATURE(kEnableFollowingFeedDefaultSortType,
+             "EnableFollowingFeedDefaultSortType",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// A parameter value for the number of impressions before autodismissing the
-// promo.
-const char kDiscoverFeedTopSyncPromoAutodismissImpressions[] =
-    "autodismissImpressions";
-
-const char kDiscoverFeedSRSReconstructedTemplatesEnabled[] =
-    "DiscoverFeedSRSReconstructedTemplatesEnabled";
-
-const char kDiscoverFeedSRSPreloadTemplatesEnabled[] =
-    "DiscoverFeedSRSPreloadTemplatesEnabled";
-
-BASE_FEATURE(kNTPViewHierarchyRepair,
+BASE_FEATURE(kEnableNTPViewHierarchyRepair,
              "NTPViewHierarchyRepair",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-const char kDiscoverFeedTopSyncPromoStyleFullWithTitle[] = "fullWithTitle";
-const char kDiscoverFeedTopSyncPromoStyleCompact[] = "compact";
-
-const char kFollowingFeedDefaultSortTypeSortByLatest[] = "SortByLatest";
-const char kFollowingFeedDefaultSortTypeGroupedByPublisher[] =
-    "GroupedByPublisher";
-
 BASE_FEATURE(kEnableFeedAblation,
-             "FeedAblationEnabled",
+             "EnableFeedAblation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableCheckVisibilityOnAttentionLogStart,
@@ -71,16 +55,62 @@ BASE_FEATURE(kEnableRefineDataSourceReloadReporting,
              "EnableRefineDataSourceReloadReporting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kFeedHeaderSettings,
+             "FeedHeaderSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kOverrideFeedSettings,
+             "OverrideFeedSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#pragma mark - Feature parameters
+
+const char kDiscoverFeedSRSReconstructedTemplatesEnabled[] =
+    "DiscoverFeedSRSReconstructedTemplatesEnabled";
+
+const char kDiscoverFeedSRSPreloadTemplatesEnabled[] =
+    "DiscoverFeedSRSPreloadTemplatesEnabled";
+
+// EnableDiscoverFeedTopSyncPromo parameters.
+const char kDiscoverFeedTopSyncPromoAutodismissImpressions[] =
+    "autodismissImpressions";
+const char kDiscoverFeedTopSyncPromoStyleFullWithTitle[] = "fullWithTitle";
+const char kDiscoverFeedTopSyncPromoStyleCompact[] = "compact";
+
+// EnableFollowingFeedDefaultSortType parameters.
+const char kFollowingFeedDefaultSortTypeSortByLatest[] = "SortByLatest";
+const char kFollowingFeedDefaultSortTypeGroupedByPublisher[] =
+    "GroupedByPublisher";
+
+// Feature parameters for `kFeedHeaderSettings`.
+const char kEnableDotForNewFollowedContent[] =
+    "kEnableDotForNewFollowedContent";
+const char kDisableStickyHeaderForFollowingFeed[] =
+    "DisableStickyHeaderForFollowingFeed";
+const char kOverrideFeedHeaderHeight[] = "OverrideFeedHeaderHeight";
+
+// Feature parameters for `kOverrideFeedSettings`.
+const char kFeedSettingRefreshThresholdInSeconds[] =
+    "RefreshThresholdInSeconds";
+const char kFeedSettingMaximumDataCacheAgeInSeconds[] =
+    "MaximumDataCacheAgeInSeconds";
+const char kFeedSettingTimeoutThresholdAfterClearBrowsingData[] =
+    "TimeoutThresholdAfterClearBrowsingData";
+const char kFeedSettingDiscoverReferrerParameter[] =
+    "DiscoverReferrerParameter";
+
+#pragma mark - Helpers
+
 bool IsDiscoverFeedPreviewEnabled() {
   return base::FeatureList::IsEnabled(kEnableDiscoverFeedPreview);
 }
 
 bool IsDiscoverFeedGhostCardsEnabled() {
-  return base::FeatureList::IsEnabled(kDiscoverFeedGhostCardsEnabled);
+  return base::FeatureList::IsEnabled(kEnableDiscoverFeedGhostCards);
 }
 
 bool IsNTPViewHierarchyRepairEnabled() {
-  return base::FeatureList::IsEnabled(kNTPViewHierarchyRepair);
+  return base::FeatureList::IsEnabled(kEnableNTPViewHierarchyRepair);
 }
 
 bool IsDiscoverFeedTopSyncPromoEnabled() {
@@ -100,12 +130,12 @@ int FeedSyncPromoAutodismissCount() {
 }
 
 bool IsFollowingFeedDefaultSortTypeEnabled() {
-  return base::FeatureList::IsEnabled(kFollowingFeedDefaultSortType);
+  return base::FeatureList::IsEnabled(kEnableFollowingFeedDefaultSortType);
 }
 
 bool IsDefaultFollowingFeedSortTypeGroupedByPublisher() {
   return base::GetFieldTrialParamByFeatureAsBool(
-      kFollowingFeedDefaultSortType,
+      kEnableFollowingFeedDefaultSortType,
       kFollowingFeedDefaultSortTypeGroupedByPublisher, true);
 }
 
@@ -125,4 +155,21 @@ bool IsCheckVisibilityOnAttentionLogStartEnabled() {
 
 bool IsRefineDataSourceReloadReportingEnabled() {
   return base::FeatureList::IsEnabled(kEnableRefineDataSourceReloadReporting);
+}
+
+bool IsStickyHeaderDisabledForFollowingFeed() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kFeedHeaderSettings, kDisableStickyHeaderForFollowingFeed, false);
+}
+
+bool IsDotEnabledForNewFollowedContent() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kFeedHeaderSettings, kEnableDotForNewFollowedContent, false);
+}
+
+int FollowingFeedHeaderHeight() {
+  int defaultWebChannelsHeaderHeight = 52;
+  return base::GetFieldTrialParamByFeatureAsInt(kFeedHeaderSettings,
+                                                kOverrideFeedHeaderHeight,
+                                                defaultWebChannelsHeaderHeight);
 }

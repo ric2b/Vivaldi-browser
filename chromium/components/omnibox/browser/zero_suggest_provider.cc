@@ -80,7 +80,7 @@ enum class Eligibility {
 enum class Event {
   // Cached response was synchronously converted to displayed matches.
   // Recorded for non-prefetch requests only.
-  KCachedResponseConvertedToMatches = 0,
+  kCachedResponseConvertedToMatches = 0,
   // Remote request was sent.
   kRequestSent = 1,
   // Remote request was invalidated.
@@ -251,8 +251,8 @@ bool StoreRemoteResponse(const std::string& response_json,
   if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestInMemoryCaching)) {
     auto* zero_suggest_cache_service = client->GetZeroSuggestCacheService();
     if (zero_suggest_cache_service != nullptr) {
-      zero_suggest_cache_service->StoreZeroSuggestResponse(page_url,
-                                                           response_json);
+      ZeroSuggestCacheService::CacheEntry entry(response_json);
+      zero_suggest_cache_service->StoreZeroSuggestResponse(page_url, entry);
       LogEvent(Event::kRemoteResponseCached, result_type, is_prefetch);
     }
   } else {
@@ -290,8 +290,9 @@ bool ReadStoredResponse(const AutocompleteProviderClient* client,
   if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestInMemoryCaching)) {
     auto* zero_suggest_cache_service = client->GetZeroSuggestCacheService();
     if (zero_suggest_cache_service != nullptr) {
-      response_json =
+      ZeroSuggestCacheService::CacheEntry entry =
           zero_suggest_cache_service->ReadZeroSuggestResponse(page_url);
+      response_json = entry.response_json;
     }
   } else {
     response_json = omnibox::GetUserPreferenceForZeroSuggestCachedResponse(
@@ -487,7 +488,7 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
   if (ReadStoredResponse(client(), GetZeroSuggestInput(input, client()),
                          result_type_running_, &results)) {
     ConvertSuggestResultsToAutocompleteMatches(results, input);
-    LogEvent(Event::KCachedResponseConvertedToMatches, result_type_running_,
+    LogEvent(Event::kCachedResponseConvertedToMatches, result_type_running_,
              /*is_prefetch=*/false);
   }
 

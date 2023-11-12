@@ -37,7 +37,7 @@ typedef base::OnceCallback<void(base::FilePath)> SetPrefCallback;
 void SetShowGitDirectoryWarningOnActiveProfile(base::FilePath git_root) {
 #if !BUILDFLAG(IS_ANDROID)
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Profile* profile = ProfileManager::GetActiveUserProfile();
+  Profile* profile = ProfileManager::GetLastUsedProfile();
   PrefService* pref_service = profile->GetPrefs();
   pref_service->SetFilePath(vivaldiprefs::kStartupShowGitDirectoryWarning,
                             git_root);

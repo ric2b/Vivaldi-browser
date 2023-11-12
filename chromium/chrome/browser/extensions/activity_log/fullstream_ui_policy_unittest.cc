@@ -21,7 +21,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -109,7 +108,7 @@ class FullStreamUIPolicyTest : public testing::Test {
     // when the timeout triggers then assume that the test is broken.
     base::CancelableOnceClosure timeout(
         base::BindOnce(&FullStreamUIPolicyTest::TimeoutCallback));
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, timeout.callback(), TestTimeouts::action_timeout());
 
     // Wait for results; either the checker or the timeout callbacks should
@@ -346,7 +345,7 @@ TEST_F(FullStreamUIPolicyTest, Construct) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   scoped_refptr<Action> action = new Action(extension->id(),
@@ -367,7 +366,7 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchActions) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -405,7 +404,7 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchFilteredActions) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -485,7 +484,7 @@ TEST_F(FullStreamUIPolicyTest, LogWithArguments) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
 
@@ -777,7 +776,7 @@ TEST_F(FullStreamUIPolicyTest, DeleteDatabase) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");

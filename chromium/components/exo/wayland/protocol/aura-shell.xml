@@ -24,7 +24,7 @@
     DEALINGS IN THE SOFTWARE.
   </copyright>
 
-  <interface name="zaura_shell" version="42">
+  <interface name="zaura_shell" version="49">
     <description summary="aura_shell">
       The global interface exposing aura shell capabilities is used to
       instantiate an interface extension for a wl_surface object.
@@ -160,7 +160,7 @@
     </request>
   </interface>
 
-  <interface name="zaura_surface" version="38">
+  <interface name="zaura_surface" version="47">
     <description summary="aura shell interface to a wl_surface">
       An additional interface to a wl_surface object, which allows the
       client to access aura shell specific functionality for surface.
@@ -296,7 +296,7 @@
     <enum name="fullscreen_mode">
       <description
         summary="Specifies the behavior of the surface in fullscreen.">
-          Possible windowing system behaviors if this surface were to go
+          [Deprecated] Possible windowing system behaviors if this surface were to go
           fullscreen.
       </description>
       <entry
@@ -312,6 +312,7 @@
 
     <request name="set_fullscreen_mode" since="10">
       <description summary="Sets the behavior of the surface in fullscreen.">
+        [Deprecated] Use the set_fullscreen_mode in the toplevel interface.
         Suggests how the windowing system should behave if this surface were
         to go fullscreen. Does not make the surface fullscreen.
 
@@ -352,6 +353,7 @@
 
     <request name="intent_to_snap" since="16">
       <description summary="client intents to snap the surface.">
+        [Deprecated] Use intent_to_snap on zaura_toplevel.
         Notify (or inform) the server the client's intent to snap the window.
         To inform it's no longer willing to snap, send 'none'.
       </description>
@@ -360,18 +362,21 @@
 
     <request name="set_snap_left" since="16">
       <description summary="snap the surface to the left.">
+        [Deprecated] Use set_snap_primary on zaura_toplevel.
         Request that surface is snapped to the left.
       </description>
     </request>
 
     <request name="set_snap_right" since="16">
       <description summary="snap the surface to the right.">
+        [Deprecated] Use set_snap_secondary on zaura_toplevel.
         Request that surface is snapped to the right.
       </description>
     </request>
 
     <request name="unset_snap" since="16">
       <description summary="Unset the surface snap.">
+        [Deprecated] Use unset_snap on zaura_toplevel.
         Request that surface resets snapping.
       </description>
     </request>
@@ -534,9 +539,58 @@
   See zaura_shell.release for destructor naming.
       </description>
     </request>
+
+    <!-- Version 47 additions -->
+    <request name="show_tooltip" since="47">
+      <description summary="show tooltip window">
+        Show tooltip on server side.
+        `x` and `y` specifies the location of tooltip in surface local coordinates.
+        `hide_delay` and `show_delay` specify the time to wait until showing/hiding tooltip.
+        The unit is millisecond.
+      </description>
+      <arg name="text" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="tooltip_trigger" type="uint" summary="tooltip_trigger enum"/>
+      <arg name="show_delay" type="uint" summary="delay to show tooltip in millisecond"/>
+      <arg name="hide_delay" type="uint" summary="delay to hide tooltip in millisecond"/>
+    </request>
+
+    <enum name="tooltip_trigger">
+      <description summary="type of tooltip trigger">
+        Describes what triggered tooltip
+      </description>
+      <entry name="cursor" value="0" summary="triggered by cursor"/>
+      <entry name="keyboard" value="1" summary="triggered by keyboard"/>
+    </enum>
+
+    <request name="hide_tooltip" since="47">
+      <description summary="hide tooltip window">
+        Hide tooltip created by the same client on server side.
+        This may be called even when there is no tooltip window to hide.
+      </description>
+    </request>
+
+    <event name="tooltip_shown" since="47">
+      <description summary="tooltip is shown by server side">
+        Informs the client that the tooltip is shown with states.
+        `x` and `y` specifies the location of tooltip in surface local coordinates.
+      </description>
+      <arg name="text" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="tooltip_hidden" since="47">
+      <description summary="tooltip is hidden by server side">
+        Informs the client that the tooltip is hidden.
+      </description>
+    </event>
   </interface>
 
-  <interface name="zaura_output" version="38">
+  <interface name="zaura_output" version="45">
     <description summary="aura shell interface to a wl_output">
       An additional interface to a wl_output object, which allows the
       client to access aura shell specific functionality for output.
@@ -682,9 +736,26 @@
   See zaura_shell.release for destructor naming.
       </description>
     </request>
+
+    <event name="display_id" since="43">
+      <description summary="advertise the output's display id">
+        This event describes the 64bit display id assigned to each display by ChromeOS.
+	The value is opaque and should not be interpreted.
+      </description>
+      <arg name="display_id_hi" type="uint"/>
+      <arg name="display_id_lo" type="uint"/>
+    </event>
+
+    <!-- Version 45 additions -->
+    <event name="activated" since="45">
+      <description summary="target display for new windows">
+        Notifies that this output is now active output. It is typically used as a
+        target when a new window is created without specific bounds.
+      </description>
+    </event>
   </interface>
 
-  <interface name="zaura_toplevel" version="42">
+  <interface name="zaura_toplevel" version="49">
     <description summary="aura shell interface to the toplevel shell">
       An interface to the toplevel shell, which allows the
       client to access shell specific functionality.
@@ -733,20 +804,21 @@
 	Request a new location and bounds of the surface in DP screen
 	coordinates.  The size will be applied to visible bounds used
 	in set_geometry.  The output is a hint for the compositor to
-	determine which output the window should move to.  These
-	parameters are just a request and the compositor may ignore,
-	adjust the size and position based on the rule imposed by the
-	window manager, or may preserve it for future operations. For
-	example, the compositor will not allow a position outside of
-	the output, or the compositor may just store it if the
-	toplevel surface is in maximiezd state, and may use it upon
-	unmaximized.
+	determine which output the window should move to. If the
+	output is null, the compositor should make decision solely by
+	the given bounds. These parameters are just a request and the
+	compositor may ignore, adjust the size and position based on
+	the rule imposed by the window manager, or may preserve it for
+	future operations. For example, the compositor will not allow
+	a position outside of the output, or the compositor may just
+	store it if the toplevel surface is in maximiezd state, and
+	may use it upon unmaximized.
       </description>
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
       <arg name="width" type="int"/>
       <arg name="height" type="int"/>
-      <arg name="output" type="object" interface="wl_output" summary="the output"/>
+      <arg name="output" type="object" interface="wl_output" summary="the output" allow-null="true"/>
     </request>
 
     <event name="configure" since="29">
@@ -921,7 +993,7 @@
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
       <arg name="output" type="object" interface="wl_output" allow-null="true"
-           summary="output to contain the surface"/>
+        summary="output to contain the surface"/>
     </request>
 
     <request name="activate" since="42">
@@ -940,9 +1012,95 @@
         if it deems the client to be misbehaving.
       </description>
     </request>
+
+    <!-- Version 44 additions -->
+    <enum name="fullscreen_mode">
+      <description
+        summary="Specifies the behavior of the surface in fullscreen.">
+          Possible windowing system behaviors if this surface were to go
+          fullscreen.
+      </description>
+       <entry
+        name="plain"
+        value="0"
+        summary="user cannot access system UIs using mouse/touches"/>
+      <entry
+        name="immersive"
+        value="1"
+        summary="user can access system UIs such as the shelf and window frame
+          by pointing to, or swiping over, the screen edge"/>
+    </enum>
+
+    <request name="set_fullscreen_mode" since="44">
+      <description summary="Sets the behavior of the surface in fullscreen.">
+        Suggests how the windowing manager should behave if this surface were
+        to go fullscreen. Does not make the surface fullscreen.
+      </description>
+      <arg name="mode" type="uint" enum="fullscreen_mode"/>
+    </request>
+
+    <!-- Version 46 additions -->
+    <request name="set_scale_factor" since="46">
+      <description summary="Allows the client to set the scale factor for the future buffer commits.">
+        The client has a 32-bit float scale factor that is associated with each
+        zaura toplevel. This scale factor must be propagated exactly to exo. To
+        do so we reinterpret_cast into a 32-bit uint and later cast back into a
+        float. This is because wayland does not support native transport of
+        floats. As different CPU architectures may use different endian
+        representations for IEEE 754 floats, this protocol implicitly assumes
+        that the caller and receiver are the same machine. To avoid redundant
+        messages, this request needs to only be called once when the zaura
+        toplevel scale factor changes. This is double buffered state and will be
+        applied in the next commit.
+      </description>
+      <arg name="scale_factor_as_uint" type="uint"/>
+    </request>
+
+      <!-- Version 48 additions-->
+    <request name="set_snap_primary" since="48">
+      <description summary="snap the surface to the primary snap position.">
+        Request that surface is snapped to the left or top if primary layout,
+        right or bottom otherwise.
+      </description>/>
+      <arg name="snap_ratio_as_uint" type="uint"/>
+    </request>
+
+    <request name="set_snap_secondary" since="48">
+      <description summary="snap the surface to the secondary snap position.">
+        Request that surface is snapped to the right or bottom if primary
+        layout, left or top otherwise.
+      </description>
+      <arg name="snap_ratio_as_uint" type="uint"/>
+    </request>
+
+    <!-- Version 49 additions-->
+    <enum name="snap_direction">
+      <description summary="window snap directions">
+        Window snap directions.
+      </description>
+      <entry name="none" value="0" summary="unsnap the window"/>
+      <entry name="primary" value="1" summary="snap the window to the left or
+        top in primary layout, right or bottom in secondary layout"/>
+      <entry name="secondary" value="2" summary="snap the window to the right
+        or bottom in primary layout, top or left in secondary layout"/>
+    </enum>
+
+    <request name="intent_to_snap" since="49">
+      <description summary="client intents to snap the surface.">
+        Notify (or inform) the server the client's intent to snap the window.
+        To inform it's no longer willing to snap, send 'none'.
+      </description>
+      <arg name="direction" type="uint" enum="snap_direction"/>
+    </request>
+
+    <request name="unset_snap" since="49">
+      <description summary="Unset the window snap.">
+        Request that window unsets snapping.
+      </description>
+    </request>
   </interface>
 
-  <interface name="zaura_popup" version="38">
+  <interface name="zaura_popup" version="46">
     <description summary="aura shell interface to the popup shell">
       An interface to the popup shell, which allows the
       client to access shell specific functionality.
@@ -989,6 +1147,22 @@
 
   See zaura_shell.release for destructor naming.
       </description>
+    </request>
+
+    <!-- Version 46 additions -->
+    <request name="set_scale_factor" since="46">
+      <description summary="Allows the client to set the scale factor for the future buffer commits.">
+        The client has a 32-bit float scale factor that is associated with each
+        zaura popup. This scale factor must be propagated exactly to exo. To
+        do so we reinterpret_cast into a 32-bit uint and later cast back into a
+        float. This is because wayland does not support native transport of
+        floats. As different CPU architectures may use different endian
+        representations for IEEE 754 floats, this protocol implicitly assumes
+        that the caller and receiver are the same machine. To avoid redundant
+        messages, this request needs to only be called once when the zaura
+        popup's scale factor changes.
+      </description>
+      <arg name="scale_factor_as_uint" type="uint"/>
     </request>
   </interface>
 </protocol>

@@ -13,7 +13,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -78,7 +77,7 @@ std::vector<ash::NotifierMetadata> PwaNotifierController::GetNotifierList(
         std::make_pair(app_data.publisher_id, app_data.app_id));
   }
   if (!package_to_app_ids_.empty()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&PwaNotifierController::CallLoadIcons,
                                   weak_ptr_factory_.GetWeakPtr()));
   }
@@ -101,12 +100,7 @@ void PwaNotifierController::SetNotifierEnabled(
       /*is_managed=*/false);
   apps::AppServiceProxy* service =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
-    service->SetPermission(notifier_id.id, std::move(permission));
-  } else {
-    service->SetPermission(
-        notifier_id.id, apps::ConvertPermissionToMojomPermission(permission));
-  }
+  service->SetPermission(notifier_id.id, std::move(permission));
 }
 
 void PwaNotifierController::CallLoadIcons() {

@@ -24,6 +24,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/renderer/platform/testing/histogram_tester.h"
 #include "third_party/blink/renderer/platform/video_capture/gpu_memory_buffer_test_support.h"
 #include "third_party/blink/renderer/platform/video_capture/video_capture_impl.h"
@@ -158,10 +159,10 @@ class VideoCaptureImplTest : public ::testing::Test {
   };
 
   VideoCaptureImplTest()
-      : video_capture_impl_(
-            new VideoCaptureImpl(session_id_,
-                                 base::ThreadTaskRunnerHandle::Get(),
-                                 &GetEmptyBrowserInterfaceBroker())) {
+      : video_capture_impl_(new VideoCaptureImpl(
+            session_id_,
+            scheduler::GetSingleThreadTaskRunnerForTesting(),
+            &GetEmptyBrowserInterfaceBroker())) {
     params_small_.requested_format = media::VideoCaptureFormat(
         gfx::Size(176, 144), 30, media::PIXEL_FORMAT_I420);
     params_large_.requested_format = media::VideoCaptureFormat(
@@ -289,6 +290,8 @@ TEST_F(VideoCaptureImplTest, Simple) {
 
   histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartOutcome",
                                       VideoCaptureStartOutcome::kStarted, 1);
+  histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartErrorCode",
+                                      media::VideoCaptureError::kNone, 1);
 }
 
 TEST_F(VideoCaptureImplTest, TwoClientsInSequence) {
@@ -731,6 +734,8 @@ TEST_F(VideoCaptureImplTest, AlreadyStarted) {
 
   histogram_tester.ExpectTotalCount("Media.VideoCapture.Start", 1);
   histogram_tester.ExpectTotalCount("Media.VideoCapture.StartOutcome", 1);
+  histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartErrorCode",
+                                      media::VideoCaptureError::kNone, 1);
 }
 
 TEST_F(VideoCaptureImplTest, EndedBeforeStop) {
@@ -766,6 +771,8 @@ TEST_F(VideoCaptureImplTest, ErrorBeforeStop) {
   // Successful start before the error, so StartOutcome is kStarted.
   histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartOutcome",
                                       VideoCaptureStartOutcome::kStarted, 1);
+  histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartErrorCode",
+                                      media::VideoCaptureError::kNone, 1);
 }
 
 TEST_F(VideoCaptureImplTest, WinSystemPermissionsErrorUpdatesCorrectState) {
@@ -921,6 +928,9 @@ TEST_F(VideoCaptureImplTest, StartTimeout) {
   histogram_tester.ExpectTotalCount("Media.VideoCapture.Start", 1);
   histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartOutcome",
                                       VideoCaptureStartOutcome::kTimedout, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Media.VideoCapture.StartErrorCode",
+      media::VideoCaptureError::kVideoCaptureImplTimedOutOnStart, 1);
 }
 
 TEST_F(VideoCaptureImplTest, StartTimeout_FeatureDisabled) {
@@ -950,6 +960,8 @@ TEST_F(VideoCaptureImplTest, StartTimeout_FeatureDisabled) {
   histogram_tester.ExpectTotalCount("Media.VideoCapture.Start", 1);
   histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartOutcome",
                                       VideoCaptureStartOutcome::kStarted, 1);
+  histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartErrorCode",
+                                      media::VideoCaptureError::kNone, 1);
 }
 
 TEST_F(VideoCaptureImplTest, ErrorBeforeStart) {
@@ -970,6 +982,9 @@ TEST_F(VideoCaptureImplTest, ErrorBeforeStart) {
   histogram_tester.ExpectTotalCount("Media.VideoCapture.Start", 1);
   histogram_tester.ExpectUniqueSample("Media.VideoCapture.StartOutcome",
                                       VideoCaptureStartOutcome::kFailed, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Media.VideoCapture.StartErrorCode",
+      media::VideoCaptureError::kIntentionalErrorRaisedByUnitTest, 1);
 }
 
 #if BUILDFLAG(IS_WIN)

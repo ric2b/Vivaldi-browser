@@ -31,6 +31,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "url/gurl.h"
 
 static_assert(!BUILDFLAG(IS_CHROMEOS_LACROS), "For non-Lacros only");
@@ -94,6 +95,12 @@ class WebApps : public apps::PublisherBase,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 apps::LoadIconCallback callback) override;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  void GetCompressedIconData(const std::string& app_id,
+                             int32_t size_in_dip,
+                             ui::ResourceScaleFactor scale_factor,
+                             apps::LoadIconCallback callback) override;
+#endif
   void Launch(const std::string& app_id,
               int32_t event_flags,
               apps::LaunchSource launch_source,
@@ -133,28 +140,7 @@ class WebApps : public apps::PublisherBase,
   // apps::mojom::Publisher overrides.
   void Connect(mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
                apps::mojom::ConnectOptionsPtr opts) override;
-  void Launch(const std::string& app_id,
-              int32_t event_flags,
-              apps::mojom::LaunchSource launch_source,
-              apps::mojom::WindowInfoPtr window_info) override;
-  void LaunchAppWithFiles(const std::string& app_id,
-                          int32_t event_flags,
-                          apps::mojom::LaunchSource launch_source,
-                          apps::mojom::FilePathsPtr file_paths) override;
-  void LaunchAppWithIntent(const std::string& app_id,
-                           int32_t event_flags,
-                           apps::mojom::IntentPtr intent,
-                           apps::mojom::LaunchSource launch_source,
-                           apps::mojom::WindowInfoPtr window_info,
-                           LaunchAppWithIntentCallback callback) override;
-  void SetPermission(const std::string& app_id,
-                     apps::mojom::PermissionPtr permission) override;
   void OpenNativeSettings(const std::string& app_id) override;
-  void SetWindowMode(const std::string& app_id,
-                     apps::mojom::WindowMode window_mode) override;
-  void SetRunOnOsLoginMode(
-      const std::string& app_id,
-      apps::mojom::RunOnOsLoginMode run_on_os_login_mode) override;
 
   // WebAppPublisherHelper::Delegate overrides.
   void PublishWebApps(std::vector<apps::AppPtr> apps) override;
@@ -172,17 +158,9 @@ class WebApps : public apps::PublisherBase,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // apps::mojom::Publisher overrides.
-  void Uninstall(const std::string& app_id,
-                 apps::mojom::UninstallSource uninstall_source,
-                 bool clear_site_data,
-                 bool report_abuse) override;
   void PauseApp(const std::string& app_id) override;
   void UnpauseApp(const std::string& app_id) override;
   void StopApp(const std::string& app_id) override;
-  void GetMenuModel(const std::string& app_id,
-                    apps::mojom::MenuType menu_type,
-                    int64_t display_id,
-                    GetMenuModelCallback callback) override;
   // menu_type is stored as |shortcut_id|.
   void ExecuteContextMenuCommand(const std::string& app_id,
                                  int command_id,

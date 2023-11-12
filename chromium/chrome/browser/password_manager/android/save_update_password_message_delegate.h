@@ -101,6 +101,10 @@ class SaveUpdatePasswordMessageDelegate {
       bool update_password,
       bool unified_password_manager);
 
+  std::u16string GetUnifiedPasswordManagerMessageDescription(
+      bool update_password);
+  std::u16string GetExploratoryStringsMessageDescription(bool update_password);
+
   // Returns string id for the message primary button. Takes into account
   // whether this is save or update password scenario and whether the update
   // message will be followed by a username confirmation dialog.
@@ -108,8 +112,9 @@ class SaveUpdatePasswordMessageDelegate {
                              bool use_followup_button_text);
 
   // Populates |usernames| with the list of usernames from best saved matches to
-  // be presented to the user in a dropdown. Returns the index of the username
-  // that matches the one from pending credentials.
+  // be presented to the user in a dropdown.
+  // Returns the vector index of the currently pending username in
+  // the form manager.
   unsigned int GetDisplayUsernames(std::vector<std::u16string>* usernames);
 
   // Following methods handle events associated with user interaction with UI.

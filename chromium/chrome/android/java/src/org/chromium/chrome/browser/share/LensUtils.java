@@ -51,13 +51,13 @@ public class LensUtils {
      *         available.
      */
     public static String getLensActivityVersionNameIfAvailable(final Context context) {
-        if (Boolean.TRUE.equals(sFakePassableLensEnvironmentForTesting)) {
+        if (sFakePassableLensEnvironmentForTesting) {
             return MIN_AGSA_VERSION_NAME_FOR_LENS_POSTCAPTURE;
         } else {
             if (context == null) {
                 return "";
             }
-            String agsaVersion = GSAState.getInstance(context).getAgsaVersionName();
+            String agsaVersion = GSAState.getInstance().getAgsaVersionName();
             if (agsaVersion == null) {
                 return "";
             } else {
@@ -158,7 +158,7 @@ public class LensUtils {
     public static boolean isGoogleLensFeatureEnabledOnTablet() {
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS, ENABLE_ON_TABLET_PARAM_NAME,
-                false);
+                true);
     }
 
     /**

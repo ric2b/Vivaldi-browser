@@ -900,9 +900,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   // Make the range degenerate.
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
-      /*count*/ 1,
+      /*count*/ 2,
       /*expected_text*/ L"\n3",
-      /*expected_count*/ 1);
+      /*expected_count*/ 2);
 
   // The range should now span two nodes: start: "item<>", end: "<3>.14".
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"\n3");
@@ -1085,9 +1085,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   // Now remove "Node 1" from the DOM and verify the text range created from
   // "Node 1" is still functional.
   {
-    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                           ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+    AccessibilityNotificationWaiter waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::CHILDREN_CHANGED);
     EXPECT_TRUE(
         ExecJs(shell()->web_contents(),
                "document.getElementById('wrapper').removeChild(document."
@@ -1104,9 +1104,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   // Now remove all children from the DOM and verify the text range created from
   // "Node 1" is still valid (it got moved to a non-deleted ancestor node).
   {
-    AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                           ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+    AccessibilityNotificationWaiter waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::CHILDREN_CHANGED);
     EXPECT_TRUE(ExecJs(shell()->web_contents(),
                        "while(document.body.childElementCount > 0) {"
                        "  document.body.removeChild(document.body.firstChild);"
@@ -2574,9 +2574,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Character,
-      /*count*/ -17,
+      /*count*/ -18,
       /*expected_text*/ L"iframe\nAfter frame",
-      /*expected_count*/ -17);
+      /*expected_count*/ -18);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(text_range_provider,
                                    TextPatternRangeEndpoint_End, TextUnit_Line,
                                    /*count*/ -1,
@@ -2600,21 +2600,21 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                   /*expected_count*/ -1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
-      /*count*/ 1,
+      /*count*/ 2,
       /*expected_text*/ L"frame\nT",
-      /*expected_count*/ 1);
+      /*expected_count*/ 2);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
-                  /*count*/ 6,
+                  /*count*/ 7,
                   /*expected_text*/ L"e",
-                  /*expected_count*/ 6);
+                  /*expected_count*/ 7);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
-                  /*count*/ 19,
+                  /*count*/ 20,
                   /*expected_text*/ L"f",
-                  /*expected_count*/ 19);
+                  /*expected_count*/ 20);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
-                  /*count*/ -7,
+                  /*count*/ -8,
                   /*expected_text*/ L"e",
-                  /*expected_count*/ -7);
+                  /*expected_count*/ -8);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Line,
                   /*count*/ 1,
                   /*expected_text*/ L"After frame",
@@ -2754,15 +2754,15 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
-      /*count*/ 3,
+      /*count*/ 4,
       /*expected_text*/ L"plain\ntext\nita",
-      /*expected_count*/ 3);
+      /*expected_count*/ 4);
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Character,
-      /*count*/ 10,
+      /*count*/ 12,
       /*expected_text*/ L"ta",
-      /*expected_count*/ 10);
+      /*expected_count*/ 12);
 
   ASSERT_HRESULT_SUCCEEDED(
       text_range_provider->ExpandToEnclosingUnit(TextUnit_Format));
@@ -3084,9 +3084,23 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   </html>)HTML";
 
   const std::vector<const wchar_t*> characters = {
-      L"S", L"o", L"m", L"e", L" ",
-      L"t", L"e", L"x", L"t", kEmbeddedCharacterAsString.c_str(),
-      L"a", L"f", L"t", L"e", L"r"};
+      L"S",
+      L"o",
+      L"m",
+      L"e",
+      L" ",
+      L"t",
+      L"e",
+      L"x",
+      L"t",
+      L"\n",
+      kEmbeddedCharacterAsString.c_str(),
+      L"\n",
+      L"a",
+      L"f",
+      L"t",
+      L"e",
+      L"r"};
 
   AssertMoveByUnitForMarkup(TextUnit_Character, html_markup, characters);
 }
@@ -3154,7 +3168,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
                   /*count*/ 19,
-                  /*expected_text*/ L"e",
+                  /*expected_text*/ L"t",
                   /*expected_count*/ 19);
   text_range_provider->ExpandToEnclosingUnit(TextUnit_Word);
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"item");
@@ -3282,7 +3296,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
     EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Before frame");
 
     AccessibilityNotificationWaiter waiter(web_contents, ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+                                           ax::mojom::Event::kLayoutComplete);
 
     // Updating the style on that particular node is going to invalidate the
     // leaf text node and will replace it with a new one with the updated style.
@@ -3310,7 +3324,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
         /*expected_count*/ 1);
 
     AccessibilityNotificationWaiter waiter(web_contents, ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+                                           ax::mojom::Event::kLayoutComplete);
 
     // Updating the style on that particular node is going to invalidate the
     // leaf text node and will replace it with a new one with the updated style.
@@ -3342,7 +3356,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
         /*expected_count*/ -1);
 
     AccessibilityNotificationWaiter waiter(web_contents, ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+                                           ax::mojom::Event::kEndOfTest);
 
     // Updating the style on that particular node is going to invalidate the
     // leaf text node and will replace it with a new one with the updated style.
@@ -3351,6 +3365,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
         web_contents,
         "document.getElementById('s2').style.outline = '1px solid black';"));
 
+    GetManager()->SignalEndOfTest();
     ASSERT_TRUE(waiter.WaitForNotification());
     EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"iframe\nAfter frame");
   }
@@ -3380,8 +3395,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
     // Reloading changes the tree id, triggering an AXTreeManager replacement.
     shell()->Reload();
 
-    AccessibilityNotificationWaiter waiter(web_contents, ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+    AccessibilityNotificationWaiter waiter(
+        web_contents, ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::FOCUS_CHANGED);
 
     // We do a style change here only to trigger an AXTree update - apparently,
     // a shell reload doesn't update the tree by itself.
@@ -3419,13 +3435,14 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
         /*expected_count*/ 1);
 
     AccessibilityNotificationWaiter waiter(web_contents, ui::kAXModeComplete,
-                                           ax::mojom::Event::kChildrenChanged);
+                                           ax::mojom::Event::kEndOfTest);
 
     // We do a style change here only to trigger an AXTree update.
     EXPECT_TRUE(ExecJs(
         web_contents,
         "document.getElementById('s2').style.outline = '1px solid black';"));
 
+    GetManager()->SignalEndOfTest();
     ASSERT_TRUE(waiter.WaitForNotification());
 
     // If the previous observer was not removed correctly, this will cause a

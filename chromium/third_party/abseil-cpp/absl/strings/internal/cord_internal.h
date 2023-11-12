@@ -225,7 +225,11 @@ struct CordRep {
       : length(l), refcount(immortal), tag(EXTERNAL), storage{} {}
 
   // The following three fields have to be less than 32 bytes since
-  // that is the smallest supported flat node size.
+  // that is the smallest supported flat node size. Some code optimizations rely
+  // on the specific layout of these fields. Notably: the non-trivial field
+  // `refcount` being preceeded by `length`, and being tailed by POD data
+  // members only.
+  // # LINT.IfChange
   size_t length;
   RefcountAndFlags refcount;
   // If tag < FLAT, it represents CordRepKind and indicates the type of node.
@@ -241,6 +245,7 @@ struct CordRep {
   // allocate room for these in the derived class, as not all compilers reuse
   // padding space from the base class (clang and gcc do, MSVC does not, etc)
   uint8_t storage[3];
+  // # LINT.ThenChange(cord_rep_btree.h:copy_raw)
 
   // Returns true if this instance's tag matches the requested type.
   constexpr bool IsRing() const { return tag == RING; }
@@ -591,7 +596,7 @@ class InlineData {
   // See the documentation on 'as_chars()' for more information and examples.
   void set_inline_size(size_t size) {
     ABSL_ASSERT(size <= kMaxInline);
-    tag() = static_cast<char>(size << 1);
+    tag() = static_cast<int8_t>(size << 1);
   }
 
   // Compares 'this' inlined data  with rhs. The comparison is a straightforward

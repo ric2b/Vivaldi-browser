@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
@@ -272,6 +273,11 @@ AVIFImageDecoder::AVIFImageDecoder(AlphaOption alpha_option,
 
 AVIFImageDecoder::~AVIFImageDecoder() = default;
 
+const AtomicString& AVIFImageDecoder::MimeType() const {
+  DEFINE_STATIC_LOCAL(const AtomicString, avif_mime_type, ("image/avif"));
+  return avif_mime_type;
+}
+
 bool AVIFImageDecoder::ImageIsHighBitDepth() {
   return bit_depth_ > 8;
 }
@@ -353,6 +359,10 @@ SkYUVColorSpace AVIFImageDecoder::GetYUVColorSpace() const {
 uint8_t AVIFImageDecoder::GetYUVBitDepth() const {
   DCHECK(CanDecodeToYUV());
   return bit_depth_;
+}
+
+absl::optional<gfx::HDRMetadata> AVIFImageDecoder::GetHDRMetadata() const {
+  return hdr_metadata_;
 }
 
 void AVIFImageDecoder::DecodeToYUV() {
@@ -447,7 +457,20 @@ void AVIFImageDecoder::DecodeToYUV() {
 }
 
 int AVIFImageDecoder::RepetitionCount() const {
-  return decoded_frame_count_ > 1 ? kAnimationLoopInfinite : kAnimationNone;
+  if (decoded_frame_count_ > 1) {
+    switch (decoder_->repetitionCount) {
+      case AVIF_REPETITION_COUNT_INFINITE:
+        return kAnimationLoopInfinite;
+      case AVIF_REPETITION_COUNT_UNKNOWN:
+        // The AVIF file does not have repetitions specified using an EditList
+        // box. Loop infinitely for backward compatibility with older versions
+        // of Chrome.
+        return kAnimationLoopInfinite;
+      default:
+        return decoder_->repetitionCount;
+    }
+  }
+  return kAnimationNone;
 }
 
 bool AVIFImageDecoder::FrameIsReceivedAtIndex(wtf_size_t index) const {
@@ -832,6 +855,12 @@ bool AVIFImageDecoder::UpdateDemuxer() {
   chroma_shift_x_ = format_info.chromaShiftX;
   chroma_shift_y_ = format_info.chromaShiftY;
 
+  if (container->clli.maxCLL || container->clli.maxPALL) {
+    hdr_metadata_ = gfx::HDRMetadata();
+    hdr_metadata_->max_content_light_level = container->clli.maxCLL;
+    hdr_metadata_->max_frame_average_light_level = container->clli.maxPALL;
+  }
+
   // SetEmbeddedColorProfile() must be called before IsSizeAvailable() becomes
   // true. So call SetEmbeddedColorProfile() before calling SetSize(). The color
   // profile is either an ICC profile or the CICP color description.
@@ -1121,11 +1150,11 @@ bool AVIFImageDecoder::RenderImage(const avifImage* image,
     // https://bugs.chromium.org/p/libyuv/issues/detail?id=845
     media::PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
         frame.get(), rgba_8888, frame->visible_rect().width() * 4,
-        premultiply_alpha, media::PaintCanvasVideoRenderer::kFilterBilinear);
+        premultiply_alpha, media::PaintCanvasVideoRenderer::kFilterBilinear,
+        /*disable_threading=*/true);
 
     if (save_top_row) {
-      std::copy(previous_last_decoded_row_.begin(),
-                previous_last_decoded_row_.end(), rgba_8888);
+      base::ranges::copy(previous_last_decoded_row_, rgba_8888);
     }
     return true;
   }

@@ -33,9 +33,9 @@
 #include "base/test/test_future.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/attribution_reporting/suitable_origin.h"
 #include "components/services/storage/dom_storage/async_dom_storage_database.h"
 #include "components/services/storage/dom_storage/dom_storage_database.h"
 #include "components/services/storage/dom_storage/local_storage_database.pb.h"
@@ -68,7 +68,6 @@
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/trust_tokens.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
@@ -109,13 +108,15 @@ using CookieDeletionFilterPtr = network::mojom::CookieDeletionFilterPtr;
 namespace content {
 namespace {
 
+using ::attribution_reporting::SuitableOrigin;
+
 const char kCacheKey[] = "key";
 const char kCacheValue[] = "cached value";
 
 const blink::mojom::StorageType kTemporary =
     blink::mojom::StorageType::kTemporary;
-const blink::mojom::StorageType kPersistent =
-    blink::mojom::StorageType::kPersistent;
+const blink::mojom::StorageType kSyncable =
+    blink::mojom::StorageType::kSyncable;
 
 const storage::QuotaClientType kClientFile =
     storage::QuotaClientType::kFileSystem;
@@ -251,7 +252,7 @@ class RemoveInterestGroupTester {
     static_cast<InterestGroupManagerImpl*>(
         storage_partition_->GetInterestGroupManager())
         ->GetLastKAnonymityReported(
-            KAnonKeyFor(origin, "Name"),
+            k_anon_key,
             base::BindOnce(
                 &RemoveInterestGroupTester::GetLastKAnonymityReportedCallback,
                 base::Unretained(this)));
@@ -265,9 +266,19 @@ class RemoveInterestGroupTester {
     group.owner = origin;
     group.name = "Name";
     group.expiry = base::Time::Now() + base::Days(30);
-    static_cast<InterestGroupManagerImpl*>(
-        storage_partition_->GetInterestGroupManager())
-        ->JoinInterestGroup(group, origin.GetURL());
+    group.bidding_url = origin.GetURL().Resolve("/bidding.js");
+    group.ads.emplace();
+    group.ads->push_back(blink::InterestGroup::Ad(
+        GURL("https://owner.example.com/ad1"), "metadata"));
+
+    InterestGroupManagerImpl* interest_group_manager =
+        static_cast<InterestGroupManagerImpl*>(
+            storage_partition_->GetInterestGroupManager());
+    interest_group_manager->JoinInterestGroup(group, origin.GetURL());
+
+    // Update the K-anonymity so that we can tell when it gets removed.
+    k_anon_key = KAnonKeyForAdBid(group, GURL("https://owner.example.com/ad1"));
+    interest_group_manager->UpdateLastKAnonymityReported(k_anon_key);
   }
 
  private:
@@ -278,12 +289,14 @@ class RemoveInterestGroupTester {
 
   void GetLastKAnonymityReportedCallback(
       absl::optional<base::Time> last_reported) {
-    contains_kanon_ = last_reported.has_value();
+    contains_kanon_ =
+        last_reported.has_value() && last_reported.value() > base::Time::Min();
     await_completion_.Notify();
   }
 
   bool get_interest_group_success_ = false;
   bool contains_kanon_ = false;
+  std::string k_anon_key;
   AwaitCompletionHelper await_completion_;
   raw_ptr<StoragePartitionImpl> storage_partition_;
 };
@@ -332,7 +345,7 @@ class RemoveLocalStorageTester {
         std::move(options),
         storage_partition_->GetPath().Append(storage::kLocalStoragePath),
         storage::kLocalStorageLeveldbName, absl::nullopt,
-        base::ThreadTaskRunnerHandle::Get(),
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
         base::BindLambdaForTesting([&](leveldb::Status status) {
           ASSERT_TRUE(status.ok());
           open_loop.Quit();
@@ -619,11 +632,11 @@ void ClearQuotaDataForOrigin(content::StoragePartition* partition,
       base::Time::Max(), loop_to_quit->QuitClosure());
 }
 
-void ClearQuotaDataForNonPersistent(content::StoragePartition* partition,
-                                    const base::Time delete_begin,
-                                    base::RunLoop* loop_to_quit) {
+void ClearQuotaDataForTemporary(content::StoragePartition* partition,
+                                const base::Time delete_begin,
+                                base::RunLoop* loop_to_quit) {
   partition->ClearData(kAllQuotaRemoveMask,
-                       ~StoragePartition::QUOTA_MANAGED_STORAGE_MASK_PERSISTENT,
+                       StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY,
                        blink::StorageKey(), delete_begin, base::Time::Max(),
                        loop_to_quit->QuitClosure());
 }
@@ -764,7 +777,7 @@ class StoragePartitionImplTest : public testing::Test {
       quota_manager_->proxy()->RegisterClient(
           std::move(quota_client), storage::QuotaClientType::kFileSystem,
           {blink::mojom::StorageType::kTemporary,
-           blink::mojom::StorageType::kPersistent});
+           blink::mojom::StorageType::kSyncable});
     }
     return quota_manager_.get();
   }
@@ -836,7 +849,7 @@ TEST_F(StoragePartitionShaderClearTest, ClearShaderCache) {
   EXPECT_EQ(1u, Size());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearData,
                                 browser_context()->GetDefaultStoragePartition(),
                                 &run_loop));
@@ -890,9 +903,9 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverBoth) {
   AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
                         storage::kDefaultBucketName, kTemporary);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey3,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
@@ -900,7 +913,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverBoth) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaData, partition, &run_loop));
   run_loop.Run();
 
@@ -924,23 +937,23 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverOnlyTemporary) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaData, partition, &run_loop));
   run_loop.Run();
 
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 0);
 }
 
-TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverOnlyPersistent) {
+TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverOnlySyncable) {
   const blink::StorageKey kStorageKey1 =
       blink::StorageKey::CreateFromStringForTesting("http://host1:1/");
   const blink::StorageKey kStorageKey2 =
       blink::StorageKey::CreateFromStringForTesting("http://host2:1/");
 
   AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 2);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
@@ -948,7 +961,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverOnlyPersistent) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaData, partition, &run_loop));
   run_loop.Run();
 
@@ -963,7 +976,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverNeither) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaData, partition, &run_loop));
   run_loop.Run();
 
@@ -982,10 +995,10 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverSpecificOrigin) {
       GetMockManager(), kStorageKey1, storage::kDefaultBucketName, kTemporary);
   storage::BucketInfo host2_temp_bucket = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kTemporary);
-  storage::BucketInfo host2_perm_bucket = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kPersistent);
-  storage::BucketInfo host3_perm_bucket = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey3, storage::kDefaultBucketName, kPersistent);
+  storage::BucketInfo host2_sync_bucket = AddQuotaManagedBucket(
+      GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kSyncable);
+  storage::BucketInfo host3_sync_bucket = AddQuotaManagedBucket(
+      GetMockManager(), kStorageKey3, storage::kDefaultBucketName, kSyncable);
 
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
 
@@ -994,7 +1007,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverSpecificOrigin) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearQuotaDataForOrigin, partition,
                      kStorageKey1.origin().GetURL(), base::Time(), &run_loop));
@@ -1003,8 +1016,8 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForeverSpecificOrigin) {
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 3);
   EXPECT_FALSE(GetMockManager()->BucketHasData(host1_temp_bucket, kClientFile));
   EXPECT_TRUE(GetMockManager()->BucketHasData(host2_temp_bucket, kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(host2_perm_bucket, kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(host3_perm_bucket, kClientFile));
+  EXPECT_TRUE(GetMockManager()->BucketHasData(host2_sync_bucket, kClientFile));
+  EXPECT_TRUE(GetMockManager()->BucketHasData(host3_sync_bucket, kClientFile));
 }
 
 TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForLastHour) {
@@ -1019,61 +1032,57 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedDataForLastHour) {
   base::Time now = base::Time::Now();
   storage::BucketInfo host1_temp_bucket_now = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey1, "temp_bucket_now", kTemporary, now);
-  storage::BucketInfo host1_perm_bucket_now = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey1, "perm_bucket_now", kPersistent, now);
+  storage::BucketInfo host1_sync_bucket_now =
+      AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
+                            storage::kDefaultBucketName, kSyncable, now);
   storage::BucketInfo host2_temp_bucket_now = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey2, "temp_bucket_now", kTemporary, now);
-  storage::BucketInfo host2_perm_bucket_now = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey2, "perm_bucket_now", kPersistent, now);
+  storage::BucketInfo host2_sync_bucket_now =
+      AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
+                            storage::kDefaultBucketName, kSyncable, now);
 
   // Buckets modified a day ago.
   base::Time yesterday = now - base::Days(1);
   storage::BucketInfo host1_temp_bucket_yesterday =
       AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
                             "temp_bucket_yesterday", kTemporary, yesterday);
-  storage::BucketInfo host1_perm_bucket_yesterday =
-      AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
-                            "perm_bucket_yesterday", kPersistent, yesterday);
   storage::BucketInfo host2_temp_bucket_yesterday =
       AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
                             "temp_bucket_yesterday", kTemporary, yesterday);
-  storage::BucketInfo host2_perm_bucket_yesterday =
-      AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
-                            "perm_bucket_yesterday", kPersistent, yesterday);
+  storage::BucketInfo host3_sync_bucket_yesterday =
+      AddQuotaManagedBucket(GetMockManager(), kStorageKey3,
+                            storage::kDefaultBucketName, kSyncable, yesterday);
 
-  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 8);
+  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 7);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       browser_context()->GetDefaultStoragePartition());
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaDataForOrigin, partition, GURL(),
                                 base::Time::Now() - base::Hours(1), &run_loop));
   run_loop.Run();
 
-  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
+  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 3);
   EXPECT_FALSE(
       GetMockManager()->BucketHasData(host1_temp_bucket_now, kClientFile));
   EXPECT_FALSE(
-      GetMockManager()->BucketHasData(host1_perm_bucket_now, kClientFile));
+      GetMockManager()->BucketHasData(host1_sync_bucket_now, kClientFile));
   EXPECT_FALSE(
       GetMockManager()->BucketHasData(host2_temp_bucket_now, kClientFile));
   EXPECT_FALSE(
-      GetMockManager()->BucketHasData(host2_perm_bucket_now, kClientFile));
+      GetMockManager()->BucketHasData(host2_sync_bucket_now, kClientFile));
   EXPECT_TRUE(GetMockManager()->BucketHasData(host1_temp_bucket_yesterday,
                                               kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(host1_perm_bucket_yesterday,
+  EXPECT_TRUE(GetMockManager()->BucketHasData(host3_sync_bucket_yesterday,
                                               kClientFile));
   EXPECT_TRUE(GetMockManager()->BucketHasData(host2_temp_bucket_yesterday,
                                               kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(host2_perm_bucket_yesterday,
-                                              kClientFile));
 }
 
-TEST_F(StoragePartitionImplTest,
-       RemoveQuotaManagedNonPersistentDataForLastWeek) {
+TEST_F(StoragePartitionImplTest, RemoveQuotaManagedTemporaryDataForLastWeek) {
   const blink::StorageKey kStorageKey =
       blink::StorageKey::CreateFromStringForTesting("http://host1:1/");
 
@@ -1083,40 +1092,35 @@ TEST_F(StoragePartitionImplTest,
   storage::BucketInfo temp_bucket_yesterday =
       AddQuotaManagedBucket(GetMockManager(), kStorageKey,
                             "temp_bucket_yesterday", kTemporary, yesterday);
-  storage::BucketInfo perm_bucket_yesterday =
+  storage::BucketInfo sync_bucket_yesterday =
       AddQuotaManagedBucket(GetMockManager(), kStorageKey,
-                            "perm_bucket_yesterday", kPersistent, yesterday);
+                            storage::kDefaultBucketName, kSyncable, yesterday);
 
   // Buckets modified 10 days ago.
   base::Time ten_days_ago = now - base::Days(10);
   storage::BucketInfo temp_bucket_ten_days_ago = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey, "temp_bucket_ten_days_ago", kTemporary,
       ten_days_ago);
-  storage::BucketInfo perm_bucket_ten_days_ago = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey, "perm_bucket_ten_days_ago", kPersistent,
-      ten_days_ago);
 
-  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
+  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 3);
 
   base::RunLoop run_loop;
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       browser_context()->GetDefaultStoragePartition());
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&ClearQuotaDataForNonPersistent, partition,
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&ClearQuotaDataForTemporary, partition,
                                 base::Time::Now() - base::Days(7), &run_loop));
   run_loop.Run();
 
-  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 3);
+  EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 2);
   EXPECT_FALSE(
       GetMockManager()->BucketHasData(temp_bucket_yesterday, kClientFile));
   EXPECT_TRUE(
-      GetMockManager()->BucketHasData(perm_bucket_yesterday, kClientFile));
+      GetMockManager()->BucketHasData(sync_bucket_yesterday, kClientFile));
   EXPECT_TRUE(
       GetMockManager()->BucketHasData(temp_bucket_ten_days_ago, kClientFile));
-  EXPECT_TRUE(
-      GetMockManager()->BucketHasData(perm_bucket_ten_days_ago, kClientFile));
 }
 
 TEST_F(StoragePartitionImplTest, RemoveQuotaManagedUnprotectedOrigins) {
@@ -1127,12 +1131,12 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedUnprotectedOrigins) {
 
   storage::BucketInfo host1_temp_bucket = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey1, storage::kDefaultBucketName, kTemporary);
-  storage::BucketInfo host1_perm_bucket = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey1, storage::kDefaultBucketName, kPersistent);
+  storage::BucketInfo host1_sync_bucket = AddQuotaManagedBucket(
+      GetMockManager(), kStorageKey1, storage::kDefaultBucketName, kSyncable);
   storage::BucketInfo host2_temp_bucket = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kTemporary);
-  storage::BucketInfo host2_perm_bucket = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kPersistent);
+  storage::BucketInfo host2_sync_bucket = AddQuotaManagedBucket(
+      GetMockManager(), kStorageKey2, storage::kDefaultBucketName, kSyncable);
 
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
 
@@ -1146,7 +1150,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedUnprotectedOrigins) {
   partition->OverrideSpecialStoragePolicyForTesting(mock_policy.get());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearQuotaDataWithOriginMatcher, partition,
                      base::BindRepeating(&DoesOriginMatchForUnprotectedWeb),
@@ -1155,9 +1159,9 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedUnprotectedOrigins) {
 
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 2);
   EXPECT_TRUE(GetMockManager()->BucketHasData(host1_temp_bucket, kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(host1_perm_bucket, kClientFile));
+  EXPECT_TRUE(GetMockManager()->BucketHasData(host1_sync_bucket, kClientFile));
   EXPECT_FALSE(GetMockManager()->BucketHasData(host2_temp_bucket, kClientFile));
-  EXPECT_FALSE(GetMockManager()->BucketHasData(host2_perm_bucket, kClientFile));
+  EXPECT_FALSE(GetMockManager()->BucketHasData(host2_sync_bucket, kClientFile));
 }
 
 TEST_F(StoragePartitionImplTest, RemoveQuotaManagedProtectedOrigins) {
@@ -1169,11 +1173,11 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedProtectedOrigins) {
   AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
                         storage::kDefaultBucketName, kTemporary);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey1,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
                         storage::kDefaultBucketName, kTemporary);
   AddQuotaManagedBucket(GetMockManager(), kStorageKey2,
-                        storage::kDefaultBucketName, kPersistent);
+                        storage::kDefaultBucketName, kSyncable);
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 4);
 
   // Protect kStorageKey1.
@@ -1187,7 +1191,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedProtectedOrigins) {
   partition->OverrideQuotaManagerForTesting(GetMockManager());
   partition->OverrideSpecialStoragePolicyForTesting(mock_policy.get());
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearQuotaDataWithOriginMatcher, partition,
                      base::BindRepeating(
@@ -1206,8 +1210,8 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedIgnoreDevTools) {
   storage::BucketInfo temp_bucket = AddQuotaManagedBucket(
       GetMockManager(), kStorageKey, storage::kDefaultBucketName, kTemporary,
       base::Time());
-  storage::BucketInfo perm_bucket = AddQuotaManagedBucket(
-      GetMockManager(), kStorageKey, storage::kDefaultBucketName, kPersistent,
+  storage::BucketInfo sync_bucket = AddQuotaManagedBucket(
+      GetMockManager(), kStorageKey, storage::kDefaultBucketName, kSyncable,
       base::Time());
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 2);
 
@@ -1216,7 +1220,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedIgnoreDevTools) {
       browser_context()->GetDefaultStoragePartition());
   partition->OverrideQuotaManagerForTesting(GetMockManager());
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearQuotaDataWithOriginMatcher, partition,
                                 base::BindRepeating(&DoesOriginMatchUnprotected,
                                                     kStorageKey.origin()),
@@ -1226,7 +1230,7 @@ TEST_F(StoragePartitionImplTest, RemoveQuotaManagedIgnoreDevTools) {
   // Check that devtools data isn't removed.
   EXPECT_EQ(GetMockManager()->BucketDataCount(kClientFile), 2);
   EXPECT_TRUE(GetMockManager()->BucketHasData(temp_bucket, kClientFile));
-  EXPECT_TRUE(GetMockManager()->BucketHasData(perm_bucket, kClientFile));
+  EXPECT_TRUE(GetMockManager()->BucketHasData(sync_bucket, kClientFile));
 }
 
 TEST_F(StoragePartitionImplTest, RemoveCookieForever) {
@@ -1239,7 +1243,7 @@ TEST_F(StoragePartitionImplTest, RemoveCookieForever) {
   ASSERT_TRUE(tester.ContainsCookie(kOrigin));
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearCookies, partition, base::Time(),
                                 base::Time::Max(), &run_loop));
   run_loop.Run();
@@ -1259,7 +1263,7 @@ TEST_F(StoragePartitionImplTest, RemoveCookieLastHour) {
   base::Time an_hour_ago = base::Time::Now() - base::Hours(1);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearCookies, partition, an_hour_ago,
                                 base::Time::Max(), &run_loop));
   run_loop.Run();
@@ -1277,7 +1281,7 @@ TEST_F(StoragePartitionImplTest, RemoveCookieWithDeleteInfo) {
   ASSERT_TRUE(tester.ContainsCookie(kOrigin));
 
   base::RunLoop run_loop2;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearCookiesMatchingInfo, partition,
                                 CookieDeletionFilter::New(), &run_loop2));
   run_loop2.RunUntilIdle();
@@ -1296,7 +1300,7 @@ TEST_F(StoragePartitionImplTest, RemoveInterestGroupForever) {
 
   {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ClearInterestGroups, partition, base::Time(),
                                   base::Time::Max(), &run_loop));
     run_loop.Run();
@@ -1306,7 +1310,7 @@ TEST_F(StoragePartitionImplTest, RemoveInterestGroupForever) {
 
   {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ClearInterestGroupsAndKAnon, partition,
                                   base::Time(), base::Time::Max(), &run_loop));
     run_loop.Run();
@@ -1341,7 +1345,7 @@ TEST_F(StoragePartitionImplTest, RemoveInterestGroupPermissionsCacheForever) {
       kFrameOrigin, kInterestGroupOrigin, kNetworkIsolationKey));
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ClearInterestGroupPermissionsCache, partition,
                                 base::Time(), base::Time::Max(), &run_loop));
   run_loop.Run();
@@ -1368,7 +1372,7 @@ TEST_F(StoragePartitionImplTest, RemoveUnprotectedLocalStorageForever) {
   partition->OverrideSpecialStoragePolicyForTesting(mock_policy.get());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ClearStuff, StoragePartitionImpl::REMOVE_DATA_MASK_LOCAL_STORAGE,
@@ -1404,7 +1408,7 @@ TEST_F(StoragePartitionImplTest, RemoveProtectedLocalStorageForever) {
   partition->OverrideSpecialStoragePolicyForTesting(mock_policy.get());
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearStuff,
                      StoragePartitionImpl::REMOVE_DATA_MASK_LOCAL_STORAGE,
@@ -1440,7 +1444,7 @@ TEST_F(StoragePartitionImplTest, RemoveLocalStorageForLastWeek) {
   base::Time a_week_ago = base::Time::Now() - base::Days(7);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearStuff,
                      StoragePartitionImpl::REMOVE_DATA_MASK_LOCAL_STORAGE,
@@ -1479,7 +1483,7 @@ TEST_F(StoragePartitionImplTest, RemoveLocalStorageForOrigins) {
   filter_builder->AddOrigin(kOrigin2);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ClearStuff, StoragePartitionImpl::REMOVE_DATA_MASK_LOCAL_STORAGE,
@@ -1516,7 +1520,7 @@ TEST_F(StoragePartitionImplTest, ClearCodeCache) {
   EXPECT_EQ(tester.received_data(), data);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearCodeCache, partition, base::Time(), base::Time(),
                      base::RepeatingCallback<bool(const GURL&)>(), &run_loop));
@@ -1554,7 +1558,7 @@ TEST_F(StoragePartitionImplTest, ClearCodeCacheSpecificURL) {
   EXPECT_EQ(tester.received_data(), data);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ClearCodeCache, partition, base::Time(), base::Time(),
@@ -1607,7 +1611,7 @@ TEST_F(StoragePartitionImplTest, ClearCodeCacheDateRange) {
                         kFilterResourceURLForCodeCache, origin, in_range_time);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ClearCodeCache, partition, begin_time, current_time,
@@ -1645,7 +1649,7 @@ TEST_F(StoragePartitionImplTest, ClearWasmCodeCache) {
   EXPECT_EQ(tester.received_data(), data);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearCodeCache, partition, base::Time(), base::Time(),
                      base::RepeatingCallback<bool(const GURL&)>(), &run_loop));
@@ -1681,7 +1685,7 @@ TEST_F(StoragePartitionImplTest, ClearWebUICodeCache) {
   EXPECT_EQ(tester.received_data(), data);
 
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearCodeCache, partition, base::Time(), base::Time(),
                      base::RepeatingCallback<bool(const GURL&)>(), &run_loop));
@@ -1727,7 +1731,7 @@ TEST_F(StoragePartitionImplTest, ClearCodeCacheIncognito) {
 
   base::RunLoop run_loop;
   // This shouldn't crash.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearCodeCache, partition, base::Time(), base::Time(),
                      base::RepeatingCallback<bool(const GURL&)>(), &run_loop));
@@ -1822,8 +1826,8 @@ TEST_F(StoragePartitionImplTest, ConversionsClearAllData) {
 
   base::Time now = base::Time::Now();
   for (int i = 0; i < 20; i++) {
-    auto origin = url::Origin::Create(
-        GURL(base::StringPrintf("https://www.%d.test/", i)));
+    auto origin = *SuitableOrigin::Deserialize(
+        base::StringPrintf("https://www.%d.test/", i));
     auto source = SourceBuilder(now)
                       .SetExpiry(base::Days(2))
                       .SetSourceOrigin(origin)
@@ -1849,12 +1853,12 @@ TEST_F(StoragePartitionImplTest, ConversionsClearDataForFilter) {
 
   base::Time now = base::Time::Now();
   for (int i = 0; i < 5; i++) {
-    auto impression =
-        url::Origin::Create(GURL(base::StringPrintf("https://imp-%d.com/", i)));
-    auto reporter = url::Origin::Create(
-        GURL(base::StringPrintf("https://reporter-%d.com/", i)));
-    auto conv = url::Origin::Create(
-        GURL(base::StringPrintf("https://conv-%d.com/", i)));
+    auto impression = *SuitableOrigin::Deserialize(
+        base::StringPrintf("https://imp-%d.com/", i));
+    auto reporter = *SuitableOrigin::Deserialize(
+        base::StringPrintf("https://reporter-%d.com/", i));
+    auto conv = *SuitableOrigin::Deserialize(
+        base::StringPrintf("https://conv-%d.com/", i));
     attribution_manager->HandleSource(SourceBuilder(now)
                                           .SetSourceOrigin(impression)
                                           .SetReportingOrigin(reporter)
@@ -1946,193 +1950,6 @@ TEST_F(StoragePartitionImplTest, DataRemovalObserver) {
       }),
       /*cookie_deletion_filter=*/nullptr, /*perform_storage_cleanup=*/false,
       kBeginTime, kEndTime, base::DoNothing());
-}
-
-namespace {
-
-class MockLocalTrustTokenFulfiller : public mojom::LocalTrustTokenFulfiller {
- public:
-  enum IgnoreRequestsTag { kIgnoreRequestsIndefinitely };
-  explicit MockLocalTrustTokenFulfiller(IgnoreRequestsTag) {}
-
-  explicit MockLocalTrustTokenFulfiller(
-      const network::mojom::FulfillTrustTokenIssuanceAnswerPtr& answer)
-      : answer_(answer.Clone()) {}
-
-  void FulfillTrustTokenIssuance(
-      network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
-      FulfillTrustTokenIssuanceCallback callback) override {
-    if (answer_)
-      std::move(callback).Run(answer_.Clone());
-
-    // Otherwise, this class was constructed with an IgnoreRequestsTag; drop the
-    // request.
-  }
-
-  void Bind(mojo::ScopedMessagePipeHandle handle) {
-    receiver_.Bind(mojo::PendingReceiver<mojom::LocalTrustTokenFulfiller>(
-        std::move(handle)));
-  }
-
- private:
-  network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer_;
-  mojo::Receiver<mojom::LocalTrustTokenFulfiller> receiver_{this};
-};
-
-}  // namespace
-
-#if BUILDFLAG(IS_ANDROID)
-TEST_F(StoragePartitionImplTest, BindsTrustTokenFulfiller) {
-  auto expected_answer = network::mojom::FulfillTrustTokenIssuanceAnswer::New();
-  expected_answer->status =
-      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kOk;
-  expected_answer->response = "Okay, here are some tokens";
-  MockLocalTrustTokenFulfiller mock_fulfiller(expected_answer);
-
-  // On Android, binding a local trust token operation delegate should succeed
-  // by default, but it can be explicitly rejected by the Android-side
-  // implementation code: to avoid making assumptions about that code's
-  // behavior, manually override the bind to make it succeed.
-  service_manager::InterfaceProvider::TestApi interface_overrider(
-      content::GetGlobalJavaInterfaces());
-
-  int num_binds_attempted = 0;
-  interface_overrider.SetBinderForName(
-      mojom::LocalTrustTokenFulfiller::Name_,
-      base::BindLambdaForTesting([&num_binds_attempted, &mock_fulfiller](
-                                     mojo::ScopedMessagePipeHandle handle) {
-        ++num_binds_attempted;
-        mock_fulfiller.Bind(std::move(handle));
-      }));
-
-  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      browser_context()->GetDefaultStoragePartition());
-
-  auto request = network::mojom::FulfillTrustTokenIssuanceRequest::New();
-  request->request = "Some tokens, please";
-
-  {
-    network::mojom::FulfillTrustTokenIssuanceAnswerPtr received_answer;
-    base::RunLoop run_loop;
-    partition->OnTrustTokenIssuanceDivertedToSystem(
-        request.Clone(),
-        base::BindLambdaForTesting(
-            [&run_loop, &received_answer](
-                network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-              received_answer = std::move(answer);
-              run_loop.Quit();
-            }));
-
-    run_loop.Run();
-    EXPECT_TRUE(mojo::Equals(received_answer, expected_answer));
-    EXPECT_EQ(num_binds_attempted, 1);
-  }
-  {
-    network::mojom::FulfillTrustTokenIssuanceAnswerPtr received_answer;
-    base::RunLoop run_loop;
-
-    // Execute another operation to cover the case where we've already
-    // successfully bound the fulfiller, ensuring that we don't attempt to bind
-    // it again.
-    partition->OnTrustTokenIssuanceDivertedToSystem(
-        request.Clone(),
-        base::BindLambdaForTesting(
-            [&run_loop, &received_answer](
-                network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-              received_answer = std::move(answer);
-              run_loop.Quit();
-            }));
-
-    run_loop.Run();
-
-    EXPECT_TRUE(mojo::Equals(received_answer, expected_answer));
-    EXPECT_EQ(num_binds_attempted, 1);
-  }
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-
-#if BUILDFLAG(IS_ANDROID)
-TEST_F(StoragePartitionImplTest, HandlesDisconnectedTrustTokenFulfiller) {
-  // Construct a mock fulfiller that doesn't reply to issuance requests it
-  // receives...
-  MockLocalTrustTokenFulfiller mock_fulfiller(
-      MockLocalTrustTokenFulfiller::kIgnoreRequestsIndefinitely);
-
-  service_manager::InterfaceProvider::TestApi interface_overrider(
-      content::GetGlobalJavaInterfaces());
-  interface_overrider.SetBinderForName(
-      mojom::LocalTrustTokenFulfiller::Name_,
-      base::BindRepeating(&MockLocalTrustTokenFulfiller::Bind,
-                          base::Unretained(&mock_fulfiller)));
-
-  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      browser_context()->GetDefaultStoragePartition());
-
-  auto request = network::mojom::FulfillTrustTokenIssuanceRequest::New();
-  base::RunLoop run_loop;
-  network::mojom::FulfillTrustTokenIssuanceAnswerPtr received_answer;
-  partition->OnTrustTokenIssuanceDivertedToSystem(
-      std::move(request),
-      base::BindLambdaForTesting(
-          [&run_loop, &received_answer](
-              network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-            received_answer = std::move(answer);
-            run_loop.Quit();
-          }));
-
-  // ... and, when the pipe disconnects, the disconnection handler should still
-  // ensure we get an error response.
-  partition->OnLocalTrustTokenFulfillerConnectionError();
-  run_loop.Run();
-
-  ASSERT_TRUE(received_answer);
-  EXPECT_EQ(received_answer->status,
-            network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound);
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-
-TEST_F(StoragePartitionImplTest, HandlesMissingTrustTokenFulfiller) {
-#if BUILDFLAG(IS_ANDROID)
-  // On Android, binding can be explicitly rejected by the Android-side
-  // implementation code: to ensure we can handle the rejection, manually force
-  // the bind to fail.
-  //
-  // On other platforms, local Trust Tokens issuance isn't yet implemented, so
-  // StoragePartitionImpl won't attempt to bind the fulfiller.
-  service_manager::InterfaceProvider::TestApi interface_overrider(
-      content::GetGlobalJavaInterfaces());
-
-  // Instead of using interface_overrider.ClearBinder(name), it's necessary to
-  // provide a callback that explicitly closes the pipe, since
-  // InterfaceProvider's contract requires that it either bind or close pipes
-  // it's given (see its comments in interface_provider.mojom).
-  interface_overrider.SetBinderForName(
-      mojom::LocalTrustTokenFulfiller::Name_,
-      base::BindRepeating([](mojo::ScopedMessagePipeHandle handle) {
-        mojo::Close(std::move(handle));
-      }));
-#endif  // BUILDFLAG(IS_ANDROID)
-
-  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      browser_context()->GetDefaultStoragePartition());
-
-  auto request = network::mojom::FulfillTrustTokenIssuanceRequest::New();
-  base::RunLoop run_loop;
-  network::mojom::FulfillTrustTokenIssuanceAnswerPtr received_answer;
-  partition->OnTrustTokenIssuanceDivertedToSystem(
-      std::move(request),
-      base::BindLambdaForTesting(
-          [&run_loop, &received_answer](
-              network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-            received_answer = std::move(answer);
-            run_loop.Quit();
-          }));
-
-  run_loop.Run();
-
-  ASSERT_TRUE(received_answer);
-  EXPECT_EQ(received_answer->status,
-            network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound);
 }
 
 TEST_F(StoragePartitionImplTest, RemoveAggregationServiceData) {
@@ -2528,7 +2345,7 @@ TEST_F(StoragePartitionImplSharedStorageTest,
       mock_policy.get());
 
   base::RunLoop clear_run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearStuff,
                      StoragePartitionImpl::REMOVE_DATA_MASK_SHARED_STORAGE,
@@ -2566,7 +2383,7 @@ TEST_F(StoragePartitionImplSharedStorageTest,
       mock_policy.get());
 
   base::RunLoop clear_run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearStuff,
                      StoragePartitionImpl::REMOVE_DATA_MASK_SHARED_STORAGE,
@@ -2602,7 +2419,7 @@ TEST_F(StoragePartitionImplSharedStorageTest, RemoveSharedStorageForLastWeek) {
   base::Time a_week_ago = base::Time::Now() - base::Days(7);
 
   base::RunLoop clear_run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClearStuff,
                      StoragePartitionImpl::REMOVE_DATA_MASK_SHARED_STORAGE,

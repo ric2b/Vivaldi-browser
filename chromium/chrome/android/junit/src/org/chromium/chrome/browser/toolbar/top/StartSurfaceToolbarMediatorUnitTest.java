@@ -28,6 +28,7 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_VIEW_TEXT_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.TRANSLATION_Y;
 
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.View;
@@ -66,7 +67,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -119,6 +120,8 @@ public class StartSurfaceToolbarMediatorUnitTest {
     Tracker mTracker;
     @Mock
     private TemplateUrlService mTemplateUrlService;
+    @Mock
+    private Context mContext;
     @Mock
     private LogoView mLogoView;
     @Mock
@@ -354,12 +357,12 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
         // If default search engine doesn't have logo, logo shouldn't be visible.
         when(mTemplateUrlService.doesDefaultSearchEngineHaveLogo()).thenReturn(false);
-        mMediator.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+        mMediator.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
         assertFalse(mMediator.isLogoVisibleForTesting());
 
         // If default search engine has logo, logo should be visible.
         when(mTemplateUrlService.doesDefaultSearchEngineHaveLogo()).thenReturn(true);
-        mMediator.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+        mMediator.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
         assertTrue(mMediator.isLogoVisibleForTesting());
     }
 
@@ -559,8 +562,9 @@ public class StartSurfaceToolbarMediatorUnitTest {
                 !ChromeFeatureList.sStartSurfaceDisabledFeedImprovement.isEnabled()
                 || SharedPreferencesManager.getInstance().readBoolean(
                         ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, true);
-        mMediator = new StartSurfaceToolbarMediator(mPropertyModel, mMockIdentityIPHCallback,
-                hideIncognitoSwitchWhenNoTabs, mMenuButtonCoordinator, mIdentityDiscController,
+        mMediator = new StartSurfaceToolbarMediator(mContext, mPropertyModel,
+                mMockIdentityIPHCallback, hideIncognitoSwitchWhenNoTabs, mMenuButtonCoordinator,
+                mIdentityDiscController,
                 ()
                         -> mIdentityDiscController.getForStartSurface(
                                 mMediator.getOverviewModeStateForTesting(),

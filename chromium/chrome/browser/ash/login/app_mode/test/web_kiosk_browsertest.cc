@@ -31,8 +31,8 @@
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
@@ -62,7 +62,7 @@ class FakeKioskProfileLoaderDelegate : public KioskProfileLoader::Delegate {
  public:
   MOCK_METHOD1(OnProfileLoaded, void(Profile*));
   MOCK_METHOD1(OnProfileLoadFailed, void(KioskAppLaunchError::Error));
-  MOCK_METHOD1(OnOldEncryptionDetected, void(const UserContext&));
+  MOCK_METHOD1(OnOldEncryptionDetected, void(std::unique_ptr<UserContext>));
 };
 
 class WebKioskTest : public OobeBaseTest {
@@ -289,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(WebKioskTest, LaunchWithConfigureAcceleratorPressed) {
   // Block app launch after it is being installed.
   SetBlockAppLaunch(true);
   OobeScreenWaiter(AppLaunchSplashScreenView::kScreenId).Wait();
-  ASSERT_TRUE(ash::LoginScreenTestApi::PressAccelerator(
+  ASSERT_TRUE(LoginScreenTestApi::PressAccelerator(
       ui::Accelerator(ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)));
   WaitNetworkConfigureScreenAndContinueWithOnlineState(
       /* require_network*/ true);
@@ -324,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(WebKioskTest,
   SetBlockAppLaunch(true);
   OobeScreenWaiter(AppLaunchSplashScreenView::kScreenId).Wait();
 
-  ASSERT_TRUE(ash::LoginScreenTestApi::PressAccelerator(
+  ASSERT_TRUE(LoginScreenTestApi::PressAccelerator(
       ui::Accelerator(ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)));
 
   WaitNetworkConfigureScreenAndContinueWithOnlineState(

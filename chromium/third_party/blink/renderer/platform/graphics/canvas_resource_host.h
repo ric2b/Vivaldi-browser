@@ -36,9 +36,13 @@ class PLATFORM_EXPORT CanvasResourceHost {
   cc::PaintFlags::FilterQuality FilterQuality() const {
     return filter_quality_;
   }
-  void SetHDRMetadata(const absl::optional<gfx::HDRMetadata>& hdr_metadata) {
+  void SetHDRConfiguration(
+      gfx::HDRMode hdr_mode,
+      const absl::optional<gfx::HDRMetadata>& hdr_metadata) {
+    hdr_mode_ = hdr_mode;
     hdr_metadata_ = hdr_metadata;
   }
+  gfx::HDRMode GetHDRMode() const { return hdr_mode_; }
   const absl::optional<gfx::HDRMetadata>& GetHDRMetadata() const {
     return hdr_metadata_;
   }
@@ -53,6 +57,7 @@ class PLATFORM_EXPORT CanvasResourceHost {
   virtual void DiscardResourceProvider();
 
   virtual bool IsPrinting() const { return false; }
+  virtual bool PrintedInCurrentTask() const = 0;
 
  private:
   void InitializeForRecording(cc::PaintCanvas* canvas);
@@ -60,6 +65,7 @@ class PLATFORM_EXPORT CanvasResourceHost {
   std::unique_ptr<CanvasResourceProvider> resource_provider_;
   cc::PaintFlags::FilterQuality filter_quality_ =
       cc::PaintFlags::FilterQuality::kLow;
+  gfx::HDRMode hdr_mode_ = gfx::HDRMode::kDefault;
   absl::optional<gfx::HDRMetadata> hdr_metadata_;
 };
 

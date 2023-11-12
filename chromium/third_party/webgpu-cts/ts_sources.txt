@@ -1,3 +1,4 @@
+src/common/framework/data_cache.ts
 src/common/framework/test_config.ts
 src/external/petamoriken/float16/float16.d.ts
 src/common/internal/version.ts
@@ -41,6 +42,7 @@ src/common/runtime/helper/test_worker-worker.ts
 src/common/tools/checklist.ts
 src/common/tools/crawl.ts
 src/common/tools/dev_server.ts
+src/common/tools/gen_cache.ts
 src/common/tools/gen_listings.ts
 src/common/tools/gen_wpt_cts_html.ts
 src/common/tools/presubmit.ts
@@ -117,6 +119,10 @@ src/unittests/params_builder_toplevel.spec.ts
 src/unittests/preprocessor.spec.ts
 src/unittests/query_compare.spec.ts
 src/unittests/query_string.spec.ts
+src/webgpu/shader/execution/expression/expression.ts
+src/webgpu/util/compare.ts
+src/webgpu/shader/execution/expression/case_cache.ts
+src/unittests/serialization.spec.ts
 src/unittests/test_group.spec.ts
 src/unittests/test_query.spec.ts
 src/webgpu/examples.spec.ts
@@ -169,12 +175,13 @@ src/webgpu/api/operation/render_pipeline/primitive_topology.spec.ts
 src/webgpu/api/operation/render_pipeline/sample_mask.spec.ts
 src/webgpu/api/operation/render_pipeline/vertex_only_render_pipeline.spec.ts
 src/webgpu/api/operation/rendering/basic.spec.ts
-src/webgpu/api/operation/rendering/blending.spec.ts
+src/webgpu/api/operation/rendering/color_target_state.spec.ts
 src/webgpu/api/operation/rendering/depth.spec.ts
 src/webgpu/api/operation/rendering/depth_clip_clamp.spec.ts
 src/webgpu/api/operation/rendering/draw.spec.ts
 src/webgpu/api/operation/rendering/indirect_draw.spec.ts
 src/webgpu/api/operation/rendering/robust_access_index.spec.ts
+src/webgpu/api/operation/rendering/stencil.spec.ts
 src/webgpu/api/operation/resource_init/buffer.spec.ts
 src/webgpu/util/texture/subresource.ts
 src/webgpu/api/operation/resource_init/check_texture/by_copy.ts
@@ -198,6 +205,7 @@ src/webgpu/api/validation/createPipelineLayout.spec.ts
 src/webgpu/api/validation/createSampler.spec.ts
 src/webgpu/api/validation/createTexture.spec.ts
 src/webgpu/api/validation/createView.spec.ts
+src/webgpu/api/validation/debugMarker.spec.ts
 src/webgpu/api/validation/error_scope.spec.ts
 src/webgpu/api/validation/getBindGroupLayout.spec.ts
 src/webgpu/api/validation/layout_shader_compat.spec.ts
@@ -211,6 +219,8 @@ src/webgpu/api/validation/capability_checks/features/texture_formats.spec.ts
 src/webgpu/api/validation/encoding/beginComputePass.spec.ts
 src/webgpu/api/validation/encoding/beginRenderPass.spec.ts
 src/webgpu/api/validation/encoding/createRenderBundleEncoder.spec.ts
+src/webgpu/api/validation/encoding/queries/common.ts
+src/webgpu/api/validation/encoding/encoder_open_state.spec.ts
 src/webgpu/api/validation/encoding/encoder_state.spec.ts
 src/webgpu/api/validation/encoding/render_bundle.spec.ts
 src/webgpu/api/validation/encoding/cmds/clearBuffer.spec.ts
@@ -230,7 +240,6 @@ src/webgpu/api/validation/encoding/cmds/render/setPipeline.spec.ts
 src/webgpu/api/validation/encoding/cmds/render/setVertexBuffer.spec.ts
 src/webgpu/api/validation/encoding/cmds/render/state_tracking.spec.ts
 src/webgpu/api/validation/encoding/programmable/pipeline_bind_group_compat.spec.ts
-src/webgpu/api/validation/encoding/queries/common.ts
 src/webgpu/api/validation/encoding/queries/begin_end.spec.ts
 src/webgpu/api/validation/encoding/queries/general.spec.ts
 src/webgpu/api/validation/encoding/queries/pipeline_statistics.spec.ts
@@ -271,17 +280,17 @@ src/webgpu/api/validation/shader_module/entry_point.spec.ts
 src/webgpu/api/validation/shader_module/overrides.spec.ts
 src/webgpu/api/validation/state/device_lost/destroy.spec.ts
 src/webgpu/api/validation/texture/destroy.spec.ts
+src/webgpu/api/validation/texture/rg11b10ufloat_renderable.spec.ts
 src/webgpu/idl/exposed.html.ts
 src/webgpu/idl/idl_test.ts
 src/webgpu/idl/constants/flags.spec.ts
 src/webgpu/shader/types.ts
 src/webgpu/shader/values.ts
 src/webgpu/shader/execution/evaluation_order.spec.ts
+src/webgpu/shader/execution/padding.spec.ts
 src/webgpu/shader/execution/robust_access.spec.ts
 src/webgpu/shader/execution/robust_access_vertex.spec.ts
 src/webgpu/shader/execution/zero_init.spec.ts
-src/webgpu/util/compare.ts
-src/webgpu/shader/execution/expression/expression.ts
 src/webgpu/shader/execution/expression/binary/binary.ts
 src/webgpu/shader/execution/expression/binary/bitwise.spec.ts
 src/webgpu/shader/execution/expression/binary/bool_logical.spec.ts

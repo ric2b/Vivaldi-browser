@@ -40,7 +40,10 @@ namespace {
 // our database without *too* many bad effects.
 const int kCurrentVersionNumber = 59;
 const int kCompatibleVersionNumber = 16;
+
 const char kEarlyExpirationThresholdKey[] = "early_expiration_threshold";
+const char kMayContainForeignVisits[] = "may_contain_foreign_visits";
+const char kDeleteForeignVisitsUntilId[] = "delete_foreign_visits_until_id";
 
 // Logs a migration failure to UMA and logging. The return value will be
 // what to return from ::Init (to simplify the call sites). Migration failures
@@ -260,7 +263,7 @@ void HistoryDatabase::ComputeDatabaseMetrics(
     base::Time one_month_ago = base::Time::Now() - base::Days(30);
     sql::Statement url_sql(db_.GetUniqueStatement(
         "SELECT url, last_visit_time FROM urls WHERE last_visit_time > ?"));
-    url_sql.BindInt64(0, one_month_ago.ToInternalValue());
+    url_sql.BindTime(0, one_month_ago);
 
     // Count URLs (which will always be unique) and unique hosts within the last
     // week and last month.
@@ -271,8 +274,7 @@ void HistoryDatabase::ComputeDatabaseMetrics(
     base::Time one_week_ago = base::Time::Now() - base::Days(7);
     while (url_sql.Step()) {
       GURL url(url_sql.ColumnString(0));
-      base::Time visit_time =
-          base::Time::FromInternalValue(url_sql.ColumnInt64(1));
+      base::Time visit_time = url_sql.ColumnTime(1);
       ++month_url_count;
       month_hosts.insert(url.host());
       if (visit_time > one_week_ago) {
@@ -301,7 +303,7 @@ int HistoryDatabase::CountUniqueHostsVisitedLastMonth() {
                              "WHERE last_visit_time > ? "
                              "AND hidden = 0 "
                              "AND visit_count > 0"));
-  url_sql.BindInt64(0, one_month_ago.ToInternalValue());
+  url_sql.BindTime(0, one_month_ago);
 
   std::set<std::string> hosts;
   while (url_sql.Step()) {
@@ -330,8 +332,8 @@ int HistoryDatabase::CountUniqueDomainsVisited(base::Time begin_time,
   url_sql.BindInt64(3, ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
   url_sql.BindInt64(4, ui::PAGE_TRANSITION_KEYWORD_GENERATED);
 
-  url_sql.BindInt64(5, begin_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
-  url_sql.BindInt64(6, end_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+  url_sql.BindTime(5, begin_time);
+  url_sql.BindTime(6, end_time);
 
   std::set<std::string> domains;
   while (url_sql.Step()) {
@@ -357,22 +359,8 @@ int HistoryDatabase::GetCurrentVersion() {
   return kCurrentVersionNumber;
 }
 
-void HistoryDatabase::BeginTransaction() {
-  db_.BeginTransaction();
-}
-
-void HistoryDatabase::CommitTransaction() {
-  db_.CommitTransaction();
-}
-
-void HistoryDatabase::RollbackTransaction() {
-  // If Init() returns with a failure status, the Transaction created there will
-  // be destructed and rolled back. HistoryBackend might try to kill the
-  // database after that, at which point it will try to roll back a non-existing
-  // transaction. This will crash on a DCHECK. So transaction_nesting() is
-  // checked first.
-  if (db_.transaction_nesting())
-    db_.RollbackTransaction();
+std::unique_ptr<sql::Transaction> HistoryDatabase::CreateTransaction() {
+  return std::make_unique<sql::Transaction>(&db_);
 }
 
 bool HistoryDatabase::RecreateAllTablesButURL() {
@@ -459,6 +447,28 @@ void HistoryDatabase::UpdateEarlyExpirationThreshold(base::Time threshold) {
   meta_table_.SetValue(kEarlyExpirationThresholdKey,
                        threshold.ToInternalValue());
   cached_early_expiration_threshold_ = threshold;
+}
+
+bool HistoryDatabase::MayContainForeignVisits() {
+  int may_contain_foreign_visits = false;
+  meta_table_.GetValue(kMayContainForeignVisits, &may_contain_foreign_visits);
+  return may_contain_foreign_visits != 0;
+}
+
+void HistoryDatabase::SetMayContainForeignVisits(
+    bool may_contain_foreign_visits) {
+  meta_table_.SetValue(kMayContainForeignVisits,
+                       may_contain_foreign_visits ? 1 : 0);
+}
+
+VisitID HistoryDatabase::GetDeleteForeignVisitsUntilId() {
+  VisitID visit_id = kInvalidVisitID;
+  meta_table_.GetValue(kDeleteForeignVisitsUntilId, &visit_id);
+  return visit_id;
+}
+
+void HistoryDatabase::SetDeleteForeignVisitsUntilId(VisitID visit_id) {
+  meta_table_.SetValue(kDeleteForeignVisitsUntilId, visit_id);
 }
 
 TypedURLSyncMetadataDatabase* HistoryDatabase::GetTypedURLMetadataDB() {

@@ -9,7 +9,6 @@ import android.media.MediaCodec.CryptoInfo;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecInfo.CodecCapabilities;
 import android.media.MediaCodecInfo.CodecProfileLevel;
-import android.media.MediaCodecInfo.VideoCapabilities;
 import android.media.MediaCodecList;
 import android.media.MediaCrypto;
 import android.media.MediaFormat;
@@ -265,30 +264,6 @@ class MediaCodecUtil {
             Log.e(TAG, "Cannot release media codec", e);
         }
         return true;
-    }
-
-    /**
-      * Needed on M and older to get correct information about VP9 support.
-      * @param profileLevels The CodecProfileLevelList to add supported profile levels to.
-      * @param videoCapabilities The MediaCodecInfo.VideoCapabilities used to infer support.
-      */
-    private static void addVp9CodecProfileLevels(CodecProfileLevelList profileLevels,
-            MediaCodecInfo.CodecCapabilities codecCapabilities) {
-        // https://www.webmproject.org/vp9/levels
-        final int[][] bitrateMapping = {
-                {200, 10}, {800, 11}, {1800, 20}, {3600, 21}, {7200, 30}, {12000, 31}, {18000, 40},
-                {30000, 41}, {60000, 50}, {120000, 51}, {180000, 52},
-        };
-        VideoCapabilities videoCapabilities = codecCapabilities.getVideoCapabilities();
-        for (int[] entry : bitrateMapping) {
-            int bitrate = entry[0];
-            int level = entry[1];
-            if (videoCapabilities.getBitrateRange().contains(bitrate)) {
-                // Assume all platforms before N only support VP9 profile 0.
-                profileLevels.addCodecProfileLevel(
-                        VideoCodec.VP9, VideoCodecProfile.VP9PROFILE_PROFILE0, level);
-            }
-        }
     }
 
     /**
@@ -661,12 +636,10 @@ class MediaCodecUtil {
     /**
      * Sets the encryption pattern value if and only if CryptoInfo.setPattern method is
      * supported.
-     * This method was introduced in Android N. Note that if platformSupportsCbcsEncryption
-     * returns true, then this function will set the pattern.
+     * Note that if platformSupportsCbcsEncryption returns true, then this function will set the
+     * pattern.
      */
     static void setPatternIfSupported(CryptoInfo cryptoInfo, int encrypt, int skip) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            ApiHelperForN.setCryptoInfoPattern(cryptoInfo, encrypt, skip);
-        }
+        ApiHelperForN.setCryptoInfoPattern(cryptoInfo, encrypt, skip);
     }
 }

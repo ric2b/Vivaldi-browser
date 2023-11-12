@@ -18,7 +18,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -226,12 +226,12 @@ class ConfigSingleton {
 
   // Callback to call when the interstitial timer is started. Used for
   // testing.
-  raw_ptr<SSLErrorHandler::TimerStartedCallback> timer_started_callback_ =
-      nullptr;
+  raw_ptr<SSLErrorHandler::TimerStartedCallback, DanglingUntriaged>
+      timer_started_callback_ = nullptr;
 
   // The clock to use when deciding which error type to display. Used for
   // testing.
-  raw_ptr<base::Clock> testing_clock_ = nullptr;
+  raw_ptr<base::Clock, DanglingUntriaged> testing_clock_ = nullptr;
 
   base::OnceClosure report_network_connectivity_callback_;
 
@@ -538,7 +538,7 @@ void SSLErrorHandlerDelegateImpl::OnBlockingPageReady(
                                          "SSL_ERROR", cert_error_);
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(blocking_page_ready_callback_),
                                 std::move(interstitial_page)));
 }

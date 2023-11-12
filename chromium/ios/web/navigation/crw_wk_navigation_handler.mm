@@ -211,8 +211,18 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   const WKContentMode contentMode = userAgentType == web::UserAgentType::DESKTOP
                                         ? WKContentModeDesktop
                                         : WKContentModeMobile;
+  BOOL isMainFrameNavigationAction = [self isMainFrameNavigationAction:action];
   auto decisionHandler = ^(WKNavigationActionPolicy policy) {
     preferences.preferredContentMode = contentMode;
+#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
+    if (@available(iOS 16.0, *)) {
+      if ((policy == WKNavigationActionPolicyAllow) &&
+          isMainFrameNavigationAction) {
+        UMA_HISTOGRAM_BOOLEAN("IOS.MainFrameNavigationIsInLockdownMode",
+                              preferences.lockdownModeEnabled);
+      }
+    }
+#endif  // defined (__IPHONE_16_0)
     handler(policy, preferences);
   };
 
@@ -256,7 +266,6 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
 
   ui::PageTransition transition =
       [self pageTransitionFromNavigationType:action.navigationType];
-  BOOL isMainFrameNavigationAction = [self isMainFrameNavigationAction:action];
   if (isMainFrameNavigationAction) {
     web::NavigationContextImpl* context =
         [self contextForPendingMainFrameNavigationWithURL:requestURL];
@@ -394,11 +403,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   // If this is a error navigation, pass through.
   GURL responseURL = net::GURLWithNSURL(WKResponse.response.URL);
   if ([CRWErrorPageHelper isErrorPageFileURL:responseURL]) {
-    if (self.webStateImpl->ShouldAllowErrorPageToBeDisplayed(
-            WKResponse.response, WKResponse.forMainFrame)) {
-      handler(WKNavigationResponsePolicyAllow);
-      return;
-    }
+    handler(WKNavigationResponsePolicyAllow);
+    return;
   }
 
   if (self.pendingNavigationInfo.unsafeRedirect) {
@@ -688,11 +694,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
 
   // Invariant: Every `navigation` should have a `context`. Note that violation
   // of this invariant is currently observed in production, but the cause is not
-  // well understood. This DCHECK is meant to catch such cases in testing if
-  // they arise.
-  // TODO(crbug.com/864769): Remove nullptr checks on `context` in this method
-  // once the root cause of the invariant violation is found.
-  DCHECK(context);
+  // well understood. Based on the current frequency with which this invariant
+  // fails to hold, removing null-checks on `context` would lead to a top-crash.
   UMA_HISTOGRAM_BOOLEAN("IOS.CommittedNavigationHasContext", context);
 
   GURL webViewURL = net::GURLWithNSURL(webView.URL);

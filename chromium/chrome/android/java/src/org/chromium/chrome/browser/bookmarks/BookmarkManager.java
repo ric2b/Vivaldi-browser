@@ -165,8 +165,7 @@ public class BookmarkManager
         @Override
         public boolean getDragEnabled() {
             if (ChromeApplicationImpl.isVivaldi()) {
-                return !mA11yEnabled
-                        && mBookmarkDelegate.getCurrentState() == BookmarkUIState.STATE_FOLDER
+                return mBookmarkDelegate.getCurrentState() == BookmarkUIState.STATE_FOLDER
                         && mBookmarkDelegate.getSortOrder() == BookmarkItemsAdapter.SortOrder.MANUAL;
             }
             return !mA11yEnabled
@@ -219,7 +218,8 @@ public class BookmarkManager
 
         mDragStateDelegate = new BookmarkDragStateDelegate();
 
-        mBookmarkModel = new BookmarkModel();
+        Profile profile = Profile.getLastUsedRegularProfile();
+        mBookmarkModel = BookmarkModel.getForProfile(profile);
         mMainView = (ViewGroup) LayoutInflater.from(mContext).inflate(R.layout.bookmark_main, null);
 
         // TODO(1293885): Remove this validator once we have an API on the backend that sends
@@ -229,8 +229,7 @@ public class BookmarkManager
                     new CommerceSubscriptionsServiceFactory()
                             .getForLastUsedProfile()
                             .getSubscriptionsManager());
-            ShoppingServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
-                    .scheduleSavedProductUpdate();
+            ShoppingServiceFactory.getForProfile(profile).scheduleSavedProductUpdate();
         }
 
         @SuppressWarnings("unchecked")
@@ -288,7 +287,7 @@ public class BookmarkManager
             mBookmarkModel.finishLoadingBookmarkModel(modelLoadedRunnable);
         }
 
-        mLargeIconBridge = new LargeIconBridge(Profile.getLastUsedRegularProfile());
+        mLargeIconBridge = new LargeIconBridge(profile);
         ActivityManager activityManager = ((ActivityManager) ContextUtils
                 .getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE));
         int maxSize =
@@ -335,8 +334,6 @@ public class BookmarkManager
             mUndoController = null;
         }
         mBookmarkModel.removeObserver(mBookmarkModelObserver);
-        mBookmarkModel.destroy();
-        mBookmarkModel = null;
         mLargeIconBridge.destroy();
         mLargeIconBridge = null;
         PartnerBookmarksReader.removeFaviconUpdateObserver(this);

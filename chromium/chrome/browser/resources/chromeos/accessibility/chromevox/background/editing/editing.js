@@ -11,12 +11,12 @@ import {AutomationUtil} from '../../../common/automation_util.js';
 import {constants} from '../../../common/constants.js';
 import {Cursor, CursorMovement, CursorUnit} from '../../../common/cursors/cursor.js';
 import {CursorRange} from '../../../common/cursors/range.js';
-import {AbstractTts} from '../../common/abstract_tts.js';
+import {LocalStorage} from '../../../common/local_storage.js';
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {ChromeVoxEvent} from '../../common/custom_automation_event.js';
 import {Msgs} from '../../common/msgs.js';
 import {MultiSpannable, Spannable} from '../../common/spannable.js';
-import {QueueMode} from '../../common/tts_interface.js';
+import {Personality, QueueMode} from '../../common/tts_types.js';
 import {BrailleBackground} from '../braille/braille_background.js';
 import {LibLouis} from '../braille/liblouis.js';
 import {BrailleTextStyleSpan, ValueSelectionSpan, ValueSpan} from '../braille/spans.js';
@@ -24,7 +24,7 @@ import {ChromeVox} from '../chromevox.js';
 import {ChromeVoxState, ChromeVoxStateObserver} from '../chromevox_state.js';
 import {Color} from '../color.js';
 import {Output} from '../output/output.js';
-import {OutputEventType, OutputNodeSpan} from '../output/output_types.js';
+import {OutputCustomEvent, OutputNodeSpan} from '../output/output_types.js';
 
 import {EditableLine} from './editable_line.js';
 import {ChromeVoxEditableTextBase, TextChangeEvent} from './editable_text_base.js';
@@ -571,7 +571,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
         new Output()
             .withRichSpeech(
                 new Range(cur.start, cur.end), new Range(prev.start, prev.end),
-                OutputEventType.NAVIGATE)
+                OutputCustomEvent.NAVIGATE)
             .go();
       }
 
@@ -610,7 +610,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       new Output()
           .withRichSpeech(
               new Range(cur.start, cur.end), new Range(prev.start, prev.end),
-              OutputEventType.NAVIGATE)
+              OutputCustomEvent.NAVIGATE)
           .go();
     } else if (
         !prev.hasCollapsedSelection() && !cur.hasCollapsedSelection() &&
@@ -623,7 +623,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       let suffixMsg = '';
       if (curBase.isBeforeLine(curExtent)) {
         // Forward selection.
-        if (prev.isBeforeLine(curBase)) {
+        if (prev.isBeforeLine(curBase) && !prev.start.equals(curBase.start)) {
           // Wrapped across the baseline. Read out the new selection.
           suffixMsg = 'selected';
           this.speakTextSelection_(
@@ -741,7 +741,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     if (context && context.role !== RoleType.TEXT_FIELD) {
       const output = new Output().suppress('name').withBraille(
           Range.fromNode(context), Range.fromNode(this.node_),
-          OutputEventType.NAVIGATE);
+          OutputCustomEvent.NAVIGATE);
       if (output.braille.length) {
         const end = cur.containerEndOffset + 1;
         const prefix = value.substring(0, end);
@@ -795,7 +795,8 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
     new Output()
         .withRichSpeech(
-            selectedRange, Range.fromNode(this.node_), OutputEventType.NAVIGATE)
+            selectedRange, Range.fromNode(this.node_),
+            OutputCustomEvent.NAVIGATE)
         .go();
   }
 
@@ -834,8 +835,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     if (msgs.length) {
       msgs.forEach(msg => {
         ChromeVox.tts.speak(
-            Msgs.getMsg(msg), QueueMode.QUEUE,
-            AbstractTts.PERSONALITY_ANNOTATION);
+            Msgs.getMsg(msg), QueueMode.QUEUE, Personality.ANNOTATION);
       });
     }
   }
@@ -905,7 +905,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       msgs.forEach(msgObject => {
         ChromeVox.tts.speak(
             Msgs.getMsg(msgObject.msg, msgObject.opt_subs), QueueMode.QUEUE,
-            AbstractTts.PERSONALITY_ANNOTATION);
+            Personality.ANNOTATION);
       });
     }
   }
@@ -989,7 +989,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
     this.speakTextMarker_(container, cur.localStartOffset, cur.localEndOffset);
 
-    if (localStorage['announceRichTextAttributes'] === 'true') {
+    if (LocalStorage.get('announceRichTextAttributes')) {
       this.speakTextStyle_(container);
     }
   }
@@ -1015,11 +1015,11 @@ class EditingChromeVoxStateObserver {
     const inputType = range && range.start.node.inputType;
     if (inputType === 'email' || inputType === 'url') {
       BrailleBackground.instance.getTranslatorManager().refresh(
-          localStorage['brailleTable8']);
+          LocalStorage.get('brailleTable8'));
       return;
     }
     BrailleBackground.instance.getTranslatorManager().refresh(
-        localStorage['brailleTable']);
+        LocalStorage.get('brailleTable'));
   }
 }
 

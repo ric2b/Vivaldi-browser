@@ -26,6 +26,22 @@ luci.bucket(
     ],
 )
 
+luci.bucket(
+    name = "ci.shadow",
+    shadows = "ci",
+    constraints = luci.bucket_constraints(
+        pools = ["luci.chromium.ci"],
+        service_accounts = ["chromium-ci-builder-dev@chops-service-accounts.iam.gserviceaccount.com"],
+    ),
+    bindings = [
+        luci.binding(
+            roles = "role/buildbucket.creator",
+            groups = "mdb/chrome-troopers",
+        ),
+    ],
+    dynamic = True,
+)
+
 luci.gitiles_poller(
     name = "chromium-gitiles-trigger",
     bucket = "ci",
@@ -70,39 +86,105 @@ def ci_builder(*, name, resultdb_bigquery_exports = None, **kwargs):
     )
 
 ci_builder(
-    name = "android-marshmallow-arm64-rel-swarming",
+    name = "android-pie-arm64-rel-swarming",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "android",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "android",
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
+        ),
+        android_config = builder_config.android_config(
+            config = "main_builder_mb",
+        ),
+    ),
 )
 
 ci_builder(
     name = "linux-rel-swarming",
     description_html = "Test description. <b>Test HTML</b>.",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
 )
 
 ci_builder(
     name = "linux-ssd-rel-swarming",
     description_html = "Ensures builders are using available local SSDs",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
     builderless = False,
 )
 
 ci_builder(
     name = "mac-rel-swarming",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
     os = os.MAC_DEFAULT,
 )
 
 ci_builder(
     name = "mac-arm-rel-swarming",
-    cpu = cpu.ARM64,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
     os = os.MAC_DEFAULT,
+    cpu = cpu.ARM64,
 )
 
 ci_builder(
     name = "win-rel-swarming",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
     os = os.WINDOWS_10,
     goma_enable_ats = True,
 )
 
 ci_builder(
     name = "win11-rel-swarming",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+        ),
+    ),
     os = os.WINDOWS_11,
     goma_enable_ats = True,
 )

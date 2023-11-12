@@ -82,8 +82,8 @@ sign_bundle("sign_widget_kit_extension") {
 }
 
 sign_bundle("sign_content_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_13_0/obj/ios/chrome/content_widget_extension"
-  gendir = "$root_out_dir/ios_clang_arm64_13_0/gen/ios/chrome/content_widget_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_13_4/obj/ios/chrome/content_widget_extension"
+  gendir = "$root_out_dir/ios_clang_arm64_13_4/gen/ios/chrome/content_widget_extension"
 
   binary = "$bindir/content_widget_extension"
   entitlements = "$gendir/content_widget_extension.appex.entitlements"
@@ -95,8 +95,8 @@ sign_bundle("sign_content_widget_extension") {
 }
 
 sign_bundle("sign_search_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_13_0/obj/ios/chrome/search_widget_extension"
-  gendir = "$root_out_dir/ios_clang_arm64_13_0/gen/ios/chrome/search_widget_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_13_4/obj/ios/chrome/search_widget_extension"
+  gendir = "$root_out_dir/ios_clang_arm64_13_4/gen/ios/chrome/search_widget_extension"
 
   binary = "$bindir/search_widget_extension"
   entitlements = "$gendir/search_widget_extension.appex.entitlements"

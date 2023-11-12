@@ -42,8 +42,6 @@ void NGBoxFragmentBuilder::AddBreakBeforeChild(
 
   if (!has_inflow_child_break_inside_)
     has_inflow_child_break_inside_ = !child.IsFloatingOrOutOfFlowPositioned();
-  if (!has_float_break_inside_)
-    has_float_break_inside_ = child.IsFloating();
 
   if (auto* child_inline_node = DynamicTo<NGInlineNode>(child)) {
     if (!last_inline_break_token_) {
@@ -375,8 +373,14 @@ void NGBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
 
   for (auto& candidate : oof_positioned_candidates_)
     candidate.static_position.offset.block_offset += delta;
-  for (auto& descendant : oof_positioned_fragmentainer_descendants_)
-    descendant.static_position.offset.block_offset += delta;
+  for (auto& descendant : oof_positioned_fragmentainer_descendants_) {
+    // If we have already returned past (above) the containing block of the OOF
+    // (but not all the way the outermost fragmentainer), the containing block
+    // is affected by this shift that we just decided to make. This shift wasn't
+    // known at the time of normal propagation. So shift accordingly now.
+    descendant.containing_block.IncreaseBlockOffset(delta);
+    descendant.fixedpos_containing_block.IncreaseBlockOffset(delta);
+  }
 
   if (NGFragmentItemsBuilder* items_builder = ItemsBuilder())
     items_builder->MoveChildrenInBlockDirection(delta);
@@ -407,16 +411,13 @@ void NGBoxFragmentBuilder::PropagateBreakInfo(
     return;
 
   const NGBlockBreakToken* token = child_box_fragment->BreakToken();
-  if (IsResumingLayout(token)) {
+  if (IsBreakInside(token)) {
     // Figure out if this child break is in the same flow as this parent. If
     // it's an out-of-flow positioned box, it's not. If it's in a parallel flow,
     // it's also not.
-    if (!token->IsAtBlockEnd()) {
-      if (child_box_fragment->IsFloating())
-        has_float_break_inside_ = true;
-      else if (!child_box_fragment->IsOutOfFlowPositioned())
-        has_inflow_child_break_inside_ = true;
-    }
+    if (!token->IsAtBlockEnd() &&
+        !child_box_fragment->IsFloatingOrOutOfFlowPositioned())
+      has_inflow_child_break_inside_ = true;
 
     if (child_layout_result.ShouldForceSameFragmentationFlow())
       has_inflow_child_break_inside_ = true;
@@ -535,10 +536,19 @@ const NGLayoutResult* NGBoxFragmentBuilder::ToBoxFragment(
     SetIsBlockInInline();
 
   if (UNLIKELY(has_block_fragmentation_ && node_)) {
+    if (previous_break_token_ && previous_break_token_->IsAtBlockEnd()) {
+      // Avoid trailing margin propagation from a node that just has overflowing
+      // content here in the current fragmentainer. It's in a parallel flow. If
+      // we don't prevent such propagation, the trailing margin may push down
+      // subsequent nodes that are being resumed after a break, rather than
+      // resuming at the block-start of the fragmentainer.
+      end_margin_strut_ = NGMarginStrut();
+    }
+
     if (!break_token_) {
       if (last_inline_break_token_)
         child_break_tokens_.push_back(std::move(last_inline_break_token_));
-      if (DidBreakSelf() || HasChildBreakInside())
+      if (DidBreakSelf() || ShouldBreakInside())
         break_token_ = NGBlockBreakToken::Create(this);
     }
 
@@ -562,6 +572,13 @@ const NGLayoutResult* NGBoxFragmentBuilder::ToBoxFragment(
         block_size_for_fragmentation_ =
             std::max(block_size_for_fragmentation_, FragmentBlockSize());
       }
+
+      // If the node fits inside the current fragmentainer, any break inside it
+      // will establish a parallel flow, which means that breaking early inside
+      // it isn't going to help honor any break avoidance requests on content
+      // that comes after this node. So don't propagate it.
+      if (IsKnownToFitInFragmentainer())
+        early_break_ = nullptr;
     }
   }
 
@@ -689,7 +706,7 @@ void NGBoxFragmentBuilder::AdjustFixedposContainingBlockForInnerMulticols() {
 #if DCHECK_IS_ON()
 
 void NGBoxFragmentBuilder::CheckNoBlockFragmentation() const {
-  DCHECK(!HasChildBreakInside());
+  DCHECK(!ShouldBreakInside());
   DCHECK(!HasInflowChildBreakInside());
   DCHECK(!DidBreakSelf());
   DCHECK(!has_forced_break_);

@@ -15,7 +15,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/animation/animation.h"
@@ -424,6 +423,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
       PaintHoldingReason,
       absl::optional<PaintHoldingCommitTrigger>) override {}
   void OnPauseRenderingChanged(bool) override {}
+  void OnCommitRequested() override {}
 
   void RecordStartOfFrameMetrics() override {}
   void RecordEndOfFrameMetrics(base::TimeTicks,
@@ -492,9 +492,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   void DidPresentCompositorFrame(
       uint32_t frame_token,
       const gfx::PresentationFeedback& feedback) override {}
-
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies) override {}
 
  private:
   explicit LayerTreeHostClientForTesting(TestHooks* test_hooks)
@@ -699,7 +696,7 @@ LayerTreeTest::LayerTreeTest(viz::RendererType renderer_type)
 #elif defined(ADDRESS_SANITIZER) || defined(_DEBUG)
     // ASAN and Debug builds are slower than release builds, as expected.
     timeout_seconds_ = 30;
-#elif defined(USE_OZONE)
+#elif BUILDFLAG(IS_OZONE)
     // Ozone builds go through a slower path than regular Linux builds.
     timeout_seconds_ = 30;
 #endif
@@ -910,7 +907,7 @@ void LayerTreeTest::DoBeginTest() {
   DCHECK(!impl_thread_ || impl_thread_->task_runner().get());
 
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
-      base::ThreadTaskRunnerHandle::Get();
+      base::SingleThreadTaskRunner::GetCurrentDefault();
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner =
       impl_thread_ ? impl_thread_->task_runner() : nullptr;
   LayerTreeHostSchedulingClient* scheduling_client =
@@ -1148,7 +1145,7 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   }
   InitializeSettings(&settings_);
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&LayerTreeTest::DoBeginTest, base::Unretained(this)));
 

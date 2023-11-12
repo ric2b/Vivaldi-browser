@@ -17,8 +17,8 @@ namespace segmentation_platform {
 // Implementation of the LocalStateHelper class.
 class LocalStateHelperImpl : public LocalStateHelper {
  public:
-  LocalStateHelperImpl(LocalStateHelperImpl&) = delete;
-  LocalStateHelperImpl& operator=(LocalStateHelperImpl&) = delete;
+  LocalStateHelperImpl(const LocalStateHelperImpl&) = delete;
+  LocalStateHelperImpl& operator=(const LocalStateHelperImpl&) = delete;
 
   // LocalStateHelper implementation.
   void Initialize(PrefService* local_state) override;
@@ -30,7 +30,7 @@ class LocalStateHelperImpl : public LocalStateHelper {
   LocalStateHelperImpl();
   ~LocalStateHelperImpl() override;
 
-  raw_ptr<PrefService> local_state_ = nullptr;
+  raw_ptr<PrefService, DanglingUntriaged> local_state_ = nullptr;
 };
 
 }  // namespace segmentation_platform

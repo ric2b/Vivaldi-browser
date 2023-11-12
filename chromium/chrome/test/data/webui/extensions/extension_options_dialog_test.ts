@@ -9,15 +9,14 @@
 
 import 'chrome://extensions/extensions.js';
 
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
 
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 suite('ExtensionOptionsDialogTest', () => {
   test('show options dialog', async () => {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     window.history.replaceState(
         {}, '', '/?id=ibbpngabdmdpednkhonkkobdeccpkiff');
 

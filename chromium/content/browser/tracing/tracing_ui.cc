@@ -52,13 +52,13 @@ constexpr char kStreamFormatJSON[] = "json";
 perfetto::TracingSession* g_tracing_session = nullptr;
 
 void OnGotCategories(WebUIDataSource::GotDataCallback callback,
-                     const std::set<std::string>& categorySet) {
-  base::ListValue category_list;
-  for (auto it = categorySet.begin(); it != categorySet.end(); it++) {
-    category_list.Append(*it);
+                     const std::set<std::string>& category_set) {
+  base::Value::List category_list;
+  for (const std::string& category : category_set) {
+    category_list.Append(category);
   }
 
-  scoped_refptr<base::RefCountedString> res(new base::RefCountedString());
+  auto res = base::MakeRefCounted<base::RefCountedString>();
   base::JSONWriter::Write(category_list, &res->data());
   std::move(callback).Run(res);
 }
@@ -74,8 +74,7 @@ bool BeginRecording(const std::string& data64,
 
   // TODO(skyostil): Migrate all use cases from TracingController to Perfetto.
   if (stream_format == kStreamFormatProtobuf) {
-    if (g_tracing_session)
-      delete g_tracing_session;
+    delete g_tracing_session;
     g_tracing_session =
         perfetto::Tracing::NewTrace(perfetto::BackendType::kCustomBackend)
             .release();
@@ -99,7 +98,8 @@ void OnTraceBufferUsageResult(WebUIDataSource::GotDataCallback callback,
                               float percent_full,
                               size_t approximate_event_count) {
   std::string str = base::NumberToString(percent_full);
-  std::move(callback).Run(base::RefCountedString::TakeString(&str));
+  std::move(callback).Run(
+      base::MakeRefCounted<base::RefCountedString>(std::move(str)));
 }
 
 bool GetTraceBufferUsage(WebUIDataSource::GotDataCallback callback) {
@@ -121,7 +121,8 @@ bool GetTraceBufferUsage(WebUIDataSource::GotDataCallback callback) {
             usage = base::NumberToString(percent_full);
           }
           std::move(shared_callback->data)
-              .Run(base::RefCountedString::TakeString(&usage));
+              .Run(base::MakeRefCounted<base::RefCountedString>(
+                  std::move(usage)));
         });
     return true;
   }
@@ -219,7 +220,7 @@ void OnTracingRequest(const std::string& path,
   if (!OnBeginJSONRequest(path, std::move(split_callback.first))) {
     std::string error("##ERROR##");
     std::move(split_callback.second)
-        .Run(base::RefCountedString::TakeString(&error));
+        .Run(base::MakeRefCounted<base::RefCountedString>(std::move(error)));
   }
 }
 

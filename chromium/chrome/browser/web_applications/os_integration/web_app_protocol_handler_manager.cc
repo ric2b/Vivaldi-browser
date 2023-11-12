@@ -133,12 +133,9 @@ void WebAppProtocolHandlerManager::RegisterOsProtocolHandlers(
     std::move(callback).Run(Result::kOk);
     return;
   }
+
   const std::vector<apps::ProtocolHandlerInfo> handlers =
       GetAppProtocolHandlerInfos(app_id);
-  if (handlers.empty()) {
-    std::move(callback).Run(Result::kOk);
-    return;
-  }
   RegisterProtocolHandlersWithOs(app_id,
                                  app_registrar_->GetAppShortName(app_id),
                                  profile_, handlers, std::move(callback));

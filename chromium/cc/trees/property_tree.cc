@@ -12,6 +12,7 @@
 
 #include "base/check_op.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/traced_value.h"
@@ -30,6 +31,12 @@
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace cc {
+
+void AnimationUpdateOnMissingPropertyNodeUMALog(bool missing_property_node) {
+  UMA_HISTOGRAM_BOOLEAN(
+      "Compositing.Renderer.AnimationUpdateOnMissingPropertyNode",
+      missing_property_node);
+}
 
 template <typename T>
 PropertyTree<T>::PropertyTree(PropertyTrees* property_trees)
@@ -149,11 +156,13 @@ void TransformTree::set_needs_update(bool needs_update) {
 bool TransformTree::OnTransformAnimated(ElementId element_id,
                                         const gfx::Transform& transform) {
   TransformNode* node = FindNodeFromElementId(element_id);
-  DCHECK(node);
   // TODO(crbug.com/1307498): Remove this when we no longer animate
   // non-existent nodes.
-  if (!node)
+  if (!node) {
+    AnimationUpdateOnMissingPropertyNodeUMALog(true);
     return false;
+  }
+  AnimationUpdateOnMissingPropertyNodeUMALog(false);
   if (node->local == transform)
     return false;
   node->local = transform;
@@ -273,7 +282,7 @@ void TransformTree::CombineTransformsBetween(int source_id,
     size_t index = source_to_destination_size - 1 - i;
     const TransformNode* node = Node(source_to_destination[index]);
     if (node->flattens_inherited_transform)
-      combined_transform.FlattenTo2d();
+      combined_transform.Flatten();
     combined_transform.PreConcat(node->to_parent);
   }
 
@@ -568,7 +577,7 @@ void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
   DCHECK(parent_node);
   gfx::Transform to_screen_space_transform = ToScreen(parent_node->id);
   if (node->flattens_inherited_transform)
-    to_screen_space_transform.FlattenTo2d();
+    to_screen_space_transform.Flatten();
   to_screen_space_transform.PreConcat(node->to_parent);
   node->ancestors_are_invertible = parent_node->ancestors_are_invertible;
   node->node_and_ancestors_are_flat =
@@ -614,7 +623,7 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
   // X = ST^-1 * ST'. We cache ST and ST^-1 to make this more efficient.
   DCHECK_LT(node->id, static_cast<int>(cached_data_.size()));
   gfx::Transform& to_screen = cached_data_[node->id].to_screen;
-  to_screen.RoundTranslationComponents();
+  to_screen.Round2dTranslationComponents();
   gfx::Transform& from_screen = cached_data_[node->id].from_screen;
   gfx::Transform delta = from_screen;
   delta *= to_screen;
@@ -632,7 +641,7 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
   node->to_parent.Translate(translation);
   // Avoid accumulation of errors in to_parent.
   if (node->to_parent.IsApproximatelyIdentityOrIntegerTranslation(kTolerance))
-    node->to_parent.RoundTranslationComponents();
+    node->to_parent.RoundToIdentityOrIntegerTranslation();
 }
 
 void TransformTree::UpdateTransformChanged(TransformNode* node,
@@ -696,9 +705,7 @@ void TransformTree::SetRootScaleAndTransform(
 
   gfx::Transform root_to_screen;
   root_to_screen.Scale(screen_space_scale.x(), screen_space_scale.y());
-  gfx::Transform root_from_screen;
-  bool invertible = root_to_screen.GetInverse(&root_from_screen);
-  DCHECK(invertible);
+  gfx::Transform root_from_screen = root_to_screen.GetCheckedInverse();
   if (root_to_screen != ToScreen(kRootPropertyNodeId)) {
     SetToScreen(kRootPropertyNodeId, root_to_screen);
     SetFromScreen(kRootPropertyNodeId, root_from_screen);
@@ -897,7 +904,7 @@ void EffectTree::UpdateOnlyDrawsVisibleContent(EffectNode* node,
                                                EffectNode* parent_node) {
   node->only_draws_visible_content =
       !node->has_copy_request && !node->subtree_capture_id.is_valid() &&
-      !node->shared_element_resource_id.IsValid();
+      !node->view_transition_element_resource_id.IsValid();
   if (parent_node)
     node->only_draws_visible_content &= parent_node->only_draws_visible_content;
   if (!node->backdrop_filters.IsEmpty()) {
@@ -934,11 +941,13 @@ void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
 
 bool EffectTree::OnOpacityAnimated(ElementId id, float opacity) {
   EffectNode* node = FindNodeFromElementId(id);
-  DCHECK(node);
   // TODO(crbug.com/1307498): Remove this when we no longer animate
   // non-existent nodes.
-  if (!node)
+  if (!node) {
+    AnimationUpdateOnMissingPropertyNodeUMALog(true);
     return false;
+  }
+  AnimationUpdateOnMissingPropertyNodeUMALog(false);
   if (node->opacity == opacity)
     return false;
   node->opacity = opacity;
@@ -951,11 +960,13 @@ bool EffectTree::OnOpacityAnimated(ElementId id, float opacity) {
 bool EffectTree::OnFilterAnimated(ElementId id,
                                   const FilterOperations& filters) {
   EffectNode* node = FindNodeFromElementId(id);
-  DCHECK(node);
   // TODO(crbug.com/1307498): Remove this when we no longer animate
   // non-existent nodes.
-  if (!node)
+  if (!node) {
+    AnimationUpdateOnMissingPropertyNodeUMALog(true);
     return false;
+  }
+  AnimationUpdateOnMissingPropertyNodeUMALog(false);
   if (node->filters == filters)
     return false;
   node->filters = filters;
@@ -969,11 +980,13 @@ bool EffectTree::OnBackdropFilterAnimated(
     ElementId id,
     const FilterOperations& backdrop_filters) {
   EffectNode* node = FindNodeFromElementId(id);
-  DCHECK(node);
   // TODO(crbug.com/1307498): Remove this when we no longer animate
   // non-existent nodes.
-  if (!node)
+  if (!node) {
+    AnimationUpdateOnMissingPropertyNodeUMALog(true);
     return false;
+  }
+  AnimationUpdateOnMissingPropertyNodeUMALog(false);
   if (node->backdrop_filters == backdrop_filters)
     return false;
   node->backdrop_filters = backdrop_filters;
@@ -1001,7 +1014,7 @@ void EffectTree::UpdateEffects(int id) {
 
 void EffectTree::UpdateClosestAncestorSharedElement(EffectNode* node,
                                                     EffectNode* parent_node) {
-  if (node->shared_element_resource_id.IsValid()) {
+  if (node->view_transition_element_resource_id.IsValid()) {
     node->closest_ancestor_with_shared_element_id = node->id;
   } else if (parent_node) {
     node->closest_ancestor_with_shared_element_id =
@@ -1535,7 +1548,7 @@ gfx::Transform ScrollTree::ScreenSpaceTransform(int scroll_node_id) const {
   screen_space_transform.PostConcat(
       transform_tree.ToScreen(transform_node->id));
   if (scroll_node->should_flatten)
-    screen_space_transform.FlattenTo2d();
+    screen_space_transform.Flatten();
   return screen_space_transform;
 }
 

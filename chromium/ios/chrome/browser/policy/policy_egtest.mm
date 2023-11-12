@@ -10,6 +10,7 @@
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/enterprise/browser/enterprise_switches.h"
 #import "components/history/core/common/pref_names.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/policy/core/common/cloud/cloud_policy_constants.h"
 #import "components/policy/core/common/policy_loader_ios_constants.h"
@@ -21,6 +22,7 @@
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/translate/translate_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
@@ -32,8 +34,10 @@
 #import "ios/chrome/browser/ui/settings/autofill/autofill_constants.h"
 #import "ios/chrome/browser/ui/settings/elements/elements_constants.h"
 #import "ios/chrome/browser/ui/settings/language/language_settings_ui_constants.h"
+#import "ios/chrome/browser/ui/settings/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_constants.h"
+#import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
@@ -45,7 +49,6 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/chrome/test/earl_grey/test_switches.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/testing/earl_grey/app_launch_configuration.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "net/test/embedded_test_server/embedded_test_server.h"
@@ -156,7 +159,9 @@ NSString* const kDomain2 = @"domain2.com";
   // "com.apple.configuration.managed" key.
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
   config.relaunch_policy = NoForceRelaunchAndResetState;
-  config.features_enabled.push_back(safe_browsing::kEnhancedProtection);
+  config.features_enabled.push_back(
+      password_manager::features::kIOSPasswordUISplit);
+
   return config;
 }
 
@@ -224,13 +229,19 @@ NSString* const kDomain2 = @"domain2.com";
       [ChromeEarlGrey
           userBooleanPref:password_manager::prefs::kCredentialsEnableService],
       @"Preference was unexpectedly true");
-  // Open settings menu and tap password settings.
+  // Open settings menu and tap password manager.
   [self openSettingsMenu];
   [ChromeEarlGreyUI
       tapSettingsMenuButton:chrome_test_util::SettingsMenuPasswordsButton()];
 
-  VerifyManagedSettingItem(kSavePasswordManagedTableViewId,
-                           kPasswordsTableViewId);
+  // Open password settings.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kSettingsToolbarSettingsButtonId)]
+      performAction:grey_tap()];
+
+  VerifyManagedSettingItem(
+      kPasswordSettingsManagedSavePasswordSwitchTableViewId,
+      kPasswordsSettingsTableViewId);
 }
 
 // Tests for the AutofillAddressEnabled policy Settings UI.
@@ -320,8 +331,7 @@ NSString* const kDomain2 = @"domain2.com";
 
 // Tests that language detection is not performed and the tool manual trigger
 // button is disabled when the pref kOfferTranslateEnabled is set to false.
-// TODO(crbug.com/1341363): Disabled due to flakiness. Re-enabled when fixed.
-- (void)DISABLED_testTranslateEnabled {
+- (void)testTranslateEnabled {
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   const GURL testURL = self.testServer->GetURL("/pony.html");
   const std::string pageText = "pony";
@@ -348,10 +358,14 @@ NSString* const kDomain2 = @"domain2.com";
 
   // Make sure the Translate manual trigger button disabled.
   [ChromeEarlGreyUI openToolsMenu];
+  id<GREYMatcher> toolsMenuMatcher =
+      [ChromeEarlGrey isNewOverflowMenuEnabled]
+          ? grey_accessibilityID(kPopupMenuToolsMenuActionListId)
+          : grey_accessibilityID(kPopupMenuToolsMenuTableViewId);
   [[[EarlGrey selectElementWithMatcher:ToolsMenuTranslateButton()]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   /*amount=*/200)
-      onElementWithMatcher:chrome_test_util::ToolsMenuView()]
+      onElementWithMatcher:toolsMenuMatcher]
       assertWithMatcher:grey_accessibilityTrait(
                             UIAccessibilityTraitNotEnabled)];
 
@@ -388,7 +402,7 @@ NSString* const kDomain2 = @"domain2.com";
   // Relaunch the app with Discover enabled, as it is required for this test.
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
-  config.features_enabled.push_back(kDiscoverFeedInNtp);
+  config.features_disabled.push_back(kEnableFeedAblation);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
   NSString* feedTitle = l10n_util::GetNSString(IDS_IOS_DISCOVER_FEED_TITLE);
@@ -583,7 +597,7 @@ NSString* const kDomain2 = @"domain2.com";
 // Tests that when the BrowserSignin policy is updated while the app is not
 // launched, a policy screen is displayed at startup.
 - (void)testBrowserSignInDisabledAtStartup {
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Create the config to relaunch Chrome.
@@ -627,7 +641,7 @@ NSString* const kDomain2 = @"domain2.com";
 // Tests that the UI notifying the user of their sign out is displayed when the
 // policy changes while the app is launched.
 - (void)testBrowserSignInDisabledWhileAppVisible {
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Force sign out.
@@ -651,7 +665,7 @@ NSString* const kDomain2 = @"domain2.com";
 // Tests that the UI notifying the user of their sign out is displayed when the
 // primary account is restricted.
 - (void)testBrowserAccountRestrictedAlert {
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Set restrictions.
@@ -678,7 +692,7 @@ NSString* const kDomain2 = @"domain2.com";
 // Tests that the UI notifying the user is displayed when sync is disabled by an
 // administrator while the app is launched.
 - (void)testSyncDisabledPromptWhileAppVisible {
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Enable SyncDisabled policy.

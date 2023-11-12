@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/prefs/browser_prefs.h"
 
-#import "base/stl_util.h"
 #import "base/time/time.h"
+#import "base/types/cxx23_to_underlying.h"
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/browsing_data/core/pref_names.h"
 #import "components/commerce/core/pref_names.h"
@@ -44,6 +44,7 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "components/proxy_config/pref_proxy_config_tracker_impl.h"
+#import "components/reading_list/core/reading_list_pref_names.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
@@ -61,6 +62,7 @@
 #import "components/update_client/update_client.h"
 #import "components/variations/service/variations_service.h"
 #import "components/web_resource/web_resource_pref_names.h"
+#import "ios/chrome/app/variations_app_state_agent.h"
 #import "ios/chrome/browser/browser_state/browser_state_info_cache.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
@@ -78,6 +80,7 @@
 #import "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/first_run/trending_queries_field_trial.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/ui/ntp/ios_popular_sites_field_trial.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/voice/voice_search_prefs_registration.h"
 #import "ios/chrome/browser/web/font_size/font_size_tab_helper.h"
@@ -86,9 +89,10 @@
 
 // Vivaldi
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_prefs.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/notes/note_mediator.h"
 #import "ios/notes/note_path_cache.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 #import "prefs/vivaldi_browser_prefs.h"
 // End Vivaldi
 
@@ -128,6 +132,9 @@ const char kDataSaverEnabled[] = "spdy_proxy.enabled";
 // Deprecated 09/2022.
 const char kPrefPromoObject[] = "ios.ntppromo";
 
+// Deprecated 11/2022.
+const char kLocalConsentsDictionary[] = "local_consents";
+
 }  // namespace
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -135,6 +142,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   flags_ui::PrefServiceFlagsStorage::RegisterPrefs(registry);
   signin::IdentityManager::RegisterLocalStatePrefs(registry);
   IOSChromeMetricsServiceClient::RegisterPrefs(registry);
+  metrics::RegisterDemographicsLocalStatePrefs(registry);
   network_time::NetworkTimeTracker::RegisterPrefs(registry);
   policy::BrowserPolicyConnector::RegisterPrefs(registry);
   policy::PolicyStatisticsCollector::RegisterPrefs(registry);
@@ -144,6 +152,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   variations::VariationsService::RegisterPrefs(registry);
   fre_field_trial::RegisterLocalStatePrefs(registry);
   trending_queries_field_trial::RegisterLocalStatePrefs(registry);
+  ios_popular_sites_field_trial::RegisterLocalStatePrefs(registry);
   component_updater::RegisterComponentUpdateServicePrefs(registry);
   component_updater::AutofillStatesComponentInstallerPolicy::RegisterPrefs(
       registry);
@@ -157,6 +166,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   [MemoryDebuggerManager registerLocalState:registry];
   [IncognitoReauthSceneAgent registerLocalState:registry];
+  [VariationsAppStateAgent registerLocalState:registry];
 
   registry->RegisterBooleanPref(prefs::kBrowsingDataMigrationHasBeenPossible,
                                 false);
@@ -190,6 +200,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kRestrictAccountsToPatterns);
   registry->RegisterIntegerPref(prefs::kBrowserSigninPolicy,
                                 static_cast<int>(BrowserSigninMode::kEnabled));
+  registry->RegisterBooleanPref(prefs::kAppStoreRatingPolicyEnabled, true);
 
   registry->RegisterIntegerPref(kTrialGroupPrefName, 0);
 
@@ -206,6 +217,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   // times a user should see autofill branding animation after installation.
   registry->RegisterIntegerPref(
       prefs::kAutofillBrandingIconAnimationRemainingCountPrefName, 2);
+
+  registry->RegisterDictionaryPref(kLocalConsentsDictionary);
 }
 
 void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -260,8 +273,9 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Vivaldi
   [NoteMediator registerBrowserStatePrefs:registry];
   [NotePathCache registerBrowserStatePrefs:registry];
-  [VivaldiSpeedDialPrefs registerBrowserStatePrefs:registry];
+  [VivaldiStartPagePrefs registerBrowserStatePrefs:registry];
   [VivaldiBookmarkPrefs registerBrowserStatePrefs:registry];
+  [VivaldiTabSettingPrefs registerBrowserStatePrefs:registry];
   // End Vivaldi
 
   registry->RegisterBooleanPref(kDataSaverEnabled, false);
@@ -363,6 +377,9 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
 
   // Added 09/2022
   prefs->ClearPref(kPrefPromoObject);
+
+  // Added 11/2022.
+  prefs->ClearPref(kLocalConsentsDictionary);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -392,4 +409,19 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
 
   // Added 09/2022
   prefs->ClearPref(kDataSaverEnabled);
+
+  // Added 10/2022.
+  if (prefs->HasPrefPath(prefs::kGoogleServicesLastAccountIdDeprecated)) {
+    std::string account_id =
+        prefs->GetString(prefs::kGoogleServicesLastAccountIdDeprecated);
+    prefs->ClearPref(prefs::kGoogleServicesLastAccountIdDeprecated);
+    DCHECK_EQ(account_id.find('@'), std::string::npos)
+        << "kGoogleServicesLastAccountId is not expected to be an email: "
+        << account_id;
+    if (!account_id.empty())
+      prefs->SetString(prefs::kGoogleServicesLastGaiaId, account_id);
+  }
+
+  // Added 12/2022.
+  prefs->ClearPref(reading_list::prefs::kDeprecatedReadingListHasUnseenEntries);
 }

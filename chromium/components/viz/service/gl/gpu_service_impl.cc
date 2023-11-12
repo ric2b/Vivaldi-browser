@@ -12,13 +12,16 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -123,17 +126,6 @@
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
-#endif
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-#include "platform_media/ipc_demuxer/gpu/pipeline/ipc_media_pipeline.h"
-
-namespace gpu {
-// This function pointer is defined in gpu/ipc/service/gpu_channel.cc
-extern GPU_IPC_SERVICE_EXPORT void (*g_vivaldi_media_pipeline_factory_creator)(
-    mojo::GenericPendingReceiver receiver);
-}
-
 #endif
 
 namespace viz {
@@ -340,7 +332,7 @@ GpuServiceImpl::GpuServiceImpl(
     const gfx::GpuExtraInfo& gpu_extra_info,
     gpu::VulkanImplementation* vulkan_implementation,
     base::OnceCallback<void(ExitCode)> exit_callback)
-    : main_runner_(base::ThreadTaskRunnerHandle::Get()),
+    : main_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       io_runner_(std::move(io_runner)),
       watchdog_thread_(std::move(watchdog_thread)),
       gpu_preferences_(gpu_preferences),
@@ -421,7 +413,8 @@ GpuServiceImpl::GpuServiceImpl(
     // Initialize the OverlayStateService using the GPUServiceImpl task
     // sequence.
     auto* overlay_state_service = OverlayStateService::GetInstance();
-    overlay_state_service->Initialize(base::SequencedTaskRunnerHandle::Get());
+    overlay_state_service->Initialize(
+        base::SequencedTaskRunner::GetCurrentDefault());
   }
 
   // Add GpuServiceImpl to DirectCompositionOverlayCapsMonitor observer list for
@@ -429,17 +422,10 @@ GpuServiceImpl::GpuServiceImpl(
   gl::DirectCompositionOverlayCapsMonitor::GetInstance()->AddObserver(this);
 #endif
 
-  gpu_memory_buffer_factory_ =
-      gpu::GpuMemoryBufferFactory::CreateNativeType(vulkan_context_provider());
+  gpu_memory_buffer_factory_ = gpu::GpuMemoryBufferFactory::CreateNativeType(
+      vulkan_context_provider(), io_runner_);
 
   weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  // Glue together GpuChannel and IPCMediaPipeline here where the code
-  // links against all relevant libraries.
-  gpu::g_vivaldi_media_pipeline_factory_creator =
-      &media::IPCMediaPipeline::CreateFactory;
-#endif
 }
 
 GpuServiceImpl::~GpuServiceImpl() {
@@ -597,13 +583,13 @@ void GpuServiceImpl::InitializeWithHost(
     bool thread_safe_manager = display_context_on_another_thread;
     // Raw draw needs to access shared image backing on the compositor thread.
     thread_safe_manager |= features::IsUsingRawDraw();
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
     thread_safe_manager |= features::ShouldUseRealBuffersForPageFlipTest();
 #endif
     owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
         thread_safe_manager, display_context_on_another_thread);
     shared_image_manager = owned_shared_image_manager_.get();
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   } else {
     // With this feature enabled, we don't expect to receive an external
     // SharedImageManager.
@@ -852,11 +838,30 @@ void GpuServiceImpl::CreateVideoEncodeAcceleratorProvider(
     mojo::PendingReceiver<media::mojom::VideoEncodeAcceleratorProvider>
         vea_provider_receiver) {
   DCHECK(io_runner_->BelongsToCurrentThread());
+
+  // Offload VEA providers to a dedicated runner. Things like loading profiles
+  // and creating encoder might take quite some time, and they might block
+  // processing of other mojo calls if executed on the current runner.
+  scoped_refptr<base::SingleThreadTaskRunner> runner;
+#if BUILDFLAG(IS_FUCHSIA)
+  // TODO(crbug.com/1340041): Fuchsia does not support FIDL communication from
+  // ThreadPool's worker threads.
+  if (!vea_thread_) {
+    base::Thread::Options thread_options(base::MessagePumpType::IO, /*size=*/0);
+    vea_thread_ =
+        std::make_unique<base::Thread>("GpuVideoEncodeAcceleratorThread");
+    CHECK(vea_thread_->StartWithOptions(std::move(thread_options)));
+  }
+  runner = vea_thread_->task_runner();
+#else
+  // MayBlock() because MF VEA can take long time running GetSupportedProfiles()
+  runner = base::ThreadPool::CreateSingleThreadTaskRunner({base::MayBlock()});
+#endif
   media::MojoVideoEncodeAcceleratorProvider::Create(
       std::move(vea_provider_receiver),
       base::BindRepeating(&media::GpuVideoEncodeAcceleratorFactory::CreateVEA),
       gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds(),
-      gpu_info_.active_gpu());
+      gpu_info_.active_gpu(), std::move(runner));
 }
 
 void GpuServiceImpl::CreateGpuMemoryBuffer(
@@ -1012,14 +1017,6 @@ void GpuServiceImpl::MaybeExitOnContextLost() {
 bool GpuServiceImpl::IsExiting() const {
   return is_exiting_.IsSet();
 }
-
-#if BUILDFLAG(IS_WIN)
-void GpuServiceImpl::SendCreatedChildWindow(gpu::SurfaceHandle parent_window,
-                                            gpu::SurfaceHandle child_window) {
-  // This can be called from main or display compositor thread.
-  gpu_host_->SetChildSurface(parent_window, child_window);
-}
-#endif
 
 void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
                                          uint64_t client_tracing_id,

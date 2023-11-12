@@ -204,7 +204,7 @@ std::vector<FieldValue> GetFieldValues(
   DCHECK(r.value.is_list()) << r.error;
   std::vector<FieldValue> fields;
 
-  for (const base::Value& field : r.value.GetListDeprecated()) {
+  for (const base::Value& field : r.value.GetList()) {
     fields.push_back({.id = *field.FindStringKey("id"),
                       .value = *field.FindStringKey("value")});
   }
@@ -849,8 +849,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     // "fr" instead of "en").
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
-        {blink::features::kAutofillShadowDOM,
-         features::kAutofillRefillModifiedCreditCardExpirationDates},
+        {blink::features::kAutofillShadowDOM},
         /*disabled_features=*/{features::kAutofillPageLanguageDetection});
   }
   ~AutofillInteractiveTestBase() override = default;
@@ -2885,7 +2884,7 @@ class AutofillInteractiveIsolationTest : public AutofillInteractiveTestBase {
   }
 };
 
-enum class FrameType { kIFrame, kShadowDomFencedFrame, kMPArchFencedFrame };
+enum class FrameType { kIFrame, kFencedFrame };
 
 class AutofillInteractiveFencedFrameTest
     : public AutofillInteractiveIsolationTest,
@@ -2895,12 +2894,8 @@ class AutofillInteractiveFencedFrameTest
     if (GetParam() != FrameType::kIFrame) {
       scoped_feature_list_.InitWithFeatures(
           {features::kAutofillEnableWithinFencedFrame}, {});
-      fenced_frame_test_helper_ = std::make_unique<
-          content::test::FencedFrameTestHelper>(
-          GetParam() == FrameType::kShadowDomFencedFrame
-              ? content::test::FencedFrameTestHelper::FencedFrameType::
-                    kShadowDOM
-              : content::test::FencedFrameTestHelper::FencedFrameType::kMPArch);
+      fenced_frame_test_helper_ =
+          std::make_unique<content::test::FencedFrameTestHelper>();
     }
   }
   ~AutofillInteractiveFencedFrameTest() override = default;
@@ -2925,8 +2920,7 @@ class AutofillInteractiveFencedFrameTest
             RenderFrameHostForName(GetWebContents(), "crossFrame");
         return cross_frame;
       }
-      case FrameType::kShadowDomFencedFrame:
-      case FrameType::kMPArchFencedFrame: {
+      case FrameType::kFencedFrame: {
         content::RenderFrameHost* cross_frame =
             fenced_frame_test_helper_->CreateFencedFrame(
                 primary_main_frame_host(), frame_url);
@@ -3058,9 +3052,8 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
 
 INSTANTIATE_TEST_SUITE_P(AutofillInteractiveTest,
                          AutofillInteractiveFencedFrameTest,
-                         ::testing::Values(FrameType::kMPArchFencedFrame,
-                                           FrameType::kIFrame,
-                                           FrameType::kShadowDomFencedFrame));
+                         ::testing::Values(FrameType::kFencedFrame,
+                                           FrameType::kIFrame));
 
 // Test fixture for refill behavior.
 //

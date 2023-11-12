@@ -71,6 +71,8 @@ class GURL;
 // the returned array, if appropriate.
 - (NSArray<NoteHomeViewController*>*)cachedViewControllerStack;
 
+- (void)handleAddBarButtonTap;
+
 @end
 
 #endif  // IOS_NOTES_NOTE_HOME_VIEW_CONTROLLER_H_

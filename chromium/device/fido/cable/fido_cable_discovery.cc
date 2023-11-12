@@ -4,7 +4,6 @@
 
 #include "device/fido/cable/fido_cable_discovery.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -15,8 +14,9 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
@@ -97,8 +97,7 @@ std::unique_ptr<BluetoothAdvertisement::Data> ConstructAdvertisementData(
   // bit of the flag byte.
   service_data_value[0] = kCableFlags;
   service_data_value[1] = 1 /* version */;
-  std::copy(client_eid.begin(), client_eid.end(),
-            service_data_value.begin() + 2);
+  base::ranges::copy(client_eid, service_data_value.begin() + 2);
   service_data.emplace(kGoogleCableUUID128, std::move(service_data_value));
   advertisement_data->set_service_data(std::move(service_data));
 #endif
@@ -282,7 +281,7 @@ void FidoCableDiscovery::OnGetAdapter(scoped_refptr<BluetoothAdapter> adapter) {
 
 void FidoCableDiscovery::OnSetPowered() {
   DCHECK(adapter());
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&FidoCableDiscovery::StartCableDiscovery,
                                 weak_factory_.GetWeakPtr()));
 }
@@ -345,7 +344,7 @@ void FidoCableDiscovery::AdapterPoweredChanged(BluetoothAdapter* adapter,
   // not ready for use". So wait for things to actually be ready.
   // TODO(crbug/1046140): Remove this delay once the Bluetooth layer handles
   // the spurious failure.
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&FidoCableDiscovery::StartCableDiscovery,
                      weak_factory_.GetWeakPtr()),
@@ -405,7 +404,7 @@ void FidoCableDiscovery::OnStartDiscoverySession(
   // Advertising is delayed by 500ms to ensure that any UI has a chance to
   // appear as we don't want to start broadcasting without the user being
   // aware.
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&FidoCableDiscovery::StartAdvertisement,
                      weak_factory_.GetWeakPtr()),

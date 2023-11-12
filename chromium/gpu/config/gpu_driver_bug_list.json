@@ -3398,6 +3398,26 @@
       ]
     },
     {
+      "id": 346,
+      "cr_bugs": [1062184],
+      "description": "Enable HDR video playing through overlay on Intel",
+      "os": {
+        "type": "win"
+      },
+      "intel_gpu_series": [
+        "icelake",
+        "tigerlake",
+        "rocketlake",
+        "dg1",
+        "alderlake",
+        "alchemist",
+        "raptorlake"
+      ],
+      "features": [
+        "force_rgb10a2_overlay_support_flags"
+      ]
+    },
+    {
       "id": 347,
       "cr_bugs": [1119491],
       "description": "Intel GPUs fail to report BGRA8 overlay support",
@@ -3547,8 +3567,11 @@
       "intel_gpu_series": [
         "icelake",
         "tigerlake",
+        "rocketlake",
+        "dg1",
         "alderlake",
-        "alchemist"
+        "alchemist",
+        "raptorlake"
       ],
       "features": [
         "supports_two_yuv_hardware_overlays"
@@ -3960,7 +3983,7 @@
     {
       "id": 394,
       "cr_bugs": [1318380],
-      "description": "Don't use video processor super resolution on Intel Gen9 and older GPUs and non-Intel GPUs.",
+      "description": "Only enable video processor super resolution on Intel Gen10+ GPUs and NVIDIA GPUs with 530+ drivers",
       "os": {
         "type" : "win"
       },
@@ -3974,6 +3997,17 @@
           "driver_version": {
             "op": ">",
             "value": "27.20.100.8681"
+          }
+        },
+        {
+          "vendor_id": "0x10de",
+          "os": {
+            "type" : "win"
+          },
+          "driver_version": {
+            "schema": "nvidia_driver",
+            "op": ">",
+            "value": "530.00"
           }
         }
       ],
@@ -4109,6 +4143,102 @@
       },
       "features": [
         "disable_accelerated_av1_encode"
+      ]
+    },
+    {
+      "id": 404,
+      "description": "Disable EGL_EXT_image_dma_buf_import_modifiers for Exo KMS modifier discovery on kms_swrast/llvmpipe",
+      "os": {
+        "type": "chromeos"
+      },
+      "gl_renderer": "llvmpipe.*",
+      "features": [
+        "disable_egl_ext_image_dma_buf_import_modifiers"
+      ]
+    },
+    {
+      "id": 405,
+      "description": "Disable EGL_EXT_image_dma_buf_import_modifiers for Exo KMS modifier discovery on old proprietary Mali drivers",
+      "os": {
+        "type": "chromeos"
+      },
+      "gl_renderer": "Mali.*",
+      "gl_version_string": ".*r26p0-01rel0.*",
+      "features": [
+        "disable_egl_ext_image_dma_buf_import_modifiers"
+      ]
+    },
+    {
+      "id": 406,
+      "description": "VP9 decoder rejects submitted bitstream buffer on some old Intel drivers.",
+      "cr_bugs": [1376513],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "driver_version": {
+        "op": "between",
+        "value": "23.20.16.4974",
+        "value2": "23.20.16.5044"
+      },
+      "features": [
+        "disable_accelerated_vp9_decode"
+      ]
+    },
+    {
+      "id": 407,
+      "cr_bugs": [1355946],
+      "description": "ANGLE does not permit rendering to RGB external textures",
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "ANGLE.*Samsung Xclipse 920.*",
+      "comment": [
+        "This issue affects the Samsung Galaxy S22 with Exynos chipsets which uses ANGLE",
+        "as the system GLES driver, and the cause appears be overly strict validation."
+      ],
+      "features": [
+        "disable_rendering_to_rgb_external_texture"
+      ]
+    },
+    {
+      "id": 408,
+      "description": "Disable Media Foundation Clear Playback on older AMD drivers.",
+      "comment": [
+        "We see an increased frequency of crashes with Media Foundation for Clear",
+        "playback on older AMD drivers. Disabling the feature for all drivers upto",
+        "the highest observed driver for the failure."
+      ],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "driver_version": {
+        "op": "<=",
+        "value": "26.20.15002.61 "
+      },
+      "features": [
+        "disable_media_foundation_clear_playback"
+      ]
+    },
+    {
+      "id": 409,
+      "cr_bugs": [1393646],
+      "description": "QC7c requires a flush prior to the creation of a fence.",
+      "comment": [
+        "The hypothesis behind why need a flush on the QC7c is as follows.",
+        "The driver has associated queues per buffer. These buffers are in ",
+        "order say A, B and C. We append our fence to queue C. On submission ",
+        "to the gpu these are reordered to say C, B, and then A. By flushing ",
+        "prior to fence insertion we insure that A, B, and C are submitted to ",
+        "the GPU prior to the fence."
+      ],
+      "os": {
+        "type": "chromeos"
+      },
+      "gl_vendor": "freedreno",
+      "features": [
+        "flush_before_create_fence"
       ]
     }
   ]

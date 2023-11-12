@@ -20,8 +20,9 @@ FilePathWatcher::~FilePathWatcher() {
 
 // static
 bool FilePathWatcher::RecursiveWatchAvailable() {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_AIX)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) ||        \
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_AIX) || \
+    BUILDFLAG(IS_FUCHSIA)
   return true;
 #else
   // FSEvents isn't available on iOS.
@@ -41,6 +42,21 @@ bool FilePathWatcher::Watch(const FilePath& path,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(path.IsAbsolute());
   return impl_->Watch(path, type, callback);
+}
+
+bool FilePathWatcher::WatchWithOptions(const FilePath& path,
+                                       const WatchOptions& options,
+                                       const Callback& callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(path.IsAbsolute());
+  return impl_->WatchWithOptions(path, options, callback);
+}
+
+bool FilePathWatcher::PlatformDelegate::WatchWithOptions(
+    const FilePath& path,
+    const WatchOptions& options,
+    const Callback& callback) {
+  return Watch(path, options.type, callback);
 }
 
 }  // namespace base

@@ -12,21 +12,9 @@
 
 namespace base {
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
-#define HAS_NATIVE_THREAD_POOL() 1
-#else
-#define HAS_NATIVE_THREAD_POOL() 0
-#endif
-
-#if HAS_NATIVE_THREAD_POOL()
-// Under this feature, ThreadPoolImpl will use a foreground ThreadGroup backed
-// by a native thread pool implementation. The Windows Thread Pool API and
-// libdispatch are used on Windows and macOS/iOS respectively.
-BASE_EXPORT BASE_DECLARE_FEATURE(kUseNativeThreadPool);
-// Under this feature, ThreadPoolImpl will use a background ThreadGroup backed
-// by a native thread pool implementation.
-BASE_EXPORT BASE_DECLARE_FEATURE(kUseBackgroundNativeThreadPool);
-#endif
+// Under this feature, a utility_thread_group will be created for
+// running USER_VISIBLE tasks.
+BASE_EXPORT BASE_DECLARE_FEATURE(kUseUtilityThreadGroup);
 
 // Under this feature, worker threads are not reclaimed after a timeout. Rather,
 // only excess workers are cleaned up immediately after finishing a task.
@@ -44,6 +32,11 @@ BASE_EXPORT BASE_DECLARE_FEATURE(kRemoveCanceledTasksInTaskQueue);
 // the task queue. Meant to be used in conjunction with
 // kRemoveCanceledTasksInTaskQueue.
 BASE_EXPORT BASE_DECLARE_FEATURE(kAlwaysAbandonScheduledTask);
+
+// This feature controls whether ThreadPool WorkerThreads should hold off waking
+// up to purge partition alloc within the first minute of their lifetime. See
+// base::internal::GetSleepTimeBeforePurge.
+BASE_EXPORT BASE_DECLARE_FEATURE(kDelayFirstWorkerWake);
 
 // Under this feature, a non-zero leeway is added to delayed tasks. Along with
 // DelayPolicy, this affects the time at which a delayed task runs.
@@ -74,7 +67,8 @@ extern const BASE_EXPORT base::FeatureParam<TimeDelta>
     kBrowserPeriodicYieldingToNativeDelay;
 
 BASE_EXPORT void InitializeTaskLeeway();
-BASE_EXPORT TimeDelta GetTaskLeeway();
+BASE_EXPORT TimeDelta GetTaskLeewayForCurrentThread();
+BASE_EXPORT TimeDelta GetDefaultTaskLeeway();
 
 }  // namespace base
 

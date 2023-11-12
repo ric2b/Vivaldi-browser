@@ -14,7 +14,7 @@ import posixpath
 import re
 import sys
 
-from code import Code
+from code_util import Code
 import json_parse
 
 # The template for the header file of the generated FeatureProvider.
@@ -263,11 +263,11 @@ FEATURE_GRAMMAR = ({
         list: {
             'enum_map': {
                 'chromeos': 'Feature::CHROMEOS_PLATFORM',
+                'fuchsia': 'Feature::FUCHSIA_PLATFORM',
                 'lacros': 'Feature::LACROS_PLATFORM',
                 'linux': 'Feature::LINUX_PLATFORM',
                 'mac': 'Feature::MACOSX_PLATFORM',
                 'win': 'Feature::WIN_PLATFORM',
-                'fuchsia': 'Feature::FUCHSIA_PLATFORM',
             }
         }
     },

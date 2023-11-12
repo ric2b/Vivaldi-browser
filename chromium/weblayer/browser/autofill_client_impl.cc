@@ -114,7 +114,7 @@ void AutofillClientImpl::ShowAutofillSettings(bool show_credit_card_settings) {
 
 void AutofillClientImpl::ShowUnmaskPrompt(
     const autofill::CreditCard& card,
-    UnmaskCardReason reason,
+    const autofill::CardUnmaskPromptOptions& card_unmask_prompt_options,
     base::WeakPtr<autofill::CardUnmaskDelegate> delegate) {
   NOTREACHED();
 }
@@ -254,15 +254,6 @@ bool AutofillClientImpl::IsFastCheckoutTriggerForm(
   return false;
 }
 
-bool AutofillClientImpl::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-  return false;
-}
-
-bool AutofillClientImpl::FastCheckoutClientSupportsConsentlessExecution() {
-  return false;
-}
-
 bool AutofillClientImpl::ShowFastCheckout(
     base::WeakPtr<autofill::FastCheckoutDelegate> delegate) {
   NOTREACHED();
@@ -278,7 +269,8 @@ bool AutofillClientImpl::IsTouchToFillCreditCardSupported() {
 }
 
 bool AutofillClientImpl::ShowTouchToFillCreditCard(
-    base::WeakPtr<autofill::TouchToFillDelegate> delegate) {
+    base::WeakPtr<autofill::TouchToFillDelegate> delegate,
+    base::span<const autofill::CreditCard* const> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -328,7 +320,7 @@ void AutofillClientImpl::UpdatePopup(
   NOTREACHED();
 }
 
-bool AutofillClientImpl::IsAutocompleteEnabled() {
+bool AutofillClientImpl::IsAutocompleteEnabled() const {
   NOTREACHED();
   return false;
 }
@@ -373,6 +365,13 @@ void AutofillClientImpl::ExecuteCommand(int id) {
 
 void AutofillClientImpl::OpenPromoCodeOfferDetailsURL(const GURL& url) {
   NOTREACHED();
+}
+
+autofill::FormInteractionsFlowId
+AutofillClientImpl::GetCurrentFormInteractionsFlowId() {
+  // Currently not in use here. See `ChromeAutofillClient` for a proper
+  // implementation.
+  return {};
 }
 
 void AutofillClientImpl::LoadRiskData(

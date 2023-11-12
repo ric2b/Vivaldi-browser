@@ -17,6 +17,11 @@
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -71,8 +76,18 @@
 
 // Vivaldi
 - (void)panelAction {
-  // TODO: @prio@vivaldi.com or karianne@vivaldi.com - HOOK IT UP WITH PANELS
-  // WHEN SPLITVIEW IS READY FOR THE IPAD. THIS IS AVAILABLE ON IPAD ONLY.
-} // End Vivaldi
+    [_browserCommands showPanel];
+}
+
+// Action when search is tapped.
+- (void)vivaldiSearchAction {
+  [self.omniboxHandler focusOmnibox];
+}
+
+// Action when the shield button within omnibox is tapped.
+- (void)showTrackerBlockerManager {
+  [self.omniboxHandler showTrackerBlockerManager];
+}
+// End Vivaldi
 
 @end

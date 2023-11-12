@@ -45,12 +45,6 @@ BASE_EXPORT HMODULE GetWMFLibraryForAAC();
 // one of |InitFor*()| functions.
 BASE_EXPORT HMODULE GetWMFLibraryForH264();
 
-#ifdef VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
-// Get WMF library for demuxing. Unless in unit tests this must be called after
-// calling one of |InitFor*()| functions.
-BASE_EXPORT bool HasMFDemuxerSupport();
-#endif
-
 }  // namespace platform_media_init
 
 #endif  // PLATFORM_MEDIA_SANDBOX_WIN_PLATFORM_MEDIA_INIT_H_

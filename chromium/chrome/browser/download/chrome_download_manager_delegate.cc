@@ -21,9 +21,10 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -39,7 +40,7 @@
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/download_target_determiner.h"
-#include "chrome/browser/download/mixed_content_download_blocking.h"
+#include "chrome/browser/download/insecure_download_blocking.h"
 #include "chrome/browser/download/save_package_file_picker.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
@@ -80,7 +81,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/service_process_host.h"
 #include "content/public/common/origin_util.h"
@@ -104,11 +104,12 @@
 #include "chrome/browser/download/android/download_open_source.h"
 #include "chrome/browser/download/android/download_utils.h"
 #include "chrome/browser/download/android/duplicate_download_dialog_bridge_delegate.h"
-#include "chrome/browser/download/android/mixed_content_download_dialog_bridge.h"
-#include "chrome/browser/download/android/mixed_content_download_infobar_delegate.h"
+#include "chrome/browser/download/android/insecure_download_dialog_bridge.h"
+#include "chrome/browser/download/android/insecure_download_infobar_delegate.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "net/http/http_content_disposition.h"
+#include "ui/android/window_android.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -118,8 +119,8 @@
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/webstore_installer.h"
-#include "extensions/browser/notification_types.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/user_script.h"
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -140,6 +141,11 @@ using download::PathValidationResult;
 using safe_browsing::DownloadFileType;
 using safe_browsing::DownloadProtectionService;
 using ConnectionType = net::NetworkChangeNotifier::ConnectionType;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+using extensions::CrxInstaller;
+using extensions::CrxInstallError;
+#endif
 
 namespace {
 
@@ -316,15 +322,15 @@ void OnCheckExistingDownloadPathDone(
 
   std::move(callback).Run(
       target_info->target_path, target_info->target_disposition,
-      target_info->danger_type, target_info->mixed_content_status,
+      target_info->danger_type, target_info->insecure_download_status,
       target_info->intermediate_path, target_info->display_name,
       target_info->mime_type, target_info->result);
 }
 
 #if BUILDFLAG(IS_ANDROID)
-// Callback used by Mixed Download infobar on Android. Unlike on Desktop, this
-// infobar's entire life occurs prior to download start.
-void HandleMixedDownloadInfoBarResult(
+// Callback used by Insecure Download infobar on Android. Unlike on Desktop,
+// this infobar's entire life occurs prior to download start.
+void HandleInsecureDownloadInfoBarResult(
     download::DownloadItem* download_item,
     std::unique_ptr<DownloadTargetInfo> target_info,
     content::DownloadTargetCallback callback,
@@ -334,14 +340,14 @@ void HandleMixedDownloadInfoBarResult(
     std::move(callback).Run(target_info->target_path,
                             target_info->target_disposition,
                             download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-                            DownloadItem::MixedContentStatus::SILENT_BLOCK,
+                            DownloadItem::InsecureDownloadStatus::SILENT_BLOCK,
                             target_info->intermediate_path,
                             target_info->display_name, target_info->mime_type,
                             download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED);
     return;
   }
-  target_info->mixed_content_status =
-      download::DownloadItem::MixedContentStatus::VALIDATED;
+  target_info->insecure_download_status =
+      download::DownloadItem::InsecureDownloadStatus::VALIDATED;
 
   // Otherwise, proceed as normal and check for a separate reservation with the
   // same target path. If such a reservation exists, cancel this reservation.
@@ -737,16 +743,28 @@ bool ChromeDownloadManagerDelegate::ShouldOpenDownload(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (download_crx_util::IsExtensionDownload(*item) &&
       !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {
-    scoped_refptr<extensions::CrxInstaller> crx_installer =
-        download_crx_util::OpenChromeExtension(profile_, *item);
+    scoped_refptr<CrxInstaller> installer(
+        download_crx_util::CreateCrxInstaller(profile_, *item));
 
-    // CRX_INSTALLER_DONE will fire when the install completes.  At that
-    // time, Observe() will call the passed callback.
-    registrar_.Add(
-        this, extensions::NOTIFICATION_CRX_INSTALLER_DONE,
-        content::Source<extensions::CrxInstaller>(crx_installer.get()));
+    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, *item)) {
+      installer->set_off_store_install_allow_reason(
+          CrxInstaller::OffStoreInstallAllowedBecausePref);
+    }
 
-    crx_installers_[crx_installer.get()] = std::move(callback);
+    auto token = base::UnguessableToken::Create();
+    running_crx_installs_[token] = installer;
+
+    installer->AddInstallerCallback(base::BindOnce(
+        &ChromeDownloadManagerDelegate::OnInstallerDone,
+        weak_ptr_factory_.GetWeakPtr(), token, std::move(callback)));
+
+    if (extensions::UserScript::IsURLUserScript(item->GetURL(),
+                                                item->GetMimeType())) {
+      installer->InstallUserScript(item->GetFullPath(), item->GetURL());
+    } else {
+      installer->InstallCrx(item->GetFullPath());
+    }
+
     // The status text and percent complete indicator will change now
     // that we are installing a CRX.  Update observers so that they pick
     // up the change.
@@ -969,13 +987,13 @@ ChromeDownloadManagerDelegate::GetDownloadProtectionService() {
   return nullptr;
 }
 
-void ChromeDownloadManagerDelegate::GetMixedContentStatus(
+void ChromeDownloadManagerDelegate::GetInsecureDownloadStatus(
     download::DownloadItem* download,
     const base::FilePath& virtual_path,
-    GetMixedContentStatusCallback callback) {
+    GetInsecureDownloadStatusCallback callback) {
   DCHECK(download);
   std::move(callback).Run(
-      GetMixedContentStatusForDownload(profile_, virtual_path, download));
+      GetInsecureDownloadStatusForDownload(profile_, virtual_path, download));
 }
 
 void ChromeDownloadManagerDelegate::NotifyExtensions(
@@ -1192,7 +1210,7 @@ void ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete(
 
   std::move(callback).Run(result, virtual_path);
   if (!file_picker_callbacks_.empty()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, std::move(file_picker_callbacks_.front()));
     file_picker_callbacks_.pop_front();
   } else {
@@ -1526,24 +1544,23 @@ void ChromeDownloadManagerDelegate::CheckSavePackageScanningDone(
 }
 #endif  // FULL_SAFE_BROWSING
 
-// content::NotificationObserver implementation.
-void ChromeDownloadManagerDelegate::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  DCHECK_EQ(extensions::NOTIFICATION_CRX_INSTALLER_DONE, type);
+void ChromeDownloadManagerDelegate::OnInstallerDone(
+    const base::UnguessableToken& token,
+    content::DownloadOpenDelayedCallback callback,
+    const absl::optional<CrxInstallError>& error) {
+  scoped_refptr<CrxInstaller> installer;
 
-  registrar_.Remove(this, extensions::NOTIFICATION_CRX_INSTALLER_DONE, source);
+  {
+    auto iter = running_crx_installs_.find(token);
+    DCHECK(iter != running_crx_installs_.end());
+    installer = iter->second;
+    running_crx_installs_.erase(iter);
+  }
 
-  scoped_refptr<extensions::CrxInstaller> installer =
-      content::Source<extensions::CrxInstaller>(source).ptr();
-  content::DownloadOpenDelayedCallback callback =
-      std::move(crx_installers_[installer.get()]);
-  crx_installers_.erase(installer.get());
   std::move(callback).Run(installer->did_handle_successfully());
-#endif
 }
+#endif
 
 void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
     uint32_t download_id,
@@ -1569,22 +1586,22 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
   base::FilePath target_path = target_info->target_path;
 
 #if BUILDFLAG(IS_ANDROID)
-  // Present a mixed content download infobar when needed, and wait to initiate
+  // Present an insecure download infobar when needed, and wait to initiate
   // the download until the user decides what to do.
   // On Desktop, this is handled using the unsafe-download warnings that are
   // shown in parallel with the download. Those warnings don't exist for
   // Android, so for simplicity we prompt before starting the download instead.
-  auto mcs = target_info->mixed_content_status;
+  auto ids = target_info->insecure_download_status;
   if (target_info->result == download::DOWNLOAD_INTERRUPT_REASON_NONE &&
-      (mcs == download::DownloadItem::MixedContentStatus::BLOCK ||
-       mcs == download::DownloadItem::MixedContentStatus::WARN)) {
+      (ids == download::DownloadItem::InsecureDownloadStatus::BLOCK ||
+       ids == download::DownloadItem::InsecureDownloadStatus::WARN)) {
     auto* web_contents = content::DownloadItemUtils::GetWebContents(item);
     gfx::NativeWindow native_window =
         web_contents ? web_contents->GetTopLevelNativeWindow() : nullptr;
     if (native_window && item) {
-      MixedContentDownloadDialogBridge::GetInstance()->CreateDialog(
+      InsecureDownloadDialogBridge::GetInstance()->CreateDialog(
           item, target_path.BaseName(), native_window,
-          base::BindOnce(HandleMixedDownloadInfoBarResult, item,
+          base::BindOnce(HandleInsecureDownloadInfoBarResult, item,
                          std::move(target_info), std::move(callback)));
       return;
     }
@@ -1727,7 +1744,7 @@ void ChromeDownloadManagerDelegate::CheckDownloadAllowed(
     base::FilePath::StringType extension = path.Extension();
     if (!extension.empty() && base::FilePath::CompareEqualIgnoreCase(
                                   extension, FILE_PATH_LITERAL(".pdf"))) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(std::move(check_download_allowed_cb), false));
       return;
@@ -1844,7 +1861,7 @@ void ChromeDownloadManagerDelegate::OnManagerInitialized() {
 #if !BUILDFLAG(IS_ANDROID)
 void ChromeDownloadManagerDelegate::ScheduleCancelForEphemeralWarning(
     const std::string& guid) {
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ChromeDownloadManagerDelegate::CancelForEphemeralWarning,
                      weak_ptr_factory_.GetWeakPtr(), guid),

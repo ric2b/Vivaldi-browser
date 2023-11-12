@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
@@ -51,6 +52,7 @@ import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.device.mojom.ScreenOrientationLockType;
 
@@ -71,7 +73,7 @@ public class CustomTabIntentDataProviderTest {
     @Before
     public void setUp() {
         mContext = new ContextThemeWrapper(
-                ApplicationProvider.getApplicationContext(), R.style.ColorOverlay);
+                ApplicationProvider.getApplicationContext(), R.style.Theme_BrowserUI_DayNight);
     }
 
     @After
@@ -301,41 +303,41 @@ public class CustomTabIntentDataProviderTest {
     }
 
     @Test
-    public void partialCustomTabResizeBehavior_Default() {
-        Intent intent =
-                new Intent().putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_RESIZE_BEHAVIOR,
-                        BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_DEFAULT);
+    public void partialCustomTabHeightResizeBehavior_Default() {
+        Intent intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR,
+                BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_DEFAULT);
 
         CustomTabIntentDataProvider dataProvider =
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
-        assertFalse("The default resize behavior should return false",
+        assertFalse("The default height resize behavior should return false",
                 dataProvider.isPartialCustomTabFixedHeight());
     }
 
     @Test
-    public void partialCustomTabResizeBehavior_Adjustable() {
-        Intent intent =
-                new Intent().putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_RESIZE_BEHAVIOR,
-                        BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_ADJUSTABLE);
+    public void partialCustomTabHeightResizeBehavior_Adjustable() {
+        Intent intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR,
+                BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_ADJUSTABLE);
 
         CustomTabIntentDataProvider dataProvider =
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
-        assertFalse("The adjustable resize behavior should return false",
+        assertFalse("The adjustable height resize behavior should return false",
                 dataProvider.isPartialCustomTabFixedHeight());
     }
 
     @Test
-    public void partialCustomTabResizeBehavior_Fixed() {
-        Intent intent =
-                new Intent().putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_RESIZE_BEHAVIOR,
-                        BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_FIXED);
+    public void partialCustomTabHeightResizeBehavior_Fixed() {
+        Intent intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR,
+                BrowserServicesIntentDataProvider.ACTIVITY_HEIGHT_FIXED);
 
         CustomTabIntentDataProvider dataProvider =
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
-        assertTrue("The fixed resize behavior should return true",
+        assertTrue("The fixed height resize behavior should return true",
                 dataProvider.isPartialCustomTabFixedHeight());
     }
 
@@ -393,6 +395,143 @@ public class CustomTabIntentDataProviderTest {
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
         Assert.assertNull(dataProvider.getClientPackageName());
+    }
+
+    @Test
+    public void testIsTrustedCustomTab_NoServiceConnection() {
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn(null);
+        when(connection.isFirstParty(eq("com.foo.bar"))).thenReturn(true);
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        Assert.assertFalse(CustomTabIntentDataProvider.isTrustedCustomTab(intent, null));
+
+        intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, "com.foo.bar");
+        Assert.assertTrue(CustomTabIntentDataProvider.isTrustedCustomTab(intent, null));
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateFeatureDisabled() {
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.example.foo");
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_AUTO_TRANSLATE_LANGUAGE, "es");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("fr", provider.getTranslateLanguage());
+        assertFalse(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateExtraMissing() {
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.setForTesting(false);
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.setForTesting(
+                "com.example.foo|com.example.bar");
+
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.example.foo");
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("fr", provider.getTranslateLanguage());
+        assertFalse(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateWithAllowedPackageName() {
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.setForTesting(false);
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.setForTesting(
+                "com.example.foo|com.example.bar");
+
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.example.foo");
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_AUTO_TRANSLATE_LANGUAGE, "es");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("es", provider.getTranslateLanguage());
+        assertTrue(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateWithoutAllowedPackageName() {
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.setForTesting(false);
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.setForTesting(
+                "com.example.foo|com.example.bar");
+
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.not.in.allowlist");
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_AUTO_TRANSLATE_LANGUAGE, "es");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("fr", provider.getTranslateLanguage());
+        assertFalse(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateWithFirstPartyAllowed() {
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.setForTesting(true);
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.setForTesting(
+                "com.example.foo|com.example.bar");
+
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.not.in.allowlist");
+        when(connection.isFirstParty(eq("com.not.in.allowlist"))).thenReturn(true);
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_AUTO_TRANSLATE_LANGUAGE, "es");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("es", provider.getTranslateLanguage());
+        assertTrue(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CCT_AUTO_TRANSLATE})
+    public void getTranslateLanguage_autoTranslateWithThirdPartyPackageName() {
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.setForTesting(true);
+        CustomTabIntentDataProvider.AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.setForTesting(
+                "com.example.foo|com.example.bar");
+
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.not.in.allowlist");
+        when(connection.isFirstParty(eq("com.not.in.allowlist"))).thenReturn(false);
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new Intent();
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_TRANSLATE_LANGUAGE, "fr");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_AUTO_TRANSLATE_LANGUAGE, "es");
+        CustomTabIntentDataProvider provider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals("fr", provider.getTranslateLanguage());
+        assertFalse(provider.shouldAutoTranslate());
     }
 
     private Bundle createActionButtonInToolbarBundle() {

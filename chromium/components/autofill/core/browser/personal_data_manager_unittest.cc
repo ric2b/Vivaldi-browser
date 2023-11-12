@@ -63,6 +63,10 @@ namespace autofill {
 
 namespace {
 
+using testing::ElementsAre;
+using testing::Pointee;
+using testing::UnorderedElementsAre;
+
 const char kPrimaryAccountEmail[] = "syncuser@example.com";
 const char16_t kPrimaryAccountEmail16[] = u"syncuser@example.com";
 const std::string kAddressEntryIcon = "accountIcon";
@@ -85,8 +89,8 @@ class PersonalDataManagerMock : public PersonalDataManager {
   ~PersonalDataManagerMock() override = default;
 
   MOCK_METHOD(void,
-              FetchImagesForUrls,
-              ((const std::vector<GURL>& updated_urls)),
+              FetchImagesForURLs,
+              ((base::span<const GURL> updated_urls)),
               (const override));
 };
 
@@ -115,10 +119,10 @@ void ExpectSameElements(const std::vector<T*>& expectations,
   std::vector<T*> results_copy = results;
   std::sort(results_copy.begin(), results_copy.end(), CompareElements<T>);
 
-  EXPECT_EQ(std::mismatch(results_copy.begin(), results_copy.end(),
-                          expectations_copy.begin(), ElementsEqual<T>)
-                .first,
-            results_copy.end());
+  EXPECT_EQ(
+      base::ranges::mismatch(results_copy, expectations_copy, ElementsEqual<T>)
+          .first,
+      results_copy.end());
 }
 
 class ScopedFeatureListWrapper {
@@ -128,9 +132,8 @@ class ScopedFeatureListWrapper {
       const std::vector<base::test::FeatureRef>& additional_enabled_features) {
     std::vector<base::test::FeatureRef> all_enabled_features(
         default_enabled_features);
-    std::copy(additional_enabled_features.begin(),
-              additional_enabled_features.end(),
-              std::back_inserter(all_enabled_features));
+    base::ranges::copy(additional_enabled_features,
+                       std::back_inserter(all_enabled_features));
     scoped_features_.InitWithFeatures(all_enabled_features,
                                       /*disabled_features=*/{});
   }
@@ -175,7 +178,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
 
   void ResetProfiles() {
     std::vector<AutofillProfile> empty_profiles;
-    personal_data_->SetProfiles(&empty_profiles);
+    personal_data_->SetProfilesForAllSources(&empty_profiles);
     WaitForOnPersonalDataChanged();
   }
 
@@ -400,19 +403,6 @@ class PersonalDataManagerSyncTransportModeTest
   void TearDown() override { TearDownTest(); }
 };
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-class PersonalDataManagerMigrationTest : public PersonalDataManagerHelper,
-                                         public testing::Test {
- public:
-  PersonalDataManagerMigrationTest()
-      : PersonalDataManagerHelper({::switches::kAccountIdMigration}) {}
-
- protected:
-  void SetUp() override { SetUpTest(); }
-  void TearDown() override { TearDownTest(); }
-};
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 class PersonalDataManagerMockTest : public PersonalDataManagerTestBase,
                                     public testing::Test {
  protected:
@@ -487,13 +477,13 @@ class PersonalDataManagerMockTest : public PersonalDataManagerTestBase,
   }
 
   // Verifies the credit card art image fetching should begin.
-  void WaitForFetchImagesForUrls(const std::vector<GURL>& updated_urls) {
+  void WaitForFetchImagesForUrls() {
     base::RunLoop run_loop;
     EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
         .Times(testing::AnyNumber());
     EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
         .Times(testing::AnyNumber());
-    EXPECT_CALL(*personal_data_, FetchImagesForUrls(updated_urls))
+    EXPECT_CALL(*personal_data_, FetchImagesForURLs(testing::_))
         .Times(1)
         .WillOnce(QuitMessageLoop(&run_loop));
     run_loop.Run();
@@ -546,6 +536,83 @@ TEST_F(PersonalDataManagerTest, AddProfile) {
   profiles.push_back(&profile0);
   profiles.push_back(&profile1);
   ExpectSameElements(profiles, personal_data_->GetProfiles());
+}
+
+// Tests that profiles with source `kAccount` and `kLocalOrSyncable` are loaded,
+// and accessible via `GetProfiles()` and `GetProfilesFromSource()`.
+// If duplicates exist across sources, they should be considered distinct.
+TEST_F(PersonalDataManagerTest, GetProfiles) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillAccountProfilesUnionView);
+
+  AutofillProfile kAccountProfile = test::GetFullProfile();
+  kAccountProfile.set_source_for_testing(AutofillProfile::Source::kAccount);
+  AutofillProfile kAccountProfile2 = test::GetFullProfile2();
+  kAccountProfile2.set_source_for_testing(AutofillProfile::Source::kAccount);
+  AutofillProfile kLocalProfile = test::GetFullProfile();
+
+  AddProfileToPersonalDataManager(kAccountProfile);
+  AddProfileToPersonalDataManager(kAccountProfile2);
+  AddProfileToPersonalDataManager(kLocalProfile);
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  EXPECT_THAT(
+      personal_data_->GetProfiles(),
+      UnorderedElementsAre(Pointee(kAccountProfile), Pointee(kAccountProfile2),
+                           Pointee(kLocalProfile)));
+  EXPECT_THAT(
+      personal_data_->GetProfilesFromSource(AutofillProfile::Source::kAccount),
+      UnorderedElementsAre(Pointee(kAccountProfile),
+                           Pointee(kAccountProfile2)));
+  EXPECT_THAT(personal_data_->GetProfilesFromSource(
+                  AutofillProfile::Source::kLocalOrSyncable),
+              ElementsAre(Pointee(kLocalProfile)));
+}
+
+// Tests that `SetProfilesForAllSources()` overwrites profiles with the correct
+// source.
+TEST_F(PersonalDataManagerTest, SetProfiles) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillAccountProfilesUnionView);
+
+  AutofillProfile kAccountProfile = test::GetFullProfile();
+  kAccountProfile.set_source_for_testing(AutofillProfile::Source::kAccount);
+  AutofillProfile kLocalProfile = test::GetFullProfile();
+
+  // Set `kAccount` profiles only.
+  std::vector<AutofillProfile> profiles = {kAccountProfile};
+  personal_data_->SetProfilesForAllSources(&profiles);
+  WaitForOnPersonalDataChanged();
+  EXPECT_THAT(
+      personal_data_->GetProfilesFromSource(AutofillProfile::Source::kAccount),
+      ElementsAre(Pointee(kAccountProfile)));
+  EXPECT_TRUE(
+      personal_data_
+          ->GetProfilesFromSource(AutofillProfile::Source::kLocalOrSyncable)
+          .empty());
+
+  // Set `kLocalOrSyncable` profiles only. This clear the existing `kAccount`
+  // profiles
+  profiles = {kLocalProfile};
+  personal_data_->SetProfilesForAllSources(&profiles);
+  WaitForOnPersonalDataChanged();
+  EXPECT_TRUE(
+      personal_data_->GetProfilesFromSource(AutofillProfile::Source::kAccount)
+          .empty());
+  EXPECT_THAT(personal_data_->GetProfilesFromSource(
+                  AutofillProfile::Source::kLocalOrSyncable),
+              ElementsAre(Pointee(kLocalProfile)));
+
+  // Set profiles of both sources.
+  profiles = {kAccountProfile, kLocalProfile};
+  personal_data_->SetProfilesForAllSources(&profiles);
+  WaitForOnPersonalDataChanged();
+  EXPECT_THAT(
+      personal_data_->GetProfilesFromSource(AutofillProfile::Source::kAccount),
+      ElementsAre(Pointee(kAccountProfile)));
+  EXPECT_THAT(personal_data_->GetProfilesFromSource(
+                  AutofillProfile::Source::kLocalOrSyncable),
+              ElementsAre(Pointee(kLocalProfile)));
 }
 
 // Adding, updating, removing operations without waiting in between.
@@ -717,7 +784,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile7.FinalizeAfterImport();
   profiles.push_back(profile7);
 
-  personal_data_->SetProfiles(&profiles);
+  personal_data_->SetProfilesForAllSources(&profiles);
 
   WaitForOnPersonalDataChanged();
 
@@ -745,7 +812,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_Invalid) {
 
   std::vector<AutofillProfile> profiles;
   profiles.push_back(with_invalid);
-  personal_data_->SetProfiles(&profiles);
+  personal_data_->SetProfilesForAllSources(&profiles);
   WaitForOnPersonalDataChanged();
   ASSERT_EQ(1u, personal_data_->GetProfiles().size());
   AutofillProfile profile = *personal_data_->GetProfiles()[0];
@@ -823,10 +890,10 @@ TEST_F(PersonalDataManagerTest, NoIBANsAddedIfDisabled) {
   personal_data_->AddIBAN(iban0);
   personal_data_->AddIBAN(iban1);
 
-  EXPECT_EQ(0U, personal_data_->GetIBANs().size());
+  EXPECT_EQ(0U, personal_data_->GetLocalIBANs().size());
 }
 
-TEST_F(PersonalDataManagerTest, AddUpdateRemoveIbans) {
+TEST_F(PersonalDataManagerTest, AddUpdateRemoveIBANs) {
   prefs::SetAutofillIBANEnabled(prefs_.get(), true);
   IBAN iban0(base::GenerateGUID());
   iban0.set_value(u"IE12 BOFI 9000 0112 3456 78");
@@ -836,20 +903,34 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveIbans) {
   iban1.set_value(u"DE91 1000 0000 0123 4567 89");
   iban1.set_nickname(u"Nickname 1");
 
+  IBAN iban1_1 = iban1;
+  iban1_1.set_nickname(u"Nickname 1_1");
+
   IBAN iban2(base::GenerateGUID());
   iban2.set_value(u"ES79 2100 0813 6101 2345 6789");
   iban2.set_nickname(u"Nickname 2");
 
-  // Add two test IBANs to the database.
+  // Add two test IBANs to the database. `iban1_1` has the same value
+  // as `iban1` but with a different nickname. Verify that only `iban1` is
+  // added.
   personal_data_->AddIBAN(iban0);
-  personal_data_->AddIBAN(iban1);
-
   WaitForOnPersonalDataChanged();
+
+  personal_data_->AddIBAN(iban1);
+  WaitForOnPersonalDataChanged();
+
+  personal_data_->AddIBAN(iban1_1);
 
   std::vector<IBAN*> ibans;
   ibans.push_back(&iban0);
   ibans.push_back(&iban1);
-  ExpectSameElements(ibans, personal_data_->GetIBANs());
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+
+  // `iban1_2` has the same fields as `iban1_1`, verify that `iban1_2` is
+  // not added.
+  IBAN iban1_2 = iban1_1;
+  personal_data_->AddIBAN(iban1_1);
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
 
   // Update IBAN0, remove IBAN1, and add IBAN2.
   iban0.set_nickname(u"Nickname new 0");
@@ -863,7 +944,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveIbans) {
   ibans.clear();
   ibans.push_back(&iban0);
   ibans.push_back(&iban2);
-  ExpectSameElements(ibans, personal_data_->GetIBANs());
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
 
   // Verify that a duplicate IBAN should not be added.
   IBAN iban0_dup = iban0;
@@ -871,7 +952,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveIbans) {
   ibans.clear();
   ibans.push_back(&iban0);
   ibans.push_back(&iban2);
-  ExpectSameElements(ibans, personal_data_->GetIBANs());
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
 
   // Reset the PersonalDataManager. This tests that the personal data was saved
   // to the web database, and that we can load the IBANs from the web database.
@@ -881,7 +962,107 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveIbans) {
   ibans.clear();
   ibans.push_back(&iban0);
   ibans.push_back(&iban2);
-  ExpectSameElements(ibans, personal_data_->GetIBANs());
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+}
+
+// Ensure that new IBANs can be updated and saved via
+// `OnAcceptedLocalIBANSave()`.
+TEST_F(PersonalDataManagerTest, OnAcceptedLocalIBANSave) {
+  prefs::SetAutofillIBANEnabled(prefs_.get(), true);
+
+  // Start with a new IBAN.
+  IBAN iban0(base::GenerateGUID());
+  iban0.set_value(u"IE12 BOFI 9000 0112 3456 78");
+  iban0.set_nickname(u"Nickname 0");
+  // Add the IBAN to the database.
+  personal_data_->OnAcceptedLocalIBANSave(iban0);
+
+  // Make sure everything is set up correctly.
+  WaitForOnPersonalDataChanged();
+  EXPECT_EQ(1U, personal_data_->GetLocalIBANs().size());
+
+  // Creates a new IBAN and call `OnAcceptedLocalIBANSave()` and verify that
+  // the new IBAN is saved.
+  IBAN iban1(base::GenerateGUID());
+  iban1.set_value(u"DE91 1000 0000 0123 4567 89");
+  iban1.set_nickname(u"Nickname 1");
+  personal_data_->OnAcceptedLocalIBANSave(iban1);
+  WaitForOnPersonalDataChanged();
+
+  // Expect that the new IBAN is added.
+  ASSERT_EQ(2U, personal_data_->GetLocalIBANs().size());
+
+  std::vector<IBAN*> ibans;
+  ibans.push_back(&iban0);
+  ibans.push_back(&iban1);
+  // Verify that we've loaded the IBAN from the web database.
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+
+  // Creates a new `iban2` which has the same value as `iban0` but with
+  // different nickname and call `OnAcceptedLocalIBANSave()`.
+  IBAN iban2(base::GenerateGUID());
+  iban2.set_value(u"IE12 BOFI 9000 0112 3456 78");
+  iban2.set_nickname(u"Nickname 2");
+  personal_data_->OnAcceptedLocalIBANSave(iban2);
+  WaitForOnPersonalDataChanged();
+  // Updates the nickname for `iban1` and call `OnAcceptedLocalIBANSave()`.
+  iban1.set_nickname(u"Nickname 1 updated");
+  personal_data_->OnAcceptedLocalIBANSave(iban1);
+  WaitForOnPersonalDataChanged();
+
+  ibans.clear();
+  ibans.push_back(&iban1);
+  ibans.push_back(&iban2);
+  // Expect that the existing IBANs are updated.
+  ASSERT_EQ(2U, personal_data_->GetLocalIBANs().size());
+
+  // Verify that we've loaded the IBANs from the web database.
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+
+  // Call `OnAcceptedLocalIBANSave()` with the same iban1, verify that nothing
+  // changes.
+  personal_data_->OnAcceptedLocalIBANSave(iban1);
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+
+  // Reset the PersonalDataManager. This tests that the IBANs are persisted
+  // in the local web database even if the browser is re-loaded, ensuring that
+  // the user can load the IBANs from the local web database on browser startup.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+  ExpectSameElements(ibans, personal_data_->GetLocalIBANs());
+}
+
+// Ensure that new IBAN cannot be updated nor saved via
+// `OnAcceptedLocalIBANSave()` if `is_off_the_record_` is true.
+TEST_F(PersonalDataManagerTest, OnAcceptedLocalIBANSave_IsOffTheRecordTrue) {
+  personal_data_->set_is_off_the_record_for_testing(true);
+  prefs::SetAutofillIBANEnabled(prefs_.get(), true);
+
+  // Start with a new IBAN.
+  IBAN iban0(base::GenerateGUID());
+  iban0.set_value(u"IE12 BOFI 9000 0112 3456 78");
+  iban0.set_nickname(u"Nickname 0");
+
+  // Add the IBAN to the database.
+  personal_data_->AddIBAN(iban0);
+
+  // Verify the new IBAN is not saved.
+  EXPECT_TRUE(personal_data_->GetLocalIBANs().empty());
+
+  // Creates a new IBAN and call `OnAcceptedLocalIBANSave()` and verify that
+  // the new IBAN is not saved.
+  IBAN iban1(base::GenerateGUID());
+  iban1.set_value(u"DE91 1000 0000 0123 4567 89");
+  iban1.set_nickname(u"Nickname 1");
+  personal_data_->OnAcceptedLocalIBANSave(iban1);
+
+  EXPECT_TRUE(personal_data_->GetLocalIBANs().empty());
+
+  // Updates the nickname for `iban1` and call `OnAcceptedLocalIBANSave()`,
+  // verify that nothing happens.
+  iban1.set_nickname(u"Nickname 0 updated");
+  personal_data_->OnAcceptedLocalIBANSave(iban1);
+
+  EXPECT_TRUE(personal_data_->GetLocalIBANs().empty());
 }
 
 TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
@@ -1080,11 +1261,10 @@ TEST_F(PersonalDataManagerTest, GetCreditCardByServerId) {
 TEST_F(PersonalDataManagerTest, AddAndGetCreditCardArtImage) {
   gfx::Image expected_image = gfx::test::CreateImage(32, 20);
   std::unique_ptr<CreditCardArtImage> credit_card_art_image =
-      std::make_unique<CreditCardArtImage>();
-  credit_card_art_image->card_art_url = GURL("https://www.example.com");
-  credit_card_art_image->card_art_image = expected_image;
+      std::make_unique<CreditCardArtImage>(GURL("https://www.example.com"),
+                                           expected_image);
   std::vector<std::unique_ptr<CreditCardArtImage>> images;
-  images.emplace_back(std::move(credit_card_art_image));
+  images.push_back(std::move(credit_card_art_image));
 
   personal_data_->OnCardArtImagesFetched(std::move(images));
 
@@ -1115,14 +1295,14 @@ TEST_F(PersonalDataManagerMockTest, ProcessCardArtUrlChanges) {
   updated_urls.emplace_back(GURL("https://www.example.com/card1"));
 
   personal_data_->AddFullServerCreditCard(card);
-  WaitForFetchImagesForUrls(updated_urls);
+  WaitForFetchImagesForUrls();
 
   card.set_card_art_url(GURL("https://www.example.com/card2"));
   updated_urls.clear();
   updated_urls.emplace_back(GURL("https://www.example.com/card2"));
 
   personal_data_->AddFullServerCreditCard(card);
-  WaitForFetchImagesForUrls(updated_urls);
+  WaitForFetchImagesForUrls();
 }
 #endif
 
@@ -1258,8 +1438,8 @@ TEST_F(PersonalDataManagerTest, KeepExistingLocalDataOnSignIn) {
   EXPECT_EQ(1U, personal_data_->GetCreditCards().size());
 
   // Sign in.
-  identity_test_env_.SetPrimaryAccount("test@gmail.com",
-                                       signin::ConsentLevel::kSync);
+  identity_test_env_.MakePrimaryAccountAvailable("test@gmail.com",
+                                                 signin::ConsentLevel::kSync);
   sync_service_.SetHasSyncConsent(true);
   sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -1463,8 +1643,10 @@ TEST_F(PersonalDataManagerTest, Refresh) {
   profiles.push_back(&profile2);
   ExpectSameElements(profiles, personal_data_->GetProfiles());
 
-  profile_database_service_->RemoveAutofillProfile(profile1.guid());
-  profile_database_service_->RemoveAutofillProfile(profile2.guid());
+  profile_database_service_->RemoveAutofillProfile(
+      profile1.guid(), AutofillProfile::Source::kLocalOrSyncable);
+  profile_database_service_->RemoveAutofillProfile(
+      profile2.guid(), AutofillProfile::Source::kLocalOrSyncable);
 
   personal_data_->Refresh();
   WaitForOnPersonalDataChanged();
@@ -3494,7 +3676,8 @@ TEST_P(SaveImportedProfileTest, SaveImportedProfile) {
 
   // Get the set of profiles persisted in the db.
   std::vector<std::unique_ptr<AutofillProfile>> db_profiles;
-  profile_autofill_table_->GetAutofillProfiles(&db_profiles);
+  profile_autofill_table_->GetAutofillProfiles(
+      &db_profiles, AutofillProfile::Source::kLocalOrSyncable);
 
   // Expect the profiles held in-memory by PersonalDataManager and the db
   // profiles to be the same.
@@ -5102,7 +5285,8 @@ TEST_F(PersonalDataManagerSyncTransportModeTest,
 
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
   // Expect that a profile is stored in the profile autofill table.
-  profile_autofill_table_->GetAutofillProfiles(&profiles);
+  profile_autofill_table_->GetAutofillProfiles(
+      &profiles, AutofillProfile::Source::kLocalOrSyncable);
   EXPECT_EQ(1U, profiles.size());
   EXPECT_EQ(profile, *profiles[0]);
 }
@@ -5351,27 +5535,6 @@ TEST_F(PersonalDataManagerTest, ClearUrlsFromBrowsingHistoryInTimeRange) {
   // range and therefore, the blocking should prevail.
   EXPECT_TRUE(personal_data_->IsNewProfileImportBlockedForDomain(second_url));
 }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-TEST_F(PersonalDataManagerMigrationTest,
-       MigrateUserOptedInWalletSyncTransportIfNeeded) {
-  ASSERT_EQ(
-      signin::IdentityManager::MIGRATION_DONE,
-      identity_test_env_.identity_manager()->GetAccountIdMigrationState());
-
-  ::autofill::prefs::SetUserOptedInWalletSyncTransport(
-      prefs_.get(), CoreAccountId::FromEmail(kPrimaryAccountEmail), true);
-  ASSERT_TRUE(::autofill::prefs::IsUserOptedInWalletSyncTransport(
-      prefs_.get(), CoreAccountId::FromEmail(kPrimaryAccountEmail)));
-
-  ResetPersonalDataManager(USER_MODE_NORMAL);
-
-  EXPECT_FALSE(::autofill::prefs::IsUserOptedInWalletSyncTransport(
-      prefs_.get(), CoreAccountId::FromEmail(kPrimaryAccountEmail)));
-  EXPECT_TRUE(::autofill::prefs::IsUserOptedInWalletSyncTransport(
-      prefs_.get(), sync_service_.GetAccountInfo().account_id));
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PersonalDataManagerSyncTransportModeTest,
@@ -5694,8 +5857,8 @@ TEST_F(PersonalDataManagerSyncTransportModeTest, OnUserAcceptedUpstreamOffer) {
   ///////////////////////////////////////////////////////////
   // kSignedInAndSyncFeature
   ///////////////////////////////////////////////////////////
-  identity_test_env_.SetPrimaryAccount(active_info.email,
-                                       signin::ConsentLevel::kSync);
+  identity_test_env_.MakePrimaryAccountAvailable(active_info.email,
+                                                 signin::ConsentLevel::kSync);
   sync_service_.SetHasSyncConsent(true);
   {
     EXPECT_EQ(AutofillSyncSigninState::kSignedInAndSyncFeatureEnabled,

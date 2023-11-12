@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://diagnostics/connectivity_card.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {ConnectivityCardElement} from 'chrome://diagnostics/connectivity_card.js';
 import {fakeCellularNetwork, fakeEthernetNetwork, fakeNetworkGuidInfoList, fakeWifiNetwork} from 'chrome://diagnostics/fake_data.js';
@@ -16,12 +17,12 @@ import {TestSuiteStatus} from 'chrome://diagnostics/routine_list_executor.js';
 import {RoutineType, StandardRoutineResult} from 'chrome://diagnostics/system_routine_controller.mojom-webui.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isVisible} from '../../test_util.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {isVisible} from '../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 
-export function connectivityCardTestSuite() {
+suite('connectivityCardTestSuite', function() {
   /** @type {?ConnectivityCardElement} */
   let connectivityCardElement = null;
 
@@ -225,4 +226,4 @@ export function connectivityCardTestSuite() {
                 TestSuiteStatus.RUNNING,
                 connectivityCardElement.testSuiteStatus));
   });
-}
+});

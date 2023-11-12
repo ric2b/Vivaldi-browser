@@ -59,11 +59,11 @@ GURL GetPreloadURLFromMatch(
   // Copy the search term args, so we can modify them for just the prefetch.
   auto search_terms_args = search_terms_args_from_match;
   search_terms_args.is_prefetch = attach_prefetch_information;
-  return GURL(template_url_service->GetDefaultSearchProvider()
-                  ->url_ref()
-                  .ReplaceSearchTerms(search_terms_args,
-                                      template_url_service->search_terms_data(),
-                                      nullptr));
+  const TemplateURL* default_provider =
+      template_url_service->GetDefaultSearchProvider();
+  DCHECK(default_provider);
+  return GURL(default_provider->url_ref().ReplaceSearchTerms(
+      search_terms_args, template_url_service->search_terms_data(), nullptr));
 }
 
 struct SearchPrefetchEligibilityReasonRecorder {
@@ -255,10 +255,10 @@ bool SearchPrefetchService::MaybePrefetchURL(
     return false;
   }
 
-  if (!prefetch::IsSomePreloadingEnabled(*profile_->GetPrefs())) {
+  auto eligibility = prefetch::IsSomePreloadingEnabled(*profile_->GetPrefs());
+  if (eligibility != content::PreloadingEligibility::kEligible) {
     recorder.reason_ = SearchPrefetchEligibilityReason::kPrefetchDisabled;
-    SetEligibility(attempt,
-                   content::PreloadingEligibility::kPreloadingDisabled);
+    SetEligibility(attempt, eligibility);
     return false;
   }
 
@@ -360,7 +360,7 @@ void SearchPrefetchService::OnURLOpenedFromOmnibox(
     return;
   const GURL& opened_url = log->final_destination_url;
 
-  auto& match = log->result.match_at(log->selected_index);
+  auto& match = log->result->match_at(log->selected_index);
   if (match.type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED) {
     bool has_search_suggest = false;
     bool has_history_search = false;
@@ -873,8 +873,7 @@ bool SearchPrefetchService::LoadFromPrefs() {
     if (!navigation_url.is_valid())
       continue;
 
-    base::Value::ConstListView const prefetch_url_and_time =
-        base::Value::AsListValue(element.second).GetListDeprecated();
+    const base::Value::List& prefetch_url_and_time = element.second.GetList();
 
     if (prefetch_url_and_time.size() != 2 ||
         !prefetch_url_and_time[0].is_string() ||
@@ -948,8 +947,10 @@ void SearchPrefetchService::ObserveTemplateURLService(
   if (!observer_.IsObserving()) {
     observer_.Observe(template_url_service);
 
-    template_url_service_data_ =
-        template_url_service->GetDefaultSearchProvider()->data();
+    const TemplateURL* default_provider =
+        template_url_service->GetDefaultSearchProvider();
+    DCHECK(default_provider);
+    template_url_service_data_ = default_provider->data();
   }
 }
 

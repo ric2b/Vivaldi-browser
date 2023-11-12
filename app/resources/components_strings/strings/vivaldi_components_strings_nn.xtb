@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å køyra Windows-nettverksdiagnostikk<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Denne nettstaden inneheld skadelege program</translation>
 <translation id="1916770123977586577">Du må lasta om att sida for å få oppdatert nettstadinninnstillingane</translation>
-<translation id="1973351931613083086">Auto-avspeling</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />sjå over mellomtenaren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utferda til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Denne nettstaden tilbyr ikkje eit trygt samband</translation>
 <translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Ingen Internett</translation>
-<translation id="2230458221926704099">Ordna sambandet ditt ved å bruka <ph name="BEGIN_LINK" />diagnostikk-appen<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Internettilgangen din er blokkert</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> krev eit brukarnamn og passord.</translation>
 <translation id="2337852623177822836">Innstillinga er kontrollert av administratoren din</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Åtakarar vil kanskje prøva å stela opplysningane dine frå <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.d. passord, meldingar eller kredittkort). <ph name="BEGIN_LEARN_MORE_LINK" />Lær meir<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Oppdaga ei nettverksendring.</translation>
 <translation id="2948083400971632585">Du kan slå av mellomtenarar som er i bruk på eit samband frå innstillingssida.</translation>
-<translation id="2953943267837858202">Automatisk videospeling er ikkje tillate</translation>
 <translation id="2991571918955627853">Du kan ikkje besøkja <ph name="SITE" /> nett no fordi nettstaden bruker HSTS. Nettverksfeil og -åtak er ofte mellombelse, so denne sida vil sannsynlegvis fungera seinare.</translation>
 <translation id="3005723025932146533">Syn lagra kopi</translation>
 <translation id="301521992641321250">Automatisk blokkert</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på last om att-knappen for å senda dataa som trengst for å lasta sida.</translation>
 <translation id="3234666976984236645">Oppdag alltid viktig innhald på denne sida</translation>
-<translation id="3291915639428159043">Auto-avspeling er blokkert</translation>
 <translation id="3308738399950580893">annonsar</translation>
 <translation id="3422472998109090673">Klarer ikkje å nå <ph name="HOST_NAME" /> no.</translation>
 <translation id="3427092606871434483">Tillat (standard)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Tilkoplinga di er ikkje privat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Gøym detaljane</translation>
-<translation id="3620979700683094848">Nettstadar kan automatisk spela av video</translation>
 <translation id="3630155396527302611">Om ho allereie er ført opp som eit program med nettverkstilgang, prøv
     å fjerna ho frå lista og legg ho til att.</translation>
 <translation id="3658742229777143148">Utgåve</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
 <translation id="3987940399970879459">Mindre enn 1 MB</translation>
 <translation id="4075732493274867456">Klienten og tenaren støttar ikkje sams SSL-protokollutgåve eller krypteringsmetodar.</translation>
-<translation id="410351446219883937">Auto-avspeling</translation>
 <translation id="4116663294526079822">Tillat alltid på denne sida</translation>
 <translation id="4130226655945681476">å sjå over nettverkskablane, modemet og rutaren</translation>
 <translation id="4151403195736952345">Bruk systemstandarden (oppdag)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Stadfest ny sending av skjemaet</translation>
 <translation id="6569060085658103619">Du ser på ei utvidingsside</translation>
 <translation id="6657585470893396449">Passordet</translation>
-<translation id="6685834062052613830">Logg av og gjer ferdig oppsettet</translation>
 <translation id="6711464428925977395">Det er noko galt med mellomtenaren eller adressa er feil.</translation>
 <translation id="6757797048963528358">Eininga di er i kvilemodus.</translation>
 <translation id="6897140037006041989">Brukaragent</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">Det kan vera at brannmur eller antivirusprogram blokkerer sambandet.</translation>
 <translation id="7800304661137206267">Sambandet er kryptert ved å bruka <ph name="CIPHER" />, med <ph name="MAC" /> for meldingshandtering og <ph name="KX" /> som nøkkelutvekslings- mekanisme.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> bruker vanlegvis kryptering for å verna opplysningane dine. Då Vivaldi denne gongen prøvde å kopla til <ph name="SITE" />, sende nettstaden attende uvanleg og feil påloggingsinformasjon. Dette kan skje om ein åtakar prøver å stå fram som <ph name="SITE" /> eller ein påloggingsskjerm for trådlaust nettverk har brote seg inn på sambandet. Opplysningane dine er framleis trygge fordi Vivaldi stoppa sambandet før data vart utveksla.</translation>
-<translation id="7834693436815575883">Auto-avspeling er tillate</translation>
 <translation id="7878562273885520351">Passordet ditt er kanskje blitt avslørt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Åtakarar på denne nettstaden vil kanskje prøva å lura deg til å gjera noko farleg som å installera program eller avsløra opplysningane dine (t.d. passord, telefonnummer eller kredittkort).</translation>
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk systemstandarden (spør)</translation>
-<translation id="8044382196220116469">Tillat ikkje at nettstadar automatisk kan spela av video</translation>
 <translation id="808894953321890993">Endra passordet</translation>
 <translation id="8119307142152921512">sporing og annonsar</translation>
 <translation id="8149426793427495338">Datamaskina di er i kvilemodus.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Brukarnamn</translation>
 <translation id="8703575177326907206">Tilkoplinga di til <ph name="DOMAIN" /> er ikkje kryptert.</translation>
 <translation id="8740359287975076522">Fann ikkje <ph name="HOST_NAME" /> si &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt;. Feilsøkjer problemet.</translation>
-<translation id="8774017153185436870">Nettstadar vil kanskje automatisk spela av video</translation>
 <translation id="8820817407110198400">Bokmerke</translation>
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gå til nettstadinnstillingane</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>
 <translation id="9039213469156557790">Vidare inneheld denne sida andre ressursar som ikkje er trygge. Desse kan verta lesne av andre under overføringa og kan verta endra av ein åtakar for å endra korleis sida oppfører seg.</translation>
-<translation id="9048224371732578627">Automatisk videospeling er tillate</translation>
 <translation id="9062620674789239642">Fila kan ha vorte flytta, endra eller sletta.</translation>
 <translation id="9069693763241529744">Blokkert av ei utviding</translation>
 <translation id="9073799351042754113">Du har valt å slå av tryggleiksåtvaringar for denne nettstaden.</translation>

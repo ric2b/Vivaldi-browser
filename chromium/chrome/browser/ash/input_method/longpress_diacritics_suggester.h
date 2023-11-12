@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "ash/services/ime/public/cpp/suggestions.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
@@ -15,6 +14,7 @@
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
 #include "chrome/browser/ash/input_method/ui/assistive_delegate.h"
+#include "chromeos/ash/services/ime/public/cpp/assistive_suggestions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 
@@ -26,29 +26,7 @@ constexpr ui::DomCode kNextDomCode = ui::DomCode::ARROW_RIGHT;
 constexpr ui::DomCode kPreviousDomCode = ui::DomCode::ARROW_LEFT;
 constexpr ui::DomCode kAcceptDomCode = ui::DomCode::ENTER;
 constexpr ui::DomCode kDismissDomCode = ui::DomCode::ESCAPE;
-
-// TODO(b/217560706): Replace diacritics with final set after research is
-// done (on a per input method engine basis).
-// Current diacritics ordering is based on the Gboard ordering so it keeps
-// distance from target key consistent.
-constexpr auto kDefaultDiacriticsMap =
-    base::MakeFixedFlatMap<char, base::StringPiece16>(
-        {{'a', u"à;á;â;ä;æ;ã;å;ā"},
-         {'A', u"À;Á;Â;Ä;Æ;Ã;Å;Ā"},
-         {'c', u"ç"},
-         {'C', u"Ç"},
-         {'e', u"é;è;ê;ë;ē"},
-         {'E', u"É;È;Ê;Ë;Ē"},
-         {'i', u"í;î;ï;ī;ì"},
-         {'I', u"Í;Î;Ï;Ī;Ì"},
-         {'n', u"ñ"},
-         {'N', u"Ñ"},
-         {'o', u"ó;ô;ö;ò;œ;ø;ō;õ"},
-         {'O', u"Ó;Ô;Ö;Ò;Œ;Ø;Ō;Õ"},
-         {'s', u"ß"},
-         {'S', u"ẞ"},
-         {'u', u"ú;û;ü;ù;ū"},
-         {'U', u"Ú;Û;Ü;Ù;Ū"}});
+constexpr ui::DomCode kTabDomCode = ui::DomCode::TAB;
 
 // Must match IMEPKLongpressDiacriticAction in
 // tools/metrics/histograms/enums.xml
@@ -66,12 +44,13 @@ class LongpressDiacriticsSuggester : public Suggester {
   ~LongpressDiacriticsSuggester() override;
 
   bool TrySuggestOnLongpress(char key_character);
+  void SetEngineId(const std::string& engine_id);
 
   // Suggester overrides:
   void OnFocus(int context_id) override;
   void OnBlur() override;
   void OnExternalSuggestionsUpdated(
-      const std::vector<ime::TextSuggestion>& suggestions) override;
+      const std::vector<ime::AssistiveSuggestion>& suggestions) override;
   SuggestionStatus HandleKeyEvent(const ui::KeyEvent& event) override;
   bool TrySuggestWithSurroundingText(const std::u16string& text,
                                      int cursor_pos,
@@ -80,7 +59,7 @@ class LongpressDiacriticsSuggester : public Suggester {
   void DismissSuggestion() override;
   AssistiveType GetProposeActionType() override;
   bool HasSuggestions() override;
-  std::vector<ime::TextSuggestion> GetSuggestions() override;
+  std::vector<ime::AssistiveSuggestion> GetSuggestions() override;
 
  private:
   void SetButtonHighlighted(size_t index, bool highlighted);
@@ -92,6 +71,8 @@ class LongpressDiacriticsSuggester : public Suggester {
   absl::optional<char> displayed_window_base_character_;
   // Highlighted index can be nullopt even if window displayed.
   absl::optional<size_t> highlighted_index_;
+  // Current engine id
+  std::string engine_id_ = "";
 };
 
 }  // namespace input_method

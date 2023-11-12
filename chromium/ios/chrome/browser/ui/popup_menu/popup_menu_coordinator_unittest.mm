@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/page_info_commands.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
@@ -41,6 +42,14 @@
   self.menuDisplayed = NO;
 }
 
+- (void)updateUIForIPHDisplayed:(PopupMenuType)popupType {
+  // No-op.
+}
+
+- (void)updateUIForIPHDismissed {
+  // No-op.
+}
+
 @end
 
 class PopupMenuCoordinatorTest : public PlatformTest {
@@ -57,6 +66,8 @@ class PopupMenuCoordinatorTest : public PlatformTest {
         OCMStrictProtocolMock(@protocol(BrowserCoordinatorCommands));
     mock_bookmarks_commands_handler_ =
         OCMStrictProtocolMock(@protocol(BookmarksCommands));
+    mock_lens_commands_handler_ =
+        OCMStrictProtocolMock(@protocol(LensCommands));
     mock_page_info_commands_handler_ =
         OCMStrictProtocolMock(@protocol(PageInfoCommands));
     mock_qr_scanner_commands_handler_ =
@@ -72,6 +83,9 @@ class PopupMenuCoordinatorTest : public PlatformTest {
         startDispatchingToTarget:mock_bookmarks_commands_handler_
                      forProtocol:@protocol(BookmarksCommands)];
     [browser_->GetCommandDispatcher()
+        startDispatchingToTarget:mock_lens_commands_handler_
+                     forProtocol:@protocol(LensCommands)];
+    [browser_->GetCommandDispatcher()
         startDispatchingToTarget:mock_page_info_commands_handler_
                      forProtocol:@protocol(PageInfoCommands)];
     [browser_->GetCommandDispatcher()
@@ -85,6 +99,7 @@ class PopupMenuCoordinatorTest : public PlatformTest {
   id mock_browser_commands_handler_;
   id mock_browser_coordinator_commands_handler_;
   id mock_bookmarks_commands_handler_;
+  id mock_lens_commands_handler_;
   id mock_page_info_commands_handler_;
   id mock_qr_scanner_commands_handler_;
 };

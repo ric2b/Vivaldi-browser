@@ -230,8 +230,12 @@ compatibility issues are less relevant for Chrome-only code).
 * Use scalable `font-size` units like `%` or `em` to respect users' default font
   size
 
-* Don't use CSS Mixins (`--mixin: {}` or `@apply --mixin;`) in new code. [We're
-  removing them.](https://crbug.com/973674)
+* Don't use CSS Mixins (`--mixin: {}` or `@apply --mixin;`).
+    * CSS Mixins are defunct after Oct 2022, see
+      [crrev.com/c/3953559](https://crrev.com/c/3953559)
+    * All CSS Mixins usages have been removed from Chromium, see
+      [crbug.com/973674](https://crbug.com/973674) and
+      [crbug.com/1320797](https://crbug.com/1320797)
     * Mixins were [dropped from CSS](https://www.xanthir.com/b4o00) in favor of
       [CSS Shadow Parts](https://drafts.csswg.org/css-shadow-parts/).
     * Instead, replace CSS mixin usage with one of these natively supported
@@ -320,6 +324,22 @@ Guide](https://google.github.io/styleguide/jsguide.html) as well as
 * Prefer `this.addEventListener('foo-changed', this.onFooChanged_.bind(this));`
   instead of always using an arrow function wrapper, when it makes the code less
   verbose without compromising type safety (for example in TypeScript files).
+
+* When using `?.` be aware that information about the original location of the
+  null/undefined value can be lost. You should avoid cases like this and instead
+  prefer explicit error checking:
+```js
+const enterKey = keyboards.getCurrentKeyboard()?.getKeys()?.getEnterKey();
+// ... Lots of code here.
+if (!enterKey) {
+  // Something has gone wrong here, but it is unclear what.
+}
+```
+
+* Don't use `?.` as a way to silence TypeScript "object is possibly null"
+  errors. Instead use `assert()` statements. Only use the optional chaining
+  feature when the code needs to handle null/undefined gracefully.
+
 
 ### Closure compiler
 

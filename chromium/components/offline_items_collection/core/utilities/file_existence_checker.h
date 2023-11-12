@@ -13,9 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 
 namespace offline_items_collection {
 
@@ -42,8 +40,8 @@ class FileExistenceChecker {
       const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
       FileWithIdCollection<T> items_to_check,
       ResultCallback<T> callback) {
-    base::PostTaskAndReplyWithResult(
-        blocking_task_runner.get(), FROM_HERE,
+    blocking_task_runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&FileExistenceChecker::CheckForMissingFilesBlocking<T>,
                        std::move(items_to_check)),
         std::move(callback));

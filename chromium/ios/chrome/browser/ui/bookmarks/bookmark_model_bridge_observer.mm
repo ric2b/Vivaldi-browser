@@ -105,6 +105,22 @@ void BookmarkModelBridge::BookmarkMetaInfoChanged(BookmarkModel* model,
     [observer_ bookmarkMetaInfoChanged:node];
   }
 }
+
+void BookmarkModelBridge::ExtensiveBookmarkChangesBeginning(BookmarkModel*
+                                                            model) {
+  SEL selector = @selector(extensiveBookmarkChangesBeginning);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ extensiveBookmarkChangesBeginning];
+  }
+}
+
+void BookmarkModelBridge::ExtensiveBookmarkChangesEnded(BookmarkModel*
+                                                            model) {
+  SEL selector = @selector(extensiveBookmarkChangesEnded);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ extensiveBookmarkChangesEnded];
+  }
+}
 // End Vivaldi
 
 }  // namespace bookmarks

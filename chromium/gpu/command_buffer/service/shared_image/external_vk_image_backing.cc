@@ -14,6 +14,7 @@
 #include "gpu/command_buffer/service/shared_image/external_vk_image_gl_representation.h"
 #include "gpu/command_buffer/service/shared_image/external_vk_image_overlay_representation.h"
 #include "gpu/command_buffer/service/shared_image/external_vk_image_skia_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
 #include "gpu/vulkan/vma_wrapper.h"
@@ -79,6 +80,7 @@ static const struct GLFormatInfo {
     {GL_BGRA, GL_UNSIGNED_INT_2_10_10_10_REV, 4},  // BGRA_1010102
     {GL_ZERO, GL_ZERO, 0},                         // YVU_420
     {GL_ZERO, GL_ZERO, 0},                         // YUV_420_BIPLANAR
+    {GL_ZERO, GL_ZERO, 0},                         // YUVA_420_TRIPLANAR
     {GL_ZERO, GL_ZERO, 0},                         // P010
 };
 static_assert(std::size(kFormatTable) == (viz::RESOURCE_FORMAT_MAX + 1),
@@ -188,7 +190,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
   if (usage & kUsageNeedsColorAttachment) {
     vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    if (viz::IsResourceFormatCompressed(format)) {
+    if (format.IsCompressed()) {
       DLOG(ERROR) << "ETC1 format cannot be used as color attachment.";
       return nullptr;
     }
@@ -262,13 +264,13 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
 
   auto* vulkan_implementation =
       context_state->vk_context_provider()->GetVulkanImplementation();
-  auto resource_format = viz::GetResourceFormat(buffer_format);
-  auto si_format = viz::SharedImageFormat::SinglePlane(resource_format);
+  auto si_format = viz::SharedImageFormat::SinglePlane(
+      viz::GetResourceFormat(buffer_format));
   auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
   DCHECK(vulkan_implementation->CanImportGpuMemoryBuffer(device_queue,
                                                          handle.type));
 
-  VkFormat vk_format = ToVkFormat(resource_format);
+  VkFormat vk_format = ToVkFormat(si_format);
   auto image = vulkan_implementation->CreateImageFromGpuMemoryHandle(
       device_queue, std::move(handle), size, vk_format, color_space);
   if (!image) {
@@ -313,6 +315,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
       backend_texture_(size.width(),
                        size.height(),
                        CreateGrVkImageInfo(image_.get())),
+      promise_texture_(SkPromiseImageTexture::Make(backend_texture_)),
       command_pool_(command_pool),
       use_separate_gl_texture_(use_separate_gl_texture) {}
 
@@ -569,9 +572,10 @@ std::unique_ptr<DawnImageRepresentation> ExternalVkImageBacking::ProduceDawn(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     WGPUDevice wgpuDevice,
-    WGPUBackendType backend_type) {
+    WGPUBackendType backend_type,
+    std::vector<WGPUTextureFormat> view_formats) {
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && BUILDFLAG(USE_DAWN)
-  auto wgpu_format = viz::ToWGPUFormat(format());
+  auto wgpu_format = ToWGPUFormat(format());
 
   if (wgpu_format == WGPUTextureFormat_Undefined) {
     DLOG(ERROR) << "Format not supported for Dawn";
@@ -588,7 +592,8 @@ std::unique_ptr<DawnImageRepresentation> ExternalVkImageBacking::ProduceDawn(
   }
 
   return std::make_unique<ExternalVkImageDawnImageRepresentation>(
-      manager, this, tracker, wgpuDevice, wgpu_format, std::move(memory_fd));
+      manager, this, tracker, wgpuDevice, wgpu_format, std::move(view_formats),
+      std::move(memory_fd));
 #else  // (!BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)) ||
        // !BUILDFLAG(USE_DAWN)
   NOTIMPLEMENTED_LOG_ONCE();
@@ -648,7 +653,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
                           ->feature_info()
                           ->feature_flags()
                           .angle_rgbx_internal_format;
-      GLuint internal_format = viz::TextureStorageFormat(format(), use_rgbx);
+      GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
       api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1, internal_format,
                                size().width(), size().height());
     } else {
@@ -673,7 +678,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
                         ->feature_info()
                         ->feature_flags()
                         .angle_rgbx_internal_format;
-    GLuint internal_format = viz::TextureStorageFormat(format(), use_rgbx);
+    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
     if (UseMinimalUsageFlags(context_state())) {
       api->glTexStorageMemFlags2DANGLEFn(
           GL_TEXTURE_2D, 1, internal_format, size().width(), size().height(),
@@ -705,9 +710,9 @@ ExternalVkImageBacking::ProduceGLTexture(SharedImageManager* manager,
                         ->feature_info()
                         ->feature_flags()
                         .angle_rgbx_internal_format;
-    GLuint internal_format = viz::TextureStorageFormat(format(), use_rgbx);
-    GLenum gl_format = viz::GLDataFormat(format());
-    GLenum gl_type = viz::GLDataType(format());
+    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
+    GLenum gl_format = GLDataFormat(format());
+    GLenum gl_type = GLDataType(format());
 
     texture_ = gles2::CreateGLES2TextureWithLightRef(texture_service_id,
                                                      GL_TEXTURE_2D);
@@ -743,9 +748,9 @@ ExternalVkImageBacking::ProduceGLTexturePassthrough(
                         ->feature_info()
                         ->feature_flags()
                         .angle_rgbx_internal_format;
-    GLuint internal_format = viz::TextureStorageFormat(format(), use_rgbx);
-    GLenum gl_format = viz::GLDataFormat(format());
-    GLenum gl_type = viz::GLDataType(format());
+    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
+    GLenum gl_format = GLDataFormat(format());
+    GLenum gl_type = GLDataType(format());
 
     texture_passthrough_ = base::MakeRefCounted<gpu::gles2::TexturePassthrough>(
         texture_service_id, GL_TEXTURE_2D, internal_format, size().width(),

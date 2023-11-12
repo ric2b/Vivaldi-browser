@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/accessibility/autoclick/autoclick_controller.h"
 #include "ash/capture_mode/capture_mode_bar_view.h"
-#include "ash/capture_mode/capture_mode_button.h"
 #include "ash/capture_mode/capture_mode_camera_controller.h"
 #include "ash/capture_mode/capture_mode_camera_preview_view.h"
 #include "ash/capture_mode/capture_mode_constants.h"
@@ -13,26 +13,29 @@
 #include "ash/capture_mode/capture_mode_menu_group.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_session.h"
+#include "ash/capture_mode/capture_mode_session_focus_cycler.h"
 #include "ash/capture_mode/capture_mode_session_test_api.h"
 #include "ash/capture_mode/capture_mode_settings_test_api.h"
 #include "ash/capture_mode/capture_mode_settings_view.h"
 #include "ash/capture_mode/capture_mode_test_util.h"
 #include "ash/capture_mode/capture_mode_toast_controller.h"
-#include "ash/capture_mode/capture_mode_toggle_button.h"
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/fake_camera_device.h"
 #include "ash/capture_mode/fake_folder_selection_dialog_factory.h"
 #include "ash/capture_mode/fake_video_source_provider.h"
 #include "ash/capture_mode/test_capture_mode_delegate.h"
+#include "ash/constants/ash_features.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/system/accessibility/autoclick_menu_bubble_controller.h"
+#include "ash/system/privacy/privacy_indicators_tray_item_view.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
@@ -42,6 +45,7 @@
 #include "base/system/system_monitor.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/timer/timer.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "media/base/video_facing.h"
@@ -52,14 +56,15 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
-#include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_util.h"
@@ -142,28 +147,6 @@ class CameraDevicesChangeWaiter : public CaptureModeCameraController::Observer {
 
   // Tracks the number of times `OnSelectedCameraChanged()` was triggered.
   int selected_camera_change_event_count_ = 0;
-};
-
-// Defines a waiter to observe the visibility change of the view.
-class ViewVisibilityChangeWaiter : public views::ViewObserver {
- public:
-  explicit ViewVisibilityChangeWaiter(views::View* view) : view_(view) {
-    view_->AddObserver(this);
-  }
-
-  ~ViewVisibilityChangeWaiter() override { view_->RemoveObserver(this); }
-
-  void Wait() { wait_loop_.Run(); }
-
-  // views::ViewObserver:
-  void OnViewVisibilityChanged(views::View* observed_view,
-                               views::View* starting_view) override {
-    wait_loop_.Quit();
-  }
-
- private:
-  views::View* const view_;
-  base::RunLoop wait_loop_;
 };
 
 gfx::Rect GetTooSmallToFitCameraRegion() {
@@ -283,7 +266,7 @@ class CaptureModeCameraTest : public AshTestBase {
     }
   }
 
-  CaptureModeButton* GetPreviewResizeButton() const {
+  CameraPreviewResizeButton* GetPreviewResizeButton() const {
     return GetCameraController()->camera_preview_view()->resize_button();
   }
 
@@ -336,7 +319,8 @@ class CaptureModeCameraTest : public AshTestBase {
 
   // Verifies that the icon image and the tooltip of the resize button gets
   // updated correctly when pressed.
-  void VerifyResizeButton(bool is_collapsed, CaptureModeButton* resize_button) {
+  void VerifyResizeButton(bool is_collapsed,
+                          CameraPreviewResizeButton* resize_button) {
     SkColor color =
         resize_button->GetColorProvider()->GetColor(kColorAshIconColorPrimary);
     const gfx::ImageSkia collapse_icon_image =
@@ -2090,9 +2074,10 @@ TEST_F(CaptureModeCameraTest,
   SendKey(ui::VKEY_TAB, event_generator);
   EXPECT_FALSE(camera_preview_view->has_focus());
   EXPECT_FALSE(resize_button->has_focus());
-  EXPECT_TRUE(CaptureModeSessionTestApi(controller->capture_mode_session())
-                  .GetCaptureModeBarView()
-                  ->settings_button()
+
+  CaptureModeSessionTestApi test_api(controller->capture_mode_session());
+  EXPECT_TRUE(CaptureModeSessionFocusCycler::HighlightHelper::Get(
+                  test_api.GetCaptureModeBarView()->settings_button())
                   ->has_focus());
 }
 
@@ -3612,7 +3597,7 @@ TEST_P(CaptureModeCameraPreviewTest, ResizeButtonVisibilityOnMouseEvents) {
   const gfx::Rect default_preview_bounds =
       preview_widget->GetWindowBoundsInScreen();
 
-  CaptureModeButton* resize_button = GetPreviewResizeButton();
+  CameraPreviewResizeButton* resize_button = GetPreviewResizeButton();
   auto* event_generator = GetEventGenerator();
 
   // Tests that the resize button is hidden by default.
@@ -3660,7 +3645,7 @@ TEST_P(CaptureModeCameraPreviewTest, ResizeButtonVisibilityOnTapEvents) {
   const gfx::Rect default_preview_bounds =
       preview_widget->GetWindowBoundsInScreen();
 
-  CaptureModeButton* resize_button = GetPreviewResizeButton();
+  CameraPreviewResizeButton* resize_button = GetPreviewResizeButton();
   auto* event_generator = GetEventGenerator();
 
   // Tests that the resize button is hidden by default.
@@ -3694,7 +3679,7 @@ TEST_P(CaptureModeCameraPreviewTest,
   views::Widget* preview_widget = camera_controller->camera_preview_widget();
   const gfx::Rect preview_bounds = preview_widget->GetWindowBoundsInScreen();
 
-  CaptureModeButton* resize_button = GetPreviewResizeButton();
+  CameraPreviewResizeButton* resize_button = GetPreviewResizeButton();
   auto* event_generator = GetEventGenerator();
 
   // Tests that the resize button is hidden by default.
@@ -3882,7 +3867,7 @@ TEST_P(CaptureModeCameraPreviewTest,
   autoclick_controller->SetEnabled(true, /*show_confirmation_dialog=*/false);
   Shell::Get()
       ->accessibility_controller()
-      ->GetFeature(AccessibilityControllerImpl::FeatureType::kAutoclick)
+      ->GetFeature(A11yFeatureType::kAutoclick)
       .SetEnabled(true);
 
   views::Widget* autoclick_bubble_widget =
@@ -4034,7 +4019,7 @@ TEST_P(CaptureModeCameraPreviewTest,
     views::Widget* preview_widget = camera_controller->camera_preview_widget();
     DCHECK(preview_widget);
     gfx::Rect preview_bounds = preview_widget->GetWindowBoundsInScreen();
-    CaptureModeButton* resize_button = GetPreviewResizeButton();
+    CameraPreviewResizeButton* resize_button = GetPreviewResizeButton();
 
     // Tests the default visibility of the resize button based on whether switch
     // access is enabled or not.
@@ -4098,7 +4083,7 @@ TEST_P(CaptureModeCameraPreviewTest,
     views::Widget* preview_widget = camera_controller->camera_preview_widget();
     DCHECK(preview_widget);
     gfx::Rect preview_bounds = preview_widget->GetWindowBoundsInScreen();
-    CaptureModeButton* resize_button = GetPreviewResizeButton();
+    CameraPreviewResizeButton* resize_button = GetPreviewResizeButton();
 
     // Tests the default visibility of the resize button based on whether switch
     // access is enabled or not.
@@ -4493,14 +4478,119 @@ TEST_F(NoSessionCaptureModeCameraTest, RequestCameraInfoAfterUserLogsIn) {
   // Simulate the user login process and wait for the camera info to be updated.
   {
     base::RunLoop loop;
-    GetCameraController()->SetOnCameraListReceivedForTesting(
-        loop.QuitClosure());
+    camera_controller->SetOnCameraListReceivedForTesting(loop.QuitClosure());
     SimulateUserLogin("example@gmail.com", user_manager::USER_TYPE_REGULAR);
     loop.Run();
   }
 
   // Verify that after the user logs in, the camera info is up-to-date.
   EXPECT_EQ(camera_controller->available_cameras().size(), 1u);
+}
+
+class CaptureModePrivacyIndicatorsTest : public CaptureModeCameraTest {
+ public:
+  CaptureModePrivacyIndicatorsTest()
+      : scoped_feature_list_(features::kPrivacyIndicators) {}
+  CaptureModePrivacyIndicatorsTest(const CaptureModePrivacyIndicatorsTest&) =
+      delete;
+  CaptureModePrivacyIndicatorsTest& operator=(
+      const CaptureModePrivacyIndicatorsTest&) = delete;
+  ~CaptureModePrivacyIndicatorsTest() override = default;
+
+  bool IsCameraIndicatorIconVisible() const {
+    auto* indicator_view = GetPrimaryDisplayPrivacyIndicatorsView();
+    return indicator_view && indicator_view->GetVisible() &&
+           indicator_view->IsCameraUsed() &&
+           indicator_view->camera_icon_->GetVisible();
+  }
+
+  bool IsMicrophoneIndicatorIconVisible() const {
+    auto* indicator_view = GetPrimaryDisplayPrivacyIndicatorsView();
+    return indicator_view && indicator_view->GetVisible() &&
+           indicator_view->IsMicrophoneUsed() &&
+           indicator_view->microphone_icon_->GetVisible();
+  }
+
+  PrivacyIndicatorsTrayItemView* GetPrimaryDisplayPrivacyIndicatorsView()
+      const {
+    return Shell::GetPrimaryRootWindowController()
+        ->GetStatusAreaWidget()
+        ->unified_system_tray()
+        ->privacy_indicators_view();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(CaptureModePrivacyIndicatorsTest, CameraPrivacyIndicators) {
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+
+  // Initially the session doesn't show any camera preview since the camera
+  // hasn't connected yet. There should be no privacy indicators.
+  StartCaptureSession(CaptureModeSource::kFullscreen, CaptureModeType::kVideo);
+  auto* camera_controller = GetCameraController();
+  camera_controller->SetSelectedCamera(CameraId(kDefaultCameraModelId, 1));
+  EXPECT_FALSE(camera_controller->camera_preview_widget());
+  EXPECT_FALSE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+
+  // Once the camera gets connected, the camera privacy indicator icon should
+  // show. No microphone yet (not until recording starts with audio).
+  AddDefaultCamera();
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+  EXPECT_TRUE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+
+  // If the camera gets disconnected for some reason, the indicator should go
+  // away, and come back once it reconnects again.
+  RemoveDefaultCamera();
+  EXPECT_FALSE(camera_controller->camera_preview_widget());
+  // The widget closes its window asynchronously, run a loop to finish that.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+  AddDefaultCamera();
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+  EXPECT_TRUE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+}
+
+TEST_F(CaptureModePrivacyIndicatorsTest, DuringRecordingPrivacyIndicators) {
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+
+  // Even with the selected camera present, no indicators will show until the
+  // capture session starts.
+  auto* camera_controller = GetCameraController();
+  camera_controller->SetSelectedCamera(CameraId(kDefaultCameraModelId, 1));
+  AddDefaultCamera();
+  EXPECT_FALSE(camera_controller->camera_preview_widget());
+  EXPECT_FALSE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+
+  auto* capture_controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                                 CaptureModeType::kVideo);
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+  EXPECT_TRUE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+
+  // When the user selects audio recording, the idicators won't change.
+  // Recording has to start first.
+  capture_controller->EnableAudioRecording(true);
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
+
+  StartRecordingFromSource(CaptureModeSource::kFullscreen);
+  EXPECT_TRUE(IsCameraIndicatorIconVisible());
+  EXPECT_TRUE(IsMicrophoneIndicatorIconVisible());
+
+  // Once recording ends, both indicators should disappear.
+  capture_controller->EndVideoRecording(
+      EndRecordingReason::kStopRecordingButton);
+  WaitForCaptureFileToBeSaved();
+  EXPECT_FALSE(IsCameraIndicatorIconVisible());
+  EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
 }
 
 }  // namespace ash

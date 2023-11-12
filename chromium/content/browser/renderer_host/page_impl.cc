@@ -50,10 +50,10 @@ void PageImpl::GetManifest(GetManifestCallback callback) {
 
 bool PageImpl::IsPrimary() {
   // TODO(1244137): Check for portals as well, once they are migrated to MPArch.
-  if (main_document_.IsFencedFrameRoot())
+  if (main_document_->IsFencedFrameRoot())
     return false;
 
-  return main_document_.lifecycle_state() ==
+  return main_document_->lifecycle_state() ==
          RenderFrameHostImpl::LifecycleStateImpl::kActive;
 }
 
@@ -62,15 +62,15 @@ void PageImpl::UpdateManifestUrl(const GURL& manifest_url) {
 
   // If |main_document_| is not active, the notification is sent on the page
   // activation.
-  if (!main_document_.IsActive())
+  if (!main_document_->IsActive())
     return;
 
-  main_document_.delegate()->OnManifestUrlChanged(*this);
+  main_document_->delegate()->OnManifestUrlChanged(*this);
 }
 
 void PageImpl::WriteIntoTrace(perfetto::TracedValue context) {
   auto dict = std::move(context).WriteDictionary();
-  dict.Add("main_document", main_document_);
+  dict.Add("main_document", *main_document_);
 }
 
 base::WeakPtr<Page> PageImpl::GetWeakPtr() {
@@ -87,21 +87,21 @@ bool PageImpl::IsPageScaleFactorOne() {
 
 void PageImpl::OnFirstVisuallyNonEmptyPaint() {
   did_first_visually_non_empty_paint_ = true;
-  delegate_.OnFirstVisuallyNonEmptyPaint(*this);
+  delegate_->OnFirstVisuallyNonEmptyPaint(*this);
 }
 
 void PageImpl::OnThemeColorChanged(const absl::optional<SkColor>& theme_color) {
   main_document_theme_color_ = theme_color;
-  delegate_.OnThemeColorChanged(*this);
+  delegate_->OnThemeColorChanged(*this);
 }
 
 void PageImpl::DidChangeBackgroundColor(SkColor background_color,
                                         bool color_adjust) {
   main_document_background_color_ = background_color;
-  delegate_.OnBackgroundColorChanged(*this);
+  delegate_->OnBackgroundColorChanged(*this);
   // NOTE(andre@vivaldi.com) : In Vivaldi we do not have a RenderWidgetHostView
   // created here. See VB-77203.
-  if (color_adjust && main_document_.GetRenderWidgetHost()->GetView()) {
+  if (color_adjust && main_document_->GetRenderWidgetHost()->GetView()) {
     // <meta name="color-scheme" content="dark"> may pass the dark canvas
     // background before the first paint in order to avoid flashing the white
     // background in between loading documents. If we perform a navigation
@@ -109,7 +109,7 @@ void PageImpl::DidChangeBackgroundColor(SkColor background_color,
     // previous page while rendering is blocked in the new page, but for cross
     // process navigations we would paint the default background (typically
     // white) while the rendering is blocked.
-    main_document_.GetRenderWidgetHost()->GetView()->SetContentBackgroundColor(
+    main_document_->GetRenderWidgetHost()->GetView()->SetContentBackgroundColor(
         background_color);
   }
 }
@@ -117,7 +117,13 @@ void PageImpl::DidChangeBackgroundColor(SkColor background_color,
 void PageImpl::DidInferColorScheme(
     blink::mojom::PreferredColorScheme color_scheme) {
   main_document_inferred_color_scheme_ = color_scheme;
-  delegate_.DidInferColorScheme(*this);
+  delegate_->DidInferColorScheme(*this);
+}
+
+void PageImpl::NotifyPageBecameCurrent() {
+  if (!IsPrimary())
+    return;
+  delegate_->NotifyPageBecamePrimary(*this);
 }
 
 void PageImpl::SetContentsMimeType(std::string mime_type) {
@@ -146,12 +152,12 @@ void PageImpl::OnTextAutosizerPageInfoChanged(
       },
       text_autosizer_page_info_);
 
-  main_document_.frame_tree()
+  main_document_->frame_tree()
       ->root()
       ->render_manager()
       ->ExecuteRemoteFramesBroadcastMethod(
           std::move(remote_frames_broadcast_callback),
-          main_document_.GetSiteInstance());
+          main_document_->GetSiteInstance());
 }
 
 void PageImpl::SetActivationStartTime(base::TimeTicks activation_start) {
@@ -177,12 +183,13 @@ void PageImpl::ActivateForPrerendering(
     // not yet committed. These RenderViews still need to know about activation
     // so their documents are created in the non-prerendered state once their
     // navigation is committed.
-    if (main_document_.GetRenderViewHost() == &*rvh)
+    if (main_document_->GetRenderViewHost() == &*rvh)
       navigation_start_to_send = *activation_start_time_for_prerendering_;
 
     auto params = blink::mojom::PrerenderPageActivationParams::New();
     params->was_user_activated =
-        main_document_.frame_tree_node()->has_received_user_gesture_before_nav()
+        main_document_->frame_tree_node()
+                ->has_received_user_gesture_before_nav()
             ? blink::mojom::WasActivatedOption::kYes
             : blink::mojom::WasActivatedOption::kNo;
     params->activation_start = navigation_start_to_send;
@@ -195,7 +202,7 @@ void PageImpl::ActivateForPrerendering(
   // inner WebContents. These are in a different FrameTree which might not know
   // it is being prerendered. We should teach these FrameTrees that they are
   // being prerendered, or ban inner FrameTrees in a prerendering page.
-  main_document_.ForEachRenderFrameHostIncludingSpeculative(
+  main_document_->ForEachRenderFrameHostIncludingSpeculative(
       [this](RenderFrameHostImpl* rfh) {
         if (&rfh->GetPage() != this)
           return;
@@ -211,26 +218,26 @@ void PageImpl::MaybeDispatchLoadEventsOnPrerenderActivation() {
   // blink::kFinalLoadProgress, whose notification is dispatched during call
   // to DidStopLoading.
   if (load_progress() != blink::kFinalLoadProgress)
-    main_document_.DidChangeLoadProgress(load_progress());
+    main_document_->DidChangeLoadProgress(load_progress());
 
   // Dispatch PrimaryMainDocumentElementAvailable before dispatching following
   // load complete events.
   if (is_main_document_element_available())
-    main_document_.MainDocumentElementAvailable(uses_temporary_zoom_level());
+    main_document_->MainDocumentElementAvailable(uses_temporary_zoom_level());
 
-  main_document_.ForEachRenderFrameHost(
+  main_document_->ForEachRenderFrameHost(
       &RenderFrameHostImpl::MaybeDispatchDOMContentLoadedOnPrerenderActivation);
 
   if (is_on_load_completed_in_main_document())
-    main_document_.DocumentOnLoadCompleted();
+    main_document_->DocumentOnLoadCompleted();
 
-  main_document_.ForEachRenderFrameHost(
+  main_document_->ForEachRenderFrameHost(
       &RenderFrameHostImpl::MaybeDispatchDidFinishLoadOnPrerenderActivation);
 }
 
 void PageImpl::DidActivateAllRenderViewsForPrerendering() {
   // Tell each RenderFrameHostImpl in this Page that activation finished.
-  main_document_.ForEachRenderFrameHost([this](RenderFrameHostImpl* rfh) {
+  main_document_->ForEachRenderFrameHost([this](RenderFrameHostImpl* rfh) {
     if (&rfh->GetPage() != this)
       return;
     rfh->RendererDidActivateForPrerendering();
@@ -238,11 +245,11 @@ void PageImpl::DidActivateAllRenderViewsForPrerendering() {
 }
 
 RenderFrameHost& PageImpl::GetMainDocumentHelper() {
-  return main_document_;
+  return *main_document_;
 }
 
 RenderFrameHostImpl& PageImpl::GetMainDocument() const {
-  return main_document_;
+  return *main_document_;
 }
 
 void PageImpl::UpdateBrowserControlsState(cc::BrowserControlsState constraints,
@@ -292,7 +299,7 @@ void PageImpl::SetVirtualKeyboardMode(ui::mojom::VirtualKeyboardMode mode) {
 
   virtual_keyboard_mode_ = mode;
 
-  delegate_.OnVirtualKeyboardModeChanged(*this);
+  delegate_->OnVirtualKeyboardModeChanged(*this);
 }
 
 base::flat_map<std::string, std::string> PageImpl::GetKeyboardLayoutMap() {

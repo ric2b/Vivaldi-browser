@@ -129,6 +129,12 @@ if (!is_ios) {
     ]
   }
 
+  update_target("//chrome/browser/autofill:autofill") {
+    deps += [
+      "//chrome/browser/password_manager:password_manager_buildflags",
+    ]
+  }
+
   update_target("//chrome/common:common") {
     public_deps += [
       "//components/version_info:generate_version_info",

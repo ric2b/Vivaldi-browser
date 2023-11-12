@@ -125,9 +125,6 @@ class MockWebStatePolicyDecider : public WebStatePolicyDecider {
                void(NSURLRequest* request,
                     WebStatePolicyDecider::RequestInfo request_info,
                     WebStatePolicyDecider::PolicyDecisionCallback callback));
-
-  MOCK_METHOD2(ShouldAllowErrorPageToBeDisplayed,
-               bool(NSURLResponse* response, bool for_main_frame));
   MOCK_METHOD3(ShouldAllowResponse,
                void(NSURLResponse* response,
                     WebStatePolicyDecider::ResponseInfo response_info,
@@ -441,17 +438,16 @@ TEST_F(WebStateImplTest, DelegateTest) {
   FakeJavaScriptDialogPresenter* presenter =
       delegate.GetFakeJavaScriptDialogPresenter();
   EXPECT_FALSE(delegate.get_java_script_dialog_presenter_called());
-  EXPECT_TRUE(presenter->requested_dialogs().empty());
+  EXPECT_TRUE(presenter->requested_alert_dialogs().empty());
   EXPECT_FALSE(presenter->cancel_dialogs_called());
 
   __block bool callback_called = false;
-  web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT, @"",
-                                  nil, base::BindOnce(^(bool, NSString*) {
-                                    callback_called = true;
-                                  }));
+  web_state_->RunJavaScriptAlertDialog(GURL(), @"", base::BindOnce(^() {
+                                         callback_called = true;
+                                       }));
 
   EXPECT_TRUE(delegate.get_java_script_dialog_presenter_called());
-  EXPECT_EQ(1U, presenter->requested_dialogs().size());
+  EXPECT_EQ(1U, presenter->requested_alert_dialogs().size());
   EXPECT_TRUE(callback_called);
 
   EXPECT_FALSE(presenter->cancel_dialogs_called());
@@ -646,38 +642,6 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
     EXPECT_FALSE(policy_decision.ShouldAllowNavigation());
     EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
   }
-
-  NSURL* error_url = [NSURL URLWithString:@"chrome://invalid"];
-  NSURLResponse* error_response =
-      [[NSURLResponse alloc] initWithURL:error_url
-                                MIMEType:@"text/html"
-                   expectedContentLength:0
-                        textEncodingName:nil];
-
-  const WebStatePolicyDecider::RequestInfo error_request_info_main_frame(
-      ui::PageTransition::PAGE_TRANSITION_LINK,
-      /*target_main_frame=*/true,
-      /*target_frame_is_cross_origin=*/false,
-      /*has_user_gesture=*/false);
-  EXPECT_CALL(decider, ShouldAllowErrorPageToBeDisplayed(error_response, true))
-      .Times(1)
-      .WillOnce(Return(true));
-  EXPECT_CALL(decider2, ShouldAllowErrorPageToBeDisplayed(error_response, true))
-      .Times(1)
-      .WillOnce(Return(true));
-  EXPECT_TRUE(
-      web_state_->ShouldAllowErrorPageToBeDisplayed(error_response, true));
-
-  // If at least one decider doesn't allow displaying error pages, web state
-  // shouldn't allow them either.
-  EXPECT_CALL(decider, ShouldAllowErrorPageToBeDisplayed(error_response, true))
-      .Times(1)
-      .WillOnce(Return(true));
-  EXPECT_CALL(decider2, ShouldAllowErrorPageToBeDisplayed(error_response, true))
-      .Times(1)
-      .WillOnce(Return(false));
-  EXPECT_FALSE(
-      web_state_->ShouldAllowErrorPageToBeDisplayed(error_response, true));
 
   EXPECT_CALL(decider, WebStateDestroyed()).Times(1);
   EXPECT_CALL(decider2, WebStateDestroyed()).Times(1);
@@ -1053,10 +1017,7 @@ TEST_F(WebStateImplTest, DisallowSnapshotsDuringDialogPresentation) {
   // presented.
   delegate.GetFakeJavaScriptDialogPresenter()->set_callback_execution_paused(
       true);
-  web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT,
-                                  @"message", @"",
-                                  base::BindOnce(^(bool, NSString*){
-                                  }));
+  web_state_->RunJavaScriptAlertDialog(GURL(), @"message", base::DoNothing());
 
   // Verify that CanTakeSnapshot() returns no while the dialog is presented.
   EXPECT_FALSE(web_state_->CanTakeSnapshot());
@@ -1079,10 +1040,7 @@ TEST_F(WebStateImplTest, VerifyDialogRunningBoolean) {
   // presented.
   delegate.GetFakeJavaScriptDialogPresenter()->set_callback_execution_paused(
       true);
-  web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT,
-                                  @"message", @"",
-                                  base::BindOnce(^(bool, NSString*){
-                                  }));
+  web_state_->RunJavaScriptAlertDialog(GURL(), @"message", base::DoNothing());
 
   // Verify that IsJavaScriptDialogRunning() returns true while the dialog is
   // presented.
@@ -1116,10 +1074,7 @@ TEST_F(WebStateImplTest, CreateFullPagePdfJavaScriptDialog) {
     // presented.
     delegate.GetFakeJavaScriptDialogPresenter()->set_callback_execution_paused(
         true);
-    web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT,
-                                    @"message", @"",
-                                    base::BindOnce(^(bool, NSString*){
-                                    }));
+    web_state_->RunJavaScriptAlertDialog(GURL(), @"message", base::DoNothing());
 
     // Attempt to create a PDF for this page and validate that it return nil.
     __block NSData* callback_data_when_dialog = nil;

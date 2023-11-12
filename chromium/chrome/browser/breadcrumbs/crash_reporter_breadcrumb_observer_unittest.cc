@@ -55,11 +55,6 @@ class CrashReporterBreadcrumbObserverTest : public PlatformTest {
   }
 
   void TearDown() override {
-    // Clear the CrashReporterBreadcrumbObserver singleton state to
-    // avoid polluting other tests.
-    breadcrumbs::CrashReporterBreadcrumbObserver::GetInstance()
-        .ResetForTesting();
-
     // TODO(crbug.com/1269414) This should call
     // crash_reporter::ResetCrashKeysForTesting() once
     // ChromeUserManagerImpl::UpdateNumberOfUsers allows the static
@@ -83,7 +78,8 @@ TEST_F(CrashReporterBreadcrumbObserverTest, EventsAttachedToCrashReport) {
 
   breadcrumb_service->AddEvent(std::string("Breadcrumb Event"));
 
-  const auto events = breadcrumbs::BreadcrumbManager::GetInstance().GetEvents();
+  const auto& events =
+      breadcrumbs::BreadcrumbManager::GetInstance().GetEvents();
   std::string expected_breadcrumbs;
   for (const auto& event : events)
     expected_breadcrumbs += event + "\n";

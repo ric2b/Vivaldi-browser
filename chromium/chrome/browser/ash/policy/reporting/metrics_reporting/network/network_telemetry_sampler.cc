@@ -13,7 +13,7 @@
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/bind_post_task.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/network/wifi_signal_strength_rssi_fetcher.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_state.h"
@@ -128,11 +128,13 @@ void NetworkTelemetrySampler::MaybeCollect(OptionalMetricCallback callback) {
   auto handle_probe_result_cb =
       base::BindOnce(&NetworkTelemetrySampler::CollectWifiSignalStrengthRssi,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
-  ash::cros_healthd::ServiceConnection::GetInstance()->ProbeTelemetryInfo(
-      std::vector<ash::cros_healthd::mojom::ProbeCategoryEnum>{
-          ash::cros_healthd::mojom::ProbeCategoryEnum::kNetworkInterface},
-      base::BindPostTask(base::SequencedTaskRunnerHandle::Get(),
-                         std::move(handle_probe_result_cb)));
+  ash::cros_healthd::ServiceConnection::GetInstance()
+      ->GetProbeService()
+      ->ProbeTelemetryInfo(
+          std::vector<ash::cros_healthd::mojom::ProbeCategoryEnum>{
+              ash::cros_healthd::mojom::ProbeCategoryEnum::kNetworkInterface},
+          base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
+                             std::move(handle_probe_result_cb)));
 }
 
 void NetworkTelemetrySampler::CollectWifiSignalStrengthRssi(
@@ -164,7 +166,7 @@ void NetworkTelemetrySampler::CollectWifiSignalStrengthRssi(
                      std::move(cros_healthd_telemetry));
   FetchWifiSignalStrengthRssi(
       std::move(service_paths),
-      base::BindPostTask(base::SequencedTaskRunnerHandle::Get(),
+      base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
                          std::move(wifi_signal_rssi_cb)));
 }
 

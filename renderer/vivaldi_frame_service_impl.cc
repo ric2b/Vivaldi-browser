@@ -203,7 +203,7 @@ bool VivaldiFrameServiceImpl::UpdateSpatnavQuads() {
     return false;
   }
 
-  float scale = render_frame_->GetWebView()->ZoomFactorForDeviceScaleFactor();
+  float scale = render_frame_->GetWebView()->ZoomFactorForViewportLayout();
   if (scale == 0) {
     scale = 1.0;
   }

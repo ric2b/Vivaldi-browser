@@ -15,6 +15,7 @@
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "mojo/core/channel.h"
 #include "mojo/core/ipcz_driver/object.h"
 #include "mojo/core/system_impl_export.h"
@@ -41,7 +42,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Transport : public Object<Transport>,
   };
   Transport(EndpointTypes endpoint_types,
             Channel::Endpoint endpoint,
-            base::Process remote_process);
+            base::Process remote_process,
+            bool is_remote_process_untrusted = false);
 
   // Static helper that is slightly more readable due to better type deduction
   // than MakeRefCounted<T>.
@@ -74,6 +76,12 @@ class MOJO_SYSTEM_IMPL_EXPORT Transport : public Object<Transport>,
   void set_leak_channel_on_shutdown(bool leak) {
     leak_channel_on_shutdown_ = leak;
   }
+
+  void set_is_peer_trusted(bool trusted) { is_peer_trusted_ = trusted; }
+  bool is_peer_trusted() const { return is_peer_trusted_; }
+
+  void set_is_trusted_by_peer(bool trusted) { is_trusted_by_peer_ = trusted; }
+  bool is_trusted_by_peer() const { return is_trusted_by_peer_; }
 
   void SetErrorHandler(MojoProcessErrorHandler handler, uintptr_t context) {
     error_handler_ = handler;
@@ -174,6 +182,27 @@ class MOJO_SYSTEM_IMPL_EXPORT Transport : public Object<Transport>,
   MojoProcessErrorHandler error_handler_ = nullptr;
   uintptr_t error_handler_context_ = 0;
   bool leak_channel_on_shutdown_ = false;
+
+  // Indicates whether the remote transport endpoint is "trusted" by this
+  // endpoint. In practice this means we will accept pre-duplicated handles from
+  // the remote process on Windows. This bit is ignored if the remote endpoint
+  // is a broker, since brokers are implicitly trusted; and it's currently
+  // meaningless on platforms other than Windows.
+  bool is_peer_trusted_ = false;
+
+  // Indicates whether this endpoint is "trusted" by the remote endpoint.
+  // In practice this means the remote endpoint will accept pre-duplicated
+  // handles from us on Windows. This bit is ignored if the local endpoint is a
+  // broker, since brokers are implicitly trusted; and it's currently
+  // meaningless on platforms other than Windows.
+  bool is_trusted_by_peer_ = false;
+
+#if BUILDFLAG(IS_WIN)
+  // Indicates whether the remote process is "untrusted" in Mojo parlance,
+  // meaning this Transport restricts what kinds of objects can be transferred
+  // from this end (Windows only.)
+  bool is_remote_process_untrusted_;
+#endif
 
   // The channel endpoint which will be used by this Transport to construct and
   // start its underlying Channel instance once activated. Not guarded by a lock

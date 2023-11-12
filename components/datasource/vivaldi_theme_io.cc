@@ -33,6 +33,7 @@
 #include "third_party/zlib/google/zip.h"
 
 #include "components/datasource/resource_reader.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -45,8 +46,8 @@ const char kVendorIdPrefix[] = "Vendor";
 
 namespace {
 
-// JSON max nesting is theme.section.value
-constexpr size_t kMaxSettingsDepth = 2;
+// JSON max nesting is theme.buttons.name.small.value
+constexpr size_t kMaxSettingsDepth = 4;
 
 constexpr size_t kMaxSettingsSize = 10 * 1024;
 
@@ -56,6 +57,9 @@ constexpr const char kSettingsFileName[] = "settings.json";
 constexpr const char kTempBlobFileName[] = ".data.zip";
 
 constexpr const char kBackgroundImageKey[] = "backgroundImage";
+constexpr const char kButtonsKey[] = "buttons";
+constexpr const char kSmallKey[] = "small";
+constexpr const char kLargeKey[] = "large";
 constexpr const char kVersionKey[] = "version";
 
 // Prefixes of theme ids for system themes. Such id is never exposed to users or
@@ -83,7 +87,8 @@ void RemoveTempDirLater(const scoped_refptr<base::SequencedTaskRunner>& runner,
 
 // Return the index of the theme with the given id in |value| or SIZE_MAX if
 // not found.
-size_t FindThemeIndex(const base::Value::List& list, base::StringPiece theme_id) {
+size_t FindThemeIndex(const base::Value::List& list,
+                      base::StringPiece theme_id) {
   // Be defensive and do not assume any structure of the value.
   for (size_t i = 0; i < list.size(); ++i) {
     const base::Value& elem = list[i];
@@ -139,7 +144,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
 
   // This will be called when all work is finished.
   ~Exporter() {
-    LOG_IF(ERROR, error_.empty()) << error_;
+    LOG_IF(ERROR, !error_.empty()) << error_;
     RemoveTempDirLater(work_sequence_, std::move(temp_dir_));
     ui_thread_runner_->PostTask(
         FROM_HERE, base::BindOnce(std::move(result_callback_),
@@ -156,48 +161,104 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       return;
     }
 
-    std::string* background_image =
-        theme_object_.FindStringKey(kBackgroundImageKey);
-    if (background_image) {
+    std::string* image_url = theme_object_.FindStringKey(kBackgroundImageKey);
+    bool has_background_image = image_url && !image_url->empty();
+    if (has_background_image) {
+      ExportImage(theme_object_, kBackgroundImageKey, image_url, "background");
+    }
+
+    base::Value* buttons = theme_object_.FindDictKey(kButtonsKey);
+    if (buttons) {
+      for (auto iter : buttons->DictItems()) {
+        const std::string& button = iter.first;
+        image_url = buttons->FindStringKey(button);
+        if (image_url) {
+          ExportImage(*buttons, button, image_url, button);
+        } else {
+          base::Value* dict = buttons->FindDictKey(button);
+          if (!dict) {
+            continue;
+          }
+          image_url = dict->FindStringKey(kSmallKey);
+          if (image_url) {
+            const std::string base_name =
+                base::StringPrintf("%s_small", button.c_str());
+            ExportImage(*dict, kSmallKey, image_url, base_name);
+          }
+          image_url = dict->FindStringKey(kLargeKey);
+          if (image_url) {
+            const std::string base_name =
+                base::StringPrintf("%s_large", button.c_str());
+            ExportImage(*dict, kLargeKey, image_url, base_name);
+          }
+        }
+      }
+    } else if (!has_background_image) {
+      SaveJSON();
+    }
+  }
+
+  void ExportImage(base::Value& object,
+                   std::string image_key,
+                   std::string* image_url,
+                   std::string base_name) {
+    if (image_url) {
       VivaldiImageStore::UrlKind url_kind;
       std::string url_id;
-      if (VivaldiImageStore::ParseDataUrl(*background_image, url_kind,
+      if (VivaldiImageStore::ParseDataUrl(*image_url, url_kind,
                                           url_id)) {
+        processed_images_counter++;
         data_source_api_->GetDataForId(
             url_kind, url_id,
-            base::BindOnce(&Exporter::SaveBackgroundImage, this, url_id));
+            base::BindOnce(&Exporter::SaveImage, this, &object, image_key,
+                url_id, base_name));
         return;
       }
       std::string resource;
-      if (ResourceReader::IsResourceURL(*background_image, &resource)) {
+      if (vivaldi_data_url_utils::IsResourceURL(*image_url, &resource)) {
         ResourceReader reader(resource);
         if (!reader.IsValid()) {
           error_ = reader.GetError();
           return;
         }
-        WriteBackgroundImage(resource, reader.data(), reader.size());
+        WriteImage(object,
+                   image_key,
+                   resource,
+                   base_name,
+                   reader.data(),
+                   reader.size());
       }
     }
 
     SaveJSON();
   }
 
-  void SaveBackgroundImage(std::string name,
-                           scoped_refptr<base::RefCountedMemory> data) {
+  void SaveImage(base::Value *object,
+                 std::string image_key,
+                 std::string name,
+                 std::string base_name,
+                 scoped_refptr<base::RefCountedMemory> data) {
     if (!data) {
       error_ = "Failed to read the background image";
       return;
     }
-    WriteBackgroundImage(name, data->data(), data->size());
-    SaveJSON();
+    WriteImage(*object,
+               image_key,
+               name,
+               base_name,
+               data->data(),
+               data->size());
   }
 
-  void WriteBackgroundImage(base::StringPiece name,
-                            const uint8_t* data,
-                            size_t size) {
+  void WriteImage(base::Value &object,
+                  std::string image_key,
+                  base::StringPiece name,
+                  std::string base_name,
+                  const uint8_t* data,
+                  size_t size) {
     if (size == 0)
       return;
-    std::string file_name = "background";
+    std::string file_name = base_name;
     size_t last_dot = name.rfind('.');
     if (last_dot != std::string::npos) {
       file_name.append(name.data() + last_dot, name.size() - last_dot);
@@ -210,7 +271,11 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     }
     archive_files_.push_back(path.BaseName());
 
-    theme_object_.SetStringKey(kBackgroundImageKey, std::move(file_name));
+    object.SetStringKey(image_key, std::move(file_name));
+    processed_images_counter--;
+    if (processed_images_counter == 0) {
+      SaveJSON();
+    }
   }
 
   void SaveJSON() {
@@ -286,6 +351,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
   std::string error_;
   std::vector<base::FilePath> archive_files_;
   std::vector<uint8_t> data_blob_;
+  int processed_images_counter = 0;
 };
 
 // Based on chromium/extensions/browser/zipfile_installer.cc
@@ -407,68 +473,107 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     DCHECK(work_sequence_->RunsTasksInCurrentSequence());
     if (error_)
       return;
-    std::string* background_image =
-        theme_object_.FindStringKey(kBackgroundImageKey);
-    if (background_image && !background_image->empty()) {
-      base::FilePath relative_path =
-          base::FilePath::FromUTF8Unsafe(*background_image);
-      if (!net::IsSafePortableRelativePath(relative_path)) {
-        AddError(ImportError::kBadSettings,
-                 base::StringPrintf(
-                     "The value of %s propert '%s' is not a valid file",
-                     kBackgroundImageKey, background_image->c_str()));
-        return;
-      }
 
-      // TODO(igor@vivaldi.com): Consider checking the extension matches the
-      // data format not to rely on chromium image loader be tolerant to image
-      // format mismatch and to report junk data earlier.
-      absl::optional<VivaldiImageStore::ImageFormat> image_format =
-          VivaldiImageStore::FindFormatForPath(relative_path);
-      if (!image_format) {
-        AddError(ImportError::kBadSettings,
-                 base::StringPrintf("Unsupported image format in '%s' - %s",
-                                    kBackgroundImageKey,
-                                    relative_path.AsUTF8Unsafe().c_str()));
-        return;
-      }
-      std::string image_data;
-      if (!base::ReadFileToStringWithMaxSize(
-              temp_dir_.GetPath().Append(relative_path), &image_data,
-              kMaxImageSize)) {
-        AddError(ImportError::kIO,
-                 base::StringPrintf("Failed to read %s or the file is too big",
-                                    background_image->c_str()));
-        return;
-      }
-      data_source_api_->StoreImageData(
-          *image_format, base::RefCountedString::TakeString(&image_data),
-          base::BindOnce(&Importer::OnImageStored, this));
-      return;
+    std::string* image_url = theme_object_.FindStringKey(kBackgroundImageKey);
+    bool has_background_image = image_url && !image_url->empty();
+    if (has_background_image) {
+      ImportImage(theme_object_, kBackgroundImageKey, image_url);
     }
-    StoreTheme();
+
+    base::Value* buttons = theme_object_.FindDictKey(kButtonsKey);
+    if (buttons) {
+      for (auto iter : buttons->DictItems()) {
+        const std::string& button = iter.first;
+        image_url = buttons->FindStringKey(button);
+        if (image_url) {
+          ImportImage(*buttons, button, image_url);
+        } else {
+          base::Value* dict = buttons->FindDictKey(button);
+          if (!dict) {
+            continue;
+          }
+          image_url = dict->FindStringKey(kSmallKey);
+          if (image_url) {
+            ImportImage(*dict, kSmallKey, image_url);
+          }
+          image_url = dict->FindStringKey(kLargeKey);
+          if (image_url) {
+            ImportImage(*dict, kLargeKey, image_url);
+          }
+        }
+      }
+    } else if (!has_background_image) {
+      StoreTheme(*image_url);
+    }
   }
 
-  void OnImageStored(std::string image_url) {
+  void ImportImage(base::Value& object,
+                   std::string image_key,
+                   std::string* image) {
+    base::FilePath relative_path =
+        base::FilePath::FromUTF8Unsafe(*image);
+    if (!net::IsSafePortableRelativePath(relative_path)) {
+      AddError(ImportError::kBadSettings,
+              base::StringPrintf(
+                  "The value of %s propert '%s' is not a valid file",
+                  image_key.c_str(), image->c_str()));
+      return;
+    }
+
+    // TODO(igor@vivaldi.com): Consider checking the extension matches the
+    // data format not to rely on chromium image loader be tolerant to image
+    // format mismatch and to report junk data earlier.
+    absl::optional<VivaldiImageStore::ImageFormat> image_format =
+        VivaldiImageStore::FindFormatForPath(relative_path);
+    if (!image_format) {
+      AddError(ImportError::kBadSettings,
+              base::StringPrintf("Unsupported image format in '%s' - %s",
+                                  image_key.c_str(),
+                                  relative_path.AsUTF8Unsafe().c_str()));
+      return;
+    }
+    std::string image_data;
+    if (!base::ReadFileToStringWithMaxSize(
+            temp_dir_.GetPath().Append(relative_path), &image_data,
+            kMaxImageSize)) {
+      AddError(ImportError::kIO,
+              base::StringPrintf("Failed to read %s or the file is too big",
+                                  image->c_str()));
+      return;
+    }
+    processed_images_counter++;
+    scoped_refptr<base::RefCountedMemory> image_buf(
+      new base::RefCountedString(image_data));
+    data_source_api_->StoreImageData(
+        *image_format, std::move(image_buf),
+        base::BindOnce(&Importer::OnImageStored, this, &object, image_key));
+    return;
+  }
+
+  void OnImageStored(base::Value *object,
+                     std::string image_key,
+                     std::string image_url) {
     DCHECK(work_sequence_->RunsTasksInCurrentSequence());
     DCHECK(!error_);
     if (image_url.empty()) {
       AddError(ImportError::kIO,
-               "Failed to store the background image locally");
+               base::StringPrintf("Failed to store image %s locally", image_key.c_str()));
       return;
     }
-    theme_object_.SetStringKey(kBackgroundImageKey, image_url);
-    background_image_url_ = std::move(image_url);
-    StoreTheme();
+    object->SetStringKey(image_key, image_url);
+    processed_images_counter--;
+    if (processed_images_counter == 0) {
+      StoreTheme(image_url);
+    }
   }
 
-  void StoreTheme() {
+  void StoreTheme(std::string image_url) {
     DCHECK(work_sequence_->RunsTasksInCurrentSequence());
     ui_thread_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&Importer::StoreThemeOnUIThread, this));
+        FROM_HERE, base::BindOnce(&Importer::StoreThemeOnUIThread, this, image_url));
   }
 
-  void StoreThemeOnUIThread() {
+  void StoreThemeOnUIThread(std::string image_url) {
     DCHECK(ui_thread_runner_->RunsTasksInCurrentSequence());
     if (error_)
       return;
@@ -483,7 +588,8 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     {
       // When importing a theme with an already existing id on the preview list
       // the new import replaces the old value.
-      ScopedListPrefUpdate update(profile_->GetPrefs(), vivaldiprefs::kThemesPreview);
+      ScopedListPrefUpdate update(profile_->GetPrefs(),
+                                  vivaldiprefs::kThemesPreview);
       auto& list_value = update.Get();
       size_t index = FindThemeIndex(list_value, theme_id_);
       if (index != SIZE_MAX) {
@@ -492,7 +598,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
         list_value.Append(std::move(theme_object_));
       }
     }
-    data_source_api_->ForgetNewbornUrl(std::move(background_image_url_));
+    data_source_api_->ForgetNewbornUrl(std::move(image_url));
   }
 
   base::WeakPtr<Profile> profile_;
@@ -511,7 +617,8 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
   std::string theme_id_;
   scoped_refptr<VivaldiImageStore> data_source_api_;
   std::unique_ptr<ImportError> error_;
-  std::string background_image_url_;
+
+  int processed_images_counter = 0;
 };
 
 }  // namespace
@@ -809,8 +916,8 @@ void Import(base::WeakPtr<Profile> profile,
             ImportResult callback) {
   DCHECK(theme_archive_path.empty() != theme_archive_data.empty());
   scoped_refptr<Importer> importer = base::MakeRefCounted<Importer>(
-      std::move(profile), std::move(callback),
-      std::move(theme_archive_path), std::move(theme_archive_data));
+      std::move(profile), std::move(callback), std::move(theme_archive_path),
+      std::move(theme_archive_data));
   importer->Start();
 }
 
@@ -820,23 +927,49 @@ void EnumerateUserThemeUrls(
   auto enumerate_theme_list = [&](const std::string& theme_list_pref_path) {
     auto& themes = prefs->GetList(theme_list_pref_path);
     for (const base::Value& value : themes) {
-      if (value.is_dict()) {
-        if (const std::string* image_url =
-                value.FindStringKey(kBackgroundImageKey)) {
-          callback.Run(*image_url);
+      if (!value.is_dict()) {
+        continue;
+      }
+      const std::string* image_url = value.FindStringKey(kBackgroundImageKey);
+      if (image_url) {
+        callback.Run(*image_url);
+      }
+
+      if (const base::Value* buttons = value.FindDictKey(kButtonsKey)) {
+        for (auto iter : buttons->DictItems()) {
+          const std::string& button = iter.first;
+          image_url = buttons->FindStringKey(button);
+          if (image_url) {
+            callback.Run(*image_url);
+          } else {
+            const base::Value* dict = buttons->FindDictKey(button);
+            if (!dict) {
+              continue;
+            }
+            image_url = dict->FindStringKey(kSmallKey);
+            if (image_url) {
+              callback.Run(*image_url);
+            }
+            image_url = dict->FindStringKey(kLargeKey);
+            if (image_url) {
+              callback.Run(*image_url);
+            }
+          }
         }
       }
     }
   };
   enumerate_theme_list(vivaldiprefs::kThemesUser);
   enumerate_theme_list(vivaldiprefs::kThemesPreview);
+  enumerate_theme_list(vivaldiprefs::kThemesSystem);
 }
 
 bool StoreImageUrl(PrefService* prefs,
                    base::StringPiece theme_id,
                    std::string url) {
   auto store_image = [&](const std::string& theme_list_pref_path) -> bool {
-    size_t index = FindThemeIndex(prefs->GetList(theme_list_pref_path), theme_id);
+    size_t index =
+        FindThemeIndex(prefs->GetList(theme_list_pref_path), theme_id);
     if (index == SIZE_MAX)
       return false;
     ScopedListPrefUpdate update(prefs, theme_list_pref_path);

@@ -556,13 +556,13 @@ export class RemoteCallFilesApp extends RemoteCall {
   }
 
   /**
-   * Returns whether an window exists with the expected URL.
-   * @param {string} expectedUrl
+   * Returns whether a window exists with the expected origin.
+   * @param {string} expectedOrigin
    * @return {!Promise<boolean>} Promise resolved with true or false depending
    *     on whether such window exists.
    */
-  async windowUrlExists(expectedUrl) {
-    const command = {name: 'expectWindowURL', expectedUrl: expectedUrl};
+  async windowOriginExists(expectedOrigin) {
+    const command = {name: 'expectWindowOrigin', expectedOrigin};
     const windowExists = await sendTestMessage(command);
     return windowExists == 'true';
   }
@@ -643,25 +643,30 @@ export class RemoteCallFilesApp extends RemoteCall {
    * @param {string} appId App window Id.
    * @param {!chrome.fileManagerPrivate.FileTaskDescriptor} descriptor Task to
    *     watch.
-   * @param {Array<Object>=} opt_replyArgs arguments to reply to executed task.
+   * @param {!Array<string>} fileNames Name of files that should have been
+   *     passed to the executeTasks().
+   * @param {Array<Object>=} replyArgs arguments to reply to executed task.
    * @return {Promise} Promise to be fulfilled when the task appears in the
    *     executed task list.
    */
-  waitUntilTaskExecutes(appId, descriptor, opt_replyArgs) {
+  waitUntilTaskExecutes(appId, descriptor, fileNames, replyArgs) {
     const caller = getCaller();
     return repeatUntil(async () => {
       if (!await this.callRemoteTestUtil(
-              'taskWasExecuted', appId, [descriptor])) {
-        const executedTasks =
-            (await this.callRemoteTestUtil('getExecutedTasks', appId, []))
-                .map(
-                    ({appId, taskType, actionId}) =>
-                        `${appId}|${taskType}|${actionId}`);
+              'taskWasExecuted', appId, [descriptor, fileNames])) {
+        const tasks =
+            await this.callRemoteTestUtil('getExecutedTasks', appId, []);
+        const executedTasks = tasks.map((task) => {
+          const {appId, taskType, actionId} = task.descriptor;
+          const executedFileNames = task['fileNames'];
+          return `${appId}|${taskType}|${actionId} for ${
+              JSON.stringify(executedFileNames)}`;
+        });
         return pending(caller, 'Executed task is %j', executedTasks);
       }
-      if (opt_replyArgs) {
+      if (replyArgs) {
         await this.callRemoteTestUtil(
-            'replyExecutedTask', appId, [descriptor, opt_replyArgs]);
+            'replyExecutedTask', appId, [descriptor, replyArgs]);
       }
     });
   }
@@ -896,5 +901,84 @@ export class RemoteCallFilesApp extends RemoteCall {
     await this.waitFor('isFileManagerLoaded', appId, true);
     chrome.test.assertTrue(
         await this.callRemoteTestUtil('disableNudgeExpiry', appId, []));
+  }
+
+  /**
+   * Selects the file and displays the context menu for the file.
+   * @return {!Promise<void>} resolved when the context menu is visible.
+   */
+  async showContextMenuFor(appId, fileName) {
+    // Select the file.
+    await this.waitUntilSelected(appId, fileName);
+
+    // Right-click to display the context menu.
+    await this.waitAndRightClick(appId, '.table-row[selected]');
+
+    // Wait for the context menu to appear.
+    await this.waitForElement(appId, '#file-context-menu:not([hidden])');
+
+    // Wait for the tasks to be fully fetched.
+    await this.waitForElement(appId, '#tasks[get-tasks-completed]');
+  }
+
+  /**
+   * @param {string} appId App window Id.
+   * @return {!Promise<void>}
+   */
+  async dismissMenu(appId) {
+    await this.fakeKeyDown(appId, 'body', 'Escape', false, false, false);
+  }
+
+  /**
+   * @param {string} appId App window Id.
+   * @param {string|!Array<string>} query Query to find the elements.
+   * @return {!Promise<!Array<!ElementObject>>} Promise to be fulfilled with the
+   *     elements.
+   * @private
+   */
+  async queryElements_(appId, query) {
+    if (typeof query === 'string') {
+      query = [query];
+    }
+    return this.callRemoteTestUtil('deepQueryAllElements', appId, query);
+  }
+
+  /**
+   * Returns the menu as ElementObject and its menu-items (including separators)
+   * in the `items` property.
+   * @param {string} appId App window Id.
+   * @param {string|!Array<string>} menu The name of the menu.
+   * @return {!Promise<undefined|!ElementObject>} Promise to be fulfilled with
+   *     the menu.
+   */
+  async getMenu(appId, menu) {
+    let menuId = '';
+    // TODO: Implement for other menus.
+    if (menu === 'context-menu') {
+      menuId = '#file-context-menu';
+    } else if (menu == 'tasks') {
+      menuId = '#tasks-menu';
+    }
+
+    if (!menuId) {
+      console.error(`Invalid menu '${menu}'`);
+      return;
+    }
+
+    // Get the top level menu element.
+    const menuElement = await this.waitForElement(appId, menuId);
+    // Query all the menu items.
+    menuElement.items = await this.queryElements_(appId, `${menuId} > *`);
+    return menuElement;
+  }
+
+  /**
+   * Displays the "tasks" menu from the "OPEN" button dropdown.
+   * The caller code has to prepare the selection to have multiple tasks.
+   * @param {string} appId App window Id.
+   */
+  async expandOpenDropdown(appId) {
+    // Wait the OPEN button to have multiple tasks.
+    await this.waitAndClickElement(appId, '#tasks[multiple]');
   }
 }

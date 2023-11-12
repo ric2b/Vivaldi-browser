@@ -8,12 +8,12 @@ colorset("vivaldi_ntp_background_color") {
   sources = [ "vivaldi_ntp_background_color.colorset/Contents.json" ]
 }
 
-colorset("vivaldi_ntp_searchbar_background_color") {
-  sources = [ "vivaldi_ntp_searchbar_background_color.colorset/Contents.json" ]
+colorset("vivaldi_private_ntp_background_color") {
+  sources = [ "vivaldi_private_ntp_background_color.colorset/Contents.json" ]
 }
 
-colorset("vivaldi_ntp_searchbar_text_color") {
-  sources = [ "vivaldi_ntp_searchbar_text_color.colorset/Contents.json" ]
+colorset("vivaldi_ntp_searchbar_background_color") {
+  sources = [ "vivaldi_ntp_searchbar_background_color.colorset/Contents.json" ]
 }
 
 colorset("vivaldi_ntp_speed_dial_container_background_color") {
@@ -79,9 +79,7 @@ imageset("vivaldi_ntp_add_new_speed_dial_folder") {
 imageset("vivaldi_private_tab_bg") {
   sources = [
     "vivaldi_private_tab_bg.imageset/Contents.json",
-    "vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg.png",
-    "vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg@2x.png",
-    "vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg@3x.png",
+    "vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg.pdf",
   ]
 }
 
@@ -89,5 +87,12 @@ imageset("vivaldi_private_tab_ghost") {
   sources = [
     "vivaldi_private_tab_ghost.imageset/Contents.json",
     "vivaldi_private_tab_ghost.imageset/vivaldi_private_tab_ghost.pdf",
+  ]
+}
+
+imageset("vivaldi_ntp_sd_empty_view_icon") {
+  sources = [
+    "vivaldi_ntp_sd_empty_view_icon.imageset/Contents.json",
+    "vivaldi_ntp_sd_empty_view_icon.imageset/vivaldi_ntp_sd_empty_view_icon.pdf",
   ]
 }

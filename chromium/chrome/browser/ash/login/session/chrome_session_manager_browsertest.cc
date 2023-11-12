@@ -23,9 +23,9 @@
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chromeos/system/fake_statistics_provider.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "content/public/test/browser_test.h"
 #include "google_apis/gaia/fake_gaia.h"
 #include "rlz/buildflags/buildflags.h"
@@ -42,13 +42,6 @@
 #endif  // BUILDFLAG(ENABLE_RLZ)
 
 namespace ash {
-namespace system {
-namespace {
-// TODO(https://crbug.com/1164001): remove when moved to ash::
-using ::chromeos::system::kRlzBrandCodeKey;
-using ::chromeos::system::ScopedFakeStatisticsProvider;
-}  // namespace
-}  // namespace system
 
 namespace {
 
@@ -81,7 +74,7 @@ class UserAddingScreenWaiter : public UserAddingScreen::Observer {
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 
-}  // anonymous namespace
+}  // namespace
 
 class ChromeSessionManagerTest : public LoginManagerTest {
  public:
@@ -186,7 +179,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSessionManagerExistingUsersTest,
                        CheckPastingBehavior) {
   const auto& users = login_manager_.users();
   LoginUser(users[0].account_id);
-  auto* session_controller = ash::Shell::Get()->session_controller();
+  auto* session_controller = Shell::Get()->session_controller();
 
   // Write a text in the clipboard during active session.
   EXPECT_EQ(session_manager::SessionState::ACTIVE,
@@ -254,8 +247,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSessionManagerExistingUsersTest,
 class ChromeSessionManagerRmaTest : public ChromeSessionManagerTest {
  public:
   ChromeSessionManagerRmaTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kShimlessRMAFlow}, {});
+    scoped_feature_list_.InitWithFeatures({features::kShimlessRMAFlow}, {});
   }
 
   // LoginManagerTest:

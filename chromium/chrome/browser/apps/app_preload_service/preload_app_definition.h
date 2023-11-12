@@ -5,7 +5,13 @@
 #ifndef CHROME_BROWSER_APPS_APP_PRELOAD_SERVICE_PRELOAD_APP_DEFINITION_H_
 #define CHROME_BROWSER_APPS_APP_PRELOAD_SERVICE_PRELOAD_APP_DEFINITION_H_
 
+#include <ostream>
+#include <string>
+
 #include "chrome/browser/apps/app_preload_service/proto/app_provisioning.pb.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+
+class GURL;
 
 namespace apps {
 
@@ -13,16 +19,32 @@ namespace apps {
 // extraction and conversion of information.
 class PreloadAppDefinition {
  public:
-  explicit PreloadAppDefinition(proto::AppProvisioningResponse_App app_proto)
+  explicit PreloadAppDefinition(
+      proto::AppProvisioningListAppsResponse_App app_proto)
       : app_proto_(app_proto) {}
   PreloadAppDefinition(const PreloadAppDefinition&) = default;
   PreloadAppDefinition& operator=(const PreloadAppDefinition&) = default;
   ~PreloadAppDefinition() = default;
 
   std::string GetName() const;
+  AppType GetPlatform() const;
+  bool IsOemApp() const;
+
+  // Returns the Web App manifest ID for the app, which is the canonical
+  // identifier for this app, as specified by
+  // https://www.w3.org/TR/appmanifest/#id-member. Does not attempt to validate
+  // the value returned. Must only be called if `GetPlatform()` returns
+  // `AppType::kWeb`.
+  std::string GetWebAppManifestId() const;
+
+  // Returns the Web App manifest URL for the app, which hosts the manifest of
+  // the app in a JSON format. The URL could point to a local file, or a web
+  // address. Does not attempt to validate the GURL. Must only be called if
+  // `GetPlatform()` returns `AppType::kWeb`.
+  GURL GetWebAppManifestUrl() const;
 
  private:
-  proto::AppProvisioningResponse_App app_proto_;
+  proto::AppProvisioningListAppsResponse_App app_proto_;
 };
 
 std::ostream& operator<<(std::ostream& os, const PreloadAppDefinition& app);

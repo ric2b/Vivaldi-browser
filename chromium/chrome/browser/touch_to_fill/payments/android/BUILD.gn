@@ -5,7 +5,10 @@
 import("//build/config/android/rules.gni")
 
 source_set("public") {
-  deps = [ "//base" ]
+  deps = [
+    "//base",
+    "//components/autofill/core/browser",
+  ]
 
   sources = [
     "touch_to_fill_credit_card_view.h",
@@ -24,8 +27,10 @@ source_set("android") {
   deps = [
     ":jni_headers",
     ":public",
+    "//chrome/browser/autofill",
     "//components/autofill/core/common:features",
     "//content/public/browser:browser",
+    "//third_party/libaddressinput:util",
     "//ui/android",
   ]
 }
@@ -40,7 +45,7 @@ generate_jni("jni_headers") {
 android_library("public_java") {
   deps = [
     "//base:jni_java",
-    "//chrome/android:chrome_java",
+    "//chrome/browser/autofill/android:java",
     "//components/browser_ui/bottomsheet/android:java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//ui/android:ui_java",

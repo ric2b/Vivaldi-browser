@@ -25,6 +25,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/url_formatter/url_formatter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/omnibox_proto/groups.pb.h"
 #include "third_party/omnibox_proto/types.pb.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
@@ -343,9 +344,6 @@ struct AutocompleteMatch {
   // usually this surfaces a clock icon to the user.
   static bool IsSearchHistoryType(Type type);
 
-  // Returns true if matches with given `type` may be attach an `action`.
-  static bool IsActionCompatibleType(Type type);
-
   // Returns whether this match is a starter pack suggestion provided by the
   // built-in provider. This is the suggestion that the starter pack keyword
   // mode chips attach to.
@@ -369,41 +367,41 @@ struct AutocompleteMatch {
       const std::u16string& keyword,
       const std::string& host);
 
-  // Returns |url| altered by stripping off "www.", converting https protocol
-  // to http, and stripping excess query parameters.  These conversions are
-  // merely to allow comparisons to remove likely duplicates; these URLs are
-  // not used as actual destination URLs.
-  // - |input| is used to decide if the scheme is allowed to be altered during
+  // Returns `url` altered by stripping off "www.", converting https protocol
+  // to http, and stripping query params other than the search terms. If
+  // `keep_search_intent_params` is true, also keep search intent params which
+  // disambiguate the search terms and determine the fulfillment.
+  // These conversions are meant to allow URL comparisons to find likely
+  // duplicates; and these URLs are not used as actual destination URLs.
+  // In most use cases `keep_search_intent_params` need not be true, e.g., when
+  // computing `stripped_destination_url` for matches. Otherwise, keeping the
+  // search intent params would create an unnecessary level of granularity which
+  // prevents proper deduping of matches from various local or remote providers.
+  // If a provider wishes to prevent its matches (or a subset of them) from
+  // being deduped with other matches with the same search terms, it must
+  // precompute `stripped_destination_url` while maintaining the search intent
+  // params. A notable example is when multiple entity suggestions with the same
+  // search terms are offered by SearchProvider or ZeroSuggestProvider. In that
+  // case, the entity matches (with the exception of the first one) keep their
+  // search intent params in `stripped_destination_url` to avoid being deduped.
+  // - `input` is used to decide if the scheme is allowed to be altered during
   //   stripping.  If this URL, minus the scheme and separator, starts with any
   //   the terms in input.terms_prefixed_by_http_or_https(), we avoid converting
   //   an HTTPS scheme to HTTP.  This means URLs that differ only by these
   //   schemes won't be marked as dupes, since the distinction seems to matter
   //   to the user.
-  // - If |template_url_service| is not NULL, it is used to get a template URL
-  //   corresponding to this match, which is used to strip off query args other
-  //   than the search terms themselves that would otherwise prevent doing
-  //   proper deduping.
-  // - If the match's keyword is known, it can be provided in |keyword|.
+  // - If `template_url_service` is not NULL, it is used to get a template URL
+  //   corresponding to this match, which is used to strip off query params
+  //   other than the search terms (and optionally search intent params) that
+  //   would otherwise prevent proper comparison/deduping.
+  // - If the match's keyword is known, it can be provided in `keyword`.
   //   Otherwise, it can be left empty and the template URL (if any) is
   //   determined from the destination's hostname.
   static GURL GURLToStrippedGURL(const GURL& url,
                                  const AutocompleteInput& input,
                                  const TemplateURLService* template_url_service,
-                                 const std::u16string& keyword);
-
-  // One of these 2 helpers are called by `GURLToStrippedGURL()` depending on
-  // whether optimizations (i.e., caching search term replacements) are enabled.
-  // They will be removed after experiments end.
-  static GURL GURLToStrippedGURLControl(
-      const GURL& url,
-      const AutocompleteInput& input,
-      const TemplateURLService* template_url_service,
-      const std::u16string& keyword);
-  static GURL GURLToStrippedGURLOptimized(
-      const GURL& url,
-      const AutocompleteInput& input,
-      const TemplateURLService* template_url_service,
-      const std::u16string& keyword);
+                                 const std::u16string& keyword,
+                                 const bool keep_search_intent_params);
 
   // Sets the |match_in_scheme| and |match_in_subdomain| flags based on the
   // provided |url| and list of substring |match_positions|. |match_positions|
@@ -440,6 +438,11 @@ struct AutocompleteMatch {
   // Returns whether `destination_url` looks like a doc URL. If so, will also
   // set `stripped_destination_url` to avoid repeating the computation later.
   bool IsDocumentSuggestion();
+
+  // Returns true if this match may attach an `action`.
+  // This method is used to keep actions off of matches with types that don't
+  // mix well with Pedals or other actions (e.g. entities).
+  bool IsActionCompatible() const;
 
   // Gets data relevant to whether there should be any special keyword-related
   // UI shown for this match.  If this match represents a selected keyword, i.e.
@@ -549,13 +552,6 @@ struct AutocompleteMatch {
   // Input "x" with prevent_inline_autocomplete will allow default match "x".
   void SetAllowedToBeDefault(const AutocompleteInput& input);
 
-  // If this match is a tail suggestion, prepends the passed |common_prefix|.
-  void SetTailSuggestCommonPrefix(const std::u16string& common_prefix);
-
-  // If this match is a tail suggestion, prepends the passed |common_prefix|
-  // and adds ellipses to contents.
-  void SetTailSuggestContentPrefix(const std::u16string& common_prefix);
-
   // Estimates dynamic memory usage.
   // See base/trace_event/memory_usage_estimator.h for more info.
   size_t EstimateMemoryUsage() const;
@@ -564,6 +560,10 @@ struct AutocompleteMatch {
   // |duplicate_match|. For instance: if |duplicate_match| has a higher
   // relevance score, this match's own relevance score will be upgraded.
   void UpgradeMatchWithPropertiesFrom(AutocompleteMatch& duplicate_match);
+
+  // Merges scoring signals from the other match for ML model scoring and
+  // training .
+  void MergeScoringSignals(const AutocompleteMatch& other);
 
   // Tries, in order, to:
   // - Prefix autocomplete |primary_text|
@@ -664,12 +664,16 @@ struct AutocompleteMatch {
   GURL image_url;
 
   // Optional entity id for entity suggestions. Empty string means no entity ID.
+  // This is not meant for display, but internal use only. The actual UI display
+  // is controlled by the `type` and `image_url`.
   std::string entity_id;
 
   // Optional override to use for types that specify an icon sub-type.
   DocumentType document_type = DocumentType::NONE;
 
-  // Holds the common part of tail suggestion.
+  // Holds the common part of tail suggestion. Used to indent the contents.
+  // Can't simply store the character length of the string, as different
+  // characters may have different rendered widths.
   std::u16string tail_suggest_common_prefix;
 
   // The main text displayed in the address bar dropdown.
@@ -793,6 +797,9 @@ struct AutocompleteMatch {
   // A list of navsuggest tiles to be shown as part of this match.
   // This object is only populated for TILE_NAVSUGGEST AutocompleteMatches.
   std::vector<SuggestTile> suggest_tiles;
+
+  // Signals for ML scoring.
+  metrics::OmniboxEventProto::Suggestion::ScoringSignals scoring_signals;
 
   // So users of AutocompleteMatch can use the same ellipsis that it uses.
   static const char16_t kEllipsis[];

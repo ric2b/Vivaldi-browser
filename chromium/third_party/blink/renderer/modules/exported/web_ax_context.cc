@@ -118,4 +118,29 @@ bool WebAXContext::AddPendingEvent(const ui::AXEvent& event,
                                                       insert_at_beginning);
 }
 
+void WebAXContext::UpdateAXForAllDocuments() {
+  if (!private_->HasActiveDocument())
+    return;
+  return private_->GetAXObjectCache().UpdateAXForAllDocuments();
+}
+
+void WebAXContext::ScheduleAXUpdate() {
+  if (!private_->HasActiveDocument())
+    return;
+
+  const auto& cache = private_->GetAXObjectCache();
+
+  // If no dirty objects are queued, it's not necessary to schedule an extra
+  // visual update.
+  if (!cache.HasDirtyObjects())
+    return;
+
+  return cache.ScheduleAXUpdate();
+}
+
+void WebAXContext::FireLoadCompleteIfLoaded() {
+  if (!private_->HasActiveDocument())
+    return;
+  return private_->GetDocument()->DispatchHandleLoadComplete();
+}
 }  // namespace blink

@@ -108,9 +108,9 @@ class ClientMixin : public ClientInterface {
       mojo::PendingRemote<proxy_resolver::mojom::HostResolverRequestClient>
           client) override {
     if (operation == net::ProxyResolveDnsOperation::MY_IP_ADDRESS) {
-      my_ip_address_impl_ex_->AddRequest(std::move(client));
-    } else if (operation == net::ProxyResolveDnsOperation::MY_IP_ADDRESS_EX) {
       my_ip_address_impl_->AddRequest(std::move(client));
+    } else if (operation == net::ProxyResolveDnsOperation::MY_IP_ADDRESS_EX) {
+      my_ip_address_impl_ex_->AddRequest(std::move(client));
     } else {
       bool is_ex = operation == net::ProxyResolveDnsOperation::DNS_RESOLVE_EX;
       // Request was for dnsResolve() or dnsResolveEx().
@@ -133,7 +133,8 @@ class ClientMixin : public ClientInterface {
   std::unique_ptr<MyIpAddressImpl> my_ip_address_impl_;
   std::unique_ptr<MyIpAddressImpl> my_ip_address_impl_ex_;
 
-  const raw_ptr<net::ProxyResolverErrorObserver> error_observer_;
+  const raw_ptr<net::ProxyResolverErrorObserver, DanglingUntriaged>
+      error_observer_;
   const raw_ptr<net::NetLog> net_log_;
   const net::NetLogWithSource net_log_with_source_;
 

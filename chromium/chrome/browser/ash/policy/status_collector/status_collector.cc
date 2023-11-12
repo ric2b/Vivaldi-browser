@@ -14,7 +14,7 @@
 #include "chrome/browser/ash/policy/status_collector/app_info_generator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/user_manager/user_manager.h"
 
@@ -84,9 +84,10 @@ void StatusCollector::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 // static
 absl::optional<std::string> StatusCollector::GetBootMode(
     chromeos::system::StatisticsProvider* statistics_provider) {
-  std::string dev_switch_mode;
-  if (!statistics_provider->GetMachineStatistic(
-          chromeos::system::kDevSwitchBootKey, &dev_switch_mode)) {
+  const absl::optional<base::StringPiece> dev_switch_mode =
+      statistics_provider->GetMachineStatistic(
+          chromeos::system::kDevSwitchBootKey);
+  if (!dev_switch_mode) {
     return absl::nullopt;
   }
 
@@ -125,7 +126,7 @@ StatusCollector::GetAutoLaunchedKioskSessionInfo() {
                                           &current_app) &&
       current_app.was_auto_launched_with_zero_delay;
   bool arc_app_auto_launched_with_zero_delay =
-      chromeos::ArcKioskAppManager::Get()
+      ash::ArcKioskAppManager::Get()
           ->current_app_was_auto_launched_with_zero_delay();
 
   bool web_app_auto_launched_with_zero_delay =

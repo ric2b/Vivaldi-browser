@@ -275,7 +275,8 @@ void APIRequestHandler::AsyncResultHandler::ResolvePromise(
 
   v8::Isolate* isolate = context->GetIsolate();
   v8::MicrotasksScope microtasks_scope(
-      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+      isolate, context->GetMicrotaskQueue(),
+      v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   if (error.empty()) {
     v8::Local<v8::Value> result;
@@ -442,7 +443,7 @@ APIRequestHandler::~APIRequestHandler() {}
 v8::Local<v8::Promise> APIRequestHandler::StartRequest(
     v8::Local<v8::Context> context,
     const std::string& method,
-    std::unique_ptr<base::Value> arguments_list,
+    base::Value::List arguments_list,
     binding::AsyncResponseType async_type,
     v8::Local<v8::Function> callback,
     v8::Local<v8::Function> custom_callback,

@@ -16,7 +16,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_container.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -65,10 +66,9 @@ enum class LayoutFadeType {
 ProposedLayout WithOnlyVisibleViews(const ProposedLayout layout) {
   ProposedLayout result;
   result.host_size = layout.host_size;
-  std::copy_if(
-      layout.child_layouts.begin(), layout.child_layouts.end(),
-      std::back_inserter(result.child_layouts),
-      [](const ChildLayout& child_layout) { return child_layout.visible; });
+  base::ranges::copy_if(layout.child_layouts,
+                        std::back_inserter(result.child_layouts),
+                        &ChildLayout::visible);
   return result;
 }
 
@@ -88,13 +88,13 @@ struct AnimatingLayoutManager::LayoutFadeInfo {
   // How the child view is fading.
   LayoutFadeType fade_type;
   // The child view which is fading.
-  View* child_view = nullptr;
+  raw_ptr<View> child_view = nullptr;
   // The view previous (leading side) to the fading view which is in both the
   // starting and target layout, or null if none.
-  View* prev_view = nullptr;
+  raw_ptr<View> prev_view = nullptr;
   // The view next (trailing side) to the fading view which is in both the
   // starting and target layout, or null if none.
-  View* next_view = nullptr;
+  raw_ptr<View> next_view = nullptr;
   // The full-size bounds, normalized to the orientation of the layout manager,
   // that |child_view| starts with, if fading out, or ends with, if fading in.
   NormalizedRect reference_bounds;
@@ -722,7 +722,7 @@ void AnimatingLayoutManager::PostQueuedActions() {
   // * Keep "AnimatingLayoutManager::RunQueuedActions" in the stack frame.
   // * Tie the task lifetimes to AnimatingLayoutManager.
   run_queued_actions_is_pending_ =
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&AnimatingLayoutManager::RunQueuedActions,
                                     weak_ptr_factory_.GetWeakPtr()));
 }

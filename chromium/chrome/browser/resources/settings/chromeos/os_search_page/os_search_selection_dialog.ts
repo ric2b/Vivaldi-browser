@@ -13,7 +13,7 @@ import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import '../../settings_shared.css.js';
 
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
@@ -28,7 +28,7 @@ interface OsSettingsSearchSelectionDialogElement {
 }
 
 const OsSettingsSearchSelectionDialogElementBase =
-    WebUIListenerMixin(PolymerElement);
+    WebUiListenerMixin(PolymerElement);
 
 class OsSettingsSearchSelectionDialogElement extends
     OsSettingsSearchSelectionDialogElementBase {
@@ -68,7 +68,7 @@ class OsSettingsSearchSelectionDialogElement extends
 
     this.browserProxy_.getSearchEnginesList().then(
         this.updateSearchEngines_.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'search-engines-changed', this.updateSearchEngines_.bind(this));
   }
 

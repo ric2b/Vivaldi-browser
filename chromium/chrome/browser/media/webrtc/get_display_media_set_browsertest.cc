@@ -11,6 +11,7 @@
 #include "base/containers/flat_set.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/test/gtest_tags.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_base.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,24 +27,32 @@
 #include "third_party/blink/public/common/features.h"
 #include "ui/display/test/display_manager_test_api.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
 bool RunGetDisplayMediaSet(content::WebContents* tab,
                            const std::string& constraints,
-                           std::vector<std::string>& track_ids) {
+                           std::vector<std::string>& track_ids,
+                           std::string* error_name_out = nullptr) {
   std::string result;
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       tab->GetPrimaryMainFrame(),
       base::StringPrintf("runGetDisplayMediaSet(%s);", constraints.c_str()),
       &result));
-  if (result == "capture-failure")
+  std::vector<std::string> split_result = base::SplitString(
+      result, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (split_result.empty() || split_result[0] == "capture-failure") {
+    if (error_name_out && split_result.size() == 2) {
+      *error_name_out = split_result[1];
+    }
     return false;
-  track_ids = base::SplitString(result, ",", base::KEEP_WHITESPACE,
-                                base::SPLIT_WANT_ALL);
+  }
+  track_ids = split_result;
   return true;
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 bool CheckScreenDetailedExists(content::WebContents* tab,
                                const std::string& track_id) {
@@ -58,13 +67,22 @@ bool CheckScreenDetailedExists(content::WebContents* tab,
   return result == "success-screen-detailed";
 }
 
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 class ContentBrowserClientMock : public ChromeContentBrowserClient {
  public:
   bool IsGetDisplayMediaSetSelectAllScreensAllowed(
       content::BrowserContext* context,
       const url::Origin& origin) override {
-    return true;
+    return is_get_display_media_set_select_all_screens_allowed_;
   }
+
+  void SetIsGetDisplayMediaSetSelectAllScreensAllowed(bool is_allowed) {
+    is_get_display_media_set_select_all_screens_allowed_ = is_allowed;
+  }
+
+ private:
+  bool is_get_display_media_set_select_all_screens_allowed_ = true;
 };
 
 }  // namespace
@@ -109,10 +127,10 @@ class GetDisplayMediaSetBrowserTest : public WebRtcTestBase {
 
  protected:
   content::WebContents* contents_ = nullptr;
+  std::unique_ptr<ContentBrowserClientMock> browser_client_;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<ContentBrowserClientMock> browser_client_;
   std::vector<aura::Window*> windows_;
 };
 
@@ -133,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(GetDisplayMediaSetBrowserTest,
                                     track_ids));
   // If no screen is attached to a device, the |DisplayManager| will add a
   // default device. This same behavior is used in other places in Chrome that
-  // handle multiple screens (e.g. in the window placement API) and
+  // handle multiple screens (e.g. in JS window.getScreenDetails() API) and
   // getDisplayMediaSet will follow the same convention.
   EXPECT_EQ(1u, track_ids.size());
   EXPECT_EQ(track_ids.size(), base::flat_set<std::string>(track_ids).size());
@@ -141,6 +159,8 @@ IN_PROC_BROWSER_TEST_F(GetDisplayMediaSetBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(GetDisplayMediaSetBrowserTest,
                        GetDisplayMediaSetMultipleScreensSuccess) {
+  base::AddTagToTestResult("feature_id",
+                           "screenplay-f3601ae4-bff7-495a-a51f-3c0997a46445");
   SetScreens(/*screen_count=*/5u);
   std::vector<std::string> track_ids;
   EXPECT_TRUE(RunGetDisplayMediaSet(contents_, "{autoSelectAllScreens: true}",
@@ -174,4 +194,16 @@ IN_PROC_BROWSER_TEST_F(GetDisplayMediaSetBrowserTest,
   }
 }
 
-#endif
+IN_PROC_BROWSER_TEST_F(GetDisplayMediaSetBrowserTest,
+                       AutoSelectAllScreensNotAllowed) {
+  SetScreens(/*screen_count=*/1u);
+  browser_client_->SetIsGetDisplayMediaSetSelectAllScreensAllowed(
+      /*is_allowed=*/false);
+  std::vector<std::string> track_ids;
+  std::string error_name;
+  EXPECT_FALSE(RunGetDisplayMediaSet(contents_, "{autoSelectAllScreens: true}",
+                                     track_ids, &error_name));
+  EXPECT_EQ("NotAllowedError", error_name);
+}
+
+#endif  // #if BUILDFLAG(IS_CHROMEOS)

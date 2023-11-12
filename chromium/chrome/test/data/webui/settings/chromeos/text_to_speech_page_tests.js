@@ -4,38 +4,28 @@
 
 import 'chrome://os-settings/chromeos/lazy_load.js';
 
-import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
+import {CrSettingsPrefs, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender, waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
-
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 
 suite('TextToSpeechPageTests', function() {
   let page = null;
 
-  function initPage(opt_prefs) {
-    page = document.createElement('settings-text-to-speech-page');
-    page.prefs = opt_prefs || getDefaultPrefs();
-    document.body.appendChild(page);
-  }
+  async function initPage() {
+    const prefElement = document.createElement('settings-prefs');
+    document.body.appendChild(prefElement);
 
-  function getDefaultPrefs() {
-    return {
-      'settings': {
-        'accessibility': {
-          key: 'settings.accessibility',
-          type: chrome.settingsPrivate.PrefType.BOOLEAN,
-          value: false,
-        },
-      },
-    };
+    await CrSettingsPrefs.initialized;
+    page = document.createElement('settings-text-to-speech-page');
+    page.prefs = prefElement.prefs;
+    document.body.appendChild(page);
+    flush();
   }
 
   setup(function() {
     PolymerTest.clearBody();
-    loadTimeData.overrideValues(
-      {isAccessibilityOSSettingsVisibilityEnabled: true});
     Router.getInstance().navigateTo(routes.A11Y_TEXT_TO_SPEECH);
   });
 
@@ -52,8 +42,7 @@ suite('TextToSpeechPageTests', function() {
         `should focus ${selector} button when returning from ${
             route.path} subpage`,
         async () => {
-          initPage();
-          flush();
+          await initPage();
           const router = Router.getInstance();
 
           const subpageButton = page.shadowRoot.querySelector(selector);
@@ -75,5 +64,26 @@ suite('TextToSpeechPageTests', function() {
               subpageButton, page.shadowRoot.activeElement,
               `${selector} should be focused`);
         });
+  });
+
+  test('only allowed subpages are available in kiosk mode', async function() {
+    loadTimeData.overrideValues({
+      isKioskModeActive: true,
+      showTabletModeShelfNavigationButtonsSettings: true,
+    });
+    await initPage();
+
+    const allowed_subpages = [
+      'chromeVoxSubpageButton',
+      'selectToSpeakSubpageButton',
+      'ttsSubpageButton',
+    ];
+
+    const subpages = page.root.querySelectorAll('cr-link-row');
+    subpages.forEach(function(subpage) {
+      if (isVisible(subpage)) {
+        assertTrue(allowed_subpages.includes(subpage.id));
+      }
+    });
   });
 });

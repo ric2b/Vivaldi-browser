@@ -27,7 +27,6 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
@@ -38,7 +37,6 @@ import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeActionModeHandler;
-import org.chromium.chrome.browser.ChromePowerModeVoter;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
 import org.chromium.chrome.browser.app.tab_activity_glue.TabReparentingController;
@@ -127,7 +125,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.VoiceToolbarButtonController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveButtonActionMenuCoordinator;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonController;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.OptionalNewTabButtonController;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer;
@@ -149,7 +147,6 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFacto
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
-import org.chromium.components.browser_ui.widget.CoordinatorLayoutForPointer;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
@@ -177,6 +174,7 @@ import org.chromium.url.GURL;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -665,13 +663,6 @@ public class RootUiCoordinator
 
     @Override
     public void onInflationComplete() {
-        // Allow the ChromePowerModeVoter instance to observe any touch events on the view
-        // hierarchy, so that we can avoid power throttling while the user interacts with Java views
-        // in the main Chrome activity.
-        ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
-        ((CoordinatorLayoutForPointer) coordinator)
-                .setTouchEventCallback(ChromePowerModeVoter.getInstance().getTouchEventCallback());
-
         mScrimCoordinator = buildScrimWidget();
 
         initFindToolbarManager();
@@ -710,7 +701,7 @@ public class RootUiCoordinator
                     mTabModelSelectorSupplier.get().openNewTab(
                             generateUrlParamsForSearch(tab, query),
                             TabLaunchType.FROM_LONGPRESS_FOREGROUND, tab, tab.isIncognito());
-                }, mShareDelegateSupplier, canDrawOutsideScreen());
+                }, mShareDelegateSupplier);
         mVrModeObserver = new VrModeObserver() {
             @Override
             public void onEnterVr() {
@@ -800,7 +791,8 @@ public class RootUiCoordinator
 
         if (DeviceFormFactor.isWindowOnTablet(mWindowAndroid)
                 && (RequestDesktopUtils.maybeDefaultEnableGlobalSetting(
-                            getPrimaryDisplaySizeInInches(), Profile.getLastUsedRegularProfile())
+                            getPrimaryDisplaySizeInInches(), Profile.getLastUsedRegularProfile(),
+                            mActivity)
                         || RequestDesktopUtils.maybeDisableGlobalSetting(
                                 Profile.getLastUsedRegularProfile()))) {
             // TODO(crbug.com/1350274): Remove this explicit load when this bug is addressed.
@@ -900,10 +892,7 @@ public class RootUiCoordinator
     }
 
     private void initScrollCapture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-                || DeviceFormFactor.isWindowOnTablet(mWindowAndroid)) {
-            return;
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
 
         mScrollCaptureManager = new ScrollCaptureManager(mActivityTabProvider);
     }
@@ -1332,25 +1321,6 @@ public class RootUiCoordinator
         return appRect;
     }
 
-    /**
-     * Provides the height of the base app area on which bottom sheet client is drawn. This is
-     * not necessary for most embedders of BottomSheet, unless they have non-zero vertical Window
-     * offset that would push down a part of app area out of the screen. BottomSheet then uses
-     * this height to resize the sheet content so all of it is visible.
-     * @return Supplier of the height of the base app area. {@code null} if not necessary.
-     */
-    @Nullable
-    protected Supplier<Integer> getBaseHeightProvider() {
-        return null;
-    }
-
-    /**
-     * Whether UI like popup can be drawn outside the screen. {@code false} by default.
-     */
-    protected boolean canDrawOutsideScreen() {
-        return false;
-    }
-
     private void hideAppMenu() {
         if (mAppMenuCoordinator != null) mAppMenuCoordinator.getAppMenuHandler().hideAppMenu();
     }
@@ -1443,7 +1413,7 @@ public class RootUiCoordinator
                         -> mScrimCoordinator,
                 sheetInitializedCallback, mActivity.getWindow(),
                 mWindowAndroid.getKeyboardDelegate(),
-                () -> mActivity.findViewById(R.id.sheet_container), getBaseHeightProvider());
+                () -> mActivity.findViewById(R.id.sheet_container));
         BottomSheetControllerFactory.setExceptionReporter(
                 (throwable)
                         -> ChromePureJavaExceptionReporter.reportJavaException(
@@ -1455,7 +1425,7 @@ public class RootUiCoordinator
                 this::getBottomSheetSnackbarManager, mTabObscuringHandlerSupplier.get(),
                 mOmniboxFocusStateSupplier, panelManagerSupplier, mStartSurfaceSupplier,
                 mLayoutStateProviderOneShotSupplier,
-                ReturnToChromeUtil.isTabSwitcherOnlyRefactorEnabled(mActivity));
+                ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mActivity));
 
         // TODO(crbug.com/1279941): Consider moving handler registration to feature code.
         if (BackPressManager.isEnabled()) {
@@ -1523,10 +1493,9 @@ public class RootUiCoordinator
     }
 
     private void initDirectActionInitializer() {
-        mDirectActionInitializer = new DirectActionInitializer(mActivity, mActivityType,
+        mDirectActionInitializer = new DirectActionInitializer(mActivityType,
                 mMenuOrKeyboardActionController, mActivity::onBackPressed,
-                mTabModelSelectorSupplier.get(), mFindToolbarManager, getBottomSheetController(),
-                mBrowserControlsManager, mCompositorViewHolderSupplier.get(), mActivityTabProvider);
+                mTabModelSelectorSupplier.get(), mFindToolbarManager);
         mActivityLifecycleDispatcher.register(mDirectActionInitializer);
     }
 

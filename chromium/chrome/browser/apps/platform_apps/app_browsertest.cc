@@ -28,7 +28,6 @@
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -77,6 +76,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/mock_user_manager.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
@@ -957,9 +957,9 @@ void PlatformAppDevToolsBrowserTest::RunTestWithDevTools(const char* name,
     ASSERT_FALSE(GetFirstAppWindow());
 
     // Relaunch the app and get a new AppWindow.
-    content::WindowedNotificationObserver app_loaded_observer(
-        content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver app_loaded_observer(
+        /*num_expected_contents=*/2);
+
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
         ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
@@ -1098,9 +1098,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   // Ensure that we wait until the background page is run (to register the
   // OnLaunched listener) before trying to open the application. This is similar
   // to LoadAndLaunchPlatformApp, but we want to load as a component extension.
-  content::WindowedNotificationObserver app_loaded_observer(
-      content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-      content::NotificationService::AllSources());
+  content::CreateAndLoadWebContentsObserver app_loaded_observer;
 
   const Extension* extension = LoadExtensionAsComponent(
       test_data_dir_.AppendASCII("platform_apps").AppendASCII("component"));
@@ -1162,9 +1160,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, PRE_ComponentAppBackgroundPage) {
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, ComponentAppBackgroundPage) {
   CheckExtensionInstalledObserver should_install(browser()->profile());
   // Since we are forcing an upgrade, we need to wait for the load again.
-  content::WindowedNotificationObserver app_loaded_observer(
-      content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-      content::NotificationService::AllSources());
+  content::CreateAndLoadWebContentsObserver app_loaded_observer;
 
   const Extension* extension = LoadExtensionAsComponent(
       test_data_dir_.AppendASCII("platform_apps").AppendASCII("component"));
@@ -1188,9 +1184,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   // Ensure that we wait until the background page is run (to register the
   // OnLaunched listener) before trying to open the application. This is similar
   // to LoadAndLaunchPlatformApp, but we want to load as a component extension.
-  content::WindowedNotificationObserver app_loaded_observer(
-      content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-      content::NotificationService::AllSources());
+  content::CreateAndLoadWebContentsObserver app_loaded_observer;
 
   const Extension* extension = LoadExtensionAsComponent(
       test_data_dir_.AppendASCII("platform_apps").AppendASCII("component"));
@@ -1339,7 +1333,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppIncognitoBrowserTest,
       ->Launch(file_manager->id(),
                apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                    true /* prefer_container */),
-               apps::mojom::LaunchSource::kFromTest);
+               apps::LaunchSource::kFromTest);
 
   while (!base::Contains(opener_app_ids_, file_manager->id())) {
     content::RunAllPendingInMessageLoop();
@@ -1362,7 +1356,6 @@ class RestartDeviceTest : public PlatformAppBrowserTest {
   void TearDownOnMainThread() override {
     PlatformAppBrowserTest::TearDownOnMainThread();
     user_manager_enabler_.reset();
-    fake_user_manager_ = nullptr;
   }
 
  protected:
@@ -1371,18 +1364,12 @@ class RestartDeviceTest : public PlatformAppBrowserTest {
   }
 
   void EnterKioskSession() {
-    fake_user_manager_ = new ash::FakeChromeUserManager();
-    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        base::WrapUnique(fake_user_manager_));
-
-    const AccountId kiosk_account_id(
-        AccountId::FromUserEmail("kiosk@foobar.com"));
-    fake_user_manager_->AddKioskAppUser(kiosk_account_id);
-    fake_user_manager_->LoginUser(kiosk_account_id);
+    ash::LoginState::Get()->SetLoggedInState(
+        ash::LoginState::LoggedInState::LOGGED_IN_ACTIVE,
+        ash::LoginState::LoggedInUserType::LOGGED_IN_USER_KIOSK);
   }
 
  private:
-  ash::FakeChromeUserManager* fake_user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 };
 

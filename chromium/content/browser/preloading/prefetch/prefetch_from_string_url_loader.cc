@@ -10,6 +10,8 @@
 #include "base/check_op.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
+#include "base/task/sequenced_task_runner.h"
+#include "content/browser/preloading/prefetch/prefetch_container.h"
 #include "content/browser/preloading/prefetch/prefetched_mainframe_response_container.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -26,11 +28,13 @@ namespace content {
 
 PrefetchFromStringURLLoader::PrefetchFromStringURLLoader(
     std::unique_ptr<PrefetchedMainframeResponseContainer> response,
+    const absl::optional<PrefetchResponseSizes>& response_sizes,
     const network::ResourceRequest& tentative_resource_request)
     : head_(response->ReleaseHead()),
       body_buffer_(
           base::MakeRefCounted<net::StringIOBuffer>(response->ReleaseBody())),
-      bytes_of_raw_data_to_transfer_(body_buffer_->size()) {}
+      bytes_of_raw_data_to_transfer_(body_buffer_->size()),
+      response_sizes_(response_sizes) {}
 
 PrefetchFromStringURLLoader::~PrefetchFromStringURLLoader() = default;
 
@@ -118,7 +122,7 @@ void PrefetchFromStringURLLoader::BindAndStart(
 
   handle_watcher_ = std::make_unique<mojo::SimpleWatcher>(
       FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL,
-      base::SequencedTaskRunnerHandle::Get());
+      base::SequencedTaskRunner::GetCurrentDefault());
   handle_watcher_->Watch(
       producer_handle_.get(), MOJO_HANDLE_SIGNAL_WRITABLE,
       MOJO_WATCH_CONDITION_SATISFIED,
@@ -139,7 +143,13 @@ void PrefetchFromStringURLLoader::OnHandleReady(
 }
 
 void PrefetchFromStringURLLoader::Finish(int error) {
-  client_->OnComplete(network::URLLoaderCompletionStatus(error));
+  network::URLLoaderCompletionStatus status(error);
+  if (response_sizes_) {
+    status.encoded_data_length = response_sizes_->encoded_data_length;
+    status.encoded_body_length = response_sizes_->encoded_body_length;
+    status.decoded_body_length = response_sizes_->decoded_body_length;
+  }
+  client_->OnComplete(status);
   handle_watcher_.reset();
   producer_handle_.reset();
   client_.reset();

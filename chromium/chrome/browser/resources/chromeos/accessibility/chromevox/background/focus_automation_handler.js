@@ -9,12 +9,12 @@ import {AutomationPredicate} from '../../common/automation_predicate.js';
 import {constants} from '../../common/constants.js';
 import {CursorRange} from '../../common/cursors/range.js';
 import {ChromeVoxEvent} from '../common/custom_automation_event.js';
-import {QueueMode, TtsSpeechProperties} from '../common/tts_interface.js';
+import {QueueMode, TtsSpeechProperties} from '../common/tts_types.js';
 
 import {BaseAutomationHandler} from './base_automation_handler.js';
 import {ChromeVoxState} from './chromevox_state.js';
 import {Output} from './output/output.js';
-import {OutputEventType} from './output/output_types.js';
+import {OutputCustomEvent} from './output/output_types.js';
 
 const AutomationEvent = chrome.automation.AutomationEvent;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -97,7 +97,7 @@ export class FocusAutomationHandler extends BaseAutomationHandler {
         .withoutHints()
         .withRichSpeechAndBraille(
             CursorRange.fromNode(evt.target.activeDescendant), prev,
-            OutputEventType.NAVIGATE)
+            OutputCustomEvent.NAVIGATE)
         .go();
     this.previousActiveDescendant_ = evt.target.activeDescendant;
   }

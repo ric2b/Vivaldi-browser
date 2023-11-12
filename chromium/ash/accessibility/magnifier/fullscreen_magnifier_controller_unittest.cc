@@ -62,8 +62,6 @@ class FullscreenMagnifierControllerTest : public AshTestBase {
     AshTestBase::SetUp();
     UpdateDisplay(base::StringPrintf("%dx%d", kRootWidth, kRootHeight));
 
-    GetFullscreenMagnifierController()->DisableMoveMagnifierDelayForTesting();
-
     touch_event_watcher_ = std::make_unique<TouchEventWatcher>();
     GetRootWindow()->AddPreTargetHandler(touch_event_watcher_.get(),
                                          ui::EventTarget::Priority::kSystem);
@@ -694,6 +692,72 @@ TEST_F(FullscreenMagnifierControllerTest, PinchZoom) {
   EXPECT_GT(0.01f, std::abs(ratio - ratio_zoomed));
 }
 
+// Performs pinch zoom and then receive cancelled touch events. This test case
+// tests giving back control to other event watchers.
+TEST_F(FullscreenMagnifierControllerTest, PinchZoomCancel) {
+  ASSERT_EQ(0u, touch_event_watcher_->touch_events.size());
+
+  GetFullscreenMagnifierController()->SetEnabled(true);
+  ASSERT_EQ(2.0f, GetFullscreenMagnifierController()->GetScale());
+
+  base::TimeTicks time = base::TimeTicks::Now();
+  ui::PointerDetails pointer_details1(ui::EventPointerType::kTouch, 0);
+  ui::PointerDetails pointer_details2(ui::EventPointerType::kTouch, 1);
+
+  // Simulate pinch gesture.
+  DispatchTouchEvent(ui::ET_TOUCH_PRESSED, gfx::Point(900, 10), time,
+                     pointer_details1);
+  DispatchTouchEvent(ui::ET_TOUCH_PRESSED, gfx::Point(1100, 10), time,
+                     pointer_details2);
+
+  ASSERT_EQ(2u, touch_event_watcher_->touch_events.size());
+  EXPECT_EQ(ui::ET_TOUCH_PRESSED, touch_event_watcher_->touch_events[0].type());
+  EXPECT_EQ(ui::ET_TOUCH_PRESSED, touch_event_watcher_->touch_events[1].type());
+
+  DispatchTouchEvent(ui::ET_TOUCH_MOVED, gfx::Point(850, 10), time,
+                     pointer_details1);
+  DispatchTouchEvent(ui::ET_TOUCH_MOVED, gfx::Point(1150, 10), time,
+                     pointer_details2);
+
+  // Expect that event watcher receives touch cancelled events. Magnification
+  // controller should cancel existing touches when it detects interested
+  // gestures.
+  ASSERT_EQ(4u, touch_event_watcher_->touch_events.size());
+  EXPECT_EQ(ui::ET_TOUCH_CANCELLED,
+            touch_event_watcher_->touch_events[2].type());
+  EXPECT_EQ(ui::ET_TOUCH_CANCELLED,
+            touch_event_watcher_->touch_events[3].type());
+
+  // Dispatch cancelled events (for example due to palm detection).
+  DispatchTouchEvent(ui::ET_TOUCH_CANCELLED, gfx::Point(850, 10), time,
+                     pointer_details1);
+  DispatchTouchEvent(ui::ET_TOUCH_CANCELLED, gfx::Point(1150, 10), time,
+                     pointer_details2);
+
+  // All events are consumed by the controller after it detects gesture.
+  ASSERT_EQ(4u, touch_event_watcher_->touch_events.size());
+  ASSERT_EQ(0, GetFullscreenMagnifierController()->GetTouchPointsForTesting());
+
+  // Touch the screen again.
+  DispatchTouchEvent(ui::ET_TOUCH_PRESSED, gfx::Point(900, 10), time,
+                     pointer_details1);
+
+  // Events should again be passed to touch_event_watcher.
+  ASSERT_EQ(5u, touch_event_watcher_->touch_events.size());
+  EXPECT_EQ(ui::ET_TOUCH_PRESSED, touch_event_watcher_->touch_events[4].type());
+
+  DispatchTouchEvent(ui::ET_TOUCH_MOVED, gfx::Point(800, 10), time,
+                     pointer_details1);
+  ASSERT_EQ(6u, touch_event_watcher_->touch_events.size());
+  EXPECT_EQ(ui::ET_TOUCH_MOVED, touch_event_watcher_->touch_events[5].type());
+
+  DispatchTouchEvent(ui::ET_TOUCH_RELEASED, gfx::Point(800, 10), time,
+                     pointer_details1);
+  ASSERT_EQ(7u, touch_event_watcher_->touch_events.size());
+  EXPECT_EQ(ui::ET_TOUCH_RELEASED,
+            touch_event_watcher_->touch_events[6].type());
+}
+
 TEST_F(FullscreenMagnifierControllerTest, TwoFingersScroll) {
   GetFullscreenMagnifierController()->SetEnabled(true);
   ASSERT_EQ(2.0f, GetFullscreenMagnifierController()->GetScale());
@@ -975,6 +1039,45 @@ TEST_F(FullscreenMagnifierControllerTest, CaptureMode) {
       bar_widget->GetWindowBoundsInScreen().CenterPoint();
   event_generator->MoveMouseTo(point_of_interest);
   EXPECT_NE(viewport_center, GetViewport().CenterPoint());
+}
+
+TEST_F(FullscreenMagnifierControllerTest, ContinuousFollowingReachesEdges) {
+  auto* magnifier = GetFullscreenMagnifierController();
+  magnifier->SetEnabled(true);
+  float scale = 10.0;
+  magnifier->SetScale(scale, /*animate=*/false);
+  magnifier->set_mouse_following_mode(MagnifierMouseFollowingMode::kContinuous);
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+
+  gfx::Point top_left(0, 0);
+  gfx::Point top_right(kRootWidth - 2, 0);
+  gfx::Point bottom_left(0, kRootHeight - 2);
+  gfx::Point bottom_right(kRootWidth - 2, kRootHeight - 2);
+
+  // Move until viewport upper left corner is at (0, 0).
+  // The generator moves the mouse within the scaled window,
+  // so it takes several iterations to get to the top corner.
+  while (GetViewport().ToString() != "0,0 80x60") {
+    event_generator->MoveMouseToInHost(top_left);
+  }
+  // Reset out of the corner a bit.
+  gfx::Point center(400, 300);
+  event_generator->MoveMouseToInHost(center);
+
+  // Move until viewport is all the way at the top right.
+  while (GetViewport().ToString() != "720,0 80x60") {
+    event_generator->MoveMouseToInHost(top_right);
+  }
+  event_generator->MoveMouseToInHost(center);
+
+  while (GetViewport().ToString() != "0,540 80x60") {
+    event_generator->MoveMouseToInHost(bottom_left);
+  }
+  event_generator->MoveMouseToInHost(center);
+
+  while (GetViewport().ToString() != "720,540 80x60") {
+    event_generator->MoveMouseToInHost(bottom_right);
+  }
 }
 
 }  // namespace ash

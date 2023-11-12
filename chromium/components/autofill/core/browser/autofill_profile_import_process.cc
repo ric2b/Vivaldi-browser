@@ -3,11 +3,14 @@
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/autofill_profile_import_process.h"
+
+#include "base/ranges/algorithm.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_features.h"
 
 namespace autofill {
 
@@ -20,6 +23,29 @@ AutofillProfileImportId GetImportId() {
   static AutofillProfileImportId next_import_id(0);
   next_import_id.value()++;
   return next_import_id;
+}
+
+// When the profile is observed without explicit country information, Autofill
+// guesses it's country. Detecting a profile as a duplicate can fail if we guess
+// incorrectly. This function checks if we have reason to believe that the
+// country of `profile` was guessed incorrectly. It does so by checking whether
+// any of the `existing_profiles` becomes mergeable after removing the country
+// of `profile`.
+// Comparisons are done using `comparator`.
+bool ShouldCountryApproximationBeRemoved(
+    const AutofillProfile& profile,
+    const std::vector<AutofillProfile*>& existing_profiles,
+    const AutofillProfileComparator& comparator) {
+  auto IsMergeableWithExistingProfiles = [&](const AutofillProfile& profile) {
+    return base::ranges::any_of(existing_profiles, [&](auto* existing_profile) {
+      return comparator.AreMergeable(profile, *existing_profile);
+    });
+  };
+  if (IsMergeableWithExistingProfiles(profile))
+    return false;
+  AutofillProfile without_country = profile;
+  without_country.ClearFields({ADDRESS_HOME_COUNTRY});
+  return IsMergeableWithExistingProfiles(without_country);
 }
 
 }  // namespace
@@ -75,8 +101,19 @@ void ProfileImportProcess::DetermineProfileImportType() {
 
   int number_of_unchanged_profiles = 0;
 
+  // We don't offer an import if `observed_profile_` is a duplicate of an
+  // existing profile. For `kAccount` profiles, only silent updates are allowed.
   const std::vector<AutofillProfile*> existing_profiles =
       personal_data_manager_->GetProfiles();
+
+  // If we have reason to believe that the country was complemented incorrectly,
+  // remove it.
+  if (import_metadata_.did_complement_country &&
+      ShouldCountryApproximationBeRemoved(observed_profile_, existing_profiles,
+                                          comparator)) {
+    observed_profile_.ClearFields({ADDRESS_HOME_COUNTRY});
+    import_metadata_.did_complement_country = false;
+  }
 
   for (const auto* existing_profile : existing_profiles) {
     // If the existing profile is not mergeable with the observed profile, the
@@ -100,14 +137,16 @@ void ProfileImportProcess::DetermineProfileImportType() {
       continue;
     }
 
-    // At this point, the observed profile was merged with the existing profile
-    // which changed in some way.
+    // At this point, the observed profile was merged with (a copy of) the
+    // existing profile which changed in some way.
     // Now, determine if the merge alters any settings-visible value, or if the
     // merge can  be considered as a silent update that does not need to get
     // user confirmation.
+    // Setting-visible updates are not offered for `kAccount` profiles.
     if (AutofillProfileComparator::ProfilesHaveDifferentSettingsVisibleValues(
             *existing_profile, merged_profile, app_locale_)) {
-      if (allow_only_silent_updates_) {
+      if (allow_only_silent_updates_ ||
+          existing_profile->source() == AutofillProfile::Source::kAccount) {
         ++number_of_unchanged_profiles;
         continue;
       }
@@ -139,8 +178,12 @@ void ProfileImportProcess::DetermineProfileImportType() {
     }
     // If the profile changed but all settings-visible values are maintained,
     // the profile can be updated silently.
-    merged_profile.set_modification_date(AutofillClock::Now());
-    updated_profiles_.emplace_back(merged_profile);
+    if (existing_profile->source() ==
+            AutofillProfile::Source::kLocalOrSyncable ||
+        features::kAutofillEnableSilentUpdatesForAccountProfiles.Get()) {
+      merged_profile.set_modification_date(AutofillClock::Now());
+      updated_profiles_.emplace_back(merged_profile);
+    }
   }
 
   // If the profile is not mergeable with an existing profile, the import

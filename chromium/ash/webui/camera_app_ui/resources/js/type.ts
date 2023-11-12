@@ -128,7 +128,6 @@ export enum Facing {
   VIRTUAL_USER = 'virtual_user',
   VIRTUAL_ENV = 'virtual_environment',
   VIRTUAL_EXT = 'virtual_external',
-  UNKNOWN = 'unknown',
 }
 
 export enum ViewName {
@@ -138,6 +137,7 @@ export enum ViewName {
   DOCUMENT_REVIEW = 'view-document-review',
   EXPERT_SETTINGS = 'view-expert-settings',
   FLASH = 'view-flash',
+  LOW_STORAGE_DIALOG = 'view-low-storage-dialog',
   MESSAGE_DIALOG = 'view-message-dialog',
   OPTION_PANEL = 'view-option-panel',
   PHOTO_ASPECT_RATIO_SETTINGS = 'view-photo-aspect-ratio-settings',
@@ -178,12 +178,6 @@ export enum AspectRatioSet {
   RATIO_OTHER = 0.0000,
   RATIO_SQUARE = 1.0000,
 }
-
-export const NON_CROP_ASPECT_RATIO_SETS = [
-  AspectRatioSet.RATIO_4_3,
-  AspectRatioSet.RATIO_16_9,
-  AspectRatioSet.RATIO_OTHER,
-];
 
 export enum Rotation {
   ANGLE_0 = 0,
@@ -338,6 +332,7 @@ export interface ErrorInfo {
  */
 export enum ErrorType {
   BROKEN_THUMBNAIL = 'broken-thumbnail',
+  CHECK_COVER_FAILURE = 'check-cover-failed',
   DEVICE_INFO_UPDATE_FAILURE = 'device-info-update-failure',
   DEVICE_NOT_EXIST = 'device-not-exist',
   EMPTY_FILE = 'empty-file',
@@ -355,8 +350,8 @@ export enum ErrorType {
   START_CAMERA_FAILURE = 'start-camera-failure',
   START_CAPTURE_FAILURE = 'start-capture-failure',
   STOP_CAPTURE_FAILURE = 'stop-capture-failure',
+  UNCAUGHT_ERROR = 'uncaught-error',
   UNCAUGHT_PROMISE = 'uncaught-promise',
-  UNKNOWN_FACING = 'unknown-facing',
   UNSAFE_INTEGER = 'unsafe-integer',
   UNSUPPORTED_PROTOCOL = 'unsupported-protocol',
 }
@@ -429,11 +424,29 @@ export class EmptyThumbnailError extends Error {
   }
 }
 
+export class LowStorageError extends Error {
+  constructor() {
+    const message = 'Cannot start recording due to low storage.';
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
 /**
  * Throws when the recording is ended with no chunk returned.
  */
 export class NoChunkError extends Error {
   constructor(message = 'No chunk is received during recording session') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when the GIF recording is ended with no frame captured.
+ */
+export class NoFrameError extends Error {
+  constructor(message = 'No frames captured during GIF recording') {
     super(message);
     this.name = this.constructor.name;
   }
@@ -476,4 +489,12 @@ export enum LocalStorageKey {
   SHOW_ALL_RESOLUTIONS = 'showAllResolutions',
   SHOW_METADATA = 'showMetadata',
   TOGGLE_MIC = 'toggleMic',
+}
+
+/**
+ * Type of low storage dialog.
+ */
+export enum LowStorageDialogType {
+  AUTO_STOP = 'auto-stop',
+  CANNOT_START = 'cannot-start',
 }

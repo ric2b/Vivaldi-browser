@@ -22,6 +22,7 @@ import android.widget.ProgressBar;
 import androidx.annotation.CallSuper;
 import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -30,7 +31,6 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.lifetime.DestroyChecker;
 import org.chromium.base.lifetime.Destroyable;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -56,12 +56,15 @@ import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.chrome.browser.toolbar.top.ToolbarTablet.OfflineDownloader;
+import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.ToolbarColorObserver;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.url.GURL;
+
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -75,6 +78,7 @@ public abstract class ToolbarLayout
         extends FrameLayout implements Destroyable, TintObserver, ThemeColorObserver,
                                        OmniboxSuggestionsDropdownScrollListener {
     private Callback<Runnable> mInvalidator;
+    private @Nullable ToolbarColorObserver mToolbarColorObserver;
 
     protected final ObserverList<UrlExpansionObserver> mUrlExpansionObservers =
             new ObserverList<>();
@@ -186,6 +190,10 @@ public abstract class ToolbarLayout
             mThemeColorProvider.removeThemeColorObserver(this);
             mThemeColorProvider = null;
         }
+
+        if (mToolbarColorObserver != null) {
+            mToolbarColorObserver = null;
+        }
     }
 
     /**
@@ -200,6 +208,13 @@ public abstract class ToolbarLayout
      */
     void removeUrlExpansionObserver(UrlExpansionObserver urlExpansionObserver) {
         mUrlExpansionObservers.removeObserver(urlExpansionObserver);
+    }
+
+    /**
+     * @param toolbarColorObserver The observer that observes toolbar color change.
+     */
+    void setToolbarColorObserver(@NonNull ToolbarColorObserver toolbarColorObserver) {
+        mToolbarColorObserver = toolbarColorObserver;
     }
 
     /**
@@ -390,13 +405,6 @@ public abstract class ToolbarLayout
 
     void getPositionRelativeToContainer(View containerView, int[] position) {
         ViewUtils.getRelativeDrawPosition(containerView, this, position);
-    }
-
-    /**
-     * @return The helper for menu button UI interactions.
-     */
-    AppMenuButtonHelper getMenuButtonHelper() {
-        return mAppMenuButtonHelper;
     }
 
     /**
@@ -725,37 +733,6 @@ public abstract class ToolbarLayout
     protected void onNavigatedToDifferentPage() {}
 
     /**
-     * Starts load progress.
-     */
-    void startLoadProgress() {
-        mProgressBar.start();
-    }
-
-    /**
-     * Sets load progress.
-     * @param progress The load progress between 0 and 1.
-     */
-    void setLoadProgress(float progress) {
-        mProgressBar.setProgress(progress);
-    }
-
-    /**
-     * Finishes load progress.
-     * @param delayed Whether hiding progress bar should be delayed to give enough time for user to
-     *                        recognize the last state.
-     */
-    void finishLoadProgress(boolean delayed) {
-        mProgressBar.finish(delayed);
-    }
-
-    /**
-     * @return True if the progress bar is started.
-     */
-    boolean isProgressStarted() {
-        return mProgressBar.isStarted();
-    }
-
-    /**
      * Finish any toolbar animations.
      */
     void finishAnimations() {}
@@ -896,6 +873,27 @@ public abstract class ToolbarLayout
     public void setBrowserControlsVisibilityDelegate(
             BrowserStateBrowserControlsVisibilityDelegate controlsVisibilityDelegate) {}
 
+    /**
+     * Notify the observer that the toolbar color is changed and pass the toolbar color to the
+     * observer.
+     */
+    protected void notifyToolbarColorChanged(int color) {
+        if (mToolbarColorObserver != null) {
+            mToolbarColorObserver.onToolbarColorChanged(color);
+        }
+    }
+
+    /**
+     * This method sets the toolbar hairline visibility.
+     * @param isHairlineVisible whether the toolbar hairline should be visible.
+     */
+    public void setHairlineVisibility(boolean isHairlineVisible) {
+        ImageView shadow = getRootView().findViewById(R.id.toolbar_hairline);
+        if(shadow != null) {
+            shadow.setVisibility(isHairlineVisible ? VISIBLE : GONE);
+        }
+    }
+
     /** Vivaldi */
     public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {}
 
@@ -919,5 +917,5 @@ public abstract class ToolbarLayout
         maybeUnfocusUrlBar();
     }
 
-    public void updateShieldButtonState(String url) {};
+    public void updateShieldButtonState(GURL gurl) {};
 }

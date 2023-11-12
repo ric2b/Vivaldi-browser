@@ -43,6 +43,7 @@
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/timing_allow_origin_parser.h"
+#include "services/network/public/mojom/no_vary_search.mojom-blink.h"
 #include "services/network/public/mojom/parsed_headers.mojom-blink.h"
 #include "services/network/public/mojom/supports_loading_mode.mojom-blink.h"
 #include "services/network/public/mojom/timing_allow_origin.mojom-blink.h"
@@ -170,9 +171,10 @@ blink::CSPSourceListPtr ConvertToBlink(const CSPSourceListPtr& source_list) {
       std::move(sources), std::move(nonces), std::move(hashes),
       source_list->allow_self, source_list->allow_star,
       source_list->allow_response_redirects, source_list->allow_inline,
-      source_list->allow_eval, source_list->allow_wasm_eval,
-      source_list->allow_wasm_unsafe_eval, source_list->allow_dynamic,
-      source_list->allow_unsafe_hashes, source_list->report_sample);
+      source_list->allow_inline_speculation_rules, source_list->allow_eval,
+      source_list->allow_wasm_eval, source_list->allow_wasm_unsafe_eval,
+      source_list->allow_dynamic, source_list->allow_unsafe_hashes,
+      source_list->report_sample);
 }
 
 blink::ContentSecurityPolicyHeaderPtr ConvertToBlink(
@@ -249,6 +251,23 @@ blink::VariantsHeaderPtr ConvertToBlink(const VariantsHeaderPtr& in) {
                                     ConvertToBlink(in->available_values));
 }
 
+blink::NoVarySearchPtr ConvertToBlink(const NoVarySearchPtr& in) {
+  if (!in)
+    return nullptr;
+
+  DCHECK(in->search_variance);
+  if (in->search_variance->is_no_vary_params()) {
+    return blink::NoVarySearch::New(
+        blink::SearchParamsVariance::NewNoVaryParams(
+            ConvertToBlink(in->search_variance->get_no_vary_params())),
+        in->vary_on_key_order);
+  }
+  return blink::NoVarySearch::New(
+      blink::SearchParamsVariance::NewVaryParams(
+          ConvertToBlink(in->search_variance->get_vary_params())),
+      in->vary_on_key_order);
+}
+
 blink::ParsedHeadersPtr ConvertToBlink(const ParsedHeadersPtr& in) {
   DCHECK(in);
   return blink::ParsedHeaders::New(
@@ -272,7 +291,8 @@ blink::ParsedHeadersPtr ConvertToBlink(const ParsedHeadersPtr& in) {
           : absl::nullopt,
       in->content_language.has_value()
           ? absl::make_optional(ConvertToBlink(in->content_language.value()))
-          : absl::nullopt);
+          : absl::nullopt,
+      ConvertToBlink(in->no_vary_search));
 }
 
 }  // namespace mojom

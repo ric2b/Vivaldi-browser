@@ -8,6 +8,8 @@
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 
+#include "sync/file_sync/file_store_factory.h"
+
 // static
 sync_bookmarks::BookmarkSyncService* BookmarkSyncServiceFactory::GetForProfile(
     Profile* profile) {
@@ -25,6 +27,7 @@ BookmarkSyncServiceFactory::BookmarkSyncServiceFactory()
           "BookmarkSyncServiceFactory",
           ProfileSelections::BuildRedirectedInIncognito()) {
   DependsOn(BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 BookmarkSyncServiceFactory::~BookmarkSyncServiceFactory() = default;
@@ -32,6 +35,9 @@ BookmarkSyncServiceFactory::~BookmarkSyncServiceFactory() = default;
 KeyedService* BookmarkSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  return new sync_bookmarks::BookmarkSyncService(
+  auto* sync_service = new sync_bookmarks::BookmarkSyncService(
       BookmarkUndoServiceFactory::GetForProfileIfExists(profile));
+  sync_service->SetVivaldiSyncedFileStore(
+      SyncedFileStoreFactory::GetForBrowserContext(context));
+  return sync_service;
 }

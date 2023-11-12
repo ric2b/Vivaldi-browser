@@ -210,7 +210,7 @@ class CalendarModelTest : public AshTestBase {
 
   base::Time GetStartTimeMidnightAdjusted(
       const google_apis::calendar::CalendarEvent* event) {
-    return calendar_model_->GetStartTimeMidnightAdjusted(event);
+    return calendar_utils::GetStartTimeMidnightAdjusted(event);
   }
 
   bool EventsPresentAtIndex(std::vector<base::Time>& months, int index) {
@@ -1084,6 +1084,55 @@ TEST_F(CalendarModelTest, MultiDayEvents) {
   TestMultiDayEvent(events, kMultiYearStartTime, kMultiYearEndTime);
 }
 
+TEST_F(CalendarModelTest, MultiAllDayEvents) {
+  // Set timezone and fake now. We set this to be GMT+n as we previously
+  // had a bug where all day events overflowed into the day after they were set
+  // to end for GMT+ timezones.
+  const char* kNow = "10 Nov 2022 13:00 GMT+5";
+  ash::system::ScopedTimezoneSettings timezone_settings(u"GMT+5");
+  SetTodayFromStr(kNow);
+
+  // Generic event id and summary.
+  const char* kId = "id";
+  const char* kSummary = "summary";
+
+  // Create 2 day "all day" event.  "All day" events technically don't have
+  // start and end times but we set them to start and end at 00:00 local time in
+  // the API response.
+  const char* kMultiAllDayEventPreviousDayTime = "19 Nov 2022 00:00 GMT";
+  const char* kMultiAllDayEventDayOneStartTime = "20 Nov 2022 00:00 GMT";
+  const char* kMultiAllDayEventDayTwoStartTime = "21 Nov 2022 00:00 GMT";
+  const char* kMultiAllDayEventEndTime = "22 Nov 2022 00:00 GMT";
+  std::unique_ptr<google_apis::calendar::CalendarEvent> multi_all_day_event =
+      calendar_test_utils::CreateEvent(
+          kId, kSummary, kMultiAllDayEventDayOneStartTime,
+          kMultiAllDayEventEndTime,
+          google_apis::calendar::CalendarEvent::EventStatus::kConfirmed,
+          google_apis::calendar::CalendarEvent::ResponseStatus::kAccepted,
+          true);
+
+  // Haven't injected anything yet, so no events on the start times.
+  SingleDayEventList events;
+  EXPECT_EQ(0, EventsNumberOfDay(kMultiAllDayEventDayOneStartTime, &events));
+
+  // Prepare mock events list.
+  std::unique_ptr<google_apis::calendar::EventList> event_list =
+      std::make_unique<google_apis::calendar::EventList>();
+  event_list->InjectItemForTesting(std::move(multi_all_day_event));
+
+  MockOnEventsFetched(calendar_utils::GetStartOfMonthUTC(
+                          calendar_test_utils::GetTimeFromString(kNow)),
+                      google_apis::ApiErrorCode::HTTP_SUCCESS,
+                      event_list.get());
+
+  // Assert that the correct number of all day events are stored. We should not
+  // have events on days surrounding the all day events.
+  EXPECT_EQ(0, EventsNumberOfDay(kMultiAllDayEventPreviousDayTime, &events));
+  EXPECT_EQ(1, EventsNumberOfDay(kMultiAllDayEventDayOneStartTime, &events));
+  EXPECT_EQ(1, EventsNumberOfDay(kMultiAllDayEventDayTwoStartTime, &events));
+  EXPECT_EQ(0, EventsNumberOfDay(kMultiAllDayEventEndTime, &events));
+}
+
 TEST_F(CalendarModelTest, FindFetchingStatus) {
   // Sets the timezone to "GMT".
   ash::system::ScopedTimezoneSettings timezone_settings(u"GMT");
@@ -1150,6 +1199,122 @@ TEST_F(CalendarModelTest, FindFetchingStatus) {
   EXPECT_EQ(CalendarModel::kSuccess,
             calendar_model()->FindFetchingStatus(
                 calendar_utils::GetStartOfMonthUTC(fetching_date)));
+}
+
+TEST_F(CalendarModelTest, FindEventsSplitByMultiDayAndSameDay) {
+  // Set timezone and fake now.
+  const char* kNow = "10 Nov 2022 13:00 GMT+5";
+  ash::system::ScopedTimezoneSettings timezone_settings(u"GMT+5");
+  SetTodayFromStr(kNow);
+
+  const char* kSummary = "summary";
+
+  const char* kMultiDayId = "multi-day";
+  const char* kMultiDayEventStartTime = "10 Nov 2022 12:00 GMT";
+  const char* kMultiDayEventEndTime = "12 Nov 2022 10:00 GMT";
+
+  const char* kSameDayId = "same-day";
+  const char* kSameDayEventStartTime = "10 Nov 2022 09:00 GMT";
+  const char* kSameDayEventEndTime = "10 Nov 2022 10:00 GMT";
+
+  auto multi_day_event = calendar_test_utils::CreateEvent(
+      kMultiDayId, kSummary, kMultiDayEventStartTime, kMultiDayEventEndTime);
+  auto same_day_event = calendar_test_utils::CreateEvent(
+      kSameDayId, kSummary, kSameDayEventStartTime, kSameDayEventEndTime);
+
+  // Prepare mock events list.
+  std::unique_ptr<google_apis::calendar::EventList> event_list =
+      std::make_unique<google_apis::calendar::EventList>();
+  event_list->InjectItemForTesting(std::move(multi_day_event));
+  event_list->InjectItemForTesting(std::move(same_day_event));
+
+  // Mock the events are fetched.
+  MockOnEventsFetched(calendar_utils::GetStartOfMonthUTC(
+                          calendar_test_utils::GetTimeFromString(kNow)),
+                      google_apis::ApiErrorCode::HTTP_SUCCESS,
+                      event_list.get());
+
+  auto [multi_day_events, same_day_events] =
+      calendar_model_->FindEventsSplitByMultiDayAndSameDay(now_);
+
+  EXPECT_EQ(multi_day_events.size(), size_t(1));
+  EXPECT_EQ(multi_day_events.back().id(), kMultiDayId);
+  EXPECT_EQ(same_day_events.size(), size_t(1));
+  EXPECT_EQ(same_day_events.back().id(), kSameDayId);
+}
+
+TEST_F(CalendarModelTest, FindUpcomingEvents) {
+  // Set timezone and fake now.
+  const char* kNow = "10 Nov 2022 13:00 GMT";
+  ash::system::ScopedTimezoneSettings timezone_settings(u"GMT");
+  SetTodayFromStr(kNow);
+
+  const char* kSummary = "summary";
+  const char* kEventStartingInTenMinsId = "event_starting_in_ten_mins";
+  const char* kEventStartingInThirtyMinsId = "event_starting_in_thirty_mins";
+  const char* kEventStartingInTwoHoursId = "event_starting_in_two_hours";
+  const char* kEventInProgressStartedLessThanOneHourAgoId =
+      "event_in_progress_started_less_than_one_hour_ago";
+  const char* kEventInProgressStartedMoreThanOneHourAgoId =
+      "event_in_progress_started_more_than_one_hour_ago";
+  const char* kEventFinishedId = "event_finished";
+
+  auto event_starting_in_ten_mins = calendar_test_utils::CreateEvent(
+      kEventStartingInTenMinsId, kSummary, "10 Nov 2022 13:10 GMT",
+      "10 Nov 2022 15:00 GMT");
+  auto event_starting_in_thirty_mins = calendar_test_utils::CreateEvent(
+      kEventStartingInThirtyMinsId, kSummary, "10 Nov 2022 13:30 GMT",
+      "10 Nov 2022 15:00 GMT");
+  auto event_starting_in_two_hours = calendar_test_utils::CreateEvent(
+      kEventStartingInTwoHoursId, kSummary, "10 Nov 2022 15:00 GMT",
+      "10 Nov 2022 16:00 GMT");
+  auto event_in_progress_started_less_than_one_hour_ago =
+      calendar_test_utils::CreateEvent(
+          kEventInProgressStartedLessThanOneHourAgoId, kSummary,
+          "10 Nov 2022 12:01:00 GMT", "10 Nov 2022 17:00 GMT");
+  auto event_in_progress_started_more_than_one_hour_ago =
+      calendar_test_utils::CreateEvent(
+          kEventInProgressStartedMoreThanOneHourAgoId, kSummary,
+          "10 Nov 2022 11:00 GMT", "10 Nov 2022 17:00 GMT");
+  auto event_finished = calendar_test_utils::CreateEvent(
+      kEventFinishedId, kSummary, "10 Nov 2022 12:30 GMT",
+      "10 Nov 2022 12:59 GMT");
+
+  // Prepare mock events list.
+  std::unique_ptr<google_apis::calendar::EventList> event_list =
+      std::make_unique<google_apis::calendar::EventList>();
+  event_list->InjectItemForTesting(std::move(event_starting_in_ten_mins));
+  event_list->InjectItemForTesting(std::move(event_starting_in_thirty_mins));
+  event_list->InjectItemForTesting(std::move(event_starting_in_two_hours));
+  event_list->InjectItemForTesting(
+      std::move(event_in_progress_started_less_than_one_hour_ago));
+  event_list->InjectItemForTesting(
+      std::move(event_in_progress_started_more_than_one_hour_ago));
+  event_list->InjectItemForTesting(std::move(event_finished));
+
+  // Mock the events are fetched.
+  MockOnEventsFetched(calendar_utils::GetStartOfMonthUTC(
+                          calendar_test_utils::GetTimeFromString(kNow)),
+                      google_apis::ApiErrorCode::HTTP_SUCCESS,
+                      event_list.get());
+
+  auto events = calendar_model_->FindUpcomingEvents(now_);
+
+  auto event_list_contains = [](auto& event_list, auto& id) {
+    return base::Contains(event_list, id, &CalendarEvent::id);
+  };
+
+  // We should only get the 2 events back that start in 10 mins or were ongoing
+  // with < 60 mins passed.
+  EXPECT_EQ(events.size(), size_t(2));
+  EXPECT_TRUE(event_list_contains(events, kEventStartingInTenMinsId));
+  EXPECT_FALSE(event_list_contains(events, kEventStartingInThirtyMinsId));
+  EXPECT_FALSE(event_list_contains(events, kEventStartingInTwoHoursId));
+  EXPECT_TRUE(
+      event_list_contains(events, kEventInProgressStartedLessThanOneHourAgoId));
+  EXPECT_FALSE(
+      event_list_contains(events, kEventInProgressStartedMoreThanOneHourAgoId));
+  EXPECT_FALSE(event_list_contains(events, kEventFinishedId));
 }
 
 }  // namespace ash

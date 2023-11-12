@@ -10,12 +10,9 @@ load("//lib/consoles.star", "consoles")
 try_.defaults.set(
     builder_group = "tryserver.chromium.packager",
     executable = "recipe:chromium_3pp",
-    execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     pool = try_.DEFAULT_POOL,
     service_account = "chromium-cipd-try-builder@chops-service-accounts.iam.gserviceaccount.com",
-
-    # TODO(crbug.com/1362440): remove this.
-    omit_python2 = False,
+    execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
 )
 
 consoles.list_view(

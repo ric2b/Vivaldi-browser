@@ -414,6 +414,9 @@ const int kMaxBookmarksSearchResults = 50;
   // reload here.)
   if (bookmarkNode == self.sharedState.tableViewDisplayedRootNode &&
       !self.sharedState.addingNewFolder) {
+    if (self.sharedState.currentlyInEditMode && ![self hasBookmarksOrFolders]) {
+      [self.consumer setTableViewEditing:NO];
+    }
     [self.consumer refreshContents];
     return;
   }

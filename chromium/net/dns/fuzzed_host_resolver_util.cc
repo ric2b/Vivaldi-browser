@@ -8,7 +8,6 @@
 
 #include <fuzzer/FuzzedDataProvider.h>
 
-#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
@@ -20,8 +19,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
@@ -155,7 +154,8 @@ class FuzzedHostResolverProc : public HostResolverProc {
       base::WeakPtr<FuzzedDataProvider> data_provider)
       : HostResolverProc(nullptr),
         data_provider_(data_provider),
-        network_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+        network_task_runner_(
+            base::SingleThreadTaskRunner::GetCurrentDefault()) {}
 
   FuzzedHostResolverProc(const FuzzedHostResolverProc&) = delete;
   FuzzedHostResolverProc& operator=(const FuzzedHostResolverProc&) = delete;
@@ -248,7 +248,7 @@ class FuzzedMdnsSocket : public DatagramServerSocket {
 
     // Maybe never receive any responses.
     if (data_provider_->ConsumeBool()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&FuzzedMdnsSocket::CompleteRecv,
                          weak_factory_.GetWeakPtr(), std::move(callback),
@@ -269,7 +269,7 @@ class FuzzedMdnsSocket : public DatagramServerSocket {
                  : data_provider_->PickValueInArray(kMdnsErrors);
     }
 
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&FuzzedMdnsSocket::CompleteSend,
                        weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -321,7 +321,7 @@ class FuzzedMdnsSocket : public DatagramServerSocket {
     if (data_provider_->ConsumeBool()) {
       std::string data =
           data_provider_->ConsumeRandomLengthString(buffer_length);
-      std::copy(data.begin(), data.end(), buffer->data());
+      base::ranges::copy(data, buffer->data());
       *out_address =
           IPEndPoint(FuzzIPAddress(data_provider_), FuzzPort(data_provider_));
       return data.size();

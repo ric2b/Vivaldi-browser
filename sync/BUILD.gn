@@ -10,6 +10,7 @@ source_set("invalidation") {
 
   deps = [
     "//components/invalidation/impl",
+    "//vivaldi/vivaldi_account"
   ]
 
   if(!is_ios) {
@@ -19,7 +20,12 @@ source_set("invalidation") {
     ]
     deps += [
       "//chrome/common:buildflags",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/profiles:profile",
+      "//components/keyed_service/content",
+      "//components/prefs",
       "//content/public/common",
+      "//vivaldi/prefs:prefs_strings",
     ]
   }
 }

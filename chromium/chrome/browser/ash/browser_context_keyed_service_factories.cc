@@ -11,10 +11,15 @@
 #include "chrome/browser/ash/borealis/borealis_service_factory.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_scheduler_user_service.h"
+#include "chrome/browser/ash/crosapi/persistent_forced_extension_keep_alive.h"
 #include "chrome/browser/ash/crostini/crostini_engagement_metrics_service.h"
 #include "chrome/browser/ash/eche_app/eche_app_manager_factory.h"
+#include "chrome/browser/ash/extensions/file_manager/event_router_factory.h"
+#include "chrome/browser/ash/extensions/input_method_api.h"
+#include "chrome/browser/ash/extensions/media_player_api.h"
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
 #include "chrome/browser/ash/file_system_provider/service_factory.h"
+#include "chrome/browser/ash/fileapi/file_change_service_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/kerberos/kerberos_credentials_manager_factory.h"
 #include "chrome/browser/ash/lock_screen_apps/lock_screen_apps.h"
@@ -38,15 +43,12 @@
 #include "chrome/browser/ash/secure_channel/nearby_connector_factory.h"
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
 #include "chrome/browser/ash/tether/tether_service_factory.h"
-#include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
-#include "chrome/browser/chromeos/extensions/input_method_api.h"
-#include "chrome/browser/chromeos/extensions/media_player_api.h"
-#include "chrome/browser/chromeos/fileapi/file_change_service_factory.h"
 #include "chrome/browser/ui/ash/calendar/calendar_keyed_service_factory.h"
 #include "chrome/browser/ui/ash/global_media_controls/cast_media_notification_producer_keyed_service_factory.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
+#include "printing/buildflags/buildflags.h"
 
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
 #include "chrome/browser/ash/printing/cups_proxy_service_manager_factory.h"
 #include "chrome/browser/extensions/api/printing/printing_api_handler.h"
 #endif
@@ -64,8 +66,9 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   bruschetta::BruschettaServiceFactory::GetInstance();
   CastMediaNotificationProducerKeyedServiceFactory::GetInstance();
   cert_provisioning::CertProvisioningSchedulerUserServiceFactory::GetInstance();
+  crosapi::PersistentForcedExtensionKeepAliveFactory::GetInstance();
   crostini::CrostiniEngagementMetricsService::Factory::GetInstance();
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
   CupsProxyServiceManagerFactory::GetInstance();
 #endif
   CupsPrintersManagerFactory::GetInstance();
@@ -74,7 +77,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   eche_app::EcheAppManagerFactory::GetInstance();
   extensions::InputMethodAPI::GetFactoryInstance();
   extensions::MediaPlayerAPI::GetFactoryInstance();
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
   extensions::PrintingAPIHandler::GetFactoryInstance();
 #endif
   FileChangeServiceFactory::GetInstance();

@@ -8,7 +8,6 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/strings/stringprintf.h"
-#include "base/values.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/renderer/bindings/api_binding.h"
 #include "extensions/renderer/bindings/api_binding_hooks.h"
@@ -208,7 +207,7 @@ void APIBindingsSystemTest::OnAPIRequest(
 void APIBindingsSystemTest::OnEventListenersChanged(
     const std::string& event_name,
     binding::EventListenersChanged changed,
-    const base::DictionaryValue* filter,
+    const base::Value::Dict* filter,
     bool was_manual,
     v8::Local<v8::Context> context) {}
 
@@ -216,12 +215,9 @@ void APIBindingsSystemTest::ValidateLastRequest(
     const std::string& expected_name,
     const std::string& expected_arguments) {
   ASSERT_TRUE(last_request());
-  // Note that even if no arguments are provided by the API call, we should
-  // have an empty list.
-  ASSERT_TRUE(last_request()->arguments_list);
   EXPECT_EQ(expected_name, last_request()->method_name);
   EXPECT_EQ(ReplaceSingleQuotes(expected_arguments),
-            ValueToString(*last_request()->arguments_list));
+            ValueToString(last_request()->arguments_list));
 }
 
 v8::Local<v8::Value> APIBindingsSystemTest::CallFunctionOnObject(

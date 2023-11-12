@@ -29,15 +29,15 @@
 #include "base/android/bundle_utils.h"
 #include "base/task/thread_pool/environment_config.h"
 #include "chrome/browser/android/signin/fre_mobile_identity_consistency_field_trial.h"
-#include "chrome/browser/chrome_browser_field_trials_mobile.h"
 #include "chrome/browser/flags/android/cached_feature_flags.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/common/chrome_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/services/multidevice_setup/public/cpp/first_run_field_trial.h"
 #include "chrome/browser/ash/login/consolidated_consent_field_trial.h"
+#include "chrome/browser/ash/login/hid_detection_revamp_field_trial.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/first_run_field_trial.h"
 #endif
 
 ChromeBrowserFieldTrials::ChromeBrowserFieldTrials(PrefService* local_state)
@@ -48,21 +48,22 @@ ChromeBrowserFieldTrials::ChromeBrowserFieldTrials(PrefService* local_state)
 ChromeBrowserFieldTrials::~ChromeBrowserFieldTrials() {
 }
 
-void ChromeBrowserFieldTrials::SetUpFieldTrials() {
-  // Field trials that are shared by all platforms.
-  InstantiateDynamicTrials();
-
-#if BUILDFLAG(IS_ANDROID)
-  chrome::SetupMobileFieldTrials();
-#endif
+void ChromeBrowserFieldTrials::OnVariationsSetupComplete() {
+  // Persistent histograms must be enabled ASAP, but depends on Features.
+  base::FilePath metrics_dir;
+  if (base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir)) {
+    InstantiatePersistentHistograms(metrics_dir);
+  }
 }
 
-void ChromeBrowserFieldTrials::SetUpFeatureControllingFieldTrials(
+void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
     bool has_seed,
     const variations::EntropyProviders& entropy_providers,
     base::FeatureList* feature_list) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::consolidated_consent_field_trial::Create(
+      entropy_providers.default_entropy(), feature_list, local_state_);
+  ash::hid_detection_revamp_field_trial::Create(
       entropy_providers.default_entropy(), feature_list, local_state_);
 #endif
 
@@ -83,6 +84,18 @@ void ChromeBrowserFieldTrials::SetUpFeatureControllingFieldTrials(
     ash::multidevice_setup::CreateFirstRunFieldTrial(feature_list);
 #endif
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  // RegisterSyntheticTrials doesn't have access to entropy providers which are
+  // needed to verify group consistency for
+  // FREMobileIdentityConsistencySynthetic and decide whether to assign
+  // a variation ID to that study. To work around that - grab the variation ID
+  // here and perform the actual registration in RegisterSyntheticTrials().
+  fre_consistency_trial_variation_id_ =
+      fre_mobile_identity_consistency_field_trial::GetFREFieldTrialVariationId(
+          entropy_providers.low_entropy_value(),
+          entropy_providers.low_entropy_domain());
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
@@ -136,38 +149,19 @@ void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
         kBackgroundThreadPoolTrial, group_name);
   }
 
-  {
-    // MobileIdentityConsistencyFRESynthetic field trial.
-    static constexpr char kFREMobileIdentityConsistencyTrial[] =
-        "FREMobileIdentityConsistencySynthetic";
-    const std::string group =
-        fre_mobile_identity_consistency_field_trial::GetFREFieldTrialGroup();
-    ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+  // MobileIdentityConsistencyFRESynthetic field trial.
+  static constexpr char kFREMobileIdentityConsistencyTrial[] =
+      "FREMobileIdentityConsistencySynthetic";
+  const std::string group =
+      fre_mobile_identity_consistency_field_trial::GetFREFieldTrialGroup();
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      kFREMobileIdentityConsistencyTrial, group,
+      variations::SyntheticTrialAnnotationMode::kCurrentLog);
+  if (fre_consistency_trial_variation_id_ != variations::EMPTY_ID) {
+    variations::AssociateGoogleVariationID(
+        variations::GOOGLE_WEB_PROPERTIES_ANY_CONTEXT,
         kFREMobileIdentityConsistencyTrial, group,
-        variations::SyntheticTrialAnnotationMode::kCurrentLog);
-
-    if (fre_mobile_identity_consistency_field_trial::IsFREFieldTrialEnabled()) {
-      // MobileIdentityConsistencyFREVariationsSynthetic field trial.
-      // This trial experiments with different title and subtitle variation in
-      // the FRE UI. This is a follow up experiment to
-      // MobileIdentityConsistencyFRESynthetic and thus is only used for the
-      // enabled population of MobileIdentityConsistencyFRESynthetic.
-      static constexpr char kFREMobileIdentityConsistencyVariationsTrial[] =
-          "FREMobileIdentityConsistencyVariationsSynthetic";
-      const std::string variation_group =
-          fre_mobile_identity_consistency_field_trial::
-              GetFREVariationsFieldTrialGroup();
-      ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-          kFREMobileIdentityConsistencyVariationsTrial, variation_group);
-    }
+        fre_consistency_trial_variation_id_);
   }
 #endif  // BUILDFLAG(IS_ANDROID)
-}
-
-void ChromeBrowserFieldTrials::InstantiateDynamicTrials() {
-  // Persistent histograms must be enabled as soon as possible.
-  base::FilePath metrics_dir;
-  if (base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir)) {
-    InstantiatePersistentHistograms(metrics_dir);
-  }
 }

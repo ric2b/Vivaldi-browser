@@ -18,7 +18,7 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/pin_setup_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/pin_setup_screen_handler.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
@@ -131,6 +131,23 @@ IN_PROC_BROWSER_TEST_F(PinSetupScreenTest, Skipped) {
   histogram_tester_.ExpectTotalCount("OOBE.StepCompletionTime.Pin-setup", 0);
 }
 
+// If the PIN setup screen is skipped, `extra_factors_auth_session` should be
+// cleared.
+IN_PROC_BROWSER_TEST_F(PinSetupScreenTest, SkippedClearsAuthSession) {
+  LoginDisplayHost::default_host()
+      ->GetWizardContextForTesting()
+      ->extra_factors_auth_session = std::make_unique<UserContext>();
+
+  ShowPinSetupScreen();
+  WaitForScreenExit();
+
+  EXPECT_EQ(screen_result_.value(), PinSetupScreen::Result::NOT_APPLICABLE);
+  EXPECT_EQ(LoginDisplayHost::default_host()
+                ->GetWizardContextForTesting()
+                ->extra_factors_auth_session,
+            nullptr);
+}
+
 // Oobe should show the PIN setup screen if the device is in tablet mode.
 IN_PROC_BROWSER_TEST_F(PinSetupScreenTest, ShowInTabletMode) {
   SetTabletMode(true);
@@ -139,6 +156,25 @@ IN_PROC_BROWSER_TEST_F(PinSetupScreenTest, ShowInTabletMode) {
   TapSkipButton();
   WaitForScreenExit();
   EXPECT_EQ(screen_result_.value(), PinSetupScreen::Result::USER_SKIP);
+}
+
+// If the PIN setup screen is shown, `extra_factors_auth_session` should be
+// cleared.
+IN_PROC_BROWSER_TEST_F(PinSetupScreenTest, ShowClearsAuthSession) {
+  LoginDisplayHost::default_host()
+      ->GetWizardContextForTesting()
+      ->extra_factors_auth_session = std::make_unique<UserContext>();
+  SetTabletMode(true);
+
+  ShowPinSetupScreen();
+  TapSkipButton();
+  WaitForScreenExit();
+
+  EXPECT_EQ(screen_result_.value(), PinSetupScreen::Result::USER_SKIP);
+  EXPECT_EQ(LoginDisplayHost::default_host()
+                ->GetWizardContextForTesting()
+                ->extra_factors_auth_session,
+            nullptr);
 }
 
 // Fixture to pretend that we have hardware support for login.

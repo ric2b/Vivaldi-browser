@@ -27,20 +27,20 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/customization/customization_wallpaper_downloader.h"
 #include "chrome/browser/ash/customization/customization_wallpaper_util.h"
+#include "chrome/browser/ash/extensions/default_app_order.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/net/delay_network_call.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/extensions/default_app_order.h"
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -241,7 +241,7 @@ class ServicesCustomizationExternalLoader
 
     VLOG(1) << "ServicesCustomization extension loader publishing "
             << apps_.size() << " apps.";
-    LoadFinishedWithDict(apps_.Clone());
+    LoadFinished(apps_.Clone());
   }
 
  protected:
@@ -313,7 +313,7 @@ StartupCustomizationDocument::StartupCustomizationDocument()
   {
     // Loading manifest causes us to do blocking IO on UI thread.
     // Temporarily allow it until we fix http://crosbug.com/11103
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlocking allow_blocking;
     base::FilePath startup_customization_manifest;
     base::PathService::Get(FILE_STARTUP_CUSTOMIZATION_MANIFEST,
                            &startup_customization_manifest);
@@ -356,9 +356,9 @@ void StartupCustomizationDocument::Init(
     if (keyboard_layout_ptr)
       keyboard_layout_ = *keyboard_layout_ptr;
 
-    std::string hwid;
-    if (statistics_provider->GetMachineStatistic(
-            chromeos::system::kHardwareClassKey, &hwid)) {
+    if (const absl::optional<base::StringPiece> hwid =
+            statistics_provider->GetMachineStatistic(
+                chromeos::system::kHardwareClassKey)) {
       base::Value::List* hwid_list = root_->FindList(kHwidMapAttr);
       if (hwid_list) {
         for (const base::Value& hwid_value : *hwid_list) {
@@ -370,7 +370,7 @@ void StartupCustomizationDocument::Init(
               hwid_dictionary ? hwid_dictionary->FindString(kHwidMaskAttr)
                               : nullptr;
           if (hwid_mask) {
-            if (base::MatchPattern(hwid, *hwid_mask)) {
+            if (base::MatchPattern(hwid.value(), *hwid_mask)) {
               // If HWID for this machine matches some mask, use HWID specific
               // settings.
               const std::string* initial_locale =
@@ -400,12 +400,21 @@ void StartupCustomizationDocument::Init(
   }
 
   // If manifest doesn't exist still apply values from VPD.
-  statistics_provider->GetMachineStatistic(chromeos::system::kInitialLocaleKey,
-                                           &initial_locale_);
-  statistics_provider->GetMachineStatistic(
-      chromeos::system::kInitialTimezoneKey, &initial_timezone_);
-  statistics_provider->GetMachineStatistic(chromeos::system::kKeyboardLayoutKey,
-                                           &keyboard_layout_);
+  if (const absl::optional<base::StringPiece> locale_statistic =
+          statistics_provider->GetMachineStatistic(
+              chromeos::system::kInitialLocaleKey)) {
+    initial_locale_ = std::string(locale_statistic.value());
+  }
+  if (const absl::optional<base::StringPiece> timezone_statistic =
+          statistics_provider->GetMachineStatistic(
+              chromeos::system::kInitialTimezoneKey)) {
+    initial_timezone_ = std::string(timezone_statistic.value());
+  }
+  if (const absl::optional<base::StringPiece> keyboard_statistic =
+          statistics_provider->GetMachineStatistic(
+              chromeos::system::kKeyboardLayoutKey)) {
+    keyboard_layout_ = std::string(keyboard_statistic.value());
+  }
   configured_locales_ = base::SplitString(
       initial_locale_, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
@@ -580,14 +589,13 @@ void ServicesCustomizationDocument::StartFetching() {
     return;
 
   if (!url_.is_valid()) {
-    std::string customization_id;
     chromeos::system::StatisticsProvider* provider =
         chromeos::system::StatisticsProvider::GetInstance();
-    if (provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey,
-                                      &customization_id) &&
-        !customization_id.empty()) {
+    const absl::optional<base::StringPiece> customization_id =
+        provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey);
+    if (customization_id && !customization_id->empty()) {
       url_ = GURL(base::StringPrintf(
-          kManifestUrl, base::ToLowerASCII(customization_id).c_str()));
+          kManifestUrl, base::ToLowerASCII(customization_id.value()).c_str()));
     } else {
       // Remember that there is no customization ID in VPD.
       OnCustomizationNotFound();

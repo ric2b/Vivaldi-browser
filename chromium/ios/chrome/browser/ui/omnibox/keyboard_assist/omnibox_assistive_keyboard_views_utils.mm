@@ -5,11 +5,10 @@
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
 
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_delegate.h"
-#import "ios/chrome/browser/ui/omnibox/keyboard_assist/voice_search_keyboard_accessory_button.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/voice/voice_search_availability.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -45,13 +44,13 @@ void SetUpButtonWithIcon(UIButton* button, NSString* iconName) {
 
 NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
     id<OmniboxAssistiveKeyboardDelegate> delegate,
-    id<UIPasteConfigurationSupporting> pasteTarget) {
+    id<UIPasteConfigurationSupporting> pasteTarget,
+    bool useLens) {
   NSMutableArray<UIControl*>* controls = [NSMutableArray<UIControl*> array];
 
-  UIButton* voiceSearchButton = [[VoiceSearchKeyboardAccessoryButton alloc]
-      initWithVoiceSearchAvailability:std::make_unique<
-                                          VoiceSearchAvailability>()];
+  UIButton* voiceSearchButton = [[UIButton alloc] initWithFrame:CGRectZero];
   SetUpButtonWithIcon(voiceSearchButton, @"keyboard_accessory_voice_search");
+  voiceSearchButton.enabled = ios::provider::IsVoiceSearchEnabled();
   NSString* accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_KEYBOARD_ACCESSORY_VIEW_VOICE_SEARCH);
   voiceSearchButton.accessibilityLabel = accessibilityLabel;
@@ -62,13 +61,24 @@ NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
   [controls addObject:voiceSearchButton];
 
   UIButton* cameraButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  SetUpButtonWithIcon(cameraButton, @"keyboard_accessory_qr_scanner");
-  [cameraButton addTarget:delegate
-                   action:@selector(keyboardAccessoryCameraSearchTapped)
-         forControlEvents:UIControlEventTouchUpInside];
-  SetA11yLabelAndUiAutomationName(
-      cameraButton, IDS_IOS_KEYBOARD_ACCESSORY_VIEW_QR_CODE_SEARCH,
-      @"QR code Search");
+  if (useLens) {
+    // Set up the camera button for Lens.
+    SetUpButtonWithIcon(cameraButton, @"keyboard_accessory_lens");
+    [cameraButton addTarget:delegate
+                     action:@selector(keyboardAccessoryLensTapped)
+           forControlEvents:UIControlEventTouchUpInside];
+    SetA11yLabelAndUiAutomationName(
+        cameraButton, IDS_IOS_KEYBOARD_ACCESSORY_VIEW_LENS, @"QR code Search");
+  } else {
+    // Set up the camera button for the QR scanner.
+    SetUpButtonWithIcon(cameraButton, @"keyboard_accessory_qr_scanner");
+    [cameraButton addTarget:delegate
+                     action:@selector(keyboardAccessoryCameraSearchTapped)
+           forControlEvents:UIControlEventTouchUpInside];
+    SetA11yLabelAndUiAutomationName(
+        cameraButton, IDS_IOS_KEYBOARD_ACCESSORY_VIEW_QR_CODE_SEARCH,
+        @"QR code Search");
+  }
   [controls addObject:cameraButton];
 
   if (base::FeatureList::IsEnabled(kOmniboxKeyboardPasteButton)) {

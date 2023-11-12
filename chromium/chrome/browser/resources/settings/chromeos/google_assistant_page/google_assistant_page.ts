@@ -16,19 +16,19 @@ import '../../prefs/pref_util.js';
 import '../../settings_shared.css.js';
 
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {Route} from '../../router.js';
+import {PrefsMixin, PrefsMixinInterface} from '../../prefs/prefs_mixin.js';
 import {cast, castExists} from '../assert_extras.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {routes} from '../os_route.js';
-import {PrefsBehavior, PrefsBehaviorInterface} from '../prefs_behavior.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
+import {Route} from '../router.js';
 
 import {GoogleAssistantBrowserProxy, GoogleAssistantBrowserProxyImpl} from './google_assistant_browser_proxy.js';
 import {getTemplate} from './google_assistant_page.html.js';
@@ -67,13 +67,12 @@ const SettingsGoogleAssistantPageElementBase =
     mixinBehaviors(
         [
           DeepLinkingBehavior,
-          PrefsBehavior,
-          RouteObserverBehavior,
         ],
-        WebUIListenerMixin(I18nMixin(PolymerElement))) as {
+        RouteObserverMixin(
+            PrefsMixin(WebUiListenerMixin(I18nMixin(PolymerElement))))) as {
       new (): PolymerElement & I18nMixinInterface &
-          WebUIListenerMixinInterface & DeepLinkingBehaviorInterface &
-          PrefsBehaviorInterface & RouteObserverBehaviorInterface,
+          WebUiListenerMixinInterface & PrefsMixinInterface &
+          RouteObserverMixinInterface & DeepLinkingBehaviorInterface,
     };
 
 class SettingsGoogleAssistantPageElement extends
@@ -179,7 +178,7 @@ class SettingsGoogleAssistantPageElement extends
   override ready() {
     super.ready();
 
-    this.addWebUIListener('hotwordDeviceUpdated', (hasHotword: boolean) => {
+    this.addWebUiListener('hotwordDeviceUpdated', (hasHotword: boolean) => {
       this.hotwordDspAvailable_ = hasHotword;
     });
 

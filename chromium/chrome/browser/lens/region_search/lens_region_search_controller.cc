@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "components/lens/lens_entrypoints.h"
 #include "components/lens/lens_features.h"
+#include "components/lens/lens_metadata.mojom.h"
 #include "components/lens/lens_rendering_environment.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -25,12 +26,14 @@
 
 namespace lens {
 
-LensRegionSearchController::LensRegionSearchController(
-    content::WebContents* web_contents,
-    Browser* browser)
-    : content::WebContentsObserver(web_contents), browser_(browser) {
-  screenshot_flow_ =
-      std::make_unique<image_editor::ScreenshotFlow>(web_contents);
+LensRegionSearchControllerData::LensRegionSearchControllerData() = default;
+LensRegionSearchControllerData::~LensRegionSearchControllerData() = default;
+
+RegionSearchCapturedData::RegionSearchCapturedData() = default;
+RegionSearchCapturedData::~RegionSearchCapturedData() = default;
+
+LensRegionSearchController::LensRegionSearchController(Browser* browser)
+    : browser_(browser) {
   weak_this_ = weak_factory_.GetWeakPtr();
 }
 
@@ -38,15 +41,17 @@ LensRegionSearchController::~LensRegionSearchController() {
   CloseWithReason(views::Widget::ClosedReason::kLostFocus);
 }
 
-void LensRegionSearchController::Start(bool use_fullscreen_capture,
+void LensRegionSearchController::Start(content::WebContents* web_contents,
+                                       bool use_fullscreen_capture,
                                        bool is_google_default_search_provider) {
   is_google_default_search_provider_ = is_google_default_search_provider;
-  if (!web_contents() || !browser_)
+  if (!web_contents || !browser_)
     return;
 
+  Observe(web_contents);
   if (!screenshot_flow_)
     screenshot_flow_ =
-        std::make_unique<image_editor::ScreenshotFlow>(web_contents());
+        std::make_unique<image_editor::ScreenshotFlow>(web_contents);
 
   base::OnceCallback<void(const image_editor::ScreenshotCaptureResult&)>
       callback = base::BindOnce(&LensRegionSearchController::OnCaptureCompleted,
@@ -153,8 +158,24 @@ void LensRegionSearchController::RecordRegionSizeRelatedMetrics(
       GetAspectRatioFromSize(region_height, region_width));
 }
 
+bool LensRegionSearchController::NeedsDownscale(gfx::Image image) {
+  if (image.Height() * image.Width() < features::GetMaxAreaForRegionSearch()) {
+    return false;
+  }
+  if (image.Width() < features::GetMaxPixelsForRegionSearch() &&
+      image.Height() < features::GetMaxPixelsForRegionSearch()) {
+    return false;
+  }
+  return true;
+}
+
 void LensRegionSearchController::OnCaptureCompleted(
     const image_editor::ScreenshotCaptureResult& result) {
+  std::vector<lens::mojom::LatencyLogPtr> log_data;
+  log_data.push_back(lens::mojom::LatencyLog::New(
+      lens::mojom::Phase::OVERALL_START, gfx::Size(), gfx::Size(),
+      lens::mojom::ImageFormat::ORIGINAL, base::Time::Now()));
+
   // Close all open UI overlays and bubbles.
   CloseWithReason(views::Widget::ClosedReason::kLostFocus);
   image_editor::ScreenshotCaptureResultCode code = result.result_code;
@@ -180,7 +201,18 @@ void LensRegionSearchController::OnCaptureCompleted(
   // Record region size related UMA histograms according to region and screen.
   RecordRegionSizeRelatedMetrics(result.screen_bounds, captured_image.Size());
 
+  if (NeedsDownscale(captured_image)) {
+    log_data.push_back(lens::mojom::LatencyLog::New(
+        lens::mojom::Phase::DOWNSCALE_START, captured_image.Size(), gfx::Size(),
+        lens::mojom::ImageFormat::ORIGINAL, base::Time::Now()));
+  }
   const gfx::Image& image = ResizeImageIfNecessary(captured_image);
+  if (NeedsDownscale(captured_image)) {
+    log_data.push_back(lens::mojom::LatencyLog::New(
+        lens::mojom::Phase::DOWNSCALE_END, captured_image.Size(), image.Size(),
+        lens::mojom::ImageFormat::ORIGINAL, base::Time::Now()));
+  }
+
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(web_contents());
   if (!core_tab_helper) {
@@ -200,12 +232,16 @@ void LensRegionSearchController::OnCaptureCompleted(
         image, captured_image.Size(), entry_point,
         /* is_region_search_request= */ true,
         /* is_side_panel_enabled_for_feature= */
-        lens::features::IsLensSidePanelEnabledForRegionSearch());
+        lens::features::IsLensSidePanelEnabledForRegionSearch(),
+        std::move(log_data));
   } else {
     core_tab_helper->SearchByImage(image, captured_image.Size());
   }
 
   RecordCaptureResult(lens::LensRegionSearchCaptureResult::SUCCESS);
+  if (web_contents() && lens::features::IsLensRegionSearchStaticPageEnabled()) {
+    web_contents()->ClosePage();
+  }
 }
 
 void LensRegionSearchController::WebContentsDestroyed() {
@@ -243,14 +279,24 @@ void LensRegionSearchController::CloseWithReason(
   if (bubble_widget_) {
     std::exchange(bubble_widget_, nullptr)->CloseWithReason(reason);
   }
-  if (screenshot_flow_)
+  if (screenshot_flow_) {
     screenshot_flow_->CancelCapture();
+    screenshot_flow_.reset();
+  }
+  if (web_contents() && lens::features::IsLensRegionSearchStaticPageEnabled()) {
+    web_contents()->ClosePage();
+  }
 }
 
 bool LensRegionSearchController::IsOverlayUIVisibleForTesting() {
   if (!bubble_widget_ || !screenshot_flow_)
     return false;
   return bubble_widget_->IsVisible() && screenshot_flow_->IsCaptureModeActive();
+}
+
+void LensRegionSearchController::SetWebContentsForTesting(
+    content::WebContents* web_contents) {
+  Observe(web_contents);
 }
 
 }  // namespace lens

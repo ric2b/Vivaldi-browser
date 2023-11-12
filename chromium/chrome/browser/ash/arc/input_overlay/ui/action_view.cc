@@ -7,14 +7,20 @@
 #include "base/bind.h"
 #include "base/cxx17_backports.h"
 #include "base/strings/string_piece.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/grit/generated_resources.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/button/image_button_factory.h"
 
-namespace arc {
-namespace input_overlay {
+namespace arc::input_overlay {
 namespace {
 constexpr int kMenuEntryOffset = 4;
+
+// TODO(b/250900717): Update according to UX/UI spec.
+constexpr int kTrashButtonSize = 20;
+constexpr SkColor kTrashIconColor = SK_ColorRED;
 
 // For the keys that are caught by display overlay, check if they are reserved
 // for special use.
@@ -43,6 +49,8 @@ ActionView::ActionView(Action* action,
     : views::View(),
       action_(action),
       display_overlay_controller_(display_overlay_controller),
+      allow_reposition_(
+          display_overlay_controller->touch_injector()->allow_reposition()),
       beta_(display_overlay_controller->touch_injector()->beta()) {}
 ActionView::~ActionView() = default;
 
@@ -58,11 +66,13 @@ void ActionView::SetDisplayMode(DisplayMode mode, ActionLabel* editing_label) {
     return;
   if (mode == DisplayMode::kView) {
     RemoveEditButton();
+    RemoveTrashButton();
     if (!IsInputBound(action_->GetCurrentDisplayedInput()))
       SetVisible(false);
   }
   if (mode == DisplayMode::kEdit) {
     AddEditButton();
+    AddTrashButton();
     if (!IsInputBound(*action_->current_input()))
       SetVisible(true);
   }
@@ -168,24 +178,24 @@ bool ActionView::ShouldShowErrorMsg(ui::DomCode code,
 }
 
 bool ActionView::OnMousePressed(const ui::MouseEvent& event) {
-  if (!beta_)
+  if (!allow_reposition_)
     return false;
   OnDragStart(event);
   return true;
 }
 
 bool ActionView::OnMouseDragged(const ui::MouseEvent& event) {
-  return beta_ ? OnDragUpdate(event) : false;
+  return allow_reposition_ ? OnDragUpdate(event) : false;
 }
 
 void ActionView::OnMouseReleased(const ui::MouseEvent& event) {
-  if (!beta_)
+  if (!allow_reposition_)
     return;
   OnDragEnd();
 }
 
 void ActionView::OnGestureEvent(ui::GestureEvent* event) {
-  if (!beta_)
+  if (!allow_reposition_)
     return;
   switch (event->type()) {
     case ui::ET_GESTURE_SCROLL_BEGIN:
@@ -197,6 +207,7 @@ void ActionView::OnGestureEvent(ui::GestureEvent* event) {
         event->SetHandled();
       break;
     case ui::ET_GESTURE_SCROLL_END:
+    case ui::ET_SCROLL_FLING_START:
       OnDragEnd();
       event->SetHandled();
       break;
@@ -227,13 +238,55 @@ void ActionView::RemoveEditButton() {
   menu_entry_ = nullptr;
 }
 
+void ActionView::AddTrashButton() {
+  if (!beta_ || !editable_)
+    return;
+
+  auto trash_icon = ui::ImageModel::FromVectorIcon(
+      kTrashCanIcon, kTrashIconColor, kTrashButtonSize);
+  trash_button_ =
+      AddChildView(std::make_unique<views::ImageButton>(base::BindRepeating(
+          &ActionView::OnTrashButtonPressed, base::Unretained(this))));
+  trash_button_->SetImageModel(views::Button::STATE_NORMAL, trash_icon);
+  trash_button_->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
+  trash_button_->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
+  // TODO(b/253337606): Update the tooltip text.
+  trash_button_->SetTooltipText(u"Delete Action");
+  trash_button_->SetSize(gfx::Size(kTrashButtonSize, kTrashButtonSize));
+  UpdateTrashButtonPosition();
+}
+
+void ActionView::RemoveTrashButton() {
+  if (!editable_ || !trash_button_)
+    return;
+
+  RemoveChildViewT(trash_button_);
+  trash_button_ = nullptr;
+}
+
+void ActionView::OnTrashButtonPressed() {
+  if (!display_overlay_controller_)
+    return;
+
+  display_overlay_controller_->OnActionTrashButtonPressed(action_);
+}
+
+void ActionView::UpdateTrashButtonPosition() {
+  if (!trash_button_)
+    return;
+
+  trash_button_->SetPosition(
+      gfx::Point(std::max(0, center_.x() - kTrashButtonSize / 2),
+                 std::max(0, center_.y() - kTrashButtonSize / 2)));
+}
+
 void ActionView::OnDragStart(const ui::LocatedEvent& event) {
-  start_drag_pos_ = event.location();
+  start_drag_event_pos_ = event.location();
 }
 
 bool ActionView::OnDragUpdate(const ui::LocatedEvent& event) {
   auto new_location = event.location();
-  auto target_location = origin() + (new_location - start_drag_pos_);
+  auto target_location = origin() + (new_location - start_drag_event_pos_);
   target_location.set_x(base::clamp(target_location.x(), /*lo=*/0,
                                     /*hi=*/parent()->width() - width()));
   target_location.set_y(base::clamp(target_location.y(), /*lo=*/0,
@@ -249,12 +302,11 @@ void ActionView::OnDragEnd() {
 }
 
 void ActionView::ChangePositionBinding(const gfx::Point& new_touch_center) {
-  DCHECK(beta_);
-  if (!beta_)
+  DCHECK(allow_reposition_);
+  if (!allow_reposition_)
     return;
 
   action_->PrepareToBindPosition(new_touch_center);
 }
 
-}  // namespace input_overlay
-}  // namespace arc
+}  // namespace arc::input_overlay

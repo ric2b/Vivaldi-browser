@@ -182,8 +182,8 @@
       for (let j = 0; j < actions[i].actions.length; j++) {
         if (actions[i].actions[j].type == "keyDown" ||
             actions[i].actions[j].type == "keyUp") {
-          return Promise.reject(new Error("we do not support keydown and keyup actions, " +
-                                          "please use test_driver.send_keys"));
+          return Promise.reject(new Error("We do not support keydown and keyup actions, " +
+                                          "please use test_driver.send_keys. See crbug.com/893480."));
         }
 
         if ('origin' in actions[i].actions[j]) {
@@ -431,8 +431,6 @@
   }
 
   window.test_driver_internal.set_permission = function(permission_params) {
-    // TODO(https://crbug.com/977612): Chromium currently lacks support for
-    // |permission_params.one_realm| and will always consider it is set to false.
     return internals.setPermission(permission_params.descriptor,
                                    permission_params.state);
   }

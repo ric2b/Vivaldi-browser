@@ -100,6 +100,33 @@ function updateMirroring(enabled) {
   $('mirroring-toggle').checked = enabled;
 }
 
+function updateBulkPinning(enabled) {
+  $('bulk-pinning-toggle').checked = enabled;
+  if (enabled) {
+    return;
+  }
+  $('bulk-pinning-setup-stage').innerText = 'Unknown';
+  $('bulk-pinning-available-disk-space').innerText = 'Unknown';
+  $('bulk-pinning-required-disk-space').innerText = 'Unknown';
+  $('bulk-pinning-pinned-disk-space').innerText = 'Unknown';
+  $('bulk-pinning-progress').removeAttribute('max');
+  $('bulk-pinning-progress').removeAttribute('value');
+}
+
+function onBulkPinningProgress(progress) {
+  const isBulkPinningEnabled = $('bulk-pinning-toggle').checked;
+  if (!isBulkPinningEnabled) {
+    return;
+  }
+  $('bulk-pinning-setup-stage').innerText = progress.stage;
+  $('bulk-pinning-available-disk-space').innerText =
+      progress.availableDiskSpace;
+  $('bulk-pinning-required-disk-space').innerText = progress.requiredDiskSpace;
+  $('bulk-pinning-pinned-disk-space').innerText = progress.pinnedDiskSpace;
+  $('bulk-pinning-progress').value = Number(progress.pinnedDiskSpace);
+  $('bulk-pinning-progress').max = Number(progress.requiredDiskSpace);
+}
+
 function updateStartupArguments(args) {
   $('startup-arguments-input').value = args;
 }
@@ -363,6 +390,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   $('mirroring-toggle').addEventListener('change', function(e) {
     chrome.send('setMirroringEnabled', [e.target.checked]);
+  });
+
+  $('bulk-pinning-toggle').addEventListener('change', function(e) {
+    chrome.send('setBulkPinningEnabled', [e.target.checked]);
   });
 
   $('startup-arguments-form').addEventListener('submit', function(e) {

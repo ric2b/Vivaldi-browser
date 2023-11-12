@@ -1114,6 +1114,38 @@ TEST_F(ManifestParserTest, IconsParseRules) {
     EXPECT_FALSE(IsManifestEmpty(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
+
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(R"(
+          {
+            "icons": [
+              {
+                "src": "foo.webp",
+                "type": "image/webp",
+                "sizes": "192x192"
+              },
+              {
+                "src": "foo.svg",
+                "type": "image/svg+xml",
+                "sizes": "144x144"
+              }
+            ]
+          }
+        )");
+    ASSERT_EQ(manifest->icons.size(), 2u);
+    EXPECT_EQ(manifest->icons[0]->src, KURL(DefaultDocumentUrl(), "foo.webp"));
+    EXPECT_EQ(manifest->icons[0]->type, "image/webp");
+    EXPECT_EQ(manifest->icons[0]->sizes.size(), 1u);
+    EXPECT_EQ(manifest->icons[0]->sizes[0].width(), 192);
+    EXPECT_EQ(manifest->icons[0]->sizes[0].height(), 192);
+    EXPECT_EQ(manifest->icons[1]->src, KURL(DefaultDocumentUrl(), "foo.svg"));
+    EXPECT_EQ(manifest->icons[1]->type, "image/svg+xml");
+    EXPECT_EQ(manifest->icons[1]->sizes.size(), 1u);
+    EXPECT_EQ(manifest->icons[1]->sizes[0].width(), 144);
+    EXPECT_EQ(manifest->icons[1]->sizes[0].height(), 144);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
 }
 
 TEST_F(ManifestParserTest, ScreenshotsParseRules) {
@@ -5605,6 +5637,153 @@ TEST_F(ManifestParserTest, UserPreferencesParseRules) {
                 0xFFFF0000u);
       EXPECT_FALSE(
           manifest->user_preferences->color_scheme_dark->has_background_color);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+  }
+}
+
+TEST_F(ManifestParserTest, DarkColorOverrideParseRules) {
+  {
+    ScopedWebAppDarkModeForTest feature(false);
+
+    // Feature not enabled, should not be parsed.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}],
+          "background_colors":
+            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}]
+          })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+  }
+  {
+    ScopedWebAppDarkModeForTest feature(true);
+
+    // Manifest does not contain any overrides fields.
+    {
+      auto& manifest = ParseManifest(R"({ })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Overrides objects are empty.
+    {
+      auto& manifest =
+          ParseManifest(R"({ "theme_colors": [], "background_colors": [] })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Don't parse if the overrides aren't arrays.
+    {
+      auto& manifest =
+          ParseManifest(R"({ "theme_colors": {}, "background_colors": 5 })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(2u, GetErrorCount());
+      EXPECT_EQ("property 'theme_colors' ignored, type array expected.",
+                errors()[0]);
+      EXPECT_EQ("property 'background_colors' ignored, type array expected.",
+                errors()[1]);
+    }
+
+    // Override arrays don't contain objects.
+    {
+      auto& manifest = ParseManifest(R"({
+            "theme_colors": [true],
+            "background_colors":
+            [5, {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
+            })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_TRUE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_background_color, 0xFF0000FFu);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Valid overrides should be parsed
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}],
+          "background_colors":
+            [{"color": "#FFFFFF", "media": "(prefers-color-scheme: dark) "}]
+          })");
+      EXPECT_TRUE(manifest->has_dark_theme_color);
+      EXPECT_TRUE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_theme_color, 0xFF000000u);
+      EXPECT_EQ(manifest->dark_background_color, 0xFFFFFFFFu);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Color from first matching media condition used.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000", "media":
+            "(prefers-color-scheme: dark) and (prefers-contrast: more) "},
+            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "},
+            {"color": "#00FF00", "media": "(prefers-color-scheme: dark) "}]
+          })");
+      EXPECT_TRUE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Invalid list items skipped.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000"},
+            {"media": "(prefers-color-scheme: dark) "},
+            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
+          })");
+      EXPECT_TRUE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Media query without "(prefers-color-scheme: dark)" not used as dark
+    // color.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000", "media": "(width >= 0) "}]
+          })");
+      EXPECT_FALSE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Case-insensitive media query is parsed.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000", "media": "(Prefers-color-scheme: DARK) "}]
+          })");
+      EXPECT_TRUE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_theme_color, 0xFF000000u);
+      EXPECT_EQ(0u, GetErrorCount());
+    }
+
+    // Media query containing more than "(prefer-color-scheme: dark)" skipped.
+    {
+      auto& manifest = ParseManifest(R"({
+          "theme_colors":
+            [{"color": "#000000",
+              "media": "(width >= 0) and (prefers-color-scheme: dark) "},
+            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
+          })");
+      EXPECT_TRUE(manifest->has_dark_theme_color);
+      EXPECT_FALSE(manifest->has_dark_background_color);
+      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
       EXPECT_EQ(0u, GetErrorCount());
     }
   }

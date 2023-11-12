@@ -40,15 +40,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
@@ -62,9 +61,6 @@
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
-#include "chrome/browser/chrome_for_testing/buildflags.h"
-#include "chrome/browser/component_updater/first_party_sets_component_installer.h"
-#include "chrome/browser/component_updater/registration.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -125,7 +121,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/device_event_log/device_event_log.h"
-#include "components/embedder_support/origin_trials/pref_names.h"
+#include "components/embedder_support/origin_trials/component_updater_utils.h"
 #include "components/embedder_support/switches.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/common/google_util.h"
@@ -192,9 +188,14 @@
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
+
+#if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
+#include "chrome/browser/component_updater/registration.h"
+#endif  // BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/flags/android/chrome_feature_list.h"
@@ -202,7 +203,7 @@
 #include "chrome/browser/ui/page_info/chrome_page_info_client.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #else
-#include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
+#include "chrome/browser/profiles/delete_profile_helper.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/resources_integrity.h"
 #include "chrome/browser/ui/browser.h"
@@ -358,7 +359,7 @@ std::unique_ptr<base::RunLoop>& GetMainRunLoopInstance() {
 void HandleTestParameters(const base::CommandLine& command_line) {
   // This parameter causes a null pointer crash (crash reporter trigger).
   if (command_line.HasSwitch(switches::kBrowserCrashTest)) {
-    IMMEDIATE_CRASH();
+    base::ImmediateCrash();
   }
 }
 
@@ -496,7 +497,11 @@ bool ShouldInstallSodaDuringPostProfileInit(
   return base::FeatureList::IsEnabled(
       ash::features::kOnDeviceSpeechRecognition);
 #else
+#if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
   return !command_line.HasSwitch(switches::kDisableComponentUpdate);
+#else
+  return false;
+#endif  // BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -565,7 +570,7 @@ void ChromeBrowserMainParts::ProfileInitManager::OnProfileAdded(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Ignore ChromeOS helper profiles (sign-in, lockscreen, etc).
-  if (!chromeos::ProfileHelper::IsRegularProfile(profile)) {
+  if (!ash::ProfileHelper::IsUserProfile(profile)) {
     // Notify of new profile initialization only for regular profiles. The
     // startup profile initialization is triggered by another code path.
     return;
@@ -664,73 +669,6 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
   // Record collected startup metrics.
   startup_metric_utils::RecordBrowserMainMessageLoopStart(
       base::TimeTicks::Now(), is_first_run);
-}
-
-void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
-    PrefService* local_state) {
-  // TODO(crbug.com/1211739): Temporary workaround to prevent an overly large
-  // config from crashing by exceeding command-line length limits. Set the limit
-  // to 1KB, which is far less than the known limits:
-  //  - Linux: kZygoteMaxMessageLength = 12288;
-  // This will still allow for critical updates to the public key or disabled
-  // features, but the disabled token list will be ignored.
-  const size_t kMaxAppendLength = 1024;
-  size_t appended_length = 0;
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(embedder_support::kOriginTrialPublicKey)) {
-    std::string new_public_key =
-        local_state->GetString(embedder_support::prefs::kOriginTrialPublicKey);
-    if (!new_public_key.empty()) {
-      command_line->AppendSwitchASCII(
-          embedder_support::kOriginTrialPublicKey,
-          local_state->GetString(
-              embedder_support::prefs::kOriginTrialPublicKey));
-
-      // Public key is 32 bytes
-      appended_length += 32;
-    }
-  }
-  if (!command_line->HasSwitch(
-          embedder_support::kOriginTrialDisabledFeatures)) {
-    const base::Value::List& override_disabled_feature_list =
-        local_state->GetList(
-            embedder_support::prefs::kOriginTrialDisabledFeatures);
-    std::vector<base::StringPiece> disabled_features;
-    for (const auto& item : override_disabled_feature_list) {
-      if (item.is_string())
-        disabled_features.push_back(item.GetString());
-    }
-    if (!disabled_features.empty()) {
-      const std::string override_disabled_features =
-          base::JoinString(disabled_features, "|");
-      command_line->AppendSwitchASCII(
-          embedder_support::kOriginTrialDisabledFeatures,
-          override_disabled_features);
-      appended_length += override_disabled_features.length();
-    }
-  }
-  if (!command_line->HasSwitch(embedder_support::kOriginTrialDisabledTokens)) {
-    const base::Value::List& disabled_token_list = local_state->GetList(
-        embedder_support::prefs::kOriginTrialDisabledTokens);
-    std::vector<base::StringPiece> disabled_tokens;
-    for (const auto& item : disabled_token_list) {
-      if (item.is_string())
-        disabled_tokens.push_back(item.GetString());
-    }
-    if (!disabled_tokens.empty()) {
-      const std::string disabled_token_switch =
-          base::JoinString(disabled_tokens, "|");
-      // Do not append the disabled token list if will exceed a reasonable
-      // length. See above.
-      if (appended_length + disabled_token_switch.length() <=
-          kMaxAppendLength) {
-        command_line->AppendSwitchASCII(
-            embedder_support::kOriginTrialDisabledTokens,
-            disabled_token_switch);
-      }
-    }
-  }
 }
 
 // -----------------------------------------------------------------------------
@@ -841,7 +779,8 @@ void ChromeBrowserMainParts::PostCreateMainMessageLoop() {
   UpgradeDetector::GetInstance()->Init();
 #endif
 
-  ThreadProfiler::SetMainThreadTaskRunner(base::ThreadTaskRunnerHandle::Get());
+  ThreadProfiler::SetMainThreadTaskRunner(
+      base::SingleThreadTaskRunner::GetCurrentDefault());
 
   // TODO(sebmarchand): Allow this to be created earlier if startup tracing is
   // enabled.
@@ -925,7 +864,8 @@ int ChromeBrowserMainParts::OnLocalStateLoaded(
   if (apply_first_run_result != content::RESULT_CODE_NORMAL_EXIT)
     return apply_first_run_result;
 
-  SetupOriginTrialsCommandLine(browser_process_->local_state());
+  embedder_support::SetupOriginTrialsCommandLine(
+      browser_process_->local_state());
 
   metrics::EnableExpiryChecker(chrome_metrics::kExpiredHistogramsHashes,
                                chrome_metrics::kNumExpiredHistograms);
@@ -1092,7 +1032,15 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // properly. See issue 37766.
   // (Note that the callback mask here is empty. I don't want to register for
   // any callbacks, I just want to initialize the mechanism.)
+
+  // Much of the Keychain API was marked deprecated as of the macOS 13 SDK.
+  // Removal of its use is tracked in https://crbug.com/1348251 but deprecation
+  // warnings are disabled in the meanwhile.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   SecKeychainAddCallback(&KeychainCallback, 0, nullptr);
+#pragma clang diagnostic pop
+
 #endif  // BUILDFLAG(IS_MAC)
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
@@ -1129,6 +1077,21 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
         switches::kDisableSiteIsolationForPolicy);
   }
 #endif
+
+  if (local_state->IsManagedPreference(
+          prefs::kThrottleNonVisibleCrossOriginIframesAllowed) &&
+      !local_state->GetBoolean(
+          prefs::kThrottleNonVisibleCrossOriginIframesAllowed)) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        blink::switches::kDisableThrottleNonVisibleCrossOriginIframes);
+  }
+
+  if (local_state->IsManagedPreference(
+          prefs::kNewBaseUrlInheritanceBehaviorAllowed) &&
+      !local_state->GetBoolean(prefs::kNewBaseUrlInheritanceBehaviorAllowed)) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        blink::switches::kDisableNewBaseUrlInheritanceBehavior);
+  }
 
   // ChromeOS needs ui::ResourceBundle::InitSharedInstance to be called before
   // this.
@@ -1210,9 +1173,13 @@ void ChromeBrowserMainParts::PreProfileInit() {
 
 #if !BUILDFLAG(IS_ANDROID)
   // Ephemeral profiles may have been left behind if the browser crashed.
-  g_browser_process->profile_manager()->CleanUpEphemeralProfiles();
+  g_browser_process->profile_manager()
+      ->GetDeleteProfileHelper()
+      .CleanUpEphemeralProfiles();
   // Files of deleted profiles can also be left behind after a crash.
-  g_browser_process->profile_manager()->CleanUpDeletedProfiles();
+  g_browser_process->profile_manager()
+      ->GetDeleteProfileHelper()
+      .CleanUpDeletedProfiles();
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1300,8 +1267,6 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
 
   language::LanguageUsageMetrics::RecordAcceptLanguages(
       profile->GetPrefs()->GetString(language::prefs::kAcceptLanguages));
-  language::LanguageUsageMetrics::RecordApplicationLanguage(
-      browser_process_->GetApplicationLocale());
   translate::TranslateMetricsLoggerImpl::LogApplicationStartMetrics(
       ChromeTranslateClient::CreateTranslatePrefs(profile->GetPrefs()));
 // On ChromeOS results in a crash. https://crbug.com/1151558
@@ -1358,10 +1323,6 @@ void ChromeBrowserMainParts::PostBrowserStart() {
         ->PostTask(FROM_HERE,
                    base::BindOnce(&WebUsbDetector::Initialize,
                                   base::Unretained(web_usb_detector_.get())));
-  }
-  if (base::FeatureList::IsEnabled(features::kTabMetricsLogging)) {
-    // Initialize the TabActivityWatcher to begin logging tab activity events.
-    resource_coordinator::TabActivityWatcher::GetInstance();
   }
 #endif
 
@@ -1640,12 +1601,12 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   // Needs to be done before PostProfileInit, since the SODA Installer setup is
   // called inside PostProfileInit and depends on it.
-#if !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+#if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableComponentUpdate)) {
     component_updater::RegisterComponentsForUpdate();
   }
-#endif  // !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+#endif  // BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 
   // `profile` may be nullptr if the profile picker is shown.
   Profile* profile = profile_info.profile;
@@ -2051,7 +2012,7 @@ bool ChromeBrowserMainParts::ProcessSingletonNotificationCallback(
   // cross-apartment shell objects (via IVirtualDesktopManager). That is not
   // allowed within a SendMessage handler, which this function is a part of.
   // So, we post a task to asynchronously finish the command line processing.
-  return base::ThreadTaskRunnerHandle::Get()->PostTask(
+  return base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ProcessSingletonNotificationCallbackImpl,
                                 command_line, current_directory));
 }

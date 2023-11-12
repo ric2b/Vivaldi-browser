@@ -13,8 +13,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
@@ -42,8 +42,6 @@ void InitializeSchemeAllowlist(SchemeSet* allowlist,
   allowlist->insert(std::string(url::kHttpsScheme));
   allowlist->insert(std::string(url::kMailToScheme));
 }
-
-InMemoryURLIndex::RestoreCacheObserver::~RestoreCacheObserver() = default;
 
 // RebuildPrivateDataFromHistoryDBTask -----------------------------------------
 
@@ -95,7 +93,8 @@ InMemoryURLIndex::InMemoryURLIndex(bookmarks::BookmarkModel* bookmark_model,
     history_service_observation_.Observe(history_service_.get());
 
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, "InMemoryURLIndex", base::ThreadTaskRunnerHandle::Get());
+      this, "InMemoryURLIndex",
+      base::SingleThreadTaskRunner::GetCurrentDefault());
 }
 
 InMemoryURLIndex::~InMemoryURLIndex() {
@@ -107,14 +106,19 @@ InMemoryURLIndex::~InMemoryURLIndex() {
 }
 
 void InMemoryURLIndex::Init() {
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("omnibox", "InMemoryURLIndex::Init",
+                                    TRACE_ID_LOCAL(this));
+
   if (!history_service_)
     return;
 
-  if (history_service_->backend_loaded()) {
-    ScheduleRebuildFromHistory();
-  } else {
-    listen_to_history_service_loaded_ = true;
-  }
+  // If the HistoryService backend is not initialized yet, that's okay. We're
+  // scheduled to process our task once it's initialized.
+  history_service_->ScheduleDBTask(
+      FROM_HERE,
+      std::make_unique<InMemoryURLIndex::RebuildPrivateDataFromHistoryDBTask>(
+          this, scheme_allowlist_),
+      &private_data_tracker_);
 }
 
 void InMemoryURLIndex::ClearPrivateData() {
@@ -133,7 +137,7 @@ ScoredHistoryMatches InMemoryURLIndex::HistoryItemsForTerms(
       template_url_service_);
 }
 
-std::vector<std::string> InMemoryURLIndex::HighlyVisitedHosts() const {
+const std::vector<std::string>& InMemoryURLIndex::HighlyVisitedHosts() const {
   return private_data_->HighlyVisitedHosts();
 }
 
@@ -169,13 +173,6 @@ void InMemoryURLIndex::OnURLsDeleted(
     for (const auto& row : deletion_info.deleted_rows())
       private_data_->DeleteURL(row.url());
   }
-}
-
-void InMemoryURLIndex::OnHistoryServiceLoaded(
-    history::HistoryService* history_service) {
-  if (listen_to_history_service_loaded_)
-    ScheduleRebuildFromHistory();
-  listen_to_history_service_loaded_ = false;
 }
 
 bool InMemoryURLIndex::OnMemoryDump(
@@ -227,25 +224,11 @@ void InMemoryURLIndex::Shutdown() {
 
 // Restoring from the History DB -----------------------------------------------
 
-void InMemoryURLIndex::ScheduleRebuildFromHistory() {
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      "omnibox", "InMemoryURLIndex::ScheduleRebuildFromHistory",
-      TRACE_ID_LOCAL(this));
-  DCHECK(history_service_);
-  history_service_->ScheduleDBTask(
-      FROM_HERE,
-      std::unique_ptr<history::HistoryDBTask>(
-          new InMemoryURLIndex::RebuildPrivateDataFromHistoryDBTask(
-              this, scheme_allowlist_)),
-      &private_data_tracker_);
-}
-
 void InMemoryURLIndex::DoneRebuildingPrivateDataFromHistoryDB(
     bool succeeded,
     scoped_refptr<URLIndexPrivateData> private_data) {
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      "omnibox", "InMemoryURLIndex::ScheduleRebuildFromHistory",
-      TRACE_ID_LOCAL(this));
+  TRACE_EVENT_NESTABLE_ASYNC_END0("omnibox", "InMemoryURLIndex::Init",
+                                  TRACE_ID_LOCAL(this));
   DCHECK(thread_checker_.CalledOnValidThread());
   if (succeeded) {
     private_data_tracker_.TryCancelAll();
@@ -254,6 +237,4 @@ void InMemoryURLIndex::DoneRebuildingPrivateDataFromHistoryDB(
     private_data_->Clear();
   }
   restored_ = true;
-  if (restore_cache_observer_)
-    restore_cache_observer_->OnCacheRestoreFinished(succeeded);
 }

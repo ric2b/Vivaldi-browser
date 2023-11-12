@@ -123,8 +123,13 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
     return s_test_delegate_->get_authenticator_interaction_status();
   }
 
+  bool get_add_shortcut_dialog_shown() const {
+    return s_test_delegate_->get_add_shortcut_dialog_shown();
+  }
+
  private:
-  raw_ptr<TestPasswordsPrivateDelegate> s_test_delegate_ = nullptr;
+  raw_ptr<TestPasswordsPrivateDelegate, DanglingUntriaged> s_test_delegate_ =
+      nullptr;
 };
 
 }  // namespace
@@ -205,13 +210,15 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestPlaintextPasswordFails) {
   EXPECT_TRUE(RunPasswordsSubtest("requestPlaintextPasswordFails")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestCredentialDetails) {
-  EXPECT_TRUE(RunPasswordsSubtest("requestCredentialDetails")) << message_;
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestCredentialsDetails) {
+  EXPECT_TRUE(RunPasswordsSubtest("requestCredentialsDetails")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestCredentialDetailsFails) {
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       RequestCredentialsDetailsFails) {
   ResetPlaintextPassword();
-  EXPECT_TRUE(RunPasswordsSubtest("requestCredentialDetailsFails")) << message_;
+  EXPECT_TRUE(RunPasswordsSubtest("requestCredentialsDetailsFails"))
+      << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetSavedPasswordList) {
@@ -283,16 +290,8 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, UnmuteInsecureCredentialFails) {
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
-                       RecordChangePasswordFlowStartedManual) {
-  EXPECT_TRUE(RunPasswordsSubtest("recordChangePasswordFlowStartedManual"))
-      << message_;
-  EXPECT_EQ(last_change_flow_url(),
-            "https://example.com/.well-known/change-password");
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
-                       RecordChangePasswordFlowStartedAutomated) {
-  EXPECT_TRUE(RunPasswordsSubtest("recordChangePasswordFlowStartedAutomated"))
+                       RecordChangePasswordFlowStarted) {
+  EXPECT_TRUE(RunPasswordsSubtest("recordChangePasswordFlowStarted"))
       << message_;
   EXPECT_EQ(last_change_flow_url(),
             "https://example.com/.well-known/change-password");
@@ -303,10 +302,6 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
   EXPECT_TRUE(RunPasswordsSubtest("recordChangePasswordFlowStartedAppNoUrl"))
       << message_;
   EXPECT_EQ(last_change_flow_url(), "");
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RefreshScriptsIfNecessary) {
-  EXPECT_TRUE(RunPasswordsSubtest("refreshScriptsIfNecessary")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, StartPasswordCheck) {
@@ -335,15 +330,6 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetPasswordCheckStatus) {
   EXPECT_TRUE(RunPasswordsSubtest("getPasswordCheckStatus")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, StartAutomatedPasswordChange) {
-  EXPECT_TRUE(RunPasswordsSubtest("startAutomatedPasswordChange"));
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
-                       StartAutomatedPasswordChangeWithEmptyUrl) {
-  EXPECT_TRUE(RunPasswordsSubtest("startAutomatedPasswordChangeWithEmptyUrl"));
-}
-
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, MovePasswordsToAccount) {
   EXPECT_TRUE(last_moved_passwords().empty());
   EXPECT_TRUE(RunPasswordsSubtest("movePasswordsToAccount")) << message_;
@@ -365,5 +351,15 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
   EXPECT_TRUE(get_authenticator_interaction_status());
 }
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, AddShortcut) {
+  EXPECT_FALSE(get_add_shortcut_dialog_shown());
+  EXPECT_TRUE(RunPasswordsSubtest("showAddShortcutDialog")) << message_;
+  EXPECT_TRUE(get_add_shortcut_dialog_shown());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetCredentialGroups) {
+  EXPECT_TRUE(RunPasswordsSubtest("getCredentialGroups"));
+}
 
 }  // namespace extensions

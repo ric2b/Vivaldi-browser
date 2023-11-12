@@ -11,6 +11,8 @@
 
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 
+#include "third_party/abseil-cpp/absl/types/optional.h"
+
 namespace base {
 class GUID;
 }  // namespace base
@@ -102,6 +104,15 @@ bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,
                              const std::string& originator_cache_guid,
                              const std::string& originator_client_item_id);
 
+absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
+    const sync_pb::BookmarkSpecifics& specifics);
+
+absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromNode(
+    const bookmarks::BookmarkNode* node);
+
+bool ShouldReuploadBookmarkForThumbnail(
+    const sync_pb::BookmarkSpecifics& specifics,
+    const bookmarks::BookmarkNode* node);
 }  // namespace sync_bookmarks
 
 #endif  // COMPONENTS_SYNC_BOOKMARKS_BOOKMARK_SPECIFICS_CONVERSIONS_H_

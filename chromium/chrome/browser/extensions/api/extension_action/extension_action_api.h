@@ -25,6 +25,7 @@ class WebContents;
 }
 
 namespace extensions {
+
 class ExtensionHost;
 class ExtensionPrefs;
 
@@ -97,7 +98,7 @@ class ExtensionActionAPI : public BrowserContextKeyedAPI {
                                 const std::string& extension_id,
                                 events::HistogramValue histogram_value,
                                 const std::string& event_name,
-                                std::unique_ptr<base::ListValue> event_args);
+                                base::Value::List event_args);
 
   // BrowserContextKeyedAPI implementation.
   void Shutdown() override;
@@ -315,6 +316,26 @@ class ActionSetBadgeBackgroundColorFunction
 
  protected:
   ~ActionSetBadgeBackgroundColorFunction() override {}
+};
+
+class ActionGetBadgeTextColorFunction : public ExtensionActionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.getBadgeTextColor",
+                             ACTION_GETBADGETEXTCOLOR)
+
+ protected:
+  ~ActionGetBadgeTextColorFunction() override = default;
+  ResponseAction RunExtensionAction() override;
+};
+
+class ActionSetBadgeTextColorFunction : public ExtensionActionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.setBadgeTextColor",
+                             ACTION_SETBADGETEXTCOLOR)
+
+ protected:
+  ~ActionSetBadgeTextColorFunction() override = default;
+  ResponseAction RunExtensionAction() override;
 };
 
 class ActionEnableFunction : public ExtensionActionShowFunction {

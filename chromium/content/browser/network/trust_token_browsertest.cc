@@ -42,7 +42,6 @@
 #include "services/network/test/trust_token_request_handler.h"
 #include "services/network/test/trust_token_test_server_handler_registration.h"
 #include "services/network/test/trust_token_test_util.h"
-#include "services/network/trust_tokens/test/signed_request_verification_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -90,78 +89,14 @@ MATCHER_P2(HasHeader,
   return ExplainMatchResult(other_matcher, header, result_listener);
 }
 
-MATCHER(SignaturesAreWellFormedAndVerify,
-        "The signed request has a well-formed Sec-Signature header where all "
-        "signatures verify.") {
-  std::string error;
-  if (!network::test::ReconstructSigningDataAndVerifySignatures(
-          arg.destination, arg.headers, /*verifier=*/{}, &error)) {
-    *result_listener << "Verifying the signed request encountered error "
-                     << error;
-    return false;
-  }
-  return true;
-}
-
-MATCHER_P(ParsingSignRequestDataParameterYields,
-          sign_request_data_expectation,
-          "The sign-request-data value in the Sec-Signature header, once "
-          "parsed, matches the expectation.") {
-  std::map<std::string, std::string> verification_keys_per_issuer;
-
-  std::string error;
-  network::mojom::TrustTokenSignRequestData sign_request_data;
-  if (!network::test::ReconstructSigningDataAndVerifySignatures(
-          arg.destination, arg.headers,
-          /*verifier=*/{}, &error, /*verification_keys_out=*/nullptr,
-          &sign_request_data)) {
-    *result_listener << "Verifying the signed request encountered error "
-                     << error;
-    return false;
-  }
-
-  return ExplainMatchResult(Eq(sign_request_data_expectation),
-                            sign_request_data, result_listener);
-}
-
-MATCHER_P(
-    SecSignatureHeaderKeyHashes,
-    other_matcher,
-    std::string("The verification key hashes in the Sec-Signature header ") +
-        DescribeMatcher<std::set<std::string>>(other_matcher)) {
-  std::map<std::string, std::string> verification_keys_per_issuer;
-
-  std::string error;
-  if (!network::test::ReconstructSigningDataAndVerifySignatures(
-          arg.destination, arg.headers,
-          /*verifier=*/{}, &error, &verification_keys_per_issuer)) {
-    *result_listener << "Veriying the signed request encountered error "
-                     << error;
-    return false;
-  }
-
-  std::set<std::string> hashed_verification_keys;
-  for (const auto& kv : verification_keys_per_issuer)
-    hashed_verification_keys.insert(crypto::SHA256HashString(kv.second));
-
-  return ExplainMatchResult(other_matcher, hashed_verification_keys,
-                            result_listener);
-}
-
 MATCHER(
     ReflectsSigningFailure,
     "The given signed request reflects a client-side signing failure, having "
-    "an empty redemption record and no other request-signing headers.") {
+    "an empty redemption record and no other related headers.") {
   return ExplainMatchResult(
-      AllOf(
-          HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord,
-                    StrEq("")),
-          Not(HasHeader(network::kTrustTokensSecTrustTokenVersionHeader)),
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
-          Not(HasHeader(
-              network::
-                  kTrustTokensRequestHeaderSecTrustTokensAdditionalSigningData)),
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecSignature))),
+      AllOf(HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord,
+                      StrEq("")),
+            Not(HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))),
       arg, result_listener);
 }
 
@@ -171,7 +106,7 @@ TrustTokenBrowsertest::TrustTokenBrowsertest() {
   auto& field_trial_param =
       network::features::kTrustTokenOperationsRequiringOriginTrial;
   features_.InitAndEnableFeatureWithParameters(
-      network::features::kTrustTokens,
+      network::features::kPrivateStateTokens,
       {{field_trial_param.name,
         field_trial_param.GetName(network::features::TrustTokenOriginTrialSpec::
                                       kOriginTrialNotRequired)}});
@@ -237,7 +172,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEnd) {
     await fetch("/issue", {trustToken: {type: 'token-request'}});
     await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
     await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-                                  signRequestData: 'include',
                                   issuers: [$1]}});
     return "Success"; })(); )";
 
@@ -250,12 +184,8 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEnd) {
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 }
 
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, XhrEndToEnd) {
@@ -293,7 +223,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, XhrEndToEnd) {
     request.open('GET', '/sign');
     request.setTrustToken({
       type: 'send-redemption-record',
-      signRequestData: 'include',
       issuers: [$1]
     });
     promise = new Promise((res, rej) => {
@@ -313,12 +242,8 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, XhrEndToEnd) {
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 }
 
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, IframeEndToEnd) {
@@ -345,18 +270,14 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, IframeEndToEnd) {
   execute_op_via_iframe("/redeem", R"({"type": "token-redemption"})");
   execute_op_via_iframe("/sign", JsReplace(
                                      R"({"type": "send-redemption-record",
-              "signRequestData": "include", "issuers": [$1]})",
+              "issuers": [$1]})",
                                      IssuanceOriginFromHost("a.test")));
 
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 }
 
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, HasTrustTokenAfterIssuance) {
@@ -368,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, HasTrustTokenAfterIssuance) {
   std::string command = JsReplace(R"(
   (async () => {
     await fetch("/issue", {trustToken: {type: 'token-request'}});
-    return await document.hasTrustToken($1);
+    return await document.hasPrivateToken($1, 'private-state-token');
   })();)",
                                   IssuanceOriginFromHost("a.test"));
 
@@ -383,8 +304,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, HasTrustTokenAfterIssuance) {
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
                        SigningWithNoRedemptionRecordDoesntCancelRequest) {
   TrustTokenRequestHandler::Options options;
-  options.client_signing_outcome =
-      TrustTokenRequestHandler::SigningOutcome::kFailure;
   request_handler_.UpdateOptions(std::move(options));
 
   GURL start_url = server_.GetURL("a.test", "/title1.html");
@@ -394,7 +313,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
   // storage, a prerequisite. However, the failure shouldn't be fatal.
   std::string command = JsReplace(R"((async () => {
       await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-                                         signRequestData: 'include',
                                          issuers: [$1]}});
       return "Success";
       })(); )",
@@ -424,7 +342,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEndInIsolatedWorld) {
     await fetch("/issue", {trustToken: {type: 'token-request'}});
     await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
     await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-                                  signRequestData: 'include',
                                   issuers: [$1]}});
     return "Success"; })(); )";
 
@@ -439,12 +356,8 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEndInIsolatedWorld) {
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 }
 
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, RecordsTimers) {
@@ -484,7 +397,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, RecordsTimers) {
     await fetch("/issue", {trustToken: {type: 'token-request'}});
     await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
     await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-                                  signRequestData: 'include',
                                   issuers: [$1]}});
     return "Success"; })(); )";
 
@@ -683,115 +595,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, OperationsRequireSecureContext) {
                              IsFalse())));
 }
 
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, AdditionalSigningData) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string cmd = R"(
-  (async () => {
-    await fetch("/issue", {trustToken: {type: 'token-request'}});
-    await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-    await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-      signRequestData: 'include',
-      issuers: [$1],
-      additionalSigningData: 'some additional data to sign'}});
-    return "Success"; })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ("Success",
-            EvalJs(shell(), JsReplace(cmd, IssuanceOriginFromHost("a.test"))));
-
-  auto has_additional_signing_data = [](std::string header) {
-    return base::Contains(
-        base::SplitString(header, ",", base::TRIM_WHITESPACE,
-                          base::SPLIT_WANT_ALL),
-        base::ToLowerASCII(
-            network::
-                kTrustTokensRequestHeaderSecTrustTokensAdditionalSigningData));
-  };
-
-  EXPECT_THAT(
-      request_handler_.last_incoming_signed_request(),
-      Optional(AllOf(
-          HasHeader(
-              network::
-                  kTrustTokensRequestHeaderSecTrustTokensAdditionalSigningData),
-          HasHeader(network::kTrustTokensRequestHeaderSignedHeaders,
-                    Truly(has_additional_signing_data)),
-          SignaturesAreWellFormedAndVerify())));
-}
-
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, OverlongAdditionalSigningData) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string cmd = R"(
-  (async () => {
-    await fetch("/issue", {trustToken: {type: 'token-request'}});
-    await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-    return "Success"; })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ("Success", EvalJs(shell(), cmd));
-
-  // Even though this contains fewer than
-  // network::kTrustTokenAdditionalSigningDataMaxSizeBytes code units, once it's
-  // converted to UTF-8 it will contain more than that many bytes, so we expect
-  // that it will get rejected by the network service.
-  std::u16string overlong_signing_data(
-      network::kTrustTokenAdditionalSigningDataMaxSizeBytes,
-      u'€' /* char16 literal */);
-  ASSERT_LE(overlong_signing_data.size(),
-            network::kTrustTokenAdditionalSigningDataMaxSizeBytes);
-
-  cmd = R"(
-    fetch("/sign", {trustToken: {type: 'send-redemption-record',
-      signRequestData: 'include',
-      issuers: [$1],
-      additionalSigningData: $2}}).then(()=>"Success");)";
-
-  EXPECT_EQ("Success",
-            EvalJs(shell(), JsReplace(cmd, IssuanceOriginFromHost("a.test"),
-                                      overlong_signing_data)));
-  EXPECT_THAT(request_handler_.last_incoming_signed_request(),
-              Optional(ReflectsSigningFailure()));
-}
-
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
-                       AdditionalSigningDataNotAValidHeader) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    await fetch("/issue", {trustToken: {type: 'token-request'}});
-    await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-    return "Success"; })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ("Success", EvalJs(shell(), command));
-
-  command = R"(
-    fetch("/sign", {trustToken: {type: 'send-redemption-record',
-      signRequestData: 'include',
-      issuers: [$1],
-      additionalSigningData: '\r'}}).then(()=>"Success");)";
-
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-  EXPECT_THAT(request_handler_.last_incoming_signed_request(),
-              Optional(ReflectsSigningFailure()));
-}
-
 // Issuance should fail if we don't have keys for the issuer at hand.
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, IssuanceRequiresKeys) {
   ProvideRequestHandlerKeyCommitmentsToNetworkService(
@@ -874,13 +677,15 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
       "Consider rewriting this test for performance's sake if the "
       "number-of-issuers limit gets too large.");
 
-  // Each hasTrustToken call adds the provided issuer to the calling context's
-  // list of associated issuers.
+  // Each hasPrivateStateToken call adds the provided issuer to the calling
+  // context's list of associated issuers.
   for (int i = 0;
        i < network::kTrustTokenPerToplevelMaxNumberOfAssociatedIssuers; ++i) {
-    ASSERT_EQ("Success", EvalJs(shell(), "document.hasTrustToken('https://a" +
-                                             base::NumberToString(i) +
-                                             ".test').then(()=>'Success');"));
+    ASSERT_EQ(
+        "Success",
+        EvalJs(shell(),
+               "document.hasPrivateToken('https://a" + base::NumberToString(i) +
+                   ".test', 'private-state-token').then(()=>'Success');"));
   }
 
   EXPECT_EQ("OperationError", EvalJs(shell(), R"(
@@ -913,11 +718,16 @@ IN_PROC_BROWSER_TEST_F(
              JsReplace(command,
                        server_.GetURL("a.test", "/cross-site/b.test/issue"))));
 
-  EXPECT_EQ(true, EvalJs(shell(), JsReplace("document.hasTrustToken($1);",
-                                            IssuanceOriginFromHost("b.test"))));
-  EXPECT_EQ(false,
-            EvalJs(shell(), JsReplace("document.hasTrustToken($1);",
-                                      IssuanceOriginFromHost("a.test"))));
+  EXPECT_EQ(
+      true,
+      EvalJs(shell(),
+             JsReplace("document.hasPrivateToken($1, 'private-state-token');",
+                       IssuanceOriginFromHost("b.test"))));
+  EXPECT_EQ(
+      false,
+      EvalJs(shell(),
+             JsReplace("document.hasPrivateToken($1, 'private-state-token');",
+                       IssuanceOriginFromHost("a.test"))));
 }
 
 // When an issuance request is made in no-cors mode, a cross-origin redirect
@@ -946,11 +756,16 @@ IN_PROC_BROWSER_TEST_F(
              JsReplace(command,
                        server_.GetURL("a.test", "/cross-site/b.test/issue"))));
 
-  EXPECT_EQ(true, EvalJs(shell(), JsReplace("document.hasTrustToken($1);",
-                                            IssuanceOriginFromHost("a.test"))));
-  EXPECT_EQ(false,
-            EvalJs(shell(), JsReplace("document.hasTrustToken($1);",
-                                      IssuanceOriginFromHost("b.test"))));
+  EXPECT_EQ(
+      true,
+      EvalJs(shell(),
+             JsReplace("document.hasPrivateToken($1, 'private-state-token');",
+                       IssuanceOriginFromHost("a.test"))));
+  EXPECT_EQ(
+      false,
+      EvalJs(shell(),
+             JsReplace("document.hasPrivateToken($1, 'private-state-token');",
+                       IssuanceOriginFromHost("b.test"))));
 }
 
 // Issuance from a context with a secure-but-non-HTTP/S top frame origin
@@ -977,7 +792,7 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
   EXPECT_EQ(
       false,
       EvalJs(shell(),
-             JsReplace("document.hasTrustToken($1);",
+             JsReplace("document.hasPrivateToken($1, 'private-state-token');",
                        url::Origin::Create(server_.base_url()).Serialize())));
 }
 
@@ -1010,22 +825,25 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
       EvalJs(shell(), JsReplace(command, server_.GetURL("a.test", "/redeem"))));
 }
 
-// hasTrustToken from a context with a secure-but-non-HTTP/S top frame origin
-// should fail.
+// hasPrivateToken from a context with a secure-but-non-HTTP/S top frame
+// origin should fail.
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
                        HasTrustTokenRequiresSuitableTopFrameOrigin) {
   GURL file_url = GetTestUrl(/*dir=*/nullptr, "title1.html");
   ASSERT_TRUE(file_url.SchemeIsFile());
   ASSERT_TRUE(NavigateToURL(shell(), file_url));
 
-  EXPECT_EQ("NotAllowedError",
-            EvalJs(shell(),
-                   R"(document.hasTrustToken('https://issuer.example')
+  EXPECT_EQ(
+      "NotAllowedError",
+      EvalJs(
+          shell(),
+          R"(document.hasPrivateToken('https://issuer.example', 'private-state-token')
                               .catch(error => error.name);)"));
 }
 
-// A hasTrustToken call initiated from a secure context should succeed even if
-// the initiating frame's origin is opaque (e.g. from a sandboxed iframe).
+// A hasPrivateToken call initiated from a secure context should succeed
+// even if the initiating frame's origin is opaque (e.g. from a sandboxed
+// iframe).
 IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
                        HasTrustTokenFromSecureSubframeWithOpaqueOrigin) {
   ASSERT_TRUE(NavigateToURL(
@@ -1035,9 +853,11 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
                             ->GetPrimaryFrameTree()
                             .root();
 
-  EXPECT_EQ("Success",
-            EvalJs(root->child_at(0)->current_frame_host(),
-                   R"(document.hasTrustToken('https://davids.website')
+  EXPECT_EQ(
+      "Success",
+      EvalJs(
+          root->child_at(0)->current_frame_host(),
+          R"(document.hasPrivateToken('https://davids.website', 'private-state-token')
                               .then(()=>'Success');)"));
 }
 
@@ -1317,17 +1137,14 @@ IN_PROC_BROWSER_TEST_F(
             EvalJs(shell(), JsReplace(R"(
       fetch('/sign',
         { trustToken: { type: 'send-redemption-record', issuers: [$1],
-          signRequestData: 'headers-only' } }).then(()=>'Success');)",
+        } }).then(()=>'Success');)",
                                       IssuanceOriginFromHost("b.test"))));
 
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 
   // When a signing operation fails, it isn't fatal, so the requests
   // should always get sent successfully.
@@ -1335,7 +1152,7 @@ IN_PROC_BROWSER_TEST_F(
             EvalJs(shell(), JsReplace(R"(
       fetch('/sign',
         { trustToken: { type: 'send-redemption-record', issuers: [$1],
-          signRequestData: 'headers-only' } }).then(()=>'Success');)",
+        } }).then(()=>'Success');)",
                                       IssuanceOriginFromHost("a.test"))));
 
   // There shouldn't have been an a.test redemption record attached to the
@@ -1376,27 +1193,24 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ("Success",
             EvalJs(shell(), JsReplace(R"(
       fetch('/sign',
-        { trustToken: { type: 'send-redemption-record', issuers: [$1],
-          signRequestData: 'headers-only' } })
+        { trustToken: { type: 'send-redemption-record', issuers: [$1]
+        } })
         .then(()=>'Success'); )",
                                       IssuanceOriginFromHost("a.test"))));
 
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 
   // When a signing operation fails, it isn't fatal, so the requests
   // should always get sent successfully.
   EXPECT_EQ("Success",
             EvalJs(shell(), JsReplace(R"(
       fetch('/sign',
-        { trustToken: { type: 'send-redemption-record', issuers: [$1],
-          signRequestData: 'headers-only' } })
+        { trustToken: { type: 'send-redemption-record', issuers: [$1]
+        } })
             .then(()=>'Success'); )",
                                       IssuanceOriginFromHost("b.test"))));
 
@@ -1454,7 +1268,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
       await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
       await fetch("/sign", {trustToken: {
         type: 'send-redemption-record',
-        additionalSignedHeaders: ['Sec-Redemption-Record'],
         issuers: [$1]}  // b.test, set below
       });
       return "Requests succeeded";
@@ -1471,206 +1284,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
   EXPECT_EQ(
       "Requests succeeded",
       EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("b.test"))));
-
-  EXPECT_THAT(request_handler_.last_incoming_signed_request(),
-              Optional(ReflectsSigningFailure()));
-}
-
-// Specifying `includeTimestampHeader: 'true'` for a signing operation should
-// make the outgoing request bear a Sec-Time header.
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
-                       SigningIncludesTimestampWhenSpecified) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url(server_.GetURL("a.test", "/title1.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-      await fetch("/sign",
-      {trustToken:
-        {type: 'send-redemption-record',
-         signRequestData: 'include',
-         includeTimestampHeader: true,
-         additionalSignedHeaders: ['Sec-Time'],
-         issuers: [$1]}
-      });
-      return "Success";
-    } catch (err) {
-      return "Failure";
-    }
-  })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  EXPECT_THAT(request_handler_.last_incoming_signed_request(),
-              Optional(HasHeader(network::kTrustTokensRequestHeaderSecTime)));
-}
-
-// Specifying `signRequestData: 'omit'` for a signing operation should make
-// the outgoing request bear an SRR but no signature.
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
-                       SignsCorrectRequestDataWithParameterValueOmit) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-      await fetch("/sign", {trustToken: {
-        type: 'send-redemption-record',
-        signRequestData: 'omit',
-        additionalSignedHeaders: ['Sec-Redemption-Record'],
-        issuers: [$1]}
-      });
-      return "Success";
-    } catch (err) {
-      return "Failure";
-    }
-  })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  EXPECT_THAT(
-      request_handler_.last_incoming_signed_request(),
-      Optional(AllOf(
-          HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecSignature)))));
-}
-
-// Specifying `signRequestData: 'headers-only'` for a signing operation should
-// make the outgoing request bear a signature over the request's headers.
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
-                       SignsCorrectRequestDataWithParameterValueHeadersOnly) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-      await fetch("/sign", {trustToken: {
-        type: 'send-redemption-record',
-        signRequestData: 'headers-only',
-        additionalSignedHeaders: ['Sec-Redemption-Record'],
-        issuers: [$1]}
-      });
-      return "Success";
-    } catch (err) {
-      return "Failure";
-    }
-  })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  EXPECT_THAT(
-      request_handler_.last_incoming_signed_request(),
-      Optional(AllOf(
-          HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          SignaturesAreWellFormedAndVerify(),
-          ParsingSignRequestDataParameterYields(
-              network::mojom::TrustTokenSignRequestData::kHeadersOnly))));
-}
-
-// Specifying `signRequestData: 'include'` for a signing operation should make
-// the outgoing request bear a signature over the request's headers and
-// initiating registrable domain.
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest,
-                       SignsCorrectRequestDataWithParameterValueInclude) {
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-      await fetch("/sign", {trustToken: {
-        type: 'send-redemption-record',
-        signRequestData: 'include',
-        additionalSignedHeaders: ['Sec-Redemption-Record'],
-        issuers: [$1]}
-      });
-      return "Requests succeeded";
-    } catch (err) {
-      return "Requests failed unexpectedly";
-    }
-  })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  //
-  // When a signing operation fails, it isn't fatal, so the requests
-  // should always get sent successfully.
-  EXPECT_EQ(
-      "Requests succeeded",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  EXPECT_THAT(
-      request_handler_.last_incoming_signed_request(),
-      Optional(AllOf(
-          HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          SignaturesAreWellFormedAndVerify(),
-          ParsingSignRequestDataParameterYields(
-              network::mojom::TrustTokenSignRequestData::kInclude))));
-}
-
-// Specifying an unsignable header to sign should make signing fail.
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, ShouldntSignUnsignableHeader) {
-  TrustTokenRequestHandler::Options options;
-  options.client_signing_outcome =
-      TrustTokenRequestHandler::SigningOutcome::kFailure;
-  request_handler_.UpdateOptions(std::move(options));
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-
-  std::string command = R"(
-  (async () => {
-    await fetch("/issue", {trustToken: {type: 'token-request'}});
-    await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
-    await fetch("/sign",
-    {trustToken:
-      {type: 'send-redemption-record',
-       signRequestData: 'include',
-       includeTimestampHeader: true,
-       additionalSignedHeaders: ['Sec-Certainly-Not-Signable'],
-       issuers: [$1]}
-    });
-    return "Requests succeeded";
-  })(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Requests succeeded",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
 
   EXPECT_THAT(request_handler_.last_incoming_signed_request(),
               Optional(ReflectsSigningFailure()));
@@ -1700,7 +1313,6 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEndWithServiceWorker) {
     await fetch("/issue", {trustToken: {type: 'token-request'}});
     await fetch("/redeem", {trustToken: {type: 'token-redemption'}});
     await fetch("/sign", {trustToken: {type: 'send-redemption-record',
-                                  signRequestData: 'include',
                                   issuers: [$1]}});
     return "TTSuccess"; })(); )";
 
@@ -1710,12 +1322,8 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, FetchEndToEndWithServiceWorker) {
   EXPECT_THAT(
       request_handler_.last_incoming_signed_request(),
       Optional(AllOf(
-          Not(HasHeader(network::kTrustTokensRequestHeaderSecTime)),
           HasHeader(network::kTrustTokensRequestHeaderSecRedemptionRecord),
-          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader),
-          SignaturesAreWellFormedAndVerify(),
-          SecSignatureHeaderKeyHashes(IsSubsetOf(
-              request_handler_.hashes_of_redemption_bound_public_keys())))));
+          HasHeader(network::kTrustTokensSecTrustTokenVersionHeader))));
 }
 
 // Test redemption limit. Make three refreshing redemption calls back to back
@@ -1759,254 +1367,5 @@ IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertest, RedemptionLimit) {
         .catch(()=>'Error'); )",
                                       server_.GetURL("a.test", "/redeem"))));
 }
-
-class TrustTokenBrowsertestWithPlatformIssuance : public TrustTokenBrowsertest {
- public:
-  TrustTokenBrowsertestWithPlatformIssuance() {
-    // This assertion helps guard against the brittleness of deserializing
-    // "true", in case we refactor the parameter's type.
-    static_assert(
-        std::is_same<
-            decltype(network::features::kPlatformProvidedTrustTokenIssuance
-                         .default_value),
-            const bool>::value,
-        "Need to update this initialization logic if the type of the param "
-        "changes.");
-    features_.InitAndEnableFeatureWithParameters(
-        network::features::kTrustTokens,
-        {{network::features::kPlatformProvidedTrustTokenIssuance.name,
-          "true"}});
-  }
-
- private:
-  base::test::ScopedFeatureList features_;
-};
-
-#if BUILDFLAG(IS_ANDROID)
-HandlerWrappingLocalTrustTokenFulfiller::
-    HandlerWrappingLocalTrustTokenFulfiller(TrustTokenRequestHandler& handler)
-    : handler_(handler) {
-  interface_overrider_.SetBinderForName(
-      mojom::LocalTrustTokenFulfiller::Name_,
-      base::BindRepeating(&HandlerWrappingLocalTrustTokenFulfiller::Bind,
-                          base::Unretained(this)));
-}
-HandlerWrappingLocalTrustTokenFulfiller::
-    ~HandlerWrappingLocalTrustTokenFulfiller() = default;
-
-void HandlerWrappingLocalTrustTokenFulfiller::FulfillTrustTokenIssuance(
-    network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
-    FulfillTrustTokenIssuanceCallback callback) {
-  absl::optional<std::string> maybe_result =
-      handler_.Issue(std::move(request->request));
-  if (maybe_result) {
-    std::move(callback).Run(
-        network::mojom::FulfillTrustTokenIssuanceAnswer::New(
-            network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kOk,
-            std::move(*maybe_result)));
-    return;
-  }
-  std::move(callback).Run(network::mojom::FulfillTrustTokenIssuanceAnswer::New(
-      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kUnknownError,
-      ""));
-}
-
-void HandlerWrappingLocalTrustTokenFulfiller::Bind(
-    mojo::ScopedMessagePipeHandle handle) {
-  receiver_.Bind(
-      mojo::PendingReceiver<content::mojom::LocalTrustTokenFulfiller>(
-          std::move(handle)));
-}
-
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertestWithPlatformIssuance,
-                       EndToEndAndroidPlatformIssuance) {
-  base::HistogramTester histograms;
-
-  TrustTokenRequestHandler::Options options;
-  options.specify_platform_issuance_on = {
-      network::mojom::TrustTokenKeyCommitmentResult::Os::kAndroid};
-  request_handler_.UpdateOptions(std::move(options));
-
-  HandlerWrappingLocalTrustTokenFulfiller fulfiller(request_handler_);
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  // Issuance operations successfully answered locally result in
-  // NoModificationAllowedError.
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      return "Unexpected success";
-    } catch (e) {
-      if (e.name !== "NoModificationAllowedError") {
-        return "Unexpected exception";
-      }
-      const hasToken = await document.hasTrustToken($1);
-      if (!hasToken)
-        return "Unexpectedly absent token";
-      return "Success";
-    }})(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  content::FetchHistogramsFromChildProcesses();
-  histograms.ExpectTotalCount(
-      base::StrCat({"Net.TrustTokens.OperationBeginTime.Success.Issuance."
-                    "PlatformProvided"}),
-      1);
-}
-
-IN_PROC_BROWSER_TEST_F(TrustTokenBrowsertestWithPlatformIssuance,
-                       PlatformIssuanceWithoutEmbedderSupport) {
-  base::HistogramTester histograms;
-
-  TrustTokenRequestHandler::Options options;
-  options.specify_platform_issuance_on = {
-      network::mojom::TrustTokenKeyCommitmentResult::Os::kAndroid};
-  options.unavailable_local_operation_fallback =
-      network::mojom::TrustTokenKeyCommitmentResult::
-          UnavailableLocalOperationFallback::kReturnWithError;
-  request_handler_.UpdateOptions(std::move(options));
-
-  service_manager::InterfaceProvider::TestApi interface_overrider(
-      content::GetGlobalJavaInterfaces());
-  // Instead of using interface_overrider.ClearBinder(name), it's necessary to
-  // provide a callback that explicitly closes the pipe, since
-  // InterfaceProvider's contract requires that it either bind or close pipes
-  // it's given (see its comments in interface_provider.mojom).
-  interface_overrider.SetBinderForName(
-      mojom::LocalTrustTokenFulfiller::Name_,
-      base::BindRepeating([](mojo::ScopedMessagePipeHandle handle) {
-        mojo::Close(std::move(handle));
-      }));
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  // Issuance operations diverted locally without embedder support, with
-  // "return_with_error" specified in the issuer's key commitments, should
-  // result in OperationError.
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      return "Unexpected success";
-    } catch (e) {
-      return e.name;
-    }})(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ("OperationError", EvalJs(shell(), command));
-
-  content::FetchHistogramsFromChildProcesses();
-  histograms.ExpectTotalCount(
-      base::StrCat({"Net.TrustTokens.OperationBeginTime.Failure.Issuance."
-                    "PlatformProvided"}),
-      1);
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-#if !BUILDFLAG(IS_ANDROID)
-IN_PROC_BROWSER_TEST_F(
-    TrustTokenBrowsertestWithPlatformIssuance,
-    IssuanceOnOsNotSpecifiedInKeyCommitmentsReturnsErrorIfConfiguredToDoSo) {
-  TrustTokenRequestHandler::Options options;
-  options.specify_platform_issuance_on = {
-      network::mojom::TrustTokenKeyCommitmentResult::Os::kAndroid};
-  // Since we're not on Android, if the issuer
-  // 1) configures that, on Android, we should attempt platform-provided token
-  //    issuance,
-  // 2) specifies "return_with_error" as the fallback behavior for other OSes,
-  // issuance against the host configured for platform-provided issuance should
-  // fail.
-  options.unavailable_local_operation_fallback =
-      network::mojom::TrustTokenKeyCommitmentResult::
-          UnavailableLocalOperationFallback::kReturnWithError;
-  request_handler_.UpdateOptions(std::move(options));
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  // Issuance operations attempted on OSes other than those specified in
-  // the key commitment's "request_issuance_locally_on" field should result in
-  // OperationError returns if the issuer specified "return_with_error" as the
-  // fallback behavior.
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      return "Unexpected success";
-    } catch (e) {
-      return e.name;
-    }})(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ("OperationError", EvalJs(shell(), command));
-}
-
-IN_PROC_BROWSER_TEST_F(
-    TrustTokenBrowsertestWithPlatformIssuance,
-    IssuanceOnOsNotSpecifiedInKeyCommitmentsFallsBackToWebIssuanceIfSpecified) {
-  base::HistogramTester histograms;
-
-  TrustTokenRequestHandler::Options options;
-  options.specify_platform_issuance_on = {
-      network::mojom::TrustTokenKeyCommitmentResult::Os::kAndroid};
-  // Since we're not on Android, if the issuer
-  // 1) configures that, on Android, we should attempt platform-provided token
-  //    issuance,
-  // 2) specifies "web_issuance" as fallback behavior for other OSes,
-  // we should see issuance succeed.
-  options.unavailable_local_operation_fallback =
-      network::mojom::TrustTokenKeyCommitmentResult::
-          UnavailableLocalOperationFallback::kWebIssuance;
-  request_handler_.UpdateOptions(std::move(options));
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  // Issuance operations attempted on OSes other than those specified in
-  // the key commitment's "request_issuance_locally_on" field should result in
-  // OperationError returns if the issuer specified "return_with_error" as the
-  // fallback behavior.
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      if (await document.hasTrustToken($1))
-        return "Success";
-      return "Issuance failed unexpectedly";
-    } catch (e) {
-      return e.name;
-    }})(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  content::FetchHistogramsFromChildProcesses();
-  histograms.ExpectTotalCount(
-      base::StrCat({"Net.TrustTokens.OperationBeginTime.Failure.Issuance."
-                    "PlatformProvided"}),
-      0);  // No platform-provided operation was attempted.
-}
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace content

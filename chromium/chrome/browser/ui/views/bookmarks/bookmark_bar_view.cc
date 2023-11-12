@@ -19,6 +19,7 @@
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -26,7 +27,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -245,7 +245,7 @@ class BookmarkButton : public BookmarkButtonBase {
     if (tooltip_text_.empty() || max_tooltip_width != max_tooltip_width_) {
       max_tooltip_width_ = max_tooltip_width;
       tooltip_text_ = BookmarkBarView::CreateToolTipForURLAndTitle(
-          max_tooltip_width_, tooltip_manager->GetFontList(), url_, GetText());
+          max_tooltip_width_, tooltip_manager->GetFontList(), *url_, GetText());
     }
     return tooltip_text_;
   }
@@ -260,7 +260,7 @@ class BookmarkButton : public BookmarkButtonBase {
   // new tooltip text.
   mutable int max_tooltip_width_ = 0;
   mutable std::u16string tooltip_text_;
-  const GURL& url_;
+  const raw_ref<const GURL> url_;
 };
 
 BEGIN_METADATA(BookmarkButton, BookmarkButtonBase)
@@ -318,9 +318,7 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
   }
 
   std::u16string GetTooltipText(const gfx::Point& p) const override {
-    return label()->GetPreferredSize().width() > label()->size().width()
-               ? GetAccessibleName()
-               : std::u16string();
+    return GetAccessibleName();
   }
 
   bool OnMousePressed(const ui::MouseEvent& event) override {
@@ -1748,7 +1746,7 @@ void BookmarkBarView::StartShowFolderDropMenuTimer(const BookmarkNode* node) {
     return;
   }
   show_folder_method_factory_.InvalidateWeakPtrs();
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&BookmarkBarView::ShowDropFolderForNode,
                      show_folder_method_factory_.GetWeakPtr(), node),

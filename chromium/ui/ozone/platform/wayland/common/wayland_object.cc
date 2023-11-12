@@ -39,12 +39,20 @@
 #include <xdg-foreign-unstable-v2-client-protocol.h>
 #include <xdg-output-unstable-v1-client-protocol.h>
 #include <xdg-shell-client-protocol.h>
-#include <xdg-shell-unstable-v6-client-protocol.h>
 
 #include "base/logging.h"
 
 namespace wl {
 namespace {
+
+void delete_gtk_surface1(gtk_surface1* surface) {
+  if (wl::get_version_of_object(surface) >=
+      GTK_SURFACE1_RELEASE_SINCE_VERSION) {
+    gtk_surface1_release(surface);
+  } else {
+    gtk_surface1_destroy(surface);
+  }
+}
 
 void delete_data_device(wl_data_device* data_device) {
   if (wl::get_version_of_object(data_device) >=
@@ -181,7 +189,7 @@ IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device_manager)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_offer)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_source)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_shell1)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_surface1)
+IMPLEMENT_WAYLAND_OBJECT_TRAITS_WITH_DELETER(gtk_surface1, delete_gtk_surface1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(org_kde_kwin_idle)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(org_kde_kwin_idle_timeout)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(overlay_prioritizer)
@@ -274,11 +282,6 @@ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_exporter_v2)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_exported_v2)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_output_manager_v1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_output_v1)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_popup_v6)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_positioner_v6)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_shell_v6)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_surface_v6)
-IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_toplevel_v6)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(zxdg_toplevel_decoration_v1)
 
 }  // namespace wl

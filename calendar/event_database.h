@@ -59,6 +59,7 @@ class EventDatabase {
   bool MigrateCalendarToVersion9();
   bool MigrateCalendarToVersion11();
   bool MigrateCalendarToVersion12();
+  bool MigrateCalendarToVersion13();
 };
 
 // This is available BOTH as a macro and a static string (kURLRowFields). Use

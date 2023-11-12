@@ -35,7 +35,6 @@
 #include "components/page_load_metrics/browser/metrics_navigation_throttle.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
-#include "components/permissions/quota_permission_context_impl.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service_factory.h"
@@ -446,6 +445,8 @@ void ContentBrowserClientImpl::OverrideWebkitPrefs(
     content::WebContents* web_contents,
     blink::web_pref::WebPreferences* prefs) {
   prefs->default_encoding = l10n_util::GetStringUTF8(IDS_DEFAULT_ENCODING);
+  // TODO(crbug.com/1131016): Support Picture in Picture on WebLayer.
+  prefs->picture_in_picture_enabled = false;
 
   TabImpl* tab = TabImpl::FromWebContents(web_contents);
   if (tab)
@@ -983,11 +984,6 @@ void ContentBrowserClientImpl::RenderProcessWillLaunch(
       /*force_to_support_secure_codecs*/ false));
 #endif
   PageSpecificContentSettingsDelegate::InitializeRenderer(host);
-}
-
-scoped_refptr<content::QuotaPermissionContext>
-ContentBrowserClientImpl::CreateQuotaPermissionContext() {
-  return base::MakeRefCounted<permissions::QuotaPermissionContextImpl>();
 }
 
 void ContentBrowserClientImpl::CreateFeatureListAndFieldTrials() {

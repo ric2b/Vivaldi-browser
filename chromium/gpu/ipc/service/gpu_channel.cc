@@ -33,7 +33,6 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -191,8 +190,8 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
       int32_t end,
       WaitForGetOffsetInRangeCallback callback) override;
 #if BUILDFLAG(IS_FUCHSIA)
-  void RegisterSysmemBufferCollection(const base::UnguessableToken& id,
-                                      mojo::PlatformHandle token,
+  void RegisterSysmemBufferCollection(mojo::PlatformHandle service_handle,
+                                      mojo::PlatformHandle sysmem_token,
                                       gfx::BufferFormat format,
                                       gfx::BufferUsage usage,
                                       bool register_with_image_pipe) override {
@@ -203,33 +202,12 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
     scheduler_->ScheduleTask(Scheduler::Task(
         gpu_channel_->shared_image_stub()->sequence(),
         base::BindOnce(&gpu::GpuChannel::RegisterSysmemBufferCollection,
-                       gpu_channel_->AsWeakPtr(), id, std::move(token), format,
-                       usage, register_with_image_pipe),
-        std::vector<SyncToken>()));
-  }
-
-  void ReleaseSysmemBufferCollection(
-      const base::UnguessableToken& id) override {
-    base::AutoLock lock(gpu_channel_lock_);
-    if (!gpu_channel_)
-      return;
-
-    scheduler_->ScheduleTask(Scheduler::Task(
-        gpu_channel_->shared_image_stub()->sequence(),
-        base::BindOnce(&gpu::GpuChannel::ReleaseSysmemBufferCollection,
-                       gpu_channel_->AsWeakPtr(), id),
+                       gpu_channel_->AsWeakPtr(), std::move(service_handle),
+                       std::move(sysmem_token), format, usage,
+                       register_with_image_pipe),
         std::vector<SyncToken>()));
   }
 #endif  // BUILDFLAG(IS_FUCHSIA)
-
-  // Vivaldi additions
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  void VivaldiCreateMediaPipelineFactory(
-      mojo::GenericPendingReceiver receiver) override;
-#endif
-
-  // End of Vivaldi additions
 
   // Map of route id to scheduler sequence id.
   base::flat_map<int32_t, SequenceId> route_sequences_;
@@ -407,12 +385,12 @@ void GpuChannelMessageFilter::CreateCommandBuffer(
 
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&gpu::GpuChannel::CreateCommandBuffer,
-                     gpu_channel_->AsWeakPtr(), std::move(params), routing_id,
-                     std::move(shared_state), std::move(receiver),
-                     std::move(client),
-                     base::BindPostTask(base::ThreadTaskRunnerHandle::Get(),
-                                        std::move(callback))));
+      base::BindOnce(
+          &gpu::GpuChannel::CreateCommandBuffer, gpu_channel_->AsWeakPtr(),
+          std::move(params), routing_id, std::move(shared_state),
+          std::move(receiver), std::move(client),
+          base::BindPostTask(base::SingleThreadTaskRunner::GetCurrentDefault(),
+                             std::move(callback))));
 }
 
 void GpuChannelMessageFilter::DestroyCommandBuffer(
@@ -504,10 +482,11 @@ void GpuChannelMessageFilter::WaitForTokenInRange(
   }
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&gpu::GpuChannel::WaitForTokenInRange,
-                     gpu_channel_->AsWeakPtr(), routing_id, start, end,
-                     base::BindPostTask(base::ThreadTaskRunnerHandle::Get(),
-                                        std::move(callback))));
+      base::BindOnce(
+          &gpu::GpuChannel::WaitForTokenInRange, gpu_channel_->AsWeakPtr(),
+          routing_id, start, end,
+          base::BindPostTask(base::SingleThreadTaskRunner::GetCurrentDefault(),
+                             std::move(callback))));
 }
 
 void GpuChannelMessageFilter::WaitForGetOffsetInRange(
@@ -523,31 +502,12 @@ void GpuChannelMessageFilter::WaitForGetOffsetInRange(
   }
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&gpu::GpuChannel::WaitForGetOffsetInRange,
-                     gpu_channel_->AsWeakPtr(), routing_id,
-                     set_get_buffer_count, start, end,
-                     base::BindPostTask(base::ThreadTaskRunnerHandle::Get(),
-                                        std::move(callback))));
-}
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-// Due to linking dependency limitations we cannot reference IPCMediaPipeline
-// from this code. So we indirect via a function pointer.  The pointer is
-// initialized in the GpuServiceImpl constructor.
-GPU_IPC_SERVICE_EXPORT void (*g_vivaldi_media_pipeline_factory_creator)(
-    mojo::GenericPendingReceiver receiver) = nullptr;
-
-void GpuChannelMessageFilter::VivaldiCreateMediaPipelineFactory(
-    mojo::GenericPendingReceiver receiver) {
-  main_task_runner_->PostTask(
-      FROM_HERE,
       base::BindOnce(
-          [](mojo::GenericPendingReceiver receiver) {
-            g_vivaldi_media_pipeline_factory_creator(std::move(receiver));
-          },
-          std::move(receiver)));
+          &gpu::GpuChannel::WaitForGetOffsetInRange, gpu_channel_->AsWeakPtr(),
+          routing_id, set_get_buffer_count, start, end,
+          base::BindPostTask(base::SingleThreadTaskRunner::GetCurrentDefault(),
+                             std::move(callback))));
 }
-#endif
 
 GpuChannel::GpuChannel(
     GpuChannelManager* gpu_channel_manager,
@@ -1038,19 +998,15 @@ bool GpuChannel::RegisterOverlayStateObserver(
 
 #if BUILDFLAG(IS_FUCHSIA)
 void GpuChannel::RegisterSysmemBufferCollection(
-    const base::UnguessableToken& id,
-    mojo::PlatformHandle token,
+    mojo::PlatformHandle service_handle,
+    mojo::PlatformHandle sysmem_token,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
   shared_image_stub_->RegisterSysmemBufferCollection(
-      id, zx::channel(token.TakeHandle()), format, usage,
+      zx::eventpair(service_handle.TakeHandle()),
+      zx::channel(sysmem_token.TakeHandle()), format, usage,
       register_with_image_pipe);
-}
-
-void GpuChannel::ReleaseSysmemBufferCollection(
-    const base::UnguessableToken& id) {
-  shared_image_stub_->ReleaseSysmemBufferCollection(id);
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 

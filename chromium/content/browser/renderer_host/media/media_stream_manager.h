@@ -454,8 +454,14 @@ class CONTENT_EXPORT MediaStreamManager
   FRIEND_TEST_ALL_PREFIXES(MediaStreamManagerTest,
                            MultiCaptureIntermediateErrorOnOpening);
 
-  // Contains all data needed to keep track of requests.
+  // Contains common data needed to keep track of requests.
   class DeviceRequest;
+  // Contains data specific for GenerateStreams requests
+  class GenerateStreamsRequest;
+  // Contains data specific for GetOpenDevice requests
+  class GetOpenDeviceRequest;
+  // Contains data specific for OpenDevice requests
+  class OpenDeviceRequest;
 
   // |DeviceRequests| is a list to ensure requests are processed in the order
   // they arrive. The first member of the pair is the label of the
@@ -508,25 +514,6 @@ class CONTENT_EXPORT MediaStreamManager
   MediaStreamProvider* GetDeviceManager(
       blink::mojom::MediaStreamType stream_type) const;
   void StartEnumeration(DeviceRequest* request, const std::string& label);
-  // Creates and returns a DeviceRequest of type |type|. |type| should be either
-  // blink::MEDIA_GENERATE_STREAM or blink::MEDIA_GET_OPEN_DEVICE.
-  // TODO(crbug.com/1288839): Once all device-related callbacks are packed in a
-  // single struct, delete this function and replace its usage with
-  // make_unique<DeviceRequest> calls.
-  static std::unique_ptr<DeviceRequest> CreateDeviceRequest(
-      int render_process_id,
-      int render_frame_id,
-      int requester_id,
-      int page_request_id,
-      const blink::StreamControls& controls,
-      blink::MediaStreamRequestType type,
-      MediaDeviceSaltAndOrigin salt_and_origin,
-      bool user_gesture,
-      blink::mojom::StreamSelectionInfoPtr audio_stream_selection_info_ptr,
-      DeviceStoppedCallback device_stopped_cb,
-      DeviceChangedCallback device_changed_cb,
-      DeviceRequestStateChangeCallback device_request_state_change_cb,
-      DeviceCaptureHandleChangeCallback device_capture_handle_change_cb);
   std::string AddRequest(std::unique_ptr<DeviceRequest> request);
   DeviceRequest* FindRequest(const std::string& label) const;
   // Clones an existing device identified by |existing_device_session_id| and
@@ -601,12 +588,10 @@ class CONTENT_EXPORT MediaStreamManager
   void PanTiltZoomPermissionChecked(
       const std::string& label,
       const absl::optional<blink::MediaStreamDevice>& video_device,
-      base::OnceCallback<void(bool)> callback,
       bool pan_tilt_zoom_allowed);
   void FinalizeRequestFailed(const std::string& label,
                              DeviceRequest* request,
                              blink::mojom::MediaStreamRequestResult result);
-  void FinalizeOpenDevice(const std::string& label, DeviceRequest* request);
   void FinalizeChangeDevice(const std::string& label, DeviceRequest* request);
   void FinalizeMediaAccessRequest(
       const std::string& label,

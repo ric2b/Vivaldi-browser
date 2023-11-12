@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,9 @@
 #include "ash/shell.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/test/gtest_tags.h"
 #include "base/values.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/login/test/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
@@ -27,7 +29,6 @@
 #include "chrome/browser/ash/remote_apps/remote_apps_model.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -133,7 +134,7 @@ class RemoteAppsApitest : public policy::DevicePolicyCrosBrowserTest,
   }
 
   void LoadExtensionAndRunTest(const std::string& test_name) {
-    config_.SetKey("customArg", base::Value(test_name));
+    config_.Set("customArg", base::Value(test_name));
     extensions::TestGetConfigFunction::set_test_config_state(&config_);
 
     std::unique_ptr<ash::FakeIdGenerator> id_generator =
@@ -183,13 +184,21 @@ class RemoteAppsApitest : public policy::DevicePolicyCrosBrowserTest,
     return index == model_size - 1;
   }
 
+  // Launch healthcare application on device (COM_HEALTH_CUJ1_TASK2_WF1).
+  void AddScreenplayTag() {
+    base::AddTagToTestResult("feature_id",
+                             "screenplay-446812cc-07af-4094-bfb2-00150301ede3");
+  }
+
  private:
   Profile* profile_;
-  base::DictionaryValue config_;
+  base::Value::Dict config_;
   ash::EmbeddedPolicyTestServerMixin policy_test_server_mixin_{&mixin_host_};
 };
 
 IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, AddApp) {
+  AddScreenplayTag();
+
   extensions::ResultCatcher catcher;
   LoadExtensionAndRunTest("AddApp");
   ASSERT_TRUE(catcher.GetNextResult());
@@ -224,6 +233,8 @@ IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, AddAppNoIconUrl) {
 }
 
 IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, AddAppToFront) {
+  AddScreenplayTag();
+
   extensions::ResultCatcher catcher;
   LoadExtensionAndRunTest("AddAppToFront");
   ASSERT_TRUE(catcher.GetNextResult());
@@ -233,6 +244,8 @@ IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, AddAppToFront) {
 }
 
 IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, AddFolderAndApps) {
+  AddScreenplayTag();
+
   extensions::ResultCatcher catcher;
   LoadExtensionAndRunTest("AddFolderAndApps");
   ASSERT_TRUE(catcher.GetNextResult());
@@ -285,6 +298,8 @@ IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, DeleteAppInFolder) {
 }
 
 IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, OnRemoteAppLaunched) {
+  AddScreenplayTag();
+
   extensions::ResultCatcher catcher;
   ExtensionTestMessageListener listener("Remote app added");
   listener.set_extension_id(kExtensionId);
@@ -304,6 +319,8 @@ IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, OnRemoteAppLaunched) {
 IN_PROC_BROWSER_TEST_P(RemoteAppsApitest, SortLauncher) {
   if (GetParam() != kApiExtensionRelativePath)
     GTEST_SKIP() << "The sortLauncher API method is not available in Mojo API";
+
+  AddScreenplayTag();
 
   base::FilePath test_dir_path;
   base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir_path);

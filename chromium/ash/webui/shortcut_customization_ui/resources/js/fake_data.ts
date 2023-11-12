@@ -2,149 +2,202 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AcceleratorConfig, AcceleratorSource, AcceleratorState, AcceleratorType, LayoutInfoList, LayoutStyle, Modifier} from './shortcut_types.js';
+import {TimeTicks} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 
-export const fakeActionNames: Map<number, string> = new Map([
-  [0, 'Snap Window Left'],
-  [1, 'Snap Window Right'],
-  [2, 'New Desk'],
-  [3, 'Remove Desk'],
-  [1001, 'New Tab'],
-]);
+import {keyToIconNameMap} from './input_key.js';
+import {stringToMojoString16} from './mojo_utils.js';
+import {AcceleratorCategory, AcceleratorSource, AcceleratorState, AcceleratorSubcategory, AcceleratorType, LayoutStyle, Modifier, MojoAcceleratorConfig, MojoAcceleratorInfo, MojoLayoutInfo} from './shortcut_types.js';
 
-export const fakeCategories: Map<number, string> = new Map([
-  [0, 'Chrome OS'],
-  [1, 'Browser'],
-]);
+const fakeTimestamp: TimeTicks = {
+  internalValue: BigInt(0),
+};
 
-export const fakeSubCategories: Map<number, string> = new Map([
-  [0, 'Window Management'],
-  [1, 'Virtual Desks'],
-  [2, 'Tabs'],
-]);
-
-export const fakeAcceleratorConfig: AcceleratorConfig = new Map([
-  [
-    AcceleratorSource.ASH,
-    new Map([
-      // Snap Window Left
-      [
-        0,
-        [{
-          type: AcceleratorType.DEFAULT,
-          state: AcceleratorState.ENABLED,
-          locked: true,
+export const fakeAcceleratorConfig: MojoAcceleratorConfig = {
+  [AcceleratorSource.kAsh]: {
+    // Snap Window Left
+    [0]: [{
+      type: AcceleratorType.kDefault,
+      state: AcceleratorState.kEnabled,
+      locked: true,
+      layoutProperties: {
+        defaultAccelerator: {
+          keyDisplay: stringToMojoString16('['),
           accelerator: {
             modifiers: Modifier.ALT,
-            key: 219,
-            keyDisplay: '[',
+            keyCode: 219,
+            keyState: 0,
+            timeStamp: fakeTimestamp,
           },
-        }],
-      ],
-      // Snap Window Right
-      [
-        1,
-        [{
-          type: AcceleratorType.DEFAULT,
-          state: AcceleratorState.ENABLED,
-          locked: false,
+        },
+        textAccelerator: undefined,
+      },
+    }],
+    // Snap Window Right
+    [1]: [{
+      type: AcceleratorType.kDefault,
+      state: AcceleratorState.kEnabled,
+      locked: false,
+      layoutProperties: {
+        defaultAccelerator: {
+          keyDisplay: stringToMojoString16(']'),
           accelerator: {
             modifiers: Modifier.ALT,
-            key: 221,
-            keyDisplay: ']',
+            keyCode: 221,
+            keyState: 0,
+            timeStamp: fakeTimestamp,
           },
-        }],
-      ],
-      // New Desk
-      [
-        2,
-        [{
-          type: AcceleratorType.DEFAULT,
-          state: AcceleratorState.ENABLED,
-          locked: false,
+        },
+        textAccelerator: undefined,
+      },
+
+    }],
+    // New Desk
+    [2]: [{
+      type: AcceleratorType.kDefault,
+      state: AcceleratorState.kEnabled,
+      locked: false,
+      layoutProperties: {
+        defaultAccelerator: {
+          keyDisplay: stringToMojoString16('+'),
           accelerator: {
             modifiers: Modifier.COMMAND | Modifier.SHIFT,
-            key: 187,
-            keyDisplay: '+',
+            keyCode: 187,
+            keyState: 0,
+            timeStamp: fakeTimestamp,
           },
-        }],
-      ],
-      // Remove Desk
-      [
-        3,
-        [{
-          type: AcceleratorType.DEFAULT,
-          state: AcceleratorState.ENABLED,
-          locked: false,
+        },
+        textAccelerator: undefined,
+
+      },
+    }],
+    // Remove Desk
+    [3]: [{
+      type: AcceleratorType.kDefault,
+      state: AcceleratorState.kEnabled,
+      locked: false,
+      layoutProperties: {
+        defaultAccelerator: {
+          keyDisplay: stringToMojoString16('-'),
           accelerator: {
             modifiers: Modifier.COMMAND | Modifier.SHIFT,
-            key: 189,
-            keyDisplay: '-',
+            keyCode: 189,
+            keyState: 0,
+            timeStamp: fakeTimestamp,
           },
-        }],
-      ],
-    ]),
-  ],
-  [
-    AcceleratorSource.BROWSER,
-    new Map([
-      // New Tab
-      [
-        1001,
-        [{
-          type: AcceleratorType.DEFAULT,
-          state: AcceleratorState.ENABLED,
-          locked: true,
+        },
+        textAccelerator: undefined,
+
+      },
+    }],
+  },
+  [AcceleratorSource.kBrowser]: {
+    // New Tab
+    [1001]: [{
+      type: AcceleratorType.kDefault,
+      state: AcceleratorState.kEnabled,
+      locked: true,
+      layoutProperties: {
+        defaultAccelerator: {
+          keyDisplay: stringToMojoString16('t'),
           accelerator: {
             modifiers: Modifier.CONTROL,
-            key: 84,
-            keyDisplay: 't',
+            keyCode: 84,
+            keyState: 0,
+            timeStamp: fakeTimestamp,
           },
-        }],
-      ],
-    ]),
-  ],
-]);
+        },
+        textAccelerator: undefined,
 
-export const fakeLayoutInfo: LayoutInfoList = [
+      },
+    }],
+  },
+};
+
+export const fakeLayoutInfo: MojoLayoutInfo[] = [
   {
-    category: 0,      // Chrome OS.
-    sub_category: 0,  // Window Management.
-    description: 0,   // Snap Window Left.
-    layout_style: LayoutStyle.DEFAULT,
-    source: AcceleratorSource.ASH,
+    category: AcceleratorCategory.kTabsAndWindows,
+    subCategory: AcceleratorSubcategory.kGeneral,
+    description: stringToMojoString16('Snap Window Left'),
+    style: LayoutStyle.kDefault,
+    source: AcceleratorSource.kAsh,
     action: 0,
   },
   {
-    category: 0,      // Chrome OS.
-    sub_category: 0,  // Window Management.
-    description: 1,   // Snap Window Right.
-    layout_style: LayoutStyle.DEFAULT,
-    source: AcceleratorSource.ASH,
+    category: AcceleratorCategory.kTabsAndWindows,
+    subCategory: AcceleratorSubcategory.kGeneral,
+    description: stringToMojoString16('Snap Window Right'),
+    style: LayoutStyle.kDefault,
+    source: AcceleratorSource.kAsh,
     action: 1,
   },
   {
-    category: 0,      // Chrome OS.
-    sub_category: 1,  // Virtual Desks.
-    description: 2,   // Create Desk.
-    layout_style: LayoutStyle.DEFAULT,
-    source: AcceleratorSource.ASH,
+    category: AcceleratorCategory.kTabsAndWindows,
+    subCategory: AcceleratorSubcategory.kSystemApps,
+    description: stringToMojoString16('Create Desk'),
+    style: LayoutStyle.kDefault,
+    source: AcceleratorSource.kAsh,
     action: 2,
   },
   {
-    category: 0,      // Chrome OS.
-    sub_category: 1,  // Virtual Desks.
-    description: 3,   // Remove Desk.
-    layout_style: LayoutStyle.DEFAULT,
-    source: AcceleratorSource.ASH,
+    category: AcceleratorCategory.kTabsAndWindows,
+    subCategory: AcceleratorSubcategory.kSystemApps,
+    description: stringToMojoString16('Remove Desk'),
+    style: LayoutStyle.kDefault,
+    source: AcceleratorSource.kAsh,
     action: 3,
   },
   {
-    category: 1,        // Browser.
-    sub_category: 2,    // Tabs.
-    description: 1001,  // New tab.
-    layout_style: LayoutStyle.DEFAULT,
-    source: AcceleratorSource.BROWSER,
+    category: AcceleratorCategory.kPageAndWebBrowser,
+    subCategory: AcceleratorSubcategory.kSystemControls,
+    description: stringToMojoString16('New Tab'),
+    style: LayoutStyle.kDefault,
+    source: AcceleratorSource.kBrowser,
     action: 1001,
   },
 ];
+
+// The following code is used to add fake accelerator entries for each icon.
+// When useFakeProvider is true, this will display all available icons for
+// the purposes of debugging.
+const createFakeMojoAccelInfo = (keyDisplay: string): MojoAcceleratorInfo => {
+  return {
+    type: AcceleratorType.kDefault,
+    state: AcceleratorState.kEnabled,
+    locked: true,
+    layoutProperties: {
+      defaultAccelerator: {
+        keyDisplay: stringToMojoString16(keyDisplay),
+        accelerator: {
+          modifiers: 0,
+          keyCode: 0,
+          keyState: 0,
+          timeStamp: fakeTimestamp,
+        },
+      },
+      textAccelerator: undefined,
+    },
+  };
+};
+
+const createFakeMojoLayoutInfo =
+    (description: string, action: number): MojoLayoutInfo => {
+      return {
+        category: AcceleratorCategory.kPageAndWebBrowser,
+        subCategory: AcceleratorSubcategory.kSystemControls,
+        description: stringToMojoString16(description),
+        style: LayoutStyle.kDefault,
+        source: AcceleratorSource.kBrowser,
+        action,
+      };
+    };
+
+const icons = Object.keys(keyToIconNameMap);
+
+for (const [index, iconName] of icons.entries()) {
+  const actionId = 10000 + index;
+  fakeAcceleratorConfig[AcceleratorSource.kBrowser] = {
+    ...fakeAcceleratorConfig[AcceleratorSource.kBrowser],
+    [actionId]: [createFakeMojoAccelInfo(iconName)],
+  };
+  fakeLayoutInfo.push(createFakeMojoLayoutInfo(`Icon: ${iconName}`, actionId));
+}

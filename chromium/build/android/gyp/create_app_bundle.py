@@ -199,13 +199,10 @@ def _GenerateBundleConfigJson(uncompressed_assets, compress_dex,
   split_dimensions = [ _MakeSplitDimension(dim, dim in split_dimensions)
                        for dim in _ALL_SPLIT_DIMENSIONS ]
 
-  # Native libraries loaded by the crazy linker.
-  # Whether other .so files are compressed is controlled by
-  # "uncompressNativeLibraries".
-  uncompressed_globs = ['lib/*/crazy.*']
   # Locale-specific pak files stored in bundle splits need not be compressed.
-  uncompressed_globs.extend(
-      ['assets/locales#lang_*/*.pak', 'assets/fallback-locales/*.pak'])
+  uncompressed_globs = [
+      'assets/locales#lang_*/*.pak', 'assets/fallback-locales/*.pak'
+  ]
   # Vivaldi needs these resources to be uncompressed.
   uncompressed_globs.extend(
       ['assets/default-bookmarks/*.json', 'assets/adblocker_resources/*.json'])

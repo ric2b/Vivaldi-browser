@@ -1,15 +1,15 @@
 // Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 import 'chrome://resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import 'chrome://resources/cr_elements/cr_nav_menu_item_style.css.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import './shared_style.css.js';
 import './icons.html.js';
 
-import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
+import {CrMenuSelector} from 'chrome://resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Page, Route, RouteObserverMixin, Router} from './router.js';
@@ -17,7 +17,7 @@ import {getTemplate} from './side_bar.html.js';
 
 export interface PasswordManagerSideBarElement {
   $: {
-    'menu': IronSelectorElement,
+    'menu': CrMenuSelector,
   };
 }
 
@@ -46,6 +46,25 @@ export class PasswordManagerSideBarElement extends RouteObserverMixin
 
   private onSelectorActivate_(event: CustomEvent<{selected: Page}>) {
     Router.getInstance().navigateTo(event.detail.selected);
+  }
+
+  private getSelectedPage_(): string {
+    switch (this.selectedPage_) {
+      case Page.CHECKUP_DETAILS:
+        return Page.CHECKUP;
+      case Page.PASSWORD_DETAILS:
+        return Page.PASSWORDS;
+      default:
+        return this.selectedPage_;
+    }
+  }
+
+  /**
+   * Prevent clicks on sidebar items from navigating. These are only links for
+   * accessibility purposes, taps are handled separately by <iron-selector>.
+   */
+  private onItemClick_(e: Event) {
+    e.preventDefault();
   }
 }
 

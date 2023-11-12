@@ -27,6 +27,11 @@
 #include "media/base/video_util.h"
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mp4/h264_annex_b_to_avc_bitstream_converter.h"
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && \
+    BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+#include "media/formats/mp4/h265_annex_b_to_hevc_bitstream_converter.h"
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC) &&
+        // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/video/gpu_video_accelerator_factories.h"
 
@@ -82,7 +87,8 @@ VideoEncodeAccelerator::Config SetUpVeaConfig(
     const VideoEncoder::Options& opts,
     VideoPixelFormat format,
     VideoFrame::StorageType storage_type,
-    VideoEncodeAccelerator::SupportedRateControlMode supported_rc_modes) {
+    VideoEncodeAccelerator::SupportedRateControlMode supported_rc_modes,
+    VideoEncodeAccelerator::Config::EncoderType required_encoder_type) {
   absl::optional<uint32_t> initial_framerate;
   if (opts.framerate.has_value())
     initial_framerate = static_cast<uint32_t>(opts.framerate.value());
@@ -120,6 +126,7 @@ VideoEncodeAccelerator::Config SetUpVeaConfig(
 
   config.require_low_delay =
       opts.latency_mode == VideoEncoder::LatencyMode::Realtime;
+  config.required_encoder_type = required_encoder_type;
 
   const bool is_rgb =
       format == PIXEL_FORMAT_XBGR || format == PIXEL_FORMAT_XRGB ||
@@ -295,12 +302,14 @@ VideoEncodeAcceleratorAdapter::PendingOp::~PendingOp() = default;
 VideoEncodeAcceleratorAdapter::VideoEncodeAcceleratorAdapter(
     GpuVideoAcceleratorFactories* gpu_factories,
     std::unique_ptr<MediaLog> media_log,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner)
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    VideoEncodeAccelerator::Config::EncoderType required_encoder_type)
     : output_pool_(base::MakeRefCounted<base::UnsafeSharedMemoryPool>()),
       gpu_factories_(gpu_factories),
       media_log_(std::move(media_log)),
       accelerator_task_runner_(gpu_factories_->GetTaskRunner()),
-      callback_task_runner_(std::move(callback_task_runner)) {
+      callback_task_runner_(std::move(callback_task_runner)),
+      required_encoder_type_(required_encoder_type) {
   DETACH_FROM_SEQUENCE(accelerator_sequence_checker_);
 }
 
@@ -409,6 +418,13 @@ void VideoEncodeAcceleratorAdapter::InitializeOnAcceleratorThread(
       !options_.avc.produce_annexb) {
     h264_converter_ = std::make_unique<H264AnnexBToAvcBitstreamConverter>();
   }
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && \
+    BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+  if (profile_ == HEVCPROFILE_MAIN && !options_.hevc.produce_annexb) {
+    h265_converter_ = std::make_unique<H265AnnexBToHevcBitstreamConverter>();
+  }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC) &&
+        // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
   std::move(done_cb).Run(EncoderStatus::Codes::kOk);
@@ -439,7 +455,7 @@ void VideoEncodeAcceleratorAdapter::InitializeInternalOnAcceleratorThread() {
 
   auto vea_config =
       SetUpVeaConfig(profile_, options_, format, first_frame->storage_type(),
-                     supported_rc_modes_);
+                     supported_rc_modes_, required_encoder_type_);
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // Linux/ChromeOS require a special configuration to use dmabuf storage.
@@ -527,7 +543,7 @@ void VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread(
   else
     result = PrepareCpuFrame(input_coded_size_, frame);
 
-  if (result.has_error()) {
+  if (!result.has_value()) {
     std::move(done_cb).Run(
         std::move(result)
             .error()
@@ -602,6 +618,17 @@ void VideoEncodeAcceleratorAdapter::ChangeOptionsOnAcceleratorThread(
       h264_converter_ = std::make_unique<H264AnnexBToAvcBitstreamConverter>();
     }
   }
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && \
+    BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+  if (profile_ == HEVCPROFILE_MAIN) {
+    if (options.hevc.produce_annexb) {
+      h265_converter_.reset();
+    } else if (!h265_converter_) {
+      h265_converter_ = std::make_unique<H265AnnexBToHevcBitstreamConverter>();
+    }
+  }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC) &&
+        // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
   options_ = options;
@@ -695,6 +722,8 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
     result.temporal_id = metadata.vp8.value().temporal_idx;
   else if (metadata.av1.has_value())
     result.temporal_id = metadata.av1.value().temporal_idx;
+  else if (metadata.h265.has_value())
+    result.temporal_id = metadata.h265.value().temporal_idx;
 
   DCHECK_EQ(buffer_id, 0);
   // There is always one output buffer.
@@ -703,15 +732,16 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
   DCHECK_LE(result.size, mapping.size());
 
   if (result.size > 0) {
+    bool stream_converted = false;
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
+    uint8_t* src = static_cast<uint8_t*>(mapping.memory());
+    size_t dst_size = result.size;
+    size_t actual_output_size = 0;
+    auto dst = std::make_unique<uint8_t[]>(dst_size);
+    bool config_changed = false;
+    media::MP4Status status;
     if (h264_converter_) {
-      uint8_t* src = static_cast<uint8_t*>(mapping.memory());
-      size_t dst_size = result.size;
-      size_t actual_output_size = 0;
-      bool config_changed = false;
-      auto dst = std::make_unique<uint8_t[]>(dst_size);
-
-      auto status = h264_converter_->ConvertChunk(
+      status = h264_converter_->ConvertChunk(
           base::span<uint8_t>(src, result.size),
           base::span<uint8_t>(dst.get(), dst_size), &config_changed,
           &actual_output_size);
@@ -735,6 +765,7 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
       }
       result.size = actual_output_size;
       result.data = std::move(dst);
+      stream_converted = true;
 
       if (config_changed) {
         const auto& config = h264_converter_->GetCurrentConfig();
@@ -745,13 +776,50 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
         }
       }
     } else {
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
-      result.data = std::make_unique<uint8_t[]>(result.size);
-      memcpy(result.data.get(), mapping.memory(), result.size);
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && \
+    BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+      if (h265_converter_) {
+        status = h265_converter_->ConvertChunk(
+            base::span<uint8_t>(src, result.size),
+            base::span<uint8_t>(dst.get(), dst_size), &config_changed,
+            &actual_output_size);
+        if (status.code() == MP4Status::Codes::kBufferTooSmall) {
+          dst_size = actual_output_size;
+          dst = std::make_unique<uint8_t[]>(dst_size);
+          status = h265_converter_->ConvertChunk(
+              base::span<uint8_t>(src, result.size),
+              base::span<uint8_t>(dst.get(), dst_size), &config_changed,
+              &actual_output_size);
+        }
+
+        if (!status.is_ok()) {
+          LOG(ERROR) << status.message();
+          NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+          return;
+        }
+        result.size = actual_output_size;
+        result.data = std::move(dst);
+        stream_converted = true;
+
+        if (config_changed) {
+          const auto& config = h265_converter_->GetCurrentConfig();
+          desc = CodecDescription();
+          if (!config.Serialize(desc.value())) {
+            NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+            return;
+          }
+        }
+      }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC) &&
+        // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
     }
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+    if (!stream_converted) {
+      result.data = std::make_unique<uint8_t[]>(result.size);
+      memcpy(result.data.get(), mapping.memory(), result.size);
+    }
   }
+
   // Give the buffer back to |accelerator_|
   const base::UnsafeSharedMemoryRegion& region =
       output_handle_holder_->GetRegion();
@@ -806,7 +874,13 @@ void VideoEncodeAcceleratorAdapter::NotifyError(
 }
 
 void VideoEncodeAcceleratorAdapter::NotifyEncoderInfoChange(
-    const VideoEncoderInfo& info) {}
+    const VideoEncoderInfo& info) {
+  // TODO(crbug.com/1378157): More VideoEncoderInfo can be fetched from VEA
+  // beneath. Here the accurate encoder name is updated to MediaLog. So things
+  // like media tab in Developer tools can show the actual encoder name.
+  media_log_->SetProperty<media::MediaLogProperty::kVideoEncoderName>(
+      info.implementation_name);
+}
 
 void VideoEncodeAcceleratorAdapter::InitCompleted(EncoderStatus status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(accelerator_sequence_checker_);
@@ -919,8 +993,7 @@ VideoEncodeAcceleratorAdapter::PrepareCpuFrame(
 
   shared_frame->BackWithSharedMemory(handle->region());
   shared_frame->AddDestructionObserver(
-      base::BindOnce([](std::unique_ptr<ReadOnlyRegionPool::Handle> handle) {},
-                     std::move(handle)));
+      base::DoNothingWithBoundArgs(std::move(handle)));
   return shared_frame;
 }
 

@@ -4,7 +4,6 @@
 
 #include "media/gpu/h264_decoder.h"
 
-#include <algorithm>
 #include <limits>
 #include <memory>
 
@@ -14,6 +13,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "media/base/media_switches.h"
 #include "media/video/h264_level_limits.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -531,8 +531,7 @@ void H264Decoder::ConstructReferencePicListsB() {
 
   // If lists identical, swap first two entries in RefPicList1 (spec 8.2.4.2.3)
   if (ref_pic_list_b1_.size() > 1 &&
-      std::equal(ref_pic_list_b0_.begin(), ref_pic_list_b0_.end(),
-                 ref_pic_list_b1_.begin()))
+      base::ranges::equal(ref_pic_list_b0_, ref_pic_list_b1_))
     std::swap(ref_pic_list_b1_[0], ref_pic_list_b1_[1]);
 }
 
@@ -839,8 +838,16 @@ bool H264Decoder::HandleMemoryManagementOps(scoped_refptr<H264Picture> pic) {
         if (to_mark) {
           to_mark->ref = false;
         } else {
+          // |to_mark| may be null for a variety of reasons. For example, the
+          // video frame it refers to may have been dropped by the network, or
+          // the bitstream is non-conformant and the frame it refers to is
+          // already marked as "unused for reference," etc. In any case, it
+          // should be safe to ignore this case and continue processing further
+          // memory management control operations since the frame won't be used
+          // for reference after this in any case.
+          //
+          // In real life, this case was observed in https://crbug.com/1394965.
           DVLOG(1) << "Invalid short ref pic num to unmark";
-          return false;
         }
         break;
 
@@ -852,6 +859,9 @@ bool H264Decoder::HandleMemoryManagementOps(scoped_refptr<H264Picture> pic) {
         if (to_mark) {
           to_mark->ref = false;
         } else {
+          // TODO(crbug.com/1402627): consider doing the same for mmco 2 when
+          // we can have testing for it, as how we handle missing |to_mark| for
+          // mmco 1.
           DVLOG(1) << "Invalid long term ref pic num to unmark";
           return false;
         }
@@ -1544,6 +1554,8 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
               return kRanOutOfSurfaces;
             if (current_decrypt_config_)
               curr_pic_->set_decrypt_config(current_decrypt_config_->Clone());
+            if (hdr_metadata_.has_value())
+              curr_pic_->set_hdr_metadata(hdr_metadata_);
 
             state_ = State::kTryNewFrame;
           }
@@ -1611,7 +1623,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
         CHECK_ACCELERATOR_RESULT(FinishPrevFrameIfPresent());
         break;
 
-      case H264NALU::kSEIMessage:
+      case H264NALU::kSEIMessage: {
         if (current_decrypt_config_) {
           // If there are encrypted SEI NALUs as part of CENCv1, then we also
           // need to save those so we can send them into the accelerator so it
@@ -1630,32 +1642,57 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
             break;
           }
         }
-        if (state_ == State::kAfterReset && !recovery_frame_cnt_ &&
-            !recovery_frame_num_) {
-          // If we are after reset, we can also resume from a SEI recovery point
-          // (spec D.2.8) if one is present. However, if we are already in the
-          // process of handling one, skip any subsequent ones until we are done
-          // processing.
-          H264SEIMessage sei{};
-          if (parser_.ParseSEI(&sei) != H264Parser::kOk)
-            SET_ERROR_AND_RETURN();
+        H264SEI sei;
+        if (parser_.ParseSEI(&sei) != H264Parser::kOk)
+          break;
 
-          if (sei.type == H264SEIMessage::kSEIRecoveryPoint) {
-            recovery_frame_cnt_ = sei.recovery_point.recovery_frame_cnt;
-            if (0 > *recovery_frame_cnt_ ||
-                *recovery_frame_cnt_ >= max_frame_num_) {
-              DVLOG(1) << "Invalid recovery_frame_cnt=" << *recovery_frame_cnt_
-                       << " (it must be [0, max_frame_num_-1="
-                       << max_frame_num_ - 1 << "])";
-              SET_ERROR_AND_RETURN();
-            }
-            DVLOG(3) << "Recovery point SEI is found, recovery_frame_cnt_="
-                     << *recovery_frame_cnt_;
-            break;
+        for (auto& sei_msg : sei.msgs) {
+          switch (sei_msg.type) {
+            case H264SEIMessage::kSEIRecoveryPoint:
+              // If we are after reset, we can also resume from a SEI recovery
+              // point (spec D.2.8) if one is present. However, if we are
+              // already in the process of handling one, skip any subsequent
+              // ones until we are done processing.
+              if (state_ == State::kAfterReset && !recovery_frame_cnt_ &&
+                  !recovery_frame_num_) {
+                recovery_frame_cnt_ = sei_msg.recovery_point.recovery_frame_cnt;
+                if (0 > *recovery_frame_cnt_ ||
+                    *recovery_frame_cnt_ >= max_frame_num_) {
+                  DVLOG(1) << "Invalid recovery_frame_cnt="
+                           << *recovery_frame_cnt_
+                           << " (it must be [0, max_frame_num_-1="
+                           << max_frame_num_ - 1 << "])";
+                  SET_ERROR_AND_RETURN();
+                }
+                DVLOG(3) << "Recovery point SEI is found, recovery_frame_cnt_="
+                         << *recovery_frame_cnt_;
+              }
+              break;
+            case H264SEIMessage::kSEIContentLightLevelInfo:
+              // H264 HDR metadata may appears in the below places:
+              // 1. Container.
+              // 2. Bitstream.
+              // 3. Both container and bitstream.
+              // Thus we should also extract HDR metadata here in case we
+              // miss the information.
+              if (!hdr_metadata_)
+                hdr_metadata_ = gfx::HDRMetadata();
+              sei_msg.content_light_level_info.PopulateHDRMetadata(
+                  hdr_metadata_.value());
+              break;
+            case H264SEIMessage::kSEIMasteringDisplayInfo:
+              if (!hdr_metadata_)
+                hdr_metadata_ = gfx::HDRMetadata();
+              sei_msg.mastering_display_info.PopulateColorVolumeMetadata(
+                  hdr_metadata_->color_volume_metadata);
+              break;
+            default:
+              break;
           }
         }
+        break;
+      }
 
-        [[fallthrough]];
       default:
         DVLOG(4) << "Skipping NALU type: " << curr_nalu_->nal_unit_type;
         break;
@@ -1684,6 +1721,10 @@ uint8_t H264Decoder::GetBitDepth() const {
 
 VideoChromaSampling H264Decoder::GetChromaSampling() const {
   return chroma_sampling_;
+}
+
+absl::optional<gfx::HDRMetadata> H264Decoder::GetHDRMetadata() const {
+  return hdr_metadata_;
 }
 
 size_t H264Decoder::GetRequiredNumOfPictures() const {

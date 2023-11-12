@@ -4,17 +4,22 @@ source_set("cells") {
   sources = [
     "vivaldi_speed_dial_container_cell.h",
     "vivaldi_speed_dial_container_cell.mm",
-    "vivaldi_speed_dial_folder_item_cell.h",
-    "vivaldi_speed_dial_folder_item_cell.mm",
-    "vivaldi_speed_dial_url_item_cell.h",
-    "vivaldi_speed_dial_url_item_cell.mm",
+    "vivaldi_speed_dial_folder_regular_cell.h",
+    "vivaldi_speed_dial_folder_regular_cell.mm",
+    "vivaldi_speed_dial_folder_list_cell.h",
+    "vivaldi_speed_dial_folder_list_cell.mm",
+    "vivaldi_speed_dial_regular_cell.h",
+    "vivaldi_speed_dial_regular_cell.mm",
+    "vivaldi_speed_dial_small_cell.h",
+    "vivaldi_speed_dial_small_cell.mm",
+    "vivaldi_speed_dial_list_cell.h",
+    "vivaldi_speed_dial_list_cell.mm",
   ]
 
   deps = [
     "//base",
     "//base:i18n",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser",
     "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
     "//ios/third_party/material_components_ios",

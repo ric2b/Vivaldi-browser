@@ -218,6 +218,7 @@ class VIEWS_EXPORT ViewAccessibility {
   //
   // Note that |pos_in_set| is one-based, i.e. it starts from 1 not 0.
   void OverridePosInSet(int pos_in_set, int set_size);
+  void ClearPosInSetOverride();
 
   // Override the next or previous focused widget. Some assistive technologies,
   // such as screen readers, may utilize this information to transition focus
@@ -328,7 +329,7 @@ class VIEWS_EXPORT ViewAccessibility {
 
   // If set to true, anything that is a descendant of this view will be hidden
   // from accessibility.
-  bool is_leaf_;
+  bool is_leaf_ = false;
 
   // When true the view is ignored when generating the AX node hierarchy, but
   // its children are included. For example, if you created a custom table with
@@ -338,7 +339,7 @@ class VIEWS_EXPORT ViewAccessibility {
   // ignored, like a Widget's RootView, ClientView, etc.
   // Similar to setting the role of an ARIA widget to "none" or
   // "presentational".
-  bool is_ignored_;
+  bool is_ignored_ = false;
 
   // Used to override the View's enabled state in case we need to mark the View
   // as enabled or disabled only in the accessibility tree.

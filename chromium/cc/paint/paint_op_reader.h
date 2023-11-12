@@ -5,6 +5,7 @@
 #ifndef CC_PAINT_PAINT_OP_READER_H_
 #define CC_PAINT_PAINT_OP_READER_H_
 
+#include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_filter.h"
@@ -297,9 +298,6 @@ class CC_PAINT_EXPORT PaintOpReader {
   void ReadLightingSpotPaintFilter(
       sk_sp<PaintFilter>* filter,
       const absl::optional<PaintFilter::CropRect>& crop_rect);
-  void ReadStretchPaintFilter(
-      sk_sp<PaintFilter>* filter,
-      const absl::optional<PaintFilter::CropRect>& crop_rect);
 
   // Returns the size of the read record, 0 if error.
   size_t Read(sk_sp<PaintRecord>* record);
@@ -311,7 +309,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   const volatile char* memory_ = nullptr;
   size_t remaining_bytes_ = 0u;
   bool valid_ = true;
-  const PaintOp::DeserializeOptions& options_;
+  const raw_ref<const PaintOp::DeserializeOptions> options_;
 
   // Indicates that the data was serialized with the following constraints:
   // 1) PaintRecords and SkDrawLoopers are ignored.

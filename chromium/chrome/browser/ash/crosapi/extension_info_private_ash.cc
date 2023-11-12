@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "build/config/chromebox_for_meetings/buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -29,8 +30,8 @@
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/constants/devicetype.h"
-#include "chromeos/system/statistics_provider.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -255,29 +256,28 @@ const char* GetBoolPrefNameForApiProperty(const char* api_name) {
 
 std::unique_ptr<base::Value> GetValue(const std::string& property_name) {
   if (property_name == kPropertyHWID) {
-    std::string hwid;
     chromeos::system::StatisticsProvider* provider =
         chromeos::system::StatisticsProvider::GetInstance();
-    provider->GetMachineStatistic(chromeos::system::kHardwareClassKey, &hwid);
-    return std::make_unique<base::Value>(hwid);
+    const absl::optional<base::StringPiece> hwid =
+        provider->GetMachineStatistic(chromeos::system::kHardwareClassKey);
+    return std::make_unique<base::Value>(hwid.value_or(""));
   }
 
   if (property_name == kPropertyCustomizationID) {
-    std::string customization_id;
     chromeos::system::StatisticsProvider* provider =
         chromeos::system::StatisticsProvider::GetInstance();
-    provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey,
-                                  &customization_id);
-    return std::make_unique<base::Value>(customization_id);
+    const absl::optional<base::StringPiece> customization_id =
+        provider->GetMachineStatistic(chromeos::system::kCustomizationIdKey);
+    return std::make_unique<base::Value>(customization_id.value_or(""));
   }
 
   if (property_name == kPropertyDeviceRequisition) {
-    std::string device_requisition;
     chromeos::system::StatisticsProvider* provider =
         chromeos::system::StatisticsProvider::GetInstance();
-    provider->GetMachineStatistic(chromeos::system::kOemDeviceRequisitionKey,
-                                  &device_requisition);
-    return std::make_unique<base::Value>(device_requisition);
+    const absl::optional<base::StringPiece> device_requisition =
+        provider->GetMachineStatistic(
+            chromeos::system::kOemDeviceRequisitionKey);
+    return std::make_unique<base::Value>(device_requisition.value_or(""));
   }
 
   if (property_name == kPropertyMeetDevice) {
@@ -426,7 +426,7 @@ void ExtensionInfoPrivateAsh::GetSystemProperties(
                     base::Value::FromUniquePtrValue(std::move(value)));
     }
   }
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(result)));
 }
 
@@ -454,13 +454,13 @@ void ExtensionInfoPrivateAsh::SetBool(const std::string& property_name,
     found = true;
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(found)));
 }
 
 void ExtensionInfoPrivateAsh::IsTabletModeEnabled(
     IsTabletModeEnabledCallback callback) {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback),
                      std::move(ash::TabletMode::Get()->InTabletMode())));

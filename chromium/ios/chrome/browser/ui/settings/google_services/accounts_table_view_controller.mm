@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/system_identity.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
@@ -32,7 +33,7 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
@@ -47,7 +48,6 @@
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "net/base/mac/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -190,7 +190,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.removeAccountCoordinator stop];
   self.removeAccountCoordinator = nil;
   [self stopBrowserStateServiceObservers];
+  _accountManagerServiceObserver.reset();
   _browser = nullptr;
+  _accountManagerService = nullptr;
+
+  _isBeingDismissed = YES;
 }
 
 #pragma mark - SettingsRootTableViewController
@@ -284,7 +288,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   BOOL hasSyncConsent =
       authService->HasPrimaryIdentity(signin::ConsentLevel::kSync);
   TableViewLinkHeaderFooterItem* footerItem = nil;
-  if (IsForceSignInEnabled()) {
+  if ([self authService]->GetServiceStatus() ==
+      AuthenticationService::ServiceStatus::SigninForcedByPolicy) {
     if (authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
       footerItem =
           [self signOutSyncingFooterItemForForcedSignin:hasSyncConsent];
@@ -417,7 +422,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   // If there is an operation in process that does not allow selecting a cell or
   // if the settings will be dismissed, exit without performing the selection.
-  if (self.uiDisabled || !_browser) {
+  if (self.uiDisabled || _isBeingDismissed) {
     return;
   }
 

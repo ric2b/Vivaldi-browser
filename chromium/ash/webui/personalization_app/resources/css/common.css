@@ -30,10 +30,22 @@
       var(--cros-font-family-google-sans);
 }
 
+:host-context(body.jelly-enabled) {
+  --personalization-app-grid-item-background-color:
+      var(--cros-sys-secondary_container);
+}
+
 @media (prefers-color-scheme: dark) {
   :host {
+    --personalization-app-grid-item-background-color: rgba(var(--google-grey-700-rgb), 0.3);
+  }
+
+  :host-context(body.jelly-enabled) {
+    /* When Jelly is enabled, the
+     * |personalization-app-grid-item-background-color| is the same for light
+     * and dark mode. */
     --personalization-app-grid-item-background-color:
-      rgba(var(--google-grey-700-rgb), 0.3);
+        var(--cros-sys-secondary_container);
   }
 }
 
@@ -43,16 +55,10 @@ iron-list {
 
 .photo-container {
   box-sizing: border-box;
-  height: calc(
-    var(--personalization-app-grid-item-height) +
-    var(--personalization-app-grid-item-spacing));
+  height: 100%;
   overflow: hidden;
   padding: calc(var(--personalization-app-grid-item-spacing) / 2);
-  /* Media queries in trusted and untrusted code will resize to 25% at
-   * correct widths.  Subtract 0.34px to fix subpixel rounding issues with
-   * iron-list. This makes sure all photo containers on a row add up to at
-   * least 1px smaller than the parent width.*/
-  width: calc(100% / 3 - 0.34px);
+  width: 100%;
 }
 
 .photo-container:focus-visible {
@@ -102,9 +108,7 @@ iron-list {
 
 .photo-inner-container:focus-visible,
 .photo-loading-placeholder:focus-visible {
-  border: 2px solid var(--cros-focus-ring-color);
-  border-radius: 14px;
-  outline: none;
+  outline: 2px solid var(--cros-focus-ring-color);
 }
 
 .photo-images-container {
@@ -114,6 +118,7 @@ iron-list {
   display: flex;
   flex-flow: row wrap;
   height: 100%;
+  justify-content: center;
   /* stop img and gradient-mask from ignoring above border-radius. */
   overflow: hidden;
   position: relative;
@@ -185,12 +190,6 @@ iron-icon[icon='personalization:checkmark'] {
 
 .photo-inner-container[aria-selected='true'] .photo-images-border {
   border: 0;
-}
-
-.photo-inner-container:focus-visible:not([aria-selected='true'])
-.photo-images-container {
-  height: calc(100% - 4px);
-  width: calc(100% - 4px);
 }
 
 cr-button[aria-pressed=true],
@@ -282,8 +281,8 @@ cr-button[aria-selected=true] {
 .preview-text-placeholder > .placeholder:first-child {
   /* Each row is 83 ms after the prior element. */
   --animation-delay: calc(1s + 83ms);
-  width: 20%;
   height: 20px;
+  width: 20%;
 }
 
 .preview-text-container > span:nth-child(2) {
@@ -293,8 +292,8 @@ cr-button[aria-selected=true] {
 
 .preview-text-placeholder > .placeholder:nth-child(2) {
   --animation-delay: calc(1s + 83ms * 2);
-  width: 75%;
   height: 24px;
+  width: 75%;
 }
 
 .preview-text-container > span:nth-child(n+3) {
@@ -304,8 +303,8 @@ cr-button[aria-selected=true] {
 
 .preview-text-placeholder > .placeholder:nth-child(n+3) {
   --animation-delay: calc(1s + 83ms * 3);
-  width: 33%;
   height: 20px;
+  width: 33%;
 }
 
 .ambient-subpage-element-title {
@@ -344,25 +343,6 @@ cr-button[aria-selected=true] {
 
 .clickable {
   cursor: pointer;
-}
-
-paper-tooltip::part(tooltip) {
-  align-items: flex-end;
-  display: flex;
-  flex-direction: row;
-  height: 18px;
-  padding: 3px 8px;
-}
-
-paper-tooltip {
-  --paper-tooltip-background: var(--cros-tooltip-background-color);
-  --paper-tooltip-text-color: var(--cros-tooltip-label-color);
-}
-
-paper-tooltip span {
-  align-items: center;
-  display: flex;
-  font: var(--cros-body-2-font);
 }
 
 :host-context([dir=rtl]) iron-icon[icon='cr:chevron-right'] {

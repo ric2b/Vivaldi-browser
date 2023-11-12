@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probeer Windows Probleemoplosser voor netwerken uit te voeren<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Deze website bevat schadelijke programma's</translation>
 <translation id="1916770123977586577">Laad deze pagina opnieuw om de aangepaste instellingen toe te passen op deze website</translation>
-<translation id="1973351931613083086">Automatisch afspelen</translation>
 <translation id="1974060860693918893">Geavanceerd</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controleer de proxy en firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verleend aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Deze website kan geen beveiligde verbinding leveren</translation>
 <translation id="2187317261103489799">Detecteren (standaard)</translation>
 <translation id="2224337661447660594">Geen internet</translation>
-<translation id="2230458221926704099">Los problemen met je verbinding op met de <ph name="BEGIN_LINK" />diagnose-app<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Je toegang tot internet wordt geblokkeerd</translation>
 <translation id="2317259163369394535">Voor <ph name="DOMAIN" /> is een gebruikersnaam en wachtwoord vereist.</translation>
 <translation id="2337852623177822836">Instelling beheerd door je beheerder</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Cybercriminelen proberen mogelijk je gegevens van <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> te stelen (bijvoorbeeld wachtwoorden, berichten of creditcardgegevens). <ph name="BEGIN_LEARN_MORE_LINK" />Meer informatie<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Er is een netwerkwijziging gedetecteerd.</translation>
 <translation id="2948083400971632585">Je kunt alle proxy's die zijn geconfigureerd voor een verbinding op de instellingenpagina uitschakelen.</translation>
-<translation id="2953943267837858202">Automatisch afspelen van video niet toegestaan</translation>
 <translation id="2991571918955627853">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website HSTS gebruikt. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
 <translation id="3005723025932146533">Opgeslagen kopie weergeven</translation>
 <translation id="301521992641321250">Automatisch geblokkeerd</translation>
@@ -59,7 +56,6 @@
 <translation id="3176929007561373547">Controleer je proxyinstellingen of neem contact op met je netwerkbeheerder om te controleren of de proxyserver werkt. Als je denkt dat je geen proxyserver zou moeten gebruiken: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Klik op de knop 'Pagina herladen' om de gegevens opnieuw te verzenden die nodig zijn om de pagina te laden.</translation>
 <translation id="3234666976984236645">Altijd belangrijke inhoud op deze website detecteren</translation>
-<translation id="3291915639428159043">Automatisch afspelen geblokkeerd</translation>
 <translation id="3308738399950580893">advertenties</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is momenteel niet bereikbaar.</translation>
 <translation id="3427092606871434483">Toestaan (standaard)</translation>
@@ -70,7 +66,6 @@
 <translation id="3566021033012934673">Je verbinding is niet privé</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details verbergen</translation>
-<translation id="3620979700683094848">Websites mogen video automatisch afspelen</translation>
 <translation id="3630155396527302611">Als dit programma al wordt vermeld als een programma dat toegang heeft tot het netwerk, kun je proberen het uit de lijst te verwijderen en het opnieuw toe te voegen.</translation>
 <translation id="3658742229777143148">Revisie</translation>
 <translation id="3681007416295224113">Certificaatgegevens</translation>
@@ -81,7 +76,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> wordt geblokkeerd</translation>
 <translation id="3987940399970879459">Minder dan 1 MB</translation>
 <translation id="4075732493274867456">De client en server ondersteunen geen algemene SSL-protocolversie of coderingssuite.</translation>
-<translation id="410351446219883937">Automatisch afspelen</translation>
 <translation id="4116663294526079822">Altijd toestaan op deze website</translation>
 <translation id="4130226655945681476">Controleer de netwerkkabels, modem en router</translation>
 <translation id="4151403195736952345">Algemene standaardinstelling gebruiken (detecteren)</translation>
@@ -153,7 +147,6 @@
 <translation id="6451458296329894277">Opnieuw indienen bevestigen</translation>
 <translation id="6569060085658103619">Je bekijkt een extensiepagina</translation>
 <translation id="6657585470893396449">Wachtwoord</translation>
-<translation id="6685834062052613830">Afmelden en configuratie voltooien</translation>
 <translation id="6711464428925977395">Er is iets mis met de proxyserver of het adres is onjuist.</translation>
 <translation id="6757797048963528358">Je apparaat is in de slaapstand gegaan.</translation>
 <translation id="6897140037006041989">Gebruikersagent</translation>
@@ -184,13 +177,11 @@
 <translation id="7758069387465995638">De verbinding is mogelijk geblokkeerd door de firewall of antivirussoftware.</translation>
 <translation id="7800304661137206267">De verbinding is versleuteld met <ph name="CIPHER" />, met <ph name="MAC" /> voor berichtverificatie en <ph name="KX" /> als mechanisme voor sleuteluitwisseling.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> gebruikt gewoonlijk versleuteling om je gegevens te beschermen. Toen Vivaldi deze keer probeerde verbinding te maken met <ph name="SITE" />, retourneerde de website ongewone en onjuiste inloggegevens. Dit kan gebeuren wanneer een aanvaller probeert zich als <ph name="SITE" /> voor te doen of wanneer een wifi-inlogscherm de verbinding heeft verbroken. Je gegevens zijn nog steeds veilig omdat Vivaldi de verbinding heeft verbroken voordat er gegevens konden worden uitgewisseld.</translation>
-<translation id="7834693436815575883">Automatisch afspelen toegestaan</translation>
 <translation id="7878562273885520351">Je wachtwoord is mogelijk gehackt</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
 <translation id="8025119109950072390">Cybercriminelen op deze website proberen je mogelijk te misleiden om iets gevaarlijks te doen, zoals software installeren of je persoonlijke gegevens bekendmaken (bijvoorbeeld wachtwoorden, telefoonnummers of creditcards).</translation>
 <translation id="8037357227543935929">Vragen (standaard)</translation>
 <translation id="8041940743680923270">Algemene standaardinstelling gebruiken (Vragen)</translation>
-<translation id="8044382196220116469">Niet toestaan dat websites automatisch video afspelen</translation>
 <translation id="808894953321890993">Wachtwoord wijzigen</translation>
 <translation id="8119307142152921512">traceerders en advertenties</translation>
 <translation id="8149426793427495338">Je computer is in de slaapstand gegaan.</translation>
@@ -208,7 +199,6 @@
 <translation id="8503813439785031346">Gebruikersnaam</translation>
 <translation id="8703575177326907206">Je verbinding met <ph name="DOMAIN" /> is niet versleuteld.</translation>
 <translation id="8740359287975076522">Het &lt;abbr id="dnsDefinition"&gt;DNS-adres&lt;/abbr&gt; van <ph name="HOST_NAME" /> kan niet worden gevonden. Er wordt een diagnose van het probleem uitgevoerd.</translation>
-<translation id="8774017153185436870">Websites zouden video automatisch kunnen afspelen</translation>
 <translation id="8820817407110198400">Bladwijzers</translation>
 <translation id="8940028675168378100">Geblokkeerd door <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Naar de website-instellingen</translation>
@@ -216,7 +206,6 @@
 <translation id="9008201768610948239">Negeren</translation>
 <translation id="9025348182339809926">(Ongeldig)</translation>
 <translation id="9039213469156557790">Bovendien bevat deze pagina bronnen die niet beveiligd zijn. Deze bronnen kunnen tijdens verzending door anderen worden bekeken en kunnen door een aanvaller worden gewijzigd om het gedrag van de pagina aan te passen.</translation>
-<translation id="9048224371732578627">Toegestaan om automatisch video af te spelen</translation>
 <translation id="9062620674789239642">Het is mogelijk verplaatst, bewerkt of verwijderd.</translation>
 <translation id="9069693763241529744">Geblokkeerd door een extensie</translation>
 <translation id="9073799351042754113">Je hebt ervoor gekozen beveiligingswaarschuwingen voor deze website uit te zetten.</translation>

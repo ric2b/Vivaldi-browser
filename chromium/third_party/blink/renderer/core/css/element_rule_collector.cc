@@ -81,7 +81,7 @@ unsigned LinkMatchTypeFromInsideLink(EInsideLink inside_link) {
 }
 
 bool EvaluateAndAddContainerQueries(
-    const Element& matching_element,
+    Element* style_container_candidate,
     const ContainerQuery& container_query,
     const StyleRecalcContext& style_recalc_context,
     ContainerSelectorCache& container_selector_cache,
@@ -89,7 +89,7 @@ bool EvaluateAndAddContainerQueries(
   for (const ContainerQuery* current = &container_query; current;
        current = current->Parent()) {
     if (!ContainerQueryEvaluator::EvalAndAdd(
-            matching_element, style_recalc_context, *current,
+            style_container_candidate, style_recalc_context, *current,
             container_selector_cache, result)) {
       return false;
     }
@@ -254,12 +254,10 @@ ElementRuleCollector::ElementRuleCollector(
     const StyleRecalcContext& style_recalc_context,
     const SelectorFilter& filter,
     MatchResult& result,
-    ComputedStyle* style,
     EInsideLink inside_link)
     : context_(context),
       style_recalc_context_(style_recalc_context),
       selector_filter_(filter),
-      style_(style),
       mode_(SelectorChecker::kResolvingStyle),
       can_use_fast_reject_(
           selector_filter_.ParentStackIsConsistent(context.ParentNode())),
@@ -345,6 +343,7 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
   SelectorChecker::SelectorCheckingContext context(&context_.GetElement());
   context.scope = match_request.Scope();
   context.pseudo_id = pseudo_style_request_.pseudo_id;
+  context.pseudo_argument = &pseudo_style_request_.pseudo_argument;
   context.vtt_originating_element = match_request.VTTOriginatingElement();
   context.style_scope_frame = &style_scope_frame;
 
@@ -398,9 +397,10 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
         rule_data.LinkMatchType() == CSSSelector::kMatchVisited;
     DCHECK(!context.is_inside_visited_link ||
            inside_link_ != EInsideLink::kNotInsideLink);
-    if (!checker.Match(context, result)) {
+    bool match = checker.Match(context, result);
+    result_.AddFlags(result.flags);
+    if (!match)
       continue;
-    }
     if (pseudo_style_request_.pseudo_id != kPseudoIdNone &&
         pseudo_style_request_.pseudo_id != result.dynamic_pseudo) {
       continue;
@@ -422,9 +422,13 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
       // elements when they depend on the originating element.
       if (pseudo_style_request_.pseudo_id != kPseudoIdNone ||
           result.dynamic_pseudo == kPseudoIdNone) {
+        Element* style_container_candidate =
+            pseudo_style_request_.pseudo_id == kPseudoIdNone
+                ? context_.GetElement().ParentOrShadowHostElement()
+                : &context_.GetElement();
         if (!EvaluateAndAddContainerQueries(
-                context_.GetElement(), *container_query, style_recalc_context_,
-                container_selector_cache_, result_)) {
+                style_container_candidate, *container_query,
+                style_recalc_context_, container_selector_cache_, result_)) {
           if (AffectsAnimations(rule_data))
             result_.SetConditionallyAffectsAnimations();
           continue;
@@ -507,7 +511,7 @@ void ElementRuleCollector::CollectMatchingRules(
     const MatchRequest& match_request) {
   DCHECK(!match_request.IsEmpty());
 
-  SelectorChecker checker(style_.get(), nullptr, pseudo_style_request_, mode_,
+  SelectorChecker checker(nullptr, pseudo_style_request_, mode_,
                           matching_ua_rules_);
 
   Element& element = context_.GetElement();
@@ -706,7 +710,7 @@ void ElementRuleCollector::CollectMatchingRules(
 
 void ElementRuleCollector::CollectMatchingShadowHostRules(
     const MatchRequest& match_request) {
-  SelectorChecker checker(style_.get(), nullptr, pseudo_style_request_, mode_,
+  SelectorChecker checker(nullptr, pseudo_style_request_, mode_,
                           matching_ua_rules_);
 
   for (const auto bundle : match_request.AllRuleSets()) {
@@ -718,7 +722,7 @@ void ElementRuleCollector::CollectMatchingShadowHostRules(
 
 void ElementRuleCollector::CollectMatchingSlottedRules(
     const MatchRequest& match_request) {
-  SelectorChecker checker(style_.get(), nullptr, pseudo_style_request_, mode_,
+  SelectorChecker checker(nullptr, pseudo_style_request_, mode_,
                           matching_ua_rules_);
 
   for (const auto bundle : match_request.AllRuleSets()) {
@@ -733,8 +737,8 @@ void ElementRuleCollector::CollectMatchingPartPseudoRules(
     PartNames& part_names,
     bool for_shadow_pseudo) {
   PartRequest request{part_names, for_shadow_pseudo};
-  SelectorChecker checker(style_.get(), &part_names, pseudo_style_request_,
-                          mode_, matching_ua_rules_);
+  SelectorChecker checker(&part_names, pseudo_style_request_, mode_,
+                          matching_ua_rules_);
 
   for (const auto bundle : match_request.AllRuleSets()) {
     CollectMatchingRulesForList(
@@ -748,19 +752,31 @@ CSSRule* ElementRuleCollector::FindStyleRule(CSSRuleCollection* css_rules,
                                              StyleRule* style_rule) {
   if (!css_rules)
     return nullptr;
-  CSSRule* result = nullptr;
-  for (unsigned i = 0; i < css_rules->length() && !result; ++i) {
+
+  for (unsigned i = 0; i < css_rules->length(); ++i) {
     CSSRule* css_rule = css_rules->item(i);
     if (auto* css_style_rule = DynamicTo<CSSStyleRule>(css_rule)) {
-      if (css_style_rule->GetStyleRule() == style_rule)
-        result = css_rule;
+      if (css_style_rule->GetStyleRule() == style_rule) {
+        return css_rule;
+      }
+      if (CSSRule* result =
+              FindStyleRule(css_style_rule->cssRules(), style_rule);
+          result) {
+        return result;
+      }
     } else if (auto* css_import_rule = DynamicTo<CSSImportRule>(css_rule)) {
-      result = FindStyleRule(css_import_rule->styleSheet(), style_rule);
-    } else {
-      result = FindStyleRule(css_rule->cssRules(), style_rule);
+      if (CSSRule* result =
+              FindStyleRule(css_import_rule->styleSheet(), style_rule);
+          result) {
+        return result;
+      }
+    } else if (CSSRule* result =
+                   FindStyleRule(css_rule->cssRules(), style_rule);
+               result) {
+      return result;
     }
   }
-  return result;
+  return nullptr;
 }
 
 void ElementRuleCollector::AppendCSSOMWrapperForRule(
@@ -845,8 +861,7 @@ void ElementRuleCollector::DidMatchRule(
     if (mode_ == SelectorChecker::kCollectingCSSRules ||
         mode_ == SelectorChecker::kCollectingStyleRules)
       return;
-    // FIXME: Matching should not modify the style directly.
-    if (!style_ || dynamic_pseudo > kLastTrackedPublicPseudoId)
+    if (dynamic_pseudo > kLastTrackedPublicPseudoId)
       return;
     if ((dynamic_pseudo == kPseudoIdBefore ||
          dynamic_pseudo == kPseudoIdAfter) &&
@@ -855,7 +870,7 @@ void ElementRuleCollector::DidMatchRule(
     if (rule_data->Rule()->Properties().IsEmpty())
       return;
 
-    style_->SetHasPseudoElementStyle(dynamic_pseudo);
+    result_.SetHasPseudoElementStyle(dynamic_pseudo);
 
     if (IsHighlightPseudoElement(dynamic_pseudo)) {
       // Determine whether the selector definitely matches the highlight pseudo
@@ -882,15 +897,18 @@ void ElementRuleCollector::DidMatchRule(
       }
 
       if (!universal)
-        style_->SetHasNonUniversalHighlightPseudoStyles(true);
+        result_.SetHasNonUniversalHighlightPseudoStyles();
+
+      if (!matching_ua_rules_)
+        result_.SetHasNonUaHighlightPseudoStyles();
 
       if (dynamic_pseudo == kPseudoIdHighlight) {
         DCHECK(result.custom_highlight_name);
-        style_->SetHasCustomHighlightName(
+        result_.AddCustomHighlightName(
             AtomicString(result.custom_highlight_name));
       }
     } else if (dynamic_pseudo == kPseudoIdFirstLine && container_query) {
-      style_->SetFirstLineDependsOnSizeContainerQueries(true);
+      result_.SetFirstLineDependsOnSizeContainerQueries();
     }
   } else {
     matched_rules_.push_back(MatchedRule(rule_data, layer_order, proximity,

@@ -101,8 +101,9 @@ static_library("apis") {
     #"//third_party/blink/renderer/platform",
     "//ui/shell_dialogs",
     "//ui/views",
+    "//vivaldi/browser:default_bookmarks",
     "//vivaldi/calendar",
-    "//vivaldi/components/datasource:dataurl",
+    "//vivaldi/components/datasource:resource_reader",
     "//vivaldi/components/request_filter/adblock_filter",
     "//vivaldi/contact",
     "//vivaldi/extensions/helper",
@@ -225,18 +226,21 @@ static_library("apis") {
     sources += [
       "auto_update/auto_update_api_linux.cc",
       "vivaldi_utilities/vivaldi_utilities_api_linux.cc",
+      "window/window_private_api_linux.cc",
     ]
   }
   if (is_mac) {
     sources += [
       "auto_update/auto_update_api_mac.mm",
       "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
+      "window/window_private_api_mac.mm",
     ]
   }
   if (is_win) {
     sources += [
       "auto_update/auto_update_api_win.cc",
       "vivaldi_utilities/vivaldi_utilities_api_win.cc",
+      "window/window_private_api_win.cc",
     ]
   }
 }

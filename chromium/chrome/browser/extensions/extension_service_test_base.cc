@@ -13,8 +13,8 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -54,7 +54,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/extensions/install_limiter.h"
+#include "chrome/browser/ash/extensions/install_limiter.h"
 #endif
 
 namespace extensions {
@@ -71,8 +71,9 @@ std::unique_ptr<TestingProfile> BuildTestingProfile(
   // If pref_file is empty, TestingProfile automatically creates
   // sync_preferences::TestingPrefServiceSyncable instance.
   if (!params.pref_file.empty()) {
-    factory.SetUserPrefsFile(params.pref_file,
-                             base::ThreadTaskRunnerHandle::Get().get());
+    factory.SetUserPrefsFile(
+        params.pref_file,
+        base::SingleThreadTaskRunner::GetCurrentDefault().get());
     if (params.policy_service) {
       factory.SetManagedPolicies(params.policy_service,
                                  g_browser_process->browser_policy_connector());

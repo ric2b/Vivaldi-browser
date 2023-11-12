@@ -2066,6 +2066,35 @@ class GnGlobForwardTest(unittest.TestCase):
     self.assertEqual([], warnings)
 
 
+class GnRebasePathTest(unittest.TestCase):
+  def testAddAbsolutePath(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+        MockAffectedFile('base/BUILD.gn', ['rebase_path("$target_gen_dir", "//")']),
+        MockAffectedFile('base/root/BUILD.gn', ['rebase_path("$target_gen_dir", "/")']),
+        MockAffectedFile('base/variable/BUILD.gn', ['rebase_path(target_gen_dir, "/")']),
+    ]
+    warnings = PRESUBMIT.CheckGnRebasePath(mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    msg = '\n'.join(warnings[0].items)
+    self.assertIn('base/BUILD.gn', msg)
+    self.assertIn('base/root/BUILD.gn', msg)
+    self.assertIn('base/variable/BUILD.gn', msg)
+    self.assertEqual(3, len(warnings[0].items))
+
+  def testValidUses(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+        MockAffectedFile('base/foo/BUILD.gn', ['rebase_path("$target_gen_dir", root_build_dir)']),
+        MockAffectedFile('base/bar/BUILD.gn', ['rebase_path("$target_gen_dir", root_build_dir, "/")']),
+        MockAffectedFile('base/baz/BUILD.gn', ['rebase_path(target_gen_dir, root_build_dir)']),
+        MockAffectedFile('base/baz/BUILD.gn', ['rebase_path(target_gen_dir, "//some/arbitrary/path")']),
+        MockAffectedFile('base/okay_slash/BUILD.gn', ['rebase_path(".", "//")']),
+    ]
+    warnings = PRESUBMIT.CheckGnRebasePath(mock_input_api, MockOutputApi())
+    self.assertEqual([], warnings)
+
+
 class NewHeaderWithoutGnChangeTest(unittest.TestCase):
   def testAddHeaderWithoutGn(self):
     mock_input_api = MockInputApi()
@@ -2738,6 +2767,20 @@ class SecurityChangeTest(_SecurityOwnersTestCase):
 
 
 class BannedTypeCheckTest(unittest.TestCase):
+  def testBannedJsFunctions(self):
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('ash/webui/file.js',
+                ['chrome.send(something);']),
+      MockFile('some/js/ok/file.js',
+                ['chrome.send(something);']),
+    ]
+
+    results = PRESUBMIT.CheckNoBannedFunctions(input_api, MockOutputApi())
+
+    self.assertEqual(1, len(results))
+    self.assertTrue('ash/webui/file.js' in results[0].message)
+    self.assertFalse('some/js/ok/file.js' in results[0].message)
 
   def testBannedCppFunctions(self):
     input_api = MockInputApi()
@@ -2769,6 +2812,48 @@ class BannedTypeCheckTest(unittest.TestCase):
     self.assertFalse('some/cpp/nocheck/file.cc' in results[1].message)
     self.assertFalse('some/cpp/comment/file.cc' in results[0].message)
     self.assertFalse('some/cpp/comment/file.cc' in results[1].message)
+
+  def testBannedCppRandomFunctions(self):
+    banned_rngs = [
+        'absl::BitGen',
+        'absl::InsecureBitGen',
+        'std::linear_congruential_engine',
+        'std::mersenne_twister_engine',
+        'std::subtract_with_carry_engine',
+        'std::discard_block_engine',
+        'std::independent_bits_engine',
+        'std::shuffle_order_engine',
+        'std::minstd_rand0',
+        'std::minstd_rand',
+        'std::mt19937',
+        'std::mt19937_64',
+        'std::ranlux24_base',
+        'std::ranlux48_base',
+        'std::ranlux24',
+        'std::ranlux48',
+        'std::knuth_b',
+        'std::default_random_engine',
+        'std::random_device',
+    ]
+    for banned_rng in banned_rngs:
+      input_api = MockInputApi()
+      input_api.files = [
+        MockFile('some/cpp/problematic/file.cc',
+                 [f'{banned_rng} engine;']),
+        MockFile('third_party/blink/problematic/file.cc',
+                 [f'{banned_rng} engine;']),
+        MockFile('third_party/ok/file.cc',
+                 [f'{banned_rng} engine;']),
+      ]
+      results = PRESUBMIT.CheckNoBannedFunctions(input_api, MockOutputApi())
+      self.assertEqual(1, len(results), banned_rng)
+      self.assertTrue('some/cpp/problematic/file.cc' in results[0].message,
+                      banned_rng)
+      self.assertTrue(
+          'third_party/blink/problematic/file.cc' in results[0].message,
+          banned_rng)
+      self.assertFalse(
+          'third_party/ok/file.cc' in results[0].message, banned_rng)
 
   def testBannedIosObjcFunctions(self):
     input_api = MockInputApi()
@@ -3282,7 +3367,7 @@ class StringTest(unittest.TestCase):
                                'changelist. Run '
                                'tools/translate/upload_screenshots.py to '
                                'upload them instead:')
-  GENERATE_SIGNATURES_MESSAGE = ('You are adding or modifying UI strings.\n'
+  ADD_SIGNATURES_MESSAGE = ('You are adding UI strings.\n'
                                  'To ensure the best translations, take '
                                  'screenshots of the relevant UI '
                                  '(https://g.co/chrome/translation) and add '
@@ -3321,7 +3406,7 @@ class StringTest(unittest.TestCase):
                        self.NEW_GRDP_CONTENTS1, action='M')])
     warnings = PRESUBMIT.CheckStrings(input_api, MockOutputApi())
     self.assertEqual(1, len(warnings))
-    self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[0].message)
+    self.assertEqual(self.ADD_SIGNATURES_MESSAGE, warnings[0].message)
     self.assertEqual('error', warnings[0].type)
     self.assertEqual([
       os.path.join('part_grdp', 'IDS_PART_TEST2.png.sha1'),
@@ -3337,7 +3422,7 @@ class StringTest(unittest.TestCase):
     warnings = PRESUBMIT.CheckStrings(input_api, MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual('error', warnings[0].type)
-    self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[0].message)
+    self.assertEqual(self.ADD_SIGNATURES_MESSAGE, warnings[0].message)
     self.assertEqual([
         os.path.join('part_grdp', 'IDS_PART_TEST1.png.sha1'),
         os.path.join('part_grdp', 'IDS_PART_TEST2.png.sha1'),
@@ -3406,7 +3491,7 @@ class StringTest(unittest.TestCase):
     self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png')],
                      warnings[0].items)
     self.assertEqual('error', warnings[1].type)
-    self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[1].message)
+    self.assertEqual(self.ADD_SIGNATURES_MESSAGE, warnings[1].message)
     self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png.sha1')],
                      warnings[1].items)
 
@@ -3443,7 +3528,7 @@ class StringTest(unittest.TestCase):
                       os.path.join('test_grd', 'IDS_TEST1.png')],
                      warnings[0].items)
     self.assertEqual('error', warnings[0].type)
-    self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[1].message)
+    self.assertEqual(self.ADD_SIGNATURES_MESSAGE, warnings[1].message)
     self.assertEqual([os.path.join('part_grdp', 'IDS_PART_TEST1.png.sha1'),
                       os.path.join('test_grd', 'IDS_TEST1.png.sha1')],
                       warnings[1].items)
@@ -4737,6 +4822,79 @@ class LayoutInTestsTest(unittest.TestCase):
     ]
     errors = PRESUBMIT.CheckNoLayoutCallsInTests(mock_input, MockOutputApi())
     self.assertEqual(0, len(errors))
+
+class AssertNoJsInIosTest(unittest.TestCase):
+    def testErrorJs(self):
+        input_api = MockInputApi()
+        input_api.files = [
+            MockFile('components/feature/ios/resources/script.js', []),
+            MockFile('ios/chrome/feature/resources/script.js', []),
+        ]
+        results = PRESUBMIT.CheckNoJsInIos(input_api, MockOutputApi())
+        self.assertEqual(1, len(results))
+        self.assertEqual('error', results[0].type)
+        self.assertEqual(2, len(results[0].items))
+
+    def testNonError(self):
+        input_api = MockInputApi()
+        input_api.files = [
+            MockFile('chrome/resources/script.js', []),
+            MockFile('components/feature/ios/resources/script.ts', []),
+            MockFile('ios/chrome/feature/resources/script.ts', []),
+            MockFile('ios/web/feature/resources/script.ts', []),
+            MockFile('ios/third_party/script.js', []),
+            MockFile('third_party/ios/script.js', []),
+        ]
+        results = PRESUBMIT.CheckNoJsInIos(input_api, MockOutputApi())
+        self.assertEqual(0, len(results))
+
+    def testExistingFilesWarningOnly(self):
+        input_api = MockInputApi()
+        input_api.files = [
+            MockFile('ios/chrome/feature/resources/script.js', [], action='M'),
+            MockFile('ios/chrome/feature/resources/script2.js', [], action='D'),
+        ]
+        results = PRESUBMIT.CheckNoJsInIos(input_api, MockOutputApi())
+        self.assertEqual(1, len(results))
+        self.assertEqual('warning', results[0].type)
+        self.assertEqual(1, len(results[0].items))
+
+class CheckNoAbbreviationInPngFileNameTest(unittest.TestCase):
+  def testHasAbbreviation(self):
+    """test png file names with abbreviation that fails the check"""
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('image_a.png', [], action='A'),
+      MockFile('image_a_.png', [], action='A'),
+      MockFile('image_a_name.png', [], action='A'),
+      MockFile('chrome/ui/feature_name/resources/image_a.png', [], action='A'),
+      MockFile('chrome/ui/feature_name/resources/image_a_.png', [], action='A'),
+      MockFile('chrome/ui/feature_name/resources/image_a_name.png', [], action='A'),
+    ]
+    results = PRESUBMIT.CheckNoAbbreviationInPngFileName(input_api, MockOutputApi())
+    self.assertEqual(1, len(results))
+    self.assertEqual('error', results[0].type)
+    self.assertEqual(len(input_api.files), len(results[0].items))
+
+  def testNoAbbreviation(self):
+    """test png file names without abbreviation that passes the check"""
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('a.png', [], action='A'),
+      MockFile('_a.png', [], action='A'),
+      MockFile('image.png', [], action='A'),
+      MockFile('image_ab_.png', [], action='A'),
+      MockFile('image_ab_name.png', [], action='A'),
+      # These paths used to fail because `feature_a_name` matched the regex by mistake.
+      # They should pass now because the path components ahead of the file name are ignored in the check.
+      MockFile('chrome/ui/feature_a_name/resources/a.png', [], action='A'),
+      MockFile('chrome/ui/feature_a_name/resources/_a.png', [], action='A'),
+      MockFile('chrome/ui/feature_a_name/resources/image.png', [], action='A'),
+      MockFile('chrome/ui/feature_a_name/resources/image_ab_.png', [], action='A'),
+      MockFile('chrome/ui/feature_a_name/resources/image_ab_name.png', [], action='A'),
+    ]
+    results = PRESUBMIT.CheckNoAbbreviationInPngFileName(input_api, MockOutputApi())
+    self.assertEqual(0, len(results))
 
 if __name__ == '__main__':
   unittest.main()

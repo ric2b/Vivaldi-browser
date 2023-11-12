@@ -24,6 +24,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_system_backend.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/test/async_file_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -252,7 +253,8 @@ TEST_F(FileManagerFileAPIUtilTest,
   // Run the test target.
   FileChooserFileInfoList result;
   ConvertSelectedFileInfoListToFileChooserFileInfoList(
-      context, GURL("http://example.com"), selected_info_list,
+      context, url::Origin::Create(GURL("http://example.com")),
+      selected_info_list,
       base::BindOnce(&PassFileChooserFileInfoList, &result));
   content::RunAllTasksUntilIdle();
 

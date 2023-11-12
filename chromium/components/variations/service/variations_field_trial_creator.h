@@ -50,7 +50,8 @@ enum class SeedUsage {
   kRegularSeedForFutureMilestoneNotUsed = 9,
   kSafeSeedForFutureMilestoneNotUsed = 10,
   kUnloadableSafeSeedNotUsed = 11,
-  kMaxValue = kUnloadableSafeSeedNotUsed,
+  kNullSeedUsed = 12,
+  kMaxValue = kNullSeedUsed,
 };
 
 // Denotes a variations seed's expiry state. Exposed for testing.
@@ -232,9 +233,6 @@ class VariationsFieldTrialCreator {
 
   // Returns the seed store. Virtual for testing.
   virtual VariationsSeedStore* GetSeedStore();
-
-  // Returns the time at which the binary was built. Virtual for testing.
-  virtual base::Time GetBuildTime() const;
 
   PrefService* local_state() { return seed_store_->local_state(); }
   const PrefService* local_state() const { return seed_store_->local_state(); }

@@ -25,9 +25,9 @@
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ui/webui/chromeos/login/hid_detection_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/hid_detection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/network_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/welcome_screen_handler.h"
 #include "chromeos/ash/components/hid_detection/bluetooth_hid_detector.h"
 #include "chromeos/ash/components/hid_detection/fake_hid_detection_manager.h"
 #include "chromeos/ash/components/hid_detection/hid_detection_manager.h"
@@ -39,14 +39,13 @@
 #include "services/device/public/mojom/input_service.mojom.h"
 
 namespace ash {
+
 namespace {
 
 using ::testing::_;
 using HidType = hid_detection::HidType;
 using HidsMissing = hid_detection::HidsMissing;
 using InputState = hid_detection::HidDetectionManager::InputState;
-using NiceMockDevice =
-    std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>;
 
 const uint32_t kTestBluetoothClass = 1337u;
 const char kTestBluetoothName[] = "testName";
@@ -91,7 +90,7 @@ class HIDDetectionScreenChromeboxTest
   HIDDetectionScreenChromeboxTest() {
     if (GetParam()) {
       scoped_feature_list_.InitAndEnableFeature(
-          ash::features::kOobeHidDetectionRevamp);
+          features::kOobeHidDetectionRevamp);
 
       auto fake_hid_detection_manager =
           std::make_unique<hid_detection::FakeHidDetectionManager>();
@@ -102,7 +101,7 @@ class HIDDetectionScreenChromeboxTest
     }
 
     scoped_feature_list_.InitAndDisableFeature(
-        ash::features::kOobeHidDetectionRevamp);
+        features::kOobeHidDetectionRevamp);
   }
 
   HIDDetectionScreenChromeboxTest(const HIDDetectionScreenChromeboxTest&) =
@@ -789,7 +788,7 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 IN_PROC_BROWSER_TEST_P(HIDDetectionScreenDisabledAfterRestartTest,
                        PRE_SkipToUpdate) {
-  OobeScreenWaiter(chromeos::WelcomeView::kScreenId).Wait();
+  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
 
   EXPECT_TRUE(StartupUtils::IsHIDDetectionScreenDisabledForTests());
   EXPECT_FALSE(WizardController::default_controller()->HasScreen(
@@ -798,7 +797,7 @@ IN_PROC_BROWSER_TEST_P(HIDDetectionScreenDisabledAfterRestartTest,
 
 IN_PROC_BROWSER_TEST_P(HIDDetectionScreenDisabledAfterRestartTest,
                        SkipToUpdate) {
-  OobeScreenWaiter(chromeos::WelcomeView::kScreenId).Wait();
+  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
   // The pref should persist restart.
   EXPECT_TRUE(StartupUtils::IsHIDDetectionScreenDisabledForTests());
   EXPECT_FALSE(WizardController::default_controller()->HasScreen(
@@ -828,7 +827,7 @@ class HIDDetectionScreenChromebaseTest
   HIDDetectionScreenChromebaseTest() {
     if (GetParam()) {
       scoped_feature_list_.InitAndEnableFeature(
-          ash::features::kOobeHidDetectionRevamp);
+          features::kOobeHidDetectionRevamp);
 
       auto fake_hid_detection_manager =
           std::make_unique<hid_detection::FakeHidDetectionManager>();
@@ -841,7 +840,7 @@ class HIDDetectionScreenChromebaseTest
     }
 
     scoped_feature_list_.InitAndDisableFeature(
-        ash::features::kOobeHidDetectionRevamp);
+        features::kOobeHidDetectionRevamp);
 
     hid_controller_.set_wait_until_idle_after_device_update(false);
     hid_controller_.AddTouchscreen();

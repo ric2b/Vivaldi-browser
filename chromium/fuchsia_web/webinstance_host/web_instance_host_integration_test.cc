@@ -19,7 +19,7 @@
 #include "fuchsia_web/common/test/test_devtools_list_fetcher.h"
 #include "fuchsia_web/common/test/test_navigation_listener.h"
 #include "fuchsia_web/webengine/test/frame_for_test.h"
-#include "fuchsia_web/webinstance_host/web_instance_host.h"
+#include "fuchsia_web/webinstance_host/web_instance_host_v1.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,7 +84,7 @@ class WebInstanceHostIntegrationTest : public testing::Test {
   fidl::InterfaceHandle<fuchsia::sys::ComponentController>
       web_engine_controller_;
 
-  WebInstanceHost web_instance_host_;
+  WebInstanceHostV1 web_instance_host_;
   std::unique_ptr<sys::ServiceDirectory> web_instance_services_;
   fuchsia::web::ContextPtr context_;
   fuchsia::web::FrameHostPtr frame_host_;
@@ -120,11 +120,10 @@ TEST_F(WebInstanceHostIntegrationTest, FrameHostDebugging) {
                                        fuchsia::web::LoadUrlParams(),
                                        url.spec()));
   frame.navigation_listener().RunUntilUrlEquals(url);
-  base::Value devtools_list = GetDevToolsListFromPort(remote_debugging_port);
-  ASSERT_TRUE(devtools_list.is_list());
-  EXPECT_EQ(devtools_list.GetListDeprecated().size(), 1u);
-  base::Value* devtools_url =
-      devtools_list.GetListDeprecated()[0].FindPath("url");
+  base::Value::List devtools_list =
+      GetDevToolsListFromPort(remote_debugging_port);
+  EXPECT_EQ(devtools_list.size(), 1u);
+  base::Value* devtools_url = devtools_list[0].FindPath("url");
   ASSERT_TRUE(devtools_url->is_string());
   EXPECT_EQ(devtools_url->GetString(), url);
 
@@ -141,9 +140,8 @@ TEST_F(WebInstanceHostIntegrationTest, FrameHostDebugging) {
   frame.navigation_listener().RunUntilUrlEquals(url2);
 
   devtools_list = GetDevToolsListFromPort(remote_debugging_port);
-  ASSERT_TRUE(devtools_list.is_list());
-  EXPECT_EQ(devtools_list.GetListDeprecated().size(), 1u);
-  devtools_url = devtools_list.GetListDeprecated()[0].FindPath("url");
+  EXPECT_EQ(devtools_list.size(), 1u);
+  devtools_url = devtools_list[0].FindPath("url");
   ASSERT_TRUE(devtools_url->is_string());
   EXPECT_EQ(devtools_url->GetString(), url2);
 }

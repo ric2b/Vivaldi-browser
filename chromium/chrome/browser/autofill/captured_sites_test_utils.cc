@@ -12,6 +12,7 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/path_service.h"
@@ -27,10 +28,15 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
@@ -342,7 +348,7 @@ std::vector<CapturedSiteParams> GetCapturedSites(
   }
 
   bool also_run_disabled = testing::FLAGS_gtest_also_run_disabled_tests == 1;
-  for (auto& item : list_node->GetListDeprecated()) {
+  for (auto& item : list_node->GetList()) {
     if (!item.is_dict())
       continue;
     CapturedSiteParams param;
@@ -452,7 +458,7 @@ content::RenderFrameHost* IFrameWaiter::WaitForFrameMatchingName(
   } else {
     query_type_ = NAME;
     frame_name_ = name;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop_.QuitClosure(), timeout);
     run_loop_.Run();
     return target_frame_;
@@ -470,7 +476,7 @@ content::RenderFrameHost* IFrameWaiter::WaitForFrameMatchingOrigin(
   } else {
     query_type_ = ORIGIN;
     origin_ = origin;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop_.QuitClosure(), timeout);
     run_loop_.Run();
     return target_frame_;
@@ -488,7 +494,7 @@ content::RenderFrameHost* IFrameWaiter::WaitForFrameMatchingUrl(
   } else {
     query_type_ = URL;
     url_ = url;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop_.QuitClosure(), timeout);
     run_loop_.Run();
     return target_frame_;
@@ -612,7 +618,7 @@ bool WebPageReplayServerWrapper::Start(
   // TODO(crbug.com/847910): create a process std stream reader class to use the
   // process output to determine when the server is ready
   base::RunLoop wpr_launch_waiter;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, wpr_launch_waiter.QuitClosure(), base::Seconds(5));
   wpr_launch_waiter.Run();
 
@@ -751,6 +757,71 @@ bool WebPageReplayServerWrapper::RunWebPageReplayCmd(
   return true;
 }
 
+// ProfileDataController ------------------------------------------------------
+ProfileDataController::ProfileDataController()
+    : profile_(autofill::test::GetIncompleteProfile2()),
+      card_(autofill::CreditCard(base::GenerateGUID(),
+                                 "http://www.example.com")) {
+  for (size_t i = autofill::NO_SERVER_DATA; i < autofill::MAX_VALID_FIELD_TYPE;
+       ++i) {
+    autofill::ServerFieldType field_type =
+        static_cast<autofill::ServerFieldType>(i);
+    string_to_field_type_map_[autofill::AutofillType(field_type).ToString()] =
+        field_type;
+  }
+
+  for (size_t i = static_cast<size_t>(autofill::HtmlFieldType::kUnspecified);
+       i <= static_cast<size_t>(autofill::HtmlFieldType::kMaxValue); ++i) {
+    autofill::AutofillType field_type(static_cast<autofill::HtmlFieldType>(i),
+                                      autofill::HtmlFieldMode::kNone);
+    string_to_field_type_map_[field_type.ToString()] =
+        field_type.GetStorableType();
+  }
+
+  // Initialize the credit card with default values, in case the test recipe
+  // file does not contain pre-saved credit card info.
+  autofill::test::SetCreditCardInfo(&card_, "Buddy Holly", "5187654321098765",
+                                    "10", "2998", "1");
+}
+
+ProfileDataController::~ProfileDataController() = default;
+
+bool ProfileDataController::AddAutofillProfileInfo(
+    const std::string& field_type,
+    const std::string& field_value) {
+  absl::optional<autofill::ServerFieldType> type =
+      StringToFieldType(field_type);
+  if (!type.has_value()) {
+    ADD_FAILURE() << "Unable to recognize autofill field type '" << field_type
+                  << "'!";
+    return false;
+  }
+
+  if (base::StartsWith(field_type, "HTML_TYPE_CREDIT_CARD_",
+                       base::CompareCase::INSENSITIVE_ASCII) ||
+      base::StartsWith(field_type, "CREDIT_CARD_",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    if (type == autofill::CREDIT_CARD_NAME_FIRST ||
+        type == autofill::CREDIT_CARD_NAME_LAST) {
+      card_.SetRawInfo(autofill::CREDIT_CARD_NAME_FULL, u"");
+    }
+    card_.SetRawInfo(type.value(), base::UTF8ToUTF16(field_value));
+  } else {
+    profile_.SetRawInfo(type.value(), base::UTF8ToUTF16(field_value));
+  }
+
+  return true;
+}
+
+absl::optional<autofill::ServerFieldType>
+ProfileDataController::StringToFieldType(const std::string& str) const {
+  auto it = string_to_field_type_map_.find(str);
+  if (it == string_to_field_type_map_.end()) {
+    return absl::nullopt;
+  }
+  return it->second;
+}
+
 // TestRecipeReplayer ---------------------------------------------------------
 TestRecipeReplayer::TestRecipeReplayer(
     Browser* browser,
@@ -881,7 +952,7 @@ void TestRecipeReplayer::WaitTillPageIsIdle(
   while (true) {
     {
       base::RunLoop heart_beat;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
       heart_beat.Run();
     }
@@ -905,7 +976,7 @@ void TestRecipeReplayer::WaitTillPageIsIdle(
         GetWebContents());
     {
       base::RunLoop heart_beat;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
       heart_beat.Run();
     }
@@ -934,7 +1005,7 @@ bool TestRecipeReplayer::WaitForVisualUpdate(base::TimeDelta timeout) {
       GetWebContents());
   while (frame_submission_observer.render_frame_count() == 0) {
     base::RunLoop heart_beat;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
     heart_beat.Run();
     if ((base::TimeTicks::Now() - start_time) > timeout) {
@@ -1015,7 +1086,7 @@ bool TestRecipeReplayer::ReplayRecordedActions(
                 &execution_state, &thread_finished));
         while (!thread_finished) {
           base::RunLoop run_loop;
-          base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
               FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(1000));
           run_loop.Run();
         }
@@ -1261,7 +1332,7 @@ bool TestRecipeReplayer::ExecuteCoolOffAction(base::Value::Dict action) {
     int seconds = pause_time_container->GetInt();
     cool_off_time = base::Seconds(seconds);
   }
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, heart_beat.QuitClosure(), cool_off_time);
   VLOG(1) << "Pausing execution for '" << cool_off_time.InSeconds()
           << "' seconds";

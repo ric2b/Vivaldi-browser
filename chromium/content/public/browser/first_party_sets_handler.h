@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_BROWSER_FIRST_PARTY_SETS_HANDLER_H_
 #define CONTENT_PUBLIC_BROWSER_FIRST_PARTY_SETS_HANDLER_H_
 
+#include <set>
 #include <string>
 
 #include "base/callback.h"
@@ -16,12 +17,12 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
-class FirstPartySetEntry;
 class FirstPartySetsCacheFilter;
 class FirstPartySetsContextConfig;
-class GlobalFirstPartySets;
+class FirstPartySetEntry;
+class FirstPartySetMetadata;
 class SchemefulSite;
-}
+}  // namespace net
 
 namespace content {
 
@@ -34,8 +35,12 @@ class CONTENT_EXPORT FirstPartySetsHandler {
   enum class ParseErrorType {
     // The set definition was not the correct data type.
     kInvalidType,
-    // A string in the set was not a registrable domain.
+    // A string in the set could not be parsed as a URL or origin.
     kInvalidOrigin,
+    // An origin in the set was specified using a scheme other than HTTPS.
+    kNonHttpsScheme,
+    // A origin in the set did not use a valid a registrable domain.
+    kInvalidDomain,
     // The set had no members.
     kSingletonSet,
     // The set was non-disjoint with other pre-existing sets.
@@ -137,13 +142,6 @@ class CONTENT_EXPORT FirstPartySetsHandler {
   virtual void SetPublicFirstPartySets(const base::Version& version,
                                        base::File sets_file) = 0;
 
-  // Resets the state on the instance for testing.
-  virtual void ResetForTesting() = 0;
-
-  // Allows tests to override the post-initalization global First-Party Sets.
-  virtual void SetGlobalSetsForTesting(
-      net::GlobalFirstPartySets global_sets) = 0;
-
   // Looks up `site` in the global First-Party Sets and `config` to find its
   // associated FirstPartySetEntry.
   //
@@ -186,6 +184,17 @@ class CONTENT_EXPORT FirstPartySetsHandler {
       net::FirstPartySetsContextConfig context_config,
       base::OnceCallback<void(net::FirstPartySetsContextConfig,
                               net::FirstPartySetsCacheFilter)> callback) = 0;
+
+  // Computes the First-Party Set metadata related to the given request context,
+  // and invokes `callback` with the result.
+  //
+  // This may invoke `callback` synchronously.
+  virtual void ComputeFirstPartySetMetadata(
+      const net::SchemefulSite& site,
+      const net::SchemefulSite* top_frame_site,
+      const std::set<net::SchemefulSite>& party_context,
+      const net::FirstPartySetsContextConfig& config,
+      base::OnceCallback<void(net::FirstPartySetMetadata)> callback) = 0;
 };
 
 }  // namespace content

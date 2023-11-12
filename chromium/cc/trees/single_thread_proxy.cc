@@ -192,6 +192,7 @@ void SingleThreadProxy::SetNeedsAnimate() {
   DebugScopedSetImplThread impl(task_runner_provider_);
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetNeedsBeginMainFrame();
+  layer_tree_host_->OnCommitRequested();
 }
 
 void SingleThreadProxy::SetNeedsUpdateLayers() {
@@ -669,11 +670,13 @@ void SingleThreadProxy::DidPresentCompositorFrameOnImplThread(
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
   host_impl_->NotifyDidPresentCompositorFrameOnImplThread(
-      frame_token, std::move(callbacks.compositor_thread_callbacks), details);
+      frame_token, std::move(callbacks.compositor_successful_callbacks),
+      details);
   {
     DebugScopedSetMainThread main(task_runner_provider_);
     layer_tree_host_->DidPresentCompositorFrame(
-        frame_token, std::move(callbacks.main_thread_callbacks),
+        frame_token, std::move(callbacks.main_callbacks),
+        std::move(callbacks.main_successful_callbacks),
         details.presentation_feedback);
   }
   if (scheduler_on_impl_thread_) {
@@ -773,9 +776,12 @@ void SingleThreadProxy::CompositeImmediatelyForTest(
     // a commit here.
     commit_requested_ = true;
     StopDeferringCommits(PaintHoldingCommitTrigger::kFeatureDisabled);
+    layer_tree_host_->RecordStartOfFrameMetrics();
     DoBeginMainFrame(begin_frame_args);
     commit_requested_ = false;
     DoPainting(begin_frame_args);
+    layer_tree_host_->RecordEndOfFrameMetrics(frame_begin_time,
+                                              /* trackers */ 0u);
     DoCommit(begin_frame_args);
     DoPostCommit();
 
@@ -919,14 +925,6 @@ size_t SingleThreadProxy::CommitDurationSampleCountForTesting() const {
       ->CommitDurationSampleCountForTesting();  // IN-TEST
 }
 
-void SingleThreadProxy::ReportEventLatency(
-    std::vector<EventLatencyTracker::LatencyData> latencies) {
-  DCHECK(!task_runner_provider_->HasImplThread() ||
-         task_runner_provider_->IsImplThread());
-  DebugScopedSetMainThread main(task_runner_provider_);
-  layer_tree_host_->ReportEventLatency(std::move(latencies));
-}
-
 void SingleThreadProxy::SetRenderFrameObserver(
     std::unique_ptr<RenderFrameMetadataObserver> observer) {
   DCHECK(task_runner_provider_->IsMainThread());
@@ -1012,9 +1010,10 @@ void SingleThreadProxy::BeginMainFrame(
   ScopedAbortRemainingSwapPromises swap_promise_checker(
       layer_tree_host_->GetSwapPromiseManager());
 
+  base::TimeTicks frame_start_time = base::TimeTicks::Now();
+
   if (scheduler_on_impl_thread_) {
-    scheduler_on_impl_thread_->NotifyBeginMainFrameStarted(
-        base::TimeTicks::Now());
+    scheduler_on_impl_thread_->NotifyBeginMainFrameStarted(frame_start_time);
   }
 
   commit_requested_ = false;
@@ -1032,6 +1031,13 @@ void SingleThreadProxy::BeginMainFrame(
 
   if (!layer_tree_host_->IsVisible()) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_NotVisible", TRACE_EVENT_SCOPE_THREAD);
+
+    // Since the commit is deferred due to the page becoming invisible, the
+    // metrics are not meaningful anymore (as the page might become visible in
+    // any arbitrary time in the future and cause an arbitrarily large latency).
+    // Discard event metrics.
+    layer_tree_host_->ClearEventsMetrics();
+
     BeginMainFrameAbortedOnImplThread(
         CommitEarlyOutReason::ABORTED_NOT_VISIBLE);
     return;
@@ -1045,9 +1051,10 @@ void SingleThreadProxy::BeginMainFrame(
   // Check now if we should stop deferring commits. Do this before
   // DoBeginMainFrame because the latter updates scroll offsets, which
   // we should avoid if deferring commits.
-  if (IsDeferringCommits() && base::TimeTicks::Now() > commits_restart_time_)
+  if (IsDeferringCommits() && frame_start_time > commits_restart_time_)
     StopDeferringCommits(ReasonToTimeoutTrigger(*paint_holding_reason_));
 
+  layer_tree_host_->RecordStartOfFrameMetrics();
   DoBeginMainFrame(begin_frame_args);
 
   // New commits requested inside UpdateLayers should be respected.
@@ -1061,11 +1068,15 @@ void SingleThreadProxy::BeginMainFrame(
                          TRACE_EVENT_SCOPE_THREAD);
     BeginMainFrameAbortedOnImplThread(
         CommitEarlyOutReason::ABORTED_DEFERRED_COMMIT);
+    layer_tree_host_->RecordEndOfFrameMetrics(frame_start_time,
+                                              /* trackers */ 0u);
     layer_tree_host_->DidBeginMainFrame();
     return;
   }
 
   DoPainting(begin_frame_args);
+  layer_tree_host_->RecordEndOfFrameMetrics(frame_start_time,
+                                            /* trackers */ 0u);
 }
 
 void SingleThreadProxy::DoBeginMainFrame(

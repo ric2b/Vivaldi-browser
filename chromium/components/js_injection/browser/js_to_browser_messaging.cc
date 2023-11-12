@@ -10,11 +10,13 @@
 #include "components/js_injection/browser/web_message_host.h"
 #include "components/js_injection/browser/web_message_host_factory.h"
 #include "components/js_injection/browser/web_message_reply_proxy.h"
+#include "components/js_injection/common/interfaces.mojom-forward.h"
 #include "content/public/browser/disallow_activation_reason.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/messaging/message_port_descriptor.h"
+#include "third_party/blink/public/common/messaging/string_message_codec.h"
 #include "url/origin.h"
 #include "url/url_util.h"
 
@@ -49,8 +51,8 @@ class JsToBrowserMessaging::ReplyProxyImpl : public WebMessageReplyProxy {
   ~ReplyProxyImpl() override = default;
 
   // WebMessageReplyProxy:
-  void PostWebMessage(std::unique_ptr<WebMessage> message) override {
-    java_to_js_messaging_->OnPostMessage(message->message);
+  void PostWebMessage(blink::WebMessagePayload message) override {
+    java_to_js_messaging_->OnPostMessage(std::move(message));
   }
   bool IsInBackForwardCache() override {
     return render_frame_host_->GetLifecycleState() ==
@@ -82,7 +84,7 @@ void JsToBrowserMessaging::OnBackForwardCacheStateChanged() {
 }
 
 void JsToBrowserMessaging::PostMessage(
-    const std::u16string& message,
+    blink::WebMessagePayload message,
     std::vector<blink::MessagePortDescriptor> ports) {
   DCHECK(render_frame_host_);
 
@@ -111,8 +113,7 @@ void JsToBrowserMessaging::PostMessage(
 
   if (!host_) {
     const std::string origin_string = GetOriginString(source_origin);
-    const bool is_main_frame =
-        web_contents->GetPrimaryMainFrame() == render_frame_host_;
+    const bool is_main_frame = render_frame_host_->IsInPrimaryMainFrame();
 
     host_ = connection_factory_->CreateHost(origin_string, is_main_frame,
                                             reply_proxy_.get());
@@ -127,11 +128,10 @@ void JsToBrowserMessaging::PostMessage(
   // PostMessage() has been received.
 #if DCHECK_IS_ON()
   DCHECK_EQ(GetOriginString(source_origin), origin_string_);
-  DCHECK_EQ(is_main_frame_,
-            web_contents->GetPrimaryMainFrame() == render_frame_host_);
+  DCHECK_EQ(is_main_frame_, render_frame_host_->IsInPrimaryMainFrame());
 #endif
   std::unique_ptr<WebMessage> web_message = std::make_unique<WebMessage>();
-  web_message->message = message;
+  web_message->message = std::move(message);
   web_message->ports = std::move(ports);
   host_->OnPostMessage(std::move(web_message));
 }

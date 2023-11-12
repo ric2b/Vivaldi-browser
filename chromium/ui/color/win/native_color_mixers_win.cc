@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/color/color_mixers.h"
-
 #include <windows.h>
 
 #include "base/command_line.h"
@@ -12,11 +10,11 @@
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/color/color_recipe.h"
-#include "ui/color/color_switches.h"
 #include "ui/color/color_transform.h"
 #include "ui/color/win/accent_color_observer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/native_theme/native_theme_features.h"
 
 namespace ui {
 
@@ -76,14 +74,11 @@ void AddNativeCoreColorMixer(ColorProvider* provider,
   mixer[kColorNativeWindowText] = {
       color_utils::GetSysSkColor(COLOR_WINDOWTEXT)};
 
-  // Use the system accent color as the Chrome accent color, if desired.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kPervasiveSystemAccentColor)) {
-    const auto accent_color = AccentColorObserver::Get()->accent_color();
-    if (accent_color.has_value()) {
-      mixer[kColorAccent] =
-          PickGoogleColor({accent_color.value()}, kColorPrimaryBackground);
-    }
+  // Use the system accent color as the Chrome accent color, if present.
+  if (const auto accent_color = AccentColorObserver::Get()->accent_color();
+      accent_color.has_value()) {
+    mixer[kColorAccent] =
+        PickGoogleColor({accent_color.value()}, kColorPrimaryBackground);
   }
 
   if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal)
@@ -123,10 +118,32 @@ void AddNativeCoreColorMixer(ColorProvider* provider,
 
 void AddNativeUiColorMixer(ColorProvider* provider,
                            const ColorProviderManager::Key& key) {
-  if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal)
+  if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal &&
+      !IsFluentScrollbarEnabled())
     return;
 
   ColorMixer& mixer = provider->AddMixer();
+
+  // Override scrollbar colors for the Fluent scrollbar.
+  // TODO(crbug.com/1378337): Implement high contrast mode for the Fluent
+  // scrollbar. Currently, normal and high contrast modes are the same.
+  if (IsFluentScrollbarEnabled()) {
+    const bool dark_mode =
+        key.color_mode == ColorProviderManager::ColorMode::kDark;
+
+    mixer[kColorScrollbarArrowForeground] = {
+        dark_mode ? SkColorSetA(SK_ColorWHITE, 0x8B)
+                  : SkColorSetA(SK_ColorBLACK, 0x72)};
+    mixer[kColorScrollbarArrowForegroundPressed] = {
+        dark_mode ? SkColorSetA(SK_ColorWHITE, 0xC8)
+                  : SkColorSetA(SK_ColorBLACK, 0x9B)};
+    mixer[kColorScrollbarThumb] = {mixer[kColorScrollbarArrowForeground]};
+    mixer[kColorScrollbarTrack] = {dark_mode ? SkColorSetRGB(0x2C, 0x2C, 0x2C)
+                                             : SkColorSetRGB(0xFC, 0xFC, 0xFC)};
+  }
+
+  if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal)
+    return;
 
   mixer[kColorButtonForegroundChecked] = {
       key.color_mode == ColorProviderManager::ColorMode::kDark

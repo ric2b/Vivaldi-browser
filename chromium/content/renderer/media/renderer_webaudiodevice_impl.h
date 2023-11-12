@@ -66,7 +66,7 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
   // AudioRendererSink::RenderCallback implementation.
   int Render(base::TimeDelta delay,
              base::TimeTicks delay_timestamp,
-             int prior_frames_skipped,
+             const media::AudioGlitchInfo& glitch_info,
              media::AudioBus* dest) override;
 
   void OnRenderError() override;
@@ -85,8 +85,9 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
       const base::UnguessableToken& session_id,
       const std::string& device_id)>;
 
-  // Callback get render frame token for current context (for tests).
-  using RenderFrameTokenCallback = base::OnceCallback<blink::LocalFrameToken()>;
+  using CreateSilentSinkCallback =
+      base::RepeatingCallback<scoped_refptr<media::AudioRendererSink>(
+          const scoped_refptr<base::SequencedTaskRunner>& task_runner)>;
 
   RendererWebAudioDeviceImpl(
       const blink::WebAudioSinkDescriptor& sink_descriptor,
@@ -96,7 +97,7 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
       blink::WebAudioDevice::RenderCallback* callback,
       const base::UnguessableToken& session_id,
       OutputDeviceParamsCallback device_params_cb,
-      RenderFrameTokenCallback render_frame_token_cb);
+      CreateSilentSinkCallback create_silent_sink_cb);
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> GetSilentSinkTaskRunner();
@@ -139,6 +140,8 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
   // Used to trigger one single textlog indicating that rendering started as
   // intended. Set to true once in the first call to the Render callback.
   bool is_rendering_ = false;
+
+  CreateSilentSinkCallback create_silent_sink_cb_;
 };
 
 }  // namespace content

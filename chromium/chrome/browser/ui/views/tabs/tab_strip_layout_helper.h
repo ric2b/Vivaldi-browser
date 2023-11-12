@@ -50,8 +50,6 @@ class TabStripLayoutHelper {
 
   int active_tab_width() { return active_tab_width_; }
   int inactive_tab_width() { return inactive_tab_width_; }
-  int first_non_pinned_tab_index() { return first_non_pinned_tab_index_; }
-  int first_non_pinned_tab_x() { return first_non_pinned_tab_x_; }
 
   // Returns the number of pinned tabs in the tabstrip.
   size_t GetPinnedTabCount() const;
@@ -140,11 +138,6 @@ class TabStripLayoutHelper {
   // in |slots_|.
   int GetSlotIndexForGroupHeader(tab_groups::TabGroupId group) const;
 
-  // Compares |cached_slots_| to the TabAnimations in |animator_| and DCHECKs if
-  // the TabAnimation::ViewType do not match. Prevents bugs that could cause the
-  // wrong callback being run when a tab or group is deleted.
-  void VerifyAnimationsMatchTabSlots() const;
-
   // Updates the value of either |active_tab_width_| or |inactive_tab_width_|,
   // as appropriate.
   void UpdateCachedTabWidth(int tab_index, int tab_width, bool active);
@@ -153,7 +146,7 @@ class TabStripLayoutHelper {
   bool SlotIsCollapsedTab(int i) const;
 
   // The owning TabContainer's controller.
-  const raw_ref<const TabContainerController> controller_;
+  const raw_ref<const TabContainerController, DanglingUntriaged> controller_;
 
   // Callback to get the necessary View objects from the owning tabstrip.
   GetTabsCallback get_tabs_callback_;
@@ -169,9 +162,6 @@ class TabStripLayoutHelper {
   // into these widths, the initial tabs in the strip will be 1 px larger.
   int active_tab_width_;
   int inactive_tab_width_;
-
-  int first_non_pinned_tab_index_;
-  int first_non_pinned_tab_x_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_LAYOUT_HELPER_H_

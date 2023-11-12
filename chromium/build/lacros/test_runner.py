@@ -76,6 +76,10 @@ _GS_ASH_CHROME_PATH = 'ash-chromium.zip'
 _PREBUILT_ASH_CHROME_DIR = os.path.join(os.path.dirname(__file__),
                                         'prebuilt_ash_chrome')
 
+# File path to the asan symbolizer executable.
+_ASAN_SYMBOLIZER_PATH = os.path.join(_SRC_ROOT, 'tools', 'valgrind', 'asan',
+                                     'asan_symbolize.py')
+
 # Number of seconds to wait for ash-chrome to start.
 ASH_CHROME_TIMEOUT_SECONDS = (
     300 if os.environ.get('ASH_WRAPPER', None) else 10)
@@ -375,6 +379,46 @@ def _IsRunningOnBots(forward_args):
   return '--test-launcher-bot-mode' in forward_args
 
 
+def _KillNicely(proc, timeout_secs=2, first_wait_secs=0):
+  """Kills a subprocess nicely.
+
+  Args:
+    proc: The subprocess to kill.
+    timeout_secs: The timeout to wait in seconds.
+    first_wait_secs: The grace period before sending first SIGTERM in seconds.
+  """
+  if not proc:
+    return
+
+  if first_wait_secs:
+    try:
+      proc.wait(first_wait_secs)
+      return
+    except subprocess.TimeoutExpired:
+      pass
+
+  if proc.poll() is None:
+    proc.terminate()
+    try:
+      proc.wait(timeout_secs)
+    except subprocess.TimeoutExpired:
+      proc.kill()
+      proc.wait()
+
+
+def _ClearDir(dirpath):
+  """Deletes everything within the directory.
+
+  Args:
+    dirpath: The path of the directory.
+  """
+  for e in os.scandir(dirpath):
+    if e.is_dir():
+      shutil.rmtree(e.path)
+    elif e.is_file():
+      os.remove(e.path)
+
+
 def _RunTestWithAshChrome(args, forward_args):
   """Runs tests with ash-chrome.
 
@@ -452,6 +496,9 @@ lacros_version_skew_tests_v92.0.4515.130/test_ash_chrome
         '--ash-ready-file-path=%s' % ash_ready_file,
         '--wayland-server-socket=%s' % ash_wayland_socket_name,
     ]
+    if '--enable-pixel-output-in-tests' not in forward_args:
+      ash_cmd.append('--disable-gl-drawing-for-tests')
+
     if enable_mojo_crosapi:
       ash_cmd.append(lacros_mojo_socket_arg)
 
@@ -467,28 +514,57 @@ lacros_version_skew_tests_v92.0.4515.130/test_ash_chrome
     ash_process_has_started = False
     total_tries = 3
     num_tries = 0
+    ash_start_time = None
 
     # Create a log file if the user wanted to have one.
-    log = None
+    ash_log = None
+    ash_log_path = None
+
     if args.ash_logging_path:
-      log = open(args.ash_logging_path, 'a')
-    # Ash logs can be useful. Enable ash log by default on bots.
-    elif _IsRunningOnBots(forward_args):
+      ash_log_path = args.ash_logging_path
+    # Put ash logs in a separate file on bots.
+    # For asan builds, the ash log is not symbolized. In order to
+    # read the stack strace, we don't redirect logs to another file.
+    elif _IsRunningOnBots(forward_args) and not args.combine_ash_logs_on_bots:
       summary_file = _ParseSummaryOutput(forward_args)
       if summary_file:
         ash_log_path = os.path.join(os.path.dirname(summary_file),
                                     'ash_chrome.log')
-        log = open(ash_log_path, 'a')
+
+    if ash_log_path:
+      ash_log = open(ash_log_path, 'a')
+      logging.info('Writing ash-chrome logs to: %s', ash_log_path)
+
+    ash_stdout = ash_log or None
+    test_stdout = None
+
+    # Setup asan symbolizer.
+    ash_symbolize_process = None
+    test_symbolize_process = None
+    should_symbolize = False
+    if args.asan_symbolize_output and os.path.exists(_ASAN_SYMBOLIZER_PATH):
+      should_symbolize = True
+      ash_symbolize_stdout = ash_stdout
+      ash_stdout = subprocess.PIPE
+      test_stdout = subprocess.PIPE
 
     while not ash_process_has_started and num_tries < total_tries:
       num_tries += 1
-      if log is None:
-        ash_process = subprocess.Popen(ash_cmd, env=ash_env)
-      else:
-        ash_process = subprocess.Popen(ash_cmd,
-                                       env=ash_env,
-                                       stdout=log,
-                                       stderr=log)
+      ash_start_time = time.monotonic()
+      logging.info('Starting ash-chrome.')
+      ash_process = subprocess.Popen(ash_cmd,
+                                     env=ash_env,
+                                     stdout=ash_stdout,
+                                     stderr=subprocess.STDOUT)
+
+      if should_symbolize:
+        logging.info('Symbolizing ash logs with asan symbolizer.')
+        ash_symbolize_process = subprocess.Popen([_ASAN_SYMBOLIZER_PATH],
+                                                 stdin=ash_process.stdout,
+                                                 stdout=ash_symbolize_stdout,
+                                                 stderr=subprocess.STDOUT)
+        # Allow ash_process to receive a SIGPIPE if symbolize process exits.
+        ash_process.stdout.close()
 
       ash_process_has_started = _WaitForAshChromeToStart(
           tmp_xdg_dir_name, lacros_mojo_socket_file, enable_mojo_crosapi,
@@ -501,11 +577,19 @@ lacros_version_skew_tests_v92.0.4515.130/test_ash_chrome
       logging.warning('Are you using test_ash_chrome?')
       logging.warning('Printing the output of "ps aux" for debugging:')
       subprocess.call(['ps', 'aux'])
-      if ash_process and ash_process.poll() is None:
-        ash_process.kill()
+      _KillNicely(ash_process)
+      _KillNicely(ash_symbolize_process, first_wait_secs=1)
+
+      # Clean up for retry.
+      _ClearDir(tmp_xdg_dir_name)
+      _ClearDir(tmp_ash_data_dir_name)
 
     if not ash_process_has_started:
       raise RuntimeError('Timed out waiting for ash-chrome to start')
+
+    ash_elapsed_time = time.monotonic() - ash_start_time
+    logging.info('Started ash-chrome in %.3fs on try %d.', ash_elapsed_time,
+                 num_tries)
 
     # Starts tests.
     if enable_mojo_crosapi:
@@ -515,15 +599,24 @@ lacros_version_skew_tests_v92.0.4515.130/test_ash_chrome
     test_env['WAYLAND_DISPLAY'] = ash_wayland_socket_name
     test_env['EGL_PLATFORM'] = 'surfaceless'
     test_env['XDG_RUNTIME_DIR'] = tmp_xdg_dir_name
-    test_process = subprocess.Popen([args.command] + forward_args, env=test_env)
+    logging.info('Starting test process.')
+    test_process = subprocess.Popen([args.command] + forward_args,
+                                    env=test_env,
+                                    stdout=test_stdout,
+                                    stderr=subprocess.STDOUT)
+    if should_symbolize:
+      logging.info('Symbolizing test logs with asan symbolizer.')
+      test_symbolize_process = subprocess.Popen([_ASAN_SYMBOLIZER_PATH],
+                                                stdin=test_process.stdout)
+      # Allow test_process to receive a SIGPIPE if symbolize process exits.
+      test_process.stdout.close()
     return test_process.wait()
 
   finally:
-    if ash_process and ash_process.poll() is None:
-      ash_process.terminate()
-      # Allow process to do cleanup and exit gracefully before killing.
-      time.sleep(0.5)
-      ash_process.kill()
+    _KillNicely(ash_process)
+    # Give symbolizer processes time to finish writing with first_wait_secs.
+    _KillNicely(ash_symbolize_process, first_wait_secs=1)
+    _KillNicely(test_symbolize_process, first_wait_secs=1)
 
     shutil.rmtree(tmp_xdg_dir_name, ignore_errors=True)
     shutil.rmtree(tmp_ash_data_dir_name, ignore_errors=True)
@@ -540,10 +633,7 @@ def _RunTestDirectly(args, forward_args):
     p = subprocess.Popen([args.command] + forward_args)
     return p.wait()
   finally:
-    if p and p.poll() is None:
-      p.terminate()
-      time.sleep(0.5)
-      p.kill()
+    _KillNicely(p)
 
 
 def _HandleSignal(sig, _):
@@ -650,6 +740,13 @@ def Main():
       type=str,
       help='File & path to ash-chrome logging output while running Lacros '
       'browser tests. If not provided, no output will be generated.')
+  test_parser.add_argument('--combine-ash-logs-on-bots',
+                           action='store_true',
+                           help='Whether to combine ash logs on bots.')
+  test_parser.add_argument(
+      '--asan-symbolize-output',
+      action='store_true',
+      help='Whether to run subprocess log outputs through the asan symbolizer.')
 
   args = arg_parser.parse_known_args()
   return args[0].func(args[0], args[1])

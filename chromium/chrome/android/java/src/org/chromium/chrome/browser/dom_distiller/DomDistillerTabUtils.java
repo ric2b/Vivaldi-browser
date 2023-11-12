@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -27,6 +28,11 @@ public class DomDistillerTabUtils {
 
     /** Used to specify whether mobile friendly is enabled for testing purposes. */
     private static Boolean sExcludeMobileFriendlyForTesting;
+    private static MutableFlagWithSafeDefault sReaderModeCctFlag =
+            new MutableFlagWithSafeDefault(ChromeFeatureList.READER_MODE_IN_CCT, false);
+
+    @DistillerHeuristicsType
+    private static Integer sHeuristicsForTesting;
 
     private DomDistillerTabUtils() {
     }
@@ -115,9 +121,21 @@ public class DomDistillerTabUtils {
     }
 
     /**
+     * Set a test value of DistillerHeuristicsType.
+     */
+    @VisibleForTesting
+    public static void setDistillerHeuristicsForTesting(
+            @DistillerHeuristicsType Integer distillerHeuristicsType) {
+        sHeuristicsForTesting = distillerHeuristicsType;
+    }
+
+    /**
      * Cached version of DomDistillerTabUtilsJni.get().getDistillerHeuristics().
      */
     public static @DistillerHeuristicsType int getDistillerHeuristics() {
+        if (sHeuristicsForTesting != null) {
+            return sHeuristicsForTesting;
+        }
         if (sHeuristics == null) {
             sHeuristics = DomDistillerTabUtilsJni.get().getDistillerHeuristics();
         }
@@ -130,8 +148,7 @@ public class DomDistillerTabUtils {
      * @return True if it should.
      */
     public static boolean isCctMode() {
-        if (!ChromeFeatureList.isInitialized()) return false;
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.READER_MODE_IN_CCT);
+        return sReaderModeCctFlag.isEnabled();
     }
 
     /**

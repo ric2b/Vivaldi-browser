@@ -212,6 +212,72 @@ _BANNED_JAVA_FUNCTIONS : Sequence[BanRule] = (
       ),
       False,
     ),
+    BanRule(
+      r'/(?<!\bsuper\.)(?<!\bIntent )\bregisterReceiver\(',
+      (
+       'Do not call android.content.Context.registerReceiver (or an override) '
+       'directly. Use one of the wrapper methods defined in '
+       'org.chromium.base.ContextUtils, such as '
+       'registerProtectedBroadcastReceiver, '
+       'registerExportedBroadcastReceiver, or '
+       'registerNonExportedBroadcastReceiver. See their documentation for '
+       'which one to use.',
+      ),
+      True,
+      excluded_paths=(
+          r'.*Test[^a-z]',
+          r'third_party/',
+          'base/android/java/src/org/chromium/base/ContextUtils.java',
+          'chromecast/browser/android/apk/src/org/chromium/chromecast/shell/BroadcastReceiverScope.java',
+      ),
+    ),
+    BanRule(
+      r'/(?:extends|new)\s*(?:android.util.)?Property<[A-Za-z.]+,\s*(?:Integer|Float)>',
+      (
+       'Do not use Property<..., Integer|Float>, but use FloatProperty or '
+       'IntProperty because it will avoid unnecessary autoboxing of '
+       'primitives.',
+      ),
+    ),
+    BanRule(
+      'requestLayout()',
+      (
+          'Layouts can be expensive. Prefer using ViewUtils.requestLayout(), '
+          'which emits a trace event with additional information to help with '
+          'scroll jank investigations. See http://crbug.com/1354176.',
+      ),
+      False,
+      excluded_paths=(
+          'ui/android/java/src/org/chromium/ui/base/ViewUtils.java',
+      ),
+    ),
+)
+
+_BANNED_JAVASCRIPT_FUNCTIONS : Sequence [BanRule] = (
+    BanRule(
+      r'/\bchrome\.send\b',
+      (
+       'The use of chrome.send is disallowed in Chrome (context: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/security/handling-messages-from-web-content.md).',
+       'Please use mojo instead for new webuis. https://docs.google.com/document/d/1RF-GSUoveYa37eoyZ9EhwMtaIwoW7Z88pIgNZ9YzQi4/edit#heading=h.gkk22wgk6wff',
+      ),
+      True,
+      (
+          r'^(?!ash\/webui).+',
+          # TODO(crbug.com/1385601): pre-existing violations still need to be
+          # cleaned up.
+          'ash/webui/common/resources/cr.m.js',
+          'ash/webui/common/resources/multidevice_setup/multidevice_setup_browser_proxy.js',
+          'ash/webui/common/resources/quick_unlock/lock_screen_constants.js',
+          'ash/webui/common/resources/smb_shares/smb_browser_proxy.js',
+          'ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics.js',
+          'ash/webui/diagnostics_ui/resources/diagnostics_browser_proxy.ts',
+          'ash/webui/multidevice_debug/resources/logs.js',
+          'ash/webui/multidevice_debug/resources/webui.js',
+          'ash/webui/projector_app/resources/annotator/trusted/annotator_browser_proxy.js',
+          'ash/webui/projector_app/resources/app/trusted/projector_browser_proxy.js',
+          'ash/webui/scanning/resources/scanning_browser_proxy.js',
+      ),
+    ),
 )
 
 _BANNED_OBJC_FUNCTIONS : Sequence[BanRule] = (
@@ -690,14 +756,20 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
        '^chrome/services/sharing/nearby/',
        # Needed for interop with third-party library libunwindstack.
        '^base/profiler/libunwindstack_unwinder_android\.(cc|h)',
+       # Needed for interop with third-party boringssl cert verifier
+       '^third_party/boringssl/',
+       '^net/cert/',
+       '^net/tools/cert_verify_tool/',
+       '^services/cert_verifier/',
+       '^components/certificate_transparency/',
+       '^components/media_router/common/providers/cast/certificate/',
        # gRPC provides some C++ libraries that use std::shared_ptr<>.
        '^chromeos/ash/services/libassistant/grpc/',
        '^chromecast/cast_core/grpc',
        '^chromecast/cast_core/runtime/browser',
        '^ios/chrome/test/earl_grey/chrome_egtest_plugin_client\.(mm|h)',
        # Fuchsia provides C++ libraries that use std::shared_ptr<>.
-       '^base/fuchsia/filtered_service_directory\.(cc|h)',
-       '^base/fuchsia/service_directory_test_base\.h',
+       '^base/fuchsia/.*\.(cc|h)',
        '.*fuchsia.*test\.(cc|h)',
        # Needed for clang plugin tests
        '^tools/clang/plugins/tests/',
@@ -720,7 +792,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
     BanRule(
-      r'\b(absl|std)::any\b',
+      r'/\b(absl|std)::any\b',
       (
         'absl::any / std::any are not safe to use in a component build.',
       ),
@@ -733,6 +805,191 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       (
         'std::bind is banned because of lifetime risks.',
         'Use base::BindOnce or base::BindRepeating instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      (
+        r'/\b(?:'
+        r'std::linear_congruential_engine|std::mersenne_twister_engine|'
+        r'std::subtract_with_carry_engine|std::discard_block_engine|'
+        r'std::independent_bits_engine|std::shuffle_order_engine|'
+        r'std::minstd_rand0|std::minstd_rand|'
+        r'std::mt19937|std::mt19937_64|'
+        r'std::ranlux24_base|std::ranlux48_base|std::ranlux24|std::ranlux48|'
+        r'std::knuth_b|'
+        r'std::default_random_engine|'
+        r'std::random_device'
+        r')\b'
+      ),
+      (
+        'STL random number engines and generators are banned. Use the ',
+        'helpers in base/rand_util.h instead, e.g. base::RandBytes() or ',
+        'base::RandomBitGenerator.'
+      ),
+      True,
+      [
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK,
+        # Various tools which build outside of Chrome.
+        r'testing/libfuzzer',
+        r'tools/android/io_benchmark/',
+        # Fuzzers are allowed to use standard library random number generators
+        # since fuzzing speed + reproducibility is important.
+        r'tools/ipc_fuzzer/',
+        r'.+_fuzzer\.cc$',
+        r'.+_fuzzertest\.cc$',
+        # TODO(https://crbug.com/1380528): These are all unsanctioned uses of
+        # the standard library's random number generators, and should be
+        # migrated to the //base equivalent.
+        r'ash/ambient/model/ambient_topic_queue\.cc',
+        r'base/allocator/partition_allocator/partition_alloc_unittest\.cc',
+        r'base/ranges/algorithm_unittest\.cc',
+        r'base/test/launcher/test_launcher\.cc',
+        r'cc/metrics/video_playback_roughness_reporter_unittest\.cc',
+        r'chrome/browser/apps/app_service/metrics/website_metrics\.cc',
+        r'chrome/browser/ash/power/auto_screen_brightness/monotone_cubic_spline_unittest\.cc',
+        r'chrome/browser/ash/printing/zeroconf_printer_detector_unittest\.cc',
+        r'chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager_impl_unittest\.cc',
+        r'chrome/browser/nearby_sharing/contacts/nearby_share_contacts_sorter_unittest\.cc',
+        r'chrome/browser/privacy_budget/mesa_distribution_unittest\.cc',
+        r'chrome/browser/web_applications/test/web_app_test_utils\.cc',
+        r'chrome/browser/web_applications/test/web_app_test_utils\.cc',
+        r'chrome/browser/win/conflicts/module_blocklist_cache_util_unittest\.cc',
+        r'chrome/chrome_cleaner/logging/detailed_info_sampler\.cc',
+        r'chromeos/ash/components/memory/userspace_swap/swap_storage_unittest\.cc',
+        r'chromeos/ash/components/memory/userspace_swap/userspace_swap\.cc',
+        r'components/metrics/metrics_state_manager\.cc',
+        r'components/omnibox/browser/history_quick_provider_performance_unittest\.cc',
+        r'components/zucchini/disassembler_elf_unittest\.cc',
+        r'content/browser/webid/federated_auth_request_impl\.cc',
+        r'content/browser/webid/federated_auth_request_impl\.cc',
+        r'media/cast/test/utility/udp_proxy\.h',
+        r'sql/recover_module/module_unittest\.cc',
+      ],
+    ),
+    BanRule(
+      r'/\babsl::bind_front\b',
+      (
+        'absl::bind_front is banned. Use base::BindOnce() or '
+        'base::BindRepeating() instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\bABSL_FLAG\b',
+      (
+        'ABSL_FLAG is banned. Use base::CommandLine instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::c_',
+      (
+        'Abseil container utilities are banned. Use base/ranges/algorithm.h',
+        'instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::FunctionRef\b',
+      (
+        'absl::FunctionRef is banned. Use base::FunctionRef instead.',
+      ),
+      True,
+      [
+        # base::Bind{Once,Repeating} references absl::FunctionRef to disallow
+        # interoperability.
+        r'^base/functional/bind_internal\.h',
+        # base::FunctionRef is implemented on top of absl::FunctionRef.
+        r'^base/functional/function_ref.*\..+',
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK,
+      ],
+    ),
+    BanRule(
+      r'/\babsl::(Insecure)?BitGen\b',
+      (
+        'absl random number generators are banned. Use the helpers in '
+        'base/rand_util.h instead, e.g. base::RandBytes() or ',
+        'base::RandomBitGenerator.'
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::Span\b',
+      (
+        'absl::Span is banned. Use base::span instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::StatusOr\b',
+      (
+        'absl::StatusOr is banned. Use base::expected instead.',
+      ),
+      True,
+      [
+        # Needed to use liburlpattern API.
+        r'third_party/blink/renderer/core/url_pattern/.*',
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK
+      ],
+    ),
+    BanRule(
+      r'/\babsl::StrFormat\b',
+      (
+        'absl::StrFormat is banned for now. Use base::StringPrintf instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::string_view\b',
+      (
+        'absl::string_view is banned. Use base::StringPiece instead.',
+      ),
+      True,
+      [
+        # Needed to use liburlpattern API.
+        r'third_party/blink/renderer/core/url_pattern/.*',
+        # Needed to use QUICHE API.
+        r'net/quic/.*',
+        r'net/spdy/.*',
+        r'net/test/embedded_test_server/.*',
+        r'net/third_party/quiche/.*',
+        r'services/network/web_transport\.cc',
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK
+      ],
+    ),
+    BanRule(
+      r'/\babsl::(StrSplit|StrJoin|StrCat|StrAppend|Substitute|StrContains)\b',
+      (
+        'Abseil string utilities are banned. Use base/strings instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::(Mutex|CondVar|Notification|Barrier|BlockingCounter)\b',
+      (
+        'Abseil synchronization primitives are banned. Use',
+        'base/synchronization instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    BanRule(
+      r'/\babsl::(Duration|Time|TimeZone|CivilDay)\b',
+      (
+        'Abseil\'s time library is banned. Use base/time instead.',
       ),
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
@@ -800,7 +1057,9 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
           # Required for interop with the third-party webrtc library.
           'third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl\.cc',
           'third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl\.h',
-
+          # This code is in the process of being extracted into a third-party library.
+          # See https://crbug.com/1322914
+          '^net/cert/pki/path_builder_unittest\.cc',
           # TODO(https://crbug.com/1364577): Various uses that should be
           # migrated to something else.
           # Should use base::OnceCallback or base::RepeatingCallback.
@@ -874,25 +1133,9 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     BanRule(
-      ('base::ThreadRestrictions::ScopedAllowIO'),
-      (
-        'ScopedAllowIO is deprecated, use ScopedAllowBlocking instead.',
-      ),
-      False,
-      (),
-    ),
-    BanRule(
       r'/\bRunMessageLoop\b',
       (
           'RunMessageLoop is deprecated, use RunLoop instead.',
-      ),
-      False,
-      (),
-    ),
-    BanRule(
-      'RunThisRunLoop',
-      (
-          'RunThisRunLoop is deprecated, use RunLoop directly instead.',
       ),
       False,
       (),
@@ -944,6 +1187,41 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       (
         r'^sql/initialization\.(cc|h)$',
         r'^third_party/sqlite/.*\.(c|cc|h)$',
+      ),
+    ),
+    BanRule(
+      'CREATE VIEW',
+      (
+        'SQL views are disabled in Chromium feature code',
+        'https://chromium.googlesource.com/chromium/src/+/HEAD/sql#no-views',
+      ),
+      True,
+      (
+        _THIRD_PARTY_EXCEPT_BLINK,
+        # sql/ itself uses views when using memory-mapped IO.
+        r'^sql/.*',
+        # Various performance tools that do not build as part of Chrome.
+        r'^infra/.*',
+        r'^tools/perf.*',
+        r'.*perfetto.*',
+      ),
+    ),
+    BanRule(
+      'CREATE VIRTUAL TABLE',
+      (
+        'SQL virtual tables are disabled in Chromium feature code',
+        'https://chromium.googlesource.com/chromium/src/+/HEAD/sql#no-virtual-tables',
+      ),
+      True,
+      (
+        _THIRD_PARTY_EXCEPT_BLINK,
+        # sql/ itself uses virtual tables in the recovery module and tests.
+        r'^sql/.*',
+        # TODO(https://crbug.com/695592): Remove once WebSQL is deprecated.
+        r'third_party/blink/web_tests/storage/websql/.*'
+        # Various performance tools that do not build as part of Chrome.
+        r'^tools/perf.*',
+        r'.*perfetto.*',
       ),
     ),
     BanRule(
@@ -1143,22 +1421,6 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
     ),
     BanRule(
-      r'/\babsl::FunctionRef\b',
-      (
-        'absl::FunctionRef is banned. Use base::FunctionRef instead.',
-      ),
-      True,
-      [
-        # base::Bind{Once,Repeating} references absl::FunctionRef to disallow
-        # interoperability.
-        r'^base/functional/bind_internal\.h',
-        # base::FunctionRef is implemented on top of absl::FunctionRef.
-        r'^base/functional/function_ref.*\..+',
-        # Not an error in third_party folders.
-        _THIRD_PARTY_EXCEPT_BLINK,
-      ],
-    ),
-    BanRule(
       r'base::Feature k',
       (
           'Please use BASE_DECLARE_FEATURE() or BASE_FEATURE() instead of ',
@@ -1167,6 +1429,19 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       True,
       [
         _THIRD_PARTY_EXCEPT_BLINK,
+      ],
+    ),
+    BanRule(
+      r'\bchartorune\b',
+      (
+        'chartorune is not memory-safe, unless you can guarantee the input ',
+        'string is always null-terminated. Otherwise, please use charntorune ',
+        'from libphonenumber instead.'
+      ),
+      True,
+      [
+        _THIRD_PARTY_EXCEPT_BLINK,
+        # Exceptions to this rule should have a fuzzer.
       ],
     ),
 )
@@ -1258,8 +1533,6 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/create_test_apk_wrapper_script.pydeps',
     'build/android/gyp/create_ui_locale_resources.pydeps',
     'build/android/gyp/dex.pydeps',
-    'build/android/gyp/dex_jdk_libs.pydeps',
-    'build/android/gyp/dexsplitter.pydeps',
     'build/android/gyp/dist_aar.pydeps',
     'build/android/gyp/filter_zip.pydeps',
     'build/android/gyp/flatc_java.pydeps',
@@ -1334,13 +1607,17 @@ _KNOWN_ROBOTS = set(
                     'wpt-autoroller', 'chrome-weblayer-builder',
                     'lacros-version-skew-roller', 'skylab-test-cros-roller',
                     'infra-try-recipes-tester', 'lacros-tracking-roller',
-                    'lacros-sdk-version-roller')
+                    'lacros-sdk-version-roller', 'chrome-automated-expectation',
+                    'chromium-automated-expectation')
   ) | set('%s@skia-public.iam.gserviceaccount.com' % s
           for s in ('chromium-autoroll', 'chromium-release-autoroll')
   ) | set('%s@skia-corp.google.com.iam.gserviceaccount.com' % s
           for s in ('chromium-internal-autoroll',)
   ) | set('%s@owners-cleanup-prod.google.com.iam.gserviceaccount.com' % s
-          for s in ('swarming-tasks',))
+          for s in ('swarming-tasks',)
+  ) | set('%s@fuchsia-infra.iam.gserviceaccount.com' % s
+          for s in ('global-integration-try-builder',
+                    'global-integration-ci-builder'))
 
 _INVALID_GRD_FILE_LINE = [
         (r'<file lang=.* path=.*', 'Path should come before lang in GRD files.')
@@ -1861,6 +2138,12 @@ def CheckNoBannedFunctions(input_api, output_api):
             for ban_rule in _BANNED_JAVA_FUNCTIONS:
                 CheckForMatch(f, line_num, line, ban_rule)
 
+    file_filter = lambda f: f.LocalPath().endswith(('.js', '.ts'))
+    for f in input_api.AffectedFiles(file_filter=file_filter):
+        for line_num, line in f.ChangedContents():
+            for ban_rule in _BANNED_JAVASCRIPT_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
+
     file_filter = lambda f: f.LocalPath().endswith(('.mm', '.m', '.h'))
     for f in input_api.AffectedFiles(file_filter=file_filter):
         for line_num, line in f.ChangedContents():
@@ -2313,23 +2596,25 @@ def CheckChromeOsSyncedPrefRegistration(input_api, output_api):
     return results
 
 
-# TODO: add unit tests.
 def CheckNoAbbreviationInPngFileName(input_api, output_api):
     """Makes sure there are no abbreviations in the name of PNG files.
     The native_client_sdk directory is excluded because it has auto-generated PNG
     files for documentation.
     """
     errors = []
-    files_to_check = [r'.*_[a-z]_.*\.png$|.*_[a-z]\.png$']
+    files_to_check = [r'.*\.png$']
     files_to_skip = [r'^native_client_sdk/',
                      r'^services/test/',
                      r'^third_party/blink/web_tests/',
                     ]
     file_filter = lambda f: input_api.FilterSourceFile(
         f, files_to_check=files_to_check, files_to_skip=files_to_skip)
+    abbreviation = input_api.re.compile('.+_[a-z]\.png|.+_[a-z]_.*\.png')
     for f in input_api.AffectedFiles(include_deletes=False,
                                      file_filter=file_filter):
-        errors.append('    %s' % f.LocalPath())
+        file_name = input_api.os_path.split(f.LocalPath())[1]
+        if abbreviation.search(file_name):
+            errors.append('    %s' % f.LocalPath())
 
     results = []
     if errors:
@@ -2555,6 +2840,7 @@ def CheckSpamLogging(input_api, output_api):
     files_to_skip = (
         _EXCLUDED_PATHS + _TEST_CODE_EXCLUDED_PATHS +
         input_api.DEFAULT_FILES_TO_SKIP + (
+            r"^base/fuchsia/scoped_fx_logger\.cc$",
             r"^base/logging\.h$",
             r"^base/logging\.cc$",
             r"^base/task/thread_pool/task_tracker\.cc$",
@@ -2941,10 +3227,9 @@ def CheckJavaStyle(input_api, output_api):
         # Restore sys.path to what it was before.
         sys.path = original_sys_path
 
-    return checkstyle.RunCheckstyle(
+    return checkstyle.run_presubmit(
         input_api,
         output_api,
-        'tools/android/checkstyle/chromium-style-5.0.xml',
         files_to_skip=_EXCLUDED_PATHS + input_api.DEFAULT_FILES_TO_SKIP)
 
 
@@ -4367,6 +4652,36 @@ def CheckWATCHLISTS(input_api, output_api):
 
     return []
 
+def CheckGnRebasePath(input_api, output_api):
+    """Checks that target_gen_dir is not used wtih "//" in rebase_path().
+
+    Developers should use root_build_dir instead of "//" when using target_gen_dir because
+    Chromium is sometimes built outside of the source tree.
+    """
+
+    def gn_files(f):
+        return input_api.FilterSourceFile(f, files_to_check=(r'.+\.gn', ))
+
+    rebase_path_regex = input_api.re.compile(r'rebase_path\(("\$target_gen_dir"|target_gen_dir), ("/"|"//")\)')
+    problems = []
+    for f in input_api.AffectedSourceFiles(gn_files):
+        for line_num, line in f.ChangedContents():
+            if rebase_path_regex.search(line):
+                problems.append(
+                    'Absolute path in rebase_path() in %s:%d' %
+                    (f.LocalPath(), line_num))
+
+    if problems:
+        return [
+            output_api.PresubmitPromptWarning(
+                'Using an absolute path in rebase_path()',
+                items=sorted(problems),
+                long_text=(
+                    'rebase_path() should use root_build_dir instead of "/" ',
+                    'since builds can be initiated from outside of the source ',
+                    'root.'))
+        ]
+    return []
 
 def CheckGnGlobForward(input_api, output_api):
     """Checks that forward_variables_from(invoker, "*") follows best practices.
@@ -4399,7 +4714,6 @@ def CheckGnGlobForward(input_api, output_api):
                     '#Using-forward_variables_from'))
         ]
     return []
-
 
 def CheckNewHeaderWithoutGnChangeOnUpload(input_api, output_api):
     """Checks that newly added header files have corresponding GN changes.
@@ -4799,6 +5113,30 @@ def CheckAccessibilityTreeTestsAreIncludedForAndroid(input_api, output_api):
         return []
 
     return [output_api.PresubmitPromptWarning(message)]
+
+
+def CheckEsLintConfigChanges(input_api, output_api):
+    """Suggest using "git cl presubmit --files" when .eslintrc.js files are
+    modified. This is important because enabling an error in .eslintrc.js can
+    trigger errors in any .js or .ts files in its directory, leading to hidden
+    presubmit errors."""
+    results = []
+    eslint_filter = lambda f: input_api.FilterSourceFile(
+        f, files_to_check=[r'.*\.eslintrc\.js$'])
+    for f in input_api.AffectedFiles(include_deletes=False,
+                                     file_filter=eslint_filter):
+        local_dir = input_api.os_path.dirname(f.LocalPath())
+        # Use / characters so that the commands printed work on any OS.
+        local_dir = local_dir.replace(input_api.os_path.sep, '/')
+        if local_dir:
+            local_dir += '/'
+        results.append(
+            output_api.PresubmitNotifyResult(
+                '%(file)s modified. Consider running \'git cl presubmit --files '
+                '"%(dir)s*.js;%(dir)s*.ts"\' in order to check and fix the affected '
+                'files before landing this change.' %
+                { 'file' : f.LocalPath(), 'dir' : local_dir}))
+    return results
 
 
 # string pattern, sequence of strings to show when pattern matches,
@@ -5516,6 +5854,7 @@ def CheckStrings(input_api, output_api):
     #   .sha1 files aren't removed, warn the developer to remove them.
     unnecessary_screenshots = []
     missing_sha1 = []
+    missing_sha1_modified = []
     unnecessary_sha1_files = []
 
     # This checks verifies that the ICU syntax of messages this CL touched is
@@ -5531,6 +5870,12 @@ def CheckStrings(input_api, output_api):
                                            message_id + '.png.sha1')
         if sha1_path not in new_or_added_paths:
             missing_sha1.append(sha1_path)
+
+    def _CheckScreenshotModified(screenshots_dir, message_id):
+        sha1_path = input_api.os_path.join(screenshots_dir,
+                                           message_id + '.png.sha1')
+        if sha1_path not in new_or_added_paths:
+            missing_sha1_modified.append(sha1_path)
 
     def _CheckScreenshotRemoved(screenshots_dir, message_id):
         sha1_path = input_api.os_path.join(screenshots_dir,
@@ -5747,7 +6092,7 @@ def CheckStrings(input_api, output_api):
                 _CheckScreenshotAdded(screenshots_dir, added_id)
 
             for modified_id in modified_ids:
-                _CheckScreenshotAdded(screenshots_dir, modified_id)
+                _CheckScreenshotModified(screenshots_dir, modified_id)
 
             for removed_id in removed_ids:
                 _CheckScreenshotRemoved(screenshots_dir, removed_id)
@@ -5771,10 +6116,18 @@ def CheckStrings(input_api, output_api):
         if missing_sha1:
             results.append(
                 output_api.PresubmitError(
-                    'You are adding or modifying UI strings.\n'
+                    'You are adding UI strings.\n'
                     'To ensure the best translations, take screenshots of the relevant UI '
                     '(https://g.co/chrome/translation) and add these files to your '
                     'changelist:', sorted(missing_sha1)))
+
+        if missing_sha1_modified:
+            results.append(
+                output_api.PresubmitError(
+                    'You are modifying UI strings or their meanings.\n'
+                    'To ensure the best translations, take screenshots of the relevant UI '
+                    '(https://g.co/chrome/translation) and add these files to your '
+                    'changelist:', sorted(missing_sha1_modified)))
 
         if unnecessary_sha1_files:
             results.append(
@@ -6413,5 +6766,44 @@ Mockito.mock()/spy() cause issues with our Java optimizer. You have 3 options:
    builtin type which we don't ship, or a class you know R8 will treat
    specially, you can ignore this warning.
 """, error_locations))
+
+    return results
+
+def CheckNoJsInIos(input_api, output_api):
+    """Checks to make sure that JavaScript files are not used on iOS."""
+
+    def _FilterFile(affected_file):
+        return input_api.FilterSourceFile(
+            affected_file,
+            files_to_skip=input_api.DEFAULT_FILES_TO_SKIP +
+                          (r'^ios/third_party/*', r'^third_party/*'),
+            files_to_check=[r'^ios/.*\.js$', r'.*/ios/.*\.js$'])
+
+    error_paths = []
+    warning_paths = []
+
+    for f in input_api.AffectedSourceFiles(_FilterFile):
+        local_path = f.LocalPath()
+
+        if input_api.os_path.splitext(local_path)[1] == '.js':
+            if f.Action() == 'A':
+                error_paths.append(local_path)
+            elif f.Action() != 'D':
+                warning_paths.append(local_path)
+
+    results = []
+
+    if warning_paths:
+        results.append(output_api.PresubmitPromptWarning(
+            'TypeScript is now fully supported for iOS feature scripts. '
+            'Consider converting JavaScript files to TypeScript. See '
+            '//ios/web/public/js_messaging/README.md for more details.',
+            warning_paths))
+
+    if error_paths:
+        results.append(output_api.PresubmitError(
+            'Do not use JavaScript on iOS as TypeScript is fully supported. '
+            'See //ios/web/public/js_messaging/README.md for help using '
+            'scripts on iOS.', error_paths))
 
     return results

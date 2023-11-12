@@ -62,7 +62,7 @@ const char kPKCS7Header[] = "PKCS7";
 // Utility to split |src| on the first occurrence of |c|, if any. |right| will
 // either be empty if |c| was not found, or will contain the remainder of the
 // string including the split character itself.
-void SplitOnChar(const base::StringPiece& src,
+void SplitOnChar(base::StringPiece src,
                  char c,
                  base::StringPiece* left,
                  base::StringPiece* right) {
@@ -468,7 +468,7 @@ bool X509Certificate::VerifyHostname(
   // and DNS names, via dNSName subjectAltNames.
   // Validate that the host conforms to the DNS preferred name syntax, in
   // either relative or absolute form, and exclude the "root" label for DNS.
-  if (reference_name == "." || !IsValidDNSDomain(reference_name))
+  if (reference_name == "." || !IsCanonicalizedHostCompliant(reference_name))
     return false;
 
   // CanonicalizeHost does not normalize absolute vs relative DNS names. If
@@ -744,8 +744,7 @@ bool X509Certificate::IsSelfSigned(const CRYPTO_BUFFER* cert_buffer) {
     return false;
 
   absl::optional<SignatureAlgorithm> signature_algorithm =
-      ParseSignatureAlgorithm(signature_algorithm_tlv,
-                              /*errors=*/nullptr);
+      ParseSignatureAlgorithm(signature_algorithm_tlv);
   if (!signature_algorithm)
     return false;
 

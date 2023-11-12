@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
 #include <iterator>
 #include <set>
 #include <string>
@@ -15,6 +14,7 @@
 
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
@@ -103,7 +103,12 @@ bool StringMatchesSSN(const std::u16string& str) {
 
 // Returns true if the |str| contains words related to one time password fields.
 bool StringMatchesOTP(const std::u16string& str) {
-  return autofill::MatchesRegex<autofill::kOneTimePwdRe>(str);
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kNewRegexForOtpFields)) {
+    return autofill::MatchesRegex<autofill::kNewOneTimePwdRe>(str);
+  } else {
+    return autofill::MatchesRegex<autofill::kOneTimePwdRe>(str);
+  }
 }
 
 // Returns true if the |str| consists of one repeated non alphanumeric symbol.
@@ -200,7 +205,7 @@ const std::u16string& GetFieldValue(const FormFieldData& field) {
 // A helper struct that is used to capture significant fields to be used for
 // the construction of a PasswordForm.
 struct SignificantFields {
-  const FormFieldData* username = nullptr;
+  raw_ptr<const FormFieldData> username = nullptr;
   const FormFieldData* password = nullptr;
   const FormFieldData* new_password = nullptr;
   const FormFieldData* confirmation_password = nullptr;
@@ -291,7 +296,7 @@ const FormFieldData* FindConfirmationPasswordField(
       std::find_if(std::next(new_password_field), processed_fields.end(),
                    MatchesNewPasswordField);
   return confirmation_password_field != processed_fields.end()
-             ? confirmation_password_field->field
+             ? confirmation_password_field->field.get()
              : nullptr;
 }
 
@@ -579,10 +584,11 @@ std::vector<const FormFieldData*> GetRelevantPasswords(
   // |passwords| though, in case it is needed for fallback.
   std::vector<const ProcessedField*> filtered;
   filtered.reserve(passwords.size());
-  std::copy_if(passwords.begin(), passwords.end(), std::back_inserter(filtered),
-               [&ignored_readonly](const ProcessedField* processed_field) {
-                 return IsLikelyPassword(*processed_field, &ignored_readonly);
-               });
+  base::ranges::copy_if(
+      passwords, std::back_inserter(filtered),
+      [&ignored_readonly](const ProcessedField* processed_field) {
+        return IsLikelyPassword(*processed_field, &ignored_readonly);
+      });
 
   // Step 4: remove the field parsed as username, if needed.
   if (username && username->IsPasswordInputElement()) {

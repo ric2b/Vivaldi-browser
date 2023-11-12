@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_swap_buffer_provider.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 
 namespace blink {
@@ -50,6 +51,8 @@ class GPUCanvasContext : public CanvasRenderingContext,
 
   GPUCanvasContext(const GPUCanvasContext&) = delete;
   GPUCanvasContext& operator=(const GPUCanvasContext&) = delete;
+
+  ~GPUCanvasContext() override;
 
   void Trace(Visitor*) const override;
 
@@ -137,6 +140,7 @@ class GPUCanvasContext : public CanvasRenderingContext,
       cc::PaintFlags::FilterQuality::kLow;
   Member<GPUDevice> device_;
   Member<GPUTexture> texture_;
+  PredefinedColorSpace color_space_ = PredefinedColorSpace::kSRGB;
   V8GPUCanvasAlphaMode::Enum alpha_mode_;
   scoped_refptr<WebGPUTextureAlphaClearer> alpha_clearer_;
   scoped_refptr<WebGPUSwapBufferProvider> swap_buffers_;

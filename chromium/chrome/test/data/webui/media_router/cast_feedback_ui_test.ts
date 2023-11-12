@@ -25,10 +25,12 @@ class TestFeedbackUiBrowserProxy extends TestBrowserProxy implements
 
   sendFeedback(info: chrome.feedbackPrivate.FeedbackInfo) {
     this.methodCalled('sendFeedback', info);
-    return Promise.resolve(
-        this.getCallCount('sendFeedback') > this.timesToFail ?
-            chrome.feedbackPrivate.Status.SUCCESS :
-            chrome.feedbackPrivate.Status.DELAYED);
+    return Promise.resolve({
+      status: this.getCallCount('sendFeedback') > this.timesToFail ?
+          chrome.feedbackPrivate.Status.SUCCESS :
+          chrome.feedbackPrivate.Status.DELAYED,
+      landingPageType: chrome.feedbackPrivate.LandingPageType.NORMAL,
+    });
   }
 }
 
@@ -50,8 +52,7 @@ suite('Suite', function() {
   }
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     browserProxy = new TestFeedbackUiBrowserProxy();
     FeedbackUiBrowserProxyImpl.setInstance(browserProxy);
     ui = document.createElement('feedback-ui');

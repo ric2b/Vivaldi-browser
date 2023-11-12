@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -51,6 +50,9 @@
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
 #include "chrome/browser/printing/print_backend_service_manager.h"
 #include "chrome/services/printing/public/mojom/print_backend_service.mojom.h"
+#endif
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(ENABLE_OOP_PRINTING)
 #include "printing/printing_features.h"
 #endif
 
@@ -142,6 +144,14 @@ void PrintJobWorker::SetPrintJob(PrintJob* print_job) {
   print_job_ = print_job;
 }
 
+std::unique_ptr<PrintSettings> PrintJobWorker::GetPdfSettings() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_EQ(page_number_, PageNumber::npos());
+
+  printing_context_->UsePdfSettings();
+  return printing_context_->TakeAndResetSettings();
+}
+
 void PrintJobWorker::GetDefaultSettings(SettingsCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(page_number_, PageNumber::npos());
@@ -195,7 +205,7 @@ void PrintJobWorker::SetSettings(base::Value::Dict new_settings,
     crash_key = std::make_unique<crash_keys::ScopedPrinterInfo>(
         print_backend->GetPrinterDriverInfo(printer_name));
 
-#if BUILDFLAG(IS_LINUX) && defined(USE_CUPS)
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_CUPS)
     PrinterBasicInfo basic_info;
     if (print_backend->GetPrinterBasicInfo(printer_name, &basic_info) ==
         mojom::ResultCode::kSuccess) {
@@ -205,7 +215,7 @@ void PrintJobWorker::SetSettings(base::Value::Dict new_settings,
 
       new_settings.Set(kSettingAdvancedSettings, std::move(advanced_settings));
     }
-#endif  // BUILDFLAG(IS_LINUX) && defined(USE_CUPS)
+#endif  // BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_CUPS)
   }
 
   mojom::ResultCode result;
@@ -361,7 +371,7 @@ void PrintJobWorker::OnDocumentChanged(PrintedDocument* new_document) {
 
 void PrintJobWorker::PostWaitForPage() {
   // We need to wait for the page to be available.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&PrintJobWorker::OnNewPage, weak_factory_.GetWeakPtr()),
       base::Milliseconds(500));
@@ -503,10 +513,9 @@ bool PrintJobWorker::SpoolPage(PrintedPage* page) {
 
   // Signal everyone that the page is printed.
   DCHECK(print_job_);
-  print_job_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&PrintJob::OnPageDone, base::RetainedRef(print_job_.get()),
-                     base::RetainedRef(page)));
+  print_job_->PostTask(FROM_HERE,
+                       base::BindOnce(&PrintJob::OnPageDone, print_job_,
+                                      base::RetainedRef(page)));
   return true;
 }
 #endif  // BUILDFLAG(IS_WIN)

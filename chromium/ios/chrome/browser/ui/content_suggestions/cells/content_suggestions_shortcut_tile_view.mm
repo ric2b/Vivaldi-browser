@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_shortcut_tile_view.h"
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
@@ -47,34 +47,32 @@ const CGFloat kIconSize = 56;
   self = [self initWithFrame:CGRectZero];
   if (self) {
     self.accessibilityCustomActions = nil;
-    self.titleLabel.text = config.title;
     self.isAccessibilityElement = YES;
-    self.accessibilityTraits = config.accessibilityTraits;
-    self.accessibilityLabel = config.accessibilityLabel.length
-                                  ? config.accessibilityLabel
-                                  : config.title;
-    // The accessibilityUserInputLabel should just be the title, with nothing
-    // extra from the accessibilityLabel.
-    self.accessibilityUserInputLabels = @[ config.title ];
-    _iconView.image =
-        UseSymbols()
-            ? SymbolForCollectionShortcutType(config.collectionShortcutType)
-            : ImageForCollectionShortcutType(config.collectionShortcutType);
     _iconView.contentMode = UIViewContentModeCenter;
 
-    _countContainer.hidden = !config.count;
-    _countLabel.text = [@(config.count) stringValue];
-    _config = config;
+    [self updateConfiguration:config];
   }
   return self;
 }
 
-- (void)updateCount:(NSInteger)count {
-  self.countContainer.hidden = count == 0;
-  if (count > 0) {
-    self.countLabel.text = [@(count) stringValue];
+- (void)updateConfiguration:(ContentSuggestionsMostVisitedActionItem*)config {
+  _config = config;
+  self.titleLabel.text = config.title;
+  self.accessibilityTraits = config.accessibilityTraits;
+  self.accessibilityLabel = config.accessibilityLabel.length
+                                ? config.accessibilityLabel
+                                : config.title;
+  // The accessibilityUserInputLabel should just be the title, with nothing
+  // extra from the accessibilityLabel.
+  self.accessibilityUserInputLabels = @[ config.title ];
+  self.iconView.image =
+      UseSymbols()
+          ? SymbolForCollectionShortcutType(config.collectionShortcutType)
+          : ImageForCollectionShortcutType(config.collectionShortcutType);
+  self.countContainer.hidden = config.count == 0;
+  if (config.count > 0) {
+    self.countLabel.text = [@(config.count) stringValue];
   }
-  self.config.count = count;
 }
 
 - (UILabel*)countLabel {

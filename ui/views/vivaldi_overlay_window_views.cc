@@ -185,7 +185,7 @@ constexpr char kPipWidth[] = "width";
 constexpr char kPipHeight[] = "height";
 
 // OverlayWindowViews implementation
-gfx::Rect OverlayWindowViews::GetStoredBoundsFromPrefs() {
+gfx::Rect VideoOverlayWindowViews::GetStoredBoundsFromPrefs() {
   Browser* browser =
       chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
   if (browser) {
@@ -209,7 +209,7 @@ gfx::Rect OverlayWindowViews::GetStoredBoundsFromPrefs() {
   return native_widget() ? GetRestoredBounds() : gfx::Rect();
 }
 
-void OverlayWindowViews::UpdateStoredBounds() {
+void VideoOverlayWindowViews::UpdateStoredBounds() {
   gfx::Rect bounds = GetRestoredBounds();
   gfx::Size size = bounds.size();
   if (size.width() == min_size_.width() ||

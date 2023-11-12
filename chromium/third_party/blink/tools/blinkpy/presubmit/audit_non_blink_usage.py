@@ -34,6 +34,7 @@ _CONFIG = [
             # TODO(dcheng): Should these be in a more specific config?
             'gfx::ColorSpace',
             'gfx::CubicBezier',
+            'gfx::HDRMode',
             'gfx::HDRMetadata',
             'gfx::ICCProfile',
             'gfx::RadToDeg',
@@ -129,7 +130,9 @@ _CONFIG = [
             'base::WritableSharedMemoryMapping',
             'base::as_bytes',
             'base::bit_cast',
+            'base::expected',
             'base::make_span',
+            'base::unexpected',
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::span',
@@ -316,6 +319,8 @@ _CONFIG = [
             'base::TickClock',
 
             # cc painting types.
+            'cc::InspectablePaintRecorder',
+            'cc::InspectableRecordPaintCanvas',
             'cc::PaintCanvas',
             'cc::PaintFlags',
             'cc::PaintImage',
@@ -329,6 +334,7 @@ _CONFIG = [
             'cc::UsePaintCache',
 
             # Chromium geometry types.
+            'gfx::DecomposedTransform',
             'gfx::Insets',
             'gfx::InsetsF',
             'gfx::Outsets',
@@ -506,9 +512,10 @@ _CONFIG = [
             'ui::ScrollGranularity',
 
             # Document transitions
-            'cc::DocumentTransitionRequest',
-            'cc::DocumentTransitionContentLayer',
-            'viz::SharedElementResourceId',
+            'cc::ViewTransitionRequest',
+            'cc::ViewTransitionContentLayer',
+            'viz::NavigationID'
+            'viz::ViewTransitionElementResourceId',
 
             # base/types/strong_alias.h
             'base::StrongAlias',
@@ -516,6 +523,9 @@ _CONFIG = [
             # Common display structs across display <-> Blink.
             'display::ScreenInfo',
             'display::ScreenInfos',
+
+            # Terminal value for display id's used across display <-> Blink.
+            'display::kInvalidDisplayId',
 
             # Standalone utility libraries that only depend on //base
             'skia::.+',
@@ -525,7 +535,6 @@ _CONFIG = [
             "power_scheduler::.+",
 
             # Nested namespaces under the blink namespace
-            'attribution_response_parsing::.+',
             'bindings::.+',
             'canvas_heuristic_parameters::.+',
             'compositor_target_property::.+',
@@ -590,6 +599,10 @@ _CONFIG = [
 
             # TODO(crbug.com/1296161): Remove this when the CHIPS OT ends.
             "net::features::kPartitionedCookiesBypassOriginTrial",
+
+            # TODO(https://crbug.com/1261328): Remove this once the Blob URL
+            # partitioning killswitch is removed.
+            "net::features::kSupportPartitionedBlobUrl",
 
             # HTTP structured headers
             'net::structured_headers::.+',
@@ -697,6 +710,7 @@ _CONFIG = [
             'ui::IsTableRow',
             'ui::IsTableHeader',
             'ui::IsText',
+            'ui::IsTextField',
 
             # Blink uses UKM for logging e.g. always-on leak detection (crbug/757374)
             'ukm::.+',
@@ -731,6 +745,11 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/bindings/'],
         'allowed': ['gin::.+'],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/bindings/core/v8/serialization/'],
+        'allowed': ['base::BufferIterator'],
     },
     {
         'paths':
@@ -945,6 +964,14 @@ _CONFIG = [
         ],
     },
     {
+        'paths': [
+            'third_party/blink/renderer/core/loader/web_bundle/script_web_bundle.cc'
+        ],
+        'allowed': [
+            'web_package::ScriptWebBundleOriginType',
+        ],
+    },
+    {
         'paths': ['third_party/blink/renderer/core/paint'],
         'allowed': [
             # cc painting types.
@@ -1093,32 +1120,6 @@ _CONFIG = [
         ],
         'allowed': [
             'base::flat_map',
-            # TODO(mythria): Allow use of non-blink mojo interface. Once
-            # //content/renderer/loader is moved to Blink as a part of onion
-            # soup we can update all uses to blink::mojom::blink::CodeCacheHost.
-            'blink::mojom::CodeCacheHost',
-        ],
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.cc',
-            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.h',
-            'third_party/blink/renderer/core/workers/worklet_global_scope.h',
-            'third_party/blink/renderer/core/workers/worklet_global_scope.cc',
-            'third_party/blink/renderer/core/workers/worker_global_scope.cc',
-            'third_party/blink/renderer/core/workers/worker_global_scope.h',
-            'third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h',
-            'third_party/blink/renderer/core/execution_context/execution_context.h',
-            'third_party/blink/renderer/core/execution_context/execution_context.cc',
-            'third_party/blink/renderer/modules/service_worker/service_worker_script_cached_metadata_handler.h',
-            'third_party/blink/renderer/modules/service_worker/service_worker_script_cached_metadata_handler.cc',
-            'third_party/blink/renderer/bindings/core/v8/v8_wasm_response_extensions.cc',
-        ],
-        'allowed': [
-            # TODO(mythria): Allow use of non-blink mojo interface. Once
-            # //content/renderer/loader is moved to Blink as a part of onion
-            # soup we can update all uses to blink::mojom::blink::CodeCacheHost.
-            'blink::mojom::CodeCacheHost',
         ],
     },
     {
@@ -1389,6 +1390,7 @@ _CONFIG = [
         ],
         'allowed': [
             'base::ClampMul',
+            'base::DoNothingWithBoundArgs',
             'base::PlatformThreadRef',
             'base::WrapRefCounted',
             'cc::kNumYUVPlanes',
@@ -1427,6 +1429,7 @@ _CONFIG = [
         'allowed': [
             'gpu::webgpu::PowerPreference',
             'gpu::webgpu::WebGPUInterface',
+            'media::PIXEL_FORMAT_NV12',
         ],
     },
     {
@@ -1440,6 +1443,7 @@ _CONFIG = [
             'media::.+',
             'rtc::scoped_refptr',
             'webrtc::AudioDeviceModule',
+            'webrtc::AudioParameters',
             'webrtc::AudioSourceInterface',
             'webrtc::AudioTransport',
             'webrtc::kAdmMaxDeviceNameSize',
@@ -1464,6 +1468,11 @@ _CONFIG = [
         # WTF::RefCounted should be used instead. base::RefCountedThreadSafe is
         # still needed for cross_thread_copier.h though.
         'allowed': ['base::RefCountedThreadSafe', '(?!base::RefCounted).+'],
+        # This is required to supplant less fine-grained inclass_disallows. We
+        # want to allow everything that the normal ones are allowing here, for
+        # the same reasons.
+        'inclass_allowed':
+        ['base::RefCountedThreadSafe::.+', '(?!base::RefCounted).+'],
         'disallowed': [
             # TODO(https://crbug.com/1267866): this warning is shown twice for
             # renderer/platform/ violations.
@@ -1512,7 +1521,7 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/url_pattern/',
+            'third_party/blink/renderer/core/url_pattern/',
         ],
         'allowed': [
             # Required to provide a canonicalization functor to liburlpattern.
@@ -1735,9 +1744,9 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/platform/graphics/document_transition_shared_element_id.h'
+            'third_party/blink/renderer/platform/graphics/view_transition_shared_element_id.h'
         ],
-        'allowed': ['cc::DocumentTransitionSharedElementId'],
+        'allowed': ['cc::ViewTransitionElementId'],
     },
     {
         'paths': [
@@ -1812,6 +1821,23 @@ _CONFIG = [
         'allowed': [
             # Used for injecting a mock.
             'base::NoDestructor',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/browsing_topics/browsing_topics_document_supplement.cc',
+        ],
+        'allowed': [
+            'browsing_topics::ApiAccessFailureReason',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/frame/attribution_src_loader.cc',
+            'third_party/blink/renderer/core/frame/attribution_src_loader.h',
+        ],
+        'allowed': [
+            'attribution_reporting:.*',
         ]
     },
 ]

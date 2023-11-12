@@ -8,27 +8,22 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_background_task.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_manager.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/test/fake_externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
-#include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
@@ -36,16 +31,11 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_icon_manager.h"
-#include "chrome/browser/web_applications/web_app_install_finalizer.h"
-#include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
-#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
-#include "chromeos/login/login_state/login_state.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/webapps/browser/install_result_code.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/test/test_utils.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/idle/idle.h"
@@ -95,12 +85,12 @@ struct SystemAppData {
 class SystemWebAppWaiter {
  public:
   explicit SystemWebAppWaiter(SystemWebAppManager* system_web_app_manager) {
-    system_web_app_manager->ResetOnAppsSynchronizedForTesting();
+    system_web_app_manager->ResetForTesting();
     system_web_app_manager->on_apps_synchronized().Post(
         FROM_HERE, base::BindLambdaForTesting([&]() {
-          // Wait one execution loop for on_apps_synchronized() to be
-          // called on all listeners.
-          base::SequencedTaskRunnerHandle::Get()->PostTask(
+          // Wait one execution loop for on_apps_synchronized() to be called on
+          // all listeners.
+          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
               FROM_HERE, run_loop_.QuitClosure());
         }));
   }
@@ -169,73 +159,13 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-
-    provider_ = web_app::FakeWebAppProvider::Get(profile());
-    provider_->SetDefaultFakeSubsystems();
-
-    auto install_manager =
-        std::make_unique<web_app::WebAppInstallManager>(profile());
-    install_manager_ = install_manager.get();
-    provider_->SetInstallManager(std::move(install_manager));
-
-    auto install_finalizer =
-        std::make_unique<web_app::WebAppInstallFinalizer>(profile());
-    install_finalizer_ = install_finalizer.get();
-    provider_->SetInstallFinalizer(std::move(install_finalizer));
-
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
-
-    // This is not a WebAppProvider subsystem, so this can be set
-    // after the WebAppProvider has started.
-    test_system_web_app_manager_ =
-        std::make_unique<TestSystemWebAppManager>(profile());
-
-    web_app_policy_manager().SetSystemWebAppDelegateMap(
-        &test_system_web_app_manager_->system_app_delegates());
-
-    test_system_web_app_manager_->SetSubsystems(
-        &externally_managed_app_manager(), &provider().registrar(),
-        &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
-
-    externally_installed_app_prefs_ =
-        std::make_unique<web_app::ExternallyInstalledWebAppPrefs>(
-            profile()->GetPrefs());
   }
-
-  void TearDown() override {
-    DestroyManagers();
-    ChromeRenderViewHostTestHarness::TearDown();
-  }
-
-  void DestroyManagers() {
-    provider_->Shutdown();
-    test_system_web_app_manager_.reset();
-    externally_installed_app_prefs_.reset();
-  }
-
-  void DestroyUiManager() { provider_->ShutDownUiManagerForTesting(); }
 
  protected:
-  web_app::WebAppProvider& provider() { return *provider_; }
-
-  web_app::ExternallyInstalledWebAppPrefs& externally_installed_app_prefs() {
-    return *externally_installed_app_prefs_;
-  }
-
-  web_app::WebAppIconManager& icon_manager() {
-    return provider().icon_manager();
-  }
-
-  web_app::WebAppInstallFinalizer& install_finalizer() {
-    return *install_finalizer_;
-  }
-
-  web_app::WebAppInstallManager& install_manager() {
-    return provider().install_manager();
-  }
-
-  web_app::WebAppCommandManager& command_manager() {
-    return provider().command_manager();
+  web_app::FakeWebAppProvider& provider() {
+    return static_cast<web_app::FakeWebAppProvider&>(
+        *SystemWebAppManager::GetWebAppProvider(profile()));
   }
 
   web_app::FakeExternallyManagedAppManager& externally_managed_app_manager() {
@@ -244,25 +174,18 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
   }
 
   TestSystemWebAppManager& system_web_app_manager() {
-    return *test_system_web_app_manager_;
-  }
-
-  web_app::FakeWebAppUiManager& ui_manager() {
-    return static_cast<web_app::FakeWebAppUiManager&>(provider().ui_manager());
-  }
-
-  web_app::WebAppPolicyManager& web_app_policy_manager() {
-    return provider().policy_manager();
+    return static_cast<TestSystemWebAppManager&>(
+        *SystemWebAppManager::Get(profile()));
   }
 
   bool IsInstalled(const GURL& install_url) {
-    return provider().registrar().IsInstalled(
+    return provider().registrar_unsafe().IsInstalled(
         web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, install_url));
   }
 
   void InitRegistrarWithSystemApps(
       const std::vector<SystemAppData>& system_app_data_list) {
-    DCHECK(provider().registrar().is_empty());
+    DCHECK(provider().registrar_unsafe().is_empty());
     DCHECK(!system_app_data_list.empty());
 
     for (const SystemAppData& data : system_app_data_list) {
@@ -270,14 +193,15 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
           data.url, web_app::WebAppManagement::Type::kSystem);
       const web_app::AppId app_id = web_app->app_id();
       {
-        web_app::ScopedRegistryUpdate update(&provider().sync_bridge());
+        web_app::ScopedRegistryUpdate update(&provider().sync_bridge_unsafe());
         update->CreateApp(std::move(web_app));
       }
 
-      externally_installed_app_prefs().Insert(
-          data.url,
-          web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, data.url),
-          data.source);
+      web_app::ExternallyInstalledWebAppPrefs(profile()->GetPrefs())
+          .Insert(
+              data.url,
+              web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, data.url),
+              data.source);
     }
   }
 
@@ -287,29 +211,54 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
     waiter.Wait();
   }
 
- private:
-  raw_ptr<web_app::FakeWebAppProvider> provider_;
-  raw_ptr<web_app::WebAppInstallFinalizer> install_finalizer_;
-  raw_ptr<web_app::WebAppInstallManager> install_manager_;
+  void StartAndWaitForIconCheck() {
+    StartAndWaitForAppsToSynchronize();
 
-  std::unique_ptr<TestSystemWebAppManager> test_system_web_app_manager_;
-  std::unique_ptr<web_app::ExternallyInstalledWebAppPrefs>
-      externally_installed_app_prefs_;
+    base::RunLoop run_loop;
+    system_web_app_manager().on_icon_check_completed().Post(
+        FROM_HERE, run_loop.QuitClosure());
+    run_loop.Run();
+  }
 };
 
 class SystemWebAppManagerTest_PrefMigrationEnabled
     : public SystemWebAppManagerTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<
+          web_app::test::ExternalPrefMigrationTestCases> {
  public:
   SystemWebAppManagerTest_PrefMigrationEnabled() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {::features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {::features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case web_app::test::ExternalPrefMigrationTestCases::
+          kDisableMigrationReadPref:
+        disabled_features.push_back(
+            ::features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            ::features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case web_app::test::ExternalPrefMigrationTestCases::
+          kDisableMigrationReadDB:
+        disabled_features.push_back(
+            ::features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            ::features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case web_app::test::ExternalPrefMigrationTestCases::
+          kEnableMigrationReadPref:
+        enabled_features.push_back(::features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            ::features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case web_app::test::ExternalPrefMigrationTestCases::
+          kEnableMigrationReadDB:
+        enabled_features.push_back(::features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            ::features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   bool IsExternalDataReadFromDBEnabled() {
@@ -377,9 +326,16 @@ TEST_P(SystemWebAppManagerTest_PrefMigrationEnabled,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerTest_PrefMigrationEnabled,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerTest_PrefMigrationEnabled,
+    ::testing::Values(
+        web_app::test::ExternalPrefMigrationTestCases::
+            kDisableMigrationReadPref,
+        web_app::test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        web_app::test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        web_app::test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    web_app::test::GetExternalPrefMigrationTestName);
 
 // Test that System Apps do install with the pref migration enabled.
 TEST_F(SystemWebAppManagerTest, Enabled) {
@@ -525,6 +481,126 @@ TEST_F(SystemWebAppManagerTest, UpdateOnVersionChange) {
   EXPECT_FALSE(IsInstalled(AppUrl1()));
   EXPECT_TRUE(IsInstalled(AppUrl2()));
   EXPECT_TRUE(IsInstalled(kAppUrl3));
+}
+
+TEST_F(SystemWebAppManagerTest, RetryBrokenIcons) {
+  const std::vector<web_app::ExternalInstallOptions>& install_requests =
+      externally_managed_app_manager().install_requests();
+
+  // We don't want to force reinstall by default, we want to check that we
+  // correctly set to force reinstall when icons are broken.
+  system_web_app_manager().SetUpdatePolicy(
+      SystemWebAppManager::UpdatePolicy::kOnVersionChange);
+
+  {
+    SystemWebAppDelegateMap system_apps;
+    system_apps.emplace(
+        SystemWebAppType::SETTINGS,
+        std::make_unique<UnittestingSystemAppDelegate>(
+            SystemWebAppType::SETTINGS, kSettingsAppInternalName, AppUrl1(),
+            GetApp1WebAppInfoFactory()));
+    system_web_app_manager().SetSystemAppsForTesting(std::move(system_apps));
+  }
+
+  {
+    // Initial install.
+    StartAndWaitForAppsToSynchronize();
+
+    EXPECT_EQ(1u, install_requests.size());
+    EXPECT_TRUE(install_requests[0].force_reinstall);
+    EXPECT_TRUE(IsInstalled(AppUrl1()));
+  }
+
+  {
+    // Icons not broken.
+    system_web_app_manager().set_icons_are_broken(false);
+    StartAndWaitForAppsToSynchronize();
+
+    EXPECT_EQ(2u, install_requests.size());
+    EXPECT_FALSE(install_requests[1].force_reinstall);
+  }
+
+  {
+    // Broken icons should force reinstall.
+    system_web_app_manager().set_icons_are_broken(true);
+    StartAndWaitForAppsToSynchronize();
+
+    EXPECT_EQ(3u, install_requests.size());
+    EXPECT_TRUE(install_requests[2].force_reinstall);
+  }
+}
+
+TEST_F(SystemWebAppManagerTest, AbortOnExceedRetryLimit) {
+  const std::vector<web_app::ExternalInstallOptions>& install_requests =
+      externally_managed_app_manager().install_requests();
+
+  base::HistogramTester histograms;
+
+  // We don't want to force reinstall by default, we want to check that we
+  // correctly set to force reinstall when icons are broken.
+  system_web_app_manager().SetUpdatePolicy(
+      SystemWebAppManager::UpdatePolicy::kOnVersionChange);
+
+  {
+    SystemWebAppDelegateMap system_apps;
+    system_apps.emplace(
+        SystemWebAppType::SETTINGS,
+        std::make_unique<UnittestingSystemAppDelegate>(
+            SystemWebAppType::SETTINGS, kSettingsAppInternalName, AppUrl1(),
+            GetApp1WebAppInfoFactory()));
+    system_web_app_manager().SetSystemAppsForTesting(std::move(system_apps));
+    system_web_app_manager().set_icons_are_broken(true);
+  }
+
+  {
+    // Initial install
+    StartAndWaitForAppsToSynchronize();
+
+    EXPECT_EQ(1u, install_requests.size());
+    EXPECT_TRUE(install_requests[0].force_reinstall);
+    EXPECT_TRUE(IsInstalled(AppUrl1()));
+  }
+
+  {
+    // 1st retry
+    StartAndWaitForIconCheck();
+
+    histograms.ExpectBucketCount(
+        SystemWebAppManager::kIconsFixedOnReinstallHistogramName, false, 1);
+
+    EXPECT_EQ(2u, install_requests.size());
+    EXPECT_TRUE(install_requests[1].force_reinstall);
+  }
+
+  {
+    // 2nd retry
+    StartAndWaitForIconCheck();
+
+    histograms.ExpectBucketCount(
+        SystemWebAppManager::kIconsFixedOnReinstallHistogramName, false, 2);
+    EXPECT_EQ(3u, install_requests.size());
+    EXPECT_TRUE(install_requests[2].force_reinstall);
+  }
+
+  {
+    // 3rd retry
+    StartAndWaitForIconCheck();
+
+    histograms.ExpectBucketCount(
+        SystemWebAppManager::kIconsFixedOnReinstallHistogramName, false, 3);
+
+    EXPECT_EQ(4u, install_requests.size());
+    EXPECT_TRUE(install_requests[3].force_reinstall);
+  }
+
+  {
+    // 4th retry should be aborted - no new install request
+    system_web_app_manager().ResetForTesting();
+    system_web_app_manager().Start();
+    base::RunLoop().RunUntilIdle();
+
+    EXPECT_EQ(4u, install_requests.size());
+  }
 }
 
 TEST_F(SystemWebAppManagerTest, UpdateOnLocaleChange) {
@@ -821,20 +897,28 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstalls) {
 
   // Bump the version number, and an update will trigger, and force
   // reinstallation of both apps.
+  //
   system_web_app_manager().set_current_version(base::Version("2.0.0.0"));
-  externally_managed_app_manager().SetDropRequestsForTesting(true);
-  // Can't use the normal method because RunLoop::Run goes until
-  // on_app_synchronized is called, and this fails, never calling that.
-  system_web_app_manager().Start();
-  base::RunLoop().RunUntilIdle();
-  externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
 
+  // We use RunUntilIdle because the install requests are dropped, so
+  // on_app_synchronized() won't be called.
+  externally_managed_app_manager().SetDropRequestsForTesting(true);
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
+
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
+
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
+  system_web_app_manager().Start();
+  base::RunLoop().RunUntilIdle();
+
+  externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
@@ -851,6 +935,7 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstalls) {
   // If we don't abandon at the same version, it doesn't even attempt another
   // request
   externally_managed_app_manager().SetDropRequestsForTesting(false);
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().set_current_version(base::Version("2.0.0.0"));
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
@@ -858,10 +943,11 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstalls) {
   EXPECT_EQ(5u, install_requests.size());
 
   // Bump the version, and it works.
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().set_current_version(base::Version("3.0.0.0"));
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
-  command_manager().AwaitAllCommandsCompleteForTesting();
+  provider().command_manager().AwaitAllCommandsCompleteForTesting();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
 
   EXPECT_EQ(6u, install_requests.size());
@@ -895,18 +981,25 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstallsLocaleChange) {
   // reinstallation of both apps.
   system_web_app_manager().set_current_locale("en/au");
   externally_managed_app_manager().SetDropRequestsForTesting(true);
-  // Can't use the normal method because RunLoop::Run goes until
-  // on_app_synchronized is called, and this fails, never calling that.
-  system_web_app_manager().Start();
-  base::RunLoop().RunUntilIdle();
-  externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
 
+  // We use RunUntilIdle because the install requests are dropped, so
+  // on_app_synchronized() won't be called.
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
+
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
+
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
+  system_web_app_manager().Start();
+  base::RunLoop().RunUntilIdle();
+
+  externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
@@ -923,16 +1016,18 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstallsLocaleChange) {
   // If we don't abandon at the same version, it doesn't even attempt another
   // request
   externally_managed_app_manager().SetDropRequestsForTesting(false);
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
   EXPECT_EQ(5u, install_requests.size());
 
   // Bump the version, and it works.
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().set_current_locale("fr/fr");
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
-  command_manager().AwaitAllCommandsCompleteForTesting();
+  provider().command_manager().AwaitAllCommandsCompleteForTesting();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
 }
 
@@ -963,7 +1058,7 @@ TEST_F(SystemWebAppManagerTest, SucceedsAfterOneRetry) {
   // reinstallation. But, this fails!
   system_web_app_manager().set_current_version(base::Version("2.0.0.0"));
   externally_managed_app_manager().SetDropRequestsForTesting(true);
-
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
@@ -971,6 +1066,8 @@ TEST_F(SystemWebAppManagerTest, SucceedsAfterOneRetry) {
   EXPECT_EQ(2u, install_requests.size());
   EXPECT_TRUE(install_requests[1].force_reinstall);
   EXPECT_TRUE(IsInstalled(AppUrl1()));
+
+  system_web_app_manager().ResetForTesting();
   system_web_app_manager().Start();
   base::RunLoop().RunUntilIdle();
   externally_managed_app_manager().ClearSynchronizeRequestsForTesting();
@@ -1067,9 +1164,6 @@ TEST_F(SystemWebAppManagerTest, IsSWABeforeSync) {
   auto unsynced_system_web_app_manager =
       std::make_unique<TestSystemWebAppManager>(profile());
 
-  unsynced_system_web_app_manager->SetSubsystems(
-      &externally_managed_app_manager(), &provider().registrar(),
-      &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
   {
     SystemWebAppDelegateMap system_apps;
     system_apps.emplace(
@@ -1124,6 +1218,21 @@ class SystemWebAppManagerTimerTest : public SystemWebAppManagerTest {
             GetApp1WebAppInfoFactory(), period, open_immediately));
 
     system_web_app_manager().SetSystemAppsForTesting(std::move(system_apps));
+  }
+
+  void TearDown() override {
+    // Normally, WebContents used to perform background tasks are released
+    // during KeyedService shutdown. In tests, we need to release them before
+    // fixture tear down.
+    //
+    // The parent fixture (RenderViewHostTestHarness::TearDown) expects
+    // us to release WebContents before tearing down (which happens before
+    // KeyedService shutdown because the parent fixture owns TestingProfile).
+    //
+    // If we don't StopBackgroundTasks (and release WebContents) here, the
+    // fixture will complain about leaking RenderWidgetHost.
+    system_web_app_manager().StopBackgroundTasksForTesting();
+    SystemWebAppManagerTest::TearDown();
   }
 };
 
@@ -1480,13 +1589,9 @@ TEST_F(SystemWebAppManagerTest,
   auto unsynced_system_web_app_manager =
       std::make_unique<TestSystemWebAppManager>(profile());
 
-  unsynced_system_web_app_manager->SetSubsystems(
-      &externally_managed_app_manager(), &provider().registrar(),
-      &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
-
   // Before Apps are synchronized, WebAppRegistry should know about the App.
   const web_app::WebApp* web_app =
-      provider().registrar().GetAppById(*opt_app_id);
+      provider().registrar_unsafe().GetAppById(*opt_app_id);
   ASSERT_TRUE(web_app);
   ASSERT_TRUE(web_app->client_data().system_web_app_data.has_value());
   ASSERT_EQ(SystemWebAppType::SETTINGS,
@@ -1506,11 +1611,11 @@ TEST_F(SystemWebAppManagerTest, DestroyUiManager) {
   StartAndWaitForAppsToSynchronize();
 
   base::RunLoop run_loop;
-  TestUiManagerObserver observer{&ui_manager()};
+  TestUiManagerObserver observer{&provider().ui_manager()};
   observer.SetUiManagerDestroyedCallback(run_loop.QuitClosure());
 
   // Should not crash.
-  DestroyUiManager();
+  provider().ShutDownUiManagerForTesting();
   run_loop.Run();
 }
 
@@ -1530,33 +1635,20 @@ class SystemWebAppManagerInKioskTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    chromeos::LoginState::Initialize();
-    chromeos::LoginState::Get()->SetLoggedInState(
-        chromeos::LoginState::LOGGED_IN_ACTIVE,
-        chromeos::LoginState::LOGGED_IN_USER_KIOSK);
-
-    system_web_app_manager_ = std::make_unique<SystemWebAppManager>(profile());
+    LoginState::Initialize();
+    LoginState::Get()->SetLoggedInState(LoginState::LOGGED_IN_ACTIVE,
+                                        LoginState::LOGGED_IN_USER_KIOSK);
   }
 
   void TearDown() override {
-    system_web_app_manager_.reset();
-    chromeos::LoginState::Shutdown();
+    LoginState::Shutdown();
     ChromeRenderViewHostTestHarness::TearDown();
   }
-
- protected:
-  SystemWebAppManager& system_web_app_manager() {
-    return *system_web_app_manager_;
-  }
-
- private:
-  std::unique_ptr<SystemWebAppManager> system_web_app_manager_;
 };
 
-// Checks that SWA delegates are not created in Kiosk sessions.
-TEST_F(SystemWebAppManagerInKioskTest, ShoudNotCreateDelegate) {
-  EXPECT_EQ(system_web_app_manager().GetSystemApp(SystemWebAppType::SETTINGS),
-            nullptr);
+// Checks that SWA manager is not created in Kiosk sessions.
+TEST_F(SystemWebAppManagerInKioskTest, ShoudNotCreateManager) {
+  EXPECT_FALSE(SystemWebAppManager::Get(profile()));
 }
 
 }  // namespace ash

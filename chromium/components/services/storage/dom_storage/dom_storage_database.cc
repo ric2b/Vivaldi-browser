@@ -4,14 +4,15 @@
 
 #include "components/services/storage/dom_storage/dom_storage_database.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/debug/leak_annotations.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -110,8 +111,88 @@ DomStorageDatabase::Status ForEachWithPrefix(leveldb::DB* db,
   return iter->status();
 }
 
+}  // namespace
+
+DomStorageDatabase::KeyValuePair::KeyValuePair() = default;
+
+DomStorageDatabase::KeyValuePair::~KeyValuePair() = default;
+
+DomStorageDatabase::KeyValuePair::KeyValuePair(KeyValuePair&&) = default;
+
+DomStorageDatabase::KeyValuePair::KeyValuePair(const KeyValuePair&) = default;
+
+DomStorageDatabase::KeyValuePair::KeyValuePair(Key key, Value value)
+    : key(std::move(key)), value(std::move(value)) {}
+
+DomStorageDatabase::KeyValuePair& DomStorageDatabase::KeyValuePair::operator=(
+    KeyValuePair&&) = default;
+
+DomStorageDatabase::KeyValuePair& DomStorageDatabase::KeyValuePair::operator=(
+    const KeyValuePair&) = default;
+
+bool DomStorageDatabase::KeyValuePair::operator==(
+    const KeyValuePair& rhs) const {
+  return std::tie(key, value) == std::tie(rhs.key, rhs.value);
+}
+
+DomStorageDatabase::DomStorageDatabase(
+    PassKey,
+    const base::FilePath& directory,
+    const std::string& name,
+    const leveldb_env::Options& options,
+    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>&
+        memory_dump_id,
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    StatusCallback callback)
+    : DomStorageDatabase(PassKey(),
+                         MakeFullPersistentDBName(directory, name),
+                         /*env=*/nullptr,
+                         options,
+                         memory_dump_id,
+                         std::move(callback_task_runner),
+                         std::move(callback)) {}
+
+DomStorageDatabase::DomStorageDatabase(
+    PassKey,
+    const std::string& tracking_name,
+    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>&
+        memory_dump_id,
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    StatusCallback callback)
+    : DomStorageDatabase(PassKey(),
+                         "",
+                         leveldb_chrome::NewMemEnv(tracking_name),
+                         CreateDefaultInMemoryOptions(),
+                         memory_dump_id,
+                         std::move(callback_task_runner),
+                         std::move(callback)) {}
+
+DomStorageDatabase::DomStorageDatabase(
+    PassKey,
+    const std::string& name,
+    std::unique_ptr<leveldb::Env> env,
+    const leveldb_env::Options& options,
+    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>
+        memory_dump_id,
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    StatusCallback callback)
+    : name_(name),
+      env_(std::move(env)),
+      options_(AddEnvToOptions(options,
+                               env_ ? env_.get() : GetDomStorageDatabaseEnv())),
+      memory_dump_id_(memory_dump_id),
+      db_(TryOpenDB(options_,
+                    name,
+                    std::move(callback_task_runner),
+                    std::move(callback))) {
+  base::trace_event::MemoryDumpManager::GetInstance()
+      ->RegisterDumpProviderWithSequencedTaskRunner(
+          this, "MojoLevelDB", base::SequencedTaskRunner::GetCurrentDefault(),
+          MemoryDumpProvider::Options());
+}
+
 template <typename... Args>
-void CreateSequenceBoundDomStorageDatabase(
+void DomStorageDatabase::CreateSequenceBoundDomStorageDatabase(
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
     DomStorageDatabase::OpenCallback callback,
     Args&&... args) {
@@ -139,7 +220,8 @@ void CreateSequenceBoundDomStorageDatabase(
   auto* database_ptr = database.release();
   ANNOTATE_LEAKING_OBJECT_PTR(database_ptr);
   *database_ptr = base::SequenceBound<DomStorageDatabase>(
-      blocking_task_runner, args..., base::SequencedTaskRunnerHandle::Get(),
+      blocking_task_runner, PassKey(), args...,
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(
           [](base::SequenceBound<DomStorageDatabase>* database_ptr,
              DomStorageDatabase::OpenCallback callback,
@@ -151,81 +233,6 @@ void CreateSequenceBoundDomStorageDatabase(
               std::move(callback).Run({}, status);
           },
           database_ptr, std::move(callback)));
-}
-
-}  // namespace
-
-DomStorageDatabase::KeyValuePair::KeyValuePair() = default;
-
-DomStorageDatabase::KeyValuePair::~KeyValuePair() = default;
-
-DomStorageDatabase::KeyValuePair::KeyValuePair(KeyValuePair&&) = default;
-
-DomStorageDatabase::KeyValuePair::KeyValuePair(const KeyValuePair&) = default;
-
-DomStorageDatabase::KeyValuePair::KeyValuePair(Key key, Value value)
-    : key(std::move(key)), value(std::move(value)) {}
-
-DomStorageDatabase::KeyValuePair& DomStorageDatabase::KeyValuePair::operator=(
-    KeyValuePair&&) = default;
-
-DomStorageDatabase::KeyValuePair& DomStorageDatabase::KeyValuePair::operator=(
-    const KeyValuePair&) = default;
-
-bool DomStorageDatabase::KeyValuePair::operator==(
-    const KeyValuePair& rhs) const {
-  return std::tie(key, value) == std::tie(rhs.key, rhs.value);
-}
-
-DomStorageDatabase::DomStorageDatabase(
-    const base::FilePath& directory,
-    const std::string& name,
-    const leveldb_env::Options& options,
-    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>&
-        memory_dump_id,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
-    StatusCallback callback)
-    : DomStorageDatabase(MakeFullPersistentDBName(directory, name),
-                         /*env=*/nullptr,
-                         options,
-                         memory_dump_id,
-                         std::move(callback_task_runner),
-                         std::move(callback)) {}
-
-DomStorageDatabase::DomStorageDatabase(
-    const std::string& tracking_name,
-    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>&
-        memory_dump_id,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
-    StatusCallback callback)
-    : DomStorageDatabase("",
-                         leveldb_chrome::NewMemEnv(tracking_name),
-                         CreateDefaultInMemoryOptions(),
-                         memory_dump_id,
-                         std::move(callback_task_runner),
-                         std::move(callback)) {}
-
-DomStorageDatabase::DomStorageDatabase(
-    const std::string& name,
-    std::unique_ptr<leveldb::Env> env,
-    const leveldb_env::Options& options,
-    const absl::optional<base::trace_event::MemoryAllocatorDumpGuid>
-        memory_dump_id,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
-    StatusCallback callback)
-    : name_(name),
-      env_(std::move(env)),
-      options_(AddEnvToOptions(options,
-                               env_ ? env_.get() : GetDomStorageDatabaseEnv())),
-      memory_dump_id_(memory_dump_id),
-      db_(TryOpenDB(options_,
-                    name,
-                    std::move(callback_task_runner),
-                    std::move(callback))) {
-  base::trace_event::MemoryDumpManager::GetInstance()
-      ->RegisterDumpProviderWithSequencedTaskRunner(
-          this, "MojoLevelDB", base::SequencedTaskRunnerHandle::Get(),
-          MemoryDumpProvider::Options());
 }
 
 DomStorageDatabase::~DomStorageDatabase() {
@@ -282,7 +289,7 @@ void DomStorageDatabase::Destroy(
                                leveldb::DestroyDB(db_name, options)));
           },
           MakeFullPersistentDBName(directory, name),
-          base::SequencedTaskRunnerHandle::Get(), std::move(callback)));
+          base::SequencedTaskRunner::GetCurrentDefault(), std::move(callback)));
 }
 
 DomStorageDatabase::Status DomStorageDatabase::Get(KeyView key,

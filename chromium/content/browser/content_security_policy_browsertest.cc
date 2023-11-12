@@ -12,7 +12,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_paths.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -56,7 +55,7 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
       "following Content Security Policy directive: \"script-src "
       "'unsafe-inline'\".\n");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 // Test that creating a duplicate Trusted Types policy will yield a console
@@ -83,7 +82,7 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
   WebContentsConsoleObserver console_observer(web_contents());
   console_observer.SetPattern("*already exists*");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 // Test that creating a Trusted Types policy with a disallowed name will yield
@@ -102,7 +101,7 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
   WebContentsConsoleObserver console_observer(web_contents());
   console_observer.SetPattern("*violates*the following*directive*");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
@@ -122,7 +121,7 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
       "matches `self`'s scheme. The scheme 'mailto:' must be added "
       "explicitly.\n");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
@@ -144,7 +143,7 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest,
       "scheme matches `self`'s scheme. The scheme 'mailto:' must be added "
       "explicitly.\n");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 namespace {
@@ -284,24 +283,26 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyBrowserTest, CSPAttributeTooLong) {
   WebContentsConsoleObserver console_observer(web_contents());
   console_observer.SetPattern("'csp' attribute too long*");
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 
   EXPECT_EQ(current_frame_host()->child_count(), 1u);
   EXPECT_FALSE(current_frame_host()->child_at(0)->csp_attribute());
 }
 
-class IsolatedAppContentBrowserClient : public ContentBrowserClient {
- public:
-  bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
-                                             const GURL& url) override {
-    return true;
-  }
-};
-
 namespace {
 const char kAppHost[] = "app.com";
 const char kNonAppHost[] = "other.com";
 }  // namespace
+
+class IsolatedWebAppContentBrowserClient : public ContentBrowserClient {
+ public:
+  bool ShouldUrlUseApplicationIsolationLevel(
+      BrowserContext* browser_context,
+      const GURL& url,
+      bool origin_matches_flag) override {
+    return url.host() == kAppHost;
+  }
+};
 
 class ContentSecurityPolicyIsolatedAppBrowserTest
     : public ContentSecurityPolicyBrowserTest {
@@ -312,28 +313,31 @@ class ContentSecurityPolicyIsolatedAppBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ContentSecurityPolicyBrowserTest::SetUpCommandLine(command_line);
     mock_cert_verifier_.SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kIsolatedAppOrigins,
-                                    std::string("https://") + kAppHost);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     ContentSecurityPolicyBrowserTest::SetUpInProcessBrowserTestFixture();
     mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
-    old_client_ = SetBrowserClientForTesting(&client_);
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-    SetBrowserClientForTesting(old_client_);
     mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
     ContentSecurityPolicyBrowserTest::TearDownInProcessBrowserTestFixture();
   }
 
   void SetUpOnMainThread() override {
     ContentSecurityPolicyBrowserTest::SetUpOnMainThread();
+    old_client_ = SetBrowserClientForTesting(&client_);
+
     host_resolver()->AddRule("*", "127.0.0.1");
     mock_cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
     https_server()->ServeFilesFromSourceDirectory(GetTestDataFilePath());
     ASSERT_TRUE(https_server()->Start());
+  }
+
+  void TearDownOnMainThread() override {
+    SetBrowserClientForTesting(old_client_);
+    ContentSecurityPolicyBrowserTest::TearDownOnMainThread();
   }
 
  protected:
@@ -343,7 +347,7 @@ class ContentSecurityPolicyIsolatedAppBrowserTest
   net::EmbeddedTestServer https_server_;
   ContentMockCertVerifier mock_cert_verifier_;
 
-  IsolatedAppContentBrowserClient client_;
+  IsolatedWebAppContentBrowserClient client_;
   raw_ptr<ContentBrowserClient> old_client_;
 };
 

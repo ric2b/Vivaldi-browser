@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMMANDS_SUB_APP_INSTALL_COMMAND_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMMANDS_SUB_APP_INSTALL_COMMAND_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,9 +31,9 @@ class Profile;
 
 namespace web_app {
 
+class LockDescription;
 class SharedWebContentsWithAppLock;
-class WebAppRegistrar;
-class WebAppInstallFinalizer;
+class SharedWebContentsWithAppLockDescription;
 class WebAppUrlLoader;
 class WebAppDataRetriever;
 
@@ -40,26 +41,26 @@ using AppInstallResults =
     std::vector<std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode>>;
 using SubAppInstallResultCallback = base::OnceCallback<void(AppInstallResults)>;
 
-class SubAppInstallCommand : public WebAppCommand {
+class SubAppInstallCommand
+    : public WebAppCommandTemplate<SharedWebContentsWithAppLock> {
  public:
   SubAppInstallCommand(const AppId& parent_app_id,
                        std::vector<std::pair<UnhashedAppId, GURL>> sub_apps,
                        SubAppInstallResultCallback install_callback,
                        Profile* profile,
-                       const WebAppRegistrar* registrar,
-                       WebAppInstallFinalizer* install_finalizer,
                        std::unique_ptr<WebAppUrlLoader> url_loader,
                        std::unique_ptr<WebAppDataRetriever> data_retriever);
   ~SubAppInstallCommand() override;
   SubAppInstallCommand(const SubAppInstallCommand&) = delete;
   SubAppInstallCommand& operator=(const SubAppInstallCommand&) = delete;
 
-  Lock& lock() const override;
+  LockDescription& lock_description() const override;
   base::Value ToDebugValue() const override;
   void SetDialogNotAcceptedForTesting();
 
  protected:
-  void Start() override;
+  void StartWithLock(
+      std::unique_ptr<SharedWebContentsWithAppLock> lock) override;
   void OnSyncSourceRemoved() override {}
   void OnShutdown() override;
 
@@ -95,7 +96,7 @@ class SubAppInstallCommand : public WebAppCommand {
                          bool user_accepted,
                          std::unique_ptr<WebAppInstallInfo> web_app_info);
   void OnInstallFinalized(const UnhashedAppId& unhashed_app_id,
-                          std::unique_ptr<WebAppInstallInfo> web_app_info,
+                          const GURL& start_url,
                           const AppId& app_id,
                           webapps::InstallResultCode code,
                           OsHooksErrors os_hooks_errors);
@@ -115,14 +116,14 @@ class SubAppInstallCommand : public WebAppCommand {
       const AppId& installed_app_id,
       const blink::mojom::SubAppsServiceAddResultCode& code);
 
+  std::unique_ptr<SharedWebContentsWithAppLockDescription> lock_description_;
   std::unique_ptr<SharedWebContentsWithAppLock> lock_;
+
   const AppId parent_app_id_;
   std::vector<std::pair<UnhashedAppId, GURL>> requested_installs_;
   SubAppInstallResultCallback install_callback_;
 
   raw_ptr<Profile> profile_;
-  raw_ptr<const WebAppRegistrar> registrar_;
-  raw_ptr<WebAppInstallFinalizer> install_finalizer_;
   std::unique_ptr<WebAppUrlLoader> url_loader_;
   std::unique_ptr<WebAppDataRetriever> data_retriever_;
 

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "ash/frame/header_view.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/wide_frame_view.h"
 #include "ash/public/cpp/arc_resize_lock_type.h"
@@ -33,6 +32,7 @@
 #include "ash/wm/window_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -43,6 +43,7 @@
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/caption_button_model.h"
 #include "chromeos/ui/frame/default_frame_header.h"
+#include "chromeos/ui/frame/header_view.h"
 #include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
@@ -446,10 +447,12 @@ void ClientControlledShellSurface::SetPinned(chromeos::WindowPinType type) {
     CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
 
   if (type == chromeos::WindowPinType::kNone) {
-    ash::WindowState::Get(widget_->GetNativeWindow())->Restore();
+    // Set other window state mode will automatically cancelled pin mode.
+    // TODO: Add NOTREACH() here after ARC side integration fully landed.
   } else {
     bool trusted = type == chromeos::WindowPinType::kTrustedPinned;
-    ash::window_util::PinWindow(widget_->GetNativeWindow(), trusted);
+    pending_window_state_ = trusted ? chromeos::WindowStateType::kTrustedPinned
+                                    : chromeos::WindowStateType::kPinned;
   }
 }
 
@@ -783,12 +786,12 @@ void ClientControlledShellSurface::OnSetFrameColors(SkColor active_color,
   }
 }
 
-void ClientControlledShellSurface::SetSnappedToPrimary() {
+void ClientControlledShellSurface::SetSnapPrimary(float snap_ratio) {
   TRACE_EVENT0("exo", "ClientControlledShellSurface::SetSnappedToPrimary");
   pending_window_state_ = chromeos::WindowStateType::kPrimarySnapped;
 }
 
-void ClientControlledShellSurface::SetSnappedToSecondary() {
+void ClientControlledShellSurface::SetSnapSecondary(float snap_ratio) {
   TRACE_EVENT0("exo", "ClientControlledShellSurface::SetSnappedToSecondary");
   pending_window_state_ = chromeos::WindowStateType::kSecondarySnapped;
 }
@@ -1193,8 +1196,10 @@ bool ClientControlledShellSurface::OnPreWidgetCommit() {
     return true;
   }
 
-  if (IsPinned(window_state)) {
-    VLOG(1) << "State change was requested while pinned";
+  if (IsPinned(window_state) &&
+      (pending_window_state_ == chromeos::WindowStateType::kPinned ||
+       pending_window_state_ == chromeos::WindowStateType::kTrustedPinned)) {
+    VLOG(1) << "Pinned was requested while pinned";
     return true;
   }
 
@@ -1398,7 +1403,7 @@ void ClientControlledShellSurface::UpdateFrameWidth() {
     float dsf_to_default_dsf = device_scale_factor / scale_;
     width = base::ClampRound(shadow_bounds_->width() * dsf_to_default_dsf);
   }
-  static_cast<ash::HeaderView*>(GetFrameView()->GetHeaderView())
+  static_cast<chromeos::HeaderView*>(GetFrameView()->GetHeaderView())
       ->SetWidthInPixels(width);
 }
 

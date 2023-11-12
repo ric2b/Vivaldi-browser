@@ -10,6 +10,7 @@
 #include "ash/public/cpp/wallpaper/wallpaper_controller_observer.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -118,7 +119,7 @@ bool CreateJPEGImage(int width,
   return true;
 }
 
-class TestWallpaperObserver : public ash::WallpaperControllerObserver {
+class TestWallpaperObserver : public WallpaperControllerObserver {
  public:
   TestWallpaperObserver() {
     WallpaperControllerClientImpl::Get()->AddObserver(this);
@@ -131,7 +132,7 @@ class TestWallpaperObserver : public ash::WallpaperControllerObserver {
     WallpaperControllerClientImpl::Get()->RemoveObserver(this);
   }
 
-  // ash::WallpaperControllerObserver:
+  // WallpaperControllerObserver:
   void OnWallpaperChanged() override {
     finished_ = true;
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
@@ -172,7 +173,7 @@ class CustomizationWallpaperDownloaderBrowserTest
                                 kCustomizedDefaultWallpaperColor,
                                 &oem_wallpaper));
     jpeg_data_.resize(oem_wallpaper.size());
-    std::copy(oem_wallpaper.begin(), oem_wallpaper.end(), jpeg_data_.begin());
+    base::ranges::copy(oem_wallpaper, jpeg_data_.begin());
 
     // Set up the test server.
     embedded_test_server()->RegisterRequestHandler(base::BindRepeating(

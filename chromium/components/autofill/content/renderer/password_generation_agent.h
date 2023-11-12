@@ -95,6 +95,14 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
 
   bool IsPrerendering() const;
 
+  // Previews the generation suggestion for the current generation element.
+  void PreviewGenerationSuggestion(const std::u16string& password);
+
+  // Returns true if a generation suggestion was found and cleared successfully
+  // on |control_element|.
+  bool DidClearGenerationSuggestion(
+      const blink::WebFormControlElement& control_element);
+
  private:
   class DeferringPasswordGenerationDriver;
 

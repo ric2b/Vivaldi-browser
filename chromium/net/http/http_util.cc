@@ -291,6 +291,7 @@ const char* const kForbiddenHeaderFields[] = {
     "accept-encoding",
     "access-control-request-headers",
     "access-control-request-method",
+    "access-control-request-private-network",
     "connection",
     "content-length",
     "cookie",
@@ -312,6 +313,23 @@ const char* const kForbiddenHeaderFields[] = {
     "via",
 };
 
+// A header string containing any of the following fields with a forbidden
+// method name in the value will cause an error. The list comes from the fetch
+// standard.
+const char* const kForbiddenHeaderFieldsWithForbiddenMethod[] = {
+    "x-http-method",
+    "x-http-method-override",
+    "x-method-override",
+};
+
+// The forbidden method names that is defined in the fetch standard, and used
+// to check the kForbiddenHeaderFileWithForbiddenMethod above.
+const char* const kForbiddenMethods[] = {
+    "connect",
+    "trace",
+    "track",
+};
+
 }  // namespace
 
 // static
@@ -326,7 +344,7 @@ bool HttpUtil::IsMethodIdempotent(base::StringPiece method) {
 }
 
 // static
-bool HttpUtil::IsSafeHeader(base::StringPiece name) {
+bool HttpUtil::IsSafeHeader(base::StringPiece name, base::StringPiece value) {
   if (base::StartsWith(name, "proxy-", base::CompareCase::INSENSITIVE_ASCII) ||
       base::StartsWith(name, "sec-", base::CompareCase::INSENSITIVE_ASCII))
     return false;
@@ -341,6 +359,27 @@ bool HttpUtil::IsSafeHeader(base::StringPiece name) {
     return false;
   }
 
+  if (base::FeatureList::IsEnabled(features::kBlockNewForbiddenHeaders)) {
+    bool is_forbidden_header_fields_with_forbidden_method = false;
+    for (const char* field : kForbiddenHeaderFieldsWithForbiddenMethod) {
+      if (base::EqualsCaseInsensitiveASCII(name, field)) {
+        is_forbidden_header_fields_with_forbidden_method = true;
+        break;
+      }
+    }
+    if (is_forbidden_header_fields_with_forbidden_method) {
+      std::string value_string(value);
+      ValuesIterator method_iterator(value_string.begin(), value_string.end(),
+                                     ',');
+      while (method_iterator.GetNext()) {
+        base::StringPiece method = method_iterator.value_piece();
+        for (const char* forbidden_method : kForbiddenMethods) {
+          if (base::EqualsCaseInsensitiveASCII(method, forbidden_method))
+            return false;
+        }
+      }
+    }
+  }
   return true;
 }
 
@@ -400,7 +439,7 @@ void HttpUtil::TrimLWS(std::string::const_iterator* begin,
 }
 
 // static
-base::StringPiece HttpUtil::TrimLWS(const base::StringPiece& string) {
+base::StringPiece HttpUtil::TrimLWS(base::StringPiece string) {
   const char* begin = string.data();
   const char* end = string.data() + string.size();
   TrimLWSImplementation(&begin, &end);

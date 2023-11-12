@@ -517,4 +517,16 @@ bool EventDatabase::MigrateCalendarToVersion12() {
   return true;
 }
 
+// Updates to version 13. VB-94637 re-sync certain events
+// to update invalid timezone on server
+bool EventDatabase::MigrateCalendarToVersion13() {
+  if (!GetDB().Execute(
+          "UPDATE events "
+          " SET sync_pending = 1 "
+          " WHERE start = 11644473600000000 AND end = 11644473600000000"))
+    return false;
+
+  return true;
+}
+
 }  // namespace calendar

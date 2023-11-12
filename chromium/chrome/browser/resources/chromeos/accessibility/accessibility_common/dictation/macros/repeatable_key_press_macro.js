@@ -4,8 +4,8 @@
 
 import {EventGenerator} from '../../../common/event_generator.js';
 import {KeyCode} from '../../../common/key_code.js';
+import {InputController} from '../input_controller.js';
 import {LocaleInfo} from '../locale_info.js';
-
 import {Macro, MacroError} from './macro.js';
 import {MacroName} from './macro_names.js';
 
@@ -197,8 +197,11 @@ export class SelectAllTextMacro extends RepeatableKeyPressMacro {
 
 /** Macro to unselect text. */
 export class UnselectTextMacro extends RepeatableKeyPressMacro {
-  constructor() {
+  /** @param {!InputController} inputController */
+  constructor(inputController) {
     super(MacroName.UNSELECT_TEXT, /*repeat=*/ 1);
+    /** @private {!InputController} */
+    this.inputController_ = inputController;
   }
 
   /** @override */
@@ -206,12 +209,33 @@ export class UnselectTextMacro extends RepeatableKeyPressMacro {
     EventGenerator.sendKeyPress(
         LocaleInfo.isRTLLocale() ? KeyCode.LEFT : KeyCode.RIGHT);
   }
+
+  /** @override */
+  checkContext() {
+    const checkContextResult = super.checkContext();
+    if (!checkContextResult.canTryAction) {
+      return checkContextResult;
+    }
+
+    if (!this.inputController_.isActive()) {
+      return this.createFailureCheckContextResult_(MacroError.BAD_CONTEXT);
+    }
+
+    const data = this.inputController_.getEditableNodeData();
+    if (!data || !data.value || data.selStart === data.selEnd) {
+      return this.createFailureCheckContextResult_(MacroError.BAD_CONTEXT);
+    }
+
+    return this.createSuccessCheckContextResult_(
+        /*willImmediatelyDisambiguate=*/ false);
+  }
 }
 
 /** Macro to delete the previous word. */
 export class DeletePrevWordMacro extends RepeatableKeyPressMacro {
-  constructor() {
-    super(MacroName.DELETE_PREV_WORD, /*repeat=*/ 1);
+  /** @param {number=} repeat The number of words to delete. */
+  constructor(repeat = 1) {
+    super(MacroName.DELETE_PREV_WORD, repeat);
   }
 
   /** @override */
@@ -245,5 +269,100 @@ export class NavPrevWordMacro extends RepeatableKeyPressMacro {
   doKeyPress() {
     EventGenerator.sendKeyPress(
         LocaleInfo.isRTLLocale() ? KeyCode.RIGHT : KeyCode.LEFT, {ctrl: true});
+  }
+}
+
+/** Macro to delete all text in input field. */
+export class DeleteAllText extends RepeatableKeyPressMacro {
+  constructor() {
+    super(MacroName.DELETE_ALL_TEXT, 1);
+  }
+
+  /** @override */
+  doKeyPress() {
+    EventGenerator.sendKeyPress(KeyCode.A, {ctrl: true});
+    EventGenerator.sendKeyPress(KeyCode.BACK);
+  }
+}
+
+/** Macro to move the cursor to the start of the input field. */
+export class NavStartText extends RepeatableKeyPressMacro {
+  constructor() {
+    super(MacroName.NAV_START_TEXT, 1);
+  }
+
+  /** @override */
+  doKeyPress() {
+    // TODO(b/259397131): Migrate this implementation to use
+    // chrome.automation.setDocumentSelection.
+    EventGenerator.sendKeyPress(
+        KeyCode.LEFT, {search: true, ctrl: true}, /*useRewriters=*/ true);
+  }
+}
+
+/** Macro to move the cursor to the end of the input field. */
+export class NavEndText extends RepeatableKeyPressMacro {
+  constructor() {
+    super(MacroName.NAV_END_TEXT, 1);
+  }
+
+  /** @override */
+  doKeyPress() {
+    // TODO(b/259397131): Migrate this implementation to use
+    // chrome.automation.setDocumentSelection.
+    EventGenerator.sendKeyPress(
+        KeyCode.RIGHT, {search: true, ctrl: true}, /*useRewriters=*/ true);
+  }
+}
+
+/** Macro to select the previous word in the input field. */
+export class SelectPrevWord extends RepeatableKeyPressMacro {
+  /** @param {number=} repeat The number of previous words to select. */
+  constructor(repeat = 1) {
+    super(MacroName.SELECT_PREV_WORD, repeat);
+  }
+
+  /** @override */
+  doKeyPress() {
+    EventGenerator.sendKeyPress(KeyCode.LEFT, {ctrl: true, shift: true});
+  }
+}
+
+/** Macro to select the next word in the input field. */
+export class SelectNextWord extends RepeatableKeyPressMacro {
+  /** @param {number=} repeat The number of next words to select. */
+  constructor(repeat = 1) {
+    super(MacroName.SELECT_NEXT_WORD, repeat);
+  }
+
+  /** @override */
+  doKeyPress() {
+    EventGenerator.sendKeyPress(KeyCode.RIGHT, {ctrl: true, shift: true});
+  }
+}
+
+/** Macro to select the next character in the input field. */
+export class SelectNextChar extends RepeatableKeyPressMacro {
+  /** @param {number=} repeat The number of next characters to select. */
+  constructor(repeat = 1) {
+    super(MacroName.SELECT_NEXT_CHAR, repeat);
+  }
+
+  /** @override */
+  doKeyPress() {
+    EventGenerator.sendKeyPress(KeyCode.RIGHT, {shift: true});
+  }
+}
+
+/** Macro to select the previous character in the input field. */
+export class SelectPrevChar extends RepeatableKeyPressMacro {
+  /** @param {number=} repeat The number of previous characters to select. */
+  constructor(repeat = 1) {
+    super(MacroName.SELECT_PREV_CHAR, repeat);
+  }
+
+  /** @override */
+  doKeyPress() {
+    EventGenerator.sendKeyPress(KeyCode.LEFT, {shift: true});
   }
 }

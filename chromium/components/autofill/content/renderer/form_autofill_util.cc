@@ -18,6 +18,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
@@ -30,7 +31,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
-#include "components/autofill/core/common/autofill_data_validation.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
@@ -499,6 +500,31 @@ std::u16string InferLabelFromPlaceholder(const WebFormControlElement& element) {
   return std::u16string();
 }
 
+// Detects a label declared after the `element`, which is visually positioned
+// above the element (usually using CCS). Such labels often act as a
+// placeholders. E.g.
+// <div>
+//  <input>
+//  <span>Placeholder</span>
+// </div>
+std::u16string InferLabelFromOverlayingSuccessor(
+    const WebFormControlElement& element) {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillSupportPoorMansPlaceholder)) {
+    return std::u16string();
+  }
+
+  WebNode next = element.NextSibling();
+  while (!next.IsNull() && !next.IsElementNode())
+    next = next.NextSibling();
+  if (!next.IsNull()) {
+    gfx::Rect bounds = next.To<WebElement>().BoundsInWidget();
+    if (!bounds.IsEmpty() && element.BoundsInWidget().Contains(bounds))
+      return FindChildText(next);
+  }
+  return std::u16string();
+}
+
 // Helper for |InferLabelForElement()| that infers a label, from
 // the value attribute when it is present and user has not typed in (if
 // element's value attribute is same as the element's value).
@@ -796,6 +822,13 @@ bool InferLabelForElement(const WebFormControlElement& element,
   std::u16string inferred_label = InferLabelFromPlaceholder(element);
   if (IsLabelValid(inferred_label)) {
     label_source = FormFieldData::LabelSource::kPlaceHolder;
+    label = std::move(inferred_label);
+    return true;
+  }
+
+  inferred_label = InferLabelFromOverlayingSuccessor(element);
+  if (IsLabelValid(inferred_label)) {
+    label_source = FormFieldData::LabelSource::kOverlayingLabel;
     label = std::move(inferred_label);
     return true;
   }
@@ -1377,6 +1410,16 @@ void MatchLabelsAndFields(
     field_data->label += label_text;
     field_data->label_source = FormFieldData::LabelSource::kFor;
     base::UmaHistogramEnumeration(kAssignedLabelSourceHistogram, label_source);
+
+    if (label_source == AssignedLabelSource::kName) {
+      // Add a DevTools issue informing the developer that the `label`'s for-
+      // attribute is pointing to the name of a field, even though the ID should
+      // be used.
+      // TODO(crbug.com/1339277): Use `root` once the feature is launched.
+      label.GetDocument().GetFrame()->AddGenericIssue(
+          blink::mojom::GenericIssueErrorType::kFormLabelForNameError,
+          label.GetDevToolsNodeId());
+    }
   }
 }
 
@@ -1491,6 +1534,8 @@ bool FormOrFieldsetsToFormData(
     // `root` of `MatchLabelsAndFields()` all label tags are considered. This is
     // necessary to support label-for inference in unowned forms and in owned
     // forms utilizing the form-attribute.
+    // TODO(crbug.com/1339277): Change the type of `MatchLabelsAndFields()`'s
+    // first parameter to `WebDocument`.
     if (!control_elements.empty())
       MatchLabelsAndFields(control_elements[0].GetDocument(), field_set);
   } else {
@@ -1522,7 +1567,7 @@ bool FormOrFieldsetsToFormData(
     // it is set to kUnknown.
     base::UmaHistogramEnumeration("Autofill.LabelInference.InferredLabelSource",
                                   field.label_source);
-    TruncateString(&field.label, kMaxDataLength);
+    TruncateString(&field.label, kMaxStringLength);
 
     if (optional_field && *form_control_element == control_element) {
       *optional_field = field;
@@ -1605,8 +1650,8 @@ void TrimStringVectorForIPC(std::vector<std::u16string>* strings) {
 
   // Limit the size of the strings in the vector.
   for (auto& string : *strings) {
-    if (string.length() > kMaxDataLength)
-      string.resize(kMaxDataLength);
+    if (string.length() > kMaxStringLength)
+      string.resize(kMaxStringLength);
   }
 }
 
@@ -1625,7 +1670,7 @@ std::string GetAutocompleteAttribute(const WebElement& element) {
   static base::NoDestructor<WebString> kAutocomplete("autocomplete");
   std::string autocomplete_attribute =
       element.GetAttribute(*kAutocomplete).Utf8();
-  if (autocomplete_attribute.size() > kMaxDataLength) {
+  if (autocomplete_attribute.size() > kMaxStringLength) {
     // Discard overly long attribute values to avoid DOS-ing the browser
     // process.  However, send over a default string to indicate that the
     // attribute was present.
@@ -2085,7 +2130,7 @@ void WebFormControlElementToFormField(
 
   // Constrain the maximum data length to prevent a malicious site from DOS'ing
   // the browser: http://crbug.com/49332
-  TruncateString(&value, kMaxDataLength);
+  TruncateString(&value, kMaxStringLength);
 
   field->value = value;
 

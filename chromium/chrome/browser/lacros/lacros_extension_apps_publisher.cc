@@ -18,7 +18,6 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/lacros/lacros_extensions_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/app_list/extension_app_utils.h"
 #include "chrome/browser/ui/lacros/window_utility.h"
 #include "chromeos/crosapi/mojom/app_window_tracker.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
@@ -300,7 +299,7 @@ class LacrosExtensionAppsPublisher::ProfileTracker
     auto* prefs = extensions::ExtensionPrefs::Get(profile_);
     if (prefs) {
       app->last_launch_time = prefs->GetLastLaunchTime(extension->id());
-      app->install_time = prefs->GetInstallTime(extension->id());
+      app->install_time = prefs->GetLastUpdateTime(extension->id());
     } else {
       app->last_launch_time = base::Time();
       app->install_time = base::Time();

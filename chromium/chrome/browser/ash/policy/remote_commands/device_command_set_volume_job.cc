@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/syslog_logging.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -51,13 +51,13 @@ bool DeviceCommandSetVolumeJob::ParseCommandPayload(
 void DeviceCommandSetVolumeJob::RunImpl(CallbackWithResult succeeded_callback,
                                         CallbackWithResult failed_callback) {
   SYSLOG(INFO) << "Running set volume command, volume = " << volume_;
-  auto* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = ash::CrasAudioHandler::Get();
   audio_handler->SetOutputVolumePercent(volume_);
   bool mute = audio_handler->IsOutputVolumeBelowDefaultMuteLevel();
   audio_handler->SetOutputMute(mute);
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(succeeded_callback), nullptr));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(succeeded_callback), absl::nullopt));
 }
 
 }  // namespace policy

@@ -19,7 +19,6 @@
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -123,7 +122,7 @@
 
 #if BUILDFLAG(ENABLE_PRINTING)
 // nogncheck because dependency on //printing is conditional upon
-// enable_basic_printing flags.
+// enable_printing flags.
 #include "printing/metafile_skia.h"          // nogncheck
 #endif
 
@@ -1466,7 +1465,7 @@ void PepperPluginInstanceImpl::UpdateWheelEventRequest() {
 void PepperPluginInstanceImpl::ScheduleAsyncDidChangeView() {
   if (view_change_weak_ptr_factory_.HasWeakPtrs())
     return;  // Already scheduled.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PepperPluginInstanceImpl::SendAsyncDidChangeView,
                      view_change_weak_ptr_factory_.GetWeakPtr()));
@@ -2239,7 +2238,7 @@ void PepperPluginInstanceImpl::SelectionChanged(PP_Instance instance) {
   // uses a weak pointer rather than exploiting the fact that this class is
   // refcounted because we don't actually want this operation to affect the
   // lifetime of the instance.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PepperPluginInstanceImpl::RequestSurroundingText,
                      weak_factory_.GetWeakPtr(),

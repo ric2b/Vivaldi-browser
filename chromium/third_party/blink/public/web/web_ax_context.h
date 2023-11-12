@@ -80,6 +80,16 @@ class BLINK_EXPORT WebAXContext {
   bool AddPendingEvent(const ui::AXEvent& event,
                        bool insert_at_beginning = false);
 
+  // Ensure that accessibility is clean and up-to-date for both the main and
+  // popup document. Ensures layout is clean as well.
+  void UpdateAXForAllDocuments();
+
+  // Ensure that a layout and accessibility update will occur soon.
+  void ScheduleAXUpdate();
+
+  // If the document is loaded, fire a load complete event.
+  void FireLoadCompleteIfLoaded();
+
  private:
   std::unique_ptr<AXContext> private_;
 };

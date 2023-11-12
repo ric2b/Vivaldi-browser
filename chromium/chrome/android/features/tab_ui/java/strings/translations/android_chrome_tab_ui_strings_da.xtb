@@ -4,18 +4,18 @@
 <translation id="1075622780330595106"><ph name="NUMBER_OF_TABS" /> af dine faner er ikke blevet brugt for nylig. Vil du lukke dem?</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="125153950246128346">Tryk for at se en anden fane</translation>
-<translation id="1302104331113804646">Indstillinger for prisovervågning</translation>
-<translation id="1378979118429748177">Få besked om prisfald</translation>
 <translation id="1403228085774130835">Du kan finde dine lukkede faner på fanen Seneste i Chrome-hovedmenuen</translation>
 <translation id="1455506303394048917">Din aktivitet i disse inkognitofaner ryddes på denne enhed</translation>
 <translation id="1499635324672558517">Vil du lukke alle inkognitofaner?</translation>
 <translation id="1657719826150349398">Flyt fane ned</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> fane}one{<ph name="TABS_COUNT_MANY" /> fane}other{<ph name="TABS_COUNT_MANY" /> faner}}</translation>
+<translation id="2050597508048557928">{TABS_COUNT,plural, =1{Gem <ph name="TABS_COUNT_ONE" /> valgt fane som bogmærke}one{Gem <ph name="TABS_COUNT_MANY" /> valgt faner som bogmærke}other{Gem <ph name="TABS_COUNT_MANY" /> valgte faner som bogmærker}}</translation>
 <translation id="2118649612461486615">Butiksinfo</translation>
 <translation id="2162620598375156287">Fås nu til <ph name="CURRENT_PRICE" /> på <ph name="SOURCE_WEBSITE" /></translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{Ophæv gruppering af fane}one{Ophæv gruppering af fane}other{Ophæv gruppering af faner}}</translation>
 <translation id="2277224997687551299">Rediger gruppenavn</translation>
 <translation id="228946090561406413">{TABS_COUNT,plural, =1{Fjern <ph name="TABS_COUNT_ONE" /> valgt fane fra gruppen.}one{Fjern <ph name="TABS_COUNT_MANY" /> valgt fane fra gruppen.}other{Fjern <ph name="TABS_COUNT_MANY" /> valgte faner fra gruppen.}}</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Gem fane som bogmærke}one{Gem fane som bogmærke}other{Gem faner som bogmærker}}</translation>
 <translation id="2479148705183875116">Gå til Indstillinger</translation>
 <translation id="2539705006853443997">{TABS_COUNT,plural, =1{Skjul <ph name="TABS_COUNT_ONE" /> fane.}one{Skjul fanegruppe med <ph name="TABS_COUNT_MANY" /> fane.}other{Skjul fanegruppe med <ph name="TABS_COUNT_MANY" /> faner.}}</translation>
 <translation id="2569352796411618312">Forslag: <ph name="NUMBER_OF_TABS" /> af dine faner er ikke blevet brugt for nylig. Vil du lukke dem?</translation>
@@ -34,6 +34,7 @@
 <translation id="3291470810748040983">Du får en notifikation, når der er en lavere pris på en åben fane</translation>
 <translation id="3328308545011660196">Forslag: <ph name="NUMBER_OF_TABS" /> faner ser ud til at være relateret. Vil du gruppere dem?</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
+<translation id="374923079891132274">Miniature med forhåndsvisning af deleark.</translation>
 <translation id="3819916404117584598">{TABS_COUNT,plural, =1{Skjul <ph name="TABS_COUNT_ONE" /> fane.}one{Skjul fanegruppen <ph name="TITLE_OF_GROUP" /> med <ph name="TABS_COUNT_MANY" /> fane.}other{Skjul fanegruppen <ph name="TITLE_OF_GROUP" /> med <ph name="TABS_COUNT_MANY" /> faner.}}</translation>
 <translation id="3882834874697329510">Slå notifikationer til i indstillingerne for at få en underretning, når der er en lavere pris på en åben fane.</translation>
 <translation id="3940195383040445971">Følg prisudvikling på faner</translation>
@@ -58,6 +59,7 @@
 <translation id="5556417849629758491">Se butiksoplysninger. Valgmuligheden findes øverst på skærmen</translation>
 <translation id="5558362125926932819">Luk fanegruppe med <ph name="NUMBER_OF_TABS" /> faner</translation>
 <translation id="5580090775658607195"><ph name="TAB_COUNT" /> faner blev grupperet</translation>
+<translation id="5656738671621697952">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> link fra Chrome}one{<ph name="TABS_COUNT_MANY" /> link fra Chrome}other{<ph name="TABS_COUNT_MANY" /> links fra Chrome}}</translation>
 <translation id="575494663145460764">Vil du have underretninger om prisfald?</translation>
 <translation id="58326064309361797">Træk og slip faner for at gruppere dem</translation>
 <translation id="5846292395804797011">Luk gruppen <ph name="TITLE_OF_GROUP" /> med <ph name="NUMBER_OF_TABS" /> faner</translation>
@@ -95,8 +97,8 @@
 <translation id="8205266828577616993">Flyt fane op</translation>
 <translation id="8304833501377495048">Vil du skjule denne fanelinje permanent?</translation>
 <translation id="83556505225171773">{TABS_COUNT,plural, =1{Luk <ph name="TABS_COUNT_ONE" /> valgt fane}one{Luk <ph name="TABS_COUNT_MANY" /> valgt fane}other{Luk de <ph name="TABS_COUNT_MANY" /> valgte faner}}</translation>
+<translation id="8398929769197326728">Ny mappe – <ph name="CURRENT_TIMESTAMP_MS" /></translation>
 <translation id="8557923272772633250">Udvid fanegruppen med <ph name="NUMBER_OF_TABS" /> faner.</translation>
-<translation id="860282621117673749">Underretninger om prisfald</translation>
 <translation id="8714939927607906138">Lavere pris</translation>
 <translation id="8749939518995770034">Fanelinjen er lukket</translation>
 <translation id="8820741577754260431">Se prisfald på dine faner</translation>

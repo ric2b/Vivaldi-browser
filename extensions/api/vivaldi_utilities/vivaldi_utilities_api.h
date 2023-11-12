@@ -327,7 +327,10 @@ class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
                       base::FilePath path,
                       bool cancelled);
 
-  void SendResult(bool success);
+  void OnContentRead(int64_t bookmark_id,
+                     absl::optional<std::vector<uint8_t>> content);
+
+  void SendResult(std::string data_url);
 };
 
 class UtilitiesStoreImageFunction : public ExtensionFunction {
@@ -342,7 +345,7 @@ class UtilitiesStoreImageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void StoreImage(scoped_refptr<base::RefCountedMemory> data);
-  void SendResult(bool success);
+  void SendResult(std::string data_url);
 
   VivaldiImageStore::ImagePlace place_;
   absl::optional<VivaldiImageStore::ImageFormat> image_format_;
@@ -959,6 +962,17 @@ class UtilitiesShowManageSSLCertificatesFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesShowManageSSLCertificatesFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesSetProtocolHandlingFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setProtocolHandling",
+                             UTILITIES_SET_PROTOCOL_HANDLING)
+  UtilitiesSetProtocolHandlingFunction() = default;
+
+ private:
+  ~UtilitiesSetProtocolHandlingFunction() override = default;
   ResponseAction Run() override;
 };
 

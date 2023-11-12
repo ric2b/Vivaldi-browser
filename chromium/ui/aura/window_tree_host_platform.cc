@@ -21,6 +21,7 @@
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/layout.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -29,7 +30,7 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/events/keycodes/dom/dom_keyboard_layout_map.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
@@ -69,7 +70,7 @@ void WindowTreeHostPlatform::CreateAndSetPlatformWindow(
   // end up propagating unneeded bounds change event when it is first notified
   // through OnBoundsChanged, which may lead to unneeded re-layouts, etc.
   size_in_pixels_ = properties.bounds.size();
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   platform_window_ = ui::OzonePlatform::GetInstance()->CreatePlatformWindow(
       this, std::move(properties));
 #elif BUILDFLAG(IS_WIN)
@@ -156,7 +157,7 @@ bool WindowTreeHostPlatform::IsKeyLocked(ui::DomCode dom_code) {
 
 base::flat_map<std::string, std::string>
 WindowTreeHostPlatform::GetKeyboardLayoutMap() {
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
   return ui::GenerateDomKeyboardLayoutMap();
 #else
   NOTIMPLEMENTED();
@@ -297,6 +298,13 @@ void WindowTreeHostPlatform::OnOcclusionStateChanged(
       break;
   }
   SetNativeWindowOcclusionState(aura_occlusion_state, {});
+}
+
+int64_t WindowTreeHostPlatform::InsertSequencePoint() {
+  int64_t seq =
+      compositor()->local_surface_id_from_parent().child_sequence_number();
+  compositor()->RequestNewLocalSurfaceId();
+  return seq;
 }
 
 void WindowTreeHostPlatform::SetFrameRateThrottleEnabled(bool enabled) {

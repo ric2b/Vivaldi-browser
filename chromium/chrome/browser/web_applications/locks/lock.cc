@@ -8,11 +8,12 @@
 
 namespace web_app {
 
-Lock::Lock(base::flat_set<AppId> app_ids, Lock::Type type)
+LockDescription::LockDescription(base::flat_set<AppId> app_ids,
+                                 LockDescription::Type type)
     : app_ids_(std::move(app_ids)), type_(type) {}
-Lock::~Lock() = default;
+LockDescription::~LockDescription() = default;
 
-bool Lock::IncludesSharedWebContents() const {
+bool LockDescription::IncludesSharedWebContents() const {
   switch (type_) {
     case Type::kNoOp:
     case Type::kFullSystem:
@@ -23,5 +24,10 @@ bool Lock::IncludesSharedWebContents() const {
       return true;
   }
 }
+
+Lock::Lock(std::unique_ptr<content::PartitionedLockHolder> holder)
+    : holder_(std::move(holder)) {}
+
+Lock::~Lock() = default;
 
 }  // namespace web_app

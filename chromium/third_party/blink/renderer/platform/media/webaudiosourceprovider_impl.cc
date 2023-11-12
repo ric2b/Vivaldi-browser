@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/thread_annotations.h"
+#include "media/base/audio_glitch_info.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_log.h"
@@ -47,13 +48,13 @@ class WebAudioSourceProviderImpl::TeeFilter
   // get a copy of the rendered audio by SetCopyAudioCallback().
   int Render(base::TimeDelta delay,
              base::TimeTicks delay_timestamp,
-             int prior_frames_skipped,
+             const media::AudioGlitchInfo& glitch_info,
              media::AudioBus* audio_bus) override {
     DCHECK(initialized());
     DCHECK_EQ(audio_bus->channels(), channels_);
 
-    const int num_rendered_frames = renderer_->Render(
-        delay, delay_timestamp, prior_frames_skipped, audio_bus);
+    const int num_rendered_frames =
+        renderer_->Render(delay, delay_timestamp, glitch_info, audio_bus);
 
     // Avoid taking the copy lock for the vast majority of cases.
     if (copy_required_) {
@@ -68,6 +69,9 @@ class WebAudioSourceProviderImpl::TeeFilter
           bus_copy->Zero();
         else
           audio_bus->CopyTo(bus_copy.get());
+
+        // TODO(fhernqvist): Propagate glitch info through here if the callback
+        // needs it.
         copy_audio_bus_callback_.Run(std::move(bus_copy),
                                      static_cast<uint32_t>(frames_delayed),
                                      sample_rate_);
@@ -116,10 +120,7 @@ WebAudioSourceProviderImpl::WebAudioSourceProviderImpl(
     scoped_refptr<media::SwitchableAudioRendererSink> sink,
     media::MediaLog* media_log,
     base::OnceClosure on_set_client_callback /* = base::OnceClosure()*/)
-    : volume_(1.0),
-      state_(kStopped),
-      client_(nullptr),
-      sink_(std::move(sink)),
+    : sink_(std::move(sink)),
       tee_filter_(new TeeFilter()),
       media_log_(media_log),
       on_set_client_callback_(std::move(on_set_client_callback)) {}
@@ -205,8 +206,10 @@ void WebAudioSourceProviderImpl::ProvideInput(
     return;
   }
 
+  // TODO(fhernqvist): If we need glitches propagated through WebAudio, plumb
+  // them through here.
   const int frames = tee_filter_->Render(
-      base::TimeDelta(), base::TimeTicks::Now(), 0, bus_wrapper_.get());
+      base::TimeDelta(), base::TimeTicks::Now(), {}, bus_wrapper_.get());
 
   // Zero out frames after rendering for tainted origins.
   if (tee_filter_->is_tainted()) {
@@ -330,15 +333,21 @@ void WebAudioSourceProviderImpl::TaintOrigin() {
 void WebAudioSourceProviderImpl::SetCopyAudioCallback(CopyAudioCB callback) {
   DCHECK(!callback.is_null());
   tee_filter_->SetCopyAudioCallback(std::move(callback));
+  has_copy_audio_callback_ = true;
 }
 
 void WebAudioSourceProviderImpl::ClearCopyAudioCallback() {
   tee_filter_->SetCopyAudioCallback(CopyAudioCB());
+  has_copy_audio_callback_ = false;
 }
 
 int WebAudioSourceProviderImpl::RenderForTesting(media::AudioBus* audio_bus) {
-  return tee_filter_->Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+  return tee_filter_->Render(base::TimeDelta(), base::TimeTicks::Now(), {},
                              audio_bus);
+}
+
+bool WebAudioSourceProviderImpl::IsAudioBeingCaptured() const {
+  return has_copy_audio_callback_ || client_;
 }
 
 void WebAudioSourceProviderImpl::OnSetFormat() {

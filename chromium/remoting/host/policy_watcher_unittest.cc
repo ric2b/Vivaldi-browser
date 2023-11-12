@@ -13,7 +13,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/mock_log.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/fake_async_policy_loader.h"
@@ -78,22 +77,22 @@ class PolicyWatcherTest : public testing::Test {
     EXPECT_CALL(mock_policy_callback_, OnPolicyError()).Times(0);
 
     // Retaining a raw pointer to keep control over policy contents.
-    policy_loader_ =
-        new policy::FakeAsyncPolicyLoader(base::ThreadTaskRunnerHandle::Get());
+    policy_loader_ = new policy::FakeAsyncPolicyLoader(
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     policy_watcher_ = PolicyWatcher::CreateFromPolicyLoaderForTesting(
         base::WrapUnique(policy_loader_.get()));
 
     policy_watcher_default_values_ = PolicyWatcher::GetDefaultPolicies();
 
-    base::ListValue host_domain;
+    base::Value::List host_domain;
     host_domain.Append(kHostDomain);
-    base::ListValue client_domain;
+    base::Value::List client_domain;
     client_domain.Append(kClientDomain);
-    base::ListValue multiple_host_domains;
+    base::Value::List multiple_host_domains;
     multiple_host_domains.Append("a.com");
     multiple_host_domains.Append("b.com");
     multiple_host_domains.Append("c.com");
-    base::ListValue multiple_client_domains;
+    base::Value::List multiple_client_domains;
     multiple_client_domains.Append("d.com");
     multiple_client_domains.Append("e.com");
     multiple_client_domains.Append("f.com");
@@ -104,7 +103,7 @@ class PolicyWatcherTest : public testing::Test {
     nat_one_domain_full_.Set(key::kRemoteAccessHostFirewallTraversal, 1);
     nat_one_domain_full_.Set(key::kRemoteAccessHostDomainList,
                              host_domain.Clone());
-    domain_empty_.Set(key::kRemoteAccessHostDomainList, base::ListValue());
+    domain_empty_.Set(key::kRemoteAccessHostDomainList, base::Value::List());
     domain_full_.Set(key::kRemoteAccessHostDomainList, host_domain.Clone());
     SetDefaults(nat_true_others_default_);
     nat_true_others_default_.Set(key::kRemoteAccessHostFirewallTraversal, true);
@@ -113,19 +112,19 @@ class PolicyWatcherTest : public testing::Test {
                                   false);
     SetDefaults(domain_empty_others_default_);
     domain_empty_others_default_.Set(key::kRemoteAccessHostDomainList,
-                                     base::ListValue());
+                                     base::Value::List());
     SetDefaults(domain_full_others_default_);
     domain_full_others_default_.Set(key::kRemoteAccessHostDomainList,
                                     host_domain.Clone());
     nat_true_domain_empty_.Set(key::kRemoteAccessHostFirewallTraversal, true);
     nat_true_domain_empty_.Set(key::kRemoteAccessHostDomainList,
-                               base::ListValue());
+                               base::Value::List());
     nat_true_domain_full_.Set(key::kRemoteAccessHostFirewallTraversal, true);
     nat_true_domain_full_.Set(key::kRemoteAccessHostDomainList,
                               host_domain.Clone());
     nat_false_domain_empty_.Set(key::kRemoteAccessHostFirewallTraversal, false);
     nat_false_domain_empty_.Set(key::kRemoteAccessHostDomainList,
-                                base::ListValue());
+                                base::Value::List());
     nat_false_domain_full_.Set(key::kRemoteAccessHostFirewallTraversal, false);
     nat_false_domain_full_.Set(key::kRemoteAccessHostDomainList,
                                host_domain.Clone());
@@ -133,7 +132,7 @@ class PolicyWatcherTest : public testing::Test {
     nat_true_domain_empty_others_default_.Set(
         key::kRemoteAccessHostFirewallTraversal, true);
     nat_true_domain_empty_others_default_.Set(key::kRemoteAccessHostDomainList,
-                                              base::ListValue());
+                                              base::Value::List());
     unknown_policies_.Set("UnknownPolicyOne", std::string());
     unknown_policies_.Set("UnknownPolicyTwo", std::string());
     unknown_policies_.Set("RemoteAccessHostUnknownPolicyThree", true);
@@ -310,8 +309,8 @@ class PolicyWatcherTest : public testing::Test {
     dict.Set(key::kRemoteAccessHostFirewallTraversal, true);
     dict.Set(key::kRemoteAccessHostAllowRelayedConnection, true);
     dict.Set(key::kRemoteAccessHostUdpPortRange, "");
-    dict.Set(key::kRemoteAccessHostClientDomainList, base::ListValue());
-    dict.Set(key::kRemoteAccessHostDomainList, base::ListValue());
+    dict.Set(key::kRemoteAccessHostClientDomainList, base::Value::List());
+    dict.Set(key::kRemoteAccessHostDomainList, base::Value::List());
     dict.Set(key::kRemoteAccessHostClipboardSizeBytes, -1);
     dict.Set(key::kRemoteAccessHostAllowRemoteSupportConnections, true);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)

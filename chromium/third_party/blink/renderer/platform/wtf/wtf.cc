@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/stack_util.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
+#include "third_party/blink/renderer/platform/wtf/text/copy_lchars_from_uchar_source.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_statics.h"
 #include "third_party/blink/renderer/platform/wtf/thread_specific.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
@@ -55,7 +56,7 @@ base::PlatformThreadId g_main_thread_identifier;
 #if !BUILDFLAG(IS_MAC) && defined(ARCH_CPU_X86_FAMILY)
 BASE_FEATURE(kEnableSsePathForCopyLCharsX86,
              "EnableSsePathForCopyLCharsX86",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

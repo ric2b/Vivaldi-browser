@@ -5,49 +5,88 @@ import("//build/config/ios/asset_catalog.gni")
 imageset("toolbar_new_tab_page") {
   sources = [
     "toolbar_new_tab_page.imageset/Contents.json",
-    "toolbar_new_tab_page.imageset/toolbar_new_tab_page@2x.png",
-    "toolbar_new_tab_page.imageset/toolbar_new_tab_page@3x.png",
+    "toolbar_new_tab_page.imageset/vivaldi_toolbar_new_tab_page.pdf",
+    "toolbar_new_tab_page.imageset/vivaldi_toolbar_new_tab_page_dark.pdf",
   ]
 }
 
 imageset("toolbar_stop") {
   sources = [
     "toolbar_stop.imageset/Contents.json",
-    "toolbar_stop.imageset/toolbar_stop@2x.png",
-    "toolbar_stop.imageset/toolbar_stop@3x.png",
+    "toolbar_stop.imageset/vivaldi_toolbar_stop.pdf",
+    "toolbar_stop.imageset/vivaldi_toolbar_stop_dark.pdf",
   ]
 }
 
 imageset("toolbar_back") {
   sources = [
     "toolbar_back.imageset/Contents.json",
-    "toolbar_back.imageset/toolbar_back@2x.png",
-    "toolbar_back.imageset/toolbar_back@3x.png",
+    "toolbar_back.imageset/vivaldi_toolbar_back.pdf",
+    "toolbar_back.imageset/vivaldi_toolbar_back_dark.pdf",
   ]
 }
 
 imageset("toolbar_switcher") {
   sources = [
     "toolbar_switcher.imageset/Contents.json",
-    "toolbar_switcher.imageset/toolbar_switcher.png",
-    "toolbar_switcher.imageset/toolbar_switcher@2x.png",
-    "toolbar_switcher.imageset/toolbar_switcher@3x.png",
+    "toolbar_switcher.imageset/vivaldi_toolbar_switcher.pdf",
+    "toolbar_switcher.imageset/vivaldi_toolbar_switcher_dark.pdf",
   ]
 }
 
 imageset("toolbar_forward") {
   sources = [
     "toolbar_forward.imageset/Contents.json",
-    "toolbar_forward.imageset/toolbar_forward@2x.png",
-    "toolbar_forward.imageset/toolbar_forward@3x.png",
+    "toolbar_forward.imageset/vivaldi_toolbar_forward.pdf",
+    "toolbar_forward.imageset/vivaldi_toolbar_forward_dark.pdf",
   ]
 }
 
 imageset("toolbar_menu") {
   sources = [
     "toolbar_menu.imageset/Contents.json",
-    "toolbar_menu.imageset/toolbar_menu.pdf",
-    "toolbar_menu.imageset/toolbar_menu_dark.pdf",
+    "toolbar_menu.imageset/vivaldi_toolbar_menu.pdf",
+    "toolbar_menu.imageset/vivaldi_toolbar_menu_dark.pdf",
+  ]
+}
+
+imageset("toolbar_panel") {
+  sources = [
+    "toolbar_panel.imageset/Contents.json",
+    "toolbar_panel.imageset/vivaldi_toolbar_panel.pdf",
+    "toolbar_panel.imageset/vivaldi_toolbar_panel_dark.pdf",
+  ]
+}
+
+imageset("toolbar_share") {
+  sources = [
+    "toolbar_share.imageset/Contents.json",
+    "toolbar_share.imageset/vivaldi_toolbar_share.pdf",
+    "toolbar_share.imageset/vivaldi_toolbar_share_dark.pdf",
+  ]
+}
+
+imageset("toolbar_more") {
+  sources = [
+    "toolbar_more.imageset/Contents.json",
+    "toolbar_more.imageset/vivaldi_toolbar_more.pdf",
+    "toolbar_more.imageset/vivaldi_toolbar_more_dark.pdf",
+  ]
+}
+
+imageset("toolbar_reload") {
+  sources = [
+    "toolbar_reload.imageset/Contents.json",
+    "toolbar_reload.imageset/vivaldi_toolbar_reload.pdf",
+    "toolbar_reload.imageset/vivaldi_toolbar_reload_dark.pdf",
+  ]
+}
+
+imageset("toolbar_search") {
+  sources = [
+    "toolbar_search.imageset/Contents.json",
+    "toolbar_search.imageset/vivaldi_toolbar_search.pdf",
+    "toolbar_search.imageset/vivaldi_toolbar_search_dark.pdf",
   ]
 }
 

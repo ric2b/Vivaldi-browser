@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/time/default_tick_clock.h"
@@ -72,6 +73,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_result_reporter.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/jsoncpp/source/include/json/reader.h"
 #include "third_party/jsoncpp/source/include/json/value.h"
 #include "third_party/jsoncpp/source/include/json/writer.h"
@@ -216,7 +218,7 @@ media::cast::FrameReceiverConfig WithSharedConfig(
 
 void ContinueBrowserFor(base::TimeDelta duration) {
   base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), duration);
   run_loop.Run();
 }
@@ -880,12 +882,12 @@ class TestTabMirroringSession : public mirroring::mojom::SessionObserver,
     mojo::PendingRemote<mirroring::mojom::CastMessageChannel> channel_remote;
     channel_receiver_.Bind(channel_remote.InitWithNewPipeAndPassReceiver());
 
-    const std::string receiver_model_name{};
     auto session_params = mirroring::mojom::SessionParameters::New(
         mirroring::mojom::SessionType::AUDIO_AND_VIDEO, endpoint.address(),
-        receiver_model_name, "sender-123", "receiver-456",
-        base::Milliseconds(kTargetPlayoutDelayMs));
-
+        "model_name", "friendly_name", "sender-123", "receiver-456",
+        base::Milliseconds(kTargetPlayoutDelayMs),
+        false /* is_remote_playback */, absl::nullopt /** refresh_interval */,
+        false /** force_letterboxing */);
     host_->Start(std::move(session_params), std::move(observer_remote),
                  std::move(channel_remote),
                  channel_to_service_.BindNewPipeAndPassReceiver());
@@ -900,6 +902,7 @@ class TestTabMirroringSession : public mirroring::mojom::SessionObserver,
   void DidStop() override {}
   void LogInfoMessage(const std::string& message) override {}
   void LogErrorMessage(const std::string& message) override {}
+  void OnSourceChanged() override {}
 
   // CastMessageChannel implementation (inbound).
   void OnMessage(mirroring::mojom::CastMessagePtr message) override {

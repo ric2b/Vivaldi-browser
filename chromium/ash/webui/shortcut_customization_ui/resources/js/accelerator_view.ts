@@ -11,7 +11,8 @@ import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {getTemplate} from './accelerator_view.html.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
 import {ModifierKeyCodes} from './shortcut_input.js';
-import {AcceleratorConfigResult, AcceleratorInfo, AcceleratorKeys, AcceleratorSource, AcceleratorState, AcceleratorType, Modifier, ShortcutProviderInterface} from './shortcut_types.js';
+import {Accelerator, AcceleratorConfigResult, AcceleratorSource, DefaultAcceleratorInfo, Modifier, ShortcutProviderInterface} from './shortcut_types.js';
+import {areAcceleratorsEqual, createEmptyAcceleratorInfo, getAccelerator} from './shortcut_utils.js';
 
 export interface AcceleratorViewElement {
   $: {
@@ -48,15 +49,6 @@ function getModifierString(modifier: Modifier): string {
     default:
       return '';
   }
-}
-
-function createEmptyAcceleratorInfo(): AcceleratorInfo {
-  return {
-    accelerator: {modifiers: 0, key: 0, keyDisplay: ''},
-    type: AcceleratorType.DEFAULT,
-    state: AcceleratorState.ENABLED,
-    locked: false,
-  };
 }
 
 /**
@@ -128,13 +120,13 @@ export class AcceleratorViewElement extends PolymerElement {
     };
   }
 
-  acceleratorInfo: AcceleratorInfo;
+  acceleratorInfo: DefaultAcceleratorInfo;
   viewState: ViewState;
   statusMessage: string;
   hasError: boolean;
   action: number;
   source: AcceleratorSource;
-  protected pendingAcceleratorInfo_: AcceleratorInfo;
+  protected pendingAcceleratorInfo_: DefaultAcceleratorInfo;
   private modifiers_: string[];
   private acceleratorOnHold_: string;
   private isCapturing_: boolean;
@@ -151,7 +143,7 @@ export class AcceleratorViewElement extends PolymerElement {
     ];
     const modifierStrings: string[] = [];
     for (const modifier of modifiers) {
-      if (this.acceleratorInfo.accelerator.modifiers & modifier) {
+      if ((getAccelerator(this.acceleratorInfo)).modifiers & modifier) {
         modifierStrings.push(getModifierString(modifier));
       }
     }
@@ -238,19 +230,32 @@ export class AcceleratorViewElement extends PolymerElement {
       return;
     }
     this.set(
-        'pendingAcceleratorInfo_.accelerator', this.keystrokeToAccelerator_(e));
+        'pendingAcceleratorInfo_.layoutProperties.defaultAccelerator.accelerator',
+        this.keystrokeToAccelerator_(e));
 
-    const pendingKeys = this.pendingAcceleratorInfo_.accelerator;
+    if (this.isModifierKey_(e)) {
+      // Reset the keyDisplay property if the key is a modifier.
+      this.set(
+          'pendingAcceleratorInfo_.layoutProperties.defaultAccelerator.keyDisplay',
+          '');
+    } else {
+      this.set(
+          'pendingAcceleratorInfo_.layoutProperties.defaultAccelerator.keyDisplay',
+          e.key);
+    }
+
     // New shortcut matches the current shortcut, end capture.
-    if (JSON.stringify(pendingKeys) ===
-        JSON.stringify(this.acceleratorInfo.accelerator)) {
+    if (areAcceleratorsEqual(
+            getAccelerator(this.pendingAcceleratorInfo_),
+            this.acceleratorInfo.layoutProperties.defaultAccelerator
+                .accelerator)) {
       this.endCapture_();
       return;
     }
 
     // Only process valid accelerators.
-    if (this.isValidDefaultAccelerator_(pendingKeys)) {
-      this.processPendingAccelerator_(pendingKeys);
+    if (this.isValidDefaultAccelerator_(this.pendingAcceleratorInfo_)) {
+      this.processPendingAccelerator_(this.pendingAcceleratorInfo_);
     }
   }
 
@@ -258,7 +263,7 @@ export class AcceleratorViewElement extends PolymerElement {
    * Checks that |pendingAccelerator_| is not a pre-existing shortcut. Sets the
    * error message if there is a conflict.
    */
-  private processPendingAccelerator_(pendingKeys: AcceleratorKeys) {
+  private processPendingAccelerator_(pendingAccelInfo: DefaultAcceleratorInfo) {
     // Reset status state when processing the new accelerator.
     this.statusMessage = '';
     this.hasError = false;
@@ -267,17 +272,18 @@ export class AcceleratorViewElement extends PolymerElement {
     // replace a pre-existing accelerator. Check that the new accelerator
     // matches the |acceleratorOnHold_|, otherwise reset its value.
     if (this.acceleratorOnHold_ !== '') {
-      if (this.acceleratorOnHold_ === JSON.stringify(pendingKeys)) {
+      if (this.acceleratorOnHold_ ===
+          JSON.stringify(getAccelerator(pendingAccelInfo))) {
         // User re-pressed the shortcut, send a request to replace the
         // accelerator.
-        this.requestUpdateAccelerator_(pendingKeys);
+        this.requestUpdateAccelerator_(pendingAccelInfo);
         return;
       }
       this.acceleratorOnHold_ = '';
     }
 
-    const foundId =
-        this.lookupManager_.getAcceleratorFromKeys(JSON.stringify(pendingKeys));
+    const foundId = this.lookupManager_.getAcceleratorIdFromReverseLookup(
+        getAccelerator(pendingAccelInfo));
 
     // Pre-existing shortcut, update the error message.
     if (foundId !== undefined) {
@@ -291,7 +297,8 @@ export class AcceleratorViewElement extends PolymerElement {
       // Cannot override a locked action.
       if (!this.shortcutProvider_.isMutable(conflictSource) ||
           this.lookupManager_.isAcceleratorLocked(
-              conflictSource, conflictAction, pendingKeys)) {
+              conflictSource, conflictAction,
+              getAccelerator(pendingAccelInfo))) {
         // TODO(jimmyxgong): i18n this string.
         this.statusMessage = 'Shortcut is used by \"' + conflictAccelName +
             '\". Press a new shortcut to replace.';
@@ -307,19 +314,20 @@ export class AcceleratorViewElement extends PolymerElement {
 
       // Store the pending accelerator.
       this.acceleratorOnHold_ =
-          JSON.stringify(this.pendingAcceleratorInfo_.accelerator);
+          JSON.stringify(this.pendingAcceleratorInfo_.layoutProperties
+                             .defaultAccelerator.accelerator);
       return;
     }
 
     // No conflicts, request replacement.
-    this.requestUpdateAccelerator_(pendingKeys);
+    this.requestUpdateAccelerator_(pendingAccelInfo);
   }
 
   /**
    * Converts a keystroke event to an Accelerator Object.
    */
-  private keystrokeToAccelerator_(e: KeyboardEvent): AcceleratorKeys {
-    const output: AcceleratorKeys = {modifiers: 0, key: 0, keyDisplay: ''};
+  private keystrokeToAccelerator_(e: KeyboardEvent): Accelerator {
+    const output: Accelerator = {modifiers: 0, keyCode: 0};
     if (e.metaKey) {
       output.modifiers = output.modifiers | Modifier.COMMAND;
     }
@@ -337,8 +345,7 @@ export class AcceleratorViewElement extends PolymerElement {
 
     // Only add non-modifier keys as the pending key.
     if (!this.isModifierKey_(e)) {
-      output.keyDisplay = e.key;
-      output.key = e.keyCode;
+      output.keyCode = e.keyCode;
     }
 
     return output;
@@ -380,7 +387,7 @@ export class AcceleratorViewElement extends PolymerElement {
    * Returns the specified CSS state of the modifier key element.
    */
   private getModifierState_(modifier: Modifier): KeyState {
-    if (this.pendingAcceleratorInfo_.accelerator.modifiers & modifier) {
+    if ((getAccelerator(this.pendingAcceleratorInfo_)).modifiers & modifier) {
       return KeyState.MODIFIER;
     }
     return KeyState.NOT_SELECTED;
@@ -390,7 +397,8 @@ export class AcceleratorViewElement extends PolymerElement {
    * Returns the specified CSS state of the pending key element.
    */
   protected getPendingKeyState_(): string {
-    if (this.pendingAcceleratorInfo_.accelerator.keyDisplay != '') {
+    if (this.pendingAcceleratorInfo_.layoutProperties.defaultAccelerator
+            .keyDisplay != '') {
       return KeyState.ALPHANUMERIC;
     }
     return KeyState.NOT_SELECTED;
@@ -400,8 +408,10 @@ export class AcceleratorViewElement extends PolymerElement {
    * Returns the specified key to display.
    */
   protected getPendingKey_(): string {
-    if (this.pendingAcceleratorInfo_.accelerator.keyDisplay != '') {
-      return this.pendingAcceleratorInfo_.accelerator.keyDisplay.toLowerCase();
+    if (this.pendingAcceleratorInfo_.layoutProperties.defaultAccelerator
+            .keyDisplay != '') {
+      return this.pendingAcceleratorInfo_.layoutProperties.defaultAccelerator
+          .keyDisplay.toLowerCase();
     }
     // TODO(jimmyxgong): Reset to a localized default empty state.
     return 'key';
@@ -416,27 +426,33 @@ export class AcceleratorViewElement extends PolymerElement {
     return e.ctrlKey || e.altKey || e.metaKey;
   }
 
-  private isValidDefaultAccelerator_(keys: AcceleratorKeys): boolean {
+  private isValidDefaultAccelerator_(accelInfo: DefaultAcceleratorInfo):
+      boolean {
     // A valid default accelerator is on that has modifier(s) and a key.
-    return keys.modifiers > 0 && keys.keyDisplay !== '';
+    return accelInfo.layoutProperties.defaultAccelerator.accelerator.modifiers >
+        0 &&
+        accelInfo.layoutProperties.defaultAccelerator.keyDisplay !== '';
   }
 
   private showEditView_(): boolean {
     return this.viewState !== ViewState.VIEW;
   }
 
-  private requestUpdateAccelerator_(newKeys: AcceleratorKeys) {
+  private requestUpdateAccelerator_(newAcceleratorInfo:
+                                        DefaultAcceleratorInfo) {
     if (this.viewState === ViewState.EDIT) {
       this.shortcutProvider_
           .replaceAccelerator(
-              this.source, this.action, this.acceleratorInfo.accelerator,
-              newKeys)
+              this.source, this.action, (getAccelerator(this.acceleratorInfo)),
+              (getAccelerator(newAcceleratorInfo)))
           .then((result: AcceleratorConfigResult) => {
             // TODO(jimmyxgong): Handle other error cases.
             if (result === AcceleratorConfigResult.SUCCESS) {
               this.lookupManager_.replaceAccelerator(
-                  this.source, this.action, this.acceleratorInfo.accelerator,
-                  newKeys);
+                  this.source, this.action,
+                  this.acceleratorInfo.layoutProperties.defaultAccelerator
+                      .accelerator,
+                  newAcceleratorInfo);
               this.fireUpdateEvent_();
             }
           });
@@ -444,12 +460,13 @@ export class AcceleratorViewElement extends PolymerElement {
 
     if (this.viewState === ViewState.ADD) {
       this.shortcutProvider_
-          .addUserAccelerator(this.source, this.action, newKeys)
+          .addUserAccelerator(
+              this.source, this.action, getAccelerator(newAcceleratorInfo))
           .then((result: AcceleratorConfigResult) => {
             // TODO(jimmyxgong): Handle other error cases.
             if (result === AcceleratorConfigResult.SUCCESS) {
               this.lookupManager_.addAccelerator(
-                  this.source, this.action, newKeys);
+                  this.source, this.action, newAcceleratorInfo);
               this.fireUpdateEvent_();
             }
           });

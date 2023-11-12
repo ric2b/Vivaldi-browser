@@ -75,8 +75,10 @@ import android.text.TextUtils;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.ui.base.DeviceFormFactor;
 
+import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiRelaunchUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
@@ -277,6 +279,22 @@ public class MainSettings extends PreferenceFragmentCompat
                     VivaldiRelaunchUtils.showRelaunchDialog(getContext(), null);
                     return true;
                 });
+
+            // Handle set as default browser setting
+            ChromeSwitchPreference setDefaultBrowserPref =
+                    findPreference(VivaldiPreferences.SET_AS_DEFAULT_BROWSER);
+            if (setDefaultBrowserPref != null) {
+                setDefaultBrowserPref.setOnPreferenceClickListener(preference -> {
+                    if (setDefaultBrowserPref.isChecked()) {
+                        setDefaultBrowserPref.setChecked(false);
+                        VivaldiDefaultBrowserUtils.setAsDefaultBrowser(getActivity());
+                    } else {
+                        setDefaultBrowserPref.setChecked(true);
+                        VivaldiDefaultBrowserUtils.openDefaultAppsSettings(getActivity());
+                    }
+                    return true;
+                });
+            }
         }
     }
 
@@ -352,6 +370,10 @@ public class MainSettings extends PreferenceFragmentCompat
         pref = getPreferenceScreen().findPreference("automatic_close_tabs");
         pref.setSummary(AutomaticCloseTabsMainPreference.updateSummary());
         updateSummary();
+        pref = findPreference(VivaldiPreferences.SET_AS_DEFAULT_BROWSER);
+        ((ChromeSwitchPreference)pref).setChecked(
+                    VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(getActivity()));
+
         // Handling the home button here.
         boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
         String homeButton = "show_start_page_icon";

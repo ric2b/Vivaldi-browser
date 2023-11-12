@@ -5,13 +5,14 @@
 #ifndef ASH_SYSTEM_NOTIFICATION_CENTER_NOTIFICATION_CENTER_TRAY_H_
 #define ASH_SYSTEM_NOTIFICATION_CENTER_NOTIFICATION_CENTER_TRAY_H_
 
+#include <memory>
 #include <string>
 
 #include "ash/ash_export.h"
+#include "ash/system/notification_center/notification_center_bubble.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/unified/notification_icons_controller.h"
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/message_center_types.h"
 
@@ -41,6 +42,9 @@ class ASH_EXPORT NotificationCenterTray
   // Called when UnifiedSystemTray's preferred visibility changes.
   void OnSystemTrayVisibilityChanged(bool system_tray_visible);
 
+  // True if the bubble is shown.
+  bool IsBubbleShown() const;
+
   // TrayBackgroundView:
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
@@ -51,8 +55,14 @@ class ASH_EXPORT NotificationCenterTray
   void UpdateAfterLoginStatusChange() override;
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
+  void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
+                                    bool visible) override;
 
  private:
+  friend class NotificationCenterTestApi;
+  friend class NotificationCounterViewTest;
+  friend class NotificationIconsControllerTest;
+
   // message_center::MessageCenterObserver:
   void OnNotificationAdded(const std::string& notification_id) override;
   void OnNotificationDisplayed(
@@ -71,7 +81,7 @@ class ASH_EXPORT NotificationCenterTray
   const std::unique_ptr<NotificationIconsController>
       notification_icons_controller_;
 
-  // TODO(1311738): Add NotificationCenterBubble.
+  std::unique_ptr<NotificationCenterBubble> bubble_;
 
   // The notification center tray can only be shown along side the system and
   // date tray. This flag keeps track of the system tray's visibility being set

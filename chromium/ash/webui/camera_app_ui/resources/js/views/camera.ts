@@ -6,6 +6,7 @@ import * as animate from '../animation.js';
 import {
   assert,
   assertInstanceof,
+  assertNotReached,
 } from '../assert.js';
 import * as customToast from '../custom_effect.js';
 import {
@@ -43,6 +44,8 @@ import {
   ErrorType,
   Facing,
   ImageBlob,
+  LowStorageDialogType,
+  LowStorageError,
   MimeType,
   Mode,
   PerfEvent,
@@ -79,6 +82,10 @@ export class Camera extends View implements CameraViewUI {
 
   private readonly docModeDialogView =
       new Dialog(ViewName.DOCUMENT_MODE_DIALOG);
+
+  private currentLowStorageType: LowStorageDialogType|null = null;
+
+  private readonly lowStorageDialogView: Dialog;
 
   private readonly subViews: View[];
 
@@ -129,6 +136,9 @@ export class Camera extends View implements CameraViewUI {
   ) {
     super(ViewName.CAMERA);
     this.documentReview = new DocumentReview(resultSaver);
+    this.lowStorageDialogView = new Dialog(ViewName.LOW_STORAGE_DIALOG, {
+      onNegativeButtonClicked: () => this.openStorageManagement(),
+    });
     this.subViews = [
       new PrimarySettings(this.cameraManager),
       new OptionPanel(),
@@ -137,6 +147,7 @@ export class Camera extends View implements CameraViewUI {
       this.cropDocument,
       this.documentReview,
       this.docModeDialogView,
+      this.lowStorageDialogView,
       new View(ViewName.FLASH),
     ];
 
@@ -162,12 +173,17 @@ export class Camera extends View implements CameraViewUI {
           metrics.ShutterType.TOUCH :
           metrics.ShutterType.MOUSE;
     }
-
-    dom.get('#start-takephoto', HTMLButtonElement)
-        .addEventListener('click', (e) => {
-          const mouseEvent = assertInstanceof(e, MouseEvent);
-          this.beginTake(getShutterType(mouseEvent));
-        });
+    const photoShutter = dom.get('#start-takephoto', HTMLButtonElement);
+    photoShutter.addEventListener('click', (e) => {
+      this.beginTake(getShutterType(e));
+    });
+    function checkPhotoShutter() {
+      const disabled = state.get(state.State.CAMERA_CONFIGURING) ||
+          state.get(state.State.TAKING);
+      photoShutter.disabled = disabled;
+    }
+    state.addObserver(state.State.CAMERA_CONFIGURING, checkPhotoShutter);
+    state.addObserver(state.State.TAKING, checkPhotoShutter);
 
     dom.get('#stop-takephoto', HTMLButtonElement)
         .addEventListener('click', () => this.endTake());
@@ -175,16 +191,28 @@ export class Camera extends View implements CameraViewUI {
     const videoShutter = dom.get('#recordvideo', HTMLButtonElement);
     videoShutter.addEventListener('click', (e) => {
       if (!state.get(state.State.TAKING)) {
-        this.beginTake(getShutterType(assertInstanceof(e, MouseEvent)));
+        this.beginTake(getShutterType(e));
       } else {
         this.endTake();
       }
     });
+    function checkVideoShutter() {
+      const disabled = state.get(state.State.CAMERA_CONFIGURING) &&
+          !state.get(state.State.TAKING);
+      videoShutter.disabled = disabled;
+    }
+    state.addObserver(state.State.CAMERA_CONFIGURING, checkVideoShutter);
+    state.addObserver(state.State.TAKING, checkVideoShutter);
 
-    dom.get('#video-snapshot', HTMLButtonElement)
-        .addEventListener('click', () => {
-          this.cameraManager.takeVideoSnapshot();
-        });
+    const videoSnapshotButton = dom.get('#video-snapshot', HTMLButtonElement);
+    videoSnapshotButton.addEventListener('click', () => {
+      this.cameraManager.takeVideoSnapshot();
+    });
+    function checkVideoSnapshotButton() {
+      const disabled = state.get(state.State.SNAPSHOTTING);
+      videoSnapshotButton.disabled = disabled;
+    }
+    state.addObserver(state.State.SNAPSHOTTING, checkVideoSnapshotButton);
 
     const pauseShutter = dom.get('#pause-recordvideo', HTMLButtonElement);
     pauseShutter.addEventListener('click', () => {
@@ -209,6 +237,7 @@ export class Camera extends View implements CameraViewUI {
     this.cameraManager.registerCameraUI({
       onTryingNewConfig: (config: CameraConfig) => {
         this.updateModeUI(config.mode);
+        this.updateShutterLabel(config.mode);
       },
       onUpdateConfig: async (config: CameraConfig) => {
         nav.close(ViewName.WARNING, WarningType.NO_CAMERA);
@@ -246,9 +275,21 @@ export class Camera extends View implements CameraViewUI {
       },
     });
 
+    const checkModesGroupDisabled = () => {
+      const disabled =
+          !state.get(state.State.STREAMING) || state.get(state.State.TAKING);
+      const modes =
+          dom.getAllFrom(this.modesGroup, '.mode-item>input', HTMLInputElement);
+      for (const mode of modes) {
+        mode.disabled = disabled;
+      }
+    };
+    state.addObserver(state.State.STREAMING, checkModesGroupDisabled);
+    state.addObserver(state.State.TAKING, checkModesGroupDisabled);
+
     for (const el of dom.getAll('.mode-item>input', HTMLInputElement)) {
       el.addEventListener('click', (event) => {
-        if (!this.cameraReady) {
+        if (!this.cameraReady.isSignaled()) {
           event.preventDefault();
         }
       });
@@ -256,6 +297,7 @@ export class Camera extends View implements CameraViewUI {
         if (el.checked) {
           const mode = util.assertEnumVariant(Mode, el.dataset['mode']);
           this.updateModeUI(mode);
+          this.updateShutterLabel(mode);
           state.set(state.State.MODE_SWITCHING, true);
           const isSuccess = await this.cameraManager.switchMode(mode);
           state.set(state.State.MODE_SWITCHING, false, {hasError: !isSuccess});
@@ -311,6 +353,14 @@ export class Camera extends View implements CameraViewUI {
       top: 0,
       behavior: 'smooth',
     });
+  }
+
+  private updateShutterLabel(mode: Mode) {
+    const element = dom.get('#start-takephoto', HTMLButtonElement);
+    const label =
+        mode === 'scan' ? I18nString.SCAN_BUTTON : I18nString.TAKE_PHOTO_BUTTON;
+    element.setAttribute('i18n-label', label);
+    element.setAttribute('aria-label', getI18nMessage(label));
   }
 
   private initVideoEncoderOptions() {
@@ -430,6 +480,11 @@ export class Camera extends View implements CameraViewUI {
         const [captureDone] = await this.cameraManager.startCapture();
         await captureDone;
       } catch (e) {
+        if (e instanceof LowStorageError) {
+          this.showLowStorageDialog(LowStorageDialogType.CANNOT_START);
+          // Don't send capture error.
+          return;
+        }
         hasError = true;
         if (e instanceof CanceledError) {
           return;
@@ -668,6 +723,9 @@ export class Camera extends View implements CameraViewUI {
       nav.close(ViewName.FLASH);
     }
     await this.reviewMultiPageDocument(enterInFixMode);
+    if (!state.get(state.State.DOC_MODE_REVIEWING)) {
+      ChromeHelper.getInstance().maybeTriggerSurvey();
+    }
   }
 
   /**
@@ -841,6 +899,44 @@ export class Camera extends View implements CameraViewUI {
     animate.play(this.cameraManager.getPreviewVideo().video);
   }
 
+  private getLowStorageDialogKeys(dialogType: LowStorageDialogType) {
+    switch (dialogType) {
+      case LowStorageDialogType.AUTO_STOP:
+        return {
+          title: I18nString.LOW_STORAGE_DIALOG_AUTO_STOP_TITLE,
+          description: I18nString.LOW_STORAGE_DIALOG_AUTO_STOP_DESC,
+          dialogAction: metrics.LowStorageActionType.SHOW_AUTO_STOP_DIALOG,
+          manageAction: metrics.LowStorageActionType.MANAGE_STORAGE_AUTO_STOP,
+        };
+      case LowStorageDialogType.CANNOT_START:
+        return {
+          title: I18nString.LOW_STORAGE_DIALOG_CANNOT_START_TITLE,
+          description: I18nString.LOW_STORAGE_DIALOG_CANNOT_START_DESC,
+          dialogAction: metrics.LowStorageActionType.SHOW_CANNOT_START_DIALOG,
+          manageAction:
+              metrics.LowStorageActionType.MANAGE_STORAGE_CANNOT_START,
+        };
+      default:
+        assertNotReached();
+    }
+  }
+
+  private openStorageManagement(): void {
+    assert(this.currentLowStorageType !== null);
+    const {manageAction} =
+        this.getLowStorageDialogKeys(this.currentLowStorageType);
+    metrics.sendLowStorageEvent(manageAction);
+    ChromeHelper.getInstance().openStorageManagement();
+  }
+
+  private showLowStorageDialog(dialogType: LowStorageDialogType): void {
+    const {description, dialogAction, title} =
+        this.getLowStorageDialogKeys(dialogType);
+    this.currentLowStorageType = dialogType;
+    metrics.sendLowStorageEvent(dialogAction);
+    nav.open(ViewName.LOW_STORAGE_DIALOG, {title, description});
+  }
+
   async onGifCaptureDone({name, gifSaver, resolution, duration}: GifResult):
       Promise<void> {
     nav.open(ViewName.FLASH);
@@ -897,8 +993,12 @@ export class Camera extends View implements CameraViewUI {
     ChromeHelper.getInstance().maybeTriggerSurvey();
   }
 
-  async onVideoCaptureDone({resolution, videoSaver, duration, everPaused}:
-                               VideoResult): Promise<void> {
+  async onVideoCaptureDone(
+      {resolution, videoSaver, duration, everPaused, autoStopped}: VideoResult):
+      Promise<void> {
+    if (autoStopped) {
+      this.showLowStorageDialog(LowStorageDialogType.AUTO_STOP);
+    }
     state.set(PerfEvent.VIDEO_CAPTURE_POST_PROCESSING, true);
     try {
       metrics.sendCaptureEvent({
@@ -927,8 +1027,8 @@ export class Camera extends View implements CameraViewUI {
     this.layoutHandler.update();
   }
 
-  override handlingKey(key: string): boolean {
-    if (key === 'Ctrl-R') {
+  override handlingKey(key: util.KeyboardShortcut): boolean {
+    if (key === 'Ctrl-Alt-R') {
       toast.showDebugMessage(
           this.cameraManager.getPreviewResolution().toString());
       return true;
@@ -942,7 +1042,7 @@ export class Camera extends View implements CameraViewUI {
       }
       return true;
     }
-    if (key === 'Space') {
+    if (key === ' ') {
       this.focusShutterButton();
       if (state.get(state.State.TAKING)) {
         this.endTake();

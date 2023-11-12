@@ -6,12 +6,12 @@
 
 #include <memory>
 
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
-#include "ash/services/secure_channel/public/cpp/shared/connection_priority.h"
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/proximity_auth/messenger_impl.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/shared/connection_priority.h"
 
 namespace proximity_auth {
 
@@ -131,7 +131,7 @@ void RemoteDeviceLifeCycleImpl::OnConnection(
   // Create the MessengerImpl asynchronously. |messenger_| registers itself as
   // an observer of |channel_|, so creating it synchronously would trigger
   // |OnSendCompleted()| as an observer call for |messenger_|.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&RemoteDeviceLifeCycleImpl::CreateMessenger,
                                 weak_ptr_factory_.GetWeakPtr()));
 }

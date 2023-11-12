@@ -19,7 +19,6 @@
 #include "chrome/browser/ash/login/signin_specifics.h"
 #include "chrome/browser/ash/login/ui/mock_login_display_host.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/login_screen/login/cleanup/cleanup_manager_ash.h"
 #include "chrome/browser/chromeos/extensions/login_screen/login/cleanup/mock_cleanup_handler.h"
@@ -156,6 +155,7 @@ class LoginApiUnittest : public ExtensionApiUnittest {
   void SetUp() override {
     ExtensionApiUnittest::SetUp();
 
+    auth_metrics_recorder_ = ash::AuthMetricsRecorder::CreateForTesting();
     fake_chrome_user_manager_ = new ash::FakeChromeUserManager();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::unique_ptr<ash::FakeChromeUserManager>(fake_chrome_user_manager_));
@@ -182,6 +182,7 @@ class LoginApiUnittest : public ExtensionApiUnittest {
     mock_existing_user_controller_.reset();
     mock_login_display_host_.reset();
     scoped_user_manager_.reset();
+    auth_metrics_recorder_.reset();
 
     ExtensionApiUnittest::TearDown();
   }
@@ -200,6 +201,7 @@ class LoginApiUnittest : public ExtensionApiUnittest {
   std::unique_ptr<ash::MockLoginDisplayHost> mock_login_display_host_;
   std::unique_ptr<MockExistingUserController> mock_existing_user_controller_;
   std::unique_ptr<MockLoginApiLockHandler> mock_lock_handler_;
+  std::unique_ptr<ash::AuthMetricsRecorder> auth_metrics_recorder_;
 };
 
 MATCHER_P(MatchSigninSpecifics, expected, "") {
@@ -589,11 +591,11 @@ TEST_F(LoginApiUserSessionUnittest, LaunchSamlUserSession) {
   std::unique_ptr<ScopedTestingProfile> profile = AddRegularUser(kEmail);
   ash::UserContext user_context = GetRegularUserContext(kEmail, kGaiaId);
 
-  chromeos::Key key("password");
+  ash::Key key("password");
   key.SetLabel(ash::kCryptohomeGaiaKeyLabel);
   user_context.SetKey(key);
-  user_context.SetPasswordKey(chromeos::Key("password"));
-  user_context.SetAuthFlow(chromeos::UserContext::AUTH_FLOW_GAIA_WITH_SAML);
+  user_context.SetPasswordKey(ash::Key("password"));
+  user_context.SetAuthFlow(ash::UserContext::AUTH_FLOW_GAIA_WITH_SAML);
   user_context.SetIsUsingSamlPrincipalsApi(false);
   user_context.SetAuthCode("oauth_code");
 
@@ -821,7 +823,7 @@ class LoginApiSharedSessionUnittest : public LoginApiUnittest {
 
   void LaunchSharedManagedGuestSession(const std::string& password) {
     EXPECT_CALL(*mock_existing_user_controller_,
-                Login(_, MatchSigninSpecifics(chromeos::SigninSpecifics())))
+                Login(_, MatchSigninSpecifics(ash::SigninSpecifics())))
         .Times(1);
 
     testing_profile_ = AddPublicAccountUser(kEmail);
@@ -861,7 +863,7 @@ TEST_F(LoginApiSharedSessionUnittest, LaunchSharedManagedGuestSession) {
   std::unique_ptr<ScopedTestingProfile> profile = AddPublicAccountUser(kEmail);
   ash::UserContext user_context;
   EXPECT_CALL(*mock_existing_user_controller_,
-              Login(_, MatchSigninSpecifics(chromeos::SigninSpecifics())))
+              Login(_, MatchSigninSpecifics(ash::SigninSpecifics())))
       .WillOnce(SaveArg<0>(&user_context));
 
   RunFunction(new LoginLaunchSharedManagedGuestSessionFunction(), "[\"foo\"]");

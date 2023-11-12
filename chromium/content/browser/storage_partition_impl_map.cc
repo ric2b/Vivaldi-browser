@@ -21,7 +21,6 @@
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
@@ -46,8 +45,6 @@
 #include "services/network/public/cpp/features.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
-
-#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -345,16 +342,6 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
       fallback_config.has_value() ? Get(*fallback_config, /*can_create=*/false)
                                   : nullptr;
 
-  // NOTE(andre@vivaldi.com) : On startup and tab-restore the
-  // webcontentsdelegate might not yet be set. Set the default storagepartition
-  // as blob-fallback. See Browser::SetAsDelegate.
-  if (!fallback_for_blob_urls &&
-      vivaldi::IsVivaldiApp(partition_config.partition_domain())) {
-    fallback_for_blob_urls =
-        Get(StoragePartitionConfig::CreateDefault(browser_context_),
-            /*can_create=*/false);
-  }
-
   std::unique_ptr<StoragePartitionImpl> partition_ptr(
       StoragePartitionImpl::Create(browser_context_, partition_config,
                                    relative_partition_path));
@@ -421,7 +408,7 @@ void StoragePartitionImplMap::AsyncObliterate(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&BlockingObliteratePath, browser_context_->GetPath(),
                      domain_root, paths_to_keep,
-                     base::ThreadTaskRunnerHandle::Get(),
+                     base::SingleThreadTaskRunner::GetCurrentDefault(),
                      std::move(on_gc_required)),
       subtask_done_callback);
 }

@@ -103,8 +103,8 @@ bool ContentAutofillDriver::IsInAnyMainFrame() const {
 }
 
 bool ContentAutofillDriver::IsPrerendering() const {
-  return render_frame_host_->GetLifecycleState() ==
-         content::RenderFrameHost::LifecycleState::kPrerendering;
+  return render_frame_host_->IsInLifecycleState(
+      content::RenderFrameHost::LifecycleState::kPrerendering);
 }
 
 bool ContentAutofillDriver::CanShowAutofillUi() const {
@@ -156,18 +156,17 @@ net::IsolationInfo ContentAutofillDriver::IsolationInfo() {
 }
 
 std::vector<FieldGlobalId> ContentAutofillDriver::FillOrPreviewForm(
-    int query_id,
     mojom::RendererFormDataAction action,
     const FormData& data,
     const url::Origin& triggered_origin,
     const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) {
   return autofill_router().FillOrPreviewForm(
-      this, query_id, action, data, triggered_origin, field_type_map,
-      [](ContentAutofillDriver* target, int query_id,
-         mojom::RendererFormDataAction action, const FormData& data) {
+      this, action, data, triggered_origin, field_type_map,
+      [](ContentAutofillDriver* target, mojom::RendererFormDataAction action,
+         const FormData& data) {
         if (!target->RendererIsAvailable())
           return;
-        target->GetAutofillAgent()->FillOrPreviewForm(query_id, data, action);
+        target->GetAutofillAgent()->FillOrPreviewForm(data, action);
       });
 }
 
@@ -407,8 +406,7 @@ void ContentAutofillDriver::AskForValuesToFill(
     const FormData& raw_form,
     const FormFieldData& raw_field,
     const gfx::RectF& bounding_box,
-    int32_t query_id,
-    bool autoselect_first_suggestion,
+    AutoselectFirstSuggestion autoselect_first_suggestion,
     FormElementWasClicked form_element_was_clicked) {
   if (!bad_message::CheckFrameNotPrerendering(render_frame_host_))
     return;
@@ -417,14 +415,14 @@ void ContentAutofillDriver::AskForValuesToFill(
   SetFrameAndFormMetaData(form, &field);
   autofill_router().AskForValuesToFill(
       this, form, field,
-      TransformBoundingBoxToViewportCoordinates(bounding_box), query_id,
+      TransformBoundingBoxToViewportCoordinates(bounding_box),
       autoselect_first_suggestion, form_element_was_clicked,
       [](ContentAutofillDriver* target, const FormData& form,
          const FormFieldData& field, const gfx::RectF& bounding_box,
-         int32_t query_id, bool autoselect_first_suggestion,
+         AutoselectFirstSuggestion autoselect_first_suggestion,
          FormElementWasClicked form_element_was_clicked) {
         target->autofill_manager_->OnAskForValuesToFill(
-            form, field, bounding_box, query_id, autoselect_first_suggestion,
+            form, field, bounding_box, autoselect_first_suggestion,
             form_element_was_clicked);
       });
 }
@@ -534,31 +532,42 @@ void ContentAutofillDriver::JavaScriptChangedAutofilledValue(
 void ContentAutofillDriver::FillFormForAssistant(
     const AutofillableData& fill_data,
     const FormData& raw_form,
-    const FormFieldData& raw_field,
-    const autofill_assistant::AutofillAssistantIntent intent) {
+    const FormFieldData& raw_field) {
   FormData form = raw_form;
   FormFieldData field = raw_field;
   SetFrameAndFormMetaData(form, &field);
   autofill_router().FillFormForAssistant(
-      this, fill_data, form, field, intent,
+      this, fill_data, form, field,
       [](ContentAutofillDriver* target, const AutofillableData& fill_data,
-         const FormData& form, const FormFieldData& field,
-         const autofill_assistant::AutofillAssistantIntent intent) {
+         const FormData& form, const FormFieldData& field) {
         DCHECK(target->autofill_manager_);
         if (fill_data.is_profile()) {
-          target->autofill_manager_->SetProfileFillViaAutofillAssistantIntent(
-              intent);
           target->autofill_manager_->FillProfileForm(fill_data.profile(), form,
                                                      field);
         } else if (fill_data.is_credit_card()) {
-          target->autofill_manager_
-              ->SetCreditCardFillViaAutofillAssistantIntent(intent);
           target->autofill_manager_->FillCreditCardForm(
-              /*query_id=*/kNoQueryId, form, field, fill_data.credit_card(),
-              fill_data.cvc());
+              form, field, fill_data.credit_card(), fill_data.cvc());
         } else {
           NOTREACHED();
         }
+      });
+}
+
+void ContentAutofillDriver::OnContextMenuShownInFieldCallback(
+    const FormGlobalId& form_global_id,
+    const FieldGlobalId& field_global_id) {
+  autofill_manager_->OnContextMenuShownInField(form_global_id, field_global_id);
+}
+
+void ContentAutofillDriver::OnContextMenuShownInField(
+    const FormGlobalId& form_global_id,
+    const FieldGlobalId& field_global_id) {
+  autofill_router().OnContextMenuShownInField(
+      this, form_global_id, field_global_id,
+      [](ContentAutofillDriver* target, const FormGlobalId& form_global_id,
+         const FieldGlobalId& field_global_id) {
+        target->OnContextMenuShownInFieldCallback(form_global_id,
+                                                  field_global_id);
       });
 }
 
@@ -700,8 +709,7 @@ FormData ContentAutofillDriver::GetFormWithFrameAndFormMetaData(
 }
 
 ContentAutofillRouter& ContentAutofillDriver::autofill_router() {
-  DCHECK(content::RenderFrameHost::LifecycleState::kPrerendering !=
-         render_frame_host_->GetLifecycleState());
+  DCHECK(!IsPrerendering());
   return *autofill_router_;
 }
 

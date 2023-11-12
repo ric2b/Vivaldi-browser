@@ -8,16 +8,23 @@
 #import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/google/core/common/google_util.h"
+#import "components/password_manager/core/browser/password_manager_constants.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_action_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_cell_utils.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_text_cell.h"
 #import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
+#import "ios/chrome/browser/ui/settings/password/branded_navigation_item_title_view.h"
+#import "ios/chrome/browser/ui/settings/password/create_password_manager_title_view.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
@@ -31,6 +38,7 @@
 
 typedef NS_ENUM(NSInteger, ManualFallbackItemType) {
   ManualFallbackItemTypeUnkown = kItemTypeEnumZero,
+  ManualFallbackItemTypeHeader,
   ManualFallbackItemTypeCredential,
   ManualFallbackItemTypeEmptyCredential,
 };
@@ -46,7 +54,7 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
 
 }  // namespace manual_fill
 
-@interface PasswordViewController ()
+@interface PasswordViewController () <TableViewTextLinkCellDelegate>
 
 // Search controller if any.
 @property(nonatomic, strong) UISearchController* searchController;
@@ -76,17 +84,18 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
   self.searchController.searchBar.accessibilityIdentifier =
       manual_fill::kPasswordSearchBarAccessibilityIdentifier;
-  NSString* titleString =
-      l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD);
-  self.title = titleString;
 
-  // Center search bar vertically so it looks centered in the header when
-  // searching.  The cancel button is centered / decentered on
-  // viewWillAppear and viewDidDisappear.
-  UIOffset offset =
-      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-  self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
-      offset;
+  bool useUISplitHeader = base::FeatureList::IsEnabled(
+      password_manager::features::kIOSPasswordUISplit);
+  int titleStringID = useUISplitHeader
+                          ? IDS_IOS_PASSWORD_MANAGER
+                          : IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD;
+  self.title = l10n_util::GetNSString(titleStringID);
+
+  if (useUISplitHeader && self.searchController) {
+    [self setUpCustomTitleView];
+    [self addHeaderItem];
+  }
 
   UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
@@ -97,33 +106,6 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   self.navigationItem.rightBarButtonItem = doneButton;
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-  [super viewWillAppear:animated];
-  // Center search bar's cancel button vertically so it looks centered.
-  // We change the cancel button proxy styles, so we will return it to
-  // default in viewDidDisappear.
-  if (self.searchController) {
-    UIOffset offset =
-        UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
-    UIBarButtonItem* cancelButton = [UIBarButtonItem
-        appearanceWhenContainedInInstancesOfClasses:@ [[UISearchBar class]]];
-    [cancelButton setTitlePositionAdjustment:offset
-                               forBarMetrics:UIBarMetricsDefault];
-  }
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  [super viewWillDisappear:animated];
-
-  // Restore to default origin offset for cancel button proxy style.
-  if (self.searchController) {
-    UIBarButtonItem* cancelButton = [UIBarButtonItem
-        appearanceWhenContainedInInstancesOfClasses:@ [[UISearchBar class]]];
-    [cancelButton setTitlePositionAdjustment:UIOffsetZero
-                               forBarMetrics:UIBarMetricsDefault];
-  }
-}
-
 #pragma mark - UITableViewDataSource
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
@@ -132,9 +114,22 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   UITableViewCell* cell = [super tableView:tableView
                      cellForRowAtIndexPath:indexPath];
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
-  // Retrieve favicons for credential cells.
-  if (itemType == ManualFallbackItemTypeCredential) {
-    [self loadFaviconForCell:cell indexPath:indexPath];
+
+  switch (itemType) {
+    case ManualFallbackItemTypeCredential:
+      // Retrieve favicons for credential cells.
+      [self loadFaviconForCell:cell indexPath:indexPath];
+      break;
+
+    case ManualFallbackItemTypeHeader: {
+      TableViewTextLinkCell* linkCell =
+          base::mac::ObjCCastStrict<TableViewTextLinkCell>(cell);
+      linkCell.delegate = self;
+      break;
+    }
+
+    default:
+      break;
   }
   return cell;
 }
@@ -174,6 +169,14 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   [self presentActionItems:actions];
 }
 
+#pragma mark - TableViewTextLinkCellDelegate
+
+- (void)tableViewTextLinkCell:(TableViewTextLinkCell*)cell
+            didRequestOpenURL:(CrURL*)URL {
+  // Handle tap on header link.
+  [self.delegate didTapLinkURL:URL];
+}
+
 #pragma mark - Private
 
 // Retrieves favicon from FaviconLoader and sets image in `cell`.
@@ -207,6 +210,33 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
 
 - (void)handleDoneButton {
   [self.delegate passwordViewControllerDidTapDoneButton:self];
+}
+
+// Adds a custom title view branded with a Password Manager icon.
+- (void)setUpCustomTitleView {
+  self.navigationItem.largeTitleDisplayMode =
+      UINavigationItemLargeTitleDisplayModeNever;
+  self.navigationItem.titleView =
+      password_manager::CreatePasswordManagerTitleView(/*title=*/self.title);
+}
+
+// Adds a header containing text and a link.
+- (void)addHeaderItem {
+  TableViewTextLinkItem* headerItem =
+      [[TableViewTextLinkItem alloc] initWithType:ManualFallbackItemTypeHeader];
+
+  StringWithTags headerStringWithTags = ParseStringWithLinks(
+      l10n_util::GetNSString(IDS_IOS_SAVE_PASSWORDS_MANAGE_ACCOUNT_HEADER));
+
+  headerItem.text = headerStringWithTags.string;
+  headerItem.linkURLs = {google_util::AppendGoogleLocaleParam(
+      GURL(password_manager::kPasswordManagerHelpCenteriOSURL),
+      GetApplicationContext()->GetApplicationLocale())};
+  DCHECK_EQ(1U, headerStringWithTags.ranges.size());
+  headerItem.linkRanges =
+      @[ [NSValue valueWithRange:headerStringWithTags.ranges[0]] ];
+
+  [self presentHeaderItem:headerItem];
 }
 
 @end

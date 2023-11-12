@@ -205,6 +205,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool IsAutoSizeSupported() const final;
   void SignalWhenReady(base::OnceClosure callback) final;
   void WillAttachToEmbedder() final;
+  bool RequiresSslInterstitials() const final;
 
   // WebContentsDelegate implementation.
   void CloseContents(content::WebContents* source) final;
@@ -254,6 +255,12 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) final;
+
+  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
+                               const std::string& protocol,
+                               const GURL& url,
+                               bool user_gesture) final;
+
   void RequestToLockMouse(content::WebContents* web_contents,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;

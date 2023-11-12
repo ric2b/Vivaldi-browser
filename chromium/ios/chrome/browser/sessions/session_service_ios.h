@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/ios/block_types.h"
 #include "base/task/sequenced_task_runner.h"
 
 @class SessionIOS;
@@ -26,6 +27,10 @@
 - (instancetype)initWithTaskRunner:
     (const scoped_refptr<base::SequencedTaskRunner>&)taskRunner
     NS_DESIGNATED_INITIALIZER;
+
+// Block and call `completion` when task runner is complete. Should only be used
+// by fast terminate experiment.
+- (void)shutdownWithCompletion:(ProceduralBlock)completion;
 
 // Saves the session (list of tabs) returned by `factory`. The save location
 // is derived from the scene identifier `sessionID` and the ChromeBrowserState

@@ -53,15 +53,14 @@ class MEDIA_GPU_EXPORT GpuVideoDecodeAcceleratorFactory {
   // executing any GL calls. Return true on success, false otherwise.
   using MakeGLContextCurrentCallback = base::RepeatingCallback<bool(void)>;
 
-  // Bind |image| to |client_texture_id| given |texture_target|. If
-  // |can_bind_to_sampler| is true, then the image may be used as a sampler
-  // directly, otherwise a copy to a staging buffer is required.
+  // Bind |image| to |client_texture_id| given |texture_target|. On Win/Mac,
+  // marks the texture as needing binding by the decoder; on other platforms,
+  // marks the texture as *not* needing binding by the decoder.
   // Return true on success, false otherwise.
   using BindGLImageCallback =
       base::RepeatingCallback<bool(uint32_t client_texture_id,
                                    uint32_t texture_target,
-                                   const scoped_refptr<gl::GLImage>& image,
-                                   bool can_bind_to_sampler)>;
+                                   const scoped_refptr<gl::GLImage>& image)>;
 
   // Return a ContextGroup*, if one is available.
   using GetContextGroupCallback =
@@ -99,7 +98,8 @@ class MEDIA_GPU_EXPORT GpuVideoDecodeAcceleratorFactory {
       const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences,
       MediaLog* media_log) const;
-#elif BUILDFLAG(USE_V4L2_CODEC) && BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(USE_V4L2_CODEC) && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH))
   std::unique_ptr<VideoDecodeAccelerator> CreateV4L2VDA(
       const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences,

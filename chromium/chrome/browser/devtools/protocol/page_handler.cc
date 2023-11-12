@@ -89,11 +89,14 @@ protocol::Response PageHandler::SetSPCTransactionMode(
     return protocol::Response::ServerError("No web contents to host a dialog.");
 
   payments::SPCTransactionMode spc_mode = payments::SPCTransactionMode::NONE;
-  if (mode == protocol::Page::SetSPCTransactionMode::ModeEnum::Autoaccept) {
+  if (mode == protocol::Page::SetSPCTransactionMode::ModeEnum::AutoAccept) {
     spc_mode = payments::SPCTransactionMode::AUTOACCEPT;
   } else if (mode ==
-             protocol::Page::SetSPCTransactionMode::ModeEnum::Autoreject) {
+             protocol::Page::SetSPCTransactionMode::ModeEnum::AutoReject) {
     spc_mode = payments::SPCTransactionMode::AUTOREJECT;
+  } else if (mode ==
+             protocol::Page::SetSPCTransactionMode::ModeEnum::AutoOptOut) {
+    spc_mode = payments::SPCTransactionMode::AUTOOPTOUT;
   } else if (mode != protocol::Page::SetSPCTransactionMode::ModeEnum::None) {
     return protocol::Response::ServerError("Unrecognized mode value");
   }
@@ -286,18 +289,18 @@ void PageHandler::GetAppId(std::unique_ptr<GetAppIdCallback> callback) {
 
 void PageHandler::OnDidGetManifest(std::unique_ptr<GetAppIdCallback> callback,
                                    const webapps::InstallableData& data) {
-  if (blink::IsEmptyManifest(data.manifest)) {
+  if (blink::IsEmptyManifest(*data.manifest)) {
     callback->sendSuccess(protocol::Maybe<protocol::String>(),
                           protocol::Maybe<protocol::String>());
     return;
   }
   absl::optional<std::string> id;
-  if (data.manifest.id.has_value()) {
-    id = base::UTF16ToUTF8(data.manifest.id.value());
+  if (data.manifest->id.has_value()) {
+    id = base::UTF16ToUTF8(data.manifest->id.value());
   }
   callback->sendSuccess(
-      web_app::GenerateAppIdUnhashed(id, data.manifest.start_url),
-      web_app::GenerateRecommendedId(data.manifest.start_url));
+      web_app::GenerateAppIdUnhashed(id, data.manifest->start_url),
+      web_app::GenerateRecommendedId(data.manifest->start_url));
 }
 
 #if BUILDFLAG(ENABLE_PRINTING)

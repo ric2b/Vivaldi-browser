@@ -15,7 +15,6 @@
 #include "content/public/test/browser_test.h"
 #include "fuchsia_web/common/test/frame_test_util.h"
 #include "fuchsia_web/common/test/test_navigation_listener.h"
-#include "fuchsia_web/webengine/browser/accessibility_bridge.h"
 #include "fuchsia_web/webengine/browser/context_impl.h"
 #include "fuchsia_web/webengine/browser/fake_semantics_manager.h"
 #include "fuchsia_web/webengine/browser/frame_impl.h"
@@ -110,7 +109,6 @@ class FuchsiaFrameAccessibilityTest : public WebEngineBrowserTest {
 
     frame_impl_ = context_impl()->GetFrameImplForTest(&frame_.ptr());
     frame_impl_->set_window_size_for_test(kTestWindowSize);
-    frame_impl_->set_use_v2_accessibility_bridge(true);
     frame_->EnableHeadlessRendering();
 
     semantics_manager_.WaitUntilViewRegistered();
@@ -176,7 +174,7 @@ IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest, DataSentWithBatching) {
 
   // Run until we expect more than a batch's worth of nodes to be present.
   semantics_manager_.semantic_tree()->RunUntilNodeCountAtLeast(kPage2NodeCount);
-  EXPECT_TRUE(semantics_manager_.semantic_tree()->GetNodeFromLabel(kNodeName));
+  semantics_manager_.semantic_tree()->RunUntilNodeWithLabelIsInTree(kNodeName);
 
   // Checks if the actual batching happened.
   EXPECT_GE(semantics_manager_.semantic_tree()->num_update_calls(), 18u);
@@ -206,7 +204,8 @@ IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest, NavigateFromPageToPage) {
 
   EXPECT_TRUE(
       semantics_manager_.semantic_tree()->GetNodeFromLabel(kPage2Title));
-  EXPECT_TRUE(semantics_manager_.semantic_tree()->GetNodeFromLabel(kNodeName));
+
+  semantics_manager_.semantic_tree()->RunUntilNodeWithLabelIsInTree(kNodeName);
 
   // Check that data from the first page has been deleted successfully.
   EXPECT_FALSE(
@@ -520,7 +519,7 @@ IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest, OutOfProcessIframe) {
       kPage2Title);
 
   // check that the iframe navigated to a different page.
-  EXPECT_TRUE(semantics_manager_.semantic_tree()->GetNodeFromLabel(kNodeName));
+  semantics_manager_.semantic_tree()->RunUntilNodeWithLabelIsInTree(kNodeName);
 
   // Old iframe data should be gone.
   EXPECT_FALSE(

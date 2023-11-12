@@ -27,6 +27,7 @@
 #include "components/sync_device_info/device_info_sync_service_impl.h"
 #include "components/sync_device_info/local_device_info_provider_impl.h"
 
+#include "components/prefs/pref_service.h"
 #include "sync/vivaldi_device_info_utils.h"
 
 // static

@@ -43,20 +43,14 @@
         {
           "builder": "fuchsia-x64-rel",
           "group": "tryserver.chromium.fuchsia"
-        },
-        {
-          "builder": "fuchsia_x64",
-          "group": "tryserver.chromium.fuchsia"
         }
       ]
     }
   },
-  "$build/goma": {
-    "enable_ats": true,
+  "$build/reclient": {
+    "instance": "rbe-chromium-trusted",
     "jobs": 500,
-    "rpc_extra_params": "?prod",
-    "server_host": "goma.chromium.org",
-    "use_luci_auth": true
+    "metrics_project": "chromium-reclient-metrics"
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

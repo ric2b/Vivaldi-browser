@@ -302,7 +302,7 @@ void AppShimController::PollForChromeReady(
   // Otherwise, try again after a brief delay.
   if (time_until_timeout < kPollPeriodMsec)
     LOG(FATAL) << "Timed out waiting for running chrome instance to be ready.";
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&AppShimController::PollForChromeReady,
                      base::Unretained(this),
@@ -369,8 +369,10 @@ void AppShimController::SendBootstrapOnShimConnected(
   app_shim_info->app_id = params_.app_id;
   app_shim_info->app_url = params_.app_url;
   app_shim_info->launch_type =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          app_mode::kLaunchedByChromeProcessId)
+      (base::CommandLine::ForCurrentProcess()->HasSwitch(
+           app_mode::kLaunchedByChromeProcessId) &&
+       !base::CommandLine::ForCurrentProcess()->HasSwitch(
+           app_mode::kIsNormalLaunch))
           ? chrome::mojom::AppShimLaunchType::kRegisterOnly
           : chrome::mojom::AppShimLaunchType::kNormal;
   app_shim_info->files = launch_files_;
@@ -527,7 +529,8 @@ void AppShimController::UpdateProfileMenu(
                                     action:@selector(profileMenuItemSelected:)
                              keyEquivalent:@""] autorelease];
     [item setTag:mojo_item->menu_index];
-    [item setState:mojo_item->active ? NSOnState : NSOffState];
+    [item setState:mojo_item->active ? NSControlStateValueOn
+                                     : NSControlStateValueOff];
     [item setTarget:profile_menu_target_.get()];
     gfx::Image icon(mojo_item->icon);
     [item setImage:icon.AsNSImage()];

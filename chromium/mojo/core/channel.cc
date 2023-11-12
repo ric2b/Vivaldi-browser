@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -17,8 +16,11 @@
 #include "base/memory/nonscannable_memory.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
+#include "base/process/current_process.h"
 #include "base/process/process_handle.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "mojo/core/configuration.h"
@@ -92,16 +94,17 @@ struct TrivialMessage;
 // the original Mojo Core implementation.
 struct IpczMessage : public Channel::Message {
   IpczMessage(base::span<const uint8_t> data,
-              std::vector<PlatformHandle> handles)
-      : data_(sizeof(IpczHeader) + data.size()) {
-    size_ = data_.size();
-    IpczHeader& header = *reinterpret_cast<IpczHeader*>(data_.data());
+              std::vector<PlatformHandle> handles) {
+    size_ = sizeof(IpczHeader) + data.size();
+    data_.reset(static_cast<char*>(base::AllocNonScannable(size_)));
+
+    IpczHeader& header = *reinterpret_cast<IpczHeader*>(data_.get());
     header.size = sizeof(IpczHeader);
 
     DCHECK_LE(handles.size(), std::numeric_limits<uint16_t>::max());
-    DCHECK_LE(data_.size(), std::numeric_limits<uint32_t>::max());
+    DCHECK_LE(size_, std::numeric_limits<uint32_t>::max());
     header.num_handles = static_cast<uint16_t>(handles.size());
-    header.num_bytes = static_cast<uint32_t>(data_.size());
+    header.num_bytes = static_cast<uint32_t>(size_);
     memcpy(&header + 1, data.data(), data.size());
 
     handles_.reserve(handles.size());
@@ -121,12 +124,12 @@ struct IpczMessage : public Channel::Message {
   }
   size_t NumHandlesForTransit() const override { return handles_.size(); }
 
-  const void* data() const override { return data_.data(); }
+  const void* data() const override { return data_.get(); }
   void* mutable_data() const override {
     NOTREACHED();
     return nullptr;
   }
-  size_t capacity() const override { return data_.size(); }
+  size_t capacity() const override { return size_; }
 
   bool ExtendPayload(size_t) override {
     NOTREACHED();
@@ -134,7 +137,7 @@ struct IpczMessage : public Channel::Message {
   }
 
  private:
-  std::vector<uint8_t> data_;
+  Channel::AlignedBuffer data_;
   std::vector<PlatformHandleInTransit> handles_;
 };
 
@@ -293,7 +296,7 @@ Channel::MessagePtr Channel::Message::CreateRawForFuzzing(
   message->size_ = data.size();
   if (data.size()) {
     message->data_ = MakeAlignedBuffer(data.size());
-    std::copy(data.begin(), data.end(), message->data_.get());
+    base::ranges::copy(data, message->data_.get());
   }
   return base::WrapUnique<Channel::Message>(message.release());
 }
@@ -949,6 +952,7 @@ bool Channel::OnReadComplete(size_t bytes_read, size_t* next_read_size_hint) {
                                            read_buffer_->num_occupied_bytes()),
                            next_read_size_hint);
     if (result == DispatchResult::kOK) {
+      MaybeLogHistogramForIPCMetrics(MessageType::kReceive);
       read_buffer_->Discard(*next_read_size_hint);
       *next_read_size_hint = 0;
     } else if (result == DispatchResult::kNotEnoughData) {
@@ -1093,6 +1097,24 @@ bool Channel::OnControlMessage(Message::MessageType message_type,
                                size_t payload_size,
                                std::vector<PlatformHandle> handles) {
   return false;
+}
+
+void Channel::MaybeLogHistogramForIPCMetrics(MessageType type) {
+  {
+    base::AutoLock hold(lock_);
+    if (!sub_sampler_.ShouldSample(0.001))
+      return;
+  }
+  if (type == MessageType::kSent) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Mojo.Channel.WriteSendMessageProcessType",
+        base::CurrentProcess::GetInstance().GetShortType({}));
+  }
+  if (type == MessageType::kReceive) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Mojo.Channel.WriteReceiveMessageProcessType",
+        base::CurrentProcess::GetInstance().GetShortType({}));
+  }
 }
 
 // Currently only Non-nacl CrOs, Linux, and Android support upgrades.

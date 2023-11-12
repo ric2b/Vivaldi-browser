@@ -13,7 +13,7 @@ var statusPromise = null;
  * Return the outstanding status promise, if any.
  * @return {string} - The status field or error message.
  */
-async function getOutstandingStatusPromise() { // eslint-disable-line no-unused-vars, max-len
+async function getOutstandingStatusPromise() {
   return statusPromise;
 }
 
@@ -84,7 +84,8 @@ function getTestMethodDataWithInstrument(
  * If not specified, the parameter is not set in the input data blob.
  * @return {string} - The status field or error message.
  */
-async function getSecurePaymentConfirmationStatus(credentialIdentifier, iconUrl, showOptOut) { // eslint-disable-line no-unused-vars, max-len
+async function getSecurePaymentConfirmationStatus(
+    credentialIdentifier, iconUrl, showOptOut) {
   statusPromise = getStatusForMethodData(
       getTestMethodData(credentialIdentifier, iconUrl, showOptOut));
   return statusPromise;
@@ -96,7 +97,7 @@ async function getSecurePaymentConfirmationStatus(credentialIdentifier, iconUrl,
  * request.
  * @return {string} - The status field or error message.
  */
-async function getSecurePaymentConfirmationStatusAfterCanMakePayment() { // eslint-disable-line no-unused-vars, max-len
+async function getSecurePaymentConfirmationStatusAfterCanMakePayment() {
   statusPromise = getStatusForMethodDataAfterCanMakePayment(
       getTestMethodData(), /* checkCanMakePaymentFirst = */true);
   return statusPromise;
@@ -110,7 +111,8 @@ async function getSecurePaymentConfirmationStatusAfterCanMakePayment() { // esli
  * @param {string} credentialIdentifier - base64 encoded credential identifier.
  * @return {string} - Output instrument icon string.
  */
-async function getSecurePaymentConfirmationResponseIconWithInstrument(paymentInstrument, credentialIdentifier) { // eslint-disable-line no-unused-vars, max-len
+async function getSecurePaymentConfirmationResponseIconWithInstrument(
+    paymentInstrument, credentialIdentifier) {
   const methodData = getTestMethodDataWithInstrument(
     paymentInstrument, credentialIdentifier);
   const request = new PaymentRequest(
@@ -130,7 +132,7 @@ async function getSecurePaymentConfirmationResponseIconWithInstrument(paymentIns
  * 'window.location.origin/icon.png' is used.
  * @return {string} - 'true', 'false', or error message on failure.
  */
-async function securePaymentConfirmationCanMakePayment(iconUrl) { // eslint-disable-line no-unused-vars, max-len
+async function securePaymentConfirmationCanMakePayment(iconUrl) {
   return canMakePaymentForMethodData(getTestMethodData(
       /* credentialIdentifier = */undefined, iconUrl));
 }
@@ -140,7 +142,7 @@ async function securePaymentConfirmationCanMakePayment(iconUrl) { // eslint-disa
  * canMakePayment twice, and returns the second value.
  * @return {string} - 'true', 'false', or error message on failure.
  */
-async function securePaymentConfirmationCanMakePaymentTwice() { // eslint-disable-line no-unused-vars, max-len
+async function securePaymentConfirmationCanMakePaymentTwice() {
   return canMakePaymentForMethodDataTwice(getTestMethodData());
 }
 
@@ -148,68 +150,19 @@ async function securePaymentConfirmationCanMakePaymentTwice() { // eslint-disabl
  * Checks whether secure payment confirmation has enrolled instruments.
  * @return {string} - 'true', 'false', or error message on failure.
  */
-async function securePaymentConfirmationHasEnrolledInstrument() { // eslint-disable-line no-unused-vars, max-len
+async function securePaymentConfirmationHasEnrolledInstrument() {
   return hasEnrolledInstrumentForMethodData(getTestMethodData());
 }
 
 /**
- * Creates a secure payment confirmation credential and returns "OK" on success.
- * @param {string} icon - The URL of the icon for the credential.
- * @return {string} - Either "OK" or an error string.
+ * Creates a secure payment confirmation credential, returning a JSON
+ * blob of information about the created credential.
+ *
+ * @param {string} userId - The user.id for the created credential.
+ * @return {Promise<object>} - Either information about the created credential
+ *     or an error message.
  */
-async function createPaymentCredential(icon) { // eslint-disable-line no-unused-vars, max-len
-  try {
-    // Intentionally ignore the result.
-    await createAndReturnPaymentCredential(icon);
-    return 'OK';
-  } catch (e) {
-    return e.toString();
-  }
-}
-
-/**
- * Creates a secure payment confirmation credential and returns its identifier.
- * @param {string} icon - The URL of the icon for the credential.
- * @return {string} - The base64 encoded identifier of the new credential,
- * or the error message.
- */
-async function createCredentialAndReturnItsIdentifier(icon) { // eslint-disable-line no-unused-vars, max-len
-  try {
-    const credential = await createAndReturnPaymentCredential(icon);
-    return btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-  } catch (e) {
-    return e.toString();
-  }
-}
-
-/**
- * Creates a secure payment confirmation credential and returns its
- * clientDataJSON.type field.
- * @param {string} icon - The URL of the icon for the credential.
- * @return {string} - The clientDataJson.type field of the new credential.
- */
-async function createCredentialAndReturnClientDataType(icon) { // eslint-disable-line no-unused-vars, max-len
-  const credential = await createAndReturnPaymentCredential(icon);
-  return JSON.parse(String.fromCharCode(...new Uint8Array(
-      credential.response.clientDataJSON))).type;
-}
-
-/**
- * Creates a secure payment confirmation credential and returns its type.
- * @param {string} icon - The URL of the icon for the credential.
- * @return {string} - Either "PaymentCredential" or "PublicKeyCredential".
- */
-async function createCredentialAndReturnItsType(icon) { // eslint-disable-line no-unused-vars, max-len
-  const credential = await createAndReturnPaymentCredential(icon);
-  return credential.constructor.name;
-}
-
-/**
- * Creates and returns a secure payment confirmation credential.
- * @param {string} icon - The URL of the icon for the credential.
- * @return {PaymentCredential} - The new credential.
- */
-async function createAndReturnPaymentCredential(icon) {
+async function createPaymentCredential(userId) {
   const textEncoder = new TextEncoder();
   const publicKeyRP = {
       id: 'a.com',
@@ -220,50 +173,26 @@ async function createAndReturnPaymentCredential(icon) {
       alg: -7,
   }];
   const publicKey = {
-      user: {
-        displayName: 'User',
-        id: textEncoder.encode('user_123'),
-        name: 'user@acme.com',
-      },
-      rp: publicKeyRP,
-      challenge: textEncoder.encode('climb a mountain'),
-      pubKeyCredParams: publicKeyParameters,
-      extensions: {payment: {isPayment: true}},
+    user: {
+      displayName: 'User',
+      id: textEncoder.encode(userId),
+      name: 'user@acme.com',
+    },
+    rp: publicKeyRP,
+    challenge: textEncoder.encode('climb a mountain'),
+    pubKeyCredParams: publicKeyParameters,
+    extensions: {payment: {isPayment: true}},
   };
-  return navigator.credentials.create({publicKey});
-}
 
-/**
- * Creates a public key credential with 'payment' extension and returns its
- * identifier in base64 encoding.
- * @param {string} userId - the user ID for the credential.
- * @return {DOMString} - The new credential's identifier in base64 encoding.
- */
-async function createPublicKeyCredentialWithPaymentExtensionAndReturnItsId(userId) { // eslint-disable-line no-unused-vars, max-len
   try {
-    const textEncoder = new TextEncoder();
-    const credential = await navigator.credentials.create({
-      publicKey: {
-        challenge: textEncoder.encode('climb a mountain'),
-        rp: {
-          id: 'a.com',
-          name: 'Acme',
-        },
-        user: {
-          displayName: 'User',
-          id: textEncoder.encode(userId),
-          name: 'user@acme.com',
-        },
-        pubKeyCredParams: [{
-          alg: -7,
-          type: 'public-key',
-        }],
-        timeout: 60000,
-        attestation: 'direct',
-        extensions: {payment: {isPayment: true}},
-      },
-    });
-    return btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    const credential = await navigator.credentials.create({publicKey});
+    const webIdlType = credential.constructor.name;
+    const type = JSON.parse(String.fromCharCode(...new Uint8Array(
+                                credential.response.clientDataJSON)))
+                     .type;
+    const id = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+
+    return JSON.stringify({webIdlType, type, id});
   } catch (e) {
     return e.toString();
   }

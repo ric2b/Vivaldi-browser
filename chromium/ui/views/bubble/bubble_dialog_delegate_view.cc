@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -43,6 +44,7 @@
 #include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/views/window/dialog_client_view.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "ui/base/win/shell.h"
@@ -243,7 +245,7 @@ class BubbleDialogDelegate::AnchorViewObserver : public ViewObserver {
  private:
   void AddToAnchorVector() {
     auto& vector = GetAnchorVector(anchor_view_);
-    DCHECK(vector.cend() == std::find(vector.cbegin(), vector.cend(), parent_));
+    DCHECK(!base::Contains(vector, parent_));
     vector.push_back(parent_);
   }
 
@@ -805,6 +807,16 @@ void BubbleDialogDelegate::OnAnchorBoundsChanged() {
   // TODO(pbos): Reconsider whether to update the anchor when the view isn't
   // drawn.
   SizeToContents();
+
+  // We will not accept input event a short time after anchored view changed.
+  UpdateInputProtectorsTimeStamp();
+}
+
+void BubbleDialogDelegate::UpdateInputProtectorsTimeStamp() {
+  if (auto* dialog = GetDialogClientView())
+    dialog->UpdateInputProtectorTimeStamp();
+
+  GetBubbleFrameView()->UpdateInputProtectorTimeStamp();
 }
 
 gfx::Rect BubbleDialogDelegate::GetBubbleBounds() {

@@ -803,11 +803,6 @@ void CompositorFrameReporter::TerminateReporter() {
       global_trackers_.dropped_frame_counter->AddGoodFrame();
   }
   global_trackers_.dropped_frame_counter->OnEndFrame(args_, frame_info);
-
-  if (discarded_partial_update_dependents_count_ > 0)
-    UMA_HISTOGRAM_CUSTOM_COUNTS(
-        "Graphics.Smoothness.Diagnostic.DiscardedDependentCount",
-        discarded_partial_update_dependents_count_, 1, 1000, 50);
 }
 
 void CompositorFrameReporter::EndCurrentStage(base::TimeTicks end_time) {
@@ -1474,9 +1469,9 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
       event_metrics->GetDispatchStageTimestamp(
           EventMetrics::DispatchStage::kGenerated);
 
-  // Determine the last valid stage in case kRendererMainFinished or
-  // kRendererCompositorFinished stages do not exist, otherwise there is not
-  // enough information for the prediction.
+  // Determine the last valid stage. First check kRendererMainFinished and if it
+  // doesn't exist, check kRendererCompositorFinished. If neither of them
+  // exists, there is not enough information for the prediction.
   EventMetrics::DispatchStage last_valid_stage =
       EventMetrics::DispatchStage::kGenerated;
   if (event_metrics->GetDispatchStageTimestamp(
@@ -1487,6 +1482,8 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
                  EventMetrics::DispatchStage::kRendererCompositorFinished) >
              dispatch_start_time) {
     last_valid_stage = EventMetrics::DispatchStage::kRendererCompositorFinished;
+  } else {
+    return;
   }
 
   base::TimeTicks dispatch_end_time =
@@ -1616,7 +1613,6 @@ void CompositorFrameReporter::DiscardOldPartialUpdateReporters() {
     auto& dependent = owned_partial_update_dependents_.front();
     dependent->set_has_partial_update(false);
     owned_partial_update_dependents_.pop();
-    discarded_partial_update_dependents_count_++;
   }
 
   // Remove dependent reporters from the front of `partial_update_dependents_`

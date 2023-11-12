@@ -14,6 +14,7 @@
 #include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/display/cursor_window_controller.h"
 #include "ash/keyboard/ui/keyboard_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/test_pref_service_provider.h"
@@ -68,6 +69,24 @@ class AccessibilityControllerTest : public AshTestBase {
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+TEST_F(AccessibilityControllerTest, ChangingCursorSizePrefChangesCursorSize) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+
+  prefs->SetBoolean(prefs::kAccessibilityLargeCursorEnabled, true);
+
+  CursorWindowController* cursor_window_controller =
+      Shell::Get()->window_tree_host_manager()->cursor_window_controller();
+
+  // Test all possible sizes
+  for (int size = 25; size <= 64; ++size) {
+    prefs->SetInteger(prefs::kAccessibilityLargeCursorDipSize, size);
+    auto bounds = cursor_window_controller->GetBoundsForTest();
+    EXPECT_EQ(bounds.height(), size);
+    EXPECT_EQ(bounds.width(), size);
+  }
+}
 
 TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
   PrefService* prefs =
@@ -881,6 +900,35 @@ TEST_F(AccessibilityControllerTest, DisableLargeCursorResetsSize) {
             prefs->GetInteger(prefs::kAccessibilityLargeCursorDipSize));
 }
 
+TEST_F(AccessibilityControllerTest, ChangingCursorColorPrefChangesCursorColor) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+
+  // Simulate using chrome settings webui to set cursor color, which also turns
+  // on the cursor color enabled pref.
+  prefs->SetInteger(prefs::kAccessibilityCursorColor, SK_ColorBLUE);
+  prefs->SetBoolean(prefs::kAccessibilityCursorColorEnabled, true);
+
+  CursorWindowController* cursor_window_controller =
+      Shell::Get()->window_tree_host_manager()->cursor_window_controller();
+
+  // Expect cursor color in cursor_window_controller to be blue.
+  EXPECT_EQ(SK_ColorBLUE, cursor_window_controller->GetCursorColorForTest());
+
+  // Set cursor color pref to green.
+  prefs->SetInteger(prefs::kAccessibilityCursorColor, SK_ColorGREEN);
+
+  // Expect cursor color in cursor_window_controller to be green.
+  EXPECT_EQ(SK_ColorGREEN, cursor_window_controller->GetCursorColorForTest());
+
+  // Simulate using chrome settings webui to set cursor color to black, which
+  // which also turns off the cursor color enabled pref.
+  prefs->SetInteger(prefs::kAccessibilityCursorColor, 0);
+  prefs->SetBoolean(prefs::kAccessibilityCursorColorEnabled, false);
+  EXPECT_EQ(kDefaultCursorColor,
+            cursor_window_controller->GetCursorColorForTest());
+}
+
 TEST_F(AccessibilityControllerTest, SetMonoAudioEnabled) {
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
@@ -1093,21 +1141,23 @@ TEST_F(AccessibilityControllerTest, SelectToSpeakStateChanges) {
 
 TEST_F(AccessibilityControllerTest,
        SpeechRecognitionDownloadSucceededNotification) {
-  const std::u16string kSucceededTitle = u"English speech files downloaded";
+  const std::u16string kSucceededTitle =
+      u"English speech files partially downloaded";
   const std::u16string kSucceededDescription =
-      u"Speech is now processed locally and Dictation works offline";
+      u"Speech is processed locally and dictation works offline, but some "
+      u"voice commands won’t work.";
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
 
-  controller->ShowSpeechRecognitionDownloadNotificationForDictation(true,
-                                                                    u"English");
+  controller->ShowNotificationForDictation(
+      DictationNotificationType::kOnlySodaDownloaded, u"English");
   message_center::NotificationList::Notifications notifications =
       MessageCenter::Get()->GetVisibleNotifications();
   ASSERT_EQ(1u, notifications.size());
   EXPECT_EQ(kSucceededTitle, (*notifications.begin())->title());
   EXPECT_EQ(kSucceededDescription, (*notifications.begin())->message());
   EXPECT_EQ(u"Dictation", (*notifications.begin())->display_source());
-  EXPECT_EQ(message_center::SystemNotificationWarningLevel::NORMAL,
+  EXPECT_EQ(message_center::SystemNotificationWarningLevel::CRITICAL_WARNING,
             (*notifications.begin())->system_notification_warning_level());
 }
 
@@ -1116,12 +1166,12 @@ TEST_F(AccessibilityControllerTest,
   const std::u16string kFailedTitle = u"Couldn't download English speech files";
   const std::u16string kFailedDescription =
       u"Download will be attempted later. Speech will be sent to Google for "
-      u"processing until download is completed.";
+      u"processing for now.";
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
 
-  controller->ShowSpeechRecognitionDownloadNotificationForDictation(false,
-                                                                    u"English");
+  controller->ShowNotificationForDictation(
+      DictationNotificationType::kNoDlcsDownloaded, u"English");
   message_center::NotificationList::Notifications notifications =
       MessageCenter::Get()->GetVisibleNotifications();
   ASSERT_EQ(1u, notifications.size());

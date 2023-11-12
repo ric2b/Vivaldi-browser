@@ -5,6 +5,7 @@
 #include "content/browser/preloading/prefetch/prefetch_document_manager.h"
 
 #include <algorithm>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -20,6 +21,10 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "net/http/http_no_vary_search_data.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/no_vary_search.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -41,6 +46,7 @@ PrefetchDocumentManager::~PrefetchDocumentManager() {
     return;
 
   for (const auto& prefetch_iter : owned_prefetches_) {
+    DCHECK(prefetch_iter.second);
     prefetch_service->RemovePrefetch(
         prefetch_iter.second->GetPrefetchContainerKey());
   }
@@ -71,26 +77,44 @@ void PrefetchDocumentManager::DidStartNavigation(
   serving_page_metrics_container->SetSameTabAsPrefetchingTab(true);
 
   // Get the prefetch for the URL being navigated to. If there is no prefetch
-  // for that URL, then stop.
+  // for that URL, then check if there is an equivalent prefetch using
+  // No-Vary-Search equivalence. If there is not then stop.
   auto prefetch_iter = all_prefetches_.find(navigation_handle->GetURL());
-  if (prefetch_iter == all_prefetches_.end() || !prefetch_iter->second)
-    return;
+  if (prefetch_iter == all_prefetches_.end() || !prefetch_iter->second) {
+    if (!no_vary_search_support_enabled_ ||
+        !base::FeatureList::IsEnabled(
+            network::features::kPrefetchNoVarySearch)) {
+      return;
+    }
+    const auto no_vary_search_match_url =
+        GetNoVarySearchHelper().MatchUrl(navigation_handle->GetURL());
+    if (!no_vary_search_match_url.has_value()) {
+      return;
+    }
+    // Find the prefetched url matching |navigation_handle->GetURL()| based on
+    // No-Vary-Search in |all_prefetches_|.
+    prefetch_iter = all_prefetches_.find(no_vary_search_match_url.value());
+    if (prefetch_iter == all_prefetches_.end() || !prefetch_iter->second) {
+      return;
+    }
+  }
 
   // If this prefetch has already been used with another navigation then stop.
   if (prefetch_iter->second->HasPrefetchBeenConsideredToServe())
     return;
 
-  serving_page_metrics_container->SetRequiredPrivatePrefetchProxy(
-      prefetch_iter->second->GetPrefetchType().IsProxyRequired());
-  serving_page_metrics_container->SetPrefetchHeaderLatency(
-      prefetch_iter->second->GetPrefetchHeaderLatency());
-  if (prefetch_iter->second->HasPrefetchStatus()) {
-    serving_page_metrics_container->SetPrefetchStatus(
-        prefetch_iter->second->GetPrefetchStatus());
-  }
+  prefetch_iter->second->SetServingPageMetrics(
+      serving_page_metrics_container->GetWeakPtr());
+  prefetch_iter->second->UpdateServingPageMetrics();
 
   // Inform |PrefetchService| of the navigation to the prefetch.
-  GetPrefetchService()->PrepareToServe(prefetch_iter->second);
+  // |navigation_handle->GetURL()| and |prefetched_iter->second->GetURL()|
+  // might be different but be equivalent under No-Vary-Search.
+  PrefetchService* prefetch_service = GetPrefetchService();
+  if (prefetch_service) {
+    prefetch_service->PrepareToServe(navigation_handle->GetURL(),
+                                     prefetch_iter->second);
+  }
 }
 
 void PrefetchDocumentManager::ProcessCandidates(
@@ -124,7 +148,8 @@ void PrefetchDocumentManager::ProcessCandidates(
           bool use_prefetch_proxy = !is_same_origin && private_prefetch;
           prefetches.emplace_back(
               candidate->url,
-              PrefetchType(use_isolated_network_context, use_prefetch_proxy),
+              PrefetchType(use_isolated_network_context, use_prefetch_proxy,
+                           candidate->eagerness),
               *candidate->referrer);
           return true;
         }
@@ -176,7 +201,10 @@ void PrefetchDocumentManager::PrefetchUrl(
 
   // Send a reference of the new |PrefetchContainer| to |PrefetchService| to
   // start the prefetch process.
-  GetPrefetchService()->PrefetchUrl(weak_container);
+  PrefetchService* prefetch_service = GetPrefetchService();
+  if (prefetch_service) {
+    prefetch_service->PrefetchUrl(weak_container);
+  }
 }
 
 std::unique_ptr<PrefetchContainer>
@@ -186,6 +214,63 @@ PrefetchDocumentManager::ReleasePrefetchContainer(const GURL& url) {
       std::move(owned_prefetches_[url]);
   owned_prefetches_.erase(url);
   return prefetch_container;
+}
+
+bool PrefetchDocumentManager::IsPrefetchAttemptFailedOrDiscarded(
+    const GURL& url) {
+  auto it = all_prefetches_.find(url);
+  if (it == all_prefetches_.end() || !it->second)
+    return true;
+
+  const auto& container = it->second;
+  if (!container->HasPrefetchStatus())
+    return false;  // the container is not processed yet
+
+  switch (container->GetPrefetchStatus()) {
+    case PrefetchStatus::kPrefetchSuccessful:
+    case PrefetchStatus::kPrefetchResponseUsed:
+      return false;
+    case PrefetchStatus::kPrefetchNotEligibleUserHasCookies:
+    case PrefetchStatus::kPrefetchNotEligibleUserHasServiceWorker:
+    case PrefetchStatus::kPrefetchNotEligibleGoogleDomain:
+    case PrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps:
+    case PrefetchStatus::kPrefetchNotEligibleNonDefaultStoragePartition:
+    case PrefetchStatus::kPrefetchPositionIneligible:
+    case PrefetchStatus::kPrefetchIneligibleRetryAfter:
+    case PrefetchStatus::kPrefetchProxyNotAvailable:
+    case PrefetchStatus::kPrefetchNotEligibleHostIsNonUnique:
+    case PrefetchStatus::kPrefetchNotEligibleDataSaverEnabled:
+    case PrefetchStatus::kPrefetchNotEligibleExistingProxy:
+    case PrefetchStatus::kPrefetchUsedNoProbe:
+    case PrefetchStatus::kPrefetchNotUsedProbeFailed:
+    case PrefetchStatus::kPrefetchNotStarted:
+    case PrefetchStatus::kPrefetchNotFinishedInTime:
+    case PrefetchStatus::kPrefetchFailedNetError:
+    case PrefetchStatus::kPrefetchFailedNon2XX:
+    case PrefetchStatus::kPrefetchFailedMIMENotSupported:
+    case PrefetchStatus::kNavigatedToLinkNotOnSRP:
+    case PrefetchStatus::kSubresourceThrottled:
+    case PrefetchStatus::kPrefetchUsedNoProbeWithNSP:
+    case PrefetchStatus::kPrefetchUsedProbeSuccessWithNSP:
+    case PrefetchStatus::kPrefetchNotUsedProbeFailedWithNSP:
+    case PrefetchStatus::kPrefetchUsedNoProbeNSPAttemptDenied:
+    case PrefetchStatus::kPrefetchUsedProbeSuccessNSPAttemptDenied:
+    case PrefetchStatus::kPrefetchNotUsedProbeFailedNSPAttemptDenied:
+    case PrefetchStatus::kPrefetchUsedNoProbeNSPNotStarted:
+    case PrefetchStatus::kPrefetchUsedProbeSuccessNSPNotStarted:
+    case PrefetchStatus::kPrefetchNotUsedProbeFailedNSPNotStarted:
+    case PrefetchStatus::kPrefetchIsPrivacyDecoy:
+    case PrefetchStatus::kPrefetchIsStale:
+    case PrefetchStatus::kPrefetchIsStaleWithNSP:
+    case PrefetchStatus::kPrefetchIsStaleNSPAttemptDenied:
+    case PrefetchStatus::kPrefetchIsStaleNSPNotStarted:
+    case PrefetchStatus::kPrefetchNotUsedCookiesChanged:
+    case PrefetchStatus::kPrefetchFailedRedirectsDisabled:
+    case PrefetchStatus::kPrefetchNotEligibleBrowserContextOffTheRecord:
+    case PrefetchStatus::kPrefetchHeldback:
+    case PrefetchStatus::kPrefetchAllowed:
+      return true;
+  }
 }
 
 // static
@@ -205,13 +290,38 @@ PrefetchService* PrefetchDocumentManager::GetPrefetchService() const {
       ->GetPrefetchService();
 }
 
+const NoVarySearchHelper& PrefetchDocumentManager::GetNoVarySearchHelper()
+    const {
+  return no_vary_search_helper_;
+}
+
 void PrefetchDocumentManager::OnEligibilityCheckComplete(bool is_eligible) {
   if (is_eligible)
     referring_page_metrics_.prefetch_eligible_count++;
 }
 
+void PrefetchDocumentManager::OnPrefetchedHeadReceived(const GURL& url) {
+  if (!no_vary_search_support_enabled_ ||
+      !base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch)) {
+    return;
+  }
+  // Find the PrefetchContainer associated with |url|.
+  const auto it = all_prefetches_.find(url);
+  if (it == all_prefetches_.end() || !it->second) {
+    return;
+  }
+
+  const auto* head = it->second->GetHead();
+  DCHECK(head);
+  no_vary_search_helper_.AddUrl(url, *head);
+}
+
 void PrefetchDocumentManager::OnPrefetchSuccessful() {
   referring_page_metrics_.prefetch_successful_count++;
+}
+
+void PrefetchDocumentManager::EnableNoVarySearchSupport() {
+  no_vary_search_support_enabled_ = true;
 }
 
 DOCUMENT_USER_DATA_KEY_IMPL(PrefetchDocumentManager);

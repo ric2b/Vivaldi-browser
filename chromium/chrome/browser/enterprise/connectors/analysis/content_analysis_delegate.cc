@@ -65,26 +65,18 @@ ContentAnalysisDelegate::Factory* GetFactoryStorage() {
   return factory.get();
 }
 
-// A BinaryUploadService::Request implementation that gets the data to scan
-// from a string.
-class StringAnalysisRequest : public BinaryUploadService::Request {
- public:
-  StringAnalysisRequest(CloudOrLocalAnalysisSettings settings,
-                        std::string text,
-                        BinaryUploadService::ContentAnalysisCallback callback);
-  ~StringAnalysisRequest() override;
+bool* UIEnabledStorage() {
+  static bool enabled = true;
+  return &enabled;
+}
 
-  StringAnalysisRequest(const StringAnalysisRequest&) = delete;
-  StringAnalysisRequest& operator=(const StringAnalysisRequest&) = delete;
+ContentAnalysisDelegate::OnAckAllRequestsCallback* OnAckAllRequestsStorage() {
+  static base::NoDestructor<ContentAnalysisDelegate::OnAckAllRequestsCallback>
+      callback;
+  return callback.get();
+}
 
-  // BinaryUploadService::Request implementation.
-  void GetRequestData(DataCallback callback) override;
-
- private:
-  Data data_;
-  BinaryUploadService::Result result_ =
-      BinaryUploadService::Result::FILE_TOO_LARGE;
-};
+}  // namespace
 
 StringAnalysisRequest::StringAnalysisRequest(
     CloudOrLocalAnalysisSettings settings,
@@ -110,15 +102,8 @@ StringAnalysisRequest::~StringAnalysisRequest() {
 }
 
 void StringAnalysisRequest::GetRequestData(DataCallback callback) {
-  std::move(callback).Run(result_, std::move(data_));
+  std::move(callback).Run(result_, data_);
 }
-
-bool* UIEnabledStorage() {
-  static bool enabled = true;
-  return &enabled;
-}
-
-}  // namespace
 
 ContentAnalysisDelegate::Data::Data() = default;
 ContentAnalysisDelegate::Data::Data(Data&& other) = default;
@@ -180,10 +165,20 @@ void ContentAnalysisDelegate::Cancel(bool warning) {
   // Don't report this upload as cancelled if the user didn't bypass the
   // warning.
   if (!warning) {
-    RecordDeepScanMetrics(access_point_,
-                          base::TimeTicks::Now() - upload_start_time_, 0,
-                          "CancelledByUser", false);
+    RecordDeepScanMetrics(
+        data_.settings.cloud_or_local_settings.is_cloud_analysis(),
+        access_point_, base::TimeTicks::Now() - upload_start_time_, 0,
+        "CancelledByUser", false);
   }
+
+  // Ask the binary upload service to cancel requests if it can.
+  auto cancel = std::make_unique<BinaryUploadService::CancelRequests>(
+      data_.settings.cloud_or_local_settings);
+  cancel->set_user_action_id(user_action_id_);
+
+  BinaryUploadService* upload_service = GetBinaryUploadService();
+  if (upload_service)
+    upload_service->MaybeCancelRequests(std::move(cancel));
 
   // Make sure to reject everything.
   FillAllResultsWith(false);
@@ -288,7 +283,10 @@ void ContentAnalysisDelegate::CreateForWebContents(
 
     // This dialog is owned by the constrained_window code.
     delegate_ptr->dialog_ = new ContentAnalysisDialog(
-        std::move(delegate), web_contents, access_point, files_count);
+        std::move(delegate),
+        delegate_ptr->data_.settings.cloud_or_local_settings
+            .is_cloud_analysis(),
+        web_contents, access_point, files_count);
     return;
   }
 
@@ -324,6 +322,12 @@ void ContentAnalysisDelegate::DisableUIForTesting() {
   *UIEnabledStorage() = false;
 }
 
+// static
+void ContentAnalysisDelegate::SetOnAckAllRequestsCallbackForTesting(
+    OnAckAllRequestsCallback callback) {
+  *OnAckAllRequestsStorage() = std::move(callback);
+}
+
 ContentAnalysisDelegate::ContentAnalysisDelegate(
     content::WebContents* web_contents,
     Data data,
@@ -354,9 +358,10 @@ void ContentAnalysisDelegate::StringRequestCallback(
   int64_t content_size = 0;
   for (const std::string& entry : data_.text)
     content_size += entry.size();
-  RecordDeepScanMetrics(access_point_,
-                        base::TimeTicks::Now() - upload_start_time_,
-                        content_size, result, response);
+  RecordDeepScanMetrics(
+      data_.settings.cloud_or_local_settings.is_cloud_analysis(), access_point_,
+      base::TimeTicks::Now() - upload_start_time_, content_size, result,
+      response);
 
   text_request_complete_ = true;
 
@@ -402,6 +407,7 @@ void ContentAnalysisDelegate::FilesRequestCallback(
     }
     UpdateFinalResult(result, results[index].tag);
   }
+  files_request_results_ = std::move(results);
   files_request_complete_ = true;
 
   MaybeCompleteScanRequest();
@@ -424,8 +430,7 @@ bool ContentAnalysisDelegate::CancelDialog() {
   if (!dialog_)
     return false;
 
-  dialog_->CancelDialog();
-  return true;
+  return dialog_->CancelDialogAndDelete();
 }
 
 void ContentAnalysisDelegate::PageRequestCallback(
@@ -435,9 +440,10 @@ void ContentAnalysisDelegate::PageRequestCallback(
   if (result == safe_browsing::BinaryUploadService::Result::SUCCESS)
     final_actions_[response.request_token()] = GetAckFinalAction(response);
 
-  RecordDeepScanMetrics(access_point_,
-                        base::TimeTicks::Now() - upload_start_time_,
-                        page_size_bytes_, result, response);
+  RecordDeepScanMetrics(
+      data_.settings.cloud_or_local_settings.is_cloud_analysis(), access_point_,
+      base::TimeTicks::Now() - upload_start_time_, page_size_bytes_, result,
+      response);
 
   page_request_complete_ = true;
 
@@ -615,12 +621,12 @@ void ContentAnalysisDelegate::MaybeCompleteScanRequest() {
     return;
   }
 
-  AckAllRequests();
-
   // If showing the warning message, wait before running the callback. The
   // callback will be called either in BypassWarnings or Cancel.
   if (final_result_ != FinalContentAnalysisResult::WARNING)
     RunCallback();
+
+  AckAllRequests();
 
   if (!UpdateDialog() && data_uploaded_) {
     // No UI was shown.  Delete |this| to cleanup, unless UploadData isn't done
@@ -630,8 +636,22 @@ void ContentAnalysisDelegate::MaybeCompleteScanRequest() {
 }
 
 void ContentAnalysisDelegate::RunCallback() {
-  if (!callback_.is_null())
-    std::move(callback_).Run(data_, result_);
+  if (callback_.is_null())
+    return;
+
+  std::move(callback_).Run(data_, result_);
+
+  // Since `result_` might have been tweaked by `callback_`, `final_actions_`
+  // need to be updated before Acks are sent.
+  for (size_t i = 0; i < result_.paths_results.size(); ++i) {
+    if (!result_.paths_results[i] && files_request_results_.size() > i &&
+        final_actions_.count(files_request_results_[i].request_token) &&
+        final_actions_[files_request_results_[i].request_token] ==
+            ContentAnalysisAcknowledgement::ALLOW) {
+      final_actions_[files_request_results_[i].request_token] =
+          ContentAnalysisAcknowledgement::BLOCK;
+    }
+  }
 }
 
 void ContentAnalysisDelegate::UpdateFinalResult(
@@ -644,17 +664,25 @@ void ContentAnalysisDelegate::UpdateFinalResult(
 }
 
 void ContentAnalysisDelegate::AckAllRequests() {
+  if (!OnAckAllRequestsStorage()->is_null())
+    std::move(*OnAckAllRequestsStorage()).Run(final_actions_);
+
   BinaryUploadService* upload_service = GetBinaryUploadService();
   if (!upload_service)
     return;
 
   for (const auto& token_and_action : final_actions_) {
-    auto ack = std::make_unique<safe_browsing::BinaryUploadService::Ack>(
-        data_.settings.cloud_or_local_settings);
-    ack->set_request_token(token_and_action.first);
-    ack->set_status(ContentAnalysisAcknowledgement::SUCCESS);
-    ack->set_final_action(token_and_action.second);
-    upload_service->MaybeAcknowledge(std::move(ack));
+    // Only have files that have a request token. Not having one implies that
+    // the agent never received the request for some reason (size, encryption,
+    // etc.) so it doesn't make sense to send an ack.
+    if (!token_and_action.first.empty()) {
+      auto ack = std::make_unique<safe_browsing::BinaryUploadService::Ack>(
+          data_.settings.cloud_or_local_settings);
+      ack->set_request_token(token_and_action.first);
+      ack->set_status(ContentAnalysisAcknowledgement::SUCCESS);
+      ack->set_final_action(token_and_action.second);
+      upload_service->MaybeAcknowledge(std::move(ack));
+    }
   }
 }
 

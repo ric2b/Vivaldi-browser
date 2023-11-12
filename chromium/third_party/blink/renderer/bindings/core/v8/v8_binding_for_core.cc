@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 
 #include "base/debug/dump_without_crashing.h"
-#include "third_party/blink/renderer/bindings/core/v8/custom/v8_custom_xpath_ns_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -41,9 +40,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_script_runner.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_worker_global_scope.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_worklet_global_scope.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_xpath_ns_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -55,11 +51,11 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
+#include "third_party/blink/renderer/core/shadow_realm/shadow_realm_global_scope.h"
 #include "third_party/blink/renderer/core/typed_arrays/flexible_array_buffer_view.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
-#include "third_party/blink/renderer/core/xml/xpath_ns_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding_macros.h"
@@ -634,18 +630,6 @@ String ReplaceUnmatchedSurrogates(String string) {
   return String::Adopt(result);
 }
 
-XPathNSResolver* ToXPathNSResolver(ScriptState* script_state,
-                                   v8::Local<v8::Value> value) {
-  XPathNSResolver* resolver = nullptr;
-  if (V8XPathNSResolver::HasInstance(value, script_state->GetIsolate())) {
-    resolver = V8XPathNSResolver::ToImpl(v8::Local<v8::Object>::Cast(value));
-  } else if (value->IsObject()) {
-    resolver = MakeGarbageCollected<V8CustomXPathNSResolver>(
-        script_state, value.As<v8::Object>());
-  }
-  return resolver;
-}
-
 DOMWindow* ToDOMWindow(v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return V8Window::ToImplWithTypeCheck(isolate, value);
 }
@@ -696,13 +680,15 @@ ExecutionContext* ToExecutionContext(v8::Local<v8::Context> context) {
   if (global_proxy->InternalFieldCount() == 0)
     return nullptr;
 
-  const WrapperTypeInfo* wrapper_type_info = ToWrapperTypeInfo(global_proxy);
-  if (wrapper_type_info->Equals(V8Window::GetWrapperTypeInfo()))
-    return V8Window::ToImpl(global_proxy)->GetExecutionContext();
-  if (wrapper_type_info->IsSubclass(V8WorkerGlobalScope::GetWrapperTypeInfo()))
-    return V8WorkerGlobalScope::ToImpl(global_proxy)->GetExecutionContext();
-  if (wrapper_type_info->IsSubclass(V8WorkletGlobalScope::GetWrapperTypeInfo()))
-    return V8WorkletGlobalScope::ToImpl(global_proxy)->GetExecutionContext();
+  ScriptWrappable::TypeDispatcher dispatcher(ToScriptWrappable(global_proxy));
+  if (auto* x = dispatcher.ToMostDerived<DOMWindow>())
+    return x->GetExecutionContext();
+  if (auto* x = dispatcher.DowncastTo<WorkerGlobalScope>())
+    return x->GetExecutionContext();
+  if (auto* x = dispatcher.DowncastTo<WorkletGlobalScope>())
+    return x->GetExecutionContext();
+  if (auto* x = dispatcher.ToMostDerived<ShadowRealmGlobalScope>())
+    return x->GetExecutionContext();
 
   NOTREACHED();
   return nullptr;

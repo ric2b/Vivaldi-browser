@@ -42,6 +42,7 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/bvc_container_view_controller.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_mediator.h"
@@ -54,6 +55,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_context_menu_helper.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator+private.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
@@ -64,6 +66,7 @@
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -71,9 +74,12 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
-// Vivaldigit
-#import "ios/notes/note_interaction_controller.h"
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/panel/panel_interaction_controller.h"
 
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -95,6 +101,10 @@
   // The controller that shows the bookmarking UI after the user taps the Add
   // to Bookmarks button.
   BookmarkInteractionController* _bookmarkInteractionController;
+
+  // Vivaldi
+  PanelInteractionController* _panelInteractionController;
+  // End Vivaldi
 }
 
 @property(nonatomic, assign, readonly) Browser* regularBrowser;
@@ -329,6 +339,10 @@
     return;
   [base::mac::ObjCCast<TabGridViewController>(self.baseViewController)
       prepareForAppearance];
+  if (IsTabGridSortedByRecency()) {
+    [self.incognitoTabsMediator prepareToShowTabGrid];
+    [self.regularTabsMediator prepareToShowTabGrid];
+  }
 }
 
 - (void)showTabGrid {
@@ -482,10 +496,6 @@
     if (!GetFirstResponder()) {
       // It is possible to already have a first responder (for example the
       // omnibox). In that case, we don't want to mark BVC as first responder.
-      // TODO(crbug.com/1223090): Adding DCHECK below to confirm hypothesis
-      // that `-becomeFirstResponder` is crashing due to `currentBVC` not
-      // being in the view hierarchy.
-      DCHECK(self.bvcContainer.currentBVC.view.window);
       [self.bvcContainer.currentBVC becomeFirstResponder];
     }
     if (completion) {
@@ -636,6 +646,8 @@
       HandlerForProtocol(self.dispatcher, IncognitoReauthCommands);
   baseViewController.reauthAgent = reauthAgent;
   baseViewController.tabPresentationDelegate = self;
+  baseViewController.layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
   baseViewController.delegate = self;
   _baseViewController = baseViewController;
 
@@ -685,7 +697,8 @@
 
   // Vivaldi
   [self setupRecentlyClosedTab:baseViewController
-           regularBrowserState:regularBrowserState regularWebStateList:regularWebStateList];
+           regularBrowserState:regularBrowserState
+           regularWebStateList:regularWebStateList];
   // End Vivaldi
 
   self.regularTabsGridContextMenuHelper =
@@ -708,9 +721,6 @@
   self.remoteTabsMediator.browserState = regularBrowserState;
   self.remoteTabsMediator.consumer = baseViewController.remoteTabsConsumer;
   self.remoteTabsMediator.webStateList = regularWebStateList;
-  // TODO(crbug.com/845636) : Currently, the image data source must be set
-  // before the mediator starts updating its consumer. Fix this so that order of
-  // calls does not matter.
   baseViewController.remoteTabsViewController.imageDataSource =
       self.remoteTabsMediator;
   baseViewController.remoteTabsViewController.delegate =
@@ -995,6 +1005,7 @@
 
   const TemplateURL* searchURLTemplate =
       templateURLService->GetDefaultSearchProvider();
+  DCHECK(searchURLTemplate);
 
   TemplateURLRef::SearchTermsArgs searchArgs(
       base::SysNSStringToUTF16(searchText));
@@ -1005,6 +1016,16 @@
 }
 
 - (void)showHistoryFilteredBySearchText:(NSString*)searchText {
+
+  // Vivaldi
+  if (IsVivaldiRunning()){
+      [self initializePanelInteractionController];
+      [_panelInteractionController presentPanel:PanelPage::HistoryPage
+                               withSearchString:searchText];
+      return;
+  }
+  // End Vivaldi
+
   // A history coordinator from main_controller won't work properly from the
   // tab grid. Using a local coordinator works better and we need to set
   // `loadStrategy` to YES to ALWAYS_NEW_FOREGROUND_TAB.
@@ -1118,6 +1139,14 @@
   [self.bookmarkInteractionController presentBookmarkEditorForURL:URL];
 }
 
+- (void)pinTabWithIdentifier:(NSString*)identifier incognito:(BOOL)incognito {
+  if (incognito) {
+    [self.incognitoTabsMediator pinItemWithID:identifier];
+  } else {
+    [self.regularTabsMediator pinItemWithID:identifier];
+  }
+}
+
 - (void)closeTabWithIdentifier:(NSString*)identifier incognito:(BOOL)incognito {
   if (incognito) {
     [self.incognitoTabsMediator closeItemWithID:identifier];
@@ -1197,7 +1226,7 @@
 #pragma mark - SnackbarCoordinatorDelegate
 
 - (CGFloat)bottomOffsetForCurrentlyPresentedView {
-  NamedGuide* bottomToolbarGuide = nil;
+  UILayoutGuide* bottomToolbarGuide = nil;
   if ([self.bvcContainer currentBVC]) {
     // Use the BVC bottom bar as the offset as it is currently presented.
     bottomToolbarGuide =
@@ -1205,16 +1234,12 @@
                              view:self.bvcContainer.currentBVC.view];
   } else {
     // The tab grid is being show so use tab grid bottom bar.
-    bottomToolbarGuide =
-        [NamedGuide guideWithName:kTabGridBottomToolbarGuide
-                             view:self.baseViewController.view];
+    bottomToolbarGuide = [LayoutGuideCenterForBrowser(self.browser)
+        makeLayoutGuideNamed:kTabGridBottomToolbarGuide];
+    [self.baseViewController.view addLayoutGuide:bottomToolbarGuide];
   }
 
-  if (!bottomToolbarGuide) {
-    return 0.0;
-  }
-
-  return bottomToolbarGuide.constrainedView.frame.size.height;
+  return CGRectGetHeight(bottomToolbarGuide.layoutFrame);
 }
 
 #pragma mark - Vivaldi
@@ -1226,10 +1251,10 @@
   // Context menu setup
   self.closedTabsContextMenuHelper =
       [[RecentTabsContextMenuHelper alloc] initWithBrowser:self.regularBrowser
-              recentTabsPresentationDelegate:self
-              tabContextMenuDelegate:self];
+                            recentTabsPresentationDelegate:self
+                                    tabContextMenuDelegate:self];
   self.baseViewController.closedTabsViewController.menuProvider =
-  self.closedTabsContextMenuHelper;
+      self.closedTabsContextMenuHelper;
 
   // Recently closed tab setup
   baseViewController.closedTabsViewController.browser = self.regularBrowser;
@@ -1250,13 +1275,21 @@
       WindowOpenDisposition::NEW_FOREGROUND_TAB;
   baseViewController.closedTabsViewController.presentationDelegate = self;
 
-  self.firstPresentation = YES;
-
-  self.window.rootViewController = self.baseViewController;
   if (self.closedTabsMediator.browserState) {
     [self.closedTabsMediator initObservers];
     [self.closedTabsMediator refreshSessionsView];
   }
 }
+
+// Initializes the panel interaction controller if not already initialized.
+- (void)initializePanelInteractionController {
+  if (_panelInteractionController) {
+    return;
+  }
+  _panelInteractionController =
+      [[PanelInteractionController alloc] initWithBrowser: self.regularBrowser];
+  _panelInteractionController.parentController = self.baseViewController;
+}
+// End Vivaldi
 
 @end

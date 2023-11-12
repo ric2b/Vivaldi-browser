@@ -27,6 +27,7 @@ import org.chromium.components.version_info.VersionConstants;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
@@ -75,17 +76,23 @@ public class ServiceTracingProxyProvider {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            if (!ThreadUtils.runningOnUiThread()) return method.invoke(mSystemImpl, args);
+            try {
+                if (!ThreadUtils.runningOnUiThread()) return method.invoke(mSystemImpl, args);
 
-            long start = SystemClock.elapsedRealtime();
-            Object result = method.invoke(mSystemImpl, args);
-            long durationMs = SystemClock.elapsedRealtime() - start;
+                long start = SystemClock.elapsedRealtime();
+                Object result = method.invoke(mSystemImpl, args);
+                long durationMs = SystemClock.elapsedRealtime() - start;
 
-            if (durationMs >= MINIMUM_IPC_TRACE_DURATION_MS) {
-                TraceEvent.instantAndroidIPC(
-                        mSystemImpl.getClass().getName() + "#" + method.getName(), durationMs);
+                if (durationMs >= MINIMUM_IPC_TRACE_DURATION_MS) {
+                    TraceEvent.instantAndroidIPC(
+                            mSystemImpl.getClass().getName() + "#" + method.getName(), durationMs);
+                }
+                return result;
+            } catch (InvocationTargetException e) {
+                // Need to rethrow the cause or the proxy will generate
+                // UndeclaredThrowableExceptions that callers won't be expecting.
+                throw e.getCause();
             }
-            return result;
         }
     }
 
@@ -100,9 +107,8 @@ public class ServiceTracingProxyProvider {
         // A lot of service bindings were uncached pre-R, so easier to start tracing at R+.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false;
 
-        // TODO(https://crbug.com/1339984): Enable for Beta once this has time to stabilize on
-        // Canary/Dev.
-        if (VersionConstants.CHANNEL > Channel.DEV) return false;
+        // Don't ship this tracing to Stable.
+        if (VersionConstants.CHANNEL > Channel.BETA) return false;
 
         // static init failed.
         if (sGetDeclaredMethod == null) return false;
@@ -130,6 +136,10 @@ public class ServiceTracingProxyProvider {
             for (int i = 0; i < mServiceCacheProxied.length; ++i) {
                 mServiceCacheProxied[i] = new AtomicBoolean(false);
             }
+            // Force the window service to be accessed and added to the service cache immediately.
+            // This will make sure it is proxied before ViewRootImpl can cache an unproxied
+            // WindowSession.
+            unwrappedBaseContext.getSystemService(Context.WINDOW_SERVICE);
         } catch (Throwable throwable) {
             Log.d(TAG, TRACE_FAILED, throwable);
             mServiceCache = new Object[0];
@@ -169,8 +179,10 @@ public class ServiceTracingProxyProvider {
             // Class defers to WindowManagerGlobal.
             Class clazz = Class.forName("android.view.WindowManagerGlobal");
             Object managerGlobal = callNoArgMethod(null, clazz, "getInstance");
-            // Static service is unpopulated until used.
+            // Static service and WindowSession are unpopulated until used. Access them now so that
+            // the fields are populated when we inspect them for proxying.
             callNoArgMethod(null, managerGlobal.getClass(), "getWindowManagerService");
+            callNoArgMethod(null, managerGlobal.getClass(), "getWindowSession");
             return managerGlobal;
         }
         if (service.getClass().equals(ActivityManager.class)) {

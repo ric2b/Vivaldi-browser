@@ -640,11 +640,13 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
       const blink::web_pref::WebPreferences& r) {
     return r.disable_accelerated_small_canvases;
   }
+#endif  // BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
   static bool disable_webauthn(const blink::web_pref::WebPreferences& r) {
     return r.disable_webauthn;
   }
-#endif
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
 
   static bool force_dark_mode_enabled(
       const blink::web_pref::WebPreferences& r) {
@@ -762,6 +764,10 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static bool strict_mime_type_check_for_worker_scripts_enabled(
       const blink::web_pref::WebPreferences& r) {
     return r.strict_mime_type_check_for_worker_scripts_enabled;
+  }
+
+  static bool modal_context_menu(const blink::web_pref::WebPreferences& r) {
+    return r.modal_context_menu;
   }
 
   static bool allow_tab_cycle_from_webpage_into_ui(

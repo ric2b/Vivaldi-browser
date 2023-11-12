@@ -11,11 +11,13 @@
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/test/gmock_move_support.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/aggregation_service/aggregation_service.mojom.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
@@ -41,6 +43,9 @@ namespace {
 using testing::_;
 using testing::Invoke;
 using testing::Property;
+
+constexpr char kSendHistogramReportResultHistogram[] =
+    "PrivacySandbox.PrivateAggregation.Host.SendHistogramReportResult";
 
 class PrivateAggregationHostTest : public testing::Test {
  public:
@@ -68,6 +73,8 @@ class PrivateAggregationHostTest : public testing::Test {
 
 TEST_F(PrivateAggregationHostTest,
        SendHistogramReport_ReportRequestHasCorrectMembers) {
+  base::HistogramTester histogram;
+
   const url::Origin kExampleOrigin =
       url::Origin::Create(GURL("https://example.com"));
   const url::Origin kMainFrameOrigin =
@@ -112,7 +119,8 @@ TEST_F(PrivateAggregationHostTest,
               AggregationServicePayloadContents::Operation::kHistogram,
               {mojom::AggregatableReportHistogramContribution(
                   /*bucket=*/123, /*value=*/456)},
-              mojom::AggregationServiceMode::kDefault),
+              mojom::AggregationServiceMode::kDefault,
+              ::aggregation_service::mojom::AggregationCoordinator::kDefault),
           AggregatableReportSharedInfo(
               validated_request->shared_info().scheduled_report_time,
               validated_request->shared_info().report_id,
@@ -126,9 +134,15 @@ TEST_F(PrivateAggregationHostTest,
 
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
       validated_request.value(), expected_request.value()));
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kSuccess, 1);
 }
 
 TEST_F(PrivateAggregationHostTest, ApiDiffers_RequestUpdatesCorrectly) {
+  base::HistogramTester histogram;
+
   const url::Origin kExampleOrigin =
       url::Origin::Create(GURL("https://example.com"));
   const url::Origin kMainFrameOrigin =
@@ -172,9 +186,15 @@ TEST_F(PrivateAggregationHostTest, ApiDiffers_RequestUpdatesCorrectly) {
   EXPECT_EQ(validated_requests[0]->shared_info().api_identifier, "fledge");
   EXPECT_EQ(validated_requests[1]->shared_info().api_identifier,
             "shared-storage");
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kSuccess, 2);
 }
 
 TEST_F(PrivateAggregationHostTest, DebugModeDetails_ReflectedInReport) {
+  base::HistogramTester histogram;
+
   const url::Origin kExampleOrigin =
       url::Origin::Create(GURL("https://example.com"));
   const url::Origin kMainFrameOrigin =
@@ -182,8 +202,8 @@ TEST_F(PrivateAggregationHostTest, DebugModeDetails_ReflectedInReport) {
 
   std::vector<mojom::DebugModeDetailsPtr> debug_mode_details_args;
   debug_mode_details_args.push_back(mojom::DebugModeDetails::New());
-  debug_mode_details_args.push_back(
-      mojom::DebugModeDetails::New(/*is_enabled=*/true, /*debug_key=*/nullptr));
+  debug_mode_details_args.push_back(mojom::DebugModeDetails::New(
+      /*is_enabled=*/true, /*debug_key=*/nullptr));
   debug_mode_details_args.push_back(mojom::DebugModeDetails::New(
       /*is_enabled=*/true,
       /*debug_key=*/mojom::DebugKey::New(/*value=*/1234u)));
@@ -227,10 +247,16 @@ TEST_F(PrivateAggregationHostTest, DebugModeDetails_ReflectedInReport) {
   EXPECT_EQ(validated_requests[0]->debug_key(), absl::nullopt);
   EXPECT_EQ(validated_requests[1]->debug_key(), absl::nullopt);
   EXPECT_EQ(validated_requests[2]->debug_key(), 1234u);
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kSuccess, 3);
 }
 
 TEST_F(PrivateAggregationHostTest,
        MultipleReceievers_SendHistogramReportCallsRoutedCorrectly) {
+  base::HistogramTester histogram;
+
   const url::Origin kExampleOriginA =
       url::Origin::Create(GURL("https://a.example"));
   const url::Origin kExampleOriginB =
@@ -305,9 +331,15 @@ TEST_F(PrivateAggregationHostTest,
     remote.FlushForTesting();
     EXPECT_TRUE(remote.is_connected());
   }
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kSuccess, 2);
 }
 
 TEST_F(PrivateAggregationHostTest, BindUntrustworthyOriginReceiver_Fails) {
+  base::HistogramTester histogram;
+
   const url::Origin kInsecureOrigin =
       url::Origin::Create(GURL("http://example.com"));
   const url::Origin kOpaqueOrigin;
@@ -324,8 +356,8 @@ TEST_F(PrivateAggregationHostTest, BindUntrustworthyOriginReceiver_Fails) {
                                       PrivateAggregationBudgetKey::Api::kFledge,
                                       remote_2.BindNewPipeAndPassReceiver()));
 
-  // Attempt to send a message to an unconnected remote. The request should not
-  // be processed.
+  // Attempt to send a message to an unconnected remote. The request should
+  // not be processed.
   EXPECT_CALL(mock_callback_, Run(_, _)).Times(0);
   std::vector<mojom::AggregatableReportHistogramContributionPtr> contributions;
   contributions.push_back(mojom::AggregatableReportHistogramContribution::New(
@@ -340,6 +372,8 @@ TEST_F(PrivateAggregationHostTest, BindUntrustworthyOriginReceiver_Fails) {
   remote_2.FlushForTesting();
   EXPECT_FALSE(remote_1.is_connected());
   EXPECT_FALSE(remote_2.is_connected());
+
+  histogram.ExpectTotalCount(kSendHistogramReportResultHistogram, 0);
 }
 
 TEST_F(PrivateAggregationHostTest, InvalidRequest_Rejected) {
@@ -376,21 +410,52 @@ TEST_F(PrivateAggregationHostTest, InvalidRequest_Rejected) {
           /*bucket=*/123, /*value=*/456));
 
   EXPECT_CALL(mock_callback_, Run(_, _)).Times(0);
-  remote->SendHistogramReport(std::move(negative_contributions),
-                              mojom::AggregationServiceMode::kDefault,
-                              mojom::DebugModeDetails::New());
-  remote->SendHistogramReport(std::move(too_many_contributions),
-                              mojom::AggregationServiceMode::kDefault,
-                              mojom::DebugModeDetails::New());
-  remote->SendHistogramReport(
-      std::move(valid_contributions), mojom::AggregationServiceMode::kDefault,
-      // Debug mode must be enabled for a debug key to be set.
-      mojom::DebugModeDetails::New(
-          /*is_enabled=*/false, /*debug_key=*/mojom::DebugKey::New(1234u)));
-  remote.FlushForTesting();
+
+  {
+    base::HistogramTester histogram;
+    remote->SendHistogramReport(std::move(negative_contributions),
+                                mojom::AggregationServiceMode::kDefault,
+                                mojom::DebugModeDetails::New());
+    remote.FlushForTesting();
+    histogram.ExpectUniqueSample(
+        kSendHistogramReportResultHistogram,
+        PrivateAggregationHost::SendHistogramReportResult::
+            kReportRequestCreationFailed,
+        1);
+  }
+  {
+    base::HistogramTester histogram;
+
+    remote->SendHistogramReport(std::move(too_many_contributions),
+                                mojom::AggregationServiceMode::kDefault,
+                                mojom::DebugModeDetails::New());
+    remote.FlushForTesting();
+    histogram.ExpectUniqueSample(
+        kSendHistogramReportResultHistogram,
+        PrivateAggregationHost::SendHistogramReportResult::
+            kTooManyContributions,
+        1);
+  }
+  {
+    base::HistogramTester histogram;
+
+    remote->SendHistogramReport(
+        std::move(valid_contributions), mojom::AggregationServiceMode::kDefault,
+        // Debug mode must be enabled for a debug key to be set.
+        mojom::DebugModeDetails::New(
+            /*is_enabled=*/false, /*debug_key=*/mojom::DebugKey::New(1234u)));
+    remote.FlushForTesting();
+    histogram.ExpectUniqueSample(
+        kSendHistogramReportResultHistogram,
+        PrivateAggregationHost::SendHistogramReportResult::
+            kDebugKeyPresentWithoutDebugMode,
+        1);
+  }
 }
 
 TEST_F(PrivateAggregationHostTest, PrivateAggregationAllowed_RequestSucceeds) {
+  base::HistogramTester histogram;
+
   MockPrivateAggregationContentBrowserClient browser_client;
   ScopedContentBrowserClientSetting setting(&browser_client);
 
@@ -419,9 +484,15 @@ TEST_F(PrivateAggregationHostTest, PrivateAggregationAllowed_RequestSucceeds) {
 
   remote.FlushForTesting();
   EXPECT_TRUE(remote.is_connected());
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kSuccess, 1);
 }
 
 TEST_F(PrivateAggregationHostTest, PrivateAggregationDisallowed_RequestFails) {
+  base::HistogramTester histogram;
+
   MockPrivateAggregationContentBrowserClient browser_client;
   ScopedContentBrowserClientSetting setting(&browser_client);
 
@@ -450,6 +521,11 @@ TEST_F(PrivateAggregationHostTest, PrivateAggregationDisallowed_RequestFails) {
 
   remote.FlushForTesting();
   EXPECT_TRUE(remote.is_connected());
+
+  histogram.ExpectUniqueSample(
+      kSendHistogramReportResultHistogram,
+      PrivateAggregationHost::SendHistogramReportResult::kApiDisabledInSettings,
+      1);
 }
 
 class PrivateAggregationHostDeveloperModeTest

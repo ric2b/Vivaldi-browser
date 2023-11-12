@@ -21,14 +21,17 @@
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/values.h"
+#include "build/chromecast_buildflags.h"
 #include "components/fuchsia_component_support/config_reader.h"
 #include "components/fuchsia_component_support/feedback_registration.h"
 #include "components/fuchsia_component_support/inspect.h"
 #include "fuchsia_web/common/fuchsia_dir_scheme.h"
 #include "fuchsia_web/common/init_logging.h"
+#include "fuchsia_web/runners/cast/cast_resolver.h"
 #include "fuchsia_web/runners/cast/cast_runner.h"
 #include "fuchsia_web/runners/cast/cast_runner_switches.h"
-#include "fuchsia_web/webinstance_host/web_instance_host.h"
+#include "fuchsia_web/runners/cast/cast_runner_v1.h"
+#include "fuchsia_web/webinstance_host/web_instance_host_v1.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
@@ -39,12 +42,15 @@ constexpr char kHeadlessConfigKey[] = "headless";
 // Config-data key to enable the fuchsia.web.FrameHost provider component.
 constexpr char kFrameHostConfigKey[] = "enable-frame-host-component";
 
+// Config-data key for disable dynamic code generation by the web runtime.
+constexpr char kDisableCodeGenConfigKey[] = "disable-codegen";
+
 // Returns the value of |config_key| or false if it is not set.
 bool GetConfigBool(base::StringPiece config_key) {
-  const absl::optional<base::Value>& config =
+  const absl::optional<base::Value::Dict>& config =
       fuchsia_component_support::LoadPackageConfig();
   if (config)
-    return config->FindBoolPath(config_key).value_or(false);
+    return config->FindBool(config_key).value_or(false);
   return false;
 }
 
@@ -108,6 +114,15 @@ int main(int argc, char** argv) {
 
   LogComponentStartWithVersion("cast_runner");
 
+  // CastRunner is built even when `enable_cast_receiver=false` so that it can
+  // always be tested. However, the statically linked WebEngineHost dependency
+  // and WebEngine binary from the same build will be missing functionality and
+  // should not be used with CastRunner outside tests.
+#if !BUILDFLAG(ENABLE_CAST_RECEIVER)
+  LOG(WARNING) << "This binary is from a build without Cast Receiver support "
+                  "and does not support all necessary functionality.";
+#endif
+
   if (!enable_cfv2) {
     return Cfv1ToCfv2RunnerProxyMain();
   }
@@ -117,18 +132,34 @@ int main(int argc, char** argv) {
   sys::OutgoingDirectory* const outgoing_directory =
       base::ComponentContextForProcess()->outgoing().get();
 
-  // Publish the fuchsia.sys.Runner implementation for Cast applications.
-  WebInstanceHost web_instance_host;
-  const bool enable_headless =
-      command_line->HasSwitch(kForceHeadlessForTestsSwitch) ||
-      GetConfigBool(kHeadlessConfigKey);
-  CastRunner runner(&web_instance_host, enable_headless);
-  const base::ScopedServiceBinding<fuchsia::sys::Runner> runner_binding(
-      outgoing_directory, &runner);
+  // Publish the fuchsia.component.resolution.Resolver for the cast: scheme.
+  CastResolver resolver;
+  const base::ScopedServiceBinding<fuchsia::component::resolution::Resolver>
+      resolver_binding(outgoing_directory, &resolver);
+
+  // Publish the fuchsia.component.runner.ComponentRunner for Cast apps.
+  WebInstanceHostV1 web_instance_host;
+  CastRunner runner(
+      web_instance_host,
+      {.headless = command_line->HasSwitch(kForceHeadlessForTestsSwitch) ||
+                   GetConfigBool(kHeadlessConfigKey),
+       .disable_codegen = GetConfigBool(kDisableCodeGenConfigKey)});
+  const base::ScopedServiceBinding<fuchsia::component::runner::ComponentRunner>
+      runner_binding(outgoing_directory, &runner);
+
+  // Publish the legacy fuchsia.sys.Runner implementation for Cast applications.
+  CastRunnerV1 runner_v1;
+  const base::ScopedServiceBinding<fuchsia::sys::Runner> runner_v1_binding(
+      outgoing_directory, &runner_v1);
 
   // Publish the associated DataReset service for the instance.
   const base::ScopedServiceBinding<chromium::cast::DataReset>
       data_reset_binding(outgoing_directory, &runner);
+
+  // Allow ephemeral web profiles to be created in the main web instance.
+  const base::ScopedServicePublisher<fuchsia::web::FrameHost>
+      frame_host_binding(outgoing_directory,
+                         runner.GetFrameHostRequestHandler());
 
   // Allow web containers to be debugged, by end-to-end tests.
   base::ScopedServiceBinding<fuchsia::web::Debug> debug_binding(

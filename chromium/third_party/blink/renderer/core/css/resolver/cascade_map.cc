@@ -69,12 +69,11 @@ CascadePriority& CascadeMap::Top(CascadePriorityList& list) {
   return list.Top(backing_vector_);
 }
 
-const CascadePriority* CascadeMap::FindRevertLayer(
-    const CSSPropertyName& name,
-    CascadePriority revert_from) const {
-  auto find_revert_layer =
-      [this](const CascadeMap::CascadePriorityList& list,
-             CascadePriority revert_from) -> const CascadePriority* {
+const CascadePriority* CascadeMap::FindRevertLayer(const CSSPropertyName& name,
+                                                   uint64_t revert_from) const {
+  auto find_revert_layer = [this](
+                               const CascadeMap::CascadePriorityList& list,
+                               uint64_t revert_from) -> const CascadePriority* {
     for (auto iter = list.Begin(backing_vector_);
          iter != list.End(backing_vector_); ++iter) {
       if (iter->ForLayerComparison() < revert_from)
@@ -99,6 +98,10 @@ void CascadeMap::Add(const CSSPropertyName& name, CascadePriority priority) {
   if (name.IsCustomProperty()) {
     auto result = custom_properties_.insert(name, CascadePriorityList());
     list = &result.stored_value->value;
+    if (list->IsEmpty()) {
+      list->Push(backing_vector_, priority);
+      return;
+    }
   } else {
     DCHECK(!CSSProperty::Get(name.Id()).IsSurrogate());
 
@@ -116,14 +119,11 @@ void CascadeMap::Add(const CSSPropertyName& name, CascadePriority priority) {
     list = &native_properties_.Buffer()[index];
     if (!native_properties_.Bits().Has(id)) {
       native_properties_.Bits().Set(id);
-      new (list) CascadeMap::CascadePriorityList();
+      new (list) CascadeMap::CascadePriorityList(backing_vector_, priority);
+      return;
     }
   }
 
-  if (list->IsEmpty()) {
-    list->Push(backing_vector_, priority);
-    return;
-  }
   CascadePriority& top = list->Top(backing_vector_);
   DCHECK(priority.ForLayerComparison() >= top.ForLayerComparison());
   if (top >= priority) {

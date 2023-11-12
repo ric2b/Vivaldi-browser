@@ -14,8 +14,8 @@
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chromeos/ash/components/settings/cros_settings_provider.h"
 #include "components/ownership/owner_settings_service.h"
-#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_value_map.h"
 
 class PrefService;
@@ -157,11 +157,5 @@ class DeviceSettingsProvider
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when Chrome OS code migration is
-// done.
-namespace chromeos {
-using ::ash::DeviceSettingsProvider;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_SETTINGS_DEVICE_SETTINGS_PROVIDER_H_

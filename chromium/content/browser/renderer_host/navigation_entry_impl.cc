@@ -23,6 +23,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_entry_restore_context_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/web_package/subresource_web_bundle_navigation_info.h"
 #include "content/browser/web_package/web_bundle_navigation_info.h"
 #include "content/common/content_constants_internal.h"
@@ -35,6 +36,7 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/navigation/prefetched_signed_exchange_info.mojom.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state.mojom.h"
 #include "ui/gfx/text_elider.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -728,9 +730,6 @@ bool NavigationEntryImpl::GetCanLoadLocalResources() {
 }
 
 bool NavigationEntryImpl::IsInitialEntry() {
-  DCHECK(blink::features::IsInitialNavigationEntryEnabled() ||
-         initial_navigation_entry_state_ ==
-             InitialNavigationEntryState::kNonInitial);
   return initial_navigation_entry_state_ !=
          InitialNavigationEntryState::kNonInitial;
 }
@@ -825,16 +824,13 @@ NavigationEntryImpl::ConstructCommonNavigationParams(
     blink::mojom::NavigationType navigation_type,
     base::TimeTicks navigation_start,
     base::TimeTicks input_start) {
-  blink::NavigationDownloadPolicy download_policy;
-  if (IsViewSourceMode())
-    download_policy.SetDisallowed(blink::NavigationDownloadType::kViewSource);
   // `base_url_for_data_url` is saved in NavigationEntry but should only be used
   // by main frames, because loadData* navigations can only happen on the main
   // frame.
   bool is_for_main_frame = (root_node()->frame_entry == &frame_entry);
   return blink::mojom::CommonNavigationParams::New(
       dest_url, frame_entry.initiator_origin(), std::move(dest_referrer),
-      GetTransitionType(), navigation_type, download_policy,
+      GetTransitionType(), navigation_type, blink::NavigationDownloadPolicy(),
       // It's okay to pass false for `should_replace_entry` because we never
       // replace an entry on session history / reload / restore navigation. New
       // navigation that may use replacement create their CommonNavigationParams
@@ -853,7 +849,6 @@ blink::mojom::CommitNavigationParamsPtr
 NavigationEntryImpl::ConstructCommitNavigationParams(
     const FrameNavigationEntry& frame_entry,
     const GURL& original_url,
-    const absl::optional<url::Origin>& origin_to_commit,
     const std::string& original_method,
     const base::flat_map<std::string, bool>& subframe_unique_names,
     bool intended_as_new_entry,
@@ -861,7 +856,9 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
     int current_history_list_offset,
     int current_history_list_length,
     const blink::FramePolicy& frame_policy,
-    bool ancestor_or_self_has_cspee) {
+    bool ancestor_or_self_has_cspee,
+    absl::optional<blink::scheduler::TaskAttributionId>
+        soft_navigation_heuristics_task_id) {
   // Set the redirect chain to the navigation's redirects, unless returning to a
   // completed navigation (whose previous redirects don't apply).
   // Note that this is actually does not work as intended right now because
@@ -888,7 +885,7 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
 
   blink::mojom::CommitNavigationParamsPtr commit_params =
       blink::mojom::CommitNavigationParams::New(
-          origin_to_commit,
+          absl::nullopt,
           // The correct storage key will be computed before committing the
           // navigation.
           blink::StorageKey(), GetIsOverridingUserAgent(), redirects,
@@ -919,13 +916,19 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           -1 /* http_response_code */,
           blink::mojom::NavigationApiHistoryEntryArrays::New(),
           std::vector<GURL>() /* early_hints_preloaded_resources */,
-          absl::nullopt /* ad_auction_components */,
-          /*fenced_frame_reporting_metadata=*/nullptr,
           // This timestamp will be populated when the commit IPC is sent.
           base::TimeTicks() /* commit_sent */, std::string() /* srcdoc_value */,
           GURL() /* fallback_srcdoc_baseurl */,
           false /* should_load_data_url */, ancestor_or_self_has_cspee,
-          std::string() /* reduced_accept_language */);
+          std::string() /* reduced_accept_language */,
+          /*navigation_delivery_type=*/
+          network::mojom::NavigationDeliveryType::kDefault,
+          /*view_transition_state=*/absl::nullopt,
+          soft_navigation_heuristics_task_id,
+          /*modified_runtime_features=*/
+          base::flat_map<::blink::mojom::RuntimeFeatureState, bool>(),
+          /*fenced_frame_properties=*/absl::nullopt,
+          /*not_restored_reasons=*/nullptr);
 #if BUILDFLAG(IS_ANDROID)
   // `data_url_as_string` is saved in NavigationEntry but should only be used by
   // main frames, because loadData* navigations can only happen on the main
@@ -1174,6 +1177,25 @@ void NavigationEntryImpl::RemoveEntryForFrame(FrameTreeNode* frame_tree_node,
     CHECK(it != parent_node->children.end());
     parent_node->children.erase(it);
   }
+}
+
+void NavigationEntryImpl::UpdateBackForwardCacheNotRestoredReasons(
+    NavigationRequest* navigation_request) {
+  DCHECK(BackForwardCacheMetrics::IsCrossDocumentMainFrameHistoryNavigation(
+      navigation_request));
+  if (!back_forward_cache_metrics()) {
+    // Create a metrics object if there is none.
+    FrameNavigationEntry* frame_navigation_entry =
+        GetFrameEntry(navigation_request->frame_tree_node());
+    scoped_refptr<BackForwardCacheMetrics> metrics =
+        base::WrapRefCounted(new BackForwardCacheMetrics(
+            frame_navigation_entry->document_sequence_number()));
+    set_back_forward_cache_metrics(std::move(metrics));
+  }
+  // Update NotRestoredReasons to include additional reasons only
+  // known when we navigate back to the NavigationEntry.
+  back_forward_cache_metrics()->UpdateNotRestoredReasonsForNavigation(
+      navigation_request);
 }
 
 GURL NavigationEntryImpl::GetHistoryURLForDataURL() {

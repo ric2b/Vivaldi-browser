@@ -4,11 +4,13 @@
 
 #include "chrome/browser/ui/webui/settings/ash/os_settings_manager.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_base.h"
 #include "base/test/metrics/histogram_enum_reader.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/android_sms/android_sms_service_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chrome/browser/ash/eche_app/eche_app_manager_factory.h"
 #include "chrome/browser/ash/kerberos/kerberos_credentials_manager_factory.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
@@ -17,11 +19,10 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
+#include "chrome/browser/ui/webui/settings/ash/constants/constants_util.h"
 #include "chrome/browser/ui/webui/settings/ash/hierarchy.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_manager_factory.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_sections.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/constants_util.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -51,8 +52,9 @@ class OsSettingsManagerTest : public testing::Test {
   // testing::Test:
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-      {features::kAccessibilityOSSettingsVisibility}, {});
-
+        {::features::kAccessibilitySelectToSpeakPageMigration,
+         ash::features::kInputDeviceSettingsSplit},
+        {});
     ASSERT_TRUE(profile_manager_.SetUp());
     TestingProfile* profile =
         profile_manager_.CreateTestingProfile("TestingProfile");
@@ -93,21 +95,14 @@ TEST_F(OsSettingsManagerTest, Initialization) {
   absl::optional<base::HistogramEnumEntryMap> sections_enum_entry_map =
       base::ReadEnumFromEnumsXml("OsSettingsSection");
   ASSERT_TRUE(sections_enum_entry_map);
-  for (const auto& section : constants::AllSections()) {
+  for (const auto& section : AllSections()) {
     // For each mojom::Section value, there should be an associated
     // OsSettingsSection class registered.
     EXPECT_TRUE(manager_->sections_->GetSection(section))
         << "No OsSettingsSection instance created for " << section << ".";
 
     // Each mojom::Section should be registered in the hierarchy.
-    const Hierarchy::SectionMetadata& metadata =
-        manager_->hierarchy_->GetSectionMetadata(section);
-
-    // Only "About Chrome OS" and "Kerberos" sections contain only a link to a
-    // subpage.
-    EXPECT_EQ(metadata.only_contains_link_to_subpage,
-              section == mojom::Section::kAboutChromeOs ||
-                  section == mojom::Section::kKerberos);
+    manager_->hierarchy_->GetSectionMetadata(section);
 
     EXPECT_TRUE(
         base::Contains(*sections_enum_entry_map, static_cast<int32_t>(section)))
@@ -117,7 +112,7 @@ TEST_F(OsSettingsManagerTest, Initialization) {
   absl::optional<base::HistogramEnumEntryMap> subpages_enum_entry_map =
       base::ReadEnumFromEnumsXml("OsSettingsSubpage");
   ASSERT_TRUE(subpages_enum_entry_map);
-  for (const auto& subpage : constants::AllSubpages()) {
+  for (const auto& subpage : AllSubpages()) {
     // Each mojom::Subpage should be registered in the hierarchy. Note that
     // GetSubpageMetadata() internally CHECK()s that the metadata exists before
     // returning it.
@@ -131,7 +126,7 @@ TEST_F(OsSettingsManagerTest, Initialization) {
   absl::optional<base::HistogramEnumEntryMap> settings_enum_entry_map =
       base::ReadEnumFromEnumsXml("OsSetting");
   ASSERT_TRUE(settings_enum_entry_map);
-  for (const auto& setting : constants::AllSettings()) {
+  for (const auto& setting : AllSettings()) {
     // Each mojom::Setting should be registered in the hierarchy. Note that
     // GetSettingMetadata() internally CHECK()s that the metadata exists before
     // returning it.

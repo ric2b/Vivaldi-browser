@@ -19,9 +19,9 @@
 #include "base/profiler/sample_metadata.h"
 #include "base/profiler/sampling_profiler_thread_token.h"
 #include "base/rand_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequence_local_storage_slot.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/common/profiler/process_type.h"
 #include "chrome/common/profiler/thread_profiler_configuration.h"
@@ -34,6 +34,10 @@
 #if BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
 #include "chrome/android/modules/stack_unwinder/public/module.h"
 #endif  // BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
+
+#if BUILDFLAG(IS_MAC)
+#include "base/process/port_provider_mac.h"
+#endif  // BUILDFLAG(IS_MAC)
 
 using CallStackProfileBuilder = metrics::CallStackProfileBuilder;
 using CallStackProfileParams = metrics::CallStackProfileParams;
@@ -51,14 +55,7 @@ constexpr double kFractionOfExecutionTimeToSample = 0.02;
 
 bool IsCurrentProcessBackgrounded() {
 #if BUILDFLAG(IS_MAC)
-  // Port provider that returns the calling process's task port, ignoring its
-  // argument.
-  class SelfPortProvider : public base::PortProvider {
-    mach_port_t TaskForPid(base::ProcessHandle process) const override {
-      return mach_task_self();
-    }
-  };
-  SelfPortProvider provider;
+  base::SelfPortProvider provider;
   return base::Process::Current().IsProcessBackgrounded(&provider);
 #else   // BUILDFLAG(IS_MAC)
   return base::Process::Current().IsProcessBackgrounded();
@@ -199,8 +196,8 @@ void ThreadProfiler::StartOnChildThread(CallStackProfileParams::Thread thread) {
     return;
   }
 
-  child_thread_profiler_sequence_local_storage.emplace(
-      new ThreadProfiler(thread, base::ThreadTaskRunnerHandle::Get()));
+  child_thread_profiler_sequence_local_storage.emplace(new ThreadProfiler(
+      thread, base::SingleThreadTaskRunner::GetCurrentDefault()));
 }
 
 // static

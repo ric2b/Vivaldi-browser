@@ -15,10 +15,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/input_method/assistive_window_properties.h"
+#include "chrome/browser/ash/input_method/autocorrect_enums.h"
+#include "chrome/browser/ash/input_method/autocorrect_prefs.h"
 #include "chrome/browser/ash/input_method/ime_rules_config.h"
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/ash/input_method_manager.h"
@@ -30,6 +35,12 @@ namespace ash {
 namespace input_method {
 
 namespace {
+
+constexpr int kMaxEditDistance = 30;
+constexpr int kDistanceUntilUnderlineHides = 3;
+constexpr int kMaxValidationTries = 4;
+constexpr base::TimeDelta kVeryFastInteractionPeriod = base::Milliseconds(200);
+constexpr base::TimeDelta kFastInteractionPeriod = base::Milliseconds(500);
 
 bool IsVkAutocorrect() {
   return ChromeKeyboardControllerClient::HasInstance() &&
@@ -45,6 +56,103 @@ bool IsCurrentInputMethodExperimentalMultilingual() {
       input_method_manager->GetActiveIMEState()->GetCurrentInputMethod().id());
 }
 
+bool IsUsEnglishId(const std::string& engine_id) {
+  return engine_id == "xkb:us::eng";
+}
+
+AutocorrectCompatibilitySummary ConvertActionToCompatibilitySummary(
+    AutocorrectActions action) {
+  switch (action) {
+    case AutocorrectActions::kWindowShown:
+      return AutocorrectCompatibilitySummary::kWindowShown;
+    case AutocorrectActions::kUnderlined:
+      return AutocorrectCompatibilitySummary::kUnderlined;
+    case AutocorrectActions::kReverted:
+      return AutocorrectCompatibilitySummary::kReverted;
+    case AutocorrectActions::kUserAcceptedAutocorrect:
+      return AutocorrectCompatibilitySummary::kUserAcceptedAutocorrect;
+    case AutocorrectActions::kUserActionClearedUnderline:
+      return AutocorrectCompatibilitySummary::kUserActionClearedUnderline;
+    case AutocorrectActions::kUserExitedTextFieldWithUnderline:
+      return AutocorrectCompatibilitySummary::kUserExitedTextFieldWithUnderline;
+    case AutocorrectActions::kInvalidRange:
+      return AutocorrectCompatibilitySummary::kInvalidRange;
+    default:
+      LOG(ERROR) << "Invalid AutocorrectActions: action=" << (int)action;
+      return AutocorrectCompatibilitySummary::kInvalidRange;
+  }
+}
+
+void RecordAppCompatibilityUkm(
+    ukm::SourceId source_id,
+    bool virtual_keyboard,
+    AutocorrectCompatibilitySummary compatibility_summary) {
+  if (virtual_keyboard) {
+    ukm::builders::InputMethod_Assistive_AutocorrectV2(source_id)
+        .SetCompatibilitySummary_VK(static_cast<int>(compatibility_summary))
+        .Record(ukm::UkmRecorder::Get());
+  } else {
+    ukm::builders::InputMethod_Assistive_AutocorrectV2(source_id)
+        .SetCompatibilitySummary_PK(static_cast<int>(compatibility_summary))
+        .Record(ukm::UkmRecorder::Get());
+  }
+}
+
+void LogAutocorrectAppCompatibilityUkm(AutocorrectActions action,
+                                       base::TimeDelta time_delta,
+                                       bool virtual_keyboard_visible) {
+  ui::TextInputTarget* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context) {
+    return;
+  }
+
+  ukm::SourceId sourceId = input_context->GetClientSourceForMetrics();
+  if (sourceId == ukm::kInvalidSourceId) {
+    return;
+  }
+
+  // Record base interactions.
+  RecordAppCompatibilityUkm(sourceId, virtual_keyboard_visible,
+                            ConvertActionToCompatibilitySummary(action));
+
+  if (time_delta > kFastInteractionPeriod) {
+    return;
+  }
+
+  bool is_very_fast = time_delta <= kVeryFastInteractionPeriod;
+
+  AutocorrectCompatibilitySummary latency_compatibility;
+
+  // Convert latency of important interaction to CompatibilitySummary.
+  switch (action) {
+    case AutocorrectActions::kUserAcceptedAutocorrect:
+      latency_compatibility =
+          is_very_fast
+              ? AutocorrectCompatibilitySummary::kVeryFastAcceptedAutocorrect
+              : AutocorrectCompatibilitySummary::kFastAcceptedAutocorrect;
+      break;
+    case AutocorrectActions::kReverted:
+    case AutocorrectActions::kUserActionClearedUnderline:
+    case AutocorrectActions::kInvalidRange:
+      latency_compatibility =
+          is_very_fast
+              ? AutocorrectCompatibilitySummary::kVeryFastRejectedAutocorrect
+              : AutocorrectCompatibilitySummary::kFastRejectedAutocorrect;
+      break;
+    case AutocorrectActions::kUserExitedTextFieldWithUnderline:
+      latency_compatibility =
+          is_very_fast ? AutocorrectCompatibilitySummary::kVeryFastExitField
+                       : AutocorrectCompatibilitySummary::kFastExitField;
+      break;
+    default:
+      return;
+  }
+
+  RecordAppCompatibilityUkm(sourceId, virtual_keyboard_visible,
+                            latency_compatibility);
+}
+
 void LogAssistiveAutocorrectDelay(base::TimeDelta delay) {
   base::UmaHistogramMediumTimes("InputMethod.Assistive.Autocorrect.Delay",
                                 delay);
@@ -54,24 +162,45 @@ void LogAssistiveAutocorrectDelay(base::TimeDelta delay) {
   }
 }
 
-void LogAssistiveAutocorrectActionLatency(AutocorrectActions action,
-                                          base::TimeDelta time_delta,
-                                          bool virtual_keyboard_visible) {
+void LogAssistiveAutocorrectActionLatency(
+    const AutocorrectActions action,
+    const base::TimeDelta time_delta,
+    const bool virtual_keyboard_visible,
+    const bool autocorrect_is_pk_enabled_by_default) {
   switch (action) {
     case AutocorrectActions::kUnderlined:
     case AutocorrectActions::kWindowShown:
       // Skip non-terminal actions.
       return;
     case AutocorrectActions::kUserAcceptedAutocorrect:
+      if (autocorrect_is_pk_enabled_by_default) {
+        base::UmaHistogramMediumTimes(
+            "InputMethod.Assistive.AutocorrectV2.Latency.Accept."
+            "EnabledByDefault",
+            time_delta);
+      }
       base::UmaHistogramMediumTimes(
           "InputMethod.Assistive.AutocorrectV2.Latency.Accept", time_delta);
       break;
     case AutocorrectActions::kReverted:
     case AutocorrectActions::kUserActionClearedUnderline:
+    case AutocorrectActions::kInvalidRange:
+      if (autocorrect_is_pk_enabled_by_default) {
+        base::UmaHistogramMediumTimes(
+            "InputMethod.Assistive.AutocorrectV2.Latency.Reject."
+            "EnabledByDefault",
+            time_delta);
+      }
       base::UmaHistogramMediumTimes(
           "InputMethod.Assistive.AutocorrectV2.Latency.Reject", time_delta);
       break;
     case AutocorrectActions::kUserExitedTextFieldWithUnderline:
+      if (autocorrect_is_pk_enabled_by_default) {
+        base::UmaHistogramMediumTimes(
+            "InputMethod.Assistive.AutocorrectV2.Latency.ExitField."
+            "EnabledByDefault",
+            time_delta);
+      }
       base::UmaHistogramMediumTimes(
           "InputMethod.Assistive.AutocorrectV2.Latency.ExitField", time_delta);
       break;
@@ -90,46 +219,109 @@ void LogAssistiveAutocorrectActionLatency(AutocorrectActions action,
   }
 }
 
-void LogAssistiveAutocorrectInternalState(
-    AutocorrectInternalStates internal_state) {
-  if (IsVkAutocorrect()) {
-    base::UmaHistogramEnumeration(
-        "InputMethod.Assistive.AutocorrectV2.Internal.VkState", internal_state);
-  } else {
-    base::UmaHistogramEnumeration(
-        "InputMethod.Assistive.AutocorrectV2.Internal.PkState", internal_state);
+AutocorrectRejectionBreakdown LogControlInteractions(
+    const ui::DomCode& last_key_press,
+    const std::string& histogram_name) {
+  switch (last_key_press) {
+    case ui::DomCode::BACKSPACE:
+    case ui::DomCode::DEL:
+      return AutocorrectRejectionBreakdown::kRejectedCtrlBackspace;
+    case ui::DomCode::US_Z:
+      return AutocorrectRejectionBreakdown::kUndoCtrlZ;
+    default:
+      return AutocorrectRejectionBreakdown::kRejectionOther;
   }
 }
 
-void LogAssistiveAutocorrectQualityBreakdown(
-    AutocorrectQualityBreakdown quality_breakdown,
-    bool suggestion_accepted,
-    bool virtual_keyboard_visible) {
-  std::string histogram_name = "InputMethod.Assistive.AutocorrectV2.Quality.";
-
-  // Explicitly use autocorrect histogram name so that this usage can be found
-  // using code search.
-  if (virtual_keyboard_visible) {
-    if (suggestion_accepted) {
-      base::UmaHistogramEnumeration(
-          "InputMethod.Assistive.AutocorrectV2.Quality.VkAccepted",
-          quality_breakdown);
-    } else {
-      base::UmaHistogramEnumeration(
-          "InputMethod.Assistive.AutocorrectV2.Quality.VkRejected",
-          quality_breakdown);
+AutocorrectRejectionBreakdown LogSelectionEditInteractions(
+    const gfx::Range& last_autocorrect_range,
+    const gfx::Range& last_selection_range,
+    const std::string& histogram_name) {
+  if (last_autocorrect_range.IsBoundedBy(last_selection_range)) {
+    if (last_selection_range.IsBoundedBy(last_autocorrect_range)) {
+      return AutocorrectRejectionBreakdown::kRejectedTypingFull;
     }
-  } else {
-    if (suggestion_accepted) {
-      base::UmaHistogramEnumeration(
-          "InputMethod.Assistive.AutocorrectV2.Quality.PkAccepted",
-          quality_breakdown);
-    } else {
-      base::UmaHistogramEnumeration(
-          "InputMethod.Assistive.AutocorrectV2.Quality.PkRejected",
-          quality_breakdown);
+    return AutocorrectRejectionBreakdown::kRejectedTypingFullWithExternal;
+  }
+  if (last_selection_range.IsBoundedBy(last_autocorrect_range)) {
+    return AutocorrectRejectionBreakdown::kRejectedTypingPartial;
+  }
+  if (last_selection_range.Intersects(last_autocorrect_range)) {
+    return AutocorrectRejectionBreakdown::kRejectedTypingPartialWithExternal;
+  }
+  return AutocorrectRejectionBreakdown::kRejectedSelectedInvalidRange;
+}
+
+// Returns the Levenshtein distance between |str1| and |str2|.
+// Which is the minimum number of single-character edits (i.e. insertions,
+// deletions or substitutions) required to change one word into the other.
+// https://en.wikipedia.org/wiki/Levenshtein_distance
+int GetLevenshteinDistance(const std::u16string& str1,
+                           const std::u16string& str2) {
+  if (str1.size() > str2.size()) {
+    return GetLevenshteinDistance(str2, str1);
+  }
+  if (str1.size() + static_cast<size_t>(kMaxEditDistance) < str2.size()) {
+    return kMaxEditDistance;
+  }
+
+  std::vector<int> row(str1.size() + 1);
+  for (size_t i = 0; i < row.size(); ++i) {
+    row[i] = static_cast<int>(i);
+  }
+
+  for (size_t i = 0; i < str2.size(); ++i) {
+    ++row[0];
+    int previous = static_cast<int>(i);
+    bool under_cutoff = false;
+    for (size_t j = 0; j < str1.size(); ++j) {
+      int old_row = row[j + 1];
+      int cost = str2[i] == str1[j] ? 0 : 1;
+      row[j + 1] = std::min(std::min(row[j], row[j + 1]) + 1, previous + cost);
+      if (row[j + 1] < kMaxEditDistance) {
+        under_cutoff = true;
+      }
+      previous = old_row;
+    }
+
+    if (!under_cutoff) {
+      return kMaxEditDistance;
     }
   }
+  return row[str1.size()];
+}
+
+void MeasureAndLogAssistiveAutocorrectEditDistance(
+    const std::u16string& original_text,
+    const std::u16string& suggested_text,
+    const bool suggestion_accepted,
+    const bool virtual_keyboard_visible) {
+  const int text_length =
+      std::min(static_cast<int>(original_text.length()), kMaxEditDistance);
+  const int distance = std::min(
+      GetLevenshteinDistance(original_text, suggested_text), kMaxEditDistance);
+  if (text_length <= 0 || distance <= 0) {
+    return;
+  }
+
+  const std::string histogram_base_name =
+      "InputMethod.Assistive.AutocorrectV2.Distance.";
+  std::string keyboard_type_extension =
+      virtual_keyboard_visible ? ".Vk" : ".Pk";
+  keyboard_type_extension += suggestion_accepted ? "Accepted" : "Rejected";
+
+  // This is a 2d array of size (kMaxEditDistance x kMaxEditDistance) that
+  // has been flattened
+  const int flattenedLengthVsDistance =
+      (text_length - 1) * kMaxEditDistance + distance - 1;
+  base::UmaHistogramSparse(
+      base::StrCat({histogram_base_name, "OriginalLengthVsLevenshteinDistance",
+                    keyboard_type_extension}),
+      flattenedLengthVsDistance);
+  base::UmaHistogramExactLinear(
+      base::StrCat(
+          {histogram_base_name, "SuggestedLength", keyboard_type_extension}),
+      suggested_text.length(), kMaxEditDistance);
 }
 
 void RecordAssistiveCoverage(AssistiveType type) {
@@ -138,6 +330,16 @@ void RecordAssistiveCoverage(AssistiveType type) {
 
 void RecordAssistiveSuccess(AssistiveType type) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Success", type);
+}
+
+void RecordPhysicalKeyboardAutocorrectPref(const std::string& engine_id,
+                                           const AutocorrectPreference& pref) {
+  if (IsUsEnglishId(engine_id)) {
+    base::UmaHistogramEnumeration(
+        "InputMethod.Assistive.AutocorrectV2.PkUserPreference.English", pref);
+  }
+  base::UmaHistogramEnumeration(
+      "InputMethod.Assistive.AutocorrectV2.PkUserPreference.All", pref);
 }
 
 bool CouldTriggerAutocorrectWithSurroundingText(const std::u16string& text,
@@ -167,14 +369,12 @@ bool IsAutocorrectSuggestionInSurroundingText(
                                  autocorrect_range.length()) == suggested_text;
 }
 
-constexpr int kDistanceUntilUnderlineHides = 3;
-constexpr int kMaxValidationTries = 4;
-
 }  // namespace
 
 AutocorrectManager::AutocorrectManager(
-    SuggestionHandlerInterface* suggestion_handler)
-    : suggestion_handler_(suggestion_handler) {}
+    SuggestionHandlerInterface* suggestion_handler,
+    Profile* profile)
+    : suggestion_handler_(suggestion_handler), profile_(profile) {}
 
 AutocorrectManager::~AutocorrectManager() = default;
 
@@ -221,6 +421,7 @@ void AutocorrectManager::HandleAutocorrect(const gfx::Range autocorrect_range,
 
   LogAssistiveAutocorrectInternalState(
       AutocorrectInternalStates::kHandleSetRange);
+
   input_context->SetAutocorrectRange(
       autocorrect_range,
       base::BindOnce(&AutocorrectManager::ProcessSetAutocorrectRangeDone,
@@ -256,15 +457,30 @@ void AutocorrectManager::ProcessSetAutocorrectRangeDone(
   RecordAssistiveCoverage(AssistiveType::kAutocorrectUnderlined);
 }
 
+bool AutocorrectManager::AutoCorrectPrefIsPkEnabledByDefault() {
+  if (!active_engine_id_.has_value() || IsVkAutocorrect()) {
+    return false;
+  }
+  return GetPhysicalKeyboardAutocorrectPref(*(profile_->GetPrefs()),
+                                            *active_engine_id_) ==
+         AutocorrectPreference::kEnabledByDefault;
+}
+
 void AutocorrectManager::LogAssistiveAutocorrectAction(
     AutocorrectActions action) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Autocorrect.Actions",
                                 action);
 
   if (pending_autocorrect_.has_value()) {
+    base::TimeDelta latency =
+        base::TimeTicks::Now() - pending_autocorrect_->start_time;
     LogAssistiveAutocorrectActionLatency(
-        action, base::TimeTicks::Now() - pending_autocorrect_->start_time,
-        pending_autocorrect_->virtual_keyboard_visible);
+        action, latency, pending_autocorrect_->virtual_keyboard_visible,
+        AutoCorrectPrefIsPkEnabledByDefault());
+
+    LogAutocorrectAppCompatibilityUkm(
+        action, latency, pending_autocorrect_->virtual_keyboard_visible);
+    LogRejectionInteractions(action);
   }
 
   if (pending_autocorrect_.has_value() &&
@@ -274,6 +490,11 @@ void AutocorrectManager::LogAssistiveAutocorrectAction(
     base::UmaHistogramEnumeration(
         "InputMethod.Assistive.AutocorrectV2.Actions.VK", action);
   } else {
+    if (AutoCorrectPrefIsPkEnabledByDefault()) {
+      base::UmaHistogramEnumeration(
+          "InputMethod.Assistive.AutocorrectV2.Actions.PK.EnabledByDefault",
+          action);
+    }
     base::UmaHistogramEnumeration(
         "InputMethod.Assistive.AutocorrectV2.Actions.PK", action);
   }
@@ -288,6 +509,68 @@ void AutocorrectManager::LogAssistiveAutocorrectAction(
           action);
     }
   }
+}
+
+void AutocorrectManager::LogRejectionInteractions(
+    const AutocorrectActions action) {
+  if ((action != AutocorrectActions::kUserActionClearedUnderline &&
+       action != AutocorrectActions::kReverted) ||
+      !pending_autocorrect_.has_value()) {
+    return;
+  }
+  const ui::DomCode& last_key_press =
+      pending_autocorrect_->last_key_event.has_value()
+          ? pending_autocorrect_->last_key_event->code()
+          : ui::DomCode::NONE;
+  const std::string histogram_name =
+      pending_autocorrect_->virtual_keyboard_visible
+          ? "InputMethod.Assistive.AutocorrectV2.Rejection.VK"
+          : "InputMethod.Assistive.AutocorrectV2.Rejection.PK";
+  base::UmaHistogramEnumeration(
+      histogram_name, AutocorrectRejectionBreakdown::kSuggestionRejected);
+
+  if (action == AutocorrectActions::kReverted) {
+    if (last_key_press == ui::DomCode::ENTER) {
+      base::UmaHistogramEnumeration(
+          histogram_name, AutocorrectRejectionBreakdown::kUndoWithKeyboard);
+      return;
+    }
+    base::UmaHistogramEnumeration(
+        histogram_name, AutocorrectRejectionBreakdown::kUndoWithoutKeyboard);
+    return;
+  }
+  if (pending_autocorrect_->last_key_event.has_value() &&
+      pending_autocorrect_->last_key_event->IsControlDown()) {
+    base::UmaHistogramEnumeration(
+        histogram_name, LogControlInteractions(last_key_press, histogram_name));
+    return;
+  }
+  if (!pending_autocorrect_->last_selection_range.is_empty()) {
+    base::UmaHistogramEnumeration(
+        histogram_name,
+        LogSelectionEditInteractions(
+            pending_autocorrect_->last_autocorrect_range,
+            pending_autocorrect_->last_selection_range, histogram_name));
+    return;
+  }
+  if (pending_autocorrect_->text_length_diff < 0) {
+    base::UmaHistogramEnumeration(
+        histogram_name, AutocorrectRejectionBreakdown::kRemovedLetters);
+    if (last_key_press == ui::DomCode::BACKSPACE ||
+        last_key_press == ui::DomCode::DEL) {
+      base::UmaHistogramEnumeration(
+          histogram_name, AutocorrectRejectionBreakdown::kRejectedBackspace);
+    }
+    return;
+  }
+  if (pending_autocorrect_->text_length_diff > 0) {
+    base::UmaHistogramEnumeration(
+        histogram_name,
+        AutocorrectRejectionBreakdown::kRejectedTypingNoSelection);
+    return;
+  }
+  base::UmaHistogramEnumeration(histogram_name,
+                                AutocorrectRejectionBreakdown::kRejectionOther);
 }
 
 void AutocorrectManager::MeasureAndLogAssistiveAutocorrectQualityBreakdown(
@@ -312,6 +595,9 @@ void AutocorrectManager::MeasureAndLogAssistiveAutocorrectQualityBreakdown(
   LogAssistiveAutocorrectQualityBreakdown(
       AutocorrectQualityBreakdown::kSuggestionResolved, suggestion_accepted,
       virtual_keyboard_visible);
+  MeasureAndLogAssistiveAutocorrectEditDistance(original_text, suggested_text,
+                                                suggestion_accepted,
+                                                virtual_keyboard_visible);
 
   if (diacritics_insensitive_string_comparator_.Equal(original_text,
                                                       suggested_text)) {
@@ -371,15 +657,88 @@ void AutocorrectManager::MeasureAndLogAssistiveAutocorrectQualityBreakdown(
   }
 }
 
+void AutocorrectManager::LogAssistiveAutocorrectInternalState(
+    AutocorrectInternalStates internal_state) {
+  if (IsVkAutocorrect()) {
+    base::UmaHistogramEnumeration(
+        "InputMethod.Assistive.AutocorrectV2.Internal.VkState", internal_state);
+    return;
+  }
+  if (AutoCorrectPrefIsPkEnabledByDefault()) {
+    base::UmaHistogramEnumeration(
+        "InputMethod.Assistive.AutocorrectV2.Internal.PkState."
+        "EnabledByDefault",
+        internal_state);
+  }
+  base::UmaHistogramEnumeration(
+      "InputMethod.Assistive.AutocorrectV2.Internal.PkState", internal_state);
+}
+
+void AutocorrectManager::LogAssistiveAutocorrectQualityBreakdown(
+    AutocorrectQualityBreakdown quality_breakdown,
+    bool suggestion_accepted,
+    bool virtual_keyboard_visible) {
+  std::string histogram_name = "InputMethod.Assistive.AutocorrectV2.Quality.";
+  histogram_name =
+      base::StrCat({histogram_name, virtual_keyboard_visible ? "Vk" : "Pk",
+                    suggestion_accepted ? "Accepted" : "Rejected"});
+
+  base::UmaHistogramEnumeration(histogram_name, quality_breakdown);
+
+  if (AutoCorrectPrefIsPkEnabledByDefault()) {
+    base::UmaHistogramEnumeration(histogram_name + ".EnabledByDefault",
+                                  quality_breakdown);
+  }
+}
+
+void AutocorrectManager::OnActivate(const std::string& engine_id) {
+  active_engine_id_ = engine_id;
+
+  PrefService* pref_service = profile_->GetPrefs();
+  auto autocorrect_pref =
+      GetPhysicalKeyboardAutocorrectPref(*pref_service, engine_id);
+  if (base::FeatureList::IsEnabled(features::kAutocorrectByDefault) &&
+      autocorrect_pref == AutocorrectPreference::kDefault &&
+      IsUsEnglishId(engine_id) &&
+      // This class is instantiated with NativeInputMethodEngineObserver, which
+      // must exist at all times in the system to provide typing (including
+      // login screens, guest sessions, etc). Make sure we are only recording
+      // this metric when a real user has logged into their profile.
+      ProfileHelper::IsUserProfile(profile_) && profile_->IsRegularProfile() &&
+      !profile_->IsGuestSession()) {
+    SetPhysicalKeyboardAutocorrectAsEnabledByDefault(pref_service, engine_id);
+  }
+}
+
 bool AutocorrectManager::OnKeyEvent(const ui::KeyEvent& event) {
+  if (pending_user_pref_metric_ && IsVkAutocorrect()) {
+    // We only want to record a pending user pref metric if the user is
+    // currently using the physical keyboard.
+    pending_user_pref_metric_ = absl::nullopt;
+  }
+
+  if (pending_user_pref_metric_) {
+    const std::string& engine_id = pending_user_pref_metric_->engine_id;
+    RecordPhysicalKeyboardAutocorrectPref(
+        engine_id,
+        GetPhysicalKeyboardAutocorrectPref(*(profile_->GetPrefs()), engine_id));
+    pending_user_pref_metric_ = absl::nullopt;
+  }
+
+  if (!pending_autocorrect_.has_value() || event.type() != ui::ET_KEY_PRESSED) {
+    return false;
+  }
+  // TODO(b:253549747): call pending_autocorrect_->last_key_event.reset() if
+  // user changes the text using Mouse or Touch Screen
+  pending_autocorrect_->last_key_event = event;
+
   // OnKeyEvent is only used for interacting with the undo UI.
-  if (!pending_autocorrect_.has_value() ||
-      !pending_autocorrect_->undo_window_visible ||
-      event.type() != ui::ET_KEY_PRESSED) {
+  if (!pending_autocorrect_->undo_window_visible) {
     return false;
   }
 
-  if (event.code() == ui::DomCode::ARROW_UP) {
+  if (event.code() == ui::DomCode::ARROW_UP ||
+      event.code() == ui::DomCode::TAB) {
     HighlightUndoButton();
     return true;
   }
@@ -420,6 +779,7 @@ void AutocorrectManager::OnSurroundingTextChanged(const std::u16string& text,
     return;
   }
 
+  const gfx::Range range = input_context->GetAutocorrectRange();
   if (!pending_autocorrect_->is_validated) {
     // Validate that the surrounding text matches with pending autocorrect
     // suggestion. Because of delays in update of surrounding text and
@@ -428,8 +788,7 @@ void AutocorrectManager::OnSurroundingTextChanged(const std::u16string& text,
     // implementation of autocorrect interactions such as implicit acceptance.
     pending_autocorrect_->is_validated =
         IsAutocorrectSuggestionInSurroundingText(
-            text, input_context->GetAutocorrectRange(),
-            pending_autocorrect_->suggested_text);
+            text, range, pending_autocorrect_->suggested_text);
     pending_autocorrect_->validation_tries++;
 
     if (!pending_autocorrect_->is_validated) {
@@ -443,7 +802,11 @@ void AutocorrectManager::OnSurroundingTextChanged(const std::u16string& text,
     }
   }
 
-  const gfx::Range range = input_context->GetAutocorrectRange();
+  pending_autocorrect_->text_length_diff =
+      pending_autocorrect_->text_length != -1
+          ? text.length() - pending_autocorrect_->text_length
+          : 0;
+
   const uint32_t cursor_pos_unsigned
       = base::checked_cast<uint32_t>(cursor_pos);
 
@@ -488,9 +851,20 @@ void AutocorrectManager::OnSurroundingTextChanged(const std::u16string& text,
     // range.
     HideUndoWindow();
   }
+
+  // Only update at the end so that the metrics can use the cursor selection
+  // just before the edit
+  pending_autocorrect_->last_autocorrect_range = range;
+  pending_autocorrect_->last_selection_range = gfx::Range(
+      std::min(cursor_pos, anchor_pos), std::max(cursor_pos, anchor_pos));
 }
 
 void AutocorrectManager::OnFocus(int context_id) {
+  if (active_engine_id_) {
+    pending_user_pref_metric_ =
+        PendingPhysicalKeyboardUserPrefMetric{.engine_id = *active_engine_id_};
+  }
+
   if (base::FeatureList::IsEnabled(ash::features::kImeRuleConfig)) {
     GetTextFieldContextualInfo(
         base::BindOnce(&AutocorrectManager::OnTextFieldContextualInfoChanged,
@@ -573,9 +947,12 @@ void AutocorrectManager::UndoAutocorrect() {
     // This will not quite work properly if there is text actually highlighted,
     // and cursor is at end of the highlight block, but no easy way around it.
     // First delete everything before cursor.
-    input_context->DeleteSurroundingText(
-        autocorrect_range.start() - surrounding_text.selection_range.start(),
-        autocorrect_range.length());
+    DCHECK(autocorrect_range.Contains(surrounding_text.selection_range));
+    const uint32_t before =
+        surrounding_text.selection_range.start() - autocorrect_range.start();
+    const uint32_t after =
+        autocorrect_range.end() - surrounding_text.selection_range.end();
+    input_context->DeleteSurroundingText(before, after);
 
     // Replace with the original text.
     input_context->CommitText(
@@ -606,7 +983,7 @@ void AutocorrectManager::ShowUndoWindow(
   const std::u16string autocorrected_text =
       text.substr(range.start(), range.length());
   AssistiveWindowProperties properties;
-  properties.type = ui::ime::AssistiveWindowType::kUndoWindow;
+  properties.type = ash::ime::AssistiveWindowType::kUndoWindow;
   properties.visible = true;
   properties.announce_string = l10n_util::GetStringFUTF16(
       IDS_SUGGESTION_AUTOCORRECT_UNDO_WINDOW_SHOWN,
@@ -648,7 +1025,7 @@ void AutocorrectManager::HideUndoWindow() {
 
   std::string error;
   AssistiveWindowProperties properties;
-  properties.type = ui::ime::AssistiveWindowType::kUndoWindow;
+  properties.type = ash::ime::AssistiveWindowType::kUndoWindow;
   properties.visible = false;
   suggestion_handler_->SetAssistiveWindowProperties(context_id_, properties,
                                                     &error);
@@ -682,7 +1059,7 @@ void AutocorrectManager::HighlightUndoButton() {
   std::string error;
   ui::ime::AssistiveWindowButton button = ui::ime::AssistiveWindowButton();
   button.id = ui::ime::ButtonId::kUndo;
-  button.window_type = ui::ime::AssistiveWindowType::kUndoWindow;
+  button.window_type = ash::ime::AssistiveWindowType::kUndoWindow;
   button.announce_string = l10n_util::GetStringFUTF16(
       IDS_SUGGESTION_AUTOCORRECT_UNDO_BUTTON,
       pending_autocorrect_->original_text);
@@ -711,13 +1088,15 @@ void AutocorrectManager::AcceptOrClearPendingAutocorrect() {
   LogAssistiveAutocorrectInternalState(
       AutocorrectInternalStates::kSuggestionResolved);
 
-  if (!pending_autocorrect_->is_validated) {
+  if (!input_context) {
+    LogAssistiveAutocorrectAction(AutocorrectActions::kInvalidRange);
+    LogAssistiveAutocorrectInternalState(
+        AutocorrectInternalStates::kNoInputContext);
+  } else if (!pending_autocorrect_->is_validated) {
+    LogAssistiveAutocorrectAction(AutocorrectActions::kInvalidRange);
     LogAssistiveAutocorrectInternalState(
         AutocorrectInternalStates::kErrorRangeNotValidated);
-    LogAssistiveAutocorrectAction(
-        AutocorrectActions::kUserActionClearedUnderline);
-  } else if (input_context &&
-             !input_context->GetAutocorrectRange().is_empty()) {
+  } else if (!input_context->GetAutocorrectRange().is_empty()) {
     MeasureAndLogAssistiveAutocorrectQualityBreakdown(
         AutocorrectActions::kUserAcceptedAutocorrect);
     LogAssistiveAutocorrectInternalState(
@@ -728,13 +1107,8 @@ void AutocorrectManager::AcceptOrClearPendingAutocorrect() {
     LogAssistiveAutocorrectAction(
       AutocorrectActions::kUserAcceptedAutocorrect);
   } else {
-    if (!input_context) {
-      LogAssistiveAutocorrectInternalState(
-          AutocorrectInternalStates::kNoInputContext);
-    } else {
-      MeasureAndLogAssistiveAutocorrectQualityBreakdown(
-          AutocorrectActions::kUserActionClearedUnderline);
-    }
+    MeasureAndLogAssistiveAutocorrectQualityBreakdown(
+        AutocorrectActions::kUserActionClearedUnderline);
     LogAssistiveAutocorrectAction(
       AutocorrectActions::kUserActionClearedUnderline);
   }

@@ -12,10 +12,13 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/ranges/algorithm.h"
 #include "components/autofill/core/browser/form_data_importer.h"
+#include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/validation.h"
+#include "components/autofill/core/common/autofill_internals/log_message.h"
+#include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
@@ -29,7 +32,7 @@ CreditCardFormEventLogger::CreditCardFormEventLogger(
     : FormEventLoggerBase("CreditCard",
                           is_in_any_main_frame,
                           form_interactions_ukm_logger,
-                          client ? client->GetLogManager() : nullptr),
+                          client),
       current_authentication_flow_(UnmaskAuthFlowType::kNone),
       personal_data_manager_(personal_data_manager),
       client_(client) {}
@@ -38,8 +41,11 @@ CreditCardFormEventLogger::~CreditCardFormEventLogger() = default;
 
 void CreditCardFormEventLogger::OnDidFetchSuggestion(
     const std::vector<Suggestion>& suggestions,
-    bool with_offer) {
+    bool with_offer,
+    const autofill_metrics::CardMetadataLoggingContext&
+        metadata_logging_context) {
   has_eligible_offer_ = with_offer;
+  metadata_logging_context_ = metadata_logging_context;
   suggestions_.clear();
   for (const auto& suggestion : suggestions)
     suggestions_.emplace_back(suggestion);
@@ -57,6 +63,8 @@ void CreditCardFormEventLogger::OnDidShowSuggestions(
   // Also perform the logging actions from the base class:
   FormEventLoggerBase::OnDidShowSuggestions(form, field, form_parsed_timestamp,
                                             sync_state, off_the_record);
+
+  suggestion_shown_timestamp_ = AutofillTickClock::NowTicks();
 }
 
 void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
@@ -95,6 +103,14 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
       }
       break;
   }
+
+  // Log the latency between suggestion being shown and suggestion being
+  // selected.
+  if (metadata_logging_context_.card_metadata_available) {
+    autofill_metrics::LogCardSuggestionAcceptanceLatencyMetric(
+        AutofillTickClock::NowTicks() - suggestion_shown_timestamp_,
+        metadata_logging_context_);
+  }
 }
 
 void CreditCardFormEventLogger::OnDidFillSuggestion(
@@ -115,12 +131,12 @@ void CreditCardFormEventLogger::OnDidFillSuggestion(
       /*is_for_credit_card=*/true, form, field);
 
   AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
-      {.event_logger = *this,
-       .form = form,
-       .field = field,
-       .newly_filled_fields = newly_filled_fields,
-       .safe_fields = safe_fields,
-       .builder = builder});
+      {.event_logger = raw_ref(*this),
+       .form = raw_ref(form),
+       .field = raw_ref(field),
+       .newly_filled_fields = raw_ref(newly_filled_fields),
+       .safe_fields = raw_ref(safe_fields),
+       .builder = raw_ref(builder)});
 
   switch (record_type) {
     case CreditCard::LOCAL_CARD:
@@ -173,6 +189,9 @@ void CreditCardFormEventLogger::OnDidFillSuggestion(
       base::UserMetricsAction("Autofill_FilledCreditCardSuggestion"));
 
   form_interactions_ukm_logger_->Record(std::move(builder));
+
+  ++form_interaction_counts_.autofill_fills;
+  UpdateFlowId();
 }
 
 void CreditCardFormEventLogger::LogCardUnmaskAuthenticationPromptShown(
@@ -265,8 +284,8 @@ void CreditCardFormEventLogger::OnSuggestionsShownOnce(
 void CreditCardFormEventLogger::OnSuggestionsShownSubmittedOnce(
     const FormStructure& form) {
   if (!has_logged_suggestion_filled_) {
-    const CreditCard credit_card =
-        client_->GetFormDataImporter()->ExtractCreditCardFromForm(form);
+    const CreditCard& credit_card =
+        client_->GetFormDataImporter()->ExtractCreditCardFromForm(form).card;
     Log(GetCardNumberStatusFormEvent(credit_card), form);
   }
 }
@@ -274,13 +293,6 @@ void CreditCardFormEventLogger::OnSuggestionsShownSubmittedOnce(
 void CreditCardFormEventLogger::OnLog(const std::string& name,
                                       FormEvent event,
                                       const FormStructure& form) const {
-  // Log in a different histogram for credit card forms on nonsecure pages so
-  // that form interactions on nonsecure pages can be analyzed on their own.
-  if (!is_context_secure_) {
-    base::UmaHistogramEnumeration(name + ".OnNonsecurePage", event,
-                                  NUM_FORM_EVENTS);
-  }
-
   // Log a different histogram for credit card forms with credit card offers
   // available so that selection rate with offers and rewards can be compared on
   // their own.

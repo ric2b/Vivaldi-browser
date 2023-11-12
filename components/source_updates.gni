@@ -3,6 +3,7 @@ import ("//vivaldi/testing/testing.gni")
 update_target("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/components/content/vivaldi_web_contents_delegate.cc",
+    "//vivaldi/components/datasource/vivaldi_url_data_source.cc",
   ]
 }
 
@@ -79,6 +80,10 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/capture/capture_page.h",
     "//vivaldi/components/capture/thumbnail_capture_contents.cc",
     "//vivaldi/components/capture/thumbnail_capture_contents.h",
+    "//vivaldi/components/datasource/vivaldi_data_source.cc",
+    "//vivaldi/components/datasource/vivaldi_data_source.h",
+    "//vivaldi/components/datasource/synced_file_data_source.cc",
+    "//vivaldi/components/datasource/synced_file_data_source.h",
     "//vivaldi/components/datasource/vivaldi_image_store.cc",
     "//vivaldi/components/datasource/vivaldi_image_store.h",
     "//vivaldi/components/datasource/vivaldi_theme_io.cc",
@@ -95,10 +100,6 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/components/datasource/css_mods_data_source.h",
       "//vivaldi/components/datasource/local_image_data_source.cc",
       "//vivaldi/components/datasource/local_image_data_source.h",
-      "//vivaldi/components/datasource/notes_attachment_data_source.cc",
-      "//vivaldi/components/datasource/notes_attachment_data_source.h",
-      "//vivaldi/components/datasource/vivaldi_data_source.cc",
-      "//vivaldi/components/datasource/vivaldi_data_source.h",
       "//vivaldi/components/datasource/vivaldi_web_source.cc",
       "//vivaldi/components/datasource/vivaldi_web_source.h",
     ]
@@ -144,15 +145,10 @@ if (!is_android) {
     ]
   }
 
-  update_target("//extensions/browser/api:api") {
-    sources += [
-      "//vivaldi/components/guest_view/vivaldi_guest_view_internal_api.cc",
-    ]
-  }
-
   update_target("//extensions/browser:browser_sources") {
     sources += [
       "//vivaldi/components/browser/vivaldi_app_window.cc",
+      "//vivaldi/components/guest_view/vivaldi_guest_view_internal_api.cc",
       "//vivaldi/components/guest_view/vivaldi_web_view_permission_helper_delegate.cc",
     ]
   }

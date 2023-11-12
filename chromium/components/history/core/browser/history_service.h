@@ -35,6 +35,7 @@
 #include "components/history/core/browser/keyword_id.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "sql/init_status.h"
 #include "ui/base/page_transition_types.h"
 
@@ -588,6 +589,24 @@ class HistoryService : public KeyedService {
       base::OnceClosure callback,
       base::CancelableTaskTracker* tracker);
 
+  // Implemented and called by `ReserveNextClusterId()` below with the last
+  // cluster ID that was added to the database.
+  using ClusterIdCallback = base::OnceCallback<void(int64_t)>;
+
+  // Adds a cluster with no visits and invokes `callback` with the ID of the
+  // new cluster.
+  // Virtual for testing.
+  virtual base::CancelableTaskTracker::TaskId ReserveNextClusterId(
+      base::OnceCallback<void(int64_t)> callback,
+      base::CancelableTaskTracker* tracker);
+
+  // Adds `visits` to the cluster `cluster_id`.
+  // Virtual for testing.
+  virtual base::CancelableTaskTracker::TaskId AddVisitsToCluster(
+      int64_t cluster_id,
+      const std::vector<ClusterVisit>& visits,
+      base::CancelableTaskTracker* tracker);
+
   // Get the most recent `Cluster`s within the constraints. The most recent
   // visit of a cluster represents the cluster's time. `max_clusters` is a hard
   // cap. `max_visits_soft_cap` is a soft cap; `GetMostRecentClusters()` will
@@ -683,6 +702,10 @@ class HistoryService : public KeyedService {
   // HistorySyncBridge. Must be called from the UI thread.
   std::unique_ptr<syncer::ModelTypeControllerDelegate>
   GetHistorySyncControllerDelegate();
+
+  // Sends the SyncService's TransportState `state` to the backend, which will
+  // pass it on to the HistorySyncBridge.
+  void SetSyncTransportState(syncer::SyncService::TransportState state);
 
   // Override `backend_task_runner_` for testing; needs to be called before
   // Init.
@@ -802,13 +825,6 @@ class HistoryService : public KeyedService {
   // Notify all HistoryServiceObservers registered that keyword search term is
   // deleted. `url_id` is the id of the url row.
   void NotifyKeywordSearchTermDeleted(URLID url_id);
-
-  // Notify all HistoryServiceObservers registered that content model
-  // annotations for the URL associated with `row` have changed. `row` contains
-  // the URL information for the page.
-  void NotifyContentModelAnnotationModified(
-      const URLRow& row,
-      const VisitContentModelAnnotations& model_annotations);
 
   // Favicon -------------------------------------------------------------------
 
@@ -1011,6 +1027,10 @@ class HistoryService : public KeyedService {
   // and vice versa.
   void NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                              const GURL& icon_url);
+
+  // Whether the given `url` should be added to history. See
+  // HistoryClient::GetCanAddURLCallback().
+  bool CanAddURL(const GURL& url);
 
   SEQUENCE_CHECKER(sequence_checker_);
 

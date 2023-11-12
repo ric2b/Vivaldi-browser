@@ -214,10 +214,12 @@ gridTemplateColumns
 gridTemplateRows
 height
 hyphenateCharacter
+hyphenateLimitChars
 hyphens
 imageOrientation
 imageRendering
 inherits
+initialLetter
 initialValue
 inlineSize
 inset
@@ -260,6 +262,9 @@ markerMid
 markerStart
 mask
 maskType
+mathDepth
+mathShift
+mathStyle
 maxBlockSize
 maxHeight
 maxInlineSize

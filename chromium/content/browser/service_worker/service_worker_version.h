@@ -107,6 +107,7 @@ FORWARD_DECLARE_TEST(ServiceWorkerVersionTest,
 FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, DevToolsAttachThenDetach);
 FORWARD_DECLARE_TEST(ServiceWorkerVersionTest,
                      DefaultTimeoutRequestDoesNotAffectMaxTimeoutRequest);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, Doom);
 }  // namespace service_worker_version_unittest
 
 FORWARD_DECLARE_TEST(ServiceWorkerRegistryTest, ScriptResponseTime);
@@ -771,6 +772,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FRIEND_TEST_ALL_PREFIXES(
       service_worker_version_unittest::ServiceWorkerVersionTest,
       DevToolsAttachThenDetach);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      Doom);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerRegistryTest, ScriptResponseTime);
 
   // Contains timeout info for InflightRequest.
@@ -884,10 +888,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
       blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void StartWorkerInternal();
-
-  // Stops the worker if it is idle (has no in-flight requests) or timed out
-  // ping.
-  void StopWorkerIfIdle();
 
   // Returns true if the service worker is known to have work to do because the
   // browser process initiated a request to the service worker which isn't done

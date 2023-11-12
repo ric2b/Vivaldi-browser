@@ -43,8 +43,10 @@
 <translation id="1378727793141957596">Chào mừng bạn đến với Google Drive!</translation>
 <translation id="1379911846207762492">Bạn có thể chọn xem các tệp ở chế độ ngoại tuyến khi không có mạng.</translation>
 <translation id="1383876407941801731">Tìm kiếm</translation>
+<translation id="1388045380422025115">Tất cả các loại</translation>
 <translation id="1395262318152388157">Thanh trượt tìm kiếm</translation>
 <translation id="1399511500114202393">Không có chứng chỉ người dùng</translation>
+<translation id="1403008701842173542">Mọi nơi</translation>
 <translation id="1404323374378969387">Tiếng Na Uy</translation>
 <translation id="1433628812591023318">Để thả tệp vào Parallels Desktop, bạn phải chuyển tệp đó vào thư mục tệp Windows.</translation>
 <translation id="1435838927755162558">Chia sẻ thư mục với ứng dụng Parallels Desktop</translation>
@@ -102,6 +104,7 @@
 <translation id="1834290891154666894">Mục nhập so khớp tên thay thế của tiêu đề không hợp lệ</translation>
 <translation id="1838709767668011582">Trang web Google</translation>
 <translation id="1853795129690976061">Thư mục này được chia sẻ với Linux</translation>
+<translation id="1859422890169495746">Chromebook này</translation>
 <translation id="1864756863218646478">Không thể tìm thấy tệp.</translation>
 <translation id="1884013283844450420">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Kết nối</translation>
 <translation id="1920670151694390848">Tiếng Malayalam (chuyển tự)</translation>
@@ -124,8 +127,8 @@
 <translation id="2079545284768500474">Hoàn tác</translation>
 <translation id="2084108471225856927">Cài đặt thiết bị</translation>
 <translation id="2084809735218147718">Ra hiệu cảm ơn</translation>
-<translation id="2085470240340828803">Tệp có tên "<ph name="FILENAME" />" đã tồn tại. Bạn muốn làm gì?</translation>
 <translation id="2088690981887365033">Mạng riêng ảo (VPN)</translation>
+<translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> mục sẽ bị xoá và không thể khôi phục.</translation>
 <translation id="2122305276694332719">Việc tự động kết nối vào một mạng ẩn sẽ cho phép những người khác nhìn thấy thiết bị và một số tùy chọn cài đặt mạng của bạn. Bạn không nên bật tùy chọn này.</translation>
 <translation id="2125607626296734455">Tiếng Khmer</translation>
 <translation id="2139545522194199494">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Do quản trị viên của bạn quản lý, Kết nối</translation>
@@ -134,6 +137,7 @@
 <translation id="2143778271340628265">Cấu hình proxy thủ công</translation>
 <translation id="2148716181193084225">Hôm nay</translation>
 <translation id="2163152940313951844">Ký tự không hợp lệ: <ph name="CHARACTER_NAME" /></translation>
+<translation id="2178056538281447670">Microsoft 365</translation>
 <translation id="2184934335987813305">Tiếng Bồ Đào Nha bằng bàn phím quốc tế Hoa Kỳ cho máy tính để bàn</translation>
 <translation id="2193661397560634290">Đã dùng <ph name="SPACE_USED" /></translation>
 <translation id="2198315389084035571">Tiếng Trung giản thể</translation>
@@ -153,6 +157,7 @@
 <translation id="2307462900900812319">Định cấu hình mạng</translation>
 <translation id="2325650632570794183">Loại tệp này không được hỗ trợ. Vui lòng truy cập Cửa hàng Chrome trực tuyến để tìm ứng dụng có thể mở loại tệp này.</translation>
 <translation id="2326539130272988168">Tiếng Bungary</translation>
+<translation id="2337715497728194187">Chia sẻ với Bruschetta</translation>
 <translation id="23721837607121582">Tải hồ sơ mạng di động xuống, Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">Chuyển sang chế độ xem danh sách</translation>
 <translation id="2377590462528165447">Đã chia sẻ <ph name="NUMBER_OF_ITEMS" /> thư mục với Linux</translation>
@@ -182,6 +187,7 @@
 <translation id="2544853746127077729">Chứng chỉ xác thực bị mạng từ chối</translation>
 <translation id="255937426064304553">Bàn phím quốc tế Hoa Kỳ</translation>
 <translation id="2563185590376525700">Ếch</translation>
+<translation id="2574327434504608656">Đã chia sẻ 1 thư mục với Bruschetta</translation>
 <translation id="2578394532502990878">Tiếng Tamil (phiên âm)</translation>
 <translation id="2579959351793446050">Tiếng Odia</translation>
 <translation id="2602810353103180630">Mạng <ph name="NETWORK_INDEX" /> trong tổng số <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Quản trị viên của bạn đã chặn, Thông tin chi tiết</translation>
@@ -275,6 +281,7 @@
 <translation id="3408072735282270043">Kích hoạt, <ph name="NETWORK_NAME" /></translation>
 <translation id="3408236822532681288">Tiếng Đức (Đức) bằng bàn phím Neo 2</translation>
 <translation id="3414856743105198592">Định dạng phương tiện di động sẽ xóa tất cả dữ liệu. Bạn có muốn tiếp tục không?</translation>
+<translation id="3435143625481187092">Cho phép Bruschetta truy cập vào các tệp trong thư mục <ph name="FOLDER_NAME" /></translation>
 <translation id="3437801641691368414">Thời gian tạo</translation>
 <translation id="343907260260897561">Máy ảnh chụp lấy ngay</translation>
 <translation id="3455931012307786678">Tiếng Estonia</translation>
@@ -320,6 +327,7 @@
 <translation id="3801082500826908679">Tiếng Faroe</translation>
 <translation id="3809272675881623365">Con thỏ</translation>
 <translation id="3810973564298564668">Quản lý</translation>
+<translation id="3811408895933919563">Tiếng Anh (Pakistan)</translation>
 <translation id="3811494700605067549">Đã chọn 1 tệp</translation>
 <translation id="3817579325494460411">Không được cung cấp</translation>
 <translation id="3819448694985509187">Mã PIN không chính xác. Bạn còn 1 lần nhập.</translation>
@@ -354,9 +362,10 @@
 <translation id="4159731583141908892">Đã di chuyển <ph name="FILE_NAME" />.</translation>
 <translation id="4176286497474237543">Dọn sạch thùng rác ngay</translation>
 <translation id="4179621117429069925">Mục này đang nằm trong thùng rác</translation>
+<translation id="4181839429935094755">Đã chia sẻ <ph name="NUMBER_OF_ITEMS" /> thư mục với Bruschetta</translation>
 <translation id="4186579485882418952">Bật chế độ ngoại tuyến</translation>
 <translation id="4193154014135846272">Tài liệu Google</translation>
-<translation id="4197674956721858839">Chọn file nén zip</translation>
+<translation id="4197674956721858839">Nén tệp đã chọn</translation>
 <translation id="4202378258276439759">Tiếng Tây Ban Nha (Mỹ Latinh)</translation>
 <translation id="4202977638116331303">Tiếng Georgia</translation>
 <translation id="421017592316736757">Bạn phải trực tuyến để truy cập tệp này.</translation>
@@ -387,6 +396,7 @@
 <translation id="4398096759193130964">Khôi phục hoặc kéo các mục này vào một thư mục mới bên ngoài thùng rác</translation>
 <translation id="4401287888955153199">Trích xuất tất cả</translation>
 <translation id="4410695710508688828">Thao tác trích xuất không thành công. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="4414834425328380570">"<ph name="FILE_NAME" />" sẽ bị xoá và không thể khôi phục.</translation>
 <translation id="4418686080762064601">Tạo một lối tắt cho tệp của bạn</translation>
 <translation id="4425149324548788773">Drive của tôi</translation>
 <translation id="4439427728133035643">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Kết nối</translation>
@@ -404,7 +414,6 @@
 <translation id="4552759165874948005">Mạng <ph name="NETWORK_TYPE" />, cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%</translation>
 <translation id="4559767610552730302">Hiệu ứng Bokeh</translation>
 <translation id="4572815280350369984">Tệp <ph name="FILE_TYPE" /></translation>
-<translation id="457386861538956877">Thêm...</translation>
 <translation id="4579744207439506346">Đã thêm <ph name="ENTRY_NAME" /> vào lựa chọn.</translation>
 <translation id="4583436353463424810">Không có tài liệu nào gần đây</translation>
 <translation id="4594543368593301662">Đang hiển thị kết quả cho <ph name="SEARCH_TERM" />.</translation>
@@ -415,6 +424,7 @@
 <translation id="4646813851450205600">Tiếng Séc bằng bàn phím Qwerty</translation>
 <translation id="4656777537938206294">Dùng tệp khi không có mạng</translation>
 <translation id="4658782175094886150">Người trong tuyết</translation>
+<translation id="466782788172479199">Cho phép Bruschetta truy cập vào các tệp trên Google Drive. Các thay đổi sẽ đồng bộ hoá với những thiết bị khác mà bạn có.</translation>
 <translation id="4669606053856530811">Thành viên của '<ph name="SOURCE_NAME" />' sẽ mất quyền truy cập trừ khi bạn chia sẻ các mục này với họ.</translation>
 <translation id="467809019005607715">Google Trang trình bày</translation>
 <translation id="4690246192099372265">Tiếng Thuỵ Điển</translation>
@@ -448,6 +458,7 @@
 <translation id="4850886885716139402">Xem</translation>
 <translation id="485316830061041779">Tiếng Đức</translation>
 <translation id="4867079195717347957">Nhấp để sắp xếp cột theo thứ tự giảm dần.</translation>
+<translation id="4867297348137739678">Tuần trước</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> byte</translation>
 <translation id="4874569719830985133">Xoá vĩnh viễn</translation>
 <translation id="4880214202172289027">Thanh trượt âm lượng</translation>
@@ -456,7 +467,6 @@
 <translation id="4900532980794411603">Chia sẻ với ứng dụng Parallels Desktop</translation>
 <translation id="4902546322522096650">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Kết nối</translation>
 <translation id="4906580650526544301">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Pin điện thoại <ph name="BATTERY_STATUS" />%, Thông tin chi tiết</translation>
-<translation id="4929673617759421391">Chính sách của quản trị viên không cho phép dán tệp này</translation>
 <translation id="4935975195727477204">Hoa Gazania</translation>
 <translation id="4943368462779413526">Bóng đá</translation>
 <translation id="4961158930123534723">Đã chia sẻ 1 thư mục với ứng dụng Parallels Desktop</translation>
@@ -522,6 +532,7 @@
 <translation id="5330145655348521461">Những tệp này được mở trên máy tính khác. Chuyển tới <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) để xem tệp đó.</translation>
 <translation id="5330512191124428349">Nhận thông tin</translation>
 <translation id="5337538975554986899">Hoạt động truy cập vào tệp qua mọi URL, ngoại trừ <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
+<translation id="5344246330454251646">Quản lý hoạt động chia sẻ của Bruschetta</translation>
 <translation id="535792325654997756">Người với mèo</translation>
 <translation id="5358764674931277">Tốc độ khung hình</translation>
 <translation id="5363339716524495120">Ngôn ngữ nhập là tiếng Trung</translation>
@@ -534,6 +545,7 @@
 <translation id="5428105026674456456">Tiếng Tây Ban Nha</translation>
 <translation id="5438282218546237410">Không có kết quả nào cho <ph name="SEARCH_TERM" />.</translation>
 <translation id="5449551289610225147">Mật khẩu không hợp lệ</translation>
+<translation id="5459064203055649751">Đã có một tệp có tên "<ph name="FILENAME" />". Bạn có muốn thay thế tệp này bằng tệp mà bạn đang di chuyển không?</translation>
 <translation id="5463231940765244860">Nhập</translation>
 <translation id="5469868506864199649">Tiếng Ý</translation>
 <translation id="5473333559083690127">Nhập lại mã PIN mới</translation>
@@ -550,6 +562,7 @@
 <translation id="5580591966435005537">máy ảo</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5583664733673201137">Độ rộng dấu câu là Đầy đủ</translation>
+<translation id="5596627076506792578">Tùy chọn khác</translation>
 <translation id="5602622065581044566">Tiếng Bulgaria bằng bàn phím phiên âm</translation>
 <translation id="5605830556594064952">Dvorak Hoa Kỳ</translation>
 <translation id="5618330573454123917">Tệp này dành cho máy tính sử dụng phần mềm Macintosh. Tệp này không tương thích với thiết bị chạy ChromeOS của bạn. <ph name="BEGIN_LINK_HELP" />Tìm hiểu thêm<ph name="END_LINK_HELP" /> về cách mở tệp trên ChromeOS.</translation>
@@ -566,6 +579,7 @@
 <translation id="5700087501958648444">Thông tin về tệp âm thanh</translation>
 <translation id="5720028165859493293">Đã chuyển <ph name="FILE_NAME" /> vào thùng rác</translation>
 <translation id="5724172041621205163">Tiếng Thái bằng bàn phím Pattachote</translation>
+<translation id="57383366388012121">Tháng trước</translation>
 <translation id="5756666464756035725">QWERTY dành cho tiếng Hungary</translation>
 <translation id="5763377084591234761">Tiếng Đức (Thụy Sĩ)</translation>
 <translation id="5769519078756170258">Máy chủ lưu trữ hoặc miền cần loại trừ</translation>
@@ -654,6 +668,7 @@
 <translation id="6495925982925244349">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Do quản trị viên của bạn quản lý, Thông tin chi tiết</translation>
 <translation id="649877868557234318">Đang giải nén <ph name="FILE_NAME" /> vào <ph name="FOLDER_NAME" /></translation>
 <translation id="6499681088828539489">Không cho phép proxy đối với các mạng chia sẻ</translation>
+<translation id="6503285896705205014">Chính sách của quản trị viên không cho phép sao chép <ph name="COUNT" /> tệp</translation>
 <translation id="6509122719576673235">Tiếng Na Uy</translation>
 <translation id="6528513914570774834">Cho phép người dùng khác của thiết bị sử dụng mạng này</translation>
 <translation id="653019979737152879">Đang đồng bộ hóa <ph name="FILE_NAME" />...</translation>
@@ -674,6 +689,7 @@
 <translation id="6710213216561001401">Trước</translation>
 <translation id="6732801395666424405">Không tải được chứng chỉ</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
+<translation id="6740270213273127264">Chia sẻ thư mục với Bruschetta</translation>
 <translation id="6751256176799620176">Đã chọn 1 thư mục</translation>
 <translation id="6755827872271341378">Thiết bị ChromeOS Flex</translation>
 <translation id="6790428901817661496">Phát</translation>
@@ -693,7 +709,6 @@
 <translation id="6874758081814639712">Người tập thái cực quyền</translation>
 <translation id="6876155724392614295">Xe đạp</translation>
 <translation id="6878261347041253038">Bàn phím Devanagari (Ngữ âm)</translation>
-<translation id="6881853403185175088">Office</translation>
 <translation id="6885780034956018177">Ốc sên</translation>
 <translation id="6896758677409633944">Sao chép</translation>
 <translation id="6898028766943174120">Các thư mục con khác...</translation>
@@ -703,6 +718,7 @@
 <translation id="6935521024859866267">Lộn ngược</translation>
 <translation id="6943836128787782965">HTTP gặp lỗi</translation>
 <translation id="6949408524333579394">Tiếng Serbia (chuyển tự)</translation>
+<translation id="69548399407432279">Năm ngoái</translation>
 <translation id="6960565108681981554">Chưa kích hoạt. Hãy liên hệ với nhà mạng của bạn.</translation>
 <translation id="696203921837389374">Bật đồng bộ hóa qua dữ liệu di động</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -711,6 +727,7 @@
 <translation id="6973630695168034713">Thư mục</translation>
 <translation id="6976795442547527108">Sư tử</translation>
 <translation id="6979158407327259162">Google Drive</translation>
+<translation id="6979737339423435258">Từ trước đến nay</translation>
 <translation id="6989942356279143254">Tiếng Thụy Điển</translation>
 <translation id="6990081529015358884">Bạn đã hết dung lượng lưu trữ</translation>
 <translation id="6993826899923627728">Các mục này đang nằm trong thùng rác</translation>
@@ -756,6 +773,7 @@
 <translation id="7357762654218998920">Loại tệp này không được hỗ trợ. <ph name="BEGIN_LINK_HELP" />Tìm hiểu thêm<ph name="END_LINK_HELP" /> về cách mở tệp trên ChromeOS.</translation>
 <translation id="7359359531237882347">Đang sao chép <ph name="NUMBER_OF_ITEMS" /> mục...</translation>
 <translation id="7375951387215729722">Danh sách tệp được sắp xếp giảm dần theo <ph name="COLUMN_NAME" />.</translation>
+<translation id="7377161162143020057">Chính sách của quản trị viên không cho phép sao chép tệp này</translation>
 <translation id="7402503521691663770">Thiết bị ChromeOS Flex</translation>
 <translation id="7408870451288633753">Tiếng Séc</translation>
 <translation id="7417453074306512035">Bàn phím tiếng Ethiopic</translation>
@@ -844,6 +862,7 @@
 <translation id="8042602468072383151">Âm thanh <ph name="AUDIO_TYPE" /></translation>
 <translation id="8045462269890919536">Tiếng Rumani</translation>
 <translation id="8049184478152619004">Nhập khóa mở khóa cá nhân (PUK)</translation>
+<translation id="8055538340801153769">Thư mục này</translation>
 <translation id="807187749540895545">Đang trích xuất <ph name="FILE_NAME" />...</translation>
 <translation id="8087576439476816834">Tải xuống, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Được chia sẻ với tôi</translation>
@@ -910,6 +929,7 @@
 <translation id="8560515948038859357">Tiếng Quảng Đông</translation>
 <translation id="8561206103590473338">Voi</translation>
 <translation id="8566466896628108558">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Quản trị viên đã chặn, Thông tin chi tiết</translation>
+<translation id="8568374623837201676">Xoá vĩnh viễn tệp này?</translation>
 <translation id="8569764466147087991">Chọn tệp để mở</translation>
 <translation id="8577897833047451336">Tiếng Croatia</translation>
 <translation id="8578308463707544055">Tiếng Indonesia</translation>
@@ -977,7 +997,6 @@
 <translation id="9183302530794969518">Google Tài liệu</translation>
 <translation id="9189836632794948435">Tiếng Kazakh</translation>
 <translation id="9200427192836333033">Đã giải nén <ph name="NUMBER_OF_ITEMS" /> mục.</translation>
-<translation id="9210751050717126865">Chính sách của quản trị viên không cho phép dán <ph name="COUNT" /> tệp</translation>
 <translation id="9213073329713032541">Đã bắt đầu thành công quá trình cài đặt.</translation>
 <translation id="9219103736887031265">Hình ảnh</translation>
 <translation id="9219908252191632183">Hình lưỡi liềm</translation>

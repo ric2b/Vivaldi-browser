@@ -4,6 +4,7 @@
 
 #include "chrome/browser/permissions/permission_revocation_request.h"
 
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -61,19 +62,17 @@ OriginStatus GetOriginStatus(Profile* profile, const GURL& origin) {
 void SetOriginStatus(Profile* profile,
                      const GURL& origin,
                      const OriginStatus& status) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  base::Value permission_dict(base::Value::Type::DICTIONARY);
-  permission_dict.SetKey(kExcludedKey,
-                         base::Value(status.is_exempt_from_future_revocations));
-  permission_dict.SetKey(kRevokedKey,
-                         base::Value(status.has_been_previously_revoked));
-  dict.SetKey(kPermissionName, std::move(permission_dict));
+  base::Value::Dict dict;
+  base::Value::Dict permission_dict;
+  permission_dict.Set(kExcludedKey, status.is_exempt_from_future_revocations);
+  permission_dict.Set(kRevokedKey, status.has_been_previously_revoked);
+  dict.Set(kPermissionName, std::move(permission_dict));
 
   permissions::PermissionsClient::Get()
       ->GetSettingsMap(profile)
       ->SetWebsiteSettingDefaultScope(
           origin, GURL(), ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA,
-          dict.Clone());
+          base::Value(std::move(dict)));
 }
 
 void RevokePermission(const GURL& origin, Profile* profile) {
@@ -98,7 +97,7 @@ PermissionRevocationRequest::PermissionRevocationRequest(
     const GURL& origin,
     OutcomeCallback callback)
     : profile_(profile), origin_(origin), callback_(std::move(callback)) {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PermissionRevocationRequest::CheckAndRevokeIfBlocklisted,
                      weak_factory_.GetWeakPtr()));

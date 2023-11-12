@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#include <algorithm>
 #include <iostream>
 #include <iterator>
 #include <string>
@@ -22,10 +21,10 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
@@ -518,7 +517,7 @@ class ReadableFakeWebSocketStream : public FakeWebSocketStream {
       return ERR_IO_PENDING;
     if (responses_[index_]->async == ASYNC) {
       read_frames_pending_ = true;
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&ReadableFakeWebSocketStream::DoCallback,
                          base::Unretained(this), frames, std::move(callback)));
@@ -625,7 +624,7 @@ class EchoeyFakeWebSocketStream : public FakeWebSocketStream {
 
  private:
   void PostCallback() {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&EchoeyFakeWebSocketStream::DoCallback,
                                   base::Unretained(this)));
   }
@@ -677,13 +676,13 @@ class ResetOnWriteFakeWebSocketStream : public FakeWebSocketStream {
 
   int WriteFrames(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
                   CompletionOnceCallback callback) override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
             &ResetOnWriteFakeWebSocketStream::CallCallbackUnlessClosed,
             weak_ptr_factory_.GetWeakPtr(), std::move(callback),
             ERR_CONNECTION_RESET));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
             &ResetOnWriteFakeWebSocketStream::CallCallbackUnlessClosed,
@@ -769,16 +768,16 @@ struct WebSocketStreamCreationCallbackArgumentSaver {
   std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate;
 };
 
-std::vector<char> AsVector(const base::StringPiece& s) {
+std::vector<char> AsVector(base::StringPiece s) {
   return std::vector<char>(s.begin(), s.end());
 }
 
 // Converts a base::StringPiece to a IOBuffer. For test purposes, it is
 // convenient to be able to specify data as a string, but the
 // WebSocketEventInterface requires the IOBuffer type.
-scoped_refptr<IOBuffer> AsIOBuffer(const base::StringPiece& s) {
+scoped_refptr<IOBuffer> AsIOBuffer(base::StringPiece s) {
   auto buffer = base::MakeRefCounted<IOBuffer>(s.size());
-  std::copy(s.begin(), s.end(), buffer->data());
+  base::ranges::copy(s, buffer->data());
   return buffer;
 }
 

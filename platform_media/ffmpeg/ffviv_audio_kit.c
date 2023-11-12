@@ -8,6 +8,7 @@
 #include "third_party/ffmpeg/libavcodec/adts_parser.h"
 #include "third_party/ffmpeg/libavcodec/get_bits.h"
 #include "third_party/ffmpeg/libavcodec/mpeg4audio.h"
+#include "third_party/ffmpeg/libavcodec/mpeg4audio_copy_pce.h"
 #include "third_party/ffmpeg/libavcodec/put_bits.h"
 #include "third_party/ffmpeg/libavutil/error.h"
 #include "third_party/ffmpeg/libavutil/log.h"

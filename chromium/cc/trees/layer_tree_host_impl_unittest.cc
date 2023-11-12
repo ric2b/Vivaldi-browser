@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -15,10 +14,11 @@
 #include "base/callback_helpers.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/animation/animation.h"
@@ -26,7 +26,6 @@
 #include "cc/animation/animation_id_provider.h"
 #include "cc/base/features.h"
 #include "cc/base/histograms.h"
-#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/browser_controls_offset_manager.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/main_thread_scrolling_reason.h"
@@ -72,6 +71,7 @@
 #include "cc/trees/render_frame_metadata_observer.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
+#include "cc/view_transition/view_transition_request.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
@@ -149,7 +149,8 @@ class LayerTreeHostImplTest : public testing::Test,
                               public LayerTreeHostImplClient {
  public:
   LayerTreeHostImplTest()
-      : task_runner_provider_(base::ThreadTaskRunnerHandle::Get()),
+      : task_runner_provider_(
+            base::SingleThreadTaskRunner::GetCurrentDefault()),
         always_main_thread_blocked_(&task_runner_provider_),
         on_can_draw_state_changed_called_(false),
         did_notify_ready_to_activate_(false),
@@ -272,18 +273,18 @@ class LayerTreeHostImplTest : public testing::Test,
       PresentationTimeCallbackBuffer::PendingCallbacks activated,
       const viz::FrameTimingDetails& details) override {
     // We don't call main thread callbacks in this test.
-    activated.main_thread_callbacks.clear();
+    activated.main_callbacks.clear();
+    activated.main_successful_callbacks.clear();
 
     host_impl_->NotifyDidPresentCompositorFrameOnImplThread(
-        frame_token, std::move(activated.compositor_thread_callbacks), details);
+        frame_token, std::move(activated.compositor_successful_callbacks),
+        details);
   }
   void NotifyAnimationWorkletStateChange(AnimationWorkletMutationState state,
                                          ElementListType tree_type) override {}
   void NotifyPaintWorkletStateChange(
       Scheduler::PaintWorkletState state) override {}
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override {}
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies) override {}
 
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
@@ -712,38 +713,6 @@ class LayerTreeHostImplTest : public testing::Test,
     TestFrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
     return host_impl_->MakeRenderFrameMetadata(&frame);
-  }
-
-  void TestGPUMemoryForTilings(const gfx::Size& layer_size) {
-    std::unique_ptr<FakeRecordingSource> recording_source =
-        FakeRecordingSource::CreateFilledRecordingSource(layer_size);
-    PaintImage checkerable_image =
-        CreateDiscardablePaintImage(gfx::Size(500, 500));
-    recording_source->add_draw_image(checkerable_image, gfx::Point(0, 0));
-
-    recording_source->Rerecord();
-    scoped_refptr<FakeRasterSource> raster_source =
-        FakeRasterSource::CreateFromRecordingSource(recording_source.get());
-
-    // Create the pending tree.
-    host_impl_->BeginCommit(0, /*trace_id=*/1);
-    LayerTreeImpl* pending_tree = host_impl_->pending_tree();
-    LayerImpl* root = SetupRootLayer<FakePictureLayerImpl>(
-        pending_tree, layer_size, raster_source);
-    root->SetDrawsContent(true);
-    UpdateDrawProperties(pending_tree);
-
-    // CompleteCommit which should perform a PrepareTiles, adding tilings for
-    // the root layer, each one having a raster task.
-    host_impl_->CommitComplete();
-    // Activate the pending tree and ensure that all tiles are rasterized.
-    while (!did_notify_ready_to_activate_)
-      base::RunLoop().RunUntilIdle();
-
-    DrawFrame();
-
-    host_impl_->ReleaseLayerTreeFrameSink();
-    host_impl_ = nullptr;
   }
 
   void AllowedTouchActionTestHelper(float device_scale_factor,
@@ -1276,34 +1245,6 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, SyncedScrollAbortedCommit) {
   EXPECT_EQ(scroll_delta3, synced_scroll->reflected_delta_in_main_tree());
   EXPECT_EQ(gfx::Vector2dF(),
             synced_scroll->next_reflected_delta_in_main_tree());
-}
-
-TEST_F(CommitToPendingTreeLayerTreeHostImplTest,
-       GPUMemoryForSmallLayerHistogramTest) {
-  base::HistogramTester histogram_tester;
-  SetClientNameForMetrics("Renderer");
-  host_impl_->SetDownsampleMetricsForTesting(false);
-  // With default tile size being set to 256 * 256, the following layer needs
-  // one tile only which costs 256 * 256 * 4 / 1024 = 256KB memory.
-  TestGPUMemoryForTilings(gfx::Size(200, 200));
-  histogram_tester.ExpectBucketCount(
-      "Compositing.Renderer.GPUMemoryForTilingsInKb", 256, 1);
-  histogram_tester.ExpectTotalCount(
-      "Compositing.Renderer.GPUMemoryForTilingsInKb", 1);
-}
-
-TEST_F(CommitToPendingTreeLayerTreeHostImplTest,
-       GPUMemoryForLargeLayerHistogramTest) {
-  base::HistogramTester histogram_tester;
-  SetClientNameForMetrics("Renderer");
-  host_impl_->SetDownsampleMetricsForTesting(false);
-  // With default tile size being set to 256 * 256, the following layer needs
-  // 4 tiles which cost 256 * 256 * 4 * 4 / 1024 = 1024KB memory.
-  TestGPUMemoryForTilings(gfx::Size(500, 500));
-  histogram_tester.ExpectBucketCount(
-      "Compositing.Renderer.GPUMemoryForTilingsInKb", 1024, 1);
-  histogram_tester.ExpectTotalCount(
-      "Compositing.Renderer.GPUMemoryForTilingsInKb", 1);
 }
 
 // This test verifies that we drop a scroll (and don't crash) if a scroll is
@@ -1841,73 +1782,108 @@ gfx::PresentationFeedback ExampleFeedback() {
   return feedback;
 }
 
-class LayerTreeHostImplTestInvokeMainThreadCallbacks
+class LayerTreeHostImplTestInvokePresentationCallbacks
     : public LayerTreeHostImplTest {
  public:
   void DidPresentCompositorFrameOnImplThread(
       uint32_t frame_token,
       PresentationTimeCallbackBuffer::PendingCallbacks activated,
       const viz::FrameTimingDetails& details) override {
-    auto main_thread_callbacks = std::move(activated.main_thread_callbacks);
     host_impl_->NotifyDidPresentCompositorFrameOnImplThread(
-        frame_token, std::move(activated.compositor_thread_callbacks), details);
-    for (auto& callback : main_thread_callbacks)
+        frame_token, std::move(activated.compositor_successful_callbacks),
+        details);
+    for (auto& callback : activated.main_callbacks)
       std::move(callback).Run(details.presentation_feedback);
+    for (auto& callback : activated.main_successful_callbacks)
+      std::move(callback).Run(details.presentation_feedback.timestamp);
   }
 };
 
 // Tests that, when the LayerTreeHostImpl receives presentation feedback, the
 // feedback gets routed to a properly registered callback.
-TEST_F(LayerTreeHostImplTestInvokeMainThreadCallbacks,
+TEST_F(LayerTreeHostImplTestInvokePresentationCallbacks,
        PresentationFeedbackCallbacksFire) {
-  bool compositor_thread_callback_fired = false;
-  bool main_thread_callback_fired = false;
-  base::TimeTicks presentation_time_seen_by_compositor_thread_callback;
-  gfx::PresentationFeedback feedback_seen_by_main_thread_callback;
+  bool compositor_successful_callback_fired = false;
+  bool main_callback_fired = false;
+  bool main_successful_callback_fired = false;
+  base::TimeTicks compositor_successful_callback_presentation_timestamp;
+  gfx::PresentationFeedback main_callback_presentation_feedback;
+  base::TimeTicks main_successful_callback_presentation_timestamp;
 
-  // Register a compositor-thread callback to run when the frame for
-  // |frame_token_1| gets presented.
   constexpr uint32_t frame_token_1 = 1;
-  host_impl_->RegisterCompositorPresentationTimeCallback(
-      frame_token_1,
-      base::BindLambdaForTesting([&](base::TimeTicks presentation_timestamp) {
-        DCHECK(presentation_time_seen_by_compositor_thread_callback.is_null());
-        DCHECK(!presentation_timestamp.is_null());
-        compositor_thread_callback_fired = true;
-        presentation_time_seen_by_compositor_thread_callback =
-            presentation_timestamp;
-      }));
-
-  // Register a main-thread callback to run when the frame for |frame_token_2|
-  // gets presented.
   constexpr uint32_t frame_token_2 = 2;
-  ASSERT_GT(frame_token_2, frame_token_1);
+  constexpr uint32_t frame_token_3 = 3;
+
+  // Register a compositor-thread successful presentation callback to run when
+  // the frame for `frame_token_1` gets presented.
+  host_impl_
+      ->RegisterCompositorThreadSuccessfulPresentationTimeCallbackForTesting(
+          frame_token_1,
+          base::BindLambdaForTesting(
+              [&](base::TimeTicks presentation_timestamp) {
+                DCHECK(compositor_successful_callback_presentation_timestamp
+                           .is_null());
+                DCHECK(!presentation_timestamp.is_null());
+                compositor_successful_callback_fired = true;
+                compositor_successful_callback_presentation_timestamp =
+                    presentation_timestamp;
+              }));
+
+  // Register a main-thread presentation callback to run when the presentation
+  // feedback for `frame_token_2` is received.
   host_impl_->RegisterMainThreadPresentationTimeCallbackForTesting(
       frame_token_2, base::BindLambdaForTesting(
                          [&](const gfx::PresentationFeedback& feedback) {
-                           main_thread_callback_fired = true;
-                           feedback_seen_by_main_thread_callback = feedback;
+                           main_callback_fired = true;
+                           main_callback_presentation_feedback = feedback;
                          }));
 
+  // Register a main-thread successful presentation callback to run when the
+  // frame for `frame_token_2` gets presented.
+  host_impl_->RegisterMainThreadSuccessfulPresentationTimeCallbackForTesting(
+      frame_token_2,
+      base::BindLambdaForTesting([&](base::TimeTicks presentation_timestamp) {
+        DCHECK(main_successful_callback_presentation_timestamp.is_null());
+        DCHECK(!presentation_timestamp.is_null());
+        main_successful_callback_fired = true;
+        main_successful_callback_presentation_timestamp =
+            presentation_timestamp;
+      }));
+
+  // Present frame for `frame_token_1` successfully.
   viz::FrameTimingDetails mock_details;
   mock_details.presentation_feedback = ExampleFeedback();
-
   host_impl_->DidPresentCompositorFrame(frame_token_1, mock_details);
 
-  EXPECT_TRUE(compositor_thread_callback_fired);
-  EXPECT_EQ(presentation_time_seen_by_compositor_thread_callback,
+  // Only callbacks registered for `frame_token_1` should be called.
+  EXPECT_TRUE(compositor_successful_callback_fired);
+  EXPECT_FALSE(main_callback_fired);
+  EXPECT_FALSE(main_successful_callback_fired);
+  EXPECT_EQ(compositor_successful_callback_presentation_timestamp,
             mock_details.presentation_feedback.timestamp);
+  EXPECT_EQ(main_callback_presentation_feedback, gfx::PresentationFeedback());
+  EXPECT_TRUE(main_successful_callback_presentation_timestamp.is_null());
 
-  // Since |frame_token_2| is strictly greater than |frame_token_1|, the
-  // main-thread callback must remain queued for now.
-  EXPECT_FALSE(main_thread_callback_fired);
-  EXPECT_EQ(feedback_seen_by_main_thread_callback, gfx::PresentationFeedback());
-
+  // Fail presentation of frame for `frame_token_2`.
+  mock_details.presentation_feedback = gfx::PresentationFeedback::Failure();
   host_impl_->DidPresentCompositorFrame(frame_token_2, mock_details);
 
-  EXPECT_TRUE(main_thread_callback_fired);
-  EXPECT_EQ(feedback_seen_by_main_thread_callback,
+  // Only callbacks that are allowed to run on failed presentations should be
+  // called.
+  EXPECT_TRUE(main_callback_fired);
+  EXPECT_FALSE(main_successful_callback_fired);
+  EXPECT_EQ(main_callback_presentation_feedback,
             mock_details.presentation_feedback);
+  EXPECT_TRUE(main_successful_callback_presentation_timestamp.is_null());
+
+  // Present frame for `frame_token_2` successfully.
+  mock_details.presentation_feedback = ExampleFeedback();
+  host_impl_->DidPresentCompositorFrame(frame_token_3, mock_details);
+
+  // Now the callbacks for successful presentation should be called, too.
+  EXPECT_TRUE(main_successful_callback_fired);
+  EXPECT_EQ(main_successful_callback_presentation_timestamp,
+            mock_details.presentation_feedback.timestamp);
 }
 
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, NonFastScrollableRegionBasic) {
@@ -5840,7 +5816,6 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
   settings.scrollbar_animator = LayerTreeSettings::AURA_OVERLAY;
   settings.scrollbar_fade_delay = base::Milliseconds(20);
   settings.scrollbar_fade_duration = base::Milliseconds(20);
-  settings.enable_scroll_update_optimizations = true;
   gfx::Size viewport_size(50, 50);
   gfx::Size content_size(100, 100);
 
@@ -11268,10 +11243,9 @@ class FakeDrawableLayerImpl : public LayerImpl {
 // the sub-buffer that is damaged.
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
   auto gl_owned = std::make_unique<viz::TestGLES2Interface>();
-  gl_owned->set_have_post_sub_buffer(true);
   scoped_refptr<viz::TestContextProvider> context_provider(
       viz::TestContextProvider::Create(std::move(gl_owned)));
-  context_provider->BindToCurrentThread();
+  context_provider->BindToCurrentSequence();
 
   std::unique_ptr<FakeLayerTreeFrameSink> layer_tree_frame_sink(
       FakeLayerTreeFrameSink::Create3d(context_provider));
@@ -15748,11 +15722,7 @@ TEST_F(LayerTreeHostImplCountingLostSurfaces, TwiceLostSurface) {
 
 size_t CountRenderPassesWithId(const viz::CompositorRenderPassList& list,
                                viz::CompositorRenderPassId id) {
-  return std::count_if(
-      list.begin(), list.end(),
-      [id](const std::unique_ptr<viz::CompositorRenderPass>& p) {
-        return p->id == id;
-      });
+  return base::ranges::count(list, id, &viz::CompositorRenderPass::id);
 }
 
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, RemoveUnreferencedRenderPass) {
@@ -16791,7 +16761,7 @@ class TestRenderFrameMetadataObserver : public RenderFrameMetadataObserver {
   TestRenderFrameMetadataObserver& operator=(
       const TestRenderFrameMetadataObserver&) = delete;
 
-  void BindToCurrentThread() override {}
+  void BindToCurrentSequence() override {}
   void OnRenderFrameSubmission(
       const RenderFrameMetadata& render_frame_metadata,
       viz::CompositorFrameMetadata* compositor_frame_metadata,
@@ -18498,7 +18468,7 @@ TEST_F(LayerTreeHostImplTest, FrameElementIdHitTestOverlapSibling) {
       GetInputHandler().FindFrameElementIdAtPoint(gfx::PointF(30, 30)));
 }
 
-TEST_F(LayerTreeHostImplTest, DocumentTransitionRequestCausesDamage) {
+TEST_F(LayerTreeHostImplTest, ViewTransitionRequestCausesDamage) {
   const gfx::Size viewport_size(100, 100);
   SetupDefaultRootLayer(viewport_size);
   UpdateDrawProperties(host_impl_->active_tree());
@@ -18522,9 +18492,9 @@ TEST_F(LayerTreeHostImplTest, DocumentTransitionRequestCausesDamage) {
   did_request_redraw_ = false;
 
   // Adding a transition effect should cause us to redraw.
-  host_impl_->active_tree()->AddDocumentTransitionRequest(
-      DocumentTransitionRequest::CreateAnimateRenderer(
-          /*document_tag=*/0));
+  host_impl_->active_tree()->AddViewTransitionRequest(
+      ViewTransitionRequest::CreateAnimateRenderer(
+          /*document_tag=*/0, viz::NavigationID::Null()));
 
   // Ensure there is damage and we requested a redraw.
   host_impl_->OnDraw(draw_transform, draw_viewport, resourceless_software_draw,

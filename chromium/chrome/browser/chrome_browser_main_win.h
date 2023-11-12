@@ -12,6 +12,8 @@
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/common/conflicts/module_watcher_win.h"
 
+class PlatformAuthPolicyObserver;
+
 namespace base {
 class CommandLine;
 }
@@ -38,6 +40,7 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
 
   // ChromeBrowserMainParts overrides.
   void ShowMissingLocaleMessageBox() override;
+  void PreProfileInit() override;
   void PostProfileInit(Profile* profile, bool is_initial_profile) override;
   void PostBrowserStart() override;
 
@@ -81,6 +84,9 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
 
   // Watches module load events and forwards them to the ModuleDatabase.
   std::unique_ptr<ModuleWatcher> module_watcher_;
+
+  // Applies enterprise policies for platform auth SSO.
+  std::unique_ptr<PlatformAuthPolicyObserver> platform_auth_policy_observer_;
 };
 
 #endif  // CHROME_BROWSER_CHROME_BROWSER_MAIN_WIN_H_

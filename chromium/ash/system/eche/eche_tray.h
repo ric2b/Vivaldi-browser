@@ -8,25 +8,18 @@
 #include <string>
 
 #include "ash/ash_export.h"
-#include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "ash/session/session_controller_impl.h"
-#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_observer.h"
-#include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/system/eche/eche_icon_loading_indicator_view.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/gtest_prod_util.h"
 #include "base/timer/timer.h"
-#include "components/session_manager/session_manager_types.h"
 #include "ui/events/event_handler.h"
-#include "ui/events/event_target.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/button.h"
 #include "url/gurl.h"
@@ -49,13 +42,20 @@ class Image;
 class Size;
 }  // namespace gfx
 
+namespace keyboard {
+class KeyboardUIController;
+}  // namespace keyboard
+
 namespace ash {
 
-class Shelf;
-class TrayBubbleView;
-class TrayBubbleWrapper;
 class AshWebView;
 class PhoneHubTray;
+class TabletModeController;
+class TrayBubbleView;
+class TrayBubbleWrapper;
+class SessionControllerImpl;
+class Shelf;
+class Shell;
 
 // This class represents the Eche tray button in the status area and
 // controls the bubble that is shown when the tray button is clicked.
@@ -65,9 +65,41 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
                             public ShelfObserver,
                             public TabletModeObserver,
                             public KeyboardControllerObserver,
-                            ShellObserver {
+                            public ShellObserver {
  public:
   METADATA_HEADER(EcheTray);
+
+  // TODO(b/226687249): Move to ash/webui/eche_app_ui if dependency cycle error
+  // is fixed. Enum representing the connection fail reason. These values are
+  // persisted to logs. Entries should not be renumbered and numeric values
+  // should never be reused.
+  enum class ConnectionFailReason {
+    // Initial state.
+    kUnknown = 0,
+
+    // Timeout because signaling no response, we don't received any response
+    // or request before timeout. Report this from EcheSignaler.
+    kSignalingNotTriggered = 1,
+
+    // Timeout because signaling response is late. Report this from
+    // EcheSignaler.
+    kSignalingHasLateResponse = 2,
+
+    // Timeout because we can't finish the whole connection process on time
+    // after receiving the signaling request from the remote device. Report
+    // this from EcheSignaler.
+    kSignalingHasLateRequest = 3,
+
+    // Timeout because the security channel disconnected. Report this from
+    // EcheSignaler.
+    kSecurityChannelDisconnected = 4,
+
+    // Connection fail because the device is in the tablet mode. Report this
+    // from EcheTray.
+    kConnectionFailInTabletMode = 5,
+
+    kMaxValue = kConnectionFailInTabletMode,
+  };
 
   using GracefulCloseCallback = base::OnceCallback<void()>;
   using GracefulGoBackCallback = base::RepeatingCallback<void()>;
@@ -150,7 +182,8 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // Returns true if the bubble is loaded or initialized successfully.
   bool LoadBubble(const GURL& url,
                   const gfx::Image& icon,
-                  const std::u16string& visible_name);
+                  const std::u16string& visible_name,
+                  const std::u16string& phone_name);
 
   // Destroys the view inclusing the web view.
   // Note: `CloseBubble` only hides the view.
@@ -167,7 +200,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // Set up the params and init the bubble.
   // Note: This function makes the bubble active and makes the
   // TrayBackgroundView's background inkdrop activate.
-  void InitBubble();
+  void InitBubble(const std::u16string& phone_name);
 
   // Starts graceful close to ensure the connection resource is released before
   // the window is closed.
@@ -176,6 +209,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // Test helpers
   TrayBubbleWrapper* get_bubble_wrapper_for_test() { return bubble_.get(); }
   AshWebView* get_web_view_for_test() { return web_view_; }
+  views::ImageButton* GetIcon();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(EcheTrayTest, EcheTrayCreatesBubbleButHideFirst);
@@ -187,7 +221,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // process the accelerator keys.
   class EventInterceptor : public ui::EventHandler {
    public:
-    EventInterceptor(EcheTray* eche_tray);
+    explicit EventInterceptor(EcheTray* eche_tray);
 
     EventInterceptor(const EventInterceptor&) = delete;
     EventInterceptor& operator=(const EventInterceptor&) = delete;
@@ -210,9 +244,9 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
 
   // Creates the header of the bubble that includes a back arrow,
   // close, and minimize buttons.
-  std::unique_ptr<views::View> CreateBubbleHeaderView();
+  std::unique_ptr<views::View> CreateBubbleHeaderView(
+      const std::u16string& phone_name);
 
-  views::ImageButton* GetIcon();
   void StopLoadingAnimation();
   void StartLoadingAnimation();
   void SetIconVisibility(bool visibility);
@@ -278,19 +312,17 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // when the stream is initializing to when the stream is closed by user.
   absl::optional<base::TimeTicks> init_stream_timestamp_;
 
+  bool is_stream_started_ = false;
+
   // Observers
   base::ScopedObservation<SessionControllerImpl, SessionObserver>
       observed_session_{this};
   base::ScopedObservation<Shelf, ShelfObserver> shelf_observation_{this};
   base::ScopedObservation<TabletModeController, TabletModeObserver>
       tablet_mode_observation_{this};
-  base::ScopedObservation<Shell,
-                          ShellObserver,
-                          &Shell::AddShellObserver,
-                          &Shell::RemoveShellObserver>
-      shell_observer_{this};
+  base::ScopedObservation<Shell, ShellObserver> shell_observer_{this};
   base::ScopedObservation<keyboard::KeyboardUIController,
-                          ash::KeyboardControllerObserver>
+                          KeyboardControllerObserver>
       keyboard_observation_{this};
 
   base::WeakPtrFactory<EcheTray> weak_factory_{this};

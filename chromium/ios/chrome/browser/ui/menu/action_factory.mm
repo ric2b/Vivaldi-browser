@@ -5,10 +5,10 @@
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 
 #import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -36,7 +36,7 @@ using l10n_util::GetNSString;
 
 @implementation ActionFactory
 
-- (instancetype)initWithScenario:(MenuScenario)scenario {
+- (instancetype)initWithScenario:(MenuScenarioHistogram)scenario {
   if (self = [super init]) {
     _histogram = GetActionsHistogramName(scenario);
   }
@@ -91,6 +91,17 @@ using l10n_util::GetNSString;
                       block:block];
 }
 
+- (UIAction*)actionToPinTabWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
+                                      kPinSymbol, kSymbolActionPointSize)
+                                : [UIImage imageNamed:@"pin"];
+  return [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_PINTAB)
+                image:image
+                 type:MenuActionType::PinTab
+                block:block];
+}
+
 - (UIAction*)actionToDeleteWithBlock:(ProceduralBlock)block {
   UIImage* image = UseSymbols()
                        ? DefaultSymbolWithPointSize(kDeleteActionSymbol,
@@ -114,6 +125,8 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kNewTabActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"open_in_new_tab"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
 
   if (IsVivaldiRunning())
     image =
@@ -124,7 +137,7 @@ using l10n_util::GetNSString;
                                    IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
                          image:image
                           type:MenuActionType::OpenInNewTab
-                         block:block];
+                         block:completionBlock];
 }
 
 - (UIAction*)actionToOpenAllTabsWithBlock:(ProceduralBlock)block {
@@ -208,9 +221,10 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToMarkAsUnreadWithBlock:(ProceduralBlock)block {
-  UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
-                                      kHideActionSymbol, kSymbolActionPointSize)
-                                : [UIImage imageNamed:@"remove"];
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kMarkAsUnreadActionSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"remove"];
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_MARK_AS_UNREAD_ACTION)
                          image:image
@@ -221,14 +235,17 @@ using l10n_util::GetNSString;
 - (UIAction*)actionToOpenOfflineVersionInNewTabWithBlock:
     (ProceduralBlock)block {
   UIImage* image = UseSymbols()
-                       ? DefaultSymbolWithPointSize(kCheckMarkCircleSymbol,
+                       ? DefaultSymbolWithPointSize(kCheckmarkCircleSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"offline"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_OPEN_OFFLINE_BUTTON)
                          image:image
                           type:MenuActionType::ViewOffline
-                         block:block];
+                         block:completionBlock];
 }
 
 - (UIAction*)actionToAddToReadingListWithBlock:(ProceduralBlock)block {
@@ -333,7 +350,7 @@ using l10n_util::GetNSString;
 
 - (UIAction*)actionToSelectTabsWithBlock:(ProceduralBlock)block {
   UIImage* image = UseSymbols()
-                       ? DefaultSymbolWithPointSize(kCheckMarkCircleSymbol,
+                       ? DefaultSymbolWithPointSize(kCheckmarkCircleSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"select"];
   UIAction* action = [self
@@ -355,6 +372,16 @@ using l10n_util::GetNSString;
                        type:MenuActionType::SearchImageWithLens
                       block:block];
   return action;
+}
+
+- (ProceduralBlock)recordMobileWebContextMenuOpenTabActionWithBlock:
+    (ProceduralBlock)block {
+  return ^{
+    base::RecordAction(base::UserMetricsAction("MobileWebContextMenuOpenTab"));
+    if (block) {
+      block();
+    }
+  };
 }
 
 #pragma mark - Vivaldi
@@ -403,7 +430,5 @@ using l10n_util::GetNSString;
                            type:MenuActionType::NewNote
                            block:block];
   }
-
-
 
 @end

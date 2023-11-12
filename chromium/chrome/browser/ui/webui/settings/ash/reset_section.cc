@@ -6,6 +6,7 @@
 
 #include "base/no_destructor.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/management_utils.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -17,14 +18,13 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace mojom {
-using ::ash::settings::mojom::SearchResultDefaultRank;
-using ::ash::settings::mojom::SearchResultIcon;
-using ::ash::settings::mojom::SearchResultType;
+using ::chromeos::settings::mojom::kResetSectionPath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
 }  // namespace mojom
 
 namespace {
@@ -49,7 +49,7 @@ const std::vector<SearchConcept>& GetResetSearchConcepts() {
 }
 
 bool IsPowerwashAllowed() {
-  return !webui::IsEnterpriseManaged() &&
+  return !policy::IsDeviceEnterpriseManaged() &&
          !user_manager::UserManager::Get()->IsLoggedInAsGuest() &&
          !user_manager::UserManager::Get()->IsLoggedInAsChildUser();
 }
@@ -133,5 +133,4 @@ void ResetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kPowerwash);
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

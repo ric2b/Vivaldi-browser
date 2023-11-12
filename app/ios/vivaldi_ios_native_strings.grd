@@ -207,8 +207,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_TITLE" desc="Title shown above a message in the Recently Closed Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced.">
         Recently Closed Tabs are Unavailable
       </message>
+      <!-- START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_NEW_SPEED_DIAL" desc="The string title describing the new speed dial adding option on the start page.">
         New Speed Dial
+      </message>
+      <message name="IDS_IOS_NEW_SPEED_DIAL_SMALL" desc="The string title describing the new speed dial adding option on the start page on 'Small' layout">
+        New
       </message>
       <message name="IDS_IOS_EDIT_SPEED_DIAL" desc="The string title describing the context menu option for editing an speed dial.">
         Edit Speed Dial
@@ -246,9 +250,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_SORT_BY_CONTENT" desc="Description of sort order by content">
         By Content
       </message>
+      <!-- END START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
         Search or type web address
       </message>
+      <!-- BOOKMARK EDITOR -->
       <message name="IDS_IOS_USE_AS_SPEED_DIAL_FOLDER" desc="Description for the bookmark folder editor 'Use as Speed Dial Folder' option">
         Use as Speed Dial Folder
       </message>
@@ -297,6 +303,7 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
         Search Folder
       </message>
+      <!-- END BOOKMARK EDITOR -->
       <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
         Open in Private
       </message>
@@ -306,6 +313,158 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens an private tab explaining incognito mode">
         Browsing in a Private Tab means that searches, sites visited, cookies and temporary files won't be stored by Vivaldi. It does not encrypt or otherwise modify your connection.
       </message>
+      <!-- Sync -->
+      <message name="IDS_VIVALDI_IOS_SYNC_LAST_SYNC" desc="(Vivaldi iOS) Message prefix of last sync information.">
+        Last sync:
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CLEARING_SERVER_DATA" desc="(Vivaldi iOS) Message shown when user chooses to delete remove server data.">
+        Clearing Sync data. Please wait.
+      </message>
+      <message name="IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT" desc="Accessibility hint that indicates to the user that they can show the hidden/masked password.">
+        Show Password
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED" desc="Message shown when logging into sync fails.">
+        Login Failed
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_USERNAME_REQUIRED" desc="Message shown when logging into sync and username is not provided.">
+        Username required
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_PASSWORD_REQUIRED" desc="Message shown when logging into sync and password is not provided.">
+        Password required
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED" desc="Message shown when logging into sync and encryption passphrase is not provided.">
+        Encryption password required
+      </message>
+      <message name="IDS_VIVALDI_CREATE_ACCOUNT_TEXT" desc="(Vivaldi) Request the creation of a new vivaldi account.">
+        New to Vivaldi? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Create an Account<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <!-- TODO(tomas@vivaldi.com): we need an ios URL. See HP-199 in JIRA-->
+      <message name="IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL" translateable="false">
+        https://help.vivaldi.com/android/android-tools/android-sync
+      </message>
+      <message name="IDS_VIVALDI_SYNC_BOOKMARKS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        Bookmarks
+      </message>
+      <message name="IDS_VIVALDI_SYNC_BOOKMARKS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync bookmarks and Speed Dials
+      </message>
+      <message name="IDS_VIVALDI_SYNC_PREFERENCES" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        Settings
+      </message>
+      <message name="IDS_VIVALDI_SYNC_PREFERENCES_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync Vivaldi settings (not all settings are yet syncable)
+      </message>
+      <message name="IDS_VIVALDI_SYNC_PASSWORDS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        Passwords
+      </message>
+      <message name="IDS_VIVALDI_SYNC_PASSWORDS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync stored webpage passwords
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTOFILL" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        Autofill
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTOFILL_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync form autofill information
+      </message>
+      <message name="IDS_VIVALDI_SYNC_TYPED_URLS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        History
+      </message>
+      <message name="IDS_VIVALDI_SYNC_TYPED_URLS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync typed URLs and open tabs
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CANCEL_CLEAR_SERVER_DATA_MESSAGE" desc="(Vivaldi) Cancel button of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        Cancel
+      </message>
+      <!-- End Sync -->
+      <!-- AD AND TRACKER BLOCKER -->
+      <message name="IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker settings">
+        Ad and Tracker blocker
+      </message>
+      <message name="IDS_IOS_TRACKER_SHIELD_ACCNAME" desc="The accessible name for the vivaldi tracker blocker shield button of the omnibox.">
+        Ad and Tracker blocker summery
+      </message>
+      <message name="IDS_IOS_TRACKER_BLOCKED_TEXT" desc="Label for blocked tracker (singular) counter in the blocker popup window">
+        Tracker blocked
+      </message>
+      <message name="IDS_IOS_TRACKERS_BLOCKED_TEXT" desc="Label for blocked trackers counter in the blocker popup window">
+        Trackers blocked
+      </message>
+      <message name="IDS_IOS_AD_BLOCKED_TEXT" desc="Label for blocked ad (singular) counter in the blocker popup window">
+        Ad blocked
+      </message>
+      <message name="IDS_IOS_ADS_BLOCKED_TEXT" desc="Label for blocked ads counter in the blocker popup window">
+        Ads blocked
+      </message>
+      <!-- END AD AND TRACKER BLOCKER -->
+      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+        Add your first bookmark by tapping the plus icon below
+      </message>
+      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
+        You'll find your bookmarks here
+      </message>
+      <message name="IDS_VIVALDI_HISTORY_EMPTY_TITLE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+        History
+      </message>
+      <message name="IDS_VIVALDI_HISTORY_EMPTY_MESSAGE" desc="Title shown on the Note screen when there are no Notes.">
+        Once you start browsing, your history will appear here
+      </message>
+      <message name="IDS_VIVALDI_NOTE_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+         Add your first note by tapping the plus icon below
+      </message>
+      <message name="IDS_VIVALDI_NOTE_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
+         You'll find your notes here
+      </message>
+      <!-- START PAGE LAYOUT SETTINGS -->
+      <message name="IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT" desc="Title for the start page layout settings">
+        Start Page Layout
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LARGE" desc="Start page layout settings large speed dials">
+        Large
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_MEDIUM" desc="Start page layout settings medium speed dials">
+        Medium
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL" desc="Start page layout settings small speed dials">
+        Small
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LIST" desc="Start page layout settings list speed dials">
+        List
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SIZE_PREVIEW" desc="Start page layout settings title for size preview">
+        Size Preview
+      </message>
+      <!-- END START PAGE LAYOUT SETTINGS -->
+      <!-- DESKTOP TABS SETTINGS -->
+      <message name="IDS_IOS_PREFS_VIVALDI_DESKTOP_TABS" desc="Title for the desktop tabs settings">
+        Desktop tabs
+      </message>
+      <!-- END DESKTOP TABS SETTINGS -->
+      <!-- TOOLBAR -->
+      <message name="IDS_IOS_TOOLBAR_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker button on the toolbar menu for iPhone landscape">
+        Ad and Tracker blocker
+      </message>
+      <message name="IDS_IOS_TOOLBAR_VIVALDI_SHARE" desc="Title for the share button on the toolbar menu for iPhone landscape">
+        Share
+      </message>
+      <message name="IDS_IOS_TOOLBAR_VIVALDI_PANEL" desc="Title for the panel button on the toolbar menu for iPhone landscape">
+        Panel
+      </message>
+      <message name="IDS_ACCNAME_MORE" desc="The accessible name for the more button.">
+        More
+      </message>
+      <message name="IDS_ACCNAME_PANEL" desc="The accessible name for the panel button.">
+        Panel
+      </message>
+      <message name="IDS_ACCNAME_SHARE" desc="The accessible name for the share button.">
+        Share
+      </message>
+      <message name="IDS_ACCNAME_ATB" desc="The accessible name for the ad and tracker blocker button.">
+        Ad and Tracker Blocker
+      </message>
+      <message name="IDS_ACCNAME_SEARCH" desc="The accessible name for the search button.">
+        Search
+      </message>
+      <!-- END TOOLBAR -->
     </messages>
   </release>
 </grit>

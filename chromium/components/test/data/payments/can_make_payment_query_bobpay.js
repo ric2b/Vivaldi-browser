@@ -4,9 +4,6 @@
  * found in the LICENSE file.
  */
 
-/* global PaymentRequest:false */
-/* global print:false */
-
 const defaultDetails = {
   total: {
     label: 'Total',
@@ -18,14 +15,14 @@ const defaultDetails = {
 };
 
 const bobPayMethod = {
-  supportedMethods: 'https://bobpay.com',
+  supportedMethods: 'https://bobpay.test',
   data: {
     'bobPayParameter': '1',
   },
 };
 
 const alicePayMethod = {
-  supportedMethods: 'https://alicepay.com',
+  supportedMethods: 'https://alicepay.test',
   data: {
     'alicePayParameter': '2',
   },
@@ -76,7 +73,7 @@ function run(testFunction, logger) {
  * Checks for existence of Bob Pay twice, with the same payment method specific
  * parameters.
  */
-function buy() { // eslint-disable-line no-unused-vars
+function buy() {
   first = null;
   second = null;
 
@@ -94,7 +91,7 @@ function buy() { // eslint-disable-line no-unused-vars
 /**
  * Checks for existence of Bob Pay and AlicePay.
  */
-function otherBuy() { // eslint-disable-line no-unused-vars
+function otherBuy() {
   first = null;
   second = null;
 
@@ -112,7 +109,7 @@ function otherBuy() { // eslint-disable-line no-unused-vars
 /**
  * Checks for existence of an enrolled instrument for BobPay and AlicePay.
  */
-function hasEnrolledInstrument() { // eslint-disable-line no-unused-vars
+function hasEnrolledInstrument() {
   first = null;
   second = null;
 

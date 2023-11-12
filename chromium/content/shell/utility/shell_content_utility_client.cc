@@ -17,6 +17,7 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/writable_shared_memory_region.h"
 #include "base/process/process.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/services/storage/test_api/test_api.h"
 #include "content/public/child/child_thread.h"
@@ -62,7 +63,7 @@ class TestUtilityServiceImpl : public mojom::TestService {
   }
 
   void DoCrashImmediately(DoCrashImmediatelyCallback callback) override {
-    IMMEDIATE_CRASH();
+    base::ImmediateCrash();
   }
 
   void CreateFolder(CreateFolderCallback callback) override {
@@ -81,8 +82,8 @@ class TestUtilityServiceImpl : public mojom::TestService {
     base::MappedReadOnlyRegion map_and_region =
         base::ReadOnlySharedMemoryRegion::Create(message.size());
     CHECK(map_and_region.IsValid());
-    std::copy(message.begin(), message.end(),
-              map_and_region.mapping.GetMemoryAsSpan<char>().begin());
+    base::ranges::copy(message,
+                       map_and_region.mapping.GetMemoryAsSpan<char>().begin());
     std::move(callback).Run(std::move(map_and_region.region));
   }
 
@@ -93,8 +94,7 @@ class TestUtilityServiceImpl : public mojom::TestService {
     CHECK(region.IsValid());
     base::WritableSharedMemoryMapping mapping = region.Map();
     CHECK(mapping.IsValid());
-    std::copy(message.begin(), message.end(),
-              mapping.GetMemoryAsSpan<char>().begin());
+    base::ranges::copy(message, mapping.GetMemoryAsSpan<char>().begin());
     std::move(callback).Run(std::move(region));
   }
 
@@ -105,9 +105,18 @@ class TestUtilityServiceImpl : public mojom::TestService {
     CHECK(region.IsValid());
     base::WritableSharedMemoryMapping mapping = region.Map();
     CHECK(mapping.IsValid());
-    std::copy(message.begin(), message.end(),
-              mapping.GetMemoryAsSpan<char>().begin());
+    base::ranges::copy(message, mapping.GetMemoryAsSpan<char>().begin());
     std::move(callback).Run(std::move(region));
+  }
+
+  void CloneSharedMemoryContents(
+      base::ReadOnlySharedMemoryRegion region,
+      CloneSharedMemoryContentsCallback callback) override {
+    auto mapping = region.Map();
+    auto new_region = base::UnsafeSharedMemoryRegion::Create(region.GetSize());
+    auto new_mapping = new_region.Map();
+    memcpy(new_mapping.memory(), mapping.memory(), region.GetSize());
+    std::move(callback).Run(std::move(new_region));
   }
 
   void IsProcessSandboxed(IsProcessSandboxedCallback callback) override {
@@ -132,7 +141,7 @@ ShellContentUtilityClient::ShellContentUtilityClient(bool is_browsertest) {
   if (is_browsertest &&
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kProcessType) == switches::kUtilityProcess) {
-    network_service_test_helper_ = std::make_unique<NetworkServiceTestHelper>();
+    network_service_test_helper_ = NetworkServiceTestHelper::Create();
     audio_service_test_helper_ = std::make_unique<AudioServiceTestHelper>();
     storage::InjectTestApiImplementation();
     register_sandbox_status_helper_ = true;
@@ -145,13 +154,13 @@ void ShellContentUtilityClient::ExposeInterfacesToBrowser(
     mojo::BinderMap* binders) {
   binders->Add<mojom::PowerMonitorTest>(
       base::BindRepeating(&PowerMonitorTestImpl::MakeSelfOwnedReceiver),
-      base::ThreadTaskRunnerHandle::Get());
+      base::SingleThreadTaskRunner::GetCurrentDefault());
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   if (register_sandbox_status_helper_) {
     binders->Add<content::mojom::SandboxStatusService>(
         base::BindRepeating(
             &content::SandboxStatusService::MakeSelfOwnedReceiver),
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
 #endif
 }
@@ -160,12 +169,6 @@ void ShellContentUtilityClient::RegisterIOThreadServices(
     mojo::ServiceFactory& services) {
   services.Add(RunTestService);
   services.Add(RunEchoService);
-}
-
-void ShellContentUtilityClient::RegisterNetworkBinders(
-    service_manager::BinderRegistry* registry) {
-  if (network_service_test_helper_)
-    network_service_test_helper_->RegisterNetworkBinders(registry);
 }
 
 }  // namespace content

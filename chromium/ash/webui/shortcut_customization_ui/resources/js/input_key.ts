@@ -19,9 +19,38 @@ export enum KeyInputState {
   ALPHANUMERIC_SELECTED = 'alpha-numeric-selected',
 }
 
-const keyToIconNameMap: {[key: string]: string} = {
-  'PrintScreen': 'overview',
-  // TODO(cambickel): Add remaining keyboard icons to this map.
+// The keys in this map are pulled from the file:
+// ui/events/keycodes/dom/dom_code_data.inc
+// TODO(cambickel): Add remaining missing icons.
+export const keyToIconNameMap: {[key: string]: string} = {
+  'ArrowDown': 'arrow-down',
+  'ArrowLeft': 'arrow-left',
+  'ArrowRight': 'arrow-right',
+  'ArrowUp': 'arrow-up',
+  'AudioVolumeDown': 'volume-down',
+  'AudioVolumeMute': 'volume-mute',
+  'AudioVolumeUp': 'volume-up',
+  'BrightnessDown': 'display-brightness-down',
+  'BrightnessUp': 'display-brightness-up',
+  'BrowserBack': 'back',
+  'BrowserForward': 'forward',
+  'BrowserRefresh': 'refresh',
+  'KeyboardBacklightToggle': 'keyboard-brightness-toggle',
+  'KeyboardBrightnessUp': 'keyboard-brightness-up',
+  'KeyboardBrightnessDown': 'keyboard-brightness-down',
+  'LaunchApplication1': 'overview',
+  'LaunchAssistant': 'assistant',
+  'MediaPlayPause': 'play-pause',
+  'MediaTrackNext': 'next-track',
+  'MediaTrackPrevious': 'last-track',
+  'MicrophoneMuteToggle': 'microphone-mute',
+  // TODO(cambickel) The launcher icon will vary per-device; update this when
+  // we're able to detect which one to show.
+  'OpenLauncher': 'launcher',
+  'Power': 'power',
+  'PrintScreen': 'screenshot',
+  'PrivacyScreenToggle': 'electronic-privacy-screen',
+  'ZoomToggle': 'fullscreen',
 };
 
 /**
@@ -59,7 +88,7 @@ export class InputKeyElement extends PolymerElement {
   private getIconIdForKey(): string|null {
     const iconName = keyToIconNameMap[this.key];
     if (iconName) {
-      return `shortcut-customization:${iconName}`;
+      return `shortcut-customization-keys:${iconName}`;
     }
     return null;
   }

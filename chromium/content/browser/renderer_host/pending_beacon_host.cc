@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/pending_beacon_host.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/browser/renderer_host/pending_beacon_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -18,30 +19,19 @@
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "url/url_constants.h"
 
 namespace content {
 namespace {
 
-// Returns true if `host` has the Background Sync permission granted for current
-// document.
-bool IsBackgroundSyncGranted(RenderFrameHost* host) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(host);
-
-  auto* permission_controller =
-      host->GetBrowserContext()->GetPermissionController();
-  DCHECK(permission_controller);
-
-  // Cannot use `PermissionController::GetPermissionStatusForCurrentDocument()`
-  // as `host` might not have all its states available when in PendingBeaconHost
-  // dtor even if it's still alive (See `DocumentUserData::render_frame_host()`)
-  // Specifically, it will crash on Android when the controller requests a
-  // RenderViewHost.
-  return permission_controller
-             ->GetPermissionResultForOriginWithoutContext(
-                 blink::PermissionType::BACKGROUND_SYNC,
-                 host->GetLastCommittedOrigin())
-             .status == blink::mojom::PermissionStatus::GRANTED;
+// Tells if `url` can be used by PendingBeacon.
+// The renderer checks these criteria in pending_beacon.cc and should have
+// already returned an exception instead of making an IPC to the browser.
+// Double-check in the browser process and report a bad message since the
+// renderer is possibly compromised.
+bool ShouldBlockURL(const GURL& url) {
+  return !url.is_valid() || !url.has_scheme() ||
+         !url.SchemeIs(url::kHttpsScheme);
 }
 
 }  // namespace
@@ -56,6 +46,8 @@ PendingBeaconHost::PendingBeaconHost(
       service_(service) {
   DCHECK(shared_url_factory_);
   DCHECK(service_);
+  // TODO(crbug.com/1293679): Abort if created from a non-secure context.
+  // https://w3c.github.io/webappsec-secure-contexts/
 
   render_frame_host().GetProcess()->AddObserver(this);
 }
@@ -64,6 +56,12 @@ void PendingBeaconHost::CreateBeacon(
     mojo::PendingReceiver<blink::mojom::PendingBeacon> receiver,
     const GURL& url,
     blink::mojom::BeaconMethod method) {
+  if (ShouldBlockURL(url)) {
+    mojo::ReportBadMessage("Unexpected url format from renderer");
+    return;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("PendingBeaconHost.Action", Action::kCreate);
   auto beacon =
       std::make_unique<Beacon>(url, method, this, std::move(receiver));
   beacons_.emplace_back(std::move(beacon));
@@ -76,12 +74,12 @@ PendingBeaconHost::~PendingBeaconHost() {
   }
   CHECK(!IsInObserverList());
 
-  // Checks if it has Background Sync granted before sending out the rest of
-  // beacons.
-  // https://github.com/WICG/unload-beacon#privacy
-  if (IsBackgroundSyncGranted(&render_frame_host())) {
-    Send(beacons_);
-  }
+  // PendingBeaconHost gets cleared when either RenderFrameHost is deleted or
+  // a cross-document non-BFCached navigation is committed in the same
+  // RenderFrameHost (See content::DocumentUserData).
+  // In both of the above case, pending beacons should be sent per Case B-1 from
+  // https://github.com/WICG/pending-beacon/issues/3#issuecomment-1286397825
+  SendAll(BatchAction::kSendAllOnHostDestroy);
 }
 
 void PendingBeaconHost::DeleteBeacon(Beacon* beacon) {
@@ -89,6 +87,7 @@ void PendingBeaconHost::DeleteBeacon(Beacon* beacon) {
       beacons_, beacon,
       [](const std::unique_ptr<Beacon>& b) { return b.get(); });
   if (iter != beacons_.end()) {
+    UMA_HISTOGRAM_ENUMERATION("PendingBeaconHost.Action", Action::kDelete);
     beacons_.erase(iter);
   }
 }
@@ -104,6 +103,20 @@ void PendingBeaconHost::SendBeacon(Beacon* beacon) {
   beacons_.erase(iter);
   std::vector<std::unique_ptr<Beacon>> to_send;
   to_send.emplace_back(std::move(beacon_ptr));
+  UMA_HISTOGRAM_ENUMERATION("PendingBeaconHost.Action", Action::kSend);
+  Send(to_send);
+}
+
+void PendingBeaconHost::SendAll(const BatchAction& action) {
+  if (beacons_.empty()) {
+    return;
+  }
+
+  // Swaps out from private field first to make any potential subsequent send
+  // requests from renderer no-ops.
+  std::vector<std::unique_ptr<Beacon>> to_send;
+  to_send.swap(beacons_);
+  UMA_HISTOGRAM_ENUMERATION("PendingBeaconHost.BatchAction", action);
   Send(to_send);
 }
 
@@ -112,6 +125,12 @@ void PendingBeaconHost::Send(
   if (beacons.empty()) {
     return;
   }
+
+  // TODO(crbug.com/1378833): When document is in BackForwardCache, checks if it
+  // has Background Sync granted before sending out the rest of beacons.
+  // https://github.com/WICG/pending-beacon#privacy
+  // Right now it cannot happen as `kPendingBeaconAPIForcesSendingOnNavigation`
+  // is enabled.
 
   service_->SendBeacons(beacons, shared_url_factory_.get());
 }
@@ -131,13 +150,8 @@ void PendingBeaconHost::SendAllOnNavigation() {
   // after users think they have left a page, beacons queued in that page
   // still exist and get sent through the new network, which leaks navigation
   // history to the new network.
-  // See https://github.com/WICG/unload-beacon/issues/30.
-
-  // Swaps out from private field first to make any potential subsequent send
-  // requests from renderer no-ops.
-  std::vector<std::unique_ptr<Beacon>> to_send;
-  to_send.swap(beacons_);
-  Send(to_send);
+  // See https://github.com/WICG/pending-beacon/issues/30.
+  SendAll(BatchAction::kSendAllOnNavigation);
 
   // Now all beacons are gone.
   // The renderer-side beacons should update their pending states by themselves.
@@ -146,9 +160,7 @@ void PendingBeaconHost::SendAllOnNavigation() {
 void PendingBeaconHost::RenderProcessExited(
     RenderProcessHost*,
     const ChildProcessTerminationInfo&) {
-  std::vector<std::unique_ptr<Beacon>> to_send;
-  to_send.swap(beacons_);
-  Send(to_send);
+  SendAll(BatchAction::kSendAllOnProcessExit);
 }
 void PendingBeaconHost::RenderProcessHostDestroyed(RenderProcessHost*) {
   render_frame_host().GetProcess()->RemoveObserver(this);
@@ -214,6 +226,11 @@ void Beacon::SetRequestURL(const GURL& url) {
     mojo::ReportBadMessage("Unexpected BeaconMethod from renderer");
     return;
   }
+  if (ShouldBlockURL(url)) {
+    mojo::ReportBadMessage("Unexpected url format from renderer");
+    return;
+  }
+
   url_ = url;
 }
 

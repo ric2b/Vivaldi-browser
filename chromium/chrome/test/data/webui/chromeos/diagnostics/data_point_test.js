@@ -3,16 +3,17 @@
 // found in the LICENSE file.
 
 import 'chrome://diagnostics/data_point.js';
+import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {DataPointElement} from 'chrome://diagnostics/data_point.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isVisible} from '../../test_util.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {isVisible} from '../test_util.js';
 
 import * as dx_utils from './diagnostics_test_utils.js';
 
-export function dataPointTestSuite() {
+suite('dataPointTestSuite', function() {
   /** @type {?DataPointElement} */
   let dataPointElement = null;
 
@@ -87,4 +88,4 @@ export function dataPointTestSuite() {
           dataPointElement.shadowRoot.querySelector('.text-red'), value);
     });
   });
-}
+});

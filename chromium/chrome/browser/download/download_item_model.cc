@@ -66,7 +66,7 @@
 #endif
 
 using download::DownloadItem;
-using MixedContentStatus = download::DownloadItem::MixedContentStatus;
+using InsecureDownloadStatus = download::DownloadItem::InsecureDownloadStatus;
 using safe_browsing::DownloadFileType;
 using ReportThreatDetailsResult =
     safe_browsing::PingManager::ReportThreatDetailsResult;
@@ -172,6 +172,62 @@ bool ShouldSendDownloadReport(download::DownloadDangerType danger_type) {
       return false;
   }
 }
+
+void MaybeSendDownloadReport(const GURL& url,
+                             download::DownloadDangerType danger_type,
+                             bool did_proceed,
+                             Profile* profile,
+                             download::DownloadItem* download) {
+  // Dangerous download delete report is gated by the new trigger flag.
+  if (!base::FeatureList::IsEnabled(
+          safe_browsing::kSafeBrowsingCsbrrNewDownloadTrigger) &&
+      !did_proceed) {
+    return;
+  }
+  // Only sends dangerous download report if :
+  // 1. FULL_SAFE_BROWSING is enabled, and
+  // 2. Download verdict is one of the dangerous types, and
+  // 3. Download URL is not empty, and
+  // 4. User is not in incognito mode.
+  if (ShouldSendDownloadReport(danger_type) && !url.is_empty() &&
+      !profile->IsOffTheRecord()) {
+    safe_browsing::SafeBrowsingService* sb_service =
+        g_browser_process->safe_browsing_service();
+    if (sb_service) {
+      bool is_successful = sb_service->SendDownloadReport(
+          download,
+          safe_browsing::ClientSafeBrowsingReportRequest::
+              DANGEROUS_DOWNLOAD_WARNING,
+          did_proceed, /*show_download_in_folder=*/absl::nullopt);
+      DCHECK(is_successful);
+    }
+  }
+}
+
+// Submits download to download feedback service if the user has approved and
+// the download is suitable for submission.
+// If user hasn't seen SBER opt-in text before, show SBER opt-in dialog first.
+bool MaybeSubmitDownloadToFeedbackService(DownloadCommands::Command command,
+                                          Profile* profile,
+                                          download::DownloadItem* download) {
+  if (!download->IsDangerous() || download->IsInsecure()) {
+    return false;
+  }
+  if (!safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
+          *download)) {
+    return false;
+  }
+
+  auto* const sb_service = g_browser_process->safe_browsing_service();
+  if (!sb_service)
+    return false;
+  auto* const dp_service = sb_service->download_protection_service();
+  if (!dp_service)
+    return false;
+  // TODO(shaktisahu): Enable feedback service for offline item.
+  return dp_service->MaybeBeginFeedbackForDownload(profile, download, command);
+}
+
 #endif
 
 // Enum representing reasons why a download is not preferred to be opened in
@@ -337,19 +393,8 @@ bool DownloadItemModel::IsMalicious() const {
   return false;
 }
 
-bool DownloadItemModel::IsMixedContent() const {
-  return download_->IsMixedContent();
-}
-
-bool DownloadItemModel::ShouldAllowDownloadFeedback() const {
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-  if (!IsDangerous())
-    return false;
-  return safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
-      *download_);
-#else
-  return false;
-#endif
+bool DownloadItemModel::IsInsecure() const {
+  return download_->IsInsecure();
 }
 
 bool DownloadItemModel::ShouldRemoveFromShelfWhenComplete() const {
@@ -501,9 +546,9 @@ void DownloadItemModel::SetDangerLevel(
   data->danger_level_ = danger_level;
 }
 
-download::DownloadItem::MixedContentStatus
-DownloadItemModel::GetMixedContentStatus() const {
-  return download_->GetMixedContentStatus();
+download::DownloadItem::InsecureDownloadStatus
+DownloadItemModel::GetInsecureDownloadStatus() const {
+  return download_->GetInsecureDownloadStatus();
 }
 
 bool DownloadItemModel::IsBeingRevived() const {
@@ -733,7 +778,7 @@ bool DownloadItemModel::IsCommandEnabled(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
-    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+    case DownloadCommands::LEARN_MORE_INSECURE_DOWNLOAD:
     case DownloadCommands::DEEP_SCAN:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
     case DownloadCommands::REVIEW:
@@ -773,7 +818,7 @@ bool DownloadItemModel::IsCommandChecked(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
-    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+    case DownloadCommands::LEARN_MORE_INSECURE_DOWNLOAD:
     case DownloadCommands::COPY_TO_CLIPBOARD:
     case DownloadCommands::DEEP_SCAN:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
@@ -820,41 +865,35 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
 #endif
       [[fallthrough]];
     case DownloadCommands::KEEP:
-      if (IsMixedContent()) {
-        download_->ValidateMixedContentDownload();
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+      if (command == DownloadCommands::KEEP) {
+        MaybeSubmitDownloadToFeedbackService(command, profile(), download_);
+      }
+#endif
+      if (IsInsecure()) {
+        download_->ValidateInsecureDownload();
         break;
       }
       if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
         break;
       }
       DCHECK(IsDangerous());
-// Only sends dangerous download accept report if :
-// 1. FULL_SAFE_BROWSING is enabled, and
-// 2. Download verdict is one of the dangerous types, and
-// 3. Download URL is not empty, and
-// 4. User is not in incognito mode.
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-      if (ShouldSendDownloadReport(GetDangerType()) && !GetURL().is_empty() &&
-          !profile()->IsOffTheRecord()) {
-        // The bypassed danger type can only be uncommon in the old UI, because
-        // the other danger types are not bypassable in the download shelf.
-        // However, it can be any dangerous danger type in the new UI.
-        DCHECK(GetDangerType() ==
-                   download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT ||
-               download::IsDownloadBubbleEnabled(profile()));
-        safe_browsing::SafeBrowsingService* sb_service =
-            g_browser_process->safe_browsing_service();
-        if (sb_service) {
-          bool is_successful = sb_service->SendDownloadReport(
-              download_,
-              safe_browsing::ClientSafeBrowsingReportRequest::
-                  DANGEROUS_DOWNLOAD_WARNING,
-              /*did_proceed=*/true, /*show_download_in_folder=*/absl::nullopt);
-          DCHECK(is_successful);
-        }
-      }
+      MaybeSendDownloadReport(GetURL(), GetDangerType(), /*did_proceed=*/true,
+                              profile(), download_);
 #endif
       download_->ValidateDangerousDownload();
+      break;
+    case DownloadCommands::DISCARD:
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+      MaybeSendDownloadReport(GetURL(), GetDangerType(), /*did_proceed=*/false,
+                              profile(), download_);
+      if (MaybeSubmitDownloadToFeedbackService(command, profile(), download_)) {
+        // Skip Remove because it is handled by download feedback service.
+        break;
+      }
+#endif
+      DownloadUIModel::ExecuteCommand(download_commands, command);
       break;
     case DownloadCommands::LEARN_MORE_SCANNING: {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -878,9 +917,8 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       break;
     case DownloadCommands::PLATFORM_OPEN:
     case DownloadCommands::CANCEL:
-    case DownloadCommands::DISCARD:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
-    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+    case DownloadCommands::LEARN_MORE_INSECURE_DOWNLOAD:
     case DownloadCommands::PAUSE:
     case DownloadCommands::RESUME:
     case DownloadCommands::COPY_TO_CLIPBOARD:
@@ -1030,8 +1068,8 @@ bool DownloadItemModel::ShouldShowInBubble() const {
   bool should_notify =
       download_->GetLastReason() ==
           download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED &&
-      download_->GetMixedContentStatus() !=
-          download::DownloadItem::MixedContentStatus::SILENT_BLOCK;
+      download_->GetInsecureDownloadStatus() !=
+          download::DownloadItem::InsecureDownloadStatus::SILENT_BLOCK;
 
   // Wait until the target path is determined.
   if (download_->GetTargetFilePath().empty() && !should_notify) {
@@ -1065,14 +1103,14 @@ bool DownloadItemModel::IsEphemeralWarning() const {
     return false;
   }
 
-  switch (GetMixedContentStatus()) {
-    case download::DownloadItem::MixedContentStatus::BLOCK:
-    case download::DownloadItem::MixedContentStatus::WARN:
+  switch (GetInsecureDownloadStatus()) {
+    case download::DownloadItem::InsecureDownloadStatus::BLOCK:
+    case download::DownloadItem::InsecureDownloadStatus::WARN:
       return true;
-    case download::DownloadItem::MixedContentStatus::UNKNOWN:
-    case download::DownloadItem::MixedContentStatus::SAFE:
-    case download::DownloadItem::MixedContentStatus::VALIDATED:
-    case download::DownloadItem::MixedContentStatus::SILENT_BLOCK:
+    case download::DownloadItem::InsecureDownloadStatus::UNKNOWN:
+    case download::DownloadItem::InsecureDownloadStatus::SAFE:
+    case download::DownloadItem::InsecureDownloadStatus::VALIDATED:
+    case download::DownloadItem::InsecureDownloadStatus::SILENT_BLOCK:
       break;
   }
 

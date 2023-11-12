@@ -86,6 +86,27 @@ void PageTimingMetricsSender::DidObserveLoadingBehavior(
   EnsureSendTimer();
 }
 
+void PageTimingMetricsSender::DidObserveSubresourceLoad(
+    uint32_t number_of_subresources_loaded,
+    uint32_t number_of_subresource_loads_handled_by_service_worker) {
+  if (!subresource_load_metrics_) {
+    subresource_load_metrics_ = mojom::SubresourceLoadMetrics::New();
+  }
+  if (subresource_load_metrics_->number_of_subresources_loaded ==
+          number_of_subresources_loaded &&
+      subresource_load_metrics_
+              ->number_of_subresource_loads_handled_by_service_worker ==
+          number_of_subresource_loads_handled_by_service_worker) {
+    return;
+  }
+  subresource_load_metrics_->number_of_subresources_loaded =
+      number_of_subresources_loaded;
+  subresource_load_metrics_
+      ->number_of_subresource_loads_handled_by_service_worker =
+      number_of_subresource_loads_handled_by_service_worker;
+  EnsureSendTimer();
+}
+
 void PageTimingMetricsSender::DidObserveNewFeatureUsage(
     const blink::UseCounterFeature& feature) {
   if (feature_tracker_.TestAndSet(feature))
@@ -110,23 +131,6 @@ void PageTimingMetricsSender::DidObserveLayoutShift(
       mojom::LayoutShift::New(base::TimeTicks::Now(), score));
   if (!after_input_or_scroll)
     render_data_.layout_shift_delta_before_input_or_scroll += score;
-  EnsureSendTimer();
-}
-
-void PageTimingMetricsSender::DidObserveLayoutNg(uint32_t all_block_count,
-                                                 uint32_t ng_block_count,
-                                                 uint32_t all_call_count,
-                                                 uint32_t ng_call_count) {
-  render_data_.all_layout_block_count_delta += all_block_count;
-  render_data_.ng_layout_block_count_delta += ng_block_count;
-  render_data_.all_layout_call_count_delta += all_call_count;
-  render_data_.ng_layout_call_count_delta += ng_call_count;
-  EnsureSendTimer();
-}
-
-void PageTimingMetricsSender::DidObserveMobileFriendlinessChanged(
-    const blink::MobileFriendliness& mf) {
-  mobile_friendliness_ = mf;
   EnsureSendTimer();
 }
 
@@ -323,12 +327,11 @@ void PageTimingMetricsSender::SendNow() {
       page_resource_data_use_.erase(resource->resource_id());
     }
   }
-  sender_->SendTiming(last_timing_, metadata_, std::move(new_features_),
-                      std::move(resources), render_data_, last_cpu_timing_,
-                      std::move(input_timing_delta_), mobile_friendliness_,
-                      soft_navigation_count_);
+  sender_->SendTiming(
+      last_timing_, metadata_, std::move(new_features_), std::move(resources),
+      render_data_, last_cpu_timing_, std::move(input_timing_delta_),
+      subresource_load_metrics_.Clone(), soft_navigation_count_);
   input_timing_delta_ = mojom::InputTiming::New();
-  mobile_friendliness_ = absl::nullopt;
   InitiateUserInteractionTiming();
   new_features_.clear();
   metadata_->main_frame_intersection_rect.reset();
@@ -338,10 +341,6 @@ void PageTimingMetricsSender::SendNow() {
   render_data_.new_layout_shifts.clear();
   render_data_.layout_shift_delta = 0;
   render_data_.layout_shift_delta_before_input_or_scroll = 0;
-  render_data_.all_layout_block_count_delta = 0;
-  render_data_.ng_layout_block_count_delta = 0;
-  render_data_.all_layout_call_count_delta = 0;
-  render_data_.ng_layout_call_count_delta = 0;
   // As PageTimingMetricsSender is owned by MetricsRenderFrameObserver, which is
   // instantiated for each frame, there's no need to make soft_navigation_count_
   // zero here, as its value only increments through the lifetime of the frame.

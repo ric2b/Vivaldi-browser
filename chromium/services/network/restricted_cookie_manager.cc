@@ -340,12 +340,7 @@ RestrictedCookieManager::RestrictedCookieManager(
       cookie_observer_(std::move(cookie_observer)),
       first_party_set_metadata_(std::move(first_party_set_metadata)),
       cookie_partition_key_(net::CookiePartitionKey::FromNetworkIsolationKey(
-          isolation_info.network_isolation_key(),
-          base::OptionalToPtr(
-              first_party_set_metadata_.top_frame_entry().has_value()
-                  ? absl::make_optional(
-                        first_party_set_metadata_.top_frame_entry()->primary())
-                  : absl::nullopt))),
+          isolation_info.network_isolation_key())),
       cookie_partition_key_collection_(
           net::CookiePartitionKeyCollection::FromOptional(
               cookie_partition_key_)),
@@ -384,12 +379,7 @@ void RestrictedCookieManager::OnGotFirstPartySetMetadataForTesting(
     net::FirstPartySetMetadata first_party_set_metadata) {
   first_party_set_metadata_ = std::move(first_party_set_metadata);
   cookie_partition_key_ = net::CookiePartitionKey::FromNetworkIsolationKey(
-      isolation_info_.network_isolation_key(),
-      base::OptionalToPtr(
-          first_party_set_metadata_.top_frame_entry().has_value()
-              ? absl::make_optional(
-                    first_party_set_metadata_.top_frame_entry()->primary())
-              : absl::nullopt));
+      isolation_info_.network_isolation_key());
   cookie_partition_key_collection_ =
       net::CookiePartitionKeyCollection::FromOptional(cookie_partition_key_);
   std::move(done_closure).Run();
@@ -399,28 +389,11 @@ bool RestrictedCookieManager::IsPartitionedCookiesEnabled() const {
   return cookie_partition_key_.has_value();
 }
 
-namespace {
-
-bool PartitionedCookiesAllowed(
-    bool partitioned_cookies_runtime_feature_enabled,
-    const absl::optional<net::CookiePartitionKey>& cookie_partition_key) {
-  if (base::FeatureList::IsEnabled(
-          net::features::kPartitionedCookiesBypassOriginTrial) ||
-      partitioned_cookies_runtime_feature_enabled)
-    return true;
-  // We allow partition keys which have a nonce since the Origin Trial is
-  // only meant to test cookies set with the Partitioned attribute.
-  return cookie_partition_key && cookie_partition_key->nonce();
-}
-
-}  // namespace
-
 void RestrictedCookieManager::GetAllForUrl(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     mojom::CookieManagerGetOptionsPtr options,
-    bool partitioned_cookies_runtime_feature_enabled,
     GetAllForUrlCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -439,11 +412,7 @@ void RestrictedCookieManager::GetAllForUrl(
   net_options.set_return_excluded_cookies();
 
   cookie_store_->GetCookieListWithOptionsAsync(
-      url, net_options,
-      PartitionedCookiesAllowed(partitioned_cookies_runtime_feature_enabled,
-                                cookie_partition_key_)
-          ? cookie_partition_key_collection_
-          : net::CookiePartitionKeyCollection(),
+      url, net_options, cookie_partition_key_collection_,
       base::BindOnce(&RestrictedCookieManager::CookieListToGetAllForUrlCallback,
                      weak_ptr_factory_.GetWeakPtr(), url, site_for_cookies,
                      top_frame_origin, net_options, std::move(options),
@@ -474,32 +443,6 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
   CookieAccesses* cookie_accesses =
       GetCookieAccessesForURLAndSite(url, site_for_cookies);
 
-  auto add_excluded = [&]() {
-    // TODO(https://crbug.com/977040): Stop reporting accesses of cookies with
-    // warning reasons once samesite tightening up is rolled out.
-    for (const auto& cookie_and_access_result : excluded_cookies) {
-      if (!cookie_and_access_result.access_result.status.ShouldWarn() &&
-          !cookie_and_access_result.access_result.status.HasOnlyExclusionReason(
-              net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
-        continue;
-      }
-
-      // Skip sending a notification about this cookie access?
-      if (SkipAccessNotificationForCookieItem(cookie_accesses,
-                                              cookie_and_access_result)) {
-        continue;
-      }
-
-      on_cookies_accessed_result.push_back(
-          mojom::CookieOrLineWithAccessResult::New(
-              mojom::CookieOrLine::NewCookie(cookie_and_access_result.cookie),
-              cookie_and_access_result.access_result));
-    }
-  };
-
-  if (!base::FeatureList::IsEnabled(features::kFasterSetCookie))
-    add_excluded();
-
   if (!maybe_included_cookies.empty())
     result.reserve(maybe_included_cookies.size());
   mojom::CookieMatchType match_type = options->match_type;
@@ -525,17 +468,6 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
     if (access_result.status.IsInclude()) {
       result.push_back(cookie_item);
     }
-
-    if (!base::FeatureList::IsEnabled(features::kFasterSetCookie)) {
-      // Skip sending a notification about this cookie access?
-      if (SkipAccessNotificationForCookieItem(cookie_accesses, cookie_item)) {
-        continue;
-      }
-
-      on_cookies_accessed_result.push_back(
-          mojom::CookieOrLineWithAccessResult::New(
-              mojom::CookieOrLine::NewCookie(cookie), access_result));
-    }
   }
 
   auto notify_observer = [&]() {
@@ -546,9 +478,6 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
     }
   };
 
-  if (!base::FeatureList::IsEnabled(features::kFasterSetCookie))
-    notify_observer();
-
   if (!maybe_included_cookies.empty() && IsPartitionedCookiesEnabled()) {
     UMA_HISTOGRAM_COUNTS_100(
         "Net.RestrictedCookieManager.PartitionedCookiesInScript",
@@ -558,28 +487,42 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
                                }));
   }
 
-  std::move(callback).Run(
-      base::FeatureList::IsEnabled(features::kFasterSetCookie)
-          ? result
-          : std::move(result));
+  std::move(callback).Run(result);
 
-  if (base::FeatureList::IsEnabled(features::kFasterSetCookie)) {
-    add_excluded();
-
-    for (auto& cookie : result) {
-      // Skip sending a notification about this cookie access?
-      if (SkipAccessNotificationForCookieItem(cookie_accesses, cookie)) {
-        continue;
-      }
-
-      on_cookies_accessed_result.push_back(
-          mojom::CookieOrLineWithAccessResult::New(
-              mojom::CookieOrLine::NewCookie(cookie.cookie),
-              cookie.access_result));
+  // TODO(https://crbug.com/977040): Stop reporting accesses of cookies with
+  // warning reasons once samesite tightening up is rolled out.
+  for (const auto& cookie_and_access_result : excluded_cookies) {
+    if (!cookie_and_access_result.access_result.status.ShouldWarn() &&
+        !cookie_and_access_result.access_result.status
+             .ExcludedByUserPreferences()) {
+      continue;
     }
 
-    notify_observer();
+    // Skip sending a notification about this cookie access?
+    if (SkipAccessNotificationForCookieItem(cookie_accesses,
+                                            cookie_and_access_result)) {
+      continue;
+    }
+
+    on_cookies_accessed_result.push_back(
+        mojom::CookieOrLineWithAccessResult::New(
+            mojom::CookieOrLine::NewCookie(cookie_and_access_result.cookie),
+            cookie_and_access_result.access_result));
   }
+
+  for (auto& cookie : result) {
+    // Skip sending a notification about this cookie access?
+    if (SkipAccessNotificationForCookieItem(cookie_accesses, cookie)) {
+      continue;
+    }
+
+    on_cookies_accessed_result.push_back(
+        mojom::CookieOrLineWithAccessResult::New(
+            mojom::CookieOrLine::NewCookie(cookie.cookie),
+            cookie.access_result));
+  }
+
+  notify_observer();
 }
 
 void RestrictedCookieManager::SetCanonicalCookie(
@@ -605,7 +548,7 @@ void RestrictedCookieManager::SetCanonicalCookie(
   }
 
   // TODO(morlovich): Try to validate site_for_cookies as well.
-  bool blocked = !cookie_settings_.IsCookieAccessible(
+  bool blocked = !cookie_settings_->IsCookieAccessible(
       cookie, url, site_for_cookies, top_frame_origin);
 
   if (blocked)
@@ -781,7 +724,6 @@ void RestrictedCookieManager::SetCookieFromString(
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     const std::string& cookie,
-    bool partitioned_cookies_runtime_feature_enabled,
     SetCookieFromStringCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -789,20 +731,14 @@ void RestrictedCookieManager::SetCookieFromString(
       BoundSiteForCookies().IsEquivalent(site_for_cookies);
   bool top_frame_origin_ok = top_frame_origin == BoundTopFrameOrigin();
 
-  if (base::FeatureList::IsEnabled(features::kFasterSetCookie)) {
-    std::move(callback).Run(site_for_cookies_ok, top_frame_origin_ok);
-    callback = base::DoNothing();
-  }
+  std::move(callback).Run(site_for_cookies_ok, top_frame_origin_ok);
+  callback = base::DoNothing();
 
   net::CookieInclusionStatus status;
   std::unique_ptr<net::CanonicalCookie> parsed_cookie =
-      net::CanonicalCookie::Create(
-          url, cookie, base::Time::Now(), absl::nullopt /* server_time */,
-          PartitionedCookiesAllowed(partitioned_cookies_runtime_feature_enabled,
-                                    cookie_partition_key_)
-              ? cookie_partition_key_
-              : absl::nullopt,
-          &status);
+      net::CanonicalCookie::Create(url, cookie, base::Time::Now(),
+                                   absl::nullopt /* server_time */,
+                                   cookie_partition_key_, &status);
   if (!parsed_cookie) {
     if (cookie_observer_) {
       std::vector<network::mojom::CookieOrLineWithAccessResultPtr>
@@ -836,7 +772,6 @@ void RestrictedCookieManager::GetCookiesString(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
-    bool partitioned_cookies_runtime_feature_enabled,
     GetCookiesStringCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Checks done by GetAllForUrl.
@@ -847,7 +782,6 @@ void RestrictedCookieManager::GetCookiesString(
   match_options->match_type = mojom::CookieMatchType::STARTS_WITH;
   GetAllForUrl(url, site_for_cookies, top_frame_origin,
                std::move(match_options),
-               partitioned_cookies_runtime_feature_enabled,
                base::BindOnce([](const std::vector<net::CookieWithAccessResult>&
                                      cookies) {
                  return net::CanonicalCookie::BuildCookieLine(cookies);
@@ -864,7 +798,7 @@ void RestrictedCookieManager::CookiesEnabledFor(
     return;
   }
 
-  std::move(callback).Run(cookie_settings_.IsFullCookieAccessAllowed(
+  std::move(callback).Run(cookie_settings_->IsFullCookieAccessAllowed(
       url, site_for_cookies, top_frame_origin,
       CookieSettings::QueryReason::kCookies));
 }
@@ -912,16 +846,6 @@ bool RestrictedCookieManager::ValidateAccessToCookiesAt(
 
   mojo::ReportBadMessage("Incorrect url origin");
   return false;
-}
-
-void RestrictedCookieManager::ConvertPartitionedCookiesToUnpartitioned(
-    const GURL& url) {
-  DCHECK(base::FeatureList::IsEnabled(net::features::kPartitionedCookies));
-  if (base::FeatureList::IsEnabled(
-          net::features::kPartitionedCookiesBypassOriginTrial)) {
-    return;
-  }
-  cookie_store_->ConvertPartitionedCookiesToUnpartitioned(url);
 }
 
 }  // namespace network

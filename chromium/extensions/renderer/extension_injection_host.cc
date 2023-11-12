@@ -12,6 +12,8 @@
 #include "extensions/renderer/renderer_extension_registry.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 
 ExtensionInjectionHost::ExtensionInjectionHost(const Extension* extension)
@@ -63,6 +65,19 @@ PermissionsData::PageAccess ExtensionInjectionHost::CanExecuteOnFrame(
   // Only allowlisted extensions may run scripts on another extension's page.
   if (outermost_origin->scheme() == kExtensionScheme &&
       outermost_origin->host() != extension_->id() &&
+      !PermissionsData::CanExecuteScriptEverywhere(extension_->id(),
+                                                   extension_->location())) {
+    return PermissionsData::PageAccess::kDenied;
+  }
+
+  // NOTE(andre@vivaldi.com) : In vivaldi we can have subframes/guestviews as
+  // panels. Extensions will get notifications when the RenderFrame for these
+  // are created and inject any script based on their manifest. Certain scripts
+  // can expose data the extension is not allowed to see, like storage. There
+  // are tests for this later on, but they will kill the renderer. Block it
+  // before it happens. "VB-94105 Panels crash with extension installed"
+  if (vivaldi::IsVivaldiRunning() && tab_id == extension_misc::kUnknownTabId &&
+      !vivaldi::IsVivaldiApp(extension_->id()) &&
       !PermissionsData::CanExecuteScriptEverywhere(extension_->id(),
                                                    extension_->location())) {
     return PermissionsData::PageAccess::kDenied;

@@ -179,7 +179,7 @@ ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
     SetFootnoteView(CreateSigninPromoView(browser->profile(), this));
 #endif
   }
-  SetIcon(model_->MakeIconOfSize(kMaxIconSize));
+  SetIcon(ui::ImageModel::FromImageSkia(model_->MakeIconOfSize(kMaxIconSize)));
   SetShowIcon(true);
   SetShowCloseButton(true);
 

@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
+#include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 #include "url/gurl.h"
 
 namespace ash {
@@ -42,10 +42,5 @@ class AccountMigrationWelcomeDialog : public SystemWebDialogDelegate {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::AccountMigrationWelcomeDialog;
-}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_ASH_ACCOUNT_MANAGER_ACCOUNT_MIGRATION_WELCOME_DIALOG_H_

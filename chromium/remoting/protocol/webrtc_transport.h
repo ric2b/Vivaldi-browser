@@ -12,7 +12,7 @@
 
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
@@ -193,6 +193,10 @@ class WebrtcTransport : public Transport,
   // The default range is [0, default max bitrate]. Client overrides that go
   // beyond this bound or exceed the relay server's max bitrate will be ignored.
   std::tuple<int, int> BitratesForConnection();
+
+  // Sets the min/max bitrate (using the preferred bitrate members) on the peer
+  // connection and each video RtpSender.
+  void UpdateBitrates();
 
   // Sets bitrates on the PeerConnection.
   // Called after SetRemoteDescription(), but also called if the relay status

@@ -19,7 +19,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -102,6 +102,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     ERROR_INPROGRESS = 5,
     ERROR_UNKNOWN = 6,
     ERROR_UNSUPPORTED_DEVICE = 7,
+    ERROR_DEVICE_NOT_READY = 8,
+    ERROR_ALREADY_CONNECTED = 9,
+    ERROR_DEVICE_ALREADY_EXISTS = 10,
+    ERROR_DEVICE_UNCONNECTED = 11,
+    ERROR_DOES_NOT_EXIST = 12,
+    ERROR_INVALID_ARGS = 13,
     NUM_CONNECT_ERROR_CODES,  // Keep as last enum.
   };
 

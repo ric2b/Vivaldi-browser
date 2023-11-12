@@ -15,6 +15,7 @@
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "components/request_filter/filtered_request_info.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"

@@ -77,8 +77,6 @@ void AppListMainView::AddContentsViews() {
   contents_view->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   contents_view->layer()->SetMasksToBounds(true);
   contents_view_ = AddChildView(std::move(contents_view));
-
-  search_box_view_->set_contents_view(contents_view_);
 }
 
 void AppListMainView::ShowAppListWhenReady() {
@@ -88,7 +86,7 @@ void AppListMainView::ShowAppListWhenReady() {
       wm::GetActivationClient(
           app_list_view_->GetWidget()->GetNativeView()->GetRootWindow())
           ->GetActiveWindow();
-  if (app_list_view_->is_tablet_mode() && active_window)
+  if (active_window)
     GetWidget()->ShowInactive();
   else
     GetWidget()->Show();
@@ -103,14 +101,6 @@ PaginationModel* AppListMainView::GetAppsPaginationModel() {
   return contents_view_->apps_container_view()
       ->apps_grid_view()
       ->pagination_model();
-}
-
-void AppListMainView::NotifySearchBoxVisibilityChanged() {
-  // Repaint the AppListView's background which will repaint the background for
-  // the search box. This is needed because this view paints to a layer and
-  // won't propagate paints upward.
-  if (parent())
-    parent()->SchedulePaint();
 }
 
 const char* AppListMainView::GetClassName() const {
@@ -141,14 +131,9 @@ void AppListMainView::ActiveChanged(SearchBoxViewBase* sender) {
     // Show zero state suggestions when search box is activated with an empty
     // query.
     const bool is_query_empty = sender->IsSearchBoxTrimmedQueryEmpty();
-    if (features::IsProductivityLauncherEnabled()) {
-      app_list_view_->SetStateFromSearchBoxView(
-          is_query_empty, true /*triggered_by_contents_change*/);
-      contents_view_->ShowSearchResults(true);
-    } else {
-      if (is_query_empty)
-        search_box_view_->ShowZeroStateSuggestions();
-    }
+    app_list_view_->SetStateFromSearchBoxView(
+        is_query_empty, true /*triggered_by_contents_change*/);
+    contents_view_->ShowSearchResults(true);
   } else {
     // Close the search results page if the search box is inactive.
     contents_view_->ShowSearchResults(false);

@@ -127,6 +127,29 @@ class ExpectationProcessor():
             self.ModifyFileForResult(suite, test, typ_tags, '', expected_result,
                                      group_by_tags, include_all_tags)
 
+  def CreateFailureExpectationsForAllResults(
+      self, result_map: ct.AggregatedResultsType, group_by_tags: bool,
+      include_all_tags: bool) -> None:
+    """Iterates over |result_map| and adds Failure expectations for its results.
+
+    Args:
+      result_map: Aggregated query results from results.AggregateResults to
+          iterate over.
+      group_by_tags: A boolean denoting whether to attempt to group expectations
+          by tags or not. If True, expectations will be added after an existing
+          expectation whose tags are the largest subset of the produced tags. If
+          False, new expectations will be appended to the end of the file.
+      include_all_tags: A boolean denoting whether all tags should be used for
+          expectations or only the most specific ones.
+    """
+    for suite, test_map in result_map.items():
+      if self.IsSuiteUnsupported(suite):
+        continue
+      for test, tag_map in test_map.items():
+        for typ_tags in tag_map.keys():
+          self.ModifyFileForResult(suite, test, typ_tags, '', 'Failure',
+                                   group_by_tags, include_all_tags)
+
   # pylint: enable=too-many-locals,too-many-arguments
 
   def FindFailuresInSameTest(self, result_map: ct.AggregatedResultsType,
@@ -271,18 +294,12 @@ class ExpectationProcessor():
     """
     expectation_file = self.GetExpectationFileForSuite(suite, typ_tags)
     if not include_all_tags:
-      # Remove temporarily un-ignored tags, namely webgl-version-x tags, since
-      # those were necessary to find the correct file. However, we do not want
-      # to actually include them in the file since they are unused/ignored.
-      typ_tags = tag_utils.TagUtils.RemoveTemporarilyKeptIgnoredTags(typ_tags)
       typ_tags = self.FilterToMostSpecificTypTags(typ_tags, expectation_file)
     bug = '%s ' % bug if bug else bug
 
     def AppendExpectationToEnd():
-      # TODO(crbug/1358735) : Process the tags to capitalize the first letter
-      # for web tests before writing.
-      expectation_line = '%s[ %s ] %s [ %s ]\n' % (bug, ' '.join(typ_tags),
-                                                   test, expected_result)
+      expectation_line = '%s[ %s ] %s [ %s ]\n' % (bug, ' '.join(
+          self.ProcessTypTagsBeforeWriting(typ_tags)), test, expected_result)
       with open(expectation_file, 'a') as outfile:
         outfile.write(expectation_line)
 
@@ -299,10 +316,8 @@ class ExpectationProcessor():
           tags_to_use = typ_tags
         # enumerate starts at 0 but line numbers start at 1.
         insertion_line -= 1
-        tags_to_use = list(tags_to_use)
+        tags_to_use = list(self.ProcessTypTagsBeforeWriting(tags_to_use))
         tags_to_use.sort()
-        # TODO(crbug/1358735) : Process the tags to capitalize the first letter
-        # for web tests before writing.
         expectation_line = '%s[ %s ] %s [ %s ]\n' % (bug, ' '.join(tags_to_use),
                                                      test, expected_result)
         with open(expectation_file) as infile:
@@ -513,7 +528,7 @@ class ExpectationProcessor():
     """
     raise NotImplementedError
 
-  def GetTagGroups(self, contents: str) -> List[str]:
+  def GetTagGroups(self, contents: str) -> List[List[str]]:
     tag_groups = []
     for match in TAG_GROUP_REGEX.findall(contents):
       tag_groups.append(match.strip().replace('#', '').split())
@@ -521,3 +536,7 @@ class ExpectationProcessor():
 
   def GetExpectedResult(self, fraction: float, flaky_threshold: float) -> str:
     raise NotImplementedError
+
+  def ProcessTypTagsBeforeWriting(self,
+                                  typ_tags: ct.TagTupleType) -> ct.TagTupleType:
+    return typ_tags

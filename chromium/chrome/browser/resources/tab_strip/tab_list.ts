@@ -8,11 +8,11 @@ import './tab_group.js';
 
 import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {addWebUIListener, removeWebUIListener, WebUIListener} from 'chrome://resources/js/cr.m.js';
+import {addWebUiListener, removeWebUiListener, WebUiListener} from 'chrome://resources/js/cr.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {CustomElement} from 'chrome://resources/js/custom_element.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
-import {isRTL} from 'chrome://resources/js/util.js';
+import {isRTL} from 'chrome://resources/js/util_ts.js';
 
 import {DragManager, DragManagerDelegate} from './drag_manager.js';
 import {isTabElement, TabElement} from './tab.js';
@@ -144,7 +144,7 @@ export class TabListElement extends CustomElement implements
   private pinnedTabsElement_: Element;
   private tabsApi_: TabsApiProxy;
   private unpinnedTabsElement_: Element;
-  private webUIListeners_: WebUIListener[];
+  private webUIListeners_: WebUiListener[];
   private windowBlurListener_: () => void;
   private scrollingTimeoutId_: number;
   private scrollListener_: (e: Event) => void;
@@ -235,7 +235,7 @@ export class TabListElement extends CustomElement implements
 
     const callbackRouter = this.tabsApi_.getCallbackRouter();
     callbackRouter.layoutChanged.addListener(
-        this.applyCSSDictionary_.bind(this));
+        this.applyCssDictionary_.bind(this));
 
     callbackRouter.tabThumbnailUpdated.addListener(
         this.tabThumbnailUpdated_.bind(this));
@@ -283,8 +283,8 @@ export class TabListElement extends CustomElement implements
     this.animationPromises = this.animationPromises.then(() => promise);
   }
 
-  private addWebUIListener_(eventName: string, callback: Function) {
-    this.webUIListeners_.push(addWebUIListener(eventName, callback));
+  private addWebUiListener_(eventName: string, callback: Function) {
+    this.webUIListeners_.push(addWebUiListener(eventName, callback));
   }
 
   private animateScrollPosition_(scrollBy: number) {
@@ -326,7 +326,7 @@ export class TabListElement extends CustomElement implements
     this.currentScrollUpdateFrame_ = requestAnimationFrame(onAnimationFrame);
   }
 
-  private applyCSSDictionary_(dictionary: {[key: string]: string}) {
+  private applyCssDictionary_(dictionary: {[key: string]: string}) {
     for (const [cssVariable, value] of Object.entries(dictionary)) {
       this.style.setProperty(cssVariable, value);
     }
@@ -339,7 +339,7 @@ export class TabListElement extends CustomElement implements
 
   connectedCallback() {
     this.tabsApi_.getLayout().then(
-        ({layout}) => this.applyCSSDictionary_(layout));
+        ({layout}) => this.applyCssDictionary_(layout));
 
     const getTabsStartTimestamp = Date.now();
     this.tabsApi_.getTabs().then(({tabs}) => {
@@ -376,7 +376,7 @@ export class TabListElement extends CustomElement implements
   }
 
   disconnectedCallback() {
-    this.webUIListeners_.forEach(removeWebUIListener);
+    this.webUIListeners_.forEach(removeWebUiListener);
     this.eventTracker_.removeAll();
   }
 

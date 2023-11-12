@@ -7,17 +7,19 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 import 'chrome://resources/cr_elements/icons.html.js';
+import './icons.html.js';
 import './strings.m.js';
 import './signin_shared.css.js';
 import './signin_vars.css.js';
 
-import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './sync_confirmation_app.html.js';
-import {SyncConfirmationBrowserProxy, SyncConfirmationBrowserProxyImpl} from './sync_confirmation_browser_proxy.js';
+import {SyncBenefit, SyncConfirmationBrowserProxy, SyncConfirmationBrowserProxyImpl} from './sync_confirmation_browser_proxy.js';
 
 
 interface AccountInfo {
@@ -25,7 +27,8 @@ interface AccountInfo {
   showEnterpriseBadge: boolean;
 }
 
-const SyncConfirmationAppElementBase = WebUIListenerMixin(PolymerElement);
+const SyncConfirmationAppElementBase =
+    WebUiListenerMixin(I18nMixin(PolymerElement));
 
 export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
   static get is() {
@@ -64,9 +67,23 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
         },
       },
 
+      isTangibleSync_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('isTangibleSync');
+        },
+      },
+
       showEnterpriseBadge_: {
         type: Boolean,
         value: false,
+      },
+
+      syncBenefitsList_: {
+        type: Array,
+        value() {
+          return JSON.parse(loadTimeData.getString('syncBenefitsList'));
+        },
       },
     };
   }
@@ -75,14 +92,16 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
   private anyButtonClicked_: boolean;
   private isModalDialog_: boolean;
   private isSigninInterceptFre_: boolean;
+  private isTangibleSync_: boolean;
   private showEnterpriseBadge_: boolean;
+  private syncBenefitsList_: SyncBenefit[];
   private syncConfirmationBrowserProxy_: SyncConfirmationBrowserProxy =
       SyncConfirmationBrowserProxyImpl.getInstance();
 
   override connectedCallback() {
     super.connectedCallback();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'account-info-changed', this.handleAccountInfoChanged_.bind(this));
     this.syncConfirmationBrowserProxy_.requestAccountInfo();
   }
@@ -119,7 +138,6 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
       }
     }
     assertNotReached('No consent confirmation element found.');
-    return '';
   }
 
   /** @return Text of the consent description elements. */
@@ -144,6 +162,14 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
   private getSigninInterceptDesignClass_(isSigninInterceptFre: boolean):
       string {
     return isSigninInterceptFre ? 'signin-intercept-design' : '';
+  }
+
+  private isModalDialogWithoutTangibleSync_(): boolean {
+    return this.isModalDialog_ && !this.isTangibleSync_;
+  }
+
+  private isWindowVersionWithoutTangibleSync_(): boolean {
+    return !this.isModalDialog_ && !this.isTangibleSync_;
   }
 }
 

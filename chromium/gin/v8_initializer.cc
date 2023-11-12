@@ -14,6 +14,7 @@
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/bits.h"
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
@@ -29,7 +30,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -37,6 +37,7 @@
 #include "gin/array_buffer.h"
 #include "gin/gin_features.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "tools/v8_context_snapshot/buildflags.h"
 #include "v8/include/v8-initialization.h"
 #include "v8/include/v8-snapshot.h"
 
@@ -96,8 +97,9 @@ const char kSnapshotFileName32[] = "snapshot_blob_32.bin";
 #endif
 
 #else  // BUILDFLAG(IS_ANDROID)
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
-const char kV8ContextSnapshotFileName[] = V8_CONTEXT_SNAPSHOT_FILENAME;
+#if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
+const char kV8ContextSnapshotFileName[] =
+    BUILDFLAG(V8_CONTEXT_SNAPSHOT_FILENAME);
 #endif
 const char kSnapshotFileName[] = "snapshot_blob.bin";
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -107,7 +109,7 @@ const char* GetSnapshotFileName(const V8SnapshotFileType file_type) {
     case V8SnapshotFileType::kDefault:
       return kSnapshotFileName;
     case V8SnapshotFileType::kWithAdditionalContext:
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
+#if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
       return kV8ContextSnapshotFileName;
 #else
       NOTREACHED();
@@ -124,9 +126,7 @@ void GetV8FilePath(const char* file_name, base::FilePath* path_out) {
   *path_out =
       base::FilePath(FILE_PATH_LITERAL("assets")).AppendASCII(file_name);
 #elif BUILDFLAG(IS_MAC)
-  base::ScopedCFTypeRef<CFStringRef> bundle_resource(
-      base::SysUTF8ToCFStringRef(file_name));
-  *path_out = base::mac::PathForFrameworkBundleResource(bundle_resource);
+  *path_out = base::mac::PathForFrameworkBundleResource(file_name);
 #else
   base::FilePath data_path;
   bool r = base::PathService::Get(base::DIR_ASSETS, &data_path);
@@ -245,10 +245,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--no-compact-code-space-with-stack");
   SetV8FlagsIfOverridden(features::kV8CompactWithStack, "--compact-with-stack",
                          "--no-compact-with-stack");
-  SetV8FlagsIfOverridden(features::kV8CompactMaps, "--compact-maps",
-                         "--no-compact-maps");
-  SetV8FlagsIfOverridden(features::kV8UseMapSpace, "--use-map-space",
-                         "--no-use-map-space");
   SetV8FlagsIfOverridden(features::kV8CrashOnEvacuationFailure,
                          "--crash-on-aborted-evacuation",
                          "--no-crash-on-aborted-evacuation");
@@ -346,9 +342,23 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                            "--no-slow-histograms");
   }
 
+  // JavaScript language features.
+  SetV8FlagsIfOverridden(features::kJavaScriptSymbolAsWeakMapKey,
+                         "--harmony-symbol-as-weakmap-key",
+                         "--no-harmony-symbol-as-weakmap-key");
+  SetV8FlagsIfOverridden(features::kJavaScriptChangeArrayByCopy,
+                         "--harmony-change-array-by-copy",
+                         "--no-harmony-change-array-by-copy");
+  SetV8FlagsIfOverridden(features::kJavaScriptRabGsab, "--harmony-rab-gsab",
+                         "--no-harmony-rab-gsab");
+
   if (IsolateHolder::kStrictMode == mode) {
     SetV8Flags("--use_strict");
   }
+
+  SetV8FlagsIfOverridden(features::kV8UseLibmTrigFunctions,
+                         "--use-libm-trig-functions",
+                         "--no-use-libm-trig-functions");
 
   if (js_command_line_flags.empty())
     return;

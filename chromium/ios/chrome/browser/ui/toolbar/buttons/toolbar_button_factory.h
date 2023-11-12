@@ -57,6 +57,17 @@
 // Vivaldi
 // Panel toolbar button.
 - (ToolbarButton*)panelButton;
+// Tracker blocker shield button.
+- (ToolbarButton*)shieldButton;
+// More button -> Visible only in iPhone landscape mode.
+- (ToolbarButton*)vivaldiMoreButton;
+// Vivaldi search button -> Visible only on new tab page.
+- (ToolbarButton*)vivaldiSearchButton;
+
+/// Returns the more button options based on the browsing state. In new tab page
+/// we show only the panels button. But, in webpage we show the ad and tracker
+/// blocker item as well as the share button.
+- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons;
 // End Vivaldi
 @end
 

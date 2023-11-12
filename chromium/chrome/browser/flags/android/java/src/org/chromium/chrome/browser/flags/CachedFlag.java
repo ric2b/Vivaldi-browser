@@ -7,6 +7,8 @@ package org.chromium.chrome.browser.flags;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Flag;
+
 /**
  * Flags of this type may be used before native is loaded and return the value read
  * from native and cached to SharedPreferences in a previous run.
@@ -25,9 +27,12 @@ public class CachedFlag extends Flag {
         return CachedFeatureFlags.isEnabled(mFeatureName, mDefaultValue);
     }
 
+    @Override
+    protected void clearInMemoryCachedValueForTesting() {}
+
     @VisibleForTesting
-    public void setForTesting(String name, @Nullable Boolean value) {
-        CachedFeatureFlags.setForTesting(name, value);
+    public void setForTesting(@Nullable Boolean value) {
+        CachedFeatureFlags.setForTesting(mFeatureName, value);
     }
 
     public void cacheFeature() {

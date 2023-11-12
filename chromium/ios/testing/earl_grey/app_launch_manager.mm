@@ -53,6 +53,9 @@ bool LaunchArgumentsAreEqual(NSArray<NSString*>* args1,
 }  // namespace
 
 @interface AppLaunchManager ()
+// Similar to EG's -backgroundApplication, but with a longer 20 second wait and
+// faster 0.5 second poll interval.
+- (BOOL)backgroundApplication;
 // List of observers to be notified of actions performed by the app launch
 // manager.
 @property(nonatomic, strong)
@@ -149,10 +152,23 @@ bool LaunchArgumentsAreEqual(NSArray<NSString*>* args1,
     [CoverageUtils writeClangCoverageProfile];
 
     if (gracefullyKill) {
-      GREYAssertTrue([EarlGrey backgroundApplication],
+      GREYAssertTrue([self backgroundApplication],
                      @"Failed to background application.");
+
+      if (self.runningApplication.state ==
+          XCUIApplicationStateRunningBackgroundSuspended) {
+        [self.runningApplication terminate];
+      } else {
+        [BaseEarlGreyTestCaseAppInterface gracefulTerminate];
+        if (![self.runningApplication
+                waitForState:XCUIApplicationStateNotRunning
+                     timeout:5]) {
+          [self.runningApplication terminate];
+        }
+      }
     }
 
+    // No-op if already terminated above.
     [self.runningApplication terminate];
 
     // Can't use EG conditionals here since the app is terminated.
@@ -274,9 +290,24 @@ bool LaunchArgumentsAreEqual(NSArray<NSString*>* args1,
 }
 
 - (void)backgroundAndForegroundApp {
-  GREYAssertTrue([EarlGrey backgroundApplication],
+  GREYAssertTrue([self backgroundApplication],
                  @"Failed to background application.");
   [self.runningApplication activate];
+}
+
+- (BOOL)backgroundApplication {
+  XCUIApplication* currentApplication = [[XCUIApplication alloc] init];
+  // Tell the system to background the app.
+  [[XCUIDevice sharedDevice] pressButton:XCUIDeviceButtonHome];
+  BOOL (^conditionBlock)(void) = ^BOOL {
+    return currentApplication.state == XCUIApplicationStateRunningBackground ||
+           currentApplication.state ==
+               XCUIApplicationStateRunningBackgroundSuspended;
+  };
+  GREYCondition* condition =
+      [GREYCondition conditionWithName:@"check if backgrounded"
+                                 block:conditionBlock];
+  return [condition waitWithTimeout:20.0 pollInterval:0.5];
 }
 
 - (void)addObserver:(id<AppLaunchManagerObserver>)observer {

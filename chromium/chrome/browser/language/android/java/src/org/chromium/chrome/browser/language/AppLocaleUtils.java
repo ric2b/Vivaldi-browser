@@ -220,10 +220,13 @@ public class AppLocaleUtils {
      * that the current SDK is T (API level 33).
      * TODO(crbug.com/1333981) Remove when on released versions of the SDK.
      * @return True if the current Android SDK supports {@link LocaleManager}
+     * NOTE(jarle@vivaldi.com): Remove temp fix when the new SDK is released.
      */
     @ChecksSdkIntAtLeast(api = 33)
     public static boolean shouldUseSystemManagedLocale() {
-        return BuildInfo.isAtLeastT();
+        // Vivaldi (temp. fix for VAB-6818)
+        return false;
+        // return BuildInfo.isAtLeastT();
     }
 
     /**
@@ -264,8 +267,8 @@ public class AppLocaleUtils {
     private static final Comparator<String> BASE_LANGUAGE_COMPARATOR = new Comparator<String>() {
         @Override
         public int compare(String a, String b) {
-            String langA = LocaleUtils.toLanguage(a);
-            String langB = LocaleUtils.toLanguage(b);
+            String langA = LocaleUtils.toBaseLanguage(a);
+            String langB = LocaleUtils.toBaseLanguage(b);
             return langA.compareTo(langB);
         }
     };

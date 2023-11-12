@@ -16,8 +16,8 @@
 #include "chrome/browser/browser_process_platform_part_ash.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "chromeos/system/fake_statistics_provider.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/cloud/test/policy_builder.h"
@@ -51,7 +51,12 @@ constexpr char kFakeDeviceID[] = "fake device ID";
 
 class DeviceAttributesTest : public DevicePolicyCrosBrowserTest {
  public:
-  DeviceAttributesTest() { device_state_.set_skip_initial_policy_setup(true); }
+  DeviceAttributesTest() {
+    device_state_.set_skip_initial_policy_setup(true);
+    fake_statistics_provider_.SetVpdStatus(
+        chromeos::system::StatisticsProvider::VpdStatus::kValid);
+  }
+
   ~DeviceAttributesTest() override = default;
 
  protected:

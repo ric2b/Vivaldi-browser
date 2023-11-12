@@ -118,6 +118,13 @@ class KEYED_SERVICE_EXPORT BrowserContextKeyedServiceFactory
   // By default, we create instances of a service lazily and wait until
   // GetForBrowserContext() is called on our subclass. Some services need to be
   // created as soon as the BrowserContext has been brought up.
+  //
+  // Note: To ensure that this method takes effect, the Factory should be
+  // instantiated before any BrowserContext is created to be part of the
+  // dependency graph used to initialize all services on BrowserContext
+  // creation.
+  // The best practice is to initialize the factory in the appropriate
+  // `EnsureBrowserContextKeyedServiceFactoriesBuilt()` method.
   virtual bool ServiceIsCreatedWithBrowserContext() const;
 
   // By default, TestingBrowserContexts will be treated like normal contexts.
@@ -134,12 +141,15 @@ class KEYED_SERVICE_EXPORT BrowserContextKeyedServiceFactory
   //
   // This should not return nullptr; instead, return nullptr from
   // `GetBrowserContextToUse()`.
-  // NOTE: There is a //chrome-specific exception to this rule for a
-  // ChromeOS-specific case until crbug.com/1284664 is resolved. See
-  // documentation on //chrome's //
-  // `ProfileKeyedServiceFactory::BuildServiceInstanceFor()` for details.
+  //
+  // Sub-classes implement one of these two forms:
+  virtual std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
+      content::BrowserContext* context) const;
+
+  // DEPRECATED: allows incremental conversion to the unique_ptr<> form
+  // above. New code should not be using this form.
   virtual KeyedService* BuildServiceInstanceFor(
-      content::BrowserContext* context) const = 0;
+      content::BrowserContext* context) const;
 
   // A helper object actually listens for notifications about BrowserContext
   // destruction, calculates the order in which things are destroyed and then

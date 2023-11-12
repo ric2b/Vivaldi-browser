@@ -18,7 +18,6 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
@@ -89,7 +88,7 @@ void UpdateNotificationController::GenerateUpdateNotification(
     slow_boot_file_path_exists_ = slow_boot_file_path_exists.value();
   }
 
-  std::unique_ptr<Notification> notification = CreateSystemNotification(
+  std::unique_ptr<Notification> notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, GetTitle(),
       GetMessage(), std::u16string() /* display_source */, GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
@@ -149,9 +148,6 @@ bool UpdateNotificationController::ShouldShowDeferredUpdate() const {
 }
 
 std::u16string UpdateNotificationController::GetTitle() const {
-  if (model_->update_type() == UpdateType::kLacros)
-    return l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TITLE_LACROS);
-
   switch (model_->relaunch_notification_state().requirement_type) {
     case RelaunchNotificationState::kRecommendedAndOverdue:
       return model_->rollback() ? l10n_util::GetStringUTF16(
@@ -199,9 +195,6 @@ std::u16string UpdateNotificationController::GetTitle() const {
 }
 
 std::u16string UpdateNotificationController::GetMessage() const {
-  if (model_->update_type() == UpdateType::kLacros)
-    return l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_MESSAGE_LACROS);
-
   if (ShouldShowDeferredUpdate()) {
     return l10n_util::GetStringUTF16(
         IDS_UPDATE_NOTIFICATION_MESSAGE_DEFERRED_UPDATE);
@@ -241,8 +234,7 @@ std::u16string UpdateNotificationController::GetMessage() const {
   std::u16string update_text;
   std::u16string domain_manager =
       GetDomainManager(model_->relaunch_notification_state().policy_source);
-  if (body_message_id.has_value() && !domain_manager.empty() &&
-      model_->update_type() == UpdateType::kSystem) {
+  if (body_message_id.has_value() && !domain_manager.empty()) {
     update_text = l10n_util::GetStringFUTF16(*body_message_id, domain_manager,
                                              ui::GetChromeOSDeviceName());
   } else {
@@ -285,16 +277,8 @@ UpdateNotificationController::GetWarningLevel() const {
 
 void UpdateNotificationController::RestartForUpdate() {
   confirmation_dialog_ = nullptr;
-  if (model_->update_type() == UpdateType::kLacros) {
-    // Lacros only needs to restart the browser to cause the component updater
-    // to use the new lacros component.
-    Shell::Get()->session_controller()->AttemptRestartChrome();
-    return;
-  }
   // System updates require restarting the device.
   Shell::Get()->session_controller()->RequestRestartForUpdate();
-  base::RecordAction(
-      base::UserMetricsAction("StatusArea_OS_Update_Default_Selected"));
 }
 
 void UpdateNotificationController::RestartCancelled() {

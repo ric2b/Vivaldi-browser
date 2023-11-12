@@ -308,17 +308,8 @@ JumpList::JumpList(Profile* profile)
   if (!tab_restore_service)
     return;
 
-  if (vivaldi::IsVivaldiRunning()) {
-    std::string app_name = web_app::GenerateApplicationNameFromAppId(
-                  vivaldi::kVivaldiAppId);
-    app_id_ = shell_integration::win::GetAppUserModelIdForApp(
-                                                 base::UTF8ToWide(app_name),
-                                                 profile_->GetPath());
-  }
-  else {
   app_id_ =
       shell_integration::win::GetAppUserModelIdForBrowser(profile_->GetPath());
-  }
 
   // Register as TopSitesObserver so that we can update ourselves when the
   // TopSites changes. TopSites updates itself after a delay. This is especially

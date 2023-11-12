@@ -17,10 +17,9 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/updater/constants.h"
@@ -34,7 +33,7 @@
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/update_service_internal.h"
 #include "chrome/updater/updater_version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/util.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -48,8 +47,8 @@ class SplashScreenImpl : public SplashScreen {
   // Overrides for SplashScreen.
   void Show() override {}
   void Dismiss(base::OnceClosure callback) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     std::move(callback));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
   }
 };
 
@@ -61,14 +60,14 @@ class AppInstallControllerImpl : public AppInstallController {
   void InstallApp(const std::string& /*app_id*/,
                   const std::string& /*app_name*/,
                   base::OnceCallback<void(int)> callback) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), 0));
   }
 
   void InstallAppOffline(const std::string& app_id,
                          const std::string& app_name,
                          base::OnceCallback<void(int)> callback) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), 0));
   }
 
@@ -102,17 +101,9 @@ AppInstall::AppInstall(SplashScreen::Maker splash_screen_maker,
 
 AppInstall::~AppInstall() = default;
 
-void AppInstall::Initialize() {}
-
-void AppInstall::Uninitialize() {
-  if (update_service_) {
-    update_service_->Uninitialize();
-  }
-}
-
 void AppInstall::FirstTaskRun() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(base::ThreadTaskRunnerHandle::IsSet());
+  DCHECK(base::SequencedTaskRunner::HasCurrentDefault());
 
   const TagParsingResult tag_parsing_result =
       GetTagArgsForCommandLine(GetCommandLineLegacyCompatible());
@@ -201,26 +192,19 @@ void AppInstall::InstallCandidateDone(bool valid_version, int result) {
 void AppInstall::WakeCandidate() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // Invoke UpdateServiceInternal::InitializeUpdateService to wake this version
-  // of the updater, qualify, and possibly promote this version as a result. The
+  // Invoke UpdateServiceInternal::Hello to wake this version of the updater,
+  // qualify, and possibly promote this version as a result. The
   // |UpdateServiceInternal| instance has sequence affinity. Bind it in the
   // closure to ensure it is released in this sequence.
   scoped_refptr<UpdateServiceInternal> update_service_internal =
       CreateUpdateServiceInternalProxy(updater_scope());
-  update_service_internal->InitializeUpdateService(base::BindOnce(
+  update_service_internal->Hello(base::BindOnce(
       [](scoped_refptr<UpdateServiceInternal> /*update_service_internal*/,
          scoped_refptr<AppInstall> app_install) {
         app_install->WakeCandidateDone();
       },
       update_service_internal, base::WrapRefCounted(this)));
 }
-
-#if BUILDFLAG(IS_LINUX)
-// TODO(crbug.com/1276114) - implement.
-void AppInstall::WakeCandidateDone() {
-  NOTIMPLEMENTED();
-}
-#endif  // BUILDFLAG(IS_LINUX)
 
 void AppInstall::FetchPolicies() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

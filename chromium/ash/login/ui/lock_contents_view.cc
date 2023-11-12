@@ -391,8 +391,9 @@ class LockContentsView::AuthErrorBubble : public LoginErrorBubble {
 
 class LockContentsView::ManagementBubble : public LoginTooltipView {
  public:
-  ManagementBubble(const std::u16string& message, views::View* anchor_view)
-      : LoginTooltipView(message, anchor_view) {
+  ManagementBubble(const std::u16string& message,
+                   base::WeakPtr<views::View> anchor_view)
+      : LoginTooltipView(message, std::move(anchor_view)) {
     views::BoxLayout* layout_manager =
         SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal,
@@ -528,6 +529,11 @@ views::View* LockContentsView::TestApi::main_view() const {
 const std::vector<LockContentsView::UserState>&
 LockContentsView::TestApi::users() const {
   return view_->users_;
+}
+
+LoginCameraTimeoutView* LockContentsView::TestApi::login_camera_timeout_view()
+    const {
+  return view_->login_camera_timeout_view_;
 }
 
 LoginBigUserView* LockContentsView::TestApi::FindBigUser(
@@ -687,7 +693,9 @@ LockContentsView::LockContentsView(
       l10n_util::GetStringFUTF16(IDS_ASH_LOGIN_ENTERPRISE_MANAGED_POP_UP,
                                  ui::GetChromeOSDeviceName(),
                                  base::UTF8ToUTF16(enterprise_domain_manager)),
-      bottom_status_indicator_));
+      bottom_status_indicator_ != nullptr
+          ? bottom_status_indicator_->AsWeakPtr()
+          : nullptr));
 
   warning_banner_bubble_ = AddChildView(std::make_unique<LoginErrorBubble>());
   warning_banner_bubble_->set_persistent(true);
@@ -1486,20 +1494,27 @@ void LockContentsView::OnFocusLeavingLockScreenApps(bool reverse) {
 }
 
 void LockContentsView::OnOobeDialogStateChanged(OobeDialogState state) {
-  bool oobe_dialog_was_visible = oobe_dialog_visible_;
-  oobe_dialog_visible_ = state != OobeDialogState::HIDDEN;
+  const bool oobe_dialog_was_visible = oobe_dialog_visible_;
+  oobe_dialog_visible_ = state != OobeDialogState::HIDDEN &&
+                         state != OobeDialogState::EXTENSION_LOGIN &&
+                         state != OobeDialogState::EXTENSION_LOGIN_CLOSED;
   extension_ui_visible_ = state == OobeDialogState::EXTENSION_LOGIN;
+  const bool oobe_dialog_closed = state == OobeDialogState::HIDDEN;
+  // If the main dialog is not visible any more. The main dialog can either be
+  // the OOBE dialog or the login screen extension UI.
+  const bool main_dialog_closed =
+      oobe_dialog_closed || state == OobeDialogState::EXTENSION_LOGIN_CLOSED;
 
   // Show either oobe dialog or user pods.
   if (main_view_)
-    main_view_->SetVisible(!oobe_dialog_visible_);
-  GetWidget()->widget_delegate()->SetCanActivate(!oobe_dialog_visible_);
+    main_view_->SetVisible(main_dialog_closed);
+  GetWidget()->widget_delegate()->SetCanActivate(main_dialog_closed);
 
   UpdateBottomStatusIndicatorVisibility();
 
-  if (!oobe_dialog_visible_ && CurrentBigUserView()) {
+  if (main_dialog_closed && CurrentBigUserView()) {
     CurrentBigUserView()->RequestFocus();
-  } else if (!oobe_dialog_visible_ && login_camera_timeout_view_) {
+  } else if (oobe_dialog_closed && login_camera_timeout_view_) {
     login_camera_timeout_view_->RequestFocus();
   }
   // If OOBE dialog visibility changes we need to force an update of the a11y
@@ -2038,7 +2053,8 @@ void LockContentsView::SwapActiveAuthBetweenPrimaryAndSecondary(
 }
 
 void LockContentsView::OnAuthenticate(bool auth_success,
-                                      bool display_error_messages) {
+                                      bool display_error_messages,
+                                      bool authenticated_by_pin) {
   AccountId account_id =
       CurrentBigUserView()->GetCurrentUser().basic_user_info.account_id;
   if (auth_success) {
@@ -2063,6 +2079,8 @@ void LockContentsView::OnAuthenticate(bool auth_success,
         true /*success*/, &unlock_attempt_by_user_[account_id]);
   } else {
     ++unlock_attempt_by_user_[account_id];
+    if (authenticated_by_pin)
+      ++pin_unlock_attempt_by_user_[account_id];
     if (display_error_messages)
       ShowAuthErrorMessage();
   }
@@ -2136,6 +2154,11 @@ void LockContentsView::LayoutAuth(LoginBigUserView* to_update,
         }
       }
       view->auth_user()->SetAuthMethods(to_update_auth, auth_metadata);
+      if (auth_error_bubble_->GetVisible()) {
+        // Update the anchor position in case the active input view changed.
+        auth_error_bubble_->SetAnchorView(
+            view->auth_user()->GetActiveInputView());
+      }
     } else if (view->public_account()) {
       view->public_account()->SetAuthEnabled(true /*enabled*/, animate);
     }
@@ -2269,14 +2292,20 @@ void LockContentsView::ShowAuthErrorMessage() {
   if (!big_view->auth_user())
     return;
 
-  int unlock_attempt = unlock_attempt_by_user_[big_view->GetCurrentUser()
-                                                   .basic_user_info.account_id];
+  const AccountId account_id =
+      big_view->GetCurrentUser().basic_user_info.account_id;
+  int unlock_attempt = unlock_attempt_by_user_[account_id];
+
   // Show gaia signin if this is login and the user has failed too many times.
   // Do not show on secondary login screen – even though it has type kLogin – as
   // there is no OOBE there.
   if (!ash::features::IsCryptohomeRecoveryFlowUIEnabled()) {
+    // Pin login attempt does not trigger Gaia dialog. Pin auth method will be
+    // disabled after 5 failed attempts.
+    int pin_unlock_attempt = pin_unlock_attempt_by_user_[account_id];
     if (screen_type_ == LockScreen::ScreenType::kLogin &&
-        unlock_attempt >= kLoginAttemptsBeforeGaiaDialog &&
+        (unlock_attempt - pin_unlock_attempt) >=
+            kLoginAttemptsBeforeGaiaDialog &&
         Shell::Get()->session_controller()->GetSessionState() !=
             session_manager::SessionState::LOGIN_SECONDARY) {
       Shell::Get()->login_screen_controller()->ShowGaiaSignin(

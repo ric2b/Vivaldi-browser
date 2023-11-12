@@ -21,6 +21,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/dbus/power/power_manager_client.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -35,14 +36,6 @@
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/dbus/power/power_manager_client.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/chromeos/app_mode/kiosk_session_plugin_handler.h"
@@ -67,12 +60,8 @@ bool IsPepperPlugin(const base::FilePath& plugin_path) {
 #endif
 
 void RebootDevice() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER, "kiosk app session");
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  KioskSessionServiceLacros::Get()->RestartDevice("kiosk app session");
-#endif
 }
 
 // Sends a SIGFPE signal to plugin subprocesses that matches |child_ids|
@@ -192,14 +181,16 @@ class AppSession::PluginHandlerDelegateImpl
 };
 #endif
 
-AppSession::AppSession()
-    : AppSession(base::BindOnce(chrome::AttemptUserExit),
+AppSession::AppSession(Profile* profile)
+    : AppSession(profile,
+                 base::BindOnce(chrome::AttemptUserExit),
                  g_browser_process->local_state()) {}
 
-AppSession::AppSession(base::OnceClosure attempt_user_exit,
+AppSession::AppSession(Profile* profile,
+                       base::OnceClosure attempt_user_exit,
                        PrefService* local_state)
-    : AppSession(std::move(attempt_user_exit),
-                 local_state,
+    : AppSession(profile,
+                 std::move(attempt_user_exit),
                  std::make_unique<AppSessionMetricsService>(local_state)) {}
 
 AppSession::~AppSession() {
@@ -209,11 +200,12 @@ AppSession::~AppSession() {
 
 // static
 std::unique_ptr<AppSession> AppSession::CreateForTesting(
+    Profile* profile,
     base::OnceClosure attempt_user_exit,
     PrefService* local_state,
     const std::vector<std::string>& crash_dirs) {
   return base::WrapUnique(new AppSession(
-      std::move(attempt_user_exit), local_state,
+      profile, std::move(attempt_user_exit),
       AppSessionMetricsService::CreateForTesting(local_state, crash_dirs)));
 }
 
@@ -226,10 +218,9 @@ void AppSession::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kNewWindowsInKioskAllowed, false);
 }
 
-void AppSession::Init(Profile* profile, const std::string& app_id) {
-  SetProfile(profile);
+void AppSession::Init(const std::string& app_id) {
   app_window_handler_ = std::make_unique<AppWindowHandler>(this);
-  app_window_handler_->Init(profile, app_id);
+  app_window_handler_->Init(profile(), app_id);
   CreateBrowserWindowHandler(absl::nullopt);
 #if BUILDFLAG(ENABLE_PLUGINS)
   plugin_handler_ = std::make_unique<KioskSessionPluginHandler>(
@@ -238,9 +229,9 @@ void AppSession::Init(Profile* profile, const std::string& app_id) {
   metrics_service_->RecordKioskSessionStarted();
 }
 
-void AppSession::InitForWebKiosk(Browser* browser) {
-  SetProfile(browser->profile());
-  CreateBrowserWindowHandler(browser->app_name());
+void AppSession::InitForWebKiosk(
+    const absl::optional<std::string>& web_app_name) {
+  CreateBrowserWindowHandler(web_app_name);
   metrics_service_->RecordKioskSessionWebStarted();
 }
 
@@ -259,26 +250,23 @@ AppSession::GetPluginHandlerDelegateForTesting() {
 }
 
 AppSession::AppSession(
+    Profile* profile,
     base::OnceClosure attempt_user_exit,
-    PrefService* local_state,
     std::unique_ptr<AppSessionMetricsService> metrics_service)
     :
 #if BUILDFLAG(ENABLE_PLUGINS)
       plugin_handler_delegate_(
           std::make_unique<PluginHandlerDelegateImpl>(this)),
 #endif
+      profile_(profile),
       attempt_user_exit_(std::move(attempt_user_exit)),
       metrics_service_(std::move(metrics_service)) {
 }
 
-void AppSession::SetProfile(Profile* profile) {
-  profile_ = profile;
-}
-
 void AppSession::CreateBrowserWindowHandler(
-    absl::optional<std::string> web_app_name) {
+    const absl::optional<std::string>& web_app_name) {
   browser_window_handler_ = std::make_unique<AppSessionBrowserWindowHandler>(
-      profile_, web_app_name,
+      profile(), web_app_name,
       base::BindRepeating(&AppSession::OnHandledNewBrowserWindow,
                           weak_ptr_factory_.GetWeakPtr()),
       base::BindRepeating(&AppSession::OnLastAppWindowClosed,

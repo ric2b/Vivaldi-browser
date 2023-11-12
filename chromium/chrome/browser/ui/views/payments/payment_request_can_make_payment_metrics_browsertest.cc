@@ -39,18 +39,18 @@ class PaymentRequestCanMakePaymentMetricsTest
 
     // Choosing nickpay for its JIT installation support.
     nickpay_server_.ServeFilesFromSourceDirectory(
-        "components/test/data/payments/nickpay.com/");
+        "components/test/data/payments/nickpay.test/");
 
     ASSERT_TRUE(nickpay_server_.Start());
   }
 
   void InstallTwoPaymentHandlersAndQueryShow() {
     std::string a_method_name;
-    InstallPaymentApp("a.com", "payment_request_success_responder.js",
+    InstallPaymentApp("a.com", "/payment_request_success_responder.js",
                       &a_method_name);
 
     std::string b_method_name;
-    InstallPaymentApp("b.com", "payment_request_success_responder.js",
+    InstallPaymentApp("b.com", "/payment_request_success_responder.js",
                       &b_method_name);
 
     NavigateTo("c.com", "/payment_request_can_make_payment_metrics_test.html");
@@ -77,11 +77,11 @@ class PaymentRequestCanMakePaymentMetricsTest
 
   void InstallTwoPaymentHandlersAndNoQueryShow() {
     std::string a_method_name;
-    InstallPaymentApp("a.com", "payment_request_success_responder.js",
+    InstallPaymentApp("a.com", "/payment_request_success_responder.js",
                       &a_method_name);
 
     std::string b_method_name;
-    InstallPaymentApp("b.com", "payment_request_success_responder.js",
+    InstallPaymentApp("b.com", "/payment_request_success_responder.js",
                       &b_method_name);
 
     NavigateTo("c.com", "/payment_request_can_make_payment_metrics_test.html");
@@ -105,11 +105,10 @@ class PaymentRequestCanMakePaymentMetricsTest
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
                        Called_True_NotShown) {
-  NavigateTo("a.com", "/payment_handler_installer.html");
   base::HistogramTester histogram_tester;
 
   std::string a_method_name;
-  InstallPaymentApp("a.com", "can_make_payment_true_responder.js",
+  InstallPaymentApp("a.com", "/can_make_payment_true_responder.js",
                     &a_method_name);
 
   NavigateTo("b.com", "/payment_request_can_make_payment_metrics_test.html");
@@ -206,9 +205,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
   base::HistogramTester histogram_tester;
 
   std::string nickpay_method_name =
-      nickpay_server_.GetURL("nickpay.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay.test", "/pay").spec();
   std::string nickpay2_method_name =
-      nickpay_server_.GetURL("nickpay2.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay2.test", "/pay").spec();
 
   ResetEventWaiterForSequence({DialogEvent::CAN_MAKE_PAYMENT_CALLED,
                                DialogEvent::CAN_MAKE_PAYMENT_RETURNED,
@@ -268,9 +267,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
   base::HistogramTester histogram_tester;
 
   std::string nickpay_method_name =
-      nickpay_server_.GetURL("nickpay.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay.test", "/pay").spec();
   std::string nickpay2_method_name =
-      nickpay_server_.GetURL("nickpay2.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay2.test", "/pay").spec();
 
   ResetEventWaiterForSequence({DialogEvent::CAN_MAKE_PAYMENT_CALLED,
                                DialogEvent::CAN_MAKE_PAYMENT_RETURNED,
@@ -335,9 +334,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
   base::HistogramTester histogram_tester;
 
   std::string nickpay_method_name =
-      nickpay_server_.GetURL("nickpay.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay.test", "/pay").spec();
   std::string nickpay2_method_name =
-      nickpay_server_.GetURL("nickpay2.com", "/pay").spec();
+      nickpay_server_.GetURL("nickpay2.test", "/pay").spec();
 
   ResetEventWaiterForSequence({DialogEvent::CAN_MAKE_PAYMENT_CALLED,
                                DialogEvent::CAN_MAKE_PAYMENT_RETURNED,
@@ -395,7 +394,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentMetricsTest,
   base::HistogramTester histogram_tester;
 
   std::string a_method_name;
-  InstallPaymentApp("a.com", "payment_request_success_responder.js",
+  InstallPaymentApp("a.com", "/payment_request_success_responder.js",
                     &a_method_name);
 
   NavigateTo("b.com", "/payment_request_can_make_payment_metrics_test.html");

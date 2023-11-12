@@ -5,19 +5,18 @@
 #include "media/fuchsia/video/fuchsia_video_decoder.h"
 
 #include <fuchsia/sysmem/cpp/fidl.h>
+#include <lib/zx/eventpair.h>
 #include <vulkan/vulkan.h>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/process/process_metrics.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -34,7 +33,7 @@
 #include "media/fuchsia/common/decrypting_sysmem_buffer_stream.h"
 #include "media/fuchsia/common/passthrough_sysmem_buffer_stream.h"
 #include "media/fuchsia/common/stream_processor_helper.h"
-#include "media/fuchsia/mojom/fuchsia_media_resource_provider.mojom.h"
+#include "media/fuchsia/mojom/fuchsia_media.mojom.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/client_native_pixmap_factory.h"
 #include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
@@ -153,7 +152,11 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
     gpu::MailboxHolder mailboxes[VideoFrame::kMaxPlanes];
     mailboxes[0].mailbox = mailbox_;
-    mailboxes[0].sync_token = create_sync_token_;
+
+    if (create_sync_token_.HasData()) {
+      mailboxes[0].sync_token = create_sync_token_;
+      create_sync_token_.Clear();
+    }
 
     auto frame = VideoFrame::WrapNativeTextures(
         pixel_format, mailboxes,
@@ -221,11 +224,11 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
 FuchsiaVideoDecoder::FuchsiaVideoDecoder(
     scoped_refptr<viz::RasterContextProvider> raster_context_provider,
-    const mojo::SharedRemote<media::mojom::FuchsiaMediaResourceProvider>&
-        media_resource_provider,
+    const mojo::SharedRemote<media::mojom::FuchsiaMediaCodecProvider>&
+        media_codec_provider,
     bool allow_overlays)
     : raster_context_provider_(raster_context_provider),
-      media_resource_provider_(media_resource_provider),
+      media_codec_provider_(media_codec_provider),
       use_overlays_for_video_(allow_overlays &&
                               base::CommandLine::ForCurrentProcess()->HasSwitch(
                                   switches::kUseOverlaysForVideo)),
@@ -319,8 +322,8 @@ void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,
   ReleaseOutputBuffers();
 
   fuchsia::media::StreamProcessorPtr decoder;
-  media_resource_provider_->CreateVideoDecoder(config.codec(), secure_mode,
-                                               decoder.NewRequest());
+  media_codec_provider_->CreateVideoDecoder(config.codec(), secure_mode,
+                                            decoder.NewRequest());
   decoder_ = std::make_unique<StreamProcessorHelper>(std::move(decoder), this);
 
   current_config_ = config;
@@ -342,7 +345,7 @@ void FuchsiaVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   if (!decoder_) {
     // Post the callback to the current sequence as DecoderStream doesn't expect
     // Decode() to complete synchronously.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(decode_cb), DecoderStatus::Codes::kFailed));
     return;
@@ -357,8 +360,8 @@ void FuchsiaVideoDecoder::Reset(base::OnceClosure closure) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DropInputQueue(DecoderStatus::Codes::kAborted);
-  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                   std::move(closure));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                           std::move(closure));
 }
 
 bool FuchsiaVideoDecoder::NeedsBitstreamConversion() const {
@@ -373,6 +376,11 @@ bool FuchsiaVideoDecoder::CanReadWithoutStalling() const {
 int FuchsiaVideoDecoder::GetMaxDecodeRequests() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return max_decoder_requests_;
+}
+
+void FuchsiaVideoDecoder::SetClientNativePixmapFactoryForTests(
+    std::unique_ptr<gfx::ClientNativePixmapFactory> factory) {
+  client_native_pixmap_factory_ = std::move(factory);
 }
 
 DecoderStatus FuchsiaVideoDecoder::InitializeSysmemBufferStream(
@@ -587,8 +595,10 @@ void FuchsiaVideoDecoder::OnStreamProcessorOutputPacket(
   if (!output_mailboxes_[buffer_index]) {
     gfx::GpuMemoryBufferHandle gmb_handle;
     gmb_handle.type = gfx::NATIVE_PIXMAP;
-    gmb_handle.native_pixmap_handle.buffer_collection_id =
-        output_buffer_collection_id_;
+    auto status = output_buffer_collection_handle_.duplicate(
+        ZX_RIGHT_SAME_RIGHTS,
+        &gmb_handle.native_pixmap_handle.buffer_collection_handle);
+    ZX_DCHECK(status == ZX_OK, status);
     gmb_handle.native_pixmap_handle.buffer_index = buffer_index;
 
     auto gmb = gpu::GpuMemoryBufferImplNativePixmap::CreateFromHandle(
@@ -721,11 +731,15 @@ void FuchsiaVideoDecoder::OnError() {
 void FuchsiaVideoDecoder::SetBufferCollectionTokenForGpu(
     fuchsia::sysmem::BufferCollectionTokenPtr token) {
   // Register the new collection with the GPU process.
-  DCHECK(!output_buffer_collection_id_);
-  output_buffer_collection_id_ = gfx::SysmemBufferCollectionId::Create();
+  DCHECK(!output_buffer_collection_handle_);
+
+  zx::eventpair service_handle;
+  auto status = zx::eventpair::create(0, &output_buffer_collection_handle_,
+                                      &service_handle);
+  ZX_DCHECK(status == ZX_OK, status);
   raster_context_provider_->SharedImageInterface()
       ->RegisterSysmemBufferCollection(
-          output_buffer_collection_id_, token.Unbind().TakeChannel(),
+          std::move(service_handle), token.Unbind().TakeChannel(),
           gfx::BufferFormat::YUV_420_BIPLANAR, gfx::BufferUsage::GPU_READ,
           use_overlays_for_video_ /*register_with_image_pipe*/);
 
@@ -749,11 +763,7 @@ void FuchsiaVideoDecoder::ReleaseOutputBuffers() {
   output_mailboxes_.clear();
 
   // Tell the GPU process to drop the buffer collection.
-  if (output_buffer_collection_id_) {
-    raster_context_provider_->SharedImageInterface()
-        ->ReleaseSysmemBufferCollection(output_buffer_collection_id_);
-    output_buffer_collection_id_ = {};
-  }
+  output_buffer_collection_handle_.reset();
 }
 
 void FuchsiaVideoDecoder::ReleaseOutputPacket(

@@ -4,14 +4,15 @@
 
 #include "chrome/browser/ash/web_applications/demo_mode_web_app_info.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/webui/demo_mode_app_ui/url_constants.h"
 #include "ash/webui/grit/ash_demo_mode_app_resources.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chromeos/constants/chromeos_features.h"
 
 std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForDemoModeApp() {
   std::unique_ptr<WebAppInstallInfo> info =
@@ -48,5 +49,6 @@ bool DemoModeSystemAppDelegate::ShouldCaptureNavigations() const {
 }
 
 bool DemoModeSystemAppDelegate::IsAppEnabled() const {
-  return chromeos::features::IsDemoModeSWAEnabled();
+  return chromeos::features::IsDemoModeSWAEnabled() &&
+         ash::DemoSession::IsDeviceInDemoMode();
 }

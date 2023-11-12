@@ -31,7 +31,8 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
-#include "components/omnibox/browser/match_compare.h"
+#include "components/omnibox/browser/history_cluster_provider.h"
+#include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -48,6 +49,8 @@
 
 namespace {
 
+using ShortcutMatch = ShortcutsProvider::ShortcutMatch;
+
 class DestinationURLEqualsURL {
  public:
   explicit DestinationURLEqualsURL(const GURL& url) : url_(url) {}
@@ -59,69 +62,19 @@ class DestinationURLEqualsURL {
   const GURL url_;
 };
 
-// ShortcutMatch holds sufficient information about a single match from the
-// shortcut database to allow for destination deduping and relevance sorting.
-// After those stages the top matches are converted to the more heavyweight
-// AutocompleteMatch struct.  Avoiding constructing the larger struct for
-// every such match can save significant time when there are many shortcut
-// matches to process.
-struct ShortcutMatch {
-  ShortcutMatch(int relevance,
-                const GURL& stripped_destination_url,
-                const ShortcutsDatabase::Shortcut* shortcut)
-      : relevance(relevance),
-        stripped_destination_url(stripped_destination_url),
-        shortcut(shortcut),
-        contents(shortcut->match_core.contents),
-        type(shortcut->match_core.type) {}
-
-  int relevance;
-  // To satisfy |CompareWithDemoteByType<>::operator()|.
-  size_t subrelevance = 0;
-  GURL stripped_destination_url;
-  raw_ptr<const ShortcutsDatabase::Shortcut> shortcut;
-  std::u16string contents;
-  AutocompleteMatch::Type type;
-
-  AutocompleteMatch::Type GetDemotionType() const { return type; }
-};
-
-// Sorts |matches| by destination, taking into account demotions based on
-// |page_classification| when resolving ties about which of several
-// duplicates to keep.  The matches are also deduplicated.
-void SortAndDedupMatches(
-    metrics::OmniboxEventProto::PageClassification page_classification,
-    std::vector<ShortcutMatch>* matches) {
-  // Sort matches such that duplicate matches are consecutive.
-  std::sort(matches->begin(), matches->end(),
-            DestinationSort<ShortcutMatch>(page_classification));
-
-  // Erase duplicate matches. Duplicate matches are those with
-  // stripped_destination_url fields equal and non empty.
-  matches->erase(
-      std::unique(matches->begin(), matches->end(),
-                  [](const ShortcutMatch& elem1, const ShortcutMatch& elem2) {
-                    return !elem1.stripped_destination_url.is_empty() &&
-                           (elem1.stripped_destination_url ==
-                            elem2.stripped_destination_url);
-                  }),
-      matches->end());
-}
-
 // Helpers for extracting aggregated factors from a vector of shortcuts.
 const ShortcutsDatabase::Shortcut* ShortestShortcutText(
     std::vector<const ShortcutsDatabase::Shortcut*> shortcuts) {
-  return *base::ranges::min_element(
-      shortcuts, [](auto len1, auto len2) { return len1 < len2; },
-      [](const auto* shortcut) { return shortcut->text.length(); });
+  return *base::ranges::min_element(shortcuts, {}, [](const auto* shortcut) {
+    return shortcut->text.length();
+  });
 }
 
 const ShortcutsDatabase::Shortcut* MostRecentShortcut(
     std::vector<const ShortcutsDatabase::Shortcut*> shortcuts) {
-  return *base::ranges::max_element(
-      shortcuts,
-      [](const auto& time1, const auto& time2) { return time1 < time2; },
-      [](const auto* shortcut) { return shortcut->last_access_time; });
+  return *base::ranges::max_element(shortcuts, {}, [](const auto* shortcut) {
+    return shortcut->last_access_time;
+  });
 }
 
 int SumNumberOfHits(std::vector<const ShortcutsDatabase::Shortcut*> shortcuts) {
@@ -133,15 +86,12 @@ int SumNumberOfHits(std::vector<const ShortcutsDatabase::Shortcut*> shortcuts) {
 
 const ShortcutsDatabase::Shortcut* ShortestShortcutContent(
     std::vector<const ShortcutsDatabase::Shortcut*> shortcuts) {
-  return *base::ranges::min_element(
-      shortcuts, [](auto len1, auto len2) { return len1 < len2; },
-      [](const auto* shortcut) {
-        return shortcut->match_core.contents.length();
-      });
+  return *base::ranges::min_element(shortcuts, {}, [](const auto* shortcut) {
+    return shortcut->match_core.contents.length();
+  });
 }
 
-// Helper for `CalculateScore()` and `CalculateAggregateScore()` to score
-// shortcuts based on their individual or aggregate factors.
+// Helper for `CreateScoredShortcutMatch()` to score shortcuts.
 int CalculateScoreFromFactors(size_t typed_length,
                               size_t shortcut_text_length,
                               const base::Time& last_access_time,
@@ -153,47 +103,75 @@ int CalculateScoreFromFactors(size_t typed_length,
   // Due to appending 3 chars when updating shortcuts, and expanding the last
   // word when updating or creating shortcuts, the shortcut text can be longer
   // than the user's previous inputs (see
-  // `ShortcutsBackend::AddOrUpdateShortcut()`). As an approximation, ignore the
-  // 10 chars in the shortcut text, though this can overestimate or
-  // underestimate the actual previous inputs. Shortcuts are often deduped with
-  // higher scoring history suggestions anyway.
+  // `ShortcutsBackend::AddOrUpdateShortcut()`). As an approximation, ignore 3
+  // or 10 chars in the shortcut text. Shortcuts are often deduped with higher
+  // scoring history suggestions anyway.
   const size_t adjustment =
       OmniboxFieldTrial::IsShortcutExpandingEnabled() ? 10 : 3;
   const size_t adjusted_text_length =
       std::max(shortcut_text_length, typed_length + adjustment) - adjustment;
-  const double typed_fraction =
-      static_cast<double>(typed_length) / adjusted_text_length;
-
   // Using the square root of the typed fraction boosts the base score rapidly
   // as characters are typed, compared with simply using the typed fraction
   // directly. This makes sense since the first characters typed are much more
   // important for determining how likely it is a user wants a particular
   // shortcut than are the remaining continued characters.
-  const double base_score = max_relevance * sqrt(typed_fraction);
+  const double typed_fraction =
+      sqrt(static_cast<double>(typed_length) / adjusted_text_length);
 
-  // Then we decay this by half each week.
-  const double kLn2 = 0.6931471805599453;
-  base::TimeDelta time_passed = base::Time::Now() - last_access_time;
-  // Clamp to 0 in case time jumps backwards (e.g. due to DST).
-  double decay_exponent = std::max(0.0, kLn2 * time_passed / base::Days(7));
+  // Decay score by half each week. Clamp to 0 in case time jumps backwards
+  // (e.g. due to DST).
+  const double halftime_numerator =
+      std::max((base::Time::Now() - last_access_time) / base::Days(7), 0.);
+  // Reduce the decay factor for more used shortcuts. Once used, decay at full
+  // speed; otherwise, decay `n` times slower, where n increases by 0.2 for each
+  // additional hit, up to a maximum of 5.
+  const double halftime_denominator = std::min(.8 + number_of_hits * .2, 5.);
+  const double halftime_decay =
+      pow(.5, halftime_numerator / halftime_denominator);
 
-  // We modulate the decay factor based on how many times the shortcut has been
-  // used. Newly created shortcuts decay at full speed; otherwise, decaying by
-  // half takes |n| times as much time, where n increases by
-  // (1.0 / each 5 additional hits), up to a maximum of 5x as long.
-  const double kMaxDecaySpeedDivisor = 5.0;
-  const double kNumUsesPerDecaySpeedDivisorIncrement = 5.0;
-  const double decay_divisor =
-      std::min(kMaxDecaySpeedDivisor,
-               (number_of_hits + kNumUsesPerDecaySpeedDivisorIncrement - 1) /
-                   kNumUsesPerDecaySpeedDivisorIncrement);
+  return base::ClampRound(typed_fraction * halftime_decay * max_relevance);
+}
 
-  return base::ClampRound(base_score / exp(decay_exponent / decay_divisor));
+// Populate scoring signals from the shortcut match to ACMatch.
+void PopulateScoringSignals(const ShortcutMatch& shortcut_match,
+                            AutocompleteMatch* match) {
+  match->scoring_signals.set_shortcut_visit_count(
+      shortcut_match.aggregate_number_of_hits);
+  match->scoring_signals.set_shortest_shortcut_len(
+      shortcut_match.shortest_text_length);
+  match->scoring_signals.set_elapsed_time_last_shortcut_visit_sec(
+      (base::Time::Now() - shortcut_match.most_recent_access_time).InSeconds());
+  match->scoring_signals.set_length_of_url(
+      match->destination_url.spec().length());
 }
 
 }  // namespace
 
 const int ShortcutsProvider::kShortcutsProviderDefaultMaxRelevance = 1199;
+
+ShortcutsProvider::ShortcutMatch::ShortcutMatch(
+    int relevance,
+    int aggregate_number_of_hits,
+    base::Time most_recent_access_time,
+    size_t shortest_text_length,
+    const GURL& stripped_destination_url,
+    const ShortcutsDatabase::Shortcut* shortcut)
+    : relevance(relevance),
+      aggregate_number_of_hits(aggregate_number_of_hits),
+      most_recent_access_time(most_recent_access_time),
+      shortest_text_length(shortest_text_length),
+      stripped_destination_url(stripped_destination_url),
+      shortcut(shortcut),
+      contents(shortcut->match_core.contents),
+      type(shortcut->match_core.type) {
+  DCHECK_GE(aggregate_number_of_hits, shortcut->number_of_hits);
+}
+
+ShortcutsProvider::ShortcutMatch::ShortcutMatch(const ShortcutMatch& other) =
+    default;
+
+ShortcutMatch& ShortcutsProvider::ShortcutMatch::operator=(
+    const ShortcutMatch& other) = default;
 
 ShortcutsProvider::ShortcutsProvider(AutocompleteProviderClient* client)
     : AutocompleteProvider(AutocompleteProvider::TYPE_SHORTCUTS),
@@ -215,7 +193,7 @@ void ShortcutsProvider::Start(const AutocompleteInput& input,
   if (input.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT &&
       input.type() != metrics::OmniboxInputType::EMPTY &&
       !input.text().empty() && initialized_) {
-    GetMatches(input);
+    GetMatches(input, OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled());
   }
 }
 
@@ -252,7 +230,8 @@ void ShortcutsProvider::OnShortcutsLoaded() {
   initialized_ = true;
 }
 
-void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
+void ShortcutsProvider::GetMatches(const AutocompleteInput& input,
+                                   bool populate_scoring_signals) {
   scoped_refptr<ShortcutsBackend> backend =
       client_->GetShortcutsBackendIfExists();
   if (!backend)
@@ -262,10 +241,7 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
   std::u16string term_string(base::i18n::ToLower(input.text()));
   DCHECK(!term_string.empty());
 
-  int max_relevance;
-  if (!OmniboxFieldTrial::ShortcutsScoringMaxRelevance(
-          input.current_page_classification(), &max_relevance))
-    max_relevance = kShortcutsProviderDefaultMaxRelevance;
+  int max_relevance = kShortcutsProviderDefaultMaxRelevance;
   TemplateURLService* template_url_service = client_->GetTemplateURLService();
   const std::u16string fixed_up_input(FixupUserInput(input).second);
 
@@ -275,104 +251,63 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
   // Track history cluster shortcuts separately, so they don't consume
   // `provider_max_matches_`.
   std::vector<ShortcutMatch> history_cluster_shortcut_matches;
-  // The number of history cluster shortcuts added to `shortcut_matches`. This
-  // is used to bump the `provider_max_matches_`.
-  if (base::FeatureList::IsEnabled(omnibox::kAggregateShortcuts)) {
-    // If `kAggregateShortcuts` is enabled, group the matching shortcuts by
-    // stripped `destination_url`, score them together, and create a single
-    // `ShortcutMatch`.
-    std::map<GURL, std::vector<const ShortcutsDatabase::Shortcut*>>
-        shortcuts_by_url;
-    for (auto it = FindFirstMatch(term_string, backend.get());
-         it != backend->shortcuts_map().end() &&
-         base::StartsWith(it->first, term_string, base::CompareCase::SENSITIVE);
-         ++it) {
-      const ShortcutsDatabase::Shortcut& shortcut = it->second;
 
-      // Allow `HISTORY_CLUSTER` suggestions only if the appropriate feature is
-      // enabled.
+  // Group the matching shortcuts by stripped `destination_url`, score them
+  // together, and create a single `ShortcutMatch`.
+  std::map<GURL, std::vector<const ShortcutsDatabase::Shortcut*>>
+      shortcuts_by_url;
+  for (auto it = FindFirstMatch(term_string, backend.get());
+       it != backend->shortcuts_map().end() &&
+       base::StartsWith(it->first, term_string, base::CompareCase::SENSITIVE);
+       ++it) {
+    const ShortcutsDatabase::Shortcut& shortcut = it->second;
+
+    // Allow `HISTORY_CLUSTER` suggestions only if the appropriate feature is
+    // enabled.
 #if !BUILDFLAG(IS_IOS)
-      if (!history_clusters::GetConfig()
-               .omnibox_history_cluster_provider_shortcuts &&
-          shortcut.match_core.type ==
-              AutocompleteMatch::Type::HISTORY_CLUSTER) {
-        continue;
-      }
+    if (!history_clusters::GetConfig()
+             .omnibox_history_cluster_provider_shortcuts &&
+        shortcut.match_core.type == AutocompleteMatch::Type::HISTORY_CLUSTER) {
+      continue;
+    }
 #endif  // !BUILDFLAG(IS_IOS)
 
-      const GURL stripped_destination_url(AutocompleteMatch::GURLToStrippedGURL(
-          shortcut.match_core.destination_url, input, template_url_service,
-          shortcut.match_core.keyword));
-      shortcuts_by_url[stripped_destination_url].push_back(&shortcut);
+    const GURL stripped_destination_url(AutocompleteMatch::GURLToStrippedGURL(
+        shortcut.match_core.destination_url, input, template_url_service,
+        shortcut.match_core.keyword, /*keep_search_intent_params=*/false));
+    shortcuts_by_url[stripped_destination_url].push_back(&shortcut);
+  }
+
+  for (const auto& [url, shortcuts] : shortcuts_by_url) {
+    ShortcutMatch shortcut_match =
+        CreateScoredShortcutMatch(term_string, url, shortcuts, max_relevance);
+
+    // Don't return shortcuts with zero relevance.
+    if (shortcut_match.relevance == 0)
+      continue;
+
+    if (shortcut_match.shortcut->match_core.type ==
+        AutocompleteMatch::Type::HISTORY_CLUSTER) {
+      history_cluster_shortcut_matches.push_back(shortcut_match);
+    } else {
+      shortcut_matches.push_back(shortcut_match);
     }
+  }
 
-    for (auto const& it : shortcuts_by_url) {
-      int relevance =
-          CalculateAggregateScore(term_string, it.second, max_relevance);
-      // Don't return shortcuts with zero relevance.
-      if (relevance) {
-        // When `kAggregateShortcuts` is disabled, the highest scored shortcut
-        // is picked, followed by shortest content if equally scored. Since
-        // we're scoring them in aggregate, there are no individual scores to
-        // consider, so we just pick the shortest content. Picking the shortest
-        // shortcut text would probably also work, but could result in more
-        // text changes as the user types their input for shortcut texts that
-        // are prefixes of each other.
-        const ShortcutsDatabase::Shortcut* shortcut =
-            ShortestShortcutContent(it.second);
-
-        if (shortcut->match_core.type ==
-            AutocompleteMatch::Type::HISTORY_CLUSTER) {
-          history_cluster_shortcut_matches.emplace_back(relevance, it.first,
-                                                        shortcut);
-        } else {
-          shortcut_matches.emplace_back(relevance, it.first, shortcut);
-        }
-      }
-    }
-
-  } else {
-    // If `kAggregateShortcuts` is disabled, score each matching shortcut
-    // individually and create 1 `ShortcutMatch` for each. Dedupe them
-    // afterwards.
-    for (auto it = FindFirstMatch(term_string, backend.get());
-         it != backend->shortcuts_map().end() &&
-         base::StartsWith(it->first, term_string, base::CompareCase::SENSITIVE);
-         ++it) {
-      const ShortcutsDatabase::Shortcut& shortcut = it->second;
-
-      // `kAggregateShortcuts` is launched. So rather than implement history
-      // cluster shortcuts logic, simply bypass history cluster suggestions when
-      // `kAggregateShortcuts` is disabled. This will prevent weird bugs if
-      // `kAggregateShortcuts` is unlaunched.
-      if (shortcut.match_core.type ==
-          AutocompleteMatch::Type::HISTORY_CLUSTER) {
-        continue;
-      }
-
-      // Don't return shortcuts with zero relevance.
-      int relevance = CalculateScore(term_string, it->second, max_relevance);
-      if (relevance) {
-        GURL stripped_destination_url(AutocompleteMatch::GURLToStrippedGURL(
-            shortcut.match_core.destination_url, input, template_url_service,
-            shortcut.match_core.keyword));
-        shortcut_matches.emplace_back(relevance, stripped_destination_url,
-                                      &it->second);
-      }
-    }
-    // Remove duplicates.  This is important because it's common to have
-    // multiple shortcuts pointing to the same URL, e.g., ma, mai, and mail all
-    // pointing to mail.google.com, so typing "m" will return them all.  If we
-    // then simply clamp to provider_max_matches_ and let the
-    // SortAndDedupMatches take care of collapsing the duplicates, we'll
-    // effectively only be returning one match, instead of several
-    // possibilities.
-    //
-    // Note that while removing duplicates, we don't populate a match's
-    // |duplicate_matches| field--duplicates don't need to be preserved in the
-    // matches because they are only used for deletions, and this provider
-    // deletes matches based on the URL.
-    SortAndDedupMatches(input.current_page_classification(), &shortcut_matches);
+  static const bool boost_enabled =
+      base::FeatureList::IsEnabled(omnibox::kShortcutBoost);
+  if (!shortcut_matches.empty() && boost_enabled) {
+    // Promote the shortcut with most hits to compete for the default slot.
+    // Won't necessarily be the highest scoring shortcut, as scoring also
+    // depends on visit times and input length. Therefore, has to be done before
+    // the partial sort before to ensure the match isn't erased. The match may
+    // be not-allowed-to-be-default, in which case, it'll be competing for top
+    // slot in the URL grouped suggestions.
+    base::ranges::max_element(shortcut_matches, {},
+                              [](const auto& shortcut_match) {
+                                return shortcut_match.aggregate_number_of_hits;
+                              })
+        ->relevance = HistoryURLProvider::kScoreForBestInlineableResult + 1;
   }
 
   // Find best matches.
@@ -405,9 +340,12 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
         int relevance = max_relevance;
         if (max_relevance > 1)
           --max_relevance;
-
-        return ShortcutToACMatch(*shortcut_match.shortcut, relevance, input,
-                                 fixed_up_input, term_string);
+        auto match = ShortcutToACMatch(*shortcut_match.shortcut, relevance,
+                                       input, fixed_up_input, term_string);
+        if (populate_scoring_signals) {
+          PopulateScoringSignals(shortcut_match, &match);
+        }
+        return match;
       });
   base::ranges::transform(
       history_cluster_shortcut_matches, std::back_inserter(matches_),
@@ -415,20 +353,52 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
         auto match = ShortcutToACMatch(*shortcut_match.shortcut,
                                        shortcut_match.relevance, input,
                                        fixed_up_input, term_string);
-    // Guard this as `history_clusters::GetConfig()` doesn't exist on iOS.
+    // Guard this as `HistoryClusterProvider` doesn't exist on iOS.
     // Though this code will never run on iOS regardless.
 #if !BUILDFLAG(IS_IOS)
-        if (!history_clusters::GetConfig()
-                 .omnibox_history_cluster_provider_free_ranking) {
-          match.suggestion_group_id = omnibox::GROUP_HISTORY_CLUSTER;
-          // Insert a corresponding omnibox::GroupConfig with default values in
-          // the suggestion groups map; otherwise the group ID will get dropped.
-          suggestion_groups_map_[omnibox::GROUP_HISTORY_CLUSTER];
-        }
+        // `term_string` is only what the user typed, e.g. "new y" instead of
+        // "new york". Use `match.description`, which is the whole string.
+        // This is a bit hacky, but accurately reflects how
+        // `HistoryClusterProvider` constructed the original match.
+        std::string matching_string = base::UTF16ToUTF8(match.description);
+        // Shortcut-generated HC matches have empty `ClusterKeywordData()`s,
+        // because it wasn't generated via an entity match in the first place.
+        HistoryClusterProvider::CompleteHistoryClustersMatch(
+            matching_string, history::ClusterKeywordData(), &match);
 #endif  // !BUILDFLAG(IS_IOS)
 
         return match;
       });
+}
+
+ShortcutMatch ShortcutsProvider::CreateScoredShortcutMatch(
+    const std::u16string& terms,
+    const GURL& stripped_destination_url,
+    const std::vector<const ShortcutsDatabase::Shortcut*>& shortcuts,
+    int max_relevance) {
+  DCHECK_GT(shortcuts.size(), 0u);
+  const size_t shortest_text_length =
+      ShortestShortcutText(shortcuts)->text.length();
+  const base::Time& last_access_time =
+      MostRecentShortcut(shortcuts)->last_access_time;
+  const int number_of_hits = SumNumberOfHits(shortcuts);
+  const int relevance = CalculateScoreFromFactors(
+      terms.length(), shortest_text_length, last_access_time, number_of_hits,
+      max_relevance);
+
+  // Pick the shortcut with the shortest content. Picking the shortest
+  // shortcut text would probably also work, but could result in more
+  // text changes as the user types their input for shortcut texts that
+  // are prefixes of each other.
+  const ShortcutsDatabase::Shortcut* shortcut =
+      ShortestShortcutContent(shortcuts);
+
+  return ShortcutMatch{relevance,
+                       number_of_hits,
+                       last_access_time,
+                       shortest_text_length,
+                       stripped_destination_url,
+                       shortcut};
 }
 
 AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
@@ -495,6 +465,8 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
         // or keyword mode was invoked explicitly and the keyword in the input
         // is also of the default search provider.
         (input.prefer_keyword() && keyword_matches);
+    match.search_terms_args =
+        std::make_unique<TemplateURLRef::SearchTermsArgs>(match.contents);
   }
 
   const bool match_has_explicit_keyword =
@@ -521,7 +493,15 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
             !input.prevent_inline_autocomplete() ||
             match.inline_autocompletion.empty();
       }
+#if !BUILDFLAG(IS_IOS)
+    } else if (match.type != AutocompleteMatch::Type::HISTORY_CLUSTER ||
+               history_clusters::GetConfig()
+                   .omnibox_history_cluster_provider_allow_default) {
+      // Don't try to default history cluster suggestions unless
+      // `omnibox_history_cluster_provider_allow_default` is enabled.
+#else
     } else {
+#endif
       // Try rich autocompletion first. For document suggestions,
       // `match.contents` is the title, while `description` is something like
       // 'Google Docs' and shouldn't be autocompleted. For all other nav
@@ -569,28 +549,4 @@ ShortcutsBackend::ShortcutMap::const_iterator ShortcutsProvider::FindFirstMatch(
           base::StartsWith(it->first, keyword, base::CompareCase::SENSITIVE))
              ? it
              : backend->shortcuts_map().end();
-}
-
-int ShortcutsProvider::CalculateScore(
-    const std::u16string& terms,
-    const ShortcutsDatabase::Shortcut& shortcut,
-    int max_relevance) {
-  return CalculateScoreFromFactors(terms.length(), shortcut.text.length(),
-                                   shortcut.last_access_time,
-                                   shortcut.number_of_hits, max_relevance);
-}
-
-int ShortcutsProvider::CalculateAggregateScore(
-    const std::u16string& terms,
-    const std::vector<const ShortcutsDatabase::Shortcut*>& shortcuts,
-    int max_relevance) {
-  DCHECK_GT(shortcuts.size(), 0u);
-  const size_t shortest_text_length =
-      ShortestShortcutText(shortcuts)->text.length();
-  const base::Time& last_access_time =
-      MostRecentShortcut(shortcuts)->last_access_time;
-  const int number_of_hits = SumNumberOfHits(shortcuts);
-  return CalculateScoreFromFactors(terms.length(), shortest_text_length,
-                                   last_access_time, number_of_hits,
-                                   max_relevance);
 }

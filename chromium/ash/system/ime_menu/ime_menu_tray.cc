@@ -4,7 +4,11 @@
 
 #include "ash/system/ime_menu/ime_menu_tray.h"
 
+#include <memory>
+
+#include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/tray_background_view_catalog.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
@@ -18,8 +22,9 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/icon_button.h"
+#include "ash/style/rounded_container.h"
 #include "ash/system/ime_menu/ime_list_view.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/detailed_view_delegate.h"
@@ -41,6 +46,7 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
@@ -70,12 +76,22 @@ constexpr auto kTitleViewPadding = gfx::Insets::TLBR(0, 0, 0, 16);
 // between the floating menu and the IME tray in kiosk session (dp).
 constexpr auto kKioskBubbleViewPadding = gfx::Insets::TLBR(-19, 0, -23, 0);
 
+// For QsRevamp the scroll view has no margin at the top or bottom to make it
+// flush with the header and footer.
+constexpr auto kQsScrollViewMargin = gfx::Insets::TLBR(0, 16, 0, 16);
+
 // Returns the height range of ImeListView.
 gfx::Range GetImeListViewRange() {
   const int max_items = 5;
   const int min_items = 1;
   const int tray_item_height = kTrayPopupItemMinHeight;
-  return gfx::Range(tray_item_height * min_items, tray_item_height * max_items);
+  // QsRevamp has insets at the top and bottom of the RoundedContainer.
+  const int insets = features::IsQsRevampEnabled()
+                         ? RoundedContainer::kBorderInsets.top() +
+                               RoundedContainer::kBorderInsets.bottom()
+                         : 0;
+  return gfx::Range(tray_item_height * min_items + insets,
+                    tray_item_height * max_items + insets);
 }
 
 // Returns true if the current screen is login or lock screen.
@@ -142,14 +158,15 @@ class ImeTitleView : public views::BoxLayoutView {
  public:
   METADATA_HEADER(ImeTitleView);
   ImeTitleView() {
-    auto* color_provider = AshColorProvider::Get();
-    SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(
-            gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
-            color_provider->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
-                        0)));
+    // QsRevamp doesn't show a separator between title area and list.
+    if (!features::IsQsRevampEnabled()) {
+      SetBorder(views::CreatePaddedBorder(
+          views::CreateThemedSolidSidedBorder(
+              gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
+              kColorAshSeparatorColor),
+          gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                          0)));
+    }
     SetOrientation(views::BoxLayout::Orientation::kHorizontal);
     SetInsideBorderInsets(kTitleViewPadding);
     SetMinimumCrossAxisSize(kTrayPopupItemMinHeight);
@@ -159,8 +176,7 @@ class ImeTitleView : public views::BoxLayoutView {
     title_label->SetBorder(views::CreateEmptyBorder(
         gfx::Insets::TLBR(0, kMenuEdgeEffectivePadding, 1, 0)));
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    title_label->SetEnabledColor(color_provider->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
+    title_label->SetEnabledColorId(kColorAshTextColorPrimary);
     TrayPopupUtils::SetLabelFontList(title_label,
                                      TrayPopupUtils::FontStyle::kPodMenuHeader);
     SetFlexForView(title_label, 1);
@@ -173,7 +189,7 @@ class ImeTitleView : public views::BoxLayoutView {
                 base::UserMetricsAction("StatusArea_IME_Detailed"));
             Shell::Get()->system_tray_model()->client()->ShowIMESettings();
           }),
-          IconButton::Type::kSmall, &kSystemMenuSettingsIcon,
+          IconButton::Type::kMedium, &kSystemMenuSettingsIcon,
           IDS_ASH_STATUS_TRAY_IME_SETTINGS));
       settings_button_->SetEnabled(TrayPopupUtils::CanOpenWebUISettings());
       settings_button_->SetID(kSettingsButtonId);
@@ -229,14 +245,17 @@ class ImeButtonsView : public views::View {
         views::BoxLayout::Orientation::kHorizontal);
     box_layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
     SetLayoutManager(std::move(box_layout));
-    SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(
-            gfx::Insets::TLBR(kMenuSeparatorWidth, 0, 0, 0),
-            AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
-                        kMenuExtraMarginFromLeftEdge)));
-
+    if (features::IsQsRevampEnabled()) {
+      SetBorder(views::CreateEmptyBorder(
+          gfx::Insets::VH(0, kMenuExtraMarginFromLeftEdge)));
+    } else {
+      SetBorder(views::CreatePaddedBorder(
+          views::CreateThemedSolidSidedBorder(
+              gfx::Insets::TLBR(kMenuSeparatorWidth, 0, 0, 0),
+              kColorAshSeparatorColor),
+          gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                          kMenuExtraMarginFromLeftEdge)));
+    }
     if (show_emoji) {
       emoji_button_ = new SystemMenuButton(
           base::BindRepeating(&ImeButtonsView::KeysetButtonPressed,
@@ -299,6 +318,9 @@ class ImeMenuListView : public ImeListView {
     // DetailedViewDelegate:
     void TransitionToMainView(bool restore_focus) override {}
     void CloseBubble() override {}
+    gfx::Insets GetScrollViewMargin() const override {
+      return kQsScrollViewMargin;
+    }
   };
 
   explicit ImeMenuListView(std::unique_ptr<Delegate> delegate)
@@ -381,7 +403,8 @@ void ImeMenuTray::ShowImeMenuBubbleInternal() {
     view->layer()->SetFillsBoundsOpaquely(false);
   };
 
-  TrayBubbleView* bubble_view = new TrayBubbleView(init_params);
+  std::unique_ptr<TrayBubbleView> bubble_view =
+      std::make_unique<TrayBubbleView>(init_params);
   bubble_view->set_margins(GetSecondaryBubbleInsets());
 
   // Add a title item with a separator on the top of the IME menu.
@@ -402,7 +425,8 @@ void ImeMenuTray::ShowImeMenuBubbleInternal() {
             is_voice_enabled_)));
   }
 
-  bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
+  bubble_ = std::make_unique<TrayBubbleWrapper>(this);
+  bubble_->ShowBubble(std::move(bubble_view));
   SetIsActive(true);
 }
 
@@ -444,7 +468,7 @@ bool ImeMenuTray::ShouldShowBottomButtons() {
     const bool is_dictation_enabled =
         Shell::Get()
             ->accessibility_controller()
-            ->GetFeature(AccessibilityControllerImpl::FeatureType::kDictation)
+            ->GetFeature(A11yFeatureType::kDictation)
             .enabled();
 
     // Only enable voice button in IME tray if the function is enabled and
@@ -493,12 +517,11 @@ void ImeMenuTray::ClickedOutsideBubble() {
   CloseBubble();
 }
 
-bool ImeMenuTray::PerformAction(const ui::Event& event) {
-  if (event.IsMouseEvent() || event.IsGestureEvent()) {
-    UserMetricsRecorder::RecordUserClickOnTray(
-        LoginMetricsRecorder::TrayClickTarget::kImeTray);
-  }
-  return TrayBackgroundView::PerformAction(event);
+void ImeMenuTray::OnTrayActivated(const ui::Event& event) {
+  if (!event.IsMouseEvent() && !event.IsGestureEvent())
+    return;
+  UserMetricsRecorder::RecordUserClickOnTray(
+      LoginMetricsRecorder::TrayClickTarget::kImeTray);
 }
 
 void ImeMenuTray::CloseBubble() {
@@ -600,18 +623,15 @@ void ImeMenuTray::UpdateTrayLabel() {
   // IME.
   if (extension_ime_util::IsArcIME(current_ime.id)) {
     CreateImageView();
-    image_view_->SetImage(gfx::CreateVectorIcon(
-        kShelfGlobeIcon,
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kIconColorPrimary)));
+    image_view_->SetImage(ui::ImageModel::FromVectorIcon(
+        kShelfGlobeIcon, kColorAshIconColorPrimary));
     return;
   }
 
   // Updates the tray label based on the current input method.
   CreateLabel();
 
-  label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary));
+  label_->SetEnabledColorId(kColorAshIconColorPrimary);
 
   if (current_ime.third_party)
     label_->SetText(current_ime.short_name + u"*");

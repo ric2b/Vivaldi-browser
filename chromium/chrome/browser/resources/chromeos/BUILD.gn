@@ -78,7 +78,6 @@ group("closure_compile") {
     "crostini_installer:closure_compile",
     "crostini_upgrader:closure_compile",
     "edu_coexistence:closure_compile",
-    "emoji_picker:closure_compile",
     "emulator:closure_compile",
     "gaia_action_buttons:closure_compile",
     "internet_config_dialog:closure_compile",
@@ -110,16 +109,16 @@ js_type_check("closure_compile_local") {
 
 js_library("power") {
   deps = [
-    "//ui/webui/resources/js:cr.m",
-    "//ui/webui/resources/js:load_time_data.m",
-    "//ui/webui/resources/js:util",
+    "//ash/webui/common/resources:cr.m",
+    "//ash/webui/common/resources:load_time_data.m",
+    "//ash/webui/common/resources:util",
   ]
 }
 
 js_library("slow") {
   deps = [
-    "//ui/webui/resources/js:cr.m",
-    "//ui/webui/resources/js:util",
+    "//ash/webui/common/resources:cr.m",
+    "//ash/webui/common/resources:util",
   ]
   externs_list = [ "$externs_path/chrome_send.js" ]
 }

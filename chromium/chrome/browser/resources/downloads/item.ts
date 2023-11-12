@@ -20,8 +20,9 @@ import {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {FocusRowMixin} from 'chrome://resources/js/focus_row_mixin.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {HTMLEscape} from 'chrome://resources/js/util.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
+import {htmlEscape} from 'chrome://resources/js/util_ts.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy} from './browser_proxy.js';
@@ -239,7 +240,7 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
 
     const url = `chrome://extensions/?id=${this.data.byExtId}`;
     const name = this.data.byExtName;
-    return loadTimeData.getStringF('controlledByUrl', url, HTMLEscape(name));
+    return loadTimeData.getStringF('controlledByUrl', url, htmlEscape(name));
   }
 
   private computeControlRemoveFromListAriaLabel_(): string {
@@ -272,8 +273,8 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
         }
         break;
 
-      case States.MIXED_CONTENT:
-        return loadTimeData.getString('mixedContentDownloadDesc');
+      case States.INSECURE:
+        return loadTimeData.getString('insecureDownloadDesc');
 
       case States.DANGEROUS:
         switch (data.dangerType) {
@@ -390,7 +391,7 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
 
   private computeIsDangerous_(): boolean {
     return this.data.state === States.DANGEROUS ||
-        this.data.state === States.MIXED_CONTENT;
+        this.data.state === States.INSECURE;
   }
 
   private computeIsInProgress_(): boolean {
@@ -484,7 +485,7 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
   }
 
   private observeControlledBy_() {
-    this.$['controlled-by'].innerHTML = this.controlledBy_;
+    this.$['controlled-by'].innerHTML = sanitizeInnerHtml(this.controlledBy_);
     if (this.controlledBy_) {
       const link = this.shadowRoot!.querySelector('#controlled-by a');
       link!.setAttribute('focus-row-control', '');
@@ -576,7 +577,7 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
       // Make the file name collapsible.
       p.collapsible = !!p.arg;
     });
-    const canUndo = !this.data.isDangerous && !this.data.isMixedContent;
+    const canUndo = !this.data.isDangerous && !this.data.isInsecure;
     getToastManager().showForStringPieces(pieces, /* hideSlotted= */ !canUndo);
 
     // Stop propagating a click to the document to remove toast.

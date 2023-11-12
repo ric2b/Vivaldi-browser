@@ -49,6 +49,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
@@ -79,6 +80,7 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.EventOffsetHandler;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.ui.resources.ResourceManager;
@@ -93,6 +95,7 @@ import java.util.Set;
 import android.view.GestureDetector;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -111,6 +114,9 @@ public class CompositorViewHolder extends FrameLayout
                    ChromeAccessibilityUtil.Observer, TabObscuringHandler.Observer,
                    ViewGroup.OnHierarchyChangeListener {
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
+    private static MutableFlagWithSafeDefault sDeferKeepScreenOnFlag =
+            new MutableFlagWithSafeDefault(
+                    ChromeFeatureList.DEFER_KEEP_SCREEN_ON_DURING_GESTURE, false);
     private Runnable mSetBackgroundRunnable;
 
     // Vivaldi
@@ -449,6 +455,10 @@ public class CompositorViewHolder extends FrameLayout
                             }
                         }, ThreadUtils.getUiThreadHandler());
         }
+        // Note(david@vivaldi.com): On first runs we activate the focus on new tab setting.
+        if (FirstRunStatus.isFirstRunTriggered())
+            VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
+                    VivaldiPreferences.FOCUS_ADDRESS_BAR_SWITCH, true);
     }
 
     private Point getViewportSize() {
@@ -801,15 +811,18 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void updateInMotion() {
-        // TODO(skym): Track fling as well.
+        // TODO(https://crbug.com/1378716): Track fling as well.
         boolean inMotion = mInGesture || mContentViewScrolling;
         mInMotionSupplier.set(inMotion);
+        if (sDeferKeepScreenOnFlag.isEnabled() && mContentView != null) {
+            mContentView.setDeferKeepScreenOnChanges(inMotion);
+        }
     }
 
     /**
      * Aggregated supplier for whether the compositor's content is moving. Currently tracking in
      * touch event and in scroll event. Performance is critical while this supplier returns true,
-     * and clients that have expensive operations may consider defering until after the motion is
+     * and clients that have expensive operations may consider deferring until after the motion is
      * over.
      */
     public ObservableSupplier<Boolean> getInMotionSupplier() {
@@ -1212,7 +1225,8 @@ public class CompositorViewHolder extends FrameLayout
                             || layoutParams.bottomMargin != (int) bottomMargin)) {
                 layoutParams.topMargin = (int) topMargin;
                 layoutParams.bottomMargin = (int) bottomMargin;
-                child.requestLayout();
+                ViewUtils.requestLayout(
+                        child, "CompositorViewHolder.applyMarginToFullscreenChildViews");
                 TraceEvent.instant("FullscreenManager:child.requestLayout()");
             }
         }
@@ -1535,7 +1549,8 @@ public class CompositorViewHolder extends FrameLayout
                 // created by a user.
                 String homepageUrl = tab.isIncognito() ? HomepageManager.getDefaultHomepageUri()
                                                        : HomepageManager.getHomepageUri();
-                if (!HomepageManager.isHomepageEnabled()) homepageUrl = tab.getUrl().getSpec();
+                if (!HomepageManager.isHomepageEnabled())
+                    homepageUrl = HomepageManager.getDefaultHomepageUri();
                 if (creationState == TabCreationState.LIVE_IN_FOREGROUND
                         && tab.getUrl().getSpec().equalsIgnoreCase(homepageUrl))
                     VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
@@ -1654,6 +1669,7 @@ public class CompositorViewHolder extends FrameLayout
     private void updateViewStateListener(ContentView newContentView) {
         if (mContentView != null) {
             mContentView.removeOnHierarchyChangeListener(this);
+            mContentView.setDeferKeepScreenOnChanges(false);
         }
         if (newContentView != null) {
             newContentView.addOnHierarchyChangeListener(this);

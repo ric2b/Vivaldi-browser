@@ -8,7 +8,7 @@
 #         mac highsierra mojave catalina bigsur monterey
 #         win win8 win10 ]
 # Devices
-# tags: [ android-nexus-5 android-nexus-5x android-pixel-2 android-pixel-4
+# tags: [ android-nexus-5x android-pixel-2 android-pixel-4
 #             android-pixel-6 android-shield-android-tv android-sm-a135m
 #             android-sm-a235m
 #         chromeos-board-amd64-generic chromeos-board-kevin chromeos-board-eve
@@ -25,9 +25,9 @@
 # tags: [ amd amd-0x6613 amd-0x679e amd-0x6821 amd-0x7340
 #         apple apple-apple-m1 apple-angle-metal-renderer:-apple-m1
 #         arm
-#         google google-0xffff
-#         intel intel-gen-9 intel-0xa2e intel-0xd26 intel-0xa011 intel-0x3e92
-#               intel-0x3e9b intel-0x5912 intel-0x9bc5
+#         google google-0xffff google-0xc0de
+#         intel intel-gen-9 intel-gen-12 intel-0xa2e intel-0xd26 intel-0xa011
+#               intel-0x3e92 intel-0x3e9b intel-0x5912 intel-0x9bc5
 #         nvidia nvidia-0xfe9 nvidia-0x1cb3 nvidia-0x2184
 #         qualcomm ]
 # Architecture
@@ -80,9 +80,6 @@
 # Failures/Flakes #
 ###################
 # Non-"Skip" expectations go here to suppress regular flakes/failures.
-
-crbug.com/1166379 [ android android-pixel-4 ] ScreenshotSync_GPURasterWithDivs [ RetryOnFailure ]
-crbug.com/1166379 [ android android-pixel-4 ] ScreenshotSync_SWRasterWithDivs [ RetryOnFailure ]
 
 #######################################################################
 # Automated Entries After This Point - Do Not Manually Add Below Here #

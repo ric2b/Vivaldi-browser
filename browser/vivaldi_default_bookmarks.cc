@@ -8,20 +8,17 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/favicon/favicon_service_factory.h"
-#include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "ui/base/models/tree_node_iterator.h"
 
+#include "browser/removed_partners_tracker.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/bookmarks/vivaldi_partners.h"
 #include "components/datasource/resource_reader.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/locale/locale_kit.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -32,6 +29,8 @@ bool g_bookmark_update_actve = false;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
+using favicon::FaviconService;
+
 using vivaldi_partners::PartnerDetails;
 
 namespace {
@@ -40,12 +39,6 @@ namespace {
 // bookmarks that are no longer specified in the default collection. Currently
 // we do not want this functionality.
 constexpr bool kAllowPartnerRemoval = false;
-
-// If this is true, older locale-specific partner GUIDs will be updated to newer
-// locale-independent ones. This is false for now to avoid suprises when syncing
-// between profiles using newer version of Vivaldi and older one that knows only
-// about locale-based partners.
-constexpr bool kUpdateLocaleBasedPartners = false;
 
 const char kChildrenKey[] = "children";
 const char kNameKey[] = "name";
@@ -97,7 +90,7 @@ class BookmarkUpdater {
     int failed_updates = 0;
   };
 
-  BookmarkUpdater(Profile* profile,
+  BookmarkUpdater(FaviconServiceGetter favicons_getter,
                   const DefaultBookmarkTree* default_bookmark_tree,
                   BookmarkModel* model);
 
@@ -135,7 +128,7 @@ class BookmarkUpdater {
                              const DefaultBookmarkItem& item,
                              const BookmarkNode* node);
 
-  // Add a new partner node to the givent bookmark folder.
+  // Add a new partner node to the given bookmark folder.
   const BookmarkNode* AddPartnerNode(const DefaultBookmarkItem& item,
                                      const BookmarkNode* parent_node);
 
@@ -143,10 +136,10 @@ class BookmarkUpdater {
                   const GURL& icon_url,
                   std::string icon_path);
 
-  Profile* profile_;
+  FaviconServiceGetter favicons_getter_;
   const DefaultBookmarkTree* default_bookmark_tree_;
   BookmarkModel* model_;
-  base::flat_set<base::GUID> deleted_partner_guids_;
+  std::set<base::GUID> deleted_partner_guids_;
 
   std::map<base::GUID, const BookmarkNode*> guid_node_map_;
   std::map<base::GUID, const BookmarkNode*> existing_partner_bookmarks_;
@@ -164,11 +157,11 @@ struct DefaultBookmarkParser {
 
   DefaultBookmarkTree& tree;
 
-  // The set of partner folders and bookmarks outside Bokmarks folder that are
+  // The set of partner folders and bookmarks outside Bookmarks folder that are
   // used by a particular bookmark file.
   std::set<const PartnerDetails*> used_details;
 
-  // The set of partner bookmarks inside Bokmarks folder that are used by a
+  // The set of partner bookmarks inside Bookmarks folder that are used by a
   // particular bookmark file.
   std::set<const PartnerDetails*> used_details2;
 };
@@ -318,47 +311,20 @@ absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
 }
 
 BookmarkUpdater::BookmarkUpdater(
-    Profile* profile,
+    FaviconServiceGetter favicons_getter,
     const DefaultBookmarkTree* default_bookmark_tree,
     BookmarkModel* model)
-    : profile_(profile),
+    : favicons_getter_(std::move(favicons_getter)),
       default_bookmark_tree_(default_bookmark_tree),
       model_(model) {}
 
 void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
   auto& deleted_partners =
       prefs->GetList(vivaldiprefs::kBookmarksDeletedPartners);
-
-  std::vector<base::GUID> ids;
-  ids.reserve(deleted_partners.size());
-  bool has_locale_based_ids = false;
-  for (const base::Value& value : deleted_partners) {
-    if (!value.is_string()) {
-      LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
-                 << " contains non-string entry";
-      continue;
-    }
-    base::GUID partner_id = base::GUID::ParseCaseInsensitive(value.GetString());
-    if (!partner_id.is_valid()) {
-      LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
-                 << " contains an entry that is not a valid GUID - "
-                 << value.GetString();
-      continue;
-    }
-    if (vivaldi_partners::MapLocaleIdToGUID(partner_id)) {
-      has_locale_based_ids = true;
-    }
-    ids.push_back(std::move(partner_id));
-  }
-  if (has_locale_based_ids && kUpdateLocaleBasedPartners) {
-    base::Value new_list(base::Value::Type::LIST);
-    for (const base::GUID& guid : ids) {
-      new_list.Append(base::Value(guid.AsLowercaseString()));
-    }
-    prefs->Set(vivaldiprefs::kBookmarksDeletedPartners, new_list);
-  }
-
-  deleted_partner_guids_ = base::flat_set<base::GUID>(std::move(ids));
+  bool upgraded_old_ids = false;
+  deleted_partner_guids_ =
+      vivaldi_partners::RemovedPartnersTracker::ReadRemovedPartners(
+          deleted_partners, upgraded_old_ids);
 }
 
 void AddBookmarkGuids(const std::vector<DefaultBookmarkItem>& default_items,
@@ -519,11 +485,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
     custom_meta.SetMap(*old_meta_info);
   }
 
-  if (kUpdateLocaleBasedPartners) {
-    // Make sure the node uses locale-independent partner guid, not one of older
-    // locale-specific partner ids.
-    custom_meta.SetPartner(item.guid);
-  }
+  custom_meta.SetPartner(item.guid);
 
   // If nick is taken by other node do nothing. But ensure that it is cleared
   // if the nick in defaults is empty.
@@ -534,7 +496,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   // We do not clear the partner status when the user selects a custom
   // thumbnail or uses a page snapshot as a thumbnail. So update the
   // thumbnail only if still points to the partner image.
-  if (ResourceReader::IsResourceURL(
+  if (vivaldi_data_url_utils::IsResourceURL(
           ::vivaldi_bookmark_kit::GetThumbnail(node))) {
     custom_meta.SetThumbnail(item.thumbnail);
   }
@@ -625,7 +587,7 @@ const BookmarkNode* BookmarkUpdater::TryToAdd(const DefaultBookmarkItem& item,
     }
   }
 
-  if (deleted_partner_guids_.contains(item.guid)) {
+  if (base::Contains(deleted_partner_guids_, item.guid)) {
     VLOG(2) << "Skipping deleted partner name=" << item.title
             << " guid=" << item.guid;
     return nullptr;
@@ -688,14 +650,12 @@ void BookmarkUpdater::SetFavicon(const GURL& page_url,
   if (page_url.is_empty() || icon_url.is_empty() || icon_path.empty())
     return;
 
-  auto set_favicon_image =
-      [](base::WeakPtr<content::BrowserContext> browser_context, GURL page_url,
-         GURL icon_url, gfx::Image image) -> void {
-    if (!browser_context)
+  auto set_favicon_image = [](FaviconServiceGetter favicons_getter,
+                              GURL page_url, GURL icon_url,
+                              gfx::Image image) -> void {
+    FaviconService* favicon_service = favicons_getter.Run();
+    if (!favicon_service)
       return;
-    Profile* profile = Profile::FromBrowserContext(browser_context.get());
-    auto* favicon_service = FaviconServiceFactory::GetForProfile(
-        profile, ServiceAccessType::EXPLICIT_ACCESS);
     favicon_service->SetFavicons({page_url}, icon_url,
                                  favicon_base::IconType::kFavicon, image);
   };
@@ -703,11 +663,10 @@ void BookmarkUpdater::SetFavicon(const GURL& page_url,
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ResourceReader::ReadPngImage, std::move(icon_path)),
-      base::BindOnce(set_favicon_image, profile_->GetWeakPtr(), page_url,
-                     icon_url));
+      base::BindOnce(set_favicon_image, favicons_getter_, page_url, icon_url));
 }
 
-void UpdatePartnersInModel(Profile* profile,
+void UpdatePartnersInModel(std::unique_ptr<UpdaterClient> client,
                            const std::string& locale,
                            absl::optional<base::Value> default_bookmarks_value,
                            UpdateCallback callback,
@@ -724,6 +683,9 @@ void UpdatePartnersInModel(Profile* profile,
       break;
     }
 
+    PrefService* prefs = client->GetPrefService();
+    DCHECK(prefs);
+
     // We parse default_bookmarks_value here after the bookmark model and
     // vivaldi_partners database are loaded, not on a worker thread immediatelly
     // after we read JSON in ReadDefaultBookmarks. The latter may run before
@@ -737,7 +699,6 @@ void UpdatePartnersInModel(Profile* profile,
       break;
     }
 
-    PrefService* prefs = profile->GetPrefs();
     std::string prev_update_version =
         prefs->GetString(vivaldiprefs::kBookmarksVersion);
     if (prev_update_version.empty()) {
@@ -763,7 +724,8 @@ void UpdatePartnersInModel(Profile* profile,
       }
     }
 
-    BookmarkUpdater upgrader(profile, &default_tree, model);
+    BookmarkUpdater upgrader(client->GetFaviconServiceGetter(), &default_tree,
+                             model);
     upgrader.SetDeletedPartners(prefs);
     upgrader.RunCleanUpdate();
 
@@ -796,19 +758,21 @@ void UpdatePartnersInModel(Profile* profile,
 }
 
 void UpdatePartnersFromDefaults(
-    Profile* profile,
+    std::unique_ptr<UpdaterClient> client,
     const std::string& locale,
     UpdateCallback callback,
     absl::optional<base::Value> default_bookmarks_value) {
-  // Unretained is safe as recording profiles are never removed.
+  BookmarkModel* model = client->GetBookmarkModel();
+  if (!model)
+    return;
   vivaldi_bookmark_kit::RunAfterModelLoad(
-      profile ? BookmarkModelFactory::GetForBrowserContext(profile) : nullptr,
-      base::BindOnce(&UpdatePartnersInModel, base::Unretained(profile), locale,
+      model,
+      base::BindOnce(&UpdatePartnersInModel, std::move(client), locale,
                      std::move(default_bookmarks_value), std::move(callback)));
 }
 
-std::string GetBookmarkLocale(Profile* profile) {
-  PrefService* prefs = profile->GetPrefs();
+std::string GetBookmarkLocale(PrefService* prefs,
+                              const std::string& application_locale) {
   std::string locale = prefs->GetString(vivaldiprefs::kBookmarksLanguage);
   if (!locale.empty()) {
     // Check if the locale is still a valid one.
@@ -817,8 +781,8 @@ std::string GetBookmarkLocale(Profile* profile) {
     if (i != std::end(bookmark_locales))
       return locale;
   }
-  locale = locale_kit::FindBestMatchingLocale(
-      bookmark_locales, g_browser_process->GetApplicationLocale());
+  locale =
+      locale_kit::FindBestMatchingLocale(bookmark_locales, application_locale);
   DCHECK(!locale.empty());
   if (!locale.empty()) {
     prefs->SetString(vivaldiprefs::kBookmarksLanguage, locale);
@@ -828,21 +792,19 @@ std::string GetBookmarkLocale(Profile* profile) {
 
 }  // namespace
 
-void UpdatePartners(Profile* profile, UpdateCallback callback) {
+UpdaterClient::~UpdaterClient() = default;
+
+void UpdatePartners(std::unique_ptr<UpdaterClient> client,
+                    UpdateCallback callback) {
   // A guest session cannot have persistent bookmarks and must not trigger
   // this call.
-  if (profile->IsGuestSession()) {
-    LOG(ERROR) << "Attempt to update bookmarks from a guest window";
+  if (!client) {
     std::move(callback).Run(false, false, std::string());
     return;
   }
 
-  // Allow to upgrade bookmarks even with a private profile as a command line
-  // switch can trigger the first window in Vivaldi to be incognito one. So
-  // get the original recording profile.
-  profile = profile->GetOriginalProfile();
-
-  std::string locale = GetBookmarkLocale(profile);
+  std::string locale = GetBookmarkLocale(client->GetPrefService(),
+                                         client->GetApplicationLocale());
 
   // Unretained() is safe as recording profiles are not deleted until shutdown.
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -850,8 +812,8 @@ void UpdatePartners(Profile* profile, UpdateCallback callback) {
       {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ReadDefaultBookmarks, locale),
-      base::BindOnce(&UpdatePartnersFromDefaults, base::Unretained(profile),
-                     locale, std::move(callback)));
+      base::BindOnce(&UpdatePartnersFromDefaults, std::move(client), locale,
+                     std::move(callback)));
 }
 
 }  // namespace vivaldi_default_bookmarks

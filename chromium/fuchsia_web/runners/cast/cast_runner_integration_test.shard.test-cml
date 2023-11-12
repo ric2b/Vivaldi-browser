@@ -1,3 +1,6 @@
+// Copyright 2022 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 {
   offer: [
     {
@@ -38,5 +41,14 @@
       from: "parent",
       to: "#realm_builder",
     }
-  ]
+  ],
+  facets: {
+    "fuchsia.test": {
+      "deprecated-allowed-packages": [
+          "cast_runner",
+          "flatland-scene-manager-test-ui-stack",
+          "web_engine",
+      ],
+    },
+  },
 }

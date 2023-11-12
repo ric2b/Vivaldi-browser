@@ -11,7 +11,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/ui/elements/fade_truncating_label.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -27,7 +27,7 @@
 #import "url/gurl.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
@@ -373,8 +373,12 @@ UIImage* DefaultFaviconImage() {
     tabViewBackground.backgroundColor = selected ?
       [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
       [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
-    tabViewBackground.layer.borderColor =
-      [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+    if (_incognitoStyle) {
+      tabViewBackground.layer.borderColor = [UIColor blackColor].CGColor;
+    } else {
+      tabViewBackground.layer.borderColor =
+        [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+    }
   } else {
   NSString* state = (selected ? @"foreground" : @"background");
   NSString* imageName = [NSString stringWithFormat:@"tabstrip_%@_tab", state];
@@ -536,8 +540,12 @@ UIImage* DefaultFaviconImage() {
   tabViewBackground.layer.cornerRadius = vTabViewBackgroundCornerRadius;
   tabViewBackground.layer.maskedCorners = kCALayerMinXMinYCorner |
                                           kCALayerMaxXMinYCorner;
-  tabViewBackground.layer.borderColor =
-    [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+  if (_incognitoStyle) {
+    tabViewBackground.layer.borderColor = [UIColor blackColor].CGColor;
+  } else {
+    tabViewBackground.layer.borderColor =
+      [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+  }
   tabViewBackground.layer.borderWidth = 1.0;
   [self insertSubview:tabViewBackground atIndex:0];
 

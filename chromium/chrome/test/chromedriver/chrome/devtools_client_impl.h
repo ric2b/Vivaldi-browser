@@ -14,14 +14,12 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/values.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/net/sync_websocket_factory.h"
 #include "chrome/test/chromedriver/net/timeout.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace internal {
 
@@ -34,7 +32,7 @@ struct InspectorEvent {
   InspectorEvent();
   ~InspectorEvent();
   std::string method;
-  std::unique_ptr<base::DictionaryValue> params;
+  absl::optional<base::Value::Dict> params;
 };
 
 struct InspectorCommandResponse {
@@ -42,7 +40,7 @@ struct InspectorCommandResponse {
   ~InspectorCommandResponse();
   int id;
   std::string error;
-  std::unique_ptr<base::DictionaryValue> result;
+  absl::optional<base::Value::Dict> result;
 };
 
 }  // namespace internal
@@ -57,8 +55,8 @@ class SyncWebSocket;
 class DevToolsClientImpl : public DevToolsClient {
  public:
   static const char kBrowserwideDevToolsClientId[];
-  static const char kInfraChannel[];
-  static const char kClientChannelSuffix[];
+  static const char kCdpTunnelChannel[];
+  static const char kBidiChannelSuffix[];
 
   // Postcondition: !IsNull()
   // Postcondition: !IsConnected()
@@ -107,20 +105,29 @@ class DevToolsClientImpl : public DevToolsClient {
   // Session id used for CDP traffic tunneling
   const std::string& TunnelSessionId() const override;
   // Set the session id used for CDP traffic tunneling
-  void SetTunnelSessionId(const std::string& session_id) override;
+  Status SetTunnelSessionId(std::string session_id) override;
+  // Set the session id used for CDP traffic tunneling
+  Status AppointAsBidiServerForTesting();
+  // Start a BiDi Server in the connected target
+  // Precondition: IsMainPage()
+  // Precondition: IsConnected()
+  // Precondition: BiDi tunnel for CDP traffic is not set.
+  Status StartBidiServer(std::string bidi_mapper_script) override;
+  Status StartBidiServer(std::string bidi_mapper_script,
+                         const Timeout& timeout);
   // If the object IsNull then it cannot be connected to the remote end.
   // Such an object needs to be attached to some !IsNull() parent first.
   // Postcondition: IsNull() == (socket == nullptr && parent == nullptr)
   bool IsNull() const override;
-  bool IsConnected() const;
+  bool IsConnected() const override;
   bool WasCrashed() override;
   // Connect and configure the remote end.
   // The children are also connected and their remote ends are configured.
   // The listeners and the listeners of the children are notified appropriately.
   // Does nothing if the connection is already established.
-  // Precondition: !IsNull()
+  // Precondition: socket != nullptr
   // Postcondition: result.IsError() || IsConnected()
-  Status ConnectIfNecessary() override;
+  Status Connect() override;
   Status PostBidiCommand(base::Value::Dict command) override;
   Status SendCommand(const std::string& method,
                      const base::Value::Dict& params) override;
@@ -134,11 +141,11 @@ class DevToolsClientImpl : public DevToolsClient {
                           const base::Value::Dict& params) override;
   Status SendCommandAndGetResult(const std::string& method,
                                  const base::Value::Dict& params,
-                                 base::Value* result) override;
+                                 base::Value::Dict* result) override;
   Status SendCommandAndGetResultWithTimeout(const std::string& method,
                                             const base::Value::Dict& params,
                                             const Timeout* timeout,
-                                            base::Value* result) override;
+                                            base::Value::Dict* result) override;
   Status SendCommandAndIgnoreResponse(const std::string& method,
                                       const base::Value::Dict& params) override;
 
@@ -160,6 +167,7 @@ class DevToolsClientImpl : public DevToolsClient {
   int NextMessageId() const;
   // Return NextMessageId and immediately increment it
   int AdvanceNextMessageId();
+  void EnableEventTunnelingForTesting();
 
  private:
   enum ResponseState {
@@ -191,7 +199,7 @@ class DevToolsClientImpl : public DevToolsClient {
   Status SendCommandInternal(const std::string& method,
                              const base::Value::Dict& params,
                              const std::string& session_id,
-                             base::Value* result,
+                             base::Value::Dict* result,
                              bool expect_response,
                              bool wait_for_response,
                              int client_command_id,
@@ -216,16 +224,16 @@ class DevToolsClientImpl : public DevToolsClient {
   std::unique_ptr<SyncWebSocket> socket_;
   GURL url_;
   // WebViewImpl that owns this instance; nullptr for browser-wide DevTools.
-  raw_ptr<WebViewImpl> owner_;
+  raw_ptr<WebViewImpl> owner_ = nullptr;
   const std::string session_id_;
   std::string tunnel_session_id_;
   // parent_ / children_: it's a flat hierarchy - nesting is at most one level
   // deep. children_ holds child sessions - identified by their session id -
   // which send/receive messages via the socket_ of their parent.
-  raw_ptr<DevToolsClientImpl> parent_;
+  raw_ptr<DevToolsClientImpl> parent_ = nullptr;
   std::map<std::string, DevToolsClientImpl*> children_;
-  bool crashed_;
-  bool detached_;
+  bool crashed_ = false;
+  bool detached_ = false;
   // For the top-level session, this is the target id.
   // For child sessions, it's the session id.
   const std::string id_;
@@ -234,14 +242,18 @@ class DevToolsClientImpl : public DevToolsClient {
   std::list<DevToolsEventListener*> listeners_;
   std::list<DevToolsEventListener*> unnotified_connect_listeners_;
   std::list<DevToolsEventListener*> unnotified_event_listeners_;
-  raw_ptr<const internal::InspectorEvent> unnotified_event_;
+  raw_ptr<const internal::InspectorEvent> unnotified_event_ = nullptr;
   std::list<DevToolsEventListener*> unnotified_cmd_response_listeners_;
   scoped_refptr<ResponseInfo> unnotified_cmd_response_info_;
   std::map<int, scoped_refptr<ResponseInfo>> response_info_map_;
-  int next_id_;  // The id identifying a particular request.
-  int stack_count_;
-  bool is_remote_end_configured_;
-  bool is_main_page_;
+  int next_id_ = 1;  // The id identifying a particular request.
+  int stack_count_ = 0;
+  bool is_main_page_ = false;
+  bool bidi_server_is_launched_ = false;
+  // Event tunneling is temporarily disabled in production.
+  // It is enabled only by the unit tests
+  // TODO(chromedriver:4181): Enable CDP event tunneling
+  bool event_tunneling_is_enabled_ = false;
   base::WeakPtrFactory<DevToolsClientImpl> weak_ptr_factory_{this};
 };
 

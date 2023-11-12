@@ -49,6 +49,8 @@ class GURL;
 // Vivaldi
 // Shows notes manager.
 - (void)showNotesManager;
+
+- (void)showPanel;
 // End Vivaldi
 
 // Shows recent tabs.

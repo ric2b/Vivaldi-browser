@@ -50,6 +50,10 @@ BASE_FEATURE(kTFLiteLanguageDetectionIgnoreEnabled,
              "TFLiteLanguageDetectionIgnoreEnabled",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kIOSForceTranslateEnabled,
+             "IOSForceTranslateEnabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kDesktopPartialTranslate,
              "DesktopPartialTranslate",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -63,7 +67,7 @@ const base::FeatureParam<int> kDesktopPartialTranslateBubbleShowDelayMs{
 #if !BUILDFLAG(IS_WIN)
 BASE_FEATURE(kMmapLanguageDetectionModel,
              "MmapLanguageDetectionModel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 GURL GetTranslateSecurityOrigin() {
@@ -84,6 +88,14 @@ bool IsSubFrameLanguageDetectionEnabled() {
   return base::FeatureList::IsEnabled(kTranslateSubFrames) &&
          base::GetFieldTrialParamByFeatureAsBool(
              kTranslateSubFrames, kDetectLanguageInSubFrames, true);
+}
+
+bool IsForceTranslateEnabled() {
+#if BUILDFLAG(IS_IOS)
+  return base::FeatureList::IsEnabled(kIOSForceTranslateEnabled);
+#else
+  return true;
+#endif
 }
 
 bool IsTFLiteLanguageDetectionEnabled() {

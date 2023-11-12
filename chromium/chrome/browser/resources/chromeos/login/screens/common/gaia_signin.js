@@ -11,27 +11,27 @@ import '//resources/js/action_link.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/notification_card.js';
 import '../../components/security_token_pin.js';
-import '../../components/gaia_dialog.m.js';
+import '../../components/gaia_dialog.js';
 import '../../components/oobe_icons.m.js';
-import '../../components/buttons/oobe_back_button.m.js';
-import '../../components/buttons/oobe_next_button.m.js';
-import '../../components/common_styles/common_styles.m.js';
+import '../../components/buttons/oobe_back_button.js';
+import '../../components/buttons/oobe_next_button.js';
+import '../../components/common_styles/oobe_common_styles.m.js';
 import '../../components/common_styles/oobe_dialog_host_styles.m.js';
-import '../../components/dialogs/oobe_adaptive_dialog.m.js';
-import '../../components/dialogs/oobe_loading_dialog.m.js';
-import '../../components/throbber_notice.m.js';
+import '../../components/dialogs/oobe_adaptive_dialog.js';
+import '../../components/dialogs/oobe_loading_dialog.js';
+import '../../components/throbber_notice.js';
 
-import {assert} from '//resources/js/assert.js';
+import {assert} from '//resources/ash/common/assert.js';
 import {afterNextRender, html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AuthFlow, AuthMode, SUPPORTED_PARAMS} from '../../../../gaia_auth_host/authenticator.js';
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
 import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.m.js';
-import {OOBE_UI_STATE} from '../../components/display_manager_types.m.js';
-import {OobeTypes} from '../../components/oobe_types.m.js';
-import {Oobe} from '../../cr_ui.m.js';
-import {invokePolymerMethod} from '../../display_manager.m.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
+import {OobeTypes} from '../../components/oobe_types.js';
+import {Oobe} from '../../cr_ui.js';
+import {invokePolymerMethod} from '../../display_manager.js';
 
 
 // GAIA animation guard timer. Started when GAIA page is loaded (Authenticator

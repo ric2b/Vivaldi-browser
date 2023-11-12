@@ -9,8 +9,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -21,7 +19,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.Px;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -42,6 +39,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.Px;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsClient;
@@ -67,25 +65,27 @@ public class MainActivity
         extends AppCompatActivity implements OnClickListener, ServiceConnectionCallback {
     private static final String TAG = "CustomTabsClientExample";
     private static final String DEFAULT_URL = "https://www.google.com";
+    private static final String SHARED_PREF_BACKGROUND_INTERACT = "BackgroundInteract";
     private static final String SHARED_PREF_BOTTOM_TOOLBAR = "BottomToolbar";
     private static final String SHARED_PREF_CCT = "Cct";
     private static final String SHARED_PREF_CLOSE_ICON = "CloseIcon";
     private static final String SHARED_PREF_CLOSE_POSITION = "ClosePosition";
     private static final String SHARED_PREF_COLOR = "Color";
     private static final String SHARED_PREF_HEIGHT = "Height";
-    private static final String SHARED_PREF_PACKAGE = "Package";
     private static final String SHARED_PREF_PROGRESS = "Progress";
-    private static final String SHARED_PREF_RESIZABLE = "Resizable";
+    private static final String SHARED_PREF_HEIGHT_RESIZABLE = "HeightResizable";
     private static final String SHARED_PREF_SITES = "Sites";
     private static final String SHARED_PREF_SHOW_TITLE = "ShowTitle";
     private static final String SHARED_PREF_THEME = "Theme";
     private static final String SHARED_PREF_URL_HIDING = "UrlHiding";
+    private static final String SHARED_PREF_FORCE_ENGAGEMENT_SIGNALS = "ForceEngagementSignals";
     private static final int CLOSE_ICON_X = 0;
     private static final int CLOSE_ICON_BACK = 1;
     private static final int CLOSE_ICON_CHECK = 2;
     private static final int UNCHECKED = 0;
     private static final int CHECKED = 1;
     private static final int ACTIVITY_HEIGHT_FIXED = 2;
+    private static final int BACKGROUND_INTERACT_OFF_VALUE = 2;
     /**
      * Minimal height the bottom sheet CCT should show is half of the display height.
      */
@@ -111,12 +111,15 @@ public class MainActivity
     private TextView mToolbarCornerRadiusLabel;
     private SeekBar mToolbarCornerRadiusSlider;
     private CheckBox mBottomToolbarCheckbox;
-    private CheckBox mPcctResizableCheckbox;
+    private CheckBox mPcctHeightResizableCheckbox;
     private CheckBox mShowTitleCheckbox;
     private CheckBox mUrlHidingCheckbox;
+    private CheckBox mBackgroundInteractCheckbox;
+    private CheckBox mForceEngagementSignalsCheckbox;
     private TextView mPcctInitialHeightLabel;
     private SeekBar mPcctInitialHeightSlider;
     private SharedPreferences mSharedPref;
+    private CustomTabsPackageHelper mCustomTabsPackageHelper;
     private @Px int mMaxHeight;
     private @Px int mInitialHeight;
 
@@ -153,8 +156,8 @@ public class MainActivity
         }
 
         @Override
-        public void onActivityResized(int size, Bundle extras) {
-            Log.w(TAG, "onActivityResized: size = " + size);
+        public void onActivityResized(int height, int width, Bundle extras) {
+            Log.w(TAG, "onActivityResized: height = " + height + " width: " + width);
         }
 
         @Override
@@ -183,6 +186,7 @@ public class MainActivity
         setContentView(R.layout.main);
         mSharedPref = getPreferences(Context.MODE_PRIVATE);
         mMediaPlayer = MediaPlayer.create(this, R.raw.amazing_grace);
+        mCustomTabsPackageHelper = new CustomTabsPackageHelper(this, mSharedPref);
         initializeUrlEditTextView();
         initializePackageSpinner();
         initializeColorSpinner();
@@ -203,7 +207,7 @@ public class MainActivity
         if (stringSet != null) {
             for (String site : stringSet) {
                 // We use prefixes with numbers on the StringSet in order to track the ordering
-                if (site.substring(0, 1).equals("1")) {
+                if (site.charAt(0) == '1') {
                     recent = site.substring(1);
                 } else {
                     urlsDropdown.add(site.substring(1));
@@ -211,48 +215,20 @@ public class MainActivity
             }
         }
 
-        mEditUrl = (AutoCompleteTextView) findViewById(R.id.autocomplete_url);
+        mEditUrl = findViewById(R.id.autocomplete_url);
         mEditUrl.setText(urlsDropdown.size() > 0 ? recent : DEFAULT_URL);
         mEditUrl.requestFocus();
         ArrayAdapter<String> adapter =
-                new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, urlsDropdown);
+                new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, urlsDropdown);
         mEditUrl.setAdapter(adapter);
-        mEditUrl.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mEditUrl.showDropDown();
-            }
-        });
+        mEditUrl.setOnClickListener(v -> mEditUrl.showDropDown());
     }
 
     private void initializePackageSpinner() {
-        int prefIndex = 0;
-        Spinner packageSpinner = (Spinner) findViewById(R.id.package_spinner);
-        Intent activityIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"));
-        PackageManager pm = getPackageManager();
-        List<ResolveInfo> resolvedActivityList = pm.queryIntentActivities(
-                activityIntent, PackageManager.MATCH_ALL);
-        // TODO(1369795) Consider refactoring into separate class
-        // Adds queried packages to list, puts last used package at 0 position if applicable
-        List<Pair<String, String>> packagesSupportingCustomTabs = new ArrayList<>();
-        for (ResolveInfo info : resolvedActivityList) {
-            Intent serviceIntent = new Intent();
-            serviceIntent.setAction("android.support.customtabs.action.CustomTabsService");
-            serviceIntent.setPackage(info.activityInfo.packageName);
-            if (pm.resolveService(serviceIntent, 0) != null) {
-                String label = info.loadLabel(pm).toString();
-                String packageName = info.activityInfo.packageName;
-                Pair appPair = Pair.create(label, packageName);
-
-                if (TextUtils.equals(label, mSharedPref.getString("Package", ""))) {
-                    packagesSupportingCustomTabs.add(0, appPair);
-                } else {
-                    packagesSupportingCustomTabs.add(appPair);
-                }
-            }
-        }
-
-        final ArrayAdapter<Pair<String, String>> adapter = new ArrayAdapter<Pair<String, String>>(
+        Spinner packageSpinner = findViewById(R.id.package_spinner);
+        List<Pair<String, String>> packagesSupportingCustomTabs =
+                mCustomTabsPackageHelper.getCustomTabsSupportingPackages();
+        ArrayAdapter<Pair<String, String>> adapter = new ArrayAdapter<>(
                 this, 0, packagesSupportingCustomTabs) {
 
             @Override
@@ -402,8 +378,9 @@ public class MainActivity
     }
 
     private void initializeCheckBoxes() {
-        mPcctResizableCheckbox = findViewById(R.id.pcct_resizable_checkbox);
-        mPcctResizableCheckbox.setChecked(mSharedPref.getInt(SHARED_PREF_RESIZABLE, CHECKED) == CHECKED);
+        mPcctHeightResizableCheckbox = findViewById(R.id.pcct_height_resizable_checkbox);
+        mPcctHeightResizableCheckbox.setChecked(
+                mSharedPref.getInt(SHARED_PREF_HEIGHT_RESIZABLE, CHECKED) == CHECKED);
         mBottomToolbarCheckbox = findViewById(R.id.bottom_toolbar_checkbox);
         mBottomToolbarCheckbox.setChecked(
                 mSharedPref.getInt(SHARED_PREF_BOTTOM_TOOLBAR, UNCHECKED) == CHECKED);
@@ -411,6 +388,12 @@ public class MainActivity
         mShowTitleCheckbox.setChecked(mSharedPref.getInt(SHARED_PREF_SHOW_TITLE, CHECKED) == CHECKED);
         mUrlHidingCheckbox = findViewById(R.id.url_hiding_checkbox);
         mUrlHidingCheckbox.setChecked(mSharedPref.getInt(SHARED_PREF_URL_HIDING, CHECKED) == CHECKED);
+        mBackgroundInteractCheckbox = findViewById(R.id.background_interact_checkbox);
+        mBackgroundInteractCheckbox.setChecked(
+                mSharedPref.getInt(SHARED_PREF_BACKGROUND_INTERACT, CHECKED) == CHECKED);
+        mForceEngagementSignalsCheckbox = findViewById(R.id.force_engagement_signals_checkbox);
+        mForceEngagementSignalsCheckbox.setChecked(
+                mSharedPref.getInt(SHARED_PREF_FORCE_ENGAGEMENT_SIGNALS, CHECKED) == CHECKED);
     }
 
     private void initializeCctSpinner() {
@@ -526,9 +509,7 @@ public class MainActivity
 
         mConnection = new ServiceConnection(this);
         boolean ok = CustomTabsClient.bindCustomTabsService(this, mPackageNameToBind, mConnection);
-        SharedPreferences.Editor editor = mSharedPref.edit();
-        editor.putString(SHARED_PREF_PACKAGE, mPackageTitle);
-        editor.apply();
+        mCustomTabsPackageHelper.saveLastUsedPackage(mPackageTitle);
         if (ok) {
             mConnectButton.setEnabled(false);
             mWarmupButton.setEnabled(true);
@@ -624,10 +605,10 @@ public class MainActivity
             CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder(session);
             prepareMenuItems(builder);
             prepareActionButton(builder);
+            CustomTabsIntent customTabsIntent = builder.build();
             if (mCctType.equals("Partial CCT")) {
                 editor.putString(SHARED_PREF_CCT, "Partial CCT");
                 prepareAesthetics(builder, /*isPcct=*/true);
-                CustomTabsIntent customTabsIntent = builder.build();
                 int toolbarCornerRadiusDp = mToolbarCornerRadiusSlider.getProgress();
                 int toolbarCornerRadiusPx = Math.round(
                         toolbarCornerRadiusDp * getResources().getDisplayMetrics().density);
@@ -643,20 +624,22 @@ public class MainActivity
                             "androidx.browser.customtabs.extra.INITIAL_ACTIVITY_HEIGHT_IN_PIXEL",
                             pcctInitialHeightPx);
                 }
-                if (!mPcctResizableCheckbox.isChecked()) {
+                if (!mPcctHeightResizableCheckbox.isChecked()) {
                     customTabsIntent.intent.putExtra(
-                            "androidx.browser.customtabs.extra.ACTIVITY_RESIZE_BEHAVIOR",
+                            "androidx.browser.customtabs.extra.ACTIVITY_HEIGHT_RESIZE_BEHAVIOR",
                             ACTIVITY_HEIGHT_FIXED);
                 }
-                configSessionConnection(session, customTabsIntent);
-                customTabsIntent.launchUrl(this, Uri.parse(url));
+                if (!mBackgroundInteractCheckbox.isChecked()) {
+                    customTabsIntent.intent.putExtra(
+                            "androix.browser.customtabs.extra.ENABLE_BACKGROUND_INTERACTION",
+                            BACKGROUND_INTERACT_OFF_VALUE);
+                }
             } else {
                 editor.putString(SHARED_PREF_CCT, mCctType.equals("Incognito CCT") ? "Incognito CCT" : "CCT");
                 prepareAesthetics(builder, /*isPcct=*/false);
                 if (session != null && mBottomToolbarCheckbox.isChecked()) {
                     prepareBottombar(builder);
                 }
-                CustomTabsIntent customTabsIntent = builder.build();
                 // NOTE: opening in incognito may be restricted. This assumes it is not.
                 customTabsIntent.intent.putExtra(
                         "com.google.android.apps.chrome.EXTRA_OPEN_NEW_INCOGNITO_TAB",
@@ -664,9 +647,18 @@ public class MainActivity
                 customTabsIntent.intent.putExtra(
                         "androidx.browser.customtabs.extra.CLOSE_BUTTON_POSITION",
                         closeButtonPosition);
-                configSessionConnection(session, customTabsIntent);
-                customTabsIntent.launchUrl(this, Uri.parse(url));
             }
+            if (mForceEngagementSignalsCheckbox.isChecked()) {
+                // NOTE: this may not work because this app is not a trusted 1st party app,
+                // and CCT requires that for this feature currently.
+                // Set the command-line-flag --cct-client-firstparty-override to fake 1st-party!
+                customTabsIntent.intent.putStringArrayListExtra(
+                        "org.chromium.chrome.browser.customtabs.EXPERIMENTS_ENABLE",
+                        new ArrayList<String>(
+                                List.of("CCTRealTimeEngagementSignals", "CCTBrandTransparency")));
+            }
+            configSessionConnection(session, customTabsIntent);
+            customTabsIntent.launchUrl(this, Uri.parse(url));
 
             editor.putInt(SHARED_PREF_HEIGHT, mPcctInitialHeightSlider.getProgress());
             editor.putInt(SHARED_PREF_PROGRESS, mToolbarCornerRadiusSlider.getProgress());
@@ -674,7 +666,8 @@ public class MainActivity
                     session != null && mBottomToolbarCheckbox.isChecked() ? CHECKED : UNCHECKED;
             editor.putInt(SHARED_PREF_BOTTOM_TOOLBAR, toolbarCheck);
             editor.putInt(SHARED_PREF_CLOSE_POSITION, closeButtonPosition);
-            editor.putInt(SHARED_PREF_RESIZABLE, mPcctResizableCheckbox.isChecked() ? CHECKED : UNCHECKED);
+            editor.putInt(SHARED_PREF_HEIGHT_RESIZABLE,
+                    mPcctHeightResizableCheckbox.isChecked() ? CHECKED : UNCHECKED);
             editor.apply();
         }
     }
@@ -686,6 +679,17 @@ public class MainActivity
             editor.putInt(SHARED_PREF_URL_HIDING, CHECKED);
         } else {
             editor.putInt(SHARED_PREF_URL_HIDING, UNCHECKED);
+        }
+        if (mForceEngagementSignalsCheckbox.isChecked()) {
+            editor.putInt(SHARED_PREF_FORCE_ENGAGEMENT_SIGNALS, CHECKED);
+        } else {
+            editor.putInt(SHARED_PREF_FORCE_ENGAGEMENT_SIGNALS, UNCHECKED);
+        }
+        boolean backgroundInteract = mBackgroundInteractCheckbox.isChecked();
+        if (backgroundInteract) {
+            editor.putInt(SHARED_PREF_BACKGROUND_INTERACT, CHECKED);
+        } else {
+            editor.putInt(SHARED_PREF_BACKGROUND_INTERACT, UNCHECKED);
         }
         boolean showTitle = mShowTitleCheckbox.isChecked();
         if (showTitle) {
@@ -708,9 +712,9 @@ public class MainActivity
             builder.setToolbarColor(Color.parseColor(mToolbarColor));
         }
         editor.putString(SHARED_PREF_COLOR, mColorName);
-        builder.setShowTitle(showTitle);
-        builder.setColorScheme(colorScheme);
-        builder.setUrlBarHidingEnabled(urlHiding);
+        builder.setShowTitle(showTitle)
+                .setColorScheme(colorScheme)
+                .setUrlBarHidingEnabled(urlHiding);
         if (isPcct) {
             builder.setStartAnimations(this, R.anim.slide_in_up, R.anim.slide_out_bottom);
             builder.setExitAnimations(this, R.anim.slide_in_bottom, R.anim.slide_out_up);

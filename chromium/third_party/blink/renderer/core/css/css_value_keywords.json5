@@ -102,6 +102,15 @@
     "ordinal",
     "slashed-zero",
 
+    // font-variant-alternates
+    "stylistic",
+    "historical-forms",
+    "styleset",
+    "character-variant",
+    "swash",
+    "ornaments",
+    "annotation",
+
     //
     // font-weight
     //
@@ -612,6 +621,7 @@
     "thick",
     "thin",
     "underline",
+    "view",
     "wavy",
     "-webkit-nowrap",
 
@@ -1045,6 +1055,7 @@
     "minimal-ui",
     "browser",
     "window-controls-overlay",
+    "tabbed",
 
     // position
     "sticky",
@@ -1224,6 +1235,7 @@
     "-webkit-repeating-linear-gradient",
     "-webkit-repeating-radial-gradient",
     "-webkit-image-set",
+    "image-set",
 
     // deprecated gradients
     "from",
@@ -1305,10 +1317,11 @@
     "longer",
     "decreasing",
     "increasing",
-    "specified",
 
     // For gradient interpolations in certain color spaces
     "in",
+    // The color-mix function https://www.w3.org/TR/css-color-5/#color-mix
+    "color-mix",
 
     // transform
     "matrix",
@@ -1357,7 +1370,7 @@
     // "tan" - already declared for color value
     "asin",
     "atan",
-    // "atan2",
+    "atan2",
     "acos",
 
     //<calc-constant>
@@ -1365,6 +1378,8 @@
     "infinity",
     "-infinity",
     "nan",
+    "pi",
+    "e",
 
     // scroll-snap-type
     // none
@@ -1480,7 +1495,7 @@
     // (device-posture) media feature
     "continuous",
     "folded",
-    
+
     // scrollbar-gutter
     // auto
     "stable",
@@ -1576,6 +1591,10 @@
     // inline,
     "self-block",
     "self-inline",
+
+    // anchor-scroll
+    "implicit",
+    // none,
 
     // animation-[end-]delay
     // contain

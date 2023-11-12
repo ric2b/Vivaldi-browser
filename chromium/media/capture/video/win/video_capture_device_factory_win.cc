@@ -337,14 +337,6 @@ VideoCaptureDeviceFactoryWin::VideoCaptureDeviceFactoryWin()
       com_thread_("Windows Video Capture COM Thread") {
   if (use_media_foundation_ && !PlatformSupportsMediaFoundation()) {
     use_media_foundation_ = false;
-    LogVideoCaptureWinBackendUsed(
-        VideoCaptureWinBackendUsed::kUsingDirectShowAsFallback);
-  } else if (use_media_foundation_) {
-    LogVideoCaptureWinBackendUsed(
-        VideoCaptureWinBackendUsed::kUsingMediaFoundationAsDefault);
-  } else {
-    LogVideoCaptureWinBackendUsed(
-        VideoCaptureWinBackendUsed::kUsingDirectShowAsDefault);
   }
 }
 
@@ -365,41 +357,51 @@ VideoCaptureErrorOrDevice VideoCaptureDeviceFactoryWin::CreateDevice(
       ComPtr<IMFMediaSource> source;
       MFSourceOutcome outcome = CreateDeviceSourceMediaFoundation(
           device_descriptor.device_id, device_descriptor.capture_api, &source);
-      if (outcome == MFSourceOutcome::kFailedSystemPermissions) {
-        return VideoCaptureErrorOrDevice(
-            VideoCaptureError::kWinMediaFoundationSystemPermissionDenied);
+      switch (outcome) {
+        case MFSourceOutcome::kSuccess: {
+          auto device = std::make_unique<VideoCaptureDeviceMFWin>(
+              device_descriptor, std::move(source), dxgi_device_manager_,
+              base::SingleThreadTaskRunner::GetCurrentDefault());
+          DVLOG(1) << " MediaFoundation Device: "
+                   << device_descriptor.display_name();
+          if (device->Init()) {
+            return VideoCaptureErrorOrDevice(std::move(device));
+          }
+          return VideoCaptureErrorOrDevice(
+              VideoCaptureError::kWinMediaFoundationDeviceInitializationFailed);
+        }
+        case MFSourceOutcome::kFailedSystemPermissions:
+          return VideoCaptureErrorOrDevice(
+              VideoCaptureError::kWinMediaFoundationSystemPermissionDenied);
+        case MFSourceOutcome::kFailed:
+          return VideoCaptureErrorOrDevice(
+              VideoCaptureError::kWinMediaFoundationSourceCreationFailed);
       }
-      if (outcome == MFSourceOutcome::kSuccess) {
-        auto device = std::make_unique<VideoCaptureDeviceMFWin>(
-            device_descriptor, std::move(source), dxgi_device_manager_,
-            base::ThreadTaskRunnerHandle::Get());
-        DVLOG(1) << " MediaFoundation Device: "
-                 << device_descriptor.display_name();
-        if (device->Init())
-          return VideoCaptureErrorOrDevice(std::move(device));
-      }
+      NOTREACHED();
       break;
     }
     case VideoCaptureApi::WIN_DIRECT_SHOW: {
       ComPtr<IBaseFilter> capture_filter;
       if (!CreateDeviceFilterDirectShow(device_descriptor.device_id,
                                         &capture_filter)) {
-        break;
+        return VideoCaptureErrorOrDevice(
+            VideoCaptureError::kWinDirectShowDeviceFilterCreationFailed);
       }
       auto device = std::make_unique<VideoCaptureDeviceWin>(
           device_descriptor, std::move(capture_filter));
       DVLOG(1) << " DirectShow Device: " << device_descriptor.display_name();
       if (device->Init())
         return VideoCaptureErrorOrDevice(std::move(device));
-      break;
+      return VideoCaptureErrorOrDevice(
+          VideoCaptureError::kWinDirectShowDeviceInitializationFailed);
     }
     default:
       NOTREACHED();
       break;
   }
+  NOTREACHED();
   return VideoCaptureErrorOrDevice(
-      VideoCaptureError::
-          kVideoCaptureControllerInvalidOrUnsupportedVideoCaptureParametersRequested);
+      VideoCaptureError::kVideoCaptureDeviceFactoryWinUnknownError);
 }
 
 bool VideoCaptureDeviceFactoryWin::CreateDeviceEnumMonikerDirectShow(
@@ -564,7 +566,7 @@ void VideoCaptureDeviceFactoryWin::GetDevicesInfo(
   }
 
   if (IsEnclosureLocationSupported()) {
-    origin_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    origin_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
     com_thread_.init_com_with_mta(true);
     com_thread_.Start();
     com_thread_.task_runner()->PostTask(

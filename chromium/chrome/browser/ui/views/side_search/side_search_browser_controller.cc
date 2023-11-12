@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/views/side_search/side_search_browser_controller.h"
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -87,14 +89,14 @@ class HeaderButton : public views::ImageButton {
                   ChromeDistanceMetric::
                       DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE);
     SetImageModel(Button::STATE_NORMAL, ui::ImageModel::FromVectorIcon(
-                                            icon_, ui::kColorIcon, icon_size));
+                                            *icon_, ui::kColorIcon, icon_size));
     SetImageModel(Button::STATE_DISABLED,
-                  ui::ImageModel::FromVectorIcon(icon_, ui::kColorIconDisabled,
+                  ui::ImageModel::FromVectorIcon(*icon_, ui::kColorIconDisabled,
                                                  icon_size));
   }
 
  private:
-  const gfx::VectorIcon& icon_;
+  const raw_ref<const gfx::VectorIcon> icon_;
 };
 
 BEGIN_METADATA(HeaderButton, views::ImageButton)
@@ -145,7 +147,7 @@ class DseImageView : public views::ImageView {
   }
 
  private:
-  Browser* const browser_;
+  const raw_ptr<Browser> browser_;
 
   // Subscription to change notifications to the default search icon source.
   base::CallbackListSubscription icon_changed_subscription_;

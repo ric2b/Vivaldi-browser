@@ -27,9 +27,6 @@ static_assert(sizeof(LibraryHandle) == sizeof(HMODULE), "HMODULE is a pointer");
 
 // Media Libraries to preload to enable media decoding and demultiplexing.
 enum LibraryMF {
-#ifdef VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
-  kLibraryDemuxer,
-#endif
   kLibraryAAC,
   kLibraryH264,
 };
@@ -77,11 +74,6 @@ void LoadMFLibrary(LibraryMF library) {
     case kLibraryH264:
       name = L"msmpeg2vdec.dll";
       break;
-#ifdef VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
-    case kLibraryDemuxer:
-      name = L"mfreadwrite.dll";
-      break;
-#endif
   }
   handle = DoLoadLibrary(name);
 }
@@ -119,17 +111,8 @@ HMODULE GetWMFLibraryForH264() {
   return GetLibrary(kLibraryH264);
 }
 
-#ifdef VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
-bool HasMFDemuxerSupport() {
-  return GetLibrary(kLibraryDemuxer) != nullptr;
-}
-#endif
-
 void InitForGPUProcess() {
   LoadDecoders();
-#ifdef VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
-  LoadMFLibrary(kLibraryDemuxer);
-#endif
 }
 
 void InitForRendererProcess() {

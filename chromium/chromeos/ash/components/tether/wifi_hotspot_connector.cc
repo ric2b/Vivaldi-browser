@@ -9,21 +9,18 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_connect.h"
-#include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/shill_property_util.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
-namespace ash {
-
-namespace tether {
+namespace ash::tether {
 
 WifiHotspotConnector::WifiHotspotConnector(
     NetworkStateHandler* network_state_handler,
@@ -32,13 +29,11 @@ WifiHotspotConnector::WifiHotspotConnector(
       network_connect_(network_connect),
       timer_(std::make_unique<base::OneShotTimer>()),
       clock_(base::DefaultClock::GetInstance()),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-  network_state_handler_->AddObserver(this, FROM_HERE);
+      task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
+  network_state_handler_observer_.Observe(network_state_handler_);
 }
 
 WifiHotspotConnector::~WifiHotspotConnector() {
-  network_state_handler_->RemoveObserver(this, FROM_HERE);
-
   // If a connection attempt is active when this class is destroyed, the attempt
   // has no time to finish successfully, so it is considered a failure.
   if (!wifi_network_guid_.empty())
@@ -151,6 +146,10 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
 void WifiHotspotConnector::DevicePropertiesUpdated(const DeviceState* device) {
   if (device->Matches(NetworkTypePattern::WiFi()))
     UpdateWaitingForWifi();
+}
+
+void WifiHotspotConnector::OnShuttingDown() {
+  network_state_handler_observer_.Reset();
 }
 
 void WifiHotspotConnector::UpdateWaitingForWifi() {
@@ -297,6 +296,4 @@ void WifiHotspotConnector::SetTestDoubles(
   task_runner_ = test_task_runner;
 }
 
-}  // namespace tether
-
-}  // namespace ash
+}  // namespace ash::tether

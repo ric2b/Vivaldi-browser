@@ -23,11 +23,12 @@
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/infobar_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ui/base/models/image_model.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -52,7 +53,7 @@ const IconConfigs& SymbolsIconConfigs() {
       [UIColor colorNamed:kRed500Color],
       [UIColor colorNamed:kTextPrimaryColor],
       DefaultSymbolTemplateWithPointSize(kSyncErrorSymbol,
-                                         kSymbolImagePointSize),
+                                         kInfobarSymbolPointSize),
   };
   return kSymbols;
 }

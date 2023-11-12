@@ -11,7 +11,6 @@
 #include "build/build_config.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
-#include "third_party/blink/renderer/modules/font_access/font_table_map.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_global_context.h"
@@ -101,9 +100,6 @@ void FontMetadata::BlobImpl(ScriptPromiseResolver* resolver,
     // TODO(https://crbug.com/1086840): openStream rarely fails, but it happens
     // sometimes. A potential remediation is to synthesize a font from tables
     // at the cost of memory and throughput.
-    // For reference, the UMA metric "Blink.Fonts.HarfBuzzFaceZeroCopyAccess"
-    // indicates that the success rate is close to 100% on all platforms where
-    // it applies, but failures do happen.
     auto message = String::Format("Font data for %s could not be accessed.",
                                   postscriptName.Latin1().c_str());
     ScriptState::Scope scope(resolver->GetScriptState());

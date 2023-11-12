@@ -203,9 +203,7 @@ class DummyBrightnessControlDelegate : public BrightnessControlDelegate {
 class DummyKeyboardBrightnessControlDelegate
     : public KeyboardBrightnessControlDelegate {
  public:
-  DummyKeyboardBrightnessControlDelegate()
-      : handle_keyboard_brightness_down_count_(0),
-        handle_keyboard_brightness_up_count_(0) {}
+  DummyKeyboardBrightnessControlDelegate() = default;
 
   DummyKeyboardBrightnessControlDelegate(
       const DummyKeyboardBrightnessControlDelegate&) = delete;
@@ -226,7 +224,11 @@ class DummyKeyboardBrightnessControlDelegate
         ui::Accelerator(ui::VKEY_BRIGHTNESS_UP, ui::EF_ALT_DOWN);
   }
 
-  void HandleToggleKeyboardBacklight() override {}
+  void HandleToggleKeyboardBacklight() override {
+    ++handle_toggle_keyboard_backlight_count_;
+    last_accelerator_ =
+        ui::Accelerator(ui::VKEY_KBD_BACKLIGHT_TOGGLE, ui::EF_NONE);
+  }
 
   int handle_keyboard_brightness_down_count() const {
     return handle_keyboard_brightness_down_count_;
@@ -236,11 +238,16 @@ class DummyKeyboardBrightnessControlDelegate
     return handle_keyboard_brightness_up_count_;
   }
 
+  int handle_toggle_keyboard_backlight_count() const {
+    return handle_toggle_keyboard_backlight_count_;
+  }
+
   const ui::Accelerator& last_accelerator() const { return last_accelerator_; }
 
  private:
-  int handle_keyboard_brightness_down_count_;
-  int handle_keyboard_brightness_up_count_;
+  int handle_keyboard_brightness_down_count_ = 0;
+  int handle_keyboard_brightness_up_count_ = 0;
+  int handle_toggle_keyboard_backlight_count_ = 0;
   ui::Accelerator last_accelerator_;
 };
 
@@ -1253,21 +1260,32 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
                                             ui::EF_ALT_DOWN);
   const ui::Accelerator alt_brightness_up(ui::VKEY_BRIGHTNESS_UP,
                                           ui::EF_ALT_DOWN);
+  const ui::Accelerator toggle_keyboard_backlight(ui::VKEY_KBD_BACKLIGHT_TOGGLE,
+                                                  ui::EF_NONE);
   {
     EXPECT_TRUE(ProcessInController(alt_brightness_down));
     EXPECT_TRUE(ProcessInController(alt_brightness_up));
+    EXPECT_TRUE(ProcessInController(toggle_keyboard_backlight));
+
     DummyKeyboardBrightnessControlDelegate* delegate =
         new DummyKeyboardBrightnessControlDelegate;
     SetKeyboardBrightnessControlDelegate(
         std::unique_ptr<KeyboardBrightnessControlDelegate>(delegate));
+
     EXPECT_EQ(0, delegate->handle_keyboard_brightness_down_count());
     EXPECT_TRUE(ProcessInController(alt_brightness_down));
     EXPECT_EQ(1, delegate->handle_keyboard_brightness_down_count());
     EXPECT_EQ(alt_brightness_down, delegate->last_accelerator());
+
     EXPECT_EQ(0, delegate->handle_keyboard_brightness_up_count());
     EXPECT_TRUE(ProcessInController(alt_brightness_up));
     EXPECT_EQ(1, delegate->handle_keyboard_brightness_up_count());
     EXPECT_EQ(alt_brightness_up, delegate->last_accelerator());
+
+    EXPECT_EQ(0, delegate->handle_toggle_keyboard_backlight_count());
+    EXPECT_TRUE(ProcessInController(toggle_keyboard_backlight));
+    EXPECT_EQ(1, delegate->handle_toggle_keyboard_backlight_count());
+    EXPECT_EQ(toggle_keyboard_backlight, delegate->last_accelerator());
   }
 
   // Exit
@@ -1396,12 +1414,12 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleQuickSettings) {
   EXPECT_FALSE(tray->IsBubbleShown());
 }
 
-class GlobalAcceleratorsToggleProductivityLauncher
+class GlobalAcceleratorsToggleLauncher
     : public AcceleratorControllerTest,
       public testing::WithParamInterface<
           std::pair<ui::KeyboardCode, ui::Accelerator::KeyState>> {
  public:
-  GlobalAcceleratorsToggleProductivityLauncher() {
+  GlobalAcceleratorsToggleLauncher() {
     std::tie(key_, key_state_) = GetParam();
   }
 
@@ -1412,7 +1430,7 @@ class GlobalAcceleratorsToggleProductivityLauncher
 
 INSTANTIATE_TEST_SUITE_P(
     All,
-    GlobalAcceleratorsToggleProductivityLauncher,
+    GlobalAcceleratorsToggleLauncher,
     testing::Values(std::make_pair(ui::VKEY_LWIN,
                                    ui::Accelerator::KeyState::RELEASED),
                     std::make_pair(ui::VKEY_BROWSER_SEARCH,
@@ -1420,10 +1438,7 @@ INSTANTIATE_TEST_SUITE_P(
                     std::make_pair(ui::VKEY_ALL_APPLICATIONS,
                                    ui::Accelerator::KeyState::PRESSED)));
 
-TEST_P(GlobalAcceleratorsToggleProductivityLauncher, ToggleLauncher) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kProductivityLauncher);
-
+TEST_P(GlobalAcceleratorsToggleLauncher, ToggleLauncher) {
   EXPECT_TRUE(
       ProcessInController(ui::Accelerator(key_, ui::EF_NONE, key_state_)));
   base::RunLoop().RunUntilIdle();
@@ -1435,11 +1450,7 @@ TEST_P(GlobalAcceleratorsToggleProductivityLauncher, ToggleLauncher) {
   GetAppListTestHelper()->CheckVisibility(false);
 }
 
-TEST_P(GlobalAcceleratorsToggleProductivityLauncher,
-       PreventProcessingShortcuts) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kProductivityLauncher);
-
+TEST_P(GlobalAcceleratorsToggleLauncher, PreventProcessingShortcuts) {
   // Set Controller to block all shortcuts and try to toggle the productivity
   // launcher
   controller_->SetPreventProcessingAccelerators(true);

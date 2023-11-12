@@ -115,6 +115,10 @@ class AccessCodeCastSinkService : public KeyedService,
                              TestChangeNetworkWithRouteActiveExpiration);
     FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
                              TestCheckMediaSinkForExpirationAfterDelay);
+    FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                             RecordRouteDuration);
+    FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                             RecordRouteDurationNonAccessCodeDevice);
     // media_router::MediaRoutesObserver:
     void OnRoutesUpdated(const std::vector<MediaRoute>& routes) override;
 
@@ -190,6 +194,17 @@ class AccessCodeCastSinkService : public KeyedService,
                            TestCheckMediaSinkForExpirationBeforeDelay);
   FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
                            TestCheckMediaSinkForExpirationAfterDelay);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                           RefreshStoredDeviceInfo);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                           RefreshExistingDeviceName);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                           RefreshStoredDeviceTimer);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                           HandleMediaRouteAdded);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest, RecordRouteDuration);
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastSinkServiceTest,
+                           RecordRouteDurationNonAccessCodeDevice);
 
   // Use |AccessCodeCastSinkServiceFactory::GetForProfile(..)| to get
   // an instance of this service.
@@ -216,6 +231,11 @@ class AccessCodeCastSinkService : public KeyedService,
   // Handles removal from media router via expiration if a route with an access
   // code cast sink has ended.
   void HandleMediaRouteRemovedByAccessCode(const MediaSinkInternal* sink);
+
+  // Reports to metrics whenever the added route is to an access code sink.
+  void HandleMediaRouteAdded(const MediaRoute::Id route_id,
+                             const bool is_route_local,
+                             const MediaSinkInternal* sink);
 
   void OnAccessCodeRouteRemoved(const MediaSinkInternal* sink);
   void OpenChannelIfNecessary(const MediaSinkInternal& sink,
@@ -274,6 +294,9 @@ class AccessCodeCastSinkService : public KeyedService,
 
   void RemoveAndDisconnectExistingSinksOnNetwork();
 
+  void UpdateExistingSink(const MediaSinkInternal& new_sink,
+                          const MediaSinkInternal* exisitng_sink);
+
   // DiscoveryNetworkMonitor::Observer implementation
   void OnNetworksChanged(const std::string& network_id) override;
 
@@ -328,6 +351,9 @@ class AccessCodeCastSinkService : public KeyedService,
   std::map<MediaSink::Id, std::unique_ptr<base::OneShotTimer>>
       current_session_expiration_timers_;
 
+  // For all current local routes, records the time those routes started.
+  std::map<MediaRoute::Id, base::Time> current_route_start_times_;
+
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // Raw pointer to DiscoveryNetworkMonitor, which is a global leaky singleton
@@ -336,9 +362,10 @@ class AccessCodeCastSinkService : public KeyedService,
 
   std::unique_ptr<AccessCodeCastPrefUpdater> pref_updater_;
 
-  raw_ptr<PrefService> prefs_;
+  raw_ptr<PrefService, DanglingUntriaged> prefs_;
 
-  raw_ptr<signin::IdentityManager> identity_manager_ = nullptr;
+  raw_ptr<signin::IdentityManager, DanglingUntriaged> identity_manager_ =
+      nullptr;
 
   // This registrar monitors for user prefs changes.
   std::unique_ptr<PrefChangeRegistrar> user_prefs_registrar_;

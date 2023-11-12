@@ -28,7 +28,7 @@
 #include "components/reporting/compression/decompression.h"
 #include "components/reporting/encryption/test_encryption_module.h"
 #include "components/reporting/proto/synced/record.pb.h"
-#include "components/reporting/resources/resource_interface.h"
+#include "components/reporting/resources/resource_manager.h"
 #include "components/reporting/storage/storage_configuration.h"
 #include "components/reporting/util/file.h"
 #include "components/reporting/util/status.h"
@@ -40,6 +40,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 using ::testing::_;
+using ::testing::AnyOf;
 using ::testing::AtMost;
 using ::testing::Between;
 using ::testing::DoAll;
@@ -101,15 +102,11 @@ class StorageQueueTest
         .WillRepeatedly(Invoke([this](UploaderInterface::UploadReason reason) {
           return TestUploader::SetUpDummy(this);
         }));
+    ResetExpectedUploadsCount();
   }
 
   void TearDown() override {
     ResetTestStorageQueue();
-    // Make sure all memory is deallocated.
-    ASSERT_THAT(options_.memory_resource()->GetUsed(), Eq(0u));
-    // Make sure all disk is not reserved (files remain, but Storage is not
-    // responsible for them anymore).
-    ASSERT_THAT(options_.disk_space_resource()->GetUsed(), Eq(0u));
     // Log next uploader id for possible verification.
     LOG(ERROR) << "Next uploader id=" << next_uploader_id.load();
   }
@@ -565,7 +562,7 @@ class StorageQueueTest
     const int64_t uploader_id_;
 
     absl::optional<int64_t> generation_id_;
-    absl::optional<int64_t>* const last_upload_generation_id_;
+    const raw_ptr<absl::optional<int64_t>> last_upload_generation_id_;
     const raw_ptr<LastRecordDigestMap> last_record_digest_map_;
 
     const raw_ptr<const MockUpload> mock_upload_;
@@ -598,16 +595,6 @@ class StorageQueueTest
   // and returns the corresponding result of the operation.
   StatusOr<scoped_refptr<StorageQueue>> CreateTestStorageQueue(
       const QueueOptions& options) {
-    // Handle and reject PERIODIC (optionally), as long as there is no explicit
-    // expectation set.
-    EXPECT_CALL(set_mock_uploader_expectations_,
-                Call(Eq(UploaderInterface::UploadReason::PERIODIC)))
-        .WillRepeatedly(Invoke([](UploaderInterface::UploadReason reason) {
-          return Status(
-              error::UNAVAILABLE,
-              base::StrCat({"Test uploader not provided by the test, reason=",
-                            UploaderInterface::ReasonToString(reason)}));
-        }));
     CreateTestEncryptionModuleOrDie();
     test::TestEvent<StatusOr<scoped_refptr<StorageQueue>>>
         storage_queue_create_event;
@@ -623,29 +610,39 @@ class StorageQueueTest
   }
 
   void ResetTestStorageQueue() {
-    // Let everything ongoing to finish.
+    if (storage_queue_) {
+      // StorageQueue is destructed on thread, wait for it to finish.
+      test::TestCallbackAutoWaiter waiter;
+      storage_queue_->RegisterCompletionCallback(base::BindOnce(
+          &test::TestCallbackAutoWaiter::Signal, base::Unretained(&waiter)));
+      storage_queue_.reset();
+    }
+    // Let remaining asynchronous activity finish.
+    // TODO(b/254418902): The next line is not logically necessary, but for
+    // unknown reason the tests becomes flaky without it, keeping it for now.
     task_environment_.RunUntilIdle();
-    storage_queue_.reset();
-    // StorageQueue is destructed on a thread,
-    // so we need to wait for it to destruct.
-    task_environment_.RunUntilIdle();
-    // Handle and reject INIT_RESUME (optionally), in case the queue is
-    // recreated.
-    EXPECT_CALL(set_mock_uploader_expectations_,
-                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
-        .Times(AtMost(1))
-        .WillRepeatedly(Invoke([](UploaderInterface::UploadReason reason) {
-          return Status(
-              error::UNAVAILABLE,
-              base::StrCat({"Test uploader not provided by the test, reason=",
-                            UploaderInterface::ReasonToString(reason)}));
-        }));
+    // All expected uploads should have happened.
+    EXPECT_THAT(expected_uploads_count_, Eq(0u));
+    // Make sure all memory is deallocated.
+    EXPECT_THAT(options_.memory_resource()->GetUsed(), Eq(0u));
+    // Make sure all disk is not reserved (files remain, but Storage is not
+    // responsible for them anymore).
+    EXPECT_THAT(options_.disk_space_resource()->GetUsed(), Eq(0u));
   }
 
-  void InjectFailures(const test::StorageQueueOperationKind operation_kind,
-                      std::initializer_list<int64_t> sequencing_ids) {
-    storage_queue_->TestInjectErrorsForOperation(operation_kind,
-                                                 sequencing_ids);
+  std::unique_ptr<
+      ::testing::MockFunction<Status(test::StorageQueueOperationKind, int64_t)>>
+  InjectFailures() {
+    auto inject = std::make_unique<::testing::MockFunction<Status(
+        test::StorageQueueOperationKind, int64_t)>>();
+    // By default return OK status - no error injected.
+    EXPECT_CALL(*inject, Call(_, _))
+        .WillRepeatedly(WithoutArgs(Return(Status::StatusOK())));
+    storage_queue_->TestInjectErrorsForOperation(base::BindRepeating(
+        &::testing::MockFunction<Status(test::StorageQueueOperationKind,
+                                        int64_t)>::Call,
+        base::Unretained(inject.get())));
+    return inject;
   }
 
   QueueOptions BuildStorageQueueOptionsImmediate() const {
@@ -674,8 +671,22 @@ class StorageQueueTest
             [](UploaderInterface::UploadReason reason,
                UploaderInterface::UploaderInterfaceResultCb start_uploader_cb,
                StorageQueueTest* self) {
+              if (self->expected_uploads_count_ == 0u) {
+                LOG(ERROR) << "Upload not expected, reason="
+                           << UploaderInterface::ReasonToString(reason);
+                std::move(start_uploader_cb)
+                    .Run(Status(
+                        error::CANCELLED,
+                        base::StrCat(
+                            {"Unexpected upload ignored, reason=",
+                             UploaderInterface::ReasonToString(reason)})));
+                return;
+              }
+              --(self->expected_uploads_count_);
               LOG(ERROR) << "Attempt upload, reason="
                          << UploaderInterface::ReasonToString(reason);
+              LOG_IF(FATAL, ++(self->upload_count_) >= 8uL)
+                  << "Too many uploads";
               auto result = self->set_mock_uploader_expectations_.Call(reason);
               if (!result.ok()) {
                 LOG(ERROR) << "Upload not allowed, reason="
@@ -714,6 +725,12 @@ class StorageQueueTest
     ASSERT_OK(write_result) << write_result;
   }
 
+  void FlushOrDie() {
+    test::TestEvent<Status> flush_event;
+    storage_queue_->Flush(flush_event.cb());
+    ASSERT_OK(flush_event.result());
+  }
+
   void ConfirmOrDie(int64_t sequencing_id, bool force = false) {
     ASSERT_TRUE(last_upload_generation_id_.has_value());
     LOG(ERROR) << "Confirm force=" << force << " seq=" << sequencing_id
@@ -728,12 +745,19 @@ class StorageQueueTest
     ASSERT_OK(c_result) << c_result;
   }
 
+  void ResetExpectedUploadsCount() { expected_uploads_count_ = 0u; }
+
+  void SetExpectedUploadsCount(size_t count = 1u) {
+    EXPECT_THAT(expected_uploads_count_, Eq(0u));
+    expected_uploads_count_ = count;
+  }
+
   std::string dm_token_;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   // Sequenced task runner where all EXPECTs will happen.
   const scoped_refptr<base::SequencedTaskRunner> main_task_runner_{
-      base::SequencedTaskRunnerHandle::Get()};
+      base::SequencedTaskRunner::GetCurrentDefault()};
 
   base::ScopedTempDir location_;
   StorageOptions options_;
@@ -745,6 +769,20 @@ class StorageQueueTest
   // digest. Serves all TestUploaders created by test fixture.
   TestUploader::LastRecordDigestMap last_record_digest_map_;
 
+  size_t upload_count_ = 0uL;
+
+  // Counter indicating how many upload calls are expected.
+  // Can be set only if before that it is zero.
+  // Needs to be set to a positive number (usually 1) before executing an action
+  // that would trigger upload (e.g., advancing time or FLUSH or calling write
+  // to IMMEDIATE/SECURITY queue). As long as the counter is positive, uploads
+  // will be permitted, and the counter will decrement by 1. Once the counter
+  // becomes zero, upload calls will be ignored (they may be caused by mocked
+  // time being advanced more than requested).
+  size_t expected_uploads_count_ = 0u;
+
+  // Mock to be called for setting up the uploader.
+  // Allowed only if expected_uploads_count_ is positive.
   ::testing::MockFunction<StatusOr<std::unique_ptr<TestUploader>>(
       UploaderInterface::UploadReason /*reason*/)>
       set_mock_uploader_expectations_;
@@ -762,6 +800,21 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueAndReopen) {
 
   ResetTestStorageQueue();
 
+  // Init resume upload upon non-empty queue restart.
+  test::TestCallbackAutoWaiter waiter;
+  EXPECT_CALL(set_mock_uploader_expectations_,
+              Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+      .WillOnce(Invoke([&waiter, this](UploaderInterface::UploadReason reason) {
+        return TestUploader::SetUp(&waiter, this)
+            .Required(0, kData[0])
+            .Required(1, kData[1])
+            .Required(2, kData[2])
+            .Complete();
+      }))
+      .RetiresOnSaturation();
+
+  // Reopening will cause INIT_RESUME
+  SetExpectedUploadsCount();
   CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
 }
 
@@ -773,7 +826,26 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenAndWriteMore) {
 
   ResetTestStorageQueue();
 
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  // Init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(
+            Invoke([&waiter, this](UploaderInterface::UploadReason reason) {
+              return TestUploader::SetUp(&waiter, this)
+                  .Required(0, kData[0])
+                  .Required(1, kData[1])
+                  .Required(2, kData[2])
+                  .Complete();
+            }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
+
   WriteStringOrDie(kMoreData[0]);
   WriteStringOrDie(kMoreData[1]);
   WriteStringOrDie(kMoreData[2]);
@@ -799,6 +871,7 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueAndUpload) {
       .RetiresOnSaturation();
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -809,7 +882,14 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueAndUploadWithFailures) {
   WriteStringOrDie(kData[2]);
 
   // Inject simulated failures.
-  InjectFailures(test::StorageQueueOperationKind::kReadBlock, {1});
+  auto inject = InjectFailures();
+  EXPECT_CALL(*inject,
+              Call(Eq(test::StorageQueueOperationKind::kReadBlock), Eq(1)))
+      .WillRepeatedly(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(error::INTERNAL,
+                      base::StrCat({"Simulated read failure, seq=",
+                                    base::NumberToString(seq_id)}));
+      })));
 
   // Set uploader expectations.
   test::TestCallbackAutoWaiter waiter;
@@ -825,6 +905,7 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueAndUploadWithFailures) {
       .RetiresOnSaturation();
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -836,8 +917,26 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenWriteMoreAndUpload) {
 
   ResetTestStorageQueue();
 
-  // Set uploader expectations.
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  // Init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(
+            Invoke([&waiter, this](UploaderInterface::UploadReason reason) {
+              return TestUploader::SetUp(&waiter, this)
+                  .Required(0, kData[0])
+                  .Required(1, kData[1])
+                  .Required(2, kData[2])
+                  .Complete();
+            }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
+
   WriteStringOrDie(kMoreData[0]);
   WriteStringOrDie(kMoreData[1]);
   WriteStringOrDie(kMoreData[2]);
@@ -859,6 +958,7 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenWriteMoreAndUpload) {
       .RetiresOnSaturation();
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -879,8 +979,23 @@ TEST_P(StorageQueueTest,
                       /*recursive=*/false, base::FileEnumerator::FILES,
                       base::StrCat({METADATA_NAME, FILE_PATH_LITERAL(".*")}));
 
-  // Reopen, starting a new generation.
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    // Reopen, starting a new generation.
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
+
   WriteStringOrDie(kMoreData[0]);
   WriteStringOrDie(kMoreData[1]);
   WriteStringOrDie(kMoreData[2]);
@@ -902,6 +1017,7 @@ TEST_P(StorageQueueTest,
       .RetiresOnSaturation();
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -936,8 +1052,23 @@ TEST_P(
         << "Failed to delete " << full_name;
   }
 
-  // Reopen, starting a new generation.
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    // Reopen, starting a new generation.
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
+
   WriteStringOrDie(kMoreData[0]);
   WriteStringOrDie(kMoreData[1]);
   WriteStringOrDie(kMoreData[2]);
@@ -959,6 +1090,7 @@ TEST_P(
       .RetiresOnSaturation();
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -974,8 +1106,22 @@ TEST_P(StorageQueueTest,
 
   ResetTestStorageQueue();
 
-  // Reopen with the same generation and sequencing information.
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    // Reopen with the same generation and sequencing information.
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
 
   // Delete the data files *.generation.0
   EnsureDeletingFiles(
@@ -1046,6 +1192,7 @@ TEST_P(StorageQueueTest,
   }
 
   // Trigger upload.
+  SetExpectedUploadsCount();
   task_environment_.FastForwardBy(base::Seconds(1));
 }
 
@@ -1069,7 +1216,8 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueAndFlush) {
       .RetiresOnSaturation();
 
   // Flush manually.
-  storage_queue_->Flush();
+  SetExpectedUploadsCount();
+  FlushOrDie();
 }
 
 TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenWriteMoreAndFlush) {
@@ -1080,7 +1228,22 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenWriteMoreAndFlush) {
 
   ResetTestStorageQueue();
 
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+  }
+
   WriteStringOrDie(kMoreData[0]);
   WriteStringOrDie(kMoreData[1]);
   WriteStringOrDie(kMoreData[2]);
@@ -1102,7 +1265,8 @@ TEST_P(StorageQueueTest, WriteIntoNewStorageQueueReopenWriteMoreAndFlush) {
       .RetiresOnSaturation();
 
   // Flush manually.
-  storage_queue_->Flush();
+  SetExpectedUploadsCount();
+  FlushOrDie();
 }
 
 TEST_P(StorageQueueTest, ValidateVariousRecordSizes) {
@@ -1130,7 +1294,8 @@ TEST_P(StorageQueueTest, ValidateVariousRecordSizes) {
       .RetiresOnSaturation();
 
   // Flush manually.
-  storage_queue_->Flush();
+  SetExpectedUploadsCount();
+  FlushOrDie();
 }
 
 TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
@@ -1156,6 +1321,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
         .RetiresOnSaturation();
 
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
   // Confirm #0 and forward time again, removing record #0
@@ -1173,7 +1339,9 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1191,7 +1359,9 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1215,6 +1385,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1235,6 +1406,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 }
@@ -1262,6 +1434,7 @@ TEST_P(StorageQueueTest, WriteAndUploadWithBadConfirmation) {
         .RetiresOnSaturation();
 
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1299,6 +1472,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmationsAndReopen) {
         .RetiresOnSaturation();
 
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1317,7 +1491,9 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmationsAndReopen) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1335,12 +1511,29 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmationsAndReopen) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
   ResetTestStorageQueue();
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
 
   // Add more data and verify that #2 and new data are returned.
   WriteStringOrDie(kMoreData[0]);
@@ -1364,6 +1557,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmationsAndReopen) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1384,6 +1578,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyUploadWithConfirmationsAndReopen) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 }
@@ -1412,6 +1607,7 @@ TEST_P(StorageQueueTest,
         .RetiresOnSaturation();
 
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1430,7 +1626,9 @@ TEST_P(StorageQueueTest,
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1448,12 +1646,29 @@ TEST_P(StorageQueueTest,
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
   ResetTestStorageQueue();
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+
+  // Avoid init resume upload upon non-empty queue restart.
+  {
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::INIT_RESUME)))
+        .WillOnce(Invoke([&waiter](UploaderInterface::UploadReason reason) {
+          waiter.Signal();
+          return Status(error::UNAVAILABLE, "Skipped upload in test");
+        }))
+        .RetiresOnSaturation();
+
+    // Reopening will cause INIT_RESUME
+    SetExpectedUploadsCount();
+    CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
+  }
 
   // Add more data and verify that #2 and new data are returned.
   WriteStringOrDie(kMoreData[0]);
@@ -1461,7 +1676,14 @@ TEST_P(StorageQueueTest,
   WriteStringOrDie(kMoreData[2]);
 
   // Inject simulated failures.
-  InjectFailures(test::StorageQueueOperationKind::kReadBlock, {4, 5});
+  auto inject = InjectFailures();
+  EXPECT_CALL(*inject, Call(Eq(test::StorageQueueOperationKind::kReadBlock),
+                            AnyOf(4, 5)))
+      .WillRepeatedly(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(error::INTERNAL,
+                      base::StrCat({"Simulated read failure, seq=",
+                                    base::NumberToString(seq_id)}));
+      })));
 
   {
     // Set uploader expectations.
@@ -1482,14 +1704,15 @@ TEST_P(StorageQueueTest,
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
   // Confirm #2 and forward time again, removing record #2
   ConfirmOrDie(/*sequencing_id=*/2);
 
-  // Reset simulated failures.
-  InjectFailures(test::StorageQueueOperationKind::kReadBlock, {});
+  // Reset error injection.
+  storage_queue_->TestInjectErrorsForOperation();
 
   {
     // Set uploader expectations.
@@ -1505,6 +1728,7 @@ TEST_P(StorageQueueTest,
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 }
@@ -1528,6 +1752,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUpload) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[0]);
   }
 
@@ -1544,6 +1769,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUpload) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[1]);
   }
 
@@ -1560,6 +1786,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUpload) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[2]);
   }
 }
@@ -1582,6 +1809,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[0]);
   }
 
@@ -1597,6 +1825,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[1]);
   }
 
@@ -1613,6 +1842,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[2]);
   }
 
@@ -1635,6 +1865,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kMoreData[0]);
   }
 
@@ -1651,6 +1882,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kMoreData[1]);
   }
 
@@ -1668,6 +1900,7 @@ TEST_P(StorageQueueTest, WriteAndRepeatedlyImmediateUploadWithConfirmations) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kMoreData[2]);
   }
 }
@@ -1696,8 +1929,8 @@ TEST_P(StorageQueueTest, WriteAndImmediateUploadWithFailure) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount(2u);
     WriteStringOrDie(kData[0]);  // Immediately uploads and fails.
-
     // Let it retry upload and verify.
     task_environment_.FastForwardBy(base::Seconds(1));
   }
@@ -1721,6 +1954,7 @@ TEST_P(StorageQueueTest, WriteAndImmediateUploadWithoutConfirmation) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     WriteStringOrDie(kData[0]);  // Immediately uploads and does not confirm.
   }
 
@@ -1736,6 +1970,7 @@ TEST_P(StorageQueueTest, WriteAndImmediateUploadWithoutConfirmation) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(5));
   }
 
@@ -1784,6 +2019,7 @@ TEST_P(StorageQueueTest, ForceConfirm) {
         .RetiresOnSaturation();
 
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1802,7 +2038,9 @@ TEST_P(StorageQueueTest, ForceConfirm) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1831,7 +2069,9 @@ TEST_P(StorageQueueTest, ForceConfirm) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 
@@ -1857,7 +2097,9 @@ TEST_P(StorageQueueTest, ForceConfirm) {
                   .Complete();
             }))
         .RetiresOnSaturation();
+
     // Forward time to trigger upload
+    SetExpectedUploadsCount();
     task_environment_.FastForwardBy(base::Seconds(1));
   }
 }
@@ -1880,7 +2122,16 @@ TEST_P(StorageQueueTest, WriteRecordWithNoData) {
 
 TEST_P(StorageQueueTest, WriteRecordWithWriteMetadataFailures) {
   CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
-  InjectFailures(test::StorageQueueOperationKind::kWriteMetadata, {0});
+
+  auto inject = InjectFailures();
+  EXPECT_CALL(*inject,
+              Call(Eq(test::StorageQueueOperationKind::kWriteMetadata), Eq(0)))
+      .WillOnce(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(error::INTERNAL,
+                      base::StrCat({"Simulated metadata write failure, seq=",
+                                    base::NumberToString(seq_id)}));
+      })));
+
   Status write_result = WriteString(kData[0]);
   EXPECT_FALSE(write_result.ok());
   EXPECT_EQ(write_result.error_code(), error::INTERNAL);
@@ -1888,7 +2139,16 @@ TEST_P(StorageQueueTest, WriteRecordWithWriteMetadataFailures) {
 
 TEST_P(StorageQueueTest, WriteRecordWithWriteBlockFailures) {
   CreateTestStorageQueueOrDie(BuildStorageQueueOptionsPeriodic());
-  InjectFailures(test::StorageQueueOperationKind::kWriteBlock, {0});
+
+  auto inject = InjectFailures();
+  EXPECT_CALL(*inject,
+              Call(Eq(test::StorageQueueOperationKind::kWriteBlock), Eq(0)))
+      .WillOnce(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(error::INTERNAL,
+                      base::StrCat({"Simulated write failure, seq=",
+                                    base::NumberToString(seq_id)}));
+      })));
+
   Status write_result = WriteString(kData[0]);
   EXPECT_FALSE(write_result.ok());
   EXPECT_EQ(write_result.error_code(), error::INTERNAL);
@@ -1910,28 +2170,166 @@ TEST_P(StorageQueueTest, CreateStorageQueueInvalidOptionsPath) {
   EXPECT_EQ(queue_result.status().error_code(), error::UNAVAILABLE);
 }
 
-TEST_P(StorageQueueTest, WriteRecordWithInsufficientDiskSpace) {
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsImmediate());
+TEST_P(StorageQueueTest, WriteRecordMetadataWithInsufficientDiskSpaceFailure) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
 
-  // Update total disk space and reset after running the write operation so it
-  // does not affect other tests
-  const auto original_disk_space = options_.disk_space_resource()->GetTotal();
-  options_.disk_space_resource()->Test_SetTotal(0);
+  // Inject simulated failures.
+  auto inject = InjectFailures();
+  EXPECT_CALL(
+      *inject,
+      Call(Eq(test::StorageQueueOperationKind::kWriteLowDiskSpace), Eq(0)))
+      .WillRepeatedly(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(
+            error::INTERNAL,
+            base::StrCat({"Simulated metadata write low disk space, seq=",
+                          base::NumberToString(seq_id)}));
+      })));
   Status write_result = WriteString(kData[0]);
-  options_.disk_space_resource()->Test_SetTotal(original_disk_space);
   EXPECT_FALSE(write_result.ok());
   EXPECT_EQ(write_result.error_code(), error::RESOURCE_EXHAUSTED);
 }
 
-TEST_P(StorageQueueTest, WriteRecordWithInsufficientMemory) {
-  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsImmediate());
+TEST_P(StorageQueueTest, WrappedRecordWithInsufficientMemoryWithRetry) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
 
-  // Update total memory and reset after running the write operation so it does
-  // not affect other tests
-  const auto original_total_memory = options_.memory_resource()->GetTotal();
-  options_.memory_resource()->Test_SetTotal(0);
-  Status write_result = WriteString(kData[0]);
-  options_.memory_resource()->Test_SetTotal(original_total_memory);
+  // Inject "low memory" error multiple times, then retire and return success.
+  auto inject = InjectFailures();
+  static constexpr size_t kAttempts = 3;
+  size_t attempts = 0;
+  EXPECT_CALL(
+      *inject,
+      Call(Eq(test::StorageQueueOperationKind::kWrappedRecordLowMemory), Eq(0)))
+      .Times(kAttempts)
+      .WillRepeatedly(WithArg<1>(Invoke([&attempts](int64_t seq_id) {
+        return Status(error::RESOURCE_EXHAUSTED,
+                      base::StrCat({"Not enough memory for WrappedRecord, seq=",
+                                    base::NumberToString(seq_id), " attempt=",
+                                    base::NumberToString(attempts++)}));
+      })))
+      .RetiresOnSaturation();
+  Record record;
+  record.set_data(std::string(kData[0]));
+  record.set_destination(UPLOAD_EVENTS);
+  if (!dm_token_.empty()) {
+    record.set_dm_token(dm_token_);
+  }
+  test::TestEvent<Status> write_event;
+  LOG(ERROR) << "Write data='" << record.data() << "'";
+  storage_queue_->Write(std::move(record), write_event.cb());
+  Status write_result = write_event.result();
+  EXPECT_OK(write_result) << write_result;
+  EXPECT_THAT(attempts, Eq(kAttempts));
+}
+
+TEST_P(StorageQueueTest, WrappedRecordWithInsufficientMemoryWithFailure) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+
+  // Inject "low memory" error multiple times, then retire and return success.
+  auto inject = InjectFailures();
+  EXPECT_CALL(
+      *inject,
+      Call(Eq(test::StorageQueueOperationKind::kWrappedRecordLowMemory), Eq(0)))
+      .WillRepeatedly(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(error::RESOURCE_EXHAUSTED,
+                      base::StrCat({"Not enough memory for WrappedRecord, seq=",
+                                    base::NumberToString(seq_id)}));
+      })))
+      .RetiresOnSaturation();
+  Record record;
+  record.set_data(std::string(kData[0]));
+  record.set_destination(UPLOAD_EVENTS);
+  if (!dm_token_.empty()) {
+    record.set_dm_token(dm_token_);
+  }
+  test::TestEvent<Status> write_event;
+  LOG(ERROR) << "Write data='" << record.data() << "'";
+  storage_queue_->Write(std::move(record), write_event.cb());
+  Status write_result = write_event.result();
+  EXPECT_FALSE(write_result.ok());
+  EXPECT_EQ(write_result.error_code(), error::RESOURCE_EXHAUSTED);
+}
+
+TEST_P(StorageQueueTest, EncryptedRecordWithInsufficientMemoryWithRetry) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+
+  // Inject "low memory" error multiple times, then retire and return success.
+  auto inject = InjectFailures();
+  static constexpr size_t kAttempts = 3;
+  size_t attempts = 0;
+  EXPECT_CALL(
+      *inject,
+      Call(Eq(test::StorageQueueOperationKind::kEncryptedRecordLowMemory),
+           Eq(0)))
+      .Times(kAttempts)
+      .WillRepeatedly(WithArg<1>(Invoke([&attempts](int64_t seq_id) {
+        return Status(
+            error::RESOURCE_EXHAUSTED,
+            base::StrCat({"Not enough memory for EncryptedRecord, seq=",
+                          base::NumberToString(seq_id),
+                          " attempt=", base::NumberToString(attempts++)}));
+      })))
+      .RetiresOnSaturation();
+  Record record;
+  record.set_data(std::string(kData[0]));
+  record.set_destination(UPLOAD_EVENTS);
+  if (!dm_token_.empty()) {
+    record.set_dm_token(dm_token_);
+  }
+  test::TestEvent<Status> write_event;
+  LOG(ERROR) << "Write data='" << record.data() << "'";
+  storage_queue_->Write(std::move(record), write_event.cb());
+  Status write_result = write_event.result();
+  EXPECT_OK(write_result) << write_result;
+  EXPECT_THAT(attempts, Eq(kAttempts));
+}
+
+TEST_P(StorageQueueTest, EncryptedRecordWithInsufficientMemoryWithFailure) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+
+  // Inject "low memory" error multiple times, then retire and return success.
+  auto inject = InjectFailures();
+  EXPECT_CALL(
+      *inject,
+      Call(Eq(test::StorageQueueOperationKind::kEncryptedRecordLowMemory),
+           Eq(0)))
+      .WillRepeatedly(WithArg<1>(Invoke([](int64_t seq_id) {
+        return Status(
+            error::RESOURCE_EXHAUSTED,
+            base::StrCat({"Not enough memory for EncryptedRecord, seq=",
+                          base::NumberToString(seq_id)}));
+      })))
+      .RetiresOnSaturation();
+  Record record;
+  record.set_data(std::string(kData[0]));
+  record.set_destination(UPLOAD_EVENTS);
+  if (!dm_token_.empty()) {
+    record.set_dm_token(dm_token_);
+  }
+  test::TestEvent<Status> write_event;
+  LOG(ERROR) << "Write data='" << record.data() << "'";
+  storage_queue_->Write(std::move(record), write_event.cb());
+  Status write_result = write_event.result();
+  EXPECT_FALSE(write_result.ok());
+  EXPECT_EQ(write_result.error_code(), error::RESOURCE_EXHAUSTED);
+}
+
+TEST_P(StorageQueueTest, WriteRecordWithReservedSpace) {
+  CreateTestStorageQueueOrDie(BuildStorageQueueOptionsOnlyManual());
+
+  const auto tatal_disk_space = options_.disk_space_resource()->GetTotal();
+  Record record;
+  record.set_data(kData[0]);
+  record.set_destination(UPLOAD_EVENTS);
+  if (!dm_token_.empty()) {
+    record.set_dm_token(dm_token_);
+  }
+  // Large reservation, but still available.
+  record.set_reserved_space(tatal_disk_space / 2);
+  Status write_result = WriteRecord(record);
+  EXPECT_OK(write_result) << write_result;
+  // Even larger reservation, not available.
+  record.set_reserved_space(tatal_disk_space);
+  write_result = WriteRecord(record);
   EXPECT_FALSE(write_result.ok());
   EXPECT_EQ(write_result.error_code(), error::RESOURCE_EXHAUSTED);
 }
@@ -1943,34 +2341,44 @@ TEST_P(StorageQueueTest, UploadWithInsufficientMemory) {
 
   const auto original_total_memory = options_.memory_resource()->GetTotal();
 
-  // Set uploader expectations.
-  test::TestCallbackAutoWaiter waiter;
-  EXPECT_CALL(set_mock_uploader_expectations_,
-              Call(Eq(UploaderInterface::UploadReason::PERIODIC)))
-      .WillOnce(Invoke([&waiter, this](UploaderInterface::UploadReason reason) {
-        // First attempt - update total memory to a low amount.
-        options_.memory_resource()->Test_SetTotal(100u);
-        return TestUploader::SetUp(&waiter, this)
-            .Complete(Status(error::RESOURCE_EXHAUSTED,
-                             "Insufficient memory for upload"));
-      }))
-      .RetiresOnSaturation();
-  EXPECT_CALL(set_mock_uploader_expectations_,
-              Call(Eq(UploaderInterface::UploadReason::FAILURE_RETRY)))
-      .WillOnce(Invoke([&waiter, &original_total_memory,
-                        this](UploaderInterface::UploadReason reason) {
-        // Reset after running upload so it does not affect other tests.
-        options_.memory_resource()->Test_SetTotal(original_total_memory);
-        return TestUploader::SetUp(&waiter, this)
-            .Required(0, kData[0])
-            .Complete();
-      }))
-      .RetiresOnSaturation();
+  {
+    // Set uploader expectations.
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::PERIODIC)))
+        .WillOnce(
+            Invoke([&waiter, this](UploaderInterface::UploadReason reason) {
+              // First attempt - update total memory to a low amount.
+              options_.memory_resource()->Test_SetTotal(100u);
+              return TestUploader::SetUp(&waiter, this)
+                  .Complete(Status(error::RESOURCE_EXHAUSTED,
+                                   "Insufficient memory for upload"));
+            }))
+        .RetiresOnSaturation();
+    // Trigger upload which will experience insufficient memory.
+    SetExpectedUploadsCount();
+    task_environment_.FastForwardBy(base::Seconds(5));
+  }
 
-  // Trigger upload which will experience insufficient memory.
-  task_environment_.FastForwardBy(base::Seconds(5));
-  // Trigger another (failure retry) upload resetting the memory resource.
-  task_environment_.FastForwardBy(base::Seconds(1));
+  {
+    // Set uploader expectations.
+    test::TestCallbackAutoWaiter waiter;
+    EXPECT_CALL(set_mock_uploader_expectations_,
+                Call(Eq(UploaderInterface::UploadReason::FAILURE_RETRY)))
+        .WillOnce(Invoke([&waiter, &original_total_memory,
+                          this](UploaderInterface::UploadReason reason) {
+          // Reset after running upload so it does not affect other tests.
+          options_.memory_resource()->Test_SetTotal(original_total_memory);
+          return TestUploader::SetUp(&waiter, this)
+              .Required(0, kData[0])
+              .Complete();
+        }))
+        .RetiresOnSaturation();
+
+    // Trigger another (failure retry) upload resetting the memory resource.
+    SetExpectedUploadsCount();
+    task_environment_.FastForwardBy(base::Seconds(1));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

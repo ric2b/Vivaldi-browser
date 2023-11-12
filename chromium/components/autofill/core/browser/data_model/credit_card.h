@@ -63,6 +63,7 @@ class CreditCard : public AutofillDataModel {
   enum Issuer {
     ISSUER_UNKNOWN = 0,
     GOOGLE = 1,
+    EXTERNAL_ISSUER = 2,
   };
 
   // Whether the card has been enrolled in the virtual card feature. This must
@@ -182,9 +183,8 @@ class CreditCard : public AutofillDataModel {
 
   Issuer card_issuer() const { return card_issuer_; }
   void set_card_issuer(Issuer card_issuer) { card_issuer_ = card_issuer; }
-
-  // Return true if card_issuer_ is set to Issuer::GOOGLE.
-  bool IsGoogleIssuedCard() const;
+  const std::string& issuer_id() const { return issuer_id_; }
+  void set_issuer_id(const std::string& issuer_id) { issuer_id_ = issuer_id; }
 
   // For use in STL containers.
   void operator=(const CreditCard& credit_card);
@@ -203,14 +203,15 @@ class CreditCard : public AutofillDataModel {
   // GUIDs, origins, labels, and unique IDs are not compared, only the values of
   // the cards themselves. A full card is equivalent to its corresponding masked
   // card.
-  int Compare(const CreditCard& credit_card) const;
+  [[nodiscard]] int Compare(const CreditCard& credit_card) const;
 
   // Determines if |this| is a local version of the server card |other|.
-  bool IsLocalDuplicateOfServerCard(const CreditCard& other) const;
+  [[nodiscard]] bool IsLocalDuplicateOfServerCard(
+      const CreditCard& other) const;
 
   // Determines if |this| has the same number as |other|. If either is a masked
   // server card, compares their last four digits and expiration dates.
-  bool HasSameNumberAs(const CreditCard& other) const;
+  [[nodiscard]] bool HasSameNumberAs(const CreditCard& other) const;
 
   // Equality operators compare GUIDs, origins, and the contents.
   // Usage metadata (use count, use date, modification date) are NOT compared.
@@ -457,9 +458,15 @@ class CreditCard : public AutofillDataModel {
   // The nickname of the card. May be empty when nickname is not set.
   std::u16string nickname_;
 
+  // TODO(crbug.com/1394514): Consider removing this field and all its usage
+  // after `issuer_id_` is used.
   // The issuer for the card. This is populated from the sync response. It has a
   // default value of CreditCard::ISSUER_UNKNOWN.
   Issuer card_issuer_;
+
+  // The issuer id of the card. This is set for server cards only (both actual
+  // cards and virtual cards).
+  std::string issuer_id_;
 
   // For masked server cards, this is the ID assigned by the server to uniquely
   // identify this card. |server_id_| is the legacy version of this.

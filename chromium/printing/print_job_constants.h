@@ -8,6 +8,8 @@
 #include <stdint.h>
 
 #include "base/component_export.h"
+#include "build/build_config.h"
+#include "printing/buildflags/buildflags.h"
 
 namespace printing {
 
@@ -17,6 +19,10 @@ extern const char kPreviewRequestID[];
 COMPONENT_EXPORT(PRINTING_BASE) extern const char kPreviewUIID[];
 COMPONENT_EXPORT(PRINTING_BASE)
 extern const char kSettingCapabilities[];
+#if BUILDFLAG(IS_CHROMEOS)
+COMPONENT_EXPORT(PRINTING_BASE)
+extern const char kSettingChromeOSAccessOAuthToken[];
+#endif
 COMPONENT_EXPORT(PRINTING_BASE) extern const char kSettingCollate[];
 COMPONENT_EXPORT(PRINTING_BASE) extern const char kSettingColor[];
 COMPONENT_EXPORT(PRINTING_BASE)
@@ -151,7 +157,7 @@ COMPONENT_EXPORT(PRINTING_BASE)
 extern const uint32_t kInvalidPageIndex;
 COMPONENT_EXPORT(PRINTING_BASE) extern const uint32_t kMaxPageCount;
 
-#if defined(USE_CUPS)
+#if BUILDFLAG(USE_CUPS)
 // Printer color models
 COMPONENT_EXPORT(PRINTING_BASE) extern const char kBlack[];
 COMPONENT_EXPORT(PRINTING_BASE) extern const char kCMYK[];

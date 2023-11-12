@@ -31,17 +31,16 @@ struct StructTraits<viz::mojom::FilterOperationDataView, cc::FilterOperation> {
   }
 
   static float outer_threshold(const cc::FilterOperation& operation) {
-    if (operation.type() != cc::FilterOperation::ALPHA_THRESHOLD &&
-        operation.type() != cc::FilterOperation::STRETCH) {
+    if (operation.type() != cc::FilterOperation::ALPHA_THRESHOLD)
       return 0.f;
-    }
     return operation.outer_threshold();
   }
 
-  static gfx::Point drop_shadow_offset(const cc::FilterOperation& operation) {
-    if (operation.type() != cc::FilterOperation::DROP_SHADOW)
+  static gfx::Point offset(const cc::FilterOperation& operation) {
+    if (operation.type() != cc::FilterOperation::DROP_SHADOW &&
+        operation.type() != cc::FilterOperation::OFFSET)
       return gfx::Point();
-    return operation.drop_shadow_offset();
+    return operation.offset();
   }
 
   static SkColor4f drop_shadow_color(const cc::FilterOperation& operation) {

@@ -14,11 +14,11 @@
 #include "base/files/file_util.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/task_environment.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "chromeos/ash/components/disks/mock_disk_mount_manager.h"
@@ -108,15 +108,15 @@ class TestSmbFsMounter : public SmbFsMounter {
             [mount_error, mount_path](
                 const std::string& source_path,
                 ash::disks::DiskMountManager::MountPathCallback callback) {
-              base::SequencedTaskRunnerHandle::Get()->PostTask(
+              base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
                   FROM_HERE,
                   base::BindOnce(
                       std::move(callback), mount_error,
                       MakeMountPointInfo(source_path, mount_path.value())));
             }));
-    if (mount_error == ash::MountError::kNone) {
+    if (mount_error == ash::MountError::kSuccess) {
       EXPECT_CALL(mock_disk_mount_manager_, UnmountPath(mount_path.value(), _))
-          .WillOnce(base::test::RunOnceCallback<1>(ash::MountError::kNone));
+          .WillOnce(base::test::RunOnceCallback<1>(ash::MountError::kSuccess));
     } else {
       EXPECT_CALL(mock_disk_mount_manager_, UnmountPath(mount_path.value(), _))
           .Times(0);
@@ -134,7 +134,7 @@ class SmbFsMounterTest : public testing::Test {
       const std::string& mount_path,
       ash::MountError mount_error,
       ash::disks::DiskMountManager::MountPathCallback callback) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), mount_error,
                                   MakeMountPointInfo(source_path, mount_path)));
   }
@@ -194,7 +194,8 @@ TEST_F(SmbFsMounterTest, FilesystemMountFailure) {
       .WillOnce(WithArgs<0, 6>(
           [this](const std::string& source_path,
                  ash::disks::DiskMountManager::MountPathCallback callback) {
-            PostMountEvent(source_path, kMountPath, ash::MountError::kInternal,
+            PostMountEvent(source_path, kMountPath,
+                           ash::MountError::kInternalError,
                            std::move(callback));
           }));
   EXPECT_CALL(mock_disk_mount_manager_, UnmountPath(_, _)).Times(0);
@@ -222,7 +223,7 @@ TEST_F(SmbFsMounterTest, TimeoutAfterFilesystemMount) {
       .WillOnce(WithArgs<0, 6>(
           [this](const std::string& source_path,
                  ash::disks::DiskMountManager::MountPathCallback callback) {
-            PostMountEvent(source_path, kMountPath, ash::MountError::kNone,
+            PostMountEvent(source_path, kMountPath, ash::MountError::kSuccess,
                            std::move(callback));
           }));
   // Destructing SmbFsMounter on failure will cause the mount point to be
@@ -257,7 +258,8 @@ TEST_F(SmbFsMounterTest, FilesystemMountAfterDestruction) {
                  ash::disks::DiskMountManager::MountPathCallback callback) {
             // This posts a mount event to the task queue, which will not be run
             // until |run_loop| is started.
-            PostMountEvent(source_path, kMountPath, ash::MountError::kInternal,
+            PostMountEvent(source_path, kMountPath,
+                           ash::MountError::kInternalError,
                            std::move(callback));
           }));
   EXPECT_CALL(mock_disk_mount_manager_, UnmountPath(_, _)).Times(0);
@@ -324,7 +326,7 @@ TEST_F(SmbFsMounterTest, MountOptions) {
   mount_options.resolved_host = net::IPAddress(1, 2, 3, 4);
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, mount_options, &mock_delegate_, base::FilePath(kMountPath),
-      ash::MountError::kNone,
+      ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -367,7 +369,7 @@ TEST_F(SmbFsMounterTest, MountOptions_SkipConnect) {
   mount_options.skip_connect = true;
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, mount_options, &mock_delegate_, base::FilePath(kMountPath),
-      ash::MountError::kNone,
+      ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -419,7 +421,7 @@ TEST_F(SmbFsMounterTest, MountOptions_SavePassword) {
   mount_options.password_salt = kSalt;
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, mount_options, &mock_delegate_, base::FilePath(kMountPath),
-      ash::MountError::kNone,
+      ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -477,7 +479,7 @@ TEST_F(SmbFsMounterTest, KerberosAuthentication) {
           SmbFsMounter::KerberosOptions::Source::kKerberos, kKerberosIdentity);
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, mount_options, &mock_delegate_, base::FilePath(kMountPath),
-      ash::MountError::kNone,
+      ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -511,7 +513,7 @@ TEST_F(SmbFsMounterTest, BootstrapMountError) {
 
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, SmbFsMounter::MountOptions(), &mock_delegate_,
-      base::FilePath(kMountPath), ash::MountError::kNone,
+      base::FilePath(kMountPath), ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -546,7 +548,7 @@ TEST_F(SmbFsMounterTest, BootstrapDisconnection) {
 
   std::unique_ptr<SmbFsMounter> mounter = std::make_unique<TestSmbFsMounter>(
       kSharePath, SmbFsMounter::MountOptions(), &mock_delegate_,
-      base::FilePath(kMountPath), ash::MountError::kNone,
+      base::FilePath(kMountPath), ash::MountError::kSuccess,
       mojo::Remote<mojom::SmbFsBootstrap>(
           bootstrap_receiver.BindNewPipeAndPassRemote()));
   mounter->Mount(callback);
@@ -560,9 +562,10 @@ class SmbFsMounterE2eTest : public testing::Test {
       const std::string& source_path,
       const std::string& mount_path,
       ash::disks::DiskMountManager::MountPathCallback callback) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), ash::MountError::kNone,
-                                  MakeMountPointInfo(source_path, mount_path)));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), ash::MountError::kSuccess,
+                       MakeMountPointInfo(source_path, mount_path)));
   }
 
   void SetUp() override {
@@ -678,7 +681,7 @@ TEST_F(SmbFsMounterE2eTest, MountSuccess) {
         // providing a Mojo connection endpoint.
         const std::string token =
             source_path.substr(sizeof(kMountUrlPrefix) - 1);
-        base::SequencedTaskRunnerHandle::Get()->PostTask(
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindLambdaForTesting([token, &channel]() {
               mojo_bootstrap::PendingConnectionManager::Get().OpenIpcChannel(
                   token,
@@ -686,7 +689,7 @@ TEST_F(SmbFsMounterE2eTest, MountSuccess) {
             }));
       }));
   EXPECT_CALL(mock_disk_mount_manager_, UnmountPath(kMountPath, _))
-      .WillOnce(base::test::RunOnceCallback<1>(ash::MountError::kNone));
+      .WillOnce(base::test::RunOnceCallback<1>(ash::MountError::kSuccess));
   EXPECT_CALL(mock_delegate_, OnDisconnected()).Times(0);
 
   base::RunLoop run_loop;

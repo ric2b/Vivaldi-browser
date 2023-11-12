@@ -35,6 +35,7 @@
     attribute EventHandler onabort;
     attribute EventHandler onbeforeinput;
     [RuntimeEnabled=BeforeMatchEvent] attribute EventHandler onbeforematch;
+    [RuntimeEnabled=HTMLPopoverAttribute] attribute EventHandler onbeforetoggle;
     attribute EventHandler onblur;
     attribute EventHandler oncancel;
     attribute EventHandler oncanplay;
@@ -83,8 +84,8 @@
     attribute EventHandler onpause;
     attribute EventHandler onplay;
     attribute EventHandler onplaying;
-    [RuntimeEnabled=HTMLPopupAttribute] attribute EventHandler onpopuphide;
-    [RuntimeEnabled=HTMLPopupAttribute] attribute EventHandler onpopupshow;
+    [RuntimeEnabled=HTMLPopoverAttribute] attribute EventHandler onpopoverhide;
+    [RuntimeEnabled=HTMLPopoverAttribute] attribute EventHandler onpopovershow;
     attribute EventHandler onprogress;
     attribute EventHandler onratechange;
     attribute EventHandler onreset;

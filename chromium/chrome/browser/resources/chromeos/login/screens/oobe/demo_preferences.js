@@ -6,22 +6,22 @@ import '//resources/polymer/v3_0/paper-styles/color.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/oobe_icons.m.js';
 import '../../components/oobe_i18n_dropdown.js';
-import '../../components/buttons/oobe_back_button.m.js';
-import '../../components/buttons/oobe_text_button.m.js';
-import '../../components/common_styles/common_styles.m.js';
+import '../../components/buttons/oobe_back_button.js';
+import '../../components/buttons/oobe_text_button.js';
+import '../../components/common_styles/oobe_common_styles.m.js';
 import '../../components/common_styles/oobe_dialog_host_styles.m.js';
-import '../../components/dialogs/oobe_adaptive_dialog.m.js';
+import '../../components/dialogs/oobe_adaptive_dialog.js';
 
 import {I18nBehavior} from '//resources/ash/common/i18n_behavior.js';
-import {assert} from '//resources/js/assert.js';
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
+import {assert} from '//resources/ash/common/assert.js';
+import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
-import {OobeDialogHostBehavior} from '../../components/behaviors/oobe_dialog_host_behavior.m.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.m.js';
-import {OobeTypes} from '../../components/oobe_types.m.js';
-import {Oobe} from '../../cr_ui.m.js';
+import {OobeDialogHostBehavior} from '../../components/behaviors/oobe_dialog_host_behavior.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeTypes} from '../../components/oobe_types.js';
+import {Oobe} from '../../cr_ui.js';
 
 
 /**
@@ -57,14 +57,6 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
       },
 
       /**
-       * List of keyboards for keyboard selector dropdown.
-       * @type {!Array<!OobeTypes.IMEDsc>}
-       */
-      keyboards: {
-        type: Array,
-      },
-
-      /**
        * List of countries for country selector dropdown.
        * @type {!Array<!OobeTypes.DemoCountryDsc>}
        */
@@ -85,6 +77,7 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
         type: Boolean,
         value: false,
         reflectToAttribute: true,
+        observer: 'isInputInvalidObserver_',
       },
 
       retailer_id_input_: {
@@ -95,7 +88,7 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
 
       retailer_id_input_pattern_: {
         type: String,
-        value: '[a-zA-Z]{3}-[0-9]{4}$',
+        value: '^[A-Z]{3}-[0-9]{4}$',
       },
 
     };
@@ -127,7 +120,7 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
   /** Overridden from LoginScreenBehavior. */
   // clang-format off
   get EXTERNAL_API() {
-    return ['setSelectedKeyboard'];
+    return [];
   }
   // clang-format on
 
@@ -163,37 +156,11 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
         loadTimeData.getValue('languageList'));
     this.setLanguageList_(languageList);
 
-    const inputMethodsList = /** @type {!Array<OobeTypes.IMEDsc>} */ (
-        loadTimeData.getValue('inputMethodsList'));
-    this.setInputMethods_(inputMethodsList);
-
     const countryList = /** @type {!Array<OobeTypes.DemoCountryDsc>} */ (
         loadTimeData.getValue('demoModeCountryList'));
     this.setCountryList_(countryList);
 
     this.i18nUpdateLocale();
-  }
-
-  /**
-   * Sets selected keyboard.
-   * @param {string} keyboardId
-   */
-  setSelectedKeyboard(keyboardId) {
-    let found = false;
-    for (const keyboard of this.keyboards) {
-      if (keyboard.value != keyboardId) {
-        keyboard.selected = false;
-        continue;
-      }
-      keyboard.selected = true;
-      found = true;
-    }
-    if (!found) {
-      return;
-    }
-
-    // Force i18n-dropdown to refresh.
-    this.keyboards = this.keyboards.slice();
   }
 
   /**
@@ -203,15 +170,6 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
    */
   setLanguageList_(languages) {
     this.languages = languages;
-  }
-
-  /**
-   * Sets input methods.
-   * @param {!Array<!OobeTypes.IMEDsc>} inputMethods
-   * @private
-   */
-  setInputMethods_(inputMethods) {
-    this.keyboards = inputMethods;
   }
 
   /**
@@ -244,6 +202,14 @@ class DemoPreferencesScreen extends DemoPreferencesScreenBase {
     } else {
       this.is_input_invalid_ = !RegExp(this.retailer_id_input_pattern_)
                                     .test(this.retailer_id_input_);
+    }
+  }
+
+  isInputInvalidObserver_() {
+    if (this.is_input_invalid_) {
+      this.$.nextButton.disabled = true;
+    } else {
+      this.$.nextButton.disabled = false;
     }
   }
 

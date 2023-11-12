@@ -98,7 +98,7 @@ class AUHALStream : public AudioOutputStream {
   void GetVolume(double* volume) override;
 
   AudioDeviceID device_id() const { return device_; }
-  size_t requested_buffer_size() const { return number_of_frames_; }
+  size_t requested_buffer_size() const { return params_.frames_per_buffer(); }
   AudioUnit audio_unit() const {
     return audio_unit_ ? audio_unit_->audio_unit() : nullptr;
   }
@@ -134,9 +134,6 @@ class AUHALStream : public AudioOutputStream {
   // glitches.
   void UpdatePlayoutTimestamp(const AudioTimeStamp* timestamp);
 
-  // Called from the dtor and when the stream is reset.
-  void ReportAndResetStats();
-
   // Our creator, the audio manager needs to be notified when we close.
   const raw_ptr<AudioManagerMac> manager_;
 
@@ -144,16 +141,6 @@ class AUHALStream : public AudioOutputStream {
 
   // We may get some callbacks after AudioUnitStop() has been called.
   base::Lock lock_;
-
-  // Size of audio buffer requested at construction. The actual buffer size
-  // is given by |actual_io_buffer_frame_size_| and it can differ from the
-  // requested size.
-  const size_t number_of_frames_;
-
-  // Stores the number of frames that we actually get callbacks for.
-  // This may be different from what we ask for, so we use this for stats in
-  // order to understand how often this happens and what are the typical values.
-  size_t number_of_frames_requested_ GUARDED_BY(lock_);
 
   // Pointer to the object that will provide the audio samples.
   raw_ptr<AudioSourceCallback> source_ GUARDED_BY(lock_);
@@ -187,11 +174,6 @@ class AUHALStream : public AudioOutputStream {
   // Current playout time.  Set by Render().
   base::TimeTicks current_playout_time_;
 
-  // Lost frames not yet reported to the provider. Increased in
-  // UpdatePlayoutTimestamp() if any lost frame since last time. Forwarded to
-  // the provider and reset in ProvideInput().
-  uint32_t current_lost_frames_;
-
   // Stores the timestamp of the previous audio buffer requested by the OS.
   // We use this in combination with |last_number_of_frames_| to detect when
   // the OS has decided to skip rendering frames (i.e. a glitch).
@@ -213,9 +195,11 @@ class AUHALStream : public AudioOutputStream {
   // Callback to send statistics info.
   AudioManager::LogCallback log_callback_;
 
+  AudioGlitchInfo::Accumulator glitch_info_accumulator_;
+
   // Used to make sure control functions (Start(), Stop() etc) are called on the
   // right thread.
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 };
 
 }  // namespace media

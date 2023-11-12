@@ -12,17 +12,17 @@ import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import '../../settings_shared.css.js';
-import '../os_icons.js';
+import '../os_settings_icons.html.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
-import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, Router} from '../../router.js';
 import {castExists} from '../assert_extras.js';
 import {routes} from '../os_route.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {Route, Router} from '../router.js';
 
 import {getTemplate} from './os_settings_menu.html.js';
 
@@ -34,10 +34,7 @@ interface OsSettingsMenuElement {
   };
 }
 
-const OsSettingsMenuElementBase =
-    mixinBehaviors([RouteObserverBehavior], PolymerElement) as {
-      new (): PolymerElement & RouteObserverBehaviorInterface,
-    };
+const OsSettingsMenuElementBase = RouteObserverMixin(PolymerElement);
 
 class OsSettingsMenuElement extends OsSettingsMenuElementBase {
   static get is() {
@@ -65,18 +62,6 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
         readOnly: true,
       },
 
-      /**
-       * Whether Accessibility OS Settings visibility improvements are enabled.
-       */
-      isAccessibilityOSSettingsVisibilityEnabled_: {
-        type: Boolean,
-        readOnly: true,
-        value() {
-          return loadTimeData.getBoolean(
-              'isAccessibilityOSSettingsVisibilityEnabled');
-        },
-      },
-
       showCrostini: Boolean,
 
       showStartup: Boolean,
@@ -93,7 +78,6 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
   showReset: boolean;
   showKerberosSection: boolean;
   private isGuestMode_: boolean;
-  private isAccessibilityOSSettingsVisibilityEnabled_: boolean;
 
   override currentRouteChanged(newRoute: Route) {
     const urlSearchQuery =

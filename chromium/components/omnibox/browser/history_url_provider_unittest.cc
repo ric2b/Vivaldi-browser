@@ -566,7 +566,7 @@ TEST_F(HistoryURLProviderTest, CullRedirects) {
   redirects_to_a.push_back(GURL(test_cases[2].url));
   redirects_to_a.push_back(GURL(test_cases[0].url));
   client_->GetHistoryService()->AddPage(
-      GURL(test_cases[0].url), Time::Now(), nullptr, 0, GURL(), redirects_to_a,
+      GURL(test_cases[0].url), Time::Now(), 0, 0, GURL(), redirects_to_a,
       ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, true);
 
   // Because all the results are part of a redirect chain with other results,
@@ -1501,4 +1501,29 @@ TEST_F(HistoryURLProviderTest, MaxMatches) {
   matches_ = autocomplete_->matches();
   EXPECT_EQ(matches_.size(),
             autocomplete_->provider_max_matches_in_keyword_mode());
+}
+
+TEST_F(HistoryURLProviderTest, HistoryMatchToACMatchWithScoringSignals) {
+  const std::string input_text = "abc";
+  AutocompleteInput input(ASCIIToUTF16(input_text),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  history::HistoryMatch history_match;
+  history_match.url_info.set_url(GURL("https://abc.com"));
+  history_match.url_info.set_typed_count(3);
+  history_match.url_info.set_visit_count(5);
+  history_match.match_in_scheme = false;
+  auto params = std::make_unique<HistoryURLProviderParams>(
+      input, input, true, AutocompleteMatch(), nullptr, nullptr, true, nullptr);
+  params->matches.push_back(history_match);
+
+  AutocompleteMatch match =
+      autocomplete_->HistoryMatchToACMatch(*params, 0, /*relevance=*/1,
+                                           /*populate_scoring_signals=*/true);
+  EXPECT_EQ(match.scoring_signals.typed_count(), 3);
+  EXPECT_EQ(match.scoring_signals.visit_count(), 5);
+  EXPECT_TRUE(match.scoring_signals.allowed_to_be_default_match());
+  EXPECT_TRUE(match.scoring_signals.is_host_only());
+  EXPECT_EQ(match.scoring_signals.length_of_url(), 16);
+  EXPECT_TRUE(match.scoring_signals.has_non_scheme_www_match());
 }

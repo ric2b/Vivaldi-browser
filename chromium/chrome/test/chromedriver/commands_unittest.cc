@@ -32,7 +32,7 @@
 #include "chrome/test/chromedriver/session_commands.h"
 #include "chrome/test/chromedriver/window_commands.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webdriver/atoms.h"
+#include "third_party/selenium-atoms/atoms.h"
 
 namespace {
 
@@ -41,15 +41,15 @@ void OnGetStatus(const Status& status,
                  const std::string& session_id,
                  bool w3c_compliant) {
   ASSERT_EQ(kOk, status.code());
-  base::DictionaryValue* dict;
-  ASSERT_TRUE(value->GetAsDictionary(&dict));
-  absl::optional<bool> ready = dict->FindBoolKey("ready");
+  base::Value::Dict* dict = value->GetIfDict();
+  ASSERT_TRUE(dict);
+  absl::optional<bool> ready = dict->FindBool("ready");
   ASSERT_TRUE(ready.has_value() && ready.value());
-  ASSERT_TRUE(dict->FindKey("message"));
-  ASSERT_TRUE(dict->FindPath("os.name"));
-  ASSERT_TRUE(dict->FindPath("os.version"));
-  ASSERT_TRUE(dict->FindPath("os.arch"));
-  ASSERT_TRUE(dict->FindPath("build.version"));
+  ASSERT_TRUE(dict->Find("message"));
+  ASSERT_TRUE(dict->FindByDottedPath("os.name"));
+  ASSERT_TRUE(dict->FindByDottedPath("os.version"));
+  ASSERT_TRUE(dict->FindByDottedPath("os.arch"));
+  ASSERT_TRUE(dict->FindByDottedPath("build.version"));
 }
 
 }  // namespace
@@ -72,13 +72,13 @@ void ExecuteStubGetSession(int* count,
   }
   (*count)++;
 
-  std::unique_ptr<base::Value> capabilities(
-      new base::Value(base::Value::Type::DICTIONARY));
+  base::Value::Dict capabilities;
+  capabilities.Set("capability1", "test1");
+  capabilities.Set("capability2", "test2");
 
-  capabilities->SetStringKey("capability1", "test1");
-  capabilities->SetStringKey("capability2", "test2");
-
-  callback.Run(Status(kOk), std::move(capabilities), session_id, false);
+  callback.Run(Status(kOk),
+               std::make_unique<base::Value>(std::move(capabilities)),
+               session_id, false);
 }
 
 void OnGetSessions(const Status& status,
@@ -229,14 +229,14 @@ void OnSimpleCommand(base::RunLoop* run_loop,
 
 TEST(CommandsTest, ExecuteSessionCommand) {
   SessionThreadMap map;
-  auto threadInfo = std::make_unique<SessionThreadInfo>("1", true);
-  base::Thread* thread = threadInfo->thread();
+  auto thread_info = std::make_unique<SessionThreadInfo>("1", true);
+  base::Thread* thread = thread_info->thread();
   ASSERT_TRUE(thread->Start());
   std::string id("id");
   thread->task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&internal::CreateSessionOnSessionThreadForTesting, id));
-  map[id] = std::move(threadInfo);
+  map[id] = std::move(thread_info);
 
   base::Value::Dict params;
   params.Set("param", 5);
@@ -311,10 +311,10 @@ void OnNoSuchSessionAndQuit(base::RunLoop* run_loop,
 
 TEST(CommandsTest, ExecuteSessionCommandOnJustDeletedSession) {
   SessionThreadMap map;
-  auto threadInfo = std::make_unique<SessionThreadInfo>("1", true);
-  ASSERT_TRUE(threadInfo->thread()->Start());
+  auto thread_info = std::make_unique<SessionThreadInfo>("1", true);
+  ASSERT_TRUE(thread_info->thread()->Start());
   std::string id("id");
-  map[id] = std::move(threadInfo);
+  map[id] = std::move(thread_info);
 
   base::test::SingleThreadTaskEnvironment task_environment;
   base::Value::Dict params;
@@ -345,18 +345,18 @@ class FindElementWebView : public StubWebView {
       case kElementExistsQueryTwice:
       case kElementExistsTimeout: {
         if (only_one_) {
-          base::Value element(base::Value::Type::DICTIONARY);
-          element.SetStringKey("ELEMENT", "1");
-          result_ = base::Value::ToUniquePtrValue(element.Clone());
+          base::Value::Dict element;
+          element.Set("ELEMENT", "1");
+          result_ = std::make_unique<base::Value>(std::move(element));
         } else {
-          base::Value element1(base::Value::Type::DICTIONARY);
-          element1.SetStringKey("ELEMENT", "1");
-          base::Value element2(base::Value::Type::DICTIONARY);
-          element2.SetStringKey("ELEMENT", "2");
-          base::Value list(base::Value::Type::LIST);
-          list.Append(element1.Clone());
-          list.Append(element2.Clone());
-          result_ = base::Value::ToUniquePtrValue(list.Clone());
+          base::Value::Dict element1;
+          element1.Set("ELEMENT", "1");
+          base::Value::Dict element2;
+          element2.Set("ELEMENT", "2");
+          base::Value::List list;
+          list.Append(std::move(element1));
+          list.Append(std::move(element2));
+          result_ = std::make_unique<base::Value>(std::move(list));
         }
         break;
       }
@@ -450,10 +450,10 @@ TEST(CommandsTest, SuccessfulFindElement) {
   ASSERT_EQ(kOk,
             ExecuteFindElement(1, &session, &web_view, params, &result, nullptr)
                 .code());
-  base::Value param(base::Value::Type::DICTIONARY);
-  param.SetStringKey("css selector", "#a");
+  base::Value::Dict param;
+  param.Set("css selector", "#a");
   base::Value expected_args(base::Value::Type::LIST);
-  expected_args.Append(param.Clone());
+  expected_args.Append(base::Value(std::move(param)));
   web_view.Verify("frame_id1", &expected_args, result.get());
 }
 
@@ -481,10 +481,10 @@ TEST(CommandsTest, SuccessfulFindElements) {
   ASSERT_EQ(
       kOk, ExecuteFindElements(1, &session, &web_view, params, &result, nullptr)
                .code());
-  base::Value param(base::Value::Type::DICTIONARY);
-  param.SetStringKey("css selector", "*[name='b']");
+  base::Value::Dict param;
+  param.Set("css selector", "*[name='b']");
   base::Value expected_args(base::Value::Type::LIST);
-  expected_args.Append(param.Clone());
+  expected_args.Append(base::Value(std::move(param)));
   web_view.Verify("frame_id2", &expected_args, result.get());
 }
 
@@ -515,13 +515,13 @@ TEST(CommandsTest, SuccessfulFindChildElement) {
   ASSERT_EQ(kOk, ExecuteFindChildElement(1, &session, &web_view, element_id,
                                          params, &result)
                      .code());
-  base::Value locator_param(base::Value::Type::DICTIONARY);
-  locator_param.SetStringKey("css selector", "div");
-  base::Value root_element_param(base::Value::Type::DICTIONARY);
-  root_element_param.SetStringKey("ELEMENT", element_id);
+  base::Value::Dict locator_param;
+  locator_param.Set("css selector", "div");
+  base::Value::Dict root_element_param;
+  root_element_param.Set("ELEMENT", element_id);
   base::Value expected_args(base::Value::Type::LIST);
-  expected_args.Append(locator_param.Clone());
-  expected_args.Append(root_element_param.Clone());
+  expected_args.Append(base::Value(std::move(locator_param)));
+  expected_args.Append(base::Value(std::move(root_element_param)));
   web_view.Verify("frame_id3", &expected_args, result.get());
 }
 
@@ -551,13 +551,13 @@ TEST(CommandsTest, SuccessfulFindChildElements) {
   ASSERT_EQ(kOk, ExecuteFindChildElements(1, &session, &web_view, element_id,
                                           params, &result)
                      .code());
-  base::Value locator_param(base::Value::Type::DICTIONARY);
-  locator_param.SetStringKey("css selector", ".c");
-  base::Value root_element_param(base::Value::Type::DICTIONARY);
-  root_element_param.SetStringKey("ELEMENT", element_id);
+  base::Value::Dict locator_param;
+  locator_param.Set("css selector", ".c");
+  base::Value::Dict root_element_param;
+  root_element_param.Set("ELEMENT", element_id);
   base::Value expected_args(base::Value::Type::LIST);
-  expected_args.Append(locator_param.Clone());
-  expected_args.Append(root_element_param.Clone());
+  expected_args.Append(base::Value(std::move(locator_param)));
+  expected_args.Append(base::Value(std::move(root_element_param)));
   web_view.Verify("frame_id4", &expected_args, result.get());
 }
 
@@ -699,15 +699,15 @@ void OnSessionCommand(base::RunLoop* run_loop,
 
 TEST(CommandsTest, SuccessNotifyingCommandListeners) {
   SessionThreadMap map;
-  auto threadInfo = std::make_unique<SessionThreadInfo>("1", true);
-  base::Thread* thread = threadInfo->thread();
+  auto thread_info = std::make_unique<SessionThreadInfo>("1", true);
+  base::Thread* thread = thread_info->thread();
   ASSERT_TRUE(thread->Start());
   std::string id("id");
   thread->task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&internal::CreateSessionOnSessionThreadForTesting, id));
 
-  map[id] = std::move(threadInfo);
+  map[id] = std::move(thread_info);
 
   base::Value::Dict params;
   auto listener = std::make_unique<MockCommandListener>();
@@ -781,14 +781,14 @@ void VerifySessionWasDeleted() {
 
 TEST(CommandsTest, ErrorNotifyingCommandListeners) {
   SessionThreadMap map;
-  auto threadInfo = std::make_unique<SessionThreadInfo>("1", true);
-  base::Thread* thread = threadInfo->thread();
+  auto thread_info = std::make_unique<SessionThreadInfo>("1", true);
+  base::Thread* thread = thread_info->thread();
   ASSERT_TRUE(thread->Start());
   std::string id("id");
   thread->task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&internal::CreateSessionOnSessionThreadForTesting, id));
-  map[id] = std::move(threadInfo);
+  map[id] = std::move(thread_info);
 
   // In SuccessNotifyingCommandListenersBeforeCommand, we verified BeforeCommand
   // was called before (as opposed to after) command execution. We don't need to

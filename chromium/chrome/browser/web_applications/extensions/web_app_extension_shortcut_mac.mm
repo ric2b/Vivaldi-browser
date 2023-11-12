@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut_mac.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 
 #include <utility>
 
@@ -10,6 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/one_shot_event.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -18,7 +19,6 @@
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/web_applications/app_shim_registry_mac.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_mac.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -28,6 +28,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 
 using content::BrowserThread;
@@ -69,42 +70,6 @@ class Latch : public base::RefCountedThreadSafe<
 
 namespace web_app {
 
-void RebuildAppAndLaunch(std::unique_ptr<ShortcutInfo> shortcut_info) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  Profile* profile =
-      profile_manager->GetProfileByPath(shortcut_info->profile_path);
-  if (!profile || !profile_manager->IsValidProfile(profile))
-    return;
-
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(profile);
-  const extensions::Extension* extension = registry->GetExtensionById(
-      shortcut_info->extension_id, extensions::ExtensionRegistry::ENABLED);
-  if (!extension || !extension->is_platform_app())
-    return;
-  base::OnceCallback<void(base::Process)> launched_callback = base::DoNothing();
-  base::OnceClosure terminated_callback = base::DoNothing();
-  GetShortcutInfoForApp(
-      extension, profile,
-      base::BindOnce(
-          &LaunchShim, LaunchShimUpdateBehavior::RECREATE_IF_INSTALLED,
-          std::move(launched_callback), std::move(terminated_callback)));
-}
-
-bool MaybeRebuildShortcut(const base::CommandLine& command_line) {
-  if (!command_line.HasSwitch(app_mode::kAppShimError))
-    return false;
-
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&RecordAppShimErrorAndBuildShortcutInfo,
-                     command_line.GetSwitchValuePath(app_mode::kAppShimError)),
-      base::BindOnce(&RebuildAppAndLaunch));
-  return true;
-}
-
 // Mac-specific version of ShouldCreateShortcutFor() used during batch
 // upgrades to ensure all shortcuts a user may still have are repaired when
 // required by a Chrome upgrade.
@@ -122,11 +87,24 @@ bool ShouldUpgradeShortcutFor(Profile* profile,
 void UpdateShortcutsForAllApps(Profile* profile, base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // Wait for extensions to be ready before continuing.
+  auto* extension_system = extensions::ExtensionSystem::Get(profile);
+  if (!extension_system)
+    return;
+  if (!extension_system->is_ready()) {
+    extension_system->ready().Post(
+        FROM_HERE, base::BindOnce(&UpdateShortcutsForAllApps, profile,
+                                  std::move(callback)));
+    return;
+  }
+
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile);
   if (!registry)
     return;
 
+  // Note: This can be replaced with a `BarrierCallback`, and the callback is
+  // now guaranteed to be called on the calling thread.
   scoped_refptr<Latch> latch = new Latch(std::move(callback));
 
   // Update all apps.

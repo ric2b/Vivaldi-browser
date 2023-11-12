@@ -232,8 +232,9 @@ void BestEffortCheckOCSP(const std::string& raw_response,
 
   verify_result->revocation_status = CheckOCSP(
       raw_response, std::string_view(cert_der.data(), cert_der.size()),
-      std::string_view(issuer_der.data(), issuer_der.size()), base::Time::Now(),
-      kMaxRevocationLeafUpdateAge, &verify_result->response_status);
+      std::string_view(issuer_der.data(), issuer_der.size()),
+      base::Time::Now().ToTimeT(), kMaxRevocationLeafUpdateAge.InSeconds(),
+      &verify_result->response_status);
 }
 
 // Records details about the most-specific trust anchor in |hashes|, which is
@@ -382,9 +383,9 @@ bool AreSHA1IntermediatesAllowed() {
   }
 
   absl::optional<SignatureAlgorithm> cert_algorithm =
-      ParseSignatureAlgorithm(der::Input(cert_algorithm_sequence), nullptr);
+      ParseSignatureAlgorithm(der::Input(cert_algorithm_sequence));
   absl::optional<SignatureAlgorithm> tbs_algorithm =
-      ParseSignatureAlgorithm(der::Input(tbs_algorithm_sequence), nullptr);
+      ParseSignatureAlgorithm(der::Input(tbs_algorithm_sequence));
   if (!cert_algorithm || !tbs_algorithm || *cert_algorithm != *tbs_algorithm) {
     return false;
   }

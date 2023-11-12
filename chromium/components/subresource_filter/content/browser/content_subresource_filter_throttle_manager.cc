@@ -153,7 +153,7 @@ ContentSubresourceFilterThrottleManager::
 
 ContentSubresourceFilterThrottleManager::
     ~ContentSubresourceFilterThrottleManager() {
-  web_contents_helper_.WillDestroyThrottleManager(this);
+  web_contents_helper_->WillDestroyThrottleManager(this);
 }
 
 void ContentSubresourceFilterThrottleManager::RenderFrameDeleted(
@@ -868,14 +868,6 @@ void ContentSubresourceFilterThrottleManager::AdScriptDidCreateFencedFrame(
     mojo::ReportBadMessage(
         "AdScriptDidCreateFencedFrame can only be called when fenced frames "
         "are enabled.");
-    return;
-  }
-
-  if (blink::features::kFencedFramesImplementationTypeParam.Get() !=
-      blink::features::FencedFramesImplementationType::kMPArch) {
-    mojo::ReportBadMessage(
-        "AdScriptDidCreateFencedFrame can only be called in MPArch-based "
-        "fenced frames.");
     return;
   }
 

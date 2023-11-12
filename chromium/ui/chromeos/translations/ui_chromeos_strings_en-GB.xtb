@@ -43,8 +43,10 @@
 <translation id="1378727793141957596">Welcome to Google Drive!</translation>
 <translation id="1379911846207762492">You can make files available offline for access when you don't have an Internet connection.</translation>
 <translation id="1383876407941801731">Search</translation>
+<translation id="1388045380422025115">All types</translation>
 <translation id="1395262318152388157">Seek slider</translation>
 <translation id="1399511500114202393">No user certificate</translation>
+<translation id="1403008701842173542">Everywhere</translation>
 <translation id="1404323374378969387">Norwegian</translation>
 <translation id="1433628812591023318">To drop files in Parallels Desktop, the file must be moved to Windows files.</translation>
 <translation id="1435838927755162558">Share folder with Parallels Desktop</translation>
@@ -102,6 +104,7 @@
 <translation id="1834290891154666894">Invalid subject alternative name match entry</translation>
 <translation id="1838709767668011582">Google site</translation>
 <translation id="1853795129690976061">This folder is shared with Linux</translation>
+<translation id="1859422890169495746">This Chromebook</translation>
 <translation id="1864756863218646478">The file could not be found.</translation>
 <translation id="1884013283844450420">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, connect</translation>
 <translation id="1920670151694390848">Malayalam transliteration</translation>
@@ -124,8 +127,8 @@
 <translation id="2079545284768500474">Undo</translation>
 <translation id="2084108471225856927">Device settings</translation>
 <translation id="2084809735218147718">Signing thank you</translation>
-<translation id="2085470240340828803">A file named "<ph name="FILENAME" />" already exists. What do you want to do?</translation>
 <translation id="2088690981887365033">VPN network</translation>
+<translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> items will be deleted and you won't be able to restore them.</translation>
 <translation id="2122305276694332719">Automatically connecting to a hidden network allows others to see your device and some network settings, and is not recommended.</translation>
 <translation id="2125607626296734455">Khmer</translation>
 <translation id="2139545522194199494">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, signal strength <ph name="SIGNAL_STRENGTH" />%, managed by your administrator, connect</translation>
@@ -134,6 +137,7 @@
 <translation id="2143778271340628265">Manual proxy configuration</translation>
 <translation id="2148716181193084225">Today</translation>
 <translation id="2163152940313951844">Invalid character: <ph name="CHARACTER_NAME" /></translation>
+<translation id="2178056538281447670">Microsoft 365</translation>
 <translation id="2184934335987813305">Portuguese with US international PC keyboard</translation>
 <translation id="2193661397560634290"><ph name="SPACE_USED" /> used</translation>
 <translation id="2198315389084035571">Simplified Chinese</translation>
@@ -153,6 +157,7 @@
 <translation id="2307462900900812319">Configure network</translation>
 <translation id="2325650632570794183">This file type is not supported. Please visit the Chrome Web Store to find an app that can open this type of file.</translation>
 <translation id="2326539130272988168">Bulgarian</translation>
+<translation id="2337715497728194187">Share with Bruschetta</translation>
 <translation id="23721837607121582">Download mobile profile, network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">Switch to list view</translation>
 <translation id="2377590462528165447"><ph name="NUMBER_OF_ITEMS" /> folders shared with Linux</translation>
@@ -182,6 +187,7 @@
 <translation id="2544853746127077729">Authentication certificate rejected by network</translation>
 <translation id="255937426064304553">US international</translation>
 <translation id="2563185590376525700">Frog</translation>
+<translation id="2574327434504608656">One folder shared with Bruschetta</translation>
 <translation id="2578394532502990878">Tamil phonetic</translation>
 <translation id="2579959351793446050">Odia</translation>
 <translation id="2602810353103180630">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, blocked by your administrator. Details</translation>
@@ -275,6 +281,7 @@
 <translation id="3408072735282270043">Activate, <ph name="NETWORK_NAME" /></translation>
 <translation id="3408236822532681288">German (Germany) with Neo 2 keyboard</translation>
 <translation id="3414856743105198592">Formatting the removable media is going to erase all data. Do you wish to continue?</translation>
+<translation id="3435143625481187092">Give Bruschetta permission to access files in the <ph name="FOLDER_NAME" /> folder</translation>
 <translation id="3437801641691368414">Created time</translation>
 <translation id="343907260260897561">Instant camera</translation>
 <translation id="3455931012307786678">Estonian</translation>
@@ -320,6 +327,7 @@
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">Rabbit</translation>
 <translation id="3810973564298564668">Manage</translation>
+<translation id="3811408895933919563">English (Pakistan)</translation>
 <translation id="3811494700605067549">1 file selected</translation>
 <translation id="3817579325494460411">Not provided</translation>
 <translation id="3819448694985509187">Incorrect PIN. You have one remaining attempt.</translation>
@@ -354,6 +362,7 @@
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> moved.</translation>
 <translation id="4176286497474237543">Empty bin now</translation>
 <translation id="4179621117429069925">This item is in your bin.</translation>
+<translation id="4181839429935094755"><ph name="NUMBER_OF_ITEMS" /> folders shared with Bruschetta</translation>
 <translation id="4186579485882418952">Enable offline</translation>
 <translation id="4193154014135846272">Google document</translation>
 <translation id="4197674956721858839">Zip selection</translation>
@@ -387,6 +396,7 @@
 <translation id="4398096759193130964">Restore the items or drag them to a new folder outside the bin</translation>
 <translation id="4401287888955153199">Extract all</translation>
 <translation id="4410695710508688828">Extract operation failed. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="4414834425328380570">‘<ph name="FILE_NAME" />’ will be deleted and you won't be able to restore it.</translation>
 <translation id="4418686080762064601">Create a shortcut for your files</translation>
 <translation id="4425149324548788773">My Drive</translation>
 <translation id="4439427728133035643">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, signal strength <ph name="SIGNAL_STRENGTH" />%, connect</translation>
@@ -404,7 +414,6 @@
 <translation id="4552759165874948005"><ph name="NETWORK_TYPE" /> network, signal strength <ph name="SIGNAL_STRENGTH" />%</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> file</translation>
-<translation id="457386861538956877">More...</translation>
 <translation id="4579744207439506346">Added <ph name="ENTRY_NAME" /> to selection.</translation>
 <translation id="4583436353463424810">No recent documents</translation>
 <translation id="4594543368593301662">Showing results for <ph name="SEARCH_TERM" />.</translation>
@@ -415,6 +424,7 @@
 <translation id="4646813851450205600">Czech with QWERTY keyboard</translation>
 <translation id="4656777537938206294">Make files available offline</translation>
 <translation id="4658782175094886150">Person in snow</translation>
+<translation id="466782788172479199">Give Bruschetta permission to access files in your Google Drive. Changes will sync to your other devices.</translation>
 <translation id="4669606053856530811">Members of '<ph name="SOURCE_NAME" />' will lose access unless these items are shared with them.</translation>
 <translation id="467809019005607715">Google Slides</translation>
 <translation id="4690246192099372265">Swedish</translation>
@@ -448,6 +458,7 @@
 <translation id="4850886885716139402">View</translation>
 <translation id="485316830061041779">German</translation>
 <translation id="4867079195717347957">Click to sort the column in descending order.</translation>
+<translation id="4867297348137739678">Last week</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> bytes</translation>
 <translation id="4874569719830985133">Delete forever</translation>
 <translation id="4880214202172289027">Volume slider</translation>
@@ -456,7 +467,6 @@
 <translation id="4900532980794411603">Share with Parallels Desktop</translation>
 <translation id="4902546322522096650">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, connect</translation>
 <translation id="4906580650526544301">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, phone battery <ph name="BATTERY_STATUS" />%, details</translation>
-<translation id="4929673617759421391">Pasting this file is blocked by administrator policy</translation>
 <translation id="4935975195727477204">Gazania Flower</translation>
 <translation id="4943368462779413526">Football</translation>
 <translation id="4961158930123534723">1 folder shared with Parallels Desktop</translation>
@@ -522,6 +532,7 @@
 <translation id="5330145655348521461">These files opened on a different desktop. Move to <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) to view it.</translation>
 <translation id="5330512191124428349">Get info</translation>
 <translation id="5337538975554986899">File access by all URLs except <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
+<translation id="5344246330454251646">Manage Bruschetta sharing</translation>
 <translation id="535792325654997756">Person with cats</translation>
 <translation id="5358764674931277">Frame rate</translation>
 <translation id="5363339716524495120">Input language is Chinese</translation>
@@ -534,6 +545,7 @@
 <translation id="5428105026674456456">Spanish</translation>
 <translation id="5438282218546237410">There are no results for <ph name="SEARCH_TERM" />.</translation>
 <translation id="5449551289610225147">Invalid password</translation>
+<translation id="5459064203055649751">A file named ‘<ph name="FILENAME" />’ already exists. Do you want to replace it with the one that you're moving?</translation>
 <translation id="5463231940765244860">Enter</translation>
 <translation id="5469868506864199649">Italian</translation>
 <translation id="5473333559083690127">Re-enter new PIN</translation>
@@ -550,6 +562,7 @@
 <translation id="5580591966435005537">virtual machine</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5583664733673201137">Punctuation width is Full</translation>
+<translation id="5596627076506792578">More options</translation>
 <translation id="5602622065581044566">Bulgarian with phonetic keyboard</translation>
 <translation id="5605830556594064952">US Dvorak</translation>
 <translation id="5618330573454123917">This file is designed for a computer using Macintosh software. This is not compatible with your device which runs Chrome OS. <ph name="BEGIN_LINK_HELP" />Learn more<ph name="END_LINK_HELP" /> about opening files on Chrome OS.</translation>
@@ -566,6 +579,7 @@
 <translation id="5700087501958648444">Audio info</translation>
 <translation id="5720028165859493293"><ph name="FILE_NAME" /> moved to the bin</translation>
 <translation id="5724172041621205163">Thai with Pattachote keyboard</translation>
+<translation id="57383366388012121">Last month</translation>
 <translation id="5756666464756035725">Hungarian QWERTY</translation>
 <translation id="5763377084591234761">German (Switzerland)</translation>
 <translation id="5769519078756170258">Host or domain to exclude</translation>
@@ -654,6 +668,7 @@
 <translation id="6495925982925244349">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, managed by your administrator, details</translation>
 <translation id="649877868557234318">Extracting <ph name="FILE_NAME" /> to <ph name="FOLDER_NAME" /></translation>
 <translation id="6499681088828539489">Disallow proxies for shared networks</translation>
+<translation id="6503285896705205014">Copying <ph name="COUNT" /> files is blocked by administrator policy</translation>
 <translation id="6509122719576673235">Norwegian</translation>
 <translation id="6528513914570774834">Allow other users of this device to use this network</translation>
 <translation id="653019979737152879">Syncing <ph name="FILE_NAME" />...</translation>
@@ -674,6 +689,7 @@
 <translation id="6710213216561001401">Previous</translation>
 <translation id="6732801395666424405">Certificates not loaded</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
+<translation id="6740270213273127264">Share folder with Bruschetta</translation>
 <translation id="6751256176799620176">1 folder selected</translation>
 <translation id="6755827872271341378">Chrome OS Flex device</translation>
 <translation id="6790428901817661496">Play</translation>
@@ -693,7 +709,6 @@
 <translation id="6874758081814639712">Person doing tai chi</translation>
 <translation id="6876155724392614295">Cycle</translation>
 <translation id="6878261347041253038">Devanagari keyboard (Phonetic)</translation>
-<translation id="6881853403185175088">Office</translation>
 <translation id="6885780034956018177">Snail</translation>
 <translation id="6896758677409633944">Copy</translation>
 <translation id="6898028766943174120">More sub-folders…</translation>
@@ -703,6 +718,7 @@
 <translation id="6935521024859866267">Upside Down</translation>
 <translation id="6943836128787782965">HTTP get failed</translation>
 <translation id="6949408524333579394">Serbian transliteration</translation>
+<translation id="69548399407432279">Last year</translation>
 <translation id="6960565108681981554">Not activated. Contact your operator.</translation>
 <translation id="696203921837389374">Enable syncing over mobile data</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -711,6 +727,7 @@
 <translation id="6973630695168034713">Folders</translation>
 <translation id="6976795442547527108">Lion</translation>
 <translation id="6979158407327259162">Google Drive</translation>
+<translation id="6979737339423435258">All time</translation>
 <translation id="6989942356279143254">Swedish</translation>
 <translation id="6990081529015358884">You have run out of space</translation>
 <translation id="6993826899923627728">These items are in your bin</translation>
@@ -756,6 +773,7 @@
 <translation id="7357762654218998920">This file type is not supported. <ph name="BEGIN_LINK_HELP" />Learn more<ph name="END_LINK_HELP" /> about opening files on Chrome OS.</translation>
 <translation id="7359359531237882347">Copying <ph name="NUMBER_OF_ITEMS" /> items…</translation>
 <translation id="7375951387215729722">File list sorted by <ph name="COLUMN_NAME" /> in descending order.</translation>
+<translation id="7377161162143020057">Copying this file is blocked by administrator policy</translation>
 <translation id="7402503521691663770">Chrome OS Flex devices</translation>
 <translation id="7408870451288633753">Czech</translation>
 <translation id="7417453074306512035">Ethiopic keyboard</translation>
@@ -844,6 +862,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> audio</translation>
 <translation id="8045462269890919536">Romanian</translation>
 <translation id="8049184478152619004">Enter personal unblocking key (PUK)</translation>
+<translation id="8055538340801153769">This folder</translation>
 <translation id="807187749540895545">Extracting <ph name="FILE_NAME" />…</translation>
 <translation id="8087576439476816834">Download, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Shared with me</translation>
@@ -910,6 +929,7 @@
 <translation id="8560515948038859357">Cantonese</translation>
 <translation id="8561206103590473338">Elephant</translation>
 <translation id="8566466896628108558">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, blocked by your administrator, details</translation>
+<translation id="8568374623837201676">Permanently delete this file?</translation>
 <translation id="8569764466147087991">Select a file to open</translation>
 <translation id="8577897833047451336">Croatian</translation>
 <translation id="8578308463707544055">Indonesian</translation>
@@ -977,7 +997,6 @@
 <translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">Kazakh</translation>
 <translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> items extracted.</translation>
-<translation id="9210751050717126865">Pasting <ph name="COUNT" /> files is blocked by administrator policy</translation>
 <translation id="9213073329713032541">Installation successfully started.</translation>
 <translation id="9219103736887031265">Images</translation>
 <translation id="9219908252191632183">Lunar</translation>

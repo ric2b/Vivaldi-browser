@@ -11,8 +11,10 @@
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "content/browser/notifications/notification_event_dispatcher_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
+#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_database_data.h"
@@ -40,6 +42,8 @@ const char kBadMessageInvalidNotificationTriggerTimestamp[] =
 const char kBadMessageInvalidNotificationActionButtons[] =
     "Received a notification with a number of action images that does not "
     "match the number of actions.";
+const char kBadMessageNonPersistentNotificationFromServiceWorker[] =
+    "Received a non-persistent notification from a service worker.";
 
 bool FilterByTag(const std::string& filter_tag,
                  const NotificationDatabaseData& database_data) {
@@ -83,17 +87,21 @@ BlinkNotificationServiceImpl::BlinkNotificationServiceImpl(
     BrowserContext* browser_context,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
     RenderProcessHost* render_process_host,
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     const GURL& document_url,
     const WeakDocumentPtr& weak_document_ptr,
+    RenderProcessHost::NotificationServiceCreatorType creator_type,
     mojo::PendingReceiver<blink::mojom::NotificationService> receiver)
     : notification_context_(notification_context),
       browser_context_(browser_context),
       service_worker_context_(std::move(service_worker_context)),
       render_process_host_id_(render_process_host->GetID()),
-      origin_(origin),
+      storage_key_(storage_key),
+      storage_key_if_3psp_enabled(
+          storage_key.CopyWithForceEnabledThirdPartyStoragePartitioning()),
       document_url_(document_url),
       weak_document_ptr_(weak_document_ptr),
+      creator_type_(creator_type),
       receiver_(this, std::move(receiver)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(notification_context_);
@@ -125,6 +133,22 @@ void BlinkNotificationServiceImpl::OnConnectionError() {
   // |this| has now been deleted.
 }
 
+// Since a non-persistent notification cannot be created by service workers, we
+// report the bad message here and raise a connection error.
+bool BlinkNotificationServiceImpl::IsValidForNonPersistentNotification() {
+  switch (creator_type_) {
+    case RenderProcessHost::NotificationServiceCreatorType::kDocument:
+    case RenderProcessHost::NotificationServiceCreatorType::kDedicatedWorker:
+    case RenderProcessHost::NotificationServiceCreatorType::kSharedWorker:
+      return true;
+    case RenderProcessHost::NotificationServiceCreatorType::kServiceWorker:
+      receiver_.ReportBadMessage(
+          kBadMessageNonPersistentNotificationFromServiceWorker);
+      OnConnectionError();
+      return false;
+  }
+}
+
 void BlinkNotificationServiceImpl::DisplayNonPersistentNotification(
     const std::string& token,
     const blink::PlatformNotificationData& platform_notification_data,
@@ -142,17 +166,25 @@ void BlinkNotificationServiceImpl::DisplayNonPersistentNotification(
   if (CheckPermissionStatus() != blink::mojom::PermissionStatus::GRANTED)
     return;
 
+  if (!IsValidForNonPersistentNotification())
+    return;
+
+  base::UmaHistogramBoolean(
+      "Notifications.NonPersistentNotificationThirdPartyCount",
+      storage_key_if_3psp_enabled.IsThirdPartyContext());
+
   std::string notification_id =
       notification_context_->notification_id_generator()
-          ->GenerateForNonPersistentNotification(origin_, token);
+          ->GenerateForNonPersistentNotification(storage_key_.origin(), token);
 
   NotificationEventDispatcherImpl* event_dispatcher =
       NotificationEventDispatcherImpl::GetInstance();
   event_dispatcher->RegisterNonPersistentNotificationListener(
-      notification_id, std::move(event_listener_remote), weak_document_ptr_);
+      notification_id, std::move(event_listener_remote), weak_document_ptr_,
+      creator_type_);
 
   browser_context_->GetPlatformNotificationService()->DisplayNotification(
-      notification_id, origin_.GetURL(), document_url_,
+      notification_id, storage_key_.origin().GetURL(), document_url_,
       platform_notification_data, notification_resources);
 }
 
@@ -165,9 +197,12 @@ void BlinkNotificationServiceImpl::CloseNonPersistentNotification(
   if (CheckPermissionStatus() != blink::mojom::PermissionStatus::GRANTED)
     return;
 
+  if (!IsValidForNonPersistentNotification())
+    return;
+
   std::string notification_id =
       notification_context_->notification_id_generator()
-          ->GenerateForNonPersistentNotification(origin_, token);
+          ->GenerateForNonPersistentNotification(storage_key_.origin(), token);
 
   browser_context_->GetPlatformNotificationService()->CloseNotification(
       notification_id);
@@ -185,11 +220,8 @@ BlinkNotificationServiceImpl::CheckPermissionStatus() {
   // TODO(crbug.com/987654): It is odd that a service instance can be created
   // for cross-origin subframes, yet the instance is completely oblivious of
   // whether it is serving a top-level browsing context or an embedded one.
-
-  // An empty |document_url_| should mean this is initiated by a worker.
-  // See: `RenderProcessHostImpl::CreateNotificationService` description in
-  // content/browser/renderer_host/render_process_host_impl.h
-  if (!document_url_.is_empty()) {
+  if (creator_type_ ==
+      RenderProcessHost::NotificationServiceCreatorType::kDocument) {
     RenderFrameHost* rfh = weak_document_ptr_.AsRenderFrameHostIfValid();
     if (!rfh) {
       return blink::mojom::PermissionStatus::DENIED;
@@ -204,7 +236,7 @@ BlinkNotificationServiceImpl::CheckPermissionStatus() {
     }
     return browser_context_->GetPermissionController()
         ->GetPermissionStatusForWorker(blink::PermissionType::NOTIFICATIONS,
-                                       rph, origin_);
+                                       rph, storage_key_.origin());
   }
 }
 
@@ -270,12 +302,16 @@ void BlinkNotificationServiceImpl::DisplayPersistentNotification(
     return;
   }
 
+  base::UmaHistogramBoolean(
+      "Notifications.PersistentNotificationThirdPartyCount",
+      storage_key_if_3psp_enabled.IsThirdPartyContext());
+
   int64_t next_persistent_id =
       browser_context_->GetPlatformNotificationService()
           ->ReadNextPersistentNotificationId();
 
   NotificationDatabaseData database_data;
-  database_data.origin = origin_.GetURL();
+  database_data.origin = storage_key_.origin().GetURL();
   database_data.service_worker_registration_id = service_worker_registration_id;
   database_data.notification_data = platform_notification_data;
   database_data.notification_resources = notification_resources;
@@ -284,8 +320,8 @@ void BlinkNotificationServiceImpl::DisplayPersistentNotification(
   // here or in the mojo struct traits).
 
   notification_context_->WriteNotificationData(
-      next_persistent_id, service_worker_registration_id, origin_.GetURL(),
-      database_data,
+      next_persistent_id, service_worker_registration_id,
+      storage_key_.origin().GetURL(), database_data,
       base::BindOnce(&BlinkNotificationServiceImpl::DidWriteNotificationData,
                      weak_factory_for_ui_.GetWeakPtr(), std::move(callback)));
 }
@@ -310,8 +346,8 @@ void BlinkNotificationServiceImpl::ClosePersistentNotification(
     return;
 
   notification_context_->DeleteNotificationData(
-      notification_id, origin_.GetURL(), /* close_notification= */ true,
-      base::DoNothing());
+      notification_id, storage_key_.origin().GetURL(),
+      /* close_notification= */ true, base::DoNothing());
 }
 
 void BlinkNotificationServiceImpl::GetNotifications(
@@ -336,7 +372,7 @@ void BlinkNotificationServiceImpl::GetNotifications(
                      include_triggered, std::move(callback));
 
   notification_context_->ReadAllNotificationDataForServiceWorkerRegistration(
-      origin_.GetURL(), service_worker_registration_id,
+      storage_key_.origin().GetURL(), service_worker_registration_id,
       std::move(read_notification_data_callback));
 }
 

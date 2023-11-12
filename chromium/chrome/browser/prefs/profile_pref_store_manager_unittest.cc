@@ -214,8 +214,8 @@ class ProfilePrefStoreManagerTest : public testing::Test,
     scoped_refptr<PersistentPrefStore> pref_store =
         manager_->CreateProfilePrefStore(
             prefs::CloneTrackedConfiguration(configuration_), kReportingIdCount,
-            base::ThreadTaskRunnerHandle::Get(), std::move(observer),
-            std::move(validation_delegate));
+            base::SingleThreadTaskRunner::GetCurrentDefault(),
+            std::move(observer), std::move(validation_delegate));
     InitializePrefStore(pref_store.get());
     pref_store = nullptr;
   }
@@ -266,7 +266,7 @@ class ProfilePrefStoreManagerTest : public testing::Test,
         validation_delegate.InitWithNewPipeAndPassReceiver());
     pref_store_ = manager_->CreateProfilePrefStore(
         prefs::CloneTrackedConfiguration(configuration_), kReportingIdCount,
-        base::ThreadTaskRunnerHandle::Get(), std::move(observer),
+        base::SingleThreadTaskRunner::GetCurrentDefault(), std::move(observer),
         std::move(validation_delegate));
     pref_store_->AddObserver(&registry_verifier_);
     PrefStoreReadObserver read_observer(pref_store_);
@@ -374,10 +374,9 @@ TEST_F(ProfilePrefStoreManagerTest, ProtectValues) {
 }
 
 TEST_F(ProfilePrefStoreManagerTest, InitializePrefsFromMasterPrefs) {
-  auto master_prefs = std::make_unique<base::DictionaryValue>();
-  master_prefs->Set(kTrackedAtomic, std::make_unique<base::Value>(kFoobar));
-  master_prefs->Set(kProtectedAtomic,
-                    std::make_unique<base::Value>(kHelloWorld));
+  base::Value::Dict master_prefs;
+  master_prefs.Set(kTrackedAtomic, kFoobar);
+  master_prefs.Set(kProtectedAtomic, kHelloWorld);
   EXPECT_TRUE(manager_->InitializePrefsFromMasterPrefs(
       prefs::CloneTrackedConfiguration(configuration_), kReportingIdCount,
       std::move(master_prefs)));

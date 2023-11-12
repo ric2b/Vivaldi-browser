@@ -237,7 +237,8 @@ Browser* LaunchWebAppBrowserAndWait(Profile* profile,
                                     const AppId& app_id,
                                     WindowOpenDisposition disposition) {
   ui_test_utils::UrlLoadObserver url_observer(
-      WebAppProvider::GetForTest(profile)->registrar().GetAppLaunchUrl(app_id),
+      WebAppProvider::GetForTest(profile)->registrar_unsafe().GetAppLaunchUrl(
+          app_id),
       content::NotificationService::AllSources());
   Browser* const app_browser =
       LaunchWebAppBrowser(profile, app_id, disposition);
@@ -322,6 +323,7 @@ void NavigateToURLAndWait(Browser* browser,
                           bool proceed_through_interstitial) {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
+
   {
     content::TestNavigationObserver observer(
         web_contents, content::MessageLoopRunner::QuitMode::DEFERRED);

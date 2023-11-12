@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.toolbar;
 
 import org.chromium.base.FeatureList;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 
 /** Utility class for toolbar code interacting with features and params. */
 public final class ToolbarFeatures {
@@ -14,6 +15,10 @@ public final class ToolbarFeatures {
     // allows half of this work to still be done, allowing measurement of both halves when compared
     // to the original ablation and controls.
     private static final String ALLOW_CAPTURES = "allow_captures";
+    private static final MutableFlagWithSafeDefault sSuppressionFlag =
+            new MutableFlagWithSafeDefault(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES, false);
+    private static final MutableFlagWithSafeDefault sRecordSuppressionMetrics =
+            new MutableFlagWithSafeDefault(ChromeFeatureList.RECORD_SUPPRESSION_METRICS, true);
 
     /** Private constructor to avoid instantiation. */
     private ToolbarFeatures() {}
@@ -33,5 +38,18 @@ public final class ToolbarFeatures {
         // Ablation is enabled, follow the param.
         return !ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.TOOLBAR_SCROLL_ABLATION_ANDROID, ALLOW_CAPTURES, false);
+    }
+
+    public static boolean shouldSuppressCaptures() {
+        return sSuppressionFlag.isEnabled();
+    }
+
+    /**
+     * Returns whether to record metrics from suppression experiment. This allows an arm of
+     * suppression to run without the overhead from reporting any extra metrics in Java. Using a
+     * feature instead of a param to utilize Java side caching.
+     */
+    public static boolean shouldRecordSuppressionMetrics() {
+        return sRecordSuppressionMetrics.isEnabled();
     }
 }

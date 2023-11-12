@@ -4,6 +4,7 @@
 
 module attribution_internals.mojom;
 
+import "components/attribution_reporting/source_registration_error.mojom";
 import "content/browser/attribution_reporting/attribution_reporting.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
@@ -76,8 +77,21 @@ struct WebUIReport {
   WebUIReportData data;
 };
 
-struct DebugKey {
-  uint64 value;
+union DebugReportStatus {
+  int32 http_response_code;
+  string network_error;
+};
+
+struct WebUIDebugReport {
+  url.mojom.Url url;
+  double time;
+  string body;
+  DebugReportStatus status;
+};
+
+union SourceDebugKey {
+  uint64 debug_key;
+  uint64 cleared_debug_key;
 };
 
 // Struct representing a stored attribution source that will be displayed by WebUI.
@@ -89,15 +103,24 @@ struct WebUISource {
   url.mojom.Origin reporting_origin;
   double source_time;
   double expiry_time;
+  double event_report_window_time;
+  double aggregatable_report_window_time;
   attribution_reporting.mojom.SourceType source_type;
   int64 priority;
-  DebugKey? debug_key;
+  SourceDebugKey? debug_key;
   array<uint64> dedup_keys;
   map<string, array<string>> filter_data;
   // The value is a hex-encoded unsigned 128-bit integer.
   map<string, string> aggregation_keys;
   uint64 aggregatable_budget_consumed;
   array<uint64> aggregatable_dedup_keys;
+
+  enum DebugReporting {
+    kDisabled,
+    kEnabled,
+    kNotApplicable,
+  };
+  DebugReporting debug_reporting_enabled;
 
   // Union of `StorableSource::Result` and `StoredSource::AttributionLogic`.
   enum Attributability {
@@ -114,37 +137,18 @@ struct WebUISource {
   Attributability attributability;
 };
 
-struct DedupKey {
+struct TriggerDebugKey {
   uint64 value;
-};
-
-struct WebUIEventTriggerData {
-  uint64 data;
-  int64 priority;
-  DedupKey? dedup_key;
-  map<string, array<string>> filters;
-  map<string, array<string>> not_filters;
-};
-
-struct WebUIAggregatableTriggerData {
-  // Hex-encoded unsigned 128-bit integer.
-  string key_piece;
-  array<string> source_keys;
-  map<string, array<string>> filters;
-  map<string, array<string>> not_filters;
 };
 
 struct WebUITrigger {
   double trigger_time;
   url.mojom.Origin destination_origin;
   url.mojom.Origin reporting_origin;
-  map<string, array<string>> filters;
-  map<string, array<string>> not_filters;
-  DebugKey? debug_key;
-  array<WebUIEventTriggerData> event_triggers;
-  array<WebUIAggregatableTriggerData> aggregatable_triggers;
-  map<string, uint32> aggregatable_values;
-  DedupKey? aggregatable_dedup_key;
+  // String instead of mojo_base.mojom.DictionaryValue because the value is
+  // simply displayed in the UI, never inspected.
+  string registration_json;
+  TriggerDebugKey? cleared_debug_key;
 
   enum Status {
     // Shared statuses:
@@ -157,11 +161,13 @@ struct WebUITrigger {
     kExcessiveReportingOrigins,
     kProhibitedByBrowserPolicy,
     kDeduplicated,
+    kReportWindowPassed,
 
     // Event-level statuses:
     kLowPriority,
     kNoised,
     kNoMatchingConfigurations,
+    kExcessiveEventLevelReports,
 
     // Aggregatable statuses:
     kNoHistograms,
@@ -197,6 +203,9 @@ interface Observer {
 
   // Called when a report is sent, regardless of success.
   OnReportSent(WebUIReport report);
+
+  // Called when a verbose debug report is sent, regardless of success.
+  OnDebugReportSent(WebUIDebugReport report);
 
   // Called when a report is dropped from storage or prevented from being
   // created in the first place.

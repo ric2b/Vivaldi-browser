@@ -50,10 +50,6 @@
 #include "media/filters/dav1d_video_decoder.h"
 #endif
 
-#if BUILDFLAG(ENABLE_LIBGAV1_DECODER)
-#include "media/filters/gav1_video_decoder.h"
-#endif
-
 namespace media {
 
 struct SwVideoTestParams {
@@ -100,16 +96,9 @@ class SoftwareVideoEncoderTest
       decoder_ = std::make_unique<VpxVideoDecoder>();
 #endif
     } else if (codec_ == VideoCodec::kAV1) {
-#if BUILDFLAG(ENABLE_LIBGAV1_DECODER)
-      if (base::FeatureList::IsEnabled(kGav1VideoDecoder)) {
-        decoder_ = std::make_unique<Gav1VideoDecoder>(&media_log_);
-      } else
-#endif
-      {
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
-        decoder_ = std::make_unique<Dav1dVideoDecoder>(&media_log_);
+      decoder_ = std::make_unique<Dav1dVideoDecoder>(&media_log_);
 #endif
-      }
     }
 
     EXPECT_NE(decoder_, nullptr);
@@ -317,6 +306,25 @@ class SoftwareVideoEncoderTest
 
 class H264VideoEncoderTest : public SoftwareVideoEncoderTest {};
 class SVCVideoEncoderTest : public SoftwareVideoEncoderTest {};
+
+TEST_P(SoftwareVideoEncoderTest, StopCallbackWrapping) {
+  VideoEncoder::Options options;
+  options.frame_size = gfx::Size(640, 480);
+  bool init_called = false;
+  bool flush_called = false;
+  encoder_->DisablePostedCallbacks();
+
+  VideoEncoder::EncoderStatusCB init_cb = base::BindLambdaForTesting(
+      [&](EncoderStatus error) { init_called = true; });
+
+  VideoEncoder::EncoderStatusCB flush_cb = base::BindLambdaForTesting(
+      [&](EncoderStatus error) { flush_called = true; });
+  encoder_->Initialize(profile_, options, VideoEncoder::OutputCB(),
+                       std::move(init_cb));
+  encoder_->Flush(std::move(flush_cb));
+  EXPECT_TRUE(init_called);
+  EXPECT_TRUE(flush_called);
+}
 
 TEST_P(SoftwareVideoEncoderTest, InitializeAndFlush) {
   VideoEncoder::Options options;

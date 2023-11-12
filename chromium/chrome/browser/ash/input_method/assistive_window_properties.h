@@ -21,7 +21,7 @@ struct AssistiveWindowProperties {
 
   bool operator==(const AssistiveWindowProperties& other) const;
 
-  ui::ime::AssistiveWindowType type = ui::ime::AssistiveWindowType::kNone;
+  ash::ime::AssistiveWindowType type = ash::ime::AssistiveWindowType::kNone;
   bool visible = false;
   std::u16string announce_string;
   std::vector<std::u16string> candidates;
@@ -31,12 +31,5 @@ struct AssistiveWindowProperties {
 
 }  // namespace input_method
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-namespace input_method {
-using ::ash::input_method::AssistiveWindowProperties;
-}  // namespace input_method
-}  // namespace chromeos
 
 #endif  //  CHROME_BROWSER_ASH_INPUT_METHOD_ASSISTIVE_WINDOW_PROPERTIES_H_

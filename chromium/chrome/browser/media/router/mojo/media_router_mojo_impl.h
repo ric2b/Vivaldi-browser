@@ -49,7 +49,9 @@ namespace media_router {
 enum class MediaRouteProviderWakeReason;
 
 // MediaRouter implementation that delegates calls to a MediaRouteProvider.
-class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
+class MediaRouterMojoImpl : public MediaRouterBase,
+                            public mojom::MediaRouter,
+                            public base::SupportsWeakPtr<MediaRouterMojoImpl> {
  public:
   MediaRouterMojoImpl(const MediaRouterMojoImpl&) = delete;
   MediaRouterMojoImpl& operator=(const MediaRouterMojoImpl&) = delete;
@@ -215,7 +217,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   // Represents a query to the MediaRouteProviders for media routes and caches
   // media routes returned by MRPs. Holds observers for the query.
   //
-  // NOTE: If the to-do below for providers_for_routes_ is fixed, then this
+  // NOTE: If the to-do below for providers_to_routes_ is fixed, then this
   // entire class can be replaced with a std::vector<MediaRoute> and a
   // base::ObserverList of observers.
   class MediaRoutesQuery {
@@ -259,12 +261,12 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
     absl::optional<std::vector<MediaRoute>> cached_route_list_;
 
     // Per-MRP lists of routes for the query.
-    // TODO(crbug.com/761493): Consider making MRP ID an attribute of
+    // TODO(crbug.com/1374496): Consider making MRP ID an attribute of
     // MediaRoute, so that we can simplify these into vectors.
     base::flat_map<mojom::MediaRouteProviderId, std::vector<MediaRoute>>
         providers_to_routes_;
 
-    base::ObserverList<MediaRoutesObserver>::Unchecked observers_;
+    base::ObserverList<MediaRoutesObserver> observers_;
   };
 
   // See note in OnDesktopPickerDone().
@@ -301,12 +303,15 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void UnregisterMediaSinksObserver(MediaSinksObserver* observer) override;
   void RegisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
   void UnregisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
-  void RegisterRouteMessageObserver(RouteMessageObserver* observer) override;
-  void UnregisterRouteMessageObserver(RouteMessageObserver* observer) override;
+  void RegisterPresentationConnectionMessageObserver(
+      PresentationConnectionMessageObserver* observer) override;
+  void UnregisterPresentationConnectionMessageObserver(
+      PresentationConnectionMessageObserver* observer) override;
 
   // Notifies |observer| of any existing cached routes, if it is still
   // registered.
-  void NotifyOfExistingRoutesIfRegistered(MediaRoutesObserver* observer) const;
+  void NotifyOfExistingRoutes(
+      base::WeakPtr<MediaRoutesObserver> observer) const;
 
   // mojom::MediaRouter implementation.
   void OnIssue(const IssueInfo& issue) override;
@@ -422,12 +427,13 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
       sinks_queries_;
 
   // Holds observers for media route updates and a map of providers to route
-  // ids..
+  // ids.
   MediaRoutesQuery routes_query_;
 
-  using RouteMessageObserverList =
-      base::ObserverList<RouteMessageObserver>::Unchecked;
-  base::flat_map<MediaRoute::Id, std::unique_ptr<RouteMessageObserverList>>
+  using PresentationConnectionMessageObserverList =
+      base::ObserverList<PresentationConnectionMessageObserver>;
+  base::flat_map<MediaRoute::Id,
+                 std::unique_ptr<PresentationConnectionMessageObserverList>>
       message_observers_;
 
   // Receivers for Mojo remotes to |this| held by media route providers.
@@ -442,8 +448,6 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   // Collects logs from the Media Router and the native Media Route Providers.
   // TODO(crbug.com/1077138): Limit logging before Media Router usage.
   LoggerImpl logger_;
-
-  base::WeakPtrFactory<MediaRouterMojoImpl> weak_factory_{this};
 };
 
 }  // namespace media_router

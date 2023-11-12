@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -38,7 +39,14 @@ constexpr int kAutoDisableAccessibilityEventCount = 3;
 
 // Updating Active/Inactive time on every accessibility api calls would not be
 // good for perf. Instead, delay the update task.
-constexpr int kOnAccessibilityUsageUpdateDelaySecs = 1;
+constexpr int kOnAccessibilityUsageUpdateDelaySecs = 5;
+
+// How long to wait after `OnScreenReaderStopped` was called before actually
+// disabling accessibility support. The main use case is when a screen reader
+// or other client is toggled off and on in rapid succession. We don't want to
+// destroy the full accessibility tree only to immediately recreate it because
+// doing so is bad for performance.
+constexpr int kDisableAccessibilitySupportDelaySecs = 2;
 
 // Record a histograms for an accessibility mode when it's enabled.
 void RecordNewAccessibilityModeFlags(
@@ -108,11 +116,30 @@ BrowserAccessibilityStateImpl::~BrowserAccessibilityStateImpl() {
 }
 
 void BrowserAccessibilityStateImpl::OnScreenReaderDetected() {
+  // Clear any previous, now obsolete, request to disable support.
+  disable_accessibility_request_time_ = base::TimeTicks();
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableRendererAccessibility)) {
     return;
   }
   EnableAccessibility();
+}
+
+void BrowserAccessibilityStateImpl::OnScreenReaderStopped() {
+  disable_accessibility_request_time_ = ui::EventTimeForNow();
+
+  // If a screen reader or other client using accessibility API is toggled off
+  // and on in short succession, we risk destroying and recreating large
+  // accessibility trees unnecessarily which is bad for performance. So we post
+  // a delayed task here, and only reset accessibility mode if nothing has
+  // requested accessibility support be re-enabled after that delay has passed.
+  GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(
+          &BrowserAccessibilityStateImpl::MaybeResetAccessibilityMode,
+          weak_factory_.GetWeakPtr()),
+      base::Seconds(kDisableAccessibilitySupportDelaySecs));
 }
 
 void BrowserAccessibilityStateImpl::EnableAccessibility() {
@@ -132,6 +159,25 @@ void BrowserAccessibilityStateImpl::ResetAccessibilityModeValue() {
   accessibility_mode_ = ui::AXMode();
   if (force_renderer_accessibility_)
     AddAccessibilityModeFlags(ui::kAXModeComplete);
+}
+
+void BrowserAccessibilityStateImpl::MaybeResetAccessibilityMode() {
+  // `OnScreenReaderStopped` sets `disable_accessibility_request_time_`, and
+  // `OnScreenReaderDetected` clears it. If we no longer have a request time
+  // to disable accessibility, this delayed task is obsolete.
+  if (disable_accessibility_request_time_.is_null())
+    return;
+
+  // `OnScreenReaderStopped` could be called multiple times prior to the delay
+  // expiring. The value of `disable_accessibility_request_time_` is updated
+  // for every call. If we're running this task prior to the delay expiring,
+  // this request time to disable accessibility is obsolete.
+  if ((base::TimeTicks::Now() - disable_accessibility_request_time_) <
+      base::Seconds(kDisableAccessibilitySupportDelaySecs)) {
+    return;
+  }
+
+  ResetAccessibilityMode();
 }
 
 void BrowserAccessibilityStateImpl::ResetAccessibilityMode() {
@@ -313,6 +359,11 @@ void BrowserAccessibilityStateImpl::UpdateUniqueUserHistograms() {}
 void BrowserAccessibilityStateImpl::SetImageLabelsModeForProfile(
     bool enabled,
     BrowserContext* profile) {}
+
+bool BrowserAccessibilityStateImpl::HasSpokenFeedbackServicePresent() {
+  NOTIMPLEMENTED();
+  return false;
+}
 #endif
 
 void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(ui::AXMode mode) {
@@ -347,7 +398,7 @@ void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(ui::AXMode mode) {
   ui::AXPlatformNode::NotifyAddAXModeFlags(accessibility_mode_);
 
   // Retrieve only newly added modes for the purposes of logging.
-  int new_mode_flags = mode.mode() & (~previous_mode.mode());
+  int new_mode_flags = mode.flags() & (~previous_mode.flags());
   if (new_mode_flags & ui::AXMode::kNativeAPIs)
     RecordNewAccessibilityModeFlags(
         ui::AXMode::ModeFlagHistogramValue::UMA_AX_MODE_NATIVE_APIS);
@@ -394,8 +445,8 @@ void BrowserAccessibilityStateImpl::RemoveAccessibilityModeFlags(
   if (force_renderer_accessibility_ && mode == ui::kAXModeComplete)
     return;
 
-  int raw_flags =
-      accessibility_mode_.mode() ^ (mode.mode() & accessibility_mode_.mode());
+  int raw_flags = accessibility_mode_.flags() ^
+                  (mode.flags() & accessibility_mode_.flags());
   accessibility_mode_ = raw_flags;
 
   // Proxy the new AXMode to AXPlatformNode.

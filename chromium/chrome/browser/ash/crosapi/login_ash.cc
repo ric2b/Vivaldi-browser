@@ -56,12 +56,12 @@ void LoginAsh::LaunchManagedGuestSession(
     ash::UserContext context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
                              user->GetAccountId());
     if (password) {
-      context.SetKey(chromeos::Key(*password));
+      context.SetKey(ash::Key(*password));
       context.SetCanLockManagedGuestSession(true);
     }
 
-    chromeos::ExistingUserController* existing_user_controller =
-        chromeos::ExistingUserController::current_controller();
+    auto* existing_user_controller =
+        ash::ExistingUserController::current_controller();
     existing_user_controller->Login(context, ash::SigninSpecifics());
     std::move(callback).Run(absl::nullopt);
     return;
@@ -155,13 +155,13 @@ void LoginAsh::LaunchSamlUserSession(const std::string& email,
     return;
   }
 
-  chromeos::UserContext context(user_manager::USER_TYPE_REGULAR,
-                                AccountId::FromUserEmailGaiaId(email, gaia_id));
-  chromeos::Key key(password);
+  ash::UserContext context(user_manager::USER_TYPE_REGULAR,
+                           AccountId::FromUserEmailGaiaId(email, gaia_id));
+  ash::Key key(password);
   key.SetLabel(ash::kCryptohomeGaiaKeyLabel);
   context.SetKey(key);
-  context.SetPasswordKey(chromeos::Key(password));
-  context.SetAuthFlow(chromeos::UserContext::AUTH_FLOW_GAIA_WITH_SAML);
+  context.SetPasswordKey(ash::Key(password));
+  context.SetAuthFlow(ash::UserContext::AUTH_FLOW_GAIA_WITH_SAML);
   context.SetIsUsingSamlPrincipalsApi(false);
   context.SetAuthCode(oauth_code);
 
@@ -330,8 +330,8 @@ absl::optional<std::string> LoginAsh::CanLaunchSession() {
     return extensions::login_api_errors::kAlreadyActiveSession;
   }
 
-  chromeos::ExistingUserController* existing_user_controller =
-      chromeos::ExistingUserController::current_controller();
+  auto* existing_user_controller =
+      ash::ExistingUserController::current_controller();
   if (existing_user_controller->IsSigninInProgress())
     return extensions::login_api_errors::kAnotherLoginAttemptInProgress;
 
@@ -385,7 +385,7 @@ void LoginAsh::UnlockSession(const std::string& password,
       user_manager::UserManager::Get();
   const user_manager::User* active_user = user_manager->GetActiveUser();
   ash::UserContext context(active_user->GetType(), active_user->GetAccountId());
-  context.SetKey(chromeos::Key(password));
+  context.SetKey(ash::Key(password));
 
   chromeos::LoginApiLockHandler* handler = chromeos::LoginApiLockHandler::Get();
   handler->Authenticate(

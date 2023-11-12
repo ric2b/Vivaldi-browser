@@ -43,6 +43,7 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
@@ -103,15 +104,12 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   } else {
     scoped_refptr<gles2::FeatureInfo> feature_info = new gles2::FeatureInfo(
         manager->gpu_driver_bug_workarounds(), manager->gpu_feature_info());
-    gpu::GpuMemoryBufferFactory* gmb_factory =
-        manager->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
         manager->gpu_preferences(), gles2::PassthroughCommandDecoderSupported(),
         manager->mailbox_manager(), CreateMemoryTracker(),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
         init_params.attribs.bind_generates_resource,
-        gmb_factory ? gmb_factory->AsImageFactory() : nullptr,
         manager->watchdog() /* progress_reporter */,
         manager->gpu_feature_info(), manager->discardable_manager(),
         manager->passthrough_discardable_manager(),
@@ -147,8 +145,9 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     // We hit this code path when creating the onscreen render context
     // used for compositing on low-end Android devices.
     //
-    // TODO(klausw): explicitly copy rgba sizes? Currently the formats
-    // supported are only RGB565 and default (RGBA8888).
+    // Currently the only formats supported are RGB565 and default (RGBA8888).
+    // See also comments in ui/gl/gl_surface_format.h in case there's
+    // a use case requiring more fine-grained control.
     surface_format.SetRGB565();
     DVLOG(1) << __FUNCTION__ << ": Choosing RGB565 mode.";
   }
@@ -161,22 +160,34 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     use_virtualized_gl_context_ = false;
 #endif
 
+  gpu::GpuMemoryBufferFactory* gmb_factory =
+      manager->gpu_memory_buffer_factory();
+
   command_buffer_ = std::make_unique<CommandBufferService>(
       this, context_group_->memory_tracker());
   gles2_decoder_ = gles2::GLES2Decoder::Create(
-      this, command_buffer_.get(), manager->outputter(), context_group_.get());
+      this, command_buffer_.get(), manager->outputter(), context_group_.get(),
+      gmb_factory ? gmb_factory->AsImageFactory() : nullptr);
   set_decoder_context(std::unique_ptr<DecoderContext>(gles2_decoder_));
 
   sync_point_client_state_ =
       channel_->sync_point_manager()->CreateSyncPointClientState(
           CommandBufferNamespace::GPU_IO, command_buffer_id_, sequence_id_);
 
+  // TODO(crbug.com/1251724): Remove this after testing.
+  // Only enable multiple displays on ANGLE/Metal and only behind a feature.
+  bool force_default_display = true;
+  if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE &&
+      gl::GetANGLEImplementation() == gl::ANGLEImplementation::kMetal &&
+      features::SupportsEGLDualGPURendering()) {
+    force_default_display = false;
+  }
   gl::GpuPreference gpu_preference = init_params.attribs.gpu_preference;
   // If the user queries a low-power context, it's better to use whatever the
   // default GPU used by Chrome is, which may be different than the low-power
   // GPU determined by GLDisplayManager.
   if (gpu_preference == gl::GpuPreference::kLowPower ||
-      gpu_preference == gl::GpuPreference::kNone) {
+      gpu_preference == gl::GpuPreference::kNone || force_default_display) {
     gpu_preference = gl::GpuPreference::kDefault;
   }
   gl::GLDisplay* display = gl::GetDisplay(gpu_preference);
@@ -211,9 +222,8 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
       }
       // Currently, we can't separately control alpha channel for surfaces,
       // it's generally enabled by default except for RGB565 and (on desktop)
-      // smaller-than-32bit formats.
-      //
-      // TODO(klausw): use init_params.attribs.alpha_size here if possible.
+      // smaller-than-32bit formats. If there's a future use case that
+      // requires this, it should use init_params.attribs.alpha_size here.
     }
     if (!surface_format.IsCompatible(default_surface->GetFormat())) {
       DVLOG(1) << __FUNCTION__ << ": Hit the OwnOffscreenSurface path";
@@ -226,7 +236,13 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
         return gpu::ContextResult::kSurfaceFailure;
       }
     } else {
-      surface_ = default_surface;
+      if (default_surface->GetGLDisplay() == display) {
+        surface_ = default_surface;
+      } else {
+        // The default surface was created on a different display, create a
+        // new surface on the requested display.
+        surface_ = gl::init::CreateOffscreenGLSurface(display, gfx::Size());
+      }
     }
   } else {
     switch (init_params.attribs.color_space) {
@@ -242,7 +258,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
             gl::GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3);
         break;
     }
-    surface_ = ImageTransportSurface::CreateNativeSurface(
+    surface_ = ImageTransportSurface::CreateNativeGLSurface(
         display, weak_ptr_factory_.GetWeakPtr(), surface_handle_,
         surface_format);
     if (!surface_ || !surface_->Initialize(surface_format)) {
@@ -409,12 +425,9 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
 }
 
 #if BUILDFLAG(IS_WIN)
-void GLES2CommandBufferStub::DidCreateAcceleratedSurfaceChildWindow(
-    SurfaceHandle parent_window,
-    SurfaceHandle child_window) {
-  GpuChannelManager* gpu_channel_manager = channel_->gpu_channel_manager();
-  gpu_channel_manager->delegate()->SendCreatedChildWindow(parent_window,
-                                                          child_window);
+void GLES2CommandBufferStub::AddChildWindowToBrowser(
+    gpu::SurfaceHandle child_window) {
+  NOTREACHED();
 }
 #endif
 
@@ -453,6 +466,16 @@ void GLES2CommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
                                                  bool is_lost) {
   // No need to pull texture updates.
   gles2_decoder_->ReturnFrontBuffer(mailbox, is_lost);
+}
+
+void GLES2CommandBufferStub::OnSetDefaultFramebufferSharedImage(
+    const Mailbox& mailbox,
+    int samples_count,
+    bool preserve,
+    bool needs_depth,
+    bool needs_stencil) {
+  gles2_decoder_->SetDefaultFramebufferSharedImage(
+      mailbox, samples_count, preserve, needs_depth, needs_stencil);
 }
 
 void GLES2CommandBufferStub::CreateGpuFenceFromHandle(

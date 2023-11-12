@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
@@ -68,6 +69,7 @@ import org.chromium.net.HttpUtil;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.url.GURL;
+import org.chromium.url.Origin;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -994,7 +996,6 @@ public class IntentHandler {
             // Ignore all intents that specify a Chrome internal scheme if they did not come from
             // a trustworthy source.
             String scheme = getSanitizedUrlScheme(url);
-            recordFirstPartyToInternalScheme(scheme, url, intent, isInternal, isFromChrome);
             if (!isInternal) {
                 if (intentHasUnsafeInternalScheme(scheme, url, intent)) {
                     Log.w(TAG, "Ignoring internal Chrome URL from untrustworthy source.");
@@ -1557,18 +1558,6 @@ public class IntentHandler {
     }
 
     /**
-     * Records whether the intent comes from a non-Chrome first party and contains a Chrome internal
-     * scheme. This is so we can determine whether we can cut the feature.
-     */
-    private static void recordFirstPartyToInternalScheme(
-            String scheme, String url, Intent intent, boolean isInternal, boolean isChrome) {
-        if (!isInternal || isChrome) return;
-
-        RecordHistogram.recordBooleanHistogram("MobileIntent.FirstPartyToInternalScheme",
-                intentHasUnsafeInternalScheme(scheme, url, intent));
-    }
-
-    /**
      * Create a LoadUrlParams for handling a VIEW intent.
      */
     public LoadUrlParams createLoadUrlParamsForIntent(String url, Intent intent) {
@@ -1621,11 +1610,18 @@ public class IntentHandler {
                         bookmarkId.getType() == BookmarkType.NORMAL ? bookmarkId.getId() : -1);
                 loadUrlParams.setNavigationUIDataSupplier(navData::createUnownedNativeCopy);
             }
+        } else {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.OPAQUE_ORIGIN_FOR_INCOMING_INTENTS)
+                    || metadata != null && metadata.isRendererInitiated()) {
+                // Intent is not coming from Chrome, the sender can't be trusted.
+                // Even if the feature isn't enabled we still need to apply an opaque Origin to
+                // intents coming from the renderer. https://crbug.com/1368230
+                loadUrlParams.setInitiatorOrigin(Origin.createOpaqueOrigin());
+            }
         }
         loadUrlParams.setVerbatimHeaders(headers);
         loadUrlParams.setIsRendererInitiated(
                 metadata == null ? false : metadata.isRendererInitiated());
-        loadUrlParams.setInitiatorOrigin(metadata == null ? null : metadata.getInitiatorOrigin());
 
         return loadUrlParams;
     }

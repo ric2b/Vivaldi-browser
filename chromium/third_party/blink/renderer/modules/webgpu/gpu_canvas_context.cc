@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_canvas_configuration.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_canvasrenderingcontext2d_gpucanvascontext_imagebitmaprenderingcontext_webgl2renderingcontext_webglrenderingcontext.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_gpucanvascontext_imagebitmaprenderingcontext_offscreencanvasrenderingcontext2d_webgl2renderingcontext_webglrenderingcontext.h"
+#include "third_party/blink/renderer/core/html/canvas/predefined_color_space.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
@@ -19,11 +20,13 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_texture.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_mailbox_texture.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_texture_alpha_clearer.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 
 namespace blink {
 
@@ -55,6 +58,14 @@ GPUCanvasContext::GPUCanvasContext(
   texture_descriptor_.sampleCount = 1;
 }
 
+GPUCanvasContext::~GPUCanvasContext() {
+  // Perform destruction that's safe to do inside a GC (as in it doesn't touch
+  // other GC objects).
+  if (swap_buffers_) {
+    swap_buffers_->Neuter();
+  }
+}
+
 void GPUCanvasContext::Trace(Visitor* visitor) const {
   visitor->Trace(device_);
   visitor->Trace(texture_);
@@ -78,7 +89,7 @@ SkColorInfo GPUCanvasContext::CanvasRenderingContextSkColorInfo() const {
                      alpha_mode_ == V8GPUCanvasAlphaMode::Enum::kOpaque
                          ? kOpaque_SkAlphaType
                          : kPremul_SkAlphaType,
-                     SkColorSpace::MakeSRGB());
+                     PredefinedColorSpaceToSkColorSpace(color_space_));
 }
 
 void GPUCanvasContext::Stop() {
@@ -198,7 +209,7 @@ bool GPUCanvasContext::PushFrame() {
   // encapsulate an external mailbox, synctoken and release callback.
   SkImageInfo resource_info = SkImageInfo::Make(
       transferable_resource.size.width(), transferable_resource.size.height(),
-      viz::ResourceFormatToClosestSkColorType(
+      viz::ToClosestSkColorType(
           /*gpu_compositing=*/true, transferable_resource.format),
       kPremul_SkAlphaType);
   auto canvas_resource = ExternalCanvasResource::Create(
@@ -248,7 +259,7 @@ ImageBitmap* GPUCanvasContext::TransferToImageBitmap(
   const auto& sk_image_sync_token =
       transferable_resource.mailbox_holder.sync_token;
 
-  auto sk_color_type = viz::ResourceFormatToClosestSkColorType(
+  auto sk_color_type = viz::ToClosestSkColorType(
       /*gpu_compositing=*/true, transferable_resource.format);
 
   const SkImageInfo sk_image_info = SkImageInfo::Make(
@@ -262,7 +273,7 @@ ImageBitmap* GPUCanvasContext::TransferToImageBitmap(
           transferable_resource.mailbox_holder.texture_target,
           /* is_origin_top_left = */ kBottomLeft_GrSurfaceOrigin,
           GetContextProviderWeakPtr(), base::PlatformThread::CurrentRef(),
-          Thread::Current()->GetDeprecatedTaskRunner(),
+          ThreadScheduler::Current()->CleanupTaskRunner(),
           std::move(release_callback),
           /*supports_display_compositing=*/true,
           transferable_resource.is_overlay_candidate));
@@ -364,20 +375,15 @@ void GPUCanvasContext::configure(const GPUCanvasConfiguration* descriptor,
     return;
   }
 
-  // TODO(crbug.com/1241375): Support additional color spaces for external
-  // textures.
-  if (descriptor->colorSpace().AsEnum() !=
-      V8PredefinedColorSpace::Enum::kSRGB) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kOperationError,
-        "colorSpace !== 'srgb' isn't supported yet.");
+  if (!ValidateAndConvertColorSpace(descriptor->colorSpace(), color_space_,
+                                    exception_state)) {
     return;
   }
 
   swap_buffers_ = base::AdoptRef(new WebGPUSwapBufferProvider(
       this, device_->GetDawnControlClient(), device_->GetHandle(),
       static_cast<WGPUTextureUsage>(texture_descriptor_.usage),
-      texture_descriptor_.format));
+      texture_descriptor_.format, color_space_));
   swap_buffers_->SetFilterQuality(filter_quality_);
 
   // Note: SetContentsOpaque is only an optimization hint. It doesn't

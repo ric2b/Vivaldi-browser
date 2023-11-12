@@ -20,7 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
 #include "base/time/default_clock.h"
-#include "chromeos/system/devicemode.h"
+#include "chromeos/ash/components/system/devicemode.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/ash/ime_keyboard.h"
 #include "ui/base/ime/ash/input_method_manager.h"
@@ -29,11 +29,38 @@
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_key_event_dispatcher.h"
 #include "ui/base/ime/text_input_client.h"
+#include "ui/base/ime/text_input_flags.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ui {
+namespace {
+
+template <typename T>
+T ConvertTextInputFlagToEnum(int flags, int flag_on_value, int flag_off_value) {
+  if (flags & flag_on_value) {
+    return T::kEnabled;
+  }
+  if (flags & flag_off_value) {
+    return T::kDisabled;
+  }
+  return T::kUnspecified;
+}
+
+AutocapitalizationMode ConvertAutocapitalizationMode(int flags) {
+  if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE)
+    return AutocapitalizationMode::kNone;
+  if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS)
+    return AutocapitalizationMode::kCharacters;
+  if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS)
+    return AutocapitalizationMode::kWords;
+  if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_SENTENCES)
+    return AutocapitalizationMode::kSentences;
+  return AutocapitalizationMode::kUnspecified;
+}
+
+}  // namespace
 
 ui::TextInputMethod* GetEngine() {
   auto* bridge = ui::IMEBridge::Get();
@@ -48,7 +75,7 @@ InputMethodAsh::InputMethodAsh(ImeKeyEventDispatcher* ime_key_event_dispatcher)
 }
 
 InputMethodAsh::~InputMethodAsh() {
-  ConfirmCompositionText(/* reset_engine */ true, /* keep_selection */ false);
+  ConfirmComposition(/* reset_engine */ true);
   // We are dead, so we need to ask the client to stop relying on us.
   OnInputMethodChanged();
 
@@ -148,13 +175,22 @@ ui::EventDispatchDetails InputMethodAsh::DispatchKeyEvent(ui::KeyEvent* event) {
     return DispatchKeyEventPostIME(event);
   }
 
+  // Resets previous event dispatch details before invoking IME engine's
+  // `ProcessKeyEvent`. `ProcessKeyEventDone` sets its value when it
+  // re-dispatches the key events. If `ProcessKeyEventDone` is invoked
+  // synchronously by `ProcessKeyEvent`, `dispatch_details_` would have correct
+  // dispatch details data to return. This is important because an `EventTarget`
+  // could be destroyed under `ProcessKeyEventDone`.
+  // See http://crbug.com/1392491.
+  dispatch_details_.reset();
+
   handling_key_event_ = true;
   GetEngine()->ProcessKeyEvent(
       *event, base::BindOnce(&InputMethodAsh::ProcessKeyEventDone,
                              weak_ptr_factory_.GetWeakPtr(),
                              // Pass the ownership of the new copied event.
                              base::Owned(new ui::KeyEvent(*event))));
-  return ui::EventDispatchDetails();
+  return dispatch_details_.value_or(ui::EventDispatchDetails());
 }
 
 void InputMethodAsh::ProcessKeyEventDone(
@@ -179,8 +215,7 @@ void InputMethodAsh::ProcessKeyEventDone(
         // keys because, for example, if the IME handles Shift+A, then we don't
         // want the Shift key to confirm the composition text. Only confirm the
         // composition text when the IME does not handle the full key combo.
-        ConfirmCompositionText(/* reset_engine */ true,
-                               /* keep_selection */ true);
+        ConfirmComposition(/* reset_engine */ true);
       }
     }
   }
@@ -189,8 +224,8 @@ void InputMethodAsh::ProcessKeyEventDone(
         is_handled_by_char_composer
             ? ui::ime::KeyEventHandledState::kHandledByIME
             : handled_state;
-    std::ignore = ProcessKeyEventPostIME(event, handled_state_to_process,
-                                         /* stopped_propagation */ false);
+    dispatch_details_ = ProcessKeyEventPostIME(event, handled_state_to_process,
+                                               /* stopped_propagation */ false);
   }
   handling_key_event_ = false;
 }
@@ -203,14 +238,12 @@ void InputMethodAsh::OnTextInputTypeChanged(TextInputClient* client) {
 
   ui::TextInputMethod* engine = GetEngine();
   if (engine) {
-    ui::TextInputMethod::InputContext context(
-        GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
-        GetClientFocusReason(), GetClientShouldDoLearning());
+    const ui::TextInputMethod::InputContext context = GetInputContext();
     // When focused input client is not changed, a text input type change
     // should cause blur/focus events to engine. The focus in to or out from
     // password field should also notify engine.
-    engine->FocusOut();
-    engine->FocusIn(context);
+    engine->Blur();
+    engine->Focus(context);
   }
 
   OnCaretBoundsChanged(client);
@@ -310,9 +343,8 @@ bool InputMethodAsh::IsCandidatePopupOpen() const {
 }
 
 VirtualKeyboardController* InputMethodAsh::GetVirtualKeyboardController() {
-  auto* manager = ash::input_method::InputMethodManager::Get();
-  if (manager) {
-    if (auto* controller = manager->GetVirtualKeyboardController())
+  if (auto* engine = GetEngine()) {
+    if (auto* controller = engine->GetVirtualKeyboardController())
       return controller;
   }
   return InputMethodBase::GetVirtualKeyboardController();
@@ -344,7 +376,7 @@ void InputMethodAsh::OnBlur() {
 
 void InputMethodAsh::OnWillChangeFocusedClient(TextInputClient* focused_before,
                                                TextInputClient* focused) {
-  ConfirmCompositionText(/* reset_engine */ true, /* keep_selection */ false);
+  ConfirmComposition(/* reset_engine */ true);
 
   // Remove any autocorrect range in the unfocused TextInputClient.
   gfx::Range text_range;
@@ -353,7 +385,7 @@ void InputMethodAsh::OnWillChangeFocusedClient(TextInputClient* focused_before,
   }
 
   if (GetEngine())
-    GetEngine()->FocusOut();
+    GetEngine()->Blur();
 }
 
 void InputMethodAsh::OnDidChangeFocusedClient(TextInputClient* focused_before,
@@ -364,10 +396,7 @@ void InputMethodAsh::OnDidChangeFocusedClient(TextInputClient* focused_before,
   UpdateContextFocusState();
 
   if (GetEngine()) {
-    ui::TextInputMethod::InputContext context(
-        GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
-        GetClientFocusReason(), GetClientShouldDoLearning());
-    GetEngine()->FocusIn(context);
+    GetEngine()->Focus(GetInputContext());
   }
 
   OnCaretBoundsChanged(GetTextInputClient());
@@ -499,16 +528,7 @@ bool InputMethodAsh::AddGrammarFragments(
   return GetTextInputClient()->AddGrammarFragments(fragments);
 }
 
-bool InputMethodAsh::SetSelectionRange(uint32_t start, uint32_t end) {
-  if (IsTextInputTypeNone())
-    return false;
-  typing_session_manager_.Heartbeat();
-  return GetTextInputClient()->SetEditableSelectionRange(
-      gfx::Range(start, end));
-}
-
-void InputMethodAsh::ConfirmCompositionText(bool reset_engine,
-                                            bool keep_selection) {
+void InputMethodAsh::ConfirmComposition(bool reset_engine) {
   TextInputClient* client = GetTextInputClient();
   // TODO(b/223075193): Quick fix for the case where we have a pending commit.
   // Without this, then we would lose the pending commit after confirming the
@@ -529,7 +549,7 @@ void InputMethodAsh::ConfirmCompositionText(bool reset_engine,
   }
   if (client && client->HasCompositionText()) {
     const size_t characters_committed =
-        client->ConfirmCompositionText(keep_selection);
+        client->ConfirmCompositionText(/*keep_selection*/ true);
     typing_session_manager_.CommitCharacters(characters_committed);
   }
   // See https://crbug.com/984472.
@@ -570,10 +590,7 @@ void InputMethodAsh::UpdateContextFocusState() {
   if (assistive_window)
     assistive_window->FocusStateChanged();
 
-  ui::TextInputMethod::InputContext context(
-      GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
-      GetClientFocusReason(), GetClientShouldDoLearning());
-  ui::IMEBridge::Get()->SetCurrentInputContext(context);
+  ui::IMEBridge::Get()->SetCurrentInputContext(GetInputContext());
 }
 
 ui::EventDispatchDetails InputMethodAsh::ProcessKeyEventPostIME(
@@ -759,7 +776,7 @@ void InputMethodAsh::CommitText(
   if (!GetTextInputClient())
     return;
 
-  if (!CanComposeInline()) {
+  if (!GetTextInputClient()->CanComposeInline()) {
     // Hides the candidate window for preedit text.
     UpdateCompositionText(CompositionText(), 0, false);
   }
@@ -793,7 +810,7 @@ void InputMethodAsh::UpdateCompositionText(const CompositionText& text,
   if (IsTextInputTypeNone())
     return;
 
-  if (!CanComposeInline()) {
+  if (!GetTextInputClient()->CanComposeInline()) {
     ash::IMECandidateWindowHandlerInterface* candidate_window =
         ui::IMEBridge::Get()->GetCandidateWindowHandler();
     if (candidate_window)
@@ -850,24 +867,32 @@ void InputMethodAsh::HidePreeditText() {
   }
 }
 
-bool InputMethodAsh::CanComposeInline() const {
+TextInputMethod::InputContext InputMethodAsh::GetInputContext() const {
   TextInputClient* client = GetTextInputClient();
-  return client ? client->CanComposeInline() : true;
-}
+  if (!client) {
+    return TextInputMethod::InputContext(ui::TEXT_INPUT_TYPE_NONE);
+  }
 
-bool InputMethodAsh::GetClientShouldDoLearning() const {
-  TextInputClient* client = GetTextInputClient();
-  return client && client->ShouldDoLearning();
-}
-
-int InputMethodAsh::GetTextInputFlags() const {
-  TextInputClient* client = GetTextInputClient();
-  return client ? client->GetTextInputFlags() : 0;
-}
-
-TextInputMode InputMethodAsh::GetTextInputMode() const {
-  TextInputClient* client = GetTextInputClient();
-  return client ? client->GetTextInputMode() : TEXT_INPUT_MODE_DEFAULT;
+  TextInputMethod::InputContext input_context(client->GetTextInputType());
+  input_context.mode = client->GetTextInputMode();
+  const int flags = client->GetTextInputFlags();
+  input_context.autocompletion_mode =
+      ConvertTextInputFlagToEnum<AutocompletionMode>(
+          flags, ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_ON,
+          ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_OFF);
+  input_context.autocorrection_mode =
+      ConvertTextInputFlagToEnum<AutocorrectionMode>(
+          flags, ui::TEXT_INPUT_FLAG_AUTOCORRECT_ON,
+          ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
+  input_context.autocapitalization_mode = ConvertAutocapitalizationMode(flags);
+  input_context.spellcheck_mode = ConvertTextInputFlagToEnum<SpellcheckMode>(
+      flags, ui::TEXT_INPUT_FLAG_SPELLCHECK_ON,
+      ui::TEXT_INPUT_FLAG_SPELLCHECK_OFF);
+  input_context.focus_reason = client->GetFocusReason();
+  input_context.personalization_mode = client->ShouldDoLearning()
+                                           ? PersonalizationMode::kEnabled
+                                           : PersonalizationMode::kDisabled;
+  return input_context;
 }
 
 void InputMethodAsh::SendKeyEvent(KeyEvent* event) {
@@ -891,15 +916,16 @@ SurroundingTextInfo InputMethodAsh::GetSurroundingTextInfo() {
   return info;
 }
 
-void InputMethodAsh::DeleteSurroundingText(int32_t offset, uint32_t length) {
+void InputMethodAsh::DeleteSurroundingText(uint32_t num_char16s_before_cursor,
+                                           uint32_t num_char16s_after_cursor) {
   if (!GetTextInputClient())
     return;
 
   if (GetTextInputClient()->HasCompositionText())
     return;
 
-  uint32_t before = offset >= 0 ? 0U : static_cast<uint32_t>(-1 * offset);
-  GetTextInputClient()->ExtendSelectionAndDelete(before, length - before);
+  GetTextInputClient()->ExtendSelectionAndDelete(num_char16s_before_cursor,
+                                                 num_char16s_after_cursor);
 }
 
 bool InputMethodAsh::ExecuteCharacterComposer(const ui::KeyEvent& event) {
@@ -1001,11 +1027,6 @@ CompositionText InputMethodAsh::ExtractCompositionText(
 bool InputMethodAsh::IsPasswordOrNoneInputFieldFocused() {
   TextInputType type = GetTextInputType();
   return type == TEXT_INPUT_TYPE_NONE || type == TEXT_INPUT_TYPE_PASSWORD;
-}
-
-TextInputClient::FocusReason InputMethodAsh::GetClientFocusReason() const {
-  TextInputClient* client = GetTextInputClient();
-  return client ? client->GetFocusReason() : TextInputClient::FOCUS_REASON_NONE;
 }
 
 bool InputMethodAsh::HasCompositionText() {

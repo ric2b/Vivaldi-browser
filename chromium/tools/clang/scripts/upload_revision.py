@@ -40,7 +40,7 @@ Cq-Include-Trybots: chromium/try:linux_chromium_chromeos_msan_rel_ng
 Cq-Include-Trybots: chromium/try:linux_chromium_msan_rel_ng
 Cq-Include-Trybots: chromium/try:mac11-arm64-rel,mac_chromium_asan_rel_ng
 Cq-Include-Trybots: chromium/try:ios-catalyst
-Cq-Include-Trybots: chromium/try:win-asan,win7-rel
+Cq-Include-Trybots: chromium/try:win-asan
 Cq-Include-Trybots: chromium/try:android-official,fuchsia-official
 Cq-Include-Trybots: chromium/try:mac-official,linux-official
 Cq-Include-Trybots: chromium/try:win-official,win32-official
@@ -104,10 +104,16 @@ def main():
   Git(["checkout", "origin/main", "-b", "clang-{}".format(rev_string)])
 
   old_rev_string = PatchRevision(clang_git_revision, clang_sub_revision)
+  old_git_shortref = re.search('-g([0-9a-f]+)', old_rev_string).group(1)
+  new_git_shortref = re.search('-g([0-9a-f]+)', rev_string).group(1)
 
   Git(["add", UPDATE_PY_PATH])
 
-  commit_message = 'Ran `{}`.'.format(' '.join(sys.argv)) + COMMIT_FOOTER
+  commit_message = 'Ran `{}`.\n'.format(' '.join(sys.argv)) + COMMIT_FOOTER
+  if new_git_shortref != old_git_shortref:
+    commit_message = 'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/+log/{}..{}\n\n'.format(
+        old_git_shortref, new_git_shortref) + commit_message
+
   Git([
       "commit", "-m",
       "Roll clang {} : {}\n\n{}".format(old_rev_string, rev_string,

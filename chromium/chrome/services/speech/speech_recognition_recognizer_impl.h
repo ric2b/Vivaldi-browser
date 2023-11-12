@@ -8,8 +8,10 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "chrome/services/speech/audio_source_consumer.h"
 #include "components/soda/constants.h"
 #include "media/mojo/mojom/speech_recognition.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -22,7 +24,8 @@ class SodaClient;
 namespace speech {
 
 class SpeechRecognitionRecognizerImpl
-    : public media::mojom::SpeechRecognitionRecognizer {
+    : public media::mojom::SpeechRecognitionRecognizer,
+      public AudioSourceConsumer {
  public:
   using OnRecognitionEventCallback =
       base::RepeatingCallback<void(media::SpeechRecognitionResult event)>;
@@ -38,7 +41,8 @@ class SpeechRecognitionRecognizerImpl
           remote,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
-      const base::FilePath& config_path);
+      const base::flat_map<std::string, base::FilePath>& config_paths,
+      const std::string& primary_language_name);
 
   SpeechRecognitionRecognizerImpl(const SpeechRecognitionRecognizerImpl&) =
       delete;
@@ -56,7 +60,8 @@ class SpeechRecognitionRecognizerImpl
           remote,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
-      const base::FilePath& config_path);
+      const base::flat_map<std::string, base::FilePath>& config_paths,
+      const std::string& primary_language_name);
 
   static bool IsMultichannelSupported();
 
@@ -83,6 +88,11 @@ class SpeechRecognitionRecognizerImpl
 
   void MarkDone() override;
 
+  // AudioSourceConsumer:
+  void AddAudio(media::mojom::AudioDataS16Ptr buffer) override;
+  void OnAudioCaptureEnd() override;
+  void OnAudioCaptureError() override;
+
  protected:
   virtual void SendAudioToSpeechRecognitionServiceInternal(
       media::mojom::AudioDataS16Ptr buffer);
@@ -97,13 +107,18 @@ class SpeechRecognitionRecognizerImpl
 
   void OnRecognitionStoppedCallback();
 
+  base::flat_map<std::string, base::FilePath> config_paths() const {
+    return config_paths_;
+  }
+  std::string primary_language_name() const { return primary_language_name_; }
+
   media::mojom::SpeechRecognitionOptionsPtr options_;
 
  private:
   void OnLanguageChanged(const std::string& language) final;
 
   void ResetSodaWithNewLanguage(base::FilePath config_path,
-                                speech::LanguageCode language_code,
+                                std::string language_name,
                                 bool config_exists);
   void RecordDuration();
 
@@ -133,10 +148,10 @@ class SpeechRecognitionRecognizerImpl
 
   OnSpeechRecognitionStoppedCallback speech_recognition_stopped_callback_;
 
-  base::FilePath config_path_;
+  base::flat_map<std::string, base::FilePath> config_paths_;
+  std::string primary_language_name_;
   int sample_rate_ = 0;
   int channel_count_ = 0;
-  LanguageCode language_ = LanguageCode::kNone;
 
   base::TimeDelta caption_bubble_visible_duration_;
   base::TimeDelta caption_bubble_hidden_duration_;

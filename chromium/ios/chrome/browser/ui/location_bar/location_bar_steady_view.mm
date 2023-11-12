@@ -8,6 +8,7 @@
 #import "base/check_op.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/elements/extended_touch_target_button.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
@@ -17,6 +18,16 @@
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -96,7 +107,11 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
   scheme.fontColor = [UIColor colorNamed:kTextPrimaryColor];
   scheme.placeholderColor = [UIColor colorNamed:kTextfieldPlaceholderColor];
-  scheme.trailingButtonColor = [UIColor colorNamed:kGrey500Color];
+  if (UseSymbols()) {
+    scheme.trailingButtonColor = [UIColor colorNamed:kGrey600Color];
+  } else {
+    scheme.trailingButtonColor = [UIColor colorNamed:kGrey500Color];
+  }
 
   return scheme;
 }
@@ -121,7 +136,13 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
 - (void)layoutSubviews {
   [super layoutSubviews];
+
+  if (IsVivaldiRunning()) {
+    self.layer.cornerRadius = vNTPSearchBarCornerRadius;
+  } else {
   self.layer.cornerRadius = self.bounds.size.height / 2.0;
+  } // End Vivaldi
+
 }
 
 - (void)setHighlighted:(BOOL)highlighted {
@@ -215,6 +236,39 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
     AddSameConstraints(self, _locationButton);
 
+    if (IsVivaldiRunning()) {
+      _locationContainerViewLeadingAnchorConstraint =
+          [_locationContainerView.leadingAnchor
+              constraintEqualToAnchor:self.leadingAnchor
+                             constant:kLocationBarLeadingPadding];
+
+      _trailingButtonTrailingAnchorConstraint =
+          [self.trailingButton.trailingAnchor
+              constraintEqualToAnchor:self.trailingAnchor
+                             constant:self.trailingButtonTrailingSpacing];
+
+      // Setup and activate constraints.
+      [NSLayoutConstraint activateConstraints:@[
+        [_locationLabel.centerYAnchor
+            constraintEqualToAnchor:_locationContainerView.centerYAnchor
+                           constant:kLocationLabelVerticalOffset],
+        [_locationLabel.heightAnchor
+            constraintLessThanOrEqualToAnchor:_locationContainerView.heightAnchor
+                                     constant:2 * kLocationLabelVerticalOffset],
+        [_trailingButton.centerYAnchor
+            constraintEqualToAnchor:self.centerYAnchor],
+        [_locationContainerView.centerYAnchor
+            constraintEqualToAnchor:self.centerYAnchor],
+        [_trailingButton.leadingAnchor
+            constraintGreaterThanOrEqualToAnchor:_locationContainerView
+                                                     .trailingAnchor],
+        [_trailingButton.widthAnchor constraintEqualToConstant:kButtonSize],
+        [_trailingButton.heightAnchor constraintEqualToConstant:kButtonSize],
+        _trailingButtonTrailingAnchorConstraint,
+        _locationContainerViewLeadingAnchorConstraint,
+      ]];
+    } else {
+
     // Make the label gravitate towards the center of the view.
     NSLayoutConstraint* centerX = [_locationContainerView.centerXAnchor
         constraintEqualToAnchor:self.centerXAnchor];
@@ -251,6 +305,7 @@ const CGFloat kLocationLabelVerticalOffset = -1;
       centerX,
       _locationContainerViewLeadingAnchorConstraint,
     ]];
+    } // End Vivaldi
   }
 
   // Setup accessibility.
@@ -336,6 +391,11 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 }
 
 - (void)setBadgeView:(UIView*)badgeView {
+
+  // Vivaldi: We don't show badge here.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   BOOL hadBadgeView = _badgeView != nil;
   _badgeView = badgeView;
   if (!hadBadgeView && badgeView) {
@@ -377,9 +437,15 @@ const CGFloat kLocationLabelVerticalOffset = -1;
                       constraintEqualToAnchor:self.bottomAnchor],
                 ]]];
   }
+
 }
 
 - (void)setFullScreenCollapsedMode:(BOOL)isFullScreenCollapsed {
+
+  // Vivaldi: Since we don't show badge, we can skip this.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   if (!self.badgeView) {
     return;
   }
@@ -397,6 +463,11 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 }
 
 - (void)displayBadgeView:(BOOL)display animated:(BOOL)animated {
+
+  // Vivaldi: Since we don't show badge, we can skip this.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   if (display) {
     // Adding InfobarBadge button as an accessibility element behind location
     // label. Thus, there should be at least one object alreading in
@@ -490,5 +561,17 @@ const CGFloat kLocationLabelVerticalOffset = -1;
   return LocationBarSteadyViewFont(
       self.traitCollection.preferredContentSizeCategory);
 }
+
+#pragma mark - VIVALDI
+#pragma mark - ActivityServicePositioner
+
+- (UIView*)sourceView {
+  return self.trailingButton;
+}
+
+- (CGRect)sourceRect {
+  return self.trailingButton.bounds;
+}
+// End Vivaldi
 
 @end

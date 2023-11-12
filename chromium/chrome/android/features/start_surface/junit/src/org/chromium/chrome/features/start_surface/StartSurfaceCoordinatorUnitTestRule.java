@@ -31,7 +31,6 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.bookmarks.BookmarkNativesMockRule;
@@ -40,7 +39,6 @@ import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridgeJni;
 import org.chromium.chrome.browser.feed.FeedSurfaceMediator;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -150,7 +148,7 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
         return new Statement() {
             @Override
             public void evaluate() {
-                CachedFeatureFlags.setForTesting(ChromeFeatureList.START_SURFACE_ANDROID, true);
+                ChromeFeatureList.sStartSurfaceAndroid.setForTesting(true);
 
                 mTabModelSelector = Mockito.mock(TabModelSelector.class);
                 mContainerView = Mockito.mock(ViewGroup.class);
@@ -222,7 +220,6 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
     private void initViewsMocks() {
         mActivity = spy(Robolectric.buildActivity(Activity.class).setup().get());
         mActivity.setTheme(org.chromium.chrome.tab_ui.R.style.Theme_BrowserUI_DayNight);
-        mActivity.setTheme(R.style.ColorOverlay_ChromiumAndroid);
         ApplicationStatus.onStateChangeForTesting(mActivity, ActivityState.CREATED);
 
         when(mContainerView.getContext()).thenReturn(mActivity);

@@ -616,7 +616,8 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToDataUrl) {
             url::SchemeHostPort(main_url));
 
   // Navigate the grandchild frame again cross-process to foo.com, then
-  // go back in session history. The origin for the data: URL must be preserved.
+  // go back in session history. The frame should commit a new opaque origin,
+  // but it will still have the same precursor origin (the main frame origin).
   {
     TestFrameNavigationObserver observer(target);
     EXPECT_TRUE(ExecJs(target, JsReplace("window.location = $1",
@@ -634,10 +635,12 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToDataUrl) {
 
   url::Origin target_origin =
       target->current_frame_host()->GetLastCommittedOrigin();
+  EXPECT_NE(target_origin, original_target_origin);
   EXPECT_TRUE(target_origin.opaque());
   EXPECT_EQ(target_origin.GetTupleOrPrecursorTupleIfOpaque(),
+            original_target_origin.GetTupleOrPrecursorTupleIfOpaque());
+  EXPECT_EQ(target_origin.GetTupleOrPrecursorTupleIfOpaque(),
             url::SchemeHostPort(main_url));
-  EXPECT_EQ(target_origin, original_target_origin);
 }
 
 // Ensures that iframe with srcdoc is always put in the same origin as its
@@ -1231,6 +1234,8 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   EXPECT_TRUE(blob_origin.opaque());
   EXPECT_EQ(root->current_origin().GetTupleOrPrecursorTupleIfOpaque(),
             blob_origin.GetTupleOrPrecursorTupleIfOpaque());
+  EXPECT_FALSE(
+      child->current_origin().GetTupleOrPrecursorTupleIfOpaque().IsValid());
 
   // Navigate the frame away to any web URL.
   {
@@ -1251,7 +1256,9 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   EXPECT_EQ(blob_url, GURL(EvalJs(root, "blob_url;").ExtractString()));
 
   // Now navigate back in session history. It should successfully go back to
-  // the blob: URL.
+  // the blob: URL. The child frame won't be reusing the exact same origin it
+  // used before, but it will commit a new opaque origin which will still have
+  // no precursor information.
   {
     TestFrameNavigationObserver observer(child);
     shell()->web_contents()->GetController().GoBack();
@@ -1259,9 +1266,11 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   }
   EXPECT_EQ(blob_url, child->current_frame_host()->GetLastCommittedURL());
   EXPECT_TRUE(child->current_origin().opaque());
-  EXPECT_EQ(blob_origin, child->current_origin());
+  EXPECT_NE(blob_origin, child->current_origin());
   EXPECT_EQ(root->current_origin().GetTupleOrPrecursorTupleIfOpaque(),
             child->current_origin().GetTupleOrPrecursorTupleIfOpaque());
+  EXPECT_FALSE(
+      child->current_origin().GetTupleOrPrecursorTupleIfOpaque().IsValid());
 }
 
 // Test to verify that about:blank iframe, which is a child of a sandboxed
@@ -1517,17 +1526,17 @@ IN_PROC_BROWSER_TEST_F(IsolateIcelandFrameTreeBrowserTest,
             DepictFrameTree(*root));
 }
 
-class FrameTreeAnonymousIframeBrowserTest : public FrameTreeBrowserTest {
+class FrameTreeCredentiallessIframeBrowserTest : public FrameTreeBrowserTest {
  public:
-  FrameTreeAnonymousIframeBrowserTest() = default;
+  FrameTreeCredentiallessIframeBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kEnableBlinkTestFeatures);
   }
 };
 
-// Tests the mojo propagation of the 'anonymous' attribute to the browser.
-IN_PROC_BROWSER_TEST_F(FrameTreeAnonymousIframeBrowserTest,
+// Tests the mojo propagation of the 'credentialless' attribute to the browser.
+IN_PROC_BROWSER_TEST_F(FrameTreeCredentiallessIframeBrowserTest,
                        AttributeIsPropagatedToBrowser) {
   GURL main_url(embedded_test_server()->GetURL("/hello.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -1536,44 +1545,45 @@ IN_PROC_BROWSER_TEST_F(FrameTreeAnonymousIframeBrowserTest,
                             ->GetPrimaryFrameTree()
                             .root();
 
-  // Not setting the attribute => the iframe is not anonymous.
+  // Not setting the attribute => the iframe is not credentialless.
   EXPECT_TRUE(ExecJs(root,
                      "var f = document.createElement('iframe');"
                      "document.body.appendChild(f);"));
   EXPECT_EQ(1U, root->child_count());
-  EXPECT_FALSE(root->child_at(0)->anonymous());
+  EXPECT_FALSE(root->child_at(0)->credentialless());
   EXPECT_EQ(false, EvalJs(root->child_at(0)->current_frame_host(),
-                          "window.anonymouslyFramed"));
+                          "window.credentialless"));
 
-  // Setting the attribute on the iframe element makes the iframe anonymous.
+  // Setting the attribute on the iframe element makes the iframe
+  // credentialless.
   EXPECT_TRUE(ExecJs(root,
                      "var d = document.createElement('div');"
-                     "d.innerHTML = '<iframe anonymous></iframe>';"
+                     "d.innerHTML = '<iframe credentialless></iframe>';"
                      "document.body.appendChild(d);"));
   EXPECT_EQ(2U, root->child_count());
-  EXPECT_TRUE(root->child_at(1)->anonymous());
+  EXPECT_TRUE(root->child_at(1)->credentialless());
   EXPECT_EQ(true, EvalJs(root->child_at(1)->current_frame_host(),
-                         "window.anonymouslyFramed"));
+                         "window.credentialless"));
 
   // Setting the attribute via javascript works.
   EXPECT_TRUE(ExecJs(root,
                      "var g = document.createElement('iframe');"
-                     "g.anonymous = true;"
+                     "g.credentialless = true;"
                      "document.body.appendChild(g);"));
   EXPECT_EQ(3U, root->child_count());
-  EXPECT_TRUE(root->child_at(2)->anonymous());
+  EXPECT_TRUE(root->child_at(2)->credentialless());
   EXPECT_EQ(true, EvalJs(root->child_at(2)->current_frame_host(),
-                         "window.anonymouslyFramed"));
+                         "window.credentialless"));
 
-  EXPECT_TRUE(ExecJs(root, "g.anonymous = false;"));
-  EXPECT_FALSE(root->child_at(2)->anonymous());
+  EXPECT_TRUE(ExecJs(root, "g.credentialless = false;"));
+  EXPECT_FALSE(root->child_at(2)->credentialless());
   EXPECT_EQ(true, EvalJs(root->child_at(2)->current_frame_host(),
-                         "window.anonymouslyFramed"));
+                         "window.credentialless"));
 
-  EXPECT_TRUE(ExecJs(root, "g.anonymous = true;"));
-  EXPECT_TRUE(root->child_at(2)->anonymous());
+  EXPECT_TRUE(ExecJs(root, "g.credentialless = true;"));
+  EXPECT_TRUE(root->child_at(2)->credentialless());
   EXPECT_EQ(true, EvalJs(root->child_at(2)->current_frame_host(),
-                         "window.anonymouslyFramed"));
+                         "window.credentialless"));
 }
 
 }  // namespace content

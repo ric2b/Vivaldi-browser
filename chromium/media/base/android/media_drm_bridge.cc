@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <sys/system_properties.h>
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -20,12 +19,12 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/sys_byteorder.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/android/android_util.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge_client.h"
@@ -279,15 +278,11 @@ bool MediaDrmBridge::IsKeySystemSupported(const std::string& key_system) {
 }
 
 // static
-bool MediaDrmBridge::IsPerOriginProvisioningSupported() {
-  return base::android::BuildInfo::GetInstance()->sdk_int() >=
-         base::android::SDK_VERSION_MARSHMALLOW;
-}
-
-// static
 bool MediaDrmBridge::IsPerApplicationProvisioningSupported() {
   // Start by checking "ro.product.first_api_level", which may not exist.
   // If it is non-zero, then it is the API level.
+  // Checking FirstApiLevel is known to be expensive (see crbug.com/1366106),
+  // and thus is cached.
   static int first_api_level = GetFirstApiLevel();
   DVLOG(1) << "first_api_level = " << first_api_level;
   if (first_api_level >= base::android::SDK_VERSION_OREO)
@@ -305,9 +300,7 @@ bool MediaDrmBridge::IsPersistentLicenseTypeSupported(
     const std::string& /* key_system */) {
   // TODO(yucliu): Check |key_system| if persistent license is supported by
   // MediaDrm.
-  return  // In development. See http://crbug.com/493521
-      base::FeatureList::IsEnabled(kMediaDrmPersistentLicense) &&
-      IsPerOriginProvisioningSupported();
+  return base::FeatureList::IsEnabled(kMediaDrmPersistentLicense);
 }
 
 // static
@@ -552,7 +545,7 @@ bool MediaDrmBridge::IsSecureCodecRequired() {
   // TODO(xhwang): This is specific to Widevine. See http://crbug.com/459400.
   // To fix it, we could call MediaCrypto.requiresSecureDecoderComponent().
   // See http://crbug.com/727918.
-  if (std::equal(scheme_uuid_.begin(), scheme_uuid_.end(), kWidevineUuid))
+  if (base::ranges::equal(scheme_uuid_, kWidevineUuid))
     return SECURITY_LEVEL_1 == GetSecurityLevel();
 
   // For other key systems, assume true.
@@ -827,7 +820,7 @@ MediaDrmBridge::MediaDrmBridge(
       session_closed_cb_(session_closed_cb),
       session_keys_change_cb_(session_keys_change_cb),
       session_expiration_update_cb_(session_expiration_update_cb),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       media_crypto_context_(this) {
   DVLOG(1) << __func__;
 
@@ -844,8 +837,6 @@ MediaDrmBridge::MediaDrmBridge(
       ConvertUTF8ToJavaString(env, security_level_str);
 
   bool use_origin_isolated_storage =
-      // Per-origin provisioning must be supported for origin isolated storage.
-      IsPerOriginProvisioningSupported() &&
       // origin id can be empty when MediaDrmBridge is created by
       // CreateWithoutSessionSupport, which is used for unprovisioning.
       !origin_id.empty();

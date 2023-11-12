@@ -5,10 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_PICKER_WEB_CONTENTS_HOST_H_
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_PICKER_WEB_CONTENTS_HOST_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
-#include "content/public/browser/web_contents_delegate.h"
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "ui/views/controls/webview/web_contents_set_background_color.h"
@@ -18,13 +17,22 @@ class GURL;
 
 namespace content {
 class WebContents;
+class WebContentsDelegate;
 }  // namespace content
+
+namespace web_modal {
+class WebContentsModalDialogHost;
+}
+
+// Type for a callback that is used to close the `ProfilePickerWebContentsHost`.
+// It is the owner's responsibility to make sure that the issuing host is still
+// alive and that the callback is valid, before running it.
+using ClearHostClosure =
+    base::StrongAlias<class ClearHostClosureTag, base::OnceClosure>;
 
 // Class responsible for embedding a web contents in the profile picker and
 // providing extra UI such as a back button.
-class ProfilePickerWebContentsHost
-    : public content::WebContentsDelegate,
-      public web_modal::WebContentsModalDialogHost {
+class ProfilePickerWebContentsHost {
  public:
   // Shows a screen with `url` in `contents`. If `url` is empty, it only shows
   // `contents` with its currently loaded url. If both
@@ -40,14 +48,16 @@ class ProfilePickerWebContentsHost
       const GURL& url,
       base::OnceClosure navigation_finished_closure = base::OnceClosure()) = 0;
 
-  // Hides the profile picker window.
-  virtual void Clear() = 0;
-
   // Returns whether dark colors should be used (based on native theme).
   virtual bool ShouldUseDarkColors() const = 0;
 
   // Returns the picker WebContents.
   virtual content::WebContents* GetPickerContents() const = 0;
+
+  virtual content::WebContentsDelegate* GetWebContentsDelegate() = 0;
+
+  virtual web_modal::WebContentsModalDialogHost*
+  GetWebContentsModalDialogHost() = 0;
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Changes the visibility of the host's native toolbar, which shows a back

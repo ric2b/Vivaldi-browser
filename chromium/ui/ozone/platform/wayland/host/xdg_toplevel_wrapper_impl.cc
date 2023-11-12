@@ -6,14 +6,15 @@
 
 #include <aura-shell-client-protocol.h>
 #include <xdg-decoration-unstable-v1-client-protocol.h>
-#include <xdg-shell-unstable-v6-client-protocol.h>
 
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/common/features.h"
+#include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/shell_surface_wrapper.h"
 #include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
@@ -99,16 +100,12 @@ bool XDGToplevelWrapperImpl::Initialize() {
   }
 
   static constexpr xdg_toplevel_listener xdg_toplevel_listener = {
-    &ConfigureTopLevel,
-    &CloseTopLevel,
-#if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
-    // Since v4
-    &ConfigureBounds,
-#endif
-#if defined(XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION)
-    // Since v5
-    &WmCapabilities,
-#endif
+      &ConfigureTopLevel,
+      &CloseTopLevel,
+      // Since v4
+      &ConfigureBounds,
+      // Since v5
+      &WmCapabilities,
   };
 
   if (!xdg_surface_wrapper_)
@@ -120,8 +117,7 @@ bool XDGToplevelWrapperImpl::Initialize() {
     LOG(ERROR) << "Failed to create xdg_toplevel";
     return false;
   }
-  connection_->wayland_window_manager()->NotifyWindowRoleAssigned(
-      wayland_window_);
+  connection_->window_manager()->NotifyWindowRoleAssigned(wayland_window_);
 
   if (connection_->zaura_shell()) {
     uint32_t version =
@@ -161,6 +157,21 @@ void XDGToplevelWrapperImpl::SetFullscreen() {
   xdg_toplevel_set_fullscreen(xdg_toplevel_.get(), nullptr);
 }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void XDGToplevelWrapperImpl::SetUseImmersiveMode(bool immersive) {
+  if (SupportsTopLevelImmersiveStatus()) {
+    auto mode = immersive ? ZAURA_TOPLEVEL_FULLSCREEN_MODE_IMMERSIVE
+                          : ZAURA_TOPLEVEL_FULLSCREEN_MODE_PLAIN;
+    zaura_toplevel_set_fullscreen_mode(aura_toplevel_.get(), mode);
+  }
+}
+
+bool XDGToplevelWrapperImpl::SupportsTopLevelImmersiveStatus() const {
+  return aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                               ZAURA_TOPLEVEL_SET_FULLSCREEN_MODE_SINCE_VERSION;
+}
+#endif
+
 void XDGToplevelWrapperImpl::UnSetFullscreen() {
   DCHECK(xdg_toplevel_);
   xdg_toplevel_unset_fullscreen(xdg_toplevel_.get());
@@ -183,8 +194,7 @@ void XDGToplevelWrapperImpl::SurfaceResize(WaylandConnection* connection,
   DCHECK(xdg_toplevel_);
   if (auto serial = GetSerialForMoveResize(connection)) {
     xdg_toplevel_resize(xdg_toplevel_.get(), connection->seat()->wl_object(),
-                        serial->value,
-                        wl::IdentifyDirection(*connection, hittest));
+                        serial->value, wl::IdentifyDirection(hittest));
   }
 }
 
@@ -287,20 +297,25 @@ void XDGToplevelWrapperImpl::ConfigureAuraTopLevel(
   auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
   DCHECK(surface);
 
-  surface->wayland_window_->HandleAuraToplevelConfigure(
-      x, y, width, height,
-      {.is_maximized =
-           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED),
-       .is_fullscreen =
-           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN),
-       .is_activated =
-           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED),
-       .is_snapped_primary =
-           CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_SNAPPED_PRIMARY),
-       .is_snapped_secondary = CheckIfWlArrayHasValue(
-           states, ZAURA_TOPLEVEL_STATE_SNAPPED_SECONDARY),
-       .is_floated =
-           CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_FLOATED)});
+  surface->wayland_window_->HandleAuraToplevelConfigure(x, y, width, height, {
+    .is_maximized =
+        CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED),
+    .is_fullscreen =
+        CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN),
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    .is_immersive_fullscreen =
+        CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_IMMERSIVE),
+#endif
+    .is_activated =
+        CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED),
+    .is_minimized =
+        CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_MINIMIZED),
+    .is_snapped_primary =
+        CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_SNAPPED_PRIMARY),
+    .is_snapped_secondary =
+        CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_SNAPPED_SECONDARY),
+    .is_floated = CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_FLOATED)
+  });
 }
 
 // static
@@ -324,7 +339,6 @@ void XDGToplevelWrapperImpl::CloseTopLevel(void* data,
   surface->wayland_window_->OnCloseRequest();
 }
 
-#if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
 // static
 void XDGToplevelWrapperImpl::ConfigureBounds(void* data,
                                              struct xdg_toplevel* xdg_toplevel,
@@ -332,16 +346,13 @@ void XDGToplevelWrapperImpl::ConfigureBounds(void* data,
                                              int32_t height) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
-#endif
 
-#if defined(XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION)
 // static
 void XDGToplevelWrapperImpl::WmCapabilities(void* data,
                                             struct xdg_toplevel* xdg_toplevel,
                                             struct wl_array* capabilities) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
-#endif
 
 void XDGToplevelWrapperImpl::SetTopLevelDecorationMode(
     DecorationMode requested_mode) {
@@ -435,8 +446,10 @@ void XDGToplevelWrapperImpl::RequestWindowBounds(const gfx::Rect& bounds) {
 
   // `entered_output` can be null in unit tests, where it doesn't wait for
   // output events.
-  if (!entered_output)
+  if (!entered_output) {
+    DLOG(WARNING) << "Entered output is null, cannot request window bounds.";
     return;
+  }
 
   if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
                             ZAURA_TOPLEVEL_SET_WINDOW_BOUNDS_SINCE_VERSION) {
@@ -511,6 +524,14 @@ void XDGToplevelWrapperImpl::Deactivate() {
   }
 }
 
+void XDGToplevelWrapperImpl::SetScaleFactor(float scale_factor) {
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_SET_SCALE_FACTOR_SINCE_VERSION) {
+    uint32_t value = *reinterpret_cast<uint32_t*>(&scale_factor);
+    zaura_toplevel_set_scale_factor(aura_toplevel_.get(), value);
+  }
+}
+
 void XDGToplevelWrapperImpl::SetRestoreInfo(int32_t restore_session_id,
                                             int32_t restore_window_id) {
   if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
@@ -543,6 +564,58 @@ void XDGToplevelWrapperImpl::UnSetFloat() {
   if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
                             ZAURA_TOPLEVEL_UNSET_FLOAT_SINCE_VERSION) {
     zaura_toplevel_unset_float(aura_toplevel_.get());
+  }
+}
+
+void XDGToplevelWrapperImpl::CommitSnap(
+    WaylandWindowSnapDirection snap_direction,
+    float snap_ratio) {
+  if (!aura_toplevel_) {
+    return;
+  }
+
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_UNSET_SNAP_SINCE_VERSION) {
+    zaura_toplevel_unset_snap(aura_toplevel_.get());
+    return;
+  }
+
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_SET_SNAP_PRIMARY_SINCE_VERSION) {
+    uint32_t value = *reinterpret_cast<uint32_t*>(&snap_ratio);
+    switch (snap_direction) {
+      case WaylandWindowSnapDirection::kPrimary:
+        zaura_toplevel_set_snap_primary(aura_toplevel_.get(), value);
+        return;
+      case WaylandWindowSnapDirection::kSecondary:
+        zaura_toplevel_set_snap_secondary(aura_toplevel_.get(), value);
+        return;
+      case WaylandWindowSnapDirection::kNone:
+        NOTREACHED() << "Toplevel does not support UnsetSnap yet";
+        return;
+    }
+  }
+}
+
+void XDGToplevelWrapperImpl::ShowSnapPreview(
+    WaylandWindowSnapDirection snap_direction,
+    bool allow_haptic_feedback) {
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_INTENT_TO_SNAP_SINCE_VERSION) {
+    uint32_t zaura_shell_snap_direction = ZAURA_TOPLEVEL_SNAP_DIRECTION_NONE;
+    switch (snap_direction) {
+      case WaylandWindowSnapDirection::kPrimary:
+        zaura_shell_snap_direction = ZAURA_TOPLEVEL_SNAP_DIRECTION_PRIMARY;
+        break;
+      case WaylandWindowSnapDirection::kSecondary:
+        zaura_shell_snap_direction = ZAURA_TOPLEVEL_SNAP_DIRECTION_SECONDARY;
+        break;
+      case WaylandWindowSnapDirection::kNone:
+        break;
+    }
+    zaura_toplevel_intent_to_snap(aura_toplevel_.get(),
+                                  zaura_shell_snap_direction);
+    return;
   }
 }
 

@@ -40,6 +40,12 @@ if (is_fuchsia) {
   }
 }
 
+if (enable_pkeys && is_debug) {
+  config("no_stack_protector") {
+    cflags = [ "-fno-stack-protector" ]
+  }
+}
+
 component("partition_alloc") {
   sources = [
     "address_pool_manager.cc",
@@ -52,6 +58,8 @@ component("partition_alloc") {
     "address_space_stats.h",
     "allocation_guard.cc",
     "allocation_guard.h",
+    "compressed_pointer.cc",
+    "compressed_pointer.h",
     "dangling_raw_ptr_checks.cc",
     "dangling_raw_ptr_checks.h",
     "freeslot_bitmap.h",
@@ -74,6 +82,7 @@ component("partition_alloc") {
     "partition_alloc.cc",
     "partition_alloc.h",
     "partition_alloc_base/atomic_ref_count.h",
+    "partition_alloc_base/augmentations/compiler_specific.h",
     "partition_alloc_base/bit_cast.h",
     "partition_alloc_base/bits.h",
     "partition_alloc_base/check.cc",
@@ -125,6 +134,8 @@ component("partition_alloc") {
     "partition_alloc_base/time/time_override.cc",
     "partition_alloc_base/time/time_override.h",
     "partition_alloc_base/types/strong_alias.h",
+    "partition_alloc_base/win/win_handle_types.h",
+    "partition_alloc_base/win/win_handle_types_list.inc",
     "partition_alloc_base/win/windows_types.h",
     "partition_alloc_check.h",
     "partition_alloc_config.h",
@@ -153,6 +164,8 @@ component("partition_alloc") {
     "partition_tag_bitmap.h",
     "partition_tag_types.h",
     "partition_tls.h",
+    "pkey.cc",
+    "pkey.h",
     "random.cc",
     "random.h",
     "reservation_offset_table.cc",
@@ -346,37 +359,22 @@ component("partition_alloc") {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_speed" ]
   }
+
+  # We want to be able to test pkey mode without access to the default pkey.
+  # This is incompatible with stack protectors since the TLS won't be pkey-tagged.
+  if (enable_pkeys && is_debug) {
+    configs += [ ":no_stack_protector" ]
+  }
 }
 
 buildflag_header("partition_alloc_buildflags") {
   header = "partition_alloc_buildflags.h"
 
-  # BackupRefPtr(BRP) build flags.
-  _enable_backup_ref_ptr_support = enable_backup_ref_ptr_support && !is_nacl
-  _put_ref_count_in_previous_slot =
-      put_ref_count_in_previous_slot && _enable_backup_ref_ptr_support
-  _enable_backup_ref_ptr_slow_checks =
-      enable_backup_ref_ptr_slow_checks && _enable_backup_ref_ptr_support
-  _enable_dangling_raw_ptr_checks =
-      enable_dangling_raw_ptr_checks && _enable_backup_ref_ptr_support
-
-  # MTECheckedPtr is exclusive against BRP (asserted at declaration).
-  # MTECheckedPtr requires 64-bit pointers (not available in NaCl).
-  _enable_mte_checked_ptr_support = enable_mte_checked_ptr_support && !is_nacl
-
   _record_alloc_info = false
 
-  _enable_gwp_asan_support = _enable_backup_ref_ptr_support
-
-  # Shadow metadata only supports Linux now.
-  _enable_shadow_metadata_for_64_bits_pointers =
-      enable_shadow_metadata && is_linux
-
-  # The only BRP mode that GWP-ASan supports is the "previous slot" mode.
-  # This is because it requires out-of-line ref count storage for system
-  # page aligned allocations.
-  assert(_put_ref_count_in_previous_slot || !_enable_gwp_asan_support,
-         "It's unsafe to use BRP in a mode that doesn't support GWP-ASan")
+  # GWP-ASan is tied to BRP's "refcount in previous slot" mode, whose
+  # enablement is already gated on BRP enablement.
+  _enable_gwp_asan_support = put_ref_count_in_previous_slot
 
   # TODO(crbug.com/1151236): Need to refactor the following buildflags.
   # The buildflags (except RECORD_ALLOC_INFO) are used by both chrome and
@@ -385,25 +383,31 @@ buildflag_header("partition_alloc_buildflags") {
   # defines and partition alloc includes the header file. For chrome,
   # gen/base/allocator/buildflags.h defines and chrome includes.
   flags = [
-    "ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT=$enable_partition_alloc_as_malloc_support",
+    "USE_PARTITION_ALLOC=$use_partition_alloc",
+    "ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT=$use_partition_alloc_as_malloc",
 
-    "ENABLE_BACKUP_REF_PTR_SUPPORT=$_enable_backup_ref_ptr_support",
-    "ENABLE_BACKUP_REF_PTR_SLOW_CHECKS=$_enable_backup_ref_ptr_slow_checks",
-    "ENABLE_DANGLING_RAW_PTR_CHECKS=$_enable_dangling_raw_ptr_checks",
-    "PUT_REF_COUNT_IN_PREVIOUS_SLOT=$_put_ref_count_in_previous_slot",
+    "ENABLE_BACKUP_REF_PTR_SUPPORT=$enable_backup_ref_ptr_support",
+    "ENABLE_BACKUP_REF_PTR_SLOW_CHECKS=$enable_backup_ref_ptr_slow_checks",
+    "ENABLE_DANGLING_RAW_PTR_CHECKS=$enable_dangling_raw_ptr_checks",
+    "ENABLE_DANGLING_RAW_PTR_PERF_EXPERIMENT=$enable_dangling_raw_ptr_perf_experiment",
+    "BACKUP_REF_PTR_POISON_OOB_PTR=$backup_ref_ptr_poison_oob_ptr",
+    "PUT_REF_COUNT_IN_PREVIOUS_SLOT=$put_ref_count_in_previous_slot",
+    "USE_ASAN_BACKUP_REF_PTR=$use_asan_backup_ref_ptr",
+    "USE_ASAN_UNOWNED_PTR=$use_asan_unowned_ptr",
     "ENABLE_GWP_ASAN_SUPPORT=$_enable_gwp_asan_support",
 
-    "ENABLE_MTE_CHECKED_PTR_SUPPORT=$_enable_mte_checked_ptr_support",
+    # Not to be used directly - instead use
+    # defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+    "ENABLE_MTE_CHECKED_PTR_SUPPORT=$enable_mte_checked_ptr_support",
 
     "RECORD_ALLOC_INFO=$_record_alloc_info",
     "USE_FREESLOT_BITMAP=$use_freeslot_bitmap",
-    "ENABLE_SHADOW_METADATA_FOR_64_BITS_POINTERS=$_enable_shadow_metadata_for_64_bits_pointers",
+    "GLUE_CORE_POOLS=$glue_core_pools",
+    "ENABLE_POINTER_COMPRESSION=$enable_pointer_compression_support",
+    "ENABLE_SHADOW_METADATA_FOR_64_BITS_POINTERS=$enable_shadow_metadata",
 
     # *Scan is currently only used by Chromium.
     "STARSCAN=$build_with_chromium",
-
-    # We can only use `//base/tracing` when building in Chromium.
-    "PA_USE_BASE_TRACING=$build_with_chromium",
 
     "ENABLE_PKEYS=$enable_pkeys",
   ]

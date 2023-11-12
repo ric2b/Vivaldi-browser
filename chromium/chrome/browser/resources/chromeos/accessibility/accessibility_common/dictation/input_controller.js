@@ -8,6 +8,27 @@ import {LocaleInfo} from './locale_info.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 const EventType = chrome.automation.EventType;
+const StateType = chrome.automation.StateType;
+
+/**
+ * @typedef {{
+ * anchor: number,
+ * focus: number,
+ * offset: number,
+ * text: string,
+ * }}
+ */
+let SurroundingInfo;
+
+/**
+ * @typedef {{
+ * node: !AutomationNode,
+ * value: string,
+ * selStart: number,
+ * selEnd: number,
+ * }}
+ */
+let EditableNodeData;
 
 /** InputController handles interaction with input fields for Dictation. */
 export class InputController {
@@ -37,6 +58,12 @@ export class InputController {
     /** @private {?function(number):void} */
     this.onBlurListener_ = null;
 
+    /** @private {?function(string, !SurroundingInfo):void} */
+    this.onSurroundingTextChangedListener_ = null;
+
+    /** @private {?SurroundingInfo} */
+    this.surroundingInfo_ = null;
+
     this.initialize_();
   }
 
@@ -47,20 +74,25 @@ export class InputController {
   initialize_() {
     this.onFocusListener_ = context => this.onImeFocus_(context);
     this.onBlurListener_ = contextId => this.onImeBlur_(contextId);
-    // Listen for IME focus changes.
+    this.onSurroundingTextChangedListener_ = (engineID, surroundingInfo) =>
+        this.onSurroundingTextChanged_(engineID, surroundingInfo);
     chrome.input.ime.onFocus.addListener(this.onFocusListener_);
     chrome.input.ime.onBlur.addListener(this.onBlurListener_);
+    chrome.input.ime.onSurroundingTextChanged.addListener(
+        this.onSurroundingTextChangedListener_);
   }
 
-  /**
-   * Removes IME listeners.
-   */
+  /** Removes IME listeners. */
   removeListeners() {
     if (this.onFocusListener_) {
       chrome.input.ime.onFocus.removeListener(this.onFocusListener_);
     }
     if (this.onBlurListener_) {
       chrome.input.ime.onBlur.removeListener(this.onBlurListener_);
+    }
+    if (this.onSurroundingTextChangedListener_) {
+      chrome.input.ime.onSurroundingTextChanged.removeListener(
+          this.onSurroundingTextChangedListener_);
     }
   }
 
@@ -109,6 +141,7 @@ export class InputController {
     this.activeImeContextId_ = InputController.NO_ACTIVE_IME_CONTEXT_ID_;
     chrome.inputMethodPrivate.setCurrentInputMethod(this.previousImeEngineId_);
     this.previousImeEngineId_ = '';
+    this.surroundingInfo_ = null;
   }
 
   /**
@@ -120,11 +153,12 @@ export class InputController {
       return;
     }
 
-    const data = this.getEditableNodeData_();
-    if (LocaleInfo.allowSmartCapAndSpacing() && data) {
-      const {value, caretIndex} = data;
-      text = EditingUtil.smartCapitalization(value, caretIndex, text);
-      text = EditingUtil.smartSpacing(value, caretIndex, text);
+    const data = this.getEditableNodeData();
+    if (LocaleInfo.allowSmartCapAndSpacing() &&
+        this.checkEditableNodeData_(data)) {
+      const {value, selStart, selEnd} = data;
+      text = EditingUtil.smartCapitalization(value, selStart, text);
+      text = EditingUtil.smartSpacing(value, selStart, text);
     }
 
     chrome.input.ime.commitText({contextID: this.activeImeContextId_, text});
@@ -156,8 +190,24 @@ export class InputController {
     if (contextId === this.activeImeContextId_) {
       // Clean up context ID immediately. We can no longer use this context.
       this.activeImeContextId_ = InputController.NO_ACTIVE_IME_CONTEXT_ID_;
+      this.surroundingInfo_ = null;
       this.stopDictationCallback_();
     }
+  }
+
+  /**
+   * Called when the editable string around the caret is changed or when the
+   * caret position is moved.
+   * @param {string} engineID
+   * @param {!SurroundingInfo} surroundingInfo
+   * @private
+   */
+  onSurroundingTextChanged_(engineID, surroundingInfo) {
+    if (engineID !== InputController.ON_SURROUNDING_TEXT_CHANGED_ENGINE_ID) {
+      return;
+    }
+
+    this.surroundingInfo_ = surroundingInfo;
   }
 
   /**
@@ -166,14 +216,14 @@ export class InputController {
    * intersects.
    */
   deletePrevSentence() {
-    const data = this.getEditableNodeData_();
-    if (!data) {
+    const data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {value, caretIndex} = data;
-    const prevSentenceStart = EditingUtil.navPrevSent(value, caretIndex);
-    const length = caretIndex - prevSentenceStart;
+    const {value, selStart, selEnd} = data;
+    const prevSentenceStart = EditingUtil.navPrevSent(value, selStart);
+    const length = selStart - prevSentenceStart;
     this.deleteSurroundingText_(length, -length);
   }
 
@@ -209,14 +259,14 @@ export class InputController {
    * @param {string} insertPhrase The phrase to be inserted.
    */
   replacePhrase(deletePhrase, insertPhrase) {
-    let data = this.getEditableNodeData_();
-    if (!data) {
+    let data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {value, caretIndex} = data;
-    data = EditingUtil.replacePhrase(
-        value, caretIndex, deletePhrase, insertPhrase);
+    const {value, selStart, selEnd} = data;
+    data =
+        EditingUtil.replacePhrase(value, selStart, deletePhrase, insertPhrase);
     const newValue = data.value;
     const newIndex = data.caretIndex;
     this.setEditableValueAndUpdateCaretPosition_(newValue, newIndex);
@@ -231,14 +281,14 @@ export class InputController {
    * @param {string} beforePhrase
    */
   insertBefore(insertPhrase, beforePhrase) {
-    let data = this.getEditableNodeData_();
-    if (!data) {
+    let data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {value, caretIndex} = data;
+    const {value, selStart, selEnd} = data;
     data =
-        EditingUtil.insertBefore(value, caretIndex, insertPhrase, beforePhrase);
+        EditingUtil.insertBefore(value, selStart, insertPhrase, beforePhrase);
     const newValue = data.value;
     const newIndex = data.caretIndex;
     this.setEditableValueAndUpdateCaretPosition_(newValue, newIndex);
@@ -253,14 +303,14 @@ export class InputController {
    * @param {string} endPhrase
    */
   selectBetween(startPhrase, endPhrase) {
-    const data = this.getEditableNodeData_();
-    if (!data) {
+    const data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {node, value, caretIndex} = data;
+    const {node, value, selStart, selEnd} = data;
     const selection =
-        EditingUtil.selectBetween(value, caretIndex, startPhrase, endPhrase);
+        EditingUtil.selectBetween(value, selStart, startPhrase, endPhrase);
     if (!selection) {
       return;
     }
@@ -270,25 +320,25 @@ export class InputController {
 
   /** Moves the text caret to the next sentence. */
   navNextSent() {
-    const data = this.getEditableNodeData_();
-    if (!data) {
+    const data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {node, value, caretIndex} = data;
-    const newCaretIndex = EditingUtil.navNextSent(value, caretIndex);
+    const {node, value, selStart, selEnd} = data;
+    const newCaretIndex = EditingUtil.navNextSent(value, selStart);
     node.setSelection(newCaretIndex, newCaretIndex);
   }
 
   /** Moves the text caret to the previous sentence. */
   navPrevSent() {
-    const data = this.getEditableNodeData_();
-    if (!data) {
+    const data = this.getEditableNodeData();
+    if (!this.checkEditableNodeData_(data)) {
       return;
     }
 
-    const {node, value, caretIndex} = data;
-    const newCaretIndex = EditingUtil.navPrevSent(value, caretIndex);
+    const {node, value, selStart, selEnd} = data;
+    const newCaretIndex = EditingUtil.navPrevSent(value, selStart);
     node.setSelection(newCaretIndex, newCaretIndex);
   }
 
@@ -320,18 +370,61 @@ export class InputController {
   }
 
   /**
-   * Returns the value and caret index of the currently focused editable node.
-   * @return {!{node: !AutomationNode, value: string, caretIndex: number}|null}
-   * @private
+   * Returns the editable node, its value, the selection start, and the
+   * selection end.
+   * TODO(crbug.com/1353871): Only return text that is visible on-screen.
+   * @return {?EditableNodeData}
    */
-  getEditableNodeData_() {
+  getEditableNodeData() {
     const node = this.focusHandler_.getEditableNode();
-    if (!node || node.value === undefined || node.textSelStart === undefined ||
-        node.textSelStart !== node.textSelEnd) {
+    if (!node) {
       return null;
     }
 
-    return {node, value: node.value, caretIndex: node.textSelStart};
+    let value;
+    let selStart;
+    let selEnd;
+    const isContentEditable = node.state[StateType.RICHLY_EDITABLE];
+    if (isContentEditable && this.surroundingInfo_) {
+      const info = this.surroundingInfo_;
+      // Use IME data only in contenteditables.
+      value = info.text;
+      selStart = Math.min(info.anchor, info.focus);
+      selEnd = Math.max(info.anchor, info.focus);
+      return {node, value, selStart, selEnd};
+    }
+
+    // Fall back to data from Automation.
+    value = node.value || '';
+    selStart = (node.textSelStart !== undefined && node.textSelStart !== -1) ?
+        node.textSelStart :
+        value.length;
+    selEnd = (node.textSelEnd !== undefined && node.textSelEnd !== -1) ?
+        node.textSelEnd :
+        value.length;
+    return {
+      node,
+      value,
+      selStart: Math.min(selStart, selEnd),
+      selEnd: Math.max(selStart, selEnd),
+    };
+  }
+
+  /**
+   * Returns whether or not `data` meets the prerequisites for performing an
+   * editing command.
+   * @param {?EditableNodeData} data
+   * @return {boolean}
+   * @private
+   */
+  checkEditableNodeData_(data) {
+    if (!data || data.selStart !== data.selEnd) {
+      // TODO(b:259353226): Move this selection check into checkContext()
+      // method.
+      return false;
+    }
+
+    return true;
   }
 }
 
@@ -341,6 +434,13 @@ export class InputController {
  */
 InputController.IME_ENGINE_ID =
     '_ext_ime_egfdjlfmgnehecnclamagfafdccgfndpdictation';
+
+/**
+ * The engine ID that is passed into `onSurroundingTextChanged_` when Dictation
+ * modifies the text field.
+ * @const {string}
+ */
+InputController.ON_SURROUNDING_TEXT_CHANGED_ENGINE_ID = 'dictation';
 
 /**
  * @private {number}

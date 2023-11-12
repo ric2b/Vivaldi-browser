@@ -9,7 +9,8 @@
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
 
 @protocol VivaldiSpeedDialBaseControllerDelegate
-- (void)didTapSpeedDialWithItem:(VivaldiSpeedDialItem*)item;
+- (void)didTapSpeedDialWithItem:(VivaldiSpeedDialItem*)item
+                captureSnapshot:(BOOL)captureSnapshot;
 @end
 
 // The controller that contains the speed dial folder menu and the child pages.

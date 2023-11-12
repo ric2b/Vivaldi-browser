@@ -6,6 +6,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 
 #include "browser/vivaldi_default_bookmarks.h"
+#include "browser/vivaldi_default_bookmarks_updater_client_impl.h"
 
 VivaldiBrowserMainExtraPartsAndroid::VivaldiBrowserMainExtraPartsAndroid() =
     default;
@@ -20,7 +21,8 @@ void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit(
 
   if (first_run::IsChromeFirstRun()) {
     DCHECK(profile);
-    vivaldi_default_bookmarks::UpdatePartners(profile);
+    vivaldi_default_bookmarks::UpdatePartners(
+        vivaldi_default_bookmarks::UpdaterClientImpl::Create(profile));
   }
 }
 

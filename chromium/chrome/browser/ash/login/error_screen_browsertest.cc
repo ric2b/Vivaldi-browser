@@ -21,9 +21,9 @@
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/welcome_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
@@ -294,7 +294,7 @@ class KioskErrorScreenTest : public MixinBasedInProcessBrowserTest {
 
     network_helper_->service_test()->AddService(
         kWifiServiceName, "wifi_guid", kWifiNetworkName, shill::kTypeWifi,
-        shill::kStateOffline, /*visible=*/true);
+        shill::kStateIdle, /*visible=*/true);
 
     MixinBasedInProcessBrowserTest::SetUpOnMainThread();
   }

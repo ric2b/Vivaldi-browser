@@ -7,9 +7,11 @@
  * that the user can select from.
  */
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
+import {setErrorAction} from '../personalization_actions.js';
 import {DefaultUserImage, UserImage} from '../personalization_app.mojom-webui.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {decodeString16, getSanitizedDefaultImageUrl, isNonEmptyArray, isSelectionEvent} from '../utils.js';
@@ -132,6 +134,12 @@ export class AvatarList extends WithPersonalizationStore {
         'lastExternalUserImageUrl_', selectLastExternalUserImageUrl);
     this.updateFromStore();
     fetchDefaultUserImages(getUserProvider(), this.getStore());
+    window.addEventListener('offline', this.onAvatarNetworkError_);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('offline', this.onAvatarNetworkError_);
   }
 
   /** Invoked to update |options_|. */
@@ -255,6 +263,19 @@ export class AvatarList extends WithPersonalizationStore {
     }
   }
 
+  // Called when (1) avatar images fail to load, (2) device goes
+  // offline while the avatar picker is open, (3) user tries to
+  // select an avatar while the device is offline.
+  private onAvatarNetworkError_ = () => {
+    this.dispatch(setErrorAction({
+      id: 'AvatarList',
+      message: this.i18n('avatarNetworkError'),
+      dismiss: {
+        message: this.i18n('dismiss'),
+      },
+    }));
+  };
+
   private getImageClassForOption_(option: Option) {
     if (option.imgSrc) {
       return '';
@@ -263,6 +284,11 @@ export class AvatarList extends WithPersonalizationStore {
   }
 
   private onSelectDefaultImage_(event: Event) {
+    if (!window.navigator.onLine) {
+      this.onAvatarNetworkError_();
+      return;
+    }
+
     if (!isSelectionEvent(event)) {
       return;
     }
@@ -358,6 +384,23 @@ export class AvatarList extends WithPersonalizationStore {
     return this.getAriaSelected_(option, image) === 'true' ?
         `${defaultClass} tast-selected-${camelToKebab(option.id)}` :
         defaultClass;
+  }
+
+  /**
+   * Creates style string with static background image url for default
+   * avatar images. Static image loads faster and will provide a
+   * smooth experience when the animated image completes loading.
+   */
+  private getImgBackgroundStyle_(url: string, defaultImageIndex: number|null):
+      string {
+    // If the image is a default avatar loaded from gstatic resources,
+    // return a static encoded background image.
+    if (loadTimeData.getBoolean('isAvatarsCloudMigrationEnabled') &&
+        defaultImageIndex) {
+      return `background-image: url('` + url + `&staticEncode=true')`;
+    }
+
+    return '';
   }
 }
 

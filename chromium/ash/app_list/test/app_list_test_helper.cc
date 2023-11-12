@@ -46,11 +46,8 @@ constexpr gfx::Size kIconImageSize(56, 56);
 // An app list should be either a bubble app list or a fullscreen app list.
 // Returns true if a bubble app list should be used under the current mode.
 bool ShouldUseBubbleAppList() {
-  // A bubble app list should be used only when:
-  // (1) It is in clamshell mode; and
-  // (2) The productivity launcher flag is enabled.
-  return !Shell::Get()->IsInTabletMode() &&
-         features::IsProductivityLauncherEnabled();
+  // A bubble app list should be used only when ot is in clamshell mode.
+  return !Shell::Get()->IsInTabletMode();
 }
 
 }  // namespace
@@ -81,8 +78,7 @@ void AppListTestHelper::WaitUntilIdle() {
 
 void AppListTestHelper::WaitForFolderAnimation() {
   AppListFolderView* folder_view = nullptr;
-  if (!Shell::Get()->IsInTabletMode() &&
-      features::IsProductivityLauncherEnabled()) {
+  if (ShouldUseBubbleAppList()) {
     folder_view = GetBubbleFolderView();
   } else {
     folder_view = GetFullscreenFolderView();
@@ -96,7 +92,7 @@ void AppListTestHelper::WaitForFolderAnimation() {
 }
 
 void AppListTestHelper::ShowAppList() {
-  app_list_controller_->ShowAppList();
+  app_list_controller_->ShowAppList(AppListShowSource::kSearchKey);
 }
 
 void AppListTestHelper::ShowAndRunLoop(uint64_t display_id) {
@@ -109,7 +105,7 @@ void AppListTestHelper::Show(uint64_t display_id) {
 
 void AppListTestHelper::ShowAndRunLoop(uint64_t display_id,
                                        AppListShowSource show_source) {
-  app_list_controller_->Show(display_id, show_source, base::TimeTicks());
+  app_list_controller_->Show(display_id, show_source, base::TimeTicks(), true);
   WaitUntilIdle();
 }
 
@@ -189,12 +185,6 @@ void AppListTestHelper::AddAppItemsWithColorAndName(int num_apps,
     if (set_name)
       model->SetItemName(item_ptr, id);
   }
-}
-
-void AppListTestHelper::AddPageBreakItem() {
-  auto page_break_item = std::make_unique<AppListItem>(base::GenerateGUID());
-  page_break_item->set_is_page_break(true);
-  AppListModelProvider::Get()->model()->AddItem(std::move(page_break_item));
 }
 
 void AppListTestHelper::AddContinueSuggestionResults(int num_results) {

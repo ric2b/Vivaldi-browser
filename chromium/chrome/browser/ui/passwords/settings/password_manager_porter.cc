@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
@@ -81,7 +81,9 @@ bool PasswordManagerPorter::Export(content::WebContents* web_contents) {
   if (!exporter_) {
     // Set a new exporter for this request.
     exporter_ = std::make_unique<password_manager::PasswordManagerExporter>(
-        presenter_, on_export_progress_callback_);
+        presenter_, on_export_progress_callback_,
+        base::BindOnce(&PasswordManagerPorter::ExportDone,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Start serialising while the user selects a file.
@@ -123,7 +125,7 @@ void PasswordManagerPorter::Import(
         password_manager::ImportResults::Status::IMPORT_ALREADY_ACTIVE;
 
     // For consistency |results_callback| is always run asynchronously.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(results_callback), results));
     return;
   }
@@ -219,6 +221,10 @@ void PasswordManagerPorter::FileSelectionCanceled(void* params) {
 
 void PasswordManagerPorter::ExportPasswordsToPath(const base::FilePath& path) {
   exporter_->SetDestination(path);
+}
+
+void PasswordManagerPorter::ExportDone() {
+  exporter_.reset();
 }
 
 void PasswordManagerPorter::ImportDone(

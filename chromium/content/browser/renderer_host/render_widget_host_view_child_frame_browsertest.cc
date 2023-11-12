@@ -121,7 +121,7 @@ class RenderWidgetHostViewChildFrameBrowserTest : public ContentBrowserTest {
 
   void GiveItSomeTime() {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   }
@@ -421,9 +421,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   ASSERT_TRUE(trigger_subframe_tab_switch());
 
   // If TabSwitchMetrics2 is enabled, both Browser.Tabs.TotalSwitchDuration.*
-  // and Browser.Tabs.TotalSwitchDuration2.* will be logged.
+  // and Browser.Tabs.TotalSwitchDuration2.* will be logged, along with an
+  // unsuffixed aggregate Browser.Tabs.TotalSwitchDuration2.
   const size_t expected_histogram_count =
-      base::FeatureList::IsEnabled(blink::features::kTabSwitchMetrics2) ? 2 : 1;
+      base::FeatureList::IsEnabled(blink::features::kTabSwitchMetrics2) ? 3 : 1;
 
   bool got_incomplete_tab_switch = false;
   const base::TimeTicks start_time = base::TimeTicks::Now();

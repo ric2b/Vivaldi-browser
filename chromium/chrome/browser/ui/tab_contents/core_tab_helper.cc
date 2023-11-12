@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/branding_buildflags.h"
@@ -21,6 +22,7 @@
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/lens/buildflags.h"
 #include "components/lens/lens_entrypoints.h"
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_rendering_environment.h"
@@ -29,7 +31,6 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -42,6 +43,8 @@
 #include "net/http/http_request_headers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/webp_codec.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/tab_android.h"
@@ -55,7 +58,7 @@
 #include "components/guest_view/browser/guest_view_manager.h"
 #endif
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_SIDE_PANEL)
 #include "chrome/browser/ui/lens/lens_side_panel_helper.h"
 #endif
 
@@ -141,6 +144,7 @@ bool CoreTabHelper::IsSidePanelEnabled() {
 
 bool CoreTabHelper::IsSidePanelEnabledFor3PDse() {
   return IsSidePanelEnabled() &&
+         !search::DefaultSearchProviderIsGoogle(GetTemplateURLService()) &&
          base::FeatureList::IsEnabled(features::kUnifiedSidePanel) &&
          lens::features::GetEnableImageSearchUnifiedSidePanelFor3PDse();
 }
@@ -150,6 +154,18 @@ void CoreTabHelper::SearchWithLens(gfx::Image image,
                                    lens::EntryPoint entry_point,
                                    bool is_region_search_request,
                                    bool is_side_panel_enabled_for_feature) {
+  SearchWithLens(image, image_original_size, entry_point,
+                 is_region_search_request, is_side_panel_enabled_for_feature,
+                 std::vector<lens::mojom::LatencyLogPtr>());
+}
+
+void CoreTabHelper::SearchWithLens(
+    gfx::Image image,
+    const gfx::Size& image_original_size,
+    lens::EntryPoint entry_point,
+    bool is_region_search_request,
+    bool is_side_panel_enabled_for_feature,
+    std::vector<lens::mojom::LatencyLogPtr> log_data) {
   bool use_side_panel =
       is_side_panel_enabled_for_feature && IsSidePanelEnabled();
   bool is_full_screen_region_search_request =
@@ -160,7 +176,7 @@ void CoreTabHelper::SearchWithLens(gfx::Image image,
       /* is_full_screen_region_search_request= */
       is_full_screen_region_search_request);
   SearchByImageImpl(image, image_original_size, lens_query_params,
-                    use_side_panel);
+                    use_side_panel, std::move(log_data));
 }
 
 void CoreTabHelper::SearchByImage(content::RenderFrameHost* render_frame_host,
@@ -175,14 +191,16 @@ void CoreTabHelper::SearchByImage(const gfx::Image& image,
                                   const gfx::Size& image_original_size) {
   SearchByImageImpl(image, image_original_size,
                     /*additional_query_params=*/std::string(),
-                    IsSidePanelEnabledFor3PDse());
+                    IsSidePanelEnabledFor3PDse(),
+                    std::vector<lens::mojom::LatencyLogPtr>());
 }
 
 void CoreTabHelper::SearchByImageImpl(
     const gfx::Image& image,
     const gfx::Size& image_original_size,
     const std::string& additional_query_params,
-    bool use_side_panel) {
+    bool use_side_panel,
+    std::vector<lens::mojom::LatencyLogPtr> log_data) {
   TemplateURLService* template_url_service = GetTemplateURLService();
   const TemplateURL* const default_provider =
       template_url_service->GetDefaultSearchProvider();
@@ -191,17 +209,48 @@ void CoreTabHelper::SearchByImageImpl(
   TemplateURLRef::SearchTermsArgs search_args =
       TemplateURLRef::SearchTermsArgs(std::u16string());
 
-  // Get the front and end of the image bytes in order to store them in the
-  // search_args to be sent as part of the PostContent in the request.
-  size_t image_bytes_size = image.As1xPNGBytes()->size();
-  const unsigned char* image_bytes_begin = image.As1xPNGBytes()->front();
-  const unsigned char* image_bytes_end = image_bytes_begin + image_bytes_size;
+  log_data.push_back(lens::mojom::LatencyLog::New(
+      lens::mojom::Phase::ENCODE_START, image_original_size, gfx::Size(),
+      lens::mojom::ImageFormat::ORIGINAL, base::Time::Now()));
 
-  search_args.image_thumbnail_content.assign(image_bytes_begin,
-                                             image_bytes_end);
+  std::vector<unsigned char> data;
+  lens::mojom::ImageFormat image_format;
+  if (lens::features::IsWebpForRegionSearchEnabled() &&
+      gfx::WebpCodec::Encode(image.AsBitmap(),
+                             lens::features::GetRegionSearchEncodingQuality(),
+                             &data)) {
+    image_format = lens::mojom::ImageFormat::WEBP;
+    search_args.image_thumbnail_content.assign(data.begin(), data.end());
+  } else if (lens::features::IsJpegForRegionSearchEnabled() &&
+             gfx::JPEGCodec::Encode(
+                 image.AsBitmap(),
+                 lens::features::GetRegionSearchEncodingQuality(), &data)) {
+    image_format = lens::mojom::ImageFormat::JPEG;
+    search_args.image_thumbnail_content.assign(data.begin(), data.end());
+  } else {
+    // If the WebP/JPEG encoding fails, fall back to PNG.
+    // Get the front and end of the image bytes in order to store them in the
+    // search_args to be sent as part of the PostContent in the request.
+    size_t image_bytes_size = image.As1xPNGBytes()->size();
+    const unsigned char* image_bytes_begin = image.As1xPNGBytes()->front();
+    const unsigned char* image_bytes_end = image_bytes_begin + image_bytes_size;
+    image_format = lens::mojom::ImageFormat::PNG;
+    search_args.image_thumbnail_content.assign(image_bytes_begin,
+                                               image_bytes_end);
+  }
+  log_data.push_back(lens::mojom::LatencyLog::New(
+      lens::mojom::Phase::ENCODE_END, image_original_size, gfx::Size(),
+      image_format, base::Time::Now()));
+
+  std::string additional_query_params_modified = additional_query_params;
+  if (lens::features::GetEnableLatencyLogging() &&
+      search::DefaultSearchProviderIsGoogle(template_url_service)) {
+    lens::AppendLogsQueryParam(&additional_query_params_modified,
+                               std::move(log_data));
+  }
+
   search_args.image_original_size = image_original_size;
-  search_args.additional_query_params = additional_query_params;
-
+  search_args.additional_query_params = additional_query_params_modified;
   TemplateURLRef::PostContent post_content;
   GURL search_url(default_provider->image_url_ref().ReplaceSearchTerms(
       search_args, template_url_service->search_terms_data(), &post_content));
@@ -229,8 +278,10 @@ void CoreTabHelper::SearchByImageImpl(
   auto* thumbnail_capturer_proxy = chrome_render_frame.get();
   thumbnail_capturer_proxy->RequestImageForContextNode(
       thumbnail_min_size, gfx::Size(thumbnail_max_width, thumbnail_max_height),
-      lens::features::GetSendImagesAsPng() ? chrome::mojom::ImageFormat::PNG
-                                           : chrome::mojom::ImageFormat::JPEG,
+      lens::features::IsWebpForImageSearchEnabled()
+          ? chrome::mojom::ImageFormat::WEBP
+          : chrome::mojom::ImageFormat::JPEG,
+      lens::features::GetImageSearchEncodingQuality(),
       base::BindOnce(&CoreTabHelper::DoSearchByImage,
                      weak_factory_.GetWeakPtr(), std::move(chrome_render_frame),
                      src_url, additional_query_params, use_side_panel));
@@ -359,13 +410,6 @@ void CoreTabHelper::DidStartLoading() {
   UpdateContentRestrictions(0);
 }
 
-void CoreTabHelper::OnVisibilityChanged(content::Visibility visibility) {
-  if (visibility == content::Visibility::VISIBLE) {
-    web_cache::WebCacheManager::GetInstance()->ObserveActivity(
-        web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID());
-  }
-}
-
 // Update back/forward buttons for web_contents that are active.
 void CoreTabHelper::NavigationEntriesDeleted() {
 #if !BUILDFLAG(IS_ANDROID)
@@ -470,12 +514,12 @@ void CoreTabHelper::PostContentToURL(TemplateURLRef::PostContent post_content,
   }
 
   if (use_side_panel) {
-#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_SIDE_PANEL)
     lens::OpenLensSidePanel(chrome::FindBrowserWithWebContents(web_contents()),
                             open_url_params);
 #else
     web_contents()->OpenURL(open_url_params);
-#endif  // !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_SIDE_PANEL)
   } else {
     web_contents()->OpenURL(open_url_params);
   }

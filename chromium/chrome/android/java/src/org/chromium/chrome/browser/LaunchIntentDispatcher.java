@@ -15,7 +15,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.SystemClock;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -337,6 +336,11 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
             // in recents.
             newIntent.setFlags(newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
 
+            // Adjacent launch flag, if present, already would have made the launcher activity start
+            // on the adajcent screen in multi-window mode. Clear it on the new Intent for the flag
+            // to take effect only once.
+            newIntent.setFlags(newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+
             // Android will try to find and reuse an existing CCT activity in the background. Use
             // this flag to always start a new one instead.
             newIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
@@ -433,19 +437,20 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
 
         if (Intent.ACTION_VIEW.equals(newIntent.getAction())
                 && !IntentHandler.wasIntentSenderChrome(newIntent)) {
-            long time = SystemClock.elapsedRealtime();
             if (!chromeTabbedTaskExists()) {
                 newIntent.putExtra(IntentHandler.EXTRA_STARTED_TABBED_CHROME_TASK, true);
             }
-            RecordHistogram.recordTimesHistogram("Startup.Android.ChromeTabbedTaskExistsTime",
-                    SystemClock.elapsedRealtime() - time);
+            if ((newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+                // Adjacent launch flag, if present, already would have made the launcher activity
+                // start on the adajcent screen in multi-window mode. Clear it on the new Intent for
+                // the flag to take effect only once.
+                newIntent.setFlags(newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+            }
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
-            Uri extraReferrer = mActivity.getReferrer();
-            if (extraReferrer != null) {
-                newIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
-            }
+        Uri extraReferrer = mActivity.getReferrer();
+        if (extraReferrer != null) {
+            newIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
         }
 
         String targetActivityClassName = MultiWindowUtils.getInstance()
@@ -470,9 +475,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         if (uri != null && UrlConstants.CONTENT_SCHEME.equals(uri.getScheme())) {
             isContentScheme = true;
             newIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-        if (MultiWindowUtils.getInstance().shouldRunInLegacyMultiInstanceMode(mActivity, mIntent)) {
-            MultiWindowUtils.getInstance().makeLegacyMultiInstanceIntent(mActivity, newIntent);
         }
 
         if (newIntent.getComponent().getClassName().equals(mActivity.getClass().getName())) {
@@ -522,13 +524,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
      * Records metrics gleaned from the Intent.
      */
     private void recordIntentMetrics() {
-        @IntentHandler.ExternalAppId
-        int source = IntentHandler.determineExternalIntentSource(mIntent);
-        if (mIntent.getPackage() == null && source != IntentHandler.ExternalAppId.CHROME) {
-            int flagsOfInterest = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
-            int maskedFlags = mIntent.getFlags() & flagsOfInterest;
-            RecordHistogram.recordSparseHistogram("Launch.IntentFlags", maskedFlags);
-        }
         MediaNotificationUma.recordClickSource(mIntent);
     }
 

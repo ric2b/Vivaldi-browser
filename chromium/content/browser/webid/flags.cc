@@ -21,29 +21,32 @@ bool IsFedCmIdpSignoutEnabled() {
       features::kFedCm, features::kFedCmIdpSignoutFieldTrialParamName, false);
 }
 
-bool IsFedCmManifestValidationEnabled() {
-  return base::FeatureList::IsEnabled(features::kFedCmManifestValidation);
-}
-
 bool IsFedCmMultipleIdentityProvidersEnabled() {
   return base::FeatureList::IsEnabled(
       features::kFedCmMultipleIdentityProviders);
 }
 
-bool IsFedCmIdpSigninStatusEnabled() {
-  return GetFieldTrialParamByFeatureAsBool(
-      features::kFedCm, features::kFedCmIdpSigninStatusFieldTrialParamName,
-      false);
-}
-
-bool IsFedCmIframeSupportEnabled() {
-  return GetFieldTrialParamByFeatureAsBool(
-      features::kFedCm, features::kFedCmIframeSupportFieldTrialParamName,
-      false);
+FedCmIdpSigninStatusMode GetFedCmIdpSigninStatusMode() {
+  if (GetFieldTrialParamByFeatureAsBool(
+          features::kFedCm, features::kFedCmIdpSigninStatusFieldTrialParamName,
+          false)) {
+    return FedCmIdpSigninStatusMode::ENABLED;
+  }
+  if (GetFieldTrialParamByFeatureAsBool(
+          features::kFedCm,
+          features::kFedCmIdpSigninStatusMetricsOnlyFieldTrialParamName,
+          true)) {
+    return FedCmIdpSigninStatusMode::METRICS_ONLY;
+  }
+  return FedCmIdpSigninStatusMode::DISABLED;
 }
 
 bool IsFedCmMetricsEndpointEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmMetricsEndpoint);
+}
+
+bool IsFedCmUserInfoEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmUserInfo);
 }
 
 }  // namespace content

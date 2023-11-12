@@ -59,7 +59,6 @@ import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.device.ShadowDeviceConditions;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtilsJni;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
@@ -109,6 +108,7 @@ import org.chromium.url.JUnitTestGURLs;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Unit tests for {@link AppMenuPropertiesDelegateImpl}.
@@ -281,7 +281,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     private void setTabSelectionEditorV2Enabled(boolean enabled) {
         mTestValues.addFeatureFlagOverride(ChromeFeatureList.TAB_SELECTION_EDITOR_V2, enabled);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_SELECTION_EDITOR_V2, enabled);
+        ChromeFeatureList.sTabSelectionEditorV2.setForTesting(enabled);
     }
 
     private void setWebApkUniqueIdEnabled(boolean enabled) {
@@ -294,7 +294,7 @@ public class AppMenuPropertiesDelegateUnitTest {
         ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(false);
         ChromeAccessibilityUtil.get().setTouchExplorationEnabledForTesting(false);
         ReadingListUtils.setReadingListSupportedForTesting(null);
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_SELECTION_EDITOR_V2, null);
+        ChromeFeatureList.sTabSelectionEditorV2.setForTesting(null);
     }
 
     @Test
@@ -528,7 +528,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     private void checkOverviewMenuItemsPhone(int tabSelectionEditorMenuItemId) {
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mIncognitoTabModel.getCount()).thenReturn(0);
         Assert.assertFalse(mAppMenuPropertiesDelegate.shouldShowPageMenu());
         Assert.assertEquals(
@@ -806,6 +806,20 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     @Test
+    public void enablePriceTrackingItemRow_NullBookmarkModel() {
+        setShoppingListItemRowEnabled(true);
+        PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
+        mBookmarkModelSupplier.set(null);
+
+        MenuItem startPriceTrackingMenuItem = mock(MenuItem.class);
+        MenuItem stopPriceTrackingMenuItem = mock(MenuItem.class);
+        mAppMenuPropertiesDelegate.updatePriceTrackingMenuItemRow(
+                startPriceTrackingMenuItem, stopPriceTrackingMenuItem, mTab);
+        verify(startPriceTrackingMenuItem).setVisible(false);
+        verify(stopPriceTrackingMenuItem).setVisible(false);
+    }
+
+    @Test
     public void enablePriceTrackingItemRow_NullBookmarkId() {
         setShoppingListItemRowEnabled(true);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
@@ -842,7 +856,8 @@ public class AppMenuPropertiesDelegateUnitTest {
                 .when(mBookmarkModel)
                 .getBookmarksOfType(eq(PowerBookmarkType.SHOPPING));
         Long clusterId = 1L;
-        doReturn(new ShoppingService.ProductInfo("", new GURL(""), clusterId, 0, "", 0, ""))
+        doReturn(new ShoppingService.ProductInfo(
+                         "", new GURL(""), clusterId, 0, "", 0, "", Optional.empty()))
                 .when(mShoppingService)
                 .getAvailableProductInfoForUrl(any());
         PowerBookmarkMeta meta =
@@ -952,7 +967,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     private Menu setUpMenuWithIncognitoReauthPage(boolean isShowing) {
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mIncognitoTabModel);
         prepareMocksForGroupTabsOnTabModel(mIncognitoTabModel);
         doReturn(isShowing).when(mIncognitoReauthControllerMock).isReauthPageShowing();
@@ -1000,7 +1015,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     @Test
     @SmallTest
     public void testGroupTabsOption_IsEnabled_InRegularMode_IndependentOfIncognitoReauth() {
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
         prepareMocksForGroupTabsOnTabModel(mTabModel);
 
@@ -1016,7 +1031,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     @Test
     @SmallTest
     public void testGroupTabsOption_IsDisabled_InRegularMode_IndependentOfIncognitoReauth() {
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
 
         Menu menu = createTestMenu();
@@ -1032,7 +1047,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     @SmallTest
     public void testSelectTabsOption_IsEnabled_InRegularMode_IndependentOfIncognitoReauth() {
         setTabSelectionEditorV2Enabled(true);
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
         prepareMocksForGroupTabsOnTabModel(mTabModel);
 
@@ -1049,7 +1064,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     @SmallTest
     public void testSelectTabsOption_IsEnabledOneTab_InRegularMode_IndependentOfIncognitoReauth() {
         setTabSelectionEditorV2Enabled(true);
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
         when(mTabModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mTabModelFilter.getCount()).thenReturn(1);
@@ -1070,7 +1085,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     @SmallTest
     public void testSelectTabsOption_IsDisabled_InRegularMode_IndependentOfIncognitoReauth() {
         setTabSelectionEditorV2Enabled(true);
-        setUpMocksForOverviewMenu();
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
 
         Menu menu = createTestMenu();
@@ -1085,7 +1100,11 @@ public class AppMenuPropertiesDelegateUnitTest {
     @Test
     public void testStartSurfaceMenu() {
         mStartSurfaceSupplier.set(mStartSurfaceCoordinator);
-        setUpMocksForOverviewMenu();
+        @LayoutType
+        int layoutType =
+                ChromeFeatureList.sStartSurfaceRefactor.isEnabled() ? LayoutType.START_SURFACE
+                                                                    : LayoutType.TAB_SWITCHER;
+        setUpMocksForOverviewMenu(layoutType);
         doReturn(true).when(mAppMenuPropertiesDelegate).isAutoDarkWebContentsEnabled();
 
         when(mIncognitoTabModel.getCount()).thenReturn(0);
@@ -1117,8 +1136,8 @@ public class AppMenuPropertiesDelegateUnitTest {
         setUpIncognitoMocks();
     }
 
-    private void setUpMocksForOverviewMenu() {
-        when(mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER)).thenReturn(true);
+    private void setUpMocksForOverviewMenu(@LayoutType int layoutType) {
+        when(mLayoutStateProvider.isLayoutVisible(layoutType)).thenReturn(true);
         when(mTabModelSelector.getTotalTabCount()).thenReturn(1);
         setUpIncognitoMocks();
     }

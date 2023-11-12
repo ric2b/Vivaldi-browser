@@ -53,7 +53,6 @@ constexpr int64_t kBytesPerGigabyte = 1024 * 1024 * 1024;
 constexpr int64_t kDownloadSizeFallbackEstimate = 15LL * kBytesPerGigabyte;
 
 constexpr char kFailureReasonHistogram[] = "PluginVm.SetupFailureReason";
-constexpr char kSetupTimeHistogram[] = "PluginVm.SetupTime";
 
 constexpr char kHomeDirectory[] = "/home/chronos/user";
 
@@ -79,6 +78,16 @@ bool IsIsoImage(const base::FilePath& image) {
     }
   }
   return false;
+}
+
+absl::optional<base::ScopedFD> PrepareFD(const base::FilePath& image) {
+  base::File file(image, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  if (!file.IsValid()) {
+    LOG(ERROR) << "Failed to open " << image.value();
+    return absl::nullopt;
+  }
+
+  return base::ScopedFD(file.TakePlatformFile());
 }
 
 PluginVmSetupResult BucketForCancelledInstall(
@@ -142,7 +151,6 @@ absl::optional<PluginVmInstaller::FailureReason> PluginVmInstaller::Start() {
   // goes back to kIdle.
   GetWakeLock()->RequestWakeLock();
   state_ = State::kInstalling;
-  setup_start_tick_ = base::TimeTicks::Now();
   progress_ = 0;
 
   // Perform the first step asynchronously to ensure OnError() isn't called
@@ -249,7 +257,6 @@ void PluginVmInstaller::OnDownloadCompleted(
     return;
   }
 
-  RecordPluginVmImageDownloadedSizeHistogram(info.bytes_downloaded);
   StartImport();
 }
 
@@ -605,19 +612,16 @@ void PluginVmInstaller::StartImport() {
   UpdateInstallingState(InstallingState::kImporting);
   UpdateProgress(/*state_progress=*/0);
 
-  base::ThreadPool::PostTaskAndReply(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&PluginVmInstaller::DetectImageType,
-                     base::Unretained(this)),
+      base::BindOnce(&IsIsoImage, downloaded_image_),
       base::BindOnce(&PluginVmInstaller::OnImageTypeDetected,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void PluginVmInstaller::DetectImageType() {
-  creating_new_vm_ = IsIsoImage(downloaded_image_);
-}
+void PluginVmInstaller::OnImageTypeDetected(bool is_iso_image) {
+  creating_new_vm_ = is_iso_image;
 
-void PluginVmInstaller::OnImageTypeDetected() {
   if (!GetConciergeClient()->IsDiskImageProgressSignalConnected()) {
     LOG(ERROR) << "Disk image progress signal is not connected";
     OnImported(FailureReason::SIGNAL_NOT_CONNECTED);
@@ -628,24 +632,9 @@ void PluginVmInstaller::OnImageTypeDetected() {
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&PluginVmInstaller::PrepareFD, base::Unretained(this)),
+      base::BindOnce(&PrepareFD, downloaded_image_),
       base::BindOnce(&PluginVmInstaller::OnFDPrepared,
                      weak_ptr_factory_.GetWeakPtr()));
-}
-
-absl::optional<base::ScopedFD> PluginVmInstaller::PrepareFD() {
-  // In case import has been cancelled meantime.
-  if (state_ != State::kInstalling)
-    return absl::nullopt;
-
-  base::File file(downloaded_image_,
-                  base::File::FLAG_OPEN | base::File::FLAG_READ);
-  if (!file.IsValid()) {
-    LOG(ERROR) << "Failed to open " << downloaded_image_.value();
-    return absl::nullopt;
-  }
-
-  return base::ScopedFD(file.TakePlatformFile());
 }
 
 void PluginVmInstaller::OnFDPrepared(absl::optional<base::ScopedFD> maybeFd) {
@@ -858,8 +847,6 @@ void PluginVmInstaller::InstallFailed(FailureReason reason) {
 
 void PluginVmInstaller::InstallFinished() {
   LOG_FUNCTION_CALL();
-  base::UmaHistogramLongTimes(kSetupTimeHistogram,
-                              base::TimeTicks::Now() - setup_start_tick_);
   state_ = State::kIdle;
   GetWakeLock()->CancelWakeLock();
   installing_state_ = InstallingState::kInactive;

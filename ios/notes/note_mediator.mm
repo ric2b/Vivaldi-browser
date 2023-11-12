@@ -47,7 +47,7 @@ const int64_t kLastUsedFolderNone = -1;
 @synthesize browserState = _browserState;
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
-  registry->RegisterInt64Pref(vivaldiprefs::kIosNoteFolderDefault,
+  registry->RegisterInt64Pref(vivaldiprefs::kVivaldiNoteFolderDefault,
                               kLastUsedFolderNone);
 }
 
@@ -58,7 +58,7 @@ const int64_t kLastUsedFolderNone = -1;
   const NoteNode* defaultFolder = notes->main_node();
 
   PrefService* prefs = browserState->GetPrefs();
-  int64_t node_id = prefs->GetInt64(vivaldiprefs::kIosNoteFolderDefault);
+  int64_t node_id = prefs->GetInt64(vivaldiprefs::kVivaldiNoteFolderDefault);
   if (node_id == kLastUsedFolderNone)
     node_id = defaultFolder->id();
   const NoteNode* result = notes->GetNoteNodeByID(node_id);
@@ -72,7 +72,7 @@ const int64_t kLastUsedFolderNone = -1;
 + (void)setFolderForNewNotes:(const NoteNode*)folder
                   inBrowserState:(ChromeBrowserState*)browserState {
   DCHECK(folder && folder->is_folder());
-  browserState->GetPrefs()->SetInt64(vivaldiprefs::kIosNoteFolderDefault,
+  browserState->GetPrefs()->SetInt64(vivaldiprefs::kVivaldiNoteFolderDefault,
                                      folder->id());
 }
 

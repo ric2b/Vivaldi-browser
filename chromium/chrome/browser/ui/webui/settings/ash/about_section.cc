@@ -18,6 +18,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
+#include "chrome/browser/policy/management_utils.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/management/management_ui.h"
 #include "chrome/browser/ui/webui/settings/about_handler.h"
@@ -44,14 +45,15 @@
 
 #include "app/vivaldi_resources.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace mojom {
-using ::ash::settings::mojom::SearchResultDefaultRank;
-using ::ash::settings::mojom::SearchResultIcon;
-using ::ash::settings::mojom::SearchResultType;
+using ::chromeos::settings::mojom::kAboutChromeOsDetailsSubpagePath;
+using ::chromeos::settings::mojom::kAboutChromeOsSectionPath;
+using ::chromeos::settings::mojom::kDetailedBuildInfoSubpagePath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
 }  // namespace mojom
 
 namespace {
@@ -235,12 +237,11 @@ AboutSection::AboutSection(Profile* profile,
 
   updater.AddSearchTags(GetDiagnosticsAppSearchConcepts());
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kFirmwareUpdaterApp)) {
+  if (base::FeatureList::IsEnabled(features::kFirmwareUpdaterApp)) {
     updater.AddSearchTags(GetFirmwareUpdatesAppSearchConcepts());
   }
 
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kEnableHostnameSetting)) {
+  if (base::FeatureList::IsEnabled(features::kEnableHostnameSetting)) {
     updater.AddSearchTags(GetDeviceNameSearchConcepts());
   }
 }
@@ -389,7 +390,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString("deviceManager", GetDeviceManager());
 
   if (user_manager::UserManager::IsInitialized()) {
-    bool is_enterprise_managed = webui::IsEnterpriseManaged();
+    bool is_enterprise_managed = policy::IsDeviceEnterpriseManaged();
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
     bool is_current_owner = user_manager->IsCurrentUserOwner();
 
@@ -428,7 +429,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString("aboutProductOsWithLinuxLicense",
                          os_with_linux_license);
   html_source->AddBoolean("aboutEnterpriseManaged",
-                          webui::IsEnterpriseManaged());
+                          policy::IsDeviceEnterpriseManaged());
   html_source->AddBoolean("aboutIsArcEnabled",
                           arc::IsArcPlayStoreEnabledForProfile(profile()));
   html_source->AddBoolean("aboutIsDeveloperMode",
@@ -448,11 +449,10 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean(
       "isFirmwareUpdaterAppEnabled",
-      base::FeatureList::IsEnabled(chromeos::features::kFirmwareUpdaterApp));
+      base::FeatureList::IsEnabled(features::kFirmwareUpdaterApp));
 
-  html_source->AddBoolean(
-      "isOsFeedbackEnabled",
-      base::FeatureList::IsEnabled(chromeos::features::kOsFeedback));
+  html_source->AddBoolean("isOsFeedbackEnabled",
+                          base::FeatureList::IsEnabled(features::kOsFeedback));
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   html_source->AddString("aboutTermsURL", chrome::kChromeUITermsURL);
@@ -539,7 +539,7 @@ bool AboutSection::ShouldShowAUToggle(user_manager::User* active_user) {
   if (account_info.capabilities.can_toggle_auto_updates() ==
       signin::Tribool::kTrue) {
     // Show toggle based on user's capabilities.
-    return chromeos::features::IsConsumerAutoUpdateToggleAllowed();
+    return features::IsConsumerAutoUpdateToggleAllowed();
   }
 
   return false;
@@ -556,5 +556,4 @@ void AboutSection::UpdateReportIssueSearchTags() {
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

@@ -151,8 +151,7 @@ SquareInkDropRipple::SquareInkDropRipple(const gfx::Size& large_size,
                                          const gfx::Point& center_point,
                                          SkColor color,
                                          float visible_opacity)
-    : activated_shape_(ActivatedShape::kRoundedRect),
-      visible_opacity_(visible_opacity),
+    : visible_opacity_(visible_opacity),
       large_size_(large_size),
       large_corner_radius_(large_corner_radius),
       small_size_(small_size),
@@ -442,7 +441,7 @@ void SquareInkDropRipple::CalculateRectTransforms(
                                           desired_size.width() / 2.0f));
     ripple_bounds.Scale(dsf);
     ripple_bounds = gfx::RectF(gfx::ToEnclosingRect(ripple_bounds));
-    ripple_bounds.Scale(1.0f / dsf);
+    ripple_bounds.InvScale(dsf);
     size = ripple_bounds.size();
   }
 

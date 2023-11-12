@@ -47,7 +47,15 @@ std::vector<std::string> GetSyncedServicePrefNames() {
 }  // namespace
 
 UnifiedConsentServiceFactory::UnifiedConsentServiceFactory()
-    : ProfileKeyedServiceFactory("UnifiedConsentService") {
+    : ProfileKeyedServiceFactory(
+          "UnifiedConsentService",
+          ProfileSelections::Builder()
+              .WithGuest(ProfileSelection::kNone)
+              .WithSystem(ProfileSelection::kNone)
+              // ChromeOS creates various profiles (login, lock screen...) that
+              // do not have unified consent.
+              .WithAshInternals(ProfileSelection::kNone)
+              .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
 }

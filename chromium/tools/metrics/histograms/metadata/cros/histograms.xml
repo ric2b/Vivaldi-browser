@@ -35,7 +35,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisks.ArchiveType" enum="CrosDisksArchiveType"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -44,7 +44,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisks.DeviceMediaType" enum="CrosDisksDeviceMediaType"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -54,7 +54,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisks.FilesystemType" enum="CrosDisksFilesystemType"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -74,7 +74,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisks.Fuse.FuseZip" enum="FuseZipError"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -84,7 +84,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisks.Fuse.Rar2fs" enum="Rar2fsError"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -93,8 +93,49 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CrosDisks.MountError.{FileSystem}" enum="PopularOSErrno"
+    expires_after="2023-12-01">
+  <owner>fdegros@chromium.org</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    The error returned by the mount() system call when the ChromeOS cros-disks
+    daemon tries to mount a file system.
+  </summary>
+  <token key="FileSystem">
+    <variant name="ext2"/>
+    <variant name="ext3"/>
+    <variant name="ext4"/>
+    <variant name="fuse"/>
+    <variant name="hfsplus"/>
+    <variant name="iso9660"/>
+    <variant name="udf"/>
+    <variant name="vfat"/>
+  </token>
+</histogram>
+
+<histogram name="CrosDisks.PrematureTermination.{Daemon}" enum="DaemonError"
+    expires_after="2023-12-01">
+  <owner>fdegros@chromium.org</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    Error returned by a FUSE daemon that unexpectedly terminated (i.e. before
+    being requested by cros-disks to unmount and exit).
+  </summary>
+  <token key="Daemon">
+    <variant name="drivefs"/>
+    <variant name="fuse-archive"/>
+    <variant name="fusebox"/>
+    <variant name="mount-exfat-fuse"/>
+    <variant name="mount-zip"/>
+    <variant name="ntfs-3g"/>
+    <variant name="rar2fs"/>
+    <variant name="smbfs"/>
+    <variant name="sshfs"/>
+  </token>
+</histogram>
+
 <histogram name="CrosDisks.ReadOnlyFileSystemAfterError"
-    enum="CrosDisksFilesystemType" expires_after="2023-04-01">
+    enum="CrosDisksFilesystemType" expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -104,8 +145,36 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CrosDisks.UnmountError.{FileSystem}" enum="PopularOSErrno"
+    expires_after="2023-12-01">
+  <owner>fdegros@chromium.org</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    The error returned by the umount() system call when the ChromeOS cros-disks
+    daemon tries to unmount a file system.
+  </summary>
+  <token key="FileSystem">
+    <variant name="archive"/>
+    <variant name="drivefs"/>
+    <variant name="exfat"/>
+    <variant name="ext2"/>
+    <variant name="ext3"/>
+    <variant name="ext4"/>
+    <variant name="fusebox"/>
+    <variant name="hfsplus"/>
+    <variant name="iso9660"/>
+    <variant name="ntfs"/>
+    <variant name="rar"/>
+    <variant name="smbfs"/>
+    <variant name="sshfs"/>
+    <variant name="udf"/>
+    <variant name="vfat"/>
+    <variant name="zip"/>
+  </token>
+</histogram>
+
 <histogram name="CrosDisksClient.FormatCompletedError"
-    enum="CrosDisksClientFormatError" expires_after="2023-04-09">
+    enum="CrosDisksClientFormatError" expires_after="2023-06-11">
   <owner>austinct@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -115,7 +184,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.FormatTime" units="ms"
-    expires_after="2023-03-19">
+    expires_after="2023-05-27">
   <owner>austinct@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -124,7 +193,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.MountCompletedError"
-    enum="CrosDisksClientMountError" expires_after="2023-04-01">
+    enum="CrosDisksClientMountError" expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -134,7 +203,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.MountErrorMountType"
-    enum="CrosDisksMountTypeError" expires_after="2023-04-01">
+    enum="CrosDisksMountTypeError" expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -144,7 +213,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.MountTime" units="ms"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -153,7 +222,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.UnmountError" enum="CrosDisksClientMountError"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -163,7 +232,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CrosDisksClient.UnmountTime" units="ms"
-    expires_after="2023-04-01">
+    expires_after="2023-06-04">
   <owner>fdegros@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>

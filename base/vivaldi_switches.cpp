@@ -13,11 +13,6 @@ const char kAutoTestMode[] = "auto-test-mode";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
 
-// Enable platform media IPC demuxer that was used previously to play mpeg4
-// media. Nowadays individual platform audio and video decoders should work and
-// support more cases, but for testing the older code can be enabled.
-const char kVivaldiEnableIPCDemuxer[] = "enable-ipc-demuxer";
-
 // The installer should perform updates completely silently and should not
 // terminate running browser instances. The name is criptic as it is not
 // intended to be used by the end-user.

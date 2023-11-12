@@ -7,10 +7,14 @@
 #include <string>
 
 #include "ash/constants/ash_features.h"
+#include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/animation/linear_animation.h"
@@ -22,6 +26,15 @@ namespace {
 const int kPrivacyIndicatorsViewExpandedShorterSideSize = 24;
 const int kPrivacyIndicatorsViewExpandedLongerSideSize = 50;
 const int kPrivacyIndicatorsViewSize = 8;
+
+constexpr char kPrivacyIndicatorsShowTypeHistogramName[] =
+    "Ash.PrivacyIndicators.ShowType";
+constexpr char kPrivacyIndicatorsShowPerSessionHistogramName[] =
+    "Ash.PrivacyIndicators.NumberOfShowsPerSession";
+constexpr char kCountAppsAccessCameraHistogramName[] =
+    "Ash.PrivacyIndicators.NumberOfAppsAccessingCamera";
+constexpr char kCountAppsAccessMicrophoneHistogramName[] =
+    "Ash.PrivacyIndicators.NumberOfAppsAccessingMicrophone";
 
 // Get the expected size in expand animation, given the animation value.
 int GetExpectedSizeInExpandAnimation(double progress) {
@@ -77,6 +90,11 @@ class PrivacyIndicatorsTrayItemViewTest : public AshTestBase {
         std::make_unique<PrivacyIndicatorsTrayItemView>(GetPrimaryShelf());
   }
 
+  void TearDown() override {
+    privacy_indicators_view_.reset();
+    AshTestBase::TearDown();
+  }
+
   std::u16string GetTooltipText() {
     return privacy_indicators_view_->GetTooltipText(gfx::Point());
   }
@@ -120,6 +138,10 @@ class PrivacyIndicatorsTrayItemViewTest : public AshTestBase {
   PrivacyIndicatorsTrayItemView::AnimationState animation_state() {
     return privacy_indicators_view_->animation_state_;
   }
+  void set_animation_state(
+      PrivacyIndicatorsTrayItemView::AnimationState state) {
+    privacy_indicators_view_->animation_state_ = state;
+  }
 
   gfx::LinearAnimation* longer_side_shrink_animation() {
     return privacy_indicators_view_->longer_side_shrink_animation_.get();
@@ -137,6 +159,9 @@ class PrivacyIndicatorsTrayItemViewTest : public AshTestBase {
 
 TEST_F(PrivacyIndicatorsTrayItemViewTest, IconsVisibility) {
   EXPECT_FALSE(privacy_indicators_view()->GetVisible());
+
+  // Set animation to expand to allow showing icons.
+  set_animation_state(PrivacyIndicatorsTrayItemView::AnimationState::kExpand);
 
   privacy_indicators_view()->Update(/*app_id=*/"app_id",
                                     /*is_camera_used=*/true,
@@ -167,6 +192,9 @@ TEST_F(PrivacyIndicatorsTrayItemViewTest, IconsVisibility) {
 
 TEST_F(PrivacyIndicatorsTrayItemViewTest, ScreenShareIconsVisibility) {
   EXPECT_FALSE(privacy_indicators_view()->GetVisible());
+
+  // Set animation to expand to allow showing icons.
+  set_animation_state(PrivacyIndicatorsTrayItemView::AnimationState::kExpand);
 
   privacy_indicators_view()->UpdateScreenShareStatus(
       /*is_screen_sharing=*/true);
@@ -329,6 +357,11 @@ TEST_F(PrivacyIndicatorsTrayItemViewTest, VisibilityAnimation) {
             privacy_indicators_view()->GetPreferredSize().height());
   EXPECT_EQ(kPrivacyIndicatorsViewSize,
             privacy_indicators_view()->GetPreferredSize().width());
+
+  // All icon should not be visible.
+  EXPECT_FALSE(camera_icon()->GetVisible());
+  EXPECT_FALSE(microphone_icon()->GetVisible());
+  EXPECT_FALSE(screen_share_icon()->GetVisible());
 }
 
 // Same test as above, but with the side shelf (the longer and shorter side will
@@ -397,6 +430,11 @@ TEST_F(PrivacyIndicatorsTrayItemViewTest, SideShelfVisibilityAnimation) {
             privacy_indicators_view()->GetPreferredSize().width());
   EXPECT_EQ(kPrivacyIndicatorsViewSize,
             privacy_indicators_view()->GetPreferredSize().height());
+
+  // All icon should not be visible.
+  EXPECT_FALSE(camera_icon()->GetVisible());
+  EXPECT_FALSE(microphone_icon()->GetVisible());
+  EXPECT_FALSE(screen_share_icon()->GetVisible());
 }
 
 TEST_F(PrivacyIndicatorsTrayItemViewTest, StateChangeDuringAnimation) {
@@ -431,10 +469,17 @@ TEST_F(PrivacyIndicatorsTrayItemViewTest, StateChangeDuringAnimation) {
   privacy_indicators_view()->UpdateScreenShareStatus(
       /*is_screen_sharing=*/false);
   EXPECT_FALSE(privacy_indicators_view()->GetVisible());
+
+  // Clean up.
+  longer_side_shrink_animation()->End();
+  shorter_side_shrink_animation()->End();
 }
 
 TEST_F(PrivacyIndicatorsTrayItemViewTest, MultipleAppsAccess) {
   EXPECT_FALSE(privacy_indicators_view()->GetVisible());
+
+  // Set animation to expand to allow showing icons.
+  set_animation_state(PrivacyIndicatorsTrayItemView::AnimationState::kExpand);
 
   privacy_indicators_view()->Update(/*app_id=*/"app_id1",
                                     /*is_camera_used=*/true,
@@ -463,6 +508,131 @@ TEST_F(PrivacyIndicatorsTrayItemViewTest, MultipleAppsAccess) {
                                     /*is_camera_used=*/false,
                                     /*is_microphone_used=*/false);
   EXPECT_FALSE(privacy_indicators_view()->GetVisible());
+}
+
+TEST_F(PrivacyIndicatorsTrayItemViewTest, RecordShowTypeMetrics) {
+  auto check_histogram_record = [](bool is_camera_used, bool is_microphone_used,
+                                   bool is_screen_sharing,
+                                   PrivacyIndicatorsTrayItemView* view,
+                                   PrivacyIndicatorsTrayItemView::Type type) {
+    base::HistogramTester histograms;
+    view->Update(/*app_id=*/"app_id", is_camera_used, is_microphone_used);
+    view->UpdateScreenShareStatus(is_screen_sharing);
+    histograms.ExpectBucketCount(kPrivacyIndicatorsShowTypeHistogramName, type,
+                                 1);
+  };
+
+  check_histogram_record(/*is_camera_used=*/true, /*is_microphone_used=*/false,
+                         /*is_screen_sharing=*/false, privacy_indicators_view(),
+                         PrivacyIndicatorsTrayItemView::Type::kCamera);
+
+  check_histogram_record(/*is_camera_used=*/false, /*is_microphone_used=*/true,
+                         /*is_screen_sharing=*/false, privacy_indicators_view(),
+                         PrivacyIndicatorsTrayItemView::Type::kMicrophone);
+
+  check_histogram_record(/*is_camera_used=*/false, /*is_microphone_used=*/false,
+                         /*is_screen_sharing=*/true, privacy_indicators_view(),
+                         PrivacyIndicatorsTrayItemView::Type::kScreenSharing);
+
+  check_histogram_record(
+      /*is_camera_used=*/true, /*is_microphone_used=*/true,
+      /*is_screen_sharing=*/false, privacy_indicators_view(),
+      PrivacyIndicatorsTrayItemView::Type::kCameraMicrophone);
+
+  check_histogram_record(
+      /*is_camera_used=*/true, /*is_microphone_used=*/false,
+      /*is_screen_sharing=*/true, privacy_indicators_view(),
+      PrivacyIndicatorsTrayItemView::Type::kCameraScreenSharing);
+
+  check_histogram_record(
+      /*is_camera_used=*/false, /*is_microphone_used=*/true,
+      /*is_screen_sharing=*/true, privacy_indicators_view(),
+      PrivacyIndicatorsTrayItemView::Type::kMicrophoneScreenSharing);
+
+  check_histogram_record(
+      /*is_camera_used=*/true, /*is_microphone_used=*/true,
+      /*is_screen_sharing=*/true, privacy_indicators_view(),
+      PrivacyIndicatorsTrayItemView::Type::kAllUsed);
+}
+
+TEST_F(PrivacyIndicatorsTrayItemViewTest, RecordShowPerSessionMetrics) {
+  // Set up 2 displays. Note that only one instance should be recorded for the
+  // primary display when session changes.
+  UpdateDisplay("100x200,300x400");
+  int expected_count = 1;
+
+  // Show the indicator in the given `show_count` number of times.
+  auto trigger_show_indicator = [](int show_count) {
+    // Update the state of camera/microphone access so that the indicators on
+    // all displays show, then hide for `show_count` times.
+    for (auto i = 0; i < show_count; i++) {
+      for (auto* controller : Shell::Get()->GetAllRootWindowControllers()) {
+        auto* indicator_view = controller->GetStatusAreaWidget()
+                                   ->unified_system_tray()
+                                   ->privacy_indicators_view();
+        indicator_view->Update(/*app_id=*/"app_id", /*is_camera_used=*/true,
+                               /*is_microphone_used=*/true);
+        indicator_view->Update(/*app_id=*/"app_id", /*is_camera_used=*/false,
+                               /*is_microphone_used=*/false);
+      }
+    }
+  };
+
+  base::HistogramTester histograms;
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  int expected_sample = 1;
+  trigger_show_indicator(expected_sample);
+
+  // After session changed, metrics should be recorded.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOCKED);
+  histograms.ExpectBucketCount(kPrivacyIndicatorsShowPerSessionHistogramName,
+                               expected_sample, expected_count);
+
+  expected_sample = 6;
+  trigger_show_indicator(expected_sample);
+
+  // After session changed, metrics should be recorded.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  histograms.ExpectBucketCount(kPrivacyIndicatorsShowPerSessionHistogramName,
+                               expected_sample, expected_count);
+
+  expected_sample = 10;
+  trigger_show_indicator(expected_sample);
+
+  // After session changed, metrics should be recorded.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  histograms.ExpectBucketCount(kPrivacyIndicatorsShowPerSessionHistogramName,
+                               expected_sample, expected_count);
+}
+
+// When multiple apps access camera and microphone, their histograms should
+// update accordingly.
+TEST_F(PrivacyIndicatorsTrayItemViewTest, RecordAppAccessSimultaneously) {
+  base::HistogramTester histograms;
+
+  privacy_indicators_view()->Update(/*app_id=*/"app_id1",
+                                    /*is_camera_used=*/true,
+                                    /*is_microphone_used=*/false);
+  histograms.ExpectBucketCount(kCountAppsAccessCameraHistogramName, 1, 1);
+  histograms.ExpectBucketCount(kCountAppsAccessMicrophoneHistogramName, 1, 0);
+
+  privacy_indicators_view()->Update(/*app_id=*/"app_id2",
+                                    /*is_camera_used=*/true,
+                                    /*is_microphone_used=*/true);
+  histograms.ExpectBucketCount(kCountAppsAccessCameraHistogramName, 2, 1);
+  histograms.ExpectBucketCount(kCountAppsAccessMicrophoneHistogramName, 1, 1);
+
+  privacy_indicators_view()->Update(/*app_id=*/"app_id3",
+                                    /*is_camera_used=*/true,
+                                    /*is_microphone_used=*/true);
+  histograms.ExpectBucketCount(kCountAppsAccessCameraHistogramName, 3, 1);
+  histograms.ExpectBucketCount(kCountAppsAccessMicrophoneHistogramName, 2, 1);
 }
 
 }  // namespace ash

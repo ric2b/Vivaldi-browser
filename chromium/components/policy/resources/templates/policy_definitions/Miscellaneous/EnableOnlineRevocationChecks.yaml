@@ -7,6 +7,7 @@ desc: |-
         Note: <ph name="OCSP_CRL_LABEL">OCSP/CRL</ph> checks provide no effective security benefit.
 example_value: false
 features:
+  can_be_recommended: true,
   dynamic_refresh: true
   per_profile: false
 future_on:

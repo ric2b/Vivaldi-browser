@@ -151,6 +151,8 @@ public class LayerTitleCache {
             title.register();
         }
 
+        // Note(david@vivaldi.com): Apply current density to the image.
+        originalFavicon.setDensity(mContext.getResources().getDisplayMetrics().densityDpi);
         title.set(titleBitmapFactory.getTitleBitmap(mContext, titleString),
                 titleBitmapFactory.getFaviconBitmap(originalFavicon), fetchFaviconFromHistory);
 

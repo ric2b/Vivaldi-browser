@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">Ε&amp;πανάληψη φόρτωσης Εικόνας</translation>
 <translation id="1924750141060565109">Τοπίο 15</translation>
 <translation id="19598411548897379">Γενικό</translation>
+<translation id="1973351931613083086">αυτόματη αναπαραγωγή</translation>
 <translation id="1985669426322966465">Αναβάθμιση Λογισμικού</translation>
 <translation id="2079036669923635404">Κάντε κλικ εδώ για να ενημερώσετε το Vivaldi στην έκδοση <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Παρουσιάστηκε σφάλμα κατά τη λήψη αρχείων ενημέρωσης. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά αργότερα.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Κάδος απορριμμάτων</translation>
 <translation id="292258461174562431">Τέρας 4</translation>
 <translation id="2923448633003185837">Επικόλληση και Μετάβαση</translation>
+<translation id="2953943267837858202">Δεν επιτρέπεται η αυτόματη αναπαραγωγή βίντεο</translation>
 <translation id="2977472760057091832">Άνοιγμα Συνδέσμου σε Νέο Ιδιωτικό Παράθυρο</translation>
 <translation id="2989805286512600854">Άνοιγμα σε Νέα Καρτέλα</translation>
 <translation id="3027988479108856431">Δυστυχώς, οι ρυθμίσεις σας Yandex δεν είναι διαθέσιμες ενώ εκτελείται το πρόγραμμα περιήγησης. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα Yandex. Στη συνέχεια, κάντε κλικ στο κουμπί Συνέχεια.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Νέος Σελιδοδείκτης</translation>
 <translation id="3255747772218936245">Εγκατάσταση ενημέρωσης</translation>
 <translation id="3259769196742189631">Επικύρωση</translation>
+<translation id="3291915639428159043">Αποκλείστηκε η αυτόματη αναπαραγωγή</translation>
 <translation id="3302905971452834934">Τέρας 1</translation>
 <translation id="3334610655141903168">(χωρίς τίτλο)</translation>
 <translation id="3372505110412186107">Το Vivaldi <ph name="VERSION" /> είναι προς το παρόν η πιο πρόσφατη διαθέσιμη έκδοση.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Άνοιγμα Συνδέσμου σε Νέο Παράθυρο</translation>
 <translation id="3588820906588687999">Άνοιγμα Εικόνας σε Νέα Καρτέλα</translation>
 <translation id="3601066750251199488">Τέρας 3</translation>
+<translation id="3620979700683094848">Οι ιστότοποι μπορούν να αναπαράγουν αυτόματα βίντεο</translation>
 <translation id="3680031241659195730">Μια νέα έκδοση του Vivaldi είναι διαθέσιμη!</translation>
 <translation id="3708982624815781692">Η λήψη ακυρώθηκε.</translation>
 <translation id="3732157130969736834">Προσθήκη Συνδέσμου στους Σελιδοδείκτες</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Να μην εμφανιστεί ξανά</translation>
 <translation id="4074744496918018786">Άνοιγμα Εικόνας σε Ιδιωτικό Παράθυρο</translation>
+<translation id="410351446219883937">Αυτόματη αναπαραγωγή</translation>
 <translation id="4324492550286218827">Τοπίο 2</translation>
 <translation id="4406101500523955324">Άνοιγμα σε Νέο Ιδιωτικό Παράθυρο</translation>
 <translation id="4420816922321010053">Θέλετε πραγματικά να κλείσετε τον Vivaldi;</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Αποκοπή</translation>
 <translation id="7727481996062361502">Επαλήθευση ενημέρωσης...</translation>
 <translation id="7793738202466490491">Προσθήκη ως Συμβάν Ημερολογίου</translation>
+<translation id="7834693436815575883">Επιτρέπεται η αυτόματη αναπαραγωγή</translation>
 <translation id="7848222781052558334">Αποτυχία επαλήθευσης της ψηφιακής υπογραφής των ληφθέντων αρχείων.</translation>
 <translation id="7865983598101744945">Επιβεβαίωση εξόδου</translation>
 <translation id="7957213167373139414">Το Ημερολόγιό Μου</translation>
 <translation id="8027581147000338959">Άνοιγμα σε Νέο Παράθυρο</translation>
+<translation id="8044382196220116469">Να μην επιτρέπεται στους ιστότοπους η αυτόματη αναπαραγωγή βίντεο</translation>
 <translation id="8099620695029051217">Αντιγραφή της Διεύθυνσης της Σελίδας</translation>
 <translation id="8197810018650377191">Προσθήκη Σελίδας στους Σελιδοδείκτες</translation>
 <translation id="8261506727792406068">Διαγραφή</translation>
@@ -160,12 +167,14 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Τοπίο 14</translation>
 <translation id="8773635261052182196">Δεν θα δείτε πλέον αυτές τις ειδοποιήσεις. Μπορείτε να τα ενεργοποιήσετε ξανά από τις ρυθμίσεις του vivaldi.</translation>
+<translation id="8774017153185436870">Οι ιστότοποι ενδέχεται να αναπαράγουν αυτόματα βίντεο</translation>
 <translation id="8813277370772331957">Θύμισέ μου αργότερα</translation>
 <translation id="8894900864683381599">Προσθήκη Συνδέσμου σε Πίνακα Ιστού</translation>
 <translation id="8912720443398351457">Θέλετε πραγματικά να κλείσετε τον Vivaldi;</translation>
 <translation id="8947109330183116400">Επιλέξτε αρχείο σελιδοδεικτών HTML</translation>
 <translation id="9017566390391482291">Επιλέξτε το φάκελο προφίλ Vivaldi για εισαγωγή</translation>
 <translation id="9048058608784130603">Εκκρεμεί ενημέρωση <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Επιτρέπεται η αυτόματη αναπαραγωγή βίντεο</translation>
 <translation id="9065203028668620118">Επεξεργασία</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Άνοιγμα εικόνας ως <ph name="USER" /></translation>

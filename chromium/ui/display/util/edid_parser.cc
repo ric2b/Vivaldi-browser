@@ -100,7 +100,8 @@ EdidParser::EdidParser(const std::vector<uint8_t>& edid_blob, bool is_external)
       year_of_manufacture_(display::kInvalidYearOfManufacture),
       gamma_(0.0),
       bits_per_channel_(-1),
-      primaries_({0}) {
+      primaries_({0}),
+      audio_formats_(0) {
   ParseEdid(edid_blob);
 }
 
@@ -467,26 +468,29 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
     if (edid[offset] == 0 && edid[offset + 1] == 0 && edid[offset + 2] == 0 &&
         edid[offset + 3] == kDisplayRangeLimitsDescriptor) {
       // byte 4: Offsets for display range limits
-      const uint8_t kRateOffset = edid[offset + 4];
+      const uint8_t rateOffset = edid[offset + 4];
       // bits 7-4: Reserved \0
-      if (kRateOffset & 0x10)
+      if (rateOffset & 0xf0)
         continue;
       // bit 3: Horizontal max rate offset (not used)
       // bit 2: Horizontal min rate offset (not used)
       // bit 1: Vertical max rate offset
-      const uint8_t verticalMaxRateOffset = kRateOffset & (1 << 1) ? 255 : 0;
+      const uint8_t verticalMaxRateOffset = rateOffset & (1 << 1) ? 255 : 0;
       // bit 0: Vertical min rate offset
-      const uint8_t verticalMinRateOffset = kRateOffset & (1 << 0) ? 255 : 0;
+      const uint8_t verticalMinRateOffset = rateOffset & (1 << 0) ? 255 : 0;
 
       // bytes 5-8: Rate limits
       // Each byte must be within [1, 255].
       if (edid[offset + 5] == 0 || edid[offset + 6] == 0 ||
           edid[offset + 7] == 0 || edid[offset + 8] == 0)
         continue;
+      vertical_display_range_limits_ = absl::make_optional<gfx::Range>();
       // byte 5: Min vertical rate in Hz
-      min_vfreq_ = edid[offset + 5] + verticalMinRateOffset;
+      vertical_display_range_limits_->set_start(edid[offset + 5] +
+                                                verticalMinRateOffset);
       // byte 6: Max vertical rate in Hz
-      max_vfreq_ = edid[offset + 6] + verticalMaxRateOffset;
+      vertical_display_range_limits_->set_end(edid[offset + 6] +
+                                              verticalMaxRateOffset);
       // byte 7: Min horizontal rate in kHz (not used)
       // byte 8: Max horizontal rate in kHz (not used)
 
@@ -538,6 +542,7 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
   constexpr size_t kDataBlockOffset = 4;
   constexpr uint8_t kCEAExtensionTag = '\x02';
   constexpr uint8_t kExpectedExtensionRevision = '\x03';
+  constexpr uint8_t kAudioTag = 1;
   constexpr uint8_t kExtendedTag = 7;
   constexpr uint8_t kExtendedVideoCapabilityTag = 0;
   constexpr uint8_t kPTOverscanFlagPosition = 4;
@@ -598,8 +603,8 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
     for (size_t data_offset = extension_offset + kDataBlockOffset;
          data_offset < extension_offset + timing_descriptors_start;) {
       // A data block is encoded as:
-      // - byte 1 high 3 bits: tag. '07' for extended tags.
-      // - byte 1 remaining bits: the length of data block.
+      // - byte 1 high 3 bits: tag: '1' for audio, '7' for extended tags.
+      // - byte 1 remaining bits: the length of data block after header.
       // - byte 2: the extended tag. E.g. '0' for video capability. Values are
       //   defined by the k...CapabilityTag constants.
       // - byte 3: the capability.
@@ -607,6 +612,35 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
       const uint8_t payload_length = edid[data_offset] & 0x1f;
       if (data_offset + payload_length + 1 > edid.size())
         break;
+
+      // Short Audio Descriptors contain passthrough audio support information.
+      // Note: Short Audio Descriptors also contain channel count and sampling
+      // frequency information as described in:
+      // CTA-861-G (2017) section 7.5.2 Audio Data Block.
+      if (tag == kAudioTag) {
+        constexpr uint8_t kCEAShortAudioDescriptorLength = 3;
+        constexpr uint8_t kFormatBitsLPCM = 1;
+        constexpr uint8_t kFormatBitsDTS = 7;
+        constexpr uint8_t kFormatBitsDTSHD = 11;
+
+        for (int sad_index = 0;
+             sad_index + kCEAShortAudioDescriptorLength <= payload_length;
+             sad_index += kCEAShortAudioDescriptorLength) {
+          switch ((edid[data_offset + 1 + sad_index] >> 3) & 0x1F) {
+            case kFormatBitsLPCM:
+              audio_formats_ |= kAudioBitstreamPcmLinear;
+              break;
+            case kFormatBitsDTS:
+              audio_formats_ |= kAudioBitstreamDts;
+              break;
+            case kFormatBitsDTSHD:
+              audio_formats_ |= kAudioBitstreamDtsHd;
+              break;
+          }
+        }
+        data_offset += payload_length + 1;
+        continue;
+      }
 
       if (tag != kExtendedTag || payload_length < 2) {
         data_offset += payload_length + 1;

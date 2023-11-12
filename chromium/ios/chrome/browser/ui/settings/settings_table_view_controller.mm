@@ -31,7 +31,7 @@
 #import "components/sync/driver/sync_service.h"
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/commerce/price_alert_util.h"
+#import "ios/chrome/browser/commerce/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
@@ -48,6 +48,7 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/system_identity.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -63,8 +64,7 @@
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/icons/buildflags.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/settings_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/settings/about_chrome_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
@@ -111,10 +111,23 @@
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_api.h"
 #import "net/base/mac/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ad_tracker_blocker/settings/vivaldi_atb_settings_view_controller.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_layout_settings_view_controller.h"
+#import "ios/ui/settings/sync/vivaldi_sync_coordinator.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -207,6 +220,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 #pragma mark - SettingsTableViewController
 
 @interface SettingsTableViewController () <
+
+    // Vivaldi
+    VivaldiSyncCoordinatorDelegate,
+    // End Vivaldi
+
     BooleanObserver,
     ChromeAccountManagerServiceObserver,
     GoogleServicesSettingsCoordinatorDelegate,
@@ -297,8 +315,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   TableViewDetailIconItem* _autoFillCreditCardDetailItem;
   TableViewItem* _syncItem;
 
-  // YES if view has been dismissed.
-  BOOL _settingsHasBeenDismissed;
+  // Whether Settings have been dismissed.
+  BOOL _settingsAreDismissed;
+
+  // Vivaldi
+  VivaldiSyncCoordinator* _vivaldiSyncCoordinator;
+  // End Vivaldi
 }
 
 // The item related to the switch for the show feed settings.
@@ -313,10 +335,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 // YES if the sign-in is in progress.
 @property(nonatomic, assign) BOOL isSigninInProgress;
-
-// Stops observing browser state services. This is required during the shutdown
-// phase to avoid observing services for a profile that is being killed.
-- (void)stopBrowserStateServiceObservers;
 
 // Account manager service to retrieve Chrome identities.
 @property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
@@ -430,19 +448,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)dealloc {
-  DCHECK(_settingsHasBeenDismissed)
+  DCHECK(_settingsAreDismissed)
       << "-settingsWillBeDismissed must be called before -dealloc";
-}
-
-- (void)stopBrowserStateServiceObservers {
-  _syncObserverBridge.reset();
-  _identityObserverBridge.reset();
-  _accountManagerServiceObserver.reset();
-  [_showMemoryDebugToolsEnabled setObserver:nil];
-  [_articlesEnabled setObserver:nil];
-  [_allowChromeSigninPreference setObserver:nil];
-  [_contentSuggestionPolicyEnabled setObserver:nil];
-  [_contentSuggestionForSupervisedUsersEnabled setObserver:nil];
 }
 
 #pragma mark View lifecycle
@@ -466,8 +473,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 - (void)loadModel {
   [super loadModel];
 
+  if (vivaldi::IsVivaldiRunning()) {
+    [self addVivaldiSigninSection];
+  } else {
   // Sign-in section.
   [self updateSigninSection];
+  } // End Vivaldi
 
   // Defaults section.
   TableViewModel<TableViewItem*>* model = self.tableViewModel;
@@ -493,19 +504,35 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [model addItem:[self autoFillProfileDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierBasics];
 
+  // Vivaldi
+  [self addVivaldiAppearanceSection];
+  if (!self.isDeviceIPad)
+    [self addVivaldiTabsSettingItem];
+  [self addVivaldiStartPageLayoutSettingItem];
+  // End Vivaldi
+
   // Advanced Section
   [model addSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
   if (IsPriceNotificationsEnabled()) {
     [model addItem:[self priceNotificationsItem]
         toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
   }
+
+  if (!IsVivaldiRunning()) {
   [model addItem:[self voiceSearchDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
   [model addItem:[self safetyCheckDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+  } // End Vivaldi
+
   [model addItem:[self privacyDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
 
+  // Vivaldi
+  [self addVivaldiATBSettingItem];
+  // End Vivaldi
+
+  if (!IsVivaldiRunning()) {
   if (!IsFeedAblationEnabled() &&
       IsContentSuggestionsForSupervisedUserEnabled(_browserState->GetPrefs())) {
     if ([_contentSuggestionPolicyEnabled value]) {
@@ -517,12 +544,17 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
     }
   }
+  } // End Vivaldi
+
   [model addItem:[self languageSettingsDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
   [model addItem:[self contentSettingsDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+
+  if (!IsVivaldiRunning()) {
   [model addItem:[self bandwidthManagementDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+  } // End Vivaldi
 
   // Info Section
   [model addSectionWithIdentifier:SettingsSectionIdentifierInfo];
@@ -549,6 +581,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)updateSigninSection {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   TableViewModel<TableViewItem*>* model = self.tableViewModel;
   if ([model hasSectionForSectionIdentifier:SettingsSectionIdentifierSignIn]) {
     [model removeSectionWithIdentifier:SettingsSectionIdentifierSignIn];
@@ -695,29 +732,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 #pragma mark - Model Items
 
-- (TableViewItem*)signInTextItem {
-  if (_signinPromoViewMediator) {
-    TableViewSigninPromoItem* signinPromoItem =
-        [[TableViewSigninPromoItem alloc]
-            initWithType:SettingsItemTypeSigninPromo];
-    signinPromoItem.text =
-        l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_SETTINGS_WITH_UNITY);
-    signinPromoItem.configurator =
-        [_signinPromoViewMediator createConfigurator];
-    signinPromoItem.delegate = _signinPromoViewMediator;
-    [_signinPromoViewMediator signinPromoViewIsVisible];
-    return signinPromoItem;
-  }
-  if (!_hasRecordedSigninImpression) {
-    // Once the Settings are open, this button impression will at most be
-    // recorded once until they are closed.
-    signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
-        signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
-    _hasRecordedSigninImpression = YES;
-  }
-  return [self accountSignInItem];
-}
-
 - (TableViewItem*)accountSignInItem {
   AccountSignInItem* signInTextItem =
       [[AccountSignInItem alloc] initWithType:SettingsItemTypeSignInButton];
@@ -824,8 +838,18 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   defaultBrowser.text =
       l10n_util::GetNSString(IDS_IOS_SETTINGS_SET_DEFAULT_BROWSER);
 
+  if (IsVivaldiRunning()) {
+    defaultBrowser.iconImage =
+        [UIImage imageNamed:vDefaultBrowserSetting];
+  } else {
   if (UseSymbols()) {
-    defaultBrowser.iconImage = DefaultSettingsRootSymbol(kDefaultBrowserSymbol);
+    if (@available(iOS 15, *)) {
+      defaultBrowser.iconImage =
+          DefaultSettingsRootSymbol(kDefaultBrowserSymbol);
+    } else {
+      defaultBrowser.iconImage =
+          DefaultSettingsRootSymbol(kDefaultBrowseriOS14Symbol);
+    }
     defaultBrowser.iconBackgroundColor = [UIColor colorNamed:kPurple500Color];
     defaultBrowser.iconTintColor = UIColor.whiteColor;
     defaultBrowser.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
@@ -833,6 +857,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     defaultBrowser.iconImage =
         [UIImage imageNamed:kDefaultBrowserWorldImageName];
   }
+  } // End Vivaldi
 
   return defaultBrowser;
 }
@@ -852,6 +877,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
       base::SysUTF16ToNSString(GetDefaultSearchEngineName(
           ios::TemplateURLServiceFactory::GetForBrowserState(_browserState)));
 
+  if (IsVivaldiRunning()) {
+    _defaultSearchEngineItem =
+        [self detailItemWithType:SettingsItemTypeSearchEngine
+                               text:l10n_util::GetNSString(
+                                        IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)
+                         detailText:defaultSearchEngineName
+                      iconImageName:vSearchEngineSetting
+            accessibilityIdentifier:kSettingsSearchEngineCellId];
+  } else {
   if (UseSymbols()) {
     _defaultSearchEngineItem =
         [self detailItemWithType:SettingsItemTypeSearchEngine
@@ -870,6 +904,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                       iconImageName:kSettingsSearchEngineImageName
             accessibilityIdentifier:kSettingsSearchEngineCellId];
   }
+  } // End Vivaldi
 
   return _defaultSearchEngineItem;
 }
@@ -914,6 +949,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           ? l10n_util::GetNSString(IDS_IOS_PASSWORD_MANAGER)
           : l10n_util::GetNSString(IDS_IOS_PASSWORDS);
 
+  if (IsVivaldiRunning()) {
+    NSString* passwordsItemTitle = l10n_util::GetNSString(IDS_IOS_PASSWORDS);
+    _passwordsDetailItem = [self detailItemWithType:SettingsItemTypePasswords
+                                               text:passwordsItemTitle
+                                         detailText:passwordsDetail
+                                      iconImageName:vPasswordSetting
+                            accessibilityIdentifier:kSettingsPasswordsCellId];
+  } else {
   if (UseSymbols()) {
     _passwordsDetailItem =
         [self detailItemWithType:SettingsItemTypePasswords
@@ -933,6 +976,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                                       iconImageName:passwordsIconImageName
                             accessibilityIdentifier:kSettingsPasswordsCellId];
   }
+  } // End Vivaldi
 
   return _passwordsDetailItem;
 }
@@ -944,6 +988,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
 
+  if (IsVivaldiRunning()) {
+    _autoFillCreditCardDetailItem =
+        [self detailItemWithType:SettingsItemTypeAutofillCreditCard
+                               text:l10n_util::GetNSString(
+                                        IDS_AUTOFILL_PAYMENT_METHODS)
+                         detailText:detailText
+                      iconImageName:vPaymentMethodSetting
+            accessibilityIdentifier:kSettingsPaymentMethodsCellId];
+  } else {
   if (UseSymbols()) {
     _autoFillCreditCardDetailItem =
         [self detailItemWithType:SettingsItemTypeAutofillCreditCard
@@ -962,6 +1015,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                       iconImageName:kSettingsAutofillCreditCardImageName
             accessibilityIdentifier:kSettingsPaymentMethodsCellId];
   }
+  } // End Vivaldi
 
   return _autoFillCreditCardDetailItem;
 }
@@ -973,6 +1027,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
 
+  if (IsVivaldiRunning()) {
+    _autoFillProfileDetailItem =
+        [self detailItemWithType:SettingsItemTypeAutofillProfile
+                               text:l10n_util::GetNSString(
+                                        IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE)
+                         detailText:detailText
+                      iconImageName:vAddressSetting
+            accessibilityIdentifier:kSettingsAddressesAndMoreCellId];
+  } else {
   if (UseSymbols()) {
     _autoFillProfileDetailItem =
         [self detailItemWithType:SettingsItemTypeAutofillProfile
@@ -991,6 +1054,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                       iconImageName:kSettingsAutofillProfileImageName
             accessibilityIdentifier:kSettingsAddressesAndMoreCellId];
   }
+  } // End Vivaldi
+
   return _autoFillProfileDetailItem;
 }
 
@@ -1087,11 +1152,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 - (TableViewItem*)privacyDetailItem {
   NSString* title = nil;
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    title = l10n_util::GetNSString(IDS_IOS_SETTINGS_PRIVACY_TITLE);
-  } else {
-    title = l10n_util::GetNSString(IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY);
-  }
+  title = l10n_util::GetNSString(IDS_IOS_SETTINGS_PRIVACY_TITLE);
+
+  if (IsVivaldiRunning()) {
+    return [self detailItemWithType:SettingsItemTypePrivacy
+                               text:title
+                         detailText:nil
+                      iconImageName:vPrivacySetting
+            accessibilityIdentifier:kSettingsPrivacyCellId];
+  } // End Vivaldi
 
   if (UseSymbols()) {
     return [self detailItemWithType:SettingsItemTypePrivacy
@@ -1160,6 +1229,16 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (TableViewItem*)languageSettingsDetailItem {
+
+  if (IsVivaldiRunning()) {
+    return [self detailItemWithType:SettingsItemTypeLanguageSettings
+                               text:l10n_util::GetNSString(
+                                        IDS_IOS_LANGUAGE_SETTINGS_TITLE)
+                         detailText:nil
+                      iconImageName:vlanguageSetting
+            accessibilityIdentifier:kSettingsLanguagesCellId];
+  } // End Vivaldi
+
   if (UseSymbols()) {
     return [self detailItemWithType:SettingsItemTypeLanguageSettings
                                text:l10n_util::GetNSString(
@@ -1179,6 +1258,16 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (TableViewItem*)contentSettingsDetailItem {
+
+  if (IsVivaldiRunning()) {
+    return [self detailItemWithType:SettingsItemTypeContentSettings
+                               text:l10n_util::GetNSString(
+                                        IDS_IOS_CONTENT_SETTINGS_TITLE)
+                         detailText:nil
+                      iconImageName:vContentsSetting
+            accessibilityIdentifier:kSettingsContentSettingsCellId];
+  } // End Vivaldi
+
   if (UseSymbols()) {
     return [self
              detailItemWithType:SettingsItemTypeContentSettings
@@ -1218,6 +1307,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (TableViewItem*)aboutChromeDetailItem {
+
+  if (IsVivaldiRunning()) {
+    return [self detailItemWithType:SettingsItemTypeAboutChrome
+                               text:l10n_util::GetNSString(IDS_IOS_PRODUCT_NAME)
+                         detailText:nil
+                      iconImageName:vAboutSetting
+            accessibilityIdentifier:kSettingsAboutCellId];
+  } // End Vivaldi
+
   if (UseSymbols()) {
     return [self detailItemWithType:SettingsItemTypeAboutChrome
                                text:l10n_util::GetNSString(IDS_IOS_PRODUCT_NAME)
@@ -1260,12 +1358,17 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 - (TableViewSwitchItem*)viewSourceSwitchItem {
   TableViewSwitchItem* viewSourceItem = nil;
   if (UseSymbols()) {
-    viewSourceItem = [self
-             switchItemWithType:SettingsItemTypeViewSource
-                          title:@"View source menu"
-                         symbol:DefaultSettingsRootSymbol(@"keyboard.badge.eye")
-          symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
-        accessibilityIdentifier:nil];
+    UIImage* image;
+    if (@available(iOS 16, *)) {
+      image = DefaultSettingsRootSymbol(@"keyboard.badge.eye");
+    } else {
+      image = DefaultSettingsRootSymbol(@"keyboard");
+    }
+    viewSourceItem = [self switchItemWithType:SettingsItemTypeViewSource
+                                        title:@"View source menu"
+                                       symbol:image
+                        symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
+                      accessibilityIdentifier:nil];
 
   } else {
     viewSourceItem = [self switchItemWithType:SettingsItemTypeViewSource
@@ -1384,13 +1487,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
       [[TableViewInfoButtonItem alloc] initWithType:type];
   infoButton.text = text;
   infoButton.statusText = status;
-  if (image)
+  if (image) {
     infoButton.iconImage = image;
-  if (UseSymbols()) {
-    DCHECK(imageBackground);
-    infoButton.iconBackgroundColor = imageBackground;
-    infoButton.iconTintColor = UIColor.whiteColor;
-    infoButton.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
+    if (UseSymbols()) {
+      DCHECK(imageBackground);
+      infoButton.iconBackgroundColor = imageBackground;
+      infoButton.iconTintColor = UIColor.whiteColor;
+      infoButton.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
+    }
   }
   infoButton.accessibilityHint = accessibilityHint;
   infoButton.accessibilityIdentifier = accessibilityIdentifier;
@@ -1403,6 +1507,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [super tableView:tableView
                      cellForRowAtIndexPath:indexPath];
+  if (_settingsAreDismissed)
+    return cell;
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
   if ([cell isKindOfClass:[TableViewDetailIconCell class]]) {
@@ -1498,6 +1604,18 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           forControlEvents:UIControlEventTouchUpInside];
       break;
     }
+
+    // Vivaldi
+    case SettingsItemTypeVivaldiTabsSettings: {
+      TableViewSwitchCell* tabModeCell =
+          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [tabModeCell.switchView addTarget:self
+                                 action:@selector(tabStyleChanged:)
+                       forControlEvents:UIControlEventTouchUpInside];
+      break;
+    }
+    // End Vivaldi
+
     default:
       break;
   }
@@ -1509,6 +1627,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (_settingsAreDismissed)
+    return;
+
   id object = [self.tableViewModel itemAtIndexPath:indexPath];
   if ([object respondsToSelector:@selector(isEnabled)] &&
       ![object performSelector:@selector(isEnabled)]) {
@@ -1655,6 +1776,19 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           pushViewController:[[TableCellCatalogViewController alloc] init]
                     animated:YES];
       break;
+
+    // Vivaldi
+    case SettingsItemTypeVivaldiSyncSettings:
+      [self showVivaldiSync];
+      break;
+    case SettingsItemTypeVivaldiStartPageLayoutSettings:
+      [self showStartPageLayoutSettings];
+      break;
+    case SettingsItemTypeVivaldiATBSettings:
+      [self showAdAndTrackerBlockerSettings];
+      break;
+    // End Vivaldi
+
     default:
       break;
   }
@@ -1824,6 +1958,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 // Displays a red issue state on `_safetyCheckItem` if there is a reamining
 // issue for any of the checks.
 - (void)setSafetyCheckIssueStateUnsafe:(BOOL)isUnsafe {
+
+  // Vivaldi: Return early as this is related to safety check
+  // option of chrome which we don't have.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   if (isUnsafe && PreviousSafetyCheckIssueFound()) {
     UIImage* unSafeIconImage =
         UseSymbols()
@@ -1924,8 +2064,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     case kSyncConsentOff: {
       googleSyncItem.detailText = l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
       if (UseSymbols()) {
-        googleSyncItem.iconImage = DefaultSettingsRootSymbol(kSyncErrorSymbol);
-        googleSyncItem.iconBackgroundColor = UIColor.redColor;
+        googleSyncItem.iconImage =
+            CustomSettingsRootSymbol(kSyncDisabledSymbol);
+        googleSyncItem.iconBackgroundColor = [UIColor colorNamed:kGrey400Color];
         googleSyncItem.iconTintColor = UIColor.whiteColor;
         googleSyncItem.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
 
@@ -1937,7 +2078,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     case kSyncOff:
     case kSyncEnabledWithNoSelectedTypes: {
       googleSyncItem.detailText = nil;
-      googleSyncItem.iconImage = [UIImage imageNamed:kSyncOffImageName];
       if (UseSymbols()) {
         googleSyncItem.iconImage =
             CustomSettingsRootSymbol(kSyncDisabledSymbol);
@@ -2058,11 +2198,13 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)didFinishSignin:(BOOL)signedIn {
+  if (_settingsAreDismissed)
+    return;
+
   // The sign-in is done. The sign-in promo cell or account cell can be
   // reloaded.
   DCHECK(self.isSigninInProgress);
   self.isSigninInProgress = NO;
-  DCHECK(!_settingsHasBeenDismissed);
   [self reloadData];
 }
 
@@ -2078,10 +2220,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)settingsWillBeDismissed {
-  DCHECK(!_settingsHasBeenDismissed);
+  DCHECK(!_settingsAreDismissed);
 
-  _passwordCheckObserver.reset();
+  // Disconnect the sign-in mediator.
+  DCHECK(!self.isSigninInProgress);
+  [_signinPromoViewMediator disconnect];
+  _signinPromoViewMediator = nil;
 
+  // Stop children coordinators.
   [_googleServicesSettingsCoordinator stop];
   _googleServicesSettingsCoordinator.delegate = nil;
   _googleServicesSettingsCoordinator = nil;
@@ -2102,33 +2248,60 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [_manageSyncSettingsCoordinator stop];
   _manageSyncSettingsCoordinator = nil;
 
-  _settingsHasBeenDismissed = YES;
-  DCHECK(!self.isSigninInProgress);
-  [_signinPromoViewMediator disconnect];
-  _signinPromoViewMediator = nil;
-  [self stopBrowserStateServiceObservers];
+  // Vivaldi
+  [_vivaldiSyncCoordinator stop];
+  _vivaldiSyncCoordinator = nil;
+  // End Vivaldi
 
-  // Stop observing preferences.
+  // Stop observable prefs.
   [_showMemoryDebugToolsEnabled stop];
+  [_showMemoryDebugToolsEnabled setObserver:nil];
   _showMemoryDebugToolsEnabled = nil;
+
   [_articlesEnabled stop];
+  [_articlesEnabled setObserver:nil];
   _articlesEnabled = nil;
+
   [_allowChromeSigninPreference stop];
+  [_allowChromeSigninPreference setObserver:nil];
   _allowChromeSigninPreference = nil;
+
   [_contentSuggestionPolicyEnabled stop];
+  [_contentSuggestionPolicyEnabled setObserver:nil];
   _contentSuggestionPolicyEnabled = nil;
+
   [_contentSuggestionForSupervisedUsersEnabled stop];
+  [_contentSuggestionForSupervisedUsersEnabled setObserver:nil];
   _contentSuggestionForSupervisedUsersEnabled = nil;
 
-  _voiceLocaleCode.Destroy();
-
+  // Remove pref changes registrations.
   _prefChangeRegistrar.RemoveAll();
+
+  // Remove observer bridges.
   _prefObserverBridge.reset();
+  _passwordCheckObserver.reset();
+  _searchEngineObserverBridge.reset();
+  _syncObserverBridge.reset();
+  _identityObserverBridge.reset();
+  _accountManagerServiceObserver.reset();
+
+  // Clear C++ ivars.
+  _voiceLocaleCode.Destroy();
+  _passwordCheckManager.reset();
+  _browser = nullptr;
+  _browserState = nullptr;
+
+  _settingsAreDismissed = YES;
 }
 
 #pragma mark SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   [self updateSigninSection];
   // The Identity section may be added or removed depending on sign-in is
   // allowed. Reload all sections in the model to account for the change.
@@ -2425,6 +2598,141 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 - (NSString*)manageSyncSettingsCoordinatorTitle {
   return l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE);
+}
+
+#pragma mark - Vivaldi
+#pragma mark - SYNC SETTINGS
+- (void)vivaldiSyncCoordinatorWasRemoved:
+    (VivaldiSyncCoordinator*)coordinator {
+  DCHECK_EQ(_vivaldiSyncCoordinator, coordinator);
+  [_vivaldiSyncCoordinator stop];
+  _vivaldiSyncCoordinator = nil;
+}
+
+- (void)addVivaldiSigninSection {
+  TableViewModel<TableViewItem*>* model = self.tableViewModel;
+  // Vivaldi Sign-in section.
+  [model addSectionWithIdentifier:SettingsSectionIdentifierVivaldiAccount];
+  [model addItem:[self vivaldiSyncItem]
+      toSectionWithIdentifier:SettingsSectionIdentifierVivaldiAccount];
+}
+
+- (TableViewItem*)vivaldiSyncItem {
+  TableViewDetailIconItem* item = [[TableViewDetailIconItem alloc]
+      initWithType:SettingsItemTypeVivaldiSyncSettings];
+  item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+  item.text =
+      l10n_util::GetNSString(IDS_PREFS_VIVALDI_SYNC);
+  item.iconImage = [UIImage imageNamed:vSyncSetting];
+
+  return item;
+}
+
+- (void)showVivaldiSync {
+  DCHECK(!_vivaldiSyncCoordinator);
+  _vivaldiSyncCoordinator = [[VivaldiSyncCoordinator alloc]
+      initWithBaseNavigationController:self.navigationController
+                               browser:_browser];
+  _vivaldiSyncCoordinator.delegate = self;
+  [_vivaldiSyncCoordinator start];
+}
+
+// Vivaldi appearance setting section where tabs and start page layout settings
+// live.
+- (void)addVivaldiAppearanceSection {
+  TableViewModel<TableViewItem*>* model = self.tableViewModel;
+  [model addSectionWithIdentifier:SettingsSectionIdentifierVivaldiAppearance];
+}
+
+#pragma mark - TABS SETTINGS
+- (void)addVivaldiTabsSettingItem {
+  TableViewModel<TableViewItem*>* model = self.tableViewModel;
+  [model addItem:[self vivaldiTabsItem]
+      toSectionWithIdentifier:SettingsSectionIdentifierVivaldiAppearance];
+}
+
+- (TableViewItem*)vivaldiTabsItem {
+  TableViewSwitchItem* item = [[TableViewSwitchItem alloc]
+      initWithType:SettingsItemTypeVivaldiTabsSettings];
+  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_DESKTOP_TABS);
+  item.iconImage = [UIImage imageNamed:vTabsSetting];
+  item.on = [self isDesktopTabBarEnabled];
+  return item;
+}
+
+#pragma mark - START PAGE LAYOUT SETTINGS
+- (void)addVivaldiStartPageLayoutSettingItem {
+  TableViewModel<TableViewItem*>* model = self.tableViewModel;
+  [model addItem:[self vivaldiStartPageLayoutItem]
+      toSectionWithIdentifier:SettingsSectionIdentifierVivaldiAppearance];
+}
+
+- (TableViewItem*)vivaldiStartPageLayoutItem {
+  TableViewDetailIconItem* item = [[TableViewDetailIconItem alloc]
+      initWithType:SettingsItemTypeVivaldiStartPageLayoutSettings];
+  item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT);
+  item.iconImage = [UIImage imageNamed:vStartPageLayoutSetting];
+  return item;
+}
+
+- (void)showStartPageLayoutSettings {
+  VivaldiStartPageLayoutSettingsViewController* controller =
+    [[VivaldiStartPageLayoutSettingsViewController alloc]
+        initWithTitle:
+          l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT)
+              browser:_browser];
+  controller.navigationItem.largeTitleDisplayMode =
+      UINavigationItemLargeTitleDisplayModeNever;
+  [self.navigationController pushViewController:controller animated:YES];
+}
+
+#pragma mark - AD AND TRACKER BLOCKER SETTINGS
+- (void)addVivaldiATBSettingItem {
+  TableViewModel<TableViewItem*>* model = self.tableViewModel;
+  [model addItem:[self vivaldiAdTrackerBlockerItem]
+      toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+}
+
+- (TableViewItem*)vivaldiAdTrackerBlockerItem {
+  TableViewDetailIconItem* item = [[TableViewDetailIconItem alloc]
+      initWithType:SettingsItemTypeVivaldiATBSettings];
+  item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
+  item.iconImage = [UIImage imageNamed:vATBSetting];
+  return item;
+}
+
+- (void)showAdAndTrackerBlockerSettings {
+  NSString* settingsTitleString =
+    l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
+  VivaldiATBSettingsViewController* controller =
+    [[VivaldiATBSettingsViewController alloc]
+      initWithTitle:settingsTitleString];
+  controller.navigationItem.largeTitleDisplayMode =
+      UINavigationItemLargeTitleDisplayModeNever;
+  [self.navigationController
+    pushViewController:controller animated:YES];
+}
+
+#pragma mark - TABS
+- (void)tabStyleChanged:(UISwitch*)switchView {
+  if (!_browserState)
+    return;
+  [VivaldiTabSettingPrefs setDesktopTabsMode:switchView.isOn
+                              inPrefServices:_browserState->GetPrefs()];
+  [[NSNotificationCenter defaultCenter]
+    postNotificationName:vTabSettingsDidChange
+                  object:self];
+}
+
+/// Returns the setting from prefs for selected tabs mode
+- (BOOL)isDesktopTabBarEnabled {
+  if (!_browserState)
+    return NO;
+
+  return [VivaldiTabSettingPrefs
+          getDesktopTabsModeWithPrefService:_browserState->GetPrefs()];
 }
 
 @end

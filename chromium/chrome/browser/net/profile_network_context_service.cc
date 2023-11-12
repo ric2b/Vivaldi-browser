@@ -697,7 +697,7 @@ ProfileNetworkContextService::CreateClientCertStore() {
   // selection dialog.
   return nullptr;
 #elif BUILDFLAG(IS_FUCHSIA)
-  // TODO(crbug.com/1235293)
+  // TODO(crbug.com/1380609): Implement ClientCertStore support.
   NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;
 #else
@@ -871,7 +871,6 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   proxy_config_monitor_.AddToNetworkContextParams(network_context_params);
 
   network_context_params->enable_certificate_reporting = true;
-  network_context_params->enable_expect_ct_reporting = true;
 
   SCTReportingService* sct_reporting_service =
       SCTReportingServiceFactory::GetForBrowserContext(profile_);
@@ -899,7 +898,8 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   bool is_trial_comparison_supported = !in_memory;
 
   cert_verifier::mojom::CertVerifierServiceParamsPtr
-      cert_verifier_configuration = GetChromeCertVerifierServiceParams();
+      cert_verifier_configuration =
+          GetChromeCertVerifierServiceParams(/*local_state=*/nullptr);
   DCHECK(cert_verifier_configuration);
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   is_trial_comparison_supported &=
@@ -1023,17 +1023,15 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   network_context_params->first_party_sets_access_delegate_receiver =
       fps_access_delegate_remote.BindNewPipeAndPassReceiver();
 
-  if (first_party_sets::FirstPartySetsPolicyService* fps_service =
-          first_party_sets::FirstPartySetsPolicyServiceFactory::
-              GetForBrowserContext(profile_);
-      fps_service) {
-    fps_service->AddRemoteAccessDelegate(std::move(fps_access_delegate_remote));
-  } else {
-    // Immediately notify ready if First-Party Sets is disabled globally or
-    // disabled locally by this `profile_`.
-    fps_access_delegate_remote->NotifyReady(
-        network::mojom::FirstPartySetsReadyEvent::New());
-  }
+  first_party_sets::FirstPartySetsPolicyService* fps_service =
+      first_party_sets::FirstPartySetsPolicyServiceFactory::
+          GetForBrowserContext(profile_);
+  DCHECK(fps_service);
+  fps_service->AddRemoteAccessDelegate(std::move(fps_access_delegate_remote));
+
+  network_context_params->acam_preflight_spec_conformant =
+      profile_->GetPrefs()->GetBoolean(
+          prefs::kAccessControlAllowMethodsInCORSPreflightSpecConformant);
 }
 
 base::FilePath ProfileNetworkContextService::GetPartitionPath(

@@ -6,17 +6,8 @@
 
 #include <memory>
 
-#include "ash/components/phonehub/fake_camera_roll_manager.h"
-#include "ash/components/phonehub/fake_multidevice_feature_access_manager.h"
-#include "ash/components/phonehub/feature_setup_connection_operation.h"
-#include "ash/components/phonehub/multidevice_feature_access_manager.h"
-#include "ash/components/phonehub/pref_names.h"
-#include "ash/components/phonehub/screen_lock_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/services/multidevice_setup/public/cpp/fake_android_sms_pairing_state_tracker.h"
-#include "ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "ash/webui/eche_app_ui/fake_apps_access_manager.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -26,6 +17,15 @@
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/multidevice/remote_device_test_util.h"
+#include "chromeos/ash/components/phonehub/fake_camera_roll_manager.h"
+#include "chromeos/ash/components/phonehub/fake_multidevice_feature_access_manager.h"
+#include "chromeos/ash/components/phonehub/feature_setup_connection_operation.h"
+#include "chromeos/ash/components/phonehub/multidevice_feature_access_manager.h"
+#include "chromeos/ash/components/phonehub/pref_names.h"
+#include "chromeos/ash/components/phonehub/screen_lock_manager.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/fake_android_sms_pairing_state_tracker.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -381,9 +381,9 @@ class MultideviceHandlerTest : public testing::Test {
     ASSERT_TRUE(call_data.arg2()->GetBool());
     EXPECT_EQ(
         ContentSettingsPattern::FromURLNoWildcard(expected_url).ToString(),
-        call_data.arg3()->FindKey("origin")->GetString());
+        *call_data.arg3()->GetDict().FindString("origin"));
     EXPECT_EQ(expected_enabled,
-              call_data.arg3()->FindKey("enabled")->GetBool());
+              *call_data.arg3()->GetDict().FindBool("enabled"));
   }
 
   void CallAttemptNotificationSetup(bool has_notification_access_been_granted) {

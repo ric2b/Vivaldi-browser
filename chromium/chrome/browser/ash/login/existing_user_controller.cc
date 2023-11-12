@@ -11,7 +11,6 @@
 
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
@@ -28,7 +27,7 @@
 #include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -82,12 +81,12 @@
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/managed_ui.h"
-#include "chrome/browser/ui/webui/chromeos/login/encryption_migration_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/kiosk_autolaunch_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/kiosk_enable_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
-#include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/encryption_migration_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/kiosk_autolaunch_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/kiosk_enable_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/l10n_util.h"
+#include "chrome/browser/ui/webui/ash/login/tpm_error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/update_required_screen_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -98,6 +97,7 @@
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/hibernate/buildflags.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/login/auth/public/auth_failure.h"
 #include "chromeos/ash/components/login/auth/public/key.h"
 #include "chromeos/ash/components/login/session/session_termination_manager.h"
@@ -450,13 +450,11 @@ void ExistingUserController::UpdateLoginDisplay(
 
   cros_settings_->GetBoolean(kAccountsPrefShowUserNamesOnSignIn,
                              &show_users_on_signin);
-  GetLoginDisplayHost()->metrics_recorder()->OnShowUsersOnSignin(
-      show_users_on_signin);
+  AuthMetricsRecorder::Get()->OnShowUsersOnSignin(show_users_on_signin);
   bool enable_ephemeral_users = false;
   cros_settings_->GetBoolean(kAccountsPrefEphemeralUsersEnabled,
                              &enable_ephemeral_users);
-  GetLoginDisplayHost()->metrics_recorder()->OnEnableEphemeralUsers(
-      enable_ephemeral_users);
+  AuthMetricsRecorder::Get()->OnEnableEphemeralUsers(enable_ephemeral_users);
   user_manager::UserManager* const user_manager =
       user_manager::UserManager::Get();
   // By default disable offline login from the error screen.
@@ -487,7 +485,7 @@ void ExistingUserController::UpdateLoginDisplay(
   // Records total number of users on the login screen.
   base::UmaHistogramCounts100("Login.NumberOfUsersOnLoginScreen",
                               regular_users_counter);
-  GetLoginDisplayHost()->metrics_recorder()->OnUserCount(regular_users_counter);
+  AuthMetricsRecorder::Get()->OnUserCount(regular_users_counter);
 
   auto login_users = ExtractLoginUsers(users);
 
@@ -532,7 +530,7 @@ void ExistingUserController::Observe(
   // has been updated before we copy it.
   // TODO(pmarko): Find a better way to do this, see https://crbug.com/796512.
   VLOG(1) << "Authentication was entered manually, possibly for proxyauth.";
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, base::BindOnce(&TransferHttpAuthCaches),
       kAuthCacheTransferDelayMs);
 }
@@ -603,7 +601,7 @@ void ExistingUserController::PerformLogin(
     // Only one instance of LoginPerformer should exist at a time.
     login_performer_.reset(nullptr);
     login_performer_ = std::make_unique<ChromeLoginPerformer>(
-        this, GetLoginDisplayHost()->metrics_recorder());
+        this, AuthMetricsRecorder::Get());
   }
   if (IsActiveDirectoryManaged() &&
       user_context.GetUserType() != user_manager::USER_TYPE_ACTIVE_DIRECTORY) {
@@ -671,16 +669,15 @@ void ExistingUserController::PerformLogin(
 
 void ExistingUserController::ContinuePerformLogin(
     LoginPerformer::AuthorizationMode auth_mode,
-    const UserContext& user_context) {
-  login_performer_->PerformLogin(user_context, auth_mode);
+    std::unique_ptr<UserContext> user_context) {
+  login_performer_->LoginAuthenticated(std::move(user_context));
 }
 
 void ExistingUserController::ContinuePerformLoginWithoutMigration(
     LoginPerformer::AuthorizationMode auth_mode,
-    const UserContext& user_context) {
-  UserContext user_context_ecryptfs = user_context;
-  user_context_ecryptfs.SetIsForcingDircrypto(false);
-  ContinuePerformLogin(auth_mode, user_context_ecryptfs);
+    std::unique_ptr<UserContext> user_context) {
+  user_context->SetIsForcingDircrypto(false);
+  ContinuePerformLogin(auth_mode, std::move(user_context));
 }
 
 void ExistingUserController::OnGaiaScreenReady() {
@@ -741,10 +738,10 @@ void ExistingUserController::ShowKioskEnableScreen() {
 }
 
 void ExistingUserController::ShowEncryptionMigrationScreen(
-    const UserContext& user_context,
+    std::unique_ptr<UserContext> user_context,
     EncryptionMigrationMode migration_mode) {
   GetLoginDisplayHost()->GetSigninUI()->StartEncryptionMigration(
-      user_context, migration_mode,
+      std::move(user_context), migration_mode,
       base::BindOnce(&ExistingUserController::ContinuePerformLogin,
                      weak_factory_.GetWeakPtr(),
                      login_performer_->auth_mode()));
@@ -860,42 +857,9 @@ void ExistingUserController::OnAuthSuccess(const UserContext& user_context) {
 
   StopAutoLoginTimer();
 
-  // If the hibernate service is supported, call it to initiate resume.
-#if BUILDFLAG(ENABLE_HIBERNATE)
-  if (features::IsHibernateEnabled() &&
-      !base::FeatureList::IsEnabled(
-          ash::features::kUseAuthsessionAuthentication)) {
-    HibermanClient::Get()->WaitForServiceToBeAvailable(
-        base::BindOnce(&ExistingUserController::OnHibernateServiceAvailable,
-                       weak_factory_.GetWeakPtr(), user_context));
-
-    return;
-  }
-#endif
-
   // The hibernate service is not supported, just continue directly.
   ContinueAuthSuccessAfterResumeAttempt(user_context, true);
-  return;
 }
-
-#if BUILDFLAG(ENABLE_HIBERNATE)
-void ExistingUserController::OnHibernateServiceAvailable(
-    const UserContext& user_context,
-    bool service_is_available) {
-  if (!service_is_available) {
-    LOG(ERROR) << "Hibernate service is unavailable";
-    ContinueAuthSuccessAfterResumeAttempt(user_context, false);
-  } else {
-    // In a successful resume case, this function never returns, as execution
-    // continues in the resumed hibernation image.
-    HibermanClient::Get()->ResumeFromHibernate(
-        user_context.GetAccountId().GetUserEmail(),
-        base::BindOnce(
-            &ExistingUserController::ContinueAuthSuccessAfterResumeAttempt,
-            weak_factory_.GetWeakPtr(), user_context));
-  }
-}
-#endif
 
 void ExistingUserController::ContinueAuthSuccessAfterResumeAttempt(
     const UserContext& user_context,
@@ -939,9 +903,9 @@ void ExistingUserController::ContinueAuthSuccessAfterResumeAttempt(
 
   // Mark device will be consumer owned if the device is not managed and this is
   // the first user on the device.
-  if (!is_enterprise_managed &&
-      user_manager::UserManager::Get()->GetUsers().empty()) {
+  if (!is_enterprise_managed && InstallAttributes::Get()->IsFirstSignIn()) {
     DeviceSettingsService::Get()->MarkWillEstablishConsumerOwnership();
+    user_manager::UserManager::Get()->RecordOwner(user_context.GetAccountId());
   }
 
   if (user_context.CanLockManagedGuestSession()) {
@@ -1027,18 +991,17 @@ void ExistingUserController::ShowAutoLaunchManagedGuestSessionNotification() {
             DCHECK(button_index);
             SystemTrayClientImpl::Get()->ShowEnterpriseInfo();
           }));
-  std::unique_ptr<message_center::Notification> notification =
-      CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, kAutoLaunchNotificationId,
-          title, message, std::u16string(), GURL(),
-          message_center::NotifierId(
-              message_center::NotifierType::SYSTEM_COMPONENT,
-              kAutoLaunchNotifierId, NotificationCatalogName::kAutoLaunch),
-          data, std::move(delegate), vector_icons::kBusinessIcon,
-          message_center::SystemNotificationWarningLevel::NORMAL);
-  notification->SetSystemPriority();
-  notification->set_pinned(true);
-  SystemNotificationHelper::GetInstance()->Display(*notification);
+  message_center::Notification notification = CreateSystemNotification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, kAutoLaunchNotificationId,
+      title, message, std::u16string(), GURL(),
+      message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
+                                 kAutoLaunchNotifierId,
+                                 NotificationCatalogName::kAutoLaunch),
+      data, std::move(delegate), vector_icons::kBusinessIcon,
+      message_center::SystemNotificationWarningLevel::NORMAL);
+  notification.SetSystemPriority();
+  notification.set_pinned(true);
+  SystemNotificationHelper::GetInstance()->Display(notification);
 }
 
 void ExistingUserController::OnProfilePrepared(Profile* profile,
@@ -1110,16 +1073,16 @@ void ExistingUserController::OnPasswordChangeDetected(
 }
 
 void ExistingUserController::OnOldEncryptionDetected(
-    const UserContext& user_context,
+    std::unique_ptr<UserContext> user_context,
     bool has_incomplete_migration) {
   absl::optional<EncryptionMigrationMode> encryption_migration_mode =
-      GetEncryptionMigrationMode(user_context, has_incomplete_migration);
+      GetEncryptionMigrationMode(*user_context, has_incomplete_migration);
   if (!encryption_migration_mode.has_value()) {
     ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
-                                         user_context);
+                                         std::move(user_context));
     return;
   }
-  ShowEncryptionMigrationScreen(user_context,
+  ShowEncryptionMigrationScreen(std::move(user_context),
                                 encryption_migration_mode.value());
 }
 
@@ -1244,8 +1207,8 @@ void ExistingUserController::LoginAsGuest() {
 
   // Only one instance of LoginPerformer should exist at a time.
   login_performer_.reset(nullptr);
-  login_performer_ = std::make_unique<ChromeLoginPerformer>(
-      this, GetLoginDisplayHost()->metrics_recorder());
+  login_performer_ =
+      std::make_unique<ChromeLoginPerformer>(this, AuthMetricsRecorder::Get());
   login_performer_->LoginOffTheRecord();
   SendAccessibilityAlert(
       l10n_util::GetStringUTF8(IDS_CHROMEOS_ACC_LOGIN_SIGNIN_OFFRECORD));
@@ -1543,8 +1506,8 @@ void ExistingUserController::LoginAsPublicSessionInternal(
   VLOG(2) << "LoginAsPublicSessionInternal for user: "
           << user_context.GetAccountId();
   login_performer_.reset(nullptr);
-  login_performer_ = std::make_unique<ChromeLoginPerformer>(
-      this, GetLoginDisplayHost()->metrics_recorder());
+  login_performer_ =
+      std::make_unique<ChromeLoginPerformer>(this, AuthMetricsRecorder::Get());
   login_performer_->LoginAsPublicSession(user_context);
   SendAccessibilityAlert(
       l10n_util::GetStringUTF8(IDS_CHROMEOS_ACC_LOGIN_SIGNIN_PUBLIC_ACCOUNT));

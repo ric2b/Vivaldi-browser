@@ -16,11 +16,10 @@
 <translation id="1734878702283171397">Încearcați să contactați administratorul de sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de rețea Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Acest site web conține programe dăunătoare</translation>
-<translation id="1916770123977586577">Pentru a aplica setările actualizate de la acest site web, reîncărcați această pagină</translation>
+<translation id="1916770123977586577">Pentru a aplica setările actualizate la acest site web, reîncărcați această pagină</translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Acest site web nu poate oferi o conexiune securizată</translation>
-<translation id="2230458221926704099">Remediați conexiunea folosind <ph name="BEGIN_LINK" />aplicația de diagnosticare<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
 <translation id="2355395290879513365">Este posibil ca atacatorii să poată vedea imaginile la care vă uitați pe acest site web și să vă păcălească prin modificarea lor.</translation>
@@ -42,9 +41,9 @@
 <translation id="3041612393474885105">Informații despre certificat</translation>
 <translation id="3109728660330352905">Nu aveți autorizare pentru a vizualiza această pagină.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de conectivitate<ph name="END_LINK" />.</translation>
-<translation id="3176929007561373547">Verifică setările de proxy sau contactează administratorul de rețea
-      pentru a te asigura că serverul proxy funcționează. Dacă nu consideri că ar trebui
-      să folosești un server proxy:
+<translation id="3176929007561373547">Verificați setările de proxy sau contactați administratorul de rețea
+      pentru a vă asigura că serverul proxy funcționează.
+      Dacă nu considerați că ar trebui să folosiți un server proxy:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Apăsați butonul de reîncărcare pentru a retrimite datele necesare pentru încărcarea paginii.</translation>
 <translation id="3234666976984236645">Detectează întotdeauna conținutul important pe acest site web</translation>
@@ -118,7 +117,6 @@
 <translation id="6451458296329894277">Confirmați retrimiterea formularului</translation>
 <translation id="6569060085658103619">Actualmente vizualizați pagina unei extensii</translation>
 <translation id="6657585470893396449">Parolă</translation>
-<translation id="6685834062052613830">Deconectați-vă și finalizați configurarea</translation>
 <translation id="6711464428925977395">A apărut o problemă la serverul proxy sau adresa nu este corectă.</translation>
 <translation id="6897140037006041989">Agent utilizator</translation>
 <translation id="7053983685419859001">Blochează</translation>
@@ -150,8 +148,9 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a răspuns prea târziu.</translation>
 <translation id="8503813439785031346">Nume de utilizator</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Adresa DNS&lt;/abbr&gt; pentru <ph name="HOST_NAME" /> nu a putut fi găsită. Se diagnostichează problema.</translation>
-<translation id="8820817407110198400">Marcaje</translation>
+<translation id="8820817407110198400">Semne de carte</translation>
 <translation id="8940028675168378100">Blocat de <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Accesează setările site-ului web</translation>
 <translation id="9001074447101275817">Proxy-ul <ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
 <translation id="9025348182339809926">(Nevalid)</translation>
 <translation id="9039213469156557790">În plus, această pagină include alte resurse care nu sunt securizate. Aceste resurse pot fi vizualizate în tranzit de către alții și pot fi modificate de un atacator pentru a schimba comportamentul paginii.</translation>

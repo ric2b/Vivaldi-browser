@@ -1427,10 +1427,9 @@ TEST_F(ManagePasswordsUIControllerTest, SaveBubbleAfterLeakCheck) {
       .WillOnce(DoAll(SaveArg<0>(&dialog_controller), Return(&dialog_prompt)));
   EXPECT_CALL(dialog_prompt, ShowCredentialLeakPrompt);
   controller()->OnCredentialLeak(
-      password_manager::CreateLeakType(
-          password_manager::IsSaved(false), password_manager::IsReused(false),
-          password_manager::IsSyncing(false),
-          password_manager::HasChangeScript(false)),
+      password_manager::CreateLeakType(password_manager::IsSaved(false),
+                                       password_manager::IsReused(false),
+                                       password_manager::IsSyncing(false)),
       GURL(kExampleUrl), kExampleUsername);
   // The bubble is gone.
   EXPECT_FALSE(controller()->opened_bubble());
@@ -1459,10 +1458,9 @@ TEST_F(ManagePasswordsUIControllerTest, UpdateBubbleAfterLeakCheck) {
       .WillOnce(DoAll(SaveArg<0>(&dialog_controller), Return(&dialog_prompt)));
   EXPECT_CALL(dialog_prompt, ShowCredentialLeakPrompt);
   controller()->OnCredentialLeak(
-      password_manager::CreateLeakType(
-          password_manager::IsSaved(true), password_manager::IsReused(false),
-          password_manager::IsSyncing(false),
-          password_manager::HasChangeScript(false)),
+      password_manager::CreateLeakType(password_manager::IsSaved(true),
+                                       password_manager::IsReused(false),
+                                       password_manager::IsSyncing(false)),
       GURL(kExampleUrl), kExampleUsername);
   // The bubble is gone.
   EXPECT_FALSE(controller()->opened_bubble());
@@ -1922,6 +1920,19 @@ TEST_F(ManagePasswordsUIControllerTest, AuthenticationCancledOnPageChange) {
 
   static_cast<content::WebContentsObserver*>(controller())
       ->PrimaryPageChanged(controller()->GetWebContents()->GetPrimaryPage());
+}
+
+TEST_F(ManagePasswordsUIControllerTest, OnBiometricAuthBeforeFillingDeclined) {
+  std::vector<const PasswordForm*> best_matches;
+  auto test_form_manager = CreateFormManagerWithBestMatches(&best_matches);
+  controller()->OnPasswordSubmitted(std::move(test_form_manager));
+  controller()->OnBiometricAuthenticationForFilling(profile()->GetPrefs());
+
+  ASSERT_EQ(password_manager::ui::BIOMETRIC_AUTHENTICATION_FOR_FILLING_STATE,
+            controller()->GetState());
+
+  controller()->OnBiometricAuthBeforeFillingDeclined();
+  ASSERT_EQ(password_manager::ui::MANAGE_STATE, controller()->GetState());
 }
 
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)

@@ -16,6 +16,7 @@ namespace history_clusters {
 namespace {
 
 using ::testing::UnorderedElementsAre;
+using LabelSource = history::Cluster::LabelSource;
 
 class LabelClusterFinalizerTest : public ::testing::Test {
  public:
@@ -71,7 +72,6 @@ TEST_F(LabelClusterFinalizerTest, ClusterWithNoSearchTerms) {
   {
     // With only search term labelling active, there should be no label.
     Config config;
-    config.should_label_clusters = true;
     config.labels_from_hostnames = false;
     config.labels_from_entities = false;
     SetConfigForTesting(config);
@@ -88,7 +88,6 @@ TEST_F(LabelClusterFinalizerTest, ClusterWithNoSearchTerms) {
     // prefer the entity because if we prefer hostnames, every cluster will have
     // a hostname label, and no entity labels will ever get surfaced.
     Config config;
-    config.should_label_clusters = true;
     config.labels_from_hostnames = true;
     config.labels_from_entities = true;
     SetConfigForTesting(config);
@@ -103,7 +102,6 @@ TEST_F(LabelClusterFinalizerTest, ClusterWithNoSearchTerms) {
   {
     // With hostname labelling active only, we should use the hostname.
     Config config;
-    config.should_label_clusters = true;
     config.labels_from_hostnames = true;
     config.labels_from_entities = false;
     SetConfigForTesting(config);
@@ -118,7 +116,6 @@ TEST_F(LabelClusterFinalizerTest, ClusterWithNoSearchTerms) {
   {
     // With entity labelling active only, we should use the entity name.
     Config config;
-    config.should_label_clusters = true;
     config.labels_from_hostnames = false;
     config.labels_from_entities = true;
     SetConfigForTesting(config);
@@ -135,7 +132,6 @@ TEST_F(LabelClusterFinalizerTest, TakesHighestScoringSearchTermIfAvailable) {
   // Verify that search terms take precedence even if labels from entities are
   // enabled.
   Config config;
-  config.should_label_clusters = true;
   config.labels_from_hostnames = true;
   config.labels_from_entities = true;
   SetConfigForTesting(config);

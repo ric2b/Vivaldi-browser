@@ -56,8 +56,13 @@ class LocalFrameMojoHandler
 
   void ClosePageForTesting();
 
-  mojom::blink::LocalFrameHost& LocalFrameHostRemote() const {
+  mojom::blink::LocalFrameHost& LocalFrameHostRemote() {
     return *local_frame_host_remote_.get();
+  }
+
+  mojom::blink::NonAssociatedLocalFrameHost&
+  NonAssociatedLocalFrameHostRemote() {
+    return *non_associated_local_frame_host_remote_.get();
   }
 
   mojom::blink::ReportingServiceProxy* ReportingService();
@@ -199,6 +204,8 @@ class LocalFrameMojoHandler
       const WTF::Vector<WTF::String>&) final;
   void TraverseCancelled(const String& navigation_api_key,
                          mojom::blink::TraverseCancelledReason reason) final;
+  void SnapshotDocumentForViewTransition(
+      SnapshotDocumentForViewTransitionCallback callback) final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,
@@ -259,6 +266,9 @@ class LocalFrameMojoHandler
 
   HeapMojoAssociatedRemote<mojom::blink::LocalFrameHost>
       local_frame_host_remote_{nullptr};
+
+  HeapMojoRemote<mojom::blink::NonAssociatedLocalFrameHost>
+      non_associated_local_frame_host_remote_{nullptr};
 
   // LocalFrameMojoHandler can be reused by multiple ExecutionContext.
   HeapMojoAssociatedReceiver<mojom::blink::LocalFrame, LocalFrameMojoHandler>

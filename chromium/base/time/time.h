@@ -67,10 +67,12 @@
 
 #include <iosfwd>
 #include <limits>
+#include <ostream>
 
 #include "base/base_export.h"
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/numerics/clamped_math.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -103,6 +105,7 @@ namespace ABI {
 namespace Windows {
 namespace Foundation {
 struct DateTime;
+struct TimeSpan;
 }  // namespace Foundation
 }  // namespace Windows
 }  // namespace ABI
@@ -128,6 +131,7 @@ class BASE_EXPORT TimeDelta {
   // based on absolute time
   static TimeDelta FromFileTime(FILETIME ft);
   static TimeDelta FromWinrtDateTime(ABI::Windows::Foundation::DateTime dt);
+  static TimeDelta FromWinrtTimeSpan(ABI::Windows::Foundation::TimeSpan ts);
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
   static TimeDelta FromTimeSpec(const timespec& ts);
 #endif
@@ -199,6 +203,7 @@ class BASE_EXPORT TimeDelta {
 #endif
 #if BUILDFLAG(IS_WIN)
   ABI::Windows::Foundation::DateTime ToWinrtDateTime() const;
+  ABI::Windows::Foundation::TimeSpan ToWinrtTimeSpan() const;
 #endif
 
   // Returns the frequency in Hertz (cycles per second) that has a period of
@@ -443,6 +448,9 @@ class TimeBase {
   constexpr TimeDelta since_origin() const;
 
   // Compute the difference between two times.
+#if !defined(__aarch64__) && BUILDFLAG(IS_ANDROID)
+  NOINLINE  // https://crbug.com/1369775
+#endif
   constexpr TimeDelta operator-(const TimeBase<TimeClass>& other) const;
 
   // Return a new time modified by some delta.
@@ -481,7 +489,7 @@ class TimeBase {
   constexpr explicit TimeBase(int64_t us) : us_(us) {}
 
   // Time value in a microsecond timebase.
-  int64_t us_;
+  ClampedNumeric<int64_t> us_;
 };
 
 #if BUILDFLAG(IS_WIN)
@@ -956,7 +964,7 @@ constexpr TimeDelta TimeBase<TimeClass>::since_origin() const {
 template <class TimeClass>
 constexpr TimeDelta TimeBase<TimeClass>::operator-(
     const TimeBase<TimeClass>& other) const {
-  return Microseconds(ClampSub(us_, other.us_));
+  return Microseconds(us_ - other.us_);
 }
 
 template <class TimeClass>

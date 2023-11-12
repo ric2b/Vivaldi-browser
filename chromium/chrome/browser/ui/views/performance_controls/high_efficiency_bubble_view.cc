@@ -29,6 +29,14 @@
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(HighEfficiencyBubbleView,
                                       kHighEfficiencyDialogBodyElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(HighEfficiencyBubbleView,
+                                      kHighEfficiencyDialogOkButton);
+
+namespace {
+// The lower limit of memory usage that we would display to the user in bytes.
+// This value is the equivalent of 10MB.
+constexpr uint64_t kMemoryUsageThresholdInBytes = 10 * 1024 * 1024;
+}  // namespace
 
 // static
 views::BubbleDialogModelHost* HighEfficiencyBubbleView::ShowBubble(
@@ -46,13 +54,16 @@ views::BubbleDialogModelHost* HighEfficiencyBubbleView::ShowBubble(
       .SetDialogDestroyingCallback(
           base::BindOnce(&HighEfficiencyBubbleDelegate::OnDialogDestroy,
                          base::Unretained(bubble_delegate)))
-      .AddOkButton(base::DoNothing(), l10n_util::GetStringUTF16(IDS_OK));
+      .AddOkButton(base::DoNothing(),
+                   ui::DialogModelButton::Params()
+                       .SetLabel(l10n_util::GetStringUTF16(IDS_OK))
+                       .SetId(kHighEfficiencyDialogOkButton));
 
   TabDiscardTabHelper* const tab_helper = TabDiscardTabHelper::FromWebContents(
       browser->tab_strip_model()->GetActiveWebContents());
   const uint64_t memory_savings = tab_helper->GetMemorySavingsInBytes();
 
-  if (memory_savings > 0) {
+  if (memory_savings > kMemoryUsageThresholdInBytes) {
     dialog_model_builder.AddParagraph(
         ui::DialogModelLabel::CreateWithReplacements(
             IDS_HIGH_EFFICIENCY_DIALOG_BODY_WITH_SAVINGS_AND_LINK,
@@ -74,7 +85,8 @@ views::BubbleDialogModelHost* HighEfficiencyBubbleView::ShowBubble(
                 base::BindRepeating(
                     &HighEfficiencyBubbleDelegate::OnSettingsClicked,
                     base::Unretained(bubble_delegate))))
-            .set_is_secondary());
+            .set_is_secondary(),
+        std::u16string(), kHighEfficiencyDialogBodyElementId);
   }
   auto dialog_model = dialog_model_builder.Build();
 

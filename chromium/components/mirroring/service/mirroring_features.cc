@@ -3,38 +3,9 @@
 // found in the LICENSE file.
 
 #include "components/mirroring/service/mirroring_features.h"
-#include "third_party/libaom/libaom_buildflags.h"
 
 namespace mirroring {
 namespace features {
-
-// Controls whether offers using the AV1 codec for video encoding are included
-// in mirroring negotiations in addition to the VP8 codec, or offers only
-// include VP8.
-BASE_FEATURE(kCastStreamingAv1,
-             "CastStreamingAv1",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether offers using the VP9 codec for video encoding are included
-// in mirroring negotiations in addition to the VP8 codec, or offers only
-// include VP8.
-BASE_FEATURE(kCastStreamingVp9,
-             "CastStreamingVp9",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether the allow list (legacy behavior) or blocklist is used to
-// determine whether remoting capabilities should be queried for as part of
-// configuring a mirroring session.
-BASE_FEATURE(kCastUseBlocklistForRemotingQuery,
-             "CastUseBlocklistForRemotingQuery",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables querying for remoting capabilities against ALL devices, as opposed to
-// just those controlled by the allow or blocklist. When set, this flag takes
-// precedence over the above flag.
-BASE_FEATURE(kCastForceEnableRemotingQuery,
-             "CastForceEnableRemotingQuery",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The mirroring sender has the ability to letterbox video frames to match the
 // aspect ratio of the reciever's display.  However, receivers can handle
@@ -42,15 +13,24 @@ BASE_FEATURE(kCastForceEnableRemotingQuery,
 // TODO(crbug.com/1363512):  Remove support for sender side letterboxing.
 BASE_FEATURE(kCastDisableLetterboxing,
              "CastDisableLetterboxing",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// The mirroring service previously used a model name filter before even
+// attempting to query the receiver for media remoting support. This
+// flag disables this behavior and queries all devices for remoting support.
+// See https://crbug.com/1198616 and b/224993260 for background.
+BASE_FEATURE(kCastDisableModelNameCheck,
+             "CastDisableModelNameCheck",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-bool IsCastStreamingAV1Enabled() {
-#if BUILDFLAG(ENABLE_LIBAOM)
-  return base::FeatureList::IsEnabled(features::kCastStreamingAv1);
-#else
-  return false;
-#endif
-}
+// This changes the default interval for refresh frame requests when the capture
+// source is showing static content from the slower default to a faster one.
+//
+// This feature is overridden by the Chrome command line flag
+// --mirroring-refresh-interval-ms=<num>.
+BASE_FEATURE(kCastFastRefreshFrames,
+             "CastFastRefreshFrames",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace mirroring

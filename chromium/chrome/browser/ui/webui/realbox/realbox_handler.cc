@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/realbox/realbox_handler.h"
 
+#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,10 +18,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
-#include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/favicon/favicon_service_factory.h"
-#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
@@ -29,7 +28,8 @@
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/omnibox/omnibox_pedal_implementations.h"
 #include "chrome/browser/ui/search/omnibox_utils.h"
-#include "chrome/browser/ui/webui/realbox/realbox.mojom.h"
+#include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/new_tab_page_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -39,7 +39,6 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_result.h"
-#include "components/omnibox/browser/omnibox_controller_emitter.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
@@ -52,9 +51,11 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/variations/variations_client.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "net/cookies/cookie_util.h"
+#include "realbox_handler.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/resource_path.h"
@@ -79,6 +80,8 @@ constexpr char kAnswerWhenIsIconResourceName[] = "realbox/icons/when_is.svg";
 constexpr char kBookmarkIconResourceName[] =
     "chrome://resources/images/icon_bookmark.svg";
 constexpr char kCalculatorIconResourceName[] = "realbox/icons/calculator.svg";
+constexpr char kChromeProductIconResourceName[] =
+    "realbox/icons/chrome_product.svg";
 constexpr char kClockIconResourceName[] =
     "chrome://resources/images/icon_clock.svg";
 constexpr char kDinoIconResourceName[] = "realbox/icons/dino.svg";
@@ -109,6 +112,7 @@ constexpr char kJourneysIconResourceName[] = "realbox/icons/journeys.svg";
 constexpr char kPageIconResourceName[] = "realbox/icons/page.svg";
 constexpr char kPedalsIconResourceName[] =
     "chrome://theme/current-channel-logo";
+constexpr char kTabIconResourceName[] = "realbox/icons/tab.svg";
 constexpr char kTrendingUpIconResourceName[] = "realbox/icons/trending_up.svg";
 
 #if BUILDFLAG(IS_MAC)
@@ -119,15 +123,15 @@ constexpr char kWinShareIconResourceName[] = "realbox/icons/win_share.svg";
 constexpr char kShareIconResourceName[] = "realbox/icons/share.svg";
 #endif
 
-base::flat_map<int32_t, realbox::mojom::SuggestionGroupPtr>
+base::flat_map<int32_t, omnibox::mojom::SuggestionGroupPtr>
 CreateSuggestionGroupsMap(
     const AutocompleteResult& result,
     PrefService* prefs,
     const omnibox::GroupConfigMap& suggestion_groups_map) {
-  base::flat_map<int32_t, realbox::mojom::SuggestionGroupPtr> result_map;
+  base::flat_map<int32_t, omnibox::mojom::SuggestionGroupPtr> result_map;
   for (const auto& pair : suggestion_groups_map) {
-    realbox::mojom::SuggestionGroupPtr suggestion_group =
-        realbox::mojom::SuggestionGroup::New();
+    omnibox::mojom::SuggestionGroupPtr suggestion_group =
+        omnibox::mojom::SuggestionGroup::New();
     suggestion_group->header = base::UTF8ToUTF16(pair.second.header_text());
     suggestion_group->hidden =
         result.IsSuggestionGroupHidden(prefs, pair.first);
@@ -171,6 +175,10 @@ std::u16string GetAdditionalA11yMessage(const AutocompleteMatch& match,
                                         RealboxHandler::FocusState state) {
   switch (state) {
     case RealboxHandler::FocusState::kFocusedMatch: {
+      if (match.has_tab_match.value_or(false) &&
+          base::FeatureList::IsEnabled(omnibox::kNtpRealboxPedals)) {
+        return l10n_util::GetStringUTF16(IDS_ACC_TAB_SWITCH_SUFFIX);
+      }
       if (match.action) {
         return match.action->GetLabelStrings().accessibility_suffix;
       }
@@ -189,26 +197,26 @@ std::u16string GetAdditionalA11yMessage(const AutocompleteMatch& match,
   return std::u16string();
 }
 
-std::vector<realbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
+std::vector<omnibox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
     const AutocompleteResult& result,
     bookmarks::BookmarkModel* bookmark_model) {
-  std::vector<realbox::mojom::AutocompleteMatchPtr> matches;
+  std::vector<omnibox::mojom::AutocompleteMatchPtr> matches;
   int line = 0;
   for (const AutocompleteMatch& match : result) {
-    realbox::mojom::AutocompleteMatchPtr mojom_match =
-        realbox::mojom::AutocompleteMatch::New();
+    omnibox::mojom::AutocompleteMatchPtr mojom_match =
+        omnibox::mojom::AutocompleteMatch::New();
     mojom_match->allowed_to_be_default_match =
         match.allowed_to_be_default_match;
     mojom_match->contents = match.contents;
     for (const auto& contents_class : match.contents_class) {
       mojom_match->contents_class.push_back(
-          realbox::mojom::ACMatchClassification::New(contents_class.offset,
+          omnibox::mojom::ACMatchClassification::New(contents_class.offset,
                                                      contents_class.style));
     }
     mojom_match->description = match.description;
     for (const auto& description_class : match.description_class) {
       mojom_match->description_class.push_back(
-          realbox::mojom::ACMatchClassification::New(description_class.offset,
+          omnibox::mojom::ACMatchClassification::New(description_class.offset,
                                                      description_class.style));
     }
     mojom_match->destination_url = match.destination_url;
@@ -231,7 +239,7 @@ std::vector<realbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
     if (match.answer.has_value()) {
       const auto& additional_text =
           GetAdditionalText(match.answer->first_line());
-      mojom_match->answer = realbox::mojom::SuggestionAnswer::New(
+      mojom_match->answer = omnibox::mojom::SuggestionAnswer::New(
           additional_text ? base::JoinString(
                                 {match.contents, additional_text.value()}, u" ")
                           : match.contents,
@@ -242,13 +250,25 @@ std::vector<realbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
         !mojom_match->image_url.empty() ||
         match.type == AutocompleteMatchType::CALCULATOR ||
         (match.answer.has_value());
-    const bool has_action = match.action && base::FeatureList::IsEnabled(
-                                                omnibox::kNtpRealboxPedals);
-    if (has_action) {
-      mojom_match->action = realbox::mojom::Action::New(
-          match.action->GetLabelStrings().accessibility_hint,
-          match.action->GetLabelStrings().hint,
-          match.action->GetLabelStrings().suggestion_contents,
+    // The realbox only supports one action and priority is given to the actions
+    // instead of the switch to tab button.
+    if (match.has_tab_match.value_or(false) &&
+        base::FeatureList::IsEnabled(omnibox::kNtpRealboxPedals)) {
+      mojom_match->action = omnibox::mojom::Action::New(
+          l10n_util::GetStringUTF16(IDS_ACC_TAB_SWITCH_BUTTON),
+          l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT),
+          std::u16string(), kTabIconResourceName);
+    }
+
+    // Omit actions that takeover the whole match, because the C++ handler
+    // remaps the navigation to execute the action. (Doesn't happen in the JS.)
+    if (match.action && !match.action->TakesOverMatch() &&
+        base::FeatureList::IsEnabled(omnibox::kNtpRealboxPedals)) {
+      const OmniboxAction::LabelStrings& label_strings =
+          match.action->GetLabelStrings();
+      mojom_match->action = omnibox::mojom::Action::New(
+          label_strings.accessibility_hint, label_strings.hint,
+          label_strings.suggestion_contents,
           RealboxHandler::PedalVectorIconToResourceName(
               match.action->GetVectorIcon()));
     }
@@ -272,21 +292,46 @@ std::vector<realbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
   return matches;
 }
 
-realbox::mojom::AutocompleteResultPtr CreateAutocompleteResult(
+omnibox::mojom::AutocompleteResultPtr CreateAutocompleteResult(
     const std::u16string& input,
     const AutocompleteResult& result,
     bookmarks::BookmarkModel* bookmark_model,
     PrefService* prefs) {
-  return realbox::mojom::AutocompleteResult::New(
+  return omnibox::mojom::AutocompleteResult::New(
       input,
       CreateSuggestionGroupsMap(result, prefs, result.suggestion_groups_map()),
       CreateAutocompleteMatches(result, bookmark_model));
 }
 
+std::string GetBase64UrlVariations(Profile* profile) {
+  variations::VariationsClient* provider = profile->GetVariationsClient();
+
+  variations::mojom::VariationsHeadersPtr headers =
+      provider->GetVariationsHeaders();
+  if (headers.is_null()) {
+    return std::string();
+  }
+  const std::string variations_base64 = headers->headers_map.at(
+      variations::mojom::GoogleWebVisibility::FIRST_PARTY);
+
+  // Variations headers are base64 encoded, however, we're attaching the value
+  // to a URL query parameter so they need to be base64url encoded.
+  std::string variations_decoded;
+  base::Base64Decode(variations_base64, &variations_decoded);
+
+  std::string variations_base64url;
+  base::Base64UrlEncode(variations_decoded,
+                        base::Base64UrlEncodePolicy::OMIT_PADDING,
+                        &variations_base64url);
+
+  return variations_base64url;
+}
+
 }  // namespace
 
 // static
-void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source) {
+void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
+                                          Profile* profile) {
   static constexpr webui::ResourcePath kImages[] = {
       {kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH_SVG}};
   source->AddResourcePaths(kImages);
@@ -319,7 +364,9 @@ void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source) {
                                        IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD));
   source->AddBoolean(
       "realboxLensSearch",
-      base::FeatureList::IsEnabled(ntp_features::kNtpRealboxLensSearch));
+      base::FeatureList::IsEnabled(ntp_features::kNtpRealboxLensSearch) &&
+          profile->GetPrefs()->GetBoolean(prefs::kLensDesktopNTPSearchEnabled));
+  source->AddString("realboxLensVariations", GetBase64UrlVariations(profile));
 }
 
 // static
@@ -379,6 +426,8 @@ std::string RealboxHandler::AutocompleteMatchVectorIconToResourceName(
     return kPageIconResourceName;
   } else if (icon.name == omnibox::kPedalIcon.name) {
     return kPedalsIconResourceName;
+  } else if (icon.name == omnibox::kProductIcon.name) {
+    return kChromeProductIconResourceName;
   } else if (icon.name == vector_icons::kSearchIcon.name) {
     return kSearchIconResourceName;
   } else if (icon.name == omnibox::kTrendingUpIcon.name) {
@@ -451,30 +500,22 @@ std::string RealboxHandler::PedalVectorIconToResourceName(
 }
 
 RealboxHandler::RealboxHandler(
-    mojo::PendingReceiver<realbox::mojom::PageHandler> pending_page_handler,
+    mojo::PendingReceiver<omnibox::mojom::PageHandler> pending_page_handler,
     Profile* profile,
-    content::WebContents* web_contents)
+    content::WebContents* web_contents,
+    MetricsReporter* metrics_reporter)
     : profile_(profile),
       web_contents_(web_contents),
-      bitmap_fetcher_service_(
-          BitmapFetcherServiceFactory::GetForBrowserContext(profile)),
-      favicon_cache_(FaviconServiceFactory::GetForProfile(
-                         profile,
-                         ServiceAccessType::EXPLICIT_ACCESS),
-                     HistoryServiceFactory::GetForProfile(
-                         profile,
-                         ServiceAccessType::EXPLICIT_ACCESS)),
-      page_handler_(this, std::move(pending_page_handler)) {}
-
-RealboxHandler::~RealboxHandler() {
-  // Clear pending bitmap requests.
-  for (auto bitmap_request_id : bitmap_request_ids_) {
-    bitmap_fetcher_service_->CancelRequest(bitmap_request_id);
-  }
+      metrics_reporter_(metrics_reporter),
+      page_handler_(this, std::move(pending_page_handler)) {
+  controller_emitter_observation_.Observe(
+      OmniboxControllerEmitter::GetForBrowserContext(profile_));
 }
 
+RealboxHandler::~RealboxHandler() = default;
+
 void RealboxHandler::SetPage(
-    mojo::PendingRemote<realbox::mojom::Page> pending_page) {
+    mojo::PendingRemote<omnibox::mojom::Page> pending_page) {
   page_.Bind(std::move(pending_page));
 }
 
@@ -484,12 +525,12 @@ void RealboxHandler::QueryAutocomplete(const std::u16string& input,
     autocomplete_controller_ = std::make_unique<AutocompleteController>(
         std::make_unique<ChromeAutocompleteProviderClient>(profile_),
         AutocompleteClassifier::DefaultOmniboxProviders());
-    autocomplete_controller_->AddObserver(this);
 
     OmniboxControllerEmitter* emitter =
         OmniboxControllerEmitter::GetForBrowserContext(profile_);
-    if (emitter)
+    if (emitter) {
       autocomplete_controller_->AddObserver(emitter);
+    }
   }
 
   // TODO(tommycli): We use the input being empty as a signal we are requesting
@@ -545,6 +586,11 @@ void RealboxHandler::OpenAutocompleteMatch(
   }
 
   AutocompleteMatch match(autocomplete_controller_->result().match_at(line));
+  if (match.action && match.action->TakesOverMatch()) {
+    return ExecuteAction(line, base::TimeTicks::Now(), mouse_button, alt_key,
+                         ctrl_key, meta_key, shift_key);
+  }
+
   if (match.destination_url != url) {
     // TODO(https://crbug.com/1020025): this could be malice or staleness.
     // Either way: don't navigate.
@@ -659,6 +705,8 @@ void RealboxHandler::OpenAutocompleteMatch(
 void RealboxHandler::OnNavigationLikely(
     uint8_t line,
     omnibox::mojom::NavigationPredictor navigation_predictor) {
+  if (line >= autocomplete_controller_->result().size())
+    return;
   if (auto* search_prefetch_service =
           SearchPrefetchServiceFactory::GetForProfile(profile_)) {
     AutocompleteMatch match(autocomplete_controller_->result().match_at(line));
@@ -728,29 +776,40 @@ void RealboxHandler::ExecuteAction(uint8_t line,
   }
 
   const auto& match = autocomplete_controller_->result().match_at(line);
-  if (!match.action) {
-    return;
+  if (match.action) {
+    WindowOpenDisposition disposition = ui::DispositionFromClick(
+        /*middle_button=*/mouse_button == 1, alt_key, ctrl_key, meta_key,
+        shift_key);
+    // TODO(tommycli): Add recording of action shown in the realbox when the
+    // user uses the realbox to go somewhere OTHER than executing an action.
+    match.action->RecordActionShown(line, /*executed=*/true);
+    OmniboxAction::ExecutionContext context(
+        *(autocomplete_controller_->autocomplete_provider_client()),
+        base::BindOnce(&RealboxHandler::OpenURL,
+                       weak_ptr_factory_.GetWeakPtr()),
+        match_selection_timestamp, disposition);
+    match.action->Execute(context);
+  } else if (match.has_tab_match.value_or(false)) {
+    WindowOpenDisposition disposition = WindowOpenDisposition::SWITCH_TO_TAB;
+    ui::PageTransition transition = ui::PageTransitionFromInt(
+        match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+    web_contents_->OpenURL(
+        content::OpenURLParams(match.destination_url, content::Referrer(),
+                               disposition, transition, false));
   }
-  WindowOpenDisposition disposition = ui::DispositionFromClick(
-      /*middle_button=*/mouse_button == 1, alt_key, ctrl_key, meta_key,
-      shift_key);
-
-  // TODO(tommycli): Add recording of action shown in the realbox when the user
-  //  uses the realbox to go somewhere OTHER than executing an action.
-  match.action->RecordActionShown(line, /*executed=*/true);
-  OmniboxAction::ExecutionContext context(
-      *(autocomplete_controller_->autocomplete_provider_client()),
-      base::BindOnce(&RealboxHandler::OpenURL, weak_ptr_factory_.GetWeakPtr()),
-      match_selection_timestamp, disposition);
-  match.action->Execute(context);
 }
 
 void RealboxHandler::OnResultChanged(AutocompleteController* controller,
                                      bool default_match_changed) {
-  DCHECK(controller == autocomplete_controller_.get());
+  // Ignore updates if the controller does not belong to the realbox.
+  if (!autocomplete_controller_ ||
+      autocomplete_controller_.get() != controller) {
+    return;
+  }
 
-  // Prepend missing tail suggestion prefixes in results, if present.
-  autocomplete_controller_->SetTailSuggestCommonPrefixes();
+  if (metrics_reporter_ && !metrics_reporter_->HasLocalMark("ResultChanged")) {
+    metrics_reporter_->Mark("ResultChanged");
+  }
 
   page_->AutocompleteResultChanged(CreateAutocompleteResult(
       autocomplete_controller_->input().text(),
@@ -765,60 +824,4 @@ void RealboxHandler::OnResultChanged(AutocompleteController* controller,
           web_contents_, autocomplete_controller_->result());
     }
   }
-
-  // Clear pending bitmap requests before requesting new ones.
-  for (auto bitmap_request_id : bitmap_request_ids_) {
-    bitmap_fetcher_service_->CancelRequest(bitmap_request_id);
-  }
-  bitmap_request_ids_.clear();
-
-  int match_index = -1;
-  for (const auto& match : autocomplete_controller_->result()) {
-    match_index++;
-
-    // Request bitmaps for matche images.
-    if (!match.ImageUrl().is_empty()) {
-      bitmap_request_ids_.push_back(bitmap_fetcher_service_->RequestImage(
-          match.ImageUrl(),
-          base::BindOnce(&RealboxHandler::OnRealboxBitmapFetched,
-                         weak_ptr_factory_.GetWeakPtr(), match_index,
-                         match.ImageUrl())));
-    }
-
-    // Request favicons for navigational matches.
-    // TODO(crbug.com/1075848): Investigate using chrome://favicon2.
-    if (!AutocompleteMatch::IsSearchType(match.type) &&
-        match.type != AutocompleteMatchType::DOCUMENT_SUGGESTION &&
-        match.type != AutocompleteMatchType::HISTORY_CLUSTER) {
-      gfx::Image favicon = favicon_cache_.GetLargestFaviconForPageUrl(
-          match.destination_url,
-          base::BindOnce(&RealboxHandler::OnRealboxFaviconFetched,
-                         weak_ptr_factory_.GetWeakPtr(), match_index,
-                         match.destination_url));
-      if (!favicon.IsEmpty()) {
-        OnRealboxFaviconFetched(match_index, match.destination_url, favicon);
-      }
-    }
-  }
-}
-
-void RealboxHandler::OnRealboxBitmapFetched(int match_index,
-                                            const GURL& image_url,
-                                            const SkBitmap& bitmap) {
-  auto data = gfx::Image::CreateFrom1xBitmap(bitmap).As1xPNGBytes();
-  std::string data_url =
-      webui::GetPngDataUrl(data->front_as<unsigned char>(), data->size());
-
-  page_->AutocompleteMatchImageAvailable(match_index, image_url, data_url);
-}
-
-void RealboxHandler::OnRealboxFaviconFetched(int match_index,
-                                             const GURL& page_url,
-                                             const gfx::Image& favicon) {
-  DCHECK(!favicon.IsEmpty());
-  auto data = favicon.As1xPNGBytes();
-  std::string data_url =
-      webui::GetPngDataUrl(data->front_as<unsigned char>(), data->size());
-
-  page_->AutocompleteMatchImageAvailable(match_index, page_url, data_url);
 }

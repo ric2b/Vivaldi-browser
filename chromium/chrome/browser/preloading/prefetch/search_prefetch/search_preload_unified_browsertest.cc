@@ -414,7 +414,7 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest {
           break;
         case DeferralType::kDeferHeader:
           test_harness_->AddDelayedResponseTask(
-              base::ThreadTaskRunnerHandle::Get(),
+              base::SingleThreadTaskRunner::GetCurrentDefault(),
               base::BindOnce(&net::test_server::HttpResponseDelegate::
                                  SendHeadersContentAndFinish,
                              delegate, code(), net::GetHttpReasonPhrase(code()),
@@ -422,7 +422,7 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest {
           break;
         case DeferralType::kDeferBody:
           test_harness_->AddDelayedResponseTask(
-              base::ThreadTaskRunnerHandle::Get(),
+              base::SingleThreadTaskRunner::GetCurrentDefault(),
               base::BindOnce(&net::test_server::HttpResponseDelegate::
                                  SendContentsAndFinish,
                              delegate, body_));
@@ -431,12 +431,12 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest {
           break;
         case DeferralType::kDeferHeaderThenBody:
           test_harness_->AddDelayedResponseTask(
-              base::ThreadTaskRunnerHandle::Get(),
+              base::SingleThreadTaskRunner::GetCurrentDefault(),
               base::BindOnce(
                   &net::test_server::HttpResponseDelegate::SendResponseHeaders,
                   delegate, code(), "OK", headers_));
           test_harness_->AddDelayedResponseTask(
-              base::ThreadTaskRunnerHandle::Get(),
+              base::SingleThreadTaskRunner::GetCurrentDefault(),
               base::BindOnce(&net::test_server::HttpResponseDelegate::
                                  SendContentsAndFinish,
                              delegate, body_));
@@ -479,8 +479,9 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest {
 
   constexpr static char kSearchDomain[] = "a.test";
   constexpr static char16_t kSearchDomain16[] = u"a.test";
-  raw_ptr<PrerenderManager> prerender_manager_ = nullptr;
-  raw_ptr<SearchPrefetchService> search_prefetch_service_ = nullptr;
+  raw_ptr<PrerenderManager, DanglingUntriaged> prerender_manager_ = nullptr;
+  raw_ptr<SearchPrefetchService, DanglingUntriaged> search_prefetch_service_ =
+      nullptr;
   net::test_server::EmbeddedTestServer search_engine_server_{
       net::test_server::EmbeddedTestServer::TYPE_HTTPS};
 
@@ -998,7 +999,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
 
     // DispatchDelayedResponseTask will dispatch DidFailLoadWithError resulting
     // in prerender cancelling with status 123 i.e., =>
-    // PrerenderHost::FinalStatus::DidFailLoad.
+    // PrerenderFinalStatus::DidFailLoad.
     std::vector<UkmEntry> expected_entries = {
         attempt_entry_builder().BuildEntry(
             ukm_source_id, content::PreloadingType::kPrefetch,

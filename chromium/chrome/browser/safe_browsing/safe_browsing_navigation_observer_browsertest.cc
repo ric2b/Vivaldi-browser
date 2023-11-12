@@ -1223,15 +1223,14 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, NewTabDownload) {
   // Source and target are at different tabs.
   EXPECT_NE(nav_list->GetNavigationEvent(1)->source_tab_id,
             nav_list->GetNavigationEvent(1)->target_tab_id);
-  VerifyNavigationEvent(
-      GURL(),     // source_url
-      GURL(),     // source_main_frame_url
-      blank_url,  // original_request_url
-      blank_url,  // destination_url
-      false,      // is_user_initiated,
-      blink::features::IsInitialNavigationEntryEnabled(),  // has_committed
-      false,  // has_server_redirect
-      nav_list->GetNavigationEvent(2));
+  VerifyNavigationEvent(GURL(),     // source_url
+                        GURL(),     // source_main_frame_url
+                        blank_url,  // original_request_url
+                        blank_url,  // destination_url
+                        false,      // is_user_initiated,
+                        true,       // has_committed
+                        false,      // has_server_redirect
+                        nav_list->GetNavigationEvent(2));
   EXPECT_EQ(nav_list->GetNavigationEvent(2)->source_tab_id,
             nav_list->GetNavigationEvent(2)->target_tab_id);
   VerifyNavigationEvent(blank_url,     // source_url
@@ -1317,15 +1316,14 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   // Source and target are at different tabs.
   EXPECT_FALSE(nav_list->GetNavigationEvent(1)->source_tab_id ==
                nav_list->GetNavigationEvent(1)->target_tab_id);
-  VerifyNavigationEvent(
-      GURL(),     // source_url
-      GURL(),     // source_main_frame_url
-      blank_url,  // original_request_url
-      blank_url,  // destination_url
-      false,      // is_user_initiated,
-      blink::features::IsInitialNavigationEntryEnabled(),  // has_committed
-      false,  // has_server_redirect
-      nav_list->GetNavigationEvent(2));
+  VerifyNavigationEvent(GURL(),     // source_url
+                        GURL(),     // source_main_frame_url
+                        blank_url,  // original_request_url
+                        blank_url,  // destination_url
+                        false,      // is_user_initiated,
+                        true,       // has_committed
+                        false,      // has_server_redirect
+                        nav_list->GetNavigationEvent(2));
   EXPECT_EQ(nav_list->GetNavigationEvent(2)->source_tab_id,
             nav_list->GetNavigationEvent(2)->target_tab_id);
   VerifyNavigationEvent(blank_url,     // source_url
@@ -1586,15 +1584,14 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                         false,                   // has_committed
                         false,                   // has_server_redirect
                         nav_list->GetNavigationEvent(4));
-  VerifyNavigationEvent(
-      GURL(),     // source_url
-      GURL(),     // source_main_frame_url
-      blank_url,  // original_request_url
-      blank_url,  // destination_url
-      false,      // is_user_initiated,
-      blink::features::IsInitialNavigationEntryEnabled(),  // has_committed
-      false,  // has_server_redirect
-      nav_list->GetNavigationEvent(5));
+  VerifyNavigationEvent(GURL(),     // source_url
+                        GURL(),     // source_main_frame_url
+                        blank_url,  // original_request_url
+                        blank_url,  // destination_url
+                        false,      // is_user_initiated,
+                        true,       // has_committed
+                        false,      // has_server_redirect
+                        nav_list->GetNavigationEvent(5));
   VerifyNavigationEvent(blank_url,     // source_url
                         blank_url,     // source_main_frame_url
                         download_url,  // original_request_url
@@ -3359,14 +3356,14 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
 
   // Add URLs to the Safe Browsing allowlist.
-  base::ListValue allowlist;
+  base::Value::List allowlist;
   allowlist.Append(initial_url.host());
   allowlist.Append(multi_frame_test_url.host());
   allowlist.Append(iframe_url.host());
   allowlist.Append(iframe_retargeting_url.host());
   allowlist.Append(download_url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
-                                        allowlist);
+  browser()->profile()->GetPrefs()->SetList(
+      prefs::kSafeBrowsingAllowlistDomains, std::move(allowlist));
 
   ReferrerChain referrer_chain;
   IdentifyReferrerChainForDownload(GetDownload(), &referrer_chain);
@@ -3433,12 +3430,12 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
 
   // Add URLs to the Safe Browsing allowlist.
-  base::ListValue allowlist;
+  base::Value::List allowlist;
   allowlist.Append(initial_url.host());
   allowlist.Append(download_url.host());
   allowlist.Append(request_url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
-                                        allowlist);
+  browser()->profile()->GetPrefs()->SetList(
+      prefs::kSafeBrowsingAllowlistDomains, std::move(allowlist));
 
   ReferrerChain referrer_chain;
   IdentifyReferrerChainForDownload(GetDownload(), &referrer_chain);
@@ -3468,11 +3465,11 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
 
   // Add URLs to the Safe Browsing allowlist.
-  base::ListValue allowlist;
+  base::Value::List allowlist;
   allowlist.Append(initial_url.host());
   allowlist.Append(download_url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
-                                        allowlist);
+  browser()->profile()->GetPrefs()->SetList(
+      prefs::kSafeBrowsingAllowlistDomains, std::move(allowlist));
 
   ReferrerChain referrer_chain;
   AppendRecentNavigations(/*recent_navigation_count=*/2, &referrer_chain);

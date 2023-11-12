@@ -17,6 +17,7 @@ import android.webkit.WebSettings;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.android_webview.autofill.ChromeAutocompleteSafeModeAction;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
 import org.chromium.android_webview.settings.ForceDarkBehavior;
@@ -637,6 +638,10 @@ public class AwSettings {
     @CalledByNative
     private boolean getSaveFormDataLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
+        if (ChromeAutocompleteSafeModeAction.isChromeAutocompleteDisabled()) {
+            Log.i(TAG, "Chrome autocomplete is disabled by SafeMode");
+            return false;
+        }
         return mAutoCompleteEnabled;
     }
 
@@ -1771,6 +1776,13 @@ public class AwSettings {
         }
     }
 
+    public boolean prefersDarkFromTheme() {
+        synchronized (mAwSettingsLock) {
+            assert mNativeAwSettings != 0;
+            return AwSettingsJni.get().prefersDarkFromTheme(mNativeAwSettings, AwSettings.this);
+        }
+    }
+
     @ForceDarkBehavior
     public int getForceDarkBehavior() {
         synchronized (mAwSettingsLock) {
@@ -1998,6 +2010,7 @@ public class AwSettings {
         void updateCookiePolicyLocked(long nativeAwSettings, AwSettings caller);
         void updateAllowFileAccessLocked(long nativeAwSettings, AwSettings caller);
         boolean isForceDarkApplied(long nativeAwSettings, AwSettings caller);
+        boolean prefersDarkFromTheme(long nativeAwSettings, AwSettings caller);
         void setEnterpriseAuthenticationAppLinkPolicyEnabled(
                 long nativeAwSettings, AwSettings caller, boolean enabled);
         boolean getEnterpriseAuthenticationAppLinkPolicyEnabled(

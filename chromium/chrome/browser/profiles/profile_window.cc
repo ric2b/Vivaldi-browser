@@ -6,9 +6,6 @@
 
 #include <stddef.h>
 
-#include <string>
-#include <vector>
-
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -19,7 +16,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -98,18 +94,6 @@ void ProfileLoadedCallback(base::OnceCallback<void(Profile*)> callback,
 }  // namespace
 
 namespace profiles {
-
-base::FilePath GetPathOfProfileWithEmail(ProfileManager* profile_manager,
-                                         const std::string& email) {
-  std::u16string profile_email = base::UTF8ToUTF16(email);
-  std::vector<ProfileAttributesEntry*> entries =
-      profile_manager->GetProfileAttributesStorage().GetAllProfilesAttributes();
-  for (ProfileAttributesEntry* entry : entries) {
-    if (entry->GetUserName() == profile_email)
-      return entry->GetPath();
-  }
-  return base::FilePath();
-}
 
 void FindOrCreateNewWindowForProfile(
     Profile* profile,
@@ -274,9 +258,10 @@ void BrowserAddedForProfileObserver::OnBrowserAdded(Browser* browser) {
     // By the time the browser is added a tab (or multiple) are about to be
     // added. Post the callback to the message loop so it gets executed after
     // the tabs are created.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  std::move(callback_));
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback_));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                  this);
   }
 }
 

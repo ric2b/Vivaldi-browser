@@ -96,10 +96,6 @@ TrustTokenRequestIssuanceHelper::TrustTokenRequestIssuanceHelper(
     absl::optional<std::string> custom_key_commitment,
     absl::optional<url::Origin> custom_issuer,
     std::unique_ptr<Cryptographer> cryptographer,
-    std::unique_ptr<LocalTrustTokenOperationDelegate> local_operation_delegate,
-    base::RepeatingCallback<bool(mojom::TrustTokenKeyCommitmentResult::Os)>
-        is_current_os_callback,
-    MetricsDelegate* metrics_delegate,
     net::NetLogWithSource net_log)
     : top_level_origin_(std::move(top_level_origin)),
       token_store_(token_store),
@@ -107,9 +103,6 @@ TrustTokenRequestIssuanceHelper::TrustTokenRequestIssuanceHelper(
       custom_key_commitment_(custom_key_commitment),
       custom_issuer_(custom_issuer),
       cryptographer_(std::move(cryptographer)),
-      local_operation_delegate_(std::move(local_operation_delegate)),
-      is_current_os_callback_(std::move(is_current_os_callback)),
-      metrics_delegate_(metrics_delegate),
       net_log_(std::move(net_log)) {
   DCHECK(token_store_);
   DCHECK(key_commitment_getter_);
@@ -124,22 +117,22 @@ TrustTokenRequestIssuanceHelper::Cryptographer::UnblindedTokens::
     ~UnblindedTokens() = default;
 
 void TrustTokenRequestIssuanceHelper::Begin(
-    net::URLRequest* request,
-    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) {
-  DCHECK(request);
-
+    const GURL& url,
+    base::OnceCallback<void(absl::optional<net::HttpRequestHeaders>,
+                            mojom::TrustTokenOperationStatus)> done) {
   net_log_.BeginEvent(
       net::NetLogEventType::TRUST_TOKEN_OPERATION_BEGIN_ISSUANCE);
 
   if (custom_issuer_) {
     issuer_ = SuitableTrustTokenOrigin::Create(*custom_issuer_);
   } else {
-    issuer_ = SuitableTrustTokenOrigin::Create(request->url());
+    issuer_ = SuitableTrustTokenOrigin::Create(url);
   }
 
   if (!issuer_) {
     LogOutcome(net_log_, kBegin, "Unsuitable issuer URL");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInvalidArgument);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kInvalidArgument);
     return;
   }
 
@@ -148,59 +141,46 @@ void TrustTokenRequestIssuanceHelper::Begin(
         TrustTokenKeyCommitmentParser().Parse(*custom_key_commitment_);
     if (!keys) {
       LogOutcome(net_log_, kBegin, "Failed to parse custom keys");
-      std::move(done).Run(mojom::TrustTokenOperationStatus::kInvalidArgument);
+      std::move(done).Run(absl::nullopt,
+                          mojom::TrustTokenOperationStatus::kInvalidArgument);
       return;
     }
-    OnGotKeyCommitment(request, std::move(done), std::move(keys));
+    OnGotKeyCommitment(url, std::move(done), std::move(keys));
     return;
   }
 
   if (!token_store_->SetAssociation(*issuer_, top_level_origin_)) {
     LogOutcome(net_log_, kBegin, "Couldn't set issuer-toplevel association");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kResourceExhausted);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kResourceExhausted);
     return;
   }
 
   if (token_store_->CountTokens(*issuer_) ==
       kTrustTokenPerIssuerTokenCapacity) {
     LogOutcome(net_log_, kBegin, "Tokens at capacity");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kResourceExhausted);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kResourceExhausted);
     return;
   }
 
   key_commitment_getter_->Get(
       *issuer_,
       base::BindOnce(&TrustTokenRequestIssuanceHelper::OnGotKeyCommitment,
-                     weak_ptr_factory_.GetWeakPtr(), request, std::move(done)));
+                     weak_ptr_factory_.GetWeakPtr(), std::cref(url),
+                     std::move(done)));
 }
 
 void TrustTokenRequestIssuanceHelper::OnGotKeyCommitment(
-    net::URLRequest* request,
-    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
+    const GURL& url,
+    base::OnceCallback<void(absl::optional<net::HttpRequestHeaders>,
+                            mojom::TrustTokenOperationStatus)> done,
     mojom::TrustTokenKeyCommitmentResultPtr commitment_result) {
   if (!commitment_result) {
     LogOutcome(net_log_, kBegin, "No keys for issuer");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kFailedPrecondition);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kFailedPrecondition);
     return;
-  }
-
-  if (features::kPlatformProvidedTrustTokenIssuance.Get() &&
-      !commitment_result->request_issuance_locally_on.empty()) {
-    should_divert_issuance_request_to_os_ = base::ranges::any_of(
-        commitment_result->request_issuance_locally_on,
-        [this](mojom::TrustTokenKeyCommitmentResult::Os os) {
-          return is_current_os_callback_.Run(os);
-        });
-    if (!should_divert_issuance_request_to_os_ &&
-        commitment_result->unavailable_local_operation_fallback ==
-            mojom::TrustTokenKeyCommitmentResult::
-                UnavailableLocalOperationFallback::kReturnWithError) {
-      // If the issuer requests that issuance be mediated by the OS on at least
-      // one platform, and we aren't on that platform, and the issuer has
-      // configured that we should return with an error in this case, do so.
-      std::move(done).Run(mojom::TrustTokenOperationStatus::kUnavailable);
-      return;
-    }
   }
 
   protocol_version_ = commitment_result->protocol_version;
@@ -209,7 +189,8 @@ void TrustTokenRequestIssuanceHelper::OnGotKeyCommitment(
                                   commitment_result->batch_size)) {
     LogOutcome(net_log_, kBegin,
                "Internal error initializing cryptography delegate");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInternalError);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kInternalError);
     return;
   }
 
@@ -218,7 +199,7 @@ void TrustTokenRequestIssuanceHelper::OnGotKeyCommitment(
     if (!cryptographer_->AddKey(key->body)) {
       LogOutcome(net_log_, kBegin, "Bad key");
       std::move(done).Run(
-          mojom::TrustTokenOperationStatus::kFailedPrecondition);
+          absl::nullopt, mojom::TrustTokenOperationStatus::kFailedPrecondition);
       return;
     }
   }
@@ -236,15 +217,16 @@ void TrustTokenRequestIssuanceHelper::OnGotKeyCommitment(
                      batch_size),
       base::BindOnce(
           &TrustTokenRequestIssuanceHelper::OnDelegateBeginIssuanceCallComplete,
-          weak_ptr_factory_.GetWeakPtr(), request, std::move(done)));
+          weak_ptr_factory_.GetWeakPtr(), std::cref(url), std::move(done)));
   // Logic continues... in the continuation
   // OnDelegateBeginIssuanceCallComplete; don't add more code here. In
   // particular, |cryptographer_| is empty at this point.
 }
 
 void TrustTokenRequestIssuanceHelper::OnDelegateBeginIssuanceCallComplete(
-    net::URLRequest* request,
-    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
+    const GURL& url,
+    base::OnceCallback<void(absl::optional<net::HttpRequestHeaders>,
+                            mojom::TrustTokenOperationStatus)> done,
     CryptographerAndBlindedTokens cryptographer_and_blinded_tokens) {
   cryptographer_ = std::move(cryptographer_and_blinded_tokens.cryptographer);
   absl::optional<std::string>& maybe_blinded_tokens =
@@ -252,57 +234,28 @@ void TrustTokenRequestIssuanceHelper::OnDelegateBeginIssuanceCallComplete(
 
   if (!maybe_blinded_tokens) {
     LogOutcome(net_log_, kBegin, "Internal error generating blinded tokens");
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInternalError);
+    std::move(done).Run(absl::nullopt,
+                        mojom::TrustTokenOperationStatus::kInternalError);
     return;
   }
 
-  if (should_divert_issuance_request_to_os_) {
-    LogOutcome(net_log_, kBegin,
-               "Passing operation to local issuance provider");
-    auto fulfill_request = mojom::FulfillTrustTokenIssuanceRequest::New();
-    fulfill_request->issuer = url::Origin::Create(request->url());
-    fulfill_request->request = std::move(*maybe_blinded_tokens);
-    metrics_delegate_->WillExecutePlatformProvidedOperation();
-    local_operation_delegate_->FulfillIssuance(
-        std::move(fulfill_request),
-        base::BindOnce(&TrustTokenRequestIssuanceHelper::
-                           DoneRequestingLocallyFulfilledIssuance,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(done)));
-    // |this| may have been deleted and/or Finalize may have been called
-    // already.
-    return;
-  }
-
-  request->SetExtraRequestHeaderByName(kTrustTokensSecTrustTokenHeader,
-                                       std::move(*maybe_blinded_tokens),
-                                       /*overwrite=*/true);
+  net::HttpRequestHeaders request_headers;
+  request_headers.SetHeader(kTrustTokensSecTrustTokenHeader,
+                            std::move(*maybe_blinded_tokens));
 
   std::string protocol_string_version =
       internal::ProtocolVersionToString(protocol_version_);
-  request->SetExtraRequestHeaderByName(kTrustTokensSecTrustTokenVersionHeader,
-                                       protocol_string_version,
-                                       /*overwrite=*/true);
-
-  // We don't want cache reads, because the highest priority is to execute the
-  // protocol operation by sending the server the Trust Tokens request header
-  // and getting the corresponding response header, but we want cache writes
-  // in case subsequent requests are made to the same URL in non-trust-token
-  // settings.
-  request->SetLoadFlags(request->load_flags() | net::LOAD_BYPASS_CACHE);
+  request_headers.SetHeader(kTrustTokensSecTrustTokenVersionHeader,
+                            protocol_string_version);
 
   LogOutcome(net_log_, kBegin, "Success");
-  std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
+  std::move(done).Run(std::move(request_headers),
+                      mojom::TrustTokenOperationStatus::kOk);
 }
 
 void TrustTokenRequestIssuanceHelper::Finalize(
-    mojom::URLResponseHead* response,
+    net::HttpResponseHeaders& response_headers,
     base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) {
-  DCHECK(response);
-
-  // A response headers object should be present on all responses for
-  // https-scheme requests (which Trust Tokens requests are).
-  DCHECK(response->headers);
-
   net_log_.BeginEvent(
       net::NetLogEventType::TRUST_TOKEN_OPERATION_FINALIZE_ISSUANCE);
 
@@ -310,21 +263,21 @@ void TrustTokenRequestIssuanceHelper::Finalize(
 
   // EnumerateHeader(|iter|=nullptr) asks for the first instance of the header,
   // if any.
-  if (!response->headers->EnumerateHeader(
+  if (!response_headers.EnumerateHeader(
           /*iter=*/nullptr, kTrustTokensSecTrustTokenHeader, &header_value)) {
     LogOutcome(net_log_, kFinalize, "Response missing Trust Tokens header");
-    response->headers->RemoveHeader(
+    response_headers.RemoveHeader(
         kTrustTokensResponseHeaderSecTrustTokenClearData);
     std::move(done).Run(mojom::TrustTokenOperationStatus::kBadResponse);
     return;
   }
 
-  response->headers->RemoveHeader(kTrustTokensSecTrustTokenHeader);
-  if (response->headers->HasHeaderValue(
+  response_headers.RemoveHeader(kTrustTokensSecTrustTokenHeader);
+  if (response_headers.HasHeaderValue(
           kTrustTokensResponseHeaderSecTrustTokenClearData, "all")) {
     static_cast<void>(token_store_->DeleteStoredTrustTokens(*issuer_));
   }
-  response->headers->RemoveHeader(
+  response_headers.RemoveHeader(
       kTrustTokensResponseHeaderSecTrustTokenClearData);
 
   ProcessIssuanceResponse(std::move(header_value), std::move(done));
@@ -380,47 +333,6 @@ void TrustTokenRequestIssuanceHelper::OnDoneProcessingIssuanceResponse(
       });
   std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
   return;
-}
-
-void TrustTokenRequestIssuanceHelper::DoneRequestingLocallyFulfilledIssuance(
-    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
-    mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
-  base::UmaHistogramEnumeration(
-      "Net.TrustTokens.IssuanceHelperLocalFulfillResult", answer->status);
-  switch (answer->status) {
-    case mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound: {
-      std::move(done).Run(mojom::TrustTokenOperationStatus::kUnavailable);
-      return;
-    }
-    case mojom::FulfillTrustTokenIssuanceAnswer::Status::kUnknownError: {
-      std::move(done).Run(mojom::TrustTokenOperationStatus::kUnknownError);
-      return;
-    }
-    case mojom::FulfillTrustTokenIssuanceAnswer::Status::kOk:
-      break;
-  }
-
-  // Log the beginning of the Finalize event here, since this is where we enter
-  // the main response processing logic when executing issuance locally:
-  net_log_.BeginEvent(
-      net::NetLogEventType::TRUST_TOKEN_OPERATION_FINALIZE_ISSUANCE);
-  ProcessIssuanceResponse(
-      std::move(answer->response),
-      base::BindOnce(&TrustTokenRequestIssuanceHelper::
-                         DoneFinalizingLocallyFulfilledIssuance,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(done)));
-}
-
-void TrustTokenRequestIssuanceHelper::DoneFinalizingLocallyFulfilledIssuance(
-    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
-    mojom::TrustTokenOperationStatus status) {
-  if (status == mojom::TrustTokenOperationStatus::kOk) {
-    std::move(done).Run(mojom::TrustTokenOperationStatus::
-                            kOperationSuccessfullyFulfilledLocally);
-    return;
-  }
-
-  std::move(done).Run(status);
 }
 
 mojom::TrustTokenOperationResultPtr

@@ -9,6 +9,7 @@
 #include <set>
 #include <vector>
 
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/input/browser_controls_state.h"
@@ -51,7 +52,7 @@ class CONTENT_EXPORT PageImpl : public Page {
 
   base::WeakPtr<PageImpl> GetWeakPtrImpl();
 
-  void UpdateManifestUrl(const GURL& manifest_url);
+  virtual void UpdateManifestUrl(const GURL& manifest_url);
 
   RenderFrameHostImpl& GetMainDocument() const;
 
@@ -92,6 +93,8 @@ class CONTENT_EXPORT PageImpl : public Page {
 
   // Notifies the page's color scheme was inferred.
   void DidInferColorScheme(blink::mojom::PreferredColorScheme color_scheme);
+
+  void NotifyPageBecameCurrent();
 
   absl::optional<SkColor> theme_color() const {
     return main_document_theme_color_;
@@ -237,7 +240,7 @@ class CONTENT_EXPORT PageImpl : public Page {
 
   // This class is owned by the main RenderFrameHostImpl and it's safe to keep a
   // reference to it.
-  RenderFrameHostImpl& main_document_;
+  const raw_ref<RenderFrameHostImpl> main_document_;
 
   // SourceId of the navigation in this page's main frame. Note that a same
   // document navigation is the only case where this source id can change, since
@@ -246,7 +249,7 @@ class CONTENT_EXPORT PageImpl : public Page {
 
   // This page is owned by the RenderFrameHostImpl, which in turn does not
   // outlive the delegate (the contents).
-  PageDelegate& delegate_;
+  const raw_ref<PageDelegate> delegate_;
 
   // Stores information from the main frame's renderer that needs to be shared
   // with OOPIF renderers.

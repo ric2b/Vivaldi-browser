@@ -66,11 +66,10 @@ enum ShellWindowId {
   //   - There are no direct mapping between `kShellWindowId_DeskContainerA` and
   //     Desk 1, or `kShellWindowId_DeskContainerB` and Desk 2. The containers
   //     are reused as desks are created and deleted.
+  //   - Keep the desk container IDs sequential here.
   //   - **DO NOT** use these container IDs directly, instead use
   //     `desks_util::GetActiveDeskContainerId()`.
-  // TODO(afakhry): Rename this container, unexpose it, and add the rest of the
-  // containers.
-  kShellWindowId_DefaultContainerDeprecated,
+  kShellWindowId_DeskContainerA,
   kShellWindowId_DeskContainerB,
   kShellWindowId_DeskContainerC,
   kShellWindowId_DeskContainerD,
@@ -113,7 +112,7 @@ enum ShellWindowId {
   kShellWindowId_ArcVirtualKeyboardContainer,
 
   // The container for UI on the shelf (shelf, navigation, hotseat,
-  // status area).
+  // status area, notifications).
   kShellWindowId_ShelfContainer,
 
   // The container for bubbles which float over the shelf.
@@ -151,8 +150,8 @@ enum ShellWindowId {
   // The container for menus.
   kShellWindowId_MenuContainer,
 
-  // The container for drag/drop images, tooltips, and widgets that are tagged
-  // with ui::ZOrderLevel::kSecuritySurface.
+  // The container for drag/drop images, tooltips, toasts, and widgets that are
+  // tagged with ui::ZOrderLevel::kSecuritySurface.
   kShellWindowId_DragImageAndTooltipContainer,
 
   // The container for the fullscreen power button menu.

@@ -572,7 +572,7 @@ IN_PROC_BROWSER_TEST_F(
   base::UserActionTester user_action_tester;
   ui::ime::AssistiveWindowButton button;
   button.id = ui::ime::ButtonId::kLearnMore;
-  button.window_type = ui::ime::AssistiveWindowType::kEmojiSuggestion;
+  button.window_type = ash::ime::AssistiveWindowType::kEmojiSuggestion;
 
   engine_->AssistiveWindowButtonClicked(button);
 
@@ -637,7 +637,7 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineWithoutImeServiceTest,
 
   helper.WaitForSurroundingTextChanged(u"corrected ");
 
-  EXPECT_FALSE(engine_->GetAutocorrectRange().is_empty());
+  EXPECT_FALSE(text_input_client.GetAutocorrectRange().is_empty());
 
   helper.GetTextInputClient()->InsertText(
       u"aa",
@@ -645,14 +645,14 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineWithoutImeServiceTest,
   helper.WaitForSurroundingTextChanged(u"corrected aa");
 
   // Highlighting should only go away after inserting 3 characters.
-  EXPECT_FALSE(engine_->GetAutocorrectRange().is_empty());
+  EXPECT_FALSE(text_input_client.GetAutocorrectRange().is_empty());
 
   helper.GetTextInputClient()->InsertText(
       u"a",
       ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   helper.WaitForSurroundingTextChanged(u"corrected aaa");
 
-  EXPECT_TRUE(engine_->GetAutocorrectRange().is_empty());
+  EXPECT_TRUE(text_input_client.GetAutocorrectRange().is_empty());
 
   SetFocus(nullptr);
 }

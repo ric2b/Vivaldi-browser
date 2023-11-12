@@ -2,22 +2,22 @@
 
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_home_mediator.h"
 
+#import "base/check.h"
+#import "base/mac/foundation_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "chromium/base/containers/stack.h"
+#import "components/bookmarks/browser/bookmark_model_observer.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/bookmarks/managed/managed_bookmark_service.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "components/url_formatter/url_fixer.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_prefs.h"
-#include "base/check.h"
-#include "base/mac/foundation_util.h"
-#include "base/strings/sys_string_conversions.h"
-#include "chromium/base/containers/stack.h"
-#include "components/bookmarks/browser/bookmark_model_observer.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/common/bookmark_pref_names.h"
-#include "components/bookmarks/managed/managed_bookmark_service.h"
-#include "components/bookmarks/vivaldi_bookmark_kit.h"
-#include "components/url_formatter/url_fixer.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
-#include "url/gurl.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -29,21 +29,10 @@ using bookmarks::ManagedBookmarkService;
 #error "This file requires ARC support."
 #endif
 
-namespace {
-
-// Converts NSString entered by the user to a GURL.
-GURL ConvertUserDataToGURL(NSString* urlString) {
-  if (urlString) {
-    return url_formatter::FixupURL(base::SysNSStringToUTF8(urlString),
-                                   std::string());
-  } else {
-    return GURL();
-  }
+@interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver> {
+  // Bridge to register for bookmark changes.
+  std::unique_ptr<bookmarks::BookmarkModelBridge> _model_bridge;
 }
-
-}  // namespace
-
-@interface VivaldiSpeedDialHomeMediator () {}
 
 // The browser state for this mediator.
 @property(nonatomic,assign) ChromeBrowserState* browserState;
@@ -51,6 +40,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 @property(nonatomic,assign) BookmarkModel* bookmarkModel;
 // Speed dial folders collection
 @property(nonatomic,strong) NSMutableArray* speedDialFolders;
+// Bool to keep track the initial loading of the speed dial folders.
+@property(nonatomic,assign) BOOL isFirstLoad;
 @end
 
 @implementation VivaldiSpeedDialHomeMediator
@@ -58,6 +49,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 @synthesize bookmarkModel = _bookmarkModel;
 @synthesize consumer = _consumer;
 @synthesize speedDialFolders = _speedDialFolders;
+@synthesize isFirstLoad = _isFirstLoad;
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
@@ -65,6 +57,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if ((self = [super init])) {
     _browserState = browserState;
     _bookmarkModel = bookmarkModel;
+    _model_bridge.reset(new bookmarks::BookmarkModelBridge(self,
+                                                           _bookmarkModel));
+
+    [self setUpStartPageLayoutChangeListener];
   }
   return self;
 }
@@ -73,6 +69,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (void)startMediating {
   DCHECK(self.consumer);
+  self.isFirstLoad = YES;
   [self computeSpeedDialFolders];
 }
 
@@ -80,10 +77,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   self.browserState = nullptr;
   self.bookmarkModel = nullptr;
   self.consumer = nil;
+  _model_bridge = nullptr;
+  [self removeStartPageLayoutListener];
 }
 
 - (void)computeSpeedDialFolders {
-  [self fetchSpeedDialFolders];
+  if (_bookmarkModel && _bookmarkModel->loaded())
+    [self fetchSpeedDialFolders];
 }
 
 - (void)computeSpeedDialChildItems:(VivaldiSpeedDialItem*)item {
@@ -110,6 +110,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     [self computeSortedItems:childItemsCollection
                       byMode:self.currentSortingMode];
   }
+
+  self.isFirstLoad = NO;
 }
 
 - (void)computeSortedItems:(NSMutableArray*)items
@@ -127,9 +129,31 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 #pragma mark - PRIVATE METHODS
 
+/// Set up observer to notify whenever layout style is changed.
+- (void)setUpStartPageLayoutChangeListener {
+  [self removeStartPageLayoutListener];
+  [[NSNotificationCenter defaultCenter]
+    addObserver:self
+       selector:@selector(handleLayoutChangeNotification)
+           name:vStartPageLayoutChangeDidChange
+         object:nil];
+}
+
+- (void)removeStartPageLayoutListener {
+  [[NSNotificationCenter defaultCenter]
+     removeObserver:self
+               name:vStartPageLayoutChangeDidChange
+             object:nil];
+}
+
+/// Layout style change handler
+- (void)handleLayoutChangeNotification {
+  [self.consumer reloadLayout];
+}
+
 /// Returns current sorting mode
 - (SpeedDialSortingMode)currentSortingMode {
-  return [VivaldiSpeedDialPrefs
+  return [VivaldiStartPagePrefs
             getSDSortingModeWithPrefService:self.browserState->GetPrefs()];
 }
 
@@ -151,65 +175,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   bookmarkList.push_back(self.bookmarkModel->mobile_node());
   bookmarkList.push_back(self.bookmarkModel->bookmark_bar_node());
   bookmarkList.push_back(self.bookmarkModel->other_node());
-
-  // MARK: - TEST DATA INJECTION STARTS
-  // TODO: - @prio@vivaldi.com - REMOVE THIS BLOCK WHEN DEFAULT ITEMS ARE SET
-  // IMPORTANT!!!: THIS IS TEMPORARY UNTIL THE DEFAULT ITEMS ARE SET
-  // If there's no item then create two folders under bookmarks bar node
-  const BookmarkNode* bbNode = self.bookmarkModel->bookmark_bar_node();
-  if (bbNode->children().size() == 0) {
-
-    // Speed dial
-    NSString *speedDialfolderString = @"Speed Dial";
-    std::u16string speedDialFolderTitle =
-      base::SysNSStringToUTF16(speedDialfolderString);
-
-    const BookmarkNode* speedDial =
-      self.bookmarkModel->AddFolder(bbNode,
-                                bbNode->children().size(),
-                                speedDialFolderTitle);
-    SetNodeSpeeddial(self.bookmarkModel, speedDial, YES);
-
-    [self addAmazon:speedDial];
-    [self addBooking:speedDial];
-    [self addYelp:speedDial];
-    [self addYoutube:speedDial];
-    [self addeBay:speedDial];
-    [self addWalmart:speedDial];
-    [self addHotels:speedDial];
-    [self addAliex:speedDial];
-    [self addDisney:speedDial];
-    [self addExpedia:speedDial];
-    [self addYahoo:speedDial];
-    [self addEneba:speedDial];
-
-    // Vivaldi folder
-    NSString *vivaldiFolderString = @"Vivaldi";
-    std::u16string vivaldiFolderTitle =
-      base::SysNSStringToUTF16(vivaldiFolderString);
-
-    // Store the folder
-    const BookmarkNode* vivaldi =
-      self.bookmarkModel->AddFolder(speedDial,
-                                speedDial->children().size(),
-                                vivaldiFolderTitle);
-    SetNodeSpeeddial(self.bookmarkModel, vivaldi, NO);
-
-    [self addVivaldiCom:vivaldi];
-
-    // Bookmarks
-    NSString *bookmarkfolderString = @"Bookmarks";
-    std::u16string bookmarkFolderTitle =
-      base::SysNSStringToUTF16(bookmarkfolderString);
-
-    // Store the folder
-    const BookmarkNode* bookmark =
-      self.bookmarkModel->AddFolder(bbNode,
-                                bbNode->children().size(),
-                                bookmarkFolderTitle);
-    SetNodeSpeeddial(self.bookmarkModel, bookmark, NO);
-  }
-  // MARK: - TEST DATA INJECTION ENDS
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -254,6 +219,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // Refresh child items
   [self computeSortedItems:speedDialFolderChildren
                     byMode:self.currentSortingMode];
+
+  self.isFirstLoad = NO;
 }
 
 /// Returns the children of a node.
@@ -364,207 +331,52 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   return result;
 }
 
-#pragma mark - TEST DATA STARTS
-
-// TODO: - @prio@vivaldi.com - REMOVE THESE STATIC BOOOKMARKS
-// IMPORTANT!!!
-// THESE SHOULD BE DELETED AS SOON AS DEFAULT BOOKMARK SETTING IS IMPLEMENTED
-
-- (void) addAmazon:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://amazon.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Amazon";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)refreshContents {
+  if (self.isFirstLoad)
+    return;
+  [self.consumer refreshContents];
 }
 
-- (void) addBooking:(const BookmarkNode*)parent {
+#pragma mark - BOOKMARK MODEL OBSERVER
 
-  NSString* urlString = @"https://booking.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Booking.com";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkModelLoaded {
+  // No-op when loaded.
 }
 
-- (void) addYelp:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://yelp.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Yelp";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkNodeChanged:(const BookmarkNode*)node {
+  [self refreshContents];
 }
 
-- (void) addYoutube:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://youtube.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"YouTube";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkNodeChildrenChanged:(const BookmarkNode*)bookmarkNode {
+  [self refreshContents];
 }
 
-- (void) addeBay:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://ebay.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"eBay";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkNode:(const BookmarkNode*)bookmarkNode
+     movedFromParent:(const BookmarkNode*)oldParent
+            toParent:(const BookmarkNode*)newParent {
+  [self refreshContents];
 }
 
-- (void) addWalmart:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://walmart.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Walmart";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkNodeDeleted:(const BookmarkNode*)node
+                 fromFolder:(const BookmarkNode*)folder {
+  [self refreshContents];
 }
 
-- (void) addHotels:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://hotels.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Hotels";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkModelRemovedAllNodes {
+  // No-op.
 }
 
-- (void) addAliex:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://aliexpress.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"AliExpress";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
+  [self refreshContents];
 }
 
-- (void) addDisney:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://disneyplus.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Disney+";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)extensiveBookmarkChangesBeginning {
+  // No op when sync started. We would be interested to refresh the UI when
+  // bookmark changes ended.
 }
 
-- (void) addExpedia:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://expedia.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Expedia";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
+- (void)extensiveBookmarkChangesEnded {
+  [self refreshContents];
 }
-
-- (void) addYahoo:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://yahoo.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Yahoo!";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
-}
-
-- (void) addEneba:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://eneba.com";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Eneba";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
-}
-
-- (void) addVivaldiCom:(const BookmarkNode*)parent {
-
-  NSString* urlString = @"https://vivaldi.net";
-  GURL url = ConvertUserDataToGURL(urlString);
-
-  NSString* bookmarkName = @"Vivaldi Community";
-  std::u16string titleString = base::SysNSStringToUTF16(bookmarkName);
-
-  // Save the bookmark information.
-  self.bookmarkModel->AddURL(parent,
-                         parent->children().size(),
-                         titleString,
-                         url);
-}
-
-#pragma mark - TEST DATA ENDS
 
 @end

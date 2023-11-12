@@ -31,6 +31,9 @@
 #include "ui/base/models/tree_node_iterator.h"
 
 #include "app/vivaldi_apptools.h"
+#include "sync/file_sync/file_store.h"
+#include "components/sync_bookmarks/bookmark_specifics_conversions.h"
+#include "components/sync/engine/commit_and_get_updates_types.h"
 
 namespace sync_bookmarks {
 
@@ -89,6 +92,16 @@ SyncedBookmarkTracker::CreateFromBookmarkModelAndMetadata(
   DCHECK(model);
 
   if (!model_metadata.model_type_state().initial_sync_done()) {
+    return nullptr;
+  }
+
+  if (vivaldi::IsVivaldiRunning() &&
+      !model_metadata.vivaldi_bookmarks_reset_for_custom_thumbnail_suport()) {
+    // When updating from a version of vivaldi that didn't support custom
+    // thumbnails syncing, we need to redownload all bookmarks. This is because
+    // those older versions would just throw away all thumbnail data. The only
+    // way to ensure we receive those again from the server is to request
+    // everything.
     return nullptr;
   }
 
@@ -206,6 +219,16 @@ const SyncedBookmarkTrackerEntity* SyncedBookmarkTracker::Add(
   auto entity = std::make_unique<SyncedBookmarkTrackerEntity>(
       bookmark_node, std::move(metadata));
 
+  if (vivaldi_synced_file_store_ &&
+      server_version != syncer::kUncommittedVersion) {
+    auto thumbnail_checksum =
+        VivaldiGetSyncedThumbnailChecksumFromSpecifics(specifics.bookmark());
+    if (thumbnail_checksum)
+      vivaldi_synced_file_store_->SetSyncFileRef(entity->metadata().server_id(),
+                                                 syncer::BOOKMARKS,
+                                                 *thumbnail_checksum);
+  }
+
   DCHECK_EQ(0U, bookmark_node_to_entities_map_.count(bookmark_node));
   bookmark_node_to_entities_map_[bookmark_node] = entity.get();
   DCHECK_EQ(0U, client_tag_hash_to_entities_map_.count(client_tag_hash));
@@ -238,6 +261,18 @@ void SyncedBookmarkTracker::Update(const SyncedBookmarkTrackerEntity* entity,
                 mutable_entity->MutableMetadata()->mutable_specifics_hash());
   mutable_entity->MutableMetadata()->set_bookmark_favicon_hash(
       base::PersistentHash(specifics.bookmark().favicon()));
+
+  if (vivaldi_synced_file_store_) {
+    auto thumbnail_checksum =
+        VivaldiGetSyncedThumbnailChecksumFromSpecifics(specifics.bookmark());
+    if (thumbnail_checksum)
+      vivaldi_synced_file_store_->SetSyncFileRef(entity->metadata().server_id(),
+                                                 syncer::BOOKMARKS,
+                                                 *thumbnail_checksum);
+    else
+      vivaldi_synced_file_store_->RemoveSyncRef(entity->metadata().server_id(),
+                                                syncer::BOOKMARKS);
+  }
 }
 
 void SyncedBookmarkTracker::UpdateServerVersion(
@@ -284,6 +319,13 @@ void SyncedBookmarkTracker::Remove(const SyncedBookmarkTrackerEntity* entity) {
     bookmark_node_to_entities_map_.erase(entity->bookmark_node());
   } else {
     DCHECK(entity->metadata().is_deleted());
+  }
+
+  if (vivaldi_synced_file_store_) {
+    // We don't need to check if this has a thumbnail. If it doesn't, there will
+    // just be nothing to remove for the provided sync id
+    vivaldi_synced_file_store_->RemoveSyncRef(entity->metadata().server_id(),
+                                              syncer::BOOKMARKS);
   }
 
   client_tag_hash_to_entities_map_.erase(entity->GetClientTagHash());
@@ -343,6 +385,10 @@ SyncedBookmarkTracker::BuildBookmarkModelMetadata() const {
     *bookmark_metadata->mutable_metadata() = tombstone_entity->metadata();
   }
   *model_metadata.mutable_model_type_state() = model_type_state_;
+
+  // This is always true for all trackers that were allowed to initialize.
+  model_metadata.set_vivaldi_bookmarks_reset_for_custom_thumbnail_suport(true);
+
   return model_metadata;
 }
 
@@ -711,6 +757,12 @@ void SyncedBookmarkTracker::UpdateSyncIdIfNeeded(
   owned_entity->MutableMetadata()->set_server_id(sync_id);
   sync_id_to_entities_map_[sync_id] = std::move(owned_entity);
   sync_id_to_entities_map_.erase(old_id);
+
+  auto thumbnail_checksum =
+      VivaldiGetSyncedThumbnailChecksumFromNode(entity->bookmark_node());
+  if (vivaldi_synced_file_store_ && thumbnail_checksum)
+    vivaldi_synced_file_store_->SetSyncFileRef(
+        entity->metadata().server_id(), syncer::BOOKMARKS, *thumbnail_checksum);
 }
 
 void SyncedBookmarkTracker::UndeleteTombstoneForBookmarkNode(

@@ -46,13 +46,16 @@ class CONTENT_EXPORT ClipboardHostImpl
  protected:
   // These types and methods are protected for testing.
 
-  using ClipboardPasteContentAllowed =
-      RenderFrameHostImpl::ClipboardPasteContentAllowed;
   using IsClipboardPasteContentAllowedCallback =
       RenderFrameHostImpl::IsClipboardPasteContentAllowedCallback;
 
+  // Represents the underlying type of the argument passed to
+  // IsClipboardPasteContentAllowedCallback without the const& part.
+  using IsClipboardPasteContentAllowedCallbackArgType =
+      absl::optional<std::string>;
+
   // Keeps track of a request to see if some clipboard content, identified by
-  // its sequence number, is allowed to be pasted into the render frame host
+  // its sequence number, is allowed to be pasted into the RenderFrameHost
   // that owns this clipboard host.
   //
   // A request starts in the state incomplete until Complete() is called with
@@ -70,7 +73,10 @@ class CONTENT_EXPORT ClipboardHostImpl
 
     // Mark this request as completed with the specified result.
     // Invoke all callbacks now.
-    void Complete(ClipboardPasteContentAllowed allowed);
+    void Complete(IsClipboardPasteContentAllowedCallbackArgType data);
+
+    // Returns true if the request has completed.
+    bool is_complete() const { return data_.has_value(); }
 
     // Returns true if this request is obsolete.  An obsolete request
     // is one that is completed, all registered callbacks have been
@@ -79,16 +85,22 @@ class CONTENT_EXPORT ClipboardHostImpl
     // |now| represents the current time.  It is an argument to ease testing.
     bool IsObsolete(base::Time now);
 
-    // Returns the time at which this request was created.
-    base::Time time() { return time_; }
+    // Returns the time at which this request was completed.  If called
+    // before the request is completed the return value is undefined.
+    base::Time completed_time();
 
    private:
     // Calls all the callbacks in |callbacks_| with the current value of
     // |allowed_|.  |allowed_| must not be empty.
     void InvokeCallbacks();
 
-    base::Time time_{base::Time::Now()};
-    absl::optional<ClipboardPasteContentAllowed> allowed_;
+    // The time at which the request was completed.  Before completion this
+    // value is undefined.
+    base::Time completed_time_;
+
+    // The data argument to pass to the IsClipboardPasteContentAllowedCallback.
+    // This member is null until Complete() is called.
+    absl::optional<IsClipboardPasteContentAllowedCallbackArgType> data_;
     std::vector<IsClipboardPasteContentAllowedCallback> callbacks_;
   };
 
@@ -129,7 +141,7 @@ class CONTENT_EXPORT ClipboardHostImpl
   // status for the clipboard data corresponding to sequence number |seqno|.
   void FinishPasteIfContentAllowed(
       const ui::ClipboardSequenceNumberToken& seqno,
-      ClipboardPasteContentAllowed allowed);
+      const absl::optional<std::string>& data);
 
   const std::map<ui::ClipboardSequenceNumberToken,
                  IsPasteContentAllowedRequest>&
@@ -194,6 +206,11 @@ class CONTENT_EXPORT ClipboardHostImpl
 #if BUILDFLAG(IS_MAC)
   void WriteStringToFindPboard(const std::u16string& text) override;
 #endif
+
+  // Checks if the renderer allows pasting.  This check is skipped if called
+  // soon after a successful content allowed request.
+  bool IsRendererPasteAllowed(ui::ClipboardBuffer clipboard_buffer,
+                              RenderFrameHost& render_frame_host);
 
   // Returns true if custom format is allowed to be read/written from/to the
   // clipboard, else, fails.

@@ -15,7 +15,6 @@
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/layout_types.h"
 
 namespace views {
@@ -26,12 +25,12 @@ namespace ash {
 class PillButton;
 }  // namespace ash
 
-namespace arc {
+namespace arc::input_overlay {
 class ArcInputOverlayManagerTest;
-namespace input_overlay {
 class TouchInjector;
 class InputMappingView;
 class InputMenuView;
+class MenuEntryView;
 class ActionEditMenu;
 class EditFinishView;
 class MessageView;
@@ -48,7 +47,8 @@ class DisplayOverlayController : public ui::EventHandler,
   DisplayOverlayController& operator=(const DisplayOverlayController&) = delete;
   ~DisplayOverlayController() override;
 
-  void OnWindowBoundsChanged();
+  // Virtual for test.
+  virtual void OnWindowBoundsChanged();
   void SetDisplayMode(DisplayMode mode);
   // Get the bounds of |menu_entry_| in screen coordinates.
   absl::optional<gfx::Rect> GetOverlayMenuEntryBounds();
@@ -70,7 +70,7 @@ class DisplayOverlayController : public ui::EventHandler,
   // Restore back to original default binding when users press the restore
   // button after editing.
   void OnCustomizeRestore();
-  const std::string* GetPackageName() const;
+  const std::string& GetPackageName() const;
   // Once the menu state is loaded from protobuf data, it should be applied on
   // the view. For example, |InputMappingView| may not be visible if it is
   // hidden or input overlay is disabled.
@@ -81,6 +81,7 @@ class DisplayOverlayController : public ui::EventHandler,
   void OnActionAdded(Action* action);
   // Remove the action view when removing |action|.
   void OnActionRemoved(Action* action);
+  void OnActionTrashButtonPressed(Action* action);
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -92,15 +93,19 @@ class DisplayOverlayController : public ui::EventHandler,
   const TouchInjector* touch_injector() const { return touch_injector_; }
 
  private:
-  friend class ::arc::ArcInputOverlayManagerTest;
+  friend class ArcInputOverlayManagerTest;
   friend class DisplayOverlayControllerTest;
   friend class EducationalView;
   friend class InputMenuView;
   friend class InputMappingView;
+  friend class MenuEntryViewTest;
 
   // Display overlay is added for starting |display_mode|.
   void AddOverlay(DisplayMode display_mode);
   void RemoveOverlayIfAny();
+  // If |on_overlay| is true, set event target on overlay layer. Otherwise, set
+  // event target on the layer underneath the overlay layer.
+  void SetEventTarget(views::Widget* overlay_widget, bool on_overlay);
 
   // On charge of Add/Remove nudge view.
   void AddNudgeView(views::Widget* overlay_widget);
@@ -111,6 +116,7 @@ class DisplayOverlayController : public ui::EventHandler,
   void AddMenuEntryView(views::Widget* overlay_widget);
   void RemoveMenuEntryView();
   void OnMenuEntryPressed();
+  void OnMenuEntryDragEnd(absl::optional<gfx::Point> location);
   void FocusOnMenuEntry();
   void ClearFocusOnMenuEntry();
   void RemoveInputMenuView();
@@ -153,13 +159,15 @@ class DisplayOverlayController : public ui::EventHandler,
   // For test:
   gfx::Rect GetInputMappingViewBoundsForTesting();
   void DismissEducationalViewForTesting();
+  InputMenuView* GetInputMenuView() { return input_menu_view_; }
+  MenuEntryView* GetMenuEntryView() { return menu_entry_; }
 
   const raw_ptr<TouchInjector> touch_injector_;
 
   // References to UI elements owned by the overlay widget.
   raw_ptr<InputMappingView> input_mapping_view_ = nullptr;
   raw_ptr<InputMenuView> input_menu_view_ = nullptr;
-  raw_ptr<views::ImageButton> menu_entry_ = nullptr;
+  raw_ptr<MenuEntryView> menu_entry_ = nullptr;
   raw_ptr<ActionEditMenu> action_edit_menu_ = nullptr;
   raw_ptr<EditFinishView> edit_finish_view_ = nullptr;
   raw_ptr<MessageView> message_ = nullptr;
@@ -172,7 +180,6 @@ class DisplayOverlayController : public ui::EventHandler,
   DisplayMode display_mode_ = DisplayMode::kNone;
 };
 
-}  // namespace input_overlay
-}  // namespace arc
+}  // namespace arc::input_overlay
 
 #endif  // CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_DISPLAY_OVERLAY_CONTROLLER_H_

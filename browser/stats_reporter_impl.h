@@ -16,8 +16,11 @@
 #include "net/base/backoff_entry.h"
 #include "ui/display/screen.h"
 
+class PrefService;
+
 namespace network {
 class SimpleURLLoader;
+class SharedURLLoaderFactory;
 }
 
 namespace vivaldi {
@@ -86,6 +89,9 @@ class StatsReporterImpl : public StatsReporter {
 
   static std::string GetUserIdFromLegacyStorage();
   static base::FilePath GetReportingDataFileDir();
+  static PrefService* GetLocalState();
+  static scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory();
+  static std::string GetUserAgent();
 
   void OnLegacyUserIdGot(const std::string& legacy_user_id);
   void StartReporting();

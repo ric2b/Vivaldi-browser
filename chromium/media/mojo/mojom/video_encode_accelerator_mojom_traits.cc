@@ -214,6 +214,9 @@ bool UnionTraits<media::mojom::CodecMetadataDataView,
     case media::mojom::CodecMetadataDataView::Tag::kAv1: {
       return data.ReadAv1(&out->av1);
     }
+    case media::mojom::CodecMetadataDataView::Tag::kH265: {
+      return data.ReadH265(&out->h265);
+    }
   }
   NOTREACHED();
   return false;
@@ -239,6 +242,16 @@ bool StructTraits<media::mojom::H264MetadataDataView, media::H264Metadata>::
     Read(media::mojom::H264MetadataDataView data,
          media::H264Metadata* out_metadata) {
   out_metadata->temporal_idx = data.temporal_idx();
+  out_metadata->layer_sync = data.layer_sync();
+  return true;
+}
+
+// static
+bool StructTraits<media::mojom::H265MetadataDataView, media::H265Metadata>::
+    Read(media::mojom::H265MetadataDataView data,
+         media::H265Metadata* out_metadata) {
+  out_metadata->temporal_idx = data.temporal_idx();
+  out_metadata->spatial_idx = data.spatial_idx();
   out_metadata->layer_sync = data.layer_sync();
   return true;
 }
@@ -314,6 +327,45 @@ bool EnumTraits<media::mojom::VideoEncodeAcceleratorConfig_StorageType,
         kGpuMemoryBuffer:
       *output =
           media::VideoEncodeAccelerator::Config::StorageType::kGpuMemoryBuffer;
+      return true;
+  }
+  NOTREACHED();
+  return false;
+}
+
+// static
+media::mojom::VideoEncodeAcceleratorConfig_EncoderType
+EnumTraits<media::mojom::VideoEncodeAcceleratorConfig_EncoderType,
+           media::VideoEncodeAccelerator::Config::EncoderType>::
+    ToMojom(media::VideoEncodeAccelerator::Config::EncoderType input) {
+  switch (input) {
+    case media::VideoEncodeAccelerator::Config::EncoderType::kHardware:
+      return media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kHardware;
+    case media::VideoEncodeAccelerator::Config::EncoderType::kSoftware:
+      return media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kSoftware;
+    case media::VideoEncodeAccelerator::Config::EncoderType::kNoPreference:
+      return media::mojom::VideoEncodeAcceleratorConfig_EncoderType::
+          kNoPreference;
+  }
+  NOTREACHED();
+  return media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kHardware;
+}
+
+// static
+bool EnumTraits<media::mojom::VideoEncodeAcceleratorConfig_EncoderType,
+                media::VideoEncodeAccelerator::Config::EncoderType>::
+    FromMojom(media::mojom::VideoEncodeAcceleratorConfig_EncoderType input,
+              media::VideoEncodeAccelerator::Config::EncoderType* output) {
+  switch (input) {
+    case media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kHardware:
+      *output = media::VideoEncodeAccelerator::Config::EncoderType::kHardware;
+      return true;
+    case media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kSoftware:
+      *output = media::VideoEncodeAccelerator::Config::EncoderType::kSoftware;
+      return true;
+    case media::mojom::VideoEncodeAcceleratorConfig_EncoderType::kNoPreference:
+      *output =
+          media::VideoEncodeAccelerator::Config::EncoderType::kNoPreference;
       return true;
   }
   NOTREACHED();
@@ -515,12 +567,17 @@ bool StructTraits<media::mojom::VideoEncodeAcceleratorConfigDataView,
   if (!input.ReadInterLayerPred(&inter_layer_pred))
     return false;
 
+  media::VideoEncodeAccelerator::Config::EncoderType required_encoder_type;
+  if (!input.ReadRequiredEncoderType(&required_encoder_type))
+    return false;
+
   *output = media::VideoEncodeAccelerator::Config(
       input_format, input_visible_size, output_profile, bitrate,
       initial_framerate, gop_length, h264_output_level, is_constrained_h264,
       storage_type, content_type, spatial_layers, inter_layer_pred);
 
   output->require_low_delay = input.require_low_delay();
+  output->required_encoder_type = required_encoder_type;
 
   return true;
 }

@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from code import Code
+from code_util import Code
 from model import PropertyType, Property, Type
 import cpp_util
 import schema_util
@@ -500,7 +500,10 @@ class _Generator(object):
     )
     c.Sblock('if (!value)')
     c.Append('return false;')
-    c.Eblock('const base::Value::Dict& dict = value->GetDict();')
+    if len(properties) > 0:
+      c.Eblock('const base::Value::Dict& dict = value->GetDict();')
+    else:
+      c.Eblock('')
 
     for prop in properties:
       c.Concat(self._InitializePropertyToDefault(prop, 'out'))

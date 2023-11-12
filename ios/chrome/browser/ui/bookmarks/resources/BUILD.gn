@@ -2,10 +2,6 @@
 
 import("//build/config/ios/asset_catalog.gni")
 
-colorset("vivaldi_bookmark_text_field_underline_color") {
-  sources = [ "vivaldi_bookmark_text_field_underline_color.colorset/Contents.json" ]
-}
-
 imageset("vivaldi_bookmarks_folder") {
   sources = [
     "vivaldi_bookmarks_folder.imageset/Contents.json",

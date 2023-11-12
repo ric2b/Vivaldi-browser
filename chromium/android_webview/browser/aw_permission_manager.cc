@@ -341,7 +341,7 @@ void AwPermissionManager::RequestPermissions(
       case PermissionType::AR:
       case PermissionType::STORAGE_ACCESS_GRANT:
       case PermissionType::CAMERA_PAN_TILT_ZOOM:
-      case PermissionType::WINDOW_PLACEMENT:
+      case PermissionType::WINDOW_MANAGEMENT:
       case PermissionType::LOCAL_FONTS:
       case PermissionType::DISPLAY_CAPTURE:
         NOTIMPLEMENTED() << "RequestPermissions is not implemented for "
@@ -577,7 +577,7 @@ void AwPermissionManager::CancelPermissionRequest(int request_id) {
       case PermissionType::AR:
       case PermissionType::STORAGE_ACCESS_GRANT:
       case PermissionType::CAMERA_PAN_TILT_ZOOM:
-      case PermissionType::WINDOW_PLACEMENT:
+      case PermissionType::WINDOW_MANAGEMENT:
       case PermissionType::LOCAL_FONTS:
       case PermissionType::DISPLAY_CAPTURE:
         NOTIMPLEMENTED() << "CancelPermission not implemented for "
@@ -612,6 +612,65 @@ void AwPermissionManager::CancelPermissionRequests() {
   for (auto request_id : request_ids)
     CancelPermissionRequest(request_id);
   DCHECK(pending_requests_.IsEmpty());
+}
+
+void AwPermissionManager::SetOriginCanReadEnumerateDevicesAudioLabels(
+    const GURL& origin,
+    bool audio) {
+  if (origin.spec().empty() || origin.SchemeIsFile())
+    return;
+  auto it = enumerate_devices_labels_cache_.find(origin);
+  if (it == enumerate_devices_labels_cache_.end()) {
+    enumerate_devices_labels_cache_[origin] = std::make_pair(audio, false);
+  } else {
+    it->second.first = audio;
+  }
+}
+
+void AwPermissionManager::SetOriginCanReadEnumerateDevicesVideoLabels(
+    const GURL& origin,
+    bool video) {
+  if (origin.spec().empty() || origin.SchemeIsFile())
+    return;
+  auto it = enumerate_devices_labels_cache_.find(origin);
+  if (it == enumerate_devices_labels_cache_.end())
+    enumerate_devices_labels_cache_[origin] = std::make_pair(false, video);
+  else
+    it->second.second = video;
+}
+
+bool AwPermissionManager::ShouldShowEnumerateDevicesAudioLabels(
+    const GURL& origin) {
+  auto it = enumerate_devices_labels_cache_.find(origin);
+  if (it == enumerate_devices_labels_cache_.end())
+    return false;
+  return it->second.first;
+}
+
+bool AwPermissionManager::ShouldShowEnumerateDevicesVideoLabels(
+    const GURL& origin) {
+  auto it = enumerate_devices_labels_cache_.find(origin);
+  if (it == enumerate_devices_labels_cache_.end())
+    return false;
+  return it->second.second;
+}
+
+void AwPermissionManager::ClearEnumerateDevicesCachedPermission(
+    const GURL& origin,
+    bool remove_audio,
+    bool remove_video) {
+  if (origin.spec().empty())
+    return;
+  auto it = enumerate_devices_labels_cache_.find(origin);
+  if (it == enumerate_devices_labels_cache_.end())
+    return;
+  else if (remove_audio && remove_video) {
+    enumerate_devices_labels_cache_.erase(origin);
+  } else if (remove_audio) {
+    it->second.first = false;
+  } else if (remove_video) {
+    it->second.second = false;
+  }
 }
 
 int AwPermissionManager::GetRenderProcessID(

@@ -110,6 +110,7 @@ class ManagePasswordsUIController
       override;
   void OnBiometricAuthenticationForFilling(PrefService* prefs) override;
   void ShowBiometricActivationConfirmation() override;
+  void OnBiometricAuthBeforeFillingDeclined() override;
 
   virtual void NotifyUnsyncedCredentialsWillBeDeleted(
       std::vector<password_manager::PasswordForm> unsynced_credentials);
@@ -244,8 +245,6 @@ class ManagePasswordsUIController
   // PasswordsLeakDialogDelegate:
   void NavigateToPasswordCheckup(
       password_manager::PasswordCheckReferrer referrer) override;
-  void StartAutomatedPasswordChange(const GURL& origin,
-                                    const std::u16string& username) override;
   void OnLeakDialogHidden() override;
 
   enum class BubbleStatus {

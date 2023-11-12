@@ -53,6 +53,8 @@
           "COMMAND_MAIL_DELETE_PERMANENTLY": {"shortcuts": ["shift+del"]},
           "COMMAND_MAIL_FORWARD": {"shortcuts": ["f"]},
           "COMMAND_MAIL_MARK_READ": {"shortcuts": ["k"]},
+          "COMMAND_MAIL_MARK_JUNK": {"shortcuts": ["j"]},
+          "COMMAND_MAIL_MARK_NOT_JUNK": {"shortcuts": ["shift+j"]},
           "COMMAND_MAIL_ENABLE_SENDER_VIEW": {"shortcuts": ["e"]},
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {"shortcuts": ["t"]},
           "COMMAND_MAIL_MARK_THREAD_READ": {"shortcuts": ["m"]},
@@ -137,7 +139,17 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]}
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
+          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["ctrl+shift+0", "ctrl+shift+numpad0"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1", "ctrl+shift+numpad1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2", "ctrl+shift+numpad2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3", "ctrl+shift+numpad3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4", "ctrl+shift+numpad4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5", "ctrl+shift+numpad5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]}
         }
       ],
       "default_linux": [
@@ -190,6 +202,8 @@
           "COMMAND_MAIL_DELETE_PERMANENTLY": {"shortcuts": ["shift+del"]},
           "COMMAND_MAIL_FORWARD": {"shortcuts": ["f"]},
           "COMMAND_MAIL_MARK_READ": {"shortcuts": ["k"]},
+          "COMMAND_MAIL_MARK_JUNK": {"shortcuts": ["j"]},
+          "COMMAND_MAIL_MARK_NOT_JUNK": {"shortcuts": ["shift+j"]},
           "COMMAND_MAIL_ENABLE_SENDER_VIEW": {"shortcuts": ["e"]},
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {"shortcuts": ["t"]},
           "COMMAND_MAIL_MARK_THREAD_READ": {"shortcuts": ["m"]},
@@ -274,7 +288,17 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]}
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
+          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["ctrl+shift+0", "ctrl+shift+numpad0"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1", "ctrl+shift+numpad1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2", "ctrl+shift+numpad2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3", "ctrl+shift+numpad3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4", "ctrl+shift+numpad4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5", "ctrl+shift+numpad5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]}
         }
       ],
       "default_mac": [
@@ -323,6 +347,8 @@
           "COMMAND_MAIL_DELETE_PERMANENTLY": {"shortcuts": ["shift+del"]},
           "COMMAND_MAIL_FORWARD": {"shortcuts": ["f"]},
           "COMMAND_MAIL_MARK_READ": {"shortcuts": ["k"]},
+          "COMMAND_MAIL_MARK_JUNK": {"shortcuts": ["j"]},
+          "COMMAND_MAIL_MARK_NOT_JUNK": {"shortcuts": ["shift+j"]},
           "COMMAND_MAIL_ENABLE_SENDER_VIEW": {"shortcuts": ["e"]},
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {"shortcuts": ["t"]},
           "COMMAND_MAIL_MARK_THREAD_READ": {"shortcuts": ["m"]},
@@ -411,7 +437,17 @@
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["alt+meta+p", "f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["shift+meta+i"]},
-          "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]}
+          "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]},
+          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["shift+meta+0"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["shift+meta+1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["shift+meta+2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["shift+meta+3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["shift+meta+4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["shift+meta+5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["shift+meta+6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["shift+meta+7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["shift+meta+8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["shift+meta+9"]}
         }
       ]
     },
@@ -440,6 +476,11 @@
           }
         },
         "prefer_bookmarks": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "autocomplete_on_title": {
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -596,6 +637,12 @@
           "type": "boolean",
           "default": false,
           "syncable": true
+        },
+        "typed_history": {
+          "description": "History of searches made with the search field",
+          "type": "list",
+          "default": [],
+          "syncable": false
         },
         "typed_history_enabled": {
           "type": "boolean",
@@ -754,6 +801,7 @@
         "syncable": true
       },
       "deleted_partners": {
+        "description": "[DEPRECATED 2023/1]",
         "type": "list",
         "default": [],
         "syncable": true,
@@ -863,7 +911,8 @@
           "info": 0,
           "warn": 1,
           "error": 2,
-          "none": 3
+          "none": 3,
+          "debug": 4
         },
         "default": "warn",
         "syncable": false
@@ -955,7 +1004,7 @@
         "syncable": false,
         "default": {
           "showCompletedTasks": false,
-          "displayMode": "day"
+          "displayMode": "agenda"
         }
       },
       "task_panel_filter": {
@@ -963,7 +1012,7 @@
         "syncable": false,
         "default": {
           "showCompletedTasks": false,
-          "displayMode": "day"
+          "displayMode": "agenda"
         }
       },
       "show_day_sidebar": {
@@ -1833,6 +1882,12 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "auto_mark_as_read": {
+        "description": "Automatically mark unread mail as read when selected",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
       }
     },
     "menu": {
@@ -2551,12 +2606,6 @@
           "type": "boolean",
           "default": true,
           "syncable": true
-        },
-        "crypto_token": {
-          "description": "Load Google crypto token.",
-          "type": "boolean",
-          "default": true,
-          "syncable": true
         }
       }
     },
@@ -2667,6 +2716,7 @@
           "NORMAL_COMMAND",
           "COMMAND_CHAIN",
           "KEYWORD_SEARCH",
+          "WORKSPACES",
           "OPEN_TABS",
           "BOOKMARK_ITEM_OR_FOLDER",
           "READING_LIST",
@@ -3555,6 +3605,18 @@
         "default": "Vivaldi9",
         "syncable": false
       },
+      "current_buttons": {
+        "description": "Reference to a theme to use custom buttons from",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "prefer_custom_buttons": {
+        "description": "Prefer custom theme buttons in toolbars",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
+      },
       "prefer_system_accent": {
         "description": "[DEPRECATED 2021/11] Kept for migration",
         "type": "boolean",
@@ -4301,6 +4363,34 @@
         ]
       }
     },
+    "workspaces": {
+      "list": {
+        "syncable": false,
+        "description": "A list of all the workspaces",
+        "type": "list",
+        "default": []
+      },
+      "enabled": {
+        "description": "The workspaces feature is enabled.",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "button": {
+        "show_in_tabbar": {
+          "description": "[DEPRECATED 2023/01]",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_name": {
+          "description": "Always show name in workspace button",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      }
+    },
 
     "system": {
       "accent_color": {
@@ -4353,6 +4443,11 @@
           "default": null,
           "syncable": false
         },
+        "hide_menubar": {
+          "type": "boolean",
+          "default": false,
+          "syncable": false
+        },
         "interface_style": {
           "type": "integer",
           "default": null,
@@ -4361,6 +4456,11 @@
         "keyboard_ui_mode": {
           "type": "integer",
           "default": null,
+          "syncable": false
+        },
+        "menubar_visible_in_fullscreen": {
+          "type": "boolean",
+          "default": false,
           "syncable": false
         },
         "swipe_scroll_direction": {
@@ -4471,6 +4571,10 @@
     },
     "kMediaRouterMediaRemotingEnabled": {
       "path": "media_router.media_remoting.enabled",
+      "type": "boolean"
+    },
+    "kCustomHandlersEnabled": {
+      "path": "custom_handlers.enabled",
       "type": "boolean"
     }
   },

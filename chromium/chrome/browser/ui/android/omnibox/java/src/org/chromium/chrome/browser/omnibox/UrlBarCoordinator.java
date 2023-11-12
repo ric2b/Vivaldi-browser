@@ -29,6 +29,7 @@ import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
  * Coordinates the interactions with the UrlBar text component.
@@ -127,6 +128,11 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
         return mMediator.setUrlBarData(data, scrollType, state);
     }
 
+    /** Returns the UrlBarData representing the current contents of the UrsssdddsssslBar. */
+    public UrlBarData getUrlBarData() {
+        return mMediator.getUrlBarData();
+    }
+
     /** @see UrlBarMediator#setAutocompleteText(String, String) */
     public void setAutocompleteText(String userText, String autocompleteText) {
         mMediator.setAutocompleteText(userText, autocompleteText);
@@ -187,6 +193,11 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
         return mUrlBar.getTextWithoutAutocomplete();
     }
 
+    /** @see UrlBar#getVisibleTextPrefixHint() */
+    public CharSequence getVisibleTextPrefixHint() {
+        return mUrlBar.getVisibleTextPrefixHint();
+    }
+
     // LocationBarLayout.UrlFocusChangeListener implementation.
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
@@ -235,10 +246,15 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
         // receive a second request to hide the keyboard instantly.
         if (showKeyboard) {
             // Note (david@vivaldi.com): When the toolbar is at the bottom we don't apply the soft
-            // input mode in oder to have the control container always visible.
+            // input mode in oder to have the control container always visible. We also reset the
+            // auto focus on new tab flag.
             if (!BuildConfig.IS_VIVALDI)
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
             mKeyboardVisibilityDelegate.showKeyboard(mUrlBar);
+            if (SharedPreferencesManager.getInstance().readBoolean(
+                        "focus_address_bar_on_new_tab", false))
+                SharedPreferencesManager.getInstance().writeBoolean(
+                        "focus_address_bar_on_new_tab", false);
         } else {
             // The animation rendering may not yet be 100% complete and hiding the keyboard makes
             // the animation quite choppy.

@@ -20,7 +20,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/extensions/file_manager/scoped_suppress_drive_notifications_for_path.h"
+#include "chrome/browser/ash/extensions/file_manager/scoped_suppress_drive_notifications_for_path.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/projector/projector_drivefs_provider.h"
 #include "chrome/browser/ui/ash/projector/projector_utils.h"
@@ -96,7 +96,7 @@ void GetVideoMetadata(const base::FilePath& video_path,
       size_in_byte, kProjectorMediaMimeType,
       /*get_attached_images=*/false,
       std::make_unique<LocalMediaDataSourceFactory>(
-          video_path, base::ThreadTaskRunnerHandle::Get()));
+          video_path, base::SingleThreadTaskRunner::GetCurrentDefault()));
 
   // Uses raw pointer since the `parser` is moved before calling Start().
   SafeMediaMetadataParser* parser_ptr = parser.get();

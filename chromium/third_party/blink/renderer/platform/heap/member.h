@@ -92,22 +92,13 @@ struct MemberHash
 };
 
 template <typename T>
-struct DefaultHash<blink::Member<T>> {
-  STATIC_ONLY(DefaultHash);
-  using Hash = MemberHash<T>;
-};
+struct DefaultHash<blink::Member<T>> : MemberHash<T> {};
 
 template <typename T>
-struct DefaultHash<blink::WeakMember<T>> {
-  STATIC_ONLY(DefaultHash);
-  using Hash = MemberHash<T>;
-};
+struct DefaultHash<blink::WeakMember<T>> : MemberHash<T> {};
 
 template <typename T>
-struct DefaultHash<blink::UntracedMember<T>> {
-  STATIC_ONLY(DefaultHash);
-  using Hash = MemberHash<T>;
-};
+struct DefaultHash<blink::UntracedMember<T>> : MemberHash<T> {};
 
 template <typename T>
 struct IsTraceable<blink::Member<T>> {
@@ -156,7 +147,7 @@ struct BaseMemberHashTraits : SimpleClassHashTraits<MemberType> {
   }
 
   static bool IsDeletedValue(const MemberType& value) {
-    return value.Get() == cppgc::kSentinelPointer;
+    return value == cppgc::kSentinelPointer;
   }
 };
 

@@ -1,17 +1,20 @@
-// Copyright 2022 The Chromium Authors.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/style/style_initial_letter.h"
 
 #include "base/check_op.h"
+#include "base/numerics/safe_conversions.h"
 
 namespace blink {
 
 StyleInitialLetter::StyleInitialLetter() = default;
 
 StyleInitialLetter::StyleInitialLetter(float size)
-    : size_(size), sink_(std::floor(size)), sink_type_(kOmitted) {
+    : size_(size),
+      sink_(base::saturated_cast<int>(std::floor(size))),
+      sink_type_(kOmitted) {
   DCHECK_GE(size_, 1);
   DCHECK_GE(sink_, 1);
 }
@@ -24,7 +27,8 @@ StyleInitialLetter::StyleInitialLetter(float size, int sink)
 
 StyleInitialLetter::StyleInitialLetter(float size, SinkType sink_type)
     : size_(size),
-      sink_(sink_type == kDrop ? std::floor(size) : 1),
+      sink_(sink_type == kDrop ? base::saturated_cast<int>(std::floor(size))
+                               : 1),
       sink_type_(sink_type) {
   DCHECK_GE(size_, 1);
   DCHECK_GE(sink_, 1);

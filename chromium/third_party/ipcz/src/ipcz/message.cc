@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -29,7 +30,7 @@ namespace {
 // transmissible handles emitted by the driver are appended to
 // `transmissible_handles`, with relevant index and count also stashed in the
 // DriverObjectData.
-IpczResult SerializeDriverObject(
+bool SerializeDriverObject(
     DriverObject object,
     const DriverTransport& transport,
     Message& message,
@@ -38,7 +39,7 @@ IpczResult SerializeDriverObject(
   if (!object.is_valid()) {
     // This is not a valid driver handle and it cannot be serialized.
     data.num_driver_handles = 0;
-    return IPCZ_RESULT_INVALID_ARGUMENT;
+    return false;
   }
 
   uint32_t driver_data_array = 0;
@@ -60,10 +61,13 @@ IpczResult SerializeDriverObject(
                                dimensions.num_driver_handles);
 
   auto handles_view = absl::MakeSpan(transmissible_handles);
-  object.Serialize(
-      transport, driver_data,
-      handles_view.subspan(first_handle, dimensions.num_driver_handles));
-  return IPCZ_RESULT_OK;
+  if (!object.Serialize(
+          transport, driver_data,
+          handles_view.subspan(first_handle, dimensions.num_driver_handles))) {
+    return false;
+  }
+
+  return true;
 }
 
 // Returns `true` if and only if it will be safe to use GetArrayView() to access
@@ -131,10 +135,30 @@ DriverObject DeserializeDriverObject(
 
 }  // namespace
 
+Message::ReceivedDataBuffer::ReceivedDataBuffer() = default;
+
+// NOTE: This malloc'd buffer is intentionally NOT zero-initialized, because we
+// will fully overwrite its contents.
+Message::ReceivedDataBuffer::ReceivedDataBuffer(size_t size)
+    : data_(static_cast<uint8_t*>(malloc(size))), size_(size) {}
+
+Message::ReceivedDataBuffer::ReceivedDataBuffer(ReceivedDataBuffer&& other)
+    : data_(std::move(other.data_)), size_(std::exchange(other.size_, 0)) {}
+
+Message::ReceivedDataBuffer& Message::ReceivedDataBuffer::operator=(
+    ReceivedDataBuffer&& other) {
+  data_ = std::move(other.data_);
+  size_ = std::exchange(other.size_, 0);
+  return *this;
+}
+
+Message::ReceivedDataBuffer::~ReceivedDataBuffer() = default;
+
 Message::Message() = default;
 
 Message::Message(uint8_t message_id, size_t params_size)
-    : data_(sizeof(internal::MessageHeader) + params_size) {
+    : inlined_data_(sizeof(internal::MessageHeader) + params_size),
+      data_(absl::MakeSpan(*inlined_data_)) {
   internal::MessageHeader& h = header();
   h.size = sizeof(h);
   h.version = 0;
@@ -152,7 +176,10 @@ uint32_t Message::AllocateGenericArray(size_t element_size,
   size_t offset = Align(data_.size());
   size_t num_bytes = Align(CheckAdd(sizeof(internal::ArrayHeader),
                                     CheckMul(element_size, num_elements)));
-  data_.resize(CheckAdd(offset, num_bytes));
+
+  ABSL_ASSERT(inlined_data_);
+  inlined_data_->resize(CheckAdd(offset, num_bytes));
+  data_ = absl::MakeSpan(*inlined_data_);
   auto& header = *reinterpret_cast<internal::ArrayHeader*>(&data_[offset]);
   header.num_bytes = checked_cast<uint32_t>(num_bytes);
   header.num_elements = checked_cast<uint32_t>(num_elements);
@@ -208,10 +235,10 @@ bool Message::CanTransmitOn(const DriverTransport& transport) {
   return true;
 }
 
-void Message::Serialize(const DriverTransport& transport) {
+bool Message::Serialize(const DriverTransport& transport) {
   ABSL_ASSERT(CanTransmitOn(transport));
   if (driver_objects_.empty()) {
-    return;
+    return true;
   }
 
   const uint32_t array_offset =
@@ -222,16 +249,19 @@ void Message::Serialize(const DriverTransport& transport) {
   // handles attached. Since these objects are small, we inline some storage on
   // the stack to avoid some heap allocation in the most common cases.
   absl::InlinedVector<IpczDriverHandle, 2> transmissible_handles;
+  bool ok = true;
   for (size_t i = 0; i < driver_objects().size(); ++i) {
     internal::DriverObjectData data = {};
-    const IpczResult result =
-        SerializeDriverObject(std::move(driver_objects()[i]), transport, *this,
-                              data, transmissible_handles);
-    ABSL_ASSERT(result == IPCZ_RESULT_OK);
+    ok &= SerializeDriverObject(std::move(driver_objects()[i]), transport,
+                                *this, data, transmissible_handles);
     GetArrayView<internal::DriverObjectData>(array_offset)[i] = data;
   }
 
-  transmissible_driver_handles_ = std::move(transmissible_handles);
+  if (ok) {
+    transmissible_driver_handles_ = std::move(transmissible_handles);
+    return true;
+  }
+  return false;
 }
 
 bool Message::DeserializeUnknownType(const DriverTransport::RawMessage& message,
@@ -270,11 +300,20 @@ bool Message::DeserializeUnknownType(const DriverTransport::RawMessage& message,
   return all_driver_objects_ok;
 }
 
+Message::ReceivedDataBuffer Message::TakeReceivedData() && {
+  ABSL_ASSERT(received_data_.has_value());
+  ReceivedDataBuffer buffer(std::move(*received_data_));
+  received_data_.reset();
+  data_ = {};
+  return buffer;
+}
+
 bool Message::CopyDataAndValidateHeader(absl::Span<const uint8_t> data) {
   // Copy the data into a local message object to avoid any TOCTOU issues in
   // case `data` is in unsafe shared memory.
-  data_.resize(data.size());
-  memcpy(data_.data(), data.data(), data.size());
+  received_data_.emplace(data.size());
+  memcpy(received_data_->data(), data.data(), data.size());
+  data_ = received_data_->bytes();
 
   // The message must at least be large enough to encode a v0 MessageHeader.
   if (data_.size() < sizeof(internal::MessageHeaderV0)) {

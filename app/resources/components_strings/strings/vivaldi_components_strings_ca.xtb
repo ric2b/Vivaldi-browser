@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" /> Prova d'executar els diagnòstics de xarxa de Windows<ph name="END_LINK" /> .</translation>
 <translation id="1834321415901700177">Aquest lloc conté programes perjudicials</translation>
 <translation id="1916770123977586577">Per aplicar els ajustos actualitzats a aquest lloc web, torna a carregar la pàgina</translation>
-<translation id="1973351931613083086">reproducció automàtica</translation>
 <translation id="1974060860693918893">Avançat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprova el servidor intermediari i el tallafoc<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emès per a: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Aquest lloc no pot proporcionar una connexió segura</translation>
 <translation id="2187317261103489799">Detecta (predeterminat)</translation>
 <translation id="2224337661447660594">Sense connexió a internet</translation>
-<translation id="2230458221926704099">Repara la connexió amb l'<ph name="BEGIN_LINK" />aplicació de diagnòstic<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">El teu accés a internet està bloquejat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requereix un nom d'usuari i contrasenya.</translation>
 <translation id="2337852623177822836">Ajust controlat per l'administrador</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Pot ser que algun atacant provi de robar la teva informació del lloc web <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (per exemple, contrasenyes, missatges o targetes de crèdit). <ph name="BEGIN_LEARN_MORE_LINK" />Més informació<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">S'ha detectat un canvi a la xarxa.</translation>
 <translation id="2948083400971632585">Pots desactivar qualsevol servidor intermediari configurat per a una connexió des de la pàgina d'ajustos.</translation>
-<translation id="2953943267837858202">No permesos per la reproducció automàtica de vídeo</translation>
 <translation id="2991571918955627853">En aquest moment no pots visitar la pàgina <ph name="SITE" /> perquè el lloc web fa servir HSTS. Els atacs i els errors de xarxa acostumen a ser temporals, o sigui que probablement la pàgina funcionarà més endavant.</translation>
 <translation id="3005723025932146533">Mostra la còpia desada</translation>
 <translation id="301521992641321250">Bloquejat automàticament</translation>
@@ -62,7 +59,6 @@
           <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Prem el botó de tornar a carregar per tornar a enviar les dades necessàries per carregar la pàgina.</translation>
 <translation id="3234666976984236645">Detecta sempre el contingut important en aquest lloc</translation>
-<translation id="3291915639428159043">Reproducció automàtica bloquejada</translation>
 <translation id="3308738399950580893">anuncis</translation>
 <translation id="3422472998109090673">Actualment no es pot accedir a <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permet (predeterminat)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">La teva connexió no és privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Amaga els detalls</translation>
-<translation id="3620979700683094848">Llocs que poden reproduir vídeo automàticament</translation>
 <translation id="3630155396527302611">Si ja està inclòs a la llista de programes autoritzats per accedir a la xarxa, prova
       de suprimir-lo de la llista i torna'l a afegir.</translation>
 <translation id="3658742229777143148">Revisió</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> està bloquejat</translation>
 <translation id="3987940399970879459">Menys d'1 MB</translation>
 <translation id="4075732493274867456">El client i el servidor no admeten cap versió de protocol SSL ni cap sistema de xifrat comú.</translation>
-<translation id="410351446219883937">Reproducció automàtica</translation>
 <translation id="4116663294526079822">Permet sempre en aquest lloc</translation>
 <translation id="4130226655945681476">Comprova els cables de xarxa, el mòdem i l'encaminador</translation>
 <translation id="4151403195736952345">Utilitza l'opció predeterminada global (detecta)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Confirma el reenviament del formulari</translation>
 <translation id="6569060085658103619">Estàs consultant la pàgina d'un complement</translation>
 <translation id="6657585470893396449">Contrasenya</translation>
-<translation id="6685834062052613830">Tanca la sessió i completa la configuració</translation>
 <translation id="6711464428925977395">Hi ha hagut algun problema amb el servidor intermediari o l'adreça no és correcta.</translation>
 <translation id="6757797048963528358">El teu dispositiu ha entrat en mode de repòs.</translation>
 <translation id="6897140037006041989">Agent d'usuari</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">És possible que l'antivirus o el tallafoc hagi bloquejat la connexió.</translation>
 <translation id="7800304661137206267">La connexió està xifrada mitjançant <ph name="CIPHER" />, amb <ph name="MAC" /> per a l'autenticació de missatges i amb <ph name="KX" /> com a mecanisme d'intercanvi clau.</translation>
 <translation id="7834399512844817676">Normalment, <ph name="SITE" /> fa servir el xifratge per protegir la teva informació. En aquesta ocasió, quan Vivaldi ha provat de connectar-se a <ph name="SITE" />, el lloc web ha enviat unes credencials poc comunes i incorrectes. Pot ser que un atacant estigui provant de fer-se passar per <ph name="SITE" /> o que una pantalla d'inici de sessió a la xarxa Wi-Fi hagi interromput la connexió. En qualsevol cas, la teva informació continua estant segura, perquè Vivaldi ha aturat la connexió abans no s'intercanviés cap dada.</translation>
-<translation id="7834693436815575883">Reproducció automàtica permesa</translation>
 <translation id="7878562273885520351">La teva contrasenya pot estar compromesa</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8025119109950072390">Algun atacant d'aquest lloc et podria enganyar perquè facis alguna acció perillosa, com ara instal·lar programari o enviar informació personal (per exemple, contrasenyes, números de telèfon o targetes de crèdit).</translation>
 <translation id="8037357227543935929">Pregunta (predeterminat)</translation>
 <translation id="8041940743680923270">Utilitza l'opció predeterminada global (pregunta)</translation>
-<translation id="8044382196220116469">No permetre la reproducció automàtica de vídeos</translation>
 <translation id="808894953321890993">Canvia la contrasenya</translation>
 <translation id="8119307142152921512">rastrejadors i anuncis</translation>
 <translation id="8149426793427495338">El dispositiu ha entrat en mode de repòs.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Nom d'usuari</translation>
 <translation id="8703575177326907206">La teva connexió a <ph name="DOMAIN" /> no està xifrada.</translation>
 <translation id="8740359287975076522">No s'ha trobat la &lt;abbr id="dnsDefinition"&gt; direcció DNS &lt;/abbr&gt; de la pàgina <ph name="HOST_NAME" />. S'està diagnosticant el problema.</translation>
-<translation id="8774017153185436870">Els llocs podrien reproduir vídeo automàticament</translation>
 <translation id="8820817407110198400">Marcadors</translation>
 <translation id="8940028675168378100">Bloquejat per <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ves als ajustos del lloc web</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Ignora</translation>
 <translation id="9025348182339809926">(Invàlid)</translation>
 <translation id="9039213469156557790">A més, aquesta pàgina conté altres recursos que no són segurs. La resta d'usuaris poden visualitzar-los mentre estan en trànsit, i algun atacant podria modificar-los per canviar el comportament de la pàgina.</translation>
-<translation id="9048224371732578627">Permesos per reproduir vídeo automàticament</translation>
 <translation id="9062620674789239642">És possible que s'hagi mogut, editat o suprimit.</translation>
 <translation id="9069693763241529744">Bloquejat per un complement</translation>
 <translation id="9073799351042754113">Has decidit desactivar els advertiments de seguretat per a aquest lloc web.</translation>

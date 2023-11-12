@@ -76,6 +76,11 @@ SurfacelessGlRenderer::BufferWrapper::~BufferWrapper() {
   }
 }
 
+scoped_refptr<gfx::NativePixmap> SurfacelessGlRenderer::BufferWrapper::image()
+    const {
+  return image_->GetNativePixmap();
+}
+
 bool SurfacelessGlRenderer::BufferWrapper::Initialize(
     gfx::AcceleratedWidget widget,
     const gfx::Size& size) {
@@ -88,12 +93,11 @@ bool SurfacelessGlRenderer::BufferWrapper::Initialize(
           ->GetSurfaceFactoryOzone()
           ->CreateNativePixmap(widget, nullptr, size, format,
                                gfx::BufferUsage::SCANOUT);
-  auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
-  if (!image->Initialize(std::move(pixmap))) {
+  image_ = gl::GLImageNativePixmap::Create(size, format, std::move(pixmap));
+  if (!image_) {
     LOG(ERROR) << "Failed to create GLImage";
     return false;
   }
-  image_ = image;
 
   glBindFramebufferEXT(GL_FRAMEBUFFER, gl_fb_);
   glBindTexture(GL_TEXTURE_2D, gl_tex_);
@@ -308,7 +312,7 @@ void SurfacelessGlRenderer::PostRenderFrameTask(
       }
       [[fallthrough]];  // We want to render a new frame anyways.
     case gfx::SwapResult::SWAP_ACK:
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&SurfacelessGlRenderer::RenderFrame,
                                     weak_ptr_factory_.GetWeakPtr()));
       break;

@@ -4,6 +4,8 @@
 
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 
+#include "base/check_op.h"
+
 namespace ash {
 
 namespace {
@@ -102,6 +104,9 @@ std::ostream& operator<<(std::ostream& out, AmbientUiVisibility visibility) {
   switch (visibility) {
     case AmbientUiVisibility::kShown:
       out << "kShown";
+      break;
+    case AmbientUiVisibility::kPreview:
+      out << "kPreview";
       break;
     case AmbientUiVisibility::kHidden:
       out << "kHidden";

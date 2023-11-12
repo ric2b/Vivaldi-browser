@@ -6,6 +6,7 @@
 
 #include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_raster_source.h"
@@ -2133,8 +2134,7 @@ TEST_F(LayerTreeImplTest, SelectionBoundsWithLargeTransforms) {
   LayerImpl* root = root_layer();
   root->SetBounds(gfx::Size(100, 100));
 
-  gfx::Transform large_transform;
-  large_transform.Scale(SkDoubleToScalar(1e37), SkDoubleToScalar(1e37));
+  gfx::Transform large_transform = gfx::Transform::MakeScale(1e37);
   large_transform.RotateAboutYAxis(30);
 
   LayerImpl* child = AddLayer<LayerImpl>();
@@ -2322,7 +2322,8 @@ class PersistentSwapPromise
   MOCK_METHOD1(WillSwap, void(viz::CompositorFrameMetadata* metadata));
   MOCK_METHOD0(DidSwap, void());
 
-  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
+  DidNotSwapAction DidNotSwap(DidNotSwapReason reason,
+                              base::TimeTicks ts) override {
     return DidNotSwapAction::KEEP_ACTIVE;
   }
   int64_t GetTraceId() const override { return 0; }
@@ -2339,7 +2340,8 @@ class NotPersistentSwapPromise
   void WillSwap(viz::CompositorFrameMetadata* metadata) override {}
   void DidSwap() override {}
 
-  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
+  DidNotSwapAction DidNotSwap(DidNotSwapReason reason,
+                              base::TimeTicks ts) override {
     return DidNotSwapAction::BREAK_PROMISE;
   }
   int64_t GetTraceId() const override { return 0; }

@@ -39,7 +39,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.DownloadErrorCode"
-    enum="UpdateEngineDownloadErrorCode" expires_after="2023-03-05">
+    enum="UpdateEngineDownloadErrorCode" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -54,7 +54,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.DownloadSource"
-    enum="UpdateEngineDownloadSource" expires_after="2023-03-05">
+    enum="UpdateEngineDownloadSource" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -68,7 +68,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.DurationMinutes" units="minutes"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -96,7 +96,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.InternalErrorCode"
-    enum="UpdateEngineErrorCode" expires_after="2023-03-05">
+    enum="UpdateEngineErrorCode" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -110,7 +110,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.Number" units="count"
-    expires_after="2023-01-01">
+    expires_after="2023-05-14">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -152,7 +152,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.PayloadSizeMiB" units="MiB"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -165,7 +165,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.PayloadType"
-    enum="UpdateEnginePayloadFormat" expires_after="2023-03-05">
+    enum="UpdateEnginePayloadFormat" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -181,7 +181,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.Result" enum="UpdateEngineAttemptResult"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -194,7 +194,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.TimeSinceLastAttemptMinutes"
-    units="minutes" expires_after="2023-03-12">
+    units="minutes" expires_after="2023-06-04">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -209,7 +209,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Attempt.TimeSinceLastAttemptUptimeMinutes"
-    units="minutes" expires_after="2023-03-05">
+    units="minutes" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -268,7 +268,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Check.Reaction" enum="UpdateEngineCheckReaction"
-    expires_after="2023-01-01">
+    expires_after="2023-05-14">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -284,7 +284,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Check.Result" enum="UpdateEngineCheckResult"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -299,27 +299,27 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Check.RollbackTargetVersion"
-    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-03-26">
+    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-11-30">
   <owner>mpolzer@google.com</owner>
-  <owner>managed-platforms@google.com</owner>
+  <owner>crisguerrero@chromium.org</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
-    First section of the Chrome OS target version set by device policy and sent
+    First section of the ChromeOS target version set by device policy and sent
     to Omaha if rollback is also allowed. This is a sparse histogram, since the
-    possible valid values are stable Chrome OS version prefixes (usually one per
+    possible valid values are stable ChromeOS version prefixes (usually one per
     milestone).
 
     Example value: 10323 (meaning M65 stable).
 
     This is reported on every update check if the TargetVersionPrefix device
-    policy is set and the value of the RollbackToTargetVersion device policy is
-    one of the values allowing rollback.
+    policy is set and rollback is enabled.
 
-    This metric is specific to Chrome OS.
+    This metric is specific to ChromeOS.
   </summary>
 </histogram>
 
 <histogram name="UpdateEngine.Check.TargetVersion"
-    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-03-05">
+    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-05-14">
   <owner>mpolzer@google.com</owner>
   <owner>managed-platforms@google.com</owner>
   <summary>
@@ -365,7 +365,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.ConsecutiveUpdate.Count" units="updates"
-    expires_after="2023-03-05">
+    expires_after="2023-06-11">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -403,7 +403,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Daily.OSAgeDays" units="days"
-    expires_after="2023-03-12">
+    expires_after="2023-06-04">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -416,43 +416,45 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.EnterpriseRollback.Failure"
-    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-01-01">
+    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-11-30">
   <owner>mpolzer@google.com</owner>
-  <owner>managed-platforms@google.com</owner>
+  <owner>crisguerrero@chromium.org</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
-    First section of the Chrome OS version to which an enterprise rollback
+    First section of the ChromeOS version to which an enterprise rollback
     (rollback initiated by the admin of the device) has failed. This is a sparse
-    histogram, since the possible valid values are stable Chrome OS version
+    histogram, since the possible valid values are stable ChromeOS version
     prefixes (usually one per milestone).
 
     Example value: 10323 (meaning M65 stable).
 
     This is reported after a rollback image has failed installing.
 
-    This metric is specific to Chrome OS.
+    This metric is specific to ChromeOS.
   </summary>
 </histogram>
 
 <histogram name="UpdateEngine.EnterpriseRollback.Success"
-    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-01-01">
+    enum="UpdateEngineChromeOsVersionPrefix" expires_after="2023-11-30">
   <owner>mpolzer@google.com</owner>
-  <owner>managed-platforms@google.com</owner>
+  <owner>crisguerrero@chromium.org</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
-    First section of the Chrome OS version to which an enterprise rollback
+    First section of the ChromeOS version to which an enterprise rollback
     (rollback initiated by the admin of the device) has succeeded. This is a
-    sparse histogram, since the possible valid values are stable Chrome OS
+    sparse histogram, since the possible valid values are stable ChromeOS
     version prefixes (usually one per milestone).
 
     Example value: 10323 (meaning M65 stable).
 
     This is reported after a rollback image has been successfully installed.
 
-    This metric is specific to Chrome OS.
+    This metric is specific to ChromeOS.
   </summary>
 </histogram>
 
 <histogram name="UpdateEngine.FailedUpdateCount" units="count"
-    expires_after="2023-03-05">
+    expires_after="2023-05-14">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -467,7 +469,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.InstallDateProvisioningSource"
-    enum="UpdateEngineInstallDateProvisioningSource" expires_after="2023-03-05">
+    enum="UpdateEngineInstallDateProvisioningSource" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -515,7 +517,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.KernelKey.MinVersion" units="units"
-    expires_after="2023-03-05">
+    expires_after="2023-05-14">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -529,7 +531,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.Rollback.Result" enum="BooleanSuccess"
-    expires_after="2023-01-01">
+    expires_after="2023-05-14">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -624,7 +626,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.SuccessfulUpdate.DownloadSourcesUsed"
-    enum="UpdateEngineDownloadSources" expires_after="2023-03-26">
+    enum="UpdateEngineDownloadSources" expires_after="2023-06-04">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -639,7 +641,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="UpdateEngine.SuccessfulUpdate.DurationFromSeenDays.NoTimeRestriction"
-    units="days" expires_after="2023-03-12">
+    units="days" expires_after="2023-05-14">
   <owner>snijhara@google.com</owner>
   <owner>managed-platforms@google.com</owner>
   <summary>
@@ -680,7 +682,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.SuccessfulUpdate.PayloadType"
-    enum="UpdateEnginePayloadFormat" expires_after="2023-03-19">
+    enum="UpdateEnginePayloadFormat" expires_after="2023-06-04">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -707,7 +709,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.SuccessfulUpdate.TotalDurationMinutes"
-    units="minutes" expires_after="2023-03-05">
+    units="minutes" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -722,7 +724,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.SuccessfulUpdate.TotalDurationUptimeMinutes"
-    units="minutes" expires_after="2023-03-05">
+    units="minutes" expires_after="2023-05-07">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -751,7 +753,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UpdateEngine.SuccessfulUpdate.UrlSwitchCount" units="count"
-    expires_after="2023-04-09">
+    expires_after="2023-06-11">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>

@@ -13,7 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
@@ -29,6 +29,7 @@
 #include "components/viz/common/surfaces/video_capture_target.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
+#include "components/viz/service/frame_sinks/frame_counter.h"
 #include "components/viz/service/frame_sinks/frame_sink_bundle_impl.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
@@ -73,7 +74,6 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
       surface_resource_holder_(this),
       is_root_(is_root),
       allow_copy_output_requests_(is_root),
-      surface_animation_manager_(frame_sink_manager_->shared_bitmap_manager()),
       // Don't track the root surface for PowerMode voting. All child surfaces
       // are tracked individually instead, and tracking the root surface could
       // override votes from the children.
@@ -81,10 +81,6 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
           is_root ? nullptr
                   : power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
                         "PowerModeVoter.Animation")) {
-  surface_animation_manager_.SetDirectiveFinishedCallback(
-      base::BindRepeating(&CompositorFrameSinkSupport::
-                              OnCompositorFrameTransitionDirectiveProcessed,
-                          weak_factory_.GetWeakPtr()));
   // This may result in SetBeginFrameSource() being called.
   frame_sink_manager_->RegisterCompositorFrameSinkSupport(frame_sink_id_, this);
 }
@@ -221,18 +217,16 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   if (pending_surfaces_.empty())
     UpdateNeedsBeginFramesInternal();
 
-  // Let the animation manager process any new directives on the surface.
-  const auto& transition_directives =
-      surface->GetActiveFrameMetadata().transition_directives;
-  if (!transition_directives.empty()) {
-    surface_animation_manager_.ProcessTransitionDirectives(
-        transition_directives, surface);
+  for (const auto& directive :
+       surface->GetActiveFrameMetadata().transition_directives) {
+    ProcessCompositorFrameTransitionDirective(directive, surface);
   }
 
   // The directives above generate TransferableResources which are required to
-  // replaced shared elements with the corresponding cached snapshots. This step
+  // replace shared elements with the corresponding cached snapshots. This step
   // must be done after processing directives above.
-  surface_animation_manager_.ReplaceSharedElementResources(surface);
+  if (surface_animation_manager_)
+    surface_animation_manager_->ReplaceSharedElementResources(surface);
 
   if (surface->surface_id() == last_activated_surface_id_)
     return;
@@ -333,7 +327,8 @@ void CompositorFrameSinkSupport::OnSurfacePresented(
 
 void CompositorFrameSinkSupport::RefResources(
     const std::vector<TransferableResource>& resources) {
-  surface_animation_manager_.RefResources(resources);
+  if (surface_animation_manager_)
+    surface_animation_manager_->RefResources(resources);
   surface_resource_holder_.RefResources(resources);
 }
 
@@ -342,7 +337,8 @@ void CompositorFrameSinkSupport::UnrefResources(
   // |surface_animation_manager_| allocates ResourceIds in a different range
   // than the client so it can process returned resources before
   // |surface_resource_holder_|.
-  surface_animation_manager_.UnrefResources(resources);
+  if (surface_animation_manager_)
+    surface_animation_manager_->UnrefResources(resources);
   surface_resource_holder_.UnrefResources(std::move(resources));
 }
 
@@ -438,6 +434,11 @@ void CompositorFrameSinkSupport::InitializeCompositorFrameSinkType(
     return;
   }
   frame_sink_type_ = type;
+
+  if (frame_sink_manager_->frame_counter()) {
+    frame_sink_manager_->frame_counter()->SetFrameSinkType(frame_sink_id_,
+                                                           frame_sink_type_);
+  }
 }
 
 void CompositorFrameSinkSupport::SetThreadIds(
@@ -758,6 +759,11 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
   DCHECK(frame_timing_details_.find(frame_token) ==
          frame_timing_details_.end());
   frame_timing_details_.emplace(frame_token, details);
+
+  if (!feedback.failed() && frame_sink_manager_->frame_counter()) {
+    frame_sink_manager_->frame_counter()->AddPresentedFrame(frame_sink_id_,
+                                                            feedback.timestamp);
+  }
 
   UpdateNeedsBeginFramesInternal();
 }
@@ -1154,14 +1160,102 @@ void CompositorFrameSinkSupport::CheckPendingSurfaces() {
 
 bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(
     base::TimeTicks frame_time) {
+  // It is not good enough to only check whether
+  // |time_since_last_frame| < |begin_frame_interval_|. There are 2 factors
+  // complicating this (examples assume a 30Hz throttled frame rate):
+  // 1) The precision of timing between frames is in microseconds, which
+  //    can result in error accumulation over several throttled frames. For
+  //    instance, on a 60Hz display, the first frame is produced at 0.016666
+  //    seconds, and the second at (0.016666 + 0.016666 = 0.033332) seconds.
+  //    base::Hertz(30) is 0.033333 seconds, so the second frame is considered
+  //    to have been produced too fast, and is therefore throttled.
+  // 2) Small system error in the frame timestamps (often on the order of a few
+  //    microseconds). For example, the first frame may be produced at 0.016662
+  //    seconds (instead of 0.016666), so the second frame's timestamp is
+  //    0.016662 + 0.016666 = 0.033328 and incorrectly gets throttled.
+  //
+  // To correct for this: Ceil the time since last frame to the nearest 100us.
+  // Building off the example above:
+  // Frame 1 time -> 0.016662 -> 0.0167 -> Throttle
+  // Frame 2 time -> 0.016662 + 0.016666 = 0.033328 -> 0.0334 -> Don't Throttle
+  static constexpr base::TimeDelta kFrameTimeQuantization =
+      base::Microseconds(100);
+  base::TimeDelta time_since_last_frame = frame_time - last_frame_time_;
   return begin_frame_interval_.is_positive() &&
-         (frame_time - last_frame_time_) < begin_frame_interval_;
+         time_since_last_frame.CeilToMultiple(kFrameTimeQuantization) <
+             begin_frame_interval_;
+}
+
+void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
+    const CompositorFrameTransitionDirective& directive,
+    Surface* surface) {
+  switch (directive.type()) {
+    case CompositorFrameTransitionDirective::Type::kSave:
+      // Initialize this before creating the SurfaceAnimationManager since the
+      // save operation may execute synchronously.
+      in_flight_save_sequence_id_ = directive.sequence_id();
+      surface_animation_manager_ = SurfaceAnimationManager::CreateWithSave(
+          directive, surface, frame_sink_manager_->shared_bitmap_manager(),
+          base::BindOnce(&CompositorFrameSinkSupport::
+                             OnCompositorFrameTransitionDirectiveProcessed,
+                         base::Unretained(this)));
+      break;
+    case CompositorFrameTransitionDirective::Type::kAnimateRenderer:
+      // The save operation must have been executed before we see an animate
+      // directive.
+      if (in_flight_save_sequence_id_ != 0) {
+        LOG(ERROR)
+            << "Ignoring animate directive, save operation pending completion";
+        break;
+      }
+
+      if (directive.navigation_id()) {
+        if (surface_animation_manager_) {
+          LOG(ERROR) << "Deleting existing SurfaceAnimationManager for "
+                        "transition with navigation_id : "
+                     << directive.navigation_id();
+        }
+
+        surface_animation_manager_ =
+            frame_sink_manager_->TakeSurfaceAnimationManager(
+                directive.navigation_id());
+      }
+
+      if (surface_animation_manager_)
+        surface_animation_manager_->Animate();
+      else
+        LOG(ERROR) << "Animate directive with no saved data.";
+
+      break;
+    case CompositorFrameTransitionDirective::Type::kRelease:
+      surface_animation_manager_.reset();
+      break;
+  }
 }
 
 void CompositorFrameSinkSupport::OnCompositorFrameTransitionDirectiveProcessed(
-    uint32_t sequence_id) {
-  if (client_)
-    client_->OnCompositorFrameTransitionDirectiveProcessed(sequence_id);
+    const CompositorFrameTransitionDirective& directive) {
+  DCHECK_EQ(directive.type(), CompositorFrameTransitionDirective::Type::kSave)
+      << "Only save directives need to be ack'd back to the client";
+
+  if (client_) {
+    client_->OnCompositorFrameTransitionDirectiveProcessed(
+        directive.sequence_id());
+  }
+
+  // There could be an ID mismatch if there are consecutive save operations
+  // before the first one is ack'd. This should never happen but handled safely
+  // here since the directives are untrusted input from the renderer.
+  if (in_flight_save_sequence_id_ == directive.sequence_id() &&
+      directive.navigation_id()) {
+    // Note that this can fail if there is already a cached
+    // SurfaceAnimationManager for this |navigation_id|. Should never happen
+    // but handled safely because its untrusted input from the renderer.
+    frame_sink_manager_->CacheSurfaceAnimationManager(
+        directive.navigation_id(), std::move(surface_animation_manager_));
+  }
+
+  in_flight_save_sequence_id_ = 0;
 }
 
 bool CompositorFrameSinkSupport::IsEvicted(
@@ -1174,7 +1268,7 @@ bool CompositorFrameSinkSupport::IsEvicted(
 
 SurfaceAnimationManager*
 CompositorFrameSinkSupport::GetSurfaceAnimationManagerForTesting() {
-  return &surface_animation_manager_;
+  return surface_animation_manager_.get();
 }
 
 void CompositorFrameSinkSupport::DestroySelf() {
@@ -1187,7 +1281,7 @@ void CompositorFrameSinkSupport::DestroySelf() {
 }
 
 void CompositorFrameSinkSupport::ScheduleSelfDestruction() {
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&CompositorFrameSinkSupport::DestroySelf,
                                 weak_factory_.GetWeakPtr()));
 }

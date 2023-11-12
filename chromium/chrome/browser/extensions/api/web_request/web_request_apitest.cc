@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -212,7 +213,7 @@ class NavigateTabMessageHandler {
     navigate_listener_.Reset();
   }
 
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
   ExtensionTestMessageListener navigate_listener_;
 };
 
@@ -332,7 +333,7 @@ void WaitForExtraHeadersListener(base::WaitableEvent* event,
     return;
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&WaitForExtraHeadersListener, event, browser_context));
 }
@@ -528,7 +529,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
 }
 
 class ExtensionDevToolsProtocolTest
-    : public ExtensionWebRequestApiTest,
+    : public ExtensionWebRequestApiTestWithContextType,
       public content::TestDevToolsProtocolClient {
  protected:
   void Attach() { AttachToWebContents(web_contents()); }
@@ -543,7 +544,15 @@ class ExtensionDevToolsProtocolTest
   }
 };
 
-IN_PROC_BROWSER_TEST_F(ExtensionDevToolsProtocolTest,
+INSTANTIATE_TEST_SUITE_P(PersistentBackground,
+                         ExtensionDevToolsProtocolTest,
+                         ::testing::Values(ContextType::kPersistentBackground));
+
+INSTANTIATE_TEST_SUITE_P(ServiceWorker,
+                         ExtensionDevToolsProtocolTest,
+                         ::testing::Values(ContextType::kServiceWorker));
+
+IN_PROC_BROWSER_TEST_P(ExtensionDevToolsProtocolTest,
                        HeaderOverriddenByExtension) {
   Attach();
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -602,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDevToolsProtocolTest,
   ASSERT_EQ(*cookie_value, "cookieValue");
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionDevToolsProtocolTest,
+IN_PROC_BROWSER_TEST_P(ExtensionDevToolsProtocolTest,
                        HeaderOverrideViaProtocolAllowedByExtension) {
   Attach();
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -709,10 +718,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDevToolsProtocolTest,
   ASSERT_EQ(*cookie_value, "cookieValue");
 }
 
-// This test times out regularly on ASAN/MSAN trybots. See
-// https://crbug.com/733395.
-// TODO(crbug.com/1177120) Re-enable test
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, DISABLED_WebRequestTypes) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestTypes) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webrequest/test_types")) << message_;
 }
@@ -725,7 +731,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, DISABLED_WebRequestTypes) {
 #else
 #define MAYBE_WebRequestTestOSDD WebRequestTestOSDD
 #endif
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, MAYBE_WebRequestTestOSDD) {
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
+                       MAYBE_WebRequestTestOSDD) {
   // An OSDD request is only generated when a main frame at is loaded at /, so
   // serve osdd/index.html from the root of the test server:
   embedded_test_server()->ServeFilesFromDirectory(
@@ -780,12 +787,29 @@ enum class ProfileMode {
   kIncognito,
 };
 
+struct ARTestParams {
+  ARTestParams(ProfileMode profile_mode, ContextType context_type)
+      : profile_mode(profile_mode), context_type(context_type) {}
+
+  ProfileMode profile_mode;
+  ContextType context_type;
+};
+
 class ExtensionWebRequestApiAuthRequiredTest
     : public ExtensionWebRequestApiTest,
-      public testing::WithParamInterface<ProfileMode> {
+      public testing::WithParamInterface<ARTestParams> {
+ public:
+  ExtensionWebRequestApiAuthRequiredTest()
+      : ExtensionWebRequestApiTest(GetParam().context_type) {}
+  ~ExtensionWebRequestApiAuthRequiredTest() override = default;
+  ExtensionWebRequestApiAuthRequiredTest(
+      const ExtensionWebRequestApiAuthRequiredTest&) = delete;
+  ExtensionWebRequestApiAuthRequiredTest& operator=(
+      ExtensionWebRequestApiAuthRequiredTest&) = delete;
+
  protected:
   static bool GetEnableIncognito() {
-    return GetParam() == ProfileMode::kIncognito;
+    return GetParam().profile_mode == ProfileMode::kIncognito;
   }
 
   static std::string FormatCustomArg(const char* test_name) {
@@ -879,12 +903,27 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
       << message_;
 }
 
-INSTANTIATE_TEST_SUITE_P(UserProfile,
-                         ExtensionWebRequestApiAuthRequiredTest,
-                         ::testing::Values(ProfileMode::kUserProfile));
-INSTANTIATE_TEST_SUITE_P(Incognito,
-                         ExtensionWebRequestApiAuthRequiredTest,
-                         ::testing::Values(ProfileMode::kIncognito));
+INSTANTIATE_TEST_SUITE_P(
+    PersistentBackground,
+    ExtensionWebRequestApiAuthRequiredTest,
+    ::testing::Values(ARTestParams(ProfileMode::kUserProfile,
+                                   ContextType::kPersistentBackground)));
+INSTANTIATE_TEST_SUITE_P(
+    PersistentBackgroundIncognito,
+    ExtensionWebRequestApiAuthRequiredTest,
+    ::testing::Values(ARTestParams(ProfileMode::kIncognito,
+                                   ContextType::kPersistentBackground)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    ExtensionWebRequestApiAuthRequiredTest,
+    ::testing::Values(ARTestParams(ProfileMode::kUserProfile,
+                                   ContextType::kServiceWorker)));
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorkerIncognito,
+    ExtensionWebRequestApiAuthRequiredTest,
+    ::testing::Values(ARTestParams(ProfileMode::kIncognito,
+                                   ContextType::kServiceWorker)));
 
 IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
                        WebRequestBlocking) {
@@ -981,7 +1020,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
 
   GURL url = https_test_server.GetURL("/webrequest/simulate_click.html");
 
-  base::ListValue custom_args;
+  base::Value::List custom_args;
   custom_args.Append(url.spec());
   custom_args.Append(insecure_destination.spec());
 
@@ -992,20 +1031,14 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
       << message_;
 }
 
-// TODO(crbug.com/1093066): The JS file for this test uses XmlHttpRequest,
-// which needs to be migrated to use fetch() to be compatible with
-// service workers.
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
                        WebRequestSubresourceRedirects) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webrequest/test_subresource_redirects"))
       << message_;
 }
 
-// TODO(crbug.com/1093066): The JS file for this test uses XmlHttpRequest,
-// which needs to be migrated to use fetch() to be compatible with
-// service workers.
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
                        WebRequestSubresourceRedirectsWithExtraHeaders) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webrequest/test_subresource_redirects",
@@ -1053,11 +1086,11 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestDeclarative1) {
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
+                       WebRequestDeclarative1) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webrequest",
-                               {.extension_url = "test_declarative1.html",
-                                .custom_arg = R"({"testSuite": "normal"})"}))
+  ASSERT_TRUE(RunExtensionTest("webrequest/test_declarative",
+                               {.custom_arg = R"({"testSuite": "normal1"})"}))
       << message_;
 }
 
@@ -1065,19 +1098,19 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestDeclarative1) {
 // until these tests are fixed and moved to the set of tests that aren't
 // broken or flaky. Should tests become flaky, they can be moved here.
 // See https://crbug.com/846555.
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
                        DISABLED_WebRequestDeclarative1Broken) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webrequest",
-                               {.extension_url = "test_declarative1.html",
-                                .custom_arg = R"({"testSuite": "broken"})"}))
+  ASSERT_TRUE(RunExtensionTest("webrequest/test_declarative",
+                               {.custom_arg = R"({"testSuite": "broken"})"}))
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestDeclarative2) {
+IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
+                       WebRequestDeclarative2) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webrequest",
-                               {.extension_url = "test_declarative2.html"}))
+  ASSERT_TRUE(RunExtensionTest("webrequest/test_declarative",
+                               {.custom_arg = R"({"testSuite": "normal2"})"}))
       << message_;
 }
 
@@ -1314,9 +1347,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, HostedAppRequest) {
                                   .Set("launch", DictionaryBuilder()
                                                      .Set("web_url",
                                                           hosted_app_url.spec())
-                                                     .Build())
-                                  .Build())
-                  .Build())
+                                                     .BuildDict())
+                                  .BuildDict())
+                  .BuildDict())
           .Build();
   extension_service()->AddExtension(hosted_app.get());
 
@@ -1872,8 +1905,8 @@ class ExtensionWebRequestApiWebTransportTest
   void SetUpOnMainThread() override {
     ExtensionWebRequestApiTest::SetUpOnMainThread();
     ASSERT_TRUE(StartEmbeddedTestServer());
-    GetTestConfig()->SetInteger("testWebTransportPort",
-                                server_.server_address().port());
+    GetTestConfig()->Set("testWebTransportPort",
+                         server_.server_address().port());
   }
 
  protected:
@@ -2180,13 +2213,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   ash::ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(true);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ProfileManager* profile_manager = g_browser_process->profile_manager();
-  Profile* temp_profile =
-      Profile::CreateProfile(
-          profile_manager->user_data_dir().AppendASCII("profile"), nullptr,
-          Profile::CreateMode::CREATE_MODE_SYNCHRONOUS)
-          .release();
+  std::unique_ptr<Profile> temp_profile = Profile::CreateProfile(
+      profile_manager->user_data_dir().AppendASCII("profile"), nullptr,
+      Profile::CreateMode::CREATE_MODE_SYNCHRONOUS);
   // Create a WebRequestAPI instance that we can control the lifetime of.
-  auto api = std::make_unique<WebRequestAPI>(temp_profile);
+  auto api = std::make_unique<WebRequestAPI>(temp_profile.get());
   // Make sure we are proxying for |temp_profile|.
   api->ForceProxyForTesting();
   temp_profile->GetDefaultStoragePartition()->FlushNetworkInterfaceForTesting();
@@ -2194,7 +2225,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   mojo::Remote<network::mojom::URLLoaderFactory> factory;
   auto pending_receiver = factory.BindNewPipeAndPassReceiver();
   auto temp_web_contents =
-      WebContents::Create(WebContents::CreateParams(temp_profile));
+      WebContents::Create(WebContents::CreateParams(temp_profile.get()));
   content::RenderFrameHost* frame = temp_web_contents->GetPrimaryMainFrame();
   EXPECT_TRUE(api->MaybeProxyURLLoaderFactory(
       frame->GetProcess()->GetBrowserContext(), frame,
@@ -2233,7 +2264,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   // the ThreadPool here to avoid the posts coming from it.
   content::RunAllTasksUntilIdle();
 
-  ProfileDestroyer::DestroyProfileWhenAppropriate(temp_profile);
+  ProfileDestroyer::DestroyOriginalProfileWhenAppropriate(
+      std::move(temp_profile));
   client.Unbind();
   api.reset();
 }
@@ -2764,8 +2796,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestMockedClockTest,
   const std::string extension_id_2 = extension_2->id();
 
   const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
-  EXPECT_LT(prefs->GetInstallTime(extension_id_1),
-            prefs->GetInstallTime(extension_id_2));
+  EXPECT_LT(prefs->GetLastUpdateTime(extension_id_1),
+            prefs->GetLastUpdateTime(extension_id_2));
 
   // The extensions will notify the browser if their proposed redirect was
   // successful or not.
@@ -2801,8 +2833,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestMockedClockTest,
   ReloadExtension(extension_id_1);
   ASSERT_TRUE(ready_1_listener.WaitUntilSatisfied());
 
-  EXPECT_LT(prefs->GetInstallTime(extension_id_2),
-            prefs->GetInstallTime(extension_id_1));
+  EXPECT_LT(prefs->GetLastUpdateTime(extension_id_2),
+            prefs->GetLastUpdateTime(extension_id_1));
 
   redirect_ignored_listener.Reset();
   redirect_successful_listener.Reset();
@@ -2854,7 +2886,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
   ASSERT_TRUE(extension);
   EXPECT_TRUE(listener.WaitUntilSatisfied());
 
-  auto task_runner = base::SequencedTaskRunnerHandle::Get();
+  auto task_runner = base::SequencedTaskRunner::GetCurrentDefault();
   embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(
       [&](const net::test_server::HttpRequest& request)
           -> std::unique_ptr<net::test_server::HttpResponse> {
@@ -4088,11 +4120,10 @@ IN_PROC_BROWSER_TEST_P(SubresourceWebBundlesWebRequestApiTest,
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Create a web bundle.
-  std::string script_url_str =
-      embedded_test_server()->GetURL("/test.js").spec();
+  GURL script_url = embedded_test_server()->GetURL("/test.js");
   web_package::WebBundleBuilder builder;
   builder.AddExchange(
-      script_url_str,
+      script_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'ScriptDone';");
   builder.AddExchange(
@@ -4212,17 +4243,15 @@ IN_PROC_BROWSER_TEST_P(SubresourceWebBundlesWebRequestApiTest,
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Create a web bundle.
-  std::string pass_js_url_str =
-      embedded_test_server()->GetURL("/pass.js").spec();
-  std::string cancel_js_url_str =
-      embedded_test_server()->GetURL("/cancel.js").spec();
+  GURL pass_js_url = embedded_test_server()->GetURL("/pass.js");
+  GURL cancel_js_url = embedded_test_server()->GetURL("/cancel.js");
   web_package::WebBundleBuilder builder;
   builder.AddExchange(
-      pass_js_url_str,
+      pass_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'script loaded';");
   builder.AddExchange(
-      cancel_js_url_str,
+      cancel_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}}, "");
   builder.AddExchange(
       pass_uuid_in_package_js_url,
@@ -4339,11 +4368,10 @@ IN_PROC_BROWSER_TEST_P(SubresourceWebBundlesWebRequestApiTest, ChangeHeader) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Create a web bundle.
-  std::string target_txt_url_str =
-      embedded_test_server()->GetURL("/target.txt").spec();
+  GURL target_txt_url = embedded_test_server()->GetURL("/target.txt");
   web_package::WebBundleBuilder builder;
   builder.AddExchange(
-      target_txt_url_str,
+      target_txt_url,
       {{":status", "200"}, {"content-type", "text/plain"}, {"foo", "bar"}},
       "Hello world");
   std::vector<uint8_t> bundle = builder.CreateBundle();
@@ -4549,35 +4577,33 @@ IN_PROC_BROWSER_TEST_P(SubresourceWebBundlesWebRequestApiTest,
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Create a web bundle.
-  std::string redirect_js_url_str =
-      embedded_test_server()->GetURL("/redirect.js").spec();
-  std::string redirected_js_url_str =
-      embedded_test_server()->GetURL("/redirected.js").spec();
-  std::string redirect_to_unlisted_js_url_str =
-      embedded_test_server()->GetURL("/redirect_to_unlisted.js").spec();
-  std::string redirected_to_unlisted_js_url_str =
-      embedded_test_server()->GetURL("/redirected_to_unlisted.js").spec();
-  std::string redirect_to_server_js_url_str =
-      embedded_test_server()->GetURL("/redirect_to_server.js").spec();
+  GURL redirect_js_url = embedded_test_server()->GetURL("/redirect.js");
+  GURL redirected_js_url = embedded_test_server()->GetURL("/redirected.js");
+  GURL redirect_to_unlisted_js_url =
+      embedded_test_server()->GetURL("/redirect_to_unlisted.js");
+  GURL redirected_to_unlisted_js_url =
+      embedded_test_server()->GetURL("/redirected_to_unlisted.js");
+  GURL redirect_to_server_js_url =
+      embedded_test_server()->GetURL("/redirect_to_server.js");
   web_package::WebBundleBuilder builder;
   builder.AddExchange(
-      redirect_js_url_str,
+      redirect_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirect';");
   builder.AddExchange(
-      redirected_js_url_str,
+      redirected_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirected';");
   builder.AddExchange(
-      redirect_to_unlisted_js_url_str,
+      redirect_to_unlisted_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirect_to_unlisted';");
   builder.AddExchange(
-      redirected_to_unlisted_js_url_str,
+      redirected_to_unlisted_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirected_to_unlisted';");
   builder.AddExchange(
-      redirect_to_server_js_url_str,
+      redirect_to_server_js_url,
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirect_to_server';");
   std::vector<uint8_t> bundle = builder.CreateBundle();
@@ -5169,13 +5195,11 @@ IN_PROC_BROWSER_TEST_P(ProxyCORSWebRequestApiTest,
 }
 
 class ExtensionWebRequestApiFencedFrameTest
-    : public ExtensionWebRequestApiTest,
-      public testing::WithParamInterface<bool /* shadow_dom_fenced_frame */> {
+    : public ExtensionWebRequestApiTest {
  protected:
   ExtensionWebRequestApiFencedFrameTest() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames,
-          {{"implementation_type", GetParam() ? "shadow_dom" : "mparch"}}},
+        {{blink::features::kFencedFrames, {{}}},
          {features::kPrivacySandboxAdsAPIsOverride, {}}},
         {/* disabled_features */});
     // Fenced frames are only allowed in secure contexts.
@@ -5187,26 +5211,20 @@ class ExtensionWebRequestApiFencedFrameTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiFencedFrameTest, Load) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiFencedFrameTest, Load) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest(
-      "webrequest", {.extension_url = "test_fenced_frames.html",
-                     .custom_arg = !GetParam() ? R"({"mparch": true})" : ""}))
+  ASSERT_TRUE(RunExtensionTest("webrequest",
+                               {.extension_url = "test_fenced_frames.html"}))
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiFencedFrameTest,
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiFencedFrameTest,
                        DeclarativeSendMessage) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest(
-      "webrequest", {.extension_url = "test_fenced_frames_send_message.html",
-                     .custom_arg = !GetParam() ? R"({"mparch": true})" : ""}))
+      "webrequest", {.extension_url = "test_fenced_frames_send_message.html"}))
       << message_;
 }
-
-INSTANTIATE_TEST_SUITE_P(ExtensionWebRequestApiFencedFrameTest,
-                         ExtensionWebRequestApiFencedFrameTest,
-                         testing::Bool());
 
 class ExtensionWebRequestApiPrerenderingTest
     : public ExtensionWebRequestApiTest {
@@ -5232,16 +5250,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiPrerenderingTest, Load) {
 class WebRequestPersistentListenersTest
     : public ExtensionWebRequestApiTestWithContextType {
  public:
-  WebRequestPersistentListenersTest() = default;
+  WebRequestPersistentListenersTest()
+      // Note: Set the listener before triggering the parent
+      // SetUpOnMainThread to ensure it happens before extensions start
+      // loading.
+      : test_listener_(
+            std::make_unique<ExtensionTestMessageListener>("ready")) {}
   ~WebRequestPersistentListenersTest() override = default;
-
-  void SetUpOnMainThread() override {
-    // Note: Set the listener before triggering the parent SetUpOnMainThread
-    // to ensure it happens before extensions start loading.
-    test_listener_ = std::make_unique<ExtensionTestMessageListener>("ready");
-
-    ExtensionWebRequestApiTestWithContextType::SetUpOnMainThread();
-  }
 
   void TearDownOnMainThread() override {
     test_listener_.reset();
@@ -5293,14 +5308,8 @@ IN_PROC_BROWSER_TEST_P(WebRequestPersistentListenersTest,
   EXPECT_EQ(1, request_count.GetInt());
 }
 
-// TODO(https://crbug.com/1361941): Fix flakes under ASAN/LSAN.
-#if defined(ADDRESS_SANITIZER)
-#define MAYBE_TestListenersArePersistent DISABLED_TestListenersArePersistent
-#else
-#define MAYBE_TestListenersArePersistent TestListenersArePersistent
-#endif
 IN_PROC_BROWSER_TEST_P(WebRequestPersistentListenersTest,
-                       MAYBE_TestListenersArePersistent) {
+                       TestListenersArePersistent) {
   // Find the installed extension and wait for it to fully load.
   ASSERT_TRUE(StartEmbeddedTestServer());
   const Extension* extension = nullptr;
@@ -6035,7 +6044,7 @@ class ErrorObserver : public ErrorConsole::Observer {
 
  private:
   size_t errors_expected_;
-  raw_ptr<ErrorConsole> error_console_;
+  raw_ptr<ErrorConsole, DanglingUntriaged> error_console_;
   size_t errors_observed_ = 0;
   base::ScopedObservation<ErrorConsole, ErrorConsole::Observer> observation_{
       this};

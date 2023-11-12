@@ -31,6 +31,7 @@ source_set("whats_new") {
     "//ios/chrome/browser/ui/elements",
     "//ios/chrome/browser/ui/table_view",
     "//ios/chrome/browser/ui/table_view:utils",
+    "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/whats_new/cells",
     "//ios/chrome/browser/ui/whats_new/data_source",
     "//ios/chrome/browser/url_loading",
@@ -64,6 +65,10 @@ source_set("util") {
   deps = [
     ":feature_flags",
     "//base",
+    "//ios/chrome/browser/application_context",
+    "//ios/chrome/browser/promos_manager",
+    "//ios/chrome/browser/promos_manager:constants",
+    "//ios/chrome/browser/promos_manager:features",
     "//ios/chrome/browser/ui:feature_flags",
   ]
 }

@@ -67,7 +67,7 @@ bool ShouldSuspendDuringNavigation(crdtp::span<uint8_t> method) {
 }
 
 // Async control commands (such as CSS.enable) are idempotant and can
-// be safely replayed in the new render frame host. We will always forward
+// be safely replayed in the new RenderFrameHost. We will always forward
 // them to the new renderer on cross process navigation. Main rationale for
 // it is that the client doesn't expect such calls to fail in normal
 // circumstances.
@@ -196,7 +196,8 @@ void DevToolsSession::AttachToAgent(blink::mojom::DevToolsAgent* agent,
       receiver_.BindNewEndpointAndPassRemote(),
       session_.BindNewEndpointAndPassReceiver(),
       io_session_.BindNewPipeAndPassReceiver(), session_state_cookie_.Clone(),
-      client_->UsesBinaryProtocol(), client_->IsTrusted(), session_id_);
+      client_->UsesBinaryProtocol(), client_->IsTrusted(), session_id_,
+      IsWaitingForDebuggerOnStart());
   session_.set_disconnect_handler(base::BindOnce(
       &DevToolsSession::MojoConnectionDestroyed, base::Unretained(this)));
 
@@ -228,7 +229,7 @@ void DevToolsSession::AttachToAgent(blink::mojom::DevToolsAgent* agent,
     return;
   }
 
-  // The session is not suspended but the render frame host may be updated
+  // The session is not suspended but the RenderFrameHost may be updated
   // during navigation because:
   // - auto attached to a new OOPIF
   // - cross-process navigation in the main frame
@@ -593,11 +594,13 @@ DevToolsSession* DevToolsSession::AttachChildSession(
     const std::string& session_id,
     DevToolsAgentHostImpl* agent_host,
     DevToolsAgentHostClient* client,
-    Mode mode) {
+    Mode mode,
+    base::OnceClosure resume_callback) {
   DCHECK(!agent_host->SessionByClient(client));
   DCHECK(!root_session_);
   std::unique_ptr<DevToolsSession> session(
       new DevToolsSession(client, session_id, this, mode));
+  session->SetRuntimeResumeCallback(std::move(resume_callback));
   DevToolsSession* session_ptr = session.get();
   // If attach did not succeed, |session| is already destroyed.
   if (!agent_host->AttachInternal(std::move(session)))

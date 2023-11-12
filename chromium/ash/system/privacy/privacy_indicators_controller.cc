@@ -42,6 +42,10 @@ void PrivacyIndicatorsNotificationDelegate::Click(
   launch_settings_.Run();
 }
 
+std::string GetPrivacyIndicatorsNotificationId(const std::string& app_id) {
+  return kPrivacyIndicatorsNotificationIdPrefix + app_id;
+}
+
 std::unique_ptr<message_center::Notification>
 CreatePrivacyIndicatorsNotification(
     const std::string& app_id,
@@ -84,9 +88,9 @@ CreatePrivacyIndicatorsNotification(
   optional_fields.buttons.emplace_back(
       l10n_util::GetStringUTF16(IDS_PRIVACY_NOTIFICATION_BUTTON_APP_SETTINGS));
 
-  auto notification = CreateSystemNotification(
+  auto notification = CreateSystemNotificationPtr(
       message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE,
-      kPrivacyIndicatorsNotificationIdPrefix + app_id, title, message,
+      GetPrivacyIndicatorsNotificationId(app_id), title, message,
       /*display_source=*/std::u16string(),
       /*origin_url=*/GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
@@ -108,7 +112,7 @@ void ModifyPrivacyIndicatorsNotification(
     bool is_microphone_used,
     scoped_refptr<PrivacyIndicatorsNotificationDelegate> delegate) {
   auto* message_center = message_center::MessageCenter::Get();
-  std::string id = kPrivacyIndicatorsNotificationIdPrefix + app_id;
+  std::string id = GetPrivacyIndicatorsNotificationId(app_id);
   bool notification_exists = message_center->FindVisibleNotificationById(id);
 
   if (!is_camera_used && !is_microphone_used) {

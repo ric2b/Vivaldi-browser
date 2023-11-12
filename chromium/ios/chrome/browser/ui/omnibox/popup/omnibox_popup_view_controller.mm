@@ -11,6 +11,7 @@
 #import "base/time/time.h"
 #import "components/favicon/core/large_icon_service.h"
 #import "components/omnibox/common/omnibox_features.h"
+#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
 #import "ios/chrome/browser/ui/elements/self_sizing_table_view.h"
@@ -35,79 +36,110 @@
 #import "ios/chrome/common/ui/util/device_util.h"
 #import "ui/base/device_form_factor.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
 const CGFloat kTopAndBottomPadding = 8.0;
-const CGFloat kTopPaddingVariation1 = 8.0;
+const CGFloat kTopPaddingVariation1 = 0.0;
 const CGFloat kTopPaddingVariation2 = 10.0;
 const CGFloat kTopBottomPaddingVariation2Ipad = 16.0;
+const CGFloat kTopPaddingVariation2IpadPopoutOmnibox = 8.0;
+const CGFloat kBottomPaddingVariation2IpadPopoutOmnibox = -12.0;
+const CGFloat kSidePaddingVariation2IpadPopoutOmnibox = 8.0;
 const CGFloat kFooterHeightVariation1 = 12.0;
 const CGFloat kFooterHeightVariation2 = 16.0;
-// Percentage of the suggestion height that needs to be visible in order to
-// consider the suggestion as visible.
+/// Percentage of the suggestion height that needs to be visible in order to
+/// consider the suggestion as visible.
 const CGFloat kVisibleSuggestionThreshold = 0.6;
-// Minimum size of the fetched favicon for tiles.
+/// Minimum size of the fetched favicon for tiles.
 const CGFloat kMinTileFaviconSize = 32.0f;
-// Maximum size of the fetched favicon for tiles.
+/// Maximum size of the fetched favicon for tiles.
 const CGFloat kMaxTileFaviconSize = 48.0f;
+
+/// Bottom padding for table view headers.
+const CGFloat kHeaderPaddingBottom = 10.0f;
+/// Leading, trailing, and top padding for table view headers.
+const CGFloat kHeaderPadding = 2.0f;
+
+/// Returns whether the keyboard is dismissed when scrolling suggestions.
+BOOL ShouldDismissKeyboardOnScroll() {
+  return ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET ||
+         base::FeatureList::IsEnabled(kEnableSuggestionsScrollingOnIPad);
+}
+
 }  // namespace
 
 @interface OmniboxPopupViewController () <UITableViewDataSource,
                                           UITableViewDelegate,
                                           OmniboxPopupCarouselCellDelegate,
-                                          OmniboxPopupRowCellDelegate,
-                                          KeyboardObserverHelperConsumer>
+                                          OmniboxPopupRowCellDelegate>
 
-// Index path of currently highlighted row. The rows can be highlighted by
-// tapping and holding on them or by using arrow keys on a hardware keyboard.
+/// Index path of currently highlighted row. The rows can be highlighted by
+/// tapping and holding on them or by using arrow keys on a hardware keyboard.
 @property(nonatomic, strong) NSIndexPath* highlightedIndexPath;
 
-// Flag that enables forwarding scroll events to the delegate. Disabled while
-// updating the cells to avoid defocusing the omnibox when the omnibox popup
-// changes size and table view issues a scroll event.
+/// Flag that enables forwarding scroll events to the delegate. Disabled while
+/// updating the cells to avoid defocusing the omnibox when the omnibox popup
+/// changes size and table view issues a scroll event.
 @property(nonatomic, assign) BOOL forwardsScrollEvents;
 
-// The height of the keyboard. Used to determine the content inset for the
-// scroll view.
+/// The height of the keyboard. Used to determine the content inset for the
+/// scroll view.
 @property(nonatomic, assign) CGFloat keyboardHeight;
 
-// Time the view appeared on screen. Used to record a metric of how long this
-// view controller was on screen.
+/// Time the view appeared on screen. Used to record a metric of how long this
+/// view controller was on screen.
 @property(nonatomic, assign) base::TimeTicks viewAppearanceTime;
-// Table view that displays the results.
+/// Table view that displays the results.
 @property(nonatomic, strong) UITableView* tableView;
 
-// Alignment of omnibox text. Popup text should match this alignment.
+/// Alignment of omnibox text. Popup text should match this alignment.
 @property(nonatomic, assign) NSTextAlignment alignment;
 
-// Semantic content attribute of omnibox text. Popup should match this
-// attribute. This is used by the new omnibox popup.
+/// Semantic content attribute of omnibox text. Popup should match this
+/// attribute. This is used by the new omnibox popup.
 @property(nonatomic, assign)
     UISemanticContentAttribute semanticContentAttribute;
 
-// Estimated maximum number of visible suggestions.
-// Only updated in `newResultsAvailable` method, were the value is used.
+/// Estimated maximum number of visible suggestions.
+/// Only updated in `newResultsAvailable` method, were the value is used.
 @property(nonatomic, assign) NSUInteger visibleSuggestionCount;
 
-// Boolean to update visible suggestion count only once on event such as device
-// orientation change or multitasking window change, where multiple keyboard and
-// view updates are received.
+/// Boolean to update visible suggestion count only once on event such as device
+/// orientation change or multitasking window change, where multiple keyboard
+/// and view updates are received.
 @property(nonatomic, assign) BOOL shouldUpdateVisibleSuggestionCount;
 
-// Index of the suggestion group that contains the first suggestion to preview
-// and highlight.
+/// Index of the suggestion group that contains the first suggestion to preview
+/// and highlight.
 @property(nonatomic, assign) NSUInteger preselectedMatchGroupIndex;
 
-// Provider used to fetch carousel favicons.
+/// Provider used to fetch carousel favicons.
 @property(nonatomic, strong)
     FaviconAttributesProvider* carouselAttributeProvider;
 
-// UITableViewCell displaying the most visited carousel in (Web and SRP) ZPS
-// state.
+/// UITableViewCell displaying the most visited carousel in (Web and SRP) ZPS
+/// state.
 @property(nonatomic, strong) OmniboxPopupCarouselCell* carouselCell;
+
+/// Flag that tracks if the carousel should be hidden. It is only true when we
+/// show the carousel, then the user deletes every item in it before the UI has
+/// updated.
+@property(nonatomic, assign) BOOL shouldHideCarousel;
+
+/// Cached `tableView.visibleContentSize.height` used in `viewDidLayoutSubviews`
+/// to avoid infinite loop and redudant computation when updating table view's
+/// content inset.
+@property(nonatomic, assign) CGFloat cachedContentHeight;
 
 @end
 
@@ -118,8 +150,9 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     _forwardsScrollEvents = YES;
     _preselectedMatchGroupIndex = 0;
     _visibleSuggestionCount = 0;
+    _cachedContentHeight = 0;
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-    if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    if (!ShouldDismissKeyboardOnScroll()) {
       // The iPad keyboard can cover some of the rows of the scroll view. The
       // scroll view's content inset may need to be updated when the keyboard is
       // displayed.
@@ -128,10 +161,6 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
                             name:UIKeyboardDidShowNotification
                           object:nil];
     }
-    // Listen to keyboard observer to detect `KeyboardState` changes in order to
-    // update the estimated number of visible suggestions.
-    [KeyboardObserverHelper.sharedKeyboardObserver addConsumer:self];
-
     // Listen to keyboard frame change event to detect keyboard frame changes
     // (ex: when changing input method) to update the estimated number of
     // visible suggestions.
@@ -162,7 +191,7 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   }
   UITableViewStyle style = IsOmniboxActionsVisualTreatment2()
                                ? UITableViewStyleInsetGrouped
-                               : UITableViewStylePlain;
+                               : UITableViewStyleGrouped;
   self.tableView = [[SelfSizingTableView alloc] initWithFrame:CGRectZero
                                                         style:style];
   self.tableView.delegate = self;
@@ -173,11 +202,27 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   [self updateBackgroundColor];
+  if (IsIpadPopoutOmniboxEnabled()) {
+    [self.delegate autocompleteResultConsumerDidChangeTraitCollection:self];
+  }
 }
 
 #pragma mark - Getter/Setter
 
 - (void)setHighlightedIndexPath:(NSIndexPath*)highlightedIndexPath {
+  // Special case for highlight moving inside a carousel-style section.
+  if (_highlightedIndexPath &&
+      highlightedIndexPath.section == _highlightedIndexPath.section &&
+      self.currentResult[highlightedIndexPath.section].displayStyle ==
+          SuggestionGroupDisplayStyleCarousel) {
+    // The highlight moved inside the section horizontally. No need to
+    // unhighlight the previous row. Just notify the delegate.
+    _highlightedIndexPath = highlightedIndexPath;
+    [self didHighlightSelectedSuggestion];
+    return;
+  }
+
+  // General case: highlighting moved between different rows.
   if (_highlightedIndexPath) {
     [self unhighlightRowAtIndexPath:_highlightedIndexPath];
   }
@@ -222,11 +267,9 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     [self.tableView setLayoutMargins:UIEdgeInsetsZero];
   }
   self.tableView.contentInsetAdjustmentBehavior =
-      IsOmniboxActionsVisualTreatment2()
-          ? UIScrollViewContentInsetAdjustmentNever
-          : UIScrollViewContentInsetAdjustmentAutomatic;
-  [self.tableView setContentInset:UIEdgeInsetsMake(self.topPadding, 0,
-                                                   self.bottomPadding, 0)];
+      UIScrollViewContentInsetAdjustmentAutomatic;
+  [self.tableView setDirectionalLayoutMargins:NSDirectionalEdgeInsetsMake(
+                                                  0, 0, self.bottomPadding, 0)];
 
   self.tableView.sectionHeaderHeight = 0.1;
   self.tableView.estimatedRowHeight = 0;
@@ -236,6 +279,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 
   [self.tableView registerClass:[OmniboxPopupRowCell class]
          forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
+  [self.tableView registerClass:[UITableViewHeaderFooterView class]
+      forHeaderFooterViewReuseIdentifier:NSStringFromClass(
+                                             [UITableViewHeaderFooterView
+                                                 class])];
   self.shouldUpdateVisibleSuggestionCount = YES;
 
   if (@available(iOS 15.0, *)) {
@@ -245,7 +292,7 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  if (IsOmniboxActionsVisualTreatment2()) {
+  if (IsOmniboxActionsEnabled()) {
     [self adjustMarginsToMatchOmniboxWidth];
   }
 
@@ -258,6 +305,15 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
                              base::TimeTicks::Now() - self.viewAppearanceTime);
 }
 
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  if (!ShouldDismissKeyboardOnScroll() &&
+      self.tableView.visibleSize.height != self.cachedContentHeight) {
+    self.cachedContentHeight = self.tableView.visibleSize.height;
+    [self updateContentInsetForKeyboard];
+  }
+}
+
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
            (id<UIViewControllerTransitionCoordinator>)coordinator {
@@ -265,7 +321,7 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   [self.tableView setEditing:NO animated:NO];
   self.shouldUpdateVisibleSuggestionCount = YES;
 
-  if (IsOmniboxActionsVisualTreatment2()) {
+  if (IsOmniboxActionsEnabled()) {
     [coordinator
         animateAlongsideTransition:^(
             id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -292,9 +348,24 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
                                   omniboxFrame.origin.x -
                                   omniboxFrame.size.width
                             : 0;
-  self.tableView.layoutMargins =
-      UIEdgeInsetsMake(self.tableView.layoutMargins.top, leftMargin,
-                       self.tableView.layoutMargins.bottom, rightMargin);
+
+  if (IsOmniboxActionsVisualTreatment2()) {
+    if (IsIpadPopoutOmniboxEnabled() && IsRegularXRegularSizeClass(self)) {
+      leftMargin += kSidePaddingVariation2IpadPopoutOmnibox;
+      rightMargin += kSidePaddingVariation2IpadPopoutOmnibox;
+    }
+
+    // Adjust the table view to be aligned with the omnibox textfield.
+    self.tableView.layoutMargins =
+        UIEdgeInsetsMake(self.tableView.layoutMargins.top, leftMargin,
+                         self.tableView.layoutMargins.bottom, rightMargin);
+  } else if (IsOmniboxActionsVisualTreatment1() &&
+             base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles)) {
+    // Adjust the carousel to be aligned with the omnibox textfield.
+    UIEdgeInsets margins = self.carouselCell.layoutMargins;
+    self.carouselCell.layoutMargins =
+        UIEdgeInsetsMake(margins.top, leftMargin, margins.bottom, rightMargin);
+  }
 }
 
 #pragma mark - AutocompleteResultConsumer
@@ -302,6 +373,7 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 - (void)updateMatches:(NSArray<id<AutocompleteSuggestionGroup>>*)result
     preselectedMatchGroupIndex:(NSInteger)groupIndex {
   DCHECK(groupIndex == 0 || groupIndex < (NSInteger)result.count);
+  self.shouldHideCarousel = NO;
   self.forwardsScrollEvents = NO;
   // Reset highlight state.
   self.highlightedIndexPath = nil;
@@ -319,9 +391,21 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
              isFirstUpdate:YES];
 }
 
-// Set text alignment for popup cells.
+/// Set text alignment for popup cells.
 - (void)setTextAlignment:(NSTextAlignment)alignment {
   self.alignment = alignment;
+}
+
+- (void)setDebugInfoViewController:(UIViewController*)viewController {
+  DCHECK(experimental_flags::IsOmniboxDebuggingEnabled());
+  _debugInfoViewController = viewController;
+
+  UITapGestureRecognizer* debugGestureRecognizer =
+      [[UITapGestureRecognizer alloc] initWithTarget:self
+                                              action:@selector(showDebugUI)];
+  debugGestureRecognizer.numberOfTapsRequired = 2;
+  debugGestureRecognizer.numberOfTouchesRequired = 2;
+  [self.view addGestureRecognizer:debugGestureRecognizer];
 }
 
 - (void)newResultsAvailable {
@@ -341,7 +425,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
       return YES;
     case OmniboxKeyboardActionLeftArrow:
     case OmniboxKeyboardActionRightArrow:
-      // TODO(crbug.com/1371453): Add left and right action for tile selection.
+      if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) &&
+          self.carouselCell.isHighlighted) {
+        return [self.carouselCell canPerformKeyboardAction:keyboardAction];
+      }
       return NO;
   }
 }
@@ -357,41 +444,25 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
       break;
     case OmniboxKeyboardActionLeftArrow:
     case OmniboxKeyboardActionRightArrow:
-      // TODO(crbug.com/1371453): Add left and right action for tile selection.
-      NOTREACHED();
+      if (self.carouselCell.isHighlighted) {
+        DCHECK(self.highlightedIndexPath.section ==
+               [self.tableView indexPathForCell:self.carouselCell].section);
+
+        [self.carouselCell performKeyboardAction:keyboardAction];
+        NSInteger highlightedTileIndex = self.carouselCell.highlightedTileIndex;
+        if (highlightedTileIndex == NSNotFound) {
+          self.highlightedIndexPath = nil;
+        } else {
+          self.highlightedIndexPath =
+              [NSIndexPath indexPathForRow:highlightedTileIndex
+                                 inSection:self.highlightedIndexPath.section];
+        }
+      }
       break;
   }
 }
 
-#pragma mark - OmniboxPopupRowCellDelegate
-
-- (void)trailingButtonTappedForCell:(OmniboxPopupRowCell*)cell {
-  NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
-  id<AutocompleteSuggestion> suggestion =
-      [self suggestionAtIndexPath:indexPath];
-  DCHECK(suggestion);
-  [self.delegate autocompleteResultConsumer:self
-           didTapTrailingButtonOnSuggestion:suggestion
-                                      inRow:indexPath.row];
-}
-
-#pragma mark - OmniboxReturnDelegate
-
-- (void)omniboxReturnPressed:(id)sender {
-  if (self.highlightedIndexPath) {
-    id<AutocompleteSuggestion> suggestion =
-        [self suggestionAtIndexPath:self.highlightedIndexPath];
-    if (suggestion) {
-      [self.delegate autocompleteResultConsumer:self
-                            didSelectSuggestion:suggestion
-                                          inRow:self.highlightedIndexPath.row];
-      return;
-    }
-  }
-  [self.acceptReturnDelegate omniboxReturnPressed:sender];
-}
-
-#pragma mark - OmniboxSuggestionCommands
+#pragma mark OmniboxKeyboardDelegate Private
 
 - (void)highlightPreviousSuggestion {
   NSIndexPath* path = self.highlightedIndexPath;
@@ -415,7 +486,12 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     return;
   }
 
-  BOOL isCurrentHighlightedRowFirstInSection = (path.row == 0);
+  id<AutocompleteSuggestionGroup> suggestionGroup =
+      self.currentResult[self.highlightedIndexPath.section];
+  BOOL isCurrentHighlightedRowFirstInSection =
+      suggestionGroup.displayStyle == SuggestionGroupDisplayStyleCarousel ||
+      (path.row == 0);
+
   if (isCurrentHighlightedRowFirstInSection) {
     NSInteger previousSection = path.section - 1;
     NSInteger previousSectionCount =
@@ -452,7 +528,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   }
 
   NSIndexPath* path = self.highlightedIndexPath;
+  id<AutocompleteSuggestionGroup> suggestionGroup =
+      self.currentResult[self.highlightedIndexPath.section];
   BOOL isCurrentHighlightedRowLastInSection =
+      suggestionGroup.displayStyle == SuggestionGroupDisplayStyleCarousel ||
       path.row == [self.tableView numberOfRowsInSection:path.section] - 1;
   if (isCurrentHighlightedRowLastInSection) {
     NSInteger nextSection = path.section + 1;
@@ -477,14 +556,20 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   self.highlightedIndexPath = path;
 }
 
-#pragma mark OmniboxSuggestionCommands Private
-
 - (void)highlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (self.currentResult[indexPath.section].displayStyle ==
+      SuggestionGroupDisplayStyleCarousel) {
+    indexPath = [NSIndexPath indexPathForRow:0 inSection:indexPath.section];
+  }
   UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
   [cell setHighlighted:YES animated:NO];
 }
 
 - (void)unhighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (self.currentResult[indexPath.section].displayStyle ==
+      SuggestionGroupDisplayStyleCarousel) {
+    indexPath = [NSIndexPath indexPathForRow:0 inSection:indexPath.section];
+  }
   UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
   [cell setHighlighted:NO animated:NO];
 }
@@ -494,6 +579,36 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
       [self suggestionAtIndexPath:self.highlightedIndexPath];
   DCHECK(suggestion);
   [self.matchPreviewDelegate setPreviewSuggestion:suggestion isFirstUpdate:NO];
+}
+
+#pragma mark - OmniboxPopupRowCellDelegate
+
+- (void)trailingButtonTappedForCell:(OmniboxPopupRowCell*)cell {
+  NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:indexPath];
+  DCHECK(suggestion);
+  [self.delegate autocompleteResultConsumer:self
+           didTapTrailingButtonOnSuggestion:suggestion
+                                      inRow:indexPath.row];
+}
+
+#pragma mark - OmniboxReturnDelegate
+
+- (void)omniboxReturnPressed:(id)sender {
+  if (self.highlightedIndexPath) {
+    id<AutocompleteSuggestion> suggestion =
+        [self suggestionAtIndexPath:self.highlightedIndexPath];
+    if (suggestion) {
+      NSInteger absoluteRow =
+          [self absoluteRowIndexForIndexPath:self.highlightedIndexPath];
+      [self.delegate autocompleteResultConsumer:self
+                            didSelectSuggestion:suggestion
+                                          inRow:absoluteRow];
+      return;
+    }
+  }
+  [self.acceptReturnDelegate omniboxReturnPressed:sender];
 }
 
 #pragma mark - Table view delegate
@@ -516,7 +631,6 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 
 - (BOOL)tableView:(UITableView*)tableView
     shouldHighlightRowAtIndexPath:(NSIndexPath*)indexPath {
-  // TODO(crbug.com/1365374): Handle Carousel's highlight.
   return YES;
 }
 
@@ -533,11 +647,11 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   if (section >= self.currentResult.count ||
       row >= self.currentResult[indexPath.section].suggestions.count)
     return;
-  // TODO(crbug.com/1365374): Handle Carousel's selection.
+  NSInteger absoluteRow = [self absoluteRowIndexForIndexPath:indexPath];
   [self.delegate
       autocompleteResultConsumer:self
              didSelectSuggestion:[self suggestionAtIndexPath:indexPath]
-                           inRow:row];
+                           inRow:absoluteRow];
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
@@ -561,6 +675,12 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     return FLT_MIN;
   }
 
+  // When most visited tiles are enabled, only allow section separator under the
+  // verbatim suggestion.
+  if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) && section > 0) {
+    return FLT_MIN;
+  }
+
   return IsOmniboxActionsVisualTreatment1() ? kFooterHeightVariation1
                                             : kFooterHeightVariation2;
 }
@@ -579,6 +699,12 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     return [[UIView alloc] init];
   }
 
+  // When most visited tiles are enabled, only allow section separator under the
+  // verbatim suggestion.
+  if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles) && section > 0) {
+    return nil;
+  }
+
   UIView* footer = [[UIView alloc] init];
   footer.backgroundColor = tableView.backgroundColor;
   UIView* hairline = [[UIView alloc]
@@ -591,11 +717,6 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   hairline.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 
   return footer;
-}
-
-- (UIView*)tableView:(UITableView*)tableView
-    viewForHeaderInSection:(NSInteger)section {
-  return nil;
 }
 
 #pragma mark - Table view data source
@@ -611,6 +732,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
       return self.currentResult[section].suggestions.count;
     case SuggestionGroupDisplayStyleCarousel:
       DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
+      if (self.shouldHideCarousel) {
+        return 0;
+      }
+
       // The carousel displays suggestions on one row.
       return 1;
   }
@@ -654,12 +779,52 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   return UITableViewAutomaticDimension;
 }
 
-- (NSString*)tableView:(UITableView*)tableView
-    titleForHeaderInSection:(NSInteger)section {
-  return self.currentResult[section].title;
+- (UIView*)tableView:(UITableView*)tableView
+    viewForHeaderInSection:(NSInteger)section {
+  NSString* title = self.currentResult[section].title;
+  if (!title) {
+    return nil;
+  }
+
+  UITableViewHeaderFooterView* header =
+      [tableView dequeueReusableHeaderFooterViewWithIdentifier:
+                     NSStringFromClass([UITableViewHeaderFooterView class])];
+
+  UIListContentConfiguration* contentConfiguration =
+      header.defaultContentConfiguration;
+
+  contentConfiguration.text = title;
+  contentConfiguration.textProperties.font =
+      [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+  contentConfiguration.textProperties.transform =
+      UIListContentTextTransformUppercase;
+  contentConfiguration.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(
+      kHeaderPadding, kHeaderPadding, kHeaderPaddingBottom,
+      kHeaderPadding);
+
+  // Inset the header to match the omnibox width, similar to
+  // `adjustMarginsToMatchOmniboxWidth` method.
+  if (IsOmniboxActionsVisualTreatment1() && IsRegularXRegularSizeClass(self)) {
+    NamedGuide* layoutGuide = [NamedGuide guideWithName:kOmniboxGuide
+                                                   view:self.view];
+    if (layoutGuide) {
+      CGRect omniboxFrame = [layoutGuide.constrainedView
+          convertRect:layoutGuide.constrainedView.bounds
+               toView:self.view];
+      CGFloat leftMargin = omniboxFrame.origin.x;
+
+      contentConfiguration.directionalLayoutMargins =
+          NSDirectionalEdgeInsetsMake(
+              kHeaderPadding, kHeaderPadding + leftMargin,
+              kHeaderPaddingBottom, kHeaderPadding);
+    }
+  }
+
+  header.contentConfiguration = contentConfiguration;
+  return header;
 }
 
-// Customize the appearance of table view cells.
+/// Customize the appearance of table view cells.
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   DCHECK_LT((NSUInteger)indexPath.row,
@@ -698,28 +863,78 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 
 #pragma mark - OmniboxPopupCarouselCellDelegate
 
-- (void)didTapCarouselItem:(CarouselItem*)carouselItem {
+- (void)carouselCellDidChangeItemCount:(OmniboxPopupCarouselCell*)carouselCell {
+  if (carouselCell.tileCount == 0) {
+    // Hide the carousel row.
+    self.shouldHideCarousel = YES;
+    NSInteger carouselSection =
+        [self.tableView indexPathForCell:self.carouselCell].section;
+    [self.tableView
+        deleteRowsAtIndexPaths:@[ [NSIndexPath
+                                   indexPathForRow:0
+                                         inSection:carouselSection] ]
+              withRowAnimation:UITableViewRowAnimationAutomatic];
+    [self resetHighlighting];
+    return;
+  }
+
+  if (self.highlightedIndexPath.section !=
+      [self.tableView indexPathForCell:self.carouselCell].section) {
+    return;
+  }
+
+  // Defensively update highlightedIndexPath, because the highlighted tile might
+  // have been removed.
+  NSInteger highlightedTileIndex = self.carouselCell.highlightedTileIndex;
+  if (highlightedTileIndex == NSNotFound) {
+    [self resetHighlighting];
+  } else {
+    self.highlightedIndexPath =
+        [NSIndexPath indexPathForRow:highlightedTileIndex
+                           inSection:self.highlightedIndexPath.section];
+  }
+}
+
+- (void)carouselCell:(OmniboxPopupCarouselCell*)carouselCell
+    didTapCarouselItem:(CarouselItem*)carouselItem {
   id<AutocompleteSuggestion> suggestion =
       [self suggestionAtIndexPath:carouselItem.indexPath];
   DCHECK(suggestion);
 
+  NSInteger absoluteRow =
+      [self absoluteRowIndexForIndexPath:carouselItem.indexPath];
   [self.delegate autocompleteResultConsumer:self
                         didSelectSuggestion:suggestion
-                                      inRow:carouselItem.indexPath.row];
+                                      inRow:absoluteRow];
 }
 
 #pragma mark - Internal API methods
 
-// Adjust the inset on the table view to prevent keyboard from overlapping the
-// text.
+/// Reset the highlighting to the first suggestion when it's available. Reset
+/// to nil otherwise.
+- (void)resetHighlighting {
+  if (self.currentResult.firstObject.suggestions.count > 0) {
+    self.highlightedIndexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+  } else {
+    self.highlightedIndexPath = nil;
+  }
+}
+
+/// Adjust the inset on the table view to allow user to scroll to suggestions
+/// below the keyboard.
 - (void)updateContentInsetForKeyboard {
-  UIScreen* currentScreen = self.tableView.window.screen;
+  // Disable content inset update when scrolling dismisses the keyboard.
+  if (ShouldDismissKeyboardOnScroll() ||
+      self.tableView.contentSize.height <= 0) {
+    return;
+  }
+  UIWindow* currentWindow = self.tableView.window;
   CGRect absoluteRect =
       [self.tableView convertRect:self.tableView.bounds
-                toCoordinateSpace:currentScreen.coordinateSpace];
-  CGFloat screenHeight = currentScreen.bounds.size.height;
-  CGFloat bottomInset = screenHeight - self.tableView.contentSize.height -
-                        _keyboardHeight - absoluteRect.origin.y -
+                toCoordinateSpace:currentWindow.coordinateSpace];
+  CGFloat windowHeight = CGRectGetHeight(currentWindow.bounds);
+  CGFloat bottomInset = windowHeight - self.tableView.visibleSize.height -
+                        self.keyboardHeight - absoluteRect.origin.y -
                         self.bottomPadding - self.topPadding;
   bottomInset = MAX(self.bottomPadding, -bottomInset);
   self.tableView.contentInset =
@@ -727,9 +942,15 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   self.tableView.scrollIndicatorInsets = self.tableView.contentInset;
 }
 
-// Updates the color of the background based on the incognito-ness and the size
-// class.
+/// Updates the color of the background based on the incognito-ness and the size
+/// class.
 - (void)updateBackgroundColor {
+
+  // Vivaldi: Match the search suggestion view background color with location
+  // bar.
+  if (IsVivaldiRunning()) {
+    self.view.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
+  } else {
   ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
       initWithStyle:self.incognito ? INCOGNITO : NORMAL];
 
@@ -744,6 +965,8 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   } else {
     self.view.backgroundColor = [UIColor clearColor];
   }
+  } // End Vivaldi
+
 }
 
 #pragma mark Action for append UIButton
@@ -784,28 +1007,21 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 
 #pragma mark - Keyboard events
 
+/// Handles `UIKeyboardDidShowNotification`, only active when
+/// `ShouldDismissKeyboardOnScroll` is false.
 - (void)keyboardDidShow:(NSNotification*)notification {
-  NSDictionary* keyboardInfo = [notification userInfo];
-  NSValue* keyboardFrameValue =
-      [keyboardInfo valueForKey:UIKeyboardFrameEndUserInfoKey];
   self.keyboardHeight =
-      KeyboardObserverHelper.keyboardScreen == self.view.window.screen
-          ? CurrentKeyboardHeight(keyboardFrameValue)
-          : 0;
-  if (self.tableView.contentSize.height > 0)
-    [self updateContentInsetForKeyboard];
+      [KeyboardObserverHelper keyboardHeightInWindow:self.tableView.window];
+  [self updateContentInsetForKeyboard];
 }
 
 - (void)keyboardDidChangeFrame:(NSNotification*)notification {
-  if (KeyboardObserverHelper.sharedKeyboardObserver.visibleKeyboardHeight > 0) {
+  CGFloat keyboardHeight =
+      [KeyboardObserverHelper keyboardHeightInWindow:self.tableView.window];
+  if (self.keyboardHeight != keyboardHeight) {
+    self.keyboardHeight = keyboardHeight;
     self.shouldUpdateVisibleSuggestionCount = YES;
   }
-}
-
-#pragma mark - KeyboardObserverHelperConsumer
-
-- (void)keyboardWillChangeToState:(KeyboardState)keyboardState {
-  self.shouldUpdateVisibleSuggestionCount = YES;
 }
 
 #pragma mark - Content size events
@@ -819,6 +1035,12 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 - (BOOL)hasContent {
   return self.tableView.numberOfSections > 0 &&
          [self.tableView numberOfRowsInSection:0] > 0;
+}
+
+#pragma mark - CarouselItemConsumer
+
+- (void)deleteCarouselItem:(CarouselItem*)carouselItem {
+  [self.carouselCell deleteCarouselItem:carouselItem];
 }
 
 #pragma mark - Private Methods
@@ -836,19 +1058,35 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   return self.currentResult[indexPath.section].suggestions[indexPath.row];
 }
 
+/// Returns the absolute row number for `indexPath`, counting every row in every
+/// section above. Used for logging.
+- (NSInteger)absoluteRowIndexForIndexPath:(NSIndexPath*)indexPath {
+  if (![self suggestionAtIndexPath:indexPath]) {
+    return NSNotFound;
+  }
+  NSInteger rowCount = 0;
+  // For each section above `indexPath` add the number of row used by the
+  // section.
+  for (NSInteger i = 0; i < indexPath.section; ++i) {
+    rowCount += [self.tableView numberOfRowsInSection:i];
+  }
+  switch (self.currentResult[indexPath.section].displayStyle) {
+    case SuggestionGroupDisplayStyleDefault:
+      return rowCount + indexPath.row;
+    case SuggestionGroupDisplayStyleCarousel:
+      return rowCount;
+  }
+}
+
 - (void)updateVisibleSuggestionCount {
-  CGFloat keyboardHeight =
-      [[KeyboardObserverHelper sharedKeyboardObserver] visibleKeyboardHeight];
-  UIScreen* currentScreen = self.tableView.window.screen;
-  CGRect tableViewFrameInCurrentScreenCoordinateSpace =
+  CGRect tableViewFrameInCurrentWindowCoordinateSpace =
       [self.tableView convertRect:self.tableView.bounds
-                toCoordinateSpace:currentScreen.coordinateSpace];
+                toCoordinateSpace:self.tableView.window.coordinateSpace];
   // Computes the visible area between the omnibox and the keyboard.
   CGFloat visibleTableViewHeight =
-      CurrentScreenHeight() -
-      tableViewFrameInCurrentScreenCoordinateSpace.origin.y - keyboardHeight -
-      self.tableView.contentInset.top;
-
+      CGRectGetHeight(self.tableView.window.bounds) -
+      tableViewFrameInCurrentWindowCoordinateSpace.origin.y -
+      self.keyboardHeight - self.tableView.contentInset.top;
   // Use font size to estimate the size of a omnibox search suggestion.
   CGFloat fontSizeHeight = [@"T" sizeWithAttributes:@{
                              NSFontAttributeName : [UIFont
@@ -879,6 +1117,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
     BOOL isIpad = ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
     topPadding =
         isIpad ? kTopBottomPaddingVariation2Ipad : kTopPaddingVariation2;
+
+    if (IsIpadPopoutOmniboxEnabled()) {
+      topPadding = kTopPaddingVariation2IpadPopoutOmnibox;
+    }
   }
   return topPadding;
 }
@@ -886,6 +1128,10 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
 - (CGFloat)bottomPadding {
   if (IsOmniboxActionsVisualTreatment2() &&
       (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)) {
+    if (IsIpadPopoutOmniboxEnabled()) {
+      return kBottomPaddingVariation2IpadPopoutOmnibox;
+    }
+
     return kTopBottomPaddingVariation2Ipad;
   }
   return kTopAndBottomPadding;
@@ -927,6 +1173,12 @@ const CGFloat kMaxTileFaviconSize = 48.0f;
   [self.carouselAttributeProvider
       fetchFaviconAttributesForURL:carouselItem.URL.gurl
                         completion:completion];
+}
+
+- (void)showDebugUI {
+  [self presentViewController:self.debugInfoViewController
+                     animated:YES
+                   completion:nil];
 }
 
 @end

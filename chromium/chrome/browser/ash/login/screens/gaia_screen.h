@@ -15,10 +15,11 @@
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "components/account_id/account_id.h"
 
 namespace ash {
+
+class GaiaView;
 
 // This class represents GAIA screen: login screen that is responsible for
 // GAIA-based sign-in. Screen observs backlight to turn the camera off if the
@@ -77,11 +78,5 @@ class GaiaScreen : public BaseScreen, public ScreenBacklightObserver {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::GaiaScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_GAIA_SCREEN_H_

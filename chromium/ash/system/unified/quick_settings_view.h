@@ -5,37 +5,26 @@
 #ifndef ASH_SYSTEM_UNIFIED_QUICK_SETTINGS_VIEW_H_
 #define ASH_SYSTEM_UNIFIED_QUICK_SETTINGS_VIEW_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
+#include "ash/system/brightness/unified_brightness_view.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
+namespace views {
+class FlexLayoutView;
+}  // namespace views
+
 namespace ash {
 
+class FeatureTile;
 class FeatureTilesContainerView;
 class PageIndicatorView;
 class QuickSettingsFooter;
 class QuickSettingsHeader;
 class UnifiedMediaControlsContainer;
 class UnifiedSystemTrayController;
-
-// Container view of slider views.
-class SlidersContainerView : public views::View {
- public:
-  METADATA_HEADER(SlidersContainerView);
-
-  SlidersContainerView();
-
-  SlidersContainerView(const SlidersContainerView&) = delete;
-  SlidersContainerView& operator=(const SlidersContainerView&) = delete;
-
-  ~SlidersContainerView() override;
-
-  // Gets height of the view.
-  int GetHeight() const;
-
-  // views::View:
-  gfx::Size CalculatePreferredSize() const override;
-};
 
 // View class of the bubble in status area tray.
 //
@@ -54,6 +43,9 @@ class ASH_EXPORT QuickSettingsView : public views::View {
   // Sets the maximum height that the view can take.
   void SetMaxHeight(int max_height);
 
+  // Adds tiles to the FeatureTile container view.
+  void AddTiles(std::vector<std::unique_ptr<FeatureTile>> tiles);
+
   // Adds slider view.
   void AddSliderView(views::View* slider_view);
 
@@ -61,7 +53,7 @@ class ASH_EXPORT QuickSettingsView : public views::View {
   void AddMediaControlsView(views::View* media_controls);
 
   // Hides the main view and shows the given `detailed_view`.
-  void SetDetailedView(views::View* detailed_view);
+  void SetDetailedView(std::unique_ptr<views::View> detailed_view);
 
   // Removes the detailed view set by SetDetailedView, and shows the main view.
   // It deletes `detailed_view` and children.
@@ -91,17 +83,14 @@ class ASH_EXPORT QuickSettingsView : public views::View {
   void ShowMediaControls();
 
   // views::View:
-  gfx::Size CalculatePreferredSize() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void Layout() override;
-  void ChildPreferredSizeChanged(views::View* child) override;
 
   FeatureTilesContainerView* feature_tiles_container() {
     return feature_tiles_container_;
   }
 
-  View* detailed_view() { return detailed_view_container_; }
-  View* detailed_view_for_testing() { return detailed_view_container_; }
+  views::View* detailed_view() { return detailed_view_container_; }
+  views::View* detailed_view_for_testing() { return detailed_view_container_; }
   PageIndicatorView* page_indicator_view_for_test() {
     return page_indicator_view_;
   }
@@ -111,16 +100,23 @@ class ASH_EXPORT QuickSettingsView : public views::View {
 
  private:
   class SystemTrayContainer;
+  friend class UnifiedBrightnessViewTest;
+  friend class UnifiedVolumeViewTest;
+
+  // Adds buttons that load some of the tray detailed pages.
+  // TODO(b/255993869): Delete this when feature tiles are working.
+  void AddTemporaryDetailedViewButtons();
 
   // Owned by UnifiedSystemTrayBubble.
   UnifiedSystemTrayController* const controller_;
 
   // Owned by views hierarchy.
-  SystemTrayContainer* system_tray_container_ = nullptr;
+  views::View* temporary_buttons_container_ = nullptr;
+  views::FlexLayoutView* system_tray_container_ = nullptr;
   QuickSettingsHeader* header_ = nullptr;
   FeatureTilesContainerView* feature_tiles_container_ = nullptr;
   PageIndicatorView* page_indicator_view_ = nullptr;
-  SlidersContainerView* sliders_container_ = nullptr;
+  views::FlexLayoutView* sliders_container_ = nullptr;
   QuickSettingsFooter* footer_ = nullptr;
   views::View* detailed_view_container_ = nullptr;
 

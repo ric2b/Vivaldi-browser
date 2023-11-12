@@ -14,6 +14,7 @@ export {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggl
 export {CrToolbarElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
 export {CrToolbarSearchFieldElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 export {PluralStringProxyImpl as SettingsPluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
+export {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 export {SettingsAboutPageElement} from './about_page/about_page.js';
 export {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, UpdateStatus} from './about_page/about_page_browser_proxy.js';
 // <if expr="_google_chrome and is_macosx">
@@ -62,7 +63,7 @@ export {BatterySaverModeState, HighEfficiencyModeExceptionListAction, Performanc
 export {HIGH_EFFICIENCY_MODE_PREF, SettingsPerformancePageElement} from './performance_page/performance_page.js';
 export {MAX_TAB_DISCARD_EXCEPTION_RULE_LENGTH, SUBMIT_EVENT, TabDiscardExceptionDialogElement} from './performance_page/tab_discard_exception_dialog.js';
 export {TabDiscardExceptionEntryElement} from './performance_page/tab_discard_exception_entry.js';
-export {TAB_DISCARD_EXCEPTIONS_PREF, TabDiscardExceptionListElement} from './performance_page/tab_discard_exception_list.js';
+export {TAB_DISCARD_EXCEPTIONS_MANAGED_PREF, TAB_DISCARD_EXCEPTIONS_PREF, TabDiscardExceptionListElement} from './performance_page/tab_discard_exception_list.js';
 export {prefToString, stringToPrefValue} from './prefs/pref_util.js';
 export {SettingsPrefsElement} from './prefs/prefs.js';
 export {PrefsMixin, PrefsMixinInterface} from './prefs/prefs_mixin.js';
@@ -74,7 +75,7 @@ export {RelaunchMixin, RestartType} from './relaunch_mixin.js';
 export {ResetBrowserProxy, ResetBrowserProxyImpl} from './reset_page/reset_browser_proxy.js';
 export {SettingsResetProfileBannerElement} from './reset_page/reset_profile_banner.js';
 export {buildRouter, routes} from './route.js';
-export {MinimumRoutes, Route, Router} from './router.js';
+export {SettingsRoutes, Route, Router} from './router.js';
 export {SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckChromeCleanerStatus, SafetyCheckExtensionsStatus, SafetyCheckParentStatus, SafetyCheckPasswordsStatus, SafetyCheckSafeBrowsingStatus, SafetyCheckUpdatesStatus} from './safety_check_page/safety_check_browser_proxy.js';
 export {SafetyCheckIconStatus, SettingsSafetyCheckChildElement} from './safety_check_page/safety_check_child.js';
 // <if expr="_google_chrome and is_win">
@@ -95,3 +96,4 @@ export {SettingsMenuElement} from './settings_menu/settings_menu.js';
 export {SettingsSectionElement} from './settings_page/settings_section.js';
 export {SettingsUiElement} from './settings_ui/settings_ui.js';
 export {SiteFaviconElement} from './site_favicon.js';
+export {TooltipMixin, TooltipMixinInterface} from './tooltip_mixin.js';

@@ -24,9 +24,9 @@
 #import "ui/gfx/ios/uikit_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
-#include "ui/base/device_form_factor.h"
+#import "ui/base/device_form_factor.h"
 
 using ui::GetDeviceFormFactor;
 using ui::DEVICE_FORM_FACTOR_PHONE;
@@ -100,8 +100,13 @@ using vivaldi::IsVivaldiRunning;
     NSMutableArray<NSLayoutConstraint*>* contractedNoMarginConstraints;
 
 // Vivaldi
-// Button to open and close, redefined as readwrite.
+// Button to open and close panel, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
+// Button to show tracker blocker summery, this is for iPad only.
+@property(nonatomic, strong, readwrite) ToolbarButton* shieldButton;
+// Button to show more options such as shield, share button when iPhone is on
+// landscape mode.
+@property(nonatomic, strong, readwrite) ToolbarButton* vivaldiMoreButton;
 // End Vivaldi
 
 @end
@@ -198,16 +203,12 @@ using vivaldi::IsVivaldiRunning;
   [super willMoveToWindow:newWindow];
   [NamedGuide guideWithName:kPrimaryToolbarGuide view:self].constrainedView =
       nil;
-  [NamedGuide guideWithName:kPrimaryToolbarLocationViewGuide view:self]
-      .constrainedView = nil;
 }
 
 - (void)didMoveToWindow {
   [super didMoveToWindow];
   [NamedGuide guideWithName:kPrimaryToolbarGuide view:self].constrainedView =
       self;
-  [NamedGuide guideWithName:kPrimaryToolbarLocationViewGuide view:self]
-      .constrainedView = self.locationBarContainer;
 }
 
 #pragma mark - Setup
@@ -220,11 +221,11 @@ using vivaldi::IsVivaldiRunning;
   } else {
   self.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
-  } // End Vivaldi
 
   if (base::FeatureList::IsEnabled(kExpandedTabStrip)) {
     self.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
   }
+  } // End Vivaldi
 
   self.contentView = self;
 }
@@ -241,8 +242,7 @@ using vivaldi::IsVivaldiRunning;
   self.locationBarContainer = [[UIView alloc] init];
 
   if (IsVivaldiRunning()) {
-    self.locationBarContainer.backgroundColor =
-      [UIColor colorNamed:vSearchbarBackgroundColor];
+    self.locationBarContainer.backgroundColor = UIColor.clearColor;
   } else {
   self.locationBarContainer.backgroundColor =
       [self.buttonFactory.toolbarConfiguration
@@ -266,16 +266,26 @@ using vivaldi::IsVivaldiRunning;
   self.stopButton.hiddenInCurrentState = YES;
   self.reloadButton = [self.buttonFactory reloadButton];
 
-  if (IsVivaldiRunning() &&
-      (GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET)) {
-    self.panelButton = [self.buttonFactory panelButton];
-    self.leadingStackViewButtons = @[
-      self.panelButton,
-      self.backButton,
-      self.forwardButton,
-      self.stopButton,
-      self.reloadButton
-    ];
+  if (IsVivaldiRunning()) {
+    if (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
+      self.leadingStackViewButtons = @[
+        self.backButton,
+        self.forwardButton,
+        self.stopButton,
+        self.reloadButton,
+      ];
+    } else {
+      self.panelButton = [self.buttonFactory panelButton];
+      self.shieldButton = [self.buttonFactory shieldButton];
+      self.leadingStackViewButtons = @[
+        self.panelButton,
+        self.backButton,
+        self.forwardButton,
+        self.stopButton,
+        self.reloadButton,
+        self.shieldButton
+      ];
+    }
   } else {
   self.leadingStackViewButtons = @[
     self.backButton, self.forwardButton, self.stopButton, self.reloadButton
@@ -299,8 +309,22 @@ using vivaldi::IsVivaldiRunning;
   self.tabGridButton = [self.buttonFactory tabGridButton];
   self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
 
+  if (IsVivaldiRunning()) {
+    if (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
+      self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
+      self.trailingStackViewButtons =
+          @[self.vivaldiMoreButton,
+            self.tabGridButton,
+            self.toolsMenuButton ];
+    } else {
+      self.trailingStackViewButtons =
+          @[self.tabGridButton,
+            self.toolsMenuButton ];
+    }
+  } else {
   self.trailingStackViewButtons =
       @[ self.shareButton, self.tabGridButton, self.toolsMenuButton ];
+  } // End Vivaldi
 
   self.trailingStackView = [[UIStackView alloc]
       initWithArrangedSubviews:self.trailingStackViewButtons];
@@ -523,6 +547,17 @@ using vivaldi::IsVivaldiRunning;
 
 - (ToolbarButton*)openNewTabButton {
   return nil;
+}
+
+#pragma mark: - Vivaldi
+- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled {
+  self.vivaldiMoreButton.menu =
+      [self.buttonFactory contextMenuForMoreWithAllButtons:enabled];
+}
+
+- (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
+                  desktopTabEnabled:(BOOL)desktopTabEnabled {
+  // No op.
 }
 
 @end

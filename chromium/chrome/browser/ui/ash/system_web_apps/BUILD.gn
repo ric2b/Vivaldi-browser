@@ -2,13 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//chrome/browser/buildflags.gni")
+import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
 
 source_set("system_web_apps") {
   sources = [
     "system_web_app_delegate_ui_impl.cc",
+    "system_web_app_icon_checker_impl.cc",
+    "system_web_app_icon_checker_impl.h",
     "system_web_app_ui_utils.cc",
     "system_web_app_ui_utils.h",
   ]

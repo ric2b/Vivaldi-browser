@@ -31,7 +31,6 @@ import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -63,11 +62,14 @@ import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.ui.widget.ChromeImageButton;
 
+import org.chromium.url.GURL;
 import org.vivaldi.browser.toolbar.TrackerShieldButton;
 
 /**
@@ -440,6 +442,10 @@ public class ToolbarTablet
      */
     private void updateShadowVisibility() {
         int shadowVisibility = mIsInTabSwitcherMode ? View.INVISIBLE : View.VISIBLE;
+
+        // Vivaldi - Check if speed dial
+        if (UrlUtilities.isNTPUrl(getToolbarDataProvider().getCurrentGurl()))
+            shadowVisibility = View.INVISIBLE;
 
         if (mToolbarShadow != null && mToolbarShadow.getVisibility() != shadowVisibility) {
             mToolbarShadow.setVisibility(shadowVisibility);
@@ -956,8 +962,8 @@ public class ToolbarTablet
     }
 
     @Override
-    public void updateShieldButtonState(String url) {
-        mShieldButton.updateState(url);
+    public void updateShieldButtonState(GURL gurl) {
+        mShieldButton.updateState(gurl);
     }
 
     // Vivaldi

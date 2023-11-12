@@ -102,10 +102,10 @@ class ASH_EXPORT AppListControllerImpl
                       AppListModel* model,
                       SearchModel* search_model) override;
   void ClearActiveModel() override;
-  void NotifyProcessSyncChangesFinished() override;
   void DismissAppList() override;
   void GetAppInfoDialogBounds(GetAppInfoDialogBoundsCallback callback) override;
-  void ShowAppList() override;
+  void ShowAppList(AppListShowSource source) override;
+  AppListShowSource LastAppListShowSource() override;
   aura::Window* GetWindow() override;
   bool IsVisible(const absl::optional<int64_t>& display_id) override;
   bool IsVisible() override;
@@ -117,9 +117,12 @@ class ASH_EXPORT AppListControllerImpl
 
   // Methods used in ash:
   bool GetTargetVisibility(const absl::optional<int64_t>& display_id) const;
+  // 'should_record_metrics' is false when transitioning to tablet mode with a
+  // visible window which is shown over, and thus hides, the app list.
   void Show(int64_t display_id,
-            absl::optional<AppListShowSource> show_source,
-            base::TimeTicks event_time_stamp);
+            AppListShowSource show_source,
+            base::TimeTicks event_time_stamp,
+            bool should_record_metrics);
   void UpdateAppListWithNewTemporarySortOrder(
       const absl::optional<AppListSortOrder>& new_order,
       bool animate,
@@ -182,10 +185,7 @@ class ASH_EXPORT AppListControllerImpl
   AssistantViewDelegate* GetAssistantViewDelegate() override;
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visibility) override;
-  void MaybeIncreaseSuggestedContentInfoShownCount() override;
   bool IsAssistantAllowedAndEnabled() const override;
-  bool ShouldShowSuggestedContentInfo() const override;
-  void MarkSuggestedContentInfoDismissed() override;
   void OnStateTransitionAnimationCompleted(
       AppListViewState state,
       bool was_animation_interrupted) override;
@@ -332,18 +332,12 @@ class ASH_EXPORT AppListControllerImpl
 
   void RecordShelfAppLaunched();
 
-  // Updates which container the launcher window should be in.
-  void UpdateLauncherContainer(
+  // Updates which container the fullscreen launcher window should be in.
+  void UpdateFullscreenLauncherContainer(
       absl::optional<int64_t> display_id = absl::nullopt);
 
-  // Gets the container which should contain the AppList.
-  int GetContainerId() const;
-
-  // Returns whether the launcher should show behinds apps or infront of them.
-  bool ShouldLauncherShowBehindApps() const;
-
-  // Returns the parent window of the applist for a |display_id|.
-  aura::Window* GetContainerForDisplayId(
+  // Returns the parent window of the `AppListView` for a |display_id|.
+  aura::Window* GetFullscreenLauncherContainerForDisplayId(
       absl::optional<int64_t> display_id = absl::nullopt);
 
   // Methods for recording the state of the app list before it changes in order
@@ -353,6 +347,9 @@ class ASH_EXPORT AppListControllerImpl
   AppListBadgeController* badge_controller_for_test() {
     return badge_controller_.get();
   }
+
+  // Returns the preferred width for the bubble launcher for the |root_window|.
+  int GetPreferredBubbleWidth(aura::Window* root_window) const;
 
  private:
   // Convenience methods for getting models from `model_provider_`.
@@ -368,7 +365,7 @@ class ASH_EXPORT AppListControllerImpl
 
   void ResetHomeLauncherIfShown();
 
-  void ShowHomeScreen();
+  void ShowHomeScreen(AppListShowSource show_source);
 
   // Updates the visibility of the home screen based on e.g. if the device is
   // in overview mode.
@@ -377,10 +374,6 @@ class ASH_EXPORT AppListControllerImpl
   // Returns true if home screen should be shown based on the current
   // configuration.
   bool ShouldShowHomeScreen() const;
-
-  // Returns true if the bubble app list should be shown (instead of the
-  // fullscreen app list), based on tablet mode state and the feature flag.
-  bool ShouldShowAppListBubble() const;
 
   // Updates home launcher scale and opacity when the overview mode state
   // changes. `show_home_launcher` - whether the home launcher should be shown.
@@ -407,6 +400,9 @@ class ASH_EXPORT AppListControllerImpl
   // FeatureDiscoveryDurationReporter::ReporterObserver:
   void OnReporterActivated() override;
 
+  // Gets the container which should contain the fullscreen launcher.
+  int GetFullscreenLauncherContainerId() const;
+
   // Whether the home launcher is
   // * being shown (either through an animation or a drag)
   // * being hidden (either through an animation or a drag)
@@ -420,6 +416,9 @@ class ASH_EXPORT AppListControllerImpl
 
   AppListClient* client_ = nullptr;
 
+  // Tracks the most recent show source for the app list.
+  absl::optional<AppListShowSource> last_open_source_;
+
   // Tracks active app list and search models to app list UI stack. It can be
   // accessed outside AppListModelControllerImpl using
   // `AppListModelController::Get()`.
@@ -429,14 +428,12 @@ class ASH_EXPORT AppListControllerImpl
   // |presenter_| and UI.
   AppListColorProviderImpl color_provider_;
 
-  // Manages the fullscreen/peeking launcher and the tablet mode home launcher.
+  // Manages the tablet mode home launcher.
   // |fullscreen_presenter_| should be put below |client_| and |model_| to
   // prevent a crash in destruction.
   std::unique_ptr<AppListPresenterImpl> fullscreen_presenter_;
 
-  // Manages the clamshell launcher bubble. Always exists, even when feature
-  // ProductivityLauncher is disabled, to allow unit tests to turn the feature
-  // on and off within the test body.
+  // Manages the clamshell launcher bubble.
   std::unique_ptr<AppListBubblePresenter> bubble_presenter_;
 
   // Tracks the current page shown in the app list view (tracked for the

@@ -775,7 +775,6 @@ using bookmarks::BookmarkNode;
   VivaldiBookmarkAddEditFolderViewController* controller =
     [VivaldiBookmarkAddEditFolderViewController
        initWithBrowser:self.browser
-             bookmarks:self.bookmarkModel
                   item:item
                 parent:parent
              isEditing:isEditing
@@ -804,11 +803,6 @@ using bookmarks::BookmarkNode;
   [self reloadModelVivaldi];
   [self changeSelectedFolder:folder];
   [self delayedNotifyDelegateOfSelection];
-}
-
-- (void)didUpdateBookmarksCollection {
-  // No op here as we will only pop this view controller if a new folder is
-  // created.
 }
 
 @end

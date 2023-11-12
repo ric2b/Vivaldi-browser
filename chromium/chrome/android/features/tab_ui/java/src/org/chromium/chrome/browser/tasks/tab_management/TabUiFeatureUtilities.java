@@ -40,17 +40,6 @@ public class TabUiFeatureUtilities {
             new DoubleCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, THUMBNAIL_ASPECT_RATIO_PARAM, 0.85);
 
-    private static final String SEARCH_CHIP_PARAM = "enable_search_term_chip";
-    public static final BooleanCachedFieldTrialParameter ENABLE_SEARCH_CHIP =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, SEARCH_CHIP_PARAM, false);
-
-    private static final String SEARCH_CHIP_ADAPTIVE_PARAM =
-            "enable_search_term_chip_adaptive_icon";
-    public static final BooleanCachedFieldTrialParameter ENABLE_SEARCH_CHIP_ADAPTIVE =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, SEARCH_CHIP_ADAPTIVE_PARAM, false);
-
     private static final String LAUNCH_BUG_FIX_PARAM = "enable_launch_bug_fix";
     public static final BooleanCachedFieldTrialParameter ENABLE_LAUNCH_BUG_FIX =
             new BooleanCachedFieldTrialParameter(
@@ -106,6 +95,18 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
                     DELAY_GTS_CREATION_PARAM, true);
 
+    // Field trial parameter for enabling folio for tab strip redesign.
+    private static final String TAB_STRIP_REDESIGN_ENABLE_FOLIO_PARAM = "enable_folio";
+    public static final BooleanCachedFieldTrialParameter TAB_STRIP_REDESIGN_ENABLE_FOLIO =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
+                    TAB_STRIP_REDESIGN_ENABLE_FOLIO_PARAM, false);
+
+    // Field trial parameter for enabling detached for tab strip redesign.
+    private static final String TAB_STRIP_REDESIGN_ENABLE_DETACHED_PARAM = "enable_detached";
+    public static final BooleanCachedFieldTrialParameter TAB_STRIP_REDESIGN_ENABLE_DETACHED =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
+                    TAB_STRIP_REDESIGN_ENABLE_DETACHED_PARAM, false);
+
     // Field trial parameter for defining tab width for tab strip improvements.
     private static final String TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM = "min_tab_width";
     public static final DoubleCachedFieldTrialParameter TAB_STRIP_TAB_WIDTH =
@@ -118,8 +119,15 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
                     TAB_SELECTION_EDITOR_V2_SHARE_PARAM, false);
 
+    // Field trial parameter for controlling bookmark tabs in TabSelectionEditorV2.
+    private static final String TAB_SELECTION_EDITOR_V2_BOOKMARKS_PARAM = "enable_bookmarks";
+    public static final BooleanCachedFieldTrialParameter ENABLE_TAB_SELECTION_EDITOR_V2_BOOKMARKS =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
+                    TAB_SELECTION_EDITOR_V2_BOOKMARKS_PARAM, false);
+
     private static Boolean sTabManagementModuleSupportedForTesting;
     private static Boolean sGridTabSwitcherPolishEnabledForTesting;
+    private static Boolean sGridTabSwitcherDelayCreationEnabledForTesting;
 
     /**
      * Set whether the tab management module is supported for testing.
@@ -193,6 +201,13 @@ public class TabUiFeatureUtilities {
     }
 
     /**
+     * Set whether the tablet grid tab switcher polish is enabled for testing.
+     */
+    public static void setGtsDelayCreationEnabledForTesting(@Nullable Boolean enabled) {
+        sGridTabSwitcherDelayCreationEnabledForTesting = enabled;
+    }
+
+    /**
      * @return Whether the tablet Grid Tab Switcher Polish is enabled.
      * @param context The activity context.
      */
@@ -210,6 +225,10 @@ public class TabUiFeatureUtilities {
      *         instead of on startup.
      */
     public static boolean isTabletGridTabSwitcherDelayCreationEnabled() {
+        if (sGridTabSwitcherDelayCreationEnabledForTesting != null) {
+            return sGridTabSwitcherDelayCreationEnabledForTesting;
+        }
+
         return DELAY_GTS_CREATION.getValue();
     }
 
@@ -295,6 +314,42 @@ public class TabUiFeatureUtilities {
      */
     public static boolean isLaunchPolishEnabled() {
         return ENABLE_LAUNCH_POLISH.getValue();
+    }
+
+    private static boolean sFolioEnabledForTesting;
+    private static boolean sDetachedEnabledForTesting;
+    /**
+     * Set folio disabled/enabled for testing.
+     */
+    public static void setTabStripRedesignEnableFolioForTesting(boolean enabled) {
+        sFolioEnabledForTesting = enabled;
+    }
+
+    /**
+     * Set folio disabled/enabled for testing.
+     */
+    public static void setTabStripRedesignEnableDetachedForTesting(boolean enabled) {
+        sDetachedEnabledForTesting = enabled;
+    }
+
+    /**
+     * @return Whether Folio for tab strip redesign is enabled.
+     */
+    public static boolean isTabStripFolioEnabled() {
+        if (sFolioEnabledForTesting) {
+            return sFolioEnabledForTesting;
+        }
+        return TAB_STRIP_REDESIGN_ENABLE_FOLIO.getValue();
+    }
+
+    /**
+     * @return Whether Detached for tab strip redesign is enabled.
+     */
+    public static boolean isTabStripDetachedEnabled() {
+        if (sDetachedEnabledForTesting) {
+            return sDetachedEnabledForTesting;
+        }
+        return TAB_STRIP_REDESIGN_ENABLE_DETACHED.getValue();
     }
 
     private static Float sTabMinWidthForTesting;

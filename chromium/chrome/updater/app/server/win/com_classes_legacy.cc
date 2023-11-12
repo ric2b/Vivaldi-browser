@@ -19,7 +19,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
@@ -33,6 +32,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_handle.h"
@@ -48,12 +48,12 @@
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/util.h"
+#include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/app_command_runner.h"
 #include "chrome/updater/win/scoped_handle.h"
 #include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/win_constants.h"
-#include "chrome/updater/win/win_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
@@ -356,17 +356,17 @@ class AppWebImpl : public IDispatchImpl<IAppWeb> {
 
   // Overrides for IAppWeb.
   IFACEMETHODIMP get_appId(BSTR* app_id) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP get_currentVersionWeb(IDispatch** current) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP get_nextVersionWeb(IDispatch** next) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -376,7 +376,7 @@ class AppWebImpl : public IDispatchImpl<IAppWeb> {
   }
 
   IFACEMETHODIMP cancel() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -479,22 +479,22 @@ class AppWebImpl : public IDispatchImpl<IAppWeb> {
   }
 
   IFACEMETHODIMP launch() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP uninstall() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP get_serverInstallDataIndex(BSTR* language) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP put_serverInstallDataIndex(BSTR language) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -538,7 +538,7 @@ class AppBundleWebImpl : public IDispatchImpl<IAppBundleWeb> {
                            BSTR brand_code,
                            BSTR language,
                            BSTR ap) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -552,12 +552,12 @@ class AppBundleWebImpl : public IDispatchImpl<IAppBundleWeb> {
   }
 
   IFACEMETHODIMP createAllInstalledApps() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP get_displayLanguage(BSTR* language) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -566,7 +566,7 @@ class AppBundleWebImpl : public IDispatchImpl<IAppBundleWeb> {
   IFACEMETHODIMP put_parentHWND(ULONG_PTR hwnd) override { return S_OK; }
 
   IFACEMETHODIMP get_length(int* number) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -592,34 +592,34 @@ class AppBundleWebImpl : public IDispatchImpl<IAppBundleWeb> {
   }
 
   IFACEMETHODIMP download() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP install() override { return S_OK; }
 
   IFACEMETHODIMP pause() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP resume() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP cancel() override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP downloadPackage(BSTR app_id, BSTR package_name) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
   IFACEMETHODIMP get_currentState(VARIANT* current_state) override {
-    NOTIMPLEMENTED();
+    LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
     return E_NOTIMPL;
   }
 
@@ -651,7 +651,7 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLine(const WCHAR* cmd_line) {
 
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchBrowser(DWORD browser_type,
                                                       const WCHAR* url) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -660,11 +660,11 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdElevated(
     const WCHAR* command_id,
     DWORD caller_proc_id,
     ULONG_PTR* proc_handle) {
-  AppCommandRunner app_command_runner;
-  if (HRESULT hr = AppCommandRunner::LoadAppCommand(
-          UpdaterScope::kSystem, app_id, command_id, app_command_runner);
-      FAILED(hr)) {
-    return hr;
+  HResultOr<AppCommandRunner> app_command_runner =
+      AppCommandRunner::LoadAppCommand(UpdaterScope::kSystem, app_id,
+                                       command_id);
+  if (!app_command_runner.has_value()) {
+    return app_command_runner.error();
   }
 
   base::win::ScopedHandle caller_proc_handle;
@@ -675,7 +675,7 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdElevated(
   }
 
   base::Process process;
-  if (HRESULT hr = app_command_runner.Run({}, process); FAILED(hr)) {
+  if (HRESULT hr = app_command_runner->Run({}, process); FAILED(hr)) {
     return hr;
   }
 
@@ -683,7 +683,7 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdElevated(
   if (!::DuplicateHandle(
           ::GetCurrentProcess(), process.Handle(), caller_proc_handle.Get(),
           ScopedKernelHANDLE::Receiver(duplicate_proc_handle).get(),
-          PROCESS_QUERY_INFORMATION | SYNCHRONIZE, FALSE, 0)) {
+          PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, 0)) {
     HRESULT hr = HRESULTFromLastError();
     VLOG(1) << "Failed to duplicate the handle " << hr;
     return hr;
@@ -699,7 +699,7 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLineEx(
     DWORD* server_proc_id,
     ULONG_PTR* proc_handle,
     ULONG_PTR* stdout_handle) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -710,8 +710,9 @@ HRESULT LegacyAppCommandWebImpl::RuntimeClassInitialize(
     UpdaterScope scope,
     const std::wstring& app_id,
     const std::wstring& command_id) {
-  return AppCommandRunner::LoadAppCommand(scope, app_id, command_id,
-                                          app_command_runner_);
+  app_command_runner_ =
+      AppCommandRunner::LoadAppCommand(scope, app_id, command_id);
+  return app_command_runner_.has_value() ? S_OK : app_command_runner_.error();
 }
 
 STDMETHODIMP LegacyAppCommandWebImpl::get_status(UINT* status) {
@@ -742,7 +743,7 @@ STDMETHODIMP LegacyAppCommandWebImpl::get_exitCode(DWORD* exit_code) {
 }
 
 STDMETHODIMP LegacyAppCommandWebImpl::get_output(BSTR* output) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -755,6 +756,8 @@ STDMETHODIMP LegacyAppCommandWebImpl::execute(VARIANT substitution1,
                                               VARIANT substitution7,
                                               VARIANT substitution8,
                                               VARIANT substitution9) {
+  CHECK(app_command_runner_.has_value());
+
   std::vector<std::wstring> substitutions;
   for (const VARIANT& substitution :
        {substitution1, substitution2, substitution3, substitution4,
@@ -770,7 +773,7 @@ STDMETHODIMP LegacyAppCommandWebImpl::execute(VARIANT substitution1,
     substitutions.push_back(substitution_string.value());
   }
 
-  return app_command_runner_.Run(substitutions, process_);
+  return app_command_runner_->Run(substitutions, process_);
 }
 
 PolicyStatusImpl::PolicyStatusImpl()
@@ -786,11 +789,11 @@ HRESULT PolicyStatusImpl::RuntimeClassInitialize() {
 STDMETHODIMP PolicyStatusImpl::get_lastCheckPeriodMinutes(DWORD* minutes) {
   DCHECK(minutes);
 
-  int period = 0;
-  if (!policy_service_->GetLastCheckPeriodMinutes(nullptr, &period))
+  PolicyStatus<base::TimeDelta> period = policy_service_->GetLastCheckPeriod();
+  if (!period)
     return E_FAIL;
 
-  *minutes = period;
+  *minutes = period.policy().InMinutes();
   return S_OK;
 }
 
@@ -804,21 +807,21 @@ STDMETHODIMP PolicyStatusImpl::get_updatesSuppressedTimes(
   DCHECK(duration_min);
   DCHECK(are_updates_suppressed);
 
-  UpdatesSuppressedTimes updates_suppressed_times;
-  if (!policy_service_->GetUpdatesSuppressedTimes(nullptr,
-                                                  &updates_suppressed_times) ||
-      !updates_suppressed_times.valid()) {
+  PolicyStatus<UpdatesSuppressedTimes> updates_suppressed_times =
+      policy_service_->GetUpdatesSuppressedTimes();
+  if (!updates_suppressed_times || !updates_suppressed_times.policy().valid()) {
     return E_FAIL;
   }
 
   base::Time::Exploded now;
   base::Time::Now().LocalExplode(&now);
-  *start_hour = updates_suppressed_times.start_hour_;
-  *start_min = updates_suppressed_times.start_minute_;
-  *duration_min = updates_suppressed_times.duration_minute_;
+  *start_hour = updates_suppressed_times.policy().start_hour_;
+  *start_min = updates_suppressed_times.policy().start_minute_;
+  *duration_min = updates_suppressed_times.policy().duration_minute_;
   *are_updates_suppressed =
-      updates_suppressed_times.contains(now.hour, now.minute) ? VARIANT_TRUE
-                                                              : VARIANT_FALSE;
+      updates_suppressed_times.policy().contains(now.hour, now.minute)
+          ? VARIANT_TRUE
+          : VARIANT_FALSE;
 
   return S_OK;
 }
@@ -826,40 +829,40 @@ STDMETHODIMP PolicyStatusImpl::get_updatesSuppressedTimes(
 STDMETHODIMP PolicyStatusImpl::get_downloadPreferenceGroupPolicy(BSTR* pref) {
   DCHECK(pref);
 
-  std::string download_preference;
-  if (!policy_service_->GetDownloadPreferenceGroupPolicy(
-          nullptr, &download_preference)) {
+  PolicyStatus<std::string> download_preference =
+      policy_service_->GetDownloadPreferenceGroupPolicy();
+  if (!download_preference) {
     return E_FAIL;
   }
 
-  *pref =
-      base::win::ScopedBstr(base::ASCIIToWide(download_preference)).Release();
+  *pref = base::win::ScopedBstr(base::ASCIIToWide(download_preference.policy()))
+              .Release();
   return S_OK;
 }
 
 STDMETHODIMP PolicyStatusImpl::get_packageCacheSizeLimitMBytes(DWORD* limit) {
   DCHECK(limit);
 
-  int cache_size_limit = 0;
-  if (!policy_service_->GetPackageCacheSizeLimitMBytes(nullptr,
-                                                       &cache_size_limit)) {
+  PolicyStatus<int> cache_size_limit =
+      policy_service_->GetPackageCacheSizeLimitMBytes();
+  if (!cache_size_limit) {
     return E_FAIL;
   }
 
-  *limit = cache_size_limit;
+  *limit = cache_size_limit.policy();
   return S_OK;
 }
 
 STDMETHODIMP PolicyStatusImpl::get_packageCacheExpirationTimeDays(DWORD* days) {
   DCHECK(days);
 
-  int cache_life_limit = 0;
-  if (!policy_service_->GetPackageCacheExpirationTimeDays(nullptr,
-                                                          &cache_life_limit)) {
+  PolicyStatus<int> cache_life_limit =
+      policy_service_->GetPackageCacheExpirationTimeDays();
+  if (!cache_life_limit) {
     return E_FAIL;
   }
 
-  *days = cache_life_limit;
+  *days = cache_life_limit.policy();
   return S_OK;
 }
 
@@ -868,13 +871,13 @@ STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppInstalls(
     DWORD* policy) {
   DCHECK(policy);
 
-  int install_policy = 0;
-  if (!policy_service_->GetEffectivePolicyForAppInstalls(
-          base::WideToASCII(app_id), nullptr, &install_policy)) {
+  PolicyStatus<int> install_policy =
+      policy_service_->GetPolicyForAppInstalls(base::WideToASCII(app_id));
+  if (!install_policy) {
     return E_FAIL;
   }
 
-  *policy = install_policy;
+  *policy = install_policy.policy();
   return S_OK;
 }
 
@@ -882,13 +885,13 @@ STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppUpdates(BSTR app_id,
                                                                 DWORD* policy) {
   DCHECK(policy);
 
-  int update_policy = 0;
-  if (!policy_service_->GetEffectivePolicyForAppUpdates(
-          base::WideToASCII(app_id), nullptr, &update_policy)) {
+  PolicyStatus<int> update_policy =
+      policy_service_->GetPolicyForAppUpdates(base::WideToASCII(app_id));
+  if (!update_policy) {
     return E_FAIL;
   }
 
-  *policy = update_policy;
+  *policy = update_policy.policy();
   return S_OK;
 }
 
@@ -896,14 +899,15 @@ STDMETHODIMP PolicyStatusImpl::get_targetVersionPrefix(BSTR app_id,
                                                        BSTR* prefix) {
   DCHECK(prefix);
 
-  std::string target_version_prefix;
-  if (!policy_service_->GetTargetVersionPrefix(
-          base::WideToASCII(app_id), nullptr, &target_version_prefix)) {
+  PolicyStatus<std::string> target_version_prefix =
+      policy_service_->GetTargetVersionPrefix(base::WideToASCII(app_id));
+  if (!target_version_prefix) {
     return E_FAIL;
   }
 
   *prefix =
-      base::win::ScopedBstr(base::ASCIIToWide(target_version_prefix)).Release();
+      base::win::ScopedBstr(base::ASCIIToWide(target_version_prefix.policy()))
+          .Release();
   return S_OK;
 }
 
@@ -912,13 +916,15 @@ STDMETHODIMP PolicyStatusImpl::get_isRollbackToTargetVersionAllowed(
     VARIANT_BOOL* rollback_allowed) {
   DCHECK(rollback_allowed);
 
-  bool is_rollback_allowed = false;
-  if (!policy_service_->IsRollbackToTargetVersionAllowed(
-          base::WideToASCII(app_id), nullptr, &is_rollback_allowed)) {
+  PolicyStatus<bool> is_rollback_allowed =
+      policy_service_->IsRollbackToTargetVersionAllowed(
+          base::WideToASCII(app_id));
+  if (!is_rollback_allowed) {
     return E_FAIL;
   }
 
-  *rollback_allowed = is_rollback_allowed ? VARIANT_TRUE : VARIANT_FALSE;
+  *rollback_allowed =
+      is_rollback_allowed.policy() ? VARIANT_TRUE : VARIANT_FALSE;
   return S_OK;
 }
 
@@ -947,7 +953,7 @@ template <typename T>
 class PolicyStatusResult
     : public base::RefCountedThreadSafe<PolicyStatusResult<T>> {
  public:
-  using ValueGetter = base::RepeatingCallback<bool(PolicyStatus<T>*, T*)>;
+  using ValueGetter = base::RepeatingCallback<PolicyStatus<T>()>;
 
   static auto Get(ValueGetter value_getter) {
     auto result = base::WrapRefCounted(new PolicyStatusResult<T>(value_getter));
@@ -966,8 +972,8 @@ class PolicyStatusResult
       : value_getter(value_getter) {}
 
   void GetValueOnSequence() {
-    PolicyStatus<T> policy_status;
-    if (value_getter.Run(&policy_status, nullptr)) {
+    PolicyStatus<T> policy_status = value_getter.Run();
+    if (policy_status) {
       value = policy_status;
     }
     completion_event.Signal();
@@ -1035,10 +1041,9 @@ STDMETHODIMP PolicyStatusImpl::refreshPolicies() {
   scoped_refptr<ComServerApp> com_server = AppServerSingletonInstance();
   com_server->main_task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          &UpdateService::FetchPolicies, com_server->update_service(),
-          base::BindOnce([](PolicyStatusImplPtr /* obj */, int /* result */) {},
-                         PolicyStatusImplPtr(this))));
+      base::BindOnce(&UpdateService::FetchPolicies,
+                     com_server->update_service(),
+                     base::DoNothingWithBoundArgs(PolicyStatusImplPtr(this))));
   return S_OK;
 }
 
@@ -1046,7 +1051,7 @@ STDMETHODIMP PolicyStatusImpl::get_lastCheckPeriodMinutes(
     IPolicyStatusValue** value) {
   DCHECK(value);
   auto policy_status = PolicyStatusResult<int>::Get(base::BindRepeating(
-      &PolicyService::GetLastCheckPeriodMinutes, policy_service_));
+      &PolicyService::DeprecatedGetLastCheckPeriodMinutes, policy_service_));
   return policy_status.has_value()
              ? PolicyStatusValueImpl::Create(*policy_status, value)
              : E_FAIL;
@@ -1137,7 +1142,7 @@ STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppInstalls(
     IPolicyStatusValue** value) {
   DCHECK(value);
   auto policy_status = PolicyStatusResult<int>::Get(
-      base::BindRepeating(&PolicyService::GetEffectivePolicyForAppInstalls,
+      base::BindRepeating(&PolicyService::GetPolicyForAppInstalls,
                           policy_service_, base::WideToASCII(app_id)));
   return policy_status.has_value()
              ? PolicyStatusValueImpl::Create(*policy_status, value)
@@ -1149,7 +1154,7 @@ STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppUpdates(
     IPolicyStatusValue** value) {
   DCHECK(value);
   auto policy_status = PolicyStatusResult<int>::Get(
-      base::BindRepeating(&PolicyService::GetEffectivePolicyForAppUpdates,
+      base::BindRepeating(&PolicyService::GetPolicyForAppUpdates,
                           policy_service_, base::WideToASCII(app_id)));
   return policy_status.has_value()
              ? PolicyStatusValueImpl::Create(*policy_status, value)
@@ -1205,12 +1210,12 @@ STDMETHODIMP PolicyStatusImpl::get_forceInstallApps(
 
 // TODO(crbug.com/1344200): Implement the IDispatch methods.
 STDMETHODIMP PolicyStatusImpl::GetTypeInfoCount(UINT*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
 STDMETHODIMP PolicyStatusImpl::GetTypeInfo(UINT, LCID, ITypeInfo**) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -1219,7 +1224,7 @@ STDMETHODIMP PolicyStatusImpl::GetIDsOfNames(REFIID,
                                              UINT,
                                              LCID,
                                              DISPID*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -1231,7 +1236,7 @@ STDMETHODIMP PolicyStatusImpl::Invoke(DISPID,
                                       VARIANT*,
                                       EXCEPINFO*,
                                       UINT*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -1309,12 +1314,12 @@ STDMETHODIMP PolicyStatusValueImpl::get_conflictValue(BSTR* conflict_value) {
 
 // TODO(crbug.com/1344200): Implement the IDispatch methods.
 STDMETHODIMP PolicyStatusValueImpl::GetTypeInfoCount(UINT*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
 STDMETHODIMP PolicyStatusValueImpl::GetTypeInfo(UINT, LCID, ITypeInfo**) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -1323,7 +1328,7 @@ STDMETHODIMP PolicyStatusValueImpl::GetIDsOfNames(REFIID,
                                                   UINT,
                                                   LCID,
                                                   DISPID*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 
@@ -1335,7 +1340,7 @@ STDMETHODIMP PolicyStatusValueImpl::Invoke(DISPID,
                                            VARIANT*,
                                            EXCEPINFO*,
                                            UINT*) {
-  NOTIMPLEMENTED();
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
   return E_NOTIMPL;
 }
 

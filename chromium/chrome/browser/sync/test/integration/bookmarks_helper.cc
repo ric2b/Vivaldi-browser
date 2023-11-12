@@ -26,7 +26,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/types/optional_util.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -52,7 +51,6 @@
 #include "components/sync/protocol/sync_entity.pb.h"
 #include "components/sync/protocol/unique_position.pb.h"
 #include "components/sync/test/entity_builder_factory.h"
-#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -145,7 +143,7 @@ class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
 
   void WaitUntilFaviconChangedToIconURL() {
     DCHECK(!run_loop_.running());
-    content::RunThisRunLoop(&run_loop_);
+    run_loop_.Run();
   }
 
   // bookmarks::BookmarkModelObserver:
@@ -888,7 +886,7 @@ gfx::Image Create1xFaviconFromPNGFile(const std::string& path) {
   std::string contents;
   base::ReadFileToString(full_path, &contents);
   return gfx::Image::CreateFrom1xPNGBytes(
-      base::RefCountedString::TakeString(&contents));
+      base::MakeRefCounted<base::RefCountedString>(std::move(contents)));
 }
 
 std::string IndexedURL(size_t i) {
@@ -1076,7 +1074,7 @@ void BookmarkModelStatusChangeChecker::PostCheckExitCondition() {
 
   // PostTask() instead of CheckExitCondition() directly to make sure that the
   // checker doesn't immediately kick in while bookmarks are modified.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&BookmarkModelStatusChangeChecker::CheckExitCondition,
                      weak_ptr_factory_.GetWeakPtr()));

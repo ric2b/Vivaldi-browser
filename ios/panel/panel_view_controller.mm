@@ -3,19 +3,19 @@
 #import "ios/panel/panel_view_controller.h"
 #include <stdint.h>
 
-#include "base/strings/utf_string_conversions.h"
-#include "ios/chrome/browser/ui/history/history_coordinator.h"
-#include "ios/chrome/browser/ui/history/history_table_view_controller.h"
+#import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/ui/history/history_coordinator.h"
+#import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/note_home_view_controller.h"
 #import "ios/panel/panel_constants.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 using l10n_util::GetNSString;
@@ -25,7 +25,6 @@ using l10n_util::GetNSString;
 #endif
 
 @interface PanelViewController (){
-    NSArray *pages;
     UISegmentedControl* segmentedControl;
     NoteNavigationController* noteNavigationController;
     UINavigationController* historyController;
@@ -66,7 +65,6 @@ using l10n_util::GetNSString;
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  // Setup page controller and add to view
   self.pageController = [[UIPageViewController alloc]
       initWithTransitionStyle:UIPageViewControllerTransitionStyleScroll
         navigationOrientation:UIPageViewControllerNavigationOrientationVertical
@@ -122,10 +120,11 @@ using l10n_util::GetNSString;
                   multiplier:1.0
                   constant:0];
   [segmentedControl.topAnchor constraintEqualToAnchor:
-    topView.topAnchor constant:12].active = YES;
+    topView.topAnchor constant:panel_padding].active = YES;
   [segmentedControl.leadingAnchor constraintEqualToAnchor:
-    self.view.leadingAnchor constant:12].active = YES;
+    self.view.leadingAnchor constant:panel_padding].active = YES;
   [topView addConstraint:centerHorizontallyConstraint];
+  [self setIndexForControl:BookmarksPage];
 }
 
 /*

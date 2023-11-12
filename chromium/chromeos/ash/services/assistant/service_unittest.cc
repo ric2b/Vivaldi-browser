@@ -102,6 +102,8 @@ class AssistantServiceTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
 
     IssueAccessToken(kAccessToken);
+    // Simulate that the DLC library is loaded.
+    service_->OnLibassistantLoaded(/*success=*/true);
   }
 
   void TearDown() override {
@@ -305,6 +307,19 @@ TEST_F(AssistantServiceTest, ShouldSetClientStatusToNotReadyWhenStopped) {
   StopAssistantAndWait();
 
   EXPECT_EQ(client()->status(), AssistantStatus::NOT_READY);
+}
+
+TEST_F(AssistantServiceTest, StopImmediatelyIfAssistantIsDisconnected) {
+  // Test is set up as |State::STARTED|.
+  assistant_manager()->FinishStart();
+  EXPECT_STATE(AssistantManagerService::State::RUNNING);
+
+  assistant_manager()->Disconnected();
+  EXPECT_STATE(AssistantManagerService::State::DISCONNECTED);
+  EXPECT_EQ(client()->status(), AssistantStatus::NOT_READY);
+
+  task_environment()->FastForwardBy(kUpdateAssistantManagerDelay);
+  EXPECT_STATE(AssistantManagerService::State::STARTING);
 }
 
 }  // namespace ash::assistant

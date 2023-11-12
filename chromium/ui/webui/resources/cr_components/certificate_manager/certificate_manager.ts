@@ -21,17 +21,17 @@ import './certificate_provisioning_list.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {focusWithoutInk} from '../../js/focus_without_ink.js';
 import {I18nMixin} from '../../cr_elements/i18n_mixin.js';
-import {loadTimeData} from '../../js/load_time_data.m.js';
-import {WebUIListenerMixin} from '../../cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from '../../cr_elements/web_ui_listener_mixin.js';
+import {focusWithoutInk} from '../../js/focus_without_ink.js';
+import {loadTimeData} from '../../js/load_time_data.js';
 
 import {getTemplate} from './certificate_manager.html.js';
 import {CertificateAction, CertificateActionEvent} from './certificate_manager_types.js';
 import {CertificatesBrowserProxyImpl, CertificatesError, CertificatesImportError, CertificatesOrgGroup, CertificateSubnode, CertificateType, NewCertificateSubNode} from './certificates_browser_proxy.js';
 
 const CertificateManagerElementBase =
-    WebUIListenerMixin(I18nMixin(PolymerElement));
+    WebUiListenerMixin(I18nMixin(PolymerElement));
 
 export class CertificateManagerElement extends CertificateManagerElementBase {
   static get is() {
@@ -167,12 +167,12 @@ export class CertificateManagerElement extends CertificateManagerElementBase {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.addWebUIListener('certificates-changed', this.set.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener('certificates-changed', this.set.bind(this));
+    this.addWebUiListener(
         'client-import-allowed-changed',
         this.setClientImportAllowed.bind(this));
-    this.addWebUIListener(
-        'ca-import-allowed-changed', this.setCAImportAllowed.bind(this));
+    this.addWebUiListener(
+        'ca-import-allowed-changed', this.setCaImportAllowed.bind(this));
     CertificatesBrowserProxyImpl.getInstance().refreshCertificates();
   }
 
@@ -180,7 +180,7 @@ export class CertificateManagerElement extends CertificateManagerElementBase {
     this.clientImportAllowed = allowed;
   }
 
-  private setCAImportAllowed(allowed: boolean) {
+  private setCaImportAllowed(allowed: boolean) {
     this.caImportAllowed = allowed;
   }
 

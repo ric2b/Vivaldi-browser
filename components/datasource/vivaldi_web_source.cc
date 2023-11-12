@@ -61,7 +61,9 @@ void VivaldiWebSource::StartDataRequest(
     out.push_back(kHtmlFooter);
 
     std::string out_html = base::StrCat(out);
-    std::move(callback).Run(base::RefCountedString::TakeString(&out_html));
+    scoped_refptr<base::RefCountedMemory> out_html_data(
+      new base::RefCountedString(out_html));
+    std::move(callback).Run(out_html_data);
   } else {
     NOTREACHED();
   }

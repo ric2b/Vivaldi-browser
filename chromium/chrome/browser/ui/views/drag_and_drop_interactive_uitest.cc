@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -17,6 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/pattern.h"
@@ -25,7 +25,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/browser.h"
@@ -406,7 +405,7 @@ class DragStartWaiter : public aura::client::DragDropClient {
     }
 
     if (!callback_to_run_inside_drag_and_drop_message_loop_.is_null()) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           std::move(callback_to_run_inside_drag_and_drop_message_loop_));
       callback_to_run_inside_drag_and_drop_message_loop_.Reset();
@@ -424,6 +423,11 @@ class DragStartWaiter : public aura::client::DragDropClient {
   void DragCancel() override {
     ADD_FAILURE() << "Unexpected call to DragCancel";
   }
+
+#if BUILDFLAG(IS_LINUX)
+  void UpdateDragImage(const gfx::ImageSkia& image,
+                       const gfx::Vector2d& offset) override {}
+#endif
 
   bool IsDragDropInProgress() override { return drag_started_; }
 
@@ -640,8 +644,8 @@ class DOMDragEventCounter {
                              });
         };
 
-    return std::count_if(received_events_.begin(), received_events_.end(),
-                         received_event_has_matching_event_type);
+    return base::ranges::count_if(received_events_,
+                                  received_event_has_matching_event_type);
   }
 
   void StoreAccumulatedEvents() {
@@ -1563,12 +1567,15 @@ void DragAndDropBrowserTest::DragImageBetweenFrames_Step3(
                    {"dragstart", "dragleave", "dragenter", "dragend"}));
 }
 
-// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
-// complete.
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 // There is no known way to execute test-controlled tasks during
 // a drag-and-drop loop run by Windows OS.
 // Also disable the test on Linux due to flaky: crbug.com/1164442
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+// TODO(crbug.com/1380803): Enable on ChromeOS ASAN once flakiness is fixed.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS_LACROS) ||            \
+    (BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER))
 #define MAYBE_DragImageFromDisappearingFrame \
   DISABLED_DragImageFromDisappearingFrame
 #else
@@ -1794,7 +1801,9 @@ void DragAndDropBrowserTest::CrossSiteDrag_Step3(
 
 // There is no known way to execute test-controlled tasks during
 // a drag-and-drop loop run by Windows OS.
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_CHROMEOS_ASH) && \
+                          (defined(ADDRESS_SANITIZER) || !defined(NDEBUG)))
+// https://crbug.com/1393605: Flaky at ChromeOS ASAN and Debug builds
 #define MAYBE_CrossTabDrag DISABLED_CrossTabDrag
 #else
 #define MAYBE_CrossTabDrag CrossTabDrag
@@ -2031,7 +2040,7 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragUpdateScreenCoordinates) {
   browser()->window()->SetBounds(gfx::Rect(200, 100, 700, 500));
   do {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   } while (browser()->window()->GetBounds().origin() != gfx::Point(200, 100));

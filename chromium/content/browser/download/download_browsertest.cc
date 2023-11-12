@@ -1487,22 +1487,10 @@ class DownloadPrerenderTest : public DownloadContentTest {
   test::PrerenderTestHelper prerender_helper_;
 };
 
-class DownloadFencedFrameTest
-    : public ::testing::WithParamInterface<
-          blink::features::FencedFramesImplementationType>,
-      public DownloadContentTest {
+class DownloadFencedFrameTest : public DownloadContentTest {
  public:
   DownloadFencedFrameTest() {
-    if (GetParam() ==
-        blink::features::FencedFramesImplementationType::kMPArch) {
-      fenced_frame_helper_ = std::make_unique<test::FencedFrameTestHelper>();
-    } else {
-      feature_list_.InitWithFeaturesAndParameters(
-          {{blink::features::kFencedFrames,
-            {{"implementation_type", "shadow_dom"}}},
-           {features::kPrivacySandboxAdsAPIsOverride, {}}},
-          {/* disabled_features */});
-    }
+    fenced_frame_helper_ = std::make_unique<test::FencedFrameTestHelper>();
   }
 
   ~DownloadFencedFrameTest() override = default;
@@ -4933,7 +4921,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadFromWebUIWithoutRenderer) {
   ASSERT_EQ(1u, downloads.size());
 
   // WebUI or other UrlLoaderFacotry will not handle request without a valid
-  // render frame host, download should gracefully fail without triggering
+  // RenderFrameHost, download should gracefully fail without triggering
   // crash.
   ASSERT_EQ(download::DownloadItem::INTERRUPTED, downloads[0]->GetState());
 }
@@ -5203,7 +5191,7 @@ IN_PROC_BROWSER_TEST_F(DownloadPrerenderTest, DiscardNonNavigationDownload) {
 
 // Verify that downloads not triggered by navigation are discarded when
 // initiated from a fenced frame.
-IN_PROC_BROWSER_TEST_P(DownloadFencedFrameTest, DiscardNonNavigationDownload) {
+IN_PROC_BROWSER_TEST_F(DownloadFencedFrameTest, DiscardNonNavigationDownload) {
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
   const GURL kFencedFrameUrl =
       embedded_test_server()->GetURL("/fenced_frames/title1.html");
@@ -5215,7 +5203,7 @@ IN_PROC_BROWSER_TEST_P(DownloadFencedFrameTest, DiscardNonNavigationDownload) {
   RenderFrameHost* fenced_frame_host = CreateFencedFrame(
       shell()->web_contents()->GetPrimaryMainFrame(), kFencedFrameUrl);
 
-  // Do a download without navigation from the fenced frame render frame host.
+  // Do a download without navigation from the fenced frame RenderFrameHost.
   // The download will be dropped.
   auto* download_manager =
       fenced_frame_host->GetBrowserContext()->GetDownloadManager();
@@ -5234,13 +5222,6 @@ IN_PROC_BROWSER_TEST_P(DownloadFencedFrameTest, DiscardNonNavigationDownload) {
   download_manager->GetAllDownloads(&downloads);
   EXPECT_TRUE(downloads.empty());
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    DownloadFencedFrameTest,
-    DownloadFencedFrameTest,
-    ::testing::Values(
-        blink::features::FencedFramesImplementationType::kShadowDOM,
-        blink::features::FencedFramesImplementationType::kMPArch));
 
 // A download triggered by clicking on a link with a |download| attribute should
 // have the user-gesture flag set.

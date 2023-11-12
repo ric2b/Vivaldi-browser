@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h"
 
+#include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
 #include "cc/input/overscroll_behavior.h"
@@ -69,24 +70,17 @@ static void UpdateCcTransformLocalMatrix(
     // Same for anchor positioning.
     DCHECK(compositor_node.local.IsIdentity());
     DCHECK_EQ(gfx::Point3F(), compositor_node.origin);
-  } else if (transform_node.IsIdentityOr2DTranslation()) {
-    auto translation = transform_node.Translation2D();
-    if (transform_node.ScrollNode()) {
-      // Blink creates a 2d transform node just for scroll offset whereas cc's
-      // transform node has a special scroll offset field.
-      compositor_node.scroll_offset =
-          gfx::PointAtOffsetFromOrigin(-translation);
-      DCHECK(compositor_node.local.IsIdentity());
-      DCHECK_EQ(gfx::Point3F(), compositor_node.origin);
-    } else {
-      compositor_node.local.MakeIdentity();
-      compositor_node.local.Translate(translation);
-      DCHECK_EQ(gfx::Point3F(), transform_node.Origin());
-      compositor_node.origin = gfx::Point3F();
-    }
+  } else if (transform_node.ScrollNode()) {
+    DCHECK(transform_node.IsIdentityOr2dTranslation());
+    // Blink creates a 2d transform node just for scroll offset whereas cc's
+    // transform node has a special scroll offset field.
+    compositor_node.scroll_offset =
+        gfx::PointAtOffsetFromOrigin(-transform_node.Get2dTranslation());
+    DCHECK(compositor_node.local.IsIdentity());
+    DCHECK_EQ(gfx::Point3F(), compositor_node.origin);
   } else {
     DCHECK(!transform_node.ScrollNode());
-    compositor_node.local = transform_node.Matrix().ToTransform();
+    compositor_node.local = transform_node.Matrix();
     compositor_node.origin = transform_node.Origin();
   }
   compositor_node.needs_local_transform_update = true;
@@ -146,7 +140,7 @@ bool PropertyTreeManager::DirectlyUpdateScrollOffsetTransform(
   DCHECK(!cc_transform->is_currently_animating);
 
   gfx::PointF scroll_offset =
-      gfx::PointAtOffsetFromOrigin(-transform.Translation2D());
+      gfx::PointAtOffsetFromOrigin(-transform.Get2dTranslation());
   DirectlySetScrollOffset(host, scroll_node->GetCompositorElementId(),
                           scroll_offset);
   if (cc_transform->scroll_offset != scroll_offset) {
@@ -250,9 +244,7 @@ void PropertyTreeManager::SetupRootTransformNode() {
   gfx::Transform to_screen;
   to_screen.Scale(device_scale_factor, device_scale_factor);
   transform_tree_.SetToScreen(cc::kRootPropertyNodeId, to_screen);
-  gfx::Transform from_screen;
-  bool invertible = to_screen.GetInverse(&from_screen);
-  DCHECK(invertible);
+  gfx::Transform from_screen = to_screen.GetCheckedInverse();
   transform_tree_.SetFromScreen(cc::kRootPropertyNodeId, from_screen);
   transform_tree_.set_needs_update(true);
 
@@ -333,11 +325,10 @@ bool TransformsMayBe2dAxisMisaligned(const TransformPaintPropertyNode& a,
                                      const TransformPaintPropertyNode& b) {
   if (&a == &b)
     return false;
-  const auto& translation_2d_or_matrix =
-      GeometryMapper::SourceToDestinationProjection(a, b);
-  if (!translation_2d_or_matrix.IsIdentityOr2DTranslation() &&
-      !translation_2d_or_matrix.Matrix().Preserves2dAxisAlignment())
+  if (!GeometryMapper::SourceToDestinationProjection(a, b)
+           .Preserves2dAxisAlignment()) {
     return true;
+  }
   const auto& lca = a.LowestCommonAncestor(b).Unalias();
   if (TransformsToAncestorHaveNonAxisAlignedActiveAnimation(a, lca) ||
       TransformsToAncestorHaveNonAxisAlignedActiveAnimation(b, lca))
@@ -988,11 +979,11 @@ int PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
     if (pending_clip.type & CcEffectType::kSyntheticForNonTrivialClip) {
       if (clip_id == cc::kInvalidPropertyNodeId) {
         const auto* clip = pending_clip.clip;
-        // Some virtual/document-transition/wpt_internal/document-transition/*
+        // Some virtual/view-transition/external/wpt/css/css-view-transitions/*
         // tests will fail without the following condition.
         // TODO(crbug.com/1345805): Investigate the reason and remove the
         // condition if possible.
-        if (!current_.effect->DocumentTransitionSharedElementId().valid()) {
+        if (!current_.effect->ViewTransitionElementId().valid()) {
           // Use the parent clip as the output clip of the synthetic effect so
           // that the clip will apply to the masked contents but not the mask
           // layer, to ensure the masked content is fully covered by the mask
@@ -1192,8 +1183,8 @@ static cc::RenderSurfaceReason RenderSurfaceReasonForEffect(
       effect.BlendMode() != SkBlendMode::kDstIn) {
     return cc::RenderSurfaceReason::kBlendMode;
   }
-  if (effect.DocumentTransitionSharedElementId().valid())
-    return cc::RenderSurfaceReason::kDocumentTransitionParticipant;
+  if (effect.ViewTransitionElementId().valid())
+    return cc::RenderSurfaceReason::kViewTransitionParticipant;
   // If the effect's transform node flattens the transform while it
   // participates in the 3d sorting context of an ancestor, cc needs a
   // render surface for correct flattening.
@@ -1234,9 +1225,10 @@ void PropertyTreeManager::PopulateCcEffectNode(
   effect_node.effect_changed = effect.NodeChangeAffectsRaster();
 
   if (can_be_shared_element_resource) {
-    effect_node.document_transition_shared_element_id =
-        effect.DocumentTransitionSharedElementId();
-    effect_node.shared_element_resource_id = effect.SharedElementResourceId();
+    effect_node.view_transition_shared_element_id =
+        effect.ViewTransitionElementId();
+    effect_node.view_transition_element_resource_id =
+        effect.ViewTransitionElementResourceId();
   }
 }
 
@@ -1244,7 +1236,9 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
     const cc::LayerList& layers) {
   // This vector is indexed by effect node id. The value is the number of
   // layers and sub-render-surfaces controlled by this effect.
-  Vector<int> effect_layer_counts(static_cast<wtf_size_t>(effect_tree_.size()));
+  wtf_size_t tree_size = base::checked_cast<wtf_size_t>(effect_tree_.size());
+  Vector<int> effect_layer_counts(tree_size);
+  Vector<bool> has_child_surface(tree_size);
   // Initialize the vector to count directly controlled layers.
   for (const auto& layer : layers) {
     if (layer->draws_content())
@@ -1254,11 +1248,15 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
   // In the effect tree, parent always has lower id than children, so the
   // following loop will check descendants before parents and accumulate
   // effect_layer_counts.
-  for (int id = static_cast<int>(effect_tree_.size() - 1);
-       id > cc::kSecondaryRootPropertyNodeId; id--) {
+  for (int id = tree_size - 1; id > cc::kSecondaryRootPropertyNodeId; id--) {
     auto* effect = effect_tree_.Node(id);
     if (effect_layer_counts[id] < 2 &&
-        IsConditionalRenderSurfaceReason(effect->render_surface_reason)) {
+        IsConditionalRenderSurfaceReason(effect->render_surface_reason) &&
+        // kBlendModeDstIn should create a render surface if the mask itself
+        // has any child render surface.
+        !(effect->render_surface_reason ==
+              cc::RenderSurfaceReason::kBlendModeDstIn &&
+          has_child_surface[id])) {
       // The conditional render surface can be omitted because it controls less
       // than two layers or render surfaces.
       effect->render_surface_reason = cc::RenderSurfaceReason::kNone;
@@ -1269,9 +1267,11 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
     if (effect->HasRenderSurface()) {
       // A sub-render-surface counts as one controlled layer of the parent.
       effect_layer_counts[effect->parent_id]++;
+      has_child_surface[effect->parent_id] = true;
     } else {
       // Otherwise all layers count as controlled layers of the parent.
       effect_layer_counts[effect->parent_id] += effect_layer_counts[id];
+      has_child_surface[effect->parent_id] |= has_child_surface[id];
     }
 
 #if DCHECK_IS_ON()

@@ -25,7 +25,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "chrome/browser/ui/views/hover_button.h"
+#include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
@@ -82,6 +82,8 @@ constexpr int kGridItemInset = 2;
 constexpr int kGridItemInteriorPadding = 8;
 constexpr int kGridItemBorderRadius = 4;
 constexpr int kGridItemGroupId = 1;
+
+bool g_auto_accept_intent_picker_bubble_for_testing = false;
 
 bool IsKeyboardCodeArrow(ui::KeyboardCode key_code) {
   return key_code == ui::VKEY_UP || key_code == ui::VKEY_DOWN ||
@@ -528,7 +530,17 @@ views::Widget* IntentPickerBubbleView::ShowBubble(
   intent_picker_bubble_->ShowForReason(DisplayReason::USER_GESTURE);
 
   intent_picker_bubble_->SelectDefaultItem();
+  if (g_auto_accept_intent_picker_bubble_for_testing) {
+    intent_picker_bubble_->AcceptDialog();
+  }
   return widget;
+}
+
+// static
+base::AutoReset<bool>
+IntentPickerBubbleView::SetAutoAcceptIntentPickerBubbleForTesting() {
+  return base::AutoReset<bool>(&g_auto_accept_intent_picker_bubble_for_testing,
+                               true);
 }
 
 // static

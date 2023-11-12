@@ -13,7 +13,7 @@ found in the LICENSE file.
 
     <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
     <link rel="stylesheet" href="chrome://resources/chromeos/colors/cros_styles.css">
-    <link rel="stylesheet" href="chrome://theme/colors.css?sets=legacy">
+    <link rel="stylesheet" href="chrome://theme/colors.css?sets=legacy,sys">
     <link rel="stylesheet" href="foreground/css/list.css">
     <link rel="stylesheet" href="foreground/css/table.css">
     <link rel="stylesheet" href="foreground/css/tree.css">
@@ -45,12 +45,7 @@ found in the LICENSE file.
                shortcut="Enter|Ctrl">
       <command id="move-to-trash" shortcut="Backspace|Alt Delete" label="$i18n{MOVE_TO_TRASH_BUTTON_LABEL}">
       <command id="restore-from-trash" shortcut="Backspace|Alt Delete" label="$i18n{RESTORE_FROM_TRASH_BUTTON_LABEL}">
-      <!-- TODO(crbug.com/953310): Remove 'Backspace|Alt' and 'Delete' from
-           'delete' once trash is permanently enabled. For now, these shortcuts
-           are left for backward-compatibility for when trash is not enabled,
-           but 'restore-from-trash' intentionally shadows these shortcuts when
-           trash is enabled -->
-      <command id="delete" shortcut="Backspace|Alt Delete Backspace|Alt|Shift Delete|Shift">
+      <command id="delete" shortcut="Backspace|Alt|Shift Delete|Shift Backspace|Alt Delete ">
       <command id="empty-trash" shortcut="Backspace|Alt|Ctrl|Shift Delete|Ctrl|Shift" shortcut="" label="$i18n{EMPTY_TRASH_BUTTON_LABEL}">
       <command id="refresh" label="$i18n{REFRESH_BUTTON_LABEL}"
                shortcut="b|Ctrl" hidden>
@@ -130,6 +125,9 @@ found in the LICENSE file.
       <command id="share-with-plugin-vm" label="$i18n{SHARE_WITH_PLUGIN_VM_BUTTON_LABEL}" disabled hidden>
       <command id="manage-plugin-vm-sharing" label="$i18n{MANAGE_PLUGIN_VM_SHARING_BUTTON_LABEL}" disabled hidden>
       <command id="manage-plugin-vm-sharing-gear" label="$i18n{MANAGE_PLUGIN_VM_SHARING_BUTTON_LABEL}" disabled hidden>
+      <command id="share-with-bruschetta" label="$i18n{SHARE_WITH_BRUSCHETTA_BUTTON_LABEL}" disabled hidden>
+      <command id="manage-bruschetta-sharing" label="$i18n{MANAGE_BRUSCHETTA_SHARING_BUTTON_LABEL}" disabled hidden>
+      <command id="manage-bruschetta-sharing-gear" label="$i18n{MANAGE_BRUSCHETTA_SHARING_BUTTON_LABEL}" disabled hidden>
 
       <command id="zoom-in" shortcut="=|Ctrl">
       <command id="zoom-out" shortcut="-|Ctrl">
@@ -187,6 +185,8 @@ found in the LICENSE file.
         <cr-menu-item command="#manage-linux-sharing"></cr-menu-item>
         <cr-menu-item command="#share-with-plugin-vm"></cr-menu-item>
         <cr-menu-item command="#manage-plugin-vm-sharing"></cr-menu-item>
+        <cr-menu-item command="#share-with-bruschetta"></cr-menu-item>
+        <cr-menu-item command="#manage-bruschetta-sharing"></cr-menu-item>
         <cr-menu-item command="#set-wallpaper"></cr-menu-item>
         <hr visibleif="saveas-file full-page" class="hide-on-toolbar">
         <cr-menu-item command="#new-folder" visibleif="saveas-file full-page"
@@ -206,6 +206,8 @@ found in the LICENSE file.
         <cr-menu-item command="#manage-linux-sharing"></cr-menu-item>
         <cr-menu-item command="#share-with-plugin-vm"></cr-menu-item>
         <cr-menu-item command="#manage-plugin-vm-sharing"></cr-menu-item>
+        <cr-menu-item command="#share-with-bruschetta"></cr-menu-item>
+        <cr-menu-item command="#manage-bruschetta-sharing"></cr-menu-item>
       </cr-menu>
 
       <cr-menu id="directory-tree-context-menu" class="chrome-menu files-menu"
@@ -218,6 +220,8 @@ found in the LICENSE file.
         <cr-menu-item command="#manage-linux-sharing"></cr-menu-item>
         <cr-menu-item command="#share-with-plugin-vm"></cr-menu-item>
         <cr-menu-item command="#manage-plugin-vm-sharing"></cr-menu-item>
+        <cr-menu-item command="#share-with-bruschetta"></cr-menu-item>
+        <cr-menu-item command="#manage-bruschetta-sharing"></cr-menu-item>
         <hr visibleif="full-page">
         <cr-menu-item command="#format"></cr-menu-item>
         <cr-menu-item command="#rename"></cr-menu-item>
@@ -313,7 +317,7 @@ found in the LICENSE file.
     </menus>
 
     <div class="dialog-container">
-      <div class="dialog-navigation-list">
+      <div class="dialog-navigation-list" slot="splitter-before">
         <div class="dialog-navigation-list-contents" role="navigation">
           <tree id="directory-tree" role="tree" tabindex="0" files-ng></tree>
         </div>
@@ -323,7 +327,7 @@ found in the LICENSE file.
           <div class="icon"></div>
         </cr-button>
       </div>
-      <div class="dialog-main">
+      <div class="dialog-main" slot="splitter-after">
         <div class="dialog-header files-ng" role="contentinfo">
           <div id="location-breadcrumbs" class="breadcrumbs"></div>
           <div id="read-only-indicator" aria-label="$i18n{READONLY_INDICATOR_TOOLTIP}" hidden
@@ -347,44 +351,39 @@ found in the LICENSE file.
                          aria-labelledby="pinned-toggle-label">
               </cr-toggle>
             </div>
-            <button id="tasks" class="combobutton menu-button" menu="#tasks-menu"
+            <cr-button id="tasks" class="combobutton menu-button" menu="#tasks-menu"
                     tabindex="0" hidden
                     aria-label="$i18n{TASKS_BUTTON_LABEL}">
-            </button>
+            </cr-button>
             <cr-button id="sharesheet-button" class="icon-button menu-button" tabindex="0" hidden
                     aria-label="$i18n{SHARESHEET_BUTTON_LABEL}"
                     visibleif="full-page"
                     command="#invoke-sharesheet"
                     has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
             <cr-button id="move-to-trash-button" class="icon-button menu-button" tabindex="0" hidden
                     aria-label="$i18n{MOVE_TO_TRASH_BUTTON_LABEL}"
                     visibleif="full-page"
                     has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
             <cr-button id="delete-button" class="icon-button menu-button" tabindex="0" hidden
                     aria-label="$i18n{DELETE_BUTTON_LABEL}"
                     visibleif="full-page"
                     has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
             <cr-button id="restore-from-trash-button" class="icon-button menu-button" tabindex="0" hidden
                     aria-label="$i18n{RESTORE_FROM_TRASH_BUTTON_LABEL}"
                     visibleif="full-page"
                     has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
             <div id="search-wrapper">
               <cr-button id="search-button" class="icon-button menu-button" tabindex="0"
                       aria-label="$i18n{SEARCH_TEXT_LABEL}"
                       has-tooltip>
-                <files-toggle-ripple></files-toggle-ripple>
                 <div class="icon"></div>
               </cr-button>
               <div id="search-box">
@@ -400,43 +399,39 @@ found in the LICENSE file.
             <cr-button id="refresh-button" class="icon-button menu-button" tabindex="0" hidden
                     aria-label="$i18n{REFRESH_BUTTON_LABEL}"
                     command="#refresh" has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
             <cr-button id="view-button" class="icon-button menu-button" tabindex="0"
                     aria-label="$i18n{CHANGE_TO_THUMBNAILVIEW_BUTTON_LABEL}"
                     has-tooltip>
-              <files-ripple></files-ripple>
               <div class="icon"></div>
             </cr-button>
-            <button id="sort-button" class="icon-button menu-button" tabindex="0"
+            <cr-button id="sort-button" class="icon-button menu-button" tabindex="0"
                     menu="#sort-menu"
                     aria-haspopup="true"
                     aria-label="$i18n{SORT_BUTTON_TOOLTIP}"
                     aria-activedescendant="sort-menu"
                     has-tooltip>
-              <files-toggle-ripple></files-toggle-ripple>
               <div class="icon"></div>
-            </button>
-            <button id="gear-button" class="icon-button menu-button" tabindex="0"
+            </cr-button>
+            <cr-button id="gear-button" class="icon-button menu-button" tabindex="0"
                     menu="#gear-menu"
                     aria-label="$i18n{GEAR_BUTTON_TOOLTIP}"
                     aria-haspopup="true"
                     aria-activedescendant="gear-menu"
                     has-tooltip>
-              <files-toggle-ripple></files-toggle-ripple>
               <div class="icon"></div>
-            </button>
-            <button id="selection-menu-button" class="icon-button menu-button" tabindex="0"
+            </cr-button>
+            <cr-button id="selection-menu-button" class="icon-button menu-button" tabindex="0"
                     menu="#file-context-menu"
                     aria-label="$i18n{SELECTION_MENU_BUTTON_TOOLTIP}"
                     aria-activedescendant="file-context-menu"
                     has-tooltip hidden>
-              <files-toggle-ripple></files-toggle-ripple>
               <div class="icon"></div>
-            </button>
+            </cr-button>
           </div>
         </div>
+        <div id="search-options-container"></div>
         <div class="dialog-body">
           <div id="a11y-msg" aria-live="polite" style="display: inline-block; position: fixed; clip: rect(0, 0, 0, 0);"></div>
           <div class="main-panel">
@@ -465,6 +460,7 @@ found in the LICENSE file.
             </div>
           </div>
         </div>
+        <div id="path-display-container"></div>
         <div class="files-feedback-panels" visibleif="full-page">
           <xf-display-panel id="progress-panel" role="complementary"
                             aria-label="$i18n{FILES_FEEDBACK_WINDOW}">

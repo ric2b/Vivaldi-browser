@@ -11,12 +11,14 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece.h"
+#include "base/values.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "extensions/common/value_builder.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace extensions {
 class Extension;
@@ -62,7 +64,8 @@ class ExtensionBuilder {
   // Initializes an ExtensionBuilder that can be used with various utility
   // methods to automatically construct a manifest. |name| will be the name of
   // the extension and used to generate a stable ID.
-  ExtensionBuilder(const std::string& name, Type type = Type::EXTENSION);
+  explicit ExtensionBuilder(const std::string& name,
+                            Type type = Type::EXTENSION);
 
   ExtensionBuilder(const ExtensionBuilder&) = delete;
   ExtensionBuilder& operator=(const ExtensionBuilder&) = delete;
@@ -119,9 +122,7 @@ class ExtensionBuilder {
     return *this;
   }
   template <typename T>
-  ExtensionBuilder& SetManifestPath(
-      std::initializer_list<base::StringPiece> path,
-      T&& value) {
+  ExtensionBuilder& SetManifestPath(base::StringPiece path, T&& value) {
     SetManifestPathImpl(path, base::Value(std::forward<T>(value)));
     return *this;
   }
@@ -134,9 +135,8 @@ class ExtensionBuilder {
     return *this;
   }
   template <typename T>
-  ExtensionBuilder& SetManifestPath(
-      std::initializer_list<base::StringPiece> path,
-      std::unique_ptr<T> value) {
+  ExtensionBuilder& SetManifestPath(base::StringPiece path,
+                                    std::unique_ptr<T> value) {
     SetManifestPathImpl(path, std::move(*value));
     return *this;
   }
@@ -157,6 +157,9 @@ class ExtensionBuilder {
   ExtensionBuilder& SetManifest(
       std::unique_ptr<base::DictionaryValue> manifest);
 
+  // Assigns the extension's manifest to |manifest|.
+  ExtensionBuilder& SetManifest(base::Value::Dict manifest);
+
   //////////////////////////////////////////////////////////////////////////////
   // Common utility methods (usable with both aided and custom manifest
   // creation).
@@ -169,7 +172,7 @@ class ExtensionBuilder {
 
   // Merge another manifest into the current manifest, with new keys taking
   // precedence.
-  ExtensionBuilder& MergeManifest(const base::Value& manifest);
+  ExtensionBuilder& MergeManifest(base::Value::Dict manifest);
   ExtensionBuilder& MergeManifest(
       std::unique_ptr<base::DictionaryValue> manifest);
 
@@ -185,14 +188,13 @@ class ExtensionBuilder {
   struct ManifestData;
 
   void SetManifestKeyImpl(base::StringPiece key, base::Value value);
-  void SetManifestPathImpl(std::initializer_list<base::StringPiece> path,
-                           base::Value value);
+  void SetManifestPathImpl(base::StringPiece path, base::Value value);
 
   // Information for constructing the manifest; either metadata about the
   // manifest which will be used to construct it, or the dictionary itself. Only
   // one will be present.
   std::unique_ptr<ManifestData> manifest_data_;
-  std::unique_ptr<base::DictionaryValue> manifest_value_;
+  absl::optional<base::Value::Dict> manifest_value_;
 
   base::FilePath path_;
   mojom::ManifestLocation location_;

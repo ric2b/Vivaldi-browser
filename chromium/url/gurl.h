@@ -189,6 +189,14 @@ class COMPONENT_EXPORT(URL) GURL {
   // scheme, authority or path, it will return an empty, invalid GURL.
   GURL GetWithoutFilename() const;
 
+  // A helper function to return a GURL without the Ref (also named Fragment
+  // Identifier). For example,
+  // GURL("https://www.foo.com/index.html#test").GetWithoutRef().spec()
+  // will return "https://www.foo.com/index.html".
+  // If the GURL is invalid or missing a
+  // scheme, authority or path, it will return an empty, invalid GURL.
+  GURL GetWithoutRef() const;
+
   // A helper function to return a GURL containing just the scheme, host,
   // and port from a URL. Equivalent to clearing any username and password,
   // replacing the path with a slash, and clearing everything after that. If
@@ -285,9 +293,7 @@ class COMPONENT_EXPORT(URL) GURL {
   bool HostIsIPAddress() const;
 
   // Not including the colon. If you are comparing schemes, prefer SchemeIs.
-  bool has_scheme() const {
-    return parsed_.scheme.len >= 0;
-  }
+  bool has_scheme() const { return parsed_.scheme.is_valid(); }
   std::string scheme() const {
     return ComponentString(parsed_.scheme);
   }
@@ -295,9 +301,7 @@ class COMPONENT_EXPORT(URL) GURL {
     return ComponentStringPiece(parsed_.scheme);
   }
 
-  bool has_username() const {
-    return parsed_.username.len >= 0;
-  }
+  bool has_username() const { return parsed_.username.is_valid(); }
   std::string username() const {
     return ComponentString(parsed_.username);
   }
@@ -305,9 +309,7 @@ class COMPONENT_EXPORT(URL) GURL {
     return ComponentStringPiece(parsed_.username);
   }
 
-  bool has_password() const {
-    return parsed_.password.len >= 0;
-  }
+  bool has_password() const { return parsed_.password.is_valid(); }
   std::string password() const {
     return ComponentString(parsed_.password);
   }
@@ -320,7 +322,7 @@ class COMPONENT_EXPORT(URL) GURL {
   // HostNoBrackets() below.
   bool has_host() const {
     // Note that hosts are special, absence of host means length 0.
-    return parsed_.host.len > 0;
+    return parsed_.host.is_nonempty();
   }
   std::string host() const {
     return ComponentString(parsed_.host);
@@ -332,9 +334,7 @@ class COMPONENT_EXPORT(URL) GURL {
   // The port if one is explicitly specified. Most callers will want IntPort()
   // or EffectiveIntPort() instead of these. The getters will not include the
   // ':'.
-  bool has_port() const {
-    return parsed_.port.len >= 0;
-  }
+  bool has_port() const { return parsed_.port.is_valid(); }
   std::string port() const {
     return ComponentString(parsed_.port);
   }
@@ -344,9 +344,7 @@ class COMPONENT_EXPORT(URL) GURL {
 
   // Including first slash following host, up to the query. The URL
   // "http://www.google.com/" has a path of "/".
-  bool has_path() const {
-    return parsed_.path.len >= 0;
-  }
+  bool has_path() const { return parsed_.path.is_valid(); }
   std::string path() const {
     return ComponentString(parsed_.path);
   }
@@ -355,9 +353,7 @@ class COMPONENT_EXPORT(URL) GURL {
   }
 
   // Stuff following '?' up to the ref. The getters will not include the '?'.
-  bool has_query() const {
-    return parsed_.query.len >= 0;
-  }
+  bool has_query() const { return parsed_.query.is_valid(); }
   std::string query() const {
     return ComponentString(parsed_.query);
   }
@@ -367,9 +363,7 @@ class COMPONENT_EXPORT(URL) GURL {
 
   // Stuff following '#' to the end of the string. This will be %-escaped UTF-8.
   // The getters will not include the '#'.
-  bool has_ref() const {
-    return parsed_.ref.len >= 0;
-  }
+  bool has_ref() const { return parsed_.ref.is_valid(); }
   std::string ref() const {
     return ComponentString(parsed_.ref);
   }
@@ -470,16 +464,13 @@ class COMPONENT_EXPORT(URL) GURL {
 
   // Returns the substring of the input identified by the given component.
   std::string ComponentString(const url::Component& comp) const {
-    if (!comp.is_nonempty())
-      return std::string();
-    return std::string(spec_, static_cast<size_t>(comp.begin),
-                       static_cast<size_t>(comp.len));
+    return std::string(ComponentStringPiece(comp));
   }
   base::StringPiece ComponentStringPiece(const url::Component& comp) const {
-    if (!comp.is_nonempty())
+    if (comp.is_empty())
       return base::StringPiece();
-    return base::StringPiece(&spec_[static_cast<size_t>(comp.begin)],
-                             static_cast<size_t>(comp.len));
+    return base::StringPiece(spec_).substr(static_cast<size_t>(comp.begin),
+                                           static_cast<size_t>(comp.len));
   }
 
   void ProcessFileSystemURLAfterReplaceComponents();

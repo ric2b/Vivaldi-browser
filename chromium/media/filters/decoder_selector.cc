@@ -27,10 +27,6 @@
 #include "media/filters/decoder_stream_traits.h"
 #include "media/filters/decrypting_demuxer_stream.h"
 
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-#include "platform_media/ipc_demuxer/renderer/pass_through_decoder.h"
-#endif
-
 namespace media {
 
 namespace {
@@ -296,13 +292,6 @@ void DecoderSelector<StreamType>::OverrideDecoderPriorityCBForTesting(
 
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::CreateDecoders() {
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  if (config_.platform_media_pass_through_) {
-    decoders_.clear();
-    decoders_.push_back(CreatePlatformMediaPassThroughDecoder<StreamType>());
-    return;
-  }
-#endif
   // Post-insert decoders returned by `create_decoders_cb_`, so that
   // any decoders added via `PrependDecoder()` are not overwritten and retain
   // priority (even if they are ultimately de-ranked by
@@ -360,10 +349,11 @@ void DecoderSelector<StreamType>::OnDecoderInitializeDone(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!status.is_ok()) {
-    // Note: Don't track this decode status, as it is the result of
-    // initialization failure.
+    // Note: Don't track this decode status, as it is the result of decoder
+    // selection (initialization) failure.
     MEDIA_LOG(INFO, media_log_)
-        << "Failed to initialize " << decoder_->GetDecoderType();
+        << "Cannot select " << decoder_->GetDecoderType() << " for "
+        << DemuxerStream::GetTypeName(StreamType) << " decoding";
 
     // Try the next decoder on the list.
     decoder_ = nullptr;

@@ -6,12 +6,10 @@ import * as animate from './animation.js';
 import {assert, assertInstanceof} from './assert.js';
 import * as dom from './dom.js';
 import {I18nString} from './i18n_string.js';
-import * as Comlink from './lib/comlink.js';
 import * as loadTimeData from './models/load_time_data.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
 import {AspectRatioSet, Facing, Resolution} from './type.js';
-import {WaitableEvent} from './waitable_event.js';
 
 /**
  * Creates a canvas element for 2D drawing.
@@ -58,44 +56,92 @@ export function bitmapToJpegBlob(bitmap: ImageBitmap): Promise<Blob> {
 }
 
 /**
+ * Types for keyboard shortcuts.
+ */
+const KEYBOARD_KEYS = [
+  ' ',
+  '-',
+  '=',
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'O',
+  'P',
+  'Q',
+  'R',
+  'S',
+  'T',
+  'U',
+  'V',
+  'W',
+  'X',
+  'Y',
+  'Z',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'AudioVolumeUp',
+  'AudioVolumeDown',
+  'BrowserBack',
+  'Delete',
+  'Enter',
+  'Escape',
+] as const;
+const KEYBOARD_KEY_SET = new Set(KEYBOARD_KEYS);
+type KeyboardKey = typeof KEYBOARD_KEYS[number];
+
+// TODO(b/248398229): After upgrading TS to 4.7 or later, we can use "extends
+// constraints on infer" to simplify the syntax of `WithModifiers`.
+type WithModifiers<Modifiers extends string[], Key extends string> =
+    Modifiers extends [...infer Rest, infer Last] ?
+    Rest extends string[] ?
+    Last extends string ? WithModifiers<Rest, Key|`${Last}-${Key}`>: never :
+    never :
+    Key;
+export type KeyboardShortcut =
+    WithModifiers<['Ctrl', 'Alt', 'Shift'], KeyboardKey>|'Unsupported';
+
+/**
  * Returns a shortcut string, such as Ctrl-Alt-A.
  *
  * @param event Keyboard event.
  * @return Shortcut identifier.
  */
-export function getShortcutIdentifier(event: KeyboardEvent): string {
-  let identifier = (event.ctrlKey ? 'Ctrl-' : '') +
-      (event.altKey ? 'Alt-' : '') + (event.shiftKey ? 'Shift-' : '') +
-      (event.metaKey ? 'Meta-' : '');
-  if (event.key) {
-    switch (event.key) {
-      case 'ArrowLeft':
-        identifier += 'Left';
-        break;
-      case 'ArrowRight':
-        identifier += 'Right';
-        break;
-      case 'ArrowDown':
-        identifier += 'Down';
-        break;
-      case 'ArrowUp':
-        identifier += 'Up';
-        break;
-      case ' ':
-        identifier += 'Space';
-        break;
-      case 'a':
-      case 'p':
-      case 's':
-      case 'v':
-      case 'r':
-        identifier += event.key.toUpperCase();
-        break;
-      default:
-        identifier += event.key;
-    }
+export function getKeyboardShortcut(event: KeyboardEvent): KeyboardShortcut {
+  let key = event.key;
+  if (key.match(/^[a-z]$/)) {
+    key = key.toUpperCase();
   }
-  return identifier;
+  if (!isSupportedKeyboardKey(key)) {
+    return 'Unsupported';
+  }
+  let modifiers: WithModifiers<['Ctrl', 'Alt', 'Shift'], ''> = '';
+  if (event.ctrlKey) {
+    modifiers = `${modifiers}Ctrl-`;
+  }
+  if (event.altKey) {
+    modifiers = `${modifiers}Alt-`;
+  }
+  if (event.shiftKey) {
+    modifiers = `${modifiers}Shift-`;
+  }
+  return `${modifiers}${key}`;
+}
+
+function isSupportedKeyboardKey(key: string): key is KeyboardKey {
+  return KEYBOARD_KEY_SET.has(key as KeyboardKey);
 }
 
 /**
@@ -216,35 +262,6 @@ export function instantiateTemplate(selector: string): DocumentFragment {
       document.importNode(tpl.content, true), DocumentFragment);
   setupI18nElements(doc);
   return doc;
-}
-
-/**
- * Creates JS module by given |scriptUrl| under untrusted context with given
- * origin and returns its proxy.
- *
- * @param scriptUrl The URL of the script to load.
- */
-export async function createUntrustedJSModule<T>(scriptUrl: string):
-    Promise<Comlink.Remote<T>> {
-  const untrustedPageReady = new WaitableEvent();
-  const iFrame = document.createElement('iframe');
-  iFrame.addEventListener('load', () => untrustedPageReady.signal());
-  iFrame.setAttribute(
-      'src',
-      'chrome-untrusted://camera-app/views/untrusted_script_loader.html');
-  iFrame.hidden = true;
-  document.body.appendChild(iFrame);
-  await untrustedPageReady.wait();
-
-  assert(iFrame.contentWindow !== null);
-  // TODO(pihsun): actually get correct type from the function definition.
-  const untrustedRemote =
-      Comlink.wrap<{loadScript(url: string): Promise<void>}>(
-          Comlink.windowEndpoint(iFrame.contentWindow, self));
-  await untrustedRemote.loadScript(scriptUrl);
-  // loadScript adds the script exports to what's exported by the
-  // untrustedRemote, so we manually cast it to the expected type.
-  return untrustedRemote as unknown as Comlink.Remote<T>;
 }
 
 /**

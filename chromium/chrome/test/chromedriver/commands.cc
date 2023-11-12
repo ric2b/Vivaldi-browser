@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <functional>
 #include <list>
 #include <utility>
 
@@ -21,7 +22,6 @@
 #include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/capabilities.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
@@ -40,24 +40,23 @@ void ExecuteGetStatus(const base::Value::Dict& params,
   // W3C defined data:
   // ChromeDriver doesn't have a preset limit on number of active sessions,
   // so we are always ready.
-  base::DictionaryValue info;
-  info.GetDict().Set("ready", true);
-  info.GetDict().Set("message",
-                     base::StringPrintf("%s ready for new sessions.",
-                                        kChromeDriverProductShortName));
+  base::Value::Dict info;
+  info.Set("ready", true);
+  info.Set("message", base::StringPrintf("%s ready for new sessions.",
+                                         kChromeDriverProductShortName));
 
   // ChromeDriver specific data:
-  base::DictionaryValue build;
-  build.GetDict().Set("version", kChromeDriverVersion);
-  info.SetKey("build", std::move(build));
+  base::Value::Dict build;
+  build.Set("version", kChromeDriverVersion);
+  info.Set("build", std::move(build));
 
-  base::DictionaryValue os;
-  os.GetDict().Set("name", base::SysInfo::OperatingSystemName());
-  os.GetDict().Set("version", base::SysInfo::OperatingSystemVersion());
-  os.GetDict().Set("arch", base::SysInfo::OperatingSystemArchitecture());
-  info.SetKey("os", std::move(os));
+  base::Value::Dict os;
+  os.Set("name", base::SysInfo::OperatingSystemName());
+  os.Set("version", base::SysInfo::OperatingSystemVersion());
+  os.Set("arch", base::SysInfo::OperatingSystemArchitecture());
+  info.Set("os", std::move(os));
 
-  callback.Run(Status(kOk), base::Value::ToUniquePtrValue(std::move(info)),
+  callback.Run(Status(kOk), std::make_unique<base::Value>(std::move(info)),
                std::string(), kW3CDefault);
 }
 
@@ -68,9 +67,9 @@ void ExecuteCreateSession(SessionThreadMap* session_thread_map,
                           const CommandCallback& callback) {
   std::string new_id = GenerateId();
   std::unique_ptr<Session> session = std::make_unique<Session>(new_id, host);
-  std::unique_ptr<SessionThreadInfo> threadInfo =
+  std::unique_ptr<SessionThreadInfo> thread_info =
       std::make_unique<SessionThreadInfo>(new_id, GetW3CSetting(params));
-  if (!threadInfo->thread()->Start()) {
+  if (!thread_info->thread()->Start()) {
     callback.Run(
         Status(kUnknownError, "failed to start a thread for the new session"),
         std::unique_ptr<base::Value>(), std::string(),
@@ -78,9 +77,9 @@ void ExecuteCreateSession(SessionThreadMap* session_thread_map,
     return;
   }
 
-  threadInfo->thread()->task_runner()->PostTask(
+  thread_info->thread()->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&SetThreadLocalSession, std::move(session)));
-  session_thread_map->insert(std::make_pair(new_id, std::move(threadInfo)));
+  session_thread_map->insert(std::make_pair(new_id, std::move(thread_info)));
   init_session_cmd.Run(params, new_id, callback);
 }
 
@@ -88,7 +87,7 @@ namespace {
 
 void OnGetSession(const base::WeakPtr<size_t>& session_remaining_count,
                   const base::RepeatingClosure& all_get_session_func,
-                  base::ListValue* session_list,
+                  base::Value::List& session_list,
                   const Status& status,
                   std::unique_ptr<base::Value> value,
                   const std::string& session_id,
@@ -103,7 +102,7 @@ void OnGetSession(const base::WeakPtr<size_t>& session_remaining_count,
     session.Set("id", session_id);
     session.Set("capabilities",
                 base::Value::FromUniquePtrValue(std::move(value)));
-    session_list->GetList().Append(std::move(session));
+    session_list.Append(std::move(session));
   }
 
   if (!*session_remaining_count) {
@@ -120,10 +119,12 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
                         const CommandCallback& callback) {
   size_t get_remaining_count = session_thread_map->size();
   base::WeakPtrFactory<size_t> weak_ptr_factory(&get_remaining_count);
-  std::unique_ptr<base::ListValue> session_list(new base::ListValue());
+  base::Value::List session_list;
 
   if (!get_remaining_count) {
-    callback.Run(Status(kOk), std::move(session_list), session_id, false);
+    callback.Run(Status(kOk),
+                 std::make_unique<base::Value>(std::move(session_list)),
+                 session_id, false);
     return;
   }
 
@@ -134,13 +135,15 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
     session_capabilities_command.Run(
         params, iter->first,
         base::BindRepeating(&OnGetSession, weak_ptr_factory.GetWeakPtr(),
-                            run_loop.QuitClosure(), session_list.get()));
+                            run_loop.QuitClosure(), std::ref(session_list)));
   }
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Seconds(10));
   run_loop.Run();
 
-  callback.Run(Status(kOk), std::move(session_list), session_id, false);
+  callback.Run(Status(kOk),
+               std::make_unique<base::Value>(std::move(session_list)),
+               session_id, false);
 }
 
 namespace {
@@ -182,7 +185,7 @@ void ExecuteQuitAll(const Command& quit_command,
         base::BindRepeating(&OnSessionQuit, weak_ptr_factory.GetWeakPtr(),
                             run_loop.QuitClosure()));
   }
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Seconds(10));
   // Uses a nested run loop to block this thread until all the quit
   // commands have executed, or the timeout expires.
@@ -345,7 +348,8 @@ void ExecuteSessionCommand(SessionThreadMap* session_thread_map,
         base::BindOnce(
             &ExecuteSessionCommandOnSessionThread, command_name, session_id,
             command, w3c_standard_command, return_ok_without_session,
-            params.Clone(), base::ThreadTaskRunnerHandle::Get(), callback,
+            params.Clone(), base::SingleThreadTaskRunner::GetCurrentDefault(),
+            callback,
             base::BindRepeating(&TerminateSessionThreadOnCommandThread,
                                 session_thread_map, session_id)));
   }

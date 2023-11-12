@@ -6,6 +6,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -13,7 +14,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/google/google_brand_code_map_chromeos.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
@@ -27,7 +28,7 @@ namespace {
 const base::FilePath::CharType kRLZBrandFilePath[] =
     FILE_PATH_LITERAL("/opt/oem/etc/BRAND_CODE");
 
-bool IsBrandValid(const std::string& brand) {
+bool IsBrandValid(base::StringPiece brand) {
   return !brand.empty();
 }
 
@@ -88,11 +89,10 @@ std::string GetRlzBrand() {
 void InitBrand(base::OnceClosure callback) {
   ::chromeos::system::StatisticsProvider* provider =
       ::chromeos::system::StatisticsProvider::GetInstance();
-  std::string brand;
-  const bool found = provider->GetMachineStatistic(
-      ::chromeos::system::kRlzBrandCodeKey, &brand);
-  if (found && IsBrandValid(brand)) {
-    SetBrand(std::move(callback), brand);
+  const absl::optional<base::StringPiece> brand =
+      provider->GetMachineStatistic(::chromeos::system::kRlzBrandCodeKey);
+  if (brand && IsBrandValid(brand.value())) {
+    SetBrand(std::move(callback), std::string(brand.value()));
     return;
   }
 

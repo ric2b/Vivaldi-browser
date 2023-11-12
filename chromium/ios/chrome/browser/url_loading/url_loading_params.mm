@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "components/url_param_filter/core/url_param_filterer.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -77,11 +76,11 @@ UrlLoadParams::UrlLoadParams()
       append_to(kLastTab),
       origin_point(CGPointZero),
       from_chrome(false),
+      from_external(false),
       user_initiated(true),
       should_focus_omnibox(false),
       inherit_opener(false),
-      load_strategy(UrlLoadStrategy::NORMAL),
-      filtering_result(url_param_filter::FilterResult()) {}
+      load_strategy(UrlLoadStrategy::NORMAL) {}
 
 UrlLoadParams::UrlLoadParams(const UrlLoadParams& other)
     : web_params(other.web_params),
@@ -90,11 +89,11 @@ UrlLoadParams::UrlLoadParams(const UrlLoadParams& other)
       append_to(other.append_to),
       origin_point(other.origin_point),
       from_chrome(other.from_chrome),
+      from_external(other.from_external),
       user_initiated(other.user_initiated),
       should_focus_omnibox(other.should_focus_omnibox),
       inherit_opener(other.inherit_opener),
-      load_strategy(other.load_strategy),
-      filtering_result(other.filtering_result) {}
+      load_strategy(other.load_strategy) {}
 
 UrlLoadParams& UrlLoadParams::operator=(const UrlLoadParams& other) {
   web_params = other.web_params;
@@ -103,11 +102,11 @@ UrlLoadParams& UrlLoadParams::operator=(const UrlLoadParams& other) {
   append_to = other.append_to;
   origin_point = other.origin_point;
   from_chrome = other.from_chrome;
+  from_external = other.from_external;
   user_initiated = other.user_initiated;
   should_focus_omnibox = other.should_focus_omnibox;
   inherit_opener = other.inherit_opener;
   load_strategy = other.load_strategy;
-  filtering_result = other.filtering_result;
   return *this;
 }
 

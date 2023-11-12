@@ -10,10 +10,7 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/web_app_id.h"
-
-namespace content {
-struct PartitionedLockHolder;
-}
+#include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
 
 namespace web_app {
 
@@ -22,7 +19,7 @@ namespace web_app {
 // `WebAppLockManager` to acquire the lock. The lock is acquired when the
 // callback given to the WebAppLockManager is called. Destruction of this class
 // will release the lock or cancel the lock request if it is not acquired yet.
-class Lock {
+class LockDescription {
  public:
   enum class Type {
     kNoOp,
@@ -32,13 +29,13 @@ class Lock {
     kFullSystem,
   };
 
-  Lock(Lock&&);
-  Lock& operator=(Lock&&);
+  LockDescription(LockDescription&&);
+  LockDescription& operator=(LockDescription&&);
 
-  Lock(const Lock&) = delete;
-  Lock& operator=(const Lock&) = delete;
+  LockDescription(const LockDescription&) = delete;
+  LockDescription& operator=(const LockDescription&) = delete;
 
-  ~Lock();
+  ~LockDescription();
 
   Type type() const { return type_; }
 
@@ -48,25 +45,31 @@ class Lock {
   // exclusive lock on the shared web contents.
   bool IncludesSharedWebContents() const;
 
-  bool HasLockBeenRequested() const { return !!holder_.get(); }
-
  protected:
-  explicit Lock(base::flat_set<AppId> app_ids, Type type);
+  explicit LockDescription(base::flat_set<AppId> app_ids, Type type);
 
  private:
-  friend class WebAppLockManager;
-
   enum class LockLevel {
     kStatic = 0,
     kApp = 1,
     kMaxValue = kApp,
   };
 
-  std::unique_ptr<content::PartitionedLockHolder> holder_;
   const base::flat_set<AppId> app_ids_{};
   const Type type_;
 
-  base::WeakPtrFactory<Lock> weak_factory_{this};
+  base::WeakPtrFactory<LockDescription> weak_factory_{this};
+};
+
+class Lock {
+ public:
+  explicit Lock(std::unique_ptr<content::PartitionedLockHolder> holder);
+
+  ~Lock();
+
+ private:
+  friend class WebAppLockManager;
+  std::unique_ptr<content::PartitionedLockHolder> holder_;
 };
 
 }  // namespace web_app

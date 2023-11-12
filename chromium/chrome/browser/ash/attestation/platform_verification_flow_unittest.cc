@@ -100,8 +100,8 @@ class PlatformVerificationFlowTest : public ::testing::Test {
     // Configure the mock AttestationFlow to call FakeGetCertificate.
     EXPECT_CALL(mock_attestation_flow_,
                 GetCertificate(PROFILE_CONTENT_PROTECTION_CERTIFICATE,
-                               account_id, kTestID, _, _, _, _))
-        .WillRepeatedly(WithArgs<6>(
+                               account_id, kTestID, _, _, _, _, _))
+        .WillRepeatedly(WithArgs<7>(
             Invoke(this, &PlatformVerificationFlowTest::FakeGetCertificate)));
 
     const std::string expected_key_name =
@@ -115,7 +115,7 @@ class PlatformVerificationFlowTest : public ::testing::Test {
     std::string certificate =
         (fake_certificate_index_ < fake_certificate_list_.size()) ?
             fake_certificate_list_[fake_certificate_index_] : kTestCertificate;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), certificate_status_, certificate));
     ++fake_certificate_index_;

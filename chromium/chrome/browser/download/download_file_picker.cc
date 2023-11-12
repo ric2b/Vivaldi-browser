@@ -6,11 +6,12 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "components/download/public/common/base_file.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
@@ -20,10 +21,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/aura/window.h"
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
-#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
-#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #endif
 
 using download::DownloadItem;
@@ -46,7 +43,7 @@ DownloadFilePicker::DownloadFilePicker(download::DownloadItem* item,
   // Extension download may not have associated webcontents.
   if (item->GetDownloadSource() != download::DownloadSource::EXTENSION_API &&
       (!web_contents || !web_contents->GetNativeView())) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DownloadFilePicker::FileSelectionCanceled,
                                   base::Unretained(this), nullptr));
     return;
@@ -57,7 +54,7 @@ DownloadFilePicker::DownloadFilePicker(download::DownloadItem* item,
   // |select_file_dialog_| could be null in Linux. See CreateSelectFileDialog()
   // in shell_dialog_linux.cc.
   if (!select_file_dialog_.get()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&DownloadFilePicker::FileSelectionCanceled,
                                   base::Unretained(this), nullptr));
     return;
@@ -94,17 +91,13 @@ DownloadFilePicker::DownloadFilePicker(download::DownloadItem* item,
   }
 #endif
 
-  const GURL* caller =
-#if BUILDFLAG(IS_CHROMEOS)
-      &download_item_->GetURL();
-#else
-      nullptr;
-#endif
+  const GURL caller = download::BaseFile::GetEffectiveAuthorityURL(
+      download_item_->GetURL(), download_item_->GetReferrerUrl());
 
   select_file_dialog_->SelectFile(
       ui::SelectFileDialog::SELECT_SAVEAS_FILE, std::u16string(),
       suggested_path_, &file_type_info, 0, base::FilePath::StringType(),
-      owning_window, /*params=*/nullptr, caller);
+      owning_window, /*params=*/nullptr, &caller);
 }
 
 DownloadFilePicker::~DownloadFilePicker() {
@@ -116,47 +109,10 @@ DownloadFilePicker::~DownloadFilePicker() {
 }
 
 void DownloadFilePicker::OnFileSelected(const base::FilePath& path) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  auto* web_contents =
-      download_item_
-          ? content::DownloadItemUtils::GetWebContents(download_item_)
-          : nullptr;
-  if (web_contents && !path.empty()) {
-    DCHECK(download_item_);
-
-    policy::DlpFilesController* files_controller = nullptr;
-    policy::DlpRulesManager* rules_manager =
-        policy::DlpRulesManagerFactory::GetForPrimaryProfile();
-
-    if (rules_manager)
-      files_controller = rules_manager->GetDlpFilesController();
-
-    if (files_controller) {
-      files_controller->CheckIfDownloadAllowed(
-          download_item_->GetURL(), path,
-          base::BindOnce(&DownloadFilePicker::CompleteFileSelection,
-                         base::Unretained(this), path));
-    } else {
-      CompleteFileSelection(path, /*is_allowed=*/true);
-    }
-    return;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-  CompleteFileSelection(path, /*is_allowed=*/true);
-  // Deletes |this|
-}
-
-void DownloadFilePicker::CompleteFileSelection(const base::FilePath& path,
-                                               bool is_allowed) {
-  base::FilePath selected_path(path);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!is_allowed)
-    selected_path.clear();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   std::move(file_selected_callback_)
-      .Run(selected_path.empty() ? DownloadConfirmationResult::CANCELED
-                                 : DownloadConfirmationResult::CONFIRMED,
-           selected_path);
+      .Run(path.empty() ? DownloadConfirmationResult::CANCELED
+                        : DownloadConfirmationResult::CONFIRMED,
+           path);
   delete this;
 }
 

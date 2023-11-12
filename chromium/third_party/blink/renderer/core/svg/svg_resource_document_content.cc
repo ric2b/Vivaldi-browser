@@ -101,7 +101,8 @@ Document* CreateDocument(const TextResource* resource,
   auto* document =
       XMLDocument::CreateSVG(DocumentInit::Create()
                                  .WithURL(response.CurrentRequestUrl())
-                                 .WithExecutionContext(execution_context));
+                                 .WithExecutionContext(execution_context)
+                                 .WithAgent(*execution_context->GetAgent()));
   document->SetContent(resource->DecodedText());
   return document;
 }
@@ -125,6 +126,10 @@ Document* SVGResourceDocumentContent::GetDocument() {
 
 const KURL& SVGResourceDocumentContent::Url() const {
   return resource_->Url();
+}
+
+bool SVGResourceDocumentContent::IsLoading() const {
+  return resource_->IsLoading();
 }
 
 void SVGResourceDocumentContent::Trace(Visitor* visitor) const {

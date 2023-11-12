@@ -9,7 +9,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/display/aggregated_frame.h"
@@ -221,6 +220,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
   // List of clear video content candidate bounds.
   std::vector<gfx::Rect> previous_frame_overlay_candidate_rects_{};
   int frames_since_last_overlay_candidate_rects_change_ = 0;
+  bool no_undamaged_overlay_promotion_;
 
   THREAD_CHECKER(thread_checker_);
 };

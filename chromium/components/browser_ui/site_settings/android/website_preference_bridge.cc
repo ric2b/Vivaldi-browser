@@ -825,6 +825,7 @@ static void JNI_WebsitePreferenceBridge_SetContentSettingEnabled(
       case ContentSettingsType::REQUEST_DESKTOP_SITE:
       case ContentSettingsType::SENSORS:
       case ContentSettingsType::SOUND:
+      case ContentSettingsType::AUTOPLAY: // Vivaldi
         value = CONTENT_SETTING_ALLOW;
         break;
       default:

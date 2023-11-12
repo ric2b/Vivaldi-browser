@@ -413,11 +413,9 @@ LayoutObject* LayoutObjectFactory::CreateSVGForeignObject(
     Node& node,
     const ComputedStyle& style,
     LegacyLayout legacy) {
-  const bool disable_ng_for_type =
-      !RuntimeEnabledFeatures::LayoutNGForeignObjectEnabled();
   return CreateObject<LayoutBlockFlow, LayoutNGSVGForeignObject,
                       LayoutSVGForeignObject>(node, legacy,
-                                              disable_ng_for_type);
+                                              /*disable_ng_for_type=*/false);
 }
 
 LayoutObject* LayoutObjectFactory::CreateSVGText(Node& node,
@@ -441,7 +439,7 @@ LayoutObject* LayoutObjectFactory::CreateWordBreak(HTMLElement* element,
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
     const LayoutObject& parent,
     bool child_forces_legacy) {
-  scoped_refptr<ComputedStyle> new_style =
+  scoped_refptr<const ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(),
           parent.IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
@@ -459,7 +457,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
 
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
     const LayoutObject& parent) {
-  scoped_refptr<ComputedStyle> new_style =
+  scoped_refptr<const ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRowGroup);
   LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()
@@ -475,7 +473,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
 
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
     const LayoutObject& parent) {
-  scoped_refptr<ComputedStyle> new_style =
+  scoped_refptr<const ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRow);
   LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()
@@ -489,7 +487,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
 
 LayoutBlockFlow* LayoutObjectFactory::CreateAnonymousTableCellWithParent(
     const LayoutObject& parent) {
-  scoped_refptr<ComputedStyle> new_style =
+  scoped_refptr<const ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableCell);
   LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()

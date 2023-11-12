@@ -11,12 +11,12 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/containers/unique_ptr_adapters.h"
-#include "content/public/browser/navigation_type.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/test/test_utils.h"
 #include "net/base/net_errors.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
+#include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -100,6 +100,12 @@ class TestNavigationObserver {
   // filters, if set) succeeded.
   bool last_navigation_succeeded() const { return last_navigation_succeeded_; }
 
+  // The last navigation initiator's user activation and ad status.
+  blink::mojom::NavigationInitiatorActivationAndAdStatus
+  last_navigation_initiator_activation_and_ad_status() const {
+    return last_navigation_initiator_activation_and_ad_status_;
+  }
+
   // Returns the initiator origin of the last finished navigation (that matched
   // URL / net error filters, if set).
   const absl::optional<url::Origin>& last_initiator_origin() const {
@@ -123,10 +129,6 @@ class TestNavigationObserver {
   // Returns the net::Error origin of the last finished navigation (that matched
   // URL / net error filters, if set).
   net::Error last_net_error_code() const { return last_net_error_code_; }
-
-  // Returns the NavigationType  of the last finished navigation (that matched
-  // URL / net error filters, if set).
-  NavigationType last_navigation_type() const { return last_navigation_type_; }
 
   // Returns the navigation entry ID of the last finished navigation (that
   // matched URL if set).
@@ -245,6 +247,12 @@ class TestNavigationObserver {
   // True if the last navigation succeeded.
   bool last_navigation_succeeded_;
 
+  // The last navigation initiator's user activation and ad status.
+  blink::mojom::NavigationInitiatorActivationAndAdStatus
+      last_navigation_initiator_activation_and_ad_status_ =
+          blink::mojom::NavigationInitiatorActivationAndAdStatus::
+              kDidNotStartWithTransientActivation;
+
   // True if we have called EventTriggered following wait. This is used for
   // internal checks-- we expect certain conditions to be valid until we call
   // EventTriggered at which point we reset state.
@@ -265,9 +273,6 @@ class TestNavigationObserver {
 
   // The net error code of the last navigation.
   net::Error last_net_error_code_;
-
-  // The NavigationType of the last navigation.
-  NavigationType last_navigation_type_;
 
   // The navigation entry ID of the last navigation.
   int last_nav_entry_id_ = 0;

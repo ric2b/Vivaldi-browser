@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/functional/overloaded.h"
@@ -254,6 +255,10 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
       return WebAppManagement::Type::kDefault;
     case WebAppManagementProto::COMMAND_LINE:
       return WebAppManagement::Type::kCommandLine;
+    case WebAppManagementProto::OEM:
+      return WebAppManagement::Type::kOem;
+    case WebAppManagementProto::ONEDRIVEINTEGRATION:
+      return WebAppManagement::Type::kOneDriveIntegration;
   }
 }
 
@@ -275,6 +280,10 @@ WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
       return WebAppManagementProto::DEFAULT;
     case WebAppManagement::Type::kCommandLine:
       return WebAppManagementProto::COMMAND_LINE;
+    case WebAppManagement::Type::kOem:
+      return WebAppManagementProto::OEM;
+    case WebAppManagement::Type::kOneDriveIntegration:
+      return WebAppManagementProto::ONEDRIVEINTEGRATION;
   }
 }
 
@@ -407,6 +416,10 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       web_app.sources_[WebAppManagement::kKiosk]);
   local_data->mutable_sources()->set_command_line(
       web_app.sources_[WebAppManagement::kCommandLine]);
+  local_data->mutable_sources()->set_oem(
+      web_app.sources_[WebAppManagement::kOem]);
+  local_data->mutable_sources()->set_one_drive_integration(
+      web_app.sources_[WebAppManagement::kOneDriveIntegration]);
 
   local_data->set_is_locally_installed(web_app.is_locally_installed());
 
@@ -768,8 +781,9 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
                   FilePathToProto(bundle.path));
             },
             [&mutable_data](const IsolationData::DevModeProxy& proxy) {
+              DCHECK(!proxy.proxy_url.opaque());
               mutable_data->mutable_dev_mode_proxy()->set_proxy_url(
-                  proxy.proxy_url);
+                  proxy.proxy_url.Serialize());
             },
         },
         web_app.isolation_data().value().content);
@@ -820,6 +834,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
       local_data.sources().web_app_store();
   sources[WebAppManagement::kSync] = local_data.sources().sync();
   sources[WebAppManagement::kDefault] = local_data.sources().default_();
+  sources[WebAppManagement::kOem] = local_data.sources().oem();
   if (local_data.sources().has_sub_app()) {
     sources[WebAppManagement::kSubApp] = local_data.sources().sub_app();
   }
@@ -829,6 +844,10 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   if (local_data.sources().has_command_line()) {
     sources[WebAppManagement::kCommandLine] =
         local_data.sources().command_line();
+  }
+  if (local_data.sources().has_one_drive_integration()) {
+    sources[WebAppManagement::kOneDriveIntegration] =
+        local_data.sources().one_drive_integration();
   }
   if (!sources.any() && !local_data.is_uninstalling()) {
     DLOG(ERROR) << "WebApp proto parse error: no any source in sources field, "
@@ -1419,11 +1438,21 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
         break;
       }
 
-      case IsolationDataProto::ContentCase::kDevModeProxy:
-        web_app->SetIsolationData(IsolationData(IsolationData::DevModeProxy{
-            .proxy_url =
-                local_data.isolation_data().dev_mode_proxy().proxy_url()}));
+      case IsolationDataProto::ContentCase::kDevModeProxy: {
+        GURL gurl_proxy_url =
+            GURL(local_data.isolation_data().dev_mode_proxy().proxy_url());
+        url::Origin proxy_url = url::Origin::Create(gurl_proxy_url);
+        if (!gurl_proxy_url.is_valid() || proxy_url.opaque()) {
+          DLOG(ERROR)
+              << "WebApp proto isolation_data.dev_mode_proxy.proxy_url "
+                 "parse error: cannot deserialize proxy url. Value: " +
+                     local_data.isolation_data().dev_mode_proxy().proxy_url();
+          return nullptr;
+        }
+        web_app->SetIsolationData(
+            IsolationData(IsolationData::DevModeProxy{.proxy_url = proxy_url}));
         break;
+      }
 
       case IsolationDataProto::ContentCase::CONTENT_NOT_SET:
         DLOG(ERROR) << "WebApp proto isolation_data parse error: "

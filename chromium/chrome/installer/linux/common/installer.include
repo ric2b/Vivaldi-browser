@@ -91,7 +91,6 @@ process_template() (
     -e "s#@@PRODUCTURL@@#${PRODUCTURL}#g" \
     -e "s#@@PREDEPENDS@@#${PREDEPENDS}#g" \
     -e "s#@@DEPENDS@@#${DEPENDS}#g" \
-    -e "s#@@RECOMMENDS@@#${RECOMMENDS}#g" \
     -e "s#@@PROVIDES@@#${PROVIDES}#g" \
     -e "s#@@ARCHITECTURE@@#${ARCHITECTURE}#g" \
     -e "s#@@MAINTNAME@@#${MAINTNAME}#g" \
@@ -149,8 +148,8 @@ stage_install_common() {
 
   # Final permissions for the chrome-management-service will be set in
   # postinst chrome_management_service_setup().
-  strippedfile="${OUTPUTDIR}/chrome_management_service.stripped"
-  install -m 755 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/chrome-management-service"
+  # strippedfile="${OUTPUTDIR}/chrome_management_service.stripped"
+  # install -m 755 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/chrome-management-service"
 
   # resources
   install -m 644 "${OUTPUTDIR}/resources.pak" "${STAGEDIR}/${INSTALLDIR}/"

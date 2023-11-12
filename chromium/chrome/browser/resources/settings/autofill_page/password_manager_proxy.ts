@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
+
 /**
  * @fileoverview PasswordManagerProxy is an abstraction over
  * chrome.passwordsPrivate which facilitates testing.
@@ -41,10 +43,9 @@ export interface PasswordManagerProxy {
 
   /**
    * Request the list of saved passwords.
-   * TODO(https://crbug.com/919483): Return a promise instead of taking a
-   * callback argument.
+   * @return A promise that resolves with the list of saved passwords.
    */
-  getSavedPasswordList(callback: SavedPasswordListChangedListener): void;
+  getSavedPasswordList(): Promise<chrome.passwordsPrivate.PasswordUiEntry[]>;
 
   /**
    * Log that the Passwords page was accessed from the Chrome Settings WebUI.
@@ -115,10 +116,9 @@ export interface PasswordManagerProxy {
 
   /**
    * Request the list of password exceptions.
-   * TODO(https://crbug.com/919483): Return a promise instead of taking a
-   * callback argument.
+   * @return A promise that resolves with the list of password exceptions.
    */
-  getExceptionList(callback: PasswordExceptionListChangedListener): void;
+  getExceptionList(): Promise<chrome.passwordsPrivate.ExceptionEntry[]>;
 
   /**
    * Should remove the password exception and notify that the list has changed.
@@ -134,12 +134,12 @@ export interface PasswordManagerProxy {
   undoRemoveSavedPasswordOrException(): void;
 
   /**
-   * Gets the full credential for a given id.
-   * @param id The id for the password entry being being retrieved.
-   * @return A promise that resolves to the full |PasswordUiEntry|.
+   * Gets the list of full (with note and password) credentials for given ids.
+   * @param ids The id for the password entries being retrieved.
+   * @return A promise that resolves to |PasswordUiEntry[]|.
    */
-  requestCredentialDetails(id: number):
-      Promise<chrome.passwordsPrivate.PasswordUiEntry>;
+  requestCredentialsDetails(ids: number[]):
+      Promise<chrome.passwordsPrivate.PasswordUiEntry[]>;
 
   /**
    * Gets the saved password for a given id and reason.
@@ -208,13 +208,6 @@ export interface PasswordManagerProxy {
   optInForAccountStorage(optIn: boolean): void;
 
   /**
-   * Refreshes the cache for automatic password change scripts if the cache is
-   * stale.
-   * @return A promise that resolves when the cache is fresh.
-   */
-  refreshScriptsIfNecessary(): Promise<void>;
-
-  /**
    * Requests the start of the bulk password check.
    */
   startBulkPasswordCheck(): Promise<void>;
@@ -236,13 +229,6 @@ export interface PasswordManagerProxy {
       Promise<chrome.passwordsPrivate.PasswordCheckStatus>;
 
   /**
-   * Starts an automated password change flow.
-   * @param credential The credential for which to start the flow.
-   */
-  startAutomatedPasswordChange(
-      credential: chrome.passwordsPrivate.PasswordUiEntry): Promise<boolean>;
-
-  /**
    * Dismisses / mutes the |insecureCredential| in the passwords store.
    */
   muteInsecureCredential(insecureCredential:
@@ -255,12 +241,10 @@ export interface PasswordManagerProxy {
                                chrome.passwordsPrivate.PasswordUiEntry): void;
 
   /**
-   * Records the state of a change password flow for |insecureCredential|
-   * and notes it is a manual flow via |isManualFlow|.
+   * Records the state of a change password flow for |insecureCredential|.
    */
   recordChangePasswordFlowStarted(
-      insecureCredential: chrome.passwordsPrivate.PasswordUiEntry,
-      isManualFlow: boolean): void;
+      insecureCredential: chrome.passwordsPrivate.PasswordUiEntry): void;
 
   /**
    * Requests extension of authentication validity.
@@ -376,8 +360,8 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
         listener);
   }
 
-  getSavedPasswordList(callback: SavedPasswordListChangedListener) {
-    chrome.passwordsPrivate.getSavedPasswordList(callback);
+  getSavedPasswordList() {
+    return chrome.passwordsPrivate.getSavedPasswordList();
   }
 
   recordPasswordsPageAccessInSettings() {
@@ -385,33 +369,20 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
   }
 
   isAccountStoreDefault() {
-    return new Promise<boolean>(resolve => {
-      chrome.passwordsPrivate.isAccountStoreDefault(resolve);
-    });
+    return chrome.passwordsPrivate.isAccountStoreDefault();
   }
 
   getUrlCollection(url: string) {
-    return new Promise<chrome.passwordsPrivate.UrlCollection|null>(resolve => {
-      chrome.passwordsPrivate.getUrlCollection(url, urlCollection => {
-        resolve(chrome.runtime.lastError ? null : urlCollection);
-      });
-    });
+    return chrome.passwordsPrivate.getUrlCollection(url);
   }
 
   addPassword(options: chrome.passwordsPrivate.AddPasswordOptions) {
-    return new Promise<void>(resolve => {
-      chrome.passwordsPrivate.addPassword(options, resolve);
-    });
+    return chrome.passwordsPrivate.addPassword(options);
   }
 
   changeSavedPassword(
       id: number, params: chrome.passwordsPrivate.ChangeSavedPasswordParams) {
-    return new Promise<number>(resolve => {
-      chrome.passwordsPrivate.changeSavedPassword(
-          id, params, (newId: number) => {
-            resolve(newId);
-          });
-    });
+    return chrome.passwordsPrivate.changeSavedPassword(id, params);
   }
 
   removeSavedPassword(
@@ -435,8 +406,8 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
         listener);
   }
 
-  getExceptionList(callback: PasswordExceptionListChangedListener) {
-    chrome.passwordsPrivate.getPasswordExceptionList(callback);
+  getExceptionList() {
+    return chrome.passwordsPrivate.getPasswordExceptionList();
   }
 
   removeException(id: number) {
@@ -447,60 +418,25 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
     chrome.passwordsPrivate.undoRemoveSavedPasswordOrException();
   }
 
-  requestCredentialDetails(id: number) {
-    return new Promise<chrome.passwordsPrivate.PasswordUiEntry>(
-        (resolve, reject) => {
-          chrome.passwordsPrivate.requestCredentialDetails(
-              id,
-              (passwordUiEntry: chrome.passwordsPrivate.PasswordUiEntry) => {
-                if (chrome.runtime.lastError) {
-                  reject(chrome.runtime.lastError.message);
-                  return;
-                }
-
-                resolve(passwordUiEntry);
-              });
-        });
+  requestCredentialsDetails(ids: number[]) {
+    return chrome.passwordsPrivate.requestCredentialsDetails(ids);
   }
 
   requestPlaintextPassword(
       id: number, reason: chrome.passwordsPrivate.PlaintextReason) {
-    return new Promise<string>((resolve, reject) => {
-      chrome.passwordsPrivate.requestPlaintextPassword(
-          id, reason, (password) => {
-            if (chrome.runtime.lastError) {
-              reject(chrome.runtime.lastError.message);
-              return;
-            }
-
-            resolve(password);
-          });
-    });
+    return chrome.passwordsPrivate.requestPlaintextPassword(id, reason);
   }
 
   importPasswords(toStore: chrome.passwordsPrivate.PasswordStoreSet) {
-    return new Promise<chrome.passwordsPrivate.ImportResults>(resolve => {
-      chrome.passwordsPrivate.importPasswords(toStore, resolve);
-    });
+    return chrome.passwordsPrivate.importPasswords(toStore);
   }
 
   exportPasswords() {
-    return new Promise<void>((resolve, reject) => {
-      chrome.passwordsPrivate.exportPasswords(() => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError.message);
-          return;
-        }
-        resolve();
-      });
-    });
+    return chrome.passwordsPrivate.exportPasswords();
   }
 
   requestExportProgressStatus() {
-    return new Promise<chrome.passwordsPrivate.ExportProgressStatus>(
-        resolve => {
-          chrome.passwordsPrivate.requestExportProgressStatus(resolve);
-        });
+    return chrome.passwordsPrivate.requestExportProgressStatus();
   }
 
   addPasswordsFileExportProgressListener(
@@ -531,44 +467,25 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
   }
 
   isOptedInForAccountStorage() {
-    return new Promise<boolean>(resolve => {
-      chrome.passwordsPrivate.isOptedInForAccountStorage(resolve);
-    });
+    return chrome.passwordsPrivate.isOptedInForAccountStorage();
   }
 
   getPasswordCheckStatus() {
-    return new Promise<chrome.passwordsPrivate.PasswordCheckStatus>(resolve => {
-      chrome.passwordsPrivate.getPasswordCheckStatus(resolve);
-    });
-  }
-
-  startAutomatedPasswordChange(credential:
-                                   chrome.passwordsPrivate.PasswordUiEntry) {
-    return new Promise<boolean>(resolve => {
-      chrome.passwordsPrivate.startAutomatedPasswordChange(credential, resolve);
-    });
+    return chrome.passwordsPrivate.getPasswordCheckStatus();
   }
 
   optInForAccountStorage(optIn: boolean) {
     chrome.passwordsPrivate.optInForAccountStorage(optIn);
   }
 
-  refreshScriptsIfNecessary() {
-    return new Promise<void>(resolve => {
-      chrome.passwordsPrivate.refreshScriptsIfNecessary(resolve);
-    });
-  }
-
   startBulkPasswordCheck() {
-    return new Promise<void>((resolve, reject) => {
-      chrome.passwordsPrivate.startPasswordCheck(() => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError.message);
-          return;
-        }
-        resolve();
-      });
-    });
+    // Note: PasswordCheck can be run automatically, such as when the row or
+    // button is clicked from the passwords_section page. In this case, we also
+    // want to count it as if the user ran password check, because it is still
+    // an explicit action.
+    HatsBrowserProxyImpl.getInstance().trustSafetyInteractionOccurred(
+        TrustSafetyInteraction.RAN_PASSWORD_CHECK);
+    return chrome.passwordsPrivate.startPasswordCheck();
   }
 
   stopBulkPasswordCheck() {
@@ -589,11 +506,9 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
     chrome.passwordsPrivate.unmuteInsecureCredential(insecureCredential);
   }
 
-  recordChangePasswordFlowStarted(
-      insecureCredential: chrome.passwordsPrivate.PasswordUiEntry,
-      isManualFlow: boolean) {
-    chrome.passwordsPrivate.recordChangePasswordFlowStarted(
-        insecureCredential, isManualFlow);
+  recordChangePasswordFlowStarted(insecureCredential:
+                                      chrome.passwordsPrivate.PasswordUiEntry) {
+    chrome.passwordsPrivate.recordChangePasswordFlowStarted(insecureCredential);
   }
 
   extendAuthValidity() {

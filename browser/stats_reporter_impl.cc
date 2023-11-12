@@ -11,9 +11,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_content_browser_client.h"
-#include "components/embedder_support/user_agent_utils.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info_values.h"
@@ -702,7 +699,7 @@ void StatsReporterImpl::OnOSStatFileRead(
 
 void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
                                     std::string os_profile_reporting_data) {
-  PrefService* prefs = g_browser_process->local_state();
+  PrefService* prefs = GetLocalState();
   ReportingData local_state_reporting_data;
   local_state_reporting_data.user_id =
       prefs->GetString(vivaldiprefs::kVivaldiUniqueUserId);
@@ -779,7 +776,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
           now, legacy_user_id_,
           display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel(),
           base::SysInfo::OperatingSystemArchitecture(), VIVALDI_UA_VERSION,
-          embedder_support::GetUserAgent(), local_state_reporting_data,
+          GetUserAgent(), local_state_reporting_data,
           os_profile_reporting_data_json, request_url, body,
           next_reporting_time_interval)) {
     ScheduleNextReporting(next_reporting_time_interval, true);
@@ -791,7 +788,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
   // Unretained is safe because the callback is destroyed when the url_loader_
   // (which we own) is destroyed
   url_loader_->DownloadToString(
-      g_browser_process->shared_url_loader_factory().get(),
+      GetUrlLoaderFactory().get(),
       base::BindOnce(&StatsReporterImpl::OnURLLoadComplete,
                      base::Unretained(this),
                      std::move(os_profile_reporting_data_file),
@@ -842,7 +839,7 @@ void StatsReporterImpl::OnURLLoadComplete(
   // another day.
   report_backoff_.Reset();
 
-  PrefService* prefs = g_browser_process->local_state();
+  PrefService* prefs = GetLocalState();
 
   prefs->SetTime(vivaldiprefs::kVivaldiStatsNextDailyPing,
                  local_state_reporting_data.next_pings.daily);

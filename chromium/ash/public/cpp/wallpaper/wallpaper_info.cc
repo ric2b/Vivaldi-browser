@@ -4,11 +4,11 @@
 
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
 
-#include <algorithm>
 #include <iostream>
 
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
+#include "base/ranges/algorithm.h"
 
 namespace ash {
 
@@ -60,7 +60,7 @@ WallpaperInfo& WallpaperInfo::operator=(const WallpaperInfo& other) = default;
 WallpaperInfo::WallpaperInfo(WallpaperInfo&& other) = default;
 WallpaperInfo& WallpaperInfo::operator=(WallpaperInfo&& other) = default;
 
-bool WallpaperInfo::operator==(const WallpaperInfo& other) const {
+bool WallpaperInfo::MatchesSelection(const WallpaperInfo& other) const {
   // |asset_id| and |location| are skipped on purpose in favor of |unit_id| as
   // online wallpapers can vary across devices due to their color mode. Other
   // wallpaper types still require location to be equal.
@@ -69,8 +69,7 @@ bool WallpaperInfo::operator==(const WallpaperInfo& other) const {
     case WallpaperType::kDaily:
       return type == other.type && layout == other.layout &&
              collection_id == other.collection_id && unit_id == other.unit_id &&
-             (std::equal(variants.begin(), variants.end(),
-                         other.variants.begin()));
+             base::ranges::equal(variants, other.variants);
     case WallpaperType::kOnceGooglePhotos:
     case WallpaperType::kDailyGooglePhotos:
       return location == other.location && layout == other.layout &&
@@ -90,8 +89,25 @@ bool WallpaperInfo::operator==(const WallpaperInfo& other) const {
   }
 }
 
-bool WallpaperInfo::operator!=(const WallpaperInfo& other) const {
-  return !(*this == other);
+bool WallpaperInfo::MatchesAsset(const WallpaperInfo& other) const {
+  if (!MatchesSelection(other))
+    return false;
+
+  switch (type) {
+    case WallpaperType::kOnline:
+    case WallpaperType::kDaily:
+      return location == other.location && asset_id == other.asset_id;
+    case WallpaperType::kOnceGooglePhotos:
+    case WallpaperType::kDailyGooglePhotos:
+    case WallpaperType::kCustomized:
+    case WallpaperType::kDefault:
+    case WallpaperType::kPolicy:
+    case WallpaperType::kThirdParty:
+    case WallpaperType::kDevice:
+    case WallpaperType::kOneShot:
+    case WallpaperType::kCount:
+      return true;
+  }
 }
 
 WallpaperInfo::~WallpaperInfo() = default;

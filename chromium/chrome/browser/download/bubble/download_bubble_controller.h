@@ -64,15 +64,10 @@ class DownloadBubbleUIController
   virtual void InitOfflineItems(DownloadDisplayController* display_controller,
                                 base::OnceCallback<void()> callback);
 
-  // Submits download to download feedback service if the user has approved and
-  // the download is suitable for submission, then applies |command|.
-  // If user hasn't seen SBER opt-in text before, show SBER opt-in dialog first.
-  void MaybeSubmitDownloadToFeedbackService(DownloadUIModel* model,
-                                            DownloadCommands::Command command);
-
   // Process button press on the bubble.
   void ProcessDownloadButtonPress(DownloadUIModel* model,
-                                  DownloadCommands::Command command);
+                                  DownloadCommands::Command command,
+                                  bool is_main_view);
 
   // Notify when a new download is ready to be shown on UI, and if the window
   // this controller belongs to should show the partial view.
@@ -146,35 +141,24 @@ class DownloadBubbleUIController
   // Common method for getting main and partial views.
   std::vector<DownloadUIModelPtr> GetDownloadUIModels(bool is_main_view);
 
-  // Submits the downloaded file to the safebrowsing download feedback service.
-  // Applies |command| if submission succeeds. Returns whether submission was
-  // successful.
-  bool SubmitDownloadToFeedbackService(DownloadUIModel* model,
-                                       DownloadCommands::Command command) const;
-
-  // Process Warning keep or discard button press on the bubble. Submit
-  // download to feedback service for non-mixed content downloads.
-  void ProcessDownloadWarningButtonPress(DownloadUIModel* model,
-                                         DownloadCommands::Command command);
-
   // Kick off retrying an eligible interrupted download.
   void RetryDownload(DownloadUIModel* model, DownloadCommands::Command command);
 
-  raw_ptr<Browser> browser_;
-  raw_ptr<Profile> profile_;
-  raw_ptr<content::DownloadManager> download_manager_;
+  raw_ptr<Browser, DanglingUntriaged> browser_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
+  raw_ptr<content::DownloadManager, DanglingUntriaged> download_manager_;
   download::AllDownloadItemNotifier download_notifier_;
   // Null if the profile is not off the record.
   std::unique_ptr<download::AllDownloadItemNotifier> original_notifier_;
-  raw_ptr<OfflineContentAggregator> aggregator_;
-  raw_ptr<OfflineItemModelManager> offline_manager_;
+  raw_ptr<OfflineContentAggregator, DanglingUntriaged> aggregator_;
+  raw_ptr<OfflineItemModelManager, DanglingUntriaged> offline_manager_;
   base::ScopedObservation<OfflineContentProvider,
                           OfflineContentProvider::Observer>
       observation_{this};
   // DownloadDisplayController and DownloadBubbleUIController have the same
   // lifetime. Both are owned, constructed together, and destructed together by
   // DownloadToolbarButtonView. If one is valid, so is the other.
-  raw_ptr<DownloadDisplayController> display_controller_;
+  raw_ptr<DownloadDisplayController, DanglingUntriaged> display_controller_;
 
   // Pruned list of offline items.
   OfflineItemList offline_items_;

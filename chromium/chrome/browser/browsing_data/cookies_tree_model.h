@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/browsing_data/access_context_audit_database.h"
@@ -238,13 +239,17 @@ class CookieTreeHostNode : public CookieTreeNode {
   // the COOKIES node to add children. Checking each child and interrogating
   // them to see if they are a COOKIES, DATABASES, etc node seems
   // less preferable than storing an extra pointer per origin.
-  raw_ptr<CookieTreeCookiesNode> cookies_child_ = nullptr;
-  raw_ptr<CookieTreeDatabasesNode> databases_child_ = nullptr;
-  raw_ptr<CookieTreeLocalStoragesNode> local_storages_child_ = nullptr;
-  raw_ptr<CookieTreeSessionStoragesNode> session_storages_child_ = nullptr;
-  raw_ptr<CookieTreeIndexedDBsNode> indexed_dbs_child_ = nullptr;
+  raw_ptr<CookieTreeCookiesNode, DanglingUntriaged> cookies_child_ = nullptr;
+  raw_ptr<CookieTreeDatabasesNode, DanglingUntriaged> databases_child_ =
+      nullptr;
+  raw_ptr<CookieTreeLocalStoragesNode, DanglingUntriaged>
+      local_storages_child_ = nullptr;
+  raw_ptr<CookieTreeSessionStoragesNode, DanglingUntriaged>
+      session_storages_child_ = nullptr;
+  raw_ptr<CookieTreeIndexedDBsNode, DanglingUntriaged> indexed_dbs_child_ =
+      nullptr;
   raw_ptr<CookieTreeFileSystemsNode> file_systems_child_ = nullptr;
-  raw_ptr<CookieTreeQuotaNode> quota_child_ = nullptr;
+  raw_ptr<CookieTreeQuotaNode, DanglingUntriaged> quota_child_ = nullptr;
   raw_ptr<CookieTreeServiceWorkersNode> service_workers_child_ = nullptr;
   raw_ptr<CookieTreeSharedWorkersNode> shared_workers_child_ = nullptr;
   raw_ptr<CookieTreeCacheStoragesNode> cache_storages_child_ = nullptr;
@@ -281,10 +286,17 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   // observers for every item added from databases and local storage.
   // We extend the Observer interface to add notifications before and
   // after these batch inserts.
+  // DEPRECATED(crbug.com/1271155): The cookies tree model is slowly being
+  // deprecated, during this process the semantics of the model are nuanced
+  // w.r.t sync vs async operations, and should not be used in new locations.
+  // Batch operations which fetch are always sync if all helpers are canned
+  // (in-memory) versions *and* the CannedLocalStorageHelper is configured not
+  // to check for empty local storages. Batch fetch operations are always async
+  // otherwise.
   class Observer : public ui::TreeModelObserver {
    public:
-    virtual void TreeModelBeginBatch(CookiesTreeModel* model) {}
-    virtual void TreeModelEndBatch(CookiesTreeModel* model) {}
+    virtual void TreeModelBeginBatchDeprecated(CookiesTreeModel* model) {}
+    virtual void TreeModelEndBatchDeprecated(CookiesTreeModel* model) {}
   };
 
   // This class defines the scope for batch updates. It can be created as a
@@ -373,6 +385,8 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   GetCookieDeletionDisabledCallback(Profile* profile);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(CookiesTreeModelBrowserTest, BatchesFinishSync);
+
   // Record that one batch has been delivered.
   void RecordBatchSeen();
 

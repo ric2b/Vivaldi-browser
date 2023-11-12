@@ -159,8 +159,6 @@ struct NET_EXPORT QuicParams {
   // If true, the quic stream factory may race connection from stale dns
   // result with the original dns resolution
   bool race_stale_dns_on_connection = false;
-  // If true, bidirectional streams over QUIC will be disabled.
-  bool disable_bidirectional_streams = false;
   // If true, estimate the initial RTT for QUIC connections based on network.
   bool estimate_initial_rtt = false;
   // If true, client headers will include HTTP/2 stream dependency info
@@ -184,7 +182,7 @@ struct NET_EXPORT QuicParams {
   absl::optional<bool> exponential_backoff_on_initial_delay;
   // If true, delay main job even the request can be sent immediately on an
   // available SPDY session.
-  bool delay_main_job_with_available_spdy_session = true;
+  bool delay_main_job_with_available_spdy_session = false;
 };
 
 // QuicContext contains QUIC-related variables that are shared across all of the

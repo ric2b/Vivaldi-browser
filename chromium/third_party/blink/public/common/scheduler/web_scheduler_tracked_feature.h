@@ -61,7 +61,12 @@ enum class WebSchedulerTrackedFeature : uint32_t {
   // TODO(altimin): Track this more accurately depending on the data.
   // See permission.mojom for more details.
   // kRequestedGeolocationPermission = 19,   // No longer blocking.
-  kRequestedNotificationsPermission = 20,
+
+  // Requesting for the notifications permission should never have blocked
+  // back/forward cache entry.
+  // https://crbug.com/1350944
+  // kRequestedNotificationsPermission = 20,
+
   kRequestedMIDIPermission = 21,
   kRequestedAudioCapturePermission = 22,
   kRequestedVideoCapturePermission = 23,
@@ -94,8 +99,8 @@ enum class WebSchedulerTrackedFeature : uint32_t {
 
   kOutstandingNetworkRequestFetch = 40,
   kOutstandingNetworkRequestXHR = 41,
-
-  kAppBanner = 42,
+  // kAppBanner = 42. Removed after support added for back/forward cache.
+  // See https://crbug.com/1276864.
   kPrinting = 43,
   kWebDatabase = 44,
   kPictureInPicture = 45,
@@ -114,12 +119,18 @@ enum class WebSchedulerTrackedFeature : uint32_t {
   kWebTransport = 57,
   // This should be used only for testing.
   kDummy = 58,
+  kKeepaliveRequest = 59,
+  // An RPC has been made using the "Authorization" header. We record this
+  // whenever we see it but we only care about this if the frame it was made
+  // from is same-origin with the main frame and the main frame used
+  // "Cache-Control: no-store".
+  kAuthorizationHeader = 60,
 
   // Please keep in sync with WebSchedulerTrackedFeature in
   // tools/metrics/histograms/enums.xml. These values should not be renumbered.
 
   // NB: This enum is used in a bitmask, so kMaxValue must be less than 64.
-  kMaxValue = kDummy,
+  kMaxValue = kAuthorizationHeader,
 };
 
 using WebSchedulerTrackedFeatures =

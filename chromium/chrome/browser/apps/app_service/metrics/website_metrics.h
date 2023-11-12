@@ -22,6 +22,7 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
@@ -36,17 +37,6 @@ namespace apps {
 class WebsiteMetricsBrowserTest;
 class TestWebsiteMetrics;
 
-// This is used for logging, so do not remove or reorder existing entries.
-enum class UrlContent {
-  kUnknown = 0,
-  kFullUrl = 1,
-  kScope = 2,
-
-  // Add any new values above this one, and update kMaxValue to the highest
-  // enumerator value.
-  kMaxValue = kScope,
-};
-
 extern const char kWebsiteUsageTime[];
 extern const char kRunningTimeKey[];
 extern const char kUrlContentKey[];
@@ -60,7 +50,7 @@ class WebsiteMetrics : public BrowserListObserver,
                        public wm::ActivationChangeObserver,
                        public history::HistoryServiceObserver {
  public:
-  explicit WebsiteMetrics(Profile* profile);
+  WebsiteMetrics(Profile* profile, int user_type_by_device_type);
 
   WebsiteMetrics(const WebsiteMetrics&) = delete;
   WebsiteMetrics& operator=(const WebsiteMetrics&) = delete;
@@ -134,6 +124,7 @@ class WebsiteMetrics : public BrowserListObserver,
   struct UrlInfo {
     UrlInfo() = default;
     explicit UrlInfo(const base::Value& value);
+    ukm::SourceId source_id = ukm::kInvalidSourceId;
     base::TimeTicks start_time;
     // Running time in the past 5 minutes without noise.
     base::TimeDelta running_time_in_five_minutes;
@@ -141,7 +132,6 @@ class WebsiteMetrics : public BrowserListObserver,
     // time1 * noise1 + time2 * noise2 + time3 * noise3....
     base::TimeDelta running_time_in_two_hours;
 
-    UrlContent url_content = UrlContent::kUnknown;
     bool is_activated = false;
     bool promotable = false;
 
@@ -156,13 +146,14 @@ class WebsiteMetrics : public BrowserListObserver,
 
   // Observes the root window's activation client for the OnWindowActivated
   // callback.
-  void MaybeObserveWindowActivationClient();
+  void MaybeObserveWindowActivationClient(aura::Window* window);
 
   // Removes observing the root window's activation client when the last browser
   // window is closed.
-  void MaybeRemoveObserveWindowActivationClient();
+  void MaybeRemoveObserveWindowActivationClient(aura::Window* window);
 
-  void OnTabStripModelChangeInsert(TabStripModel* tab_strip_model,
+  void OnTabStripModelChangeInsert(aura::Window* window,
+                                   TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert,
                                    const TabStripSelectionChange& selection);
   void OnTabStripModelChangeRemove(aura::Window* window,
@@ -183,18 +174,14 @@ class WebsiteMetrics : public BrowserListObserver,
 
   // Adds the url info to `url_infos_`.
   void AddUrlInfo(const GURL& url,
+                  ukm::SourceId source_id,
                   const base::TimeTicks& start_time,
-                  UrlContent url_content,
                   bool is_activated,
                   bool promotable);
 
-  // Modifies `old_url` to `new_url` in `url_infos_`, when the website manifest
-  // is updated.
-  void UpdateUrlInfo(const GURL& old_url,
-                     const GURL& new_url,
-                     UrlContent url_content,
-                     bool is_activated,
-                     bool promotable);
+  // Modifies `url_infos_` to set whether the website can be promoted to PWA,
+  // when the website manifest is updated.
+  void UpdateUrlInfo(const GURL& old_url, bool promotable);
 
   void SetWindowActivated(aura::Window* window);
 
@@ -215,9 +202,8 @@ class WebsiteMetrics : public BrowserListObserver,
   // after the user logs in.
   void RecordUsageTimeFromPref();
 
-  void EmitUkm(const GURL& url,
+  void EmitUkm(ukm::SourceId source_id,
                int64_t usage_time,
-               UrlContent url_content,
                bool promotable,
                bool is_from_last_login);
 
@@ -227,6 +213,10 @@ class WebsiteMetrics : public BrowserListObserver,
 
   // The map from the window to the active tab contents.
   base::flat_map<aura::Window*, content::WebContents*> window_to_web_contents_;
+
+  // The map from the root window's activation client to windows.
+  std::map<wm::ActivationClient*, std::set<aura::Window*>>
+      activation_client_to_windows_;
 
   std::map<content::WebContents*, std::unique_ptr<ActiveTabWebContentsObserver>>
       webcontents_to_observer_map_;
@@ -253,8 +243,11 @@ class WebsiteMetrics : public BrowserListObserver,
   base::ScopedMultiSourceObservation<aura::Window, aura::WindowObserver>
       observed_windows_{this};
 
-  base::ScopedObservation<wm::ActivationClient, wm::ActivationChangeObserver>
-      activation_client_observation_{this};
+  // For Lacros browser windows, there could be multiple root windows for
+  // browser windows, and multiple ActivationClients.
+  base::ScopedMultiSourceObservation<wm::ActivationClient,
+                                     wm::ActivationChangeObserver>
+      activation_client_observations_{this};
 
   base::ScopedObservation<history::HistoryService,
                           history::HistoryServiceObserver>

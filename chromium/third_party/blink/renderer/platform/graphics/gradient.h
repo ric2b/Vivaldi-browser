@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/effects/SkGradientShader.h"
 
 class SkMatrix;
 
@@ -127,14 +128,14 @@ class PLATFORM_EXPORT Gradient : public RefCounted<Gradient> {
  protected:
   Gradient(Type, GradientSpreadMethod, ColorInterpolation, DegenerateHandling);
 
-  using ColorBuffer = Vector<SkColor, 8>;
+  using ColorBuffer = Vector<SkColor4f, 8>;
   using OffsetBuffer = Vector<SkScalar, 8>;
   virtual sk_sp<PaintShader> CreateShader(const ColorBuffer&,
                                           const OffsetBuffer&,
                                           SkTileMode,
-                                          uint32_t flags,
+                                          SkGradientShader::Interpolation,
                                           const SkMatrix&,
-                                          SkColor) const = 0;
+                                          SkColor4f) const = 0;
 
   DegenerateHandling GetDegenerateHandling() const {
     return degenerate_handling_;
@@ -142,9 +143,11 @@ class PLATFORM_EXPORT Gradient : public RefCounted<Gradient> {
 
  private:
   sk_sp<PaintShader> CreateShaderInternal(const SkMatrix& local_matrix);
+  SkGradientShader::Interpolation ResolveSkInterpolation() const;
 
   void SortStopsIfNecessary() const;
   void FillSkiaStops(ColorBuffer&, OffsetBuffer&) const;
+  bool HasNonLegacyColor() const;
 
   const Type type_;
   const GradientSpreadMethod spread_method_;
@@ -159,8 +162,10 @@ class PLATFORM_EXPORT Gradient : public RefCounted<Gradient> {
   mutable sk_sp<PaintShader> cached_shader_;
   mutable sk_sp<SkColorFilter> color_filter_;
 
-  Color::ColorInterpolationSpace color_space_interpolation_space_;
-  Color::HueInterpolationMethod hue_interpolation_method_;
+  Color::ColorInterpolationSpace color_space_interpolation_space_ =
+      Color::ColorInterpolationSpace::kNone;
+  Color::HueInterpolationMethod hue_interpolation_method_ =
+      Color::HueInterpolationMethod::kShorter;
 };
 
 }  // namespace blink

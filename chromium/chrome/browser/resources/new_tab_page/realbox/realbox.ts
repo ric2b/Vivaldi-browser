@@ -5,20 +5,19 @@
 import './realbox_dropdown.js';
 import './realbox_icon.js';
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {hasKeyModifiers} from 'chrome://resources/js/util.js';
-import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
+import {MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
+import {hasKeyModifiers} from 'chrome://resources/js/util_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
-import {NavigationPredictor} from '../omnibox.mojom-webui.js';
-import {AutocompleteMatch, AutocompleteResult, PageCallbackRouter, PageHandlerInterface} from '../realbox.mojom-webui.js';
+import {AutocompleteMatch, AutocompleteResult, NavigationPredictor, PageCallbackRouter, PageHandlerInterface} from '../omnibox.mojom-webui.js';
 import {decodeString16, mojoString16, mojoTimeDelta} from '../utils.js';
 
 import {getTemplate} from './realbox.html.js';
 import {RealboxBrowserProxy} from './realbox_browser_proxy.js';
 import {RealboxDropdownElement} from './realbox_dropdown.js';
-import {AutocompleteMatchWithImageData, RealboxIconElement} from './realbox_icon.js';
+import {RealboxIconElement} from './realbox_icon.js';
 
 interface Input {
   text: string;
@@ -81,6 +80,13 @@ export class RealboxElement extends PolymerElement {
       realboxLensSearchEnabled: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('realboxLensSearch'),
+        reflectToAttribute: true,
+      },
+
+      /** Whether to display single-colored icons or not. */
+      singleColoredIcons: {
+        type: Boolean,
+        value: false,
         reflectToAttribute: true,
       },
 
@@ -194,7 +200,9 @@ export class RealboxElement extends PolymerElement {
   matchesAreVisible: boolean;
   matchSearchbox: boolean;
   realboxLensSearchEnabled: boolean;
+  singleColoredIcons: boolean;
   private charTypedTime_: number;
+  private inputAriaLive_: string;
   private isDeletingInput_: boolean;
   private lastIgnoredEnterEvent_: KeyboardEvent|null;
   private lastInput_: Input;
@@ -206,12 +214,10 @@ export class RealboxElement extends PolymerElement {
   private result_: AutocompleteResult|null;
   private selectedMatch_: AutocompleteMatch|null;
   private selectedMatchIndex_: number;
-  private inputAriaLive_: string;
 
   private pageHandler_: PageHandlerInterface;
   private callbackRouter_: PageCallbackRouter;
   private autocompleteResultChangedListenerId_: number|null = null;
-  private autocompleteMatchImageAvailableListenerId_: number|null = null;
 
   constructor() {
     performance.mark('realbox-creation-start');
@@ -229,17 +235,13 @@ export class RealboxElement extends PolymerElement {
     this.autocompleteResultChangedListenerId_ =
         this.callbackRouter_.autocompleteResultChanged.addListener(
             this.onAutocompleteResultChanged_.bind(this));
-    this.autocompleteMatchImageAvailableListenerId_ =
-        this.callbackRouter_.autocompleteMatchImageAvailable.addListener(
-            this.onAutocompleteMatchImageAvailable_.bind(this));
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    assert(this.autocompleteResultChangedListenerId_);
     this.callbackRouter_.removeListener(
-        assert(this.autocompleteResultChangedListenerId_!));
-    this.callbackRouter_.removeListener(
-        assert(this.autocompleteMatchImageAvailableListenerId_!));
+        this.autocompleteResultChangedListenerId_);
   }
 
   override ready() {
@@ -251,33 +253,9 @@ export class RealboxElement extends PolymerElement {
   // Callbacks
   //============================================================================
 
-  /**
-   * @param matchIndex match index
-   * @param url match imageUrl or destinationUrl.
-   * @param dataUrl match image or favicon content in in base64 encoded Data URL
-   *     format.
-   */
-  private onAutocompleteMatchImageAvailable_(
-      matchIndex: number, url: Url, dataUrl: string) {
-    if (!this.result_ || !this.result_.matches) {
-      return;
-    }
-
-    const match = this.result_.matches[matchIndex];
-    if (!match || this.selectedMatchIndex_ !== matchIndex) {
-      return;
-    }
-
-    // Set favicon content of the selected match, if applicable.
-    if (match.destinationUrl.url === url.url) {
-      (match as AutocompleteMatchWithImageData).faviconDataUrl = dataUrl;
-      this.notifyPath('selectedMatch_.faviconDataUrl');
-    }
-  }
-
   private onAutocompleteResultChanged_(result: AutocompleteResult) {
     if (this.lastQueriedInput_ === null ||
-        this.lastQueriedInput_.trimLeft() !== decodeString16(result.input)) {
+        this.lastQueriedInput_.trimStart() !== decodeString16(result.input)) {
       return;  // Stale result; ignore.
     }
 
@@ -370,6 +348,19 @@ export class RealboxElement extends PolymerElement {
     this.charTypedTime_ =
         charTyped ? this.charTypedTime_ || window.performance.now() : 0;
 
+    // If a character has been typed, mark 'CharTyped'. Otherwise clear it. If
+    // 'CharTyped' mark already exists, there's a pending typed character for
+    // which the results have not been painted yet. In that case, keep the
+    // earlier mark.
+    const metricsReporter = MetricsReporterImpl.getInstance();
+    if (charTyped) {
+      if (!metricsReporter.hasLocalMark('CharTyped')) {
+        metricsReporter.mark('CharTyped');
+      }
+    } else {
+      metricsReporter.clearMark('CharTyped');
+    }
+
     if (inputValue.trim()) {
       // TODO(crbug.com/1149769): Rather than disabling inline autocompletion
       // when the input event is fired within a composition session, change the
@@ -400,8 +391,10 @@ export class RealboxElement extends PolymerElement {
         inputValue === lastInputValue &&
         this.lastInput_.inline[0].toLocaleLowerCase() ===
             e.key.toLocaleLowerCase()) {
+      const text = this.lastInput_.text + e.key;
+      assert(text);
       this.updateInput_({
-        text: assert(this.lastInput_.text + e.key),
+        text: text,
         inline: this.lastInput_.inline.substr(1),
       });
 
@@ -409,6 +402,14 @@ export class RealboxElement extends PolymerElement {
       // which the results have not been painted yet. In that case, keep the
       // earlier time.
       this.charTypedTime_ = this.charTypedTime_ || window.performance.now();
+
+      // If 'CharTyped' mark already exists, there's a pending typed character
+      // for which the results have not been painted yet. In that case, keep the
+      // earlier mark.
+      const metricsReporter = MetricsReporterImpl.getInstance();
+      if (!metricsReporter.hasLocalMark('CharTyped')) {
+        metricsReporter.mark('CharTyped');
+      }
 
       this.queryAutocomplete_(this.lastInput_.text);
       e.preventDefault();
@@ -520,7 +521,7 @@ export class RealboxElement extends PolymerElement {
       const array: HTMLElement[] = [this.$.matches, this.$.input];
       if (array.includes(e.target as HTMLElement)) {
         if (this.lastQueriedInput_ !== null &&
-            this.lastQueriedInput_.trimLeft() ===
+            this.lastQueriedInput_.trimStart() ===
                 decodeString16(this.result_.input)) {
           if (this.selectedMatch_) {
             this.navigateToMatch_(this.selectedMatchIndex_, e);
@@ -577,8 +578,10 @@ export class RealboxElement extends PolymerElement {
         decodeString16(this.selectedMatch_!.inlineAutocompletion) :
         '';
     const newFillEnd = newFill.length - newInline.length;
+    const text = newFill.substr(0, newFillEnd);
+    assert(text);
     this.updateInput_({
-      text: assert(newFill.substr(0, newFillEnd)),
+      text: text,
       inline: newInline,
       moveCursorToEnd: newInline.length === 0,
     });
@@ -659,10 +662,11 @@ export class RealboxElement extends PolymerElement {
 
   private navigateToMatch_(matchIndex: number, e: KeyboardEvent|MouseEvent) {
     assert(matchIndex >= 0);
-    const match = assert(this.result_!.matches[matchIndex]);
+    const match = this.result_!.matches[matchIndex];
+    assert(match);
     assert(this.lastInputFocusTime_);
     const delta =
-        mojoTimeDelta(window.performance.now() - this.lastInputFocusTime_!);
+        mojoTimeDelta(window.performance.now() - this.lastInputFocusTime_);
     this.pageHandler_.openAutocompleteMatch(
         matchIndex, match.destinationUrl, this.matchesAreVisible, delta,
         (e as MouseEvent).button || 0, e.altKey, e.ctrlKey, e.metaKey,

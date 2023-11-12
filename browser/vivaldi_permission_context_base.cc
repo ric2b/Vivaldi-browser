@@ -20,8 +20,7 @@ void NotificationPermissionContext::UpdateTabContext(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(
-          content::RenderFrameHost::FromID(id.render_process_id(),
-                                           id.render_frame_id()));
+          content::RenderFrameHost::FromID(id.global_render_frame_host_id()));
 
   if (web_contents) {
     extensions::VivaldiPrivateTabObserver* private_tab =

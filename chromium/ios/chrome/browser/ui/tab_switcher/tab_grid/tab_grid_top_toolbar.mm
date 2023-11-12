@@ -7,11 +7,16 @@
 #import "base/check_op.h"
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "base/location.h"
+#import "base/task/sequenced_task_runner.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_toolbars_utils.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -33,27 +38,7 @@ const int kSearchBarTrailingSpace = 24;
 // The size of top toolbar search symbol image.
 const CGFloat kSymbolSearchImagePointSize = 22;
 
-// Kill switch guarding a workaround for broken UI around the dynamic island,
-// see crbug.com/1364629. This workaround makes the UIToolbar background
-// transparent and correctly frames a UIVisualEffectView.
-BASE_FEATURE(kDynamicIslandToolbarBlurFix,
-             "DynamicIslandToolbarBlurFix",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Kill switch guarding a workaround for broken UI around the dynamic island,
-// see crbug.com/1364629. This workaround manually resizes the incorrectly
-// framed UIVisualEffectView.
-BASE_FEATURE(kDynamicIslandToolbarManualOffsetFix,
-             "DynamicIslandToolbarManualOffsetFix",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace
-
-bool ShouldUseToolbarBlurFix() {
-  static bool dynamic_island_toolbar_blur_fix =
-      base::FeatureList::IsEnabled(kDynamicIslandToolbarBlurFix) &&
-      base::ios::HasDynamicIsland();
-  return dynamic_island_toolbar_blur_fix;
-}
 
 @interface TabGridTopToolbar () <UIToolbarDelegate>
 @end
@@ -78,6 +63,10 @@ bool ShouldUseToolbarBlurFix() {
   UIView* _searchBarView;
 
   BOOL _undoActive;
+
+  BOOL _scrolledToEdge;
+  UIView* _scrolledToTopBackgroundView;
+  UIView* _scrolledBackgroundView;
 }
 
 - (UIBarButtonItem*)anchorItem {
@@ -108,9 +97,15 @@ bool ShouldUseToolbarBlurFix() {
   if (mode == TabGridModeSearch) {
     // Focus the search bar, and make it a first responder once the user enter
     // to search mode. Doing that here instead in `setItemsForTraitCollection`
-    // makes sure it's only called once and allows the voicOver to transition
+    // makes sure it's only called once and allows VoiceOver to transition
     // smoothly and to say that there is a search field opened.
-    [_searchBar becomeFirstResponder];
+    // It is done on the next turn of the runloop as it has been seen to collide
+    // with other animations on some devices.
+    __weak __typeof(_searchBar) weakSearchBar = _searchBar;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(^{
+          [weakSearchBar becomeFirstResponder];
+        }));
   }
 }
 
@@ -152,6 +147,10 @@ bool ShouldUseToolbarBlurFix() {
 - (void)setCancelSearchButtonTarget:(id)target action:(SEL)action {
   _cancelSearchButton.target = target;
   _cancelSearchButton.action = action;
+}
+
+- (void)setSearchButtonEnabled:(BOOL)enabled {
+  _searchButton.enabled = enabled;
 }
 
 - (void)setNewTabButtonEnabled:(BOOL)enabled {
@@ -224,6 +223,17 @@ bool ShouldUseToolbarBlurFix() {
   self.pageControl.alpha = 1.0;
 }
 
+- (void)setScrollViewScrolledToEdge:(BOOL)scrolledToEdge {
+  if (!UseSymbols() || scrolledToEdge == _scrolledToEdge)
+    return;
+
+  _scrolledToEdge = scrolledToEdge;
+
+  _scrolledToTopBackgroundView.hidden = !scrolledToEdge;
+  _scrolledBackgroundView.hidden = scrolledToEdge;
+  [_pageControl setScrollViewScrolledToEdge:scrolledToEdge];
+}
+
 #pragma mark Edit Button
 
 - (void)setEditButtonMenu:(UIMenu*)menu API_AVAILABLE(ios(14.0)) {
@@ -241,62 +251,25 @@ bool ShouldUseToolbarBlurFix() {
 }
 
 - (void)willMoveToSuperview:(UIView*)newSuperview {
+  [super willMoveToSuperview:newSuperview];
   // The first time this moves to a superview, perform the view setup.
   if (newSuperview && self.subviews.count == 0) {
     [self setupViews];
   }
 }
 
+- (void)didMoveToSuperview {
+  if (_scrolledBackgroundView) {
+    [self.superview.topAnchor
+        constraintEqualToAnchor:_scrolledBackgroundView.topAnchor]
+        .active = YES;
+  }
+  [super didMoveToSuperview];
+}
+
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   [self setItemsForTraitCollection:self.traitCollection];
-}
-
-- (void)layoutSubviews {
-  [super layoutSubviews];
-
-  // The following is a workaround for crbug.com/1364629, which appears to be a
-  // bug in the UIToolbar when using UIBarPositionTopAttached. Once this is
-  // fixed in a future release of iOS, everything below should be removed.
-  // However, everything below should also be safe to run, including when the
-  // incorrect negative offset is corrected.
-  static bool dynamic_island_toolbar_manual_offset_fix =
-      base::FeatureList::IsEnabled(kDynamicIslandToolbarManualOffsetFix) &&
-      base::ios::HasDynamicIsland();
-  if (!dynamic_island_toolbar_manual_offset_fix)
-    return;
-
-  // Sanity check that we are a UIToolbar with a background blur and content
-  // view.
-  if ([[self subviews] count] != 2)
-    return;
-
-  UIView* view = [self subviews][0];
-  NSString* className = NSStringFromClass([view class]);
-  // Another safety check -- but don't put the actual string in
-  // `_UIBarBackground`.
-  if (![className hasSuffix:@"BarBackground"])
-    return;
-
-  // Make sure we have the 'wrong' offset
-  CGRect frame = view.frame;
-#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
-  if (frame.origin.y != -54) {
-#else
-  if (frame.origin.y != -44) {
-#endif
-    return;
-  }
-
-  // The actual workaround.
-#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
-  const CGFloat kOffsetFix = 5;
-#else
-  const CGFloat kOffsetFix = 15;
-#endif
-  frame.origin.y -= kOffsetFix;
-  frame.size.height += kOffsetFix;
-  view.frame = frame;
 }
 
 #pragma mark - UIBarPositioningDelegate
@@ -431,8 +404,13 @@ bool ShouldUseToolbarBlurFix() {
 
 - (void)setupViews {
   self.translatesAutoresizingMaskIntoConstraints = NO;
-  self.barStyle = UIBarStyleBlack;
-  self.translucent = YES;
+  if (UseSymbols()) {
+    self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    [self createScrolledBackgrounds];
+  } else {
+    self.barStyle = UIBarStyleBlack;
+    self.translucent = YES;
+  }
 
   // Vivaldi: - Top tool bar support for both light and dark mode
   if (vivaldi::IsVivaldiRunning()) {
@@ -444,7 +422,7 @@ bool ShouldUseToolbarBlurFix() {
   self.delegate = self;
   [self setShadowImage:[[UIImage alloc] init]
       forToolbarPosition:UIBarPositionAny];
-  if (ShouldUseToolbarBlurFix()) {
+  if (!UseSymbols() && base::ios::HasDynamicIsland()) {
     // Do this to make the toolbar transparent instead of translucent.
     [self setBackgroundImage:[UIImage new]
           forToolbarPosition:UIToolbarPositionAny
@@ -459,6 +437,7 @@ bool ShouldUseToolbarBlurFix() {
   // The segmented control has an intrinsic size.
   _pageControl = [[TabGridPageControl alloc] init];
   _pageControl.translatesAutoresizingMaskIntoConstraints = NO;
+  [_pageControl setScrollViewScrolledToEdge:_scrolledToEdge];
   _pageControlItem = [[UIBarButtonItem alloc] initWithCustomView:_pageControl];
 
   _doneButton = [[UIBarButtonItem alloc] init];
@@ -580,6 +559,33 @@ bool ShouldUseToolbarBlurFix() {
   // End Vivaldi
 
   [self setItemsForTraitCollection:self.traitCollection];
+}
+
+// Creates and configures the two background for the scrolled in the
+// middle/scrolled to the top states.
+- (void)createScrolledBackgrounds {
+  _scrolledToEdge = YES;
+
+  // Background when the content is scrolled to the middle.
+  _scrolledBackgroundView = CreateTabGridOverContentBackground();
+  _scrolledBackgroundView.hidden = YES;
+  _scrolledBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addSubview:_scrolledBackgroundView];
+  AddSameConstraintsToSides(
+      self, _scrolledBackgroundView,
+      LayoutSides::kLeading | LayoutSides::kBottom | LayoutSides::kTrailing);
+
+  // Background when the content is scrolled to the top.
+  _scrolledToTopBackgroundView = CreateTabGridScrolledToEdgeBackground();
+  _scrolledToTopBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addSubview:_scrolledToTopBackgroundView];
+  AddSameConstraints(_scrolledBackgroundView, _scrolledToTopBackgroundView);
+
+  // A non-nil UIImage has to be added in the background of the toolbar to avoid
+  // having an additional blur effect.
+  [self setBackgroundImage:[UIImage new]
+        forToolbarPosition:UIBarPositionAny
+                barMetrics:UIBarMetricsDefault];
 }
 
 // Returns YES if should use compact bottom toolbar layout.

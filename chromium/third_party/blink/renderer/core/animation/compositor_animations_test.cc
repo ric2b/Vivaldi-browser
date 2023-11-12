@@ -58,6 +58,7 @@
 #include "third_party/blink/renderer/core/css/css_syntax_definition.h"
 #include "third_party/blink/renderer/core/css/css_test_helpers.h"
 #include "third_party/blink/renderer/core/css/mock_css_paint_image_generator.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -75,6 +76,7 @@
 #include "third_party/blink/renderer/core/svg/svg_length.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
+#include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
@@ -709,8 +711,11 @@ TEST_P(AnimationCompositorAnimationsTest,
   paint_value->CreateGeneratorForTesting(GetDocument());
   StyleGeneratedImage* style_image = MakeGarbageCollected<StyleGeneratedImage>(
       *paint_value, StyleGeneratedImage::ContainerSizes());
-  style->AddPaintImage(style_image);
-  element_->GetLayoutObject()->SetStyle(style);
+
+  ComputedStyleBuilder builder(*style);
+  builder.AddPaintImage(style_image);
+  element_->GetLayoutObject()->SetStyle(builder.TakeStyle());
+
   // The image is added for testing off-thread paint worklet supporting
   // custom property animation case. The style doesn't have a real
   // PaintImage, so we cannot call UpdateAllLifecyclePhasesForTest. But the
@@ -2039,9 +2044,7 @@ namespace {
 
 void UpdateDummyTransformNode(ObjectPaintProperties& properties,
                               CompositingReasons reasons) {
-  // Initialize with TransformationMatrix() to avoid 2d translation optimization
-  // in case of transform animation.
-  TransformPaintPropertyNode::State state{TransformationMatrix()};
+  TransformPaintPropertyNode::State state;
   state.direct_compositing_reasons = reasons;
   properties.UpdateTransform(TransformPaintPropertyNode::Root(),
                              std::move(state));
@@ -2346,9 +2349,11 @@ TEST_P(AnimationCompositorAnimationsTest,
   Element* target = GetElementById("target");
   ASSERT_TRUE(target);
 
+  ScopedNullExecutionContext execution_context;
   // Move the target element to another Document, that does not have a frame
   // (and thus no Settings).
-  Document* another_document = Document::CreateForTest();
+  Document* another_document =
+      Document::CreateForTest(execution_context.GetExecutionContext());
   ASSERT_FALSE(another_document->GetSettings());
 
   another_document->adoptNode(target, ASSERT_NO_EXCEPTION);

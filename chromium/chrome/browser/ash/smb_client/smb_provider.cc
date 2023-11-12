@@ -11,7 +11,7 @@
 #include "chrome/browser/ash/file_system_provider/service.h"
 #include "chrome/browser/ash/smb_client/smb_file_system.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/chromeos/smb_shares/smb_share_dialog.h"
+#include "chrome/browser/ui/webui/ash/smb_shares/smb_share_dialog.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -55,7 +55,17 @@ const file_system_provider::IconSet& SmbProvider::GetIconSet() const {
   return icon_set_;
 }
 
-bool SmbProvider::RequestMount(Profile* profile) {
+file_system_provider::RequestManager* SmbProvider::GetRequestManager() {
+  NOTREACHED();
+  return nullptr;
+}
+
+bool SmbProvider::RequestMount(
+    Profile* profile,
+    ash::file_system_provider::RequestMountCallback callback) {
+  // Mount requests for SMB are handled by the SMB dialog. The callback
+  // isn't expected to be used.
+  std::move(callback).Run(base::File::Error::FILE_OK);
   smb_dialog::SmbShareDialog::Show();
   return true;
 }

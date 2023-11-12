@@ -28,8 +28,6 @@
 #include <memory>
 
 #include "base/callback_helpers.h"
-#include "base/strings/stringprintf.h"
-#include "build/build_config.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -94,6 +92,9 @@ bool ConstraintSetHasImageCapture(
 
 bool ConstraintSetHasNonImageCapture(
     const MediaTrackConstraintSet* constraint_set) {
+  // TODO(crbug.com/1381959): Add hasSuppressLocalAudioPlayback() to this list
+  // and complete support for toggling suppressLocalAudioPlayback using
+  // the applyConstraints() API.
   return constraint_set->hasAspectRatio() ||
          constraint_set->hasChannelCount() || constraint_set->hasDeviceId() ||
          constraint_set->hasEchoCancellation() ||
@@ -210,12 +211,25 @@ absl::optional<media::mojom::DisplayCaptureSurfaceType> GetDisplayCaptureType(
   return settings.display_surface;
 }
 
+WebString GetDisplaySurfaceString(
+    media::mojom::DisplayCaptureSurfaceType value) {
+  switch (value) {
+    case media::mojom::DisplayCaptureSurfaceType::MONITOR:
+      return WebString::FromUTF8("monitor");
+    case media::mojom::DisplayCaptureSurfaceType::WINDOW:
+      return WebString::FromUTF8("window");
+    case media::mojom::DisplayCaptureSurfaceType::BROWSER:
+      return WebString::FromUTF8("browser");
+  }
+  NOTREACHED();
+  return WebString();
+}
+
 }  // namespace
 
 MediaStreamTrack* MediaStreamTrackImpl::Create(ExecutionContext* context,
                                                MediaStreamComponent* component,
-                                               base::OnceClosure callback,
-                                               const String& descriptor_id) {
+                                               base::OnceClosure callback) {
   DCHECK(context);
   DCHECK(component);
 
@@ -224,16 +238,10 @@ MediaStreamTrack* MediaStreamTrackImpl::Create(ExecutionContext* context,
   const bool is_tab_capture =
       (display_surface_type ==
        media::mojom::DisplayCaptureSurfaceType::BROWSER);
-  const bool is_window_capture =
-      (display_surface_type == media::mojom::DisplayCaptureSurfaceType::WINDOW);
 
   if (is_tab_capture && RuntimeEnabledFeatures::RegionCaptureEnabled(context)) {
     return MakeGarbageCollected<BrowserCaptureMediaStreamTrack>(
-        context, component, std::move(callback), descriptor_id);
-  } else if ((is_tab_capture || is_window_capture) &&
-             RuntimeEnabledFeatures::ConditionalFocusEnabled(context)) {
-    return MakeGarbageCollected<FocusableMediaStreamTrack>(
-        context, component, std::move(callback), descriptor_id);
+        context, component, std::move(callback));
   } else {
     return MakeGarbageCollected<MediaStreamTrackImpl>(context, component,
                                                       std::move(callback));
@@ -315,11 +323,7 @@ String MediaStreamTrackImpl::id() const {
 }
 
 String MediaStreamTrackImpl::label() const {
-  String label = component_->GetSourceName();
-  if (label.Contains("AirPods")) {
-    label = "AirPods";
-  }
-  return label;
+  return component_->GetSourceName();
 }
 
 bool MediaStreamTrackImpl::enabled() const {
@@ -554,6 +558,11 @@ MediaTrackCapabilities* MediaStreamTrackImpl::getCapabilities() const {
     capabilities->setFacingMode(facing_mode);
     capabilities->setResizeMode({WebMediaStreamTrack::kResizeModeNone,
                                  WebMediaStreamTrack::kResizeModeRescale});
+    const absl::optional<const MediaStreamDevice> source_device = device();
+    if (source_device && source_device->display_media_info) {
+      capabilities->setDisplaySurface(GetDisplaySurfaceString(
+          source_device->display_media_info->display_surface));
+    }
   }
   return capabilities;
 }
@@ -635,19 +644,8 @@ MediaTrackSettings* MediaStreamTrackImpl::getSettings() const {
     image_capture_->GetMediaTrackSettings(settings);
 
   if (platform_settings.display_surface) {
-    WTF::String value;
-    switch (platform_settings.display_surface.value()) {
-      case media::mojom::DisplayCaptureSurfaceType::MONITOR:
-        value = "monitor";
-        break;
-      case media::mojom::DisplayCaptureSurfaceType::WINDOW:
-        value = "window";
-        break;
-      case media::mojom::DisplayCaptureSurfaceType::BROWSER:
-        value = "browser";
-        break;
-    }
-    settings->setDisplaySurface(value);
+    settings->setDisplaySurface(
+        GetDisplaySurfaceString(platform_settings.display_surface.value()));
   }
   if (platform_settings.logical_surface)
     settings->setLogicalSurface(platform_settings.logical_surface.value());
@@ -665,6 +663,11 @@ MediaTrackSettings* MediaStreamTrackImpl::getSettings() const {
         break;
     }
     settings->setCursor(value);
+  }
+
+  if (suppress_local_audio_playback_setting_.has_value()) {
+    settings->setSuppressLocalAudioPlayback(
+        suppress_local_audio_playback_setting_.value());
   }
 
   return settings;
@@ -697,6 +700,32 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
   ScriptPromise promise = resolver->Promise();
   applyConstraints(resolver, constraints);
   return promise;
+}
+
+void MediaStreamTrackImpl::SetInitialConstraints(
+    const MediaConstraints& constraints) {
+  SetConstraintsInternal(constraints, /*initial_values=*/true);
+}
+
+void MediaStreamTrackImpl::SetConstraints(const MediaConstraints& constraints) {
+  SetConstraintsInternal(constraints, /*initial_values=*/false);
+}
+
+// TODO(crbug.com/1381959): Remove this helper.
+void MediaStreamTrackImpl::SetConstraintsInternal(
+    const MediaConstraints& constraints,
+    bool initial_values) {
+  constraints_ = constraints;
+
+  if (!initial_values)
+    return;
+
+  DCHECK(!suppress_local_audio_playback_setting_.has_value());
+  if (!constraints_.IsNull() &&
+      constraints_.Basic().suppress_local_audio_playback.HasIdeal()) {
+    suppress_local_audio_playback_setting_ =
+        constraints_.Basic().suppress_local_audio_playback.Ideal();
+  }
 }
 
 void MediaStreamTrackImpl::applyConstraints(
@@ -883,10 +912,6 @@ void MediaStreamTrackImpl::BeingTransferred(
   return;
 }
 
-#if !BUILDFLAG(IS_ANDROID)
-void MediaStreamTrackImpl::CloseFocusWindowOfOpportunity() {}
-#endif
-
 void MediaStreamTrackImpl::RegisterMediaStream(MediaStream* media_stream) {
   CHECK(!is_iterating_registered_media_streams_);
   CHECK(!registered_media_streams_.Contains(media_stream));
@@ -932,7 +957,7 @@ void MediaStreamTrackImpl::CloneInternal(MediaStreamTrackImpl* cloned_track) {
 
   DidCloneMediaStreamTrack(cloned_track->Component());
 
-  cloned_track->SetConstraints(constraints_);
+  cloned_track->SetInitialConstraints(constraints_);
 
   if (image_capture_) {
     cloned_track->image_capture_ = image_capture_->Clone();

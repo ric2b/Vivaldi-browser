@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 #include "third_party/blink/renderer/core/animation/timing.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unit_values.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
@@ -216,7 +217,7 @@ class AnimationAnimationTestNoCompositing : public PaintTestConfigurations,
   void SimulateAwaitReady() { SimulateFrame(last_frame_time); }
 
   void SimulateMicrotask() {
-    GetDocument().GetAgent()->event_loop()->PerformMicrotaskCheckpoint();
+    GetDocument().GetAgent().event_loop()->PerformMicrotaskCheckpoint();
   }
 
   void SimulateFrameForScrollAnimations() {
@@ -1400,6 +1401,16 @@ TEST_P(AnimationAnimationTestCompositing, PreCommitWithUnresolvedStartTimes) {
   EXPECT_FALSE(animation->PreCommit(0, nullptr, true));
 }
 
+TEST_P(AnimationAnimationTestCompositing, SynchronousCancel) {
+  // Start with a composited animation.
+  ResetWithCompositedAnimation();
+  ASSERT_TRUE(animation->HasActiveAnimationsOnCompositor());
+
+  animation->cancel();
+  ASSERT_FALSE(animation->HasActiveAnimationsOnCompositor());
+  EXPECT_FALSE(animation->CompositorPending());
+}
+
 namespace {
 int GenerateHistogramValue(CompositorAnimations::FailureReason reason) {
   // The enum values in CompositorAnimations::FailureReasons are stored as 2^i
@@ -2464,6 +2475,24 @@ TEST_P(AnimationAnimationTestCompositing, HiddenAnimationsTickWhenVisible) {
   // running on the compositor.
   EXPECT_TIMEDELTA(ANIMATION_TIME_DELTA_FROM_SECONDS(30),
                    animation->TimeToEffectChange().value());
+}
+
+TEST_P(AnimationAnimationTestNoCompositing,
+       GetEffectTimingDelayZeroUseCounter) {
+  animation->setEffect(MakeAnimation(/* duration */ 1.0));
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kGetEffectTimingDelayZero));
+  EXPECT_TRUE(animation->effect()->getTiming());
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kGetEffectTimingDelayZero));
+
+  animation->setEffect(MakeAnimation(/* duration */ 0.0));
+  // Should remain uncounted until getTiming is called.
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kGetEffectTimingDelayZero));
+  EXPECT_TRUE(animation->effect()->getTiming());
+  EXPECT_TRUE(
+      GetDocument().IsUseCounted(WebFeature::kGetEffectTimingDelayZero));
 }
 
 }  // namespace blink

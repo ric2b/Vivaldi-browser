@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/typed_macros.h"
+#include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -32,6 +33,19 @@ constexpr char kAddSpeculationRuleScript[] = R"({
       "prerender": [{
         "source": "list",
         "urls": [$1]
+      }]
+    }`;
+    document.head.appendChild(script);
+  })";
+
+constexpr char kAddSpeculationRuleWithTargetHintScript[] = R"({
+    const script = document.createElement('script');
+    script.type = 'speculationrules';
+    script.text = `{
+      "prerender": [{
+        "source": "list",
+        "urls": [$1],
+        "target_hint": $2
       }]
     }`;
     document.head.appendChild(script);
@@ -152,7 +166,7 @@ class PrerenderHostObserverImpl : public PrerenderHost::Observer {
       std::move(waiting_for_activation_).Run();
   }
 
-  void OnHostDestroyed(PrerenderHost::FinalStatus final_status) override {
+  void OnHostDestroyed(PrerenderFinalStatus final_status) override {
     observation_.Reset();
     if (waiting_for_destruction_)
       std::move(waiting_for_destruction_).Run();
@@ -230,21 +244,10 @@ bool PrerenderHostObserver::was_activated() const {
 }
 
 ScopedPrerenderFeatureList::ScopedPrerenderFeatureList() {
-  std::vector<base::test::FeatureRef> enabled_features;
-#if !BUILDFLAG(IS_ANDROID)
-  // Prerender2 for Speculation Rules should be enabled by default on Android.
-  // To test the default behavior on Android, explicitly enable the feature only
-  // on non-Android.
-  //
-  // This is useful for preventing breakages by future changes on the complex
-  // flag structure. See review comments on https://crrev.com/c/3670822 for
-  // details.
-  enabled_features.push_back(blink::features::kPrerender2);
-#endif
-  feature_list_.InitWithFeatures(enabled_features,
-                                 // Disable the memory requirement of Prerender2
-                                 // so the test can run on any bot.
-                                 {blink::features::kPrerender2MemoryControls});
+  // Disable the memory requirement of Prerender2
+  // so the test can run on any bot.
+  feature_list_.InitAndDisableFeature(
+      blink::features::kPrerender2MemoryControls);
 }
 
 PrerenderTestHelper::PrerenderTestHelper(const WebContents::Getter& fn)
@@ -349,6 +352,22 @@ void PrerenderTestHelper::AddMultiplePrerenderAsync(
       base::UTF8ToUTF16(script), base::NullCallback());
 }
 
+void PrerenderTestHelper::AddPrerenderWithTargetHintAsync(
+    const GURL& prerendering_url,
+    const std::string& target_hint) {
+  TRACE_EVENT("test", "PrerenderTestHelper::AddPrerenderWithTargetHintAsync",
+              "prerendering_url", prerendering_url, "target_hint", target_hint);
+  EXPECT_TRUE(content::BrowserThread::CurrentlyOn(BrowserThread::UI));
+  std::string script = JsReplace(kAddSpeculationRuleWithTargetHintScript,
+                                 prerendering_url, target_hint);
+
+  // Have to use ExecuteJavaScriptForTests instead of ExecJs/EvalJs here,
+  // because some test pages have ContentSecurityPolicy and EvalJs cannot work
+  // with it. See the quick migration guide for EvalJs for more information.
+  GetWebContents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16(script), base::NullCallback());
+}
+
 std::unique_ptr<PrerenderHandle>
 PrerenderTestHelper::AddEmbedderTriggeredPrerenderAsync(
     const GURL& prerendering_url,
@@ -389,6 +408,11 @@ void PrerenderTestHelper::NavigatePrerenderedPage(int host_id,
   // should be safe to ignore it.
   std::ignore =
       ExecJs(prerender_render_frame_host, JsReplace("location = $1", gurl));
+}
+
+void PrerenderTestHelper::CancelPrerenderedPage(int host_id) {
+  PrerenderHostRegistry& registry = GetPrerenderHostRegistry(GetWebContents());
+  registry.CancelHost(host_id, PrerenderFinalStatus::kDestroyed);
 }
 
 // static

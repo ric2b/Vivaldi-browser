@@ -12,6 +12,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "components/attribution_reporting/os_support.mojom.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/render_message_filter.mojom.h"
@@ -328,6 +329,11 @@ void MockRenderThread::OnCreateWindow(
 
 void MockRenderThread::ReleaseAllWebViews() {
   page_broadcasts_.clear();
+}
+
+attribution_reporting::mojom::OsSupport
+MockRenderThread::GetOsSupportForAttributionReporting() {
+  return attribution_reporting::mojom::OsSupport::kDisabled;
 }
 
 }  // namespace content

@@ -12,7 +12,6 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -57,7 +56,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
+import android.os.Build;
+
+import org.chromium.base.supplier.Supplier;
 import org.chromium.build.BuildConfig;
+import org.chromium.ui.base.DeviceFormFactor;
+
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -89,8 +93,10 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     private AnimatorSet mMenuItemEnterAnimator;
     private long mMenuShownTimeMs;
     private boolean mSelectedItemBeforeDismiss;
-    private Integer mHighlightedItemId;
     private ModelList mModelList;
+
+    // Vivaldi
+    private Supplier<Boolean> mIsInOverviewModeSupplier;
 
     /**
      * Creates and sets up the App Menu.
@@ -189,10 +195,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         mPopup.setFocusable(true);
         mPopup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // The window layout type affects the z-index of the popup window on M+.
-            mPopup.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL);
-        }
+        // The window layout type affects the z-index of the popup window.
+        mPopup.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL);
 
         mPopup.setOnDismissListener(() -> {
             recordTimeToTakeActionHistogram();
@@ -210,7 +214,6 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             mListView = null;
             mFooterView = null;
             mMenuItemEnterAnimator = null;
-            mHighlightedItemId = null;
         });
 
         // Some OEMs don't actually let us change the background... but they still return the
@@ -226,9 +229,11 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         mPopup.setOutsideTouchable(true);
 
         // Vivaldi: Animate from bottom when main toolbar is at the bottom.
+        boolean isInOverviewMode =
+                mIsInOverviewModeSupplier != null && mIsInOverviewModeSupplier.get();
         boolean isToolbarAtBottom = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                 VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM, false);
-        if (isToolbarAtBottom)
+        if (isToolbarAtBottom && !isInOverviewMode)
             mPopup.setAnimationStyle(R.style.EndIconMenuAnimBottom);
         else
         if (!isByPermanentButton) {
@@ -277,7 +282,6 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         int footerHeight = inflateFooter(footerResourceId, contentView, menuWidth);
         int headerHeight = inflateHeader(headerResourceId, contentView, menuWidth);
 
-        mHighlightedItemId = highlightedItemId;
         if (highlightedItemId != null) {
             View viewToHighlight = contentView.findViewById(highlightedItemId);
             HighlightParams highlightParams = new HighlightParams(HighlightShape.RECTANGLE);
@@ -313,6 +317,47 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         if (!BuildConfig.IS_VIVALDI)
         if (popupHeight + popupPosition[1] > visibleDisplayFrame.bottom) {
             mPopup.setHeight(visibleDisplayFrame.height());
+        }
+
+        // Vivaldi - Offset the menu list to keep the vivaldi icon visible
+        if (!isInOverviewMode) {
+            boolean isTabStripOn = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_TAB_STRIP, true);
+            boolean isTabStackVisible = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.TAB_STACK_VISIBLE, false);
+            boolean isTabStackToolbarVisible = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.TAB_STACK_TOOLBAR_VISIBLE, false);
+            boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
+
+            int tabStripHeight =
+                    (int) context.getResources().getDimension(R.dimen.tab_strip_height);
+
+            int popupHeightOffset = tabStripHeight;
+            if (isTabStripOn) popupHeightOffset += tabStripHeight;
+            if (isTabStackVisible) popupHeightOffset += tabStripHeight;
+
+            if (isToolbarAtBottom) {
+                if (isTabStackToolbarVisible) popupHeightOffset += tabStripHeight;
+                // Adjust the popup height as per the available screen space
+                if (popupHeight + popupHeightOffset + sizingPadding.bottom > screenHeight)
+                    mPopup.setHeight(popupHeight - popupHeightOffset);
+
+                // Adjust the Y-position of the popup
+                popupPosition[1] +=
+                        visibleDisplayFrame.bottom - mTempLocation[1] - mPopup.getHeight();
+                popupPosition[1] -= mNegativeVerticalOffsetNotTopAnchored;
+                if (isTabStripOn) popupPosition[1] -= tabStripHeight;
+                if (isTabStackVisible) popupPosition[1] -= tabStripHeight;
+                if (isTabStackToolbarVisible) popupPosition[1] -= tabStripHeight;
+                else popupPosition[1] += sizingPadding.bottom;
+            } else {
+                // Adjust the Y-position of the popup
+                popupPosition[1] += tabStripHeight;
+                if (isTablet) popupPosition[1] += sizingPadding.top;
+                // Adjust the popup height as per the available screen space
+                if (popupHeight + popupPosition[1] > screenHeight)
+                    mPopup.setHeight(popupHeight - popupHeightOffset);
+            }
         }
 
         try {
@@ -412,7 +457,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         int id = model.get(AppMenuItemProperties.MENU_ITEM_ID);
         mSelectedItemBeforeDismiss = true;
         dismiss();
-        mHandler.onOptionsItemSelected(id, mHighlightedItemId != null && mHighlightedItemId == id);
+        mHandler.onOptionsItemSelected(id);
     }
 
     @Override
@@ -712,5 +757,10 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     /** @param reporter A means of reporting an exception without crashing. */
     static void setExceptionReporter(Callback<Throwable> reporter) {
         sExceptionReporter = reporter;
+    }
+
+    /** Vivaldi */
+    public void setIsInOverviewModeSupplier(Supplier<Boolean> supplier) {
+        mIsInOverviewModeSupplier = supplier;
     }
 }

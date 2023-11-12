@@ -159,7 +159,8 @@ bool SessionRestorationBrowserAgent::RestoreSession() {
   DCHECK(session_identifier_.length != 0);
 
   PreviousSessionInfo* session_info = [PreviousSessionInfo sharedInstance];
-  auto scoped_restore = [session_info startSessionRestoration];
+  base::ScopedClosureRunner scoped_restore =
+      [session_info startSessionRestoration];
 
   SessionIOS* session = [session_service_
       loadSessionWithSessionID:session_identifier_
@@ -241,6 +242,19 @@ void SessionRestorationBrowserAgent::WillDetachWebStateAt(
     return;
 
   // Persist the session state if a background tab is detached.
+  SaveSession(/*immediately=*/false);
+}
+
+void SessionRestorationBrowserAgent::WebStateDetachedAt(
+    WebStateList* web_state_list,
+    web::WebState* web_state,
+    int index) {
+  if (!web_state_list_->empty())
+    return;
+
+  // Persist the session state after CloseAllWebStates. SaveSession will discard
+  // calls when the web_state_list is not empty and the active WebState is null,
+  // which is the order CloseAllWebStates uses.
   SaveSession(/*immediately=*/false);
 }
 

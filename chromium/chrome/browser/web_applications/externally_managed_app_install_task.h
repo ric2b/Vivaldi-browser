@@ -35,7 +35,7 @@ namespace web_app {
 
 class WebAppUrlLoader;
 class WebAppInstallFinalizer;
-class WebAppCommandManager;
+class WebAppCommandScheduler;
 class WebAppUiManager;
 class WebAppDataRetriever;
 
@@ -55,7 +55,7 @@ class ExternallyManagedAppInstallTask {
       WebAppRegistrar* registrar,
       WebAppUiManager* ui_manager,
       WebAppInstallFinalizer* install_finalizer,
-      WebAppCommandManager* command_manager,
+      WebAppCommandScheduler* command_scheduler,
       ExternalInstallOptions install_options);
 
   ExternallyManagedAppInstallTask(const ExternallyManagedAppInstallTask&) =
@@ -136,10 +136,10 @@ class ExternallyManagedAppInstallTask {
       ExternallyManagedAppManager::InstallResult result);
 
   const raw_ptr<Profile> profile_;
-  const raw_ptr<WebAppUrlLoader> url_loader_;
+  const raw_ptr<WebAppUrlLoader, DanglingUntriaged> url_loader_;
   const raw_ptr<WebAppRegistrar> registrar_;
   const raw_ptr<WebAppInstallFinalizer> install_finalizer_;
-  const raw_ptr<WebAppCommandManager> command_manager_;
+  const raw_ptr<WebAppCommandScheduler> command_scheduler_;
   const raw_ptr<WebAppUiManager> ui_manager_;
 
   ExternallyInstalledWebAppPrefs externally_installed_app_prefs_;

@@ -20,10 +20,12 @@
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/safe_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
+#include "base/scoped_observation_traits.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -84,13 +86,13 @@ class SkBitmap;
 namespace blink {
 class WebInputEvent;
 class WebMouseEvent;
-}
+}  // namespace blink
 
 namespace gfx {
 class Image;
 class Range;
 class Vector2dF;
-}
+}  // namespace gfx
 
 namespace ui {
 enum class DomCode;
@@ -218,7 +220,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   RenderWidgetHostOwnerDelegate* owner_delegate() { return owner_delegate_; }
 
   AgentSchedulingGroupHost& agent_scheduling_group() {
-    return agent_scheduling_group_;
+    return *agent_scheduling_group_;
   }
 
   // Returns the object that tracks the start of content to visible events for
@@ -819,6 +821,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   void DidStopFlinging();
 
+  bool IsContentRenderingTimeoutRunning() const;
   void GetContentRenderingTimeoutFrom(RenderWidgetHostImpl* other);
 
   // Called on delayed response from the renderer by either
@@ -956,6 +959,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   base::WeakPtr<RenderWidgetHostViewBase> view_;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(FullscreenDetectionTest,
+                           EncompassingDivNotFullscreen);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostTest,
                            DoNotAcceptPopupBoundsUntilScreenRectsAcked);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostTest,
@@ -1169,7 +1174,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // An expiry time for resetting the pending_user_activation_timer_.
   static const base::TimeDelta kActivationNotificationExpireTime;
 
-  raw_ptr<FrameTree, DanglingUntriaged> frame_tree_;
+  raw_ptr<FrameTree> frame_tree_;
 
   // RenderWidgetHost are either:
   // - Owned by RenderViewHostImpl.
@@ -1211,7 +1216,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // dynamically fetching it from `site_instance_group_` since its
   // value gets cleared early in `SiteInstanceGroup` via
   // RenderProcessHostDestroyed before this object is destroyed.
-  AgentSchedulingGroupHost& agent_scheduling_group_;
+  const raw_ref<AgentSchedulingGroupHost> agent_scheduling_group_;
 
   // The SiteInstanceGroup this RenderWidgetHost belongs to.
   base::SafeRef<SiteInstanceGroup> site_instance_group_;
@@ -1504,5 +1509,24 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 };
 
 }  // namespace content
+
+namespace base {
+
+template <>
+struct ScopedObservationTraits<content::RenderWidgetHostImpl,
+                               content::RenderWidgetHost::InputEventObserver> {
+  static void AddObserver(
+      content::RenderWidgetHostImpl* source,
+      content::RenderWidgetHost::InputEventObserver* observer) {
+    source->AddInputEventObserver(observer);
+  }
+  static void RemoveObserver(
+      content::RenderWidgetHostImpl* source,
+      content::RenderWidgetHost::InputEventObserver* observer) {
+    source->RemoveInputEventObserver(observer);
+  }
+};
+
+}  // namespace base
 
 #endif  // CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_IMPL_H_

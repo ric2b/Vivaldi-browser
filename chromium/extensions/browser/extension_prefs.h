@@ -196,6 +196,11 @@ class ExtensionPrefs : public KeyedService {
   // user.
   bool IsExternalExtensionUninstalled(const std::string& id) const;
 
+  // Clears any recording of extension with |id| as being an externally
+  // installed extension uninstalled by the user. Returns whether any change was
+  // made.
+  bool ClearExternalExtensionUninstalled(const std::string& id);
+
   // Checks whether |extension_id| is disabled. If there's no state pref for
   // the extension, this will return false. Generally you should use
   // ExtensionService::IsExtensionEnabled instead.
@@ -266,15 +271,14 @@ class ExtensionPrefs : public KeyedService {
   void SetStringPref(const PrefMap& pref, const std::string& value);
   void SetTimePref(const PrefMap& pref, base::Time value);
   void SetGURLPref(const PrefMap& pref, const GURL& value);
-  void SetDictionaryPref(const PrefMap& pref,
-                         std::unique_ptr<base::DictionaryValue> value);
+  void SetDictionaryPref(const PrefMap& pref, base::Value::Dict value);
 
   int GetPrefAsInteger(const PrefMap& pref) const;
   bool GetPrefAsBoolean(const PrefMap& pref) const;
   std::string GetPrefAsString(const PrefMap& pref) const;
   base::Time GetPrefAsTime(const PrefMap& pref) const;
   GURL GetPrefAsGURL(const PrefMap& pref) const;
-  const base::DictionaryValue* GetPrefAsDictionary(const PrefMap& pref) const;
+  const base::Value::Dict& GetPrefAsDictionary(const PrefMap& pref) const;
 
   // Returns a wrapper that allows to update an ExtensionPref with a
   // PrefType::kDictionary.
@@ -292,16 +296,16 @@ class ExtensionPrefs : public KeyedService {
   void SetBooleanPref(const std::string& id, const PrefMap& pref, bool value);
   void SetStringPref(const std::string& id,
                      const PrefMap& pref,
-                     const std::string value);
+                     std::string value);
   void SetListPref(const std::string& id,
                    const PrefMap& pref,
-                   base::Value value);
+                   base::Value::List value);
   void SetDictionaryPref(const std::string& id,
                          const PrefMap& pref,
-                         std::unique_ptr<base::DictionaryValue> value);
+                         base::Value::Dict value);
   void SetTimePref(const std::string& id,
                    const PrefMap& pref,
-                   const base::Time value);
+                   base::Time value);
 
   void UpdateExtensionPref(const std::string& id,
                            base::StringPiece key,
@@ -323,13 +327,11 @@ class ExtensionPrefs : public KeyedService {
                         const PrefMap& pref,
                         std::string* out_value) const;
 
-  bool ReadPrefAsList(const std::string& extension_id,
-                      const PrefMap& pref,
-                      const base::ListValue** out_value) const;
+  const base::Value::List* ReadPrefAsList(const std::string& extension_id,
+                                          const PrefMap& pref) const;
 
-  bool ReadPrefAsDictionary(const std::string& extension_id,
-                            const PrefMap& pref,
-                            const base::DictionaryValue** out_value) const;
+  const base::Value::Dict* ReadPrefAsDictionary(const std::string& extension_id,
+                                                const PrefMap& pref) const;
 
   base::Time ReadPrefAsTime(const std::string& extension_id,
                             const PrefMap& pref) const;
@@ -346,14 +348,8 @@ class ExtensionPrefs : public KeyedService {
                         base::StringPiece pref_key,
                         std::string* out_value) const;
 
-  bool ReadPrefAsList(const std::string& extension_id,
-                      base::StringPiece pref_key,
-                      const base::ListValue** out_value) const;
-
-  // DEPRECATED: prefer ReadPrefAsDict() instead.
-  bool ReadPrefAsDictionary(const std::string& extension_id,
-                            base::StringPiece pref_key,
-                            const base::DictionaryValue** out_value) const;
+  const base::Value::List* ReadPrefAsList(const std::string& extension_id,
+                                          base::StringPiece pref_key) const;
 
   const base::Value::Dict* ReadPrefAsDict(const std::string& extension_id,
                                           base::StringPiece pref_key) const;
@@ -509,6 +505,14 @@ class ExtensionPrefs : public KeyedService {
   // Sets/Gets the value indicating if an extension should be granted all the
   // requested host permissions without requiring explicit runtime-granted
   // permissions from the user.
+  // Note: any callers that want to determine if an extension has withheld host
+  // permissions should call PermissionsManager::HasWithheldHostPermissions
+  // instead. This is because host permission prefs are only used if host
+  // permissions can affect the extension. E.g. Say user installs extension with
+  // host permissions and withhelds them (pref is set). Then the extension
+  // updates to no longer need host permissions. Pref still appears as
+  // witholding permissions, but extension cannot be affected by host
+  // permissions.
   void SetWithholdingPermissions(const ExtensionId& extension_id,
                                  bool should_withhold);
   bool GetWithholdingPermissions(const ExtensionId& extension_id) const;
@@ -622,10 +626,15 @@ class ExtensionPrefs : public KeyedService {
   // Returns true if the extension was installed as an oem app.
   bool WasInstalledByOem(const std::string& extension_id) const;
 
-  // Helper method to acquire the installation time of an extension.
+  // Helper method to acquire the original installation time of an extension.
   // Returns base::Time() if the installation time could not be parsed or
   // found.
-  base::Time GetInstallTime(const std::string& extension_id) const;
+  base::Time GetFirstInstallTime(const std::string& extension_id) const;
+
+  // Helper method to acquire the installation/last update time of an extension.
+  // Returns base::Time() if the installation time could not be parsed or
+  // found.
+  base::Time GetLastUpdateTime(const std::string& extension_id) const;
 
   // Returns true if the extension should not be synced.
   bool DoNotSync(const std::string& extension_id) const;
@@ -657,15 +666,15 @@ class ExtensionPrefs : public KeyedService {
 
   // Used by AppWindowGeometryCache to persist its cache. These methods
   // should not be called directly.
-  const base::DictionaryValue* GetGeometryCache(
-        const std::string& extension_id) const;
+  const base::Value::Dict* GetGeometryCache(
+      const std::string& extension_id) const;
   void SetGeometryCache(const std::string& extension_id,
-                        std::unique_ptr<base::DictionaryValue> cache);
+                        base::Value::Dict cache);
 
   // Used for verification of installed extension ids. For the Set method, pass
   // null to remove the preference.
-  const base::DictionaryValue* GetInstallSignature() const;
-  void SetInstallSignature(const base::DictionaryValue* signature);
+  const base::Value::Dict& GetInstallSignature() const;
+  void SetInstallSignature(base::Value::Dict* signature);
 
   // The installation parameter associated with the extension.
   std::string GetInstallParam(const std::string& extension_id) const;
@@ -733,6 +742,11 @@ class ExtensionPrefs : public KeyedService {
   void SetDNRKeepExcessAllocation(const ExtensionId& extension_id,
                                   bool keep_excess_allocation);
 
+  // Backfills the first_install_time pref for currently installed extensions
+  // that did not have the pref recorded when they were installed.
+  // TODO(anunoy): Remove this in M113.
+  void BackfillAndMigrateInstallTimePrefs();
+
   // Migrates the disable reasons extension pref for extensions that were
   // disabled due to a deprecated reason.
   // TODO(archanasimha): Remove this around M89.
@@ -772,11 +786,16 @@ class ExtensionPrefs : public KeyedService {
       const std::string& extension_id,
       const mojom::ManifestLocation location);
 
+  // Join |parts| to get a prefs key
+  static std::string JoinPrefs(const std::vector<base::StringPiece>& parts);
+
+  // TODO(blee@igalia.com) Need to move all the DNR related codes to the helper.
+  //                       (DeclarativeNetRequestPrefsHelper)
+  static const char kDNRStaticRulesetPref[];
+
   // When called before the ExtensionService is created, alerts that are
   // normally suppressed in first run will still trigger.
   static void SetRunAlertsInFirstRunForTest();
-
-  void ClearExternalUninstallForTesting(const ExtensionId& id);
 
   static const char kFakeObsoletePrefForTesting[];
 
@@ -788,6 +807,7 @@ class ExtensionPrefs : public KeyedService {
   friend class ExtensionPrefsBlocklistedExtensions;  // Unit test.
   friend class ExtensionPrefsComponentExtension;     // Unit test.
   friend class ExtensionPrefsUninstallExtension;     // Unit test.
+  friend class ExtensionPrefsMigratesToLastUpdateTime;  // Unit test.
   friend class
       ExtensionPrefsBitMapPrefValueClearedIfEqualsDefaultValue;  // Unit test.
 
@@ -801,21 +821,14 @@ class ExtensionPrefs : public KeyedService {
       bool extensions_disabled,
       const std::vector<EarlyExtensionPrefsObserver*>& early_observers);
 
-  // Sets profile wide ExtensionPrefs.
-  void SetPref(const PrefMap& pref, std::unique_ptr<base::Value> value);
-
   // Updates ExtensionPrefs for a specific extension.
-  void UpdateExtensionPref(const std::string& id,
-                           const PrefMap& pref,
-                           std::unique_ptr<base::Value> value);
+  void UpdateExtensionPrefInternal(const std::string& id,
+                                   const PrefMap& pref,
+                                   base::Value value);
 
   // Converts absolute paths in the pref to paths relative to the
   // install_directory_.
   void MakePathsRelative();
-
-  // Converts internal relative paths to be absolute. Used for export to
-  // consumers who expect full paths.
-  void MakePathsAbsolute(base::DictionaryValue* dict);
 
   // Helper function used by GetInstalledExtensionInfo() and
   // GetDelayedInstallInfo() to construct an ExtensionInfo from the provided
@@ -854,7 +867,7 @@ class ExtensionPrefs : public KeyedService {
 
   // Returns an immutable dictionary for extension |id|'s prefs, or NULL if it
   // doesn't exist.
-  const base::DictionaryValue* GetExtensionPref(const std::string& id) const;
+  const base::Value::Dict* GetExtensionPref(const std::string& id) const;
 
   // Returns an immutable base::Value for extension |id|'s prefs, or nullptr if
   // it doesn't exist.
@@ -926,8 +939,10 @@ class ExtensionPrefs : public KeyedService {
   // for a given extension.
   bool HasWithholdingPermissionsSetting(const ExtensionId& extension_id) const;
 
-  // Clears the bit indicating that an external extension was uninstalled.
-  void ClearExternalUninstallBit(const ExtensionId& extension_id);
+  // Helper function to retrieve various time prefs like first install time,
+  // last updated time, last launch time for a given extension.
+  base::Time GetTimePrefHelper(const std::string& extension_id,
+                               const char* pref_key) const;
 
   raw_ptr<content::BrowserContext> browser_context_;
 
@@ -939,7 +954,7 @@ class ExtensionPrefs : public KeyedService {
   base::FilePath install_directory_;
 
   // Weak pointer, owned by BrowserContext.
-  raw_ptr<ExtensionPrefValueMap> extension_pref_value_map_;
+  raw_ptr<ExtensionPrefValueMap, DanglingUntriaged> extension_pref_value_map_;
 
   raw_ptr<base::Clock> clock_;
 

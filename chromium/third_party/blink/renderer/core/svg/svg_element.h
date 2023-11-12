@@ -176,6 +176,7 @@ class CORE_EXPORT SVGElement : public Element {
   MutableCSSPropertyValueSet* AnimatedSMILStyleProperties() const;
   MutableCSSPropertyValueSet* EnsureAnimatedSMILStyleProperties();
 
+  virtual void BuildPendingResource() {}
   virtual bool HaveLoadedRequiredResources();
 
   void InvalidateRelativeLengthClients(SubtreeLayoutScope* = nullptr);
@@ -189,7 +190,6 @@ class CORE_EXPORT SVGElement : public Element {
   void AddReferenceTo(SVGElement*);
   template <typename InvalidationFunction>
   void NotifyIncomingReferences(InvalidationFunction&&);
-  void RebuildAllIncomingReferences();
   void RemoveAllIncomingReferences();
   void RemoveAllOutgoingReferences();
 
@@ -343,7 +343,7 @@ struct SVGAttributeHashTranslator {
                                             key.NamespaceURI().Impl()};
       return HashComponents(components);
     }
-    return DefaultHash<QualifiedName>::Hash::GetHash(key);
+    return DefaultHash<QualifiedName>::GetHash(key);
   }
   static bool Equal(const QualifiedName& a, const QualifiedName& b) {
     return a.Matches(b);

@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/trace_event.h"
@@ -460,7 +461,7 @@ void PaintPreviewClient::RequestCaptureOnUIThread(
     return;
   }
 
-  // If the render frame host navigated or is no longer around treat this as a
+  // If the RenderFrameHost navigated or is no longer around treat this as a
   // failure as a navigation occurring during capture is bad.
   auto* render_frame_host = content::RenderFrameHost::FromID(render_frame_id);
 
@@ -512,7 +513,7 @@ void PaintPreviewClient::OnPaintPreviewCapturedCallback(
   // |status|
   MarkFrameAsProcessed(params.document_guid, frame_guid);
 
-  // If the render frame host navigated or is no longer around treat this as a
+  // If the RenderFrameHost navigated or is no longer around treat this as a
   // failure as a navigation occurring during capture is bad.
   auto* render_frame_host = content::RenderFrameHost::FromID(render_frame_id);
   if (!render_frame_host || render_frame_host->GetEmbeddingToken().value_or(
@@ -584,7 +585,7 @@ void PaintPreviewClient::OnFinished(
     // At a minimum one frame was captured successfully, it is up to the
     // caller to decide if a partial success is acceptable based on what is
     // contained in the proto.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(document_data->callback), guid,
                        document_data->had_error
@@ -593,7 +594,7 @@ void PaintPreviewClient::OnFinished(
                        std::move(*document_data).IntoCaptureResult()));
   } else {
     // A proto could not be created indicating all frames failed to capture.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(document_data->callback), guid,
                                   mojom::PaintPreviewStatus::kFailed, nullptr));
   }

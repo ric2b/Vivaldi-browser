@@ -15,7 +15,6 @@ namespace ui {
 
 MockIMEInputContextHandler::MockIMEInputContextHandler()
     : commit_text_call_count_(0),
-      set_selection_range_call_count_(0),
       update_preedit_text_call_count_(0),
       delete_surrounding_text_call_count_(0) {}
 
@@ -107,27 +106,24 @@ bool MockIMEInputContextHandler::AddGrammarFragments(
   return true;
 }
 
-bool MockIMEInputContextHandler::SetSelectionRange(uint32_t start,
-                                                   uint32_t end) {
-  ++set_selection_range_call_count_;
-  last_update_composition_arg_.selection = gfx::Range(start, end);
-  return true;
-}
-
-void MockIMEInputContextHandler::DeleteSurroundingText(int32_t offset,
-                                                       uint32_t length) {
+void MockIMEInputContextHandler::DeleteSurroundingText(
+    uint32_t num_char16s_before_cursor,
+    uint32_t num_char16s_after_cursor) {
   ++delete_surrounding_text_call_count_;
-  last_delete_surrounding_text_arg_.offset = offset;
-  last_delete_surrounding_text_arg_.length = length;
+  last_delete_surrounding_text_arg_.num_char16s_before_cursor =
+      num_char16s_before_cursor;
+  last_delete_surrounding_text_arg_.num_char16s_after_cursor =
+      num_char16s_after_cursor;
 }
 
 SurroundingTextInfo MockIMEInputContextHandler::GetSurroundingTextInfo() {
-  return SurroundingTextInfo();
+  SurroundingTextInfo info;
+  info.selection_range = cursor_range_;
+  return info;
 }
 
 void MockIMEInputContextHandler::Reset() {
   commit_text_call_count_ = 0;
-  set_selection_range_call_count_ = 0;
   update_preedit_text_call_count_ = 0;
   delete_surrounding_text_call_count_ = 0;
   autocorrect_enabled_ = true;
@@ -143,13 +139,10 @@ InputMethod* MockIMEInputContextHandler::GetInputMethod() {
   return nullptr;
 }
 
-void MockIMEInputContextHandler::ConfirmCompositionText(bool reset_engine,
-                                                        bool keep_selection) {
-  // TODO(b/134473433) Modify this function so that when keep_selection is
-  // true, the selection is not changed when text committed
-  if (keep_selection) {
-    NOTIMPLEMENTED_LOG_ONCE();
-  }
+void MockIMEInputContextHandler::ConfirmComposition(bool reset_engine) {
+  // TODO(b/134473433) Modify this function so that the selection is unchanged.
+  NOTIMPLEMENTED_LOG_ONCE();
+
   if (!HasCompositionText())
     return;
 

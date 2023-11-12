@@ -20,6 +20,11 @@ public class EmptyTabModelFilter extends TabModelFilter {
 
     // TabModelFilter implementation.
     @Override
+    public int getValidPosition(Tab tab, int proposedPosition) {
+        return proposedPosition;
+    }
+
+    @Override
     protected void addTab(Tab tab) {}
 
     @Override

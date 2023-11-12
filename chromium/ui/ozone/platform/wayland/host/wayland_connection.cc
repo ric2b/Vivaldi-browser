@@ -8,7 +8,6 @@
 #include <extended-drag-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
 #include <xdg-shell-client-protocol.h>
-#include <xdg-shell-unstable-v6-client-protocol.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -64,12 +63,6 @@
 #include "ui/ozone/platform/wayland/host/zwp_primary_selection_device_manager.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 
-#if defined(USE_LIBWAYLAND_STUBS)
-#include <dlfcn.h>
-
-#include "third_party/wayland/libwayland_stubs.h"  // nogncheck
-#endif
-
 namespace ui {
 
 namespace {
@@ -80,7 +73,6 @@ namespace {
 constexpr uint32_t kMaxCompositorVersion = 4;
 constexpr uint32_t kMaxKeyboardExtensionVersion = 2;
 constexpr uint32_t kMaxXdgShellVersion = 5;
-constexpr uint32_t kMaxZXdgShellVersion = 1;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxWpViewporterVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
@@ -134,35 +126,6 @@ WaylandConnection::WaylandConnection() = default;
 WaylandConnection::~WaylandConnection() = default;
 
 bool WaylandConnection::Initialize() {
-#if defined(USE_LIBWAYLAND_STUBS)
-  // Use RTLD_NOW to load all symbols, since the stubs will try to load all of
-  // them anyway.  Use RTLD_GLOBAL to add the symbols to the global namespace.
-  auto dlopen_flags = RTLD_NOW | RTLD_GLOBAL;
-  if (void* libwayland_client =
-          dlopen("libwayland-client.so.0", dlopen_flags)) {
-    third_party_wayland::InitializeLibwaylandclient(libwayland_client);
-  } else {
-    LOG(ERROR) << "Failed to load wayland client libraries.";
-    return false;
-  }
-
-  if (void* libwayland_egl = dlopen("libwayland-egl.so.1", dlopen_flags))
-    third_party_wayland::InitializeLibwaylandegl(libwayland_egl);
-
-  // TODO(crbug.com/1081784): consider handling this in more flexible way.
-  // libwayland-cursor is said to be part of the standard shipment of Wayland,
-  // and it seems unlikely (although possible) that it would be unavailable
-  // while libwayland-client was present.  To handle that gracefully, chrome can
-  // fall back to the generic Ozone behaviour.
-  if (void* libwayland_cursor =
-          dlopen("libwayland-cursor.so.0", dlopen_flags)) {
-    third_party_wayland::InitializeLibwaylandcursor(libwayland_cursor);
-  } else {
-    LOG(ERROR) << "Failed to load libwayland-cursor.so.0.";
-    return false;
-  }
-#endif
-
   // Register factories for classes that implement wl::GlobalObjectRegistrar<T>.
   // Keep alphabetical order for convenience.
   RegisterGlobalObjectFactory(GtkPrimarySelectionDeviceManager::kInterfaceName,
@@ -242,15 +205,14 @@ bool WaylandConnection::Initialize() {
   // estabilished, initialize the event source and input objects.
   DCHECK(!event_source_);
   event_source_ = std::make_unique<WaylandEventSource>(
-      display(), event_queue_.get(), wayland_window_manager(), this);
+      display(), event_queue_.get(), window_manager(), this);
 
   // Create the buffer factory before registry listener is set so that shm, drm,
   // zwp_linux_dmabuf objects are able to be stored.
-  wayland_buffer_factory_ = std::make_unique<WaylandBufferFactory>();
+  buffer_factory_ = std::make_unique<WaylandBufferFactory>();
 
   wl_registry_add_listener(registry_.get(), &registry_listener, this);
-  while (!wayland_output_manager_ ||
-         !wayland_output_manager_->IsOutputReady()) {
+  while (!output_manager_ || !output_manager_->IsOutputReady()) {
     RoundTripQueue();
   }
 
@@ -260,11 +222,11 @@ bool WaylandConnection::Initialize() {
     LOG(ERROR) << "No wl_compositor object";
     return false;
   }
-  if (!wayland_buffer_factory()->shm()) {
+  if (!buffer_factory()->shm()) {
     LOG(ERROR) << "No wl_shm object";
     return false;
   }
-  if (!shell_v6_ && !shell_) {
+  if (!shell_) {
     LOG(ERROR) << "No Wayland shell found";
     return false;
   }
@@ -328,7 +290,7 @@ bool WaylandConnection::IsDragInProgress() const {
 }
 
 bool WaylandConnection::SupportsSetWindowGeometry() const {
-  return shell_ || shell_v6_;
+  return !!shell_;
 }
 
 wl::Object<wl_surface> WaylandConnection::CreateSurface() {
@@ -357,7 +319,7 @@ void WaylandConnection::UpdateInputDevices() {
   if (seat_->pointer()) {
     cursor_ = std::make_unique<WaylandCursor>(seat_->pointer(), this);
     cursor_->set_listener(listener_);
-    wayland_cursor_position_ = std::make_unique<WaylandCursorPosition>();
+    cursor_position_ = std::make_unique<WaylandCursorPosition>();
 
     // Wayland doesn't expose InputDeviceType.
     devices.emplace_back(InputDevice(seat_->pointer()->id(),
@@ -365,11 +327,12 @@ void WaylandConnection::UpdateInputDevices() {
                                      "pointer"));
 
     // Pointer is required for PointerGestures to be functional.
-    if (wayland_zwp_pointer_gestures_)
-      wayland_zwp_pointer_gestures_->Init();
+    if (zwp_pointer_gestures_) {
+      zwp_pointer_gestures_->Init();
+    }
   } else {
     cursor_.reset();
-    wayland_cursor_position_.reset();
+    cursor_position_.reset();
   }
 
   // Notify about mouse changes.
@@ -424,9 +387,6 @@ void WaylandConnection::Global(void* data,
   static constexpr xdg_wm_base_listener shell_listener = {
       &Ping,
   };
-  static constexpr zxdg_shell_v6_listener shell_v6_listener = {
-      &PingV6,
-  };
   static constexpr wp_presentation_listener presentation_listener = {
       &ClockId,
   };
@@ -452,18 +412,6 @@ void WaylandConnection::Global(void* data,
       LOG(ERROR) << "Failed to bind to wl_subcompositor global";
       return;
     }
-  } else if (!connection->shell_v6_ &&
-             strcmp(interface, "zxdg_shell_v6") == 0) {
-    // Check for zxdg_shell_v6 first.
-    connection->shell_v6_ = wl::Bind<zxdg_shell_v6>(
-        registry, name, std::min(version, kMaxZXdgShellVersion));
-    if (!connection->shell_v6_) {
-      LOG(ERROR) << "Failed to bind to zxdg_shell_v6 global";
-      return;
-    }
-    zxdg_shell_v6_add_listener(connection->shell_v6_.get(), &shell_v6_listener,
-                               connection);
-    ReportShellUMA(UMALinuxWaylandShell::kXdgShellV6);
   } else if (!connection->shell_ && strcmp(interface, "xdg_wm_base") == 0) {
     connection->shell_ = wl::Bind<xdg_wm_base>(
         registry, name, std::min(version, kMaxXdgShellVersion));
@@ -576,18 +524,19 @@ void WaylandConnection::Global(void* data,
     connection->xdg_output_manager_ = wl::Bind<struct zxdg_output_manager_v1>(
         registry, name, std::min(version, kMaxXdgOutputManagerVersion));
     if (!connection->xdg_output_manager_) {
-      LOG(ERROR) << "Failed to bind zxdg_outout_manager_v1";
+      LOG(ERROR) << "Failed to bind zxdg_output_manager_v1";
       return;
     }
-    if (connection->wayland_output_manager_)
-      connection->wayland_output_manager_->InitializeAllXdgOutputs();
+    if (connection->output_manager_) {
+      connection->output_manager_->InitializeAllXdgOutputs();
+    }
   } else if (strcmp(interface, "org_kde_plasma_shell") == 0) {
-    NOTIMPLEMENTED_LOG_ONCE()
-        << interface << " is recognized but not yet supported";
+    // Recognized but not yet supported.
+    NOTIMPLEMENTED_LOG_ONCE();
     ReportShellUMA(UMALinuxWaylandShell::kOrgKdePlasmaShell);
   } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0) {
-    NOTIMPLEMENTED_LOG_ONCE()
-        << interface << " is recognized but not yet supported";
+    // Recognized but not yet supported.
+    NOTIMPLEMENTED_LOG_ONCE();
     ReportShellUMA(UMALinuxWaylandShell::kZwlrLayerShellV1);
   } else if (!connection->zcr_stylus_v2_ &&
              strcmp(interface, "zcr_stylus_v2") == 0) {
@@ -641,7 +590,7 @@ const gfx::PointF WaylandConnection::MaybeConvertLocation(
   if (!surface_submission_in_pixel_coordinates_ || !window)
     return location;
   gfx::PointF converted(location);
-  converted.Scale(1.0f / window->window_scale());
+  converted.InvScale(window->window_scale());
   return converted;
 }
 
@@ -649,40 +598,32 @@ const gfx::PointF WaylandConnection::MaybeConvertLocation(
 void WaylandConnection::GlobalRemove(void* data,
                                      wl_registry* registry,
                                      uint32_t name) {
-  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
+  auto* connection = static_cast<WaylandConnection*>(data);
   // The Wayland protocol distinguishes global objects by unique numeric names,
   // which the WaylandOutputManager uses as unique output ids. But, it is only
   // possible to figure out, what global object is going to be removed on the
   // WaylandConnection::GlobalRemove call. Thus, whatever unique |name| comes,
   // it's forwarded to the WaylandOutputManager, which checks if such a global
   // output object exists and removes it.
-  if (connection->wayland_output_manager_)
-    connection->wayland_output_manager_->RemoveWaylandOutput(name);
-}
-
-// static
-void WaylandConnection::PingV6(void* data,
-                               zxdg_shell_v6* shell_v6,
-                               uint32_t serial) {
-  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
-  zxdg_shell_v6_pong(shell_v6, serial);
-  connection->Flush();
+  if (connection->output_manager_) {
+    connection->output_manager_->RemoveWaylandOutput(name);
+  }
 }
 
 // static
 void WaylandConnection::Ping(void* data, xdg_wm_base* shell, uint32_t serial) {
-  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
+  auto* connection = static_cast<WaylandConnection*>(data);
   xdg_wm_base_pong(shell, serial);
   connection->Flush();
 }
 
 // static
 void WaylandConnection::ClockId(void* data,
-                                wp_presentation* shell_v6,
+                                wp_presentation* presentation,
                                 uint32_t clk_id) {
   DCHECK_EQ(base::TimeTicks::GetClock(),
             base::TimeTicks::Clock::LINUX_CLOCK_MONOTONIC);
-  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
+  auto* connection = static_cast<WaylandConnection*>(data);
   connection->presentation_clk_id_ = clk_id;
 }
 

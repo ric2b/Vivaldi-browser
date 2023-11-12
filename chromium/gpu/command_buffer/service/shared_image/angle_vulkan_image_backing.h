@@ -7,7 +7,7 @@
 
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_common_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/gl_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/gl_texture_common_representations.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 
@@ -36,6 +36,7 @@ class AngleVulkanImageBacking : public ClearTrackingSharedImageBacking,
   ~AngleVulkanImageBacking() override;
 
   bool Initialize(const base::span<const uint8_t>& data);
+  bool InitializeWihGMB(gfx::GpuMemoryBufferHandle handle);
 
  protected:
   // SharedImageBacking implementation.

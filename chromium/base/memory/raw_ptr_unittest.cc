@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstddef>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -25,22 +26,20 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr_asan_service.h"
 #include "base/memory/raw_ref.h"
+#include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if BUILDFLAG(ENABLE_BASE_TRACING) && BUILDFLAG(PA_USE_BASE_TRACING)
-#include "third_party/perfetto/include/perfetto/test/traced_value_test_support.h"  // no-presubmit-check nogncheck
-#endif  // BUILDFLAG(ENABLE_BASE_TRACING) && BUILDFLAG(PA_USE_BASE_TRACING)
-
 #if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 #include "base/allocator/partition_allocator/partition_tag_types.h"
-#endif  // defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#endif
 
 #if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 #include <sanitizer/asan_interface.h>
@@ -57,7 +56,8 @@ static_assert(sizeof(raw_ptr<int>) == sizeof(int*),
 static_assert(sizeof(raw_ptr<std::string>) == sizeof(std::string*),
               "raw_ptr shouldn't add memory overhead");
 
-#if !BUILDFLAG(USE_BACKUP_REF_PTR)
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) && \
+    !BUILDFLAG(USE_ASAN_UNOWNED_PTR)
 // |is_trivially_copyable| assertion means that arrays/vectors of raw_ptr can
 // be copied by memcpy.
 static_assert(std::is_trivially_copyable<raw_ptr<void>>::value,
@@ -86,7 +86,7 @@ static_assert(std::is_trivially_default_constructible<raw_ptr<int>>::value,
 static_assert(
     std::is_trivially_default_constructible<raw_ptr<std::string>>::value,
     "raw_ptr should be trivially default constructible");
-#endif  // !BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 // Don't use base::internal for testing raw_ptr API, to test if code outside
 // this namespace calls the correct functions from this namespace.
@@ -207,6 +207,19 @@ TEST_F(RawPtrTest, NullExtractNoDereference) {
   // No dereference hence shouldn't crash.
   int* raw = ptr;
   std::ignore = raw;
+  EXPECT_THAT((CountingRawPtrExpectations{.get_for_dereference_cnt = 0,
+                                          .get_for_extraction_cnt = 1,
+                                          .get_for_comparison_cnt = 0}),
+              CountingRawPtrHasCounts());
+}
+
+TEST_F(RawPtrTest, InvalidExtractNoDereference) {
+  // Some code uses invalid pointer values as indicators, so those values must
+  // be accepted by raw_ptr and passed through unchanged during extraction.
+  int* inv_ptr = reinterpret_cast<int*>(~static_cast<uintptr_t>(0));
+  CountingRawPtr<int> ptr = inv_ptr;
+  int* raw = ptr;
+  EXPECT_EQ(raw, inv_ptr);
   EXPECT_THAT((CountingRawPtrExpectations{.get_for_dereference_cnt = 0,
                                           .get_for_extraction_cnt = 1,
                                           .get_for_comparison_cnt = 0}),
@@ -1228,7 +1241,7 @@ TEST_F(RawPtrTest, TrivialRelocability) {
       vector.emplace_back(&x);
     number_of_capacity_changes++;
   } while (number_of_capacity_changes < 10);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   // TODO(lukasza): In the future (once C++ language and std library
   // support custom trivially relocatable objects) this #if branch can
   // be removed (keeping only the right long-term expectation from the
@@ -1244,7 +1257,7 @@ TEST_F(RawPtrTest, TrivialRelocability) {
   // the EXPECT_EQ is correct + the assertion should be true in the
   // long-term.)
   EXPECT_EQ(0, RawPtrCountingImpl::release_wrapped_ptr_cnt);
-#endif
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
   // Basic smoke test that raw_ptr elements in a vector work okay.
   for (const auto& elem : vector) {
@@ -1257,7 +1270,7 @@ TEST_F(RawPtrTest, TrivialRelocability) {
   RawPtrCountingImpl::ClearCounters();
   size_t number_of_cleared_elements = vector.size();
   vector.clear();
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   EXPECT_EQ((int)number_of_cleared_elements,
             RawPtrCountingImpl::release_wrapped_ptr_cnt);
 #else
@@ -1269,7 +1282,7 @@ TEST_F(RawPtrTest, TrivialRelocability) {
   // ships to the Stable channel).
   EXPECT_EQ(0, RawPtrCountingImpl::release_wrapped_ptr_cnt);
   std::ignore = number_of_cleared_elements;
-#endif
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 }
 
 struct BaseStruct {
@@ -1303,31 +1316,6 @@ TEST_F(RawPtrTest, DerivedStructsComparison) {
             checked_derived2_ptr);
 }
 
-#if BUILDFLAG(ENABLE_BASE_TRACING) && BUILDFLAG(PA_USE_BASE_TRACING)
-TEST_F(RawPtrTest, TracedValueSupport) {
-  // Serialise nullptr.
-  EXPECT_EQ(perfetto::TracedValueToString(raw_ptr<int>()), "0x0");
-
-  {
-    // If the pointer is non-null, its dereferenced value will be serialised.
-    int value = 42;
-    EXPECT_EQ(perfetto::TracedValueToString(raw_ptr<int>(&value)), "42");
-  }
-
-  struct WithTraceSupport {
-    void WriteIntoTrace(perfetto::TracedValue ctx) const {
-      std::move(ctx).WriteString("result");
-    }
-  };
-
-  {
-    WithTraceSupport value;
-    EXPECT_EQ(perfetto::TracedValueToString(raw_ptr<WithTraceSupport>(&value)),
-              "result");
-  }
-}
-#endif  // BUILDFLAG(ENABLE_BASE_TRACING) && BUILDFLAG(PA_USE_BASE_TRACING)
-
 class PmfTestBase {
  public:
   int MemFunc(char, double) const { return 11; }
@@ -1344,7 +1332,8 @@ class PmfTestDerived : public PmfTestBase {
 namespace base {
 namespace internal {
 
-#if BUILDFLAG(USE_BACKUP_REF_PTR) && !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) && \
+    !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
 void HandleOOM(size_t unused_size) {
   LOG(FATAL) << "Out of memory";
@@ -1504,13 +1493,21 @@ void RunBackupRefPtrImplAdvanceTest(
   protected_ptr = protected_ptr + 123;
   protected_ptr = protected_ptr - 123;
   protected_ptr += requested_size / 2;
-  protected_ptr =
-      protected_ptr + requested_size / 2;  // end-of-allocation address is ok
+  // end-of-allocation address should not cause an error immediately, but it may
+  // result in the pointer being poisoned.
+  protected_ptr = protected_ptr + requested_size / 2;
+#if defined(PA_USE_OOB_POISON)
+  EXPECT_DEATH_IF_SUPPORTED(*protected_ptr = ' ', "");
+  protected_ptr -= 1;  // This brings the pointer back within
+                       // bounds, which causes the poison to be removed.
+  *protected_ptr = ' ';
+  protected_ptr += 1;  // Reposition pointer back past end of allocation.
+#endif
   EXPECT_CHECK_DEATH(protected_ptr = protected_ptr + 1);
   EXPECT_CHECK_DEATH(protected_ptr += 1);
   EXPECT_CHECK_DEATH(++protected_ptr);
 
-  // Even though |protected_ptr| is already puinting to the end of the
+  // Even though |protected_ptr| is already pointing to the end of the
   // allocation, assign it explicitly to make sure the underlying implementation
   // doesn't "switch" to the next slot.
   protected_ptr = ptr + requested_size;
@@ -1533,7 +1530,7 @@ TEST_F(BackupRefPtrTest, Advance) {
   size_t slot_size = 512;
   size_t requested_size =
       allocator_.root()->AdjustSizeForExtrasSubtract(slot_size);
-  // Verify that we're indeed fillin up the slot.
+  // Verify that we're indeed filling up the slot.
   ASSERT_EQ(
       requested_size,
       allocator_.root()->AllocationCapacityFromRequestedSize(requested_size));
@@ -1552,6 +1549,27 @@ TEST_F(BackupRefPtrTest, Advance) {
   ASSERT_GT(raw_size, partition_alloc::internal::kMaxBucketed);
   requested_size = allocator_.root()->AdjustSizeForExtrasSubtract(slot_size);
   RunBackupRefPtrImplAdvanceTest(allocator_, requested_size);
+}
+
+TEST_F(BackupRefPtrTest, AdvanceAcrossPools) {
+  char array1[1000];
+  char array2[1000];
+
+  char* in_pool_ptr = static_cast<char*>(allocator_.root()->Alloc(123, ""));
+
+  raw_ptr<char> protected_ptr = array1;
+  // Nothing bad happens. Both pointers are outside of the BRP pool, so no
+  // checks are triggered.
+  protected_ptr += (array2 - array1);
+  // A pointer is shifted from outside of the BRP pool into the BRP pool. This
+  // should trigger death to avoid
+  EXPECT_CHECK_DEATH(protected_ptr += (in_pool_ptr - array2));
+
+  protected_ptr = in_pool_ptr;
+  // Same when a pointer is shifted from inside the BRP pool out of it.
+  EXPECT_CHECK_DEATH(protected_ptr += (array1 - in_pool_ptr));
+
+  allocator_.root()->Free(in_pool_ptr);
 }
 
 TEST_F(BackupRefPtrTest, GetDeltaElems) {
@@ -1613,7 +1631,7 @@ struct BoundRawPtrTestHelper {
             Unretained(this))) {}
 
   void DeleteItselfAndCheckIfInQuarantine() {
-    auto& allocator = owning_allocator;
+    auto& allocator = *owning_allocator;
     EXPECT_TRUE(IsQuarantineEmpty(allocator));
 
     // Since we use a non-default partition, `delete` has to be simulated.
@@ -1623,7 +1641,7 @@ struct BoundRawPtrTestHelper {
     EXPECT_FALSE(IsQuarantineEmpty(allocator));
   }
 
-  partition_alloc::PartitionAllocator& owning_allocator;
+  const raw_ref<partition_alloc::PartitionAllocator> owning_allocator;
   OnceClosure once_callback;
   RepeatingClosure repeating_callback;
 };
@@ -1701,7 +1719,8 @@ TEST_F(BackupRefPtrTest, RawPtrNotDangling) {
 
   void* ptr = allocator_.root()->Alloc(16, "");
   raw_ptr<void> dangling_ptr = ptr;
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) && \
+    !BUILDFLAG(ENABLE_DANGLING_RAW_PTR_PERF_EXPERIMENT)
   BASE_EXPECT_DEATH(
       {
         allocator_.root()->Free(ptr);  // Dangling raw_ptr detected.
@@ -1710,6 +1729,9 @@ TEST_F(BackupRefPtrTest, RawPtrNotDangling) {
       AllOf(HasSubstr("Detected dangling raw_ptr"),
             HasSubstr("The memory was freed at:"),
             HasSubstr("The dangling raw_ptr was released at:")));
+#else
+  allocator_.root()->Free(ptr);
+  dangling_ptr = nullptr;
 #endif
 }
 
@@ -1807,7 +1829,8 @@ TEST_F(BackupRefPtrTest, RawPtrDeleteWithoutExtractAsDangling) {
 
   raw_ptr<int> ptr =
       static_cast<int*>(allocator_.root()->Alloc(sizeof(int), ""));
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) && \
+    !BUILDFLAG(ENABLE_DANGLING_RAW_PTR_PERF_EXPERIMENT)
   BASE_EXPECT_DEATH(
       {
         allocator_.root()->Free(ptr.get());  // Dangling raw_ptr detected.
@@ -1816,10 +1839,136 @@ TEST_F(BackupRefPtrTest, RawPtrDeleteWithoutExtractAsDangling) {
       AllOf(HasSubstr("Detected dangling raw_ptr"),
             HasSubstr("The memory was freed at:"),
             HasSubstr("The dangling raw_ptr was released at:")));
+#else
+  allocator_.root()->Free(ptr.get());
+  ptr = nullptr;
 #endif
 }
 
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR) &&
+TEST_F(BackupRefPtrTest, SpatialAlgoCompat) {
+  size_t slot_size = 512;
+  size_t requested_size =
+      allocator_.root()->AdjustSizeForExtrasSubtract(slot_size);
+  // Verify that we're indeed filling up the slot.
+  ASSERT_EQ(
+      requested_size,
+      allocator_.root()->AllocationCapacityFromRequestedSize(requested_size));
+  size_t requested_elements = requested_size / sizeof(int);
+
+  int* ptr =
+      reinterpret_cast<int*>(allocator_.root()->Alloc(requested_size, ""));
+  int* ptr_end = ptr + requested_elements;
+
+  RawPtrCountingImpl::ClearCounters();
+
+  CountingRawPtr<int> protected_ptr = ptr;
+  CountingRawPtr<int> protected_ptr_end = protected_ptr + requested_elements;
+
+#if defined(PA_USE_OOB_POISON)
+  EXPECT_DEATH_IF_SUPPORTED(*protected_ptr_end = 1, "");
+#endif
+
+  int gen_val = 1;
+  std::generate(protected_ptr, protected_ptr_end, [&gen_val]() {
+    gen_val ^= gen_val + 1;
+    return gen_val;
+  });
+
+  EXPECT_THAT((CountingRawPtrExpectations{
+                  .get_for_dereference_cnt = requested_elements,
+                  .get_for_extraction_cnt = 0,
+                  .get_for_comparison_cnt = (requested_elements + 1) * 2,
+              }),
+              CountingRawPtrHasCounts());
+
+  RawPtrCountingImpl::ClearCounters();
+
+  for (CountingRawPtr<int> protected_ptr_i = protected_ptr;
+       protected_ptr_i < protected_ptr_end; protected_ptr_i++) {
+    *protected_ptr_i ^= *protected_ptr_i + 1;
+  }
+
+  EXPECT_THAT((CountingRawPtrExpectations{
+                  .get_for_dereference_cnt = requested_elements * 2,
+                  .get_for_extraction_cnt = 0,
+                  .get_for_comparison_cnt = (requested_elements + 1) * 2,
+              }),
+              CountingRawPtrHasCounts());
+
+  RawPtrCountingImpl::ClearCounters();
+
+  for (CountingRawPtr<int> protected_ptr_i = protected_ptr;
+       protected_ptr_i < ptr_end; protected_ptr_i++) {
+    *protected_ptr_i ^= *protected_ptr_i + 1;
+  }
+
+  EXPECT_THAT((CountingRawPtrExpectations{
+                  .get_for_dereference_cnt = requested_elements * 2,
+                  .get_for_extraction_cnt = 0,
+                  .get_for_comparison_cnt = requested_elements + 1,
+              }),
+              CountingRawPtrHasCounts());
+
+  RawPtrCountingImpl::ClearCounters();
+
+  for (int* ptr_i = ptr; ptr_i < protected_ptr_end; ptr_i++) {
+    *ptr_i ^= *ptr_i + 1;
+  }
+
+  EXPECT_THAT((CountingRawPtrExpectations{
+                  .get_for_dereference_cnt = 0,
+                  .get_for_extraction_cnt = 0,
+                  .get_for_comparison_cnt = requested_elements + 1,
+              }),
+              CountingRawPtrHasCounts());
+
+  RawPtrCountingImpl::ClearCounters();
+
+  size_t iter_cnt = 0;
+  for (int *ptr_i = protected_ptr, *ptr_i_end = protected_ptr_end;
+       ptr_i < ptr_i_end; ptr_i++) {
+    *ptr_i ^= *ptr_i + 1;
+    iter_cnt++;
+  }
+  EXPECT_EQ(iter_cnt, requested_elements);
+
+  EXPECT_THAT((CountingRawPtrExpectations{
+                  .get_for_dereference_cnt = 0,
+                  .get_for_extraction_cnt = 2,
+                  .get_for_comparison_cnt = 0,
+              }),
+              CountingRawPtrHasCounts());
+
+  allocator_.root()->Free(ptr);
+}
+
+#if defined(PA_USE_OOB_POISON)
+TEST_F(BackupRefPtrTest, Duplicate) {
+  size_t requested_size = allocator_.root()->AdjustSizeForExtrasSubtract(512);
+  char* ptr = static_cast<char*>(allocator_.root()->Alloc(requested_size, ""));
+  raw_ptr<char> protected_ptr1 = ptr;
+  protected_ptr1 += requested_size;  // Pointer should now be poisoned.
+
+  // Duplicating a poisoned pointer should be allowed.
+  raw_ptr<char> protected_ptr2 = protected_ptr1;
+
+  // The poison bit should be propagated to the duplicate such that the OOB
+  // access is disallowed:
+  EXPECT_DEATH_IF_SUPPORTED(*protected_ptr2 = ' ', "");
+
+  // Assignment from a poisoned pointer should be allowed.
+  raw_ptr<char> protected_ptr3;
+  protected_ptr3 = protected_ptr1;
+
+  // The poison bit should be propagated via the assignment such that the OOB
+  // access is disallowed:
+  EXPECT_DEATH_IF_SUPPORTED(*protected_ptr3 = ' ', "");
+
+  allocator_.root()->Free(ptr);
+}
+#endif  // PA_USE_OOB_POISON
+
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) &&
         // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
 #if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
@@ -1845,9 +1994,14 @@ const char kAsanBrpMaybeProtected_Extraction[] = ASAN_BRP_MANUAL_ANALYSIS(
 const char kAsanBrpNotProtected_Instantiation[] = ASAN_BRP_NOT_PROTECTED(
     "pointer to an already freed region was assigned to a raw_ptr<T>");
 const char kAsanBrpNotProtected_EarlyAllocation[] = ASAN_BRP_NOT_PROTECTED(
-    "region was allocated before MiraclePtr was activated");
+    "crash occurred while accessing a region that was allocated before "
+    "MiraclePtr was activated");
 const char kAsanBrpNotProtected_NoRawPtrAccess[] =
     ASAN_BRP_NOT_PROTECTED("No raw_ptr<T> access to this region was detected");
+const char kAsanBrpMaybeProtected_Race[] =
+    ASAN_BRP_MANUAL_ANALYSIS("\\nThe \"use\" and \"free\" threads don't match");
+const char kAsanBrpMaybeProtected_ThreadPool[] =
+    ASAN_BRP_MANUAL_ANALYSIS("\\nThis crash occurred in the thread pool");
 
 #undef ASAN_BRP_PROTECTED
 #undef ASAN_BRP_MANUAL_ANALYSIS
@@ -2205,6 +2359,33 @@ TEST_F(AsanBackupRefPtrTest, BoundReferences) {
                             kAsanBrpProtected_Callback);
 }
 
+TEST_F(AsanBackupRefPtrTest, FreeOnAnotherThread) {
+  auto ptr = ::std::make_unique<AsanStruct>();
+  raw_ptr<AsanStruct> protected_ptr = ptr.get();
+
+  std::thread thread([&ptr] { ptr.reset(); });
+  thread.join();
+
+  EXPECT_DEATH_IF_SUPPORTED(protected_ptr->func(), kAsanBrpMaybeProtected_Race);
+}
+
+TEST_F(AsanBackupRefPtrTest, AccessOnThreadPoolThread) {
+  auto ptr = ::std::make_unique<AsanStruct>();
+  raw_ptr<AsanStruct> protected_ptr = ptr.get();
+
+  test::TaskEnvironment env;
+  RunLoop run_loop;
+
+  ThreadPool::PostTaskAndReply(
+      FROM_HERE, {}, base::BindLambdaForTesting([&ptr, &protected_ptr] {
+        ptr.reset();
+        EXPECT_DEATH_IF_SUPPORTED(protected_ptr->func(),
+                                  kAsanBrpMaybeProtected_ThreadPool);
+      }),
+      base::BindLambdaForTesting([&run_loop]() { run_loop.Quit(); }));
+  run_loop.Run();
+}
+
 #endif  // BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
 #if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
@@ -2380,6 +2561,54 @@ TEST(MTECheckedPtrImpl, AdvancedPointerShiftedAppropriately) {
                   .get_for_extraction_cnt = 2,
               }),
               CountingRawPtrHasCounts());
+}
+
+// Verifies that MTECheckedPtr allows the extraction of the raw pointee
+// pointing just one byte beyond the end. (Dereference is still
+// undefined behavior.)
+TEST(MTECheckedPtrImpl, PointerBeyondAllocationCanBeExtracted) {
+  // This test was most meaningful when MTECheckedPtr had the error
+  // in its implementation (crbug.com/1364476), i.e. in cases where
+  // the allocation end was flush with the slot end: the next byte
+  // would lie outside said slot. When fixed with the extra byte
+  // padding, this is never true.
+  //
+  // Without asserting any particular knowledge of PartitionAlloc's
+  // internals (i.e. what allocation size will produce exactly
+  // this situation), we perform the same test for a range of
+  // allocation sizes. Note that this test doesn't do anything when
+  // the PA cookie is present at slot's end.
+  for (size_t size = 16; size <= 64; ++size) {
+    char* unwrapped_ptr = new char[size];
+    raw_ptr<char> wrapped_ptr = unwrapped_ptr;
+    char unused = 0;
+
+    // There are no real expectations here - we just don't expect the
+    // test to crash when we get() the raw pointers.
+    //
+    // Getting the last allocated char definitely cannot crash.
+    char* unwrapped_last_char = (wrapped_ptr + size - 1).get();
+
+    // Trivial expectation to prevent "unused variable" warning.
+    EXPECT_THAT(unwrapped_last_char, testing::NotNull());
+
+    // Getting the char just beyond the allocation area must not crash.
+    // Today, MTECheckedPtr is patched with a one-byte "extra" that
+    // makes this not crash.
+    char* unwrapped_char_beyond = (wrapped_ptr + size).get();
+
+    // This is bad behavior (clients must not dereference beyond-the-end
+    // pointers), but it is in the same slot, so MTECheckedPtr sees no
+    // issue with the tag. Therefore, this must not crash.
+    unused = *(wrapped_ptr + size);
+
+    // Trivial statements to prevent "unused variable" warnings.
+    unused = 0;
+    EXPECT_EQ(unused, 0);
+    EXPECT_THAT(unwrapped_char_beyond, testing::NotNull());
+
+    delete[] unwrapped_ptr;
+  }
 }
 
 #endif  // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) &&

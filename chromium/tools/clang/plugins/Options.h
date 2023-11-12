@@ -5,6 +5,8 @@
 #ifndef TOOLS_CLANG_PLUGINS_OPTIONS_H_
 #define TOOLS_CLANG_PLUGINS_OPTIONS_H_
 
+#include <string>
+
 namespace chrome_checker {
 
 struct Options {
@@ -13,6 +15,10 @@ struct Options {
   bool check_ipc = false;
   bool check_layout_object_methods = false;
   bool raw_ref_template_as_trivial_member = false;
+  bool check_bad_raw_ptr_cast = false;
+  bool check_raw_ptr_fields = false;
+  std::string exclude_fields_file;
+  std::string exclude_paths_file;
 };
 
 }  // namespace chrome_checker

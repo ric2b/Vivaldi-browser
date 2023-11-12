@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "media/gpu/vaapi/vaapi_picture_native_pixmap.h"
 #include "ui/gfx/buffer_types.h"
@@ -16,6 +16,10 @@
 namespace gfx {
 class NativePixmap;
 }  // namespace gfx
+
+namespace gl {
+class GLImage;
+}
 
 namespace media {
 
@@ -50,6 +54,9 @@ class VaapiPictureNativePixmapEgl : public VaapiPictureNativePixmap {
 
  private:
   VaapiStatus Initialize(scoped_refptr<gfx::NativePixmap> pixmap);
+
+  // GLImage bound to the GL textures used by the VDA client.
+  scoped_refptr<gl::GLImage> gl_image_;
 };
 
 }  // namespace media

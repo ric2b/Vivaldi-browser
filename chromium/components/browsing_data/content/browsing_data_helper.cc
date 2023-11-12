@@ -179,12 +179,6 @@ void RemoveSiteSettingsData(const base::Time& delete_begin,
 #endif
 }
 
-void RemovePersistentOriginTrials(PrefService* pref_service) {
-  if (pref_service->HasPrefPath(origin_trials::kOriginTrialPrefKey)) {
-    pref_service->ClearPref(origin_trials::kOriginTrialPrefKey);
-  }
-}
-
 void RemoveFederatedSiteSettingsData(
     const base::Time& delete_begin,
     const base::Time& delete_end,
@@ -197,6 +191,10 @@ void RemoveFederatedSiteSettingsData(
   host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType::FEDERATED_IDENTITY_API, delete_begin, delete_end,
       pattern_predicate);
+
+  host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
+      ContentSettingsType::FEDERATED_IDENTITY_IDENTITY_PROVIDER_SIGNIN_STATUS,
+      delete_begin, delete_end, pattern_predicate);
 
   host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType::FEDERATED_IDENTITY_SHARING, delete_begin, delete_end,

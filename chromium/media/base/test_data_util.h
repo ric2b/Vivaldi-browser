@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_split.h"
 #include "base/time/time.h"
 
@@ -43,12 +43,7 @@ std::string GetURLQueryString(const base::StringPairs& query_params);
 //
 //  |name| - The name of the file.
 //  |buffer| - The contents of the file.
-scoped_refptr<DecoderBuffer> ReadTestDataFile(
-    const std::string& name
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-    , const base::FilePath& full_filename = {}
-#endif
-);
+scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name);
 
 // Reads a decoder buffer from a file as well, but also sets the presentation
 // timestamp on it.

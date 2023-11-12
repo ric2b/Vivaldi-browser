@@ -26,10 +26,10 @@ import '../settings_shared.css.js';
 import {convertImageSequenceToPng} from 'chrome://resources/ash/common/cr_picture/png.js';
 // </if>
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+import {isChromeOS} from 'chrome://resources/js/platform.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {getImage} from 'chrome://resources/js/icon.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
@@ -56,8 +56,8 @@ export interface SettingsPeoplePageElement {
 }
 
 const SettingsPeoplePageElementBase =
-    RouteObserverMixin(WebUIListenerMixin(BaseMixin(PolymerElement))) as {
-      new (): PolymerElement & WebUIListenerMixinInterface &
+    RouteObserverMixin(WebUiListenerMixin(BaseMixin(PolymerElement))) as {
+      new (): PolymerElement & WebUiListenerMixinInterface &
           RouteObserverMixinInterface,
     };
 
@@ -216,7 +216,7 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
       // If this is SplitSettings and we have the Google Account manager,
       // prefer the GAIA name and icon.
       useProfileNameAndIcon = false;
-      this.addWebUIListener(
+      this.addWebUiListener(
           'accounts-changed', this.updateAccounts_.bind(this));
       this.updateAccounts_();
     }
@@ -224,13 +224,13 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
     if (useProfileNameAndIcon) {
       ProfileInfoBrowserProxyImpl.getInstance().getProfileInfo().then(
           this.handleProfileInfo_.bind(this));
-      this.addWebUIListener(
+      this.addWebUiListener(
           'profile-info-changed', this.handleProfileInfo_.bind(this));
     }
 
     this.syncBrowserProxy_.getSyncStatus().then(
         this.handleSyncStatus_.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'sync-status-changed', this.handleSyncStatus_.bind(this));
 
     // <if expr="not chromeos_ash">
@@ -238,9 +238,9 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
       this.storedAccounts = accounts;
     };
     this.syncBrowserProxy_.getStoredAccounts().then(handleStoredAccounts);
-    this.addWebUIListener('stored-accounts-updated', handleStoredAccounts);
+    this.addWebUiListener('stored-accounts-updated', handleStoredAccounts);
 
-    this.addWebUIListener('sync-settings-saved', () => {
+    this.addWebUiListener('sync-settings-saved', () => {
       this.$.toast.show();
     });
     // </if>
@@ -382,7 +382,7 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
    * Open URL for managing your Google Account.
    */
   private openGoogleAccount_() {
-    OpenWindowProxyImpl.getInstance().openURL(
+    OpenWindowProxyImpl.getInstance().openUrl(
         loadTimeData.getString('googleAccountUrl'));
     chrome.metricsPrivate.recordUserAction('ManageGoogleAccount_Clicked');
   }

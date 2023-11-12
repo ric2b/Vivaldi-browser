@@ -12,7 +12,7 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
@@ -40,7 +40,7 @@
 #include "ui/base/cocoa/remote_layer_api.h"
 #endif
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 #include "components/viz/service/display_embedder/software_output_device_ozone.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -59,7 +59,7 @@ OutputSurfaceProviderImpl::OutputSurfaceProviderImpl(
     GpuServiceImpl* gpu_service_impl,
     bool headless)
     : gpu_service_impl_(gpu_service_impl),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       headless_(headless) {}
 
 OutputSurfaceProviderImpl::OutputSurfaceProviderImpl(bool headless)
@@ -150,16 +150,16 @@ OutputSurfaceProviderImpl::CreateSoftwareOutputDeviceForPlatform(
   // Android does not do software compositing, so we can't get here.
   NOTREACHED();
   return nullptr;
-#elif defined(USE_OZONE)
-    ui::SurfaceFactoryOzone* factory =
-        ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
-    std::unique_ptr<ui::PlatformWindowSurface> platform_window_surface =
-        factory->CreatePlatformWindowSurface(surface_handle);
-    std::unique_ptr<ui::SurfaceOzoneCanvas> surface_ozone =
-        factory->CreateCanvasForWidget(surface_handle);
-    CHECK(surface_ozone);
-    return std::make_unique<SoftwareOutputDeviceOzone>(
-        std::move(platform_window_surface), std::move(surface_ozone));
+#elif BUILDFLAG(IS_OZONE)
+  ui::SurfaceFactoryOzone* factory =
+      ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
+  std::unique_ptr<ui::PlatformWindowSurface> platform_window_surface =
+      factory->CreatePlatformWindowSurface(surface_handle);
+  std::unique_ptr<ui::SurfaceOzoneCanvas> surface_ozone =
+      factory->CreateCanvasForWidget(surface_handle);
+  CHECK(surface_ozone);
+  return std::make_unique<SoftwareOutputDeviceOzone>(
+      std::move(platform_window_surface), std::move(surface_ozone));
 #else
   NOTREACHED();
   return nullptr;

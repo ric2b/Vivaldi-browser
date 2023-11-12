@@ -23,6 +23,7 @@
   "chromeos-amd64-generic-cfi-thin-lto-rel": {
     "args_file": "//build/args/chromeos/amd64-generic.gni",
     "gn_args": {
+      "also_build_lacros_chrome_for_architecture": "amd64",
       "dcheck_always_on": false,
       "is_cfi": true,
       "is_chromeos_device": true,
@@ -58,6 +59,7 @@
   "chromeos-amd64-generic-rel": {
     "args_file": "//build/args/chromeos/amd64-generic-vm.gni",
     "gn_args": {
+      "also_build_lacros_chrome_for_architecture": "amd64",
       "dcheck_always_on": false,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
@@ -90,20 +92,11 @@
       "dcheck_always_on": true,
       "is_chromeos_device": true,
       "ozone_platform_headless": true,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "chromeos-jacuzzi-rel": {
     "args_file": "//build/args/chromeos/jacuzzi.gni",
-    "gn_args": {
-      "dcheck_always_on": true,
-      "is_chromeos_device": true,
-      "ozone_platform_headless": true,
-      "use_remoteexec": true
-    }
-  },
-  "chromeos-kevin-rel": {
-    "args_file": "//build/args/chromeos/kevin.gni",
     "gn_args": {
       "dcheck_always_on": true,
       "is_chromeos_device": true,
@@ -144,6 +137,19 @@
       "use_remoteexec": true
     }
   },
+  "lacros-amd64-generic-rel-skylab": {
+    "args_file": "//build/args/chromeos/amd64-generic-crostoolchain.gni",
+    "gn_args": {
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": false,
+      "is_chromeos_device": true,
+      "is_debug": false,
+      "is_skylab": true,
+      "ozone_platform_headless": true,
+      "target_os": "chromeos",
+      "use_remoteexec": true
+    }
+  },
   "lacros-arm-generic-rel": {
     "args_file": "//build/args/chromeos/arm-generic-crostoolchain.gni",
     "gn_args": {
@@ -176,7 +182,7 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "target_os": "chromeos",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "linux-cfm-rel": {

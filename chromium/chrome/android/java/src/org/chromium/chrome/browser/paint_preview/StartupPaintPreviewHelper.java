@@ -11,8 +11,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
@@ -24,7 +22,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.load_progress.LoadProgressCoordinator;
-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -32,9 +29,6 @@ import org.chromium.ui.base.WindowAndroid;
  * Glue code for the Paint Preview show-on-startup feature.
  */
 public class StartupPaintPreviewHelper {
-    public static final BooleanCachedFieldTrialParameter ACCESSIBILITY_SUPPORT_PARAM =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP,
-                    "has_accessibility_support", true);
     /**
      * Tracks whether a paint preview should be shown on tab restore. We use this to only attempt
      * to display a paint preview on the first tab restoration that happens on Chrome startup when
@@ -116,7 +110,7 @@ public class StartupPaintPreviewHelper {
      * @return the feature availability
      */
     public static boolean isEnabled() {
-        return ChromeFeatureList.sPaintPreviewShowOnStartup.isEnabled();
+        return true;
     }
 
     /**
@@ -140,11 +134,6 @@ public class StartupPaintPreviewHelper {
             return;
         }
 
-        if (ChromeAccessibilityUtil.get().isAccessibilityEnabled()
-                && !ACCESSIBILITY_SUPPORT_PARAM.getValue()) {
-            return;
-        }
-
         sShouldShowOnRestore = false;
         LoadProgressCoordinator loadProgressCoordinator =
                 paintPreviewHelper.mProgressBarCoordinatorSupplier.get();
@@ -163,7 +152,9 @@ public class StartupPaintPreviewHelper {
         startupPaintPreview.setActivityCreationTimestampMs(
                 paintPreviewHelper.mActivityCreationTime);
         startupPaintPreview.setShouldRecordFirstPaint(
-                () -> UmaUtils.hasComeToForeground() && !UmaUtils.hasComeToBackground());
+                ()
+                        -> UmaUtils.hasComeToForegroundWithNative()
+                        && !UmaUtils.hasComeToBackgroundWithNative());
         startupPaintPreview.setIsOfflinePage(() -> OfflinePageUtils.isOfflinePage(tab));
         for (PaintPreviewMetricsObserver observer : paintPreviewHelper.mMetricsObservers) {
             startupPaintPreview.addMetricsObserver(observer);

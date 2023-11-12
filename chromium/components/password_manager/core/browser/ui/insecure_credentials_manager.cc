@@ -26,7 +26,6 @@
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #include "components/password_manager/core/browser/ui/weak_check_utility.h"
@@ -44,9 +43,9 @@ bool SupportsMuteOperation(InsecureType insecure_type) {
 // The function is only used by the weak check.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 base::flat_set<std::u16string> ExtractPasswords(
-    SavedPasswordsPresenter::SavedPasswordsView password_forms) {
-  return base::MakeFlatSet<std::u16string>(password_forms, {},
-                                           &PasswordForm::password_value);
+    const std::vector<CredentialUIEntry>& credentials) {
+  return base::MakeFlatSet<std::u16string>(credentials, {},
+                                           &CredentialUIEntry::password);
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
@@ -78,21 +77,20 @@ void InsecureCredentialsManager::StartWeakCheck(
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 void InsecureCredentialsManager::SaveInsecureCredential(
-    const LeakCheckCredential& credential) {
+    const LeakCheckCredential& leak) {
   // Iterate over all currently saved credentials and mark those as insecure
   // that have the same canonicalized username and password.
   const std::u16string canonicalized_username =
-      CanonicalizeUsername(credential.username());
-  for (const PasswordForm& saved_password : presenter_->GetSavedPasswords()) {
-    if (saved_password.password_value == credential.password() &&
-        CanonicalizeUsername(saved_password.username_value) ==
-            canonicalized_username &&
-        !saved_password.password_issues.contains(InsecureType::kLeaked)) {
-      PasswordForm form_to_update = saved_password;
-      form_to_update.password_issues.insert_or_assign(
+      CanonicalizeUsername(leak.username());
+  for (const auto& credential : presenter_->GetSavedPasswords()) {
+    if (credential.password == leak.password() &&
+        CanonicalizeUsername(credential.username) == canonicalized_username &&
+        !credential.password_issues.contains(InsecureType::kLeaked)) {
+      CredentialUIEntry credential_to_update = credential;
+      credential_to_update.password_issues.insert_or_assign(
           InsecureType::kLeaked,
           InsecurityMetadata(base::Time::Now(), IsMuted(false)));
-      GetStoreFor(saved_password).UpdateLogin(form_to_update);
+      presenter_->EditSavedCredentials(credential, credential_to_update);
     }
   }
 }
@@ -128,21 +126,6 @@ InsecureCredentialsManager::GetInsecureCredentialEntries() const {
   DCHECK(presenter_);
   std::vector<CredentialUIEntry> credentials =
       presenter_->GetSavedCredentials();
-  if (base::GetFieldTrialParamByFeatureAsBool(
-          password_manager::features::kPasswordChangeInSettings,
-          password_manager::features::
-              kPasswordChangeInSettingsWithForcedWarningForEverySite,
-          /*default_value=*/false)) {
-    // If a flag is set to return every credential as compromised, ensure that
-    // all credentials contain a "leak" password issue.
-    for (auto& credential : credentials) {
-      if (!credential.IsLeaked() && !credential.IsPhished()) {
-        credential.password_issues[InsecureType::kLeaked] =
-            InsecurityMetadata();
-      }
-    }
-    return credentials;
-  }
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   // Otherwise erase entries which aren't leaked and phished.
   base::EraseIf(credentials, [](const auto& credential) {
@@ -182,11 +165,11 @@ void InsecureCredentialsManager::OnWeakCheckDone(
   NotifyInsecureCredentialsChanged();
 }
 
-void InsecureCredentialsManager::OnEdited(const PasswordForm& form) {
+void InsecureCredentialsManager::OnEdited(const CredentialUIEntry& credential) {
   // The WeakCheck is a Desktop only feature for now. Disable on Mobile to
   // avoid pulling in a big dependency on zxcvbn.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  const std::u16string& password = form.password_value;
+  const std::u16string& password = credential.password;
   if (weak_passwords_.contains(password) || !IsWeak(password)) {
     // Either the password is already known to be weak, or it is not weak at
     // all. In both cases there is nothing to do.
@@ -200,8 +183,7 @@ void InsecureCredentialsManager::OnEdited(const PasswordForm& form) {
 
 // Re-computes the list of insecure credentials with passwords after obtaining a
 // new list of saved passwords.
-void InsecureCredentialsManager::OnSavedPasswordsChanged(
-    SavedPasswordsPresenter::SavedPasswordsView saved_passwords) {
+void InsecureCredentialsManager::OnSavedPasswordsChanged() {
   NotifyInsecureCredentialsChanged();
 }
 

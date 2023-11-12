@@ -84,6 +84,10 @@ void AddPdfViewerStrings(base::Value::Dict* dict) {
     {"propertiesPdfVersion", IDS_PDF_PROPERTIES_PDF_VERSION},
     {"propertiesSubject", IDS_PDF_PROPERTIES_SUBJECT},
     {"propertiesTitle", IDS_PDF_PROPERTIES_TITLE},
+    {"rotationStateLabel0", IDS_PDF_ROTATION_STATE_LABEL_0},
+    {"rotationStateLabel90", IDS_PDF_ROTATION_STATE_LABEL_90},
+    {"rotationStateLabel180", IDS_PDF_ROTATION_STATE_LABEL_180},
+    {"rotationStateLabel270", IDS_PDF_ROTATION_STATE_LABEL_270},
     {"thumbnailPageAriaLabel", IDS_PDF_THUMBNAIL_PAGE_ARIA_LABEL},
     {"tooltipDocumentOutline", IDS_PDF_TOOLTIP_DOCUMENT_OUTLINE},
     {"tooltipDownload", IDS_PDF_TOOLTIP_DOWNLOAD},
@@ -186,6 +190,9 @@ void AddStrings(PdfViewerContext context, base::Value::Dict* dict) {
 }
 
 void AddAdditionalData(bool enable_annotations, base::Value::Dict* dict) {
+  // NOTE: This function should not include any data used for $i18n{}
+  // replacements. The i18n string resources should be added using AddStrings()
+  // above instead.
   bool printing_enabled = true;
   bool annotations_enabled = false;
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
+#include "build/build_config.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/skia_output_surface.h"
@@ -55,10 +56,17 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
     void EndWriteSkia(bool force_flush = false);
     void PreGrContextSubmit();
 
+    // Set the image as purgeable. Returns false if the image was already
+    // purgeable.
+    bool SetPurgeable();
+    void SetNotPurgeable();
+
     virtual void BeginPresent() = 0;
     virtual void EndPresent(gfx::GpuFenceHandle release_fence) = 0;
     virtual int GetPresentCount() const = 0;
     virtual void OnContextLost() = 0;
+
+    const gpu::Mailbox& mailbox() const { return mailbox_; }
 
     base::WeakPtr<Image> GetWeakPtr() { return weak_ptr_factory_.GetWeakPtr(); }
 
@@ -68,6 +76,7 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
         representation_factory_;
     const raw_ptr<SkiaOutputSurfaceDependency> deps_;
     gpu::Mailbox mailbox_;
+    bool is_purgeable_ = false;
 
     std::unique_ptr<gpu::SkiaImageRepresentation> skia_representation_;
     std::unique_ptr<gpu::SkiaImageRepresentation::ScopedWriteAccess>
@@ -121,7 +130,7 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
       bool is_submitted) = 0;
-#if BUILDFLAG(IS_ANDROID) || defined(USE_OZONE)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_OZONE)
   using OverlayPlaneCandidate = OverlayCandidate;
 #elif BUILDFLAG(IS_APPLE)
   using OverlayPlaneCandidate = CALayerOverlay;

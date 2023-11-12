@@ -57,7 +57,7 @@ const CGSize selectionIndicatorSize = CGSizeMake(0, 2.f);
   UILabel* label = [[UILabel alloc] init];
   _titleLabel = label;
   label.textColor = [UIColor colorNamed:vNTPToolbarTextColor];
-  label.font = [UIFont systemFontOfSize:vBodyFontSize];
+  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   label.numberOfLines = 1;
   label.textAlignment = NSTextAlignmentLeft;
 

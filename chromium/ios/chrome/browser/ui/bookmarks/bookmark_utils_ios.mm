@@ -184,8 +184,8 @@ MDCSnackbarMessage* CreateOrUpdateBookmarkWithUndoToast(
   if (!node) {  // Create a new bookmark.
     bookmark_model->client()->RecordAction(
         base::UserMetricsAction("BookmarkAdded"));
-    node = bookmark_model->AddURL(folder, folder->children().size(),
-                                  titleString, url);
+    node = bookmark_model->AddNewURL(folder, folder->children().size(),
+                                     titleString, url);
 
     // Vivaldi
     vivaldi_bookmark_kit::SetNodeDescription(bookmark_model,
@@ -234,7 +234,7 @@ MDCSnackbarMessage* CreateBookmarkAtPositionWithUndoToast(
 
   bookmark_model->client()->RecordAction(
       base::UserMetricsAction("BookmarkAdded"));
-  const bookmarks::BookmarkNode* node = bookmark_model->AddURL(
+  const bookmarks::BookmarkNode* node = bookmark_model->AddNewURL(
       folder, folder->children().size(), titleString, url);
   bookmark_model->Move(node, folder, position);
 

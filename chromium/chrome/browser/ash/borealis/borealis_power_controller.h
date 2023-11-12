@@ -11,29 +11,21 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
-#include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/window.h"
 
 class Profile;
 
 namespace borealis {
 
-// Prevents the device from going to sleep/dimming when Borealis requests it.
-// Conditions for this are either the Steam client is focused or the VM
-// sends an inhibit message.
-// TODO(b/244273692): Remove the window focus logic once download signals
-// are available.
-class BorealisPowerController : public aura::client::FocusChangeObserver,
-                                ash::CiceroneClient::Observer {
+// Prevents the device from going to sleep when the VM
+// receives an inhibit message. Allows screen off if reason is "download"
+// otherwise, keeps screen on.
+class BorealisPowerController : public ash::CiceroneClient::Observer {
  public:
   explicit BorealisPowerController(Profile* profile);
   BorealisPowerController(const BorealisPowerController&) = delete;
   BorealisPowerController& operator=(const BorealisPowerController&) = delete;
   ~BorealisPowerController() override;
-
-  // Overridden from FocusChangeObserver
-  void OnWindowFocused(aura::Window* gained_focus,
-                       aura::Window* lost_focus) override;
 
   // ash::CiceroneClient::Observer override.
   void OnInhibitScreensaver(
@@ -42,8 +34,6 @@ class BorealisPowerController : public aura::client::FocusChangeObserver,
   // ash::CiceroneClient::Observer override.
   void OnUninhibitScreensaver(
       const vm_tools::cicerone::UninhibitScreensaverSignal& signal) override;
-
-  void EnsureWakeLock();
 
   void SetWakeLockProviderForTesting(
       mojo::Remote<device::mojom::WakeLockProvider> provider) {
@@ -54,14 +44,18 @@ class BorealisPowerController : public aura::client::FocusChangeObserver,
     if (wake_lock_) {
       wake_lock_.FlushForTesting();
     }
+    if (download_wake_lock_) {
+      download_wake_lock_.FlushForTesting();
+    }
   }
 
  private:
   mojo::Remote<device::mojom::WakeLockProvider> wake_lock_provider_;
   mojo::Remote<device::mojom::WakeLock> wake_lock_;
+  mojo::Remote<device::mojom::WakeLock> download_wake_lock_;
   // Cookies from Inhibit messages that have not yet received uninhibit.
-  std::set<int64_t> cookies_;
-  Profile* const profile_;
+  std::set<u_int32_t> cookies_;
+  std::set<u_int32_t> download_cookies_;
   std::string const owner_id_;
 };
 

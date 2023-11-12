@@ -42,4 +42,9 @@ NoteSyncService::GetNoteSyncControllerDelegate() {
   return note_model_type_processor_->GetWeakPtr();
 }
 
+void NoteSyncService::SetNotesLimitForTesting(size_t limit) {
+  note_model_type_processor_->SetMaxNotesTillSyncEnabledForTest(  // IN-TEST
+      limit);
+}
+
 }  // namespace sync_notes

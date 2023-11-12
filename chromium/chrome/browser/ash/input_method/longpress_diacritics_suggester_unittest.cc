@@ -35,7 +35,7 @@ using LongpressDiacriticsSuggesterTest =
 using AssistiveWindowButton = ui::ime::AssistiveWindowButton;
 
 const int kContextId = 24601;
-
+const char kUSEngineId[] = "xkb:us::eng";
 const auto kDigitToDomCode = base::MakeFixedFlatMap<int, ui::DomCode>({
     {0, ui::DomCode::DIGIT0},
     {1, ui::DomCode::DIGIT1},
@@ -74,7 +74,7 @@ AssistiveWindowButton CreateDiacriticsButtonFor(
   AssistiveWindowButton button = {
       .id = ui::ime::ButtonId::kSuggestion,
       .window_type =
-          ui::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion,
+          ash::ime::AssistiveWindowType::kLongpressDiacriticsSuggestion,
       .index = index,
       .announce_string = announce_string,
   };
@@ -86,6 +86,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, SuggestsOnTrySuggest) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -101,6 +102,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -111,10 +113,24 @@ TEST_P(LongpressDiacriticsSuggesterTest,
       GetParam().invalid_surrounding_text.size()));
 }
 
+TEST_P(LongpressDiacriticsSuggesterTest, DoesNotSuggestForInvalidEngineId) {
+  FakeSuggestionHandler suggestion_handler;
+  LongpressDiacriticsSuggester suggester =
+      LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId("xkb::someunsupportedengine");
+  suggester.OnFocus(kContextId);
+
+  suggester.TrySuggestOnLongpress('a');
+
+  EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
+  EXPECT_EQ(suggestion_handler.GetSuggestionText(), u"");
+}
+
 TEST_P(LongpressDiacriticsSuggesterTest, DoesNotSuggestForInvalidKeyChar) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress('~');  // Char doesn't have diacritics.
@@ -127,6 +143,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, DoesNotSuggestAfterBlur) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.OnBlur();
@@ -140,6 +157,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HighlightsFirstOnInitialNextKeyEvent) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -159,6 +177,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -179,6 +198,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HighlightIncrementsOnNextKeyEvent) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -196,11 +216,35 @@ TEST_P(LongpressDiacriticsSuggesterTest, HighlightIncrementsOnNextKeyEvent) {
                 GetParam().candidates[expected_candidate_index]));
 }
 
+TEST_P(LongpressDiacriticsSuggesterTest, HighlightIncrementsOnTabKeyEvent) {
+  size_t expected_candidate_index = 2 % GetParam().candidates.size();
+  FakeSuggestionHandler suggestion_handler;
+  LongpressDiacriticsSuggester suggester =
+      LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
+  suggester.OnFocus(kContextId);
+
+  suggester.TrySuggestOnLongpress(GetParam().longpress_char);
+  suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::TAB));
+  suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::TAB));
+  suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::TAB));
+
+  EXPECT_EQ(suggestion_handler.GetContextId(), kContextId);
+  EXPECT_TRUE(suggestion_handler.GetShowingSuggestion());
+  EXPECT_EQ(suggestion_handler.GetSuggestionText(),
+            Join(GetParam().candidates));
+  EXPECT_EQ(suggestion_handler.GetHighlightedButton(),
+            CreateDiacriticsButtonFor(
+                expected_candidate_index,
+                GetParam().candidates[expected_candidate_index]));
+}
+
 TEST_P(LongpressDiacriticsSuggesterTest,
        HighlightDecrementsOnPreviousKeyEvent) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -222,6 +266,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -245,6 +290,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -266,6 +312,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
   suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::ARROW_RIGHT));
@@ -290,6 +337,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
   suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::ARROW_RIGHT));
@@ -313,6 +361,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
   suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::ARROW_RIGHT));
@@ -336,6 +385,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(1);
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
   suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::ARROW_RIGHT));
@@ -358,6 +408,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, AcceptsOnEnterKeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -375,6 +426,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, NotHandledOnDigit0KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -388,6 +440,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit1KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -404,6 +457,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit2KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -425,6 +479,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit3KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -446,6 +501,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit4KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -467,6 +523,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit5KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -488,6 +545,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit6KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -509,6 +567,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit7KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -530,6 +589,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit8KeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -552,6 +612,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -565,6 +626,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, DismissSuggestionOnEscKeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -581,6 +643,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, DismissSuggestionOnSecondKeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -592,10 +655,31 @@ TEST_P(LongpressDiacriticsSuggesterTest, DismissSuggestionOnSecondKeyPress) {
   EXPECT_FALSE(suggestion_handler.GetAcceptedSuggestion());
 }
 
+TEST_P(LongpressDiacriticsSuggesterTest,
+       AcceptSuggestionOnSecondKeyPressIfHighlighted) {
+  FakeSuggestionHandler suggestion_handler;
+  LongpressDiacriticsSuggester suggester =
+      LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
+  suggester.OnFocus(kContextId);
+
+  suggester.TrySuggestOnLongpress(GetParam().longpress_char);
+  suggester.HandleKeyEvent(CreateKeyEventFromCode(ui::DomCode::ARROW_RIGHT));
+
+  EXPECT_EQ(suggester.HandleKeyEvent(CreateKeyEventFromCode(GetParam().code)),
+            SuggestionStatus::kNotHandled);
+  EXPECT_EQ(suggestion_handler.GetContextId(), kContextId);
+  EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
+  EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
+            GetParam().candidates[0]);
+  EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
+}
+
 TEST_P(LongpressDiacriticsSuggesterTest, NoDismissSuggestionOnRepeatKeyPress) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -612,6 +696,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, ReturnsDiacriticsProposeActionType) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   EXPECT_EQ(suggester.GetProposeActionType(),
@@ -624,6 +709,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, RecordsAcceptanceCharCodeMetric) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   int histogram_accept_count = 0;
@@ -649,6 +735,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, RecordsShowWindowActionMetric) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -663,6 +750,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, RecordsAcceptActionMetric) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -678,6 +766,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, RecordsDismissActionMetricOnEsc) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -694,6 +783,7 @@ TEST_P(LongpressDiacriticsSuggesterTest,
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -709,6 +799,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, A11yAnnounceOnShowWindow) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -724,6 +815,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, A11yAnnounceOnDismissWithEsc) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -742,6 +834,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, A11yAnnounceOnDismissByTyping) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -760,6 +853,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, A11yAnnounceOnAcceptViaDigit) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);
@@ -778,6 +872,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, A11yAnnounceOnAcceptViaEnter) {
   FakeSuggestionHandler suggestion_handler;
   LongpressDiacriticsSuggester suggester =
       LongpressDiacriticsSuggester(&suggestion_handler);
+  suggester.SetEngineId(kUSEngineId);
   suggester.OnFocus(kContextId);
 
   suggester.TrySuggestOnLongpress(GetParam().longpress_char);

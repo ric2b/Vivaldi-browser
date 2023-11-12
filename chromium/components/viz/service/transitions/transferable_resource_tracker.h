@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/transferable_resource.h"
@@ -50,10 +51,10 @@ class VIZ_SERVICE_EXPORT TransferableResourceTracker {
     // [src_element, dst_element] has a null src_element.
     std::vector<absl::optional<PositionedResource>> shared;
 
-    // A map from renderer generated SharedElementResourceId to the
+    // A map from renderer generated ViewTransitionElementResourceId to the
     // corresponding cached resource. The resources are the same as |shared|
     // above.
-    base::flat_map<SharedElementResourceId, TransferableResource>
+    base::flat_map<ViewTransitionElementResourceId, TransferableResource>
         element_id_to_resource;
   };
 
@@ -103,7 +104,7 @@ class VIZ_SERVICE_EXPORT TransferableResourceTracker {
   const uint32_t starting_id_;
   uint32_t next_id_;
 
-  SharedBitmapManager* const shared_bitmap_manager_;
+  const raw_ptr<SharedBitmapManager> shared_bitmap_manager_;
 
   struct TransferableResourceHolder {
     using ResourceReleaseCallback =

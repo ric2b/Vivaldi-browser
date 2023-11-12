@@ -378,9 +378,10 @@ class CC_EXPORT LayerImpl {
   // Mark a layer on pending tree that needs to push its properties to the
   // active tree. These properties should not be changed during pending tree
   // lifetime, and only changed by being pushed from the main thread. There are
-  // two cases where this function needs to be called: when main thread layer
-  // has properties that need to be pushed, or when a new LayerImpl is created
-  // on pending tree when syncing layers from main thread.
+  // three cases where this function needs to be called: when main thread layer
+  // has properties that need to be pushed, when a new LayerImpl is created
+  // on pending tree when syncing layers from main thread, or when we recompute
+  // visible layer properties on the pending tree.
   void SetNeedsPushProperties();
 
   virtual void RunMicroBenchmark(MicroBenchmarkImpl* benchmark);
@@ -459,7 +460,8 @@ class CC_EXPORT LayerImpl {
   virtual gfx::ContentColorUsage GetContentColorUsage() const;
 
   virtual void NotifyKnownResourceIdsBeforeAppendQuads(
-      const base::flat_set<viz::SharedElementResourceId>& known_resource_ids) {}
+      const base::flat_set<viz::ViewTransitionElementResourceId>&
+          known_resource_ids) {}
 
  protected:
   // When |will_always_push_properties| is true, the layer will not itself set

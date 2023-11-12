@@ -5,7 +5,7 @@
 import './strings.m.js';
 
 import {CustomElement} from 'chrome://resources/js/custom_element.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {getTemplate} from './policy_conflict.html.js';
 
@@ -43,7 +43,8 @@ export class PolicyConflictElement extends CustomElement {
                                                'levelMandatory');
     this.shadowRoot.querySelector('.source').textContent =
         loadTimeData.getString(conflict.source);
-    this.shadowRoot.querySelector('.value').textContent = conflict.value;
+    this.shadowRoot.querySelector('.value').textContent =
+        JSON.stringify(conflict.value);
     this.shadowRoot.querySelector('.name').textContent =
         loadTimeData.getString(rowLabel);
   }

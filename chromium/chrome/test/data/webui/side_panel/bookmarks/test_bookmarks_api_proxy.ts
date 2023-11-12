@@ -17,18 +17,22 @@ export class TestBookmarksApiProxy extends TestBrowserProxy implements
     onCreated: FakeChromeEvent,
     onMoved: FakeChromeEvent,
     onRemoved: FakeChromeEvent,
+    onTabActivated: FakeChromeEvent,
+    onTabUpdated: FakeChromeEvent,
   };
 
   constructor() {
     super([
-      'getTopLevelBookmarks',
+      'getActiveUrl',
       'getFolders',
+      'bookmarkCurrentTabInFolder',
       'openBookmark',
       'cutBookmark',
       'copyBookmark',
+      'deleteBookmarks',
       'pasteToBookmark',
       'showContextMenu',
-      'showUI',
+      'showUi',
     ]);
 
     this.callbackRouter = {
@@ -37,17 +41,23 @@ export class TestBookmarksApiProxy extends TestBrowserProxy implements
       onCreated: new FakeChromeEvent(),
       onMoved: new FakeChromeEvent(),
       onRemoved: new FakeChromeEvent(),
+      onTabActivated: new FakeChromeEvent(),
+      onTabUpdated: new FakeChromeEvent(),
     };
   }
 
-  getTopLevelBookmarks() {
-    this.methodCalled('getTopLevelBookmarks');
-    return Promise.resolve(this.folders_);
+  getActiveUrl() {
+    this.methodCalled('getActiveUrl');
+    return Promise.resolve('http://www.test.com');
   }
 
   getFolders() {
     this.methodCalled('getFolders');
     return Promise.resolve(this.folders_);
+  }
+
+  bookmarkCurrentTabInFolder() {
+    this.methodCalled('bookmarkCurrentTabInFolder');
   }
 
   openBookmark(
@@ -69,6 +79,11 @@ export class TestBookmarksApiProxy extends TestBrowserProxy implements
     this.methodCalled('cutBookmark', id);
   }
 
+  deleteBookmarks(ids: string[]) {
+    this.methodCalled('deleteBookmarks', ids);
+    return Promise.resolve();
+  }
+
   pasteToBookmark(parentId: string, destinationId?: string): Promise<void> {
     this.methodCalled('pasteToBookmark', parentId, destinationId);
     return Promise.resolve();
@@ -78,7 +93,7 @@ export class TestBookmarksApiProxy extends TestBrowserProxy implements
     this.methodCalled('showContextMenu', id, x, y, source);
   }
 
-  showUI() {
-    this.methodCalled('showUI');
+  showUi() {
+    this.methodCalled('showUi');
   }
 }

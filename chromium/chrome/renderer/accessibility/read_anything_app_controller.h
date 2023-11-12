@@ -6,6 +6,7 @@
 #define CHROME_RENDERER_ACCESSIBILITY_READ_ANYTHING_APP_CONTROLLER_H_
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,15 @@ class ReadAnythingAppControllerTest;
 //  This class is owned by the ChromeRenderFrameObserver and has the same
 //  lifetime as the render frame.
 //
+//  This class is responsible for identifying the nodes to be displayed by the
+//  webapp and providing attributes about them when queried. Nodes are selected
+//  from the provided AXTreeUpdate and content nodes. There are two rendering
+//  algorithms:
+//  1. If the AXTreeUpdate has a selection, display a subtree containing all of
+//     the nodes between the selection start and end.
+//  2. If the AXTreeUpdate has no selection, display a subtree containing all of
+//     the content nodes, their descendants, and their ancestors.
+//
 class ReadAnythingAppController
     : public gin::Wrappable<ReadAnythingAppController>,
       public read_anything::mojom::Page {
@@ -71,19 +81,31 @@ class ReadAnythingAppController
       read_anything::mojom::ReadAnythingThemePtr new_theme) override;
 
   // gin templates:
-  std::vector<ui::AXNodeID> DisplayNodeIds();
-  SkColor BackgroundColor();
-  std::string FontName();
-  float FontSize();
-  SkColor ForegroundColor();
-  float LetterSpacing();
-  float LineSpacing();
-  std::vector<ui::AXNodeID> GetChildren(ui::AXNodeID ax_node_id);
-  std::string GetHtmlTag(ui::AXNodeID ax_node_id);
-  std::string GetLanguage(ui::AXNodeID ax_node_id);
-  std::string GetTextContent(ui::AXNodeID ax_node_id);
-  std::string GetUrl(ui::AXNodeID ax_node_id);
+  ui::AXNodeID RootId() const;
+  SkColor BackgroundColor() const;
+  std::string FontName() const;
+  float FontSize() const;
+  SkColor ForegroundColor() const;
+  float LetterSpacing() const;
+  float LineSpacing() const;
+  std::vector<ui::AXNodeID> GetChildren(ui::AXNodeID ax_node_id) const;
+  std::string GetHtmlTag(ui::AXNodeID ax_node_id) const;
+  std::string GetLanguage(ui::AXNodeID ax_node_id) const;
+  std::string GetTextContent(ui::AXNodeID ax_node_id) const;
+  std::string GetTextDirection(ui::AXNodeID ax_node_id) const;
+  std::string GetUrl(ui::AXNodeID ax_node_id) const;
   void OnConnected();
+  void OnLinkClicked(ui::AXNodeID ax_node_id) const;
+
+  // Helper functions for the rendering algorithm. Post-process the AXTree and
+  // cache values before sending an `updateContent` notification to the Read
+  // Anything app.ts. These functions:
+  // 1. Save state related to selection (start_node_, end_node_, start_offset_,
+  //    end_offset_).
+  // 2. Save the display_node_ids_, which is a set of all nodes to be displayed
+  //    in Read Anything app.ts.
+  void PostProcessAXTreeWithSelection(const ui::AXTreeData& tree_data);
+  void PostProcessDistillableAXTree();
 
   // The following methods are used for testing ReadAnythingAppTest.
   // Snapshot_lite is a data structure which resembles an AXTreeUpdate. E.g.:
@@ -110,18 +132,13 @@ class ReadAnythingAppController
                           SkColor background_color,
                           int line_spacing,
                           int letter_spacing);
-  double GetLetterSpacingValue(read_anything::mojom::Spacing letter_spacing);
-  double GetLineSpacingValue(read_anything::mojom::Spacing line_spacing);
+  double GetLetterSpacingValue(
+      read_anything::mojom::Spacing letter_spacing) const;
+  double GetLineSpacingValue(read_anything::mojom::Spacing line_spacing) const;
 
-  ui::AXNode* GetAXNode(ui::AXNodeID ax_node_id);
+  ui::AXNode* GetAXNode(ui::AXNodeID ax_node_id) const;
 
-  // Returns whether the node is part of the selection. Returns true for partial
-  // containment as well; it also returns true if part of the node is part of
-  // the selection (e.g. a node in which some children are part of the selection
-  // and others are not).
-  bool SelectionContainsNode(ui::AXNode* ax_node);
-
-  bool NodeIsContentNode(ui::AXNodeID ax_node_id);
+  bool NodeIsContentNode(ui::AXNodeID ax_node_id) const;
 
   content::RenderFrame* render_frame_;
   mojo::Remote<read_anything::mojom::PageHandlerFactory> page_handler_factory_;
@@ -131,7 +148,7 @@ class ReadAnythingAppController
   // State
   std::unique_ptr<ui::AXTree> tree_;
   std::vector<ui::AXNodeID> content_node_ids_;
-  std::vector<ui::AXNodeID> selection_node_ids_;
+  std::set<ui::AXNodeID> display_node_ids_;
   bool has_selection_ = false;
   ui::AXNode* start_node_ = nullptr;
   ui::AXNode* end_node_ = nullptr;

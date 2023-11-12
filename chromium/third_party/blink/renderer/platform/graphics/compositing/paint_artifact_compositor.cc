@@ -10,12 +10,12 @@
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "cc/base/features.h"
-#include "cc/document_transition/document_transition_request.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/mutator_host.h"
+#include "cc/view_transition/view_transition_request.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/adjust_mask_layer_geometry.h"
@@ -451,15 +451,13 @@ void PaintArtifactCompositor::LayerizeGroup(
     // If the new layer is the first using the nearest directly composited
     // ancestor, it can't be merged into any previous layers, so skip the merge
     // and overlap loop below.
-    if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-      if (const auto* composited_transform =
-              new_layer.GetPropertyTreeState()
-                  .Transform()
-                  .NearestDirectlyCompositedAncestor()) {
-        if (directly_composited_transforms.insert(composited_transform)
-                .is_new_entry) {
-          continue;
-        }
+    if (const auto* composited_transform =
+            new_layer.GetPropertyTreeState()
+                .Transform()
+                .NearestDirectlyCompositedAncestor()) {
+      if (directly_composited_transforms.insert(composited_transform)
+              .is_new_entry) {
+        continue;
       }
     }
 
@@ -507,27 +505,25 @@ void SynthesizedClip::UpdateLayer(const ClipPaintPropertyNode& clip,
   gfx::Rect layer_rect = gfx::ToEnclosingRect(clip.PaintClipRect().Rect());
   bool needs_display = false;
 
-  auto new_translation_2d_or_matrix =
-      GeometryMapper::SourceToDestinationProjection(clip.LocalTransformSpace(),
-                                                    transform);
-  new_translation_2d_or_matrix.MapRect(layer_rect);
+  gfx::Transform new_projection = GeometryMapper::SourceToDestinationProjection(
+      clip.LocalTransformSpace(), transform);
+  layer_rect = new_projection.MapRect(layer_rect);
   gfx::Vector2dF layer_offset(layer_rect.OffsetFromOrigin());
   gfx::Size layer_bounds = layer_rect.size();
   AdjustMaskLayerGeometry(transform, layer_offset, layer_bounds);
-  new_translation_2d_or_matrix.PostTranslate(-layer_offset.x(),
-                                             -layer_offset.y());
+  new_projection.PostTranslate(-layer_offset);
 
-  if (!path && new_translation_2d_or_matrix.IsIdentityOr2DTranslation()) {
-    const auto& translation = new_translation_2d_or_matrix.Translation2D();
+  if (!path && new_projection.IsIdentityOr2DTranslation()) {
+    gfx::Vector2dF translation = new_projection.To2dTranslation();
     new_rrect.offset(translation.x(), translation.y());
     needs_display = !rrect_is_local_ || new_rrect != rrect_;
-    translation_2d_or_matrix_ = GeometryMapper::Translation2DOrMatrix();
+    projection_.MakeIdentity();
     rrect_is_local_ = true;
   } else {
     needs_display = rrect_is_local_ || new_rrect != rrect_ ||
-                    new_translation_2d_or_matrix != translation_2d_or_matrix_ ||
+                    new_projection != projection_ ||
                     !clip.ClipPathEquals(path_);
-    translation_2d_or_matrix_ = new_translation_2d_or_matrix;
+    projection_ = new_projection;
     rrect_is_local_ = false;
   }
 
@@ -542,8 +538,7 @@ void SynthesizedClip::UpdateLayer(const ClipPaintPropertyNode& clip,
 
 scoped_refptr<cc::DisplayItemList>
 SynthesizedClip::PaintContentsToDisplayList() {
-  auto cc_list = base::MakeRefCounted<cc::DisplayItemList>(
-      cc::DisplayItemList::kTopLevelDisplayItemList);
+  auto cc_list = base::MakeRefCounted<cc::DisplayItemList>();
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   cc_list->StartPaint();
@@ -551,11 +546,11 @@ SynthesizedClip::PaintContentsToDisplayList() {
     cc_list->push<cc::DrawRRectOp>(rrect_, flags);
   } else {
     cc_list->push<cc::SaveOp>();
-    if (translation_2d_or_matrix_.IsIdentityOr2DTranslation()) {
-      const auto& translation = translation_2d_or_matrix_.Translation2D();
+    if (projection_.IsIdentityOr2DTranslation()) {
+      gfx::Vector2dF translation = projection_.To2dTranslation();
       cc_list->push<cc::TranslateOp>(translation.x(), translation.y());
     } else {
-      cc_list->push<cc::ConcatOp>(translation_2d_or_matrix_.ToSkM44());
+      cc_list->push<cc::ConcatOp>(gfx::TransformToSkM44(projection_));
     }
     if (path_) {
       cc_list->push<cc::ClipPathOp>(path_->GetSkPath(), SkClipOp::kIntersect,
@@ -615,10 +610,6 @@ static void UpdateCompositorViewportProperties(
         property_tree_manager.EnsureCompositorTransformNode(
             *properties.overscroll_elasticity_transform);
   }
-  if (properties.overscroll_elasticity_effect) {
-    ids.overscroll_elasticity_effect =
-        properties.overscroll_elasticity_effect->GetCompositorElementId();
-  }
   if (properties.page_scale) {
     ids.page_scale_transform =
         property_tree_manager.EnsureCompositorPageScaleTransformNode(
@@ -644,8 +635,7 @@ void PaintArtifactCompositor::Update(
     scoped_refptr<const PaintArtifact> artifact,
     const ViewportProperties& viewport_properties,
     const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes,
-    Vector<std::unique_ptr<cc::DocumentTransitionRequest>>
-        transition_requests) {
+    Vector<std::unique_ptr<cc::ViewTransitionRequest>> transition_requests) {
   const bool unification_enabled =
       base::FeatureList::IsEnabled(features::kScrollUnification);
   // See: |UpdateRepaintedLayers| for repaint updates.
@@ -662,7 +652,7 @@ void PaintArtifactCompositor::Update(
     return;
 
   for (auto& request : transition_requests)
-    host->AddDocumentTransitionRequest(std::move(request));
+    host->AddViewTransitionRequest(std::move(request));
 
   host->property_trees()->scroll_tree_mutable().SetScrollCallbacks(
       scroll_callbacks_);
@@ -745,7 +735,7 @@ void PaintArtifactCompositor::Update(
     if (layer.subtree_property_changed())
       root_layer_->SetNeedsCommit();
 
-    auto shared_element_id = layer.DocumentTransitionResourceId();
+    auto shared_element_id = layer.ViewTransitionResourceId();
     if (shared_element_id.IsValid()) {
       host->property_trees()
           ->effect_tree_mutable()
@@ -838,6 +828,12 @@ void PaintArtifactCompositor::UpdateRepaintedLayers(
 
   previous_update_for_testing_ = PreviousUpdateType::kRepaint;
   needs_update_ = false;
+
+  DVLOG(3) << "PaintArtifactCompositor::UpdateRepaintedLayers() done\n"
+           << "Composited layers:\n"
+           << GetLayersAsJSON(VLOG_IS_ON(3) ? 0xffffffff : 0)
+                  ->ToPrettyJSONString()
+                  .Utf8();
 }
 
 bool PaintArtifactCompositor::CanDirectlyUpdateProperties() const {

@@ -18,7 +18,7 @@ import {KeyUtil} from '../common/key_util.js';
 import {ChromeVoxKbHandler} from '../common/keyboard_handler.js';
 import {Msgs} from '../common/msgs.js';
 import {Spannable} from '../common/spannable.js';
-import {QueueMode, TtsSpeechProperties} from '../common/tts_interface.js';
+import {QueueMode, TtsSpeechProperties} from '../common/tts_types.js';
 
 /**
  * Class to manage the keyboard explorer.
@@ -44,8 +44,6 @@ export class LearnMode {
     chrome.accessibilityPrivate.setKeyboardListener(true, true);
     BackgroundBridge.BrailleCommandHandler.setEnabled(false);
     BackgroundBridge.GestureCommandHandler.setEnabled(false);
-
-    ChromeVoxKbHandler.handlerKeyMap = KeyMap.get();
 
     ChromeVoxKbHandler.commandHandler = LearnMode.onCommand;
 

@@ -47,6 +47,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
+#include "chrome/browser/ui/user_notes/user_notes_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/common/url_constants.h"
@@ -263,7 +264,8 @@ struct TabStripModel::DetachNotifications {
   //
   // Once the notification for change of active web contents has been sent,
   // this field is set to nullptr.
-  raw_ptr<WebContents> initially_active_web_contents = nullptr;
+  raw_ptr<WebContents, DanglingUntriaged> initially_active_web_contents =
+      nullptr;
 
   // The WebContents that were recently detached. Observers need to be notified
   // about these. These must be updated after construction.
@@ -1058,7 +1060,7 @@ tab_groups::TabGroupId TabStripModel::AddToNewGroup(
   // Ensure that the indices are nonempty, sorted, and unique.
   DCHECK_GT(indices.size(), 0u);
   DCHECK(base::ranges::is_sorted(indices));
-  DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
+  DCHECK(base::ranges::adjacent_find(indices) == indices.end());
 
   // The odds of |new_group| colliding with an existing group are astronomically
   // low. If there is a collision, a DCHECK will fail in |AddToNewGroupImpl()|,
@@ -1078,7 +1080,7 @@ void TabStripModel::AddToExistingGroup(const std::vector<int>& indices,
 
   // Ensure that the indices are sorted and unique.
   DCHECK(base::ranges::is_sorted(indices));
-  DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
+  DCHECK(base::ranges::adjacent_find(indices) == indices.end());
   CHECK(ContainsIndex(*(indices.begin())));
   CHECK(ContainsIndex(*(indices.rbegin())));
 
@@ -1316,6 +1318,11 @@ bool TabStripModel::IsContextMenuCommandEnabled(
     case CommandSendTabToSelf:
       return true;
 
+    case CommandAddNote: {
+      DCHECK(UserNotesController::IsUserNotesSupported(profile()));
+      return GetIndicesForCommand(context_index).size() == 1;
+    }
+
     case CommandAddToReadLater:
       return true;
 
@@ -1479,6 +1486,13 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
             UserMetricsAction("SoundContentSetting.UnmuteBy.TabStrip"));
       }
       SetSitesMuted(GetIndicesForCommand(context_index), mute);
+      break;
+    }
+
+    case CommandAddNote: {
+      std::vector<int> indices = GetIndicesForCommand(context_index);
+      DCHECK(indices.size() == 1);
+      UserNotesController::SwitchTabsAndAddNote(this, indices.front());
       break;
     }
 

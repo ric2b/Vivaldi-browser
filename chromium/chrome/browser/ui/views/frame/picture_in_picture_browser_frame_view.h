@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_PICTURE_IN_PICTURE_BROWSER_FRAME_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_PICTURE_IN_PICTURE_BROWSER_FRAME_VIEW_H_
 
+#include "base/scoped_observation.h"
 #include "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
@@ -17,9 +18,19 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout_view.h"
+#include "ui/views/widget/widget_observer.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "ui/linux/window_frame_provider.h"
+#endif
 
 namespace views {
+class FrameBackground;
 class Label;
+}
+
+namespace {
+class WindowEventObserver;
 }
 
 class PictureInPictureBrowserFrameView
@@ -28,7 +39,10 @@ class PictureInPictureBrowserFrameView
       public LocationIconView::Delegate,
       public IconLabelBubbleView::Delegate,
       public ContentSettingImageView::Delegate,
-      public device::GeolocationManager::PermissionObserver {
+#if BUILDFLAG(IS_MAC)
+      public device::GeolocationManager::PermissionObserver,
+#endif
+      public views::WidgetObserver {
  public:
   METADATA_HEADER(PictureInPictureBrowserFrameView);
 
@@ -56,8 +70,16 @@ class PictureInPictureBrowserFrameView
   void UpdateWindowTitle() override {}
   void SizeConstraintsChanged() override {}
   gfx::Size GetMinimumSize() const override;
+  gfx::Size GetMaximumSize() const override;
   void OnThemeChanged() override;
   void Layout() override;
+  void AddedToWidget() override;
+  void RemovedFromWidget() override;
+#if BUILDFLAG(IS_LINUX)
+  gfx::Insets MirroredFrameBorderInsets() const override;
+  gfx::Insets GetInputInsets() const override;
+  SkRRect GetRestoredClipRegion() const override;
+#endif
 
   // ChromeLocationBarModelDelegate:
   content::WebContents* GetActiveWebContents() const override;
@@ -85,10 +107,20 @@ class PictureInPictureBrowserFrameView
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
 
+#if BUILDFLAG(IS_MAC)
   // GeolocationManager::PermissionObserver:
   void OnSystemPermissionUpdated(
       device::LocationSystemPermissionStatus new_status) override;
+#endif
 
+  // views::WidgetObserver:
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override;
+
+  // PictureInPictureBrowserFrameView:
   // Convert the bounds of a child view of |controls_container_view_| to use
   // the system's coordinate system.
   gfx::Rect ConvertControlViewBounds(views::View* control_view) const;
@@ -104,11 +136,45 @@ class PictureInPictureBrowserFrameView
   // Updates the state of the images showing the content settings status.
   void UpdateContentSettingsIcons();
 
+  // Updates the top bar title and icons according to whether user wants to
+  // interact with the window. The top bar should be highlighted in all these
+  // cases:
+  // - PiP window is hovered with mouse
+  // - PiP window is in focus with keyboard navigation
+  // - PiP window is in focus with any other format of activation
+  // - Dialogs are opened in the PiP window
+  void UpdateTopBarView(bool render_active);
+
+  // Returns the insets of the window frame borders.
+  gfx::Insets FrameBorderInsets() const;
+
+  // Returns the insets of the window frame borders for resizing.
+  gfx::Insets ResizeBorderInsets() const;
+
+  // Returns the height of the top bar area, including the window top border.
+  int GetTopAreaHeight() const;
+
+  // Called when mouse entered or exited the pip window.
+  void OnMouseEnteredOrExitedWindow(bool entered);
+
+#if BUILDFLAG(IS_LINUX)
+  // Sets the window frame provider so that it will be used for drawing.
+  void SetWindowFrameProvider(ui::WindowFrameProvider* window_frame_provider);
+
+  // Returns whether a client-side shadow should be drawn for the window.
+  bool ShouldDrawFrameShadow() const;
+
+  // Gets the shadow metrics (radius, offset, and number of shadows) even if
+  // shadows are not drawn.
+  static gfx::ShadowValues GetShadowValues();
+#endif
+
+  views::View* GetBackToTabButtonForTesting();
+
  private:
   // A model required to use LocationIconView.
   std::unique_ptr<LocationBarModel> location_bar_model_;
 
-  raw_ptr<views::View> window_background_view_ = nullptr;
   raw_ptr<views::BoxLayoutView> controls_container_view_ = nullptr;
 
   // An icon to the left of the window title, which reuses the location icon in
@@ -123,6 +189,23 @@ class PictureInPictureBrowserFrameView
 
   raw_ptr<CloseImageButton> close_image_button_ = nullptr;
   raw_ptr<views::View> back_to_tab_button_ = nullptr;
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
+  bool mouse_inside_window_ = false;
+
+#if BUILDFLAG(IS_LINUX)
+  // Used to draw window frame borders and shadow on Linux when GTK theme is
+  // enabled.
+  raw_ptr<ui::WindowFrameProvider> window_frame_provider_ = nullptr;
+
+  // Used to draw window frame borders and shadow on Linux when classic theme is
+  // enabled.
+  std::unique_ptr<views::FrameBackground> frame_background_;
+#endif
+
+  // Userd to monitor key and mouse event from native window.
+  std::unique_ptr<WindowEventObserver> window_event_observer_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_PICTURE_IN_PICTURE_BROWSER_FRAME_VIEW_H_

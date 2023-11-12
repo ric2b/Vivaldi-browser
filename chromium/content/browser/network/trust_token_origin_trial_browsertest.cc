@@ -134,7 +134,7 @@ class TrustTokenOriginTrialBrowsertest
     auto& field_trial_param =
         network::features::kTrustTokenOperationsRequiringOriginTrial;
     features_.InitAndEnableFeatureWithParameters(
-        network::features::kTrustTokens,
+        network::features::kPrivateStateTokens,
         {{field_trial_param.name,
           field_trial_param.GetName(std::get<1>(GetParam()).trial_type)}});
   }
@@ -330,8 +330,7 @@ IN_PROC_BROWSER_TEST_P(TrustTokenOriginTrialBrowsertest,
   }
 
   network::TrustTokenTestParameters trust_token_params(
-      test_description.op, absl::nullopt, absl::nullopt, absl::nullopt,
-      absl::nullopt, absl::nullopt, absl::nullopt);
+      test_description.op, absl::nullopt, absl::nullopt);
 
   network::TrustTokenParametersAndSerialization
       expected_params_and_serialization =

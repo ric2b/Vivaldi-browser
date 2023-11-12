@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/check.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/connectors/reporting/browser_crash_event_router.h"
@@ -17,7 +18,7 @@ namespace enterprise_connectors {
 
 ConnectorsManager::ConnectorsManager(
     std::unique_ptr<BrowserCrashEventRouter> browser_crash_event_router,
-    ExtensionInstallEventRouter extension_install_event_router,
+    std::unique_ptr<ExtensionInstallEventRouter> extension_install_event_router,
     PrefService* pref_service,
     const ServiceProviderConfig* config,
     bool observe_prefs)
@@ -25,9 +26,11 @@ ConnectorsManager::ConnectorsManager(
       browser_crash_event_router_(std::move(browser_crash_event_router)),
       extension_install_event_router_(
           std::move(extension_install_event_router)) {
+  DCHECK(browser_crash_event_router_) << "Crash event router is null";
+  DCHECK(extension_install_event_router_) << "Extension event router is null";
   if (observe_prefs)
     StartObservingPrefs(pref_service);
-  extension_install_event_router_.StartObserving();
+  extension_install_event_router_->StartObserving();
 }
 
 ConnectorsManager::~ConnectorsManager() = default;
@@ -42,15 +45,6 @@ bool ConnectorsManager::IsConnectorEnabled(AnalysisConnector connector) const {
 
 bool ConnectorsManager::IsConnectorEnabled(ReportingConnector connector) const {
   if (reporting_connector_settings_.count(connector) == 1)
-    return true;
-
-  const char* pref = ConnectorPref(connector);
-  return pref && pref_change_registrar_.prefs()->HasPrefPath(pref);
-}
-
-bool ConnectorsManager::IsConnectorEnabled(
-    FileSystemConnector connector) const {
-  if (file_system_connector_settings_.count(connector) == 1)
     return true;
 
   const char* pref = ConnectorPref(connector);
@@ -135,41 +129,6 @@ ConnectorsManager::GetAnalysisSettingsFromConnectorPolicy(
   return analysis_connector_settings_[connector][0].GetAnalysisSettings(url);
 }
 
-FileSystemServiceSettings* ConnectorsManager::GetFileSystemServiceSettings(
-    FileSystemConnector connector) {
-  if (!IsConnectorEnabled(connector))
-    return nullptr;
-
-  if (file_system_connector_settings_.count(connector) == 0)
-    CacheFileSystemConnectorPolicy(connector);
-
-  // If the connector is still not in memory, it means the pref is set to an
-  // empty list or that it is not a list.
-  if (file_system_connector_settings_.count(connector) == 0)
-    return nullptr;
-
-  // While multiple services can be set by the connector policies, only the
-  // first one is considered for now.
-  return &(file_system_connector_settings_[connector][0]);
-}
-
-absl::optional<FileSystemSettings>
-ConnectorsManager::GetFileSystemGlobalSettings(FileSystemConnector connector) {
-  auto* service_settings = GetFileSystemServiceSettings(connector);
-  if (!service_settings)
-    return absl::nullopt;
-  return service_settings->GetGlobalSettings();
-}
-
-absl::optional<FileSystemSettings> ConnectorsManager::GetFileSystemSettings(
-    const GURL& url,
-    FileSystemConnector connector) {
-  auto* service_settings = GetFileSystemServiceSettings(connector);
-  if (!service_settings)
-    return absl::nullopt;
-  return service_settings->GetSettings(url);
-}
-
 void ConnectorsManager::CacheAnalysisConnectorPolicy(
     AnalysisConnector connector) {
   analysis_connector_settings_.erase(connector);
@@ -197,21 +156,6 @@ void ConnectorsManager::CacheReportingConnectorPolicy(
       pref_change_registrar_.prefs()->GetList(pref);
   for (const base::Value& service_settings : policy_value)
     reporting_connector_settings_[connector].emplace_back(
-        service_settings, *service_provider_config_);
-}
-
-void ConnectorsManager::CacheFileSystemConnectorPolicy(
-    FileSystemConnector connector) {
-  file_system_connector_settings_.erase(connector);
-
-  // Connectors with non-existing policies should not reach this code.
-  const char* pref = ConnectorPref(connector);
-  DCHECK(pref);
-
-  const base::Value::List& policy_value =
-      pref_change_registrar_.prefs()->GetList(pref);
-  for (const base::Value& service_settings : policy_value)
-    file_system_connector_settings_[connector].emplace_back(
         service_settings, *service_provider_config_);
 }
 
@@ -348,7 +292,6 @@ void ConnectorsManager::StartObservingPrefs(PrefService* pref_service) {
   StartObservingPref(AnalysisConnector::FILE_TRANSFER);
 #endif
   StartObservingPref(ReportingConnector::SECURITY_EVENT);
-  StartObservingPref(FileSystemConnector::SEND_DOWNLOAD_TO_CLOUD);
 }
 
 void ConnectorsManager::StartObservingPref(AnalysisConnector connector) {
@@ -373,17 +316,6 @@ void ConnectorsManager::StartObservingPref(ReportingConnector connector) {
   }
 }
 
-void ConnectorsManager::StartObservingPref(FileSystemConnector connector) {
-  const char* pref = ConnectorPref(connector);
-  DCHECK(pref);
-  if (!pref_change_registrar_.IsObserved(pref)) {
-    pref_change_registrar_.Add(
-        pref,
-        base::BindRepeating(&ConnectorsManager::CacheFileSystemConnectorPolicy,
-                            base::Unretained(this), connector));
-  }
-}
-
 const ConnectorsManager::AnalysisConnectorsSettings&
 ConnectorsManager::GetAnalysisConnectorsSettingsForTesting() const {
   return analysis_connector_settings_;
@@ -392,11 +324,6 @@ ConnectorsManager::GetAnalysisConnectorsSettingsForTesting() const {
 const ConnectorsManager::ReportingConnectorsSettings&
 ConnectorsManager::GetReportingConnectorsSettingsForTesting() const {
   return reporting_connector_settings_;
-}
-
-const ConnectorsManager::FileSystemConnectorsSettings&
-ConnectorsManager::GetFileSystemConnectorsSettingsForTesting() const {
-  return file_system_connector_settings_;
 }
 
 }  // namespace enterprise_connectors

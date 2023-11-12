@@ -81,6 +81,10 @@
         {
           "builder": "android-oreo-arm64-dbg",
           "group": "tryserver.chromium.android"
+        },
+        {
+          "builder": "android_compile_dbg",
+          "group": "tryserver.chromium.android"
         }
       ]
     }

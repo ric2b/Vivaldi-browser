@@ -2,21 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertInstanceof} from 'chrome://resources/js/assert.js';
-import {assertFalse} from 'chrome://webui-test/chai_assert.js';
+import {assertInstanceof} from 'chrome://resources/ash/common/assert.js';
+import {assertFalse} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {waitUntil} from '../../../common/js/test_error_reporting.js';
 
 import {FileManagerDialogBase} from './file_manager_dialog_base.js';
-
-export function setUp() {
-  // Polyfill chrome.app.window.current().
-  /** @suppress {duplicate,checkTypes,const} */
-  chrome.app = {window: {current: () => null}};
-
-  // Mock loadTimeData.
-  window.loadTimeData.resetForTesting({});
-}
 
 export async function testShowDialogAfterHide(done) {
   const dialog = new FileManagerDialogBase(document.body);

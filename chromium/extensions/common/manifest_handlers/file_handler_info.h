@@ -9,9 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "components/services/app_service/public/cpp/file_handler_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handler.h"
+#include "extensions/common/manifest_handlers/file_handler_info_mv3.h"
 
 namespace extensions {
 
@@ -20,7 +22,7 @@ using FileHandlersInfo = std::vector<apps::FileHandlerInfo>;
 struct FileHandlerMatch {
   FileHandlerMatch();
   ~FileHandlerMatch();
-  const apps::FileHandlerInfo* handler = nullptr;
+  raw_ptr<const apps::FileHandlerInfo> handler = nullptr;
 
   // True if the handler matched on MIME type
   bool matched_mime = false;
@@ -34,8 +36,11 @@ struct FileHandlers : public Extension::ManifestData {
   ~FileHandlers() override;
 
   FileHandlersInfo file_handlers;
+  FileHandlersInfoMV3 file_handlers_mv3;
 
   static const FileHandlersInfo* GetFileHandlers(const Extension* extension);
+  static const FileHandlersInfoMV3* GetFileHandlersMV3(
+      const Extension* extension);
 };
 
 // Parses the "file_handlers" manifest key.

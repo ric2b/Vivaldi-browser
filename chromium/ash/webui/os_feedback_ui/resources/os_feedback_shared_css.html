@@ -1,7 +1,11 @@
 <template>
   <style include="cr-shared-style md-select">
     :host {
+      --feedback-footer-height: 92px;
       --feedback-google-sans-font-family: "Google Sans", Roboto, sans-serif;
+      --feedback-header-height: 92px;
+      --feedback-padding-inline-end: 40px;
+      --feedback-padding-inline-start: 40px;
       --feedback-regular-font-weight: 400;
       --feedback-roboto-font-family: Roboto, sans-serif;
       --feedback-medium-font-weight: 500;
@@ -17,11 +21,6 @@
 
     a {
       color: var(--cros-link-color);
-      text-decoration: none;
-    }
-
-    a:focus,
-    a:hover {
       text-decoration: underline;
     }
 
@@ -34,13 +33,40 @@
     #header {
       display: flex;
       height: 68px;
-      margin: 0 0 24px 0;
+      padding-bottom: 24px;
+      padding-inline-end: var(--feedback-padding-inline-end);
+      padding-inline-start: var(--feedback-padding-inline-start);
+    }
+
+    .elevation-shadow-scrolling {
+      background-color: var(--cros-bg-color-elevation-1);
+      box-shadow: var(--cros-elevation-2-shadow);
+    }
+
+    #shadowElevation {
+      height: 2px;
+      left: 0;
+      position: fixed;
+      right: 0;
+      top: 90px;
     }
 
     #content {
       display: flex;
       flex-direction: column;
-      height: 456px;
+      height: calc(var(--window-height) - var(--feedback-header-height) -
+          var(--feedback-footer-height));
+      overflow: auto;
+      padding-inline-end: var(--feedback-padding-inline-end);
+      padding-inline-start: var(--feedback-padding-inline-start);
+    }
+
+    #separator {
+      height: 1px;
+    }
+
+    .separator-scrolling-end {
+      background-color: var(--cros-separator-color);
     }
 
     .page-title {
@@ -85,9 +111,16 @@
     }
 
     #navButtons {
-      align-self: flex-end;
       display: flex;
-      margin: auto 0 40px 0;
+      justify-content: end;
+      padding-bottom: 40px;
+      padding-inline-end: var(--feedback-padding-inline-end);
+      padding-inline-start: var(--feedback-padding-inline-start);
+      padding-top: 20px;
+    }
+
+    .nav-buttons-scrolling {
+      box-shadow: var(--cros-elevation-2-shadow);
     }
 
     cr-button {
@@ -95,10 +128,9 @@
     }
 
     cr-checkbox {
-      --cr-checkbox-label-padding-start: 0;
+      --cr-checkbox-label-padding-start: 10px;
       --cr-checkbox-unchecked-box-color: var(--cros-icon-color-primary);
       margin-inline-end: 12px;
-      padding: 2px;
     }
 
     dialog {
@@ -121,7 +153,7 @@
       transition: opacity 200ms;
     }
 
-    .focusable:focus {
+    .focusable:focus-visible {
       border-radius: 4px;
       outline: 2px solid var(--cros-focus-ring-color);
     }
@@ -195,6 +227,7 @@
 
     paper-tooltip {
       --paper-tooltip-background: var(--cros-tooltip-background-color);
+      --paper-tooltip-delay-in: 100ms;
       --paper-tooltip-text-color: var(--cros-tooltip-label-color);
     }
 
@@ -203,8 +236,26 @@
       --cr-checkbox-ripple-size: 32px;
     }
 
-    :host-context(.focus-outline-visible) cr-checkbox:focus-within {
+    :host-context(.focus-outline-visible) cr-checkbox {
+      --cr-checkbox-ripple-ring: none;
+    }
+
+    :host-context(.focus-outline-visible) cr-checkbox:focus {
       --cr-checkbox-ripple-ring: 2px solid var(--cros-focus-ring-color);
+    }
+
+    #shadowShield {
+      bottom: 92px;
+      height: 48px;
+      left: 0;
+      pointer-events: none;
+      position: absolute;
+      right: 0;
+    }
+
+    .scrolling-shield {
+      background: linear-gradient(to bottom,
+          rgba(var(--cros-bg-color-rgb),0), rgba(var(--cros-bg-color-rgb),1));
     }
   </style>
 </template>

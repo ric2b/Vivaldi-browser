@@ -7,10 +7,10 @@ package org.chromium.components.messages;
 import android.animation.Animator;
 import android.content.res.Resources;
 import android.provider.Settings;
+import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.MockedInTests;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton.PopupMenuShownListener;
@@ -40,7 +40,7 @@ class MessageBannerCoordinator {
      * @param resources The {@link Resources}.
      * @param messageDismissed The {@link Runnable} that will run if and when the user dismisses the
      *         message.
-     * @param animatorStartCallback The {@link Callback} that will be used to delegate starting the
+     * @param swipeAnimationHandler The handler that will be used to delegate starting the
      *         animations to {@link WindowAndroid} so the message is not clipped as a result of some
      *         Android SurfaceView optimization.
      * @param autodismissDurationMs A {@link Supplier} providing autodismiss duration for message
@@ -49,13 +49,13 @@ class MessageBannerCoordinator {
      */
     MessageBannerCoordinator(MessageBannerView view, PropertyModel model,
             Supplier<Integer> maxTranslationSupplier, Resources resources,
-            Runnable messageDismissed, Callback<Animator> animatorStartCallback,
+            Runnable messageDismissed, SwipeAnimationHandler swipeAnimationHandler,
             Supplier<Long> autodismissDurationMs, Runnable onTimeUp) {
         mView = view;
         mModel = model;
         PropertyModelChangeProcessor.create(model, view, MessageBannerViewBinder::bind);
         mMediator = new MessageBannerMediator(
-                model, maxTranslationSupplier, resources, messageDismissed, animatorStartCallback);
+                model, maxTranslationSupplier, resources, messageDismissed, swipeAnimationHandler);
         mAutodismissDurationMs = autodismissDurationMs;
         mTimer = new MessageAutoDismissTimer();
         mOnTimeUp = onTimeUp;
@@ -92,16 +92,42 @@ class MessageBannerCoordinator {
      * Shows the message banner.
      * @param fromIndex The initial position.
      * @param toIndex The target position the message is moving to.
+     * @param messageDimensSupplier Supplier of dimensions of the message next to current one.
      * @return The animator which shows the message view.
      */
-    Animator show(@Position int fromIndex, @Position int toIndex) {
+    Animator show(@Position int fromIndex, @Position int toIndex,
+            Supplier<MessageDimens> messageDimensSupplier) {
         mView.dismissSecondaryMenuIfShown();
-        return mMediator.show(fromIndex, toIndex, () -> {
+        int verticalOffset = 0;
+        if (toIndex == Position.BACK) {
+            MessageDimens prevMessageDimens = messageDimensSupplier.get();
+            int height = mView.getHeight();
+            if (!mView.isLaidOut()) {
+                int maxWidth = prevMessageDimens.getWidth();
+                int wSpec = View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST);
+                int hSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+                mView.measure(wSpec, hSpec);
+                height = mView.getMeasuredHeight();
+            }
+            if (height < prevMessageDimens.getHeight()) {
+                verticalOffset = prevMessageDimens.getHeight() - height;
+            } else if (height > prevMessageDimens.getHeight()) {
+                mView.resizeForStackingAnimation(prevMessageDimens.getTitleHeight(),
+                        prevMessageDimens.getDescriptionHeight(),
+                        prevMessageDimens.getPrimaryButtonLineCount());
+            }
+        } else if (fromIndex == Position.BACK && toIndex == Position.FRONT) {
+            mView.resetForStackingAnimation();
+        }
+        return mMediator.show(fromIndex, toIndex, verticalOffset, () -> {
             if (toIndex != Position.FRONT) {
                 setOnTouchRunnable(null);
                 setOnTitleChanged(null);
                 mTimer.cancelTimer();
+                // Make it unable to be focused if it is not in the front.
+                mView.enableA11y(false);
             } else {
+                mView.enableA11y(true);
                 setOnTouchRunnable(mTimer::resetTimer);
                 announceForAccessibility();
                 setOnTitleChanged(() -> {
@@ -115,11 +141,14 @@ class MessageBannerCoordinator {
 
     /**
      * Hides the message banner.
+     * @param fromIndex The initial position.
+     * @param toIndex The target position the message is moving to.
      * @param animate Whether to hide with an animation.
      * @param messageHidden The {@link Runnable} that will run once the message banner is hidden.
      * @return The animator which hides the message view.
      */
-    Animator hide(boolean animate, Runnable messageHidden) {
+    Animator hide(@Position int fromIndex, @Position int toIndex, boolean animate,
+            Runnable messageHidden) {
         mView.dismissSecondaryMenuIfShown();
         mTimer.cancelTimer();
         // Skip animation if animation has been globally disabled.
@@ -128,7 +157,7 @@ class MessageBannerCoordinator {
         var isAnimationDisabled = Settings.Global.getFloat(mView.getContext().getContentResolver(),
                                           Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
                 == 0;
-        return mMediator.hide(animate && !isAnimationDisabled, () -> {
+        return mMediator.hide(fromIndex, toIndex, animate && !isAnimationDisabled, () -> {
             setOnTouchRunnable(null);
             setOnTitleChanged(null);
             messageHidden.run();

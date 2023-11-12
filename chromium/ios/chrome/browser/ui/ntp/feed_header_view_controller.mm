@@ -7,7 +7,7 @@
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
@@ -45,8 +45,6 @@ const CGFloat kHiddenFeedLabelWidth = 250;
 const CGFloat kHeaderMenuButtonInsetTopAndBottom = 2;
 const CGFloat kHeaderMenuButtonInsetSides = 2;
 // The height of the header container. The content is unaffected.
-// TODO(crbug.com/1277504): Only keep the WC header after launch.
-const CGFloat kWebChannelsHeaderHeight = 52;
 const CGFloat kDiscoverFeedHeaderHeight = 40;
 const CGFloat kCustomSearchEngineLabelHeight = 18;
 // * Values below are exclusive to Web Channels.
@@ -66,10 +64,6 @@ const CGFloat kSegmentAnimationDuration = 0.3;
 
 // TODO(crbug.com/1277974): Remove this when Web Channels is launched.
 NSString* kDiscoverMenuIcon = @"infobar_settings_icon";
-
-// Specific symbols used in the feed header.
-NSString* kSortArrowFeedSymbol = @"arrow.up.arrow.down";
-NSString* kEllipsisFeedSymbol = @"ellipsis";
 
 // The size of feed symbol images.
 NSInteger kFeedSymbolPointSize = 17;
@@ -218,7 +212,7 @@ NSInteger kFeedSymbolPointSize = 17;
 
 - (CGFloat)feedHeaderHeight {
   return [self.feedControlDelegate isFollowingFeedAvailable]
-             ? kWebChannelsHeaderHeight
+             ? FollowingFeedHeaderHeight()
              : kDiscoverFeedHeaderHeight;
 }
 
@@ -369,7 +363,7 @@ NSInteger kFeedSymbolPointSize = 17;
       l10n_util::GetNSString(IDS_IOS_DISCOVER_FEED_MENU_ACCESSIBILITY_LABEL);
   if ([self.feedControlDelegate isFollowingFeedAvailable]) {
     [menuButton setImage:DefaultSymbolTemplateWithPointSize(
-                             kEllipsisFeedSymbol, kFeedSymbolPointSize)
+                             kMenuSymbol, kFeedSymbolPointSize)
                 forState:UIControlStateNormal];
     menuButton.backgroundColor =
         [[UIColor colorNamed:kGrey200Color] colorWithAlphaComponent:0.8];
@@ -400,7 +394,7 @@ NSInteger kFeedSymbolPointSize = 17;
   sortButton.accessibilityIdentifier = kNTPFeedHeaderSortButtonIdentifier;
   sortButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_FEED_SORT_ACCESSIBILITY_LABEL);
-  [sortButton setImage:DefaultSymbolTemplateWithPointSize(kSortArrowFeedSymbol,
+  [sortButton setImage:DefaultSymbolTemplateWithPointSize(kSortSymbol,
                                                           kFeedSymbolPointSize)
               forState:UIControlStateNormal];
   sortButton.showsMenuAsPrimaryAction = YES;
@@ -410,6 +404,10 @@ NSInteger kFeedSymbolPointSize = 17;
   // is hidden.
   sortButton.alpha =
       [self.feedControlDelegate selectedFeed] == FeedTypeFollowing ? 1 : 0;
+
+  if (@available(iOS 15.0, *)) {
+    sortButton.configuration = [UIButtonConfiguration plainButtonConfiguration];
+  }
 
   return sortButton;
 }
@@ -536,9 +534,7 @@ NSInteger kFeedSymbolPointSize = 17;
         constraintEqualToAnchor:self.view.bottomAnchor],
     [self.container.centerXAnchor
         constraintEqualToAnchor:self.view.centerXAnchor],
-    [self.container.widthAnchor
-        constraintEqualToConstant:MIN(kDiscoverFeedContentWidth,
-                                      self.view.frame.size.width)],
+    [self.container.widthAnchor constraintEqualToAnchor:self.view.widthAnchor],
     [self.menuButton.trailingAnchor
         constraintEqualToAnchor:self.container.trailingAnchor
                        constant:-kButtonHorizontalMargin],
@@ -763,7 +759,10 @@ NSInteger kFeedSymbolPointSize = 17;
 - (void)onSegmentSelected:(UISegmentedControl*)segmentedControl {
   switch (segmentedControl.selectedSegmentIndex) {
     case static_cast<NSInteger>(FeedTypeDiscover): {
-      [self.feedMetricsRecorder recordFeedSelected:FeedTypeDiscover];
+      [self.feedMetricsRecorder
+                recordFeedSelected:FeedTypeDiscover
+          fromPreviousFeedPosition:[self.feedControlDelegate
+                                           lastVisibleFeedCardIndex]];
       [self.feedControlDelegate handleFeedSelected:FeedTypeDiscover];
       [UIView animateWithDuration:kSegmentAnimationDuration
                        animations:^{
@@ -772,7 +771,10 @@ NSInteger kFeedSymbolPointSize = 17;
       break;
     }
     case static_cast<NSInteger>(FeedTypeFollowing): {
-      [self.feedMetricsRecorder recordFeedSelected:FeedTypeFollowing];
+      [self.feedMetricsRecorder
+                recordFeedSelected:FeedTypeFollowing
+          fromPreviousFeedPosition:[self.feedControlDelegate
+                                           lastVisibleFeedCardIndex]];
       [self.feedControlDelegate handleFeedSelected:FeedTypeFollowing];
       // Only show sorting button for Following feed.
       [UIView animateWithDuration:kSegmentAnimationDuration

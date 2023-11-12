@@ -11,21 +11,21 @@
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/paths/paths.h"
 #import "ios/chrome/browser/ui/first_run/fre_field_trial.h"
-#import "ios/chrome/browser/ui/first_run/trending_queries_field_trial.h"
+#import "ios/chrome/browser/ui/ntp/ios_popular_sites_field_trial.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-void IOSChromeFieldTrials::SetUpFieldTrials() {
-  // Persistent histograms must be enabled as soon as possible.
+void IOSChromeFieldTrials::OnVariationsSetupComplete() {
+  // Persistent histograms must be enabled ASAP, but depends on Features.
   base::FilePath user_data_dir;
   if (base::PathService::Get(ios::DIR_USER_DATA, &user_data_dir)) {
     InstantiatePersistentHistograms(user_data_dir);
   }
 }
 
-void IOSChromeFieldTrials::SetUpFeatureControllingFieldTrials(
+void IOSChromeFieldTrials::SetUpClientSideFieldTrials(
     bool has_seed,
     const variations::EntropyProviders& entropy_providers,
     base::FeatureList* feature_list) {
@@ -40,7 +40,7 @@ void IOSChromeFieldTrials::SetUpFeatureControllingFieldTrials(
   // See http://crrev/c/1128269 for an example.
   fre_field_trial::Create(entropy_providers.low_entropy(), feature_list,
                           GetApplicationContext()->GetLocalState());
-  trending_queries_field_trial::Create(
+  ios_popular_sites_field_trial::Create(
       entropy_providers.low_entropy(), feature_list,
       GetApplicationContext()->GetLocalState());
 }

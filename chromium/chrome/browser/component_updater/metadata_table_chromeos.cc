@@ -60,7 +60,7 @@ std::string HashUsername(const std::string& username) {
   std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(),
                  ::tolower);
   std::vector<uint8_t> data;
-  std::copy(lowercase.begin(), lowercase.end(), std::back_inserter(data));
+  base::ranges::copy(lowercase, std::back_inserter(data));
   base::SHA1HashBytes(data.data(), data.size(), binmd);
   std::string result = base::HexEncode(binmd, sizeof(binmd));
   // Stay compatible with CryptoLib::HexEncodeToBuffer()
@@ -159,8 +159,8 @@ void MetadataTable::Store() {
   DCHECK(pref_service_);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  DictionaryPrefUpdate update(pref_service_, kMetadataPrefPath);
-  update->GetDict().Set(kMetadataContentKey, installed_items_.Clone());
+  ScopedDictPrefUpdate update(pref_service_, kMetadataPrefPath);
+  update->Set(kMetadataContentKey, installed_items_.Clone());
 }
 
 void MetadataTable::AddItem(const std::string& hashed_user_id,

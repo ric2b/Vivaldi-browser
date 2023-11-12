@@ -222,7 +222,7 @@ const SyncedNoteTrackerEntity* SyncedNoteTracker::Add(
             client_tag_hash_to_entities_map_.size());
   if (server_version != syncer::kUncommittedVersion &&
       note_node->is_attachment()) {
-    synced_file_store_->AddSyncFileRef(
+    synced_file_store_->SetSyncFileRef(
         sync_id, syncer::NOTES, base::UTF16ToASCII(note_node->GetContent()));
   }
   return raw_entity;
@@ -704,7 +704,7 @@ void SyncedNoteTracker::UpdateSyncIdIfNeeded(
   sync_id_to_entities_map_.erase(old_id);
 
   if (entity->note_node() && entity->note_node()->is_attachment()) {
-    synced_file_store_->AddSyncFileRef(
+    synced_file_store_->SetSyncFileRef(
         sync_id, syncer::NOTES,
         base::UTF16ToASCII(entity->note_node()->GetContent()));
   }

@@ -37,7 +37,6 @@ class TextureImage : public gl::GLImage {
     return false;
   }
   void SetColorSpace(const gfx::ColorSpace& color_space) override {}
-  void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
                     const std::string& dump_name) override {}
@@ -46,17 +45,6 @@ class TextureImage : public gl::GLImage {
   ~TextureImage() override = default;
   gfx::Size size_;
 };
-
-scoped_refptr<gl::GLImage> TextureImageFactory::CreateImageForGpuMemoryBuffer(
-    gfx::GpuMemoryBufferHandle handle,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    const gfx::ColorSpace& color_space,
-    gfx::BufferPlane plane,
-    int client_id,
-    SurfaceHandle surface_handle) {
-  return nullptr;
-}
 
 bool TextureImageFactory::SupportsCreateAnonymousImage() const {
   return true;

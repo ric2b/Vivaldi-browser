@@ -9,7 +9,6 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <set>
 #include <string>
 #include <utility>
@@ -47,6 +46,7 @@
 #include "services/network/http_cache_data_counter.h"
 #include "services/network/http_cache_data_remover.h"
 #include "services/network/network_qualities_pref_delegate.h"
+#include "services/network/oblivious_http_request_handler.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/cpp/transferable_directory.h"
@@ -104,7 +104,6 @@ class URLMatcher;
 namespace network {
 class CertVerifierWithTrustAnchors;
 class CookieManager;
-class ExpectCTReporter;
 class HostResolver;
 class MdnsResponderManager;
 class MojoBackendFileOperationsFactory;
@@ -240,6 +239,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
       mojom::URLLoaderFactoryParamsPtr params) override;
   void ResetURLLoaderFactories() override;
+  void GetViaObliviousHttp(
+      mojom::ObliviousHttpRequestPtr request,
+      mojo::PendingRemote<mojom::ObliviousHttpClient> client) override;
   void GetCookieManager(
       mojo::PendingReceiver<mojom::CookieManager> receiver) override;
   void GetRestrictedCookieManager(
@@ -305,19 +307,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 #endif
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void SetCTPolicy(mojom::CTPolicyPtr ct_policy) override;
-  void AddExpectCT(
-      const std::string& domain,
-      base::Time expiry,
-      bool enforce,
-      const GURL& report_uri,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
-      AddExpectCTCallback callback) override;
-  void SetExpectCTTestReport(const GURL& report_uri,
-                             SetExpectCTTestReportCallback callback) override;
-  void GetExpectCTState(
-      const std::string& domain,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
-      GetExpectCTStateCallback callback) override;
   void MaybeEnqueueSCTReport(
       const net::HostPortPair& host_port_pair,
       const net::X509Certificate* validated_certificate_chain,
@@ -497,11 +486,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const std::string& realm,
       LookupProxyAuthCredentialsCallback callback) override;
 #endif
-  void ComputeFirstPartySetMetadata(
-      const net::SchemefulSite& site,
-      const absl::optional<net::SchemefulSite>& top_frame_site,
-      const std::vector<net::SchemefulSite>& party_context,
-      ComputeFirstPartySetMetadataCallback callback) override;
 
   // Destroys |request| when a proxy lookup completes.
   void OnProxyLookupComplete(ProxyLookupRequest* proxy_lookup_request);
@@ -601,6 +585,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
     return require_network_isolation_key_;
   }
 
+  bool acam_preflight_spec_conformant() const {
+    return acam_preflight_spec_conformant_;
+  }
+
   cors::NonWildcardRequestHeadersSupport
   cors_non_wildcard_request_headers_support() const {
     return cors_non_wildcard_request_headers_support_;
@@ -678,12 +666,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 #endif
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
-  void OnSetExpectCTTestReportSuccess();
-
-  void LazyCreateExpectCTReporter(net::URLRequestContext* url_request_context);
-
-  void OnSetExpectCTTestReportFailure();
-
   // Checks the Certificate Transparency policy compliance for a given
   // certificate and SCTs in `cert_verify_result`, and updates
   // `cert_verify_result.cert_status` and
@@ -817,13 +799,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   std::unique_ptr<net::ReportSender> certificate_report_sender_;
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
-  std::unique_ptr<ExpectCTReporter> expect_ct_reporter_;
-
   std::unique_ptr<certificate_transparency::ChromeRequireCTDelegate>
       require_ct_delegate_;
-
-  std::queue<SetExpectCTTestReportCallback>
-      outstanding_set_expect_ct_callbacks_;
 
   // Owned by the URLRequestContext.
   raw_ptr<certificate_transparency::ChromeCTPolicyEnforcer>
@@ -904,10 +881,18 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::unique_ptr<NetworkServiceMemoryCache> memory_cache_;
 
+  // The ohttp_handler_ needs to be destroyed before cookie_manager_, since it
+  // depends on it indirectly through this context.
+  ObliviousHttpRequestHandler ohttp_handler_;
+
   // Whether all external consumers are expected to provide a non-empty
   // NetworkAnonymizationKey with all requests. When set, enabled a variety of
   // DCHECKs on APIs used by external callers.
   bool require_network_isolation_key_ = false;
+
+  // Whether Access-Control-Allow-Methods matching in CORS preflight is done
+  // according to the spec.
+  bool acam_preflight_spec_conformant_ = true;
 
   // Indicating whether
   // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name is

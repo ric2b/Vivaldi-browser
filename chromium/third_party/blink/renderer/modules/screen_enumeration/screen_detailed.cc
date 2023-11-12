@@ -21,7 +21,7 @@ ScreenDetailed::ScreenDetailed(LocalDOMWindow* window,
                                int64_t display_id,
                                bool label_is_internal,
                                uint32_t label_idx)
-    : Screen(window, display_id),
+    : Screen(window, display_id, /*use_size_override=*/false),
       label_idx_(label_idx),
       label_is_internal_(label_is_internal) {}
 
@@ -29,8 +29,10 @@ ScreenDetailed::ScreenDetailed(LocalDOMWindow* window,
 bool ScreenDetailed::AreWebExposedScreenDetailedPropertiesEqual(
     const display::ScreenInfo& prev,
     const display::ScreenInfo& current) {
-  if (!Screen::AreWebExposedScreenPropertiesEqual(prev, current))
+  if (!Screen::AreWebExposedScreenPropertiesEqual(
+          prev, current, /*use_size_override=*/false)) {
     return false;
+  }
 
   // left() / top()
   if (prev.rect.origin() != current.rect.origin())
@@ -99,25 +101,13 @@ bool ScreenDetailed::AreWebExposedScreenDetailedPropertiesEqual(
 int ScreenDetailed::left() const {
   if (!DomWindow())
     return 0;
-  LocalFrame* frame = DomWindow()->GetFrame();
-  const display::ScreenInfo& screen_info = GetScreenInfo();
-  if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk()) {
-    return base::ClampRound(screen_info.rect.x() *
-                            screen_info.device_scale_factor);
-  }
-  return screen_info.rect.x();
+  return GetRect(/*available=*/false).x();
 }
 
 int ScreenDetailed::top() const {
   if (!DomWindow())
     return 0;
-  LocalFrame* frame = DomWindow()->GetFrame();
-  const display::ScreenInfo& screen_info = GetScreenInfo();
-  if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk()) {
-    return base::ClampRound(screen_info.rect.y() *
-                            screen_info.device_scale_factor);
-  }
-  return screen_info.rect.y();
+  return GetRect(/*available=*/false).y();
 }
 
 bool ScreenDetailed::isPrimary() const {
@@ -141,16 +131,7 @@ float ScreenDetailed::devicePixelRatio() const {
 String ScreenDetailed::label() const {
   if (!DomWindow())
     return String();
-  // If enabled, return a more accurate screen label determined by the platform.
-  if (RuntimeEnabledFeatures::WindowPlacementEnhancedScreenLabelsEnabled())
-    return String(GetScreenInfo().label);
-
-  // Return a placeholder label, e.g. "Internal Display 1".
-  // These don't have to be unique, but it's nice to be able to differentiate
-  // if a user has two external screens, for example.
-  const char* prefix =
-      label_is_internal_ ? "Internal Display " : "External Display ";
-  return String(prefix) + String::Number(label_idx_);
+  return String(GetScreenInfo().label);
 }
 
 float ScreenDetailed::highDynamicRangeHeadroom() const {

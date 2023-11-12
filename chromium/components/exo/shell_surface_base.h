@@ -13,6 +13,7 @@
 #include "base/gtest_prod_util.h"
 #include "chromeos/ui/base/display_util.h"
 #include "chromeos/ui/base/window_pin_type.h"
+#include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "components/exo/surface_observer.h"
 #include "components/exo/surface_tree_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -28,6 +29,7 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
+#include "ui/wm/public/tooltip_observer.h"
 
 namespace ash {
 class WindowState;
@@ -52,7 +54,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
                          public views::WidgetDelegate,
                          public views::WidgetObserver,
                          public views::View,
-                         public wm::ActivationChangeObserver {
+                         public wm::ActivationChangeObserver,
+                         public wm::TooltipObserver {
  public:
   // The |origin| is the initial position in screen coordinates. The position
   // specified as part of the geometry is relative to the shell surface.
@@ -229,8 +232,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void ShowSnapPreviewToPrimary() override;
   void ShowSnapPreviewToSecondary() override;
   void HideSnapPreview() override;
-  void SetSnappedToPrimary() override;
-  void SetSnappedToSecondary() override;
+  void SetSnapPrimary(float snap_ratio) override;
+  void SetSnapSecondary(float snap_ratio) override;
   void UnsetSnap() override;
   void OnActivationRequested() override;
   void OnSetServerStartResize() override;
@@ -251,6 +254,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void OnContentSizeChanged(Surface*) override {}
   void OnFrameLockingChanged(Surface*, bool) override {}
   void OnDeskChanged(Surface*, int) override {}
+  void OnTooltipShown(Surface* surface,
+                      const std::u16string& text,
+                      const gfx::Rect& bounds) override {}
+  void OnTooltipHidden(Surface* surface) override {}
 
   // CaptureClientObserver:
   void OnCaptureChanged(aura::Window* lost_capture,
@@ -294,6 +301,12 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void OnWindowActivated(ActivationReason reason,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
+
+  // wm::TooltipObserver:
+  void OnTooltipShown(aura::Window* target,
+                      const std::u16string& text,
+                      const gfx::Rect& bounds) override;
+  void OnTooltipHidden(aura::Window* target) override;
 
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
@@ -399,6 +412,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // maximize request. Currently only true for Lacros.
   bool ShouldExitFullscreenFromRestoreOrMaximized();
 
+  static bool IsPopupWithGrab(aura::Window* window);
+
   views::Widget* widget_ = nullptr;
   bool movement_disabled_ = false;
   gfx::Point origin_;
@@ -493,6 +508,14 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool skip_ime_processing_ = false;
   bool overlay_overlaps_frame_ = true;
   absl::optional<bool> overlay_can_resize_;
+
+  // We independently store whether a widget should be activated on creation.
+  // The source of truth is on widget, but there are two problems:
+  //   (1) The widget has no activation state before it has shown.
+  //   (2) In the wayland protocol, asynchronous buffer-commit causes a surface
+  //   to be shown. Because this is asynchronous, it's possible for a surface to
+  //   be deactivated before shown.
+  bool initially_activated_ = true;
 
   // Pin members.
   chromeos::WindowPinType current_pinned_state_ =

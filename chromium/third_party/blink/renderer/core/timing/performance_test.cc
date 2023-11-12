@@ -4,6 +4,9 @@
 
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 
+#include <algorithm>
+
+#include "base/ranges/algorithm.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -92,11 +95,8 @@ class PerformanceTest : public PageTestBase {
 
   void CheckBackForwardCacheRestoration(PerformanceEntryVector entries) {
     // Expect there are 2 back forward cache restoration entries.
-    EXPECT_EQ(2, std::count_if(entries.begin(), entries.end(),
-                               [](const PerformanceEntry* e) -> bool {
-                                 return e->entryType() ==
-                                        "back-forward-cache-restoration";
-                               }));
+    EXPECT_EQ(2, base::ranges::count(entries, "back-forward-cache-restoration",
+                                     &PerformanceEntry::entryType));
 
     // Retain only back forward cache restoration entries.
     entries.erase(std::remove_if(entries.begin(), entries.end(),
@@ -216,10 +216,125 @@ TEST_F(PerformanceTest, BackForwardCacheRestoration) {
   auto entries = PerformanceEntriesInObserver();
   CheckBackForwardCacheRestoration(entries);
 
-  entries = base_->getEntries();
+  entries = base_->getEntries(scope.GetScriptState());
   CheckBackForwardCacheRestoration(entries);
 
-  entries = base_->getEntriesByType("back-forward-cache-restoration");
+  entries = base_->getEntriesByType(scope.GetScriptState(),
+                                    "back-forward-cache-restoration");
   CheckBackForwardCacheRestoration(entries);
 }
+
+// Validate ordering after insertion into an empty vector.
+TEST_F(PerformanceTest, InsertEntryOnEmptyBuffer) {
+  V8TestingScope scope;
+  Initialize(scope.GetScriptState());
+
+  PerformanceEntryVector test_buffer_;
+
+  PerformanceEventTiming* test_entry =
+      PerformanceEventTiming::Create("event", 0.0, 0.0, 0.0, false, nullptr, 0);
+
+  base_->InsertEntryIntoSortedBuffer(test_buffer_, *test_entry,
+                                     Performance::kDoNotRecordSwaps);
+
+  PerformanceEntryVector sorted_buffer_;
+  sorted_buffer_.push_back(*test_entry);
+
+  EXPECT_EQ(test_buffer_, sorted_buffer_);
+}
+
+// Validate ordering after insertion into a non-empty vector.
+TEST_F(PerformanceTest, InsertEntryOnExistingBuffer) {
+  V8TestingScope scope;
+  Initialize(scope.GetScriptState());
+
+  PerformanceEntryVector test_buffer_;
+
+  // Insert 3 entries into the vector.
+  for (int i = 0; i < 3; i++) {
+    double tmp = 1.0;
+    PerformanceEventTiming* entry = PerformanceEventTiming::Create(
+        "event", tmp * i, 0.0, 0.0, false, nullptr, 0);
+    test_buffer_.push_back(*entry);
+  }
+
+  PerformanceEventTiming* test_entry =
+      PerformanceEventTiming::Create("event", 1.0, 0.0, 0.0, false, nullptr, 0);
+
+  // Create copy of the test_buffer_.
+  PerformanceEntryVector sorted_buffer_ = test_buffer_;
+
+  base_->InsertEntryIntoSortedBuffer(test_buffer_, *test_entry,
+                                     Performance::kDoNotRecordSwaps);
+
+  sorted_buffer_.push_back(*test_entry);
+  std::sort(sorted_buffer_.begin(), sorted_buffer_.end(),
+            PerformanceEntry::StartTimeCompareLessThan);
+
+  EXPECT_EQ(test_buffer_, sorted_buffer_);
+}
+
+// Validate ordering when inserting to the front of a buffer.
+TEST_F(PerformanceTest, InsertEntryToFrontOfBuffer) {
+  V8TestingScope scope;
+  Initialize(scope.GetScriptState());
+
+  PerformanceEntryVector test_buffer_;
+
+  // Insert 3 entries into the vector.
+  for (int i = 0; i < 3; i++) {
+    double tmp = 1.0;
+    PerformanceEventTiming* entry = PerformanceEventTiming::Create(
+        "event", tmp * i, 0.0, 0.0, false, nullptr, 0);
+    test_buffer_.push_back(*entry);
+  }
+
+  PerformanceEventTiming* test_entry =
+      PerformanceEventTiming::Create("event", 0.0, 0.0, 0.0, false, nullptr, 0);
+
+  // Create copy of the test_buffer_.
+  PerformanceEntryVector sorted_buffer_ = test_buffer_;
+
+  base_->InsertEntryIntoSortedBuffer(test_buffer_, *test_entry,
+                                     Performance::kDoNotRecordSwaps);
+
+  sorted_buffer_.push_back(*test_entry);
+  std::sort(sorted_buffer_.begin(), sorted_buffer_.end(),
+            PerformanceEntry::StartTimeCompareLessThan);
+
+  EXPECT_EQ(test_buffer_, sorted_buffer_);
+}
+
+TEST_F(PerformanceTest, MergePerformanceEntryVectorsTest) {
+  PerformanceEntryVector first_vector;
+  PerformanceEntryVector second_vector;
+
+  PerformanceEntryVector test_vector;
+
+  for (int i = 0; i < 6; i += 2) {
+    double tmp = 1.0;
+    PerformanceEventTiming* entry = PerformanceEventTiming::Create(
+        "event", tmp * i, 0.0, 0.0, false, nullptr, 0);
+    first_vector.push_back(*entry);
+    test_vector.push_back(*entry);
+  }
+
+  for (int i = 1; i < 6; i += 2) {
+    double tmp = 1.0;
+    PerformanceEventTiming* entry = PerformanceEventTiming::Create(
+        "event", tmp * i, 0.0, 0.0, false, nullptr, 0);
+    second_vector.push_back(*entry);
+    test_vector.push_back(*entry);
+  }
+
+  PerformanceEntryVector all_entries;
+  all_entries = MergePerformanceEntryVectors(all_entries, first_vector);
+  all_entries = MergePerformanceEntryVectors(all_entries, second_vector);
+
+  std::sort(test_vector.begin(), test_vector.end(),
+            PerformanceEntry::StartTimeCompareLessThan);
+
+  EXPECT_EQ(all_entries, test_vector);
+}
+
 }  // namespace blink

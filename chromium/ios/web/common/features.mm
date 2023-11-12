@@ -33,10 +33,6 @@ BASE_FEATURE(kEnablePersistentDownloads,
              "EnablePersistentDownloads",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPreserveScrollViewProperties,
-             "PreserveScrollViewProperties",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kRecordSnapshotSize,
              "RecordSnapshotSize",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -87,6 +83,13 @@ bool IsMediaPermissionsControlEnabled() {
 bool IsLoadSimulatedRequestAPIEnabled() {
   if (@available(iOS 15, *)) {
     return base::FeatureList::IsEnabled(kUseLoadSimulatedRequestForOfflinePage);
+  }
+  return false;
+}
+
+bool IsFullscreenAPIEnabled() {
+  if (@available(iOS 16.0, *)) {
+    return base::FeatureList::IsEnabled(kEnableFullscreenAPI);
   }
   return false;
 }

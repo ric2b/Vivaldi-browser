@@ -18,7 +18,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -64,6 +64,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom.h"
@@ -78,9 +79,18 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
+#include "chrome/android/chrome_jni_headers/PushMessagingServiceBridge_jni.h"
 #include "chrome/android/chrome_jni_headers/PushMessagingServiceObserver_jni.h"
 #include "chrome/browser/android/shortcut_helper.h"
+#include "chrome/browser/notifications/notification_platform_bridge.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "components/permissions/android/android_permission_util.h"
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 #endif
 
 using instance_id::InstanceID;
@@ -179,9 +189,10 @@ void LogMessageReceivedEventToDevTools(
   else if (was_encrypted)
     event_metadata["Payload"] = payload;
 
+  url::Origin origin = url::Origin::Create(app_identifier.origin());
   devtools_context->LogBackgroundServiceEvent(
       app_identifier.service_worker_registration_id(),
-      url::Origin::Create(app_identifier.origin()),
+      blink::StorageKey(origin),
       content::DevToolsBackgroundService::kPushMessaging,
       "Push message received" /* event_name */, message_id, event_metadata);
 }
@@ -229,11 +240,12 @@ void PushMessagingServiceImpl::RemoveExpiredSubscriptions() {
 
   for (const auto& identifier : PushMessagingAppIdentifier::GetAll(profile_)) {
     if (!identifier.IsExpired()) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, barrier_closure);
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, barrier_closure);
       continue;
     }
     content::BrowserThread::PostBestEffortTask(
-        FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
+        FROM_HERE, base::SingleThreadTaskRunner::GetCurrentDefault(),
         base::BindOnce(
             &PushMessagingServiceImpl::UnexpectedChange,
             weak_factory_.GetWeakPtr(), identifier,
@@ -383,15 +395,6 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
       /* was_encrypted= */ message.decrypted, std::string() /* error_message */,
       message.decrypted ? message.raw_data : std::string());
 
-#if BUILDFLAG(IS_ANDROID)
-  if (CheckAndRevokeNotificationPermissionIfNeeded(app_id, message,
-                                                   app_identifier)) {
-    // `message` is processed inside
-    // `CheckAndRevokeNotificationPermissionIfNeeded()`.
-    return;
-  }
-#endif
-
   if (IsPermissionSet(app_identifier.origin())) {
     messages_pending_permission_check_.emplace(app_id, message);
     // Start abusive and disruptive origin verifications only if no other
@@ -430,77 +433,6 @@ void PushMessagingServiceImpl::CheckOriginAndDispatchNextMessage() {
       base::BindOnce(&PushMessagingServiceImpl::OnCheckedOrigin,
                      weak_factory_.GetWeakPtr(), std::move(message)));
 }
-
-#if BUILDFLAG(IS_ANDROID)
-bool PushMessagingServiceImpl::CheckAndRevokeNotificationPermissionIfNeeded(
-    const std::string& app_id,
-    const gcm::IncomingMessage& message,
-    const PushMessagingAppIdentifier& app_identifier) {
-  if (!base::FeatureList::IsEnabled(
-          features::kRevokeNotificationsPermissionIfDisabledOnAppLevel)) {
-    return false;
-  }
-
-  bool has_app_level_notification_permission =
-      enabled_app_level_notification_permission_for_testing_.has_value()
-          ? enabled_app_level_notification_permission_for_testing_.value()
-          : permissions::AreAppLevelNotificationsEnabled();
-
-  bool contains_webapk = ShortcutHelper::DoesOriginContainAnyInstalledWebApk(
-      app_identifier.origin());
-  bool contains_twa =
-      ShortcutHelper::DoesOriginContainAnyInstalledTrustedWebActivity(
-          app_identifier.origin());
-  bool contains_installed_webapp = contains_twa || contains_webapk;
-
-  // If Notifications permission delegation is enabled, for the
-  // `app_identifier.origin()`, we should not revoke permissions because
-  // Notifications permissions are automatically synced with an installed app.
-  if (contains_installed_webapp)
-    return false;
-
-  PrefService* prefs = prefs_for_testing_.has_value()
-                           ? prefs_for_testing_.value()
-                           : g_browser_process->local_state();
-
-  if (has_app_level_notification_permission) {
-    // Chrome has app-level Notifications permission. Reset the grace period
-    // flag and continue as normal.
-    prefs->ClearPref(kNotificationsPermissionRevocationGracePeriodDate);
-    return false;
-  }
-
-  // Chrome has no app-level Notifications permission.
-  blink::mojom::PushEventStatus status;
-
-  if (prefs->GetTime(kNotificationsPermissionRevocationGracePeriodDate) ==
-      base::Time()) {
-    prefs->SetTime(kNotificationsPermissionRevocationGracePeriodDate,
-                   base::Time::Now());
-  }
-
-  base::TimeDelta permission_revocation_activated_duration =
-      base::Time::Now() -
-      prefs->GetTime(kNotificationsPermissionRevocationGracePeriodDate);
-  if (permission_revocation_activated_duration.InDays() <
-      GetNotificationsRevocationGracePeriodInDays()) {
-    // Ignore a push message during the grace period.
-    status = blink::mojom::PushEventStatus::NO_APP_LEVEL_PERMISSION_IGNORE;
-  } else {
-    // Revoke site-level Notifications permission & FCM.
-    status = blink::mojom::PushEventStatus::NO_APP_LEVEL_PERMISSION_UNSUBSCRIBE;
-
-    profile_->GetPermissionController()->ResetPermission(
-        blink::PermissionType::NOTIFICATIONS,
-        url::Origin::Create(app_identifier.origin()));
-  }
-
-  DeliverMessageCallback(app_id, app_identifier.origin(),
-                         app_identifier.service_worker_registration_id(),
-                         message, /*did_enqueue_message=*/false, status);
-  return true;
-}
-#endif
 
 void PushMessagingServiceImpl::OnCheckedOrigin(
     PendingMessage message,
@@ -722,12 +654,13 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
     if (app_identifier.is_null())
       return;
 
+    url::Origin origin = url::Origin::Create(app_identifier.origin());
     if (auto* devtools_context = GetDevToolsContext(app_identifier.origin())) {
       std::stringstream ss;
       ss << unsubscribe_reason;
       devtools_context->LogBackgroundServiceEvent(
           app_identifier.service_worker_registration_id(),
-          url::Origin::Create(app_identifier.origin()),
+          blink::StorageKey(origin),
           content::DevToolsBackgroundService::kPushMessaging,
           "Unsubscribed due to error" /* event_name */, message.message_id,
           {{"Reason", ss.str()}});
@@ -792,10 +725,11 @@ void PushMessagingServiceImpl::DidHandleMessage(
   if (app_identifier.is_null() || !did_show_generic_notification)
     return;
 
+  url::Origin origin = url::Origin::Create(app_identifier.origin());
   if (auto* devtools_context = GetDevToolsContext(app_identifier.origin())) {
     devtools_context->LogBackgroundServiceEvent(
         app_identifier.service_worker_registration_id(),
-        url::Origin::Create(app_identifier.origin()),
+        blink::StorageKey(origin),
         content::DevToolsBackgroundService::kPushMessaging,
         "Generic notification shown" /* event_name */, push_message_id,
         {} /* event_metadata */);
@@ -978,6 +912,88 @@ void PushMessagingServiceImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(kNotificationsPermissionRevocationGracePeriodDate,
                              base::Time());
 }
+
+static void
+JNI_PushMessagingServiceBridge_VerifyAndRevokeNotificationsPermission(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& java_origin,
+    const JavaParamRef<jstring>& java_profile_id,
+    jboolean app_level_notifications_enabled) {
+  if (!base::FeatureList::IsEnabled(
+          features::kRevokeNotificationsPermissionIfDisabledOnAppLevel)) {
+    return;
+  }
+
+  GURL origin(ConvertJavaStringToUTF8(env, java_origin));
+  std::string profile_id = ConvertJavaStringToUTF8(env, java_profile_id);
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  DCHECK(profile_manager);
+
+  profile_manager->LoadProfile(
+      NotificationPlatformBridge::GetProfileBaseNameFromProfileId(profile_id),
+      /*incognito=*/false,
+      base::BindOnce(&PushMessagingServiceImpl::RevokePermissionIfPossible,
+                     GURL(ConvertJavaStringToUTF8(env, java_origin)),
+                     app_level_notifications_enabled,
+                     g_browser_process->local_state()));
+}
+
+void PushMessagingServiceImpl::RevokePermissionIfPossible(
+    GURL origin,
+    bool app_level_notifications_enabled,
+    PrefService* prefs,
+    Profile* profile) {
+  if (app_level_notifications_enabled) {
+    if (prefs->GetTime(kNotificationsPermissionRevocationGracePeriodDate) !=
+        base::Time()) {
+      // Record when the grace period was started so we can adjust the grace
+      // period duration.
+      base::UmaHistogramLongTimes(
+          "Permissions.FCM.Revocation.ResetGracePeriod",
+          base::Time::Now() -
+              prefs->GetTime(
+                  kNotificationsPermissionRevocationGracePeriodDate));
+    }
+
+    base::UmaHistogramEnumeration("Permissions.FCM.Revocation",
+                                  FcmTokenRevocation::kResetGracePeriod);
+
+    // Chrome has app-level Notifications permission. Reset the grace period
+    // flag and continue as normal.
+    prefs->ClearPref(kNotificationsPermissionRevocationGracePeriodDate);
+    return;
+  }
+
+  if (prefs->GetTime(kNotificationsPermissionRevocationGracePeriodDate) ==
+      base::Time()) {
+    prefs->SetTime(kNotificationsPermissionRevocationGracePeriodDate,
+                   base::Time::Now());
+    return;
+  }
+
+  base::TimeDelta permission_revocation_activated_duration =
+      base::Time::Now() -
+      prefs->GetTime(kNotificationsPermissionRevocationGracePeriodDate);
+  if (permission_revocation_activated_duration.InDays() >=
+      GetNotificationsRevocationGracePeriodInDays()) {
+    content::PermissionController* permission_controller =
+        profile->GetPermissionController();
+
+    // As soon as permission is reset,
+    // `PushMessagingServiceImpl::OnContentSettingChanged` is notified and it
+    // revokes a push message registration token.
+    permission_controller->ResetPermission(blink::PermissionType::NOTIFICATIONS,
+                                           url::Origin::Create(origin));
+
+    base::UmaHistogramEnumeration("Permissions.FCM.Revocation",
+                                  FcmTokenRevocation::kRevokePermission);
+  } else {
+    base::UmaHistogramEnumeration("Permissions.FCM.Revocation",
+                                  FcmTokenRevocation::kGracePeriodIsNotOver);
+  }
+}
+
 #endif
 
 bool PushMessagingServiceImpl::SupportNonVisibleMessages() {
@@ -1337,7 +1353,7 @@ void PushMessagingServiceImpl::DidDeleteID(const std::string& app_id,
   // |app_id_when_instance_id|, since it calls
   // InstanceIDDriver::RemoveInstanceID which deletes the InstanceID itself.
   // Calling that immediately would cause a use-after-free in our caller.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PushMessagingServiceImpl::DidUnsubscribe,
                      weak_factory_.GetWeakPtr(), app_id, was_subscribed));

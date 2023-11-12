@@ -99,10 +99,10 @@ export class RecipesModuleElement extends I18nMixin
         loadTimeData.getString('modulesRecipeTasksLower');
   }
 
-  private computeInfo_(): string {
+  private computeInfo_(): TrustedHTML {
     return loadTimeData.getBoolean('moduleRecipeExtendedExperimentEnabled') ?
-        loadTimeData.getString('modulesRecipeExtendedInfo') :
-        loadTimeData.getString('modulesRecipeInfo');
+        this.i18nAdvanced('modulesRecipeExtendedInfo') :
+        this.i18nAdvanced('modulesRecipeInfo');
   }
 
   private computeShowRelatedSearches_(): boolean {
@@ -182,10 +182,5 @@ async function createModule(): Promise<HTMLElement|null> {
   return element;
 }
 
-export const recipeTasksDescriptor: ModuleDescriptor = new ModuleDescriptor(
-    /*id=*/ 'recipe_tasks',
-    /*name=*/
-    loadTimeData.getBoolean('modulesRecipeHistoricalExperimentEnabled') ?
-        loadTimeData.getString('modulesRecipeViewedTasksSentence') :
-        loadTimeData.getString('modulesRecipeTasksSentence'),
-    createModule);
+export const recipeTasksDescriptor: ModuleDescriptor =
+    new ModuleDescriptor(/*id=*/ 'recipe_tasks', createModule);

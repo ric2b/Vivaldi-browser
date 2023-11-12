@@ -39,17 +39,19 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/preloading_data.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace {
 
-const float kConfidenceCutoff[] = {
-  0.8f,
-  0.5f
-};
-
-static_assert(std::size(kConfidenceCutoff) ==
-                  predictors::AutocompleteActionPredictor::LAST_PREDICT_ACTION,
-              "kConfidenceCutoff count should match LAST_PREDICT_ACTION");
+// These are used as confidence cutoff threshold to determine the action should
+// be PRERENDER or PRECONNECT. Due to the current design, the prerender one
+// should be higher than the preconnect one, otherwise preconnect will never
+// run.
+const base::FeatureParam<double> kPrerenderDUIConfidenceCutoff{
+    &blink::features::kPrerender2, "prerender_dui_confidence_cutoff", 0.8};
+const base::FeatureParam<double> kPreconnectConfidenceCutoff{
+    &blink::features::kPrerender2, "preconnect_dui_confidence_cutoff", 0.5};
 
 const int kMinimumNumberOfHits = 3;
 const size_t kMaximumTransitionalMatchesSize = 1024 * 1024;  // 1 MB.
@@ -196,15 +198,16 @@ void AutocompleteActionPredictor::StartPrerendering(
     content::WebContents& web_contents,
     const gfx::Size& size) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Helpers to create content::PreloadingAttempt.
+  auto* preloading_data =
+      content::PreloadingData::GetOrCreateForWebContents(&web_contents);
+  content::PreloadingURLMatchCallback same_url_matcher =
+      content::PreloadingData::GetSameURLMatcher(url);
+
   if (prerender_utils::IsDirectUrlInputPrerenderEnabled()) {
-    auto* preloading_data =
-        content::PreloadingData::GetOrCreateForWebContents(&web_contents);
-
-    content::PreloadingURLMatchCallback same_url_matcher =
-        content::PreloadingData::GetSameURLMatcher(url);
-
     // Create new PreloadingAttempt and pass all the values corresponding to
-    // this prerendering attempt.
+    // this prerendering attempt for Prerender.
     content::PreloadingAttempt* preloading_attempt =
         preloading_data->AddPreloadingAttempt(
             ToPreloadingPredictor(
@@ -218,10 +221,36 @@ void AutocompleteActionPredictor::StartPrerendering(
                                                         *preloading_attempt);
   } else if (base::FeatureList::IsEnabled(
                  features::kOmniboxTriggerForNoStatePrefetch)) {
+    // Create new PreloadingAttempt and pass all the values corresponding to
+    // this preloading attempt for NoStatePrefetch.
+    content::PreloadingAttempt* preloading_attempt =
+        preloading_data->AddPreloadingAttempt(
+            ToPreloadingPredictor(
+                ChromePreloadingPredictor::kOmniboxDirectURLInput),
+            content::PreloadingType::kNoStatePrefetch,
+            std::move(same_url_matcher));
+
     content::SessionStorageNamespace* session_storage_namespace =
         web_contents.GetController().GetDefaultSessionStorageNamespace();
     if (no_state_prefetch_handle_) {
       if (no_state_prefetch_handle_->prerender_url() == url) {
+        // In case NSP is already present for the URL, NoStatPrefetch is
+        // eligible but mark triggering outcome as a duplicate.
+        preloading_attempt->SetEligibility(
+            content::PreloadingEligibility::kEligible);
+
+        // Check and set the PreloadingHoldbackStatus before setting the
+        // TriggeringOutcome.
+        if (base::FeatureList::IsEnabled(features::kNoStatePrefetchHoldback)) {
+          preloading_attempt->SetHoldbackStatus(
+              content::PreloadingHoldbackStatus::kHoldback);
+          return;
+        }
+        preloading_attempt->SetHoldbackStatus(
+            content::PreloadingHoldbackStatus::kAllowed);
+        preloading_attempt->SetTriggeringOutcome(
+            content::PreloadingTriggeringOutcome::kDuplicate);
+
         // We've already started a prefetch for the target URL. Nothing to do.
         return;
       }
@@ -239,7 +268,7 @@ void AutocompleteActionPredictor::StartPrerendering(
     if (no_state_prefetch_manager) {
       no_state_prefetch_handle_ =
           no_state_prefetch_manager->StartPrefetchingFromOmnibox(
-              url, session_storage_namespace, size);
+              url, session_storage_namespace, size, preloading_attempt);
     }
   }
 }
@@ -263,11 +292,10 @@ AutocompleteActionPredictor::RecommendAction(
 
   // Map the confidence to an action.
   Action action = ACTION_NONE;
-  for (int i = 0; i < LAST_PREDICT_ACTION; ++i) {
-    if (confidence >= kConfidenceCutoff[i]) {
-      action = static_cast<Action>(i);
-      break;
-    }
+  if (confidence >= kPrerenderDUIConfidenceCutoff.Get()) {
+    action = ACTION_PRERENDER;
+  } else if (confidence >= kPreconnectConfidenceCutoff.Get()) {
+    action = ACTION_PRECONNECT;
   }
 
   // Downgrade prefetch to preconnect if this is a search match.
@@ -324,7 +352,7 @@ void AutocompleteActionPredictor::OnOmniboxOpenedUrl(const OmniboxLog& log) {
   if (!log.is_popup_open || log.is_paste_and_go)
     return;
 
-  const AutocompleteMatch& match = log.result.match_at(log.selected_index);
+  const AutocompleteMatch& match = log.result->match_at(log.selected_index);
   const GURL& opened_url = match.destination_url;
 
   // Abandon the current prefetch. If it is to be used, it will be used very

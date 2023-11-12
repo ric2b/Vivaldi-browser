@@ -99,4 +99,16 @@ std::string getSystemHighlightColor() {
   return hightlightColorString;
 }
 
+bool getMenubarVisibleInFullscreen() {
+  bool value = [[[NSUserDefaults standardUserDefaults]
+      objectForKey:@"AppleMenuBarVisibleInFullscreen"] boolValue];
+  return value;
+}
+
+bool getHideMenubar() {
+  bool value = [[[NSUserDefaults standardUserDefaults]
+      objectForKey:@"_HIHideMenuBar"] boolValue];
+  return value;
+}
+
 }  // namespace vivaldi

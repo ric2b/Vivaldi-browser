@@ -37,6 +37,9 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/dips/dips_service.h"
+#include "chrome/browser/dips/dips_service_factory.h"
+#include "chrome/browser/dips/dips_utils.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -127,6 +130,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/origin_trials_controller_delegate.h"
 #include "content/public/browser/prefetch_service_delegate.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
@@ -157,7 +161,7 @@
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/web_applications/commands/clear_browsing_data_command.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -210,18 +214,6 @@ base::OnceClosure UIThreadTrampoline(base::OnceClosure callback) {
                             std::move(callback));
 }
 #endif  // BUILDFLAG(ENABLE_NACL)
-
-template <typename T>
-void IgnoreArgumentHelper(base::OnceClosure callback, T unused_argument) {
-  std::move(callback).Run();
-}
-
-// Another convenience method to turn a callback without arguments into one that
-// accepts (and ignores) a single argument.
-template <typename T>
-base::OnceCallback<void(T)> IgnoreArgument(base::OnceClosure callback) {
-  return base::BindOnce(&IgnoreArgumentHelper<T>, std::move(callback));
-}
 
 // Returned by ChromeBrowsingDataRemoverDelegate::GetOriginTypeMatcher().
 bool DoesOriginMatchEmbedderMask(uint64_t origin_type_mask,
@@ -686,14 +678,18 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       should_clear_password_account_storage_settings_ = true;
     }
 
-    // Persistent Origin Trial preferences are only saved until the next page
+    // Persistent Origin Trial tokens are only saved until the next page
     // load from the same origin. For that reason, they are not saved with
     // last-modified information, so deletion will clear all stored information.
     // Sites should omit setting the Origin-Trial header to clear their
     // individual information, so rather than filtering origins, we only perform
     // the removal if we are removing information for all origins.
-    if (filter_builder->MatchesAllOriginsAndDomains())
-      browsing_data::RemovePersistentOriginTrials(prefs);
+    if (filter_builder->MatchesAllOriginsAndDomains()) {
+      content::OriginTrialsControllerDelegate* delegate =
+          profile_->GetOriginTrialsControllerDelegate();
+      if (delegate)
+        delegate->ClearPersistedTokens();
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -805,14 +801,44 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
         ContentSettingsType::NOTIFICATION_PERMISSION_REVIEW, delete_begin_,
         delete_end_, website_settings_filter);
+
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS, delete_begin_,
+        delete_end_, website_settings_filter);
 #endif
 
     host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
         ContentSettingsType::NOTIFICATION_INTERACTIONS, delete_begin_,
         delete_end_, website_settings_filter);
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::PRIVATE_NETWORK_GUARD, delete_begin_, delete_end_,
+        website_settings_filter);
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::PRIVATE_NETWORK_CHOOSER_DATA, delete_begin_,
+        delete_end_, website_settings_filter);
 
     PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
         ->RemoveEmbargoAndResetCounts(filter);
+  }
+
+  // Different types of DIPS events are cleared for DATA_TYPE_HISTORY and
+  // DATA_TYPE_COOKIES.
+  DIPSEventRemovalType dips_mask = DIPSEventRemovalType::kNone;
+  if ((remove_mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES) &&
+      !filter_builder->IsCrossSiteClearSiteDataForCookies()) {
+    dips_mask |= DIPSEventRemovalType::kStorage;
+  }
+  if (remove_mask & constants::DATA_TYPE_HISTORY) {
+    dips_mask |= DIPSEventRemovalType::kHistory;
+  }
+
+  if (dips_mask != DIPSEventRemovalType::kNone) {
+    auto* dips_service = DIPSServiceFactory::GetForBrowserContext(profile_);
+    if (dips_service) {
+      dips_service->RemoveEvents(delete_begin_, delete_end_,
+                                 filter_builder->BuildNetworkServiceFilter(),
+                                 dips_mask);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -1020,7 +1046,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       if (offline_page_model)
         offline_page_model->DeleteCachedPagesByURLPredicate(
             filter,
-            IgnoreArgument<offline_pages::OfflinePageModel::DeletePageResult>(
+            base::IgnoreArgs<offline_pages::OfflinePageModel::DeletePageResult>(
                 CreateTaskCompletionClosure(TracingDataType::kOfflinePages)));
     }
 #endif
@@ -1235,8 +1261,8 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       web_app::AreWebAppsEnabled(profile_)) {
     auto* web_app_provider =
         web_app::WebAppProvider::GetForLocalAppsUnchecked(profile_);
-    web_app::ClearWebAppBrowsingData(
-        delete_begin, delete_end, web_app_provider,
+    web_app_provider->scheduler().ClearWebAppBrowsingData(
+        delete_begin, delete_end,
         CreateTaskCompletionClosure(TracingDataType::kWebAppHistory));
   }
 #endif  // !BUILDFLAG(IS_ANDROID)

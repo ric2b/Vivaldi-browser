@@ -13,8 +13,8 @@
 #include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/ash/shelf/shelf_controller_helper.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -318,8 +318,7 @@ TEST_F(ChromeShelfPrefsTest, LacrosPrimaryPinnedApp) {
   // Enable lacros-only.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kLacrosPrimary, chromeos::features::kLacrosSupport},
-      {});
+      {ash::features::kLacrosPrimary, ash::features::kLacrosSupport}, {});
   AddRegularUser("test@test.com");
 
   ASSERT_TRUE(shelf_prefs_->ShouldPerformConsistencyMigrations());
@@ -345,8 +344,8 @@ TEST_F(ChromeShelfPrefsTest, LacrosOnlyPinnedApp) {
   // Enable lacros-only.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-       chromeos::features::kLacrosSupport},
+      {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+       ash::features::kLacrosSupport},
       {});
   AddRegularUser("test@test.com");
 
@@ -385,8 +384,8 @@ TEST_F(ChromeShelfPrefsTest, ShelfPositionAfterLacrosMigration) {
   // Enable lacros-only.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-       chromeos::features::kLacrosSupport},
+      {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+       ash::features::kLacrosSupport},
       {});
   AddRegularUser("test@test.com");
 
@@ -420,8 +419,8 @@ TEST_F(ChromeShelfPrefsTest, EnableSideBySideLacrosDisable) {
   // Disable lacros.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {}, {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-           chromeos::features::kLacrosSupport});
+      {}, {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+           ash::features::kLacrosSupport});
   AddRegularUser("test@test.com");
 
   // Perform migration

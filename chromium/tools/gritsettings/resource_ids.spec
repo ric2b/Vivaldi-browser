@@ -104,6 +104,10 @@
     "META": {"sizes": {"includes": [20],}},
     "includes": [1260],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/feed_internals/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [1270],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/app_service_internals/resources.grd": {
     "META": {"sizes": {"includes": [5],}},
     "includes": [1280],
@@ -125,7 +129,7 @@
     "includes": [1340],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/cloud_upload/resources.grd": {
-    "META": {"sizes": {"includes": [5]}},
+    "META": {"sizes": {"includes": [30]}},
     "includes": [1345],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/desk_api/resources.grd": {
@@ -337,15 +341,19 @@
     "META": {"sizes": {"includes": [50]}},
     "includes": [2150],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/omnibox_popup/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2160],
+  },
   # END chrome/browser section.
 
   # START chrome/ WebUI resources section
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/browsing_topics/resources.grd": {
     "META": {"sizes": {"includes": [10]}},
-    "includes": [2160],
+    "includes": [2170],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/bluetooth_internals/resources.grd": {
-    "META": {"sizes": {"includes": [30],}},
+    "META": {"sizes": {"includes": [50],}},
     "includes": [2180],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/audio/resources.grd": {
@@ -474,6 +482,14 @@
     "META": {"sizes": {"includes": [10]}},
     "includes": [2665],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/lens/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2675],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/lens/untrusted_resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2685],
+  },
   # END chrome/ WebUI resources section
 
   # START chrome/ miscellaneous section.
@@ -495,7 +511,7 @@
     "structures": [2800],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/test/data/webui/resources.grd": {
-    "META": {"sizes": {"includes": [900],}},
+    "META": {"sizes": {"includes": [1100],}},
     "includes": [2810],
   },
   "chrome/test/data/webui_test_resources.grd": {
@@ -530,6 +546,10 @@
     "META": {"sizes": {"includes": [20],}},
     "includes": [2950],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/common/resources/office_fallback/resources.grd": {
+    "META": {"sizes": {"includes": [5]}},
+    "includes": [2955],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [2960],
@@ -545,6 +565,10 @@
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/file_manager/untrusted_resources/file_manager_untrusted_resources.grd": {
     "META": {"sizes": {"includes": [10]}},
     "includes": [3020],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/files_internals/ash_files_internals_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [3025],
   },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/guest_os_installer/resources/resources.grd": {
     "META": {"sizes": {"includes": [10]}},
@@ -723,7 +747,14 @@
   "components/omnibox/resources/omnibox_pedal_synonyms.grd": {
     "messages": [3600],
   },
+  # components/policy/resources/policy_templates.grd and
+  # components/policy/resources/policy_templates.build.grd must share the same
+  # id because they are based on the same structure, however they are used in
+  # different pipelines.
   "components/policy/resources/policy_templates.grd": {
+    "structures": [3640],
+  },
+  "components/policy/resources/policy_templates.build.grd": {
     "structures": [3640],
   },
   "components/resources/components_resources.grd": {

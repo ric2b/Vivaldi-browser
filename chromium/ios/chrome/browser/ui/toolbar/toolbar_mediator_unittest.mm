@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/toolbar/test/toolbar_test_navigation_manager.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
@@ -55,7 +56,7 @@
 
 namespace {
 
-MenuScenario kTestMenuScenario = MenuScenario::kHistoryEntry;
+MenuScenarioHistogram kTestMenuScenario = MenuScenarioHistogram::kHistoryEntry;
 
 static const int kNumberOfWebStates = 3;
 static const char kTestUrl[] = "http://www.chromium.org";
@@ -69,6 +70,7 @@ class ToolbarMediatorTest : public PlatformTest {
 
     chrome_browser_state_ = test_cbs_builder.Build();
     test_browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
+    WebNavigationBrowserAgent::CreateForBrowser(test_browser_.get());
 
     std::unique_ptr<ToolbarTestNavigationManager> navigation_manager =
         std::make_unique<ToolbarTestNavigationManager>();
@@ -79,6 +81,8 @@ class ToolbarMediatorTest : public PlatformTest {
     test_web_state_->SetLoading(true);
     web_state_ = test_web_state_.get();
     mediator_ = [[TestToolbarMediator alloc] init];
+    mediator_.navigationBrowserAgent =
+        WebNavigationBrowserAgent::FromBrowser(test_browser_.get());
     mediator_.actionFactory =
         [[BrowserActionFactory alloc] initWithBrowser:test_browser_.get()
                                              scenario:kTestMenuScenario];
@@ -450,22 +454,21 @@ TEST_F(ToolbarMediatorTest, MenuElements) {
   UIMenu* tab_grid_menu =
       [mediator_ menuForButtonOfType:AdaptiveToolbarButtonTypeTabGrid];
 
-  ASSERT_EQ(2U, tab_grid_menu.children.count);
+  ASSERT_EQ(3U, tab_grid_menu.children.count);
 
-  ASSERT_TRUE([tab_grid_menu.children[0] isKindOfClass:[UIMenu class]]);
-  UIMenu* open_tab_menu = (UIMenu*)tab_grid_menu.children[0];
-  ASSERT_EQ(2U, open_tab_menu.children.count);
-  for (UIMenuElement* element in open_tab_menu.children) {
-    ASSERT_TRUE([element isKindOfClass:[UIAction class]]);
-    UIAction* action = (UIAction*)element;
-    EXPECT_EQ(0U, action.attributes);
-  }
-
-  ASSERT_TRUE([tab_grid_menu.children[1] isKindOfClass:[UIAction class]]);
-  UIAction* close_tab = (UIAction*)tab_grid_menu.children[1];
+  ASSERT_TRUE([tab_grid_menu.children[0] isKindOfClass:[UIAction class]]);
+  UIAction* close_tab = (UIAction*)tab_grid_menu.children[0];
   EXPECT_NSEQ(l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_CLOSE_TAB),
               close_tab.title);
   EXPECT_EQ(UIMenuElementAttributesDestructive, close_tab.attributes);
+
+  ASSERT_TRUE([tab_grid_menu.children[1] isKindOfClass:[UIAction class]]);
+  UIAction* action = (UIAction*)tab_grid_menu.children[1];
+  EXPECT_EQ(0U, action.attributes);
+
+  ASSERT_TRUE([tab_grid_menu.children[2] isKindOfClass:[UIAction class]]);
+  action = (UIAction*)tab_grid_menu.children[2];
+  EXPECT_EQ(0U, action.attributes);
 }
 
 // Tests the back/forward items for the menu.

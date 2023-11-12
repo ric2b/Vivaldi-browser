@@ -57,6 +57,9 @@ class AppMenuHandlerImpl
 
     private Callback<Integer> mTestOptionsItemSelectedListener;
 
+    // Vivaldi
+    private Supplier<Boolean> mIsInOverviewModeSupplier;
+
     /**
      * The resource id of the menu item to highlight when the menu next opens. A value of
      * {@code null} means no item will be highlighted.  This value will be cleared after the menu is
@@ -192,6 +195,8 @@ class AppMenuHandlerImpl
             a.recycle();
             mAppMenu = new AppMenu(itemRowHeight, this, mContext.getResources());
             mAppMenuDragHelper = new AppMenuDragHelper(mContext, mAppMenu, itemRowHeight);
+            // Vivaldi - Pass overview mode handler to AppMenu
+            mAppMenu.setIsInOverviewModeSupplier(mIsInOverviewModeSupplier);
         }
         setupModelForHighlightAndClick(modelList, mHighlightMenuId, mAppMenu);
         ModelListAdapter adapter = new ModelListAdapter(modelList);
@@ -289,14 +294,13 @@ class AppMenuHandlerImpl
     }
 
     @VisibleForTesting
-    void onOptionsItemSelected(int itemId, boolean highlighted) {
+    void onOptionsItemSelected(int itemId) {
         if (mTestOptionsItemSelectedListener != null) {
             mTestOptionsItemSelectedListener.onResult(itemId);
             return;
         }
 
         mAppMenuDelegate.onOptionsItemSelected(itemId, mDelegate.getBundleForMenuItem(itemId));
-        if (highlighted) mDelegate.recordHighlightedMenuItemClicked(itemId);
     }
 
     /**
@@ -459,5 +463,11 @@ class AppMenuHandlerImpl
     /** @param reporter A means of reporting an exception without crashing. */
     static void setExceptionReporter(Callback<Throwable> reporter) {
         AppMenu.setExceptionReporter(reporter);
+    }
+
+    /** Vivaldi */
+    @Override
+    public void setIsInOverviewModeSupplier(Supplier<Boolean> supplier) {
+        mIsInOverviewModeSupplier = supplier;
     }
 }

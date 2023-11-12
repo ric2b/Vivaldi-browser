@@ -35,8 +35,8 @@ source_set("browser") {
     "presentation/start_presentation_context.h",
     "presentation/web_contents_presentation_manager.cc",
     "presentation/web_contents_presentation_manager.h",
-    "route_message_observer.cc",
-    "route_message_observer.h",
+    "presentation_connection_message_observer.cc",
+    "presentation_connection_message_observer.h",
     "route_message_util.cc",
     "route_message_util.h",
   ]
@@ -82,6 +82,8 @@ source_set("browser") {
       "issue_manager.h",
       "issues_observer.cc",
       "issues_observer.h",
+      "log_util.cc",
+      "log_util.h",
       "logger_impl.cc",
       "logger_impl.h",
       "presentation/presentation_navigation_policy.cc",
@@ -114,6 +116,7 @@ source_set("unit_tests") {
   sources = [
     "media_router_base_unittest.cc",
     "media_router_dialog_controller_unittest.cc",
+    "media_router_factory_unittest.cc",
     "media_router_metrics_unittest.cc",
     "media_sinks_observer_unittest.cc",
     "presentation/browser_presentation_connection_proxy_unittest.cc",

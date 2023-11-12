@@ -18,6 +18,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+#include "chrome/browser/policy/management_utils.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/managed_ui.h"
@@ -65,6 +67,8 @@
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
+#include "chrome/browser/net/stub_resolver_config_reader.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/ui/webui/management/management_ui_handler_chromeos.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
@@ -213,7 +217,7 @@ bool IsProfileManaged(Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 bool IsDeviceManaged() {
-  return webui::IsEnterpriseManaged();
+  return policy::IsDeviceEnterpriseManaged();
 }
 
 enum class DeviceReportingType {
@@ -313,7 +317,19 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
     return;
 
   // Elements appear on the page in the order they are added.
-  if (collector->IsReportingActivityTimes() ||
+  bool report_device_peripherals = false;
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportDevicePeripherals,
+                                       &report_device_peripherals);
+  bool report_audio_status = false;
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportDeviceAudioStatus,
+                                       &report_audio_status);
+  // TODO(b/262295601): Add/refine management strings corresponding to XDR
+  // reporting policy.
+  bool device_report_xdr_events = false;
+  ash::CrosSettings::Get()->GetBoolean(ash::kDeviceReportXDREvents,
+                                       &device_report_xdr_events);
+  if (collector->IsReportingActivityTimes() || report_device_peripherals ||
+      report_audio_status || device_report_xdr_events ||
       profile->GetPrefs()->GetBoolean(::prefs::kInsightsExtensionEnabled)) {
     AddDeviceReportingElement(report_sources, kManagementReportActivityTimes,
                               DeviceReportingType::kDeviceActivity);
@@ -336,7 +352,7 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
     AddDeviceReportingElement(report_sources, kManagementReportCrashReports,
                               DeviceReportingType::kCrashReport);
   }
-  if (collector->IsReportingAppInfoAndActivity()) {
+  if (collector->IsReportingAppInfoAndActivity() || device_report_xdr_events) {
     AddDeviceReportingElement(report_sources,
                               kManagementReportAppInfoAndActivity,
                               DeviceReportingType::kAppInfoAndActivity);
@@ -346,9 +362,6 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
                               DeviceReportingType::kLogs);
   }
 
-  bool report_audio_status = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDeviceAudioStatus,
-                                            &report_audio_status);
   if (report_audio_status) {
     AddDeviceReportingElement(report_sources,
                               kManagementReportDeviceAudioStatus,
@@ -356,17 +369,14 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
   }
 
   bool report_graphics_status = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDeviceGraphicsStatus,
-                                            &report_graphics_status);
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportDeviceGraphicsStatus,
+                                       &report_graphics_status);
   if (report_graphics_status) {
     AddDeviceReportingElement(report_sources,
                               kManagementReportDeviceGraphicsStatus,
                               DeviceReportingType::kDevice);
   }
 
-  bool report_device_peripherals = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDevicePeripherals,
-                                            &report_device_peripherals);
   if (report_device_peripherals) {
     AddDeviceReportingElement(report_sources,
                               kManagementReportDevicePeripherals,
@@ -374,8 +384,8 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
   }
 
   bool report_print_jobs = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDevicePrintJobs,
-                                            &report_print_jobs);
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportDevicePrintJobs,
+                                       &report_print_jobs);
   if (report_print_jobs) {
     AddDeviceReportingElement(report_sources, kManagementReportPrintJobs,
                               DeviceReportingType::kPrintJobs);
@@ -420,16 +430,16 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
   }
 
   bool report_login_logout = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDeviceLoginLogout,
-                                            &report_login_logout);
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportDeviceLoginLogout,
+                                       &report_login_logout);
   if (report_login_logout) {
     AddDeviceReportingElement(report_sources, kManagementReportLoginLogout,
                               DeviceReportingType::kLoginLogout);
   }
 
   bool report_crd_sessions = false;
-  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportCRDSessions,
-                                            &report_crd_sessions);
+  ash::CrosSettings::Get()->GetBoolean(ash::kReportCRDSessions,
+                                       &report_crd_sessions);
   if (report_crd_sessions) {
     AddDeviceReportingElement(report_sources, kManagementReportCRDSessions,
                               DeviceReportingType::kCRDSessions);
@@ -741,9 +751,22 @@ void ManagementUIHandler::AddUpdateRequiredEolInfo(
   response->Set("eolAdminMessage", eol_admin_message);
 }
 
-void ManagementUIHandler::AddProxyServerPrivacyDisclosure(
+void ManagementUIHandler::AddMonitoredNetworkPrivacyDisclosure(
     base::Value::Dict* response) const {
-  bool showProxyDisclosure = false;
+  bool showMonitoredNetworkDisclosure = false;
+
+  // Check for secure DNS templates with identifiers.
+  showMonitoredNetworkDisclosure =
+      SystemNetworkContextManager::GetStubResolverConfigReader()
+          ->GetDohWithIdentifiersDisplayServers()
+          .has_value();
+  if (showMonitoredNetworkDisclosure) {
+    response->Set("showMonitoredNetworkPrivacyDisclosure",
+                  showMonitoredNetworkDisclosure);
+    return;
+  }
+
+  // Check for proxy config.
   ash::NetworkHandler* network_handler = ash::NetworkHandler::Get();
   base::Value::Dict proxy_settings;
   // |ui_proxy_config_service| may be missing in tests. If the device is offline
@@ -764,10 +787,12 @@ void ManagementUIHandler::AddProxyServerPrivacyDisclosure(
         proxy_settings.FindStringByDottedPath(base::JoinString(
             {::onc::network_config::kType, ::onc::kAugmentationActiveSetting},
             "."));
-    showProxyDisclosure = proxy_specification_mode &&
-                          *proxy_specification_mode != ::onc::proxy::kDirect;
+    showMonitoredNetworkDisclosure =
+        proxy_specification_mode &&
+        *proxy_specification_mode != ::onc::proxy::kDirect;
   }
-  response->Set("showProxyServerPrivacyDisclosure", showProxyDisclosure);
+  response->Set("showMonitoredNetworkPrivacyDisclosure",
+                showMonitoredNetworkDisclosure);
 }
 
 // static
@@ -814,7 +839,7 @@ base::Value::Dict ManagementUIHandler::GetContextualManagedData(
   if (enterprise_manager.empty())
     enterprise_manager = GetAccountManager(profile);
   AddUpdateRequiredEolInfo(&response);
-  AddProxyServerPrivacyDisclosure(&response);
+  AddMonitoredNetworkPrivacyDisclosure(&response);
 #else
   std::string enterprise_manager = GetAccountManager(profile);
 
@@ -822,7 +847,9 @@ base::Value::Dict ManagementUIHandler::GetContextualManagedData(
                l10n_util::GetStringFUTF16(
                    managed_() ? IDS_MANAGEMENT_BROWSER_NOTICE
                               : IDS_MANAGEMENT_NOT_MANAGED_NOTICE,
-                   base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl)));
+                   base::UTF8ToUTF16(chrome::kManagedUiLearnMoreUrl),
+                   base::EscapeForHTML(l10n_util::GetStringUTF16(
+                       IDS_MANAGEMENT_LEARN_MORE_ACCCESSIBILITY_TEXT))));
 #endif
 
   if (enterprise_manager.empty()) {

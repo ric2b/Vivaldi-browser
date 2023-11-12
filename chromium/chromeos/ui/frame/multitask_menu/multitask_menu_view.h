@@ -6,6 +6,7 @@
 #define CHROMEOS_UI_FRAME_MULTITASK_MENU_MULTITASK_MENU_VIEW_H_
 
 #include "base/memory/raw_ptr.h"
+#include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
@@ -43,25 +44,31 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuView
   ~MultitaskMenuView() override;
 
   // For testing.
-  SplitButtonView* half_button_for_testing() { return half_button_.get(); }
-  SplitButtonView* partial_button_for_testing() {
-    return partial_button_.get();
+  SplitButtonView* half_button_for_testing() {
+    return half_button_for_testing_.get();
   }
-  MultitaskButton* full_button_for_testing() { return full_button_.get(); }
-  MultitaskButton* float_button_for_testing() { return float_button_.get(); }
+  SplitButtonView* partial_button_for_testing() {
+    return partial_button_for_testing_.get();
+  }
+  MultitaskButton* full_button_for_testing() {
+    return full_button_for_testing_.get();
+  }
+  MultitaskButton* float_button_for_testing() {
+    return float_button_for_testing_.get();
+  }
 
  private:
   // Callbacks for the buttons in the multitask menu view.
-  void SplitButtonPressed(bool left_top);
-  void PartialButtonPressed(bool left_top);
+  void SplitButtonPressed(SnapDirection direction);
+  void PartialButtonPressed(SnapDirection direction);
   void FullScreenButtonPressed();
   void FloatButtonPressed();
 
   // Saved for testing purpose.
-  raw_ptr<SplitButtonView> half_button_ = nullptr;
-  raw_ptr<SplitButtonView> partial_button_ = nullptr;
-  raw_ptr<MultitaskButton> full_button_ = nullptr;
-  raw_ptr<MultitaskButton> float_button_ = nullptr;
+  raw_ptr<SplitButtonView> half_button_for_testing_ = nullptr;
+  raw_ptr<SplitButtonView> partial_button_for_testing_ = nullptr;
+  raw_ptr<MultitaskButton> full_button_for_testing_ = nullptr;
+  raw_ptr<MultitaskButton> float_button_for_testing_ = nullptr;
 
   // The window which the buttons act on. It is guaranteed to outlive `this`.
   aura::Window* const window_;

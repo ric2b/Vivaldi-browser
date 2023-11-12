@@ -25,7 +25,6 @@ import("//third_party/blink/renderer/core/context_features/build.gni")
 import("//third_party/blink/renderer/core/core.gni")
 import("//third_party/blink/renderer/core/css/build.gni")
 import("//third_party/blink/renderer/core/display_lock/build.gni")
-import("//third_party/blink/renderer/core/document_transition/build.gni")
 import("//third_party/blink/renderer/core/dom/build.gni")
 import("//third_party/blink/renderer/core/editing/build.gni")
 import("//third_party/blink/renderer/core/events/build.gni")
@@ -60,6 +59,7 @@ import(
     "//third_party/blink/renderer/core/scheduler_integration_tests/build.gni")
 import("//third_party/blink/renderer/core/script/build.gni")
 import("//third_party/blink/renderer/core/scroll/build.gni")
+import("//third_party/blink/renderer/core/shadow_realm/build.gni")
 import("//third_party/blink/renderer/core/speculation_rules/build.gni")
 import("//third_party/blink/renderer/core/speech/build.gni")
 import("//third_party/blink/renderer/core/streams/build.gni")
@@ -70,6 +70,7 @@ import("//third_party/blink/renderer/core/timing/build.gni")
 import("//third_party/blink/renderer/core/trustedtypes/build.gni")
 import("//third_party/blink/renderer/core/typed_arrays/build.gni")
 import("//third_party/blink/renderer/core/url/build.gni")
+import("//third_party/blink/renderer/core/view_transition/build.gni")
 import("//third_party/blink/renderer/core/workers/build.gni")
 import("//third_party/blink/renderer/core/xml/build.gni")
 import("//third_party/blink/renderer/core/xmlhttprequest/build.gni")
@@ -215,9 +216,8 @@ component("core") {
       rebase_path(blink_core_sources_context_features, "", "context_features")
   sources += rebase_path(blink_core_sources_css, "", "css")
   sources += rebase_path(blink_core_sources_display_lock, "", "display_lock")
-  sources += rebase_path(blink_core_sources_document_transition,
-                         "",
-                         "document_transition")
+  sources +=
+      rebase_path(blink_core_sources_view_transition, "", "view_transition")
   sources += rebase_path(blink_core_sources_dom, "", "dom")
   sources += rebase_path(blink_core_sources_editing, "", "editing")
   sources += rebase_path(blink_core_sources_events, "", "events")
@@ -262,6 +262,7 @@ component("core") {
       rebase_path(blink_core_sources_speculation_rules, "", "speculation_rules")
   sources += rebase_path(blink_core_sources_script, "", "script")
   sources += rebase_path(blink_core_sources_scroll, "", "scroll")
+  sources += rebase_path(blink_core_sources_shadow_realm, "", "shadow_realm")
   sources += rebase_path(blink_core_sources_streams, "", "streams")
   sources += rebase_path(blink_core_sources_style, "", "style")
   sources += rebase_path(blink_core_sources_svg, "", "svg")
@@ -278,23 +279,20 @@ component("core") {
 
   configs -= core_config_remove
   configs += core_config_add
-  configs += [
-    "//tools/v8_context_snapshot:use_v8_context_snapshot",
-    "//v8:external_startup_data",
-  ]
+  configs += [ "//v8:external_startup_data" ]
 
   public_deps = [
     ":core_generated",
     ":core_hot",
     "//cc",
     "//skia",
-    "//third_party/blink/public/mojom:mobile_metrics_blink",
     "//third_party/blink/public/mojom:mojom_broadcastchannel_bindings_blink",
     "//third_party/blink/public/mojom:mojom_core_blink",
     "//third_party/blink/renderer/bindings/core/v8",
     "//third_party/blink/renderer/core/animation",
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe",
+    "//third_party/blink/renderer/core/url_pattern",
     "//third_party/blink/renderer/core/xml:xpath_generated",
     "//third_party/blink/renderer/platform",
     "//third_party/blink/renderer/platform/wtf",
@@ -318,6 +316,7 @@ component("core") {
     "//components/performance_manager/public/mojom:mojom_blink",
     "//components/power_scheduler",
     "//components/shared_highlighting/core/common",
+    "//components/web_package",
     "//gin",
     "//gpu/config",
     "//mojo/public/cpp/bindings:bindings",
@@ -336,6 +335,7 @@ component("core") {
     "//third_party/blink/public/common",
     "//third_party/blink/public/mojom:web_feature_mojo_bindings",
     "//third_party/blink/public/strings",
+    "//tools/v8_context_snapshot:buildflags",
     "//ui/base/cursor/mojom:cursor_type_blink",
     "//ui/base/dragdrop/mojom:mojom_blink",
     "//ui/gfx/geometry",
@@ -346,7 +346,7 @@ component("core") {
     deps += [ "//ui/base/mojom" ]
   }
 
-  if (enable_basic_printing) {
+  if (enable_printing) {
     deps += [ "//printing:metafile" ]
   }
 
@@ -356,6 +356,7 @@ component("core") {
     "//third_party/blink/renderer/core/animation",
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe",
+    "//third_party/blink/renderer/core/url_pattern",
     "//third_party/blink/renderer/core/xml:xpath_generated",
   ]
 
@@ -529,6 +530,7 @@ generate_event_interfaces("core_event_interfaces") {
     "events/animation_event.idl",
     "events/animation_playback_event.idl",
     "events/before_create_policy_event.idl",
+    "events/before_toggle_event.idl",
     "events/before_unload_event.idl",
     "events/clipboard_event.idl",
     "events/composition_event.idl",
@@ -777,11 +779,12 @@ css_properties("make_core_generated_cssom_types") {
   ]
 }
 
-css_properties("make_core_generated_known_exposed_properties") {
-  script =
-      "../build/scripts/core/css/properties/make_known_exposed_properties.py"
-  other_inputs = [ "../build/scripts/core/css/properties/templates/known_exposed_properties.cc.tmpl" ]
-  outputs = [ "$blink_core_output_dir/known_exposed_properties.cc" ]
+css_properties("make_core_generated_property_bitsets") {
+  script = "../build/scripts/core/css/properties/make_property_bitsets.py"
+  other_inputs = [
+    "../build/scripts/core/css/properties/templates/property_bitsets.cc.tmpl",
+  ]
+  outputs = [ "$blink_core_output_dir/property_bitsets.cc" ]
 }
 
 code_generator("make_core_generated_css_value_keywords") {
@@ -1169,7 +1172,6 @@ targets_generating_sources = [
   ":make_core_generated_html_tokenizer_names",
   ":make_core_generated_input_type_names",
   ":make_core_generated_keywords",
-  ":make_core_generated_known_exposed_properties",
   ":make_core_generated_mathml_element_type_helpers",
   ":make_core_generated_mathml_names",
   ":make_core_generated_media_feature_names",
@@ -1178,6 +1180,7 @@ targets_generating_sources = [
   ":make_core_generated_performance_entry_names",
   ":make_core_generated_permissions_policy_helper",
   ":make_core_generated_pointer_type_names",
+  ":make_core_generated_property_bitsets",
   ":make_core_generated_script_type_names",
   ":make_core_generated_securitypolicyviolation_disposition_names",
   ":make_core_generated_shadow_element_names",
@@ -1321,9 +1324,8 @@ source_set("unit_tests") {
       rebase_path(blink_core_tests_content_capture, "", "content_capture")
   sources += rebase_path(blink_core_tests_css, "", "css")
   sources += rebase_path(blink_core_tests_display_lock, "", "display_lock")
-  sources += rebase_path(blink_core_tests_document_transition,
-                         "",
-                         "document_transition")
+  sources +=
+      rebase_path(blink_core_tests_view_transition, "", "view_transition")
   sources += rebase_path(blink_core_tests_dom, "", "dom")
   sources += rebase_path(blink_core_tests_editing, "", "editing")
   sources += rebase_path(blink_core_tests_events, "", "events")
@@ -1346,6 +1348,7 @@ source_set("unit_tests") {
                          "intersection_observer")
   sources += rebase_path(blink_core_tests_layout, "", "layout")
   sources += rebase_path(blink_core_tests_loader, "", "loader")
+  sources += rebase_path(blink_core_tests_mathml, "", "mathml")
   sources += rebase_path(blink_core_tests_messaging, "", "messaging")
   sources += rebase_path(blink_core_tests_mobile_metrics, "", "mobile_metrics")
   sources += rebase_path(blink_core_tests_navigation_api, "", "navigation_api")
@@ -1406,7 +1409,6 @@ source_set("unit_tests") {
     "//third_party/blink/public:buildflags",
     "//third_party/blink/public:test_headers",
     "//third_party/blink/public/common/privacy_budget:test_support",
-    "//third_party/blink/public/mojom:mobile_metrics",
     "//third_party/blink/renderer/controller:blink_bindings_test_sources",
     "//third_party/blink/renderer/core",
     "//third_party/blink/renderer/core:testing",
@@ -1677,29 +1679,4 @@ fuzzer_test("permissions_policy_fuzzer") {
   ]
   dict = "//third_party/blink/renderer/core/permissions_policy/permissions_policy.dict"
   seed_corpus = "//third_party/blink/renderer/core/permissions_policy/permissions_policy_corpus"
-}
-
-fuzzer_test("attribution_source_registration_fuzzer") {
-  sources = [ "frame/attribution_source_registration_fuzzer.cc" ]
-  deps = [
-    ":core",
-    "//testing/libfuzzer/proto:json_proto",
-    "//testing/libfuzzer/proto:json_proto_converter",
-    "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
-    "//third_party/libprotobuf-mutator",
-  ]
-  seed_corpus =
-      "//testing/libfuzzer/fuzzers/attribution_source_registration_corpus"
-}
-
-fuzzer_test("attribution_trigger_registration_fuzzer") {
-  sources = [ "frame/attribution_trigger_registration_fuzzer.cc" ]
-  deps = [
-    ":core",
-    "//testing/libfuzzer/proto:json_proto",
-    "//testing/libfuzzer/proto:json_proto_converter",
-    "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
-    "//third_party/libprotobuf-mutator",
-  ]
-  seed_corpus = "//third_party/blink/renderer/core/frame/attribution_src/attribution_trigger_registration_corpus"
 }

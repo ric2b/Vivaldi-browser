@@ -25,10 +25,14 @@ std::ostream& operator<<(std::ostream& os, WebAppManagement::Type type) {
       return os << "Kiosk";
     case WebAppManagement::Type::kPolicy:
       return os << "Policy";
+    case WebAppManagement::Type::kOem:
+      return os << "OEM";
     case WebAppManagement::Type::kSubApp:
       return os << "SubApp";
     case WebAppManagement::Type::kWebAppStore:
       return os << "WebAppStore";
+    case WebAppManagement::Type::kOneDriveIntegration:
+      return os << "OneDriveIntegration";
     case WebAppManagement::Type::kSync:
       return os << "Sync";
     case WebAppManagement::Type::kDefault:
@@ -83,6 +87,8 @@ std::string ConvertUninstallSourceToStringType(
       return "Parent App Uninstalled";
     case webapps::WebappUninstallSource::kExternalLockScreen:
       return "External Lock Screen";
+    case webapps::WebappUninstallSource::kTestCleanup:
+      return "Test cleanup";
   }
 }
 

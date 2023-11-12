@@ -20,14 +20,16 @@
 #import "components/policy/core/common/mock_configuration_policy_provider.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
+#import "components/translate/core/browser/translate_pref_names.h"
 #import "components/translate/core/browser/translate_prefs.h"
+#import "components/translate/core/language_detection/language_detection_model.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
-#import "ios/chrome/browser/overlays/public/web_content_area/java_script_dialog_overlay.h"
+#import "ios/chrome/browser/overlays/public/web_content_area/java_script_alert_dialog_overlay.h"
 #import "ios/chrome/browser/overlays/test/fake_overlay_presentation_context.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/policy/enterprise_policy_test_helper.h"
@@ -48,6 +50,8 @@
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
+#import "ios/web/public/test/fakes/fake_web_frame.h"
+#import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/web_state_observer_bridge.h"
@@ -59,7 +63,6 @@
 #endif
 
 using bookmarks::BookmarkModel;
-using java_script_dialog_overlays::JavaScriptDialogRequest;
 
 namespace {
 const int kNumberOfWebStates = 3;
@@ -67,7 +70,10 @@ const int kNumberOfWebStates = 3;
 
 class OverflowMenuMediatorTest : public PlatformTest {
  public:
-  OverflowMenuMediatorTest() {}
+  OverflowMenuMediatorTest() {
+    pref_service_.registry()->RegisterBooleanPref(
+        translate::prefs::kOfferTranslateEnabled, true);
+  }
 
   void SetUp() override {
     PlatformTest::SetUp();
@@ -89,7 +95,8 @@ class OverflowMenuMediatorTest : public PlatformTest {
     auto navigation_manager = std::make_unique<ToolbarTestNavigationManager>();
 
     navigation_item_ = web::NavigationItem::Create();
-    navigation_item_->SetURL(GURL("http://chromium.org"));
+    GURL url = GURL("http://chromium.org");
+    navigation_item_->SetURL(url);
     navigation_manager->SetVisibleItem(navigation_item_.get());
 
     std::unique_ptr<web::FakeWebState> test_web_state =
@@ -97,6 +104,14 @@ class OverflowMenuMediatorTest : public PlatformTest {
     test_web_state->SetNavigationManager(std::move(navigation_manager));
     test_web_state->SetLoading(true);
     web_state_ = test_web_state.get();
+
+    auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
+    auto main_frame = web::FakeWebFrame::CreateMainWebFrame(
+        /*security_origin=*/url);
+    frames_manager->AddWebFrame(std::move(main_frame));
+    web_state_->SetWebFramesManager(std::move(frames_manager));
+    web_state_->OnWebFrameDidBecomeAvailable(
+        web_state_->GetWebFramesManager()->GetMainWebFrame());
 
     browser_->GetWebStateList()->InsertWebState(
         0, std::move(test_web_state), WebStateList::INSERT_FORCE_INDEX,
@@ -165,6 +180,15 @@ class OverflowMenuMediatorTest : public PlatformTest {
     auto web_state = std::make_unique<web::FakeWebState>();
     GURL url("http://test/" + base::NumberToString(index));
     web_state->SetCurrentURL(url);
+
+    auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
+    auto main_frame = web::FakeWebFrame::CreateMainWebFrame(
+        /*security_origin=*/url);
+    frames_manager->AddWebFrame(std::move(main_frame));
+    web_state->SetWebFramesManager(std::move(frames_manager));
+    web_state->OnWebFrameDidBecomeAvailable(
+        web_state->GetWebFramesManager()->GetMainWebFrame());
+
     browser_->GetWebStateList()->InsertWebState(
         index, std::move(web_state), WebStateList::INSERT_FORCE_INDEX,
         WebStateOpener());
@@ -175,7 +199,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
     // for the currently active WebState.
     language::IOSLanguageDetectionTabHelper::CreateForWebState(
         browser_->GetWebStateList()->GetWebStateAt(0),
-        /*url_language_histogram=*/nullptr);
+        /*url_language_histogram=*/nullptr, &model_, &pref_service_);
 
     browser_->GetWebStateList()->ActivateWebStateAt(0);
   }
@@ -236,6 +260,8 @@ class OverflowMenuMediatorTest : public PlatformTest {
   web::FakeWebState* web_state_;
   std::unique_ptr<web::NavigationItem> navigation_item_;
   UIViewController* baseViewController_;
+  translate::LanguageDetectionModel model_;
+  TestingPrefServiceSimple pref_service_;
 };
 
 // Tests that the feature engagement tracker get notified when the mediator is
@@ -262,11 +288,8 @@ TEST_F(OverflowMenuMediatorTest, TestMenuItemsCount) {
   CreateMediator(/*is_incognito=*/NO);
   mediator_.localStatePrefs = localStatePrefs_.get();
 
-  NSUInteger number_of_action_items = 5;
+  NSUInteger number_of_action_items = 6;
 
-  if (IsNewOverflowMenuCBDActionEnabled()) {
-    number_of_action_items++;
-  }
   if (ios::provider::IsTextZoomEnabled()) {
     number_of_action_items++;
   }
@@ -359,10 +382,10 @@ TEST_F(OverflowMenuMediatorTest, TestReadLaterDisabled) {
   // longer shareable.
   OverlayRequestQueue* queue = OverlayRequestQueue::FromWebState(
       web_state_, OverlayModality::kWebContentArea);
-  queue->AddRequest(OverlayRequest::CreateWithConfig<JavaScriptDialogRequest>(
-      web::JAVASCRIPT_DIALOG_TYPE_ALERT, web_state_, kUrl,
-      /*is_main_frame=*/true, @"message",
-      /*default_text_field_value=*/nil));
+  queue->AddRequest(
+      OverlayRequest::CreateWithConfig<JavaScriptAlertDialogRequest>(
+          web_state_, kUrl,
+          /*is_main_frame=*/true, @"message"));
   EXPECT_TRUE(HasItem(kToolsMenuReadLater, /*enabled=*/NO));
 
   // Cancel the request and verify that the "Add to Reading List" button is

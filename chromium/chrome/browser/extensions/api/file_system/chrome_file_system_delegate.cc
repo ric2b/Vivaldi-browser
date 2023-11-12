@@ -136,7 +136,6 @@ bool ChromeFileSystemDelegate::ShowSelectFileDialog(
     return false;
   }
 
-
   // The file picker will hold a reference to the ExtensionFunction
   // instance, preventing its destruction (and subsequent sending of the
   // function response) until the user has selected a file or cancelled the

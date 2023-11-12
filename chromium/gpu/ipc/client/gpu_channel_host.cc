@@ -11,14 +11,12 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/client/client_shared_image_interface.h"
 #include "gpu/ipc/common/command_buffer_id.h"
 #include "gpu/ipc/common/gpu_watchdog_timeout.h"
 #include "ipc/ipc_channel_mojo.h"
-#include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "url/gurl.h"
 
@@ -32,8 +30,9 @@ GpuChannelHost::GpuChannelHost(
     const gpu::GpuFeatureInfo& gpu_feature_info,
     mojo::ScopedMessagePipeHandle handle,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
-    : io_thread_(io_task_runner ? io_task_runner
-                                : base::ThreadTaskRunnerHandle::Get()),
+    : io_thread_(io_task_runner
+                     ? io_task_runner
+                     : base::SingleThreadTaskRunner::GetCurrentDefault()),
       channel_id_(channel_id),
       gpu_info_(gpu_info),
       gpu_feature_info_(gpu_feature_info),
@@ -215,9 +214,9 @@ void GpuChannelHost::Listener::Initialize(
     mojo::PendingAssociatedReceiver<mojom::GpuChannel> receiver,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   base::AutoLock lock(lock_);
-  channel_ = IPC::ChannelMojo::Create(
-      std::move(handle), IPC::Channel::MODE_CLIENT, this, io_task_runner,
-      io_task_runner, mojo::internal::MessageQuotaChecker::MaybeCreate());
+  channel_ =
+      IPC::ChannelMojo::Create(std::move(handle), IPC::Channel::MODE_CLIENT,
+                               this, io_task_runner, io_task_runner);
   DCHECK(channel_);
   bool result = channel_->Connect();
   DCHECK(result);

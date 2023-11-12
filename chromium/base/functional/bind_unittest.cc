@@ -13,7 +13,9 @@
 #include "base/allocator/partition_alloc_support.h"
 #include "base/allocator/partition_allocator/dangling_raw_ptr_checks.h"
 #include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/functional/callback.h"
+#include "base/functional/disallow_unretained.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
@@ -37,7 +39,23 @@ using ::testing::StrictMock;
 namespace base {
 namespace {
 
-class IncompleteType;
+class AllowsUnretained {};
+
+class BansUnretained {
+ public:
+  DISALLOW_UNRETAINED();
+};
+
+class BansUnretainedInPrivate {
+  DISALLOW_UNRETAINED();
+};
+
+class DerivedButBaseBansUnretained : public BansUnretained {};
+
+static_assert(internal::TypeSupportsUnretainedV<AllowsUnretained>);
+static_assert(!internal::TypeSupportsUnretainedV<BansUnretained>);
+static_assert(!internal::TypeSupportsUnretainedV<BansUnretainedInPrivate>);
+static_assert(!internal::TypeSupportsUnretainedV<DerivedButBaseBansUnretained>);
 
 class NoRef {
  public:
@@ -1082,12 +1100,6 @@ TYPED_TEST(BindVariantsTest, ArgumentBinding) {
   p.value = 5;
   EXPECT_EQ(5, TypeParam::Bind(&UnwrapNoRefParent, p).Run());
 
-  IncompleteType* incomplete_ptr = reinterpret_cast<IncompleteType*>(123);
-  EXPECT_EQ(
-      incomplete_ptr,
-      TypeParam::Bind(&PolymorphicIdentity<IncompleteType*>, incomplete_ptr)
-          .Run());
-
   NoRefChild c;
   c.value = 6;
   EXPECT_EQ(6, TypeParam::Bind(&UnwrapNoRefParent, c).Run());
@@ -1798,7 +1810,7 @@ TEST(BindDeathTest, BanFirstOwnerOfRefCountedType) {
   });
 }
 
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 void HandleOOM(size_t unused_size) {
   LOG(FATAL) << "Out of memory";
@@ -1865,10 +1877,15 @@ bool PtrCheckFn(int* p) {
   return p != nullptr;
 }
 
+bool RefCheckFn(const int& p) {
+  return true;
+}
+
 class ClassWithWeakPtr {
  public:
   ClassWithWeakPtr() = default;
   void RawPtrArg(int* p) { *p = 123; }
+  void RawRefArg(int& p) { p = 123; }
   WeakPtr<ClassWithWeakPtr> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
@@ -1906,8 +1923,16 @@ TEST_F(BindUnretainedDanglingTest, UnretainedWeakReceiverValidNoDangling) {
   Free(p);
 }
 
-// Death tests misbehave on Android, http://crbug.com/643760.
-#if defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
+TEST_F(BindUnretainedDanglingTest, UnretainedRefWeakReceiverValidNoDangling) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  std::unique_ptr<ClassWithWeakPtr> r = std::make_unique<ClassWithWeakPtr>();
+  auto callback = base::BindOnce(&ClassWithWeakPtr::RawRefArg, r->GetWeakPtr(),
+                                 std::ref(ref));
+  std::move(callback).Run();
+  EXPECT_EQ(*p, 123);
+  Free(p);
+}
 
 TEST_F(BindUnretainedDanglingTest, UnretainedWeakReceiverInvalidNoDangling) {
   raw_ptr<int> p = Alloc<int>(3);
@@ -1921,9 +1946,69 @@ TEST_F(BindUnretainedDanglingTest, UnretainedWeakReceiverInvalidNoDangling) {
   // the callback is cancelled because the WeakPtr is already invalidated.
 }
 
+TEST_F(BindUnretainedDanglingTest, UnretainedRefWeakReceiverInvalidNoDangling) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  std::unique_ptr<ClassWithWeakPtr> r = std::make_unique<ClassWithWeakPtr>();
+  auto callback = base::BindOnce(&ClassWithWeakPtr::RawRefArg, r->GetWeakPtr(),
+                                 std::ref(ref));
+  r.reset();
+  Free(p);
+  std::move(callback).Run();
+  // Should reach this point without crashing; there is a dangling pointer, but
+  // the callback is cancelled because the WeakPtr is already invalidated.
+}
+
+TEST_F(BindUnretainedDanglingTest, UnretainedRefUnsafeDangling) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  auto callback =
+      base::BindOnce(RefCheckFn, base::UnsafeDangling(base::raw_ref<int>(ref)));
+  Free(p);
+  EXPECT_EQ(std::move(callback).Run(), true);
+  // Should reach this point without crashing; there is a dangling pointer, but
+  // the we marked the reference as `UnsafeDangling`.
+}
+
+TEST_F(BindUnretainedDanglingTest, UnretainedRefUnsafeDanglingUntriaged) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  auto callback = base::BindOnce(
+      RefCheckFn, base::UnsafeDanglingUntriaged(base::raw_ref<const int>(ref)));
+  Free(p);
+  EXPECT_EQ(std::move(callback).Run(), true);
+  // Should reach this point without crashing; there is a dangling pointer, but
+  // the we marked the reference as `UnsafeDanglingUntriaged`.
+}
+
+// Death tests misbehave on Android, http://crbug.com/643760.
+#if defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
+
+int FuncWithRefArgument(int& i_ptr) {
+  return i_ptr;
+}
+
 TEST_F(BindUnretainedDanglingDeathTest, UnretainedDanglingPtr) {
   raw_ptr<int> p = Alloc<int>(3);
   auto callback = base::BindOnce(PingPong, base::Unretained(p));
+  Free(p);
+  EXPECT_DEATH(std::move(callback).Run(), "");
+}
+
+TEST_F(BindUnretainedDanglingDeathTest, UnretainedRefDanglingPtr) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  auto callback = base::BindOnce(FuncWithRefArgument, std::ref(ref));
+  Free(p);
+  EXPECT_DEATH(std::move(callback).Run(), "");
+}
+
+TEST_F(BindUnretainedDanglingDeathTest,
+       UnretainedRefWithManualUnretainedDanglingPtr) {
+  raw_ptr<int> p = Alloc<int>(3);
+  int& ref = *p;
+  auto callback = base::BindOnce(FuncWithRefArgument,
+                                 base::Unretained(base::raw_ref<int>(ref)));
   Free(p);
   EXPECT_DEATH(std::move(callback).Run(), "");
 }
@@ -1939,7 +2024,7 @@ TEST_F(BindUnretainedDanglingDeathTest, UnretainedWeakReceiverDangling) {
 
 #endif  // defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
 
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 }  // namespace
 }  // namespace base

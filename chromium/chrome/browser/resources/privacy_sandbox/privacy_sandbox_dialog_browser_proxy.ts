@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {sendWithPromise} from 'chrome://resources/js/cr.js';
 // clang-format on
 
 // All actions related to showing & interacting with the privacy sandbox
@@ -23,6 +23,8 @@ export enum PrivacySandboxPromptAction {
   CONSENT_MORE_INFO_CLOSED = 9,
   CONSENT_CLOSED_NO_DECISION = 10,
   NOTICE_LEARN_MORE = 11,
+  NOTICE_MORE_INFO_OPENED = 12,
+  NOTICE_MORE_INFO_CLOSED = 13,
 }
 
 export class PrivacySandboxDialogBrowserProxy {

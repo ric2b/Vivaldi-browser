@@ -39,12 +39,13 @@ extern content::WebContents* GetWebContentsFromTabStrip(
 
 extern bool IsOutsideAppWindow(int screen_x, int screen_y);
 
-extern Browser* FindBrowserForPinnedTabs(Browser* current_browser);
+extern Browser* FindBrowserForPersistentTabs(Browser* current_browser);
 extern bool MoveTabToWindow(Browser* source_browser,
                             Browser* target_browser,
                             int tab_index,
                             int* new_index,
-                            int iteration);
+                            int iteration,
+                            int add_types);
 extern bool GetTabById(int tab_id, content::WebContents** contents, int* index);
 
 }  // namespace ui_tools

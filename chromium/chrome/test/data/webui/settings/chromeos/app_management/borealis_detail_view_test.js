@@ -7,7 +7,7 @@
 import {PermissionType, createBoolPermission, AppManagementStore, updateSelectedAppId, getPermissionValueBool, convertOptionalBoolToBool, Router} from 'chrome://os-settings/chromeos/os_settings.js';
 import {setupFakeHandler, replaceStore, replaceBody, getPermissionCrToggleByType, getPermissionToggleByType} from './test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
-
+import {AppType} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 suite('<app-management-borealis-detail-view>', function() {
@@ -43,7 +43,7 @@ suite('<app-management-borealis-detail-view>', function() {
 
     // Add main app, and make it the currently selected app.
     const mainOptions = {
-      type: appManagement.mojom.AppType.kBorealis,
+      type: AppType.kBorealis,
       permissions: permissions,
     };
     const mainApp = await fakeHandler.addApp(kBorealisClientAppId, mainOptions);
@@ -83,8 +83,8 @@ suite('<app-management-borealis-detail-view>', function() {
   });
 
   test('Pin to shelf toggle', async function() {
-    const pinToShelfItem = borealisDetailView.$['pin-to-shelf-setting'];
-    const toggle = pinToShelfItem.$['toggle-row'].$.toggle;
+    const pinToShelfItem = borealisDetailView.$.pinToShelfSetting;
+    const toggle = pinToShelfItem.$.toggleRow.$.toggle;
 
     assertFalse(toggle.checked);
     assertEquals(
@@ -105,23 +105,22 @@ suite('<app-management-borealis-detail-view>', function() {
   });
 
   test('Permission info links are correct', async function() {
-    assertTrue(!!borealisDetailView.shadowRoot.querySelector('#main-link'));
-    assertFalse(
-        !!borealisDetailView.shadowRoot.querySelector('#borealis-link'));
+    assertTrue(!!borealisDetailView.shadowRoot.querySelector('#mainLink'));
+    assertFalse(!!borealisDetailView.shadowRoot.querySelector('#borealisLink'));
 
     // Add borealis (non main) app. Note that any tests after this will
     // have the borealis app selected as default.
     const options = {
-      type: appManagement.mojom.AppType.kBorealis,
+      type: AppType.kBorealis,
     };
     const app = await fakeHandler.addApp('foo', options);
     AppManagementStore.getInstance().dispatch(updateSelectedAppId(app.id));
     await fakeHandler.flushPipesForTesting();
-    assertFalse(!!borealisDetailView.shadowRoot.querySelector('#main-link'));
-    assertTrue(!!borealisDetailView.shadowRoot.querySelector('#borealis-link'));
+    assertFalse(!!borealisDetailView.shadowRoot.querySelector('#mainLink'));
+    assertTrue(!!borealisDetailView.shadowRoot.querySelector('#borealisLink'));
 
     // Check that link directs to main app page.
-    const link = borealisDetailView.shadowRoot.querySelector('#borealis-link');
+    const link = borealisDetailView.shadowRoot.querySelector('#borealisLink');
     const anchorTag = link.shadowRoot.querySelector('a');
     assertTrue(!!anchorTag);
     const localizedLinkPromise = eventToPromise('link-clicked', link);

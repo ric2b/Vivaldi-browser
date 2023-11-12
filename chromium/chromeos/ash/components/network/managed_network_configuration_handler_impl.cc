@@ -18,7 +18,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_profile_client.h"
@@ -308,8 +307,9 @@ void ManagedNetworkConfigurationHandlerImpl::SetProperties(
   }
 
   // Fill in HexSSID field from contents of SSID field if not set already.
-  onc::FillInHexSSIDFieldsInOncObject(
-      chromeos::onc::kNetworkConfigurationSignature, &validated_user_settings);
+  chromeos::onc::FillInHexSSIDFieldsInOncObject(
+      chromeos::onc::kNetworkConfigurationSignature,
+      validated_user_settings.GetDict());
 
   const base::Value* network_policy = policies->GetPolicyByGuid(guid);
   if (network_policy)
@@ -393,8 +393,9 @@ void ManagedNetworkConfigurationHandlerImpl::CreateConfiguration(
 
   // Fill in HexSSID field from contents of SSID field if not set already - this
   // is required to properly match the configuration against existing policies.
-  onc::FillInHexSSIDFieldsInOncObject(
-      chromeos::onc::kNetworkConfigurationSignature, &validated_properties);
+  chromeos::onc::FillInHexSSIDFieldsInOncObject(
+      chromeos::onc::kNetworkConfigurationSignature,
+      validated_properties.GetDict());
 
   // Make sure the network is not configured through a user policy.
   const ProfilePolicies* policies = nullptr;
@@ -590,7 +591,7 @@ void ManagedNetworkConfigurationHandlerImpl::SchedulePolicyApplication(
     return;
   }
   policy_application_info.task_scheduled = true;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ManagedNetworkConfigurationHandlerImpl::StartPolicyApplication,
@@ -698,9 +699,12 @@ void ManagedNetworkConfigurationHandlerImpl::
   const std::string* profile =
       existing_properties.FindStringKey(shill::kProfileProperty);
   if (!profile || profile->empty()) {
+    // TODO(b/258782165): Figure out how to deal with entries that don't have a
+    // Profile property properly.
     NET_LOG(ERROR) << "Missing profile property: "
                    << shill_property_util::GetNetworkIdFromProperties(
                           existing_properties);
+    std::move(callback).Run();
     return;
   }
   shill_properties.SetKey(shill::kProfileProperty, base::Value(*profile));
@@ -779,7 +783,7 @@ void ManagedNetworkConfigurationHandlerImpl::OnPoliciesApplied(
   PolicyApplicationInfo& policy_application_info =
       policy_application_info_map_[userhash];
 
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
       FROM_HERE, std::move(policy_application_info.running_policy_applicator));
 
   TriggerCellularPolicyApplication(profile, new_cellular_policy_guids);
@@ -1037,7 +1041,7 @@ ManagedNetworkConfigurationHandlerImpl::GetPoliciesForProfile(
 
 ManagedNetworkConfigurationHandlerImpl::
     ManagedNetworkConfigurationHandlerImpl() {
-  CHECK(base::ThreadTaskRunnerHandle::IsSet());
+  CHECK(base::SingleThreadTaskRunner::HasCurrentDefault());
 }
 
 ManagedNetworkConfigurationHandlerImpl::
@@ -1070,7 +1074,7 @@ void ManagedNetworkConfigurationHandlerImpl::Init(
 void ManagedNetworkConfigurationHandlerImpl::OnPolicyAppliedToNetwork(
     base::OnceClosure callback,
     const std::string& service_path,
-    const std::string& guid) {
+    const std::string& guid) const {
   // When this is called, the policy has been fully applied and is reflected in
   // NetworkStateHandler, so it is safe to notify obserers.
   // Notifying observers is the last step of policy application to

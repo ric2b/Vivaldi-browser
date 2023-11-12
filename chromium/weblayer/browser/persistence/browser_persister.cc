@@ -6,11 +6,11 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/ranges/algorithm.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/command_storage_manager.h"
@@ -38,7 +38,7 @@ namespace {
 
 int GetIndexOfTab(BrowserImpl* browser, Tab* tab) {
   const std::vector<Tab*>& tabs = browser->GetTabs();
-  auto iter = std::find(tabs.begin(), tabs.end(), tab);
+  auto iter = base::ranges::find(tabs, tab);
   DCHECK(iter != tabs.end());
   return static_cast<int>(iter - tabs.begin());
 }
@@ -299,12 +299,10 @@ void BrowserPersister::BuildCommandsForTab(TabImpl* tab, int index_in_browser) {
   // Ensure that we don't try to persist initial NavigationEntry, as it is
   // not actually associated with any navigation and will just result in
   // about:blank on session restore.
-  bool is_on_initial_entry =
-      (tab->web_contents()->GetController().GetLastCommittedEntry() &&
-       tab->web_contents()
-           ->GetController()
-           .GetLastCommittedEntry()
-           ->IsInitialEntry());
+  bool is_on_initial_entry = (tab->web_contents()
+                                  ->GetController()
+                                  .GetLastCommittedEntry()
+                                  ->IsInitialEntry());
   const int current_index =
       is_on_initial_entry ? -1 : controller.GetCurrentEntryIndex();
   const int min_index =

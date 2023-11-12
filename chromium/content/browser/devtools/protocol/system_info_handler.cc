@@ -21,6 +21,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/content_features.h"
 #include "gpu/config/gpu_feature_type.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_switches.h"
@@ -50,7 +51,7 @@ std::unique_ptr<SystemInfo::Size> GfxSizeToSystemInfoSize(
 // Windows builds need more time -- see Issue 873112 and 1004472.
 // Mac builds need more time - see Issue angleproject:6182.
 #if ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && !defined(NDEBUG)) || \
-    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || defined(USE_OZONE)
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_OZONE)
 static constexpr int kGPUInfoWatchdogTimeoutMultiplierOS = 3;
 #else
 static constexpr int kGPUInfoWatchdogTimeoutMultiplierOS = 1;
@@ -425,6 +426,16 @@ void SystemInfoHandler::GetProcessInfo(
   AddRendererProcessInfo(process_info.get());
   AddChildProcessInfo(process_info.get());
   callback->sendSuccess(std::move(process_info));
+}
+
+Response SystemInfoHandler::GetFeatureState(const String& in_featureState,
+                                            bool* featureEnabled) {
+  if (in_featureState == "PrerenderHoldback") {
+    *featureEnabled =
+        std::move(base::FeatureList::IsEnabled(features::kPrerender2Holdback));
+    return Response::Success();
+  }
+  return Response::InvalidParams("Unknown feature");
 }
 
 }  // namespace protocol

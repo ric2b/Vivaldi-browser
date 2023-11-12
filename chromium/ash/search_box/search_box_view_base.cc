@@ -12,7 +12,9 @@
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "base/bind.h"
+#include "base/strings/strcat.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -83,6 +85,8 @@ void SetupLabelView(views::Label* label,
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->GetViewAccessibility().OverrideIsIgnored(true);
   label->SetBackgroundColor(SK_ColorTRANSPARENT);
+  label->SetAutoColorReadabilityEnabled(false);
+  label->SetEnabledColorId(kColorAshTextColorSuggestion);
   label->SetVisible(true);
   label->SetElideBehavior(gfx::ELIDE_TAIL);
   label->SetMultiLine(false);
@@ -176,33 +180,24 @@ class SearchBoxImageButton : public views::ImageButton {
     SchedulePaint();
   }
 
-  void OnThemeChanged() override {
-    views::View::OnThemeChanged();
-    UpdateInkDropColors();
-  }
-
   void set_is_showing(bool is_showing) { is_showing_ = is_showing; }
   bool is_showing() { return is_showing_; }
+
+  void UpdateInkDropColors(SkColor background_color) {
+    const views::Widget* app_list_widget = GetWidget();
+    views::InkDrop::Get(this)->SetBaseColor(
+        AppListColorProvider::Get()->GetInkDropBaseColor(app_list_widget,
+                                                         background_color));
+    views::InkDrop::Get(this)->SetVisibleOpacity(
+        AppListColorProvider::Get()->GetInkDropOpacity(app_list_widget,
+                                                       background_color));
+  }
 
  private:
   int GetButtonRadius() const { return width() / 2; }
 
   // Whether the button is showing/shown or hiding/hidden.
   bool is_showing_ = false;
-
-  void UpdateInkDropColors() {
-    const views::Widget* app_list_widget = GetWidget();
-    SkColor search_box_card_background_color =
-        AppListColorProvider::Get()->GetSearchBoxCardBackgroundColor(
-            app_list_widget);
-
-    views::InkDrop::Get(this)->SetBaseColor(
-        AppListColorProvider::Get()->GetInkDropBaseColor(
-            app_list_widget, search_box_card_background_color));
-    views::InkDrop::Get(this)->SetVisibleOpacity(
-        AppListColorProvider::Get()->GetInkDropOpacity(
-            app_list_widget, search_box_card_background_color));
-  }
 
   // views::View:
   void OnPaintBackground(gfx::Canvas* canvas) override {
@@ -543,6 +538,16 @@ void SearchBoxViewBase::MaybeSetAutocompleteGhostText(
   }
 }
 
+std::string SearchBoxViewBase::GetSearchBoxGhostTextForTest() {
+  if (!autocomplete_ghost_text_->GetText().empty()) {
+    return base::UTF16ToUTF8(base::StrCat(
+        {autocomplete_ghost_text_->GetText(),
+         l10n_util::GetStringUTF16(IDS_ASH_SEARCH_RESULT_SEPARATOR),
+         category_ghost_text_->GetText()}));
+  }
+  return base::UTF16ToUTF8(category_ghost_text_->GetText());
+}
+
 void SearchBoxViewBase::SetSearchBoxActive(bool active,
                                            ui::EventType event_type) {
   if (active == is_search_box_active_)
@@ -606,25 +611,9 @@ void SearchBoxViewBase::OnMouseEvent(ui::MouseEvent* event) {
 
 void SearchBoxViewBase::OnThemeChanged() {
   views::View::OnThemeChanged();
-  const views::Widget* app_list_widget = GetWidget();
-
   if (features::IsAutocompleteExtendedSuggestionsEnabled()) {
-    auto ghost_text_color =
-        AppListColorProvider::Get()->GetSearchBoxSuggestionTextColor(
-            kDeprecatedSearchBoxTextDefaultColor, app_list_widget);
-    autocomplete_ghost_text_->SetEnabledColor(ghost_text_color);
-    separator_label_->SetEnabledColor(ghost_text_color);
-    category_ghost_text_->SetEnabledColor(ghost_text_color);
-    category_separator_label_->SetEnabledColor(ghost_text_color);
     search_box_->SetSelectionBackgroundColor(
-        AppListColorProvider::Get()->GetFolderNameSelectionColor(GetWidget()));
-  }
-
-  auto* background = GetBackground();
-  if (background) {
-    background->SetNativeControlColor(
-        AppListColorProvider::Get()->GetSearchBoxBackgroundColor(
-            app_list_widget));
+        GetWidget()->GetColorProvider()->GetColor(kColorAshFocusAuraColor));
   }
   UpdatePlaceholderTextStyle();
 }
@@ -786,11 +775,14 @@ void SearchBoxViewBase::HandleSearchBoxEvent(ui::LocatedEvent* located_event) {
   }
 }
 
-// TODO(crbug.com/755219): Unify this with SetBackgroundColor.
 void SearchBoxViewBase::UpdateBackgroundColor(SkColor color) {
   auto* search_box_background = background();
   if (search_box_background)
     search_box_background->SetNativeControlColor(color);
+  if (close_button_)
+    close_button_->UpdateInkDropColors(color);
+  if (assistant_button_)
+    assistant_button_->UpdateInkDropColors(color);
 }
 
 }  // namespace ash

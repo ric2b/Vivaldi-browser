@@ -10,17 +10,6 @@
       "use_remoteexec": true
     }
   },
-  "Linux ASan LSan Low Symbols FYI Builder": {
-    "gn_args": {
-      "dcheck_always_on": true,
-      "is_asan": true,
-      "is_component_build": false,
-      "is_debug": false,
-      "is_lsan": true,
-      "symbol_level": 0,
-      "use_remoteexec": true
-    }
-  },
   "Linux CFI": {
     "gn_args": {
       "dcheck_always_on": true,
@@ -49,6 +38,7 @@
   "Linux ChromiumOS MSan Builder": {
     "gn_args": {
       "dcheck_always_on": false,
+      "instrumented_libraries_release": "xenial",
       "is_component_build": false,
       "is_debug": false,
       "is_msan": true,
@@ -60,6 +50,7 @@
   "Linux MSan Builder": {
     "gn_args": {
       "dcheck_always_on": false,
+      "instrumented_libraries_release": "focal",
       "is_component_build": false,
       "is_debug": false,
       "is_msan": true,
@@ -114,6 +105,7 @@
     "gn_args": {
       "dcheck_always_on": false,
       "ffmpeg_branding": "Chrome",
+      "instrumented_libraries_release": "xenial",
       "is_component_build": false,
       "is_debug": false,
       "is_msan": true,

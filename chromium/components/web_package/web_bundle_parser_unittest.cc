@@ -4,14 +4,17 @@
 
 #include "components/web_package/web_bundle_parser.h"
 
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "components/cbor/writer.h"
 #include "components/web_package/mojom/web_bundle_parser.mojom-forward.h"
 #include "components/web_package/mojom/web_bundle_parser.mojom.h"
+#include "components/web_package/signed_web_bundles/ed25519_public_key.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
 #include "components/web_package/web_bundle_builder.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -86,6 +89,12 @@ class TestDataSource : public mojom::BundleDataSource {
   mojo::ReceiverSet<mojom::BundleDataSource> receivers_;
 };
 
+template <typename... T>
+auto to_pair(std::tuple<T...>&& t)
+    -> decltype(std::make_pair(std::get<0>(t), std::get<1>(t))) {
+  return std::make_pair(std::move(std::get<0>(t)), std::move(std::get<1>(t)));
+}
+
 using ParseSignedBundleIntegrityBlockResult =
     std::pair<mojom::BundleIntegrityBlockPtr,
               mojom::BundleIntegrityBlockParseErrorPtr>;
@@ -105,7 +114,8 @@ ParseSignedBundleIntegrityBlockResult ParseSignedBundleIntegrityBlock(
                          mojom::BundleIntegrityBlockParseErrorPtr>
       integrity_block_future;
   parser.ParseIntegrityBlock(integrity_block_future.GetCallback());
-  ParseSignedBundleIntegrityBlockResult result = integrity_block_future.Take();
+  ParseSignedBundleIntegrityBlockResult result =
+      to_pair(integrity_block_future.Take());
   EXPECT_TRUE((result.first && !result.second) ||
               (!result.first && result.second));
   return result;
@@ -129,7 +139,7 @@ ParseUnsignedBundleResult ParseUnsignedBundle(TestDataSource* data_source,
                          mojom::BundleMetadataParseErrorPtr>
       future;
   parser.ParseMetadata(offset, future.GetCallback());
-  ParseUnsignedBundleResult result = future.Take();
+  ParseUnsignedBundleResult result = to_pair(future.Take());
   EXPECT_TRUE((result.first && !result.second) ||
               (!result.first && result.second));
   return result;
@@ -211,27 +221,22 @@ SignedWebBundleAndKeys SignBundle(
 
 void CheckIfSignatureStackEntryIsValid(
     mojom::BundleIntegrityBlockSignatureStackEntryPtr& entry,
-    const std::vector<uint8_t>& public_key) {
+    const Ed25519PublicKey& public_key) {
   EXPECT_EQ(entry->public_key, public_key);
 
-  EXPECT_EQ(entry->signature.size(), 64ul);
   // The signature should also be present at the very end of
   // `complete_entry_cbor`.
-  EXPECT_TRUE(
-      std::equal(entry->signature.begin(), entry->signature.end(),
-                 entry->complete_entry_cbor.end() - entry->signature.size()));
+  EXPECT_TRUE(std::equal(
+      entry->signature.bytes().begin(), entry->signature.bytes().end(),
+      entry->complete_entry_cbor.end() - entry->signature.bytes().size()));
 
   // The attributes should also be part of `complete_entry_cbor`.
   EXPECT_NE(
-      std::search(entry->complete_entry_cbor.begin(),
-                  entry->complete_entry_cbor.end(),
-                  entry->attributes_cbor.begin(), entry->attributes_cbor.end()),
+      base::ranges::search(entry->complete_entry_cbor, entry->attributes_cbor),
       entry->complete_entry_cbor.end());
   // The attributes should contain the public key.
-  EXPECT_NE(
-      std::search(entry->attributes_cbor.begin(), entry->attributes_cbor.end(),
-                  public_key.begin(), public_key.end()),
-      entry->attributes_cbor.end());
+  EXPECT_NE(base::ranges::search(entry->attributes_cbor, public_key.bytes()),
+            entry->attributes_cbor.end());
 }
 
 }  // namespace
@@ -723,7 +728,7 @@ TEST_F(WebBundleParserTest, NoPrimaryUrlSingleEntry) {
   EXPECT_EQ(response->response_headers.size(), 1u);
   EXPECT_EQ(response->response_headers["content-type"], "text/plain");
   EXPECT_EQ(data_source.GetPayload(response), "payload");
-  EXPECT_TRUE(metadata->primary_url.is_empty());
+  EXPECT_FALSE(metadata->primary_url.has_value());
 }
 
 TEST_F(WebBundleParserTest, RelativeURL) {
@@ -853,7 +858,7 @@ TEST_F(WebBundleParserTest,
 TEST_F(WebBundleParserTest, RandomAccessContextLengthSmallerThanWebBundle) {
   std::vector<uint8_t> bundle = CreateSmallBundle();
   std::vector<uint8_t> invalid_length = {0, 0, 0, 0, 0, 0, 0, 10};
-  std::copy(invalid_length.begin(), invalid_length.end(), bundle.end() - 8);
+  base::ranges::copy(invalid_length, bundle.end() - 8);
   TestDataSource data_source(bundle, /*is_random_access_context=*/true);
 
   ExpectFormatError(ParseUnsignedBundle(&data_source));
@@ -869,7 +874,7 @@ TEST_F(WebBundleParserTest, RandomAccessContextFileSmallerThanLengthField) {
 TEST_F(WebBundleParserTest, RandomAccessContextLengthBiggerThanFile) {
   std::vector<uint8_t> bundle = CreateSmallBundle();
   std::vector<uint8_t> invalid_length = {0xff, 0, 0, 0, 0, 0, 0, 0};
-  std::copy(invalid_length.begin(), invalid_length.end(), bundle.end() - 8);
+  base::ranges::copy(invalid_length, bundle.end() - 8);
   TestDataSource data_source(bundle, /*is_random_access_context=*/true);
 
   ExpectFormatError(ParseUnsignedBundle(&data_source));
@@ -1096,8 +1101,8 @@ TEST_F(WebBundleParserTest, SignedBundleWrongPublicKeyLength) {
   ASSERT_TRUE(error);
   EXPECT_EQ(error->type, mojom::BundleParseErrorType::kFormatError);
   EXPECT_EQ(error->message,
-            "The public key does not have the correct length, expected 32 "
-            "bytes.");
+            "The Ed25519 public key does not have the correct length. Expected "
+            "32 bytes, but received 33 bytes.");
 }
 
 TEST_F(WebBundleParserTest, DisconnectWhileParsingMetadata) {

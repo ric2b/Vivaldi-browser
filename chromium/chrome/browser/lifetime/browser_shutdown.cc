@@ -28,9 +28,8 @@
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/switch_utils.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -57,6 +56,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/boot_times_recorder.h"
+#include "chrome/browser/lifetime/application_lifetime_chromeos.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #endif
 
@@ -110,50 +110,6 @@ const char* ToShutdownTypeString(ShutdownType type) {
   }
   return "";
 }
-
-#if !BUILDFLAG(IS_ANDROID)
-void LogShutdownMetrics() {
-  base::UmaHistogramEnumeration("Shutdown.ShutdownType2", g_shutdown_type);
-
-  const char* time_metric_name = nullptr;
-  switch (g_shutdown_type) {
-    case ShutdownType::kNotValid:
-      time_metric_name = "Shutdown.NotValid.Time2";
-      break;
-
-    case ShutdownType::kSilentExit:
-      time_metric_name = "Shutdown.SilentExit.Time2";
-      break;
-
-    case ShutdownType::kWindowClose:
-      time_metric_name = "Shutdown.WindowClose.Time2";
-      break;
-
-    case ShutdownType::kBrowserExit:
-      time_metric_name = "Shutdown.BrowserExit.Time2";
-      break;
-
-    case ShutdownType::kEndSession:
-      time_metric_name = "Shutdown.EndSession.Time2";
-      break;
-
-    case ShutdownType::kOtherExit:
-      time_metric_name = "Shutdown.OtherExit.Time2";
-      break;
-  }
-  DCHECK(time_metric_name);
-
-  if (g_shutdown_started) {
-    base::TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
-    base::UmaHistogramMediumTimes(time_metric_name, shutdown_delta);
-  }
-
-  base::UmaHistogramCounts100("Shutdown.Renderers.Total2",
-                              g_shutdown_num_processes);
-  base::UmaHistogramCounts100("Shutdown.Renderers.Slow2",
-                              g_shutdown_num_processes_slow);
-}
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Utility function to verify that globals are accessed on the UI/Main thread.
 void CheckAccessedOnCorrectThread() {
@@ -261,6 +217,48 @@ bool ShutdownPreThreadsStop() {
   return restart_last_session;
 }
 
+void RecordShutdownMetrics() {
+  base::UmaHistogramEnumeration("Shutdown.ShutdownType2", g_shutdown_type);
+
+  const char* time_metric_name = nullptr;
+  switch (g_shutdown_type) {
+    case ShutdownType::kNotValid:
+      time_metric_name = "Shutdown.NotValid.Time2";
+      break;
+
+    case ShutdownType::kSilentExit:
+      time_metric_name = "Shutdown.SilentExit.Time2";
+      break;
+
+    case ShutdownType::kWindowClose:
+      time_metric_name = "Shutdown.WindowClose.Time2";
+      break;
+
+    case ShutdownType::kBrowserExit:
+      time_metric_name = "Shutdown.BrowserExit.Time2";
+      break;
+
+    case ShutdownType::kEndSession:
+      time_metric_name = "Shutdown.EndSession.Time2";
+      break;
+
+    case ShutdownType::kOtherExit:
+      time_metric_name = "Shutdown.OtherExit.Time2";
+      break;
+  }
+  DCHECK(time_metric_name);
+
+  if (g_shutdown_started) {
+    base::TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
+    base::UmaHistogramMediumTimes(time_metric_name, shutdown_delta);
+  }
+
+  base::UmaHistogramCounts100("Shutdown.Renderers.Total2",
+                              g_shutdown_num_processes);
+  base::UmaHistogramCounts100("Shutdown.Renderers.Slow2",
+                              g_shutdown_num_processes_slow);
+}
+
 bool RecordShutdownInfoPrefs() {
   CheckAccessedOnCorrectThread();
   PrefService* prefs = g_browser_process->local_state();
@@ -291,7 +289,7 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
 
   // crbug.com/95079 - This needs to happen after the browser process object
   // goes away.
-  ProfileManager::NukeDeletedProfilesFromDisk();
+  NukeDeletedProfilesFromDisk();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::BootTimesRecorder::Get()->AddLogoutTimeMarker("BrowserDeleted", true);
@@ -366,11 +364,8 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
     base::WriteFile(shutdown_ms_file, shutdown_ms.c_str(), len);
   }
 
-  // Log shutdown timing metrics.
-  LogShutdownMetrics();
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  NotifyAndTerminate(false /* fast_path */);
+  chrome::StopSession();
 #endif
 }
 #endif  // !BUILDFLAG(IS_ANDROID)

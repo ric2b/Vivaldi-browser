@@ -80,7 +80,7 @@ const size_t kQuicMaxHeaderListSize = 256 * 1024;
 enum class MigrationResult {
   SUCCESS,         // Migration succeeded.
   NO_NEW_NETWORK,  // Migration failed since no new network was found.
-  FAILURE          // Migration failed for other reasons.
+  FAILURE,         // Migration failed for other reasons.
 };
 
 // Mode of connection migration.
@@ -658,7 +658,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void UnregisterStreamPriority(quic::QuicStreamId id, bool is_static) override;
   void UpdateStreamPriority(
       quic::QuicStreamId id,
-      const spdy::SpdyStreamPrecedence& new_precedence) override;
+      const quic::QuicStreamPriority& new_priority) override;
   void OnHttp3GoAway(uint64_t id) override;
   void OnAcceptChFrameReceivedViaAlps(
       const quic::AcceptChFrame& frame) override;
@@ -695,6 +695,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void OnPathDegrading() override;
   void OnForwardProgressMadeAfterPathDegrading() override;
   void OnKeyUpdate(quic::KeyUpdateReason reason) override;
+  std::unique_ptr<quic::QuicPathValidationContext>
+  CreateContextForMultiPortPath() override;
 
   // QuicChromiumPacketReader::Visitor methods:
   bool OnReadError(int result, const DatagramClientSocket* socket) override;
@@ -766,6 +768,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // If |writer| is no longer actively used, abort migration.
   void MigrateSessionOnWriteError(int error_code,
                                   quic::QuicPacketWriter* writer);
+  // Called when the Migrate() call from MigrateSessionOnWriteError completes.
+  // Always called asynchronously.
+  void FinishMigrateSessionOnWriteError(handles::NetworkHandle new_network,
+                                        MigrationResult result);
 
   // Helper method that completes connection/server migration.
   // Unblocks packet writer on network level. If the writer becomes unblocked
@@ -776,9 +782,20 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // If |network| is handles::kInvalidNetworkHandle, default network is used. If
   // the migration fails and |close_session_on_error| is true, session will be
   // closed.
-  MigrationResult Migrate(handles::NetworkHandle network,
-                          IPEndPoint peer_address,
-                          bool close_session_on_error);
+  using MigrationCallback = base::OnceCallback<void(MigrationResult)>;
+  void Migrate(handles::NetworkHandle network,
+               IPEndPoint peer_address,
+               bool close_session_on_error,
+               MigrationCallback migration_callback);
+  // Helper to finish session migration once a socket has been opened. Always
+  // called asynchronously.
+  void FinishMigrate(std::unique_ptr<DatagramClientSocket> socket,
+                     IPEndPoint peer_address,
+                     bool close_session_on_error,
+                     MigrationCallback callback,
+                     int rv);
+
+  void DoMigrationCallback(MigrationCallback callback, MigrationResult rv);
 
   // Migrates session onto new socket, i.e., sets |writer| to be the new
   // default writer and post a task to write to |socket|. |reader| *must*
@@ -896,13 +913,24 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Probe on <network, peer_address>.
   // If <network, peer_addres> is identical to the current path, the probe
   // is sent on a different port.
-  ProbingResult StartProbing(handles::NetworkHandle network,
-                             const quic::QuicSocketAddress& peer_address);
+  using ProbingCallback = base::OnceCallback<void(ProbingResult)>;
+  void StartProbing(ProbingCallback probing_callback,
+                    handles::NetworkHandle network,
+                    const quic::QuicSocketAddress& peer_address);
+
+  // Helper to finish network probe once socket has been opened. Always called
+  // asynchronously.
+  void FinishStartProbing(ProbingCallback probing_callback,
+                          std::unique_ptr<DatagramClientSocket> probing_socket,
+                          handles::NetworkHandle network,
+                          const quic::QuicSocketAddress& peer_address,
+                          int rv);
 
   // Perform a few checks before StartProbing. If any of those checks fails,
   // StartProbing will be skipped.
-  ProbingResult MaybeStartProbing(handles::NetworkHandle network,
-                                  const quic::QuicSocketAddress& peer_address);
+  void MaybeStartProbing(ProbingCallback probing_callback,
+                         handles::NetworkHandle network,
+                         const quic::QuicSocketAddress& peer_address);
 
   // Helper method to perform a few checks and initiate connection migration
   // attempt when path degrading is detected.
@@ -922,9 +950,16 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   //    network.
   void MigrateNetworkImmediately(handles::NetworkHandle network);
 
+  // Called when Migrate() call from MigrateNetworkImmediately completes. Always
+  // called asynchronously.
+  void FinishMigrateNetworkImmediately(handles::NetworkHandle network,
+                                       MigrationResult result);
+
   void StartMigrateBackToDefaultNetworkTimer(base::TimeDelta delay);
   void CancelMigrateBackToDefaultNetworkTimer();
   void TryMigrateBackToDefaultNetwork(base::TimeDelta timeout);
+  void FinishTryMigrateBackToDefaultNetwork(base::TimeDelta timeout,
+                                            ProbingResult result);
   void MaybeRetryMigrateBackToDefaultNetwork();
 
   // If migrate idle session is enabled, returns true and post a task to close
@@ -967,6 +1002,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool require_confirmation_;
   bool migrate_session_early_v2_;
   bool migrate_session_on_network_change_v2_;
+  // True when session migration has started from MigrateSessionOnWriteError.
+  bool pending_migrate_session_on_write_error_ = false;
+  // True when a session migration starts from MigrateNetworkImmediately.
+  bool pending_migrate_network_immediately_ = false;
   bool migrate_idle_session_;
   bool allow_port_migration_;
   // Session can be migrated if its idle time is within this period.

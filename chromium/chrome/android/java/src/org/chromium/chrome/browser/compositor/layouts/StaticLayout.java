@@ -41,6 +41,9 @@ import org.chromium.url.GURL;
 import java.util.Arrays;
 import java.util.LinkedList;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 // TODO(meiliang): Rename to StaticLayoutMediator.
 /**
  * A {@link Layout} that shows a single tab at full screen. This tab is chosen based on the
@@ -201,7 +204,14 @@ public class StaticLayout extends Layout {
         mTabModelSelectorTabModelObserver = new TabModelSelectorTabModelObserver(tabModelSelector) {
             @Override
             public void didSelectTab(Tab tab, int type, int lastId) {
-                if (mIsActive) setStaticTab(tab);
+                if (!mIsActive) return;
+
+                setStaticTab(tab);
+                // Note(david@vivaldi.com): Don't focus tab when we are about to focus the address
+                // bar.
+                if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false))
+                requestFocus(tab);
             }
         };
 
@@ -210,6 +220,7 @@ public class StaticLayout extends Layout {
             public void onPageLoadFinished(Tab tab, GURL url) {
                 if (mIsActive) unstallImmediately(tab.getId());
             }
+
             @Override
             public void onShown(Tab tab, @TabSelectionType int type) {
                 if (mModel.get(LayoutTab.TAB_ID) != tab.getId()) {
@@ -263,32 +274,31 @@ public class StaticLayout extends Layout {
     }
 
     @Override
+    public void doneShowing() {
+        super.doneShowing();
+        Tab tab = mTabModelSelector.getCurrentTab();
+        if (tab == null) return;
+        // Note(david@vivaldi.com): Don't focus tab when we are about to focus the address bar.
+        if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false))
+        requestFocus(tab);
+    }
+
+    @Override
     public void doneHiding() {
         super.doneHiding();
         mIsActive = false;
     }
 
     @Override
-    public void onTabSelected(long time, int id, int prevId, boolean incognito) {
-
-    }
-
-    @Override
     public void onTabSelecting(long time, int id) {
-
+        // Intentional no-op.
     }
 
     @Override
-    public void onTabCreated(long time, int tabId, int tabIndex, int sourceTabId,
-            boolean newIsIncognito, boolean background, float originX, float originY) {
+    public void setTabModelSelector(TabModelSelector modelSelector, TabContentManager manager) {
+        // Intentional no-op.
     }
-
-    @Override
-    public void onTabModelSwitched(boolean incognito) {
-    }
-
-    @Override
-    public void setTabModelSelector(TabModelSelector modelSelector, TabContentManager manager) {}
 
     private void setPreHideState() {
         mHandler.removeCallbacks(mUnstallRunnable);
@@ -302,6 +312,11 @@ public class StaticLayout extends Layout {
         mModel.set(LayoutTab.STATIC_TO_VIEW_BLEND, 0.0f);
         mModel.set(LayoutTab.SATURATION, 1.0f);
         mUnstalling = false;
+    }
+
+    private void requestFocus(Tab tab) {
+        // TODO(crbug/1395495): Investigate removing this behavior. It may no longer be relevant.
+        if (mIsActive && tab.getView() != null) tab.getView().requestFocus();
     }
 
     private void setStaticTab(Tab tab) {

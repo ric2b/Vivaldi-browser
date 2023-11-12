@@ -335,7 +335,7 @@ public class LanguagesManager {
         LanguageItem result = mLanguagesMap.get(localeCode);
         if (result != null) return result;
 
-        String baseLanguage = LocaleUtils.toLanguage(localeCode);
+        String baseLanguage = LocaleUtils.toBaseLanguage(localeCode);
         return mLanguagesMap.get(baseLanguage);
     }
 

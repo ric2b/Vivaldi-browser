@@ -11,12 +11,12 @@
 
 #include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_features.h"
@@ -389,7 +389,7 @@ void FilesystemUnmounter::UnmountPaths(
 }
 
 void FilesystemUnmounter::OnUnmountPath(MountError mount_error) {
-  if (mount_error != MountError::kNone) {
+  if (mount_error != MountError::kSuccess) {
     LOG(ERROR) << "Error unmounting USB drive: " << mount_error;
     success_ = false;
   }
@@ -543,6 +543,11 @@ void CrosUsbDetector::ConnectToDeviceManager() {
 }
 
 bool CrosUsbDetector::ShouldShowNotification(const UsbDevice& device) {
+  PrefService* prefs = profile()->GetPrefs();
+  if (!prefs->GetBoolean(ash::prefs::kUsbDetectorNotificationEnabled)) {
+    return false;
+  }
+
   if (!crostini::CrostiniFeatures::Get()->IsEnabled(profile()) &&
       !plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile()) &&
       !IsPlayStoreEnabledWithArcVmForProfile(profile())) {
@@ -630,7 +635,7 @@ void CrosUsbDetector::OnMountEvent(
     MountError error_code,
     const disks::DiskMountManager::MountPoint& mount_info) {
   if (mount_info.mount_type != MountType::kDevice ||
-      error_code != MountError::kNone) {
+      error_code != MountError::kSuccess) {
     return;
   }
 

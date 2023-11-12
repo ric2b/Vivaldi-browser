@@ -507,6 +507,12 @@ export class ChromeCartModuleElement extends I18nMixin
     ChromeCartProxy.getHandler().prepareForNavigation(
         this.cartItems[index].cartUrl, /*isNavigating=*/ false);
   }
+
+  private onProductImageLoadError_(e: DomRepeatEvent<MerchantCart>) {
+    const index =
+        this.$.cartItemRepeat.indexForElement(e.target as HTMLElement)!;
+    this.set('cartItems.' + index + '.productImageUrls', []);
+  }
 }
 
 customElements.define(ChromeCartModuleElement.is, ChromeCartModuleElement);
@@ -572,5 +578,4 @@ async function createCartElement(): Promise<HTMLElement|null> {
 }
 
 export const chromeCartDescriptor: ModuleDescriptor = new ModuleDescriptor(
-    /*id=*/ 'chrome_cart',
-    /*name=*/ loadTimeData.getString('modulesCartSentence'), createCartElement);
+    /*id=*/ 'chrome_cart', createCartElement);

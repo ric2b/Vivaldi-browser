@@ -75,6 +75,15 @@ BASE_FEATURE(kGPayAppDynamicUpdate,
 
 BASE_FEATURE(kSecurePaymentConfirmationUseCredentialStoreAPIs,
              "SecurePaymentConfirmationUseCredentialStoreAPIs",
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
+
+BASE_FEATURE(kPaymentHandlerMinimalHeaderUX,
+             "PaymentHandlerMinimalHeaderUX",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

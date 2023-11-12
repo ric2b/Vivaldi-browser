@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
@@ -72,6 +73,7 @@ class AuthenticatorRequestDialogModel {
     // The request errored out before completing. Error will only be sent
     // after user interaction.
     kErrorNoAvailableTransports,
+    kErrorNoPasskeys,
     kErrorInternalUnrecognized,
 
     // The request is already complete, but the error dialog should wait
@@ -198,7 +200,7 @@ class AuthenticatorRequestDialogModel {
     const Type type;
     const std::u16string name;
     const std::u16string short_name;
-    const gfx::VectorIcon& icon;
+    const raw_ref<const gfx::VectorIcon> icon;
     const base::RepeatingClosure callback;
     // priority is true if this mechanism should be activated immediately.
     // Only a single Mechanism in a list should have priority.

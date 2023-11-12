@@ -5,7 +5,7 @@
 import 'chrome://history/history.js';
 
 import {ensureLazyLoaded, HistorySyncedDeviceManagerElement} from 'chrome://history/history.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
 import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -16,8 +16,7 @@ suite('<history-synced-device-manager>', function() {
   let element: HistorySyncedDeviceManagerElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     return ensureLazyLoaded().then(() => {
       element = document.createElement('history-synced-device-manager');

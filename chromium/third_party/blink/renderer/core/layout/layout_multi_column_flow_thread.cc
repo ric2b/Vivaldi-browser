@@ -634,8 +634,7 @@ void LayoutMultiColumnFlowThread::ColumnRuleStyleDidChange() {
   NOT_DESTROYED();
   for (LayoutMultiColumnSet* column_set = FirstMultiColumnSet(); column_set;
        column_set = column_set->NextSiblingMultiColumnSet()) {
-    column_set->SetShouldDoFullPaintInvalidation(
-        PaintInvalidationReason::kStyle);
+    column_set->SetShouldDoFullPaintInvalidation();
   }
 }
 
@@ -735,9 +734,13 @@ void LayoutMultiColumnFlowThread::AppendNewFragmentainerGroupIfNeeded(
   }
 }
 
-void LayoutMultiColumnFlowThread::StartLayoutFromNG(unsigned column_count) {
+void LayoutMultiColumnFlowThread::SetColumnCountFromNG(unsigned column_count) {
   NOT_DESTROYED();
   column_count_ = column_count;
+}
+
+void LayoutMultiColumnFlowThread::StartLayoutFromNG() {
+  NOT_DESTROYED();
   last_set_worked_on_ = DynamicTo<LayoutMultiColumnSet>(FirstMultiColumnBox());
 }
 

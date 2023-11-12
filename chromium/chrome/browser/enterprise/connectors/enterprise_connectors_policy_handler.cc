@@ -28,8 +28,21 @@ bool IsContentAnalysisPref(const char* pref) {
 bool CanUseNonCloudPolicySource(const char* pref,
                                 const policy::PolicyMap::Entry* policy) {
   DCHECK(policy);
-  if (!base::FeatureList::IsEnabled(kLocalContentAnalysisEnabled))
-    return false;
+
+  // The condition below is a quick fix to avoid accessing feature state before
+  // FeatureList initialization, because that results in a crash.
+  //
+  // TODO(crbug.com/1381113): Instead of this quick fix, move code that depends
+  // on feature state after FeatureList initialization.
+  if (base::FeatureList::GetInstance()) {
+    if (!base::FeatureList::IsEnabled(kLocalContentAnalysisEnabled))
+      return false;
+  } else {
+    if (kLocalContentAnalysisEnabled.default_state ==
+        base::FEATURE_DISABLED_BY_DEFAULT) {
+      return false;
+    }
+  }
 
   // Only content analysis policies with a LCA provider are exempt from using
   // cloud policies.

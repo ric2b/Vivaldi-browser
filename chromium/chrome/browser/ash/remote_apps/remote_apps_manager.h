@@ -14,12 +14,12 @@
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/apps/app_service/publishers/remote_apps.h"
+#include "chrome/browser/ash/app_list/app_list_model_updater_observer.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/chrome_app_list_model_updater.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_impl.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_model.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_types.h"
-#include "chrome/browser/ui/app_list/app_list_model_updater_observer.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chromeos/components/remote_apps/mojom/remote_apps.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -212,10 +212,8 @@ class RemoteAppsManager
   // app has been observed.
   std::map<std::string, AddAppCallback> add_app_callback_map_;
   std::map<std::string, std::string> app_id_to_source_id_map_;
-  base::ScopedObservation<
-      app_list::AppListSyncableService,
-      app_list::AppListSyncableService::Observer,
-      &app_list::AppListSyncableService::AddObserverAndStart>
+  base::ScopedObservation<app_list::AppListSyncableService,
+                          app_list::AppListSyncableService::Observer>
       app_list_syncable_service_observation_{this};
   base::ScopedObservation<AppListModelUpdater, AppListModelUpdaterObserver>
       app_list_model_updater_observation_{this};

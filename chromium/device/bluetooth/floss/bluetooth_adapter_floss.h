@@ -19,7 +19,9 @@
 #include "device/bluetooth/bluetooth_gatt_service.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
 #include "device/bluetooth/floss/bluetooth_low_energy_scan_session_floss.h"
+#include "device/bluetooth/floss/bluetooth_socket_floss.h"
 #include "device/bluetooth/floss/floss_adapter_client.h"
+#include "device/bluetooth/floss/floss_battery_manager_client.h"
 #include "device/bluetooth/floss/floss_dbus_client.h"
 #include "device/bluetooth/floss/floss_gatt_client.h"
 #include "device/bluetooth/floss/floss_lescan_client.h"
@@ -28,11 +30,13 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "device/bluetooth/bluetooth_low_energy_scan_filter.h"
 #include "device/bluetooth/bluetooth_low_energy_scan_session.h"
+#include "device/bluetooth/floss/floss_admin_client.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace floss {
 
 class BluetoothDeviceFloss;
+class BluetoothAdvertisementFloss;
 
 // The BluetoothAdapterFloss class implements BluetoothAdapter for platforms
 // that use Floss, a dbus front-end for the Fluoride Bluetooth stack.
@@ -44,6 +48,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
     : public device::BluetoothAdapter,
       public floss::FlossManagerClient::Observer,
       public floss::FlossAdapterClient::Observer,
+      public floss::FlossBatteryManagerClient::
+          FlossBatteryManagerClientObserver,
+#if BUILDFLAG(IS_CHROMEOS)
+      public FlossAdminClientObserver,
+#endif  // BUILDFLAG(IS_CHROMEOS)
       public ScannerClientObserver {
  public:
   static scoped_refptr<BluetoothAdapterFloss> CreateAdapter();
@@ -87,6 +96,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
                           const ServiceOptions& options,
                           CreateServiceCallback callback,
                           CreateServiceErrorCallback error_callback) override;
+
+  // Intercept errors when creating an RFCOMM or L2CAP service. This keeps
+  // a reference to the |socket| so that it does not go out of scope until after
+  // the error is completed.
+  void OnCreateServiceError(scoped_refptr<BluetoothSocketFloss> socket,
+                            CreateServiceErrorCallback error_callback,
+                            const std::string& error_message);
 
   void RegisterAdvertisement(
       std::unique_ptr<device::BluetoothAdvertisement::Data> advertisement_data,
@@ -137,6 +153,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
                          uint8_t scanner_id,
                          GattStatus status) override;
   void ScanResultReceived(ScanResult scan_result) override;
+  void ScanResultLost(ScanResult scan_result) override;
 
  protected:
   // BluetoothAdapter:
@@ -150,6 +167,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
   // Init will get asynchronouly called once we know if Object Manager is
   // supported.
   void Init();
+
+  // Helper function to create a Floss device
+  std::unique_ptr<BluetoothDeviceFloss> CreateBluetoothDeviceFloss(
+      FlossDeviceId device);
 
   // Handle responses to most method calls
   void OnMethodResponse(base::OnceClosure callback,
@@ -195,6 +216,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
 
   void PopulateInitialDevices();
   void ClearAllDevices();
+  bool UpdateDevice(BluetoothDeviceFloss* device,
+                    BluetoothDeviceFloss* new_device);
 
   // floss::FlossAdapterClient::Observer override.
   void DiscoverableChanged(bool discoverable) override;
@@ -211,6 +234,19 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
       FlossAdapterClient::BondState bond_state) override;
   void AdapterDeviceConnected(const FlossDeviceId& device_id) override;
   void AdapterDeviceDisconnected(const FlossDeviceId& device_id) override;
+
+  // floss::FlossBatteryManagerClient::FlossBatteryManagerClientObserver
+  // override.
+  void BatteryInfoUpdated(std::string remote_address,
+                          BatterySet battery_set) override;
+#if BUILDFLAG(IS_CHROMEOS)
+  // floss::FlossAdminClientObserver override.
+  void DevicePolicyEffectChanged(
+      const FlossDeviceId& device_id,
+      const absl::optional<PolicyEffect>& effect) override;
+  void ServiceAllowlistChanged(
+      const std::vector<device::BluetoothUUID>& allowlist) override;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // BluetoothAdapter:
   base::WeakPtr<BluetoothAdapter> GetWeakPtr() override;
@@ -249,6 +285,20 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
   // the ui thread but socket operations (including connect/disconnect) will be
   // run in this thread. See |BluetoothSocketNet| for more details.
   scoped_refptr<device::BluetoothSocketThread> socket_thread_;
+
+  // List of advertisements registered with this adapter. This list is used
+  // to ensure we unregister any advertisements that were registered with
+  // this adapter on adapter shutdown. This is a sub-optimal solution since
+  // we'll keep a list of all advertisements ever created by this adapter (the
+  // unregistered ones will just be inactive). This will be fixed with
+  // crbug.com/687396.
+  std::vector<scoped_refptr<BluetoothAdvertisementFloss>> advertisements_;
+
+  // Default BLE advertising interval.
+  // 100 ms is one of the recommended values on Floss AdvertisingSetParameters.
+  // b/253718595 will provide a 'no preference' option so that Floss can choose
+  // a default value for the advertising interval.
+  uint16_t interval_ms_ = 100;
 
   base::WeakPtrFactory<BluetoothAdapterFloss> weak_ptr_factory_{this};
 };

@@ -5,38 +5,33 @@
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_AGGREGATABLE_ATTRIBUTION_UTILS_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_AGGREGATABLE_ATTRIBUTION_UTILS_H_
 
-#include <string>
 #include <vector>
 
+#include "components/attribution_reporting/aggregatable_trigger_data.h"
+#include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace absl {
-class uint128;
-}  // namespace absl
+namespace attribution_reporting {
+class AggregatableValues;
+class AggregationKeys;
+class FilterData;
+}  // namespace attribution_reporting
 
 namespace content {
 
 class AggregatableHistogramContribution;
 class AggregatableReportRequest;
-class AttributionAggregationKeys;
-class AttributionAggregatableTriggerData;
-class AttributionAggregatableValues;
-class AttributionFilterData;
 class AttributionReport;
 
 // Creates histograms from the specified source and trigger data.
 CONTENT_EXPORT std::vector<AggregatableHistogramContribution>
 CreateAggregatableHistogram(
-    const AttributionFilterData& source_filter_data,
-    const AttributionAggregationKeys& keys,
-    const std::vector<AttributionAggregatableTriggerData>&
-        aggregatable_trigger_data,
-    const AttributionAggregatableValues& aggregatable_values);
-
-// Returns a hex string representation of the 128-bit aggregatable key in big
-// endian order.
-CONTENT_EXPORT std::string HexEncodeAggregationKey(absl::uint128 value);
+    const attribution_reporting::FilterData& source_filter_data,
+    AttributionSourceType,
+    const attribution_reporting::AggregationKeys& keys,
+    const attribution_reporting::AggregatableTriggerDataList&,
+    const attribution_reporting::AggregatableValues&);
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.

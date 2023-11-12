@@ -46,9 +46,10 @@
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/action_factory.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url/url_util.h"
@@ -80,14 +81,44 @@ TabSwitcherItem* CreateItem(web::WebState* web_state) {
   return item;
 }
 
-// Constructs an array of TabSwitcherItems from a `web_state_list`.
-NSArray* CreateItems(WebStateList* web_state_list) {
+// Constructs an array of TabSwitcherItems from a `web_state_list` sorted by
+// last active time.
+NSArray* CreateItemsOrderedByLastActiveTime(WebStateList* web_state_list) {
+  DCHECK(IsTabGridSortedByRecency());
+  NSMutableArray* items = [[NSMutableArray alloc] init];
+  std::vector<web::WebState*> web_states;
+  for (int i = 0; i < web_state_list->count(); i++) {
+    web_states.push_back(web_state_list->GetWebStateAt(i));
+  }
+  std::sort(web_states.begin(), web_states.end(),
+            [](web::WebState* a, web::WebState* b) -> bool {
+              return a->GetLastActiveTime() < b->GetLastActiveTime();
+            });
+
+  for (web::WebState* web_state : web_states) {
+    [items addObject:CreateItem(web_state)];
+  }
+  return [items copy];
+}
+
+// Constructs an array of TabSwitcherItems from a `web_state_list` sorted by
+// index.
+NSArray* CreateItemsOrderedByIndex(WebStateList* web_state_list) {
+  DCHECK(!IsTabGridSortedByRecency());
   NSMutableArray* items = [[NSMutableArray alloc] init];
   for (int i = 0; i < web_state_list->count(); i++) {
     web::WebState* web_state = web_state_list->GetWebStateAt(i);
     [items addObject:CreateItem(web_state)];
   }
   return [items copy];
+}
+
+// Constructs an array of TabSwitcherItems from a `web_state_list`.
+NSArray* CreateItems(WebStateList* web_state_list) {
+  if (IsTabGridSortedByRecency()) {
+    return CreateItemsOrderedByLastActiveTime(web_state_list);
+  }
+  return CreateItemsOrderedByIndex(web_state_list);
 }
 
 // Returns the ID of the active tab in `web_state_list`.
@@ -163,6 +194,11 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   return nullptr;
 }
 
+// Records the number of Tabs closed after a bulk or a "Close All" operation.
+void RecordTabGridCloseTabsCount(int count) {
+  base::UmaHistogramCounts100("IOS.TabGrid.CloseTabs", count);
+}
+
 }  // namespace
 
 @interface TabGridMediator () <CRWWebStateObserver,
@@ -173,7 +209,7 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
 // The browser state from the browser.
 @property(nonatomic, readonly) ChromeBrowserState* browserState;
 // The UI consumer to which updates are made.
-@property(nonatomic, weak) id<GridConsumer> consumer;
+@property(nonatomic, weak) id<TabCollectionConsumer> consumer;
 // Handler for reading list command.
 @property(nonatomic, weak) id<BrowserCommands> readingListHandler;
 // The saved session window just before close all tabs is called.
@@ -197,9 +233,13 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   std::unique_ptr<
       base::ScopedMultiSourceObservation<web::WebState, web::WebStateObserver>>
       _scopedWebStateObservation;
+
+  // ItemID of the dragged tab. Used to check if the dropped tab is from the
+  // same Chrome window.
+  NSString* _dragItemID;
 }
 
-- (instancetype)initWithConsumer:(id<GridConsumer>)consumer {
+- (instancetype)initWithConsumer:(id<TabCollectionConsumer>)consumer {
   if (self = [super init]) {
     _consumer = consumer;
     _webStateListObserverBridge =
@@ -216,6 +256,11 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
     _appearanceCache = [[NSMutableDictionary alloc] init];
   }
   return self;
+}
+
+- (void)prepareToShowTabGrid {
+  DCHECK(IsTabGridSortedByRecency());
+  [self resetToAllItems];
 }
 
 #pragma mark - Public properties
@@ -438,6 +483,9 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
     // is being selected, make sure that the consumer update its selected item.
     [self.consumer selectItemWithID:itemID];
     return;
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridMoveToExistingTab"));
   }
 
   // Avoid a reentrant activation. This is a fix for crbug.com/1134663, although
@@ -454,6 +502,15 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   if (index == WebStateList::kInvalidIndex)
     return NO;
   return index == self.webStateList->active_index();
+}
+
+- (void)pinItemWithID:(NSString*)itemID {
+  int index = GetIndexOfTabWithId(self.webStateList, itemID);
+  if (index == WebStateList::kInvalidIndex) {
+    return;
+  }
+
+  self.webStateList->SetWebStatePinnedAt(index, true);
 }
 
 - (void)closeItemWithID:(NSString*)itemID {
@@ -489,6 +546,7 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   __block bool allTabsClosed = true;
 
   base::UmaHistogramCounts100("IOS.TabGrid.Selection.CloseTabs", itemIDs.count);
+  RecordTabGridCloseTabsCount(itemIDs.count);
 
   self.webStateList->PerformBatchOperation(
       base::BindOnce(^(WebStateList* list) {
@@ -513,6 +571,7 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
 }
 
 - (void)closeAllItems {
+  RecordTabGridCloseTabsCount(self.webStateList->count());
   if (!self.browserState->IsOffTheRecord()) {
     base::RecordAction(
         base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
@@ -526,8 +585,10 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
 }
 
 - (void)saveAndCloseAllItems {
+  RecordTabGridCloseTabsCount(self.webStateList->count());
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
+
   if (self.webStateList->empty())
     return;
   self.closedSessionWindow = SerializeWebStateList(self.webStateList, nil);
@@ -595,8 +656,8 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
     return nil;
   }
 
-  ActionFactory* actionFactory =
-      [[ActionFactory alloc] initWithScenario:MenuScenario::kTabGridAddTo];
+  ActionFactory* actionFactory = [[ActionFactory alloc]
+      initWithScenario:MenuScenarioHistogram::kTabGridAddTo];
 
   __weak TabGridMediator* weakSelf = self;
 
@@ -703,11 +764,16 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
       WebStateOpener());
 }
 
-#pragma mark - GridDragDropHandler
+#pragma mark - TabCollectionDragDropHandler
 
 - (UIDragItem*)dragItemForItemWithID:(NSString*)itemID {
+  _dragItemID = itemID;
   web::WebState* webState = GetWebStateWithId(self.browserState, itemID);
   return CreateTabDragItem(webState);
+}
+
+- (void)dragSessionDidEnd {
+  _dragItemID = nil;
 }
 
 - (UIDropOperation)dropOperationForDropSession:(id<UIDropSession>)session {
@@ -718,6 +784,13 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   // asynchronous drops.
   if ([dragItem.localObject isKindOfClass:[TabInfo class]]) {
     TabInfo* tabInfo = static_cast<TabInfo*>(dragItem.localObject);
+    // If the dropped tab is from the same Chrome window and has been removed,
+    // cancel the drop operation.
+    if (_dragItemID == tabInfo.tabID &&
+        GetIndexOfTabWithId(self.webStateList, tabInfo.tabID) ==
+            WebStateList::kInvalidIndex) {
+      return UIDropOperationCancel;
+    }
     if (self.browserState->IsOffTheRecord() && tabInfo.incognito) {
       return UIDropOperationMove;
     }

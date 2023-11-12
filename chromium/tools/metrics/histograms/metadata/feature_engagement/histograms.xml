@@ -211,6 +211,12 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_RequestDesktopSiteAppMenu"
       summary="educating users about using the desktop site app menu item to
                add a site-level exception."/>
+  <variant name="IPH_RequestDesktopSiteDefaultOn"
+      summary="the in product help message to let users opt out of desktop
+               site global settings default-on."/>
+  <variant name="IPH_RequestDesktopSiteOptIn"
+      summary="the in product help message to let users turn on the desktop
+               site global settings."/>
   <variant name="IPH_SharedHighlightingBuilder"
       summary="the in product help message to notify the user that the share
                action can preemptively share a link-to-text"/>
@@ -251,6 +257,8 @@ chromium-metrics-reviews@google.com.
       summary="Video tutorial card on NTP about voice search in chrome"/>
   <variant name="IPH_VideoTutorial_TryNow"
       summary="Video tutorial Try Now feature"/>
+  <variant name="IPH_WebFeedAwareness"
+      summary="proactive announcement of web feed on NTP/start surface"/>
   <variant name="IPH_WebFeedFollow"
       summary="proactive Web Feed follow recommendations"/>
   <variant name="IPH_WebFeedPostFollowDialog"
@@ -262,11 +270,13 @@ chromium-metrics-reviews@google.com.
 
 <variants name="TutorialID">
   <variant name="" summary="any tutorial"/>
+  <variant name=".SidePanelReadingList"
+      summary="the tutorial for the side panel reading list"/>
   <variant name=".TabGroup" summary="the tutorial for tab groups"/>
 </variants>
 
 <histogram name="InProductHelp.Config.ParsingEvent" enum="ConfigParsingEvent"
-    expires_after="2023-03-19">
+    expires_after="2023-05-27">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help configuration is parsed correctly, and the
@@ -275,7 +285,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.Init.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2022-12-26">
+    expires_after="2023-12-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if {IPHDatabase} database initialization succeeds for in-product
@@ -285,7 +295,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.Load.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2022-12-26">
+    expires_after="2023-12-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if {IPHDatabase} database successfully loads the data for in-product
@@ -295,7 +305,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.TotalEvents" units="events"
-    expires_after="2023-02-26">
+    expires_after="2023-04-30">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records the total number of event records in the database for in-product
@@ -304,7 +314,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.Update.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2022-12-26">
+    expires_after="2023-12-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if {IPHDatabase} database update succeeds for in-product help.
@@ -313,7 +323,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.DismissalReason.iOS"
-    enum="InProductHelpDismissalReason" expires_after="2023-02-12">
+    enum="InProductHelpDismissalReason" expires_after="2023-04-16">
   <owner>lpromero@google.com</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -322,7 +332,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.NotifyEventReadyState.{IPHFeature}"
-    enum="BooleanSuccess" expires_after="2022-12-26">
+    enum="BooleanSuccess" expires_after="2023-12-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if the model is ready when in-product help event happens for
@@ -404,7 +414,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.ShouldTriggerHelpUI.{IPHFeature}"
-    enum="TriggerHelpUIResult" expires_after="2022-12-26">
+    enum="TriggerHelpUIResult" expires_after="2023-12-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help for {IPHFeature} is shown to the user, and the
@@ -429,7 +439,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.SnoozeAction" enum="InProductHelpSnoozeAction"
-    expires_after="2022-12-04">
+    expires_after="2023-04-16">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -438,7 +448,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.TextBubble.ShownTime" units="ms"
-    expires_after="2023-04-09">
+    expires_after="2023-06-11">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -480,7 +490,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial.TabGroup.EditedTitle" enum="BooleanSuccess"
-    expires_after="2023-03-05">
+    expires_after="2023-05-07">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -492,7 +502,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial{TutorialID}.AbortStep" units="int"
-    expires_after="2022-12-31">
+    expires_after="2023-12-31">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -503,7 +513,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial{TutorialID}.Completion" enum="BooleanSuccess"
-    expires_after="2022-12-31">
+    expires_after="2023-12-31">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -514,7 +524,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial{TutorialID}.IPHLinkClicked" enum="BooleanSuccess"
-    expires_after="2022-12-31">
+    expires_after="2023-12-31">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -526,7 +536,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial{TutorialID}.StartedFromWhatsNewPage"
-    enum="BooleanSuccess" expires_after="2022-12-31">
+    enum="BooleanSuccess" expires_after="2023-12-31">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>

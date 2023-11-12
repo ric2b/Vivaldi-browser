@@ -6,8 +6,8 @@
  * @fileoverview This is a table column representation
  */
 
-import {dispatchPropertyChange, getPropertyDescriptor} from 'chrome://resources/js/cr.m.js';
-import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.js';
+import {dispatchPropertyChange, getPropertyDescriptor} from 'chrome://resources/ash/common/cr_deprecated.js';
+import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 
 /**
  * A table column that wraps column ids and settings.

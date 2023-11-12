@@ -8,7 +8,9 @@
 #include <memory>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/touch_to_fill/payments/android/touch_to_fill_credit_card_view_controller.h"
 
@@ -16,6 +18,7 @@ namespace autofill {
 
 class TouchToFillCreditCardView;
 class TouchToFillDelegate;
+class CreditCard;
 
 // Controller of the bottom sheet surface for filling credit card data on
 // Android. It is responsible for showing the view and handling user
@@ -35,18 +38,24 @@ class TouchToFillCreditCardController
   // cards and be notified of the user's decision. Returns whether the surface
   // was successfully shown.
   bool Show(std::unique_ptr<TouchToFillCreditCardView> view,
-            base::WeakPtr<TouchToFillDelegate> delegate);
+            base::WeakPtr<TouchToFillDelegate> delegate,
+            base::span<const autofill::CreditCard* const> cards_to_suggest);
 
   // Hides the surface if it is currently shown.
   void Hide();
+
+  // TouchToFillCreditCardViewController:
+  void OnDismissed(JNIEnv* env) override;
+  void ScanCreditCard(JNIEnv* env) override;
+  void ShowCreditCardSettings(JNIEnv* env) override;
+  void SuggestionSelected(
+      JNIEnv* env,
+      base::android::JavaParamRef<jstring> unique_id) override;
 
  private:
   // Called after the surface gets shown or hidden.
   void SetShouldSuppressKeyboard(bool suppress);
 
-  // TouchToFillCreditCardViewController:
-  // Called whenever the surface gets hidden (regardless of the cause).
-  void OnDismissed(JNIEnv* env) override;
   // Gets or creates the Java counterpart.
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
 

@@ -25,7 +25,6 @@
 <translation id="2166378884831602661">Bu site güvenli bağlantı sağlayamıyor</translation>
 <translation id="2187317261103489799">Algıla (varsayılan)</translation>
 <translation id="2224337661447660594">İnternet bağlantısı yok</translation>
-<translation id="2230458221926704099"><ph name="BEGIN_LINK" />Tanılama uygulamasını<ph name="END_LINK" /> kullanarak bağlantınızı düzeltin</translation>
 <translation id="2292556288342944218">İnternet erişiminiz engellendi</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> için kullanıcı adı ve parola gerekiyor.</translation>
 <translation id="2337852623177822836">Ayar, yöneticiniz tarafından denetleniyor</translation>
@@ -152,7 +151,6 @@
 <translation id="6451458296329894277">Yeniden Form Gönderme İşlemini Onayla</translation>
 <translation id="6569060085658103619">Bir eklenti sayfasını görüntülüyorsunuz</translation>
 <translation id="6657585470893396449">Parola</translation>
-<translation id="6685834062052613830">Çıkış yapın ve kurulumu tamamlayın</translation>
 <translation id="6711464428925977395">Proxy sunucusunda bir sorun var veya adres yanlış.</translation>
 <translation id="6757797048963528358">Cihazınız uyku moduna geçti.</translation>
 <translation id="6897140037006041989">Kullanıcı Aracısı</translation>
@@ -211,7 +209,6 @@
 <translation id="9008201768610948239">Yoksay</translation>
 <translation id="9025348182339809926">(Geçersiz)</translation>
 <translation id="9039213469156557790">Ayrıca, bu sayfa güvenli olmayan başka kaynaklar içeriyor. Bu kaynaklar, aktarım sırasında başkaları tarafından görülebilir ve bir saldırgan tarafından sayfanın davranışını değiştirmek üzere kullanılabilir.</translation>
-<translation id="9048224371732578627">Otomatik video oynatmaya izin verildi</translation>
 <translation id="9062620674789239642">Taşınmış, dizenlenmiş veya silinmiş olabilir.</translation>
 <translation id="9069693763241529744">Bir eklenti tarafından engellendi</translation>
 <translation id="9073799351042754113">Bu site için güvenlik uyarılarını kapatmayı seçtiniz.</translation>

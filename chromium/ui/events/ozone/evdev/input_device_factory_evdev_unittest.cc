@@ -6,15 +6,17 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_converter_test_util.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/event_device_test_util.h"
+#include "ui/events/ozone/evdev/input_device_factory_evdev_metrics.h"
 #include "ui/events/ozone/evdev/input_device_opener.h"
 #include "ui/events/ozone/features.h"
 
@@ -163,6 +165,7 @@ class InputDeviceFactoryEvdevTest : public testing::Test {
       base::test::TaskEnvironment::MainThreadType::UI};
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<ui::DeviceEventDispatcherEvdev> dispatcher_;
+  base::HistogramTester histogram_tester_;
 
   void SetUp() override {
     dispatcher_ = std::make_unique<StubDeviceEventDispatcherEvdev>(
@@ -195,8 +198,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -218,8 +221,8 @@ TEST_F(InputDeviceFactoryEvdevTest, AttachSingularMouse) {
           std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(0));
 }
@@ -251,8 +254,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
   input_device_factory_->AddInputDevice(2, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -285,8 +288,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
   input_device_factory_->AddInputDevice(2, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_TRUE(keyboards_.front().suspected_imposter);
@@ -312,8 +315,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
           std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_TRUE(keyboards_.front().suspected_imposter);
@@ -339,8 +342,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -373,8 +376,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
   input_device_factory_->AddInputDevice(2, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -407,8 +410,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
   input_device_factory_->AddInputDevice(2, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -434,8 +437,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
           std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
@@ -468,8 +471,8 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->OnStartupScanComplete();
   input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
   input_device_factory_->AddInputDevice(2, base::FilePath("unused_value"));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_TRUE(keyboards_.front().suspected_imposter);
@@ -477,6 +480,79 @@ TEST_F(InputDeviceFactoryEvdevTest,
   input_device_factory_->RemoveInputDevice(mouse_path);
   EXPECT_EQ(keyboards_.size(), std::size_t(1));
   EXPECT_FALSE(keyboards_.front().suspected_imposter);
+}
+
+TEST_F(InputDeviceFactoryEvdevTest,
+       AttachInternalKeyboardTriggersMetricLogging) {
+  std::vector<std::unique_ptr<FakeEventConverterEvdev>> converters;
+  base::RunLoop run_loop;
+
+  std::unique_ptr<FakeEventConverterEvdev> keyboard_converter =
+      std::make_unique<FakeEventConverterEvdev>(
+          1, base::FilePath("path"), 1, InputDeviceType::INPUT_DEVICE_INTERNAL,
+          "name", "phys_path", 1, 1, 1, DeviceForm::KEYBOARD);
+  converters.push_back(std::move(keyboard_converter));
+  std::unique_ptr<InputDeviceFactoryEvdev> input_device_factory_ =
+      std::make_unique<InputDeviceFactoryEvdev>(
+          std::move(dispatcher_), nullptr,
+          std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
+  input_device_factory_->OnStartupScanComplete();
+  input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester_.ExpectUniqueSample(kKeyboardAttachmentTypeHistogramName,
+                                       AttachmentType::kInternal, 1);
+  histogram_tester_.ExpectUniqueSample(kInternalAttachmentFormHistogramName,
+                                       AttachmentForm::kKeyboard, 1);
+}
+
+TEST_F(InputDeviceFactoryEvdevTest, AttachUSBKeyboardTriggersMetricLogging) {
+  std::vector<std::unique_ptr<FakeEventConverterEvdev>> converters;
+  base::RunLoop run_loop;
+
+  std::unique_ptr<FakeEventConverterEvdev> keyboard_converter =
+      std::make_unique<FakeEventConverterEvdev>(
+          1, base::FilePath("path"), 1, InputDeviceType::INPUT_DEVICE_USB,
+          "name", "phys_path", 1, 1, 1, DeviceForm::KEYBOARD);
+  converters.push_back(std::move(keyboard_converter));
+  std::unique_ptr<InputDeviceFactoryEvdev> input_device_factory_ =
+      std::make_unique<InputDeviceFactoryEvdev>(
+          std::move(dispatcher_), nullptr,
+          std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
+  input_device_factory_->OnStartupScanComplete();
+  input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester_.ExpectUniqueSample(kKeyboardAttachmentTypeHistogramName,
+                                       AttachmentType::kUsb, 1);
+  histogram_tester_.ExpectUniqueSample(kUsbAttachmentFormHistogramName,
+                                       AttachmentForm::kKeyboard, 1);
+}
+
+TEST_F(InputDeviceFactoryEvdevTest, AttachBluetoothMouseTriggersMetricLogging) {
+  std::vector<std::unique_ptr<FakeEventConverterEvdev>> converters;
+  base::RunLoop run_loop;
+
+  std::unique_ptr<FakeEventConverterEvdev> mouse_converter =
+      std::make_unique<FakeEventConverterEvdev>(
+          1, base::FilePath("path"), 1, InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+          "name", "phys_path", 1, 1, 1, DeviceForm::MOUSE);
+  converters.push_back(std::move(mouse_converter));
+  std::unique_ptr<InputDeviceFactoryEvdev> input_device_factory_ =
+      std::make_unique<InputDeviceFactoryEvdev>(
+          std::move(dispatcher_), nullptr,
+          std::make_unique<FakeInputDeviceOpenerEvdev>(std::move(converters)));
+  input_device_factory_->OnStartupScanComplete();
+  input_device_factory_->AddInputDevice(1, base::FilePath("unused_value"));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester_.ExpectUniqueSample(kMouseAttachmentTypeHistogramName,
+                                       AttachmentType::kBluetooth, 1);
+  histogram_tester_.ExpectUniqueSample(kBluetoothAttachmentFormHistogramName,
+                                       AttachmentForm::kMouse, 1);
 }
 
 }  // namespace ui

@@ -103,6 +103,14 @@ found in the LICENSE file.
             android:id="@+id/selection_open_in_incognito_tab_id"
             android:title="@string/contextmenu_open_in_incognito_tab"
             app:showAsAction="never" />
+        <item
+            android:id="@+id/reading_list_mark_as_read_id"
+            android:title="@string/reading_list_mark_as_read"
+            app:showAsAction="never" />
+        <item
+            android:id="@+id/reading_list_mark_as_unread_id"
+            android:title="@string/reading_list_mark_as_unread"
+            app:showAsAction="never" />
         <!-- Vivaldi -->
         <item
             android:id="@+id/select_all_menu_id"
@@ -110,5 +118,4 @@ found in the LICENSE file.
             android:visible="false"
             app:showAsAction="never" />
     </group>
-
 </menu>

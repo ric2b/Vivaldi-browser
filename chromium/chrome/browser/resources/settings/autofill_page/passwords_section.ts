@@ -37,10 +37,10 @@ import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
 import {DomRepeat, DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
@@ -113,10 +113,10 @@ export interface PasswordsSectionElement {
 
 const PasswordsSectionElementBase =
     UserUtilMixin(MergePasswordsStoreCopiesMixin(PrefsMixin(
-        GlobalScrollTargetMixin(RouteObserverMixin(WebUIListenerMixin(
+        GlobalScrollTargetMixin(RouteObserverMixin(WebUiListenerMixin(
             I18nMixin(PasswordCheckMixin(PolymerElement)))))))) as {
       new (): PolymerElement & PasswordCheckMixinInterface &
-          I18nMixinInterface & WebUIListenerMixinInterface &
+          I18nMixinInterface & WebUiListenerMixinInterface &
           RouteObserverMixinInterface & GlobalScrollTargetMixinInterface &
           PrefsMixinInterface & MergePasswordsStoreCopiesMixinInterface &
           UserUtilMixinInterface,
@@ -227,14 +227,6 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
         value: false,
       },
 
-      isAutomaticPasswordChangeEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'enableAutomaticPasswordChangeInSettings');
-        },
-      },
-
       isPasswordViewPageEnabled_: {
         type: Boolean,
         value() {
@@ -292,7 +284,6 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private numberOfDevicePasswords_: number;
   private hasPasswordExceptions_: boolean;
   private shouldShowBanner_: boolean;
-  private isAutomaticPasswordChangeEnabled_: boolean;
   private isPasswordViewPageEnabled_: boolean;
   private shouldShowDevicePasswordsLink_: boolean;
   private trustedVaultBannerState_: TrustedVaultBannerState;
@@ -359,7 +350,8 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
     };
 
     // Request initial data.
-    this.passwordManager_.getExceptionList(this.setPasswordExceptionsListener_);
+    this.passwordManager_.getExceptionList().then(
+        this.setPasswordExceptionsListener_);
 
     // Listen for changes.
     this.passwordManager_.addExceptionListChangedListener(
@@ -368,7 +360,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
     const syncBrowserProxy = SyncBrowserProxyImpl.getInstance();
 
     syncBrowserProxy.sendTrustedVaultBannerStateChanged();
-    this.addWebUIListener(
+    this.addWebUiListener(
         'trusted-vault-banner-state-changed',
         (state: TrustedVaultBannerState) => {
           this.trustedVaultBannerState_ = state;
@@ -392,12 +384,6 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
     if (route !== routes.PASSWORDS) {
       return;
-    }
-
-    // If password change scripts are enabled, the scripts cache should be
-    // refreshed to minimize any UI modifications on the password check page.
-    if (this.isAutomaticPasswordChangeEnabled_) {
-      this.passwordManager_.refreshScriptsIfNecessary();
     }
 
     // Show the auth timeout dialog if the URL has the URL param.
@@ -481,11 +467,11 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private onTrustedVaultBannerClick_() {
     switch (this.trustedVaultBannerState_) {
       case TrustedVaultBannerState.OPTED_IN:
-        OpenWindowProxyImpl.getInstance().openURL(
+        OpenWindowProxyImpl.getInstance().openUrl(
             loadTimeData.getString('trustedVaultLearnMoreUrl'));
         break;
       case TrustedVaultBannerState.OFFER_OPT_IN:
-        OpenWindowProxyImpl.getInstance().openURL(
+        OpenWindowProxyImpl.getInstance().openUrl(
             loadTimeData.getString('trustedVaultOptInUrl'));
         break;
       case TrustedVaultBannerState.NOT_SHOWN:
@@ -586,7 +572,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
   private onAddPasswordTap_() {
     chrome.metricsPrivate.recordEnumerationValue(
-        'PasswordManager.AddCredentialFromSettings.UserAction',
+        'PasswordManager.AddCredentialFromSettings.UserAction2',
         AddCredentialFromSettingsUserInteractions.ADD_DIALOG_OPENED,
         AddCredentialFromSettingsUserInteractions.COUNT);
     this.showAddPasswordDialog_ = true;
@@ -594,7 +580,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
   private onAddPasswordDialogClosed_() {
     chrome.metricsPrivate.recordEnumerationValue(
-        'PasswordManager.AddCredentialFromSettings.UserAction',
+        'PasswordManager.AddCredentialFromSettings.UserAction2',
         AddCredentialFromSettingsUserInteractions.ADD_DIALOG_CLOSED,
         AddCredentialFromSettingsUserInteractions.COUNT);
     this.showAddPasswordDialog_ = false;

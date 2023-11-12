@@ -35,15 +35,6 @@
 
 namespace {
 
-NSString* const kExtensionPrefPanePath =
-    @"/System/Library/PreferencePanes/Extensions.prefPane";
-// Undocumented, used by Safari.
-const UInt32 kOpenSharingSubpaneDescriptorType = 'ptru';
-NSString* const kOpenSharingSubpaneActionKey = @"action";
-NSString* const kOpenSharingSubpaneActionValue = @"revealExtensionPoint";
-NSString* const kOpenSharingSubpaneProtocolKey = @"protocol";
-NSString* const kOpenSharingSubpaneProtocolValue = @"com.apple.share-services";
-
 // The reminder service doesn't have a convenient NSSharingServiceName*
 // constant.
 NSString* const kRemindersSharingServiceName =
@@ -202,13 +193,14 @@ bool CanShare() {
   [service setDelegate:self];
   [service setSubject:title];
 
-  NSArray* itemsToShare;
-  if ([[service name] isEqual:NSSharingServiceNamePostOnTwitter]) {
-    // The Twitter share service expects the title as an additional share item.
-    // This is the same approach system apps use.
-    itemsToShare = @[ url, title ];
+  NSArray* itemsToShare = @[ url ];
+  if (@available(macOS 10.14, *)) {
   } else {
-    itemsToShare = @[ url ];
+    if ([[service name] isEqual:NSSharingServiceNamePostOnTwitter]) {
+      // The Twitter share service expects the title as an additional share
+      // item. This is the same approach system apps use.
+      itemsToShare = @[ url, title ];
+    }
   }
   if ([[service name] isEqual:kRemindersSharingServiceName]) {
     _activity.reset([[NSUserActivity alloc]
@@ -225,26 +217,8 @@ bool CanShare() {
 
 // Opens the "Sharing" subpane of the "Extensions" macOS preference pane.
 - (void)openSharingPrefs:(NSMenuItem*)sender {
-  NSURL* prefPaneURL =
-      [NSURL fileURLWithPath:kExtensionPrefPanePath isDirectory:YES];
-  NSDictionary* args = @{
-    kOpenSharingSubpaneActionKey : kOpenSharingSubpaneActionValue,
-    kOpenSharingSubpaneProtocolKey : kOpenSharingSubpaneProtocolValue
-  };
-  NSData* data = [NSPropertyListSerialization
-      dataWithPropertyList:args
-                    format:NSPropertyListXMLFormat_v1_0
-                   options:0
-                     error:nil];
-  base::scoped_nsobject<NSAppleEventDescriptor> descriptor(
-      [[NSAppleEventDescriptor alloc]
-          initWithDescriptorType:kOpenSharingSubpaneDescriptorType
-                            data:data]);
-  [[NSWorkspace sharedWorkspace] openURLs:@[ prefPaneURL ]
-                  withAppBundleIdentifier:nil
-                                  options:NSWorkspaceLaunchAsync
-           additionalEventParamDescriptor:descriptor
-                        launchIdentifiers:NULL];
+  base::mac::OpenSystemSettingsPane(
+      base::mac::SystemSettingsPane::kPrivacySecurity_Extensions_Sharing);
 }
 
 // Returns the image to be used for the "More..." menu item, or nil on macOS

@@ -18,6 +18,7 @@
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/app_shim/app_shim_termination_manager.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
+#include "chrome/browser/apps/platform_apps/platform_app_launch.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut_mac.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_mac.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
@@ -192,6 +192,10 @@ void ExtensionAppShimManagerDelegate::LaunchApp(
   DCHECK(extension);
   extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_CMD_LINE_APP,
                                   extension->GetType());
+
+  if (apps::OpenDeprecatedApplicationPrompt(profile, app_id))
+    return;
+
   if (extension->is_hosted_app()) {
     auto params = CreateAppLaunchParamsUserContainer(
         profile, extension, WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -199,7 +203,7 @@ void ExtensionAppShimManagerDelegate::LaunchApp(
     params.launch_files = files;
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        ->LaunchAppWithParams(std::move(params));
+        ->LaunchAppWithParams(std::move(params), base::DoNothing());
     return;
   }
   if (files.empty()) {

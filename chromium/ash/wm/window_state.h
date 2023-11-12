@@ -43,11 +43,6 @@ class WindowStateDelegate;
 class WindowStateObserver;
 class WMEvent;
 
-// TODO(crbug.com/1323394): Consider moving to a WindowState constants file.
-constexpr float kOneThirdPositionRatio = 0.33f;
-constexpr float kDefaultPositionRatio = 0.5f;
-constexpr float kTwoThirdPositionRatio = 0.67f;
-
 // WindowState manages and defines ash specific window state and
 // behavior. Ash specific per-window state (such as ones that controls
 // window manager behavior) and ash specific window behavior (such as
@@ -94,12 +89,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
     // Called when the window is being destroyed.
     virtual void OnWindowDestroying(WindowState* window_state) {}
-
-#if DCHECK_IS_ON()
-    // Check if the window state satisfies the maximizable condition.
-    virtual void CheckMaximizableCondition(
-        const WindowState* window_state) const;
-#endif  // DCHECK_IS_ON()
   };
 
   // Type of animation type to be applied when changing bounds locally.
@@ -587,9 +576,13 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool allow_set_bounds_direct_ = false;
   bool is_moving_to_another_display_ = false;
 
-  // A property to save the ratio between snapped window width (or height
-  // for vertical layout) and display workarea width (or height). The ratio
-  // should be preserved when the display or workspace size changes.
+  // Contains the window's target snap ratio if it's going to be snapped by a
+  // WindowSnapWMEvent, and the updated window snap ratio if the snapped
+  // window's bounds are changed while it remains snapped. It will be used to
+  // calculate the desired snapped window bounds for a WindowSnapWMEvent, or
+  // adjust the window's bounds when display or workarea changes, or decide what
+  // the window bounds should be if restoring the window back to a snapped
+  // window state, etc.
   absl::optional<float> snap_ratio_;
 
   // A property to remember the window position which was set before the

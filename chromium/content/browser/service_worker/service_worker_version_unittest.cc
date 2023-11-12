@@ -499,6 +499,10 @@ TEST_F(ServiceWorkerVersionTest, Doom) {
   EXPECT_TRUE(version_->HasControllee());
   EXPECT_TRUE(container_host->controller());
 
+  // Set main_script_load_params_.
+  version_->set_main_script_load_params(
+      blink::mojom::WorkerMainScriptLoadParams::New());
+
   // Doom the version.
   version_->Doom();
 
@@ -509,6 +513,9 @@ TEST_F(ServiceWorkerVersionTest, Doom) {
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
   EXPECT_FALSE(version_->HasControllee());
   EXPECT_FALSE(container_host->controller());
+
+  // Ensure that the params are released.
+  EXPECT_TRUE(version_->main_script_load_params_.is_null());
 }
 
 TEST_F(ServiceWorkerVersionTest, SetDevToolsAttached) {
@@ -1490,8 +1497,32 @@ TEST_F(ServiceWorkerVersionTest,
       helper_->mock_render_process_host()->foreground_service_worker_count());
 }
 
+// An instance client whose fetch handler type is kNoHandler.
+class NoFetchHandlerClient : public FakeEmbeddedWorkerInstanceClient {
+ public:
+  explicit NoFetchHandlerClient(EmbeddedWorkerTestHelper* helper)
+      : FakeEmbeddedWorkerInstanceClient(helper) {}
+
+  NoFetchHandlerClient(const NoFetchHandlerClient&) = delete;
+  NoFetchHandlerClient& operator=(const NoFetchHandlerClient&) = delete;
+
+  void EvaluateScript() override {
+    host()->OnScriptEvaluationStart();
+    host()->OnStarted(blink::mojom::ServiceWorkerStartStatus::kNormalCompletion,
+                      blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler,
+                      helper()->GetNextThreadId(),
+                      blink::mojom::EmbeddedWorkerStartTiming::New());
+  }
+};
+
 class ServiceWorkerVersionNoFetchHandlerTest : public ServiceWorkerVersionTest {
  protected:
+  void SetUp() override {
+    ServiceWorkerVersionTest::SetUp();
+    // Make the service worker says no handler.
+    helper_->AddPendingInstanceClient(
+        std::make_unique<NoFetchHandlerClient>(helper_.get()));
+  }
   absl::optional<ServiceWorkerVersion::FetchHandlerType> GetFetchHandlerType()
       const override {
     return ServiceWorkerVersion::FetchHandlerType::kNoHandler;

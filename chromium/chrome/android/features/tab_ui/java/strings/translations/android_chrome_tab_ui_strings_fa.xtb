@@ -4,18 +4,18 @@
 <translation id="1075622780330595106"><ph name="NUMBER_OF_TABS" /> مورد از برگه‌هایتان اخیراً استفاده نشده‌اند. آن‌ها را می‌بندید؟</translation>
 <translation id="1181037720776840403">حذف</translation>
 <translation id="125153950246128346">برای دیدن برگه دیگر ضربه بزنید</translation>
-<translation id="1302104331113804646">تنظیمات پیگیری قیمت</translation>
-<translation id="1378979118429748177">دریافت اعلان هنگام کاهش قیمت‌ها</translation>
 <translation id="1403228085774130835">‏می‌توانید برگه‌های بسته‌شده را در «برگه‌های اخیر» در بخش منوی اصلی Chrome پیدا کنید</translation>
 <translation id="1455506303394048917">فعالیتتان در این «برگه‌های ناشناس» از این دستگاه حذف خواهد شد.</translation>
 <translation id="1499635324672558517">همه «برگه‌های ناشناس» بسته شود؟</translation>
 <translation id="1657719826150349398">انتقال برگه به پایین</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> برگه}one{<ph name="TABS_COUNT_MANY" /> برگه}other{<ph name="TABS_COUNT_MANY" /> برگه}}</translation>
+<translation id="2050597508048557928">{TABS_COUNT,plural, =1{نشانک‌گذاری <ph name="TABS_COUNT_ONE" /> برگه انتخاب‌شده}one{نشانک‌گذاری <ph name="TABS_COUNT_MANY" /> برگه انتخاب‌شده}other{نشانک‌گذاری <ph name="TABS_COUNT_MANY" /> برگه انتخاب‌شده}}</translation>
 <translation id="2118649612461486615">اطلاعات فروشگاه</translation>
 <translation id="2162620598375156287">اکنون با قیمت <ph name="CURRENT_PRICE" /> در <ph name="SOURCE_WEBSITE" /></translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{لغو گروه‌بندی برگه}one{لغو گروه‌بندی برگه}other{لغو گروه‌بندی برگه‌ها}}</translation>
 <translation id="2277224997687551299">ویرایش نام گروه</translation>
 <translation id="228946090561406413">{TABS_COUNT,plural, =1{برداشتن <ph name="TABS_COUNT_ONE" /> برگه انتخاب‌شده از گروه.}one{برداشتن <ph name="TABS_COUNT_MANY" /> برگه انتخاب‌شده از گروه.}other{برداشتن <ph name="TABS_COUNT_MANY" /> برگه انتخاب‌شده از گروه.}}</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{نشانک‌گذاری برگه}one{نشانک‌گذاری برگه}other{نشانک‌گذاری برگه‌ها}}</translation>
 <translation id="2479148705183875116">رفتن به تنظیمات</translation>
 <translation id="2539705006853443997">{TABS_COUNT,plural, =1{جمع کردن <ph name="TABS_COUNT_ONE" /> برگه.}one{جمع کردن گروه برگه با <ph name="TABS_COUNT_MANY" /> برگه.}other{جمع کردن گروه برگه با <ph name="TABS_COUNT_MANY" /> برگه.}}</translation>
 <translation id="2569352796411618312">پیشنهاد: <ph name="NUMBER_OF_TABS" /> مورد از برگه‌هایتان اخیراً استفاده نشده‌اند. آن‌ها را می‌بندید؟</translation>
@@ -34,6 +34,7 @@
 <translation id="3291470810748040983">وقتی در یکی از برگه‌های باز، قیمت کمتری وجود داشت، اعلان دریافت خواهید کرد</translation>
 <translation id="3328308545011660196">پیشنهاد: به نظر می‌رسد <ph name="NUMBER_OF_TABS" /> برگه مرتبط باشند. گروه‌بندی شوند؟</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
+<translation id="374923079891132274">تصویر کوچک پیش‌نمایش برگ هم‌رسانی.</translation>
 <translation id="3819916404117584598">{TABS_COUNT,plural, =1{جمع کردن <ph name="TABS_COUNT_ONE" /> برگه.}one{جمع کردن گروه برگه <ph name="TITLE_OF_GROUP" /> با <ph name="TABS_COUNT_MANY" /> برگه.}other{جمع کردن گروه برگه <ph name="TITLE_OF_GROUP" /> با <ph name="TABS_COUNT_MANY" /> برگه.}}</translation>
 <translation id="3882834874697329510">اعلان‌ها را در «تنظیمات» روشن کنید تا اگر قیمت کمتری در برگه‌ای باز وجود داشت هشدار دریافت کنید.</translation>
 <translation id="3940195383040445971">پیگیری قیمت در برگه‌ها</translation>
@@ -58,6 +59,7 @@
 <translation id="5556417849629758491">مشاهده اطلاعات فروشگاه، گزینه مربوطه در نزدیکی بالای صفحه قرار دارد</translation>
 <translation id="5558362125926932819">بستن گروه برگه با <ph name="NUMBER_OF_TABS" /> برگه</translation>
 <translation id="5580090775658607195"><ph name="TAB_COUNT" /> برگه گروه‌بندی شد</translation>
+<translation id="5656738671621697952">{TABS_COUNT,plural, =1{‏<ph name="TABS_COUNT_ONE" /> پیوند از Chrome}one{‏<ph name="TABS_COUNT_MANY" /> پیوند از Chrome}other{‏<ph name="TABS_COUNT_MANY" /> پیوند از Chrome}}</translation>
 <translation id="575494663145460764">برای کاهش قیمت‌ها اعلان دریافت شود؟</translation>
 <translation id="58326064309361797">برای گروه‌بندی برگه‌ها، آن‌ها را بکشید</translation>
 <translation id="5846292395804797011">بستن گروه <ph name="TITLE_OF_GROUP" /> با <ph name="NUMBER_OF_TABS" /> برگه</translation>
@@ -95,8 +97,8 @@
 <translation id="8205266828577616993">انتقال برگه به بالا</translation>
 <translation id="8304833501377495048">نوار برگه دیگر نشان داده نشود؟</translation>
 <translation id="83556505225171773">{TABS_COUNT,plural, =1{بستن <ph name="TABS_COUNT_ONE" /> برگه انتخابی}one{بستن <ph name="TABS_COUNT_MANY" /> برگه انتخابی}other{بستن <ph name="TABS_COUNT_MANY" /> برگه انتخابی}}</translation>
+<translation id="8398929769197326728">پوشه جدید - <ph name="CURRENT_TIMESTAMP_MS" /></translation>
 <translation id="8557923272772633250">گسترده کردن گروه برگه با <ph name="NUMBER_OF_TABS" /> برگه.</translation>
-<translation id="860282621117673749">اعلان‌های کاهش قیمت</translation>
 <translation id="8714939927607906138">قیمت کمتر</translation>
 <translation id="8749939518995770034">نوار برگه بسته شد</translation>
 <translation id="8820741577754260431">دیدن کاهش قیمت در برگه‌ها</translation>

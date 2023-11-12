@@ -32,6 +32,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/color/color_id.h"
@@ -86,8 +87,7 @@
 #include "ui/base/cocoa/secure_password_input.h"
 #endif
 
-#if defined(USE_OZONE)
-#include "ui/base/ui_base_features.h"
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_gl_egl_utility.h"
 #endif
@@ -177,11 +177,10 @@ bool IsValidCharToInsert(const char16_t& ch) {
 }
 
 bool CanUseTransparentBackgroundForDragImage() {
-#if defined(USE_OZONE)
-    const auto* const egl_utility =
-        ui::OzonePlatform::GetInstance()->GetPlatformGLEGLUtility();
-    return egl_utility ? egl_utility->IsTransparentBackgroundSupported()
-                       : false;
+#if BUILDFLAG(IS_OZONE)
+  const auto* const egl_utility =
+      ui::OzonePlatform::GetInstance()->GetPlatformGLEGLUtility();
+  return egl_utility ? egl_utility->IsTransparentBackgroundSupported() : false;
 #else
   // Other platforms allow this.
   return true;
@@ -1377,8 +1376,8 @@ void Textfield::ClearCompositionText() {
 void Textfield::InsertText(const std::u16string& new_text,
                            InsertTextCursorBehavior cursor_behavior) {
   std::u16string filtered_new_text;
-  std::copy_if(new_text.begin(), new_text.end(),
-               std::back_inserter(filtered_new_text), IsValidCharToInsert);
+  base::ranges::copy_if(new_text, std::back_inserter(filtered_new_text),
+                        IsValidCharToInsert);
 
   if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE ||
       filtered_new_text.empty())
@@ -1716,7 +1715,7 @@ bool Textfield::ShouldDoLearning() {
   if (should_do_learning_.has_value())
     return should_do_learning_.value();
 
-  NOTIMPLEMENTED_LOG_ONCE() << "A Textfield does not support ShouldDoLearning";
+  NOTIMPLEMENTED_LOG_ONCE();
   DVLOG(1) << "This Textfield instance does not support ShouldDoLearning";
   return false;
 }
@@ -1776,6 +1775,18 @@ bool Textfield::SetAutocorrectRange(const gfx::Range& range) {
   }
   return model_->SetAutocorrectRange(range);
 }
+
+bool Textfield::AddGrammarFragments(
+    const std::vector<ui::GrammarFragment>& fragments) {
+  if (!fragments.empty()) {
+    base::UmaHistogramEnumeration("InputMethod.Assistive.Grammar.Count",
+                                  TextInputClient::SubClass::kTextField);
+  }
+  // TODO(crbug/1201454): Implement this method for CrOS Grammar.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
@@ -2332,7 +2343,9 @@ void Textfield::UpdateBackgroundColor() {
   const SkColor color = GetBackgroundColor();
   SetBackground(
       CreateBackgroundFromPainter(Painter::CreateSolidRoundRectPainter(
-          color, FocusableBorder::kCornerRadiusDp)));
+          color, ::features::IsChromeRefresh2023()
+                     ? FocusableBorder::kChromeRefresh2023CornerRadiusDp
+                     : FocusableBorder::kCornerRadiusDp)));
   // Disable subpixel rendering when the background color is not opaque because
   // it draws incorrect colors around the glyphs in that case.
   // See crbug.com/115198

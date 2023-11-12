@@ -36,8 +36,8 @@
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
-#include "third_party/blink/renderer/core/paint/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/svg_image_painter.h"
+#include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
@@ -166,7 +166,7 @@ void LayoutSVGImage::UpdateLayout() {
 
   const bool bbox_changed = UpdateBoundingBox();
   if (bbox_changed) {
-    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
+    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kSVGResource);
 
     // Invalidate all resources of this client if our reference box changed.
     if (EverHadLayout())
@@ -252,7 +252,8 @@ void LayoutSVGImage::ImageChanged(WrappedImagePtr, CanDeferInvalidation defer) {
   if (CalculateObjectSize() != object_bounding_box_.size())
     SetNeedsLayout(layout_invalidation_reason::kSizeChanged);
 
-  SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
+  SetShouldDoFullPaintInvalidationWithoutLayoutChange(
+      PaintInvalidationReason::kImage);
 }
 
 }  // namespace blink

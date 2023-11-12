@@ -10,7 +10,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/test/cc_test_suite.h"
@@ -85,7 +84,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   void DidCommit() override { WaitForCallback(); }
 
   void WaitForCallback() {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::NextStep,
                        base::Unretained(this)));
@@ -877,7 +876,7 @@ class LayerTreeHostCopyRequestTestDeleteSharedImage
   std::unique_ptr<viz::SkiaOutputSurface> CreateSkiaOutputSurfaceOnThread(
       viz::DisplayCompositorMemoryAndTaskController*) override {
     display_context_provider_ = viz::TestContextProvider::Create();
-    display_context_provider_->BindToCurrentThread();
+    display_context_provider_->BindToCurrentSequence();
     return viz::FakeSkiaOutputSurface::Create3d(display_context_provider_);
   }
 
@@ -1022,7 +1021,7 @@ class LayerTreeHostCopyRequestTestCountSharedImages
   std::unique_ptr<viz::SkiaOutputSurface> CreateSkiaOutputSurfaceOnThread(
       viz::DisplayCompositorMemoryAndTaskController*) override {
     display_context_provider_ = viz::TestContextProvider::Create();
-    display_context_provider_->BindToCurrentThread();
+    display_context_provider_->BindToCurrentSequence();
     return viz::FakeSkiaOutputSurface::Create3d(display_context_provider_);
   }
 

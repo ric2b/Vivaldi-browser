@@ -5,6 +5,7 @@
 #include "net/dns/host_resolver_manager.h"
 
 #include <cmath>
+#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -50,6 +51,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -77,6 +79,7 @@
 #include "net/dns/address_sorter.h"
 #include "net/dns/dns_alias_utility.h"
 #include "net/dns/dns_client.h"
+#include "net/dns/dns_names_util.h"
 #include "net/dns/dns_response.h"
 #include "net/dns/dns_response_result_extractor.h"
 #include "net/dns/dns_transaction.h"
@@ -468,10 +471,12 @@ absl::variant<url::SchemeHostPort, std::string> CreateHostForJobKey(
 
 DnsResponse CreateFakeEmptyResponse(base::StringPiece hostname,
                                     DnsQueryType query_type) {
-  std::string qname;
-  CHECK(DNSDomainFromDot(hostname, &qname));
+  absl::optional<std::vector<uint8_t>> qname =
+      dns_names_util::DottedNameToNetwork(
+          hostname, /*require_valid_internet_hostname=*/true);
+  CHECK(qname.has_value());
   return DnsResponse::CreateEmptyNoDataResponse(
-      /*id=*/0u, /*is_authoritative=*/true, qname,
+      /*id=*/0u, /*is_authoritative=*/true, qname.value(),
       DnsQueryTypeToQtype(query_type));
 }
 
@@ -797,7 +802,7 @@ class HostResolverManager::RequestImpl
   const NetworkAnonymizationKey network_anonymization_key_;
   ResolveHostParameters parameters_;
   base::WeakPtr<ResolveContext> resolve_context_;
-  const raw_ptr<HostCache> host_cache_;
+  const raw_ptr<HostCache, DanglingUntriaged> host_cache_;
   const HostResolverFlags host_resolver_flags_;
 
   RequestPriority priority_;
@@ -859,7 +864,7 @@ class HostResolverManager::ProbeRequestImpl
   void OnDohServerUnavailable(bool network_change) override {
     // Start the runner asynchronously, as this may trigger reentrant calls into
     // HostResolverManager, which are not allowed during notification handling.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&ProbeRequestImpl::StartRunner,
                        weak_ptr_factory_.GetWeakPtr(), network_change));
@@ -1891,7 +1896,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
       // If we were called from a Request's callback within CompleteRequests,
       // that Request could not have been cancelled, so num_active_requests()
       // could not be 0. Therefore, we are not in CompleteRequests().
-      CompleteRequestsWithError(ERR_DNS_REQUEST_CANCELLED);
+      CompleteRequestsWithError(ERR_DNS_REQUEST_CANCELLED,
+                                /*task_type=*/absl::nullopt);
     }
   }
 
@@ -1900,7 +1906,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
   // change.
   // TODO This should not delete |this|.
   void Abort() {
-    CompleteRequestsWithError(ERR_NETWORK_CHANGED);
+    CompleteRequestsWithError(ERR_NETWORK_CHANGED, /*task_type=*/absl::nullopt);
   }
 
   // Gets a closure that will abort an insecure DnsTask (see
@@ -1933,7 +1939,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
         dns_task_error_ = OK;
         RunNextTask();
       } else if (!fallback_only) {
-        CompleteRequestsWithError(error);
+        CompleteRequestsWithError(error, /*task_type=*/absl::nullopt);
       }
     }
   }
@@ -1954,10 +1960,11 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     // Otherwise the job will be destroyed with requests silently cancelled
     // before completion runs.
     DCHECK(self_iterator_);
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&Job::CompleteRequestsWithError,
                                   weak_ptr_factory_.GetWeakPtr(),
-                                  ERR_HOST_RESOLVER_QUEUE_TOO_LARGE));
+                                  ERR_HOST_RESOLVER_QUEUE_TOO_LARGE,
+                                  /*task_type=*/absl::nullopt));
   }
 
   // Attempts to serve the job from HOSTS. Returns true if succeeded and
@@ -1970,7 +1977,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     if (results) {
       // This will destroy the Job.
       CompleteRequests(results.value(), base::TimeDelta(),
-                       true /* allow_cache */, true /* secure */);
+                       true /* allow_cache */, true /* secure */,
+                       TaskType::HOSTS);
       return true;
     }
     return false;
@@ -1994,7 +2002,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     if (tasks_.empty()) {
       // If there are no stored results, complete with an error.
       if (completion_results_.size() == 0) {
-        CompleteRequestsWithError(ERR_NAME_NOT_RESOLVED);
+        CompleteRequestsWithError(ERR_NAME_NOT_RESOLVED,
+                                  /*task_type=*/absl::nullopt);
         return;
       }
 
@@ -2007,8 +2016,10 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
       }
       const auto& last_result = completion_results_.back();
       DCHECK_NE(OK, last_result.entry.error());
-      CompleteRequests(last_result.entry, last_result.ttl,
-                       true /* allow_cache */, last_result.secure);
+      CompleteRequests(
+          last_result.entry, last_result.ttl, true /* allow_cache */,
+          last_result.secure,
+          last_result.secure ? TaskType::SECURE_DNS : TaskType::DNS);
       return;
     }
 
@@ -2063,6 +2074,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
       case TaskType::SECURE_CACHE_LOOKUP:
       case TaskType::CACHE_LOOKUP:
       case TaskType::CONFIG_PRESET:
+      case TaskType::HOSTS:
         // These task types should have been handled synchronously in
         // ResolveLocally() prior to Job creation.
         NOTREACHED();
@@ -2245,7 +2257,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
             net_error,
             net_error == OK ? addr_list.endpoints() : std::vector<IPEndPoint>(),
             std::move(aliases), HostCache::Entry::SOURCE_UNKNOWN),
-        ttl, /*allow_cache=*/true, /*secure=*/false);
+        ttl, /*allow_cache=*/true, /*secure=*/false, TaskType::SYSTEM);
   }
 
   void InsecureCacheLookup() {
@@ -2260,7 +2272,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     if (resolved) {
       DCHECK(stale_info);
       DCHECK(!stale_info.value().is_stale());
-      CompleteRequestsWithoutCache(resolved.value(), std::move(stale_info));
+      CompleteRequestsWithoutCache(resolved.value(), std::move(stale_info),
+                                   TaskType::INSECURE_CACHE_LOOKUP);
     } else {
       RunNextTask();
     }
@@ -2380,11 +2393,13 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
 
     if ((results.ip_endpoints() &&
          ContainsIcannNameCollisionIp(*results.ip_endpoints()))) {
-      CompleteRequestsWithError(ERR_ICANN_NAME_COLLISION);
+      CompleteRequestsWithError(ERR_ICANN_NAME_COLLISION,
+                                secure ? TaskType::SECURE_DNS : TaskType::DNS);
       return;
     }
 
-    CompleteRequests(results, bounded_ttl, true /* allow_cache */, secure);
+    CompleteRequests(results, bounded_ttl, true /* allow_cache */, secure,
+                     secure ? TaskType::SECURE_DNS : TaskType::DNS);
   }
 
   void OnIntermediateTransactionsComplete() override {
@@ -2439,7 +2454,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     } else {
       // Could not create an mDNS client. Since we cannot complete synchronously
       // from here, post a failure without starting the task.
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&Job::OnMdnsImmediateFailure,
                                     weak_ptr_factory_.GetWeakPtr(), rv));
     }
@@ -2453,19 +2468,20 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
 
     if ((results.ip_endpoints() &&
          ContainsIcannNameCollisionIp(*results.ip_endpoints()))) {
-      CompleteRequestsWithError(ERR_ICANN_NAME_COLLISION);
+      CompleteRequestsWithError(ERR_ICANN_NAME_COLLISION, TaskType::MDNS);
       return;
     }
     // MDNS uses a separate cache, so skip saving result to cache.
     // TODO(crbug.com/926300): Consider merging caches.
-    CompleteRequestsWithoutCache(results, absl::nullopt /* stale_info */);
+    CompleteRequestsWithoutCache(results, absl::nullopt /* stale_info */,
+                                 TaskType::MDNS);
   }
 
   void OnMdnsImmediateFailure(int rv) {
     DCHECK(mdns_task_);
     DCHECK_NE(OK, rv);
 
-    CompleteRequestsWithError(rv);
+    CompleteRequestsWithError(rv, TaskType::MDNS);
   }
 
   void StartNat64Task() {
@@ -2482,10 +2498,13 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
   void OnNat64TaskComplete() {
     DCHECK(nat64_task_);
     HostCache::Entry results = nat64_task_->GetResults();
-    CompleteRequestsWithoutCache(results, absl::nullopt /* stale_info */);
+    CompleteRequestsWithoutCache(results, absl::nullopt /* stale_info */,
+                                 TaskType::NAT64);
   }
 
-  void RecordJobHistograms(int error) {
+  void RecordJobHistograms(const HostCache::Entry& results,
+                           absl::optional<TaskType> task_type) {
+    int error = results.error();
     // Used in UMA_HISTOGRAM_ENUMERATION. Do not renumber entries or reuse
     // deprecated values.
     enum Category {
@@ -2538,6 +2557,26 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
               SecureDnsModeToString(key_.secure_dns_mode).c_str()),
           duration);
     }
+
+    if (error == OK) {
+      DCHECK(task_type.has_value());
+      // Record, for HTTPS-capable queries to a host known to serve HTTPS
+      // records, whether the HTTPS record was successfully received.
+      if (key_.query_types.Has(DnsQueryType::HTTPS) &&
+          // Skip http- and ws-schemed hosts. Although they query HTTPS records,
+          // successful queries are reported as errors, which would skew the
+          // metrics.
+          (GetScheme(key_.host) == url::kHttpsScheme ||
+           GetScheme(key_.host) == url::kWssScheme) &&
+          IsGoogleHostWithAlpnH3(GetHostname(key_.host))) {
+        bool has_metadata =
+            results.GetMetadatas() && !results.GetMetadatas()->empty();
+        base::UmaHistogramExactLinear(
+            "Net.DNS.H3SupportedGoogleHost.TaskTypeMetadataAvailability2",
+            static_cast<int>(task_type.value()) * 2 + (has_metadata ? 1 : 0),
+            (static_cast<int>(TaskType::kMaxValue) + 1) * 2);
+      }
+    }
   }
 
   void MaybeCacheResult(const HostCache::Entry& results,
@@ -2557,7 +2596,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
   void CompleteRequests(const HostCache::Entry& results,
                         base::TimeDelta ttl,
                         bool allow_cache,
-                        bool secure) {
+                        bool secure,
+                        absl::optional<TaskType> task_type) {
     CHECK(resolver_.get());
 
     // This job must be removed from resolver's |jobs_| now to make room for a
@@ -2585,7 +2625,7 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     if (allow_cache)
       MaybeCacheResult(results, ttl, secure);
 
-    RecordJobHistograms(results.error());
+    RecordJobHistograms(results, task_type);
 
     // Complete all of the requests that were attached to the job and
     // detach them.
@@ -2615,7 +2655,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
 
   void CompleteRequestsWithoutCache(
       const HostCache::Entry& results,
-      absl::optional<HostCache::EntryStaleness> stale_info) {
+      absl::optional<HostCache::EntryStaleness> stale_info,
+      TaskType task_type) {
     // Record the stale_info for all non-speculative requests, if it exists.
     if (stale_info) {
       for (auto* node = requests_.head(); node != requests_.end();
@@ -2625,15 +2666,17 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
       }
     }
     CompleteRequests(results, base::TimeDelta(), false /* allow_cache */,
-                     false /* secure */);
+                     false /* secure */, task_type);
   }
 
   // Convenience wrapper for CompleteRequests in case of failure.
-  void CompleteRequestsWithError(int net_error) {
+  void CompleteRequestsWithError(int net_error,
+                                 absl::optional<TaskType> task_type) {
     DCHECK_NE(OK, net_error);
     CompleteRequests(
         HostCache::Entry(net_error, HostCache::Entry::SOURCE_UNKNOWN),
-        base::TimeDelta(), true /* allow_cache */, false /* secure */);
+        base::TimeDelta(), true /* allow_cache */, false /* secure */,
+        task_type);
   }
 
   RequestPriority priority() const override {
@@ -3015,6 +3058,7 @@ bool HostResolverManager::IsLocalTask(TaskType task) {
     case TaskType::INSECURE_CACHE_LOOKUP:
     case TaskType::CACHE_LOOKUP:
     case TaskType::CONFIG_PRESET:
+    case TaskType::HOSTS:
       return true;
     default:
       return false;
@@ -3097,8 +3141,8 @@ HostCache::Entry HostResolverManager::ResolveLocally(
     // than implicitly based on |source|.
     const bool is_valid_hostname =
         job_key.source == HostResolverSource::MULTICAST_DNS
-            ? IsValidUnrestrictedDNSDomain(GetHostname(job_key.host))
-            : IsValidDNSDomain(GetHostname(job_key.host));
+            ? dns_names_util::IsValidDnsName(GetHostname(job_key.host))
+            : IsCanonicalizedHostCompliant(GetHostname(job_key.host));
     if (!is_valid_hostname) {
       return HostCache::Entry(ERR_NAME_NOT_RESOLVED,
                               HostCache::Entry::SOURCE_UNKNOWN);
@@ -3176,19 +3220,18 @@ HostCache::Entry HostResolverManager::ResolveLocally(
         StartBootstrapFollowup(job_key, cache, source_net_log);
         return resolved.value();
       }
+    } else if (task == TaskType::HOSTS) {
+      resolved = ServeFromHosts(GetHostname(job_key.host), job_key.query_types,
+                                default_family_due_to_no_ipv6, *out_tasks);
+      if (resolved) {
+        source_net_log.AddEvent(
+            NetLogEventType::HOST_RESOLVER_MANAGER_HOSTS_HIT,
+            [&] { return NetLogResults(resolved.value()); });
+        return resolved.value();
+      }
     } else {
       NOTREACHED();
     }
-  }
-
-  // TODO(szym): Do not do this if nsswitch.conf instructs not to.
-  // http://crbug.com/117655
-  resolved = ServeFromHosts(GetHostname(job_key.host), job_key.query_types,
-                            default_family_due_to_no_ipv6, *out_tasks);
-  if (resolved) {
-    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_MANAGER_HOSTS_HIT,
-                            [&] { return NetLogResults(resolved.value()); });
-    return resolved.value();
   }
 
   return HostCache::Entry(ERR_DNS_CACHE_MISS, HostCache::Entry::SOURCE_UNKNOWN);
@@ -3573,6 +3616,7 @@ void HostResolverManager::CreateTaskSequence(
       out_tasks->push_front(TaskType::CACHE_LOOKUP);
     }
   }
+  out_tasks->push_back(TaskType::HOSTS);
 
   // Determine what type of task a future Job should start.
   bool prioritize_local_lookups =

@@ -2,16 +2,17 @@
 
 #import "ios/notes/note_home_view_controller.h"
 
+#import "app/vivaldi_apptools.h"
 #import "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/numerics/safe_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#include "notes/notes_model.h"
-#include "components/prefs/pref_service.h"
-#include "components/strings/grit/components_strings.h"
+#import "base/mac/foundation_util.h"
+#import "base/numerics/safe_conversions.h"
+#import "base/strings/sys_string_conversions.h"
+#import "notes/notes_model.h"
+#import "components/prefs/pref_service.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
-#include "ios/notes/notes_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/notes/notes_factory.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -23,15 +24,15 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/notes/note_edit_view_controller.h"
-#include "ios/notes/note_empty_background.h"
+#import "ios/notes/note_add_edit_view_controller.h"
+#import "ios/notes/note_empty_background.h"
 #import "ios/notes/note_folder_view_controller.h"
 #import "ios/notes/note_home_consumer.h"
 #import "ios/notes/note_home_mediator.h"
 #import "ios/notes/note_home_shared_state.h"
-#include "ios/notes/note_interaction_controller.h"
+#import "ios/notes/note_interaction_controller.h"
 #import "ios/notes/note_interaction_controller_delegate.h"
-#include "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_model_bridge_observer.h"
 #import "ios/notes/note_navigation_controller.h"
 #import "ios/notes/note_path_cache.h"
 #import "ios/notes/note_ui_constants.h"
@@ -65,16 +66,16 @@
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-
-#include "app/vivaldi_apptools.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
-
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ios/web/public/navigation/navigation_manager.h"
+#import "ios/web/public/navigation/referrer.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -231,9 +232,7 @@ const int kRowsHiddenByNavigationBar = 3;
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
     _webStateList = _browser->GetWebStateList();
-
     _notes = vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
-
     _bridge.reset(new notes::NoteModelBridge(self, _notes));
   }
   return self;
@@ -344,7 +343,10 @@ const int kRowsHiddenByNavigationBar = 3;
       kNoteHomeSearchBarIdentifier;
   self.searchController.hidesNavigationBarDuringPresentation = NO;
 
-  [self setupHeaderWithSearch];
+  if (self.isDeviceIPad)
+    [self setupHeaderWithSearchForIPad];
+  else
+    [self setupHeaderWithSearch];
 
   self.navigationItem.searchController = nil;
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
@@ -381,10 +383,14 @@ const int kRowsHiddenByNavigationBar = 3;
   // Hide the toolbar if we're displaying the root node.
   if (self.notes->loaded() &&
       (![self isDisplayingNoteRoot] ||
-       self.sharedState.currentlyShowingSearchResults)) {
-    self.navigationController.toolbarHidden = NO;
+     self.sharedState.currentlyShowingSearchResults)) {
+      self.navigationController.toolbarHidden = NO;
   } else {
-    self.navigationController.toolbarHidden = YES;
+     if (_notes->main_node()->children().empty())
+        self.navigationController.toolbarHidden = NO;
+     else {
+        self.navigationController.toolbarHidden = YES;
+     }
   }
 
   // If we navigate back to the root level, we need to make sure the root level
@@ -431,13 +437,11 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (NSArray*)keyCommands {
-  __weak NoteHomeViewController* weakSelf = self;
-  return @[ [UIKeyCommand cr_keyCommandWithInput:UIKeyInputEscape
-                                   modifierFlags:Cr_UIKeyModifierNone
-                                           title:nil
-                                          action:^{
-                                            [weakSelf navigationBarCancel:nil];
-                                          }] ];
+  return @[ UIKeyCommand.cr_close ];
+}
+
+- (void)keyCommand_close {
+  [self navigationBarCancel:nil];
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
@@ -605,6 +609,20 @@ const int kRowsHiddenByNavigationBar = 3;
   }
   [self.noteInteractionController presentEditorForNode:node];
 }
+
+
+/// Open the add note dialog
+- (void)addNote {
+  if (!self.noteInteractionController) {
+    self.noteInteractionController =
+        [[NoteInteractionController alloc] initWithBrowser:self.browser
+                                              parentController:self];
+    self.noteInteractionController.delegate = self;
+  }
+  [self.noteInteractionController presentAddViewController:
+    self.sharedState.tableViewDisplayedRootNode];
+}
+
 
 - (void)openAllURLs:(std::vector<GURL>)urls
         inIncognito:(BOOL)inIncognito
@@ -868,7 +886,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)noteModelLoaded {
   DCHECK(!_rootNode);
-  [self setRootNode:self.notes->root_node()];
+  [self setRootNode:self.notes->main_node()];
 
   // If the view hasn't loaded yet, then return early. The eventual call to
   // viewDidLoad will properly initialize the views.  This early return must
@@ -985,7 +1003,11 @@ const int kRowsHiddenByNavigationBar = 3;
     self.navigationController.toolbarHidden = NO;
     [self setContextBarState:NotesContextBarDefault];
   } else {
-    self.navigationController.toolbarHidden = YES;
+      self.navigationController.toolbarHidden = YES;
+      if (_notes->main_node()->children().empty()) {
+          self.navigationController.toolbarHidden = NO;
+      }
+    [self setContextBarState:NotesContextBarDefault];
   }
 }
 
@@ -1002,6 +1024,7 @@ const int kRowsHiddenByNavigationBar = 3;
     const std::set<const vivaldi::NoteNode*> nodes =
       self.sharedState.editNodes;
     [self addNewNote];
+    [self hideEmptyBackground];
  }
 }
 
@@ -1079,6 +1102,10 @@ const int kRowsHiddenByNavigationBar = 3;
       scrollToRowAtIndexPath:newRowIndexPath
             atScrollPosition:UITableViewScrollPositionBottom
                     animated:YES];
+}
+
+- (void)handleAddBarButtonTap {
+    [self addNote];
 }
 
 - (void)addNewNote {
@@ -1313,14 +1340,14 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Triggers the URL sharing flow for the given |URL| and |title|, with the
 // |indexPath| for the cell representing the UI component for that URL.
-- (void)shareURL:(const GURL&)URL
+- (void)shareText:(NSString*)noteText
            title:(NSString*)title
        indexPath:(NSIndexPath*)indexPath {
   UIView* cellView = [self.tableView cellForRowAtIndexPath:indexPath];
   ActivityParams* params =
-      [[ActivityParams alloc] initWithURL:URL
-                                    title:title
-                                 scenario:ActivityScenario::BookmarkEntry];
+      [[ActivityParams alloc] initWithText:noteText
+                                     title:title
+                                  scenario:ActivityScenario::VivaldiNote];
   self.sharingCoordinator =
       [[SharingCoordinator alloc] initWithBaseViewController:self
                                                      browser:self.browser
@@ -1383,7 +1410,7 @@ const int kRowsHiddenByNavigationBar = 3;
     if (!self.emptyViewBackground) {
       self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
           initWithFrame:self.sharedState.tableView.bounds
-                  image:[UIImage imageNamed:@"note_empty"]
+                  image:[UIImage imageNamed:@"vivaldi_notes_empty"]
                   title:GetNSString(IDS_VIVALDI_NOTE_EMPTY_TITLE)
                subtitle:GetNSString(IDS_VIVALDI_NOTE_EMPTY_MESSAGE)];
     }
@@ -1404,6 +1431,9 @@ const int kRowsHiddenByNavigationBar = 3;
 
     self.sharedState.tableView.backgroundView = self.emptyViewBackground;
     self.navigationItem.searchController = nil;
+
+    // Vivaldi
+    self.searchController.searchBar.hidden = YES;
 }
 
 - (void)hideEmptyBackground {
@@ -1414,6 +1444,9 @@ const int kRowsHiddenByNavigationBar = 3;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
   }
+
+  // Vivaldi
+  self.searchController.searchBar.hidden = NO;
 }
 
 #pragma mark - ContextBarDelegate implementation
@@ -1579,8 +1612,18 @@ const int kRowsHiddenByNavigationBar = 3;
       [self isEditNotesEnabled] && [self hasNotesOrFolders] &&
       [self isNodeEditableByUser:self.sharedState.tableViewDisplayedRootNode];
 
-  [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
-               animated:NO];
+  if (!_rootNode->is_trash()) {
+      UIImage* image = [UIImage systemImageNamed:@"plus"];
+      UIBarButtonItem* plusButton =
+       [[UIBarButtonItem alloc]
+        initWithImage:image
+        style:UIBarButtonItemStyleDone
+        target:self
+        action:@selector(handleAddBarButtonTap)];
+      [self setToolbarItems:@[ newFolderButton, spaceButton,
+                             plusButton, spaceButton, editButton ]
+                             animated:NO];
+  }
 }
 
 - (void)setNotesContextBarSelectionStartState {
@@ -2103,8 +2146,8 @@ const int kRowsHiddenByNavigationBar = 3;
         // dismissing.
         self.searchController.active = NO;
       }
-      // Open URL. Pass this to the delegate.
-      [self handleSelectUrlForNavigation:node->GetURL()];
+      // Open note editor
+      [self editNode:node];
     }
   }
   // Deselect row.
@@ -2154,7 +2197,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
       BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
           initWithBrowser:strongSelf.browser
-                 scenario:MenuScenario::kNoteEntry];
+                 scenario:MenuScenarioHistogram::kNoteEntry];
 
       NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];
@@ -2181,8 +2224,8 @@ const int kRowsHiddenByNavigationBar = 3;
                   note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
               if (nodeFromId) {
                 [weakSelf
-                     shareURL:nodeURL
-                        title:note_utils_ios::TitleForNoteNode(nodeFromId)
+                    shareText:base::SysUTF16ToNSString(nodeFromId->GetContent())
+                       title:note_utils_ios::TitleForNoteNode(nodeFromId)
                     indexPath:indexPath];
               }
             }]];
@@ -2215,7 +2258,7 @@ const int kRowsHiddenByNavigationBar = 3;
           return [UIMenu menuWithTitle:@"" children:@[]];
 
         ActionFactory* actionFactory = [[ActionFactory alloc]
-            initWithScenario:MenuScenario::kNoteFolder];
+            initWithScenario:MenuScenarioHistogram::kNoteFolder];
 
         NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];
@@ -2250,6 +2293,22 @@ const int kRowsHiddenByNavigationBar = 3;
         [menuElements addObject:editAction];
         [menuElements addObject:moveAction];
 
+        if (!node->is_permanent_node()) {
+          UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
+            NoteHomeViewController* innerStrongSelf = weakSelf;
+            if (!innerStrongSelf)
+                return;
+            const vivaldi::NoteNode* nodeFromId =
+                note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+            if (nodeFromId) {
+              std::set<const NoteNode*> nodes{nodeFromId};
+              [innerStrongSelf handleSelectNodesForDeletion:nodes];
+            }
+          }];
+          [menuElements addObject:deleteAction];
+          if (!canEditNode)
+              deleteAction.attributes = UIMenuElementAttributesDisabled;
+        }
         return [UIMenu menuWithTitle:@"" children:menuElements];
       };
     }
@@ -2358,19 +2417,39 @@ const int kRowsHiddenByNavigationBar = 3;
       [self customizedDoneTextButton];
   } else {
     viewController.title = note_utils_ios::TitleForNoteNode(node);
-    if (!node->is_trash()) {
-      UIImage* image = [UIImage systemImageNamed:@"plus"];
-      self.plusButton = [[UIBarButtonItem alloc]
-                                   initWithImage:image
-                                   style:UIBarButtonItemStyleDone
-                                   target:self
-                                   action:@selector(addNewNoteItem:)];
-       items = @[self.plusButton, [self customizedDoneButton]];
-    } else {
-       items = @[[self customizedDoneButton]];
-    }
+    items = @[[self customizedDoneButton]];
     viewController.navigationItem.rightBarButtonItems = items;
   }
+}
+
+- (void)setupSearchBarWithStyle {
+    searchBarContainer = [[UIView alloc] init];
+    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
+    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    [searchBarContainer addSubview:self.searchController.searchBar];
+    self.searchController.searchBar.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.searchController.searchBar.backgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    self.searchController.searchBar.alpha = 1.0;
+    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    [self.searchController.searchBar sizeToFit];
+}
+
+- (void)setupHeaderWithSearchForIPad {
+    [self setupSearchBarWithStyle];
+    self.tableView.tableHeaderView = searchBarContainer;
+
+    [searchBarContainer.topAnchor
+      constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
+    [searchBarContainer.leadingAnchor
+      constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
+    [searchBarContainer.trailingAnchor
+      constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
+    [searchBarContainer.widthAnchor
+      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
+    [searchBarContainer.heightAnchor
+      constraintEqualToConstant:search_bar_height].active = YES;
 }
 
 - (void)setupHeaderWithSearch {
@@ -2379,40 +2458,15 @@ const int kRowsHiddenByNavigationBar = 3;
     UIView* topView = [[UIView alloc] init];
     topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
     [headerView addSubview:topView];
+    [topView fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                                 0,0, search_bar_height, 0)];
 
-    topView.translatesAutoresizingMaskIntoConstraints = NO;
-    [topView.leadingAnchor
-      constraintEqualToAnchor:headerView.leadingAnchor].active = YES;
-    [topView.topAnchor
-      constraintEqualToAnchor:headerView.topAnchor].active = YES;
-    [topView.widthAnchor
-      constraintEqualToAnchor:headerView.widthAnchor].active = YES;
-    [topView.heightAnchor constraintEqualToConstant:
-        panel_top_view_height].active = YES;
-
-    searchBarContainer = [[UIView alloc] init];
-    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
-    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    [searchBarContainer addSubview:self.searchController.searchBar];
+    [self setupSearchBarWithStyle];
     [headerView addSubview:searchBarContainer];
-    self.searchController.searchBar.autoresizingMask =
-       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.searchController.searchBar.backgroundColor =
-        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    self.searchController.searchBar.alpha = 1.0;
-    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-
-    [searchBarContainer.widthAnchor
-      constraintEqualToAnchor:headerView.widthAnchor].active = YES;
-    [searchBarContainer.topAnchor
-      constraintEqualToAnchor:topView.bottomAnchor].active = YES;
-    [searchBarContainer.bottomAnchor
-      constraintEqualToAnchor:headerView.bottomAnchor].active = YES;
-    [searchBarContainer.leadingAnchor
-      constraintEqualToAnchor:headerView.leadingAnchor].active = YES;
-    [searchBarContainer.trailingAnchor constraintEqualToAnchor:
-        headerView.trailingAnchor].active = YES;
+    [searchBarContainer fillSuperviewWithPadding:UIEdgeInsetsMake(
+                                                 search_bar_height, 0,0,0)];
     self.tableView.tableHeaderView = headerView;
+
     headerView.translatesAutoresizingMaskIntoConstraints = NO;
     [headerView.leadingAnchor
       constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
@@ -2424,7 +2478,6 @@ const int kRowsHiddenByNavigationBar = 3;
       constraintEqualToConstant:panel_header_height].active = YES;
     [headerView.widthAnchor
       constraintEqualToAnchor:self.view.widthAnchor].active = YES;
-    [self.searchController.searchBar sizeToFit];
 }
 
 @end

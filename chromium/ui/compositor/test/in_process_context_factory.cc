@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "cc/trees/raster_context_provider_wrapper.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -52,10 +53,6 @@
 
 #if BUILDFLAG(IS_APPLE)
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
-#endif
-
-#if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
-#include "gpu/ipc/common/gpu_surface_tracker.h"
 #endif
 
 namespace ui {
@@ -200,20 +197,31 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
     base::WeakPtr<Compositor> compositor) {
   // Try to reuse existing shared worker context provider.
   bool shared_worker_context_provider_lost = false;
-  if (shared_worker_context_provider_) {
+  if (shared_worker_context_provider_wrapper_) {
     // Note: If context is lost, delete reference after releasing the lock.
-    base::AutoLock lock(*shared_worker_context_provider_->GetLock());
-    if (shared_worker_context_provider_->RasterInterface()
-            ->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
+    const scoped_refptr<viz::RasterContextProvider>& worker_context =
+        shared_worker_context_provider_wrapper_->GetContext();
+    base::AutoLock lock(*worker_context->GetLock());
+    if (worker_context->RasterInterface()->GetGraphicsResetStatusKHR() !=
+        GL_NO_ERROR) {
       shared_worker_context_provider_lost = true;
     }
   }
-  if (!shared_worker_context_provider_ || shared_worker_context_provider_lost) {
-    shared_worker_context_provider_ = InProcessContextProvider::CreateOffscreen(
-        &gpu_memory_buffer_manager_, &image_factory_, /*is_worker=*/true);
-    auto result = shared_worker_context_provider_->BindToCurrentThread();
-    if (result != gpu::ContextResult::kSuccess)
-      shared_worker_context_provider_ = nullptr;
+  if (!shared_worker_context_provider_wrapper_ ||
+      shared_worker_context_provider_lost) {
+    scoped_refptr<InProcessContextProvider> shared_worker_context_provider =
+        InProcessContextProvider::CreateOffscreen(&gpu_memory_buffer_manager_,
+                                                  /*is_worker=*/true);
+    auto result = shared_worker_context_provider->BindToCurrentSequence();
+    if (result != gpu::ContextResult::kSuccess) {
+      shared_worker_context_provider_wrapper_ = nullptr;
+    } else {
+      shared_worker_context_provider_wrapper_ =
+          base::MakeRefCounted<cc::RasterContextProviderWrapper>(
+              std::move(shared_worker_context_provider), nullptr,
+              cc::ImageDecodeCacheUtils::GetWorkingSetBytesForImageDecode(
+                  /*for_renderer=*/false));
+    }
   }
 
   PerCompositorData* data = per_compositor_data_[compositor.get()].get();
@@ -266,8 +274,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
 
   auto layer_tree_frame_sink = std::make_unique<DirectLayerTreeFrameSink>(
       compositor->frame_sink_id(), frame_sink_manager_, data->display(),
-      SharedMainThreadContextProvider(), shared_worker_context_provider_,
-      compositor->task_runner(), &gpu_memory_buffer_manager_);
+      SharedMainThreadContextProvider(),
+      shared_worker_context_provider_wrapper_, compositor->task_runner(),
+      &gpu_memory_buffer_manager_);
   compositor->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink),
                                     std::move(display_private));
 
@@ -281,9 +290,10 @@ InProcessContextFactory::SharedMainThreadContextProvider() {
           GL_NO_ERROR)
     return shared_main_thread_contexts_;
 
-  shared_main_thread_contexts_ = InProcessContextProvider::CreateOffscreen(
-      &gpu_memory_buffer_manager_, &image_factory_, /*is_worker=*/false);
-  auto result = shared_main_thread_contexts_->BindToCurrentThread();
+  shared_main_thread_contexts_ =
+      InProcessContextProvider::CreateOffscreen(&gpu_memory_buffer_manager_,
+                                                /*is_worker=*/false);
+  auto result = shared_main_thread_contexts_->BindToCurrentSequence();
   if (result != gpu::ContextResult::kSuccess)
     shared_main_thread_contexts_.reset();
 
@@ -305,10 +315,6 @@ void InProcessContextFactory::RemoveCompositor(Compositor* compositor) {
   PerCompositorData* data = it->second.get();
   frame_sink_manager_->UnregisterBeginFrameSource(data->begin_frame_source());
   DCHECK(data);
-#if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
-  if (data->surface_handle())
-    gpu::GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle());
-#endif
   per_compositor_data_.erase(it);
 }
 
@@ -386,20 +392,6 @@ InProcessContextFactory::CreatePerCompositorData(Compositor* compositor) {
   } else {
 #if defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
     data->SetSurfaceHandle(widget);
-#else
-    gpu::GpuSurfaceTracker* tracker = gpu::GpuSurfaceTracker::Get();
-    data->SetSurfaceHandle(tracker->AddSurfaceForNativeWidget(
-        gpu::GpuSurfaceTracker::SurfaceRecord(
-            widget
-#if BUILDFLAG(IS_ANDROID)
-            // We have to provide a surface too, but we don't have one.  For
-            // now, we don't proide it, since nobody should ask anyway.
-            // If we ever provide a valid surface here, then GpuSurfaceTracker
-            // can be more strict about enforcing it.
-            ,
-            nullptr, false /* can_be_used_with_surface_control */
-#endif
-            )));
 #endif
   }
 

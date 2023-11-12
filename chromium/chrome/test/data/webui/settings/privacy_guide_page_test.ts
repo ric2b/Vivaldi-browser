@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {CookiePrimarySetting, PrivacyGuideCompletionFragmentElement, PrivacyGuideHistorySyncFragmentElement, PrivacyGuideStep, PrivacyGuideWelcomeFragmentElement, SafeBrowsingSetting, SettingsPrivacyGuideDialogElement, SettingsPrivacyGuidePageElement, SettingsRadioGroupElement} from 'chrome://settings/lazy_load.js';
-import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyGuideSettingsStates, Router, routes, SettingsPrefsElement, StatusAction, SyncBrowserProxyImpl, SyncPrefs, syncPrefsIndividualDataTypes, SyncStatus} from 'chrome://settings/settings.js';
+import {HatsBrowserProxyImpl, TrustSafetyInteraction, CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyGuideSettingsStates, Router, routes, SettingsPrefsElement, StatusAction, SyncBrowserProxyImpl, SyncPrefs, syncPrefsIndividualDataTypes, SyncStatus} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, isChildVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -15,6 +15,7 @@ import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {getSyncAllPrefs} from './sync_test_util.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestSyncBrowserProxy} from './test_sync_browser_proxy.js';
+import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
 
 // clang-format on
 
@@ -313,7 +314,7 @@ function assertCookiesCardVisible(
 
 // Bundles functionality to create the page object for tests.
 function createPrivacyGuidePageForTest(settingsPrefs: SettingsPrefsElement) {
-  document.body.innerHTML = window.trustedTypes!.emptyHTML as unknown as string;
+  document.body.innerHTML = window.trustedTypes!.emptyHTML;
   const page = document.createElement('settings-privacy-guide-page');
   page.disableAnimationsForTesting();
   page.prefs = settingsPrefs.prefs!;
@@ -830,6 +831,7 @@ suite('CookiesFragmentNavigations', function() {
   let settingsPrefs: SettingsPrefsElement;
   let syncBrowserProxy: TestSyncBrowserProxy;
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
+  let testHatsBrowserProxy: TestHatsBrowserProxy;
 
   suiteSetup(function() {
     settingsPrefs = document.createElement('settings-prefs');
@@ -845,6 +847,9 @@ suite('CookiesFragmentNavigations', function() {
 
     page = createPrivacyGuidePageForTest(settingsPrefs);
     setupPrivacyGuidePageForTest(page, syncBrowserProxy);
+
+    testHatsBrowserProxy = new TestHatsBrowserProxy();
+    HatsBrowserProxyImpl.setInstance(testHatsBrowserProxy);
 
     return flushTasks();
   });
@@ -919,6 +924,17 @@ suite('CookiesFragmentNavigations', function() {
     setCookieSetting(page, CookiePrimarySetting.ALLOW_ALL);
     await flushTasks();
     assertCompletionCardVisible(page);
+  });
+
+  test('hatsInformedOnFinish', async function() {
+    await navigateToStep(PrivacyGuideStep.COOKIES);
+
+    page.shadowRoot!.querySelector<HTMLElement>('#nextButton')!.click();
+
+    // HaTS gets triggered if the user navigates to the completion page.
+    const interaction =
+        await testHatsBrowserProxy.whenCalled('trustSafetyInteractionOccurred');
+    assertEquals(TrustSafetyInteraction.COMPLETED_PRIVACY_GUIDE, interaction);
   });
 });
 
@@ -1325,8 +1341,7 @@ suite('HistorySyncFragment', function() {
     syncBrowserProxy = new TestSyncBrowserProxy();
     SyncBrowserProxyImpl.setInstance(syncBrowserProxy);
 
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('privacy-guide-history-sync-fragment');
     document.body.appendChild(page);
     return flushTasks();
@@ -1500,8 +1515,7 @@ suite('CompletionFragment', function() {
     testMetricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
 
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('privacy-guide-completion-fragment');
     document.body.appendChild(page);
 
@@ -1578,8 +1592,7 @@ suite('CompletionFragmentPrivacySandboxRestricted', function() {
   });
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('privacy-guide-completion-fragment');
     document.body.appendChild(page);
 
@@ -1630,8 +1643,7 @@ suite('CompletionFragmentPrivacyGuide2Disabled', function() {
     testMetricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
 
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('privacy-guide-completion-fragment');
     document.body.appendChild(page);
 
@@ -1672,8 +1684,7 @@ suite('PrivacyGuideDialog', function() {
   let page: SettingsPrivacyGuideDialogElement;
 
   setup(function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-guide-dialog');
     document.body.appendChild(page);
 
@@ -1708,8 +1719,7 @@ suite('PrivacyGuideDialog', function() {
 suite('CardHeaderTestsPrivacyGuide2Enabled', function() {
   test('phase2HeadersVisible', function() {
     for (const fragmentName of SETTINGS_FRAGMENT_NAMES) {
-      document.body.innerHTML =
-          window.trustedTypes!.emptyHTML as unknown as string;
+      document.body.innerHTML = window.trustedTypes!.emptyHTML;
       const page = document.createElement(fragmentName);
       document.body.appendChild(page);
       flush();
@@ -1733,8 +1743,7 @@ suite('CardHeaderTestsPrivacyGuide2Disabled', function() {
 
   test('phase1HeadersVisible', function() {
     for (const fragmentName of SETTINGS_FRAGMENT_NAMES) {
-      document.body.innerHTML =
-          window.trustedTypes!.emptyHTML as unknown as string;
+      document.body.innerHTML = window.trustedTypes!.emptyHTML;
       const page = document.createElement(fragmentName);
       document.body.appendChild(page);
       flush();

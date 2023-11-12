@@ -9,8 +9,8 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/memory/ptr_util.h"
-#include "content/browser/android/message_payload.h"
 #include "content/public/android/content_jni_headers/AppWebMessagePort_jni.h"
+#include "content/public/browser/android/message_payload.h"
 #include "content/public/browser/android/message_port_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/message.h"
@@ -73,7 +73,7 @@ std::vector<blink::MessagePortDescriptor> AppWebMessagePort::Release(
 }
 
 AppWebMessagePort::AppWebMessagePort(blink::MessagePortDescriptor&& descriptor)
-    : runner_(base::ThreadTaskRunnerHandle::Get()),
+    : runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       descriptor_(std::move(descriptor)) {
   // AppWebMessagePort can only be created on main thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -152,16 +152,17 @@ bool AppWebMessagePort::Accept(mojo::Message* message) {
     // Decode mojo message failed.
     return false;
   }
+  auto ports = std::move(transferable_message.ports);
   auto optional_payload =
-      blink::DecodeToWebMessagePayload(transferable_message);
+      blink::DecodeToWebMessagePayload(std::move(transferable_message));
   if (!optional_payload) {
     // Unsupported or invalid payload.
     return true;
   }
   const auto& payload = optional_payload.value();
 
-  auto j_ports = CreateJavaMessagePort(
-      blink::MessagePortChannel::ReleaseHandles(transferable_message.ports));
+  auto j_ports =
+      CreateJavaMessagePort(blink::MessagePortChannel::ReleaseHandles(ports));
   base::android::ScopedJavaLocalRef<jobject> j_message =
       ConvertWebMessagePayloadToJava(payload);
   DCHECK(j_message);

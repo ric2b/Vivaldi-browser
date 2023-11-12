@@ -244,7 +244,6 @@ MOCK_METHOD10(CopyTextureCHROMIUM,
                    GLboolean unpackFlipY,
                    GLboolean unpackPremultiplyAlpha,
                    GLboolean unpackUnmultiplyAlpha));
-MOCK_METHOD1(CoverageModulationNV, void(GLenum components));
 MOCK_METHOD7(CoverFillPathInstancedNV,
              void(GLsizei numPaths,
                   GLenum pathNameType,
@@ -1162,6 +1161,7 @@ MOCK_METHOD5(ProgramUniformMatrix4x3fv,
                   GLsizei count,
                   GLboolean transpose,
                   const GLfloat* value));
+MOCK_METHOD1(ProvokingVertexANGLE, void(GLenum provokeMode));
 MOCK_METHOD4(
     PushDebugGroup,
     void(GLenum source, GLuint id, GLsizei length, const char* message));

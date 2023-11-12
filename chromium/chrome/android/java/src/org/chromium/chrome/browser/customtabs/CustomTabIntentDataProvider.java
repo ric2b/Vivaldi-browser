@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Pair;
@@ -41,7 +40,9 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
+import org.chromium.chrome.browser.customtabs.CustomTabsFeatureUsage.CustomTabsFeature;
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -88,13 +89,22 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         int NUM_ENTRIES = 5;
     }
 
+    @IntDef({BACKGROUND_INTERACT_DEFAULT, BACKGROUND_INTERACT_ON, BACKGROUND_INTERACT_OFF})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface BackgroundInteractBehavior {}
+
+    public static final int BACKGROUND_INTERACT_DEFAULT = 0;
+
+    public static final int BACKGROUND_INTERACT_ON = 1;
+
+    public static final int BACKGROUND_INTERACT_OFF = 2;
+
     /**
      * Extra used to keep the caller alive. Its value is an Intent.
      */
     public static final String EXTRA_KEEP_ALIVE = "android.support.customtabs.extra.KEEP_ALIVE";
 
-    public static final String ANIMATION_BUNDLE_PREFIX =
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? "android:activity." : "android:";
+    public static final String ANIMATION_BUNDLE_PREFIX = "android:activity.";
     public static final String BUNDLE_PACKAGE_NAME = ANIMATION_BUNDLE_PREFIX + "packageName";
     public static final String BUNDLE_ENTER_ANIMATION_RESOURCE =
             ANIMATION_BUNDLE_PREFIX + "animEnterRes";
@@ -142,8 +152,34 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      * Extra that, if set, specifies Translate UI should be triggered with
      * specified target language.
      */
-    private static final String EXTRA_TRANSLATE_LANGUAGE =
+    @VisibleForTesting
+    static final String EXTRA_TRANSLATE_LANGUAGE =
             "androidx.browser.customtabs.extra.TRANSLATE_LANGUAGE";
+
+    /**
+     * Extra that, if set, specifies that the loaded page should be automatically translated once it
+     * loads with the specified target language. This overrides EXTRA_TRANSLATE_LANGUAGE.
+     */
+    @VisibleForTesting
+    static final String EXTRA_AUTO_TRANSLATE_LANGUAGE =
+            "androidx.browser.customtabs.extra.AUTO_TRANSLATE_LANGUAGE";
+
+    /**
+     * Parameter that, if true, indicates that the {@link EXTRA_AUTO_TRANSLATE_LANGUAGE} should be
+     * automatically allowed from any first party package name.
+     */
+    public static final BooleanCachedFieldTrialParameter AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.CCT_AUTO_TRANSLATE, "allow_all_first_parties", false);
+
+    /**
+     * Parameter that lists a pipe ("|") separated list of package names from which the {@link
+     * EXTRA_AUTO_TRANSLATE_LANGUAGE} should be allowed. This defaults to a single list item
+     * consisting of the package name of the Android Google Search App.
+     */
+    public static final StringCachedFieldTrialParameter AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST =
+            new StringCachedFieldTrialParameter(ChromeFeatureList.CCT_AUTO_TRANSLATE,
+                    "package_names_allowlist", "com.google.android.googlequicksearchbox");
 
     private static final String EXTRA_TWA_DISCLOSURE_UI =
             "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
@@ -162,6 +198,14 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public static final String EXPERIMENT_IDS =
             "org.chromium.chrome.browser.customtabs.AGA_EXPERIMENT_IDS";
 
+    // These Extra Intent parameters allow an Intent to enable or disable a set of Features.
+    // The set of Features that may be enabled or disabled is restricted by the code,
+    // and initially only two Features may be enabled together, or disabled together.
+    public static final String EXPERIMENTS_ENABLE =
+            "org.chromium.chrome.browser.customtabs.EXPERIMENTS_ENABLE";
+    public static final String EXPERIMENTS_DISABLE =
+            "org.chromium.chrome.browser.customtabs.EXPERIMENTS_DISABLE";
+
     /**
      * Extra that, if set, makes the Custom Tab Activity's height to be x pixels, the Custom Tab
      * will behave as a bottom sheet. x will be clamped between 50% and 100% of screen height.
@@ -178,12 +222,18 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             "androidx.browser.customtabs.extra.INITIAL_ACTIVITY_HEIGHT_PX";
 
     /**
+     * Extra that, if set, allows you to interact with the background app when a PCCT is launched
+     */
+    public static final String EXTRA_ENABLE_BACKGROUND_INTERACTION =
+            "androix.browser.customtabs.extra.ENABLE_BACKGROUND_INTERACTION";
+
+    /**
      * Extra that, if set in combination with
      * {@link CustomTabsIntent#EXTRA_INITIAL_ACTIVITY_HEIGHT_PX}, defines the resize behavior of
      * the Custom Tab Activity’s height when it behaves as a bottom sheet.
      */
-    public static final String EXTRA_ACTIVITY_RESIZE_BEHAVIOR =
-            "androidx.browser.customtabs.extra.ACTIVITY_RESIZE_BEHAVIOR";
+    public static final String EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR =
+            "androidx.browser.customtabs.extra.ACTIVITY_HEIGHT_RESIZE_BEHAVIOR";
 
     /**
      * Extra that, if set, makes the toolbar's top corner radii to be x pixels. This will only have
@@ -242,6 +292,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private String mUrlToLoad;
 
     private boolean mEnableUrlBarHiding;
+    private boolean mInteractWithBackground;
     private List<CustomButtonParams> mCustomButtonParams;
     private Drawable mCloseButtonIcon;
     private List<Pair<String, PendingIntent>> mMenuEntries = new ArrayList<>();
@@ -260,6 +311,10 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     /** ISO 639 language code */
     @Nullable
     private final String mTranslateLanguage;
+    /** ISO 639 language code, overrides {@link mTranslateLanguage} if non-null. */
+    @Nullable
+    private final String mAutoTranslateLanguage;
+
     private final int mDefaultOrientation;
 
     @Nullable
@@ -291,8 +346,23 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      * @return True if the intent or session are trusted.
      */
     public static boolean isTrustedCustomTab(Intent intent, CustomTabsSessionToken session) {
-        return IntentHandler.wasIntentSenderChrome(intent)
-                || CustomTabsConnection.getInstance().isSessionFirstParty(session);
+        if (IntentHandler.wasIntentSenderChrome(intent)) return true;
+        String packageName = getClientPackageNameFromSessionOrCallingActivity(intent, session);
+        return CustomTabsConnection.getInstance().isFirstParty(packageName);
+    }
+
+    @Nullable
+    private static String getClientPackageNameFromSessionOrCallingActivity(
+            Intent intent, CustomTabsSessionToken session) {
+        String packageNameFromSession =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(session);
+        if (!TextUtils.isEmpty(packageNameFromSession)) return packageNameFromSession;
+
+        String packageNameFromIntent = IntentUtils.safeGetStringExtra(
+                intent, IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE);
+        if (!TextUtils.isEmpty(packageNameFromIntent)) return packageNameFromIntent;
+
+        return null;
     }
 
     public static void configureIntentForResizableCustomTab(Context context, Intent intent) {
@@ -334,7 +404,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     /**
      * Constructs a {@link CustomTabIntentDataProvider}.
      *
-     * The colorScheme parameter specifies which color scheme the Custom Tab should use.
+     * @param intent The intent to launch the CCT.
+     * @param colorScheme The colorScheme parameter specifies which color scheme the Custom Tab
+     * should use.
      * It can currently be either {@link CustomTabsIntent#COLOR_SCHEME_LIGHT} or
      * {@link CustomTabsIntent#COLOR_SCHEME_DARK}.
      * If Custom Tab was launched with {@link CustomTabsIntent#COLOR_SCHEME_SYSTEM}, colorScheme
@@ -415,22 +487,34 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                 IntentUtils.safeGetBooleanExtra(intent, EXTRA_DISABLE_DOWNLOAD_BUTTON, false);
 
         mTranslateLanguage = IntentUtils.safeGetStringExtra(intent, EXTRA_TRANSLATE_LANGUAGE);
+        mAutoTranslateLanguage =
+                IntentUtils.safeGetStringExtra(intent, EXTRA_AUTO_TRANSLATE_LANGUAGE);
+
         // Import the {@link ScreenOrientation}.
         mDefaultOrientation = convertOrientationType(IntentUtils.safeGetIntExtra(intent,
                 TrustedWebActivityIntentBuilder.EXTRA_SCREEN_ORIENTATION,
                 ScreenOrientation.DEFAULT));
 
         mGsaExperimentIds = IntentUtils.safeGetIntArrayExtra(intent, EXPERIMENT_IDS);
+        boolean usingDynamicFeatures =
+                CustomTabsConnection.getInstance().setupDynamicFeatures(intent);
 
         mInitialActivityHeight = getInitialActivityHeightFromIntent(intent);
         mPartialTabToolbarCornerRadius = getToolbarCornerRadiusFromIntent(context, intent);
 
-        // The default behavior is that the pcct is resizable.
-        @ActivityResizeBehavior
-        int activityResizeBehavior = IntentUtils.safeGetIntExtra(
-                intent, EXTRA_ACTIVITY_RESIZE_BEHAVIOR, ACTIVITY_HEIGHT_DEFAULT);
+        // The default behavior is that the PCCT's height is resizable.
+        @ActivityHeightResizeBehavior
+        int activityHeightResizeBehavior = IntentUtils.safeGetIntExtra(
+                intent, EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR, ACTIVITY_HEIGHT_DEFAULT);
         mIsPartialCustomTabFixedHeight =
-                activityResizeBehavior == ACTIVITY_HEIGHT_FIXED ? true : false;
+                activityHeightResizeBehavior == ACTIVITY_HEIGHT_FIXED ? true : false;
+
+        @BackgroundInteractBehavior
+        int backgroundInteractBehavior = IntentUtils.safeGetIntExtra(
+                intent, EXTRA_ENABLE_BACKGROUND_INTERACTION, BACKGROUND_INTERACT_DEFAULT);
+        mInteractWithBackground = backgroundInteractBehavior != BACKGROUND_INTERACT_OFF;
+
+        logCustomTabFeatures(intent, colorScheme, usingDynamicFeatures);
     }
 
     /** Returns the toolbar corner radius in px. */
@@ -651,6 +735,124 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         }
     }
 
+    /**
+     * Logs the usage of intents of all CCT features to a large enum histogram in order to track
+     * usage by apps.
+     * @param intent The intent used to launch the CCT.
+     * @param colorScheme The requested color scheme to use with the CCT.
+     * @param isUsingDynamicFeatures Whether the intent specified Features to dynamically enable or
+     *                               disable.
+     */
+    private void logCustomTabFeatures(
+            Intent intent, int colorScheme, boolean isUsingDynamicFeatures) {
+        if (!CustomTabsFeatureUsage.isEnabled()) return;
+        CustomTabsFeatureUsage featureUsage = new CustomTabsFeatureUsage();
+
+        // Ordering: Log all the features ordered by CustomTabsFeature enum, when they apply.
+        if (mAnimationBundle != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_ACTION_BUTTON_BUNDLE);
+        }
+        if (IntentUtils.safeHasExtra(intent, CustomTabsIntent.EXTRA_TINT_ACTION_BUTTON)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_TINT_ACTION_BUTTON);
+        }
+        if (IntentUtils.safeHasExtra(intent, EXTRA_INITIAL_BACKGROUND_COLOR)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_INITIAL_BACKGROUND_COLOR);
+        }
+        if (mInteractWithBackground) {
+            featureUsage.log(CustomTabsFeature.EXTRA_ENABLE_BACKGROUND_INTERACTION);
+        }
+        if (mCloseButtonIcon != null) featureUsage.log(CustomTabsFeature.EXTRA_CLOSE_BUTTON_ICON);
+        if (getCloseButtonPosition() != CLOSE_BUTTON_POSITION_DEFAULT) {
+            featureUsage.log(CustomTabsFeature.EXTRA_CLOSE_BUTTON_POSITION);
+        }
+        if (colorScheme == CustomTabsIntent.COLOR_SCHEME_DARK) {
+            featureUsage.log(CustomTabsFeature.CTF_DARK);
+        }
+        if (colorScheme == CustomTabsIntent.COLOR_SCHEME_LIGHT) {
+            featureUsage.log(CustomTabsFeature.CTF_LIGHT);
+        }
+        if (IntentUtils.safeHasExtra(intent, CustomTabsIntent.EXTRA_COLOR_SCHEME)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_COLOR_SCHEME);
+        }
+        if (colorScheme == CustomTabsIntent.COLOR_SCHEME_SYSTEM) {
+            featureUsage.log(CustomTabsFeature.CTF_SYSTEM);
+        }
+        if (mDisableDownload) featureUsage.log(CustomTabsFeature.EXTRA_DISABLE_DOWNLOAD_BUTTON);
+        if (mDisableStar) featureUsage.log(CustomTabsFeature.EXTRA_DISABLE_STAR_BUTTON);
+        if (mGsaExperimentIds != null) featureUsage.log(CustomTabsFeature.EXPERIMENT_IDS);
+        if (IntentUtils.safeHasExtra(intent,
+                    CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_HEIGHT_IN_PIXEL_LEGACY)
+                || IntentUtils.safeHasExtra(
+                        intent, CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_HEIGHT_PX)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_INITIAL_ACTIVITY_HEIGHT_PX);
+        }
+        if (mEnableEmbeddedMediaExperience) {
+            featureUsage.log(CustomTabsFeature.EXTRA_ENABLE_EMBEDDED_MEDIA_EXPERIENCE);
+        }
+        if (mIsFromMediaLauncherActivity) {
+            featureUsage.log(CustomTabsFeature.EXTRA_BROWSER_LAUNCH_SOURCE);
+        }
+        if (mMediaViewerUrl != null) featureUsage.log(CustomTabsFeature.EXTRA_MEDIA_VIEWER_URL);
+        if (mMenuEntries != null) featureUsage.log(CustomTabsFeature.EXTRA_MENU_ITEMS);
+        if (IntentUtils.safeHasExtra(intent, IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_CALLING_ACTIVITY_PACKAGE);
+        }
+        if (getClientPackageName() != null) featureUsage.log(CustomTabsFeature.CTF_PACKAGE_NAME);
+        if (IntentUtils.safeHasExtra(
+                    intent, CustomTabIntentDataProvider.EXTRA_TOOLBAR_CORNER_RADIUS_IN_PIXEL_LEGACY)
+                || IntentUtils.safeHasExtra(
+                        intent, CustomTabIntentDataProvider.EXTRA_TOOLBAR_CORNER_RADIUS_DP)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_TOOLBAR_CORNER_RADIUS_DP);
+        }
+        if (isPartialHeightCustomTab()) {
+            featureUsage.log(CustomTabsFeature.CTF_PARTIAL);
+        }
+        if (mRemoteViewsPendingIntent != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_REMOTEVIEWS_PENDINGINTENT);
+        }
+        if (mClickableViewIds != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_REMOTEVIEWS_VIEW_IDS);
+        }
+        if (mRemoteViews != null) featureUsage.log(CustomTabsFeature.EXTRA_REMOTEVIEWS);
+        if (!mIsPartialCustomTabFixedHeight) {
+            featureUsage.log(CustomTabsFeature.EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR);
+        }
+        if (mDefaultOrientation != ScreenOrientation.DEFAULT) {
+            featureUsage.log(CustomTabsFeature.EXTRA_SCREEN_ORIENTATION);
+        }
+        if (mIsOpenedByChrome) featureUsage.log(CustomTabsFeature.CTF_SENT_BY_CHROME);
+        if (mKeepAliveServiceIntent != null) featureUsage.log(CustomTabsFeature.EXTRA_KEEP_ALIVE);
+        if (mShowShareItemInMenu) featureUsage.log(CustomTabsFeature.EXTRA_DEFAULT_SHARE_MENU_ITEM);
+        if (IntentUtils.safeHasExtra(intent, CustomTabsIntent.EXTRA_SHARE_STATE)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_SHARE_STATE);
+        }
+        if (mTitleVisibilityState != CustomTabsIntent.NO_TITLE) {
+            featureUsage.log(CustomTabsFeature.EXTRA_TITLE_VISIBILITY_STATE);
+        }
+        if (IntentUtils.safeHasExtra(intent, CustomTabsIntent.EXTRA_TOOLBAR_ITEMS)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_TOOLBAR_ITEMS);
+        }
+        if (mTranslateLanguage != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_TRANSLATE_LANGUAGE);
+        }
+        if (mAutoTranslateLanguage != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_AUTO_TRANSLATE_LANGUAGE);
+        }
+        if (IntentUtils.safeHasExtra(intent, TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE)) {
+            featureUsage.log(CustomTabsFeature.EXTRA_DISPLAY_MODE);
+        }
+        if (mActivityType == ActivityType.TRUSTED_WEB_ACTIVITY) {
+            featureUsage.log(CustomTabsFeature.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY);
+        }
+        if (mTrustedWebActivityAdditionalOrigins != null) {
+            featureUsage.log(CustomTabsFeature.EXTRA_ADDITIONAL_TRUSTED_ORIGINS);
+        }
+        if (mEnableUrlBarHiding) featureUsage.log(CustomTabsFeature.EXTRA_ENABLE_URLBAR_HIDING);
+        if (isUsingDynamicFeatures) {
+            featureUsage.log(CustomTabsFeature.EXTRA_INTENT_FEATURE_OVERRIDES);
+        }
+    }
+
     @Override
     public int getDefaultOrientation() {
         return mDefaultOrientation;
@@ -696,15 +898,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Override
     @Nullable
     public String getClientPackageName() {
-        String packageNameForSession =
-                CustomTabsConnection.getInstance().getClientPackageNameForSession(mSession);
-        if (!TextUtils.isEmpty(packageNameForSession)) return packageNameForSession;
-
-        String packageNameFromIntent = IntentUtils.safeGetStringExtra(
-                mIntent, IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE);
-        if (!TextUtils.isEmpty(packageNameFromIntent)) return packageNameFromIntent;
-
-        return null;
+        return getClientPackageNameFromSessionOrCallingActivity(mIntent, mSession);
     }
 
     @Override
@@ -873,7 +1067,27 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Override
     @Nullable
     public String getTranslateLanguage() {
-        return mTranslateLanguage;
+        return shouldAutoTranslate() ? mAutoTranslateLanguage : mTranslateLanguage;
+    }
+
+    @Override
+    public boolean shouldAutoTranslate() {
+        return mAutoTranslateLanguage != null && isAllowedToAutoTranslate();
+    }
+
+    private static boolean isPackageNameInList(String packageName, String pipeDelimitedList) {
+        if (packageName == null || TextUtils.isEmpty(pipeDelimitedList)) return false;
+        for (String p : pipeDelimitedList.split("\\|")) {
+            if (packageName.equals(p)) return true;
+        }
+        return false;
+    }
+
+    private boolean isAllowedToAutoTranslate() {
+        if (!ChromeFeatureList.sCctAutoTranslate.isEnabled()) return false;
+        if (mIsTrustedIntent && AUTO_TRANSLATE_ALLOW_ALL_FIRST_PARTIES.getValue()) return true;
+        return isPackageNameInList(
+                getClientPackageName(), AUTO_TRANSLATE_PACKAGE_NAME_ALLOWLIST.getValue());
     }
 
     @Override
@@ -939,19 +1153,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         if (packageName == null) return false;
         String defaultPolicy = THIRD_PARTIES_DEFAULT_POLICY.getValue();
         if (defaultPolicy.equals(DEFAULT_POLICY_USE_ALLOWLIST)) {
-            String allowList = ALLOWLIST_ENTRIES.getValue();
-            if (TextUtils.isEmpty(allowList)) return false;
-            for (String p : allowList.split("\\|")) {
-                if (packageName.equals(p)) return true;
-            }
-            return false;
+            return isPackageNameInList(packageName, ALLOWLIST_ENTRIES.getValue());
         } else if (defaultPolicy.equals(DEFAULT_POLICY_USE_DENYLIST)) {
-            String denyList = DENYLIST_ENTRIES.getValue();
-            if (TextUtils.isEmpty(denyList)) return true;
-            for (String p : denyList.split("\\|")) {
-                if (packageName.equals(p)) return false;
-            }
-            return true;
+            return !isPackageNameInList(packageName, DENYLIST_ENTRIES.getValue());
         }
         assert false : "We can't get here since the default policy is use denylist.";
         return false;
@@ -981,4 +1185,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public boolean isPartialCustomTabFixedHeight() {
         return mIsPartialCustomTabFixedHeight;
     }
+
+    @Override
+    public boolean canInteractWithBackground() { return mInteractWithBackground; }
 }

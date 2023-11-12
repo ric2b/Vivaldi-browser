@@ -35,6 +35,16 @@ class CanvasResourceDispatcherClient {
 class PLATFORM_EXPORT CanvasResourceDispatcher
     : public viz::mojom::blink::CompositorFrameSinkClient {
  public:
+  static constexpr unsigned kMaxPendingCompositorFrames = 2;
+
+  // In theory, the spec allows an unlimited number of frames to be retained
+  // on the main thread. For example, by acquiring ImageBitmaps from the
+  // placeholder canvas.  We nonetheless set a limit to the number of
+  // outstanding placeholder frames in order to prevent potential resource
+  // leaks that can happen when the main thread is in a jam, causing posted
+  // frames to pile-up.
+  static constexpr unsigned kMaxUnreclaimedPlaceholderFrames = 50;
+
   base::WeakPtr<CanvasResourceDispatcher> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
@@ -45,13 +55,18 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
     kInvalidPlaceholderCanvasId = -1,
   };
 
-  CanvasResourceDispatcher(CanvasResourceDispatcherClient*,
-                           scoped_refptr<base::SingleThreadTaskRunner>
-                               agent_group_scheduler_compositor_task_runner,
-                           uint32_t client_id,
-                           uint32_t sink_id,
-                           int placeholder_canvas_id,
-                           const gfx::Size&);
+  // `task_runner` is the task runner this object is associated with and
+  // executes on. `agent_group_scheduler_compositor_task_runner` is the
+  // compositor task runner for the associated canvas element.
+  CanvasResourceDispatcher(
+      CanvasResourceDispatcherClient*,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner>
+          agent_group_scheduler_compositor_task_runner,
+      uint32_t client_id,
+      uint32_t sink_id,
+      int placeholder_canvas_id,
+      const gfx::Size&);
 
   ~CanvasResourceDispatcher() override;
   void SetNeedsBeginFrame(bool);
@@ -119,7 +134,7 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   bool change_size_for_next_commit_;
   bool suspend_animation_ = false;
   bool needs_begin_frame_ = false;
-  int pending_compositor_frames_ = 0;
+  unsigned pending_compositor_frames_ = 0;
 
   void SetNeedsBeginFrameInternal();
 
@@ -157,6 +172,7 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
 
   std::unique_ptr<power_scheduler::PowerModeVoter> animation_power_mode_voter_;
 
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner>
       agent_group_scheduler_compositor_task_runner_;
 

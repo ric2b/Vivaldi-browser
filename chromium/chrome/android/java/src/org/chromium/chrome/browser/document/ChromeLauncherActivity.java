@@ -10,9 +10,11 @@ import android.os.Bundle;
 import com.google.android.material.color.DynamicColors;
 
 import org.chromium.base.TraceEvent;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
+
+// Vivaldi
+import org.chromium.chrome.R;
 
 /**
  * Dispatches incoming intents to the appropriate activity based on the current configuration and
@@ -54,6 +56,7 @@ public class ChromeLauncherActivity extends Activity {
     }
 
     private void applyThemeOverlays() {
+        // Note(david@vivaldi.com): We set the theme here in order to support all Android versions.
         setTheme(R.style.ColorOverlay_ChromiumAndroid);
 
         // The effect of this activity's theme is currently limited to CCTs, so we should only apply

@@ -26,13 +26,14 @@
 #include "cc/layers/touch_action_region.h"
 #include "cc/paint/element_id.h"
 #include "cc/paint/filter_operations.h"
+#include "cc/paint/node_id.h"
 #include "cc/paint/paint_record.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/property_tree.h"
 #include "cc/trees/target_property.h"
-#include "components/viz/common/shared_element_resource_id.h"
 #include "components/viz/common/surfaces/region_capture_bounds.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
+#include "components/viz/common/view_transition_element_resource_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/linear_gradient.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -842,7 +843,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
 
   // If the content of this layer is provided by a cached or live render
   // surface, returns the ID of that resource.
-  virtual viz::SharedElementResourceId DocumentTransitionResourceId() const;
+  virtual viz::ViewTransitionElementResourceId ViewTransitionResourceId() const;
 
  protected:
   friend class LayerImpl;

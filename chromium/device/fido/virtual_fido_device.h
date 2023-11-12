@@ -16,6 +16,8 @@
 #include "base/component_export.h"
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_device.h"
 #include "device/fido/fido_parsing_utils.h"
@@ -23,7 +25,6 @@
 #include "device/fido/public_key_credential_descriptor.h"
 #include "device/fido/public_key_credential_rp_entity.h"
 #include "device/fido/public_key_credential_user_entity.h"
-#include "net/cert/x509_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/boringssl/src/include/openssl/base.h"
 
@@ -127,6 +128,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     absl::optional<std::unique_ptr<PrivateKey>> device_key;
   };
 
+  using Credential = std::pair<base::span<const uint8_t>, RegistrationData*>;
+
+  class COMPONENT_EXPORT(DEVICE_FIDO) Observer : public base::CheckedObserver {
+   public:
+    virtual void OnCredentialCreated(const Credential& credential) = 0;
+    virtual void OnAssertion(const Credential& credential) = 0;
+  };
+
   // Stores the state of the device. Since |U2fDevice| objects only persist for
   // the lifetime of a single request, keeping state in an external object is
   // necessary in order to provide continuity between requests.
@@ -180,6 +189,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
 
     // ctap2_invalid_signature causes a bogus signature to be returned if true.
     bool ctap2_invalid_signature = false;
+    // If true, UV bit is always set to 0 in the response.
+    bool unset_uv_bit = false;
+    // If true, UP bit is always set to 0 in the response.
+    bool unset_up_bit = false;
 
     // Number of PIN retries remaining.
     int pin_retries = kMaxPinRetries;
@@ -267,6 +280,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // unit tests where a stable device identifier is required.
     absl::optional<std::string> device_id_override;
 
+    // Observer methods.
+    void AddObserver(Observer* observer);
+    void RemoveObserver(Observer* observer);
+    void NotifyCredentialCreated(
+        const std::pair<base::span<const uint8_t>, RegistrationData*>&
+            credential);
+    void NotifyAssertion(const std::pair<base::span<const uint8_t>,
+                                         RegistrationData*>& credential);
+
     // Adds a new credential to the authenticator. Returns true on success,
     // false if there already exists a credential with the given ID.
     bool InjectRegistration(base::span<const uint8_t> credential_id,
@@ -320,6 +342,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     void ClearLargeBlobs();
 
    private:
+    base::ObserverList<Observer> observers_;
     friend class base::RefCounted<State>;
     ~State();
   };

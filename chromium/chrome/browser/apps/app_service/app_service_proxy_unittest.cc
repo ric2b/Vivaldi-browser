@@ -8,6 +8,7 @@
 
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -378,6 +379,12 @@ class AppServiceProxyPreferredAppsTest : public AppServiceProxyTest {
  public:
   void SetUp() override {
     proxy_ = AppServiceProxyFactory::GetForProfile(&profile_);
+
+    // Wait for the PreferredAppsList to be initialized from disk before tests
+    // start modifying it.
+    base::RunLoop file_read_run_loop;
+    proxy_->ReinitializeForTesting(&profile_, file_read_run_loop.QuitClosure());
+    file_read_run_loop.Run();
 
     web_app::test::AwaitStartWebAppProviderAndSubsystems(&profile_);
   }

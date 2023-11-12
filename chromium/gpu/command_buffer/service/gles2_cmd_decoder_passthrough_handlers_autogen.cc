@@ -4409,24 +4409,6 @@ error::Error GLES2DecoderPassthroughImpl::HandleContextVisibilityHintCHROMIUM(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::HandleCoverageModulationCHROMIUM(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::CoverageModulationCHROMIUM& c =
-      *static_cast<const volatile gles2::cmds::CoverageModulationCHROMIUM*>(
-          cmd_data);
-  if (!features().chromium_framebuffer_mixed_samples) {
-    return error::kUnknownCommand;
-  }
-
-  GLenum components = static_cast<GLenum>(c.components);
-  error::Error error = DoCoverageModulationCHROMIUM(components);
-  if (error != error::kNoError) {
-    return error;
-  }
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderPassthroughImpl::HandleBlendBarrierKHR(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
@@ -4756,6 +4738,23 @@ error::Error GLES2DecoderPassthroughImpl::HandleIsEnablediOES(
     return error::kOutOfBounds;
   }
   error::Error error = DoIsEnablediOES(target, index, result);
+  if (error != error::kNoError) {
+    return error;
+  }
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::HandleProvokingVertexANGLE(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::ProvokingVertexANGLE& c =
+      *static_cast<const volatile gles2::cmds::ProvokingVertexANGLE*>(cmd_data);
+  if (!features().angle_provoking_vertex) {
+    return error::kUnknownCommand;
+  }
+
+  GLenum provokeMode = static_cast<GLenum>(c.provokeMode);
+  error::Error error = DoProvokingVertexANGLE(provokeMode);
   if (error != error::kNoError) {
     return error;
   }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {sendWithPromise} from 'chrome://resources/ash/common/cr.m.js';
 
 /**
  * @enum {number}
@@ -80,7 +80,7 @@ export class FingerprintBrowserProxy {
    * @param {number} index
    * @return {!Promise<boolean>}
    */
-  removeEnrollment(index) {}
+  removeEnrollment(index, authToken) {}
 
   /**
    * @param {number} index
@@ -140,8 +140,8 @@ export class FingerprintBrowserProxyImpl {
   }
 
   /** @override */
-  removeEnrollment(index) {
-    return sendWithPromise('removeEnrollment', index);
+  removeEnrollment(index, authToken) {
+    return sendWithPromise('removeEnrollment', index, authToken);
   }
 
   /** @override */

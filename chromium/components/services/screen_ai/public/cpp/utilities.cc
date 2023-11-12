@@ -5,8 +5,10 @@
 #include "components/services/screen_ai/public/cpp/utilities.h"
 
 #include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "components/component_updater/component_updater_paths.h"
 
 namespace screen_ai {
@@ -16,22 +18,28 @@ const base::FilePath::CharType kScreenAISubDirName[] =
     FILE_PATH_LITERAL("screen_ai");
 
 const base::FilePath::CharType kScreenAIComponentBinaryName[] =
-    FILE_PATH_LITERAL("libchrome_screen_ai.so");
+#if BUILDFLAG(IS_WIN)
+    FILE_PATH_LITERAL("chrome_screen_ai.dll");
+#else
+    FILE_PATH_LITERAL("libchromescreenai.so");
+#endif
 
-enum {
-  PATH_START = 13000,
-
-  // Note that this value is not kept between sessions or shared between
-  // processes.
-  PATH_SCREEN_AI_LIBRARY_BINARY,
-
-  PATH_END
-};
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// The path to the Screen AI DLC directory.
+// TODO(https://crbug.com/1278249): Replace by get it from  DlcServiceClient
+// after installation.
+constexpr char kScreenAIDlcRootPath[] =
+    "/run/imageloader/screen-ai/package/root/";
+#endif
 
 }  // namespace
 
 base::FilePath GetRelativeInstallDir() {
   return base::FilePath(kScreenAISubDirName);
+}
+
+base::FilePath GetComponentBinaryFileName() {
+  return base::FilePath(kScreenAIComponentBinaryName);
 }
 
 base::FilePath GetComponentDir() {
@@ -45,6 +53,10 @@ base::FilePath GetComponentDir() {
 }
 
 base::FilePath GetLatestComponentBinaryPath() {
+  base::FilePath latest_version_dir;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  latest_version_dir = base::FilePath::FromASCII(kScreenAIDlcRootPath);
+#else
   base::FilePath screen_ai_dir = GetComponentDir();
   if (screen_ai_dir.empty())
     return base::FilePath();
@@ -53,12 +65,12 @@ base::FilePath GetLatestComponentBinaryPath() {
   base::FileEnumerator enumerator(screen_ai_dir,
                                   /*recursive=*/false,
                                   base::FileEnumerator::DIRECTORIES);
-  base::FilePath latest_version_dir;
   for (base::FilePath version_dir = enumerator.Next(); !version_dir.empty();
        version_dir = enumerator.Next()) {
     latest_version_dir =
         latest_version_dir < version_dir ? version_dir : latest_version_dir;
   }
+#endif
 
   base::FilePath component_path =
       latest_version_dir.Append(kScreenAIComponentBinaryName);
@@ -66,16 +78,6 @@ base::FilePath GetLatestComponentBinaryPath() {
     return base::FilePath();
 
   return component_path;
-}
-
-void StoreComponentBinaryPath(const base::FilePath& path) {
-  base::PathService::Override(PATH_SCREEN_AI_LIBRARY_BINARY, path);
-}
-
-base::FilePath GetStoredComponentBinaryPath() {
-  base::FilePath path;
-  base::PathService::Get(PATH_SCREEN_AI_LIBRARY_BINARY, &path);
-  return path;
 }
 
 }  // namespace screen_ai

@@ -75,6 +75,7 @@
   E_CPONLY(kColorExtensionMenuIconDisabled) \
   E_CPONLY(kColorExtensionMenuPinButtonIcon) \
   E_CPONLY(kColorExtensionMenuPinButtonIconDisabled) \
+  E_CPONLY(kColorExtensionsMenuHighlightedBackground) \
   E_CPONLY(kColorExtensionsToolbarControlsBackground) \
   /* Eyedropper colors. */ \
   E_CPONLY(kColorEyedropperBoundary) \
@@ -111,6 +112,7 @@
   E_CPONLY(kColorInfoBarButtonIconDisabled) \
   E_CPONLY(kColorInfoBarContentAreaSeparator) \
   E_CPONLY(kColorInfoBarForeground) \
+  /* There is also a kColorInfoBarIcon in /ui/color/color_id.h */ \
   /* Intent Picker colors. */ \
   E_CPONLY(kColorIntentPickerItemBackgroundHovered) \
   E_CPONLY(kColorIntentPickerItemBackgroundSelected) \
@@ -131,15 +133,20 @@
   E_CPONLY(kColorNewTabButtonInkDropFrameActive) \
   E_CPONLY(kColorNewTabButtonInkDropFrameInactive) \
   /* New Tab Page colors. */ \
+  E_CPONLY(kColorNewTabPageActionButtonBackground) \
   E_CPONLY(kColorNewTabPageActionButtonBorder) \
   E_CPONLY(kColorNewTabPageActionButtonBorderHovered) \
+  E_CPONLY(kColorNewTabPageActionButtonForeground) \
   E_CPONLY(kColorNewTabPageActiveBackground) \
   E_CPONLY(kColorNewTabPageAttributionForeground) \
   E_CPONLY(kColorNewTabPageBackground) \
   E_CPONLY(kColorNewTabPageBackgroundOverride) \
   E_CPONLY(kColorNewTabPageBorder) \
   E_CPONLY(kColorNewTabPageButtonBackground) \
+  E_CPONLY(kColorNewTabPageButtonBackgroundHovered) \
   E_CPONLY(kColorNewTabPageButtonForeground) \
+  E_CPONLY(kColorNewTabPageCartModuleDiscountChipBackground) \
+  E_CPONLY(kColorNewTabPageCartModuleDiscountChipForeground) \
   E_CPONLY(kColorNewTabPageChipBackground) \
   E_CPONLY(kColorNewTabPageChipForeground) \
   E_CPONLY(kColorNewTabPageControlBackgroundHovered) \
@@ -151,20 +158,25 @@
   E_CPONLY(kColorNewTabPageDialogControlBackgroundHovered) \
   E_CPONLY(kColorNewTabPageDialogForeground) \
   E_CPONLY(kColorNewTabPageDialogSecondaryForeground) \
+  E_CPONLY(kColorNewTabPageFirstRunBackground) \
   E_CPONLY(kColorNewTabPageFocusShadow) \
   E_CPONLY(kColorNewTabPageHeader) \
   E_CPONLY(kColorNewTabPagePromoBackground) \
+  E_CPONLY(kColorNewTabPagePromoImageBackground) \
   E_CPONLY(kColorNewTabPageIconButtonBackground) \
   E_CPONLY(kColorNewTabPageIconButtonBackgroundActive) \
   E_CPONLY(kColorNewTabPageLink) \
   E_CPONLY(kColorNewTabPageLogo) \
   E_CPONLY(kColorNewTabPageLogoUnthemedDark) \
   E_CPONLY(kColorNewTabPageLogoUnthemedLight) \
+  E_CPONLY(kColorNewTabPageMenuInnerShadow) \
+  E_CPONLY(kColorNewTabPageMenuOuterShadow) \
   E_CPONLY(kColorNewTabPageMicBorderColor) \
   E_CPONLY(kColorNewTabPageMicIconColor) \
   E_CPONLY(kColorNewTabPageModuleControlBorder) \
   E_CPONLY(kColorNewTabPageModuleBackground) \
   E_CPONLY(kColorNewTabPageModuleIconContainerBackground) \
+  E_CPONLY(kColorNewTabPageModuleItemBackground) \
   E_CPONLY(kColorNewTabPageModuleScrollButtonBackground) \
   E_CPONLY(kColorNewTabPageModuleScrollButtonBackgroundHovered) \
   E_CPONLY(kColorNewTabPageMostVisitedForeground) \
@@ -193,8 +205,7 @@
   E_CPONLY(kColorOmniboxAnswerIconForeground) \
   E_CPONLY(kColorOmniboxBubbleOutline) \
   E_CPONLY(kColorOmniboxBubbleOutlineExperimentalKeywordMode) \
-  E_CPONLY(kColorOmniboxChipBackgroundLowVisibility) \
-  E_CPONLY(kColorOmniboxChipBackgroundNormalVisibility) \
+  E_CPONLY(kColorOmniboxChipBackground) \
   E_CPONLY(kColorOmniboxChipForegroundLowVisibility) \
   E_CPONLY(kColorOmniboxChipForegroundNormalVisibility) \
   E_CPONLY(kColorOmniboxKeywordSelected) \
@@ -207,6 +218,7 @@
   E_CPONLY(kColorOmniboxResultsFocusIndicator) \
   E_CPONLY(kColorOmniboxResultsIcon) \
   E_CPONLY(kColorOmniboxResultsIconSelected) \
+  E_CPONLY(kColorOmniboxResultsStarterPackIcon) \
   E_CPONLY(kColorOmniboxResultsTextDimmed) \
   E_CPONLY(kColorOmniboxResultsTextDimmedSelected) \
   E_CPONLY(kColorOmniboxResultsTextNegative) \

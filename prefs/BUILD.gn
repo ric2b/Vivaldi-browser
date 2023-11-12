@@ -152,10 +152,3 @@ static_library("browser_prefs") {
     ]
   }
 }
-
-if(is_ios) {
-  bundle_data("prefs_definitions") {
-    sources = [ "//vivaldi/vivapp/src/prefs_definitions.json" ]
-    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}"]
-  }
-}

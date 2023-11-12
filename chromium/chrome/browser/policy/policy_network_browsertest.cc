@@ -435,9 +435,9 @@ class QuicAllowedPolicyDynamicTest : public QuicTestBase {
 
  private:
   // The first profile.
-  raw_ptr<Profile> profile_1_;
+  raw_ptr<Profile, DanglingUntriaged> profile_1_;
   // The second profile. Only valid after CreateSecondProfile() has been called.
-  Profile* profile_2_;
+  raw_ptr<Profile, DanglingUntriaged> profile_2_;
 
   // Mock Policy for profile_1_.
   MockConfigurationPolicyProvider policy_for_profile_1_;

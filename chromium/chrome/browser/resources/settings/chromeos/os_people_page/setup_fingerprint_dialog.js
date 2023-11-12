@@ -8,7 +8,7 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import '../../settings_shared.css.js';
 
-import {assertNotReached} from 'chrome://resources/js/assert.js';
+import {assertNotReached} from 'chrome://resources/ash/common/assert.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/ash/common/web_ui_listener_behavior.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -25,19 +25,6 @@ export const FingerprintSetupStep = {
   LOCATE_SCANNER: 1,  // The user needs to locate the scanner.
   MOVE_FINGER: 2,     // The user needs to move finger around the scanner.
   READY: 3,           // The scanner has read the fingerprint successfully.
-};
-
-/**
- * Fingerprint sensor locations corresponding to the FingerprintLocation
- * enumerators in
- * /chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h
- * @enum {number}
- */
-export const FingerprintLocation = {
-  TABLET_POWER_BUTTON: 0,
-  KEYBOARD_BOTTOM_LEFT: 1,
-  KEYBOARD_BOTTOM_RIGHT: 2,
-  KEYBOARD_TOP_RIGHT: 3,
 };
 
 /**
@@ -162,7 +149,7 @@ class SettingsSetupFingerprintDialogElement extends
 
     this.addWebUIListener(
         'on-fingerprint-scan-received', this.onScanReceived_.bind(this));
-
+    this.addWebUIListener('on-screen-locked', this.onScreenLocked_.bind(this));
     this.$.arc.reset();
     this.browserProxy_.startEnroll(this.authToken);
     this.$.dialog.showModal();
@@ -172,14 +159,14 @@ class SettingsSetupFingerprintDialogElement extends
    * Closes the dialog.
    */
   close() {
-    if (this.$.dialog.open) {
-      this.$.dialog.close();
-    }
-
     // Note: Reset resets |step_| back to the default, so handle anything that
     // checks |step_| before resetting.
     if (this.step_ !== FingerprintSetupStep.READY) {
       this.browserProxy_.cancelCurrentEnroll();
+    }
+
+    if (this.$.dialog.open) {
+      this.$.dialog.close();
     }
 
     this.reset_();
@@ -248,6 +235,18 @@ class SettingsSetupFingerprintDialogElement extends
         break;
     }
   }
+
+  /**
+   * When the screen is getting locked during enrollment we close
+   * the dialog to cancel the enrollment process and make the fingerprint
+   * unlock available to the user.
+   */
+  onScreenLocked_(screenIsLocked) {
+    if (screenIsLocked) {
+      this.close();
+    }
+  }
+
 
   /**
    * Sets the instructions based on which phase of the fingerprint setup we

@@ -37,11 +37,20 @@ def AddCommonArguments(parser: argparse.ArgumentParser) -> None:
                       default=False,
                       help='Automatically remove any expectations that are '
                       'determined to be stale from the expectation file.')
-  parser.add_argument('--modify-semi-stale-expectations',
-                      action='store_true',
-                      default=False,
-                      help='If any semi-stale expectations are found, prompt '
-                      'the user about the modification of each one.')
+  semi_stale_group = parser.add_mutually_exclusive_group()
+  semi_stale_group.add_argument(
+      '--modify-semi-stale-expectations',
+      action='store_true',
+      default=False,
+      help='If any semi-stale expectations are found, '
+      'prompt the user about the modification of '
+      'each one.')
+  semi_stale_group.add_argument('--narrow-semi-stale-expectation-scope',
+                                action='store_true',
+                                default=False,
+                                help='Automatically modify or split semi-stale '
+                                'expectations so they only apply to '
+                                'configurations that actually need them.')
   parser.add_argument('-v',
                       '--verbose',
                       action='count',
@@ -77,6 +86,11 @@ def AddCommonArguments(parser: argparse.ArgumentParser) -> None:
                             'intended for use in CL descriptions. If not '
                             'specified, will be printed to the terminal '
                             'instead.'))
+  parser.add_argument('--jobs',
+                      '-j',
+                      type=int,
+                      help=('How many parallel jobs to run. By default, runs '
+                            'all work in parallel.'))
   internal_group = parser.add_mutually_exclusive_group()
   internal_group.add_argument('--include-internal-builders',
                               action='store_true',

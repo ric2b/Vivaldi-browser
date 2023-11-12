@@ -14,6 +14,7 @@ import("//chrome/version.gni")
 group("mac") {
   deps = [
     ":browser_install_script",
+    ":launcher",
     ":privileged_helper",
     ":updater_bundle",
     ":updater_bundle_test",
@@ -41,6 +42,7 @@ mac_app_bundle("updater_bundle") {
   deps = [
     ":keystone_agent_bundle_resource_executable",
     ":keystone_agent_bundle_resource_plist",
+    ":updater_bundle_helpers",
     ":updater_bundle_keystone_executable",
     ":updater_bundle_keystone_helpers",
     ":updater_bundle_keystone_plist",
@@ -59,6 +61,7 @@ mac_app_bundle("updater_bundle_test") {
   deps = [
     ":keystone_agent_bundle_resource_executable",
     ":keystone_agent_bundle_resource_plist",
+    ":updater_bundle_helpers",
     ":updater_bundle_keystone_executable",
     ":updater_bundle_keystone_helpers",
     ":updater_bundle_keystone_plist",
@@ -210,6 +213,32 @@ action("browser_install_script") {
   ]
 }
 
+executable("launcher") {
+  output_name = "launcher"
+  sources = [ "launcher_main.cc" ]
+
+  deps = [
+    ":updater_plist",
+    "//base",
+    "//chrome/updater:base",
+    "//chrome/updater:constants_prod",
+  ]
+
+  inputs = [ "$target_gen_dir/updater_plist_tweaked.plist" ]
+
+  ldflags = [
+    "-sectcreate",
+    "__TEXT",
+    "__info_plist",
+    rebase_path(inputs[0], root_out_dir),
+  ]
+
+  if (is_asan) {
+    # ASAN injects a dylib that we package in ../MacOS.
+    ldflags += [ "-Wl,-rpath,@executable_path/../MacOS" ]
+  }
+}
+
 source_set("ksadmin_lib") {
   sources = [
     "keystone/ksadmin.h",
@@ -218,7 +247,8 @@ source_set("ksadmin_lib") {
 
   deps = [
     "//base",
-    "//chrome/updater:base",
+    "//chrome/updater:base_app",
+    "//chrome/updater:ks_ticket",
     "//chrome/updater:version_header",
   ]
 
@@ -257,7 +287,7 @@ executable("ksinstall") {
 
   deps = [
     "//base",
-    "//chrome/updater:base",
+    "//chrome/updater:base_app",
     "//chrome/updater:constants_prod",
     "//chrome/updater:version_header",
   ]
@@ -354,11 +384,19 @@ bundle_data("updater_bundle_keystone_helpers") {
   public_deps = [ ":keystone_bundle" ]
 }
 
+bundle_data("updater_bundle_helpers") {
+  sources = [ "$root_out_dir/launcher" ]
+  outputs = [ "{{bundle_contents_dir}}/Helpers/{{source_file_part}}" ]
+
+  public_deps = [ ":launcher" ]
+}
+
 if (!is_component_build && enable_dsyms) {
   _symbols_sources = [
     "$root_out_dir/$updater_product_full_name.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Helpers/ksadmin",
     "$root_out_dir/$updater_product_full_name.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Helpers/ksinstall",
     "$root_out_dir/$updater_product_full_name.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Resources/${keystone_app_name}Agent.app/Contents/MacOS/${keystone_app_name}Agent",
+    "$root_out_dir/$updater_product_full_name.app/Contents/Helpers/launcher",
     "$root_out_dir/$updater_product_full_name.app/Contents/MacOS/$updater_product_full_name",
   ]
 
@@ -377,6 +415,7 @@ if (!is_component_build && enable_dsyms) {
              rebase_path(get_label_info(dump_syms, "root_out_dir") + "/" +
                              get_label_info(dump_syms, "name"),
                          root_build_dir),
+             "-m",
              "-g",
              rebase_path(
                  "$root_out_dir/{{source_file_part}}.dSYM/Contents/Resources/DWARF/{{source_file_part}}",
@@ -412,6 +451,7 @@ artifact_zip("updater_zip") {
     "$root_build_dir/${updater_product_full_name}.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Resources/${keystone_app_name}Agent.app/Contents/MacOS/${keystone_app_name}Agent",
     "$root_build_dir/${updater_product_full_name}.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Resources/${keystone_app_name}Agent.app/Contents/Info.plist",
     "$root_build_dir/${updater_product_full_name}.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Info.plist",
+    "$root_build_dir/${updater_product_full_name}.app/Contents/Helpers/launcher",
     "$root_build_dir/${updater_product_full_name}.app/Contents/PkgInfo",
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/Info.plist",
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/MacOS/${updater_product_full_name}_test",
@@ -421,6 +461,7 @@ artifact_zip("updater_zip") {
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Resources/${keystone_app_name}Agent.app/Contents/MacOS/${keystone_app_name}Agent",
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Resources/${keystone_app_name}Agent.app/Contents/Info.plist",
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/Helpers/$keystone_app_name.bundle/Contents/Info.plist",
+    "$root_build_dir/${updater_product_full_name}_test.app/Contents/Helpers/launcher",
     "$root_build_dir/${updater_product_full_name}_test.app/Contents/PkgInfo",
     "$root_build_dir/Updater Packaging/signing/signing.py",
     "$root_build_dir/Updater Packaging/signing/config.py",
@@ -438,6 +479,7 @@ artifact_zip("updater_zip") {
     "$root_build_dir/Updater Packaging/sign_updater.py",
     "$root_build_dir/chrome/updater/.install",
     "$root_build_dir/UpdaterSetup",
+    "$root_build_dir/qualification_app",
   ]
   deps = [
     ":updater_bundle",
@@ -445,5 +487,6 @@ artifact_zip("updater_zip") {
     ":updater_install_script",
     "//chrome/updater/mac/installer:metainstaller",
     "//chrome/updater/mac/signing",
+    "//chrome/updater/test/qualification_app",
   ]
 }

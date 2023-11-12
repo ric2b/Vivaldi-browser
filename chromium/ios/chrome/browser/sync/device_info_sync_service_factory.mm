@@ -87,6 +87,12 @@ class DeviceInfoSyncClient : public syncer::DeviceInfoSyncClient {
     return syncer::ModelTypeSet();
   }
 
+  size_t VivaldiGetSyncedFileStorageSize() const override {
+    // Can't add any notes attachment or custom thumbnail on iOS, so
+    // no need to report this for now.
+    return 0;
+  }
+
   // syncer::DeviceInfoSyncClient:
   // Returns false since we only care about Chrome OS devices
   bool IsUmaEnabledOnCrOSDevice() const override { return false; }

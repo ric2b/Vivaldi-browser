@@ -26,7 +26,9 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/conversions/attribution_reporting.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
@@ -54,6 +56,7 @@
 #include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -250,16 +253,28 @@ void HTMLAnchorElement::ParseAttribute(
       // GetDocument().GetFrame() could be null if this method is called from
       // DOMParser::parseFromString(), which internally creates a document
       // and eventually calls this.
-      if (GetDocument().IsDNSPrefetchEnabled() && GetDocument().GetFrame()) {
+      static bool enable =
+          !base::FeatureList::IsEnabled(
+              network::features::kPrefetchDNSWithURL) ||
+          network::features::kPrefetchDNSWithURLAllAnchorElements.Get();
+      if (GetDocument().IsDNSPrefetchEnabled() && GetDocument().GetFrame() &&
+          enable) {
         if (ProtocolIs(parsed_url, "http") || ProtocolIs(parsed_url, "https") ||
             parsed_url.StartsWith("//")) {
           WebPrescientNetworking* web_prescient_networking =
               GetDocument().GetFrame()->PrescientNetworking();
           if (web_prescient_networking) {
             web_prescient_networking->PrefetchDNS(
-                GetDocument().CompleteURL(parsed_url).Host());
+                GetDocument().CompleteURL(parsed_url));
           }
         }
+      }
+    }
+    if (isConnected()) {
+      if (auto* document_rules =
+              DocumentSpeculationRules::FromIfExists(GetDocument())) {
+        document_rules->HrefAttributeChanged(this, params.old_value,
+                                             params.new_value);
       }
     }
     InvalidateCachedVisitedLinkHash();
@@ -270,6 +285,19 @@ void HTMLAnchorElement::ParseAttribute(
   } else if (params.name == html_names::kRelAttr) {
     SetRel(params.new_value);
     rel_list_->DidUpdateAttributeValue(params.old_value, params.new_value);
+    if (isConnected() && IsLink()) {
+      if (auto* document_rules =
+              DocumentSpeculationRules::FromIfExists(GetDocument())) {
+        document_rules->RelAttributeChanged(this);
+      }
+    }
+  } else if (params.name == html_names::kReferrerpolicyAttr) {
+    if (isConnected() && IsLink()) {
+      if (auto* document_rules =
+              DocumentSpeculationRules::FromIfExists(GetDocument())) {
+        document_rules->ReferrerPolicyAttributeChanged(this);
+      }
+    }
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -457,23 +485,21 @@ void HTMLAnchorElement::HandleClick(Event& event) {
       return;
     }
 
-    if (auto* navigation_api = NavigationApi::navigation(*window)) {
-      auto* params = MakeGarbageCollected<NavigateEventDispatchParams>(
-          completed_url, NavigateEventType::kCrossDocument,
-          WebFrameLoadType::kStandard);
-      if (event.isTrusted())
-        params->involvement = UserNavigationInvolvement::kActivation;
-      params->download_filename = download_attr;
-      if (navigation_api->DispatchNavigateEvent(params) !=
-          NavigationApi::DispatchResult::kContinue) {
-        return;
-      }
-      // A download will never notify blink about its completion. Tell the
-      // NavigationApi that the navigation was dropped, so that it doesn't
-      // leave the frame thinking it is loading indefinitely.
-      navigation_api->InformAboutCanceledNavigation(
-          CancelNavigationReason::kDropped);
+    auto* params = MakeGarbageCollected<NavigateEventDispatchParams>(
+        completed_url, NavigateEventType::kCrossDocument,
+        WebFrameLoadType::kStandard);
+    if (event.isTrusted())
+      params->involvement = UserNavigationInvolvement::kActivation;
+    params->download_filename = download_attr;
+    if (window->navigation()->DispatchNavigateEvent(params) !=
+        NavigationApi::DispatchResult::kContinue) {
+      return;
     }
+    // A download will never notify blink about its completion. Tell the
+    // NavigationApi that the navigation was dropped, so that it doesn't
+    // leave the frame thinking it is loading indefinitely.
+    window->navigation()->InformAboutCanceledNavigation(
+        CancelNavigationReason::kDropped);
 
     request.SetSuggestedFilename(download_attr);
     request.SetRequestContext(mojom::blink::RequestContextType::DOWNLOAD);
@@ -531,7 +557,8 @@ void HTMLAnchorElement::HandleClick(Event& event) {
     if (!attribution_src_value.empty()) {
       frame_request.SetImpression(
           frame->GetAttributionSrcLoader()->RegisterNavigation(
-              GetDocument().CompleteURL(attribution_src_value), this));
+              GetDocument().CompleteURL(attribution_src_value),
+              mojom::blink::AttributionNavigationType::kAnchor, this));
     }
 
     // If the impression could not be set, or if the value was null, mark that
@@ -540,7 +567,8 @@ void HTMLAnchorElement::HandleClick(Event& event) {
         frame->GetAttributionSrcLoader()->CanRegister(
             completed_url, this,
             /*request_id=*/absl::nullopt)) {
-      frame_request.SetImpression(blink::Impression());
+      frame_request.SetImpression(blink::Impression{
+          .nav_type = mojom::blink::AttributionNavigationType::kAnchor});
     }
   }
 
@@ -600,7 +628,25 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
     AnchorElementMetricsSender::From(top_document)->AddAnchorElement(*this);
   }
 
+  if (isConnected() && IsLink()) {
+    if (auto* document_rules =
+            DocumentSpeculationRules::FromIfExists(GetDocument())) {
+      document_rules->LinkInserted(this);
+    }
+  }
+
   return request;
+}
+
+void HTMLAnchorElement::RemovedFrom(ContainerNode& insertion_point) {
+  HTMLElement::RemovedFrom(insertion_point);
+
+  if (insertion_point.isConnected() && IsLink()) {
+    if (auto* document_rules =
+            DocumentSpeculationRules::FromIfExists(GetDocument())) {
+      document_rules->LinkRemoved(this);
+    }
+  }
 }
 
 void HTMLAnchorElement::Trace(Visitor* visitor) const {

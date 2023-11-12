@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -160,8 +161,60 @@ class AutofillTableTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<AutofillTable> table_;
   std::unique_ptr<WebDatabase> db_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+// Tests for the AutofillProfil CRUD interface are tested with both profile
+// sources.
+class AutofillTableProfileTest
+    : public AutofillTableTest,
+      public testing::WithParamInterface<AutofillProfile::Source> {
+ public:
+  AutofillProfile::Source profile_source() const { return GetParam(); }
+
+  // Creates an `AutofillProfile` with `profile_source()` as its source.
+  AutofillProfile CreateAutofillProfile() const {
+    return AutofillProfile(base::GenerateGUID(), /*origin=*/std::string(),
+                           profile_source());
+  }
+
+  // Depending on the `profile_source()`, the AutofillProfiles are stored in a
+  // different master table.
+  base::StringPiece GetProfileTable() const {
+    return profile_source() == AutofillProfile::Source::kLocalOrSyncable
+               ? "autofill_profiles"
+               : "contact_info";
+  }
+
+  // Update tests verify that the modification date is set correctly. These
+  // functions simplify accessing and modifying it for testing.
+  bool GetDateModified(const std::string& guid, time_t& date_modified) {
+    sql::Statement s(db_->GetSQLConnection()->GetUniqueStatement(
+        base::StrCat({"SELECT date_modified FROM ", GetProfileTable(),
+                      " WHERE guid = ?"})
+            .c_str()));
+    s.BindString(0, guid);
+    if (!s.Step())
+      return false;
+    date_modified = s.ColumnInt64(0);
+    return true;
+  }
+
+  bool SetDateModified(const std::string& guid, time_t date_modified) {
+    sql::Statement s(db_->GetSQLConnection()->GetUniqueStatement(
+        base::StrCat({"UPDATE ", GetProfileTable(),
+                      " SET date_modified = ? WHERE guid = ?"})
+            .c_str()));
+    s.BindInt64(0, date_modified);
+    s.BindString(1, guid);
+    return s.Run();
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    AutofillTableProfileTest,
+    testing::ValuesIn({AutofillProfile::Source::kLocalOrSyncable,
+                       AutofillProfile::Source::kAccount}));
 
 TEST_F(AutofillTableTest, Autofill) {
   Time t1 = AutofillClock::Now();
@@ -818,8 +871,8 @@ TEST_F(AutofillTableTest, RemoveExpiredFormElements_NotOldEnough) {
 
 // Tests reading/writing name, email, company, address, phone number and
 // birthdate information.
-TEST_F(AutofillTableTest, AutofillProfile) {
-  AutofillProfile home_profile;
+TEST_P(AutofillTableProfileTest, AutofillProfile) {
+  AutofillProfile home_profile = CreateAutofillProfile();
   home_profile.set_origin(std::string());
 
   // TODO(crbug.com/1113617): Honorifics are temporally disabled.
@@ -905,7 +958,9 @@ TEST_F(AutofillTableTest, AutofillProfile) {
   home_profile.SetRawInfoAsInt(BIRTHDATE_DAY, 14);
   home_profile.SetRawInfoAsInt(BIRTHDATE_MONTH, 3);
   home_profile.SetRawInfoAsInt(BIRTHDATE_4_DIGIT_YEAR, 1997);
-  home_profile.set_disallow_settings_visible_updates(true);
+  // `disallow_settings_visible_updates` is not supported for account profiles.
+  if (profile_source() == AutofillProfile::Source::kLocalOrSyncable)
+    home_profile.set_disallow_settings_visible_updates(true);
   home_profile.set_language_code("en");
   Time pre_creation_time = AutofillClock::Now();
 
@@ -915,21 +970,58 @@ TEST_F(AutofillTableTest, AutofillProfile) {
 
   // Get the 'Home' profile from the table.
   std::unique_ptr<AutofillProfile> db_profile =
-      table_->GetAutofillProfile(home_profile.guid());
+      table_->GetAutofillProfile(home_profile.guid(), home_profile.source());
   ASSERT_TRUE(db_profile);
 
   // Verify that it is correct.
   EXPECT_EQ(home_profile, *db_profile);
 
-  sql::Statement s_home(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified "
-      "FROM autofill_profiles WHERE guid=?"));
-  s_home.BindString(0, home_profile.guid());
-  ASSERT_TRUE(s_home.is_valid());
-  ASSERT_TRUE(s_home.Step());
-  EXPECT_GE(s_home.ColumnInt64(0), pre_creation_time.ToTimeT());
-  EXPECT_LE(s_home.ColumnInt64(0), post_creation_time.ToTimeT());
-  EXPECT_FALSE(s_home.Step());
+  time_t date_modified;
+  ASSERT_TRUE(GetDateModified(home_profile.guid(), date_modified));
+  EXPECT_GE(date_modified, pre_creation_time.ToTimeT());
+  EXPECT_LE(date_modified, post_creation_time.ToTimeT());
+
+  // Remove the profile and expect that no profiles remain.
+  EXPECT_TRUE(
+      table_->RemoveAutofillProfile(home_profile.guid(), profile_source()));
+  std::vector<std::unique_ptr<AutofillProfile>> profiles;
+  EXPECT_TRUE(table_->GetAutofillProfiles(&profiles, profile_source()));
+  EXPECT_TRUE(profiles.empty());
+}
+
+// Tests that `GetAutofillProfiles(profiles, source)` cleares `profiles` and
+// only returns profiles from the correct `source`.
+// Not part of the `AutofillTableProfileTest` fixture, as it doesn't benefit
+// from parameterization on the `profile_source()`.
+TEST_F(AutofillTableTest, GetAutofillProfiles) {
+  AutofillProfile local_profile(base::GenerateGUID(), "",
+                                AutofillProfile::Source::kLocalOrSyncable);
+  AutofillProfile account_profile(base::GenerateGUID(), "",
+                                  AutofillProfile::Source::kAccount);
+  EXPECT_TRUE(table_->AddAutofillProfile(local_profile));
+  EXPECT_TRUE(table_->AddAutofillProfile(account_profile));
+
+  std::vector<std::unique_ptr<AutofillProfile>> profiles;
+  EXPECT_TRUE(table_->GetAutofillProfiles(
+      &profiles, AutofillProfile::Source::kLocalOrSyncable));
+  EXPECT_THAT(profiles, ElementsAre(testing::Pointee(local_profile)));
+  EXPECT_TRUE(table_->GetAutofillProfiles(&profiles,
+                                          AutofillProfile::Source::kAccount));
+  EXPECT_THAT(profiles, ElementsAre(testing::Pointee(account_profile)));
+}
+
+// Tests that `RemoveAllAutofillProfiles()` cleares all kAccount profiles.
+TEST_F(AutofillTableTest, RemoveAllAutofillProfiles_kAccount) {
+  EXPECT_TRUE(table_->AddAutofillProfile(AutofillProfile(
+      base::GenerateGUID(), "", AutofillProfile::Source::kAccount)));
+
+  EXPECT_TRUE(
+      table_->RemoveAllAutofillProfiles(AutofillProfile::Source::kAccount));
+
+  std::vector<std::unique_ptr<AutofillProfile>> profiles;
+  EXPECT_TRUE(table_->GetAutofillProfiles(&profiles,
+                                          AutofillProfile::Source::kAccount));
+  EXPECT_TRUE(profiles.empty());
 }
 
 TEST_F(AutofillTableTest, IBAN) {
@@ -1098,9 +1190,9 @@ TEST_F(AutofillTableTest, AddFullServerCreditCard) {
   EXPECT_EQ(0, credit_card.Compare(*outputs[0]));
 }
 
-TEST_F(AutofillTableTest, UpdateAutofillProfile) {
+TEST_P(AutofillTableProfileTest, UpdateAutofillProfile) {
   // Add a profile to the db.
-  AutofillProfile profile;
+  AutofillProfile profile = CreateAutofillProfile();
   profile.SetRawInfo(NAME_FIRST, u"John");
   profile.SetRawInfo(NAME_MIDDLE, u"Q.");
   profile.SetRawInfo(NAME_LAST, u"Smith");
@@ -1122,24 +1214,16 @@ TEST_F(AutofillTableTest, UpdateAutofillProfile) {
 
   // Set a mocked value for the profile's creation time.
   const time_t kMockCreationDate = AutofillClock::Now().ToTimeT() - 13;
-  sql::Statement s_mock_creation_date(
-      db_->GetSQLConnection()->GetUniqueStatement(
-          "UPDATE autofill_profiles SET date_modified = ?"));
-  ASSERT_TRUE(s_mock_creation_date.is_valid());
-  s_mock_creation_date.BindInt64(0, kMockCreationDate);
-  ASSERT_TRUE(s_mock_creation_date.Run());
+  ASSERT_TRUE(SetDateModified(profile.guid(), kMockCreationDate));
 
   // Get the profile.
   std::unique_ptr<AutofillProfile> db_profile =
-      table_->GetAutofillProfile(profile.guid());
+      table_->GetAutofillProfile(profile.guid(), profile.source());
   ASSERT_TRUE(db_profile);
   EXPECT_EQ(profile, *db_profile);
-  sql::Statement s_original(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified FROM autofill_profiles"));
-  ASSERT_TRUE(s_original.is_valid());
-  ASSERT_TRUE(s_original.Step());
-  EXPECT_EQ(kMockCreationDate, s_original.ColumnInt64(0));
-  EXPECT_FALSE(s_original.Step());
+  time_t date_modified;
+  ASSERT_TRUE(GetDateModified(profile.guid(), date_modified));
+  EXPECT_EQ(kMockCreationDate, date_modified);
 
   // Now, update the profile and save the update to the database.
   // The modification date should change to reflect the update.
@@ -1147,39 +1231,26 @@ TEST_F(AutofillTableTest, UpdateAutofillProfile) {
   table_->UpdateAutofillProfile(profile);
 
   // Get the profile.
-  db_profile = table_->GetAutofillProfile(profile.guid());
+  db_profile = table_->GetAutofillProfile(profile.guid(), profile.source());
   ASSERT_TRUE(db_profile);
   EXPECT_EQ(profile, *db_profile);
-  sql::Statement s_updated(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified FROM autofill_profiles"));
-  ASSERT_TRUE(s_updated.is_valid());
-  ASSERT_TRUE(s_updated.Step());
-  EXPECT_LT(kMockCreationDate, s_updated.ColumnInt64(0));
-  EXPECT_FALSE(s_updated.Step());
+  ASSERT_TRUE(GetDateModified(profile.guid(), date_modified));
+  EXPECT_LT(kMockCreationDate, date_modified);
 
   // Set a mocked value for the profile's modification time.
-  const time_t mock_modification_date = AutofillClock::Now().ToTimeT() - 7;
-  sql::Statement s_mock_modification_date(
-      db_->GetSQLConnection()->GetUniqueStatement(
-          "UPDATE autofill_profiles SET date_modified = ?"));
-  ASSERT_TRUE(s_mock_modification_date.is_valid());
-  s_mock_modification_date.BindInt64(0, mock_modification_date);
-  ASSERT_TRUE(s_mock_modification_date.Run());
+  const time_t kMockModificationDate = AutofillClock::Now().ToTimeT() - 7;
+  ASSERT_TRUE(SetDateModified(profile.guid(), kMockModificationDate));
 
   // Finally, call into |UpdateAutofillProfile()| without changing the
   // profile.  The modification date should not change.
   table_->UpdateAutofillProfile(profile);
 
   // Get the profile.
-  db_profile = table_->GetAutofillProfile(profile.guid());
+  db_profile = table_->GetAutofillProfile(profile.guid(), profile.source());
   ASSERT_TRUE(db_profile);
   EXPECT_EQ(profile, *db_profile);
-  sql::Statement s_unchanged(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified FROM autofill_profiles"));
-  ASSERT_TRUE(s_unchanged.is_valid());
-  ASSERT_TRUE(s_unchanged.Step());
-  EXPECT_EQ(mock_modification_date, s_unchanged.ColumnInt64(0));
-  EXPECT_FALSE(s_unchanged.Step());
+  ASSERT_TRUE(GetDateModified(profile.guid(), date_modified));
+  EXPECT_EQ(kMockModificationDate, date_modified);
 }
 
 TEST_F(AutofillTableTest, UpdateCreditCard) {
@@ -1253,9 +1324,15 @@ TEST_F(AutofillTableTest, UpdateCreditCard) {
   EXPECT_FALSE(s_unchanged.Step());
 }
 
-TEST_F(AutofillTableTest, UpdateProfileOriginOnly) {
+TEST_P(AutofillTableProfileTest, UpdateProfileOriginOnly) {
+  // The origin is not supported for account profiles. This test is kept as part
+  // of AutofillTableProfileTest for the simplified modification of the
+  // date_modified.
+  if (profile_source() != AutofillProfile::Source::kLocalOrSyncable)
+    return;
+
   // Add a profile to the db.
-  AutofillProfile profile;
+  AutofillProfile profile = CreateAutofillProfile();
   profile.SetRawInfo(NAME_FIRST, u"John");
   profile.SetRawInfo(NAME_MIDDLE, u"Q.");
   profile.SetRawInfo(NAME_LAST, u"Smith");
@@ -1273,24 +1350,16 @@ TEST_F(AutofillTableTest, UpdateProfileOriginOnly) {
 
   // Set a mocked value for the profile's creation time.
   const time_t kMockCreationDate = AutofillClock::Now().ToTimeT() - 13;
-  sql::Statement s_mock_creation_date(
-      db_->GetSQLConnection()->GetUniqueStatement(
-          "UPDATE autofill_profiles SET date_modified = ?"));
-  ASSERT_TRUE(s_mock_creation_date.is_valid());
-  s_mock_creation_date.BindInt64(0, kMockCreationDate);
-  ASSERT_TRUE(s_mock_creation_date.Run());
+  ASSERT_TRUE(SetDateModified(profile.guid(), kMockCreationDate));
 
   // Get the profile.
   std::unique_ptr<AutofillProfile> db_profile =
-      table_->GetAutofillProfile(profile.guid());
+      table_->GetAutofillProfile(profile.guid(), profile.source());
   ASSERT_TRUE(db_profile);
   EXPECT_EQ(profile, *db_profile);
-  sql::Statement s_original(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified FROM autofill_profiles"));
-  ASSERT_TRUE(s_original.is_valid());
-  ASSERT_TRUE(s_original.Step());
-  EXPECT_EQ(kMockCreationDate, s_original.ColumnInt64(0));
-  EXPECT_FALSE(s_original.Step());
+  time_t date_modified;
+  ASSERT_TRUE(GetDateModified(profile.guid(), date_modified));
+  EXPECT_EQ(kMockCreationDate, date_modified);
 
   // Now, update just the profile's origin and save the update to the database.
   // The modification date should change to reflect the update.
@@ -1298,15 +1367,11 @@ TEST_F(AutofillTableTest, UpdateProfileOriginOnly) {
   table_->UpdateAutofillProfile(profile);
 
   // Get the profile.
-  db_profile = table_->GetAutofillProfile(profile.guid());
+  db_profile = table_->GetAutofillProfile(profile.guid(), profile.source());
   ASSERT_TRUE(db_profile);
   EXPECT_EQ(profile, *db_profile);
-  sql::Statement s_updated(db_->GetSQLConnection()->GetUniqueStatement(
-      "SELECT date_modified FROM autofill_profiles"));
-  ASSERT_TRUE(s_updated.is_valid());
-  ASSERT_TRUE(s_updated.Step());
-  EXPECT_LT(kMockCreationDate, s_updated.ColumnInt64(0));
-  EXPECT_FALSE(s_updated.Step());
+  ASSERT_TRUE(GetDateModified(profile.guid(), date_modified));
+  EXPECT_LT(kMockCreationDate, date_modified);
 }
 
 TEST_F(AutofillTableTest, UpdateCreditCardOriginOnly) {
@@ -1836,6 +1901,7 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   inputs[0].SetRawInfo(CREDIT_CARD_EXP_MONTH, u"1");
   inputs[0].SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, u"2020");
   inputs[0].SetRawInfo(CREDIT_CARD_NUMBER, u"4111111111111111");
+  inputs[0].set_card_issuer(CreditCard::Issuer::GOOGLE);
   inputs[0].set_instrument_id(321);
   inputs[0].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::UNENROLLED);
@@ -1849,7 +1915,8 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   inputs[1].SetNetworkForMaskedCard(kVisaCard);
   std::u16string nickname = u"Grocery card";
   inputs[1].SetNickname(nickname);
-  inputs[1].set_card_issuer(CreditCard::Issuer::GOOGLE);
+  inputs[1].set_card_issuer(CreditCard::Issuer::EXTERNAL_ISSUER);
+  inputs[1].set_issuer_id("amex");
   inputs[1].set_instrument_id(123);
   inputs[1].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::ENROLLED);
@@ -1879,8 +1946,10 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   EXPECT_TRUE(outputs[0]->nickname().empty());
   EXPECT_EQ(nickname, outputs[1]->nickname());
 
-  EXPECT_EQ(CreditCard::Issuer::ISSUER_UNKNOWN, outputs[0]->card_issuer());
-  EXPECT_EQ(CreditCard::Issuer::GOOGLE, outputs[1]->card_issuer());
+  EXPECT_EQ(CreditCard::Issuer::GOOGLE, outputs[0]->card_issuer());
+  EXPECT_EQ(CreditCard::Issuer::EXTERNAL_ISSUER, outputs[1]->card_issuer());
+  EXPECT_EQ("", outputs[0]->issuer_id());
+  EXPECT_EQ("amex", outputs[1]->issuer_id());
 
   EXPECT_EQ(321, outputs[0]->instrument_id());
   EXPECT_EQ(123, outputs[1]->instrument_id());
@@ -2102,6 +2171,8 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
   inputs[0].SetRawInfo(CREDIT_CARD_NUMBER, u"1111");
   inputs[0].SetNetworkForMaskedCard(kVisaCard);
   inputs[0].SetNickname(u"Grocery card");
+  inputs[0].set_card_issuer(CreditCard::Issuer::EXTERNAL_ISSUER);
+  inputs[0].set_issuer_id("amex");
   inputs[0].set_instrument_id(1);
   inputs[0].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::ENROLLED);
@@ -2126,6 +2197,9 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
   EXPECT_EQ(CreditCard::VirtualCardEnrollmentState::ENROLLED,
             outputs[0]->virtual_card_enrollment_state());
 
+  EXPECT_EQ(CreditCard::Issuer::EXTERNAL_ISSUER, outputs[0]->card_issuer());
+  EXPECT_EQ("amex", outputs[0]->issuer_id());
+
   EXPECT_EQ(GURL("https://www.example.com"), outputs[0]->card_art_url());
   EXPECT_EQ(u"Fake description", outputs[0]->product_description());
 
@@ -2142,6 +2216,8 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
   ASSERT_TRUE(table_->GetServerCreditCards(&outputs));
   ASSERT_EQ(1U, outputs.size());
   EXPECT_EQ("card2", outputs[0]->server_id());
+  EXPECT_EQ(CreditCard::Issuer::ISSUER_UNKNOWN, outputs[0]->card_issuer());
+  EXPECT_EQ("", outputs[0]->issuer_id());
 
   // Make sure no metadata was added.
   ASSERT_TRUE(table_->GetServerCardsMetadata(&metadata_map));
@@ -2762,7 +2838,7 @@ TEST_P(AutofillTableTestPerModelType, AutofillGetAllSyncMetadata) {
   std::string storage_key2 = "storage_key2";
   metadata.set_sequence_number(1);
 
-  EXPECT_TRUE(table_->UpdateSyncMetadata(model_type, storage_key, metadata));
+  EXPECT_TRUE(table_->UpdateEntityMetadata(model_type, storage_key, metadata));
 
   ModelTypeState model_type_state;
   model_type_state.set_initial_sync_done(true);
@@ -2770,7 +2846,7 @@ TEST_P(AutofillTableTestPerModelType, AutofillGetAllSyncMetadata) {
   EXPECT_TRUE(table_->UpdateModelTypeState(model_type, model_type_state));
 
   metadata.set_sequence_number(2);
-  EXPECT_TRUE(table_->UpdateSyncMetadata(model_type, storage_key2, metadata));
+  EXPECT_TRUE(table_->UpdateEntityMetadata(model_type, storage_key2, metadata));
 
   MetadataBatch metadata_batch;
   EXPECT_TRUE(table_->GetAllSyncMetadata(model_type, &metadata_batch));
@@ -2803,10 +2879,10 @@ TEST_P(AutofillTableTestPerModelType, AutofillWriteThenDeleteSyncMetadata) {
   metadata.set_client_tag_hash("client_hash");
 
   // Write the data into the store.
-  EXPECT_TRUE(table_->UpdateSyncMetadata(model_type, storage_key, metadata));
+  EXPECT_TRUE(table_->UpdateEntityMetadata(model_type, storage_key, metadata));
   EXPECT_TRUE(table_->UpdateModelTypeState(model_type, model_type_state));
   // Delete the data we just wrote.
-  EXPECT_TRUE(table_->ClearSyncMetadata(model_type, storage_key));
+  EXPECT_TRUE(table_->ClearEntityMetadata(model_type, storage_key));
   // It shouldn't be there any more.
   EXPECT_TRUE(table_->GetAllSyncMetadata(model_type, &metadata_batch));
 

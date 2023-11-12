@@ -26,15 +26,6 @@ void AddBaseSwitches(base::CommandLine& command_line) {
 void VivaldiAddRendererProcessFlags(content::BrowserContext* browser_context,
                                     base::CommandLine& renderer_command_line) {
   AddBaseSwitches(renderer_command_line);
-
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  static const char* const kSwitchesToCopy[] = {
-      switches::kVivaldiEnableIPCDemuxer,
-  };
-  renderer_command_line.CopySwitchesFrom(
-      *base::CommandLine::ForCurrentProcess(), kSwitchesToCopy,
-      std::size(kSwitchesToCopy));
-#endif
 }
 
 void VivaldiAddGpuProcessFlags(base::CommandLine& gpu_command_line) {

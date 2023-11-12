@@ -9,8 +9,6 @@
 #include <memory>
 #include <string>
 
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -23,10 +21,15 @@ class ProximityAuthLocalStatePrefManager;
 }  // namespace proximity_auth
 
 namespace ash {
+
 class EasyUnlockChallengeWrapper;
 
 namespace multidevice {
 class RemoteDeviceCache;
+}
+
+namespace secure_channel {
+class SecureChannelClient;
 }
 
 // EasyUnlockService instance that should be used for signin profile.

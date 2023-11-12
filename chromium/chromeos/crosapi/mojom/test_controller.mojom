@@ -5,9 +5,24 @@
 module crosapi.mojom;
 
 import "chromeos/crosapi/mojom/app_service_types.mojom";
+import "chromeos/crosapi/mojom/extension_keeplist.mojom";
 import "chromeos/crosapi/mojom/tts.mojom";
 import "mojo/public/mojom/base/values.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// The enum of possible states for a shelf item.
+// Each value must be a power of 2.
+[Stable, Extensible]
+enum ShelfItemState {
+  // Usually represents an app with no running instance.
+  [Default] kNormal = 0,
+  // Shelf item has a running instance.
+  kRunning = 1,
+  // Shelf item owns the window that is currently active.
+  kActive = 2,
+  // App has at least 1 notification.
+  kNotification = 4
+};
 
 [Stable, Extensible]
 enum TouchEventType {
@@ -33,8 +48,8 @@ enum OptionalBoolean {
 // Implemented in lacros-chrome.
 // Lets the Ash browser tests that require Lacros to send commands to this
 // lacros-chrome instance.
-// Next version: 3
-// Next method id: 3
+// Next version: 4
+// Next method id: 4
 [Stable, Uuid="20e7f031-f4e1-4ad9-bd91-ad59eb8b1504"]
 interface StandaloneBrowserTestController {
   // Installs a test web app in lacros-chrome given a start URL and mode (open
@@ -50,6 +65,15 @@ interface StandaloneBrowserTestController {
   // Returns all available voices in lacros-chrome.
   [MinVersion=2]
   GetTtsVoices@2() => (array<TtsVoice> voices);
+
+  // Returns Ash extension keeplist data from Lacros.
+  [MinVersion=3]
+  GetExtensionKeeplist@3() => (ExtensionKeepList keep_list);
+
+  // Requests Tts(text to speech) to speak an utterance from Lacros browser.
+  [MinVersion=4]
+  TtsSpeak@4(TtsUtterance utterance,
+             pending_remote<TtsUtteranceClient> utterance_client);
 };
 
 // Allows callers running in lacros to trigger test events that are passed to
@@ -138,8 +162,8 @@ interface InputMethodTestInterface {
 // This interface is implemented by Ash-Chrome.
 // This interface provides tests a mechanism to mutate or query ash.
 // In the future, this interface may merge with an automation or a11y interface.
-// Next version: 21
-// Next method id: 32
+// Next version: 25
+// Next method id: 37
 [Stable, Uuid="1f93f9d7-e466-466c-a675-c21b48cf30d3"]
 interface TestController {
   // Clicks the middle of the views element identified by |element_name|.
@@ -314,4 +338,30 @@ interface TestController {
   // Clear App Service state, including from any previously installed apps.
   [MinVersion=20]
   ReinitializeAppService@31() => ();
+
+  // Reads state of Shelf item. Returns a bitmask of `ShelfItemState` values.
+  [MinVersion=21]
+  GetShelfItemState@32(string app_id) => (uint32 state);
+
+  // Returns the size of the Tts utterance queue of the TtsController running in
+  // Ash.
+  [MinVersion=22]
+  GetTtsUtteranceQueueSize@33() => (int32 size);
+
+  // Returns true is desk is being created or removed or desk animation is in
+  // progress. The result is only accurate on `false` result. Even if it returns
+  // `true`, given the async nature of CrosAPI the desk oepration might have
+  // been finished already.
+  [MinVersion=23]
+  AreDesksBeingModified@34()=>(bool are_desks_being_modified);
+
+  // Returns all available voices in ash-chrome.
+  [MinVersion=24]
+  GetTtsVoices@35() => (array<TtsVoice> voices);
+
+  // Requests Tts(text to speech) to speak an utterance from Ash.
+  [MinVersion=24]
+  TtsSpeak@36(TtsUtterance utterance,
+              pending_remote<TtsUtteranceClient> utterance_client);
+
 };

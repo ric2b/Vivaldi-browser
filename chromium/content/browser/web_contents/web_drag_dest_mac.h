@@ -70,10 +70,10 @@ CONTENT_EXPORT
 @interface WebDragDest : NSObject {
  @private
   // Our associated WebContentsImpl. Weak reference.
-  raw_ptr<content::WebContentsImpl> _webContents;
+  raw_ptr<content::WebContentsImpl, DanglingUntriaged> _webContents;
 
   // Delegate; weak.
-  raw_ptr<content::WebDragDestDelegate> _delegate;
+  raw_ptr<content::WebDragDestDelegate, DanglingUntriaged> _delegate;
 
   // Updated asynchronously during a drag to tell us whether or not we should
   // allow the drop.
@@ -141,6 +141,7 @@ CONTENT_EXPORT
 
 // Sets |dragStartProcessID_| and |dragStartViewID_|.
 - (void)setDragStartTrackersForProcess:(int)processID;
+- (void)resetDragStartTrackers;
 
 // Returns whether |targetRWH| is a valid RenderWidgetHost to be dragging
 // over. This enforces that same-page, cross-site drags are not allowed. See

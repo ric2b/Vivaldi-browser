@@ -115,7 +115,7 @@ class TabStripModel : public TabGroupController {
     // guaranteed to be valid for the life time of the notification (and
     // possibly longer).
     std::unique_ptr<content::WebContents> owned_contents;
-    raw_ptr<content::WebContents> contents;
+    raw_ptr<content::WebContents, DanglingUntriaged> contents;
 
     // The index of the WebContents in the original selection model of the tab
     // strip [prior to any tabs being removed, if multiple tabs are being
@@ -134,6 +134,8 @@ class TabStripModel : public TabGroupController {
     absl::optional<SessionID> id;
   };
 
+  // TODO(1394210): Remove this, and use absl::optional<size_t> (or at least
+  // absl::optional<int>) in its place.
   static constexpr int kNoTab = -1;
 
   TabStripModel() = delete;
@@ -499,6 +501,7 @@ class TabStripModel : public TabGroupController {
     CommandToggleGrouped,
     CommandToggleSiteMuted,
     CommandSendTabToSelf,
+    CommandAddNote,
     CommandAddToReadLater,
     CommandAddToNewGroup,
     CommandAddToExistingGroup,
@@ -803,14 +806,14 @@ class TabStripModel : public TabGroupController {
   // The model for tab groups hosted within this TabStripModel.
   std::unique_ptr<TabGroupModel> group_model_;
 
-  raw_ptr<TabStripModelDelegate> delegate_;
+  raw_ptr<TabStripModelDelegate, DanglingUntriaged> delegate_;
 
   bool tab_strip_ui_was_set_ = false;
 
   base::ObserverList<TabStripModelObserver>::Unchecked observers_;
 
   // A profile associated with this TabStripModel.
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
 
   // True if all tabs are currently being closed via CloseAllTabs.
   bool closing_all_ = false;

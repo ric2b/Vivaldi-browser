@@ -9,7 +9,6 @@
 
 #include "base/component_export.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/ref_counted.h"
 #import "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider.h"
@@ -74,9 +73,8 @@ class COMPONENT_EXPORT(UI_BASE) OSExchangeDataProviderMac
   // Gets the underlying pasteboard.
   virtual NSPasteboard* GetPasteboard() const = 0;
 
-  // Returns an NSDraggingItem useful for initiating a drag. (Currently
-  // OSExchangeDataProviderMac can only have one item.)
-  NSDraggingItem* GetDraggingItem() const;
+  // Returns NSDraggingItems for initiating a drag.
+  NSArray<NSDraggingItem*>* GetDraggingItems() const;
 
   // Returns an array of pasteboard types that can be supported by
   // OSExchangeData.

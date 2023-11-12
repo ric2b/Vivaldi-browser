@@ -3,9 +3,20 @@
 // found in the LICENSE file.
 
 // Private API for trusted extensions/apps to do desk related operations.
-[platforms=("chromeos"),
+[platforms=("chromeos","lacros"),
  implemented_in="chrome/browser/chromeos/extensions/wm/wm_desks_private_api.h"]
 namespace wmDesksPrivate {
+  enum SavedDeskType {
+    // Desk saved for regular desk template.
+    kTemplate,
+
+    // Desk saved for Save & Recall.
+    kSaveAndRecall,
+
+    // Unknown desk type.
+    kUnknown
+  };
+
   dictionary RemoveDeskOptions {
     // Define whether close all windows on the desk and combine them to the
     // active desk to the left.
@@ -20,11 +31,22 @@ namespace wmDesksPrivate {
     DOMString deskName;
   };
 
+  dictionary SavedDesk {
+    // Unique ID for a saved desk.
+    DOMString savedDeskUuid;
+
+    // User readable name of the saved desk.
+    DOMString savedDeskName;
+
+    // Saved desk type.
+    SavedDeskType savedDeskType;
+  };
+
   // Launch desk options
   dictionary LaunchOptions {
     // User readable name of the desk.
     DOMString? deskName;
-};
+  };
 
   // Window properties
   dictionary WindowProperties {
@@ -36,9 +58,14 @@ namespace wmDesksPrivate {
   callback VoidCallback = void ();
   callback GetDeskTemplateJsonCallback = void (DOMString templateJson);
   callback GetAllDesksCallback = void (Desk[] desks);
-  callback SaveActiveDeskCallback = void (Desk desk);
+  callback GetSavedDesksCallback = void (SavedDesk[] saveDesks);
+  callback SaveActiveDeskCallback = void (SavedDesk desk);
 
   interface Functions {
+    // Returns all available previously-saved desks.
+    [supportsPromises] static void getSavedDesks(
+        GetSavedDesksCallback callback);
+
     // Launches a desk, if `templateUuid` is present in the options, launches a
     // desk template, otherwise launches an empty desk. If `deskName` is present
     // in the options, using provided name as desk name, otherwise launches with

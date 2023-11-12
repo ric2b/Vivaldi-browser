@@ -31,7 +31,7 @@
 #include "services/network/test/test_url_loader_factory.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_ANDROID)
@@ -297,31 +297,14 @@ class SyncTest : public PlatformBrowserTest {
   // Stops notificatinos being sent to a client.
   void DisableNotificationsForClient(int index);
 
-  // Sets a decryption passphrase to be used for a client. The passphrase will
-  // be provided to the client during initialization, before Sync starts. It is
-  // an error to provide both a decryption and encryption passphrases for one
-  // client.
-  // TODO(crbug.com/1338480): this and below are overused, most tests can use
-  // SyncUserSettings interface. Avoid usages, reintroduce logic in specific
-  // test that actually need it (if exists) and remove these functions together
-  // with relevant SyncTest SetupSync() code.
-  void SetDecryptionPassphraseForClient(int index,
-                                        const std::string& passphrase);
-
-  // Sets an explicit encryption passphrase to be used for a client. The
-  // passphrase will be set for the client during initialization, before Sync
-  // starts. An encryption passphrase can be also enabled after initialization,
-  // but using this method ensures that Sync is never enabled when there is no
-  // passphrase, which allows tests to check for unencrypted data leaks. It is
-  // an error to provide both a decryption and encryption passphrases for one
-  // client.
-  void SetEncryptionPassphraseForClient(int index,
-                                        const std::string& passphrase);
-
   // Sets up fake responses for kClientLoginUrl, kIssueAuthTokenUrl,
   // kGetUserInfoUrl and kSearchDomainCheckUrl in order to mock out calls to
   // GAIA servers.
   void SetupMockGaiaResponsesForProfile(Profile* profile);
+
+  // Exclude data types from end of test checks in CheckForDataTypeFailures().
+  // Note that this replaces the list of excluded types (if set earlier).
+  void ExcludeDataTypesFromCheckForDataTypeFailures(syncer::ModelTypeSet types);
 
   // The FakeServer used in tests with server type IN_PROCESS_FAKE_SERVER.
   std::unique_ptr<fake_server::FakeServer> fake_server_;
@@ -421,7 +404,7 @@ class SyncTest : public PlatformBrowserTest {
   // The default profile, created before our actual testing |profiles_|. This is
   // needed in a workaround for https://crbug.com/801569, see comments in the
   // .cc file.
-  raw_ptr<Profile> previous_profile_;
+  raw_ptr<Profile, DanglingUntriaged> previous_profile_;
 
   // Number of sync clients that will be created by a test.
   int num_clients_;
@@ -453,12 +436,6 @@ class SyncTest : public PlatformBrowserTest {
   // profile with the server.
   std::vector<std::unique_ptr<SyncServiceImplHarness>> clients_;
 
-  // Mapping from client indexes to encryption passphrases to use for them.
-  std::map<int, std::string> client_encryption_passphrases_;
-
-  // Mapping from client indexes to decryption passphrases to use for them.
-  std::map<int, std::string> client_decryption_passphrases_;
-
   // Owns the FakeServerInvalidationSender for each profile.
   std::vector<std::unique_ptr<fake_server::FakeServerInvalidationSender>>
       fake_server_invalidation_observers_;
@@ -480,11 +457,13 @@ class SyncTest : public PlatformBrowserTest {
   // We don't need a corresponding verifier sync client because the contents
   // of the verifier profile are strictly local, and are not meant to be
   // synced.
-  raw_ptr<Profile> verifier_;
+  raw_ptr<Profile, DanglingUntriaged> verifier_;
 
   // Indicates whether to use a new user data dir.
   // Only used for external server tests with two clients.
   bool use_new_user_data_dir_ = false;
+
+  syncer::ModelTypeSet excluded_types_from_check_for_data_type_failures_;
 
   // The feature list to override features for all sync tests.
   base::test::ScopedFeatureList feature_list_;

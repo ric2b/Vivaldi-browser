@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/observer_list.h"
+#include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -16,6 +17,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_f.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace base {
 namespace trace_event {
@@ -47,6 +49,10 @@ class SubSurface : public SurfaceDelegate,
 
   // This schedules a clip rect to be applied when drawing this sub-surface.
   void SetClipRect(const absl::optional<gfx::RectF>& clip_rect);
+
+  // This schedules a matrix transform to be applied when drawing this
+  // sub-surface.
+  void SetTransform(const gfx::Transform& transform);
 
   // This removes sub-surface from the stack, and puts it back just above the
   // reference surface, changing the z-order of the sub-surfaces. The reference
@@ -80,8 +86,8 @@ class SubSurface : public SurfaceDelegate,
   void ShowSnapPreviewToPrimary() override {}
   void ShowSnapPreviewToSecondary() override {}
   void HideSnapPreview() override {}
-  void SetSnappedToPrimary() override {}
-  void SetSnappedToSecondary() override {}
+  void SetSnapPrimary(float snap_ratio) override {}
+  void SetSnapSecondary(float snap_ratio) override {}
   void UnsetSnap() override {}
   void SetCanGoBack() override {}
   void UnsetCanGoBack() override {}

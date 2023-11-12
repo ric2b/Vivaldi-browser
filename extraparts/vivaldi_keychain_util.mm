@@ -22,6 +22,12 @@ const std::string vivaldi_service_name = "Vivaldi Safe Storage";
 const std::string vivaldi_account_name = "Vivaldi";
 const crypto::AppleKeychain keychain_;
 
+// Much of the Keychain API was marked deprecated as of the macOS 13 SDK.
+// Removal of its use is tracked in https://crbug.com/1348251 but deprecation
+// warnings are disabled in the meanwhile.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 OSStatus GetVivaldiKeychainStatus() {
   // Turn off the keychain user interaction
   SecKeychainSetUserInteractionAllowed(false);
@@ -41,6 +47,8 @@ OSStatus GetVivaldiKeychainStatus() {
 
   return error;
 }
+
+#pragma clang diagnostic pop
 
 bool HasKeychainAccess() {
   return GetVivaldiKeychainStatus() == errSecSuccess;

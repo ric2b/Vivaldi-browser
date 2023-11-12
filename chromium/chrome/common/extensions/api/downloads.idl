@@ -122,11 +122,29 @@ namespace downloads {
   //     <dd>The user has accepted the dangerous download.</dd>
   // </dl>
   enum DangerType {
-    file, url, content, uncommon, host, unwanted, safe, accepted
+    file,
+    url,
+    content,
+    uncommon,
+    host,
+    unwanted,
+    safe,
+    accepted,
+    allowlistedByPolicy,
+    asyncScanning,
+    passwordProtected,
+    blockedTooLarge,
+    sensitiveContentWarning,
+    sensitiveContentBlock,
+    unsupportedFileType,
+    deepScannedSafe,
+    deepScannedOpenedDangerous,
+    promptForScaning,
+    accountCompromise
   };
 
-  // Vivaldi addition. Mixed content download state. See MixedContentStatus.
-  enum MixedStatusType {
+  // Vivaldi addition. Insecure content download state. See InsecureContentStatus.
+  enum InsecureStatusType {
     unknown, safe, validated, warn, block, silent_block
   };
 
@@ -241,8 +259,8 @@ namespace downloads {
     // Vivaldi addition. Current speed.
     double currentSpeed;
 
-    // Vivaldi addition. Mixed content state.
-    MixedStatusType? mixedState;
+    // Vivaldi addition. Insecure content state.
+    InsecureStatusType? mixedState;
   };
 
   [inline_doc] dictionary DownloadQuery {

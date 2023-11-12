@@ -21,10 +21,10 @@
 #include "base/bit_cast.h"
 #include "base/compiler_specific.h"
 #include "base/containers/checked_iterators.h"
-#include "base/containers/checked_range.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_piece.h"
 #include "base/trace_event/base_tracing_forward.h"
 #include "base/value_iterators.h"
@@ -188,8 +188,6 @@ class ListValue;
 // DEPRECATED (PREVIOUS) WAY:
 //
 //   void AlwaysTakesList(std::vector<base::Value> list);
-//   void AlwaysTakesListAlternative1(base::Value::ConstListView list);
-//   void AlwaysTakesListAlternative2(base::Value::ListView& list);
 //   void AlwaysTakesListAlterantive3(base::Value::ListStorage);
 //   void AlwaysTakesDict(base::flat_map<std::string, base::Value> dict);
 //   void AlwaysTakesDictAlternative(base::Value::DictStorage);
@@ -207,20 +205,11 @@ class BASE_EXPORT GSL_OWNER Value {
  public:
   using BlobStorage = std::vector<uint8_t>;
 
-  using DeprecatedListStorage = std::vector<Value>;
-
   // Like `DictStorage`, but with std::unique_ptr in the mapped type. This is
   // due to legacy reasons, and should be replaced with
   // flat_map<std::string, Value> once no caller relies on stability of pointers
   // anymore.
   using LegacyDictStorage = flat_map<std::string, std::unique_ptr<Value>>;
-
-  using DeprecatedListView = CheckedContiguousRange<DeprecatedListStorage>;
-  using DeprecatedConstListView =
-      CheckedContiguousConstRange<DeprecatedListStorage>;
-  // TODO(https://crbug.com/1291666): Make these private.
-  using ListView = DeprecatedListView;
-  using ConstListView = DeprecatedConstListView;
 
   class Dict;
   class List;
@@ -240,6 +229,10 @@ class BASE_EXPORT GSL_OWNER Value {
   };
 
   // Adaptors for converting from the old way to the new way and vice versa.
+  // Note: `DictionaryValue` and `ListValue` have been deprecated.
+  // `AsDictionaryValue()` and `AsListValue()` perform a `static_cast` to these
+  // types (as opposed to the preferred `GetDict()` and `GetList()` APIs - which
+  // use a variant lookup `absl::get<>()`).
   static Value FromUniquePtrValue(std::unique_ptr<Value> val);
   static std::unique_ptr<Value> ToUniquePtrValue(Value val);
   static const DictionaryValue& AsDictionaryValue(const Value& val);
@@ -426,7 +419,7 @@ class BASE_EXPORT GSL_OWNER Value {
     bool contains(base::StringPiece key) const;
 
     // Removes all entries from this dictionary.
-    void clear();
+    REINITIALIZES_AFTER_MOVE void clear();
 
     // Removes the entry referenced by `pos` in this dictionary and returns an
     // iterator to the entry following the removed entry.
@@ -630,7 +623,7 @@ class BASE_EXPORT GSL_OWNER Value {
     Value& operator[](size_t index);
 
     // Removes all value from this list.
-    void clear();
+    REINITIALIZES_AFTER_MOVE void clear();
 
     // Removes the value referenced by `pos` in this list and returns an
     // iterator to the value following the removed value.
@@ -703,15 +696,6 @@ class BASE_EXPORT GSL_OWNER Value {
 
   // ===== DEPRECATED methods that require `type() == Type::LIST` =====
 
-  // Returns the Values in a list as a view. The mutable overload allows for
-  // modification of the underlying values, but does not allow changing the
-  // structure of the list.
-  //
-  // DEPRECATED: prefer direct use `base::Value::List` where possible, or
-  // `GetList()` otherwise.
-  DeprecatedListView GetListDeprecated();
-  DeprecatedConstListView GetListDeprecated() const;
-
   // Appends `value` to the end of the list.
   //
   // DEPRECATED: prefer `Value::List::Append()`.
@@ -732,11 +716,6 @@ class BASE_EXPORT GSL_OWNER Value {
   void Append(const char* value);
   // DEPRECATED: prefer `Value::List::Append()`.
   void Append(std::string&& value);
-
-  // Erases all Values from the list.
-  //
-  // DEPRECATED: prefer `Value::List::clear()`.
-  void ClearList();
 
   // ===== DEPRECATED methods that require `type() == Type::DICT` =====
 
@@ -772,8 +751,6 @@ class BASE_EXPORT GSL_OWNER Value {
   // DEPRECATED: prefer `Value::Dict::FindString()`.
   const std::string* FindStringKey(StringPiece key) const;
   std::string* FindStringKey(StringPiece key);
-  // DEPRECATED: prefer `Value::Dict::FindBlob()`.
-  const BlobStorage* FindBlobKey(StringPiece key) const;
   // DEPRECATED: prefer `Value::Dict::FindDict()`.
   const Value* FindDictKey(StringPiece key) const;
   Value* FindDictKey(StringPiece key);
@@ -983,9 +960,6 @@ class BASE_EXPORT GSL_OWNER Value {
   // DEPRECATED: prefer `Value::Dict::empty()`.
   bool DictEmpty() const;
 
-  // DEPRECATED: prefer `Value::Dict::clear()`.
-  void DictClear();
-
   // Merge `dictionary` into this value. This is done recursively, i.e. any
   // sub-dictionaries will be merged as well. In case of key collisions, the
   // passed in dictionary takes precedence and data already present will be
@@ -1005,18 +979,8 @@ class BASE_EXPORT GSL_OWNER Value {
   //
   // DEPRECATED: prefer direct use `base::Value::Dict` where possible, or
   // `GetIfDict()` otherwise.
-  bool GetAsDictionary(DictionaryValue** out_value);
   bool GetAsDictionary(const DictionaryValue** out_value) const;
   // Note: Do not add more types. See the file-level comment above for why.
-
-  // This creates a deep copy of the entire Value tree, and returns a pointer
-  // to the copy. The caller gets ownership of the copy, of course.
-  // Subclasses return their own type directly in their overrides;
-  // this works because C++ supports covariant return types.
-  // TODO(crbug.com/646113): Delete this and migrate callsites.
-  //
-  // DEPRECATED: prefer `Value::Clone()`.
-  std::unique_ptr<Value> CreateDeepCopy() const;
 
   // Comparison operators so that Values can easily be used with standard
   // library algorithms and associative containers.
@@ -1128,9 +1092,9 @@ class BASE_EXPORT GSL_OWNER Value {
   }
 
  protected:
-  // TODO(https://crbug.com/1187091): Once deprecated list methods and ListView
-  // have been removed, make this a private member of List.
-  using ListStorage = DeprecatedListStorage;
+  // TODO(https://crbug.com/1187062): Once ListValue has been removed, remove
+  // list() and make this a private member of List.
+  using ListStorage = std::vector<Value>;
 
   // Checked convenience accessors for dict and list.
   const LegacyDictStorage& dict() const { return GetDict().storage_; }
@@ -1286,7 +1250,7 @@ class BASE_EXPORT GSL_POINTER DictAdapterForMigration {
   const Value::Dict& dict_for_test() const;
 
  private:
-  const Value::Dict& dict_;
+  const raw_ref<const Value::Dict> dict_;
 };
 
 // DictionaryValue provides a key-value dictionary with (optional) "path"
@@ -1336,10 +1300,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   // component, i.e. has no dots), or `Value::Dict::SetByDottedPath()`
   // otherwise.
   Value* SetString(StringPiece path, const std::u16string& in_value);
-  // DEPRECATED: prefer `Value::Dict::Set()` (if the path only has one
-  // component, i.e. has no dots), or `Value::Dict::SetByDottedPath()`
-  // otherwise.
-  ListValue* SetList(StringPiece path, std::unique_ptr<ListValue> in_value);
 
   // Gets the Value associated with the given path starting from this object.
   // A path has the form "<key>" or "<key>.<key>.[...]", where "." indexes
@@ -1379,13 +1339,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   // otherwise.
   bool GetList(StringPiece path, const ListValue** out_value) const;
   bool GetList(StringPiece path, ListValue** out_value);
-
-  // Swaps contents with the `other` dictionary.
-  void Swap(DictionaryValue* other);
-
-  // DEPRECATED, use `Value::Dict::Clone()` instead.
-  // TODO(crbug.com/646113): Delete this and migrate callsites.
-  std::unique_ptr<DictionaryValue> CreateDeepCopy() const;
 };
 
 // This type of Value represents a list of other Value values.
@@ -1393,9 +1346,6 @@ class BASE_EXPORT DictionaryValue : public Value {
 // DEPRECATED: prefer `base::Value::List`.
 class BASE_EXPORT ListValue : public Value {
  public:
-  using const_iterator = ListView::const_iterator;
-  using iterator = ListView::iterator;
-
   // Returns `value` if it is a list, nullptr otherwise.
   static std::unique_ptr<ListValue> From(std::unique_ptr<Value> value);
 

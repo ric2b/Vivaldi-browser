@@ -9,6 +9,10 @@
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_controller.h"
 
+// Vivaldi
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -95,6 +99,16 @@
   [self.tabStripController disconnect];
   self.tabStripController = nil;
   self.presentationProvider = nil;
+}
+
+#pragma mark VIVALDI
+
+- (BOOL)isTabStackEnabled {
+  if (!self.browser)
+    return NO;
+
+  return [VivaldiTabSettingPrefs getUseTabStackWithPrefService:
+          self.browser->GetBrowserState()->GetPrefs()];
 }
 
 @end

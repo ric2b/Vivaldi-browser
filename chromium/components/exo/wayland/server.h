@@ -13,8 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/time/time.h"
-#include "build/chromeos_buildflags.h"
-#include "components/exo/buildflags.h"
 #include "components/exo/wayland/scoped_wl.h"
 #include "ui/display/display_observer.h"
 
@@ -28,6 +26,7 @@ class Display;
 namespace wayland {
 
 class SerialTracker;
+class UiControls;
 struct WaylandDataDeviceManager;
 class WaylandDisplayOutput;
 struct WaylandKeyboardExtension;
@@ -37,6 +36,7 @@ struct WaylandTextInputManager;
 struct WaylandXdgShell;
 struct WaylandZxdgShell;
 struct WaylandRemoteShellData;
+class WaylandDmabufFeedbackManager;
 class WestonTest;
 class WaylandWatcher;
 
@@ -108,6 +108,7 @@ class Server : public display::DisplayObserver {
   const base::FilePath& socket_path() const { return socket_path_; }
 
  protected:
+  friend class UiControls;
   friend class WestonTest;
   void AddWaylandOutput(int64_t id,
                         std::unique_ptr<WaylandDisplayOutput> output);
@@ -129,6 +130,7 @@ class Server : public display::DisplayObserver {
   display::ScopedDisplayObserver display_observer_{this};
   std::unique_ptr<wayland::WaylandWatcher> wayland_watcher_;
   base::FilePath socket_path_;
+  std::unique_ptr<WaylandDmabufFeedbackManager> wayland_feedback_manager_;
 
   std::unique_ptr<WaylandKeyboardExtension> zcr_keyboard_extension_data_;
   std::unique_ptr<WaylandTextInputManager> zwp_text_manager_data_;
@@ -137,6 +139,7 @@ class Server : public display::DisplayObserver {
   std::unique_ptr<WaylandXdgShell> xdg_shell_data_;
   std::unique_ptr<WaylandRemoteShellData> remote_shell_data_;
   std::unique_ptr<WestonTest> weston_test_holder_;
+  std::unique_ptr<UiControls> ui_controls_holder_;
 };
 
 }  // namespace wayland

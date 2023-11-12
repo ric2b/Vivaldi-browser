@@ -804,7 +804,7 @@ class WorkerDevToolsTest : public InProcessBrowserTest {
     scoped_refptr<DevToolsAgentHost> host;
     base::RunLoop run_loop;
     new WorkerCreationObserver(path, &host, run_loop.QuitWhenIdleClosure());
-    content::RunThisRunLoop(&run_loop);
+    run_loop.Run();
     return host;
   }
 
@@ -2290,6 +2290,21 @@ IN_PROC_BROWSER_TEST_F(DevToolsTest, PolicyDisallowed) {
   ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
 }
 
+IN_PROC_BROWSER_TEST_F(DevToolsTest, PolicyDisallowedCloseConnection) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+  DevToolsWindow::OpenDevToolsWindow(web_contents);
+  auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
+
+  // Policy change must close the connection
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kDevToolsAvailability,
+      static_cast<int>(
+          policy::DeveloperToolsPolicyHandler::Availability::kDisallowed));
+  ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+}
+
 class DevToolsExtensionForceInstallTest : public extensions::ExtensionBrowserTest {
  public:
   // Installs an extensions, emulating that it has been force-installed by
@@ -2339,6 +2354,23 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionForceInstallTest,
 
 IN_PROC_BROWSER_TEST_F(
     DevToolsExtensionForceInstallTest,
+    PolicyDisallowedForForceInstalledExtensionsCloseConneciton) {
+  content::WebContents* web_contents = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ForceInstallExtensionAndOpen(&web_contents));
+
+  DevToolsWindow::OpenDevToolsWindow(web_contents);
+  auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
+
+  // Policy change must close the connection with the force installed extension.
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kDevToolsAvailability,
+      static_cast<int>(policy::DeveloperToolsPolicyHandler::Availability::
+                           kDisallowedForForceInstalledExtensions));
+  ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    DevToolsExtensionForceInstallTest,
     PolicyDisallowedForForceInstalledExtensionsAfterNavigation) {
   browser()->profile()->GetPrefs()->SetInteger(
       prefs::kDevToolsAvailability,
@@ -2360,6 +2392,27 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), GURL("chrome-extension://" + extension_id + "/options.html")));
   ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    DevToolsExtensionForceInstallTest,
+    PolicyDisallowedForForceInstalledExtensionsKeepConnectionAboutBlank) {
+  std::string extension_id;
+  ASSERT_NO_FATAL_FAILURE(ForceInstallExtension(&extension_id));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  DevToolsWindow::OpenDevToolsWindow(web_contents);
+  auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
+
+  // Policy change to must not disrupt CDP coneciton unrelated to a force
+  // installed extension.
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kDevToolsAvailability,
+      static_cast<int>(policy::DeveloperToolsPolicyHandler::Availability::
+                           kDisallowedForForceInstalledExtensions));
+  ASSERT_TRUE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
 }
 
 class DevToolsAllowedByCommandLineSwitch : public DevToolsExtensionForceInstallTest {
@@ -2483,8 +2536,8 @@ class StaticURLDataSource : public content::URLDataSource {
   void StartDataRequest(const GURL& url,
                         const content::WebContents::Getter& wc_getter,
                         GotDataCallback callback) override {
-    std::string data(content_);
-    std::move(callback).Run(base::RefCountedString::TakeString(&data));
+    std::move(callback).Run(
+        base::MakeRefCounted<base::RefCountedString>(std::string(content_)));
   }
   std::string GetMimeType(const GURL& url) override { return "text/html"; }
   bool ShouldAddContentSecurityPolicy() override { return false; }
@@ -2806,12 +2859,12 @@ class DevToolsPolicyTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(DevToolsPolicyTest, OpenBlockedDevTools) {
-  base::ListValue blocklist;
+  base::Value::List blocklist;
   blocklist.Append("devtools://*");
   policy::PolicyMap policies;
   policies.Set(policy::key::kURLBlocklist, policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-               blocklist.Clone(), nullptr);
+               base::Value(std::move(blocklist)), nullptr);
   provider_.UpdateChromePolicy(policies);
 
   WebContents* wc = browser()->tab_strip_model()->GetActiveWebContents();

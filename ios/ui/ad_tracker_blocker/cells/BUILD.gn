@@ -1,0 +1,19 @@
+# Copyright 2022 Vivaldi Technologies AS. All rights reserved.
+
+source_set("cells") {
+  sources = [
+    "vivaldi_atb_setting_item.h",
+    "vivaldi_atb_setting_item.mm",
+  ]
+
+  deps = [
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

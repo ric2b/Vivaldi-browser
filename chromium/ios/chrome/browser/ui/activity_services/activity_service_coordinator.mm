@@ -33,6 +33,10 @@
 #import "net/base/mac/url_conversions.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "ios/ui/activity_services/share_text_data.h"
+// End Vivaldi
+
 #import <LinkPresentation/LinkPresentation.h>
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -110,10 +114,18 @@ const char kMimeTypePDF[] = "application/pdf";
     return;
   }
 
-  if (self.params.filePath) {
+  if (self.params.filePath &&
+      [[NSFileManager defaultManager]
+          isReadableFileAtPath:self.params.filePath.path]) {
     [self shareFile];
     return;
   }
+
+  // Vivaldi
+  if (self.params.noteText) {
+    [self shareText];
+  }
+  // End Vivaldi
 
   if (self.params.URLs.count > 0) {
     // If at least one valid URL is found, share the URLs in `_params`.
@@ -212,17 +224,27 @@ const char kMimeTypePDF[] = "application/pdf";
 
   // Retrieve the current page's URL.
   __weak __typeof(self) weakSelf = self;
-  activity_services::RetrieveCanonicalUrl(currentWebState, ^(const GURL& url) {
-    [weakSelf sharePageWithCanonicalURL:url];
-  });
+  activity_services::RetrieveCanonicalUrl(
+      currentWebState,
+      base::BindOnce(
+          ^(base::WeakPtr<web::WebState> weak_web_state, const GURL& url) {
+            [weakSelf sharePageWithCanonicalURL:url
+                                       webState:weak_web_state.get()];
+          },
+          currentWebState->GetWeakPtr()));
 }
 
 // Shares the current page using its `canonicalURL`.
-- (void)sharePageWithCanonicalURL:(const GURL&)canonicalURL {
-  ShareToData* data = activity_services::ShareToDataForWebState(
-      self.browser->GetWebStateList()->GetActiveWebState(), canonicalURL);
-  if (!data)
+- (void)sharePageWithCanonicalURL:(const GURL&)canonicalURL
+                         webState:(web::WebState*)webState {
+  if (!webState)
     return;
+
+  if (webState != self.browser->GetWebStateList()->GetActiveWebState())
+    return;
+
+  ShareToData* data =
+      activity_services::ShareToDataForWebState(webState, canonicalURL);
 
   NSArray<ChromeActivityURLSource*>* items =
       [self.mediator activityItemsForDataItems:@[ data ]];
@@ -248,6 +270,22 @@ const char kMimeTypePDF[] = "application/pdf";
   [self shareItems:items activities:activities];
 }
 
+#pragma mark - Private Methods: Vivaldi Share Text
+
+// Vivaldi
+- (void)shareText {
+  ShareTextData* data =
+  [[ShareTextData alloc] initWithText:self.params.noteText
+                                  title:self.params.noteText];
+
+  NSArray<ChromeActivityImageSource*>* items =
+      [self.mediator activityItemsForTextData:data];
+  NSArray* activities = [self.mediator applicationActivitiesForTextData:data];
+
+  [self shareItems:items activities:activities];
+}
+// End Vivaldi
+
 #pragma mark - Private Methods: Share File
 
 // Configures activities and items, and shows an activity view.
@@ -262,27 +300,44 @@ const char kMimeTypePDF[] = "application/pdf";
 
   // Retrieve the current page's URL.
   __weak __typeof(self) weakSelf = self;
-  activity_services::RetrieveCanonicalUrl(currentWebState, ^(const GURL& url) {
-    ShareToData* URLData = activity_services::ShareToDataForWebState(
-        weakSelf.browser->GetWebStateList()->GetActiveWebState(), url);
+  activity_services::RetrieveCanonicalUrl(
+      currentWebState,
+      base::BindOnce(
+          ^(base::WeakPtr<web::WebState> weak_web_state, const GURL& url) {
+            [weakSelf shareFileWithCanonicalURL:url
+                                       webState:weak_web_state.get()];
+          },
+          currentWebState->GetWeakPtr()));
+}
 
-    // As giving a PDF file to the UIActivityViewController will add the "Print"
-    // activity from Apple, Chrome's print activity is disabled to avoid
-    // duplicate.
-    BOOL isPDF = currentWebState->GetContentsMimeType() == kMimeTypePDF;
-    if (isPDF) {
-      URLData.isPagePrintable = NO;
-    }
+// Shares the current PDF using its `canonicalURL`.
+- (void)shareFileWithCanonicalURL:(const GURL&)canonicalURL
+                         webState:(web::WebState*)webState {
+  if (!webState)
+    return;
 
-    ShareFileData* fileData =
-        [[ShareFileData alloc] initWithFilePath:self.params.filePath];
+  if (webState != self.browser->GetWebStateList()->GetActiveWebState())
+    return;
 
-    NSArray<ChromeActivityFileSource*>* items =
-        [weakSelf.mediator activityItemsForFileData:fileData];
-    NSArray* activities =
-        [weakSelf.mediator applicationActivitiesForDataItems:@[ URLData ]];
-    [weakSelf shareItems:items activities:activities];
-  });
+  ShareToData* URLData =
+      activity_services::ShareToDataForWebState(webState, canonicalURL);
+
+  // As giving a PDF file to the UIActivityViewController will add the "Print"
+  // activity from Apple, Chrome's print activity is disabled to avoid
+  // duplicate.
+  const BOOL isPDF = webState->GetContentsMimeType() == kMimeTypePDF;
+  if (isPDF) {
+    URLData.isPagePrintable = NO;
+  }
+
+  ShareFileData* fileData =
+      [[ShareFileData alloc] initWithFilePath:self.params.filePath];
+
+  NSArray<ChromeActivityFileSource*>* items =
+      [self.mediator activityItemsForFileData:fileData];
+  NSArray* activities =
+      [self.mediator applicationActivitiesForDataItems:@[ URLData ]];
+  [self shareItems:items activities:activities];
 }
 
 #pragma mark - Private Methods: Share URL
@@ -297,9 +352,8 @@ const char kMimeTypePDF[] = "application/pdf";
   // If only given a single URL, include additionalText in shared payload.
   if (params.URLs.count == 1) {
     URLWithTitle* url = params.URLs[0];
-    LPLinkMetadata* metadata = [self linkMetadata:url];
     ShareToData* data = activity_services::ShareToDataForURL(
-        url.URL, url.title, params.additionalText, metadata);
+        url.URL, url.title, params.additionalText, nil);
     [dataItems addObject:data];
   } else {
     for (URLWithTitle* urlWithTitle in params.URLs) {
@@ -315,32 +369,6 @@ const char kMimeTypePDF[] = "application/pdf";
       [self.mediator applicationActivitiesForDataItems:dataItems];
 
   [self shareItems:items activities:activities];
-}
-
-// Returns some basic metadata for the Chrome App's app store link. If we do
-// not supply this metadata, UIActivityViewController will only display a
-// generic website icon and the hostname when given an app store link.
-- (LPLinkMetadata*)linkMetadata:(URLWithTitle*)url {
-  if (self.params.scenario != ActivityScenario::ShareChrome) {
-    // For non app store links, we will allow UIActivityViewController to choose
-    // how to display.
-    return nil;
-  }
-
-  LPLinkMetadata* metadata = [[LPLinkMetadata alloc] init];
-  metadata.originalURL = net::NSURLWithGURL(url.URL);
-  metadata.title = url.title;
-  metadata.iconProvider = [self appIconProvider];
-  return metadata;
-}
-
-- (NSItemProvider*)appIconProvider {
-  NSDictionary* allIcons =
-      [[NSBundle mainBundle] infoDictionary][@"CFBundleIcons"];
-  NSDictionary* primaryIcon = allIcons[@"CFBundlePrimaryIcon"];
-  NSArray* iconFiles = primaryIcon[@"CFBundleIconFiles"];
-  UIImage* iconFile = [UIImage imageNamed:iconFiles.lastObject];
-  return [[NSItemProvider alloc] initWithObject:iconFile];
 }
 
 @end

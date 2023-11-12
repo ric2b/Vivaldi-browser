@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -178,7 +178,7 @@ class CppConverterWriter(writer.CodeWriter):
         'if (!value->is_list()) {{\n'
         '  goto error;\n'
         '}}\n'
-        'for (const auto& element : value->GetListDeprecated()) {{\n'
+        'for (const auto& element : value->GetList()) {{\n'
     )
 
     with self.AddIndent():

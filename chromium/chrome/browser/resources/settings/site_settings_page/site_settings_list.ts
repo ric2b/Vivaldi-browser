@@ -11,7 +11,7 @@ import '../i18n_setup.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {DomRepeatEvent, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
@@ -49,7 +49,7 @@ export function defaultSettingLabel(
 
 
 const SettingsSiteSettingsListElementBase =
-    PrefsMixin(BaseMixin(WebUIListenerMixin(I18nMixin(PolymerElement))));
+    PrefsMixin(BaseMixin(WebUiListenerMixin(I18nMixin(PolymerElement))));
 
 class SettingsSiteSettingsListElement extends
     SettingsSiteSettingsListElementBase {
@@ -114,7 +114,7 @@ class SettingsSiteSettingsListElement extends
           this.fire('site-settings-list-labels-updated-for-testing');
         });
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'contentSettingCategoryChanged',
         (category: ContentSettingsTypes) =>
             this.refreshDefaultValueLabel_(category));
@@ -125,7 +125,7 @@ class SettingsSiteSettingsListElement extends
 
     if (hasProtocolHandlers) {
       // The protocol handlers have a separate enabled/disabled notifier.
-      this.addWebUIListener('setHandlersEnabled', (enabled: boolean) => {
+      this.addWebUiListener('setHandlersEnabled', (enabled: boolean) => {
         this.updateDefaultValueLabel_(
             ContentSettingsTypes.PROTOCOL_HANDLERS,
             enabled ? ContentSetting.ALLOW : ContentSetting.BLOCK);
@@ -140,7 +140,7 @@ class SettingsSiteSettingsListElement extends
       // The cookies sub-label is provided by an update from C++.
       this.browserProxy_.getCookieSettingDescription().then(
           (label: string) => this.updateCookiesLabel_(label));
-      this.addWebUIListener(
+      this.addWebUiListener(
           'cookieSettingDescriptionChanged',
           (label: string) => this.updateCookiesLabel_(label));
     }
@@ -152,11 +152,12 @@ class SettingsSiteSettingsListElement extends
    */
   private refreshDefaultValueLabel_(category: ContentSettingsTypes):
       Promise<void> {
-    // Default labels are not applicable to ZOOM_LEVELS, PDF or
-    // PROTECTED_CONTENT
+    // Default labels are not applicable to ZOOM_LEVELS, PDF, PROTECTED_CONTENT,
+    // or SITE_DATA.
     if (category === ContentSettingsTypes.ZOOM_LEVELS ||
         category === ContentSettingsTypes.PROTECTED_CONTENT ||
-        category === ContentSettingsTypes.PDF_DOCUMENTS) {
+        category === ContentSettingsTypes.PDF_DOCUMENTS ||
+        category === ContentSettingsTypes.SITE_DATA) {
       return Promise.resolve();
     }
 

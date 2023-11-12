@@ -11,13 +11,19 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/events/event.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/extensions/desk_extension.h"
 #include "ui/platform_window/extensions/pinned_mode_extension.h"
 #include "ui/platform_window/extensions/system_modal_extension.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_move_resize_handler.h"
+#include "ui/views/corewm/tooltip_aura.h"
+#include "ui/views/corewm/tooltip_controller.h"
+#include "ui/views/corewm/tooltip_lacros.h"
 #include "ui/views/views_delegate.h"
+#include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/window_event_filter_lacros.h"
 #include "ui/views/widget/widget.h"
 
@@ -71,6 +77,7 @@ void DesktopWindowTreeHostLacros::OnNativeWidgetCreated(
     const Widget::InitParams& params) {
   CreateNonClientEventFilter();
   DesktopWindowTreeHostPlatform::OnNativeWidgetCreated(params);
+  platform_window()->SetUseNativeFrame(false);
 }
 
 void DesktopWindowTreeHostLacros::InitModalType(ui::ModalType modal_type) {
@@ -105,11 +112,43 @@ void DesktopWindowTreeHostLacros::OnWindowStateChanged(
       ToChromeosWindowStateType(new_window_show_state));
 }
 
+void DesktopWindowTreeHostLacros::OnImmersiveModeChanged(bool enabled) {
+  // Keep in sync with ImmersiveFullscreenController::Enable for widget. See
+  // comment there for details.
+  GetContentWindow()->SetProperty(chromeos::kImmersiveIsActive, enabled);
+}
+
+void DesktopWindowTreeHostLacros::OnTooltipShownOnServer(
+    const std::u16string& text,
+    const gfx::Rect& bounds) {
+  if (tooltip_controller()) {
+    tooltip_controller()->OnTooltipShownOnServer(text, bounds);
+  }
+}
+
+void DesktopWindowTreeHostLacros::OnTooltipHiddenOnServer() {
+  if (tooltip_controller()) {
+    tooltip_controller()->OnTooltipHiddenOnServer();
+  }
+}
+
 void DesktopWindowTreeHostLacros::AddAdditionalInitProperties(
     const Widget::InitParams& params,
     ui::PlatformWindowInitProperties* properties) {
   properties->icon = ViewsDelegate::GetInstance()->GetDefaultWindowIcon();
   properties->wayland_app_id = params.wayland_app_id;
+}
+
+std::unique_ptr<corewm::Tooltip> DesktopWindowTreeHostLacros::CreateTooltip() {
+  // TODO(crbug.com/1338597): Remove TooltipAura from Lacros when Ash is new
+  // enough.
+  if (ui::OzonePlatform::GetInstance()
+          ->GetPlatformRuntimeProperties()
+          .supports_tooltip) {
+    return std::make_unique<views::corewm::TooltipLacros>();
+  }
+  // Fallback to TooltipAura if wayland version is not new enough.
+  return std::make_unique<views::corewm::TooltipAura>();
 }
 
 void DesktopWindowTreeHostLacros::CreateNonClientEventFilter() {

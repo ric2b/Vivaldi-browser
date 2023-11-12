@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_OPTIMIZATION_GUIDE_CONTENT_BROWSER_PAGE_CONTENT_ANNOTATIONS_SERVICE_H_
 #define COMPONENTS_OPTIMIZATION_GUIDE_CONTENT_BROWSER_PAGE_CONTENT_ANNOTATIONS_SERVICE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,23 +15,26 @@
 #include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
+#include "base/scoped_observation.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/continuous_search/browser/search_result_extractor_client.h"
 #include "components/continuous_search/browser/search_result_extractor_client_status.h"
 #include "components/continuous_search/common/public/mojom/continuous_search.mojom.h"
+#include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/omnibox/browser/autocomplete_provider_client.h"
+#include "components/omnibox/browser/zero_suggest_cache_service.h"
 #include "components/optimization_guide/content/browser/page_content_annotator.h"
 #include "components/optimization_guide/core/entity_metadata_provider.h"
 #include "components/optimization_guide/core/model_info.h"
 #include "components/optimization_guide/core/page_content_annotations_common.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "components/optimization_guide/proto/page_entities_metadata.pb.h"
+#include "components/search_engines/template_url_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -78,12 +82,6 @@ struct HistoryVisit {
   };
 };
 
-// The information about a search visit to store in HistoryService.
-struct SearchMetadata {
-  GURL normalized_url;
-  std::u16string search_terms;
-};
-
 // The type of page content annotations stored in the history database.
 enum class PageContentAnnotationsType {
   kUnknown = 0,
@@ -100,12 +98,17 @@ enum class PageContentAnnotationsType {
 
 // A KeyedService that annotates page content.
 class PageContentAnnotationsService : public KeyedService,
-                                      public EntityMetadataProvider {
+                                      public EntityMetadataProvider,
+                                      public history::HistoryServiceObserver,
+                                      public ZeroSuggestCacheService::Observer {
  public:
   PageContentAnnotationsService(
+      std::unique_ptr<AutocompleteProviderClient> autocomplete_provider_client,
       const std::string& application_locale,
       OptimizationGuideModelProvider* optimization_guide_model_provider,
       history::HistoryService* history_service,
+      TemplateURLService* template_url_service,
+      ZeroSuggestCacheService* zero_suggest_cache_service,
       leveldb_proto::ProtoDatabaseProvider* database_provider,
       const base::FilePath& database_dir,
       OptimizationGuideLogger* optimization_guide_logger,
@@ -140,9 +143,28 @@ class PageContentAnnotationsService : public KeyedService,
       const std::string& entity_id,
       EntityMetadataRetrievedCallback callback) override;
 
+  // history::HistoryServiceObserver:
+  void OnURLVisited(history::HistoryService* history_service,
+                    const history::URLRow& url_row,
+                    const history::VisitRow& visit_row) override;
+
   // Overrides the PageContentAnnotator for testing. See
   // test_page_content_annotator.h for an implementation designed for testing.
   void OverridePageContentAnnotatorForTesting(PageContentAnnotator* annotator);
+
+  // Specifies whether PageContentAnnotationsService should extract "related
+  // searches" data from the ZPS response cache.
+  bool ShouldExtractRelatedSearchesFromZPSCache();
+
+  // ZeroSuggestCacheService::Observer:
+  void OnZeroSuggestResponseUpdated(
+      const std::string& page_url,
+      const ZeroSuggestCacheService::CacheEntry& response) override;
+
+  // Callback used to extract "related searches" data from cached ZPS responses.
+  void ExtractRelatedSearchesFromZeroSuggestResponse(
+      const ZeroSuggestCacheService::CacheEntry& response,
+      history::QueryURLResult url_result);
 
   OptimizationGuideLogger* optimization_guide_logger() const {
     return optimization_guide_logger_;
@@ -190,7 +212,7 @@ class PageContentAnnotationsService : public KeyedService,
   // The annotator to use for requests to |BatchAnnotate| and |Annotate|. In
   // prod, this is simply |model_manager_.get()| but is set as a separate
   // pointer here in order to be override-able for testing.
-  raw_ptr<PageContentAnnotator> annotator_;
+  raw_ptr<PageContentAnnotator> annotator_ = nullptr;
 
   // Requests to annotate |text|, which is associated with |web_contents|.
   //
@@ -208,10 +230,6 @@ class PageContentAnnotationsService : public KeyedService,
   static HistoryVisit CreateHistoryVisitFromWebContents(
       content::WebContents* web_contents,
       int64_t navigation_id);
-
-  // Persist |search_metadata| for |visit| in |history_service_|.
-  virtual void PersistSearchMetadata(const HistoryVisit& visit,
-                                     const SearchMetadata& search_metadata);
 
   // Requests |search_result_extractor_client_| to extract related searches from
   // the Google SRP DOM associated with |web_contents|.
@@ -260,6 +278,9 @@ class PageContentAnnotationsService : public KeyedService,
                     PageContentAnnotationsType annotation_type,
                     history::QueryURLResult url_result);
 
+  // Provider client instance used when parsing cached ZPS response data.
+  std::unique_ptr<AutocompleteProviderClient> autocomplete_provider_client_;
+
   // The minimum score that an allowlisted page category must have for it to be
   // persisted.
   const int min_page_category_score_to_persist_;
@@ -273,9 +294,21 @@ class PageContentAnnotationsService : public KeyedService,
 
   // The history service to write content annotations to. Not owned. Guaranteed
   // to outlive |this|.
-  raw_ptr<history::HistoryService> history_service_;
+  const raw_ptr<history::HistoryService> history_service_;
+  // Not owned and must outlive |this|. Can be nullptr in tests only.
+  const raw_ptr<TemplateURLService> template_url_service_;
+  // The scoped observation to the HistoryService.
+  base::ScopedObservation<history::HistoryService,
+                          PageContentAnnotationsService>
+      history_service_observation_{this};
   // The task tracker to keep track of tasks to query |history_service|.
   base::CancelableTaskTracker history_service_task_tracker_;
+  // The zero suggest cache service used to fetch cached ZPS response data.
+  const raw_ptr<ZeroSuggestCacheService> zero_suggest_cache_service_;
+  // The scoped observation to the ZeroSuggestCacheService.
+  base::ScopedObservation<ZeroSuggestCacheService,
+                          PageContentAnnotationsService>
+      zero_suggest_cache_service_observation_{this};
   // The client of continuous_search::mojom::SearchResultExtractor interface
   // used for extracting data from the main frame of Google SRP |web_contents|.
   continuous_search::SearchResultExtractorClient
@@ -307,7 +340,7 @@ class PageContentAnnotationsService : public KeyedService,
   // are set.
   std::unique_ptr<PageContentAnnotationsValidator> validator_;
 
-  OptimizationGuideLogger* optimization_guide_logger_ = nullptr;
+  raw_ptr<OptimizationGuideLogger> optimization_guide_logger_ = nullptr;
 
   base::WeakPtrFactory<PageContentAnnotationsService> weak_ptr_factory_{this};
 };

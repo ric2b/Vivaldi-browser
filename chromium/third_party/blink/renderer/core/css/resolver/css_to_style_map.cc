@@ -39,8 +39,10 @@
 #include "third_party/blink/renderer/core/css/css_scroll_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
+#include "third_party/blink/renderer/core/css/css_view_value.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+#include "third_party/blink/renderer/core/css/scoped_css_value.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/style/border_image_length_box.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -288,10 +290,32 @@ void CSSToStyleMap::MapFillPositionY(StyleResolverState& state,
   }
 }
 
-double CSSToStyleMap::MapAnimationDelay(const CSSValue& value) {
+namespace {
+
+Timing::Delay MapAnimationTimingDelay(const CSSValue& value) {
+  if (const auto* primitive = DynamicTo<CSSPrimitiveValue>(value))
+    return Timing::Delay(AnimationTimeDelta(primitive->ComputeSeconds()));
+  const auto& list = To<CSSValueList>(value);
+  DCHECK_EQ(list.length(), 2u);
+  const auto& range_name = To<CSSIdentifierValue>(list.Item(0));
+  const auto& percentage = To<CSSPrimitiveValue>(list.Item(1));
+  DCHECK(percentage.IsPercentage());
+  return Timing::Delay(range_name.ConvertTo<Timing::TimelineNamedPhase>(),
+                       percentage.GetValue<double>() / 100.0);
+}
+
+}  // namespace
+
+Timing::Delay CSSToStyleMap::MapAnimationDelayStart(const CSSValue& value) {
   if (value.IsInitialValue())
-    return CSSTimingData::InitialDelay();
-  return To<CSSPrimitiveValue>(value).ComputeSeconds();
+    return CSSAnimationData::InitialDelayStart();
+  return MapAnimationTimingDelay(value);
+}
+
+Timing::Delay CSSToStyleMap::MapAnimationDelayEnd(const CSSValue& value) {
+  if (value.IsInitialValue())
+    return CSSAnimationData::InitialDelayEnd();
+  return MapAnimationTimingDelay(value);
 }
 
 Timing::PlaybackDirection CSSToStyleMap::MapAnimationDirection(
@@ -314,9 +338,14 @@ Timing::PlaybackDirection CSSToStyleMap::MapAnimationDirection(
   }
 }
 
-double CSSToStyleMap::MapAnimationDuration(const CSSValue& value) {
+absl::optional<double> CSSToStyleMap::MapAnimationDuration(
+    const CSSValue& value) {
   if (value.IsInitialValue())
     return CSSTimingData::InitialDuration();
+  if (auto* identifier = DynamicTo<CSSIdentifierValue>(value);
+      identifier && identifier->GetValueID() == CSSValueID::kAuto) {
+    return absl::nullopt;
+  }
   return To<CSSPrimitiveValue>(value).ComputeSeconds();
 }
 
@@ -358,7 +387,9 @@ AtomicString CSSToStyleMap::MapAnimationName(const CSSValue& value) {
   return CSSAnimationData::InitialName();
 }
 
-StyleTimeline CSSToStyleMap::MapAnimationTimeline(const CSSValue& value) {
+StyleTimeline CSSToStyleMap::MapAnimationTimeline(
+    const ScopedCSSValue& scoped_value) {
+  const CSSValue& value = scoped_value.GetCSSValue();
   if (value.IsInitialValue())
     return CSSAnimationData::InitialTimeline();
   if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
@@ -367,13 +398,22 @@ StyleTimeline CSSToStyleMap::MapAnimationTimeline(const CSSValue& value) {
     return StyleTimeline(ident->GetValueID());
   }
   if (auto* custom_ident = DynamicTo<CSSCustomIdentValue>(value)) {
-    return StyleTimeline(
-        StyleName(custom_ident->Value(), StyleName::Type::kCustomIdent));
+    return StyleTimeline(MakeGarbageCollected<ScopedCSSName>(
+        custom_ident->Value(), scoped_value.GetTreeScope()));
   }
   if (auto* string_value = DynamicTo<CSSStringValue>(value)) {
-    return StyleTimeline(StyleName(AtomicString(string_value->Value()),
-                                   StyleName::Type::kString));
+    return StyleTimeline(MakeGarbageCollected<ScopedCSSName>(
+        AtomicString(string_value->Value()), scoped_value.GetTreeScope()));
   }
+  if (value.IsViewValue()) {
+    const auto& view_value = To<cssvalue::CSSViewValue>(value);
+    const auto* axis_value = DynamicTo<CSSIdentifierValue>(view_value.Axis());
+    TimelineAxis axis = axis_value ? axis_value->ConvertTo<TimelineAxis>()
+                                   : StyleTimeline::ViewData::DefaultAxis();
+    return StyleTimeline(StyleTimeline::ViewData(axis));
+  }
+
+  DCHECK(value.IsScrollValue());
   const auto& scroll_value = To<cssvalue::CSSScrollValue>(value);
   const auto* axis_value = DynamicTo<CSSIdentifierValue>(scroll_value.Axis());
   const auto* scroller_value =
@@ -517,25 +557,30 @@ void CSSToStyleMap::MapNinePieceImage(StyleResolverState& state,
   }
 
   if (property == CSSPropertyID::kWebkitBorderImage) {
+    ComputedStyleBuilder& builder = state.StyleBuilder();
     // We have to preserve the legacy behavior of -webkit-border-image and make
     // the border slices also set the border widths. We don't need to worry
     // about percentages, since we don't even support those on real borders yet.
     if (image.BorderSlices().Top().IsLength() &&
-        image.BorderSlices().Top().length().IsFixed())
-      state.Style()->SetBorderTopWidth(
-          image.BorderSlices().Top().length().Value());
+        image.BorderSlices().Top().length().IsFixed()) {
+      builder.SetBorderTopWidth(
+          LayoutUnit(image.BorderSlices().Top().length().Pixels()));
+    }
     if (image.BorderSlices().Right().IsLength() &&
-        image.BorderSlices().Right().length().IsFixed())
-      state.Style()->SetBorderRightWidth(
-          image.BorderSlices().Right().length().Value());
+        image.BorderSlices().Right().length().IsFixed()) {
+      builder.SetBorderRightWidth(
+          LayoutUnit(image.BorderSlices().Right().length().Pixels()));
+    }
     if (image.BorderSlices().Bottom().IsLength() &&
-        image.BorderSlices().Bottom().length().IsFixed())
-      state.Style()->SetBorderBottomWidth(
-          image.BorderSlices().Bottom().length().Value());
+        image.BorderSlices().Bottom().length().IsFixed()) {
+      builder.SetBorderBottomWidth(
+          LayoutUnit(image.BorderSlices().Bottom().length().Pixels()));
+    }
     if (image.BorderSlices().Left().IsLength() &&
-        image.BorderSlices().Left().length().IsFixed())
-      state.Style()->SetBorderLeftWidth(
-          image.BorderSlices().Left().length().Value());
+        image.BorderSlices().Left().length().IsFixed()) {
+      builder.SetBorderLeftWidth(
+          LayoutUnit(image.BorderSlices().Left().length().Pixels()));
+    }
   }
 }
 

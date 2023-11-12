@@ -28,7 +28,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_features.h"
@@ -209,29 +208,29 @@ ThemeService::BrowserThemeProvider::~BrowserThemeProvider() = default;
 
 gfx::ImageSkia* ThemeService::BrowserThemeProvider::GetImageSkiaNamed(
     int id) const {
-  return theme_helper_.GetImageSkiaNamed(id, incognito_, GetThemeSupplier());
+  return theme_helper_->GetImageSkiaNamed(id, incognito_, GetThemeSupplier());
 }
 
 color_utils::HSL ThemeService::BrowserThemeProvider::GetTint(int id) const {
-  return theme_helper_.GetTint(id, incognito_, GetThemeSupplier());
+  return theme_helper_->GetTint(id, incognito_, GetThemeSupplier());
 }
 
 int ThemeService::BrowserThemeProvider::GetDisplayProperty(int id) const {
-  return theme_helper_.GetDisplayProperty(id, GetThemeSupplier());
+  return theme_helper_->GetDisplayProperty(id, GetThemeSupplier());
 }
 
 bool ThemeService::BrowserThemeProvider::ShouldUseNativeFrame() const {
-  return theme_helper_.ShouldUseNativeFrame(GetThemeSupplier());
+  return theme_helper_->ShouldUseNativeFrame(GetThemeSupplier());
 }
 
 bool ThemeService::BrowserThemeProvider::HasCustomImage(int id) const {
-  return theme_helper_.HasCustomImage(id, GetThemeSupplier());
+  return theme_helper_->HasCustomImage(id, GetThemeSupplier());
 }
 
 base::RefCountedMemory* ThemeService::BrowserThemeProvider::GetRawData(
     int id,
     ui::ResourceScaleFactor scale_factor) const {
-  return theme_helper_.GetRawData(id, GetThemeSupplier(), scale_factor);
+  return theme_helper_->GetRawData(id, GetThemeSupplier(), scale_factor);
 }
 
 CustomThemeSupplier* ThemeService::BrowserThemeProvider::GetThemeSupplier()
@@ -248,20 +247,20 @@ std::unique_ptr<ui::ThemeProvider> ThemeService::CreateBoundThemeProvider(
     Profile* profile,
     BrowserThemeProviderDelegate* delegate) {
   return std::make_unique<BrowserThemeProvider>(
-      ThemeServiceFactory::GetForProfile(profile)->theme_helper_, false,
+      *ThemeServiceFactory::GetForProfile(profile)->theme_helper_, false,
       delegate);
 }
 
 ThemeService::ThemeService(Profile* profile, const ThemeHelper& theme_helper)
     : profile_(profile),
       theme_helper_(theme_helper),
-      original_theme_provider_(theme_helper_, false, this),
-      incognito_theme_provider_(theme_helper_, true, this) {}
+      original_theme_provider_(*theme_helper_, false, this),
+      incognito_theme_provider_(*theme_helper_, true, this) {}
 
 ThemeService::~ThemeService() = default;
 
 void ThemeService::Init() {
-  theme_helper_.DCheckCalledOnValidSequence();
+  theme_helper_->DCheckCalledOnValidSequence();
 
   InitFromPrefs();
 
@@ -652,7 +651,7 @@ void ThemeService::OnExtensionServiceReady() {
     set_ready();
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThemeService::RemoveUnusedThemes,
                      weak_ptr_factory_.GetWeakPtr()),

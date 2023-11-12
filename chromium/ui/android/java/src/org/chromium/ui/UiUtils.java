@@ -31,7 +31,6 @@ import androidx.annotation.StyleableRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.drawable.DrawableCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
 
 import java.io.File;
@@ -61,9 +60,6 @@ public class UiUtils {
      */
     private static final Map<String, Integer> sAndroidUiThemeBlocklist = new HashMap<>();
     static {
-        // Xiaomi doesn't support SYSTEM_UI_FLAG_LIGHT_STATUS_BAR until Android N; more info at
-        // https://crbug.com/823264.
-        sAndroidUiThemeBlocklist.put("xiaomi", Build.VERSION_CODES.N);
         // HTC doesn't respect theming flags on activity restart until Android O; this affects both
         // the system nav and status bar. More info at https://crbug.com/831737.
         sAndroidUiThemeBlocklist.put("htc", Build.VERSION_CODES.O);
@@ -93,7 +89,7 @@ public class UiUtils {
                     imManager.getEnabledInputMethodSubtypeList(enabledMethods.get(i), true);
             if (subtypes == null) continue;
             for (int j = 0; j < subtypes.size(); j++) {
-                String locale = ApiCompatibilityUtils.getLocale(subtypes.get(j));
+                String locale = subtypes.get(j).getLanguageTag();
                 if (!TextUtils.isEmpty(locale)) locales.add(locale);
             }
         }

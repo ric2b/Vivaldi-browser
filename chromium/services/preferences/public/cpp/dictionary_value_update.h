@@ -49,8 +49,8 @@ class DictionaryValueUpdate {
   // within a key, but there are no other restrictions on keys.
   // If the key at any step of the way doesn't exist, or exists but isn't
   // a DictionaryValue, a new DictionaryValue will be created and attached
-  // to the path in that location. |in_value| must be non-null.
-  void Set(base::StringPiece path, std::unique_ptr<base::Value> in_value);
+  // to the path in that location.
+  void Set(base::StringPiece path, base::Value in_value);
 
   // This is similar to |Set|, but lets callers explicitly specify the path
   // components and thus allows nested keys with periods in them.
@@ -66,7 +66,7 @@ class DictionaryValueUpdate {
   void SetString(base::StringPiece path, const std::u16string& in_value);
   std::unique_ptr<DictionaryValueUpdate> SetDictionary(
       base::StringPiece path,
-      std::unique_ptr<base::DictionaryValue> in_value);
+      base::Value::Dict in_value);
 
   // Like Set(), but without special treatment of '.'.  This allows e.g. URLs to
   // be used as paths. Returns a pointer to the set `value`.
@@ -77,7 +77,7 @@ class DictionaryValueUpdate {
   // Convenience forms of SetWithoutPathExpansion().
   std::unique_ptr<DictionaryValueUpdate> SetDictionaryWithoutPathExpansion(
       base::StringPiece path,
-      std::unique_ptr<base::DictionaryValue> in_value);
+      base::Value::Dict in_value);
 
   // These are convenience forms of Get().  The value will be retrieved
   // and the return value will be true if the path is valid and the value at

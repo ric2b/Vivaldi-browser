@@ -11,39 +11,13 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
 namespace policy {
 
-namespace {
-
-// Fetches a machine statistic value from StatisticsProvider, returns an empty
-// string on failure.
-std::string GetMachineStatistic(const std::string& key) {
-  std::string value;
-  chromeos::system::StatisticsProvider* provider =
-      chromeos::system::StatisticsProvider::GetInstance();
-  if (!provider->GetMachineStatistic(key, &value))
-    return std::string();
-
-  return value;
-}
-
-// Gets a machine flag from StatisticsProvider, returns the given
-// |default_value| if not present.
-bool GetMachineFlag(const std::string& key, bool default_value) {
-  bool value = default_value;
-  chromeos::system::StatisticsProvider* provider =
-      chromeos::system::StatisticsProvider::GetInstance();
-  if (!provider->GetMachineFlag(key, &value))
-    return default_value;
-
-  return value;
-}
-
-}  // namespace
+using chromeos::system::StatisticsProvider;
 
 // static
 const char EnrollmentRequisitionManager::kNoRequisition[] = "none";
@@ -61,27 +35,34 @@ void EnrollmentRequisitionManager::Initialize() {
   // interrupted.
   ash::DemoSetupController::ClearDemoRequisition();
   auto* local_state = g_browser_process->local_state();
+  auto* provider = StatisticsProvider::GetInstance();
   const PrefService::Preference* pref =
       local_state->FindPreference(prefs::kDeviceEnrollmentRequisition);
   if (pref->IsDefaultValue()) {
-    std::string requisition =
-        GetMachineStatistic(chromeos::system::kOemDeviceRequisitionKey);
+    const absl::optional<base::StringPiece> requisition =
+        provider->GetMachineStatistic(
+            chromeos::system::kOemDeviceRequisitionKey);
 
-    if (!requisition.empty()) {
-      local_state->SetString(prefs::kDeviceEnrollmentRequisition, requisition);
+    if (requisition && !requisition->empty()) {
+      // TODO(b/259661300): Remove copy of `requisition` once
+      // `PrefService::SetString()` uses StringPiece as an argument.
+      local_state->SetString(prefs::kDeviceEnrollmentRequisition,
+                             std::string(requisition.value()));
       if (requisition == kRemoraRequisition ||
           requisition == kSharkRequisition ||
           requisition == kRialtoRequisition) {
         SetDeviceEnrollmentAutoStart();
       } else {
-        local_state->SetBoolean(
-            prefs::kDeviceEnrollmentAutoStart,
-            GetMachineFlag(chromeos::system::kOemIsEnterpriseManagedKey,
-                           false));
-        local_state->SetBoolean(
-            prefs::kDeviceEnrollmentCanExit,
-            GetMachineFlag(chromeos::system::kOemCanExitEnterpriseEnrollmentKey,
-                           false));
+        const bool auto_start = StatisticsProvider::FlagValueToBool(
+            provider->GetMachineFlag(
+                chromeos::system::kOemIsEnterpriseManagedKey),
+            /*default_value=*/false);
+        local_state->SetBoolean(prefs::kDeviceEnrollmentAutoStart, auto_start);
+        const bool can_exit = StatisticsProvider::FlagValueToBool(
+            provider->GetMachineFlag(
+                chromeos::system::kOemCanExitEnterpriseEnrollmentKey),
+            /*default_value=*/false);
+        local_state->SetBoolean(prefs::kDeviceEnrollmentCanExit, can_exit);
       }
     }
   }

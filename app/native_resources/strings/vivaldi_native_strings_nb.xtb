@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Last inn bildet på nytt</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Generisk</translation>
+<translation id="1973351931613083086">automatisk avspilling</translation>
 <translation id="1985669426322966465">Programoppdatering</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatere Vivaldi til versjon <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">En feil oppstod under nedlasting av oppdateringsfilene. Sjekk internettilkoblingen din og prøv igjen.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Søppel</translation>
 <translation id="292258461174562431">Monster 4</translation>
 <translation id="2923448633003185837">Lim inn og gå</translation>
+<translation id="2953943267837858202">Automatisk avspilling av video ikke tillatt</translation>
 <translation id="2977472760057091832">Åpne lenken i privatvindu</translation>
 <translation id="2989805286512600854">Åpne i ny fane</translation>
 <translation id="3027988479108856431">Yandex innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Yandex-vinduer. Deretter klikker du på Fortsett.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Nytt bokmerke</translation>
 <translation id="3255747772218936245">Installer oppdatering</translation>
 <translation id="3259769196742189631">Valider siden</translation>
+<translation id="3291915639428159043">Automatisk avspilling blokkert</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er nyeste tilgjengelige versjon.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Åpne lenken i nytt vindu</translation>
 <translation id="3588820906588687999">Åpne bilde i ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3620979700683094848">Nettsteder kan spille av video automatisk</translation>
 <translation id="3680031241659195730">En ny versjon av Vivaldi er tilgjengelig!</translation>
 <translation id="3708982624815781692">Nedlastningen ble avbrutt.</translation>
 <translation id="3732157130969736834">Bokmerk lenke</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Ikke vis igjen</translation>
 <translation id="4074744496918018786">Åpne bilde i privatvindu</translation>
+<translation id="410351446219883937">Automatisk avspilling</translation>
 <translation id="4324492550286218827">Landskap 2</translation>
 <translation id="4406101500523955324">Åpne i nytt privatvindu</translation>
 <translation id="4420816922321010053">Sikker på at du vil avslutte Vivaldi?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Klipp ut</translation>
 <translation id="7727481996062361502">Verifiserer oppdatering...</translation>
 <translation id="7793738202466490491">Legg til som kalenderhendelse</translation>
+<translation id="7834693436815575883">Automatisk avspilling tillatt</translation>
 <translation id="7848222781052558334">Kunne ikke bekrefte den digitale signaturen på de nedlastede filene.</translation>
 <translation id="7865983598101744945">Bekreft avslutning</translation>
 <translation id="7957213167373139414">Min kalender</translation>
 <translation id="8027581147000338959">Åpne i nytt vindu</translation>
+<translation id="8044382196220116469">Ikke tillat sider å automatisk spille av video</translation>
 <translation id="8099620695029051217">Kopier adresse</translation>
 <translation id="8197810018650377191">Bokmerk siden</translation>
 <translation id="8261506727792406068">Slett</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Inspiser portaldokument</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
+<translation id="8774017153185436870">Nettsteder vil kanskje spille av video automatisk</translation>
 <translation id="8813277370772331957">Minn meg på dette senere</translation>
 <translation id="8894900864683381599">Legg til lenken som nettpanel</translation>
 <translation id="8912720443398351457">Er du sikker på at du vil avslutte Vivaldi?</translation>
 <translation id="8947109330183116400">Velg HTML bokmerkefil</translation>
 <translation id="9017566390391482291">Velg Vivaldi profilkatalog for import</translation>
 <translation id="9048058608784130603">Venter på oppdatering <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Tillatelse for automatisk avspilling av video</translation>
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Åpne bilde som <ph name="USER" /></translation>

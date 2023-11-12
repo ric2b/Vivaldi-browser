@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/scoped_observation.h"
 #include "base/values.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -39,8 +41,10 @@ enum class FeatureFlagsMigrationStatus {
   kMaxValue = kMigrationPerformed,
 };
 
-// The class is a profile-keyed service which holds public/private keypair
-// corresponds to a profile. The keypair is reloaded automatically when profile
+class OwnerKeyLoader;
+
+// The class is a profile-keyed service which holds public/private key pair
+// corresponds to a profile. The key pair is reloaded automatically when profile
 // is created and TPM token is ready. Note that the private part of a key can be
 // loaded only for the owner.
 //
@@ -86,6 +90,7 @@ class OwnerSettingsServiceAsh : public ownership::OwnerSettingsService,
 
   // ProfileManagerObserver:
   void OnProfileAdded(Profile* profile) override;
+  void OnProfileManagerDestroying() override;
 
   // SessionManagerClient::Observer:
   void OwnerKeySet(bool success) override;
@@ -141,21 +146,31 @@ class OwnerSettingsServiceAsh : public ownership::OwnerSettingsService,
                               scoped_refptr<ownership::PrivateKey> private_key)>
           callback) override;
 
-  // Possibly notifies DeviceSettingsService that owner's keypair is loaded.
+  void OnReloadedKeypairImpl(
+      base::OnceCallback<void(scoped_refptr<ownership::PublicKey>,
+                              scoped_refptr<ownership::PrivateKey>)> callback,
+      scoped_refptr<ownership::PublicKey> public_key,
+      scoped_refptr<ownership::PrivateKey> private_key);
+
+  // Possibly notifies DeviceSettingsService that owner's key pair is loaded.
   void OnPostKeypairLoadedActions() override;
 
   // Tries to apply recent changes to device settings proto, sign it and store.
   void StorePendingChanges();
 
-  // Called when current device settings are successfully signed.
-  // Sends signed settings for storage.
+  // Called when current device settings are successfully signed. |public_key|
+  // is the public part of the key that was used for signing. Sends signed
+  // settings for storage.
   void OnPolicyAssembledAndSigned(
+      scoped_refptr<ownership::PublicKey> public_key,
       std::unique_ptr<enterprise_management::PolicyFetchResponse>
           policy_response);
 
   // Called by DeviceSettingsService when modified and signed device
-  // settings are stored.
-  void OnSignedPolicyStored(bool success);
+  // settings are stored. |public_key| is the public part of the key that was
+  // used for signing.
+  void OnSignedPolicyStored(scoped_refptr<ownership::PublicKey> public_key,
+                            bool success);
 
   // Report status to observers and tries to continue storing pending chages to
   // device settings.
@@ -191,17 +206,18 @@ class OwnerSettingsServiceAsh : public ownership::OwnerSettingsService,
   std::unique_ptr<enterprise_management::ChromeDeviceSettingsProto>
       tentative_settings_;
 
+  // A helper to load an existing owner key or generate a new one when
+  // necessary.
+  std::unique_ptr<OwnerKeyLoader> owner_key_loader_;
+
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observation_{this};
+
   base::WeakPtrFactory<OwnerSettingsServiceAsh> weak_factory_{this};
 
   base::WeakPtrFactory<OwnerSettingsServiceAsh> store_settings_factory_{this};
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::OwnerSettingsServiceAsh;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_OWNERSHIP_OWNER_SETTINGS_SERVICE_ASH_H_

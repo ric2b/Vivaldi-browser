@@ -5,12 +5,13 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/task/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 
 #include "components/datasource/resource_reader.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 
 namespace vivaldi_partners {
 
@@ -119,7 +120,7 @@ bool ParsePartnerDatabaseDetailsList(
         // For convenience of partners.json maintainence allow but ignore an
         // empty thumbnail.
         if (!v.GetString().empty()) {
-          if (!ResourceReader::IsResourceURL(v.GetString()))
+          if (!vivaldi_data_url_utils::IsResourceURL(v.GetString()))
             return error(property + " value is not a browser resource URL.");
           details.thumbnail = std::move(v.GetString());
         }

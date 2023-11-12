@@ -16,9 +16,9 @@
 #include "base/logging.h"
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/ash/borealis/borealis_context.h"
 #include "chrome/browser/ash/borealis/borealis_disk_manager.h"
 #include "chrome/browser/ash/borealis/borealis_features.h"
@@ -54,7 +54,7 @@ void BorealisTask::Complete(BorealisStartupResult status, std::string message) {
                << (base::Time::Now() - start_time_);
   // Task completion is self-mutually-exclusive, because tasks are deleted once
   // complete.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback_), status, std::move(message)));
 }
@@ -134,8 +134,7 @@ void CreateDiskImage::RunInternal(BorealisContext* context) {
   request.set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
   request.set_storage_location(vm_tools::concierge::STORAGE_CRYPTOHOME_ROOT);
   request.set_disk_size(0);
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kBorealisStorageBallooning)) {
+  if (base::FeatureList::IsEnabled(ash::features::kBorealisStorageBallooning)) {
     request.set_filesystem_type(vm_tools::concierge::EXT4);
     request.set_storage_ballooning(true);
   }
@@ -234,12 +233,11 @@ void StartBorealisVm::StartBorealisWithExternalDisk(
   request.set_software_tpm(false);
   request.set_enable_audio_capture(false);
   request.set_enable_vulkan(true);
-  if (base::FeatureList::IsEnabled(chromeos::features::kBorealisBigGl)) {
+  if (base::FeatureList::IsEnabled(ash::features::kBorealisBigGl)) {
     request.set_enable_big_gl(true);
   }
   request.set_name(context->vm_name());
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kBorealisStorageBallooning)) {
+  if (base::FeatureList::IsEnabled(ash::features::kBorealisStorageBallooning)) {
     request.set_storage_ballooning(true);
   }
 
@@ -331,9 +329,9 @@ std::string SendFlagsToVm(const std::string& owner_id,
   std::vector<std::string> command{"/usr/bin/vsh", "--owner_id=" + owner_id,
                                    "--vm_name=" + vm_name, "--",
                                    "update_chrome_flags"};
-  PushFlag(chromeos::features::kBorealisLinuxMode, command);
-  PushFlag(chromeos::features::kBorealisForceBetaClient, command);
-  PushFlag(chromeos::features::kBorealisForceDoubleScale, command);
+  PushFlag(ash::features::kBorealisLinuxMode, command);
+  PushFlag(ash::features::kBorealisForceBetaClient, command);
+  PushFlag(ash::features::kBorealisForceDoubleScale, command);
 
   std::string output;
   if (!base::GetAppOutput(command, &output)) {

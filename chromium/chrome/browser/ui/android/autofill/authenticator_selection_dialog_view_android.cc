@@ -36,8 +36,8 @@ AuthenticatorSelectionDialogViewAndroid::
     ~AuthenticatorSelectionDialogViewAndroid() = default;
 
 // static
-CardUnmaskAuthenticationSelectionDialogView*
-CardUnmaskAuthenticationSelectionDialogView::CreateAndShow(
+CardUnmaskAuthenticationSelectionDialog*
+CardUnmaskAuthenticationSelectionDialog::CreateAndShow(
     CardUnmaskAuthenticationSelectionDialogController* controller,
     content::WebContents* web_contents) {
   ui::ViewAndroid* view_android = web_contents->GetNativeView();
@@ -69,13 +69,17 @@ void AuthenticatorSelectionDialogViewAndroid::Dismiss(bool user_closed_dialog,
   }
 }
 
+void AuthenticatorSelectionDialogViewAndroid::UpdateContent() {}
+
 void AuthenticatorSelectionDialogViewAndroid::OnOptionSelected(
     JNIEnv* env,
-    const base::android::JavaParamRef<jstring>& authenticatorOptionIdentifier) {
-  std::string cardUnmaskChallengeOptionId =
+    const base::android::JavaParamRef<jstring>&
+        authenticator_option_identifier) {
+  std::string card_unmask_challenge_option_id =
       base::android::ConvertJavaStringToUTF8(env,
-                                             authenticatorOptionIdentifier);
-  controller_->OnOkButtonClicked(cardUnmaskChallengeOptionId);
+                                             authenticator_option_identifier);
+  controller_->SetSelectedChallengeOptionId(card_unmask_challenge_option_id);
+  controller_->OnOkButtonClicked();
 }
 
 void AuthenticatorSelectionDialogViewAndroid::OnDismissed(JNIEnv* env) {

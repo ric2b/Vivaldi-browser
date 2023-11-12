@@ -17,7 +17,6 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -31,14 +30,17 @@
 #import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_container_cell.h"
 #import "ios/chrome/browser/ui/ntp/top_menu/vivaldi_ntp_top_menu.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_empty_view.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_home_mediator.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_prefs.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_shared_state.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "prefs/vivaldi_pref_names.h"
@@ -58,7 +60,7 @@ NSString* cellId = @"cellId";
 // Padding for the top scroll menu
 UIEdgeInsets topScrollMenuPadding = UIEdgeInsetsMake(0.f, 16.f, 0.f, 0.f);
 // Padding for the speed dial sorting button
-UIEdgeInsets sortButtonPadding = UIEdgeInsetsMake(6.f, 0.f, 0.f, 16.f);
+UIEdgeInsets sortButtonPadding = UIEdgeInsetsMake(6.f, 0.f, 0.f, 12.f);
 // Size for the speed dial sorting button
 CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 }
@@ -82,6 +84,8 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @property(nonatomic, weak) VivaldiNTPTopMenuView* topScrollMenu;
 // Sort button
 @property(nonatomic, weak) UIButton* sortButton;
+// The view to show when there's no speed dial folder available
+@property(nonatomic, weak) VivaldiSpeedDialEmptyView* emptySpeedDialView;
 // The view controller to present when pushing to new view controller
 @property(nonatomic, strong)
   VivaldiSpeedDialViewController* speedDialViewController;
@@ -151,6 +155,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @synthesize nicknameSortAction = _nicknameSortAction;
 @synthesize descriptionSortAction = _descriptionSortAction;
 @synthesize dateSortAction = _dateSortAction;
+@synthesize emptySpeedDialView = _emptySpeedDialView;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -174,10 +179,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   _topScrollMenu.delegate = nil;
   self.mediator.consumer = nil;
   [self.mediator disconnect];
-  [[NSNotificationCenter defaultCenter]
-     removeObserver:self
-               name:vBookmarkDataSourceDidChange
-             object:nil];
 }
 
 #pragma mark - VIEW CONTROLLER LIFECYCLE
@@ -191,6 +192,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
 -(void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
+
   // Refresh only the body if the sorting mode is changed by dragging
   BOOL refreshable = self.speedDialPositionModifiedFlag &&
                      self.bookmarks->loaded() &&
@@ -240,7 +242,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
     [UIColor colorNamed:vNTPSpeedDialContainerbackgroundColor];
   [self setUpHeaderView];
   [self setupSpeedDialView];
-  [self startObservingDataSourceChange];
+  [self setupEmptySpeedDialView];
 }
 
 /// Set up the header view
@@ -256,7 +258,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   NSDictionary* attributes = @{
     NSFontAttributeName :
-        [UIFont systemFontOfSize:vBodyFontSize]
+        [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
   };
 
   [appearance setTitleTextAttributes:attributes];
@@ -302,9 +304,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   // Add the top scroll menu menu container as subview on navigation bar
   [navBar addSubview:topScrollMenuContainer];
   [topScrollMenuContainer anchorTop: navBar.topAnchor
-                            leading: navBar.leadingAnchor
+                            leading: navBar.safeLeftAnchor
                              bottom: navBar.bottomAnchor
-                           trailing: navBar.trailingAnchor];
+                           trailing: navBar.safeRightAnchor];
 }
 
 /// Set up the speed dial view
@@ -325,6 +327,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   layout.minimumInteritemSpacing = 0;
   layout.minimumLineSpacing = 0;
   layout.sectionInset = UIEdgeInsetsZero;
+  layout.estimatedItemSize = UICollectionViewFlowLayoutAutomaticSize;
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
                          collectionViewLayout:layout];
@@ -345,6 +348,17 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   [bodyContainerView addSubview:_collectionView];
   [_collectionView fillSuperview];
+}
+
+-(void)setupEmptySpeedDialView {
+  // Empty speed dial view. Set its alpha to 0 initially. This will be
+  // toggled based on response from the mediator.
+  VivaldiSpeedDialEmptyView* emptySpeedDialView =
+    [VivaldiSpeedDialEmptyView new];
+  _emptySpeedDialView = emptySpeedDialView;
+  [self.view addSubview:emptySpeedDialView];
+  [emptySpeedDialView fillSuperview];
+  emptySpeedDialView.alpha = 0;
 }
 
 // Returns the context menu actions for speed dial sort button action
@@ -450,15 +464,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   [self.collectionView.collectionViewLayout invalidateLayout];
 }
 
-/// Set up observer to notify whenever the bookmark collection is modified
-- (void)startObservingDataSourceChange {
-  [[NSNotificationCenter defaultCenter]
-    addObserver:self
-       selector:@selector(didUpdateBookmarksCollection)
-           name:vBookmarkDataSourceDidChange
-         object:nil];
-}
-
 - (void)refreshTopMenuLayout {
   [self.view layoutIfNeeded];
   UINavigationBar* navBar = self.navigationController.navigationBar;
@@ -555,14 +560,20 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
 /// Returns current sorting mode
 - (SpeedDialSortingMode)currentSortingMode {
-  return [VivaldiSpeedDialPrefs
+  return [VivaldiStartPagePrefs
             getSDSortingModeWithPrefService:self.browserState->GetPrefs()];
 }
 
 /// Sets the user selected sorting mode on the prefs
 - (void)setCurrentSortingMode:(SpeedDialSortingMode)mode {
-  [VivaldiSpeedDialPrefs setSDSortingMode:mode
+  [VivaldiStartPagePrefs setSDSortingMode:mode
                            inPrefServices:self.browserState->GetPrefs()];
+}
+
+/// Returns current layout style for start page
+- (VivaldiStartPageLayoutStyle)currentLayoutStyle {
+  return [VivaldiStartPagePrefs
+          getStartPageLayoutStyleWithPrefService:self.browserState->GetPrefs()];
 }
 
 /// Refresh sort button context menu options
@@ -598,7 +609,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   VivaldiBookmarkAddEditFolderViewController* controller =
     [VivaldiBookmarkAddEditFolderViewController
        initWithBrowser: self.browser
-             bookmarks: self.bookmarks
                   item: item
                 parent: parent
              isEditing: isEditing
@@ -625,7 +635,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   VivaldiBookmarkAddEditURLViewController* controller =
     [VivaldiBookmarkAddEditURLViewController
      initWithBrowser: self.browser
-           bookmarks: self.bookmarks
                 item: item
               parent: parent
            isEditing: isEditing
@@ -641,6 +650,22 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                                           animated:YES
                                         completion:nil];
   self.bookmarkURLAddEditorController = controller;
+}
+
+- (void)showEmptySpeedDialView {
+  if (self.emptySpeedDialView.alpha == 1)
+    return;
+  self.emptySpeedDialView.alpha = 1;
+  [self.navigationController setNavigationBarHidden:YES
+                                           animated:YES];
+}
+
+- (void)hideEmptySpeedDialView {
+  if (self.emptySpeedDialView.alpha == 0)
+    return;
+  self.emptySpeedDialView.alpha = 0;
+  [self.navigationController setNavigationBarHidden:NO
+                                           animated:YES];
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
@@ -662,6 +687,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   [cell configureWith:childItems
                parent:parent
         faviconLoader:self.faviconLoader
+          layoutStyle:[self currentLayoutStyle]
     deviceOrientation:!self.isDevicePortrait];
   [cell setCurrentPage: index];
   return cell;
@@ -695,7 +721,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     [self.collectionView indexPathForItemAtPoint:center];
 
   if (currentIndexPath) {
-    [self.topScrollMenu selectItemWithIndex:currentIndexPath.row];
+    [self.topScrollMenu selectItemWithIndex:currentIndexPath.row animated:YES];
     [self setSelectedMenuItemIndex:currentIndexPath.row];
   }
 }
@@ -716,22 +742,44 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 }
 
 #pragma mark - SPEED DIAL HOME CONSUMER
+- (void)refreshContents {
+  [self.mediator computeSpeedDialFolders];
+}
 
 - (void)refreshMenuItems:(NSArray*)items {
-  if (!(items.count > 0))
+  if (items.count <= 0) {
+    [self.speedDialMenuItems removeAllObjects];
+    [self.topScrollMenu removeAllItems];
+    [self showEmptySpeedDialView];
     return;
+  }
+
+  [self hideEmptySpeedDialView];
   self.speedDialMenuItems = [[NSMutableArray alloc] initWithArray:items];
   [self.topScrollMenu setMenuItemsWithSDFolders:items
-                                selectedIndex:self.selectedMenuItemIndex];
+                                  selectedIndex:self.selectedMenuItemIndex];
 }
 
 - (void)refreshChildItems:(NSArray*)items {
+  BOOL refreshable =
+    self.speedDialMenuItems && self.speedDialMenuItems.count > 0;
+  if (!refreshable)
+    return;
+
   self.speedDialChildItems = [[NSMutableArray alloc] initWithArray:items];
+  [CATransaction begin];
+  [CATransaction setValue:(id)kCFBooleanTrue
+                   forKey:kCATransactionDisableActions];
   [self.collectionView performBatchUpdates:^{
     [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
   } completion: ^(BOOL finished){
     [self scrollToItemWithIndex:self.selectedMenuItemIndex];
+    [CATransaction commit];
   }];
+}
+
+- (void)reloadLayout {
+  [self.collectionView reloadData];
 }
 
 #pragma mark - TOP MENU DELEGATE
@@ -764,8 +812,10 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     self.speedDialViewController = controller;
   } else {
     // Pass it to delegate to open the URL.
+    BOOL captureSnapshot = item.thumbnail.length == 0;
     if (self.delegate)
-      [self.delegate didTapSpeedDialWithItem:item];
+      [self.delegate didTapSpeedDialWithItem:item
+                             captureSnapshot:captureSnapshot];
     [self.navigationController popToRootViewControllerAnimated:NO];
   }
 }
@@ -806,13 +856,6 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                          parent.parent,
                          parent.parent->children().size());
   }
-
-  // Notify the observers
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:vBookmarkDidMoveOutOfFolder
-                    object:self];
-
-  [self didUpdateBookmarksCollection];
 }
 
 - (void)didMoveItemByDragging:(VivaldiSpeedDialItem*)item
@@ -842,8 +885,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     std::set<const BookmarkNode*> nodes;
     nodes.insert(item.bookmarkNode);
     bookmark_utils_ios::DeleteBookmarks(nodes, self.bookmarks);
-
-    [self didUpdateBookmarksCollection];
+    [[NSFileManager defaultManager] removeThumbnailForSDItem:item];
   }
 }
 
@@ -864,12 +906,6 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 - (void)didCreateNewFolder:(const bookmarks::BookmarkNode*)folder {
   // No op here. The collection will be reloaded if anythings changes in the
   // bookmark model.
-}
-
-- (void)didUpdateBookmarksCollection {
-  // No parent item is passed while computing the children. Hencewhy this will
-  // compute all children of all speed dial folder and refresh the UI.
-  [self.mediator computeSpeedDialFolders];
 }
 
 #pragma mark - BOOKMARK MODEL OBSERVER

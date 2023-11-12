@@ -248,9 +248,46 @@
             }
           ]
         }
+      },
+      {
+        "name": "isOnScreenWithNotch",
+        "type": "function",
+        "description": "Returns true if the screen the window is on has a notch.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "isNotched",
+              "type": "boolean",
+              "description": "True if the screen the window is on has a notch."
+            }
+          ]
+        }
       }
     ],
     "events": [
+      {
+        "name": "onWindowDidChangeScreens",
+        "type": "function",
+        "description": "Fired when the window has changed screens include a parameter that says whether the new screen has a notch.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "hasNotch",
+            "description": "Screen has a notch (true) or without notch (false)."
+          }
+        ]
+      },
       {
         "name": "onStateChanged",
         "type": "function",

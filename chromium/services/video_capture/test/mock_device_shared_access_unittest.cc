@@ -55,7 +55,7 @@ class MockDeviceSharedAccessTest : public ::testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     service_device_factory_ = std::make_unique<DeviceFactoryMediaToMojoAdapter>(
         std::move(video_capture_system), base::DoNothing(),
-        base::ThreadTaskRunnerHandle::Get());
+        base::SingleThreadTaskRunner::GetCurrentDefault());
 #else
     service_device_factory_ = std::make_unique<DeviceFactoryMediaToMojoAdapter>(
         std::move(video_capture_system));
@@ -375,8 +375,7 @@ TEST_F(MockVideoCaptureDeviceSharedAccessTest,
   LetClient2ConnectWithRequestableSettings(
       false /*force_reopen_with_new_settings*/,
       mojom::CreatePushSubscriptionResultCode::NewErrorCode(
-          media::VideoCaptureError::
-              kVideoCaptureControllerInvalidOrUnsupportedVideoCaptureParametersRequested));
+          media::VideoCaptureError::kVideoCaptureSystemDeviceIdNotFound));
 }
 
 TEST_F(MockVideoCaptureDeviceSharedAccessTest,

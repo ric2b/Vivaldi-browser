@@ -46,8 +46,6 @@ std::vector<uint8_t> GetStringAsBytes(base::StringPiece contents) {
   return std::vector<uint8_t>(bytes.begin(), bytes.end());
 }
 
-}  // namespace
-
 TEST(WebBundleSignerTest, SignedWebBundleByteByByteComparison) {
   WebBundleBuilder builder;
   builder.AddExchange(
@@ -64,7 +62,9 @@ TEST(WebBundleSignerTest, SignedWebBundleByteByByteComparison) {
       {WebBundleSigner::KeyPair(kTestPublicKey, kTestPrivateKey)});
 
   std::vector<uint8_t> expected_bundle = GetStringAsBytes(GetTestFileContents(
-      base::FilePath(FILE_PATH_LITERAL("simple_b2_signed.wbn"))));
+      base::FilePath(FILE_PATH_LITERAL("simple_b2_signed.swbn"))));
   EXPECT_EQ(signed_bundle, expected_bundle);
 }
+
+}  // namespace
 }  // namespace web_package

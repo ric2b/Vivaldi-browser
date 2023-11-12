@@ -5,7 +5,6 @@
 #include "gpu/ipc/client/client_shared_image_interface.h"
 
 #include "build/build_config.h"
-#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/shared_image_interface_proxy.h"
 #include "ui/gfx/gpu_fence.h"
@@ -43,18 +42,14 @@ void ClientSharedImageInterface::PresentSwapChain(const SyncToken& sync_token,
 
 #if BUILDFLAG(IS_FUCHSIA)
 void ClientSharedImageInterface::RegisterSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id,
-    zx::channel token,
+    zx::eventpair service_handle,
+    zx::channel sysmem_token,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
-  proxy_->RegisterSysmemBufferCollection(id, std::move(token), format, usage,
+  proxy_->RegisterSysmemBufferCollection(std::move(service_handle),
+                                         std::move(sysmem_token), format, usage,
                                          register_with_image_pipe);
-}
-
-void ClientSharedImageInterface::ReleaseSysmemBufferCollection(
-    gfx::SysmemBufferCollectionId id) {
-  proxy_->ReleaseSysmemBufferCollection(id);
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
@@ -108,6 +103,21 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
   return AddMailbox(proxy_->CreateSharedImage(si_format, size, color_space,
                                               surface_origin, alpha_type, usage,
                                               pixel_data));
+}
+
+Mailbox ClientSharedImageInterface::CreateSharedImage(
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
+    uint32_t usage,
+    gfx::GpuMemoryBufferHandle buffer_handle) {
+  DCHECK(gpu::IsValidClientUsage(usage));
+  DCHECK(format.is_multi_plane());
+  return AddMailbox(proxy_->CreateSharedImage(format, size, color_space,
+                                              surface_origin, alpha_type, usage,
+                                              std::move(buffer_handle)));
 }
 
 Mailbox ClientSharedImageInterface::CreateSharedImage(

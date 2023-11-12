@@ -9,19 +9,25 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/desks/desks_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/scoped_observation.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/multitask_menu/float_controller_base.h"
-#include "ui/aura/window.h"
-#include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
+
+namespace views {
+class Widget;
+}  // namespace views
 
 namespace ash {
 
+class Shell;
+class TabletModeController;
 class WorkspaceEventHandler;
 
 // This controller allows windows to be on top of all app windows, but below
@@ -48,11 +54,11 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   FloatController& operator=(const FloatController&) = delete;
   ~FloatController() override;
 
-  // Returns float window bounds in clamshell mode.
+  // Returns float window bounds in clamshell mode in root window coordinates.
   static gfx::Rect GetPreferredFloatWindowClamshellBounds(aura::Window* window);
 
   // Gets the ideal float bounds of `floated_window` in tablet mode if it were
-  // to be floated.
+  // to be floated, in root window coordinates.
   gfx::Rect GetPreferredFloatWindowTabletBounds(
       aura::Window* floated_window) const;
 
@@ -74,10 +80,11 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   // desk logic to use only `active_floated_window_`.
   // Called by the resizer when a drag is completed by a fling or swipe gesture
   // event. Updates the magnetism of the window and then tucks the window
-  // offscreen. `left` and `up` are used to determine the direction of the fling
-  // or swipe gesture.
+  // offscreen. If set, `left` and `up` are used to determine the direction
+  // of the fling or swipe gesture. If `left` is empty then there is no
+  // horizontal fling/swipe component.
   void OnFlingOrSwipeForTablet(aura::Window* floated_window,
-                               bool left,
+                               absl::optional<bool> left,
                                bool up);
 
   // Returns the desk where floated window belongs to if window is floated and
@@ -94,33 +101,26 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   // `target_desk` has a floated window.
   void OnMovingAllWindowsOutToDesk(Desk* original_desk, Desk* target_desk);
 
-  // Called when moving the `floated_window` to `target_desk`. This function
-  // takes care of floated window since it doesn't belong to the desk container.
-  // Note: Unlike `OnMovingAllWindowsOutToDesk` above, if `target_desk` has a
-  // floated window, it will be unfloated, while `floated_window` remains
-  // floated.
-  // Note: When dragging `floated_window` to a different display, we need to map
-  // `floated_window` to the desk container with same ID on target display's
-  // root.
+  // Called when moving the `floated_window` from `active_desk` to
+  // `target_desk`. This function takes care of floated window since it doesn't
+  // belong to the desk container. Note: Unlike `OnMovingAllWindowsOutToDesk`
+  // above, if `target_desk` has a floated window, it will be unfloated, while
+  // `floated_window` remains floated. Note: When dragging `floated_window` to a
+  // different display, we need to map `floated_window` to the desk container
+  // with same ID on target display's root.
   void OnMovingFloatedWindowToDesk(aura::Window* floated_window,
+                                   Desk* active_desk,
                                    Desk* target_desk,
                                    aura::Window* target_root);
 
   // TabletModeObserver:
-  void OnTabletModeStarting() override;
+  void OnTabletModeStarted() override;
   void OnTabletModeEnding() override;
   void OnTabletControllerDestroyed() override;
 
   // DesksController::Observer:
-  void OnDeskAdded(const Desk* desk) override {}
-  void OnDeskRemoved(const Desk* desk) override {}
-  void OnDeskReordered(int old_index, int new_index) override {}
   void OnDeskActivationChanged(const Desk* activated,
                                const Desk* deactivated) override;
-  void OnDeskSwitchAnimationLaunching() override {}
-  void OnDeskSwitchAnimationFinished() override {}
-  void OnDeskNameChanged(const Desk* desk,
-                         const std::u16string& new_name) override {}
 
   // display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -136,11 +136,12 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
 
  private:
   class FloatedWindowInfo;
-  class ScopedWindowTucker;
-  class TuckHandle;
   friend class DefaultState;
   friend class TabletModeWindowState;
   friend class WindowFloatTest;
+  FRIEND_TEST_ALL_PREFIXES(WindowFloatMetricsTest, FloatWindowCountPerSession);
+  FRIEND_TEST_ALL_PREFIXES(WindowFloatMetricsTest,
+                           FloatWindowMovedToAnotherDeskCountPerSession);
 
   // Calls `FloatImpl()` and additionally updates the magnetism if needed.
   void FloatForTablet(aura::Window* window,
@@ -177,6 +178,13 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   base::flat_map<aura::Window*, std::unique_ptr<WorkspaceEventHandler>>
       workspace_event_handlers_;
 
+  // Float window counter within a session, used for
+  // `kFloatWindowCountsPerSessionHistogramName`.
+  int floated_window_counter_ = 0;
+  // Counts of how many floated window are moved to another desk within a
+  // session. `kFloatWindowMoveToAnotherDeskCountsHistogramName`
+  int floated_window_move_to_another_desk_counter_ = 0;
+
   base::ScopedObservation<TabletModeController, TabletModeObserver>
       tablet_mode_observation_{this};
 
@@ -184,11 +192,7 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
       desks_controller_observation_{this};
 
   absl::optional<display::ScopedOptionalDisplayObserver> display_observer_;
-  base::ScopedObservation<Shell,
-                          ShellObserver,
-                          &Shell::AddShellObserver,
-                          &Shell::RemoveShellObserver>
-      shell_observation_{this};
+  base::ScopedObservation<Shell, ShellObserver> shell_observation_{this};
 };
 
 }  // namespace ash

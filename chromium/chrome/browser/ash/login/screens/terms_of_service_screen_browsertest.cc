@@ -32,10 +32,11 @@
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
-#include "chrome/browser/ui/webui/chromeos/login/sync_consent_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/family_link_notice_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/terms_of_service_screen_handler.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "components/policy/core/common/cloud/test/policy_builder.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -53,8 +54,6 @@ namespace em = ::enterprise_management;
 using ::net::test_server::BasicHttpResponse;
 using ::net::test_server::HttpRequest;
 using ::net::test_server::HttpResponse;
-using ::testing::_;
-using ::testing::InvokeWithoutArgs;
 
 const char kAccountId[] = "dla@example.com";
 const char kDisplayName[] = "display name";
@@ -102,7 +101,7 @@ class PublicSessionTosScreenTest : public OobeBaseTest {
 
     // Prevent browser start in user session so that we do not need to wait
     // for its initialization.
-    ash::test::UserSessionManagerTestApi(ash::UserSessionManager::GetInstance())
+    test::UserSessionManagerTestApi(UserSessionManager::GetInstance())
         .SetShouldLaunchBrowserInTests(false);
   }
 
@@ -497,7 +496,7 @@ enum class PendingScreen { kEmpty, kTermsOfService, kSyncConsent };
 OobeScreenId PendingScreenToId(PendingScreen pending_screen) {
   switch (pending_screen) {
     case PendingScreen::kEmpty:
-      return ash::OOBE_SCREEN_UNKNOWN;
+      return OOBE_SCREEN_UNKNOWN;
     case PendingScreen::kTermsOfService:
       return TermsOfServiceScreenView::kScreenId;
     case PendingScreen::kSyncConsent:
@@ -567,7 +566,7 @@ IN_PROC_BROWSER_TEST_P(ManagedUserTosOnboardingResumeTest, ResumeOnboarding) {
       EnsurePendingScreenIsEmpty();
       EXPECT_EQ(WizardController::default_controller()
                     ->get_screen_after_managed_tos_for_testing(),
-                ash::OOBE_SCREEN_UNKNOWN);
+                OOBE_SCREEN_UNKNOWN);
       test::WaitForPrimaryUserSessionStart();
       break;
     case PendingScreen::kTermsOfService:

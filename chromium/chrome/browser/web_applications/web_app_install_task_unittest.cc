@@ -14,7 +14,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -72,7 +71,7 @@
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_app_instance.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 #include "components/arc/test/fake_intent_helper_host.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #endif
@@ -85,8 +84,6 @@ class WebAppInstallTaskTest : public WebAppTest {
     WebAppTest::SetUp();
 
     provider_ = web_app::FakeWebAppProvider::Get(profile());
-    provider_->SetDefaultFakeSubsystems();
-
     auto install_manager = std::make_unique<WebAppInstallManager>(profile());
     install_manager_ = install_manager.get();
     provider_->SetInstallManager(std::move(install_manager));
@@ -297,7 +294,7 @@ class WebAppInstallTaskTest : public WebAppTest {
   WebAppInstallTask& install_task() { return *install_task_; }
   FakeWebAppProvider& provider() { return *provider_; }
 
-  WebAppRegistrar& registrar() { return provider().registrar(); }
+  WebAppRegistrar& registrar() { return provider().registrar_unsafe(); }
   FakeOsIntegrationManager& fake_os_integration_manager() {
     return static_cast<FakeOsIntegrationManager&>(
         provider().os_integration_manager());

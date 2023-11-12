@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/feature_list.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 
 #include "build/build_config.h"
@@ -76,7 +77,15 @@ views::View* GetView(Browser* browser, int view_id) {
 
 class PageInfoBubbleViewDialogBrowserTest : public DialogBrowserTest {
  public:
-  PageInfoBubbleViewDialogBrowserTest() = default;
+  PageInfoBubbleViewDialogBrowserTest() {
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched. Disable features for the new version of "Cookies in use"
+    // dialog. The new UI is covered by
+    // PageInfoBubbleViewCookiesSubpageBrowserTest.
+    feature_list_.InitWithFeatures({}, {page_info::kPageSpecificSiteDataDialog,
+                                        page_info::kPageInfoCookiesSubpage});
+  }
+
   PageInfoBubbleViewDialogBrowserTest(
       const PageInfoBubbleViewDialogBrowserTest& test) = delete;
   PageInfoBubbleViewDialogBrowserTest& operator=(
@@ -305,6 +314,7 @@ class PageInfoBubbleViewDialogBrowserTest : public DialogBrowserTest {
 
  private:
   std::vector<PageInfoViewFactory::PageInfoViewID> expected_identifiers_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Shows the Page Info bubble for a HTTP page (specifically, about:blank).
@@ -442,9 +452,12 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
     : public DialogBrowserTest {
  public:
   PageInfoBubbleViewAboutThisSiteDialogBrowserTest() {
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched.
     feature_list_.InitWithFeatures({page_info::kPageInfoAboutThisSiteEn,
                                     page_info::kPageInfoAboutThisSiteNonEn},
-                                   {});
+                                   {page_info::kPageSpecificSiteDataDialog,
+                                    page_info::kPageInfoCookiesSubpage});
   }
 
   void SetUpOnMainThread() override {
@@ -465,6 +478,9 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
     description->set_name("Example");
     description->mutable_source()->set_url("https://example.com");
     description->mutable_source()->set_label("Example source");
+
+    auto* more_about = site_info->mutable_more_about();
+    more_about->set_url("https://example.com/moreinfo");
 
     optimization_metadata.SetAnyMetadataForTesting(metadata);
 
@@ -533,6 +549,9 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDialogBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDialogBrowserTest,
                        InvokeUi_AboutThisSiteSubpage) {
+  // The subpage only exists in the old UI.
+  if (base::FeatureList::IsEnabled(page_info::kPageInfoAboutThisSiteMoreInfo))
+    return;
   ShowAndVerifyUi();
 }
 
@@ -540,8 +559,11 @@ class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
     : public DialogBrowserTest {
  public:
   PageInfoBubbleViewPrivacySandboxDialogBrowserTest() {
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched.
     feature_list_.InitWithFeatures({privacy_sandbox::kPrivacySandboxSettings3},
-                                   {});
+                                   {page_info::kPageSpecificSiteDataDialog,
+                                    page_info::kPageInfoCookiesSubpage});
   }
 
   void SetUpOnMainThread() override {
@@ -615,7 +637,11 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
 class PageInfoBubbleViewHistoryDialogBrowserTest : public DialogBrowserTest {
  public:
   PageInfoBubbleViewHistoryDialogBrowserTest() {
-    feature_list_.InitWithFeatures({page_info::kPageInfoHistoryDesktop}, {});
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched.
+    feature_list_.InitWithFeatures({page_info::kPageInfoHistoryDesktop},
+                                   {page_info::kPageSpecificSiteDataDialog,
+                                    page_info::kPageInfoCookiesSubpage});
   }
 
   void SetUpOnMainThread() override {
@@ -668,7 +694,8 @@ class PageInfoBubbleViewCookiesSubpageBrowserTest : public DialogBrowserTest {
  public:
   PageInfoBubbleViewCookiesSubpageBrowserTest() {
     feature_list_.InitWithFeatures(
-        {page_info::kPageInfoCookiesSubpage,
+        {page_info::kPageSpecificSiteDataDialog,
+         page_info::kPageInfoCookiesSubpage,
          privacy_sandbox::kPrivacySandboxFirstPartySetsUI},
         {});
   }
@@ -819,6 +846,13 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewCookiesSubpageBrowserTest,
 
 class PageInfoBubbleViewIsolatedWebAppBrowserTest : public DialogBrowserTest {
  public:
+  PageInfoBubbleViewIsolatedWebAppBrowserTest() {
+    // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
+    // launched.
+    feature_list_.InitWithFeatures({}, {page_info::kPageSpecificSiteDataDialog,
+                                        page_info::kPageInfoCookiesSubpage});
+  }
+
   void SetUpOnMainThread() override {
     https_server_.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
     https_server_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());

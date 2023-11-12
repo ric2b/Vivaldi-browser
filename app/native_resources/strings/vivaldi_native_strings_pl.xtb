@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Przeładuj obraz</translation>
 <translation id="1924750141060565109">Krajobraz 15</translation>
 <translation id="19598411548897379">Ogólny</translation>
+<translation id="1973351931613083086">autoodtwarzanie</translation>
 <translation id="1985669426322966465">Aktualizacja oprogramowania</translation>
 <translation id="2079036669923635404">Kliknij tutaj, aby zaktualizować Vivaldi do wersji <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Wystąpił błąd podczas pobierania plików aktualizacji. Sprawdź połączenie internetowe i spróbuj ponownie później.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Kosz</translation>
 <translation id="292258461174562431">Potwór 4</translation>
 <translation id="2923448633003185837">Wklej i przejdź</translation>
+<translation id="2953943267837858202">Nie zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="2977472760057091832">Otwórz link w oknie prywatnym</translation>
 <translation id="2989805286512600854">Otwórz w nowej karcie</translation>
 <translation id="3027988479108856431">Niestety, twoje ustawienia Yandex nie są dostępne podczas korzystania z przeglądarki. Aby zaimportować te ustawienia, zapisz swoją pracę i zamknij wszystkie okna przeglądarki Yandex. Następnie naciśnij Dalej, aby kontynuować.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Nowa zakładka</translation>
 <translation id="3255747772218936245">Zainstaluj aktualizację</translation>
 <translation id="3259769196742189631">Sprawdź poprawność kodu źródłowego</translation>
+<translation id="3291915639428159043">Autoodtwarzanie zablokowane</translation>
 <translation id="3302905971452834934">Potwór 1</translation>
 <translation id="3334610655141903168">(brak tytułu)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> jest obecnie najnowszą dostępną wersją.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Otwórz link w nowym oknie</translation>
 <translation id="3588820906588687999">Otwórz obraz w nowej karcie</translation>
 <translation id="3601066750251199488">Potwór 3</translation>
+<translation id="3620979700683094848">Strony mogą automatycznie odtwarzać pliki wideo</translation>
 <translation id="3680031241659195730">Dostępna jest nowa wersja przeglądarki Vivaldi!</translation>
 <translation id="3708982624815781692">Pobieranie zostało anulowane.</translation>
 <translation id="3732157130969736834">Dodaj link do zakładek</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Nie pokazuj ponownie</translation>
 <translation id="4074744496918018786">Otwórz obraz w oknie prywatnym</translation>
+<translation id="410351446219883937">Autoodtwarzanie</translation>
 <translation id="4324492550286218827">Krajobraz 2</translation>
 <translation id="4406101500523955324">Otwórz w nowym oknie prywatnym</translation>
 <translation id="4420816922321010053">Czy na pewno chcesz zamknąć przeglądarkę Vivaldi?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Wytnij</translation>
 <translation id="7727481996062361502">Weryfikowanie aktualizacji...</translation>
 <translation id="7793738202466490491">Dodaj jako wydarzenie kalendarza</translation>
+<translation id="7834693436815575883">Zezwalaj na autoodtwarzanie</translation>
 <translation id="7848222781052558334">Nie udało się zweryfikować podpisu cyfrowego pobranych plików.</translation>
 <translation id="7865983598101744945">Potwierdź zamknięcie</translation>
 <translation id="7957213167373139414">Mój kalendarz</translation>
 <translation id="8027581147000338959">Otwórz w nowym oknie</translation>
+<translation id="8044382196220116469">Nie pozwalaj stroną na automatyczne odtwarzanie plików wideo</translation>
 <translation id="8099620695029051217">Kopiuj adres strony</translation>
 <translation id="8197810018650377191">Dodaj zakładkę</translation>
 <translation id="8261506727792406068">Usuń</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Zbadaj portal-document</translation>
 <translation id="8768970203213061953">Krajobraz 14</translation>
 <translation id="8773635261052182196">Nie będziesz już widzieć tych powiadomień. Możesz je ponownie aktywować z poziomu ustawień Vivaldi.</translation>
+<translation id="8774017153185436870">Strony mogą automatycznie odtwarzać pliki wideo</translation>
 <translation id="8813277370772331957">Przypomnij mi później</translation>
 <translation id="8894900864683381599">Dodaj link jako panel www</translation>
 <translation id="8912720443398351457">Czy na pewno chcesz zamknąć przeglądarkę Vivaldi?</translation>
 <translation id="8947109330183116400">Wybierz plik HTML z zakładkami</translation>
 <translation id="9017566390391482291">Wybierz folder profilu przeglądarki Vivaldi, z którego chcesz zaimportować dane</translation>
 <translation id="9048058608784130603">Oczekująca aktualizacja <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="9065203028668620118">Edytuj</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Otwórz obraz jako <ph name="USER" /></translation>

@@ -16,7 +16,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/app_restore/app_launch_handler.h"
 #include "chrome/browser/ash/app_restore/app_restore_arc_task_handler.h"
-#include "chrome/browser/ash/app_restore/arc_app_launch_handler.h"
+#include "chrome/browser/ash/app_restore/arc_app_queue_restore_handler.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/desks/chrome_desks_util.h"
@@ -67,7 +67,7 @@ DesksTemplatesAppLaunchHandler::~DesksTemplatesAppLaunchHandler() {
     if (auto* arc_task_handler =
             ash::app_restore::AppRestoreArcTaskHandler::GetForProfile(
                 profile())) {
-      arc_task_handler->ClearDeskTemplateArcAppLaunchHandler(launch_id_);
+      arc_task_handler->ClearDeskTemplateArcAppQueueRestoreHandler(launch_id_);
     }
   }
 }
@@ -120,8 +120,9 @@ bool DesksTemplatesAppLaunchHandler::ShouldLaunchSystemWebAppOrChromeApp(
     absl::optional<ash::SystemWebAppType> swa_type =
         ash::GetSystemWebAppTypeForAppId(profile(), app_id);
     if (swa_type.has_value()) {
-      auto* system_app =
-          ash::SystemWebAppManager::Get(profile())->GetSystemApp(*swa_type);
+      auto* swa_manager = ash::SystemWebAppManager::Get(profile());
+      DCHECK(swa_manager);
+      auto* system_app = swa_manager->GetSystemApp(*swa_type);
       DCHECK(system_app);
       is_multi_instance_window = system_app->ShouldShowNewWindowMenuOption();
     }
@@ -140,7 +141,7 @@ bool DesksTemplatesAppLaunchHandler::ShouldLaunchSystemWebAppOrChromeApp(
     return true;
 
   const bool should_launch =
-      ash::DesksController::Get()->OnSingleInstanceAppLaunchingFromTemplate(
+      ash::DesksController::Get()->OnSingleInstanceAppLaunchingFromSavedDesk(
           app_id, launch_list);
 
   // Notify performance tracker that some tracked windows will be moving.
@@ -266,7 +267,7 @@ void DesksTemplatesAppLaunchHandler::MaybeLaunchArcApps() {
   for (const std::string& app_id : app_ids) {
     auto it = app_id_to_launch_list.find(app_id);
     DCHECK(it != app_id_to_launch_list.end());
-    if (!ash::DesksController::Get()->OnSingleInstanceAppLaunchingFromTemplate(
+    if (!ash::DesksController::Get()->OnSingleInstanceAppLaunchingFromSavedDesk(
             app_id, it->second)) {
       for (auto& window : it->second)
         NotifyMovedSingleInstanceApp(window.first);
@@ -280,7 +281,8 @@ void DesksTemplatesAppLaunchHandler::MaybeLaunchArcApps() {
     return;
 
   if (auto* launch_handler =
-          arc_task_handler->GetDeskTemplateArcAppLaunchHandler(launch_id_)) {
+          arc_task_handler->GetDeskTemplateArcAppQueueRestoreHandler(
+              launch_id_)) {
     launch_handler->set_desk_template_launch_id(launch_id_);
     launch_handler->RestoreArcApps(this);
   }

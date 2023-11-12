@@ -12,7 +12,7 @@
 #include "chrome/browser/password_check/android/jni_headers/PasswordCheckBridge_jni.h"
 #include "chrome/browser/password_manager/android/password_checkup_launcher_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "url/android/gurl_android.h"
@@ -123,8 +123,7 @@ void PasswordCheckBridge::GetCompromisedCredentials(
         base::android::ConvertUTF8ToJavaString(env, credential.package_name),
         credential.GetLastLeakedOrPhishedTime().ToJavaTime(),
         credential.last_used_time.ToJavaTime(), IsOnlyLeaked(credential),
-        IsOnlyPhished(credential), credential.has_startable_script,
-        credential.has_auto_change_button);
+        IsOnlyPhished(credential));
   }
 }
 
@@ -167,14 +166,6 @@ void PasswordCheckBridge::RemoveCredential(
 void PasswordCheckBridge::Destroy(JNIEnv* env) {
   check_manager_.StopCheck();
   delete this;
-}
-
-bool PasswordCheckBridge::AreScriptsRefreshed(JNIEnv* env) const {
-  return check_manager_.AreScriptsRefreshed();
-}
-
-void PasswordCheckBridge::RefreshScripts(JNIEnv* env) {
-  check_manager_.RefreshScripts();
 }
 
 void PasswordCheckBridge::OnSavedPasswordsFetched(int count) {

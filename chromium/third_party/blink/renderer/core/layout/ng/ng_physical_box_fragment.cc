@@ -102,9 +102,11 @@ NGContainingBlock<PhysicalOffset> PhysicalContainingBlock(
   return NGContainingBlock<PhysicalOffset>(
       containing_block.Offset().ConvertToPhysical(
           builder->Style().GetWritingDirection(), outer_size, inner_size),
-      containing_block.RelativeOffset().ConvertToPhysical(
-          builder->Style().GetWritingDirection(), outer_size, inner_size),
-      containing_block.Fragment(), containing_block.IsInsideColumnSpanner(),
+      RelativeInsetToPhysical(containing_block.RelativeOffset(),
+                              builder->Style().GetWritingDirection()),
+      containing_block.Fragment(),
+      containing_block.ClippedContainerBlockOffset(),
+      containing_block.IsInsideColumnSpanner(),
       containing_block.RequiresContentBeforeBreaking());
 }
 
@@ -157,7 +159,8 @@ const NGPhysicalBoxFragment* NGPhysicalBoxFragment::Create(
             writing_direction);
     NGLayoutOverflowCalculator calculator(
         To<NGBlockNode>(builder->node_),
-        /* is_css_box */ !builder->IsFragmentainerBoxType(), borders, scrollbar,
+        /* is_css_box */ !builder->IsFragmentainerBoxType(),
+        builder->ConstraintSpace().HasBlockFragmentation(), borders, scrollbar,
         padding, physical_size, writing_direction);
 
     if (NGFragmentItemsBuilder* items_builder = builder->ItemsBuilder()) {
@@ -695,8 +698,11 @@ const NGPhysicalBoxFragment* NGPhysicalBoxFragment::PostLayout() const {
 
   const auto* layout_object = GetSelfOrContainerLayoutObject();
   if (UNLIKELY(!layout_object)) {
-    NOTREACHED();
-    return nullptr;
+    // In some cases the layout object may have been removed. This can of course
+    // not happen if we have actually performed layout, but we may in some cases
+    // clone a fragment *before* layout, to ensure that the fragment tree spine
+    // is correctly rebuilt after a subtree layout.
+    return this;
   }
   const auto* box = DynamicTo<LayoutBox>(layout_object);
   if (UNLIKELY(!box)) {
@@ -1831,10 +1837,15 @@ void NGPhysicalBoxFragment::CheckIntegrity() const {
       has_inflow_blocks = true;
   }
 
-  // If we have line boxes, |IsInlineFormattingContext()| is true, but the
-  // reverse is not always true.
-  if (has_line_boxes || has_inlines)
-    DCHECK(IsInlineFormattingContext());
+  // The below IFC check is skipped for LayoutMedia, which can have both of
+  // block children and inline children. See crbug.com/1379779.
+  if (!RuntimeEnabledFeatures::LayoutMediaNGContainerEnabled() ||
+      !layout_object_->IsMedia()) {
+    // If we have line boxes, |IsInlineFormattingContext()| is true, but the
+    // reverse is not always true.
+    if (has_line_boxes || has_inlines)
+      DCHECK(IsInlineFormattingContext());
+  }
 
   // If display-locked, we may not have any children.
   DCHECK(layout_object_);

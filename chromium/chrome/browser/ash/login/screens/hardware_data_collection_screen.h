@@ -7,12 +7,13 @@
 
 #include <string>
 
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/hardware_data_collection_screen_handler.h"
 
 namespace ash {
+
+class HWDataCollectionView;
 
 // Representation independent class that controls OOBE screen showing HW data
 // collection notice to users.
@@ -52,11 +53,5 @@ class HWDataCollectionScreen : public BaseScreen {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::HWDataCollectionScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_SCREENS_HARDWARE_DATA_COLLECTION_SCREEN_H_

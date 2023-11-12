@@ -53,7 +53,6 @@
 #include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
-#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -61,6 +60,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/layout/anchor_scroll_data.h"
 #include "third_party/blink/renderer/core/layout/fragmentainer_iterator.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
@@ -92,6 +92,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/reference_clip_path_operation.h"
 #include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
@@ -99,14 +100,15 @@
 #include "third_party/blink/renderer/platform/graphics/filters/filter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace blink {
 
@@ -291,6 +293,8 @@ const PaintLayer* PaintLayer::ContainingScrollContainerLayer(
 void PaintLayer::UpdateLayerPositionsAfterLayout() {
   DCHECK(IsRootLayer());
 
+  SCOPED_BLINK_UMA_HISTOGRAM_TIMER_HIGHRES(
+      "Blink.Layout.UpdateLayerPositionsAfterLayout");
   TRACE_EVENT0("blink,benchmark",
                "PaintLayer::updateLayerPositionsAfterLayout");
   RUNTIME_CALL_TIMER_SCOPE(
@@ -310,30 +314,6 @@ void PaintLayer::UpdateLayerPositionRecursive() {
     UpdateLayerPosition();
   }
 
-  if (LayoutBox* box = DynamicTo<LayoutBox>(GetLayoutObject());
-      box && box->AnchorScrollContainer()) {
-    LayoutBox::AnchorScrollData anchor_scroll_data =
-        box->ComputeAnchorScrollData();
-    DCHECK(anchor_scroll_data.inner_most_scroll_container_layer);
-
-    bool needs_paint_property_update = false;
-    for (const PaintLayer* scroller_layer =
-             anchor_scroll_data.inner_most_scroll_container_layer;
-         ; scroller_layer = scroller_layer->ContainingScrollContainerLayer()) {
-      DCHECK(scroller_layer);
-      bool is_new_entry =
-          scroller_layer->GetScrollableArea()->AddAnchorPositionedLayer(this);
-      if (!is_new_entry)
-        break;
-      needs_paint_property_update = true;
-      if (scroller_layer ==
-          anchor_scroll_data.outer_most_scroll_container_layer)
-        break;
-    }
-    if (needs_paint_property_update)
-      box->SetNeedsPaintPropertyUpdate();
-  }
-
   // Display-locked elements always have a PaintLayer, meaning that the
   // PaintLayer traversal won't skip locked elements. Thus, we don't have to do
   // an ancestor check, and simply skip iterating children when this element is
@@ -345,8 +325,8 @@ void PaintLayer::UpdateLayerPositionRecursive() {
     child->UpdateLayerPositionRecursive();
 }
 
-void PaintLayer::UpdateTransformationMatrix() {
-  if (TransformationMatrix* transform = Transform()) {
+void PaintLayer::UpdateTransform() {
+  if (gfx::Transform* transform = Transform()) {
     LayoutBox* box = GetLayoutBox();
     DCHECK(box);
     transform->MakeIdentity();
@@ -355,13 +335,12 @@ void PaintLayer::UpdateTransformationMatrix() {
         ComputedStyle::kIncludeTransformOrigin,
         ComputedStyle::kIncludeMotionPath,
         ComputedStyle::kIncludeIndependentTransformProperties);
-    if (!box->GetDocument().GetSettings()->GetAcceleratedCompositingEnabled())
-      transform->MakeAffine();
   }
 }
 
-void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
-                                 const ComputedStyle& new_style) {
+void PaintLayer::UpdateTransformAfterStyleChange(
+    const ComputedStyle* old_style,
+    const ComputedStyle& new_style) {
   // It's possible for the old and new style transform data to be equivalent
   // while HasTransform() differs, as it checks a number of conditions aside
   // from just the matrix, including but not limited to animation state.
@@ -375,12 +354,12 @@ void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
 
   if (has_transform != had_transform) {
     if (has_transform)
-      EnsureRareData().transform = std::make_unique<TransformationMatrix>();
+      EnsureRareData().transform = std::make_unique<gfx::Transform>();
     else
       rare_data_->transform.reset();
   }
 
-  UpdateTransformationMatrix();
+  UpdateTransform();
 
   if (had_3d_transform != Has3DTransform())
     MarkAncestorChainForFlagsUpdate();
@@ -389,10 +368,10 @@ void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
     frame_view->SetNeedsUpdateGeometries();
 }
 
-TransformationMatrix PaintLayer::CurrentTransform() const {
-  if (TransformationMatrix* transform = Transform())
+gfx::Transform PaintLayer::CurrentTransform() const {
+  if (gfx::Transform* transform = Transform())
     return *transform;
-  return TransformationMatrix();
+  return gfx::Transform();
 }
 
 void PaintLayer::ConvertFromFlowThreadToVisualBoundingBoxInAncestor(
@@ -577,8 +556,14 @@ void PaintLayer::UpdateDescendantDependentFlags() {
       PhysicalRect old_visual_rect =
           PhysicalVisualOverflowRectAllowingUnset(GetLayoutObject());
       GetLayoutObject().RecalcVisualOverflow();
-      if (old_visual_rect != GetLayoutObject().PhysicalVisualOverflowRect())
+      if (old_visual_rect != GetLayoutObject().PhysicalVisualOverflowRect()) {
         MarkAncestorChainForFlagsUpdate(kDoesNotNeedDescendantDependentUpdate);
+      }
+    }
+    if (base::FeatureList::IsEnabled(features::kFastPathPaintPropertyUpdates)) {
+      GetLayoutObject().InvalidateIntersectionObserverCachedRects();
+      GetLayoutObject().GetFrameView()->SetIntersectionObservationState(
+          LocalFrameView::kDesired);
     }
     needs_visual_overflow_recalc_ = false;
   }
@@ -817,7 +802,6 @@ void PaintLayer::ScrollContainerStatusChanged() {
   for (auto* layer = this; layer; layer = layer->Parent()) {
     if (auto* scrollable_area = layer->GetScrollableArea()) {
       scrollable_area->InvalidateAllStickyConstraints();
-      scrollable_area->InvalidateAllAnchorPositionedLayers();
     }
   }
 
@@ -833,7 +817,15 @@ void PaintLayer::SetNeedsVisualOverflowRecalc() {
   GetLayoutObject().InvalidateVisualOverflow();
 #endif
   needs_visual_overflow_recalc_ = true;
-  MarkAncestorChainForFlagsUpdate();
+  // |MarkAncestorChainForFlagsUpdate| will cause a paint property update which
+  // is only needed if visual overflow actually changes. To avoid this, only
+  // mark this as needing a descendant dependent flags update, which will
+  // cause a paint property update if needed (see:
+  // PaintLayer::UpdateDescendantDependentFlags).
+  if (base::FeatureList::IsEnabled(features::kFastPathPaintPropertyUpdates))
+    SetNeedsDescendantDependentFlagsUpdate();
+  else
+    MarkAncestorChainForFlagsUpdate();
 }
 
 bool PaintLayer::HasNonIsolatedDescendantWithBlendMode() const {
@@ -893,10 +885,7 @@ void PaintLayer::AddChild(PaintLayer* child, PaintLayer* before_child) {
     child->SetNeedsRepaint();
 
   if (child->NeedsCullRectUpdate()) {
-    if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled())
-      SetDescendantNeedsCullRectUpdate();
-    else
-      MarkCompositingContainerChainForNeedsCullRectUpdate();
+    SetDescendantNeedsCullRectUpdate();
   } else {
     child->SetNeedsCullRectUpdate();
   }
@@ -929,7 +918,7 @@ void PaintLayer::RemoveChild(PaintLayer* old_child) {
             .HasStickyConstrainedPosition()) {
       if (const auto* scroll_container =
               old_child->ContainingScrollContainerLayer()) {
-        scroll_container->GetScrollableArea()->RemoveStickyLayer(old_child);
+        scroll_container->GetScrollableArea()->InvalidateAllStickyConstraints();
       }
     }
   }
@@ -1058,8 +1047,8 @@ static inline const PaintLayer* AccumulateOffsetTowardsAncestor(
   } else if (layer->GetLayoutObject().IsInFlowPositioned()) {
     location += layer->GetLayoutObject().OffsetForInFlowPosition();
   } else if (layer->GetLayoutObject().IsBox() &&
-             layer->GetLayoutBox()->AnchorScrollObject()) {
-    location += layer->GetLayoutBox()->ComputeAnchorScrollOffset();
+             layer->GetLayoutBox()->HasAnchorScrollTranslation()) {
+    location += layer->GetLayoutBox()->AnchorScrollTranslationOffset();
   }
   location -=
       PhysicalOffset(containing_layer->PixelSnappedScrolledContentOffset());
@@ -1381,7 +1370,7 @@ bool PaintLayer::IsInTopLayer() const {
 // points.
 static double ComputeZOffset(const HitTestingTransformState& transform_state) {
   // We got an affine transform, so no z-offset
-  if (transform_state.AccumulatedTransform().IsAffine())
+  if (transform_state.AccumulatedTransform().Is2dTransform())
     return 0;
 
   // Flatten the point into the target plane
@@ -1551,13 +1540,11 @@ PaintLayer* PaintLayer::HitTestLayer(
   // TODO(vmpstr): We need to add a simple document flag which says whether
   // there is an ongoing transition, since this may be too heavy of a check for
   // each hit test.
-  if (auto* supplement = DocumentTransitionSupplement::FromIfExists(
+  if (auto* transition = ViewTransitionUtils::GetActiveTransition(
           layout_object.GetDocument())) {
     // This means that the contents of the object are drawn elsewhere.
-    if (supplement->GetTransition()->IsRepresentedViaPseudoElements(
-            layout_object)) {
+    if (transition->IsRepresentedViaPseudoElements(layout_object))
       return nullptr;
-    }
   }
 
   ShouldRespectOverflowClipType clip_behavior = kRespectOverflowClip;
@@ -1666,15 +1653,13 @@ PaintLayer* PaintLayer::HitTestLayer(
   }
 
   // Check for hit test on backface if backface-visibility is 'hidden'
-  if (local_transform_state && layout_object.StyleRef().BackfaceVisibility() ==
-                                   EBackfaceVisibility::kHidden) {
-    STACK_UNINITIALIZED TransformationMatrix inverted_matrix =
-        local_transform_state->AccumulatedTransform().Inverse();
-    // If the z-vector of the matrix is negative, the back is facing towards the
-    // viewer. TODO(crbug.com/1359528): Use something like
-    // gfx::Transform::IsBackfaceVisible().
-    if (inverted_matrix.rc(2, 2) < 0)
-      return nullptr;
+  if (local_transform_state &&
+      layout_object.StyleRef().BackfaceVisibility() ==
+          EBackfaceVisibility::kHidden &&
+      local_transform_state->AccumulatedTransform()
+          .InverseOrIdentity()
+          .IsBackFaceVisible()) {
+    return nullptr;
   }
 
   // The following are used for keeping track of the z-depth of the hit point of
@@ -2327,10 +2312,6 @@ void PaintLayer::UpdateSelfPaintingLayer() {
   // Self-painting change can change the compositing container chain;
   // invalidate the new chain in addition to the old one.
   MarkCompositingContainerChainForNeedsRepaint();
-  if (!RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-    if (SelfOrDescendantNeedsCullRectUpdate())
-      MarkCompositingContainerChainForNeedsCullRectUpdate();
-  }
 
   if (is_self_painting_layer)
     SetNeedsVisualOverflowRecalc();
@@ -2420,10 +2401,6 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
     // propagated up the new compositing chain.
     if (SelfOrDescendantNeedsRepaint())
       MarkCompositingContainerChainForNeedsRepaint();
-    if (!RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-      if (SelfOrDescendantNeedsCullRectUpdate())
-        MarkCompositingContainerChainForNeedsCullRectUpdate();
-    }
 
     MarkAncestorChainForFlagsUpdate();
   }
@@ -2457,9 +2434,18 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
     }
   }
 
+  bool needs_full_opacity_update = diff.OpacityChanged();
+  if (needs_full_opacity_update) {
+    if (PaintPropertyTreeBuilder::ScheduleDeferredOpacityNodeUpdate(
+            GetLayoutObject())) {
+      needs_full_opacity_update = false;
+      SetNeedsDescendantDependentFlagsUpdate();
+    }
+  }
+
   // See also |LayoutObject::SetStyle| which handles these invalidations if a
   // PaintLayer is not present.
-  if (needs_full_transform_update || diff.OpacityChanged() ||
+  if (needs_full_transform_update || needs_full_opacity_update ||
       diff.ZIndexChanged() || diff.FilterChanged() || diff.CssClipChanged() ||
       diff.BlendModeChanged() || diff.MaskChanged() ||
       diff.CompositingReasonsChanged()) {
@@ -2472,7 +2458,7 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
   if (!old_style || old_style->GetPosition() != new_style.GetPosition())
     MarkAncestorChainForFlagsUpdate();
 
-  UpdateTransform(old_style, new_style);
+  UpdateTransformAfterStyleChange(old_style, new_style);
   UpdateFilters(old_style, new_style);
   UpdateBackdropFilters(old_style, new_style);
   UpdateClipPath(old_style, new_style);
@@ -2694,11 +2680,8 @@ void PaintLayer::SetNeedsCullRectUpdate() {
   if (needs_cull_rect_update_)
     return;
   needs_cull_rect_update_ = true;
-  if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-    if (Parent())
-      Parent()->SetDescendantNeedsCullRectUpdate();
-  } else {
-    MarkCompositingContainerChainForNeedsCullRectUpdate();
+  if (Parent()) {
+    Parent()->SetDescendantNeedsCullRectUpdate();
   }
 }
 
@@ -2707,55 +2690,12 @@ void PaintLayer::SetForcesChildrenCullRectUpdate() {
     return;
   forces_children_cull_rect_update_ = true;
   descendant_needs_cull_rect_update_ = true;
-  if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-    if (Parent())
-      Parent()->SetDescendantNeedsCullRectUpdate();
-  } else {
-    MarkCompositingContainerChainForNeedsCullRectUpdate();
-  }
-}
-
-void PaintLayer::MarkCompositingContainerChainForNeedsCullRectUpdate() {
-  // This is only used by the old cull rect updater.
-  DCHECK(!RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled());
-
-  // Mark compositing container chain for needing cull rect update. This is
-  // similar to MarkCompositingContainerChainForNeedsRepaint().
-  PaintLayer* layer = this;
-  while (true) {
-    // For a non-self-painting layer having self-painting descendant, the
-    // descendant will be painted through this layer's Parent() instead of
-    // this layer's Container(), so in addition to the CompositingContainer()
-    // chain, we also need to mark NeedsRepaint for Parent().
-    // TODO(crbug.com/828103): clean up this.
-    if (layer->Parent() && !layer->IsSelfPaintingLayer())
-      layer->Parent()->SetNeedsCullRectUpdate();
-
-    PaintLayer* container = layer->CompositingContainer();
-    if (!container) {
-      auto* owner = layer->GetLayoutObject().GetFrame()->OwnerLayoutObject();
-      if (!owner)
-        break;
-      container = owner->EnclosingLayer();
-    }
-
-    if (container->descendant_needs_cull_rect_update_)
-      break;
-
-    container->descendant_needs_cull_rect_update_ = true;
-
-    // Only propagate the dirty bit up to the display locked ancestor.
-    if (container->GetLayoutObject().ChildPrePaintBlockedByDisplayLock())
-      break;
-
-    layer = container;
+  if (Parent()) {
+    Parent()->SetDescendantNeedsCullRectUpdate();
   }
 }
 
 void PaintLayer::SetDescendantNeedsCullRectUpdate() {
-  // This is only used by the new cull rect updater.
-  DCHECK(RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled());
-
   for (auto* layer = this; layer; layer = layer->Parent()) {
     if (layer->descendant_needs_cull_rect_update_)
       break;

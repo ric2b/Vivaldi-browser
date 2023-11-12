@@ -172,17 +172,10 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnAuthSuccess(const UserContext& user_context) override;
   void OnOffTheRecordAuthSuccess() override;
   void OnPasswordChangeDetected(const UserContext& user_context) override;
-  void OnOldEncryptionDetected(const UserContext& user_context,
+  void OnOldEncryptionDetected(std::unique_ptr<UserContext>,
                                bool has_incomplete_migration) override;
   void AllowlistCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
-
-  // Callback called in response to calling WaitForServiceToBeAvailable() on the
-  // hibernate service. This is initiated in the OnAuthSuccess() flow to make a
-  // blocking call to resume from hibernate before releasing other usual login
-  // activities.
-  void OnHibernateServiceAvailable(const UserContext& user_context,
-                                   bool service_is_available);
 
   // Handles the continuation of successful login after an attempt has been made
   // to divert to a hibernate resume flow. The execution of this method means
@@ -215,7 +208,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void ShowKioskEnableScreen();
 
   // Shows "filesystem encryption migration" screen.
-  void ShowEncryptionMigrationScreen(const UserContext& user_context,
+  void ShowEncryptionMigrationScreen(std::unique_ptr<UserContext> user_context,
                                      EncryptionMigrationMode migration_mode);
 
   // Shows "critical TPM error" screen.
@@ -230,13 +223,13 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   // Calls login() on previously-used `login_performer_`.
   void ContinuePerformLogin(LoginPerformer::AuthorizationMode auth_mode,
-                            const UserContext& user_context);
+                            std::unique_ptr<UserContext> user_context);
 
   // Removes the constraint that user home mount requires ext4 encryption from
   // `user_context`, then calls login() on previously-used `login_performer`.
   void ContinuePerformLoginWithoutMigration(
       LoginPerformer::AuthorizationMode auth_mode,
-      const UserContext& user_context);
+      std::unique_ptr<UserContext> user_context);
 
   // Asks the user to enter their password again.
   void RestartLogin(const UserContext& user_context);
@@ -405,11 +398,5 @@ class ExistingUserController : public LoginDisplay::Delegate,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::ExistingUserController;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_EXISTING_USER_CONTROLLER_H_

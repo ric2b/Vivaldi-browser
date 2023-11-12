@@ -23,7 +23,11 @@ class ExtensionInstallEventRouter
  public:
   explicit ExtensionInstallEventRouter(content::BrowserContext* context);
 
+  ExtensionInstallEventRouter(const ExtensionInstallEventRouter&) = delete;
   ExtensionInstallEventRouter& operator=(const ExtensionInstallEventRouter&) =
+      delete;
+  ExtensionInstallEventRouter(ExtensionInstallEventRouter&&) = delete;
+  ExtensionInstallEventRouter& operator=(ExtensionInstallEventRouter&&) =
       delete;
 
   ~ExtensionInstallEventRouter() override;
@@ -34,9 +38,10 @@ class ExtensionInstallEventRouter
   void StartObserving();
 
  private:
-  raw_ptr<enterprise_connectors::RealtimeReportingClient> reporting_client_ =
-      nullptr;
-  raw_ptr<extensions::ExtensionRegistry> extension_registry_ = nullptr;
+  raw_ptr<enterprise_connectors::RealtimeReportingClient, DanglingUntriaged>
+      reporting_client_ = nullptr;
+  raw_ptr<extensions::ExtensionRegistry, DanglingUntriaged>
+      extension_registry_ = nullptr;
 };
 
 }  // namespace enterprise_connectors

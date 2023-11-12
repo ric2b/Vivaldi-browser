@@ -32,6 +32,7 @@ class StubLayerTreeHostClient : public LayerTreeHostClient {
       PaintHoldingReason,
       absl::optional<PaintHoldingCommitTrigger>) override {}
   void OnPauseRenderingChanged(bool) override {}
+  void OnCommitRequested() override {}
   void RecordStartOfFrameMetrics() override {}
   void RecordEndOfFrameMetrics(base::TimeTicks,
                                ActiveFrameSequenceTrackers) override {}
@@ -58,8 +59,6 @@ class StubLayerTreeHostClient : public LayerTreeHostClient {
   void DidPresentCompositorFrame(
       uint32_t frame_token,
       const gfx::PresentationFeedback& feedback) override {}
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies) override {}
 };
 
 }  // namespace cc

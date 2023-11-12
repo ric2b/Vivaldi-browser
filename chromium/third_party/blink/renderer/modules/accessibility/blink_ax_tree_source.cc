@@ -269,14 +269,12 @@ void BlinkAXTreeSource::Thaw() {
 AXObject* BlinkAXTreeSource::GetRoot() const {
   if (root_)
     return root_;
-  ax_object_cache_->UpdateLifecycleIfNeeded();
   return ax_object_cache_->Root();
 }
 
 AXObject* BlinkAXTreeSource::GetFocusedObject() const {
   if (focus_)
     return focus_;
-  ax_object_cache_->UpdateLifecycleIfNeeded();
   return ax_object_cache_->FocusedObject();
 }
 
@@ -372,10 +370,6 @@ std::string BlinkAXTreeSource::GetDebugString(AXObject* node) const {
   return node->ToString(true).Utf8();
 }
 
-void BlinkAXTreeSource::SerializerClearedNode(int32_t node_id) {
-  ax_object_cache_->SerializerClearedNode(node_id);
-}
-
 void BlinkAXTreeSource::SerializeNode(AXObject* src,
                                       ui::AXNodeData* dst) const {
 #if DCHECK_IS_ON()
@@ -427,8 +421,6 @@ void BlinkAXTreeSource::OnLoadInlineTextBoxes(AXObject& obj) {
 
 AXObject* BlinkAXTreeSource::GetPluginRoot() {
   AXObject* root = GetRoot();
-
-  ax_object_cache_->UpdateLifecycleIfNeeded();
 
   HeapDeque<Member<AXObject>> objs_to_explore;
   objs_to_explore.push_back(root);

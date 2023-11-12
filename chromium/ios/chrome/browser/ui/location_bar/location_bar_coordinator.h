@@ -17,6 +17,10 @@
 @protocol OmniboxPopupPresenterDelegate;
 @protocol ToolbarCoordinatorDelegate;
 
+// Vivaldi
+@protocol ActivityServicePositioner;
+// End Vivaldi
+
 // Location bar coordinator.
 @interface LocationBarCoordinator
     : ChromeCoordinator <LocationBarURLLoader, OmniboxCommands>
@@ -48,6 +52,11 @@
 
 // Target to forward omnibox-related scribble events to.
 - (UIResponder<UITextInput>*)omniboxScribbleForwardingTarget;
+
+// Vivaldi
+// Positioner for activity services attached to the location bar i.e. share page
+- (id<ActivityServicePositioner>)activityServicePositioner;
+// End Vivaldi
 
 @end
 

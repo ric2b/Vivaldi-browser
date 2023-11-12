@@ -84,6 +84,7 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/mojom/app_window.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/display/screen.h"
@@ -95,6 +96,7 @@
 #include "browser/menus/vivaldi_menus.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "extensions/api/events/vivaldi_ui_events.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/helper/vivaldi_app_helper.h"
@@ -940,7 +942,7 @@ void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
 }
 
 void VivaldiBrowserWindow::Close() {
-  MovePinnedTabsToOtherWindowIfNeeded();
+  MovePersistentTabsToOtherWindowIfNeeded();
 
   extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(GetProfile(),
                                                             browser());
@@ -960,19 +962,28 @@ void VivaldiBrowserWindow::Close() {
   }
 }
 
-void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
+void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
   Browser* candidate =
-      ::vivaldi::ui_tools::FindBrowserForPinnedTabs(browser_.get());
+      ::vivaldi::ui_tools::FindBrowserForPersistentTabs(browser_.get());
   if (!candidate) {
     return;
   }
-  std::vector<int> tabs_to_move;
+
+  is_moving_persistent_tabs_ = true;
+
+  std::vector<int> pinned_tabs_to_move;
+  std::vector<int> workspace_tabs_to_move;
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
   for (int i = 0; i < tab_strip_model->count(); ++i) {
+    content::WebContents *content = tab_strip_model->GetWebContentsAt(i);
     if (tab_strip_model->IsTabPinned(i)) {
-      tabs_to_move.push_back(sessions::SessionTabHelper::IdForTab(
-                                 tab_strip_model->GetWebContentsAt(i))
-                                 .id());
+      pinned_tabs_to_move.push_back(sessions::SessionTabHelper::IdForTab(content)
+                                    .id());
+    } else if (
+      extensions::IsTabInAWorkspace(content)
+    ) {
+      workspace_tabs_to_move.push_back(sessions::SessionTabHelper::IdForTab(content)
+                                      .id());
     }
   }
 
@@ -989,20 +1000,37 @@ void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
   // We increment the 'new_index' by one ourselves to get all moved pinned tabs
   // alongside to each other.
   int index = 0;
-  for (size_t i = 0; i < tabs_to_move.size(); i++) {
-    if (::vivaldi::ui_tools::GetTabById(tabs_to_move[i], nullptr, &index)) {
+  for (size_t i = 0; i < pinned_tabs_to_move.size(); i++) {
+    if (::vivaldi::ui_tools::GetTabById(pinned_tabs_to_move[i], nullptr, &index)) {
       if (!::vivaldi::ui_tools::MoveTabToWindow(browser_.get(), candidate,
-                                                index, &new_index, 0)) {
+                                                index, &new_index, 0,
+                                                AddTabTypes::ADD_PINNED)) {
         NOTREACHED();
         break;
       }
       new_index += 1;
     }
   }
+
+  for (size_t i = 0; i < workspace_tabs_to_move.size(); i++) {
+    if (::vivaldi::ui_tools::GetTabById(workspace_tabs_to_move[i], nullptr, &index)) {
+      if (!::vivaldi::ui_tools::MoveTabToWindow(browser_.get(), candidate,
+                                                index, &new_index, 0,
+                                                AddTabTypes::ADD_NONE)) {
+        NOTREACHED();
+        break;
+      }
+      new_index += 1;
+    }
+  }
+  is_moving_persistent_tabs_ = false;
 }
 
 // Similar to `CanClose()` and `OnWindowCloseRequested()` in views::BrowserView
 bool VivaldiBrowserWindow::ConfirmWindowClose() {
+  if (is_moving_persistent_tabs_) {
+    return false;
+  }
 #if !BUILDFLAG(IS_MAC)
   // Is window closing due to a profile being closed?
   bool closed_due_to_profile =
@@ -1540,7 +1568,7 @@ void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
     return;
 
 #if defined(USE_AURA)
-  int resize_inside = IsMaximized() ? 0 : resize_inside_bounds_size();
+  int resize_inside = (IsFullscreen() || IsMaximized()) ? 0 : resize_inside_bounds_size();
   gfx::Insets inset = gfx::Insets::TLBR(resize_inside, resize_inside,
                                         resize_inside, resize_inside);
   if (aura::Window* native_window = GetNativeWindow()) {

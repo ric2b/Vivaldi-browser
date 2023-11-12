@@ -12,6 +12,7 @@ import android.graphics.RectF;
 import android.os.Handler;
 import android.os.SystemClock;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.Supplier;
@@ -50,6 +51,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeProvider;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.LocalizationUtils;
@@ -447,8 +449,9 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 mTabModelSelector.getCurrentModel().index());
         // Note(david@vivaldi.com): We show a loading text while restoring tabs.
         if (selectedTab != null)
-            mTabStripTreeProvider.updateLoadingState(
-                    resourceManager, this, getBackgroundStripColor(selectedTab.getThemeColor()));
+            mTabStripTreeProvider.updateLoadingState(resourceManager, this,
+                    selectedTab.isIncognito(),
+                    getBackgroundStripColor(selectedTab.getThemeColor()));
         int selectedTabId = selectedTab == null ? TabModel.INVALID_TAB_INDEX : selectedTab.getId();
         mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCacheSupplier.get(),
                 resourceManager, getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
@@ -851,6 +854,10 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
     public int getOrientation() {
         return mOrientation;
+    }
+
+    public @ColorInt int getBackgroundColor() {
+        return TabUiThemeProvider.getTabStripBackgroundColor(mContext, mIsIncognito);
     }
 
     /**

@@ -12,14 +12,17 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
+#include "base/check.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -79,11 +82,11 @@ void SendWebSocketResponseOnCmdThread(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     HttpServer* http_server,
     int connection_id,
-    const std::string& data) {
+    std::string data) {
   io_task_runner->PostTask(
-      FROM_HERE,
-      base::BindOnce(&HttpServer::SendOverWebSocket,
-                     base::Unretained(http_server), connection_id, data));
+      FROM_HERE, base::BindOnce(&HttpServer::SendOverWebSocket,
+                                base::Unretained(http_server), connection_id,
+                                std::move(data)));
 }
 
 void SendWebSocketResponseOnSessionThread(
@@ -91,11 +94,11 @@ void SendWebSocketResponseOnSessionThread(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     HttpServer* http_server,
     int connection_id,
-    const std::string& data) {
+    std::string data) {
   cmd_task_runner->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SendWebSocketResponseOnCmdThread, io_task_runner,
-                     base::Unretained(http_server), connection_id, data));
+      FROM_HERE, base::BindOnce(&SendWebSocketResponseOnCmdThread,
+                                io_task_runner, base::Unretained(http_server),
+                                connection_id, std::move(data)));
 }
 
 void CloseWebSocketOnCmdThread(
@@ -153,7 +156,7 @@ class WrapperURLLoaderFactory : public network::mojom::URLLoaderFactory {
   WrapperURLLoaderFactory(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
       : url_loader_factory_(std::move(url_loader_factory)),
-        network_task_runner_(base::SequencedTaskRunnerHandle::Get()) {}
+        network_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {}
 
   WrapperURLLoaderFactory(const WrapperURLLoaderFactory&) = delete;
   WrapperURLLoaderFactory& operator=(const WrapperURLLoaderFactory&) = delete;
@@ -1130,7 +1133,7 @@ void HttpHandler::HandleCommand(
     const net::HttpServerRequestInfo& request,
     const std::string& trimmed_path,
     const HttpResponseSenderFunc& send_response_func) {
-  base::DictionaryValue params;
+  base::Value::Dict params;
   std::string session_id;
   CommandMap::const_iterator iter = command_map_->begin();
   while (true) {
@@ -1156,10 +1159,11 @@ void HttpHandler::HandleCommand(
   }
 
   if (request.data.length()) {
-    base::DictionaryValue* body_params;
     std::unique_ptr<base::Value> parsed_body =
         base::JSONReader::ReadDeprecated(request.data);
-    if (!parsed_body || !parsed_body->GetAsDictionary(&body_params)) {
+    base::Value::Dict* body_params =
+        parsed_body ? parsed_body->GetIfDict() : nullptr;
+    if (!body_params) {
       if (w3cMode(session_id, session_thread_map_)) {
         PrepareResponse(trimmed_path, send_response_func,
                         Status(kInvalidArgument, "missing command parameters"),
@@ -1172,7 +1176,7 @@ void HttpHandler::HandleCommand(
       }
       return;
     }
-    params.MergeDictionary(body_params);
+    params.Merge(std::move(*body_params));
   } else if (iter->method == kPost &&
              w3cMode(session_id, session_thread_map_)) {
     // Data in JSON format is required for POST requests. See step 5 of
@@ -1183,7 +1187,7 @@ void HttpHandler::HandleCommand(
     return;
   }
   // Pass host instead for potential WebSocketUrl if it's a new session
-  iter->command.Run(params.GetDict(),
+  iter->command.Run(params,
                     internal::IsNewSession(*iter)
                         ? request.GetHeaderValue("host")
                         : session_id,
@@ -1234,17 +1238,17 @@ std::unique_ptr<net::HttpServerResponseInfo> HttpHandler::PrepareLegacyResponse(
         kChromeDriverVersion, base::SysInfo::OperatingSystemName().c_str(),
         base::SysInfo::OperatingSystemVersion().c_str(),
         base::SysInfo::OperatingSystemArchitecture().c_str()));
-    std::unique_ptr<base::DictionaryValue> error(new base::DictionaryValue());
-    error->SetString("message", full_status.message());
-    value = std::move(error);
+    base::Value::Dict error;
+    error.Set("message", full_status.message());
+    value = std::make_unique<base::Value>(std::move(error));
   }
   if (!value)
     value = std::make_unique<base::Value>();
 
-  base::DictionaryValue body_params;
-  body_params.SetInteger("status", status.code());
-  body_params.Set("value", std::move(value));
-  body_params.SetString("sessionId", session_id);
+  base::Value::Dict body_params;
+  body_params.Set("status", status.code());
+  body_params.Set("value", base::Value::FromUniquePtrValue(std::move(value)));
+  body_params.Set("sessionId", session_id);
   std::string body;
   base::JSONWriter::WriteWithOptions(
       body_params, base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
@@ -1397,10 +1401,10 @@ HttpHandler::PrepareStandardResponse(
   if (!value)
     value = std::make_unique<base::Value>();
 
-  base::DictionaryValue body_params;
+  base::Value::Dict body_params;
   if (status.IsError()){
     base::Value* inner_params =
-        body_params.SetKey("value", base::Value(base::Value::Type::DICTIONARY));
+        body_params.Set("value", base::Value(base::Value::Type::DICTIONARY));
     inner_params->SetStringKey("error", StatusCodeToString(status.code()));
     inner_params->SetStringKey("message", status.message());
     inner_params->SetStringKey("stacktrace", status.stack_trace());
@@ -1414,16 +1418,15 @@ HttpHandler::PrepareStandardResponse(
       if (first == std::string::npos || last == std::string::npos) {
         inner_params->SetStringPath("data.text", "");
       } else {
-        std::string alertText = message.substr(first, last - first);
-        auto colon = alertText.find(":");
-        if (colon != std::string::npos && alertText.size() > (colon + 2))
-          alertText = alertText.substr(colon + 2);
-        inner_params->SetStringPath("data.text", alertText);
+        std::string alert_text = message.substr(first, last - first);
+        auto colon = alert_text.find(":");
+        if (colon != std::string::npos && alert_text.size() > (colon + 2))
+          alert_text = alert_text.substr(colon + 2);
+        inner_params->SetStringPath("data.text", alert_text);
       }
     }
   } else {
-    body_params.SetKey("value",
-                       base::Value::FromUniquePtrValue(std::move(value)));
+    body_params.Set("value", base::Value::FromUniquePtrValue(std::move(value)));
   }
 
   std::string body;
@@ -1459,15 +1462,8 @@ void HttpHandler::OnWebSocketRequest(HttpServer* http_server,
     SendWebSocketRejectResponse(http_server, connection_id,
                                 net::HTTP_BAD_REQUEST, err_msg);
     return;
-  } else if (it->second != -1) {
-    std::string err_msg = "bad request only one connection for session id " +
-                          session_id + " is allowed";
-    VLOG(0) << "HttpHandler WebSocketRequest error " << err_msg;
-    SendWebSocketRejectResponse(http_server, connection_id,
-                                net::HTTP_BAD_REQUEST, err_msg);
-    return;
   } else {
-    session_connection_map_[session_id] = connection_id;
+    session_connection_map_[session_id].push_back(connection_id);
     connection_session_map_[connection_id] = session_id;
 
     auto thread_it = session_thread_map_.find(session_id);
@@ -1545,6 +1541,7 @@ void HttpHandler::OnWebSocketMessage(HttpServer* http_server,
 
   base::Value::Dict params;
   params.Set("bidiCommand", data);
+  params.Set("connectionId", connection_id);
 
   auto callback = base::BindRepeating(
       [](base::RepeatingCallback<void(const Status&)> send_error,
@@ -1596,7 +1593,10 @@ void HttpHandler::OnClose(HttpServer* http_server, int connection_id) {
     return;
   }
   std::string session_id = it->second;
-  session_connection_map_[session_id] = -1;
+  std::vector<int>& bucket = session_connection_map_[session_id];
+  auto bucket_it = base::ranges::find(bucket, connection_id);
+  DCHECK(bucket_it != bucket.end());
+  bucket.erase(bucket_it);
   connection_session_map_.erase(it);
 
   auto thread_it = session_thread_map_.find(session_id);
@@ -1641,7 +1641,7 @@ bool MatchesCommand(const std::string& method,
                     const std::string& path,
                     const CommandMapping& command,
                     std::string* session_id,
-                    base::DictionaryValue* out_params) {
+                    base::Value::Dict* out_params) {
   if (!MatchesMethod(command.method, method))
     return false;
 
@@ -1652,7 +1652,7 @@ bool MatchesCommand(const std::string& method,
   if (path_parts.size() != command_path_parts.size())
     return false;
 
-  base::DictionaryValue params;
+  base::Value::Dict params;
   for (size_t i = 0; i < path_parts.size(); ++i) {
     CHECK(command_path_parts[i].length());
     if (command_path_parts[i][0] == ':') {
@@ -1672,12 +1672,12 @@ bool MatchesCommand(const std::string& method,
       if (name == "sessionId")
         *session_id = decoded;
       else
-        params.SetString(name, decoded);
+        params.Set(name, decoded);
     } else if (command_path_parts[i] != path_parts[i]) {
       return false;
     }
   }
-  out_params->MergeDictionary(&params);
+  out_params->Merge(std::move(params));
   return true;
 }
 

@@ -76,6 +76,11 @@ void VideoPictureInPictureWindowControllerImpl::Show() {
           media_session::mojom::MediaSessionAction::kToggleCamera);
   media_session_action_hang_up_handled_ = media_session->ShouldRouteAction(
       media_session::mojom::MediaSessionAction::kHangUp);
+  media_session_action_previous_slide_handled_ =
+      media_session->ShouldRouteAction(
+          media_session::mojom::MediaSessionAction::kPreviousSlide);
+  media_session_action_next_slide_handled_ = media_session->ShouldRouteAction(
+      media_session::mojom::MediaSessionAction::kNextSlide);
 
   UpdatePlayPauseButtonVisibility();
   window_->SetSkipAdButtonVisibility(media_session_action_skip_ad_handled_);
@@ -90,6 +95,10 @@ void VideoPictureInPictureWindowControllerImpl::Show() {
   window_->SetToggleCameraButtonVisibility(
       media_session_action_toggle_camera_handled_);
   window_->SetHangUpButtonVisibility(media_session_action_hang_up_handled_);
+  window_->SetNextSlideButtonVisibility(
+      media_session_action_next_slide_handled_);
+  window_->SetPreviousSlideButtonVisibility(
+      media_session_action_previous_slide_handled_);
   window_->ShowInactive();
   GetWebContentsImpl()->SetHasPictureInPictureVideo(true);
 }
@@ -286,6 +295,16 @@ void VideoPictureInPictureWindowControllerImpl::SkipAd() {
     MediaSession::Get(web_contents())->SkipAd();
 }
 
+void VideoPictureInPictureWindowControllerImpl::PreviousSlide() {
+  if (media_session_action_previous_slide_handled_)
+    MediaSession::Get(web_contents())->PreviousSlide();
+}
+
+void VideoPictureInPictureWindowControllerImpl::NextSlide() {
+  if (media_session_action_next_slide_handled_)
+    MediaSession::Get(web_contents())->NextSlide();
+}
+
 void VideoPictureInPictureWindowControllerImpl::NextTrack() {
   if (media_session_action_next_track_handled_)
     MediaSession::Get(web_contents())->NextTrack();
@@ -364,6 +383,12 @@ void VideoPictureInPictureWindowControllerImpl::MediaSessionActionsChanged(
   media_session_action_hang_up_handled_ =
       actions.find(media_session::mojom::MediaSessionAction::kHangUp) !=
       actions.end();
+  media_session_action_previous_slide_handled_ =
+      actions.find(media_session::mojom::MediaSessionAction::kPreviousSlide) !=
+      actions.end();
+  media_session_action_next_slide_handled_ =
+      actions.find(media_session::mojom::MediaSessionAction::kNextSlide) !=
+      actions.end();
 
   if (!window_)
     return;
@@ -379,6 +404,10 @@ void VideoPictureInPictureWindowControllerImpl::MediaSessionActionsChanged(
   window_->SetToggleCameraButtonVisibility(
       media_session_action_toggle_camera_handled_);
   window_->SetHangUpButtonVisibility(media_session_action_hang_up_handled_);
+  window_->SetNextSlideButtonVisibility(
+      media_session_action_next_slide_handled_);
+  window_->SetPreviousSlideButtonVisibility(
+      media_session_action_previous_slide_handled_);
 }
 
 void VideoPictureInPictureWindowControllerImpl::MediaSessionPositionChanged(

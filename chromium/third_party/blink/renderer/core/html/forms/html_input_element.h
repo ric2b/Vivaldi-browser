@@ -55,7 +55,7 @@ struct DateTimeChooserParameters;
 
 class CORE_EXPORT HTMLInputElement
     : public TextControlElement,
-      public ActiveScriptWrappable<HTMLInputElement> {
+      public LazyActiveScriptWrappable<HTMLInputElement> {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -134,7 +134,7 @@ class CORE_EXPORT HTMLInputElement
   bool ShouldAppearChecked() const;
   bool ShouldAppearIndeterminate() const override;
 
-  PopupTriggerSupport SupportsPopupTriggering() const override;
+  PopoverTriggerSupport SupportsPopoverTriggering() const override;
 
   // Returns null if this isn't associated with any radio button group.
   RadioButtonGroupScope* GetRadioButtonGroupScope() const;

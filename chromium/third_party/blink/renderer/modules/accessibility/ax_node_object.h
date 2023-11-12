@@ -56,6 +56,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   void Trace(Visitor*) const override;
 
+  static bool CanHaveChildren(Element& element);
+
  protected:
 #if DCHECK_IS_ON()
   bool initialized_ = false;
@@ -295,6 +297,11 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                                             const QualifiedName&) const;
 
   bool IsNativeCheckboxInMixedState() const;
+  String TextAlternativeFromTitleAttribute(
+      const AtomicString& title,
+      ax::mojom::blink::NameFrom& name_from,
+      NameSources* name_sources,
+      bool* found_text_alternative) const;
   String NativeTextAlternative(AXObjectSet& visited,
                                ax::mojom::blink::NameFrom&,
                                AXRelatedObjectVector*,

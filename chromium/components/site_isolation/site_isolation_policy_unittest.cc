@@ -166,7 +166,7 @@ class WebTriggeredIsolatedOriginsPolicyTest : public SiteIsolationPolicyTest {
   void SetUp() override {
     // Set up the COOP isolation feature with persistence enabled and a maximum
     // of 3 stored sites.
-    base::test::ScopedFeatureList::FeatureAndParams coop_feature = {
+    base::test::FeatureRefAndParams coop_feature = {
         ::features::kSiteIsolationForCrossOriginOpenerPolicy,
         {{::features::kSiteIsolationForCrossOriginOpenerPolicyMaxSitesParam
               .name,
@@ -178,7 +178,7 @@ class WebTriggeredIsolatedOriginsPolicyTest : public SiteIsolationPolicyTest {
     // Some machines running this test may be below the default memory
     // threshold.  To ensure that COOP isolation is also enabled on those
     // machines, set a very low 128MB threshold.
-    base::test::ScopedFeatureList::FeatureAndParams memory_threshold_feature = {
+    base::test::FeatureRefAndParams memory_threshold_feature = {
         site_isolation::features::kSiteIsolationMemoryThresholds,
         {{site_isolation::features::
               kPartialSiteIsolationMemoryThresholdParamName,
@@ -1205,7 +1205,13 @@ class OptInOriginIsolationPolicyTest : public BaseSiteIsolationTest {
     SetEnableStrictSiteIsolation(false);
     // Enable Origin-Agent-Cluster header.
     feature_list_.InitAndEnableFeature(::features::kOriginIsolationHeader);
+    SiteIsolationPolicy::SetDisallowMemoryThresholdCachingForTesting(true);
     BaseSiteIsolationTest::SetUp();
+  }
+
+  void TearDown() override {
+    SiteIsolationPolicy::SetDisallowMemoryThresholdCachingForTesting(false);
+    BaseSiteIsolationTest::TearDown();
   }
 
   content::BrowserContext* browser_context() { return &browser_context_; }

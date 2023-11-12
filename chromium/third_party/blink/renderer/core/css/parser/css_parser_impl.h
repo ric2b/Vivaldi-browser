@@ -7,14 +7,17 @@
 
 #include <memory>
 
+#include "css_at_rule_id.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_source_data.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
+#include "third_party/blink/renderer/core/css/css_selector.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenized_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
+#include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -32,6 +35,8 @@ class StyleRuleCharset;
 class StyleRuleCounterStyle;
 class StyleRuleFontFace;
 class StyleRuleFontPaletteValues;
+class StyleRuleFontFeatureValues;
+class StyleRuleFontFeature;
 class StyleRuleImport;
 class StyleRuleKeyframe;
 class StyleRuleKeyframes;
@@ -73,7 +78,8 @@ class CORE_EXPORT CSSParserImpl {
     kKeyframeRules,
     kFontFeatureRules,
     kTryRules,
-    kNoRules,  // For parsing at-rules inside declaration lists
+    kNoRules,                // For parsing at-rules inside declaration lists
+    kConditionalGroupRules,  // @media etc., see [css-conditional-3]
   };
 
   // Represents the start and end offsets of a CSSParserTokenRange.
@@ -107,11 +113,15 @@ class CORE_EXPORT CSSParserImpl {
       Element*);
   static ImmutableCSSPropertyValueSet*
   ParseInlineStyleDeclaration(const String&, CSSParserMode, SecureContextMode);
+  // NOTE: This function can currently only be used to parse a
+  // declaration list with no nested rules, not a full style rule
+  // (it is only used for things like inline style).
   static bool ParseDeclarationList(MutableCSSPropertyValueSet*,
                                    const String&,
                                    const CSSParserContext*);
   static StyleRuleBase* ParseRule(const String&,
                                   const CSSParserContext*,
+                                  StyleRule* parent_rule_for_nesting,
                                   StyleSheetContents*,
                                   AllowedRulesType);
   static ParseSheetResult ParseStyleSheet(
@@ -121,11 +131,13 @@ class CORE_EXPORT CSSParserImpl {
       CSSDeferPropertyParsing = CSSDeferPropertyParsing::kNo,
       bool allow_import_rules = true,
       std::unique_ptr<CachedCSSTokenizer> tokenizer = nullptr);
-  static CSSSelectorList ParsePageSelector(CSSParserTokenRange,
-                                           StyleSheetContents*,
-                                           const CSSParserContext& context);
+  static CSSSelectorList* ParsePageSelector(CSSParserTokenRange,
+                                            StyleSheetContents*,
+                                            const CSSParserContext& context);
 
-  static std::unique_ptr<Vector<double>> ParseKeyframeKeyList(const String&);
+  static std::unique_ptr<Vector<KeyframeOffset>> ParseKeyframeKeyList(
+      const CSSParserContext*,
+      const String&);
 
   bool ConsumeSupportsDeclaration(CSSParserTokenStream&);
   const CSSParserContext* GetContext() const { return context_; }
@@ -162,28 +174,46 @@ class CORE_EXPORT CSSParserImpl {
 
   // Returns whether the first encountered rule was valid
   template <typename T>
-  bool ConsumeRuleList(CSSParserTokenStream&, RuleListType, T callback);
+  bool ConsumeRuleList(CSSParserTokenStream&,
+                       RuleListType,
+                       StyleRule* parent_rule_for_nesting,
+                       T callback);
 
   // These functions update the range/stream they're given
-  StyleRuleBase* ConsumeAtRule(CSSParserTokenStream&, AllowedRulesType);
-  StyleRuleBase* ConsumeQualifiedRule(CSSParserTokenStream&, AllowedRulesType);
+  StyleRuleBase* ConsumeAtRule(CSSParserTokenStream&,
+                               AllowedRulesType,
+                               StyleRule* parent_rule_for_nesting);
+  StyleRuleBase* ConsumeAtRuleContents(CSSAtRuleID id,
+                                       CSSParserTokenStream& stream,
+                                       AllowedRulesType allowed_rules,
+                                       StyleRule* parent_rule_for_nesting);
+  StyleRuleBase* ConsumeQualifiedRule(CSSParserTokenStream&,
+                                      AllowedRulesType,
+                                      StyleRule* parent_rule_for_nesting);
 
   static StyleRuleCharset* ConsumeCharsetRule(CSSParserTokenStream&);
   StyleRuleImport* ConsumeImportRule(const AtomicString& prelude_uri,
                                      CSSParserTokenStream&);
   StyleRuleNamespace* ConsumeNamespaceRule(CSSParserTokenStream&);
-  StyleRuleMedia* ConsumeMediaRule(CSSParserTokenStream&);
-  StyleRuleSupports* ConsumeSupportsRule(CSSParserTokenStream&);
+  StyleRuleMedia* ConsumeMediaRule(CSSParserTokenStream& stream,
+                                   StyleRule* parent_rule_for_nesting);
+  StyleRuleSupports* ConsumeSupportsRule(CSSParserTokenStream& stream,
+                                         StyleRule* parent_rule_for_nesting);
   StyleRuleFontFace* ConsumeFontFaceRule(CSSParserTokenStream&);
   StyleRuleFontPaletteValues* ConsumeFontPaletteValuesRule(
       CSSParserTokenStream&);
+  StyleRuleFontFeatureValues* ConsumeFontFeatureValuesRule(
+      CSSParserTokenStream&);
+  StyleRuleFontFeature* ConsumeFontFeatureRule(CSSAtRuleID,
+                                               CSSParserTokenStream&);
   StyleRuleKeyframes* ConsumeKeyframesRule(bool webkit_prefixed,
                                            CSSParserTokenStream&);
   StyleRulePage* ConsumePageRule(CSSParserTokenStream&);
   StyleRuleProperty* ConsumePropertyRule(CSSParserTokenStream&);
   StyleRuleCounterStyle* ConsumeCounterStyleRule(CSSParserTokenStream&);
   StyleRuleBase* ConsumeScopeRule(CSSParserTokenStream&);
-  StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream&);
+  StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream& stream,
+                                           StyleRule* parent_rule_for_nesting);
   StyleRuleBase* ConsumeLayerRule(CSSParserTokenStream&);
   StyleRulePositionFallback* ConsumePositionFallbackRule(CSSParserTokenStream&);
   StyleRuleTry* ConsumeTryRule(CSSParserTokenStream&);
@@ -191,9 +221,21 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleKeyframe* ConsumeKeyframeStyleRule(CSSParserTokenRange prelude,
                                               const RangeOffset& prelude_offset,
                                               CSSParserTokenStream& block);
-  StyleRule* ConsumeStyleRule(CSSParserTokenStream&);
+  StyleRule* ConsumeStyleRule(CSSParserTokenStream&,
+                              StyleRule* parent_rule_for_nesting);
+  StyleRule* ConsumeStyleRuleContents(base::span<CSSSelector> selector_vector,
+                                      CSSParserTokenStream& stream);
 
-  void ConsumeDeclarationList(CSSParserTokenStream&, StyleRule::RuleType);
+  void ConsumeDeclarationList(
+      CSSParserTokenStream&,
+      StyleRule::RuleType,
+      StyleRule* parent_rule_for_nesting,
+      HeapVector<Member<StyleRuleBase>, 4>* child_rules);
+  // If id is absl::nullopt, we're parsing a qualified style rule;
+  // otherwise, we're parsing an at-rule.
+  StyleRuleBase* ConsumeNestedRule(absl::optional<CSSAtRuleID> id,
+                                   CSSParserTokenStream& stream,
+                                   StyleRule* parent_rule_for_nesting);
   void ConsumeDeclaration(CSSParserTokenStream&, StyleRule::RuleType);
   void ConsumeDeclarationValue(const CSSTokenizedValue&,
                                CSSPropertyID,
@@ -204,7 +246,8 @@ class CORE_EXPORT CSSParserImpl {
                             bool important,
                             bool is_animation_tainted);
 
-  static std::unique_ptr<Vector<double>> ConsumeKeyframeKeyList(
+  static std::unique_ptr<Vector<KeyframeOffset>> ConsumeKeyframeKeyList(
+      const CSSParserContext*,
       CSSParserTokenRange);
 
   // Finds a previously parsed MediaQuerySet for the given `prelude_string`
@@ -212,6 +255,13 @@ class CORE_EXPORT CSSParserImpl {
   // and returns the result after caching it.
   const MediaQuerySet* CachedMediaQuerySet(String prelude_string,
                                            CSSParserTokenRange prelude);
+
+  // Create an implicit & {} rule to wrap properties in, and insert every
+  // property from parsed_properties_ in it. Used when there are properties
+  // directly in @media, @supports or similar (which cannot hold properties
+  // by themselves, only rules; see
+  // https://github.com/w3c/csswg-drafts/issues/7850).
+  StyleRule* CreateImplicitNestedRule(StyleRule* parent_rule_for_nesting);
 
   // FIXME: Can we build CSSPropertyValueSets directly?
   HeapVector<CSSPropertyValue, 64> parsed_properties_;
@@ -226,7 +276,7 @@ class CORE_EXPORT CSSParserImpl {
 
   // Used for temporary allocations of CSSParserSelector (we send it down
   // to CSSSelectorParser, which temporarily holds on to a reference to it).
-  Arena arena_;
+  HeapVector<CSSSelector> arena_;
 
   HeapHashMap<String, Member<const MediaQuerySet>> media_query_cache_;
 };

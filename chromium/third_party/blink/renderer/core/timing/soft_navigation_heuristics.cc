@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/timing/soft_navigation_heuristics.h"
+
 #include "base/logging.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
-#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
@@ -21,14 +22,14 @@ namespace {
 void LogToConsole(LocalFrame* frame,
                   mojom::blink::ConsoleMessageLevel level,
                   const String& message) {
-  if (!RuntimeEnabledFeatures::SoftNavigationHeuristicsEnabled()) {
-    return;
-  }
   if (!frame || !frame->IsMainFrame()) {
     return;
   }
   LocalDOMWindow* window = frame->DomWindow();
   if (!window) {
+    return;
+  }
+  if (!RuntimeEnabledFeatures::SoftNavigationHeuristicsEnabled(window)) {
     return;
   }
   auto* console_message = MakeGarbageCollected<ConsoleMessage>(
@@ -44,6 +45,10 @@ const char SoftNavigationHeuristics::kSupplementName[] =
 
 SoftNavigationHeuristics* SoftNavigationHeuristics::From(
     LocalDOMWindow& window) {
+  // TODO(yoav): Ensure all callers don't have spurious IsMainFrame checks.
+  if (!window.GetFrame()->IsMainFrame()) {
+    return nullptr;
+  }
   SoftNavigationHeuristics* heuristics =
       Supplement<LocalDOMWindow>::From<SoftNavigationHeuristics>(window);
   if (!heuristics) {
@@ -69,6 +74,7 @@ void SoftNavigationHeuristics::ResetHeuristic() {
   flag_set_.Clear();
   potential_soft_navigation_task_ids_.clear();
   SetIsTrackingSoftNavigationHeuristicsOnDocument(false);
+  did_reset_paints_ = false;
 }
 
 void SoftNavigationHeuristics::UserInitiatedClick(ScriptState* script_state) {
@@ -81,6 +87,7 @@ void SoftNavigationHeuristics::UserInitiatedClick(ScriptState* script_state) {
   scheduler->GetTaskAttributionTracker()->RegisterObserver(this);
   SetIsTrackingSoftNavigationHeuristicsOnDocument(true);
   user_click_timestamp_ = base::TimeTicks::Now();
+  TRACE_EVENT0("scheduler", "SoftNavigationHeuristics::UserInitiatedClick");
 }
 
 bool SoftNavigationHeuristics::IsCurrentTaskDescendantOfClickEventHandler(
@@ -104,15 +111,18 @@ bool SoftNavigationHeuristics::IsCurrentTaskDescendantOfClickEventHandler(
 void SoftNavigationHeuristics::ClickEventEnded(ScriptState* script_state) {
   ThreadScheduler* scheduler = ThreadScheduler::Current();
   DCHECK(scheduler);
-  scheduler->GetTaskAttributionTracker()->UnregisterObserver();
+  scheduler->GetTaskAttributionTracker()->UnregisterObserver(this);
   CheckAndReportSoftNavigation(script_state);
+  TRACE_EVENT0("scheduler", "SoftNavigationHeuristics::ClickEventEnded");
 }
 
 bool SoftNavigationHeuristics::SetFlagIfDescendantAndCheck(
     ScriptState* script_state,
     FlagType type,
-    absl::optional<String> url) {
-  if (!IsCurrentTaskDescendantOfClickEventHandler(script_state)) {
+    absl::optional<String> url,
+    bool skip_descendant_check) {
+  if (!skip_descendant_check &&
+      !IsCurrentTaskDescendantOfClickEventHandler(script_state)) {
     // A non-descendent URL change should not set the flag.
     return false;
   }
@@ -125,14 +135,23 @@ bool SoftNavigationHeuristics::SetFlagIfDescendantAndCheck(
 }
 
 void SoftNavigationHeuristics::SawURLChange(ScriptState* script_state,
-                                            const String& url) {
-  if (!SetFlagIfDescendantAndCheck(script_state, FlagType::kURLChange, url)) {
+                                            const String& url,
+                                            bool skip_descendant_check) {
+  bool descendant = true;
+  if (!SetFlagIfDescendantAndCheck(script_state, FlagType::kURLChange, url,
+                                   skip_descendant_check)) {
     ResetHeuristic();
+    descendant = false;
   }
+  TRACE_EVENT1("scheduler", "SoftNavigationHeuristics::SawURLChange",
+               "descendant", descendant);
 }
 
 void SoftNavigationHeuristics::ModifiedDOM(ScriptState* script_state) {
-  SetFlagIfDescendantAndCheck(script_state, FlagType::kMainModification);
+  bool descendant =
+      SetFlagIfDescendantAndCheck(script_state, FlagType::kMainModification);
+  TRACE_EVENT1("scheduler", "SoftNavigationHeuristics::ModifiedDOM",
+               "descendant", descendant);
   SetIsTrackingSoftNavigationHeuristicsOnDocument(false);
 }
 
@@ -180,8 +199,9 @@ void SoftNavigationHeuristics::CheckAndReportSoftNavigation(
 
   ResetHeuristic();
   LogToConsole(frame, mojom::blink::ConsoleMessageLevel::kInfo,
-               String("A soft navigation has been detected."));
-  // TODO(yoav): trace event as well.
+               String("A soft navigation has been detected: ") + url_);
+  TRACE_EVENT0("scheduler",
+               "SoftNavigationHeuristics soft navigation detected");
   if (LocalFrameClient* frame_client = frame->Client()) {
     // This notifies UKM about this soft navigation.
     frame_client->DidObserveSoftNavigation(soft_navigation_count_);
@@ -191,7 +211,7 @@ void SoftNavigationHeuristics::CheckAndReportSoftNavigation(
 void SoftNavigationHeuristics::ResetPaintsIfNeeded(LocalFrame* frame,
                                                    LocalDOMWindow* window) {
   if (!did_reset_paints_) {
-    if (RuntimeEnabledFeatures::SoftNavigationHeuristicsEnabled()) {
+    if (RuntimeEnabledFeatures::SoftNavigationHeuristicsEnabled(window)) {
       if (Document* document = window->document()) {
         PaintTiming::From(*document).ResetFirstPaintAndFCP();
       }
@@ -210,7 +230,13 @@ void SoftNavigationHeuristics::OnCreateTaskScope(
     const scheduler::TaskAttributionId& task_id) {
   // We're inside a click event handler, so need to add this task to the set of
   // potential soft navigation root tasks.
+  TRACE_EVENT1("scheduler", "SoftNavigationHeuristics::OnCreateTaskScope",
+               "task_id", task_id.value());
   potential_soft_navigation_task_ids_.insert(task_id.value());
+}
+
+ExecutionContext* SoftNavigationHeuristics::GetExecutionContext() {
+  return GetSupplementable();
 }
 
 }  // namespace blink

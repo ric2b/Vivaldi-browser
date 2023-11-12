@@ -50,6 +50,9 @@ class NoteSyncService : public KeyedService {
   virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
   GetNoteSyncControllerDelegate();
 
+  // For integration tests.
+  void SetNotesLimitForTesting(size_t limit);
+
  private:
   // NoteModelTypeProcessor handles communications between sync engine and
   // NotesModel.

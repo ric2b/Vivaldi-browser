@@ -4,11 +4,7 @@
 
 #include "ash/webui/eche_app_ui/apps_access_manager_impl.h"
 
-#include "ash/components/phonehub/multidevice_feature_access_manager.h"
 #include "ash/constants/ash_features.h"
-#include "ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
-#include "ash/services/secure_channel/public/cpp/client/fake_connection_manager.h"
 #include "ash/webui/eche_app_ui/apps_access_setup_operation.h"
 #include "ash/webui/eche_app_ui/fake_eche_connector.h"
 #include "ash/webui/eche_app_ui/fake_eche_message_receiver.h"
@@ -17,6 +13,10 @@
 #include "ash/webui/eche_app_ui/proto/exo_messages.pb.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/ash/components/phonehub/multidevice_feature_access_manager.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/fake_connection_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -80,7 +80,7 @@ class AppsAccessManagerImplTest : public testing::Test {
     multidevice_setup::RegisterFeaturePrefs(pref_service_.registry());
 
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{chromeos::features::kEcheSWA},
+        /*enabled_features=*/{features::kEcheSWA},
         /*disabled_features=*/{});
 
     fake_eche_connector_ = std::make_unique<FakeEcheConnector>();

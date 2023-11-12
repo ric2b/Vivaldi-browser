@@ -19,16 +19,16 @@ WaylandProxyImpl::WaylandProxyImpl(ui::WaylandConnection* connection)
 WaylandProxyImpl::~WaylandProxyImpl() {
   WaylandProxy::SetInstance(nullptr);
   if (delegate_)
-    connection_->wayland_window_manager()->RemoveObserver(this);
+    connection_->window_manager()->RemoveObserver(this);
 }
 
 void WaylandProxyImpl::SetDelegate(WaylandProxy::Delegate* delegate) {
   DCHECK(!delegate_);
   delegate_ = delegate;
   if (delegate_)
-    connection_->wayland_window_manager()->AddObserver(this);
+    connection_->window_manager()->AddObserver(this);
   else
-    connection_->wayland_window_manager()->RemoveObserver(this);
+    connection_->window_manager()->RemoveObserver(this);
 }
 
 wl_display* WaylandProxyImpl::GetDisplay() {
@@ -45,22 +45,21 @@ void WaylandProxyImpl::RoundTripQueue() {
 
 wl_surface* WaylandProxyImpl::GetWlSurfaceForAcceleratedWidget(
     gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  auto* window = connection_->window_manager()->GetWindow(widget);
   DCHECK(window);
   return window->root_surface()->surface();
 }
 
 ui::WaylandWindow* WaylandProxyImpl::GetWaylandWindowForAcceleratedWidget(
     gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  auto* window = connection_->window_manager()->GetWindow(widget);
   DCHECK(window);
   return window;
 }
 
 wl_buffer* WaylandProxyImpl::CreateShmBasedWlBuffer(
     const gfx::Size& buffer_size) {
-  ui::WaylandShmBuffer shm_buffer(connection_->wayland_buffer_factory(),
-                                  buffer_size);
+  ui::WaylandShmBuffer shm_buffer(connection_->buffer_factory(), buffer_size);
   auto* wlbuffer = shm_buffer.get();
   DCHECK(wlbuffer);
   shm_buffers_.emplace_back(std::move(shm_buffer));
@@ -80,19 +79,19 @@ void WaylandProxyImpl::FlushForTesting() {
 
 ui::PlatformWindowType WaylandProxyImpl::GetWindowType(
     gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  auto* window = connection_->window_manager()->GetWindow(widget);
   DCHECK(window);
   return window->type();
 }
 
 bool WaylandProxyImpl::WindowHasPointerFocus(gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  auto* window = connection_->window_manager()->GetWindow(widget);
   DCHECK(window);
   return window->HasPointerFocus();
 }
 
 bool WaylandProxyImpl::WindowHasKeyboardFocus(gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  auto* window = connection_->window_manager()->GetWindow(widget);
   DCHECK(window);
   return window->HasKeyboardFocus();
 }

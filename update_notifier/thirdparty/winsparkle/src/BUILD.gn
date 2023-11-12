@@ -58,6 +58,7 @@ static_library("wxwidgets") {
     "-Wno-shadow",
     "-Wno-deprecated-declarations",
     "-Wno-deprecated-copy",
+    "-Wno-deprecated-enum-enum-conversion",
   ]
 
   defines = [

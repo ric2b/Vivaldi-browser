@@ -4,7 +4,6 @@
 
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -187,7 +186,7 @@ TEST_F(SharedImageRepresentationTest, SkiaClearing) {
 
 TEST_F(SharedImageRepresentationTest, DawnClearing) {
   auto representation = manager_.ProduceDawn(
-      mailbox_, tracker_.get(), nullptr /* device */, WGPUBackendType_Null);
+      mailbox_, tracker_.get(), nullptr /* device */, WGPUBackendType_Null, {});
   EXPECT_FALSE(representation->IsCleared());
 
   // We should not be able to begin access with |allow_uncleared| == false.
@@ -228,8 +227,7 @@ TEST_F(SharedImageRepresentationTest, OverlayClearing) {
 
   // We should not be able to begin read ccess.
   {
-    auto scoped_access =
-        representation->BeginScopedReadAccess(false /* needs_gl_image */);
+    auto scoped_access = representation->BeginScopedReadAccess();
     EXPECT_FALSE(scoped_access);
   }
   EXPECT_FALSE(representation->IsCleared());
@@ -240,8 +238,7 @@ TEST_F(SharedImageRepresentationTest, OverlayClearing) {
 
   // We can now begin read access.
   {
-    auto scoped_access =
-        representation->BeginScopedReadAccess(false /* needs_gl_image */);
+    auto scoped_access = representation->BeginScopedReadAccess();
     EXPECT_TRUE(scoped_access);
   }
   EXPECT_TRUE(representation->IsCleared());

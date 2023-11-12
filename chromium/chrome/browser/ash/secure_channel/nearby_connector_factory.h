@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_ASH_SECURE_CHANNEL_NEARBY_CONNECTOR_FACTORY_H_
 #define CHROME_BROWSER_ASH_SECURE_CHANNEL_NEARBY_CONNECTOR_FACTORY_H_
 
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "ash/services/secure_channel/public/cpp/client/nearby_connector.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 
@@ -14,6 +12,8 @@ class Profile;
 
 namespace ash {
 namespace secure_channel {
+
+class NearbyConnector;
 
 class NearbyConnectorFactory : public ProfileKeyedServiceFactory {
  public:
@@ -37,12 +37,5 @@ class NearbyConnectorFactory : public ProfileKeyedServiceFactory {
 
 }  // namespace secure_channel
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace chromeos {
-namespace secure_channel {
-using ::ash::secure_channel::NearbyConnectorFactory;
-}
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_SECURE_CHANNEL_NEARBY_CONNECTOR_FACTORY_H_

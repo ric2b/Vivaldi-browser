@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">이 사이트에 유해한 프로그램이 있습니다</translation>
 <translation id="1916770123977586577">이 사이트에 업데이트된 설정을 적용하려면 이 페이지를 새로고침하세요</translation>
-<translation id="1973351931613083086">자동 재생</translation>
 <translation id="1974060860693918893">세부정보</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />프록시 및 방화벽 확인<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">발급 대상: <ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
 <translation id="2187317261103489799">감지(기본값)</translation>
 <translation id="2224337661447660594">인터넷 연결 없음</translation>
-<translation id="2230458221926704099"><ph name="BEGIN_LINK" />진단 프로그램<ph name="END_LINK" />을 사용하여 연결 문제를 해결하세요</translation>
 <translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />에 사용자 이름과 비밀번호를 입력해야 합니다.</translation>
 <translation id="2337852623177822836">관리자가 제어하는 설정</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">해커가 <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />에서 정보(예: 비밀번호, 메시지, 신용카드 등)를 도용하려고 할 수 있습니다. <ph name="BEGIN_LEARN_MORE_LINK" />자세히 알아보기<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">네트워크 변경이 감지되었습니다.</translation>
 <translation id="2948083400971632585">연결을 위해 구성한 프록시는 설정 페이지에서 비활성화 할 수 있습니다.</translation>
-<translation id="2953943267837858202">동영상을 자동으로 재생하도록 허용되지 않음</translation>
 <translation id="2991571918955627853">웹사이트에서 HSTS를 사용하므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
 <translation id="3005723025932146533">저장된 사본 표시</translation>
 <translation id="301521992641321250">자동으로 차단됨</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">페이지를 불러오기 위해 필요한 데이터를 다시 제출하려면 새로고침 버튼을 누르세요.</translation>
 <translation id="3234666976984236645">이 사이트에서 중요한 콘텐츠 항상 감지</translation>
-<translation id="3291915639428159043">자동 재생 차단됨</translation>
 <translation id="3308738399950580893">광고</translation>
 <translation id="3422472998109090673">현재 <ph name="HOST_NAME" />에 연결할 수 없습니다.</translation>
 <translation id="3427092606871434483">허용(기본값)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">연결이 비공개로 설정되어 있지 않습니다</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /> <ph name="STATE" />, <ph name="CITY" /></translation>
 <translation id="3586931643579894722">세부정보 숨기기</translation>
-<translation id="3620979700683094848">사이트가 자동으로 동영상을 재생할 수 있음</translation>
 <translation id="3630155396527302611">이미 네트워크 액세스가 허용된 프로그램으로 되어 있는 경우
     목록에서 삭제한 뒤 다시 추가합니다.</translation>
 <translation id="3658742229777143148">개정</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" />이(가) 차단됨</translation>
 <translation id="3987940399970879459">1MB 미만</translation>
 <translation id="4075732493274867456">클라이언트와 서버가 일반적인 SSL 프로토콜 버전 또는 암호화 제품군을 지원하지 않습니다.</translation>
-<translation id="410351446219883937">자동 재생</translation>
 <translation id="4116663294526079822">이 사이트에서 항상 허용</translation>
 <translation id="4130226655945681476">네트워크 케이블, 모뎀, 라우터 확인</translation>
 <translation id="4151403195736952345">글로벌 기본값 사용(감지)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">양식 다시 제출 확인</translation>
 <translation id="6569060085658103619">확장 프로그램 페이지를 보는 중</translation>
 <translation id="6657585470893396449">비밀번호</translation>
-<translation id="6685834062052613830">로그아웃하여 설정 완료</translation>
 <translation id="6711464428925977395">프록시 서버에 문제가 발생했거나 주소가 잘못되었습니다.</translation>
 <translation id="6757797048963528358">컴퓨터가 절전 모드 상태입니다.</translation>
 <translation id="6897140037006041989">사용자 에이전트</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">방화벽이나 바이러스 백신 소프트웨어가 연결을 차단했을 수 있습니다.</translation>
 <translation id="7800304661137206267">메시지 인증(<ph name="MAC" />)과 키 교환 메커니즘(<ph name="KX" />)을 설정하고 <ph name="CIPHER" />을(를) 사용하여 연결이 암호화되어 있습니다.</translation>
 <translation id="7834399512844817676"><ph name="SITE" />에서는 사용자 정보를 보호하기 위해 일반적으로 암호화를 사용합니다. 이번에 Vivaldi에서 <ph name="SITE" />에 연결을 시도했을 때 웹사이트에서 비정상적이고 잘못된 사용자 인증 정보를 반환했습니다. 이는 공격자가 <ph name="SITE" />인 것처럼 가장하려고 하거나 Wi-Fi 로그인 화면이 연결을 방해했기 때문일 수 있습니다. 데이터 교환이 발생하기 전에 Vivaldi에서 연결을 중단했으므로 사용자 정보는 안전합니다.</translation>
-<translation id="7834693436815575883">자동 재생 허용됨</translation>
 <translation id="7878562273885520351">비밀번호가 유출될 수도 있음</translation>
 <translation id="7951415247503192394">(32비트)</translation>
 <translation id="8025119109950072390">이 사이트의 공격자가 소프트웨어를 설치하거나 개인정보(예: 비밀번호, 전화번호, 신용카드)를 공개하는 등의 위험한 행동을 하도록 사용자를 속일 수 있습니다.</translation>
 <translation id="8037357227543935929">요청(기본값)</translation>
 <translation id="8041940743680923270">전체 기본값 사용(요청)</translation>
-<translation id="8044382196220116469">사이트에서 동영상을 자동으로 재생하지 못하도록 하기</translation>
 <translation id="808894953321890993">비밀번호 변경</translation>
 <translation id="8119307142152921512">추적기와 광고</translation>
 <translation id="8149426793427495338">컴퓨터가 절전 모드 상태입니다.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">사용자 이름</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" />로의 연결은 암호화되지 않습니다.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />의 &lt;abbr id="dnsDefinition"&gt;DNS 주소&lt;/abbr&gt;를 찾을 수 없습니다. 문제를 진단하는 중입니다.</translation>
-<translation id="8774017153185436870">사이트에서 자동으로 영상을 재생할 수도 있음</translation>
 <translation id="8820817407110198400">북마크</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />에 의해 차단됨</translation>
 <translation id="8963117664422609631">사이트 설정으로 이동</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">무시</translation>
 <translation id="9025348182339809926">(유효하지 않음)</translation>
 <translation id="9039213469156557790">또한 이 페이지에는 안전하지 않은 다른 리소스가 포함되어 있습니다. 이러한 리소스는 전송 중에 다른 사람이 볼 수 있으며 페이지의 작동을 변경하기 위해 공격자가 수정할 수 있습니다.</translation>
-<translation id="9048224371732578627">동영상을 자동으로 재생하도록 허용됨</translation>
 <translation id="9062620674789239642">이동, 수정 또는 삭제되었을 수 있습니다.</translation>
 <translation id="9069693763241529744">확장 프로그램에서 차단함</translation>
 <translation id="9073799351042754113">이 사이트의 보안 경고를 끄기로 설정했습니다.</translation>

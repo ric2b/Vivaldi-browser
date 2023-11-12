@@ -20,13 +20,6 @@ namespace blink {
 FencedFrameMPArchDelegate::FencedFrameMPArchDelegate(
     HTMLFencedFrameElement* outer_element)
     : HTMLFencedFrameElement::FencedFrameDelegate(outer_element) {
-  DCHECK_EQ(outer_element->GetDocument()
-                .GetFrame()
-                ->GetPage()
-                ->FencedFramesImplementationType()
-                .value(),
-            features::FencedFramesImplementationType::kMPArch);
-
   DocumentFencedFrames::GetOrCreate(GetElement().GetDocument())
       .RegisterFencedFrame(&GetElement());
   mojo::PendingAssociatedRemote<mojom::blink::FencedFrameOwnerHost> remote;
@@ -67,14 +60,22 @@ bool FencedFrameMPArchDelegate::SupportsFocus() {
 void FencedFrameMPArchDelegate::FreezeFrameSize() {
   // With MPArch, mark the layout as stale. Do this unconditionally because
   // we are rounding the size.
-  GetElement().GetLayoutObject()->SetNeedsLayoutAndFullPaintInvalidation(
-      "Froze MPArch fenced frame");
+  if (auto* layout_object = GetElement().GetLayoutObject()) {
+    layout_object->SetNeedsLayoutAndFullPaintInvalidation(
+        "Froze MPArch fenced frame");
+  }
 
   // Stop the `ResizeObserver`. It is needed only to compute the
   // frozen size in MPArch. ShadowDOM stays subscribed in order to
   // update the CSS on the inner iframe element as the outer container's
   // size changes.
   GetElement().StopResizeObserver();
+}
+
+void FencedFrameMPArchDelegate::DidChangeFramePolicy(
+    const FramePolicy& frame_policy) {
+  DCHECK(remote_);
+  remote_->DidChangeFramePolicy(frame_policy);
 }
 
 }  // namespace blink

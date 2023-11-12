@@ -63,10 +63,7 @@ namespace keys = extension_web_request_api_constants;
 namespace web_request = extensions::api::web_request;
 namespace dnr_api = extensions::api::declarative_net_request;
 
-using base::DictionaryValue;
-using base::ListValue;
 using base::Time;
-using base::Value;
 using helpers::CalculateOnAuthRequiredDelta;
 using helpers::CalculateOnBeforeRequestDelta;
 using helpers::CalculateOnBeforeSendHeadersDelta;
@@ -130,13 +127,14 @@ namespace {
 bool GenerateInfoSpec(content::BrowserContext* browser_context,
                       const std::string& values,
                       int* result) {
-  // Create a base::ListValue of strings.
-  base::ListValue list_value;
-  for (const std::string& cur :
-       base::SplitString(values, ",", base::KEEP_WHITESPACE,
-                         base::SPLIT_WANT_NONEMPTY))
-    list_value.Append(cur);
-  return ExtraInfoSpec::InitFromValue(browser_context, list_value, result);
+  // Create a base::Value::List of strings.
+  base::Value::List list;
+  for (const std::string& cur : base::SplitString(
+           values, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    list.Append(cur);
+  }
+  return ExtraInfoSpec::InitFromValue(browser_context,
+                                      base::Value(std::move(list)), result);
 }
 
 }  // namespace
@@ -171,8 +169,9 @@ TEST_F(ExtensionWebRequestTest, AddAndRemoveListeners) {
   // Now remove the listeners one at a time, verifying the counts after each
   // removal.
   ExtensionWebRequestEventRouter::GetInstance()->UpdateActiveListener(
-      ExtensionWebRequestEventRouter::ListenerUpdateType::kRemove, &profile_,
-      ext_id, kSubEventName1, extensions::kMainThreadId,
+      ExtensionWebRequestEventRouter::ListenerUpdateType::kRemove,
+      ExtensionWebRequestEventRouter::GetBrowserContextID(&profile_), ext_id,
+      kSubEventName1, extensions::kMainThreadId,
       blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_EQ(
       1u,
@@ -180,8 +179,9 @@ TEST_F(ExtensionWebRequestTest, AddAndRemoveListeners) {
           &profile_, kEventName));
 
   ExtensionWebRequestEventRouter::GetInstance()->UpdateActiveListener(
-      ExtensionWebRequestEventRouter::ListenerUpdateType::kRemove, &profile_,
-      ext_id, kSubEventName2, extensions::kMainThreadId,
+      ExtensionWebRequestEventRouter::ListenerUpdateType::kRemove,
+      ExtensionWebRequestEventRouter::GetBrowserContextID(&profile_), ext_id,
+      kSubEventName2, extensions::kMainThreadId,
       blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_EQ(
       0u,
@@ -320,7 +320,7 @@ TEST(ExtensionWebRequestHelpersTest,
 }
 
 TEST(ExtensionWebRequestHelpersTest, TestStringToCharList) {
-  base::Value list_value(base::Value::Type::LIST);
+  base::Value::List list_value;
   list_value.Append('1');
   list_value.Append('2');
   list_value.Append('3');
@@ -330,11 +330,11 @@ TEST(ExtensionWebRequestHelpersTest, TestStringToCharList) {
   unsigned char char_value[] = {'1', '2', '3', 0xFE, 0xD1};
   std::string string_value(reinterpret_cast<char *>(char_value), 5);
 
-  base::Value converted_list(StringToCharList(string_value));
+  base::Value::List converted_list = StringToCharList(string_value);
   EXPECT_EQ(list_value, converted_list);
 
   std::string converted_string;
-  EXPECT_TRUE(CharListToString(list_value.GetList(), &converted_string));
+  EXPECT_TRUE(CharListToString(list_value, &converted_string));
   EXPECT_EQ(string_value, converted_string);
 }
 

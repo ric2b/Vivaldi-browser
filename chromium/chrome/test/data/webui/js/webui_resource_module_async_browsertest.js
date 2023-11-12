@@ -33,16 +33,12 @@ var CrModuleTest = class extends WebUIResourceModuleAsyncTest {
   }
 };
 
-TEST_F('CrModuleTest', 'AddSingletonGetter', function() {
-  mocha.fgrep('CrModuleAddSingletonGetterTest').run();
-});
-
 TEST_F('CrModuleTest', 'SendWithPromise', function() {
   mocha.fgrep('CrModuleSendWithPromiseTest').run();
 });
 
-TEST_F('CrModuleTest', 'WebUIListeners', function() {
-  mocha.fgrep('CrModuleWebUIListenersTest').run();
+TEST_F('CrModuleTest', 'WebUiListeners', function() {
+  mocha.fgrep('CrModuleWebUiListenersTest').run();
 });
 
 var IconModuleTest = class extends WebUIResourceModuleAsyncTest {
@@ -145,13 +141,13 @@ TEST_F('StaticTypesTest', 'All', function() {
   mocha.run();
 });
 
-var EventTargetModuleTest = class extends WebUIResourceModuleAsyncTest {
+var MockTimerTest = class extends WebUIResourceModuleAsyncTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://webui-test/test_loader.html?module=js/cr/event_target_test.js';
+    return 'chrome://webui-test/test_loader.html?module=mock_timer_test.js';
   }
 };
 
-TEST_F('EventTargetModuleTest', 'All', function() {
+TEST_F('MockTimerTest', 'All', function() {
   mocha.run();
 });

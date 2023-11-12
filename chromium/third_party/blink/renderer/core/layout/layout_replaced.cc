@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/html/html_dimension.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_block_flow.h"
+#include "third_party/blink/renderer/core/layout/box_layout_extra_input.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
@@ -36,10 +37,10 @@
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
-#include "third_party/blink/renderer/core/layout/layout_document_transition_content.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
+#include "third_party/blink/renderer/core/layout/layout_view_transition_content.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
@@ -109,7 +110,7 @@ void LayoutReplaced::StyleDidChange(StyleDifference diff,
         "Specifying 'overflow: visible' on img, video and canvas tags may "
         "cause them to produce visual content outside of the element bounds. "
         "See "
-        "https://github.com/WICG/shared-element-transitions/blob/main/"
+        "https://github.com/WICG/view-transitions/blob/main/"
         "debugging_overflow_on_images.md for details.";
     auto* console_message = MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kRendering,
@@ -125,8 +126,6 @@ void LayoutReplaced::UpdateLayout() {
 
   PhysicalRect old_content_rect = ReplacedContentRect();
 
-  SetHeight(MinimumReplacedHeight());
-
   UpdateLogicalWidth();
   UpdateLogicalHeight();
 
@@ -134,7 +133,8 @@ void LayoutReplaced::UpdateLayout() {
   ClearSelfNeedsLayoutOverflowRecalc();
   ClearChildNeedsLayoutOverflowRecalc();
 
-  UpdateAfterLayout();
+  if (!RuntimeEnabledFeatures::LayoutNGUnifyUpdateAfterLayoutEnabled())
+    UpdateAfterLayout();
 
   ClearNeedsLayout();
 
@@ -191,7 +191,7 @@ static inline bool LayoutObjectHasIntrinsicAspectRatio(
   DCHECK(layout_object);
   return layout_object->IsImage() || layout_object->IsCanvas() ||
          IsA<LayoutVideo>(layout_object) ||
-         IsA<LayoutDocumentTransitionContent>(layout_object);
+         IsA<LayoutViewTransitionContent>(layout_object);
 }
 
 void LayoutReplaced::RecalcVisualOverflow() {
@@ -845,6 +845,37 @@ PhysicalRect LayoutReplaced::ComputeObjectFitAndPositionRect(
 PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   NOT_DESTROYED();
   return ComputeReplacedContentRect();
+}
+
+LayoutSize LayoutReplaced::SizeFromNG() const {
+  if (!RuntimeEnabledFeatures::LayoutNGReplacedNoBoxSettersEnabled() ||
+      !GetBoxLayoutExtraInput()) {
+    return Size();
+  }
+  LayoutSize new_size(OverrideLogicalWidth(), OverrideLogicalHeight());
+  if (!StyleRef().IsHorizontalWritingMode())
+    new_size = new_size.TransposedSize();
+  return new_size;
+}
+
+NGPhysicalBoxStrut LayoutReplaced::BorderPaddingFromNG() const {
+  if (RuntimeEnabledFeatures::LayoutNGReplacedNoBoxSettersEnabled() &&
+      GetBoxLayoutExtraInput()) {
+    return GetBoxLayoutExtraInput()->border_padding_for_replaced;
+  }
+  return NGPhysicalBoxStrut(
+      BorderTop() + PaddingTop(), BorderRight() + PaddingRight(),
+      BorderBottom() + PaddingBottom(), BorderLeft() + PaddingLeft());
+}
+
+PhysicalRect LayoutReplaced::PhysicalContentBoxRectFromNG() const {
+  NOT_DESTROYED();
+  LayoutSize size = SizeFromNG();
+  NGPhysicalBoxStrut border_padding = BorderPaddingFromNG();
+  return PhysicalRect(
+      border_padding.left, border_padding.top,
+      (size.Width() - border_padding.HorizontalSum()).ClampNegativeToZero(),
+      (size.Height() - border_padding.VerticalSum()).ClampNegativeToZero());
 }
 
 PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(

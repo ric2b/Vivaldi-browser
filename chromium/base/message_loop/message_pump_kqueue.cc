@@ -6,7 +6,10 @@
 
 #include <sys/errno.h>
 
+#include <atomic>
+
 #include "base/auto_reset.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
@@ -17,6 +20,16 @@
 namespace base {
 
 namespace {
+
+// Under this feature a simplified version of the Run() function is used. It
+// improves legibility and avoids some calls to kevent64(). Remove once
+// crbug.com/1200141 is resolved.
+BASE_FEATURE(kUseSimplifiedMessagePumpKqueueLoop,
+             "UseSimplifiedMessagePumpKqueueLoop",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Caches the state of the "UseSimplifiedMessagePumpKqueueLoop".
+std::atomic_bool g_use_simplified_version = false;
 
 #if DCHECK_IS_ON()
 // Prior to macOS 10.14, kqueue timers may spuriously wake up, because earlier
@@ -136,30 +149,63 @@ MessagePumpKqueue::MessagePumpKqueue()
 
 MessagePumpKqueue::~MessagePumpKqueue() {}
 
+void MessagePumpKqueue::InitializeFeatures() {
+  g_use_simplified_version.store(
+      base::FeatureList::IsEnabled(kUseSimplifiedMessagePumpKqueueLoop),
+      std::memory_order_relaxed);
+}
+
 void MessagePumpKqueue::Run(Delegate* delegate) {
   AutoReset<bool> reset_keep_running(&keep_running_, true);
+
+  if (g_use_simplified_version.load(std::memory_order_relaxed)) {
+    RunSimplified(delegate);
+  } else {
+    while (keep_running_) {
+      mac::ScopedNSAutoreleasePool pool;
+
+      bool do_more_work = DoInternalWork(delegate, nullptr);
+      if (!keep_running_)
+        break;
+
+      Delegate::NextWorkInfo next_work_info = delegate->DoWork();
+      do_more_work |= next_work_info.is_immediate();
+      if (!keep_running_)
+        break;
+
+      if (do_more_work)
+        continue;
+
+      do_more_work |= delegate->DoIdleWork();
+      if (!keep_running_)
+        break;
+
+      if (do_more_work)
+        continue;
+
+      DoInternalWork(delegate, &next_work_info);
+    }
+  }
+}
+
+void MessagePumpKqueue::RunSimplified(Delegate* delegate) {
+  // Look for native work once before the loop starts. Without this call the
+  // loop would break without checking native work even once in cases where
+  // QuitWhenIdle was used. This is sometimes the case in tests.
+  DoInternalWork(delegate, nullptr);
 
   while (keep_running_) {
     mac::ScopedNSAutoreleasePool pool;
 
-    bool do_more_work = DoInternalWork(delegate, nullptr);
-    if (!keep_running_)
-      break;
-
     Delegate::NextWorkInfo next_work_info = delegate->DoWork();
-    do_more_work |= next_work_info.is_immediate();
     if (!keep_running_)
       break;
 
-    if (do_more_work)
-      continue;
-
-    do_more_work |= delegate->DoIdleWork();
+    if (!next_work_info.is_immediate()) {
+      delegate->DoIdleWork();
+    }
     if (!keep_running_)
       break;
-
-    if (do_more_work)
-      continue;
 
     DoInternalWork(delegate, &next_work_info);
   }

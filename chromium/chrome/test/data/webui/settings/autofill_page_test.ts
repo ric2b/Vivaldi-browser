@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomIf, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {AutofillManagerImpl, PasswordsSectionElement, PasswordListItemElement, PaymentsManagerImpl, SettingsAutofillSectionElement, SettingsPaymentsSectionElement} from 'chrome://settings/lazy_load.js';
 import {buildRouter, Router, routes} from 'chrome://settings/settings.js';
-import {CrSettingsPrefs, OpenWindowProxyImpl, PasswordManagerImpl, SettingsAutofillPageElement, SettingsPluralStringProxyImpl, SettingsPrefsElement} from 'chrome://settings/settings.js';
-import {SettingsRoutes} from 'chrome://settings/settings_routes.js';
+import {CrSettingsPrefs, OpenWindowProxyImpl, PasswordManagerImpl, SettingsAutofillPageElement, SettingsPluralStringProxyImpl, SettingsPrefsElement, SettingsRoutes} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -142,8 +141,7 @@ suite('PasswordsAndForms', function() {
 
 
   setup(async function() {
-    document.body.innerHTML =
-        window.trustedTypes!.emptyHTML as unknown as string;
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
@@ -309,7 +307,7 @@ function createAutofillPageSection() {
       value: false,
     },
   };
-  document.body.innerHTML = window.trustedTypes!.emptyHTML as unknown as string;
+  document.body.innerHTML = window.trustedTypes!.emptyHTML;
   document.body.appendChild(autofillPage);
   flush();
   return autofillPage;
@@ -397,7 +395,7 @@ suite('PasswordsUITest', function() {
             const eventDetail = document.createElement('password-list-item');
             eventDetail.entry = entry;
 
-            passwordManager.setRequestCredentialDetailsResponse(entry);
+            passwordManager.setRequestCredentialsDetailsResponse(entry);
 
             dispatchingElement.dispatchEvent(
                 new CustomEvent('password-view-page-requested', {

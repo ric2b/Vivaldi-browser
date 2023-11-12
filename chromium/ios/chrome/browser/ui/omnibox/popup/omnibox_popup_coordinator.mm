@@ -6,6 +6,7 @@
 
 #import "base/feature_list.h"
 #import "components/favicon/core/large_icon_service.h"
+#import "components/history/core/browser/top_sites.h"
 #import "components/image_fetcher/core/image_data_fetcher.h"
 #import "components/omnibox/browser/autocomplete_result.h"
 #import "components/omnibox/common/omnibox_features.h"
@@ -14,12 +15,17 @@
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
+#import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/history/top_sites_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
@@ -36,7 +42,9 @@
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_controller.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/pedal_section_extractor.h"
+#import "ios/chrome/browser/ui/omnibox/popup/popup_debug_info_view_controller.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
+#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
@@ -46,7 +54,8 @@
 #error "This file requires ARC support."
 #endif
 
-@interface OmniboxPopupCoordinator () <CarouselItemMenuProvider> {
+@interface OmniboxPopupCoordinator () <OmniboxPopupMediatorProtocolProvider,
+                                       OmniboxPopupMediatorSharingDelegate> {
   std::unique_ptr<OmniboxPopupViewIOS> _popupView;
 }
 
@@ -54,6 +63,10 @@
 @property(nonatomic, strong) OmniboxPopupMediator* mediator;
 @property(nonatomic, strong) PopupModel* model;
 @property(nonatomic, strong) PopupUIConfiguration* uiConfiguration;
+@property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
+
+// Owned by OmniboxEditModel.
+@property(nonatomic, assign) AutocompleteController* autocompleteController;
 
 @end
 
@@ -64,9 +77,12 @@
 - (instancetype)
     initWithBaseViewController:(UIViewController*)viewController
                        browser:(Browser*)browser
+        autocompleteController:(AutocompleteController*)autocompleteController
                      popupView:(std::unique_ptr<OmniboxPopupViewIOS>)popupView {
   self = [super initWithBaseViewController:nil browser:browser];
   if (self) {
+    DCHECK(autocompleteController);
+    _autocompleteController = autocompleteController;
     _popupView = std::move(popupView);
     _popupViewController = [[OmniboxPopupViewController alloc] init];
     _popupReturnDelegate = _popupViewController;
@@ -83,14 +99,17 @@
   BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
 
   self.mediator = [[OmniboxPopupMediator alloc]
-      initWithFetcher:std::move(imageFetcher)
-        faviconLoader:IOSChromeFaviconLoaderFactory::GetForBrowserState(
-                          self.browser->GetBrowserState())
-             delegate:_popupView.get()];
+             initWithFetcher:std::move(imageFetcher)
+               faviconLoader:IOSChromeFaviconLoaderFactory::GetForBrowserState(
+                                 self.browser->GetBrowserState())
+      autocompleteController:self.autocompleteController
+
+                    delegate:_popupView.get()];
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
   self.mediator.dispatcher =
       static_cast<id<BrowserCommands>>(self.browser->GetCommandDispatcher());
+
   self.mediator.webStateList = self.browser->GetWebStateList();
   TemplateURLService* templateURLService =
       ios::TemplateURLServiceFactory::GetForBrowserState(
@@ -99,6 +118,12 @@
       templateURLService && templateURLService->GetDefaultSearchProvider() &&
       templateURLService->GetDefaultSearchProvider()->GetEngineType(
           templateURLService->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
+  self.mediator.protocolProvider = self;
+  self.mediator.sharingDelegate = self;
+  BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
+      initWithBrowser:self.browser
+             scenario:MenuScenarioHistogram::kOmniboxMostVisitedEntry];
+  self.mediator.mostVisitedActionFactory = actionFactory;
 
   if (IsSwiftUIPopupEnabled()) {
     NOTREACHED() << "Swift version not supported anymore.";
@@ -115,15 +140,15 @@
         self.browser->GetBrowserState());
     self.popupViewController.largeIconService = largeIconService;
     self.popupViewController.largeIconCache = cache;
-    self.popupViewController.carouselMenuProvider = self;
-    [self.browser->GetCommandDispatcher()
-        startDispatchingToTarget:self.popupViewController
-                     forProtocol:@protocol(OmniboxSuggestionCommands)];
+    self.popupViewController.carouselMenuProvider = self.mediator;
 
     self.mediator.consumer = self.popupViewController;
     self.popupViewController.matchPreviewDelegate =
         self.popupMatchPreviewDelegate;
     self.popupViewController.acceptReturnDelegate = self.acceptReturnDelegate;
+    self.mediator.carouselItemConsumer = self.popupViewController;
+    self.mediator.allowIncognitoActions =
+        IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs());
   }
 
   if (IsOmniboxActionsEnabled()) {
@@ -146,12 +171,15 @@
                            incognito:isIncognito];
 
   _popupView->SetMediator(self.mediator);
+
+  if (experimental_flags::IsOmniboxDebuggingEnabled()) {
+    [self setupDebug];
+  }
 }
 
 - (void)stop {
+  [self.sharingCoordinator stop];
   _popupView.reset();
-  [self.browser->GetCommandDispatcher()
-      stopDispatchingForProtocol:@protocol(OmniboxSuggestionCommands)];
 }
 
 - (BOOL)isOpen {
@@ -164,38 +192,50 @@
   return self.mediator.hasResults;
 }
 
-#pragma mark - CarouselItemMenuProvider
+#pragma mark - OmniboxPopupMediatorProtocolProvider
 
-// Context Menu for carousel `item` in `view`.
-- (UIContextMenuConfiguration*)
-    contextMenuConfigurationForCarouselItem:(CarouselItem*)carouselItem
-                                   fromView:(UIView*)view {
-  __weak __typeof(self) weakSelf = self;
+- (scoped_refptr<history::TopSites>)topSites {
+  return ios::TopSitesFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+}
 
-  UIContextMenuActionProvider actionProvider = ^(
-      NSArray<UIMenuElement*>* suggestedActions) {
-    DCHECK(weakSelf);
+- (id<SnackbarCommands>)snackbarCommandsHandler {
+  return HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                            SnackbarCommands);
+}
 
-    OmniboxPopupCoordinator* strongSelf = weakSelf;
+#pragma mark - OmniboxPopupMediatorSharingDelegate
 
-    BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
-        initWithBrowser:strongSelf.browser
-               scenario:MenuScenario::kMostVisitedEntry];
+/// Triggers the URL sharing flow for the given `URL` and `title`, with the
+/// origin `view` representing the UI component for that URL.
+- (void)popupMediator:(OmniboxPopupMediator*)mediator
+             shareURL:(GURL)URL
+                title:(NSString*)title
+           originView:(UIView*)originView {
+  ActivityParams* params = [[ActivityParams alloc]
+      initWithURL:URL
+            title:title
+         scenario:ActivityScenario::OmniboxMostVisitedEntry];
+  self.sharingCoordinator = [[SharingCoordinator alloc]
+      initWithBaseViewController:self.popupViewController
+                         browser:self.browser
+                          params:params
+                      originView:originView];
+  [self.sharingCoordinator start];
+}
 
-    NSMutableArray<UIMenuElement*>* menuElements =
-        [[NSMutableArray alloc] init];
+#pragma mark - private
 
-    [menuElements
-        addObject:[actionFactory actionToRemoveWithBlock:^{
-                      // TODO(crbug.com/1365374): add block to remove suggestion
-                  }]];
+- (void)setupDebug {
+  DCHECK(experimental_flags::IsOmniboxDebuggingEnabled());
 
-    return [UIMenu menuWithTitle:@"" children:menuElements];
-  };
-  return
-      [UIContextMenuConfiguration configurationWithIdentifier:nil
-                                              previewProvider:nil
-                                               actionProvider:actionProvider];
+  PopupDebugInfoViewController* viewController =
+      [[PopupDebugInfoViewController alloc] init];
+  self.mediator.debugInfoConsumer = viewController;
+
+  UINavigationController* navController = [[UINavigationController alloc]
+      initWithRootViewController:viewController];
+  self.popupViewController.debugInfoViewController = navController;
 }
 
 @end

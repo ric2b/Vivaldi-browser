@@ -330,11 +330,9 @@ gfx::RectF MathUtil::ProjectClippedRect(const gfx::Transform& transform,
 gfx::QuadF MathUtil::InverseMapQuadToLocalSpace(
     const gfx::Transform& device_transform,
     const gfx::QuadF& device_quad) {
-  gfx::Transform inverse_device_transform(gfx::Transform::kSkipInitialization);
-  DCHECK(device_transform.IsInvertible());
   DCHECK(device_transform.IsFlat());
-  bool did_invert = device_transform.GetInverse(&inverse_device_transform);
-  DCHECK(did_invert);
+  gfx::Transform inverse_device_transform =
+      device_transform.GetCheckedInverse();
   bool clipped = false;
   gfx::QuadF local_quad =
       MathUtil::MapQuad(inverse_device_transform, device_quad, &clipped);
@@ -784,21 +782,21 @@ bool MathUtil::FromValue(const base::Value* raw_value, gfx::Rect* out_rect) {
   if (!raw_value->is_list())
     return false;
 
-  base::Value::ConstListView list_view = raw_value->GetListDeprecated();
+  const base::Value::List& list = raw_value->GetList();
 
-  if (list_view.size() != 4)
+  if (list.size() != 4)
     return false;
 
-  for (const auto& val : list_view) {
+  for (const auto& val : list) {
     if (!val.is_int()) {
       return false;
     }
   }
 
-  int x = list_view[0].GetInt();
-  int y = list_view[1].GetInt();
-  int w = list_view[2].GetInt();
-  int h = list_view[3].GetInt();
+  int x = list[0].GetInt();
+  int y = list[1].GetInt();
+  int w = list[2].GetInt();
+  int h = list[3].GetInt();
 
   *out_rect = gfx::Rect(x, y, w, h);
   return true;

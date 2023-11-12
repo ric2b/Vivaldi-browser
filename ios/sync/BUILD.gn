@@ -74,7 +74,6 @@ source_set("sync") {
     "//components/sync_sessions",
     "//components/sync_user_events",
     "//components/version_info",
-    "//ios/chrome/browser",
     "//ios/chrome/browser/autofill",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",

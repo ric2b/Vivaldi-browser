@@ -16,12 +16,15 @@
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
-#include "components/viz/test/test_image_factory.h"
 #include "components/viz/test/test_shared_bitmap_manager.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/viz/privileged/mojom/compositing/vsync_parameter_observer.mojom.h"
 #include "ui/compositor/compositor.h"
+
+namespace cc {
+class RasterContextProviderWrapper;
+}
 
 namespace viz {
 class HostFrameSinkManager;
@@ -82,10 +85,10 @@ class InProcessContextFactory : public ContextFactory {
   PerCompositorData* CreatePerCompositorData(Compositor* compositor);
 
   scoped_refptr<InProcessContextProvider> shared_main_thread_contexts_;
-  scoped_refptr<InProcessContextProvider> shared_worker_context_provider_;
+  scoped_refptr<cc::RasterContextProviderWrapper>
+      shared_worker_context_provider_wrapper_;
   viz::TestSharedBitmapManager shared_bitmap_manager_;
   viz::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
-  viz::TestImageFactory image_factory_;
   cc::TestTaskGraphRunner task_graph_runner_;
   viz::FrameSinkIdAllocator frame_sink_id_allocator_;
   viz::SubtreeCaptureIdAllocator subtree_capture_id_allocator_;

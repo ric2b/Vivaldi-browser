@@ -15,8 +15,7 @@
 #include "ui/views/accessibility/ax_event_manager.h"
 #include "ui/views/accessibility/ax_event_observer.h"
 
-namespace views {
-namespace test {
+namespace views::test {
 
 // AXEventCounter provides a convenient way to count events registered by the
 // AXEventManager by their event type, and wait for events of a specific type.
@@ -38,6 +37,11 @@ class AXEventCounter : public views::AXEventObserver {
   // being manually reset.
   int GetCount(ax::mojom::Event event_type, ax::mojom::Role role);
 
+  // Returns the number of events of a certain type on a specific view since the
+  // creation of this AXEventManager object and prior to the count being
+  // manually reset.
+  int GetCount(ax::mojom::Event event_type, views::View* view);
+
   // Sets all counters to 0.
   void ResetAllCounts();
 
@@ -51,13 +55,14 @@ class AXEventCounter : public views::AXEventObserver {
   base::flat_map<ax::mojom::Event, int> event_counts_;
   base::flat_map<std::pair<ax::mojom::Event, ax::mojom::Role>, int>
       event_counts_for_role_;
+  base::flat_map<std::pair<ax::mojom::Event, views::View*>, int>
+      event_counts_for_view_;
   ax::mojom::Event wait_for_event_type_ = ax::mojom::Event::kNone;
   raw_ptr<base::RunLoop> run_loop_ = nullptr;
   base::ScopedObservation<views::AXEventManager, views::AXEventObserver>
       tree_observation_{this};
 };
 
-}  // namespace test
-}  // namespace views
+}  // namespace views::test
 
 #endif  // UI_VIEWS_TEST_AX_EVENT_COUNTER_H_

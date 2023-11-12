@@ -11,6 +11,7 @@
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -49,7 +50,7 @@ class CanvasResourceProviderTest : public Test {
     test_context_provider_ = viz::TestContextProvider::Create();
     auto* test_gl = test_context_provider_->UnboundTestContextGL();
     test_gl->set_max_texture_size(kMaxTextureSize);
-    test_gl->set_support_texture_storage_image(true);
+    test_gl->set_supports_scanout_shared_images(true);
     test_gl->set_supports_shared_image_swap_chain(true);
     test_gl->set_supports_gpu_memory_buffer_format(gfx::BufferFormat::RGBA_8888,
                                                    true);
@@ -250,6 +251,44 @@ TEST_F(CanvasResourceProviderTest,
   EXPECT_EQ(original_mailbox, provider->Snapshot()->GetMailboxHolder().mailbox);
 }
 
+TEST_F(CanvasResourceProviderTest, NoRecycleIfLastRefCallback) {
+  const SkImageInfo kInfo = SkImageInfo::MakeN32Premul(10, 10);
+
+  const uint32_t shared_image_usage_flags =
+      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
+
+  auto provider = CanvasResourceProvider::CreateSharedImageProvider(
+      kInfo, cc::PaintFlags::FilterQuality::kMedium,
+      CanvasResourceProvider::ShouldInitialize::kCallClear,
+      context_provider_wrapper_, RasterMode::kGPU, true /*is_origin_top_left*/,
+      shared_image_usage_flags);
+
+  ASSERT_TRUE(provider->IsValid());
+
+  scoped_refptr<StaticBitmapImage> snapshot1 = provider->Snapshot();
+  ASSERT_TRUE(snapshot1);
+
+  // Set up a LastUnrefCallback that recycles the resource asynchronously,
+  // similarly to what OffscreenCanvasPlaceholder would do.
+  provider->ProduceCanvasResource()->SetLastUnrefCallback(
+      base::BindOnce([](scoped_refptr<CanvasResource> resource) {}));
+
+  // Resource updated after draw.
+  provider->Canvas()->clear(SkColors::kWhite);
+  provider->FlushCanvas();
+  scoped_refptr<StaticBitmapImage> snapshot2 = provider->Snapshot();
+  EXPECT_NE(snapshot2->GetMailboxHolder().mailbox,
+            snapshot1->GetMailboxHolder().mailbox);
+
+  auto snapshot1_mailbox = snapshot1->GetMailboxHolder().mailbox;
+  snapshot1.reset();  // resource not recycled due to LastUnrefCallback
+  provider->Canvas()->clear(SkColors::kBlack);
+  provider->FlushCanvas();
+  scoped_refptr<StaticBitmapImage> snapshot3 = provider->Snapshot();
+  // confirm resource is not recycled.
+  EXPECT_NE(snapshot3->GetMailboxHolder().mailbox, snapshot1_mailbox);
+}
+
 TEST_F(CanvasResourceProviderTest,
        CanvasResourceProviderSharedImageCopyOnWriteDisabled) {
   auto* fake_context = static_cast<FakeWebGraphicsContext3DProvider*>(
@@ -302,7 +341,8 @@ TEST_F(CanvasResourceProviderTest, CanvasResourceProviderSharedBitmap) {
 
   MockCanvasResourceDispatcherClient client;
   CanvasResourceDispatcher resource_dispatcher(
-      &client, base::ThreadTaskRunnerHandle::Get(), 1 /* client_id */,
+      &client, scheduler::GetSingleThreadTaskRunnerForTesting(),
+      scheduler::GetSingleThreadTaskRunnerForTesting(), 1 /* client_id */,
       1 /* sink_id */, 1 /* placeholder_canvas_id */, kSize);
 
   auto provider = CanvasResourceProvider::CreateSharedBitmapProvider(

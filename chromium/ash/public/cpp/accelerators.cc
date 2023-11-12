@@ -107,6 +107,8 @@ const AcceleratorData kAcceleratorData[] = {
     // (EF_COMMAND_DOWN is used for Search as a modifier).
     {false, ui::VKEY_MENU, ui::EF_COMMAND_DOWN, TOGGLE_CAPS_LOCK},
     {true, ui::VKEY_V, ui::EF_COMMAND_DOWN, TOGGLE_CLIPBOARD_HISTORY},
+    {true, ui::VKEY_V, ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN,
+     PASTE_CLIPBOARD_HISTORY_PLAIN_TEXT},
     {true, ui::VKEY_VOLUME_MUTE, ui::EF_NONE, VOLUME_MUTE},
     {true, ui::VKEY_VOLUME_DOWN, ui::EF_NONE, VOLUME_DOWN},
     {true, ui::VKEY_VOLUME_UP, ui::EF_NONE, VOLUME_UP},
@@ -348,6 +350,15 @@ const AcceleratorData
 
 const size_t kEnabledWithImprovedDesksKeyboardShortcutsAcceleratorDataLength =
     std::size(kEnabledWithImprovedDesksKeyboardShortcutsAcceleratorData);
+
+const AcceleratorData kEnableWithSameAppWindowCycleAcceleratorData[] = {
+    {true, ui::VKEY_OEM_3, ui::EF_ALT_DOWN, CYCLE_SAME_APP_WINDOWS_FORWARD},
+    {true, ui::VKEY_OEM_3, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
+     CYCLE_SAME_APP_WINDOWS_BACKWARD},
+};
+
+const size_t kEnableWithSameAppWindowCycleAcceleratorDataLength =
+    std::size(kEnableWithSameAppWindowCycleAcceleratorData);
 
 // static
 AcceleratorController* AcceleratorController::Get() {

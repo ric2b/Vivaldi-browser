@@ -8,18 +8,17 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/test_future.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
-#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
@@ -37,6 +36,7 @@
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/webapps/browser/install_result_code.h"
@@ -45,20 +45,22 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using ::base::test::RunClosure;
+using ::base::test::TestFuture;
 using ::testing::_;
+using ::testing::Invoke;
 using ::testing::Return;
 
 namespace ash {
-
 namespace {
 
-#define EXEC_AND_WAIT_FOR_CALL(exec, mock, method)                      \
-  ({                                                                    \
-    base::RunLoop loop;                                                 \
-    EXPECT_CALL(mock, method).WillOnce(RunClosure(loop.QuitClosure())); \
-    exec;                                                               \
-    loop.Run();                                                         \
+#define EXEC_AND_WAIT_FOR_CALL(exec, mock, method)    \
+  ({                                                  \
+    TestFuture<bool> waiter;                          \
+    EXPECT_CALL(mock, method).WillOnce(Invoke([&]() { \
+      waiter.SetValue(true);                          \
+    }));                                              \
+    exec;                                             \
+    EXPECT_TRUE(waiter.Wait());                       \
   })
 
 class MockAppLauncherDelegate : public WebKioskAppServiceLauncher::Delegate {
@@ -89,19 +91,15 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
  public:
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
+
+    LoginState::Get()->SetLoggedInState(LoginState::LOGGED_IN_ACTIVE,
+                                        LoginState::LOGGED_IN_USER_KIOSK);
+
     app_service_test_.UninstallAllApps(profile());
     app_service_test_.SetUp(profile());
     app_service_ = apps::AppServiceProxyFactory::GetForProfile(profile());
 
     fake_web_app_provider_ = web_app::FakeWebAppProvider::Get(profile());
-    fake_web_app_provider_->SetDefaultFakeSubsystems();
-    fake_web_app_provider_->SetRunSubsystemStartupTasks(true);
-
-    auto fake_externally_managed_app_manager =
-        std::make_unique<web_app::FakeExternallyManagedAppManager>(profile());
-    fake_web_app_provider_->SetExternallyManagedAppManager(
-        std::move(fake_externally_managed_app_manager));
-
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
 
     externally_managed_app_manager().SetSubsystems(
@@ -122,7 +120,7 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
                   /*manifest_id=*/absl::nullopt, start_url);
               // Uninstall placeholder if reinstall_placeholder is set to true.
               auto placeholder_id =
-                  web_app_provider()->registrar().LookupPlaceholderAppId(
+                  web_app_provider()->registrar_unsafe().LookupPlaceholderAppId(
                       install_url, web_app::WebAppManagement::Type::kKiosk);
               if (placeholder_id.has_value()) {
                 if (install_options.reinstall_placeholder) {
@@ -148,11 +146,6 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
                   install_result_code_, app_id);
             }));
 
-    // Web app system checks for system web app info before launching.
-    system_web_app_manager()->SetSubsystems(
-        &externally_managed_app_manager(), &app_registrar(), &sync_bridge(),
-        &ui_manager(), /*web_app_policy_manager=*/nullptr);
-
     web_app::WebAppLaunchManager::SetOpenApplicationCallbackForTesting(
         base::BindLambdaForTesting(
             [this](apps::AppLaunchParams&& params) -> content::WebContents* {
@@ -166,7 +159,7 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
 
     delegate_ = std::make_unique<MockAppLauncherDelegate>();
     launcher_ = std::make_unique<WebKioskAppServiceLauncher>(
-        profile(), delegate_.get(), AccountId::FromUserEmail(kAppEmail));
+        profile(), AccountId::FromUserEmail(kAppEmail), delegate_.get());
   }
 
   void TearDown() override {
@@ -183,20 +176,17 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
 
     if (installed) {
       {
-        base::RunLoop loop;
+        TestFuture<const GURL&,
+                   web_app::ExternallyManagedAppManager::InstallResult>
+            install_result;
         web_app::ExternalInstallOptions install_options(
             GURL(kAppInstallUrl), web_app::UserDisplayMode::kStandalone,
             web_app::ExternalInstallSource::kKiosk);
-        externally_managed_app_manager().Install(
-            install_options,
-            base::BindLambdaForTesting(
-                [&loop](const GURL& install_url,
-                        web_app::ExternallyManagedAppManager::InstallResult
-                            result) {
-                  ASSERT_TRUE(webapps::IsSuccess(result.code));
-                  loop.Quit();
-                }));
-        loop.Run();
+
+        externally_managed_app_manager().Install(install_options,
+                                                 install_result.GetCallback());
+
+        ASSERT_TRUE(webapps::IsSuccess(install_result.Get<1>().code));
       }
 
       WebAppInstallInfo info;
@@ -244,19 +234,15 @@ class WebKioskAppServiceLauncherTest : public BrowserWithTestWindowTest {
   }
 
   web_app::WebAppRegistrar& app_registrar() {
-    return web_app_provider()->registrar();
+    return web_app_provider()->registrar_unsafe();
   }
 
   web_app::WebAppSyncBridge& sync_bridge() {
-    return web_app_provider()->sync_bridge();
+    return web_app_provider()->sync_bridge_unsafe();
   }
 
   web_app::WebAppUiManager& ui_manager() {
     return web_app_provider()->ui_manager();
-  }
-
-  SystemWebAppManager* system_web_app_manager() {
-    return SystemWebAppManager::GetForTest(profile());
   }
 
   web_app::FakeExternallyManagedAppManager& externally_managed_app_manager() {
@@ -372,7 +358,7 @@ TEST_F(WebKioskAppServiceLauncherTest, PlaceholderReplaced) {
 
   set_install_placeholder(true);
   SetupAppData(/*installed=*/true);
-  EXPECT_TRUE(web_app_provider()->registrar().LookupPlaceholderAppId(
+  EXPECT_TRUE(web_app_provider()->registrar_unsafe().LookupPlaceholderAppId(
       GURL(kAppInstallUrl), web_app::WebAppManagement::Type::kKiosk));
 
   set_install_placeholder(false);
@@ -388,7 +374,7 @@ TEST_F(WebKioskAppServiceLauncherTest, PlaceholderReplaced) {
 
   EXPECT_EQ(app_data()->status(), WebKioskAppData::Status::kInstalled);
   EXPECT_EQ(app_data()->launch_url(), kAppLaunchUrl);
-  EXPECT_FALSE(web_app_provider()->registrar().LookupPlaceholderAppId(
+  EXPECT_FALSE(web_app_provider()->registrar_unsafe().LookupPlaceholderAppId(
       GURL(kAppInstallUrl), web_app::WebAppManagement::Type::kKiosk));
 
   // App isn't always ready by the time it's being launched. Therefore we check

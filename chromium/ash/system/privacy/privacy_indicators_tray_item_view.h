@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_PRIVACY_PRIVACY_INDICATORS_TRAY_ITEM_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/system/tray/tray_item_view.h"
 #include "base/containers/flat_set.h"
 #include "base/timer/timer.h"
@@ -24,7 +25,8 @@ class Shelf;
 
 // A tray item which resides in the system tray, indicating to users that an app
 // is currently accessing camera/microphone.
-class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
+class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView,
+                                                 public SessionObserver {
  public:
   enum AnimationState {
     // No animation is running.
@@ -46,6 +48,21 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
     // `shorter_side_shrink_animation_`, and this state ends when
     // `shorter_side_shrink_animation_` ends.
     kBothSideShrink,
+  };
+
+  // This enum covers all the possible variations for the privacy indicators
+  // view type that we are interested in recording metrics, specifying whether
+  // camera/mic access and screen sharing icons are showing. Note to keep in
+  // sync with enum PrivacyIndicatorsType in tools/metrics/histograms/enums.xml.
+  enum class Type {
+    kCamera = 1 << 1,
+    kMicrophone = 1 << 2,
+    kScreenSharing = 1 << 3,
+    kCameraMicrophone = kCamera | kMicrophone,
+    kCameraScreenSharing = kCamera | kScreenSharing,
+    kMicrophoneScreenSharing = kMicrophone | kScreenSharing,
+    kAllUsed = kCamera | kMicrophone | kScreenSharing,
+    kMaxValue = kAllUsed,
   };
 
   explicit PrivacyIndicatorsTrayItemView(Shelf* shelf);
@@ -72,6 +89,7 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
 
  private:
   friend class PrivacyIndicatorsTrayItemViewTest;
+  friend class CaptureModePrivacyIndicatorsTest;
 
   // TrayItemView:
   void PerformVisibilityAnimation(bool visible) override;
@@ -84,6 +102,9 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
+
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // Specify whether camera/microphone is in used.
   bool IsCameraUsed() const;
@@ -115,6 +136,9 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
   // End all 3 animations contained in this class.
   void EndAllAnimations();
 
+  // Record the type of privacy indicators that are showing.
+  void RecordPrivacyIndicatorsType();
+
   views::BoxLayout* layout_manager_ = nullptr;
 
   // Owned by the views hierarchy.
@@ -141,6 +165,9 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView {
   // completed.
   base::OneShotTimer longer_side_shrink_delay_timer_;
   base::OneShotTimer shorter_side_shrink_delay_timer_;
+
+  // Used to record metrics of the number of shows per session.
+  int count_visible_per_session_ = 0;
 
   // Measure animation smoothness metrics for all the animations.
   absl::optional<ui::ThroughputTracker> throughput_tracker_;

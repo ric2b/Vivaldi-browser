@@ -88,6 +88,7 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
   }
   out->disable_secure_dns = data.disable_secure_dns();
   out->has_user_activation = data.has_user_activation();
+  out->allow_cookies_from_browser = data.allow_cookies_from_browser();
   out->cookie_observer = data.TakeCookieObserver<
       mojo::PendingRemote<network::mojom::CookieAccessObserver>>();
   out->url_loader_network_observer = data.TakeUrlLoaderNetworkObserver<
@@ -203,6 +204,7 @@ bool StructTraits<
   out->corb_detachable = data.corb_detachable();
   out->destination = data.destination();
   out->keepalive = data.keepalive();
+  out->browsing_topics = data.browsing_topics();
   out->has_user_gesture = data.has_user_gesture();
   out->enable_load_timing = data.enable_load_timing();
   out->enable_upload_progress = data.enable_upload_progress();

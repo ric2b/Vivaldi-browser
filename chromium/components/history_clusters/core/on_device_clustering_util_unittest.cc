@@ -13,6 +13,7 @@
 namespace history_clusters {
 namespace {
 
+using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;
 
 using OnDeviceClusteringUtilTest = ::testing::Test;
@@ -121,54 +122,27 @@ TEST_F(OnDeviceClusteringUtilTest, MergeDuplicateVisitIntoCanonicalVisit) {
           .entities[0]
           .weight,
       20);
+
+  EXPECT_FLOAT_EQ(canonical_visit.score, 1.0f);
 }
 
-TEST_F(OnDeviceClusteringUtilTest, SortClusters) {
-  std::vector<history::Cluster> clusters;
-  // This first cluster is meant to validate that the higher scoring "visit 1"
-  // gets sorted to the top, even though "visit 1" is older than "visit 2".
-  // It's to validate the within-cluster sorting.
-  clusters.push_back(history::Cluster(
-      0,
-      {
-          testing::CreateClusterVisit(
-              testing::CreateDefaultAnnotatedVisit(2, GURL("https://two.com/"),
-                                                   base::Time::FromTimeT(10)),
-              absl::nullopt, 0.5),
-          testing::CreateClusterVisit(
-              testing::CreateDefaultAnnotatedVisit(1, GURL("https://one.com/"),
-                                                   base::Time::FromTimeT(5)),
-              absl::nullopt, 0.9),
-      },
-      {}));
-  // The second cluster is lower scoring, but newer, because the top visit is
-  // newer. It should be sorted above the first cluster because of reverse
-  // chronological between-cluster sorting.
-  clusters.push_back(history::Cluster(
-      0,
-      {
-          testing::CreateClusterVisit(
-              testing::CreateDefaultAnnotatedVisit(2, GURL("https://two.com/"),
-                                                   base::Time::FromTimeT(10)),
-              absl::nullopt, 0.1),
-      },
-      {}));
+TEST_F(OnDeviceClusteringUtilTest,
+       MergeDuplicateVisitIntoCanonicalVisitMaintainsZeroScore) {
+  // canonical_visit has the same normalized URL as duplicated_visit.
+  history::ClusterVisit duplicate_visit = testing::CreateClusterVisit(
+      testing::CreateDefaultAnnotatedVisit(
+          1, GURL("https://example.com/normalized?q=whatever")),
+      GURL("https://example.com/normalized"));
+  duplicate_visit.score = 0.0;
 
-  SortClusters(&clusters);
+  history::ClusterVisit canonical_visit =
+      testing::CreateClusterVisit(testing::CreateDefaultAnnotatedVisit(
+          2, GURL("https://example.com/normalized")));
 
-  ASSERT_EQ(clusters.size(), 2u);
+  MergeDuplicateVisitIntoCanonicalVisit(std::move(duplicate_visit),
+                                        canonical_visit);
 
-  auto& visits = clusters[0].visits;
-  ASSERT_EQ(visits.size(), 1u);
-  EXPECT_EQ(visits[0].annotated_visit.url_row.url(), "https://two.com/");
-  EXPECT_FLOAT_EQ(visits[0].score, 0.1);
-
-  visits = clusters[1].visits;
-  ASSERT_EQ(visits.size(), 2u);
-  EXPECT_EQ(visits[0].annotated_visit.url_row.url(), "https://one.com/");
-  EXPECT_FLOAT_EQ(visits[0].score, 0.9);
-  EXPECT_EQ(visits[1].annotated_visit.url_row.url(), "https://two.com/");
-  EXPECT_FLOAT_EQ(visits[1].score, 0.5);
+  EXPECT_FLOAT_EQ(canonical_visit.score, 0.0f);
 }
 
 TEST_F(OnDeviceClusteringUtilTest, IsNoisyVisitSearchHighEngagementVisit) {
@@ -197,6 +171,56 @@ TEST_F(OnDeviceClusteringUtilTest, IsNoisyVisitSearchLowEngagementVisit) {
   visit.annotated_visit.content_annotations.search_terms = u"search";
   visit.engagement_score = 1.0;
   EXPECT_FALSE(IsNoisyVisit(visit));
+}
+
+TEST_F(OnDeviceClusteringUtilTest, AppendClusterVisits) {
+  history::Cluster cluster1 = history::Cluster(
+      0,
+      {
+          testing::CreateClusterVisit(
+              testing::CreateDefaultAnnotatedVisit(1, GURL("https://two.com/"),
+                                                   base::Time::FromTimeT(10)),
+              absl::nullopt, 0.1),
+      },
+      {});
+
+  history::Cluster cluster2 = history::Cluster(
+      0,
+      {
+          testing::CreateClusterVisit(
+              testing::CreateDefaultAnnotatedVisit(2, GURL("https://two.com/"),
+                                                   base::Time::FromTimeT(10)),
+              absl::nullopt, 0.1),
+      },
+      {});
+
+  AppendClusterVisits(cluster1, cluster2);
+
+  ASSERT_THAT(cluster1.visits.size(), 2u);
+  ASSERT_TRUE(cluster2.visits.empty());
+  EXPECT_THAT(testing::ToVisitResults({cluster1}),
+              ElementsAre(ElementsAre(testing::VisitResult(1, 0.1),
+                                      testing::VisitResult(2, 0.1))));
+}
+
+TEST_F(OnDeviceClusteringUtilTest, RemoveEmptyClusters) {
+  std::vector<history::Cluster> clusters;
+  clusters.push_back(history::Cluster(
+      0,
+      {
+          testing::CreateClusterVisit(
+              testing::CreateDefaultAnnotatedVisit(2, GURL("https://two.com/"),
+                                                   base::Time::FromTimeT(10)),
+              absl::nullopt, 0.1),
+      },
+      {}));
+
+  clusters.push_back(history::Cluster(0, {}, {}));
+
+  RemoveEmptyClusters(&clusters);
+
+  ASSERT_THAT(clusters.size(), 1u);
+  EXPECT_THAT(clusters[0].visits.size(), 1u);
 }
 
 }  // namespace

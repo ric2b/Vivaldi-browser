@@ -12,11 +12,10 @@
   case kCommandSetExtData:                        \
   case kCommandSetWindowExtData:                  \
   case kCommandPageActionOverrides:               \
-    if (!ReadVivaldiData(command, tabs, windows)) \
-      return true;                                \
+    ReadVivaldiData(command, tabs, windows);      \
     break;
 
-bool ReadVivaldiData(const SessionCommand* command,
+void ReadVivaldiData(const SessionCommand* command,
                      IdToSessionTab* tabs,
                      IdToSessionWindow* windows) {
   switch (command->id()) {
@@ -24,7 +23,7 @@ bool ReadVivaldiData(const SessionCommand* command,
       SessionID tab_id = SessionID::InvalidValue();
       std::string viv_ext_data;
       if (!vivaldi::RestoreSetVivExtDataCommand(*command, &tab_id, &viv_ext_data)) {
-        return false;
+        return;
       }
 
       GetTab(tab_id, tabs)->viv_ext_data.swap(viv_ext_data);
@@ -36,7 +35,7 @@ bool ReadVivaldiData(const SessionCommand* command,
       std::string viv_ext_data;
       if (!vivaldi::RestoreSetWindowVivExtDataCommand(*command, &window_id,
                                                    &viv_ext_data))
-        return false;
+        return;
 
       GetWindow(window_id, windows)->viv_ext_data.swap(viv_ext_data);
       break;
@@ -48,7 +47,7 @@ bool ReadVivaldiData(const SessionCommand* command,
       bool is_enabled_override;
       if (!vivaldi::RestoreVivPageActionOverrideCommand(
               *command, &tab_id, &script_path, &is_enabled_override)) {
-        return false;
+        return;
       }
 
       GetTab(tab_id, tabs)
@@ -62,12 +61,12 @@ bool ReadVivaldiData(const SessionCommand* command,
       std::string script_path;
       if (!vivaldi::RestoreRemoveVivPageActionOverrideCommand(*command, &tab_id,
                                                            &script_path)) {
-        return false;
+        return;
       }
 
       GetTab(tab_id, tabs)->viv_page_action_overrides.erase(script_path);
       break;
     }
   }
-  return true;
+  return;
 }

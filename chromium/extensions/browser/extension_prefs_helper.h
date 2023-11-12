@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/extension_prefs_scope.h"
 
 class ExtensionPrefValueMap;
@@ -15,17 +17,24 @@ namespace base {
 class Value;
 }
 
+namespace content {
+class BrowserContext;
+}
+
 namespace extensions {
 class ExtensionPrefs;
 
-class ExtensionPrefsHelper {
+class ExtensionPrefsHelper : public KeyedService {
  public:
   ExtensionPrefsHelper(ExtensionPrefs* prefs, ExtensionPrefValueMap* value_map);
 
   ExtensionPrefsHelper(const ExtensionPrefsHelper&) = delete;
   ExtensionPrefsHelper& operator=(const ExtensionPrefsHelper&) = delete;
 
-  ~ExtensionPrefsHelper();
+  ~ExtensionPrefsHelper() override;
+
+  // Convenience function to get the ExtensionPrefshelper for a BrowserContext.
+  static ExtensionPrefsHelper* Get(content::BrowserContext* context);
 
   // Functions for manipulating preference values that are controlled by the
   // extension. In other words, these are not pref values *about* the extension,
@@ -62,8 +71,8 @@ class ExtensionPrefsHelper {
   const ExtensionPrefs* prefs() const { return prefs_; }
 
  private:
-  ExtensionPrefs* const prefs_;
-  ExtensionPrefValueMap* const value_map_;
+  const raw_ptr<ExtensionPrefs> prefs_;
+  const raw_ptr<ExtensionPrefValueMap> value_map_;
 };
 
 }  // namespace extensions

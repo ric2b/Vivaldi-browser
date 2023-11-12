@@ -6,6 +6,10 @@ found in the LICENSE file.
 -->
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Vivaldi -->
+    <org.vivaldi.browser.preferences.UIScalingPreference
+        android:key="ui_scale"
+        android:selectable="false" />
 
     <org.chromium.components.browser_ui.accessibility.TextScalePreference
         android:key="text_scale"

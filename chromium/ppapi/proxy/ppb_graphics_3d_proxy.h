@@ -38,7 +38,8 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
  public:
   Graphics3D(const HostResource& resource,
              const gfx::Size& size,
-             const bool single_buffer);
+             const bool single_buffer,
+             bool use_shared_images_swapchain);
 
   Graphics3D(const Graphics3D&) = delete;
   Graphics3D& operator=(const Graphics3D&) = delete;
@@ -64,6 +65,7 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
       int32_t end) override;
   void EnsureWorkVisible() override;
   void TakeFrontBuffer() override;
+  void ResolveAndDetachFramebuffer() override;
 
  private:
   // PPB_Graphics3D_Shared overrides.
@@ -71,6 +73,7 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
   gpu::GpuControl* GetGpuControl() override;
   int32_t DoSwapBuffers(const gpu::SyncToken& sync_token,
                         const gfx::Size& size) override;
+  void DoResize(gfx::Size size) override;
 
   std::unique_ptr<PpapiCommandBufferProxy> command_buffer_;
 
@@ -129,6 +132,9 @@ class PPB_Graphics3D_Proxy : public InterfaceProxy {
                         const gfx::Size& size);
   void OnMsgTakeFrontBuffer(const HostResource& context);
   void OnMsgEnsureWorkVisible(const HostResource& context);
+  void OnMsgResolveAndDetachFramebuffer(const HostResource& context);
+  void OnMsgResize(const HostResource& context, gfx::Size size);
+
   // Renderer->plugin message handlers.
   void OnMsgSwapBuffersACK(const HostResource& context,
                            int32_t pp_error);

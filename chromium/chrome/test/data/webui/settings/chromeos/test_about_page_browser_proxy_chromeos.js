@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 import {BrowserChannel, UpdateStatus} from 'chrome://os-settings/chromeos/os_settings.js';
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
 
-import {TestBrowserProxy} from '../../test_browser_proxy.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 /** @implements {AboutPageBrowserProxy} */
 export class TestAboutPageBrowserProxyChromeOS extends TestBrowserProxy {
@@ -24,7 +24,7 @@ export class TestAboutPageBrowserProxyChromeOS extends TestBrowserProxy {
       'launchReleaseNotes',
       'openOsHelpPage',
       'openDiagnostics',
-      'refreshTPMFirmwareUpdateStatus',
+      'refreshTpmFirmwareUpdateStatus',
       'requestUpdate',
       'setChannel',
       'getFirmwareUpdateCount',
@@ -214,8 +214,8 @@ export class TestAboutPageBrowserProxyChromeOS extends TestBrowserProxy {
   }
 
   /** @override */
-  refreshTPMFirmwareUpdateStatus() {
-    this.methodCalled('refreshTPMFirmwareUpdateStatus');
+  refreshTpmFirmwareUpdateStatus() {
+    this.methodCalled('refreshTpmFirmwareUpdateStatus');
     webUIListenerCallback(
         'tpm-firmware-update-status-changed', this.tpmFirmwareUpdateStatus_);
   }

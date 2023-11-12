@@ -8,6 +8,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/strcat.h"
+#include "chrome/browser/history_clusters/history_clusters_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/ui/views/side_panel/user_note/user_note_ui_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/webview/webview_side_panel_coordinator.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_prefs.h"
 #include "components/history_clusters/core/history_clusters_service.h"
 #include "components/prefs/pref_service.h"
@@ -64,8 +66,13 @@ void SidePanelUtil::PopulateGlobalEntries(Browser* browser,
       ->CreateAndRegisterEntry(global_registry);
 
   // Add history clusters.
-  if (base::FeatureList::IsEnabled(features::kSidePanelJourneys) &&
-      !browser->profile()->IsIncognitoProfile()) {
+  auto* history_clusters_service =
+      HistoryClustersServiceFactory::GetForBrowserContext(browser->profile());
+  if (base::FeatureList::IsEnabled(history_clusters::kSidePanelJourneys) &&
+      history_clusters_service &&
+      history_clusters_service->IsJourneysEnabled() &&
+      !browser->profile()->IsIncognitoProfile() &&
+      !browser->profile()->IsGuestSession()) {
     auto* history_clusters_side_panel_coordinator =
         HistoryClustersSidePanelCoordinator::GetOrCreateForBrowser(browser);
     if (browser->profile()->GetPrefs()->GetBoolean(
@@ -145,6 +152,11 @@ void SidePanelUtil::RecordSidePanelResizeMetrics(SidePanelEntry::Id id,
       width_percentage);
   base::UmaHistogramPercentage("SidePanel.ResizedWidthPercentage",
                                width_percentage);
+}
+
+void SidePanelUtil::RecordNewTabButtonClicked(SidePanelEntry::Id id) {
+  base::RecordComputedAction(base::StrCat(
+      {"SidePanel.", GetHistogramNameForId(id), ".NewTabButtonClicked"}));
 }
 
 void SidePanelUtil::RecordEntryShownMetrics(SidePanelEntry::Id id) {

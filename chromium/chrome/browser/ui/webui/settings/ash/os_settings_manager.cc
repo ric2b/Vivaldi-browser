@@ -4,16 +4,14 @@
 
 #include "chrome/browser/ui/webui/settings/ash/os_settings_manager.h"
 
-#include "base/bind.h"
-#include "base/feature_list.h"
 #include "chrome/browser/ui/webui/settings/ash/hierarchy.h"
 #include "chrome/browser/ui/webui/settings/ash/os_apps_page/app_notification_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_sections.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/ash/settings_user_action_tracker.h"
+#include "chromeos/ash/components/phonehub/phone_hub_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "ui/base/l10n/l10n_util.h"
 
 namespace ash::settings {
 

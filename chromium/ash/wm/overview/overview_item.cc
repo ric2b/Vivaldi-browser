@@ -45,6 +45,7 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/user_metrics.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -129,27 +130,6 @@ class AnimationObserver : public ui::ImplicitAnimationObserver {
   base::OnceClosure on_animation_finished_;
 };
 
-OverviewAnimationType GetExitOverviewAnimationTypeForMinimizedWindow(
-    OverviewEnterExitType type,
-    bool should_animate_when_exiting) {
-  // We should never get here when overview mode should exit immediately. The
-  // minimized window's |item_widget_| should be closed and destroyed
-  // immediately.
-  DCHECK_NE(type, OverviewEnterExitType::kImmediateExit);
-
-  // OverviewEnterExitType can only be set to kWindowMinimized in talbet mode.
-  // Fade out the minimized window without animation if switch from tablet mode
-  // to clamshell mode.
-  if (type == OverviewEnterExitType::kFadeOutExit) {
-    return Shell::Get()->tablet_mode_controller()->InTabletMode()
-               ? OVERVIEW_ANIMATION_EXIT_TO_HOME_LAUNCHER
-               : OVERVIEW_ANIMATION_NONE;
-  }
-  return should_animate_when_exiting
-             ? OVERVIEW_ANIMATION_EXIT_OVERVIEW_MODE_FADE_OUT
-             : OVERVIEW_ANIMATION_RESTORE_WINDOW_ZERO;
-}
-
 // Applies |new_bounds_in_screen| to |widget|, animating and observing the
 // transform if necessary.
 void SetWidgetBoundsAndMaybeAnimateTransform(
@@ -215,7 +195,7 @@ bool OverviewItem::Contains(const aura::Window* target) const {
   return transform_window_.Contains(target);
 }
 
-void OverviewItem::HideForDesksTemplatesGrid(bool animate) {
+void OverviewItem::HideForSavedDeskLibrary(bool animate) {
   // To hide the window, we will set its layer opacity to 0. This would normally
   // also hide the window from the mini view, which we don't want. By setting a
   // property on the window, we can force it to stay visible.
@@ -248,8 +228,8 @@ void OverviewItem::HideForDesksTemplatesGrid(bool animate) {
   HideCannotSnapWarning(animate);
 }
 
-void OverviewItem::RevertHideForDesksTemplatesGrid(bool animate) {
-  // This might run before `HideForDesksTemplatesGrid()`, thus cancel the
+void OverviewItem::RevertHideForSavedDeskLibrary(bool animate) {
+  // This might run before `HideForSavedDeskLibrary()`, thus cancel the
   // callback to prevent such case.
   hide_window_in_overview_callback_.Cancel();
 
@@ -286,7 +266,7 @@ void OverviewItem::OnMovingWindowToAnotherDesk() {
 }
 
 void OverviewItem::RestoreWindow(bool reset_transform,
-                                 bool was_desks_templates_grid_showing) {
+                                 bool was_saved_desk_library_showing) {
   // TODO(oshima): SplitViewController has its own logic to adjust the
   // target state in |SplitViewController::OnOverviewModeEnding|.
   // Unify the mechanism to control it and remove ifs.
@@ -302,7 +282,7 @@ void OverviewItem::RestoreWindow(bool reset_transform,
 
   overview_item_view_->OnOverviewItemWindowRestoring();
   transform_window_.RestoreWindow(reset_transform,
-                                  was_desks_templates_grid_showing);
+                                  was_saved_desk_library_showing);
 
   if (!transform_window_.IsMinimized())
     return;
@@ -318,8 +298,7 @@ void OverviewItem::RestoreWindow(bool reset_transform,
   }
 
   OverviewAnimationType animation_type =
-      GetExitOverviewAnimationTypeForMinimizedWindow(
-          enter_exit_type, should_animate_when_exiting_);
+      GetExitOverviewAnimationTypeForMinimizedWindow(enter_exit_type);
   FadeOutWidgetFromOverview(std::move(item_widget_), animation_type);
 }
 
@@ -328,6 +307,16 @@ void OverviewItem::EnsureVisible() {
 }
 
 void OverviewItem::Shutdown() {
+  // If `hide_windows` still manages the visibility of this overview item
+  // window, remove it from the list without showing.
+  ScopedOverviewHideWindows* hide_windows =
+      overview_session_->hide_windows_for_saved_desks_grid();
+  if (item_widget_ && hide_windows &&
+      hide_windows->HasWindow(item_widget_->GetNativeWindow())) {
+    hide_windows->RemoveWindow(item_widget_->GetNativeWindow(),
+                               /*show_window=*/false);
+  }
+
   item_widget_.reset();
   overview_item_view_ = nullptr;
 }
@@ -360,8 +349,8 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
   }
 
   // Do not animate if the resulting bounds does not change. The original
-  // window may change bounds so we still need to call SetItemBounds to update
-  // the window transform.
+  // window may change bounds so we still need to call `SetItemBounds()` to
+  // update the window transform.
   OverviewAnimationType new_animation_type = animation_type;
   if (target_bounds == target_bounds_ &&
       !GetWindow()->layer()->GetAnimator()->is_animating()) {
@@ -369,121 +358,130 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
   }
 
   base::AutoReset<bool> auto_reset_in_bounds_update(&in_bounds_update_, true);
-  // If |target_bounds_| is empty, this is the first update. Let
-  // UpdateHeaderLayout know, as we do not want |item_widget_| to be animated
-  // with the window.
+  // If `target_bounds_` is empty, this is the first update. Let
+  // `UpdateHeaderLayout()` know, as we do not want `item_widget_` to be
+  // animated with the window.
   const bool is_first_update = target_bounds_.IsEmpty();
   target_bounds_ = target_bounds;
 
-  // If the window is minimized we can avoid applying transforms on the original
-  // window.
-  if (transform_window_.IsMinimized()) {
-    item_widget_->GetNativeWindow()->layer()->GetAnimator()->StopAnimating();
+  // Run at the exit of this function to update rounded corners, shadow and the
+  // cannot snap widget.
+  base::ScopedClosureRunner at_exit_runner(base::BindOnce(
+      [](base::WeakPtr<OverviewItem> item,
+         OverviewAnimationType animation_type) {
+        if (!item.get())
+          return;
 
-    gfx::Rect minimized_bounds = ToStableSizeRoundedRect(target_bounds);
-    OverviewAnimationType minimized_animation_type =
-        is_first_update ? OVERVIEW_ANIMATION_NONE : new_animation_type;
-    SetWidgetBoundsAndMaybeAnimateTransform(
-        item_widget_.get(), minimized_bounds, minimized_animation_type,
-        minimized_animation_type ==
-                OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_IN_OVERVIEW
-            ? new AnimationObserver{base::BindOnce(
-                                        &OverviewItem::
-                                            OnItemBoundsAnimationStarted,
-                                        weak_ptr_factory_.GetWeakPtr()),
-                                    base::BindOnce(
-                                        &OverviewItem::
-                                            OnItemBoundsAnimationEnded,
-                                        weak_ptr_factory_.GetWeakPtr())}
-            : nullptr);
+        // Shadow is normally set after an animation is finished. In the case of
+        // no animations, manually set the shadow. Shadow relies on both the
+        // window transform and `item_widget_`'s new bounds so set it after
+        // `SetItemBounds()` and `UpdateHeaderLayout()`. Do not apply the shadow
+        // for drop target.
+        if (animation_type == OVERVIEW_ANIMATION_NONE)
+          item->UpdateRoundedCornersAndShadow();
 
-    // Minimized windows have a WindowPreviewView which mirrors content from the
-    // window. |target_bounds| may not have a matching aspect ratio to the
-    // actual window (eg. in splitview overview). In this case, the contents
-    // will be squashed to fit the given bounds. To get around this, stretch out
-    // the contents so that it matches |unclipped_size_|, then clip the layer to
-    // match |target_bounds|. This is what is done on non-minimized windows.
-    ui::Layer* preview_layer = overview_item_view_->preview_view()->layer();
-    DCHECK(preview_layer);
-    if (unclipped_size_) {
-      gfx::SizeF target_size(*unclipped_size_);
-      gfx::SizeF preview_size = GetWindowTargetBoundsWithInsets().size();
-      target_size.Enlarge(0, -kHeaderHeightDp);
-
-      const float x_scale = target_size.width() / preview_size.width();
-      const float y_scale = target_size.height() / preview_size.height();
-      gfx::Transform transform;
-      transform.Scale(x_scale, y_scale);
-      preview_layer->SetTransform(transform);
-
-      // Transform affects clip rect so scale the clip rect so that the final
-      // size is equal to the untransformed layer.
-      gfx::Size clip_size(preview_layer->size());
-      clip_size =
-          gfx::ScaleToRoundedSize(clip_size, 1.f / x_scale, 1.f / y_scale);
-      preview_layer->SetClipRect(gfx::Rect(clip_size));
-    } else {
-      preview_layer->SetClipRect(gfx::Rect());
-      preview_layer->SetTransform(gfx::Transform());
-    }
-
-    // On the first update show |item_widget_|. It's created on creation of
-    // |this|, and needs to be shown as soon as its bounds have been determined
-    // as it contains a mirror view of the window in its contents. The header
-    // will be faded in later to match non minimized windows.
-    if (is_first_update) {
-      if (!should_animate_when_entering_) {
-        item_widget_->GetNativeWindow()->layer()->SetOpacity(1.f);
-      } else {
-        if (new_animation_type == OVERVIEW_ANIMATION_SPAWN_ITEM_IN_OVERVIEW) {
-          PerformItemSpawnedAnimation(item_widget_->GetNativeWindow(),
-                                      gfx::Transform{});
-        } else {
-          // If entering from home launcher, use the home specific (fade)
-          // animation.
-          OverviewAnimationType fade_animation =
-              animation_type == OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER
-                  ? animation_type
-                  : OVERVIEW_ANIMATION_ENTER_OVERVIEW_MODE_FADE_IN;
-
-          FadeInWidgetToOverview(item_widget_.get(), fade_animation,
-                                 /*observe=*/true);
-
-          // Update the item header visibility immediately if entering from home
-          // launcher.
-          if (new_animation_type ==
-              OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER) {
-            overview_item_view_->SetHeaderVisibility(
-                OverviewItemView::HeaderVisibility::kVisible);
-          }
+        if (RoundedLabelWidget* widget = item->cannot_snap_widget_.get()) {
+          SetWidgetBoundsAndMaybeAnimateTransform(
+              widget,
+              widget->GetBoundsCenteredIn(ToStableSizeRoundedRect(
+                  item->GetWindowTargetBoundsWithInsets())),
+              animation_type, nullptr);
         }
-      }
-    }
-  } else {
-    gfx::RectF inset_bounds(target_bounds);
-    SetItemBounds(inset_bounds, new_animation_type, is_first_update);
+      },
+      weak_ptr_factory_.GetWeakPtr(), new_animation_type));
 
+  // For non minimized windows, we simply apply the transform and update the
+  // header.
+  if (!transform_window_.IsMinimized()) {
+    SetItemBounds(target_bounds, new_animation_type, is_first_update);
     // Update header only when the overview item window is visible.
     if (GetWindow()->IsVisible()) {
       UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
                                          : new_animation_type);
     }
+    return;
   }
 
-  // Shadow is normally set after an animation is finished. In the case of no
-  // animations, manually set the shadow. Shadow relies on both the window
-  // transform and |item_widget_|'s new bounds so set it after SetItemBounds
-  // and UpdateHeaderLayout. Do not apply the shadow for drop target. In
-  // addition, only update shadow when the overview item window is visible.
-  if (new_animation_type == OVERVIEW_ANIMATION_NONE && GetWindow()->IsVisible())
-    UpdateRoundedCornersAndShadow();
+  // If the window is minimized we can avoid applying transforms on the original
+  // window.
+  item_widget_->GetLayer()->GetAnimator()->StopAnimating();
 
-  if (cannot_snap_widget_) {
-    SetWidgetBoundsAndMaybeAnimateTransform(
-        cannot_snap_widget_.get(),
-        cannot_snap_widget_->GetBoundsCenteredIn(
-            ToStableSizeRoundedRect(GetWindowTargetBoundsWithInsets())),
-        new_animation_type, nullptr);
+  const gfx::Rect minimized_bounds = ToStableSizeRoundedRect(target_bounds);
+  OverviewAnimationType minimized_animation_type =
+      is_first_update ? OVERVIEW_ANIMATION_NONE : new_animation_type;
+  SetWidgetBoundsAndMaybeAnimateTransform(
+      item_widget_.get(), minimized_bounds, minimized_animation_type,
+      minimized_animation_type ==
+              OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_IN_OVERVIEW
+          ? new AnimationObserver{base::BindOnce(
+                                      &OverviewItem::
+                                          OnItemBoundsAnimationStarted,
+                                      weak_ptr_factory_.GetWeakPtr()),
+                                  base::BindOnce(
+                                      &OverviewItem::OnItemBoundsAnimationEnded,
+                                      weak_ptr_factory_.GetWeakPtr())}
+          : nullptr);
+
+  // Minimized windows have a `WindowPreviewView` which mirrors content from the
+  // window. `target_bounds` may not have a matching aspect ratio to the
+  // actual window (eg. in splitview overview). In this case, the contents
+  // will be squashed to fit the given bounds. To get around this, stretch out
+  // the contents so that it matches `unclipped_size_`, then clip the layer to
+  // match `target_bounds`. This is what is done on non-minimized windows.
+  ui::Layer* preview_layer = overview_item_view_->preview_view()->layer();
+  DCHECK(preview_layer);
+  if (unclipped_size_) {
+    gfx::SizeF target_size(*unclipped_size_);
+    gfx::SizeF preview_size = GetWindowTargetBoundsWithInsets().size();
+    target_size.Enlarge(0, -kHeaderHeightDp);
+
+    const float x_scale = target_size.width() / preview_size.width();
+    const float y_scale = target_size.height() / preview_size.height();
+    const auto transform = gfx::Transform::MakeScale(x_scale, y_scale);
+    preview_layer->SetTransform(transform);
+
+    // Transform affects clip rect so scale the clip rect so that the final
+    // size is equal to the untransformed layer.
+    gfx::Size clip_size(preview_layer->size());
+    clip_size =
+        gfx::ScaleToRoundedSize(clip_size, 1.f / x_scale, 1.f / y_scale);
+    preview_layer->SetClipRect(gfx::Rect(clip_size));
+  } else {
+    preview_layer->SetClipRect(gfx::Rect());
+    preview_layer->SetTransform(gfx::Transform());
+  }
+
+  if (!is_first_update)
+    return;
+
+  // On the first update show `item_widget_`. It's created on creation of
+  // `this`, and needs to be shown as soon as its bounds have been determined
+  // as it contains a mirror view of the window in its contents. The header
+  // will be faded in later to match non minimized windows.
+  if (!should_animate_when_entering_) {
+    item_widget_->GetLayer()->SetOpacity(1.f);
+    return;
+  }
+
+  if (new_animation_type == OVERVIEW_ANIMATION_SPAWN_ITEM_IN_OVERVIEW) {
+    PerformItemSpawnedAnimation(item_widget_->GetNativeWindow(),
+                                gfx::Transform{});
+    return;
+  }
+
+  // If entering from home launcher, use the home specific (fade) animation.
+  OverviewAnimationType fade_animation = animation_type;
+  if (fade_animation != OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER)
+    fade_animation = OVERVIEW_ANIMATION_ENTER_OVERVIEW_MODE_FADE_IN;
+
+  FadeInWidgetToOverview(item_widget_.get(), fade_animation,
+                         /*observe=*/true);
+
+  // Update the item header visibility immediately if entering from home
+  // launcher.
+  if (new_animation_type == OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER) {
+    overview_item_view_->SetHeaderVisibility(
+        OverviewItemView::HeaderVisibility::kVisible);
   }
 }
 
@@ -1151,8 +1149,8 @@ void OverviewItem::OnItemBoundsAnimationEnded() {
   if (!Shell::Get()->overview_controller()->InOverviewSession())
     return;
 
-  if (overview_session_->IsShowingDesksTemplatesGrid()) {
-    HideForDesksTemplatesGrid(false);
+  if (overview_session_->IsShowingSavedDeskLibrary()) {
+    HideForSavedDeskLibrary(false);
     return;
   }
 
@@ -1285,7 +1283,7 @@ void OverviewItem::CreateItemWidget() {
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.visible_on_all_workspaces = true;
   params.layer_type = ui::LAYER_NOT_DRAWN;
-  params.name = "OverviewModeLabel";
+  params.name = "OverviewItemWidget";
   params.activatable = views::Widget::InitParams::Activatable::kDefault;
   params.accept_events = true;
   params.parent = transform_window_.window()->parent();
@@ -1339,6 +1337,36 @@ void OverviewItem::UpdateHeaderLayout(OverviewAnimationType animation_type) {
   widget_window->SetTransform(label_transform);
 }
 
+OverviewAnimationType
+OverviewItem::GetExitOverviewAnimationTypeForMinimizedWindow(
+    OverviewEnterExitType type) {
+  // We should never get here when overview mode should exit immediately. The
+  // minimized window's `item_widget_` should be closed and destroyed
+  // immediately.
+  DCHECK_NE(type, OverviewEnterExitType::kImmediateExit);
+
+  // If the managed window has been hidden by the saved desk library, then
+  // we must avoid animating a minimized window. See http://b/260001863.
+  if (ScopedOverviewHideWindows* hide_windows =
+          overview_session_->hide_windows_for_saved_desks_grid()) {
+    if (hide_windows->HasWindow(item_widget_->GetNativeWindow())) {
+      return OVERVIEW_ANIMATION_NONE;
+    }
+  }
+
+  // OverviewEnterExitType can only be set to `kWindowMinimized` in tablet mode.
+  // Fade out the minimized window without animation if switch from tablet mode
+  // to clamshell mode.
+  if (type == OverviewEnterExitType::kFadeOutExit) {
+    return Shell::Get()->tablet_mode_controller()->InTabletMode()
+               ? OVERVIEW_ANIMATION_EXIT_TO_HOME_LAUNCHER
+               : OVERVIEW_ANIMATION_NONE;
+  }
+  return should_animate_when_exiting_
+             ? OVERVIEW_ANIMATION_EXIT_OVERVIEW_MODE_FADE_OUT
+             : OVERVIEW_ANIMATION_RESTORE_WINDOW_ZERO;
+}
+
 void OverviewItem::AnimateOpacity(float opacity,
                                   OverviewAnimationType animation_type) {
   DCHECK_GE(opacity, 0.f);
@@ -1361,14 +1389,15 @@ void OverviewItem::AnimateOpacity(float opacity,
 }
 
 void OverviewItem::StartDrag() {
-  aura::Window* widget_window = item_widget_->GetNativeWindow();
+  // Stack the window and the widget window at the top. This is to ensure that
+  // they appear above other app windows, as well as above the desks bar. Note
+  // that the stacking operations are done in this order to make sure that that
+  // the window appears above the widget window.
+  if (aura::Window* widget_window = item_widget_->GetNativeWindow())
+    widget_window->parent()->StackChildAtTop(widget_window);
+
   aura::Window* window = GetWindow();
-  if (widget_window && widget_window->parent() == window->parent()) {
-    // TODO(xdai): This might not work if there is an always on top window.
-    // See crbug.com/733760.
-    widget_window->parent()->StackChildAtTop(window);
-    widget_window->parent()->StackChildBelow(widget_window, window);
-  }
+  window->parent()->StackChildAtTop(window);
 }
 
 void OverviewItem::CloseButtonPressed() {
@@ -1474,14 +1503,18 @@ void OverviewItem::ShowWindowInOverview() {
   // Hide the application window. Also make sure to ignore activation for this
   // application window, so that it remains in overview.
   if (hide_windows->HasWindow(GetWindow())) {
+    const bool ignore_activations = overview_session_->ignore_activations();
     overview_session_->set_ignore_activations(true);
-    hide_windows->RemoveWindow(GetWindow());
-    overview_session_->set_ignore_activations(false);
+    hide_windows->RemoveWindow(GetWindow(), /*show_window=*/true);
+    overview_session_->set_ignore_activations(ignore_activations);
   }
 
   // Show the overview item window.
-  if (item_widget_ && hide_windows->HasWindow(item_widget_->GetNativeWindow()))
-    hide_windows->RemoveWindow(item_widget_->GetNativeWindow());
+  if (item_widget_ &&
+      hide_windows->HasWindow(item_widget_->GetNativeWindow())) {
+    hide_windows->RemoveWindow(item_widget_->GetNativeWindow(),
+                               /*show_window=*/true);
+  }
 }
 
 }  // namespace ash

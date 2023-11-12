@@ -40,8 +40,6 @@ std::string GetDecoderName(VideoDecoderType type) {
       return "FuchsiaVideoDecoder";
     case VideoDecoderType::kMediaCodec:
       return "MediaCodecVideoDecoder";
-    case VideoDecoderType::kGav1:
-      return "Gav1VideoDecoder";
     case VideoDecoderType::kD3D11:
       return "D3D11VideoDecoder";
     case VideoDecoderType::kVaapi:
@@ -82,7 +80,7 @@ std::string GetDecoderName(AudioDecoderType type) {
     case AudioDecoderType::kTesting:
       return "Testing or Mock Audio decoder";
     case AudioDecoderType::kAudioToolbox:
-      return "AudioToolbox";
+      return "AudioToolboxAudioDecoder";
     case AudioDecoderType::kMediaFoundation:
       return "MediaFoundationAudioDecoder";
     case AudioDecoderType::kVivPassThrough:

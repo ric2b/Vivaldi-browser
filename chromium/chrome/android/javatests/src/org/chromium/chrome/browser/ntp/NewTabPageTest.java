@@ -110,8 +110,7 @@ import java.util.concurrent.TimeUnit;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "disable-features=IPH_FeedHeaderMenu"})
-@Features.DisableFeatures({ChromeFeatureList.EXPLORE_SITES, ChromeFeatureList.QUERY_TILES,
-        ChromeFeatureList.VIDEO_TUTORIALS})
+@Features.DisableFeatures({ChromeFeatureList.QUERY_TILES, ChromeFeatureList.VIDEO_TUTORIALS})
 public class NewTabPageTest {
     /**
      * Parameter set controlling whether scrollable mvt is enabled.
@@ -460,13 +459,13 @@ public class NewTabPageTest {
                 // Mock to notify the template URL service observer.
                 when(mTemplateUrlService.doesDefaultSearchEngineHaveLogo()).thenReturn(false);
                 when(mTemplateUrlService.isDefaultSearchEngineGoogle()).thenReturn(true);
-                ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+                ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
 
                 ntpLayout.setSearchProviderInfo(/* hasLogo = */ true, /* isGoogle */ true);
                 // Mock to notify the template URL service observer.
                 when(mTemplateUrlService.doesDefaultSearchEngineHaveLogo()).thenReturn(true);
-                ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+                ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
                 Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
             }
         });
@@ -502,7 +501,7 @@ public class NewTabPageTest {
             when(mTemplateUrlService.isDefaultSearchEngineGoogle()).thenReturn(true);
             ntpLayout.setSearchProviderInfo(/* hasLogo = */ false, /* isGoogle */ true);
             // Mock to notify the template URL service observer.
-            ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+            ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
 
             Assert.assertEquals(View.GONE, logoView.getVisibility());
             Assert.assertEquals(View.GONE, searchBoxView.getVisibility());
@@ -528,7 +527,7 @@ public class NewTabPageTest {
             when(mTemplateUrlService.isDefaultSearchEngineGoogle()).thenReturn(true);
             ntpLayout.setSearchProviderInfo(/* hasLogo = */ true, /* isGoogle */ true);
             // Mock to notify the template URL service observer.
-            ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChanged();
+            ntpLayout.getLogoCoordinatorForTesting().onTemplateURLServiceChangedForTesting();
 
             Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
             Assert.assertEquals(View.VISIBLE, searchBoxView.getVisibility());
@@ -629,16 +628,6 @@ public class NewTabPageTest {
                     /*beginVoiceSearch=*/true, /*pastedText=*/"");
             verify(mFeedReliabilityLogger).onVoiceSearch();
         });
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"NewTabPage", "FeedNewTabPage", "RenderTest"})
-    @Features.EnableFeatures(ChromeFeatureList.FEED_ABLATION)
-    public void testRender_LoadNewTabPageWithDisabledFeed() throws IOException {
-        mRenderTestRule.render(
-                mActivityTestRule.getActivity().getActivityTab().getNativePage().getView(),
-                "feed_is_ablated");
     }
 
     @Test

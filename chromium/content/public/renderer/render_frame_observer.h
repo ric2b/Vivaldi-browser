@@ -212,6 +212,13 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // load. This is used for metrics collection.
   virtual void DidObserveLoadingBehavior(blink::LoadingBehaviorFlag behavior) {}
 
+  // Notification when the renderer uses subresources.
+  // It is called when there is a subresouce load. The reported values via
+  // arguments are cumulative. They are NOT a difference from the previous call.
+  virtual void DidObserveSubresourceLoad(
+      uint32_t number_of_subresources_loaded,
+      uint32_t number_of_subresource_loads_handled_by_service_worker) {}
+
   // Notification when the renderer observes a new use counter usage during a
   // page load. This is used for UseCounter metrics.
   virtual void DidObserveNewFeatureUsage(
@@ -234,13 +241,6 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // after an input or scroll occurred in the associated document.
   virtual void DidObserveLayoutShift(double score, bool after_input_or_scroll) {
   }
-
-  // Reports the number of LayoutBlock creation, and LayoutObject::UpdateLayout
-  // calls. All values are deltas since the last calls of this function.
-  virtual void DidObserveLayoutNg(uint32_t all_block_count,
-                                  uint32_t ng_block_count,
-                                  uint32_t all_call_count,
-                                  uint32_t ng_call_count) {}
 
   // Reports that a resource will be requested.
   virtual void WillSendRequest(const blink::WebURLRequest& request) {}

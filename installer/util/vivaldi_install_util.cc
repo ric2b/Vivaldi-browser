@@ -241,7 +241,7 @@ absl::optional<base::Version> GetPendingUpdateVersion(
   return ReadExeVersion(new_exe_path);
 }
 
-std::wstring GetNewUpdateFinalizeCommand() {
+installer::AppCommand GetNewUpdateFinalizeCommand() {
   // This is based on AppendPostInstallTasks from install_worker.cc, see the
   // part that constructs the rename command to write to the registry. In
   // Vivaldi we skip the registry and construct the command as necessary.
@@ -249,7 +249,7 @@ std::wstring GetNewUpdateFinalizeCommand() {
   base::Version version =
       ReadExeVersion(install_binary_dir.Append(installer::kChromeNewExe));
   if (!version.IsValid())
-    return std::wstring();
+    return installer::AppCommand();
   base::FilePath setup_exe = install_binary_dir.AppendASCII(version.GetString())
                                  .Append(installer::kInstallerDir)
                                  .Append(installer::kSetupExe);
@@ -261,7 +261,7 @@ std::wstring GetNewUpdateFinalizeCommand() {
       vivaldi_cmd_line->HasSwitch(installer::switches::kVerboseLogging)) {
     rename_cmd.AppendSwitch(installer::switches::kVerboseLogging);
   }
-  return rename_cmd.GetCommandLineString();
+  return installer::AppCommand(installer::kSetupExe, rename_cmd.GetCommandLineString());
 }
 
 void SendQuitUpdateNotifier(const base::FilePath& install_binary_dir,

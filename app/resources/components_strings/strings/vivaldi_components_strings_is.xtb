@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Reyndu að keyra Windows villugreiningu á neti<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Þessi síða inniheldur hættuleg forrit</translation>
 <translation id="1916770123977586577">Til þess að uppfæra stillingar á þessari síðu þarftu að endurhlaða henni</translation>
-<translation id="1973351931613083086">Sjálfvirk spilun</translation>
 <translation id="1974060860693918893">Nánar</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Athuga proxy og eldvegginn<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Útgefið af: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Þessi síða getur ekki veitt örugga tengingu</translation>
 <translation id="2187317261103489799">Greina (sjálfvalið)</translation>
 <translation id="2224337661447660594">Engin nettenging</translation>
-<translation id="2230458221926704099">Lagaðu tenginguna þína með því að nota <ph name="BEGIN_LINK" />greiningar appið<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Lokað er á netaðgang þinn</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />hér þarf notandanafn og lykilorð.</translation>
 <translation id="2337852623177822836">Stillingu stýrt af kerfisstjóra</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Tölvuþrjótar gætu verið að reyna að stela upplýsingum þínum frá <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (til dæmis lykilorðum, skilaboðum eða kortaupplýsingum). <ph name="BEGIN_LEARN_MORE_LINK" />Frekari upplýsingar<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Netstillingar hafa breyst.</translation>
 <translation id="2948083400971632585">Þú getur aftengt öll vefsel sem sett hafa verið upp til tengingar á stillingarsíðunni.</translation>
-<translation id="2953943267837858202">Hefur ekki leyfi fyrir sjálfvirkri spilun myndbanda</translation>
 <translation id="2991571918955627853">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vefsíðan notar HSTS. Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="3005723025932146533">Sýna vistað afrit</translation>
 <translation id="301521992641321250">Sjálfkrafa hamlað</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Smelltu á hnapp til að endurhlaða til þess að endursenda gögn sem þarf til þess að hlaða upp síðunni.</translation>
 <translation id="3234666976984236645">Skynja ætíð mikilvægt efni á þessari síðu</translation>
-<translation id="3291915639428159043">Lokað á sjálfvirka spilun</translation>
 <translation id="3308738399950580893">Auglýsingar</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> svarar ekki, í augnablikinu.</translation>
 <translation id="3427092606871434483">Leyfa (sjálfgefið)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Tengingin þín er aðgengileg af öðrum</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Fela frekari upplýsingar</translation>
-<translation id="3620979700683094848">Síður geta spilað myndbönd sjálfvirkt</translation>
 <translation id="3630155396527302611">Ef þetta er nú þegar listað sem forrit sem hefur aðgang að netinu reyndu þá
       að fjarlægja það úr listanum og bæta því við aftur.</translation>
 <translation id="3658742229777143148">Útgáfa</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er lokað á</translation>
 <translation id="3987940399970879459">Minna en 1 MB</translation>
 <translation id="4075732493274867456">Biðillinn (e. client) og þjónninn styðja ekki almenna SSL samskiptaregluútgáfu eða dulritunaraðferðarpakka (e. cipher suite).</translation>
-<translation id="410351446219883937">Sjálfvirk spilun</translation>
 <translation id="4116663294526079822">Leyfa alltaf á þessari síðu</translation>
 <translation id="4130226655945681476">Athuga netsnúrur, mótald og beini</translation>
 <translation id="4151403195736952345">Nota algilda sjálfgefna stillingu (Greina)</translation>
@@ -158,7 +152,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6451458296329894277">Staðfesta endursendingu á eyðublaði</translation>
 <translation id="6569060085658103619">Þú ert að skoða síða viðbótar</translation>
 <translation id="6657585470893396449">Lykilorð</translation>
-<translation id="6685834062052613830">Skráðu þig út og kláraðu uppsetningu</translation>
 <translation id="6711464428925977395">Það er eitthvað að vefseli þjónsins eða veffangið ekki rétt.</translation>
 <translation id="6757797048963528358">Tækið þitt sofnaði.</translation>
 <translation id="6897140037006041989">Kennistrengur</translation>
@@ -189,13 +182,11 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7758069387465995638">Eldveggur eða vírusvörn gæti hafa hamlað tengingu.</translation>
 <translation id="7800304661137206267">Tengingin er dulrituð með <ph name="CIPHER" />, með <ph name="MAC" /> fyrir auðkenni skilaboða og <ph name="KX" /> sem aðferð til að flytja lykil á milli.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> notar yfirleitt dulkóðun til þess að vernda persónuupplýsingar. Þegar Vivaldi reyndi að tengjast <ph name="SITE" /> í þetta sinn, sendi vefsíðan óvenjuleg eða röng skilríki. Þetta getur gerst þegar hakkari reynir að þykjast vera <ph name="SITE" />, eða þegar innskráningargluggi fyrir þráðlaust netsamband truflar tenginguna. Þínar persónuupplýsingar eru samt sem áður öruggar því Vivaldi stöðvaði tenginuna áður en gögn voru send.</translation>
-<translation id="7834693436815575883">Sjálfvirk spilun leyfð</translation>
 <translation id="7878562273885520351">Lykilorðinu þínu gæti hafa verið lekið</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Tölvuþrjótar á þessari síðu gætu platað þig í að gera eitthvað hættulegt eins og að setja upp forrit eða gefa upp persónulegar upplýsingar (til dæmis lykilorð, símanúmer eða kortanúmer).</translation>
 <translation id="8037357227543935929">Spyrja (sjálfgefið)</translation>
 <translation id="8041940743680923270">Nota algilda sjálfgefna stillingu (Spyrja)</translation>
-<translation id="8044382196220116469">Ekki leyfa sjálfvirka spilun myndbanda á síðum</translation>
 <translation id="808894953321890993">Breyta lykilorði</translation>
 <translation id="8119307142152921512">Rekjarar og auglýsingar</translation>
 <translation id="8149426793427495338">Tölvan þín fór að sofa.</translation>
@@ -213,7 +204,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8503813439785031346">Notendanafn</translation>
 <translation id="8703575177326907206">Tenging þín við <ph name="DOMAIN" /> er ekki dulrituð.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS-veffangið&lt;/abbr&gt; fyrir <ph name="HOST_NAME" /> fannst ekki. Vandamálið er í skoðun.</translation>
-<translation id="8774017153185436870">Síður gætu hugsanlega leyft sjálfvirka spilun myndbanda</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
 <translation id="8940028675168378100">Lokað á af <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Opna stillingar fyrir vefsvæði</translation>
@@ -221,7 +211,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="9008201768610948239">Hunsa</translation>
 <translation id="9025348182339809926">(Ógilt)</translation>
 <translation id="9039213469156557790">Þessi síða geymir að auki önnur gögn sem ekki eru örugg. Aðrir geta skoðað þessi gögn þegar verið er að sækja þau og getur þeim verið breytt af tölvuþrjóti til þess að breyta hegðun á síðunni.</translation>
-<translation id="9048224371732578627">Leyfi fyrir sjálfvirka spilun á myndbandi</translation>
 <translation id="9062620674789239642">Hugsanlega var hún færð, henni breytt eða eytt.</translation>
 <translation id="9069693763241529744">Hamlað af viðbót</translation>
 <translation id="9073799351042754113">Þú valdir að slökkva á öryggisviðvörunum fyrir þetta vefsvæði.</translation>

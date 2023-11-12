@@ -17,38 +17,12 @@ class TestAppListColorProvider : public AppListColorProvider {
 
  public:
   // AppListColorProvider:
-  SkColor GetSearchBoxBackgroundColor(
-      const views::Widget* app_list_widget) const override;
-  SkColor GetSearchBoxTextColor(
-      SkColor default_color,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetSearchBoxSecondaryTextColor(
-      SkColor default_color,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetSearchBoxSuggestionTextColor(
-      SkColor default_color,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetAppListItemTextColor(
-      bool is_in_folder,
-      const views::Widget* app_list_widget) const override;
   SkColor GetPageSwitcherButtonColor(
-      bool is_root_app_grid_page_switcher,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetSearchBoxIconColor(
-      SkColor default_color,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetSearchBoxCardBackgroundColor(
       const views::Widget* app_list_widget) const override;
   SkColor GetFolderBackgroundColor(
       const views::Widget* app_list_widget) const override;
-  SkColor GetFolderTitleTextColor(
-      const views::Widget* app_list_widget) const override;
-  SkColor GetFolderHintTextColor(
-      const views::Widget* app_list_widget) const override;
   SkColor GetFolderNameBorderColor(
       bool active,
-      const views::Widget* app_list_widget) const override;
-  SkColor GetFolderNameSelectionColor(
       const views::Widget* app_list_widget) const override;
   SkColor GetFolderNotificationBadgeColor(
       const views::Widget* app_list_widget) const override;
@@ -58,7 +32,6 @@ class TestAppListColorProvider : public AppListColorProvider {
       const views::Widget* app_list_widget) const override;
   SkColor GetGridBackgroundCardInactiveColor(
       const views::Widget* app_list_widget) const override;
-  ui::ColorId GetSeparatorColorId() const override;
   SkColor GetFocusRingColor(
       const views::Widget* app_list_widget) const override;
   SkColor GetInkDropBaseColor(
@@ -69,7 +42,6 @@ class TestAppListColorProvider : public AppListColorProvider {
       SkColor bg_color = gfx::kPlaceholderColor) const override;
   SkColor GetSearchResultViewHighlightColor(
       const views::Widget* app_list_widget) const override;
-  SkColor GetTextColorURL(const views::Widget* app_list_widget) const override;
 };
 
 }  // namespace ash

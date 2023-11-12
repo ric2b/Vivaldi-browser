@@ -27,7 +27,7 @@ bool IsAccountManagerAvailable(const Profile* const profile) {
   // Signin Profile does not have any accounts associated with it,
   // LockScreenAppProfile and LockScreenProfile do not link to the user's
   // cryptohome.
-  if (!ProfileHelper::IsRegularProfile(profile))
+  if (!ProfileHelper::IsUserProfile(profile))
     return false;
 
   // Account Manager is unavailable on Guest (Incognito) Sessions.
@@ -71,7 +71,7 @@ void InitializeAccountManager(const base::FilePath& cryptohome_root_dir,
               /*profile_path=*/cryptohome_root_dir.value());
 
   account_manager_mojo_service->SetAccountManagerUI(
-      std::make_unique<ash::AccountManagerUIImpl>());
+      std::make_unique<AccountManagerUIImpl>());
 }
 
 }  // namespace ash

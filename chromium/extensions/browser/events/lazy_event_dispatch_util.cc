@@ -76,14 +76,14 @@ bool LazyEventDispatchUtil::ReadPendingOnInstallInfoFromPref(
   ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context_);
   DCHECK(prefs);
 
-  const base::DictionaryValue* info = nullptr;
-  if (!prefs->ReadPrefAsDictionary(
-          extension_id, kPrefPendingOnInstalledEventDispatchInfo, &info)) {
+  const base::Value::Dict* info = prefs->ReadPrefAsDict(
+      extension_id, kPrefPendingOnInstalledEventDispatchInfo);
+  if (!info) {
     return false;
   }
 
   const std::string* previous_version_string =
-      info->FindStringKey(kPrefPreviousVersion);
+      info->FindString(kPrefPreviousVersion);
   // |previous_version_string| can be empty.
   *previous_version = base::Version(
       previous_version_string ? *previous_version_string : std::string());
@@ -107,16 +107,16 @@ void LazyEventDispatchUtil::StorePendingOnInstallInfoToPref(
   // |pending_on_install_info| currently only contains a version string. Instead
   // of making the pref hold a plain string, we store it as a dictionary value
   // so that we can add more stuff to it in the future if necessary.
-  auto pending_on_install_info = std::make_unique<base::DictionaryValue>();
+  base::Value::Dict pending_on_install_info;
   base::Version previous_version = ExtensionRegistry::Get(browser_context_)
                                        ->GetStoredVersion(extension->id());
-  pending_on_install_info->SetStringKey(kPrefPreviousVersion,
-                                        previous_version.IsValid()
-                                            ? previous_version.GetString()
-                                            : std::string());
-  prefs->UpdateExtensionPref(extension->id(),
-                             kPrefPendingOnInstalledEventDispatchInfo,
-                             std::move(pending_on_install_info));
+  pending_on_install_info.Set(kPrefPreviousVersion,
+                              previous_version.IsValid()
+                                  ? previous_version.GetString()
+                                  : std::string());
+  prefs->UpdateExtensionPref(
+      extension->id(), kPrefPendingOnInstalledEventDispatchInfo,
+      std::make_unique<base::Value>(std::move(pending_on_install_info)));
 }
 
 }  // namespace extensions

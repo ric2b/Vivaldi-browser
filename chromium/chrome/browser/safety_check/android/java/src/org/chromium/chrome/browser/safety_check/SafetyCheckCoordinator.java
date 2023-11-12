@@ -10,18 +10,13 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.Observer;
 
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
-import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.ui.signin.SyncConsentActivityLauncher;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
-/**
- * Coordinator for the Safety check settings page.
- */
+/** Coordinator for the Safety check settings page. */
 public class SafetyCheckCoordinator implements DefaultLifecycleObserver {
     private SafetyCheckSettingsFragment mSettingsFragment;
     private SafetyCheckUpdatesDelegate mUpdatesClient;
@@ -32,6 +27,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver {
      * Creates a new instance given a settings fragment, an updates client, and a settings launcher.
      * There is no need to hold on to a reference since the settings fragment's lifecycle is
      * observed and a reference is retained there.
+     *
      * @param settingsFragment An instance of {SafetyCheckSettingsFragment} to observe.
      * @param updatesClient An instance implementing the {@SafetyCheckUpdatesDelegate} interface.
      * @param settingsLauncher An instance implementing the {@SettingsLauncher} interface.
@@ -44,13 +40,6 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver {
             ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier) {
         new SafetyCheckCoordinator(settingsFragment, updatesClient, settingsLauncher,
                 signinLauncher, modalDialogManagerSupplier);
-        if (!PasswordManagerHelper.canUseUpm()
-                && (ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_SCRIPTS_FETCHING)
-                        || ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.PASSWORD_DOMAIN_CAPABILITIES_FETCHING))) {
-            // Triggers pre-fetching the list of password change scripts.
-            PasswordCheckFactory.getOrCreate(settingsLauncher).fetchScripts();
-        }
     }
 
     private SafetyCheckCoordinator(SafetyCheckSettingsFragment settingsFragment,

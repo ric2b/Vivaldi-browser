@@ -14,20 +14,14 @@
 class GURL;
 
 // Factory providing methods to create UIActions with consistent titles, images
-// and metrics structure.
+// and metrics structure. When using any action from this class, an histogram
+// will be recorded on Mobile.ContextMenu.<Scenario>.Action.
 @interface ActionFactory : NSObject
 
 // Initializes a factory instance to create action instances for the given
-// `scenario`.
-- (instancetype)initWithScenario:(MenuScenario)scenario;
-
-// Creates a UIAction instance configured with the given `title` and `image`.
-// Upon execution, the action's `type` will be recorded and the `block` will be
-// run.
-- (UIAction*)actionWithTitle:(NSString*)title
-                       image:(UIImage*)image
-                        type:(MenuActionType)type
-                       block:(ProceduralBlock)block;
+// `scenario`. `scenario` is used to choose the histogram in which to record the
+// actions.
+- (instancetype)initWithScenario:(MenuScenarioHistogram)scenario;
 
 // Creates a UIAction instance configured to copy the given `URL` to the
 // pasteboard.
@@ -36,6 +30,10 @@ class GURL;
 // Creates a UIAction instance configured for sharing which will invoke
 // the given `block` upon execution.
 - (UIAction*)actionToShareWithBlock:(ProceduralBlock)block;
+
+// Creates a UIAction instance configured for pinning a tab which will invoke
+// the given `block` upon execution.
+- (UIAction*)actionToPinTabWithBlock:(ProceduralBlock)block;
 
 // Creates a UIAction instance configured for deletion which will invoke
 // the given delete `block` when executed.
@@ -112,6 +110,11 @@ class GURL;
 // Creates a UIAction instance for searching an image with Lens.
 // Invokes the given `completion` block after execution.
 - (UIAction*)actionToSearchImageUsingLensWithBlock:(ProceduralBlock)block;
+
+// Updates the given `ProceduralBlock` to record the
+// `MobileWebContextMenuOpenTab` user action.
+- (ProceduralBlock)recordMobileWebContextMenuOpenTabActionWithBlock:
+    (ProceduralBlock)block;
 
 // Vivaldi
 

@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
+#include "ui/aura/window.h"
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot_aura.h"
 
@@ -52,7 +53,7 @@ bool TakePrimaryDisplayScreenshotAndSave(const base::FilePath& file_path) {
 
 void GiveItSomeTimeForDebugging(base::TimeDelta time_duration) {
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), time_duration);
   run_loop.Run();
 }
@@ -71,6 +72,18 @@ gfx::ImageSkia CreateSolidColorTestImage(const gfx::Size& image_size,
   bitmap.eraseColor(color);
   gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
   return image;
+}
+
+bool IsStackedBelow(aura::Window* win1, aura::Window* win2) {
+  DCHECK_NE(win1, win2);
+  DCHECK_EQ(win1->parent(), win2->parent());
+
+  const auto& children = win1->parent()->children();
+  auto win1_iter = base::ranges::find(children, win1);
+  auto win2_iter = base::ranges::find(children, win2);
+  DCHECK(win1_iter != children.end());
+  DCHECK(win2_iter != children.end());
+  return win1_iter < win2_iter;
 }
 
 }  // namespace ash

@@ -213,7 +213,6 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
     delegate_ = delegate.get();
     auto layout = std::make_unique<BrowserViewLayout>(
         std::move(delegate),
-        /*host_view=*/nullptr,
         /*browser_view=*/nullptr, top_container_, tab_strip_region_view,
         tab_strip_, toolbar_, infobar_container_, contents_container_,
         /*left_aligned_side_panel=*/nullptr,
@@ -237,7 +236,7 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
   }
 
  private:
-  BrowserViewLayout* layout_;
+  raw_ptr<BrowserViewLayout> layout_;
   raw_ptr<MockBrowserViewLayoutDelegate> delegate_;  // Owned by |layout_|.
   std::unique_ptr<views::View> browser_view_;
 

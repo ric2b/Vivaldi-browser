@@ -8,15 +8,17 @@
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/os_install_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/os_trial_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/network_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/os_install_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/os_trial_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/welcome_screen_handler.h"
 #include "content/public/test/browser_test.h"
 
 namespace ash {
+
 namespace {
+
 const test::UIPath kWelcomeGetStartedButton = {"connect", "welcomeScreen",
                                                "getStarted"};
 const test::UIPath kOsInstallBackButton = {"os-install", "osInstallExitButton"};
@@ -80,8 +82,8 @@ IN_PROC_BROWSER_TEST_F(OsTrialScreenTest, TrialScreenSkipped) {
   WizardController::default_controller()->AdvanceToScreen(
       UserCreationView::kScreenId);
   OobeScreenWaiter(UserCreationView::kScreenId).Wait();
-  ASSERT_TRUE(ash::LoginScreenTestApi::IsOsInstallButtonShown());
-  ASSERT_TRUE(ash::LoginScreenTestApi::ClickOsInstallButton());
+  ASSERT_TRUE(LoginScreenTestApi::IsOsInstallButtonShown());
+  ASSERT_TRUE(LoginScreenTestApi::ClickOsInstallButton());
   OobeScreenWaiter(OsInstallScreenView::kScreenId).Wait();
 }
 
@@ -101,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(OsTrialScreenTest, OsInstallBackNavigationTrialSkipped) {
   WizardController::default_controller()->AdvanceToScreen(
       UserCreationView::kScreenId);
   OobeScreenWaiter(UserCreationView::kScreenId).Wait();
-  ASSERT_TRUE(ash::LoginScreenTestApi::ClickOsInstallButton());
+  ASSERT_TRUE(LoginScreenTestApi::ClickOsInstallButton());
   OobeScreenWaiter(OsInstallScreenView::kScreenId).Wait();
 
   test::OobeJS().ClickOnPath(kOsInstallBackButton);

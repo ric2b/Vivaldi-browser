@@ -1,6 +1,7 @@
 import("features.gni")
 import("product.gni")
 import("//build/toolchain/cc_wrapper.gni")
+import("//build/toolchain/rbe.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
 config("features") {
@@ -13,9 +14,6 @@ config("features") {
   ]
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
-    if (vivaldi_use_system_media_demuxer) {
-      defines += [ "VIVALDI_USE_SYSTEM_MEDIA_DEMUXER" ]
-    }
   }
   if (is_mac && vivaldi_disable_sparkle) {
     defines += [ "VIVALDI_SPARKLE_DISABLED" ]
@@ -25,7 +23,7 @@ config("features") {
     defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]
   }
   if (is_win) {
-    if (cc_wrapper != "") {
+    if (cc_wrapper != "" || use_remoteexec) {
       defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
     }
     ldflags = [ "notelemetry.obj" ]

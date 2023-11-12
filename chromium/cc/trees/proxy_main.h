@@ -12,7 +12,6 @@
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/metrics/event_latency_tracker.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
 #include "cc/trees/proxy.h"
@@ -67,13 +66,14 @@ class CC_EXPORT ProxyMain : public Proxy {
   void DidCompleteCommit(CommitTimestamps);
   void DidPresentCompositorFrame(
       uint32_t frame_token,
-      std::vector<PresentationTimeCallbackBuffer::MainCallback> callbacks,
+      std::vector<PresentationTimeCallbackBuffer::Callback>
+          presentation_callbacks,
+      std::vector<PresentationTimeCallbackBuffer::SuccessfulCallback>
+          successful_presentation_callbacks,
       const gfx::PresentationFeedback& feedback);
   void NotifyThroughputTrackerResults(CustomTrackerResults results);
   void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay,
                                   base::TimeTicks first_scroll_timestamp);
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies);
   void NotifyTransitionRequestFinished(uint32_t sequence_id);
 
   CommitPipelineStage max_requested_pipeline_stage() const {

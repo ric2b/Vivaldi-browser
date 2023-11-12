@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "ash/app_list/app_list_metrics.h"
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/app_menu_constants.h"
 #include "base/metrics/histogram_macros.h"
@@ -88,7 +87,6 @@ void AppListMenuModelAdapter::RecordHistogramOnMenuClosed() {
       }
       break;
     case PRODUCTIVITY_LAUNCHER_RECENT_APP:
-      DCHECK(features::IsProductivityLauncherEnabled());
       if (is_tablet_mode()) {
         UMA_HISTOGRAM_ENUMERATION(
             "Apps.ContextMenuShowSourceV2.ProductivityLauncherRecentApp."
@@ -110,7 +108,6 @@ void AppListMenuModelAdapter::RecordHistogramOnMenuClosed() {
       }
       break;
     case PRODUCTIVITY_LAUNCHER_APP_GRID:
-      DCHECK(features::IsProductivityLauncherEnabled());
       if (is_tablet_mode()) {
         UMA_HISTOGRAM_ENUMERATION(
             "Apps.ContextMenuShowSourceV2.ProductivityLauncherAppGrid."

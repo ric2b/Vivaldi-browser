@@ -20,6 +20,10 @@ class Time;
 
 namespace autofill {
 
+namespace autofill_metrics {
+struct CardMetadataLoggingContext;
+}
+
 class AutofillClient;
 class AutofillField;
 class AutofillOfferData;
@@ -36,8 +40,8 @@ using InternalId = base::IdType32<class InternalIdTag>;
 // address profile Autofill.
 class AutofillSuggestionGenerator {
  public:
-  explicit AutofillSuggestionGenerator(AutofillClient* autofill_client,
-                                       PersonalDataManager* personal_data);
+  AutofillSuggestionGenerator(AutofillClient* autofill_client,
+                              PersonalDataManager* personal_data);
   ~AutofillSuggestionGenerator();
   AutofillSuggestionGenerator(const AutofillSuggestionGenerator&) = delete;
   AutofillSuggestionGenerator& operator=(const AutofillSuggestionGenerator&) =
@@ -57,12 +61,15 @@ class AutofillSuggestionGenerator {
   // application. `should_display_gpay_logo` will be set to true if there are no
   // credit card suggestions, or all suggestions come from Payments server.
   // `with_offer` is set to true if ANY card has card-linked offers.
+  // `metadata_logging_context` contains card metadata related information used
+  // for metrics logging.
   std::vector<Suggestion> GetSuggestionsForCreditCards(
       const FormFieldData& field,
       const AutofillType& type,
       const std::string& app_locale,
-      bool* should_display_gpay_logo,
-      bool* with_offer);
+      bool& should_display_gpay_logo,
+      bool& with_offer,
+      autofill_metrics::CardMetadataLoggingContext& metadata_logging_context);
 
   // Generates suggestions for all available IBANs.
   static std::vector<Suggestion> GetSuggestionsForIBANs(
@@ -95,32 +102,22 @@ class AutofillSuggestionGenerator {
                        Suggestion::BackendId* cc_backend_id,
                        Suggestion::BackendId* profile_backend_id);
 
- private:
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           BackendIdAndInternalIdMappings);
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           CreateCreditCardSuggestion_LocalCard);
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           CreateCreditCardSuggestion_ServerCard);
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           CreateCreditCardSuggestion_ServerCardWithOffer);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillSuggestionGeneratorTest,
-      CreateCreditCardSuggestion_PopupWithMetadata_VirtualCardNameField);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillSuggestionGeneratorTest,
-      CreateCreditCardSuggestion_PopupWithMetadata_VirtualCardNumberField);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillSuggestionGeneratorTest,
-      CreateCreditCardSuggestion_PopupWithMetadata_NonVirtualCardNameField);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillSuggestionGeneratorTest,
-      CreateCreditCardSuggestion_PopupWithMetadata_NonVirtualCardNumberField);
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           GetServerCardForLocalCard);
-  FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
-                           ShouldShowVirtualCardOption);
+  // Helper function to decide whether to show the virtual card option for
+  // `candidate_card`.
+  bool ShouldShowVirtualCardOption(const CreditCard* candidate_card) const;
 
+  // Returns a pointer to the server card that has duplicate information of the
+  // `local_card`. It is not guaranteed that a server card is found. If not,
+  // nullptr is returned.
+  const CreditCard* GetServerCardForLocalCard(
+      const CreditCard* local_card) const;
+
+  // Helper functions to expose functions to tests.
+  InternalId BackendIdToInternalIdForTesting(
+      const Suggestion::BackendId& backend_id);
+  Suggestion::BackendId InternalIdToBackendIdForTesting(InternalId internal_id);
+
+ protected:
   // Creates a suggestion for the given `credit_card`. `type` denotes the
   // AutofillType of the field that is focused when the query is triggered.
   // `prefix_matched_suggestion` indicates whether the suggestion has content
@@ -135,27 +132,47 @@ class AutofillSuggestionGenerator {
                                         const std::string& app_locale,
                                         bool card_linked_offer_available) const;
 
-  // Helper function to decide whether to show the virtual card option for
-  // |candidate_card|.
-  bool ShouldShowVirtualCardOption(const CreditCard* candidate_card) const;
+  // Suggestion backend ID to internal ID mapping. We keep two maps to convert
+  // back and forth. These should be used only by BackendIdToInternalId and
+  // InternalIdToBackendId.
+  // Note that the internal IDs are not frontend IDs.
+  std::map<Suggestion::BackendId, InternalId> backend_to_internal_map_;
+  std::map<InternalId, Suggestion::BackendId> internal_to_backend_map_;
 
-  // Returns a pointer to the server card that has duplicate information of the
-  // |local_card|. It is not guaranteed that a server card is found. If not,
-  // nullptr is returned.
-  const CreditCard* GetServerCardForLocalCard(
-      const CreditCard* local_card) const;
+ private:
+  // Return the texts shown as the first line of the suggestion, based on the
+  // `credit_card` and the focused field `type`. The first index in the pair
+  // represents the main text, and the second index represents the minor text.
+  // The minor text can be empty, in which case the main text should be rendered
+  // as the entire first line. If the minor text is not empty, they should be
+  // combined. This splitting is implemented for situations where the first part
+  // of the first line of the suggestion should be truncated.
+  std::pair<Suggestion::Text, Suggestion::Text>
+  GetSuggestionMainTextAndMinorTextForCard(const CreditCard& credit_card,
+                                           const AutofillType& type,
+                                           const std::string& app_locale) const;
 
-  // Get the suggestion label for the `credit_card`. Note this does not account
+  // Return the labels to be shown in the suggestion. Note this does not account
   // for virtual cards or card-linked offers.
-  std::u16string GetCardLabel(const CreditCard& credit_card,
-                              const AutofillType& type,
-                              const std::string& app_locale,
-                              int obfuscation_length) const;
+  std::vector<Suggestion::Text> GetSuggestionLabelsForCard(
+      const CreditCard& credit_card,
+      const AutofillType& type,
+      const std::string& app_locale) const;
 
   // Adjust the content of |suggestion| if it is a virtual card suggestion.
-  void AdjustSuggestionContentForVirtualCard(Suggestion* suggestion,
-                                             const CreditCard& credit_card,
-                                             const AutofillType& type) const;
+  void AdjustVirtualCardSuggestionContent(Suggestion& suggestion,
+                                          const CreditCard& credit_card,
+                                          const AutofillType& type) const;
+
+  // Set the URL for the card art image to be shown in the `suggestion`.
+  void SetCardArtURL(Suggestion& suggestion,
+                     const CreditCard& credit_card,
+                     bool virtual_card_option) const;
+
+  // Return the CardMetadataLoggingContext based on the credit cards
+  // to be shown in the suggestion.
+  autofill_metrics::CardMetadataLoggingContext GetMetadataLoggingContext(
+      const std::vector<CreditCard*>& cards_to_suggest) const;
 
   // Maps suggestion backend ID to and from an internal ID identifying it. Two
   // of these intermediate internal IDs are packed by MakeFrontendID to make the
@@ -169,13 +186,6 @@ class AutofillSuggestionGenerator {
 
   // personal_data_ should outlive the generator.
   raw_ptr<PersonalDataManager> personal_data_;
-
-  // Suggestion backend ID to internal ID mapping. We keep two maps to convert
-  // back and forth. These should be used only by BackendIdToInternalId and
-  // InternalIdToBackendId.
-  // Note that the internal IDs are not frontend IDs.
-  std::map<Suggestion::BackendId, InternalId> backend_to_internal_map_;
-  std::map<InternalId, Suggestion::BackendId> internal_to_backend_map_;
 };
 
 }  // namespace autofill

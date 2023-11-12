@@ -45,6 +45,7 @@ struct AXTreeUpdate;
 
 namespace blink {
 
+class AriaNotificationOptions;
 class AXObject;
 class AbstractInlineTextBox;
 class AccessibleNode;
@@ -77,6 +78,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void Freeze() = 0;
   virtual void Thaw() = 0;
 
+  // Ensure that accessibility is clean and up-to-date for both the main and
+  // popup document. Ensures layout is clean as well.
+  virtual void UpdateAXForAllDocuments() = 0;
+
   virtual void SelectionChanged(Node*) = 0;
   virtual void ChildrenChanged(Node*) = 0;
   virtual void ChildrenChanged(const LayoutObject*) = 0;
@@ -93,7 +98,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void Remove(AccessibleNode*) = 0;
   // Returns true if the AXObject is removed.
   virtual bool Remove(LayoutObject*) = 0;
-  virtual void Remove(Node*) = 0;
+  virtual void Remove(const Node*) = 0;
   virtual void Remove(Document*) = 0;
   virtual void Remove(AbstractInlineTextBox*) = 0;
 
@@ -119,7 +124,6 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
                                              Element* new_focused_node) = 0;
   virtual void HandleInitialFocus() = 0;
   virtual void HandleEditableTextContentChanged(Node*) = 0;
-  virtual void HandleScaleAndLocationChanged(Document*) = 0;
   virtual void HandleTextMarkerDataAdded(Node* start, Node* end) = 0;
   virtual void HandleTextFormControlChanged(Node*) = 0;
   virtual void HandleValueChanged(Node*) = 0;
@@ -188,6 +192,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual AXID GenerateAXID() const = 0;
 
+  virtual void AddAriaNotification(Node*,
+                                   const String,
+                                   const AriaNotificationOptions*) = 0;
+
   typedef AXObjectCache* (*AXObjectCacheCreateFunction)(Document&,
                                                         const ui::AXMode&);
   static void Init(AXObjectCacheCreateFunction);
@@ -204,6 +212,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual AXObject* GetPluginRoot() = 0;
 
+  // Serialize entire tree, returning true if successful.
   virtual bool SerializeEntireTree(bool exclude_offscreen,
                                    size_t max_node_count,
                                    base::TimeDelta timeout,
@@ -217,7 +226,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // |event_from| and |event_from_action| annotate this node change with info
   // about the event which caused the change. For example, an event from a user
   // or an event from a focus action.
-  virtual void MarkAXObjectDirty(
+  virtual void MarkAXObjectDirtyWithDetails(
       AXObject* obj,
       bool subtree,
       ax::mojom::blink::EventFrom event_from,
@@ -236,7 +245,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   // Note that any pending event also causes its corresponding object to
   // become dirty.
-  virtual bool HasDirtyObjects() = 0;
+  virtual bool HasDirtyObjects() const = 0;
 
   // Adds the event to a list of pending events that is cleared out by
   // a subsequent call to  duplicates are not represented.. Returns false if
@@ -245,7 +254,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
                                bool insert_at_beginning) = 0;
 
   // Ensure that a call to ProcessDeferredAccessibilityEvents() will occur soon.
-  virtual void ScheduleVisualUpdate(Document& document) = 0;
+  virtual void ScheduleAXUpdate() const = 0;
 
  protected:
   friend class ScopedBlinkAXEventIntent;

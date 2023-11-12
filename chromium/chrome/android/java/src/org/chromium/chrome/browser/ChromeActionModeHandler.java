@@ -6,7 +6,6 @@ package org.chromium.chrome.browser;
 
 import android.content.pm.ResolveInfo;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Handler;
 import android.text.TextUtils;
 import android.view.ActionMode;
@@ -71,15 +70,13 @@ public class ChromeActionModeHandler {
      * @param searchCallback Callback to run when search action is selected in the action mode.
      * @param shareDelegateSupplier The {@link Supplier} of the {@link ShareDelegate} that will be
      *        notified when a share action is performed.
-     * @param canDrawOutsideScreen Whether floating action bar can be drawn outside the screen.
      */
     public ChromeActionModeHandler(ActivityTabProvider activityTabProvider,
-            Callback<String> searchCallback, Supplier<ShareDelegate> shareDelegateSupplier,
-            boolean canDrawOutsideScreen) {
+            Callback<String> searchCallback, Supplier<ShareDelegate> shareDelegateSupplier) {
         mInitWebContentsObserver = (webContents) -> {
             SelectionPopupController.fromWebContents(webContents)
                     .setActionModeCallback(new ActionModeCallback(mActiveTab, webContents,
-                            searchCallback, shareDelegateSupplier, canDrawOutsideScreen));
+                            searchCallback, shareDelegateSupplier));
         };
 
         mActivityTabTabObserver =
@@ -115,7 +112,6 @@ public class ChromeActionModeHandler {
         private final ActionModeCallbackHelper mHelper;
         private final Callback<String> mSearchCallback;
         private final Supplier<ShareDelegate> mShareDelegateSupplier;
-        private final boolean mCanDrawOutsideScreen;
 
         // Vivaldi
         private String mTranslateText;
@@ -124,12 +120,11 @@ public class ChromeActionModeHandler {
         private long mContextMenuStartTime;
 
         ActionModeCallback(Tab tab, WebContents webContents, Callback<String> searchCallback,
-                Supplier<ShareDelegate> shareDelegateSupplier, boolean canDrawOutsideScreen) {
+                Supplier<ShareDelegate> shareDelegateSupplier) {
             mTab = tab;
             mHelper = getActionModeCallbackHelper(webContents);
             mSearchCallback = searchCallback;
             mShareDelegateSupplier = shareDelegateSupplier;
-            mCanDrawOutsideScreen = canDrawOutsideScreen;
         }
 
         @VisibleForTesting
@@ -174,7 +169,7 @@ public class ChromeActionModeHandler {
                 }
             }
             if (menu.findItem(R.id.select_action_menu_share) != null
-                    && isFloatingActionMode(mode)) {
+                    && mode.getType() == ActionMode.TYPE_FLOATING) {
                 showShareIph();
             }
             return res;
@@ -195,11 +190,6 @@ public class ChromeActionModeHandler {
                                                         .setAnchorView(view)
                                                         .setRemoveArrow(true)
                                                         .build());
-        }
-
-        private boolean isFloatingActionMode(ActionMode mode) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
-            return mode.getType() == ActionMode.TYPE_FLOATING;
         }
 
         @Override
@@ -297,17 +287,6 @@ public class ChromeActionModeHandler {
         @Override
         public void onGetContentRect(ActionMode mode, View view, Rect outRect) {
             mHelper.onGetContentRect(mode, view, outRect);
-            if (mCanDrawOutsideScreen) {
-                // If the selected text is on the right side near the edge (over 3/4 of the screen),
-                // move it closer to the center to avoid the action mode being cut off.
-                int quarter = view.getWidth() / 4;
-                if (outRect.right - quarter * 3 > 0) {
-                    int xoffset = quarter
-                            + view.getResources().getDimensionPixelSize(
-                                    R.dimen.custom_tabs_actionmode_offset);
-                    outRect.offset(-xoffset, 0);
-                }
-            }
         }
 
         private Set<String> getPackageNames(List<ResolveInfo> list) {

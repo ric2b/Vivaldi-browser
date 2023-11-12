@@ -9,8 +9,6 @@
 #include <set>
 #include <string>
 
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -44,6 +42,10 @@ class PrefRegistrySimple;
 namespace ash {
 
 enum class SmartLockState;
+
+namespace secure_channel {
+class SecureChannelClient;
+}
 
 class EasyUnlockService : public KeyedService,
                           public proximity_auth::ScreenlockBridge::Observer {
@@ -280,21 +282,11 @@ class EasyUnlockService : public KeyedService,
       bool success,
       const EasyUnlockDeviceKeyDataList& key_data_list);
 
-  // Called inside PrepareForSuspend() and OnScreenOff() to handle shared Smart
-  // Lock state updates.
-  void OnSuspendOrScreenOff();
-
   // Updates the service to state for handling system suspend.
   void PrepareForSuspend();
 
   // Called when the system resumes from a suspended state.
   void OnSuspendDone();
-
-  // Update the service to state for handling when the screen turns off.
-  void OnScreenOff();
-
-  // Called when the system resumes after the screen turns back on.
-  void OnScreenOffDone();
 
   void EnsureTpmKeyPresentIfNeeded();
 
@@ -336,11 +328,5 @@ class EasyUnlockService : public KeyedService,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::EasyUnlockService;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_EASY_UNLOCK_EASY_UNLOCK_SERVICE_H_

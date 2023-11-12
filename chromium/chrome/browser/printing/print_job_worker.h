@@ -50,6 +50,9 @@ class PrintJobWorker {
 
   /* The following functions may only be called before calling SetPrintJob(). */
 
+  // Initializes the print settings for PDF. Must be called on the UI thread.
+  std::unique_ptr<PrintSettings> GetPdfSettings();
+
   // Initializes the default print settings. Must be called on the UI thread.
   void GetDefaultSettings(SettingsCallback callback);
 
@@ -103,8 +106,7 @@ class PrintJobWorker {
   void StopSoon();
 
   // Signals the thread to exit and returns once the thread has exited.
-  // Virtual to support testing.
-  virtual void Stop();
+  void Stop();
 
   // Starts the thread.
   bool Start();
@@ -158,7 +160,6 @@ class PrintJobWorker {
   virtual void UseDefaultSettings(SettingsCallback callback);
 
   PrintingContext* printing_context() { return printing_context_.get(); }
-  PrintedDocument* document() { return document_.get(); }
   PrintJob* print_job() { return print_job_; }
   const PageNumber& page_number() { return page_number_; }
   base::SequencedTaskRunner* task_runner() { return task_runner_.get(); }

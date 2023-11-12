@@ -106,7 +106,8 @@ declare_args() {
   chromeos_afdo_platform = "atom"
 
   # Emit debug information for profiling wile building with clang.
-  clang_emit_debug_info_for_profiling = false
+  # Only enable this for ChromeOS official builds for AFDO.
+  clang_emit_debug_info_for_profiling = is_chromeos_device && is_official_build
 
   # Turn this on to have the compiler output extra timing information.
   compiler_timing = false
@@ -132,9 +133,9 @@ declare_args() {
   # recognizable in the debugger, and crashes on memory accesses through
   # uninitialized pointers.
   #
-  # TODO(crbug.com/1131993): Enabling this when 'is_android' is true breaks
-  # content_shell_test_apk on both ARM and x86.
-  init_stack_vars = !is_android
+  # TODO(crbug.com/1131993): This regresses binary size by ~1MB on Android and
+  # needs to be evaluated before enabling it there as well.
+  init_stack_vars = !(is_android && is_official_build)
 
   # This argument is to control whether enabling text section splitting in the
   # final binary. When enabled, the separated text sections with prefix
@@ -163,6 +164,10 @@ declare_args() {
   # Enable -H, which prints the include tree during compilation.
   # For use by tools/clang/scripts/analyze_includes.py
   show_includes = false
+
+  # If true, linker crashes will be rerun with `--reproduce` which causes
+  # a reproducer file to be saved.
+  save_reproducers_on_lld_crash = false
 }
 
 declare_args() {
@@ -526,6 +531,12 @@ config("compiler") {
 
   if (is_clang && !is_nacl && current_os != "zos") {
     cflags += [ "-fcrash-diagnostics-dir=" + clang_diagnostic_dir ]
+    if (save_reproducers_on_lld_crash && use_lld) {
+      ldflags += [
+        "-fcrash-diagnostics=all",
+        "-fcrash-diagnostics-dir=" + clang_diagnostic_dir,
+      ]
+    }
 
     # TODO(hans): Remove this once Clang generates better optimized debug info
     # by default. https://crbug.com/765793
@@ -589,21 +600,25 @@ config("compiler") {
       if (is_clang) {
         cflags_cc += [ "-fno-trigraphs" ]
       }
-    } else if (is_linux) {
-      # TODO(crbug.com/1284275): Switch to C++20 on all platforms.
-      if (is_clang) {
-        cflags_cc += [ "-std=${standard_prefix}++20" ]
+    } else if (is_clang) {
+      if (is_chromeos_device) {
+        # TODO(crbug.com/1392471): Support C++20 in CrOS toolchain.
+        cflags_cc += [ "-std=${standard_prefix}++17" ]
       } else {
-        # The gcc bots are currently using GCC 9, which is not new enough to
-        # support "c++20"/"gnu++20".
-        cflags_cc += [ "-std=${standard_prefix}++2a" ]
+        cflags_cc += [ "-std=${standard_prefix}++20" ]
       }
     } else {
-      cflags_cc += [ "-std=${standard_prefix}++17" ]
+      # The gcc bots are currently using GCC 9, which is not new enough to
+      # support "c++20"/"gnu++20".
+      cflags_cc += [ "-std=${standard_prefix}++2a" ]
     }
   } else if (is_win) {
     cflags_c += [ "/std:c11" ]
-    cflags_cc += [ "/std:c++17" ]
+    if (!is_clang && defined(msvc_use_cxx17) && msvc_use_cxx17) {
+      cflags_cc += [ "/std:c++17" ]
+    } else {
+      cflags_cc += [ "/std:c++20" ]
+    }
   } else if (!is_nacl) {
     # TODO(mcgrathr) - the NaCl GCC toolchain doesn't support either
     # gnu11/gnu++11 or c11/c++11; we technically don't need this toolchain any
@@ -611,11 +626,13 @@ config("compiler") {
     # turned off we need the !is_nacl clause and the (is_nacl && is_clang)
     # clause, above.
     cflags_c += [ "-std=c11" ]
-    if (is_mac) {
-      # TODO(crbug.com/1284275): Switch to C++20 on all platforms.
-      cflags_cc += [ "-std=c++20" ]
-    } else {
+
+    if (is_fuchsia) {
+      # TODO(crbug.com/fuchsia/108751): The FIDL compiler generates code that
+      # will not compile in C++20 mode. Switch to C++20 when this is resolved.
       cflags_cc += [ "-std=c++17" ]
+    } else {
+      cflags_cc += [ "-std=c++20" ]
     }
   }
 
@@ -623,6 +640,11 @@ config("compiler") {
     # C++17 removes trigraph support, but clang still warns that it ignores
     # them when seeing them.  Don't.
     cflags_cc += [ "-Wno-trigraphs" ]
+  }
+
+  if (use_relative_vtables_abi) {
+    cflags_cc += [ "-fexperimental-relative-c++-abi-vtables" ]
+    ldflags += [ "-fexperimental-relative-c++-abi-vtables" ]
   }
 
   # Add flags for link-time optimization. These flags enable
@@ -742,6 +764,12 @@ config("compiler") {
     ldflags += [ "-Wl,--no-rosegment" ]
   }
 
+  # TODO(crbug.com/1374347): Cleanup undefined symbol errors caught by
+  # --no-undefined-version.
+  if (use_lld && !is_win && !is_mac && !is_ios) {
+    ldflags += [ "-Wl,--undefined-version" ]
+  }
+
   # LLD does call-graph-sorted binary layout by default when profile data is
   # present. On Android this increases binary size due to more thinks for long
   # jumps. Turn it off by default and enable selectively for targets where it's
@@ -776,6 +804,17 @@ config("compiler") {
   if (is_clang && !is_nacl && target_os != "chromeos" &&
       (is_win || use_custom_libcxx)) {
     cflags += [ "-fcomplete-member-pointers" ]
+  }
+
+  # Use DWARF simple template names, with the following exceptions:
+  #
+  # * Windows is not supported as it doesn't use DWARF.
+  # * Apple platforms (e.g. MacOS, iPhone, iPad) aren't supported because xcode
+  #   lldb doesn't have the needed changes yet.
+  # * Fuchsia isn't supported as zxdb doesn't support simple template names yet.
+  # TODO(crbug.com/1379070): Remove if the upstream default ever changes.
+  if (is_clang && !is_nacl && !is_win && !is_apple && !is_fuchsia) {
+    cflags_cc += [ "-gsimple-template-names" ]
   }
 
   # MLGO specific flags. These flags enable an ML-based inliner trained on
@@ -821,6 +860,10 @@ config("compiler") {
     # between different configurations, so we'll keep them on until
     # we discover a reason to turn them off.
     "-Coverflow-checks=on",
+
+    # Turn warnings into the "deny" lint level, which produce compiler errors.
+    # The equivalent of -Werror for clang/gcc.
+    "-Dwarnings",
 
     # To make Rust .d files compatible with ninja
     "-Zdep-info-omit-d-target",
@@ -905,6 +948,12 @@ config("compiler_cpu_abi") {
     configs += [ "//build/config/chromeos:compiler_cpu_abi" ]
   }
 
+  # TODO(https://crbug.com/1383873): Remove this once figured out.
+  if (is_apple && current_cpu == "arm64") {
+    cflags += [ "-fno-global-isel" ]
+    ldflags += [ "-fno-global-isel" ]
+  }
+
   if ((is_posix && !is_apple) || is_fuchsia) {
     # CPU architecture. We may or may not be doing a cross compile now, so for
     # simplicity we always explicitly set the architecture.
@@ -943,10 +992,6 @@ config("compiler_cpu_abi") {
           !(is_chromeos_lacros && is_chromeos_device)) {
         cflags += [ "--target=aarch64-linux-gnu" ]
         ldflags += [ "--target=aarch64-linux-gnu" ]
-      }
-      if (is_android) {
-        # Outline atomics crash on Exynos 9810. http://crbug.com/1272795
-        cflags += [ "-mno-outline-atomics" ]
       }
     } else if (current_cpu == "mipsel" && !is_nacl) {
       ldflags += [ "-Wl,--hash-style=sysv" ]
@@ -1760,37 +1805,9 @@ config("no_chromium_code") {
     }
   }
 
-  # Rust warnings to ignore in third party dependencies. This list is
-  # built from those warnings which are currently in our various Rust
-  # third party dependencies, but aren't serious (they're largely
-  # stylistic).
-  # An alternative policy would be to suppress all warnings in third
-  # party Rust code using "--cap-lints allow". This is what cargo does
-  # for code outside your own crate, so is worth considering if it
-  # turns out that maintaining this list is onerous.
-  # (https://doc.rust-lang.org/rustc/lints/levels.html#capping-lints)
-  rustflags = [
-    "-A",
-    "unused_parens",
-    "-A",
-    "bare_trait_objects",
-    "-A",
-    "non_fmt_panics",
-    "-A",
-    "redundant_semicolons",
-    "-A",
-    "unused_parens",
-    "-A",
-    "anonymous_parameters",
-    "-A",
-    "bare_trait_objects",
-    "-A",
-    "deprecated",
-    "-A",
-    "non_camel_case_types",
-    "-A",
-    "unused_imports",
-  ]
+  # Suppress all warnings in third party, as Cargo does:
+  # https://doc.rust-lang.org/rustc/lints/levels.html#capping-lints
+  rustflags = [ "--cap-lints=allow" ]
 
   configs = [ ":default_warnings" ]
 }
@@ -2067,10 +2084,16 @@ config("optimize") {
       # Favor size over speed, /O1 must be before the common flags.
       # /O1 implies /Os and /GF.
       cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
+      rustflags = [ "-Copt-level=s" ]
     } else {
       # PGO requires all translation units to be compiled with /O2. The actual
       # optimization level will be decided based on the profiling data.
       cflags = [ "/O2" ] + common_optimize_on_cflags + [ "/Oi" ]
+
+      # https://doc.rust-lang.org/rustc/profile-guided-optimization.html#usage
+      # suggests not using an explicit `-Copt-level` at all, and the default is
+      # to optimize for performance like `/O2` for clang.
+      rustflags = []
     }
   } else if (optimize_for_size) {
     # Favor size over speed.
@@ -2086,6 +2109,10 @@ config("optimize") {
     } else {
       cflags = [ "-Os" ] + common_optimize_on_cflags
     }
+
+    # Like with `-Oz` on Clang, `-Copt-level=z` will also turn off loop
+    # vectorization.
+    rustflags = [ "-Copt-level=z" ]
   } else if (is_chromeos) {
     # TODO(gbiv): This is partially favoring size over speed. CrOS exclusively
     # uses clang, and -Os in clang is more of a size-conscious -O2 than "size at
@@ -2094,12 +2121,16 @@ config("optimize") {
     #   for size by default (so, also Windows)
     # - Investigate -Oz here, maybe just for ARM?
     cflags = [ "-Os" ] + common_optimize_on_cflags
-  } else {
-    cflags = [ "-O2" ] + common_optimize_on_cflags
-  }
-  if (optimize_for_size) {
+
+    # Similar to clang, we optimize with `-Copt-level=s` to keep loop
+    # vectorization while otherwise optimizing for size.
     rustflags = [ "-Copt-level=s" ]
   } else {
+    cflags = [ "-O2" ] + common_optimize_on_cflags
+
+    # The `-O3` for clang turns on extra optimizations compared to the standard
+    # `-O2`. But for rust, `-Copt-level=3` is the default and is thus reliable
+    # to use.
     rustflags = [ "-Copt-level=3" ]
   }
   ldflags = common_optimize_on_ldflags
@@ -2328,7 +2359,14 @@ config("win_pdbaltpath") {
 config("symbols") {
   if (is_win) {
     if (is_clang) {
-      cflags = [ "/Z7" ]  # Debug information in the .obj files.
+      cflags = [
+        # Debug information in the .obj files.
+        "/Z7",
+
+        # Disable putting the compiler command line into the debug info to
+        # prevent some types of non-determinism.
+        "-gno-codeview-command-line",
+      ]
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }
@@ -2353,7 +2391,8 @@ config("symbols") {
       cflags += [ "-fno-standalone-debug" ]
     }
 
-    if (!is_nacl) {
+    # On aix -gdwarf causes linker failures due to thread_local variables.
+    if (!is_nacl && current_os != "aix") {
       if (use_dwarf5) {
         cflags += [ "-gdwarf-5" ]
       } else if (!is_apple) {
@@ -2381,9 +2420,6 @@ config("symbols") {
       # It is skipped in tsan and asan because enabling it causes some
       # formatting changes in the output which would require fixing bunches
       # of expectation regexps.
-      #
-      # It is skipped when generating bitcode is enabled as -gdwars-aranges
-      # is incompatible with -fembed-bitcode/-fembed-bitcode-marker.
       cflags += [ "-gdwarf-aranges" ]
     }
 
@@ -2487,7 +2523,8 @@ config("minimal_symbols") {
       # at least 10.11.
       # TODO(thakis): Remove this once mac_deployment_target is 10.11.
       cflags += [ "-gdwarf-4" ]
-    } else if (!use_dwarf5 && !is_nacl) {
+    } else if (!use_dwarf5 && !is_nacl && current_os != "aix") {
+      # On aix -gdwarf causes linker failures due to thread_local variables.
       # Recent clang versions default to DWARF5 on Linux, and Android is about
       # to switch. TODO: Adopt that in controlled way.
       cflags += [ "-gdwarf-4" ]
@@ -2612,7 +2649,16 @@ if (is_android || (is_chromeos_ash && is_chromeos_device)) {
 config("default_init_stack_vars") {
   cflags = []
   if (init_stack_vars && is_clang && !is_nacl && !using_sanitizer) {
-    cflags += [ "-ftrivial-auto-var-init=pattern" ]
+    if (is_chromeos && !chromeos_is_browser_only) {
+      # TODO(adriandole) remove chromeos_is_browser_only condition
+      # once lacros updates toolchain
+
+      # Zero init has favorable performance/size tradeoffs for Chrome OS
+      # but was not evaluated for other platforms.
+      cflags += [ "-ftrivial-auto-var-init=zero" ]
+    } else {
+      cflags += [ "-ftrivial-auto-var-init=pattern" ]
+    }
   }
 }
 

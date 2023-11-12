@@ -20,6 +20,7 @@
 <translation id="1415402041810619267">URL truncada</translation>
 <translation id="1426410128494586442">Sí</translation>
 <translation id="1446450296470737166">Control total dispositivos MIDI</translation>
+<translation id="1448064542941920355">Reducir zoom</translation>
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1633720957382884102">Sitios relacionados</translation>
 <translation id="1644574205037202324">Historial</translation>
@@ -49,8 +50,8 @@
 <translation id="2079545284768500474">Deshacer</translation>
 <translation id="2091887806945687916">Sonido</translation>
 <translation id="2107397443965016585">Preguntar antes de permitir que los sitios reproduzcan contenido protegido (recomendado)</translation>
-<translation id="2146738493024040262">Abrir aplicación instantánea</translation>
 <translation id="2148716181193084225">Hoy</translation>
+<translation id="216989819110952009">Aun con los ojos protegidos por los anteojos verdes, la brillantez de la maravillosa ciudad encandiló</translation>
 <translation id="2182457891543959921">Preguntar antes de permitir que los sitios creen un mapa 3D de tu entorno o hagan un seguimiento de la posición de la cámara (recomendado)</translation>
 <translation id="2212565012507486665">Permitir cookies</translation>
 <translation id="2228071138934252756">Para que <ph name="APP_NAME" /> pueda acceder a tu cámara, activa la cámara también en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
@@ -64,6 +65,7 @@
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2379925928934107488">El tema oscuro se aplica a los sitios si Chrome lo usa y es posible</translation>
 <translation id="2387895666653383613">Ajuste de texto</translation>
+<translation id="2390272837142897736">Aumentar zoom</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más permitidos}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más permitidos}}</translation>
 <translation id="2434158240863470628">Descarga finalizada <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -112,11 +114,13 @@
 <translation id="3248611290851046188">Este sitio define intereses que otros sitios pueden usar para mostrarte anuncios. Este sitio también consulta tus intereses de Chrome para mostrarte anuncios más relevantes.</translation>
 <translation id="3277252321222022663">Permitir que los sitios accedan a los sensores (recomendado)</translation>
 <translation id="3285500645985761267">Permitir que los sitios relacionados vean tu actividad en el grupo</translation>
+<translation id="3295019059349372795">Capítulo 11: La maravillosa Ciudad Esmeralda de Oz</translation>
 <translation id="3295602654194328831">Ocultar información</translation>
 <translation id="3328801116991980348">Información del sitio</translation>
 <translation id="3333961966071413176">Todos los contactos</translation>
 <translation id="3362437373201486687">Buscando dispositivos Bluetooth</translation>
 <translation id="3386292677130313581">Preguntar antes de permitir que los sitios detecten tu ubicación (recomendado)</translation>
+<translation id="3403537308306431953"><ph name="ZOOM_LEVEL" /> %%</translation>
 <translation id="3521663503435878242">Sitios de <ph name="DOMAIN" /></translation>
 <translation id="3538390592868664640">No permitir que los sitios creen un mapa 3D de tu entorno o hagan un seguimiento de la posición de la cámara</translation>
 <translation id="3544058026430919413">Una empresa puede definir un grupo de sitios que pueden usar cookies para compartir tu actividad dentro del grupo. Esta función está desactivada en el modo Incógnito.</translation>
@@ -126,6 +130,7 @@
 <translation id="3594780231884063836">Silenciar vídeo</translation>
 <translation id="3596414637720633074">Bloquear cookies de terceros en incógnito</translation>
 <translation id="3600792891314830896">Silenciar los sitios que reproducen sonidos</translation>
+<translation id="3602290021589620013">Vista previa</translation>
 <translation id="3628308229821498208">Sugerencias de búsqueda</translation>
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
 <translation id="3763247130972274048">Toca dos veces a la derecha o a la izquierda del vídeo para saltar 10 s</translation>
@@ -146,7 +151,7 @@
 <translation id="4008040567710660924">Permitir cookies en un sitio específico.</translation>
 <translation id="4046123991198612571">Pista siguiente</translation>
 <translation id="4149994727733219643">Vista simplificada de páginas web</translation>
-<translation id="4165986682804962316">Configuración del sitio</translation>
+<translation id="4165986682804962316">Configuración de sitios</translation>
 <translation id="4169549551965910670">Conectado a un dispositivo USB</translation>
 <translation id="4194328954146351878">Pregunta antes de permitir que los sitios vean y cambien la información de los dispositivos NFC (recomendado)</translation>
 <translation id="4200726100658658164">Abrir Ajustes de ubicación</translation>
@@ -160,6 +165,7 @@
 <translation id="4402755511846832236">Impide que los sitios detecten cuándo usas activamente este dispositivo</translation>
 <translation id="4428065317363009941">Personalización de anuncios</translation>
 <translation id="4434045419905280838">Ventanas emergentes y redirecciones</translation>
+<translation id="4440642537584213025">Mostrar <ph name="TARGET_DESCRIPTION" /></translation>
 <translation id="445467742685312942">Permitir que los sitios reproduzcan contenido protegido</translation>
 <translation id="4468959413250150279">Silencia el sonido de un sitio específico.</translation>
 <translation id="4475912480633855319">{COOKIES,plural, =1{# cookie}other{# cookies}}</translation>
@@ -171,6 +177,7 @@
 <translation id="4645575059429386691">Administrado por uno de tus padres</translation>
 <translation id="4670064810192446073">Realidad virtual</translation>
 <translation id="4751476147751820511">Sensores de luz o movimiento</translation>
+<translation id="4779083564647765204">Zoom</translation>
 <translation id="4811450222531576619">Más información sobre la fuente y el tema</translation>
 <translation id="4836046166855586901">Preguntar en caso de que un sitio quiera detectar cuándo usas activamente este dispositivo</translation>
 <translation id="483914009762354899">Incluir todos los sitios que pertenezcan a este dominio</translation>
@@ -186,7 +193,6 @@
 <translation id="5048398596102334565">Permitir que los sitios accedan a los sensores de movimiento (recomendado)</translation>
 <translation id="5050380848339752099">Este sitio va a compartir información con una aplicación fuera del modo Incógnito.</translation>
 <translation id="5063480226653192405">Uso</translation>
-<translation id="5082281938627763039">Esta acción elimina las cookies y otros datos de sitios de <ph name="FPS_MEMBER" /> y de los sitios incluidos en el grupo de sitios de <ph name="FPS_OWNER" /></translation>
 <translation id="5091013926750941408">Sitio web móvil</translation>
 <translation id="509133520954049755">Solicita la vista para ordenador</translation>
 <translation id="5100237604440890931">Contraído (hacer clic para ampliar)</translation>
@@ -200,7 +206,6 @@
 <translation id="528192093759286357">Arrastra el dedo desde la parte superior y toca el botón de retroceso para salir de la pantalla completa.</translation>
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5301954838959518834">Entendido</translation>
-<translation id="5313967007315987356">Añadir sitio</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5335288049665977812">Permitir que los sitios utilicen JavaScript (recomendado)</translation>
 <translation id="534295439873310000">Dispositivos NFC</translation>
@@ -234,9 +239,11 @@
 <translation id="5922853908706496913">Compartiendo tu pantalla</translation>
 <translation id="5922967540311291836">Bloquea cookies de terceros:</translation>
 <translation id="5939518447894949180">Restablecer</translation>
+<translation id="5968921426641056619">Introduce una dirección web</translation>
 <translation id="5975083100439434680">Reducir</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> - <ph name="WARNING_MESSAGE" /></translation>
 <translation id="6015775454662021376">Controla el acceso de este sitio web a tu dispositivo</translation>
+<translation id="6018815681665454784">¿Borrar y restablecer?</translation>
 <translation id="6040143037577758943">Cerrar</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6064125863973209585">Descargas completadas</translation>
@@ -259,6 +266,7 @@
 <translation id="6405650995156823521"><ph name="FIRST_PART" /> • <ph name="SECOND_PART" /></translation>
 <translation id="6439114592976064011">No permitir que los sitios usen tu dispositivo y tus datos de realidad virtual</translation>
 <translation id="6447842834002726250">Cookies</translation>
+<translation id="6453641458248223456">Ampliar o reducir una página desde el menú principal</translation>
 <translation id="6467852467360539617">Borrar datos y permisos</translation>
 <translation id="6527303717912515753">Compartir</translation>
 <translation id="6545864417968258051">Búsqueda de dispositivos Bluetooth</translation>
@@ -299,6 +307,7 @@
 <translation id="7250468141469952378">Elementos seleccionados: <ph name="ITEM_COUNT" /></translation>
 <translation id="7260727271532453612"><ph name="PERMISSION_1" /> y <ph name="PERMISSION_2" /> permitidos</translation>
 <translation id="7302486331832100261">Sueles bloquear las notificaciones. Para permitirlas, toca Detalles.</translation>
+<translation id="7366415735885268578">Añadir un sitio</translation>
 <translation id="7383715096023715447">Configuración de <ph name="DOMAIN" /></translation>
 <translation id="7423098979219808738">Preguntar antes</translation>
 <translation id="7423538860840206698">Se ha bloqueado la lectura del portapapeles</translation>
@@ -312,6 +321,10 @@
 <translation id="7641339528570811325">Borrar datos de navegación…</translation>
 <translation id="7649070708921625228">Ayuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
+<translation id="7667547420449112975">El maravilloso mago de Oz</translation>
+<translation id="7690549345586282764">Mostrar zoom</translation>
+<translation id="7695658402549134106">Preferencia de sitio para <ph name="SITE_NAME" /></translation>
+<translation id="7719367874908701697">Zoom de la página</translation>
 <translation id="7781829728241885113">Ayer</translation>
 <translation id="7791543448312431591">Añadir</translation>
 <translation id="780301667611848630">No, gracias</translation>
@@ -337,6 +350,7 @@
 <translation id="813082847718468539">Ver información del sitio</translation>
 <translation id="8131740175452115882">Confirmar</translation>
 <translation id="8154912474061769055">Es posible que las funciones de muchos sitios no funcionen</translation>
+<translation id="8168435359814927499">Contenido</translation>
 <translation id="8197286292360124385"><ph name="PERMISSION_1" /> permitido</translation>
 <translation id="8200772114523450471">Reanudar</translation>
 <translation id="8206354486702514201">El administrador aplica esta opción.</translation>
@@ -353,6 +367,7 @@
 <translation id="8380167699614421159">El sitio web muestra anuncios invasivos o engañosos</translation>
 <translation id="8394832520002899662">Toca para volver al sitio web</translation>
 <translation id="8409345997656833551">Recibir una notificación cuando un artículo pueda mostrarse en vista simplificada</translation>
+<translation id="8423565414844018592">Ajuste de texto establecido en <ph name="TEXT_SCALING" /></translation>
 <translation id="8428213095426709021">Configuración</translation>
 <translation id="8441146129660941386">Buscar hacia atrás</translation>
 <translation id="8444433999583714703">Para que <ph name="APP_NAME" /> tenga acceso a tu ubicación, actívala también en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
@@ -383,16 +398,17 @@
 <translation id="8921772741368021346"><ph name="POSITION" />/<ph name="DURATION" /></translation>
 <translation id="8926666909099850184">La tecnología NFC está desactivada en este dispositivo. Actívala en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
 <translation id="8928445016601307354">Impide que los sitios vean y cambien la información de los dispositivos NFC</translation>
-<translation id="8941729603749328384">www.example.com</translation>
 <translation id="8958424370300090006">Bloquear las cookies de un sitio específico.</translation>
 <translation id="8959122750345127698">No se puede realizar la navegación: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Dejar de recordar</translation>
+<translation id="900095568014372589">Aumentar o reducir el texto y las imágenes predeterminados de los sitios</translation>
 <translation id="9019902583201351841">Administrado por tus padres</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9090268041676521955">Este sitio está en un grupo que puede ver tu actividad. El grupo está definido por <ph name="FPS_OWNER" />.</translation>
 <translation id="9106233582039520022">¿Eliminar cookies?</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más}}</translation>
 <translation id="913657688200966289">Activa los permisos para <ph name="APP_NAME" /> en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
+<translation id="9138217887606523162">Zoom actual: <ph name="ZOOM_LEVEL" /> %%</translation>
 <translation id="9162462602695099906">Esta página es peligrosa</translation>
 <translation id="930525582205581608">¿Olvidar este sitio?</translation>
 <translation id="967624055006145463">Datos almacenados</translation>

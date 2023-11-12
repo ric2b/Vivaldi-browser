@@ -12,6 +12,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
+import android.os.Build.VERSION;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -38,6 +39,7 @@ import org.chromium.chrome.browser.accessibility.settings.ChromeAccessibilitySet
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragmentBasic;
 import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsController;
 import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsSettings;
@@ -76,8 +78,12 @@ import org.chromium.components.browser_ui.widget.displaystyle.ViewResizer;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
+
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The Chrome settings activity.
@@ -179,6 +185,8 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
      * by adding padding to both sides.
      */
     private void configureWideDisplayStyle() {
+        // Note(david@vivaldi.com): We don't have a width constrain in Vivaldi.
+        if (ChromeApplicationImpl.isVivaldi()) return;
         if (mUiConfig == null) {
             int minWidePaddingPixels =
                     getResources().getDimensionPixelSize(R.dimen.settings_wide_display_min_padding);
@@ -209,8 +217,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         // clang-format off
         mBottomSheetController = BottomSheetControllerFactory.createBottomSheetController(
                 () -> mScrim, (sheet) -> {}, getWindow(),
-                KeyboardVisibilityDelegate.getInstance(), () -> sheetContainer,
-                () -> findViewById(android.R.id.content).getHeight());
+                KeyboardVisibilityDelegate.getInstance(), () -> sheetContainer);
         // clang-format on
     }
 
@@ -371,7 +378,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         }
         if (fragment instanceof SafetyCheckSettingsFragment) {
             SafetyCheckCoordinator.create((SafetyCheckSettingsFragment) fragment,
-                    new SafetyCheckUpdatesDelegateImpl(this), mSettingsLauncher,
+                    new SafetyCheckUpdatesDelegateImpl(), mSettingsLauncher,
                     SyncConsentActivityLauncherImpl.get(), getModalDialogManagerSupplier());
         }
         if (fragment instanceof PasswordCheckFragmentView) {
@@ -472,12 +479,15 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
      */
     private void setStatusBarColor() {
         // On P+, the status bar color is set via the XML theme.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return;
+        if ((!DeviceFormFactor.isNonMultiDisplayContextOnTablet(this)
+                    && VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                || (DeviceFormFactor.isNonMultiDisplayContextOnTablet(this)
+                        && !ChromeFeatureList.sTabStripRedesign.isEnabled()
+                        && VERSION.SDK_INT >= Build.VERSION_CODES.P)) {
+            return;
+        }
 
         if (UiUtils.isSystemUiThemingDisabled()) return;
-
-        // Dark status icons only supported on M+.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
 
         // Use transparent color, so the AppBarLayout can color the status bar on scroll.
         ApiCompatibilityUtils.setStatusBarColor(getWindow(), Color.TRANSPARENT);

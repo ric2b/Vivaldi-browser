@@ -316,9 +316,11 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
     // Skip the model types that don't make sense for us to synchronize.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kApps ||
-        // Syncing typedUrls already syncs sessions anyway. For now we group
-        // both in our UI
+        // Syncing typedUrls already syncs sessions anyway and it
+        // doesn't make much sense to show saved tab groups if we don't
+        // show tabs. For now we group all three in our UI
         data_type == syncer::UserSelectableType::kTabs ||
+        data_type == syncer::UserSelectableType::kSavedTabGroups ||
         // Wifi configuration is only used in ChromeOS.
         data_type == syncer::UserSelectableType::kWifiConfigurations) {
       continue;
@@ -576,8 +578,9 @@ ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
           FromVivaldiSyncDataType(type_selection.data_type).value());
     }
   }
-  if (chosen_types.Has(syncer::UserSelectableType::kHistory))
+  if (chosen_types.Has(syncer::UserSelectableType::kHistory)) {
     chosen_types.Put(syncer::UserSelectableType::kTabs);
+  }
 
   sync_service->GetUserSettings()->SetSelectedTypes(params->sync_everything,
                                                     chosen_types);

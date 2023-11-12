@@ -134,6 +134,8 @@ BASE_DECLARE_FEATURE(kIPHReadLaterAppMenuBookmarkThisPageFeature);
 BASE_DECLARE_FEATURE(kIPHReadLaterAppMenuBookmarksFeature);
 BASE_DECLARE_FEATURE(kIPHReadLaterBottomSheetFeature);
 BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteAppMenuFeature);
+BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteDefaultOnFeature);
+BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteOptInFeature);
 BASE_DECLARE_FEATURE(kIPHShoppingListMenuItemFeature);
 BASE_DECLARE_FEATURE(kIPHShoppingListSaveFlowFeature);
 BASE_DECLARE_FEATURE(kIPHTabGroupsQuicklyComparePagesFeature);
@@ -171,7 +173,6 @@ BASE_DECLARE_FEATURE(kIPHLongPressToolbarTipFeature);
 BASE_DECLARE_FEATURE(kIPHNewTabTipFeature);
 BASE_DECLARE_FEATURE(kIPHNewIncognitoTabTipFeature);
 BASE_DECLARE_FEATURE(kIPHBadgedReadingListFeature);
-BASE_DECLARE_FEATURE(kIPHBadgedWhatsNewFeature);
 BASE_DECLARE_FEATURE(kIPHWhatsNewFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListMessagesFeature);
 BASE_DECLARE_FEATURE(kIPHBadgedTranslateManualTriggerFeature);
@@ -180,6 +181,7 @@ BASE_DECLARE_FEATURE(kIPHDefaultSiteViewFeature);
 BASE_DECLARE_FEATURE(kIPHPasswordSuggestionsFeature);
 BASE_DECLARE_FEATURE(kIPHFollowWhileBrowsingFeature);
 BASE_DECLARE_FEATURE(kIPHOverflowMenuTipFeature);
+BASE_DECLARE_FEATURE(kIPHPriceNotificationsWhileBrowsingFeature);
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \

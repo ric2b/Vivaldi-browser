@@ -62,6 +62,13 @@ def get_parts(config):
                 identifier_requirement=False,
                 entitlements='app-entitlements.plist',
                 verify_options=verify_options),
+        'privileged-helper':
+            CodeSignedProduct(
+                '{.app_product}.app/Contents/Library/LaunchServices/{}.UpdaterPrivilegedHelper'
+                .format(config, uncustomized_bundle_id),
+                '{}.UpdaterPrivilegedHelper'.format(uncustomized_bundle_id),
+                options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS,
+                verify_options=verify_options),
         'framework':
             CodeSignedProduct(
                 # The framework is a dylib, so options= flags are meaningless.
@@ -224,7 +231,7 @@ def sign_chrome(paths, config, sign_framework=False):
         # signing the Current version.
         # https://developer.apple.com/library/content/technotes/tn2206/_index.html#//apple_ref/doc/uid/DTS40007919-CH1-TNTAG13
         for name, part in parts.items():
-            if name in ('app', 'framework', "mac-sparkle-framework", "mac-sparkle-updater-app"):
+            if name in ('app', 'framework', 'privileged-helper', "mac-sparkle-framework", "mac-sparkle-updater-app"):
                 continue
             signing.sign_part(paths, config, part)
 
@@ -244,11 +251,16 @@ def sign_chrome(paths, config, sign_framework=False):
             os.path.join(paths.work, parts['app'].path, 'Contents',
                          _PROVISIONPROFILE_DEST))
 
+    # Sign the privileged helper.
+    #signing.sign_part(paths, config, parts['privileged-helper'])
+
     # Sign the outer app bundle.
     signing.sign_part(paths, config, parts['app'])
 
     # Verify all the parts.
-    for part in parts.values():
+    for name, part in parts.items():
+        if name in ['privileged-helper']:
+            continue
         signing.verify_part(paths, part)
 
     # Display the code signature.

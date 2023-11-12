@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {FakeEntryImpl} from '../../common/js/files_app_entry_types.js';
 import {str, strf} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {Crostini} from '../../externs/background/crostini.js';
-import {FilesToast} from '../elements/files_toast.js';
 
 import {constants} from './constants.js';
 import {DirectoryModel} from './directory_model.js';
@@ -24,8 +23,10 @@ export class CrostiniController {
    * @param {!Crostini} crostini Crostini background object.
    * @param {!DirectoryModel} directoryModel DirectoryModel.
    * @param {!DirectoryTree} directoryTree DirectoryTree.
+   * @param {boolean} disabled Whether the Crostini item should be disabled.
+   *     Defaults to false.
    */
-  constructor(crostini, directoryModel, directoryTree) {
+  constructor(crostini, directoryModel, directoryTree, disabled = false) {
     /** @private @const */
     this.crostini_ = crostini;
 
@@ -40,6 +41,11 @@ export class CrostiniController {
 
     /** @private */
     this.entrySharedWithPluginVm_ = false;
+
+    /**
+     * @private @const {boolean}
+     */
+    this.disabled_ = disabled;
   }
 
   /**
@@ -47,14 +53,18 @@ export class CrostiniController {
    */
   async redraw() {
     // Setup Linux files fake root.
-    this.directoryTree_.dataModel.linuxFilesItem =
-        this.crostini_.isEnabled(constants.DEFAULT_CROSTINI_VM) ?
-        new NavigationModelFakeItem(
-            str('LINUX_FILES_ROOT_LABEL'), NavigationModelItemType.CROSTINI,
-            new FakeEntryImpl(
-                str('LINUX_FILES_ROOT_LABEL'),
-                VolumeManagerCommon.RootType.CROSTINI)) :
-        null;
+    let crostiniNavigationModelItem;
+    if (this.crostini_.isEnabled(constants.DEFAULT_CROSTINI_VM)) {
+      crostiniNavigationModelItem = new NavigationModelFakeItem(
+          str('LINUX_FILES_ROOT_LABEL'), NavigationModelItemType.CROSTINI,
+          new FakeEntryImpl(
+              str('LINUX_FILES_ROOT_LABEL'),
+              VolumeManagerCommon.RootType.CROSTINI));
+      crostiniNavigationModelItem.disabled = this.disabled_;
+    } else {
+      crostiniNavigationModelItem = null;
+    }
+    this.directoryTree_.dataModel.linuxFilesItem = crostiniNavigationModelItem;
     // Redraw the tree to ensure 'Linux files' is added/removed.
     this.directoryTree_.redraw(false);
   }
@@ -99,23 +109,31 @@ export class CrostiniController {
       });
     };
 
-    const [crostiniShareCount, pluginVmShareCount] = await Promise.all([
-      getSharedPaths(constants.DEFAULT_CROSTINI_VM),
-      getSharedPaths(constants.PLUGIN_VM),
-    ]);
+    const [crostiniShareCount, pluginVmShareCount, bruschettaVmShareCount] =
+        await Promise.all([
+          getSharedPaths(constants.DEFAULT_CROSTINI_VM),
+          getSharedPaths(constants.PLUGIN_VM),
+          getSharedPaths(constants.DEFAULT_BRUSCHETTA_VM),
+        ]);
 
+    // Toasts are queued and shown one-at-a-time if multiple apply.
+    // TODO(b/260521400): Or at least, they will once this bug is fixed.
     toast(
         crostiniShareCount, 'FOLDER_SHARED_WITH_CROSTINI',
         'FOLDER_SHARED_WITH_CROSTINI_PLURAL', 'MANAGE_TOAST_BUTTON_LABEL',
         'crostini/sharedPaths',
         CommandHandler.MenuCommandsForUMA.MANAGE_LINUX_SHARING_TOAST_STARTUP);
-    // TODO(crbug.com/949356): UX to provide guidance for what to do
-    // when we have shared paths with both Linux and Plugin VM.
     toast(
         pluginVmShareCount, 'FOLDER_SHARED_WITH_PLUGIN_VM',
         'FOLDER_SHARED_WITH_PLUGIN_VM_PLURAL', 'MANAGE_TOAST_BUTTON_LABEL',
         'app-management/pluginVm/sharedPaths',
         CommandHandler.MenuCommandsForUMA
             .MANAGE_PLUGIN_VM_SHARING_TOAST_STARTUP);
+    toast(
+        bruschettaVmShareCount, 'FOLDER_SHARED_WITH_BRUSCHETTA',
+        'FOLDER_SHARED_WITH_BRUSCHETTA_PLURAL', 'MANAGE_TOAST_BUTTON_LABEL',
+        'bruschetta/sharedPaths',
+        CommandHandler.MenuCommandsForUMA
+            .MANAGE_BRUSCHETTA_SHARING_TOAST_STARTUP);
   }
 }

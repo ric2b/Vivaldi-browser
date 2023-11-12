@@ -3429,7 +3429,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   // This is an (arbitrary) delay to allow the test to crash if it's going to.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_max_timeout());
   run_loop.Run();
 }
@@ -4020,8 +4020,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // actual handler.
   {
     base::RunLoop loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  loop.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, loop.QuitClosure());
     loop.Run();
   }
 
@@ -5504,8 +5504,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Test that performing a touchpad pinch over an OOPIF offers the synthetic
 // wheel events to the child and causes the page scale factor to change for
 // the main frame (given that the child did not consume the wheel).
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-// Flaky on Windows: https://crbug.com/947193
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
+    BUILDFLAG(IS_FUCHSIA)
+// TODO(crbug.com/947193): Flaky on multiple platforms.
 #define MAYBE_TouchpadPinchOverOOPIF DISABLED_TouchpadPinchOverOOPIF
 #else
 #define MAYBE_TouchpadPinchOverOOPIF TouchpadPinchOverOOPIF
@@ -5615,8 +5616,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Tests that performing a touchpad double-tap zoom over an OOPIF offers the
 // synthetic wheel event to the child.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
-    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
-// Flaky on mac, linux and win. crbug.com/947193
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+// TODO(crbug.com/947193): Flaky on multiple platforms.
 #define MAYBE_TouchpadDoubleTapZoomOverOOPIF \
   DISABLED_TouchpadDoubleTapZoomOverOOPIF
 #else
@@ -6046,7 +6047,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
          last_b_node_bounds_rect.y() ==
              b_node->current_frame_host()->GetView()->GetViewBounds().y()) {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   }
@@ -6157,7 +6158,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // Wait until the OOPIF positions have been updated in the browser process.
   while (true) {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
     if (initial_grandchild_view_bounds.y() ==
@@ -6194,6 +6195,75 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // There are posted tasks that must be run before the test shuts down, lest
   // they access deleted state.
   RunPostedTasks();
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
+
+// On Mac and Android, the reported menu coordinates are relative to the OOPIF,
+// and its screen position is computed later, so this test isn't relevant on
+// those platforms. This has been disabled on CastOS due to flakiness per
+// crbug.com/1074249. (This test is based on the one above which is disabled
+// on CastOS for this reason).
+//
+// Tests that a <select>'s visibility is correctly computed and thus shows the
+// popup when clicked.
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
+IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
+                       ScrolledMainFrameSelectInLongIframe) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_tall_positioned_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
+  FrameTreeNode* child_node = root->child_at(0);
+
+  RenderProcessHost* rph = child_node->current_frame_host()->GetProcess();
+  RenderProcessHostWatcher watcher(
+      rph, RenderProcessHostWatcher::WATCH_FOR_HOST_DESTRUCTION);
+
+  GURL child_url(embedded_test_server()->GetURL(
+      "b.com", "/site_isolation/page-with-select.html"));
+  EXPECT_TRUE(NavigateToURLFromRenderer(child_node, child_url));
+
+  // This is to make sure that the navigation is completed and the previous
+  // RenderProcessHost is destroyed.
+  watcher.Wait();
+
+  EXPECT_TRUE(ExecJs(child_node,
+                     "document.querySelector('select').style.top = '700px';"));
+
+  WaitForHitTestData(child_node->current_frame_host());
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  RenderWidgetHostViewBase* rwhv_child = static_cast<RenderWidgetHostViewBase*>(
+      child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  HitTestRegionObserver hit_test_data_change_observer(
+      rwhv_child->GetRootFrameSinkId());
+  hit_test_data_change_observer.WaitForHitTestData();
+
+  // Scroll the main frame so that the <select> is visible on screen. The
+  // element is at (9,700) of the iframe document and the iframe is at (50,50)
+  // of the main document.
+  EXPECT_TRUE(ExecJs(root, "window.scrollTo(0, 740);"));
+
+  hit_test_data_change_observer.WaitForHitTestDataChange();
+
+  auto popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
+      web_contents(), child_node->current_frame_host());
+
+  // Left click the <select> element inside the iframe.
+  DispatchMouseDownEventAndWaitUntilDispatch(web_contents(), rwhv_child,
+                                             gfx::PointF(15, 710), rwhv_child,
+                                             gfx::PointF(15, 710));
+
+  // Ensure the popup is requested. This test fails if this timesouts.
+  popup_waiter->Wait();
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
 
@@ -6778,8 +6848,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   }
 }
 
+// TODO(https://crbug.com/1269640): This flakes badly on debug & sanitizer
+// builds on almost all platforms, and on Mac and Android.
 IN_PROC_BROWSER_TEST_F(SitePerProcessUserActivationHitTestBrowserTest,
-                       RenderWidgetUserActivationStateTest) {
+                       DISABLED_RenderWidgetUserActivationStateTest) {
   GURL main_url(embedded_test_server()->GetURL(
       "foo.com", "/frame_tree/page_with_positioned_frame.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -6823,8 +6895,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessUserActivationHitTestBrowserTest,
   // Wait for root frame gets activated.
   while (!root->HasTransientUserActivation()) {
     base::RunLoop loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  loop.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, loop.QuitClosure());
     loop.Run();
   }
   // Child frame doesn't have user activation.
@@ -6851,8 +6923,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessUserActivationHitTestBrowserTest,
   // Wait for child frame to get activated.
   while (!child->HasTransientUserActivation()) {
     base::RunLoop loop;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  loop.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, loop.QuitClosure());
     loop.Run();
   }
   // With UAV2, ancestor frames get activated too.
@@ -6908,13 +6980,7 @@ class SitePerProcessHitTestDataGenerationBrowserTest
         use_scale_factor ? gfx::ScaleToEnclosingRect(rect, device_scale_factor_,
                                                      device_scale_factor_)
                          : rect;
-    // TODO(crbug.com/1359528): Add gfx::Transform::MapQuad().
-    gfx::PointF p1 = transform.MapPoint(gfx::PointF(scaled_rect.origin()));
-    gfx::PointF p2 = transform.MapPoint(gfx::PointF(scaled_rect.top_right()));
-    gfx::PointF p3 =
-        transform.MapPoint(gfx::PointF(scaled_rect.bottom_right()));
-    gfx::PointF p4 = transform.MapPoint(gfx::PointF(scaled_rect.bottom_left()));
-    return gfx::QuadF(p1, p2, p3, p4);
+    return transform.MapQuad(gfx::QuadF(gfx::RectF(scaled_rect)));
   }
 
   gfx::QuadF TransformRectToQuadF(

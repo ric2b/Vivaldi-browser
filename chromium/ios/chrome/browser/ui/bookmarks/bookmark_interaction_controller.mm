@@ -766,6 +766,13 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
   TableViewNavigationController* navController =
       [[TableViewNavigationController alloc] initWithTable:viewController];
   self.bookmarkNavigationController = navController;
+  UINavigationBarAppearance* transparentAppearance =
+      [[UINavigationBarAppearance alloc] init];
+  [transparentAppearance configureWithTransparentBackground];
+  navController.navigationBar.standardAppearance = transparentAppearance;
+  navController.navigationBar.compactAppearance = transparentAppearance;
+  navController.navigationBar.scrollEdgeAppearance = transparentAppearance;
+
   if (replacementViewControllers) {
     [navController setViewControllers:replacementViewControllers];
   }

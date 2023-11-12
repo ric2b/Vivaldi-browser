@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/logging.h"
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/login/users/affiliation.h"
@@ -17,7 +18,7 @@
 #include "chromeos/ash/components/dbus/login_manager/policy_descriptor.pb.h"
 #include "chromeos/components/onc/variable_expander.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
-#include "components/policy/core/common/cloud/component_cloud_policy_store.h"
+#include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/policy_constants.h"
@@ -30,10 +31,6 @@ namespace {
 
 // List of policies where variables like ${MACHINE_NAME} should be expanded.
 constexpr const char* kPoliciesToExpand[] = {key::kPrinters};
-
-// Fetch policy every 90 minutes which matches the Windows default:
-// https://technet.microsoft.com/en-us/library/cc940895.aspx
-constexpr base::TimeDelta kFetchInterval = base::Minutes(90);
 
 void RunRefreshCallback(base::OnceCallback<void(bool success)> callback,
                         authpolicy::ErrorType error) {
@@ -55,12 +52,17 @@ void ActiveDirectoryPolicyManager::Init(SchemaRegistry* registry) {
   // Does nothing if |store_| hasn't yet initialized.
   PublishPolicy();
 
+  const base::TimeDelta fetch_interval =
+      ash::features::IsChromadAvailableEnabled()
+          ? kFetchIntervalChromadEnabled
+          : kFetchIntervalChromadDisabled;
+
   scheduler_ = std::make_unique<PolicyScheduler>(
       base::BindRepeating(&ActiveDirectoryPolicyManager::DoPolicyFetch,
                           weak_ptr_factory_.GetWeakPtr()),
       base::BindRepeating(&ActiveDirectoryPolicyManager::OnPolicyFetched,
                           weak_ptr_factory_.GetWeakPtr()),
-      kFetchInterval);
+      fetch_interval);
 
   if (external_data_manager_) {
     // Use the system network context here instead of a context derived from the
@@ -74,7 +76,7 @@ void ActiveDirectoryPolicyManager::Init(SchemaRegistry* registry) {
             : nullptr);
   }
 
-  authpolicy_helper_ = std::make_unique<chromeos::AuthPolicyHelper>();
+  authpolicy_helper_ = std::make_unique<ash::AuthPolicyHelper>();
 }
 
 void ActiveDirectoryPolicyManager::Shutdown() {
@@ -155,12 +157,12 @@ void ActiveDirectoryPolicyManager::PublishPolicy() {
     return;
   OnPublishPolicy();
 
-  std::unique_ptr<PolicyBundle> bundle = std::make_unique<PolicyBundle>();
+  PolicyBundle bundle;
   PolicyMap& policy_map =
-      bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
+      bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
   policy_map = store_->policy_map().Clone();
   if (extension_policy_service_ && extension_policy_service_->policy())
-    bundle->MergeFrom(*extension_policy_service_->policy());
+    bundle.MergeFrom(*extension_policy_service_->policy());
 
   // Overwrite the source which is POLICY_SOURCE_CLOUD by default.
   // TODO(tnagel): Rename CloudPolicyStore to PolicyStore and make the source

@@ -24,10 +24,10 @@
 <translation id="3518985090088779359">Hyväksy ja jatka</translation>
 <translation id="3571177741182643350">Ei-luetut artikkelit – Saatavilla verkotta:</translation>
 <translation id="3700829948786686853">Tervetuloa Vivaldiin</translation>
-<translation id="3719826155360621982">Kotisivu</translation>
+<translation id="3719826155360621982">Aloitussivu</translation>
 <translation id="385051799172605136">Takaisin</translation>
 <translation id="399014816462153200">Luetut artikkelit:</translation>
-<translation id="4121750346708795461">Käyttämällä sovellusta hyväksyt Vivaldin <ph name="BEGIN_LINK1" />käyttöehdot<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojailmoituksen<ph name="END_LINK2" />.</translation>
+<translation id="4121750346708795461">Käyttämällä sovellusta hyväksyt Vivaldin <ph name="BEGIN_LINK1" />loppukäyttäjän lisenssisopimuksen<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojakäytännön<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Laitteen nykyinen kieli</translation>
 <translation id="4167670741834902166">Uusi yksityisvälilehti</translation>
 <translation id="4243710787042215766">Avaa yksityisvälilehteen</translation>
@@ -53,12 +53,12 @@ Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua py
 <translation id="6593061639179217415">Työpöytäsivusto</translation>
 <translation id="6610147964972079463">Sulje yksityisvälilehdet</translation>
 <translation id="7029995644714925509">Sivuston pyytäessä sivujensa linkkien yksityistä esilatausta Vivaldi salaa ja esilataa sivut evästeittä Googlen palvelimilla. Näin henkilöytesi piilotetaan esiladatulta sivustolta.</translation>
-<translation id="706339621163631076">Selaimen tietosuojailmoitus</translation>
+<translation id="706339621163631076">Selaimen tietosuojakäytäntö</translation>
 <translation id="732145680195464316">Kirjanmerkki tallennettu ohjelmalle <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Tietoja Vivaldista</translation>
 <translation id="7465104139234185284">Sulje kaikki yksityisvälilehdet</translation>
 <translation id="804786196054284061">Vivaldin käyttöehdot</translation>
-<translation id="85991616550051997">Siirry kotisivulle</translation>
+<translation id="85991616550051997">Avaa aloitussivu</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
 <translation id="9063523880881406963">Poista käytöstä ”Käytä työpöytäsivustoa”</translation>
 <translation id="9080642952018487277">Siirry yksityistilaan</translation>

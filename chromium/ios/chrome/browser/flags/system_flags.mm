@@ -28,7 +28,6 @@ namespace {
 
 NSString* const kAlternateDiscoverFeedServerURL =
     @"AlternateDiscoverFeedServerURL";
-NSString* const kDisableDCHECKCrashes = @"DisableDCHECKCrashes";
 NSString* const kEnableStartupCrash = @"EnableStartupCrash";
 NSString* const kFirstRunForceEnabled = @"FirstRunForceEnabled";
 NSString* const kOriginServerHost = @"AlternateOriginServerHost";
@@ -99,13 +98,13 @@ bool IsMemoryDebuggingEnabled() {
 #endif // defined(VIVALDI_BUILD)
 }
 
-bool IsStartupCrashEnabled() {
-  return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableStartupCrash];
+bool IsOmniboxDebuggingEnabled() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:@"EnableOmniboxDebugging"];
 }
 
-bool AreDCHECKCrashesDisabled() {
-  return
-      [[NSUserDefaults standardUserDefaults] boolForKey:kDisableDCHECKCrashes];
+bool IsStartupCrashEnabled() {
+  return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableStartupCrash];
 }
 
 bool MustClearApplicationGroupSandbox() {

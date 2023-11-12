@@ -12,22 +12,22 @@ import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/md_select.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/oobe_icons.m.js';
-import '../../components/buttons/oobe_back_button.m.js';
-import '../../components/buttons/oobe_next_button.m.js';
-import '../../components/buttons/oobe_text_button.m.js';
-import '../../components/common_styles/common_styles.m.js';
+import '../../components/buttons/oobe_back_button.js';
+import '../../components/buttons/oobe_next_button.js';
+import '../../components/buttons/oobe_text_button.js';
+import '../../components/common_styles/oobe_common_styles.m.js';
 import '../../components/common_styles/oobe_dialog_host_styles.m.js';
-import '../../components/dialogs/oobe_adaptive_dialog.m.js';
 
 import {I18nBehavior} from '//resources/ash/common/i18n_behavior.js';
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
+import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
 import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.m.js';
-import {OobeA11yOption} from '../../components/oobe_a11y_option.m.js';
-import {getSelectedTitle, getSelectedValue, SelectListType, setupSelect} from '../../components/oobe_select.m.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeAdaptiveDialog} from '../../components/dialogs/oobe_adaptive_dialog.js';
+import {OobeA11yOption} from '../../components/oobe_a11y_option.js';
+import {getSelectedTitle, getSelectedValue, SelectListType, setupSelect} from '../../components/oobe_select.js';
 
 
 // The definitions below (JoinConfigType, ActiveDirectoryErrorState) are
@@ -80,7 +80,7 @@ const OfflineAdLoginBase = mixinBehaviors(
 
 /**
  * @typedef {{
- *   marketingOptInOverviewDialog:  OobeAdaptiveDialogElement,
+ *   marketingOptInOverviewDialog:  OobeAdaptiveDialog,
  *   chromebookUpdatesOption:  CrToggleElement,
  *   a11yNavButtonToggle:  OobeA11yOption,
  * }}

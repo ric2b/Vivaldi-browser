@@ -21,6 +21,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
+#include "chrome/browser/ash/extensions/file_manager/select_file_dialog_extension_user_data.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/select_file_dialog_util.h"
@@ -30,8 +31,8 @@
 #include "chrome/browser/ash/login/ui/webui_login_view.h"
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/extensions/file_manager/select_file_dialog_extension_user_data.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_view_host.h"
@@ -42,7 +43,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/extensions/extension_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
+#include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -183,18 +184,27 @@ SelectFileDialogExtension::RoutingID GetRoutingID(
   return "";
 }
 
+// Returns an instance of DlpFilesController if there is one.
+policy::DlpFilesController* GetDlpFilesController() {
+  policy::DlpRulesManager* rules_manager =
+      policy::DlpRulesManagerFactory::GetForPrimaryProfile();
+  if (!rules_manager)
+    return nullptr;
+  return rules_manager->GetDlpFilesController();
+}
+
 }  // namespace
 
 // A customization of SystemWebDialogDelegate that provides notifications
 // to SelectFileDialogExtension about web dialog closing events. Must be outside
 // anonymous namespace for the friend declaration to work.
-class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
+class SystemFilesAppDialogDelegate : public ash::SystemWebDialogDelegate {
  public:
   SystemFilesAppDialogDelegate(base::WeakPtr<SelectFileDialogExtension> parent,
                                const std::string& id,
                                GURL url,
                                std::u16string title)
-      : chromeos::SystemWebDialogDelegate(url, title),
+      : ash::SystemWebDialogDelegate(url, title),
         id_(id),
         parent_(std::move(parent)) {}
   ~SystemFilesAppDialogDelegate() override = default;
@@ -223,7 +233,7 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
     if (parent_) {
       parent_->OnSystemDialogShown(webui->GetWebContents(), id_);
     }
-    chromeos::SystemWebDialogDelegate::OnDialogShown(webui);
+    ash::SystemWebDialogDelegate::OnDialogShown(webui);
   }
 
   void OnDialogWillClose() override {
@@ -286,16 +296,17 @@ void SelectFileDialogExtension::OnSystemDialogShown(
     const std::string& id) {
   system_files_app_web_contents_ = web_contents;
   SelectFileDialogExtensionUserData::SetDialogDataForWebContents(
-      web_contents, id, owner_.dialog_caller);
+      web_contents, id, type_, owner_.dialog_caller);
 }
 
 void SelectFileDialogExtension::OnSystemDialogWillClose() {
   profile_ = nullptr;
+  auto dialog_caller = owner_.dialog_caller;
   owner_ = {};
   system_files_app_web_contents_ = nullptr;
   PendingDialog::GetInstance()->Remove(routing_id_);
   // Actually invoke the appropriate callback on our listener.
-  NotifyListener();
+  ApplyPolicyAndNotifyListener(std::move(dialog_caller));
 }
 
 // static
@@ -485,6 +496,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
       base_window ? base_window->GetNativeWindow() : owner.window;
 
   owner_ = owner;
+  type_ = type;
 
   auto* dialog_delegate = new SystemFilesAppDialogDelegate(
       weak_factory_.GetWeakPtr(), routing_id, file_manager_url, dialog_title);
@@ -529,7 +541,9 @@ bool SelectFileDialogExtension::IsResizeable() const {
   return can_resize_;
 }
 
-void SelectFileDialogExtension::NotifyListener() {
+void SelectFileDialogExtension::ApplyPolicyAndNotifyListener(
+    absl::optional<policy::DlpFilesController::DlpFileDestination>
+        dialog_caller) {
   if (!listener_)
     return;
 
@@ -539,6 +553,48 @@ void SelectFileDialogExtension::NotifyListener() {
       std::move(selection_files_);
   selection_files_.clear();
 
+  if (!dialog_caller.has_value() || selection_files.empty()) {
+    NotifyListener(std::move(selection_files));
+    return;
+  }
+
+  if (auto* files_controller = GetDlpFilesController();
+      files_controller && type_ == Type::SELECT_SAVEAS_FILE) {
+    files_controller->CheckIfDownloadAllowed(
+        dialog_caller.value(),
+        // TODO(crbug.com/1385687): Handle selection_files.size() > 1.
+        selection_files[0].local_path.empty() ? selection_files[0].file_path
+                                              : selection_files[0].local_path,
+        base::BindOnce(
+            [](base::WeakPtr<SelectFileDialogExtension> weak_ptr,
+               std::vector<ui::SelectedFileInfo> selection_files,
+               bool is_allowed) {
+              if (!is_allowed)
+                weak_ptr->selection_type_ = SelectionType::CANCEL;
+              weak_ptr->NotifyListener(std::move(selection_files));
+            },
+            weak_factory_.GetWeakPtr(), std::move(selection_files)));
+    return;
+  } else if (files_controller) {
+    files_controller->FilterDisallowedUploads(
+        std::move(selection_files), dialog_caller.value(),
+        base::BindOnce(
+            [](base::WeakPtr<SelectFileDialogExtension> weak_ptr,
+               std::vector<ui::SelectedFileInfo> allowed_files) {
+              if (allowed_files.empty())
+                weak_ptr->selection_type_ = SelectionType::CANCEL;
+              weak_ptr->NotifyListener(std::move(allowed_files));
+            },
+            weak_factory_.GetWeakPtr()));
+    return;
+  }
+  NotifyListener(std::move(selection_files));
+}
+
+void SelectFileDialogExtension::NotifyListener(
+    std::vector<ui::SelectedFileInfo> selection_files) {
+  if (!listener_)
+    return;
   switch (selection_type_) {
     case CANCEL:
       listener_->FileSelectionCanceled(params_);

@@ -355,7 +355,7 @@ std::string DescriptionForNSEvent(NSEvent* event) {
     if ([value intValue] == 1)
       accessibility_state->OnScreenReaderDetected();
     else
-      accessibility_state->DisableAccessibility();
+      accessibility_state->OnScreenReaderStopped();
   }
   return [super accessibilitySetValue:value forAttribute:attribute];
 }
@@ -374,7 +374,7 @@ std::string DescriptionForNSEvent(NSEvent* event) {
   content::BrowserAccessibilityState* accessibility_state =
       content::BrowserAccessibilityState::GetInstance();
   if (!accessibility_state->GetAccessibilityMode().has_mode(
-          ui::kAXModeBasic.mode())) {
+          ui::kAXModeBasic.flags())) {
     accessibility_state->AddAccessibilityModeFlags(ui::kAXModeBasic);
   }
   return [super accessibilityRole];

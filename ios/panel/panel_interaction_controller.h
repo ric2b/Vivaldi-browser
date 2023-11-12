@@ -4,11 +4,9 @@
 #define IOS_PANEL_PANEL_INTERACTION_CONTROLLER_H_
 
 #import <UIKit/UIKit.h>
-
 #import "ios/notes/note_navigation_controller.h"
 
 class Browser;
-
 
 enum PanelPage {
   BookmarksPage = 0,
@@ -25,7 +23,8 @@ NS_DESIGNATED_INITIALIZER;
 
 // Called before the instance is deallocated.
 - (void)shutdown;
-- (void)presentPanel:(PanelPage)page;
+- (void)presentPanel:(PanelPage)page
+    withSearchString:(NSString*)searchString;
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated;
 - (void)panelDismissed;
 // The parent controller on top of which the UI needs to be presented.

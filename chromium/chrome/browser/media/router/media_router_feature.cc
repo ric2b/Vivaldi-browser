@@ -4,15 +4,20 @@
 
 #include "chrome/browser/media/router/media_router_feature.h"
 
+#include <stdint.h>
+#include <string>
 #include <utility>
 
 #include "base/base64.h"
+#include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/media_router/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -27,9 +32,17 @@
 #include "components/prefs/pref_registry_simple.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/profiles/profile_types_ash.h"
+#endif
+
 namespace media_router {
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kCafMRPDeferredDiscovery,
+             "CafMRPDeferredDiscovery",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
 BASE_FEATURE(kMediaRouter, "MediaRouter", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kCastAllowAllIPsFeature,
              "CastAllowAllIPs",
@@ -40,12 +53,6 @@ BASE_FEATURE(kAllowAllSitesToInitiateMirroring,
 BASE_FEATURE(kDialMediaRouteProvider,
              "DialMediaRouteProvider",
              base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kDialEnforceUrlIPAddress,
-             "DialEnforceUrlIPAddress",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kMediaRemotingWithoutFullscreen,
-             "MediaRemotingWithoutFullscreen",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kGlobalMediaControlsCastStartStop,
@@ -57,7 +64,7 @@ BASE_FEATURE(kGlobalMediaControlsCastStartStop,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 namespace {
 const PrefService::Preference* GetMediaRouterPref(
@@ -83,6 +90,12 @@ bool MediaRouterEnabled(content::BrowserContext* context) {
   if (!base::FeatureList::IsEnabled(kMediaRouter))
     return false;
 #endif  // !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(crbug.com/1380828): Make the Media Router feature configurable via a
+  // policy for non-user profiles, i.e. sign-in and lock screen profiles.
+  if (!IsUserProfile(Profile::FromBrowserContext(context)))
+    return false;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // The MediaRouter service is shared across the original and the incognito
   // profiles, so we must use the original context for consistency between them.
@@ -117,19 +130,13 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kMediaRouterReceiverIdHashToken, "",
                                PrefRegistry::PUBLIC);
-
   registry->RegisterBooleanPref(
       media_router::prefs::kMediaRouterMediaRemotingEnabled, true);
   registry->RegisterListPref(
       media_router::prefs::kMediaRouterTabMirroringSources);
-
-// TODO(crbug.com/1308053): Register it on ChromeOS after Cast+GMC ships on
-// ChromeOS.
-#if !BUILDFLAG(IS_CHROMEOS)
   registry->RegisterBooleanPref(
       media_router::prefs::kMediaRouterShowCastSessionsStartedByOtherDevices,
       true);
-#endif
 }
 
 bool GetCastAllowAllIPsPref(PrefService* pref_service) {
@@ -167,6 +174,20 @@ bool DialMediaRouteProviderEnabled() {
 bool GlobalMediaControlsCastStartStopEnabled(content::BrowserContext* context) {
   return base::FeatureList::IsEnabled(kGlobalMediaControlsCastStartStop) &&
          MediaRouterEnabled(context);
+}
+
+absl::optional<base::TimeDelta> GetMirroringRefreshInterval() {
+  const std::string refresh_interval_str =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          "mirroring-refresh-interval-ms");
+  if (!refresh_interval_str.empty()) {
+    int64_t refresh_interval;
+    if (base::StringToInt64(refresh_interval_str, &refresh_interval) &&
+        refresh_interval > 0) {
+      return base::Milliseconds(refresh_interval);
+    }
+  }
+  return absl::nullopt;
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)

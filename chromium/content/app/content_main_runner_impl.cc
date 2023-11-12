@@ -33,13 +33,14 @@
 #include "base/metrics/histogram_base.h"
 #include "base/path_service.h"
 #include "base/power_monitor/power_monitor.h"
-#include "base/power_monitor/power_monitor_device_source.h"
+#include "base/power_monitor/power_monitor_source.h"
 #include "base/process/launch.h"
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/thread_pool/environment_config.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/platform_thread.h"
@@ -50,9 +51,9 @@
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
+#include "components/power_monitor/make_power_monitor_device_source.h"
 #include "components/power_scheduler/power_mode_arbiter.h"
 #include "components/variations/variations_ids_provider.h"
-#include "content/app/mojo/mojo_init.h"
 #include "content/app/mojo_ipc_support.h"
 #include "content/browser/browser_main.h"
 #include "content/browser/browser_process_io_thread.h"
@@ -110,6 +111,7 @@
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "tools/v8_context_snapshot/buildflags.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
@@ -133,6 +135,7 @@
 
 #include "base/file_descriptor_store.h"
 #include "base/posix/global_descriptors.h"
+#include "content/browser/posix_file_descriptor_info_impl.h"
 #include "content/public/common/content_descriptors.h"
 
 #if !BUILDFLAG(IS_MAC)
@@ -142,6 +145,7 @@
 #endif  // BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "base/files/file_path_watcher_inotify.h"
 #include "base/native_library.h"
 #include "base/rand_util.h"
 #include "content/public/common/zygote/sandbox_support_linux.h"
@@ -188,7 +192,6 @@
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include "base/fuchsia/system_info.h"
-#include "content/public/common/result_codes.h"
 #endif
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_XNNPACK)
@@ -219,7 +222,7 @@ namespace {
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 
 gin::V8SnapshotFileType GetSnapshotType(const base::CommandLine& command_line) {
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
+#if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
   return gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
   return gin::V8SnapshotFileType::kDefault;
@@ -228,7 +231,7 @@ gin::V8SnapshotFileType GetSnapshotType(const base::CommandLine& command_line) {
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
 std::string GetSnapshotDataDescriptor(const base::CommandLine& command_line) {
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
+#if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
 #if BUILDFLAG(IS_ANDROID)
   // On android, the renderer loads the context snapshot directly.
   return std::string();
@@ -315,38 +318,18 @@ pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
 
   // Start up the sandbox host process and get the file descriptor for the
   // sandboxed processes to talk to it.
-  base::FileHandleMappingVector additional_remapped_fds;
-  additional_remapped_fds.emplace_back(
-      SandboxHostLinux::GetInstance()->GetChildSocket(), GetSandboxFD());
+  std::unique_ptr<PosixFileDescriptorInfo> additional_remapped_fds(
+      PosixFileDescriptorInfoImpl::Create());
+  additional_remapped_fds->Share(
+      GetSandboxFD(), SandboxHostLinux::GetInstance()->GetChildSocket());
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Create the file descriptor for Cros startup data and pass it.
-  // This FD will be used to obtain BrowserInitParams in Zygote process.
-  // Note that this requires Mojo, but Mojo cannot be fully initialized this
-  // due to dependencies on base::FeatureList. So we also temporarily initialize
-  // Mojo and then shut it down immediately after preparing the FD. This is
-  // inexpensive, an the features which control Mojo behavior aren't relevant
-  // for this operation.
-  //
-  // TODO(https://crbug.com/1299283): This will need to be changed before
-  // MojoIpcz experimentation can happen on Lacros, as it results in
-  // inconsistent MojoIpcz feature status across Mojo initializations.
-  mojo::core::Init();
-  base::ScopedFD cros_startup_fd =
-      chromeos::BrowserInitParams::CreateStartupData();
-  mojo::core::ShutDown();
-
-  if (cros_startup_fd.is_valid()) {
-    constexpr int kStartupDataFD =
-        kCrosStartupDataDescriptor + base::GlobalDescriptors::kBaseDescriptor;
-    cmd_line->AppendSwitchASCII(chromeos::switches::kCrosStartupDataFD,
-                                base::NumberToString(kStartupDataFD));
-    additional_remapped_fds.emplace_back(cros_startup_fd.get(), kStartupDataFD);
-  }
+  GetContentClient()->browser()->GetAdditionalMappedFilesForZygote(
+      cmd_line, additional_remapped_fds.get());
 #endif
 
   return ZygoteHostImpl::GetInstance()->LaunchZygote(
-      cmd_line, control_fd, std::move(additional_remapped_fds));
+      cmd_line, control_fd, additional_remapped_fds->GetMapping());
 }
 
 // Initializes the Zygote sandbox host. No thread should be created before this
@@ -424,6 +407,10 @@ void PreSandboxInit() {
   // https://boringssl.googlesource.com/boringssl/+/HEAD/SANDBOXING.md
   CRYPTO_pre_sandbox_init();
 
+  // Pre-read /proc/sys/fs/inotify/max_user_watches so it doesn't have to be
+  // allowed by the sandbox.
+  base::GetMaxNumberOfInotifyWatches();
+
 #if BUILDFLAG(ENABLE_PPAPI)
   // Ensure access to the Pepper plugins before the sandbox is turned on.
   PreloadPepperPlugins();
@@ -474,6 +461,11 @@ void PreSandboxInit() {
     blink::WebFontRenderStyle::SetSkiaFontManager(
         SkFontMgr_New_Android(&custom));
   }
+
+  // Preload and cache the results since the methods may use the prlimit64
+  // system call that is not allowed by all sandbox types.
+  base::internal::CanUseBackgroundThreadTypeForWorkerThread();
+  base::internal::CanUseUtilityThreadTypeForWorkerThread();
 }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -847,9 +839,7 @@ int ContentMainRunnerImpl::Initialize(ContentMainParams params) {
   // Making the blocking call now also avoids the potential for blocking later
   // in when it might be user-visible.
   if (!base::FetchAndCacheSystemInfo()) {
-    // Returning `RESULT_CODE_KILLED` instead of
-    // TerminateForFatalInitializationError() to avoid CHECK.
-    return ResultCode::RESULT_CODE_KILLED;
+    return TerminateForFatalInitializationError();
   }
 #endif
 
@@ -1199,8 +1189,7 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams main_params,
 
     // PowerMonitor is needed in reduced mode. BrowserMainLoop will safely skip
     // initializing it again if it has already been initialized.
-    base::PowerMonitor::Initialize(
-        std::make_unique<base::PowerMonitorDeviceSource>());
+    base::PowerMonitor::Initialize(MakePowerMonitorDeviceSource());
 
     // Ensure the visibility tracker is created on the main thread.
     ProcessVisibilityTracker::GetInstance();
@@ -1233,7 +1222,7 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams main_params,
 
 #if BUILDFLAG(IS_ANDROID)
     if (start_minimal_browser) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&MinimalBrowserStartupComplete));
     }
 #endif
@@ -1284,11 +1273,5 @@ void ContentMainRunnerImpl::Shutdown() {
 std::unique_ptr<ContentMainRunner> ContentMainRunner::Create() {
   return ContentMainRunnerImpl::Create();
 }
-
-#if BUILDFLAG(IS_ANDROID)
-ContentMainDelegate* GetContentMainDelegateForTesting() {
-  return GetContentMainDelegate();
-}
-#endif
 
 }  // namespace content

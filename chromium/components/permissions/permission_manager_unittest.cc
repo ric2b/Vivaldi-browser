@@ -35,10 +35,6 @@
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
-#endif  // BUILDFLAG(IS_ANDROID)
-
 using blink::PermissionType;
 using blink::mojom::PermissionsPolicyFeature;
 using blink::mojom::PermissionStatus;
@@ -73,23 +69,6 @@ class ScopedPartitionedOriginBrowserClient
   url::Origin app_origin_;
   raw_ptr<content::ContentBrowserClient> old_client_;
 };
-
-#if BUILDFLAG(IS_ANDROID)
-// See https://crbug.com/904883.
-auto GetDefaultProtectedMediaIdentifierPermissionStatus() {
-  return base::android::BuildInfo::GetInstance()->sdk_int() >=
-                 base::android::SDK_VERSION_MARSHMALLOW
-             ? PermissionStatus::GRANTED
-             : PermissionStatus::ASK;
-}
-
-auto GetDefaultProtectedMediaIdentifierContentSetting() {
-  return base::android::BuildInfo::GetInstance()->sdk_int() >=
-                 base::android::SDK_VERSION_MARSHMALLOW
-             ? PermissionStatus::GRANTED
-             : PermissionStatus::ASK;
-}
-#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -341,11 +320,11 @@ TEST_F(PermissionManagerTest, GetPermissionStatusDefault) {
   CheckPermissionStatus(PermissionType::GEOLOCATION, PermissionStatus::ASK);
 #if BUILDFLAG(IS_ANDROID)
   CheckPermissionStatus(PermissionType::PROTECTED_MEDIA_IDENTIFIER,
-                        GetDefaultProtectedMediaIdentifierPermissionStatus());
-  CheckPermissionStatus(PermissionType::WINDOW_PLACEMENT,
+                        PermissionStatus::GRANTED);
+  CheckPermissionStatus(PermissionType::WINDOW_MANAGEMENT,
                         PermissionStatus::DENIED);
 #else
-  CheckPermissionStatus(PermissionType::WINDOW_PLACEMENT,
+  CheckPermissionStatus(PermissionType::WINDOW_MANAGEMENT,
                         PermissionStatus::ASK);
 #endif
 }
@@ -367,12 +346,12 @@ TEST_F(PermissionManagerTest, GetPermissionStatusAfterSet) {
   CheckPermissionStatus(PermissionType::PROTECTED_MEDIA_IDENTIFIER,
                         PermissionStatus::GRANTED);
 
-  SetPermission(PermissionType::WINDOW_PLACEMENT, PermissionStatus::GRANTED);
-  CheckPermissionStatus(PermissionType::WINDOW_PLACEMENT,
+  SetPermission(PermissionType::WINDOW_MANAGEMENT, PermissionStatus::GRANTED);
+  CheckPermissionStatus(PermissionType::WINDOW_MANAGEMENT,
                         PermissionStatus::DENIED);
 #else
-  SetPermission(PermissionType::WINDOW_PLACEMENT, PermissionStatus::GRANTED);
-  CheckPermissionStatus(PermissionType::WINDOW_PLACEMENT,
+  SetPermission(PermissionType::WINDOW_MANAGEMENT, PermissionStatus::GRANTED);
+  CheckPermissionStatus(PermissionType::WINDOW_MANAGEMENT,
                         PermissionStatus::GRANTED);
 #endif
 }
@@ -386,7 +365,7 @@ TEST_F(PermissionManagerTest, CheckPermissionResultDefault) {
                         content::PermissionStatusSource::UNSPECIFIED);
 #if BUILDFLAG(IS_ANDROID)
   CheckPermissionResult(PermissionType::PROTECTED_MEDIA_IDENTIFIER,
-                        GetDefaultProtectedMediaIdentifierContentSetting(),
+                        PermissionStatus::GRANTED,
                         content::PermissionStatusSource::UNSPECIFIED);
 #endif
 }

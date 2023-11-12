@@ -11,6 +11,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
@@ -32,6 +33,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_stats.h"
@@ -142,6 +144,10 @@ class StyleEngineTest : public PageTestBase {
     return ListMarker::Get(marker)->GetTextChild(*marker).GetText();
   }
 
+  size_t FillOrClipPathCacheSize() {
+    return GetStyleEngine().fill_or_clip_path_uri_value_cache_.size();
+  }
+
   void SimulateFrame() {
     auto new_time = GetAnimationClock().CurrentTime() + base::Milliseconds(100);
     GetPage().Animator().ServiceScriptedAnimations(new_time);
@@ -156,11 +162,9 @@ class StyleEngineTest : public PageTestBase {
 };
 
 class StyleEngineContainerQueryTest : public StyleEngineTest,
-                                      private ScopedCSSContainerQueriesForTest,
                                       private ScopedLayoutNGForTest {
  public:
-  StyleEngineContainerQueryTest()
-      : ScopedCSSContainerQueriesForTest(true), ScopedLayoutNGForTest(true) {}
+  StyleEngineContainerQueryTest() : ScopedLayoutNGForTest(true) {}
 };
 
 StyleEngineTest::RuleSetInvalidation
@@ -347,12 +351,14 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   ASSERT_TRUE(t4->GetComputedStyle());
 
   // There's only one font and it's bold and normal.
-  EXPECT_EQ(1u, GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-                ->GetNumSegmentedFacesForTesting());
+  EXPECT_EQ(1u, GetStyleEngine()
+                    .GetFontSelector()
+                    ->GetFontFaceCache()
+                    ->GetNumSegmentedFacesForTesting());
   CSSSegmentedFontFace* font_face =
-      GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-      ->Get(t4->GetComputedStyle()->GetFontDescription(),
-            AtomicString("Cool Font"));
+      GetStyleEngine().GetFontSelector()->GetFontFaceCache()->Get(
+          t4->GetComputedStyle()->GetFontDescription(),
+          AtomicString("Cool Font"));
   EXPECT_TRUE(font_face);
   FontSelectionCapabilities capabilities =
       font_face->GetFontSelectionCapabilities();
@@ -377,11 +383,12 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
 
   // After injecting a more specific font, now there are two and the
   // bold-italic one is selected.
-  EXPECT_EQ(2u, GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-                ->GetNumSegmentedFacesForTesting());
-  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-              ->Get(t4->GetComputedStyle()->GetFontDescription(),
-                    AtomicString("Cool Font"));
+  EXPECT_EQ(2u, GetStyleEngine()
+                    .GetFontSelector()
+                    ->GetFontFaceCache()
+                    ->GetNumSegmentedFacesForTesting());
+  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()->Get(
+      t4->GetComputedStyle()->GetFontDescription(), AtomicString("Cool Font"));
   EXPECT_TRUE(font_face);
   capabilities = font_face->GetFontSelectionCapabilities();
   ASSERT_EQ(capabilities.weight,
@@ -403,11 +410,12 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
 
   // Now there are three fonts, but the newest one does not override the older,
   // better matching one.
-  EXPECT_EQ(3u, GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-                ->GetNumSegmentedFacesForTesting());
-  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-              ->Get(t4->GetComputedStyle()->GetFontDescription(),
-                    AtomicString("Cool Font"));
+  EXPECT_EQ(3u, GetStyleEngine()
+                    .GetFontSelector()
+                    ->GetFontFaceCache()
+                    ->GetNumSegmentedFacesForTesting());
+  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()->Get(
+      t4->GetComputedStyle()->GetFontDescription(), AtomicString("Cool Font"));
   EXPECT_TRUE(font_face);
   capabilities = font_face->GetFontSelectionCapabilities();
   ASSERT_EQ(capabilities.weight,
@@ -421,11 +429,12 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   // After removing the injected style sheet we're left with a bold-normal and
   // a normal-italic font, and the latter is selected by the matching algorithm
   // as font-style trumps font-weight.
-  EXPECT_EQ(2u, GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-                ->GetNumSegmentedFacesForTesting());
-  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()
-              ->Get(t4->GetComputedStyle()->GetFontDescription(),
-                    AtomicString("Cool Font"));
+  EXPECT_EQ(2u, GetStyleEngine()
+                    .GetFontSelector()
+                    ->GetFontFaceCache()
+                    ->GetNumSegmentedFacesForTesting());
+  font_face = GetStyleEngine().GetFontSelector()->GetFontFaceCache()->Get(
+      t4->GetComputedStyle()->GetFontDescription(), AtomicString("Cool Font"));
   EXPECT_TRUE(font_face);
   capabilities = font_face->GetFontSelectionCapabilities();
   ASSERT_EQ(capabilities.weight,
@@ -1147,7 +1156,9 @@ TEST_F(StyleEngineTest, VisitedExplicitInheritanceMatchedPropertiesCache) {
   EXPECT_FALSE(style->ChildHasExplicitInheritance());
 
   style = span->firstChild()->GetComputedStyle();
-  EXPECT_TRUE(MatchedPropertiesCache::IsStyleCacheable(*style));
+
+  ComputedStyleBuilder builder(*style);
+  EXPECT_TRUE(MatchedPropertiesCache::IsStyleCacheable(builder));
 
   span->SetInlineStyleProperty(CSSPropertyID::kColor, "blue");
 
@@ -3203,220 +3214,6 @@ TEST_F(StyleEngineTest, AtPropertyUseCount) {
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSAtRuleProperty));
 }
 
-TEST_F(StyleEngineTest, CSSMatchMediaUnknownUseCounter) {
-  ScopedCSSMediaQueries4ForTest media_queries_4_flag(false);
-
-  UpdateAllLifecyclePhases();
-
-  {
-    MediaQueryList* mql =
-        GetDocument().domWindow()->matchMedia("(min-width: 0px)");
-    ASSERT_TRUE(mql);
-    mql->media();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMatchMediaUnknown));
-    ClearUseCounter(WebFeature::kCSSMatchMediaUnknown);
-  }
-
-  {
-    MediaQueryList* mql =
-        GetDocument().domWindow()->matchMedia("(width: 100px) or (unknown)");
-    ASSERT_TRUE(mql);
-    mql->media();
-    // Should not be use-counted, because it's a real parse error without
-    // CSSMediaQueries4 enabled.
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMatchMediaUnknown));
-    ClearUseCounter(WebFeature::kCSSMatchMediaUnknown);
-  }
-
-  {
-    MediaQueryList* mql =
-        GetDocument().domWindow()->matchMedia("(unknown: 0px)");
-    ASSERT_TRUE(mql);
-    mql->media();
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSMatchMediaUnknown));
-    ClearUseCounter(WebFeature::kCSSMatchMediaUnknown);
-  }
-
-  {
-    MediaQueryList* mql = GetDocument().domWindow()->matchMedia(
-        "not print and (width: 100px) and (unknown)");
-    ASSERT_TRUE(mql);
-    mql->media();
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSMatchMediaUnknown));
-    ClearUseCounter(WebFeature::kCSSMatchMediaUnknown);
-  }
-}
-
-TEST_F(StyleEngineTest, CSSMediaListUnknownUseCounter) {
-  ScopedCSSMediaQueries4ForTest media_queries_4_flag(false);
-
-  UpdateAllLifecyclePhases();
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style media="(min-width: 0px)"></style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    MediaList* media = style->sheet()->media();
-    ASSERT_TRUE(media);
-    media->mediaText(GetDocument().GetExecutionContext());
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style media="(width: 100px) or (unknown)"></style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    MediaList* media = style->sheet()->media();
-    ASSERT_TRUE(media);
-    media->mediaText(GetDocument().GetExecutionContext());
-    // Should not be use-counted, because it's a real parse error without
-    // CSSMediaQueries4 enabled.
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style media="(unknown: 0px)"></style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    MediaList* media = style->sheet()->media();
-    ASSERT_TRUE(media);
-    media->mediaText(GetDocument().GetExecutionContext());
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-
-    media->MediaTextInternal();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style media="not print and (width: 100px) and (unknown)"></style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    MediaList* media = style->sheet()->media();
-    ASSERT_TRUE(media);
-    media->mediaText(GetDocument().GetExecutionContext());
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-
-    media->MediaTextInternal();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSMediaListUnknown));
-    ClearUseCounter(WebFeature::kCSSMediaListUnknown);
-  }
-}
-
-TEST_F(StyleEngineTest, CSSOMMediaConditionUnknownUseCounter) {
-  ScopedCSSMediaQueries4ForTest media_queries_4_flag(false);
-
-  GetDocument().body()->setInnerHTML(R"HTML(
-    <style id=style>
-      @media (min-width: 100px) {}
-      @media (width: 100px) or (unknown) {}
-      @media (unknown: 0px) {}
-      @media not print and (width: 100px) and (unknown) {}
-    </style>
-  )HTML");
-  UpdateAllLifecyclePhases();
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style>
-        @media (min-width: 100px) {}
-      </style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    ASSERT_EQ(1u, style->sheet()->length());
-    auto* rule = DynamicTo<CSSMediaRule>(style->sheet()->item(0));
-    ASSERT_TRUE(rule);
-    rule->conditionText();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style>
-        @media (width: 100px) or (unknown) {}
-      </style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    ASSERT_EQ(1u, style->sheet()->length());
-    auto* rule = DynamicTo<CSSMediaRule>(style->sheet()->item(0));
-    ASSERT_TRUE(rule);
-    rule->conditionText();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style>
-        @media (unknown: 0px) {}
-      </style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    ASSERT_EQ(1u, style->sheet()->length());
-    auto* rule = DynamicTo<CSSMediaRule>(style->sheet()->item(0));
-    ASSERT_TRUE(rule);
-    rule->conditionText();
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-
-    rule->ConditionTextInternal();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-  }
-
-  {
-    GetDocument().body()->setInnerHTML(R"HTML(
-      <style>
-        @media not print and (width: 100px) and (unknown) {}
-      </style>
-    )HTML");
-    auto* style =
-        DynamicTo<HTMLStyleElement>(GetDocument().QuerySelector("style"));
-    ASSERT_TRUE(style);
-    ASSERT_TRUE(style->sheet());
-    ASSERT_EQ(1u, style->sheet()->length());
-    auto* rule = DynamicTo<CSSMediaRule>(style->sheet()->item(0));
-    ASSERT_TRUE(rule);
-    rule->conditionText();
-    EXPECT_TRUE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-
-    rule->ConditionTextInternal();
-    EXPECT_FALSE(IsUseCounted(WebFeature::kCSSOMMediaConditionUnknown));
-    ClearUseCounter(WebFeature::kCSSOMMediaConditionUnknown);
-  }
-}
-
 TEST_F(StyleEngineTest, AtScopeUseCount) {
   ScopedCSSScopeForTest scope_feature(true);
 
@@ -4202,38 +3999,6 @@ TEST_F(StyleEngineContainerQueryTest,
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdateForNode(*a));
 }
 
-TEST_F(StyleEngineTest, ContainerRelativeUnitsRuntimeFlag) {
-  String css = R"CSS(
-    top: 1cqw;
-    left: 1cqh;
-    bottom: 1cqi;
-    right: 1cqb;
-    padding-top: 1cqmin;
-    padding-right: 1cqmax;
-    padding-bottom: calc(1cqw);
-    margin-left: 1px;
-  )CSS";
-
-  {
-    ScopedCSSContainerQueriesForTest cq_feature(false);
-    ScopedCSSContainerRelativeUnitsForTest feature(false);
-    const CSSPropertyValueSet* set =
-        css_test_helpers::ParseDeclarationBlock(css);
-    ASSERT_TRUE(set);
-    EXPECT_EQ(1u, set->PropertyCount());
-    EXPECT_TRUE(set->HasProperty(CSSPropertyID::kMarginLeft));
-  }
-
-  {
-    ScopedCSSContainerQueriesForTest cq_feature(false);
-    ScopedCSSContainerRelativeUnitsForTest feature(true);
-    const CSSPropertyValueSet* set =
-        css_test_helpers::ParseDeclarationBlock(css);
-    ASSERT_TRUE(set);
-    EXPECT_EQ(8u, set->PropertyCount());
-  }
-}
-
 TEST_F(StyleEngineTest, CSSViewportUnits4RuntimeFlag) {
   Vector<String> units = {"vi",  "vb",    "svi",   "svb",   "svw",
                           "svh", "svmin", "svmax", "lvi",   "lvb",
@@ -4259,31 +4024,6 @@ TEST_F(StyleEngineTest, CSSViewportUnits4RuntimeFlag) {
       ASSERT_TRUE(set);
       EXPECT_EQ(1u, set->PropertyCount());
       EXPECT_TRUE(set->HasProperty(CSSPropertyID::kTop));
-    }
-  }
-}
-
-TEST_F(StyleEngineTest, ContainerPropertiesRuntimeFlag) {
-  Vector<String> declarations = {"container-type:inline-size",
-                                 "container-name:foo", "container:inline-size"};
-
-  {
-    ScopedCSSContainerQueriesForTest feature(false);
-
-    for (const String& decl : declarations) {
-      const auto* set = css_test_helpers::ParseDeclarationBlock(decl);
-      ASSERT_TRUE(set);
-      EXPECT_EQ(0u, set->PropertyCount());
-    }
-  }
-
-  {
-    ScopedCSSContainerQueriesForTest feature(true);
-
-    for (const String& decl : declarations) {
-      const auto* set = css_test_helpers::ParseDeclarationBlock(decl);
-      ASSERT_TRUE(set);
-      EXPECT_GT(set->PropertyCount(), 0u);
     }
   }
 }
@@ -4396,6 +4136,108 @@ TEST_F(StyleEngineTest, RejectSlottedSelector) {
   EXPECT_EQ(1u, stats->rules_fast_rejected);
 }
 
+TEST_F(StyleEngineTest, FastRejectForNesting) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      .notfound {
+        & span {
+          color: pink;
+        }
+      }
+    </style>
+    <div>
+      <span id="child">not pink</span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // Even if the Stats() were already enabled, the following resets it to 0.
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+
+  Element* span = GetDocument().getElementById("child");
+  ASSERT_TRUE(span);
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // Should fast reject "& span"
+  EXPECT_EQ(1u, stats->rules_fast_rejected);
+}
+
+TEST_F(StyleEngineTest, FastRejectForComplexSingleIs) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      :is(#parent .notfound) > span {
+        color: pink;
+      }
+    </style>
+    <div id="parent">
+      <span id="child">not pink</span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // Even if the Stats() were already enabled, the following resets it to 0.
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+
+  Element* span = GetDocument().getElementById("child");
+  ASSERT_TRUE(span);
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // Should fast reject ":is(#parent .notfound) > span", even though it is not
+  // the same as "#parent .notfound > span".
+  EXPECT_EQ(1u, stats->rules_fast_rejected);
+}
+
+TEST_F(StyleEngineTest, NoFastRejectForMultipleIs) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      :is(#foo, #bar) span {
+        color: pink;
+      }
+    </style>
+    <div id="parent">
+      <span id="child">not pink</span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // Even if the Stats() were already enabled, the following resets it to 0.
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+
+  Element* span = GetDocument().getElementById("child");
+  ASSERT_TRUE(span);
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // Should not try to fast reject due to the (multiple-element) selector list.
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+}
+
 TEST_F(StyleEngineTest, AudioUAStyleNameSpace) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <audio id="html-audio"></audio>
@@ -4492,6 +4334,46 @@ TEST_F(StyleEngineTest, AtContainerUseCount) {
   )HTML");
   UpdateAllLifecyclePhases();
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSAtRuleContainer));
+}
+
+TEST_F(StyleEngineTest, NestingUseCount) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { --x: No @nest or & rule here; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body {
+        & .foo { color: fuchsia; }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountNotStartingWithAmpersand) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { --x: No @nest rule or & here; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body {
+        .foo & { color: lemonchiffon; }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
 }
 
 TEST_F(StyleEngineTest, SystemFontsObeyDefaultFontSize) {
@@ -5662,8 +5544,6 @@ TEST_F(StyleEngineTest, RemovedBodyToHTMLPropagation) {
 }
 
 TEST_F(StyleEngineTest, RevertWithPresentationalHints) {
-  ScopedCustomElementDefaultStyleForTest disabled_scope(false);
-
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       img {
@@ -5683,8 +5563,6 @@ TEST_F(StyleEngineTest, RevertWithPresentationalHints) {
 }
 
 TEST_F(StyleEngineTest, RevertLayerWithPresentationalHints) {
-  ScopedCustomElementDefaultStyleForTest disabled_scope(false);
-
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       img {
@@ -5995,6 +5873,188 @@ TEST_F(StyleEngineTest, StyleElementTypeAttrChange) {
   EXPECT_EQ(Color::FromRGB(255, 0, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, SVGURIValueCacheClipPath) {
+  Element* body = GetDocument().body();
+  body->setInnerHTML(R"HTML(
+    <svg><text clip-path="inset(10px)">CLIPPED</text><svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(FillOrClipPathCacheSize(), 0u);
+
+  body->setInnerHTML(R"HTML(
+    <svg><text clip-path="url(#clipped)">CLIPPED</text><svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(FillOrClipPathCacheSize(), 1u);
+}
+
+TEST_F(StyleEngineTest, SVGURIValueCacheFill) {
+  Element* body = GetDocument().body();
+  body->setInnerHTML(R"HTML(
+    <svg><rect fill="red">FILLED</rect><svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(FillOrClipPathCacheSize(), 0u);
+
+  body->setInnerHTML(R"HTML(
+    <svg><rect fill="url(#fill)">FILLED</rect><svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(FillOrClipPathCacheSize(), 1u);
+}
+
+TEST_F(StyleEngineTest, BorderWidthsAreRecalculatedWhenZoomChanges) {
+  // Tests that Border Widths are recalculated as expected
+  // when Zoom and Device Scale Factor are changed.
+
+  ScopedSnapBorderWidthsBeforeLayoutForTest
+      enableSnapBorderWidthsBeforeLayoutForTest(true);
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  WebViewImpl* web_view_impl = web_view_helper.Initialize();
+
+  WebFrameWidget* mainFrameWidget = web_view_impl->MainFrameWidget();
+
+  const auto setZoom{[&](const float zoomFactor) {
+    mainFrameWidget->SetZoomLevelForTesting(
+        PageZoomFactorToZoomLevel(zoomFactor));
+
+    mainFrameWidget->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  }};
+
+  auto resetZoom{[&]() { setZoom(1.0f); }};
+
+  const auto setDeviceScaleFactor{[&](const float deviceScaleFactor) {
+    mainFrameWidget->SetDeviceScaleFactorForTesting(deviceScaleFactor);
+
+    mainFrameWidget->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  }};
+
+  auto resetDeviceScaleFactor{[&]() { setDeviceScaleFactor(1.0f); }};
+
+  auto reset{[&]() {
+    resetZoom();
+    resetDeviceScaleFactor();
+  }};
+
+  Document* document =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame())->GetDocument();
+
+  document->body()->setInnerHTML(R"HTML(
+    <style>
+    #square {
+      height: 100px;
+      width: 100px;
+      border: 1.5px solid gray;
+    }
+    </style>
+    <div id='square'></div>
+  )HTML");
+
+  mainFrameWidget->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+
+  const Element* square = document->getElementById("square");
+  ASSERT_NE(square, nullptr);
+
+  const auto checkBorderWidth{[&](const float expected) {
+    const ComputedStyle* computedStyle = square->GetComputedStyle();
+    ASSERT_NE(computedStyle, nullptr);
+
+    EXPECT_FLOAT_EQ(expected, computedStyle->BorderTopWidth());
+  }};
+
+  // Check initial border width.
+  reset();
+  checkBorderWidth(1.0f);
+
+  // Check border width with zoom factors.
+  setZoom(0.33f);
+  checkBorderWidth(1.0f);
+
+  setZoom(1.75f);
+  checkBorderWidth(2.0f);
+
+  setZoom(2.0f);
+  checkBorderWidth(3.0f);
+
+  // Check border width after zoom is reset.
+  resetZoom();
+  checkBorderWidth(1.0f);
+
+  // Check border width with device scale factors.
+  setDeviceScaleFactor(2.0f);
+  checkBorderWidth(3.0f);
+
+  setDeviceScaleFactor(3.0f);
+  checkBorderWidth(4.0f);
+
+  // Check border width after device scale factor is reset.
+  resetDeviceScaleFactor();
+  checkBorderWidth(1.0f);
+
+  // Check border width with a combination
+  // of zoom and device scale factors.
+  setZoom(2.0f);
+  setDeviceScaleFactor(2.0f);
+  checkBorderWidth(6.0f);
+
+  setZoom(1.5f);
+  checkBorderWidth(4.0f);
+
+  setDeviceScaleFactor(2.6f);
+  checkBorderWidth(5.0f);
+
+  setZoom(0.33f);
+  checkBorderWidth(1.0f);
+
+  // Check border width after resetting both
+  // zoom and device scale factor is reset.
+  reset();
+  checkBorderWidth(1.0f);
+}
+
+TEST_F(StyleEngineTest, SubsequentSiblingRecalcFlatTree) {
+  GetDocument()
+      .documentElement()
+      ->setInnerHTMLWithDeclarativeShadowDOMForTesting(R"HTML(
+    <div id="host">
+      <template shadowroot=open>
+        <slot name=a></slot>
+      </template>
+      <div slot=a id=target></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div slot=a></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div slot=a></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  unsigned before_count = GetStyleEngine().StyleForElementCount();
+
+  Element* target = GetElementById("target");
+  ASSERT_TRUE(target);
+
+  target->SetInlineStyleProperty(CSSPropertyID::kScrollTimelineName, "foo");
+  UpdateAllLifecyclePhasesForTest();
+
+  unsigned after_count = GetStyleEngine().StyleForElementCount();
+
+  // Only the slotted elements should get style recalc.
+  EXPECT_EQ(3u, after_count - before_count);
 }
 
 }  // namespace blink

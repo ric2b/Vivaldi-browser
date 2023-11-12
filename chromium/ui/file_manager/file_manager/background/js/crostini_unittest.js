@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {installMockChrome} from '../../common/js/mock_chrome.js';
 import {MockDirectoryEntry, MockEntry, MockFileSystem} from '../../common/js/mock_entry.js';
@@ -33,13 +33,6 @@ let crostini;
 
 // Set up the test components.
 export function setUp() {
-  // Mock LoadTimeData strings.
-  loadTimeData.resetForTesting({});
-  loadTimeData.getBoolean = function(key) {
-    return loadTimeData.data_[key];
-  };
-  loadTimeData.getString = id => id;
-
   // Mock fileManagerPrivate.onCrostiniChanged.
   const mockChrome = {
     fileManagerPrivate: {
@@ -72,17 +65,40 @@ export function setUp() {
  * Tests init sets crostini and PluginVm enabled status.
  */
 export function testInitCrostiniPluginVmEnabled() {
-  loadTimeData.data_['CROSTINI_ENABLED'] = true;
-  loadTimeData.data_['PLUGIN_VM_ENABLED'] = true;
-  crostini.initEnabled();
-  assertTrue(crostini.isEnabled('termina'));
-  assertTrue(crostini.isEnabled('PvmDefault'));
-
-  loadTimeData.data_['CROSTINI_ENABLED'] = false;
-  loadTimeData.data_['PLUGIN_VM_ENABLED'] = false;
+  loadTimeData.overrideValues({'VMS_FOR_SHARING': []});
   crostini.initEnabled();
   assertFalse(crostini.isEnabled('termina'));
   assertFalse(crostini.isEnabled('PvmDefault'));
+
+  loadTimeData.overrideValues({
+    'VMS_FOR_SHARING': [
+      {'vmName': 'termina', 'containerName': 'penguin'},
+      {'vmName': 'PvmDefault', 'containerName': ''},
+    ],
+  });
+  crostini.initEnabled();
+  assertTrue(crostini.isEnabled('termina'));
+  assertTrue(crostini.isEnabled('PvmDefault'));
+}
+
+/**
+ * Tests setEnabled tracks enabled/disabled correctly, in particular with
+ * multiple containers in a VM.
+ */
+export function testSetEnabled() {
+  assertFalse(crostini.isEnabled('termina'));
+
+  crostini.setEnabled('termina', 'penguin', true);
+  assertTrue(crostini.isEnabled('termina'));
+
+  crostini.setEnabled('termina', 'puffin', true);
+  assertTrue(crostini.isEnabled('termina'));
+
+  crostini.setEnabled('termina', 'penguin', false);
+  assertTrue(crostini.isEnabled('termina'));
+
+  crostini.setEnabled('termina', 'puffin', false);
+  assertFalse(crostini.isEnabled('termina'));
 }
 
 /**
@@ -162,7 +178,7 @@ export function testIsPathShared() {
  * Tests disallowed and allowed shared paths.
  */
 export function testCanSharePath() {
-  crostini.setEnabled('vm', true);
+  crostini.setEnabled('vm', '', true);
 
   const mockFileSystem = new MockFileSystem('test');
   const root = MockDirectoryEntry.create(mockFileSystem, '/');

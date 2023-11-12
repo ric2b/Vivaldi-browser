@@ -55,7 +55,8 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
     ResourceTimingInfo* info,
     base::TimeTicks time_origin,
     bool cross_origin_isolated_capability,
-    HeapVector<Member<PerformanceServerTiming>> server_timing)
+    HeapVector<Member<PerformanceServerTiming>> server_timing,
+    network::mojom::NavigationDeliveryType navigation_delivery_type)
     : PerformanceResourceTiming(
           info ? AtomicString(
                      info->FinalResponse().CurrentRequestUrl().GetString())
@@ -66,7 +67,8 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
           base::Contains(url::GetSecureSchemes(),
                          window->Url().Protocol().Ascii()),
           std::move(server_timing),
-          window),
+          window,
+          navigation_delivery_type),
       ExecutionContextClient(window),
       resource_timing_info_(info) {
   DCHECK(window);
@@ -75,7 +77,7 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
 
 PerformanceNavigationTiming::~PerformanceNavigationTiming() = default;
 
-AtomicString PerformanceNavigationTiming::entryType() const {
+const AtomicString& PerformanceNavigationTiming::entryType() const {
   return performance_entry_names::kNavigation;
 }
 
@@ -330,7 +332,17 @@ ScriptValue PerformanceNavigationTiming::NotRestoredReasonsBuilder(
   if (!reasons)
     return ScriptValue::CreateNull(script_state->GetIsolate());
   V8ObjectBuilder builder(script_state);
-  builder.AddBoolean("blocked", reasons->blocked);
+  switch (reasons->blocked) {
+    case mojom::blink::BFCacheBlocked::kYes:
+    case mojom::blink::BFCacheBlocked::kNo:
+      builder.AddBoolean(
+          "blocked", reasons->blocked == mojom::blink::BFCacheBlocked::kYes);
+      break;
+    case mojom::blink::BFCacheBlocked::kMasked:
+      // |blocked| can be null when masking the value.
+      builder.AddNull("blocked");
+      break;
+  }
   builder.AddString("url", AtomicString(reasons->same_origin_details
                                             ? reasons->same_origin_details->url
                                             : ""));

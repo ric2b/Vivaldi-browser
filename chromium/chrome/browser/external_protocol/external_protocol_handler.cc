@@ -40,7 +40,9 @@
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #endif
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+#include "components/navigation_interception/intercept_navigation_delegate.h"
+#else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -97,6 +99,7 @@ void AddMessageToConsole(const content::WeakDocumentPtr& document,
     rfh->AddMessageToConsole(level, message);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 // Functions enabling unit testing. Using a NULL delegate will use the default
 // behavior; if a delegate is provided it will be used instead.
 scoped_refptr<shell_integration::DefaultProtocolClientWorker> CreateShellWorker(
@@ -107,6 +110,7 @@ scoped_refptr<shell_integration::DefaultProtocolClientWorker> CreateShellWorker(
   return base::MakeRefCounted<shell_integration::DefaultProtocolClientWorker>(
       url);
 }
+#endif
 
 ExternalProtocolHandler::BlockState GetBlockStateWithDelegate(
     const std::string& scheme,
@@ -119,6 +123,7 @@ ExternalProtocolHandler::BlockState GetBlockStateWithDelegate(
                                                 profile);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void RunExternalProtocolDialogWithDelegate(
     const GURL& url,
     content::WebContents* web_contents,
@@ -154,6 +159,7 @@ void RunExternalProtocolDialogWithDelegate(
       is_in_fenced_frame_tree, initiating_origin, std::move(initiator_document),
       program_name);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 void LaunchUrlWithoutSecurityCheckWithDelegate(
     const GURL& url,
@@ -195,6 +201,7 @@ void LaunchUrlWithoutSecurityCheckWithDelegate(
 #endif
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 // When we are about to launch a URL with the default OS level application, we
 // check if the external application will be us. If it is we just ignore the
 // request.
@@ -225,6 +232,7 @@ void OnDefaultProtocolClientWorkerFinished(
   // On ChromeOS, Click to Call is integrated into the external protocol dialog.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA) && \
     !BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!vivaldi::IsVivaldiRunning()) {
   if (web_contents && ShouldOfferClickToCallForURL(
                           web_contents->GetBrowserContext(), escaped_url)) {
     // Handle tel links by opening the Click to Call dialog. This will call back
@@ -233,6 +241,7 @@ void OnDefaultProtocolClientWorkerFinished(
         web_contents, initiating_origin, std::move(initiator_document),
         escaped_url, chrome_is_default_handler, program_name);
     return;
+  }
   }
 #endif
 
@@ -265,6 +274,7 @@ void OnDefaultProtocolClientWorkerFinished(
   LaunchUrlWithoutSecurityCheckWithDelegate(
       escaped_url, web_contents, std::move(initiator_document), delegate);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
                                        const url::Origin* initiating_origin,
@@ -388,25 +398,25 @@ void ExternalProtocolHandler::SetBlockState(
   if (MayRememberAllowDecisionsForThisOrigin(&initiating_origin)) {
     PrefService* profile_prefs = profile->GetPrefs();
     if (profile_prefs) {  // May be NULL during testing.
-      DictionaryPrefUpdate update_allowed_origin_protocol_pairs(
+      ScopedDictPrefUpdate update_allowed_origin_protocol_pairs(
           profile_prefs, prefs::kProtocolHandlerPerOriginAllowedProtocols);
 
       const std::string serialized_origin = initiating_origin.Serialize();
-      base::Value* allowed_protocols_for_origin =
-          update_allowed_origin_protocol_pairs->FindDictKey(serialized_origin);
+      base::Value::Dict* allowed_protocols_for_origin =
+          update_allowed_origin_protocol_pairs->FindDict(serialized_origin);
       if (!allowed_protocols_for_origin) {
-        update_allowed_origin_protocol_pairs->SetKey(
-            serialized_origin, base::Value(base::Value::Type::DICTIONARY));
+        update_allowed_origin_protocol_pairs->Set(serialized_origin,
+                                                  base::Value::Dict());
         allowed_protocols_for_origin =
-            update_allowed_origin_protocol_pairs->FindDictKey(
-                serialized_origin);
+            update_allowed_origin_protocol_pairs->FindDict(serialized_origin);
       }
       if (state == DONT_BLOCK) {
-        allowed_protocols_for_origin->SetBoolKey(scheme, true);
+        allowed_protocols_for_origin->Set(scheme, true);
       } else {
-        allowed_protocols_for_origin->RemoveKey(scheme);
-        if (allowed_protocols_for_origin->DictEmpty())
-          update_allowed_origin_protocol_pairs->RemoveKey(serialized_origin);
+        allowed_protocols_for_origin->Remove(scheme);
+        if (allowed_protocols_for_origin->empty()) {
+          update_allowed_origin_protocol_pairs->Remove(serialized_origin);
+        }
       }
     }
   }
@@ -425,7 +435,12 @@ void ExternalProtocolHandler::LaunchUrl(
     bool has_user_gesture,
     bool is_in_fenced_frame_tree,
     const absl::optional<url::Origin>& initiating_origin,
-    content::WeakDocumentPtr initiator_document) {
+    content::WeakDocumentPtr initiator_document
+#if BUILDFLAG(IS_ANDROID)
+    ,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory
+#endif
+) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Disable anti-flood protection if the user is invoking a bookmark or
@@ -466,6 +481,22 @@ void ExternalProtocolHandler::LaunchUrl(
 
   g_accept_requests = false;
 
+  // Shell integration code below doesn't work on Android - default handler
+  // checks are instead handled through the InterceptNavigationDelegate. See
+  // ExternalNavigationHandler.java.
+  // The Origin is used for security checks, not for displaying to the user, so
+  // the precursor origin should not be used.
+  // Also, a protocol dialog isn't used on Android.
+#if BUILDFLAG(IS_ANDROID)
+  navigation_interception::InterceptNavigationDelegate* delegate =
+      navigation_interception::InterceptNavigationDelegate::Get(web_contents);
+  if (delegate) {
+    delegate->HandleSubframeExternalProtocol(escaped_url, page_transition,
+                                             has_user_gesture,
+                                             initiating_origin, out_factory);
+  }
+  return;
+#else
   absl::optional<url::Origin> initiating_origin_or_precursor;
   if (initiating_origin) {
     // Transform the initiating origin to its precursor origin if it is
@@ -495,6 +526,7 @@ void ExternalProtocolHandler::LaunchUrl(
   // OnDefaultProtocolClientWorkerFinished().
   CreateShellWorker(escaped_url, g_external_protocol_handler_delegate)
       ->StartCheckIsDefaultAndGetDefaultClientName(std::move(callback));
+#endif
 }
 
 // static

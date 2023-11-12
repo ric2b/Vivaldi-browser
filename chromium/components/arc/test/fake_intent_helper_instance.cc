@@ -4,13 +4,13 @@
 
 #include "components/arc/test/fake_intent_helper_instance.h"
 
-#include <algorithm>
 #include <iterator>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 
 namespace arc {
 
@@ -108,7 +108,7 @@ void FakeIntentHelperInstance::RequestIntentHandlerList(
     }
   }
   // Post the reply to run asynchronously to match the real implementation.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(handlers)));
 }
 
@@ -117,7 +117,7 @@ void FakeIntentHelperInstance::RequestUrlHandlerList(
     RequestUrlHandlerListCallback callback) {
   std::vector<mojom::IntentHandlerInfoPtr> handlers;
   // Post the reply to run asynchronously to match the real implementation.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(handlers)));
 }
 
@@ -147,9 +147,9 @@ std::vector<FakeIntentHelperInstance::Broadcast>
 FakeIntentHelperInstance::GetBroadcastsForAction(
     const std::string& action) const {
   std::vector<Broadcast> result;
-  std::copy_if(broadcasts_.begin(), broadcasts_.end(),
-               std::back_inserter(result),
-               [action](const Broadcast& b) { return b.action == action; });
+  base::ranges::copy_if(
+      broadcasts_, std::back_inserter(result),
+      [&action](const Broadcast& b) { return b.action == action; });
   return result;
 }
 

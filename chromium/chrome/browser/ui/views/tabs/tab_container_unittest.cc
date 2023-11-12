@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_group_views.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_layout_helper.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -62,11 +63,19 @@ class FakeTabContainerController final : public TabContainerController {
       : tab_strip_controller_(tab_strip_controller) {}
   ~FakeTabContainerController() override = default;
 
+  void set_tab_container(TabContainer* tab_container) {
+    tab_container_ = tab_container;
+  }
+
+  void set_is_animating_outside_container(bool is_animating_outside_container) {
+    is_animating_outside_container_ = is_animating_outside_container;
+  }
+
   bool IsValidModelIndex(int index) const override {
     return tab_strip_controller_->IsValidIndex(index);
   }
 
-  int GetActiveIndex() const override {
+  absl::optional<int> GetActiveIndex() const override {
     return tab_strip_controller_->GetActiveIndex();
   }
 
@@ -108,8 +117,19 @@ class FakeTabContainerController final : public TabContainerController {
     return nullptr;
   }
 
+  bool IsAnimatingInTabStrip() const override {
+    return tab_container_->IsAnimating() || is_animating_outside_container_;
+  }
+
+  void UpdateAnimationTarget(TabSlotView* tab_slot_view,
+                             gfx::Rect target_bounds) override {}
+
  private:
   const raw_ref<TabStripController> tab_strip_controller_;
+  raw_ptr<const TabContainer> tab_container_;
+
+  // Set this to true to emulate a tab being animated outside `tab_container_`.
+  bool is_animating_outside_container_ = false;
 };
 }  // namespace
 
@@ -140,14 +160,15 @@ class TabContainerTest : public ChromeViewsTestBase {
         [](TabContainerTest* test) { return test->tab_container_width_; },
         this));
 
+    tab_container_controller_->set_tab_container(tab_container.get());
+    tab_slot_controller_->set_tab_container(tab_container.get());
+
     widget_ = CreateTestWidget();
     tab_container_ =
         widget_->GetRootView()->AddChildView(std::move(tab_container));
     drag_context_ =
         widget_->GetRootView()->AddChildView(std::move(drag_context));
     SetTabContainerWidth(1000);
-
-    tab_slot_controller_->set_tab_container(tab_container_);
   }
 
   void TearDown() override {
@@ -847,8 +868,7 @@ TEST_F(TabContainerTest, UnderlineBoundsTabVisibilityChange) {
   // Add tabs to a single group until the last one is not visible.
   tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
   do {
-    AddTab(0);
-    AddTabToGroup(0, group);
+    AddTab(0, group);
     tab_container_->CompleteAnimationAndLayout();
   } while (tab_container_->GetTabAtModelIndex(tab_container_->GetTabCount() - 1)
                ->GetVisible());
@@ -867,8 +887,40 @@ TEST_F(TabContainerTest, UnderlineBoundsTabVisibilityChange) {
   // Use the abridged version of the method to ensure TabContainer::Layout is
   // called exactly once.
   SetTabContainerWidthSingleLayout(300);
-  EXPECT_NE(tab_container_->bounds(), initial_bounds);
-  EXPECT_NE(tab_container_->bounds(), shrunk_bounds);
+  EXPECT_NE(underline->bounds(), initial_bounds);
+  EXPECT_NE(underline->bounds(), shrunk_bounds);
+}
+
+TEST_F(TabContainerTest, UnderlineBoundsCollapsedGroupHeaderVisibilityChange) {
+  // Validates that group underlines are updated correctly in a single Layout
+  // call when the visibility of the group header changes, even if the group is
+  // collapsed. See crbug.com/1374614
+
+  // This test is only valid with scrolling off, since it pertains to tab
+  // visibility stuff that scrolling doesn't do.
+  ASSERT_FALSE(base::FeatureList::IsEnabled(features::kScrollableTabStrip));
+
+  SetTabContainerWidth(200);
+  // Create a tab group with one tab and collapse it.
+  tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
+  AddTab(0, absl::nullopt, TabActive::kActive);
+  AddTab(1, group);
+  tab_strip_controller_->ToggleTabGroupCollapsedState(
+      group, ToggleTabGroupCollapsedStateOrigin::kMouse);
+  // Add tabs until the group header is not visible.
+  do {
+    AddTab(0);
+    tab_container_->CompleteAnimationAndLayout();
+  } while (ListGroupViews()[0]->header()->GetVisible());
+
+  const TabGroupUnderline* underline = ListGroupViews()[0]->underline();
+  const gfx::Rect initial_bounds = underline->bounds();
+
+  // Expand the TabContainer and verify that the underline bounds changed.
+  // Use the abridged version of the method to ensure TabContainer::Layout is
+  // called exactly once.
+  SetTabContainerWidthSingleLayout(300);
+  EXPECT_NE(underline->bounds(), initial_bounds);
 }
 
 TEST_F(TabContainerTest, GroupHighlightBasics) {
@@ -892,22 +944,104 @@ TEST_F(TabContainerTest, GroupHighlightBasics) {
             tab_container_->GetTabAtModelIndex(0)->bounds().height());
 }
 
-TEST_F(TabContainerTest, PreferredWidth) {
-  Tab* const tab = AddTab(0);
-  // Manually displace `tab`, then trigger an animation back to ideal bounds.
-  tab->SetBoundsRect(gfx::Rect());
-  tab_container_->MoveTab(0, 0);
+TEST_F(TabContainerTest, PreferredWidthDuringAnimation) {
+  AddTab(0);
+  AddTab(0);
+  const int initial_pref_width = tab_container_->GetPreferredSize().width();
 
-  // During animations, container should prefer to match its child bounds.
-  const gfx::Rect initial_tab_bounds = tab->bounds();
+  // Trigger an animation.
+  RemoveTab(0);
   ASSERT_TRUE(tab_container_->IsAnimating());
 
-  EXPECT_EQ(tab_container_->GetPreferredSize().width(),
-            initial_tab_bounds.right());
+  // During animations, container preferred size should animate smoothly.
+  EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
 
-  // Complete the animation and the preferred width should match ideal bounds.
+  // Complete the animation and the preferred width should match ideal bounds of
+  // the trailingmost tab.
   tab_container_->CompleteAnimationAndLayout();
-  ASSERT_NE(initial_tab_bounds, tab_container_->GetIdealBounds(0));
+  ASSERT_NE(initial_pref_width, tab_container_->GetPreferredSize().width());
   EXPECT_EQ(tab_container_->GetPreferredSize().width(),
-            tab_container_->GetIdealBounds(0).right());
+            tab_container_->GetIdealBounds(tab_container_->GetTabCount() - 1)
+                .right());
+}
+
+TEST_F(TabContainerTest, PreferredWidthNotAffectedByTransferOut) {
+  // Start with two tabs.
+  AddTab(0);
+  AddTab(1);
+  const int initial_pref_width = tab_container_->GetPreferredSize().width();
+
+  // Transfer one out, then pretend to animate it.
+  std::unique_ptr<Tab> owned_tab = tab_container_->TransferTabOut(1);
+  tab_container_controller_->set_is_animating_outside_container(true);
+  // Preferred width should be unchanged, even though `owned_tab` is no longer
+  // part of `tab_container_`.
+  EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
+
+  // Complete the animation and stop pretending.
+  tab_container_->CompleteAnimationAndLayout();
+  tab_container_controller_->set_is_animating_outside_container(false);
+  // Preferred width should now be changed.
+  EXPECT_NE(initial_pref_width, tab_container_->GetPreferredSize().width());
+}
+
+TEST_F(TabContainerTest, PreferredWidthAddTabToViewModel) {
+  // Start with one tab, and one more that is not in the container.
+  AddTab(0);
+  const auto owned_tab = std::make_unique<Tab>(tab_slot_controller_.get());
+  const int initial_pref_width = tab_container_->GetPreferredSize().width();
+
+  // Add `owned_tab` to `tab_container_`'s viewmodel without giving it the
+  // actual view, and pretend to animate it.
+  tab_container_->AddTabToViewModel(owned_tab.get(), 1, TabPinned::kUnpinned);
+  tab_container_controller_->set_is_animating_outside_container(true);
+  // Preferred width should be unchanged.
+  EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
+
+  // Complete animation and stop pretending.
+  tab_container_->CompleteAnimationAndLayout();
+  tab_container_controller_->set_is_animating_outside_container(false);
+  // Preferred width should be changed, even though we still haven't handed the
+  // actual view over.
+  EXPECT_NE(initial_pref_width, tab_container_->GetPreferredSize().width());
+}
+
+TEST_F(TabContainerTest, TabDestroyedWhileOutOfContainerDoesNotActuallyReturn) {
+  // Add a tab, but take the view to simulate an outside-container animation.
+  std::unique_ptr<views::View> tab_parent = std::make_unique<views::View>();
+  Tab* tab_ptr =
+      tab_parent->AddChildView(tab_container_->RemoveChildViewT(AddTab(0)));
+
+  // Simulate destroying the tabstrip during this animation:
+  // 1. Close the tab.
+  RemoveTab(0);
+  // 2. Remove it from the view hierarchy (this would happen as part of the
+  // tab's destructor).
+  std::unique_ptr<Tab> tab = tab_parent->RemoveChildViewT(tab_ptr);
+  // 3. BoundsAnimator completes the animation, which returns the TabSlotView.
+  tab_container_->ReturnTabSlotView(tab_ptr);
+
+  // Validate that `tab_container_` did not actually take the tab view back.
+  EXPECT_EQ(tab->parent(), nullptr);
+}
+
+TEST_F(TabContainerTest, GetLeadingTrailingElementsForZOrdering) {
+  // An empty TabContainer has no leading/trailing views.
+  EXPECT_EQ(tab_container_->GetLeadingElementForZOrdering(), absl::nullopt);
+  EXPECT_EQ(tab_container_->GetTrailingElementForZOrdering(), absl::nullopt);
+
+  // Leading/trailing views could be tabs.
+  Tab* const first_tab = AddTab(0);
+  Tab* const last_tab = AddTab(1);
+  EXPECT_EQ(tab_container_->GetLeadingElementForZOrdering()->view(), first_tab);
+  EXPECT_EQ(tab_container_->GetTrailingElementForZOrdering()->view(), last_tab);
+
+  // Leading view could be a group header.
+  tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
+  AddTabToGroup(0, group);
+  AddTabToGroup(1, group);
+  TabGroupHeader* const group_header =
+      tab_container_->GetGroupViews(group)->header();
+  EXPECT_EQ(tab_container_->GetLeadingElementForZOrdering()->view(),
+            group_header);
 }

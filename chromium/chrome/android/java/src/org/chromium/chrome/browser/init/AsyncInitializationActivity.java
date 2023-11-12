@@ -10,11 +10,11 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
+import android.os.Build.VERSION;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
-import android.provider.Settings;
-import android.provider.Settings.SettingNotFoundException;
 import android.view.Display;
 import android.view.Menu;
 import android.view.View;
@@ -27,6 +27,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.compat.ApiHelperForR;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -36,6 +37,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcherImpl;
@@ -50,8 +52,6 @@ import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
-
-import java.lang.reflect.Field;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -617,7 +617,12 @@ public abstract class AsyncInitializationActivity
         if (mWindowAndroid != null) mWindowAndroid.onContextMenuClosed();
     }
 
-    private void onFirstDrawComplete() {
+    /**
+     * Called when the content view gets drawn for the first time. See {@link FirstDrawDetector} for
+     * details on the exact signals used to call this.
+     */
+    @CallSuper
+    protected void onFirstDrawComplete() {
         assert mFirstDrawComplete;
         assert !mStartupDelayed;
         TraceEvent.instant("onFirstDrawComplete");
@@ -727,19 +732,25 @@ public abstract class AsyncInitializationActivity
      */
     protected int getCurrentSmallestScreenWidth(Context context) {
         DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(context);
+        // Android T does not receive updated width upon foldable unfold from window context.
+        // Continue to rely on context on this case.
+        Context windowManagerContext = (ChromeFeatureList.sFoldableJankFix.isEnabled()
+                                               && VERSION.SDK_INT >= VERSION_CODES.R
+                                               && VERSION.SDK_INT < VERSION_CODES.TIRAMISU)
+                ? (display.getWindowContext() != null ? display.getWindowContext() : context)
+                : context;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Context#getSystemService(Context.WINDOW_SERVICE) is preferred over
             // Activity#getWindowManager, because during #attachBaseContext, #getWindowManager
             // is not ready yet and always returns null. See crbug.com/1252150.
             WindowManager manager =
-                    (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+                    (WindowManager) windowManagerContext.getSystemService(Context.WINDOW_SERVICE);
             assert manager != null;
-            Rect bounds = manager.getMaximumWindowMetrics().getBounds();
+            Rect bounds = ApiHelperForR.getMaximumWindowMetricsBounds(manager);
             return DisplayUtil.pxToDp(
                     display, Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top));
-        } else {
-            return DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display));
         }
+        return DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display));
     }
 
     /**
@@ -794,33 +805,6 @@ public abstract class AsyncInitializationActivity
         mCurrentOrientation = getResources().getConfiguration().orientation;
 
         if (oldOrientation != mCurrentOrientation) onOrientationChange(mCurrentOrientation);
-    }
-
-    /**
-     * Removes the window background.
-     */
-    protected void removeWindowBackground() {
-        boolean removeWindowBackground = true;
-        try {
-            Field field = Settings.Secure.class.getField(
-                    "ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED");
-            field.setAccessible(true);
-
-            if (field.getType() == String.class) {
-                String accessibilityMagnificationSetting = (String) field.get(null);
-                // When Accessibility magnification is turned on, setting a null window
-                // background causes the overlaid android views to stretch when panning.
-                // (crbug/332994)
-                if (Settings.Secure.getInt(
-                        getContentResolver(), accessibilityMagnificationSetting) == 1) {
-                    removeWindowBackground = false;
-                }
-            }
-        } catch (SettingNotFoundException | NoSuchFieldException | IllegalAccessException
-                | IllegalArgumentException ignore) {
-            // Window background is removed if an exception occurs.
-        }
-        if (removeWindowBackground) getWindow().setBackgroundDrawable(null);
     }
 
     /**

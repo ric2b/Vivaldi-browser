@@ -155,9 +155,8 @@ void PlatformNotificationContextImpl::Initialize() {
       &PlatformNotificationServiceProxy::RecordNotificationUkmEvent,
       service_proxy_->AsWeakPtr());
 
-  service->GetDisplayedNotifications(
-      base::BindOnce(&PlatformNotificationContextImpl::DidGetNotifications,
-                     this));
+  service->GetDisplayedNotifications(base::BindOnce(
+      &PlatformNotificationContextImpl::DidGetNotifications, this));
 }
 
 void PlatformNotificationContextImpl::DidGetNotifications(
@@ -283,14 +282,16 @@ void PlatformNotificationContextImpl::Shutdown() {
 
 void PlatformNotificationContextImpl::CreateService(
     RenderProcessHost* render_process_host,
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     const GURL& document_url,
     const WeakDocumentPtr& weak_document_ptr,
+    RenderProcessHost::NotificationServiceCreatorType creator_type,
     mojo::PendingReceiver<blink::mojom::NotificationService> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   services_.push_back(std::make_unique<BlinkNotificationServiceImpl>(
       this, browser_context_, service_worker_context_, render_process_host,
-      origin, document_url, weak_document_ptr, std::move(receiver)));
+      storage_key, document_url, weak_document_ptr, creator_type,
+      std::move(receiver)));
 }
 
 void PlatformNotificationContextImpl::RemoveService(

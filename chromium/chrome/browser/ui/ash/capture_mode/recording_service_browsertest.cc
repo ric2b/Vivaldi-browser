@@ -13,9 +13,9 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -28,6 +28,7 @@
 #include "content/public/test/browser_test.h"
 #include "media/base/media_tracks.h"
 #include "media/base/mock_media_log.h"
+#include "media/base/stream_parser.h"
 #include "media/formats/webm/webm_stream_parser.h"
 #include "ui/aura/window.h"
 #include "ui/display/screen.h"
@@ -45,7 +46,7 @@ void WaitForMilliseconds(int milliseconds) {
 #endif
 
   base::RunLoop loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, loop.QuitClosure(), base::Milliseconds(milliseconds));
   loop.Run();
 }
@@ -89,9 +90,22 @@ class WebmVerifier {
 
   // Parses the given |webm_file_content| and returns true on success.
   bool Verify(const std::string& webm_file_content) {
-    return webm_parser_.Parse(
-        reinterpret_cast<const uint8_t*>(webm_file_content.data()),
-        webm_file_content.size());
+    if (!webm_parser_.AppendToParseBuffer(
+            reinterpret_cast<const uint8_t*>(webm_file_content.data()),
+            webm_file_content.size())) {
+      return false;
+    }
+
+    // Run the segment parser loop one time with the full size of the appended
+    // data to ensure the parser has had a chance to parse all the appended
+    // bytes.
+    media::StreamParser::ParseStatus result =
+        webm_parser_.Parse(webm_file_content.size());
+
+    // Note that media::StreamParser::ParseStatus::kSuccessHasMoreData is deemed
+    // a verification failure here, since the parser was told to parse all the
+    // appended bytes and should not have uninspected data afterwards.
+    return result == media::StreamParser::ParseStatus::kSuccess;
   }
 
  private:

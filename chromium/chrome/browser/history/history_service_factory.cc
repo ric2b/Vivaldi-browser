@@ -7,6 +7,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/chrome_history_client.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/channel_info.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/content/browser/content_visit_delegate.h"
 #include "components/history/content/browser/history_database_helper.h"
@@ -34,7 +35,8 @@ std::unique_ptr<KeyedService> BuildHistoryService(
   int number_of_days_to_keep_visits = 90;
 #endif
   history::HistoryDatabaseParams param =
-      history::HistoryDatabaseParamsForPath(context->GetPath());
+      history::HistoryDatabaseParamsForPath(
+          context->GetPath(), chrome::GetChannel());
   param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
 
   if (!history_service->Init(param)) {

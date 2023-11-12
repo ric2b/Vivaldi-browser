@@ -17,7 +17,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.FeatureList;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.CalledByNative;
@@ -173,6 +172,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     private boolean mIsUsingBrandColor;
     private boolean mShouldShowOmniboxInOverviewMode;
     private boolean mIsShowingTabSwitcher;
+    private boolean mIsShowingStartSurface;
     @StartSurfaceState
     private int mStartSurfaceState;
 
@@ -182,6 +182,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     protected GURL mVisibleGurl = GURL.emptyGURL();
     protected String mFormattedFullUrl;
     protected String mUrlForDisplay;
+    private boolean mOmniboxUpdatedConnectionSecurityIndicatorsEnabled;
 
     /**
      * Default constructor for this class.
@@ -212,6 +213,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     public void initializeWithNative() {
         mOptimizationsEnabled =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_SCROLL_OPTIMIZATIONS);
+        mOmniboxUpdatedConnectionSecurityIndicatorsEnabled = ChromeFeatureList.isEnabled(
+                ChromeFeatureList.OMNIBOX_UPDATED_CONNECTION_SECURITY_INDICATORS);
         mLastUsedNonOTRProfile = Profile.getLastUsedRegularProfile();
         mNativeLocationBarModelAndroid = LocationBarModelJni.get().init(LocationBarModel.this);
 
@@ -298,38 +301,47 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @Override
     public GURL getCurrentGurl() {
-        if (mOptimizationsEnabled) {
-            return mVisibleGurl;
-        }
-
         if (isInOverviewAndShowingOmnibox()) {
             return UrlConstants.ntpGurl();
+        }
+
+        if (mOptimizationsEnabled) {
+            return mVisibleGurl;
         }
 
         Tab tab = getTab();
         return tab != null && tab.isInitialized() ? tab.getUrl() : GURL.emptyGURL();
     }
 
+    /**
+     * Reterived updated cached values for the current URL.
+     * @return whether the URL value has changed.
+     */
     @VisibleForTesting
-    void updateVisibleGurl() {
-        if (!mOptimizationsEnabled) return;
+    boolean updateVisibleGurl() {
+        if (!mOptimizationsEnabled) return true;
         try (TraceEvent te = TraceEvent.scoped("LocationBarModel.updateVisibleGurl")) {
             if (isInOverviewAndShowingOmnibox()) {
                 mFormattedFullUrl = "";
                 mUrlForDisplay = "";
                 mVisibleGurl = UrlConstants.ntpGurl();
+                return true;
             }
 
             GURL gurl = getUrlOfVisibleNavigationEntry();
             if (!gurl.equals(mVisibleGurl)) {
                 mVisibleGurl = gurl;
                 recalculateFormattedUrls();
+                return true;
             }
         }
+        return false;
     }
 
     public void notifyUrlChanged() {
-        updateVisibleGurl();
+        if (!updateVisibleGurl()) return;
+        // Url has changed, propagate it.
+
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onUrlChanged();
         }
@@ -518,10 +530,12 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     public boolean isInOverviewAndShowingOmnibox() {
         if (!mShouldShowOmniboxInOverviewMode) return false;
 
-        return mLayoutStateProvider != null && mIsShowingTabSwitcher
-                && (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
-                        || mStartSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE
-                        || mStartSurfaceState == StartSurfaceState.SHOWING_START);
+        return mLayoutStateProvider != null
+                && (mIsShowingStartSurface
+                        || mIsShowingTabSwitcher
+                                && (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
+                                        || mStartSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE
+                                        || mStartSurfaceState == StartSurfaceState.SHOWING_START));
     }
 
     /**
@@ -703,9 +717,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 !mSearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito())
                 || mNtpDelegate.isCurrentlyVisible() || isInOverviewAndShowingOmnibox();
 
-        boolean useUpdatedConnectionSecurityIndicators = FeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.OMNIBOX_UPDATED_CONNECTION_SECURITY_INDICATORS)
+        boolean useUpdatedConnectionSecurityIndicators =
+                mOmniboxUpdatedConnectionSecurityIndicatorsEnabled
                 && !(hasTab() && mTab.isCustomTab());
 
         return SecurityStatusIcon.getSecurityIconResource(securityLevel, isSmallDevice,
@@ -809,16 +822,25 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     protected GURL getUrlOfVisibleNavigationEntry() {
         if (mNativeLocationBarModelAndroid == 0) return GURL.emptyGURL();
+        if (mNtpDelegate.isCurrentlyVisible()) {
+            return getTab().getUrl();
+        }
+
         return LocationBarModelJni.get().getUrlOfVisibleNavigationEntry(
                 mNativeLocationBarModelAndroid, LocationBarModel.this);
     }
 
     /**
-     * Set whether tab switcher is showing or not and notify changes.
-     * @param isShowingTabSwitcher Whether tab switcher is showing or not.
+     * Set whether the start surface is showing or not and notify changes.
+     * TODO(1347089): Remove {@link isShowingTabSwitcher} when the Start surface refactoring is
+     * enabled by default.
+     * @param isShowingTabSwitcher Whether tab switcher layout is showing or not.
+     * @param isShowingStartSurface Whether Start surface layout is showing or not.
      */
-    public void setIsShowingTabSwitcher(boolean isShowingTabSwitcher) {
+    public void updateForNonStaticLayout(
+            boolean isShowingTabSwitcher, boolean isShowingStartSurface) {
         mIsShowingTabSwitcher = isShowingTabSwitcher;
+        mIsShowingStartSurface = isShowingStartSurface;
         notifyTitleChanged();
         notifyUrlChanged();
         notifyPrimaryColorChanged();
@@ -831,6 +853,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
      */
     public void setStartSurfaceState(@StartSurfaceState int startSurfaceState) {
         mStartSurfaceState = startSurfaceState;
+        notifyUrlChanged();
     }
 
     @NativeMethods

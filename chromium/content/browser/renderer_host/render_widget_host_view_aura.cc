@@ -9,7 +9,6 @@
 #include <set>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -81,6 +80,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/base/owned_window_anchor.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
@@ -1719,6 +1719,12 @@ bool RenderWidgetHostViewAura::ClearGrammarFragments(const gfx::Range& range) {
 
 bool RenderWidgetHostViewAura::AddGrammarFragments(
     const std::vector<ui::GrammarFragment>& fragments) {
+  if (!fragments.empty()) {
+    base::UmaHistogramEnumeration(
+        "InputMethod.Assistive.Grammar.Count",
+        TextInputClient::SubClass::kRenderWidgetHostViewAura);
+  }
+
   auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
   if (!input_handler || fragments.empty())
     return false;
@@ -2640,9 +2646,9 @@ void RenderWidgetHostViewAura::CreateSelectionController() {
       ui::GestureConfiguration::GetInstance()->long_press_time_in_ms());
   tsc_config.tap_slop = ui::GestureConfiguration::GetInstance()
                             ->max_touch_move_in_pixels_for_click();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  tsc_config.enable_longpress_drag_selection = base::FeatureList::IsEnabled(
-      chromeos::features::kTouchTextEditingRedesign);
+#if BUILDFLAG(IS_CHROMEOS)
+  tsc_config.enable_longpress_drag_selection =
+      features::IsTouchTextEditingRedesignEnabled();
 #else
   tsc_config.enable_longpress_drag_selection = false;
 #endif
@@ -2856,7 +2862,7 @@ void RenderWidgetHostViewAura::DidNavigate() {
                                   absl::nullopt);
     }
   }
-    delegated_frame_host_->DidNavigate();
+  delegated_frame_host_->DidNavigate();
   is_first_navigation_ = false;
 }
 
@@ -2876,7 +2882,6 @@ void RenderWidgetHostViewAura::TakeFallbackContentFrom(
   DCHECK(view_aura->delegated_frame_host_);
   delegated_frame_host_->TakeFallbackContentFrom(
       view_aura->delegated_frame_host_.get());
-  host()->GetContentRenderingTimeoutFrom(view_aura->host());
 }
 
 bool RenderWidgetHostViewAura::CanSynchronizeVisualProperties() {

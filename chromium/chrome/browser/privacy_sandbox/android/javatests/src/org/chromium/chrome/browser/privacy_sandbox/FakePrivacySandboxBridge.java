@@ -8,7 +8,7 @@ import org.chromium.base.Callback;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -19,19 +19,12 @@ public class FakePrivacySandboxBridge implements PrivacySandboxBridge.Natives {
     private boolean mIsPrivacySandboxRestricted /* = false*/;
 
     private final HashMap<String, Topic> mTopics = new HashMap<>();
-    private final Set<Topic> mCurrentTopTopics = new HashSet<>();
-    private final Set<Topic> mBlockedTopics = new HashSet<>();
-    private final Set<String> mCurrentFledgeSites = new HashSet<>();
-    private final Set<String> mBlockedFledgeSites = new HashSet<>();
+    private final Set<Topic> mCurrentTopTopics = new LinkedHashSet<>();
+    private final Set<Topic> mBlockedTopics = new LinkedHashSet<>();
+    private final Set<String> mCurrentFledgeSites = new LinkedHashSet<>();
+    private final Set<String> mBlockedFledgeSites = new LinkedHashSet<>();
     private @PromptType int mPromptType = PromptType.NONE;
     private Integer mLastPromptAction;
-
-    public FakePrivacySandboxBridge() {
-        setCurrentTopTopics("Foo", "Bar");
-        setBlockedTopics("BlockedFoo", "BlockedBar");
-        setCurrentFledgeSites("example.com", "example2.com");
-        setBlockedFledgeSites("blocked.com", "blocked2.com");
-    }
 
     public void setCurrentTopTopics(String... topics) {
         mCurrentTopTopics.clear();

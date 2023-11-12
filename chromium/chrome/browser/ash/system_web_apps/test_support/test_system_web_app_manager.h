@@ -5,14 +5,14 @@
 #ifndef CHROME_BROWSER_ASH_SYSTEM_WEB_APPS_TEST_SUPPORT_TEST_SYSTEM_WEB_APP_MANAGER_H_
 #define CHROME_BROWSER_ASH_SYSTEM_WEB_APPS_TEST_SUPPORT_TEST_SYSTEM_WEB_APP_MANAGER_H_
 
+#include <memory>
 #include <string>
-#include <vector>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/functional/callback.h"
+#include "base/strings/string_piece_forward.h"
 #include "base/version.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
-#include "url/gurl.h"
 
 class KeyedService;
 class Profile;
@@ -53,13 +53,17 @@ class TestSystemWebAppManager : public SystemWebAppManager {
     current_locale_ = locale;
   }
 
+  void set_icons_are_broken(bool broken) { icons_are_broken_ = broken; }
+
   // SystemWebAppManager:
   const base::Version& CurrentVersion() const override;
   const std::string& CurrentLocale() const override;
+  bool PreviousSessionHadBrokenIcons() const override;
 
  private:
   base::Version current_version_{"0.0.0.0"};
   std::string current_locale_;
+  bool icons_are_broken_ = false;
 };
 
 // Used in tests to ensure that the SystemWebAppManager that is created on

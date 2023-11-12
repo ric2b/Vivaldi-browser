@@ -12,7 +12,7 @@
 #include "media/base/video_encoder.h"
 #include "media/base/video_frame_pool.h"
 #include "media/formats/mp4/h264_annex_b_to_avc_bitstream_converter.h"
-#include "third_party/openh264/src/codec/api/svc/codec_api.h"
+#include "third_party/openh264/src/codec/api/wels/codec_api.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -39,6 +39,7 @@ class MEDIA_EXPORT OpenH264VideoEncoder : public VideoEncoder {
   EncoderStatus DrainOutputs(const SFrameBSInfo& frame_info,
                              base::TimeDelta timestamp,
                              gfx::ColorSpace color_space);
+  void UpdateEncoderColorSpace();
 
   class ISVCEncoderDeleter {
    public:

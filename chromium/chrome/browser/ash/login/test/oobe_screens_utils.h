@@ -7,7 +7,7 @@
 
 #include "base/run_loop.h"
 #include "chrome/browser/ash/login/screens/welcome_screen.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 
 namespace ash {
 namespace test {
@@ -88,32 +88,5 @@ void TapOnPathAndWaitForOobeToBeDestroyed(
 
 }  // namespace test
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-namespace test {
-using ::ash::test::ClickSignInFatalScreenActionButton;
-using ::ash::test::ExitFingerprintPinSetupScreen;
-using ::ash::test::ExitPinSetupScreen;
-using ::ash::test::ExitScreenSyncConsent;
-using ::ash::test::ExitUpdateScreenNoUpdate;
-using ::ash::test::IsScanningRequestedOnErrorScreen;
-using ::ash::test::IsScanningRequestedOnNetworkScreen;
-using ::ash::test::TapEulaAccept;
-using ::ash::test::TapNetworkSelectionNext;
-using ::ash::test::TapUserCreationNext;
-using ::ash::test::TapWelcomeNext;
-using ::ash::test::WaitForEnrollmentScreen;
-using ::ash::test::WaitForEulaScreen;
-using ::ash::test::WaitForFingerprintScreen;
-using ::ash::test::WaitForNetworkSelectionScreen;
-using ::ash::test::WaitForPinSetupScreen;
-using ::ash::test::WaitForSyncConsentScreen;
-using ::ash::test::WaitForUpdateScreen;
-using ::ash::test::WaitForUserCreationScreen;
-using ::ash::test::WaitForWelcomeScreen;
-}  // namespace test
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_TEST_OOBE_SCREENS_UTILS_H_

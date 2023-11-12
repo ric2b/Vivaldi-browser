@@ -59,9 +59,9 @@ class TestModelProvider : public ModelProvider {
     model_updated_callback.Run(segment_id_, metadata, kVersion);
   }
 
-  void ExecuteModelWithInput(const std::vector<float>& inputs,
+  void ExecuteModelWithInput(const ModelProvider::Request& inputs,
                              ExecutionCallback callback) override {
-    std::move(callback).Run(kTestScore);
+    std::move(callback).Run(ModelProvider::Response(1, kTestScore));
   }
 
   // Returns true if a model is available.
@@ -141,7 +141,7 @@ class SegmentResultProviderTest : public testing::Test {
     absl::optional<proto::PredictionResult> result;
     if (score) {
       result = proto::PredictionResult();
-      result->set_result(*score);
+      result->add_result(*score);
     }
     base::RunLoop wait_for_save;
     segment_database_->SetBucketDuration(segment, 1, proto::TimeUnit::DAY);
@@ -238,8 +238,9 @@ TEST_F(SegmentResultProviderTest, GetFromModelExecutionFailed) {
   EXPECT_CALL(*mock_execution_manager_, GetProvider(kTestSegment))
       .WillOnce(Return(&provider));
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/true, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/true,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
   ExpectSegmentResultOnGet(
       kTestSegment, /*ignore_db_scores=*/true,
       SegmentResultProvider::ResultState::kTfliteModelExecutionFailed,
@@ -257,8 +258,9 @@ TEST_F(SegmentResultProviderTest, GetFromModel) {
   EXPECT_CALL(*mock_execution_manager_, GetProvider(kTestSegment))
       .WillOnce(Return(&provider));
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/false, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/false,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
 
   // Gets the rank from test model instead of database.
   ExpectSegmentResultOnGet(
@@ -295,8 +297,9 @@ TEST_F(SegmentResultProviderTest, DefaultModelFailedExecution) {
 
   // Set error while computing features.
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/true, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/true,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
   ExpectSegmentResultOnGet(
       kTestSegment,
       /*ignore_db_scores=*/false,
@@ -313,8 +316,9 @@ TEST_F(SegmentResultProviderTest, GetFromDefault) {
   EXPECT_CALL(signal_storage_config_, MeetsSignalCollectionRequirement(_, _))
       .WillOnce(Return(true));
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/false, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/false,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
   ExpectSegmentResultOnGet(
       kTestSegment, /*ignore_db_scores=*/false,
       SegmentResultProvider::ResultState::kDefaultModelScoreUsed, kTestRank);
@@ -330,8 +334,9 @@ TEST_F(SegmentResultProviderTest, GetFromDefaultIgnoringDb) {
       .WillOnce(Return(true))
       .WillOnce(Return(true));
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/false, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/false,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
   ExpectSegmentResultOnGet(
       kTestSegment, /*ignore_db_scores=*/true,
       SegmentResultProvider::ResultState::kDefaultModelScoreUsed, kTestRank);
@@ -353,8 +358,9 @@ TEST_F(SegmentResultProviderTest, MultipleRequests) {
   EXPECT_CALL(signal_storage_config_, MeetsSignalCollectionRequirement(_, _))
       .WillOnce(Return(true));
   EXPECT_CALL(*mock_query_processor_, ProcessFeatureList(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(/*error=*/false, std::vector<float>{{1, 2}},
-                                   std::vector<float>()));
+      .WillOnce(RunOnceCallback<5>(/*error=*/false,
+                                   ModelProvider::Request{{1, 2}},
+                                   ModelProvider::Response()));
   ExpectSegmentResultOnGet(
       kTestSegment, /*ignore_db_scores=*/false,
       SegmentResultProvider::ResultState::kDefaultModelScoreUsed, kTestRank);

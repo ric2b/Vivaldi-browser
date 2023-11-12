@@ -7,6 +7,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/containers/adapters.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -22,6 +23,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_combine.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_bidi_paragraph.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_initial_letter_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_items_builder.h"
@@ -118,7 +120,7 @@ class ReusingTextShaper final {
 
     const Vector<const ShapeResult*> reusable_shape_results =
         CollectReusableShapeResults(start_offset, end_offset,
-                                    start_item.Direction());
+                                    font.PrimaryFont(), start_item.Direction());
     if (reusable_shape_results.empty())
       return Reshape(start_item, font, start_offset, end_offset);
 
@@ -163,6 +165,7 @@ class ReusingTextShaper final {
   Vector<const ShapeResult*> CollectReusableShapeResults(
       unsigned start_offset,
       unsigned end_offset,
+      const SimpleFontData* primary_font,
       TextDirection direction) {
     DCHECK_LT(start_offset, end_offset);
     Vector<const ShapeResult*> shape_results;
@@ -178,11 +181,14 @@ class ReusingTextShaper final {
         break;
       if (item->EndOffset() < start_offset)
         continue;
-      if (!item->TextShapeResult() || item->Direction() != direction)
+      const ShapeResult* const shape_result = item->TextShapeResult();
+      if (!shape_result || item->Direction() != direction)
         continue;
-      if (item->TextShapeResult()->IsAppliedSpacing())
+      if (shape_result->PrimaryFont() != primary_font)
         continue;
-      shape_results.push_back(item->TextShapeResult());
+      if (shape_result->IsAppliedSpacing())
+        continue;
+      shape_results.push_back(shape_result);
     }
     return shape_results;
   }
@@ -254,6 +260,10 @@ void CollectInlinesInternal(ItemsBuilder* builder,
         // block. This is an out-of-flow item whose position is computed
         // automatically.
         builder->AppendOpaque(NGInlineItem::kListMarker, node);
+      } else if (UNLIKELY(node->IsInitialLetterBox())) {
+        builder->AppendOpaque(NGInlineItem::kInitialLetterBox,
+                              kObjectReplacementCharacter, node);
+        builder->SetHasInititialLetterBox();
       } else {
         // For atomic inlines add a unicode "object replacement character" to
         // signal the presence of a non-text object to the unicode bidi
@@ -460,7 +470,7 @@ void NGInlineNode::ShapeTextOrDefer(const NGConstraintSpace& space) const {
   if (ds_controller.AllowDeferredShaping() &&
       !GetLayoutBox()->IsInsideFlowThread() &&
       Style().IsContentVisibilityVisible() &&
-      Style().PageTransitionTag().empty()) {
+      Style().ViewTransitionName().empty()) {
     DCHECK(IsHorizontalWritingMode(Style().GetWritingMode()));
     const LayoutUnit viewport_bottom = ds_controller.CurrentViewportBottom();
     DCHECK_NE(viewport_bottom, kIndefiniteSize) << GetLayoutBox();
@@ -780,8 +790,7 @@ class NGInlineNodeDataEditor final {
 
   template <typename Span1, typename Span2>
   static unsigned MismatchInternal(const Span1& span1, const Span2& span2) {
-    const auto old_new =
-        std::mismatch(span1.begin(), span1.end(), span2.begin(), span2.end());
+    const auto old_new = base::ranges::mismatch(span1, span2);
     return static_cast<unsigned>(old_new.first - span1.begin());
   }
 
@@ -803,8 +812,8 @@ class NGInlineNodeDataEditor final {
 
   template <typename Span1, typename Span2>
   static unsigned MismatchFromEnd(const Span1& span1, const Span2& span2) {
-    const auto old_new = std::mismatch(span1.rbegin(), span1.rend(),
-                                       span2.rbegin(), span2.rend());
+    const auto old_new =
+        base::ranges::mismatch(base::Reversed(span1), base::Reversed(span2));
     return static_cast<unsigned>(old_new.first - span1.rbegin());
   }
 
@@ -1804,6 +1813,20 @@ static LayoutUnit ComputeContentSize(
         ForceLineBreak(line_info);
     }
   };
+
+  if (UNLIKELY(node.IsInitialLetterBox())) {
+    LayoutUnit inline_size = LayoutUnit();
+    do {
+      NGLineInfo line_info;
+      line_breaker.NextLine(&line_info);
+      if (line_info.Results().empty())
+        break;
+      inline_size =
+          std::max(CalculateInitialLetterBoxInlineSize(line_info), inline_size);
+    } while (!line_breaker.IsFinished());
+    return inline_size;
+  }
+
   FloatsMaxSize floats_max_size(float_input);
   bool can_compute_max_size_from_min_size = true;
   MaxSizeFromMinSize max_size_from_min_size(items_data, *max_size_cache,

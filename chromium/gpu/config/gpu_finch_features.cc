@@ -179,6 +179,10 @@ BASE_FEATURE(kGpuProcessHighPriorityWin,
 BASE_FEATURE(kDisableVideoOverlayIfMoving,
              "DisableVideoOverlayIfMoving",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNoUndamagedOverlayPromotion,
+             "NoUndamagedOverlayPromotion",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -240,7 +244,7 @@ BASE_FEATURE(kForceGpuMainThreadToNormalPriorityDrDc,
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kEnableDrDcVulkan,
              "EnableDrDcVulkan",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // Enable WebGPU on gpu service side only. This is used with origin trial and
@@ -286,7 +290,8 @@ const base::FeatureParam<std::string> kVulkanBlockListByAndroidBuildFP{
 const base::FeatureParam<std::string> kDrDcBlockListByDevice{
     &kEnableDrDc, "BlockListByDevice",
     "LF9810_2GB|amber|chopin|secret|a03|SO-51B|on7xelte|j7xelte|F41B|doha|"
-    "rk322x_box|a20s"};
+    "rk322x_box|a20s|HWMAR|HWSTK-HF|HWPOT-H|b2q|channel|galahad|a32|ellis|"
+    "dandelion|tonga|RMX3231"};
 
 // crbug.com/1340059, crbug.com/1340064
 const base::FeatureParam<std::string> kDrDcBlockListByModel{
@@ -341,7 +346,7 @@ BASE_FEATURE(kReduceOpsTaskSplitting,
 // discardable memory.
 BASE_FEATURE(kNoDiscardableMemoryForGpuDecodePath,
              "NoDiscardableMemoryForGpuDecodePath",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Use a 100-command limit before forcing context switch per command buffer
 // instead of 20.
@@ -354,6 +359,11 @@ BASE_FEATURE(kIncreasedCmdBufferParseSlice,
 BASE_FEATURE(kForceRestartGpuKillSwitch,
              "ForceRestartGpuKillSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Using the new SchedulerDfs GPU scheduler.
+BASE_FEATURE(kUseGpuSchedulerDfs,
+             "UseGpuSchedulerDfs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool UseGles2ForOopR() {
 #if BUILDFLAG(IS_ANDROID)
@@ -505,14 +515,8 @@ bool NeedThreadSafeAndroidMedia() {
 }
 
 bool IsANGLEValidationEnabled() {
-#if BUILDFLAG(IS_ANDROID)
-  // Skia depends GL validation sometime. Without it, crashes happen in ANGLE,
-  // so we have to enable it. See crbug.com/1268568
-  return UsePassthroughCommandDecoder();
-#else
   return base::FeatureList::IsEnabled(kDefaultEnableANGLEValidation) &&
          UsePassthroughCommandDecoder();
-#endif
 }
 
 #if BUILDFLAG(IS_ANDROID)

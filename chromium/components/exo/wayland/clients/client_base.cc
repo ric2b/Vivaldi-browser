@@ -1,9 +1,6 @@
 // Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
-
-#define _GNU_SOURCE
 
 #include "components/exo/wayland/clients/client_base.h"
 
@@ -132,88 +129,10 @@ class MemfdMemoryMapping : public base::SharedMemoryMapping {
             base::SharedMemoryMapper::GetDefaultInstance()) {}
 };
 
-void RegistryHandler(void* data,
-                     wl_registry* registry,
-                     uint32_t id,
-                     const char* interface,
-                     uint32_t version) {
-  ClientBase::Globals* globals = static_cast<ClientBase::Globals*>(data);
-
-  if (strcmp(interface, "wl_compositor") == 0) {
-    globals->compositor.reset(static_cast<wl_compositor*>(
-        wl_registry_bind(registry, id, &wl_compositor_interface, 3)));
-  } else if (strcmp(interface, "wl_shm") == 0) {
-    globals->shm.reset(static_cast<wl_shm*>(
-        wl_registry_bind(registry, id, &wl_shm_interface, 1)));
-  } else if (strcmp(interface, "wl_shell") == 0) {
-    globals->shell.reset(static_cast<wl_shell*>(
-        wl_registry_bind(registry, id, &wl_shell_interface, 1)));
-  } else if (strcmp(interface, "wl_seat") == 0) {
-    globals->seat.reset(static_cast<wl_seat*>(
-        wl_registry_bind(registry, id, &wl_seat_interface, 5)));
-  } else if (strcmp(interface, "wp_presentation") == 0) {
-    globals->presentation.reset(static_cast<wp_presentation*>(
-        wl_registry_bind(registry, id, &wp_presentation_interface, 1)));
-  } else if (strcmp(interface, "zaura_shell") == 0) {
-    globals->aura_shell.reset(static_cast<zaura_shell*>(
-        wl_registry_bind(registry, id, &zaura_shell_interface, 34)));
-  } else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0) {
-    globals->linux_dmabuf.reset(static_cast<zwp_linux_dmabuf_v1*>(
-        wl_registry_bind(registry, id, &zwp_linux_dmabuf_v1_interface, 2)));
-  } else if (strcmp(interface, "wl_subcompositor") == 0) {
-    globals->subcompositor.reset(static_cast<wl_subcompositor*>(
-        wl_registry_bind(registry, id, &wl_subcompositor_interface, 1)));
-  } else if (strcmp(interface, "zcr_color_manager_v1") == 0) {
-    globals->color_manager.reset(static_cast<zcr_color_manager_v1*>(
-        wl_registry_bind(registry, id, &zcr_color_manager_v1_interface, 1)));
-  } else if (strcmp(interface, "zwp_input_timestamps_manager_v1") == 0) {
-    globals->input_timestamps_manager.reset(
-        static_cast<zwp_input_timestamps_manager_v1*>(wl_registry_bind(
-            registry, id, &zwp_input_timestamps_manager_v1_interface, 1)));
-  } else if (strcmp(interface, "zwp_fullscreen_shell_v1") == 0) {
-    globals->fullscreen_shell.reset(static_cast<zwp_fullscreen_shell_v1*>(
-        wl_registry_bind(registry, id, &zwp_fullscreen_shell_v1_interface, 1)));
-  } else if (strcmp(interface, "wl_output") == 0) {
-    globals->output.reset(static_cast<wl_output*>(
-        wl_registry_bind(registry, id, &wl_output_interface, 1)));
-  } else if (strcmp(interface, "zwp_linux_explicit_synchronization_v1") == 0) {
-    globals->linux_explicit_synchronization.reset(
-        static_cast<zwp_linux_explicit_synchronization_v1*>(wl_registry_bind(
-            registry, id, &zwp_linux_explicit_synchronization_v1_interface,
-            1)));
-  } else if (strcmp(interface, "zcr_vsync_feedback_v1") == 0) {
-    globals->vsync_feedback.reset(static_cast<zcr_vsync_feedback_v1*>(
-        wl_registry_bind(registry, id, &zcr_vsync_feedback_v1_interface, 1)));
-  } else if (strcmp(interface, "zxdg_shell_v6") == 0) {
-    globals->xdg_shell_v6.reset(static_cast<zxdg_shell_v6*>(
-        wl_registry_bind(registry, id, &zxdg_shell_v6_interface, version)));
-  } else if (strcmp(interface, "xdg_wm_base") == 0) {
-    globals->xdg_wm_base.reset(static_cast<xdg_wm_base*>(
-        wl_registry_bind(registry, id, &xdg_wm_base_interface, version)));
-  } else if (strcmp(interface, "zcr_stylus_v2") == 0) {
-    globals->stylus.reset(static_cast<zcr_stylus_v2*>(
-        wl_registry_bind(registry, id, &zcr_stylus_v2_interface, version)));
-  } else if (strcmp(interface, zcr_remote_shell_v1_interface.name) == 0) {
-    globals->cr_remote_shell_v1.reset(
-        static_cast<zcr_remote_shell_v1*>(wl_registry_bind(
-            registry, id, &zcr_remote_shell_v1_interface, version)));
-  } else if (strcmp(interface, zcr_remote_shell_v2_interface.name) == 0) {
-    globals->cr_remote_shell_v2.reset(
-        static_cast<zcr_remote_shell_v2*>(wl_registry_bind(
-            registry, id, &zcr_remote_shell_v2_interface, version)));
-  }
-}
-
-void RegistryRemover(void* data, wl_registry* registry, uint32_t id) {
-  LOG(WARNING) << "Got a registry losing event for " << id;
-}
-
 void BufferRelease(void* data, wl_buffer* /* buffer */) {
   ClientBase::Buffer* buffer = static_cast<ClientBase::Buffer*>(data);
   buffer->busy = false;
 }
-
-wl_registry_listener g_registry_listener = {RegistryHandler, RegistryRemover};
 
 wl_buffer_listener g_buffer_listener = {BufferRelease};
 
@@ -432,13 +351,6 @@ bool ClientBase::InitParams::FromCommandLine(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ClientBase::Globals, public:
-
-ClientBase::Globals::Globals() {}
-
-ClientBase::Globals::~Globals() {}
-
-////////////////////////////////////////////////////////////////////////////////
 // ClientBase::Buffer, public:
 
 ClientBase::Buffer::Buffer() {}
@@ -478,10 +390,11 @@ bool ClientBase::Init(const InitParams& params) {
     LOG(ERROR) << "wl_display_connect failed";
     return false;
   }
-  registry_.reset(wl_display_get_registry(display_.get()));
-  wl_registry_add_listener(registry_.get(), &g_registry_listener, &globals_);
 
-  wl_display_roundtrip(display_.get());
+  base::flat_map<std::string, uint32_t> requested_versions;
+  requested_versions[zwp_linux_dmabuf_v1_interface.name] =
+      params.linux_dmabuf_version;
+  globals_.Init(display_.get(), std::move(requested_versions));
 
   if (!globals_.compositor) {
     LOG(ERROR) << "Can't find compositor interface";
@@ -576,8 +489,7 @@ bool ClientBase::Init(const InitParams& params) {
     make_current_ = std::make_unique<ui::ScopedMakeCurrent>(gl_context_.get(),
                                                             gl_surface_.get());
 
-    if (display->ext->b_EGL_EXT_image_flush_external ||
-        display->ext->b_EGL_ARM_implicit_external_sync) {
+    if (display->ext->b_EGL_ARM_implicit_external_sync) {
       egl_sync_type_ = EGL_SYNC_FENCE_KHR;
     }
     if (display->ext->b_EGL_ANDROID_native_fence_sync) {
@@ -948,7 +860,7 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
   std::unique_ptr<Buffer> buffer;
 #if defined(USE_GBM)
   if (device_) {
-    buffer = CreateDrmBuffer(size, drm_format, bo_usage, y_invert_);
+    buffer = CreateDrmBuffer(size, drm_format, nullptr, 0, bo_usage, y_invert_);
     CHECK(buffer) << "Can't create drm buffer";
   }
 #endif
@@ -1053,6 +965,8 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
 std::unique_ptr<ClientBase::Buffer> ClientBase::CreateDrmBuffer(
     const gfx::Size& size,
     int32_t drm_format,
+    const uint64_t* drm_modifiers,
+    const unsigned int drm_modifiers_count,
     int32_t bo_usage,
     bool y_invert) {
   std::unique_ptr<Buffer> buffer;
@@ -1064,8 +978,14 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateDrmBuffer(
     }
 
     buffer = std::make_unique<Buffer>();
-    buffer->bo.reset(gbm_bo_create(device_.get(), size.width(), size.height(),
-                                   drm_format, bo_usage));
+    if (drm_modifiers_count == 0) {
+      buffer->bo.reset(gbm_bo_create(device_.get(), size.width(), size.height(),
+                                     drm_format, bo_usage));
+    } else {
+      buffer->bo.reset(gbm_bo_create_with_modifiers(
+          device_.get(), size.width(), size.height(), drm_format, drm_modifiers,
+          drm_modifiers_count));
+    }
     if (!buffer->bo) {
       LOG(ERROR) << "Can't create gbm buffer";
       return nullptr;
@@ -1301,6 +1221,8 @@ void ClientBase::SetupAuraShellIfAvailable() {
       [](void* data, struct zaura_output* zaura_output, int32_t transform) {
         CastToClientBase(data)->HandleLogicalTransform(transform);
       },
+      [](void* data, struct zaura_output* zaura_output, uint32_t display_id_hi,
+         uint32_t display_id_lo) {},
   };
 
   std::unique_ptr<zaura_output> aura_output(zaura_shell_get_aura_output(

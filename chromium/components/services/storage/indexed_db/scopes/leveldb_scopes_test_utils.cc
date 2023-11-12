@@ -12,7 +12,6 @@
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/services/storage/indexed_db/leveldb/leveldb_factory.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
@@ -76,7 +75,7 @@ void LevelDBScopesTestBase::CloseScopesAndDestroyLevelDBState() {
     event_watcher.StartWatching(
         leveldb_close_event_ptr,
         base::BindLambdaForTesting([&](base::WaitableEvent*) { loop.Quit(); }),
-        base::SequencedTaskRunnerHandle::Get());
+        base::SequencedTaskRunner::GetCurrentDefault());
     leveldb_.reset();
     loop.Run();
     // There is a possible race in |leveldb_close_event| where the signaling
@@ -228,31 +227,24 @@ bool LevelDBScopesTestBase::ScopeDataExistsOnDisk() {
 
 PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateSimpleSharedLock() {
-  return {0,
-          {simple_lock_begin_, simple_lock_end_},
-          PartitionedLockManager::LockType::kShared};
+  return {{0, simple_lock_begin_}, PartitionedLockManager::LockType::kShared};
 }
 
 PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateSimpleExclusiveLock() {
-  return {0,
-          {simple_lock_begin_, simple_lock_end_},
+  return {{0, simple_lock_begin_},
           PartitionedLockManager::LockType::kExclusive};
 }
 
 PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateSharedLock(int i) {
-  return {0,
-          {base::StringPrintf("%010d", i * 2),
-           base::StringPrintf("%010d", i * 2 + 1)},
+  return {{0, base::StringPrintf("%010d", i * 2)},
           PartitionedLockManager::LockType::kShared};
 }
 
 PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateExclusiveLock(int i) {
-  return {0,
-          {base::StringPrintf("%010d", i * 2),
-           base::StringPrintf("%010d", i * 2 + 1)},
+  return {{0, base::StringPrintf("%010d", i * 2)},
           PartitionedLockManager::LockType::kExclusive};
 }
 

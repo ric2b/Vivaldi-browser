@@ -18,7 +18,8 @@ source_set("bluetooth_socket") {
   ]
 
   deps = [
-    "//extensions/browser/api",
+    "//content/public/browser",
+    "//extensions/browser/api:async_api_function",
     "//extensions/common",
     "//extensions/common/api",
   ]

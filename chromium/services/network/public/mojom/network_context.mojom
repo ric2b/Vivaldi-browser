@@ -20,7 +20,6 @@ import "services/network/public/mojom/cors_origin_pattern.mojom";
 import "services/network/public/mojom/cross_origin_embedder_policy.mojom";
 import "services/network/public/mojom/default_credentials.mojom";
 import "services/network/public/mojom/devtools_observer.mojom";
-import "services/network/public/mojom/first_party_sets.mojom";
 import "services/network/public/mojom/first_party_sets_access_delegate.mojom";
 import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/http_cache_backend_file_operations.mojom";
@@ -33,6 +32,7 @@ import "services/network/public/mojom/mutable_network_traffic_annotation_tag.moj
 import "services/network/public/mojom/net_log.mojom";
 import "services/network/public/mojom/network_isolation_key.mojom";
 import "services/network/public/mojom/network_anonymization_key.mojom";
+import "services/network/public/mojom/oblivious_http_request.mojom";
 import "services/network/public/mojom/isolation_info.mojom";
 import "services/network/public/mojom/network_param.mojom";
 import "services/network/public/mojom/parsed_headers.mojom";
@@ -42,7 +42,6 @@ import "services/network/public/mojom/proxy_lookup_client.mojom";
 import "services/network/public/mojom/proxy_resolving_socket.mojom";
 import "services/network/public/mojom/reporting_service.mojom";
 import "services/network/public/mojom/restricted_cookie_manager.mojom";
-import "services/network/public/mojom/schemeful_site.mojom";
 import "services/network/public/mojom/site_for_cookies.mojom";
 import "services/network/public/mojom/socket_broker.mojom";
 import "services/network/public/mojom/ssl_config.mojom";
@@ -99,6 +98,11 @@ struct CustomProxyConfig {
   // non-idempotent methods. Can be true if the proxy is known to handle this
   // case properly.
   bool allow_non_idempotent_methods = false;
+
+  // Whether the custom proxy config should override direct settings. When
+  // this is true origins using the direct setting will be merged to respect
+  // the custom config settings first with a fallback of the direct setting.
+  bool should_replace_direct = false;
 
   // For tunneled requests (https://, ws://, wss://), these headers are added
   // to the CONNECT request. Headers here will overwrite matching headers on
@@ -434,11 +438,6 @@ struct NetworkContextParams {
   [EnableIf=is_ct_supported]
   bool enforce_chrome_ct_policy = false;
 
-  // Enables Expect CT reporting, which sends reports for opted-in sites that
-  // don't serve sufficient Certificate Transparency information.
-  [EnableIf=is_ct_supported]
-  bool enable_expect_ct_reporting = false;
-
   // The SCT auditing mode. SCT auditing sends reports for SCTs found in
   // connections made by this network context. Can also be dynamically
   // configured via NetworkContext::SetSCTAuditingMode().
@@ -542,6 +541,10 @@ struct NetworkContextParams {
   FirstPartySetsAccessDelegateParams? first_party_sets_access_delegate_params;
   pending_receiver<FirstPartySetsAccessDelegate>?
       first_party_sets_access_delegate_receiver;
+
+  // TODO(crbug.com/1228178): This flag is intended to be temporary and to be
+  // removed (always enabled) in the future.
+  bool acam_preflight_spec_conformant = true;
 };
 
 struct NetworkConditions {
@@ -552,11 +555,11 @@ struct NetworkConditions {
   // response received.
   mojo_base.mojom.TimeDelta latency;
 
-  // Maximal aggregated download throughput (bytes/sec). 0 disables download
+  // Maximal aggregated download throughput (bytes/sec). <=0 disables download
   // throttling.
   double download_throughput;
 
-  // Maximal aggregated upload throughput (bytes/sec). 0 disables upload
+  // Maximal aggregated upload throughput (bytes/sec). <=0 disables upload
   // throttling.
   double upload_throughput;
 };
@@ -817,15 +820,6 @@ interface NetworkContextClient {
   [EnableIf=is_chromeos]
   OnTrustAnchorUsed();
 
-  // If it's supported by the implementation, attempts to provide a response to
-  // the given Trust Tokens issuance request through some kind of local
-  // mediation---i.e., probably by a method other than sending a web request
-  // directly to the issuer's server. In situations where it's not possible to
-  // answer the request, returns a status of kNotFound (see the request and
-  // response structs' comments for more information).
-  OnTrustTokenIssuanceDivertedToSystem(FulfillTrustTokenIssuanceRequest request)
-    => (FulfillTrustTokenIssuanceAnswer response);
-
   // Checks if a new SCT Auditing report can be sent. The browser maintains a
   // maximum report count cap for Hashdance clients -- this returns whether the
   // cap has been exceeded or not (i.e., whether another report can be sent from
@@ -862,10 +856,16 @@ interface NetworkContext {
   // used on URLLoaders.
   ResetURLLoaderFactories();
 
+  // Uses Oblivious HTTP to indirectly perform the request. Specification at
+  // https://ietf-wg-ohai.github.io/oblivious-http/draft-ietf-ohai-ohttp.html
+  GetViaObliviousHttp(ObliviousHttpRequest request,
+                      pending_remote<ObliviousHttpClient> client);
+
   // Gets the CookieManager associated with this network context.
   //
   // The CookieManager must only be passed to trusted processes. Whenever
   // possible, a RestrictedCookieManager should be handed out instead.
+  [AllowedContext=sandbox.mojom.Context.kBrowser]
   GetCookieManager(pending_receiver<CookieManager> cookie_manager);
 
   // Gets a RestrictedCookieManager scoped to a given origin, and applying
@@ -1050,7 +1050,7 @@ interface NetworkContext {
   //
   // |reporting_source| and |network_isolation_key| are used both for looking
   // up the appropriately scoped reporting information and for sending the
-  // report. |network_isolation_key| indicates the NetworkIsolationKey
+  // report. |network_anonymization_key| indicates the NetworkAnonymizationKey
   // associated with the request, while |reporting_source|, if not empty,
   // identifies the specific document or worker instance causing the report to
   // be queued. If |reporting_source| is not empty, then it will be used to
@@ -1113,25 +1113,6 @@ interface NetworkContext {
   // of the network service.
   [EnableIf=is_ct_supported]
   SetCTPolicy(CTPolicy ct_policy);
-
-  // Adds explicitly-specified data as if it was processed from an Expect-CT
-  // header.
-  [EnableIf=is_ct_supported]
-  AddExpectCT(string host, mojo_base.mojom.Time expiry,
-              bool enforce, url.mojom.Url report_uri,
-              NetworkAnonymizationKey network_anonymization_key)
-              => (bool success);
-
-  // Send a test CT report with dummy data for test purposes.
-  [EnableIf=is_ct_supported]
-  SetExpectCTTestReport(url.mojom.Url report_uri) => (bool success);
-
-  // Retrieves the expect CT state from the associated network context
-  // transport security state.
-  [EnableIf=is_ct_supported]
-  GetExpectCTState(string domain,
-                   NetworkAnonymizationKey network_anonymization_key)
-                   => (mojo_base.mojom.DictionaryValue state);
 
   // Creates a UDP socket. Caller can supply a |listener| interface pointer
   // to listen for incoming datagrams. A null |listener| is acceptable if caller
@@ -1302,9 +1283,9 @@ interface NetworkContext {
   // than one connection be established in parallel.
   // |allow_credentials| is true if the connection is to be pooled with
   // credentialed requests and false otherwise.
-  // |network_isolation_key| specifies the NetworkIsolationKey to associate
-  // with the preconnected sockets. The sockets will only be used for requests
-  // associated with the same key.
+  // |network_anonymization_key| specifies the NetworkAnonymizationKey to
+  // associate with the preconnected sockets. The sockets will only be
+  // used for requests associated with the same key.
   PreconnectSockets(uint32 num_streams,
                     url.mojom.Url url,
                     bool allow_credentials,
@@ -1407,7 +1388,7 @@ interface NetworkContext {
   // See net::TransportSecurityState::DeleteDynamicDataForHost for more detail.
   DeleteDynamicDataForHost(string host) => (bool result);
 
-  // Sets whether the HTTP auth cache will be split the NetworkIsolationKey.
+  // Sets whether the HTTP auth cache will be split the NetworkAnonymizationKey.
   // Only affects server (not proxy) credentials. Whenever the effective value
   // is changed, all cached server auth credentials will be cleared.
   SetSplitAuthCacheByNetworkAnonymizationKey(
@@ -1431,12 +1412,12 @@ interface NetworkContext {
   LoadHttpAuthCacheProxyEntries(mojo_base.mojom.UnguessableToken cache_key)
       => ();
 
-  // Adds an entry to the HttpAuthCache. |network_anonymization_key| is the
-  // NetworkIsolationKey to restrict the credentials to, and is only respected
-  // for server (not proxy) HTTP auth and only when the NetworkService was
-  // configured to split the auth cache by NetworkIsolationKey. |challenge|
-  // may not necessarily contain a stateful challenge that requires a persistent
-  // connection, allowing the cache to be pre-populated.
+// Adds an entry to the HttpAuthCache. |network_anonymization_key| is the
+// NetworkAnonymizationKney to restrict the credentials to, and is only
+// respected for server (not proxy) HTTP auth and only when the NetworkService
+// was configured to split the auth cache by NetworkAnonymizationKey.
+// |challenge| may not necessarily contain a stateful challenge that requires a
+// persistent connection, allowing the cache to be pre-populated.
   AddAuthCacheEntry(AuthChallengeInfo challenge,
                     NetworkAnonymizationKey network_anonymization_key,
                     AuthCredentials credentials) => ();
@@ -1458,7 +1439,7 @@ interface NetworkContext {
   // |proxy_server|, |auth_scheme| and |realm| in the HttpAuthCache.
   // |auth_scheme| is the authentication scheme of the challenge and it's
   // specified as a case-insensitive string. Unlike server credentials, proxy
-  // credentials are not keyed on NetworkIsolationKey.
+  // credentials are not keyed on NetworkAnonymizationKey.
   [EnableIf=is_chromeos_ash]
   LookupProxyAuthCredentials(proxy_resolver.mojom.ProxyServer proxy_server,
       string auth_scheme, string realm)
@@ -1496,13 +1477,4 @@ interface NetworkContext {
   // events for Reporting API reports currently stored in the reporting service.
   [EnableIf=enable_reporting]
   AddReportingApiObserver(pending_remote<ReportingApiObserver> observer);
-
-  // Compute the First-Party Sets metadata for a given context. `site` is the
-  // embedded frame's site; `party_context` is the set of sites from
-  // intermediate frames in the frame hierarchy (not including the top frame and
-  // leaf frame).
-  ComputeFirstPartySetMetadata(SchemefulSite site,
-                               SchemefulSite? top_frame_site,
-                               array<SchemefulSite> party_context)
-    => (FirstPartySetMetadata metadata);
 };

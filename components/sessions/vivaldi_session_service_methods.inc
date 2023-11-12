@@ -7,11 +7,11 @@ using IdToSessionWindow = std::map<SessionID, std::unique_ptr<SessionWindow>>;
 using TokenToSessionTabGroup =
 std::map<tab_groups::TabGroupId, std::unique_ptr<SessionTabGroup>>;
 
-bool VivaldiCreateTabsAndWindows(
+void VivaldiCreateTabsAndWindows(
     const std::vector<std::unique_ptr<sessions::SessionCommand>>& data,
     IdToSessionTab* tabs,
     TokenToSessionTabGroup* tab_groups,
     IdToSessionWindow* windows,
     SessionID* active_window_id) {
-  return CreateTabsAndWindows(data, tabs, tab_groups, windows, active_window_id);
+  CreateTabsAndWindows(data, tabs, tab_groups, windows, active_window_id);
 }

@@ -33,6 +33,10 @@
 #include "ui/gfx/text_utils.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif
+
 namespace {
 
 // Possibly returns a resident key warning if the model indicates that it's
@@ -331,6 +335,36 @@ std::u16string
 AuthenticatorNoAvailableTransportsErrorModel::GetStepDescription() const {
   return l10n_util::GetStringUTF16(
       IDS_WEBAUTHN_ERROR_NO_TRANSPORTS_DESCRIPTION);
+}
+
+// AuthenticatorNoPasskeysErrorModel ------------------------------------------
+
+bool AuthenticatorNoPasskeysErrorModel::IsBackButtonVisible() const {
+  return false;
+}
+
+std::u16string AuthenticatorNoPasskeysErrorModel::GetCancelButtonLabel() const {
+  return l10n_util::GetStringUTF16(IDS_CLOSE);
+}
+
+const gfx::VectorIcon& AuthenticatorNoPasskeysErrorModel::GetStepIllustration(
+    ImageColorScheme color_scheme) const {
+  if (base::FeatureList::IsEnabled(
+          device::kWebAuthnNewDiscoverableCredentialsUi)) {
+    return color_scheme == ImageColorScheme::kDark ? kPasskeyErrorDarkIcon
+                                                   : kPasskeyErrorIcon;
+  }
+  return color_scheme == ImageColorScheme::kDark ? kWebauthnErrorDarkIcon
+                                                 : kWebauthnErrorIcon;
+}
+
+std::u16string AuthenticatorNoPasskeysErrorModel::GetStepTitle() const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_ERROR_NO_PASSKEYS_TITLE);
+}
+
+std::u16string AuthenticatorNoPasskeysErrorModel::GetStepDescription() const {
+  return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_ERROR_NO_PASSKEYS_DESCRIPTION,
+                                    GetRelyingPartyIdString(dialog_model()));
 }
 
 // AuthenticatorNotRegisteredErrorModel ---------------------------------------
@@ -657,7 +691,9 @@ bool AuthenticatorBlePermissionMacSheetModel::IsCancelButtonVisible() const {
 
 std::u16string AuthenticatorBlePermissionMacSheetModel::GetAcceptButtonLabel()
     const {
-  return l10n_util::GetStringUTF16(IDS_OPEN_PREFERENCES_LINK);
+  return l10n_util::GetStringUTF16(base::mac::IsAtMostOS12()
+                                       ? IDS_OPEN_PREFERENCES_LINK
+                                       : IDS_OPEN_SETTINGS_LINK);
 }
 
 void AuthenticatorBlePermissionMacSheetModel::OnAccept() {
@@ -877,12 +913,6 @@ std::u16string AuthenticatorPaaskSheetModel::GetStepDescription() const {
   }
 }
 
-bool AuthenticatorPaaskSheetModel::IsOtherMechanismButtonVisible() const {
-  DCHECK(base::FeatureList::IsEnabled(
-      device::kWebAuthnNewDiscoverableCredentialsUi));
-  return false;
-}
-
 ui::MenuModel* AuthenticatorPaaskSheetModel::GetOtherMechanismsMenuModel() {
   switch (dialog_model()->experiment_server_link_sheet_) {
     case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::CONTROL:
@@ -956,13 +986,6 @@ std::u16string AuthenticatorAndroidAccessorySheetModel::GetStepDescription()
 ui::MenuModel*
 AuthenticatorAndroidAccessorySheetModel::GetOtherMechanismsMenuModel() {
   return other_mechanisms_menu_model_.get();
-}
-
-bool AuthenticatorAndroidAccessorySheetModel::IsOtherMechanismButtonVisible()
-    const {
-  DCHECK(base::FeatureList::IsEnabled(
-      device::kWebAuthnNewDiscoverableCredentialsUi));
-  return false;
 }
 
 // AuthenticatorClientPinEntrySheetModel

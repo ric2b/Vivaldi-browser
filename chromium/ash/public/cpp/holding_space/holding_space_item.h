@@ -15,13 +15,11 @@
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
+#include "base/values.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "url/gurl.h"
-
-namespace base {
-class DictionaryValue;
-}  // namespace base
 
 namespace cros_styles {
 enum class ColorName;
@@ -123,24 +121,24 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   // Returns `true` if `type` is a suggestion type, `false` otherwise.
   static bool IsSuggestion(HoldingSpaceItem::Type type);
 
-  // Deserializes from `base::DictionaryValue` to `HoldingSpaceItem`.
+  // Deserializes from `base::Value::Dict` to `HoldingSpaceItem`.
   // This creates a partially initialized item with an empty file system URL.
   // The item should be fully initialized using `Initialize()`.
   static std::unique_ptr<HoldingSpaceItem> Deserialize(
-      const base::DictionaryValue& dict,
+      const base::Value::Dict& dict,
       ImageResolver image_resolver);
 
   // Deserializes `id_` from a serialized `HoldingSpaceItem`.
-  static const std::string& DeserializeId(const base::DictionaryValue& dict);
+  static const std::string& DeserializeId(const base::Value::Dict& dict);
 
   // Deserializes `file_path_` from a serialized `HoldingSpaceItem`.
-  static base::FilePath DeserializeFilePath(const base::DictionaryValue& dict);
+  static base::FilePath DeserializeFilePath(const base::Value::Dict& dict);
 
   // Deserializes `type_` from a serialized `HoldingSpaceItem`.
-  static Type DeserializeType(const base::DictionaryValue& dict);
+  static Type DeserializeType(const base::Value::Dict& dict);
 
-  // Serializes from `HoldingSpaceItem` to `base::DictionaryValue`.
-  base::DictionaryValue Serialize() const;
+  // Serializes from `HoldingSpaceItem` to `base::Value::Dict`.
+  base::Value::Dict Serialize() const;
 
   // Adds `callback` to be notified when `this` gets deleted.
   base::CallbackListSubscription AddDeletionCallback(
@@ -173,11 +171,11 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   // if a change occurred or `false` to indicate no-op.
   bool SetSecondaryText(const absl::optional<std::u16string>& secondary_text);
 
-  // Sets the color for the secondary text that should be shown for the item,
+  // Sets the color id for the secondary text that should be shown for the item,
   // returning `true` if a change occurred or `false` to indicate no-op. If
   // `absl::nullopt` is provided, secondary text color will fallback to default.
-  bool SetSecondaryTextColor(
-      const absl::optional<cros_styles::ColorName>& secondary_text_color);
+  bool SetSecondaryTextColorId(
+      const absl::optional<ui::ColorId>& secondary_text_color_id);
 
   // Returns `accessible_name_`, falling back to a concatenation of primary
   // and secondary text if absent.
@@ -215,8 +213,8 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
     return secondary_text_;
   }
 
-  const absl::optional<cros_styles::ColorName>& secondary_text_color() const {
-    return secondary_text_color_;
+  const absl::optional<ui::ColorId>& secondary_text_color_id() const {
+    return secondary_text_color_id_;
   }
 
   const HoldingSpaceImage& image() const { return *image_; }
@@ -259,8 +257,9 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   // If set, the secondary text that should be shown for the item.
   absl::optional<std::u16string> secondary_text_;
 
-  // If set, the color for the secondary text that should be shown for the item.
-  absl::optional<cros_styles::ColorName> secondary_text_color_;
+  // If set, the color resolved from the color id for the secondary text that
+  // should be shown for the item.
+  absl::optional<ui::ColorId> secondary_text_color_id_;
 
   // If set, the accessible name that should be used for the item.
   absl::optional<std::u16string> accessible_name_;

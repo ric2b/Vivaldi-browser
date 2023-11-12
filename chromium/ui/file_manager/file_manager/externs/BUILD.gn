@@ -46,7 +46,6 @@ js_library("command_handler_deps") {
     "//ui/file_manager/file_manager/foreground/js:naming_controller",
     "//ui/file_manager/file_manager/foreground/js:providers_model",
     "//ui/file_manager/file_manager/foreground/js:spinner_controller",
-    "//ui/file_manager/file_manager/foreground/js:task_controller",
     "//ui/file_manager/file_manager/foreground/js/metadata:metadata_model",
     "//ui/file_manager/file_manager/foreground/js/ui:directory_tree",
     "//ui/file_manager/file_manager/foreground/js/ui:file_manager_ui",
@@ -78,6 +77,11 @@ js_library("exif_entry") {
 
 js_library("files_app_entry_interfaces") {
   deps = [ "//ui/file_manager/file_manager/common/js:volume_manager_types" ]
+}
+
+js_library("metadata_model") {
+  deps =
+      [ "//ui/file_manager/file_manager/foreground/js/metadata:metadata_item" ]
 }
 
 js_library("metadata_worker_window") {

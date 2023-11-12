@@ -14,6 +14,7 @@
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+#include "chrome/browser/first_party_sets/scoped_mock_first_party_sets_handler.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_features.h"
@@ -42,6 +43,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/schemeful_site.h"
 #include "net/first_party_sets/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_entry_override.h"
 #include "net/first_party_sets/first_party_sets_context_config.h"
 #include "net/first_party_sets/global_first_party_sets.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -55,7 +57,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chromeos/login/login_state/scoped_test_public_session_login_state.h"
+#include "chromeos/ash/components/login/login_state/scoped_test_public_session_login_state.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -72,6 +74,8 @@ const char kFirstPartySetsStateHistogram[] = "Settings.FirstPartySets.State";
 const char kPrivacySandboxStartupHistogram[] =
     "Settings.PrivacySandbox.StartupState";
 
+const base::Version kFirstPartySetsVersion("1.2.3");
+
 class TestInterestGroupManager : public content::InterestGroupManager {
  public:
   void SetInterestGroupJoiningOrigins(const std::vector<url::Origin>& origins) {
@@ -82,6 +86,15 @@ class TestInterestGroupManager : public content::InterestGroupManager {
   void GetAllInterestGroupJoiningOrigins(
       base::OnceCallback<void(std::vector<url::Origin>)> callback) override {
     std::move(callback).Run(origins_);
+  }
+  void GetAllInterestGroupDataKeys(
+      base::OnceCallback<void(std::vector<InterestGroupDataKey>)> callback)
+      override {
+    std::move(callback).Run({});
+  }
+  void RemoveInterestGroupsByDataKey(InterestGroupDataKey data_key,
+                                     base::OnceClosure callback) override {
+    std::move(callback).Run();
   }
 
  private:
@@ -96,7 +109,7 @@ class MockPrivacySandboxSettings
       return false;
     });
   }
-  MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (override));
+  MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (const, override));
 };
 
 struct PromptTestState {
@@ -683,7 +696,12 @@ class PrivacySandboxServiceTest : public testing::Test {
 
   void SetUp() override {
     CreateService();
-    SetGlobalFirstPartySetsAndWait();
+
+    base::RunLoop run_loop;
+    first_party_sets_policy_service_.WaitForFirstInitCompleteForTesting(
+        run_loop.QuitClosure());
+    run_loop.Run();
+    first_party_sets_policy_service_.ResetForTesting();
   }
 
   virtual std::unique_ptr<
@@ -691,7 +709,8 @@ class PrivacySandboxServiceTest : public testing::Test {
   GetMockDelegate() {
     auto mock_delegate = std::make_unique<
         privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>();
-    mock_delegate->SetUpDefaultResponse(/*restricted=*/false);
+    mock_delegate->SetUpIsPrivacySandboxRestrictedResponse(
+        /*restricted=*/false);
     return mock_delegate;
   }
 
@@ -699,7 +718,7 @@ class PrivacySandboxServiceTest : public testing::Test {
     privacy_sandbox_settings_ =
         std::make_unique<privacy_sandbox::PrivacySandboxSettings>(
             GetMockDelegate(), host_content_settings_map(), cookie_settings(),
-            prefs(), /*incognito_profile=*/false);
+            prefs());
 #if !BUILDFLAG(IS_ANDROID)
     mock_sentiment_service_ =
         std::make_unique<::testing::NiceMock<MockTrustSafetySentimentService>>(
@@ -752,6 +771,10 @@ class PrivacySandboxServiceTest : public testing::Test {
   browsing_topics::MockBrowsingTopicsService* mock_browsing_topics_service() {
     return &mock_browsing_topics_service_;
   }
+  first_party_sets::ScopedMockFirstPartySetsHandler&
+  mock_first_party_sets_handler() {
+    return mock_first_party_sets_handler_;
+  }
   first_party_sets::FirstPartySetsPolicyService*
   first_party_sets_policy_service() {
     return &first_party_sets_policy_service_;
@@ -762,16 +785,6 @@ class PrivacySandboxServiceTest : public testing::Test {
   }
 #endif
 
-  void SetGlobalFirstPartySetsAndWait() {
-    content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
-    content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting({});
-    base::RunLoop run_loop;
-    first_party_sets_policy_service_.WaitForFirstInitCompleteForTesting(
-        run_loop.QuitClosure());
-    run_loop.Run();
-    first_party_sets_policy_service_.ResetForTesting();
-  }
-
  private:
   content::BrowserTaskEnvironment browser_task_environment_;
 
@@ -779,6 +792,8 @@ class PrivacySandboxServiceTest : public testing::Test {
   base::test::ScopedFeatureList feature_list_;
   TestInterestGroupManager test_interest_group_manager_;
   browsing_topics::MockBrowsingTopicsService mock_browsing_topics_service_;
+  first_party_sets::ScopedMockFirstPartySetsHandler
+      mock_first_party_sets_handler_;
   first_party_sets::FirstPartySetsPolicyService
       first_party_sets_policy_service_ =
           first_party_sets::FirstPartySetsPolicyService(
@@ -1017,6 +1032,18 @@ TEST_F(PrivacySandboxServiceTest, PromptActionsUMAActions) {
       PrivacySandboxService::PromptAction::kNoticeLearnMore);
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "Settings.PrivacySandbox.Notice.LearnMore"));
+
+  SetupPromptTestState(feature_list(), prefs(),
+                       {/*consent_required=*/false,
+                        /*old_api_pref=*/true,
+                        /*new_api_pref=*/false,
+                        /*notice_displayed=*/false,
+                        /*consent_decision_made=*/false,
+                        /*confirmation_not_shown=*/false});
+  privacy_sandbox_service()->PromptActionOccurred(
+      PrivacySandboxService::PromptAction::kNoticeMoreInfoOpened);
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "Settings.PrivacySandbox.Notice.LearnMoreExpanded"));
 
   SetupPromptTestState(feature_list(), prefs(),
                        {/*consent_required=*/true,
@@ -1399,7 +1426,7 @@ TEST_F(PrivacySandboxServiceTest, DeviceLocalAccountUser) {
                         /*confirmation_not_shown=*/false});
   // No prompt should be shown for a public session account.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::ScopedTestPublicSessionLoginState login_state;
+  ash::ScopedTestPublicSessionLoginState login_state;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   crosapi::mojom::BrowserInitParamsPtr init_params =
       crosapi::mojom::BrowserInitParams::New();
@@ -1892,8 +1919,6 @@ TEST_F(PrivacySandboxServiceTest, PrivacySandboxNoticeDisabled) {
 
 TEST_F(PrivacySandboxServiceTest, PrivacySandboxManuallyControlledEnabled) {
   base::HistogramTester histogram_tester;
-  feature_list()->InitAndEnableFeature(
-      privacy_sandbox::kPrivacySandboxSettings3);
   prefs()->SetUserPref(prefs::kPrivacySandboxApisEnabledV2,
                        std::make_unique<base::Value>(true));
   prefs()->SetUserPref(prefs::kPrivacySandboxNoConfirmationManuallyControlled,
@@ -1907,8 +1932,6 @@ TEST_F(PrivacySandboxServiceTest, PrivacySandboxManuallyControlledEnabled) {
 
 TEST_F(PrivacySandboxServiceTest, PrivacySandboxManuallyControlledDisabled) {
   base::HistogramTester histogram_tester;
-  feature_list()->InitAndEnableFeature(
-      privacy_sandbox::kPrivacySandboxSettings3);
   prefs()->SetUserPref(prefs::kPrivacySandboxApisEnabledV2,
                        std::make_unique<base::Value>(false));
   prefs()->SetUserPref(prefs::kPrivacySandboxNoConfirmationManuallyControlled,
@@ -1922,8 +1945,6 @@ TEST_F(PrivacySandboxServiceTest, PrivacySandboxManuallyControlledDisabled) {
 
 TEST_F(PrivacySandboxServiceTest, PrivacySandboxNoPromptDisabled) {
   base::HistogramTester histogram_tester;
-  feature_list()->InitAndEnableFeature(
-      privacy_sandbox::kPrivacySandboxSettings3);
   prefs()->SetUserPref(prefs::kPrivacySandboxApisEnabledV2,
                        std::make_unique<base::Value>(false));
   CreateService();
@@ -1934,8 +1955,6 @@ TEST_F(PrivacySandboxServiceTest, PrivacySandboxNoPromptDisabled) {
 
 TEST_F(PrivacySandboxServiceTest, PrivacySandboxNoPromptEnabled) {
   base::HistogramTester histogram_tester;
-  feature_list()->InitAndEnableFeature(
-      privacy_sandbox::kPrivacySandboxSettings3);
   prefs()->SetUserPref(prefs::kPrivacySandboxApisEnabledV2,
                        std::make_unique<base::Value>(true));
   CreateService();
@@ -2109,6 +2128,7 @@ TEST_F(PrivacySandboxServiceTest,
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test"}
   net::GlobalFirstPartySets global_sets(
+      kFirstPartySetsVersion,
       {{associate1_site,
         {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
                                  0)}}},
@@ -2129,16 +2149,10 @@ TEST_F(PrivacySandboxServiceTest,
                            content_settings::CookieControlsMode::kOff)));
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
 
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      global_sets.Clone());
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig());
-      });
+  mock_first_party_sets_handler().SetGlobalSets(global_sets.Clone());
+
+  first_party_sets_policy_service()->InitForTesting();
   // We shouldn't get associate1's owner since FPS is disabled.
   EXPECT_EQ(privacy_sandbox_service()->GetFirstPartySetOwner(associate1_gurl),
             absl::nullopt);
@@ -2154,6 +2168,7 @@ TEST_F(PrivacySandboxServiceTest,
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test"}
   net::GlobalFirstPartySets global_sets(
+      kFirstPartySetsVersion,
       {{associate1_site,
         {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
                                  0)}}},
@@ -2177,16 +2192,9 @@ TEST_F(PrivacySandboxServiceTest,
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
+  mock_first_party_sets_handler().SetGlobalSets(global_sets.Clone());
 
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      global_sets.Clone());
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig());
-      });
+  first_party_sets_policy_service()->InitForTesting();
   // We shouldn't get associate1's owner since FPS is disabled.
   EXPECT_EQ(privacy_sandbox_service()->GetFirstPartySetOwner(associate1_gurl),
             absl::nullopt);
@@ -2202,6 +2210,7 @@ TEST_F(PrivacySandboxServiceTest,
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test"}
   net::GlobalFirstPartySets global_sets(
+      kFirstPartySetsVersion,
       {{associate1_site,
         {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
                                  0)}}},
@@ -2227,16 +2236,9 @@ TEST_F(PrivacySandboxServiceTest,
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
+  mock_first_party_sets_handler().SetGlobalSets(global_sets.Clone());
 
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      global_sets.Clone());
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig());
-      });
+  first_party_sets_policy_service()->InitForTesting();
 
   // We shouldn't get associate1's owner since FPS is disabled.
   EXPECT_EQ(privacy_sandbox_service()->GetFirstPartySetOwner(associate1_gurl),
@@ -2253,6 +2255,7 @@ TEST_F(PrivacySandboxServiceTest,
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test"}
   net::GlobalFirstPartySets global_sets(
+      kFirstPartySetsVersion,
       {{associate1_site,
         {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
                                  0)}}},
@@ -2278,16 +2281,8 @@ TEST_F(PrivacySandboxServiceTest,
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
-
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      global_sets.Clone());
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig());
-      });
+  mock_first_party_sets_handler().SetGlobalSets(global_sets.Clone());
+  first_party_sets_policy_service()->InitForTesting();
 
   // We shouldn't get associate1's owner since FPS is disabled.
   EXPECT_EQ(privacy_sandbox_service()->GetFirstPartySetOwner(associate1_gurl),
@@ -2304,6 +2299,7 @@ TEST_F(PrivacySandboxServiceTest,
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test"}
   net::GlobalFirstPartySets global_sets(
+      kFirstPartySetsVersion,
       {{associate1_site,
         {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
                                  0)}}},
@@ -2330,16 +2326,9 @@ TEST_F(PrivacySandboxServiceTest,
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(false));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
+  mock_first_party_sets_handler().SetGlobalSets(global_sets.Clone());
 
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      global_sets.Clone());
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig());
-      });
+  first_party_sets_policy_service()->InitForTesting();
 
   // We shouldn't get associate1's owner since FPS is disabled.
   EXPECT_EQ(privacy_sandbox_service()->GetFirstPartySetOwner(associate1_gurl),
@@ -2373,9 +2362,6 @@ TEST_F(PrivacySandboxServiceTest,
   ClearFpsUserPrefs(prefs());
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
-
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
 
   // Verify `GetFirstPartySetOwner` returns empty if FPS is enabled but the
   // Global sets are not ready yet.
@@ -2413,32 +2399,26 @@ TEST_F(PrivacySandboxServiceTest,
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
-
   // Simulate that the Global First-Party Sets are ready with the following set:
   // { primary: "https://primary.test",
   // associatedSites: ["https://associate1.test", "https://associate2.test"] }
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      net::GlobalFirstPartySets(
-          {{associate1_site,
-            {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
-                                     0)}},
-           {associate2_site,
-            {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
-                                     1)}}},
-          {}));
+  mock_first_party_sets_handler().SetGlobalSets(net::GlobalFirstPartySets(
+      kFirstPartySetsVersion,
+      {{associate1_site,
+        {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated, 0)}},
+       {associate2_site,
+        {net::FirstPartySetEntry(primary_site, net::SiteType::kAssociated,
+                                 1)}}},
+      {}));
 
   // Simulate that associate2 is removed from the Global First-Party Sets for
   // this profile.
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(net::FirstPartySetsContextConfig(
-            net::FirstPartySetsContextConfig::OverrideSets{
-                {net::SchemefulSite(GURL("https://associate2.test")),
-                 {absl::nullopt}}}));
-      });
+  mock_first_party_sets_handler().SetContextConfig(
+      net::FirstPartySetsContextConfig(
+          {{net::SchemefulSite(GURL("https://associate2.test")),
+            net::FirstPartySetEntryOverride()}}));
+
+  first_party_sets_policy_service()->InitForTesting();
 
   // Verify that primary owns associate1, but no longer owns associate2.
   EXPECT_EQ(
@@ -2539,9 +2519,6 @@ TEST_F(PrivacySandboxServiceTest, UsesFpsSampleSetsWhenProvided) {
   prefs()->SetUserPref(prefs::kPrivacySandboxFirstPartySetsEnabled,
                        std::make_unique<base::Value>(true));
 
-  // Reset test state to reflect required state above.
-  content::FirstPartySetsHandler::GetInstance()->ResetForTesting();
-
   // Simulate that the Global First-Party Sets are ready with the following
   // set:
   // { primary: "https://youtube-primary.test",
@@ -2551,26 +2528,23 @@ TEST_F(PrivacySandboxServiceTest, UsesFpsSampleSetsWhenProvided) {
   GURL youtube_gurl("https://youtube.com");
   net::SchemefulSite youtube_site(youtube_gurl);
 
-  content::FirstPartySetsHandler::GetInstance()->SetGlobalSetsForTesting(
-      net::GlobalFirstPartySets(
-          {{youtube_site,
-            {net::FirstPartySetEntry(youtube_primary_site,
-                                     net::SiteType::kAssociated, 0)}}},
-          {}));
+  mock_first_party_sets_handler().SetGlobalSets(net::GlobalFirstPartySets(
+      kFirstPartySetsVersion,
+      {{youtube_site,
+        {net::FirstPartySetEntry(youtube_primary_site,
+                                 net::SiteType::kAssociated, 0)}}},
+      {}));
 
   // Simulate that https://google.de is moved into a new First-Party Set for
   // this profile.
-  first_party_sets_policy_service()->InitForTesting(
-      [](PrefService* prefs,
-         base::OnceCallback<void(net::FirstPartySetsContextConfig)> callback) {
-        std::move(callback).Run(
-            net::FirstPartySetsContextConfig(net::FirstPartySetsContextConfig(
-                net::FirstPartySetsContextConfig::OverrideSets{
-                    {net::SchemefulSite(GURL("https://google.de")),
-                     {net::FirstPartySetEntry(
-                         net::SchemefulSite(GURL("https://new-primary.test")),
-                         net::SiteType::kAssociated, 0)}}})));
-      });
+  mock_first_party_sets_handler().SetContextConfig(
+      net::FirstPartySetsContextConfig(
+          {{net::SchemefulSite(GURL("https://google.de")),
+            net::FirstPartySetEntryOverride(net::FirstPartySetEntry(
+                net::SchemefulSite(GURL("https://new-primary.test")),
+                net::SiteType::kAssociated, 0))}}));
+
+  first_party_sets_policy_service()->InitForTesting();
 
   // Expect queries to be resolved based on the FPS sample sets.
   EXPECT_GT(privacy_sandbox_service()->GetSampleFirstPartySets().size(), 0u);
@@ -2665,11 +2639,21 @@ class PrivacySandboxServicePromptTestBase {
  public:
   PrivacySandboxServicePromptTestBase() {
     privacy_sandbox::RegisterProfilePrefs(prefs()->registry());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (!user_manager::UserManager::IsInitialized())
-      user_manager_.Initialize();
-#endif
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  void SetUp() {
+    user_manager_ = std::make_unique<ash::FakeChromeUserManager>();
+    user_manager_->Initialize();
+  }
+
+  void TearDown() {
+    // Clean up user manager.
+    user_manager_->Shutdown();
+    user_manager_->Destroy();
+    user_manager_.reset();
+  }
+#endif
 
  protected:
   base::test::ScopedFeatureList* feature_list() { return &feature_list_; }
@@ -2683,7 +2667,7 @@ class PrivacySandboxServicePromptTestBase {
  private:
   base::test::ScopedFeatureList feature_list_;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  ash::FakeChromeUserManager user_manager_;
+  std::unique_ptr<ash::FakeChromeUserManager> user_manager_;
 #endif
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   MockPrivacySandboxSettings privacy_sandbox_settings_;
@@ -2691,7 +2675,14 @@ class PrivacySandboxServicePromptTestBase {
 
 class PrivacySandboxServicePromptTest
     : public PrivacySandboxServicePromptTestBase,
-      public testing::Test {};
+      public testing::Test {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+ public:
+  void SetUp() override { PrivacySandboxServicePromptTestBase::SetUp(); }
+
+  void TearDown() override { PrivacySandboxServicePromptTestBase::TearDown(); }
+#endif
+};
 
 TEST_F(PrivacySandboxServicePromptTest, RestrictedPrompt) {
   // Confirm that when the Privacy Sandbox is restricted, that no prompt is
@@ -2775,8 +2766,6 @@ TEST_F(PrivacySandboxServicePromptTest, ManuallyControlledNoPrompt) {
 TEST_F(PrivacySandboxServicePromptTest, NoParamNoPrompt) {
   // Confirm that if neither the consent or notice parameter is set, no prompt
   // is required.
-  feature_list()->InitAndEnableFeature(
-      privacy_sandbox::kPrivacySandboxSettings3);
   EXPECT_EQ(
       PrivacySandboxService::PromptType::kNone,
       PrivacySandboxService::GetRequiredPromptTypeInternal(
@@ -2786,7 +2775,14 @@ TEST_F(PrivacySandboxServicePromptTest, NoParamNoPrompt) {
 
 class PrivacySandboxServiceDeathTest
     : public PrivacySandboxServicePromptTestBase,
-      public testing::TestWithParam<int> {};
+      public testing::TestWithParam<int> {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+ public:
+  void SetUp() override { PrivacySandboxServicePromptTestBase::SetUp(); }
+
+  void TearDown() override { PrivacySandboxServicePromptTestBase::TearDown(); }
+#endif
+};
 
 TEST_P(PrivacySandboxServiceDeathTest, GetRequiredPromptType) {
   const auto& test_case = kPromptTestCases[GetParam()];

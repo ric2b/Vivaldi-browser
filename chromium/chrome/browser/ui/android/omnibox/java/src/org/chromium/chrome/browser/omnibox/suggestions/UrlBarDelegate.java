@@ -14,4 +14,14 @@ public interface UrlBarDelegate {
      * @param text The text that should be displayed in the omnibox.
      */
     void setOmniboxEditingText(String text);
+
+    /**
+     * Vivaldi
+     * Set the text in the omnibox.
+     * @param text The text that should be displayed in the omnibox.
+     * @param isRefineSuggestion Whether a suggestion is selected to refine it.
+     */
+    default void setOmniboxEditingText(String text, boolean isRefineSuggestion) {
+        setOmniboxEditingText(text);
+    }
 }

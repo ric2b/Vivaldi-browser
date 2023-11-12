@@ -89,22 +89,19 @@ class StorageHandlerTest : public testing::Test {
 
     // Initialize tests APIs.
     total_disk_space_test_api_ =
-        std::make_unique<calculator::TotalDiskSpaceTestAPI>(handler_.get(),
-                                                            profile_);
+        std::make_unique<TotalDiskSpaceTestAPI>(handler_.get(), profile_);
     free_disk_space_test_api_ =
-        std::make_unique<calculator::FreeDiskSpaceTestAPI>(handler_.get(),
-                                                           profile_);
-    my_files_size_test_api_ = std::make_unique<calculator::MyFilesSizeTestAPI>(
-        handler_.get(), profile_);
+        std::make_unique<FreeDiskSpaceTestAPI>(handler_.get(), profile_);
+    my_files_size_test_api_ =
+        std::make_unique<MyFilesSizeTestAPI>(handler_.get(), profile_);
     browsing_data_size_test_api_ =
-        std::make_unique<calculator::BrowsingDataSizeTestAPI>(handler_.get(),
-                                                              profile_);
+        std::make_unique<BrowsingDataSizeTestAPI>(handler_.get(), profile_);
     apps_size_test_api_ =
-        std::make_unique<calculator::AppsSizeTestAPI>(handler_.get(), profile_);
-    crostini_size_test_api_ = std::make_unique<calculator::CrostiniSizeTestAPI>(
-        handler_.get(), profile_);
+        std::make_unique<AppsSizeTestAPI>(handler_.get(), profile_);
+    crostini_size_test_api_ =
+        std::make_unique<CrostiniSizeTestAPI>(handler_.get(), profile_);
     other_users_size_test_api_ =
-        std::make_unique<calculator::OtherUsersSizeTestAPI>(handler_.get());
+        std::make_unique<OtherUsersSizeTestAPI>(handler_.get());
 
     // Create and register My files directory.
     // By emulating chromeos running, GetMyFilesFolderForProfile will return the
@@ -146,7 +143,7 @@ class StorageHandlerTest : public testing::Test {
     const base::Value* dictionary =
         GetWebUICallbackMessage("storage-size-stat-changed");
     EXPECT_TRUE(dictionary) << "No 'storage-size-stat-changed' callback";
-    int space_state = dictionary->FindKey("spaceState")->GetInt();
+    int space_state = *dictionary->GetDict().FindInt("spaceState");
     return space_state;
   }
 
@@ -203,14 +200,13 @@ class StorageHandlerTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   Profile* profile_;
-  std::unique_ptr<calculator::TotalDiskSpaceTestAPI> total_disk_space_test_api_;
-  std::unique_ptr<calculator::FreeDiskSpaceTestAPI> free_disk_space_test_api_;
-  std::unique_ptr<calculator::MyFilesSizeTestAPI> my_files_size_test_api_;
-  std::unique_ptr<calculator::BrowsingDataSizeTestAPI>
-      browsing_data_size_test_api_;
-  std::unique_ptr<calculator::AppsSizeTestAPI> apps_size_test_api_;
-  std::unique_ptr<calculator::CrostiniSizeTestAPI> crostini_size_test_api_;
-  std::unique_ptr<calculator::OtherUsersSizeTestAPI> other_users_size_test_api_;
+  std::unique_ptr<TotalDiskSpaceTestAPI> total_disk_space_test_api_;
+  std::unique_ptr<FreeDiskSpaceTestAPI> free_disk_space_test_api_;
+  std::unique_ptr<MyFilesSizeTestAPI> my_files_size_test_api_;
+  std::unique_ptr<BrowsingDataSizeTestAPI> browsing_data_size_test_api_;
+  std::unique_ptr<AppsSizeTestAPI> apps_size_test_api_;
+  std::unique_ptr<CrostiniSizeTestAPI> crostini_size_test_api_;
+  std::unique_ptr<OtherUsersSizeTestAPI> other_users_size_test_api_;
 
  private:
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
@@ -263,16 +259,16 @@ TEST_F(StorageHandlerTest, GlobalSizeStat) {
   free_disk_space_test_api_->StartCalculation();
   task_environment_.RunUntilIdle();
 
-  const base::Value* dictionary =
+  const base::Value* dictionary_value =
       GetWebUICallbackMessage("storage-size-stat-changed");
-  ASSERT_TRUE(dictionary) << "No 'storage-size-stat-changed' callback";
+  ASSERT_TRUE(dictionary_value) << "No 'storage-size-stat-changed' callback";
+  const base::Value::Dict& dictionary = dictionary_value->GetDict();
 
   const std::string& storage_handler_available_size =
-      dictionary->FindKey("availableSize")->GetString();
+      *dictionary.FindString("availableSize");
   const std::string& storage_handler_used_size =
-      dictionary->FindKey("usedSize")->GetString();
-  double storage_handler_used_ratio =
-      dictionary->FindKey("usedRatio")->GetDouble();
+      *dictionary.FindString("usedSize");
+  double storage_handler_used_ratio = *dictionary.FindDouble("usedRatio");
 
   EXPECT_EQ(ui::FormatBytes(available_size),
             base::ASCIIToUTF16(storage_handler_available_size));
@@ -425,8 +421,8 @@ TEST_F(StorageHandlerTest, SystemSize) {
   const base::Value* callback =
       GetWebUICallbackMessage("storage-size-stat-changed");
   ASSERT_TRUE(callback) << "No 'storage-size-stat-changed' callback";
-  EXPECT_EQ("100 GB", callback->FindKey("availableSize")->GetString());
-  EXPECT_EQ("924 GB", callback->FindKey("usedSize")->GetString());
+  EXPECT_EQ("100 GB", *callback->GetDict().FindString("availableSize"));
+  EXPECT_EQ("924 GB", *callback->GetDict().FindString("usedSize"));
   // Expect no system size callback until every other item has been updated.
   ASSERT_FALSE(GetWebUICallbackMessage("storage-system-size-changed"));
 

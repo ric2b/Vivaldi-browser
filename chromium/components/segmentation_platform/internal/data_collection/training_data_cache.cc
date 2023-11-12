@@ -17,7 +17,7 @@ TrainingDataCache::~TrainingDataCache() = default;
 
 void TrainingDataCache::StoreInputs(SegmentId segment_id,
                                     RequestId request_id,
-                                    const std::vector<float>& inputs) {
+                                    const ModelProvider::Request& inputs) {
   TrainingData training_data;
   for (const auto& input : inputs) {
     training_data.add_inputs(input);
@@ -40,6 +40,22 @@ absl::optional<TrainingData> TrainingDataCache::GetInputsAndDelete(
     cache[segment_id].erase(it);
   }
   return result;
+}
+
+absl::optional<TrainingDataCache::RequestId> TrainingDataCache::GetRequestId(
+    proto::SegmentId segment_id) {
+  // TODO(haileywang): Add a metric to record how many request at a given time
+  // every time this function is triggered.
+  absl::optional<RequestId> request_id;
+  auto it = cache.find(segment_id);
+  if (it == cache.end() or it->second.size() == 0) {
+    return request_id;
+  }
+  return it->second.begin()->first;
+}
+
+TrainingDataCache::RequestId TrainingDataCache::GenerateNextId() {
+  return request_id_generator.GenerateNextId();
 }
 
 }  // namespace segmentation_platform

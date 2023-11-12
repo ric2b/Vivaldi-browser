@@ -4,6 +4,7 @@
 
 #include "chrome/browser/component_updater/recovery_improved_component_installer.h"
 
+#include "base/task/sequenced_task_runner.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 
@@ -28,6 +29,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/component_updater/component_updater_utils.h"
 #include "components/services/unzip/content/unzip_service.h"
 #include "components/update_client/patcher.h"
@@ -88,7 +90,7 @@ void RecoveryComponentActionHandler::UnpackComplete(
   }
 
   unpack_path_ = result.unpack_path;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&RecoveryComponentActionHandler::RunCommand,
                                 this, MakeCommandLine(result.unpack_path)));
 }
@@ -140,7 +142,7 @@ bool RecoveryImprovedInstallerPolicy::RequiresNetworkEncryption() const {
 
 update_client::CrxInstaller::Result
 RecoveryImprovedInstallerPolicy::OnCustomInstall(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) {
   return update_client::CrxInstaller::Result(0);
 }
@@ -150,13 +152,13 @@ void RecoveryImprovedInstallerPolicy::OnCustomUninstall() {}
 void RecoveryImprovedInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
-    base::Value manifest) {
+    base::Value::Dict manifest) {
   DVLOG(1) << "RecoveryImproved component is ready.";
 }
 
 // Called during startup and installation before ComponentReady().
 bool RecoveryImprovedInstallerPolicy::VerifyInstallation(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) const {
   return true;
 }

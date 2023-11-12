@@ -127,6 +127,7 @@
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
 <translation id="4130207949184424187">Această extensie a modificat pagina care este afișată la căutarea din Omnibox.</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
+<translation id="4165986682804962316">Setări pentru site-ul web</translation>
 <translation id="4176463684765177261">Dezactivat</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KiB (<ph name="NUM_KILOBYTES_LIVE" /> KiB live)</translation>
 <translation id="4345587454538109430">Configurează...</translation>
@@ -135,10 +136,12 @@
 <translation id="4384652540891215547">Activați extensia</translation>
 <translation id="4394049700291259645">Dezactivează</translation>
 <translation id="4409697491990005945">Margini</translation>
+<translation id="4423376891418188461">Restaurează setările</translation>
 <translation id="4593021220803146968">&amp;Accesează <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
 <translation id="4643612240819915418">Deschide vide&amp;oul într-o filă nouă</translation>
+<translation id="4711638718396952945">Restaurează setările</translation>
 <translation id="4726710629007580002">Au fost avertismente la încercarea de instalare a acestei extensii:</translation>
 <translation id="479536056609751218">Pagină web, numai HTML</translation>
 <translation id="488785315393301722">Arată detaliile</translation>
@@ -193,7 +196,7 @@
 <translation id="6101226222197207147">A fost adăugată o aplicație nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Conexiunea la internet este controlată</translation>
 <translation id="6147020289383635445">Previzualizarea tipăririi a eșuat.</translation>
-<translation id="6196854373336333322">Extensia „<ph name="EXTENSION_NAME" />” a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faci online. Dacă nu știi sigur de ce a apărut această modificare, probabil că nu ai aprobat-o.</translation>
+<translation id="6196854373336333322">Extensia „<ph name="EXTENSION_NAME" />” a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu este ceea ce vreți.</translation>
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Setări de căutare</translation>
 <translation id="6268252012308737255">Deschide cu <ph name="APP" /></translation>
@@ -203,7 +206,7 @@
 <translation id="6315493146179903667">Aduce toate în față</translation>
 <translation id="6385543213911723544">Site-urile web pot să salveze și să citească datele asociate cookie-urilor</translation>
 <translation id="6398765197997659313">Ieșire din modul ecran complet</translation>
-<translation id="6445450263907939268">Dacă nu doriți aceste modificări, puteți restabili setările anterioare.</translation>
+<translation id="6445450263907939268">Dacă nu vreți aceste modificări, puteți restaura setările precedente.</translation>
 <translation id="6447842834002726250">Cookie-uri</translation>
 <translation id="6498249116389603658">&amp;Toate limbile</translation>
 <translation id="6503077044568424649">Cele mai vizitate</translation>
@@ -270,7 +273,7 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
         =1 {Descărcarea este în desfășurare} other {Descărcările sunt în desfășurare}}</translation>
 <translation id="8230134520748321204">Salvați parola pentru <ph name="ORIGIN" /> ?</translation>
 <translation id="8261378640211443080">Această extensie nu este inclusă în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și este posibil să fi fost adăugată fără să aveți cunoștință despre acest lucru.</translation>
-<translation id="8351419472474436977">Această extensie a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu ați aprobat-o.</translation>
+<translation id="8351419472474436977">Această extensie a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu este ceea ce vreți.</translation>
 <translation id="8413385045638830869">Mai întâi întreabă (recomandat)</translation>
 <translation id="8569682776816196752">Nu s-a găsit nicio destinație</translation>
 <translation id="857943718398505171">Permis (recomandat)</translation>

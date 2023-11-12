@@ -177,6 +177,19 @@ public interface StartSurface {
     void setStartSurfaceState(@StartSurfaceState int state);
 
     /**
+     * Set the launch origin.
+     * @param launchOrigin The {@link NewTabPageLaunchOrigin} representing what launched the
+     *         start surface.
+     */
+    void setLaunchOrigin(@NewTabPageLaunchOrigin int launchOrigin);
+
+    /**
+     * Resets the scroll position. This is called when Start surface is showing but not via back
+     * operations.
+     */
+    void resetScrollPosition();
+
+    /**
      * Called by the TabSwitcherLayout when the system back button is pressed.
      * @return Whether or not the TabSwitcher consumed the event.
      */

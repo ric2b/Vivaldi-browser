@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.customtabs;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -36,7 +37,6 @@ import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.Display;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
@@ -55,7 +55,6 @@ import androidx.swiperefreshlayout.widget.CircularProgressDrawable;
 import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -64,9 +63,6 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import org.robolectric.ParameterizedRobolectricTestRunner;
-import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
-import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
@@ -79,6 +75,7 @@ import org.robolectric.shadows.ShadowSettings;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -88,13 +85,11 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.test.util.browser.Features;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /** Tests for {@link PartialCustomTabHandleStrategy}. */
-@RunWith(ParameterizedRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
         shadows = {PartialCustomTabHeightStrategyTest.ShadowSecureSettings.class})
 @Features.EnableFeatures({ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES,
@@ -110,7 +105,6 @@ public class PartialCustomTabHeightStrategyTest {
     private static final int DEVICE_WIDTH = 1440;
 
     private static final int NAVBAR_HEIGHT = 160;
-    private static final int MAX_INIT_POS = DEVICE_HEIGHT / 2;
     private static final int INITIAL_HEIGHT = DEVICE_HEIGHT / 2 - NAVBAR_HEIGHT;
     private static final int FULL_HEIGHT = DEVICE_HEIGHT - NAVBAR_HEIGHT;
     private static final int MULTIWINDOW_HEIGHT = FULL_HEIGHT / 2;
@@ -118,16 +112,6 @@ public class PartialCustomTabHeightStrategyTest {
 
     private static final int FIND_TOOLBAR_COLOR = 3755;
     private static final int PCCT_TOOLBAR_COLOR = 12111;
-
-    @Parameters
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {{true}, {false}});
-    }
-
-    // Parameterize the internal implementation. 'Fixed window' type does not resize the Window
-    // but the WebContents, while 'Window above navbar' type dynamically resizes the Window.
-    @Parameter(0)
-    public boolean mWindowAboveNavbar;
 
     @Mock
     private Activity mActivity;
@@ -190,6 +174,7 @@ public class PartialCustomTabHeightStrategyTest {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
     private FrameLayout.LayoutParams mCoordinatorLayoutParams = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+    private boolean mFullscreen;
 
     @Before
     public void setUp() {
@@ -232,6 +217,7 @@ public class PartialCustomTabHeightStrategyTest {
         doAnswer(invocation -> {
             WindowManager.LayoutParams attributes = new WindowManager.LayoutParams();
             attributes.copyFrom((WindowManager.LayoutParams) invocation.getArgument(0));
+            mAttributes.copyFrom(attributes);
             mAttributeResults.add(attributes);
             return null;
         })
@@ -260,15 +246,23 @@ public class PartialCustomTabHeightStrategyTest {
         MultiWindowUtils.getInstance().setIsInMultiWindowModeForTesting(false);
     }
 
+    private PartialCustomTabHeightStrategy createPcctBackgroundDisabled() {
+        PartialCustomTabHeightStrategy pcct =
+                new PartialCustomTabHeightStrategy(mActivity, 500, false, mOnResizedCallback,
+                        mActivityLifecycleDispatcher, mFullscreenManager, false, false);
+        pcct.setMockViewForTesting(
+                mNavbar, mSpinnerView, mSpinner, mToolbarView, mToolbarCoordinator);
+        return pcct;
+    }
+
     private PartialCustomTabHeightStrategy createPcctAtHeight(int heightPx) {
         return createPcctAtHeight(heightPx, false);
     }
 
     private PartialCustomTabHeightStrategy createPcctAtHeight(int heightPx, boolean isFixedHeight) {
         PartialCustomTabHeightStrategy pcct = new PartialCustomTabHeightStrategy(mActivity,
-                heightPx, null, null, isFixedHeight, mOnResizedCallback,
-                mActivityLifecycleDispatcher, mFullscreenManager, false);
-        pcct.setWindowAboveNavbarForTesting(mWindowAboveNavbar);
+                heightPx, isFixedHeight, mOnResizedCallback, mActivityLifecycleDispatcher,
+                mFullscreenManager, false, true);
         pcct.setMockViewForTesting(
                 mNavbar, mSpinnerView, mSpinner, mToolbarView, mToolbarCoordinator);
         return pcct;
@@ -312,9 +306,6 @@ public class PartialCustomTabHeightStrategyTest {
     @Test
     @Config(sdk = Build.VERSION_CODES.R)
     public void create_maxHeightWithStatusBar_R() {
-        Assume.assumeTrue(
-                "Fix for status bar height only applied in 'window-above-navbar' version.",
-                mWindowAboveNavbar);
         configureStatusBarHeightForR();
         doTestHeightWithStatusBar();
         assertTabBelowStatusBar(mAttributeResults.get(0));
@@ -323,9 +314,6 @@ public class PartialCustomTabHeightStrategyTest {
     @Test
     @Config(sdk = Build.VERSION_CODES.Q)
     public void create_maxHeightWithStatusBar_Q() {
-        Assume.assumeTrue(
-                "Fix for status bar height only applied in 'window-above-navbar' version.",
-                mWindowAboveNavbar);
         configureStatusBarHeightForQ();
         doTestHeightWithStatusBar();
         assertTabBelowStatusBar(mAttributeResults.get(0));
@@ -334,8 +322,6 @@ public class PartialCustomTabHeightStrategyTest {
     @Test
     @Config(sdk = Build.VERSION_CODES.R)
     public void create_maxHeightWithStatusBar_landscape_R() {
-        Assume.assumeTrue("Fix for status bar color only applied in 'window-above-navbar' version.",
-                mWindowAboveNavbar);
         configureStatusBarHeightForR();
         configLandscapeMode();
         doTestHeightWithStatusBar();
@@ -345,8 +331,6 @@ public class PartialCustomTabHeightStrategyTest {
     @Test
     @Config(sdk = Build.VERSION_CODES.Q)
     public void create_maxHeightWithStatusBar_landscape_Q() {
-        Assume.assumeTrue("Fix for status bar color only applied in 'window-above-navbar' version.",
-                mWindowAboveNavbar);
         configureStatusBarHeightForQ();
         configLandscapeMode();
         doTestHeightWithStatusBar();
@@ -362,6 +346,15 @@ public class PartialCustomTabHeightStrategyTest {
         // Full height when in landscape mode.
         assertEquals(1, mAttributeResults.size());
         assertEquals(0, mAttributeResults.get(0).y);
+    }
+
+    @Test
+    public void create_backgroundAppDisabledPortrait() {
+        createPcctBackgroundDisabled();
+
+        verify(mWindow).addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        verify(mWindow).clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);
+
     }
 
     private static MotionEvent event(long ts, int action, int ypos) {
@@ -412,32 +405,15 @@ public class PartialCustomTabHeightStrategyTest {
     }
 
     private void assertTabIsAtInitialPos(WindowManager.LayoutParams attrs) {
-        if (mWindowAboveNavbar) {
-            if (attrs.gravity == Gravity.BOTTOM) {
-                assertEquals(INITIAL_HEIGHT, attrs.height);
-            } else if (attrs.gravity == Gravity.NO_GRAVITY) {
-                // Tab is in motion. Check y since the it is in full height.
-                assertEquals(INITIAL_HEIGHT + NAVBAR_HEIGHT, attrs.y);
-            }
-        } else {
-            assertEquals(MAX_INIT_POS, attrs.y);
-        }
+        assertEquals(INITIAL_HEIGHT + NAVBAR_HEIGHT, attrs.y);
     }
 
     private void assertTabIsFullHeight(WindowManager.LayoutParams attrs) {
-        if (mWindowAboveNavbar) {
-            assertEquals(FULL_HEIGHT, attrs.height);
-        } else {
-            assertEquals(0, attrs.y);
-        }
+        assertEquals(FULL_HEIGHT, attrs.height);
     }
 
     private void assertTabBelowStatusBar(WindowManager.LayoutParams attrs) {
-        if (mWindowAboveNavbar) {
-            assertEquals(FULL_HEIGHT - STATUS_BAR_HEIGHT, attrs.height);
-        } else {
-            assertEquals(STATUS_BAR_HEIGHT, attrs.y);
-        }
+        assertEquals(FULL_HEIGHT - STATUS_BAR_HEIGHT, attrs.height);
     }
 
     private void disableSpinnerAnimation() {
@@ -459,7 +435,7 @@ public class PartialCustomTabHeightStrategyTest {
         mConfiguration.orientation = Configuration.ORIENTATION_PORTRAIT;
         mRealMetrics.widthPixels = DEVICE_WIDTH;
         mRealMetrics.heightPixels = DEVICE_HEIGHT;
-        when(mContentFrame.getHeight()).thenReturn(DEVICE_HEIGHT);
+        when(mContentFrame.getHeight()).thenReturn(DEVICE_HEIGHT - NAVBAR_HEIGHT);
         when(mDisplay.getRotation()).thenReturn(Surface.ROTATION_90);
     }
 
@@ -584,20 +560,6 @@ public class PartialCustomTabHeightStrategyTest {
         mConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
         strategy.onConfigurationChanged(mConfiguration);
         assertMotionEventIgnored(handleStrategy);
-    }
-
-    @Test
-    public void rotateToLandscapeHideCustomNavbar() {
-        // Custom navigation bar is drawn only on 'Fixed Window'-type implementation.
-        if (mWindowAboveNavbar) return;
-
-        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(800);
-
-        configLandscapeMode();
-        strategy.onConfigurationChanged(mConfiguration);
-
-        assertEquals(0, strategy.getNavbarHeightForTesting());
-        verify(mNavbar).setVisibility(View.GONE);
     }
 
     @Test
@@ -770,10 +732,7 @@ public class PartialCustomTabHeightStrategyTest {
     @Test
     public void hideSpinnerEarly() {
         // Test hiding spinner early (500ms after showing) when there is no glitch at
-        // the end of draggin action (only in window-above-navbar version).
-        Assume.assumeTrue("Spinner can be hidden early only in 'window-above-navbar' version",
-                mWindowAboveNavbar);
-
+        // the end of draggin action.
         disableSpinnerAnimation();
         PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
         when(mSpinnerView.getVisibility()).thenReturn(View.GONE);
@@ -801,6 +760,8 @@ public class PartialCustomTabHeightStrategyTest {
         PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
         assertEquals(1, mAttributeResults.size());
         assertTabIsAtInitialPos(mAttributeResults.get(0));
+        int expected = PartialCustomTabHeightStrategy.ResizeType.AUTO_EXPANSION;
+        HistogramDelta histogramExpansion = new HistogramDelta("CustomTabs.ResizeType2", expected);
 
         strategy.onShowSoftInput(() -> {});
         shadowOf(Looper.getMainLooper()).idle();
@@ -811,6 +772,10 @@ public class PartialCustomTabHeightStrategyTest {
 
         // Verify that the tab expands to full height.
         assertTabIsFullHeight(mAttributeResults.get(length - 1));
+        assertEquals("ResizeType.AUTO_EXPANSION should be recorded once.", 1,
+                histogramExpansion.getDelta());
+        waitForAnimationToFinish();
+        verify(mOnResizedCallback).onResized(eq(FULL_HEIGHT), anyInt());
     }
 
     @Test
@@ -883,15 +848,15 @@ public class PartialCustomTabHeightStrategyTest {
 
         PartialCustomTabHandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
 
-        int expected = PartialCustomTabHeightStrategy.ResizeType.EXPANSION;
-        HistogramDelta histogramExpansion = new HistogramDelta("CustomTabs.ResizeType", expected);
+        int expected = PartialCustomTabHeightStrategy.ResizeType.MANUAL_EXPANSION;
+        HistogramDelta histogramExpansion = new HistogramDelta("CustomTabs.ResizeType2", expected);
 
         // Drag to the top.
         assertTabIsFullHeight(dragTab(handleStrategy, 1500, 1000, 0));
 
-        // invokeResizeCallback() should have been called and ResizeType.EXPANSION logged once.
-        assertEquals(
-                "ResizeType.EXPANSION should be recorded once.", 1, histogramExpansion.getDelta());
+        // invokeResizeCallback() should have been called and MANUAL_EXPANSION logged once.
+        assertEquals("ResizeType.MANUAL_EXPANSION should be recorded once.", 1,
+                histogramExpansion.getDelta());
     }
 
     @Test
@@ -908,40 +873,54 @@ public class PartialCustomTabHeightStrategyTest {
         // Drag to the top so it can be minimized in the next step.
         assertTabIsFullHeight(dragTab(handleStrategy, 1500, 1000, 0));
 
-        int expected = PartialCustomTabHeightStrategy.ResizeType.MINIMIZATION;
+        int expected = PartialCustomTabHeightStrategy.ResizeType.MANUAL_MINIMIZATION;
         HistogramDelta histogramMinimization =
-                new HistogramDelta("CustomTabs.ResizeType", expected);
+                new HistogramDelta("CustomTabs.ResizeType2", expected);
 
         // Drag down enough -> slide to the initial position.
         assertTabIsAtInitialPos(dragTab(handleStrategy, 50, 650, 1300));
 
-        // invokeResizeCallback() should have been called and ResizeType.MINIMIZATION logged once.
-        assertEquals("ResizeType.MINIMIZATION should be recorded once.", 1,
+        // invokeResizeCallback() should have been called and MANUAL_MINIMIZATION logged once.
+        assertEquals("ResizeType.MANUAL_MINIMIZATION should be recorded once.", 1,
                 histogramMinimization.getDelta());
     }
 
     @Test
-    public void callbackWhenResized() {
+    public void callbackWhenHeightResized() {
         PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
         assertTabIsAtInitialPos(mAttributeResults.get(0));
         PartialCustomTabHandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
 
         // Slide back to the initial height -> no resize happens.
         assertTabIsAtInitialPos(dragTab(handleStrategy, 1500, 1450, 1400));
-        verify(mOnResizedCallback, never()).onResized(anyInt());
+        verify(mOnResizedCallback, never()).onResized(anyInt(), anyInt());
 
         // Drag to the top -> resized.
         assertTabIsFullHeight(dragTab(handleStrategy, 1500, 1000, 500));
-        verify(mOnResizedCallback).onResized(eq(FULL_HEIGHT));
+        verify(mOnResizedCallback).onResized(eq(FULL_HEIGHT), anyInt());
         clearInvocations(mOnResizedCallback);
 
         // Slide back to the top -> no resize happens.
         assertTabIsFullHeight(dragTab(handleStrategy, 50, 100, 150));
-        verify(mOnResizedCallback, never()).onResized(anyInt());
+        verify(mOnResizedCallback, never()).onResized(anyInt(), anyInt());
 
         // Drag to the initial height -> resized.
         assertTabIsAtInitialPos(dragTab(handleStrategy, 50, 650, 1300));
-        verify(mOnResizedCallback).onResized(eq(INITIAL_HEIGHT));
+        verify(mOnResizedCallback).onResized(eq(INITIAL_HEIGHT), anyInt());
+    }
+
+    @Test
+    public void callbackUponRotation() {
+        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(800);
+
+        configLandscapeMode();
+        strategy.onConfigurationChanged(mConfiguration);
+        verify(mOnResizedCallback).onResized(eq(DEVICE_WIDTH), eq(DEVICE_HEIGHT));
+        clearInvocations(mOnResizedCallback);
+
+        configPortraitMode();
+        strategy.onConfigurationChanged(mConfiguration);
+        verify(mOnResizedCallback).onResized(eq(INITIAL_HEIGHT), anyInt());
     }
 
     @Test
@@ -964,8 +943,6 @@ public class PartialCustomTabHeightStrategyTest {
 
     @Test
     public void adjustWidthInLandscapeMode() {
-        Assume.assumeTrue("Adjusting width is in effect only in 'window-above-navbar' version",
-                mWindowAboveNavbar);
         configLandscapeMode(Surface.ROTATION_90);
         PartialCustomTabHeightStrategy strategy = createPcctAtHeight(800);
         WindowManager.LayoutParams attrs = getWindowAttributes();
@@ -984,17 +961,66 @@ public class PartialCustomTabHeightStrategyTest {
 
     @Test
     public void enterAndExitHtmlFullscreen() {
-        Assume.assumeTrue("HTML fullscreen mode is supported in 'window-above-navbar' version.",
-                mWindowAboveNavbar);
-
         PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
-        assertFalse(isFullscreen());
+        assertFalse(getWindowAttributes().isFullscreen());
+        int height = getWindowAttributes().height;
 
+        strategy.setFullscreenSupplierForTesting(() -> mFullscreen);
+
+        mFullscreen = true;
         strategy.onEnterFullscreen(null, null);
-        assertTrue(isFullscreen());
+        assertTrue(getWindowAttributes().isFullscreen());
+        verify(mOnResizedCallback).onResized(eq(DEVICE_HEIGHT), eq(DEVICE_WIDTH));
+        clearInvocations(mOnResizedCallback);
 
+        mFullscreen = false;
         strategy.onExitFullscreen(null);
-        assertFalse(isFullscreen());
+        waitForAnimationToFinish();
+        assertFalse(getWindowAttributes().isFullscreen());
+        assertEquals(height, getWindowAttributes().height);
+        verify(mOnResizedCallback).onResized(eq(height), anyInt());
+    }
+
+    @Test
+    public void fullscreenInLandscapeMode() {
+        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
+        int height = getWindowAttributes().height;
+
+        mConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        strategy.onConfigurationChanged(mConfiguration);
+
+        strategy.setFullscreenSupplierForTesting(() -> mFullscreen);
+
+        mFullscreen = true;
+        strategy.onEnterFullscreen(null, null);
+        mFullscreen = false;
+        strategy.onExitFullscreen(null);
+        waitForAnimationToFinish();
+
+        assertEquals(0, getWindowAttributes().y);
+    }
+
+    @Test
+    public void rotateAcrossFullscreenMode() {
+        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(500);
+        int height = getWindowAttributes().height;
+
+        mConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        strategy.onConfigurationChanged(mConfiguration);
+
+        strategy.setFullscreenSupplierForTesting(() -> mFullscreen);
+
+        mFullscreen = true;
+        strategy.onEnterFullscreen(null, null);
+
+        mConfiguration.orientation = Configuration.ORIENTATION_PORTRAIT;
+        strategy.onConfigurationChanged(mConfiguration);
+
+        mFullscreen = false;
+        strategy.onExitFullscreen(null);
+        waitForAnimationToFinish();
+
+        assertTabIsAtInitialPos(getWindowAttributes());
     }
 
     @Test
@@ -1097,8 +1123,46 @@ public class PartialCustomTabHeightStrategyTest {
                 histogramDelta.getDelta());
     }
 
-    private boolean isFullscreen() {
-        WindowManager.LayoutParams attrs = mAttributeResults.get(mAttributeResults.size() - 1);
-        return attrs.isFullscreen();
+    @Test
+    public void noTopShadowAtFullHeight() {
+        doReturn(47).when(mResources).getDimensionPixelSize(eq(R.dimen.custom_tabs_shadow_offset));
+        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(800);
+        PartialCustomTabHandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
+        assertNotEquals("Top margin should be non-zero for the shadow", 0, mLayoutParams.topMargin);
+
+        dragTab(handleStrategy, 1500, 1000, 500);
+        assertEquals("There should be no top shadow at full height", 0, mLayoutParams.topMargin);
+    }
+
+    @Test
+    public void expandToFullHeightOnFindInPage() {
+        PartialCustomTabHeightStrategy strategy = createPcctAtHeight(800);
+        doReturn(mDragBarBackground).when(mDragBar).getBackground();
+        int expected = PartialCustomTabHeightStrategy.ResizeType.AUTO_EXPANSION;
+        HistogramDelta histogramExpansion = new HistogramDelta("CustomTabs.ResizeType2", expected);
+        strategy.onFindToolbarShown();
+        waitForAnimationToFinish();
+
+        assertTabIsFullHeight(getWindowAttributes());
+        assertEquals("ResizeType.AUTO_EXPANSION should be recorded once.", 1,
+                histogramExpansion.getDelta());
+        verify(mOnResizedCallback).onResized(eq(FULL_HEIGHT), anyInt());
+        clearInvocations(mOnResizedCallback);
+
+        expected = PartialCustomTabHeightStrategy.ResizeType.AUTO_MINIMIZATION;
+        HistogramDelta histogramMinimization =
+                new HistogramDelta("CustomTabs.ResizeType2", expected);
+        strategy.onFindToolbarHidden();
+        waitForAnimationToFinish();
+
+        assertTabIsAtInitialPos(getWindowAttributes());
+        assertEquals("ResizeType.AUTO_MINIMIZATION should be recorded once.", 1,
+                histogramMinimization.getDelta());
+        verify(mOnResizedCallback).onResized(eq(INITIAL_HEIGHT), anyInt());
+    }
+
+    private static void waitForAnimationToFinish() {
+        shadowOf(Looper.getMainLooper()).idle();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 }

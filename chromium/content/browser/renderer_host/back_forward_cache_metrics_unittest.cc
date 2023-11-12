@@ -235,12 +235,14 @@ TEST_F(BackForwardCacheMetricsTest, AllFeaturesCovered) {
       /* WebSchedulerTrackedFeature::kResumeEventListener =*/11,
       /* WebSchedulerTrackedFeature::kServiceWorkerControlledPage =*/16,
       /* WebSchedulerTrackedFeature::kHasScriptableFramesInMultipleTabs =*/18,
-      /* WebSchedulerTrackedFeature::kRequestedGeolocationPermission  =*/19,
+      /* WebSchedulerTrackedFeature::kRequestedGeolocationPermission =*/19,
+      /* WebSchedulerTrackedFeature::kRequestedNotificationsPermission =*/20,
       /* Never existed =*/25,
       /* WebSchedulerTrackedFeature::kWebGL =*/29,
       /* WebSchedulerTrackedFeature::kWebVR =*/30,
       /* WebSchedulerTrackedFeature::kWakeLock =*/35,
       /* WebSchedulerTrackedFeature::kWebFileSystem =*/39,
+      /* WebSchedulerTrackedFeature::kAppBanner =*/42,
       /* WebSchedulerTrackedFeature::kMediaSessionImplOnServiceCreated =*/56};
 
   // Combine the result of |GetDisallowedFeatures()| and |GetAllowedFeatures()|.

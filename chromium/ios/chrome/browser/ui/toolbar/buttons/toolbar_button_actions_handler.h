@@ -13,6 +13,10 @@
 @protocol FindInPageCommands;
 @protocol OmniboxCommands;
 
+// Vivaldi
+@protocol BrowserCoordinatorCommands;
+// End vivaldi
+
 class WebNavigationBrowserAgent;
 
 // Handler for the actions associated with the different toolbar buttons.
@@ -24,6 +28,10 @@ class WebNavigationBrowserAgent;
 @property(nonatomic, weak) id<PopupMenuCommands> menuHandler;
 @property(nonatomic, weak) id<FindInPageCommands> findHandler;
 @property(nonatomic, weak) id<OmniboxCommands> omniboxHandler;
+
+// Vivaldi
+@property(nonatomic, weak) id<BrowserCoordinatorCommands> browserCommands;
+// End vivaldi
 
 @property(nonatomic, assign) WebNavigationBrowserAgent* navigationAgent;
 
@@ -63,6 +71,10 @@ class WebNavigationBrowserAgent;
 // Vivaldi
 // Action when the panel button is tapped.
 - (void)panelAction;
+// Action when search is tapped.
+- (void)vivaldiSearchAction;
+// Action when the shield button within omnibox is tapped.
+- (void)showTrackerBlockerManager;
 // End Vivaldi
 
 @end

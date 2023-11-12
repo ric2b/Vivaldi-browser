@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_navigation.h"
 #include "third_party/blink/renderer/core/timing/performance_timing.h"
+#include "third_party/blink/renderer/core/timing/performance_timing_for_reporting.h"
 #include "third_party/blink/renderer/core/timing/responsiveness_metrics.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
@@ -110,6 +111,7 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   ExecutionContext* GetExecutionContext() const override;
 
   PerformanceTiming* timing() const override;
+  PerformanceTimingForReporting* timingForReporting() const;
   PerformanceNavigation* navigation() const override;
 
   MemoryInfo* memory(ScriptState*) const override;
@@ -147,7 +149,8 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   void PageVisibilityChanged() override;
 
   void OnLargestContentfulPaintUpdated(
-      base::TimeTicks paint_time,
+      base::TimeTicks start_time,
+      base::TimeTicks render_time,
       uint64_t paint_size,
       base::TimeTicks load_time,
       base::TimeTicks first_animated_frame_time,
@@ -223,6 +226,7 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   Member<EventCounts> event_counts_;
   mutable Member<PerformanceNavigation> navigation_;
   mutable Member<PerformanceTiming> timing_;
+  mutable Member<PerformanceTimingForReporting> timing_for_reporting_;
   absl::optional<base::TimeDelta> pending_pointer_down_input_delay_;
   absl::optional<base::TimeDelta> pending_pointer_down_processing_time_;
   absl::optional<base::TimeDelta> pending_pointer_down_time_to_next_paint_;

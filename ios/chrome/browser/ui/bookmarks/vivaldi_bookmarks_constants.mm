@@ -20,19 +20,11 @@ NSString* vBookmarkFolderSelectionCheckmark =
 // Image name for add folder
 NSString* vBookmarkAddFolder =
   @"vivaldi_bookmark_add_new_folder";
-// Image name for bookmark text field delete button
-NSString* vBookmarkTextfieldDeleteIcon = @"xmark.circle.fill";
 
 #pragma mark - COLOR
 // Underline color for bookmark text field underline
 NSString* vBookmarkTextFieldUnderlineColor =
   @"vivaldi_bookmark_text_field_underline_color";
-
-#pragma mark - NOTIFICATION
-// Notification name for bookmark data source update
-NSString* vBookmarkDataSourceDidChange = @"vBookmarkDataSourceDidChange";
-// Notification name for bookmark moved out of folder event
-NSString* vBookmarkDidMoveOutOfFolder = @"vBookmarkDidMoveOutOfFolder";
 
 #pragma mark - SIZE
 // Corner radius for the bookmark body containr view

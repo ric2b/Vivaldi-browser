@@ -99,6 +99,8 @@ std::string GetPIITypeDescription(feedback::PIIType type_enum) {
     case feedback::PIIType::kVolumeLabel:
       // Volume labels are a part of removable storage paths in various logs.
       return support_tool_ui::kRemovableStorage;
+    case feedback::PIIType::kEAP:
+      return support_tool_ui::kEAP;
     default:
       return "Error: Undefined";
   }
@@ -140,6 +142,22 @@ std::string GetDataCollectorName(
       return "Chrome OS Shill (Connection Manager) Logs";
     case support_tool::POLICIES:
       return "Policies";
+    case support_tool::CHROMEOS_SYSTEM_STATE:
+      return "Chrome OS System State and Logs";
+    case support_tool::CHROMEOS_SYSTEM_LOGS:
+      return "ChromeOS System Logs";
+    case support_tool::CHROMEOS_CHROME_USER_LOGS:
+      return "Chrome OS Chrome User Logs";
+    case support_tool::CHROMEOS_BLUETOOTH_FLOSS:
+      return "ChromeOS Bluetooth Floss";
+    case support_tool::CHROMEOS_CONNECTED_INPUT_DEVICES:
+      return "ChromeOS Connected Input Devices";
+    case support_tool::CHROMEOS_TRAFFIC_COUNTERS:
+      return "ChromeOS Traffic Counters";
+    case support_tool::CHROMEOS_VIRTUAL_KEYBOARD:
+      return "ChromeOS Virtual Keyboard";
+    case support_tool::CHROMEOS_NETWORK_HEALTH:
+      return "ChromeOS Network Health";
     default:
       return "Error: Undefined";
   }
@@ -287,51 +305,25 @@ base::Value::List GetDataCollectorItemsInQuery(std::string module_query) {
   base::Value::List data_collector_list;
   support_tool::DataCollectionModule module;
   InitDataCollectionModuleFromURLQuery(&module, module_query);
-  for (const auto& type : kDataCollectors) {
+  for (const auto& type : GetAllAvailableDataCollectorsOnDevice()) {
     data_collector_list.Append(GetDataCollectorItemForType(module, type));
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  for (const auto& type : kDataCollectorsChromeosAsh) {
-    data_collector_list.Append(GetDataCollectorItemForType(module, type));
-  }
-#if BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
-  for (const auto& type : kDataCollectorsChromeosHwDetails) {
-    data_collector_list.Append(GetDataCollectorItemForType(module, type));
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return data_collector_list;
 }
 
-base::Value::List GetAllDataCollectors() {
+base::Value::List GetAllDataCollectorItems() {
   base::Value::List data_collector_list;
-  for (const auto& type : kDataCollectors) {
-    data_collector_list.Append(GetDataCollectorItemForType(type));
-  }
-  for (const auto& type : kDataCollectorsChromeosAsh) {
-    data_collector_list.Append(GetDataCollectorItemForType(type));
-  }
-  for (const auto& type : kDataCollectorsChromeosHwDetails) {
+  for (const auto& type : GetAllDataCollectors()) {
     data_collector_list.Append(GetDataCollectorItemForType(type));
   }
   return data_collector_list;
 }
 
-base::Value::List GetAllDataCollectorsForDevice() {
+base::Value::List GetAllDataCollectorItemsForDeviceForTesting() {
   base::Value::List data_collector_list;
-  for (const auto& type : kDataCollectors) {
+  for (const auto& type : GetAllAvailableDataCollectorsOnDevice()) {
     data_collector_list.Append(GetDataCollectorItemForType(type));
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  for (const auto& type : kDataCollectorsChromeosAsh) {
-    data_collector_list.Append(GetDataCollectorItemForType(type));
-  }
-#if BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
-  for (const auto& type : kDataCollectorsChromeosHwDetails) {
-    data_collector_list.Append(GetDataCollectorItemForType(type));
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_WITH_HW_DETAILS)
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return data_collector_list;
 }
 

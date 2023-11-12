@@ -2,15 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/js/cr.m.js';
-import {decorate} from 'chrome://resources/js/cr/ui.js';
+import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/ash/common/cr_deprecated.js';
+import {decorate} from '../../../common/js/ui.js';
 import {MenuItem} from './menu_item.js';
 
 import {util} from '../../../common/js/util.js';
 
 import {FilesMenuItem} from './files_menu.js';
 import {MultiMenuButton} from './multi_menu_button.js';
-
 
 /**
  * @fileoverview This implements a combobutton control.
@@ -31,9 +30,6 @@ export class ComboButton extends MultiMenuButton {
     /** @private {?Element} */
     this.actionNode_ = null;
 
-    /** @private {?Element} */
-    this.filesToggleRipple_ = null;
-
     /** @private {boolean} */
     this.disabled = false;
 
@@ -51,11 +47,16 @@ export class ComboButton extends MultiMenuButton {
 
   addDropDownItem(item) {
     this.multiple = true;
-    const menuitem = this.menu.addMenuItem(item);
+    const menuitem = /** @type {!MenuItem} */ (this.menu.addMenuItem(item));
 
     // If menu is files-menu, decorate menu item as FilesMenuItem.
     if (this.menu.classList.contains('files-menu')) {
       decorate(menuitem, FilesMenuItem);
+      /** @type {!FilesMenuItem} */ (menuitem).toggleManagedIcon(
+          /*visible=*/ item.isPolicyDefault);
+      if (item.isDefault) {
+        /** @type {!FilesMenuItem} */ (menuitem).setIsDefaultAttribute();
+      }
     }
 
     menuitem.data = item;
@@ -191,23 +192,7 @@ export class ComboButton extends MultiMenuButton {
 
     buttonLayer.appendChild(this.trigger_);
 
-    const ripplesLayer = this.ownerDocument.createElement('div');
-    ripplesLayer.classList.add('ripples');
-    this.appendChild(ripplesLayer);
-    ripplesLayer.setAttribute('hidden', '');
-
-    this.filesToggleRipple_ =
-        this.ownerDocument.createElement('files-toggle-ripple');
-    ripplesLayer.appendChild(this.filesToggleRipple_);
-
-    /** @private {!PaperRipple} */
-    this.paperRipple_ = /** @type {!PaperRipple} */
-        (this.ownerDocument.createElement('paper-ripple'));
-    ripplesLayer.appendChild(this.paperRipple_);
-
     this.addEventListener('click', this.handleButtonClick_.bind(this));
-    this.addEventListener('menushow', this.handleMenuShow_.bind(this));
-    this.addEventListener('menuhide', this.handleMenuHide_.bind(this));
 
     this.trigger_.addEventListener(
         'click', this.handleTriggerClicked_.bind(this));
@@ -256,18 +241,9 @@ export class ComboButton extends MultiMenuButton {
       }
     } else {
       // When there is only 1 choice, just dispatch to open.
-      this.paperRipple_.simulatedRipple();
       this.blur();
       this.dispatchSelectEvent(this.defaultItem_);
     }
-  }
-
-  handleMenuShow_() {
-    this.filesToggleRipple_.activated = true;
-  }
-
-  handleMenuHide_() {
-    this.filesToggleRipple_.activated = false;
   }
 
   dispatchSelectEvent(item) {

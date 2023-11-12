@@ -11,7 +11,7 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -60,14 +60,9 @@ base::TimeDelta AvatarToolbarButton::g_iph_min_delay_after_creation =
     base::Seconds(2);
 
 AvatarToolbarButton::AvatarToolbarButton(BrowserView* browser_view)
-    : AvatarToolbarButton(browser_view, nullptr) {}
-
-AvatarToolbarButton::AvatarToolbarButton(BrowserView* browser_view,
-                                         ToolbarIconContainerView* parent)
     : ToolbarButton(base::BindRepeating(&AvatarToolbarButton::ButtonPressed,
                                         base::Unretained(this))),
       browser_(browser_view->browser()),
-      parent_(parent),
       creation_time_(base::TimeTicks::Now()) {
   delegate_ =
       std::make_unique<AvatarToolbarButtonDelegate>(this, browser_->profile());
@@ -90,18 +85,9 @@ AvatarToolbarButton::AvatarToolbarButton(BrowserView* browser_view,
   // For consistency with identity representation, we need to have the avatar on
   // the left and the (potential) user name on the right.
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
-
-  // TODO(crbug.com/922525): DCHECK(parent_) instead of the if, once we always
-  // have a parent.
-  if (parent_)
-    parent_->AddObserver(this);
 }
 
-AvatarToolbarButton::~AvatarToolbarButton() {
-  // TODO(crbug.com/922525): Remove the if, once we always have a parent.
-  if (parent_)
-    parent_->RemoveObserver(this);
-}
+AvatarToolbarButton::~AvatarToolbarButton() = default;
 
 void AvatarToolbarButton::UpdateIcon() {
   // If widget isn't set, the button doesn't have access to the theme provider
@@ -227,7 +213,7 @@ void AvatarToolbarButton::MaybeShowProfileSwitchIPH() {
   // delay for a smoother animation.
   base::TimeDelta time_since_creation = base::TimeTicks::Now() - creation_time_;
   if (time_since_creation < g_iph_min_delay_after_creation) {
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&AvatarToolbarButton::MaybeShowProfileSwitchIPH,
                        weak_ptr_factory_.GetWeakPtr()),
@@ -253,11 +239,6 @@ void AvatarToolbarButton::OnBlur() {
 void AvatarToolbarButton::OnThemeChanged() {
   ToolbarButton::OnThemeChanged();
   UpdateText();
-}
-
-void AvatarToolbarButton::OnHighlightChanged() {
-  DCHECK(parent_);
-  delegate_->OnHighlightChanged();
 }
 
 // static

@@ -54,6 +54,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/test/bind.h"
+#include "base/test/gmock_callback_support.h"
 #include "chrome/browser/web_applications/test/mock_os_integration_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -452,7 +453,7 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestWithShortcuts) {
     url_handler->has_origin_wildcard = true;
     manifest.url_handlers.push_back(std::move(url_handler));
   }
-  WebAppInstallInfo web_app_info_original{web_app_info};
+  WebAppInstallInfo web_app_info_original{web_app_info.Clone()};
 
   const GURL kAppManifestUrl("http://www.chromium.org/manifest.json");
   UpdateWebAppInfoFromManifest(manifest, kAppManifestUrl, &web_app_info);
@@ -1420,6 +1421,8 @@ TEST_F(RegisterOsSettingsTest, MaybeRegisterOsUninstall) {
   EXPECT_CALL(manager, MacAppShimOnAppInstalledForProfile(app_id)).Times(1);
   EXPECT_CALL(manager, RegisterWebAppOsUninstallation(app_id, testing::_))
       .Times(1);
+  EXPECT_CALL(manager, Synchronize(app_id, testing::_))
+      .WillOnce(base::test::RunOnceCallback<1>());
 
   // Scenario 1.
   auto web_app = std::make_unique<WebApp>(app_id);
@@ -1490,6 +1493,7 @@ TEST_F(RegisterOsSettingsTest, MaybeUnregisterOsUninstall) {
   // sets only kUninstallationViaOsSettings that will async call from
   // InstallOsHooks. Test ends before async is called so we test against
   // InstallOsHooks.
+  EXPECT_CALL(manager, Synchronize(app_id, testing::_)).Times(1);
   EXPECT_CALL(manager, UnregisterWebAppOsUninstallation(app_id)).Times(1);
 
   // Scenario 1.

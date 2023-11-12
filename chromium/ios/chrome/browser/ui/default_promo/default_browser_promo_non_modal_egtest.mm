@@ -31,7 +31,7 @@ namespace {
 
 // Wait for 2 seconds longer than the default promo show time, in case it's
 // slightly delayed.
-const int64_t kShowPromoWebpageLoadWaitTime = 5;
+constexpr base::TimeDelta kShowPromoWebpageLoadWaitTime = base::Seconds(5);
 
 // Returns a matcher to "Link You Copied" row.
 id<GREYMatcher> LinkYouCopiedMatcher() {
@@ -74,13 +74,7 @@ id<GREYMatcher> FakeOmniboxMatcher() {
 
 // Test that a non modal default modal promo appears when it is triggered by
 // pasting a copied link.
-// TODO(crbug.com/1218866): Test is failing on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testNonModalAppears testNonModalAppears
-#else
-#define MAYBE_testNonModalAppears DISABLED_testNonModalAppears
-#endif
-- (void)MAYBE_testNonModalAppears {
+- (void)testNonModalAppears {
   [ChromeEarlGreyAppInterface copyURLToPasteBoard];
   [[EarlGrey selectElementWithMatcher:FakeOmniboxMatcher()]
       performAction:grey_tap()];

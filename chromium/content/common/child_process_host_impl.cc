@@ -21,7 +21,7 @@
 #include "base/process/process_metrics.h"
 #include "base/rand_util.h"
 #include "base/synchronization/lock.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/pseudonymization_salt.h"
@@ -34,7 +34,6 @@
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/message_filter.h"
-#include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
@@ -124,9 +123,9 @@ ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate,
     channel_ = IPC::ChannelMojo::Create(
         mojo_invitation_->AttachMessagePipe(
             kChildProcessReceiverAttachmentName),
-        IPC::Channel::MODE_SERVER, this, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(),
-        mojo::internal::MessageQuotaChecker::MaybeCreate());
+        IPC::Channel::MODE_SERVER, this,
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   } else if (ipc_mode_ == IpcMode::kNormal) {
     child_process_.Bind(mojo::PendingRemote<mojom::ChildProcess>(
         mojo_invitation_->AttachMessagePipe(
@@ -221,9 +220,8 @@ void ChildProcessHostImpl::CreateChannelMojo() {
         mojo_invitation_->AttachMessagePipe(kLegacyIpcBootstrapAttachmentName);
     channel_ = IPC::ChannelMojo::Create(
         std::move(bootstrap), IPC::Channel::MODE_SERVER, this,
-        base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(),
-        mojo::internal::MessageQuotaChecker::MaybeCreate());
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
   DCHECK(channel_);
 
@@ -395,6 +393,14 @@ void ChildProcessHostImpl::DumpProfilingData(base::OnceClosure callback) {
 
 void ChildProcessHostImpl::SetProfilingFile(base::File file) {
   child_process_->SetProfilingFile(std::move(file));
+}
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+// Notifies the child process of memory pressure level.
+void ChildProcessHostImpl::NotifyMemoryPressureToChildProcess(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  child_process()->OnMemoryPressure(level);
 }
 #endif
 

@@ -28,7 +28,6 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -90,56 +89,14 @@ FastPairPresenterImpl::FastPairPresenterImpl(
 
 FastPairPresenterImpl::~FastPairPresenterImpl() = default;
 
-void FastPairPresenterImpl::AddDeviceToDiscoveryNotificationAlreadyShownMap(
-    scoped_refptr<Device> device) {
-  DevicesWithDiscoveryNotificationAlreadyShown device_with_discovery_shown;
-  device_with_discovery_shown.protocol = device->protocol;
-  device_with_discovery_shown.metadata_id = device->metadata_id;
-  address_to_devices_with_discovery_notification_already_shown_map_
-      .insert_or_assign(device->ble_address, device_with_discovery_shown);
-}
-
 void FastPairPresenterImpl::ShowDiscovery(scoped_refptr<Device> device,
                                           DiscoveryCallback callback) {
   DCHECK(device);
-
-  // If we are currently running a timer for a recently lost device that we
-  // are already preventing notifications for, return early.
-  if (base::Contains(address_to_lost_device_timer_map_, device->ble_address)) {
-    callback.Run(DiscoveryAction::kAlreadyDisplayed);
-    return;
-  }
-
-  // If we have already shown a discovery notification for a device in the
-  // same protocol, don't show one again. This prevents a notification being
-  // dismissed and reappearing for every advertisement for some devices.
-  if (WasDiscoveryNotificationAlreadyShownForDevice(*device)) {
-    callback.Run(DiscoveryAction::kAlreadyDisplayed);
-    return;
-  }
-
-  AddDeviceToDiscoveryNotificationAlreadyShownMap(device);
-
   const auto metadata_id = device->metadata_id;
   FastPairRepository::Get()->GetDeviceMetadata(
       metadata_id, base::BindRepeating(
                        &FastPairPresenterImpl::OnDiscoveryMetadataRetrieved,
                        weak_pointer_factory_.GetWeakPtr(), device, callback));
-}
-
-bool FastPairPresenterImpl::WasDiscoveryNotificationAlreadyShownForDevice(
-    const Device& device) {
-  auto it =
-      address_to_devices_with_discovery_notification_already_shown_map_.find(
-          device.ble_address);
-  if (it ==
-      address_to_devices_with_discovery_notification_already_shown_map_.end())
-    return false;
-
-  DevicesWithDiscoveryNotificationAlreadyShown device_with_discovery_shown =
-      it->second;
-  return device.metadata_id == device_with_discovery_shown.metadata_id &&
-         device.protocol == device_with_discovery_shown.protocol;
 }
 
 void FastPairPresenterImpl::OnDiscoveryMetadataRetrieved(
@@ -150,19 +107,14 @@ void FastPairPresenterImpl::OnDiscoveryMetadataRetrieved(
   if (!device_metadata)
     return;
 
+  device->set_version(device_metadata->InferFastPairVersion());
+
   if (device->protocol == Protocol::kFastPairSubsequent) {
     ShowSubsequentDiscoveryNotification(device, callback, device_metadata);
     return;
   }
 
-  // Anti-spoofing keys were introduced in Fast Pair v2, so if this isn't
-  // available then the device is v1.
-  if (device_metadata->GetDetails()
-          .anti_spoofing_key_pair()
-          .public_key()
-          .empty()) {
-    device->SetAdditionalData(Device::AdditionalDataType::kFastPairVersion,
-                              {1});
+  if (device->version().value() == DeviceFastPairVersion::kV1) {
     RecordFastPairDiscoveredVersion(FastPairVersion::kVersion1);
   } else {
     RecordFastPairDiscoveredVersion(FastPairVersion::kVersion2);
@@ -234,7 +186,7 @@ void FastPairPresenterImpl::ShowSubsequentDiscoveryNotification(
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
           .email;
   notification_controller_->ShowSubsequentDiscoveryNotification(
-      base::ASCIIToUTF16(device_metadata->GetDetails().name()),
+      base::UTF8ToUTF16(device->display_name().value()),
       base::ASCIIToUTF16(email), device_metadata->image(),
       base::BindRepeating(&FastPairPresenterImpl::OnDiscoveryClicked,
                           weak_pointer_factory_.GetWeakPtr(), callback),
@@ -287,64 +239,22 @@ void FastPairPresenterImpl::OnDiscoveryClicked(DiscoveryCallback callback) {
   callback.Run(DiscoveryAction::kPairToDevice);
 }
 
-void FastPairPresenterImpl::OnDiscoveryDismissed(scoped_refptr<Device> device,
-                                                 DiscoveryCallback callback,
-                                                 bool user_dismissed) {
-  // If the discovery notification was not dismissed by user, we remove the
-  // device from the map in order to allow the notification to show again. We
-  // check |WasDiscoveryNotificationAlreadyShownForDevice| to make sure it is
-  // the same protocol, address, and metadata in the map before removing to
-  // prevent edge cases (for example, a device changes protocol but uses the
-  // same address).
-  if (!user_dismissed &&
-      WasDiscoveryNotificationAlreadyShownForDevice(*device)) {
-    address_to_devices_with_discovery_notification_already_shown_map_.erase(
-        device->ble_address);
-  }
-
-  callback.Run(user_dismissed ? DiscoveryAction::kDismissedByUser
-                              : DiscoveryAction::kDismissed);
-}
-
-void FastPairPresenterImpl::StartDeviceLostTimer(scoped_refptr<Device> device) {
-  auto [it, was_emplaced] = address_to_lost_device_timer_map_.try_emplace(
-      device->ble_address, std::make_unique<base::OneShotTimer>());
-
-  // If device is already in the map, return early. This means that the timer
-  // has not expired yet for the device, since we erase the map instance
-  // when the timer expires.
-  if (!was_emplaced)
-    return;
-
-  // Start timer for how long to keep the device in
-  // |address_to_devices_with_discovery_notification_already_shown_map_|, which
-  // prevents the discovery notifications from showing up for the device.
-  // When |AllowNotificationForRecentlyLostDevice| is fired on timeout, remove
-  // the device from the map, allowing notifications to appear again.
-  QP_LOG(VERBOSE) << __func__ << device;
-  it->second->Start(
-      FROM_HERE,
-      base::Minutes(
-          features::kFastPairDeviceLostNotificationTimeoutMinutes.Get()),
-      base::BindOnce(
-          &FastPairPresenterImpl::AllowNotificationForRecentlyLostDevice,
-          weak_pointer_factory_.GetWeakPtr(), device));
-}
-
-void FastPairPresenterImpl::AllowNotificationForRecentlyLostDevice(
-    scoped_refptr<Device> device) {
-  QP_LOG(INFO) << __func__ << device;
-  // We check that |device| is in
-  // |address_to_devices_with_discovery_notification_already_shown_map_| before
-  // we erase the timer and discovery notification to prevent the edge case
-  // where a device has the same address as a device already in our map. This
-  // happens with JBL 650s when they switch from initial to subsequent pairing.
-  if (WasDiscoveryNotificationAlreadyShownForDevice(*device)) {
-    QP_LOG(VERBOSE) << __func__
-                    << ": allowing notifications again for device=" << device;
-    address_to_lost_device_timer_map_.erase(device->ble_address);
-    address_to_devices_with_discovery_notification_already_shown_map_.erase(
-        device->ble_address);
+void FastPairPresenterImpl::OnDiscoveryDismissed(
+    scoped_refptr<Device> device,
+    DiscoveryCallback callback,
+    FastPairNotificationDismissReason dismiss_reason) {
+  switch (dismiss_reason) {
+    case FastPairNotificationDismissReason::kDismissedByUser:
+      callback.Run(DiscoveryAction::kDismissedByUser);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByOs:
+      callback.Run(DiscoveryAction::kDismissedByOs);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByTimeout:
+      callback.Run(DiscoveryAction::kDismissedByTimeout);
+      break;
+    default:
+      NOTREACHED();
   }
 }
 
@@ -421,14 +331,29 @@ void FastPairPresenterImpl::OnNavigateToSettings(
 
 void FastPairPresenterImpl::OnPairingFailedDismissed(
     PairingFailedCallback callback,
-    bool user_dismissed) {
-  callback.Run(user_dismissed ? PairingFailedAction::kDismissedByUser
-                              : PairingFailedAction::kDismissed);
+    FastPairNotificationDismissReason dismiss_reason) {
+  switch (dismiss_reason) {
+    case FastPairNotificationDismissReason::kDismissedByUser:
+      callback.Run(PairingFailedAction::kDismissedByUser);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByOs:
+      callback.Run(PairingFailedAction::kDismissed);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByTimeout:
+      // Fast Pair Error Notifications do not have a timeout, so this is never
+      // expected to be hit.
+      NOTREACHED();
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
 void FastPairPresenterImpl::ShowAssociateAccount(
     scoped_refptr<Device> device,
     AssociateAccountCallback callback) {
+  RecordRetroactiveSuccessFunnelFlow(
+      FastPairRetroactiveSuccessFunnelEvent::kNotificationDisplayed);
   const auto metadata_id = device->metadata_id;
   FastPairRepository::Get()->GetDeviceMetadata(
       metadata_id,
@@ -447,6 +372,8 @@ void FastPairPresenterImpl::OnAssociateAccountMetadataRetrieved(
     return;
   }
 
+  device->set_version(device_metadata->InferFastPairVersion());
+
   signin::IdentityManager* identity_manager =
       QuickPairBrowserDelegate::Get()->GetIdentityManager();
   if (!identity_manager) {
@@ -459,10 +386,17 @@ void FastPairPresenterImpl::OnAssociateAccountMetadataRetrieved(
   const std::string email =
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
           .email;
+  std::u16string device_name;
+  // If the name of the device has been set by the user, use that name,
+  // otherwise use the OEM default name.
+  if (device->display_name().has_value()) {
+    device_name = base::UTF8ToUTF16(device->display_name().value());
+  } else {
+    device_name = base::ASCIIToUTF16(device_metadata->GetDetails().name());
+  }
 
   notification_controller_->ShowAssociateAccount(
-      base::ASCIIToUTF16(device_metadata->GetDetails().name()),
-      base::ASCIIToUTF16(email), device_metadata->image(),
+      device_name, base::ASCIIToUTF16(email), device_metadata->image(),
       base::BindRepeating(
           &FastPairPresenterImpl::OnAssociateAccountActionClicked,
           weak_pointer_factory_.GetWeakPtr(), callback),
@@ -489,28 +423,31 @@ void FastPairPresenterImpl::OnAssociateAccountLearnMoreClicked(
 
 void FastPairPresenterImpl::OnAssociateAccountDismissed(
     AssociateAccountCallback callback,
-    bool user_dismissed) {
-  callback.Run(user_dismissed ? AssociateAccountAction::kDismissedByUser
-                              : AssociateAccountAction::kDismissed);
+    FastPairNotificationDismissReason dismiss_reason) {
+  switch (dismiss_reason) {
+    case FastPairNotificationDismissReason::kDismissedByUser:
+      callback.Run(AssociateAccountAction::kDismissedByUser);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByOs:
+      callback.Run(AssociateAccountAction::kDismissedByOs);
+      break;
+    case FastPairNotificationDismissReason::kDismissedByTimeout:
+      callback.Run(AssociateAccountAction::kDismissedByTimeout);
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
 void FastPairPresenterImpl::ShowCompanionApp(scoped_refptr<Device> device,
                                              CompanionAppCallback callback) {}
 
-void FastPairPresenterImpl::RemoveNotifications(
-    bool clear_already_shown_discovery_notification_cache) {
-  if (clear_already_shown_discovery_notification_cache) {
-    address_to_devices_with_discovery_notification_already_shown_map_.clear();
-  }
-
+void FastPairPresenterImpl::RemoveNotifications() {
   notification_controller_->RemoveNotifications();
 }
 
-void FastPairPresenterImpl::
-    RemoveDeviceFromAlreadyShownDiscoveryNotificationCache(
-        scoped_refptr<Device> device) {
-  address_to_devices_with_discovery_notification_already_shown_map_.erase(
-      device->ble_address);
+void FastPairPresenterImpl::ExtendNotification() {
+  notification_controller_->ExtendNotification();
 }
 
 }  // namespace quick_pair

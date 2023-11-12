@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 import {RecentlyUsedStore} from 'chrome://emoji-picker/store.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
-import {assertDeepEquals} from '../../chai_assert.js';
+import {assertDeepEquals} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 const TEST_EMOJI = {
   waving: {string: '👋', codepoints: [128075]},

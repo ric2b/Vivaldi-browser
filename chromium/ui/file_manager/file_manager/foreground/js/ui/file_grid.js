@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, assertInstanceof} from 'chrome://resources/js/assert.js';
-import {dispatchSimpleEvent} from 'chrome://resources/js/cr.m.js';
-import {isRTL} from 'chrome://resources/js/util.js';
+import {assert, assertInstanceof} from 'chrome://resources/ash/common/assert.js';
+import {dispatchSimpleEvent} from 'chrome://resources/ash/common/cr_deprecated.js';
+import {isRTL} from 'chrome://resources/ash/common/util.js';
 
-import {AsyncUtil} from '../../../common/js/async_util.js';
+import {RateLimiter} from '../../../common/js/async_util.js';
+import {maybeShowTooltip} from '../../../common/js/dom_utils.js';
 import {FileType} from '../../../common/js/file_type.js';
 import {util} from '../../../common/js/util.js';
 import {FilesAppEntry} from '../../../externs/files_app_entry_interfaces.js';
@@ -73,7 +74,7 @@ export class FileGrid extends Grid {
     /** @private {?VolumeManager} */
     this.volumeManager_ = null;
 
-    /** @private {?AsyncUtil.RateLimiter} */
+    /** @private {?RateLimiter} */
     this.relayoutRateLimiter_ = null;
 
     /** @private {?function(!Event)} */
@@ -152,12 +153,38 @@ export class FileGrid extends Grid {
     };
 
     self.relayoutRateLimiter_ =
-        new AsyncUtil.RateLimiter(self.relayoutImmediately_.bind(self));
+        new RateLimiter(self.relayoutImmediately_.bind(self));
 
     const style = window.getComputedStyle(self);
     self.paddingStart_ =
         parseFloat(isRTL() ? style.paddingRight : style.paddingLeft);
     self.paddingTop_ = parseFloat(style.paddingTop);
+
+    self.addEventListener(
+        'mouseover', self.onMouseOver_.bind(self), {passive: true});
+  }
+
+  onMouseOver_(event) {
+    this.maybeShowToolTip(event);
+  }
+
+  maybeShowToolTip(event) {
+    let target = null;
+    for (const el of event.composedPath()) {
+      if (el.classList?.contains('thumbnail-item')) {
+        target = el;
+        break;
+      }
+    }
+    if (!target) {
+      return;
+    }
+    const labelElement = target.querySelector('.filename-label');
+    if (!labelElement) {
+      return;
+    }
+
+    maybeShowTooltip(labelElement, labelElement.innerText);
   }
 
   /**
@@ -706,15 +733,20 @@ export class FileGrid extends Grid {
         this.querySelectorAll('.img-container'));
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
-      const listItem = this.getListItemAncestor(box);
+      let listItem = this.getListItemAncestor(box);
       const entry = listItem && this.dataModel.item(listItem.listIndex);
       if (!entry || urls.indexOf(entry.toURL()) === -1) {
         continue;
       }
 
-      this.decorateThumbnailBox_(assert(listItem), entry);
-      this.updateSharedStatus_(assert(listItem), entry);
-      this.updateInlineSyncStatus_(assert(listItem), entry);
+      listItem = /** @type {!FileGrid.Item} */ (listItem);
+      this.decorateThumbnailBox_(listItem, entry);
+      this.updateSharedStatus_(listItem, entry);
+      this.updateInlineSyncStatus_(listItem, entry);
+      listItem.toggleAttribute(
+          'disabled',
+          filelist.isDlpBlocked(
+              entry, assert(this.metadataModel_), assert(this.volumeManager_)));
     }
     this.updateGroupHeading_();
   }
@@ -747,7 +779,8 @@ export class FileGrid extends Grid {
   decorateThumbnail_(li, entry) {
     li.className = 'thumbnail-item';
     if (entry) {
-      filelist.decorateListItem(li, entry, assert(this.metadataModel_));
+      filelist.decorateListItem(
+          li, entry, assert(this.metadataModel_), assert(this.volumeManager_));
     }
 
     const frame = li.ownerDocument.createElement('div');
@@ -864,7 +897,7 @@ export class FileGrid extends Grid {
         this.metadataModel_.getCache([entry], ['syncStatus'])[0].syncStatus;
     if (frame && syncStatus) {
       frame.setAttribute('data-sync-status', syncStatus);
-      // TODO(msalomao): set sync status aria-label.
+      // TODO(b/255474670): set sync status aria-label.
     }
   }
 

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {FileTableColumnModel} from './file_table.js';
 import {TableColumn} from './table/table_column.js';
@@ -14,9 +14,6 @@ let model;
 let columns;
 
 export function setUp() {
-  window.loadTimeData.getString = id => id;
-  window.loadTimeData.getBoolean = id => false;
-
   columns = [
     new TableColumn('col0', 'col0', 100),
     new TableColumn('col1', 'col1', 100),

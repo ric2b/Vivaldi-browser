@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
@@ -104,9 +105,11 @@ absl::optional<GetAssertionStatus> ConvertDeviceResponseCode(
 
 // ValidateResponseExtensions returns true iff |extensions| is valid as a
 // response to |request| and |options|.
-bool ValidateResponseExtensions(const CtapGetAssertionRequest& request,
-                                const CtapGetAssertionOptions& options,
-                                const cbor::Value& extensions) {
+bool ValidateResponseExtensions(
+    const CtapGetAssertionRequest& request,
+    const CtapGetAssertionOptions& options,
+    const AuthenticatorGetAssertionResponse& response,
+    const cbor::Value& extensions) {
   if (!extensions.is_map()) {
     return false;
   }
@@ -130,9 +133,12 @@ bool ValidateResponseExtensions(const CtapGetAssertionRequest& request,
         FIDO_LOG(ERROR) << "unsolicited devicePubKey extension output";
         return false;
       }
+      const bool backup_eligible_flag =
+          response.authenticator_data.backup_eligible();
       const absl::optional<const char*> error =
           CheckDevicePublicKeyExtensionForErrors(
-              it.second, request.device_public_key->attestation);
+              it.second, request.device_public_key->attestation,
+              backup_eligible_flag);
       if (error.has_value()) {
         FIDO_LOG(ERROR) << error.value();
         return false;
@@ -201,7 +207,7 @@ bool ResponseValid(bool is_first_response,
   const absl::optional<cbor::Value>& extensions =
       response.authenticator_data.extensions();
   if (extensions &&
-      !ValidateResponseExtensions(request, options, *extensions)) {
+      !ValidateResponseExtensions(request, options, response, *extensions)) {
     FIDO_LOG(ERROR) << "assertion response invalid due to extensions block: "
                     << cbor::DiagnosticWriter::Write(*extensions);
     return false;
@@ -281,8 +287,7 @@ CtapGetAssertionRequest SpecializeRequestForAuthenticator(
     specialized_request.large_blob_read = false;
     specialized_request.large_blob_write.reset();
   }
-  if (!request.is_u2f_only && authenticator.Options() &&
-      authenticator.Options()->always_uv) {
+  if (authenticator.Options() && authenticator.Options()->always_uv) {
     specialized_request.user_verification =
         UserVerificationRequirement::kRequired;
   }
@@ -318,6 +323,13 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
       request_.allow_list.empty();
   transport_availability_info().is_off_the_record_context =
       request_.is_off_the_record_context;
+  transport_availability_info().transport_list_did_include_internal =
+      std::any_of(request_.allow_list.begin(), request_.allow_list.end(),
+                  [](const PublicKeyCredentialDescriptor& cred) {
+                    return cred.transports.empty() ||
+                           base::Contains(cred.transports,
+                                          FidoTransportProtocol::kInternal);
+                  });
 
   if (request_.allow_list.empty()) {
     // Resident credential requests always involve user verification.

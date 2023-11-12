@@ -229,7 +229,7 @@ NGBlockLayoutAlgorithm::NGBlockLayoutAlgorithm(
       previous_result_(params.previous_result),
       column_spanner_path_(params.column_spanner_path),
       fit_all_lines_(false),
-      is_resuming_(IsResumingLayout(params.break_token)),
+      is_resuming_(IsBreakInside(params.break_token)),
       abort_when_bfc_block_offset_updated_(false),
       has_processed_first_child_(false),
       ignore_line_clamp_(false),
@@ -654,14 +654,21 @@ inline const NGLayoutResult* NGBlockLayoutAlgorithm::Layout(
       // the column layout algorithm handle the spanner as a child.
       DCHECK(!container_builder_.DidBreakSelf());
       DCHECK(!container_builder_.FoundColumnSpanner());
-      DCHECK(!IsResumingLayout(To<NGBlockBreakToken>(child_break_token)));
+      DCHECK(!IsBreakInside(To<NGBlockBreakToken>(child_break_token)));
 
-      if (container_builder_.HasChildBreakInside()) {
+      if (ConstraintSpace().IsPastBreak() ||
+          container_builder_.HasInsertedChildBreak()) {
         // Something broke inside (typically in a parallel flow, or we wouldn't
         // be here). Before we can handle the spanner, we need to finish what
         // comes before it.
         container_builder_.AddBreakBeforeChild(child, kBreakAppealPerfect,
                                                /* is_forced_break */ true);
+
+        // We're not ready to go back and lay out the spanner yet (see above),
+        // so we don't set a spanner path, but since we did find a spanner, make
+        // a note of it. This will make sure that we resolve our BFC block-
+        // offset, so that we don't incorrectly appear to be self-collapsing.
+        container_builder_.SetHasColumnSpanner(true);
         break;
       }
 
@@ -841,7 +848,8 @@ const NGLayoutResult* NGBlockLayoutAlgorithm::FinishLayout(
   // all of our floats.
   if (ConstraintSpace().IsNewFormattingContext()) {
     intrinsic_block_size_ = std::max(
-        intrinsic_block_size_, ExclusionSpace().ClearanceOffset(EClear::kBoth));
+        intrinsic_block_size_,
+        ExclusionSpace().ClearanceOffsetIncludingInitialLetter(EClear::kBoth));
   }
 
   // If line clamping occurred, the intrinsic block-size comes from the
@@ -999,6 +1007,11 @@ const NGLayoutResult* NGBlockLayoutAlgorithm::FinishLayout(
     if (ConstraintSpace().ForcedBfcBlockOffset()) {
       container_builder_.SetBfcBlockOffset(
           *ConstraintSpace().ForcedBfcBlockOffset());
+
+      // Also make sure that this is treated as a valid class C breakpoint (if
+      // it is one).
+      if (ConstraintSpace().IsPushedByFloats())
+        container_builder_.SetIsPushedByFloats();
     }
   }
 
@@ -1178,7 +1191,7 @@ void NGBlockLayoutAlgorithm::HandleFloat(
     NGBlockNode child,
     const NGBlockBreakToken* child_break_token) {
   // If we're resuming layout, we must always know our position in the BFC.
-  DCHECK(!IsResumingLayout(child_break_token) ||
+  DCHECK(!IsBreakInside(child_break_token) ||
          container_builder_.BfcBlockOffset());
 
   // If we don't have a BFC block-offset yet, the "expected" BFC block-offset
@@ -1508,12 +1521,12 @@ const NGLayoutResult* NGBlockLayoutAlgorithm::LayoutNewFormattingContext(
   const TextDirection direction = ConstraintSpace().Direction();
   const auto writing_direction = ConstraintSpace().GetWritingDirection();
 
-  if (!IsResumingLayout(child_break_token)) {
+  if (!IsBreakInside(child_break_token)) {
     // The origin offset is where we should start looking for layout
     // opportunities. It needs to be adjusted by the child's clearance.
-    AdjustToClearance(
-        ExclusionSpace().ClearanceOffset(child_style.Clear(Style())),
-        &origin_offset);
+    AdjustToClearance(ExclusionSpace().ClearanceOffsetIncludingInitialLetter(
+                          child_style.Clear(Style())),
+                      &origin_offset);
   }
   DCHECK(container_builder_.BfcBlockOffset());
 
@@ -1782,10 +1795,10 @@ NGLayoutResult::EStatus NGBlockLayoutAlgorithm::FinishInflow(
 
   bool is_self_collapsing = layout_result->IsSelfCollapsing();
 
-  // Only non self-collapsing children (e.g. "normal children") can be pushed
-  // by floats in this way.
-  bool normal_child_had_clearance = layout_result->IsPushedByFloats();
-  DCHECK(!normal_child_had_clearance || !is_self_collapsing);
+  // "Normal child" here means non-self-collapsing. Even self-collapsing
+  // children may be cleared by floats, if they have a forced BFC block-offset.
+  bool normal_child_had_clearance =
+      layout_result->IsPushedByFloats() && !is_self_collapsing;
 
   // A child may have aborted its layout if it resolved its BFC block-offset.
   // If we don't have a BFC block-offset yet, we need to propagate the abort
@@ -1970,6 +1983,9 @@ NGLayoutResult::EStatus NGBlockLayoutAlgorithm::FinishInflow(
     }
 
     DCHECK_EQ(layout_result->Status(), NGLayoutResult::kSuccess);
+
+    // We stored this in a local variable, so it better not have changed.
+    DCHECK_EQ(layout_result->IsSelfCollapsing(), is_self_collapsing);
   }
 
   const absl::optional<LayoutUnit> line_box_bfc_block_offset =
@@ -2167,7 +2183,7 @@ NGInflowChildData NGBlockLayoutAlgorithm::ComputeChildData(
       BfcBlockOffset() + logical_block_offset};
 
   return {child_bfc_offset, margin_strut, margins, margins_fully_resolved,
-          IsResumingLayout(child_block_break_token)};
+          IsBreakInside(child_block_break_token)};
 }
 
 NGPreviousInflowPosition NGBlockLayoutAlgorithm::ComputeInflowPosition(
@@ -2711,7 +2727,7 @@ NGConstraintSpace NGBlockLayoutAlgorithm::CreateConstraintSpaceForChild(
     builder.SetAncestorHasClearancePastAdjoiningFloats();
 
   LayoutUnit clearance_offset = LayoutUnit::Min();
-  if (!IsResumingLayout(DynamicTo<NGBlockBreakToken>(child_break_token))) {
+  if (!IsBreakInside(DynamicTo<NGBlockBreakToken>(child_break_token))) {
     if (!ConstraintSpace().IsNewFormattingContext())
       clearance_offset = ConstraintSpace().ClearanceOffset();
     if (child.IsBlock()) {
@@ -2763,6 +2779,15 @@ NGConstraintSpace NGBlockLayoutAlgorithm::CreateConstraintSpaceForChild(
     SetupSpaceBuilderForFragmentation(
         ConstraintSpace(), child, fragmentainer_offset_delta, &builder,
         is_new_fc, container_builder_.RequiresContentBeforeBreaking());
+
+    // If there's a child break inside (typically in a parallel flow, or we
+    // would have finished layout by now), we need to produce more
+    // fragmentainers, before we can insert any column spanners, so that
+    // everything that is supposed to come before the spanner actually ends up
+    // there.
+    if (ConstraintSpace().IsPastBreak() ||
+        container_builder_.HasInsertedChildBreak())
+      builder.SetIsPastBreak();
   }
 
   return builder.ToConstraintSpace();

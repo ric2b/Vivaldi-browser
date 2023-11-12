@@ -71,6 +71,14 @@ if (!is_chromeos_lacros) {
   ]
 }
 
+config("pdb_larger_than_4gb") {
+  if (is_win) {
+    # Increasing the PDB page size to allow PDBs larger than 4GB. Not all
+    # tools can handle such large PDBs yet, so opt-in when needed.
+    ldflags = [ "/pdbpagesize:8192" ]
+  }
+}
+
 # To add a unit test to this target, make a "unit_tests" source_set in your
 # component(it's important to use a source_set instead of a static library or
 # no tests will run) and add a reference here.You can add more than one unit
@@ -95,14 +103,18 @@ test("components_unittests") {
     ]
   }
 
+  configs += [ ":pdb_larger_than_4gb" ]
+
   # Add only ":unit_tests" dependencies here.If your tests have dependencies
   #(this would at least include the component itself), they should be on the
   # test source set and not here.
 
   deps = [
     "//base",
+    "//components/aggregation_service:unit_tests",
     "//components/apdu:unit_tests",
     "//components/assist_ranker:unit_tests",
+    "//components/attribution_reporting:unit_tests",
     "//components/autofill/core/browser:unit_tests",
     "//components/autofill/core/common:unit_tests",
     "//components/base32:unit_tests",
@@ -125,6 +137,7 @@ test("components_unittests") {
     "//components/content_capture/common:unit_tests",
     "//components/content_settings/core/browser:unit_tests",
     "//components/content_settings/core/common:unit_tests",
+    "//components/country_codes:unit_tests",
     "//components/crash/core/common:unit_tests",
     "//components/crx_file:unit_tests",
     "//components/device_event_log:unit_tests",
@@ -133,10 +146,10 @@ test("components_unittests") {
     "//components/download:unit_tests",
     "//components/encrypted_messages:unit_tests",
     "//components/enterprise:unit_tests",
+    "//components/enterprise/common:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
     "//components/feature_engagement:unit_tests",
-    "//components/file_access:unit_tests",
     "//components/filename_generation:unit_tests",
     "//components/flags_ui:unit_tests",
     "//components/gcm_driver:unit_tests",
@@ -159,6 +172,7 @@ test("components_unittests") {
     "//components/memory_pressure:unit_tests",
     "//components/metrics:unit_tests",
     "//components/metrics/demographics:unit_tests",
+    "//components/named_mojo_ipc_server:unit_tests",
     "//components/navigation_metrics:unit_tests",
     "//components/net_log:unit_tests",
     "//components/network_session_configurator/browser:unit_tests",
@@ -176,6 +190,7 @@ test("components_unittests") {
     "//components/policy/core/browser:unit_tests",
     "//components/policy/core/common:unit_tests",
     "//components/power_bookmarks/core:unit_tests",
+    "//components/power_bookmarks/storage:unit_tests",
     "//components/power_scheduler:unit_tests",
     "//components/prefs:unit_tests",
     "//components/profile_metrics:unit_tests",
@@ -234,7 +249,6 @@ test("components_unittests") {
     "//components/url_formatter/spoof_checks/common_words:unit_tests",
     "//components/url_formatter/spoof_checks/top_domains:unit_tests",
     "//components/url_matcher:unit_tests",
-    "//components/url_param_filter/core:unit_tests",
     "//components/url_pattern_index:unit_tests",
     "//components/variations:unit_tests",
     "//components/variations/field_trial_config:unit_tests",
@@ -243,6 +257,10 @@ test("components_unittests") {
     "//components/webdata/common:unit_tests",
     "//components/webdata_services:unit_tests",
   ]
+
+  if (!is_ios) {
+    deps += [ "//components/file_access:unit_tests" ]
+  }
 
   if (enable_screen_ai_service) {
     deps += [ "//components/services/screen_ai:unit_tests" ]
@@ -309,18 +327,12 @@ test("components_unittests") {
       "//components/signin/public/identity_manager/objc:unit_tests",
       "//components/translate/ios/browser:unit_tests",
       "//components/ukm/ios:unit_tests",
-      "//components/url_param_filter/ios:unit_tests",
     ]
   } else {  #!is_ios
     deps += [
-      "//components/accuracy_tips:unit_tests",
       "//components/autofill/content/browser:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/autofill/core/common/mojom:unit_tests",
-      "//components/autofill_assistant/browser:unit_tests",
-      "//components/autofill_assistant/browser/public:unit_tests",
-      "//components/autofill_assistant/content/browser:unit_tests",
-      "//components/autofill_assistant/content/renderer:unit_tests",
       "//components/background_sync:unit_tests",
       "//components/blocked_content:unit_tests",
       "//components/browsing_data/content:unit_tests",
@@ -335,6 +347,7 @@ test("components_unittests") {
       "//components/continuous_search/browser:unit_tests",
       "//components/continuous_search/common:unit_tests",
       "//components/custom_handlers:unit_tests",
+      "//components/devtools/simple_devtools_protocol_client:unit_tests",
       "//components/digital_asset_links:unit_tests",
       "//components/discardable_memory/client:unit_tests",
       "//components/discardable_memory/common:unit_tests",
@@ -416,7 +429,6 @@ test("components_unittests") {
       "//components/translate/content/browser:unit_tests",
       "//components/translate/content/renderer:unit_tests",
       "//components/ukm/content:unit_tests",
-      "//components/url_param_filter/content:unit_tests",
       "//components/url_rewrite:unit_tests",
       "//components/user_education/common:unit_tests",
       "//components/value_store:unit_tests",
@@ -463,7 +475,7 @@ test("components_unittests") {
     deps += [
       "//base:base_java_unittest_support",
       "//components/android_autofill/browser:unit_tests",
-      "//components/autofill_assistant/browser/android:unit_tests",
+      "//components/browser_ui/accessibility/android:unit_tests",
       "//components/browser_ui/sms/android:unit_tests",
       "//components/cdm/browser:unit_tests",
       "//components/component_updater/android:embedded_component_loader_java",
@@ -483,6 +495,7 @@ test("components_unittests") {
       "//components/media_router/browser/android:test_support_java",
       "//components/messages/android:java",
       "//components/messages/android:unit_tests",
+      "//components/metrics:metrics_java",
       "//components/offline_items_collection/core:native_java_unittests_java",
       "//components/paint_preview/browser/android:java",
       "//components/paint_preview/player/android:unit_tests",
@@ -543,6 +556,7 @@ test("components_unittests") {
     deps += [
       "//components/commerce/core:commerce_heuristics_data_unittests",
       "//components/commerce/core:feature_list_unittests",
+      "//components/commerce/core:heuristics_provider_unittests",
       "//components/commerce/core/subscriptions:subscriptions_unit_tests",
       "//components/commerce/core/webui:unit_tests",
     ]
@@ -577,10 +591,7 @@ test("components_unittests") {
   }
 
   if (is_mac) {
-    deps += [
-      "//components/metal_util:unit_tests",
-      "//components/power_metrics:unit_tests",
-    ]
+    deps += [ "//components/power_metrics:unit_tests" ]
   }
 
   if (toolkit_views) {
@@ -594,7 +605,7 @@ test("components_unittests") {
     ]
   }
 
-  if (enable_basic_printing) {
+  if (enable_printing) {
     deps += [
       "//components/printing/browser/print_to_pdf:unit_tests",
       "//components/printing/common:unit_tests",
@@ -636,6 +647,9 @@ test("components_unittests") {
     ]
   } else if (safe_browsing_mode == 2) {
     deps += [ "//components/safe_browsing/android:unit_tests_mobile" ]
+
+    # Used by real_time_url_checks_allowlist_unittest.cc
+    data += [ "//components/safe_browsing/content/resources/real_time_url_checks_allowlist.pb" ]
   }
 
   if (safe_browsing_mode == 1) {
@@ -666,6 +680,11 @@ test("components_unittests") {
       "//components/user_notes/browser:unit_tests",
       "//components/user_notes/storage:unit_tests",
     ]
+  }
+
+  # Only supported on cast-enabled platforms.
+  if (enable_cast_receiver) {
+    deps += [ "//components/cast_receiver:unit_tests" ]
   }
 
   # On LaCrOS, tests use ash - chrome as a window manager, thus the dependency.
@@ -776,11 +795,6 @@ if (!is_ios) {
       "autofill/content/renderer/form_cache_browsertest.cc",
       "autofill/content/renderer/html_based_username_detector_browsertest.cc",
       "autofill/content/renderer/password_form_conversion_utils_browsertest.cc",
-      "autofill_assistant/browser/js_flow_executor_impl_browsertest.cc",
-      "autofill_assistant/browser/script_executor_browsertest.cc",
-      "autofill_assistant/browser/web/batch_element_checker_browsertest.cc",
-      "autofill_assistant/browser/web/semantic_element_finder_browsertest.cc",
-      "autofill_assistant/browser/web/web_controller_browsertest.cc",
       "browsing_data/content/browsing_data_helper_browsertest.h",
       "browsing_data/content/cache_storage_helper_browsertest.cc",
       "browsing_data/content/database_helper_browsertest.cc",
@@ -820,10 +834,6 @@ if (!is_ios) {
       "//components/autofill/content/renderer",
       "//components/autofill/content/renderer:test_support",
       "//components/autofill/core/browser",
-      "//components/autofill_assistant/browser",
-      "//components/autofill_assistant/browser:browser_test_support",
-      "//components/autofill_assistant/browser:test_support",
-      "//components/autofill_assistant/content/renderer:browser_tests",
       "//components/browsing_data/content",
       "//components/content_capture/browser:browser_tests",
       "//components/content_settings/core/common",
@@ -899,6 +909,7 @@ if (!is_ios) {
         "//components/browser_ui/client_certificate/android",
         "//components/browser_ui/client_certificate/android:java",
         "//components/download/internal/common:internal_java",
+        "//components/metrics:metrics_java",
         "//components/version_info",
         "//content/public/test/android:android_test_message_pump_support_java",
         "//content/shell:content_shell_app",
@@ -938,7 +949,7 @@ if (!is_ios) {
       ]
     }
 
-    if (enable_basic_printing) {
+    if (enable_printing) {
       sources += [ "printing/test/print_render_frame_helper_browsertest.cc" ]
       deps += [
         "//build:chromeos_buildflags",
@@ -1047,7 +1058,6 @@ if (is_android) {
   robolectric_binary("components_junit_tests") {
     deps = [
       "//components/android_autofill/browser/junit:components_autofill_junit_tests",
-      "//components/autofill_assistant/android:junit",
       "//components/background_task_scheduler:components_background_task_scheduler_junit_tests",
       "//components/browser_ui/bottomsheet/android/internal:junit_tests",
       "//components/browser_ui/client_certificate/android:junit",

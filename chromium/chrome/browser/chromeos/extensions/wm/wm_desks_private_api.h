@@ -5,15 +5,35 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_WM_WM_DESKS_PRIVATE_API_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_WM_WM_DESKS_PRIVATE_API_H_
 
+#include "base/guid.h"
+#include "base/values.h"
+#include "chrome/common/extensions/api/wm_desks_private.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_histogram_value.h"
 
-namespace ash {
-class DeskTemplate;
-class Desk;
-}
-
 namespace extensions {
+
+class WmDesksPrivateGetSavedDesksFunction : public ExtensionFunction {
+ public:
+  WmDesksPrivateGetSavedDesksFunction();
+  WmDesksPrivateGetSavedDesksFunction(
+      const WmDesksPrivateGetSavedDesksFunction&) = delete;
+  WmDesksPrivateGetSavedDesksFunction& operator=(
+      const WmDesksPrivateGetSavedDesksFunction&) = delete;
+
+  DECLARE_EXTENSION_FUNCTION("wmDesksPrivate.getSavedDesks",
+                             WMDESKSPRIVATE_GETSAVEDDESKS)
+
+ protected:
+  ~WmDesksPrivateGetSavedDesksFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void OnGetSavedDesks(std::string error_string,
+                       std::vector<api::wm_desks_private::SavedDesk> desks);
+};
+
 class WmDesksPrivateGetDeskTemplateJsonFunction : public ExtensionFunction {
  public:
   WmDesksPrivateGetDeskTemplateJsonFunction();
@@ -30,9 +50,7 @@ class WmDesksPrivateGetDeskTemplateJsonFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void OnGetDeskTemplateJson(const std::string& template_json,
-                             std::string error_string);
+  void OnGetDeskTemplateJson(std::string error, base::Value template_json);
 };
 
 class WmDesksPrivateLaunchDeskFunction : public ExtensionFunction {
@@ -51,8 +69,7 @@ class WmDesksPrivateLaunchDeskFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void OnLaunchDesk(std::string error_string, const base::GUID& desk_Id);
+  void OnLaunchDesk(std::string error, const base::GUID& desk_uuid);
 };
 
 class WmDesksPrivateRemoveDeskFunction : public ExtensionFunction {
@@ -71,7 +88,7 @@ class WmDesksPrivateRemoveDeskFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnRemoveDesk(std::string error_string);
+  void OnRemoveDesk(std::string error);
 };
 
 class WmDesksPrivateGetAllDesksFunction : public ExtensionFunction {
@@ -90,9 +107,8 @@ class WmDesksPrivateGetAllDesksFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void OnGetAllDesks(const std::vector<const ash::Desk*>& desks,
-                     std::string error_string);
+  void OnGetAllDesks(std::string error,
+                     std::vector<api::wm_desks_private::Desk> desks);
 };
 
 class WmDesksPrivateSetWindowPropertiesFunction : public ExtensionFunction {
@@ -112,7 +128,7 @@ class WmDesksPrivateSetWindowPropertiesFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnSetWindowProperties(std::string error_string);
+  void OnSetWindowProperties(std::string error);
 };
 
 class WmDesksPrivateSaveActiveDeskFunction : public ExtensionFunction {
@@ -131,9 +147,8 @@ class WmDesksPrivateSaveActiveDeskFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void OnSavedActiveDesk(std::unique_ptr<ash::DeskTemplate> desk_template,
-                         std::string error_string);
+  void OnSavedActiveDesk(std::string error,
+                         api::wm_desks_private::SavedDesk desk);
 };
 
 class WmDesksPrivateDeleteSavedDeskFunction : public ExtensionFunction {
@@ -152,8 +167,7 @@ class WmDesksPrivateDeleteSavedDeskFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void OnDeletedSavedDesk(std::string error_string);
+  void OnDeletedSavedDesk(std::string error);
 };
 
 class WmDesksPrivateRecallSavedDeskFunction : public ExtensionFunction {
@@ -173,7 +187,7 @@ class WmDesksPrivateRecallSavedDeskFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnRecalledSavedDesk(std::string error_string, const base::GUID& desk_Id);
+  void OnRecalledSavedDesk(std::string error, const base::GUID& desk_Id);
 };
 
 class WmDesksPrivateGetActiveDeskFunction : public ExtensionFunction {

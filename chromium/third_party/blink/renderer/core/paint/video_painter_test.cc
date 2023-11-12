@@ -21,40 +21,40 @@
 namespace blink {
 namespace {
 
-void ExtractLinks(const cc::PaintOpBuffer* buffer,
+void ExtractLinks(const cc::PaintOpBuffer& buffer,
                   std::vector<std::pair<GURL, SkRect>>* links) {
-  for (cc::PaintOpBuffer::Iterator it(buffer); it; ++it) {
-    if (it->GetType() == cc::PaintOpType::Annotate) {
-      const auto& annotate_op = static_cast<const cc::AnnotateOp&>(*it);
+  for (const cc::PaintOp& op : buffer) {
+    if (op.GetType() == cc::PaintOpType::Annotate) {
+      const auto& annotate_op = static_cast<const cc::AnnotateOp&>(op);
       links->push_back(std::make_pair(
           GURL(std::string(
               reinterpret_cast<const char*>(annotate_op.data->data()),
               annotate_op.data->size())),
           annotate_op.rect));
-    } else if (it->GetType() == cc::PaintOpType::DrawRecord) {
-      const auto& record_op = static_cast<const cc::DrawRecordOp&>(*it);
-      ExtractLinks(record_op.record.get(), links);
+    } else if (op.GetType() == cc::PaintOpType::DrawRecord) {
+      const auto& record_op = static_cast<const cc::DrawRecordOp&>(op);
+      ExtractLinks(*record_op.record, links);
     }
   }
 }
 
-size_t CountImagesOfType(const cc::PaintOpBuffer* buffer,
+size_t CountImagesOfType(const cc::PaintOpBuffer& buffer,
                          cc::ImageType image_type) {
   size_t count = 0;
-  for (cc::PaintOpBuffer::Iterator it(buffer); it; ++it) {
-    if (it->GetType() == cc::PaintOpType::DrawImage) {
-      const auto& image_op = static_cast<const cc::DrawImageOp&>(*it);
+  for (const cc::PaintOp& op : buffer) {
+    if (op.GetType() == cc::PaintOpType::DrawImage) {
+      const auto& image_op = static_cast<const cc::DrawImageOp&>(op);
       if (image_op.image.GetImageHeaderMetadata()->image_type == image_type) {
         ++count;
       }
-    } else if (it->GetType() == cc::PaintOpType::DrawImageRect) {
-      const auto& image_op = static_cast<const cc::DrawImageRectOp&>(*it);
+    } else if (op.GetType() == cc::PaintOpType::DrawImageRect) {
+      const auto& image_op = static_cast<const cc::DrawImageRectOp&>(op);
       if (image_op.image.GetImageHeaderMetadata()->image_type == image_type) {
         ++count;
       }
-    } else if (it->GetType() == cc::PaintOpType::DrawRecord) {
-      const auto& record_op = static_cast<const cc::DrawRecordOp&>(*it);
-      count += CountImagesOfType(record_op.record.get(), image_type);
+    } else if (op.GetType() == cc::PaintOpType::DrawRecord) {
+      const auto& record_op = static_cast<const cc::DrawRecordOp&>(op);
+      count += CountImagesOfType(*record_op.record, image_type);
     }
   }
   return count;
@@ -140,8 +140,10 @@ TEST_F(VideoPainterTest, VideoLayerAppearsInLayerTree) {
   EXPECT_EQ(gfx::Size(300, 150), layer->bounds());
 }
 
-class MockWebMediaPlayer : public EmptyWebMediaPlayer {
+class MockWebMediaPlayer : public StubWebMediaPlayer {
  public:
+  explicit MockWebMediaPlayer(WebMediaPlayerClient* client)
+      : StubWebMediaPlayer(client) {}
   MOCK_CONST_METHOD0(HasAvailableVideoFrame, bool());
   MOCK_METHOD3(Paint,
                void(cc::PaintCanvas*, const gfx::Rect&, cc::PaintFlags&));
@@ -151,14 +153,17 @@ class TestWebFrameClientImpl : public frame_test_helpers::TestWebFrameClient {
  public:
   WebMediaPlayer* CreateMediaPlayer(
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*,
+      WebMediaPlayerClient* client,
       blink::MediaInspectorContext*,
       WebMediaPlayerEncryptedMediaClient*,
       WebContentDecryptionModule*,
       const WebString& sink_id,
       const cc::LayerTreeSettings& settings,
       scoped_refptr<base::TaskRunner> compositor_worker_task_runner) override {
-    return new MockWebMediaPlayer();
+    MockWebMediaPlayer* player = new MockWebMediaPlayer(client);
+    EXPECT_CALL(*player, HasAvailableVideoFrame)
+        .WillRepeatedly(testing::Return(false));
+    return player;
   }
 };
 
@@ -214,8 +219,7 @@ class VideoPaintPreviewTest : public testing::Test,
     cc::PaintRecorder recorder;
     paint_preview::PaintPreviewTracker tracker(token, embedding_token,
                                                is_main_frame);
-    cc::PaintCanvas* canvas =
-        recorder.beginRecording(bounds().width(), bounds().height());
+    cc::PaintCanvas* canvas = recorder.beginRecording();
     canvas->SetPaintPreviewTracker(&tracker);
 
     GetLocalMainFrame().CapturePaintPreview(
@@ -254,13 +258,13 @@ TEST_P(VideoPaintPreviewTest, URLIsRecordedWhenPaintingPreview) {
   auto record = CapturePaintPreview(/*skip_accelerated_content=*/false);
 
   std::vector<std::pair<GURL, SkRect>> links;
-  ExtractLinks(record.get(), &links);
+  ExtractLinks(*record, &links);
   ASSERT_EQ(1lu, links.size());
   EXPECT_EQ("http://test.com/", links[0].first);
 
   // The captured record will contain a poster image (GIF) even through the flag
   // is not set since the video is not playing.
-  EXPECT_EQ(1U, CountImagesOfType(record.get(), cc::ImageType::kGIF));
+  EXPECT_EQ(1U, CountImagesOfType(*record, cc::ImageType::kGIF));
 }
 
 TEST_P(VideoPaintPreviewTest, PosterFlagToggleFrameCapture) {
@@ -282,29 +286,34 @@ TEST_P(VideoPaintPreviewTest, PosterFlagToggleFrameCapture) {
   ASSERT_TRUE(PlayVideo());
 
   // Capture using poster.
+  auto* element = To<HTMLMediaElement>(GetDocument().body()->firstChild());
+  MockWebMediaPlayer* player =
+      static_cast<MockWebMediaPlayer*>(element->GetWebMediaPlayer());
+  EXPECT_CALL(*player, Paint(testing::_, testing::_, testing::_)).Times(0);
   auto record = CapturePaintPreview(/*skip_accelerated_content=*/true);
 
   std::vector<std::pair<GURL, SkRect>> links;
-  ExtractLinks(record.get(), &links);
+  ExtractLinks(*record, &links);
   ASSERT_EQ(1lu, links.size());
   EXPECT_EQ("http://test.com/", links[0].first);
 
   // The captured record will contain a poster image (GIF) even though the video
   // is playing.
-  EXPECT_EQ(1U, CountImagesOfType(record.get(), cc::ImageType::kGIF));
+  EXPECT_EQ(1U, CountImagesOfType(*record, cc::ImageType::kGIF));
 
   // Capture using video frame.
+  EXPECT_CALL(*player, Paint(testing::_, testing::_, testing::_));
   record = CapturePaintPreview(/*skip_accelerated_content=*/false);
 
   links.clear();
-  ExtractLinks(record.get(), &links);
+  ExtractLinks(*record, &links);
   ASSERT_EQ(1lu, links.size());
   EXPECT_EQ("http://test.com/", links[0].first);
 
   // A video frame is recorded rather than the poster image (GIF) as the video
   // is "playing". Note: this is actually just empty since we are using a
   // MockWebMediaPlayer.
-  EXPECT_EQ(0U, CountImagesOfType(record.get(), cc::ImageType::kGIF));
+  EXPECT_EQ(0U, CountImagesOfType(*record, cc::ImageType::kGIF));
 }
 
 TEST_P(VideoPaintPreviewTest, PosterFlagToggleNoPosterFrameCapture) {
@@ -330,7 +339,7 @@ TEST_P(VideoPaintPreviewTest, PosterFlagToggleNoPosterFrameCapture) {
   auto record = CapturePaintPreview(/*skip_accelerated_content=*/true);
 
   std::vector<std::pair<GURL, SkRect>> links;
-  ExtractLinks(record.get(), &links);
+  ExtractLinks(*record, &links);
   ASSERT_EQ(1lu, links.size());
   EXPECT_EQ("http://test.com/", links[0].first);
 }

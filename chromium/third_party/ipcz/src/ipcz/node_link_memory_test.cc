@@ -15,6 +15,7 @@
 #include "ipcz/node_link.h"
 #include "ipcz/node_link_memory.h"
 #include "ipcz/node_name.h"
+#include "ipcz/parcel.h"
 #include "reference_drivers/sync_reference_driver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "util/ref_counted.h"
@@ -24,31 +25,58 @@ namespace {
 
 const IpczDriver& kTestDriver = reference_drivers::kSyncReferenceDriver;
 
-constexpr NodeName kTestBrokerName(1, 2);
 constexpr NodeName kTestNonBrokerName(2, 3);
+constexpr NodeName kOtherTestNonBrokerName(3, 5);
 
 class NodeLinkMemoryTest : public testing::Test {
  public:
+  const Ref<Node>& node_a() const { return node_a_; }
+
   NodeLinkMemory& memory_a() { return link_a_->memory(); }
   NodeLinkMemory& memory_b() { return link_b_->memory(); }
 
-  void SetUp() override {
+  // Connects a broker to a non-broker and returns their respective NodeLinks.
+  static std::pair<Ref<NodeLink>, Ref<NodeLink>> ConnectNodes(
+      Ref<Node> broker,
+      Ref<Node> non_broker) {
+    std::pair<Ref<NodeLink>, Ref<NodeLink>> links;
     auto transports = DriverTransport::CreatePair(kTestDriver);
     DriverMemoryWithMapping buffer =
         NodeLinkMemory::AllocateMemory(kTestDriver);
-    link_a_ = NodeLink::CreateInactive(
-        node_a_, LinkSide::kA, kTestBrokerName, kTestNonBrokerName,
-        Node::Type::kNormal, 0, transports.first,
-        NodeLinkMemory::Create(node_a_, std::move(buffer.mapping)));
-    link_b_ = NodeLink::CreateInactive(
-        node_b_, LinkSide::kB, kTestNonBrokerName, kTestBrokerName,
-        Node::Type::kBroker, 0, transports.second,
-        NodeLinkMemory::Create(node_b_, buffer.memory.Map()));
-    node_a_->AddConnection(kTestNonBrokerName, {.link = link_a_});
-    node_b_->AddConnection(kTestBrokerName,
-                           {.link = link_b_, .broker = link_a_});
-    link_a_->Activate();
-    link_b_->Activate();
+    links.first = NodeLink::CreateInactive(
+        broker, LinkSide::kA, broker->GetAssignedName(),
+        non_broker->GetAssignedName(), Node::Type::kNormal, 0, transports.first,
+        NodeLinkMemory::Create(broker, std::move(buffer.mapping)));
+    links.second = NodeLink::CreateInactive(
+        non_broker, LinkSide::kB, non_broker->GetAssignedName(),
+        broker->GetAssignedName(), Node::Type::kBroker, 0, transports.second,
+        NodeLinkMemory::Create(non_broker, buffer.memory.Map()));
+    broker->AddConnection(non_broker->GetAssignedName(), {.link = links.first});
+    non_broker->AddConnection(broker->GetAssignedName(),
+                              {.link = links.second, .broker = links.first});
+    links.first->Activate();
+    links.second->Activate();
+    return links;
+  }
+
+  static void AddBlocksToMemory(NodeLinkMemory& memory, size_t block_size) {
+    constexpr size_t kNumBlocks = 32;
+    auto mapping = DriverMemory(kTestDriver, block_size * kNumBlocks).Map();
+
+    BlockAllocator allocator(mapping.bytes(),
+                             static_cast<uint32_t>(block_size));
+    allocator.InitializeRegion();
+
+    const BufferId id = memory.AllocateNewBufferId();
+    memory.AddBlockBuffer(id, block_size, std::move(mapping));
+  }
+
+  void SetUp() override {
+    // Brokers assign their own names, no need to assign one to `node_a_`.
+    node_b_->SetAssignedName(kTestNonBrokerName);
+    auto links = ConnectNodes(node_a_, node_b_);
+    link_a_ = std::move(links.first);
+    link_b_ = std::move(links.second);
   }
 
   void TearDown() override {
@@ -95,10 +123,21 @@ TEST_F(NodeLinkMemoryTest, MinimumSize) {
 }
 
 TEST_F(NodeLinkMemoryTest, RoundUpSize) {
+  AddBlocksToMemory(memory_a(), /*block_size=*/256);
+  AddBlocksToMemory(memory_a(), /*block_size=*/512);
+
   // Fragment sizes are rounded up to the nearest power of 2.
-  Fragment fragment = memory_a().AllocateFragment(250);
+  Fragment fragment = memory_a().AllocateFragment(32);
+  EXPECT_TRUE(fragment.is_addressable());
+  EXPECT_EQ(64u, fragment.size());
+
+  fragment = memory_a().AllocateFragment(250);
   EXPECT_TRUE(fragment.is_addressable());
   EXPECT_EQ(256u, fragment.size());
+
+  fragment = memory_a().AllocateFragment(257);
+  EXPECT_TRUE(fragment.is_addressable());
+  EXPECT_EQ(512u, fragment.size());
 }
 
 TEST_F(NodeLinkMemoryTest, SharedPrimaryBuffer) {
@@ -223,6 +262,48 @@ TEST_F(NodeLinkMemoryTest, NewBlockSizes) {
   // And as with other cases, the new capacity should have already been shared
   // with the other NodeLinkMemory.
   EXPECT_TRUE(memory_b().FreeFragment(fragment));
+}
+
+TEST_F(NodeLinkMemoryTest, ParcelDataAllocation) {
+  // NodeLinkMemory can in general be used by Parcel instances to allocate data
+  // buffers, but dynamic expansion of the allocation capacity can be disabled
+  // when configuring a new node.
+
+  const IpczCreateNodeOptions options = {
+      .size = sizeof(options),
+      .disable_parcel_memory_expansion = true,
+  };
+  const Ref<Node> node_c{MakeRefCounted<Node>(
+      Node::Type::kNormal, kTestDriver, IPCZ_INVALID_DRIVER_HANDLE, &options)};
+  node_c->SetAssignedName(kOtherTestNonBrokerName);
+  auto links = ConnectNodes(node_a(), node_c);
+
+  // We use a small enough size that this is guaranteed to allocate within
+  // NodeLinkMemory. But we allocate them from node C's side of the link, where
+  // capacity expansion is disabled. This loop should therefore eventually
+  // terminate. Since we're using a synchronous test driver, if the memory were
+  // going to expand its capacity at all, it would do so synchronously within
+  // AllocateData.
+  constexpr size_t kParcelSize = 32;
+  std::vector<Parcel> parcels;
+  for (;;) {
+    Parcel parcel;
+    parcel.AllocateData(kParcelSize, /*allow_partial=*/false,
+                        &links.second->memory());
+    if (!parcel.has_data_fragment()) {
+      break;
+    }
+
+    // Every fragment allocated must be of sufficient size and must be in the
+    // link memory's primary buffer ONLY.
+    EXPECT_GE(parcel.data_fragment().size(), kParcelSize);
+    EXPECT_EQ(NodeLinkMemory::kPrimaryBufferId,
+              parcel.data_fragment().buffer_id());
+    parcels.push_back(std::move(parcel));
+  }
+
+  EXPECT_FALSE(parcels.empty());
+  node_c->Close();
 }
 
 }  // namespace

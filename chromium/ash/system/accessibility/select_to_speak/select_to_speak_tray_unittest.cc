@@ -9,19 +9,23 @@
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/text_input_flags.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 
 namespace ash {
@@ -66,9 +70,8 @@ class SelectToSpeakTrayTest : public AshTestBase {
   views::ImageView* GetImageView() { return GetTray()->icon_; }
 
   // Gets the corresponding image given the |select_to_speak_state|.
-  gfx::ImageSkia GetIconImage(SelectToSpeakState select_to_speak_state) {
-    SkColor color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kIconColorPrimary);
+  gfx::ImageSkia GetIconImage(SelectToSpeakState select_to_speak_state,
+                              SkColor color) {
     switch (select_to_speak_state) {
       case SelectToSpeakState::kSelectToSpeakStateInactive:
         return gfx::CreateVectorIcon(kSystemTraySelectToSpeakNewuiIcon, color);
@@ -117,16 +120,19 @@ TEST_F(SelectToSpeakTrayTest, SelectToSpeakStateImpactsImageAndActivation) {
   controller->SetSelectToSpeakState(
       SelectToSpeakState::kSelectToSpeakStateSelecting);
   EXPECT_TRUE(IsTrayBackgroundActive());
-  gfx::ImageSkia expected_icon_image =
-      GetIconImage(SelectToSpeakState::kSelectToSpeakStateSelecting);
+  const auto icon_color =
+      GetTray()->GetColorProvider()->GetColor(kColorAshIconColorPrimary);
+  gfx::ImageSkia expected_icon_image = GetIconImage(
+      SelectToSpeakState::kSelectToSpeakStateSelecting, icon_color);
   gfx::ImageSkia actual_icon_image = GetImageView()->GetImage();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(*expected_icon_image.bitmap(),
                                          *actual_icon_image.bitmap()));
   controller->SetSelectToSpeakState(
       SelectToSpeakState::kSelectToSpeakStateSpeaking);
   EXPECT_TRUE(IsTrayBackgroundActive());
+
   expected_icon_image =
-      GetIconImage(SelectToSpeakState::kSelectToSpeakStateSpeaking);
+      GetIconImage(SelectToSpeakState::kSelectToSpeakStateSpeaking, icon_color);
   actual_icon_image = GetImageView()->GetImage();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(*expected_icon_image.bitmap(),
                                          *actual_icon_image.bitmap()));
@@ -135,10 +141,76 @@ TEST_F(SelectToSpeakTrayTest, SelectToSpeakStateImpactsImageAndActivation) {
       SelectToSpeakState::kSelectToSpeakStateInactive);
   EXPECT_FALSE(IsTrayBackgroundActive());
   expected_icon_image =
-      GetIconImage(SelectToSpeakState::kSelectToSpeakStateInactive);
+      GetIconImage(SelectToSpeakState::kSelectToSpeakStateInactive, icon_color);
   actual_icon_image = GetImageView()->GetImage();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(*expected_icon_image.bitmap(),
                                          *actual_icon_image.bitmap()));
+}
+
+// Test that changing the SelectToSpeakState in the AccessibilityController
+// results in a change of tooltip text in the tray, when hover text improvements
+// are enabled.
+TEST_F(SelectToSpeakTrayTest, SelectToSpeakStateImpactsTooltipText) {
+  // Enable AccessibilitySelectToSpeakHoverTextImprovements feature.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      ::features::kAccessibilitySelectToSpeakHoverTextImprovements);
+
+  AccessibilityControllerImpl* controller =
+      Shell::Get()->accessibility_controller();
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateSelecting);
+  std::u16string expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK_INSTRUCTIONS);
+  std::u16string actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
+
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateSpeaking);
+  expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK_STOP_INSTRUCTIONS);
+  actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
+
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateInactive);
+  expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK);
+  actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
+}
+// Test that changing the SelectToSpeakState in the AccessibilityController
+// results in a change of tooltip text in the tray, when hover text improvements
+// are disabled.
+TEST_F(SelectToSpeakTrayTest,
+       SelectToSpeakStateImpactsTooltipTextFeatureDisabled) {
+  // Disable AccessibilitySelectToSpeakHoverTextImprovements feature.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      ::features::kAccessibilitySelectToSpeakHoverTextImprovements);
+
+  AccessibilityControllerImpl* controller =
+      Shell::Get()->accessibility_controller();
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateSelecting);
+  std::u16string expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK);
+  std::u16string actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
+
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateSpeaking);
+  expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK);
+  actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
+
+  controller->SetSelectToSpeakState(
+      SelectToSpeakState::kSelectToSpeakStateInactive);
+  expected_tooltip_text = l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SELECT_TO_SPEAK);
+  actual_tooltip_text = GetImageView()->GetTooltipText();
+  EXPECT_TRUE(expected_tooltip_text == actual_tooltip_text);
 }
 
 // Trivial test to increase coverage of select_to_speak_tray.h. The

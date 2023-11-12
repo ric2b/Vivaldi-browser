@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_actions_handler.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
@@ -23,9 +23,12 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
+using l10n_util::GetNSString;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
@@ -37,10 +40,6 @@ namespace {
 
 // The size of the symbol image.
 const CGFloat kSymbolToolbarPointSize = 24;
-
-// Specific symbols used in the toolbar.
-NSString* const kToolbarArrowBackwardSymbol = @"arrow.backward";
-NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
 
 }  // namespace
 
@@ -59,10 +58,9 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
 
 - (ToolbarButton*)backButton {
   UIImage* backImage;
-  backImage = UseSymbols()
-                  ? DefaultSymbolWithPointSize(kToolbarArrowBackwardSymbol,
-                                               kSymbolToolbarPointSize)
-                  : [UIImage imageNamed:@"toolbar_back"];
+  backImage = UseSymbols() ? DefaultSymbolWithPointSize(kBackSymbol,
+                                                        kSymbolToolbarPointSize)
+                           : [UIImage imageNamed:@"toolbar_back"];
   ToolbarButton* backButton = [ToolbarButton
       toolbarButtonWithImage:[backImage
                                  imageFlippedForRightToLeftLayoutDirection]];
@@ -78,9 +76,9 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
 // Returns a forward button without visibility mask configured.
 - (ToolbarButton*)forwardButton {
   UIImage* forwardImage =
-      UseSymbols() ? DefaultSymbolWithPointSize(kToolbarArrowForwardSymbol,
-                                                kSymbolToolbarPointSize)
-                   : [UIImage imageNamed:@"toolbar_forward"];
+      UseSymbols()
+          ? DefaultSymbolWithPointSize(kForwardSymbol, kSymbolToolbarPointSize)
+          : [UIImage imageNamed:@"toolbar_forward"];
   ToolbarButton* forwardButton = [ToolbarButton
       toolbarButtonWithImage:[forwardImage
                                  imageFlippedForRightToLeftLayoutDirection]];
@@ -198,12 +196,26 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
 }
 
 - (ToolbarButton*)openNewTabButton {
-  UIImage* newTabImage =
-      UseSymbols()
-          ? DefaultSymbolWithPointSize(kPlusSymbol, kSymbolToolbarPointSize)
-          : [UIImage imageNamed:@"toolbar_new_tab_page"];
-  ToolbarNewTabButton* newTabButton =
-      [ToolbarNewTabButton toolbarButtonWithImage:newTabImage];
+  ToolbarButton* newTabButton;
+  if (UseSymbols()) {
+    if (@available(iOS 15, *)) {
+      UIImage* image = SymbolWithPalette(
+          CustomSymbolWithPointSize(kNewTabSymbol, kSymbolToolbarPointSize), @[
+            [UIColor colorNamed:kGrey600Color],
+            [self.toolbarConfiguration
+                locationBarBackgroundColorWithVisibility:1]
+          ]);
+      newTabButton = [ToolbarButton toolbarButtonWithImage:image];
+    } else {
+      newTabButton = [ToolbarButton
+          toolbarButtonWithImage:
+              [[UIImage imageNamed:@"plus_circle_fill_ios14"]
+                  imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
+    }
+  } else {
+    newTabButton = [ToolbarNewTabButton
+        toolbarButtonWithImage:[UIImage imageNamed:@"toolbar_new_tab_page"]];
+  }
 
   [newTabButton addTarget:self.actionHandler
                    action:@selector(newTabAction:)
@@ -219,7 +231,7 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
   newTabButton.accessibilityIdentifier = kToolbarNewTabButtonIdentifier;
 
   newTabButton.visibilityMask =
-      self.visibilityConfiguration.searchButtonVisibility;
+      self.visibilityConfiguration.newTabButtonVisibility;
   return newTabButton;
 }
 
@@ -245,21 +257,119 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
   return cancelButton;
 }
 
-// Vivaldi
+#pragma mark: - VIVALDI
 - (ToolbarButton*)panelButton {
-  UIImage* panelImage = [UIImage imageNamed:vPrimaryToolbarPanelButton];
+  UIImage* panelImage = [UIImage imageNamed:vToolbarPanelButtonIcon];
   ToolbarButton* panelButton = [ToolbarButton
       toolbarButtonWithImage:[panelImage
                                  imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:panelButton width:kAdaptiveToolbarButtonWidth];
-  // Todo: prio@vivaldi.com - Update accessibility label
-  panelButton.accessibilityLabel = l10n_util::GetNSString(IDS_ACCNAME_BACK);
+  panelButton.accessibilityLabel = GetNSString(IDS_ACCNAME_PANEL);
   [panelButton addTarget:self.actionHandler
                  action:@selector(panelAction)
        forControlEvents:UIControlEventTouchUpInside];
-  panelButton.visibilityMask = self.visibilityConfiguration.backButtonVisibility;
+  panelButton.visibilityMask =
+      self.visibilityConfiguration.toolsMenuButtonVisibility;
   return panelButton;
-} // End Vivaldi
+}
+
+// Vivaldi search button -> Visible only on new tab page.
+- (ToolbarButton*)vivaldiSearchButton {
+  UIImage* searchImage = [UIImage imageNamed:@"toolbar_search"];
+  ToolbarButton* searchButton = [ToolbarButton
+      toolbarButtonWithImage:[searchImage
+                                 imageFlippedForRightToLeftLayoutDirection]];
+  [self configureButton:searchButton width:kAdaptiveToolbarButtonWidth];
+  searchButton.accessibilityLabel = GetNSString(IDS_ACCNAME_SEARCH);
+  [searchButton addTarget:self.actionHandler
+                 action:@selector(vivaldiSearchAction)
+       forControlEvents:UIControlEventTouchUpInside];
+  searchButton.visibilityMask =
+      self.visibilityConfiguration.backButtonVisibility;
+  return searchButton;
+}
+
+- (ToolbarButton*)shieldButton {
+  UIImage* shieldImage = [UIImage imageNamed:vATBShield];
+  ToolbarButton* shieldButton =
+    [ToolbarButton
+      toolbarButtonWithImage:[shieldImage
+                              imageFlippedForRightToLeftLayoutDirection]];
+  [self configureButton:shieldButton width:kAdaptiveToolbarButtonWidth];
+  shieldButton.accessibilityLabel = GetNSString(IDS_ACCNAME_ATB);
+  [shieldButton addTarget:self.actionHandler
+                   action:@selector(showTrackerBlockerManager)
+         forControlEvents:UIControlEventTouchUpInside];
+  shieldButton.visibilityMask =
+    self.visibilityConfiguration.toolsMenuButtonVisibility;
+  return shieldButton;
+}
+
+// More button -> Visible only in iPhone landscape mode.
+- (ToolbarButton*)vivaldiMoreButton {
+  UIImage* moreImage = [UIImage imageNamed:@"toolbar_more"];
+  ToolbarButton* moreButton =
+    [ToolbarButton
+      toolbarButtonWithImage:[moreImage
+                              imageFlippedForRightToLeftLayoutDirection]];
+  [self configureButton:moreButton width:kAdaptiveToolbarButtonWidth];
+  moreButton.accessibilityLabel = GetNSString(IDS_ACCNAME_MORE);
+  moreButton.visibilityMask =
+    self.visibilityConfiguration.toolsMenuButtonVisibility;
+  moreButton.menu = [self contextMenuForMoreWithAllButtons:NO];
+  moreButton.showsMenuAsPrimaryAction = YES;
+  return moreButton;
+}
+
+/// Returns the more button options based on the browsing state.
+- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons {
+
+  NSString* atbTitle =
+      GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
+  UIAction* atbAction =
+      [UIAction actionWithTitle:atbTitle
+                          image:[UIImage imageNamed:vATBShield]
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler showTrackerBlockerManager];
+      }];
+  atbAction.accessibilityLabel = atbTitle;
+
+  NSString* shareTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_SHARE);
+  UIAction* shareAction =
+      [UIAction actionWithTitle:shareTitle
+                          image:[UIImage imageNamed:@"toolbar_share"]
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler shareAction];
+      }];
+  shareAction.accessibilityLabel = shareTitle;
+
+  NSString* panelTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_PANEL);
+  UIAction* panelAction =
+      [UIAction actionWithTitle:panelTitle
+                          image:[UIImage imageNamed:vToolbarPanelButtonIcon]
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler panelAction];
+      }];
+  panelAction.accessibilityLabel = panelTitle;
+
+  NSArray* moreActions = [[NSArray alloc] initWithObjects:@[], nil];
+
+  if (allButtons) {
+    moreActions = @[atbAction, shareAction, panelAction];
+  } else {
+    moreActions = @[panelAction];
+  }
+
+  UIMenu* menu = [UIMenu menuWithTitle:@"" children:moreActions];
+  return menu;
+}
+// End Vivaldi
 
 #pragma mark - Helpers
 

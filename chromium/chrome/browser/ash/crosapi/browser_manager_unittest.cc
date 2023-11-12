@@ -12,7 +12,6 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/fake_cros_component_manager.h"
-#include "chrome/browser/lacros/browser_service_lacros.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -27,6 +26,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/display/test/test_screen.h"
 
 using ::component_updater::FakeCrOSComponentManager;
 using ::component_updater::MockComponentUpdateService;
@@ -52,6 +52,7 @@ class MockBrowserService : public mojom::BrowserServiceInterceptorForTesting {
               NewWindow,
               (bool incognito,
                bool should_trigger_session_restore,
+               int64_t target_display_id,
                NewWindowCallback callback),
               (override));
   MOCK_METHOD(void, OpenForFullRestore, (bool skip_crash_restore), (override));
@@ -67,9 +68,9 @@ class BrowserManagerFake : public BrowserManager {
   ~BrowserManagerFake() override = default;
 
   // BrowserManager:
-  void Start() override {
+  void Start(bool launching_at_login_screen = false) override {
     ++start_count_;
-    BrowserManager::Start();
+    BrowserManager::Start(launching_at_login_screen);
   }
 
   int start_count() const { return start_count_; }
@@ -97,6 +98,36 @@ class BrowserManagerFake : public BrowserManager {
   int start_count_ = 0;
 };
 
+class MockVersionServiceDelegate : public BrowserVersionServiceAsh::Delegate {
+ public:
+  MockVersionServiceDelegate() = default;
+  MockVersionServiceDelegate(const MockVersionServiceDelegate&) = delete;
+  MockVersionServiceDelegate& operator=(const MockVersionServiceDelegate&) =
+      delete;
+  ~MockVersionServiceDelegate() override = default;
+
+  // BrowserVersionServiceAsh::Delegate:
+  base::Version GetLatestLaunchableBrowserVersion() const override {
+    return latest_launchable_version_;
+  }
+
+  bool IsNewerBrowserAvailable() const override {
+    return is_newer_browser_available_;
+  }
+
+  void set_latest_lauchable_version(base::Version version) {
+    latest_launchable_version_ = std::move(version);
+  }
+
+  void set_is_newer_browser_available(bool is_newer_browser_available) {
+    is_newer_browser_available_ = is_newer_browser_available;
+  }
+
+ private:
+  base::Version latest_launchable_version_;
+  bool is_newer_browser_available_ = false;
+};
+
 }  // namespace
 
 class MockBrowserLoader : public BrowserLoader {
@@ -119,7 +150,7 @@ class BrowserManagerTest : public testing::Test {
 
   void SetUp() override {
     // Enable Lacros by setting the appropriate flag.
-    feature_list_.InitAndEnableFeature(chromeos::features::kLacrosSupport);
+    feature_list_.InitAndEnableFeature(ash::features::kLacrosSupport);
 
     fake_user_manager_ = new ash::FakeChromeUserManager;
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
@@ -135,6 +166,11 @@ class BrowserManagerTest : public testing::Test {
         std::make_unique<testing::NiceMock<MockComponentUpdateService>>();
     fake_browser_manager_ = std::make_unique<BrowserManagerFake>(
         std::move(browser_loader), component_update_service_.get());
+    auto version_service_delegate =
+        std::make_unique<MockVersionServiceDelegate>();
+    version_service_delegate_ = version_service_delegate.get();
+    fake_browser_manager_->set_version_service_delegate_for_testing(
+        std::move(version_service_delegate));
 
     shelf_model_ = std::make_unique<ash::ShelfModel>();
     shelf_controller_ = std::make_unique<ChromeShelfController>(
@@ -147,7 +183,7 @@ class BrowserManagerTest : public testing::Test {
     crosapi::browser_util::SetLacrosLaunchSwitchSourceForTest(
         crosapi::browser_util::LacrosAvailability::kUserChoice);
 
-    EXPECT_CALL(mock_browser_service_, NewWindow(_, _, _)).Times(0);
+    EXPECT_CALL(mock_browser_service_, NewWindow(_, _, _, _)).Times(0);
     EXPECT_CALL(mock_browser_service_, OpenForFullRestore(_)).Times(0);
   }
 
@@ -178,10 +214,13 @@ class BrowserManagerTest : public testing::Test {
   MockBrowserLoader* browser_loader_ = nullptr;
   std::unique_ptr<MockComponentUpdateService> component_update_service_;
   std::unique_ptr<BrowserManagerFake> fake_browser_manager_;
+  raw_ptr<MockVersionServiceDelegate> version_service_delegate_;
   ScopedTestingLocalState local_state_;
   std::unique_ptr<ash::ShelfModel> shelf_model_;
   std::unique_ptr<ChromeShelfController> shelf_controller_;
   MockBrowserService mock_browser_service_;
+  display::test::TestScreen test_screen_{/*create_display=*/true,
+                                         /*register_screen=*/true};
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -206,7 +245,8 @@ TEST_F(BrowserManagerTest, LacrosKeepAlive) {
   EXPECT_CALL(*browser_loader_, Load(_))
       .WillOnce([](BrowserLoader::LoadCompletionCallback callback) {
         std::move(callback).Run(base::FilePath("/run/lacros"),
-                                browser_util::LacrosSelection::kRootfs);
+                                browser_util::LacrosSelection::kRootfs,
+                                base::Version());
       });
   fake_browser_manager_->InitializeAndStartIfNeeded();
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
@@ -247,7 +287,8 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveReloadsWhenUpdateAvailable) {
   EXPECT_CALL(*browser_loader_, Load(_))
       .WillOnce([](BrowserLoader::LoadCompletionCallback callback) {
         std::move(callback).Run(base::FilePath("/run/lacros"),
-                                browser_util::LacrosSelection::kRootfs);
+                                browser_util::LacrosSelection::kRootfs,
+                                base::Version());
       });
   fake_browser_manager_->InitializeAndStartIfNeeded();
 
@@ -257,13 +298,9 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveReloadsWhenUpdateAvailable) {
   fake_browser_manager_->SetStatePublic(State::UNAVAILABLE);
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
 
-  // Simulate an update event by the component update service.
-  const std::string lacros_component_id =
-      browser_util::kLacrosDogfoodDevInfo.crx_id;
-  static_cast<component_updater::ComponentUpdateService::Observer*>(
-      fake_browser_manager_.get())
-      ->OnEvent(UpdateClient::Observer::Events::COMPONENT_UPDATED,
-                lacros_component_id);
+  version_service_delegate_->set_is_newer_browser_available(true);
+  version_service_delegate_->set_latest_lauchable_version(
+      base::Version("1.0.0"));
 
   std::unique_ptr<BrowserManager::ScopedKeepAlive> keep_alive =
       fake_browser_manager_->KeepAlive(BrowserManager::Feature::kTestOnly);
@@ -271,7 +308,8 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveReloadsWhenUpdateAvailable) {
   EXPECT_CALL(*browser_loader_, Load(_))
       .WillOnce([](BrowserLoader::LoadCompletionCallback callback) {
         std::move(callback).Run(base::FilePath(kSampleLacrosPath),
-                                browser_util::LacrosSelection::kStateful);
+                                browser_util::LacrosSelection::kStateful,
+                                base::Version());
       });
 
   // On simulated termination, KeepAlive restarts Lacros. Since there is an
@@ -295,7 +333,8 @@ TEST_F(BrowserManagerTest, NewWindowReloadsWhenUpdateAvailable) {
   EXPECT_CALL(*browser_loader_, Load(_))
       .WillOnce([](BrowserLoader::LoadCompletionCallback callback) {
         std::move(callback).Run(base::FilePath("/run/lacros"),
-                                browser_util::LacrosSelection::kRootfs);
+                                browser_util::LacrosSelection::kRootfs,
+                                base::Version());
       });
   fake_browser_manager_->InitializeAndStartIfNeeded();
 
@@ -304,16 +343,13 @@ TEST_F(BrowserManagerTest, NewWindowReloadsWhenUpdateAvailable) {
   using State = BrowserManagerFake::State;
   fake_browser_manager_->SetStatePublic(State::STOPPED);
 
-  const std::string lacros_component_id =
-      browser_util::kLacrosDogfoodDevInfo.crx_id;
-  static_cast<component_updater::ComponentUpdateService::Observer*>(
-      fake_browser_manager_.get())
-      ->OnEvent(UpdateClient::Observer::Events::COMPONENT_UPDATED,
-                lacros_component_id);
+  version_service_delegate_->set_is_newer_browser_available(true);
+  version_service_delegate_->set_latest_lauchable_version(
+      base::Version("1.0.0"));
 
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
   EXPECT_CALL(*browser_loader_, Load(_));
-  EXPECT_CALL(mock_browser_service_, NewWindow(_, _, _))
+  EXPECT_CALL(mock_browser_service_, NewWindow(_, _, _, _))
       .Times(1)
       .RetiresOnSaturation();
   fake_browser_manager_->NewWindow(/*incognito=*/false,
@@ -343,7 +379,8 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveDoesNotBlockRestart) {
   EXPECT_CALL(*browser_loader_, Load(_))
       .WillOnce([](BrowserLoader::LoadCompletionCallback callback) {
         std::move(callback).Run(base::FilePath("/run/lacros"),
-                                browser_util::LacrosSelection::kRootfs);
+                                browser_util::LacrosSelection::kRootfs,
+                                base::Version());
       });
   fake_browser_manager_->InitializeAndStartIfNeeded();
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);

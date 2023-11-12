@@ -7,12 +7,14 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "components/url_matcher/url_matcher_constants.h"
 #include "extensions/common/extension_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using base::test::ParseJson;
 using url_matcher::URLMatcher;
@@ -23,12 +25,12 @@ namespace extensions {
 
 namespace {
 
-std::unique_ptr<base::DictionaryValue> SimpleManifest() {
+base::Value::Dict SimpleManifest() {
   return DictionaryBuilder()
       .Set("name", "extension")
       .Set("manifest_version", 2)
       .Set("version", "1.0")
-      .Build();
+      .BuildDict();
 }
 
 }  // namespace
@@ -49,8 +51,7 @@ struct RecordingCondition {
       URLMatcherConditionFactory* url_matcher_condition_factory,
       const base::Value& condition,
       std::string* error) {
-    const base::DictionaryValue* dict = nullptr;
-    if (condition.GetAsDictionary(&dict) && dict->FindKey("bad_key")) {
+    if (condition.is_dict() && condition.GetDict().Find("bad_key")) {
       *error = "Found error key";
       return nullptr;
     }
@@ -97,7 +98,7 @@ TEST(DeclarativeConditionTest, CreateConditionSet) {
 struct FulfillableCondition {
   struct MatchData {
     int value;
-    const std::set<base::MatcherStringPattern::ID>& url_matches;
+    const raw_ref<const std::set<base::MatcherStringPattern::ID>> url_matches;
   };
 
   scoped_refptr<URLMatcherConditionSet> condition_set;
@@ -120,7 +121,7 @@ struct FulfillableCondition {
 
   bool IsFulfilled(const MatchData& match_data) const {
     if (condition_set_id != base::MatcherStringPattern::kInvalidId &&
-        !base::Contains(match_data.url_matches, condition_set_id))
+        !base::Contains(*match_data.url_matches, condition_set_id))
       return false;
     return match_data.value <= max_value;
   }
@@ -131,16 +132,16 @@ struct FulfillableCondition {
       const base::Value& condition,
       std::string* error) {
     std::unique_ptr<FulfillableCondition> result(new FulfillableCondition());
-    const base::DictionaryValue* dict;
-    if (!condition.GetAsDictionary(&dict)) {
+    if (!condition.is_dict()) {
       *error = "Expected dict";
       return result;
     }
-    const auto id = dict->FindIntKey("url_id");
+    const base::Value::Dict& dict = condition.GetDict();
+    const auto id = dict.FindInt("url_id");
     result->condition_set_id =
         id.has_value() ? static_cast<base::MatcherStringPattern::ID>(id.value())
                        : base::MatcherStringPattern::kInvalidId;
-    if (absl::optional<int> max_value_int = dict->FindIntKey("max")) {
+    if (absl::optional<int> max_value_int = dict.FindInt("max")) {
       result->max_value = *max_value_int;
     } else {
       *error = "Expected integer at ['max']";
@@ -171,7 +172,7 @@ TEST(DeclarativeConditionTest, FulfillConditionSet) {
   EXPECT_EQ(4u, result->conditions().size());
 
   std::set<base::MatcherStringPattern::ID> url_matches;
-  FulfillableCondition::MatchData match_data = { 0, url_matches };
+  FulfillableCondition::MatchData match_data = {0, raw_ref(url_matches)};
   EXPECT_FALSE(result->IsFulfilled(1, match_data))
       << "Testing an ID that's not in url_matches forwards to the Condition, "
       << "which doesn't match.";
@@ -219,20 +220,21 @@ class SummingAction : public base::RefCounted<SummingAction> {
       const base::Value& action,
       std::string* error,
       bool* bad_message) {
-    const base::DictionaryValue* dict = nullptr;
-    EXPECT_TRUE(action.GetAsDictionary(&dict));
-    if (dict->FindKey("error")) {
-      EXPECT_TRUE(dict->GetString("error", error));
+    EXPECT_TRUE(action.is_dict());
+    const base::Value::Dict& dict = action.GetDict();
+    if (const base::Value* value = dict.Find("error")) {
+      EXPECT_TRUE(value->is_string());
+      *error = value->GetString();
       return nullptr;
     }
-    if (dict->FindKey("bad")) {
+    if (dict.Find("bad")) {
       *bad_message = true;
       return nullptr;
     }
 
-    absl::optional<int> increment = dict->FindIntKey("value");
+    absl::optional<int> increment = dict.FindInt("value");
     EXPECT_TRUE(increment);
-    int min_priority = dict->FindIntKey("priority").value_or(0);
+    int min_priority = dict.FindInt("priority").value_or(0);
     return scoped_refptr<const SummingAction>(
         new SummingAction(*increment, min_priority));
   }

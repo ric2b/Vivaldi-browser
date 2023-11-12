@@ -44,6 +44,7 @@
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_exit_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/test/user_policy_mixin.h"
 #include "chrome/browser/ash/login/test/webview_content_extractor.h"
@@ -63,17 +64,18 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/eula_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/marketing_opt_in_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/tpm/tpm_token_loader.h"
 #include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
@@ -134,6 +136,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
+
 namespace {
 
 namespace em = ::enterprise_management;
@@ -159,6 +162,7 @@ constexpr char kSigninWebviewOnLockScreen[] =
 // UMA names for better test reading.
 const char kLoginRequests[] = "OOBE.GaiaScreen.LoginRequests";
 const char kSuccessLoginRequests[] = "OOBE.GaiaScreen.SuccessLoginRequests";
+const char kPasswordIgnoredChars[] = "OOBE.GaiaScreen.PasswordIgnoredChars";
 
 void InjectCookieDoneCallback(base::OnceClosure done_closure,
                               net::CookieAccessResult result) {
@@ -521,6 +525,102 @@ IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, Basic) {
                                        GaiaView::GaiaLoginVariant::kOobe, 1);
   histogram_tester_.ExpectUniqueSample(kSuccessLoginRequests,
                                        GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kPasswordIgnoredChars,
+                                       0 /* no ignored chars */, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest,
+                       PasswordWithTrailingWhitespaces) {
+  WaitForGaiaPageLoadAndPropertyUpdate();
+
+  ExpectIdentifierPage();
+  // Test will send `closerView` manually (if the feature is enabled).
+  DisableCloseViewMessage();
+
+  SigninFrameJS().TypeIntoPath(FakeGaiaMixin::kFakeUserEmail,
+                               FakeGaiaMixin::kEmailPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+  WaitForGaiaPageBackButtonUpdate();
+  ExpectPasswordPage();
+
+  ASSERT_TRUE(LoginDisplayHost::default_host());
+  EXPECT_TRUE(LoginDisplayHost::default_host()->GetWebUILoginView());
+
+  SigninFrameJS().TypeIntoPath("[]", {"services"});
+  SigninFrameJS().TypeIntoPath("password-with-whitespace ",
+                               FakeGaiaMixin::kPasswordPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+
+  WaitForServicesSet();
+
+  SendCloseViewOrEmulateTimeout();
+
+  // The login view should be destroyed after the browser window opens.
+  ui_test_utils::WaitForBrowserToOpen();
+  EXPECT_FALSE(LoginDisplayHost::default_host()->GetWebUILoginView());
+
+  test::WaitForPrimaryUserSessionStart();
+
+  // Wait for the LoginDisplayHost to delete itself, which is a posted task.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(LoginDisplayHost::default_host());
+
+  histogram_tester_.ExpectUniqueSample("ChromeOS.SAML.APILogin", 0, 1);
+  histogram_tester_.ExpectTotalCount("OOBE.GaiaLoginTime", 1);
+  histogram_tester_.ExpectUniqueSample(kLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kSuccessLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kPasswordIgnoredChars,
+                                       1 /* has ignored chars */, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest,
+                       PasswordWithLeadingWhitespaces) {
+  WaitForGaiaPageLoadAndPropertyUpdate();
+
+  ExpectIdentifierPage();
+  // Test will send `closerView` manually (if the feature is enabled).
+  DisableCloseViewMessage();
+
+  SigninFrameJS().TypeIntoPath(FakeGaiaMixin::kFakeUserEmail,
+                               FakeGaiaMixin::kEmailPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+  WaitForGaiaPageBackButtonUpdate();
+  ExpectPasswordPage();
+
+  ASSERT_TRUE(LoginDisplayHost::default_host());
+  EXPECT_TRUE(LoginDisplayHost::default_host()->GetWebUILoginView());
+
+  SigninFrameJS().TypeIntoPath("[]", {"services"});
+  SigninFrameJS().TypeIntoPath(" password-with-whitespace",
+                               FakeGaiaMixin::kPasswordPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+
+  WaitForServicesSet();
+
+  SendCloseViewOrEmulateTimeout();
+
+  // The login view should be destroyed after the browser window opens.
+  ui_test_utils::WaitForBrowserToOpen();
+  EXPECT_FALSE(LoginDisplayHost::default_host()->GetWebUILoginView());
+
+  test::WaitForPrimaryUserSessionStart();
+
+  // Wait for the LoginDisplayHost to delete itself, which is a posted task.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(LoginDisplayHost::default_host());
+
+  histogram_tester_.ExpectUniqueSample("ChromeOS.SAML.APILogin", 0, 1);
+  histogram_tester_.ExpectTotalCount("OOBE.GaiaLoginTime", 1);
+  histogram_tester_.ExpectUniqueSample(kLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kSuccessLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kPasswordIgnoredChars,
+                                       1 /* has ignored chars */, 1);
 }
 
 IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, BackButton) {
@@ -657,13 +757,48 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, ErrorScreenOnGaiaError) {
   ExpectIdentifierPage();
 
   // Make gaia landing page unreachable
-  fake_gaia_.fake_gaia()->SetErrorResponse(
+  fake_gaia_.fake_gaia()->SetFixedResponse(
       GaiaUrls::GetInstance()->embedded_setup_chromeos_url(2),
       net::HTTP_NOT_FOUND);
 
   // Click back to reload (unreachable) identifier page.
   test::OobeJS().ClickOnPath(kBackButton);
   OobeScreenWaiter(ErrorScreenView::kScreenId).Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(WebviewLoginTest,
+                       NavigationButtonsDisabledBeforeGaiaLoaded) {
+  WaitForSigninScreen();
+  test::WaitForOobeJSReady();
+
+  test::OobeJS().ExpectHiddenPath(kPrimaryButton);
+  test::OobeJS().ExpectDisabledPath(kPrimaryButton);
+  test::OobeJS().ExpectHiddenPath(kSecondaryButton);
+  test::OobeJS().ExpectDisabledPath(kSecondaryButton);
+}
+
+IN_PROC_BROWSER_TEST_F(WebviewLoginTest,
+                       NavigationButtonsDisabledOnGaiaReload) {
+  // Progress to password page, so that both buttons are enabled.
+  WaitForGaiaPageLoadAndPropertyUpdate();
+  ExpectIdentifierPage();
+  SigninFrameJS().TypeIntoPath(FakeGaiaMixin::kFakeUserEmail,
+                               FakeGaiaMixin::kEmailPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+  WaitForGaiaPageBackButtonUpdate();
+  ExpectPasswordPage();
+  test::OobeJS().ExpectEnabledPath(kPrimaryButton);
+  test::OobeJS().ExpectEnabledPath(kSecondaryButton);
+
+  // Return empty gaia page so that we do not re-enable buttons again.
+  fake_gaia_.fake_gaia()->SetFixedResponse(
+      GaiaUrls::GetInstance()->embedded_setup_chromeos_url(2), net::HTTP_OK,
+      "<body>no-op gaia</body>");
+  test::OobeJS().ExecuteAsync("$('gaia-signin').authenticator_.reload()");
+
+  // Wait for both buttons to become disabled due to reload.
+  test::OobeJS().CreateEnabledWaiter(false, kPrimaryButton)->Wait();
+  test::OobeJS().CreateEnabledWaiter(false, kSecondaryButton)->Wait();
 }
 
 // Device settings could only change on the owned device.
@@ -770,9 +905,9 @@ IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchSuccess) {
   test::OobeJS().ClickOnPath(kPrimaryButton);
   OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
 
-  chromeos::UserContext* user_context = LoginDisplayHost::default_host()
-                                            ->GetWizardContext()
-                                            ->extra_factors_auth_session.get();
+  UserContext* user_context = LoginDisplayHost::default_host()
+                                  ->GetWizardContext()
+                                  ->extra_factors_auth_session.get();
   EXPECT_EQ(user_context->GetReauthProofToken(), "fake-reauth-proof-token");
 }
 
@@ -806,9 +941,9 @@ IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchFailure) {
                                FakeGaiaMixin::kPasswordPath);
   test::OobeJS().ClickOnPath(kPrimaryButton);
   OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
-  chromeos::UserContext* user_context = LoginDisplayHost::default_host()
-                                            ->GetWizardContext()
-                                            ->extra_factors_auth_session.get();
+  UserContext* user_context = LoginDisplayHost::default_host()
+                                  ->GetWizardContext()
+                                  ->extra_factors_auth_session.get();
   EXPECT_TRUE(user_context->GetReauthProofToken().empty());
 }
 
@@ -927,20 +1062,6 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, StoragePartitionHandling) {
   // The StoragePartition which is not in use is supposed to have been cleared.
   EXPECT_EQ("", GetAllCookies(signin_frame_partition_1));
   EXPECT_NE("", GetAllCookies(signin_frame_partition_2));
-
-  // Trigger another gaia load.
-  test::OobeJS().ClickOnPath(kBackButton);
-  WaitForGaiaPageBackButtonUpdate();
-  ExpectIdentifierPage();
-
-  // `signin_frame_partition_1` is disposed and no longer accessible.
-  bool found_signin_frame_partition_1 = false;
-  browser_context->ForEachStoragePartition(
-      base::BindLambdaForTesting([&](content::StoragePartition* partition) {
-        if (partition == signin_frame_partition_1)
-          found_signin_frame_partition_1 = true;
-      }));
-  EXPECT_FALSE(found_signin_frame_partition_1);
 }
 
 enum class FrameUrlOrigin { kSameOrigin, kDifferentOrigin };
@@ -1999,7 +2120,13 @@ class WebviewProxyAuthLoginTest : public WebviewLoginTest {
       &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
-IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, ProxyAuthTransfer) {
+// TODO(crbug.com/1377241): The test times out on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_ProxyAuthTransfer DISABLED_ProxyAuthTransfer
+#else
+#define MAYBE_ProxyAuthTransfer ProxyAuthTransfer
+#endif
+IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, MAYBE_ProxyAuthTransfer) {
   WaitForSigninScreen();
 
   LoginHandler* login_handler = WaitForAuthRequested();

@@ -127,8 +127,6 @@ class RenderbufferAttachment
     return false;
   }
 
-  bool EmulatingRGB() const override { return false; }
-
  protected:
   ~RenderbufferAttachment() override = default;
 
@@ -302,10 +300,6 @@ class TextureAttachment
                          GLint level, GLint layer) const override {
     return texture == texture_ref_.get() &&
         level == level_ && layer == layer_;
-  }
-
-  bool EmulatingRGB() const override {
-    return texture_ref_->texture()->EmulatingRGB();
   }
 
  protected:
@@ -654,10 +648,6 @@ GLenum Framebuffer::GetReadBufferInternalFormat() const {
     return 0;
   }
   const Attachment* attachment = it->second.get();
-  if (attachment->EmulatingRGB()) {
-    DCHECK_EQ(static_cast<GLenum>(GL_RGBA), attachment->internal_format());
-    return GL_RGB;
-  }
   return attachment->internal_format();
 }
 
@@ -711,8 +701,6 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
   GLsizei samples = -1;
   uint32_t colorbufferSize = 0;
   bool colorbufferSizeValid = false;
-  const bool kSamplesMustMatch = feature_info->IsWebGLContext() ||
-      !feature_info->feature_flags().chromium_framebuffer_mixed_samples;
 
   for (AttachmentMap::const_iterator it = attachments_.begin();
        it != attachments_.end(); ++it) {
@@ -739,15 +727,13 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
       return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT;
     }
 
-    if (kSamplesMustMatch) {
-      if (samples < 0) {
-        samples = attachment->samples();
-      } else if (attachment->samples() != samples) {
-        // It's possible that the specified samples isn't the actual samples a
-        // GL implementation uses, but we always return INCOMPLETE_MULTISAMPLE
-        // here to ensure consistent behaviors across platforms.
-        return GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE;
-      }
+    if (samples < 0) {
+      samples = attachment->samples();
+    } else if (attachment->samples() != samples) {
+      // It's possible that the specified samples isn't the actual samples a
+      // GL implementation uses, but we always return INCOMPLETE_MULTISAMPLE
+      // here to ensure consistent behaviors across platforms.
+      return GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE;
     }
     if (!attachment->CanRenderTo(feature_info)) {
       return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;

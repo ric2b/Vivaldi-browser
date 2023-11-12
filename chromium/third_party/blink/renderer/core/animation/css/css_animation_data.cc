@@ -43,7 +43,6 @@ bool CSSAnimationData::AnimationsMatchForStyleRecalc(
 Timing CSSAnimationData::ConvertToTiming(size_t index) const {
   DCHECK_LT(index, name_list_.size());
   Timing timing = CSSTimingData::ConvertToTiming(index);
-
   timing.iteration_count = GetRepeated(iteration_count_list_, index);
   timing.direction = GetRepeated(direction_list_, index);
   timing.fill_mode = GetRepeated(fill_mode_list_, index);

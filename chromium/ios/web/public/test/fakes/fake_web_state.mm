@@ -207,10 +207,6 @@ void FakeWebState::SetWebViewProxy(CRWWebViewProxyType web_view_proxy) {
   web_view_proxy_ = web_view_proxy;
 }
 
-CRWJSInjectionReceiver* FakeWebState::GetJSInjectionReceiver() const {
-  return nullptr;
-}
-
 void FakeWebState::LoadData(NSData* data,
                             NSString* mime_type,
                             const GURL& url) {
@@ -219,16 +215,6 @@ void FakeWebState::LoadData(NSData* data,
   last_loaded_data_ = data;
   // Load Data is always a success. Send the event accordingly.
   OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
-}
-
-void FakeWebState::ExecuteJavaScript(const std::u16string& javascript) {
-  last_executed_javascript_ = javascript;
-}
-
-void FakeWebState::ExecuteJavaScript(const std::u16string& javascript,
-                                     JavaScriptResultCallback callback) {
-  last_executed_javascript_ = javascript;
-  std::move(callback).Run(nullptr);
 }
 
 void FakeWebState::ExecuteUserJavaScript(NSString* javaScript) {}
@@ -446,10 +432,6 @@ void FakeWebState::ShouldAllowResponse(
       num_decisions_requested);
 }
 
-std::u16string FakeWebState::GetLastExecutedJavascript() const {
-  return last_executed_javascript_;
-}
-
 absl::optional<WebState::ScriptCommandCallback>
 FakeWebState::GetLastAddedCallback() const {
   return last_added_callback_;
@@ -481,10 +463,6 @@ void FakeWebState::SetVisibleURL(const GURL& url) {
 
 void FakeWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
   trust_level_ = trust_level;
-}
-
-void FakeWebState::ClearLastExecutedJavascript() {
-  last_executed_javascript_.clear();
 }
 
 void FakeWebState::SetCanTakeSnapshot(bool can_take_snapshot) {

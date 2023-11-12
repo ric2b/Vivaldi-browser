@@ -13,6 +13,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/public/base/account_consistency_method.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
@@ -42,7 +43,13 @@ class CookieManager;
 class SigninClient : public KeyedService {
  public:
   // Argument to PreSignOut() callback, indicating client decision.
-  enum class SignoutDecision { ALLOW_SIGNOUT, DISALLOW_SIGNOUT };
+  enum class SignoutDecision {
+    ALLOW,
+    CLEAR_PRIMARY_ACCOUNT_DISALLOWED,
+    // Revoke sync disallowed implies that removing the primary account is also
+    // disallowed since sync is attached to the primary account.
+    REVOKE_SYNC_DISALLOWED,
+  };
 
   ~SigninClient() override = default;
 
@@ -61,6 +68,10 @@ class SigninClient : public KeyedService {
 
   // Returns the CookieManager for the client.
   virtual network::mojom::CookieManager* GetCookieManager() = 0;
+
+  // Returns true if clearing the primary account is allowed regardless of the
+  // consent level.
+  virtual bool IsClearPrimaryAccountAllowed() const;
 
   // Called before Google sign-out started. Implementers must run the
   // |on_signout_decision_reached|, passing a SignoutDecision to allow/disallow

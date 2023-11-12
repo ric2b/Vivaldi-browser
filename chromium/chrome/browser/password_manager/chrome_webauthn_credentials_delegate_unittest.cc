@@ -35,7 +35,7 @@
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/webauthn/android/conditional_ui_delegate_android.h"
+#include "chrome/browser/webauthn/android/webauthn_request_delegate_android.h"
 #endif
 
 namespace {
@@ -95,7 +95,7 @@ class ChromeWebAuthnCredentialsDelegateTest
     authenticator_request_delegate_->SetRelyingPartyId("rpId");
 #else
     delegate_ =
-        ConditionalUiDelegateAndroid::GetConditionalUiDelegate(web_contents());
+        WebAuthnRequestDelegateAndroid::GetRequestDelegate(web_contents());
 #endif
 
     content::WebContentsTester::For(web_contents())
@@ -122,7 +122,7 @@ class ChromeWebAuthnCredentialsDelegateTest
     dialog_model()->ReplaceCredListForTesting(std::move(creds));
 #else
     delegate_->OnWebAuthnRequestPending(
-        main_rfh(), creds,
+        main_rfh(), creds, /*is_conditional_request=*/true,
         base::BindOnce(
             &ChromeWebAuthnCredentialsDelegateTest::OnAccountSelected,
             base::Unretained(this)));
@@ -146,12 +146,12 @@ class ChromeWebAuthnCredentialsDelegateTest
 #endif
 
  protected:
-  ChromeWebAuthnCredentialsDelegate* credentials_delegate_;
+  raw_ptr<ChromeWebAuthnCredentialsDelegate> credentials_delegate_;
 #if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<ChromeAuthenticatorRequestDelegate>
       authenticator_request_delegate_;
 #else
-  raw_ptr<ConditionalUiDelegateAndroid> delegate_;
+  raw_ptr<WebAuthnRequestDelegateAndroid> delegate_;
   absl::optional<std::vector<uint8_t>> selected_id_;
 #endif
 };

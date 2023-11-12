@@ -168,6 +168,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
     vivaldi::NotesModel* note_model,
     ChromeBrowserState* browser_state) {
   std::u16string titleString = base::SysNSStringToUTF16(title);
+
   // If the note has no changes supporting Undo, just bail out.
   if (node && node->GetTitle() == titleString && node->GetURL() == url &&
       node->parent() == folder) {

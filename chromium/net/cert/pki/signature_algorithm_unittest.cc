@@ -6,11 +6,8 @@
 
 #include <memory>
 
-#include "base/containers/span.h"
 #include "base/files/file_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "net/cert/pem.h"
-#include "net/cert/pki/cert_errors.h"
 #include "net/der/input.h"
 #include "net/der/parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,16 +18,13 @@ namespace {
 
 // Parses a SignatureAlgorithm given an empty DER input.
 TEST(SignatureAlgorithmTest, ParseDerEmpty) {
-  CertErrors errors;
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(), &errors));
-  // TODO(crbug.com/634443): Test the errors.
-  // EXPECT_FALSE(errors.empty());
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input()));
 }
 
 // Parses a SignatureAlgorithm given invalid DER input.
 TEST(SignatureAlgorithmTest, ParseDerBogus) {
   const uint8_t kData[] = {0x00};
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a SignatureAlgorithm with an unsupported algorithm OID.
@@ -45,7 +39,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssUnsupportedAlgorithmOid) {
       0x42,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a sha1WithRSAEncryption which contains a NULL parameters field.
@@ -62,7 +56,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSAEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha1);
 }
 
@@ -78,7 +72,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSAEncryptionNoParams) {
       0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha1);
 }
 
@@ -97,7 +91,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSAEncryptionNonNullParams) {
       0x02, 0x01, 0x00,  // INTEGER (1 byte)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a sha1WithRSASignature which contains a NULL parameters field.
@@ -114,7 +108,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSASignatureNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha1);
 }
 
@@ -130,7 +124,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSASignatureNoParams) {
       0x2b, 0x0e, 0x03, 0x02, 0x1d,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha1);
 }
 
@@ -150,7 +144,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRsaEncryptionDataAfterSequence) {
       0x02, 0x01, 0x00,  // INTEGER (1 byte)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a sha1WithRSAEncryption which contains a bad NULL parameters field.
@@ -169,7 +163,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha1WithRSAEncryptionBadNullParams) {
       0x05, 0x01, 0x09,  // NULL (1 byte)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a sha1WithRSAEncryption which contains a NULL parameters field,
@@ -190,7 +184,7 @@ TEST(SignatureAlgorithmTest,
       0x02, 0x01, 0x00,  // INTEGER (1 byte)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a SignatureAlgorithm given DER which does not encode a sequence.
@@ -202,7 +196,7 @@ TEST(SignatureAlgorithmTest, ParseDerNotASequence) {
       0x02, 0x01, 0x00,  // INTEGER (1 byte)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a sha256WithRSAEncryption which contains a NULL parameters field.
@@ -219,7 +213,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha256WithRSAEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha256);
 }
 
@@ -235,7 +229,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha256WithRSAEncryptionNoParams) {
       0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha256);
 }
 
@@ -253,7 +247,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha384WithRSAEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha384);
 }
 
@@ -269,7 +263,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha384WithRSAEncryptionNoParams) {
       0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0c,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha384);
 }
 
@@ -287,7 +281,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha512WithRSAEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha512);
 }
 
@@ -303,7 +297,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha512WithRSAEncryptionNoParams) {
       0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0d,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPkcs1Sha512);
 }
 
@@ -323,7 +317,7 @@ TEST(SignatureAlgorithmTest, ParseDerSha224WithRSAEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a ecdsa-with-SHA1 which contains no parameters field.
@@ -338,7 +332,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA1NoParams) {
       0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x01,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kEcdsaSha1);
 }
 
@@ -356,7 +350,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA1NullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a ecdsa-with-SHA256 which contains no parameters field.
@@ -371,7 +365,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA256NoParams) {
       0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kEcdsaSha256);
 }
 
@@ -389,7 +383,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA256NullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a ecdsa-with-SHA384 which contains no parameters field.
@@ -404,7 +398,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA384NoParams) {
       0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x03,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kEcdsaSha384);
 }
 
@@ -422,7 +416,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA384NullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a ecdsa-with-SHA512 which contains no parameters field.
@@ -437,7 +431,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA512NoParams) {
       0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x04,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kEcdsaSha512);
 }
 
@@ -455,7 +449,7 @@ TEST(SignatureAlgorithmTest, ParseDerEcdsaWithSHA512NullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses SHA256 and a salt length of 32.
@@ -501,7 +495,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPss) {
 
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr),
+  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData)),
             SignatureAlgorithm::kRsaPssSha256);
 }
 
@@ -520,7 +514,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssEmptyParams) {
       0x30, 0x00,  // SEQUENCE (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has NULL parameters. This fails.
@@ -537,7 +531,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has no parameters. This fails.
@@ -552,7 +546,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNoParams) {
       0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0A,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has data after the parameters sequence.
@@ -571,7 +565,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssDataAfterParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has unrecognized data (NULL) within the
@@ -596,7 +590,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNullInsideParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has an unsupported trailer value (2). Only
@@ -619,7 +613,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssUnsupportedTrailer) {
       0x02,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that has extra data appearing after the trailer in
@@ -644,7 +638,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssBadTrailer) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses SHA384 for the hash, and leaves the rest
@@ -672,7 +666,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNonDefaultHash) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses an invalid hash algorithm (twiddled the
@@ -697,7 +691,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssUnsupportedHashOid) {
       0x60, 0x86, 0x48, 0x02, 0x67, 0x13, 0x04, 0x02, 0x02,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses SHA512 MGF1 for the mask gen, and
@@ -730,7 +724,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNonDefaultMaskGen) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses a mask gen with an unrecognized OID
@@ -762,7 +756,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssUnsupportedMaskGen) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses SHA256 for the hash, and SHA512 for the
@@ -803,7 +797,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNonDefaultHashAndMaskGen) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that uses SHA256 for the hash, and SHA256 for the
@@ -850,7 +844,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssNonDefaultHashAndMaskGenAndSalt) {
       0x0A,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that specifies default hash (SHA1).
@@ -877,7 +871,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssSpecifiedDefaultHash) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that specifies default mask gen algorithm (SHA1).
@@ -909,7 +903,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssSpecifiedDefaultMaskGen) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that specifies default salt length.
@@ -932,7 +926,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssSpecifiedDefaultSaltLength) {
       0x14,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that specifies default trailer field.
@@ -975,7 +969,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssSpecifiedDefaultTrailerField) {
       0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x08, 0x30,
       0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
       0x05, 0x00, 0xa2, 0x03, 0x02, 0x01, 0x20, 0xa3, 0x03, 0x02, 0x01, 0x01};
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a rsaPss algorithm that specifies multiple default parameter values.
@@ -1026,7 +1020,7 @@ TEST(SignatureAlgorithmTest, ParseDerRsaPssMultipleDefaultParameterValues) {
       0x01,
   };
   // clang-format on
-  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData), nullptr));
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 TEST(SignatureAlgorithmTest, ParseRsaPss) {
@@ -1162,8 +1156,7 @@ TEST(SignatureAlgorithmTest, ParseRsaPss) {
         0x04, 0x02, 0x03, 0xa2, 0x03, 0x02, 0x01, 0x40},
        SignatureAlgorithm::kRsaPssSha512}};
   for (const auto& t : kValidTests) {
-    EXPECT_EQ(ParseSignatureAlgorithm(der::Input(t.data.data(), t.data.size()),
-                                      nullptr),
+    EXPECT_EQ(ParseSignatureAlgorithm(der::Input(t.data.data(), t.data.size())),
               t.expected);
   }
 
@@ -1354,8 +1347,8 @@ TEST(SignatureAlgorithmTest, ParseRsaPss) {
         0x05, 0x00, 0xa2, 0x03, 0x02, 0x01, 0x41}},
   };
   for (const auto& t : kInvalidTests) {
-    EXPECT_FALSE(ParseSignatureAlgorithm(
-        der::Input(t.data.data(), t.data.size()), nullptr));
+    EXPECT_FALSE(
+        ParseSignatureAlgorithm(der::Input(t.data.data(), t.data.size())));
   }
 }
 
@@ -1373,7 +1366,7 @@ TEST(SignatureAlgorithmTest, ParseDerMd5WithRsaEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a md4WithRSAEncryption which contains a NULL parameters field.
@@ -1390,7 +1383,7 @@ TEST(SignatureAlgorithmTest, ParseDerMd4WithRsaEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a md2WithRSAEncryption which contains a NULL parameters field.
@@ -1407,7 +1400,7 @@ TEST(SignatureAlgorithmTest, ParseDerMd2WithRsaEncryptionNullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a dsaWithSha1 which contains no parameters field.
@@ -1422,7 +1415,7 @@ TEST(SignatureAlgorithmTest, ParseDerDsaWithSha1NoParams) {
       0x2a, 0x86, 0x48, 0xce, 0x38, 0x04, 0x03,
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a dsaWithSha1 which contains a NULL parameters field.
@@ -1439,7 +1432,7 @@ TEST(SignatureAlgorithmTest, ParseDerDsaWithSha1NullParams) {
       0x05, 0x00,  // NULL (0 bytes)
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 // Parses a dsaWithSha256 which contains no parameters field.
@@ -1454,7 +1447,7 @@ TEST(SignatureAlgorithmTest, ParseDerDsaWithSha256NoParams) {
       0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, 0x02
   };
   // clang-format on
-  EXPECT_EQ(ParseSignatureAlgorithm(der::Input(kData), nullptr), absl::nullopt);
+  EXPECT_FALSE(ParseSignatureAlgorithm(der::Input(kData)));
 }
 
 }  // namespace

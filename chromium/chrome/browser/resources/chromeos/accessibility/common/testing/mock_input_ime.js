@@ -26,6 +26,16 @@ let MockImeCompositionParameters;
  */
 let MockImeCommitParameters;
 
+/**
+ * @typedef {{
+ * anchor: number,
+ * focus: number,
+ * offset: number,
+ * text: string,
+ * }}
+ */
+let SurroundingInfo;
+
 /*
  * A mock chrome.input.ime API for tests.
  */
@@ -35,6 +45,9 @@ var MockInputIme = {
 
   /** @private {function<number>} */
   onBlurListener_: null,
+
+  /** @private {function<number>} */
+  onSurroundingTextChangedListener_: null,
 
   /** @private {MockImeCompositionParameters} */
   lastCompositionParameters_: null,
@@ -87,6 +100,26 @@ var MockInputIme = {
     },
   },
 
+  onSurroundingTextChanged: {
+    /**
+     * Adds a listener to onSurroundingTextChanged.
+     * @param {function<number>} listener
+     */
+    addListener: listener => {
+      MockInputIme.onSurroundingTextChangedListener_ = listener;
+    },
+
+    /**
+     * Removes the listener.
+     * @param {function<number>} listener
+     */
+    removeListener: listener => {
+      if (MockInputIme.onSurroundingTextChangedListener_ === listener) {
+        MockInputIme.onSurroundingTextChangedListener_ = null;
+      }
+    },
+  },
+
   /** @param {!MockImeCompositionParameters} composition */
   setComposition(composition) {
     MockInputIme.lastCompositionParameters_ = composition;
@@ -132,6 +165,18 @@ var MockInputIme = {
   callOnBlur(contextID) {
     if (MockInputIme.onBlurListener_) {
       MockInputIme.onBlurListener_(contextID);
+    }
+  },
+
+  /**
+   * Calls listeners for chrome.input.ime.onSurroundingTextChanged with the
+   * given surroundingInfo object.
+   * @param {!SurroundingInfo} surroundingInfo
+   */
+  callOnSurroundingTextChanged(surroundingInfo) {
+    if (MockInputIme.onSurroundingTextChangedListener_) {
+      MockInputIme.onSurroundingTextChangedListener_(
+          'dictation', surroundingInfo);
     }
   },
 

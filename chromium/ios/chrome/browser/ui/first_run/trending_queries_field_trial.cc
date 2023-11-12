@@ -48,13 +48,13 @@ std::map<variations::VariationID, int> GetGroupWeights() {
     case version_info::Channel::CANARY:
     case version_info::Channel::DEV:
     case version_info::Channel::BETA:
-      weight_by_id[kTrendingQueriesEnabledModuleEnabledID] = 10;
-      weight_by_id[kTrendingQueriesEnabledMinimalSpacingModuleEnabledID] = 10;
+      weight_by_id[kTrendingQueriesEnabledModuleEnabledID] = 20;
+      weight_by_id[kTrendingQueriesEnabledMinimalSpacingModuleEnabledID] = 20;
       weight_by_id
           [kTrendingQueriesEnabledMinimalSpacingRemoveHeaderModuleEnabledID] =
-              10;
-      weight_by_id[kTrendingQueriesKeepShortcutsEnabledModuleEnabledID] = 10;
-      weight_by_id[kTrendingQueriesControlID] = 10;
+              20;
+      weight_by_id[kTrendingQueriesKeepShortcutsEnabledModuleEnabledID] = 20;
+      weight_by_id[kTrendingQueriesControlID] = 20;
       break;
     case version_info::Channel::STABLE:
       weight_by_id[kTrendingQueriesEnabledModuleEnabledID] = 8;
@@ -186,10 +186,9 @@ void Create(const base::FieldTrial::EntropyProvider& low_entropy_provider,
   // Don't create the trial if either feature is enabled in chrome://flags. This
   // condition is to avoid having multiple registered trials overriding the same
   // feature.
-  if (base::FieldTrialList::TrialExists(
-          kContentSuggestionsUIModuleRefreshFlagOverrideFieldTrialName) ||
-      base::FieldTrialList::TrialExists(
-          kTrendingQueriesFlagOverrideFieldTrialName)) {
+  if (feature_list->IsFeatureOverridden(
+          kContentSuggestionsUIModuleRefreshNewUser.name) ||
+      feature_list->IsFeatureOverridden(kTrendingQueriesModuleNewUser.name)) {
     return;
   }
 

@@ -8,12 +8,14 @@
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "cc/animation/scroll_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_axis.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/animation/animation_timeline.h"
 #include "third_party/blink/renderer/core/animation/timing.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/scroll/scroll_snapshot_client.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -33,18 +35,13 @@ class WorkletAnimationBase;
 // control the conversion of scroll amount to time output.
 //
 // Spec: https://wicg.github.io/scroll-animations/#scroll-timelines
-class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
+class CORE_EXPORT ScrollTimeline : public AnimationTimeline,
+                                   public ScrollSnapshotClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   using ScrollOffsets = cc::ScrollTimeline::ScrollOffsets;
-
-  enum class ScrollDirection {
-    kBlock,
-    kInline,
-    kHorizontal,
-    kVertical,
-  };
+  using ScrollAxis = V8ScrollAxis::Enum;
 
   // Indicates the relation between the reference element and source of the
   // scroll timeline.
@@ -60,7 +57,7 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
   static ScrollTimeline* Create(Document* document,
                                 Element* source,
-                                ScrollDirection orientation);
+                                ScrollAxis axis);
 
   // Construct ScrollTimeline objects through one of the Create methods, which
   // perform initial snapshots, as it can't be done during the constructor due
@@ -68,10 +65,7 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   ScrollTimeline(Document*,
                  ReferenceType reference_type,
                  Element* reference,
-                 ScrollDirection);
-
-  static bool StringToScrollDirection(String scroll_direction,
-                                      ScrollTimeline::ScrollDirection& result);
+                 ScrollAxis axis);
 
   bool IsScrollTimeline() const override { return true; }
   // ScrollTimeline is not active if source is null, does not currently
@@ -88,7 +82,7 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
   // IDL API implementation.
   Element* source() const;
-  String orientation();
+  const V8ScrollAxis axis() const { return V8ScrollAxis(axis_); }
 
   V8CSSNumberish* currentTime() override;
   V8CSSNumberish* duration() override;
@@ -104,21 +98,15 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   // timeline is inactive.
   absl::optional<ScrollOffsets> GetResolvedScrollOffsets() const;
 
-  ScrollDirection GetOrientation() const { return orientation_; }
+  ScrollAxis GetAxis() const { return axis_; }
 
   void GetCurrentAndMaxOffset(const LayoutBox*,
                               double& current_offset,
                               double& max_offset) const;
-  // Invalidates scroll timeline as a result of scroller properties change.
-  // This may lead the timeline to request a new animation frame.
-  virtual void Invalidate();
 
   // Mark every effect target of every Animation attached to this timeline
   // for style recalc.
   void InvalidateEffectTargetStyle();
-
-  // See DocumentAnimations::ValidateTimelines
-  bool ValidateState();
 
   cc::AnimationTimeline* EnsureCompositorTimeline() override;
   void UpdateCompositorTimeline() override;
@@ -134,12 +122,6 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   void AnimationDetached(Animation*) override;
 
   void Trace(Visitor*) const override;
-
-  // Invalidates scroll timelines with a given scroller node.
-  // Called when scroller properties, affecting scroll timeline state, change.
-  // These properties are scroller offset, content size, viewport size,
-  // overflow, adding and removal of scrollable area.
-  static void Invalidate(Node* node);
 
   // Duration is the maximum value a timeline may generate for current time.
   // Used to convert time values to proportional values.
@@ -173,7 +155,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
       PaintLayerScrollableArea* scrollable_area,
       ScrollOrientation physical_orientation) const;
 
-  void SnapshotState();
+  // ScrollSnapshotClient:
+  void UpdateSnapshot() override;
+  bool ValidateSnapshot() override;
+  bool ShouldScheduleNextService() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ScrollTimelineTest, MultipleScrollOffsetsClamping);
@@ -198,14 +183,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
   TimelineState ComputeTimelineState();
 
-  // Use time_check true to request next service if time has changed.
-  // false - regardless of time change.
-  void ScheduleNextServiceInternal(bool time_check);
-
   ReferenceType reference_type_;
   Member<Element> reference_element_;
   Member<Node> resolved_source_;
-  ScrollDirection orientation_;
+  ScrollAxis axis_;
 
   // Snapshotted value produced by the last SnapshotState call.
   TimelineState timeline_state_snapshotted_;

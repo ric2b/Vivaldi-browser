@@ -11,6 +11,8 @@ namespace guest_view {
 extern const char kFileSize[];
 extern const char kMimeType[];
 extern const char kSuggestedFilename[];
+extern const char kProtocolDisplayName[];
+extern const char kSuppressedPrompt[];
 
 }  // namespace guest_view
 

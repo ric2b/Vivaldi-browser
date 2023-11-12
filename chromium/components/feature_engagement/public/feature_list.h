@@ -150,6 +150,10 @@ DEFINE_VARIATION_PARAM(kIPHReadLaterBottomSheetFeature,
                        "IPH_ReadLaterBottomSheet");
 DEFINE_VARIATION_PARAM(kIPHRequestDesktopSiteAppMenuFeature,
                        "IPH_RequestDesktopSiteAppMenu");
+DEFINE_VARIATION_PARAM(kIPHRequestDesktopSiteDefaultOnFeature,
+                       "IPH_RequestDesktopSiteDefaultOn");
+DEFINE_VARIATION_PARAM(kIPHRequestDesktopSiteOptInFeature,
+                       "IPH_RequestDesktopSiteOptIn");
 DEFINE_VARIATION_PARAM(kIPHShoppingListMenuItemFeature,
                        "IPH_ShoppingListMenuItem");
 DEFINE_VARIATION_PARAM(kIPHShoppingListSaveFlowFeature,
@@ -201,7 +205,6 @@ DEFINE_VARIATION_PARAM(kIPHLongPressToolbarTipFeature,
 DEFINE_VARIATION_PARAM(kIPHNewTabTipFeature, "IPH_NewTabTip");
 DEFINE_VARIATION_PARAM(kIPHNewIncognitoTabTipFeature, "IPH_NewIncognitoTabTip");
 DEFINE_VARIATION_PARAM(kIPHBadgedReadingListFeature, "IPH_BadgedReadingList");
-DEFINE_VARIATION_PARAM(kIPHBadgedWhatsNewFeature, "IPH_BadgedWhatsNew");
 DEFINE_VARIATION_PARAM(kIPHWhatsNewFeature, "IPH_WhatsNew");
 DEFINE_VARIATION_PARAM(kIPHReadingListMessagesFeature,
                        "IPH_ReadingListMessages");
@@ -215,6 +218,8 @@ DEFINE_VARIATION_PARAM(kIPHPasswordSuggestionsFeature,
 DEFINE_VARIATION_PARAM(kIPHFollowWhileBrowsingFeature,
                        "IPH_FollowWhileBrowsing");
 DEFINE_VARIATION_PARAM(kIPHOverflowMenuTipFeature, "IPH_OverflowMenuTip");
+DEFINE_VARIATION_PARAM(kIPHPriceNotificationsWhileBrowsingFeature,
+                       "IPHPriceNotificationsWhileBrowsing");
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
@@ -329,6 +334,8 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHReadLaterAppMenuBookmarksFeature),
         VARIATION_ENTRY(kIPHReadLaterBottomSheetFeature),
         VARIATION_ENTRY(kIPHRequestDesktopSiteAppMenuFeature),
+        VARIATION_ENTRY(kIPHRequestDesktopSiteDefaultOnFeature),
+        VARIATION_ENTRY(kIPHRequestDesktopSiteOptInFeature),
         VARIATION_ENTRY(kIPHShoppingListMenuItemFeature),
         VARIATION_ENTRY(kIPHShoppingListSaveFlowFeature),
         VARIATION_ENTRY(kIPHTabGroupsQuicklyComparePagesFeature),
@@ -348,6 +355,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHFeedSwipeRefresh),
         VARIATION_ENTRY(kIPHShareScreenshotFeature),
         VARIATION_ENTRY(kIPHSharingHubLinkToggleFeature),
+        VARIATION_ENTRY(kIPHWebFeedAwarenessFeature),
         VARIATION_ENTRY(kIPHWebFeedFollowFeature),
         VARIATION_ENTRY(kIPHWebFeedPostFollowDialogFeature),
         VARIATION_ENTRY(kIPHSharedHighlightingBuilder),
@@ -359,7 +367,6 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHNewTabTipFeature),
         VARIATION_ENTRY(kIPHNewIncognitoTabTipFeature),
         VARIATION_ENTRY(kIPHBadgedReadingListFeature),
-        VARIATION_ENTRY(kIPHBadgedWhatsNewFeature),
         VARIATION_ENTRY(kIPHReadingListMessagesFeature),
         VARIATION_ENTRY(kIPHWhatsNewFeature),
         VARIATION_ENTRY(kIPHBadgedTranslateManualTriggerFeature),
@@ -368,6 +375,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHPasswordSuggestionsFeature),
         VARIATION_ENTRY(kIPHFollowWhileBrowsingFeature),
         VARIATION_ENTRY(kIPHOverflowMenuTipFeature),
+        VARIATION_ENTRY(kIPHPriceNotificationsWhileBrowsingFeature),
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
         VARIATION_ENTRY(kIPHBatterySaverModeFeature),

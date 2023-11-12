@@ -11,11 +11,12 @@
 // Each group has an expand/collapse button and is collapsed initially.
 //
 
-import {$} from 'chrome://resources/js/util.js';
+import {$} from 'chrome://resources/js/util_ts.js';
 
 import {TimelineDataSeries} from './data_series.js';
 import {peerConnectionDataStore} from './dump_creator.js';
 import {GetSsrcFromReport} from './ssrc_info_manager.js';
+import {generateStatsLabel} from './stats_helper.js';
 import {TimelineGraphView} from './timeline_graph_view.js';
 
 const STATS_GRAPH_CONTAINER_HEADING_CLASS = 'stats-graph-container-heading';
@@ -103,8 +104,8 @@ const statsNameBlockList = {
 };
 
 function isStandardReportBlocklisted(report) {
-  // Codec stats reflect what has been negotiated. There are LOTS of them and
-  // they don't change over time on their own.
+  // Codec stats reflect what has been negotiated. They don't contain
+  // information that is useful in graphs.
   if (report.type === 'codec') {
     return true;
   }
@@ -403,7 +404,10 @@ function getSsrcReportType(report) {
 function ensureStatsGraphTopContainer(peerConnectionElement, report) {
   const containerId = peerConnectionElement.id + '-' + report.type + '-' +
       report.id + '-graph-container';
-  let container = $(containerId);
+  // Disable getElementById restriction here, since |containerId| is not always
+  // a valid selector.
+  // eslint-disable-next-line no-restricted-properties
+  let container = document.getElementById(containerId);
   if (!container) {
     container = document.createElement('details');
     container.id = containerId;
@@ -414,7 +418,7 @@ function ensureStatsGraphTopContainer(peerConnectionElement, report) {
     container.firstChild.firstChild.className =
         STATS_GRAPH_CONTAINER_HEADING_CLASS;
     container.firstChild.firstChild.textContent =
-        'Stats graphs for ' + report.type + ' (id=' + report.id + ')';
+        'Stats graphs for ' + generateStatsLabel(report);
     const statsType = getSsrcReportType(report);
     if (statsType !== '') {
       container.firstChild.firstChild.textContent += ' (' + statsType + ')';
@@ -450,8 +454,12 @@ function createStatsGraphView(peerConnectionElement, report, statsName) {
   canvasDiv.querySelector('canvas').id = canvasId;
   container.appendChild(canvasDiv);
   if (statsName === 'bweCompound') {
+    // Disable getElementById restriction here, since |divId| is not always
+    // a valid selector.
+    // eslint-disable-next-line no-restricted-properties
+    const div = document.getElementById(divId);
     container.insertBefore(
-        createBweCompoundLegend(peerConnectionElement, report.id), $(divId));
+        createBweCompoundLegend(peerConnectionElement, report.id), div);
   }
   return new TimelineGraphView(divId, canvasId);
 }

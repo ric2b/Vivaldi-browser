@@ -8,7 +8,7 @@
 
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/segmentation_platform/internal/database/segment_info_database.h"
 #include "components/segmentation_platform/internal/database/signal_storage_config.h"
 #include "components/segmentation_platform/internal/execution/default_model_manager.h"
@@ -25,11 +25,11 @@ namespace {
 float ComputeDiscreteMapping(const std::string& discrete_mapping_key,
                              const proto::SegmentInfo& segment_info) {
   float rank = metadata_utils::ConvertToDiscreteScore(
-      discrete_mapping_key, segment_info.prediction_result().result(),
+      discrete_mapping_key, segment_info.prediction_result().result()[0],
       segment_info.model_metadata());
   VLOG(1) << __func__
           << ": segment=" << SegmentId_Name(segment_info.segment_id())
-          << ": result=" << segment_info.prediction_result().result()
+          << ": result=" << segment_info.prediction_result().result()[0]
           << ", rank=" << rank;
 
   return rank;
@@ -62,12 +62,13 @@ class SegmentResultProviderImpl : public SegmentResultProvider {
         execution_service_(execution_service),
         clock_(clock),
         force_refresh_results_(force_refresh_results),
-        task_runner_(base::SequencedTaskRunnerHandle::Get()) {}
+        task_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {}
 
   void GetSegmentResult(std::unique_ptr<GetResultOptions> options) override;
 
-  SegmentResultProviderImpl(SegmentResultProviderImpl&) = delete;
-  SegmentResultProviderImpl& operator=(SegmentResultProviderImpl&) = delete;
+  SegmentResultProviderImpl(const SegmentResultProviderImpl&) = delete;
+  SegmentResultProviderImpl& operator=(const SegmentResultProviderImpl&) =
+      delete;
 
  private:
   struct RequestState {
@@ -227,13 +228,10 @@ void SegmentResultProviderImpl::GetCachedModelScore(
 
   float rank = ComputeDiscreteMapping(
       request_state->options->discrete_mapping_key, *db_segment_info);
-  auto execution_result = std::make_unique<ModelExecutionResult>(
-      ModelExecutionResult::Tensor(),
-      db_segment_info->prediction_result().result());
-  std::move(callback).Run(
-      std::move(request_state),
-      std::make_unique<SegmentResult>(ResultState::kSuccessFromDatabase, rank,
-                                      std::move(execution_result)));
+  std::move(callback).Run(std::move(request_state),
+                          std::make_unique<SegmentResult>(
+                              ResultState::kSuccessFromDatabase,
+                              db_segment_info->prediction_result(), rank));
 }
 
 void SegmentResultProviderImpl::ExecuteModelAndGetScore(
@@ -309,16 +307,19 @@ void SegmentResultProviderImpl::OnModelExecuted(
   auto* segment_info =
       FilterSegmentInfoBySource(request_state->available_segments, source);
   if (result->status == ModelExecutionStatus::kSuccess) {
-    segment_info->mutable_prediction_result()->set_result(result->score);
-    float rank = ComputeDiscreteMapping(
-        request_state->options->discrete_mapping_key, *segment_info);
     ResultState state =
         source == DefaultModelManager::SegmentSource::DEFAULT_MODEL
             ? ResultState::kDefaultModelScoreUsed
             : ResultState::kTfliteModelScoreUsed;
+    auto prediction_result = metadata_utils::CreatePredictionResult(
+        result->scores, segment_info->model_metadata().output_config(),
+        clock_->Now());
+    segment_info->mutable_prediction_result()->CopyFrom(prediction_result);
+    float rank = ComputeDiscreteMapping(
+        request_state->options->discrete_mapping_key, *segment_info);
     std::move(callback).Run(
         std::move(request_state),
-        std::make_unique<SegmentResult>(state, rank, std::move(result)));
+        std::make_unique<SegmentResult>(state, prediction_result, rank));
   } else {
     ResultState state =
         source == DefaultModelManager::SegmentSource::DEFAULT_MODEL
@@ -343,9 +344,9 @@ SegmentResultProvider::SegmentResult::SegmentResult(ResultState state)
     : state(state) {}
 SegmentResultProvider::SegmentResult::SegmentResult(
     ResultState state,
-    float rank,
-    std::unique_ptr<ModelExecutionResult> execution_result)
-    : state(state), rank(rank), execution_result(std::move(execution_result)) {}
+    const proto::PredictionResult& prediction_result,
+    float rank)
+    : state(state), result(prediction_result), rank(rank) {}
 SegmentResultProvider::SegmentResult::~SegmentResult() = default;
 
 SegmentResultProvider::GetResultOptions::GetResultOptions() = default;

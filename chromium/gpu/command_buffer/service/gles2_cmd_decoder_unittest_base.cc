@@ -208,13 +208,13 @@ ContextResult GLES2DecoderTestBase::MaybeInitDecoderWithWorkarounds(
   scoped_refptr<FeatureInfo> feature_info =
       new FeatureInfo(workarounds, gpu_feature_info);
 
-  group_ = scoped_refptr<ContextGroup>(new ContextGroup(
-      gpu_preferences_, GetParam(), &mailbox_manager_,
-      std::move(memory_tracker_), &shader_translator_cache_,
-      &framebuffer_completeness_cache_, feature_info,
-      normalized_init.bind_generates_resource, nullptr /* image_factory */,
-      nullptr /* progress_reporter */, gpu_feature_info, &discardable_manager_,
-      nullptr, &shared_image_manager_));
+  group_ = scoped_refptr<ContextGroup>(
+      new ContextGroup(gpu_preferences_, GetParam(), &mailbox_manager_,
+                       std::move(memory_tracker_), &shader_translator_cache_,
+                       &framebuffer_completeness_cache_, feature_info,
+                       normalized_init.bind_generates_resource,
+                       nullptr /* progress_reporter */, gpu_feature_info,
+                       &discardable_manager_, nullptr, &shared_image_manager_));
   bool use_default_textures = normalized_init.bind_generates_resource;
 
   InSequence sequence;
@@ -501,8 +501,9 @@ ContextResult GLES2DecoderTestBase::MaybeInitDecoderWithWorkarounds(
       normalized_init.lose_context_when_out_of_memory;
   attribs.context_type = init.context_type;
 
-  decoder_.reset(GLES2Decoder::Create(this, command_buffer_service_.get(),
-                                      &outputter_, group_.get()));
+  decoder_.reset(GLES2Decoder::Create(
+      this, command_buffer_service_.get(), &outputter_, group_.get(),
+      /*image_factory_for_nacl_swapchain=*/nullptr));
   decoder_->SetIgnoreCachedStateForTest(ignore_cached_state_for_test_);
   decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
 
@@ -579,46 +580,46 @@ ContextResult GLES2DecoderTestBase::MaybeInitDecoderWithWorkarounds(
 }
 
 void GLES2DecoderTestBase::ResetDecoder() {
-  if (!decoder_.get())
-    return;
-  // All Tests should have read all their GLErrors before getting here.
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  if (!decoder_->WasContextLost()) {
-    EXPECT_CALL(*gl_, DeleteBuffersARB(1, _)).Times(2).RetiresOnSaturation();
-    EXPECT_CALL(*gl_, DeleteFramebuffersEXT(1, _)).Times(AnyNumber());
-    if (group_->feature_info()->feature_flags().native_vertex_array_object) {
-      EXPECT_CALL(*gl_,
-                  DeleteVertexArraysOES(1, Pointee(kServiceVertexArrayId)))
+  if (decoder_.get()) {
+    // All Tests should have read all their GLErrors before getting here.
+    EXPECT_EQ(GL_NO_ERROR, GetGLError());
+    if (!decoder_->WasContextLost()) {
+      EXPECT_CALL(*gl_, DeleteBuffersARB(1, _)).Times(2).RetiresOnSaturation();
+      EXPECT_CALL(*gl_, DeleteFramebuffersEXT(1, _)).Times(AnyNumber());
+      if (group_->feature_info()->feature_flags().native_vertex_array_object) {
+        EXPECT_CALL(*gl_,
+                    DeleteVertexArraysOES(1, Pointee(kServiceVertexArrayId)))
+            .Times(1)
+            .RetiresOnSaturation();
+      }
+      if (group_->feature_info()->IsWebGL2OrES3Context()) {
+        // fake default transform feedback.
+        EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, _))
+            .Times(1)
+            .RetiresOnSaturation();
+      }
+      if (group_->feature_info()->IsWebGL2OrES3Context()) {
+        // |client_transformfeedback_id_|
+        EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, _))
+            .Times(1)
+            .RetiresOnSaturation();
+      }
+    }
+
+    decoder_->EndDecoding();
+
+    if (!decoder_->WasContextLost()) {
+      EXPECT_CALL(*copy_texture_manager_, Destroy())
           .Times(1)
           .RetiresOnSaturation();
+      copy_texture_manager_ = nullptr;
     }
-    if (group_->feature_info()->IsWebGL2OrES3Context()) {
-      // fake default transform feedback.
-      EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, _))
-          .Times(1)
-          .RetiresOnSaturation();
-    }
-    if (group_->feature_info()->IsWebGL2OrES3Context()) {
-      // |client_transformfeedback_id_|
-      EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, _))
-          .Times(1)
-          .RetiresOnSaturation();
-    }
+
+    decoder_->Destroy(!decoder_->WasContextLost());
+    decoder_.reset();
+    group_->Destroy(mock_decoder_.get(), false);
+    command_buffer_service_.reset();
   }
-
-  decoder_->EndDecoding();
-
-  if (!decoder_->WasContextLost()) {
-    EXPECT_CALL(*copy_texture_manager_, Destroy())
-        .Times(1)
-        .RetiresOnSaturation();
-    copy_texture_manager_ = nullptr;
-  }
-
-  decoder_->Destroy(!decoder_->WasContextLost());
-  decoder_.reset();
-  group_->Destroy(mock_decoder_.get(), false);
-  command_buffer_service_.reset();
   gl::MockGLInterface::SetGLInterface(nullptr);
   gl_.reset();
   gl::GLSurfaceTestSupport::ShutdownGL(display_);
@@ -2442,8 +2443,7 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
       gpu_preferences_, true, &mailbox_manager_, nullptr /* memory_tracker */,
       &shader_translator_cache_, &framebuffer_completeness_cache_, feature_info,
       context_creation_attribs_.bind_generates_resource,
-      nullptr /* image_factory */, nullptr /* progress_reporter */,
-      GpuFeatureInfo(), &discardable_manager_,
+      nullptr /* progress_reporter */, GpuFeatureInfo(), &discardable_manager_,
       &passthrough_discardable_manager_, &shared_image_manager_);
 
   surface_ = gl::init::CreateOffscreenGLSurface(

@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/native_library.h"
+#include "base/values.h"
 #include "base/version.h"
 #include "base/win/security_util.h"
 #include "base/win/sid.h"
@@ -77,19 +78,16 @@ bool MediaFoundationWidevineCdmComponentInstallerPolicy::
 // Set permission on `install_dir` so the CDM can be loaded in the LPAC process.
 update_client::CrxInstaller::Result
 MediaFoundationWidevineCdmComponentInstallerPolicy::OnCustomInstall(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) {
   DVLOG(1) << __func__ << ": Set permission on " << install_dir;
 
   auto sids = base::win::Sid::FromNamedCapabilityVector(
       {sandbox::policy::kMediaFoundationCdmFiles});
 
-  bool success = false;
-  if (sids) {
-    success = base::win::GrantAccessToPath(
-        install_dir, *sids, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
-        CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE);
-  }
+  bool success = base::win::GrantAccessToPath(
+      install_dir, sids, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+      CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE);
 
   return update_client::CrxInstaller::Result(
       success ? update_client::InstallError::NONE
@@ -101,7 +99,7 @@ void MediaFoundationWidevineCdmComponentInstallerPolicy::OnCustomUninstall() {}
 void MediaFoundationWidevineCdmComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
-    base::Value manifest) {
+    base::Value::Dict manifest) {
   VLOG(1) << "Component ready, version " << version.GetString() << " in "
           << install_dir.value();
 
@@ -132,7 +130,7 @@ void MediaFoundationWidevineCdmComponentInstallerPolicy::ComponentReady(
 
 // Called during startup and installation before ComponentReady().
 bool MediaFoundationWidevineCdmComponentInstallerPolicy::VerifyInstallation(
-    const base::Value& manifest,
+    const base::Value::Dict& manifest,
     const base::FilePath& install_dir) const {
   // TODO(crbug.com/1225681): Compare manifest version and DLL's version.
   return base::PathExists(GetCdmPath(install_dir));

@@ -2,31 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {assertEquals} from 'chrome://webui-test/chai_assert.js';
-
-import {installMockChrome} from '../../common/js/mock_chrome.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assertEquals} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {getRecentDateBucket} from './recent_date_bucket.js';
 
 export function setUp() {
-  loadTimeData.resetForTesting({
+  loadTimeData.overrideValues({
     WEEK_START_FROM: 1,
   });
-
-  const mockChrome = {
-    fileManagerPrivate: {
-      RecentDateBucket: {
-        TODAY: 'today',
-        YESTERDAY: 'yesterday',
-        EARLIER_THIS_WEEK: 'earlier_this_week',
-        EARLIER_THIS_MONTH: 'earlier_this_month',
-        EARLIER_THIS_YEAR: 'earlier_this_year',
-        OLDER: 'older',
-      },
-    },
-  };
-  installMockChrome(mockChrome);
 }
 
 export function testGetRecentDateBucket() {

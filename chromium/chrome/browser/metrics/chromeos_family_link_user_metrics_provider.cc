@@ -44,11 +44,11 @@ ChromeOSFamilyLinkUserMetricsProvider::
 
 // This function is called at unpredictable intervals throughout the entire
 // ChromeOS session, so guarantee it will never crash.
-void ChromeOSFamilyLinkUserMetricsProvider::ProvideCurrentSessionData(
-    metrics::ChromeUserMetricsExtension* uma_proto_unused) {
+bool ChromeOSFamilyLinkUserMetricsProvider::ProvideHistograms() {
   if (!log_segment_)
-    return;
+    return false;
   base::UmaHistogramEnumeration(kHistogramName, log_segment_.value());
+  return true;
 }
 
 void ChromeOSFamilyLinkUserMetricsProvider::OnUserSessionStarted(
@@ -67,7 +67,7 @@ void ChromeOSFamilyLinkUserMetricsProvider::OnUserSessionStarted(
   DCHECK(primary_user->is_profile_created());
   Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(primary_user);
   DCHECK(profile);
-  DCHECK(ash::ProfileHelper::IsRegularProfile(profile));
+  DCHECK(ash::ProfileHelper::IsUserProfile(profile));
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);

@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 import './power_bookmark_chip.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
+import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -43,11 +46,31 @@ export class PowerBookmarkRowElement extends PolymerElement {
         type: String,
         value: '',
       },
+
+      hasCheckbox: {
+        type: Boolean,
+        reflectToAttribute: true,
+        value: false,
+      },
+
+      trailingIcon: {
+        type: String,
+        value: '',
+      },
+
+      trailingIconAriaLabel: {
+        type: String,
+        value: '',
+      },
     };
   }
 
   bookmark: chrome.bookmarks.BookmarkTreeNode;
   compact: boolean;
+  description: string;
+  hasCheckbox: boolean;
+  trailingIcon: string;
+  trailingIconAriaLabel: string;
 
   /**
    * Add the appropriate image for the given bookmark and compact/expanded
@@ -86,6 +109,56 @@ export class PowerBookmarkRowElement extends PolymerElement {
       detail: {
         bookmark: this.bookmark,
         event: event,
+      },
+    }));
+  }
+
+  /**
+   * Dispatches a custom click event when the user right-clicks anywhere on the
+   * row.
+   */
+  private onContextMenu_(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(new CustomEvent('context-menu', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        bookmark: this.bookmark,
+        event: event,
+      },
+    }));
+  }
+
+  /**
+   * Dispatches a custom click event when the user clicks anywhere on the
+   * trailing icon button.
+   */
+  private onTrailingIconClicked_(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(new CustomEvent('trailing-icon-clicked', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        bookmark: this.bookmark,
+        event: event,
+      },
+    }));
+  }
+
+  /**
+   * Dispatches a custom click event when the user clicks on the checkbox.
+   */
+  private onCheckboxChange_(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(new CustomEvent('checkbox-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        bookmark: this.bookmark,
+        checked: (event.target as CrCheckboxElement).checked,
       },
     }));
   }

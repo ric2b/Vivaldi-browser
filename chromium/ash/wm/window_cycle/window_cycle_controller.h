@@ -69,8 +69,11 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
   }
 
   // Cycles between windows in the given |direction|. This moves the focus ring
-  // to the window in the given |direction| and also scrolls the list.
-  void HandleCycleWindow(WindowCyclingDirection direction);
+  // to the window in the given |direction| and also scrolls the list. If
+  // same_app_only is provided whether or not to cycle exclusively between
+  // windows of the same app from now on will be updated.
+  void HandleCycleWindow(WindowCyclingDirection direction,
+                         bool same_app_only = false);
 
   // Navigates between cycle windows and tab slider if the move is valid.
   // This moves the focus ring to the active button or the last focused window
@@ -88,7 +91,7 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
 
   // Call to start cycling windows. This function adds a pre-target handler to
   // listen to the alt key release.
-  void StartCycling();
+  void StartCycling(bool same_app_only);
 
   // Both of these functions stop the current window cycle and removes the event
   // filter. The former indicates success (i.e. the new window should be
@@ -150,13 +153,6 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
   // DesksController::Observer:
   void OnDeskAdded(const Desk* desk) override;
   void OnDeskRemoved(const Desk* desk) override;
-  void OnDeskReordered(int old_index, int new_index) override {}
-  void OnDeskActivationChanged(const Desk* activated,
-                               const Desk* deactivated) override {}
-  void OnDeskSwitchAnimationLaunching() override {}
-  void OnDeskSwitchAnimationFinished() override {}
-  void OnDeskNameChanged(const Desk* desk,
-                         const std::u16string& new_name) override {}
 
  private:
   // Gets a list of windows from the currently open windows, removing windows

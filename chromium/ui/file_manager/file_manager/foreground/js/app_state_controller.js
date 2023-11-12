@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 
 import {appUtil} from '../../common/js/app_util.js';
 import {DialogType} from '../../common/js/dialog_type.js';
+import {storage} from '../../common/js/storage.js';
 import {util} from '../../common/js/util.js';
-import {xfm} from '../../common/js/xfm.js';
 
 import {DirectoryModel} from './directory_model.js';
 import {GROUP_BY_FIELD_DIRECTORY, GROUP_BY_FIELD_MODIFICATION_TIME} from './file_list_model.js';
@@ -52,8 +52,7 @@ export class AppStateController {
   async loadInitialViewOptions() {
     // Load initial view option.
     try {
-      const values =
-          await xfm.storage.local.getAsync(this.viewOptionStorageKey_);
+      const values = await storage.local.getAsync(this.viewOptionStorageKey_);
 
       this.viewOptions_ = {};
 
@@ -139,7 +138,7 @@ export class AppStateController {
     // Save the global default.
     const items = {};
     items[this.viewOptionStorageKey_] = JSON.stringify(prefs);
-    xfm.storage.local.setAsync(items);
+    storage.local.setAsync(items);
 
     // Save the window-specific preference.
     if (window.appState) {

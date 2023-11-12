@@ -25,8 +25,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
-namespace arc {
-namespace input_overlay {
+namespace arc::input_overlay {
 namespace {
 
 // TODO(cuicuiruan): Create test for other device scale.
@@ -218,6 +217,20 @@ constexpr const char kValidJsonActionMoveMouse[] =
         }
       ]
     })json";
+
+void TouchInjectorResetAndAddTwoActions(TouchInjector* touch_injector) {
+  DCHECK(touch_injector);
+  touch_injector->OnBindingRestore();
+  touch_injector->OnBindingSave();
+  EXPECT_EQ(2u, touch_injector->actions().size());
+  EXPECT_FALSE(touch_injector->actions()[0]->deleted());
+  EXPECT_FALSE(touch_injector->actions()[1]->deleted());
+  touch_injector->AddNewAction(ActionType::MOVE);
+  touch_injector->AddNewAction(ActionType::TAP);
+  touch_injector->OnBindingSave();
+  EXPECT_EQ(4u, touch_injector->actions().size());
+}
+
 }  // namespace
 
 class TouchInjectorTest : public views::ViewsTestBase {
@@ -242,12 +255,44 @@ class TouchInjectorTest : public views::ViewsTestBase {
     return injector_->ConvertToProto();
   }
 
-  const std::vector<std::unique_ptr<Action>>& GetPendingAddActions() const {
-    return injector_->pending_add_actions_;
+  const std::vector<std::unique_ptr<Action>>& GetPendingAddUserActions() const {
+    return injector_->pending_add_user_actions_;
   }
 
-  const std::vector<std::unique_ptr<Action>>& GetPendingDeleteActions() const {
-    return injector_->pending_delete_actions_;
+  const std::vector<std::unique_ptr<Action>>& GetPendingDeleteUserActions()
+      const {
+    return injector_->pending_delete_user_actions_;
+  }
+
+  const std::vector<Action*> GetPendingAddDefaultActions() const {
+    return injector_->pending_add_default_actions_;
+  }
+
+  const std::vector<Action*> GetPendingDeleteDefaultActions() const {
+    return injector_->pending_delete_default_actions_;
+  }
+
+  void ExpectActionSizes(unsigned int size_pending_add_user_actions,
+                         unsigned int size_pending_delete_user_actions,
+                         unsigned int size_pending_add_default_actions,
+                         unsigned int size_pending_delete_default_actions,
+                         unsigned int size_actions) {
+    EXPECT_EQ(size_pending_add_user_actions, GetPendingAddUserActions().size());
+    EXPECT_EQ(size_pending_delete_user_actions,
+              GetPendingDeleteUserActions().size());
+    EXPECT_EQ(size_pending_add_default_actions,
+              GetPendingAddDefaultActions().size());
+    EXPECT_EQ(size_pending_delete_default_actions,
+              GetPendingDeleteDefaultActions().size());
+    EXPECT_EQ(size_actions, injector_->actions().size());
+  }
+
+  void AddMenuEntryToProtoIfCustomized(AppDataProto& temp_proto) {
+    injector_->AddMenuEntryToProtoIfCustomized(temp_proto);
+  }
+
+  void LoadMenuEntryFromProto(AppDataProto& temp_proto) {
+    injector_->LoadMenuEntryFromProto(temp_proto);
   }
 
   int GetNextActionID() { return injector_->next_action_id_; }
@@ -281,9 +326,9 @@ class TouchInjectorTest : public views::ViewsTestBase {
                            .y();
     injector_ = std::make_unique<TouchInjector>(
         widget_->GetNativeWindow(),
+        *widget_->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey),
         base::BindLambdaForTesting(
-            [&](std::unique_ptr<AppDataProto>, const std::string&) {}));
-    injector_->set_beta(true);
+            [&](std::unique_ptr<AppDataProto>, std::string) {}));
   }
 
   void TearDown() override {
@@ -526,11 +571,11 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Press key A and generate touch down and move left event.
   event_generator_->PressKey(ui::VKEY_A, ui::EF_NONE, 1 /* keyboard id */);
-  EXPECT_TRUE(*(action->touch_id()) == 0);
+  EXPECT_EQ(0, *(action->touch_id()));
   EXPECT_TRUE(event_capturer_.key_events().empty());
   // Wait for touch move event.
   task_environment()->FastForwardBy(kSendTouchMoveDelay);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 2);
+  EXPECT_EQ(2u, event_capturer_.touch_events().size());
   // Generate touch down event.
   auto* event = event_capturer_.touch_events()[0].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_PRESSED, event->type());
@@ -549,7 +594,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Press key W (move left + up) and generate touch move (up and left) event.
   event_generator_->PressKey(ui::VKEY_W, ui::EF_NONE, 1);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 3);
+  EXPECT_EQ(3u, event_capturer_.touch_events().size());
   event = event_capturer_.touch_events()[2].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_MOVED, event->type());
   auto expectW = gfx::PointF(expectA);
@@ -558,7 +603,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Release key A and generate touch move up event (Key W is still pressed).
   event_generator_->ReleaseKey(ui::VKEY_A, ui::EF_NONE, 1);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 4);
+  EXPECT_EQ(4u, event_capturer_.touch_events().size());
   event = event_capturer_.touch_events()[3].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_MOVED, event->type());
   expectW = gfx::PointF(expect);
@@ -567,7 +612,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Press key D and generate touch move (up and right) event.
   event_generator_->PressKey(ui::VKEY_D, ui::EF_NONE, 1);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 5);
+  EXPECT_EQ(5u, event_capturer_.touch_events().size());
   event = event_capturer_.touch_events()[4].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_MOVED, event->type());
   auto expectD = gfx::PointF(expectW);
@@ -577,7 +622,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
   // Release key W and generate touch move (right) event (Key D is still
   // pressed).
   event_generator_->ReleaseKey(ui::VKEY_W, ui::EF_NONE, 1);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 6);
+  EXPECT_EQ(6u, event_capturer_.touch_events().size());
   event = event_capturer_.touch_events()[5].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_MOVED, event->type());
   expectD = gfx::PointF(expect);
@@ -586,7 +631,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Release key D and generate touch release event.
   event_generator_->ReleaseKey(ui::VKEY_D, ui::EF_NONE, 1);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 7);
+  EXPECT_EQ(7u, event_capturer_.touch_events().size());
   event = event_capturer_.touch_events()[6].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_RELEASED, event->type());
   EXPECT_POINTF_NEAR(expectD, event->root_location_f(), kTolerance);
@@ -594,10 +639,10 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
   // Press A again, it should repeat the same as previous result.
   event_generator_->PressKey(ui::VKEY_A, ui::EF_NONE, 1 /* keyboard id */);
-  EXPECT_TRUE(*(action->touch_id()) == 0);
+  EXPECT_EQ(0, *(action->touch_id()));
   EXPECT_TRUE(event_capturer_.key_events().empty());
   task_environment()->FastForwardBy(kSendTouchMoveDelay);
-  EXPECT_TRUE((int)event_capturer_.touch_events().size() == 2);
+  EXPECT_EQ(2u, event_capturer_.touch_events().size());
   // Generate touch down event.
   event = event_capturer_.touch_events()[0].get();
   EXPECT_EQ(ui::EventType::ET_TOUCH_PRESSED, event->type());
@@ -822,7 +867,12 @@ TEST_F(TouchInjectorTest, TestProtoConversion) {
   // Check whether AppDataProto is serialized correctly.
   auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
+  injector_->set_allow_reposition(true);
   injector_->ParseActions(*json_value);
+  // Simulate a menu entry position change.
+  auto menu_entry_location_point = gfx::Point(5, 5);
+  injector_->SaveMenuEntryLocation(menu_entry_location_point);
+  auto expected_menu_entry_location = injector_->menu_entry_location();
   // Change input binding on actions[1].
   auto new_input = InputElement::CreateActionTapKeyElement(ui::DomCode::US_C);
   auto* expected_input = new_input.get();
@@ -836,6 +886,11 @@ TEST_F(TouchInjectorTest, TestProtoConversion) {
   injector_->actions()[0]->PrepareToBindPosition(std::move(new_pos));
   injector_->OnApplyPendingBinding();
   auto proto = ConvertToProto();
+  // Check that the menu entry position is serialized correctly.
+  EXPECT_TRUE(proto->has_menu_entry_position());
+  auto serialized_position = proto->menu_entry_position().anchor_to_target();
+  EXPECT_EQ(expected_menu_entry_location->x(), serialized_position[0]);
+  EXPECT_EQ(expected_menu_entry_location->y(), serialized_position[1]);
   // Check whether the actions[1] with new input binding is converted to proto
   // correctly.
   auto action_proto = proto->actions()[1];
@@ -853,9 +908,10 @@ TEST_F(TouchInjectorTest, TestProtoConversion) {
   // Check whether AppDataProto is deserialized correctly.
   auto injector = std::make_unique<TouchInjector>(
       widget_->GetNativeWindow(),
+      *widget_->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey),
       base::BindLambdaForTesting(
-          [&](std::unique_ptr<AppDataProto>, const std::string&) {}));
-  injector->set_beta(true);
+          [&](std::unique_ptr<AppDataProto>, std::string) {}));
+  injector->set_allow_reposition(true);
   injector->ParseActions(*json_value);
   injector->OnProtoDataAvailable(*proto);
   EXPECT_EQ(injector_->actions().size(), injector->actions().size());
@@ -865,29 +921,33 @@ TEST_F(TouchInjectorTest, TestProtoConversion) {
     EXPECT_EQ(*action_a->current_input(), *action_b->current_input());
     EXPECT_EQ(action_a->current_positions(), action_b->current_positions());
   }
+  auto deserialized_menu_entry_location = injector->menu_entry_location();
+  EXPECT_TRUE(deserialized_menu_entry_location);
+  EXPECT_EQ(*deserialized_menu_entry_location, *expected_menu_entry_location);
 }
 
 TEST_F(TouchInjectorTest, TestAddAction) {
   auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
+  injector_->set_beta(true);
   injector_->ParseActions(*json_value);
   EXPECT_EQ(2u, injector_->actions().size());
 
   // Add->Save.
   injector_->AddNewAction(ActionType::MOVE);
-  EXPECT_EQ(1u, GetPendingAddActions().size());
+  EXPECT_EQ(1u, GetPendingAddUserActions().size());
   injector_->OnBindingSave();
   EXPECT_EQ(3u, injector_->actions().size());
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1, injector_->actions().back()->id());
   EXPECT_EQ(kMaxDefaultActionID + 2, GetNextActionID());
 
   // Add->Save->Restore->Save. Final result only has default actions.
   injector_->AddNewAction(ActionType::TAP);
   injector_->AddNewAction(ActionType::MOVE);
-  EXPECT_EQ(2u, GetPendingAddActions().size());
+  EXPECT_EQ(2u, GetPendingAddUserActions().size());
   injector_->OnBindingSave();
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   EXPECT_EQ(5u, injector_->actions().size());
   EXPECT_EQ(kMaxDefaultActionID + 2,
             (injector_->actions().rbegin() + 1)->get()->id());
@@ -895,7 +955,7 @@ TEST_F(TouchInjectorTest, TestAddAction) {
   EXPECT_EQ(kMaxDefaultActionID + 4, GetNextActionID());
   injector_->OnBindingRestore();
   EXPECT_EQ(2u, injector_->actions().size());
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1, GetNextActionID());
   injector_->OnBindingSave();
   EXPECT_EQ(2u, injector_->actions().size());
@@ -903,9 +963,9 @@ TEST_F(TouchInjectorTest, TestAddAction) {
   // Add->Cancel. Nothing is added.
   injector_->AddNewAction(ActionType::TAP);
   injector_->AddNewAction(ActionType::MOVE);
-  EXPECT_EQ(2u, GetPendingAddActions().size());
+  EXPECT_EQ(2u, GetPendingAddUserActions().size());
   injector_->OnBindingCancel();
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   EXPECT_EQ(2u, injector_->actions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1, GetNextActionID());
 
@@ -913,15 +973,15 @@ TEST_F(TouchInjectorTest, TestAddAction) {
   injector_->AddNewAction(ActionType::MOVE);
   injector_->AddNewAction(ActionType::TAP);
   EXPECT_EQ(kMaxDefaultActionID + 1,
-            (GetPendingAddActions().rbegin() + 1)->get()->id());
-  EXPECT_EQ(kMaxDefaultActionID + 2, GetPendingAddActions().back()->id());
-  EXPECT_EQ(2u, GetPendingAddActions().size());
+            (GetPendingAddUserActions().rbegin() + 1)->get()->id());
+  EXPECT_EQ(kMaxDefaultActionID + 2, GetPendingAddUserActions().back()->id());
+  EXPECT_EQ(2u, GetPendingAddUserActions().size());
   injector_->OnBindingCancel();
   EXPECT_EQ(kMaxDefaultActionID + 1, GetNextActionID());
   EXPECT_EQ(2u, injector_->actions().size());
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   injector_->AddNewAction(ActionType::MOVE);
-  EXPECT_EQ(1u, GetPendingAddActions().size());
+  EXPECT_EQ(1u, GetPendingAddUserActions().size());
   injector_->OnBindingSave();
   EXPECT_EQ(3u, injector_->actions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1, injector_->actions().back()->id());
@@ -935,24 +995,127 @@ TEST_F(TouchInjectorTest, TestAddAction) {
   injector_->AddNewAction(ActionType::TAP);
   injector_->OnBindingSave();
   EXPECT_EQ(4u, injector_->actions().size());
-  EXPECT_EQ(0u, GetPendingAddActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1,
             (injector_->actions().rbegin() + 1)->get()->id());
   EXPECT_EQ(kMaxDefaultActionID + 2, injector_->actions().back()->id());
   EXPECT_EQ(kMaxDefaultActionID + 3, GetNextActionID());
   injector_->OnBindingRestore();
   EXPECT_EQ(2u, injector_->actions().size());
-  EXPECT_EQ(2u, GetPendingDeleteActions().size());
+  EXPECT_EQ(2u, GetPendingDeleteUserActions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1, GetNextActionID());
   injector_->OnBindingCancel();
   EXPECT_EQ(4u, injector_->actions().size());
-  EXPECT_EQ(0u, GetPendingAddActions().size());
-  EXPECT_EQ(0u, GetPendingDeleteActions().size());
+  EXPECT_EQ(0u, GetPendingAddUserActions().size());
+  EXPECT_EQ(0u, GetPendingDeleteUserActions().size());
   EXPECT_EQ(kMaxDefaultActionID + 1,
             (injector_->actions().rbegin() + 1)->get()->id());
   EXPECT_EQ(kMaxDefaultActionID + 2, injector_->actions().back()->id());
   EXPECT_EQ(kMaxDefaultActionID + 3, GetNextActionID());
 }
 
-}  // namespace input_overlay
-}  // namespace arc
+TEST_F(TouchInjectorTest, TestDeleteAction) {
+  auto json_value =
+      base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
+  injector_->set_beta(true);
+  injector_->ParseActions(*json_value);
+  TouchInjectorResetAndAddTwoActions(injector_.get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/4u);
+
+  // Delete->Save->Restore->Save.
+  // Delete a default action.
+  injector_->RemoveAction(injector_->actions()[1].get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/1u,
+                    /*size_actions=*/4u);
+  injector_->OnBindingSave();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/4u);
+  EXPECT_TRUE(injector_->actions()[1]->deleted());
+  // Delete a user-added action.
+  injector_->RemoveAction(injector_->actions()[2].get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/1u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/3u);
+  injector_->OnBindingSave();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/3u);
+
+  // Delete->Cancel->Delete->Save.
+  TouchInjectorResetAndAddTwoActions(injector_.get());
+  injector_->RemoveAction(injector_->actions()[1].get());
+  injector_->RemoveAction(injector_->actions()[2].get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/1u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/1u,
+                    /*size_actions=*/3u);
+  injector_->OnBindingCancel();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/4u);
+  injector_->RemoveAction(injector_->actions()[1].get());
+  injector_->RemoveAction(injector_->actions()[2].get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/1u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/1u,
+                    /*size_actions=*/3u);
+  injector_->OnBindingSave();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/3u);
+  EXPECT_FALSE(injector_->actions()[0]->deleted());
+  EXPECT_TRUE(injector_->actions()[1]->deleted());
+
+  // Delete->Save->Restore->Cancel.
+  TouchInjectorResetAndAddTwoActions(injector_.get());
+  injector_->RemoveAction(injector_->actions()[1].get());
+  injector_->RemoveAction(injector_->actions()[2].get());
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/1u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/1u,
+                    /*size_actions=*/3u);
+  injector_->OnBindingSave();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/3u);
+  EXPECT_TRUE(injector_->actions()[1]->deleted());
+  injector_->OnBindingRestore();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/1u,
+                    /*size_pending_add_default_actions=*/1u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/2u);
+  EXPECT_FALSE(injector_->actions()[1]->deleted());
+  injector_->OnBindingCancel();
+  ExpectActionSizes(/*size_pending_add_user_actions=*/0u,
+                    /*size_pending_delete_user_actions=*/0u,
+                    /*size_pending_add_default_actions=*/0u,
+                    /*size_pending_delete_default_actions=*/0u,
+                    /*size_actions=*/3u);
+  EXPECT_TRUE(injector_->actions()[1]->deleted());
+}
+
+}  // namespace arc::input_overlay

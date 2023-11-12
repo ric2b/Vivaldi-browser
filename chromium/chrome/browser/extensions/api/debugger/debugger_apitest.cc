@@ -148,10 +148,9 @@ testing::AssertionResult DebuggerApiTest::RunAttachFunction(
       extension_function_test_utils::RunFunctionAndReturnSingleResult(
           get_targets_function.get(), "[]", browser()));
   EXPECT_TRUE(value->is_list());
-  const base::ListValue& targets = base::Value::AsListValue(*value);
 
   std::string debugger_target_id;
-  for (const base::Value& target_value : targets.GetList()) {
+  for (const base::Value& target_value : value->GetList()) {
     EXPECT_TRUE(target_value.is_dict());
     absl::optional<int> id = target_value.FindIntKey("tabId");
     if (id == tab_id) {
@@ -455,7 +454,7 @@ IN_PROC_BROWSER_TEST_F(DebuggerApiTest, InfoBarIsRemovedAfterFiveSeconds) {
   // immediately, and should remain visible for 5 seconds to ensure the user
   // has an opportunity to see it.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(),
       ExtensionDevToolsInfoBarDelegate::kAutoCloseDelay);
   EXPECT_EQ(1u, manager->infobar_count());  // Infobar is still shown.
@@ -496,13 +495,13 @@ class CrossProfileDebuggerApiTest : public DebuggerApiTest {
   }
 
   void TearDownOnMainThread() override {
-    ProfileDestroyer::DestroyProfileWhenAppropriate(otr_profile_);
+    ProfileDestroyer::DestroyOTRProfileWhenAppropriate(otr_profile_);
     DebuggerApiTest::TearDownOnMainThread();
   }
 
-  raw_ptr<ProfileManager> profile_manager_ = nullptr;
-  raw_ptr<Profile> other_profile_ = nullptr;
-  raw_ptr<Profile> otr_profile_ = nullptr;
+  raw_ptr<ProfileManager, DanglingUntriaged> profile_manager_ = nullptr;
+  raw_ptr<Profile, DanglingUntriaged> other_profile_ = nullptr;
+  raw_ptr<Profile, DanglingUntriaged> otr_profile_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_F(CrossProfileDebuggerApiTest, GetTargets) {
@@ -641,7 +640,7 @@ IN_PROC_BROWSER_TEST_F(DebuggerApiTest,
 
   // Verify that infobar is not closed after 5 seconds.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(),
       ExtensionDevToolsInfoBarDelegate::kAutoCloseDelay);
   AdvanceClock(ExtensionDevToolsInfoBarDelegate::kAutoCloseDelay);

@@ -15,6 +15,7 @@ assert(is_chromeos_ash)
 
 preprocessed_dir = "preprocessed"
 preprocessed_manifest = "preprocessed_manifest.json"
+preprocessed_generated_manifest = "preprocessed_generated_manifest.json"
 
 web_component_files = [
   "keyboard_diagram.js",
@@ -62,6 +63,8 @@ web_component_files = [
   "network_health/network_health_container.js",
   "network_health/network_health_summary.js",
   "network_health/routine_group.js",
+  "network/apn_list.js",
+  "network/apn_list_item.js",
   "network/cr_policy_network_indicator_mojo.js",
   "network/network_apnlist.js",
   "network/network_choose_mobile.js",
@@ -82,6 +85,7 @@ web_component_files = [
   "network/network_select.js",
   "network/network_siminfo.js",
   "network/sim_lock_dialogs.js",
+  "network/apn_detail_dialog.js",
   "quick_unlock/pin_keyboard.js",
   "quick_unlock/setup_pin_keyboard.js",
   "smb_shares/add_smb_share_dialog.js",
@@ -89,7 +93,10 @@ web_component_files = [
 ]
 
 non_web_component_files = [
+  "assert.js",
   "cr.js",
+  "cr.m.js",
+  "cr_deprecated.js",
   "bluetooth/bluetooth_metrics_utils.js",
   "bluetooth/bluetooth_types.js",
   "bluetooth/bluetooth_utils.js",
@@ -107,11 +114,13 @@ non_web_component_files = [
   "cr_picture/webcam_utils.js",
   "cr_policy_indicator_behavior.js",
   "cr_scrollable_behavior.js",
+  "event_target.js",
   "event_tracker.js",
   "focus_row_js.js",
   "focus_row_behavior.js",
   "focus_without_ink_js.js",
   "i18n_behavior.js",
+  "load_time_data.m.js",
   "keyboard_shortcut_list_js.js",
   "list_property_update_behavior.js",
   "multidevice_setup/fake_mojo_service.js",
@@ -128,6 +137,8 @@ non_web_component_files = [
   "network/onc_mojo.js",
   "network_health/mojo_interface_provider.js",
   "network_health/network_diagnostics_types.js",
+  "parse_html_subset.js",
+  "promise_resolver.js",
   "post_message_api/post_message_api_client.js",
   "post_message_api/post_message_api_request_handler.js",
   "post_message_api/post_message_api_server.js",
@@ -136,6 +147,7 @@ non_web_component_files = [
   "store/store_client.js",
   "traffic_counters/traffic_counters_adapter.js",
   "quick_unlock/lock_screen_constants.js",
+  "util.js",
   "web_ui_listener_behavior.js",
 ]
 
@@ -183,6 +195,28 @@ preprocess_if_expr("preprocess") {
              html_files + css_files
 }
 
+preprocess_if_expr("preprocess_ts_generated") {
+  deps = [ "hotspot:build_ts" ]
+  in_folder = "$target_gen_dir"
+  out_folder = "$target_gen_dir/$preprocessed_dir"
+  out_manifest = "$target_gen_dir/$preprocessed_generated_manifest"
+  in_files = [
+    "hotspot/cros_hotspot_config.js",
+    "hotspot/fake_hotspot_config.js",
+    "hotspot/cros_hotspot_config.mojom-webui.js",
+  ]
+}
+
+copy("copy_generated_dts_files") {
+  deps = [ "hotspot:build_ts" ]
+  sources = [
+    "$target_gen_dir/hotspot/cros_hotspot_config.d.ts",
+    "$target_gen_dir/hotspot/cros_hotspot_config.mojom-webui.d.ts",
+    "$target_gen_dir/hotspot/fake_hotspot_config.d.ts",
+  ]
+  outputs = [ "$target_gen_dir/$preprocessed_dir/hotspot/{{source_file_part}}" ]
+}
+
 html_to_wrapper("html_wrapper_files") {
   deps = [ ":preprocess" ]
   in_folder = "$target_gen_dir/$preprocessed_dir"
@@ -218,6 +252,10 @@ generate_grd("build_grdp") {
     "fake_observables.js",
     "keyboard_layouts.js",
     "mojo_utils.js",
+
+    # Test runner used by file manager tests, webui_resource_browsertest.cc, and
+    # default_keyboard_extension_browser_test.cc
+    "webui_resource_test.js",
 
     "cellular_setup/sim_detect_error.svg",
     "cellular_setup/sim_detect_error_dark.svg",
@@ -256,21 +294,32 @@ generate_grd("build_grdp") {
     "network_health/test_warning.png",
   ]
   input_files_base_dir = rebase_path(".", "//")
-  public_deps = [ ":preprocess" ]
-  manifest_files = [ "$target_gen_dir/$preprocessed_manifest" ]
+  public_deps = [
+    ":preprocess",
+    ":preprocess_ts_generated",
+  ]
+  manifest_files = [
+    "$target_gen_dir/$preprocessed_manifest",
+    "$target_gen_dir/$preprocessed_generated_manifest",
+  ]
   grd_prefix = "ash_common"
   out_grd = "$target_gen_dir/${grd_prefix}_resources.grdp"
   resource_path_prefix = "ash/common"
 }
 
 generate_definitions_js_files = [
+  "assert.js",
   "bluetooth/bluetooth_metrics_utils.js",
   "bluetooth/bluetooth_types.js",
   "bluetooth/bluetooth_utils.js",
   "bluetooth/cros_bluetooth_config.js",
+  "cellular_setup/cellular_setup_delegate.js",
   "cellular_setup/cellular_setup_icons.html.js",
+  "cellular_setup/cellular_types.js",
+  "cellular_setup/esim_manager_listener_behavior.js",
   "cellular_setup/esim_manager_utils.js",
   "cellular_setup/mojo_interface_provider.js",
+  "cr_deprecated.js",
   "cr_picture/cr_camera.html.js",
   "cr_picture/cr_picture_list.html.js",
   "cr_picture/cr_picture_list.js",
@@ -279,17 +328,25 @@ generate_definitions_js_files = [
   "cr_picture/icons.html.js",
   "cr_picture/png.js",
   "cr_picture/webcam_utils.js",
+  "event_target.js",
   "event_tracker.js",
   "focus_row_js.js",
   "focus_without_ink_js.js",
   "keyboard_shortcut_list_js.js",
   "navigation_shared_vars.css.js",
+  "network/cellular_utils.js",
+  "network/cr_policy_network_behavior_mojo.js",
+  "network/mojo_interface_provider.js",
+  "network/network_list_types.js",
+  "network/network_listener_behavior.js",
   "network/network_shared.css.js",
   "network/onc_mojo.js",
   "quick_unlock/lock_screen_constants.js",
   "quick_unlock/pin_keyboard_icons.html.js",
   "store/store.js",
   "store/store_client.js",
+  "traffic_counters/traffic_counters_adapter.js",
+  "util.js",
 ]
 
 ts_definitions("generate_definitions") {
@@ -299,6 +356,7 @@ ts_definitions("generate_definitions") {
   deps = [ "//ui/webui/resources:library" ]
   extra_deps = [
     ":copy_checked_in_dts_files",
+    ":copy_generated_dts_files",
     ":css_wrapper_files",
     ":html_wrapper_files",
     ":preprocess",
@@ -306,6 +364,7 @@ ts_definitions("generate_definitions") {
 }
 
 checked_in_dts_files = [
+  "cr.m.d.ts",
   "cr_container_shadow_behavior.d.ts",
   "cr_scrollable_behavior.d.ts",
   "cr_policy_indicator_behavior.d.ts",
@@ -315,9 +374,12 @@ checked_in_dts_files = [
   "i18n_behavior.d.ts",
   "keyboard_diagram.d.ts",
   "keyboard_key.d.ts",
+  "load_time_data.m.d.ts",
   "list_property_update_behavior.d.ts",
 
   "page_toolbar.d.ts",
+  "parse_html_subset.d.ts",
+  "promise_resolver.d.ts",
   "navigation_view_panel.d.ts",
   "navigation_selector.d.ts",
   "web_ui_listener_behavior.d.ts",
@@ -338,10 +400,7 @@ checked_in_dts_files = [
   "cellular_setup/button_bar.d.ts",
   "cellular_setup/cellular_eid_dialog.d.ts",
   "cellular_setup/cellular_setup.d.ts",
-  "cellular_setup/cellular_setup_delegate.d.ts",
-  "cellular_setup/cellular_types.d.ts",
   "cellular_setup/esim_flow_ui.d.ts",
-  "cellular_setup/esim_manager_listener_behavior.d.ts",
   "cellular_setup/profile_discovery_list_page.d.ts",
   "cellular_setup/provisioning_page.d.ts",
   "cellular_setup/psim_flow_ui.d.ts",
@@ -350,15 +409,13 @@ checked_in_dts_files = [
   "cr_picture/cr_picture_pane.d.ts",
   "smb_shares/add_smb_share_dialog.d.ts",
   "smb_shares/smb_browser_proxy.d.ts",
-  "traffic_counters/traffic_counters_adapter.d.ts",
   "traffic_counters/traffic_counters.d.ts",
   "quick_unlock/pin_keyboard.d.ts",
   "quick_unlock/setup_pin_keyboard.d.ts",
 
-  "network/cellular_utils.d.ts",
-  "network/cr_policy_network_behavior_mojo.d.ts",
+  "network/apn_list.d.ts",
+  "network/apn_list_item.d.ts",
   "network/cr_policy_network_indicator_mojo.d.ts",
-  "network/mojo_interface_provider.d.ts",
   "network/network_apnlist.d.ts",
   "network/network_choose_mobile.d.ts",
   "network/network_config.d.ts",
@@ -368,13 +425,12 @@ checked_in_dts_files = [
   "network/network_ip_config.d.ts",
   "network/network_list.d.ts",
   "network/network_list_item.d.ts",
-  "network/network_list_types.d.ts",
-  "network/network_listener_behavior.d.ts",
   "network/network_nameservers.d.ts",
   "network/network_property_list_mojo.d.ts",
   "network/network_proxy.d.ts",
   "network/network_siminfo.d.ts",
   "network/sim_lock_dialogs.d.ts",
+  "network/apn_detail_dialog.d.ts",
 ]
 
 copy("copy_checked_in_dts_files") {
@@ -402,6 +458,9 @@ group("closure_compile") {
 js_type_check("closure_compile_local") {
   is_polymer3 = true
   deps = [
+    ":assert",
+    ":cr.m",
+    ":cr_deprecated",
     ":event_tracker",
     ":fake_method_resolver",
     ":fake_observables",
@@ -413,19 +472,33 @@ js_type_check("closure_compile_local") {
     ":keyboard_layouts",
     ":keyboard_shortcut_list_js",
     ":list_property_update_behavior",
+    ":load_time_data.m",
     ":mojo_utils",
     ":navigation_selector",
     ":navigation_view_panel",
     ":page_toolbar",
+    ":parse_html_subset",
+    ":promise_resolver",
+    ":webui_resource_test",
   ]
 }
 
+js_library("assert") {
+}
+
+js_library("cr_deprecated") {
+  deps = [ ":assert" ]
+}
+
+js_library("cr.m") {
+}
+
 js_library("cr_container_shadow_behavior") {
-  deps = [ "//ui/webui/resources/js:assert" ]
+  deps = [ ":assert" ]
 }
 
 js_library("cr_policy_indicator_behavior") {
-  deps = [ "//ui/webui/resources/js:assert" ]
+  deps = [ ":assert" ]
 }
 
 js_library("cr_scrollable_behavior") {
@@ -435,45 +508,48 @@ js_library("cr_scrollable_behavior") {
   ]
 }
 
+js_library("event_target") {
+}
+
 js_library("event_tracker") {
 }
 
 js_library("fake_observables") {
-  deps = [ "//ui/webui/resources/js:cr.m" ]
+  deps = [ ":cr.m" ]
 }
 
 js_library("fake_method_resolver") {
-  deps = [ "//ui/webui/resources/js:cr.m" ]
+  deps = [ ":cr.m" ]
 }
 
 js_library("focus_row_js") {
   deps = [
+    ":assert",
     ":event_tracker",
-    "//ui/webui/resources/js:assert",
-    "//ui/webui/resources/js:util",
+    ":util",
   ]
 }
 
 js_library("focus_row_behavior") {
   deps = [
+    ":assert",
     ":focus_row_js",
     ":focus_without_ink_js",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
-    "//ui/webui/resources/js:assert",
   ]
 }
 
 js_library("focus_without_ink_js") {
   deps = [
-    "//ui/webui/resources/js:assert",
-    "//ui/webui/resources/js:cr.m",
+    ":assert",
+    ":cr.m",
   ]
 }
 
 js_library("i18n_behavior") {
   deps = [
-    "//ui/webui/resources/js:load_time_data.m",
-    "//ui/webui/resources/js:parse_html_subset",
+    ":load_time_data.m",
+    ":parse_html_subset",
   ]
 }
 
@@ -506,6 +582,9 @@ js_library("list_property_update_behavior") {
   ]
 }
 
+js_library("load_time_data.m") {
+}
+
 js_library("mojo_utils") {
   deps = [ "//ash/webui/common/mojom:mojom_js_library_for_compile" ]
 }
@@ -529,6 +608,21 @@ js_library("page_toolbar") {
   ]
 }
 
+js_library("parse_html_subset") {
+}
+
+js_library("promise_resolver") {
+  deps = [ ":assert" ]
+}
+
 js_library("web_ui_listener_behavior") {
-  deps = [ "//ui/webui/resources/js:cr.m" ]
+  deps = [ ":cr.m" ]
+}
+
+js_library("webui_resource_test") {
+  externs_list = [ "//ui/webui/resources/js/dom_automation_controller.js" ]
+}
+
+js_library("util") {
+  deps = [ ":assert" ]
 }

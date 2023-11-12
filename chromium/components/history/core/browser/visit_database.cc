@@ -232,12 +232,11 @@ bool VisitDatabase::DropVisitTable() {
 void VisitDatabase::FillVisitRow(sql::Statement& statement, VisitRow* visit) {
   visit->visit_id = statement.ColumnInt64(0);
   visit->url_id = statement.ColumnInt64(1);
-  visit->visit_time = base::Time::FromInternalValue(statement.ColumnInt64(2));
+  visit->visit_time = statement.ColumnTime(2);
   visit->referring_visit = statement.ColumnInt64(3);
   visit->transition = ui::PageTransitionFromInt(statement.ColumnInt(4));
   visit->segment_id = statement.ColumnInt64(5);
-  visit->visit_duration =
-      base::TimeDelta::FromInternalValue(statement.ColumnInt64(6));
+  visit->visit_duration = statement.ColumnTimeDelta(6);
   visit->incremented_omnibox_typed_score = statement.ColumnBool(7);
   visit->opener_visit = statement.ColumnInt64(8);
   visit->originator_cache_guid = statement.ColumnString(9);
@@ -311,11 +310,11 @@ VisitID VisitDatabase::AddVisit(VisitRow* visit, VisitSource source) {
   // Although some columns are NULLable, we never write NULL. We write 0 or ""
   // instead for simplicity. See the CREATE TABLE comments for details.
   statement.BindInt64(0, visit->url_id);
-  statement.BindInt64(1, visit->visit_time.ToInternalValue());
+  statement.BindTime(1, visit->visit_time);
   statement.BindInt64(2, visit->referring_visit);
   statement.BindInt64(3, visit->transition);
   statement.BindInt64(4, visit->segment_id);
-  statement.BindInt64(5, visit->visit_duration.ToInternalValue());
+  statement.BindTimeDelta(5, visit->visit_duration);
   statement.BindBool(6, visit->incremented_omnibox_typed_score);
   statement.BindInt64(7, visit->opener_visit);
   statement.BindString(8, visit->originator_cache_guid);
@@ -403,7 +402,7 @@ bool VisitDatabase::GetLastRowForVisitByVisitTime(base::Time visit_time,
       SQL_FROM_HERE,
       "SELECT" HISTORY_VISIT_ROW_FIELDS
       "FROM visits WHERE visit_time=? ORDER BY id DESC LIMIT 1"));
-  statement.BindInt64(0, visit_time.ToInternalValue());
+  statement.BindTime(0, visit_time);
 
   if (!statement.Step())
     return false;
@@ -452,11 +451,11 @@ bool VisitDatabase::UpdateVisitRow(const VisitRow& visit) {
   // Although some columns are NULLable, we never write NULL. We write 0 or ""
   // instead for simplicity. See the CREATE TABLE comments for details.
   statement.BindInt64(0, visit.url_id);
-  statement.BindInt64(1, visit.visit_time.ToInternalValue());
+  statement.BindTime(1, visit.visit_time);
   statement.BindInt64(2, visit.referring_visit);
   statement.BindInt64(3, visit.transition);
   statement.BindInt64(4, visit.segment_id);
-  statement.BindInt64(5, visit.visit_duration.ToInternalValue());
+  statement.BindTimeDelta(5, visit.visit_duration);
   statement.BindBool(6, visit.incremented_omnibox_typed_score);
   statement.BindInt64(7, visit.opener_visit);
   statement.BindString(8, visit.originator_cache_guid);
@@ -512,7 +511,7 @@ bool VisitDatabase::GetVisitsForTimes(const std::vector<base::Time>& times,
         SQL_FROM_HERE, "SELECT" HISTORY_VISIT_ROW_FIELDS "FROM visits "
                        "WHERE visit_time == ?"));
 
-    statement.BindInt64(0, time.ToInternalValue());
+    statement.BindTime(0, time);
 
     if (!FillVisitVector(statement, visits))
       return false;
@@ -533,7 +532,7 @@ bool VisitDatabase::GetAllVisitsInRange(base::Time begin_time,
 
   // See GetVisibleVisitsInRange for more info on how these times are bound.
   int64_t end = end_time.ToInternalValue();
-  statement.BindInt64(0, begin_time.ToInternalValue());
+  statement.BindTime(0, begin_time);
   statement.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
   statement.BindInt64(
       2, max_results ? max_results : std::numeric_limits<int64_t>::max());
@@ -557,12 +556,35 @@ bool VisitDatabase::GetVisitsInRangeForTransition(base::Time begin_time,
 
   // See GetVisibleVisitsInRange for more info on how these times are bound.
   int64_t end = end_time.ToInternalValue();
-  statement.BindInt64(0, begin_time.ToInternalValue());
+  statement.BindTime(0, begin_time);
   statement.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
   statement.BindInt64(2, ui::PAGE_TRANSITION_CORE_MASK);
   statement.BindInt64(3, transition);
   statement.BindInt64(
       4, max_results ? max_results : std::numeric_limits<int64_t>::max());
+
+  return FillVisitVector(statement, visits);
+}
+
+bool VisitDatabase::GetSomeForeignVisits(VisitID max_visit_id,
+                                         int max_results,
+                                         VisitVector* visits) {
+  DCHECK(visits);
+  visits->clear();
+
+  // Exactly all foreign visits (i.e. coming from a different device) have an
+  // `originator_cache_guid` set. (This does *not* include legacy TypedURL
+  // visits though - those have SOURCE_SYNCED but are otherwise not considered
+  // "foreign".)
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT" HISTORY_VISIT_ROW_FIELDS
+      "FROM visits "
+      "WHERE originator_cache_guid IS NOT NULL AND originator_cache_guid != '' "
+      "AND id <= ? "
+      "LIMIT ?"));
+  statement.BindInt64(0, max_visit_id);
+  statement.BindInt(1, max_results);
 
   return FillVisitVector(statement, visits);
 }
@@ -729,9 +751,7 @@ bool VisitDatabase::GetVisibleVisitCountToHost(const GURL& url,
     if (!TransitionIsVisible(statement.ColumnInt(1)))
       continue;
     ++visit_count;
-    min_visit_time =
-        std::min(base::Time::FromInternalValue(statement.ColumnInt64(0)),
-                 min_visit_time);
+    min_visit_time = std::min(statement.ColumnTime(0), min_visit_time);
   }
 
   if (!statement.Succeeded())
@@ -755,17 +775,16 @@ bool VisitDatabase::GetHistoryCount(const base::Time& begin_time,
                                  "FROM visits "
                                  "WHERE visit_time >= ? AND visit_time < ?"));
 
-  statement.BindInt64(0, begin_time.ToInternalValue());
-  statement.BindInt64(1, end_time.ToInternalValue());
+  statement.BindTime(0, begin_time);
+  statement.BindTime(1, end_time);
 
   // Set of (date, url) pairs.
   std::set<std::pair<base::Time, std::string>> url_days;
   while (statement.Step()) {
     if (!TransitionIsVisible(statement.ColumnInt(2)))
       continue;
-    url_days.emplace(
-        base::Time::FromInternalValue(statement.ColumnInt64(1)).LocalMidnight(),
-        statement.ColumnString(0));
+    url_days.emplace(statement.ColumnTime(1).LocalMidnight(),
+                     statement.ColumnString(0));
   }
 
   *count = url_days.size();
@@ -807,13 +826,13 @@ bool VisitDatabase::GetLastVisitToHost(const std::string& host,
   statement.BindString(5, bounds.at(2).second);
   statement.BindString(6, bounds.at(3).first);
   statement.BindString(7, bounds.at(3).second);
-  statement.BindInt64(8, begin_time.ToInternalValue());
-  statement.BindInt64(9, end_time.ToInternalValue());
+  statement.BindTime(8, begin_time);
+  statement.BindTime(9, end_time);
 
   while (statement.Step()) {
     if (ui::PageTransitionIsMainFrame(
             ui::PageTransitionFromInt(statement.ColumnInt(1)))) {
-      *last_visit = base::Time::FromInternalValue(statement.ColumnInt64(0));
+      *last_visit = statement.ColumnTime(0);
       return true;
     }
   }
@@ -849,8 +868,8 @@ bool VisitDatabase::GetLastVisitToOrigin(const url::Origin& origin,
       "LIMIT 1"));
   statement.BindString(0, origin_bounds.first);
   statement.BindString(1, origin_bounds.second);
-  statement.BindInt64(2, begin_time.ToInternalValue());
-  statement.BindInt64(3, end_time.ToInternalValue());
+  statement.BindTime(2, begin_time);
+  statement.BindTime(3, end_time);
 
   if (!statement.Step()) {
     // If there are no entries from the statement, the host may not have been
@@ -860,7 +879,7 @@ bool VisitDatabase::GetLastVisitToOrigin(const url::Origin& origin,
     return statement.Succeeded();
   }
 
-  *last_visit = base::Time::FromInternalValue(statement.ColumnInt64(0));
+  *last_visit = statement.ColumnTime(0);
   return true;
 }
 
@@ -881,7 +900,7 @@ bool VisitDatabase::GetLastVisitToURL(const GURL& url,
       "ORDER BY v.visit_time DESC "
       "LIMIT 1"));
   statement.BindString(0, url.spec());
-  statement.BindInt64(1, end_time.ToInternalValue());
+  statement.BindTime(1, end_time);
 
   if (!statement.Step()) {
     // If there are no entries from the statement, the URL may not have been
@@ -891,7 +910,7 @@ bool VisitDatabase::GetLastVisitToURL(const GURL& url,
     return statement.Succeeded();
   }
 
-  *last_visit = base::Time::FromInternalValue(statement.ColumnInt64(0));
+  *last_visit = statement.ColumnTime(0);
   return true;
 }
 
@@ -921,16 +940,15 @@ DailyVisitsResult VisitDatabase::GetDailyVisitsToHost(const GURL& host,
 
   statement.BindString(0, host_bounds.first);
   statement.BindString(1, host_bounds.second);
-  statement.BindInt64(2, begin_time.ToInternalValue());
-  statement.BindInt64(3, end_time.ToInternalValue());
+  statement.BindTime(2, begin_time);
+  statement.BindTime(3, end_time);
 
   std::vector<base::Time> dates;
   while (statement.Step()) {
     if (!TransitionIsVisible(statement.ColumnInt(1)))
       continue;
     ++result.total_visits;
-    dates.push_back(base::Time::FromInternalValue(statement.ColumnInt64(0))
-                        .LocalMidnight());
+    dates.push_back(statement.ColumnTime(0).LocalMidnight());
   }
   std::sort(dates.begin(), dates.end());
   result.days_with_visits =
@@ -948,8 +966,18 @@ bool VisitDatabase::GetStartDate(base::Time* first_visit) {
     *first_visit = base::Time::Now();
     return false;
   }
-  *first_visit = base::Time::FromInternalValue(statement.ColumnInt64(0));
+  *first_visit = statement.ColumnTime(0);
   return true;
+}
+
+VisitID VisitDatabase::GetMaxVisitIDInUse() {
+  sql::Statement statement(
+      GetDB().GetCachedStatement(SQL_FROM_HERE, "SELECT MAX(id) FROM visits"));
+  if (!statement.Step()) {
+    // The visits table must be empty.
+    return kInvalidVisitID;
+  }
+  return statement.ColumnInt64(0);
 }
 
 void VisitDatabase::GetVisitsSource(const VisitVector& visits,
@@ -1084,12 +1112,11 @@ bool VisitDatabase::MigrateVisitsWithoutIncrementedOmniboxTypedScore() {
       VisitRow row;
       row.visit_id = read.ColumnInt64(0);
       row.url_id = read.ColumnInt64(1);
-      row.visit_time = base::Time::FromInternalValue(read.ColumnInt64(2));
+      row.visit_time = read.ColumnTime(2);
       row.referring_visit = read.ColumnInt64(3);
       row.transition = ui::PageTransitionFromInt(read.ColumnInt(4));
       row.segment_id = read.ColumnInt64(5);
-      row.visit_duration =
-          base::TimeDelta::FromInternalValue(read.ColumnInt64(6));
+      row.visit_duration = read.ColumnTimeDelta(6);
       // Check if the visit row is in an invalid state and if it is then
       // leave the new field as the default value.
       if (row.visit_id == row.referring_visit)
@@ -1104,11 +1131,11 @@ bool VisitDatabase::MigrateVisitsWithoutIncrementedOmniboxTypedScore() {
           "visit_duration=?,incremented_omnibox_typed_score=? "
           "WHERE id=?"));
       statement.BindInt64(0, row.url_id);
-      statement.BindInt64(1, row.visit_time.ToInternalValue());
+      statement.BindTime(1, row.visit_time);
       statement.BindInt64(2, row.referring_visit);
       statement.BindInt64(3, row.transition);
       statement.BindInt64(4, row.segment_id);
-      statement.BindInt64(5, row.visit_duration.ToInternalValue());
+      statement.BindTimeDelta(5, row.visit_duration);
       statement.BindBool(6, row.incremented_omnibox_typed_score);
       statement.BindInt64(7, row.visit_id);
 

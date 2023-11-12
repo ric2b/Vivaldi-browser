@@ -17,7 +17,7 @@
 #include "base/component_export.h"
 #include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -133,8 +133,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
       bool create);
 
   // FileSystemBackend helpers.
-  void OpenFileSystem(const blink::StorageKey& storage_key,
-                      const absl::optional<BucketLocator>& bucket_locator,
+  void OpenFileSystem(const BucketLocator& bucket_locator,
                       FileSystemType type,
                       OpenFileSystemMode mode,
                       ResolveURLCallback callback,
@@ -160,6 +159,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
       QuotaManagerProxy* proxy,
       const blink::StorageKey& storage_key,
       FileSystemType type) override;
+  void DeleteCachedDefaultBucket(const blink::StorageKey& storage_key) override;
   base::File::Error DeleteBucketDataOnFileTaskRunner(
       FileSystemContext* context,
       QuotaManagerProxy* proxy,

@@ -20,8 +20,12 @@ import org.chromium.components.version_info.VersionInfo;
 import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
+
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 
 /**
  * Settings fragment that displays information about Chrome.
@@ -71,6 +75,13 @@ public class AboutChromeSettings
     public static String getApplicationVersion(Context context, String version) {
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            if (!BuildConfig.IS_FINAL_BUILD) {
+                int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
+                        VivaldiPreferences.UI_SCALE_VALUE);
+                version = version.concat(" [ui=" + ui_dpi);
+                version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekValue(
+                        Profile.getLastUsedRegularProfile()) + "]");
+            }
             version = version.concat(" (OEM)");
         }
         if (BuildConfig.IS_OEM_POLESTAR_BUILD) {

@@ -15,7 +15,6 @@
 #include "base/rand_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/backoff_delay_provider.h"
@@ -226,6 +225,11 @@ ModelTypeSet SyncSchedulerImpl::GetEnabledAndUnblockedTypes() {
   return Difference(enabled_protocol_types, blocked_types);
 }
 
+void SyncSchedulerImpl::SetHasPendingInvalidations(ModelType type,
+                                                   bool has_invalidation) {
+  nudge_tracker_.SetHasPendingInvalidations(type, has_invalidation);
+}
+
 void SyncSchedulerImpl::SendInitialSnapshot() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -326,16 +330,14 @@ void SyncSchedulerImpl::ScheduleLocalRefreshRequest(ModelTypeSet types) {
   ScheduleNudgeImpl(nudge_delay);
 }
 
-void SyncSchedulerImpl::ScheduleInvalidationNudge(
-    ModelType model_type,
-    std::unique_ptr<SyncInvalidation> invalidation) {
+void SyncSchedulerImpl::ScheduleInvalidationNudge(ModelType model_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!syncer_->IsSyncing());
 
   SDVLOG(2) << "Scheduling sync because we received invalidation for "
             << ModelTypeToDebugString(model_type);
-  base::TimeDelta nudge_delay = nudge_tracker_.RecordRemoteInvalidation(
-      model_type, std::move(invalidation));
+  base::TimeDelta nudge_delay =
+      nudge_tracker_.GetRemoteInvalidationDelay(model_type);
   ScheduleNudgeImpl(nudge_delay);
 }
 
@@ -641,7 +643,7 @@ void SyncSchedulerImpl::TryCanaryJob() {
 void SyncSchedulerImpl::TrySyncCycleJob() {
   // Post call to TrySyncCycleJobImpl on current sequence. Later request for
   // access token will be here.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&SyncSchedulerImpl::TrySyncCycleJobImpl,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
@@ -848,15 +850,6 @@ void SyncSchedulerImpl::OnReceivedCustomNudgeDelays(
   for (const auto& [type, delay] : nudge_delays) {
     nudge_tracker_.UpdateLocalChangeDelay(type, delay);
   }
-}
-
-void SyncSchedulerImpl::OnReceivedClientInvalidationHintBufferSize(int size) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (size > 0)
-    nudge_tracker_.SetHintBufferSize(size);
-  else
-    NOTREACHED() << "Hint buffer size should be > 0.";
 }
 
 void SyncSchedulerImpl::OnSyncProtocolError(

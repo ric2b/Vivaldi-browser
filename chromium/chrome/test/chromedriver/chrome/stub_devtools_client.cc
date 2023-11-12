@@ -27,19 +27,29 @@ const std::string& StubDevToolsClient::TunnelSessionId() const {
   return tunnel_session_id_;
 }
 
-void StubDevToolsClient::SetTunnelSessionId(const std::string& session_id) {
-  tunnel_session_id_ = session_id;
+Status StubDevToolsClient::SetTunnelSessionId(std::string session_id) {
+  tunnel_session_id_ = std::move(session_id);
+  return Status{kOk};
+}
+
+Status StubDevToolsClient::StartBidiServer(std::string bidi_mapper_script) {
+  return Status{kOk};
 }
 
 bool StubDevToolsClient::IsNull() const {
   return false;
 }
 
+bool StubDevToolsClient::IsConnected() const {
+  return is_connected_;
+}
+
 bool StubDevToolsClient::WasCrashed() {
   return false;
 }
 
-Status StubDevToolsClient::ConnectIfNecessary() {
+Status StubDevToolsClient::Connect() {
+  is_connected_ = true;
   return Status(kOk);
 }
 
@@ -49,7 +59,7 @@ Status StubDevToolsClient::PostBidiCommand(base::Value::Dict command) {
 
 Status StubDevToolsClient::SendCommand(const std::string& method,
                                        const base::Value::Dict& params) {
-  base::Value result;
+  base::Value::Dict result;
   return SendCommandAndGetResult(method, params, &result);
 }
 
@@ -75,8 +85,7 @@ Status StubDevToolsClient::SendAsyncCommand(const std::string& method,
 Status StubDevToolsClient::SendCommandAndGetResult(
     const std::string& method,
     const base::Value::Dict& params,
-    base::Value* result) {
-  *result = base::Value(base::Value::Type::DICTIONARY);
+    base::Value::Dict* result) {
   return Status(kOk);
 }
 
@@ -84,7 +93,7 @@ Status StubDevToolsClient::SendCommandAndGetResultWithTimeout(
     const std::string& method,
     const base::Value::Dict& params,
     const Timeout* timeout,
-    base::Value* result) {
+    base::Value::Dict* result) {
   return SendCommandAndGetResult(method, params, result);
 }
 

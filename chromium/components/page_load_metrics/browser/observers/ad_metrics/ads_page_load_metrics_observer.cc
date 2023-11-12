@@ -629,8 +629,7 @@ void AdsPageLoadMetricsObserver::OnMainFrameIntersectionRectChanged(
     content::RenderFrameHost* render_frame_host,
     const gfx::Rect& main_frame_intersection_rect) {
   int frame_tree_node_id = render_frame_host->GetFrameTreeNodeId();
-  if (render_frame_host ==
-      GetDelegate().GetWebContents()->GetPrimaryMainFrame()) {
+  if (render_frame_host->IsInPrimaryMainFrame()) {
     page_ad_density_tracker_.UpdateMainFrameRect(main_frame_intersection_rect);
     return;
   }
@@ -1279,7 +1278,7 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
   // |render_frame_host| may be the frame host for a subframe of the ad which we
   // received a resource update for. Traversing the tree here guarantees
   // that the frame we unload is an ancestor of |render_frame_host|. We cannot
-  // check if render frame hosts are ads so we rely on matching the
+  // check if RenderFrameHosts are ads so we rely on matching the
   // root_frame_tree_node_id of |frame_data|. It is possible that this frame no
   // longer exists. We do not care if the frame has moved to a new process
   // because once the frame has been tagged as an ad, it is always considered an

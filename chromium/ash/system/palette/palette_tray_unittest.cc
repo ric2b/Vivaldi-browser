@@ -10,6 +10,7 @@
 #include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/test/test_assistant_service.h"
 #include "ash/assistant/util/assistant_util.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/highlighter/highlighter_controller.h"
@@ -51,19 +52,15 @@ namespace ash {
 
 class PaletteTrayTest : public AshTestBase {
  public:
-  PaletteTrayTest() = default;
+  PaletteTrayTest() {
+    feature_list_.InitAndDisableFeature(
+        ash::features::kDeprecateAssistantStylusFeatures);
+  }
 
   PaletteTrayTest(const PaletteTrayTest&) = delete;
   PaletteTrayTest& operator=(const PaletteTrayTest&) = delete;
 
   ~PaletteTrayTest() override = default;
-
-  // Performs a tap on the palette tray button.
-  void PerformTap() {
-    ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
-                         ui::GestureEventDetails(ui::ET_GESTURE_TAP));
-    palette_tray_->PerformAction(tap);
-  }
 
   // Fake a stylus ejection.
   void EjectStylus() {
@@ -92,6 +89,16 @@ class PaletteTrayTest : public AshTestBase {
         .SetFirstDisplayAsInternalDisplay();
   }
 
+  // Sends a stylus event, which makes the `PaletteTray` show up.
+  void ShowPaletteTray() {
+    ui::test::EventGenerator* generator = GetEventGenerator();
+    generator->EnterPenPointerMode();
+    generator->PressTouch();
+    generator->ReleaseTouch();
+    generator->ExitPenPointerMode();
+    ASSERT_TRUE(palette_tray_->GetVisible());
+  }
+
   PrefService* prefs() {
     return Shell::Get()->session_controller()->GetPrimaryUserPrefService();
   }
@@ -104,6 +111,8 @@ class PaletteTrayTest : public AshTestBase {
   PaletteTray* palette_tray_ = nullptr;  // not owned
 
   std::unique_ptr<PaletteTrayTestApi> test_api_;
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Verify the palette tray button exists and but is not visible initially.
@@ -167,8 +176,19 @@ TEST_F(PaletteTrayTest, PaletteTrayVisibleIfEnableStylusToolsNotSet) {
   EXPECT_FALSE(palette_tray_->GetVisible());
 }
 
+// A basic test to ensure the OnPressedCallback is triggered on tap.
+TEST_F(PaletteTrayTest, PressingTrayButton) {
+  ShowPaletteTray();
+
+  GestureTapOn(palette_tray_);
+
+  EXPECT_TRUE(palette_tray_->is_active());
+}
+
 // Verify taps on the palette tray button results in expected behaviour.
 TEST_F(PaletteTrayTest, PaletteTrayWorkflow) {
+  ShowPaletteTray();
+
   // Verify the palette tray button is not active, and the palette tray bubble
   // is not shown initially.
   EXPECT_FALSE(palette_tray_->is_active());
@@ -176,7 +196,7 @@ TEST_F(PaletteTrayTest, PaletteTrayWorkflow) {
 
   // Verify that by tapping the palette tray button, the button will become
   // active and the palette tray bubble will be open.
-  PerformTap();
+  GestureTapOn(palette_tray_);
   EXPECT_TRUE(palette_tray_->is_active());
   EXPECT_TRUE(test_api_->tray_bubble_wrapper());
 
@@ -190,14 +210,14 @@ TEST_F(PaletteTrayTest, PaletteTrayWorkflow) {
 
   // Verify that tapping the palette tray while a tool is active will deactivate
   // the tool, and the palette tray button will not be active.
-  PerformTap();
+  GestureTapOn(palette_tray_);
   EXPECT_FALSE(palette_tray_->is_active());
   EXPECT_FALSE(test_api_->palette_tool_manager()->IsToolActive(
       PaletteToolId::LASER_POINTER));
 
   // Verify that activating a action tool will close the palette tray bubble and
   // the palette tray button is will not be active.
-  PerformTap();
+  GestureTapOn(palette_tray_);
   ASSERT_TRUE(test_api_->tray_bubble_wrapper());
   const auto capture_tool_id = PaletteToolId::ENTER_CAPTURE_MODE;
   test_api_->palette_tool_manager()->ActivateTool(capture_tool_id);
@@ -214,7 +234,8 @@ TEST_F(PaletteTrayTest, PaletteTrayWorkflow) {
 // capture region) are deactivated.
 TEST_F(PaletteTrayTest, ModeToolDeactivatedAutomatically) {
   // Open the palette tray with a tap.
-  PerformTap();
+  ShowPaletteTray();
+  GestureTapOn(palette_tray_);
   ASSERT_TRUE(palette_tray_->is_active());
   ASSERT_TRUE(test_api_->tray_bubble_wrapper());
 

@@ -101,6 +101,7 @@ RequestHandlerResult CalculateRequestHandlerResult(
 
   RequestHandlerResult result;
   result.complies = file_complies;
+  result.request_token = response.request_token();
   result.tag = tag;
   if (!file_complies) {
     if (upload_result ==
@@ -193,13 +194,6 @@ const char* ConnectorPref(ReportingConnector connector) {
   switch (connector) {
     case ReportingConnector::SECURITY_EVENT:
       return kOnSecurityEventPref;
-  }
-}
-
-const char* ConnectorPref(FileSystemConnector connector) {
-  switch (connector) {
-    case FileSystemConnector::SEND_DOWNLOAD_TO_CLOUD:
-      return kSendDownloadToCloudPref;
   }
 }
 
@@ -425,6 +419,7 @@ void ShowDownloadReviewDialog(const std::u16string& filename,
           filename, custom_message, learn_more_url,
           bypass_justification_required, std::move(keep_closure),
           std::move(discard_closure), download_item),
+      true,  // Downloads are always cloud-based for now.
       web_contents, safe_browsing::DeepScanAccessPoint::DOWNLOAD,
       /* file_count */ 1, state, download_item);
 }

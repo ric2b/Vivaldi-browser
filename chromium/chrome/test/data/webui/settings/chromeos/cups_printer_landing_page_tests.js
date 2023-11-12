@@ -5,8 +5,8 @@
 import {CupsPrintersBrowserProxyImpl, PrinterType} from 'chrome://os-settings/chromeos/lazy_load.js';
 import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
-import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {NetworkStateProperties} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -75,7 +75,6 @@ function verifyErrorToastMessage(expectedMessage, toast) {
  * Helper function that verifies that |printerList| matches the printers in
  * |entryList|.
  * @param {!HTMLElement} entryList
- * @param {!Array<!CupsPrinterInfo>} printerList
  * @private
  */
 function verifyPrintersList(entryList, printerList) {
@@ -117,7 +116,7 @@ function verifyFilteredPrinters(printerEntryListTestElement, searchTerm) {
  * Helper function to verify that the actual visible printers match the
  * expected printer list.
  * @param {!Element} printerEntryListTestElement
- * @param {!Array<!PrinterListEntry>} expectedVisiblePrinters
+
  */
 function verifyVisiblePrinters(
     printerEntryListTestElement, expectedVisiblePrinters) {
@@ -141,7 +140,7 @@ function verifyVisiblePrinters(
  * match the search query. Also checks if the no search results section is shown
  * when appropriate.
  * @param {!Element} printersElement
- * @param {!Array<!PrinterListEntry>} expectedVisiblePrinters
+
  * @param {string} searchTerm
  */
 function verifySearchQueryResults(
@@ -163,7 +162,7 @@ function verifySearchQueryResults(
 
 /**
  * Removes a saved printer located at |index|.
- * @param {!TestCupsPrintersBrowserProxy} cupsPrintersBrowserProxy
+
  * @param {!HTMLElement} savedPrintersElement
  * @param {number} index
  * @return {!Promise}
@@ -190,7 +189,7 @@ function removePrinter(cupsPrintersBrowserProxy, savedPrintersElement, index) {
 
 /**
  * Removes all saved printers through recursion.
- * @param {!TestCupsPrintersBrowserProxy} cupsPrintersBrowserProxy
+
  * @param {!HTMLElement} savedPrintersElement
  * @return {!Promise}
  */
@@ -234,7 +233,7 @@ suite('CupsSavedPrintersTests', function() {
     page = null;
   });
 
-  /** @param {!Array<!CupsPrinterInfo>} printerList */
+
   function createCupsPrinterPage(printers) {
     printerList = printers;
     // |cupsPrinterBrowserProxy| needs to have a list of saved printers before
@@ -250,7 +249,7 @@ suite('CupsSavedPrintersTests', function() {
     flush();
   }
 
-  /** @param {!CupsPrinterInfo} printer*/
+
   function addNewSavedPrinter(printer) {
     printerList.push(printer);
     updateSavedPrinters();
@@ -649,8 +648,9 @@ suite('CupsSavedPrintersTests', function() {
     const deepLinkElement =
         printerEntry && printerEntry.shadowRoot.querySelector('#moreActions');
     await waitAfterNextRender(deepLinkElement);
+    const activeDeepLink = getDeepActiveElement();
     assertEquals(
-        deepLinkElement, getDeepActiveElement(),
+        deepLinkElement, activeDeepLink,
         'First saved printer menu button should be focused for settingId=1401.');
   });
 
@@ -1581,7 +1581,7 @@ suite('CupsEnterprisePrintersTests', function() {
     page = null;
   });
 
-  /** @param {!Array<!CupsPrinterInfo>} printerList */
+
   function createCupsPrinterPage(printers) {
     printerList = printers;
     // |cupsPrinterBrowserProxy| needs to have a list of printers before

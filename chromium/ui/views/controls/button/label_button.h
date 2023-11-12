@@ -71,6 +71,10 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   // Sets the text colors shown for the non-disabled states to |color|.
   virtual void SetEnabledTextColors(absl::optional<SkColor> color);
 
+  // Enable the text colors to auto adjust for readability for the non-disabled
+  // states. Default to false.
+  void SetEnabledTextColorReadabilityAdjustment(bool enabled);
+
   // Gets the current state text color.
   SkColor GetCurrentTextColor() const;
 
@@ -106,6 +110,10 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   // the label. The image is not centered for CheckBox and RadioButton only.
   bool GetImageCentered() const;
   void SetImageCentered(bool image_centered);
+
+  // Sets the corner radius of the focus ring around the button.
+  float GetFocusRingCornerRadius() const;
+  void SetFocusRingCornerRadius(float radius);
 
   // Creates the default border for this button. This can be overridden by
   // subclasses.
@@ -262,6 +270,9 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   // text direction) while |this| is laid out as ALIGN_LEFT (alignment matches
   // UI direction).
   gfx::HorizontalAlignment horizontal_alignment_ = gfx::ALIGN_LEFT;
+
+  // Corner radius of the focus ring.
+  float focus_ring_corner_radius_ = FocusableBorder::kCornerRadiusDp;
 
   base::CallbackListSubscription paint_as_active_subscription_;
 

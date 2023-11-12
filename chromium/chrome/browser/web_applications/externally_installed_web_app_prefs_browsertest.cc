@@ -52,7 +52,8 @@ class ExternallyInstalledWebAppPrefsBrowserTest
   base::flat_set<GURL> GetAppUrls(ExternalInstallSource install_source) {
     base::flat_set<GURL> urls;
     for (const auto& id_and_url :
-         provider().registrar().GetExternallyInstalledApps(install_source)) {
+         provider().registrar_unsafe().GetExternallyInstalledApps(
+             install_source)) {
       for (const auto& url : id_and_url.second) {
         urls.emplace(url);
       }
@@ -68,17 +69,35 @@ class ExternallyInstalledWebAppPrefsBrowserTest
 
 class ExternallyInstalledWebAppPrefsBrowserTest_ExternalPrefMigration
     : public ExternallyInstalledWebAppPrefsBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   ExternallyInstalledWebAppPrefsBrowserTest_ExternalPrefMigration() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
  private:
@@ -92,7 +111,7 @@ IN_PROC_BROWSER_TEST_P(
   AppId id_a;
 
   // Start with no data in the DB.
-  WebAppRegistrar& registrar = provider().registrar();
+  WebAppRegistrar& registrar = provider().registrar_unsafe();
   EXPECT_FALSE(registrar.LookupExternalAppId(url_a).has_value());
   EXPECT_FALSE(registrar.HasExternalApp(id_a));
 
@@ -147,7 +166,7 @@ IN_PROC_BROWSER_TEST_P(
                           webapps::WebappInstallSource::EXTERNAL_POLICY);
   ExternallyInstalledWebAppPrefs prefs(profile()->GetPrefs());
   prefs.Insert(url, app_id, ExternalInstallSource::kExternalPolicy);
-  EXPECT_FALSE(provider().registrar().IsPlaceholderApp(
+  EXPECT_FALSE(provider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
   prefs.SetIsPlaceholder(url, true);
   {
@@ -157,7 +176,7 @@ IN_PROC_BROWSER_TEST_P(
       installed_app->AddPlaceholderInfoToManagementExternalConfigMap(
           WebAppManagement::kPolicy, /*is_placeholder=*/true);
   }
-  EXPECT_TRUE(provider().registrar().IsPlaceholderApp(
+  EXPECT_TRUE(provider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
 }
 
@@ -169,7 +188,7 @@ IN_PROC_BROWSER_TEST_P(
                               prefs::kWebAppsExtensionIDs);
   update->Set("https://example.com", "add_id_string");
   // This should not crash on invalid pref data.
-  EXPECT_FALSE(provider().registrar().IsPlaceholderApp(
+  EXPECT_FALSE(provider().registrar_unsafe().IsPlaceholderApp(
       "app_id_string", WebAppManagement::kPolicy));
 }
 
@@ -306,8 +325,9 @@ IN_PROC_BROWSER_TEST_P(
                           /*overwrite_existing_manifest_fields=*/true,
                           webapps::WebappInstallSource::EXTERNAL_POLICY);
 
-  const WebApp* installed_app = provider().registrar().GetAppById(app_id);
-  EXPECT_FALSE(provider().registrar().IsPlaceholderApp(
+  const WebApp* installed_app =
+      provider().registrar_unsafe().GetAppById(app_id);
+  EXPECT_FALSE(provider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
 
   GURL install_url("https://app.com/install");
@@ -320,7 +340,7 @@ IN_PROC_BROWSER_TEST_P(
       profile()->GetPrefs(), &provider().sync_bridge());
 
   // Verify install source, placeholder info and urls have been migrated.
-  EXPECT_TRUE(provider().registrar().IsPlaceholderApp(
+  EXPECT_TRUE(provider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
   const WebApp::ExternalConfigMap& config_map =
       installed_app->management_to_external_config_map();
@@ -706,6 +726,11 @@ IN_PROC_BROWSER_TEST_F(ExternallyInstalledWebAppPrefsBrowserTest,
 INSTANTIATE_TEST_SUITE_P(
     All,
     ExternallyInstalledWebAppPrefsBrowserTest_ExternalPrefMigration,
-    ::testing::Bool());
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 }  // namespace web_app

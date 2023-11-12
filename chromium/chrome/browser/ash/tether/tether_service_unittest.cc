@@ -7,19 +7,6 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
-#include "ash/services/device_sync/cryptauth_device_manager.h"
-#include "ash/services/device_sync/cryptauth_enroller.h"
-#include "ash/services/device_sync/cryptauth_enrollment_manager.h"
-#include "ash/services/device_sync/fake_cryptauth_enrollment_manager.h"
-#include "ash/services/device_sync/fake_remote_device_provider.h"
-#include "ash/services/device_sync/public/cpp/device_sync_client_impl.h"
-#include "ash/services/device_sync/public/cpp/fake_device_sync_client.h"
-#include "ash/services/device_sync/remote_device_provider_impl.h"
-#include "ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
-#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client_impl.h"
-#include "ash/services/multidevice_setup/public/cpp/prefs.h"
-#include "ash/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client_impl.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
@@ -49,6 +36,19 @@
 #include "chromeos/ash/components/tether/fake_tether_host_fetcher.h"
 #include "chromeos/ash/components/tether/tether_component_impl.h"
 #include "chromeos/ash/components/tether/tether_host_fetcher_impl.h"
+#include "chromeos/ash/services/device_sync/cryptauth_device_manager.h"
+#include "chromeos/ash/services/device_sync/cryptauth_enroller.h"
+#include "chromeos/ash/services/device_sync/cryptauth_enrollment_manager.h"
+#include "chromeos/ash/services/device_sync/fake_cryptauth_enrollment_manager.h"
+#include "chromeos/ash/services/device_sync/fake_remote_device_provider.h"
+#include "chromeos/ash/services/device_sync/public/cpp/device_sync_client_impl.h"
+#include "chromeos/ash/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/ash/services/device_sync/remote_device_provider_impl.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client_impl.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/secure_channel_client_impl.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
@@ -770,9 +770,85 @@ TEST_F(TetherServiceTest, TestGet_PrimaryUser_FeatureFlagDisabled) {
 
 TEST_F(TetherServiceTest, TestGet_NotPrimaryUser_FeatureFlagEnabled) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(chromeos::features::kInstantTethering);
+  feature_list.InitAndEnableFeature(features::kInstantTethering);
 
   EXPECT_FALSE(TetherService::Get(profile_.get()));
+}
+
+// Regression test for b/242870461.
+TEST_F(TetherServiceTest, TestRegression_TetherDisabledWhileBluetoothDisabled) {
+  initial_feature_state_ =
+      multidevice_setup::mojom::FeatureState::kDisabledByUser;
+  profile_->GetPrefs()->SetBoolean(
+      multidevice_setup::kInstantTetheringEnabledPrefName, false);
+  SetIsBluetoothPowered(false);
+
+  CreateTetherService();
+
+  // Even though Bluetooth can be initalized, Tether should be UNAVAILABLE as
+  // it is disabled by user preference.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNAVAILABLE,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
+
+  fake_multidevice_setup_client_->SetFeatureState(
+      multidevice_setup::mojom::Feature::kInstantTethering,
+      multidevice_setup::mojom::FeatureState::kEnabledByUser);
+
+  // Technology should be UNINITIALIZED, since now only Bluetooth is disabled.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNINITIALIZED,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
+}
+
+// Regression test for b/242870461.
+TEST_F(TetherServiceTest,
+       TestRegression_BetterTogetherDisabledWhileBluetoothDisabled) {
+  initial_feature_state_ =
+      multidevice_setup::mojom::FeatureState::kUnavailableSuiteDisabled;
+  SetIsBluetoothPowered(false);
+
+  CreateTetherService();
+
+  // Even though Bluetooth can be initalized, Better Together being disabled
+  // should make the Tether state UNAVAILABLE, rather than UNINITIALIZED.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNAVAILABLE,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
+
+  fake_multidevice_setup_client_->SetFeatureState(
+      multidevice_setup::mojom::Feature::kInstantTethering,
+      multidevice_setup::mojom::FeatureState::kEnabledByUser);
+
+  // Technology should be UNINITIALIZED, since now only Bluetooth is disabled.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNINITIALIZED,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
+}
+
+// Regression test for b/242870461.
+// TODO(https://crbug.com/893878): Fix disabled test.
+TEST_F(TetherServiceTest,
+       DISABLED_TestRegression_ProhibitedByPolicyWhileBluetoothDisabled) {
+  profile_->GetPrefs()->SetBoolean(
+      multidevice_setup::kInstantTetheringAllowedPrefName, false);
+  SetIsBluetoothPowered(false);
+
+  CreateTetherService();
+
+  // Even though Bluetooth can be initalized, Tether should be UNAVAILABLE as
+  // it is prohibited by policy.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNAVAILABLE,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
+
+  profile_->GetPrefs()->SetBoolean(
+      multidevice_setup::kInstantTetheringAllowedPrefName, true);
+
+  // Technology should be UNINITIALIZED, since now only Bluetooth is disabled.
+  EXPECT_EQ(NetworkStateHandler::TechnologyState::TECHNOLOGY_UNINITIALIZED,
+            network_state_handler()->GetTechnologyState(
+                NetworkTypePattern::Tether()));
 }
 
 // TODO(https://crbug.com/893878): Fix disabled test.
@@ -781,7 +857,7 @@ TEST_F(TetherServiceTest, DISABLED_TestGet_PrimaryUser_FeatureFlagEnabled) {
 
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kInstantTethering} /* enabled_features */,
+      {features::kInstantTethering} /* enabled_features */,
       {} /* disabled_features */);
 
   TetherService* tether_service = TetherService::Get(profile_.get());
@@ -801,7 +877,7 @@ TEST_F(
 
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kInstantTethering} /* enabled_features */,
+      {features::kInstantTethering} /* enabled_features */,
       {} /* disabled_features */);
 
   TetherService* tether_service = TetherService::Get(profile_.get());
@@ -821,7 +897,7 @@ TEST_F(
 
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kInstantTethering} /* enabled_features */,
+      {features::kInstantTethering} /* enabled_features */,
       {} /* disabled_features */);
 
   TetherService* tether_service = TetherService::Get(profile_.get());

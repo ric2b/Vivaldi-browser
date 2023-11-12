@@ -19,6 +19,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_reader_registry.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_reader_registry_factory.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/isolated_web_apps/pending_install_info.h"
 #include "chrome/browser/web_applications/isolation_data.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/url_constants.h"
@@ -38,9 +39,11 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_completion_status.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -123,8 +126,12 @@ void CompleteWithGeneratedHtmlResponse(
   loader_client->OnComplete(status);
 }
 
-void LogErrorMessageToConsole(int frame_tree_node_id,
+void LogErrorMessageToConsole(absl::optional<int> frame_tree_node_id,
                               const std::string& error_message) {
+  if (!frame_tree_node_id.has_value()) {
+    LOG(ERROR) << error_message;
+    return;
+  }
   // TODO(crbug.com/1365850): The console message will vanish from the console
   // if the user does not have the `Preserve Log` option enabled, since it is
   // triggered before the navigation commits. We should try to use a similar
@@ -134,12 +141,13 @@ void LogErrorMessageToConsole(int frame_tree_node_id,
   // Find the `RenderFrameHost` associated with the `FrameTreeNode`
   // corresponding to the `frame_tree_node_id`, and then log the message.
   content::WebContents* web_contents =
-      content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+      content::WebContents::FromFrameTreeNodeId(*frame_tree_node_id);
   if (!web_contents) {
     // Log to the terminal if we can't log to the console.
     LOG(ERROR) << error_message;
     return;
   }
+
   web_contents->ForEachRenderFrameHostWithAction(
       [frame_tree_node_id,
        &error_message](content::RenderFrameHost* render_frame_host) {
@@ -154,11 +162,11 @@ void LogErrorMessageToConsole(int frame_tree_node_id,
 
 base::expected<std::reference_wrapper<const WebApp>, std::string>
 FindIsolatedWebApp(Profile* profile, const IsolatedWebAppUrlInfo& url_info) {
-  // TODO(b/242738845): Defer navigation in IsolatedAppThrottle until
+  // TODO(b/242738845): Defer navigation in IsolatedWebAppThrottle until
   // WebAppProvider is ready to ensure we never fail this DCHECK.
   auto* web_app_provider = WebAppProvider::GetForWebApps(profile);
   DCHECK(web_app_provider->is_registry_ready());
-  const WebAppRegistrar& registrar = web_app_provider->registrar();
+  const WebAppRegistrar& registrar = web_app_provider->registrar_unsafe();
   const WebApp* iwa = registrar.GetAppById(url_info.app_id());
 
   if (iwa == nullptr || !iwa->is_locally_installed()) {
@@ -182,7 +190,7 @@ class IsolatedWebAppURLLoader : public network::mojom::URLLoader {
       web_package::SignedWebBundleId web_bundle_id,
       mojo::PendingRemote<network::mojom::URLLoaderClient> loader_client,
       const network::ResourceRequest& resource_request,
-      int frame_tree_node_id)
+      absl::optional<int> frame_tree_node_id)
       : loader_client_(std::move(loader_client)),
         resource_request_(resource_request),
         frame_tree_node_id_(frame_tree_node_id) {
@@ -194,8 +202,8 @@ class IsolatedWebAppURLLoader : public network::mojom::URLLoader {
 
   IsolatedWebAppURLLoader(const IsolatedWebAppURLLoader&) = delete;
   IsolatedWebAppURLLoader& operator=(const IsolatedWebAppURLLoader&) = delete;
-
-  ~IsolatedWebAppURLLoader() override = default;
+  IsolatedWebAppURLLoader(IsolatedWebAppURLLoader&&) = delete;
+  IsolatedWebAppURLLoader& operator=(IsolatedWebAppURLLoader&&) = delete;
 
  private:
   void OnResponseRead(
@@ -304,7 +312,7 @@ class IsolatedWebAppURLLoader : public network::mojom::URLLoader {
   int64_t header_length_;
   int64_t body_length_;
   const network::ResourceRequest resource_request_;
-  const int frame_tree_node_id_;
+  absl::optional<int> frame_tree_node_id_;
 
   base::WeakPtrFactory<IsolatedWebAppURLLoader> weak_factory_{this};
 };
@@ -312,7 +320,7 @@ class IsolatedWebAppURLLoader : public network::mojom::URLLoader {
 }  // namespace
 
 IsolatedWebAppURLLoaderFactory::IsolatedWebAppURLLoaderFactory(
-    int frame_tree_node_id,
+    absl::optional<int> frame_tree_node_id,
     Profile* profile,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver)
     : network::SelfDeletingURLLoaderFactory(std::move(factory_receiver)),
@@ -341,70 +349,83 @@ void IsolatedWebAppURLLoaderFactory::CreateLoaderAndStart(
     return;
   }
 
-  base::expected<web_package::SignedWebBundleId, std::string> web_bundle_id =
-      url_info->ParseSignedWebBundleId();
-  if (!web_bundle_id.has_value()) {
-    LogErrorAndFail(web_bundle_id.error(), std::move(loader_client));
+  auto forward_request_to_isolation_data_content =
+      [&](const IsolationData& isolation_data) {
+        if (!IsSupportedHttpMethod(resource_request.method)) {
+          CompleteWithGeneratedHtmlResponse(
+              mojo::Remote<network::mojom::URLLoaderClient>(
+                  std::move(loader_client)),
+              net::HTTP_METHOD_NOT_ALLOWED, /*body=*/absl::nullopt);
+          return;
+        }
+
+        absl::visit(
+            base::Overloaded{
+                [&](const IsolationData::InstalledBundle& content) {
+                  DCHECK_EQ(
+                      url_info->web_bundle_id().type(),
+                      web_package::SignedWebBundleId::Type::kEd25519PublicKey);
+                  HandleSignedBundle(content.path, url_info->web_bundle_id(),
+                                     std::move(loader_receiver),
+                                     resource_request,
+                                     std::move(loader_client));
+                },
+                [&](const IsolationData::DevModeBundle& content) {
+                  DCHECK_EQ(
+                      url_info->web_bundle_id().type(),
+                      web_package::SignedWebBundleId::Type::kEd25519PublicKey);
+                  // A Signed Web Bundle installed in dev mode is treated just
+                  // like a properly installed Signed Web Bundle, with the only
+                  // difference being that we implicitly trust its public
+                  // key(s).
+                  HandleSignedBundle(content.path, url_info->web_bundle_id(),
+                                     std::move(loader_receiver),
+                                     resource_request,
+                                     std::move(loader_client));
+                },
+                [&](const IsolationData::DevModeProxy& content) {
+                  DCHECK_EQ(url_info->web_bundle_id().type(),
+                            web_package::SignedWebBundleId::Type::kDevelopment);
+                  HandleDevModeProxy(*url_info, content,
+                                     std::move(loader_receiver),
+                                     resource_request, std::move(loader_client),
+                                     traffic_annotation);
+                }},
+            isolation_data.content);
+      };
+
+  absl::optional<IsolationData> pending_install_isolation_data = absl::nullopt;
+
+  if (frame_tree_node_id_.has_value()) {
+    pending_install_isolation_data =
+        IsolatedWebAppPendingInstallInfo::FromWebContents(
+            *content::WebContents::FromFrameTreeNodeId(*frame_tree_node_id_))
+            .isolation_data();
+  }
+
+  if (pending_install_isolation_data.has_value()) {
+    if (resource_request.url.path() == kInstallPagePath &&
+        IsSupportedHttpMethod(resource_request.method)) {
+      CompleteWithGeneratedHtmlResponse(
+          mojo::Remote<network::mojom::URLLoaderClient>(
+              std::move(loader_client)),
+          net::HTTP_OK, kInstallPageContent);
+      return;
+    }
+
+    forward_request_to_isolation_data_content(*pending_install_isolation_data);
     return;
   }
 
   base::expected<std::reference_wrapper<const WebApp>, std::string> iwa =
       FindIsolatedWebApp(profile_, *url_info);
+
   if (!iwa.has_value()) {
     LogErrorAndFail(iwa.error(), std::move(loader_client));
     return;
   }
 
-  if (!IsSupportedHttpMethod(resource_request.method)) {
-    CompleteWithGeneratedHtmlResponse(
-        mojo::Remote<network::mojom::URLLoaderClient>(std::move(loader_client)),
-        net::HTTP_METHOD_NOT_ALLOWED, /*body=*/absl::nullopt);
-    return;
-  }
-
-  // TODO(crbug.com/1333966): Check that the app is being installed before
-  // returning the auto-generated installation page.
-  if (resource_request.url.path() == kInstallPagePath) {
-    CompleteWithGeneratedHtmlResponse(
-        mojo::Remote<network::mojom::URLLoaderClient>(std::move(loader_client)),
-        net::HTTP_OK, kInstallPageContent);
-    return;
-  }
-
-  IsolationData isolation_data = iwa->get().isolation_data().value();
-  absl::visit(
-      base::Overloaded{
-          [&](const IsolationData::InstalledBundle& content) {
-            auto* isolated_web_app_reader_registry =
-                IsolatedWebAppReaderRegistryFactory::GetForProfile(profile_);
-            if (!isolated_web_app_reader_registry) {
-              LogErrorAndFail("Support for Isolated Web Apps is not enabled.",
-                              std::move(loader_client));
-              return;
-            }
-
-            auto loader = std::make_unique<IsolatedWebAppURLLoader>(
-                isolated_web_app_reader_registry, content.path, *web_bundle_id,
-                std::move(loader_client), resource_request,
-                frame_tree_node_id_);
-            mojo::MakeSelfOwnedReceiver(
-                std::move(std::move(loader)),
-                mojo::PendingReceiver<network::mojom::URLLoader>(
-                    std::move(loader_receiver)));
-          },
-          [&loader_client](const IsolationData::DevModeBundle& content) {
-            // TODO: Implement dev mode bundles.
-            CompleteWithGeneratedHtmlResponse(
-                mojo::Remote<network::mojom::URLLoaderClient>(
-                    std::move(loader_client)),
-                net::HTTP_NOT_FOUND, /*body=*/absl::nullopt);
-          },
-          [&](const IsolationData::DevModeProxy& content) {
-            HandleDevModeProxy(*url_info, content, std::move(loader_receiver),
-                               resource_request, std::move(loader_client),
-                               traffic_annotation);
-          }},
-      isolation_data.content);
+  forward_request_to_isolation_data_content(*iwa->get().isolation_data());
 }
 
 void IsolatedWebAppURLLoaderFactory::OnProfileWillBeDestroyed(
@@ -417,6 +438,28 @@ void IsolatedWebAppURLLoaderFactory::OnProfileWillBeDestroyed(
   }
 }
 
+void IsolatedWebAppURLLoaderFactory::HandleSignedBundle(
+    const base::FilePath& path,
+    const web_package::SignedWebBundleId& web_bundle_id,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
+    const network::ResourceRequest& resource_request,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> loader_client) {
+  auto* isolated_web_app_reader_registry =
+      IsolatedWebAppReaderRegistryFactory::GetForProfile(profile_);
+  if (!isolated_web_app_reader_registry) {
+    LogErrorAndFail("Support for Isolated Web Apps is not enabled.",
+                    std::move(loader_client));
+    return;
+  }
+
+  auto loader = std::make_unique<IsolatedWebAppURLLoader>(
+      isolated_web_app_reader_registry, path, web_bundle_id,
+      std::move(loader_client), resource_request, frame_tree_node_id_);
+  mojo::MakeSelfOwnedReceiver(std::move(std::move(loader)),
+                              mojo::PendingReceiver<network::mojom::URLLoader>(
+                                  std::move(loader_receiver)));
+}
+
 void IsolatedWebAppURLLoaderFactory::HandleDevModeProxy(
     const IsolatedWebAppUrlInfo& url_info,
     const IsolationData::DevModeProxy& dev_mode_proxy,
@@ -424,34 +467,39 @@ void IsolatedWebAppURLLoaderFactory::HandleDevModeProxy(
     const network::ResourceRequest& resource_request,
     mojo::PendingRemote<network::mojom::URLLoaderClient> loader_client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-  // Generate the proxy URL.
-  // TODO(b/248125557): Consider making DevModeProxy::proxy_url a url::Origin.
-  GURL proxy_url_base(dev_mode_proxy.proxy_url);
-  if (url::Origin::Create(proxy_url_base).GetURL() != proxy_url_base) {
-    LogErrorAndFail(base::StrCat({"Proxy base URL must be an origin: ",
-                                  proxy_url_base.possibly_invalid_spec()}),
-                    std::move(loader_client));
-    return;
-  }
-  GURL proxy_url = proxy_url_base.Resolve(resource_request.url.path());
+  DCHECK(!dev_mode_proxy.proxy_url.opaque());
+  GURL proxy_url =
+      dev_mode_proxy.proxy_url.GetURL().Resolve(resource_request.url.path());
 
   // Create a new ResourceRequest with the proxy URL.
-  network::ResourceRequest proxy_request(resource_request);
+  network::ResourceRequest proxy_request;
   proxy_request.url = proxy_url;
+  proxy_request.method = net::HttpRequestHeaders::kGetMethod;
+  // Don't send cookies or HTTP authentication to the proxy server.
+  proxy_request.credentials_mode = network::mojom::CredentialsMode::kOmit;
 
-  content::StoragePartition* iwa_partition = profile_->GetStoragePartition(
+  std::string accept_header_value = network::kDefaultAcceptHeaderValue;
+  resource_request.headers.GetHeader(net::HttpRequestHeaders::kAccept,
+                                     &accept_header_value);
+  proxy_request.headers.SetHeader(net::HttpRequestHeaders::kAccept,
+                                  accept_header_value);
+  proxy_request.headers.SetHeader(net::HttpRequestHeaders::kCacheControl,
+                                  "no-cache");
+
+  content::StoragePartition* storage_partition = profile_->GetStoragePartition(
       url_info.storage_partition_config(profile_), /*can_create=*/false);
-  if (iwa_partition == nullptr) {
+  if (storage_partition == nullptr) {
     LogErrorAndFail(base::StrCat({"Storage not found for Isolated Web App: ",
                                   resource_request.url.spec()}),
                     std::move(loader_client));
     return;
   }
 
-  iwa_partition->GetURLLoaderFactoryForBrowserProcess()->CreateLoaderAndStart(
-      std::move(loader_receiver),
-      /*request_id=*/0, network::mojom::kURLLoadOptionNone, proxy_request,
-      std::move(loader_client), traffic_annotation);
+  storage_partition->GetURLLoaderFactoryForBrowserProcess()
+      ->CreateLoaderAndStart(std::move(loader_receiver),
+                             /*request_id=*/0,
+                             network::mojom::kURLLoadOptionNone, proxy_request,
+                             std::move(loader_client), traffic_annotation);
 }
 
 void IsolatedWebAppURLLoaderFactory::LogErrorAndFail(
@@ -468,6 +516,21 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
 IsolatedWebAppURLLoaderFactory::Create(
     int frame_tree_node_id,
     content::BrowserContext* browser_context) {
+  return CreateInternal(frame_tree_node_id, browser_context);
+}
+
+// static
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
+IsolatedWebAppURLLoaderFactory::CreateForServiceWorker(
+    content::BrowserContext* browser_context) {
+  return CreateInternal(/*frame_tree_node_id=*/absl::nullopt, browser_context);
+}
+
+// static
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
+IsolatedWebAppURLLoaderFactory::CreateInternal(
+    absl::optional<int> frame_tree_node_id,
+    content::BrowserContext* browser_context) {
   DCHECK(browser_context);
   DCHECK(!browser_context->ShutdownStarted());
 
@@ -477,7 +540,8 @@ IsolatedWebAppURLLoaderFactory::Create(
   // more receivers - see the
   // network::SelfDeletingURLLoaderFactory::OnDisconnect method.
   new IsolatedWebAppURLLoaderFactory(
-      frame_tree_node_id, Profile::FromBrowserContext(browser_context),
+      /*frame_tree_node_id=*/frame_tree_node_id,
+      Profile::FromBrowserContext(browser_context),
       pending_remote.InitWithNewPipeAndPassReceiver());
 
   return pending_remote;

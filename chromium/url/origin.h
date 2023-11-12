@@ -18,7 +18,6 @@
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "ipc/ipc_param_traits.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/scheme_host_port.h"
@@ -42,6 +41,11 @@ namespace blink {
 class SecurityOrigin;
 class SecurityOriginTest;
 }  // namespace blink
+
+namespace IPC {
+template <class P>
+struct ParamTraits;
+}  // namespace IPC
 
 namespace ipc_fuzzer {
 template <class T>
@@ -311,6 +315,13 @@ class COMPONENT_EXPORT(URL) Origin {
   base::android::ScopedJavaLocalRef<jobject> CreateJavaObject() const;
   static Origin FromJavaObject(
       const base::android::JavaRef<jobject>& java_origin);
+  static jlong CreateNative(JNIEnv* env,
+                            const base::android::JavaRef<jstring>& java_scheme,
+                            const base::android::JavaRef<jstring>& java_host,
+                            uint16_t port,
+                            bool is_opaque,
+                            uint64_t tokenHighBits,
+                            uint64_t tokenLowBits);
 #endif  // BUILDFLAG(IS_ANDROID)
 
   void WriteIntoTrace(perfetto::TracedValue context) const;

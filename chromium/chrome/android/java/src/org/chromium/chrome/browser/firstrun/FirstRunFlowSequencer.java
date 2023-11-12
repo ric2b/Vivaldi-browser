@@ -39,9 +39,6 @@ import org.chromium.components.signin.identitymanager.IdentityManager;
 
 import java.util.List;
 
-// Vivaldi
-import org.chromium.build.BuildConfig;
-
 /**
  * A helper to determine what should be the sequence of First Run Experience screens, and whether
  * it should be run.
@@ -240,8 +237,6 @@ public abstract class FirstRunFlowSequencer  {
      * @return Whether the First Run Experience needs to be launched.
      */
     public static boolean checkIfFirstRunIsNecessary(boolean preferLightweightFre, boolean isCct) {
-        // Vivaldi: For preloaded OEM builds, first run experience (onboarding) is disabled.
-        if (BuildConfig.IS_OEM_PRELOADED_BUILD) return false;
         // If FRE is disabled (e.g. in tests), proceed directly to the intent handling.
         if (CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
                 || ApiCompatibilityUtils.isDemoUser()

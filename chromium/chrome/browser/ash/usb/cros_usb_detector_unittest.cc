@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ash/components/arc/arc_util.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
@@ -288,7 +289,7 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
 
   void NotifyMountEvent(const std::string& name,
                         disks::DiskMountManager::MountEvent event,
-                        MountError mount_error = MountError::kNone) {
+                        MountError mount_error = MountError::kSuccess) {
     // In theory we should also clear the mounted flag from the disk, but we
     // don't rely on that.
     disks::DiskMountManager::MountPoint info{"/dev/" + name, "/mount/" + name,
@@ -421,6 +422,50 @@ TEST_F(CrosUsbDetectorTest, NotificationShown) {
   notification = display_service_->GetNotification(notification_id);
   ASSERT_TRUE(notification);
   EXPECT_EQ(notification->buttons().size(), 4u);
+  device_manager_.RemoveDevice(device);
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrosUsbDetectorTest, NotificationControlledByPolicy) {
+  ConnectToDeviceManager();
+  base::RunLoop().RunUntilIdle();
+
+  auto device = base::MakeRefCounted<device::FakeUsbDeviceInfo>(
+      0, 1, kManufacturerName, kProductName_1, "002");
+  std::string notification_id =
+      CrosUsbDetector::MakeNotificationId(device->guid());
+
+  // Notifications should be shown if UsbDetectorNotificationEnabled policy is
+  // unset.
+  crostini::FakeCrostiniFeatures crostini_features;
+  crostini_features.set_enabled(true);
+  device_manager_.AddDevice(device);
+  base::RunLoop().RunUntilIdle();
+  absl::optional<message_center::Notification> notification =
+      display_service_->GetNotification(notification_id);
+  EXPECT_TRUE(notification);
+  device_manager_.RemoveDevice(device);
+  base::RunLoop().RunUntilIdle();
+
+  // Notifications should not be shown if UsbDetectorNotificationEnabled policy
+  // is false.
+  profile()->GetPrefs()->SetBoolean(prefs::kUsbDetectorNotificationEnabled,
+                                    false);
+  device_manager_.AddDevice(device);
+  base::RunLoop().RunUntilIdle();
+  notification = display_service_->GetNotification(notification_id);
+  EXPECT_FALSE(notification);
+  device_manager_.RemoveDevice(device);
+  base::RunLoop().RunUntilIdle();
+
+  // Notifications should be shown if UsbDetectorNotificationEnabled policy is
+  // true.
+  profile()->GetPrefs()->SetBoolean(prefs::kUsbDetectorNotificationEnabled,
+                                    true);
+  device_manager_.AddDevice(device);
+  base::RunLoop().RunUntilIdle();
+  notification = display_service_->GetNotification(notification_id);
+  EXPECT_TRUE(notification);
   device_manager_.RemoveDevice(device);
   base::RunLoop().RunUntilIdle();
 }
@@ -1094,7 +1139,7 @@ TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemSuccess) {
   AddDisk("disk1", 3, 4, true);
   AddDisk("disk2", 3, 4, /*mounted=*/false);
   NotifyMountEvent("disk2", disks::DiskMountManager::MOUNTING,
-                   MountError::kInternal);
+                   MountError::kInternalError);
   AddDisk("disk3", 3, 5, true);
   AddDisk("disk4", 3, 4, true);
   AddDisk("disk5", 2, 4, true);
@@ -1111,7 +1156,7 @@ TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemSuccess) {
 
   // Unmount events would normally be fired by the DiskMountManager.
   NotifyMountEvent("disk1", disks::DiskMountManager::UNMOUNTING);
-  std::move(callback1).Run(MountError::kNone);
+  std::move(callback1).Run(MountError::kSuccess);
   base::RunLoop().RunUntilIdle();
 
   device_info = GetSingleDeviceInfo();
@@ -1120,7 +1165,7 @@ TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemSuccess) {
 
   // All unmounts must complete before sharing succeeds.
   NotifyMountEvent("disk4", disks::DiskMountManager::UNMOUNTING);
-  std::move(callback4).Run(MountError::kNone);
+  std::move(callback4).Run(MountError::kSuccess);
   base::RunLoop().RunUntilIdle();
 
   device_info = GetSingleDeviceInfo();
@@ -1155,10 +1200,10 @@ TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemFailure) {
   AttachDeviceToGuest(guest_os::GuestId("VM1", ""), GetSingleDeviceInfo().guid,
                       /*vm_success=*/false);
   NotifyMountEvent("disk1", disks::DiskMountManager::UNMOUNTING);
-  std::move(callback1).Run(MountError::kNone);
-  std::move(callback2).Run(MountError::kUnknown);
+  std::move(callback1).Run(MountError::kSuccess);
+  std::move(callback2).Run(MountError::kUnknownError);
   NotifyMountEvent("disk3", disks::DiskMountManager::UNMOUNTING);
-  std::move(callback3).Run(MountError::kNone);
+  std::move(callback3).Run(MountError::kSuccess);
   base::RunLoop().RunUntilIdle();
 
   // AttachDeviceToGuest() verifies CrosUsbDetector correctly calls the
@@ -1204,7 +1249,7 @@ TEST_F(CrosUsbDetectorTest, ReassignPromptForStorageDevice) {
   // A disk which fails to mount shouldn't cause the prompt to be shown.
   AddDisk("disk_error", 1, 5, /*mounted=*/false);
   NotifyMountEvent("disk_error", disks::DiskMountManager::MOUNTING,
-                   MountError::kInternal);
+                   MountError::kInternalError);
   EXPECT_FALSE(GetSingleDeviceInfo().prompt_before_sharing);
 
   AddDisk("disk_success", 1, 5, true);

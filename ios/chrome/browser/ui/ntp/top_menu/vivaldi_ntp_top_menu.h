@@ -26,8 +26,10 @@
 // SETTERS
 - (void)setMenuItemsWithSDFolders:(NSArray*)folders
                   selectedIndex:(NSInteger)selectedIndex;
-- (void)selectItemWithIndex:(NSInteger)index;
+- (void)selectItemWithIndex:(NSInteger)index
+                   animated:(BOOL)animated;
 - (void)invalidateLayoutWithHeight:(CGFloat)height;
+- (void)removeAllItems;
 
 @end
 

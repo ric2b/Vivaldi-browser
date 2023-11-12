@@ -40,7 +40,16 @@ CreateDirectCompositionSurfaceSettings(
 }  // namespace
 
 // static
-scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
+scoped_refptr<gl::Presenter> ImageTransportSurface::CreatePresenter(
+    gl::GLDisplay* display,
+    base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
+    SurfaceHandle surface_handle,
+    gl::GLSurfaceFormat format) {
+  return nullptr;
+}
+
+// static
+scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeGLSurface(
     gl::GLDisplay* display,
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
     SurfaceHandle surface_handle,
@@ -58,8 +67,8 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
           std::move(vsync_callback), settings);
       if (!dc_surface->Initialize(gl::GLSurfaceFormat()))
         return nullptr;
-      delegate->DidCreateAcceleratedSurfaceChildWindow(surface_handle,
-                                                       dc_surface->window());
+
+      delegate->AddChildWindowToBrowser(dc_surface->window());
       surface = std::move(dc_surface);
     } else {
       surface = gl::InitializeGLSurface(

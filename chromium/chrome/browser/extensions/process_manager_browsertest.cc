@@ -19,7 +19,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -34,7 +33,6 @@
 #include "components/permissions/permission_request_manager.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -223,14 +221,15 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
              "script-src 'self' 'unsafe-eval'; object-src 'self'")
         .Set("sandbox",
              DictionaryBuilder()
-                 .Set("pages", ListBuilder().Append("sandboxed.html").Build())
-                 .Build())
+                 .Set("pages",
+                      ListBuilder().Append("sandboxed.html").BuildList())
+                 .BuildDict())
         .Set("web_accessible_resources",
-             ListBuilder().Append("*.html").Build());
+             ListBuilder().Append("*.html").BuildList());
 
     if (has_background_process) {
       manifest.Set("background",
-                   DictionaryBuilder().Set("page", "bg.html").Build());
+                   DictionaryBuilder().Set("page", "bg.html").BuildDict());
       dir->WriteFile(FILE_PATH_LITERAL("bg.html"),
                      "<iframe id='bgframe' src='empty.html'></iframe>");
     }
@@ -426,9 +425,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, MAYBE_PopupHostCreation) {
 
   // Simulate clicking on the action to open a popup.
   auto test_util = ExtensionActionTestHelper::Create(browser());
-  content::WindowedNotificationObserver frame_observer(
-      content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-      content::NotificationService::AllSources());
+  content::CreateAndLoadWebContentsObserver frame_observer;
   // Open popup in the first extension.
   test_util->Press(popup->id());
   frame_observer.Wait();
@@ -1161,7 +1158,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
     console_observer.SetPattern("Not allowed to navigate to*");
     EXPECT_TRUE(ExecuteScript(
         popup, "location.href = '" + nested_urls[1].spec() + "';"));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
 
     // about:blank URLs can be modified by their opener. In that case their
     // effective origin changes to that of the opener, but the page URL remains

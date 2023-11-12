@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview ChromeVox predicates for the automation extension API.
+ * @fileoverview Predicates for the automation extension API.
  */
 
 import {constants} from './constants.js';
@@ -337,7 +337,7 @@ export class AutomationPredicate {
       return true;
     }
 
-    // Given no other information, ChromeVox wants to visit focusable
+    // Given no other information, we want to visit focusable
     // (e.g. tabindex=0) nodes only when it has a name or is a control.
     if (node.state[State.FOCUSABLE] &&
         (node.name || node.state[State.EDITABLE] ||
@@ -437,8 +437,13 @@ export class AutomationPredicate {
 
     // Always try to dive into subtrees with actionable descendants for some
     // roles even if these roles are not naturally containers.
-    if ((node.role === Role.BUTTON || node.role === Role.CHECK_BOX ||
-         node.role === Role.RADIO_BUTTON || node.role === Role.SWITCH) &&
+    if ([
+          Role.BUTTON,
+          Role.CELL,
+          Role.CHECK_BOX,
+          Role.RADIO_BUTTON,
+          Role.SWITCH,
+        ].includes(node.role) &&
         hasActionableDescendant(node)) {
       return true;
     }

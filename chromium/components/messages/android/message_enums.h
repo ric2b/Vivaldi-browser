@@ -104,7 +104,7 @@ enum class MessageIdentifier {
   VR_SERVICES_UPGRADE = 24,
   TAILORED_SECURITY_DISABLED = 25,
   AR_CORE_UPGRADE = 26,
-  INSTANT_APPS = 27,
+  // Removed: INSTANT_APPS = 27,
   ABOUT_THIS_SITE = 28,
   TRANSLATE = 29,
   OFFER_NOTIFICATION = 30,
@@ -114,6 +114,7 @@ enum class MessageIdentifier {
   DESKTOP_SITE_GLOBAL_OPT_IN = 34,
   PASSWORD_MANAGER_ERROR = 35,
   DOWNLOAD_INCOGNITO_WARNING = 36,
+  RESTORE_CUSTOM_TAB = 37,
 
   // Insert new values before this line.
   COUNT

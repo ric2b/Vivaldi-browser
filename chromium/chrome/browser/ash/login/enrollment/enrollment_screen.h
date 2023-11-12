@@ -16,8 +16,6 @@
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
 #include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "chrome/browser/ash/login/screen_manager.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/policy/active_directory/active_directory_join_delegate.h"
@@ -35,6 +33,9 @@ class ElapsedTimer;
 }
 
 namespace ash {
+
+class ScreenManager;
+
 namespace test {
 class EnrollmentHelperMixin;
 }
@@ -60,7 +61,7 @@ class EnrollmentScreen
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
   using TpmStatusCallback = chromeos::TpmManagerClient::TakeOwnershipCallback;
-  EnrollmentScreen(EnrollmentScreenView* view,
+  EnrollmentScreen(base::WeakPtr<EnrollmentScreenView> view,
                    const ScreenExitCallback& exit_callback);
 
   EnrollmentScreen(const EnrollmentScreen&) = delete;
@@ -69,10 +70,6 @@ class EnrollmentScreen
   ~EnrollmentScreen() override;
 
   static EnrollmentScreen* Get(ScreenManager* manager);
-
-  // Called when `view` has been destroyed. If this instance is destroyed before
-  // the `view` it should call view->Unbind().
-  void OnViewDestroyed(EnrollmentScreenView* view);
 
   // Setup how this screen will handle enrollment.
   void SetEnrollmentConfig(const policy::EnrollmentConfig& enrollment_config);
@@ -113,7 +110,7 @@ class EnrollmentScreen
   void OnBrowserRestart();
 
   // Used for testing.
-  EnrollmentScreenView* GetView() { return view_; }
+  EnrollmentScreenView* GetView() { return view_.get(); }
 
   void set_exit_callback_for_testing(const ScreenExitCallback& callback) {
     exit_callback_ = callback;
@@ -134,7 +131,7 @@ class EnrollmentScreen
   void ShowImpl() override;
   void HideImpl() override;
   bool HandleAccelerator(LoginAcceleratorAction action) override;
-  void OnUserActionDeprecated(const std::string& action_id) override;
+  void OnUserAction(const base::Value::List& args) override;
 
   // Expose the exit_callback to test screen overrides.
   ScreenExitCallback* exit_callback() { return &exit_callback_; }
@@ -242,7 +239,7 @@ class EnrollmentScreen
   // Hands Off flow or Chromad Migration.
   bool IsAutomaticEnrollmentFlow();
 
-  EnrollmentScreenView* view_;
+  base::WeakPtr<EnrollmentScreenView> view_;
   ScreenExitCallback exit_callback_;
   absl::optional<TpmStatusCallback> tpm_ownership_callback_for_testing_;
   policy::EnrollmentConfig config_;
@@ -289,17 +286,5 @@ class EnrollmentScreen
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::EnrollmentScreen;
-}
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace ash {
-using ::chromeos::EnrollmentScreen;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_ENROLLMENT_ENROLLMENT_SCREEN_H_

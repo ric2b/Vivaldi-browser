@@ -40,7 +40,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
 
   std::vector<std::string> GetAppIdsToUninstallAndReplace() const override;
   gfx::Size GetMinimumWindowSize() const override;
-  bool ShouldReuseExistingWindow() const override;
+  Browser* GetWindowForLaunch(Profile* profile, const GURL& url) const override;
   bool ShouldShowNewWindowMenuOption() const override;
   base::FilePath GetLaunchDirectory(
       const apps::AppLaunchParams& params) const override;
@@ -64,6 +64,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
   bool IsAppEnabled() const override;
   bool IsUrlInSystemAppScope(const GURL& url) const override;
   bool PreferManifestBackgroundColor() const override;
+  bool UseSystemThemeColor() const override;
 #if BUILDFLAG(IS_CHROMEOS)
   bool ShouldAnimateThemeChanges() const override;
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -90,6 +91,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
   void SetIsAppEnabled(bool);
   void SetUrlInSystemAppScope(const GURL& url);
   void SetPreferManifestBackgroundColor(bool);
+  void SetUseSystemThemeColor(bool);
 #if BUILDFLAG(IS_CHROMEOS)
   void SetShouldAnimateThemeChanges(bool);
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -115,6 +117,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
   bool is_app_enabled = true;
   GURL url_in_system_app_scope_;
   bool prefer_manifest_background_color_ = false;
+  bool use_system_theme_color_ = true;
 #if BUILDFLAG(IS_CHROMEOS)
   bool should_animate_theme_changes_ = false;
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -214,6 +217,8 @@ class TestSystemWebAppInstallation {
       absl::optional<SkColor> background_color,
       absl::optional<SkColor> dark_mode_background_color);
 
+  static std::unique_ptr<TestSystemWebAppInstallation> SetUpAppWithValidIcons();
+
   ~TestSystemWebAppInstallation();
 
   void WaitForAppInstall();
@@ -243,7 +248,7 @@ class TestSystemWebAppInstallation {
   // Must be called in SetUp*App() methods, before WebAppProvider is created.
   void RegisterAutoGrantedPermissions(ContentSettingsType permission);
 
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
   SystemWebAppManager::UpdatePolicy update_policy_ =
       SystemWebAppManager::UpdatePolicy::kAlwaysUpdate;
 

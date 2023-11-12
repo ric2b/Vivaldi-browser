@@ -11,6 +11,7 @@
 @protocol BubblePresenterDelegate;
 @class BubbleViewControllerPresenter;
 class ChromeBrowserState;
+@class LayoutGuideCenter;
 @protocol ToolbarCommands;
 
 // Object handling the presentation of the different bubbles tips. The class is
@@ -31,6 +32,7 @@ class ChromeBrowserState;
 @property(nonatomic, weak) id<BubblePresenterDelegate> delegate;
 @property(nonatomic, weak) UIViewController* rootViewController;
 @property(nonatomic, weak) id<ToolbarCommands> toolbarHandler;
+@property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
 
 - (void)stop;
 
@@ -55,6 +57,10 @@ class ChromeBrowserState;
 
 // Presents a help bubble for What's New, if applicable.
 - (void)presentWhatsNewBottomToolbarBubble;
+
+// Presents a help bubble to inform the user that they can track the price of
+// the item on the current website.
+- (void)presentPriceNotificationsWhileBrowsingTipBubble;
 
 @end
 

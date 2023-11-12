@@ -47,8 +47,8 @@ class ASH_EXPORT BluetoothDetailedViewController
       std::vector<bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr>;
 
  private:
-  // DetailedViewControllerBase:
-  views::View* CreateView() override;
+  // DetailedViewController:
+  std::unique_ptr<views::View> CreateView() override;
   std::u16string GetAccessibleName() const override;
 
   // bluetooth_config::mojom::SystemPropertiesObserver:
@@ -65,6 +65,10 @@ class ASH_EXPORT BluetoothDetailedViewController
   // Used to update |view_| and |device_list_controller_| when the cached
   // Bluetooth state has changed.
   void BluetoothEnabledStateChanged();
+
+  // Adds fake devices for manual testing to `previously_connected_devices_`
+  // and `connected_devices_`.
+  void AddFakeBluetoothDevices();
 
   const std::unique_ptr<DetailedViewDelegate> detailed_view_delegate_;
 

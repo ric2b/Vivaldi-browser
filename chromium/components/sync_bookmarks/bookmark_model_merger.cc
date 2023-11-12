@@ -389,7 +389,7 @@ GroupedUpdates GroupValidUpdates(UpdateResponseDataList updates) {
     // Special-case the root folder to avoid recording
     // |RemoteBookmarkUpdateError::kUnsupportedPermanentFolder|.
     if (update_entity.server_defined_unique_tag ==
-        syncer::ModelTypeToRootTag(syncer::BOOKMARKS)) {
+        syncer::ModelTypeToProtocolRootTag(syncer::BOOKMARKS)) {
       ++num_valid_updates;
       continue;
     }
@@ -775,7 +775,10 @@ void BookmarkModelMerger::MergeSubtree(
   const bool is_reupload_needed =
       !local_subtree_root->is_permanent_node() &&
       IsBookmarkEntityReuploadNeeded(remote_update_entity);
-  if (is_reupload_needed) {
+  const bool is_reupload_for_thumbnail_needed =
+      ShouldReuploadBookmarkForThumbnail(
+          remote_node.entity().specifics.bookmark(), local_subtree_root);
+  if (is_reupload_needed || is_reupload_for_thumbnail_needed) {
     bookmark_tracker_->IncrementSequenceNumber(entity);
   }
   LogBookmarkReuploadNeeded(is_reupload_needed);
@@ -871,7 +874,8 @@ BookmarkModelMerger::UpdateBookmarkNodeFromSpecificsIncludingGUID(
   // matched.
   DCHECK(local_node->is_folder() ||
          local_node->url() ==
-             GURL(remote_node.entity().specifics.bookmark().url()));
+             GURL(remote_node.entity().specifics.bookmark().url()) ||
+         vivaldi_bookmark_kit::GetPartner(local_node).is_valid());
   const EntityData& remote_update_entity = remote_node.entity();
   const sync_pb::BookmarkSpecifics& specifics =
       remote_update_entity.specifics.bookmark();
@@ -930,7 +934,10 @@ void BookmarkModelMerger::ProcessRemoteCreation(
       remote_update_entity.creation_time, specifics);
   const bool is_reupload_needed =
       IsBookmarkEntityReuploadNeeded(remote_node.entity());
-  if (is_reupload_needed) {
+  const bool is_reupload_for_thumbnail_needed =
+      ShouldReuploadBookmarkForThumbnail(
+          remote_node.entity().specifics.bookmark(), bookmark_node);
+  if (is_reupload_needed || is_reupload_for_thumbnail_needed) {
     bookmark_tracker_->IncrementSequenceNumber(entity);
   }
   LogBookmarkReuploadNeeded(is_reupload_needed);

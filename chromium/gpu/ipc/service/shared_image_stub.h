@@ -54,7 +54,6 @@ class GPU_IPC_SERVICE_EXPORT SharedImageStub : public MemoryTracker {
                          gfx::GpuMemoryBufferHandle handle,
                          gfx::BufferFormat format,
                          gfx::BufferPlane plane,
-                         SurfaceHandle surface_handle,
                          const gfx::Size& size,
                          const gfx::ColorSpace& color_space,
                          GrSurfaceOrigin surface_origin,
@@ -65,12 +64,11 @@ class GPU_IPC_SERVICE_EXPORT SharedImageStub : public MemoryTracker {
                          gfx::GpuFenceHandle in_fence_handle);
 
 #if BUILDFLAG(IS_FUCHSIA)
-  void RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
-                                      zx::channel token,
+  void RegisterSysmemBufferCollection(zx::eventpair service_handle,
+                                      zx::channel sysmem_token,
                                       gfx::BufferFormat format,
                                       gfx::BufferUsage usage,
                                       bool register_with_image_pipe);
-  void ReleaseSysmemBufferCollection(gfx::SysmemBufferCollectionId id);
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
  private:
@@ -79,6 +77,8 @@ class GPU_IPC_SERVICE_EXPORT SharedImageStub : public MemoryTracker {
   void OnCreateSharedImage(mojom::CreateSharedImageParamsPtr params);
   void OnCreateSharedImageWithData(
       mojom::CreateSharedImageWithDataParamsPtr params);
+  void OnCreateSharedImageWithBuffer(
+      mojom::CreateSharedImageWithBufferParamsPtr params);
   void OnCreateGMBSharedImage(mojom::CreateGMBSharedImageParamsPtr params);
   void OnUpdateSharedImage(const Mailbox& mailbox,
                            uint32_t release_id,

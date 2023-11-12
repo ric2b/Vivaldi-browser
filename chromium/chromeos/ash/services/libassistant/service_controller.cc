@@ -142,8 +142,9 @@ void ServiceController::Initialize(
   settings_controller_->SetDarkModeEnabled(config->dark_mode_enabled);
 
   CreateAndRegisterChromiumApiDelegate(std::move(url_loader_factory));
-
-  SetServerExperiments(assistant_client_.get());
+  if (!chromeos::assistant::features::IsLibAssistantV2Enabled()) {
+    SetServerExperiments(assistant_client_.get());
+  }
 
   for (auto& observer : assistant_client_observers_) {
     observer.OnAssistantClientCreated(assistant_client_.get());
@@ -166,7 +167,6 @@ void ServiceController::Stop() {
     return;
 
   DVLOG(1) << "Stopping Libassistant service";
-  SetStateAndInformObservers(ServiceState::kStopped);
 
   for (auto& observer : assistant_client_observers_) {
     observer.OnDestroyingAssistantClient(assistant_client_.get());
@@ -175,10 +175,11 @@ void ServiceController::Stop() {
   assistant_client_ = nullptr;
   chromium_api_delegate_ = nullptr;
 
+  DVLOG(1) << "Stopped Libassistant service";
+  SetStateAndInformObservers(ServiceState::kStopped);
+
   for (auto& observer : assistant_client_observers_)
     observer.OnAssistantClientDestroyed();
-
-  DVLOG(1) << "Stopped Libassistant service";
 }
 
 void ServiceController::ResetAllDataAndStop() {
@@ -247,6 +248,7 @@ void ServiceController::RemoveAllAssistantClientObservers() {
 bool ServiceController::IsStarted() const {
   switch (state_) {
     case ServiceState::kStopped:
+    case ServiceState::kDisconnected:
       return false;
     case ServiceState::kStarted:
     case ServiceState::kRunning:
@@ -262,6 +264,7 @@ bool ServiceController::IsRunning() const {
   switch (state_) {
     case ServiceState::kStopped:
     case ServiceState::kStarted:
+    case ServiceState::kDisconnected:
       return false;
     case ServiceState::kRunning:
       return true;
@@ -274,6 +277,10 @@ AssistantClient* ServiceController::assistant_client() {
 
 void ServiceController::OnAllServicesReady() {
   DVLOG(1) << "Libassistant services are ready.";
+
+  if (chromeos::assistant::features::IsLibAssistantV2Enabled()) {
+    SetServerExperiments(assistant_client_.get());
+  }
 
   // Notify observers on Libassistant services ready.
   SetStateAndInformObservers(mojom::ServiceState::kRunning);

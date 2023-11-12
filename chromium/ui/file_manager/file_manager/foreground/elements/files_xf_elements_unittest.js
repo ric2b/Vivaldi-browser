@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {waitUntil} from '../../common/js/test_error_reporting.js';
-import {util} from '../../common/js/util.js';
+import {str, util} from '../../common/js/util.js';
 
 import {DisplayPanel} from './xf_display_panel.js';
 
@@ -218,7 +218,7 @@ export function testFilesDisplayPanelErrorText() {
 
   // Check the default primary text displays a generic error message.
   // Note, the i18n message gets smooshed into 'An error occurred.' in the app.
-  assertEquals('FILE_ERROR_GENERIC', panelItem.primaryText);
+  assertEquals(str('FILE_ERROR_GENERIC'), panelItem.primaryText);
 
   // Check the secondary text is empty.
   assertEquals('', panelItem.secondaryText);

@@ -56,14 +56,13 @@ class MetricsRenderFrameObserver
       blink::UserInteractionType interaction_type) override;
   void DidChangeCpuTiming(base::TimeDelta time) override;
   void DidObserveLoadingBehavior(blink::LoadingBehaviorFlag behavior) override;
+  void DidObserveSubresourceLoad(
+      uint32_t number_of_subresources_loaded,
+      uint32_t number_of_subresource_loads_handled_by_service_worker) override;
   void DidObserveNewFeatureUsage(
       const blink::UseCounterFeature& feature) override;
   void DidObserveSoftNavigation(uint32_t count) override;
   void DidObserveLayoutShift(double score, bool after_input_or_scroll) override;
-  void DidObserveLayoutNg(uint32_t all_block_count,
-                          uint32_t ng_block_count,
-                          uint32_t all_call_count,
-                          uint32_t ng_call_count) override;
   void DidStartResponse(
       const url::SchemeHostPort& final_response_url,
       int request_id,
@@ -111,7 +110,6 @@ class MetricsRenderFrameObserver
 
   // blink::WebLocalFrameObserver implementation
   void OnFrameDetached() override;
-  void DidChangeMobileFriendliness(const blink::MobileFriendliness&) override;
 
   bool SetUpSmoothnessReporting(
       base::ReadOnlySharedMemoryRegion& shared_memory) override;

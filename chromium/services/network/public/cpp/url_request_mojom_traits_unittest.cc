@@ -79,6 +79,7 @@ TEST(URLRequestMojomTraitsTest, Roundtrips_ResourceRequest) {
   original.redirect_mode = mojom::RedirectMode::kFollow;
   original.fetch_integrity = "dummy_fetch_integrity";
   original.keepalive = true;
+  original.browsing_topics = true;
   original.has_user_gesture = false;
   original.enable_load_timing = true;
   original.enable_upload_progress = false;
@@ -111,6 +112,7 @@ TEST(URLRequestMojomTraitsTest, Roundtrips_ResourceRequest) {
       url::Origin::Create(original.url), url::Origin::Create(original.url),
       original.site_for_cookies);
   original.trusted_params->disable_secure_dns = true;
+  original.trusted_params->allow_cookies_from_browser = true;
 
   original.trust_token_params = network::mojom::TrustTokenParams();
   original.trust_token_params->issuers.push_back(

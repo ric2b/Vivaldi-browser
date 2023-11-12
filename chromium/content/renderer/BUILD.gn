@@ -191,7 +191,11 @@ target(link_target_type, "renderer") {
   }
 
   if (is_linux || is_chromeos) {
-    sources += [ "renderer_main_platform_delegate_linux.cc" ]
+    sources += [
+      "renderer_main_platform_delegate_linux.cc",
+      "renderer_thread_type_handler.cc",
+      "renderer_thread_type_handler.h",
+    ]
   }
 
   if (is_mac) {
@@ -232,9 +236,6 @@ target(link_target_type, "renderer") {
     "//cc/mojo_embedder",
     "//cc/mojom",
     "//cc/paint",
-    "//components/cast_streaming/public",
-    "//components/cast_streaming/renderer:resource_provider",
-    "//components/cast_streaming/renderer:wrapping_renderer_factory_selector",
     "//components/discardable_memory/client",
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
@@ -344,11 +345,20 @@ target(link_target_type, "renderer") {
 
   if (is_fuchsia) {
     sources += [ "renderer_main_platform_delegate_fuchsia.cc" ]
+    public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mediacodec" ]
 
     deps += [
       "//media/fuchsia/cdm/client",
       "//media/fuchsia/video",
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+    ]
+  }
+
+  if (enable_cast_receiver) {
+    deps += [
+      "//components/cast_streaming/public",
+      "//components/cast_streaming/renderer:resource_provider",
+      "//components/cast_streaming/renderer:wrapping_renderer_factory_selector",
     ]
   }
 

@@ -26,6 +26,7 @@
 #include "build/build_config.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/update_client/activity_data_service.h"
+#include "components/update_client/buildflags.h"
 #include "components/update_client/component.h"
 #include "components/update_client/net/url_loader_post_interceptor.h"
 #include "components/update_client/persisted_data.h"
@@ -85,7 +86,6 @@ class UpdateCheckerTest : public testing::TestWithParam<bool> {
   std::unique_ptr<Component> MakeComponent(
       const std::string& brand,
       const std::string& install_data_index) const;
-
   scoped_refptr<TestConfigurator> config_;
   std::unique_ptr<TestActivityDataService> activity_data_service_;
   std::unique_ptr<TestingPrefServiceSimple> pref_;
@@ -109,6 +109,7 @@ class UpdateCheckerTest : public testing::TestWithParam<bool> {
 
   base::test::TaskEnvironment task_environment_;
   base::OnceClosure quit_closure_;
+  base::ScopedTempDir temp_dir_;
 };
 
 // This test is parameterized for |is_foreground|.
@@ -138,6 +139,7 @@ void UpdateCheckerTest::SetUp() {
 
   error_ = 0;
   retry_after_sec_ = 0;
+  EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
   update_context_ = MakeMockUpdateContext();
   update_context_->is_foreground = is_foreground_;
   update_context_->components_to_check_for_updates = {kUpdateItemId};
@@ -179,8 +181,19 @@ void UpdateCheckerTest::UpdateCheckComplete(
 }
 
 scoped_refptr<UpdateContext> UpdateCheckerTest::MakeMockUpdateContext() const {
+#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
+  // TODO(crbug.com/1349060) once Puffin patches are fully implemented,
+  // we should remove this #if.
+  CrxCache::Options options(temp_dir_.GetPath());
+#endif
   return base::MakeRefCounted<UpdateContext>(
-      config_, false, false, std::vector<std::string>(),
+      config_,
+#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
+      // TODO(crbug.com/1349060) once Puffin patches are fully implemented,
+      // we should remove this #if.
+      base::MakeRefCounted<CrxCache>(options),
+#endif
+      false, false, std::vector<std::string>(),
       UpdateClient::CrxStateChangeCallback(),
       UpdateEngine::NotifyObserversCallback(), UpdateEngine::Callback(),
       nullptr);
@@ -228,6 +241,10 @@ TEST_P(UpdateCheckerTest, UpdateCheckSuccess) {
                                   {"autoupdatecheckenabled", "1"},
                                   {"updatepolicy", "1"}};
   }));
+
+  metadata_->SetCohort(kUpdateItemId, "id3");
+  metadata_->SetCohortHint(kUpdateItemId, "hint2");
+  metadata_->SetCohortName(kUpdateItemId, "name1");
 
   update_checker_ = UpdateChecker::Create(config_, metadata_.get());
 
@@ -307,6 +324,9 @@ TEST_P(UpdateCheckerTest, UpdateCheckSuccess) {
   EXPECT_EQ("TEST", *app->FindString("brand"));
   ASSERT_TRUE(app->FindString("lang"));
   EXPECT_EQ("fake_lang", *app->FindString("lang"));
+  EXPECT_EQ("name1", *app->FindString("cohortname"));
+  EXPECT_EQ("hint2", *app->FindString("cohorthint"));
+  EXPECT_EQ("id3", *app->FindString("cohort"));
 
   ASSERT_TRUE(app->FindList("data"));
   ASSERT_FALSE(app->FindList("data")->empty());

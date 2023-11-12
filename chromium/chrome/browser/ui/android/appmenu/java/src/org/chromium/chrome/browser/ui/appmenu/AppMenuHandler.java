@@ -9,6 +9,9 @@ import androidx.annotation.IntDef;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.base.supplier.Supplier;
+
 /**
  * Responsible for handling the creation, showing, hiding of the AppMenu and notifying the
  * AppMenuObservers about these actions. This interface may be used by classes outside of app_menu
@@ -101,4 +104,7 @@ public interface AppMenuHandler {
      * Call to cause a redraw when an item in the app menu changes.
      */
     void invalidateAppMenu();
+
+    /** Vivaldi */
+    default void setIsInOverviewModeSupplier(Supplier<Boolean> supplier) {}
 }

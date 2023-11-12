@@ -9,8 +9,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/raw_ref.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/android/chrome_jni_headers/ConnectivityChecker_jni.h"
@@ -53,7 +53,7 @@ void JNI_ConnectivityChecker_PostCallback(
     JNIEnv* env,
     const base::android::JavaRef<jobject>& j_callback,
     ConnectivityCheckResult result) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ExecuteCallback,
                      base::android::ScopedJavaGlobalRef<jobject>(j_callback),
@@ -83,7 +83,7 @@ class ConnectivityChecker {
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   // The URL to connect to.
-  const GURL& url_;
+  const raw_ref<const GURL> url_;
 
   // How long to wait for a response before giving up.
   const base::TimeDelta timeout_;
@@ -114,7 +114,8 @@ void ConnectivityChecker::OnURLLoadComplete(
   else
     ExecuteCallback(java_callback_, CONNECTIVITY_CHECK_RESULT_NOT_CONNECTED);
 
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                this);
 }
 
 ConnectivityChecker::ConnectivityChecker(
@@ -131,7 +132,7 @@ ConnectivityChecker::ConnectivityChecker(
 
 void ConnectivityChecker::StartAsyncCheck() {
   auto request = std::make_unique<network::ResourceRequest>();
-  request->url = url_;
+  request->url = *url_;
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
   url_loader_ = network::SimpleURLLoader::Create(std::move(request),
@@ -151,7 +152,8 @@ void ConnectivityChecker::OnTimeout() {
   is_being_destroyed_ = true;
   url_loader_.reset();
   ExecuteCallback(java_callback_, CONNECTIVITY_CHECK_RESULT_TIMEOUT);
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                this);
 }
 
 }  // namespace

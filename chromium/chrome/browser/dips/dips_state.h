@@ -10,7 +10,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/dips/dips_utils.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class DIPSStorage;
 
@@ -21,6 +20,11 @@ class DirtyBit {
   DirtyBit(DirtyBit&& old) : value_(std::exchange(old.value_, false)) {}
 
   explicit operator bool() const { return value_; }
+
+  DirtyBit& operator|=(bool value) {
+    value_ |= value;
+    return *this;
+  }
 
   DirtyBit& operator=(bool value) {
     value_ = value;
@@ -48,36 +52,29 @@ class DIPSState {
   // default-initialized for a new site).
   bool was_loaded() const { return was_loaded_; }
 
-  absl::optional<base::Time> first_site_storage_time() const {
-    return first_site_storage_time_;
+  TimestampRange site_storage_times() const {
+    return state_.site_storage_times;
   }
-  absl::optional<base::Time> last_site_storage_time() const {
-    return last_site_storage_time_;
+  TimestampRange user_interaction_times() const {
+    return state_.user_interaction_times;
   }
+  TimestampRange stateful_bounce_times() const {
+    return state_.stateful_bounce_times;
+  }
+  TimestampRange bounce_times() const { return state_.bounce_times; }
+
   void update_site_storage_time(base::Time time);
-
-  absl::optional<base::Time> first_user_interaction_time() const {
-    return first_user_interaction_time_;
-  }
-  absl::optional<base::Time> last_user_interaction_time() const {
-    return last_user_interaction_time_;
-  }
   void update_user_interaction_time(base::Time time);
-
-  StateValue ToStateValue() const {
-    return {first_site_storage_time_, last_site_storage_time_,
-            first_user_interaction_time_, last_user_interaction_time_};
-  }
+  void update_stateful_bounce_time(base::Time time);
+  void update_bounce_time(base::Time time);
+  StateValue ToStateValue() const { return state_; }
 
  private:
   raw_ptr<DIPSStorage> storage_;
   std::string site_;
   bool was_loaded_;
   DirtyBit dirty_;
-  absl::optional<base::Time> first_site_storage_time_;
-  absl::optional<base::Time> last_site_storage_time_;
-  absl::optional<base::Time> first_user_interaction_time_;
-  absl::optional<base::Time> last_user_interaction_time_;
+  StateValue state_;
 };
 
 #endif  // CHROME_BROWSER_DIPS_DIPS_STATE_H_

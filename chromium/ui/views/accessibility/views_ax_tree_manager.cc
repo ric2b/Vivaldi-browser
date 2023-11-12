@@ -9,7 +9,7 @@
 #include "base/check.h"
 #include "base/location.h"
 #include "base/notreached.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -38,7 +38,7 @@ ViewsAXTreeManager::ViewsAXTreeManager(Widget* widget)
   // synchronously) will create *another* |ViewsAXTreeManager| for the same
   // widget, since the wrapper that created this |ViewsAXTreeManager| hasn't
   // been added to the cache yet.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ViewsAXTreeManager::FireLoadComplete,
                                 weak_factory_.GetWeakPtr()));
 }
@@ -57,16 +57,6 @@ void ViewsAXTreeManager::UnsetGeneratedEventCallbackForTesting() {
   generated_event_callback_for_testing_.Reset();
 }
 
-ui::AXNode* ViewsAXTreeManager::GetNodeFromTree(
-    const ui::AXTreeID& tree_id,
-    const ui::AXNodeID node_id) const {
-  if (!widget_ || !widget_->GetRootView())
-    return nullptr;
-
-  const ui::AXTreeManager* manager = ui::AXTreeManager::FromID(tree_id);
-  return manager ? manager->GetNode(node_id) : nullptr;
-}
-
 ui::AXNode* ViewsAXTreeManager::GetNode(
     const ui::AXNodeID node_id) const {
   if (!widget_ || !widget_->GetRootView() || !ax_tree_)
@@ -81,7 +71,7 @@ ui::AXTreeID ViewsAXTreeManager::GetParentTreeID() const {
   return ui::AXTreeIDUnknown();
 }
 
-ui::AXNode* ViewsAXTreeManager::GetParentNodeFromParentTreeAsAXNode() const {
+ui::AXNode* ViewsAXTreeManager::GetParentNodeFromParentTree() const {
   // TODO(nektar): Implement stiching of AXTrees, e.g. a dialog to the main
   // window.
   return nullptr;
@@ -97,7 +87,7 @@ void ViewsAXTreeManager::OnViewEvent(View* view, ax::mojom::Event event) {
   if (waiting_to_serialize_)
     return;
   waiting_to_serialize_ = true;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ViewsAXTreeManager::SerializeTreeUpdates,
                                 weak_factory_.GetWeakPtr()));
 }

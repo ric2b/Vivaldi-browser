@@ -181,6 +181,9 @@ public class LayoutManagerImpl
     private final ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier =
             new ObservableSupplierImpl<>();
 
+    /** When non-null, #doneShowing should call into the sequencer instead of doing normal work. */
+    private ShowingEventSequencer mShowingEventSequencer;
+
     /** Vivaldi **/
     private boolean mForceOnSize;
 
@@ -253,6 +256,16 @@ public class LayoutManagerImpl
         }
 
         @Override
+        public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
+            // Handled by willCloseAllTabs;
+            if (isAllTabs) return;
+
+            for (Tab tab : tabs) {
+                tabClosed(tab.getId(), tab.isIncognito(), false);
+            }
+        }
+
+        @Override
         public void tabClosureCommitted(Tab tab) {
             LayoutManagerImpl.this.tabClosureCommitted(tab.getId(), tab.isIncognito());
         }
@@ -260,6 +273,35 @@ public class LayoutManagerImpl
         @Override
         public void tabRemoved(Tab tab) {
             tabClosed(tab.getId(), tab.isIncognito(), true);
+        }
+    }
+
+    /**
+     * Scoped class that temporarily delays doneShowing. This stops reentrancy from Layouts without
+     * animations that try to call {@link #doneShowing()} immediately. The done showing transition
+     * is different from all the others in that the manager drives it instead, instead of the
+     * layouts calling up into the host to drive it. This is why only done showing needs help
+     * stopping reentrancy.
+     */
+    private class ShowingEventSequencer implements AutoCloseable {
+        private boolean mPendingDoneShowing;
+
+        private ShowingEventSequencer() {
+            assert LayoutManagerImpl.this.mShowingEventSequencer == null;
+            LayoutManagerImpl.this.mShowingEventSequencer = this;
+        }
+
+        @Override
+        public void close() {
+            assert LayoutManagerImpl.this.mShowingEventSequencer == this;
+            LayoutManagerImpl.this.mShowingEventSequencer = null;
+            if (mPendingDoneShowing) {
+                LayoutManagerImpl.this.doneShowing();
+            }
+        }
+
+        public void setPendingDoneShowing() {
+            mPendingDoneShowing = true;
         }
     }
 
@@ -979,6 +1021,11 @@ public class LayoutManagerImpl
 
     @Override
     public void doneShowing() {
+        if (mShowingEventSequencer != null) {
+            mShowingEventSequencer.setPendingDoneShowing();
+            return;
+        }
+
         // Notify LayoutObservers the active layout is finished showing.
         for (LayoutStateObserver observer : mLayoutObservers) {
             observer.onFinishedShowing(getActiveLayout().getLayoutType());
@@ -1060,20 +1107,26 @@ public class LayoutManagerImpl
         }
 
         onViewportChanged();
-        getActiveLayout().show(time(), animate);
-        mHost.setContentOverlayVisibility(getActiveLayout().shouldDisplayContentOverlay(),
-                getActiveLayout().canHostBeFocusable());
-        requestUpdate();
 
-        // TODO(crbug.com/1108496): Remove after migrates to LayoutStateObserver#onStartedShowing.
-        // Notify observers about the new scene.
-        for (SceneChangeObserver observer : mSceneChangeObservers) {
-            observer.onSceneChange(getActiveLayout());
-        }
+        // In order to prevent another state transition in the middle of processing this one,
+        // scopedSequencer will add itself as a member of this class, and then remove itself once
+        // its scope is closed.
+        try (ShowingEventSequencer scopedSequencer = new ShowingEventSequencer()) {
+            getActiveLayout().show(time(), animate);
+            mHost.setContentOverlayVisibility(getActiveLayout().shouldDisplayContentOverlay(),
+                    getActiveLayout().canHostBeFocusable());
+            requestUpdate();
 
-        for (LayoutStateObserver observer : mLayoutObservers) {
-            observer.onStartedShowing(
-                    layout.getLayoutType(), shouldShowToolbarAnimationOnShow(animate));
+            // TODO(crbug.com/1108496): Remove after migrates to
+            // LayoutStateObserver#onStartedShowing. Notify observers about the new scene.
+            for (SceneChangeObserver observer : mSceneChangeObservers) {
+                observer.onSceneChange(getActiveLayout());
+            }
+
+            for (LayoutStateObserver observer : mLayoutObservers) {
+                observer.onStartedShowing(
+                        layout.getLayoutType(), shouldShowToolbarAnimationOnShow(animate));
+            }
         }
     }
 

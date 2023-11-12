@@ -43,8 +43,10 @@
 <translation id="1378727793141957596">Te damos la bienvenida a Google Drive</translation>
 <translation id="1379911846207762492">Puedes hacer que los archivos estén disponibles sin conexión para cuando no tengas conexión a Internet.</translation>
 <translation id="1383876407941801731">Buscar</translation>
+<translation id="1388045380422025115">Todos los tipos</translation>
 <translation id="1395262318152388157">Buscar control deslizante</translation>
 <translation id="1399511500114202393">Sin certificado del usuario</translation>
+<translation id="1403008701842173542">En todas partes</translation>
 <translation id="1404323374378969387">Noruego</translation>
 <translation id="1433628812591023318">Para poder soltar un archivo en Parallels Desktop, este debe moverse a Archivos de Windows.</translation>
 <translation id="1435838927755162558">Compartir carpeta con Parallels Desktop</translation>
@@ -102,6 +104,7 @@
 <translation id="1834290891154666894">La entrada de la coincidencia del nombre alternativo del sujeto no es válida</translation>
 <translation id="1838709767668011582">Sitio de Google</translation>
 <translation id="1853795129690976061">Se comparte esta carpeta con Linux</translation>
+<translation id="1859422890169495746">Esta Chromebook</translation>
 <translation id="1864756863218646478">No se pudo encontrar el archivo.</translation>
 <translation id="1884013283844450420">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, conectar</translation>
 <translation id="1920670151694390848">Malabar (transliteración)</translation>
@@ -124,8 +127,8 @@
 <translation id="2079545284768500474">Deshacer</translation>
 <translation id="2084108471225856927">Configuración del dispositivo</translation>
 <translation id="2084809735218147718">Persona agradeciendo</translation>
-<translation id="2085470240340828803">Ya existe un archivo llamado "<ph name="FILENAME" />". ¿Qué acción quieres realizar?</translation>
 <translation id="2088690981887365033">Red VPN</translation>
+<translation id="2114191879048183086">Se borrarán <ph name="NUMBER_OF_ITEMS" /> elementos y no podrás restablecerlos.</translation>
 <translation id="2122305276694332719">Si permites que tu dispositivo se conecte a una red oculta de forma automática, otras personas podrán ver tu dispositivo y algunas opciones de configuración de red, lo cual no es recomendable.</translation>
 <translation id="2125607626296734455">Jemer</translation>
 <translation id="2139545522194199494">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, administrada por tu administrador, conectar</translation>
@@ -134,6 +137,7 @@
 <translation id="2143778271340628265">Configuración manual de proxy</translation>
 <translation id="2148716181193084225">Hoy</translation>
 <translation id="2163152940313951844">Carácter no válido: <ph name="CHARACTER_NAME" /></translation>
+<translation id="2178056538281447670">Microsoft 365</translation>
 <translation id="2184934335987813305">Portugués con teclado internacional de EE.UU. (para PC)</translation>
 <translation id="2193661397560634290"><ph name="SPACE_USED" /> usados</translation>
 <translation id="2198315389084035571">Chino simplificado</translation>
@@ -153,6 +157,7 @@
 <translation id="2307462900900812319">Configurar red</translation>
 <translation id="2325650632570794183">Este tipo de archivo no es compatible. Visita Chrome Web Store para buscar una aplicación que pueda abrir este tipo de archivo.</translation>
 <translation id="2326539130272988168">Búlgaro</translation>
+<translation id="2337715497728194187">Compartir con Bruschetta</translation>
 <translation id="23721837607121582">Descarga un perfil de dispositivo móvil, red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">Cambiar a la vista de lista</translation>
 <translation id="2377590462528165447"><ph name="NUMBER_OF_ITEMS" /> carpetas compartidas con Linux</translation>
@@ -182,6 +187,7 @@
 <translation id="2544853746127077729">Certificado de autenticación rechazado por la red</translation>
 <translation id="255937426064304553">Inglés (Estados Unidos; internacional)</translation>
 <translation id="2563185590376525700">Rana</translation>
+<translation id="2574327434504608656">Se compartió 1 carpeta con Bruschetta</translation>
 <translation id="2578394532502990878">Tamil (fonético)</translation>
 <translation id="2579959351793446050">Oriya</translation>
 <translation id="2602810353103180630">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, bloqueda por tu administrador, detalles</translation>
@@ -275,6 +281,7 @@
 <translation id="3408072735282270043">Activar <ph name="NETWORK_NAME" /></translation>
 <translation id="3408236822532681288">Alemán (Alemania) con teclado Neo 2</translation>
 <translation id="3414856743105198592">El formato de los medios extraíbles borrará todos los datos. ¿Deseas continuar?</translation>
+<translation id="3435143625481187092">Otorgar permiso a Bruschetta para que acceda a los archivos de la carpeta <ph name="FOLDER_NAME" /></translation>
 <translation id="3437801641691368414">Hora de creación</translation>
 <translation id="343907260260897561">Cámara instantánea</translation>
 <translation id="3455931012307786678">Estonio</translation>
@@ -320,6 +327,7 @@
 <translation id="3801082500826908679">Feroés</translation>
 <translation id="3809272675881623365">Conejo</translation>
 <translation id="3810973564298564668">Administrar</translation>
+<translation id="3811408895933919563">Inglés (Pakistán)</translation>
 <translation id="3811494700605067549">1 archivo seleccionado</translation>
 <translation id="3817579325494460411">No proporcionada</translation>
 <translation id="3819448694985509187">El PIN es incorrecto. Te queda 1 intento.</translation>
@@ -354,6 +362,7 @@
 <translation id="4159731583141908892">Se movió <ph name="FILE_NAME" />.</translation>
 <translation id="4176286497474237543">Vaciar la papelera ahora</translation>
 <translation id="4179621117429069925">Este elemento está en la papelera</translation>
+<translation id="4181839429935094755">Se compartieron <ph name="NUMBER_OF_ITEMS" /> carpetas con Bruschetta</translation>
 <translation id="4186579485882418952">Habilitar acceso sin conexión</translation>
 <translation id="4193154014135846272">Documento de Google</translation>
 <translation id="4197674956721858839">Comprim. selección</translation>
@@ -387,6 +396,7 @@
 <translation id="4398096759193130964">Restablece los elementos o arrástralos a una nueva carpeta fuera de la papelera</translation>
 <translation id="4401287888955153199">Extraer todo</translation>
 <translation id="4410695710508688828">No se pudo completar la operación de extracción. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="4414834425328380570">Se borrará "<ph name="FILE_NAME" />" y no podrás restablecerlo.</translation>
 <translation id="4418686080762064601">Crea un acceso directo a tus archivos</translation>
 <translation id="4425149324548788773">Mi unidad</translation>
 <translation id="4439427728133035643">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, conectar</translation>
@@ -404,7 +414,6 @@
 <translation id="4552759165874948005">Red <ph name="NETWORK_TYPE" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984">Archivo <ph name="FILE_TYPE" /></translation>
-<translation id="457386861538956877">Más...</translation>
 <translation id="4579744207439506346">Se agregó <ph name="ENTRY_NAME" /> a la selección.</translation>
 <translation id="4583436353463424810">No hay documentos recientes.</translation>
 <translation id="4594543368593301662">Se muestran los resultados de <ph name="SEARCH_TERM" />.</translation>
@@ -415,6 +424,7 @@
 <translation id="4646813851450205600">Checo con teclado Qwerty</translation>
 <translation id="4656777537938206294">Haz que los archivos estén disponibles sin conexión</translation>
 <translation id="4658782175094886150">Persona en la nieve</translation>
+<translation id="466782788172479199">Otorgar permiso a Bruschetta para que acceda a los archivos de tu unidad de Google Drive Los cambios se sincronizarán con tus otros dispositivos.</translation>
 <translation id="4669606053856530811">Los miembros de "<ph name="SOURCE_NAME" />" ya no tendrán acceso a estos elementos, a menos que se los comparta con ellos.</translation>
 <translation id="467809019005607715">Presentaciones de Google</translation>
 <translation id="4690246192099372265">Sueco</translation>
@@ -448,6 +458,7 @@
 <translation id="4850886885716139402">Ver</translation>
 <translation id="485316830061041779">Alemán</translation>
 <translation id="4867079195717347957">Haz clic para ordenar la columna de forma descendente.</translation>
+<translation id="4867297348137739678">Última semana</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> bytes</translation>
 <translation id="4874569719830985133">Eliminar definitivamente</translation>
 <translation id="4880214202172289027">Control deslizante del volumen</translation>
@@ -456,7 +467,6 @@
 <translation id="4900532980794411603">Compartir con Parallels Desktop</translation>
 <translation id="4902546322522096650">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, conectar</translation>
 <translation id="4906580650526544301">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, nivel de la batería del teléfono: <ph name="BATTERY_STATUS" />%, detalles</translation>
-<translation id="4929673617759421391">La política del administrador no permite pegar este archivo</translation>
 <translation id="4935975195727477204">Gazania</translation>
 <translation id="4943368462779413526">Fútbol americano</translation>
 <translation id="4961158930123534723">Se compartió 1 carpeta con Parallels Desktop</translation>
@@ -522,6 +532,7 @@
 <translation id="5330145655348521461">Estos archivos están abiertos en otro escritorio. Ve a <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) para visualizarlos.</translation>
 <translation id="5330512191124428349">Obtener información</translation>
 <translation id="5337538975554986899">Acceso a archivos para todas las URLs excepto <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
+<translation id="5344246330454251646">Administrar el uso compartido de Bruschetta</translation>
 <translation id="535792325654997756">Persona con gatos</translation>
 <translation id="5358764674931277">Velocidad de fotogramas</translation>
 <translation id="5363339716524495120">El idioma de entrada es chino</translation>
@@ -534,6 +545,7 @@
 <translation id="5428105026674456456">Español</translation>
 <translation id="5438282218546237410">No hay resultados para <ph name="SEARCH_TERM" />.</translation>
 <translation id="5449551289610225147">Contraseña no válida</translation>
+<translation id="5459064203055649751">Ya existe un archivo con el nombre "<ph name="FILENAME" />". ¿Quieres reemplazarlo por el que vas a mover?</translation>
 <translation id="5463231940765244860">Ingresar</translation>
 <translation id="5469868506864199649">Italiano</translation>
 <translation id="5473333559083690127">Vuelve a ingresar el PIN nuevo</translation>
@@ -550,6 +562,7 @@
 <translation id="5580591966435005537">máquina virtual</translation>
 <translation id="5583640892426849032">Tecla de retroceso</translation>
 <translation id="5583664733673201137">El ancho de la puntuación es el ancho completo</translation>
+<translation id="5596627076506792578">Más opciones</translation>
 <translation id="5602622065581044566">Búlgaro con teclado fonético</translation>
 <translation id="5605830556594064952">Inglés (Estados Unidos; Dvorak)</translation>
 <translation id="5618330573454123917">Este archivo se diseñó para computadoras que usan software Macintosh. No es compatible con tu dispositivo, el cual ejecuta Chrome OS. <ph name="BEGIN_LINK_HELP" />Obtén más información<ph name="END_LINK_HELP" /> para abrir archivos en Chrome OS.</translation>
@@ -566,6 +579,7 @@
 <translation id="5700087501958648444">Información de audio</translation>
 <translation id="5720028165859493293">Se movió <ph name="FILE_NAME" /> a la papelera</translation>
 <translation id="5724172041621205163">Tailandés con teclado pattachote</translation>
+<translation id="57383366388012121">Último mes</translation>
 <translation id="5756666464756035725">QWERTY húngaro</translation>
 <translation id="5763377084591234761">Alemán (Suiza)</translation>
 <translation id="5769519078756170258">Host o dominio para excluir</translation>
@@ -654,6 +668,7 @@
 <translation id="6495925982925244349">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, administrada por tu administrador, detalles</translation>
 <translation id="649877868557234318">Extrayendo <ph name="FILE_NAME" /> en <ph name="FOLDER_NAME" /></translation>
 <translation id="6499681088828539489">Deshabilitar proxies para redes compartidas</translation>
+<translation id="6503285896705205014">La política del administrador no permite copiar <ph name="COUNT" /> archivos</translation>
 <translation id="6509122719576673235">Noruego</translation>
 <translation id="6528513914570774834">Permitir que otros usuarios de este dispositivo usen esta red</translation>
 <translation id="653019979737152879">Sincronizando <ph name="FILE_NAME" />…</translation>
@@ -674,6 +689,7 @@
 <translation id="6710213216561001401">Anterior</translation>
 <translation id="6732801395666424405">No se cargaron los certificados.</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
+<translation id="6740270213273127264">Compartir carpeta con Bruschetta</translation>
 <translation id="6751256176799620176">1 carpeta seleccionada</translation>
 <translation id="6755827872271341378">Dispositivo Chrome OS Flex</translation>
 <translation id="6790428901817661496">Reproducir</translation>
@@ -693,7 +709,6 @@
 <translation id="6874758081814639712">Persona practicando tai chi</translation>
 <translation id="6876155724392614295">Bicicleta</translation>
 <translation id="6878261347041253038">Teclado devanagari (fonético)</translation>
-<translation id="6881853403185175088">Office</translation>
 <translation id="6885780034956018177">Caracol</translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="6898028766943174120">Más subcarpetas…</translation>
@@ -703,6 +718,7 @@
 <translation id="6935521024859866267">Cabeza abajo</translation>
 <translation id="6943836128787782965">Error al obtener HTTP</translation>
 <translation id="6949408524333579394">Serbio (transliteración)</translation>
+<translation id="69548399407432279">Último año</translation>
 <translation id="6960565108681981554">No está activada. Comunícate con tu proveedor.</translation>
 <translation id="696203921837389374">Habilitar la sincronización mediante datos móviles</translation>
 <translation id="6965382102122355670">Aceptar</translation>
@@ -711,6 +727,7 @@
 <translation id="6973630695168034713">Carpetas</translation>
 <translation id="6976795442547527108">León</translation>
 <translation id="6979158407327259162">Google Drive</translation>
+<translation id="6979737339423435258">Todos</translation>
 <translation id="6989942356279143254">Sueco</translation>
 <translation id="6990081529015358884">Te has quedado sin espacio.</translation>
 <translation id="6993826899923627728">Estos elementos están en la papelera</translation>
@@ -756,6 +773,7 @@
 <translation id="7357762654218998920">Este tipo de archivo no es compatible. <ph name="BEGIN_LINK_HELP" />Obtén más información<ph name="END_LINK_HELP" /> para abrir archivos en Chrome OS.</translation>
 <translation id="7359359531237882347">Copiando <ph name="NUMBER_OF_ITEMS" /> elementos…</translation>
 <translation id="7375951387215729722">La lista de archivos se organiza por <ph name="COLUMN_NAME" /> en orden descendente.</translation>
+<translation id="7377161162143020057">La política del administrador no permite copiar este archivo</translation>
 <translation id="7402503521691663770">Dispositivos Chrome OS Flex</translation>
 <translation id="7408870451288633753">Checo</translation>
 <translation id="7417453074306512035">Teclado etíope</translation>
@@ -844,6 +862,7 @@
 <translation id="8042602468072383151">Audio <ph name="AUDIO_TYPE" /></translation>
 <translation id="8045462269890919536">Rumano</translation>
 <translation id="8049184478152619004">Ingresa la clave personal de desbloqueo (PUK).</translation>
+<translation id="8055538340801153769">Esta carpeta</translation>
 <translation id="807187749540895545">Extrayendo <ph name="FILE_NAME" />…</translation>
 <translation id="8087576439476816834">Descargar, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Compartidos conmigo</translation>
@@ -910,6 +929,7 @@
 <translation id="8560515948038859357">Cantonés</translation>
 <translation id="8561206103590473338">Elefante</translation>
 <translation id="8566466896628108558">Red <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" />%, bloqueada por tu administrador, detalles</translation>
+<translation id="8568374623837201676">¿Quieres borrar este archivo de forma permanente?</translation>
 <translation id="8569764466147087991">Seleccionar un archivo para abrir</translation>
 <translation id="8577897833047451336">Croata</translation>
 <translation id="8578308463707544055">Indonesio</translation>
@@ -977,7 +997,6 @@
 <translation id="9183302530794969518">Documentos de Google</translation>
 <translation id="9189836632794948435">Kazajo</translation>
 <translation id="9200427192836333033">Elementos extraídos: <ph name="NUMBER_OF_ITEMS" />.</translation>
-<translation id="9210751050717126865">La política del administrador no permite pegar <ph name="COUNT" /> archivos</translation>
 <translation id="9213073329713032541">La instalación se inició de forma correcta.</translation>
 <translation id="9219103736887031265">Imágenes</translation>
 <translation id="9219908252191632183">Superficie lunar</translation>

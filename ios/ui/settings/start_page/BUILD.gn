@@ -1,0 +1,16 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+source_set("start_page_settings") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_start_page_layout_settings_view_controller.h",
+    "vivaldi_start_page_layout_settings_view_controller.mm",
+    "vivaldi_start_page_layout_style.h",
+    "vivaldi_start_page_layout_preview_view.h",
+    "vivaldi_start_page_layout_preview_view.mm"
+  ]
+  deps = [
+    "//base",
+    "//services/network/public/mojom",
+  ]
+}

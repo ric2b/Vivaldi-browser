@@ -12,7 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -125,44 +125,42 @@ void PasswordsPrivateRequestPlaintextPasswordFunction::GotPassword(
 }
 
 // PasswordsPrivateRequestCredentialDetailsFunction
-ResponseAction PasswordsPrivateRequestCredentialDetailsFunction::Run() {
+ResponseAction PasswordsPrivateRequestCredentialsDetailsFunction::Run() {
   auto parameters =
-      api::passwords_private::RequestCredentialDetails::Params::Create(args());
+      api::passwords_private::RequestCredentialsDetails::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
   GetDelegate(browser_context())
-      ->RequestCredentialDetails(
-          parameters->id,
-          base::BindOnce(&PasswordsPrivateRequestCredentialDetailsFunction::
-                             GotPasswordUiEntry,
-                         this),
+      ->RequestCredentialsDetails(
+          parameters->ids,
+          base::BindOnce(
+              &PasswordsPrivateRequestCredentialsDetailsFunction::GotPasswords,
+              this),
           GetSenderWebContents());
 
-  // GotPasswordUiEntry() might have responded before we reach this point.
+  // GotPasswords() might have responded before we reach this point.
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
-void PasswordsPrivateRequestCredentialDetailsFunction::GotPasswordUiEntry(
-    absl::optional<api::passwords_private::PasswordUiEntry> password_ui_entry) {
-  if (password_ui_entry) {
+void PasswordsPrivateRequestCredentialsDetailsFunction::GotPasswords(
+    const PasswordsPrivateDelegate::UiEntries& entries) {
+  if (!entries.empty()) {
     Respond(ArgumentList(
-        api::passwords_private::RequestCredentialDetails::Results::Create(
-            std::move(*password_ui_entry))));
+        api::passwords_private::RequestCredentialsDetails::Results::Create(
+            entries)));
     return;
   }
 
-  Respond(Error(base::StringPrintf(
+  Respond(Error(
       "Could not obtain password entry. Either the user is not "
-      "authenticated or no credential with id = %d could be found.",
-      api::passwords_private::RequestCredentialDetails::Params::Create(args())
-          ->id)));
+      "authenticated or no credential with matching ids could be found."));
 }
 
 // PasswordsPrivateGetSavedPasswordListFunction
 ResponseAction PasswordsPrivateGetSavedPasswordListFunction::Run() {
   // GetList() can immediately call GotList() (which would Respond() before
   // RespondLater()). So we post a task to preserve order.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PasswordsPrivateGetSavedPasswordListFunction::GetList,
                      this));
@@ -181,11 +179,18 @@ void PasswordsPrivateGetSavedPasswordListFunction::GotList(
       api::passwords_private::GetSavedPasswordList::Results::Create(list)));
 }
 
+// PasswordsPrivateGetCredentialGroupsFunction
+ResponseAction PasswordsPrivateGetCredentialGroupsFunction::Run() {
+  return RespondNow(
+      ArgumentList(api::passwords_private::GetCredentialGroups::Results::Create(
+          GetDelegate(browser_context())->GetCredentialGroups())));
+}
+
 // PasswordsPrivateGetPasswordExceptionListFunction
 ResponseAction PasswordsPrivateGetPasswordExceptionListFunction::Run() {
   // GetList() can immediately call GotList() (which would Respond() before
   // RespondLater()). So we post a task to preserve order.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&PasswordsPrivateGetPasswordExceptionListFunction::GetList,
                      this));
@@ -346,27 +351,8 @@ ResponseAction PasswordsPrivateRecordChangePasswordFlowStartedFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
   GetDelegate(browser_context())
-      ->RecordChangePasswordFlowStarted(parameters->credential,
-                                        parameters->is_manual_flow);
+      ->RecordChangePasswordFlowStarted(parameters->credential);
   return RespondNow(NoArguments());
-}
-
-// PasswordsPrivateRefreshScriptsIfNecessaryFunction:
-PasswordsPrivateRefreshScriptsIfNecessaryFunction::
-    ~PasswordsPrivateRefreshScriptsIfNecessaryFunction() = default;
-
-ResponseAction PasswordsPrivateRefreshScriptsIfNecessaryFunction::Run() {
-  GetDelegate(browser_context())
-      ->RefreshScriptsIfNecessary(base::BindOnce(
-          &PasswordsPrivateRefreshScriptsIfNecessaryFunction::OnRefreshed,
-          base::RetainedRef(this)));
-
-  // OnRefreshed() might respond before we reach this point.
-  return did_respond() ? AlreadyResponded() : RespondLater();
-}
-
-void PasswordsPrivateRefreshScriptsIfNecessaryFunction::OnRefreshed() {
-  Respond(NoArguments());
 }
 
 // PasswordsPrivateStartPasswordCheckFunction:
@@ -407,35 +393,6 @@ ResponseAction PasswordsPrivateGetPasswordCheckStatusFunction::Run() {
   return RespondNow(ArgumentList(
       api::passwords_private::GetPasswordCheckStatus::Results::Create(
           GetDelegate(browser_context())->GetPasswordCheckStatus())));
-}
-
-// PasswordsPrivateStartAutomatedPasswordChangeFunction:
-PasswordsPrivateStartAutomatedPasswordChangeFunction::
-    ~PasswordsPrivateStartAutomatedPasswordChangeFunction() = default;
-
-ResponseAction PasswordsPrivateStartAutomatedPasswordChangeFunction::Run() {
-  auto parameters =
-      api::passwords_private::StartAutomatedPasswordChange::Params::Create(
-          args());
-  EXTENSION_FUNCTION_VALIDATE(parameters);
-
-  // Forward the call to the delegate.
-  GetDelegate(browser_context())
-      ->StartAutomatedPasswordChange(
-          parameters->credential,
-          base::BindOnce(&PasswordsPrivateStartAutomatedPasswordChangeFunction::
-                             OnResultReceived,
-                         base::RetainedRef(this)));
-
-  // `OnResultReceived()` might respond before we reach this point.
-  return did_respond() ? AlreadyResponded() : RespondLater();
-}
-
-void PasswordsPrivateStartAutomatedPasswordChangeFunction::OnResultReceived(
-    bool success) {
-  Respond(ArgumentList(
-      api::passwords_private::StartAutomatedPasswordChange::Results::Create(
-          success)));
 }
 
 // PasswordsPrivateIsAccountStoreDefaultFunction
@@ -495,6 +452,12 @@ ResponseAction
 PasswordsPrivateSwitchBiometricAuthBeforeFillingStateFunction::Run() {
   GetDelegate(browser_context())
       ->SwitchBiometricAuthBeforeFillingState(GetSenderWebContents());
+  return RespondNow(NoArguments());
+}
+
+// PasswordsPrivateShowAddShortcutDialogFunction
+ResponseAction PasswordsPrivateShowAddShortcutDialogFunction::Run() {
+  GetDelegate(browser_context())->ShowAddShortcutDialog(GetSenderWebContents());
   return RespondNow(NoArguments());
 }
 

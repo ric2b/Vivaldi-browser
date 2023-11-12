@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
@@ -27,18 +27,13 @@ IndexedDBDatabaseCallbacks::IndexedDBDatabaseCallbacks(
   if (!callbacks_remote.is_valid())
     return;
   callbacks_.Bind(std::move(callbacks_remote));
-  // |callbacks_| is owned by |this|, so if |this| is destroyed, then
-  // |callbacks_| will also be destroyed.  While |callbacks_| is otherwise
-  // alive, |this| will always be valid.
-  callbacks_.set_disconnect_handler(base::BindOnce(
-      &IndexedDBDatabaseCallbacks::OnConnectionError, base::Unretained(this)));
 }
 
 IndexedDBDatabaseCallbacks::~IndexedDBDatabaseCallbacks() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Transfer |context_| ownership to a new task to prevent re-entrancy through
   // IndexedDBFactory::ContextDestroyed.
-  base::SequencedTaskRunnerHandle::Get()->ReleaseSoon(
+  base::SequencedTaskRunner::GetCurrentDefault()->ReleaseSoon(
       FROM_HERE, std::move(indexed_db_context_));
 }
 
@@ -83,11 +78,6 @@ void IndexedDBDatabaseCallbacks::OnComplete(
       transaction.database()->bucket_locator());
   if (callbacks_)
     callbacks_->Complete(transaction.id());
-}
-
-void IndexedDBDatabaseCallbacks::OnConnectionError() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  callbacks_.reset();
 }
 
 }  // namespace content

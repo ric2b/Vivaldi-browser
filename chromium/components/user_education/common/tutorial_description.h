@@ -131,6 +131,8 @@ struct TutorialDescription {
   TutorialDescription(TutorialDescription&& other);
   TutorialDescription& operator=(TutorialDescription&& other);
 
+  using ContextMode = ui::InteractionSequence::ContextMode;
+
   struct Step {
     Step();
     Step(int title_text_id_,
@@ -142,7 +144,8 @@ struct TutorialDescription {
          ui::CustomElementEventType event_type_ = ui::CustomElementEventType(),
          absl::optional<bool> must_remain_visible_ = absl::nullopt,
          bool transition_only_on_event_ = false,
-         NameElementsCallback name_elements_callback_ = NameElementsCallback());
+         NameElementsCallback name_elements_callback_ = NameElementsCallback(),
+         ContextMode step_context = ContextMode::kInitial);
     Step(const Step& other);
     Step& operator=(const Step& other);
     ~Step();
@@ -190,6 +193,10 @@ struct TutorialDescription {
     // the Interaction Sequence should continue or not. If false is returned
     // the tutorial will abort
     NameElementsCallback name_elements_callback;
+
+    // Where to search for the step's target element. Default is the context the
+    // tutorial started in.
+    ContextMode context_mode = ContextMode::kInitial;
 
     // returns true iff all of the required parameters exist to display a
     // bubble.

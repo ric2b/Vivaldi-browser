@@ -33,6 +33,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -41,6 +42,7 @@
 #include "base/win/sid.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "sandbox/features.h"
@@ -275,70 +277,29 @@ std::wstring PrependWindowsSessionPath(const wchar_t* object) {
   return base::StringPrintf(L"\\Sessions\\%lu%ls", s_session_id, object);
 }
 
-// Checks if the sandbox can be let to run without a job object assigned.
-// Returns true if the job object has to be applied to the sandbox and false
-// otherwise.
-bool ShouldSetJobLevel(bool allow_no_sandbox_job) {
-  // Windows 8 allows nested jobs so we don't need to check if we are in other
-  // job.
-  if (base::win::GetVersion() >= base::win::Version::WIN8)
-    return true;
-
-  BOOL in_job = true;
-  // Either there is no job yet associated so we must add our job,
-  if (!::IsProcessInJob(::GetCurrentProcess(), NULL, &in_job))
-    NOTREACHED() << "IsProcessInJob failed. " << GetLastError();
-  if (!in_job)
-    return true;
-
-  // ...or there is a job but the JOB_OBJECT_LIMIT_BREAKAWAY_OK limit is set.
-  JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_info = {};
-  if (!::QueryInformationJobObject(NULL, JobObjectExtendedLimitInformation,
-                                   &job_info, sizeof(job_info), NULL)) {
-    NOTREACHED() << "QueryInformationJobObject failed. " << GetLastError();
-    return true;
-  }
-  if (job_info.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK)
-    return true;
-
-  // Lastly in place of the flag which was supposed to be used only for running
-  // Chrome in remote sessions we do this check explicitly here.
-  // According to MS this flag can be false for a remote session only on Windows
-  // Server 2012 and newer so if we do the check last we should be on the safe
-  // side. See: https://msdn.microsoft.com/en-us/library/aa380798.aspx.
-  if (!::GetSystemMetrics(SM_REMOTESESSION)) {
-    // TODO(pastarmovj): Even though the number are low, this flag is still
-    // necessary in some limited set of cases. Remove it once Windows 7 is no
-    // longer supported together with the rest of the checks in this function.
-    return !allow_no_sandbox_job;
-  }
-
-  // Allow running without the sandbox in this case. This slightly reduces the
-  // ability of the sandbox to protect its children from spawning new processes
-  // or preventing them from shutting down Windows or accessing the clipboard.
-  return false;
-}
-
 // Adds the generic config rules to a sandbox TargetConfig.
 ResultCode AddGenericConfig(sandbox::TargetConfig* config) {
   DCHECK(!config->IsConfigured());
   ResultCode result;
 
-  // Add the policy for the client side of a pipe. It is just a file
-  // in the \pipe\ namespace. We restrict it to pipes that start with
-  // "chrome." so the sandboxed process cannot connect to system services.
-  result = config->AddRule(SubSystem::kFiles, Semantics::kFilesAllowAny,
-                           L"\\??\\pipe\\chrome.*");
-  if (result != SBOX_ALL_OK)
-    return result;
+  if (!base::FeatureList::IsEnabled(
+          sandbox::policy::features::kChromePipeLockdown)) {
+    // Add the policy for the client side of a pipe. It is just a file
+    // in the \pipe\ namespace. We restrict it to pipes that start with
+    // "chrome." so the sandboxed process cannot connect to system services.
+    result = config->AddRule(SubSystem::kFiles, Semantics::kFilesAllowAny,
+                             L"\\??\\pipe\\chrome.*");
+    if (result != SBOX_ALL_OK)
+      return result;
 
-  // Allow the server side of sync sockets, which are pipes that have
-  // the "chrome.sync" namespace and a randomly generated suffix.
-  result =
-      config->AddRule(SubSystem::kNamedPipes, Semantics::kNamedPipesAllowAny,
-                      L"\\\\.\\pipe\\chrome.sync.*");
-  if (result != SBOX_ALL_OK)
-    return result;
+    // Allow the server side of sync sockets, which are pipes that have
+    // the "chrome.sync" namespace and a randomly generated suffix.
+    result =
+        config->AddRule(SubSystem::kNamedPipes, Semantics::kNamedPipesAllowAny,
+                        L"\\\\.\\pipe\\chrome.sync.*");
+    if (result != SBOX_ALL_OK)
+      return result;
+  }
 
 // Add the policy for read-only PDB file access for stack traces.
 #if !defined(OFFICIAL_BUILD)
@@ -402,9 +363,7 @@ ResultCode AddDefaultConfigForSandboxedProcess(TargetConfig* config) {
 
   config->SetLockdownDefaultDacl();
 
-  // Win8+ adds a device DeviceApi that we don't need.
-  if (base::win::GetVersion() >= base::win::Version::WIN8)
-    result = config->AddKernelObjectToClose(L"File", L"\\Device\\DeviceApi");
+  result = config->AddKernelObjectToClose(L"File", L"\\Device\\DeviceApi");
   if (result != SBOX_ALL_OK)
     return result;
 
@@ -741,10 +700,7 @@ ResultCode GenerateConfigForSandboxedProcess(const base::CommandLine& cmd_line,
       MITIGATION_DEP_NO_ATL_THUNK | MITIGATION_EXTENSION_POINT_DISABLE |
       MITIGATION_SEHOP | MITIGATION_NONSYSTEM_FONT_DISABLE |
       MITIGATION_IMAGE_LOAD_NO_REMOTE | MITIGATION_IMAGE_LOAD_NO_LOW_LABEL |
-      MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION;
-
-  if (base::FeatureList::IsEnabled(features::kWinSboxDisableKtmComponent))
-    mitigations |= MITIGATION_KTM_COMPONENT;
+      MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION | MITIGATION_KTM_COMPONENT;
 
   // CET is enabled with the CETCOMPAT bit on chrome.exe so must be
   // disabled for processes we know are not compatible.
@@ -759,6 +715,9 @@ ResultCode GenerateConfigForSandboxedProcess(const base::CommandLine& cmd_line,
   // Post-startup mitigations.
   mitigations = MITIGATION_DLL_SEARCH_ORDER;
   if (!cmd_line.HasSwitch(switches::kAllowThirdPartyModules) &&
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+      sandbox_type != Sandbox::kScreenAI &&
+#endif
       sandbox_type != Sandbox::kSpeechRecognition &&
       sandbox_type != Sandbox::kMediaFoundationCdm) {
     mitigations |= MITIGATION_FORCE_MS_SIGNED_BINS;
@@ -861,22 +820,13 @@ ResultCode LaunchWithoutSandbox(
   // on process shutdown, in which case TerminateProcess can fail. See
   // https://crbug.com/820996.
   if (delegate->ShouldUnsandboxedRunInJob()) {
-    BOOL in_job = true;
-    // Prior to Windows 8 nested jobs aren't possible.
-    if (base::win::GetVersion() >= base::win::Version::WIN8 ||
-        (::IsProcessInJob(::GetCurrentProcess(), nullptr, &in_job) &&
-         !in_job)) {
-      static Job* job_object = nullptr;
-      if (!job_object) {
-        job_object = new Job;
-        DWORD result = job_object->Init(JobLevel::kUnprotected, nullptr, 0, 0);
-        if (result != ERROR_SUCCESS) {
-          job_object = nullptr;
-          return SBOX_ERROR_CANNOT_INIT_JOB;
-        }
-      }
-      options.job_handle = job_object->GetHandle();
+    static base::NoDestructor<Job> job_object;
+    if (!job_object->IsValid()) {
+      DWORD result = job_object->Init(JobLevel::kUnprotected, 0, 0);
+      if (result != ERROR_SUCCESS)
+        return SBOX_ERROR_CANNOT_INIT_JOB;
     }
+    options.job_handle = job_object->GetHandle();
   }
 
   // Chromium binaries are marked as CET Compatible but some processes
@@ -917,8 +867,6 @@ ResultCode SandboxWin::SetJobLevel(Sandbox sandbox_type,
                                    uint32_t ui_exceptions,
                                    TargetConfig* config) {
   DCHECK(!config->IsConfigured());
-  if (!ShouldSetJobLevel(config->GetAllowNoSandboxJob()))
-    return config->SetJobLevel(JobLevel::kNone, 0);
 
   ResultCode ret = config->SetJobLevel(job_level, ui_exceptions);
   if (ret != SBOX_ALL_OK)
@@ -960,10 +908,6 @@ ResultCode SandboxWin::AddAppContainerPolicy(TargetConfig* config,
 ResultCode SandboxWin::AddWin32kLockdownPolicy(TargetConfig* config) {
   DCHECK(!config->IsConfigured());
 #if !defined(NACL_WIN64)
-  // Win32k Lockdown is supported on Windows 8+.
-  if (base::win::GetVersion() < base::win::Version::WIN8)
-    return SBOX_ALL_OK;
-
   MitigationFlags flags = config->GetProcessMitigations();
   // Check not enabling twice. Should not happen.
   DCHECK_EQ(0U, flags & MITIGATION_WIN32K_DISABLE);
@@ -1230,7 +1174,7 @@ ResultCode SandboxWin::GetPolicyDiagnostics(
   CHECK(g_broker_services);
   CHECK(!response.is_null());
   auto receiver = std::make_unique<ServiceManagerDiagnosticsReceiver>(
-      base::SequencedTaskRunnerHandle::Get(), std::move(response));
+      base::SequencedTaskRunner::GetCurrentDefault(), std::move(response));
   return g_broker_services->GetPolicyDiagnostics(std::move(receiver));
 }
 
@@ -1265,12 +1209,16 @@ std::string SandboxWin::GetSandboxTypeInEnglish(Sandbox sandbox_type) {
       return "CDM";
     case Sandbox::kPrintCompositor:
       return "Print Compositor";
-#if BUILDFLAG(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
     case Sandbox::kPrintBackend:
       return "Print Backend";
 #endif
     case Sandbox::kAudio:
       return "Audio";
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+    case Sandbox::kScreenAI:
+      return "Screen AI";
+#endif
     case Sandbox::kSpeechRecognition:
       return "Speech Recognition";
     case Sandbox::kPdfConversion:

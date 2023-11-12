@@ -223,6 +223,9 @@ class DeviceInfo {
 
   void set_interested_data_types(const ModelTypeSet& data_types);
 
+  size_t vivaldi_total_synced_files_size() const;
+  void set_vivaldi_total_synced_files_size(size_t size);
+
  private:
   const std::string guid_;
 
@@ -267,6 +270,8 @@ class DeviceInfo {
 
   // Data types for which this device receives invalidations.
   ModelTypeSet interested_data_types_;
+
+  size_t vivaldi_total_synced_files_size_;
 
   // NOTE: when adding a member, don't forget to update
   // |StoredDeviceInfoStillAccurate| in device_info_sync_bridge.cc or else

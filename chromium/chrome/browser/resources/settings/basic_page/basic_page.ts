@@ -34,7 +34,7 @@ import '../languages_page/languages.js';
 // </if>
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsIdleLoadElement} from '../controls/settings_idle_load.js';
@@ -61,9 +61,9 @@ type Constructor<T> = new (...args: any[]) => T;
 
 const SettingsBasicPageElementBase =
     PrefsMixin(MainPageMixin(
-        RouteObserverMixin(WebUIListenerMixin(PolymerElement)) as unknown as
+        RouteObserverMixin(WebUiListenerMixin(PolymerElement)) as unknown as
         Constructor<PolymerElement>)) as unknown as {
-      new (): PolymerElement & WebUIListenerMixinInterface &
+      new (): PolymerElement & WebUiListenerMixinInterface &
           PrefsMixinInterface & RouteObserverMixinInterface &
           MainPageMixinInterface,
     };
@@ -235,13 +235,13 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.addWebUIListener(
+    this.addWebUiListener(
         'is-managed-changed', this.onIsManagedChanged_.bind(this));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'sync-status-changed', this.onSyncStatusChanged_.bind(this));
 
     if (loadTimeData.getBoolean('batterySaverModeAvailable')) {
-      this.addWebUIListener(
+      this.addWebUiListener(
           'device-has-battery-changed',
           this.onDeviceHasBatteryChanged_.bind(this));
       this.performanceBrowserProxy_.getDeviceHasBattery().then(
@@ -365,7 +365,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   }
 
   // <if expr="chromeos_ash">
-  private onOpenChromeOSLanguagesSettingsClick_() {
+  private onOpenChromeOsLanguagesSettingsClick_() {
     const chromeOSLanguagesSettingsPath =
         loadTimeData.getString('chromeOSLanguagesSettingsPath');
     window.location.href =

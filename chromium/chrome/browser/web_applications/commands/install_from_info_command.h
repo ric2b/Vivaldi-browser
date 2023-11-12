@@ -21,7 +21,8 @@
 namespace web_app {
 
 class AppLock;
-class WebAppInstallFinalizer;
+class AppLockDescription;
+class LockDescription;
 
 // Starts a web app installation process using prefilled
 // |install_info| which holds all the data needed for installation.
@@ -36,16 +37,14 @@ class WebAppInstallFinalizer;
 // then the existing web app manifest fields will be overwritten.
 // If `install_info` contains data freshly fetched from the web app's
 // site then `overwrite_existing_manifest_fields` should be true.
-class InstallFromInfoCommand : public WebAppCommand {
+class InstallFromInfoCommand : public WebAppCommandTemplate<AppLock> {
  public:
   InstallFromInfoCommand(std::unique_ptr<WebAppInstallInfo> install_info,
-                         WebAppInstallFinalizer* install_finalizer,
                          bool overwrite_existing_manifest_fields,
                          webapps::WebappInstallSource install_surface,
                          OnceInstallCallback install_callback);
 
   InstallFromInfoCommand(std::unique_ptr<WebAppInstallInfo> install_info,
-                         WebAppInstallFinalizer* install_finalizer,
                          bool overwrite_existing_manifest_fields,
                          webapps::WebappInstallSource install_surface,
                          OnceInstallCallback install_callback,
@@ -53,29 +52,34 @@ class InstallFromInfoCommand : public WebAppCommand {
 
   ~InstallFromInfoCommand() override;
 
-  Lock& lock() const override;
+  LockDescription& lock_description() const override;
 
-  void Start() override;
+  void StartWithLock(std::unique_ptr<AppLock> lock) override;
   void OnSyncSourceRemoved() override;
   void OnShutdown() override;
 
   base::Value ToDebugValue() const override;
 
  private:
+  void PopulateInitialDebugInfo();
+
   void Abort(webapps::InstallResultCode code);
 
   void OnInstallCompleted(const AppId& app_id,
                           webapps::InstallResultCode code,
                           OsHooksErrors os_hooks_errors);
 
+  std::unique_ptr<AppLockDescription> lock_description_;
   std::unique_ptr<AppLock> lock_;
+
   AppId app_id_;
   std::unique_ptr<WebAppInstallInfo> install_info_;
-  raw_ptr<WebAppInstallFinalizer> install_finalizer_;
   bool overwrite_existing_manifest_fields_;
   webapps::WebappInstallSource install_surface_;
   OnceInstallCallback install_callback_;
   absl::optional<WebAppInstallParams> install_params_;
+
+  base::Value::Dict debug_value_;
 
   base::WeakPtrFactory<InstallFromInfoCommand> weak_factory_{this};
 };

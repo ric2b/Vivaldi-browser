@@ -12,7 +12,6 @@
 #include "base/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "build/build_config.h"
 #include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -26,6 +25,7 @@ class GURL;
 
 namespace gl {
 class GLSurface;
+class Presenter;
 }
 
 namespace gpu {
@@ -84,11 +84,16 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceDependency {
   // return kNullSurfaceHandle.
   virtual bool IsOffscreen() = 0;
   virtual gpu::SurfaceHandle GetSurfaceHandle() = 0;
+  virtual scoped_refptr<gl::Presenter> CreatePresenter(
+      base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
+      gl::GLSurfaceFormat format) = 0;
   virtual scoped_refptr<gl::GLSurface> CreateGLSurface(
       base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
       gl::GLSurfaceFormat format) = 0;
   // Hold a ref of the given surface until the returned closure is fired.
   virtual base::ScopedClosureRunner CacheGLSurface(gl::GLSurface* surface) = 0;
+  virtual base::ScopedClosureRunner CachePresenter(
+      gl::Presenter* presenter) = 0;
   virtual void ScheduleGrContextCleanup() = 0;
 
   void PostTaskToClientThread(base::OnceClosure closure) {
@@ -100,17 +105,14 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceDependency {
   // called only from GPU Thread.
   virtual void ScheduleDelayedGPUTaskFromGPUThread(base::OnceClosure task) = 0;
 
-#if BUILDFLAG(IS_WIN)
-  virtual void DidCreateAcceleratedSurfaceChildWindow(
-      gpu::SurfaceHandle parent_window,
-      gpu::SurfaceHandle child_window) = 0;
-#endif
-
   virtual void DidLoseContext(gpu::error::ContextLostReason reason,
                               const GURL& active_url) = 0;
 
   virtual base::TimeDelta GetGpuBlockedTimeSinceLastSwap() = 0;
   virtual bool NeedsSupportForExternalStencil() = 0;
+
+  // This returns true if CompositorGpuThread(aka DrDc thread) is enabled.
+  virtual bool IsUsingCompositorGpuThread() = 0;
 
   gpu::GrContextType gr_context_type() const {
     return GetGpuPreferences().gr_context_type;

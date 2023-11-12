@@ -102,25 +102,19 @@ const std::string& GetExtensionPrefNameForPref(mojom::PrefPath path) {
 }  // namespace
 
 PrefsAsh::PrefsAsh(ProfileManager* profile_manager, PrefService* local_state)
-    : profile_manager_(profile_manager), local_state_(local_state) {
-  DCHECK(profile_manager_);
+    : local_state_(local_state) {
+  DCHECK(profile_manager);
   DCHECK(local_state_);
 
   on_app_terminating_subscription_ =
       browser_shutdown::AddAppTerminatingCallback(
           base::BindOnce(&PrefsAsh::OnAppTerminating, base::Unretained(this)));
 
-  profile_manager_->AddObserver(this);
+  profile_manager_observation_.Observe(profile_manager);
   local_state_registrar_.Init(local_state_);
 }
 
-PrefsAsh::~PrefsAsh() {
-  // Remove this observer, if the Primary logged in profile is not yet created.
-  // On actual shutdown, the ProfileManager will destruct before CrosapiManager.
-  if (ProfileManagerObserver::IsInObserverList() && profile_manager_) {
-    profile_manager_->RemoveObserver(this);
-  }
-}
+PrefsAsh::~PrefsAsh() = default;
 
 void PrefsAsh::BindReceiver(mojo::PendingReceiver<mojom::Prefs> receiver) {
   receivers_.Add(this, std::move(receiver));
@@ -269,9 +263,15 @@ absl::optional<PrefsAsh::State> PrefsAsh::GetState(mojom::PrefPath path) {
     case mojom::PrefPath::kDnsOverHttpsMode:
       return State{local_state_, &local_state_registrar_, false,
                    prefs::kDnsOverHttpsMode};
+    case mojom::PrefPath::kDnsOverHttpsSalt:
+      return State{local_state_, &local_state_registrar_, false,
+                   prefs::kDnsOverHttpsSalt};
     case mojom::PrefPath::kDnsOverHttpsTemplates:
       return State{local_state_, &local_state_registrar_, false,
                    prefs::kDnsOverHttpsTemplates};
+    case mojom::PrefPath::kDnsOverHttpsTemplatesWithIdentifiers:
+      return State{local_state_, &local_state_registrar_, false,
+                   prefs::kDnsOverHttpsTemplatesWithIdentifiers};
     case mojom::PrefPath::kDockedMagnifierEnabled:
     case mojom::PrefPath::kAccessibilityAutoclickEnabled:
     case mojom::PrefPath::kAccessibilityCaretHighlightEnabled:
@@ -300,7 +300,7 @@ absl::optional<PrefsAsh::State> PrefsAsh::GetState(mojom::PrefPath path) {
 }
 
 void PrefsAsh::OnProfileManagerDestroying() {
-  profile_manager_ = nullptr;
+  profile_manager_observation_.Reset();
 }
 
 void PrefsAsh::OnProfileWillBeDestroyed(Profile* profile) {
@@ -330,7 +330,7 @@ void PrefsAsh::OnDisconnect(mojom::PrefPath path, mojo::RemoteSetElementId id) {
 }
 
 void PrefsAsh::OnPrimaryProfileReady(Profile* profile) {
-  profile_manager_->RemoveObserver(this);
+  profile_manager_observation_.Reset();
   profile_prefs_registrar_ = std::make_unique<PrefChangeRegistrar>();
   profile_prefs_registrar_->Init(profile->GetPrefs());
 }

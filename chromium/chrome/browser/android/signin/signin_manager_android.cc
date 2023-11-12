@@ -51,7 +51,7 @@ class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
       : profile_(profile),
         all_data_(all_data),
         callback_(std::move(callback)),
-        origin_runner_(base::ThreadTaskRunnerHandle::Get()),
+        origin_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
         remover_(profile->GetBrowsingDataRemover()) {
     remover_->AddObserver(this);
 
@@ -92,7 +92,7 @@ class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
       // All the Profile data has been wiped. Clear the last signed in username
       // as well, so that the next signin doesn't trigger the account
       // change dialog.
-      profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastAccountId);
+      profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastGaiaId);
       profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastUsername);
     }
 

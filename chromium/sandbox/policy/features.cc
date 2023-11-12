@@ -19,12 +19,6 @@ BASE_FEATURE(kNetworkServiceSandbox,
 #endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_WIN)
-// Emergency "off switch" for new Windows KTM security mitigation,
-// sandbox::MITIGATION_KTM_COMPONENT.
-BASE_FEATURE(kWinSboxDisableKtmComponent,
-             "WinSboxDisableKtmComponent",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Experiment for Windows sandbox security mitigation,
 // sandbox::MITIGATION_EXTENSION_POINT_DISABLE.
 BASE_FEATURE(kWinSboxDisableExtensionPoints,
@@ -50,6 +44,15 @@ BASE_FEATURE(kRendererAppContainer,
 BASE_FEATURE(kSharedSandboxPolicies,
              "SharedSandboxPolicies",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Emergency "off switch" for pipe security changes, which apply more
+// restrictions to sandboxed processes from opening or creating pipes. This
+// feature can be removed around the M112 timeline. See
+// https://crbug.com/1378724.
+BASE_FEATURE(kChromePipeLockdown,
+             "ChromePipeLockdown",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -67,6 +70,14 @@ BASE_FEATURE(kForceSpectreVariant2Mitigation,
              "ForceSpectreVariant2Mitigation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_MAC)
+// Enables caching compiled sandbox profiles. Only some profiles support this,
+// as controlled by CanCacheSandboxPolicy().
+BASE_FEATURE(kCacheMacSandboxProfiles,
+             "CacheMacSandboxProfiles",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC)
 
 bool IsNetworkSandboxEnabled() {
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_FUCHSIA)

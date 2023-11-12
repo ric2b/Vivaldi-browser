@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.js';
-import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.js';
-import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
+import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {MockDriveSyncHandler} from '../../background/js/mock_drive_sync_handler.js';
 import {MockVolumeManager} from '../../background/js/mock_volume_manager.js';
@@ -97,30 +97,10 @@ class MockUI {
 let ui;
 
 export function setUp() {
-  // Mock loadTimeData strings.
-  window.loadTimeData.getString = id => id;
-  window.loadTimeData.resetForTesting({});
-
   // Mock Chrome APIs.
   const mockChrome = {
     runtime: {
       lastError: null,
-    },
-    fileManagerPrivate: {
-      // The following closures are set per test case.
-      getCustomActions: null,
-      executeCustomAction: null,
-      pinDriveFile: null,
-      DriveConnectionStateType: {
-        ONLINE: 'ONLINE',
-        OFFLINE: 'OFFLINE',
-        METERED: 'METERED',
-      },
-      DriveOfflineReason: {
-        NOT_READY: 'NOT_READY',
-        NO_NETWORK: 'NO_NETWORK',
-        NO_SERVICE: 'NO_SERVICE',
-      },
     },
   };
   installMockChrome(mockChrome);

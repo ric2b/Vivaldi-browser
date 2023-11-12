@@ -9,10 +9,10 @@
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/icu_test_util.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
-#include "chrome/browser/web_applications/manifest_update_task.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -246,11 +245,6 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest, ThemeChange) {
   ASSERT_TRUE(https_server()->Start());
   const GURL app_url = https_server()->GetURL("/banners/theme-color.html");
   helper()->InstallAndLaunchWebApp(browser(), app_url);
-
-  // This is to ensure that for manifest updates, we auto
-  // accept the identity dialog and bypass the window closing requirement.
-  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
-  web_app::ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
 
   content::WebContents* web_contents =
       helper()->app_browser()->tab_strip_model()->GetActiveWebContents();
@@ -476,7 +470,7 @@ class WebAppFrameToolbarBrowserTest_Borderless
     return app_id;
   }
 
-  void GrantWindowPlacementPermission() {
+  void GrantWindowManagementPermission() {
     auto* web_contents = helper()->browser_view()->GetActiveWebContents();
 
     std::string permission_auto_approve_script = R"(
@@ -516,14 +510,14 @@ class WebAppFrameToolbarBrowserTest_Borderless
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
-                       AppUsesBorderlessModeAndHasWindowPlacementPermission) {
+                       AppUsesBorderlessModeAndHasWindowManagementPermission) {
   InstallAndLaunchWebApp(/*uses_borderless=*/true);
-  GrantWindowPlacementPermission();
+  GrantWindowManagementPermission();
 
   ASSERT_TRUE(helper()->browser_view()->borderless_mode_enabled_for_testing());
   ASSERT_TRUE(helper()
                   ->browser_view()
-                  ->window_placement_permission_granted_for_testing());
+                  ->window_management_permission_granted_for_testing());
   ASSERT_TRUE(helper()->browser_view()->IsBorderlessModeEnabled());
   ASSERT_FALSE(
       helper()->web_app_frame_toolbar()->GetAppMenuButton()->GetVisible());
@@ -550,7 +544,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
   EXPECT_TRUE(EvalJs(web_contents, match_media_standalone).ExtractBool());
   ASSERT_EQ(blue, EvalJs(web_contents, get_background_color));
 
-  GrantWindowPlacementPermission();
+  GrantWindowManagementPermission();
   ASSERT_TRUE(helper()->browser_view()->IsBorderlessModeEnabled());
 
   // Validate that after granting the permission the display-mode matches with
@@ -561,12 +555,12 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
 
 IN_PROC_BROWSER_TEST_F(
     WebAppFrameToolbarBrowserTest_Borderless,
-    AppUsesBorderlessModeAndDoesNotHaveWindowPlacementPermission) {
+    AppUsesBorderlessModeAndDoesNotHaveWindowManagementPermission) {
   InstallAndLaunchWebApp(/*uses_borderless=*/true);
   ASSERT_TRUE(helper()->browser_view()->borderless_mode_enabled_for_testing());
   ASSERT_FALSE(helper()
                    ->browser_view()
-                   ->window_placement_permission_granted_for_testing());
+                   ->window_management_permission_granted_for_testing());
   ASSERT_FALSE(helper()->browser_view()->IsBorderlessModeEnabled());
 }
 
@@ -576,10 +570,44 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
   ASSERT_FALSE(helper()->browser_view()->borderless_mode_enabled_for_testing());
   ASSERT_FALSE(helper()
                    ->browser_view()
-                   ->window_placement_permission_granted_for_testing());
+                   ->window_management_permission_granted_for_testing());
   ASSERT_FALSE(helper()->browser_view()->IsBorderlessModeEnabled());
   ASSERT_TRUE(
       helper()->web_app_frame_toolbar()->GetAppMenuButton()->GetVisible());
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
+                       PopupToItselfIsNotBorderless) {
+  InstallAndLaunchWebApp(/*uses_borderless=*/true);
+  GrantWindowManagementPermission();
+  ASSERT_TRUE(helper()->browser_view()->IsBorderlessModeEnabled());
+
+  // Popup to itself.
+  Browser* popup = helper()->OpenPopup(
+      EvalJs(helper()->browser_view()->GetActiveWebContents(),
+             "window.location.href")
+          .ExtractString());
+
+  BrowserView* popup_browser_view =
+      BrowserView::GetBrowserViewForBrowser(popup);
+  EXPECT_TRUE(content::WaitForRenderFrameReady(
+      popup_browser_view->GetActiveWebContents()->GetPrimaryMainFrame()));
+  EXPECT_FALSE(popup_browser_view->IsBorderlessModeEnabled());
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_Borderless,
+                       PopupToAnyOtherOriginIsNotBorderless) {
+  InstallAndLaunchWebApp(/*uses_borderless=*/true);
+  GrantWindowManagementPermission();
+  ASSERT_TRUE(helper()->browser_view()->IsBorderlessModeEnabled());
+
+  // Popup to any other website outside of the same origin.
+  Browser* popup = helper()->OpenPopup("https://google.com");
+  BrowserView* popup_browser_view =
+      BrowserView::GetBrowserViewForBrowser(popup);
+  EXPECT_TRUE(content::WaitForRenderFrameReady(
+      popup_browser_view->GetActiveWebContents()->GetPrimaryMainFrame()));
+  EXPECT_FALSE(popup_browser_view->IsBorderlessModeEnabled());
 }
 
 // TODO(https://crbug.com/1277860): Flaky.
@@ -614,10 +642,7 @@ class WebAppFrameToolbarBrowserTest_WindowControlsOverlay
   };
 
   WebAppFrameToolbarBrowserTest_WindowControlsOverlay() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{safe_browsing::kDownloadBubble,
-                              features::kWebAppWindowControlsOverlay},
-        /*disabled_features=*/{});
+    scoped_feature_list_.InitAndEnableFeature(safe_browsing::kDownloadBubble);
   }
 
   void SetUp() override {
@@ -740,22 +765,6 @@ class WebAppFrameToolbarBrowserTest_WindowControlsOverlay
         "rect");
   }
 
-  // Opens a new popup window from |app_browser| on |target_url| and returns
-  // the Browser it opened in.
-  Browser* OpenPopup(Browser* app_browser, const std::string& target_url) {
-    GURL target_gurl(target_url);
-
-    std::string script =
-        "window.open('" + target_url + "', '_blank', 'popup');";
-    content::ExecuteScriptAsync(
-        app_browser->tab_strip_model()->GetActiveWebContents(), script);
-    Browser* popup = ui_test_utils::WaitForBrowserToOpen();
-
-    EXPECT_NE(app_browser, popup);
-    EXPECT_TRUE(popup);
-    return popup;
-  }
-
  protected:
   content::test::FencedFrameTestHelper fenced_frame_helper_;
 
@@ -868,8 +877,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   InstallAndLaunchWebApp();
   auto* wco_web_contents = helper()->browser_view()->GetActiveWebContents();
 
-  Browser* popup = OpenPopup(
-      helper()->app_browser(),
+  Browser* popup = helper()->OpenPopup(
       EvalJs(wco_web_contents, "window.location.href").ExtractString());
 
   BrowserView* popup_browser_view =
@@ -903,7 +911,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   ToggleWindowControlsOverlayAndWait();
   EXPECT_TRUE(GetWindowControlOverlayVisibility());
 
-  Browser* popup = OpenPopup(helper()->app_browser(), "https://google.com");
+  Browser* popup = helper()->OpenPopup("https://google.com");
   BrowserView* popup_browser_view =
       BrowserView::GetBrowserViewForBrowser(popup);
   content::WebContents* popup_web_contents =
@@ -1082,12 +1090,12 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   EXPECT_TRUE(helper()->browser_view()->AppUsesWindowControlsOverlay());
 
   // Toggle WCO on, and verify that the UI updates accordingly.
-  helper()->browser_view()->ToggleWindowControlsOverlayEnabled();
+  ToggleWindowControlsOverlayAndWait();
   EXPECT_TRUE(helper()->browser_view()->IsWindowControlsOverlayEnabled());
   EXPECT_TRUE(helper()->browser_view()->AppUsesWindowControlsOverlay());
 
   // Toggle WCO off, and verify that the app returns to 'standalone' mode.
-  helper()->browser_view()->ToggleWindowControlsOverlayEnabled();
+  ToggleWindowControlsOverlayAndWait();
   EXPECT_FALSE(helper()->browser_view()->IsWindowControlsOverlayEnabled());
   EXPECT_TRUE(helper()->browser_view()->AppUsesWindowControlsOverlay());
 }
@@ -1137,7 +1145,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   // Hide CCT and enable window controls overlay.
   helper()->browser_view()->UpdateCustomTabBarVisibility(/*visible*/ false,
                                                          /*animate*/ false);
-  helper()->browser_view()->ToggleWindowControlsOverlayEnabled();
+  ToggleWindowControlsOverlayAndWait();
 
   // Verify that the app entered window controls overlay mode.
   EXPECT_TRUE(helper()->browser_view()->IsWindowControlsOverlayEnabled());
@@ -1179,11 +1187,13 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
 IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
                        OpenWithOverlayEnabled) {
   web_app::AppId app_id = InstallAndLaunchWebApp();
+  base::test::TestFuture<void> future;
   helper()
       ->browser_view()
       ->browser()
       ->app_controller()
-      ->ToggleWindowControlsOverlayEnabled();
+      ->ToggleWindowControlsOverlayEnabled(future.GetCallback());
+  EXPECT_TRUE(future.Wait());
   web_app::LaunchWebAppBrowserAndWait(browser()->profile(), app_id);
   // If there's no crash, the test has passed.
 }

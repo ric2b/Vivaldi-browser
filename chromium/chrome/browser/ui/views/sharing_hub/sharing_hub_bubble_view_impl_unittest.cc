@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_bubble_view_impl.h"
 
+#include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/share/share_features.h"
 #include "chrome/browser/ui/sharing_hub/fake_sharing_hub_bubble_controller.h"
@@ -35,9 +37,8 @@ std::vector<views::View*> DescendantsMatchingPredicate(
   std::vector<views::View*> result;
 
   EnumerateDescendants(root, descendants);
-  std::copy_if(descendants.begin(), descendants.end(),
-               std::back_inserter(result),
-               [=](views::View* view) { return predicate.Run(view); });
+  base::ranges::copy_if(descendants, std::back_inserter(result),
+                        [=](views::View* view) { return predicate.Run(view); });
   return result;
 }
 
@@ -124,12 +125,12 @@ class SharingHubBubbleTest : public ChromeViewsTestBase {
  private:
   base::test::ScopedFeatureList feature_list_{share::kDesktopSharePreview};
 
-  sharing_hub::SharingHubBubbleViewImpl* bubble_;
+  raw_ptr<sharing_hub::SharingHubBubbleViewImpl> bubble_;
   testing::NiceMock<sharing_hub::FakeSharingHubBubbleController> controller_{
       kFirstPartyActions, kThirdPartyActions};
 
   std::unique_ptr<views::Widget> anchor_widget_;
-  views::Widget* bubble_widget_;
+  raw_ptr<views::Widget> bubble_widget_;
 };
 
 TEST_F(SharingHubBubbleTest, AllFirstPartyActionsAppearInOrder) {

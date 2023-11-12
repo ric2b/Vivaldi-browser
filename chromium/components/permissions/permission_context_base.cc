@@ -121,8 +121,8 @@ void PermissionContextBase::RequestPermission(
     BrowserPermissionCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  content::RenderFrameHost* const rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
+  content::RenderFrameHost* const rfh =
+      content::RenderFrameHost::FromID(id.global_render_frame_host_id());
 
   if (!rfh) {
     // Permission request is not allowed without a valid RenderFrameHost.
@@ -144,7 +144,8 @@ void PermissionContextBase::RequestPermission(
              << " is not supported in popups)";
     NotifyPermissionSet(id, requesting_origin, embedding_origin,
                         std::move(callback), /*persist=*/false,
-                        CONTENT_SETTING_BLOCK, /*is_one_time=*/false);
+                        CONTENT_SETTING_BLOCK, /*is_one_time=*/false,
+                        /*is_final_decision=*/true);
     return;
   }
 
@@ -191,13 +192,13 @@ void PermissionContextBase::RequestPermission(
     PermissionUmaUtil::RecordEmbargoPromptSuppressionFromSource(result.source);
     NotifyPermissionSet(id, requesting_origin, embedding_origin,
                         std::move(callback), /*persist=*/false,
-                        result.content_setting, /*is_one_time=*/false);
+                        result.content_setting, /*is_one_time=*/false,
+                        /*is_final_decision=*/true);
     return;
   }
 
   // We are going to show a prompt now.
-  PermissionUmaUtil::PermissionRequested(content_settings_type_,
-                                         requesting_origin);
+  PermissionUmaUtil::PermissionRequested(content_settings_type_);
   PermissionUmaUtil::RecordEmbargoPromptSuppression(
       PermissionEmbargoStatus::NOT_EMBARGOED);
 
@@ -395,8 +396,8 @@ void PermissionContextBase::DecidePermission(
          requesting_origin == embedding_origin ||
          content_settings_type_ == ContentSettingsType::STORAGE_ACCESS);
 
-  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(id.global_render_frame_host_id());
   DCHECK(rfh);
 
   content::WebContents* web_contents =
@@ -410,29 +411,29 @@ void PermissionContextBase::DecidePermission(
 
   std::unique_ptr<PermissionRequest> request_ptr = CreatePermissionRequest(
       requesting_origin, content_settings_type_, user_gesture, web_contents,
-      base::BindOnce(&PermissionContextBase::PermissionDecided,
-                     weak_factory_.GetWeakPtr(), id, requesting_origin,
-                     embedding_origin, std::move(callback)),
+      base::BindRepeating(&PermissionContextBase::PermissionDecided,
+                          weak_factory_.GetWeakPtr(), id, requesting_origin,
+                          embedding_origin),
       base::BindOnce(&PermissionContextBase::CleanUpRequest,
                      weak_factory_.GetWeakPtr(), id));
   PermissionRequest* request = request_ptr.get();
 
-  bool inserted =
-      pending_requests_
-          .insert(std::make_pair(id.ToString(), std::move(request_ptr)))
-          .second;
+  bool inserted = pending_requests_
+                      .insert(std::make_pair(
+                          id.ToString(), std::make_pair(std::move(request_ptr),
+                                                        std::move(callback))))
+                      .second;
   DCHECK(inserted) << "Duplicate id " << id.ToString();
 
   permission_request_manager->AddRequest(rfh, request);
 }
 
-void PermissionContextBase::PermissionDecided(
-    const PermissionRequestID& id,
-    const GURL& requesting_origin,
-    const GURL& embedding_origin,
-    BrowserPermissionCallback callback,
-    ContentSetting content_setting,
-    bool is_one_time) {
+void PermissionContextBase::PermissionDecided(const PermissionRequestID& id,
+                                              const GURL& requesting_origin,
+                                              const GURL& embedding_origin,
+                                              ContentSetting content_setting,
+                                              bool is_one_time,
+                                              bool is_final_decision) {
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK ||
          content_setting == CONTENT_SETTING_DEFAULT);
@@ -440,9 +441,21 @@ void PermissionContextBase::PermissionDecided(
                              content_setting);
 
   bool persist = content_setting != CONTENT_SETTING_DEFAULT;
-  NotifyPermissionSet(id, requesting_origin, embedding_origin,
-                      std::move(callback), persist, content_setting,
-                      is_one_time);
+
+  auto request = pending_requests_.find(id.ToString());
+  DCHECK(request != pending_requests_.end());
+  // Check if `request` has `BrowserPermissionCallback`. The call back might be
+  // missing if a permission prompt was preignored and we already notified an
+  // origin about it.
+  if (request->second.second) {
+    NotifyPermissionSet(id, requesting_origin, embedding_origin,
+                        std::move(request->second.second), persist,
+                        content_setting, is_one_time, is_final_decision);
+  } else {
+    NotifyPermissionSet(id, requesting_origin, embedding_origin,
+                        base::DoNothing(), persist, content_setting,
+                        is_one_time, is_final_decision);
+  }
 }
 
 content::BrowserContext* PermissionContextBase::browser_context() const {
@@ -491,7 +504,8 @@ void PermissionContextBase::NotifyPermissionSet(
     BrowserPermissionCallback callback,
     bool persist,
     ContentSetting content_setting,
-    bool is_one_time) {
+    bool is_one_time,
+    bool is_final_decision) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (persist) {
@@ -499,8 +513,10 @@ void PermissionContextBase::NotifyPermissionSet(
                          is_one_time);
   }
 
-  UpdateTabContext(id, requesting_origin,
-                   content_setting == CONTENT_SETTING_ALLOW);
+  if (is_final_decision) {
+    UpdateTabContext(id, requesting_origin,
+                     content_setting == CONTENT_SETTING_ALLOW);
+  }
 
   if (content_setting == CONTENT_SETTING_DEFAULT)
     content_setting = CONTENT_SETTING_ASK;

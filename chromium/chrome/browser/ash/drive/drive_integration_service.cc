@@ -22,9 +22,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/task/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -42,6 +41,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/drivefs/drivefs_bootstrap.h"
+#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
@@ -267,7 +267,7 @@ std::vector<base::FilePath> GetPinnedAndDirtyFiles(
   // list of files to pin to the UI thread without waiting for the remaining
   // data to be cleared.
   metadata_storage.reset();
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&CleanupGCacheV1, std::move(cache_directory),
                      std::move(downloads_directory), std::move(dirty_files)));
@@ -367,10 +367,16 @@ class DriveIntegrationService::PreferenceWatcher
         prefs::kDisableDriveOverCellular,
         base::BindRepeating(&PreferenceWatcher::UpdateSyncPauseState,
                             weak_ptr_factory_.GetWeakPtr()));
-    if (chromeos::features::IsDriveFsMirroringEnabled()) {
+    if (ash::features::IsDriveFsMirroringEnabled()) {
       pref_change_registrar_.Add(
           prefs::kDriveFsEnableMirrorSync,
           base::BindRepeating(&PreferenceWatcher::ToggleLocalMirroring,
+                              weak_ptr_factory_.GetWeakPtr()));
+    }
+    if (ash::features::IsDriveFsBulkPinningEnabled()) {
+      pref_change_registrar_.Add(
+          prefs::kDriveFsBulkPinningEnabled,
+          base::BindRepeating(&PreferenceWatcher::UpdateBulkPinningState,
                               weak_ptr_factory_.GetWeakPtr()));
     }
   }
@@ -420,7 +426,7 @@ class DriveIntegrationService::PreferenceWatcher
 
   void ToggleLocalMirroring() {
     DCHECK(integration_service_);
-    if (!chromeos::features::IsDriveFsMirroringEnabled()) {
+    if (!ash::features::IsDriveFsMirroringEnabled()) {
       return;
     }
 
@@ -434,6 +440,27 @@ class DriveIntegrationService::PreferenceWatcher
           false, base::BindOnce(
                      &DriveIntegrationService::OnDisableMirroringStatusUpdate,
                      integration_service_->weak_ptr_factory_.GetWeakPtr()));
+    }
+  }
+
+  void UpdateBulkPinningState() {
+    DCHECK(integration_service_);
+    if (!ash::features::IsDriveFsBulkPinningEnabled()) {
+      return;
+    }
+
+    VLOG(1) << "Updating the bulk pinning state";
+    auto* pin_manager = integration_service_->GetDriveFsPinManager();
+    if (!pin_manager) {
+      return;
+    }
+    bool enabled = pref_service_->GetBoolean(prefs::kDriveFsBulkPinningEnabled);
+    integration_service_->GetDriveFsPinManager()->SetBulkPinningEnabled(
+        enabled);
+    if (enabled) {
+      pin_manager->Start(base::DoNothing());
+    } else {
+      pin_manager->Stop();
     }
   }
 
@@ -602,7 +629,7 @@ class DriveIntegrationService::DriveFsHolder
   }
 
   const std::string GetMachineRootID() override {
-    if (!chromeos::features::IsDriveFsMirroringEnabled()) {
+    if (!ash::features::IsDriveFsMirroringEnabled()) {
       return "";
     }
     return profile_->GetPrefs()->GetString(
@@ -610,7 +637,7 @@ class DriveIntegrationService::DriveFsHolder
   }
 
   void PersistMachineRootID(const std::string& id) override {
-    if (!chromeos::features::IsDriveFsMirroringEnabled()) {
+    if (!ash::features::IsDriveFsMirroringEnabled()) {
       return;
     }
     profile_->GetPrefs()->SetString(prefs::kDriveFsMirrorSyncMachineRootId, id);
@@ -794,7 +821,7 @@ void DriveIntegrationService::ClearCacheAndRemountFileSystem(
     // completely. Ideally we'd wait for an unmount complete callback.
     delay = base::Seconds(2);
   }
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(
           &DriveIntegrationService::ClearCacheAndRemountFileSystemAfterDelay,
@@ -825,6 +852,15 @@ void DriveIntegrationService::MaybeRemountFileSystemAfterClearCache(
 
 drivefs::DriveFsHost* DriveIntegrationService::GetDriveFsHost() const {
   return drivefs_holder_->drivefs_host();
+}
+
+drivefs::pinning::DriveFsPinManager*
+DriveIntegrationService::GetDriveFsPinManager() {
+  if (!ash::features::IsDriveFsBulkPinningEnabled()) {
+    return nullptr;
+  }
+
+  return pin_manager_.get();
 }
 
 drivefs::mojom::DriveFs* DriveIntegrationService::GetDriveFsInterface() const {
@@ -863,8 +899,8 @@ void DriveIntegrationService::AddDriveMountPoint() {
     if (mount_start_.is_null() || was_ever_mounted) {
       mount_start_ = base::TimeTicks::Now();
     }
-    base::PostTaskAndReplyWithResult(
-        blocking_task_runner_.get(), FROM_HERE,
+    blocking_task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE,
         base::BindOnce(&EnsureDirectoryExists,
                        drivefs_holder_->drivefs_host()->GetDataPath()),
         base::BindOnce(&DriveIntegrationService::MaybeMountDrive,
@@ -928,6 +964,12 @@ void DriveIntegrationService::RemoveDriveMountPoint() {
     }
   }
   drivefs_holder_->drivefs_host()->Unmount();
+
+  if (ash::features::IsDriveFsBulkPinningEnabled() && pin_manager_) {
+    pin_manager_->Stop();
+    drivefs_holder_->drivefs_host()->RemoveObserver(pin_manager_.get());
+    pin_manager_.reset();
+  }
 }
 
 void DriveIntegrationService::MaybeRemountFileSystem(
@@ -971,7 +1013,7 @@ void DriveIntegrationService::MaybeRemountFileSystem(
                  static_cast<int>(remount_delay.value().InSeconds()));
   }
 
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&DriveIntegrationService::AddDriveMountPoint,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -994,12 +1036,19 @@ void DriveIntegrationService::OnMounted(const base::FilePath& mount_path) {
   }
 
   // Enable MirrorSync if the feature is enabled.
-  if (chromeos::features::IsDriveFsMirroringEnabled() &&
+  if (ash::features::IsDriveFsMirroringEnabled() &&
       profile_->GetPrefs()->GetBoolean(prefs::kDriveFsEnableMirrorSync)) {
     ToggleMirroring(
         true,
         base::BindOnce(&DriveIntegrationService::OnEnableMirroringStatusUpdate,
                        weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  if (ash::features::IsDriveFsBulkPinningEnabled()) {
+    pin_manager_ = std::make_unique<drivefs::pinning::DriveFsPinManager>(
+        profile_->GetPrefs()->GetBoolean(prefs::kDriveFsBulkPinningEnabled),
+        profile_->GetPath(), GetDriveFsInterface());
+    drivefs_holder_->drivefs_host()->AddObserver(pin_manager_.get());
   }
 }
 
@@ -1033,8 +1082,8 @@ void DriveIntegrationService::Initialize() {
 
   state_ = INITIALIZING;
 
-  base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(), FROM_HERE,
+  blocking_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(
           &InitializeMetadata, cache_root_directory_, metadata_storage_.get(),
           file_manager::util::GetDownloadsFolderForProfile(profile_)),
@@ -1082,8 +1131,8 @@ void DriveIntegrationService::MigratePinnedFiles() {
   if (!metadata_storage_)
     return;
 
-  base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(), FROM_HERE,
+  blocking_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
       base::BindOnce(
           &GetPinnedAndDirtyFiles, std::move(metadata_storage_),
           cache_root_directory_,
@@ -1330,7 +1379,7 @@ void DriveIntegrationService::GetThumbnail(const base::FilePath& path,
 void DriveIntegrationService::ToggleMirroring(
     bool enabled,
     drivefs::mojom::DriveFs::ToggleMirroringCallback callback) {
-  if (!chromeos::features::IsDriveFsMirroringEnabled()) {
+  if (!ash::features::IsDriveFsMirroringEnabled()) {
     std::move(callback).Run(
         drivefs::mojom::MirrorSyncStatus::kFeatureNotEnabled);
     return;
@@ -1345,8 +1394,7 @@ void DriveIntegrationService::ToggleSyncForPath(
     const base::FilePath& path,
     drivefs::mojom::MirrorPathStatus status,
     drivefs::mojom::DriveFs::ToggleSyncForPathCallback callback) {
-  if (!chromeos::features::IsDriveFsMirroringEnabled() ||
-      !IsMirroringEnabled()) {
+  if (!ash::features::IsDriveFsMirroringEnabled() || !IsMirroringEnabled()) {
     std::move(callback).Run(drive::FILE_ERROR_SERVICE_UNAVAILABLE);
     return;
   }
@@ -1382,8 +1430,7 @@ void DriveIntegrationService::ToggleSyncForPathIfDirectoryExists(
 
 void DriveIntegrationService::GetSyncingPaths(
     drivefs::mojom::DriveFs::GetSyncingPathsCallback callback) {
-  if (!chromeos::features::IsDriveFsMirroringEnabled() ||
-      !IsMirroringEnabled()) {
+  if (!ash::features::IsDriveFsMirroringEnabled() || !IsMirroringEnabled()) {
     std::move(callback).Run(drive::FILE_ERROR_SERVICE_UNAVAILABLE, {});
     return;
   }
@@ -1393,7 +1440,7 @@ void DriveIntegrationService::GetSyncingPaths(
   }
 }
 
-drivefs::SyncStatus DriveIntegrationService::GetSyncStatusForPath(
+drivefs::SyncStatusAndProgress DriveIntegrationService::GetSyncStatusForPath(
     const base::FilePath& drive_path) {
   return drivefs_holder_->drivefs_host()->GetSyncStatusForPath(drive_path);
 }
@@ -1414,8 +1461,8 @@ void DriveIntegrationService::ForceReSyncFile(const base::FilePath& local_path,
   }
 
   // TODO(b/234921400): Replace this with a call to DriveFS once implemented.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                   std::move(callback));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                           std::move(callback));
 }
 
 //===================== DriveIntegrationServiceFactory =======================

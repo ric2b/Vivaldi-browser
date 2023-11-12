@@ -14,18 +14,27 @@
 #include "base/time/time.h"
 #include "chrome/browser/dips/dips_database.h"
 #include "chrome/browser/dips/dips_state.h"
+#include "chrome/browser/dips/dips_utils.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 class GURL;
+
+using UrlPredicate = base::RepeatingCallback<bool(const GURL&)>;
 
 // Manages the storage of DIPSState values.
 class DIPSStorage {
  public:
-  DIPSStorage();
+  explicit DIPSStorage(const absl::optional<base::FilePath>& path);
   ~DIPSStorage();
 
-  void Init(const absl::optional<base::FilePath>& path);
-
   DIPSState Read(const GURL& url);
+
+  void RemoveEvents(base::Time delete_begin,
+                    base::Time delete_end,
+                    network::mojom::ClearDataFilterPtr filter,
+                    const DIPSEventRemovalType type);
+
+  void RemoveRows(const std::vector<std::string>& sites);
 
   // DIPS Helper Method Impls --------------------------------------------------
 
@@ -33,11 +42,33 @@ class DIPSStorage {
   void RecordStorage(const GURL& url, base::Time time, DIPSCookieMode mode);
   // Record that the user interacted on |url|.
   void RecordInteraction(const GURL& url, base::Time time, DIPSCookieMode mode);
+  // Record that |url| redirected the user and whether it was |stateful|,
+  // meaning that |url| wrote to storage while redirecting.
+  void RecordBounce(const GURL& url, base::Time time, bool stateful);
 
-  // Empty method intended for testing use only.
-  void DoNothing() {}
+  // Storage querying Methods --------------------------------------------------
+  // Returns all sites that did a bounce that aren't protected from DIPS.
+  std::vector<std::string> GetSitesThatBounced() const;
+
+  // Returns all sites that did a stateful bounce that aren't protected from
+  // DIPS.
+  std::vector<std::string> GetSitesThatBouncedWithState() const;
+
+  // Returns all sites which use storage that aren't protected from DIPS.
+  std::vector<std::string> GetSitesThatUsedStorage() const;
+
+  // Queries the DIPS database for sites whose state DIPS should clear.
+  // If DIPS deletion isn't enabled, this just logs UMA about how many sites
+  // would've been cleared by DIPS.
+  void DeleteDIPSEligibleState(DIPSCookieMode mode);
+
+  // Utility Methods -----------------------------------------------------------
 
   static size_t SetPrepopulateChunkSizeForTesting(size_t size);
+  void SetClockForTesting(base::Clock* clock) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    db_->SetClockForTesting(clock);
+  }
 
   // For each site in |sites|, set the interaction and storage timestamps to
   // |time|. Note this may run asynchronously -- the DB is not guaranteed to be
@@ -61,10 +92,12 @@ class DIPSStorage {
     std::vector<std::string> sites;
   };
 
+ protected:
+  void Write(const DIPSState& state);
+
  private:
   friend class DIPSState;
   DIPSState ReadSite(std::string site);
-  void Write(const DIPSState& state);
   // Prepopulate the DB with one chunk of |args.sites|, and schedule another
   // task to continue if more sites remain.
   void PrepopulateChunk(PrepopulateArgs args);

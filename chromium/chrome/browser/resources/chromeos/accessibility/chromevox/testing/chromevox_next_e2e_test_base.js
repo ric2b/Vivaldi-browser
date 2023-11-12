@@ -93,9 +93,8 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
    * @return {function(): void}
    */
   doGesture(gesture, opt_x, opt_y) {
-    return () => {
-      GestureCommandHandler.onAccessibilityGesture_(gesture, opt_x, opt_y);
-    };
+    return () => GestureCommandHandler.instance_.onAccessibilityGesture_(
+               gesture, opt_x, opt_y);
   }
 
   /**
@@ -110,6 +109,7 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
   async setUpDeferred() {
     await super.setUpDeferred();
     if (!this.isCommonClass) {
+      // Alphabetical based on file path.
       await importModule(
           'BaseAutomationHandler',
           '/chromevox/background/base_automation_handler.js');
@@ -125,6 +125,7 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
           'OutputRoleInfo', '/chromevox/background/output/output_role_info.js');
       await importModule(
           'OutputContextOrder', '/chromevox/background/output/output_types.js');
+
       // For tests, enable announcement of events we trigger via automation.
       BaseAutomationHandler.announceActions = true;
 

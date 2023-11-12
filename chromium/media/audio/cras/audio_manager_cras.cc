@@ -18,7 +18,7 @@
 #include "base/nix/xdg_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_features.h"
 #include "media/audio/cras/cras_input.h"
@@ -54,7 +54,7 @@ AudioManagerCras::AudioManagerCras(std::unique_ptr<AudioThread> audio_thread,
                                    AudioLogFactory* audio_log_factory)
     : AudioManagerCrasBase(std::move(audio_thread), audio_log_factory),
       cras_util_(std::make_unique<CrasUtil>()),
-      main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      main_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       weak_ptr_factory_(this) {
   weak_this_ = weak_ptr_factory_.GetWeakPtr();
 }
@@ -213,9 +213,12 @@ AudioParameters AudioManagerCras::GetStreamParametersForSystem(
       (tuned_system_apm_available && tuned_system_aec_allowed) ||
       enforce_system_aec;
 
-  // TODO(hychao): query from CRAS
-  bool system_ns_supported = true;
-  bool system_agc_supported = true;
+  // TODO(b/266242770): Reintroduce the scheme for setting this to follow what
+  // was previously done in (the now removed)
+  // media/audio/cras/audio_manager_chromeos.cc. Until then, the NS and AGC
+  // effects are hardcoded to never run in CRAS.
+  bool system_ns_supported = false;
+  bool system_agc_supported = false;
 
   int aec_group_id = cras_util_->CrasGetAecGroupId();
   if (!use_system_aec || IsSystemAecDeactivated(aec_group_id)) {
@@ -391,7 +394,11 @@ bool AudioManagerCras::IsDefault(const std::string& device_id, bool is_input) {
 }
 
 enum CRAS_CLIENT_TYPE AudioManagerCras::GetClientType() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  return CRAS_CLIENT_TYPE_CHROME;
+#else
   return CRAS_CLIENT_TYPE_LACROS;
+#endif
 }
 
 }  // namespace media

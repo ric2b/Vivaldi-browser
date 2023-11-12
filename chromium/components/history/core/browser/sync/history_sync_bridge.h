@@ -15,6 +15,7 @@
 #include "components/history/core/browser/history_backend_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/sync/history_backend_for_sync.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/sync/model/model_type_sync_bridge.h"
 
 namespace syncer {
@@ -30,8 +31,8 @@ class VisitIDRemapper;
 class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
                           public HistoryBackendObserver {
  public:
-  // `sync_metadata_store` is owned by `history_backend`, and must outlive
-  // HistorySyncBridge.
+  // `history_backend` must not be null.
+  // `sync_metadata_store` may be null, but if non-null, must outlive this.
   HistorySyncBridge(
       HistoryBackendForSync* history_backend,
       HistorySyncMetadataDatabase* sync_metadata_store,
@@ -51,6 +52,8 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
   absl::optional<syncer::ModelError> ApplySyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
+  void ApplyStopSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
+                                delete_metadata_change_list) override;
   void GetData(StorageKeyList storage_keys, DataCallback callback) override;
   void GetAllDataForDebugging(DataCallback callback) override;
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
@@ -74,6 +77,8 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
   void OnVisitUpdated(const VisitRow& visit_row) override;
   void OnVisitDeleted(const VisitRow& visit_row) override;
 
+  void SetSyncTransportState(syncer::SyncService::TransportState state);
+
   // Called by HistoryBackend when database error is reported through
   // DatabaseErrorCallback.
   void OnDatabaseError();
@@ -82,6 +87,15 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
   // Synchronously loads sync metadata from the HistorySyncMetadataDatabase and
   // passes it to the processor so that it can start tracking changes.
   void LoadMetadata();
+
+  // Whether local history changes should be sent to Sync ("committed") right
+  // now. This includes conditions like Sync being enabled, no error state, etc.
+  bool ShouldCommitRightNow() const;
+
+  // Checks various conditions on `visit_row` and the overall Sync state, and if
+  // all are fulfilled, sends changes corresponding to the new/updated visit(s)
+  // to Sync.
+  void MaybeCommit(const VisitRow& visit_row);
 
   // Queries the redirect chain ending in `final_visit` from the HistoryBackend,
   // and creates the corresponding EntityData(s). Typically returns a single
@@ -105,6 +119,10 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
                              const sync_pb::HistorySpecifics& specifics);
 
   // Untracks all entities from the processor, and clears their (persisted)
+  // metadata.
+  void UntrackAndClearMetadataForAllEntities();
+
+  // Untracks all entities from the processor, and clears their (persisted)
   // metadata, except for entities that are "unsynced", i.e. that are waiting to
   // be committed.
   void UntrackAndClearMetadataForSyncedEntities();
@@ -116,7 +134,15 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
 
   // A non-owning pointer to the backend, which we're syncing local changes from
   // and sync changes to. Never null.
-  const raw_ptr<HistoryBackendForSync> history_backend_;
+  const raw_ptr<HistoryBackendForSync, DanglingUntriaged> history_backend_;
+
+  // The state of Sync as a whole (not necessarily for this data type). Data
+  // will only be sent to the Sync server if this is *not* DISABLED or PAUSED.
+  // Initially, the Sync state is not known, but DISABLED is a safe default
+  // assumption. This gets set to a proper value early during profile
+  // startup.
+  syncer::SyncService::TransportState sync_transport_state_ =
+      syncer::SyncService::TransportState::DISABLED;
 
   // Whether we're currently processing changes from the syncer. While this is
   // true, we ignore any local url changes, since we triggered them.
@@ -124,7 +150,8 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
 
   // A non-owning pointer to the database, which is for storing sync metadata
   // and state. Can be null in case of unrecoverable database errors.
-  raw_ptr<HistorySyncMetadataDatabase> sync_metadata_database_;
+  raw_ptr<HistorySyncMetadataDatabase, DanglingUntriaged>
+      sync_metadata_database_;
 
   // HistoryBackend uses SequencedTaskRunner, so this makes sure
   // HistorySyncBridge is used on the correct sequence.

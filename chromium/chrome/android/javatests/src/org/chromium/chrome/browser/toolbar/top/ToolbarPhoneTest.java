@@ -56,9 +56,10 @@ import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
@@ -322,6 +323,8 @@ public class ToolbarPhoneTest {
                 (LocationBarCoordinator) mToolbar.getLocationBar();
         ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
         mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
+        View statusViewBackground =
+                mActivityTestRule.getActivity().findViewById(R.id.location_bar_status_icon_bg);
 
         // Focus on the Omnibox
         mOmnibox.requestFocus();
@@ -332,18 +335,21 @@ public class ToolbarPhoneTest {
         });
         verify(mLocationbarBackgroundDrawable)
                 .setTint(locationBarCoordinator.getDropdownBackgroundColor(false /*isIncognito*/));
+        assertEquals(statusViewBackground.getVisibility(), View.INVISIBLE);
 
         // Scroll the dropdown
         TestThreadUtils.runOnUiThreadBlocking(() -> { mToolbar.onSuggestionDropdownScroll(); });
         verify(mLocationbarBackgroundDrawable)
                 .setTint(ChromeColors.getSurfaceColor(
                         mActivityTestRule.getActivity(), R.dimen.toolbar_text_box_elevation));
+        assertEquals(statusViewBackground.getVisibility(), View.VISIBLE);
 
         // Scroll the dropdown back to the top
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { mToolbar.onSuggestionDropdownOverscrolledToTop(); });
         verify(mLocationbarBackgroundDrawable, atLeastOnce())
                 .setTint(locationBarCoordinator.getDropdownBackgroundColor(false /*isIncognito*/));
+        assertEquals(statusViewBackground.getVisibility(), View.INVISIBLE);
 
         // Clear focus on the Omnibox
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -394,7 +400,11 @@ public class ToolbarPhoneTest {
             cta.findViewById(org.chromium.chrome.tab_ui.R.id.tab_switcher_button).performClick();
         });
 
-        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        // When the Start surface refactoring is enabled, the ToolbarPhone is shown on the grid tab
+        // switcher rather than the Start surface toolbar.
+        if (!TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(cta)) {
+            CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        }
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
         CriteriaHelper.pollUiThread(() -> {
             RecyclerView tabList = cta.findViewById(R.id.tab_list_view);
@@ -431,7 +441,11 @@ public class ToolbarPhoneTest {
             Assert.assertTrue(mToolbar.getVisibility() == View.VISIBLE);
         }
 
-        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        // When the Start surface refactoring is enabled, the ToolbarPhone is shown on the grid tab
+        // switcher rather than the Start surface toolbar.
+        if (!TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(cta)) {
+            CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        }
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
         CriteriaHelper.pollUiThread(() -> {
             RecyclerView tabList = cta.findViewById(R.id.tab_list_view);

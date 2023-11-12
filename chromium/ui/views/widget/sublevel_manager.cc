@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/views/widget/sublevel_manager.h"
+
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/ranges/algorithm.h"
 #include "ui/views/widget/native_widget_private.h"
-#include "ui/views/widget/sublevel_manager.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -39,8 +40,15 @@ int SublevelManager::GetSublevel() const {
 }
 
 void SublevelManager::EnsureOwnerSublevel() {
-  if (owner_->parent()) {
-    owner_->parent()->GetSublevelManager()->OrderChildWidget(owner_);
+  // Walk through the path to the root and ensure sublevel on every widget
+  // on the path. This is to work around the behavior on some platforms
+  // where showing an activatable widget brings its ancestors to the front.
+  Widget* parent = owner_->parent();
+  Widget* child = owner_;
+  while (parent && parent->GetSublevelManager()->IsTrackingChildWidget(child)) {
+    parent->GetSublevelManager()->OrderChildWidget(child);
+    child = parent;
+    parent = parent->parent();
   }
 }
 
@@ -51,10 +59,15 @@ void SublevelManager::OrderChildWidget(Widget* child) {
   ui::ZOrderLevel child_level = child->GetZOrderLevel();
   auto insert_it = FindInsertPosition(child);
 
-  // Find the closest previous widget at the same level.
-  auto prev_it = base::ranges::find(std::make_reverse_iterator(insert_it),
-                                    std::crend(children_), child_level,
-                                    &Widget::GetZOrderLevel);
+  // Stacking above an invisible widget is a no-op on Mac. Therefore, find only
+  // visible ones.
+  auto find_visible_widget_of_same_level = [child_level](Widget* widget) {
+    return widget->IsVisible() && widget->GetZOrderLevel() == child_level;
+  };
+
+  auto prev_it = base::ranges::find_if(std::make_reverse_iterator(insert_it),
+                                       std::crend(children_),
+                                       find_visible_widget_of_same_level);
 
   if (prev_it == children_.rend()) {
     // x11 bug: stacking above the base `owner_` will cause `child` to become
@@ -62,8 +75,8 @@ void SublevelManager::OrderChildWidget(Widget* child) {
     // position `child` relative to the next child widget.
 
     // Find the closest next widget at the same level.
-    auto next_it = base::ranges::find(insert_it, std::cend(children_),
-                                      child_level, &Widget::GetZOrderLevel);
+    auto next_it = base::ranges::find_if(insert_it, std::cend(children_),
+                                         find_visible_widget_of_same_level);
 
     // Put `child` below `next_it`.
     if (next_it != std::end(children_)) {
@@ -81,6 +94,10 @@ void SublevelManager::OnWidgetDestroying(Widget* owner) {
   DCHECK(owner == owner_);
   if (owner->parent())
     owner->parent()->GetSublevelManager()->UntrackChildWidget(owner);
+}
+
+bool SublevelManager::IsTrackingChildWidget(Widget* child) {
+  return base::ranges::find(children_, child) != children_.end();
 }
 
 SublevelManager::ChildIterator SublevelManager::FindInsertPosition(

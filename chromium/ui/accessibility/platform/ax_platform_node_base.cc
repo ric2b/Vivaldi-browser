@@ -4,7 +4,6 @@
 
 #include "ui/accessibility/platform/ax_platform_node_base.h"
 
-#include <algorithm>
 #include <iomanip>
 #include <limits>
 #include <set>
@@ -14,6 +13,7 @@
 
 #include "base/no_destructor.h"
 #include "base/numerics/checked_math.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -839,7 +839,7 @@ bool AXPlatformNodeBase::IsStructuredAnnotation() const {
   // The node represents a structured annotation if it can trace back to a
   // target node that is being annotated.
   std::set<AXPlatformNode*> reverse_relations =
-      GetDelegate()->GetReverseRelations(
+      GetDelegate()->GetSourceNodesForReverseRelations(
           ax::mojom::IntListAttribute::kDetailsIds);
 
   return !reverse_relations.empty();
@@ -1138,14 +1138,20 @@ bool AXPlatformNodeBase::IsInvisibleOrIgnored() const {
   if (!GetData().IsInvisibleOrIgnored())
     return false;
 
-  if (HasState(ax::mojom::State::kFocusable))
-    return !IsFocused();
+  // Never marked a focused node as invisible or ignored, otherwise screen
+  // reader users will not hear an announcement for it when it receives focus.
+  if (IsFocused())
+    return false;
 
   return !HasVisibleCaretOrSelection();
 }
 
 bool AXPlatformNodeBase::IsFocused() const {
   return delegate_ && FromNativeViewAccessible(delegate_->GetFocus()) == this;
+}
+
+bool AXPlatformNodeBase::IsFocusable() const {
+  return delegate_ && delegate_->IsFocusable();
 }
 
 bool AXPlatformNodeBase::IsScrollable() const {
@@ -1247,11 +1253,11 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
         from = "table-caption";
         break;
       case ax::mojom::DescriptionFrom::kTitle:
-      case ax::mojom::DescriptionFrom::kPopupElement:
+      case ax::mojom::DescriptionFrom::kPopoverAttribute:
         // The following types of markup are mapped to "tooltip":
         // * The title attribute.
-        // * A related popup=hint related via popuptoggletarget /
-        // popupshowtarget / popuphidetarget.
+        // * A related popover=something related via popovertoggletarget /
+        // popovershowtarget / popoverhidetarget.
         // * A tooltip related via aria-describedby (see kRelatedElement above).
         from = "tooltip";
         break;
@@ -1722,8 +1728,8 @@ int32_t AXPlatformNodeBase::GetHyperlinkIndexFromChild(
   if (hypertext_.hyperlinks.empty())
     return -1;
 
-  auto iterator = std::find(hypertext_.hyperlinks.begin(),
-                            hypertext_.hyperlinks.end(), child->GetUniqueId());
+  auto iterator =
+      base::ranges::find(hypertext_.hyperlinks, child->GetUniqueId());
   if (iterator == hypertext_.hyperlinks.end())
     return -1;
 
@@ -1925,6 +1931,12 @@ AXPlatformNodeBase::AXPosition AXPlatformNodeBase::HypertextOffsetToEndpoint(
   DCHECK_GE(hypertext_offset, 0);
   DCHECK_LT(hypertext_offset, static_cast<int>(GetHypertext().size()));
 
+  if (IsLeaf()) {
+    if (IsText())
+      return GetDelegate()->CreateTextPositionAt(hypertext_offset);
+    return GetDelegate()->CreatePositionAt(hypertext_offset);
+  }
+
   int current_hypertext_offset = hypertext_offset;
   for (auto child_iter = AXPlatformNodeChildrenBegin();
        child_iter != AXPlatformNodeChildrenEnd() &&
@@ -1937,9 +1949,8 @@ AXPlatformNodeBase::AXPosition AXPlatformNodeBase::HypertextOffsetToEndpoint(
 
     if (current_hypertext_offset < child_text_len) {
       int endpoint_offset = child_text_len - current_hypertext_offset;
-      if (child_iter->IsText()) {
+      if (child_iter->IsText())
         return child_iter->GetDelegate()->CreateTextPositionAt(endpoint_offset);
-      }
       return child_iter->GetDelegate()->CreatePositionAt(endpoint_offset);
     }
     current_hypertext_offset -= child_text_len;
@@ -2294,7 +2305,8 @@ ui::TextAttributeList AXPlatformNodeBase::ComputeTextAttributes() const {
 
   // We include list markers for now, but there might be other objects that are
   // auto generated.
-  // TODO(nektar): Compute what objects are auto-generated in Blink.
+  // TODO(nektar): Compute what objects are auto-generated in Blink and
+  // TODO(1278249): add OCRed text from Screen AI Service too.
   if (GetRole() == ax::mojom::Role::kListMarker)
     attributes.push_back(std::make_pair("auto-generated", "true"));
 

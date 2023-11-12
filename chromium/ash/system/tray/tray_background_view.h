@@ -96,8 +96,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // showing.
   virtual void CloseBubble() {}
 
-  // Shows the associated tray bubble if one exists. |show_by_click| indicates
-  // whether the showing operation is initiated by mouse or gesture click.
+  // Shows the associated tray bubble if one exists.
   virtual void ShowBubble();
 
   // Calculates the ideal bounds that this view should have depending on the
@@ -115,6 +114,10 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
   // Called when the anchor (tray or bubble) may have moved or changed.
   virtual void AnchorUpdated() {}
+
+  // Called after the tray has been activated, and `PerformAction()` has been
+  // called.
+  virtual void OnTrayActivated(const ui::Event& event);
 
   // Called from GetAccessibleNodeData, must return a valid accessible name.
   virtual std::u16string GetAccessibleNameForTray() = 0;
@@ -163,7 +166,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   gfx::Rect GetBackgroundBounds() const;
 
   // ActionableView:
-  bool PerformAction(const ui::Event& event) override;
+  bool PerformAction(const ui::Event& event) final;
 
   // Sets whether the tray item should be shown by default (e.g. it is
   // activated). The effective visibility of the tray item is determined by the

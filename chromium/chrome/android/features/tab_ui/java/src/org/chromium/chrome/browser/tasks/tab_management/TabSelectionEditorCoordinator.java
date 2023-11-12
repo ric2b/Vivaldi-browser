@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.Card
 import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.OTHERS;
 import static org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorProperties.IS_VISIBLE;
 
+import android.app.Activity;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -16,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordUserAction;
@@ -25,6 +27,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
+import org.chromium.chrome.browser.tasks.tab_management.TabListRecyclerView.RecyclerViewPosition;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -50,9 +54,16 @@ class TabSelectionEditorCoordinator {
          * Handles the reset event.
          * @param tabs List of {@link Tab}s to reset.
          * @param preSelectedCount First {@code preSelectedCount} {@code tabs} are pre-selected.
+         * @param recyclerViewPosition The state to preserve scroll position of the recycler view.
          * @param quickMode whether to use quick mode.
          */
-        void resetWithListOfTabs(@Nullable List<Tab> tabs, int preSelectedCount, boolean quickMode);
+        void resetWithListOfTabs(@Nullable List<Tab> tabs, int preSelectedCount,
+                @Nullable RecyclerViewPosition recyclerViewPosition, boolean quickMode);
+
+        /**
+         * Handles syncing the position of the outer {@link TabListCoordinator}'s RecyclerView.
+         */
+        void syncRecyclerViewPosition();
 
         /**
          * Handles cleanup.
@@ -65,18 +76,14 @@ class TabSelectionEditorCoordinator {
      */
     interface TabSelectionEditorController extends BackPressHandler {
         /**
-         * Shows the TabSelectionEditor with the given {@link Tab}s.
-         * @param tabs List of {@link Tab}s to show.
-         */
-        void show(List<Tab> tabs);
-
-        /**
          * Shows the TabSelectionEditor with the given {@Link Tab}s, and the first
          * {@code preSelectedTabCount} tabs being selected.
          * @param tabs List of {@link Tab}s to show.
          * @param preSelectedTabCount Number of selected {@link Tab}s.
+         * @param recyclerViewPosition The state to preserve scroll position of the recycler view.
          */
-        void show(List<Tab> tabs, int preSelectedTabCount);
+        void show(List<Tab> tabs, int preSelectedTabCount,
+                @Nullable RecyclerViewPosition recyclerViewPosition);
 
         /**
          * Hides the TabSelectionEditor.
@@ -150,7 +157,7 @@ class TabSelectionEditorCoordinator {
         }
     }
 
-    private final Context mContext;
+    private final Activity mActivity;
     private final ViewGroup mParentView;
     private final TabModelSelector mTabModelSelector;
     private final TabSelectionEditorLayout mTabSelectionEditorLayout;
@@ -159,15 +166,19 @@ class TabSelectionEditorCoordinator {
     private final PropertyModel mModel;
     private final PropertyModelChangeProcessor mTabSelectionEditorLayoutChangeProcessor;
     private final TabSelectionEditorMediator mTabSelectionEditorMediator;
+    private final Callback<RecyclerViewPosition> mClientTabListRecyclerViewPositionSetter;
     private MultiThumbnailCardProvider mMultiThumbnailCardProvider;
 
-    public TabSelectionEditorCoordinator(Context context, ViewGroup parentView,
+    public TabSelectionEditorCoordinator(Activity activity, ViewGroup parentView,
             TabModelSelector tabModelSelector, TabContentManager tabContentManager,
-            @TabListMode int mode, ViewGroup rootView, boolean displayGroups) {
+            Callback<RecyclerViewPosition> clientTabListRecyclerViewPositionSetter,
+            @TabListMode int mode, ViewGroup rootView, boolean displayGroups,
+            SnackbarManager snackbarManager) {
         try (TraceEvent e = TraceEvent.scoped("TabSelectionEditorCoordinator.constructor")) {
-            mContext = context;
+            mActivity = activity;
             mParentView = parentView;
             mTabModelSelector = tabModelSelector;
+            mClientTabListRecyclerViewPositionSetter = clientTabListRecyclerViewPositionSetter;
             assert mode == TabListCoordinator.TabListMode.GRID
                     || mode == TabListCoordinator.TabListMode.LIST;
             assert !displayGroups
@@ -176,7 +187,7 @@ class TabSelectionEditorCoordinator {
                                     ChromeFeatureList.TAB_SELECTION_EDITOR_V2));
 
             mTabSelectionEditorLayout =
-                    LayoutInflater.from(context)
+                    LayoutInflater.from(activity)
                             .inflate(R.layout.tab_selection_editor_layout, parentView, false)
                             .findViewById(R.id.selectable_list);
 
@@ -187,7 +198,7 @@ class TabSelectionEditorCoordinator {
             // TODO(ckitagawa): Lazily instantiate the TabSelectionEditorCoordinator. When doing so,
             // the Coordinator hosting the TabSelectionEditorCoordinator could share and reconfigure
             // its TabListCoordinator to work with the editor as an optimization.
-            mTabListCoordinator = new TabListCoordinator(mode, context, mTabModelSelector,
+            mTabListCoordinator = new TabListCoordinator(mode, activity, mTabModelSelector,
                     thumbnailProvider, titleProvider, displayGroups, null, null,
                     TabProperties.UiType.SELECTABLE, this::getSelectionDelegate, null,
                     mTabSelectionEditorLayout, false, COMPONENT_NAME, rootView, null);
@@ -236,10 +247,27 @@ class TabSelectionEditorCoordinator {
 
             ResetHandler resetHandler = new ResetHandler() {
                 @Override
-                public void resetWithListOfTabs(
-                        @Nullable List<Tab> tabs, int preSelectedCount, boolean quickMode) {
+                public void resetWithListOfTabs(@Nullable List<Tab> tabs, int preSelectedCount,
+                        @Nullable RecyclerViewPosition recyclerViewPosition, boolean quickMode) {
                     TabSelectionEditorCoordinator.this.resetWithListOfTabs(
                             tabs, preSelectedCount, quickMode);
+                    if (!ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_SELECTION_EDITOR_V2)
+                            || recyclerViewPosition == null) {
+                        return;
+                    }
+
+                    mTabListCoordinator.setRecyclerViewPosition(recyclerViewPosition);
+                }
+
+                @Override
+                public void syncRecyclerViewPosition() {
+                    if (!ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_SELECTION_EDITOR_V2)
+                            || mClientTabListRecyclerViewPositionSetter == null) {
+                        return;
+                    }
+
+                    mClientTabListRecyclerViewPositionSetter.onResult(
+                            mTabListCoordinator.getRecyclerViewPosition());
                 }
 
                 @Override
@@ -248,9 +276,12 @@ class TabSelectionEditorCoordinator {
                     mTabListCoordinator.softCleanup();
                 }
             };
-            mTabSelectionEditorMediator = new TabSelectionEditorMediator(mContext,
+            // TODO(crbug.com/1393679): Refactor SnackbarManager to support multiple overridden
+            // parentViews in a stack to avoid contention and using new snackbar managers.
+            mTabSelectionEditorMediator = new TabSelectionEditorMediator(mActivity,
                     mTabModelSelector, mTabListCoordinator, resetHandler, mModel,
-                    mSelectionDelegate, mTabSelectionEditorLayout.getToolbar(), displayGroups);
+                    mSelectionDelegate, mTabSelectionEditorLayout.getToolbar(), displayGroups,
+                    snackbarManager, mTabSelectionEditorLayout);
         }
     }
 
@@ -290,7 +321,7 @@ class TabSelectionEditorCoordinator {
             boolean displayGroups, TabContentManager tabContentManager) {
         if (displayGroups) {
             mMultiThumbnailCardProvider =
-                    new MultiThumbnailCardProvider(mContext, tabContentManager, mTabModelSelector);
+                    new MultiThumbnailCardProvider(mActivity, tabContentManager, mTabModelSelector);
             return mMultiThumbnailCardProvider;
         }
         return (tabId, thumbnailSize, callback, forceUpdate, writeBack, isSelected) -> {

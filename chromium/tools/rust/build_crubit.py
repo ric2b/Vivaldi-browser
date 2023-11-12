@@ -17,6 +17,7 @@ import hashlib
 import os
 import pipes
 import shutil
+import stat
 import string
 import subprocess
 import sys
@@ -31,9 +32,20 @@ sys.path.append(
 from update import (CLANG_REVISION, CLANG_SUB_REVISION, LLVM_BUILD_DIR)
 from build import (LLVM_BOOTSTRAP_INSTALL_DIR, MaybeDownloadHostGcc)
 
-from update_rust import (CHROMIUM_DIR, CRUBIT_REVISION, THIRD_PARTY_DIR)
+from update_rust import (CHROMIUM_DIR, CRUBIT_REVISION, THIRD_PARTY_DIR,
+                         BUILD_MAC_ARM)
 
-BAZEL_EXE = os.path.join(CHROMIUM_DIR, 'tools', 'bazel', 'bazel')
+BAZEL_DIR = os.path.join(CHROMIUM_DIR, 'tools', 'bazel')
+if sys.platform == 'darwin':
+    if BUILD_MAC_ARM or platform.machine() == 'arm64':
+        BAZEL_EXE = os.path.join(BAZEL_DIR, 'mac-arm64', 'bazel')
+    else:
+        BAZEL_EXE = os.path.join(BAZEL_DIR, 'mac-amd64', 'bazel')
+elif sys.platform == 'win32':
+    BAZEL_EXE = os.path.join(BAZEL_DIR, 'windows-amd64', 'bazel.exe')
+else:
+    BAZEL_EXE = os.path.join(BAZEL_DIR, 'linux-amd64', 'bazel')
+
 CRUBIT_SRC_DIR = os.path.join(THIRD_PARTY_DIR, 'crubit', 'src')
 
 
@@ -50,7 +62,7 @@ def RunCommand(command, env=None, cwd=None, fail_hard=True):
 
 def CheckoutCrubit(commit, dir):
     """Checkout the Crubit repo at a certain git commit in dir. Any local
-  modifications in dir will be lost."""
+    modifications in dir will be lost."""
 
     print('Checking out crubit repo %s into %s' % (commit, dir))
 
@@ -121,12 +133,43 @@ def BuildCrubit(gcc_toolchain_path):
     RunCommand(args + extra_args, env=env, cwd=CRUBIT_SRC_DIR)
 
 
+def InstallCrubit(install_dir):
+    assert os.path.isdir(install_dir)
+
+    print('Installing crubit binaries to %s' % install_dir)
+
+    BAZEL_BIN_DIR = os.path.join(CRUBIT_SRC_DIR, "bazel-bin")
+    SOURCE_PATH = os.path.join(BAZEL_BIN_DIR, "rs_bindings_from_cc",
+                               "rs_bindings_from_cc_impl")
+    TARGET_PATH = os.path.join(install_dir, "rs_bindings_from_cc")
+    shutil.copyfile(SOURCE_PATH, TARGET_PATH)
+
+    # Change from r-xr-xr-x to rwxrwxr-x, so that future copies will work fine.
+    os.chmod(TARGET_PATH,
+             stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH)
+
+
 def CleanBazel():
     RunCommand([BAZEL_EXE, "clean", "--expunge"], cwd=CRUBIT_SRC_DIR)
 
 
 def ShutdownBazel():
     RunCommand([BAZEL_EXE, "shutdown"], cwd=CRUBIT_SRC_DIR)
+
+
+def WritableDir(d):
+    """ Utility function to use as `argparse` `type` to verify that the argument
+    is a writeable dir (and resolve it as an absolute path).  """
+
+    try:
+        real_d = os.path.realpath(d)
+    except Exception as e:
+        raise ArgumentTypeError(f"realpath failed: {e}")
+    if not os.path.isdir(real_d):
+        raise ArgumentTypeError(f"Not a directory: {d}")
+    if not os.access(real_d, os.W_OK):
+        raise ArgumentTypeError(f"Cannot write to: {d}")
+    return real_d
 
 
 def main():
@@ -137,22 +180,37 @@ def main():
                         action='count',
                         help='run subcommands with verbosity')
     parser.add_argument(
+        '--install-to',
+        type=WritableDir,
+        help='skip Crubit git checkout. Useful for trying local changes')
+    parser.add_argument(
+        '--skip-clean',
+        action='store_true',
+        help='skip cleanup. Useful for retrying/rebuilding local changes')
+    parser.add_argument(
         '--skip-checkout',
         action='store_true',
         help='skip Crubit git checkout. Useful for trying local changes')
     args, rest = parser.parse_known_args()
 
-    # Fetch GCC package to build against same libstdc++ as Clang. This function
-    # will only download it if necessary.
     args.gcc_toolchain = None
-    MaybeDownloadHostGcc(args)
+    if sys.platform.startswith('linux'):
+        # Fetch GCC package to build against same libstdc++ as Clang. This
+        # function will only download it if necessary, and it will set the
+        # `args.gcc_toolchain` if so.
+        MaybeDownloadHostGcc(args)
 
     if not args.skip_checkout:
         CheckoutCrubit(CRUBIT_REVISION, CRUBIT_SRC_DIR)
 
     try:
-        CleanBazel()
+        if not args.skip_clean:
+            CleanBazel()
+
         BuildCrubit(args.gcc_toolchain)
+
+        if args.install_to:
+            InstallCrubit(args.install_to)
     finally:
         ShutdownBazel()
 

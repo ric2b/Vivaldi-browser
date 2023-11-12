@@ -23,6 +23,6 @@ ChromiumProfileLock::ChromiumProfileLock(const base::FilePath& path) {
 ChromiumProfileLock::~ChromiumProfileLock() {
   // Because this destructor happens in first run on the profile import thread,
   // with no UI to jank, it's ok to allow deletion of the lock here.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::VivaldiScopedAllowBlocking allow_blocking;
   Unlock();
 }

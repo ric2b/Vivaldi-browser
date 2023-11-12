@@ -20,13 +20,26 @@ class ProxyConfigDictionary;
 namespace extensions {
 namespace proxy_api_helpers {
 
+// The scheme for which to use a manually specified proxy, not of the proxy URI
+// itself.
+enum {
+  SCHEME_ALL = 0,
+  SCHEME_HTTP,
+  SCHEME_HTTPS,
+  SCHEME_FTP,
+  SCHEME_FALLBACK,
+  SCHEME_MAX = SCHEME_FALLBACK  // Keep this value up to date.
+};
+
+// The names of the JavaScript properties to extract from the proxy_rules.
+// These must be kept in sync with the SCHEME_* constants.
+extern const char* const field_name[];
+
 // Conversion between PAC scripts and data-encoding URLs containing these
 // PAC scripts. Data-encoding URLs consist of a data:// prefix, a mime-type and
-// base64 encoded text. The functions return true in case of success.
-// CreatePACScriptFromDataURL should only be called on data-encoding urls
-// created with CreateDataURLFromPACScript.
-bool CreateDataURLFromPACScript(const std::string& pac_script,
-                                std::string* pac_script_url_base64_encoded);
+// base64 encoded text. CreatePACScriptFromDataURL should only be called on
+// data-encoding urls created with CreateDataURLFromPACScript.
+std::string CreateDataURLFromPACScript(const std::string& pac_script);
 bool CreatePACScriptFromDataURL(
     const std::string& pac_script_url_base64_encoded,
     std::string* pac_script);
@@ -49,28 +62,27 @@ bool CreatePACScriptFromDataURL(
 //
 // The parameter |bad_message| is passed to simulate the behavior of
 // EXTENSION_FUNCTION_VALIDATE. It is never NULL.
-bool GetProxyModeFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetProxyModeFromExtensionPref(const base::Value::Dict& proxy_config,
                                    ProxyPrefs::ProxyMode* out,
                                    std::string* error,
                                    bool* bad_message);
-bool GetPacMandatoryFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacMandatoryFromExtensionPref(const base::Value::Dict& proxy_config,
                                       bool* out,
                                       std::string* error,
                                       bool* bad_message);
-bool GetPacUrlFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacUrlFromExtensionPref(const base::Value::Dict& proxy_config,
                                 std::string* out,
                                 std::string* error,
                                 bool* bad_message);
-bool GetPacDataFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetPacDataFromExtensionPref(const base::Value::Dict& proxy_config,
                                  std::string* out,
                                  std::string* error,
                                  bool* bad_message);
-bool GetProxyRulesStringFromExtensionPref(
-    const base::DictionaryValue* proxy_config,
-    std::string* out,
-    std::string* error,
-    bool* bad_message);
-bool GetBypassListFromExtensionPref(const base::DictionaryValue* proxy_config,
+bool GetProxyRulesStringFromExtensionPref(const base::Value::Dict& proxy_config,
+                                          std::string* out,
+                                          std::string* error,
+                                          bool* bad_message);
+bool GetBypassListFromExtensionPref(const base::Value::Dict& proxy_config,
                                     std::string* out,
                                     std::string* error,
                                     bool* bad_message);
@@ -78,7 +90,7 @@ bool GetBypassListFromExtensionPref(const base::DictionaryValue* proxy_config,
 // Creates and returns a ProxyConfig dictionary (as defined in the extension
 // API) from the given parameters. Ownership is passed to the caller.
 // Depending on the value of |mode_enum|, several of the strings may be empty.
-std::unique_ptr<base::Value> CreateProxyConfigDict(
+absl::optional<base::Value::Dict> CreateProxyConfigDict(
     ProxyPrefs::ProxyMode mode_enum,
     bool pac_mandatory,
     const std::string& pac_url,
@@ -92,7 +104,7 @@ std::unique_ptr<base::Value> CreateProxyConfigDict(
 // |default_scheme| is the default scheme that is filled in, in case the
 // caller did not pass one.
 // Returns true if successful and sets |error| otherwise.
-bool GetProxyServer(const base::DictionaryValue* proxy_server,
+bool GetProxyServer(const base::Value::Dict& proxy_server,
                     net::ProxyServer::Scheme default_scheme,
                     net::ProxyServer* out,
                     std::string* error,

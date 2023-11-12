@@ -49,7 +49,7 @@ KeyedService* BuildServiceInstanceAsh(content::BrowserContext* context) {
   if (!policy_certificate_provider)
     return nullptr;
 
-  if (chromeos::ProfileHelper::Get()->IsSigninProfile(profile)) {
+  if (ash::ProfileHelper::Get()->IsSigninProfile(profile)) {
     return new PolicyCertService(profile, policy_certificate_provider,
                                  /*may_use_profile_wide_trust_anchors=*/false);
   }
@@ -57,14 +57,10 @@ KeyedService* BuildServiceInstanceAsh(content::BrowserContext* context) {
   // Don't allow policy-provided certificates for "special" Profiles except the
   // one listed above.
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(
-          profile->GetOriginalProfile());
+  const user_manager::User* user = ash::ProfileHelper::Get()->GetUserByProfile(
+      profile->GetOriginalProfile());
   if (!user)
     return nullptr;
-
-  PolicyCertServiceFactory::MigrateLocalStatePrefIntoProfilePref(
-      user->GetAccountId().GetUserEmail(), profile);
 
   // Only allow trusted policy-provided certificates for non-guest primary
   // users. Guest users don't have user policy, but set
@@ -96,31 +92,6 @@ KeyedService* BuildServiceInstanceLacros(content::BrowserContext* context) {
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 }  // namespace
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-// static
-bool PolicyCertServiceFactory::MigrateLocalStatePrefIntoProfilePref(
-    const std::string& user_email,
-    Profile* profile) {
-  base::Value user_email_value(user_email);
-  const base::Value::List& list =
-      g_browser_process->local_state()->GetList(prefs::kUsedPolicyCertificates);
-
-  if (base::Contains(list, user_email_value)) {
-    profile->GetPrefs()->SetBoolean(prefs::kUsedPolicyCertificates, true);
-    return PolicyCertServiceFactory::ClearUsedPolicyCertificates(user_email);
-  }
-  return false;
-}
-
-// static
-bool PolicyCertServiceFactory::ClearUsedPolicyCertificates(
-    const std::string& user_email) {
-  ScopedListPrefUpdate update(g_browser_process->local_state(),
-                              prefs::kUsedPolicyCertificates);
-  return (update->EraseValue(base::Value(user_email)) > 0);
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // static
 PolicyCertService* PolicyCertServiceFactory::GetForProfile(Profile* profile) {

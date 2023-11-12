@@ -9,16 +9,17 @@
 
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
+#include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 
-namespace url {
-class Origin;
-}  // namespace url
+namespace attribution_reporting {
+class SuitableOrigin;
+}  // namespace attribution_reporting
 
 namespace content {
 
+class AttributionDebugReport;
 class AttributionTrigger;
 class CreateReportResult;
 
@@ -38,6 +39,7 @@ class AttributionObserver : public base::CheckedObserver {
 
   // Called when a source is registered, regardless of success.
   virtual void OnSourceHandled(const StorableSource& source,
+                               absl::optional<uint64_t> cleared_debug_key,
                                StorableSource::Result result) {}
 
   // Called when a report is sent, regardless of success, but not for attempts
@@ -46,15 +48,23 @@ class AttributionObserver : public base::CheckedObserver {
                             bool is_debug_report,
                             const SendResult& info) {}
 
+  // Called when a verbose debug report is sent, regardless of success.
+  // If `status` is positive, it is the HTTP response code. Otherwise, it is the
+  // network error.
+  virtual void OnDebugReportSent(const AttributionDebugReport&,
+                                 int status,
+                                 base::Time) {}
+
   // Called when a trigger is registered, regardless of success.
   virtual void OnTriggerHandled(const AttributionTrigger& trigger,
+                                absl::optional<uint64_t> cleared_debug_key,
                                 const CreateReportResult& result) {}
 
   // Called when the source header registration json parser fails.
   virtual void OnFailedSourceRegistration(
       const std::string& header_value,
       base::Time source_time,
-      const url::Origin& reporting_origin,
+      const attribution_reporting::SuitableOrigin& reporting_origin,
       attribution_reporting::mojom::SourceRegistrationError) {}
 };
 

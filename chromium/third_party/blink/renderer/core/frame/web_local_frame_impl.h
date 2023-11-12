@@ -62,6 +62,8 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_observer.h"
 #include "third_party/blink/public/web/web_navigation_control.h"
+#include "third_party/blink/public/web/web_performance_metrics_for_nested_contexts.h"
+#include "third_party/blink/public/web/web_performance_metrics_for_reporting.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/exported/web_input_method_controller_impl.h"
@@ -90,7 +92,8 @@ class WebDevToolsAgentImpl;
 class WebFrameWidgetImpl;
 class WebLocalFrameClient;
 class WebNode;
-class WebPerformance;
+class WebPerformanceMetricsForNestedContexts;
+class WebPerformanceMetricsForReporting;
 class WebRemoteFrameImpl;
 class WebSpellCheckPanelHostClient;
 class WebView;
@@ -315,7 +318,10 @@ class CORE_EXPORT WebLocalFrameImpl final
                            bool include_linked_destinations,
                            bool skip_accelerated_content) override;
   bool ShouldSuppressKeyboardForFocusedElement() override;
-  WebPerformance Performance() const override;
+  WebPerformanceMetricsForReporting PerformanceMetricsForReporting()
+      const override;
+  WebPerformanceMetricsForNestedContexts PerformanceMetricsForNestedContexts()
+      const override;
   bool IsAdFrame() const override;
   bool IsAdScriptInStack() const override;
   void SetAdEvidence(const FrameAdEvidence& ad_evidence) override;
@@ -370,9 +376,13 @@ class CORE_EXPORT WebLocalFrameImpl final
       bool is_client_redirect,
       bool has_transient_user_activation,
       const WebSecurityOrigin& initiator_origin,
-      bool is_browser_initiated) override;
+      bool is_browser_initiated,
+      absl::optional<scheduler::TaskAttributionId>
+          soft_navigation_heuristics_task_id) override;
   void SetIsNotOnInitialEmptyDocument() override;
   bool IsOnInitialEmptyDocument() override;
+  void WillPotentiallyStartOutermostMainFrameNavigation(
+      const WebURL&) const override;
   bool WillStartNavigation(const WebNavigationInfo&) override;
   void DidDropNavigation() override;
   void DownloadURL(
@@ -383,8 +393,6 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   void SetNotRestoredReasons(
       const mojom::BackForwardCacheNotRestoredReasonsPtr&) override;
-  // Returns if the current frame's NotRestoredReasons has any blocking reasons.
-  bool HasBlockingReasons() override;
 
   const mojom::blink::BackForwardCacheNotRestoredReasonsPtr&
   GetNotRestoredReasons();
@@ -423,9 +431,10 @@ class CORE_EXPORT WebLocalFrameImpl final
       WebLocalFrameClient*,
       InterfaceRegistry*,
       const LocalFrameToken& frame_token,
-      WebFrame*,
+      WebFrame* previous_frame,
       const FramePolicy&,
-      const WebString& name);
+      const WebString& name,
+      WebView* web_view);
 
   WebLocalFrameImpl(base::PassKey<WebLocalFrameImpl>,
                     mojom::blink::TreeScopeType,
@@ -543,7 +552,6 @@ class CORE_EXPORT WebLocalFrameImpl final
   void RemoveObserver(WebLocalFrameObserver* observer);
 
   void WillSendSubmitEvent(const WebFormElement& form);
-  void DidChangeMobileFriendliness(const MobileFriendliness& mf);
 
  protected:
   // WebLocalFrame protected overrides:
@@ -551,6 +559,8 @@ class CORE_EXPORT WebLocalFrameImpl final
                                bool discard_duplicates) override;
 
   void AddInspectorIssueImpl(mojom::blink::InspectorIssueCode code) override;
+  void AddGenericIssueImpl(mojom::blink::GenericIssueErrorType error_type,
+                           int violating_node_id) override;
 
  private:
   friend LocalFrameClientImpl;
@@ -607,6 +617,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       const DocumentToken& document_token,
       std::unique_ptr<PolicyContainer> policy_container,
       const StorageKey& storage_key,
+      ukm::SourceId document_ukm_source_id,
       network::mojom::blink::WebSandboxFlags sandbox_flags =
           network::mojom::blink::WebSandboxFlags::kNone);
 

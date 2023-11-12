@@ -776,13 +776,16 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
     // If there is a popup, expand it and wait for it to appear.
     // If it's a list, it will simply click on the list.
     {
-      AccessibilityNotificationWaiter waiter(
-          shell()->web_contents(), ui::kAXModeComplete,
-          ax::mojom::Event::kChildrenChanged);
+      // Note: the kEndOfTextSignal actually represents the next step in the
+      // test, when a response is received from the SignalEndOfTest() call.
+      AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                             ui::kAXModeComplete,
+                                             ax::mojom::Event::kEndOfTest);
 
       ui::AXActionData action_data;
       action_data.action = ax::mojom::Action::kDoDefault;
       select->AccessibilityPerformAction(action_data);
+      GetManager()->SignalEndOfTest();
       ASSERT_TRUE(waiter.WaitForNotification());
     }
 
@@ -859,10 +862,10 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   }
 
   // Open popup.
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ax::mojom::Event::kChildrenChanged);
   {
+    AccessibilityNotificationWaiter waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::EXPANDED);
     ui::AXActionData action_data;
     action_data.action = ax::mojom::Action::kDoDefault;
     select->AccessibilityPerformAction(action_data);
@@ -901,6 +904,9 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   // Close the popup.
   {
+    AccessibilityNotificationWaiter waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::COLLAPSED);
     ui::AXActionData action_data;
     action_data.action = ax::mojom::Action::kDoDefault;
     select->AccessibilityPerformAction(action_data);
@@ -1779,8 +1785,10 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   EXPECT_EQ(first_button, root_accessibility_manager->GetFocus());
 }
 
-IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
-                       IFrameContentHadFocus_ThenRootDocumentGainedFocus) {
+IN_PROC_BROWSER_TEST_F(
+    CrossPlatformAccessibilityBrowserTest,
+    // TODO(crbug.com/1377745): Re-enable this test
+    DISABLED_IFrameContentHadFocus_ThenRootDocumentGainedFocus) {
   LoadInitialAccessibilityTreeFromHtmlFilePath(
       "/accessibility/html/iframe-padding.html");
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
@@ -1918,16 +1926,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 #endif
 
 #if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
-// TODO(crbug.com/1179057): Test is flaky on multiple platforms.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
-#define MAYBE_DocumentSelectionChangesAreNotBatched \
-  DISABLED_DocumentSelectionChangesAreNotBatched
-#else
-#define MAYBE_DocumentSelectionChangesAreNotBatched \
-  DocumentSelectionChangesAreNotBatched
-#endif
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
-                       MAYBE_DocumentSelectionChangesAreNotBatched) {
+                       DocumentSelectionChangesAreNotBatched) {
   // Ensure that document selection changes are not batched, and occur faster
   // than once per kDelayForDeferredUpdatesAfterPageLoad.
   LoadInitialAccessibilityTreeFromHtml(R"HTML(
@@ -1974,15 +1974,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 #endif  // IS_FAST_BUILD
 
 #if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
-#define MAYBE_ActiveDescendantChangesAreNotBatched \
-  DISABLED_ActiveDescendantChangesAreNotBatched
-#else
-#define MAYBE_ActiveDescendantChangesAreNotBatched \
-  ActiveDescendantChangesAreNotBatched
-#endif
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
-                       MAYBE_ActiveDescendantChangesAreNotBatched) {
+                       ActiveDescendantChangesAreNotBatched) {
   // Ensure that active descendant changes are not batched, and occur faster
   // than once per kDelayForDeferredUpdatesAfterPageLoad.
   LoadInitialAccessibilityTreeFromHtml(R"HTML(

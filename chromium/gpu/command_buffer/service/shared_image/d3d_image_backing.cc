@@ -11,21 +11,19 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/trace_event/memory_dump_manager.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_image/skia_gl_image_representation.h"
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_bindings.h"
-#include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/scoped_restore_texture.h"
-#include "ui/gl/trace_util.h"
 
 #if BUILDFLAG(USE_DAWN) && BUILDFLAG(DAWN_ENABLE_BACKEND_OPENGLES)
 #include "gpu/command_buffer/service/shared_image/dawn_egl_image_representation.h"
@@ -67,12 +65,12 @@ viz::SharedImageFormat PlaneFormat(DXGI_FORMAT dxgi_format, size_t plane) {
   DCHECK_LT(plane, NumPlanes(dxgi_format));
   viz::ResourceFormat format;
   switch (dxgi_format) {
-    // TODO(crbug.com/1011555): P010 formats are not fully supported by Skia.
-    // Treat them the same as NV12 for the time being.
     case DXGI_FORMAT_NV12:
-    case DXGI_FORMAT_P010:
       // Y plane is accessed as R8 and UV plane is accessed as RG88 in D3D.
       format = plane == 0 ? viz::RED_8 : viz::RG_88;
+      break;
+    case DXGI_FORMAT_P010:
+      format = plane == 0 ? viz::R16_EXT : viz::RG16_EXT;
       break;
     case DXGI_FORMAT_B8G8R8A8_UNORM:
       format = viz::BGRA_8888;
@@ -88,6 +86,28 @@ viz::SharedImageFormat PlaneFormat(DXGI_FORMAT dxgi_format, size_t plane) {
       format = viz::BGRA_8888;
   }
   return viz::SharedImageFormat::SinglePlane(format);
+}
+
+WGPUTextureFormat DXGIToWGPUFormat(DXGI_FORMAT dxgi_format) {
+  switch (dxgi_format) {
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+      return WGPUTextureFormat_RGBA8Unorm;
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+      return WGPUTextureFormat_BGRA8Unorm;
+    case DXGI_FORMAT_R8_UNORM:
+      return WGPUTextureFormat_R8Unorm;
+    case DXGI_FORMAT_R8G8_UNORM:
+      return WGPUTextureFormat_RG8Unorm;
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+      return WGPUTextureFormat_RGBA16Float;
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+      return WGPUTextureFormat_RGB10A2Unorm;
+    case DXGI_FORMAT_NV12:
+      return WGPUTextureFormat_R8BG8Biplanar420Unorm;
+    default:
+      NOTREACHED();
+      return WGPUTextureFormat_Undefined;
+  }
 }
 
 gfx::Size PlaneSize(DXGI_FORMAT dxgi_format,
@@ -109,15 +129,29 @@ gfx::Size PlaneSize(DXGI_FORMAT dxgi_format,
   }
 }
 
-scoped_refptr<gles2::TexturePassthrough> CreateGLTexture(
+void CopyPlane(const uint8_t* source_memory,
+               size_t source_stride,
+               uint8_t* dest_memory,
+               size_t dest_stride,
+               viz::SharedImageFormat format,
+               const gfx::Size& size) {
+  int row_bytes = size.width() * BitsPerPixel(format) / 8;
+  libyuv::CopyPlane(source_memory, source_stride, dest_memory, dest_stride,
+                    row_bytes, size.height());
+}
+
+}  // namespace
+
+// static
+scoped_refptr<gles2::TexturePassthrough> D3DImageBacking::CreateGLTexture(
     viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-    GLenum texture_target = GL_TEXTURE_2D,
-    unsigned array_slice = 0u,
-    unsigned plane_index = 0u,
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain = nullptr) {
+    GLenum texture_target,
+    unsigned array_slice,
+    unsigned plane_index,
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain) {
   gl::GLApi* const api = gl::g_current_gl_context;
   gl::ScopedRestoreTexture scoped_restore(api, texture_target);
 
@@ -137,12 +171,12 @@ scoped_refptr<gles2::TexturePassthrough> CreateGLTexture(
   // The GL internal format can differ from the underlying swap chain or texture
   // format e.g. RGBA or RGB instead of BGRA or RED/RG for NV12 texture planes.
   // See EGL_ANGLE_d3d_texture_client_buffer spec for format restrictions.
-  const auto internal_format = viz::GLInternalFormat(format);
-  const auto data_type = viz::GLDataType(format);
+  const auto internal_format = GLInternalFormat(format);
+  const auto data_type = GLDataType(format);
   auto image = base::MakeRefCounted<gl::GLImageD3D>(
       size, internal_format, data_type, color_space, d3d11_texture, array_slice,
       plane_index, swap_chain);
-  DCHECK_EQ(image->GetDataFormat(), viz::GLDataFormat(format));
+  DCHECK_EQ(image->GetDataFormat(), GLDataFormat(format));
   if (!image->Initialize()) {
     LOG(ERROR) << "GLImageD3D::Initialize failed";
     api->glDeleteTexturesFn(1, &service_id);
@@ -165,18 +199,15 @@ scoped_refptr<gles2::TexturePassthrough> CreateGLTexture(
   return texture;
 }
 
-void CopyPlane(const uint8_t* source_memory,
-               size_t source_stride,
-               uint8_t* dest_memory,
-               size_t dest_stride,
-               viz::SharedImageFormat format,
-               const gfx::Size& size) {
-  int row_bytes = size.width() * viz::BitsPerPixel(format) / 8;
-  libyuv::CopyPlane(source_memory, source_stride, dest_memory, dest_stride,
-                    row_bytes, size.height());
-}
-
-}  // namespace
+#if BUILDFLAG(USE_DAWN)
+D3DImageBacking::DawnExternalImageState::DawnExternalImageState() = default;
+D3DImageBacking::DawnExternalImageState::~DawnExternalImageState() = default;
+D3DImageBacking::DawnExternalImageState::DawnExternalImageState(
+    DawnExternalImageState&&) = default;
+D3DImageBacking::DawnExternalImageState&
+D3DImageBacking::DawnExternalImageState::operator=(DawnExternalImageState&&) =
+    default;
+#endif
 
 // static
 std::unique_ptr<D3DImageBacking> D3DImageBacking::CreateFromSwapChainBuffer(
@@ -222,8 +253,7 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
   const bool has_webgpu_usage = !!(usage & SHARED_IMAGE_USAGE_WEBGPU);
   // Keyed mutexes are required for Dawn interop but are not used for XR
   // composition where fences are used instead.
-  DCHECK(!has_webgpu_usage || (dxgi_shared_handle_state &&
-                               dxgi_shared_handle_state->has_keyed_mutex()));
+  DCHECK(!has_webgpu_usage || dxgi_shared_handle_state);
 
   // Do not cache a GL texture in the backing if it could be owned by WebGPU
   // since there's no GL context to MakeCurrent in the destructor.
@@ -278,9 +308,7 @@ D3DImageBacking::CreateFromVideoTexture(
 
   // Shared handle and keyed mutex are required for Dawn interop.
   const bool has_webgpu_usage = usage & gpu::SHARED_IMAGE_USAGE_WEBGPU;
-  const bool has_keyed_mutex =
-      dxgi_shared_handle_state && dxgi_shared_handle_state->has_keyed_mutex();
-  DCHECK(!has_webgpu_usage || has_keyed_mutex);
+  DCHECK(!has_webgpu_usage || dxgi_shared_handle_state);
 
   std::vector<std::unique_ptr<SharedImageBacking>> shared_images(
       NumPlanes(dxgi_format));
@@ -354,7 +382,7 @@ D3DImageBacking::D3DImageBacking(
           usage,
           gl_texture
               ? gl_texture->estimated_size()
-              : gfx::BufferSizeForBufferFormat(size, viz::BufferFormat(format)),
+              : gfx::BufferSizeForBufferFormat(size, ToBufferFormat(format)),
           false /* is_thread_safe */),
       d3d11_texture_(std::move(d3d11_texture)),
       gl_texture_(std::move(gl_texture)),
@@ -366,6 +394,8 @@ D3DImageBacking::D3DImageBacking(
       is_back_buffer_(is_back_buffer) {
   const bool has_webgpu_usage = !!(usage & SHARED_IMAGE_USAGE_WEBGPU);
   DCHECK(has_webgpu_usage || gl_texture_);
+  if (d3d11_texture_)
+    d3d11_texture_->GetDevice(&d3d11_device_);
 }
 
 D3DImageBacking::~D3DImageBacking() {
@@ -376,7 +406,7 @@ D3DImageBacking::~D3DImageBacking() {
   swap_chain_.Reset();
   d3d11_texture_.Reset();
 #if BUILDFLAG(USE_DAWN)
-  dawn_external_images_.clear();
+  dawn_external_image_cache_.clear();
 #endif  // BUILDFLAG(USE_DAWN)
 }
 
@@ -538,10 +568,14 @@ WGPUTextureUsageFlags D3DImageBacking::GetAllowedDawnUsages(
       WGPUTextureUsage_TextureBinding | WGPUTextureUsage_RenderAttachment;
   switch (wgpu_format) {
     case WGPUTextureFormat_BGRA8Unorm:
+    case WGPUTextureFormat_R8Unorm:
+    case WGPUTextureFormat_RG8Unorm:
       return kBasicUsage;
     case WGPUTextureFormat_RGBA8Unorm:
     case WGPUTextureFormat_RGBA16Float:
       return kBasicUsage | WGPUTextureUsage_StorageBinding;
+    case WGPUTextureFormat_R8BG8Biplanar420Unorm:
+      return WGPUTextureUsage_TextureBinding;
     default:
       return WGPUTextureUsage_None;
   }
@@ -551,7 +585,8 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     WGPUDevice device,
-    WGPUBackendType backend_type) {
+    WGPUBackendType backend_type,
+    std::vector<WGPUTextureFormat> view_formats) {
 #if BUILDFLAG(USE_DAWN)
 #if BUILDFLAG(DAWN_ENABLE_BACKEND_OPENGLES)
   if (backend_type == WGPUBackendType_OpenGLES) {
@@ -560,74 +595,89 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
         device);
   }
 #endif
-  const viz::SharedImageFormat viz_si_format = format();
-  const WGPUTextureFormat wgpu_format = viz::ToWGPUFormat(viz_si_format);
+  D3D11_TEXTURE2D_DESC desc;
+  d3d11_texture_->GetDesc(&desc);
+  const WGPUTextureFormat wgpu_format = DXGIToWGPUFormat(desc.Format);
   if (wgpu_format == WGPUTextureFormat_Undefined) {
-    LOG(ERROR) << "Unsupported viz format found: " << viz_si_format.ToString();
-    return nullptr;
-  }
-  const WGPUTextureUsageFlags usage = GetAllowedDawnUsages(wgpu_format);
-  if (usage == WGPUTextureUsage_None) {
-    LOG(ERROR) << "WGPUTextureUsage is unknown for viz format: "
-               << viz_si_format.ToString();
+    LOG(ERROR) << "Unsupported DXGI_FORMAT found: " << desc.Format;
     return nullptr;
   }
 
+  WGPUTextureUsageFlags allowed_usage = GetAllowedDawnUsages(wgpu_format);
+  if (allowed_usage == WGPUTextureUsage_None) {
+    LOG(ERROR) << "Allowed WGPUTextureUsage is unknown for WGPUTextureFormat: "
+               << wgpu_format;
+    return nullptr;
+  }
+
+  // We need to have an internal usage of CopySrc in order to use
+  // CopyTextureToTextureInternal if texture format allows these usage.
+  WGPUTextureUsageFlags internal_usage =
+      (WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment |
+       WGPUTextureUsage_TextureBinding) &
+      allowed_usage;
+
   WGPUTextureDescriptor texture_descriptor = {};
   texture_descriptor.format = wgpu_format;
-  texture_descriptor.usage = static_cast<uint32_t>(usage);
+  texture_descriptor.usage = allowed_usage;
   texture_descriptor.dimension = WGPUTextureDimension_2D;
   texture_descriptor.size = {static_cast<uint32_t>(size().width()),
                              static_cast<uint32_t>(size().height()), 1};
   texture_descriptor.mipLevelCount = 1;
   texture_descriptor.sampleCount = 1;
+  texture_descriptor.viewFormatCount =
+      static_cast<uint32_t>(view_formats.size());
+  texture_descriptor.viewFormats = view_formats.data();
 
   // We need to have internal usages of CopySrc for copies,
-  // RenderAttachment for clears, and TextureBinding for copyTextureForBrowser.
+  // RenderAttachment for clears, and TextureBinding for copyTextureForBrowser
+  // if texture format allows these usages.
   WGPUDawnTextureInternalUsageDescriptor internalDesc = {};
   internalDesc.chain.sType = WGPUSType_DawnTextureInternalUsageDescriptor;
-  internalDesc.internalUsage = WGPUTextureUsage_CopySrc |
-                               WGPUTextureUsage_RenderAttachment |
-                               WGPUTextureUsage_TextureBinding;
+  internalDesc.internalUsage = internal_usage;
   texture_descriptor.nextInChain =
       reinterpret_cast<WGPUChainedStruct*>(&internalDesc);
 
-  // Evict invalid external images e.g. due to their device being destroyed.
-  base::EraseIf(dawn_external_images_,
-                [](const auto& kv) { return !kv.second->IsValid(); });
-
   // Persistently open the shared handle by caching it on this backing.
-  auto it = dawn_external_images_.find(device);
-  dawn::native::d3d12::ExternalImageDXGI* external_image_ptr = nullptr;
-  if (it == dawn_external_images_.end()) {
+  auto it = dawn_external_image_cache_.find(device);
+  if (it == dawn_external_image_cache_.end()) {
     DCHECK(dxgi_shared_handle_state_);
     const HANDLE shared_handle = dxgi_shared_handle_state_->GetSharedHandle();
     DCHECK(base::win::HandleTraits::IsHandleValid(shared_handle));
 
-    dawn::native::d3d12::ExternalImageDescriptorDXGISharedHandle
-        externalImageDesc;
+    D3D11_TEXTURE2D_DESC texture_desc = {};
+    d3d11_texture_->GetDesc(&texture_desc);
+
+    ExternalImageDescriptorDXGISharedHandle externalImageDesc;
     externalImageDesc.cTextureDescriptor = &texture_descriptor;
     externalImageDesc.sharedHandle = shared_handle;
+    externalImageDesc.useFenceSynchronization =
+        !(texture_desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX);
 
-    std::unique_ptr<dawn::native::d3d12::ExternalImageDXGI> external_image =
-        dawn::native::d3d12::ExternalImageDXGI::Create(device,
-                                                       &externalImageDesc);
-    if (!external_image) {
+    DawnExternalImageState state;
+    state.external_image =
+        ExternalImageDXGI::Create(device, &externalImageDesc);
+    if (!state.external_image) {
       LOG(ERROR) << "Failed to create external image";
       return nullptr;
     }
-    external_image_ptr = external_image.get();
-    dawn_external_images_.emplace(device, std::move(external_image));
-  } else {
-    external_image_ptr = it->second.get();
+    DCHECK(state.external_image->IsValid());
+    dawn_external_image_cache_.emplace(device, std::move(state));
   }
-  DCHECK(external_image_ptr);
-  DCHECK(external_image_ptr->IsValid());
-  return std::make_unique<DawnD3DImageRepresentation>(
-      manager, this, tracker, device, external_image_ptr);
+
+  return std::make_unique<DawnD3DImageRepresentation>(manager, this, tracker,
+                                                      device);
 #else
   return nullptr;
 #endif  // BUILDFLAG(USE_DAWN)
+}
+
+std::unique_ptr<VideoDecodeImageRepresentation>
+D3DImageBacking::ProduceVideoDecode(SharedImageManager* manager,
+                                    MemoryTypeTracker* tracker,
+                                    VideoDecodeDevice device) {
+  return std::make_unique<D3D11VideoDecodeImageRepresentation>(
+      manager, this, tracker, d3d11_texture_);
 }
 
 void D3DImageBacking::OnMemoryDump(
@@ -638,40 +688,220 @@ void D3DImageBacking::OnMemoryDump(
   SharedImageBacking::OnMemoryDump(dump_name, client_guid, pmd,
                                    client_tracing_id);
 
-  // Add a |service_guid| which expresses shared ownership between the
-  // various GPU dumps.
-  base::trace_event::MemoryAllocatorDumpGuid service_guid =
-      gl::GetGLTextureServiceGUIDForTracing(gl_texture_->service_id());
-  pmd->CreateSharedGlobalAllocatorDump(service_guid);
-  pmd->AddOwnershipEdge(client_guid, service_guid, kOwningEdgeImportance);
-
   // Swap chain textures only have one level backed by an image.
   if (auto* gl_image = GetGLImage())
     gl_image->OnMemoryDump(pmd, client_tracing_id, dump_name);
 }
 
-bool D3DImageBacking::BeginAccessD3D12() {
-  if (dxgi_shared_handle_state_)
-    return dxgi_shared_handle_state_->BeginAccessD3D12();
-  // D3D12 access is only allowed with shared handle and keyed mutex.
-  return false;
+#if BUILDFLAG(USE_DAWN)
+WGPUTexture D3DImageBacking::BeginAccessDawn(WGPUDevice device,
+                                             WGPUTextureUsage wgpu_usage) {
+  const bool write_access =
+      wgpu_usage & (WGPUTextureUsage_CopyDst | WGPUTextureUsage_StorageBinding |
+                    WGPUTextureUsage_RenderAttachment);
+
+  if (!ValidateBeginAccess(write_access))
+    return nullptr;
+
+  // D3D12 access is only allowed with shared handle. Note that BeginAccessD3D12
+  // is a no-op if fences are used instead of keyed mutex.
+  if (!dxgi_shared_handle_state_ ||
+      !dxgi_shared_handle_state_->BeginAccessD3D12()) {
+    DLOG(ERROR) << "Missing shared handle state or BeginAccessD3D12 failed";
+    return nullptr;
+  }
+
+  // Create the D3D11 device fence on first Dawn access.
+  if (!dxgi_shared_handle_state_->has_keyed_mutex() && !d3d11_device_fence_) {
+    d3d11_device_fence_ = D3DSharedFence::CreateForD3D11(d3d11_device_);
+    if (!d3d11_device_fence_) {
+      DLOG(ERROR) << "Failed to create D3D11 signal fence";
+      return nullptr;
+    }
+    // Make D3D11 device wait for |write_fence_| since we'll replace it below.
+    if (write_fence_ && !write_fence_->WaitD3D11(d3d11_device_)) {
+      DLOG(ERROR) << "Failed to wait for write fence";
+      return nullptr;
+    }
+    if (!d3d11_device_fence_->IncrementAndSignalD3D11()) {
+      DLOG(ERROR) << "Failed to signal D3D11 signal fence";
+      return nullptr;
+    }
+    // Store it in |write_fence_| so it's waited on for all subsequent access.
+    write_fence_ = d3d11_device_fence_;
+  }
+
+  auto it = dawn_external_image_cache_.find(device);
+  DCHECK(it != dawn_external_image_cache_.end());
+
+  const D3DSharedFence* dawn_signaled_fence = it->second.signaled_fence.get();
+
+  // Defer clearing fences until later to handle Dawn failure to import texture.
+  std::vector<ExternalImageDXGIFenceDescriptor> wait_fences;
+  // Always wait for previous write for both read-only or read-write access.
+  // Skip the wait if it's for the fence last signaled by the device.
+  if (write_fence_ && write_fence_.get() != dawn_signaled_fence)
+    wait_fences.push_back(ExternalImageDXGIFenceDescriptor{
+        write_fence_->GetSharedHandle(), write_fence_->GetFenceValue()});
+  // Also wait for all previous reads for read-write access.
+  if (write_access) {
+    for (const auto& read_fence : read_fences_) {
+      // Skip the wait if it's for the fence last signaled by the device.
+      if (read_fence != dawn_signaled_fence) {
+        wait_fences.push_back(ExternalImageDXGIFenceDescriptor{
+            read_fence->GetSharedHandle(), read_fence->GetFenceValue()});
+      }
+    }
+  }
+
+  ExternalImageDXGIBeginAccessDescriptor descriptor;
+  descriptor.isInitialized = IsCleared();
+  descriptor.isSwapChainTexture =
+      (usage() & SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE);
+  descriptor.usage = wgpu_usage;
+  descriptor.waitFences = std::move(wait_fences);
+
+  ExternalImageDXGI* external_image = it->second.external_image.get();
+  DCHECK(external_image);
+  WGPUTexture texture = external_image->BeginAccess(&descriptor);
+  if (!texture) {
+    DLOG(ERROR) << "Failed to begin access and produce WGPUTexture";
+    dxgi_shared_handle_state_->EndAccessD3D12();
+    return nullptr;
+  }
+
+  // Clear fences and update state iff Dawn BeginAccess succeeds.
+  if (write_access) {
+    in_write_access_ = true;
+    write_fence_.reset();
+    read_fences_.clear();
+  } else {
+    num_readers_++;
+  }
+
+  return texture;
 }
 
-void D3DImageBacking::EndAccessD3D12() {
+void D3DImageBacking::EndAccessDawn(WGPUDevice device, WGPUTexture texture) {
+  DCHECK(texture);
+  if (dawn::native::IsTextureSubresourceInitialized(texture, 0, 1, 0, 1))
+    SetCleared();
+
+  // External image is removed from cache on first EndAccess after device is
+  // lost. It's ok to skip synchronization because it should've already been
+  // synchronized before the entry was removed from the cache.
+  auto it = dawn_external_image_cache_.find(device);
+  if (it != dawn_external_image_cache_.end()) {
+    ExternalImageDXGI* external_image = it->second.external_image.get();
+    DCHECK(external_image);
+
+    // EndAccess will only succeed if the external image is still valid.
+    if (external_image->IsValid()) {
+      ExternalImageDXGIFenceDescriptor descriptor;
+      external_image->EndAccess(texture, &descriptor);
+
+      scoped_refptr<D3DSharedFence> signaled_fence;
+      if (descriptor.fenceHandle != nullptr) {
+        scoped_refptr<D3DSharedFence>& cached_fence = it->second.signaled_fence;
+        // Try to reuse the last signaled fence if it's the same fence.
+        if (!cached_fence ||
+            !cached_fence->IsSameFenceAsHandle(descriptor.fenceHandle)) {
+          cached_fence =
+              D3DSharedFence::CreateFromHandle(descriptor.fenceHandle);
+          DCHECK(cached_fence);
+        }
+        cached_fence->Update(descriptor.fenceValue);
+        signaled_fence = cached_fence;
+      }
+      // Dawn should be using either keyed mutex or fence synchronization.
+      DCHECK((dxgi_shared_handle_state_ &&
+              dxgi_shared_handle_state_->has_keyed_mutex()) ||
+             signaled_fence);
+      EndAccessCommon(std::move(signaled_fence));
+    } else {
+      // Erase from cache if external image is invalid i.e. device was lost.
+      dawn_external_image_cache_.erase(it);
+    }
+  }
+
   if (dxgi_shared_handle_state_)
     dxgi_shared_handle_state_->EndAccessD3D12();
 }
+#endif
 
-bool D3DImageBacking::BeginAccessD3D11() {
+bool D3DImageBacking::BeginAccessD3D11(bool write_access) {
+  if (!ValidateBeginAccess(write_access))
+    return false;
+
+  // If read fences or write fence are present, shared handle should be too.
+  DCHECK((read_fences_.empty() && !write_fence_) || dxgi_shared_handle_state_);
+
+  // Always wait for the write fence for both read-write and read-only access.
+  // We don't wait for previous read fences for read-only access since there's
+  // no dependency between concurrent reads and instead wait for the last write.
+  if (write_fence_ && !write_fence_->WaitD3D11(d3d11_device_)) {
+    DLOG(ERROR) << "Failed to wait for write fence";
+    return false;
+  }
+  if (write_access) {
+    // For read-write access, wait for all previous reads, and reset fences.
+    for (const auto& fence : read_fences_) {
+      if (!fence->WaitD3D11(d3d11_device_)) {
+        DLOG(ERROR) << "Failed to wait for read fence";
+        return false;
+      }
+    }
+    write_fence_.reset();
+    read_fences_.clear();
+    in_write_access_ = true;
+  } else {
+    num_readers_++;
+  }
+
   if (dxgi_shared_handle_state_)
     return dxgi_shared_handle_state_->BeginAccessD3D11();
-  // D3D11 access is allowed without shared handle and keyed mutex.
+  // D3D11 access is allowed without shared handle.
   return true;
 }
 
 void D3DImageBacking::EndAccessD3D11() {
+  // If D3D11 device signaling fence is present, shared handle should be too.
+  DCHECK(!d3d11_device_fence_ || dxgi_shared_handle_state_);
+
+  scoped_refptr<D3DSharedFence> signaled_fence;
+  if (d3d11_device_fence_ && d3d11_device_fence_->IncrementAndSignalD3D11())
+    signaled_fence = d3d11_device_fence_;
+
+  EndAccessCommon(std::move(signaled_fence));
+
   if (dxgi_shared_handle_state_)
     dxgi_shared_handle_state_->EndAccessD3D11();
+}
+
+bool D3DImageBacking::ValidateBeginAccess(bool write_access) const {
+  if (in_write_access_) {
+    DLOG(ERROR) << "Already being accessed for write";
+    return false;
+  }
+  if (write_access && num_readers_ > 0) {
+    DLOG(ERROR) << "Already being accessed for read";
+    return false;
+  }
+  return true;
+}
+
+void D3DImageBacking::EndAccessCommon(
+    scoped_refptr<D3DSharedFence> signaled_fence) {
+  if (in_write_access_) {
+    DCHECK(!write_fence_);
+    DCHECK(read_fences_.empty());
+    in_write_access_ = false;
+    write_fence_ = std::move(signaled_fence);
+  } else {
+    num_readers_--;
+    if (signaled_fence)
+      read_fences_.insert(std::move(signaled_fence));
+  }
 }
 
 gl::GLImage* D3DImageBacking::GetGLImage() const {
@@ -752,8 +982,8 @@ std::unique_ptr<OverlayImageRepresentation> D3DImageBacking::ProduceOverlay(
   // Lazily create a GL image if it wasn't provided on initialization. There's
   // no need to bind to a GL texture since the image is only used for overlay.
   if (!gl_image) {
-    const auto internal_format = viz::GLInternalFormat(format());
-    const auto data_type = viz::GLDataType(format());
+    const auto internal_format = GLInternalFormat(format());
+    const auto data_type = GLDataType(format());
     gl_image = base::MakeRefCounted<gl::GLImageD3D>(
         size(), internal_format, data_type, color_space(), d3d11_texture_,
         array_slice_, plane_index_, swap_chain_);

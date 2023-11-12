@@ -9,11 +9,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_capi_types.h"
+#include "crypto/scoped_cng_types.h"
+#include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_platform_key_util.h"
@@ -27,6 +30,31 @@
 namespace net {
 
 namespace {
+
+bool ProbeSHA256(ThreadedSSLPrivateKey::Delegate* delegate) {
+  if (!base::FeatureList::IsEnabled(features::kPlatformKeyProbeSHA256)) {
+    return false;
+  }
+
+  // This input is chosen to avoid colliding with other signing inputs used in
+  // TLS 1.2 or TLS 1.3. We use the construct in RFC 8446, section 4.4.3, but
+  // change the context string. The context string ensures we don't collide with
+  // TLS 1.3 and any future version. The 0x20 (space) prefix ensures we don't
+  // collide with TLS 1.2 ServerKeyExchange or CertificateVerify.
+  static const uint8_t kSHA256ProbeInput[] = {
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+      0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 'C',  'h',
+      'r',  'o',  'm',  'i',  'u',  'm',  ',',  ' ',  'S',  'H',  'A',
+      '2',  ' ',  'P',  'r',  'o',  'b',  'e',  0x00,
+  };
+  std::vector<uint8_t> signature;
+  return delegate->Sign(SSL_SIGN_RSA_PKCS1_SHA256, kSHA256ProbeInput,
+                        &signature) == OK;
+}
 
 std::string GetCAPIProviderName(HCRYPTPROV provider) {
   DWORD name_len;
@@ -52,7 +80,12 @@ class SSLPlatformKeyCAPI : public ThreadedSSLPrivateKey::Delegate {
   SSLPlatformKeyCAPI(crypto::ScopedHCRYPTPROV provider, DWORD key_spec)
       : provider_name_(GetCAPIProviderName(provider.get())),
         provider_(std::move(provider)),
-        key_spec_(key_spec) {}
+        key_spec_(key_spec) {
+    // Check for SHA-256 support. The CAPI service provider may only be able to
+    // sign pre-TLS-1.2 and SHA-1 hashes. If SHA-256 doesn't work, prioritize
+    // SHA-1 as a workaround. See https://crbug.com/278370.
+    prefer_sha1_ = !ProbeSHA256(this);
+  }
 
   SSLPlatformKeyCAPI(const SSLPlatformKeyCAPI&) = delete;
   SSLPlatformKeyCAPI& operator=(const SSLPlatformKeyCAPI&) = delete;
@@ -62,16 +95,12 @@ class SSLPlatformKeyCAPI : public ThreadedSSLPrivateKey::Delegate {
   std::string GetProviderName() override { return "CAPI: " + provider_name_; }
 
   std::vector<uint16_t> GetAlgorithmPreferences() override {
-    // If the key is in CAPI, assume conservatively that the CAPI service
-    // provider may only be able to sign pre-TLS-1.2 and SHA-1 hashes.
-    // Prioritize SHA-1, but if the server doesn't advertise it, leave the other
-    // algorithms enabled to try.
-    return {
-        SSL_SIGN_RSA_PKCS1_SHA1,
-        SSL_SIGN_RSA_PKCS1_SHA256,
-        SSL_SIGN_RSA_PKCS1_SHA384,
-        SSL_SIGN_RSA_PKCS1_SHA512,
-    };
+    if (prefer_sha1_) {
+      return {SSL_SIGN_RSA_PKCS1_SHA1, SSL_SIGN_RSA_PKCS1_SHA256,
+              SSL_SIGN_RSA_PKCS1_SHA384, SSL_SIGN_RSA_PKCS1_SHA512};
+    }
+    return {SSL_SIGN_RSA_PKCS1_SHA256, SSL_SIGN_RSA_PKCS1_SHA384,
+            SSL_SIGN_RSA_PKCS1_SHA512, SSL_SIGN_RSA_PKCS1_SHA1};
   }
 
   Error Sign(uint16_t algorithm,
@@ -151,33 +180,17 @@ class SSLPlatformKeyCAPI : public ThreadedSSLPrivateKey::Delegate {
   std::string provider_name_;
   crypto::ScopedHCRYPTPROV provider_;
   DWORD key_spec_;
-};
-
-class ScopedNCRYPT_PROV_HANDLE {
- public:
-  ScopedNCRYPT_PROV_HANDLE() {}
-  ScopedNCRYPT_PROV_HANDLE(const ScopedNCRYPT_PROV_HANDLE&) = delete;
-  ScopedNCRYPT_PROV_HANDLE& operator=(const ScopedNCRYPT_PROV_HANDLE&) = delete;
-  ~ScopedNCRYPT_PROV_HANDLE() {
-    if (prov_) {
-      NCryptFreeObject(prov_);
-    }
-  }
-
-  NCRYPT_PROV_HANDLE get() const { return prov_; }
-  NCRYPT_PROV_HANDLE* InitializeInto() { return &prov_; }
-
- private:
-  NCRYPT_PROV_HANDLE prov_ = 0;
+  bool prefer_sha1_ = false;
 };
 
 std::wstring GetCNGProviderName(NCRYPT_KEY_HANDLE key) {
-  ScopedNCRYPT_PROV_HANDLE prov;
+  crypto::ScopedNCryptProvider prov;
   DWORD prov_len = 0;
   SECURITY_STATUS status = NCryptGetProperty(
       key, NCRYPT_PROVIDER_HANDLE_PROPERTY,
-      reinterpret_cast<BYTE*>(prov.InitializeInto()),
-      sizeof(*prov.InitializeInto()), &prov_len, NCRYPT_SILENT_FLAG);
+      reinterpret_cast<BYTE*>(
+          crypto::ScopedNCryptProvider::Receiver(prov).get()),
+      sizeof(NCRYPT_PROV_HANDLE), &prov_len, NCRYPT_SILENT_FLAG);
   if (FAILED(status)) {
     return L"(error getting provider)";
   }
@@ -214,16 +227,20 @@ std::wstring GetCNGProviderName(NCRYPT_KEY_HANDLE key) {
 class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
  public:
   // Takes ownership of |key|.
-  SSLPlatformKeyCNG(NCRYPT_KEY_HANDLE key, int type, size_t max_length)
-      : provider_name_(GetCNGProviderName(key)),
-        key_(key),
+  SSLPlatformKeyCNG(crypto::ScopedNCryptKey key, int type, size_t max_length)
+      : provider_name_(GetCNGProviderName(key.get())),
+        key_(std::move(key)),
         type_(type),
-        max_length_(max_length) {}
+        max_length_(max_length) {
+    // If this is a 1024-bit RSA key or below, check for SHA-256 support. Older
+    // Estonian ID cards can only sign SHA-1 hashes. If SHA-256 does not work,
+    // prioritize SHA-1 as a workaround. See https://crbug.com/278370.
+    prefer_sha1_ =
+        type_ == EVP_PKEY_RSA && max_length_ <= 1024 / 8 && !ProbeSHA256(this);
+  }
 
   SSLPlatformKeyCNG(const SSLPlatformKeyCNG&) = delete;
   SSLPlatformKeyCNG& operator=(const SSLPlatformKeyCNG&) = delete;
-
-  ~SSLPlatformKeyCNG() override { NCryptFreeObject(key_); }
 
   std::string GetProviderName() override {
     return "CNG: " + base::WideToUTF8(provider_name_);
@@ -246,18 +263,14 @@ class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
       DWORD salt_size = 0;
       DWORD size_of_salt_size = sizeof(salt_size);
       HRESULT status =
-          NCryptGetProperty(key_, NCRYPT_PCP_PSS_SALT_SIZE_PROPERTY,
+          NCryptGetProperty(key_.get(), NCRYPT_PCP_PSS_SALT_SIZE_PROPERTY,
                             reinterpret_cast<PBYTE>(&salt_size),
                             size_of_salt_size, &size_of_salt_size, 0);
       if (FAILED(status) || salt_size != NCRYPT_TPM_PSS_SALT_SIZE_HASHSIZE) {
         supports_pss = false;
       }
     }
-    // If this is an under 1024-bit RSA key, conservatively prefer to sign SHA-1
-    // hashes. Older Estonian ID cards can only sign SHA-1 hashes.  Prioritize
-    // SHA-1, but if the server doesn't advertise it, leave the other algorithms
-    // enabled to try.
-    if (type_ == EVP_PKEY_RSA && max_length_ <= 1024 / 8) {
+    if (prefer_sha1_) {
       std::vector<uint16_t> ret = {
           SSL_SIGN_RSA_PKCS1_SHA1,
           SSL_SIGN_RSA_PKCS1_SHA256,
@@ -265,9 +278,9 @@ class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
           SSL_SIGN_RSA_PKCS1_SHA512,
       };
       if (supports_pss) {
-        // 1024-bit keys are too small for SSL_SIGN_RSA_PSS_SHA512.
         ret.push_back(SSL_SIGN_RSA_PSS_SHA256);
         ret.push_back(SSL_SIGN_RSA_PSS_SHA384);
+        ret.push_back(SSL_SIGN_RSA_PSS_SHA512);
       }
       return ret;
     }
@@ -327,14 +340,14 @@ class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
 
     DWORD signature_len;
     SECURITY_STATUS status =
-        NCryptSignHash(key_, padding_info, const_cast<BYTE*>(digest),
+        NCryptSignHash(key_.get(), padding_info, const_cast<BYTE*>(digest),
                        digest_len, nullptr, 0, &signature_len, flags);
     if (FAILED(status)) {
       LOG(ERROR) << "NCryptSignHash failed: " << status;
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
     }
     signature->resize(signature_len);
-    status = NCryptSignHash(key_, padding_info, const_cast<BYTE*>(digest),
+    status = NCryptSignHash(key_.get(), padding_info, const_cast<BYTE*>(digest),
                             digest_len, signature->data(), signature_len,
                             &signature_len, flags);
     if (FAILED(status)) {
@@ -375,9 +388,10 @@ class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
 
  private:
   std::wstring provider_name_;
-  NCRYPT_KEY_HANDLE key_;
+  crypto::ScopedNCryptKey key_;
   int type_;
   size_t max_length_;
+  bool prefer_sha1_ = false;
 };
 
 }  // namespace
@@ -393,19 +407,18 @@ scoped_refptr<SSLPrivateKey> WrapCAPIPrivateKey(
 
 scoped_refptr<SSLPrivateKey> WrapCNGPrivateKey(
     const X509Certificate* certificate,
-    NCRYPT_KEY_HANDLE key) {
+    crypto::ScopedNCryptKey key) {
   // Rather than query the private key for metadata, extract the public key from
   // the certificate without using Windows APIs. CNG does not consistently work
   // depending on the system. See https://crbug.com/468345.
   int key_type;
   size_t max_length;
   if (!GetClientCertInfo(certificate, &key_type, &max_length)) {
-    NCryptFreeObject(key);
     return nullptr;
   }
 
   return base::MakeRefCounted<ThreadedSSLPrivateKey>(
-      std::make_unique<SSLPlatformKeyCNG>(key, key_type, max_length),
+      std::make_unique<SSLPlatformKeyCNG>(std::move(key), key_type, max_length),
       GetSSLPlatformKeyTaskRunner());
 }
 
@@ -428,7 +441,7 @@ scoped_refptr<SSLPrivateKey> FetchClientCertPrivateKey(
   CHECK_EQ(must_free, TRUE);
 
   if (key_spec == CERT_NCRYPT_KEY_SPEC) {
-    return WrapCNGPrivateKey(certificate, prov_or_key);
+    return WrapCNGPrivateKey(certificate, crypto::ScopedNCryptKey(prov_or_key));
   } else {
     return WrapCAPIPrivateKey(certificate,
                               crypto::ScopedHCRYPTPROV(prov_or_key), key_spec);

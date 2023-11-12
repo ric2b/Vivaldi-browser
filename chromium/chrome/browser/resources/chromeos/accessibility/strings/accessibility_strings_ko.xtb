@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">현재 시간</translation>
 <translation id="1161762950103988776">점프</translation>
 <translation id="1164857107703583584">점프 명령어를 사용하면 웹페이지를 효율적으로 탐색할 수 있습니다.</translation>
+<translation id="116896278675803795">선택한 콘텐츠와 일치하도록 언어를 자동으로 변경합니다.</translation>
 <translation id="1175914831232945926">숫자</translation>
 <translation id="1188858454923323853">상호 보완</translation>
 <translation id="1189258430971676908">연습 영역: 드롭다운 목록</translation>
@@ -318,7 +319,7 @@
 <translation id="3082249673510793544">뒤로 스크롤</translation>
 <translation id="3084806535845658316">입력 에코 없음</translation>
 <translation id="3086746722712840547">note</translation>
-<translation id="308736057934395497">다른 사람이 볼 수 없도록 화면을 꺼서 개인정보 보호 기능을 향상합니다. 언제든지 검색 버튼과 밝게 버튼을 함께 누르면 화면을 다시 켤 수 있습니다.</translation>
+<translation id="308736057934395497">다른 사람이 볼 수 없도록 화면을 꺼서 개인 정보 보호 기능을 향상합니다. 언제든지 검색 버튼과 밝게 버튼을 함께 누르면 화면을 다시 켤 수 있습니다.</translation>
 <translation id="3090227230165225418">다운로드 알림 표시</translation>
 <translation id="3090532668523289635">grp</translation>
 <translation id="3093176084511590672">다음 랜드마크</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">이전 양식 입력란</translation>
 <translation id="3393605254399152980">터치한 항목을 들으려면 한 손가락으로 드래그하세요.</translation>
 <translation id="3406283310380167331">양식 목록 표시</translation>
+<translation id="3407726812456125464">선택한 텍스트 듣기</translation>
 <translation id="3414400929511680526">앨리스 블루</translation>
 <translation id="3418936350470374046">아래에 셀이 없습니다</translation>
 <translation id="3419269701801640163">붙여넣기</translation>

@@ -8,6 +8,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
@@ -106,7 +107,7 @@ void RestoreIOTask::Execute(IOTask::ProgressCallback progress_callback,
 // end up here so avoid accessing `trash_service_` here.
 void RestoreIOTask::Complete(State state) {
   progress_.state = state;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(complete_callback_), std::move(progress_)));
 }
@@ -127,21 +128,23 @@ void RestoreIOTask::ValidateTrashInfo(size_t idx) {
 
 void RestoreIOTask::EnsureParentRestorePathExists(
     size_t idx,
-    base::FileErrorOr<trash::ParsedTrashInfoData> parsed_data) {
-  if (!parsed_data.has_value()) {
-    progress_.sources[idx].error = parsed_data.error();
+    trash::ParsedTrashInfoDataOrError parsed_data_or_error) {
+  if (!parsed_data_or_error.has_value()) {
+    progress_.sources[idx].error =
+        trash::ValidationErrorToFileError(parsed_data_or_error.error());
     Complete(State::kError);
     return;
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&CreateNestedPath,
-                     parsed_data.value().absolute_restore_path.DirName()),
+      base::BindOnce(
+          &CreateNestedPath,
+          parsed_data_or_error.value().absolute_restore_path.DirName()),
       base::BindOnce(&RestoreIOTask::OnParentRestorePathExists,
                      weak_ptr_factory_.GetWeakPtr(), idx,
-                     parsed_data.value().trashed_file_path,
-                     parsed_data.value().absolute_restore_path));
+                     parsed_data_or_error.value().trashed_file_path,
+                     parsed_data_or_error.value().absolute_restore_path));
 }
 
 void RestoreIOTask::OnParentRestorePathExists(
@@ -193,7 +196,7 @@ void RestoreIOTask::RestoreItem(
       storage::FileSystemOperation::CopyOrMoveOption::kPreserveLastModified);
 
   auto complete_callback =
-      base::BindPostTask(base::SequencedTaskRunnerHandle::Get(),
+      base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
                          base::BindOnce(&RestoreIOTask::OnRestoreItem,
                                         weak_ptr_factory_.GetWeakPtr(), idx));
 
@@ -215,7 +218,7 @@ void RestoreIOTask::OnRestoreItem(size_t idx, base::File::Error error) {
   }
 
   auto complete_callback =
-      base::BindPostTask(base::SequencedTaskRunnerHandle::Get(),
+      base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
                          base::BindOnce(&RestoreIOTask::RestoreComplete,
                                         weak_ptr_factory_.GetWeakPtr(), idx));
 

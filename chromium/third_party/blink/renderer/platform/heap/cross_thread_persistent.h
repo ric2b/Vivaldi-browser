@@ -71,16 +71,11 @@ struct HashTraits<blink::CrossThreadWeakPersistent<T>>
     : BasePersistentHashTraits<T, blink::CrossThreadWeakPersistent<T>> {};
 
 template <typename T>
-struct DefaultHash<blink::CrossThreadPersistent<T>> {
-  STATIC_ONLY(DefaultHash);
-  using Hash = PersistentHashBase<T>;
-};
+struct DefaultHash<blink::CrossThreadPersistent<T>> : PersistentHashBase<T> {};
 
 template <typename T>
-struct DefaultHash<blink::CrossThreadWeakPersistent<T>> {
-  STATIC_ONLY(DefaultHash);
-  using Hash = PersistentHashBase<T>;
-};
+struct DefaultHash<blink::CrossThreadWeakPersistent<T>>
+    : PersistentHashBase<T> {};
 
 template <typename T>
 struct CrossThreadCopier<blink::CrossThreadPersistent<T>>
@@ -100,6 +95,9 @@ namespace base {
 
 template <typename T>
 struct IsWeakReceiver<blink::CrossThreadWeakPersistent<T>> : std::true_type {};
+
+template <typename>
+struct BindUnwrapTraits;
 
 template <typename T>
 struct BindUnwrapTraits<blink::CrossThreadWeakPersistent<T>> {

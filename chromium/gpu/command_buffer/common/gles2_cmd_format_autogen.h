@@ -14849,39 +14849,6 @@ static_assert(offsetof(ContextVisibilityHintCHROMIUM, header) == 0,
 static_assert(offsetof(ContextVisibilityHintCHROMIUM, visibility) == 4,
               "offset of ContextVisibilityHintCHROMIUM visibility should be 4");
 
-struct CoverageModulationCHROMIUM {
-  typedef CoverageModulationCHROMIUM ValueType;
-  static const CommandId kCmdId = kCoverageModulationCHROMIUM;
-  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
-  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
-
-  static uint32_t ComputeSize() {
-    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
-  }
-
-  void SetHeader() { header.SetCmd<ValueType>(); }
-
-  void Init(GLenum _components) {
-    SetHeader();
-    components = _components;
-  }
-
-  void* Set(void* cmd, GLenum _components) {
-    static_cast<ValueType*>(cmd)->Init(_components);
-    return NextCmdAddress<ValueType>(cmd);
-  }
-
-  gpu::CommandHeader header;
-  uint32_t components;
-};
-
-static_assert(sizeof(CoverageModulationCHROMIUM) == 8,
-              "size of CoverageModulationCHROMIUM should be 8");
-static_assert(offsetof(CoverageModulationCHROMIUM, header) == 0,
-              "offset of CoverageModulationCHROMIUM header should be 0");
-static_assert(offsetof(CoverageModulationCHROMIUM, components) == 4,
-              "offset of CoverageModulationCHROMIUM components should be 4");
-
 struct BlendBarrierKHR {
   typedef BlendBarrierKHR ValueType;
   static const CommandId kCmdId = kBlendBarrierKHR;
@@ -15971,5 +15938,38 @@ static_assert(offsetof(IsEnablediOES, result_shm_id) == 12,
               "offset of IsEnablediOES result_shm_id should be 12");
 static_assert(offsetof(IsEnablediOES, result_shm_offset) == 16,
               "offset of IsEnablediOES result_shm_offset should be 16");
+
+struct ProvokingVertexANGLE {
+  typedef ProvokingVertexANGLE ValueType;
+  static const CommandId kCmdId = kProvokingVertexANGLE;
+  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+
+  static uint32_t ComputeSize() {
+    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
+  }
+
+  void SetHeader() { header.SetCmd<ValueType>(); }
+
+  void Init(GLenum _provokeMode) {
+    SetHeader();
+    provokeMode = _provokeMode;
+  }
+
+  void* Set(void* cmd, GLenum _provokeMode) {
+    static_cast<ValueType*>(cmd)->Init(_provokeMode);
+    return NextCmdAddress<ValueType>(cmd);
+  }
+
+  gpu::CommandHeader header;
+  uint32_t provokeMode;
+};
+
+static_assert(sizeof(ProvokingVertexANGLE) == 8,
+              "size of ProvokingVertexANGLE should be 8");
+static_assert(offsetof(ProvokingVertexANGLE, header) == 0,
+              "offset of ProvokingVertexANGLE header should be 0");
+static_assert(offsetof(ProvokingVertexANGLE, provokeMode) == 4,
+              "offset of ProvokingVertexANGLE provokeMode should be 4");
 
 #endif  // GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_FORMAT_AUTOGEN_H_

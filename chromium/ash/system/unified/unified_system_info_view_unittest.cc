@@ -20,6 +20,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/version_info/channel.h"
+#include "ui/views/test/ax_event_counter.h"
 
 namespace ash {
 
@@ -27,6 +28,8 @@ namespace ash {
 // - Whether the release track UI feature is enabled, and
 // - Whether the release track is a value other than "stable"
 // The release track UI only shows if both conditions are met.
+//
+// NOTE: For QsRevamp, see similar tests in QuickSettingsHeaderTest.
 class UnifiedSystemInfoViewTest
     : public AshTestBase,
       public testing::WithParamInterface<std::tuple<bool, bool>> {
@@ -181,6 +184,22 @@ TEST_P(UnifiedSystemInfoViewTest, EnterpriseUserManagedVisible) {
       IsReleaseTrackUiEnabled() && IsReleaseTrackNotStable() &&
           Shell::Get()->system_tray_model()->client()->IsUserFeedbackEnabled(),
       GetFeedbackButton() && GetFeedbackButton()->GetVisible());
+}
+
+TEST_P(UnifiedSystemInfoViewTest, UpdateFiresAccessibilityEvents) {
+  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  auto* date_view = info_view()->GetDateViewForTesting();
+  auto* date_view_label = info_view()->GetDateViewLabelForTesting();
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged, date_view));
+  EXPECT_EQ(0,
+            counter.GetCount(ax::mojom::Event::kTextChanged, date_view_label));
+
+  // `DateView::Update` emits text-changed accessibility events on both
+  // itself and its label.
+  info_view()->UpdateDateViewForTesting();
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged, date_view));
+  EXPECT_EQ(1,
+            counter.GetCount(ax::mojom::Event::kTextChanged, date_view_label));
 }
 
 using UnifiedSystemInfoViewNoSessionTest = NoSessionAshTestBase;

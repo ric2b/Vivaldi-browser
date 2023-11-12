@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEB_APPLICATIONS_WEB_APP_LAUNCH_PROCESS_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 
@@ -25,31 +26,40 @@ class WebContents;
 
 namespace web_app {
 
+class OsIntegrationManager;
 class WebApp;
-class WebAppProvider;
+class WebAppRegistrar;
 
 // Used by WebAppLaunchManager, this executes an individual launch of a web app
 // from any entry point (OS launcher, file handler, protocol handler,
 // link capturing, etc.).
 //
 // Implements the behaviour of the `launch_handler` manifest field:
-// https://github.com/WICG/sw-launch/blob/main/launch_handler.md
+// https://github.com/WICG/web-app-launch/blob/main/launch_handler.md
 class WebAppLaunchProcess {
  public:
-  WebAppLaunchProcess(Profile& profile, const apps::AppLaunchParams& params);
   WebAppLaunchProcess(const WebAppLaunchProcess&) = delete;
 
-  content::WebContents* Run();
+  static content::WebContents* CreateAndRun(
+      Profile& profile,
+      WebAppRegistrar& registrar,
+      OsIntegrationManager& os_integration_manager,
+      const apps::AppLaunchParams& params);
 
  private:
+  WebAppLaunchProcess(Profile& profile,
+                      WebAppRegistrar& registrar,
+                      OsIntegrationManager& os_integration_manager,
+                      const apps::AppLaunchParams& params);
+  content::WebContents* Run();
+
   const apps::ShareTarget* MaybeGetShareTarget() const;
   std::tuple<GURL, bool /*is_file_handling*/> GetLaunchUrl(
       const apps::ShareTarget* share_target) const;
   WindowOpenDisposition GetNavigationDisposition(bool is_new_browser) const;
   std::tuple<Browser*, bool /*is_new_browser*/> EnsureBrowser();
+  LaunchHandler GetLaunchHandler() const;
   LaunchHandler::ClientMode GetLaunchClientMode() const;
-  bool LaunchInExistingClient() const;
-  bool NeverNavigateExistingClients() const;
 
   Browser* MaybeFindBrowserForLaunch() const;
   Browser* CreateBrowserForLaunch();
@@ -68,9 +78,10 @@ class WebAppLaunchProcess {
                                    content::WebContents* web_contents,
                                    bool started_new_navigation);
 
-  Profile& profile_;
-  WebAppProvider& provider_;
-  const apps::AppLaunchParams& params_;
+  const raw_ref<Profile> profile_;
+  const raw_ref<WebAppRegistrar> registrar_;
+  const raw_ref<OsIntegrationManager> os_integration_manager_;
+  const raw_ref<const apps::AppLaunchParams> params_;
   const raw_ptr<const WebApp> web_app_;
 };
 

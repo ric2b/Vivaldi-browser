@@ -10,7 +10,6 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/command_line.h"
-#include "base/win/windows_version.h"
 #endif
 
 namespace sandbox {
@@ -57,6 +56,9 @@ const char kMirroringSandbox[] = "mirroring";
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
 const char kHardwareVideoDecodingSandbox[] = "hardware_video_decoding";
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+const char kHardwareVideoEncodingSandbox[] = "hardware_video_encoding";
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kImeSandbox[] = "ime";

@@ -9,13 +9,15 @@ import os
 import json
 import random
 import subprocess
+import sys
 import tempfile
 
 from contextlib import AbstractContextManager
 from typing import Iterable, Optional
 
-from common import get_host_arch, run_ffx_command, run_continuous_ffx_command, \
-                   SDK_ROOT
+from common import check_ssh_config_file, run_ffx_command, \
+                   run_continuous_ffx_command, SDK_ROOT
+from compatible_utils import get_host_arch
 
 _EMU_COMMAND_RETRIES = 3
 RUN_SUMMARY_SCHEMA = \
@@ -102,10 +104,10 @@ class FfxEmulator(AbstractContextManager):
         node_name_suffix = random.randint(1, 9999)
         self._node_name = f'fuchsia-emulator-{node_name_suffix}'
 
-        # Always set the download path parallel to Fuchsia SDK directory
-        # so that old product bundles can be properly removed.
-        self._scoped_pb_storage = ScopedFfxConfig(
-            'pbms.storage.path', os.path.join(SDK_ROOT, os.pardir, 'images'))
+        # Set the download path parallel to Fuchsia SDK directory
+        # permanently so that scripts can always find the product bundles.
+        run_ffx_command(('config', 'set', 'pbms.storage.path',
+                         os.path.join(SDK_ROOT, os.pardir, 'images')))
 
         override_file = os.path.join(os.path.dirname(__file__), os.pardir,
                                      'sdk_override.txt')
@@ -117,32 +119,6 @@ class FfxEmulator(AbstractContextManager):
                 self._scoped_pb_metadata = ScopedFfxConfig(
                     'pbms.metadata', json.dumps((pb_metadata)))
 
-    @staticmethod
-    def _check_ssh_config_file() -> None:
-        """Checks for ssh keys and generates them if they are missing."""
-        script_path = os.path.join(SDK_ROOT, 'bin', 'fuchsia-common.sh')
-        check_cmd = [
-            'bash', '-c', f'. {script_path}; check-fuchsia-ssh-config'
-        ]
-        subprocess.run(check_cmd, check=True)
-
-    def _download_product_bundle_if_necessary(self) -> None:
-        """Download the image for a given product bundle."""
-
-        # Check if the product bundle has already been downloaded.
-        # TODO: remove when `ffx product-bundle get` doesn't automatically
-        # redownload.
-        list_cmd = run_ffx_command(('product-bundle', 'list'),
-                                   capture_output=True)
-        sdk_version = run_ffx_command(('sdk', 'version'),
-                                      capture_output=True).stdout.strip()
-        for line in list_cmd.stdout.splitlines():
-            if (self._product_bundle in line and sdk_version in line
-                    and '*' in line):
-                return
-
-        run_ffx_command(('product-bundle', 'get', self._product_bundle))
-
     def __enter__(self) -> str:
         """Start the emulator.
 
@@ -150,11 +126,9 @@ class FfxEmulator(AbstractContextManager):
             The node name of the emulator.
         """
 
-        self._scoped_pb_storage.__enter__()
         if self._scoped_pb_metadata:
             self._scoped_pb_metadata.__enter__()
-        self._check_ssh_config_file()
-        self._download_product_bundle_if_necessary()
+        check_ssh_config_file()
         emu_command = [
             'emu', 'start', self._product_bundle, '--name', self._node_name
         ]
@@ -207,12 +181,19 @@ class FfxEmulator(AbstractContextManager):
                 json.dump(ast.literal_eval(qemu_arm64_meta), f)
             emu_command.extend(['--engine', 'qemu'])
 
-        for retry_num in range(_EMU_COMMAND_RETRIES):
-            if retry_num == _EMU_COMMAND_RETRIES - 1:
-                run_ffx_command(emu_command)
-            else:
-                if run_ffx_command(emu_command, check=False).returncode == 0:
+        with ScopedFfxConfig('emu.start.timeout', '90'):
+            for _ in range(_EMU_COMMAND_RETRIES):
+
+                # If the ffx daemon fails to establish a connection with
+                # the emulator after 85 seconds, that means the emulator
+                # failed to be brought up and a retry is needed.
+                # TODO(fxb/103540): Remove retry when start up issue is fixed.
+                try:
+                    run_ffx_command(emu_command, timeout=85)
                     break
+                except (subprocess.TimeoutExpired,
+                        subprocess.CalledProcessError):
+                    run_ffx_command(('emu', 'stop'))
         return self._node_name
 
     def __exit__(self, exc_type, exc_value, traceback) -> bool:
@@ -224,7 +205,6 @@ class FfxEmulator(AbstractContextManager):
 
         if self._scoped_pb_metadata:
             self._scoped_pb_metadata.__exit__(exc_type, exc_value, traceback)
-        self._scoped_pb_storage.__exit__(exc_type, exc_value, traceback)
 
         # Do not suppress exceptions.
         return False
@@ -326,8 +306,19 @@ class FfxTestRunner(AbstractContextManager):
                     self._results_dir, run_artifact_dir, artifact_path)
                 break
 
+        if run_summary['data']['outcome'] == "NOT_STARTED":
+            logging.critical('Test execution was interrupted. Either the '
+                             'emulator crashed while the tests were still '
+                             'running or connection to the device was lost.')
+            sys.exit(1)
+
         # There should be precisely one suite for the test that ran.
-        suite_summary = run_summary.get('data', {}).get('suites', [{}])[0]
+        suites_list = run_summary.get('data', {}).get('suites')
+        if not suites_list:
+            logging.error('Missing or empty list of suites in %s',
+                          run_summary_path)
+            return
+        suite_summary = suites_list[0]
 
         # Get the top-level directory holding all artifacts for this suite.
         artifact_dir = suite_summary.get('artifact_dir')

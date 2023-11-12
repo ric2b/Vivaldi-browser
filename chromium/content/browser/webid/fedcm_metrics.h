@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_WEBID_FEDCM_METRICS_H_
 #define CONTENT_BROWSER_WEBID_FEDCM_METRICS_H_
 
+#include "content/browser/webid/idp_network_request_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -26,9 +27,9 @@ enum class FedCmRequestIdTokenStatus {
   kUnhandledRequest,
   kIdpNotPotentiallyTrustworthy,
   kNotSelectAccount,
-  kManifestHttpNotFound,
-  kManifestNoResponse,
-  kManifestInvalidResponse,
+  kConfigHttpNotFound,
+  kConfigNoResponse,
+  kConfigInvalidResponse,
   kClientMetadataHttpNotFound,     // obsolete
   kClientMetadataNoResponse,       // obsolete
   kClientMetadataInvalidResponse,  // obsolete
@@ -43,11 +44,11 @@ enum class FedCmRequestIdTokenStatus {
   kThirdPartyCookiesBlocked,
   kDisabledInSettings,
   kDisabledInFlags,
-  kManifestListHttpNotFound,
-  kManifestListNoResponse,
-  kManifestListInvalidResponse,
-  kManifestNotInManifestList,
-  kManifestListTooBig,
+  kWellKnownHttpNotFound,
+  kWellKnownNoResponse,
+  kWellKnownInvalidResponse,
+  kConfigNotInWellKnown,
+  kWellKnownTooBig,
   kDisabledEmbargo,
   kUserInterfaceTimedOut,  // obsolete
   kRpPageNotVisible,
@@ -67,6 +68,24 @@ enum class FedCmSignInStateMatchStatus {
   kBrowserObservedSignIn,
 
   kMaxValue = kBrowserObservedSignIn
+};
+
+// This enum describes whether the browser's knowledge of whether the user is
+// signed into the IDP based on observing signin/signout HTTP headers matches
+// the information returned by the accounts endpoint.
+enum class FedCmIdpSigninMatchStatus {
+  // Don't change the meaning or the order of these values because they are
+  // being recorded in metrics and in sync with the counterpart in enums.xml.
+  kMatchWithAccounts,
+  kMatchWithoutAccounts,
+  kUnknownStatusWithAccounts,
+  kUnknownStatusWithoutAccounts,
+  kMismatchWithNetworkError,
+  kMismatchWithNoContent,
+  kMismatchWithInvalidResponse,
+  kMismatchWithUnexpectedAccounts,
+
+  kMaxValue = kMismatchWithUnexpectedAccounts
 };
 
 class FedCmMetrics {
@@ -108,6 +127,13 @@ class FedCmMetrics {
 
   // Records whether user sign-in states between IDP and browser match.
   void RecordSignInStateMatchStatus(FedCmSignInStateMatchStatus status);
+
+  // Records whether the browser's knowledge of whether the user is signed into
+  // the IDP based on observing signin/signout HTTP headers matches the
+  // information returned by the accounts endpoint.
+  void RecordIdpSigninMatchStatus(
+      absl::optional<bool> idp_signin_status,
+      IdpNetworkRequestManager::ParseStatus accounts_endpoint_status);
 
   // Records whether the user selected account is for sign-in or not.
   void RecordIsSignInUser(bool is_sign_in);

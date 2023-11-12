@@ -19,6 +19,10 @@ namespace views {
 class StyledLabel;
 }  // namespace views
 
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PageInfoCookiesContentView,
+                                      kCookieDialogButton);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PageInfoCookiesContentView, kCookiesPage);
+
 PageInfoCookiesContentView::PageInfoCookiesContentView(PageInfo* presenter)
     : presenter_(presenter) {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -71,6 +75,8 @@ PageInfoCookiesContentView::PageInfoCookiesContentView(PageInfo* presenter)
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_BUTTONS_CONTAINER);
 
   presenter_->InitializeUiState(this, base::DoNothing());
+
+  SetProperty(views::kElementIdentifierKey, kCookiesPage);
 }
 
 PageInfoCookiesContentView::~PageInfoCookiesContentView() = default;
@@ -99,16 +105,22 @@ void PageInfoCookiesContentView::InitCookiesDialogButton() {
   // Create the cookie button, with a temporary value for the subtitle text
   // since the site count is not yet known.
   cookies_dialog_button_ = cookies_buttons_container_view_->AddChildView(
-      std::make_unique<PageInfoHoverButton>(
+      std::make_unique<RichHoverButton>(
           base::BindRepeating(
               [](PageInfoCookiesContentView* view) {
                 view->presenter_->OpenCookiesDialog();
               },
               this),
-          icon, IDS_PAGE_INFO_COOKIES_DIALOG_BUTTON_TITLE, std::u16string(),
-          PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG,
+          icon,
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_DIALOG_BUTTON_TITLE),
+          std::u16string(),
+
           tooltip, /*subtitle_text=*/u" ",
           PageInfoViewFactory::GetLaunchIcon()));
+  cookies_dialog_button_->SetID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG);
+  cookies_dialog_button_->SetProperty(views::kElementIdentifierKey,
+                                      kCookieDialogButton);
 }
 
 void PageInfoCookiesContentView::CookiesSettingsLinkClicked(
@@ -334,18 +346,19 @@ void PageInfoCookiesContentView::InitFpsButton(bool is_managed) {
   // Create the fps_button with temporary values for title and subtitle
   // as we don't have data yet, it will be updated.
   fps_button_ = cookies_buttons_container_view_->AddChildView(
-      std::make_unique<PageInfoHoverButton>(
+      std::make_unique<RichHoverButton>(
           base::BindRepeating(
               &PageInfoCookiesContentView::FpsSettingsButtonClicked,
               base::Unretained(this)),
-          PageInfoViewFactory::GetFpsIcon(), IDS_PAGE_INFO_COOKIES,
-          std::u16string(),
-          PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_FPS_SETTINGS,
+          PageInfoViewFactory::GetFpsIcon(),
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES), std::u16string(),
           tooltip, /*secondary_text=*/u" ",
           PageInfoViewFactory::GetLaunchIcon(),
           is_managed ? absl::optional<ui::ImageModel>(
                            PageInfoViewFactory::GetEnforcedByPolicyIcon())
                      : absl::nullopt));
+  fps_button_->SetID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_FPS_SETTINGS);
 }
 
 void PageInfoCookiesContentView::FpsSettingsButtonClicked(ui::Event const&) {

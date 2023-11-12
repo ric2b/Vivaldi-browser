@@ -74,7 +74,7 @@ struct PresentationFeedback;
 
 namespace cc {
 
-class DocumentTransitionRequest;
+class ViewTransitionRequest;
 class HeadsUpDisplayLayer;
 class LayerTreeHostImpl;
 class LayerTreeHostImplClient;
@@ -285,6 +285,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // synchronization.
   virtual void SetNeedsCommit();
 
+  // Invoked when a compositing update is first requested and scheduled.
+  void OnCommitRequested();
+
   // Notifies that a new viz::LocalSurfaceId has been set, ahead of it becoming
   // activated. Requests that the compositor thread does not produce new frames
   // until it has activated.
@@ -401,11 +404,20 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // remains blocked until the pending tree is activated.
   void SetNextCommitWaitsForActivation();
 
+  // Registers a callback that is run when the presentation feedback for the
+  // next submitted frame is received (it's entirely possible some frames may be
+  // dropped between the time this is called and the callback is run).
+  // Note that since this might be called on failed presentations, it is
+  // deprecated in favor of `RequestSuccessfulPresentationTimeForNextFrame()`
+  // which will be called only after a successful presentation.
+  void RequestPresentationTimeForNextFrame(
+      PresentationTimeCallbackBuffer::Callback callback);
+
   // Registers a callback that is run when the next frame successfully makes it
   // to the screen (it's entirely possible some frames may be dropped between
   // the time this is called and the callback is run).
-  void RequestPresentationTimeForNextFrame(
-      PresentationTimeCallbackBuffer::MainCallback callback);
+  void RequestSuccessfulPresentationTimeForNextFrame(
+      PresentationTimeCallbackBuffer::SuccessfulCallback callback);
 
   // Registers a callback that is run when any ongoing scroll-animation ends. If
   // there are no ongoing animations, then the callback is run immediately.
@@ -732,7 +744,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool UpdateLayers();
   void DidPresentCompositorFrame(
       uint32_t frame_token,
-      std::vector<PresentationTimeCallbackBuffer::MainCallback> callbacks,
+      std::vector<PresentationTimeCallbackBuffer::Callback>
+          presentation_callbacks,
+      std::vector<PresentationTimeCallbackBuffer::SuccessfulCallback>
+          successful_presentation_callbacks,
       const gfx::PresentationFeedback& feedback);
   // Called when the compositor completed page scale animation.
   void DidCompletePageScaleAnimation();
@@ -745,8 +760,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void NotifyThroughputTrackerResults(CustomTrackerResults results);
   void NotifyTransitionRequestsFinished(
       const std::vector<uint32_t>& sequence_ids);
-  void ReportEventLatency(
-      std::vector<EventLatencyTracker::LatencyData> latencies);
 
   LayerTreeHostClient* client() {
     DCHECK(IsMainThread());
@@ -861,10 +874,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay,
                                   base::TimeTicks first_scroll_timestamp);
 
-  void AddDocumentTransitionRequest(
-      std::unique_ptr<DocumentTransitionRequest> request);
+  void AddViewTransitionRequest(std::unique_ptr<ViewTransitionRequest> request);
 
-  std::vector<base::OnceClosure> TakeDocumentTransitionCallbacksForTesting();
+  std::vector<base::OnceClosure> TakeViewTransitionCallbacksForTesting();
 
   // Returns a percentage of dropped frames of the last second.
   double GetPercentDroppedFrames() const;
@@ -1064,7 +1076,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   EventsMetricsManager events_metrics_manager_;
 
   // A list of callbacks that need to be invoked when they are processed.
-  base::flat_map<uint32_t, base::OnceClosure> document_transition_callbacks_;
+  base::flat_map<uint32_t, base::OnceClosure> view_transition_callbacks_;
 
   // Set if WaitForCommitCompletion() was called before commit completes. Used
   // for histograms.

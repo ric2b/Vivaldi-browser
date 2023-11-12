@@ -3,12 +3,15 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/peerconnection/rtc_stats_report.h"
-#include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/fullscreen/document_fullscreen.h"
+#include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_stats.h"
-#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/webrtc/api/stats/rtc_stats.h"
 
 namespace blink {
@@ -30,6 +33,21 @@ v8::Local<v8::Value> HashMapToValue(ScriptState* script_state,
   return v8_object;
 }
 
+bool IsCapturing(LocalDOMWindow* window) {
+  UserMediaClient* user_media_client = UserMediaClient::From(window);
+  return user_media_client && user_media_client->IsCapturing();
+}
+
+bool ExposeHardwareCapabilityStats(ScriptState* script_state) {
+  // According the the spec description at
+  // https://w3c.github.io/webrtc-stats/#dfn-exposing-hardware-is-allowed,
+  // hardware capabilities may be exposed if the context capturing state is
+  // true.
+  ExecutionContext* ctx = ExecutionContext::From(script_state);
+  LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(ctx);
+  return window && IsCapturing(window);
+}
+
 v8::Local<v8::Object> RTCStatsToV8Object(ScriptState* script_state,
                                          const RTCStats* stats) {
   V8ObjectBuilder builder(script_state);
@@ -38,10 +56,16 @@ v8::Local<v8::Object> RTCStatsToV8Object(ScriptState* script_state,
   builder.AddNumber("timestamp", stats->Timestamp());
   builder.AddString("type", stats->GetType());
 
+  const bool expose_hardware_caps = ExposeHardwareCapabilityStats(script_state);
+
   for (size_t i = 0; i < stats->MembersCount(); ++i) {
     std::unique_ptr<RTCStatsMember> member = stats->GetMember(i);
-    if (!member->IsDefined())
+    if (!member->IsDefined() ||
+        (!expose_hardware_caps &&
+         member->Restriction() ==
+             RTCStatsMember::ExposureRestriction::kHardwareCapability)) {
       continue;
+    }
     String name = member->GetName();
     switch (member->GetType()) {
       case webrtc::RTCStatsMemberInterface::kBool:
@@ -106,21 +130,22 @@ v8::Local<v8::Object> RTCStatsToV8Object(ScriptState* script_state,
 }
 
 class RTCStatsReportIterationSource final
-    : public PairIterable<String, IDLString, v8::Local<v8::Object>, IDLObject>::
-          IterationSource {
+    : public PairSyncIterable<RTCStatsReport>::IterationSource {
  public:
-  RTCStatsReportIterationSource(std::unique_ptr<RTCStatsReportPlatform> report)
+  explicit RTCStatsReportIterationSource(
+      std::unique_ptr<RTCStatsReportPlatform> report)
       : report_(std::move(report)) {}
 
-  bool Next(ScriptState* script_state,
-            String& key,
-            v8::Local<v8::Object>& value,
-            ExceptionState& exception_state) override {
+  bool FetchNextItem(ScriptState* script_state,
+                     String& key,
+                     ScriptValue& value,
+                     ExceptionState& exception_state) override {
     std::unique_ptr<RTCStats> stats = report_->Next();
     if (!stats)
       return false;
     key = stats->Id();
-    value = RTCStatsToV8Object(script_state, stats.get());
+    value = ScriptValue(script_state->GetIsolate(),
+                        RTCStatsToV8Object(script_state, stats.get()));
     return true;
   }
 
@@ -154,21 +179,21 @@ uint32_t RTCStatsReport::size() const {
   return base::saturated_cast<uint32_t>(report_->Size());
 }
 
-PairIterable<String, IDLString, v8::Local<v8::Object>, IDLObject>::
-    IterationSource*
-    RTCStatsReport::StartIteration(ScriptState*, ExceptionState&) {
+PairSyncIterable<RTCStatsReport>::IterationSource*
+RTCStatsReport::CreateIterationSource(ScriptState*, ExceptionState&) {
   return MakeGarbageCollected<RTCStatsReportIterationSource>(
       report_->CopyHandle());
 }
 
 bool RTCStatsReport::GetMapEntry(ScriptState* script_state,
                                  const String& key,
-                                 v8::Local<v8::Object>& value,
+                                 ScriptValue& value,
                                  ExceptionState&) {
   std::unique_ptr<RTCStats> stats = report_->GetStats(key);
   if (!stats)
     return false;
-  value = RTCStatsToV8Object(script_state, stats.get());
+  value = ScriptValue(script_state->GetIsolate(),
+                      RTCStatsToV8Object(script_state, stats.get()));
   return true;
 }
 

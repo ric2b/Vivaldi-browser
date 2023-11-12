@@ -12,7 +12,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/gmock_callback_support.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/client/report_queue.h"
 #include "components/reporting/client/report_queue_configuration.h"
@@ -28,12 +28,13 @@ using ::testing::Return;
 namespace reporting {
 
 MockReportQueueProvider::MockReportQueueProvider()
-    : ReportQueueProvider(base::BindRepeating(
-          [](OnStorageModuleCreatedCallback storage_created_cb) {
-            std::move(storage_created_cb)
-                .Run(base::MakeRefCounted<test::TestStorageModule>());
-          })),
-      test_sequenced_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+    : ReportQueueProvider(
+          base::BindRepeating(
+              [](OnStorageModuleCreatedCallback storage_created_cb) {
+                std::move(storage_created_cb)
+                    .Run(base::MakeRefCounted<test::TestStorageModule>());
+              }),
+          base::SequencedTaskRunner::GetCurrentDefault()) {}
 
 MockReportQueueProvider::~MockReportQueueProvider() = default;
 
@@ -52,12 +53,6 @@ void MockReportQueueProvider::ExpectCreateNewQueueAndReturnNewMockQueue(
 void MockReportQueueProvider::
     ExpectCreateNewSpeculativeQueueAndReturnNewMockQueue(size_t times) {
   CheckOnThread();
-
-  // Mock internals so we do not unnecessarily create a new report queue.
-  EXPECT_CALL(*this, CreateNewQueueMock(_, _))
-      .Times(times)
-      .WillRepeatedly(
-          RunOnceCallback<1>(std::unique_ptr<ReportQueue>(nullptr)));
 
   EXPECT_CALL(*this, CreateNewSpeculativeQueueMock())
       .Times(times)
@@ -79,24 +74,15 @@ void MockReportQueueProvider::
 }
 
 void MockReportQueueProvider::OnInitCompleted() {
-  // OnInitCompleted is called on a thread pool, so in order to make potential
-  // EXPECT_CALLs happen sequentially, we assign Mock to the test's main thread
-  // task runner.
-  test_sequenced_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&MockReportQueueProvider::OnInitCompletedMock,
-                                base::Unretained(this)));
+  CheckOnThread();
+  OnInitCompletedMock();
 }
 
 void MockReportQueueProvider::CreateNewQueue(
     std::unique_ptr<ReportQueueConfiguration> config,
     CreateReportQueueCallback cb) {
-  // CreateNewQueue is called on a thread pool, so in order to make potential
-  // EXPECT_CALLs happen sequentially, we assign Mock to the test's main thread
-  // task runner.
-  test_sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&MockReportQueueProvider::CreateNewQueueMock,
-                     base::Unretained(this), std::move(config), std::move(cb)));
+  CheckOnThread();
+  CreateNewQueueMock(std::move(config), std::move(cb));
 }
 
 StatusOr<std::unique_ptr<ReportQueue, base::OnTaskRunnerDeleter>>
@@ -108,14 +94,9 @@ MockReportQueueProvider::CreateNewSpeculativeQueue() {
 void MockReportQueueProvider::ConfigureReportQueue(
     std::unique_ptr<ReportQueueConfiguration> report_queue_config,
     ReportQueueConfiguredCallback completion_cb) {
-  // ConfigureReportQueue is called on a thread pool, so in order to make
-  // potential EXPECT_CALLs happen sequentially, we assign Mock to the test's
-  // main thread task runner.
-  test_sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&MockReportQueueProvider::ConfigureReportQueueMock,
-                     base::Unretained(this), std::move(report_queue_config),
-                     std::move(completion_cb)));
+  CheckOnThread();
+  ConfigureReportQueueMock(std::move(report_queue_config),
+                           std::move(completion_cb));
 }
 
 void MockReportQueueProvider::CheckOnThread() const {

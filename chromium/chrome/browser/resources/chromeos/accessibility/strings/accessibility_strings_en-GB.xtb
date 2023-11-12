@@ -25,6 +25,7 @@
 <translation id="1156488781945104845">Current time</translation>
 <translation id="1161762950103988776">Jump</translation>
 <translation id="1164857107703583584">Jump commands can be used to efficiently navigate through a web page.</translation>
+<translation id="116896278675803795">Automatically change language to match selected content</translation>
 <translation id="1175914831232945926">Digits</translation>
 <translation id="1188858454923323853">complementary</translation>
 <translation id="1189258430971676908">Practice area: drop-down lists</translation>
@@ -184,7 +185,7 @@
 <translation id="2216790501338699346">Link URL: <ph name="LINK_URL" /></translation>
 <translation id="2220205454259065436">Move backward one char</translation>
 <translation id="2220529011494928058">Report an issue</translation>
-<translation id="2243633977138166243">Press left or right arrow to navigate; enter to activate</translation>
+<translation id="2243633977138166243">Press Left or Right Arrow to navigate; Enter to activate</translation>
 <translation id="224426591676115802">No voice available for language: <ph name="LANGUAGE" /></translation>
 <translation id="2247700577781885251">Stopping learn mode</translation>
 <translation id="2247870315273396641">Voice preview</translation>
@@ -380,6 +381,7 @@
 <translation id="3389259863310851658">Previous form field</translation>
 <translation id="3393605254399152980">Drag one finger to hear what you touch</translation>
 <translation id="3406283310380167331">Show forms list</translation>
+<translation id="3407726812456125464">Listen to selected text</translation>
 <translation id="3414400929511680526">Alice blue</translation>
 <translation id="3418936350470374046">No cell below</translation>
 <translation id="3419269701801640163">paste</translation>

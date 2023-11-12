@@ -3,13 +3,6 @@ declare_args() {
   # Media decoders based on the original Opera patches
   system_proprietary_codecs = is_win || is_mac
 
-  # Media demuxer and decoder based on the original Opera patches. It is no
-  # longer used by default requiring --enable-ipc-demuxer switch to pass for
-  # testing.  All code that depends on this setting can be removed at some point
-  # like when integrating Chromium 108 or 110. See
-  # platform_media/doc/ipc_demuxer.doc for details.
-  vivaldi_use_system_media_demuxer = is_win || is_mac
-
   vivaldi_disable_sparkle = false
   enable_widevine_signing = false
   vivaldi_disable_widevine_verification = false

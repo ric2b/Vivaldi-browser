@@ -20,6 +20,10 @@
 #import "skia/ext/skia_utils_ios.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -93,7 +97,7 @@ void FaviconLoader::FaviconForPageUrl(
              favicon.size.height <= size_in_points);
       favicon_block_handler(attributes);
       return;
-    } else if (fallback_to_google_server) {
+    } else if (!vivaldi::IsVivaldiRunning() && fallback_to_google_server) {
       void (^favicon_loaded_from_server_block)(
           favicon_base::GoogleFaviconServerRequestStatus status) =
           ^(const favicon_base::GoogleFaviconServerRequestStatus status) {

@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.feed.sort_ui;
 
+import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
@@ -16,6 +19,7 @@ import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.feed.R;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
+import org.chromium.ui.base.ViewUtils;
 
 /**
  * View class representing an expandable/collapsible view holding option chips for the feed.
@@ -58,6 +62,14 @@ public class FeedOptionsView extends LinearLayout {
 
     /** Expands this view to full height. */
     private void expand() {
+        // If the view's parent is not shown, we want to set this view as VISIBLE without the
+        // animation, and reset the height if it was previously set by collapse() animation.
+        if (getParent() == null || !(((View) getParent()).isShown())) {
+            setVisibility(VISIBLE);
+            setLayoutParams(new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
+            return;
+        }
+
         // Width is match_parent and height is wrap_content.
         int widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(
                 ((ViewGroup) getParent()).getWidth(), View.MeasureSpec.EXACTLY);
@@ -79,7 +91,8 @@ public class FeedOptionsView extends LinearLayout {
                     height = (int) (targetHeight * interpolatedTime);
                 }
                 getLayoutParams().height = height;
-                requestLayout();
+                ViewUtils.requestLayout(FeedOptionsView.this,
+                        "FeedOptionsView.expand.Animation.applyTransformation");
             }
 
             @Override
@@ -94,6 +107,13 @@ public class FeedOptionsView extends LinearLayout {
 
     /** Collapses this view to 0 height and then marks it GONE. */
     private void collapse() {
+        // If the view's parent is not shown, we want to set this view as GONE without the
+        // animation.
+        if (getParent() == null || !(((View) getParent()).isShown())) {
+            setVisibility(GONE);
+            return;
+        }
+
         int initialHeight = getMeasuredHeight();
 
         Animation animation = new Animation() {
@@ -104,7 +124,8 @@ public class FeedOptionsView extends LinearLayout {
                 } else {
                     getLayoutParams().height =
                             initialHeight - (int) (initialHeight * interpolatedTime);
-                    requestLayout();
+                    ViewUtils.requestLayout(FeedOptionsView.this,
+                            "FeedOptionsView.collapse.Animation.applyTransformation");
                 }
             }
 

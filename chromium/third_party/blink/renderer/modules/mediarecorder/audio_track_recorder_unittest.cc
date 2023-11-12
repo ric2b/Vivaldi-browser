@@ -122,7 +122,7 @@ class TestInterfaceFactory : public media::mojom::InterfaceFactory {
         nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     DCHECK(SUCCEEDED(hr));
     auto platform_audio_encoder = std::make_unique<media::MFAudioEncoder>(
-        base::SequencedTaskRunnerHandle::Get());
+        blink::scheduler::GetSequencedTaskRunnerForTesting());
 #else
 #error "Unknown platform encoder."
 #endif
@@ -538,7 +538,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     std::unique_ptr<media::AudioBus> bus(media::AudioBus::Create(
         first_params_.channels(),
         FramesPerInputBuffer(first_params_.sample_rate())));
-    first_source_.OnMoreData(base::TimeDelta(), base::TimeTicks::Now(), 0,
+    first_source_.OnMoreData(base::TimeDelta(), base::TimeTicks::Now(), {},
                              bus.get());
 
     // Save the samples that we read into the first_source_cache_ if we're using
@@ -563,7 +563,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     std::unique_ptr<media::AudioBus> bus(media::AudioBus::Create(
         second_params_.channels(),
         FramesPerInputBuffer(second_params_.sample_rate())));
-    second_source_.OnMoreData(base::TimeDelta(), base::TimeTicks::Now(), 0,
+    second_source_.OnMoreData(base::TimeDelta(), base::TimeTicks::Now(), {},
                               bus.get());
     return bus;
   }
@@ -682,7 +682,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
 
   void InitializeAacDecoder(int channels, int sample_rate) {
     aac_decoder_ = std::make_unique<media::FFmpegAudioDecoder>(
-        base::SequencedTaskRunnerHandle::Get(), &media_log_);
+        scheduler::GetSequencedTaskRunnerForTesting(), &media_log_);
     media::ChannelLayout channel_layout = media::CHANNEL_LAYOUT_NONE;
     switch (channels) {
       case 1:

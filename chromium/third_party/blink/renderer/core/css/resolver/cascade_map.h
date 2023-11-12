@@ -50,9 +50,10 @@ class CORE_EXPORT CascadeMap {
         backing_vector_);
   }
   // Similar to Find(name, origin), but returns the CascadePriority from cascade
-  // layers below the given priority.
+  // layers below the given priority. The uint64_t is presumed to come from
+  // CascadePriority::ForLayerComparison().
   const CascadePriority* FindRevertLayer(const CSSPropertyName&,
-                                         CascadePriority) const;
+                                         uint64_t) const;
   // Similar to Find(), if you already have the right CascadePriorityList.
   CascadePriority& Top(CascadePriorityList&);
   // Adds an entry to the map if the incoming priority is greater than or equal
@@ -88,17 +89,6 @@ class CORE_EXPORT CascadeMap {
       Node(CascadePriority priority, wtf_size_t next_index)
           : priority(priority), next_index(next_index) {}
 
-      // This terrible sequence convinces the compiler to use 32-bit loads and
-      // stores for copying a Node into the BackingStore, instead of coalescing
-      // them into 64-bit, which would cause a store-to-load forwarding stall.
-      // See crbug.com/1313148 (remove when it has been fixed).
-      Node(Node&& other) {
-        priority = other.priority;
-        next_index = other.next_index + 1;
-        other.next_index = next_index;
-        --next_index;
-      }
-
       CascadePriority priority;
       // 0 for null; Otherwise, next_index - 1 is index in the backing vector.
       wtf_size_t next_index;
@@ -111,6 +101,11 @@ class CORE_EXPORT CascadeMap {
 
    public:
     CascadePriorityList() = default;
+    inline CascadePriorityList(BackingVector& backing_vector,
+                               CascadePriority priority)
+        : head_index_(backing_vector.size() + 1) {
+      backing_vector.emplace_back(priority, 0);
+    }
 
     class Iterator {
       STACK_ALLOCATED();

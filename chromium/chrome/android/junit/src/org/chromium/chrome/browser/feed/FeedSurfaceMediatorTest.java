@@ -58,6 +58,7 @@ import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger.StreamTy
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ListLayoutHelper;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -74,7 +75,8 @@ import org.chromium.ui.modelutil.PropertyModel;
 // default or removed if the flag is removed.
 @Features.DisableFeatures(ChromeFeatureList.SYNC_ANDROID_LIMIT_NTP_PROMO_IMPRESSIONS)
 @Features.EnableFeatures({ChromeFeatureList.WEB_FEED, ChromeFeatureList.INTEREST_FEED_V2_HEARTS,
-        ChromeFeatureList.WEB_FEED_SORT, ChromeFeatureList.FEED_MULTI_COLUMN})
+        ChromeFeatureList.WEB_FEED_SORT, ChromeFeatureList.FEED_MULTI_COLUMN,
+        ChromeFeatureList.FEED_HEADER_STICK_TO_TOP})
 public class FeedSurfaceMediatorTest {
     static final @Px int TOOLBAR_HEIGHT = 10;
     @Rule
@@ -138,7 +140,6 @@ public class FeedSurfaceMediatorTest {
         // We want to make the feed service bridge ignore the ablation flag.
         when(mFeedServiceBridgeJniMock.isEnabled())
                 .thenAnswer(invocation -> mPrefService.getBoolean(Pref.ENABLE_SNIPPETS));
-        when(mPrefService.getBoolean(Pref.ENABLE_WEB_FEED_UI)).thenReturn(true);
         when(mIdentityService.getSigninManager(any(Profile.class))).thenReturn(mSigninManager);
         when(mSigninManager.getIdentityManager()).thenReturn(mIdentityManager);
         when(mIdentityManager.hasPrimaryAccount(anyInt())).thenReturn(true);
@@ -154,6 +155,7 @@ public class FeedSurfaceMediatorTest {
         when(mReliabilityLogger.getLaunchLogger()).thenReturn(mLaunchReliabilityLogger);
         when(mFeedSurfaceCoordinator.getHybridListRenderer()).thenReturn(mHybridListRenderer);
         when(mHybridListRenderer.getListLayoutHelper()).thenReturn(mListLayoutHelper);
+        when(mListLayoutHelper.setColumnCount(anyInt())).thenReturn(true);
         when(mFeedSurfaceCoordinator.getSurfaceLifecycleManager())
                 .thenReturn(mFeedSurfaceLifecycleManager);
         ObservableSupplierImpl<Boolean> hasUnreadContent = new ObservableSupplierImpl<>();
@@ -507,38 +509,84 @@ public class FeedSurfaceMediatorTest {
     @Config(qualifiers = "en-sw600dp")
     @Test
     public void testOnHeaderSelected_selectedWithLatestOptionsOnTablet() {
-        PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
-        PropertyModel forYou = SectionHeaderProperties.createSectionHeader("For you");
-        OnSectionHeaderSelectedListener listener =
-                getOnSectionHeaderSelectedListener(model, forYou, true);
-        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.REVERSE_CHRON);
-        listener.onSectionHeaderSelected(1);
+        when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
 
-        verify(mListLayoutHelper).setSpanCount(2);
+        // Set up mediator with For_you feed (2 column)
+        mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU,
+                SectionHeaderListProperties.create(TOOLBAR_HEIGHT));
+        mFeedSurfaceMediator.updateContent();
+
+        // Switch to following feed with latest option. Uses 2 column.
+        when(mFollowingStream.supportsOptions()).thenReturn(true);
+        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.REVERSE_CHRON);
+        OnSectionHeaderSelectedListener listener =
+                mFeedSurfaceMediator.getOrCreateSectionHeaderListenerForTesting();
+        listener.onSectionHeaderSelected(1);
+        verify(mListLayoutHelper, times(2)).setColumnCount(2);
     }
 
     @Config(qualifiers = "en-sw600dp")
     @Test
     public void testOnHeaderSelected_selectedWithSortOptionsOnTablet() {
-        PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
-        PropertyModel forYou = SectionHeaderProperties.createSectionHeader("For you");
-        OnSectionHeaderSelectedListener listener =
-                getOnSectionHeaderSelectedListener(model, forYou, true);
-        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.GROUPED);
-        listener.onSectionHeaderSelected(1);
+        when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
 
-        verify(mListLayoutHelper).setSpanCount(1);
+        // Set up mediator with For_you feed (2 column)
+        mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU,
+                SectionHeaderListProperties.create(TOOLBAR_HEIGHT));
+        mFeedSurfaceMediator.updateContent();
+        verify(mListLayoutHelper).setColumnCount(2);
+
+        // Switch to following feed with sort option. Uses 1 column.
+        when(mFollowingStream.supportsOptions()).thenReturn(true);
+        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.GROUPED);
+        OnSectionHeaderSelectedListener listener =
+                mFeedSurfaceMediator.getOrCreateSectionHeaderListenerForTesting();
+        listener.onSectionHeaderSelected(1);
+        verify(mListLayoutHelper).setColumnCount(1);
     }
 
     @Config(qualifiers = "en-sw600dp")
     @Test
-    public void testOnOptionSelected() {
-        FeedSurfaceMediator mediator = createMediator();
+    public void testOnOptionSelectedOnTablet() {
+        when(mFollowingStream.supportsOptions()).thenReturn(true);
         when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.GROUPED);
+        when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
 
-        mediator.onOptionChanged();
+        // Set up mediator with Following feed with default sort option (1 column)
+        mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOLLOWING,
+                SectionHeaderListProperties.create(TOOLBAR_HEIGHT));
+        mFeedSurfaceMediator.updateContent();
+        verify(mListLayoutHelper).setColumnCount(1);
 
-        verify(mListLayoutHelper).setSpanCount(1);
+        // Switch to latest sort. Verify 2 column
+        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.REVERSE_CHRON);
+        mFeedSurfaceMediator.onOptionChanged();
+        verify(mListLayoutHelper).setColumnCount(2);
+    }
+
+    @Config(qualifiers = "en-sw600dp")
+    @DisableFeatures(ChromeFeatureList.WEB_FEED_SORT)
+    @Test
+    public void testOnHeaderSelected_withFollowingAndSortDisabledOnTablet() {
+        when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+
+        // Set up mediator with For_you feed (2 column)
+        mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU,
+                SectionHeaderListProperties.create(TOOLBAR_HEIGHT));
+        mFeedSurfaceMediator.updateContent();
+        verify(mListLayoutHelper).setColumnCount(2);
+
+        // Switch to following feed with sort option. Uses 1 column.
+        when(mFollowingStream.supportsOptions()).thenReturn(true);
+        when(mOptionsCoordinator.getSelectedOptionId()).thenReturn(ContentOrder.GROUPED);
+        OnSectionHeaderSelectedListener listener =
+                mFeedSurfaceMediator.getOrCreateSectionHeaderListenerForTesting();
+        listener.onSectionHeaderSelected(1);
+        verify(mListLayoutHelper).setColumnCount(1);
     }
 
     private OnSectionHeaderSelectedListener getOnSectionHeaderSelectedListener(

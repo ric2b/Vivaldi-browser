@@ -38,14 +38,14 @@ struct InitSessionParams {
 
 bool GetW3CSetting(const base::Value::Dict& params);
 
-bool MergeCapabilities(const base::DictionaryValue* always_match,
-                       const base::DictionaryValue* first_match,
-                       base::DictionaryValue* merged);
+bool MergeCapabilities(const base::Value::Dict& always_match,
+                       const base::Value::Dict& first_match,
+                       base::Value::Dict& merged);
 
-bool MatchCapabilities(const base::DictionaryValue* capabilities);
+bool MatchCapabilities(const base::Value::Dict& capabilities);
 
 Status ProcessCapabilities(const base::Value::Dict& params,
-                           base::DictionaryValue* result_capabilities);
+                           base::Value::Dict& result_capabilities);
 
 // Initializes a session.
 Status ExecuteInitSession(const InitSessionParams& bound_params,
@@ -175,10 +175,12 @@ namespace internal {
 Status ConfigureHeadlessSession(Session* session,
                                 const Capabilities& capabilities);
 
+// On return `desired_caps` either points at `merged_caps`, or points to some
+// field in `params`.
 Status ConfigureSession(Session* session,
                         const base::Value::Dict& params,
-                        const base::DictionaryValue** desired_caps,
-                        base::DictionaryValue* merged_caps,
+                        const base::Value::Dict*& desired_caps,
+                        base::Value::Dict& merged_caps,
                         Capabilities* capabilities);
 
 }  // namespace internal

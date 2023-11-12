@@ -19,14 +19,12 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å kjøre Windows Nettverksdiagnose<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Denne siden inneholder skadelig programvare</translation>
 <translation id="1916770123977586577">Last inn siden på nytt for å bruke de oppdaterte innstillingene</translation>
-<translation id="1973351931613083086">automatisk avspilling</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Denne siden kan ikke tilby en sikker tilkobling</translation>
 <translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Mangler internettilgang</translation>
-<translation id="2230458221926704099">Fiks tilkoblingen ved <ph name="BEGIN_LINK" />diagnoseverktøyet<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Internettilgangen din er blokkert</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> krever brukernavn og passord.</translation>
 <translation id="2337852623177822836">Innstillingen kontrolleres av administratoren</translation>
@@ -48,7 +46,6 @@
 <translation id="2856444702002559011">Angripere kan kanskje prøve å stjele informasjonen din fra <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (for eksempel passord, meldinger og kredittkort). <ph name="BEGIN_LEARN_MORE_LINK" />Lær mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nettverksendring ble oppdaget.</translation>
 <translation id="2948083400971632585">På innstillingssiden kan du deaktivere eventuelle mellomtjenere for tilkoblinger.</translation>
-<translation id="2953943267837858202">Automatisk avspilling av video ikke tillatt</translation>
 <translation id="2991571918955627853">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi nettsiden bruker HSTS. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="3005723025932146533">Vis lagret kopi</translation>
 <translation id="301521992641321250">Automatisk blokkert</translation>
@@ -62,7 +59,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på oppdater-knappen for å sende inn dataene som trengs for å laste siden på nytt.</translation>
 <translation id="3234666976984236645">Alltid oppdag viktig innhold på dette nettstedet</translation>
-<translation id="3291915639428159043">Automatisk avspilling blokkert</translation>
 <translation id="3308738399950580893">reklame</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke nås for øyeblikket.</translation>
 <translation id="3427092606871434483">Tillat (standard)</translation>
@@ -73,7 +69,6 @@
 <translation id="3566021033012934673">Tilkoblingen din er ikke privat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Skjul detaljer</translation>
-<translation id="3620979700683094848">Nettsteder kan spille av video automatisk</translation>
 <translation id="3630155396527302611">Hvis det allerede er listet opp som et program som har tilgang til nettverket,
       prøv å fjerne det fra listen og legge det til igjen.</translation>
 <translation id="3658742229777143148">Revisjon</translation>
@@ -85,7 +80,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
 <translation id="3987940399970879459">Mindre enn 1 MB</translation>
 <translation id="4075732493274867456">Klienten og tjeneren støtter ikke en vanlig SSL-protokollversjon eller krypteringsprogrampakke.</translation>
-<translation id="410351446219883937">Automatisk avspilling</translation>
 <translation id="4116663294526079822">Alltid tillat på dette nettstedet</translation>
 <translation id="4130226655945681476">Sjekke nettverkskabler, modemet og ruteren</translation>
 <translation id="4151403195736952345">Bruk global standardinnstilling (Oppdag)</translation>
@@ -158,7 +152,6 @@
 <translation id="6451458296329894277">Bekreft gjentatt innsending av skjemaer</translation>
 <translation id="6569060085658103619">Du ser på en utvidelsesside</translation>
 <translation id="6657585470893396449">Passord</translation>
-<translation id="6685834062052613830">Logg ut og fullfør oppsett</translation>
 <translation id="6711464428925977395">Enter er det noe galt med mellomtjeneren, eller så er adressen feil.</translation>
 <translation id="6757797048963528358">Enheten din gikk inn i hvilemodus.</translation>
 <translation id="6897140037006041989">Brukeragent</translation>
@@ -189,13 +182,11 @@
 <translation id="7758069387465995638">Brannmur eller antivirusprogram kan ha blokkert tilkoblingen.</translation>
 <translation id="7800304661137206267">Tilkoblingen er kryptert ved bruk av <ph name="CIPHER" />, med <ph name="MAC" /> for meldingsautentisering og <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> bruker vanligvis kryptering for å beskytte informasjonen din. Når Vivaldi prøvde å koble til <ph name="SITE" /> denne gangen returnerte nettstedet uvanlig eller feil legitimasjon. Dette kan skje når en angriper prøver å utgi seg som <ph name="SITE" />, eller når en Wi-Fi-inloggingsskjerm avbryter tilkoblingen. Din informasjon er fortsatt trygg, fordi Vivaldi stoppet tilkoblingen før data ble sendt.</translation>
-<translation id="7834693436815575883">Automatisk avspilling tillatt</translation>
 <translation id="7878562273885520351">Passordet ditt kan være kompromittert</translation>
 <translation id="7951415247503192394">(32-biters)</translation>
 <translation id="8025119109950072390">Angripere på dette nettstedet kan lure deg til å gjøre noe farlig, som å installere programvare eller avsløre personlig informasjon (for eksempel passord, telefonnummere og kredittkort).</translation>
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk global standardinnstilling (Spør)</translation>
-<translation id="8044382196220116469">Ikke tillat sider å automatisk spille av video</translation>
 <translation id="808894953321890993">Endre passord</translation>
 <translation id="8119307142152921512">sporing og reklame</translation>
 <translation id="8149426793427495338">Datamaskinen din gikk inn i hvilemodus.</translation>
@@ -213,7 +204,6 @@
 <translation id="8503813439785031346">Brukernavn</translation>
 <translation id="8703575177326907206">Tilkoblingen til <ph name="DOMAIN" /> er ikke kryptert.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> sin &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt; ble ikke funnet. Undersøker problemet.</translation>
-<translation id="8774017153185436870">Nettsteder vil kanskje spille av video automatisk</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gå til nettstedsinnstillingene</translation>
@@ -221,7 +211,6 @@
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>
 <translation id="9039213469156557790">Dessuten inneholder denne siden noen ressurser som ikke er sikre. Disse ressursene kan sees av andre under overføring, og kan endres av en angriper for å endre sidens oppførsel.</translation>
-<translation id="9048224371732578627">Tillatelse for automatisk avspilling av video</translation>
 <translation id="9062620674789239642">Den kan ha blitt flyttet, redigert eller slettet.</translation>
 <translation id="9069693763241529744">Blokkert av en utvidelse</translation>
 <translation id="9073799351042754113">Du har valgt å slå av sikkerhetsadvarsler for dette nettstedet.</translation>

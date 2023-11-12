@@ -16,7 +16,7 @@
 #include "base/win/embedded_i18n/language_selector.h"
 #include "base/win/i18n.h"
 #include "chrome/updater/tag.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/util.h"
 #include "chrome/updater/win/ui/resources/updater_installer_strings.h"
 
 namespace updater {
@@ -49,17 +49,14 @@ const base::win::i18n::LanguageSelector& GetLanguageSelector() {
 
 std::wstring GetLocalizedString(UINT base_message_id) {
   // Map `base_message_id` to the base id for the current install mode.
-  std::wstring localized_string;
   UINT message_id =
       static_cast<UINT>(base_message_id + GetLanguageSelector().offset());
   const ATLSTRINGRESOURCEIMAGE* image =
       AtlGetStringResourceImage(_AtlBaseModule.GetModuleInstance(), message_id);
-  if (image) {
-    localized_string = std::wstring(image->achString, image->nLength);
-  } else {
-    NOTREACHED() << "Unable to find resource id " << message_id;
-  }
-  return localized_string;
+  if (image)
+    return std::wstring(image->achString, image->nLength);
+  NOTREACHED() << "Unable to find resource id " << message_id;
+  return std::wstring();
 }
 
 std::wstring GetLocalizedStringF(UINT base_message_id,

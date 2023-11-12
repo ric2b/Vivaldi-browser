@@ -35,13 +35,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -54,12 +54,12 @@
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/test/server.h"
-#include "chrome/updater/unittest_util.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/util/unittest_util.h"
+#include "chrome/updater/util/util.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -151,15 +151,18 @@ base::RepeatingCallback<bool(const std::string&)> GetScopePredicate(
     const bool is_match = [&scope, &request_body]() {
       const absl::optional<base::Value> doc =
           base::JSONReader::Read(request_body);
-      if (!doc || !doc->is_dict())
+      if (!doc || !doc->is_dict()) {
         return false;
+      }
       const base::Value::Dict* object_request =
           doc->GetDict().FindDict("request");
-      if (!object_request)
+      if (!object_request) {
         return false;
+      }
       absl::optional<bool> ismachine = object_request->FindBool("ismachine");
-      if (!ismachine.has_value())
+      if (!ismachine.has_value()) {
         return false;
+      }
       switch (scope) {
         case UpdaterScope::kSystem:
           return *ismachine;
@@ -175,6 +178,22 @@ base::RepeatingCallback<bool(const std::string&)> GetScopePredicate(
   });
 }
 
+void RunUpdaterWithSwitch(const base::Version& version,
+                          UpdaterScope scope,
+                          const std::string& command,
+                          int expected_exit_code) {
+  const absl::optional<base::FilePath> installed_executable_path =
+      GetVersionedInstallDirectory(scope, version)
+          ->Append(GetExecutableRelativePath());
+  ASSERT_TRUE(installed_executable_path);
+  ASSERT_TRUE(base::PathExists(*installed_executable_path));
+  base::CommandLine command_line(*installed_executable_path);
+  command_line.AppendSwitch(command);
+  int exit_code = -1;
+  ASSERT_TRUE(Run(scope, command_line, &exit_code));
+  EXPECT_EQ(exit_code, expected_exit_code);
+}
+
 }  // namespace
 
 void ExitTestMode(UpdaterScope scope) {
@@ -184,8 +203,9 @@ void ExitTestMode(UpdaterScope scope) {
 int CountDirectoryFiles(const base::FilePath& dir) {
   base::FileEnumerator it(dir, false, base::FileEnumerator::FILES);
   int res = 0;
-  for (base::FilePath name = it.Next(); !name.empty(); name = it.Next())
+  for (base::FilePath name = it.Next(); !name.empty(); name = it.Next()) {
     ++res;
+  }
   return res;
 }
 
@@ -248,22 +268,26 @@ void PrintLog(UpdaterScope scope) {
   }
 }
 
-base::FilePath GetLogDestinationDir() {
-  // Fetch path to ${ISOLATED_OUTDIR} env var.
-  // ResultDB reads logs and test artifacts info from there.
-  const char* var = std::getenv("ISOLATED_OUTDIR");
-  return var ? base::FilePath::FromUTF8Unsafe(var) : base::FilePath();
-}
-
+// Copies the updater log file present in `src_dir` to a test-specific directory
+// name in Swarming/Isolate. Avoids overwriting the destination log file if
+// other instances of it exist in the destination directory. Swarming retries
+// each failed test. It is useful to capture a few logs from previous failures
+// instead of the log of the last run only.
 void CopyLog(const base::FilePath& src_dir) {
   // TODO(crbug.com/1159189): copy other test artifacts.
   base::FilePath dest_dir = GetLogDestinationDir();
   if (!dest_dir.empty() && base::PathExists(dest_dir) &&
       base::PathExists(src_dir)) {
-    base::FilePath test_name_path = dest_dir.AppendASCII(GetTestName());
-    EXPECT_TRUE(base::CreateDirectory(test_name_path));
-    base::FilePath dest_file_path = test_name_path.AppendASCII("updater.log");
-    base::FilePath log_path = src_dir.AppendASCII("updater.log");
+    dest_dir = dest_dir.AppendASCII(GetTestName());
+    EXPECT_TRUE(base::CreateDirectory(dest_dir));
+    const base::FilePath dest_file_path = [dest_dir]() {
+      base::FilePath path = dest_dir.AppendASCII("updater.log");
+      for (int i = 1; i < 10 && base::PathExists(path); ++i) {
+        path = dest_dir.AppendASCII(base::StringPrintf("updater.%d.log", i));
+      }
+      return path;
+    }();
+    const base::FilePath log_path = src_dir.AppendASCII("updater.log");
     VLOG(0) << "Copying updater.log file. From: " << log_path
             << ". To: " << dest_file_path;
     EXPECT_TRUE(base::CopyFile(log_path, dest_file_path));
@@ -271,15 +295,13 @@ void CopyLog(const base::FilePath& src_dir) {
 }
 
 void RunWake(UpdaterScope scope, int expected_exit_code) {
-  const absl::optional<base::FilePath> installed_executable_path =
-      GetInstalledExecutablePath(scope);
-  ASSERT_TRUE(installed_executable_path);
-  EXPECT_TRUE(base::PathExists(*installed_executable_path));
-  base::CommandLine command_line(*installed_executable_path);
-  command_line.AppendSwitch(kWakeSwitch);
-  int exit_code = -1;
-  ASSERT_TRUE(Run(scope, command_line, &exit_code));
-  EXPECT_EQ(exit_code, expected_exit_code);
+  RunUpdaterWithSwitch(base::Version(kUpdaterVersion), scope, kWakeSwitch,
+                       expected_exit_code);
+}
+
+void RunWakeAll(UpdaterScope scope) {
+  RunUpdaterWithSwitch(base::Version(kUpdaterVersion), scope, kWakeAllSwitch,
+                       kErrorOk);
 }
 
 void RunWakeActive(UpdaterScope scope, int expected_exit_code) {
@@ -298,13 +320,7 @@ void RunWakeActive(UpdaterScope scope, int expected_exit_code) {
   ASSERT_TRUE(active_version.IsValid());
 
   // Invoke the wake client of that version.
-  base::CommandLine command_line(
-      GetVersionedInstallDirectory(scope, active_version)
-          ->Append(GetExecutableRelativePath()));
-  command_line.AppendSwitch(kWakeSwitch);
-  int exit_code = -1;
-  ASSERT_TRUE(Run(scope, command_line, &exit_code));
-  EXPECT_EQ(exit_code, expected_exit_code);
+  RunUpdaterWithSwitch(active_version, scope, kWakeSwitch, expected_exit_code);
 }
 
 void Update(UpdaterScope scope,
@@ -394,6 +410,24 @@ void SetServerStarts(UpdaterScope scope, int value) {
   PrefsCommitPendingWrites(global_prefs->GetPrefService());
 }
 
+void FillLog(UpdaterScope scope) {
+  absl::optional<base::FilePath> log = GetLogFilePath(scope);
+  ASSERT_TRUE(log);
+  std::string data = "This test string is used to fill up log space.\n";
+  for (int i = 0; i < 1024 * 1024 * 6; i += data.length()) {
+    ASSERT_TRUE(base::AppendToFile(*log, data));
+  }
+}
+
+void ExpectLogRotated(UpdaterScope scope) {
+  absl::optional<base::FilePath> log = GetLogFilePath(scope);
+  ASSERT_TRUE(log);
+  EXPECT_TRUE(base::PathExists(log->AddExtension(FILE_PATH_LITERAL(".old"))));
+  int64_t size = 0;
+  ASSERT_TRUE(base::GetFileSize(*log, &size));
+  EXPECT_TRUE(size < 1024 * 1024);
+}
+
 void ExpectRegistered(UpdaterScope scope, const std::string& app_id) {
   ASSERT_TRUE(base::Contains(base::MakeRefCounted<PersistedData>(
                                  CreateGlobalPrefs(scope)->GetPrefService())
@@ -423,14 +457,15 @@ bool Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code) {
   command_line.AppendSwitch(kEnableLoggingSwitch);
   command_line.AppendSwitchASCII(kLoggingModuleSwitch,
                                  kLoggingModuleSwitchValue);
-  if (scope == UpdaterScope::kSystem) {
+  if (IsSystemInstall(scope)) {
     command_line.AppendSwitch(kSystemSwitch);
     command_line = MakeElevated(command_line);
   }
   VLOG(0) << " Run command: " << command_line.GetCommandLineString();
   base::Process process = base::LaunchProcess(command_line, {});
-  if (!process.IsValid())
+  if (!process.IsValid()) {
     return false;
+  }
 
   // macOS requires a larger timeout value for --install.
   return process.WaitForExitWithTimeout(2 * TestTimeouts::action_max_timeout(),
@@ -443,8 +478,9 @@ bool WaitFor(base::RepeatingCallback<bool()> predicate,
   auto notify_next = base::TimeTicks::Now() + kOutputInterval;
   const auto deadline = base::TimeTicks::Now() + TestTimeouts::action_timeout();
   while (base::TimeTicks::Now() < deadline) {
-    if (predicate.Run())
+    if (predicate.Run()) {
       return true;
+    }
     if (notify_next < base::TimeTicks::Now()) {
       still_waiting.Run();
       notify_next += kOutputInterval;
@@ -457,6 +493,7 @@ bool WaitFor(base::RepeatingCallback<bool()> predicate,
 bool RequestMatcherRegex(const std::string& request_body_regex,
                          const std::string& request_body) {
   if (!re2::RE2::PartialMatch(request_body, request_body_regex)) {
+    VLOG(0) << "Request match failed.";
     ADD_FAILURE() << "Request with body: " << request_body
                   << " did not match expected regex " << request_body_regex;
     return false;
@@ -479,10 +516,10 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
       GetUpdateResponse(
           kUpdaterAppId, "", test_server->base_url().spec(),
           base::Version(kUpdaterVersion), crx_path, kSelfUpdateCRXRun,
-          base::StrCat(
-              {"--update", scope == UpdaterScope::kSystem ? " --system" : "",
-               " --", kEnableLoggingSwitch, " --", kLoggingModuleSwitch, "=",
-               kLoggingModuleSwitchValue})));
+          base::StrCat({"--update", IsSystemInstall(scope) ? " --system" : "",
+                        " --", kEnableLoggingSwitch, " --",
+                        kLoggingModuleSwitch, "=",
+                        kLoggingModuleSwitchValue})));
 
   // Second request: update download.
   std::string crx_bytes;
@@ -564,8 +601,10 @@ void StressUpdateService(UpdaterScope scope) {
 
   // Runs on the main sequence.
   auto loop_closure = [&]() {
-    if (--n)
+    LOG(ERROR) << __func__ << ": n: " << n;
+    if (--n) {
       return false;
+    }
     loop.Quit();
     return true;
   };
@@ -611,7 +650,7 @@ void StressUpdateService(UpdaterScope scope) {
       }
     };
 
-    Local::GetVersion(scope, base::SequencedTaskRunnerHandle::Get(),
+    Local::GetVersion(scope, base::SequencedTaskRunner::GetCurrentDefault(),
                       loop_closure);
   };
 
@@ -689,8 +728,7 @@ std::set<base::FilePath::StringType> GetTestProcessNames() {
       }(),
   };
 #else
-  NOTREACHED();
-  return {};
+  return {GetExecutableRelativePath().BaseName().value()};
 #endif
 }
 

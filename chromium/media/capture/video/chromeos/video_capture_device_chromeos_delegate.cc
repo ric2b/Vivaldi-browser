@@ -104,7 +104,7 @@ VideoCaptureDeviceChromeOSDelegate::VideoCaptureDeviceChromeOSDelegate(
     base::OnceClosure cleanup_callback)
     : device_descriptor_(device_descriptor),
       camera_hal_delegate_(camera_hal_delegate),
-      capture_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      capture_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
       camera_device_ipc_thread_(std::string("CameraDeviceIpcThread") +
                                 device_descriptor.device_id),
       screen_observer_delegate_(
@@ -283,7 +283,9 @@ void VideoCaptureDeviceChromeOSDelegate::CloseDevice(
                                       device_closed->Signal();
                                     },
                                     base::Unretained(&device_closed_))));
-  const base::TimeDelta kWaitTimeoutSecs = base::Seconds(1);
+  // TODO(kamesan): Reduce the timeout back to 1 second when we have a solution
+  // in platform level (b/258048698).
+  const base::TimeDelta kWaitTimeoutSecs = base::Seconds(2);
   device_closed_.TimedWait(kWaitTimeoutSecs);
 
   if (!unblock_suspend_token.is_empty())

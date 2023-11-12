@@ -131,7 +131,7 @@ void CanChangeManagedAdbSideloading(
   DCHECK(is_device_enterprise_managed || is_profile_enterprise_managed);
 
   if (!base::FeatureList::IsEnabled(
-          chromeos::features::kArcManagedAdbSideloadingSupport)) {
+          ash::features::kArcManagedAdbSideloadingSupport)) {
     DVLOG(1) << "adb sideloading is disabled by a feature flag";
     std::move(callback).Run(false);
     return;
@@ -187,6 +187,12 @@ bool CrostiniFeatures::CouldBeAllowed(Profile* profile, std::string* reason) {
   if (!crostini::CrostiniManager::IsDevKvmPresent()) {
     // Hardware is physically incapable, no matter what the user wants.
     VLOG(1) << "Cannot run crostini because /dev/kvm is not present.";
+    *reason = "Virtualization is not supported on this device";
+    return false;
+  }
+
+  if (!crostini::CrostiniManager::IsVmLaunchAllowed()) {
+    VLOG(1) << "Concierge does not allow VM to be launched.";
     *reason = "Virtualization is not supported on this device";
     return false;
   }

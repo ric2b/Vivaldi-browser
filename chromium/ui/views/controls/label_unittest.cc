@@ -109,9 +109,9 @@ std::u16string ToRTL(const char* ascii) {
   std::u16string rtl;
   for (const char* c = ascii; *c; ++c) {
     if (*c >= '0' && *c <= '6')
-      rtl += L'\x5d0' + (*c - '0');
+      rtl += static_cast<char16_t>(u'א' + (*c - '0'));
     else
-      rtl += static_cast<std::u16string::value_type>(*c);
+      rtl += static_cast<char16_t>(*c);
   }
   return rtl;
 }
@@ -297,6 +297,13 @@ TEST_F(LabelTest, ColorPropertyOnEnabledColorIdChange) {
   label()->SetAutoColorReadabilityEnabled(false);
   label()->SetEnabledColorId(ui::kColorPrimaryForeground);
   EXPECT_EQ(color, label()->GetEnabledColor());
+
+  // Update the enabled id and verify the actual enabled color is updated to
+  // reflect the color id change. Regression test case for: b/262402965.
+  label()->SetEnabledColorId(ui::kColorAccent);
+  EXPECT_EQ(
+      label()->GetWidget()->GetColorProvider()->GetColor(ui::kColorAccent),
+      label()->GetEnabledColor());
 }
 
 TEST_F(LabelTest, AlignmentProperty) {

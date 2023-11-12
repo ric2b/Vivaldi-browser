@@ -6,11 +6,10 @@
 
 #include <memory>
 
-#include "ash/services/secure_channel/public/cpp/client/client_channel.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -20,6 +19,7 @@
 #include "chromeos/ash/components/proximity_auth/metrics.h"
 #include "chromeos/ash/components/proximity_auth/proximity_auth_client.h"
 #include "chromeos/ash/components/proximity_auth/proximity_monitor_impl.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/client_channel.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
 namespace proximity_auth {
@@ -583,7 +583,7 @@ void UnlockManagerImpl::OnAuthAttempted(mojom::AuthType auth_type) {
     return;
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(
           &UnlockManagerImpl::FinalizeAuthAttempt,
@@ -760,7 +760,7 @@ void UnlockManagerImpl::SetIsPerformingInitialScan(
     initial_scan_start_time_ = base::DefaultClock::GetInstance()->Now();
     has_received_first_remote_status_ = false;
 
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&UnlockManagerImpl::OnInitialScanTimeout,
                        initial_scan_timeout_weak_ptr_factory_.GetWeakPtr()),

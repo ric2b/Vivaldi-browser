@@ -23,7 +23,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -115,7 +114,7 @@ class CountingPolicyTest : public testing::Test {
     // when the timeout triggers then assume that the test is broken.
     base::CancelableOnceClosure timeout(
         base::BindOnce(&CountingPolicyTest::TimeoutCallback));
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, timeout.callback(), TestTimeouts::action_timeout());
 
     // Wait for results; either the checker or the timeout callbacks should
@@ -271,8 +270,8 @@ class CountingPolicyTest : public testing::Test {
   static void CheckDuplicates(std::unique_ptr<Action::ActionVector> actions) {
     ASSERT_EQ(2u, actions->size());
     int total_count = 0;
-    for (size_t i = 0; i < actions->size(); i++) {
-      total_count += actions->at(i)->count();
+    for (const auto& action : *actions) {
+      total_count += action->count();
     }
     ASSERT_EQ(3, total_count);
   }
@@ -401,7 +400,7 @@ TEST_F(CountingPolicyTest, Construct) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   scoped_refptr<Action> action = new Action(extension->id(),
@@ -422,7 +421,7 @@ TEST_F(CountingPolicyTest, LogWithStrippedArguments) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
 
@@ -543,7 +542,7 @@ TEST_F(CountingPolicyTest, LogAndFetchFilteredActions) {
                            .Set("name", "Test extension")
                            .Set("version", "1.0.0")
                            .Set("manifest_version", 2)
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");

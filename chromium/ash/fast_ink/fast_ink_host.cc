@@ -12,7 +12,7 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/trees/layer_tree_frame_sink.h"
@@ -211,7 +211,8 @@ class FastInkHost::LayerTreeFrameSinkHolder
     if (delete_pending_)
       return;
     delete_pending_ = true;
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                  this);
   }
 
   FastInkHost* host_;
@@ -391,9 +392,8 @@ void FastInkHost::SubmitCompositorFrame() {
   target_to_buffer_transform.Scale(1.f / device_scale_factor,
                                    1.f / device_scale_factor);
 
-  gfx::Transform buffer_to_target_transform;
-  bool rv = target_to_buffer_transform.GetInverse(&buffer_to_target_transform);
-  DCHECK(rv);
+  gfx::Transform buffer_to_target_transform =
+      target_to_buffer_transform.GetCheckedInverse();
 
   const viz::CompositorRenderPassId kRenderPassId{1};
   auto render_pass = viz::CompositorRenderPass::Create();
@@ -450,7 +450,7 @@ void FastInkHost::SubmitPendingCompositorFrame() {
 void FastInkHost::DidReceiveCompositorFrameAck() {
   pending_compositor_frame_ack_ = false;
   if (pending_compositor_frame_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&FastInkHost::SubmitPendingCompositorFrame,
                                   weak_ptr_factory_.GetWeakPtr()));
   }

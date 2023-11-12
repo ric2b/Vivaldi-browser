@@ -16,10 +16,6 @@
 
 namespace switches {
 
-// Screen width is useful for debugging. Shipping implementations should detect
-// this.
-const char kDeJellyScreenWidth[] = "de-jelly-screen-width";
-
 // The default number of the BeginFrames to wait to activate a surface with
 // dependencies.
 const char kDeadlineToSynchronizeSurfaces[] =
@@ -32,14 +28,19 @@ const char kDisableFrameRateLimit[] = "disable-frame-rate-limit";
 // Sets the number of max pending frames in the GL buffer queue to 1.
 const char kDoubleBufferCompositing[] = "double-buffer-compositing";
 
-// Experimental de-jelly support.
-const char kEnableDeJelly[] = "enable-de-jelly";
-
 // Enable compositing individual elements via hardware overlays when
 // permitted by device.
 // Setting the flag to "single-fullscreen" will try to promote a single
 // fullscreen overlay and use it as main framebuffer where possible.
 const char kEnableHardwareOverlays[] = "enable-hardware-overlays";
+
+#if BUILDFLAG(IS_CHROMEOS)
+// ChromeOS uses one of two VideoDecoder implementations based on SoC/board
+// specific configurations that are signalled via this command line flag.
+// TODO(b/159825227): remove when the "old" video decoder is fully launched.
+const char kPlatformDisallowsChromeOSDirectVideoDecoder[] =
+    "platform-disallows-chromeos-direct-video-decoder";
+#endif
 
 // Effectively disables pipelining of compositor frame production stages by
 // waiting for each stage to finish before completing a frame.

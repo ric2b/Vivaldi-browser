@@ -29,15 +29,9 @@ class DictionaryValue;
 class FilePath;
 }  // namespace base
 
-namespace chromeos {
-
-// Friend function to initialize StartupCustomizationDocument for testing.
-void InitStartupCustomizationDocumentForTesting(const std::string& manifest);
-
-namespace system {
+namespace chromeos::system {
 class StatisticsProvider;
-}  // namespace system
-}  // namespace chromeos
+}
 
 namespace extensions {
 class ExternalLoader;
@@ -56,6 +50,9 @@ namespace ash {
 
 class CustomizationWallpaperDownloader;
 class ServicesCustomizationExternalLoader;
+
+// Friend function to initialize StartupCustomizationDocument for testing.
+void InitStartupCustomizationDocumentForTesting(const std::string& manifest);
 
 // Base class for OEM customization document classes.
 class CustomizationDocument {
@@ -119,7 +116,7 @@ class StartupCustomizationDocument : public CustomizationDocument {
   FRIEND_TEST_ALL_PREFIXES(StartupCustomizationDocumentTest, BadManifest);
   FRIEND_TEST_ALL_PREFIXES(ServicesCustomizationDocumentTest, MultiLanguage);
   friend class OobeLocalizationTest;
-  friend void chromeos::InitStartupCustomizationDocumentForTesting(
+  friend void InitStartupCustomizationDocumentForTesting(
       const std::string& manifest);
   friend struct base::DefaultSingletonTraits<StartupCustomizationDocument>;
 
@@ -333,11 +330,5 @@ class ServicesCustomizationDocument : public CustomizationDocument {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromOS code migration is done.
-namespace chromeos {
-using ::ash::ServicesCustomizationDocument;
-using ::ash::StartupCustomizationDocument;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_CUSTOMIZATION_CUSTOMIZATION_DOCUMENT_H_

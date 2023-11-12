@@ -34,12 +34,13 @@ class CORE_EXPORT PerformanceNavigationTiming final
                               ResourceTimingInfo*,
                               base::TimeTicks time_origin,
                               bool cross_origin_isolated_capability,
-                              HeapVector<Member<PerformanceServerTiming>>);
+                              HeapVector<Member<PerformanceServerTiming>>,
+                              network::mojom::NavigationDeliveryType);
   ~PerformanceNavigationTiming() override;
 
   // Attributes inherited from PerformanceEntry.
   DOMHighResTimeStamp duration() const override;
-  AtomicString entryType() const override;
+  const AtomicString& entryType() const override;
   PerformanceEntryType EntryTypeEnum() const override;
 
   AtomicString initiatorType() const override;

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/guid.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_piece.h"
@@ -46,10 +47,11 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
     kJPEG,
     kPNG,
     kWEBP,
+    kSVG,
   };
 
   static constexpr int kImageFormatCount =
-      static_cast<int>(ImageFormat::kWEBP) + 1;
+      static_cast<int>(ImageFormat::kSVG) + 1;
 
   // Location where to store or update the image.
   class ImagePlace {
@@ -134,8 +136,9 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
                            VivaldiImageStore::UrlKind& url_kind,
                            std::string& id);
 
-  /// Callback to inform about a successful image store operation.
-  using StoreImageCallback = base::OnceCallback<void(bool success)>;
+  // Callback to inform about the url of a successful image store operation.
+  // Empty string means operation failed.
+  using StoreImageCallback = base::OnceCallback<void(std::string data_url)>;
 
   // The following methods taking the BrowserContext* argument are static to
   // spare the caller from calling FromBrowserContext and checking the result.
@@ -212,6 +215,15 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   // Use std::array, not plain C array to get proper move semantics.
   using UsedIds = std::array<std::vector<std::string>, kUrlKindCount>;
   void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
+
+  // Custom bookmark thumbnails have to be moved to the synced file store,
+  // so that they can be synced.
+  void MigrateCustomBookmarkThumbnailsOnFileThread(
+      std::vector<std::pair<base::GUID, std::string>> ids_to_migrate);
+
+  void FinishCustomBookmarkThumbnailMigrationOnUIThread(
+      base::GUID bookmark_guid,
+      std::vector<uint8_t> content);
 
   scoped_refptr<base::RefCountedMemory> GetDataForIdOnFileThread(
       UrlKind url_kind,

@@ -51,6 +51,7 @@ struct ContextInfo {
   absl::optional<bool> third_party_blocking_enabled;
   SettingValue os_firewall;
   std::vector<std::string> system_dns_servers;
+  absl::optional<std::string> enterprise_profile_id;
 };
 
 // Interface used by the chrome.enterprise.reportingPrivate.getContextInfo()
@@ -103,7 +104,8 @@ class ContextInfoFetcher {
   raw_ptr<content::BrowserContext> browser_context_;
 
   // |connectors_service| is used to obtain the value of each Connector policy.
-  raw_ptr<enterprise_connectors::ConnectorsService> connectors_service_;
+  raw_ptr<enterprise_connectors::ConnectorsService, DanglingUntriaged>
+      connectors_service_;
 };
 
 #if BUILDFLAG(IS_LINUX)

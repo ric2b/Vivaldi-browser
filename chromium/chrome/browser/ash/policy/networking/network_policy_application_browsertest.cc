@@ -30,9 +30,9 @@
 #include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_policy_observer.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/services/network_config/cros_network_config.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
-#include "chromeos/system/fake_statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -401,8 +401,8 @@ class NetworkPolicyApplicationTest : public ash::LoginManagerTest {
         guid, std::move(properties),
         set_properties_future.GetCallback<bool, const std::string&>());
     ASSERT_TRUE(set_properties_future.Wait());
-    ASSERT_TRUE(set_properties_future.Get<0>())
-        << "Error msg: " << set_properties_future.Get<1>();
+    ASSERT_TRUE(set_properties_future.Get<bool>())
+        << "Error msg: " << set_properties_future.Get<std::string>();
   }
 
   // Retrieves the "managed properties" of the network identified by `guid`

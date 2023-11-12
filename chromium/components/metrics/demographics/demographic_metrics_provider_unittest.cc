@@ -10,6 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "components/metrics/demographics/user_demographics.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -48,6 +49,7 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
   TestProfileClient(int number_of_profiles,
                     TestSyncServiceState sync_service_state)
       : number_of_profiles_(number_of_profiles) {
+    RegisterDemographicsLocalStatePrefs(pref_service_.registry());
     RegisterDemographicsProfilePrefs(pref_service_.registry());
 
     switch (sync_service_state) {
@@ -100,7 +102,9 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
 
   syncer::SyncService* GetSyncService() override { return sync_service_.get(); }
 
-  PrefService* GetPrefService() override { return &pref_service_; }
+  PrefService* GetLocalState() override { return &pref_service_; }
+
+  PrefService* GetProfilePrefs() override { return &pref_service_; }
 
   base::Time GetNetworkTime() const override {
     base::Time time;
@@ -111,10 +115,10 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
 
   void SetDemographicsInPrefs(int birth_year,
                               metrics::UserDemographicsProto_Gender gender) {
-    base::DictionaryValue dict;
-    dict.SetIntPath(kSyncDemographicsBirthYearPath, birth_year);
-    dict.SetIntPath(kSyncDemographicsGenderPath, static_cast<int>(gender));
-    pref_service_.Set(kSyncDemographicsPrefName, dict);
+    base::Value::Dict dict;
+    dict.Set(kSyncDemographicsBirthYearPath, birth_year);
+    dict.Set(kSyncDemographicsGenderPath, static_cast<int>(gender));
+    pref_service_.SetDict(kSyncDemographicsPrefName, std::move(dict));
   }
 
  private:
@@ -134,8 +138,8 @@ TEST(DemographicMetricsProviderTest,
 
   // Set birth year noise offset to not have it randomized.
   const int kBirthYearOffset = 3;
-  client->GetPrefService()->SetInteger(kSyncDemographicsBirthYearOffsetPrefName,
-                                       kBirthYearOffset);
+  client->GetLocalState()->SetInteger(kUserDemographicsBirthYearOffsetPrefName,
+                                      kBirthYearOffset);
 
   // Run demographics provider.
   DemographicMetricsProvider provider(
@@ -338,8 +342,8 @@ TEST(DemographicMetricsProviderTest,
 
   // Set birth year noise offset to not have it randomized.
   const int kBirthYearOffset = 3;
-  client->GetPrefService()->SetInteger(kSyncDemographicsBirthYearOffsetPrefName,
-                                       kBirthYearOffset);
+  client->GetLocalState()->SetInteger(kUserDemographicsBirthYearOffsetPrefName,
+                                      kBirthYearOffset);
 
   // Run demographics provider.
   DemographicMetricsProvider provider(

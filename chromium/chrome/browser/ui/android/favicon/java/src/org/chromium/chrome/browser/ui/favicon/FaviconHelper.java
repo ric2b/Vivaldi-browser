@@ -79,6 +79,8 @@ public class FaviconHelper {
             Bitmap origBitmap = BitmapFactory.decodeResource(resources, resourceId);
             Bitmap tintedBitmap = Bitmap.createBitmap(
                     origBitmap.getWidth(), origBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+            // Note(david@vivaldi.com): Apply current density to the image.
+            tintedBitmap.setDensity(origBitmap.getDensity());
             Canvas c = new Canvas(tintedBitmap);
             @ColorInt
             int tintColor = ApiCompatibilityUtils.getColor(resources,

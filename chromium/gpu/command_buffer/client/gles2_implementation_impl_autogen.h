@@ -3397,16 +3397,6 @@ void GLES2Implementation::ContextVisibilityHintCHROMIUM(GLboolean visibility) {
   CheckGLError();
 }
 
-void GLES2Implementation::CoverageModulationCHROMIUM(GLenum components) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG(
-      "[" << GetLogPrefix() << "] glCoverageModulationCHROMIUM("
-          << GLES2Util::GetStringCoverageModulationComponents(components)
-          << ")");
-  helper_->CoverageModulationCHROMIUM(components);
-  CheckGLError();
-}
-
 void GLES2Implementation::BlendBarrierKHR() {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glBlendBarrierKHR("
@@ -3558,6 +3548,14 @@ void GLES2Implementation::ColorMaskiOES(GLuint buf,
                      << GLES2Util::GetStringBool(b) << ", "
                      << GLES2Util::GetStringBool(a) << ")");
   helper_->ColorMaskiOES(buf, r, g, b, a);
+  CheckGLError();
+}
+
+void GLES2Implementation::ProvokingVertexANGLE(GLenum provokeMode) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glProvokingVertexANGLE("
+                     << GLES2Util::GetStringEnum(provokeMode) << ")");
+  helper_->ProvokingVertexANGLE(provokeMode);
   CheckGLError();
 }
 

@@ -14,6 +14,7 @@
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/http/http_byte_range.h"
@@ -63,10 +64,8 @@ scoped_refptr<net::HttpResponseHeaders> GenerateHeaders(
       headers->SetHeader(net::HttpResponseHeaders::kContentRange,
                          content_range_header);
     }
-    if (!blob_handle->content_type().empty()) {
-      headers->SetHeader(net::HttpRequestHeaders::kContentType,
-                         blob_handle->content_type());
-    }
+    headers->SetHeader(net::HttpRequestHeaders::kContentType,
+                       blob_handle->content_type());
     if (!blob_handle->content_disposition().empty()) {
       headers->SetHeader("Content-Disposition",
                          blob_handle->content_disposition());
@@ -111,7 +110,7 @@ BlobURLLoader::BlobURLLoader(
       client_(std::move(client)),
       blob_handle_(std::move(blob_handle)) {
   // PostTask since it might destruct.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BlobURLLoader::Start,
                                 weak_factory_.GetWeakPtr(), method, headers));
 }

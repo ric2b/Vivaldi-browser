@@ -67,6 +67,7 @@ build_with_chromium=true
 checkout_google_benchmark=false
 checkout_ios_webkit=false
 generate_location_tags = false
+checkout_src_internal = false
 """
 
 gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_args.gni")

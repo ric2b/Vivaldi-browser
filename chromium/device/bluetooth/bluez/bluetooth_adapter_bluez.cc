@@ -22,7 +22,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -233,7 +232,7 @@ void BluetoothAdapterBlueZ::Initialize(base::OnceClosure callback) {
 
   // Can't initialize the adapter until DBus clients are ready.
   if (bluez::BluezDBusManager::Get()->IsObjectManagerSupportKnown()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&BluetoothAdapterBlueZ::Init,
                                   weak_ptr_factory_.GetWeakPtr()));
     return;
@@ -323,7 +322,7 @@ void BluetoothAdapterBlueZ::Shutdown() {
 
 BluetoothAdapterBlueZ::BluetoothAdapterBlueZ()
     : initialized_(false), dbus_is_shutdown_(false) {
-  ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  ui_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
   socket_thread_ = device::BluetoothSocketThread::Get();
 }
 
@@ -925,6 +924,9 @@ void BluetoothAdapterBlueZ::DevicePropertyChanged(
       property_name == properties->address.name() ||
       property_name == properties->name.name() ||
       property_name == properties->paired.name() ||
+#if BUILDFLAG(IS_CHROMEOS)
+      property_name == properties->bonded.name() ||
+#endif
       property_name == properties->trusted.name() ||
       property_name == properties->connected.name() ||
       property_name == properties->uuids.name() ||
@@ -967,6 +969,12 @@ void BluetoothAdapterBlueZ::DevicePropertyChanged(
     }
     NotifyDevicePairedChanged(device_bluez, properties->paired.value());
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  if (property_name == properties->bonded.name()) {
+    NotifyDeviceBondedChanged(device_bluez, properties->bonded.value());
+  }
+#endif
 
   // UMA connection counting
   if (property_name == properties->connected.name()) {

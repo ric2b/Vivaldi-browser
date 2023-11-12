@@ -15,6 +15,7 @@
 
 #include <string.h>
 
+#include <atomic>
 #include <tuple>
 
 #include "base/allocator/early_zone_registration_mac.h"
@@ -192,6 +193,16 @@ void MallocZoneBatchFree(malloc_zone_t* zone,
   return ShimBatchFree(to_be_freed, num, nullptr);
 }
 
+boolean_t MallocZoneClaimedAddress(malloc_zone_t* zone, void* ptr) {
+  return static_cast<boolean_t>(ShimClaimedAddress(ptr, nullptr));
+}
+
+#if PA_TRY_FREE_DEFAULT_IS_AVAILABLE
+void MallocZoneTryFreeDefault(malloc_zone_t* zone, void* ptr) {
+  return ShimTryFreeDefault(ptr, nullptr);
+}
+#endif
+
 malloc_introspection_t g_mac_malloc_introspection{};
 malloc_zone_t g_mac_malloc_zone{};
 
@@ -294,6 +305,7 @@ void InitializeZone() {
   //   version >= 10: claimed_address is supported
   //   version >= 11: introspect.print_task is supported
   //   version >= 12: introspect.task_statistics is supported
+  //   version >= 13: try_free_default is supported
   g_mac_malloc_zone.version = partition_alloc::kZoneVersion;
   g_mac_malloc_zone.zone_name = partition_alloc::kPartitionAllocZoneName;
   g_mac_malloc_zone.introspect = &g_mac_malloc_introspection;
@@ -309,7 +321,14 @@ void InitializeZone() {
   g_mac_malloc_zone.memalign = MallocZoneMemalign;
   g_mac_malloc_zone.free_definite_size = MallocZoneFreeDefiniteSize;
   g_mac_malloc_zone.pressure_relief = nullptr;
-  g_mac_malloc_zone.claimed_address = nullptr;
+  g_mac_malloc_zone.claimed_address = MallocZoneClaimedAddress;
+#if PA_TRY_FREE_DEFAULT_IS_AVAILABLE
+  g_mac_malloc_zone.try_free_default = MallocZoneTryFreeDefault;
+#endif
+}
+
+namespace {
+static std::atomic<bool> g_initialization_is_done;
 }
 
 // Replaces the default malloc zone with our own malloc zone backed by
@@ -349,6 +368,7 @@ InitializeDefaultMallocZoneWithPartitionAlloc() {
     // |EarlyMallocZoneRegistration()|.
     malloc_zone_register(&g_mac_malloc_zone);
     malloc_zone_unregister(system_default_zone);
+    g_initialization_is_done.store(true, std::memory_order_release);
     return;
   }
 
@@ -373,9 +393,16 @@ InitializeDefaultMallocZoneWithPartitionAlloc() {
 
   // Confirm that our own zone is now the default zone.
   CHECK_EQ(GetDefaultMallocZone(), &g_mac_malloc_zone);
+  g_initialization_is_done.store(true, std::memory_order_release);
 }
 
 }  // namespace
+
+bool IsDefaultAllocatorPartitionRootInitialized() {
+  // Even though zone registration is not thread-safe, let's not make it worse,
+  // and use acquire/release ordering.
+  return g_initialization_is_done.load(std::memory_order_acquire);
+}
 
 }  // namespace allocator_shim
 

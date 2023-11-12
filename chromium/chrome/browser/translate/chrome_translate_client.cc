@@ -28,7 +28,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/language/core/browser/accept_languages_service.h"
 #include "components/language/core/browser/language_model_manager.h"
@@ -123,11 +122,6 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
     per_frame_translate_driver_->set_translate_manager(
         translate_manager_.get());
   }
-
-  auto* assistant_runtime_manager =
-      autofill_assistant::RuntimeManager::GetOrCreateForWebContents(
-          web_contents);
-  assistant_runtime_manager->AddObserver(this);
 }
 
 ChromeTranslateClient::~ChromeTranslateClient() {
@@ -323,26 +317,15 @@ void ChromeTranslateClient::ManualTranslateWhenReady() {
 #endif
 
 void ChromeTranslateClient::SetPredefinedTargetLanguage(
-    const std::string& translate_language_code) {
+    const std::string& translate_language_code,
+    bool should_auto_translate) {
   translate::TranslateManager* manager = GetTranslateManager();
-  manager->SetPredefinedTargetLanguage(translate_language_code);
+  manager->SetPredefinedTargetLanguage(translate_language_code,
+                                       should_auto_translate);
 }
 
 bool ChromeTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateService::IsTranslatableURL(url);
-}
-
-bool ChromeTranslateClient::IsAutofillAssistantRunning() const {
-  auto* assistant_runtime_manager =
-      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
-  return assistant_runtime_manager && assistant_runtime_manager->GetState() ==
-                                          autofill_assistant::UIState::kShown;
-}
-
-void ChromeTranslateClient::OnStateChanged(autofill_assistant::UIState state) {
-  if (state == autofill_assistant::UIState::kNotShown) {
-    GetTranslateManager()->OnAutofillAssistantFinished();
-  }
 }
 
 void ChromeTranslateClient::WebContentsDestroyed() {
@@ -350,12 +333,6 @@ void ChromeTranslateClient::WebContentsDestroyed() {
   // Destroying the TranslateManager now guarantees that it never has to deal
   // with NULL WebContents.
   translate_manager_.reset();
-
-  auto* assistant_runtime_manager =
-      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
-  if (assistant_runtime_manager) {
-    assistant_runtime_manager->RemoveObserver(this);
-  }
 }
 
 // TranslateDriver::LanguageDetectionObserver implementation.

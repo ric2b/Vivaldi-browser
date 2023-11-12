@@ -39,7 +39,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/install_static/install_util.h"
-#include "chrome/installer/util/google_update_constants.h"
+#include "chrome/installer/util/app_command.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/ui_base_switches.h"
@@ -79,12 +79,11 @@ bool InvokeGoogleUpdateForRename() {
     }
   }
 
-  ULONG_PTR process_handle;
+  ULONG_PTR process_handle = 0;
   {
     TRACE_EVENT0("startup", "InvokeGoogleUpdateForRename LaunchCmdElevated");
     HRESULT hr = ipl->LaunchCmdElevated(
-        install_static::GetAppGuid(),
-        google_update::kRegRenameCmdField,
+        install_static::GetAppGuid(), installer::kCmdRenameChromeExe,
         ::GetCurrentProcessId(), &process_handle);
     if (FAILED(hr)) {
       TRACE_EVENT0("startup",
@@ -163,12 +162,12 @@ bool SwapNewChromeExeIfPresent() {
 
   TRACE_EVENT0("startup", "upgrade_util::SwapNewChromeExeIfPresent");
 
-  std::wstring rename_cmd;
+  installer::AppCommand rename_cmd;
   if (installer::kVivaldi) {
     // TODO(igor@vivaldi): implement this properly for system installs, see
     // VB-80760.
     rename_cmd = vivaldi::GetNewUpdateFinalizeCommand();
-    if (rename_cmd.empty())
+    if (rename_cmd.command_line().empty())
       return true;
   } else {
     // clang-format off
@@ -179,22 +178,9 @@ bool SwapNewChromeExeIfPresent() {
 
   // If this is a user-level install, directly launch a process to rename Chrome
   // executables. Obtain the command to launch the process from the registry.
-  base::win::RegKey key;
-  auto result =
-      key.Open(HKEY_CURRENT_USER, install_static::GetClientsKeyPath().c_str(),
-               KEY_QUERY_VALUE | KEY_WOW64_32KEY);
-  if (result != ERROR_SUCCESS) {
-    ::SetLastError(result);
-    PLOG(ERROR) << "Open Clients key failed";
+  rename_cmd = installer::AppCommand(installer::kCmdRenameChromeExe, {});
+  if (!rename_cmd.Initialize(HKEY_CURRENT_USER))
     return false;
-  }
-
-  result = key.ReadValue(google_update::kRegRenameCmdField, &rename_cmd);
-  if (result != ERROR_SUCCESS) {
-    ::SetLastError(result);
-    PLOG(ERROR) << "Read rename command failed";
-    return false;
-  }
     // clang-format on
   }
 
@@ -202,7 +188,8 @@ bool SwapNewChromeExeIfPresent() {
   options.wait = true;
   options.start_hidden = true;
   ::SetLastError(ERROR_SUCCESS);
-  base::Process process = base::LaunchProcess(rename_cmd, options);
+  base::Process process =
+      base::LaunchProcess(rename_cmd.command_line(), options);
   if (!process.IsValid()) {
     PLOG(ERROR) << "Launch rename process failed";
     return false;

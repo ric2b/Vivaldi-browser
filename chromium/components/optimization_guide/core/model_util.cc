@@ -6,8 +6,11 @@
 
 #include "base/base64.h"
 #include "base/containers/flat_set.h"
+#include "base/files/file_util.h"
+#include "base/hash/legacy_hash.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -61,8 +64,6 @@ std::string GetStringNameForOptimizationTarget(
       return "SegmentationQueryTiles";
     case proto::OPTIMIZATION_TARGET_PAGE_VISIBILITY:
       return "PageVisibility";
-    case proto::OPTIMIZATION_TARGET_AUTOFILL_ASSISTANT:
-      return "AutofillAssistant";
     case proto::OPTIMIZATION_TARGET_PAGE_TOPICS_V2:
       return "PageTopicsV2";
     case proto::OPTIMIZATION_TARGET_SEGMENTATION_CHROME_LOW_USER_ENGAGEMENT:
@@ -83,6 +84,8 @@ std::string GetStringNameForOptimizationTarget(
       return "SegmentationSearchUser";
     case proto::OPTIMIZATION_TARGET_OMNIBOX_ON_DEVICE_TAIL_SUGGEST:
       return "OmniboxOnDeviceTailSuggest";
+    case proto::OPTIMIZATION_TARGET_CLIENT_SIDE_PHISHING:
+      return "ClientSidePhishing";
       // Whenever a new value is added, make sure to add it to the OptTarget
       // variant list in
       // //tools/metrics/histograms/metadata/optimization/histograms.xml.
@@ -112,6 +115,10 @@ std::string FilePathToString(const base::FilePath& file_path) {
 
 base::FilePath GetBaseFileNameForModels() {
   return base::FilePath(FILE_PATH_LITERAL("model.tflite"));
+}
+
+base::FilePath GetBaseFileNameForModelInfo() {
+  return base::FilePath(FILE_PATH_LITERAL("model-info.pb"));
 }
 
 std::string ModelOverrideSeparator() {
@@ -178,6 +185,26 @@ GetModelOverrideForOptimizationTarget(
     return file_path_and_metadata;
   }
   return absl::nullopt;
+}
+
+bool CheckAllPathsExist(
+    const std::vector<base::FilePath>& file_paths_to_check) {
+  for (const base::FilePath& file_path : file_paths_to_check) {
+    if (!base::PathExists(file_path)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string GetModelCacheKeyHash(proto::ModelCacheKey model_cache_key) {
+  std::string bytes;
+  model_cache_key.SerializeToString(&bytes);
+  uint64_t hash =
+      base::legacy::CityHash64(base::as_bytes(base::make_span(bytes)));
+  // Convert the hash to hex encoding and not as base64 and other encodings,
+  // since it will be used as filepath names.
+  return base::HexEncode(base::as_bytes(base::make_span(&hash, 1)));
 }
 
 }  // namespace optimization_guide

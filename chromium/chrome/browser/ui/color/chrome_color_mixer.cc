@@ -243,6 +243,8 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorExtensionMenuPinButtonIcon] = {ui::kColorAccent};
   mixer[kColorExtensionMenuPinButtonIconDisabled] = ui::SetAlpha(
       kColorExtensionMenuPinButtonIcon, gfx::kDisabledControlAlpha);
+  mixer[kColorExtensionsMenuHighlightedBackground] = {
+      kColorToolbarBackgroundSubtleEmphasis};
   mixer[kColorExtensionsToolbarControlsBackground] = {
       kColorToolbarBackgroundSubtleEmphasis};
   mixer[kColorEyedropperBoundary] = {SK_ColorDKGRAY};
@@ -284,6 +286,12 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorInfoBarContentAreaSeparator] =
       ui::AlphaBlend(kColorToolbarButtonIcon, kColorInfoBarBackground, 0x3A);
   mixer[kColorInfoBarForeground] = {kColorToolbarText};
+  // kColorInfoBarIcon is referenced in //components/infobars, so
+  // we can't use a color id from the chrome namespace. Here we're
+  // overriding the default color with something more suitable.
+  mixer[ui::kColorInfoBarIcon] =
+      ui::PickGoogleColor(ui::kColorAccent, kColorInfoBarBackground,
+                          color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorIntentPickerItemBackgroundHovered] = ui::SetAlpha(
       ui::GetColorWithMaxContrast(ui::kColorDialogBackground), 0x0F);  // 6%.
   mixer[kColorIntentPickerItemBackgroundSelected] = ui::BlendForMinContrast(
@@ -325,12 +333,8 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       ui::kColorButtonBackgroundProminent};
   mixer[kColorOmniboxAnswerIconForeground] = {
       ui::kColorButtonForegroundProminent};
-  mixer[kColorOmniboxChipBackgroundLowVisibility] = {
-      kColorTabBackgroundActiveFrameActive};
-  mixer[kColorOmniboxChipBackgroundNormalVisibility] = {
-      ui::kColorButtonBackground};
-  mixer[kColorOmniboxChipForegroundLowVisibility] = {
-      kColorTabForegroundActiveFrameActive};
+  mixer[kColorOmniboxChipBackground] = {kColorTabBackgroundActiveFrameActive};
+  mixer[kColorOmniboxChipForegroundLowVisibility] = {kColorToolbarButtonIcon};
   mixer[kColorOmniboxChipForegroundNormalVisibility] = {
       ui::kColorButtonForeground};
   mixer[kColorPageInfoChosenObjectDeleteButtonIcon] = {ui::kColorIcon};

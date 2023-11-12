@@ -53,14 +53,22 @@ extern const char kOldVivaldiTabsToLinks[];
 extern const char kOldVivaldiUseNativeWindowDecoration[];
 
 #if BUILDFLAG(IS_IOS)
-extern const char kIosNoteFolderDefault[];
-extern const char kIosNoteCachedTopMostRow[];
-extern const char kIosNoteCachedFolderId[];
+extern const char kVivaldiNoteFolderDefault[];
+extern const char kVivaldiNoteCachedTopMostRow[];
+extern const char kVivaldiNoteCachedFolderId[];
 
 // Speed dial sorting mode
 extern const char kVivaldiSpeedDialSortingMode[];
+// Start page layout
+extern const char kVivaldiStartPageLayoutStyle[];
 // Setting for folder visiblity on bookmark folder page
 extern const char kVivaldiBookmarkFoldersViewMode[];
+
+// Tabs
+// Desktop style tabs enabled status
+extern const char kVivaldiDesktopTabsEnabled[];
+// Tab stack use status
+extern const char kVivaldiTabStackEnabled[];
 #endif
 
 }  // namespace vivaldiprefs

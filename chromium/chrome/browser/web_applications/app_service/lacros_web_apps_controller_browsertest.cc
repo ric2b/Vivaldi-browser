@@ -40,6 +40,7 @@
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -506,7 +507,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, LaunchWithFiles) {
   const GURL app_url =
       embedded_test_server()->GetURL("/web_apps/file_handler_index.html");
   AppId app_id = InstallWebAppFromManifest(browser(), app_url);
-  EXPECT_EQ(provider().registrar().GetAppStartUrl(app_id), app_url);
+  EXPECT_EQ(provider().registrar_unsafe().GetAppStartUrl(app_id), app_url);
 
   MockAppPublisher mock_app_publisher;
   LacrosWebAppsController lacros_web_apps_controller(profile());
@@ -653,8 +654,14 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest,
 
   auto id = *menu_items->items[5]->id;
 
-  lacros_web_apps_controller.ExecuteContextMenuCommand(app_id, id,
-                                                       base::DoNothing());
+  {
+    base::RunLoop loop;
+    lacros_web_apps_controller.ExecuteContextMenuCommand(
+        app_id, id,
+        base::BindLambdaForTesting(
+            [&](::crosapi::mojom::LaunchResultPtr) { loop.Quit(); }));
+    loop.Run();
+  }
 
   EXPECT_EQ(BrowserList::GetInstance()
                 ->GetLastActive()
@@ -784,7 +791,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, DisabledState) {
               IconEffects::kRoundCorners | IconEffects::kCrOsStandardIcon);
   }
 
-  web_app_sync_bridge.SetAppIsDisabled(app_id, true);
+  provider().scheduler().SetAppIsDisabled(app_id, true, base::DoNothing());
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().size(), 3U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
@@ -792,7 +799,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, DisabledState) {
             IconEffects::kRoundCorners | IconEffects::kCrOsStandardIcon |
                 IconEffects::kBlocked);
 
-  web_app_sync_bridge.SetAppIsDisabled(app2_id, true);
+  provider().scheduler().SetAppIsDisabled(app2_id, true, base::DoNothing());
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().size(), 4U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app2_id);
@@ -800,14 +807,14 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, DisabledState) {
             IconEffects::kRoundCorners | IconEffects::kCrOsStandardMask |
                 IconEffects::kBlocked);
 
-  web_app_sync_bridge.SetAppIsDisabled(app_id, false);
+  provider().scheduler().SetAppIsDisabled(app_id, false, base::DoNothing());
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().size(), 5U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->icon_key->icon_effects,
             IconEffects::kRoundCorners | IconEffects::kCrOsStandardIcon);
 
-  web_app_sync_bridge.SetAppIsDisabled(app2_id, false);
+  provider().scheduler().SetAppIsDisabled(app2_id, false, base::DoNothing());
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().size(), 6U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app2_id);
@@ -852,8 +859,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, GetLink) {
         /*event_flags=*/0, apps::LaunchSource::kFromSharesheet,
         display::kInvalidDisplayId);
     launch_params->intent = apps_util::ConvertAppServiceToCrosapiIntent(
-        apps_util::CreateShareIntentFromText(shared_link, shared_title),
-        profile());
+        apps_util::MakeShareIntent(shared_link, shared_title), profile());
 
     static_cast<crosapi::mojom::AppController&>(lacros_web_apps_controller)
         .Launch(std::move(launch_params), base::DoNothing());
@@ -1015,8 +1021,9 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest,
   EXPECT_TRUE(HasFileViewFilters(
       mock_app_publisher.get_deltas().back()->intent_filters));
 
-  EXPECT_EQ(ApiApprovalState::kRequiresPrompt,
-            provider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kRequiresPrompt,
+      provider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
   provider().sync_bridge().SetAppFileHandlerApprovalState(
       app_id, ApiApprovalState::kDisallowed);
 

@@ -40,6 +40,12 @@
 // Separator between the toolbar and the content.
 @property(nonatomic, strong, readonly) UIView* separator;
 
+// Vivaldi
+@optional
+- (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
+                  desktopTabEnabled:(BOOL)desktopTabEnabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_ADAPTIVE_TOOLBAR_VIEW_H_

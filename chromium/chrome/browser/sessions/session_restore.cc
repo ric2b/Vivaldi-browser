@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <iterator>
 #include <list>
 #include <map>
@@ -28,10 +27,10 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -92,7 +91,11 @@
 #include "extensions/common/extension_set.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/metrics/login_unlock_throughput_recorder.h"
+#include "ash/shell.h"
 #include "chrome/browser/ash/boot_times_recorder.h"
+#include "components/app_restore/window_properties.h"
+#include "ui/compositor/layer.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -115,6 +118,50 @@ bool HasSingleNewTabPage(Browser* browser) {
 
 // Pointers to SessionRestoreImpls which are currently restoring the session.
 std::set<SessionRestoreImpl*>* active_session_restorers = nullptr;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void StartRecordingRestoredWindowsMetrics(
+    const std::vector<std::unique_ptr<sessions::SessionWindow>>& windows) {
+  // Ash is not always initialized in unit tests.
+  if (!ash::Shell::HasInstance())
+    return;
+
+  ash::LoginUnlockThroughputRecorder* throughput_recorder =
+      ash::Shell::Get()->login_unlock_throughput_recorder();
+
+  for (const auto& w : windows) {
+    if (w->type == sessions::SessionWindow::TYPE_NORMAL) {
+      throughput_recorder->AddScheduledRestoreWindow(
+          w->window_id.id(), w->app_name,
+          ash::LoginUnlockThroughputRecorder::kBrowser);
+    }
+  }
+}
+
+void ReportRestoredWindowCreated(aura::Window* window) {
+  // Ash is not always initialized in unit tests.
+  if (!ash::Shell::HasInstance())
+    return;
+
+  const int32_t restore_window_id =
+      window->GetProperty(app_restore::kRestoreWindowIdKey);
+
+  // Restored window IDs are always non-zero.
+  if (restore_window_id == 0)
+    return;
+
+  ash::LoginUnlockThroughputRecorder* throughput_recorder =
+      ash::Shell::Get()->login_unlock_throughput_recorder();
+  throughput_recorder->OnRestoredWindowCreated(restore_window_id);
+  aura::Window* root_window = window->GetRootWindow();
+  if (root_window) {
+    ui::Compositor* compositor = root_window->layer()->GetCompositor();
+    throughput_recorder->OnBeforeRestoredWindowShown(restore_window_id,
+                                                     compositor);
+  }
+}
+
+#endif
 
 }  // namespace
 
@@ -240,8 +287,9 @@ class SessionRestoreImpl : public BrowserListObserver {
 
       // Restore and show the browser.
       const int initial_tab_count = 0;
+      bool did_show_browser = false;
       RestoreTabsToBrowser(*(*i), browser, initial_tab_count, &created_contents,
-                           &new_group_ids);
+                           &new_group_ids, did_show_browser);
       NotifySessionServiceOfRestoredTabs(browser, initial_tab_count);
     }
 
@@ -382,7 +430,8 @@ class SessionRestoreImpl : public BrowserListObserver {
       // NOTE: we must use DeleteLater here as most likely we're in a callback
       // from the history service which doesn't deal well with deleting the
       // object it is notifying.
-      base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+      base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                                    this);
 
       // The delete may take a while and at this point we no longer care about
       // if the browser is deleted. Don't listen to anything. This avoid a
@@ -424,11 +473,14 @@ class SessionRestoreImpl : public BrowserListObserver {
     if (!read_error_)
       read_error_ = read_error;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (!read_error_)
+      StartRecordingRestoredWindowsMetrics(windows);
+#endif
+
     // Copy windows into windows_ so that we can combine both app and browser
     // windows together before doing a one-pass restore.
-    std::copy(std::make_move_iterator(windows.begin()),
-              std::make_move_iterator(windows.end()),
-              std::back_inserter(windows_));
+    base::ranges::move(windows, std::back_inserter(windows_));
     SessionRestore::OnGotSession(profile(), for_apps, windows.size());
     windows.clear();
 
@@ -585,6 +637,7 @@ class SessionRestoreImpl : public BrowserListObserver {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
         ash::BootTimesRecorder::Get()->AddLoginTimeMarker(
             "SessionRestore-CreateRestoredBrowser-End", false);
+        ReportRestoredWindowCreated(browser->window()->GetNativeWindow());
 #endif
       }
 
@@ -616,8 +669,15 @@ class SessionRestoreImpl : public BrowserListObserver {
       // but unminimized.
       base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>
           new_group_ids;
+      // TODO(https://crbug.com/1378744): did_show_browser is for tracking
+      // down a bug.
+      bool did_show_browser = false;
       RestoreTabsToBrowser(*(*i), browser, initial_tab_count, created_contents,
-                           &new_group_ids);
+                           &new_group_ids, did_show_browser);
+      // Newly created browsers should be shown by RestoreTabsToBrowser. If they
+      // aren't shown, they are likely to be never shown.
+      if (browser != browser_)
+        DCHECK(did_show_browser);
       (*tab_count) += (static_cast<int>(browser->tab_strip_model()->count()) -
                        initial_tab_count);
 
@@ -724,7 +784,8 @@ class SessionRestoreImpl : public BrowserListObserver {
       int initial_tab_count,
       std::vector<RestoredTab>* created_contents,
       base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>*
-          new_group_ids) {
+          new_group_ids,
+      bool& did_show_browser) {
     DVLOG(1) << "RestoreTabsToBrowser " << window.tabs.size();
     // TODO(https://crbug.com/1032348): Change to DCHECK once we understand
     // why some browsers don't have an active tab on startup.
@@ -771,7 +832,7 @@ class SessionRestoreImpl : public BrowserListObserver {
       // windows or when launching a hosted app from the app launcher.
       int tab_index = i + initial_tab_count;
       RestoreTab(tab, browser, created_contents, new_group_ids, tab_index,
-                 is_selected_tab, last_active_time);
+                 is_selected_tab, last_active_time, did_show_browser);
     }
   }
 
@@ -787,7 +848,8 @@ class SessionRestoreImpl : public BrowserListObserver {
                                  tab_groups::TabGroupId>* new_group_ids,
                   const int tab_index,
                   bool is_selected_tab,
-                  base::TimeTicks last_active_time) {
+                  base::TimeTicks last_active_time,
+                  bool& did_show_browser) {
     // It's possible (particularly for foreign sessions) to receive a tab
     // without valid navigations. In that case, just skip it.
     // See crbug.com/154129.
@@ -840,6 +902,8 @@ class SessionRestoreImpl : public BrowserListObserver {
     if (!is_selected_tab)
       return;
 
+    if (browser != browser_)
+      did_show_browser = true;
     ShowBrowser(browser, browser->tab_strip_model()->GetIndexOfWebContents(
                              web_contents));
   }
@@ -980,7 +1044,7 @@ class SessionRestoreImpl : public BrowserListObserver {
   raw_ptr<Profile> profile_;
 
   // The first browser to restore to, may be null.
-  raw_ptr<Browser> browser_;
+  raw_ptr<Browser, DanglingUntriaged> browser_;
 
   // Whether or not restore is synchronous.
   const bool synchronous_;
@@ -1097,7 +1161,8 @@ Browser* SessionRestore::RestoreSession(
 void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
   auto* profile = browser->profile();
 
-#if BUILDFLAG(IS_CHROMEOS)
+// While this behavior is enabled for ash, it is explicitly disabled for lacros.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Desks restore a window to the right desk, so we should not reuse any
   // browser window. Otherwise, the conflict of the parent desk arises because
   // tabs created in this |browser| should remain in the current active desk,

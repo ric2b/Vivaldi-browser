@@ -25,15 +25,19 @@ constexpr char kPreferencesTypeName[] = "preferences";
 constexpr char kPasswordsTypeName[] = "passwords";
 constexpr char kAutofillTypeName[] = "autofill";
 constexpr char kThemesTypeName[] = "themes";
-constexpr char kTypedUrlsTypeName[] = "typedUrls";
+// Note: The type name for History is "typedUrls" for historic reasons. This
+// name is used in JS (sync settings) and in the SyncTypesListDisabled policy,
+// so it's fairly hard to change.
+constexpr char kHistoryTypeName[] = "typedUrls";
 constexpr char kExtensionsTypeName[] = "extensions";
 constexpr char kAppsTypeName[] = "apps";
 constexpr char kReadingListTypeName[] = "readingList";
 constexpr char kTabsTypeName[] = "tabs";
 constexpr char kWifiConfigurationsTypeName[] = "wifiConfigurations";
+constexpr char kSavedTabGroupsTypeName[] = "savedTabGroups";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
-  static_assert(42 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "Almost always when adding a new ModelType, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
                 "disable syncing of that data. Today you must also update the "
@@ -43,11 +47,14 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
   // changed without updating js part.
   switch (type) {
     case UserSelectableType::kBookmarks:
-      return {kBookmarksTypeName, BOOKMARKS, {BOOKMARKS}};
+      return {kBookmarksTypeName, BOOKMARKS, {BOOKMARKS, POWER_BOOKMARK}};
     case UserSelectableType::kPreferences:
+      // TODO(crbug.com/1369259): Add GetPreconditionState() logic to check
+      // history state as a precondition for SEGMENTATION.
       return {kPreferencesTypeName,
               PREFERENCES,
-              {PREFERENCES, DICTIONARY, PRIORITY_PREFERENCES, SEARCH_ENGINES}};
+              {PREFERENCES, DICTIONARY, PRIORITY_PREFERENCES, SEARCH_ENGINES,
+               SEGMENTATION}};
     case UserSelectableType::kPasswords:
       return {kPasswordsTypeName, PASSWORDS, {PASSWORDS}};
     case UserSelectableType::kAutofill:
@@ -66,7 +73,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       if (base::FeatureList::IsEnabled(kSyncEnableHistoryDataType)) {
         types.Remove(SESSIONS);
       }
-      return {kTypedUrlsTypeName, TYPED_URLS, types};
+      return {kHistoryTypeName, TYPED_URLS, types};
     }
     case UserSelectableType::kExtensions:
       return {
@@ -91,6 +98,8 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
               WIFI_CONFIGURATIONS,
               {WIFI_CONFIGURATIONS}};
 #endif
+    case UserSelectableType::kSavedTabGroups:
+      return {kSavedTabGroupsTypeName, SAVED_TAB_GROUP, {SAVED_TAB_GROUP}};
 
     case UserSelectableType::kNotes:
       return {"notes", NOTES, {NOTES}};
@@ -148,7 +157,7 @@ absl::optional<UserSelectableType> GetUserSelectableTypeFromString(
   if (type == kThemesTypeName) {
     return UserSelectableType::kThemes;
   }
-  if (type == kTypedUrlsTypeName) {
+  if (type == kHistoryTypeName) {
     return UserSelectableType::kHistory;
   }
   if (type == kExtensionsTypeName) {
@@ -165,6 +174,9 @@ absl::optional<UserSelectableType> GetUserSelectableTypeFromString(
   }
   if (type == kWifiConfigurationsTypeName) {
     return UserSelectableType::kWifiConfigurations;
+  }
+  if (type == kSavedTabGroupsTypeName) {
+    return UserSelectableType::kSavedTabGroups;
   }
   return absl::nullopt;
 }

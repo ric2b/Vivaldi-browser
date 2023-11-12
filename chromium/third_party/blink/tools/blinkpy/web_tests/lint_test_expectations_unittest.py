@@ -26,9 +26,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import json
 import optparse
 import textwrap
 import unittest
+from unittest.mock import patch
 
 from blinkpy.common import exit_codes
 from blinkpy.common.host_mock import MockHost
@@ -391,11 +393,12 @@ class LintTest(LoggingTestCase):
         failures, warnings = lint_test_expectations.lint(host, options)
         self.assertEqual(warnings, [])
 
-        self.assertEquals(len(failures), 4)
+        self.assertEquals(len(failures), 5)
         self.assertRegexpMatches(failures[0], ':7 .*must override')
         self.assertRegexpMatches(failures[1], ':8 .*must override')
         self.assertRegexpMatches(failures[2], ':9 Only one of')
-        self.assertRegexpMatches(failures[3], ':11 .*must override')
+        self.assertRegexpMatches(failures[3], ':10 .*exclusive_test')
+        self.assertRegexpMatches(failures[4], ':11 .*exclusive_test')
 
     def test_lint_stable_webexposed_disabled(self):
         options = optparse.Values({
@@ -415,8 +418,8 @@ class LintTest(LoggingTestCase):
         test_expectations = (
             '# tags: [ mac win ]\n'
             '# results: [ Skip Pass Failure ]\n'
-            'test/* [ Skip ]\n'
-            '[ mac ] webexposed/* [ Skip ]\n'
+            'test/* [ Skip Failure ]\n'
+            '[ mac ] webexposed/* [ Skip Failure ]\n'
             'test/sub/* [ Pass ]\n'
             'test/test1.html [ Pass ]\n'
             'webexposed/foo/* [ Pass ]\n'
@@ -424,7 +427,7 @@ class LintTest(LoggingTestCase):
             'virtual/test/test/* [ Failure ]\n'
             'virtual/test/foo.html [ Pass ]\n'
             'virtual/stable/webexposed/test1/* [ Pass ]\n'
-            'virtual/stable/webexposed/test2/* [ Skip ]\n'
+            'virtual/stable/webexposed/test2/* [ Skip Failure ]\n'
             'virtual/stable/webexposed/api.html [ Pass Failure ]\n')
         port.expectations_dict = lambda: {
             'TestExpectations': test_expectations
@@ -437,6 +440,28 @@ class LintTest(LoggingTestCase):
         self.assertRegexpMatches(fail1, '.*virtual/stable/webexposed/test2/.*')
         self.assertRegexpMatches(fail2,
                                  r'.*virtual/stable/webexposed/api\.html.*')
+
+    def test_lint_skip_in_test_expectations(self):
+        options = optparse.Values({
+            'additional_expectations': [],
+            'platform': 'test'
+        })
+        host = MockHost()
+        port = host.port_factory.get(options.platform, options=options)
+        test_expectations = ('# results: [ Skip Timeout Failure ]\n'
+                             'test1.html [ Skip ]\n'
+                             'test2.html [ Skip Timeout ]\n'
+                             'test3.html [ Skip Failure ]\n')
+        port.expectations_dict = lambda: {
+            'TestExpectations': test_expectations
+        }
+        port.test_exists = lambda test: True
+        host.port_factory.get = lambda platform=None, options=None: port
+
+        failures, warnings = lint_test_expectations.lint(host, options)
+        self.assertEqual(warnings, [])
+        self.assertEquals(len(failures), 1)
+        self.assertRegexpMatches(failures[0], ':2 .*Skip')
 
 
 class CheckVirtualSuiteTest(unittest.TestCase):
@@ -469,6 +494,42 @@ class CheckVirtualSuiteTest(unittest.TestCase):
             self.host, self.options)
         self.assertFalse(res)
 
+    def test_check_virtual_test_suites_any_js(self):
+        suites = [
+            VirtualTestSuite(prefix='wpt-any-js',
+                             platforms=['Linux', 'Mac', 'Win'],
+                             bases=[
+                                 'external/wpt/test.any.html',
+                                 'external/wpt/test.any.worker.html'
+                             ],
+                             args=['--arg']),
+        ]
+        fs = self.host.filesystem
+        fs.write_text_file(
+            fs.join(self.port.web_tests_dir(), 'virtual', 'wpt-any-js',
+                    'README.md'), '')
+        manifest = {
+            'items': {
+                'testharness': {
+                    'test.any.js': [
+                        'df2f8b048c370d3ab009946d73d7de6f8a412471',
+                        ['test.any.html', {}],
+                        ['test.any.worker.html', {}],
+                    ],
+                },
+            },
+        }
+        manifest_path = fs.join(self.port.web_tests_dir(), 'external', 'wpt',
+                                'MANIFEST.json')
+        with fs.open_text_file_for_writing(manifest_path) as manifest_file:
+            json.dump(manifest, manifest_file)
+        with patch.object(self.port,
+                          'virtual_test_suites',
+                          return_value=suites):
+            self.assertEqual(
+                lint_test_expectations.check_virtual_test_suites(
+                    self.host, self.options), [])
+
     def test_check_virtual_test_suites_redundant(self):
         self.port.virtual_test_suites = lambda: [
             VirtualTestSuite(prefix='foo', platforms=['Linux', 'Mac', 'Win'], bases=['test/sub', 'test'], args=['--foo']),
@@ -491,22 +552,30 @@ class CheckVirtualSuiteTest(unittest.TestCase):
             self.host, self.options)
         self.assertEqual(len(res), 0)
 
-    def test_check_virtual_test_suites_non_existent_base(self):
+    def test_check_virtual_test_suites_bases_and_exclusive_tests(self):
         self.port.virtual_test_suites = lambda: [
-            VirtualTestSuite(prefix='foo',
-                             platforms=['Linux', 'Mac', 'Win'],
-                             bases=['base1', 'base2', 'base3.html'],
-                             args=['-foo']),
+            VirtualTestSuite(
+                prefix='foo',
+                platforms=['Linux', 'Mac', 'Win'],
+                bases=['base1', 'base2', 'base3.html'],
+                exclusive_tests=
+                ['base1/exist.html', 'base1/missing.html', 'base4'],
+                args=['-foo']),
         ]
 
         fs = self.host.filesystem
         fs.maybe_make_directory(fs.join(MOCK_WEB_TESTS, 'base1'))
+        fs.write_text_file(fs.join(MOCK_WEB_TESTS, 'base1', 'exist.html'), '')
         fs.write_text_file(fs.join(MOCK_WEB_TESTS, 'base3.html'), '')
         fs.write_text_file(
             fs.join(MOCK_WEB_TESTS, 'virtual', 'foo', 'README.md'), '')
+        fs.maybe_make_directory(fs.join(MOCK_WEB_TESTS, 'base4'))
         res = lint_test_expectations.check_virtual_test_suites(
             self.host, self.options)
-        self.assertEqual(len(res), 1)
+        self.assertEqual(len(res), 3)
+        self.assertRegexpMatches(res[0], 'base2.* or directory')
+        self.assertRegexpMatches(res[1], 'base1/missing.html.* or directory')
+        self.assertRegexpMatches(res[2], 'base4.*subset of bases')
 
 
 class MainTest(unittest.TestCase):

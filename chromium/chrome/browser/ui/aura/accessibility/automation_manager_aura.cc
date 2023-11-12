@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/no_destructor.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/crash/core/common/crash_key.h"
@@ -90,8 +90,7 @@ void AutomationManagerAura::Enable() {
       PostEvent(focus->GetUniqueId(), ax::mojom::Event::kChildrenChanged);
   }
 
-  if (!automation_event_router_observer_.IsObserving() &&
-      !automation_event_router_interface_) {
+  if (!automation_event_router_observer_.IsObserving()) {
     automation_event_router_observer_.Observe(
         extensions::AutomationEventRouter::GetInstance());
   }
@@ -103,7 +102,7 @@ void AutomationManagerAura::Disable() {
   if (tree_) {
     if (automation_event_router_interface_)
       automation_event_router_interface_->DispatchTreeDestroyedEvent(
-          tree_->tree_id(), nullptr);
+          tree_->tree_id());
     tree_.reset();
   }
   tree_serializer_.reset();
@@ -127,6 +126,8 @@ void AutomationManagerAura::OnViewEvent(views::View* view,
   if (!enabled_)
     return;
 
+  DCHECK(tree_.get());
+
   views::AXAuraObjWrapper* obj = cache_->GetOrCreate(view);
   if (!obj)
     return;
@@ -141,6 +142,8 @@ void AutomationManagerAura::OnVirtualViewEvent(
 
   if (!enabled_)
     return;
+
+  DCHECK(tree_.get());
 
   views::AXAuraObjWrapper* obj = virtual_view->GetOrCreateWrapper(cache_.get());
   if (!obj)
@@ -158,6 +161,10 @@ void AutomationManagerAura::ExtensionListenerAdded() {
 }
 
 void AutomationManagerAura::HandleEvent(ax::mojom::Event event_type) {
+  if (!enabled_)
+    return;
+
+  DCHECK(tree_.get());
   views::AXAuraObjWrapper* obj = tree_->GetRoot();
   if (!obj)
     return;
@@ -166,12 +173,19 @@ void AutomationManagerAura::HandleEvent(ax::mojom::Event event_type) {
 }
 
 void AutomationManagerAura::HandleAlert(const std::string& text) {
+  if (!enabled_)
+    return;
+
+  DCHECK(tree_.get());
   if (alert_window_.get())
     alert_window_->HandleAlert(text);
 }
 
 void AutomationManagerAura::PerformAction(const ui::AXActionData& data) {
-  CHECK(enabled_);
+  if (!enabled_)
+    return;
+
+  DCHECK(tree_.get());
 
   base::AutoReset<ax::mojom::Action> reset_currently_performing_action(
       &currently_performing_action_, data.action);
@@ -200,6 +214,8 @@ void AutomationManagerAura::OnChildWindowRemoved(
     views::AXAuraObjWrapper* parent) {
   if (!enabled_)
     return;
+
+  DCHECK(tree_.get());
 
   if (!parent)
     parent = tree_->GetRoot();
@@ -251,7 +267,7 @@ void AutomationManagerAura::PostEvent(int id,
     return;
 
   processing_posted_ = true;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&AutomationManagerAura::SendPendingEvents,
                                 base::Unretained(this)));
 }

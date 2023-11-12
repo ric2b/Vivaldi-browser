@@ -23,10 +23,6 @@
 #include "services/tracing/public/cpp/trace_event_args_allowlist.h"
 #include "services/tracing/public/cpp/tracing_features.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "services/tracing/public/cpp/stack_sampling/reached_code_data_source_android.h"
-#endif
-
 namespace tracing {
 
 // static
@@ -51,9 +47,6 @@ TraceEventAgent::TraceEventAgent() {
 
   PerfettoTracedProcess::Get()->AddDataSource(
       TraceEventDataSource::GetInstance());
-#if BUILDFLAG(IS_ANDROID)
-  PerfettoTracedProcess::Get()->AddDataSource(ReachedCodeDataSource::Get());
-#endif
 }
 
 TraceEventAgent::~TraceEventAgent() = default;
@@ -63,23 +56,6 @@ void TraceEventAgent::GetCategories(std::set<std::string>* category_set) {
        i < base::trace_event::BuiltinCategories::Size(); ++i) {
     category_set->insert(base::trace_event::BuiltinCategories::At(i));
   }
-}
-
-void TraceEventAgent::AddMetadataGeneratorFunction(
-    MetadataGeneratorFunction generator) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  metadata_generator_functions_.push_back(generator);
-
-  TraceEventMetadataSource::GetInstance()->AddGeneratorFunction(
-      base::BindRepeating(
-          [](MetadataGeneratorFunction const& generator)
-              -> absl::optional<base::Value> {
-            if (auto rv = generator.Run()) {
-              return base::Value(std::move(rv.value()));
-            }
-            return absl::nullopt;
-          },
-          std::move(generator)));
 }
 
 }  // namespace tracing

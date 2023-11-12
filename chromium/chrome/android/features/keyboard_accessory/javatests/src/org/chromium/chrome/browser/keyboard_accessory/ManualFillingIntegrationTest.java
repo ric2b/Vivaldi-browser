@@ -8,6 +8,8 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.contrib.RecyclerViewActions.actionOnItem;
+import static androidx.test.espresso.contrib.RecyclerViewActions.scrollTo;
 import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
@@ -15,17 +17,16 @@ import static androidx.test.espresso.matcher.ViewMatchers.withChild;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
-import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertNotNull;
 
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.selectTabAtPosition;
+import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.selectTabWithDescription;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.waitToBeHidden;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.whenDisplayed;
 import static org.chromium.chrome.browser.keyboard_accessory.tab_layout_component.KeyboardAccessoryTabTestHelper.isKeyboardAccessoryTabLayout;
 
-import android.os.Build.VERSION_CODES;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -40,7 +41,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -106,11 +107,7 @@ public class ManualFillingIntegrationTest {
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testKeyboardAccessoryDisappearsWithKeyboard() throws TimeoutException {
+    public void testKeyboardAccessoryDisappearsWithKeyboard() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Focus the field to bring up the accessory.
@@ -137,8 +134,11 @@ public class ManualFillingIntegrationTest {
         onView(withChild(withId(R.id.keyboard_accessory_sheet))).check(doesNotExist());
 
         // Trigger the sheet and wait for it to open and the keyboard to disappear.
-        onView(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
     }
@@ -163,11 +163,8 @@ public class ManualFillingIntegrationTest {
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testAccessorySheetHiddenWhenRefocusingField() throws TimeoutException {
+    @DisabledTest(message = "https://crbug.com/1376371")
+    public void testAccessorySheetHiddenWhenRefocusingField() throws TimeoutException {
         AtomicReference<ViewGroup.MarginLayoutParams> accessoryMargins = new AtomicReference<>();
         AtomicReference<View> accessorySheetView = new AtomicReference<>();
         mHelper.loadTestPage(false);
@@ -184,8 +181,11 @@ public class ManualFillingIntegrationTest {
         onView(withChild(withId(R.id.keyboard_accessory_sheet))).check(doesNotExist());
 
         // Trigger the sheet and wait for it to open and the keyboard to disappear.
-        onView(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet))).check((view, e) -> {
             accessorySheetView.set(view);
@@ -204,11 +204,7 @@ public class ManualFillingIntegrationTest {
     @Test
     @SmallTest
     @Features.DisableFeatures(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testAccessoryHiddenAfterTappingAutoGenerationButton() throws TimeoutException {
+    public void testAccessoryHiddenAfterTappingAutoGenerationButton() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Focus the field to bring up the accessory and add the generation button.
@@ -238,14 +234,12 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(isKeyboardAccessoryTabLayout()).perform(selectTabAtPosition(0));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
 
         // Click the tab again to hide the sheet and show the keyboard.
-        onView(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(isKeyboardAccessoryTabLayout()).perform(selectTabAtPosition(0));
         mHelper.waitForKeyboardAccessoryToBeShown();
         onView(withId(R.id.keyboard_accessory)).check(matches(isDisplayed()));
         waitToBeHidden(withChild(withId(R.id.keyboard_accessory_sheet)));
@@ -254,17 +248,13 @@ public class ManualFillingIntegrationTest {
     @Test
     @SmallTest
     @Features.DisableFeatures({ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY})
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testSelectingNonPasswordInputDismissesAccessory() throws TimeoutException {
+    public void testSelectingNonPasswordInputDismissesAccessory() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Focus the password field to bring up the accessory.
         mHelper.focusPasswordField();
         mHelper.waitForKeyboardAccessoryToBeShown();
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()));
+        whenDisplayed(isKeyboardAccessoryTabLayout());
 
         // Clicking a field without completion hides the accessory again.
         mHelper.clickFieldWithoutCompletion();
@@ -282,8 +272,11 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
 
@@ -306,8 +299,11 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
 
@@ -329,19 +325,18 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
     }
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testPressingBackButtonHidesAccessorySheet() throws TimeoutException {
+    public void testPressingBackButtonHidesAccessorySheet() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Focus the field to bring up the accessory.
@@ -349,8 +344,11 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
 
@@ -404,11 +402,7 @@ public class ManualFillingIntegrationTest {
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testInfobarStaysHiddenWhenOpeningSheet() throws TimeoutException {
+    public void testInfobarStaysHiddenWhenOpeningSheet() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Initialize and wait for the infobar.
@@ -431,8 +425,11 @@ public class ManualFillingIntegrationTest {
         assertThat(mActivityTestRule.getInfoBarContainer().getVisibility(), is(not(View.VISIBLE)));
 
         // Click the tab to show the sheet and hide the keyboard.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         mHelper.waitForKeyboardToDisappear();
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
         assertThat(mActivityTestRule.getInfoBarContainer().getVisibility(), is(not(View.VISIBLE)));
@@ -454,11 +451,7 @@ public class ManualFillingIntegrationTest {
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testMovesUpSnackbar() throws TimeoutException {
+    public void testMovesUpSnackbar() throws TimeoutException {
         final String kSnackbarText = "snackbar";
 
         mHelper.loadTestPage(false);
@@ -481,8 +474,11 @@ public class ManualFillingIntegrationTest {
         onView(withText(kSnackbarText)).check(matches(isCompletelyDisplayed()));
 
         // Open a keyboard accessory sheet -- this also shouldn't hide the snackbar.
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
         onView(withText(kSnackbarText)).check(matches(isCompletelyDisplayed()));
 
@@ -494,11 +490,7 @@ public class ManualFillingIntegrationTest {
 
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
-            message = "Flaky on Marshmallow https://crbug.com/1102302")
-    public void
-    testInfobarReopensOnPressingBack() throws TimeoutException {
+    public void testInfobarReopensOnPressingBack() throws TimeoutException {
         mHelper.loadTestPage(false);
 
         // Initialize and wait for the infobar.
@@ -518,8 +510,11 @@ public class ManualFillingIntegrationTest {
         // Focus the field to bring up the accessory.
         mHelper.focusPasswordField();
         mHelper.waitForKeyboardAccessoryToBeShown();
-        whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()))
-                .perform(selectTabAtPosition(0));
+        whenDisplayed(withId(R.id.bar_items_view))
+                .perform(scrollTo(isKeyboardAccessoryTabLayout()),
+                        actionOnItem(isKeyboardAccessoryTabLayout(),
+                                selectTabWithDescription(
+                                        R.string.password_accessory_sheet_toggle)));
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
         assertThat(mActivityTestRule.getInfoBarContainer().getVisibility(), is(not(View.VISIBLE)));
 

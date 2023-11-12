@@ -5,10 +5,10 @@
 
 #import <Foundation/Foundation.h>
 
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_home_consumer.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
-#include "components/bookmarks/browser/bookmark_model.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;

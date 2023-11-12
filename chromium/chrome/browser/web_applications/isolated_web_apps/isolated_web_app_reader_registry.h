@@ -10,14 +10,17 @@
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/types/expected.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_validator.h"
 #include "chrome/browser/web_applications/isolated_web_apps/signed_web_bundle_reader.h"
-#include "chrome/browser/web_applications/isolated_web_apps/signed_web_bundle_signature_verifier.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/web_package/mojom/web_bundle_parser.mojom-forward.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_signature_verifier.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -39,7 +42,7 @@ class IsolatedWebAppReaderRegistry : public KeyedService {
   explicit IsolatedWebAppReaderRegistry(
       std::unique_ptr<IsolatedWebAppValidator> validator,
       base::RepeatingCallback<
-          std::unique_ptr<SignedWebBundleSignatureVerifier>()>
+          std::unique_ptr<web_package::SignedWebBundleSignatureVerifier>()>
           signature_verifier_factory);
   ~IsolatedWebAppReaderRegistry() override;
 
@@ -87,6 +90,19 @@ class IsolatedWebAppReaderRegistry : public KeyedService {
       kResponseNotFound,
     };
 
+    static ReadResponseError ForError(
+        const SignedWebBundleReader::ReadIntegrityBlockAndMetadataError& error);
+
+    static ReadResponseError ForMetadataValidationError(
+        const std::string& error);
+
+    static ReadResponseError ForError(
+        const SignedWebBundleReader::ReadResponseError& error);
+
+    Type type;
+    std::string message;
+
+   private:
     static ReadResponseError ForOtherError(const std::string& message) {
       return ReadResponseError(Type::kOtherError, message);
     }
@@ -95,10 +111,6 @@ class IsolatedWebAppReaderRegistry : public KeyedService {
       return ReadResponseError(Type::kResponseNotFound, message);
     }
 
-    Type type;
-    std::string message;
-
-   private:
     ReadResponseError(Type type, const std::string& message)
         : type(type), message(message) {}
   };
@@ -115,7 +127,48 @@ class IsolatedWebAppReaderRegistry : public KeyedService {
                     const network::ResourceRequest& resource_request,
                     ReadResponseCallback callback);
 
+  // This enum represents every error type that can occur during integrity block
+  // and metadata parsing, before responses are read from Signed Web Bundles.
+  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ReadIntegrityBlockAndMetadataStatus {
+    kSuccess = 0,
+    // Integrity Block-related errors
+    kIntegrityBlockParserInternalError = 1,
+    kIntegrityBlockParserFormatError = 2,
+    kIntegrityBlockParserVersionError = 3,
+    kIntegrityBlockValidationError = 4,
+
+    // Signature verification errors
+    kSignatureVerificationError = 5,
+
+    // Metadata-related errors
+    kMetadataParserInternalError = 6,
+    kMetadataParserFormatError = 7,
+    kMetadataParserVersionError = 8,
+    kMetadataValidationError = 9,
+
+    kMaxValue = kMetadataValidationError
+  };
+
+  // This enum represents every error type that can occur during response head
+  // parsing, after integrity block and metadata have been read successfully.
+  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ReadResponseHeadStatus {
+    kSuccess = 0,
+    kResponseHeadParserInternalError = 1,
+    kResponseHeadParserFormatError = 2,
+    kResponseNotFoundError = 3,
+    kMaxValue = kResponseNotFoundError
+  };
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(IsolatedWebAppReaderRegistryTest,
+                           TestConcurrentRequests);
+
   void OnIntegrityBlockRead(
       const base::FilePath& web_bundle_path,
       const web_package::SignedWebBundleId& web_bundle_id,
@@ -123,50 +176,144 @@ class IsolatedWebAppReaderRegistry : public KeyedService {
       base::OnceCallback<
           void(SignedWebBundleReader::SignatureVerificationAction)> callback);
 
+  void OnIntegrityBlockValidated(
+      const base::FilePath& web_bundle_path,
+      const web_package::SignedWebBundleId& web_bundle_id,
+      base::OnceCallback<
+          void(SignedWebBundleReader::SignatureVerificationAction)>
+          integrity_callback,
+      absl::optional<std::string> integrity_block_error);
+
   void OnIntegrityBlockAndMetadataRead(
       const base::FilePath& web_bundle_path,
       const web_package::SignedWebBundleId& web_bundle_id,
-      absl::optional<SignedWebBundleReader::ReadError> read_error);
+      absl::optional<SignedWebBundleReader::ReadIntegrityBlockAndMetadataError>
+          read_integrity_block_and_metadata_error);
 
   void DoReadResponse(SignedWebBundleReader& reader,
                       network::ResourceRequest resource_request,
                       ReadResponseCallback callback);
 
   void OnResponseRead(
-      SignedWebBundleReader& reader,
+      base::WeakPtr<SignedWebBundleReader> reader,
       ReadResponseCallback callback,
       base::expected<web_package::mojom::BundleResponsePtr,
                      SignedWebBundleReader::ReadResponseError> response_head);
 
-  // A `CacheEntry` has two states: In its initial `kPending` state, it caches
-  // requests made to a Signed Web Bundle until the `SignedWebBundleReader` is
-  // ready. Once the `SignedWebBundleReader` is ready to serve responses, all
-  // queued requests are run and the state is updated to `kReady`.
-  struct CacheEntry {
-    explicit CacheEntry(std::unique_ptr<SignedWebBundleReader> reader);
-    ~CacheEntry();
+  ReadIntegrityBlockAndMetadataStatus GetStatusFromError(
+      const SignedWebBundleReader::ReadIntegrityBlockAndMetadataError& error);
 
-    CacheEntry(const CacheEntry& other) = delete;
-    CacheEntry& operator=(const CacheEntry& other) = delete;
+  ReadResponseHeadStatus GetStatusFromError(
+      const SignedWebBundleReader::ReadResponseError& error);
 
-    CacheEntry(CacheEntry&& other);
-    CacheEntry& operator=(CacheEntry&& other);
+  enum class ReaderCacheState;
 
-    enum class State { kPending, kReady };
+  // A thin wrapper around `base::flat_map<base::FilePath, Cache::Entry>` that
+  // automatically removes entries from the cache if they have not been accessed
+  // for some time. This makes sure that `SignedWebBundleReader`s are not kept
+  // alive indefinitely, since each of them holds an open file handle and
+  // memory.
+  class Cache {
+   public:
+    class Entry;
 
-    State state = State::kPending;
-    std::vector<std::pair<network::ResourceRequest, ReadResponseCallback>>
-        pending_requests;
-    std::unique_ptr<SignedWebBundleReader> reader;
+    Cache();
+    ~Cache();
+
+    Cache(Cache&& other) = delete;
+    Cache& operator=(Cache&& other) = delete;
+
+    base::flat_map<base::FilePath, Entry>::iterator Find(
+        const base::FilePath& file_path);
+
+    base::flat_map<base::FilePath, Entry>::iterator End();
+
+    template <class... Args>
+    std::pair<base::flat_map<base::FilePath, Entry>::iterator, bool> Emplace(
+        Args&&... args);
+
+    void Erase(base::flat_map<base::FilePath, Entry>::iterator iterator);
+
+    // A cache `Entry` has two states: In its initial `kPending` state, it
+    // caches requests made to a Signed Web Bundle until the
+    // `SignedWebBundleReader` is ready. Once the `SignedWebBundleReader` is
+    // ready to serve responses, all queued requests are run and the state is
+    // updated to `kReady`.
+    class Entry {
+     public:
+      explicit Entry(std::unique_ptr<SignedWebBundleReader> reader);
+      ~Entry();
+
+      Entry(const Entry& other) = delete;
+      Entry& operator=(const Entry& other) = delete;
+
+      Entry(Entry&& other);
+      Entry& operator=(Entry&& other);
+
+      SignedWebBundleReader& GetReader() {
+        last_access_ = base::TimeTicks::Now();
+        return *reader_;
+      }
+
+      const base::TimeTicks last_access() const { return last_access_; }
+
+      ReaderCacheState AsReaderCacheState() {
+        switch (state) {
+          case State::kPending:
+            return ReaderCacheState::kCachedPending;
+          case State::kReady:
+            return ReaderCacheState::kCachedReady;
+        }
+      }
+
+      enum class State { kPending, kReady };
+
+      State state = State::kPending;
+      std::vector<std::pair<network::ResourceRequest,
+                            IsolatedWebAppReaderRegistry::ReadResponseCallback>>
+          pending_requests;
+
+     private:
+      std::unique_ptr<SignedWebBundleReader> reader_;
+      // The point in time when the `reader` was last accessed.
+      base::TimeTicks last_access_;
+    };
+
+   private:
+    void StartCleanupTimerIfNotRunning();
+
+    void StopCleanupTimerIfCacheIsEmpty();
+
+    void CleanupOldEntries();
+
+    base::flat_map<base::FilePath, Entry> cache_;
+    base::RepeatingTimer cleanup_timer_;
+    SEQUENCE_CHECKER(sequence_checker_);
   };
 
-  base::flat_map<base::FilePath, CacheEntry> reader_cache_;
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ReaderCacheState {
+    kNotCached = 0,
+    kCachedReady = 1,
+    kCachedPending = 2,
+    kMaxValue = kCachedPending
+  };
+
+  Cache reader_cache_;
+
+  // A set of files whose signatures have been verified successfully during the
+  // current browser session. Signatures of these files are not re-verified even
+  // if their corresponding `CacheEntry` is cleaned up and later re-created.
+  base::flat_set<base::FilePath> verified_files_;
 
   std::unique_ptr<IsolatedWebAppValidator> validator_;
-  base::RepeatingCallback<std::unique_ptr<SignedWebBundleSignatureVerifier>()>
+  base::RepeatingCallback<
+      std::unique_ptr<web_package::SignedWebBundleSignatureVerifier>()>
       signature_verifier_factory_;
 
   SEQUENCE_CHECKER(sequence_checker_);
+  base::WeakPtrFactory<IsolatedWebAppReaderRegistry> weak_ptr_factory_{this};
 };
 
 }  // namespace web_app

@@ -40,7 +40,7 @@ public final class CookieManagerImpl extends ICookieManager.Stub {
     }
 
     @Override
-    public boolean setCookie(String url, String value, IObjectWrapper callback) {
+    public void setCookie(String url, String value, IObjectWrapper callback) {
         StrictModeWorkaround.apply();
 
         WebLayerOriginVerificationScheduler originVerifier =
@@ -51,15 +51,13 @@ public final class CookieManagerImpl extends ICookieManager.Stub {
 
         originVerifier.verify(url, mProfile, (verified) -> {
             if (!verified) {
+                // TODO(crbug.com/1392110): Pass a RestrictedAPIException.
                 valueCallback.onReceiveValue(false);
-                return;
             }
             Callback<Boolean> baseCallback =
                     (Boolean result) -> valueCallback.onReceiveValue(result);
             CookieManagerImplJni.get().setCookie(mNativeCookieManager, url, value, baseCallback);
         });
-
-        return true;
     }
 
     @Override
@@ -74,8 +72,8 @@ public final class CookieManagerImpl extends ICookieManager.Stub {
 
         originVerifier.verify(url, mProfile, (verified) -> {
             if (!verified) {
+                // TODO(crbug.com/1392110): Pass a RestrictedAPIException.
                 valueCallback.onReceiveValue(null);
-                return;
             }
             Callback<String> baseCallback = (String result) -> valueCallback.onReceiveValue(result);
             CookieManagerImplJni.get().getCookie(mNativeCookieManager, url, baseCallback);

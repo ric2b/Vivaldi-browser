@@ -23,12 +23,14 @@
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/interest_group_auction.h"
+#include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
 #include "content/browser/interest_group/interest_group_storage.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom-forward.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
@@ -61,12 +63,14 @@ InterestGroupAuctionReporter::WinningBidInfo::~WinningBidInfo() = default;
 
 InterestGroupAuctionReporter::InterestGroupAuctionReporter(
     AuctionWorkletManager* auction_worklet_manager,
+    std::unique_ptr<blink::AuctionConfig> auction_config,
     WinningBidInfo winning_bid_info,
     SellerWinningBidInfo top_level_seller_winning_bid_info,
     absl::optional<SellerWinningBidInfo> component_seller_winning_bid_info,
     std::map<url::Origin, PrivateAggregationRequests>
         private_aggregation_requests)
     : auction_worklet_manager_(auction_worklet_manager),
+      auction_config_(std::move(auction_config)),
       winning_bid_info_(std::move(winning_bid_info)),
       top_level_seller_winning_bid_info_(
           std::move(top_level_seller_winning_bid_info)),
@@ -77,6 +81,9 @@ InterestGroupAuctionReporter::InterestGroupAuctionReporter(
 InterestGroupAuctionReporter ::~InterestGroupAuctionReporter() = default;
 
 void InterestGroupAuctionReporter::Start(base::OnceClosure callback) {
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "fledge", "reporting_phase", top_level_seller_winning_bid_info_.trace_id);
+
   DCHECK(!callback_);
 
   callback_ = std::move(callback);
@@ -94,6 +101,7 @@ void InterestGroupAuctionReporter::RequestSellerWorklet(
   if (auction_worklet_manager_->RequestSellerWorklet(
           seller_info->auction_config->decision_logic_url,
           seller_info->auction_config->trusted_scoring_signals_url,
+          *seller_info->subresource_url_builder,
           seller_info->auction_config->seller_experiment_group_id,
           base::BindOnce(&InterestGroupAuctionReporter::OnSellerWorkletReceived,
                          base::Unretained(this), base::Unretained(seller_info),
@@ -152,7 +160,12 @@ void InterestGroupAuctionReporter::OnSellerWorkletReceived(
   }
 
   seller_worklet_handle_->GetSellerWorklet()->ReportResult(
-      seller_info->auction_config->non_shared_params, std::move(other_seller),
+      seller_info->auction_config->non_shared_params,
+      InterestGroupAuction::GetDirectFromSellerSellerSignals(
+          *seller_info->subresource_url_builder),
+      InterestGroupAuction::GetDirectFromSellerAuctionSignals(
+          *seller_info->subresource_url_builder),
+      std::move(other_seller),
       winning_bid_info_.storage_interest_group->interest_group.owner,
       winning_bid_info_.render_url, seller_info->bid, seller_info->score,
       seller_info->highest_scoring_other_bid,
@@ -190,35 +203,40 @@ void InterestGroupAuctionReporter::OnSellerReportResultComplete(
   }
 
   if (!seller_ad_beacon_map.empty()) {
+    bool has_bad_beacon_map = false;
     for (const auto& element : seller_ad_beacon_map) {
       if (!IsEventLevelReportingUrlValid(element.second)) {
         mojo::ReportBadMessage(base::StrCat(
             {"Invalid seller beacon URL for '", element.first, "'"}));
-        // TODO(mmenke): Call into other worklets, despite failure.
-        OnReportingComplete(
-            /*success=*/false);
-        return;
+        // No need to skip rest of work on failure - all fields are validated
+        // and consumed independently, and it's not worth the complexity to make
+        // sure everything is dropped when a field is invalid.
+        has_bad_beacon_map = true;
+        break;
       }
     }
-    if (seller_info == &top_level_seller_winning_bid_info_) {
-      ad_beacon_map_.metadata[blink::mojom::ReportingDestination::kSeller] =
-          seller_ad_beacon_map;
-    } else {
-      ad_beacon_map_
-          .metadata[blink::mojom::ReportingDestination::kComponentSeller] =
-          seller_ad_beacon_map;
+    if (!has_bad_beacon_map) {
+      if (seller_info == &top_level_seller_winning_bid_info_) {
+        ad_beacon_map_
+            .metadata[blink::FencedFrame::ReportingDestination::kSeller] =
+            seller_ad_beacon_map;
+      } else {
+        ad_beacon_map_.metadata
+            [blink::FencedFrame::ReportingDestination::kComponentSeller] =
+            seller_ad_beacon_map;
+      }
     }
   }
 
   if (seller_report_url) {
     if (!IsEventLevelReportingUrlValid(*seller_report_url)) {
       mojo::ReportBadMessage("Invalid seller report URL");
-      // TODO(mmenke): Call into other worklets, despite failure.
-      OnReportingComplete(/*success=*/false);
-      return;
+      // No need to skip rest of work on failure - all fields are validated and
+      // consumed independently, and it's not worth the complexity to make sure
+      // everything is dropped when a field is invalid.
+    } else {
+      report_urls_.push_back(*seller_report_url);
     }
-
-    report_urls_.push_back(*seller_report_url);
   }
 
   errors_.insert(errors_.end(), errors.begin(), errors.end());
@@ -252,10 +270,9 @@ void InterestGroupAuctionReporter::RequestBidderWorklet(
   const blink::InterestGroup& interest_group =
       winning_bid_info_.storage_interest_group->interest_group;
 
-  const blink::AuctionConfig* auction_config =
-      GetBidderAuction().auction_config;
+  const SellerWinningBidInfo& bidder_auction = GetBidderAuction();
   absl::optional<uint16_t> experiment_group_id =
-      InterestGroupAuction::GetBuyerExperimentId(*auction_config,
+      InterestGroupAuction::GetBuyerExperimentId(*bidder_auction.auction_config,
                                                  interest_group.owner);
 
   // base::Unretained is safe to use for these callbacks because destroying
@@ -264,7 +281,8 @@ void InterestGroupAuctionReporter::RequestBidderWorklet(
   if (auction_worklet_manager_->RequestBidderWorklet(
           interest_group.bidding_url.value_or(GURL()),
           interest_group.bidding_wasm_helper_url,
-          interest_group.trusted_bidding_signals_url, experiment_group_id,
+          interest_group.trusted_bidding_signals_url,
+          *bidder_auction.subresource_url_builder, experiment_group_id,
           base::BindOnce(&InterestGroupAuctionReporter::OnBidderWorkletReceived,
                          base::Unretained(this), signals_for_winner),
           base::BindOnce(
@@ -288,9 +306,44 @@ void InterestGroupAuctionReporter::OnBidderWorkletReceived(
           *auction_config,
           winning_bid_info_.storage_interest_group->interest_group.owner);
 
+  std::string group_name =
+      winning_bid_info_.storage_interest_group->interest_group.name;
+  // if k-anonymity enforcement is on we can only reveal the winning interest
+  // group name in reportWin if the winning ad's reporting_ads_kanon entry is
+  // k-anonymous. Otherwise we simply provide the empty string instead of the
+  // group name.
+  if (base::FeatureList::IsEnabled(
+          blink::features::kFledgeConsiderKAnonymity) &&
+      base::FeatureList::IsEnabled(blink::features::kFledgeEnforceKAnonymity)) {
+    auto chosen_ad = base::ranges::find(
+        *winning_bid_info_.storage_interest_group->interest_group.ads,
+        winning_bid_info_.render_url,
+        [](const blink::InterestGroup::Ad& ad) { return ad.render_url; });
+    CHECK(chosen_ad !=
+          winning_bid_info_.storage_interest_group->interest_group.ads->end());
+    std::string reporting_key = KAnonKeyForAdNameReporting(
+        winning_bid_info_.storage_interest_group->interest_group, *chosen_ad);
+    auto kanon = base::ranges::find(
+        winning_bid_info_.storage_interest_group->reporting_ads_kanon,
+        reporting_key, [](const StorageInterestGroup::KAnonymityData& data) {
+          return data.key;
+        });
+    if (kanon == winning_bid_info_.storage_interest_group->reporting_ads_kanon
+                     .end() ||
+        !kanon->is_k_anonymous) {
+      group_name = "";
+    }
+  }
+
   bidder_worklet_handle_->GetBidderWorklet()->ReportWin(
-      winning_bid_info_.storage_interest_group->interest_group.name,
-      auction_config->non_shared_params.auction_signals, per_buyer_signals,
+      group_name,
+      auction_config->non_shared_params.auction_signals.maybe_json(),
+      per_buyer_signals,
+      InterestGroupAuction::GetDirectFromSellerPerBuyerSignals(
+          *seller_info.subresource_url_builder,
+          winning_bid_info_.storage_interest_group->interest_group.owner),
+      InterestGroupAuction::GetDirectFromSellerAuctionSignals(
+          *seller_info.subresource_url_builder),
       signals_for_winner, winning_bid_info_.render_url, winning_bid_info_.bid,
       /*browser_signal_highest_scoring_other_bid=*/
       seller_info.highest_scoring_other_bid,
@@ -347,40 +400,43 @@ void InterestGroupAuctionReporter::OnBidderReportWinComplete(
   }
 
   if (!bidder_ad_beacon_map.empty()) {
+    bool has_bad_beacon_map = false;
     for (const auto& element : bidder_ad_beacon_map) {
       if (!IsEventLevelReportingUrlValid(element.second)) {
         mojo::ReportBadMessage(base::StrCat(
             {"Invalid bidder beacon URL for '", element.first, "'"}));
-        OnReportingComplete(
-            /*success=*/false);
-        return;
+        has_bad_beacon_map = true;
+        break;
+        // No need to skip rest of work on failure - all fields are validated
+        // and consumed independently, and it's not worth the complexity to make
+        // sure everything is dropped when a field is invalid.
       }
     }
-    ad_beacon_map_.metadata[blink::mojom::ReportingDestination::kBuyer] =
-        bidder_ad_beacon_map;
+    if (!has_bad_beacon_map) {
+      ad_beacon_map_
+          .metadata[blink::FencedFrame::ReportingDestination::kBuyer] =
+          bidder_ad_beacon_map;
+    }
   }
 
   if (bidder_report_url) {
     if (!IsEventLevelReportingUrlValid(*bidder_report_url)) {
       mojo::ReportBadMessage("Invalid bidder report URL");
-      OnReportingComplete(/*success=*/false);
-      return;
+      // No need to skip rest of work on failure - all fields are validated and
+      // consumed independently, and it's not worth the complexity to make sure
+      // everything is dropped when a field is invalid.
+    } else {
+      report_urls_.push_back(*bidder_report_url);
     }
-
-    report_urls_.push_back(*bidder_report_url);
   }
 
-  OnReportingComplete(/*success=*/true, errors);
+  OnReportingComplete(errors);
 }
 
 void InterestGroupAuctionReporter::OnReportingComplete(
-    bool success,
     const std::vector<std::string>& errors) {
-  if (!success) {
-    private_aggregation_requests_.clear();
-    ad_beacon_map_ = ReportingMetadata();
-    report_urls_.clear();
-  }
+  TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "reporting_phase",
+                                  top_level_seller_winning_bid_info_.trace_id);
   errors_.insert(errors_.end(), errors.begin(), errors.end());
   std::move(callback_).Run();
 }

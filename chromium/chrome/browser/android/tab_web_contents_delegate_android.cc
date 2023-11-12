@@ -454,7 +454,8 @@ bool TabWebContentsDelegateAndroid::IsPrerender2Supported(
     content::WebContents& web_contents) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents.GetBrowserContext());
-  return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
+  return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs()) ==
+         content::PreloadingEligibility::kEligible;
 }
 
 std::unique_ptr<content::WebContents>
@@ -614,6 +615,14 @@ bool TabWebContentsDelegateAndroid::IsInstalledWebappDelegateGeolocation()
     return false;
   return Java_TabWebContentsDelegateAndroidImpl_isInstalledWebappDelegateGeolocation(
       env, obj);
+}
+
+bool TabWebContentsDelegateAndroid::IsModalContextMenu() const {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return true;
+  return Java_TabWebContentsDelegateAndroidImpl_isModalContextMenu(env, obj);
 }
 
 }  // namespace android

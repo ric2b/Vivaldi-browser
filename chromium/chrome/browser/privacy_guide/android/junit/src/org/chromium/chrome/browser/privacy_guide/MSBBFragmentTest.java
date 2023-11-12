@@ -11,18 +11,20 @@ import android.os.Bundle;
 
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.testing.FragmentScenario;
-import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridgeJni;
@@ -34,6 +36,8 @@ import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridgeJn
 public class MSBBFragmentTest {
     @Rule
     public JniMocker mocker = new JniMocker();
+    @Rule
+    public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock
     private Profile mProfile;
@@ -42,13 +46,17 @@ public class MSBBFragmentTest {
 
     private FragmentScenario mScenario;
     private SwitchCompat mMSBBButton;
+    private final UserActionTester mActionTester = new UserActionTester();
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
-
         Profile.setLastUsedProfileForTesting(mProfile);
         mocker.mock(UnifiedConsentServiceBridgeJni.TEST_HOOKS, mNativeMock);
+    }
+
+    @After
+    public void tearDown() {
+        mActionTester.tearDown();
     }
 
     private void initFragmentWithMSBBState(boolean isMSBBOn) {
@@ -61,21 +69,18 @@ public class MSBBFragmentTest {
     }
 
     @Test
-    @SmallTest
     public void testIsSwitchOffWhenMSBBOff() {
         initFragmentWithMSBBState(false);
         assertFalse(mMSBBButton.isChecked());
     }
 
     @Test
-    @SmallTest
     public void testIsSwitchOnWhenMSBBOn() {
         initFragmentWithMSBBState(true);
         assertTrue(mMSBBButton.isChecked());
     }
 
     @Test
-    @SmallTest
     public void testTurnMSBBOn() {
         initFragmentWithMSBBState(false);
         mMSBBButton.performClick();
@@ -83,10 +88,23 @@ public class MSBBFragmentTest {
     }
 
     @Test
-    @SmallTest
     public void testTurnMSBBOff() {
         initFragmentWithMSBBState(true);
         mMSBBButton.performClick();
         Mockito.verify(mNativeMock).setUrlKeyedAnonymizedDataCollectionEnabled(mProfile, false);
+    }
+
+    @Test
+    public void testTurnMSBBOff_changeMSBBOffUserAction() {
+        initFragmentWithMSBBState(true);
+        mMSBBButton.performClick();
+        assertTrue(mActionTester.getActions().contains("Settings.PrivacyGuide.ChangeMSBBOff"));
+    }
+
+    @Test
+    public void testTurnMSBBOn_changeMSBBOnUserAction() {
+        initFragmentWithMSBBState(false);
+        mMSBBButton.performClick();
+        assertTrue(mActionTester.getActions().contains("Settings.PrivacyGuide.ChangeMSBBOn"));
     }
 }

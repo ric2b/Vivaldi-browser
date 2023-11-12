@@ -31,6 +31,7 @@ namespace ash {
 
 class WallpaperControllerObserver;
 class WallpaperControllerClient;
+class WallpaperDriveFsDelegate;
 
 // Used by Chrome to set the wallpaper displayed by ash.
 class ASH_PUBLIC_EXPORT WallpaperController {
@@ -48,6 +49,9 @@ class ASH_PUBLIC_EXPORT WallpaperController {
 
   // Sets the client interface, used to show the wallpaper picker, etc.
   virtual void SetClient(WallpaperControllerClient* client) = 0;
+
+  virtual void SetDriveFsDelegate(
+      std::unique_ptr<WallpaperDriveFsDelegate> drivefs_delegate) = 0;
 
   // Sets paths for wallpaper directories and the device policy wallpaper path.
   // |user_data|: Directory where user data can be written.
@@ -110,6 +114,12 @@ class ASH_PUBLIC_EXPORT WallpaperController {
       const GooglePhotosWallpaperParams& params,
       SetWallpaperCallback callback) = 0;
 
+  // Sets and stores the collection id used to refresh Google Photos wallpapers.
+  // `album_id` is empty if daily refresh is not enabled.
+  virtual void SetGooglePhotosDailyRefreshAlbumId(
+      const AccountId& account_id,
+      const std::string& album_id) = 0;
+
   // Get the Google Photos daily refresh album id. Empty if
   // `current_wallpaper_.type` is not `kDailyGooglePhotos`
   virtual std::string GetGooglePhotosDailyRefreshAlbumId(
@@ -129,22 +139,11 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   // downloading the image if it is not on disk yet.
   // Sets wallpaper from the Chrome OS wallpaper picker. If the
   // wallpaper file corresponding to |url| already exists in local file system
-  // (i.e. |SetOnlineWallpaperFromData| was called earlier with the same |url|),
+  // (i.e. |SetOnlineWallpaper| was called earlier with the same |url|),
   // returns true and sets wallpaper for the user, otherwise returns false.
   // |params|: The parameters of the online wallpaper.
   // Responds with true if the wallpaper file exists in local file system.
   virtual void SetOnlineWallpaperIfExists(const OnlineWallpaperParams& params,
-                                          SetWallpaperCallback callback) = 0;
-
-  // Sets wallpaper from the Chrome OS wallpaper picker and saves the wallpaper
-  // to local file system. After this, |SetOnlineWallpaperIfExists| will return
-  // true for the same |params.url|, so that there's no need to provide
-  // |image_data| when the same wallpaper needs to be set again or for another
-  // user. |params|: The parameters of the online wallpaper.
-  // Responds with true if the wallpaper is set successfully (i.e. no decoding
-  // error etc.).
-  virtual void SetOnlineWallpaperFromData(const OnlineWallpaperParams& params,
-                                          const std::string& image_data,
                                           SetWallpaperCallback callback) = 0;
 
   // Sets the user's wallpaper to be the default wallpaper. Note: different user
@@ -275,7 +274,7 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   virtual void RemovePolicyWallpaper(const AccountId& account_id) = 0;
 
   // Returns the urls of the wallpapers that exist in local file system (i.e.
-  // |SetOnlineWallpaperFromData| was called earlier). The url is used as id
+  // |SetOnlineWallpaper| was called earlier). The url is used as id
   // to identify which wallpapers are available to be set offline.
   using GetOfflineWallpaperListCallback =
       base::OnceCallback<void(const std::vector<std::string>&)>;

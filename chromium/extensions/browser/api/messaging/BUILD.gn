@@ -31,7 +31,6 @@ source_set("messaging") {
     "//components/keyed_service/content:content",
     "//content/public/browser",
     "//content/public/common",
-    "//extensions/browser/api",
     "//extensions/common",
     "//extensions/common/api",
   ]

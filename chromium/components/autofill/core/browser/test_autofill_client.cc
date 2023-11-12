@@ -154,9 +154,9 @@ TestAutofillClient::CreateCreditCardInternalAuthenticator(
 void TestAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {}
 
 void TestAutofillClient::ShowUnmaskPrompt(
-    const CreditCard& card,
-    UnmaskCardReason reason,
-    base::WeakPtr<CardUnmaskDelegate> delegate) {}
+    const autofill::CreditCard& card,
+    const autofill::CardUnmaskPromptOptions& card_unmask_prompt_options,
+    base::WeakPtr<autofill::CardUnmaskDelegate> delegate) {}
 
 void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {}
 
@@ -205,6 +205,15 @@ void TestAutofillClient::ShowLocalCardMigrationResults(
     const std::u16string& tip_message,
     const std::vector<MigratableCreditCard>& migratable_credit_cards,
     MigrationDeleteCardCallback delete_local_card_callback) {}
+
+void TestAutofillClient::ConfirmSaveIBANLocally(
+    const IBAN& iban,
+    bool should_show_prompt,
+    LocalSaveIBANPromptCallback callback) {
+  confirm_save_iban_locally_called_ = true;
+  offer_to_save_iban_bubble_was_shown_ = should_show_prompt;
+}
+
 void TestAutofillClient::ShowWebauthnOfferDialog(
     WebauthnDialogCallback offer_dialog_callback) {}
 
@@ -293,15 +302,6 @@ bool TestAutofillClient::IsFastCheckoutTriggerForm(const FormData& form,
   return false;
 }
 
-bool TestAutofillClient::FastCheckoutScriptSupportsConsentlessExecution(
-    const url::Origin& origin) {
-  return false;
-}
-
-bool TestAutofillClient::FastCheckoutClientSupportsConsentlessExecution() {
-  return false;
-}
-
 bool TestAutofillClient::ShowFastCheckout(
     base::WeakPtr<FastCheckoutDelegate> delegate) {
   return false;
@@ -314,7 +314,8 @@ bool TestAutofillClient::IsTouchToFillCreditCardSupported() {
 }
 
 bool TestAutofillClient::ShowTouchToFillCreditCard(
-    base::WeakPtr<TouchToFillDelegate> delegate) {
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const autofill::CreditCard* const> cards_to_suggest) {
   return false;
 }
 
@@ -349,7 +350,7 @@ void TestAutofillClient::ShowVirtualCardErrorDialog(
   autofill_error_dialog_context_ = context;
 }
 
-bool TestAutofillClient::IsAutocompleteEnabled() {
+bool TestAutofillClient::IsAutocompleteEnabled() const {
   return true;
 }
 
@@ -386,13 +387,17 @@ LogManager* TestAutofillClient::GetLogManager() const {
   return log_manager_.get();
 }
 
+FormInteractionsFlowId TestAutofillClient::GetCurrentFormInteractionsFlowId() {
+  return {};
+}
+
 void TestAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   std::move(callback).Run("some risk data");
 }
 
 #if BUILDFLAG(IS_IOS)
-bool TestAutofillClient::IsQueryIDRelevant(int query_id) {
+bool TestAutofillClient::IsLastQueriedField(FieldGlobalId field_id) {
   return true;
 }
 #endif

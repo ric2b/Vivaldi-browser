@@ -167,6 +167,24 @@ class MockSubscriptionsStorage : public SubscriptionsStorage {
             });
   }
 
+  // Mock empty local fetch responses for Get* requests.
+  void MockEmptyGetResponses() {
+    ON_CALL(*this, GetUniqueNonExistingSubscriptions)
+        .WillByDefault([](std::unique_ptr<std::vector<CommerceSubscription>>
+                              subscriptions,
+                          GetLocalSubscriptionsCallback callback) {
+          std::move(callback).Run(
+              std::make_unique<std::vector<commerce::CommerceSubscription>>());
+        });
+    ON_CALL(*this, GetUniqueExistingSubscriptions)
+        .WillByDefault([](std::unique_ptr<std::vector<CommerceSubscription>>
+                              subscriptions,
+                          GetLocalSubscriptionsCallback callback) {
+          std::move(callback).Run(
+              std::make_unique<std::vector<commerce::CommerceSubscription>>());
+        });
+  }
+
   // Mock the responses for UpdateStorage requests.
   void MockUpdateResponses(bool succeeded) {
     ON_CALL(*this, UpdateStorage)
@@ -200,12 +218,12 @@ class SubscriptionsManagerTest : public testing::Test {
   }
   ~SubscriptionsManagerTest() override = default;
 
-  void CreateManagerAndVerify(bool init_succeeded) {
+  void CreateManagerAndVerify(bool last_sync_succeeded) {
     subscriptions_manager_ = std::make_unique<SubscriptionsManager>(
         identity_test_env_.identity_manager(), std::move(mock_server_proxy_),
         std::move(mock_storage_), &account_checker_);
-    ASSERT_EQ(init_succeeded,
-              subscriptions_manager_->GetInitSucceededForTesting());
+    ASSERT_EQ(last_sync_succeeded,
+              subscriptions_manager_->GetLastSyncSucceededForTesting());
   }
 
   void MockHasRequestRunning(bool has_request_running) {
@@ -232,7 +250,7 @@ class SubscriptionsManagerTest : public testing::Test {
   std::unique_ptr<SubscriptionsManager> subscriptions_manager_;
 };
 
-TEST_F(SubscriptionsManagerTest, TestInitSucceeded) {
+TEST_F(SubscriptionsManagerTest, TestSyncSucceeded) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
   mock_storage_->MockUpdateResponses(true);
@@ -245,7 +263,7 @@ TEST_F(SubscriptionsManagerTest, TestInitSucceeded) {
   CreateManagerAndVerify(true);
 }
 
-TEST_F(SubscriptionsManagerTest, TestInitFailedDueToStorage) {
+TEST_F(SubscriptionsManagerTest, TestSyncFailedDueToStorage) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
   mock_storage_->MockUpdateResponses(false);
@@ -258,7 +276,7 @@ TEST_F(SubscriptionsManagerTest, TestInitFailedDueToStorage) {
   CreateManagerAndVerify(false);
 }
 
-TEST_F(SubscriptionsManagerTest, TestInitFailedDueToServer) {
+TEST_F(SubscriptionsManagerTest, TestSyncFailedDueToServer) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111", false);
   mock_storage_->MockUpdateResponses(true);
@@ -351,7 +369,7 @@ TEST_F(SubscriptionsManagerTest, TestSubscribe_ServerManageFailed) {
   run_loop.Run();
 }
 
-TEST_F(SubscriptionsManagerTest, TestSubscribe_InitFailed) {
+TEST_F(SubscriptionsManagerTest, TestSubscribe_LastSyncFailed) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
   mock_server_proxy_->MockManageResponses(true);
@@ -465,7 +483,7 @@ TEST_F(SubscriptionsManagerTest, TestSubscribe_HasPendingUnsubscribeRequest) {
 
   {
     InSequence s;
-    // Init calls.
+    // Sync calls.
     EXPECT_CALL(*mock_storage_, DeleteAll);
     EXPECT_CALL(*mock_server_proxy_, Get);
     EXPECT_CALL(*mock_storage_,
@@ -528,6 +546,38 @@ TEST_F(SubscriptionsManagerTest, TestSubscribe_HasPendingUnsubscribeRequest) {
   VerifyHasPendingRequests(false);
 }
 
+TEST_F(SubscriptionsManagerTest, TestSubscribe_ExistingSubscriptions) {
+  SetAccountStatus(true, true);
+  mock_server_proxy_->MockGetResponses("111");
+  mock_server_proxy_->MockManageResponses(true);
+  mock_storage_->MockEmptyGetResponses();
+  mock_storage_->MockUpdateResponses(true);
+
+  {
+    InSequence s;
+    EXPECT_CALL(*mock_storage_, DeleteAll);
+    EXPECT_CALL(*mock_server_proxy_, Get);
+    EXPECT_CALL(*mock_storage_,
+                UpdateStorage(_, _, AreExpectedSubscriptions("111")));
+    EXPECT_CALL(*mock_storage_, GetUniqueNonExistingSubscriptions(
+                                    AreExpectedSubscriptions("333"), _));
+    EXPECT_CALL(*mock_server_proxy_, Create).Times(0);
+  }
+
+  CreateManagerAndVerify(true);
+  base::RunLoop run_loop;
+  subscriptions_manager_->Subscribe(
+      BuildSubscriptions("333"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, bool succeeded) {
+            ASSERT_EQ(true, succeeded);
+            run_loop->Quit();
+          },
+          &run_loop));
+  // The callback should eventually quit the run loop.
+  run_loop.Run();
+}
+
 TEST_F(SubscriptionsManagerTest, TestUnsubscribe) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
@@ -563,7 +613,7 @@ TEST_F(SubscriptionsManagerTest, TestUnsubscribe) {
   run_loop.Run();
 }
 
-TEST_F(SubscriptionsManagerTest, TestUnsubscribe_InitFailed) {
+TEST_F(SubscriptionsManagerTest, TestUnsubscribe_LastSyncFailed) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
   mock_server_proxy_->MockManageResponses(true);
@@ -598,7 +648,8 @@ TEST_F(SubscriptionsManagerTest, TestUnsubscribe_InitFailed) {
   run_loop.Run();
 }
 
-TEST_F(SubscriptionsManagerTest, TestUnsubscribe_InitFailedWithRequestRunning) {
+TEST_F(SubscriptionsManagerTest,
+       TestUnsubscribe_LastSyncFailedWithRequestRunning) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
   mock_server_proxy_->MockManageResponses(true);
@@ -629,6 +680,38 @@ TEST_F(SubscriptionsManagerTest, TestUnsubscribe_InitFailedWithRequestRunning) {
   ASSERT_EQ(false, callback_executed);
 }
 
+TEST_F(SubscriptionsManagerTest, TestUnsubscribe_NonExistingSubscriptions) {
+  SetAccountStatus(true, true);
+  mock_server_proxy_->MockGetResponses("111");
+  mock_server_proxy_->MockManageResponses(true);
+  mock_storage_->MockEmptyGetResponses();
+  mock_storage_->MockUpdateResponses(true);
+
+  {
+    InSequence s;
+    EXPECT_CALL(*mock_storage_, DeleteAll);
+    EXPECT_CALL(*mock_server_proxy_, Get);
+    EXPECT_CALL(*mock_storage_,
+                UpdateStorage(_, _, AreExpectedSubscriptions("111")));
+    EXPECT_CALL(*mock_storage_, GetUniqueExistingSubscriptions(
+                                    AreExpectedSubscriptions("333"), _));
+    EXPECT_CALL(*mock_server_proxy_, Delete).Times(0);
+  }
+
+  CreateManagerAndVerify(true);
+  base::RunLoop run_loop;
+  subscriptions_manager_->Unsubscribe(
+      BuildSubscriptions("333"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, bool succeeded) {
+            ASSERT_EQ(true, succeeded);
+            run_loop->Quit();
+          },
+          &run_loop));
+  // The callback should eventually quit the run loop.
+  run_loop.Run();
+}
+
 TEST_F(SubscriptionsManagerTest, TestIdentityChange) {
   SetAccountStatus(true, true);
   mock_server_proxy_->MockGetResponses("111");
@@ -636,12 +719,12 @@ TEST_F(SubscriptionsManagerTest, TestIdentityChange) {
 
   {
     InSequence s;
-    // First init on manager instantiation.
+    // First sync on manager instantiation.
     EXPECT_CALL(*mock_storage_, DeleteAll);
     EXPECT_CALL(*mock_server_proxy_, Get);
     EXPECT_CALL(*mock_storage_,
                 UpdateStorage(_, _, AreExpectedSubscriptions("111")));
-    // Second init on primary account change.
+    // Second sync on primary account change.
     EXPECT_CALL(*mock_storage_, DeleteAll);
     EXPECT_CALL(*mock_server_proxy_, Get);
     EXPECT_CALL(*mock_storage_,
@@ -678,12 +761,12 @@ TEST_F(SubscriptionsManagerTest, TestVerifyIfSubscriptionExists_Inconsistent) {
 
   {
     InSequence s;
-    // First init on manager instantiation.
+    // First sync on manager instantiation.
     EXPECT_CALL(*mock_storage_, DeleteAll);
     EXPECT_CALL(*mock_server_proxy_, Get);
     EXPECT_CALL(*mock_storage_,
                 UpdateStorage(_, _, AreExpectedSubscriptions("111")));
-    // Second init since local subscriptions are out of sync.
+    // Second sync since local subscriptions are out of sync.
     EXPECT_CALL(*mock_storage_, DeleteAll);
     EXPECT_CALL(*mock_server_proxy_, Get);
     EXPECT_CALL(*mock_storage_,
@@ -712,6 +795,26 @@ TEST_F(SubscriptionsManagerTest,
   MockHasRequestRunning(true);
   subscriptions_manager_->VerifyIfSubscriptionExists(BuildSubscription("222"),
                                                      true);
+}
+
+TEST_F(SubscriptionsManagerTest, TestIsSubscribed) {
+  SetAccountStatus(true, true);
+  mock_server_proxy_->MockGetResponses("111");
+  mock_storage_->MockUpdateResponses(true);
+  mock_storage_->MockIsSubscribedResponses(true);
+
+  CreateManagerAndVerify(true);
+
+  base::RunLoop run_loop;
+  subscriptions_manager_->IsSubscribed(
+      BuildSubscription("111"),
+      base::BindOnce(
+          [](base::RunLoop* looper, bool is_subscribed) {
+            EXPECT_TRUE(is_subscribed);
+            looper->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
 }
 
 }  // namespace commerce

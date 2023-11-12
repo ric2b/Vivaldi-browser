@@ -503,7 +503,7 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
 
     EXPECT_TRUE(ExecJs(shell(), JsReplace(kAddIframeScript, iframe_url),
                        EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
 
     FrameTreeNode* root = static_cast<WebContentsImpl*>(web_contents)
                               ->GetPrimaryFrameTree()
@@ -555,7 +555,7 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
 
     EXPECT_TRUE(ExecJs(shell(), JsReplace(kAddIframeScript, iframe_url),
                        EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
 
     FrameTreeNode* root = static_cast<WebContentsImpl*>(web_contents)
                               ->GetPrimaryFrameTree()
@@ -604,7 +604,7 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
 
     EXPECT_TRUE(ExecJs(shell(), JsReplace(kAddIframeScript, iframe_url),
                        EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-    console_observer.Wait();
+    ASSERT_TRUE(console_observer.Wait());
 
     FrameTreeNode* root = static_cast<WebContentsImpl*>(web_contents)
                               ->GetPrimaryFrameTree()
@@ -714,7 +714,7 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
   // navigation was blocked.
   EXPECT_TRUE(ExecJs(shell(), JsReplace(kAddIframeScript, webui_url),
                      EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetPrimaryFrameTree()
@@ -817,8 +817,7 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
   // TODO(crbug.com/1044951): Since we swap BrowsingInstances, we shouldn't
   // keep a proxy for the second tab in the first tab's SiteInstance.
   RenderFrameProxyHost* initial_rfph =
-      new_web_contents->GetRenderManagerForTesting()
-          ->current_frame_host()
+      new_web_contents->GetPrimaryMainFrame()
           ->browsing_context_state()
           ->GetRenderFrameProxyHost(
               static_cast<SiteInstanceImpl*>(site_instance1)->group());

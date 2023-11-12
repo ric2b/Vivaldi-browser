@@ -49,59 +49,6 @@ class AppServiceMojomImpl : public apps::mojom::AppService {
   void RegisterSubscriber(
       mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
       apps::mojom::ConnectOptionsPtr opts) override;
-  void Launch(apps::mojom::AppType app_type,
-              const std::string& app_id,
-              int32_t event_flags,
-              apps::mojom::LaunchSource launch_source,
-              apps::mojom::WindowInfoPtr window_info) override;
-  void LaunchAppWithFiles(apps::mojom::AppType app_type,
-                          const std::string& app_id,
-                          int32_t event_flags,
-                          apps::mojom::LaunchSource launch_source,
-                          apps::mojom::FilePathsPtr file_paths) override;
-  void LaunchAppWithIntent(apps::mojom::AppType app_type,
-                           const std::string& app_id,
-                           int32_t event_flags,
-                           apps::mojom::IntentPtr intent,
-                           apps::mojom::LaunchSource launch_source,
-                           apps::mojom::WindowInfoPtr window_info,
-                           LaunchAppWithIntentCallback callback) override;
-  void SetPermission(apps::mojom::AppType app_type,
-                     const std::string& app_id,
-                     apps::mojom::PermissionPtr permission) override;
-  void Uninstall(apps::mojom::AppType app_type,
-                 const std::string& app_id,
-                 apps::mojom::UninstallSource uninstall_source,
-                 bool clear_site_data,
-                 bool report_abuse) override;
-  void PauseApp(apps::mojom::AppType app_type,
-                const std::string& app_id) override;
-  void UnpauseApp(apps::mojom::AppType app_type,
-                  const std::string& app_id) override;
-  void StopApp(apps::mojom::AppType app_type,
-               const std::string& app_id) override;
-  void GetMenuModel(apps::mojom::AppType app_type,
-                    const std::string& app_id,
-                    apps::mojom::MenuType menu_type,
-                    int64_t display_id,
-                    GetMenuModelCallback callback) override;
-  void ExecuteContextMenuCommand(apps::mojom::AppType app_type,
-                                 const std::string& app_id,
-                                 int command_id,
-                                 const std::string& shortcut_id,
-                                 int64_t display_id) override;
-  void OpenNativeSettings(apps::mojom::AppType app_type,
-                          const std::string& app_id) override;
-  void SetResizeLocked(apps::mojom::AppType app_type,
-                       const std::string& app_id,
-                       apps::mojom::OptionalBool locked) override;
-  void SetWindowMode(apps::mojom::AppType app_type,
-                     const std::string& app_id,
-                     apps::mojom::WindowMode window_mode) override;
-  void SetRunOnOsLoginMode(
-      apps::mojom::AppType app_type,
-      const std::string& app_id,
-      apps::mojom::RunOnOsLoginMode run_on_os_login_mode) override;
 
  private:
   void OnPublisherDisconnected(apps::mojom::AppType app_type);

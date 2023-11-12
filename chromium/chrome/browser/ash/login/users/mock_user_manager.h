@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/user_flow.h"
 #include "chrome/browser/ash/login/users/affiliation.h"
 #include "chrome/browser/ash/login/users/avatar/mock_user_image_manager.h"
@@ -18,6 +17,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace ash {
+
 class FakeSupervisedUserManager;
 
 class MockUserManager : public ChromeUserManager {
@@ -193,10 +193,5 @@ class MockUserManager : public ChromeUserManager {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove once the migration is finished.
-namespace chromeos {
-using ::ash::MockUserManager;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_USERS_MOCK_USER_MANAGER_H_

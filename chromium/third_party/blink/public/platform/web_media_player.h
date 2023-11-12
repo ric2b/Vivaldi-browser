@@ -31,7 +31,7 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/viz/common/surfaces/surface_id.h"
@@ -177,8 +177,10 @@ class WebMediaPlayer {
   virtual void OnTimeUpdate() {}
 
   virtual void RequestRemotePlaybackDisabled(bool disabled) {}
+  virtual void RequestMediaRemoting() {}
   virtual void FlingingStarted() {}
   virtual void FlingingStopped() {}
+
   virtual void SetPreload(Preload) {}
   virtual WebTimeRanges Buffered() const = 0;
   virtual WebTimeRanges Seekable() const = 0;
@@ -196,9 +198,6 @@ class WebMediaPlayer {
   // True if the loaded media has a playable video/audio track.
   virtual bool HasVideo() const = 0;
   virtual bool HasAudio() const = 0;
-
-  // True if the media is being played on a remote device.
-  virtual bool IsRemote() const { return false; }
 
   // Dimension of the video.
   virtual gfx::Size NaturalSize() const = 0;
@@ -242,6 +241,12 @@ class WebMediaPlayer {
   virtual uint64_t AudioDecodedByteCount() const = 0;
   virtual uint64_t VideoDecodedByteCount() const = 0;
 
+  // Returns false if any of the HTTP responses which make up the video data
+  // loaded so far have failed the TAO check as defined by Fetch
+  // (https://fetch.spec.whatwg.org/#tao-check), or true otherwise. Video
+  // streams which do not originate from HTTP responses should return true here.
+  // This check is used to determine if timing information from those responses
+  // may be exposed to the page in Largest Contentful Paint performance entries.
   virtual bool PassedTimingAllowOriginCheck() const = 0;
 
   // Set the volume multiplier to control audio ducking.
@@ -276,8 +281,7 @@ class WebMediaPlayer {
   // Return current video frame unique id from compositor. The query is readonly
   // and should avoid any extra ops. Function returns absl::nullopt if current
   // frame is invalid or fails to access current frame.
-  // TODO(crbug.com/1328005): Change the id into a 64 bit value.
-  virtual absl::optional<int> CurrentFrameId() const = 0;
+  virtual absl::optional<media::VideoFrame::ID> CurrentFrameId() const = 0;
 
   // Provides a PaintCanvasVideoRenderer instance owned by this WebMediaPlayer.
   // Useful for ensuring that the paint/texturing operation for current frame is

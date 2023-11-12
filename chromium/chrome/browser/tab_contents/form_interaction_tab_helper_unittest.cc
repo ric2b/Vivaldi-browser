@@ -114,10 +114,9 @@ class FormInteractionTabHelperWithChildTest
       public testing::WithParamInterface<ChildFrameType> {
  public:
   FormInteractionTabHelperWithChildTest() {
-    std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled;
+    std::vector<base::test::FeatureRefAndParams> enabled;
     enabled.push_back(
         {blink::features::kFencedFrames, {{"implementation_type", "mparch"}}});
-    enabled.push_back({blink::features::kInitialNavigationEntry, {}});
     scoped_feature_list_.InitWithFeaturesAndParameters(
         enabled, std::vector<base::test::FeatureRef>());
   }

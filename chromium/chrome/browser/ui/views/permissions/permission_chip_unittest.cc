@@ -62,6 +62,7 @@ class TestDelegate : public permissions::PermissionPrompt::Delegate {
   void Deny() override { requests_.clear(); }
   void Dismiss() override { requests_.clear(); }
   void Ignore() override { requests_.clear(); }
+  void PreIgnoreQuietPrompt() override { requests_.clear(); }
   void SetManageClicked() override { requests_.clear(); }
   void SetLearnMoreClicked() override { requests_.clear(); }
   bool RecreateView() override { return false; }
@@ -105,10 +106,7 @@ class PermissionChipUnitTest : public TestWithBrowserView {
  public:
   PermissionChipUnitTest()
       : TestWithBrowserView(
-            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    feature_list_.InitAndEnableFeature(
-        permissions::features::kPermissionChipGestureSensitive);
-  }
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
 
   PermissionChipUnitTest(const PermissionChipUnitTest&) = delete;
   PermissionChipUnitTest& operator=(const PermissionChipUnitTest&) = delete;
@@ -127,7 +125,6 @@ class PermissionChipUnitTest : public TestWithBrowserView {
     base::RunLoop().RunUntilIdle();
   }
 
-  base::test::ScopedFeatureList feature_list_;
   raw_ptr<content::WebContents> web_contents_;
 
   base::TimeDelta kChipCollapseDuration = base::Seconds(12);

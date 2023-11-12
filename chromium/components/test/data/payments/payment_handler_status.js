@@ -10,7 +10,7 @@
  * @param {string} method - The payment method identifier to use.
  * @return {string} - The status field or error message.
  */
-async function getStatus(method) { // eslint-disable-line no-unused-vars
+async function getStatus(method) {
   return getStatusForMethodData([{supportedMethods: method}]);
 }
 
@@ -20,7 +20,7 @@ async function getStatus(method) { // eslint-disable-line no-unused-vars
  * @param {array<string>} methods - The list of payment methods to use.
  * @return {string} - The status field or error message.
  */
-async function getStatusList(methods) { // eslint-disable-line no-unused-vars
+async function getStatusList(methods) {
   const methodData = [];
   for (let method of methods) {
     methodData.push({supportedMethods: method});
@@ -63,7 +63,7 @@ async function getStatusForMethodDataAfterCanMakePayment(
     }
     return response.details.status;
   } catch (e) {
-    return e.message;
+    return e.toString();
   }
 }
 
@@ -74,7 +74,7 @@ async function getStatusForMethodDataAfterCanMakePayment(
  * @param {array<PaymentMethodData>} methodData - The method data to use.
  * @return {string} - The status field or error message.
  */
-async function getStatusForMethodDataWithShowPromise(methodData) { // eslint-disable-line no-unused-vars, max-len
+async function getStatusForMethodDataWithShowPromise(methodData) {
   try {
     const details = {total: {label: 'TEST',
         amount: {currency: 'USD', value: '0.01'}}};
@@ -88,7 +88,7 @@ async function getStatusForMethodDataWithShowPromise(methodData) { // eslint-dis
     }
     return response.details.status;
   } catch (e) {
-    return e.message;
+    return e.toString();
   }
 }
 
@@ -99,7 +99,7 @@ async function getStatusForMethodDataWithShowPromise(methodData) { // eslint-dis
  * @param {array<PaymentMethodData>} methodData - The method data to use.
  * @return {string} - The status field or error message.
  */
-async function getStatusForMethodDataWithEmptyShowPromise(methodData) { // eslint-disable-line no-unused-vars, max-len
+async function getStatusForMethodDataWithEmptyShowPromise(methodData) {
   try {
     const details = {total: {label: 'TEST',
         amount: {currency: 'USD', value: '0.01'}}};
@@ -111,6 +111,6 @@ async function getStatusForMethodDataWithEmptyShowPromise(methodData) { // eslin
     }
     return response.details.status;
   } catch (e) {
-    return e.message;
+    return e.toString();
   }
 }

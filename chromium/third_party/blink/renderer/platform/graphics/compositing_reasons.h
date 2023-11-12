@@ -26,7 +26,7 @@ using CompositingReasons = uint64_t;
   V(Canvas)                                                                   \
   V(Plugin)                                                                   \
   V(IFrame)                                                                   \
-  V(DocumentTransitionPseudoElement)                                          \
+  V(ViewTransitionPseudoElement)                                              \
   V(BackfaceVisibilityHidden)                                                 \
   V(ActiveTransformAnimation)                                                 \
   V(ActiveScaleAnimation)                                                     \
@@ -85,9 +85,9 @@ using CompositingReasons = uint64_t;
   /* Link highlight, frame overlay, etc. */                                   \
   V(LayerForOther)                                                            \
                                                                               \
-  /* DocumentTransition shared element.                                       \
-  See third_party/blink/renderer/core/document_transition/README.md. */       \
-  V(DocumentTransitionSharedElement)
+  /* ViewTransition shared element.                                           \
+  See third_party/blink/renderer/core/view_transition/README.md. */           \
+  V(ViewTransitionSharedElement)
 
 class PLATFORM_EXPORT CompositingReason {
   DISALLOW_NEW();
@@ -143,7 +143,7 @@ class PLATFORM_EXPORT CompositingReason {
     kDirectReasonsForEffectProperty =
         kActiveOpacityAnimation | kWillChangeOpacity | kBackdropFilter |
         kWillChangeBackdropFilter | kActiveBackdropFilterAnimation |
-        kDocumentTransitionPseudoElement | kTransform3DSceneLeaf,
+        kViewTransitionPseudoElement | kTransform3DSceneLeaf,
     kDirectReasonsForFilterProperty =
         kActiveFilterAnimation | kWillChangeFilter,
     kDirectReasonsForBackdropFilter = kBackdropFilter |
@@ -167,8 +167,11 @@ class PLATFORM_EXPORT CompositingReason {
     kRequiresCullRectExpansion =
         kDirectReasonsForTransformProperty | kDirectReasonsForScaleProperty |
         kDirectReasonsForRotateProperty | kDirectReasonsForTranslateProperty |
-        kDirectReasonsForScrollTranslationProperty,
-
+        kDirectReasonsForScrollTranslationProperty |
+        // Normally a sticky element inherits the expanded contents cull rect of
+        // the scroll container, but it needs expansion by itself if there is
+        // additional clip between the sticky element and its scroll container.
+        kStickyPosition,
   };
 };
 

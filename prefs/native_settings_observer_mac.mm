@@ -76,6 +76,19 @@ void ColorPreferencesChanged(CFNotificationCenterRef center,
     ->SetPref(vivaldiprefs::kSystemHighlightColor, getSystemHighlightColor());
 }
 
+void MenubarSettingChanged(CFNotificationCenterRef center,
+                           void* observer,
+                           CFStringRef name,
+                           const void* object,
+                           CFDictionaryRef userInfo) {
+  reinterpret_cast<NativeSettingsObserver*>(observer)
+      ->SetPref(vivaldiprefs::kSystemMacMenubarVisibleInFullscreen,
+        getMenubarVisibleInFullscreen());
+  reinterpret_cast<NativeSettingsObserver*>(observer)
+      ->SetPref(vivaldiprefs::kSystemMacHideMenubar,
+        getHideMenubar());
+}
+
 NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
     : NativeSettingsObserver(profile) {
 
@@ -99,6 +112,13 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
     SystemDarkModeChanged(CFNotificationCenterGetDistributedCenter(), this,
       CFSTR("AppleColorPreferencesChangedNotification"), nullptr, nullptr);
   }
+
+  if (@available(macos 12.0.1, *)) {
+    MenubarSettingChanged(CFNotificationCenterGetLocalCenter(), this,
+      CFSTR("NSApplicationDidChangeSafeVisibleFrameNotification"), nullptr,
+      nullptr);
+  }
+
   // NOTE(tomas@vivaldi.com): fix for VB-39486
   CFNotificationCenterRemoveEveryObserver(
       CFNotificationCenterGetDistributedCenter(), this);
@@ -128,6 +148,12 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
     CFNotificationCenterAddObserver(
       CFNotificationCenterGetDistributedCenter(), this, ColorPreferencesChanged,
       CFSTR("AppleColorPreferencesChangedNotification"), NULL,
+      CFNotificationSuspensionBehaviorDeliverImmediately);
+  }
+  if (@available(macos 12.0.1, *)) {
+    CFNotificationCenterAddObserver(
+      CFNotificationCenterGetLocalCenter(), this, MenubarSettingChanged,
+      CFSTR("NSApplicationDidChangeSafeVisibleFrameNotification"), NULL,
       CFNotificationSuspensionBehaviorDeliverImmediately);
   }
 }

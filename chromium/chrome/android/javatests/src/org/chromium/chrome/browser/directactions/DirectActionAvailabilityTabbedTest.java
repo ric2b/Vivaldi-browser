@@ -5,9 +5,6 @@
 package org.chromium.chrome.browser.directactions;
 import static org.junit.Assert.assertThat;
 
-import android.os.Build;
-
-import androidx.annotation.RequiresApi;
 import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
@@ -18,13 +15,10 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.components.autofill_assistant.AssistantFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 /**
@@ -35,9 +29,6 @@ import org.chromium.components.embedder_support.util.UrlConstants;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableFeatures(AssistantFeatures.AUTOFILL_ASSISTANT_DIRECT_ACTIONS_NAME)
-@MinAndroidSdkLevel(Build.VERSION_CODES.N)
-@RequiresApi(24) // For java.util.function.Consumer.
 public class DirectActionAvailabilityTabbedTest {
     @Rule
     public ChromeTabbedActivityTestRule mTabbedActivityTestRule =

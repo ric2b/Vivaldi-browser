@@ -1837,7 +1837,9 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadReportDmgWithoutKoly) {
 
 // Test that a large DMG (size equals max value of 64 bit signed int) is not
 // unpacked for binary feature analysis.
-TEST_F(DownloadProtectionServiceTest, CheckClientDownloadReportLargeDmg) {
+// Disabled due to new CHECK failures: https://crbug.com/1393039
+TEST_F(DownloadProtectionServiceTest,
+       DISABLED_CheckClientDownloadReportLargeDmg) {
   PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
 
   base::FilePath unsigned_dmg;
@@ -2202,8 +2204,7 @@ TEST_F(DownloadProtectionServiceTest,
     redirects.push_back(tab_url);
     HistoryServiceFactory::GetForProfile(profile(),
                                          ServiceAccessType::EXPLICIT_ACCESS)
-        ->AddPage(tab_url, base::Time::Now(),
-                  reinterpret_cast<history::ContextID>(1), 0, GURL(), redirects,
+        ->AddPage(tab_url, base::Time::Now(), 1, 0, GURL(), redirects,
                   ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, false);
 
     PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
@@ -3111,14 +3112,12 @@ TEST_F(DownloadProtectionServiceTest, VerifyDangerousDownloadOpenedAPICall) {
   download_service_->MaybeSendDangerousDownloadOpenedReport(&item, false);
   ASSERT_EQ(1, test_event_router_->GetEventCount(
                    OnDangerousDownloadOpened::kEventName));
-  auto captured_args =
-      event_observer.PassEventArgs().GetListDeprecated()[0].Clone();
-  EXPECT_EQ("http://example.com/a.exe",
-            captured_args.FindKey("url")->GetString());
+  const auto captured_args =
+      std::move(event_observer.PassEventArgs().GetList()[0].GetDict());
+  EXPECT_EQ("http://example.com/a.exe", *captured_args.FindString("url"));
   EXPECT_EQ(base::HexEncode(hash.data(), hash.size()),
-            captured_args.FindKey("downloadDigestSha256")->GetString());
-  EXPECT_EQ(target_path.MaybeAsASCII(),
-            captured_args.FindKey("fileName")->GetString());
+            *captured_args.FindString("downloadDigestSha256"));
+  EXPECT_EQ(target_path.MaybeAsASCII(), *captured_args.FindString("fileName"));
 
   // No event is triggered if in incognito mode..
   content::DownloadItemUtils::AttachInfoForTesting(
@@ -3980,8 +3979,7 @@ TEST_F(DownloadProtectionServiceTest,
     redirects.push_back(tab_url);
     HistoryServiceFactory::GetForProfile(profile(),
                                          ServiceAccessType::EXPLICIT_ACCESS)
-        ->AddPage(tab_url, base::Time::Now(),
-                  reinterpret_cast<history::ContextID>(1), 0, GURL(), redirects,
+        ->AddPage(tab_url, base::Time::Now(), 1, 0, GURL(), redirects,
                   ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, false);
 
     PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);

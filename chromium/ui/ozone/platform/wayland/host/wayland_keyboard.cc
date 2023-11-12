@@ -37,6 +37,34 @@
 
 namespace ui {
 
+namespace {
+
+bool IsModifierKey(int key) {
+  auto dom_code = KeycodeConverter::EvdevCodeToDomCode(key);
+  switch (dom_code) {
+    // Based on ui::NonPrintableCodeEntry map.
+    case DomCode::ALT_LEFT:
+    case DomCode::ALT_RIGHT:
+    case DomCode::SHIFT_LEFT:
+    case DomCode::SHIFT_RIGHT:
+    case DomCode::CONTROL_LEFT:
+    case DomCode::CONTROL_RIGHT:
+    case DomCode::FN:
+    case DomCode::FN_LOCK:
+    case DomCode::HYPER:
+    case DomCode::META_LEFT:
+    case DomCode::META_RIGHT:
+    case DomCode::CAPS_LOCK:
+    case DomCode::NUM_LOCK:
+    case DomCode::SCROLL_LOCK:
+    case DomCode::SUPER:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 class WaylandKeyboard::ZCRExtendedKeyboard {
  public:
   // Takes the ownership of |extended_keyboard|.
@@ -139,13 +167,16 @@ void WaylandKeyboard::Keymap(void* data,
                              uint32_t format,
                              int32_t fd,
                              uint32_t size) {
-  WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
+  auto* keyboard = static_cast<WaylandKeyboard*>(data);
   DCHECK(keyboard);
 
   if (!data || format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
     return;
 
-  void* keymap = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+  // From the Wayland specification: "From version 7 onwards, the fd must be
+  // mapped with MAP_PRIVATE by the recipient, as MAP_SHARED may fail."
+  int map_flags = wl_keyboard_get_version(obj) >= 7 ? MAP_PRIVATE : MAP_SHARED;
+  void* keymap = mmap(nullptr, size, PROT_READ, map_flags, fd, 0);
   if (keymap == MAP_FAILED) {
     DPLOG(ERROR) << "Failed to map XKB keymap.";
     return;
@@ -190,7 +221,7 @@ void WaylandKeyboard::Key(void* data,
                           uint32_t time,
                           uint32_t key,
                           uint32_t state) {
-  WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
+  auto* keyboard = static_cast<WaylandKeyboard*>(data);
   DCHECK(keyboard);
   keyboard->OnKey(serial, time, key, state, KeyEventKind::kKey);
 }
@@ -203,7 +234,7 @@ void WaylandKeyboard::Modifiers(void* data,
                                 uint32_t locked,
                                 uint32_t group) {
 #if BUILDFLAG(USE_XKBCOMMON)
-  WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
+  auto* keyboard = static_cast<WaylandKeyboard*>(data);
   DCHECK(keyboard);
 
   int modifiers = keyboard->layout_engine_->UpdateModifiers(depressed, latched,
@@ -274,9 +305,9 @@ void WaylandKeyboard::OnKey(uint32_t serial,
                                                serial);
   }
 
-  if (kind == KeyEventKind::kKey) {
+  if (kind == KeyEventKind::kKey && !IsModifierKey(key)) {
     auto_repeat_handler_.UpdateKeyRepeat(key, 0 /*scan_code*/, down,
-                                         false /*suppress_auto_repeat*/,
+                                         /*suppress_auto_repeat=*/false,
                                          device_id());
   }
 
@@ -326,7 +357,7 @@ void WaylandKeyboard::DispatchKey(unsigned int key,
 void WaylandKeyboard::SyncCallback(void* data,
                                    struct wl_callback* cb,
                                    uint32_t time) {
-  WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
+  auto* keyboard = static_cast<WaylandKeyboard*>(data);
   DCHECK(keyboard);
   DCHECK(keyboard->auto_repeat_closure_);
   std::move(keyboard->auto_repeat_closure_).Run();

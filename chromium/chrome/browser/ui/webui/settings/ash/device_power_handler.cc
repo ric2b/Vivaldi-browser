@@ -113,6 +113,8 @@ const char PowerHandler::kBatteryIdleManagedKey[] = "batteryIdleManaged";
 const char PowerHandler::kLidClosedControlledKey[] = "lidClosedControlled";
 const char PowerHandler::kHasLidKey[] = "hasLid";
 const char PowerHandler::kAdaptiveChargingKey[] = "adaptiveCharging";
+const char PowerHandler::kAdaptiveChargingManagedKey[] =
+    "adaptiveChargingManaged";
 
 PowerHandler::TestAPI::TestAPI(PowerHandler* handler) : handler_(handler) {}
 
@@ -397,6 +399,8 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
 
   const bool adaptive_charging =
       prefs_->GetBoolean(ash::prefs::kPowerAdaptiveChargingEnabled);
+  const bool adaptive_charging_managed =
+      prefs_->IsManagedPreference(ash::prefs::kPowerAdaptiveChargingEnabled);
 
   // Don't notify the UI if nothing changed.
   if (!force && ac_idle_info == last_ac_idle_info_ &&
@@ -404,17 +408,17 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
       lid_closed_behavior == last_lid_closed_behavior_ &&
       lid_closed_controlled == last_lid_closed_controlled_ &&
       has_lid == last_has_lid_ &&
-      adaptive_charging == last_adaptive_charging_) {
+      adaptive_charging == last_adaptive_charging_ &&
+      adaptive_charging_managed == last_adaptive_charging_managed_) {
     return;
   }
 
   base::Value::Dict dict;
-  base::Value* list =
-      dict.Set(kPossibleAcIdleBehaviorsKey, base::Value::List());
+  base::Value::List* list = dict.EnsureList(kPossibleAcIdleBehaviorsKey);
   for (auto idle_behavior : ac_idle_info.possible_behaviors)
     list->Append(static_cast<int>(idle_behavior));
 
-  list = dict.Set(kPossibleBatteryIdleBehaviorsKey, base::Value::List());
+  list = dict.EnsureList(kPossibleBatteryIdleBehaviorsKey);
   for (auto idle_behavior : battery_idle_info.possible_behaviors)
     list->Append(static_cast<int>(idle_behavior));
   dict.Set(kCurrentAcIdleBehaviorKey,
@@ -427,6 +431,7 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
   dict.Set(kLidClosedControlledKey, lid_closed_controlled);
   dict.Set(kHasLidKey, has_lid);
   dict.Set(kAdaptiveChargingKey, adaptive_charging);
+  dict.Set(kAdaptiveChargingManagedKey, adaptive_charging_managed);
   FireWebUIListener(kPowerManagementSettingsChangedName, dict);
 
   last_ac_idle_info_ = ac_idle_info;
@@ -435,6 +440,7 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
   last_lid_closed_controlled_ = lid_closed_controlled;
   last_has_lid_ = has_lid;
   last_adaptive_charging_ = adaptive_charging;
+  last_adaptive_charging_managed_ = adaptive_charging_managed;
 }
 
 void PowerHandler::OnGotSwitchStates(

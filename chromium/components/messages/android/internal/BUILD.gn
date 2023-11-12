@@ -12,6 +12,7 @@ android_library("java") {
     "java/src/org/chromium/components/messages/MessageBannerMediator.java",
     "java/src/org/chromium/components/messages/MessageBannerView.java",
     "java/src/org/chromium/components/messages/MessageBannerViewBinder.java",
+    "java/src/org/chromium/components/messages/MessageDimens.java",
     "java/src/org/chromium/components/messages/MessageDispatcherImpl.java",
     "java/src/org/chromium/components/messages/MessageQueueManager.java",
     "java/src/org/chromium/components/messages/MessageScopeChange.java",
@@ -20,6 +21,7 @@ android_library("java") {
     "java/src/org/chromium/components/messages/ScopeChangeController.java",
     "java/src/org/chromium/components/messages/ScopeKey.java",
     "java/src/org/chromium/components/messages/SingleActionMessage.java",
+    "java/src/org/chromium/components/messages/SwipeAnimationHandler.java",
   ]
 
   resources_package = "org.chromium.components.messages"

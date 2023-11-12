@@ -17,6 +17,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/posix/eintr_wrapper.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
+#include "base/allocator/partition_allocator/pkey.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE)
@@ -200,8 +201,14 @@ bool TrySetSystemPagesAccessInternal(
     uintptr_t address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
+#if BUILDFLAG(ENABLE_PKEYS)
+  return 0 == PkeyMprotectIfEnabled(reinterpret_cast<void*>(address), length,
+                                    GetAccessFlags(accessibility),
+                                    accessibility.pkey);
+#else
   return 0 == PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
                                        GetAccessFlags(accessibility)));
+#endif
 }
 
 void SetSystemPagesAccessInternal(
@@ -209,8 +216,14 @@ void SetSystemPagesAccessInternal(
     size_t length,
     PageAccessibilityConfiguration accessibility) {
   int access_flags = GetAccessFlags(accessibility);
-  const int ret = PA_HANDLE_EINTR(
-      mprotect(reinterpret_cast<void*>(address), length, access_flags));
+#if BUILDFLAG(ENABLE_PKEYS)
+  int ret =
+      PkeyMprotectIfEnabled(reinterpret_cast<void*>(address), length,
+                            GetAccessFlags(accessibility), accessibility.pkey);
+#else
+  int ret = PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
+                                     GetAccessFlags(accessibility)));
+#endif
 
   // On Linux, man mprotect(2) states that ENOMEM is returned when (1) internal
   // kernel data structures cannot be allocated, (2) the address range is
@@ -293,7 +306,8 @@ void DecommitSystemPagesInternal(
   // crbug.com/1153021).
   if (change_permissions) {
     SetSystemPagesAccess(address, length,
-                         PageAccessibilityConfiguration::kInaccessible);
+                         PageAccessibilityConfiguration(
+                             PageAccessibilityConfiguration::kInaccessible));
   }
 }
 
@@ -355,6 +369,7 @@ bool TryRecommitSystemPagesInternal(
 }
 
 void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
+#if !BUILDFLAG(IS_NACL)
   void* ptr = reinterpret_cast<void*>(address);
 #if BUILDFLAG(IS_APPLE)
   int ret = madvise(ptr, length, MADV_FREE_REUSABLE);
@@ -372,6 +387,7 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
   // Therefore, we just do the simple thing: MADV_DONTNEED.
   PA_PCHECK(0 == madvise(ptr, length, MADV_DONTNEED));
 #endif
+#endif  // !BUILDFLAG(IS_NACL)
 }
 
 }  // namespace partition_alloc::internal

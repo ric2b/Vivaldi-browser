@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, assertInstanceof} from 'chrome://resources/js/assert.js';
-import {define as crUiDefine, decorate} from 'chrome://resources/js/cr/ui.js';
-import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/js/cr.m.js';
+import {assert, assertInstanceof} from 'chrome://resources/ash/common/assert.js';
+import {getPropertyDescriptor, PropertyKind} from 'chrome://resources/ash/common/cr_deprecated.js';
+
+import {define as crUiDefine, decorate} from '../../../common/js/ui.js';
 import {MenuItem} from './menu_item.js';
 
 

@@ -14,7 +14,6 @@ import org.chromium.weblayer_private.FragmentHostingRemoteFragmentImpl;
 import org.chromium.weblayer_private.R;
 import org.chromium.weblayer_private.interfaces.IMediaRouteDialogFragment;
 import org.chromium.weblayer_private.interfaces.IRemoteFragment;
-import org.chromium.weblayer_private.interfaces.IRemoteFragmentClient;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.lang.ref.WeakReference;
@@ -39,12 +38,11 @@ public class MediaRouteDialogFragmentImpl extends FragmentHostingRemoteFragmentI
             // action bar. It's unclear why this is necessary when it's not in Chrome, and why
             // ContextThemeWrapper doesn't work.
             getTheme().applyStyle(R.style.Theme_BrowserUI_DayNight, /*force=*/true);
-            getTheme().applyStyle(R.style.ColorOverlay_WebLayer, /*force=*/true);
         }
     }
 
-    public MediaRouteDialogFragmentImpl(IRemoteFragmentClient remoteFragmentClient) {
-        super(remoteFragmentClient);
+    public MediaRouteDialogFragmentImpl() {
+        super();
         sInstanceForTest = new WeakReference<MediaRouteDialogFragmentImpl>(this);
     }
 

@@ -10,6 +10,8 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -45,7 +47,9 @@
 
 @end
 
-@implementation SettingsCheckCell
+@implementation SettingsCheckCell {
+  UIView* _leadingIconBackground;
+}
 
 @synthesize textLabel = _textLabel;
 @synthesize detailTextLabel = _detailTextLabel;
@@ -59,12 +63,18 @@
     // Attributes of row contents in order or appearance (if present).
 
     // `_leadingImageView` attributes
+    _leadingIconBackground = [[UIView alloc] init];
+    _leadingIconBackground.translatesAutoresizingMaskIntoConstraints = NO;
+    _leadingIconBackground.hidden = NO;
+    [contentView addSubview:_leadingIconBackground];
+
     _leadingImageView = [[UIImageView alloc] init];
     _leadingImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _leadingImageView.tintColor = [UIColor colorNamed:kTextPrimaryColor];
     _leadingImageView.contentMode = UIViewContentModeCenter;
-    _leadingImageView.hidden = NO;
     [contentView addSubview:_leadingImageView];
+
+    AddSameCenterConstraints(_leadingImageView, _leadingIconBackground);
 
     // Text attributes.
     // `_textLabel` attributes.
@@ -124,7 +134,7 @@
                        constant:kTableViewHorizontalSpacing];
 
     _textWithLeadingImageConstraint = [textLayoutGuide.leadingAnchor
-        constraintEqualToAnchor:_leadingImageView.trailingAnchor
+        constraintEqualToAnchor:_leadingIconBackground.trailingAnchor
                        constant:kTableViewImagePadding];
 
     NSLayoutConstraint* heightConstraint = [self.contentView.heightAnchor
@@ -176,15 +186,15 @@
       [_activityIndicator.centerYAnchor
           constraintEqualToAnchor:textLayoutGuide.centerYAnchor],
 
-      // Constraints for `_leadingImageView`.
-      [_leadingImageView.leadingAnchor
+      // Constraints for `_leadingIconBackground`.
+      [_leadingIconBackground.leadingAnchor
           constraintEqualToAnchor:self.contentView.leadingAnchor
                          constant:kTableViewHorizontalSpacing],
-      [_leadingImageView.widthAnchor
+      [_leadingIconBackground.widthAnchor
           constraintEqualToConstant:kTableViewIconImageSize],
-      [_leadingImageView.heightAnchor
-          constraintEqualToAnchor:_leadingImageView.widthAnchor],
-      [_leadingImageView.centerYAnchor
+      [_leadingIconBackground.heightAnchor
+          constraintEqualToAnchor:_leadingIconBackground.widthAnchor],
+      [_leadingIconBackground.centerYAnchor
           constraintEqualToAnchor:textLayoutGuide.centerYAnchor],
 
       // Constraints for `_textLabel` and `_detailTextLabel`.
@@ -249,12 +259,14 @@
                   tintColor:(UIColor*)tintColor
             backgroundColor:(UIColor*)backgroundColor
                cornerRadius:(CGFloat)cornerRadius {
-  self.leadingImageView.tintColor = tintColor;
-  self.leadingImageView.backgroundColor = backgroundColor;
-  self.leadingImageView.layer.cornerRadius = cornerRadius;
-  BOOL hidden = !image;
   self.leadingImageView.image = image;
-  self.leadingImageView.hidden = hidden;
+  self.leadingImageView.tintColor = tintColor;
+
+  _leadingIconBackground.backgroundColor = backgroundColor;
+  _leadingIconBackground.layer.cornerRadius = cornerRadius;
+
+  BOOL hidden = !image;
+  _leadingIconBackground.hidden = hidden;
   // Update the leading text constraint based on `image` being provided.
   if (hidden) {
     _textWithLeadingImageConstraint.active = NO;
@@ -270,7 +282,10 @@
     return;
 
   self.infoButton.hidden = hidden;
-  if (!hidden) {
+  if (hidden) {
+    self.accessibilityCustomActions = nil;
+  } else {
+    self.accessibilityCustomActions = [self createAccessibilityActions];
     self.trailingImageView.hidden = YES;
     self.activityIndicator.hidden = YES;
   }
@@ -309,6 +324,7 @@
   [super prepareForReuse];
 
   self.textLabel.text = nil;
+  self.accessibilityCustomActions = nil;
   [self setInfoButtonEnabled:YES];
   [self.infoButton removeTarget:nil
                          action:nil
@@ -321,6 +337,24 @@
             backgroundColor:nil
                cornerRadius:0];
   [self hideActivityIndicator];
+}
+
+#pragma mark - Accessibility
+
+// Creates custom accessibility actions.
+- (NSArray*)createAccessibilityActions {
+  UIAccessibilityCustomAction* tapButtonAction =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(
+                           IDS_IOS_INFO_BUTTON_ACCESSIBILITY_HINT)
+                target:self
+              selector:@selector(handleInfoButtonTapForCell)];
+  return @[ tapButtonAction ];
+}
+
+// Handles accessibility action for tapping outside the info button.
+- (void)handleInfoButtonTapForCell {
+  [self.infoButton sendActionsForControlEvents:UIControlEventTouchUpInside];
 }
 
 @end

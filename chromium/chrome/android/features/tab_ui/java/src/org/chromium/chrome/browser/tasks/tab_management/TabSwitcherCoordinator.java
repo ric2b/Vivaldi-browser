@@ -113,10 +113,6 @@ public class TabSwitcherCoordinator
     // tab switcher.
     static final String COMPONENT_NAME = "GridTabSwitcher";
     private static boolean sAppendedMessagesForTesting;
-    // TODO(crbug.com/1240249): We have to use a static variable because startedShowing() &
-    // startedHiding() aren't always called for CAROUSEL tab switcher, thus we can't get its
-    // visibility directly.
-    private static boolean sIsGridTabSwitcherShowing;
     private final Activity mActivity;
     private final PropertyModelChangeProcessor mContainerViewChangeProcessor;
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
@@ -157,51 +153,11 @@ public class TabSwitcherCoordinator
     private IncognitoReauthManager mIncognitoReauthManager;
 
     private final MenuOrKeyboardActionController
-            .MenuOrKeyboardActionHandler mTabSwitcherMenuActionHandler =
-            new MenuOrKeyboardActionController.MenuOrKeyboardActionHandler() {
-                @Override
-                public boolean handleMenuOrKeyboardAction(int id, boolean fromMenu) {
-                    // Both GRID and CAROUSEL tab switchers register a MenuOrKeyboardActionHandler
-                    // upon creation, but only the first registered handler will handle the menu
-                    // actions. Checking the mode allows the handler created under GRID tab switcher
-                    // to handle the menu actions when GRID tab switcher is showing; while CAROUSAL
-                    // tab switcher handles the menu actions when Start Surface is showing.
-                    if ((sIsGridTabSwitcherShowing && mMode == TabListMode.CAROUSEL)
-                            || (!sIsGridTabSwitcherShowing && mMode == TabListMode.GRID)) {
-                        return false;
-                    }
-                    if (id == R.id.menu_group_tabs && mTabSelectionEditorCoordinator != null) {
-                        assert mTabGroupManualSelectionMode != null;
-
-                        mTabSelectionEditorCoordinator.getController().configureToolbar(
-                                mTabGroupManualSelectionMode.actionString,
-                                mTabGroupManualSelectionMode.actionButtonDescriptionResourceId,
-                                mTabGroupManualSelectionMode.actionProvider,
-                                mTabGroupManualSelectionMode.enablingThreshold,
-                                mTabGroupManualSelectionMode.navigationProvider);
-
-                        mTabSelectionEditorCoordinator.getController().show(
-                                mTabModelSelector.getTabModelFilterProvider()
-                                        .getCurrentTabModelFilter()
-                                        .getTabsWithNoOtherRelatedTabs());
-                        RecordUserAction.record("MobileMenuGroupTabs");
-                        return true;
-                    } else if (id == R.id.menu_select_tabs) {
-                        showTabSelectionEditorV2();
-                        RecordUserAction.record("MobileMenuSelectTabs");
-                        return true;
-                    } else if (id == R.id.track_prices_row_menu_id) {
-                        assert mPriceTrackingDialogCoordinator != null;
-                        mPriceTrackingDialogCoordinator.show();
-                        return true;
-                    }
-                    return false;
-                }
-            };
+            .MenuOrKeyboardActionHandler mTabSwitcherMenuActionHandler;
     private TabGridIphDialogCoordinator mTabGridIphDialogCoordinator;
-    private PriceTrackingDialogCoordinator mPriceTrackingDialogCoordinator;
     private TabSwitcherCustomViewManager mTabSwitcherCustomViewManager;
     private Supplier<ShareDelegate> mShareDelegateSupplier;
+    private SnackbarManager mTabSelectionEditorSnackbarManager;
 
     /** Vivaldi members */
     private ArrayList<TabListCoordinator> mTabGridCoordinators;
@@ -245,6 +201,11 @@ public class TabSwitcherCoordinator
             mSnackbarManager = snackbarManager;
             mModalDialogManager = modalDialogManager;
             mShareDelegateSupplier = shareDelegateSupplier;
+
+            // The snackbarManager for the TabSelectionEditor from the tab switcher side, with the
+            // rootView as the default parentView. The parentView will be re-parented on show,
+            // inside the selection editor mediator using its layout.
+            mTabSelectionEditorSnackbarManager = new SnackbarManager(activity, mRootView, null);
 
             PropertyModel containerViewModel =
                     new PropertyModel(TabListContainerProperties.ALL_KEYS);
@@ -316,24 +277,6 @@ public class TabSwitcherCoordinator
             RecordHistogram.recordTimesHistogram("Android.TabSwitcher.SetupRecyclerView.Time",
                     SystemClock.uptimeMillis() - startTimeMs);
 
-            mMediator.addTabSwitcherViewObserver(new TabSwitcherViewObserver() {
-                @Override
-                public void startedShowing() {
-                    if (mMode == TabListMode.GRID) sIsGridTabSwitcherShowing = true;
-                }
-
-                @Override
-                public void finishedShowing() {}
-
-                @Override
-                public void startedHiding() {
-                    if (mMode == TabListMode.GRID) sIsGridTabSwitcherShowing = false;
-                }
-
-                @Override
-                public void finishedHiding() {}
-            });
-
             if (TabUiFeatureUtilities.isLaunchPolishEnabled()
                     && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(activity)) {
                 mMediator.addTabSwitcherViewObserver(new TabSwitcherViewObserver() {
@@ -397,6 +340,8 @@ public class TabSwitcherCoordinator
                 mTabGridDialogCoordinator = null;
             }
 
+            mMenuOrKeyboardActionController = menuOrKeyboardActionController;
+
             if (mode == TabListCoordinator.TabListMode.GRID) {
                 if (shouldRegisterMessageItemType()) {
                     mTabListCoordinator.registerItemType(TabProperties.UiType.MESSAGE,
@@ -424,17 +369,48 @@ public class TabSwitcherCoordinator
                     SharedPreferencesManager.getInstance().addObserver(
                             mPriceAnnotationsPrefObserver);
                 }
+
+                mTabSwitcherMenuActionHandler =
+                        new MenuOrKeyboardActionController.MenuOrKeyboardActionHandler() {
+                            @Override
+                            public boolean handleMenuOrKeyboardAction(int id, boolean fromMenu) {
+                                if (id == R.id.menu_group_tabs
+                                        && mTabSelectionEditorCoordinator != null) {
+                                    assert mTabGroupManualSelectionMode != null;
+
+                                    mTabSelectionEditorCoordinator.getController().configureToolbar(
+                                            mTabGroupManualSelectionMode.actionString,
+                                            mTabGroupManualSelectionMode
+                                                    .actionButtonDescriptionResourceId,
+                                            mTabGroupManualSelectionMode.actionProvider,
+                                            mTabGroupManualSelectionMode.enablingThreshold,
+                                            mTabGroupManualSelectionMode.navigationProvider);
+
+                                    mTabSelectionEditorCoordinator.getController().show(
+                                            mTabModelSelector.getTabModelFilterProvider()
+                                                    .getCurrentTabModelFilter()
+                                                    .getTabsWithNoOtherRelatedTabs(),
+                                            /*preSelectedTabCount=*/0,
+                                            /*recyclerViewPosition=*/null);
+                                    RecordUserAction.record("MobileMenuGroupTabs");
+                                    return true;
+                                } else if (id == R.id.menu_select_tabs) {
+                                    showTabSelectionEditorV2();
+                                    RecordUserAction.record("MobileMenuSelectTabs");
+                                    return true;
+                                }
+                                return false;
+                            }
+                        };
+                mMenuOrKeyboardActionController.registerMenuOrKeyboardActionHandler(
+                        mTabSwitcherMenuActionHandler);
+            } else {
+                mTabSwitcherMenuActionHandler = null;
             }
 
-            if (ChromeFeatureList.sInstantStart.isEnabled()
-                    || TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue()
-                            && mode != TabListCoordinator.TabListMode.CAROUSEL) {
+            if (ChromeFeatureList.sInstantStart.isEnabled()) {
                 mTabAttributeCache = new TabAttributeCache(mTabModelSelector);
             }
-
-            mMenuOrKeyboardActionController = menuOrKeyboardActionController;
-            mMenuOrKeyboardActionController.registerMenuOrKeyboardActionHandler(
-                    mTabSwitcherMenuActionHandler);
 
             mLifecycleDispatcher = lifecycleDispatcher;
             mLifecycleDispatcher.register(this);
@@ -563,13 +539,13 @@ public class TabSwitcherCoordinator
     }
 
     private void setUpTabSelectionEditorCoordinator(
-            Context context, TabContentManager tabContentManager) {
+            Activity activity, TabContentManager tabContentManager) {
         // For tab switcher in carousel mode, the selection editor should still follow grid
         // style.
         int selectionEditorMode = mMode == TabListMode.CAROUSEL ? TabListMode.GRID : mMode;
-        mTabSelectionEditorCoordinator =
-                new TabSelectionEditorCoordinator(context, mCoordinatorView, mTabModelSelector,
-                        tabContentManager, selectionEditorMode, mRootView, /*displayGroups=*/false);
+        mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(activity,
+                mCoordinatorView, mTabModelSelector, tabContentManager, null, selectionEditorMode,
+                mRootView, /*displayGroups=*/false, mTabSelectionEditorSnackbarManager);
     }
 
     private void showTabSelectionEditorV2() {
@@ -578,25 +554,29 @@ public class TabSwitcherCoordinator
         if (mTabSelectionEditorCoordinator == null) {
             int selectionEditorMode = mMode == TabListMode.CAROUSEL ? TabListMode.GRID : mMode;
             mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(mActivity,
-                    mCoordinatorView, mTabModelSelector, mTabContentManager, selectionEditorMode,
-                    mRootView, /*displayGroups=*/true);
+                    mCoordinatorView, mTabModelSelector, mTabContentManager,
+                    mTabListCoordinator::setRecyclerViewPosition, selectionEditorMode, mRootView,
+                    /*displayGroups=*/true, mTabSelectionEditorSnackbarManager);
             mMediator.setTabSelectionEditorController(
                     mTabSelectionEditorCoordinator.getController());
         }
 
         if (mTabSelectionEditorActions == null) {
             mTabSelectionEditorActions = new ArrayList<>();
-            mTabSelectionEditorActions.add(TabSelectionEditorSelectionAction.createAction(mActivity,
-                    ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.END,
-                    mTabModelSelector.getCurrentModel().isIncognito()));
+            mTabSelectionEditorActions.add(TabSelectionEditorSelectionAction.createAction(
+                    mActivity, ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.END));
             mTabSelectionEditorActions.add(TabSelectionEditorCloseAction.createAction(
                     mActivity, ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.START));
             mTabSelectionEditorActions.add(TabSelectionEditorGroupAction.createAction(
                     mActivity, ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.START));
+            if (TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_BOOKMARKS.getValue()) {
+                mTabSelectionEditorActions.add(
+                        TabSelectionEditorBookmarkAction.createAction(mActivity, ShowMode.MENU_ONLY,
+                                ButtonType.ICON_AND_TEXT, IconPosition.START));
+            }
             if (TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_SHARE.getValue()) {
                 mTabSelectionEditorActions.add(TabSelectionEditorShareAction.createAction(mActivity,
-                        ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.START,
-                        mShareDelegateSupplier));
+                        ShowMode.MENU_ONLY, ButtonType.ICON_AND_TEXT, IconPosition.START));
             }
         }
 
@@ -610,7 +590,8 @@ public class TabSwitcherCoordinator
         for (int i = 0; i < list.getCount(); i++) {
             tabs.add(list.getTabAt(i));
         }
-        mTabSelectionEditorCoordinator.getController().show(tabs);
+        mTabSelectionEditorCoordinator.getController().show(
+                tabs, /*preSelectedTabCount=*/0, mTabListCoordinator.getRecyclerViewPosition());
         RecordUserAction.record("TabMultiSelectV2.OpenFromGrid");
     }
 
@@ -618,8 +599,6 @@ public class TabSwitcherCoordinator
         if (PriceTrackingFeatures.isPriceTrackingEnabled()) {
             PriceDropNotificationManager notificationManager =
                     PriceDropNotificationManagerFactory.create();
-            mPriceTrackingDialogCoordinator = new PriceTrackingDialogCoordinator(context,
-                    modalDialogManager, this, mTabModelSelector, notificationManager, mMode);
             if (mMode == TabListCoordinator.TabListMode.GRID) {
                 mPriceMessageService = new PriceMessageService(
                         mTabListCoordinator, mMediator, notificationManager);
@@ -950,8 +929,11 @@ public class TabSwitcherCoordinator
     // ResetHandler implementation.
     @Override
     public void onDestroy() {
-        mMenuOrKeyboardActionController.unregisterMenuOrKeyboardActionHandler(
-                mTabSwitcherMenuActionHandler);
+        if (mTabSwitcherMenuActionHandler != null) {
+            mMenuOrKeyboardActionController.unregisterMenuOrKeyboardActionHandler(
+                    mTabSwitcherMenuActionHandler);
+        }
+
         if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.onDestroy();
             for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {

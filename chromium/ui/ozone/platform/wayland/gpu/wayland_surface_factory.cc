@@ -63,7 +63,7 @@ class GLOzoneEGLWayland : public GLOzoneEGL {
       gl::GLDisplay* display,
       gfx::AcceleratedWidget widget) override;
 
-  scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
+  scoped_refptr<gl::Presenter> CreateSurfacelessViewGLSurface(
       gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override;
 
@@ -100,13 +100,20 @@ std::unique_ptr<NativePixmapGLBinding> GLOzoneEGLWayland::ImportNativePixmap(
 scoped_refptr<gl::GLSurface> GLOzoneEGLWayland::CreateViewGLSurface(
     gl::GLDisplay* display,
     gfx::AcceleratedWidget widget) {
+  // If we run with software GL implementation, use GLSurface which will read
+  // pixels back and present via shared memory.
+  if (gl::IsSoftwareGLImplementation(gl::GetGLImplementationParts())) {
+    return gl::InitializeGLSurface(
+        base::MakeRefCounted<GLSurfaceEglReadbackWayland>(
+            display->GetAs<gl::GLDisplayEGL>(), widget, buffer_manager_));
+  }
+
   // Only EGLGLES2 is supported with surfaceless view gl.
   if ((gl::GetGLImplementation() != gl::kGLImplementationEGLGLES2) ||
       !connection_)
     return nullptr;
 
-  WaylandWindow* window =
-      connection_->wayland_window_manager()->GetWindow(widget);
+  WaylandWindow* window = connection_->window_manager()->GetWindow(widget);
   if (!window)
     return nullptr;
 
@@ -119,20 +126,22 @@ scoped_refptr<gl::GLSurface> GLOzoneEGLWayland::CreateViewGLSurface(
       display->GetAs<gl::GLDisplayEGL>(), std::move(egl_window), window));
 }
 
-scoped_refptr<gl::GLSurface> GLOzoneEGLWayland::CreateSurfacelessViewGLSurface(
+scoped_refptr<gl::Presenter> GLOzoneEGLWayland::CreateSurfacelessViewGLSurface(
     gl::GLDisplay* display,
     gfx::AcceleratedWidget window) {
   if (gl::IsSoftwareGLImplementation(gl::GetGLImplementationParts())) {
-    return gl::InitializeGLSurface(
-        base::MakeRefCounted<GLSurfaceEglReadbackWayland>(
-            display->GetAs<gl::GLDisplayEGL>(), window, buffer_manager_));
+    return nullptr;
   } else {
 #if defined(WAYLAND_GBM)
   // If there is a gbm device available, use surfaceless gl surface.
   if (!buffer_manager_->GetGbmDevice())
     return nullptr;
-  return gl::InitializeGLSurface(new GbmSurfacelessWayland(
-      display->GetAs<gl::GLDisplayEGL>(), buffer_manager_, window));
+  scoped_refptr<gl::Presenter> presenter =
+      base::MakeRefCounted<GbmSurfacelessWayland>(
+          display->GetAs<gl::GLDisplayEGL>(), buffer_manager_, window);
+  if (!presenter->Initialize(gl::GLSurfaceFormat()))
+    return nullptr;
+  return presenter;
 #else
   return nullptr;
 #endif
@@ -190,8 +199,18 @@ WaylandSurfaceFactory::GetAllowedGLImplementations() {
   if (egl_implementation_) {
     impls.emplace_back(
         gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
+    // Add only supported ANGLE implementations. Otherwise, angle-vulkan might
+    // be requested, which is not supported with this backend yet.
     impls.emplace_back(
         gl::GLImplementationParts(gl::ANGLEImplementation::kSwiftShader));
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // TODO(crbug.com/1231934): --use-angle=gl results in gles, resolve that and
+    // use the correct config/testsuite on Lacros-like Linux bots.
+    impls.emplace_back(
+        gl::GLImplementationParts(gl::ANGLEImplementation::kOpenGL));
+    impls.emplace_back(
+        gl::GLImplementationParts(gl::ANGLEImplementation::kOpenGLES));
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   }
   return impls;
 }
@@ -217,7 +236,7 @@ WaylandSurfaceFactory::CreateVulkanImplementation(bool use_swiftshader,
 
 scoped_refptr<gfx::NativePixmap> WaylandSurfaceFactory::CreateNativePixmap(
     gfx::AcceleratedWidget widget,
-    VkDevice vk_device,
+    gpu::VulkanDeviceQueue* device_queue,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -240,7 +259,7 @@ scoped_refptr<gfx::NativePixmap> WaylandSurfaceFactory::CreateNativePixmap(
 
 void WaylandSurfaceFactory::CreateNativePixmapAsync(
     gfx::AcceleratedWidget widget,
-    VkDevice vk_device,
+    gpu::VulkanDeviceQueue* device_queue,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -248,7 +267,7 @@ void WaylandSurfaceFactory::CreateNativePixmapAsync(
   // CreateNativePixmap is non-blocking operation. Thus, it is safe to call it
   // and return the result with the provided callback.
   std::move(callback).Run(
-      CreateNativePixmap(widget, vk_device, size, format, usage));
+      CreateNativePixmap(widget, device_queue, size, format, usage));
 }
 
 scoped_refptr<gfx::NativePixmap>
@@ -280,6 +299,13 @@ bool WaylandSurfaceFactory::SupportsNativePixmaps() const {
     supports_native_pixmaps = false;
   }
   return supports_native_pixmaps;
+}
+
+absl::optional<gfx::BufferFormat>
+WaylandSurfaceFactory::GetPreferredFormatForSolidColor() const {
+  if (!buffer_manager_->SupportsFormat(gfx::BufferFormat::RGBA_8888))
+    return gfx::BufferFormat::BGRA_8888;
+  return gfx::BufferFormat::RGBA_8888;
 }
 
 }  // namespace ui

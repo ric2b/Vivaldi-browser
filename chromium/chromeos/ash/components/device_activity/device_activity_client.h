@@ -6,18 +6,18 @@
 #define CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY_DEVICE_ACTIVITY_CLIENT_H_
 
 #include <memory>
+#include <queue>
 
 #include "base/component_export.h"
-#include "base/containers/queue.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
-#include "chromeos/ash/components/network/network_state.h"
-#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/dbus/private_computing/private_computing_client.h"
+#include "chromeos/ash/components/dbus/private_computing/private_computing_service.pb.h"
+#include "chromeos/ash/components/device_activity/fresnel_service.pb.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
-#include "services/network/public/cpp/resource_request.h"
 #include "third_party/private_membership/src/private_membership_rlwe_client.h"
 #include "url/gurl.h"
 
@@ -28,6 +28,8 @@ class SharedURLLoaderFactory;
 
 namespace ash {
 
+class NetworkState;
+class NetworkStateHandler;
 class SystemClockSyncObservation;
 
 namespace device_activity {
@@ -72,6 +74,22 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
     kMaxValue = kTimeout,
   };
 
+  // Categorize the preserved file state which will be used when bucketing UMA
+  // histograms.
+  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class PreservedFileState {
+    kUnknown = 0,                // Uncategorized state.
+    kReadOkLocalStateEmpty = 1,  // Preserved file read successfully and local
+                                 // state empty.
+    kReadOkLocalStateSet = 2,    // Preserved file read successfully but local
+                                 // state is already set.
+    kReadFail = 3,  // Preserved file read failed and local state can either be
+                    // empty or set.
+    kMaxValue = kReadFail,
+  };
+
   // Categorize device activity methods which will be used when bucketing UMA
   // histograms by number of calls to each method.
   // Enum listed keys map to methods in |DeviceActivityController| and
@@ -104,7 +122,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
     kDeviceActivityClientTransitionToIdle = 21,
     kDeviceActivityClientOnSystemClockSyncResult = 22,
     kDeviceActivityClientReportingTriggeredByTimer = 23,
-    kMaxValue = kDeviceActivityClientReportingTriggeredByTimer,
+    kDeviceActivityClientSaveLastPingDatesStatus = 24,
+    kDeviceActivityClientOnSaveLastPingDatesStatusComplete = 25,
+    kDeviceActivityClientGetLastPingDatesStatus = 26,
+    kDeviceActivityClientOnGetLastPingDatesStatusFetched = 27,
+    kMaxValue = kDeviceActivityClientOnGetLastPingDatesStatusFetched,
   };
 
   // Records UMA histogram for number of times various methods are called in
@@ -119,7 +141,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
       std::unique_ptr<base::RepeatingTimer> report_timer,
       const std::string& fresnel_server_url,
       const std::string& api_key,
-      std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases);
+      std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases,
+      base::Time chrome_first_run_time);
   DeviceActivityClient(const DeviceActivityClient&) = delete;
   DeviceActivityClient& operator=(const DeviceActivityClient&) = delete;
   ~DeviceActivityClient() override;
@@ -129,11 +152,33 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
 
   // NetworkStateHandlerObserver overridden method.
   void DefaultNetworkChanged(const NetworkState* network) override;
+  void OnShuttingDown() override;
 
   State GetState() const;
 
-  // Used for testing.
   std::vector<DeviceActiveUseCase*> GetUseCases() const;
+
+  DeviceActiveUseCase* GetUseCasePtr(
+      private_membership::rlwe::RlweUseCase psm_use_case) const;
+
+  // Generate the proto with the latest last ping date values.
+  private_computing::SaveStatusRequest GetSaveStatusRequest();
+
+  // Write the last ping dates for all use cases to preserved files via
+  // the private_computingd dbus daemon.
+  void SaveLastPingDatesStatus();
+
+  // After the dbus call is complete, return response via this method.
+  void OnSaveLastPingDatesStatusComplete(
+      private_computing::SaveStatusResponse response);
+
+  // Read the last ping dates status for all use cases from preserved files
+  // via the private_comutingd dbus daemon.
+  void GetLastPingDatesStatus();
+
+  // After the dbus call is complete, return response via this method.
+  void OnGetLastPingDatesStatusFetched(
+      private_computing::GetStatusResponse response);
 
  private:
   // |report_timer_| triggers method to retry reporting device actives if
@@ -226,6 +271,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   // reported to UMA via. histograms.
   base::ElapsedTimer state_timer_;
 
+  // The chrome first run sentinel creation time.
+  base::Time chrome_first_run_time_;
+
   // Tracks the visible networks and their properties.
   // |network_state_handler_| outlives the lifetime of this class.
   // |ChromeBrowserMainPartsAsh| initializes the network_state object as
@@ -264,6 +312,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
 
   // Used to wait until the system clock to be synchronized.
   std::unique_ptr<SystemClockSyncObservation> system_clock_sync_observation_;
+
+  NetworkStateHandlerScopedObservation network_state_handler_observer_{this};
 
   // Automatically cancels callbacks when the referent of weakptr gets
   // destroyed.

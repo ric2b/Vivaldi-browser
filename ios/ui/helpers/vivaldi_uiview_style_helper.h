@@ -1,7 +1,7 @@
 // Copyright 2022 Vivaldi Technologies. All rights reserved.
 
-#ifndef IOS_CHROME_BROWSER_UI_STYLE_HELPER_H_
-#define IOS_CHROME_BROWSER_UI_STYLE_HELPER_H_
+#ifndef IOS_UI_HELPERS_VIVALDI_UIVIEW_STYLE_HELPER_H_
+#define IOS_UI_HELPERS_VIVALDI_UIVIEW_STYLE_HELPER_H_
 
 #import <UIKit/UIKit.h>
 

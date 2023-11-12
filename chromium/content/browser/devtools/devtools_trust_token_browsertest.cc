@@ -32,17 +32,17 @@ class DevToolsTrustTokenBrowsertest : public DevToolsProtocolTest,
   }
 
   // The returned view is only valid until the next |SendCommand| call.
-  base::Value::ConstListView GetTrustTokensViaProtocol() {
+  const base::Value::List& GetTrustTokensViaProtocol() {
     SendCommandSync("Storage.getTrustTokens");
     const base::Value* tokens = result()->Find("tokens");
     CHECK(tokens);
-    return tokens->GetListDeprecated();
+    return tokens->GetList();
   }
 
   // Asserts that CDP reports |count| number of tokens for |issuerOrigin|.
   void AssertTrustTokensViaProtocol(const std::string& issuerOrigin,
                                     int expectedCount) {
-    auto tokens = GetTrustTokensViaProtocol();
+    const base::Value::List& tokens = GetTrustTokensViaProtocol();
     EXPECT_GT(tokens.size(), 0ul);
 
     for (const auto& token : tokens) {
@@ -98,85 +98,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsTrustTokenBrowsertest,
   WaitForNotification("Network.trustTokenOperationDone", true);
 }
 
-class DevToolsTrustTokenBrowsertestWithPlatformIssuance
-    : public DevToolsTrustTokenBrowsertest {
- public:
-  DevToolsTrustTokenBrowsertestWithPlatformIssuance() {
-    // This assertion helps guard against the brittleness of deserializing
-    // "true", in case we refactor the parameter's type.
-    static_assert(
-        std::is_same<decltype(
-                         network::features::kPlatformProvidedTrustTokenIssuance
-                             .default_value),
-                     const bool>::value,
-        "Need to update this initialization logic if the type of the param "
-        "changes.");
-    features_.InitAndEnableFeatureWithParameters(
-        network::features::kTrustTokens,
-        {{network::features::kPlatformProvidedTrustTokenIssuance.name,
-          "true"}});
-  }
-
- private:
-  base::test::ScopedFeatureList features_;
-};
-
-#if BUILDFLAG(IS_ANDROID)
-// After a successful platform-provided issuance operation (which involves an
-// IPC to a system-local provider, not an HTTP request to a server), the
-// request's outcome should show as a cache hit in the network panel.
-IN_PROC_BROWSER_TEST_F(
-    DevToolsTrustTokenBrowsertestWithPlatformIssuance,
-    SuccessfulPlatformProvidedIssuanceIsReportedAsLoadingFinished) {
-  TrustTokenRequestHandler::Options options;
-  options.specify_platform_issuance_on = {
-      network::mojom::TrustTokenKeyCommitmentResult::Os::kAndroid};
-  request_handler_.UpdateOptions(std::move(options));
-
-  HandlerWrappingLocalTrustTokenFulfiller fulfiller(request_handler_);
-
-  ProvideRequestHandlerKeyCommitmentsToNetworkService({"a.test"});
-
-  GURL start_url = server_.GetURL("a.test", "/title1.html");
-  ASSERT_TRUE(NavigateToURL(shell(), start_url));
-
-  // Open DevTools and enable Network domain.
-  Attach();
-  SendCommandSync("Network.enable");
-
-  // Make sure there are no existing DevTools events in the queue.
-  EXPECT_FALSE(HasExistingNotification());
-
-  // Issuance operations successfully answered locally result in
-  // NoModificationAllowedError.
-  std::string command = R"(
-  (async () => {
-    try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
-      return "Unexpected success";
-    } catch (e) {
-      if (e.name !== "NoModificationAllowedError") {
-        return "Unexpected exception";
-      }
-      const hasToken = await document.hasTrustToken($1);
-      if (!hasToken)
-        return "Unexpectedly absent token";
-      return "Success";
-    }})(); )";
-
-  // We use EvalJs here, not ExecJs, because EvalJs waits for promises to
-  // resolve.
-  EXPECT_EQ(
-      "Success",
-      EvalJs(shell(), JsReplace(command, IssuanceOriginFromHost("a.test"))));
-
-  // Verify the request is marked as successful and not as failed.
-  WaitForNotification("Network.requestServedFromCache", true);
-  WaitForNotification("Network.loadingFinished", true);
-  WaitForNotification("Network.trustTokenOperationDone", true);
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-
 namespace {
 
 bool MatchStatus(const std::string& expected_status,
@@ -210,7 +131,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsTrustTokenBrowsertest, FetchEndToEnd) {
     await fetch('/issue', {trustToken: {type: 'token-request'}});
     await fetch('/redeem', {trustToken: {type: 'token-redemption'}});
     await fetch('/sign', {trustToken: {type: 'send-redemption-record',
-                                  signRequestData: 'include',
                                   issuers: [$1]}});
     return 'Success'; })(); )";
 
@@ -260,7 +180,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsTrustTokenBrowsertest, IframeEndToEnd) {
   execute_op_via_iframe("/redeem", R"({"type": "token-redemption"})");
   execute_op_via_iframe("/sign", JsReplace(
                                      R"({"type": "send-redemption-record",
-              "signRequestData": "include", "issuers": [$1]})",
+              "issuers": [$1]})",
                                      IssuanceOriginFromHost("a.test")));
 
   // 4) Verify that we received three successful events.

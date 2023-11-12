@@ -19,7 +19,6 @@
 #include "third_party/blink/renderer/modules/manifest/manifest_change_notifier.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_fetcher.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_parser.h"
-#include "third_party/blink/renderer/modules/manifest/manifest_uma_util.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 
@@ -143,14 +142,12 @@ void ManifestManager::DidChangeManifest() {
 
 void ManifestManager::FetchManifest() {
   if (!CanFetchManifest()) {
-    ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_FROM_OPAQUE_ORIGIN);
     ResolveCallbacks(ResolveState::kFailure);
     return;
   }
 
   manifest_url_ = ManifestURL();
   if (manifest_url_.IsEmpty()) {
-    ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_EMPTY_URL);
     ResolveCallbacks(ResolveState::kFailure);
     return;
   }
@@ -169,12 +166,10 @@ void ManifestManager::OnManifestFetchComplete(const KURL& document_url,
   fetcher_ = nullptr;
   if (response.IsNull() && data.empty()) {
     manifest_debug_info_ = nullptr;
-    ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_UNSPECIFIED_REASON);
     ResolveCallbacks(ResolveState::kFailure);
     return;
   }
 
-  ManifestUmaUtil::FetchSucceeded();
   // We are using the document as our FeatureContext for checking origin trials.
   // Note that any origin trials delivered in the manifest HTTP headers will be
   // ignored, only ones associated with the page will be used.
@@ -250,7 +245,7 @@ void ManifestManager::RecordMetrics(const mojom::blink::Manifest& manifest) {
     }
   }
 
-  if (!manifest.user_preferences.is_null()) {
+  if (manifest.has_dark_theme_color || manifest.has_dark_background_color) {
     UseCounter::Count(GetSupplementable(),
                       WebFeature::kWebAppManifestUserPreferences);
   }

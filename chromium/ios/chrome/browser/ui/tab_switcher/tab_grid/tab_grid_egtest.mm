@@ -8,6 +8,7 @@
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "base/time/time.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
@@ -71,8 +72,8 @@ char kResponse2[] = "Test Page 2 content";
 char kResponse3[] = "Test Page 3 content";
 char kResponse4[] = "Test Page 4 content";
 
-const CFTimeInterval kSnackbarAppearanceTimeout = 5;
-const CFTimeInterval kSnackbarDisappearanceTimeout = 11;
+constexpr base::TimeDelta kSnackbarAppearanceTimeout = base::Seconds(5);
+constexpr base::TimeDelta kSnackbarDisappearanceTimeout = base::Seconds(11);
 
 id<GREYMatcher> TabGridCell() {
   return grey_allOf(grey_kindOfClassName(@"GridCell"),
@@ -450,7 +451,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 }
 
 // Tests that Clear Browsing Data can be successfully done from tab grid.
-- (void)DISABLED_testClearBrowsingData {
+- (void)testClearBrowsingData {
   // Load history
   [self loadTestURLs];
 
@@ -2020,11 +2021,11 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   NSString* query = [NSString stringWithFormat:@"%s\n", kTitle2];
   [[EarlGrey selectElementWithMatcher:TabGridSearchBar()]
       performAction:grey_typeText(query)];
-  // Verify that the RegularGridView is visible, use 60% for the visibility
+  // Verify that the RegularGridView is visible, use 50% for the visibility
   // percentage as in smaller devices the toolbars can occupy more space on the
   // screen.
   [[EarlGrey selectElementWithMatcher:RegularTabGrid()]
-      assertWithMatcher:grey_minimumVisiblePercent(0.6)];
+      assertWithMatcher:grey_minimumVisiblePercent(0.5)];
 
   // Tap on search recent tabs.
   [[self scrollDownViewMatcher:RegularTabGrid()
@@ -2056,7 +2057,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
                                           base::SysUTF8ToNSString(kTitle2))]
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey selectElementWithMatcher:RegularTabGrid()]
-      assertWithMatcher:grey_minimumVisiblePercent(0.6)];
+      assertWithMatcher:grey_minimumVisiblePercent(0.5)];
   [[EarlGrey selectElementWithMatcher:RecentTabsTable()]
       assertWithMatcher:grey_notVisible()];
 }

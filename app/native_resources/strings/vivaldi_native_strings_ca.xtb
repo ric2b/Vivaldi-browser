@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Tornar a carregar la imatge</translation>
 <translation id="1924750141060565109">Paisatge 15</translation>
 <translation id="19598411548897379">Genèric</translation>
+<translation id="1973351931613083086">reproducció automàtica</translation>
 <translation id="1985669426322966465">Actualització del programari</translation>
 <translation id="2079036669923635404">Fes clic aquí per actualitzar Vivaldi a la versió <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ha ocorregut un error mentre es descarregaven els fitxers de l'actualització. Si us plau, revisa la teva connexió a internet i torna-ho a intentar més tard.</translation>
@@ -38,6 +39,7 @@
 <translation id="2873951654529031587">Paperera</translation>
 <translation id="292258461174562431">Monstre 4</translation>
 <translation id="2923448633003185837">Enganxa i vés-hi</translation>
+<translation id="2953943267837858202">No permesos per la reproducció automàtica de vídeo</translation>
 <translation id="2977472760057091832">Obre l'enllaç a una finestra privada</translation>
 <translation id="2989805286512600854">Obre a una pestanya nova</translation>
 <translation id="3027988479108856431">Malauradament, els teus ajustos de Yandex no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres de Yandex. Aleshores, fes clic a continua.</translation>
@@ -47,6 +49,7 @@
 <translation id="3156398087075132709">Nou marcador</translation>
 <translation id="3255747772218936245">Instal·la l'actualització</translation>
 <translation id="3259769196742189631">Valida</translation>
+<translation id="3291915639428159043">Reproducció automàtica bloquejada</translation>
 <translation id="3302905971452834934">Monstre 1</translation>
 <translation id="3334610655141903168">(sense títol)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> és la versió disponible més recent.</translation>
@@ -61,6 +64,7 @@
 <translation id="3542768452570884558">Obre l'enllaç a una finestra nova</translation>
 <translation id="3588820906588687999">Obre la imatge a una pestanya nova</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
+<translation id="3620979700683094848">Llocs que poden reproduir vídeo automàticament</translation>
 <translation id="3680031241659195730">Una nova versió de Vivaldi està disponible!</translation>
 <translation id="3708982624815781692">La descàrrega s'ha cancel·lat.</translation>
 <translation id="3732157130969736834">Afegeix l'enllaç als marcadors</translation>
@@ -76,6 +80,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;No ho tornis a mostrar</translation>
 <translation id="4074744496918018786">Obre la imatge a una finestra privada</translation>
+<translation id="410351446219883937">Reproducció automàtica</translation>
 <translation id="4324492550286218827">Paisatge 2</translation>
 <translation id="4406101500523955324">Obre a una finestra privada nova</translation>
 <translation id="4420816922321010053">Estàs segur de voler sortir de Vivaldi?</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Retalla</translation>
 <translation id="7727481996062361502">Verificant l'actualització...</translation>
 <translation id="7793738202466490491">Afegeix com a esdeveniment del calendari</translation>
+<translation id="7834693436815575883">Reproducció automàtica permesa</translation>
 <translation id="7848222781052558334">Error en verificar la firma digital dels fitxers baixats.</translation>
 <translation id="7865983598101744945">Confirma la sortida</translation>
 <translation id="7957213167373139414">El meu calendari</translation>
 <translation id="8027581147000338959">Obre a una finestra nova</translation>
+<translation id="8044382196220116469">No permetre la reproducció automàtica de vídeos</translation>
 <translation id="8099620695029051217">Copia l'adreça de la pàgina</translation>
 <translation id="8197810018650377191">Afegeix als marcadors</translation>
 <translation id="8261506727792406068">Suprimeix</translation>
@@ -162,12 +169,14 @@
 <translation id="8689295374912158752">Inspecciona el document del portal</translation>
 <translation id="8768970203213061953">Paisatge 14</translation>
 <translation id="8773635261052182196">No tornaràs a veure aquestes notificacions. Pots activar-les de nou des dels ajustos de Vivaldi.</translation>
+<translation id="8774017153185436870">Els llocs podrien reproduir vídeo automàticament</translation>
 <translation id="8813277370772331957">Recorda-m'ho més tard</translation>
 <translation id="8894900864683381599">Afegeix l'enllaç al tauler web</translation>
 <translation id="8912720443398351457">Segur que vols sortir de Vivaldi?</translation>
 <translation id="8947109330183116400">Selecciona un fitxer HTML de marcadors</translation>
 <translation id="9017566390391482291">Selecciona la carpeta del perfil de Vivaldi a importar</translation>
 <translation id="9048058608784130603">Actualització pendent <ph name="VERSION" /></translation>
+<translation id="9048224371732578627">Permesos per reproduir vídeo automàticament</translation>
 <translation id="9065203028668620118">Edita</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Obre la imatge com a <ph name="USER" /></translation>

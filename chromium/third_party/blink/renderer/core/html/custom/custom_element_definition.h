@@ -8,8 +8,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
+#include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_descriptor.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -33,17 +33,14 @@ enum class FormAssociationFlag {
 
 class CORE_EXPORT CustomElementDefinition
     : public GarbageCollected<CustomElementDefinition>,
-      public NameClient {
+      public NameClient,
+      public ElementRareDataField {
  public:
-  // Each definition has an ID that is unique within the
-  // CustomElementRegistry that created it.
-  using Id = uint32_t;
-
   CustomElementDefinition(const CustomElementDefinition&) = delete;
   CustomElementDefinition& operator=(const CustomElementDefinition&) = delete;
   ~CustomElementDefinition() override;
 
-  virtual void Trace(Visitor*) const;
+  void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override {
     return "CustomElementDefinition";
   }
@@ -109,16 +106,6 @@ class CORE_EXPORT CustomElementDefinition
                                        const AtomicString& old_value,
                                        const AtomicString& new_value);
 
-  void SetDefaultStyleSheets(
-      const HeapVector<Member<CSSStyleSheet>>& default_style_sheets) {
-    default_style_sheets_ = default_style_sheets;
-  }
-
-  const HeapVector<Member<CSSStyleSheet>>& DefaultStyleSheets() const {
-    return default_style_sheets_;
-  }
-
-  bool HasDefaultStyleSheets() const { return !default_style_sheets_.empty(); }
   bool DisableShadow() const { return disable_shadow_; }
   bool DisableInternals() const { return disable_internals_; }
   bool IsFormAssociated() const { return is_form_associated_; }
@@ -146,8 +133,6 @@ class CORE_EXPORT CustomElementDefinition
                           const Vector<String>& disabled_features,
                           FormAssociationFlag form_association_flag);
 
-  void AddDefaultStylesTo(Element&);
-
   virtual bool RunConstructor(Element&) = 0;
 
   static void CheckConstructorResult(Element*,
@@ -160,12 +145,9 @@ class CORE_EXPORT CustomElementDefinition
   ConstructionStack construction_stack_;
   HashSet<AtomicString> observed_attributes_;
   bool has_style_attribute_changed_callback_;
-  bool added_default_style_sheet_ = false;
   bool disable_shadow_ = false;
   bool disable_internals_ = false;
   bool is_form_associated_ = false;
-
-  HeapVector<Member<CSSStyleSheet>> default_style_sheets_;
 
   void EnqueueAttributeChangedCallbackForAllAttributes(Element&);
 };

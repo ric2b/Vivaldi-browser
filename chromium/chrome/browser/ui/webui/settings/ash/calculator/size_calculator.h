@@ -24,7 +24,7 @@
 
 class Profile;
 
-namespace ash::settings::calculator {
+namespace ash::settings {
 
 // Base class for the calculation of a specific storage item. Instances of this
 // class rely on their observers calling StartCalculation, and are designed to
@@ -149,10 +149,6 @@ class MyFilesSizeCalculator : public SizeCalculator {
 
   // SizeCalculator:
   void PerformCalculation() override;
-
-  // Computes the size of My Files and Play files.
-  int64_t ComputeLocalFilesSize(const base::FilePath& my_files_path,
-                                const base::FilePath& android_files_path);
 
   // Updates the size of My Files and Play files.
   void OnGetMyFilesSize(int64_t total_bytes);
@@ -322,6 +318,6 @@ class OtherUsersSizeCalculator : public SizeCalculator {
   base::WeakPtrFactory<OtherUsersSizeCalculator> weak_ptr_factory_{this};
 };
 
-}  // namespace ash::settings::calculator
+}  // namespace ash::settings
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_CALCULATOR_SIZE_CALCULATOR_H_

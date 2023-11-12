@@ -22,23 +22,23 @@ import '../../settings_shared.css.js';
 import '../../prefs/prefs.js';
 import '../../settings_vars.css.js';
 
-import {CrContainerShadowBehavior} from 'chrome://resources/ash/common/cr_container_shadow_behavior.js';
+import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
 import {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
-import {FindShortcutMixin, FindShortcutMixinInterface} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
+import {FindShortcutMixin} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {listenOnce} from 'chrome://resources/js/util.js';
-import {Debouncer, DomIf, microTask, mixinBehaviors, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {listenOnce} from 'chrome://resources/js/util_ts.js';
+import {Debouncer, DomIf, microTask, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {SettingsPrefsElement} from '../../prefs/prefs.js';
-import {Route, Router} from '../../router.js';
 import {castExists} from '../assert_extras.js';
 import {setGlobalScrollTarget} from '../global_scroll_target_behavior.js';
 import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSettingChange} from '../metrics_recorder.js';
+import {convertPrefToSettingMetric} from '../metrics_utils.js';
 import {OSPageVisibility, osPageVisibility} from '../os_page_visibility.js';
 import {OsToolbarElement} from '../os_toolbar/os_toolbar.js';
-import {PrefToSettingMetricConverter} from '../pref_to_setting_metric_converter.js';
-import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {Route, Router} from '../router.js';
 
 import {getTemplate} from './os_settings_ui.html.js';
 
@@ -73,17 +73,11 @@ interface OsSettingsUiElement {
 }
 
 const OsSettingsUiElementBase =
-    mixinBehaviors(
-        [
-          CrContainerShadowBehavior,
-          // Calls currentRouteChanged() in attached(),so ensure other behaviors
-          // run their attached() first.
-          RouteObserverBehavior,
-        ],
-        FindShortcutMixin(PolymerElement)) as {
-      new (): PolymerElement & CrContainerShadowBehavior &
-          FindShortcutMixinInterface & RouteObserverBehaviorInterface,
-    };
+    // RouteObserverMixin calls currentRouteChanged() in
+    // connectedCallback(), so ensure other mixins/behaviors run their
+    // connectedCallback() first.
+    RouteObserverMixin(
+        FindShortcutMixin(CrContainerShadowMixin(PolymerElement)));
 
 class OsSettingsUiElement extends OsSettingsUiElementBase {
   static get is() {
@@ -183,7 +177,6 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
   private showKerberosSection_: boolean;
   private narrowThreshold_: number;
   private activeRoute_: Route|null;
-  private prefToSettingMetricConverter_: PrefToSettingMetricConverter;
   private scrollEndDebouncer_: Debouncer|null;
 
   constructor() {
@@ -194,11 +187,6 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
      * defer navigation until drawer animation completes.
      */
     this.activeRoute_ = null;
-
-    /**
-     * Converts prefs to settings metrics to help record pref changes.
-     */
-    this.prefToSettingMetricConverter_ = new PrefToSettingMetricConverter();
 
     this.scrollEndDebouncer_ = null;
 
@@ -393,9 +381,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
 
   private onSettingChange_(e: CustomEvent<{prefKey: string, prefValue: any}>) {
     const {prefKey, prefValue} = e.detail;
-    const settingMetric =
-        this.prefToSettingMetricConverter_.convertPrefToSettingMetric(
-            prefKey, prefValue);
+    const settingMetric = convertPrefToSettingMetric(prefKey, prefValue);
 
     // New metrics for this setting pref have not yet been implemented.
     if (!settingMetric) {
@@ -456,7 +442,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
    */
   private onMenuClose_() {
     if (!this.getDrawer_().wasCanceled()) {
-      // If a navigation happened, MainPageBehavior#currentRouteChanged
+      // If a navigation happened, MainPageMixin#currentRouteChanged
       // handles focusing the corresponding section when we call
       // settings.NavigateTo().
       this.navigateToActiveRoute_();

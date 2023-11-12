@@ -79,10 +79,7 @@ class InputMethodEngineBrowserTest
 
   ui::TextInputMethod::InputContext CreateInputContextWithInputType(
       ui::TextInputType type) {
-    return ui::TextInputMethod::InputContext(
-        type, ui::TEXT_INPUT_MODE_DEFAULT, ui::TEXT_INPUT_FLAG_NONE,
-        ui::TextInputClient::FOCUS_REASON_OTHER,
-        false /* should_do_learning */);
+    return ui::TextInputMethod::InputContext(type);
   }
 
  protected:
@@ -197,9 +194,6 @@ INSTANTIATE_TEST_SUITE_P(InputMethodEngineComponentExtensionBrowserTest,
 IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, BasicScenarioTest) {
   LoadTestInputMethod();
 
-  InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
-      kIdentityIMEID, false /* show_message */);
-
   std::unique_ptr<ui::MockIMEInputContextHandler> mock_input_context(
       new ui::MockIMEInputContextHandler());
   std::unique_ptr<MockIMECandidateWindowHandler> mock_candidate_window(
@@ -208,22 +202,23 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, BasicScenarioTest) {
   ui::IMEBridge::Get()->SetInputContextHandler(mock_input_context.get());
   ui::IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
 
+  // onActivate event should be fired when changing input methods.
+  ExtensionTestMessageListener activated_listener("onActivate");
+  InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+      kIdentityIMEID, false /* show_message */);
+  ASSERT_TRUE(activated_listener.WaitUntilSatisfied());
+  ASSERT_TRUE(activated_listener.was_satisfied());
+
   ui::TextInputMethod* engine_handler =
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
 
-  // onActivate event should be fired if Enable function is called.
-  ExtensionTestMessageListener activated_listener("onActivate");
-  engine_handler->Enable("IdentityIME");
-  ASSERT_TRUE(activated_listener.WaitUntilSatisfied());
-  ASSERT_TRUE(activated_listener.was_satisfied());
-
-  // onFocus event should be fired if FocusIn function is called.
+  // onFocus event should be fired if Focus function is called.
   ExtensionTestMessageListener focus_listener(
       "onFocus:text:true:true:true:false");
   const auto context =
       CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TEXT);
-  engine_handler->FocusIn(context);
+  engine_handler->Focus(context);
   ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
   ASSERT_TRUE(focus_listener.was_satisfied());
 
@@ -262,15 +257,16 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, BasicScenarioTest) {
   ASSERT_TRUE(reset_listener.WaitUntilSatisfied());
   ASSERT_TRUE(reset_listener.was_satisfied());
 
-  // onBlur should be fired if FocusOut is called.
+  // onBlur should be fired if Blur is called.
   ExtensionTestMessageListener blur_listener("onBlur");
-  engine_handler->FocusOut();
+  engine_handler->Blur();
   ASSERT_TRUE(blur_listener.WaitUntilSatisfied());
   ASSERT_TRUE(blur_listener.was_satisfied());
 
-  // onDeactivated should be fired if Disable is called.
+  // onDeactivated should be fired when changing input methods.
   ExtensionTestMessageListener disabled_listener("onDeactivated");
-  engine_handler->Disable();
+  InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+      kAPIArgumentIMEID, false /* show_message */);
   ASSERT_TRUE(disabled_listener.WaitUntilSatisfied());
   ASSERT_TRUE(disabled_listener.was_satisfied());
 
@@ -305,8 +301,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
           extension_->id());
   ASSERT_TRUE(host);
 
-  engine_handler->Enable("APIArgumentIME");
-  engine_handler->FocusIn(
+  engine_handler->Focus(
       CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TEXT));
 
   {
@@ -1159,16 +1154,17 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
         "chrome.input.ime.deleteSurroundingText({"
         "  engineID: engineBridge.getActiveEngineID(),"
         "  contextID: engineBridge.getFocusedContextID().contextID,"
-        "  offset: 5,"
+        "  offset: -1,"
         "  length: 3"
         "});";
     ASSERT_TRUE(content::ExecuteScript(host->host_contents(),
                                        delete_surrounding_text_test_script));
 
     EXPECT_EQ(1, mock_input_context->delete_surrounding_text_call_count());
-    EXPECT_EQ(5, mock_input_context->last_delete_surrounding_text_arg().offset);
-    EXPECT_EQ(3U,
-              mock_input_context->last_delete_surrounding_text_arg().length);
+    EXPECT_EQ(1u, mock_input_context->last_delete_surrounding_text_arg()
+                      .num_char16s_before_cursor);
+    EXPECT_EQ(2u, mock_input_context->last_delete_surrounding_text_arg()
+                      .num_char16s_after_cursor);
   }
   {
     SCOPED_TRACE("onFocus test");
@@ -1178,7 +1174,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:text:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TEXT));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1186,7 +1182,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:search:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_SEARCH));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1194,7 +1190,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:tel:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TELEPHONE));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1202,7 +1198,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:url:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_URL));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1210,7 +1206,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:email:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_EMAIL));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1218,7 +1214,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
     {
       ExtensionTestMessageListener focus_listener(
           "onFocus:number:true:true:true:false");
-      engine_handler->FocusIn(
+      engine_handler->Focus(
           CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_NUMBER));
       ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
       ASSERT_TRUE(focus_listener.was_satisfied());
@@ -1319,8 +1315,6 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
           extension_->id());
   ASSERT_TRUE(host);
 
-  engine_handler->Enable("APIArgumentIME");
-
   {
     SCOPED_TRACE("Text");
 
@@ -1328,7 +1322,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:text:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TEXT);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1339,7 +1333,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:password:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1350,7 +1344,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:url:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_URL);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1361,7 +1355,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:search:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_SEARCH);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1372,7 +1366,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:email:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_EMAIL);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1383,7 +1377,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:number:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_NUMBER);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1394,7 +1388,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
         "onFocus:tel:false:false:false:false");
     const auto context =
         CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TELEPHONE);
-    engine_handler->FocusIn(context);
+    engine_handler->Focus(context);
     ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
     ASSERT_TRUE(focus_listener.was_satisfied());
   }
@@ -1420,14 +1414,13 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, ShouldDoLearning) {
   ui::TextInputMethod* engine_handler =
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
-  engine_handler->Enable("IdentityIME");
 
-  // onFocus event should be fired if FocusIn function is called.
+  // onFocus event should be fired if Focus function is called.
   ExtensionTestMessageListener focus_listener(
       "onFocus:text:true:true:true:true");
   auto context = CreateInputContextWithInputType(ui::TEXT_INPUT_TYPE_TEXT);
-  context.should_do_learning = true;
-  engine_handler->FocusIn(context);
+  context.personalization_mode = ui::PersonalizationMode::kEnabled;
+  engine_handler->Focus(context);
   ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
   ASSERT_TRUE(focus_listener.was_satisfied());
 

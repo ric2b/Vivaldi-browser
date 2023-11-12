@@ -17,7 +17,6 @@
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/exo/data_device.h"
@@ -491,7 +490,6 @@ TEST_F(DataOfferTest, SetClipboardDataPlainText) {
   EXPECT_EQ("Test data", base::UTF16ToUTF8(result16));
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(DataOfferTest, SetClipboardDataOfferDteToLacros) {
   TestDataOfferDelegate delegate;
   DataOffer data_offer(&delegate);
@@ -748,7 +746,6 @@ TEST_F(DataOfferTest, SetDropDataDoNotOfferDteToNonLacros) {
   ASSERT_TRUE(ReadString(std::move(read_pipe), &dte_json_result));
   EXPECT_EQ("", dte_json_result);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(DataOfferTest, SetClipboardDataHTML) {
   TestDataOfferDelegate delegate;

@@ -17,9 +17,9 @@
 #include "third_party/blink/renderer/core/paint/line_box_list_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/scrollable_area_painter.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 
 namespace blink {
 
@@ -70,10 +70,8 @@ void BlockPainter::Paint(const PaintInfo& paint_info) {
     // it easier to merge scrolling background and scrolling contents into the
     // same layer. The function checks if it's appropriate to paint overflow
     // controls now.
-    if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-      painted_overflow_controls =
-          PaintOverflowControls(local_paint_info, paint_offset);
-    }
+    painted_overflow_controls =
+        PaintOverflowControls(local_paint_info, paint_offset);
 
     if (paint_location & kBackgroundPaintInContentsSpace) {
       local_paint_info.SetIsPaintingBackgroundInContentsSpace(true);

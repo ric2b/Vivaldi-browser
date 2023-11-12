@@ -56,18 +56,19 @@ class AHardwareBufferImageBackingFactoryTest : public testing::Test {
     ASSERT_TRUE(result);
 
     GpuDriverBugWorkarounds workarounds;
+    auto gpu_preferences = GpuPreferences();
 
     scoped_refptr<gl::GLShareGroup> share_group = new gl::GLShareGroup();
     context_state_ = base::MakeRefCounted<SharedContextState>(
         std::move(share_group), surface_, context_,
         false /* use_virtualized_gl_contexts */, base::DoNothing());
-    context_state_->InitializeGrContext(GpuPreferences(), workarounds, nullptr);
+    context_state_->InitializeGrContext(gpu_preferences, workarounds, nullptr);
     auto feature_info =
         base::MakeRefCounted<gles2::FeatureInfo>(workarounds, GpuFeatureInfo());
-    context_state_->InitializeGL(GpuPreferences(), std::move(feature_info));
+    context_state_->InitializeGL(gpu_preferences, std::move(feature_info));
 
     backing_factory_ = std::make_unique<AHardwareBufferImageBackingFactory>(
-        context_state_->feature_info());
+        context_state_->feature_info(), gpu_preferences);
 
     memory_type_tracker_ = std::make_unique<MemoryTypeTracker>(nullptr);
     shared_image_representation_factory_ =
@@ -317,7 +318,7 @@ TEST_F(AHardwareBufferImageBackingFactoryTest, EstimatedSize) {
       alpha_type, usage, false /* is_thread_safe */);
   EXPECT_TRUE(backing);
 
-  size_t backing_estimated_size = backing->estimated_size();
+  size_t backing_estimated_size = backing->GetEstimatedSize();
   EXPECT_GT(backing_estimated_size, 0u);
 
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
@@ -565,11 +566,9 @@ TEST_F(AHardwareBufferImageBackingFactoryTest, Overlay) {
           gl_legacy_shared_image.mailbox());
   EXPECT_TRUE(overlay_representation);
 
-  auto scoped_read_access =
-      overlay_representation->BeginScopedReadAccess(true /* needs_gl_image */);
+  auto scoped_read_access = overlay_representation->BeginScopedReadAccess();
   EXPECT_TRUE(scoped_read_access);
-  EXPECT_TRUE(scoped_read_access->gl_image());
-  auto buffer = scoped_read_access->gl_image()->GetAHardwareBuffer();
+  auto buffer = scoped_read_access->GetAHardwareBufferFenceSync();
   DCHECK(buffer);
   scoped_read_access.reset();
   skia_representation.reset();

@@ -55,10 +55,10 @@ ScopedJavaLocalRef<jobject> ConvertToJavaIdentityProviderMetadata(
 
 ScopedJavaLocalRef<jobject> ConvertToJavaClientIdMetadata(
     JNIEnv* env,
-    const content::ClientIdData& data) {
+    const content::ClientMetadata& metadata) {
   return Java_ClientIdMetadata_Constructor(
-      env, url::GURLAndroid::FromNativeGURL(env, data.terms_of_service_url),
-      url::GURLAndroid::FromNativeGURL(env, data.privacy_policy_url));
+      env, url::GURLAndroid::FromNativeGURL(env, metadata.terms_of_service_url),
+      url::GURLAndroid::FromNativeGURL(env, metadata.privacy_policy_url));
 }
 
 ScopedJavaLocalRef<jobjectArray> ConvertToJavaAccounts(
@@ -113,7 +113,6 @@ AccountSelectionViewAndroid::~AccountSelectionViewAndroid() {
 
 void AccountSelectionViewAndroid::Show(
     const std::string& rp_for_display,
-    const absl::optional<std::string>& iframe_url_for_display,
     const std::vector<content::IdentityProviderData>& identity_provider_data,
     Account::SignInMode sign_in_mode) {
   if (!RecreateJavaObject()) {
@@ -137,7 +136,7 @@ void AccountSelectionViewAndroid::Show(
           env, identity_provider_data[0].idp_metadata);
   ScopedJavaLocalRef<jobject> client_id_metadata_obj =
       ConvertToJavaClientIdMetadata(env,
-                                    identity_provider_data[0].client_id_data);
+                                    identity_provider_data[0].client_metadata);
   Java_AccountSelectionBridge_showAccounts(
       env, java_object_internal_, ConvertUTF8ToJavaString(env, rp_for_display),
       ConvertUTF8ToJavaString(env, identity_provider_data[0].idp_for_display),
@@ -147,8 +146,7 @@ void AccountSelectionViewAndroid::Show(
 
 void AccountSelectionViewAndroid::ShowFailureDialog(
     const std::string& rp_for_display,
-    const std::string& idp_for_display,
-    const absl::optional<std::string>& iframe_url_for_display) {
+    const std::string& idp_for_display) {
   // TODO(crbug.com/1357790): add support on Android.
 }
 
@@ -162,6 +160,9 @@ void AccountSelectionViewAndroid::OnAccountSelected(
   delegate_->OnAccountSelected(
       config_url, ConvertFieldsToAccount(env, account_string_fields,
                                          account_picture_url, is_sign_in));
+  // The AccountSelectionViewAndroid may be destroyed.
+  // AccountSelectionView::Delegate::OnAccountSelected() might delete this.
+  // See https://crbug.com/1393650 for details.
 }
 
 void AccountSelectionViewAndroid::OnDismiss(JNIEnv* env, jint dismiss_reason) {

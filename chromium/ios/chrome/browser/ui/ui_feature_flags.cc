@@ -4,6 +4,21 @@
 
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 
+BASE_FEATURE(kDefaultBrowserBlueDotPromo,
+             "DefaultBrowserBlueDotPromo",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<BlueDotPromoUserGroup>::Option
+    kBlueDotPromoUserGroupOptions[] = {
+        {BlueDotPromoUserGroup::kAllDBPromosDisabled, "all-db-promos-disabled"},
+        {BlueDotPromoUserGroup::kOnlyBlueDotPromoEnabled,
+         "only-blue-dot-promo-enabled"}};
+
+constexpr base::FeatureParam<BlueDotPromoUserGroup> kBlueDotPromoUserGroupParam{
+    &kDefaultBrowserBlueDotPromo, "user-group",
+    BlueDotPromoUserGroup::kOnlyBlueDotPromoEnabled,
+    &kBlueDotPromoUserGroupOptions};
+
 BASE_FEATURE(kExpandedTabStrip,
              "ExpandedTabStrip",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -16,10 +31,6 @@ BASE_FEATURE(kSharedHighlightingIOS,
 
 BASE_FEATURE(kEnableFREDefaultBrowserPromoScreen,
              "EnableFREDefaultBrowserPromoScreen",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableFREUIModuleIOS,
-             "EnableFREUIModuleIOSV3",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // TODO(crbug.com/1128242): Remove this flag after the refactoring work is
@@ -50,6 +61,10 @@ BASE_FEATURE(kIOSNewOmniboxImplementation,
 
 BASE_FEATURE(kIOSOmniboxUpdatedPopupUI,
              "IOSOmniboxUpdatedPopupUI",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kRemoveCrashInfobar,
+             "RemoveCrashInfobar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kIOSOmniboxUpdatedPopupUIVariationName[] = "PopupUIVariant";
@@ -71,7 +86,7 @@ BASE_FEATURE(kUpdateHistoryEntryPointsInIncognito,
 
 BASE_FEATURE(kUseLensToSearchForImage,
              "UseLensToSearchForImage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInHomeScreenWidget,
              "EnableLensInHomeScreenWidget",
@@ -85,6 +100,10 @@ BASE_FEATURE(kEnableLensInNTP,
              "EnableLensInNTP",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableLensInOmniboxCopiedImage,
+             "EnableLensInOmniboxCopiedImage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kRemoveExcessNTPs,
              "RemoveExcessNTPs",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -95,9 +114,13 @@ BASE_FEATURE(kEnableShortenedPasswordAutoFillInstruction,
 
 BASE_FEATURE(kUseSFSymbols, "UseSFSymbols", base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kUseSFSymbolsInOmnibox,
+             "UseSFSymbolsInOmnibox",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kCalendarExperienceKit,
              "CalendarExperienceKit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableExpKitAppleCalendar,
              "EnableExpKitAppleCalendar",
@@ -107,6 +130,9 @@ BASE_FEATURE(kEnablePhoneNumbers,
              "EnablePhoneNumbers",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+const char kExperienceKitMapsVariationName[] = "ExperienceKitMapsVariant";
+extern const char kEnableExperienceKitMapsVariationSrp[] = "with SRP";
+
 BASE_FEATURE(kMapsExperienceKit,
              "MapsExperienceKit",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -114,3 +140,11 @@ BASE_FEATURE(kMapsExperienceKit,
 BASE_FEATURE(kEnableMiniMap,
              "EnableMiniMap",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabGridRecencySort,
+             "TabGridRecencySort",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsTabGridSortedByRecency() {
+  return base::FeatureList::IsEnabled(kTabGridRecencySort);
+}

@@ -43,8 +43,10 @@
 <translation id="1378727793141957596">‏Google Drive میں خوش آمدید!</translation>
 <translation id="1379911846207762492">انٹرنیٹ کنکشن نہ ہونے پر رسائی کے لیے آپ فائلز کو آف لائن دستیاب بنا سکتے ہیں۔</translation>
 <translation id="1383876407941801731">تلاش کریں</translation>
+<translation id="1388045380422025115">سبھی اقسام</translation>
 <translation id="1395262318152388157">تلاش کرنے کا سلائیڈر</translation>
 <translation id="1399511500114202393">کوئی صارفی سرٹیفیکیٹ نہیں ہے</translation>
+<translation id="1403008701842173542">ہر جگہ</translation>
 <translation id="1404323374378969387">نارويجين</translation>
 <translation id="1433628812591023318">‏فائلز کو Parallels Desktop میں ڈراپ کرنے کے لیے، فائل کو Windows کی فائلز میں منتقل کرنا ضروری ہے۔</translation>
 <translation id="1435838927755162558">‏Parallels ڈیسک ٹاپ کے ساتھ فولڈر کا اشتراک کریں</translation>
@@ -102,6 +104,7 @@
 <translation id="1834290891154666894">موضوع کے متبادل نام سے مماثل اندراج غلط ہے</translation>
 <translation id="1838709767668011582">‏Google سائٹ</translation>
 <translation id="1853795129690976061">‏اس فولڈر کا اشتراک Linux کے ساتھ کر دیا گیا ہے</translation>
+<translation id="1859422890169495746">‏یہ Chromebook</translation>
 <translation id="1864756863218646478">فائل تلاش نہیں کی جا سکی۔</translation>
 <translation id="1884013283844450420"><ph name="NETWORK_COUNT" /> میں سے نیٹ ورک <ph name="NETWORK_INDEX" />، <ph name="NETWORK_NAME" />، منسلک کریں</translation>
 <translation id="1920670151694390848">ملیالم نقل حرفی</translation>
@@ -124,8 +127,8 @@
 <translation id="2079545284768500474">کالعدم کریں</translation>
 <translation id="2084108471225856927">آلے کی ترتیبات</translation>
 <translation id="2084809735218147718">اشارے سے شکریہ ادا کرتا ہوا شخص</translation>
-<translation id="2085470240340828803">"<ph name="FILENAME" />" نام کی ایک فائل پہلے سے موجود ہے۔ آپ کیا کرنا چاہتے ہیں؟</translation>
 <translation id="2088690981887365033">‏VPN نیٹ ورک</translation>
+<translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> آئٹمز حذف ہو جائیں گے اور آپ انہیں بحال نہیں کر سکیں گے۔</translation>
 <translation id="2122305276694332719">پوشیدہ نیٹ ورک سے خود کار طور پر منسلک ہونے سے دوسروں کو آپ کا آلہ اور نیٹ ورک کی کچھ ترتیبات دیکھنے میں سہولت ملتی ہے اور اس کی تجویز نہیں کی جاتی ہے۔</translation>
 <translation id="2125607626296734455">خمیر</translation>
 <translation id="2139545522194199494"><ph name="NETWORK_COUNT" /> میں سے نیٹ ورک <ph name="NETWORK_INDEX" />، <ph name="NETWORK_NAME" />، سگنل کی مضبوطی <ph name="SIGNAL_STRENGTH" />%، آپ کے منتظم کے زیر انتظام ہے، منسلک کریں</translation>
@@ -134,6 +137,7 @@
 <translation id="2143778271340628265">دستی پراکسی کنفیگریشن</translation>
 <translation id="2148716181193084225">آج</translation>
 <translation id="2163152940313951844">غلط حرف: <ph name="CHARACTER_NAME" /></translation>
+<translation id="2178056538281447670">Microsoft 365</translation>
 <translation id="2184934335987813305">‏امریکی بین الاقوامی PC کی بورڈ کے ساتھ پرتگالی</translation>
 <translation id="2193661397560634290"><ph name="SPACE_USED" /> استعمال شدہ</translation>
 <translation id="2198315389084035571">آسان کردہ چینی</translation>
@@ -153,6 +157,7 @@
 <translation id="2307462900900812319">نیٹ ورک کنفیگر کریں</translation>
 <translation id="2325650632570794183">‏فائل کی یہ قسم تعاون یافتہ نہیں ہے۔ اس قسم کی فائل کو کھول سکنے والی ایپ تلاش کرنے کیلئے براہ کرم Chrome ویب اسٹور ملاحظہ کریں۔</translation>
 <translation id="2326539130272988168">بلغاریائی</translation>
+<translation id="2337715497728194187">‏Bruschetta کے ساتھ اشتراک کریں</translation>
 <translation id="23721837607121582">موبائل پروفائل ڈاؤن لوڈ کریں، نیٹ ورک <ph name="NETWORK_INDEX" /> از <ph name="NETWORK_COUNT" />، <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">فہرست والے منظر پر سوئچ کریں</translation>
 <translation id="2377590462528165447">‏<ph name="NUMBER_OF_ITEMS" /> فولڈرز کا Linux کے ساتھ اشتراک کیا گیا</translation>
@@ -182,6 +187,7 @@
 <translation id="2544853746127077729">نیٹ ورک نے توثیق کا سرٹیفکیٹ مسترد کر دیا گیا</translation>
 <translation id="255937426064304553">امریکی بین الاقوامی</translation>
 <translation id="2563185590376525700">مینڈک</translation>
+<translation id="2574327434504608656">‏Bruschetta کے ساتھ 1 فولڈر کا اشتراک کیا گیا</translation>
 <translation id="2578394532502990878">تمل فونیٹک</translation>
 <translation id="2579959351793446050">اڑیہ</translation>
 <translation id="2602810353103180630"><ph name="NETWORK_COUNT" /> میں سے <ph name="NETWORK_INDEX" />، <ph name="NETWORK_NAME" /> نیٹ ورک، <ph name="CONNECTION_STATUS" />، سگنل کی مضبوطی <ph name="SIGNAL_STRENGTH" />%، آپ کے منتظم کے ذریعے مسدود کردہ، تفاصیل</translation>
@@ -275,6 +281,7 @@
 <translation id="3408072735282270043">فعال کریں، <ph name="NETWORK_NAME" /></translation>
 <translation id="3408236822532681288">نیو 2 کی بورڈ کے ساتھ جرمن (جرمنی)</translation>
 <translation id="3414856743105198592">ہٹانے لائق میڈیا کو فارمیٹ کرنے سے سبھی ڈیٹا مٹ جائے گا۔ کیا آپ جاری رکھنا چاہتے ہیں؟</translation>
+<translation id="3435143625481187092">‏Bruschetta کو <ph name="FOLDER_NAME" /> فولڈر میں موجود فائلز تک رسائی دینے کی اجازت دیں</translation>
 <translation id="3437801641691368414">بنانے کا وقت</translation>
 <translation id="343907260260897561">فوری کیمرا</translation>
 <translation id="3455931012307786678">اسٹونين</translation>
@@ -320,6 +327,7 @@
 <translation id="3801082500826908679">فیروئیز</translation>
 <translation id="3809272675881623365">خرگوش</translation>
 <translation id="3810973564298564668">نظم کریں</translation>
+<translation id="3811408895933919563">انگریزی (پاکستان)</translation>
 <translation id="3811494700605067549">1 فائل منتخب کی گئی</translation>
 <translation id="3817579325494460411">فراہم نہیں کیا گیا</translation>
 <translation id="3819448694985509187">‏غلط PIN۔ آپ کے پاس 1 کوشش بچی ہے۔</translation>
@@ -354,6 +362,7 @@
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> منتقل ہو گیا۔</translation>
 <translation id="4176286497474237543">کوڑے دان ابھی خالی کریں</translation>
 <translation id="4179621117429069925">یہ آئٹم آپ کے کوڑے دان میں ہے</translation>
+<translation id="4181839429935094755">‏<ph name="NUMBER_OF_ITEMS" /> فولڈرز کا اشتراک Bruschetta کے ساتھ کیا گیا</translation>
 <translation id="4186579485882418952">آف لائن فعال کریں</translation>
 <translation id="4193154014135846272">‏Google دستاویز</translation>
 <translation id="4197674956721858839">زپ کا انتخاب</translation>
@@ -387,6 +396,7 @@
 <translation id="4398096759193130964">آئٹمز کو بحال کریں یا انہیں کوڑے دان سے باہر ایک نئے فولڈر میں گھسیٹیں</translation>
 <translation id="4401287888955153199">سبھی کھولیں</translation>
 <translation id="4410695710508688828">اضافی آپریشن ناکام ہو گیا۔ <ph name="ERROR_MESSAGE" /></translation>
+<translation id="4414834425328380570">"<ph name="FILE_NAME" />" حذف ہو جائے گا اور آپ اسے بحال نہیں کر سکیں گے۔</translation>
 <translation id="4418686080762064601">اپنی فائلوں کے ليے ایک شارٹ کٹ تخلیق کریں</translation>
 <translation id="4425149324548788773">میری ڈرائیو</translation>
 <translation id="4439427728133035643"><ph name="NETWORK_COUNT" /> میں سے <ph name="NETWORK_INDEX" /> نیٹ ورک، <ph name="NETWORK_NAME" />، سگنل کی مضبوطی <ph name="SIGNAL_STRENGTH" />%، منسلک کریں</translation>
@@ -404,7 +414,6 @@
 <translation id="4552759165874948005"><ph name="NETWORK_TYPE" /> نیٹ ورک، سگنل کی مظبوطی <ph name="SIGNAL_STRENGTH" />%</translation>
 <translation id="4559767610552730302">بوکیہ</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> فائل</translation>
-<translation id="457386861538956877">مزید…</translation>
 <translation id="4579744207439506346">انتخاب میں <ph name="ENTRY_NAME" /> شامل کیا گیا۔</translation>
 <translation id="4583436353463424810">حالیہ کوئی دستاویز نہیں ہے</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> کے لیے نتائج دکھائے جا رہے ہیں۔</translation>
@@ -415,6 +424,7 @@
 <translation id="4646813851450205600">‏Qwerty کی بورڈ کے ساتھ چیک زبان</translation>
 <translation id="4656777537938206294">فائلز کو آف لائن دستیاب کرائیں</translation>
 <translation id="4658782175094886150">برف سے ڈھکا ہوا شخص</translation>
+<translation id="466782788172479199">‏Bruschetta کو اپنے Google Drive میں موجود فائلز تک رسائی دینے کی اجازت دیں۔ آپ کے دیگر آلات پر تبدیلیوں کی مطابقت پذیری کی جائے گی۔</translation>
 <translation id="4669606053856530811">جب تک ان آئٹمز کا ان کے ساتھ اشتراک نہیں کیا جاتا ہے، <ph name="SOURCE_NAME" /> کے اراکین کی رسائی منقطع ہو جائے گي۔</translation>
 <translation id="467809019005607715">Google Slides</translation>
 <translation id="4690246192099372265">سويڈش</translation>
@@ -448,6 +458,7 @@
 <translation id="4850886885716139402">دیکھیں</translation>
 <translation id="485316830061041779">جرمن</translation>
 <translation id="4867079195717347957">نزولی ترتیب میں کالم ترتیب دینے کیلئے کلک کریں۔</translation>
+<translation id="4867297348137739678">گزشتہ ہفتہ</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> بائٹس</translation>
 <translation id="4874569719830985133">ہمیشہ کے لیے حذف کریں</translation>
 <translation id="4880214202172289027">والیوم سلائیڈر</translation>
@@ -456,7 +467,6 @@
 <translation id="4900532980794411603">‏Parallels ڈیسک ٹاپ کے ساتھ اشتراک کریں</translation>
 <translation id="4902546322522096650"><ph name="NETWORK_COUNT" /> میں سے نیٹ ورک <ph name="NETWORK_INDEX" />، <ph name="NETWORK_NAME" />، <ph name="SECURITY_STATUS" />، سگنل کی مضبوطی <ph name="SIGNAL_STRENGTH" />%، منسلک کریں</translation>
 <translation id="4906580650526544301"><ph name="NETWORK_COUNT" /> میں سے نیٹ ورک <ph name="NETWORK_INDEX" />، <ph name="PHONE_NAME" />، <ph name="PROVIDER_NAME" />، <ph name="CONNECTION_STATUS" />، سگنل کی مضبوطی %<ph name="SIGNAL_STRENGTH" />، فون کی بیٹری %<ph name="BATTERY_STATUS" />، تفصیلات</translation>
-<translation id="4929673617759421391">منتظم کی پالیسی کے تحت اس فائل کو پیسٹ کرنا مسدود ہے</translation>
 <translation id="4935975195727477204">گزانیہ پھول</translation>
 <translation id="4943368462779413526">فٹبال</translation>
 <translation id="4961158930123534723">‏Parallels ڈیسک ٹاپ کے ساتھ اشتراک کردہ 1 فولڈر</translation>
@@ -521,6 +531,7 @@
 <translation id="5330145655348521461">یہ فائلیں ایک مختلف ڈیسک ٹاپ پر کھولی گئیں۔ اسے دیکھنے کیلئے <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) پر جائیں۔</translation>
 <translation id="5330512191124428349">معلومات حاصل کریں</translation>
 <translation id="5337538975554986899">‏سوائے <ph name="NON_RESTRICTED_DESTINATIONS" /> کے تمام urls کے ذریعے فائل تک رسائی</translation>
+<translation id="5344246330454251646">‏Bruschetta کے اشتراک کرنے کا نظم کریں</translation>
 <translation id="535792325654997756">بلیوں کے ساتھ شخص</translation>
 <translation id="5358764674931277">فریم ریٹ</translation>
 <translation id="5363339716524495120">ان پٹ زبان چینی ہے</translation>
@@ -533,6 +544,7 @@
 <translation id="5428105026674456456">ہسپانوی</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" /> کے لیے کوئی نتیجہ نہیں ملا۔</translation>
 <translation id="5449551289610225147">غلط پاس ورڈ</translation>
+<translation id="5459064203055649751">"<ph name="FILENAME" />" نام کی فائل پہلے سے موجود ہے۔ کیا آپ اسے اس سے بدلنا چاہتے ہیں جسے آپ منتقل کر رہے ہیں؟</translation>
 <translation id="5463231940765244860">درج کریں</translation>
 <translation id="5469868506864199649">اطالوی</translation>
 <translation id="5473333559083690127">‏نیا PIN دوبارہ درج کریں</translation>
@@ -549,6 +561,7 @@
 <translation id="5580591966435005537">ورچوئل مشین</translation>
 <translation id="5583640892426849032">بیک اسپیس</translation>
 <translation id="5583664733673201137">رموز اوقاف کی چوڑائی پوری ہے</translation>
+<translation id="5596627076506792578">مزید اختیارات</translation>
 <translation id="5602622065581044566">فونیٹک کی بورڈ کے ساتھ بلغاریائی</translation>
 <translation id="5605830556594064952">‏US ڈوراک</translation>
 <translation id="5618330573454123917">‏یہ فائل Macintosh سافٹ ویئر استعمال کر رہے کمپیوٹر کیلئے بنائی گئی ہے۔ یہ آپ کے اس آلے کے ساتھ موافق نہیں ہے جو ChromeOS چلاتا ہے۔ ChromeOS پر فائلز کھولنے کے بارے میں <ph name="BEGIN_LINK_HELP" />مزید جانیں<ph name="END_LINK_HELP" />۔</translation>
@@ -565,6 +578,7 @@
 <translation id="5700087501958648444">آڈیو کی معلومات</translation>
 <translation id="5720028165859493293"><ph name="FILE_NAME" /> کوڑے دان میں منتقل کی گئی</translation>
 <translation id="5724172041621205163">‏تھائی میں Pattachote کی بورڈ</translation>
+<translation id="57383366388012121">گزشتہ ماہ</translation>
 <translation id="5756666464756035725">‏ہنگریائی QWERTY</translation>
 <translation id="5763377084591234761">جرمن (سوئٹزر لینڈ)</translation>
 <translation id="5769519078756170258">خارج کرنے کے لیے میزبان یا ڈومین</translation>
@@ -653,6 +667,7 @@
 <translation id="6495925982925244349"><ph name="NETWORK_COUNT" /> میں سے <ph name="NETWORK_INDEX" /> نیٹ ورک، <ph name="NETWORK_NAME" />، <ph name="SECURITY_STATUS" />، <ph name="CONNECTION_STATUS" />، سگنل کی مضبوطی <ph name="SIGNAL_STRENGTH" />%، آپ کے منتظم کے زیر انتظام ہے، تفصیلات</translation>
 <translation id="649877868557234318"><ph name="FILE_NAME" /> کو <ph name="FOLDER_NAME" /> میں اخذ کیا جا رہا ہے</translation>
 <translation id="6499681088828539489">مشترکہ نیٹ ورکس کیلئے پراکسیز کی اجازت نہ دیں</translation>
+<translation id="6503285896705205014">منتظم کی پالیسی کے تحت، <ph name="COUNT" /> فائلز کو کاپی کرنا مسدود ہے</translation>
 <translation id="6509122719576673235">نارويجين</translation>
 <translation id="6528513914570774834">اس آلہ کے دیگر صارفین کو یہ نیٹ ورک استعمال کرنے کی اجازت دیں</translation>
 <translation id="653019979737152879"><ph name="FILE_NAME" /> کی مطابقت پذیری ہو رہی ہے…</translation>
@@ -673,6 +688,7 @@
 <translation id="6710213216561001401">گزشتہ</translation>
 <translation id="6732801395666424405">سرٹیفکیٹس لوڈ نہیں ہوئے</translation>
 <translation id="6736329909263487977">‎<ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]‎</translation>
+<translation id="6740270213273127264">‏Bruschetta کے ساتھ فولڈر کا اشتراک کریں</translation>
 <translation id="6751256176799620176">1 فولڈر منتخب کیا گیا</translation>
 <translation id="6755827872271341378">‏ChromeOS Flex آلہ</translation>
 <translation id="6790428901817661496">چلائیں</translation>
@@ -692,7 +708,6 @@
 <translation id="6874758081814639712">تائی چی کی مشق کرتا ہوا شخص</translation>
 <translation id="6876155724392614295">بائیک</translation>
 <translation id="6878261347041253038">دیوناگری کی بورڈ (فونیٹک)</translation>
-<translation id="6881853403185175088">آفس</translation>
 <translation id="6885780034956018177">گھونگھا</translation>
 <translation id="6896758677409633944">کاپی کریں</translation>
 <translation id="6898028766943174120">مزید ذیلی فولڈرز...</translation>
@@ -702,6 +717,7 @@
 <translation id="6935521024859866267">اوپری کی جانب سے نیچے</translation>
 <translation id="6943836128787782965">‏HTTP ناکام ہوگیا</translation>
 <translation id="6949408524333579394">سربیائی نقل حرفی</translation>
+<translation id="69548399407432279">پچھلے سال</translation>
 <translation id="6960565108681981554">فعال نہیں ہے۔ اپنے کیریئر سے رابطہ کریں۔</translation>
 <translation id="696203921837389374">موبائل ڈیٹا پر مطابقت پذیری کو فعال کریں</translation>
 <translation id="6965382102122355670">ٹھیک ہے</translation>
@@ -710,6 +726,7 @@
 <translation id="6973630695168034713">فولڈرز</translation>
 <translation id="6976795442547527108">شیر</translation>
 <translation id="6979158407327259162">Google Drive</translation>
+<translation id="6979737339423435258">ہر وقت</translation>
 <translation id="6989942356279143254">سویڈش</translation>
 <translation id="6990081529015358884">آپ کے پاس جگہ ختم ہو گئی ہے</translation>
 <translation id="6993826899923627728">یہ آئٹمز آپ کے کوڑے دان میں ہیں</translation>
@@ -755,6 +772,7 @@
 <translation id="7357762654218998920">‏فائل کی یہ قسم غیر تعاون یافتہ ہے۔ ChromeOS پر فائلز کھولنے کے بارے میں <ph name="BEGIN_LINK_HELP" />مزید جانیں<ph name="END_LINK_HELP" />۔</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> آئٹمز کاپی کئے جا رہے ہیں...</translation>
 <translation id="7375951387215729722">فائل کی فہرست کو نزولی ترتیب میں <ph name="COLUMN_NAME" /> کے لحاظ سے ترتیب دیا گیا۔</translation>
+<translation id="7377161162143020057">منتظم کی پالیسی کے تحت اس فائل کو کاپی کرنا مسدود ہے</translation>
 <translation id="7402503521691663770">‏ChromeOS Flex آلات</translation>
 <translation id="7408870451288633753">چیک</translation>
 <translation id="7417453074306512035">ایتھوپیائی کی بورڈ</translation>
@@ -843,6 +861,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> آڈیو</translation>
 <translation id="8045462269890919536">رومنی</translation>
 <translation id="8049184478152619004">‏غیر مسدود کرنے کی ذاتی کلید درج کریں (PUK)</translation>
+<translation id="8055538340801153769">یہ فولڈر</translation>
 <translation id="807187749540895545"><ph name="FILE_NAME" /> کو اخذ کیا جا رہا ہے…</translation>
 <translation id="8087576439476816834">ڈاؤن لوڈ کریں، <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">میرے ساتھ اشتراک کردہ</translation>
@@ -909,6 +928,7 @@
 <translation id="8560515948038859357">کینٹونیز</translation>
 <translation id="8561206103590473338">ہاتھی</translation>
 <translation id="8566466896628108558"><ph name="NETWORK_COUNT" /> میں سے <ph name="NETWORK_INDEX" />، <ph name="NETWORK_NAME" /> نیٹ ورک، <ph name="SECURITY_STATUS" />، سگنل کی مضبوطی %<ph name="SIGNAL_STRENGTH" />، آپ کے منتظم کے ذریعے مسدود کردہ، تفاصیل</translation>
+<translation id="8568374623837201676">مستقل طور پر اس فائل کو حذف کریں؟</translation>
 <translation id="8569764466147087991">کھولنے کیلئے ایک فائل منتخب کریں</translation>
 <translation id="8577897833047451336">کروشیائی</translation>
 <translation id="8578308463707544055">انڈونیشیائی</translation>
@@ -976,7 +996,6 @@
 <translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">قزاخ</translation>
 <translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> آئٹمز کو ایکسٹریکٹ کیا گیا۔</translation>
-<translation id="9210751050717126865">منتظم کی پالیسی کے تحت، <ph name="COUNT" /> فائلز کو پیسٹ کرنا مسدود ہے</translation>
 <translation id="9213073329713032541">انسٹالیشن کامیابی کے ساتھ شروع ہو گئی۔</translation>
 <translation id="9219103736887031265">تصاویر</translation>
 <translation id="9219908252191632183">قمری</translation>

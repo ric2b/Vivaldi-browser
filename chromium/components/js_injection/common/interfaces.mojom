@@ -5,6 +5,7 @@
 module js_injection.mojom;
 
 import "components/js_injection/common/origin_matcher.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "third_party/blink/public/mojom/messaging/message_port_descriptor.mojom";
 
@@ -28,12 +29,19 @@ struct DocumentStartJavaScript {
   js_injection.mojom.OriginMatcher origin_matcher;
 };
 
+// JsWebMessage struct contains the message payload sent between
+// JavaScript and Browser.
+union JsWebMessage {
+  mojo_base.mojom.String16 string_value;
+  mojo_base.mojom.BigBuffer array_buffer_value;
+};
+
 // For JavaScript postMessage() API, implemented by browser.
 interface JsToBrowserMessaging {
   // Called from renderer, browser receives |message| and possible |ports|,
   // The |message| is an opaque type and the contents are defined by the client
   // of this API.
-  PostMessage(mojo_base.mojom.String16 message,
+  PostMessage(JsWebMessage message,
               array<blink.mojom.MessagePortDescriptor> ports);
 
   // When there is a new BrowserToJsMessaging created in renderer, we need to
@@ -46,7 +54,7 @@ interface JsToBrowserMessaging {
 // the renderer.
 interface BrowserToJsMessaging {
   // Called from browser, to send message to page.
-  OnPostMessage(mojo_base.mojom.String16 message);
+  OnPostMessage(JsWebMessage message);
 };
 
 // For browser to configure renderer, implemented by renderer.

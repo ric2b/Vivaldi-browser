@@ -247,66 +247,6 @@ TEST(ContainerNamesTest, FileCheckUNKNOWN) {
   TestFile(CONTAINER_UNKNOWN, GetTestDataFilePath("webm_vp8_track_entry"));
 }
 
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-// Determine the container type of a specified file.
-void OperaTestFile(MediaContainerName expected,
-                   const base::FilePath& filename) {
-  char buffer[8192];
-
-  // Windows implementation of ReadFile fails if file smaller than desired size,
-  // so use file length if file less than 8192 bytes (http://crbug.com/243885).
-  int read_size = sizeof(buffer);
-  int64_t actual_size;
-  if (base::GetFileSize(filename, &actual_size) && actual_size < read_size)
-    read_size = actual_size;
-  int read = base::ReadFile(filename, buffer, read_size);
-
-  // Now verify the type.
-  EXPECT_EQ(
-      expected,
-      OperaDetermineContainer(reinterpret_cast<const uint8_t*>(buffer), read))
-      << "Failure (Opera) with file " << filename.value();
-}
-
-TEST(ContainerNamesTest, OperaFileCheckMP4) {
-  OperaTestFile(CONTAINER_H264, GetTestDataFilePath("bear-1280x720.mp4"));
-  EXPECT_EQ(
-     CONTAINER_H264,
-     OperaDetermineContainer(reinterpret_cast<const uint8_t*>(kBug263073Buffer),
-                              sizeof(kBug263073Buffer)));
-}
-
-uint8_t kBigBoxSize[] = {0x00, 0x66, 0x00, 0x18, 0x66, 0x74, 0x79,
-                       0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                       0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00};
-
-uint8_t kNegativeBoxSize[] = {0xF2, 0x26, 0x01, 0x1C, 0x66, 0x74, 0x79,
-                            0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                            0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00};
-
-// Try a few non containers.
-TEST(ContainerNamesTest, OperaFileCheckUNKNOWN) {
-  OperaTestFile(CONTAINER_UNKNOWN, GetTestDataFilePath("ten_byte_file"));
-  OperaTestFile(CONTAINER_UNKNOWN, GetTestDataFilePath("README"));
-  OperaTestFile(CONTAINER_UNKNOWN,
-                GetTestDataFilePath("bali_640x360_P422.yuv"));
-  OperaTestFile(CONTAINER_UNKNOWN,
-                GetTestDataFilePath("bali_640x360_RGB24.rgb"));
-  OperaTestFile(CONTAINER_UNKNOWN, GetTestDataFilePath("webm_vp8_track_entry"));
-
-  EXPECT_EQ(CONTAINER_UNKNOWN,
-      OperaDetermineContainer(reinterpret_cast<const uint8_t*>(kBigBoxSize),
-                                    sizeof(kBigBoxSize)));
-  EXPECT_EQ(
-     CONTAINER_UNKNOWN,
-     OperaDetermineContainer(reinterpret_cast<const uint8_t*>(kNegativeBoxSize),
-                              sizeof(kNegativeBoxSize)));
-}
-
-#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-
 }  // namespace container_names
 
 }  // namespace media

@@ -172,10 +172,7 @@ TEST_F(OsIntegrationManagerTest, UninstallOsHooksEverything) {
   EXPECT_CALL(manager, UnregisterWebAppOsUninstallation(app_id)).Times(1);
   EXPECT_CALL(manager, UnregisterShortcutsMenu(app_id, testing::_))
       .WillOnce(testing::Return(true));
-  EXPECT_CALL(manager,
-              UnregisterRunOnOsLogin(app_id, base::FilePath(kFakeProfilePath),
-                                     kFakeAppTitle, testing::_))
-      .Times(1);
+  EXPECT_CALL(manager, UnregisterRunOnOsLogin(app_id, testing::_)).Times(1);
 
   EXPECT_CALL(manager, UninstallAllOsHooks(testing::_, testing::_))
       .WillOnce(
@@ -210,8 +207,8 @@ TEST_F(OsIntegrationManagerTest, UpdateProtocolHandlers) {
 #if !BUILDFLAG(IS_WIN)
   EXPECT_CALL(manager, UpdateShortcuts(app_id, base::StringPiece(), testing::_))
       .WillOnce([](const AppId& app_id, base::StringPiece old_name,
-                   base::OnceClosure update_finished_callback) {
-        std::move(update_finished_callback).Run();
+                   ResultCallback update_finished_callback) {
+        std::move(update_finished_callback).Run(Result::kOk);
       });
 #endif
 

@@ -1421,6 +1421,21 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
+  if (policy.has_keyboard_backlight_color()) {
+    const em::KeyboardBacklightColorProto& container(
+        policy.keyboard_backlight_color());
+    if (container.has_color()) {
+      // This policy is interpreted as "Recommended".
+      // See the comment at the definition of the
+      // ash::prefs::kPersonalizationKeyboardBacklightColor pref (to which this
+      // policy will be mapped) for more details.
+      policies->Set(key::kDeviceKeyboardBacklightColor,
+                    POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.color()),
+                    nullptr);
+    }
+  }
+
   if (policy.has_allow_redeem_offers()) {
     const em::AllowRedeemChromeOsRegistrationOffersProto& container(
         policy.allow_redeem_offers());
@@ -1563,7 +1578,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     if (off_hours_policy)
       policies->Set(key::kDeviceOffHours, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                    std::move(*off_hours_policy), nullptr);
+                    base::Value(std::move(*off_hours_policy)), nullptr);
   }
 
   if (policy.has_cast_receiver_name()) {

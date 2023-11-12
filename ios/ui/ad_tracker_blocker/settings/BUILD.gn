@@ -1,0 +1,32 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+
+source_set("settings") {
+  sources = [
+    "vivaldi_atb_settings_view_controller.h",
+    "vivaldi_atb_settings_view_controller.mm",
+    "vivaldi_atb_per_site_settings_view_controller.h",
+    "vivaldi_atb_per_site_settings_view_controller.mm",
+    "vivaldi_atb_source_settings_view_controller.h",
+    "vivaldi_atb_source_settings_view_controller.mm",
+    "vivaldi_atb_add_domain_source_view_controller.h",
+    "vivaldi_atb_add_domain_source_view_controller.mm"
+  ]
+
+  deps = [
+    "//ui/base",
+    "//base",
+    "//base:i18n",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/util",
+    "//ios/public/provider/chrome/browser",
+    "//ios/third_party/material_components_ios",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

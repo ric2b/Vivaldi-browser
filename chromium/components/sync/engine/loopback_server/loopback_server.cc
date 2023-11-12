@@ -26,6 +26,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/engine/loopback_server/persistent_bookmark_entity.h"
 #include "components/sync/engine/loopback_server/persistent_permanent_entity.h"
 #include "components/sync/engine/loopback_server/persistent_tombstone_entity.h"
@@ -287,7 +288,7 @@ bool LoopbackServer::CreatePermanentBookmarkFolder(
   std::unique_ptr<LoopbackServerEntity> entity =
       PersistentPermanentEntity::CreateNew(
           syncer::BOOKMARKS, server_tag, name,
-          ModelTypeToRootTag(syncer::BOOKMARKS));
+          ModelTypeToProtocolRootTag(syncer::BOOKMARKS));
   if (!entity)
     return false;
 
@@ -601,6 +602,26 @@ string LoopbackServer::CommitEntity(
       entity = PersistentBookmarkEntity::CreateNew(client_entity, parent_id,
                                                    client_guid);
     }
+  } else if (type == syncer::PASSWORDS) {
+    entity = PersistentUniqueClientEntity::CreateFromEntity(client_entity);
+    // If the commit is coming from a legacy client that doesn't support
+    // password notes, carry over an existing note backup. The same logic is
+    // implemented on the production sync server.
+    if (!client_entity.specifics().password().has_encrypted_notes_backup()) {
+      EntityMap::const_iterator iter =
+          entities_.find(client_entity.id_string());
+      if (iter != entities_.end()) {
+        const LoopbackServerEntity* server_entity = iter->second.get();
+        if (server_entity->GetSpecifics()
+                .password()
+                .has_encrypted_notes_backup()) {
+          sync_pb::EntitySpecifics specifics = entity->GetSpecifics();
+          *specifics.mutable_password()->mutable_encrypted_notes_backup() =
+              server_entity->GetSpecifics().password().encrypted_notes_backup();
+          entity->SetSpecifics(specifics);
+        }
+      }
+    }
   } else {
     entity = PersistentUniqueClientEntity::CreateFromEntity(client_entity);
   }
@@ -811,17 +832,14 @@ LoopbackServer::GetPermanentSyncEntitiesByModelType(ModelType model_type) {
   return sync_entities;
 }
 
-std::unique_ptr<base::DictionaryValue>
-LoopbackServer::GetEntitiesAsDictionaryValue() {
+std::unique_ptr<base::Value::Dict> LoopbackServer::GetEntitiesAsDict() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::unique_ptr<base::DictionaryValue> dictionary(
-      new base::DictionaryValue());
+  auto dictionary = std::make_unique<base::Value::Dict>();
 
   // Initialize an empty Value::List for all ModelTypes.
   ModelTypeSet all_types = ModelTypeSet::All();
   for (ModelType type : all_types) {
-    dictionary->SetKey(ModelTypeToDebugString(type),
-                       base::Value(base::Value::Type::LIST));
+    dictionary->Set(ModelTypeToDebugString(type), base::Value::List());
   }
 
   for (const auto& [id, entity] : entities_) {
@@ -831,11 +849,12 @@ LoopbackServer::GetEntitiesAsDictionaryValue() {
       // consider them.
       continue;
     }
-    base::Value* list_value;
-    if (!dictionary->Get(ModelTypeToDebugString(entity->GetModelType()),
-                         &list_value)) {
+
+    base::Value::List* list_value =
+        dictionary->FindList(ModelTypeToDebugString(entity->GetModelType()));
+    if (!list_value)
       return nullptr;
-    }
+
     // TODO(pvalenzuela): Store more data for each entity so additional
     // verification can be performed. One example of additional verification
     // is checking the correctness of the bookmark hierarchy.
@@ -987,7 +1006,7 @@ bool LoopbackServer::CreatePermanentNotesFolder(const std::string& server_tag,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::unique_ptr<LoopbackServerEntity> entity =
       PersistentPermanentEntity::CreateNew(syncer::NOTES, server_tag, name,
-                                           ModelTypeToRootTag(syncer::NOTES));
+        ModelTypeToProtocolRootTag(syncer::NOTES));
   if (!entity)
     return false;
 

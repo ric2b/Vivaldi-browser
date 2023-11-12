@@ -17,7 +17,11 @@
 #include "build/chromeos_buildflags.h"
 #include "components/feedback/pii_types.h"
 #include "net/base/ip_address.h"
+#ifdef USE_SYSTEM_RE2
+#include <re2/re2.h>
+#else
 #include "third_party/re2/src/re2/re2.h"
+#endif //USE_SYSTEM_RE2
 
 using re2::RE2;
 
@@ -54,7 +58,18 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
      PIIType::kLocationInfo},
 
     // Android. Must run first since this expression matches the replacement.
-    {"SSID", "(?i-s)(\\SSID: ['\"]??)(.+)(['\"]??)", PIIType::kSSID},
+    //
+    // If we don't get helpful delimiters like a single/double quote, then we
+    // can only try our best and take out the next 32 characters, the max length
+    // of a SSID. Require at least one non-quote character though so we skip
+    // over the quoted SSIDs (which the following patterns will catch and
+    // redact).
+    {"SSID", "(?i-s)(\\bSSID: )([^'\"]{1,32})(.*)", PIIType::kSSID},
+    // Replace any SSID inside quotes.
+    {"SSID", "(?i-s)(\\bSSID: ['\"])(.+)(['\"])", PIIType::kSSID},
+    // Special WifiNetworkSpecifier#toString.
+    {"SSID", "(?i-s)(\\bSSID Match pattern=[^ ]*\\s?)(.+)(\\})",
+     PIIType::kSSID},
 
     // wpa_supplicant
     {"SSID", "(?i-s)(\\bssid[= ]')(.+)(')", PIIType::kSSID},

@@ -17,15 +17,14 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewStub;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.Callback;
-import org.chromium.base.FeatureList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
@@ -35,6 +34,7 @@ import org.chromium.chrome.browser.toolbar.ConstraintsChecker;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarCaptureType;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -47,6 +47,10 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.util.TokenHolder;
 import org.chromium.ui.widget.OptimizedFrameLayout;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -239,6 +243,21 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
     @VisibleForTesting
     protected static class ToolbarViewResourceAdapter extends ViewResourceAdapter {
+        /**
+         * Emitted at various points during the in motion observer method. Note that it is not the
+         * toolbar that is in motion, but the toolbar's handling of the compositor being in motion.
+         * Treat this list as append only and keep it in sync with ToolbarInMotionStage in
+         * enums.xml.
+         **/
+        @IntDef({ToolbarInMotionStage.SUPPRESSION_ENABLED, ToolbarInMotionStage.READINESS_CHECKED,
+                ToolbarInMotionStage.NUM_ENTRIES})
+        @Retention(RetentionPolicy.SOURCE)
+        @interface ToolbarInMotionStage {
+            int SUPPRESSION_ENABLED = 0;
+            int READINESS_CHECKED = 1;
+            int NUM_ENTRIES = 2;
+        }
+
         private final int[] mTempPosition = new int[2];
         private final Rect mLocationBarRect = new Rect();
         private final Rect mToolbarRect = new Rect();
@@ -258,9 +277,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         @Nullable
         private BrowserStateBrowserControlsVisibilityDelegate
                 mBrowserStateBrowserControlsVisibilityDelegate;
-
         @Nullable
-        private BooleanSupplier mIsVisible;
+        private BooleanSupplier mControlContainerIsVisibleSupplier;
 
         private int mControlsToken = TokenHolder.INVALID_TOKEN;
 
@@ -278,13 +296,14 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
          * @param compositorInMotionSupplier Whether there is an ongoing touch or gesture.
          * @param browserStateBrowserControlsVisibilityDelegate Used to keep controls locked when
          *        captures are stale and not able to be taken.
+         * @param controlContainerIsVisibleSupplier Whether the toolbar is visible.
          */
         public void setPostInitializationDependencies(Toolbar toolbar,
                 ObservableSupplier<Integer> constraintsSupplier, Supplier<Tab> tabSupplier,
                 ObservableSupplier<Boolean> compositorInMotionSupplier,
                 BrowserStateBrowserControlsVisibilityDelegate
                         browserStateBrowserControlsVisibilityDelegate,
-                BooleanSupplier isVisible) {
+                BooleanSupplier controlContainerIsVisibleSupplier) {
             assert mToolbar == null;
             mToolbar = toolbar;
             mTabStripHeightPx = mToolbar.getTabStripHeight();
@@ -300,7 +319,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
             mCompositorInMotionSupplier.addObserver(mOnCompositorInMotionChange);
             mBrowserStateBrowserControlsVisibilityDelegate =
                     browserStateBrowserControlsVisibilityDelegate;
-            mIsVisible = isVisible;
+            mControlContainerIsVisibleSupplier = controlContainerIsVisibleSupplier;
         }
 
         /**
@@ -319,8 +338,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
                 return false;
             }
 
-            if (FeatureList.isInitialized()
-                    && ChromeFeatureList.isEnabled(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES)) {
+            if (ToolbarFeatures.shouldSuppressCaptures()) {
                 if (mConstraintsObserver != null && mTabSupplier != null) {
                     Tab tab = mTabSupplier.get();
 
@@ -417,29 +435,43 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         }
 
         private void onCompositorInMotionChange(Boolean compositorInMotion) {
-            boolean useSuppression = (FeatureList.isInitialized()
-                    && ChromeFeatureList.isEnabled(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES));
-            if (!useSuppression || mToolbar == null
+            if (!ToolbarFeatures.shouldSuppressCaptures() || mToolbar == null
                     || mBrowserStateBrowserControlsVisibilityDelegate == null
-                    || mIsVisible == null) {
+                    || mControlContainerIsVisibleSupplier == null) {
                 return;
+            }
+
+            if (ToolbarFeatures.shouldRecordSuppressionMetrics()) {
+                RecordHistogram.recordEnumeratedHistogram("Android.TopToolbar.InMotionStage",
+                        ToolbarInMotionStage.SUPPRESSION_ENABLED, ToolbarInMotionStage.NUM_ENTRIES);
             }
 
             if (!Boolean.TRUE.equals(compositorInMotion)) {
                 if (mControlsToken == TokenHolder.INVALID_TOKEN) {
                     // Only needed when the ConstraintsChecker doesn't drive the capture.
-                    // TODO(skym): Make this post a task similar to ConstraintsChecker.
+                    // TODO(https://crbug.com/1378721): Make this post a task similar to
+                    // ConstraintsChecker.
                     onResourceRequested();
                 } else {
                     mBrowserStateBrowserControlsVisibilityDelegate.releasePersistentShowingToken(
                             mControlsToken);
                     mControlsToken = TokenHolder.INVALID_TOKEN;
                 }
-            } else if (super.isDirty() && mToolbar.isReadyForTextureCapture().isReady) {
-                // Motion is starting, and we don't have a good capture. Lock the controls so that a
-                // new capture doesn't happen and the old capture is not shown. This can be fixed
-                // once the motion is over.
-                if (mIsVisible.getAsBoolean()) {
+            } else if (super.isDirty() && mControlContainerIsVisibleSupplier.getAsBoolean()) {
+                CaptureReadinessResult captureReadinessResult = mToolbar.isReadyForTextureCapture();
+                if (ToolbarFeatures.shouldRecordSuppressionMetrics()
+                        && compositorInMotion != null) {
+                    RecordHistogram.recordEnumeratedHistogram("Android.TopToolbar.InMotionStage",
+                            ToolbarInMotionStage.READINESS_CHECKED,
+                            ToolbarInMotionStage.NUM_ENTRIES);
+                }
+                if (captureReadinessResult.blockReason
+                        == TopToolbarBlockCaptureReason.SNAPSHOT_SAME) {
+                    setDirtyRectEmpty();
+                } else if (captureReadinessResult.isReady) {
+                    // Motion is starting, and we don't have a good capture. Lock the controls so
+                    // that a new capture doesn't happen and the old capture is not shown. This can
+                    // be fixed once the motion is over.
                     mControlsToken =
                             mBrowserStateBrowserControlsVisibilityDelegate
                                     .showControlsPersistentAndClearOldToken(mControlsToken);

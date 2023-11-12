@@ -244,6 +244,7 @@ struct MediaTrackConstraintSetPlatform {
   LongConstraint channel_count;
   StringConstraint device_id;
   BooleanConstraint disable_local_echo;
+  BooleanConstraint suppress_local_audio_playback;
   DoubleConstraint pan;
   DoubleConstraint tilt;
   DoubleConstraint zoom;
@@ -256,7 +257,6 @@ struct MediaTrackConstraintSetPlatform {
   BooleanConstraint goog_echo_cancellation;
   BooleanConstraint goog_experimental_echo_cancellation;
   BooleanConstraint goog_auto_gain_control;
-  BooleanConstraint goog_experimental_auto_gain_control;
   BooleanConstraint goog_noise_suppression;
   BooleanConstraint goog_highpass_filter;
   BooleanConstraint goog_experimental_noise_suppression;

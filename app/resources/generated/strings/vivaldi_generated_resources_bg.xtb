@@ -70,7 +70,7 @@
 <translation id="2282146716419988068">Процес на ГПУ</translation>
 <translation id="2301382460326681002">Главната директория на разширението е недействителна.</translation>
 <translation id="2318143611928805047">Размер на листа</translation>
-<translation id="2322193970951063277">Ползвай колонтитули</translation>
+<translation id="2322193970951063277">Ползвай горни и долни колонтитули</translation>
 <translation id="2326931316514688470">Пре&amp;зареди приложението</translation>
 <translation id="2327492829706409234">Разреши приложението</translation>
 <translation id="2348176352564285430">Приложение: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -378,7 +378,7 @@
 <translation id="7818135753970109980">Добавена нова тема (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Коп&amp;ирай адреса на клипа</translation>
 <translation id="7849264908733290972">Отвори &amp;картината в нов раздел</translation>
-<translation id="7857949311770343000">Този ли нов раздел очаквате?</translation>
+<translation id="7857949311770343000">Тази ли страница с нов раздел очаквате?</translation>
 <translation id="786073089922909430">Услуга: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Помагало: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">Коп&amp;ирай адреса на клипа</translation>

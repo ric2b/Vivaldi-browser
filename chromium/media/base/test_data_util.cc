@@ -5,6 +5,7 @@
 #include "media/base/test_data_util.h"
 
 #include <stdint.h>
+#include <ostream>
 
 #include "base/check_op.h"
 #include "base/containers/flat_map.h"
@@ -206,16 +207,8 @@ std::string GetURLQueryString(const base::StringPairs& query_params) {
   return query;
 }
 
-scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-  , const base::FilePath& full_filename
-#endif
-) {
-  base::FilePath file_path =
-#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
-      !full_filename.empty() ? full_filename :
-#endif
-                             GetTestDataFilePath(name);
+scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name) {
+  base::FilePath file_path = GetTestDataFilePath(name);
 
   int64_t tmp = 0;
   CHECK(base::GetFileSize(file_path, &tmp))

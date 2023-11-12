@@ -8,7 +8,6 @@
 #include <set>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/check_op.h"
@@ -89,13 +88,13 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image.h"
-#include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/selection_model.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
@@ -353,7 +352,8 @@ void OmniboxViewViews::SetAdditionalText(
   // between the OmniboxEditModel, which handles setting the omnibox match, and
   // LocationBarView. Perhaps, if we decide to launch rich autocompletion we'll
   // consider alternatives.
-  location_bar_view_->SetOmniboxAdditionalText(additional_text);
+  if (location_bar_view_)
+    location_bar_view_->SetOmniboxAdditionalText(additional_text);
 }
 
 void OmniboxViewViews::EnterKeywordModeForDefaultSearchProvider() {
@@ -482,19 +482,17 @@ void OmniboxViewViews::OnPaint(gfx::Canvas* canvas) {
     UMA_HISTOGRAM_TIMES("Omnibox.CharTypedToRepaintLatency.ToPaint",
                         now - insert_char_time_);
     latency_histogram_state_ = ON_PAINT_CALLED;
-    GetWidget()->GetCompositor()->RequestPresentationTimeForNextFrame(
+    GetWidget()->GetCompositor()->RequestSuccessfulPresentationTimeForNextFrame(
         base::BindOnce(
             [](base::TimeTicks insert_timestamp,
                base::TimeTicks paint_timestamp,
-               const gfx::PresentationFeedback& feedback) {
-              if (feedback.flags & gfx::PresentationFeedback::kFailure)
-                return;
+               base::TimeTicks presentation_timestamp) {
               UMA_HISTOGRAM_TIMES(
                   "Omnibox.CharTypedToRepaintLatency.PaintToPresent",
-                  feedback.timestamp - paint_timestamp);
+                  presentation_timestamp - paint_timestamp);
               UMA_HISTOGRAM_TIMES(
                   "Omnibox.CharTypedToRepaintLatency.InsertToPresent",
-                  feedback.timestamp - insert_timestamp);
+                  presentation_timestamp - insert_timestamp);
             },
             insert_char_time_, now));
   }
@@ -848,7 +846,7 @@ void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
   // with an explicit announcement. Use PostTask to ensure that this
   // announcement happens after the text change notification, otherwise
   // the text change can interrupt the announcement.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&OmniboxViewViews::AnnounceFriendlySuggestionText,
                      weak_factory_.GetWeakPtr()));
@@ -1234,7 +1232,7 @@ bool OmniboxViewViews::SkipDefaultKeyEventProcessing(
     return true;
   }
   if (event.key_code() == ui::VKEY_ESCAPE)
-    return model()->WillHandleEscapeKey();
+    return true;
   return Textfield::SkipDefaultKeyEventProcessing(event);
 }
 
@@ -1451,10 +1449,9 @@ void OmniboxViewViews::OnBlur() {
 }
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (command_id == Textfield::kSelectAll) {
-    return base::FeatureList::IsEnabled(
-        chromeos::features::kTouchTextEditingRedesign);
+    return features::IsTouchTextEditingRedesignEnabled();
   }
 #endif
   if (command_id == Textfield::kPaste)

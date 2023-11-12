@@ -5,6 +5,9 @@ However, they are a source of UaF bugs and highly discouraged unless you are
 100% confident that they are never dereferenced after the pointed-to objects are
 freed.
 
+See also the guide: [how to fix dangling pointers.
+[docs/dangling_ptr.md](./dangling_ptr_guide.md)
+
 Behind build flags, Chrome implements a dangling pointer detector. It causes
 Chrome to crash, whenever a raw_ptr becomes dangling:
 ```cpp
@@ -20,6 +23,15 @@ code.
 raw_ptr<T, DisableDanglingPtrDetection> ptr_may_dangle;
 ```
 
+The `DanglingUntriaged` has been used to annotate pre-existing dangling
+pointers in Chrome:
+```cpp
+raw_ptr<T, DanglingUntriaged> ptr_dangling_mysteriously;
+```
+Contrary to `DisableDanglingPtrDetection`, we don't know yet why it dangles. It
+is meant to be either refactored to avoid dangling, or turned into
+"DisableDanglingPtrDetection" with a comment explaining what happens.
+
 # How to check for dangling pointers?
 
 It is gated behind both build and runtime flags:
@@ -32,21 +44,16 @@ gn args ./out/dangling/
 
 ```gn
 use_goma = true
-is_debug = false
+is_debug = false  # Important! (*)
 dcheck_always_on = true
-enable_backup_ref_ptr_support = true
+enable_backup_ref_ptr_support = true  # true by default on most platforms
 enable_dangling_raw_ptr_checks = true
-use_backup_ref_ptr = true
 ```
 
-We want to emphasize that `is_debug = false` is important. It is a common
-mistake to set it to true, which in turn turns on component builds, which
-disabled PartitionAlloc-Everywhere. `use_backup_ref_ptr = true` can't be used
-without PartitionAlloc-Everywhere, leading to error:
-```
-ERROR at //base/allocator/allocator.gni:126:3: Assertion failed.
-  assert(!use_backup_ref_ptr || use_allocator == "partition",
-```
+(*) We want to emphasize that `is_debug = false` is important. It is a common
+mistake to set it to `true`, which in turn turns on component builds, which
+disables PartitionAlloc-Everywhere. `enable_backup_ref_ptr_support = true` can't
+be used without PartitionAlloc-Everywhere, and is silently set to `false`.
 
 ## Runtime flags
 
@@ -86,10 +93,3 @@ cat output \
 ```
 
 This is used to list issues and track progresses.
-
-# DanglingUntriaged
-
-This raw_ptr option means it is allowed to dangle. Contrary to
-`DisableDanglingPtrDetection`, we don't know yet why it dangle. It is meant to
-be either refactored to avoid dangling, or turned into
-"DisableDanglingPtrDetection" with a comment explaining what happens.

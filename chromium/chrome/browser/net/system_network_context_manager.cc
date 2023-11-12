@@ -75,6 +75,7 @@
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_pending_shared_url_loader_factory.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/cert_verifier_service.mojom.h"
@@ -124,6 +125,9 @@ enum class NetworkSandboxState {
   kDisabledBecauseOfFailedLaunch = 4,
   kMaxValue = kDisabledBecauseOfFailedLaunch
 };
+
+// The temporary header name expected by the envoy proxy configuration.
+const char kIPAnonymizationProxyPassword[] = "password";
 
 // The global instance of the SystemNetworkContextManager.
 SystemNetworkContextManager* g_system_network_context_manager = nullptr;
@@ -770,6 +774,33 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
   if (IsCertificateTransparencyEnabled()) {
     network_context_params->enforce_chrome_ct_policy = true;
   }
+
+  // If a custom proxy is specified, set the proxy rules
+  if (command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)) {
+    auto proxy_config = network::mojom::CustomProxyConfig::New();
+    proxy_config->rules.type =
+        net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME;
+    proxy_config->rules.ParseFromString(command_line.GetSwitchValueASCII(
+        ::switches::kIPAnonymizationProxyServer));
+
+    // Get allowlist hosts
+    std::string proxy_allow_list = command_line.GetSwitchValueASCII(
+        ::switches::kIPAnonymizationProxyAllowList);
+    proxy_config->rules.reverse_bypass = true;
+    proxy_config->rules.bypass_rules.ParseFromString(proxy_allow_list);
+
+    proxy_config->should_replace_direct = true;
+    proxy_config->should_override_existing_config = false;
+    proxy_config->allow_non_idempotent_methods = true;
+    proxy_config->connect_tunnel_headers.SetHeader(
+        kIPAnonymizationProxyPassword,
+        command_line.GetSwitchValueASCII(
+            ::switches::kIPAnonymizationProxyPassword));
+
+    // Set initial custom proxy configuration
+    network_context_params->initial_custom_proxy_config =
+        std::move(proxy_config);
+  }
 }
 
 network::mojom::NetworkContextParamsPtr
@@ -782,6 +813,10 @@ SystemNetworkContextManager::CreateDefaultNetworkContextParams() {
   ConfigureDefaultNetworkContextParams(network_context_params.get());
   network_context_params->cert_verifier_params =
       content::GetCertVerifierParams(std::move(cert_verifier_creation_params));
+  network_context_params->acam_preflight_spec_conformant =
+      base::FeatureList::IsEnabled(
+          network::features::
+              kAccessControlAllowMethodsInCORSPreflightSpecConformant);
   return network_context_params;
 }
 

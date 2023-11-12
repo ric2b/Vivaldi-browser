@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -18,11 +19,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/base/simple_enclosed_region.h"
-#include "cc/benchmarks/benchmark_instrumentation.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -50,6 +51,7 @@
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
+#include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "gpu/command_buffer/service/scheduler_sequence.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -239,6 +241,17 @@ bool SupportsSetFrameRate(const OutputSurface* output_surface) {
 #else
   return false;
 #endif
+}
+
+void IssueDisplayRenderingStatsEvent() {
+  std::unique_ptr<base::trace_event::TracedValue> record_data =
+      std::make_unique<base::trace_event::TracedValue>();
+  record_data->SetInteger("frame_count", 1);
+  // Please don't rename this trace event as it's used by tools. The benchmarks
+  // search for events and their arguments by name.
+  TRACE_EVENT_INSTANT1(
+      "benchmark", "BenchmarkInstrumentation::DisplayRenderingStats",
+      TRACE_EVENT_SCOPE_THREAD, "data", std::move(record_data));
 }
 
 }  // namespace
@@ -872,9 +885,11 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
         frame.latency_info,
         perfetto::protos::pbzero::ChromeLatencyInfo::STEP_DRAW_AND_SWAP);
 
-    cc::benchmark_instrumentation::IssueDisplayRenderingStatsEvent();
+    IssueDisplayRenderingStatsEvent();
     DirectRenderer::SwapFrameData swap_frame_data;
     swap_frame_data.latency_info = std::move(frame.latency_info);
+    swap_frame_data.seq =
+        current_surface_id_.local_surface_id().child_sequence_number();
     swap_frame_data.choreographer_vsync_id = params.choreographer_vsync_id;
     if (frame.top_controls_visible_height.has_value()) {
       swap_frame_data.top_controls_visible_height_changed =
@@ -938,13 +953,21 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
   return true;
 }
 
-void Display::DidReceiveSwapBuffersAck(const gfx::SwapTimings& timings,
-                                       gfx::GpuFenceHandle release_fence) {
+void Display::DidReceiveSwapBuffersAck(
+    const gpu::SwapBuffersCompleteParams& params,
+    gfx::GpuFenceHandle release_fence) {
   // Adding to |pending_presentation_group_timings_| must
   // have been done in DrawAndSwap(), and should not be popped until
   // DidReceiveSwapBuffersAck.
   DCHECK(!pending_presentation_group_timings_.empty());
 
+  if (params.swap_response.result ==
+      gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
+    aggregator_->SetFullDamageForSurface(current_surface_id_);
+    damage_tracker_->SetRootSurfaceDamaged();
+  }
+
+  const gfx::SwapTimings& timings = params.swap_response.timings;
   ++last_swap_ack_trace_id_;
   TRACE_EVENT_ASYNC_STEP_INTO_WITH_TIMESTAMP0(
       "viz,benchmark", "Graphics.Pipeline.DrawAndSwap", last_swap_ack_trace_id_,
@@ -955,8 +978,9 @@ void Display::DidReceiveSwapBuffersAck(const gfx::SwapTimings& timings,
 
   if (overlay_processor_)
     overlay_processor_->OverlayPresentationComplete();
-  if (renderer_)
-    renderer_->SwapBuffersComplete(std::move(release_fence));
+  if (renderer_) {
+    renderer_->SwapBuffersComplete(params, std::move(release_fence));
+  }
 
   DCHECK_GT(pending_swaps_, 0);
   pending_swaps_--;
@@ -1083,19 +1107,19 @@ void Display::DidReceiveReleasedOverlays(
     renderer_->DidReceiveReleasedOverlays(released_overlays);
 }
 
-void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
-  aggregator_->SetFullDamageForSurface(current_surface_id_);
-  damage_tracker_->SetRootSurfaceDamaged();
+void Display::AddChildWindowToBrowser(gpu::SurfaceHandle child_window) {
+  if (client_) {
+    client_->DisplayAddChildWindowToBrowser(child_window);
+  }
 }
 
 void Display::DidFinishFrame(const BeginFrameAck& ack) {
   for (auto& observer : observers_)
     observer.OnDisplayDidFinishFrame(ack);
 
-  // Prevent de-jelly skew or a delegated ink trail from staying on the screen
+  // Prevent a delegated ink trail from staying on the screen
   // for more than one frame by forcing a new frame to be produced.
-  if (aggregator_->last_frame_had_jelly() ||
-      !renderer_->GetDelegatedInkTrailDamageRect().IsEmpty()) {
+  if (!renderer_->GetDelegatedInkTrailDamageRect().IsEmpty()) {
     scheduler_->SetNeedsOneBeginFrame(true);
   }
 
@@ -1268,13 +1292,11 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
         // positive scale check.
         if (current_sqs_intersects_occlusion &&
             transform.IsPositiveScaleOrTranslation()) {
-          gfx::Transform reverse_transform;
-          bool is_invertible = transform.GetInverse(&reverse_transform);
           // Scale transform can be inverted by multiplying 1/scale (given
           // scale > 0) and translation transform can be inverted by applying
           // the reversed directional translation. Therefore, |transform| is
           // always invertible.
-          DCHECK(is_invertible);
+          gfx::Transform reverse_transform = transform.GetCheckedInverse();
           DCHECK_LE(occlusion_in_target_space.GetRegionComplexity(),
                     settings_.kMaximumOccluderComplexity);
 

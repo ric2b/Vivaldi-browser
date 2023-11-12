@@ -111,8 +111,7 @@ bool IsFillableFieldType(ServerFieldType field_type) {
       return true;
 
     case MERCHANT_PROMO_CODE:
-      return base::FeatureList::IsEnabled(
-          features::kAutofillParseMerchantPromoCodeFields);
+      return true;
 
     // Fillable credential fields.
     case USERNAME:
@@ -141,6 +140,7 @@ bool IsFillableFieldType(ServerFieldType field_type) {
     case FIELD_WITH_DEFAULT_VALUE:
     case MERCHANT_EMAIL_SIGNUP:
     case PRICE:
+    case NUMERIC_QUANTITY:
     case SEARCH_TERM:
     case BIRTHDATE_DAY:
     case BIRTHDATE_MONTH:
@@ -293,6 +293,8 @@ base::StringPiece FieldTypeToStringPiece(ServerFieldType type) {
       return "SEARCH_TERM";
     case PRICE:
       return "PRICE";
+    case NUMERIC_QUANTITY:
+      return "NUMERIC_QUANTITY";
     case NOT_PASSWORD:
       return "NOT_PASSWORD";
     case SINGLE_USERNAME:
@@ -327,6 +329,21 @@ base::StringPiece FieldTypeToStringPiece(ServerFieldType type) {
 
   NOTREACHED();
   return "";
+}
+
+std::ostream& operator<<(std::ostream& o, ServerFieldTypeSet field_type_set) {
+  o << "[";
+  bool first = true;
+  for (const auto type : field_type_set) {
+    if (!first) {
+      o << ", ";
+    } else {
+      first = false;
+    }
+    o << FieldTypeToStringPiece(type);
+  }
+  o << "]";
+  return o;
 }
 
 }  // namespace autofill

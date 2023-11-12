@@ -378,10 +378,8 @@ SkBitmap AXImageAnnotator::GetImageData(const blink::WebAXObject& image) {
 void AXImageAnnotator::OnImageAnnotated(
     const blink::WebAXObject& image,
     image_annotation::mojom::AnnotateImageResultPtr result) {
-  if (!blink::WebAXObject::MaybeUpdateLayoutAndCheckValidity(
-          image.GetDocument())) {
-    return;
-  }
+  DCHECK(render_accessibility_->GetAXContext());
+  render_accessibility_->GetAXContext()->UpdateAXForAllDocuments();
 
   if (!base::Contains(image_annotations_, image.AxID()))
     return;
@@ -502,6 +500,10 @@ void AXImageAnnotator::OnImageAnnotated(
         break;
       case image_annotation::mojom::AnnotationType::kIcon: {
         int icon_message_id = GetMessageIdForIconEnum(annotation->text);
+
+        // Skip unrecognized icon annotation enum.
+        if (icon_message_id == 0)
+          continue;
 
         DCHECK(GetContentClient());
         contextualized_strings.push_back(base::UTF16ToUTF8(

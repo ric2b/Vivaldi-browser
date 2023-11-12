@@ -22,7 +22,6 @@
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/gfx/overlay_priority_hint.h"
-#include "ui/gl/gl_image_egl.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/ozone/platform/wayland/gpu/gbm_surfaceless_wayland.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
@@ -49,14 +48,16 @@ namespace {
 
 constexpr uint32_t kAugmentedSurfaceNotSupportedVersion = 0;
 
-// Fake GLImage that just schedules overlay plane. It must become busy when
-// scheduled and be associated with the swap id to track correct order of swaps
-// and releases of the image.
-class FakeGLImageNativePixmap : public gl::GLImageEGL {
+// Holds a NativePixmap used for scheduling overlay planes. It must become busy
+// when scheduled and be associated with the swap id to track correct order of
+// swaps and releases of the image.
+// TODO(rjkroege): Consider putting extra state inside a test NativePixmap
+// implementation instead of a wrapper class.
+class OverlayImageHolder : public base::RefCounted<OverlayImageHolder> {
  public:
-  FakeGLImageNativePixmap(scoped_refptr<gfx::NativePixmap> pixmap,
-                          const gfx::Size& size)
-      : gl::GLImageEGL(size), pixmap_(pixmap) {}
+  OverlayImageHolder(scoped_refptr<gfx::NativePixmap> pixmap,
+                     const gfx::Size& size)
+      : pixmap_(pixmap) {}
 
   // Associates swap id with this image.
   void AssociateWithSwapId(uint32_t swap_id) {
@@ -76,19 +77,16 @@ class FakeGLImageNativePixmap : public gl::GLImageEGL {
   void SetDisplayed(bool displayed) { displayed_ = displayed; }
   bool displayed() const { return displayed_; }
 
-  // Overridden from GLImage:
-  void Flush() override {}
-  scoped_refptr<gfx::NativePixmap> GetNativePixmap() override {
-    return pixmap_;
-  }
-
- protected:
-  ~FakeGLImageNativePixmap() override {}
+  scoped_refptr<gfx::NativePixmap> GetNativePixmap() { return pixmap_; }
 
  private:
+  friend class base::RefCounted<OverlayImageHolder>;
+
+  ~OverlayImageHolder() = default;
+
   scoped_refptr<gfx::NativePixmap> pixmap_;
 
-  // Indicated if the gl image is busy. If yes, it was scheduled as overlay
+  // Indicated if the overlay image is busy. If yes, it was scheduled as overlay
   // plane for further submission and can't be reused until it's freed.
   bool busy_ = false;
 
@@ -120,27 +118,27 @@ class CallbacksHelper {
   }
 
   // Finishes the submission by setting the swap id of completed buffer swap and
-  // sets the associated gl_image as displayed and non-busy, which indicates
-  // that 1) the image has been sent to be shown after being scheduled 2) the
-  // image is displayed. This sort of mimics a buffer queue, but in a simpliear
-  // way.
+  // sets the associated overlay_image as displayed and non-busy, which
+  // indicates that 1) the image has been sent to be shown after being scheduled
+  // 2) the image is displayed. This sort of mimics a buffer queue, but in a
+  // simpler way.
   void FinishSwapBuffersAsync(
       uint32_t local_swap_id,
-      std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images,
+      std::vector<scoped_refptr<OverlayImageHolder>> overlay_images,
       gfx::SwapCompletionResult result) {
     last_finish_swap_id_ = pending_local_swap_ids_.front();
     pending_local_swap_ids_.pop();
 
-    for (auto& gl_image : gl_images) {
-      EXPECT_EQ(gl_image->GetAssociateWithSwapId(), last_finish_swap_id_);
-      EXPECT_TRUE(gl_image->busy() && !gl_image->displayed());
-      gl_image->SetBusy(false);
-      gl_image->SetDisplayed(true);
+    for (auto& overlay_image : overlay_images) {
+      EXPECT_EQ(overlay_image->GetAssociateWithSwapId(), last_finish_swap_id_);
+      EXPECT_TRUE(overlay_image->busy() && !overlay_image->displayed());
+      overlay_image->SetBusy(false);
+      overlay_image->SetDisplayed(true);
     }
 
     for (auto& displayed_image : displayed_images_)
       displayed_image->SetDisplayed(false);
-    displayed_images_ = std::move(gl_images);
+    displayed_images_ = std::move(overlay_images);
   }
 
   void BufferPresented(uint64_t local_swap_id,
@@ -159,7 +157,7 @@ class CallbacksHelper {
   base::queue<uint64_t> pending_local_swap_ids_;
 
   // Keeps track of a displayed image.
-  std::vector<scoped_refptr<FakeGLImageNativePixmap>> displayed_images_;
+  std::vector<scoped_refptr<OverlayImageHolder>> displayed_images_;
 };
 
 }  // namespace
@@ -167,17 +165,21 @@ class CallbacksHelper {
 class WaylandSurfaceFactoryTest : public WaylandTest {
  public:
   WaylandSurfaceFactoryTest() = default;
-
   WaylandSurfaceFactoryTest(const WaylandSurfaceFactoryTest&) = delete;
   WaylandSurfaceFactoryTest& operator=(const WaylandSurfaceFactoryTest&) =
       delete;
-
   ~WaylandSurfaceFactoryTest() override = default;
 
   void SetUp() override {
     const base::flat_map<gfx::BufferFormat, std::vector<uint64_t>>
         kSupportedFormatsWithModifiers{
             {gfx::BufferFormat::BGRA_8888, {DRM_FORMAT_MOD_LINEAR}}};
+
+    // Set this bug fix so that WaylandFrameManager does not use a freeze
+    // counter. Otherwise, we won't be able to have a reliable test order of
+    // frame submissions. This must be set before any window is created
+    // (WaylandTest does that for us during the SetUp phase).
+    server_.zaura_shell()->SetBugFixes({1358908});
 
     WaylandTest::SetUp();
 
@@ -193,6 +195,9 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
 
     // Wait until initialization and mojo calls go through.
     base::RunLoop().RunUntilIdle();
+
+    // Store the surface_id for convenience.
+    surface_id_ = window_->root_surface()->get_surface_id();
   }
 
   void TearDown() override {
@@ -211,7 +216,7 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
   }
 
   void ScheduleOverlayPlane(gl::GLSurface* gl_surface,
-                            gl::GLImage* image,
+                            gl::OverlayImage image,
                             int z_order) {
     gl_surface->ScheduleOverlayPlane(
         image, nullptr,
@@ -222,6 +227,8 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
                               gfx::OverlayPriorityHint::kNone, gfx::RRectF(),
                               gfx::ColorSpace::CreateSRGB(), absl::nullopt));
   }
+
+  uint32_t surface_id_ = 0;
 };
 
 TEST_P(WaylandSurfaceFactoryTest,
@@ -245,23 +252,20 @@ TEST_P(WaylandSurfaceFactoryTest,
   static_cast<ui::GbmSurfacelessWayland*>(gl_surface.get())
       ->SetNoGLFlushForTests();
 
-  // Expect to create 4 buffers.
-  EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(4);
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    // Expect to create 4 buffers.
+    EXPECT_CALL(*server->zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(4);
+  });
 
   // Create buffers and FakeGlImageNativePixmap.
-  std::vector<scoped_refptr<FakeGLImageNativePixmap>> fake_gl_image;
+  std::vector<scoped_refptr<OverlayImageHolder>> fake_overlay_image;
   for (int i = 0; i < 4; ++i) {
     auto native_pixmap = surface_factory_->CreateNativePixmap(
         widget_, nullptr, window_->size_px(), gfx::BufferFormat::BGRA_8888,
         gfx::BufferUsage::SCANOUT);
-    fake_gl_image.push_back(base::MakeRefCounted<FakeGLImageNativePixmap>(
+    fake_overlay_image.push_back(base::MakeRefCounted<OverlayImageHolder>(
         native_pixmap, window_->size_px()));
   }
-
-  auto* root_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->get_surface_id());
-  auto* mock_primary_surface = server_.GetObject<wl::MockSurface>(
-      window_->primary_subsurface()->wayland_surface()->get_surface_id());
 
   CallbacksHelper cbs_helper;
   // Submit a frame with an overlay and background.
@@ -271,66 +275,82 @@ TEST_P(WaylandSurfaceFactoryTest,
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[0]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[0]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[0]->SetBusy(true);
+    fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[0].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[0]->GetNativePixmap(),
                          /*z_order=*/INT32_MIN);
 
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[1]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[1]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[1]->SetBusy(true);
+    fake_overlay_image[1]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[1].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[1]->GetNativePixmap(),
                          /*z_order=*/1);
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[0]);
-    gl_images.push_back(fake_gl_image[1]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[0]);
+    overlay_images.push_back(fake_overlay_image[1]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
   }
 
-  Sync();
+  // Wait until GbmSurfacelessWayland submits the buffer according to internal
+  // queue.
+  base::RunLoop().RunUntilIdle();
 
-  // Let's sync so that 1) GbmSurfacelessWayland submits the buffer according to
-  // internal queue and fake server processes the request.
+  // The fake server must have dmabuf params created. Set expectations and
+  // notify the client about created buffers.
+  const uint32_t primary_subsurface_id =
+      window_->primary_subsurface()->wayland_surface()->get_surface_id();
+  PostToServerAndWait([main_surface_id = surface_id_, primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* root_surface = server->GetObject<wl::MockSurface>(main_surface_id);
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
 
-  // Also, we expect no buffer committed on primary subsurface.
-  EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(0);
-  EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(0);
-  // 1 buffer committed on root surface.
-  EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*root_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*root_surface, Commit()).Times(1);
+    // Also, we expect no buffer committed on primary subsurface.
+    EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(0);
+    // 1 buffer committed on root surface.
+    EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*root_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*root_surface, Commit()).Times(1);
 
-  // The wl_buffers are requested during ScheduleOverlays. Thus, we have pending
-  // requests that we need to execute.
-  auto params_vector = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 2u);
-  for (auto* mock_params : params_vector) {
-    zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
-                                            mock_params->buffer_resource());
-  }
+    // The wl_buffers are requested during ScheduleOverlays. Thus, we have
+    // pending requests that we need to execute.
+    auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+    ASSERT_EQ(params_vector.size(), 2u);
+    for (auto* mock_params : params_vector) {
+      zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
+                                              mock_params->buffer_resource());
+    }
+  });
 
-  Sync();
+  // Verify our server side expectations now.
+  PostToServerAndWait([main_surface_id = surface_id_, primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    testing::Mock::VerifyAndClearExpectations(
+        server->GetObject<wl::MockSurface>(primary_subsurface_id));
+    testing::Mock::VerifyAndClearExpectations(
+        server->GetObject<wl::MockSurface>(main_surface_id));
+  });
 
-  testing::Mock::VerifyAndClearExpectations(mock_primary_surface);
-  testing::Mock::VerifyAndClearExpectations(root_surface);
-
-  // Give mojo the chance to pass the callbacks.
+  // Give mojo the chance to pass the callbacks if any.
   base::RunLoop().RunUntilIdle();
 
   // We have just received Attach/DamageBuffer/Commit for buffer with swap
@@ -340,21 +360,16 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   cbs_helper.ResetLastFinishedSwapId();
 
-  for (const auto& gl_image : fake_gl_image) {
+  for (const auto& overlay_image : fake_overlay_image) {
     // All the images except the first one, which was associated with swap
     // id=0u, must be busy and not displayed. The first one must be displayed.
-    if (gl_image->GetAssociateWithSwapId() == 0u) {
-      EXPECT_FALSE(gl_image->busy());
-      EXPECT_TRUE(gl_image->displayed());
+    if (overlay_image->GetAssociateWithSwapId() == 0u) {
+      EXPECT_FALSE(overlay_image->busy());
+      EXPECT_TRUE(overlay_image->displayed());
     } else {
-      EXPECT_FALSE(gl_image->displayed());
+      EXPECT_FALSE(overlay_image->displayed());
     }
   }
-
-  auto* mock_overlay_surface = server_.GetObject<wl::MockSurface>(
-      (*window_->wayland_subsurfaces().begin())
-          ->wayland_surface()
-          ->get_surface_id());
 
   // Submit another frame with only an overlay.
   {
@@ -363,61 +378,85 @@ TEST_P(WaylandSurfaceFactoryTest,
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[2]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[2]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[2]->SetBusy(true);
+    fake_overlay_image[2]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[2].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[2]->GetNativePixmap(),
                          /*z_order=*/1);
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[2]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[2]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
   }
 
-  // Expect no buffer committed on primary subsurface.
-  EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(0);
-  EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(0);
-  // Expect 1 buffer to be committed on overlay subsurface, with frame callback.
-  EXPECT_CALL(*mock_overlay_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, Commit()).Times(1);
-  // Expect no buffer committed on root surface.
-  EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Commit()).Times(1);
+  // Wait until GbmSurfacelessWayland submits the buffer according to internal
+  // queue.
+  base::RunLoop().RunUntilIdle();
 
-  Sync();
+  const uint32_t overlay_surface_id = (*window_->wayland_subsurfaces().begin())
+                                          ->wayland_surface()
+                                          ->get_surface_id();
+  // The fake server must have dmabuf params created. Set expectations and
+  // notify the client about created buffers.
+  PostToServerAndWait([overlay_surface_id, main_surface_id = surface_id_,
+                       primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* mock_overlay_surface =
+        server->GetObject<wl::MockSurface>(overlay_surface_id);
+    auto* root_surface = server->GetObject<wl::MockSurface>(main_surface_id);
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
 
-  auto params_vector2 = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 2u);
-  for (auto* mock_params : params_vector2) {
-    zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
-                                            mock_params->buffer_resource());
-  }
+    // Expect no buffer committed on primary subsurface.
+    EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(0);
+    // Expect 1 buffer to be committed on overlay subsurface, with frame
+    // callback.
+    EXPECT_CALL(*mock_overlay_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, Commit()).Times(1);
+    // Expect no buffer committed on root surface.
+    EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Commit()).Times(1);
 
-  Sync();
+    auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+    ASSERT_EQ(params_vector.size(), 1u);
+    for (auto* mock_params : params_vector) {
+      zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
+                                              mock_params->buffer_resource());
+    }
 
-  // Send the frame callback so that pending buffer for swap id=1u is processed
-  // and swapped.
-  mock_overlay_surface->SendFrameCallback();
+    // Also send the frame callback so that pending buffer for swap id=1u is
+    // processed and swapped.
+    server->GetObject<wl::MockSurface>(overlay_surface_id)->SendFrameCallback();
+  });
 
-  Sync();
-
-  testing::Mock::VerifyAndClearExpectations(mock_primary_surface);
-  testing::Mock::VerifyAndClearExpectations(mock_overlay_surface);
-  testing::Mock::VerifyAndClearExpectations(root_surface);
+  // Give a client a chance to send requests and then verify our expectations on
+  // the server thread.
+  PostToServerAndWait(
+      [overlay_surface_id, main_surface_id = surface_id_,
+       primary_subsurface_id](wl::TestWaylandServerThread* server) {
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(primary_subsurface_id));
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(overlay_surface_id));
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(main_surface_id));
+      });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -434,74 +473,99 @@ TEST_P(WaylandSurfaceFactoryTest,
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[3]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[3]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[3]->SetBusy(true);
+    fake_overlay_image[3]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[3].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[3]->GetNativePixmap(),
                          /*z_order=*/0);
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[3]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[3]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
   }
 
-  // Expect 1 buffer committed on primary subsurface, with frame callback.
-  EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
-  // Expect no buffer to be committed on overlay subsurface.
-  EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(0);
-  // Expect no buffer committed on root surface.
-  EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Commit()).Times(1);
+  // Wait until GbmSurfacelessWayland submits the buffer according to internal
+  // queue.
+  base::RunLoop().RunUntilIdle();
 
-  Sync();
+  // Process requests and send events.
+  PostToServerAndWait([overlay_surface_id, main_surface_id = surface_id_,
+                       primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* mock_overlay_surface =
+        server->GetObject<wl::MockSurface>(overlay_surface_id);
+    auto* root_surface = server->GetObject<wl::MockSurface>(main_surface_id);
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
 
-  auto params_vector3 = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 2u);
-  for (auto* mock_params : params_vector3) {
-    zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
-                                            mock_params->buffer_resource());
-  }
+    // Expect 1 buffer committed on primary subsurface, with frame callback.
+    EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
+    // Expect no buffer to be committed on overlay subsurface.
+    EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(0);
+    // Expect no buffer committed on root surface.
+    EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Commit()).Times(1);
 
-  Sync();
+    auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+    ASSERT_EQ(params_vector.size(), 1u);
+    for (auto* mock_params : params_vector) {
+      zwp_linux_buffer_params_v1_send_created(mock_params->resource(),
+                                              mock_params->buffer_resource());
+    }
+  });
 
   // Send the frame callback so that pending buffer for swap id=2u is processed
   // and swapped.
-  mock_overlay_surface->SendFrameCallback();
-
-  // Release overlay image with swap id=1u before swap id=2u.
-  mock_overlay_surface->ReleaseBuffer(mock_overlay_surface->attached_buffer());
-
-  Sync();
-
-  testing::Mock::VerifyAndClearExpectations(mock_primary_surface);
-  testing::Mock::VerifyAndClearExpectations(mock_overlay_surface);
-  testing::Mock::VerifyAndClearExpectations(root_surface);
+  PostToServerAndWait(
+      [overlay_surface_id](wl::TestWaylandServerThread* server) {
+        // Send the frame callback so that pending buffer for swap id=1u is
+        // processed and swapped.
+        auto* mock_overlay_surface =
+            server->GetObject<wl::MockSurface>(overlay_surface_id);
+        mock_overlay_surface->SendFrameCallback();
+        // Release overlay image with swap id=1u before swap id=2u.
+        mock_overlay_surface->ReleaseBuffer(
+            mock_overlay_surface->attached_buffer());
+      });
 
   // Even 2nd frame is released, we do not send OnSubmission() out of order.
   EXPECT_EQ(cbs_helper.GetLastFinishedSwapId(),
             std::numeric_limits<uint32_t>::max());
 
-  // This will result in Wayland server releasing previously attached buffer for
-  // swap id=1u and calling OnSubmission for buffer with swap id=1u.
-  mock_overlay_surface->ReleaseBuffer(
-      mock_overlay_surface->prev_attached_buffer());
+  PostToServerAndWait(
+      [overlay_surface_id, main_surface_id = surface_id_,
+       primary_subsurface_id](wl::TestWaylandServerThread* server) {
+        // Verify our expectations.
+        auto* mock_overlay_surface =
+            server->GetObject<wl::MockSurface>(overlay_surface_id);
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(primary_subsurface_id));
+        testing::Mock::VerifyAndClearExpectations(mock_overlay_surface);
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(main_surface_id));
 
-  Sync();
+        // This will result in Wayland server releasing previously attached
+        // buffer for swap id=1u and calling OnSubmission for buffer with swap
+        // id=1u.
+        mock_overlay_surface->ReleaseBuffer(
+            mock_overlay_surface->prev_attached_buffer());
+      });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -512,12 +576,12 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   cbs_helper.ResetLastFinishedSwapId();
 
-  for (const auto& gl_image : fake_gl_image) {
-    if (gl_image->GetAssociateWithSwapId() == 2u) {
-      EXPECT_TRUE(gl_image->displayed());
-      EXPECT_FALSE(gl_image->busy());
+  for (const auto& overlay_image : fake_overlay_image) {
+    if (overlay_image->GetAssociateWithSwapId() == 2u) {
+      EXPECT_TRUE(overlay_image->displayed());
+      EXPECT_FALSE(overlay_image->busy());
     } else {
-      EXPECT_FALSE(gl_image->displayed());
+      EXPECT_FALSE(overlay_image->displayed());
     }
   }
 }
@@ -542,19 +606,19 @@ TEST_P(WaylandSurfaceFactoryTest,
       ->SetNoGLFlushForTests();
 
   // Create buffers and FakeGlImageNativePixmap.
-  std::vector<scoped_refptr<FakeGLImageNativePixmap>> fake_gl_image;
+  std::vector<scoped_refptr<OverlayImageHolder>> fake_overlay_image;
   for (int i = 0; i < 5; ++i) {
     auto native_pixmap = surface_factory_->CreateNativePixmap(
         widget_, nullptr, window_->size_px(), gfx::BufferFormat::BGRA_8888,
         gfx::BufferUsage::SCANOUT);
-    fake_gl_image.push_back(base::MakeRefCounted<FakeGLImageNativePixmap>(
+    fake_overlay_image.push_back(base::MakeRefCounted<OverlayImageHolder>(
         native_pixmap, window_->size_px()));
   }
 
-  auto* root_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->get_surface_id());
-  auto* mock_primary_surface = server_.GetObject<wl::MockSurface>(
-      window_->primary_subsurface()->wayland_surface()->get_surface_id());
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    // Expect to create 3 buffers.
+    EXPECT_CALL(*server->zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(3);
+  });
 
   CallbacksHelper cbs_helper;
   // Submit a frame with 1 primary plane, 1 underlay, and 1 background.
@@ -564,79 +628,92 @@ TEST_P(WaylandSurfaceFactoryTest,
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[0]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[0]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[0]->SetBusy(true);
+    fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[0].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[0]->GetNativePixmap(),
                          /*z_order=*/INT32_MIN);
 
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[1]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[1]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[1]->SetBusy(true);
+    fake_overlay_image[1]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[1].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[1]->GetNativePixmap(),
                          /*z_order=*/0);
 
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[2]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[2]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[2]->SetBusy(true);
+    fake_overlay_image[2]->SetBusy(true);
 
     // Prepare underlay plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[2].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[2]->GetNativePixmap(),
                          /*z_order=*/-1);
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[0]);
-    gl_images.push_back(fake_gl_image[1]);
-    gl_images.push_back(fake_gl_image[2]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[0]);
+    overlay_images.push_back(fake_overlay_image[1]);
+    overlay_images.push_back(fake_overlay_image[2]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
   }
 
-  // Let's sync so that 1) GbmSurfacelessWayland submits the buffer according to
-  // internal queue and fake server processes the request.
+  // Wait until GbmSurfacelessWayland submits the buffer according to internal
+  // queue.
+  base::RunLoop().RunUntilIdle();
 
   // Also, we expect primary buffer to be committed.
-  EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
-  EXPECT_CALL(*root_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*root_surface, Commit()).Times(1);
+  const uint32_t primary_subsurface_id =
+      window_->primary_subsurface()->wayland_surface()->get_surface_id();
+  PostToServerAndWait([main_surface_id = surface_id_, primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* root_surface = server->GetObject<wl::MockSurface>(main_surface_id);
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
 
-  // Expect to create 3 buffers.
-  EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(3);
+    EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
+    EXPECT_CALL(*root_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*root_surface, Commit()).Times(1);
 
-  Sync();
+    testing::Mock::VerifyAndClearExpectations(server->zwp_linux_dmabuf_v1());
 
-  // If wl_buffers have never been created, they will be requested during the
-  // first commit.
-  auto params_vector = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 3u);
-  for (auto* param : params_vector) {
-    zwp_linux_buffer_params_v1_send_created(param->resource(),
-                                            param->buffer_resource());
-  }
+    // If wl_buffers have never been created, they will be requested during the
+    // first commit.
+    auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+    ASSERT_EQ(params_vector.size(), 3u);
+    for (auto* param : params_vector) {
+      zwp_linux_buffer_params_v1_send_created(param->resource(),
+                                              param->buffer_resource());
+    }
+  });
 
-  Sync();
+  PostToServerAndWait(
+      [primary_subsurface_id](wl::TestWaylandServerThread* server) {
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(primary_subsurface_id));
+      });
 
-  testing::Mock::VerifyAndClearExpectations(&mock_primary_surface);
   auto* subsurface = window_->wayland_subsurfaces().begin()->get();
-  auto* mock_overlay_surface = server_.GetObject<wl::MockSurface>(
-      subsurface->wayland_surface()->get_surface_id());
+  const uint32_t overlay_surface_id =
+      subsurface->wayland_surface()->get_surface_id();
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -648,16 +725,21 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   cbs_helper.ResetLastFinishedSwapId();
 
-  for (const auto& gl_image : fake_gl_image) {
+  for (const auto& overlay_image : fake_overlay_image) {
     // All the images except the first one, which was associated with swap
     // id=0u, must be busy and not displayed. The first one must be displayed.
-    if (gl_image->GetAssociateWithSwapId() == 0u) {
-      EXPECT_FALSE(gl_image->busy());
-      EXPECT_TRUE(gl_image->displayed());
+    if (overlay_image->GetAssociateWithSwapId() == 0u) {
+      EXPECT_FALSE(overlay_image->busy());
+      EXPECT_TRUE(overlay_image->displayed());
     } else {
-      EXPECT_FALSE(gl_image->displayed());
+      EXPECT_FALSE(overlay_image->displayed());
     }
   }
+
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    // Expect to create 2 more buffers.
+    EXPECT_CALL(*server->zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(2);
+  });
 
   // Submit another frame with 1 primary plane and 1 overlay
   {
@@ -666,79 +748,98 @@ TEST_P(WaylandSurfaceFactoryTest,
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[3]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[3]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[3]->SetBusy(true);
+    fake_overlay_image[3]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[3].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[3]->GetNativePixmap(),
                          /*z_order=*/0);
 
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[4]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[4]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[4]->SetBusy(true);
+    fake_overlay_image[4]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(), fake_gl_image[4].get(),
+    ScheduleOverlayPlane(gl_surface.get(),
+                         fake_overlay_image[4]->GetNativePixmap(),
                          /*z_order=*/1);
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[3]);
-    gl_images.push_back(fake_gl_image[4]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[3]);
+    overlay_images.push_back(fake_overlay_image[4]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
   }
 
-  // Expect primary buffer to be committed, but since it is not the top-most
-  // surface in the frame it does not setup frame callback.
-  EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
-  EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
+  // Give mojo messages chance to reach host.
+  base::RunLoop().RunUntilIdle();
 
-  // Expect overlay buffer to be committed, and sets up frame callback.
-  EXPECT_CALL(*mock_overlay_surface, Attach(_, _, _)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(1);
-  EXPECT_CALL(*mock_overlay_surface, Commit()).Times(1);
+  PostToServerAndWait([main_surface_id = surface_id_, overlay_surface_id,
+                       primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* root_surface = server->GetObject<wl::MockSurface>(main_surface_id);
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
+    auto* mock_overlay_surface =
+        server->GetObject<wl::MockSurface>(overlay_surface_id);
 
-  // Expect root surface to be committed without buffer.
-  EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Frame(_)).Times(0);
-  EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
-  EXPECT_CALL(*root_surface, Commit()).Times(1);
+    // Expect primary buffer to be committed, but since it is not the top-most
+    // surface in the frame it does not setup frame callback.
+    EXPECT_CALL(*mock_primary_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*mock_primary_surface, DamageBuffer(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mock_primary_surface, Commit()).Times(1);
 
-  // Expect to create 2 more buffers.
-  EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(2);
+    // Expect overlay buffer to be committed, and sets up frame callback.
+    EXPECT_CALL(*mock_overlay_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, Frame(_)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, DamageBuffer(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mock_overlay_surface, Commit()).Times(1);
 
-  Sync();
+    // Expect root surface to be committed without buffer.
+    EXPECT_CALL(*root_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*root_surface, DamageBuffer(_, _, _, _)).Times(0);
+    EXPECT_CALL(*root_surface, Commit()).Times(1);
 
-  // 2 more buffers are to be created.
-  params_vector = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 2u);
-  for (auto* param : params_vector) {
-    zwp_linux_buffer_params_v1_send_created(param->resource(),
-                                            param->buffer_resource());
-  }
+    testing::Mock::VerifyAndClearExpectations(server->zwp_linux_dmabuf_v1());
 
-  Sync();
+    // 2 more buffers are to be created.
+    auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+    ASSERT_EQ(params_vector.size(), 2u);
+    for (auto* param : params_vector) {
+      zwp_linux_buffer_params_v1_send_created(param->resource(),
+                                              param->buffer_resource());
+    }
+  });
 
-  // Send the frame callback so that pending buffer for swap id=1u is processed
-  // and swapped.
-  mock_primary_surface->SendFrameCallback();
-  mock_overlay_surface->SendFrameCallback();
+  PostToServerAndWait([overlay_surface_id, primary_subsurface_id](
+                          wl::TestWaylandServerThread* server) {
+    auto* mock_primary_surface =
+        server->GetObject<wl::MockSurface>(primary_subsurface_id);
+    auto* mock_overlay_surface =
+        server->GetObject<wl::MockSurface>(overlay_surface_id);
+    // Send the frame callback so that pending buffer for swap id=1u is
+    // processed and swapped.
+    mock_primary_surface->SendFrameCallback();
+    mock_overlay_surface->SendFrameCallback();
+  });
 
-  Sync();
-
-  testing::Mock::VerifyAndClearExpectations(&mock_primary_surface);
+  PostToServerAndWait(
+      [primary_subsurface_id](wl::TestWaylandServerThread* server) {
+        testing::Mock::VerifyAndClearExpectations(
+            server->GetObject<wl::MockSurface>(primary_subsurface_id));
+      });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -748,13 +849,16 @@ TEST_P(WaylandSurfaceFactoryTest,
   EXPECT_EQ(cbs_helper.GetLastFinishedSwapId(),
             std::numeric_limits<uint32_t>::max());
 
-  // This will result in Wayland server releasing one of the previously attached
-  // buffers for swap id=0u and calling OnSubmission for a buffer with swap
-  // id=1u attached to the primary surface.
-  mock_primary_surface->ReleaseBuffer(
-      mock_primary_surface->prev_attached_buffer());
-
-  Sync();
+  PostToServerAndWait(
+      [primary_subsurface_id](wl::TestWaylandServerThread* server) {
+        auto* mock_primary_surface =
+            server->GetObject<wl::MockSurface>(primary_subsurface_id);
+        // This will result in Wayland server releasing one of the previously
+        // attached buffers for swap id=0u and calling OnSubmission for a buffer
+        // with swap id=1u attached to the primary surface.
+        mock_primary_surface->ReleaseBuffer(
+            mock_primary_surface->prev_attached_buffer());
+      });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -764,11 +868,14 @@ TEST_P(WaylandSurfaceFactoryTest,
   EXPECT_EQ(cbs_helper.GetLastFinishedSwapId(),
             std::numeric_limits<uint32_t>::max());
 
-  // Release the another buffer.
-  mock_overlay_surface->ReleaseBuffer(
-      mock_overlay_surface->prev_attached_buffer());
-
-  Sync();
+  PostToServerAndWait(
+      [overlay_surface_id](wl::TestWaylandServerThread* server) {
+        auto* mock_overlay_surface =
+            server->GetObject<wl::MockSurface>(overlay_surface_id);
+        // Release the another buffer.
+        mock_overlay_surface->ReleaseBuffer(
+            mock_overlay_surface->prev_attached_buffer());
+      });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -777,12 +884,12 @@ TEST_P(WaylandSurfaceFactoryTest,
   // SwapCompletionCallback should run.
   EXPECT_EQ(cbs_helper.GetLastFinishedSwapId(), 1u);
 
-  for (const auto& gl_image : fake_gl_image) {
-    if (gl_image->GetAssociateWithSwapId() == 1u) {
-      EXPECT_TRUE(gl_image->displayed());
-      EXPECT_FALSE(gl_image->busy());
+  for (const auto& overlay_image : fake_overlay_image) {
+    if (overlay_image->GetAssociateWithSwapId() == 1u) {
+      EXPECT_TRUE(overlay_image->displayed());
+      EXPECT_FALSE(overlay_image->busy());
     } else {
-      EXPECT_FALSE(gl_image->displayed());
+      EXPECT_FALSE(overlay_image->displayed());
     }
   }
 }
@@ -799,32 +906,39 @@ TEST_P(WaylandSurfaceFactoryTest, Canvas) {
     canvas->ResizeCanvas(bounds_px.size(), scale_factor);
     auto* sk_canvas = canvas->GetCanvas();
     ASSERT_TRUE(sk_canvas);
+
+    const uint32_t surface_id = window_->root_surface()->get_surface_id();
+    PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
+      auto* mock_surface = server->GetObject<wl::MockSurface>(surface_id);
+      ASSERT_FALSE(mock_surface->attached_buffer());
+      Expectation damage =
+          EXPECT_CALL(*mock_surface, DamageBuffer(5, 10, 20, 15)).Times(1);
+      Expectation attach = EXPECT_CALL(*mock_surface, Attach(_, 0, 0)).Times(1);
+      EXPECT_CALL(*mock_surface, Commit()).After(damage, attach);
+    });
+
     canvas->PresentCanvas(gfx::Rect(5, 10, 20, 15));
+    canvas->OnSwapBuffers(base::DoNothing(), gl::FrameData());
 
     // Wait until the mojo calls are done.
     base::RunLoop().RunUntilIdle();
 
-    Expectation damage = EXPECT_CALL(*surface_, DamageBuffer(5, 10, 20, 15));
-    wl_resource* buffer_resource = nullptr;
-    Expectation attach = EXPECT_CALL(*surface_, Attach(_, 0, 0))
-                             .WillOnce(SaveArg<0>(&buffer_resource));
-    EXPECT_CALL(*surface_, Commit()).After(damage, attach);
+    PostToServerAndWait(
+        [surface_id, bounds_px](wl::TestWaylandServerThread* server) {
+          auto* mock_surface = server->GetObject<wl::MockSurface>(surface_id);
+          auto* buffer_resource = mock_surface->attached_buffer();
+          ASSERT_TRUE(buffer_resource);
+          wl_shm_buffer* buffer = wl_shm_buffer_get(buffer_resource);
+          ASSERT_TRUE(buffer);
+          EXPECT_EQ(wl_shm_buffer_get_width(buffer), bounds_px.width());
+          EXPECT_EQ(wl_shm_buffer_get_height(buffer), bounds_px.height());
 
-    Sync();
+          // Release the buffer immediately as the test always attaches the same
+          // buffer.
+          mock_surface->ReleaseBufferFenced(buffer_resource, {});
 
-    ASSERT_TRUE(buffer_resource);
-    wl_shm_buffer* buffer = wl_shm_buffer_get(buffer_resource);
-    ASSERT_TRUE(buffer);
-    EXPECT_EQ(wl_shm_buffer_get_width(buffer), bounds_px.width());
-    EXPECT_EQ(wl_shm_buffer_get_height(buffer), bounds_px.height());
-
-    // Release the buffer immediately as the test always attaches the same
-    // buffer.
-    surface_->ReleaseBufferFenced(buffer_resource, {});
-
-    surface_->SendFrameCallback();
-
-    Sync();
+          mock_surface->SendFrameCallback();
+        });
   }
 
   // TODO(forney): We could check that the contents match something drawn to the
@@ -841,23 +955,32 @@ TEST_P(WaylandSurfaceFactoryTest, CanvasResize) {
   canvas->ResizeCanvas(gfx::Size(100, 50), 1);
   sk_canvas = canvas->GetCanvas();
   ASSERT_TRUE(sk_canvas);
+
+  const uint32_t surface_id = window_->root_surface()->get_surface_id();
+  PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
+    auto* mock_surface = server->GetObject<wl::MockSurface>(surface_id);
+    Expectation damage =
+        EXPECT_CALL(*mock_surface, DamageBuffer(0, 0, 100, 50)).Times(1);
+    Expectation attach = EXPECT_CALL(*mock_surface, Attach(_, 0, 0)).Times(1);
+    EXPECT_CALL(*mock_surface, Commit()).After(damage, attach);
+  });
+
   canvas->PresentCanvas(gfx::Rect(0, 0, 100, 50));
+  canvas->OnSwapBuffers(base::DoNothing(), gl::FrameData());
 
   base::RunLoop().RunUntilIdle();
 
-  Expectation damage = EXPECT_CALL(*surface_, DamageBuffer(0, 0, 100, 50));
-  wl_resource* buffer_resource = nullptr;
-  Expectation attach = EXPECT_CALL(*surface_, Attach(_, 0, 0))
-                           .WillOnce(SaveArg<0>(&buffer_resource));
-  EXPECT_CALL(*surface_, Commit()).After(damage, attach);
+  PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
+    auto* mock_surface = server->GetObject<wl::MockSurface>(surface_id);
+    auto* buffer_resource = mock_surface->attached_buffer();
+    ASSERT_TRUE(buffer_resource);
 
-  Sync();
-
-  ASSERT_TRUE(buffer_resource);
-  wl_shm_buffer* buffer = wl_shm_buffer_get(buffer_resource);
-  ASSERT_TRUE(buffer);
-  EXPECT_EQ(wl_shm_buffer_get_width(buffer), 100);
-  EXPECT_EQ(wl_shm_buffer_get_height(buffer), 50);
+    ASSERT_TRUE(buffer_resource);
+    wl_shm_buffer* buffer = wl_shm_buffer_get(buffer_resource);
+    ASSERT_TRUE(buffer);
+    EXPECT_EQ(wl_shm_buffer_get_width(buffer), 100);
+    EXPECT_EQ(wl_shm_buffer_get_height(buffer), 50);
+  });
 }
 
 TEST_P(WaylandSurfaceFactoryTest, CreateSurfaceCheckGbm) {
@@ -912,15 +1035,18 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
 
   auto* gl_ozone = surface_factory_->GetGLOzone(
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
+  ASSERT_TRUE(gl_ozone);
   auto gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(
       gl::GetDefaultDisplay(), widget_);
-  EXPECT_TRUE(gl_surface);
+  ASSERT_TRUE(gl_surface);
   gl_surface->SetRelyOnImplicitSync();
   static_cast<ui::GbmSurfacelessWayland*>(gl_surface.get())
       ->SetNoGLFlushForTests();
 
-  // This test only needs 1 buffer.
-  EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    // This test only needs 1 buffer.
+    EXPECT_CALL(*server->zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
+  });
 
   gfx::Size test_buffer_size = {300, 100};
   gfx::RectF test_buffer_dmg_uv = {0.2f, 0.3f, 0.6, 0.32f};
@@ -936,16 +1062,15 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
                      window_->size_px().height()));
 
   // Create buffer and FakeGlImageNativePixmap.
-  std::vector<scoped_refptr<FakeGLImageNativePixmap>> fake_gl_image;
+  std::vector<scoped_refptr<OverlayImageHolder>> fake_overlay_image;
   auto native_pixmap = surface_factory_->CreateNativePixmap(
       widget_, nullptr, test_buffer_size, gfx::BufferFormat::BGRA_8888,
       gfx::BufferUsage::SCANOUT);
-  fake_gl_image.push_back(base::MakeRefCounted<FakeGLImageNativePixmap>(
+  ASSERT_TRUE(native_pixmap);
+  fake_overlay_image.push_back(base::MakeRefCounted<OverlayImageHolder>(
       native_pixmap, test_buffer_size));
 
-  auto* root_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->get_surface_id());
-  auto* test_viewport = root_surface->viewport();
+  const uint32_t surface_id = window_->root_surface()->get_surface_id();
 
   CallbacksHelper cbs_helper;
   // Submit a frame with an overlay and background.
@@ -955,26 +1080,26 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
     auto swap_id = cbs_helper.GetNextLocalSwapId();
     // Associate the image with the next swap id so that we can easily track if
     // it became free to reuse.
-    fake_gl_image[0]->AssociateWithSwapId(swap_id);
+    fake_overlay_image[0]->AssociateWithSwapId(swap_id);
     // And set it to be busy...
-    fake_gl_image[0]->SetBusy(true);
+    fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
     gl_surface->ScheduleOverlayPlane(
-        fake_gl_image[0].get(), nullptr,
+        fake_overlay_image[0]->GetNativePixmap(), nullptr,
         gfx::OverlayPlaneData(
             INT32_MIN, gfx::OverlayTransform::OVERLAY_TRANSFORM_ROTATE_270,
             gfx::RectF(window_->GetBoundsInPixels()), crop_uv, false,
             gfx::Rect(test_buffer_dmg), 1.0f, gfx::OverlayPriorityHint::kNone,
             gfx::RRectF(), gfx::ColorSpace::CreateSRGB(), absl::nullopt));
 
-    std::vector<scoped_refptr<FakeGLImageNativePixmap>> gl_images;
-    gl_images.push_back(fake_gl_image[0]);
+    std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
+    overlay_images.push_back(fake_overlay_image[0]);
 
     // And submit each image. They will be executed in FIFO manner.
     gl_surface->SwapBuffersAsync(
         base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
-                       base::Unretained(&cbs_helper), swap_id, gl_images),
+                       base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
         gl::FrameData());
@@ -983,41 +1108,44 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
   // Wait until the mojo calls are done.
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_CALL(*test_viewport,
-              SetSource(expected_src.x(), expected_src.y(),
-                        expected_src.width(), expected_src.height()))
-      .Times(1);
-  EXPECT_CALL(*test_viewport,
-              SetDestination(window_->GetBoundsInDIP().width(),
-                             window_->GetBoundsInDIP().height()))
-      .Times(1);
-  EXPECT_CALL(*root_surface, SetBufferTransform(WL_OUTPUT_TRANSFORM_90))
-      .Times(1);
-  Expectation damage =
-      EXPECT_CALL(*root_surface, Damage(expected_surface_dmg.origin().x(),
-                                        expected_surface_dmg.origin().y(),
-                                        expected_surface_dmg.width(),
-                                        expected_surface_dmg.height()));
-  wl_resource* buffer_resource = nullptr;
-  Expectation attach = EXPECT_CALL(*root_surface, Attach(_, 0, 0))
-                           .WillOnce(SaveArg<0>(&buffer_resource));
-  EXPECT_CALL(*root_surface, Commit()).After(damage, attach);
+  PostToServerAndWait(
+      [surface_id, expected_src, bounds_dip = window_->GetBoundsInDIP(),
+       expected_surface_dmg](wl::TestWaylandServerThread* server) {
+        auto* root_surface = server->GetObject<wl::MockSurface>(surface_id);
+        auto* test_viewport = root_surface->viewport();
+        ASSERT_TRUE(test_viewport);
 
-  // Let's sync so that 1) GbmSurfacelessWayland submits the buffer according to
-  // internal queue and fake server processes the request.
-  Sync();
+        EXPECT_CALL(*test_viewport,
+                    SetSource(expected_src.x(), expected_src.y(),
+                              expected_src.width(), expected_src.height()))
+            .Times(1);
+        EXPECT_CALL(*test_viewport,
+                    SetDestination(bounds_dip.width(), bounds_dip.height()))
+            .Times(1);
+        EXPECT_CALL(*root_surface, SetBufferTransform(WL_OUTPUT_TRANSFORM_90))
+            .Times(1);
+        Expectation damage =
+            EXPECT_CALL(*root_surface, Damage(expected_surface_dmg.origin().x(),
+                                              expected_surface_dmg.origin().y(),
+                                              expected_surface_dmg.width(),
+                                              expected_surface_dmg.height()))
+                .Times(1);
+        Expectation attach =
+            EXPECT_CALL(*root_surface, Attach(_, 0, 0)).Times(1);
+        EXPECT_CALL(*root_surface, Commit()).After(damage, attach);
 
-  auto params_vector = server_.zwp_linux_dmabuf_v1()->buffer_params();
-  ASSERT_EQ(params_vector.size(), 1u);
+        auto params_vector = server->zwp_linux_dmabuf_v1()->buffer_params();
+        ASSERT_EQ(params_vector.size(), 1u);
 
-  zwp_linux_buffer_params_v1_send_created(
-      params_vector.front()->resource(),
-      params_vector.front()->buffer_resource());
+        zwp_linux_buffer_params_v1_send_created(
+            params_vector.front()->resource(),
+            params_vector.front()->buffer_resource());
+      });
 
-  // And create buffer.
-  Sync();
-
-  testing::Mock::VerifyAndClearExpectations(root_surface);
+  PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
+    testing::Mock::VerifyAndClearExpectations(
+        server->GetObject<wl::MockSurface>(surface_id));
+  });
 
   // Give mojo the chance to pass the callbacks.
   base::RunLoop().RunUntilIdle();
@@ -1032,13 +1160,7 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandSurfaceFactoryTest,
-                         Values(wl::ServerConfig{
-                             .shell_version = wl::ShellVersion::kStable}));
-
-INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
-                         WaylandSurfaceFactoryTest,
-                         Values(wl::ServerConfig{
-                             .shell_version = wl::ShellVersion::kV6}));
+                         Values(wl::ServerConfig{}));
 
 INSTANTIATE_TEST_SUITE_P(
     CompositorVersionV3Test,

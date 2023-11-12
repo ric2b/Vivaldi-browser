@@ -62,6 +62,26 @@ gfx::Point MovePointToWindow(const NSPoint& point,
                     NSHeight(content_rect) - point_in_window.y);
 }
 
+// Convert a |point| in |source_window|'s AppKit coordinate system (origin at
+// the bottom left of the window) to |target_view|'s coordinate, with the
+// origin at the top left of the view.
+// If |source_window| is nil, |point| will be treated as screen coordinates.
+gfx::Point MovePointToView(const NSPoint& point,
+                           NSWindow* source_window,
+                           NSView* target_view) {
+  NSPoint point_in_screen =
+      source_window ? ui::ConvertPointFromWindowToScreen(source_window, point)
+                    : point;
+
+  NSWindow* target_window = [target_view window];
+  NSPoint point_in_window =
+      ui::ConvertPointFromScreenToWindow(target_window, point_in_screen);
+  NSPoint point_in_view = [target_view convertPoint:point_in_window
+                                           fromView:nil];
+  return gfx::Point(point_in_window.x,
+                    NSHeight([target_view frame]) - point_in_view.y);
+}
+
 // Some keys are silently consumed by -[NSView interpretKeyEvents:]
 // They should not be processed as accelerators.
 // See comments at |keyDown:| for details.
@@ -308,8 +328,20 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
     return;
   }
 
-  gfx::Point event_location =
-      MovePointToWindow([theEvent locationInWindow], source, target);
+  gfx::Point event_location;
+  if (remote_cocoa::IsNSToolbarFullScreenWindow(target)) {
+    // We are in immersive fullscreen. This event is generated from the overlay
+    // window which sits atop the toolbar. Convert the event location to the
+    // content view coordiate, which should have the same bounds as the overlay
+    // window.
+    // This is to handle the case that `target` may contain the titlebar which
+    // the overlay window does not contain. Without this, buttons in the toolbar
+    // are not clickable when the titlebar is revealed.
+    event_location = MovePointToView([theEvent locationInWindow], source, self);
+  } else {
+    event_location =
+        MovePointToWindow([theEvent locationInWindow], source, target);
+  }
   [self updateTooltipIfRequiredAt:event_location];
 
   if (isScrollEvent) {
@@ -1325,10 +1357,9 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 // Currently we only support reading and writing plain strings.
 - (id)validRequestorForSendType:(NSString*)sendType
                      returnType:(NSString*)returnType {
-  NSString* const utf8Type = base::mac::CFToNSCast(kUTTypeUTF8PlainText);
-  BOOL canWrite =
-      [sendType isEqualToString:utf8Type] && [self selectedRange].length > 0;
-  BOOL canRead = [returnType isEqualToString:utf8Type];
+  BOOL canWrite = [sendType isEqualToString:NSPasteboardTypeString] &&
+                  [self selectedRange].length > 0;
+  BOOL canRead = [returnType isEqualToString:NSPasteboardTypeString];
   // Valid if (sendType, returnType) is either (string, nil), (nil, string),
   // or (string, string).
   BOOL valid =
@@ -1342,13 +1373,25 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 // NSServicesMenuRequestor protocol
 
 - (BOOL)writeSelectionToPasteboard:(NSPasteboard*)pboard types:(NSArray*)types {
-  // NB: The NSServicesMenuRequestor protocol has not (as of macOS 12) been
-  // upgraded to request UTIs rather than obsolete PboardType constants. Handle
-  // either for when it is upgraded.
+  // /!\ Compatibility hack!
+  //
+  // The NSServicesMenuRequestor protocol does not pass in the correct
+  // NSPasteboardType constants in the `types` array, verified through macOS 13
+  // (FB11838671). To keep the code below clean, if an obsolete type is passed
+  // in, rewrite the array.
+  //
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  if ([types containsObject:NSStringPboardType] &&
+      ![types containsObject:NSPasteboardTypeString]) {
+    types = [types arrayByAddingObject:NSPasteboardTypeString];
+  }
+#pragma clang diagnostic pop
+  // /!\ End compatibility hack.
+
   bool wasAbleToWriteAtLeastOneType = false;
 
-  if ([types containsObject:NSStringPboardType] ||
-      [types containsObject:base::mac::CFToNSCast(kUTTypeUTF8PlainText)]) {
+  if ([types containsObject:NSPasteboardTypeString]) {
     bool result = false;
     std::u16string selection_text;
     if (_bridge)
@@ -1366,8 +1409,15 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 - (BOOL)readSelectionFromPasteboard:(NSPasteboard*)pboard {
   NSArray* objects = [pboard readObjectsForClasses:@[ [NSString class] ]
                                            options:nil];
-  DCHECK([objects count] == 1);
-  [self insertText:[objects lastObject]];
+  if (!objects.count) {
+    return NO;
+  }
+
+  // It's expected that there only will be one string object on the pasteboard,
+  // but if there is more than one, catenate them. This is the same compat
+  // technique used by the compatibility call, -[NSPasteboard stringForType:].
+  NSString* allTheText = [objects componentsJoinedByString:@"\n"];
+  [self insertText:allTheText];
   return YES;
 }
 

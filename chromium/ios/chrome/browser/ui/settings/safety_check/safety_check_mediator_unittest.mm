@@ -30,10 +30,12 @@
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/authentication_service_fake.h"
+#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_mock.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_check_item.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_constants.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_consumer.h"
@@ -130,6 +132,24 @@ PrefService* SetPrefService() {
   return prefs;
 }
 
+// The image when the state is safe.
+UIImage* SafeImage() {
+  if (UseSymbols()) {
+    return DefaultSymbolTemplateWithPointSize(kCheckmarkCircleFillSymbol, 18);
+  }
+  return [[UIImage imageNamed:@"settings_safe_state"]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+// The image when the state is unsafe.
+UIImage* UnsafeImage() {
+  if (UseSymbols()) {
+    return DefaultSymbolTemplateWithPointSize(kWarningFillSymbol, 18);
+  }
+  return [[UIImage imageNamed:@"settings_unsafe_state"]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
 }  // namespace
 
 class SafetyCheckMediatorTest : public PlatformTest {
@@ -138,13 +158,15 @@ class SafetyCheckMediatorTest : public PlatformTest {
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        base::BindRepeating(
-            &AuthenticationServiceFake::CreateAuthenticationService));
+        AuthenticationServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
         SyncSetupServiceFactory::GetInstance(),
         base::BindRepeating(&SyncSetupServiceMock::CreateKeyedService));
     browser_state_ = test_cbs_builder.Build();
-    auth_service_ = static_cast<AuthenticationServiceFake*>(
+    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
+        browser_state_.get(),
+        std::make_unique<FakeAuthenticationServiceDelegate>());
+    auth_service_ = static_cast<AuthenticationService*>(
         AuthenticationServiceFactory::GetInstance()->GetForBrowserState(
             browser_state_.get()));
 
@@ -216,7 +238,7 @@ class SafetyCheckMediatorTest : public PlatformTest {
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   scoped_refptr<TestPasswordStore> store_;
-  AuthenticationServiceFake* auth_service_;
+  AuthenticationService* auth_service_;
   scoped_refptr<IOSChromePasswordCheckManager> password_check_;
   SafetyCheckMediator* mediator_;
   PrefService* pref_service_;
@@ -318,44 +340,33 @@ TEST_F(SafetyCheckMediatorTest, SafeBrowsingEnabledReturnsSafeState) {
 TEST_F(SafetyCheckMediatorTest, SafeBrowsingSafeUI) {
   mediator_.safeBrowsingCheckRowState = SafeBrowsingCheckRowStateSafe;
   [mediator_ reconfigureSafeBrowsingCheckItem];
-  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
-    EXPECT_NSEQ(
-        mediator_.safeBrowsingCheckItem.detailText,
-        GetNSString(
-            IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED_DESC));
+  EXPECT_NSEQ(
+      mediator_.safeBrowsingCheckItem.detailText,
+      GetNSString(
+          IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED_DESC));
 
-    // Change from Enhanced Protection to Standard Protection.
-    mediator_.enhancedSafeBrowsingPreference.value = false;
-    [mediator_ reconfigureSafeBrowsingCheckItem];
-    EXPECT_NSEQ(
-        mediator_.safeBrowsingCheckItem.detailText,
-        GetNSString(
-            IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC_WITH_ENHANCED_PROTECTION));
-  } else {
-    EXPECT_NSEQ(
-        mediator_.safeBrowsingCheckItem.detailText,
-        GetNSString(IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENABLED_DESC));
-  }
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  // Change from Enhanced Protection to Standard Protection.
+  mediator_.enhancedSafeBrowsingPreference.value = false;
+  [mediator_ reconfigureSafeBrowsingCheckItem];
+  EXPECT_NSEQ(
+      mediator_.safeBrowsingCheckItem.detailText,
+      GetNSString(
+          IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC_WITH_ENHANCED_PROTECTION));
+
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, SafeImage());
 }
 
 // Tests UI for Safe Browsing row in Safety Check settings with one of the
 // Enhanced Protection features enabled.
 TEST_F(SafetyCheckMediatorTest,
        SafeBrowsingSafeUIStandardAndEnhancedProtection) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(safe_browsing::kEnhancedProtection);
   mediator_.safeBrowsingCheckRowState = SafeBrowsingCheckRowStateSafe;
   [mediator_ reconfigureSafeBrowsingCheckItem];
   EXPECT_NSEQ(
       mediator_.safeBrowsingCheckItem.detailText,
       GetNSString(
           IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED_DESC));
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, SafeImage());
 
   mediator_.enhancedSafeBrowsingPreference.value = false;
   [mediator_ reconfigureSafeBrowsingCheckItem];
@@ -363,9 +374,7 @@ TEST_F(SafetyCheckMediatorTest,
       mediator_.safeBrowsingCheckItem.detailText,
       GetNSString(
           IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC_WITH_ENHANCED_PROTECTION));
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, SafeImage());
 }
 
 // TODO(crbug.com/1348254): Consolidate with other test when feature is
@@ -374,12 +383,6 @@ TEST_F(SafetyCheckMediatorTest,
 // Protection features enabled.
 TEST_F(SafetyCheckMediatorTest,
        SafeBrowsingSafeUIStandardAndEnhancedProtectionPhase2IOS) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{safe_browsing::kEnhancedProtection,
-                            safe_browsing::kEnhancedProtectionPhase2IOS},
-      /*disabled_features=*/{});
-
   // Check UI when Safe Browsing protection choice is "Enhanced Protection".
   mediator_.safeBrowsingCheckRowState = SafeBrowsingCheckRowStateSafe;
   [mediator_ reconfigureSafeBrowsingCheckItem];
@@ -389,9 +392,7 @@ TEST_F(SafetyCheckMediatorTest,
           IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED_DESC));
   EXPECT_EQ(mediator_.safeBrowsingCheckItem.accessoryType,
             UITableViewCellAccessoryNone);
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, SafeImage());
 
   // Check UI when Safe Browsing protection choice is "Standard Protection".
   mediator_.enhancedSafeBrowsingPreference.value = false;
@@ -402,9 +403,7 @@ TEST_F(SafetyCheckMediatorTest,
           IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_STANDARD_PROTECTION_ENABLED_DESC_WITH_ENHANCED_PROTECTION));
   EXPECT_EQ(mediator_.safeBrowsingCheckItem.accessoryType,
             UITableViewCellAccessoryDisclosureIndicator);
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, SafeImage());
 
   // Check UI when Safe Browsing protection choice is "No Protection".
   mediator_.safeBrowsingPreference.value = false;
@@ -412,9 +411,7 @@ TEST_F(SafetyCheckMediatorTest,
   [mediator_ reconfigureSafeBrowsingCheckItem];
   EXPECT_EQ(mediator_.safeBrowsingCheckItem.accessoryType,
             UITableViewCellAccessoryDisclosureIndicator);
-  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_unsafe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.safeBrowsingCheckItem.trailingImage, UnsafeImage());
 }
 
 TEST_F(SafetyCheckMediatorTest, SafeBrowsingDisabledReturnsInfoState) {
@@ -457,9 +454,7 @@ TEST_F(SafetyCheckMediatorTest, PasswordCheckSafeUI) {
   EXPECT_NSEQ(mediator_.passwordCheckItem.detailText,
               base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
                   IDS_IOS_CHECK_PASSWORDS_COMPROMISED_COUNT, 0)));
-  EXPECT_EQ(mediator_.passwordCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.passwordCheckItem.trailingImage, SafeImage());
 }
 
 TEST_F(SafetyCheckMediatorTest, PasswordCheckUnSafeCheck) {
@@ -476,9 +471,7 @@ TEST_F(SafetyCheckMediatorTest, PasswordCheckUnSafeUI) {
   EXPECT_NSEQ(mediator_.passwordCheckItem.detailText,
               base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
                   IDS_IOS_CHECK_PASSWORDS_COMPROMISED_COUNT, 1)));
-  EXPECT_EQ(mediator_.passwordCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_unsafe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.passwordCheckItem.trailingImage, UnsafeImage());
 }
 
 TEST_F(SafetyCheckMediatorTest, PasswordCheckErrorCheck) {
@@ -514,9 +507,7 @@ TEST_F(SafetyCheckMediatorTest, UpdateCheckUpToDateUI) {
   EXPECT_NSEQ(
       mediator_.updateCheckItem.detailText,
       GetNSString(IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_UP_TO_DATE_DESC));
-  EXPECT_EQ(mediator_.updateCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_safe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.updateCheckItem.trailingImage, SafeImage());
 }
 
 TEST_F(SafetyCheckMediatorTest, OmahaRespondsOutOfDateAndUpdatesInfobarTime) {
@@ -541,9 +532,7 @@ TEST_F(SafetyCheckMediatorTest, UpdateCheckOutOfDateUI) {
   EXPECT_NSEQ(
       mediator_.updateCheckItem.detailText,
       GetNSString(IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_OUT_OF_DATE_DESC));
-  EXPECT_EQ(mediator_.updateCheckItem.trailingImage,
-            [[UIImage imageNamed:@"settings_unsafe_state"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]);
+  EXPECT_EQ(mediator_.updateCheckItem.trailingImage, UnsafeImage());
 }
 
 TEST_F(SafetyCheckMediatorTest, OmahaRespondsError) {

@@ -22,11 +22,11 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
@@ -152,8 +152,9 @@ class DelayedBlob : public storage::FakeBlob {
 class CallbackScheduler : public CacheStorageScheduler {
  public:
   explicit CallbackScheduler(base::OnceClosure callback)
-      : CacheStorageScheduler(CacheStorageSchedulerClient::kCache,
-                              base::ThreadTaskRunnerHandle::Get()),
+      : CacheStorageScheduler(
+            CacheStorageSchedulerClient::kCache,
+            base::SingleThreadTaskRunner::GetCurrentDefault()),
         callback_(std::move(callback)) {}
 
  protected:
@@ -365,7 +366,8 @@ class CacheStorageManagerTest : public testing::Test {
 
     quota_policy_ = base::MakeRefCounted<storage::MockSpecialStoragePolicy>();
     mock_quota_manager_ = base::MakeRefCounted<storage::MockQuotaManager>(
-        MemoryOnly(), temp_dir_path, base::ThreadTaskRunnerHandle::Get().get(),
+        MemoryOnly(), temp_dir_path,
+        base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         quota_policy_.get());
     mock_quota_manager_->SetQuota(storage_key1_, StorageType::kTemporary,
                                   1024 * 1024 * 100);
@@ -375,7 +377,7 @@ class CacheStorageManagerTest : public testing::Test {
     quota_manager_proxy_ =
         base::MakeRefCounted<MockCacheStorageQuotaManagerProxy>(
             mock_quota_manager_.get(),
-            base::ThreadTaskRunnerHandle::Get().get());
+            base::SingleThreadTaskRunner::GetCurrentDefault().get());
 
     // These must be instantiated after `quota_manager_proxy_` has been
     // initialized.
@@ -385,8 +387,8 @@ class CacheStorageManagerTest : public testing::Test {
         GetOrCreateBucket(storage_key2_, storage::kDefaultBucketName);
 
     cache_manager_ = CacheStorageManager::Create(
-        temp_dir_path, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(), quota_manager_proxy_,
+        temp_dir_path, base::SingleThreadTaskRunner::GetCurrentDefault(),
+        base::SingleThreadTaskRunner::GetCurrentDefault(), quota_manager_proxy_,
         blob_storage_context_, nullptr);
   }
 
@@ -816,7 +818,7 @@ class CacheStorageManagerTest : public testing::Test {
     base::RunLoop loop;
     quota_manager_proxy_->GetUsageAndQuota(
         storage_key, StorageType::kTemporary,
-        base::ThreadTaskRunnerHandle::Get(),
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
         base::BindOnce(&CacheStorageManagerTest::DidGetQuotaOriginUsage,
                        base::Unretained(this), base::Unretained(&usage),
                        &loop));
@@ -838,8 +840,11 @@ class CacheStorageManagerTest : public testing::Test {
                                            const std::string& name) {
     base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>> future;
     quota_manager_proxy_->UpdateOrCreateBucket(
-        storage::BucketInitParams(storage_key, name),
-        base::ThreadTaskRunnerHandle::Get(), future.GetCallback());
+        name == storage::kDefaultBucketName
+            ? storage::BucketInitParams::ForDefaultBucket(storage_key)
+            : storage::BucketInitParams(storage_key, name),
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        future.GetCallback());
     auto bucket = future.Take();
     EXPECT_TRUE(bucket.ok());
     return bucket->ToBucketLocator();
@@ -2135,19 +2140,8 @@ TEST_P(CacheStorageManagerTestP, GetAllStorageKeysUsageAggregateBucketUsages) {
       original_usage[1]->storage_key == storage_key2_ ? 1 : 0;
   EXPECT_NE(original_storage_key1_index, original_storage_key2_index);
 
-  // TODO(https://crbug.com/1218097): In memory-only mode this works as
-  // expected, but otherwise the named bucket usage info isn't
-  // currently reported (instead, the code looks up the default bucket usage,
-  // which is zero at this point). This will work correctly once we store the
-  // bucket names in the index files and can use those when determining the
-  // corresponding bucket locator to use.
-  if (MemoryOnly()) {
-    EXPECT_EQ(original_usage[original_storage_key1_index]->total_size_bytes,
-              original_usage[original_storage_key2_index]->total_size_bytes);
-  } else {
-    EXPECT_EQ(original_usage[original_storage_key1_index]->total_size_bytes, 0);
-    EXPECT_NE(original_usage[original_storage_key2_index]->total_size_bytes, 0);
-  }
+  EXPECT_EQ(original_usage[original_storage_key1_index]->total_size_bytes,
+            original_usage[original_storage_key2_index]->total_size_bytes);
 
   // Now open a cache using the default bucket and add the entry there as well.
   // `GetAllStorageKeysUsage()` should still return a list with two entries, but
@@ -2172,13 +2166,8 @@ TEST_P(CacheStorageManagerTestP, GetAllStorageKeysUsageAggregateBucketUsages) {
 
   EXPECT_EQ(new_usage[new_storage_key1_index]->total_size_bytes,
             new_usage[new_storage_key2_index]->total_size_bytes);
-  if (MemoryOnly()) {
-    EXPECT_EQ(2 * original_usage[original_storage_key1_index]->total_size_bytes,
-              new_usage[new_storage_key1_index]->total_size_bytes);
-  } else {
-    EXPECT_EQ(original_usage[original_storage_key1_index]->total_size_bytes, 0);
-    EXPECT_NE(new_usage[new_storage_key1_index]->total_size_bytes, 0);
-  }
+  EXPECT_EQ(2 * original_usage[original_storage_key1_index]->total_size_bytes,
+            new_usage[new_storage_key1_index]->total_size_bytes);
   EXPECT_EQ(2 * original_usage[original_storage_key2_index]->total_size_bytes,
             new_usage[new_storage_key2_index]->total_size_bytes);
 }
@@ -2906,22 +2895,10 @@ TEST_P(CacheStorageManagerTestP, DeleteStorageKeyData) {
     EXPECT_NE(storage_key2_index, partitioned_storage_key1_index);
     EXPECT_NE(partitioned_storage_key1_index, storage_key1_index);
 
-    // TODO(https://crbug.com/1218097): In memory-only mode this works as
-    // expected, but otherwise the named bucket usage info isn't currently
-    // reported (instead, the code looks up the default bucket usage, which is
-    // zero at this point). This will work correctly once we store the bucket
-    // names in the index files and can use those when determining the
-    // corresponding bucket locator to use.
-    if (MemoryOnly()) {
-      EXPECT_EQ(usages[storage_key2_index]->total_size_bytes,
-                usages[storage_key1_index]->total_size_bytes);
-      EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes,
-                usages[storage_key2_index]->total_size_bytes);
-    } else {
-      EXPECT_EQ(usages[storage_key1_index]->total_size_bytes, 0);
-      EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes, 0);
-      EXPECT_NE(usages[storage_key2_index]->total_size_bytes, 0);
-    }
+    EXPECT_EQ(usages[storage_key2_index]->total_size_bytes,
+              usages[storage_key1_index]->total_size_bytes);
+    EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes,
+              usages[storage_key2_index]->total_size_bytes);
 
     EXPECT_EQ(DeleteStorageKeyData(storage_key1_, owner),
               blink::mojom::QuotaStatusCode::kOk);
@@ -2949,16 +2926,10 @@ TEST_P(CacheStorageManagerTestP, DeleteStorageKeyData) {
     EXPECT_NE(storage_key2_index, partitioned_storage_key1_index);
     EXPECT_NE(partitioned_storage_key1_index, storage_key1_index);
 
-    if (MemoryOnly()) {
-      EXPECT_EQ(usages[storage_key2_index]->total_size_bytes,
-                usages[storage_key1_index]->total_size_bytes);
-      EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes,
-                usages[storage_key2_index]->total_size_bytes);
-    } else {
-      EXPECT_EQ(usages[storage_key1_index]->total_size_bytes, 0);
-      EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes, 0);
-      EXPECT_NE(usages[storage_key2_index]->total_size_bytes, 0);
-    }
+    EXPECT_EQ(usages[storage_key2_index]->total_size_bytes,
+              usages[storage_key1_index]->total_size_bytes);
+    EXPECT_EQ(usages[partitioned_storage_key1_index]->total_size_bytes,
+              usages[storage_key2_index]->total_size_bytes);
 
     EXPECT_EQ(DeleteStorageKeyData(storage_key2_, owner),
               blink::mojom::QuotaStatusCode::kOk);

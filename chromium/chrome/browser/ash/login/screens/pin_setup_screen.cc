@@ -21,7 +21,7 @@
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/pin_setup_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/pin_setup_screen_handler.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/prefs/pref_service.h"
@@ -104,19 +104,13 @@ PinSetupScreen::PinSetupScreen(base::WeakPtr<PinSetupScreenView> view,
 
 PinSetupScreen::~PinSetupScreen() = default;
 
-bool PinSetupScreen::SkipScreen(WizardContext& context) {
-  ClearAuthData(context);
-  exit_callback_.Run(Result::NOT_APPLICABLE);
-  return true;
-}
-
-bool PinSetupScreen::MaybeSkip(WizardContext& context) {
+bool PinSetupScreen::ShouldBeSkipped(const WizardContext& context) const {
   if (context.skip_post_login_screens_for_tests || ShouldSkipBecauseOfPolicy())
-    return SkipScreen(context);
+    return true;
 
   // Just a precaution:
   if (!context.extra_factors_auth_session)
-    return SkipScreen(context);
+    return true;
 
   // If cryptohome takes very long to respond, `has_login_support_` may be null
   // here, but this is very unusual.
@@ -134,7 +128,16 @@ bool PinSetupScreen::MaybeSkip(WizardContext& context) {
     return false;
   }
 
-  return SkipScreen(context);
+  return true;
+}
+
+bool PinSetupScreen::MaybeSkip(WizardContext& context) {
+  if (ShouldBeSkipped(context)) {
+    ClearAuthData(context);
+    exit_callback_.Run(Result::NOT_APPLICABLE);
+    return true;
+  }
+  return false;
 }
 
 void PinSetupScreen::ShowImpl() {

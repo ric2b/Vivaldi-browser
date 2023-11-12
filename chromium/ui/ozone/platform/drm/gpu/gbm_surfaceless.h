@@ -12,8 +12,8 @@
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_image.h"
-#include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_surface_overlay.h"
+#include "ui/gl/presenter.h"
 #include "ui/gl/scoped_binders.h"
 #include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
 
@@ -30,7 +30,7 @@ class GbmSurfaceFactory;
 // displaying happens directly through NativePixmap buffers. CC would call into
 // SurfaceFactoryOzone to allocate the buffers and then call
 // ScheduleOverlayPlane(..) to schedule the buffer for presentation.
-class GbmSurfaceless : public gl::SurfacelessEGL {
+class GbmSurfaceless : public gl::Presenter {
  public:
   GbmSurfaceless(GbmSurfaceFactory* surface_factory,
                  gl::GLDisplayEGL* display,
@@ -47,7 +47,7 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
   gfx::SwapResult SwapBuffers(PresentationCallback callback,
                               gl::FrameData data) override;
   bool ScheduleOverlayPlane(
-      gl::GLImage* image,
+      gl::OverlayImage image,
       std::unique_ptr<gfx::GpuFence> gpu_fence,
       const gfx::OverlayPlaneData& overlay_plane_data) override;
   bool Resize(const gfx::Size& size,
@@ -91,7 +91,6 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
     ~PendingFrame();
 
     bool ScheduleOverlayPlanes(gfx::AcceleratedWidget widget);
-    void Flush();
 
     bool ready = false;
     gfx::SwapResult swap_result = gfx::SwapResult::SWAP_FAILED;
@@ -119,7 +118,6 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
   std::unique_ptr<PendingFrame> submitted_frame_;
   std::unique_ptr<gfx::GpuFence> submitted_frame_gpu_fence_;
   const bool has_implicit_external_sync_;
-  const bool has_image_flush_external_;
   bool last_swap_buffers_result_ = true;
   bool supports_plane_gpu_fences_ = false;
   bool use_egl_fence_sync_ = true;

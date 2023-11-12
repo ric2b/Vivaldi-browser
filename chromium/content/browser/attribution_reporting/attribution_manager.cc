@@ -5,6 +5,8 @@
 #include "content/browser/attribution_reporting/attribution_manager.h"
 
 #include "base/check.h"
+#include "components/attribution_reporting/os_support.mojom.h"
+#include "content/browser/attribution_reporting/attribution_manager_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -19,6 +21,11 @@ AttributionManager* AttributionManager::FromWebContents(
   return static_cast<StoragePartitionImpl*>(
              web_contents->GetBrowserContext()->GetDefaultStoragePartition())
       ->GetAttributionManager();
+}
+
+// static
+attribution_reporting::mojom::OsSupport AttributionManager::GetOsSupport() {
+  return AttributionManagerImpl::GetOsSupport();
 }
 
 }  // namespace content

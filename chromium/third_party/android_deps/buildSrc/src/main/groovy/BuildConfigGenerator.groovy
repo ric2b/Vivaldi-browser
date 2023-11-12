@@ -544,23 +544,17 @@ class BuildConfigGenerator extends DefaultTask {
 
     String generateBuildTargetVisibilityDeclaration(ChromiumDepGraph.DependencyDescription dependency) {
         StringBuilder sb = new StringBuilder()
-        switch (dependency.id) {
-            case 'com_google_android_material_material':
-                sb.append('  # Material Design is pulled in via Doubledown, thus this target should not\n')
-                sb.append('  # be directly depended on. Please use :material_design_java instead.\n')
-                sb.append(generateInternalTargetVisibilityLine())
-                return sb.toString()
-            case 'com_google_protobuf_protobuf_javalite':
-                sb.append('  # Protobuf runtime is pulled in via Doubledown, thus this target should not\n')
-                sb.append('  # be directly depended on. Please use :protobuf_lite_runtime_java instead.\n')
-                sb.append(generateInternalTargetVisibilityLine())
-                return sb.toString()
-        }
-
-        if (!dependency.visible) {
+        String aliasedLib = ALIASED_LIBS.get(dependency.id)
+        if (aliasedLib) {
+            // Cannot add only the specific target because doing so breaks nested template target.
+            String visibilityLabel = aliasedLib.replaceAll(":.*", ":*")
+            sb.append("  # Target is swapped out when internal code is enabled.\n")
+            sb.append("  # Please depend on $aliasedLib instead.\n")
+            sb.append("  visibility = [ \"$visibilityLabel\" ]\n")
+        } else if (!dependency.visible) {
             sb.append('  # To remove visibility constraint, add this dependency to\n')
             sb.append("  # //${repositoryPath}/build.gradle.\n")
-            sb.append(generateInternalTargetVisibilityLine())
+            sb.append("visibility = ${makeGnArray(internalTargetVisibility)}\n")
         }
         return sb.toString()
     }
@@ -631,7 +625,9 @@ class BuildConfigGenerator extends DefaultTask {
         }
 
         switch (dependencyId) {
-            case 'androidx_annotation_annotation':
+            case 'androidx_annotation_annotation_jvm':
+                sb.append('  # https://crbug.com/989505\n')
+                sb.append('  jar_excluded_patterns = ["META-INF/proguard/*"]\n')
                 break
             case 'androidx_core_core':
                 sb.with {
@@ -717,10 +713,6 @@ class BuildConfigGenerator extends DefaultTask {
                     append('      "res/layout*/*time*",\n')
                     append('  ]\n')
                 }
-                break
-            case 'com_android_support_support_annotations':
-                sb.append('  # https://crbug.com/989505\n')
-                sb.append('  jar_excluded_patterns = ["META-INF/proguard/*"]\n')
                 break
             case 'com_android_support_support_compat':
                 sb.append('\n')
@@ -846,19 +838,9 @@ class BuildConfigGenerator extends DefaultTask {
                     append('  # target for them. See crbug.com/1103399 for discussion.\n')
                     append('  jar_excluded_patterns = [\n')
                     append('    "com/google/protobuf/Any*",\n')
-                    append('    "com/google/protobuf/Api*",\n')
                     append('    "com/google/protobuf/Duration*",\n')
-                    append('    "com/google/protobuf/Empty*",\n')
                     append('    "com/google/protobuf/FieldMask*",\n')
-                    append('    "com/google/protobuf/SourceContext*",\n')
-                    append('    "com/google/protobuf/Struct\\$1.class",\n')
-                    append('    "com/google/protobuf/Struct\\$Builder.class",\n')
-                    append('    "com/google/protobuf/Struct.class",\n')
-                    append('    "com/google/protobuf/StructOrBuilder.class",\n')
-                    append('    "com/google/protobuf/StructProto.class",\n')
                     append('    "com/google/protobuf/Timestamp*",\n')
-                    append('    "com/google/protobuf/Type*",\n')
-                    append('    "com/google/protobuf/Wrappers*",\n')
                     append('  ]')
                 }
                 break
@@ -1052,10 +1034,6 @@ class BuildConfigGenerator extends DefaultTask {
                 }
             }
         }
-    }
-
-    private String generateInternalTargetVisibilityLine() {
-        return "visibility = ${makeGnArray(internalTargetVisibility)}\n"
     }
 
     private void updateDepsDeclaration(ChromiumDepGraph depGraph, String cipdBucket,

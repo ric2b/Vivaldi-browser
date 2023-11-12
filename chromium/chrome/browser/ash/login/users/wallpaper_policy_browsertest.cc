@@ -35,7 +35,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/cryptohome/system_salt_getter.h"
@@ -121,8 +121,8 @@ SkColor ComputeAverageColor(const SkBitmap& bitmap) {
 
 // Initialize system salt to calculate wallpaper file names.
 void SetSystemSalt() {
-  chromeos::SystemSaltGetter::Get()->SetRawSaltForTesting(
-      chromeos::SystemSaltGetter::RawSalt({1, 2, 3, 4, 5, 6, 7, 8}));
+  SystemSaltGetter::Get()->SetRawSaltForTesting(
+      SystemSaltGetter::RawSalt({1, 2, 3, 4, 5, 6, 7, 8}));
 }
 
 }  // namespace

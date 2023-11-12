@@ -27,7 +27,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/display.h"
@@ -46,14 +45,17 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
+#include "ui/base/wayland/wayland_display_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_util.h"
 #include "ui/display/screen.h"
+#include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
+#include "ui/wm/public/tooltip_client.h"
 
 namespace exo {
 namespace wayland {
@@ -63,6 +65,8 @@ namespace {
 constexpr int kAuraShellSeatObserverPriority = 1;
 static_assert(Seat::IsValidObserverPriority(kAuraShellSeatObserverPriority),
               "kAuraShellSeatObserverPriority is not in the valid range.");
+static_assert(sizeof(uint32_t) == sizeof(float),
+              "Sizes much match for reinterpret cast to be meaningful");
 
 // A property key containing a boolean set to true if na aura surface object is
 // associated with surface object.
@@ -183,9 +187,9 @@ void aura_surface_draw_attention(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->DrawAttention();
 }
 
-void aura_surface_set_fullscreen_mode(wl_client* client,
-                                      wl_resource* resource,
-                                      uint32_t mode) {
+void aura_surface_set_fullscreen_mode_deprecated(wl_client* client,
+                                                 wl_resource* resource,
+                                                 uint32_t mode) {
   GetUserDataAs<AuraSurface>(resource)->SetFullscreenMode(mode);
 }
 
@@ -200,21 +204,24 @@ void aura_surface_set_server_start_resize(wl_client* client,
   GetUserDataAs<AuraSurface>(resource)->SetServerStartResize();
 }
 
-void aura_surface_intent_to_snap(wl_client* client,
-                                 wl_resource* resource,
-                                 uint32_t snap_direction) {
+void aura_surface_intent_to_snap_deprecated(wl_client* client,
+                                            wl_resource* resource,
+                                            uint32_t snap_direction) {
   GetUserDataAs<AuraSurface>(resource)->IntentToSnap(snap_direction);
 }
 
-void aura_surface_set_snap_left(wl_client* client, wl_resource* resource) {
+void aura_surface_set_snap_left_deprecated(wl_client* client,
+                                           wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->SetSnapPrimary();
 }
 
-void aura_surface_set_snap_right(wl_client* client, wl_resource* resource) {
+void aura_surface_set_snap_right_deprecated(wl_client* client,
+                                            wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->SetSnapSecondary();
 }
 
-void aura_surface_unset_snap(wl_client* client, wl_resource* resource) {
+void aura_surface_unset_snap_deprecated(wl_client* client,
+                                        wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->UnsetSnap();
 }
 
@@ -274,6 +281,23 @@ void aura_surface_release(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+void aura_surface_show_tooltip(wl_client* client,
+                               wl_resource* resource,
+                               const char* text,
+                               int32_t x,
+                               int32_t y,
+                               uint32_t trigger,
+                               uint32_t show_delay,
+                               uint32_t hide_delay) {
+  GetUserDataAs<AuraSurface>(resource)->ShowTooltip(
+      text, gfx::Point(x, y), trigger, base::Milliseconds((uint64_t)show_delay),
+      base::Milliseconds((uint64_t)hide_delay));
+}
+
+void aura_surface_hide_tooltip(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraSurface>(resource)->HideTooltip();
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame,
     aura_surface_set_parent,
@@ -285,13 +309,13 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_unset_occlusion_tracking,
     aura_surface_activate,
     aura_surface_draw_attention,
-    aura_surface_set_fullscreen_mode,
+    aura_surface_set_fullscreen_mode_deprecated,
     aura_surface_set_client_surface_str_id,
     aura_surface_set_server_start_resize,
-    aura_surface_intent_to_snap,
-    aura_surface_set_snap_left,
-    aura_surface_set_snap_right,
-    aura_surface_unset_snap,
+    aura_surface_intent_to_snap_deprecated,
+    aura_surface_set_snap_left_deprecated,
+    aura_surface_set_snap_right_deprecated,
+    aura_surface_unset_snap_deprecated,
     aura_surface_set_window_session_id,
     aura_surface_set_can_go_back,
     aura_surface_unset_can_go_back,
@@ -303,6 +327,8 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_pin,
     aura_surface_unset_pin,
     aura_surface_release,
+    aura_surface_show_tooltip,
+    aura_surface_hide_tooltip,
 };
 
 }  // namespace
@@ -411,11 +437,11 @@ void AuraSurface::IntentToSnap(uint32_t snap_direction) {
 }
 
 void AuraSurface::SetSnapPrimary() {
-  surface_->SetSnappedToPrimary();
+  surface_->SetSnapPrimary(chromeos::kDefaultSnapRatio);
 }
 
 void AuraSurface::SetSnapSecondary() {
-  surface_->SetSnappedToSecondary();
+  surface_->SetSnapSecondary(chromeos::kDefaultSnapRatio);
 }
 
 void AuraSurface::UnsetSnap() {
@@ -608,6 +634,26 @@ void AuraSurface::ThrottleFrameRate(bool on) {
   wl_client_flush(wl_resource_get_client(resource_));
 }
 
+void AuraSurface::OnTooltipShown(Surface* surface,
+                                 const std::u16string& text,
+                                 const gfx::Rect& bounds) {
+  if (wl_resource_get_version(resource_) <
+      ZAURA_SURFACE_TOOLTIP_SHOWN_SINCE_VERSION) {
+    return;
+  }
+  zaura_surface_send_tooltip_shown(resource_, base::UTF16ToUTF8(text).c_str(),
+                                   bounds.x(), bounds.y(), bounds.width(),
+                                   bounds.height());
+}
+
+void AuraSurface::OnTooltipHidden(Surface* surface) {
+  if (wl_resource_get_version(resource_) <
+      ZAURA_SURFACE_TOOLTIP_HIDDEN_SINCE_VERSION) {
+    return;
+  }
+  zaura_surface_send_tooltip_hidden(resource_);
+}
+
 void AuraSurface::MoveToDesk(int desk_index) {
   constexpr int kToggleVisibleOnAllWorkspacesValue = -1;
   if (desk_index == kToggleVisibleOnAllWorkspacesValue) {
@@ -627,6 +673,24 @@ void AuraSurface::Pin(bool trusted) {
 
 void AuraSurface::Unpin() {
   surface_->Unpin();
+}
+
+void AuraSurface::ShowTooltip(const char* text,
+                              const gfx::Point& position,
+                              uint32_t trigger,
+                              const base::TimeDelta& show_delay,
+                              const base::TimeDelta& hide_delay) {
+  tooltip_text_ = base::UTF8ToUTF16(text);
+  auto* window = surface_->window();
+  wm::SetTooltipText(window, &tooltip_text_);
+  wm::SetTooltipId(window, surface_);
+  ash::Shell::Get()->tooltip_controller()->UpdateTooltip(window);
+}
+
+void AuraSurface::HideTooltip() {
+  tooltip_text_ = std::u16string();
+  auto* window = surface_->window();
+  ash::Shell::Get()->tooltip_controller()->UpdateTooltip(window);
 }
 
 chromeos::OrientationType OrientationLock(uint32_t orientation_lock) {
@@ -738,6 +802,26 @@ void AuraToplevel::Deactivate() {
   shell_surface_->RequestDeactivation();
 }
 
+bool IsImmersive(uint32_t mode) {
+  switch (mode) {
+    case ZAURA_TOPLEVEL_FULLSCREEN_MODE_PLAIN:
+      return false;
+    case ZAURA_TOPLEVEL_FULLSCREEN_MODE_IMMERSIVE:
+      return true;
+    default:
+      VLOG(2) << "Unknown immersive mode: " << mode;
+      return false;
+  }
+}
+
+void AuraToplevel::SetFullscreenMode(uint32_t mode) {
+  shell_surface_->SetUseImmersiveForFullscreen(IsImmersive(mode));
+}
+
+void AuraToplevel::SetScaleFactor(float scale_factor) {
+  shell_surface_->SetScaleFactor(scale_factor);
+}
+
 void AuraToplevel::SetClientUsesScreenCoordinates() {
   supports_window_bounds_ = true;
   shell_surface_->set_client_supports_window_bounds(true);
@@ -760,6 +844,32 @@ void AuraToplevel::SetFloat() {
 
 void AuraToplevel::UnsetFloat() {
   shell_surface_->UnsetFloat();
+}
+
+void AuraToplevel::SetSnapPrimary(float snap_ratio) {
+  shell_surface_->SetSnapPrimary(snap_ratio);
+}
+
+void AuraToplevel::SetSnapSecondary(float snap_ratio) {
+  shell_surface_->SetSnapSecondary(snap_ratio);
+}
+
+void AuraToplevel::IntentToSnap(uint32_t snap_direction) {
+  switch (snap_direction) {
+    case ZAURA_SURFACE_SNAP_DIRECTION_NONE:
+      shell_surface_->HideSnapPreview();
+      break;
+    case ZAURA_SURFACE_SNAP_DIRECTION_LEFT:
+      shell_surface_->ShowSnapPreviewToPrimary();
+      break;
+    case ZAURA_SURFACE_SNAP_DIRECTION_RIGHT:
+      shell_surface_->ShowSnapPreviewToSecondary();
+      break;
+  }
+}
+
+void AuraToplevel::UnsetSnap() {
+  shell_surface_->UnsetSnap();
 }
 
 template <class T>
@@ -825,6 +935,10 @@ void AuraPopup::SetMenu() {
   shell_surface_->SetMenu();
 }
 
+void AuraPopup::SetScaleFactor(float scale_factor) {
+  shell_surface_->SetScaleFactor(scale_factor);
+}
+
 namespace {
 
 void aura_output_release(wl_client* client, wl_resource* resource) {
@@ -864,6 +978,12 @@ bool AuraOutput::SendDisplayMetrics(const display::Display& display,
   const WMHelper* wm_helper = WMHelper::GetInstance();
   const display::ManagedDisplayInfo& display_info =
       wm_helper->GetDisplayInfo(display.id());
+
+  if (wl_resource_get_version(resource_) >=
+      ZAURA_OUTPUT_DISPLAY_ID_SINCE_VERSION) {
+    auto display_id = ui::wayland::ToWaylandDisplayIdPair(display.id());
+    zaura_output_send_display_id(resource_, display_id.high, display_id.low);
+  }
 
   if (wl_resource_get_version(resource_) >= ZAURA_OUTPUT_SCALE_SINCE_VERSION) {
     display::ManagedDisplayMode active_mode;
@@ -932,6 +1052,13 @@ bool AuraOutput::HasDisplayHandlerForTesting() const {
   return !!display_handler_;
 }
 
+void AuraOutput::SendActiveDisplay() {
+  if (wl_resource_get_version(resource_) >=
+      ZAURA_OUTPUT_ACTIVATED_SINCE_VERSION) {
+    zaura_output_send_activated(resource_);
+  }
+}
+
 void AuraOutput::SendInsets(const gfx::Insets& insets) {
   zaura_output_send_insets(resource_, insets.top(), insets.left(),
                            insets.bottom(), insets.right());
@@ -954,6 +1081,7 @@ const uint32_t kFixedBugIds[] = {
               // |wayland_simple_client|
     1352584,
     1358908,
+    1400226,
 };
 
 // Implements aura shell interface and monitors workspace state needed
@@ -1181,6 +1309,30 @@ void aura_toplevel_unset_float(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraToplevel>(resource)->UnsetFloat();
 }
 
+void aura_toplevel_set_snap_primary(wl_client* client,
+                                    wl_resource* resource,
+                                    uint32_t snap_ratio_as_uint) {
+  float snap_ratio = *reinterpret_cast<float*>(&snap_ratio_as_uint);
+  GetUserDataAs<AuraToplevel>(resource)->SetSnapPrimary(snap_ratio);
+}
+
+void aura_toplevel_set_snap_secondary(wl_client* client,
+                                      wl_resource* resource,
+                                      uint32_t snap_ratio_as_uint) {
+  float snap_ratio = *reinterpret_cast<float*>(&snap_ratio_as_uint);
+  GetUserDataAs<AuraToplevel>(resource)->SetSnapSecondary(snap_ratio);
+}
+
+void aura_toplevel_intent_to_snap(wl_client* client,
+                                  wl_resource* resource,
+                                  uint32_t snap_direction) {
+  GetUserDataAs<AuraToplevel>(resource)->IntentToSnap(snap_direction);
+}
+
+void aura_toplevel_unset_snap(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->UnsetSnap();
+}
+
 void aura_toplevel_set_restore_info_with_window_id_source(
     wl_client* client,
     wl_resource* resource,
@@ -1246,6 +1398,21 @@ void aura_toplevel_deactivate(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraToplevel>(resource)->Deactivate();
 }
 
+void aura_toplevel_set_fullscreen_mode(wl_client* client,
+                                       wl_resource* resource,
+                                       uint32_t mode) {
+  GetUserDataAs<AuraToplevel>(resource)->SetFullscreenMode(mode);
+}
+
+void aura_toplevel_set_scale_factor(wl_client* client,
+                                    wl_resource* resource,
+                                    uint32_t scale_factor_as_uint) {
+  static_assert(sizeof(uint32_t) == sizeof(float),
+                "Sizes much match for reinterpret cast to be meaningful");
+  float scale_factor = *reinterpret_cast<float*>(&scale_factor_as_uint);
+  GetUserDataAs<AuraToplevel>(resource)->SetScaleFactor(scale_factor);
+}
+
 const struct zaura_toplevel_interface aura_toplevel_implementation = {
     aura_toplevel_set_orientation_lock,
     aura_toplevel_surface_submission_in_pixel_coordinates,
@@ -1263,6 +1430,12 @@ const struct zaura_toplevel_interface aura_toplevel_implementation = {
     aura_toplevel_set_origin,
     aura_toplevel_activate,
     aura_toplevel_deactivate,
+    aura_toplevel_set_fullscreen_mode,
+    aura_toplevel_set_scale_factor,
+    aura_toplevel_set_snap_primary,
+    aura_toplevel_set_snap_secondary,
+    aura_toplevel_intent_to_snap,
+    aura_toplevel_unset_snap,
 };
 
 void aura_popup_surface_submission_in_pixel_coordinates(wl_client* client,
@@ -1300,11 +1473,19 @@ void aura_popup_release(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
+void aura_popup_set_scale_factor(wl_client* client,
+                                 wl_resource* resource,
+                                 uint32_t scale_factor_as_uint) {
+  float scale_factor = *reinterpret_cast<float*>(&scale_factor_as_uint);
+  GetUserDataAs<AuraPopup>(resource)->SetScaleFactor(scale_factor);
+}
+
 const struct zaura_popup_interface aura_popup_implementation = {
     aura_popup_surface_submission_in_pixel_coordinates,
     aura_popup_set_decoration,
     aura_popup_set_menu,
     aura_popup_release,
+    aura_popup_set_scale_factor,
 };
 
 void aura_shell_get_aura_toplevel(wl_client* client,

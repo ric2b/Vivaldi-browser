@@ -49,6 +49,10 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "components/page_info/core/features.h"
+#endif
+
 using content::BrowserThread;
 using StorageType =
     content_settings::mojom::ContentSettingsManager::StorageType;
@@ -407,14 +411,26 @@ PageSpecificContentSettings::PageSpecificContentSettings(content::Page& page,
     : content::PageUserData<PageSpecificContentSettings>(page),
       delegate_(delegate),
       map_(delegate_->GetSettingsMap()),
-      allowed_local_shared_objects_(GetWebContents()->GetBrowserContext(),
-                                    /*ignore_empty_localstorage=*/true,
-                                    delegate_->GetAdditionalFileSystemTypes(),
-                                    delegate_->GetIsDeletionDisabledCallback()),
+      allowed_local_shared_objects_(
+          GetWebContents()->GetBrowserContext(),
+#if !BUILDFLAG(IS_ANDROID)
+          // TODO(crbug.com/1404234): Remove the async local storage pathway
+          // completely when the new dialog has launched.
+          /*ignore_empty_localstorage=*/
+          !base::FeatureList::IsEnabled(page_info::kPageSpecificSiteDataDialog),
+#else
+          /*ignore_empty_localstorage=*/true,
+#endif
+          delegate_->GetAdditionalFileSystemTypes(),
+          delegate_->GetIsDeletionDisabledCallback()),
       blocked_local_shared_objects_(GetWebContents()->GetBrowserContext(),
                                     /*ignore_empty_localstorage=*/false,
                                     delegate_->GetAdditionalFileSystemTypes(),
                                     delegate_->GetIsDeletionDisabledCallback()),
+      allowed_browsing_data_model_(
+          BrowsingDataModel::BuildEmpty(GetWebContents()->GetBrowserContext())),
+      blocked_browsing_data_model_(
+          BrowsingDataModel::BuildEmpty(GetWebContents()->GetBrowserContext())),
       microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED) {
   observation_.Observe(map_.get());
   if (page.GetMainDocument().GetLifecycleState() ==
@@ -442,11 +458,9 @@ void PageSpecificContentSettings::DeleteForWebContentsForTest(
 
 // static
 PageSpecificContentSettings* PageSpecificContentSettings::GetForFrame(
-    int render_process_id,
-    int render_frame_id) {
+    const content::GlobalRenderFrameHostId& id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return GetForFrame(
-      content::RenderFrameHost::FromID(render_process_id, render_frame_id));
+  return GetForFrame(content::RenderFrameHost::FromID(id));
 }
 
 // static
@@ -478,10 +492,21 @@ void PageSpecificContentSettings::StorageAccessed(StorageType storage_type,
           rfh, &PageSpecificContentSettings::StorageAccessed, storage_type,
           render_process_id, render_frame_id, url, blocked_by_policy))
     return;
-  PageSpecificContentSettings* settings =
-      GetForFrame(render_process_id, render_frame_id);
+  PageSpecificContentSettings* settings = GetForFrame(rfh);
   if (settings)
     settings->OnStorageAccessed(storage_type, url, blocked_by_policy);
+}
+
+// static
+void PageSpecificContentSettings::BrowsingDataAccessed(
+    content::RenderFrameHost* rfh,
+    BrowsingDataModel::DataKey data_key,
+    BrowsingDataModel::StorageType storage_type,
+    bool blocked) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  PageSpecificContentSettings* settings = GetForFrame(rfh);
+  if(settings)
+    settings->OnBrowsingDataAccessed(data_key, storage_type, blocked);
 }
 
 // static
@@ -508,8 +533,8 @@ void PageSpecificContentSettings::SharedWorkerAccessed(
     const blink::StorageKey& storage_key,
     bool blocked_by_policy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  PageSpecificContentSettings* settings =
-      GetForFrame(render_process_id, render_frame_id);
+  PageSpecificContentSettings* settings = GetForFrame(
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id));
   if (settings)
     settings->OnSharedWorkerAccessed(worker_url, name, storage_key,
                                      blocked_by_policy);
@@ -832,6 +857,46 @@ void PageSpecificContentSettings::OnTopicAccessed(
   accessed_topics_.insert(topic);
   MaybeUpdateParent(&PageSpecificContentSettings::OnTopicAccessed, api_origin,
                     blocked_by_policy, topic);
+}
+
+void PageSpecificContentSettings::OnTrustTokenAccessed(
+    const url::Origin api_origin,
+    bool blocked) {
+  // TODO(crbug.com/1378703): Call this method.
+  // The size isn't relevant here and won't be displayed in the UI.
+  const int kTrustTokenSize = 0;
+  auto& model =
+      blocked ? blocked_browsing_data_model_ : allowed_browsing_data_model_;
+  model->AddBrowsingData(api_origin,
+                         BrowsingDataModel::StorageType::kTrustTokens,
+                         kTrustTokenSize);
+  if (blocked) {
+    OnContentBlocked(ContentSettingsType::COOKIES);
+  } else {
+    OnContentAllowed(ContentSettingsType::COOKIES);
+  }
+  MaybeUpdateParent(&PageSpecificContentSettings::OnTrustTokenAccessed,
+                    api_origin, blocked);
+  MaybeNotifySiteDataObservers();
+}
+
+void PageSpecificContentSettings::OnBrowsingDataAccessed(
+    BrowsingDataModel::DataKey data_key,
+    BrowsingDataModel::StorageType storage_type,
+    bool blocked) {
+  auto& model =
+      blocked ? blocked_browsing_data_model_ : allowed_browsing_data_model_;
+
+  // The size isn't relevant here and won't be displayed in the UI.
+  model->AddBrowsingData(data_key, storage_type, /*storage_size=*/0);
+  if (blocked) {
+    OnContentBlocked(ContentSettingsType::COOKIES);
+  } else {
+    OnContentAllowed(ContentSettingsType::COOKIES);
+  }
+  MaybeUpdateParent(&PageSpecificContentSettings::OnBrowsingDataAccessed,
+                    data_key, storage_type, blocked);
+  MaybeNotifySiteDataObservers();
 }
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)

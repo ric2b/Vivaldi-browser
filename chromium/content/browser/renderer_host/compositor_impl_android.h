@@ -40,8 +40,7 @@
 #include "ui/android/window_android_compositor.h"
 #include "ui/compositor/compositor_lock.h"
 #include "ui/display/display_observer.h"
-
-struct ANativeWindow;
+#include "ui/gl/android/scoped_a_native_window.h"
 
 namespace cc {
 class AnimationHost;
@@ -125,6 +124,8 @@ class CONTENT_EXPORT CompositorImpl
   void PreserveChildSurfaceControls() override;
   void RequestPresentationTimeForNextFrame(
       PresentationTimeCallback callback) override;
+  void RequestSuccessfulPresentationTimeForNextFrame(
+      SuccessfulPresentationTimeCallback callback) override;
   void SetDidSwapBuffersCallbackEnabled(bool enable) override;
 
   // LayerTreeHostClient implementation.
@@ -139,6 +140,7 @@ class CONTENT_EXPORT CompositorImpl
       cc::PaintHoldingReason,
       absl::optional<cc::PaintHoldingCommitTrigger>) override {}
   void OnPauseRenderingChanged(bool) override {}
+  void OnCommitRequested() override {}
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
   void UpdateLayerTreeHost() override;
@@ -150,7 +152,7 @@ class CONTENT_EXPORT CompositorImpl
   void DidInitializeLayerTreeFrameSink() override;
   void DidFailToInitializeLayerTreeFrameSink() override;
   void WillCommit(const cc::CommitState&) override {}
-  void DidCommit(base::TimeTicks, base::TimeTicks) override;
+  void DidCommit(base::TimeTicks, base::TimeTicks) override {}
   void DidCommitAndDrawFrame() override {}
   void DidReceiveCompositorFrameAck() override;
   void DidCompletePageScaleAnimation() override {}
@@ -169,8 +171,6 @@ class CONTENT_EXPORT CompositorImpl
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override {}
-  void ReportEventLatency(
-      std::vector<cc::EventLatencyTracker::LatencyData> latencies) override {}
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;
@@ -262,7 +262,7 @@ class CONTENT_EXPORT CompositorImpl
   gfx::Size size_;
   bool requires_alpha_channel_ = false;
 
-  raw_ptr<ANativeWindow> window_;
+  gl::ScopedANativeWindow window_;
   gpu::SurfaceHandle surface_handle_;
   std::unique_ptr<ScopedCachedBackBuffer> cached_back_buffer_;
 

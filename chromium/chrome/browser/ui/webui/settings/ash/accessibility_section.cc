@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
+#include "chrome/browser/ui/webui/settings/ash/select_to_speak_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/switch_access_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/tts_handler.h"
 #include "chrome/browser/ui/webui/settings/captions_handler.h"
@@ -43,14 +44,22 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace mojom {
-using ::ash::settings::mojom::SearchResultDefaultRank;
-using ::ash::settings::mojom::SearchResultIcon;
-using ::ash::settings::mojom::SearchResultType;
+using ::chromeos::settings::mojom::kAccessibilitySectionPath;
+using ::chromeos::settings::mojom::kAudioAndCaptionsSubpagePath;
+using ::chromeos::settings::mojom::kCursorAndTouchpadSubpagePath;
+using ::chromeos::settings::mojom::kDisplayAndMagnificationSubpagePath;
+using ::chromeos::settings::mojom::kKeyboardAndTextInputSubpagePath;
+using ::chromeos::settings::mojom::kManageAccessibilitySubpagePath;
+using ::chromeos::settings::mojom::kSelectToSpeakSubpagePath;
+using ::chromeos::settings::mojom::kSwitchAccessOptionsSubpagePath;
+using ::chromeos::settings::mojom::kTextToSpeechPagePath;
+using ::chromeos::settings::mojom::kTextToSpeechSubpagePath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
 }  // namespace mojom
 
 namespace {
@@ -65,18 +74,58 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {.setting = mojom::Setting::kA11yQuickSettings},
        {IDS_OS_SETTINGS_TAG_A11Y_ALWAYS_SHOW_OPTIONS_ALT1,
         SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE,
+       mojom::kTextToSpeechPagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kTextToSpeechPage},
+       {IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT1,
+        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT2,
+        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT3,
+        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT4,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_A11Y_DISPLAY_AND_MAGNIFICATION_PAGE,
+       mojom::kDisplayAndMagnificationSubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kDisplayAndMagnification},
+       {IDS_OS_SETTINGS_TAG_A11Y_DISPLAY_AND_MAGNIFICATION_PAGE_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_A11Y_KEYBOARD_AND_TEXT_INPUT_PAGE,
+       mojom::kKeyboardAndTextInputSubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kKeyboardAndTextInput}},
+      {IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE,
+       mojom::kCursorAndTouchpadSubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kCursorAndTouchpad},
+       {IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE_ALT1,
+        IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE_ALT2,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE,
+       mojom::kAudioAndCaptionsSubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kAudioAndCaptions},
+       {IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT1,
+        IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT2,
+        IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT3,
+        SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_STICKY_KEYS,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kStickyKeys}},
       {IDS_OS_SETTINGS_TAG_A11Y_LARGE_CURSOR,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kCursorAndTouchpadSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kCursorAndTouchpadSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -94,9 +143,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_ALT1, IDS_OS_SETTINGS_TAG_A11Y_ALT2,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_DOCKED_MAGNIFIER,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kDisplayAndMagnificationSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kDisplayAndMagnificationSubpagePath,
        mojom::SearchResultIcon::kDockedMagnifier,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -104,9 +151,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_DOCKED_MAGNIFIER_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11y_CHROMEVOX,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kTextToSpeechPagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kTextToSpeechPagePath,
        mojom::SearchResultIcon::kChromeVox,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -114,9 +159,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11y_CHROMEVOX_ALT1,
         IDS_OS_SETTINGS_TAG_A11y_CHROMEVOX_ALT2, SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_MONO_AUDIO,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kAudioAndCaptionsSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kAudioAndCaptionsSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kLow,
        mojom::SearchResultType::kSetting,
@@ -133,15 +176,13 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
         IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_ALT3,
         IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_ALT4}},
       {IDS_OS_SETTINGS_TAG_A11Y_CAPTIONS,
-       mojom::kCaptionsSubpagePath,
+       mojom::kAudioAndCaptionsSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kCaptions}},
+       {.subpage = mojom::Subpage::kAudioAndCaptions}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_CURSOR,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kCursorAndTouchpadSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kCursorAndTouchpadSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -158,17 +199,13 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {.subpage = mojom::Subpage::kManageAccessibility},
        {IDS_OS_SETTINGS_TAG_A11Y_MANAGE_ALT1, SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_ON_SCREEN_KEYBOARD,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kOnScreenKeyboard,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kOnScreenKeyboard}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_TEXT_CARET,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -176,9 +213,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_TEXT_CARET_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_DICTATION,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kDictation,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -188,9 +223,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
         IDS_OS_SETTINGS_TAG_A11Y_DICTATION_ALT3,
         IDS_OS_SETTINGS_TAG_A11Y_DICTATION_ALT4, SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGH_CONTRAST,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kDisplayAndMagnificationSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kDisplayAndMagnificationSubpagePath,
        mojom::SearchResultIcon::kContrast,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -198,9 +231,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_HIGH_CONTRAST_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_KEYBOARD_FOCUS,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -208,9 +239,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_KEYBOARD_FOCUS_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_STARTUP_SOUND,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kAudioAndCaptionsSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kAudioAndCaptionsSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -218,9 +247,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_STARTUP_SOUND_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_AUTOMATICALLY_CLICK,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kCursorAndTouchpadSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kCursorAndTouchpadSubpagePath,
        mojom::SearchResultIcon::kAutoclick,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -228,9 +255,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        {IDS_OS_SETTINGS_TAG_A11Y_AUTOMATICALLY_CLICK_ALT1,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_SELECT_TO_SPEAK,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kTextToSpeechPagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kTextToSpeechPagePath,
        mojom::SearchResultIcon::kSelectToSpeak,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -255,9 +280,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kTextToSpeechVolume}},
       {IDS_OS_SETTINGS_TAG_A11Y_FULLSCREEN_MAGNIFIER,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kDisplayAndMagnificationSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kDisplayAndMagnificationSubpagePath,
        mojom::SearchResultIcon::kFullscreenMagnifier,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -266,17 +289,13 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
         IDS_OS_SETTINGS_TAG_A11Y_FULLSCREEN_MAGNIFIER_ALT2,
         SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_A11Y_ENABLE_SWITCH_ACCESS,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kKeyboardAndTextInputSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kKeyboardAndTextInputSubpagePath,
        mojom::SearchResultIcon::kSwitchAccess,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kEnableSwitchAccess}},
       {IDS_OS_SETTINGS_TAG_A11Y_CURSOR_COLOR,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kCursorAndTouchpadSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kCursorAndTouchpadSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -315,9 +334,7 @@ const std::vector<SearchConcept>&
 GetA11yTabletNavigationButtonSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_TABLET_NAVIGATION_BUTTONS,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kCursorAndTouchpadSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kCursorAndTouchpadSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -377,7 +394,7 @@ const std::vector<SearchConcept>& GetA11yLabelsSearchConcepts() {
 const std::vector<SearchConcept>& GetA11yLiveCaptionSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTION,
-       mojom::kCaptionsSubpagePath,
+       mojom::kAudioAndCaptionsSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -391,9 +408,7 @@ const std::vector<SearchConcept>&
 GetA11yFullscreenMagnifierFocusFollowingSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_FULLSCREEN_MAGNIFIER_FOCUS_FOLLOWING,
-       ::features::IsAccessibilityOSSettingsVisibilityEnabled()
-           ? mojom::kDisplayAndMagnificationSubpagePath
-           : mojom::kManageAccessibilitySubpagePath,
+       mojom::kDisplayAndMagnificationSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -402,62 +417,17 @@ GetA11yFullscreenMagnifierFocusFollowingSearchConcepts() {
   return *tags;
 }
 
-const std::vector<SearchConcept>& GetA11yVisibilitySearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE,
-       mojom::kTextToSpeechPagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kTextToSpeechPage},
-       {IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT1,
-        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT2,
-        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT3,
-        IDS_OS_SETTINGS_TAG_A11Y_TEXT_TO_SPEECH_PAGE_ALT4,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_A11Y_DISPLAY_AND_MAGNIFICATION_PAGE,
-       mojom::kDisplayAndMagnificationSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kDisplayAndMagnification},
-       {IDS_OS_SETTINGS_TAG_A11Y_DISPLAY_AND_MAGNIFICATION_PAGE_ALT1,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_A11Y_KEYBOARD_AND_TEXT_INPUT_PAGE,
-       mojom::kKeyboardAndTextInputSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kKeyboardAndTextInput}},
-      {IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE,
-       mojom::kCursorAndTouchpadSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kCursorAndTouchpad},
-       {IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE_ALT1,
-        IDS_OS_SETTINGS_TAG_A11Y_CURSOR_AND_TOUCHPAD_PAGE_ALT2,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE,
-       mojom::kAudioAndCaptionsSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kAudioAndCaptions},
-       {IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT1,
-        IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT2,
-        IDS_OS_SETTINGS_TAG_A11Y_AUDIO_AND_CAPTIONS_PAGE_ALT3,
-        SearchConcept::kAltTagEnd}},
-  });
-  return *tags;
-}
-
 bool IsLiveCaptionEnabled() {
   return captions::IsLiveCaptionFeatureSupported();
 }
 
-bool IsAccessibilityOSSettingsVisibilityEnabled() {
-  return ::features::IsAccessibilityOSSettingsVisibilityEnabled();
+bool IsAccessibilitySelectToSpeakPageMigrationEnabled() {
+  return ::features::IsAccessibilitySelectToSpeakPageMigrationEnabled();
+}
+
+bool IsExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled() {
+  return ::features::
+      IsExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled();
 }
 
 bool AreExperimentalAccessibilityColorEnhancementSettingsEnabled() {
@@ -471,8 +441,8 @@ bool IsSwitchAccessTextAllowed() {
 }
 
 bool AreTabletNavigationButtonsAllowed() {
-  return ash::features::IsHideShelfControlsInTabletModeEnabled() &&
-         ash::TabletMode::IsBoardTypeMarkedAsTabletCapable();
+  return features::IsHideShelfControlsInTabletModeEnabled() &&
+         TabletMode::IsBoardTypeMarkedAsTabletCapable();
 }
 
 }  // namespace
@@ -491,15 +461,15 @@ AccessibilitySection::AccessibilitySection(
 
   pref_change_registrar_.Init(pref_service_);
   pref_change_registrar_.Add(
-      ash::prefs::kAccessibilitySwitchAccessEnabled,
+      prefs::kAccessibilitySwitchAccessEnabled,
       base::BindRepeating(&AccessibilitySection::UpdateSearchTags,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled,
+      prefs::kAccessibilitySwitchAccessAutoScanEnabled,
       base::BindRepeating(&AccessibilitySection::UpdateSearchTags,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      ash::prefs::kAccessibilityScreenMagnifierEnabled,
+      prefs::kAccessibilityScreenMagnifierEnabled,
       base::BindRepeating(&AccessibilitySection::UpdateSearchTags,
                           base::Unretained(this)));
 
@@ -527,205 +497,22 @@ AccessibilitySection::~AccessibilitySection() {
 void AccessibilitySection::AddLoadTimeData(
     content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"a11yExplanation", IDS_SETTINGS_ACCESSIBILITY_EXPLANATION},
       {"a11yPageTitle", IDS_SETTINGS_ACCESSIBILITY},
       {"a11yWebStore", IDS_SETTINGS_ACCESSIBILITY_WEB_STORE},
-      {"moreFeaturesLinkDescription",
-       IDS_SETTINGS_MORE_FEATURES_LINK_DESCRIPTION},
-      {"accessibleImageLabelsTitle",
-       IDS_SETTINGS_ACCESSIBLE_IMAGE_LABELS_TITLE},
       {"accessibleImageLabelsSubtitle",
        IDS_SETTINGS_ACCESSIBLE_IMAGE_LABELS_SUBTITLE},
-      {"settingsSliderRoleDescription",
-       IDS_SETTINGS_SLIDER_MIN_MAX_ARIA_ROLE_DESCRIPTION},
-      {"manageAccessibilityFeatures",
-       IDS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES},
-      {"textToSpeechLinkTitle",
-       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_TITLE},
-      {"textToSpeechLinkDescription",
-       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_DESCRIPTION},
-      {"displayAndMagnificationLinkTitle",
-       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_TITLE},
-      {"displayAndMagnificationLinkDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_DESCRIPTION},
-      {"keyboardAndTextInputLinkTitle",
-       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_TITLE},
-      {"keyboardAndTextInputLinkDescription",
-       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_DESCRIPTION},
-      {"cursorAndTouchpadLinkTitle",
-       IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_TITLE},
-      {"cursorAndTouchpadLinkDescription",
-       IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_DESCRIPTION},
-      {"audioAndCaptionsLinkTitle",
-       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_TITLE},
-      {"audioAndCaptionsLinkDescription",
-       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_DESCRIPTION},
-      {"optionsInMenuLabel", IDS_SETTINGS_OPTIONS_IN_MENU_LABEL},
-      {"optionsInMenuDescription", IDS_SETTINGS_OPTIONS_IN_MENU_DESCRIPTION},
-      {"largeMouseCursorLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_LABEL},
-      {"largeMouseCursorSizeLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LABEL},
-      {"largeMouseCursorSizeDefaultLabel",
-       IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL},
-      {"largeMouseCursorSizeLargeLabel",
-       IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL},
-      {"cursorColorOptionsLabel", IDS_SETTINGS_CURSOR_COLOR_OPTIONS_LABEL},
-      {"cursorColorBlack", IDS_SETTINGS_CURSOR_COLOR_BLACK},
-      {"cursorColorRed", IDS_SETTINGS_CURSOR_COLOR_RED},
-      {"cursorColorYellow", IDS_SETTINGS_CURSOR_COLOR_YELLOW},
-      {"cursorColorGreen", IDS_SETTINGS_CURSOR_COLOR_GREEN},
-      {"cursorColorCyan", IDS_SETTINGS_CURSOR_COLOR_CYAN},
-      {"cursorColorBlue", IDS_SETTINGS_CURSOR_COLOR_BLUE},
-      {"cursorColorMagenta", IDS_SETTINGS_CURSOR_COLOR_MAGENTA},
-      {"cursorColorPink", IDS_SETTINGS_CURSOR_COLOR_PINK},
-      {"highContrastLabel", IDS_SETTINGS_HIGH_CONTRAST_LABEL},
-      {"highContrastDescription", IDS_SETTINGS_HIGH_CONTRAST_DESCRIPTION},
-      {"greyscaleLabel", IDS_SETTINGS_GREYSCALE_LABEL},
-      {"sepiaLabel", IDS_SETTINGS_SEPIA_LABEL},
-      {"saturationLabel", IDS_SETTINGS_SATURATION_LABEL},
-      {"hueRotationLabel", IDS_SETTINGS_HUE_ROTATION_LABEL},
-      {"colorFilterMinLabel", IDS_SETTINGS_COLOR_FILTER_MINIMUM_LABEL},
-      {"colorFilterMaxLabel", IDS_SETTINGS_COLOR_FILTER_MAXIMUM_LABEL},
-      {"stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL},
-      {"stickyKeysDescription", IDS_SETTINGS_STICKY_KEYS_DESCRIPTION},
-      {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
-      {"chromeVoxDescriptionOff", IDS_SETTINGS_CHROMEVOX_DESCRIPTION_OFF},
-      {"chromeVoxDescriptionOn", IDS_SETTINGS_CHROMEVOX_DESCRIPTION_ON},
-      {"chromeVoxOptionsLabel", IDS_SETTINGS_CHROMEVOX_OPTIONS_LABEL},
-      {"chromeVoxTutorialLabel", IDS_SETTINGS_CHROMEVOX_TUTORIAL_LABEL},
-      {"screenMagnifierLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL},
-      {"screenMagnifierDescriptionOff",
-       IDS_SETTINGS_SCREEN_MAGNIFIER_DESCRIPTION_OFF},
-      {"screenMagnifierDescriptionOn",
-       IDS_SETTINGS_SCREEN_MAGNIFIER_DESCRIPTION_ON},
-      {"screenMagnifierMouseFollowingModeContinuous",
-       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CONTINUOUS},
-      {"screenMagnifierMouseFollowingModeCentered",
-       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CENTERED},
-      {"screenMagnifierMouseFollowingModeEdge",
-       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_EDGE},
-      {"screenMagnifierFocusFollowingLabel",
-       IDS_SETTINGS_SCREEN_MAGNIFIER_FOCUS_FOLLOWING_LABEL},
-      {"screenMagnifierZoomLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_LABEL},
-      {"screenMagnifierZoomHintLabel",
-       IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_HINT_LABEL},
-      {"dockedMagnifierLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_LABEL},
-      {"dockedMagnifierDescription", IDS_SETTINGS_DOCKED_MAGNIFIER_DESCRIPTION},
-      {"dockedMagnifierZoomLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_ZOOM_LABEL},
-      {"screenMagnifierZoom2x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_2_X},
-      {"screenMagnifierZoom4x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_4_X},
-      {"screenMagnifierZoom6x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_6_X},
-      {"screenMagnifierZoom8x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_8_X},
-      {"screenMagnifierZoom10x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_10_X},
-      {"screenMagnifierZoom12x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_12_X},
-      {"screenMagnifierZoom14x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_14_X},
-      {"screenMagnifierZoom16x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_16_X},
-      {"screenMagnifierZoom18x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_18_X},
-      {"screenMagnifierZoom20x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_20_X},
-      {"tapDraggingLabel", IDS_SETTINGS_TAP_DRAGGING_LABEL},
-      {"clickOnStopLabel", IDS_SETTINGS_CLICK_ON_STOP_LABEL},
-      {"clickOnStopDescription", IDS_SETTINGS_CLICK_ON_STOP_DESCRIPTION},
-      {"delayBeforeClickLabel", IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL},
-      {"delayBeforeClickExtremelyShort",
-       IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT},
-      {"delayBeforeClickVeryShort", IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT},
-      {"delayBeforeClickShort", IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT},
-      {"delayBeforeClickLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG},
-      {"delayBeforeClickVeryLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG},
-      {"autoclickRevertToLeftClick",
-       IDS_SETTINGS_AUTOCLICK_REVERT_TO_LEFT_CLICK},
-      {"autoclickStabilizeCursorPosition",
-       IDS_SETTINGS_AUTOCLICK_STABILIZE_CURSOR_POSITION},
-      {"autoclickMovementThresholdLabel",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LABEL},
-      {"autoclickMovementThresholdExtraSmall",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_SMALL},
-      {"autoclickMovementThresholdSmall",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_SMALL},
-      {"autoclickMovementThresholdDefault",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_DEFAULT},
-      {"autoclickMovementThresholdLarge",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LARGE},
-      {"autoclickMovementThresholdExtraLarge",
-       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_LARGE},
-      {"dictationLabel", IDS_SETTINGS_ACCESSIBILITY_DICTATION_LABEL},
-      {"dictationDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_NEW_DESCRIPTION},
-      {"dictationLocaleMenuLabel",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_MENU_LABEL},
-      {"dictationLocaleSubLabelOffline",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_SUB_LABEL_OFFLINE},
-      {"dictationLocaleSubLabelNetwork",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_SUB_LABEL_NETWORK},
-      // For temporary network label, we can use the string that's shown when a
-      // SODA download fails.
-      {"dictationLocaleSubLabelNetworkTemporarily",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_SUBTITLE_SODA_DOWNLOAD_ERROR},
-      {"dictationChangeLanguageButton",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_CHANGE_LANGUAGE_BUTTON},
-      {"dictationChangeLanguageDialogTitle",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_CHANGE_LANGUAGE_DIALOG_TITLE},
-      {"dictationChangeLanguageDialogSearchHint",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SEARCH_HINT},
-      {"dictationChangeLanguageDialogSearchClear",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SEARCH_CLEAR},
-      {"dictationChangeLanguageDialogRecommended",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_RECOMMENDED},
-      {"dictationChangeLanguageDialogAll",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_ALL},
-      {"dictationChangeLanguageDialogNoResults",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_NO_RESULTS},
-      {"dictationChangeLanguageDialogUpdateButton",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_UPDATE_BUTTON},
-      {"dictationChangeLanguageDialogCancelButton",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_CANCEL_BUTTON},
-      {"dictationLocaleOfflineSubtitle",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_OFFLINE_SUBTITLE},
-      {"dictationChangeLanguageDialogOfflineDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_OFFLINE_DESCRIPTION},
-      {"dictationChangeLanguageDialogSelectedDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SELECTED_DESCRIPTION},
-      {"dictationChangeLanguageDialogNotSelectedDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_NOT_SELECTED_DESCRIPTION},
-      {"onScreenKeyboardLabel", IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL},
-      {"onScreenKeyboardDescription",
-       IDS_SETTINGS_ON_SCREEN_KEYBOARD_DESCRIPTION},
-      {"monoAudioLabel", IDS_SETTINGS_MONO_AUDIO_LABEL},
-      {"monoAudioDescription", IDS_SETTINGS_MONO_AUDIO_DESCRIPTION},
-      {"startupSoundLabel", IDS_SETTINGS_STARTUP_SOUND_LABEL},
-      {"a11yExplanation", IDS_SETTINGS_ACCESSIBILITY_EXPLANATION},
-      {"caretHighlightLabel",
-       IDS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION},
-      {"caretHighlightLabelSubtext",
-       IDS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION_SUBTEXT},
-      {"caretBrowsingLabel",
-       IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION},
-      {"caretBrowsingLabelSubtext",
-       IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION_SUBTEXT},
-      {"cursorHighlightLabel",
-       IDS_SETTINGS_ACCESSIBILITY_CURSOR_HIGHLIGHT_DESCRIPTION},
-      {"focusHighlightLabel",
-       IDS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION},
-      {"focusHighlightLabelSubtext",
-       IDS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION_SUBTEXT},
-      {"selectToSpeakTitle", IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE},
-      {"selectToSpeakDisabledDescription",
-       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DISABLED_DESCRIPTION},
-      {"selectToSpeakDescription",
-       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION},
-      {"selectToSpeakDescriptionWithoutKeyboard",
-       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION_WITHOUT_KEYBOARD},
-      {"selectToSpeakOptionsLabel",
-       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_OPTIONS_LABEL},
-      {"switchAccessLabel",
-       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION},
-      {"switchAccessLabelSubtext",
-       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION_SUBTEXT},
-      {"switchAccessOptionsLabel",
-       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_OPTIONS_LABEL},
-      {"manageSwitchAccessSettings",
-       IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS},
-      {"switchAssignmentHeading", IDS_SETTINGS_SWITCH_ASSIGNMENT_HEADING},
-      {"switchAccessSetupGuideLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_LABEL},
+      {"accessibleImageLabelsTitle",
+       IDS_SETTINGS_ACCESSIBLE_IMAGE_LABELS_TITLE},
+      {"additionalFeaturesTitle",
+       IDS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE},
+      {"appearanceSettingsDescription",
+       IDS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_DESCRIPTION},
+      {"appearanceSettingsTitle",
+       IDS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_TITLE},
+      {"assignNextSwitchLabel", IDS_SETTINGS_ASSIGN_NEXT_SWITCH_LABEL},
+      {"assignPreviousSwitchLabel", IDS_SETTINGS_ASSIGN_PREVIOUS_SWITCH_LABEL},
+      {"assignSelectSwitchLabel", IDS_SETTINGS_ASSIGN_SELECT_SWITCH_LABEL},
       {"assignSwitchSubLabel0Switches",
        IDS_SETTINGS_ASSIGN_SWITCH_SUB_LABEL_0_SWITCHES},
       {"assignSwitchSubLabel1Switch",
@@ -738,74 +525,342 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_ASSIGN_SWITCH_SUB_LABEL_4_SWITCHES},
       {"assignSwitchSubLabel5OrMoreSwitches",
        IDS_SETTINGS_ASSIGN_SWITCH_SUB_LABEL_5_OR_MORE_SWITCHES},
-      {"assignSelectSwitchLabel", IDS_SETTINGS_ASSIGN_SELECT_SWITCH_LABEL},
-      {"assignNextSwitchLabel", IDS_SETTINGS_ASSIGN_NEXT_SWITCH_LABEL},
-      {"assignPreviousSwitchLabel", IDS_SETTINGS_ASSIGN_PREVIOUS_SWITCH_LABEL},
-      {"switchAccessInternalDeviceTypeLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_INTERNAL_DEVICE_TYPE_LABEL},
-      {"switchAccessUsbDeviceTypeLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_USB_DEVICE_TYPE_LABEL},
-      {"switchAccessBluetoothDeviceTypeLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_BLUETOOTH_DEVICE_TYPE_LABEL},
-      {"switchAccessUnknownDeviceTypeLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_UNKNOWN_DEVICE_TYPE_LABEL},
-      {"switchAccessActionAssignmentAssignedIconLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_ASSIGNED_ICON_LABEL},
+      {"audioAndCaptionsHeading",
+       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_HEADING},
+      {"audioAndCaptionsLinkDescription",
+       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_DESCRIPTION},
+      {"audioAndCaptionsLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_TITLE},
+      {"autoclickMovementThresholdDefault",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_DEFAULT},
+      {"autoclickMovementThresholdExtraLarge",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_LARGE},
+      {"autoclickMovementThresholdExtraSmall",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_SMALL},
+      {"autoclickMovementThresholdLabel",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LABEL},
+      {"autoclickMovementThresholdLarge",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LARGE},
+      {"autoclickMovementThresholdSmall",
+       IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_SMALL},
+      {"autoclickRevertToLeftClick",
+       IDS_SETTINGS_AUTOCLICK_REVERT_TO_LEFT_CLICK},
+      {"autoclickStabilizeCursorPosition",
+       IDS_SETTINGS_AUTOCLICK_STABILIZE_CURSOR_POSITION},
+      {"cancel", IDS_CANCEL},
+      {"caretBrowsingLabel",
+       IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION},
+      {"caretBrowsingLabelSubtext",
+       IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION_SUBTEXT},
+      {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
+      {"caretBrowsingTitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_TITLE},
+      {"caretHighlightLabel",
+       IDS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION},
+      {"caretHighlightLabelSubtext",
+       IDS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION_SUBTEXT},
+      {"chromeVoxDescriptionOff", IDS_SETTINGS_CHROMEVOX_DESCRIPTION_OFF},
+      {"chromeVoxDescriptionOn", IDS_SETTINGS_CHROMEVOX_DESCRIPTION_ON},
+      {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
+      {"chromeVoxOptionsLabel", IDS_SETTINGS_CHROMEVOX_OPTIONS_LABEL},
+      {"chromeVoxTutorialLabel", IDS_SETTINGS_CHROMEVOX_TUTORIAL_LABEL},
+      {"clickOnStopDescription", IDS_SETTINGS_CLICK_ON_STOP_DESCRIPTION},
+      {"clickOnStopLabel", IDS_SETTINGS_CLICK_ON_STOP_LABEL},
+      {"colorFilterMaxLabel", IDS_SETTINGS_COLOR_FILTER_MAXIMUM_LABEL},
+      {"colorFilterMinLabel", IDS_SETTINGS_COLOR_FILTER_MINIMUM_LABEL},
+      {"cursorAndTouchpadLinkDescription",
+       IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_DESCRIPTION},
+      {"cursorAndTouchpadLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_TITLE},
+      {"cursorColorBlack", IDS_SETTINGS_CURSOR_COLOR_BLACK},
+      {"cursorColorBlue", IDS_SETTINGS_CURSOR_COLOR_BLUE},
+      {"cursorColorCyan", IDS_SETTINGS_CURSOR_COLOR_CYAN},
+      {"cursorColorGreen", IDS_SETTINGS_CURSOR_COLOR_GREEN},
+      {"cursorColorMagenta", IDS_SETTINGS_CURSOR_COLOR_MAGENTA},
+      {"cursorColorOptionsLabel", IDS_SETTINGS_CURSOR_COLOR_OPTIONS_LABEL},
+      {"cursorColorPink", IDS_SETTINGS_CURSOR_COLOR_PINK},
+      {"cursorColorRed", IDS_SETTINGS_CURSOR_COLOR_RED},
+      {"cursorColorYellow", IDS_SETTINGS_CURSOR_COLOR_YELLOW},
+      {"cursorHighlightLabel",
+       IDS_SETTINGS_ACCESSIBILITY_CURSOR_HIGHLIGHT_DESCRIPTION},
+      {"defaultPercentage", IDS_SETTINGS_DEFAULT_PERCENTAGE},
+      {"delayBeforeClickExtremelyShort",
+       IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT},
+      {"delayBeforeClickLabel", IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL},
+      {"delayBeforeClickLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG},
+      {"delayBeforeClickShort", IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT},
+      {"delayBeforeClickVeryLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG},
+      {"delayBeforeClickVeryShort", IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT},
+      {"dictationChangeLanguageButton",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_CHANGE_LANGUAGE_BUTTON},
+      {"dictationChangeLanguageDialogAll",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_ALL},
+      {"dictationChangeLanguageDialogCancelButton",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_CANCEL_BUTTON},
+      {"dictationChangeLanguageDialogNoResults",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_NO_RESULTS},
+      {"dictationChangeLanguageDialogNotSelectedDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_NOT_SELECTED_DESCRIPTION},
+      {"dictationChangeLanguageDialogOfflineDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_OFFLINE_DESCRIPTION},
+      {"dictationChangeLanguageDialogRecommended",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_RECOMMENDED},
+      {"dictationChangeLanguageDialogSearchClear",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SEARCH_CLEAR},
+      {"dictationChangeLanguageDialogSearchHint",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SEARCH_HINT},
+      {"dictationChangeLanguageDialogSelectedDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_SELECTED_DESCRIPTION},
+      {"dictationChangeLanguageDialogTitle",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_CHANGE_LANGUAGE_DIALOG_TITLE},
+      {"dictationChangeLanguageDialogUpdateButton",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_UPDATE_BUTTON},
+      {"dictationDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_NEW_DESCRIPTION},
+      {"dictationLabel", IDS_SETTINGS_ACCESSIBILITY_DICTATION_LABEL},
+      {"dictationLocaleMenuLabel",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_MENU_LABEL},
+      {"dictationLocaleOfflineSubtitle",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LANGUAGE_DIALOG_OFFLINE_SUBTITLE},
+      {"dictationLocaleSubLabelNetwork",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_SUB_LABEL_NETWORK},
+      // For temporary network label, we can use the string that's shown when a
+      // SODA download fails.
+      {"dictationLocaleSubLabelNetworkTemporarily",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_SUBTITLE_SODA_DOWNLOAD_ERROR},
+      {"dictationLocaleSubLabelOffline",
+       IDS_SETTINGS_ACCESSIBILITY_DICTATION_LOCALE_SUB_LABEL_OFFLINE},
+      {"displayAndMagnificationLinkDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_DESCRIPTION},
+      {"displayAndMagnificationLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_TITLE},
+      {"displayHeading", IDS_SETTINGS_ACCESSIBILITY_DISPLAY_HEADING},
+      {"displaySettingsDescription",
+       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_DESCRIPTION},
+      {"displaySettingsTitle",
+       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_TITLE},
+      {"dockedMagnifierDescription", IDS_SETTINGS_DOCKED_MAGNIFIER_DESCRIPTION},
+      {"dockedMagnifierLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_LABEL},
+      {"dockedMagnifierZoomLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_ZOOM_LABEL},
+      {"durationInSeconds", IDS_SETTINGS_DURATION_IN_SECONDS},
+      {"focusHighlightLabel",
+       IDS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION},
+      {"focusHighlightLabelSubtext",
+       IDS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION_SUBTEXT},
+      {"greyscaleLabel", IDS_SETTINGS_GREYSCALE_LABEL},
+      {"highContrastDescription", IDS_SETTINGS_HIGH_CONTRAST_DESCRIPTION},
+      {"highContrastLabel", IDS_SETTINGS_HIGH_CONTRAST_LABEL},
+      {"hueRotationLabel", IDS_SETTINGS_HUE_ROTATION_LABEL},
+      {"keyboardAndTextInputHeading",
+       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_HEADING},
+      {"keyboardAndTextInputLinkDescription",
+       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_DESCRIPTION},
+      {"keyboardAndTextInputLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_TITLE},
+      {"keyboardSettingsDescription",
+       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_DESCRIPTION},
+      {"keyboardSettingsTitle",
+       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_TITLE},
+      {"largeMouseCursorLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_LABEL},
+      {"largeMouseCursorSizeDefaultLabel",
+       IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL},
+      {"largeMouseCursorSizeLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LABEL},
+      {"largeMouseCursorSizeLargeLabel",
+       IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL},
+      {"manageAccessibilityFeatures",
+       IDS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES},
+      {"manageSwitchAccessSettings",
+       IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS},
+      {"manageTtsSettings", IDS_SETTINGS_MANAGE_TTS_SETTINGS},
+      {"monoAudioDescription", IDS_SETTINGS_MONO_AUDIO_DESCRIPTION},
+      {"monoAudioLabel", IDS_SETTINGS_MONO_AUDIO_LABEL},
+      {"moreFeaturesLinkDescription",
+       IDS_SETTINGS_MORE_FEATURES_LINK_DESCRIPTION},
+      {"mouseAndTouchpadHeading",
+       IDS_SETTINGS_ACCESSIBILITY_MOUSE_AND_TOUCHPAD_HEADING},
+      {"mouseSettingsTitle", IDS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_TITLE},
+      {"noSwitchesAssigned", IDS_SETTINGS_NO_SWITCHES_ASSIGNED},
+      {"noSwitchesAssignedSetupGuide",
+       IDS_SETTINGS_NO_SWITCHES_ASSIGNED_SETUP_GUIDE},
+      {"onScreenKeyboardDescription",
+       IDS_SETTINGS_ON_SCREEN_KEYBOARD_DESCRIPTION},
+      {"onScreenKeyboardLabel", IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL},
+      {"optionsInMenuDescription", IDS_SETTINGS_OPTIONS_IN_MENU_DESCRIPTION},
+      {"optionsInMenuLabel", IDS_SETTINGS_OPTIONS_IN_MENU_LABEL},
+      {"percentage", IDS_SETTINGS_PERCENTAGE},
+      {"saturationLabel", IDS_SETTINGS_SATURATION_LABEL},
+      {"screenMagnifierDescriptionOff",
+       IDS_SETTINGS_SCREEN_MAGNIFIER_DESCRIPTION_OFF},
+      {"screenMagnifierDescriptionOn",
+       IDS_SETTINGS_SCREEN_MAGNIFIER_DESCRIPTION_ON},
+      {"screenMagnifierFocusFollowingLabel",
+       IDS_SETTINGS_SCREEN_MAGNIFIER_FOCUS_FOLLOWING_LABEL},
+      {"screenMagnifierLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL},
+      {"screenMagnifierMouseFollowingModeCentered",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CENTERED},
+      {"screenMagnifierMouseFollowingModeContinuous",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CONTINUOUS},
+      {"screenMagnifierMouseFollowingModeEdge",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_EDGE},
+      {"screenMagnifierZoom10x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_10_X},
+      {"screenMagnifierZoom12x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_12_X},
+      {"screenMagnifierZoom14x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_14_X},
+      {"screenMagnifierZoom16x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_16_X},
+      {"screenMagnifierZoom18x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_18_X},
+      {"screenMagnifierZoom20x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_20_X},
+      {"screenMagnifierZoom2x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_2_X},
+      {"screenMagnifierZoom4x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_4_X},
+      {"screenMagnifierZoom6x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_6_X},
+      {"screenMagnifierZoom8x", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_8_X},
+      {"screenMagnifierZoomHintLabel",
+       IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_HINT_LABEL},
+      {"screenMagnifierZoomLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_LABEL},
+      {"selectToSpeakDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION},
+      {"selectToSpeakDescriptionWithoutKeyboard",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION_WITHOUT_KEYBOARD},
+      {"selectToSpeakDisabledDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DISABLED_DESCRIPTION},
+      {"selectToSpeakLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_LINK_TITLE},
+      {"selectToSpeakOptionsLanguagesFilterDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_LANGUAGES_FILTER_DESCRIPTION},
+      {"selectToSpeakOptionsVoiceDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_VOICE_DESCRIPTION},
+      {"selectToSpeakOptionsVoiceSwitchingDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_VOICE_SWITCHING_DESCRIPTION},
+      {"selectToSpeakOptionsEnhancedNetworkVoicesDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_ENHANCED_NETWORK_VOICES_DESCRIPTION},
+      {"selectToSpeakOptionsEnhancedNetworkVoicesSubtitle",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_ENHANCED_NETWORK_VOICES_SUBTITLE},
+      {"selectToSpeakOptionsEnhancedNetworkVoice",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_ENHANCED_NETWORK_VOICE},
+      {"selectToSpeakOptionsNaturalVoiceName",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_NATURAL_VOICE_NAME},
+      {"selectToSpeakOptionsHighlightDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_DESCRIPTION},
+      {"selectToSpeakOptionsHighlightColorDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_DESCRIPTION},
+      {"selectToSpeakOptionsHighlightColorBlue",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_BLUE},
+      {"selectToSpeakOptionsHighlightColorOrange",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_ORANGE},
+      {"selectToSpeakOptionsHighlightColorYellow",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_YELLOW},
+      {"selectToSpeakOptionsHighlightColorGreen",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_GREEN},
+      {"selectToSpeakOptionsHighlightColorPink",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_COLOR_PINK},
+      {"selectToSpeakOptionsHighlightDark",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_DARK},
+      {"selectToSpeakOptionsHighlightLight",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT_LIGHT},
+      {"selectToSpeakOptionsBackgroundShadingDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_BACKGROUND_SHADING_DESCRIPTION},
+      {"selectToSpeakOptionsSampleText",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_SAMPLE_TEXT},
+      {"selectToSpeakOptionsNavigationControlsDescription",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_NAVIGATION_CONTROLS_DESCRIPTION},
+      {"selectToSpeakOptionsNavigationControlsSubtitle",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_NAVIGATION_CONTROLS_SUBTITLE},
+      {"selectToSpeakTextToSpeechSettingsLink",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TEXT_TO_SPEECH_SETTINGS_LINK},
+      {"selectToSpeakOptionsHighlight",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_HIGHLIGHT},
+      {"selectToSpeakOptionsSpeech",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_SPEECH},
+      {"selectToSpeakOptionsDeviceLanguage",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DEVICE_LANGUAGE},
+      {"selectToSpeakOptionsSystemVoice",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_SYSTEM_VOICE},
+      {"selectToSpeakOptionsVoicePreview",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_VOICE_PREVIEW},
+      {"selectToSpeakOptionsDefaultNetworkVoice",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DEFAULT_NETWORK_VOICE},
+      {"selectToSpeakOptionsNaturalVoicePreview",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_NATURAL_VOICE_PREVIEW},
+      {"selectToSpeakOptionsLabel",
+       IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_OPTIONS_LABEL},
+      {"selectToSpeakTitle", IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE},
+      {"sepiaLabel", IDS_SETTINGS_SEPIA_LABEL},
+      {"settingsSliderRoleDescription",
+       IDS_SETTINGS_SLIDER_MIN_MAX_ARIA_ROLE_DESCRIPTION},
+      {"startupSoundLabel", IDS_SETTINGS_STARTUP_SOUND_LABEL},
+      {"stickyKeysDescription", IDS_SETTINGS_STICKY_KEYS_DESCRIPTION},
+      {"stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL},
       {"switchAccessActionAssignmentAddAssignmentIconLabel",
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_ADD_ASSIGNMENT_ICON_LABEL},
-      {"switchAccessActionAssignmentRemoveAssignmentIconLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_REMOVE_ASSIGNMENT_ICON_LABEL},
-      {"switchAccessActionAssignmentErrorIconLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_ERROR_ICON_LABEL},
+      {"switchAccessActionAssignmentAssignedIconLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_ASSIGNED_ICON_LABEL},
+      {"switchAccessActionAssignmentContinueResponse",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_CONTINUE_RESPONSE},
       {"switchAccessActionAssignmentDialogTitle",
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_DIALOG_TITLE},
-      {"switchAccessActionAssignmentWarnNotConfirmedPrompt",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_NOT_CONFIRMED_PROMPT},
-      {"switchAccessActionAssignmentWarnAlreadyAssignedActionPrompt",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_ALREADY_ASSIGNED_ACTION_PROMPT},
-      {"switchAccessActionAssignmentWarnUnrecognizedKeyPrompt",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_UNRECOGNIZED_KEY_PROMPT},
+      {"switchAccessActionAssignmentErrorIconLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_ERROR_ICON_LABEL},
+      {"switchAccessActionAssignmentExitResponse",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_EXIT_RESPONSE},
+      {"switchAccessActionAssignmentRemoveAssignmentIconLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_REMOVE_ASSIGNMENT_ICON_LABEL},
+      {"switchAccessActionAssignmentTryAgainResponse",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_TRY_AGAIN_RESPONSE},
+      {"switchAccessActionAssignmentWaitForConfirmationPrompt",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_CONFIRMATION_PROMPT},
+      {"switchAccessActionAssignmentWaitForConfirmationRemovalPrompt",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_CONFIRMATION_REMOVAL_PROMPT},
+      {"switchAccessActionAssignmentWaitForKeyPromptAtLeastOneSwitch",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_KEY_PROMPT_AT_LEAST_ONE_SWITCH},
       {"switchAccessActionAssignmentWaitForKeyPromptNoSwitches",
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_KEY_PROMPT_NO_SWITCHES},
       {"switchAccessActionAssignmentWaitForKeyPromptNoSwitchesSetupGuide",
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_KEY_PROMPT_NO_SWITCHES_SETUP_GUIDE},
-      {"switchAccessActionAssignmentWaitForKeyPromptAtLeastOneSwitch",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_KEY_PROMPT_AT_LEAST_ONE_SWITCH},
-      {"switchAccessActionAssignmentWaitForConfirmationPrompt",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_CONFIRMATION_PROMPT},
-      {"switchAccessActionAssignmentExitResponse",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_EXIT_RESPONSE},
-      {"switchAccessActionAssignmentContinueResponse",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_CONTINUE_RESPONSE},
-      {"switchAccessActionAssignmentTryAgainResponse",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_TRY_AGAIN_RESPONSE},
-      {"switchAccessActionAssignmentWaitForConfirmationRemovalPrompt",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WAIT_FOR_CONFIRMATION_REMOVAL_PROMPT},
+      {"switchAccessActionAssignmentWarnAlreadyAssignedActionPrompt",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_ALREADY_ASSIGNED_ACTION_PROMPT},
       {"switchAccessActionAssignmentWarnCannotRemoveLastSelectSwitch",
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_CANNOT_REMOVE_LAST_SELECT_SWITCH},
-      {"switchAndDeviceType", IDS_SETTINGS_SWITCH_AND_DEVICE_TYPE},
-      {"noSwitchesAssigned", IDS_SETTINGS_NO_SWITCHES_ASSIGNED},
-      {"noSwitchesAssignedSetupGuide",
-       IDS_SETTINGS_NO_SWITCHES_ASSIGNED_SETUP_GUIDE},
+      {"switchAccessActionAssignmentWarnNotConfirmedPrompt",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_NOT_CONFIRMED_PROMPT},
+      {"switchAccessActionAssignmentWarnUnrecognizedKeyPrompt",
+       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_WARN_UNRECOGNIZED_KEY_PROMPT},
+      {"switchAccessAutoScanHeading",
+       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_HEADING},
+      {"switchAccessAutoScanKeyboardSpeedLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_KEYBOARD_SPEED_LABEL},
+      {"switchAccessAutoScanLabel", IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_LABEL},
+      {"switchAccessAutoScanSpeedLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_SPEED_LABEL},
+      {"switchAccessBluetoothDeviceTypeLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_BLUETOOTH_DEVICE_TYPE_LABEL},
       {"switchAccessDialogExit", IDS_SETTINGS_SWITCH_ACCESS_DIALOG_EXIT},
-      {"switchAccessSetupGuideWarningDialogTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_WARNING_DIALOG_TITLE},
-      {"switchAccessSetupGuideWarningDialogMessage",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_WARNING_DIALOG_MESSAGE},
-      {"switchAccessSetupIntroTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_TITLE},
-      {"switchAccessSetupIntroBody",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_BODY},
+      {"switchAccessInternalDeviceTypeLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_INTERNAL_DEVICE_TYPE_LABEL},
+      {"switchAccessLabel",
+       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION},
+      {"switchAccessLabelSubtext",
+       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION_SUBTEXT},
+      {"switchAccessOptionsLabel",
+       IDS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_OPTIONS_LABEL},
+      {"switchAccessPointScanSpeedLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_POINT_SCAN_SPEED_LABEL},
+      {"switchAccessSetupAssignNextTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_ASSIGN_NEXT_TITLE},
+      {"switchAccessSetupAssignPreviousTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_ASSIGN_PREVIOUS_TITLE},
       {"switchAccessSetupAssignSelectTitle",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_ASSIGN_SELECT_TITLE},
-      {"switchAccessSetupAutoScanEnabledTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_ENABLED_TITLE},
-      {"switchAccessSetupAutoScanEnabledExplanation",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_ENABLED_EXPLANATION},
       {"switchAccessSetupAutoScanEnabledDirections",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_ENABLED_DIRECTIONS},
-      {"switchAccessSetupChooseSwitchCountTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CHOOSE_SWITCH_COUNT_TITLE},
+      {"switchAccessSetupAutoScanEnabledExplanation",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_ENABLED_EXPLANATION},
+      {"switchAccessSetupAutoScanEnabledTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_ENABLED_TITLE},
+      {"switchAccessSetupAutoScanFaster",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_FASTER},
+      {"switchAccessSetupAutoScanSlower",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SLOWER},
+      {"switchAccessSetupAutoScanSpeedDescription",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SPEED_DESCRIPTION},
+      {"switchAccessSetupAutoScanSpeedTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SPEED_TITLE},
       {"switchAccessSetupChoose1Switch",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_CHOOSE_1_SWITCH},
       {"switchAccessSetupChoose2Switches",
@@ -816,111 +871,85 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_CHOOSE_3_SWITCHES},
       {"switchAccessSetupChoose3SwitchesDescription",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_CHOOSE_3_SWITCHES_DESCRIPTION},
-      {"switchAccessSetupAutoScanSpeedTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SPEED_TITLE},
-      {"switchAccessSetupAutoScanSpeedDescription",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SPEED_DESCRIPTION},
-      {"switchAccessSetupAssignNextTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_ASSIGN_NEXT_TITLE},
-      {"switchAccessSetupAssignPreviousTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_ASSIGN_PREVIOUS_TITLE},
-      {"switchAccessSetupClosingTitle",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CLOSING_TITLE},
-      {"switchAccessSetupClosingManualScanInstructions",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CLOSING_MANUAL_SCAN_INSTRUCTIONS},
+      {"switchAccessSetupChooseSwitchCountTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CHOOSE_SWITCH_COUNT_TITLE},
       {"switchAccessSetupClosingInfo",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_CLOSING_INFO},
-      {"switchAccessSetupAutoScanSlower",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_SLOWER},
-      {"switchAccessSetupAutoScanFaster",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_AUTO_SCAN_FASTER},
-      {"switchAccessSetupStartOver",
-       IDS_SETTINGS_SWITCH_ACCESS_SETUP_START_OVER},
+      {"switchAccessSetupClosingManualScanInstructions",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CLOSING_MANUAL_SCAN_INSTRUCTIONS},
+      {"switchAccessSetupClosingTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_CLOSING_TITLE},
       {"switchAccessSetupDone", IDS_SETTINGS_SWITCH_ACCESS_SETUP_DONE},
+      {"switchAccessSetupGuideLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_LABEL},
+      {"switchAccessSetupGuideWarningDialogMessage",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_WARNING_DIALOG_MESSAGE},
+      {"switchAccessSetupGuideWarningDialogTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_WARNING_DIALOG_TITLE},
+      {"switchAccessSetupIntroBody",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_BODY},
+      {"switchAccessSetupIntroTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_TITLE},
+      {"switchAccessSetupNext", IDS_SETTINGS_SWITCH_ACCESS_SETUP_NEXT},
       {"switchAccessSetupPairBluetooth",
        IDS_SETTINGS_SWITCH_ACCESS_SETUP_PAIR_BLUETOOTH},
-      {"switchAccessSetupNext", IDS_SETTINGS_SWITCH_ACCESS_SETUP_NEXT},
       {"switchAccessSetupPrevious", IDS_SETTINGS_SWITCH_ACCESS_SETUP_PREVIOUS},
-      {"switchAccessAutoScanHeading",
-       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_HEADING},
-      {"switchAccessAutoScanLabel", IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_LABEL},
-      {"switchAccessAutoScanSpeedLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_SPEED_LABEL},
-      {"switchAccessAutoScanKeyboardSpeedLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_KEYBOARD_SPEED_LABEL},
-      {"switchAccessPointScanSpeedLabel",
-       IDS_SETTINGS_SWITCH_ACCESS_POINT_SCAN_SPEED_LABEL},
-      {"durationInSeconds", IDS_SETTINGS_DURATION_IN_SECONDS},
-      {"manageAccessibilityFeatures",
-       IDS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES},
-      {"textToSpeechHeading",
-       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_HEADING},
-      {"displayHeading", IDS_SETTINGS_ACCESSIBILITY_DISPLAY_HEADING},
-      {"displaySettingsTitle",
-       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_TITLE},
-      {"displaySettingsDescription",
-       IDS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_DESCRIPTION},
-      {"appearanceSettingsTitle",
-       IDS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_TITLE},
-      {"appearanceSettingsDescription",
-       IDS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_DESCRIPTION},
-      {"keyboardAndTextInputHeading",
-       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_HEADING},
-      {"keyboardSettingsTitle",
-       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_TITLE},
-      {"keyboardSettingsDescription",
-       IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_DESCRIPTION},
-      {"mouseAndTouchpadHeading",
-       IDS_SETTINGS_ACCESSIBILITY_MOUSE_AND_TOUCHPAD_HEADING},
-      {"mouseSettingsTitle", IDS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_TITLE},
-      {"audioAndCaptionsHeading",
-       IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_HEADING},
-      {"additionalFeaturesTitle",
-       IDS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE},
-      {"manageTtsSettings", IDS_SETTINGS_MANAGE_TTS_SETTINGS},
-      {"ttsSettingsLinkDescription", IDS_SETTINGS_TTS_LINK_DESCRIPTION},
-      {"textToSpeechVoices", IDS_SETTINGS_TEXT_TO_SPEECH_VOICES},
-      {"textToSpeechNoVoicesMessage",
-       IDS_SETTINGS_TEXT_TO_SPEECH_NO_VOICES_MESSAGE},
-      {"textToSpeechMoreLanguages", IDS_SETTINGS_TEXT_TO_SPEECH_MORE_LANGUAGES},
-      {"textToSpeechProperties", IDS_SETTINGS_TEXT_TO_SPEECH_PROPERTIES},
-      {"textToSpeechRate", IDS_SETTINGS_TEXT_TO_SPEECH_RATE},
-      {"textToSpeechRateMinimumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_RATE_MINIMUM_LABEL},
-      {"textToSpeechRateMaximumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_RATE_MAXIMUM_LABEL},
-      {"textToSpeechPitch", IDS_SETTINGS_TEXT_TO_SPEECH_PITCH},
-      {"textToSpeechPitchMinimumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_PITCH_MINIMUM_LABEL},
-      {"textToSpeechPitchMaximumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_PITCH_MAXIMUM_LABEL},
-      {"textToSpeechVolume", IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME},
-      {"textToSpeechVolumeMinimumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME_MINIMUM_LABEL},
-      {"textToSpeechVolumeMaximumLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME_MAXIMUM_LABEL},
-      {"percentage", IDS_SETTINGS_PERCENTAGE},
-      {"defaultPercentage", IDS_SETTINGS_DEFAULT_PERCENTAGE},
-      {"textToSpeechPreviewHeading",
-       IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_HEADING},
-      {"textToSpeechPreviewInputLabel",
-       IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_INPUT_LABEL},
-      {"textToSpeechPreviewInput", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_INPUT},
-      {"textToSpeechPreviewVoice", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_VOICE},
-      {"textToSpeechPreviewPlay", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_PLAY},
-      {"textToSpeechEngines", IDS_SETTINGS_TEXT_TO_SPEECH_ENGINES},
-      {"tabletModeShelfNavigationButtonsSettingLabel",
-       IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_LABEL},
+      {"switchAccessSetupStartOver",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_START_OVER},
+      {"switchAccessUnknownDeviceTypeLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_UNKNOWN_DEVICE_TYPE_LABEL},
+      {"switchAccessUsbDeviceTypeLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_USB_DEVICE_TYPE_LABEL},
+      {"switchAndDeviceType", IDS_SETTINGS_SWITCH_AND_DEVICE_TYPE},
+      {"switchAssignmentHeading", IDS_SETTINGS_SWITCH_ASSIGNMENT_HEADING},
       {"tabletModeShelfNavigationButtonsSettingDescription",
        IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_DESCRIPTION},
-      {"caretBrowsingTitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_TITLE},
-      {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
-      {"cancel", IDS_CANCEL},
+      {"tabletModeShelfNavigationButtonsSettingLabel",
+       IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_LABEL},
+      {"tapDraggingLabel", IDS_SETTINGS_TAP_DRAGGING_LABEL},
+      {"textToSpeechEngines", IDS_SETTINGS_TEXT_TO_SPEECH_ENGINES},
+      {"textToSpeechHeading",
+       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_HEADING},
+      {"textToSpeechLinkDescription",
+       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_DESCRIPTION},
+      {"textToSpeechLinkTitle",
+       IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_TITLE},
+      {"textToSpeechMoreLanguages", IDS_SETTINGS_TEXT_TO_SPEECH_MORE_LANGUAGES},
+      {"textToSpeechNoVoicesMessage",
+       IDS_SETTINGS_TEXT_TO_SPEECH_NO_VOICES_MESSAGE},
+      {"textToSpeechPitch", IDS_SETTINGS_TEXT_TO_SPEECH_PITCH},
+      {"textToSpeechPitchMaximumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_PITCH_MAXIMUM_LABEL},
+      {"textToSpeechPitchMinimumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_PITCH_MINIMUM_LABEL},
+      {"textToSpeechPreviewHeading",
+       IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_HEADING},
+      {"textToSpeechPreviewInput", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_INPUT},
+      {"textToSpeechPreviewInputLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_INPUT_LABEL},
+      {"textToSpeechPreviewPlay", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_PLAY},
+      {"textToSpeechPreviewVoice", IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_VOICE},
+      {"textToSpeechProperties", IDS_SETTINGS_TEXT_TO_SPEECH_PROPERTIES},
+      {"textToSpeechRate", IDS_SETTINGS_TEXT_TO_SPEECH_RATE},
+      {"textToSpeechRateMaximumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_RATE_MAXIMUM_LABEL},
+      {"textToSpeechRateMinimumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_RATE_MINIMUM_LABEL},
+      {"textToSpeechVoices", IDS_SETTINGS_TEXT_TO_SPEECH_VOICES},
+      {"textToSpeechVolume", IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME},
+      {"textToSpeechVolumeMaximumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME_MAXIMUM_LABEL},
+      {"textToSpeechVolumeMinimumLabel",
+       IDS_SETTINGS_TEXT_TO_SPEECH_VOLUME_MINIMUM_LABEL},
+      {"ttsSettingsLinkDescription", IDS_SETTINGS_TTS_LINK_DESCRIPTION},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddString("a11yLearnMoreUrl",
                          chrome::kChromeAccessibilityHelpURL);
+
+  html_source->AddString("selectToSpeakLearnMoreUrl",
+                         chrome::kSelectToSpeakLearnMoreURL);
 
   html_source->AddBoolean(
       "showExperimentalAccessibilitySwitchAccessImprovedTextInput",
@@ -932,8 +961,12 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddString("tabletModeShelfNavigationButtonsLearnMoreUrl",
                          chrome::kTabletModeGesturesLearnMoreURL);
 
-  html_source->AddBoolean("isAccessibilityOSSettingsVisibilityEnabled",
-                          IsAccessibilityOSSettingsVisibilityEnabled());
+  html_source->AddBoolean("isAccessibilitySelectToSpeakPageMigrationEnabled",
+                          IsAccessibilitySelectToSpeakPageMigrationEnabled());
+
+  html_source->AddBoolean(
+      "isExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled",
+      IsExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled());
 
   html_source->AddBoolean(
       "areExperimentalAccessibilityColorEnhancementSettingsEnabled",
@@ -948,7 +981,8 @@ void AccessibilitySection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<AccessibilityHandler>(profile()));
   web_ui->AddMessageHandler(
       std::make_unique<SwitchAccessHandler>(profile()->GetPrefs()));
-  web_ui->AddMessageHandler(std::make_unique<::settings::TtsHandler>());
+  web_ui->AddMessageHandler(std::make_unique<TtsHandler>());
+  web_ui->AddMessageHandler(std::make_unique<SelectToSpeakHandler>());
   web_ui->AddMessageHandler(
       std::make_unique<::settings::FontHandler>(profile()));
   web_ui->AddMessageHandler(
@@ -984,7 +1018,7 @@ bool AccessibilitySection::LogMetric(mojom::Setting setting,
       base::UmaHistogramEnumeration(
           "ChromeOS.Settings.Accessibility."
           "FullscreenMagnifierMouseFollowingMode",
-          static_cast<ash::MagnifierMouseFollowingMode>(value.GetInt()));
+          static_cast<MagnifierMouseFollowingMode>(value.GetInt()));
       return true;
 
     default:
@@ -1005,37 +1039,50 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kManageAccessibilitySubpagePath);
 
-  if (IsAccessibilityOSSettingsVisibilityEnabled()) {
-    // Text-to-Speech page.
+  // Text-to-Speech page.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_TITLE,
+      mojom::Subpage::kTextToSpeechPage, mojom::SearchResultIcon::kA11y,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kTextToSpeechPagePath);
+  // Select to speak options page.
+  if (IsAccessibilitySelectToSpeakPageMigrationEnabled()) {
     generator->RegisterTopLevelSubpage(
-        IDS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_LINK_TITLE,
-        mojom::Subpage::kTextToSpeechPage, mojom::SearchResultIcon::kA11y,
-        mojom::SearchResultDefaultRank::kMedium, mojom::kTextToSpeechPagePath);
-    // Display and magnification page.
-    generator->RegisterTopLevelSubpage(
-        IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_TITLE,
-        mojom::Subpage::kDisplayAndMagnification,
-        mojom::SearchResultIcon::kA11y, mojom::SearchResultDefaultRank::kMedium,
-        mojom::kDisplayAndMagnificationSubpagePath);
-    // Keyboard and text input page.
-    generator->RegisterTopLevelSubpage(
-        IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_TITLE,
-        mojom::Subpage::kKeyboardAndTextInput, mojom::SearchResultIcon::kA11y,
+        IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_LINK_TITLE,
+        mojom::Subpage::kSelectToSpeak, mojom::SearchResultIcon::kA11y,
         mojom::SearchResultDefaultRank::kMedium,
-        mojom::kKeyboardAndTextInputSubpagePath);
-    // Cursor and touchpad page.
-    generator->RegisterTopLevelSubpage(
-        IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_TITLE,
-        mojom::Subpage::kCursorAndTouchpad, mojom::SearchResultIcon::kA11y,
-        mojom::SearchResultDefaultRank::kMedium,
-        mojom::kCursorAndTouchpadSubpagePath);
-    // Audio and captions page.
-    generator->RegisterTopLevelSubpage(
-        IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_TITLE,
-        mojom::Subpage::kAudioAndCaptions, mojom::SearchResultIcon::kA11y,
-        mojom::SearchResultDefaultRank::kMedium,
-        mojom::kAudioAndCaptionsSubpagePath);
+        mojom::kSelectToSpeakSubpagePath);
+    static constexpr mojom::Setting kSelectToSpeakSettings[] = {
+        mojom::Setting::kSelectToSpeakWordHighlight,
+        mojom::Setting::kSelectToSpeakBackgroundShading,
+        mojom::Setting::kSelectToSpeakNavigationControls,
+    };
+    RegisterNestedSettingBulk(mojom::Subpage::kSelectToSpeak,
+                              kSelectToSpeakSettings, generator);
   }
+  // Display and magnification page.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_TITLE,
+      mojom::Subpage::kDisplayAndMagnification, mojom::SearchResultIcon::kA11y,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kDisplayAndMagnificationSubpagePath);
+  // Keyboard and text input page.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_LINK_TITLE,
+      mojom::Subpage::kKeyboardAndTextInput, mojom::SearchResultIcon::kA11y,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kKeyboardAndTextInputSubpagePath);
+  // Cursor and touchpad page.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ACCESSIBILITY_CURSOR_AND_TOUCHPAD_LINK_TITLE,
+      mojom::Subpage::kCursorAndTouchpad, mojom::SearchResultIcon::kA11y,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kCursorAndTouchpadSubpagePath);
+  // Audio and captions page.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ACCESSIBILITY_AUDIO_AND_CAPTIONS_LINK_TITLE,
+      mojom::Subpage::kAudioAndCaptions, mojom::SearchResultIcon::kA11y,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kAudioAndCaptionsSubpagePath);
 
   static constexpr mojom::Setting kManageAccessibilitySettings[] = {
       mojom::Setting::kChromeVox,
@@ -1055,6 +1102,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kLargeCursor,
       mojom::Setting::kHighlightCursorWhileMoving,
       mojom::Setting::kTabletNavigationButtons,
+      mojom::Setting::kLiveCaption,
       mojom::Setting::kMonoAudio,
       mojom::Setting::kStartupSound,
       mojom::Setting::kEnableCursorColor,
@@ -1075,6 +1123,7 @@ void AccessibilitySection::RegisterHierarchy(
   RegisterNestedSettingBulk(mojom::Subpage::kTextToSpeech,
                             kTextToSpeechSettings, generator);
 
+  // TODO(crbug.com/1383613): Change some of these to RegisterNestedSubpages.
   // Switch access.
   generator->RegisterTopLevelSubpage(IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS,
                                      mojom::Subpage::kSwitchAccessOptions,
@@ -1088,17 +1137,6 @@ void AccessibilitySection::RegisterHierarchy(
   };
   RegisterNestedSettingBulk(mojom::Subpage::kSwitchAccessOptions,
                             kSwitchAccessSettings, generator);
-
-  // Caption preferences.
-  generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_CAPTIONS, mojom::Subpage::kCaptions,
-      mojom::SearchResultIcon::kA11y, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kCaptionsSubpagePath);
-  static constexpr mojom::Setting kCaptionsSettings[] = {
-      mojom::Setting::kLiveCaption,
-  };
-  RegisterNestedSettingBulk(mojom::Subpage::kCaptions, kCaptionsSettings,
-                            generator);
 }
 
 void AccessibilitySection::OnVoicesChanged() {
@@ -1163,8 +1201,7 @@ void AccessibilitySection::UpdateSearchTags() {
     updater.RemoveSearchTags(GetA11yLiveCaptionSearchConcepts());
   }
 
-  if (pref_service_->GetBoolean(
-          ash::prefs::kAccessibilityScreenMagnifierEnabled)) {
+  if (pref_service_->GetBoolean(prefs::kAccessibilityScreenMagnifierEnabled)) {
     updater.AddSearchTags(
         GetA11yFullscreenMagnifierFocusFollowingSearchConcepts());
   } else {
@@ -1172,12 +1209,7 @@ void AccessibilitySection::UpdateSearchTags() {
         GetA11yFullscreenMagnifierFocusFollowingSearchConcepts());
   }
 
-  if (IsAccessibilityOSSettingsVisibilityEnabled()) {
-    updater.AddSearchTags(GetA11yVisibilitySearchConcepts());
-  }
-
-  if (!pref_service_->GetBoolean(
-          ash::prefs::kAccessibilitySwitchAccessEnabled)) {
+  if (!pref_service_->GetBoolean(prefs::kAccessibilitySwitchAccessEnabled)) {
     return;
   }
 
@@ -1185,10 +1217,9 @@ void AccessibilitySection::UpdateSearchTags() {
 
   if (IsSwitchAccessTextAllowed() &&
       pref_service_->GetBoolean(
-          ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled)) {
+          prefs::kAccessibilitySwitchAccessAutoScanEnabled)) {
     updater.AddSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
   }
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

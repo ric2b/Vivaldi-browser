@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
@@ -31,6 +31,12 @@
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+
+// Vivaldi
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -59,29 +65,31 @@
 - (void)start {
   if (self.started)
     return;
+  Browser* browser = self.browser;
 
   self.started = YES;
 
   self.viewController.longPressDelegate = self.longPressDelegate;
   self.viewController.overrideUserInterfaceStyle =
-      self.browser->GetBrowserState()->IsOffTheRecord()
+      browser->GetBrowserState()->IsOffTheRecord()
           ? UIUserInterfaceStyleDark
           : UIUserInterfaceStyleUnspecified;
-  self.viewController.layoutGuideCenter =
-      LayoutGuideCenterForBrowser(self.browser);
+  self.viewController.layoutGuideCenter = LayoutGuideCenterForBrowser(browser);
 
   self.mediator = [[ToolbarMediator alloc] init];
-  self.mediator.incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  self.mediator.incognito = browser->GetBrowserState()->IsOffTheRecord();
   self.mediator.consumer = self.viewController;
-  self.mediator.webStateList = self.browser->GetWebStateList();
-  self.mediator.webContentAreaOverlayPresenter = OverlayPresenter::FromBrowser(
-      self.browser, OverlayModality::kWebContentArea);
+  self.mediator.navigationBrowserAgent =
+      WebNavigationBrowserAgent::FromBrowser(browser);
+  self.mediator.webStateList = browser->GetWebStateList();
+  self.mediator.webContentAreaOverlayPresenter =
+      OverlayPresenter::FromBrowser(browser, OverlayModality::kWebContentArea);
   self.mediator.templateURLService =
       ios::TemplateURLServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  self.mediator.actionFactory =
-      [[BrowserActionFactory alloc] initWithBrowser:self.browser
-                                           scenario:MenuScenario::kToolbarMenu];
+          browser->GetBrowserState());
+  self.mediator.actionFactory = [[BrowserActionFactory alloc]
+      initWithBrowser:browser
+             scenario:MenuScenarioHistogram::kToolbarMenu];
 
   self.viewController.menuProvider = self.mediator;
 }
@@ -170,6 +178,12 @@
   actionHandler.incognito = isIncognito;
   actionHandler.navigationAgent =
       WebNavigationBrowserAgent::FromBrowser(self.browser);
+
+  // Vivaldi
+  actionHandler.browserCommands =
+    HandlerForProtocol(
+     dispatcher, BrowserCoordinatorCommands);
+  // End Vivaldi
 
   self.actionHandler = actionHandler;
 

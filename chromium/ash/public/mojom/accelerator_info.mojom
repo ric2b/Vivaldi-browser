@@ -55,19 +55,24 @@ enum AcceleratorState {
 };
 
 // Represents the style of layout for an accelerator.
-// TODO(jimmyxgong): Add alternate layout styles.
 enum AcceleratorLayoutStyle {
+  // Used for shortcuts containing zero or more modifiers and one key,
+  // e.g. "Ctrl+T", "Ctrl+Shift+T", "<Refresh Icon>", etc.
   kDefault = 0,
+  // Used to display arbitrary text with optional modifiers/keys interspersed,
+  // e.g. "Hold <Ctrl> and click on a link" or "Drag link to bookmarks bar".
+  kText = 1,
 };
 
 // Enum of top-level accelerator categories. Used in the UI for categorization.
 // TODO(jimmyxgong): These are not the final enums, update once final categories
 // are available.
 enum AcceleratorCategory {
-  kSystem,
-  kWindowsAndDesk,
-  kTabsAndPages,
-  kTextAndInput,
+  kTabsAndWindows,
+  kPageAndWebBrowser,
+  kSystemAndDisplaySettings,
+  kTextEditing,
+  kAccessibility,
   kDebug,
   kDeveloper,
 };
@@ -82,18 +87,42 @@ enum AcceleratorSubcategory {
   kSystemApps,
 };
 
-// Represents an accelerator in its entirety. Includes the keys, state, type,
-// and whether the accelerator is locked.
-struct AcceleratorInfo {
+enum TextAcceleratorPartType {
+  kPlainText,
+  kModifier,
+  kKey,
+};
+
+struct TextAcceleratorPart {
+  mojo_base.mojom.String16 text;
+  TextAcceleratorPartType type;
+};
+
+struct TextAcceleratorProperties {
+  array<TextAcceleratorPart> text_accelerator;
+};
+
+struct DefaultAcceleratorProperties {
   // Underlying accelerator struct, contains keycode and modifier.
   ui.mojom.Accelerator accelerator;
   // The user viewable string of the primary activation key for the accelerator.
   mojo_base.mojom.String16 key_display;
+};
+
+union LayoutStyleProperties {
+  DefaultAcceleratorProperties default_accelerator;
+  TextAcceleratorProperties text_accelerator;
+};
+
+// Represents an accelerator in its entirety. Includes the keys, state, type,
+// and whether the accelerator is locked.
+struct AcceleratorInfo {
   AcceleratorType type;
   AcceleratorState state;
   // True if the accelerator can not be customized by the user.
   // False if the accelerator can be customized by the user.
   bool locked;
+  LayoutStyleProperties layout_properties;
 };
 
 // Represents layout styling descriptors of an accelerator. Includes the

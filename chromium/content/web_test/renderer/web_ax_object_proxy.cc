@@ -259,7 +259,9 @@ WebAXObjectProxy::WebAXObjectProxy(const blink::WebAXObject& object,
 WebAXObjectProxy::~WebAXObjectProxy() = default;
 
 void WebAXObjectProxy::UpdateLayout() {
-  blink::WebAXObject::UpdateLayout(accessibility_object_.GetDocument());
+  DCHECK(factory());
+  DCHECK(factory()->GetAXContext());
+  factory()->GetAXContext()->UpdateAXForAllDocuments();
 }
 
 ui::AXNodeData WebAXObjectProxy::GetAXNodeData() const {
@@ -396,6 +398,7 @@ gin::ObjectTemplateBuilder WebAXObjectProxy::GetObjectTemplateBuilder(
       .SetMethod("isAttributeSettable", &WebAXObjectProxy::IsAttributeSettable)
       .SetMethod("isPressActionSupported",
                  &WebAXObjectProxy::IsPressActionSupported)
+      .SetMethod("hasDefaultAction", &WebAXObjectProxy::HasDefaultAction)
       .SetMethod("parentElement", &WebAXObjectProxy::ParentElement)
       .SetMethod("increment", &WebAXObjectProxy::Increment)
       .SetMethod("decrement", &WebAXObjectProxy::Decrement)
@@ -1373,6 +1376,11 @@ bool WebAXObjectProxy::IsPressActionSupported() {
   return accessibility_object_.Action() == ax::mojom::DefaultActionVerb::kPress;
 }
 
+bool WebAXObjectProxy::HasDefaultAction() {
+  UpdateLayout();
+  return accessibility_object_.Action() != ax::mojom::DefaultActionVerb::kNone;
+}
+
 v8::Local<v8::Object> WebAXObjectProxy::ParentElement() {
   UpdateLayout();
   blink::WebAXObject parent_object = accessibility_object_.ParentObject();
@@ -1769,7 +1777,8 @@ bool RootWebAXObjectProxy::IsRoot() const {
   return true;
 }
 
-WebAXObjectProxyList::WebAXObjectProxyList() = default;
+WebAXObjectProxyList::WebAXObjectProxyList(blink::WebAXContext& ax_context)
+    : ax_context_(&ax_context) {}
 
 WebAXObjectProxyList::~WebAXObjectProxyList() {
   Clear();
@@ -1804,6 +1813,7 @@ v8::Local<v8::Object> WebAXObjectProxyList::GetOrCreate(
 
   v8::Isolate* isolate = blink::MainThreadIsolate();
 
+  // Return existing object if there is a match.
   for (const auto& persistent : elements_) {
     auto local = v8::Local<v8::Object>::New(isolate, persistent);
 
@@ -1815,6 +1825,7 @@ v8::Local<v8::Object> WebAXObjectProxyList::GetOrCreate(
       return local;
   }
 
+  // Create a new object.
   v8::Local<v8::Value> value_handle =
       gin::CreateHandle(isolate, new WebAXObjectProxy(object, this)).ToV8();
   v8::Local<v8::Object> handle;
@@ -1825,6 +1836,10 @@ v8::Local<v8::Object> WebAXObjectProxyList::GetOrCreate(
 
   elements_.emplace_back(isolate, handle);
   return handle;
+}
+
+blink::WebAXContext* WebAXObjectProxyList::GetAXContext() {
+  return ax_context_;
 }
 
 }  // namespace content

@@ -143,8 +143,8 @@ void NotificationPermissionContext::DecidePermission(
     return;
   }
 
-  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(id.global_render_frame_host_id());
 
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(rfh);
@@ -167,7 +167,8 @@ void NotificationPermissionContext::DecidePermission(
                            weak_factory_ui_thread_.GetWeakPtr(), id,
                            requesting_origin, embedding_origin,
                            std::move(callback), /*persist=*/true,
-                           CONTENT_SETTING_BLOCK, /*is_one_time=*/false),
+                           CONTENT_SETTING_BLOCK, /*is_one_time=*/false,
+                           /*is_final_decision=*/true),
             base::Seconds(delay_seconds));
     return;
   }

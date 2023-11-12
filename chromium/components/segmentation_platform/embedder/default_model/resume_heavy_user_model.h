@@ -20,15 +20,15 @@ class ResumeHeavyUserModel : public ModelProvider {
   ~ResumeHeavyUserModel() override = default;
 
   // Disallow copy/assign.
-  ResumeHeavyUserModel(ResumeHeavyUserModel&) = delete;
-  ResumeHeavyUserModel& operator=(ResumeHeavyUserModel&) = delete;
+  ResumeHeavyUserModel(const ResumeHeavyUserModel&) = delete;
+  ResumeHeavyUserModel& operator=(const ResumeHeavyUserModel&) = delete;
 
   static std::unique_ptr<Config> GetConfig();
 
   // ModelProvider implementation.
   void InitAndFetchModel(
       const ModelUpdatedCallback& model_updated_callback) override;
-  void ExecuteModelWithInput(const std::vector<float>& inputs,
+  void ExecuteModelWithInput(const ModelProvider::Request& inputs,
                              ExecutionCallback callback) override;
   bool ModelAvailable() override;
 };

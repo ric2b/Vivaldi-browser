@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,12 +13,14 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/attribution_reporting/aggregatable_trigger_data.h"
+#include "components/attribution_reporting/aggregatable_values.h"
+#include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/filters.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
-#include "content/browser/attribution_reporting/attribution_aggregatable_trigger_data.h"
-#include "content/browser/attribution_reporting/attribution_aggregatable_values.h"
-#include "content/browser/attribution_reporting/attribution_aggregation_keys.h"
-#include "content/browser/attribution_reporting/attribution_filter_data.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
+#include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
@@ -31,61 +32,64 @@ namespace {
 
 using ::testing::ElementsAre;
 
-using FilterValues = base::flat_map<std::string, std::vector<std::string>>;
+using AttributionFilters = ::attribution_reporting::Filters;
 
 }  // namespace
 
 TEST(AggregatableAttributionUtilsTest, CreateAggregatableHistogram) {
   base::HistogramTester histograms;
 
-  auto source = AttributionAggregationKeys::FromKeys(
+  auto source = attribution_reporting::AggregationKeys::FromKeys(
       {{"key1", 345}, {"key2", 5}, {"key3", 123}});
   ASSERT_TRUE(source.has_value());
 
-  std::vector<AttributionAggregatableTriggerData> aggregatable_trigger_data{
-      // The first trigger data applies to "key1", "key3".
-      AttributionAggregatableTriggerData::CreateForTesting(
-          absl::MakeUint128(/*high=*/0, /*low=*/1024),
-          /*source_keys=*/{"key1", "key3"},
-          /*filters=*/
-          AttributionFilterData::CreateForTesting({{"filter", {"value"}}}),
-          /*not_filters=*/AttributionFilterData()),
+  std::vector<attribution_reporting::AggregatableTriggerData>
+      aggregatable_trigger_data{
+          // The first trigger data applies to "key1", "key3".
+          *attribution_reporting::AggregatableTriggerData::Create(
+              absl::MakeUint128(/*high=*/0, /*low=*/1024),
+              /*source_keys=*/{"key1", "key3"},
+              /*filters=*/
+              *AttributionFilters::Create({{"filter", {"value"}}}),
+              /*not_filters=*/AttributionFilters()),
 
-      // The second trigger data applies to "key2", "key4" is ignored.
-      AttributionAggregatableTriggerData::CreateForTesting(
-          absl::MakeUint128(/*high=*/0, /*low=*/2688),
-          /*source_keys=*/{"key2", "key4"},
-          /*filters=*/
-          AttributionFilterData::CreateForTesting({{"a", {"b", "c"}}}),
-          /*not_filters=*/AttributionFilterData()),
+          // The second trigger data applies to "key2", "key4" is ignored.
+          *attribution_reporting::AggregatableTriggerData::Create(
+              absl::MakeUint128(/*high=*/0, /*low=*/2688),
+              /*source_keys=*/{"key2", "key4"},
+              /*filters=*/
+              *AttributionFilters::Create({{"a", {"b", "c"}}}),
+              /*not_filters=*/AttributionFilters()),
 
-      // The third trigger will be ignored due to mismatched filters.
-      AttributionAggregatableTriggerData::CreateForTesting(
-          absl::MakeUint128(/*high=*/0, /*low=*/4096),
-          /*source_keys=*/{"key1", "key2"},
-          /*filters=*/
-          AttributionFilterData::CreateForTesting({{"filter", {}}}),
-          /*not_filters=*/AttributionFilterData()),
+          // The third trigger will be ignored due to mismatched filters.
+          *attribution_reporting::AggregatableTriggerData::Create(
+              absl::MakeUint128(/*high=*/0, /*low=*/4096),
+              /*source_keys=*/{"key1", "key2"},
+              /*filters=*/
+              *AttributionFilters::Create({{"filter", {}}}),
+              /*not_filters=*/AttributionFilters()),
 
-      // The fourth trigger will be ignored due to matched not_filters.
-      AttributionAggregatableTriggerData::CreateForTesting(
-          absl::MakeUint128(/*high=*/0, /*low=*/4096),
-          /*source_keys=*/{"key1", "key2"},
-          /*filters=*/AttributionFilterData(),
-          /*not_filters=*/
-          AttributionFilterData::CreateForTesting({{"filter", {"value"}}}))};
+          // The fourth trigger will be ignored due to matched not_filters.
+          *attribution_reporting::AggregatableTriggerData::Create(
+              absl::MakeUint128(/*high=*/0, /*low=*/4096),
+              /*source_keys=*/{"key1", "key2"},
+              /*filters=*/AttributionFilters(),
+              /*not_filters=*/
+              *AttributionFilters::Create({{"filter", {"value"}}}))};
 
-  absl::optional<AttributionFilterData> source_filter_data =
-      AttributionFilterData::FromSourceFilterValues({{"filter", {"value"}}});
+  absl::optional<attribution_reporting::FilterData> source_filter_data =
+      attribution_reporting::FilterData::Create({{"filter", {"value"}}});
   ASSERT_TRUE(source_filter_data.has_value());
 
-  auto aggregatable_values = AttributionAggregatableValues::CreateForTesting(
+  auto aggregatable_values = *attribution_reporting::AggregatableValues::Create(
       {{"key1", 32768}, {"key2", 1664}});
 
   std::vector<AggregatableHistogramContribution> contributions =
-      CreateAggregatableHistogram(*source_filter_data, *source,
-                                  aggregatable_trigger_data,
-                                  aggregatable_values);
+      CreateAggregatableHistogram(
+          *source_filter_data, AttributionSourceType::kEvent, *source,
+          *attribution_reporting::AggregatableTriggerDataList::Create(
+              std::move(aggregatable_trigger_data)),
+          aggregatable_values);
 
   // "key3" is not present as no value is found.
   EXPECT_THAT(
@@ -102,41 +106,22 @@ TEST(AggregatableAttributionUtilsTest, CreateAggregatableHistogram) {
       "Conversions.AggregatableReport.NumContributionsPerReport", 2, 1);
 }
 
-TEST(AggregatableAttributionUtilsTest, HexEncodeAggregationKey) {
-  const struct {
-    absl::uint128 input;
-    std::string output;
-  } kTestCases[] = {
-      {0, "0x0"},
-      {absl::MakeUint128(/*high=*/0,
-                         /*low=*/std::numeric_limits<uint64_t>::max()),
-       "0xffffffffffffffff"},
-      {absl::MakeUint128(/*high=*/1,
-                         /*low=*/std::numeric_limits<uint64_t>::max()),
-       "0x1ffffffffffffffff"},
-      {std::numeric_limits<absl::uint128>::max(),
-       "0xffffffffffffffffffffffffffffffff"},
-  };
-
-  for (const auto& test_case : kTestCases) {
-    EXPECT_EQ(HexEncodeAggregationKey(test_case.input), test_case.output)
-        << test_case.input;
-  }
-}
-
 TEST(AggregatableAttributionUtilsTest,
      NoTriggerData_FilteredPercentageNotRecorded) {
   base::HistogramTester histograms;
 
-  auto source = AttributionAggregationKeys::FromKeys({{"key1", 345}});
+  auto source =
+      attribution_reporting::AggregationKeys::FromKeys({{"key1", 345}});
   ASSERT_TRUE(source.has_value());
 
   std::vector<AggregatableHistogramContribution> contributions =
       CreateAggregatableHistogram(
-          AttributionFilterData(), *source,
+          attribution_reporting::FilterData(),
+          AttributionSourceType::kNavigation, *source,
           /*aggregatable_trigger_data=*/{},
           /*aggregatable_values=*/
-          AttributionAggregatableValues::CreateForTesting({{"key2", 32768}}));
+          *attribution_reporting::AggregatableValues::Create(
+              {{"key2", 32768}}));
 
   histograms.ExpectTotalCount(
       "Conversions.AggregatableReport.FilteredTriggerDataPercentage", 0);
@@ -181,6 +166,26 @@ TEST(AggregatableAttributionUtilsTest, RoundsSourceRegistrationTime) {
     ASSERT_TRUE(actual_serialized_time);
     EXPECT_EQ(*actual_serialized_time, test_case.expected_serialized_time)
         << test_case.description;
+  }
+}
+
+TEST(AggregatableAttributionUtilsTest, AggregationCoordinatorSet) {
+  for (auto aggregation_coordinator :
+       {::aggregation_service::mojom::AggregationCoordinator::kAwsCloud}) {
+    AttributionReport report =
+        ReportBuilder(
+            AttributionInfoBuilder(SourceBuilder().BuildStored()).Build())
+            .SetAggregatableHistogramContributions(
+                {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
+            .SetAggregationCoordinator(aggregation_coordinator)
+            .BuildAggregatableAttribution();
+
+    absl::optional<AggregatableReportRequest> request =
+        CreateAggregatableReportRequest(report);
+    ASSERT_TRUE(request.has_value()) << aggregation_coordinator;
+    EXPECT_EQ(request->payload_contents().aggregation_coordinator,
+              aggregation_coordinator)
+        << aggregation_coordinator;
   }
 }
 

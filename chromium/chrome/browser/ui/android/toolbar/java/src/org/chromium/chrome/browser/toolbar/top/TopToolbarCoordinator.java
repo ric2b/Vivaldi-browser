@@ -15,7 +15,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneShotCallback;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -39,7 +38,7 @@ import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
@@ -52,6 +51,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -70,8 +70,18 @@ public class TopToolbarCoordinator implements Toolbar {
          * @param fraction The toolbar expansion progress. 0 indicates that the URL bar is not
          *                   expanded. 1 indicates that the URL bar is expanded to the maximum
          *                   width.
+         *
+         * @param changeInProgress Whether the toolbar animation is still in progress or not.
          */
-        void onUrlExpansionProgressChanged(float fraction);
+        void onUrlExpansionProgressChanged(float fraction, boolean changeInProgress);
+    }
+
+    /**
+     * Observes toolbar color change.
+     */
+    public interface ToolbarColorObserver {
+        /** @param color The toolbar color value. */
+        void onToolbarColorChanged(int color);
     }
 
     public static final int TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS = 200;
@@ -198,10 +208,8 @@ public class TopToolbarCoordinator implements Toolbar {
         }
         } // vivaldi
         controlContainer.setPostInitializationDependencies(this, initializeWithIncognitoColors,
-                constraintsSupplier,
-                ()
-                        -> toolbarDataProvider.getTab(),
-                compositorInMotionSupplier, browserStateBrowserControlsVisibilityDelegate);
+                constraintsSupplier, toolbarDataProvider::getTab, compositorInMotionSupplier,
+                browserStateBrowserControlsVisibilityDelegate);
         mToolbarLayout.initialize(toolbarDataProvider, tabController, mMenuButtonCoordinator,
                 isProgressBarVisibleSupplier, historyDelegate, partnerHomepageEnabledSupplier,
                 offlineDownloader);
@@ -311,6 +319,13 @@ public class TopToolbarCoordinator implements Toolbar {
      */
     public void removeUrlExpansionObserver(UrlExpansionObserver urlExpansionObserver) {
         mToolbarLayout.removeUrlExpansionObserver(urlExpansionObserver);
+    }
+
+    /**
+     * @param toolbarColorObserver The observer that observes toolbar color change.
+     */
+    public void setToolbarColorObserver(@NonNull ToolbarColorObserver toolbarColorObserver) {
+        mToolbarLayout.setToolbarColorObserver(toolbarColorObserver);
     }
 
     /**
@@ -700,6 +715,7 @@ public class TopToolbarCoordinator implements Toolbar {
         mStartSurfaceToolbarCoordinator.onStartSurfaceStateChanged(
                 newState, requestToShow, newLayoutType);
         updateToolbarLayoutVisibility();
+        updateButtonVisibility();
     }
 
     /**
@@ -777,5 +793,15 @@ public class TopToolbarCoordinator implements Toolbar {
     @VisibleForTesting
     public StartSurfaceToolbarCoordinator getStartSurfaceToolbarForTesting() {
         return mStartSurfaceToolbarCoordinator;
+    }
+
+    @Override
+    public void setBrowsingModeHairlineVisibility(boolean isVisible) {
+        mToolbarLayout.setHairlineVisibility(isVisible);
+    }
+
+    @Override
+    public boolean isBrowsingModeToolbarVisible() {
+        return mToolbarLayout.getVisibility() == View.VISIBLE;
     }
 }

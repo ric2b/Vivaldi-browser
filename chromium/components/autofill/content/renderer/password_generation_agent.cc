@@ -22,6 +22,7 @@
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/signatures.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/renderer/render_frame.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -78,6 +79,17 @@ void CopyElementValueToOtherInputElements(
     }
     it.SetAutofillState(WebAutofillState::kAutofilled);
   }
+}
+
+void PreviewGeneratedValue(WebInputElement& input_element,
+                           const blink::WebString& value) {
+  input_element.SetShouldRevealPassword(true);
+  input_element.SetSuggestedValue(value);
+}
+
+void ClearPreviewedValue(WebInputElement& input_element) {
+  input_element.SetShouldRevealPassword(false);
+  input_element.SetSuggestedValue(blink::WebString());
 }
 
 }  // namespace
@@ -173,7 +185,8 @@ struct PasswordGenerationAgent::GenerationItemInfo {
   // FormData for the generation element.
   FormData form_data_;
 
-  // All the password elements in the form.
+  // Password elements (new password only or both new password and
+  // confirmation password) in the form.
   std::vector<blink::WebInputElement> password_elements_;
 
   // If the password field at |generation_element_| contains a generated
@@ -283,8 +296,36 @@ bool PasswordGenerationAgent::ShouldIgnoreBlur() const {
 }
 
 bool PasswordGenerationAgent::IsPrerendering() const {
-  return blink::features::IsPrerender2Enabled() &&
-         render_frame()->GetWebFrame()->GetDocument().IsPrerendering();
+  return render_frame()->GetWebFrame()->GetDocument().IsPrerendering();
+}
+
+void PasswordGenerationAgent::PreviewGenerationSuggestion(
+    const std::u16string& password) {
+  DCHECK(current_generation_item_);
+
+  for (auto& password_field : current_generation_item_->password_elements_) {
+    PreviewGeneratedValue(password_field,
+                          blink::WebString::FromUTF16(password));
+  }
+}
+
+bool PasswordGenerationAgent::DidClearGenerationSuggestion(
+    const WebFormControlElement& control_element) {
+  const WebInputElement element = control_element.DynamicTo<WebInputElement>();
+  if (element.IsNull() || !current_generation_item_ ||
+      element != current_generation_item_->generation_element_)
+    return false;
+
+  bool suggestion_cleared = false;
+  for (auto& password_field : current_generation_item_->password_elements_) {
+    if (password_field.SuggestedValue().IsEmpty())
+      continue;
+
+    ClearPreviewedValue(password_field);
+    suggestion_cleared = true;
+  }
+
+  return suggestion_cleared;
 }
 
 void PasswordGenerationAgent::GeneratedPasswordAccepted(
@@ -486,11 +527,16 @@ bool PasswordGenerationAgent::FocusedNodeHasChanged(
     return true;
   }
 
-  // Assume that if the password field has less than
-  // |kMaximumCharsForGenerationOffer| characters then the user is not finished
+  // Assume that if the password field has less than or equal to
+  // `kMaximumCharsForGenerationOffer` characters, then the user is not finished
   // typing their password and display the password suggestion.
+  // With `kPasswordStrengthIndicator` enabled the decision to display the
+  // suggestion needs to be calculated in the browser process based on the
+  // strength of the typed password.
   if (!element.IsReadOnly() && element.IsEnabled() &&
-      element.Value().length() <= kMaximumCharsForGenerationOffer) {
+      (element.Value().length() <= kMaximumCharsForGenerationOffer ||
+       base::FeatureList::IsEnabled(
+           password_manager::features::kPasswordStrengthIndicator))) {
     MaybeOfferAutomaticGeneration();
     return true;
   }
@@ -534,7 +580,9 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
   }
 
   if (!current_generation_item_->password_is_generated_ &&
-      element.Value().length() > kMaximumCharsForGenerationOffer) {
+      element.Value().length() > kMaximumCharsForGenerationOffer &&
+      !base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordStrengthIndicator)) {
     // User has rejected the feature and has started typing a password.
     GenerationRejectedByTyping();
   } else {

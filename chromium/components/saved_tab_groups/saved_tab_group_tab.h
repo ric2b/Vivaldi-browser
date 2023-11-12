@@ -24,24 +24,28 @@ class SavedTabGroup;
 class SavedTabGroupTab {
  public:
   SavedTabGroupTab(const GURL& url,
+                   const std::u16string& title,
                    const base::GUID& group_guid,
                    SavedTabGroup* group = nullptr,
-                   absl::optional<base::GUID> guid = absl::nullopt,
+                   absl::optional<base::GUID> saved_tab_guid = absl::nullopt,
+                   absl::optional<base::Token> local_tab_id = absl::nullopt,
                    absl::optional<base::Time>
                        creation_time_windows_epoch_micros = absl::nullopt,
                    absl::optional<base::Time> update_time_windows_epoch_micros =
                        absl::nullopt,
-                   absl::optional<std::u16string> title = absl::nullopt,
                    absl::optional<gfx::Image> favicon = absl::nullopt);
   SavedTabGroupTab(const SavedTabGroupTab& other);
   ~SavedTabGroupTab();
 
   // Accessors.
-  const base::GUID& guid() const { return guid_; }
-  const base::GUID& group_guid() const { return group_guid_; }
+  const base::GUID& saved_tab_guid() const { return saved_tab_guid_; }
+  const base::GUID& saved_group_guid() const { return saved_group_guid_; }
+  const absl::optional<base::Token> local_tab_id() const {
+    return local_tab_id_;
+  }
   SavedTabGroup* saved_tab_group() const { return saved_tab_group_; }
   const GURL& url() const { return url_; }
-  const absl::optional<std::u16string>& title() const { return title_; }
+  const std::u16string& title() const { return title_; }
   const absl::optional<gfx::Image>& favicon() const { return favicon_; }
   const base::Time& creation_time_windows_epoch_micros() const {
     return creation_time_windows_epoch_micros_;
@@ -71,6 +75,11 @@ class SavedTabGroupTab {
     SetUpdateTimeWindowsEpochMicros(base::Time::Now());
     return *this;
   }
+  SavedTabGroupTab& SetLocalTabID(absl::optional<base::Token> local_tab_id) {
+    local_tab_id_ = local_tab_id;
+    SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+    return *this;
+  }
   SavedTabGroupTab& SetUpdateTimeWindowsEpochMicros(
       base::Time update_time_windows_epoch_micros) {
     update_time_windows_epoch_micros_ = update_time_windows_epoch_micros;
@@ -80,12 +89,12 @@ class SavedTabGroupTab {
   // Merges this tabs data with a specific from sync and returns the newly
   // merged specific. Side effect: Updates the values in the tab.
   std::unique_ptr<sync_pb::SavedTabGroupSpecifics> MergeTab(
-      std::unique_ptr<sync_pb::SavedTabGroupSpecifics> sync_specific);
+      const sync_pb::SavedTabGroupSpecifics& sync_specific);
 
   // We should merge a tab if one of the following is true:
   // 1. The data from `sync_specific` has the most recent (larger) update time.
   // 2. The `sync_specific` has the oldest (smallest) creation time.
-  bool ShouldMergeTab(sync_pb::SavedTabGroupSpecifics* sync_specific);
+  bool ShouldMergeTab(const sync_pb::SavedTabGroupSpecifics& sync_specific);
 
   // Converts a `SavedTabGroupSpecifics` retrieved from sync into a
   // `SavedTabGroupTab`.
@@ -97,10 +106,13 @@ class SavedTabGroupTab {
 
  private:
   // The ID used to represent the tab in sync.
-  base::GUID guid_;
+  base::GUID saved_tab_guid_;
 
-  // The ID used to represent the tab in sync. This must not be null. It
-  base::GUID group_guid_;
+  // The ID used to represent the tab's group in sync. This must not be null.
+  base::GUID saved_group_guid_;
+
+  // The ID used to represent the tab in reference to the web_contents locally.
+  absl::optional<base::Token> local_tab_id_;
 
   // The Group which owns this tab, this can be null if sync hasn't sent the
   // group over yet.
@@ -109,8 +121,8 @@ class SavedTabGroupTab {
   // The link to navigate with.
   GURL url_;
 
-  // The title of the website this urls is associated with.
-  absl::optional<std::u16string> title_;
+  // The title of the website this url is associated with.
+  std::u16string title_;
 
   // The favicon of the website this SavedTabGroupTab represents.
   absl::optional<gfx::Image> favicon_;

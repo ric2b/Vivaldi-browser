@@ -76,7 +76,6 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/unique_name/unique_name_helper.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
-#include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom.h"
@@ -173,7 +172,11 @@ class CONTENT_EXPORT RenderFrameImpl
       public blink::WebLocalFrameClient,
       service_manager::mojom::InterfaceProvider {
  public:
-  // Creates a new RenderFrame as the main frame of `web_view`.
+  // Creates a new RenderFrame as the main frame of `web_view`. Note that not
+  // all main RenderFrame creation uses this function. `CreateMainFrame()`
+  // is used to create a RenderFrame that is immediately attached as the main
+  // frame of the `web_view`. Meanwhile, `CreateFrame()` is used to create
+  // provisional main RenderFrames (and subframe creation cases).
   static RenderFrameImpl* CreateMainFrame(
       AgentSchedulingGroup& agent_scheduling_group,
       blink::WebView* web_view,
@@ -202,6 +205,11 @@ class CONTENT_EXPORT RenderFrameImpl
   // The |widget_params| is not null if the frame is to be a local root, which
   // means it will own a RenderWidget, in which case the |widget_params| hold
   // the routing id and initialization properties for the RenderWidget.
+  // The |web_view| param will only be set when the frame to be created will use
+  // new WebView, instead of using the previous Frame's WebView. This is only
+  // possible for provisional main RenderFrames that will do a local main
+  // RenderFrame swap later on with the frame that has the token
+  // |previous_frame_token|.
   //
   // Note: This is called only when RenderFrame is being created in response
   // to IPC message from the browser process. All other frame creation is driven
@@ -215,6 +223,7 @@ class CONTENT_EXPORT RenderFrameImpl
           browser_interface_broker,
       mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
           associated_interface_provider,
+      blink::WebView* web_view,
       const absl::optional<blink::FrameToken>& previous_frame_token,
       const absl::optional<blink::FrameToken>& opener_frame_token,
       const absl::optional<blink::FrameToken>& parent_frame_token,
@@ -448,7 +457,6 @@ class CONTENT_EXPORT RenderFrameImpl
       mojo::PendingRemote<blink::mojom::CodeCacheHost> code_cache_host,
       mojom::CookieManagerInfoPtr cookie_manager_info,
       mojom::StorageInfoPtr storage_info,
-      blink::mojom::BackForwardCacheNotRestoredReasonsPtr not_restored_reasons,
       mojom::NavigationClient::CommitNavigationCallback commit_callback);
   void CommitFailedNavigation(
       blink::mojom::CommonNavigationParamsPtr common_params,
@@ -509,6 +517,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebFrameOwnerProperties& frame_owner_properties,
       blink::FrameOwnerElementType frame_owner_element_type,
       blink::WebPolicyContainerBindParams policy_container_bind_params,
+      ukm::SourceId document_ukm_source_id,
       FinishChildFrameCreationFn finish_creation) override;
   void DidCreateFencedFrame(
       const blink::RemoteFrameToken& frame_token) override;
@@ -581,14 +590,13 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::UserInteractionType interaction_type) override;
   void DidChangeCpuTiming(base::TimeDelta time) override;
   void DidObserveLoadingBehavior(blink::LoadingBehaviorFlag behavior) override;
+  void DidObserveSubresourceLoad(
+      uint32_t number_of_subresources_loaded,
+      uint32_t number_of_subresource_loads_handled_by_service_worker) override;
   void DidObserveNewFeatureUsage(
       const blink::UseCounterFeature& feature) override;
   void DidObserveSoftNavigation(uint32_t count) override;
   void DidObserveLayoutShift(double score, bool after_input_or_scroll) override;
-  void DidObserveLayoutNg(uint32_t all_block_count,
-                          uint32_t ng_block_count,
-                          uint32_t all_call_count,
-                          uint32_t ng_call_count) override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
@@ -605,6 +613,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebURL& url) override;
   void PostAccessibilityEvent(const ui::AXEvent& event) override;
   void NotifyWebAXObjectMarkedDirty(const blink::WebAXObject& object) override;
+  void AXReadyCallback() override;
   void CheckIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
       blink::WebSetSinkIdCompleteCallback callback) override;
@@ -957,7 +966,6 @@ class CONTENT_EXPORT RenderFrameImpl
       mojom::CookieManagerInfoPtr cookie_manager_info,
       mojom::StorageInfoPtr storage_info,
       std::unique_ptr<DocumentState> document_state,
-      blink::mojom::BackForwardCacheNotRestoredReasonsPtr not_restored_reasons,
       std::unique_ptr<blink::WebNavigationParams> navigation_params);
 
   // Decodes a data url for navigation commit.

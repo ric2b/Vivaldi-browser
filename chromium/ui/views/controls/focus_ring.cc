@@ -16,6 +16,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
@@ -58,7 +59,10 @@ SkColor GetPaintColor(FocusRing* focus_ring, bool valid) {
 
 double GetCornerRadius(float halo_thickness) {
   const double thickness = halo_thickness / 2.f;
-  return FocusableBorder::kCornerRadiusDp + thickness;
+  return (features::IsChromeRefresh2023()
+              ? FocusableBorder::kChromeRefresh2023CornerRadiusDp
+              : FocusableBorder::kCornerRadiusDp) +
+         thickness;
 }
 
 SkPath GetHighlightPathInternal(const View* view, float halo_thickness) {
@@ -171,6 +175,10 @@ void FocusRing::SetHaloInset(float halo_inset) {
   OnPropertyChanged(&halo_inset_, PropertyEffects::kPropertyEffectsPaint);
 }
 
+bool FocusRing::ShouldPaintForTesting() {
+  return ShouldPaint();
+}
+
 void FocusRing::Layout() {
   // The focus ring handles its own sizing, which is simply to fill the parent
   // and extend a little beyond its borders.
@@ -229,12 +237,7 @@ void FocusRing::ViewHierarchyChanged(
 }
 
 void FocusRing::OnPaint(gfx::Canvas* canvas) {
-  // TODO(pbos): Reevaluate if this can turn into a DCHECK, e.g. we should
-  // never paint if there's no parent focus.
-  if (has_focus_predicate_) {
-    if (!(*has_focus_predicate_)(parent()))
-      return;
-  } else if (!parent()->HasFocus()) {
+  if (!ShouldPaint()) {
     return;
   }
 
@@ -342,6 +345,13 @@ void FocusRing::RefreshLayer() {
   } else {
     DestroyLayer();
   }
+}
+
+bool FocusRing::ShouldPaint() {
+  // TODO(pbos): Reevaluate if this can turn into a DCHECK, e.g. we should
+  // never paint if there's no parent focus.
+  return (!has_focus_predicate_ || (*has_focus_predicate_)(parent())) &&
+         (has_focus_predicate_ || parent()->HasFocus());
 }
 
 SkRRect FocusRing::RingRectFromPathRect(const SkRect& rect) const {

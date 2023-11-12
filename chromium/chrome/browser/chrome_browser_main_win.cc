@@ -35,8 +35,8 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/version.h"
 #include "base/win/pe_image.h"
@@ -50,6 +50,7 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
+#include "chrome/browser/enterprise/platform_auth/platform_auth_policy_observer.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/os_crypt/app_bound_encryption_metrics_win.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -223,8 +224,7 @@ void DelayedRecordProcessorMetrics() {
       LaunchProcessorMetricsService();
   auto* remote_util_win_ptr = remote_util_win.get();
   remote_util_win_ptr->RecordProcessorMetrics(
-      base::BindOnce([](mojo::Remote<chrome::mojom::ProcessorMetrics>) {},
-                     std::move(remote_util_win)));
+      base::DoNothingWithBoundArgs(std::move(remote_util_win)));
 }
 
 // Initializes the ModuleDatabase on its owning sequence. Also starts the
@@ -418,7 +418,7 @@ void UpdatePwaLaunchersForProfile(const base::FilePath& profile_dir) {
   auto* provider = web_app::WebAppProvider::GetForWebApps(profile);
   if (!provider)
     return;
-  web_app::WebAppRegistrar& registrar = provider->registrar();
+  web_app::WebAppRegistrar& registrar = provider->registrar_unsafe();
 
   // Create a vector of all PWA-launcher paths in |profile_dir|.
   std::vector<base::FilePath> pwa_launcher_paths;
@@ -570,6 +570,10 @@ int ChromeBrowserMainPartsWin::PreCreateThreads() {
 void ChromeBrowserMainPartsWin::PostMainMessageLoopRun() {
   base::ImportantFileWriterCleaner::GetInstance().Stop();
 
+  // The `ProfileManager` has been destroyed, so no new platform authentication
+  // requests will be created.
+  platform_auth_policy_observer_.reset();
+
   ChromeBrowserMainParts::PostMainMessageLoopRun();
 }
 
@@ -577,6 +581,21 @@ void ChromeBrowserMainPartsWin::ShowMissingLocaleMessageBox() {
   ui::MessageBox(NULL, base::ASCIIToWide(kMissingLocaleDataMessage),
                  base::ASCIIToWide(kMissingLocaleDataTitle),
                  MB_OK | MB_ICONERROR | MB_TOPMOST);
+}
+
+void ChromeBrowserMainPartsWin::PreProfileInit() {
+  ChromeBrowserMainParts::PreProfileInit();
+
+  // Create the module database and hook up the in-process module watcher. This
+  // needs to be done before any child processes are initialized as the
+  // `ModuleDatabase` is an endpoint for IPC from child processes.
+  SetupModuleDatabase(&module_watcher_);
+
+  // Start up the platform auth SSO policy observer.
+  PrefService* const local_state = g_browser_process->local_state();
+  if (local_state)
+    platform_auth_policy_observer_ =
+        std::make_unique<PlatformAuthPolicyObserver>(local_state);
 }
 
 void ChromeBrowserMainPartsWin::PostProfileInit(Profile* profile,
@@ -587,38 +606,13 @@ void ChromeBrowserMainPartsWin::PostProfileInit(Profile* profile,
   if (!is_initial_profile)
     return;
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // Explicitly disable the third-party modules blocking.
-  //
-  // Because the blocking code lives in chrome_elf, it is not possible to check
-  // the feature (via the FeatureList API) or the policy to control whether it
-  // is enabled or not.
-  //
-  // What truly controls if the blocking is enabled is the presence of the
-  // module blocklist cache file. This means that to disable the feature, the
-  // cache must be deleted and the browser relaunched.
-  if (!ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() ||
-      !ModuleBlocklistCacheUpdater::IsBlockingEnabled())
-    ThirdPartyConflictsManager::DisableThirdPartyModuleBlocking(
-        base::ThreadPool::CreateTaskRunner(
-            {base::TaskPriority::BEST_EFFORT,
-             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
-             base::MayBlock()})
-            .get());
-#endif
-
-  // Create the module database and hook up the in-process module watcher. This
-  // needs to be done before any child processes are initialized as the
-  // ModuleDatabase is an endpoint for IPC from child processes.
-  SetupModuleDatabase(&module_watcher_);
-
   // If Chrome was launched by a Progressive Web App launcher that needs to be
   // updated, update all launchers for this profile.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kAppId) &&
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kPwaLauncherVersion) != chrome::kChromeVersion) {
     content::BrowserThread::PostBestEffortTask(
-        FROM_HERE, base::SequencedTaskRunnerHandle::Get(),
+        FROM_HERE, base::SequencedTaskRunner::GetCurrentDefault(),
         base::BindOnce(&UpdatePwaLaunchersForProfile, profile->GetPath()));
   }
 }
@@ -878,6 +872,10 @@ base::CommandLine ChromeBrowserMainPartsWin::GetRestartCommandLine(
   if (!command_line.HasSwitch(switches::kRestoreLastSession))
     restart_command.AppendSwitch(switches::kRestoreLastSession);
 
+  // This is used when recording launch mode metric.
+  if (!command_line.HasSwitch(switches::kRestart))
+    restart_command.AppendSwitch(switches::kRestart);
+
   // TODO(crbug.com/964541): Remove other unneeded switches, including
   // duplicates, perhaps harmonize with switches::RemoveSwitchesForAutostart.
   return restart_command;
@@ -938,6 +936,26 @@ void ChromeBrowserMainPartsWin::SetupModuleDatabase(
     std::unique_ptr<ModuleWatcher>* module_watcher) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(module_watcher);
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Explicitly disable the third-party modules blocking.
+  //
+  // Because the blocking code lives in chrome_elf, it is not possible to check
+  // the feature (via the FeatureList API) or the policy to control whether it
+  // is enabled or not.
+  //
+  // What truly controls if the blocking is enabled is the presence of the
+  // module blocklist cache file. This means that to disable the feature, the
+  // cache must be deleted and the browser relaunched.
+  if (!ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() ||
+      !ModuleBlocklistCacheUpdater::IsBlockingEnabled())
+    ThirdPartyConflictsManager::DisableThirdPartyModuleBlocking(
+        base::ThreadPool::CreateTaskRunner(
+            {base::TaskPriority::BEST_EFFORT,
+             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
+             base::MayBlock()})
+            .get());
+#endif
 
   bool third_party_blocking_policy_enabled =
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

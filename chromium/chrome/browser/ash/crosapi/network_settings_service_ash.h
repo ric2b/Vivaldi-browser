@@ -7,7 +7,6 @@
 
 #include "base/scoped_observation.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
-#include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "chromeos/crosapi/mojom/network_settings_service.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -24,7 +23,8 @@ class ProfileManager;
 
 namespace ash {
 class NetworkState;
-}
+class NetworkStateHandler;
+}  // namespace ash
 
 namespace crosapi {
 
@@ -85,6 +85,8 @@ class NetworkSettingsServiceAsh : public crosapi::mojom::NetworkSettingsService,
   void OnProfileManagerDestroying() override;
 
   crosapi::mojom::ProxyConfigPtr cached_proxy_config_;
+  crosapi::mojom::ExtensionControllingProxyPtr extension_controlling_proxy_;
+
   // The PAC URL associated with `default_network_name_`, received via the DHCP
   // discovery method.
   GURL cached_wpad_url_;

@@ -58,9 +58,9 @@
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_app_instance.h"
 #include "ash/constants/ash_features.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/common/chrome_features.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -108,12 +108,6 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   PwaInstallViewBrowserTest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-    base::FieldTrialParams iph_demo_params;
-    iph_demo_params[feature_engagement::kIPHDemoModeFeatureChoiceParam] =
-        feature_engagement::kIPHDesktopPwaInstallFeature.name;
-    base::test::ScopedFeatureList::FeatureAndParams iph_demo(
-        feature_engagement::kIPHDemoMode, iph_demo_params);
-
     // kIPHDemoMode will bypass IPH framework's triggering validation so that
     // we can test PWA specific triggering logic.
     features_.InitWithFeaturesAndParameters(
@@ -124,7 +118,7 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
         {
             features::kWebAppsCrosapi,
-            chromeos::features::kLacrosPrimary,
+            ash::features::kLacrosPrimary,
         }
 #else
         {}
@@ -200,7 +194,8 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
 
   struct OpenTabResult {
     raw_ptr<content::WebContents> web_contents;
-    raw_ptr<webapps::TestAppBannerManagerDesktop> app_banner_manager;
+    raw_ptr<webapps::TestAppBannerManagerDesktop, DanglingUntriaged>
+        app_banner_manager;
     bool installable;
   };
 
@@ -326,9 +321,10 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
   std::string intercept_request_path_;
   std::string intercept_request_response_;
 
-  raw_ptr<PageActionIconView> pwa_install_view_ = nullptr;
-  raw_ptr<content::WebContents> web_contents_ = nullptr;
-  raw_ptr<webapps::TestAppBannerManagerDesktop> app_banner_manager_ = nullptr;
+  raw_ptr<PageActionIconView, DanglingUntriaged> pwa_install_view_ = nullptr;
+  raw_ptr<content::WebContents, DanglingUntriaged> web_contents_ = nullptr;
+  raw_ptr<webapps::TestAppBannerManagerDesktop, DanglingUntriaged>
+      app_banner_manager_ = nullptr;
 
  private:
   web_app::OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
@@ -387,7 +383,7 @@ IN_PROC_BROWSER_TEST_F(PwaInstallViewBrowserTest,
 
   // Change launch container to open in tab.
   web_app::WebAppProvider::GetForTest(browser()->profile())
-      ->sync_bridge()
+      ->sync_bridge_unsafe()
       .SetAppUserDisplayMode(app_id, web_app::UserDisplayMode::kBrowser,
                              /*is_user_action=*/false);
 

@@ -27,7 +27,7 @@ import './safety_check_chrome_cleaner_child.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
@@ -35,6 +35,7 @@ import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {Router} from '../router.js';
+import {SiteSettingsPermissionsBrowserProxy, SiteSettingsPermissionsBrowserProxyImpl, UnusedSitePermissions} from '../site_settings/site_settings_permissions_browser_proxy.js';
 import {NotificationPermission, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckParentStatus} from './safety_check_browser_proxy.js';
@@ -46,7 +47,7 @@ interface ParentChangedEvent {
 }
 
 const SettingsSafetyCheckPageElementBase =
-    WebUIListenerMixin(I18nMixin(PolymerElement));
+    WebUiListenerMixin(I18nMixin(PolymerElement));
 
 export class SettingsSafetyCheckPageElement extends
     SettingsSafetyCheckPageElementBase {
@@ -97,8 +98,11 @@ export class SettingsSafetyCheckPageElement extends
   private safetyCheckNotificationPermissionsEnabled_: boolean;
   private safetyCheckUnusedSitePermissionsEnabled_: boolean;
   private notificationPermissionSites_: NotificationPermission[] = [];
+  private unusedSitePermissions_: UnusedSitePermissions[] = [];
   private siteSettingsBrowserProxy_: SiteSettingsPrefsBrowserProxy =
       SiteSettingsPrefsBrowserProxyImpl.getInstance();
+  private permissionsBrowserProxy_: SiteSettingsPermissionsBrowserProxy =
+      SiteSettingsPermissionsBrowserProxyImpl.getInstance();
   private safetyCheckBrowserProxy_: SafetyCheckBrowserProxy =
       SafetyCheckBrowserProxyImpl.getInstance();
   private metricsBrowserProxy_: MetricsBrowserProxy =
@@ -111,7 +115,7 @@ export class SettingsSafetyCheckPageElement extends
     super.connectedCallback();
 
     // Register for safety check status updates.
-    this.addWebUIListener(
+    this.addWebUiListener(
         SafetyCheckCallbackConstants.PARENT_CHANGED,
         this.onSafetyCheckParentChanged_.bind(this));
 
@@ -125,13 +129,22 @@ export class SettingsSafetyCheckPageElement extends
     }
 
     // Register for notification permission review list updates.
-    this.addWebUIListener(
+    this.addWebUiListener(
         'notification-permission-review-list-maybe-changed',
         (sites: NotificationPermission[]) =>
             this.onReviewNotificationPermissionListChanged_(sites));
 
     this.notificationPermissionSites_ =
         await this.siteSettingsBrowserProxy_.getNotificationPermissionReview();
+
+    // Register for updates on the unused site permission list.
+    this.addWebUiListener(
+        'unused-permission-review-list-maybe-changed',
+        (sites: UnusedSitePermissions[]) =>
+            this.onUnusedSitePermissionListChanged_(sites));
+
+    this.unusedSitePermissions_ = await this.permissionsBrowserProxy_
+                                      .getRevokedUnusedSitePermissionsList();
   }
 
   /** Triggers the safety check. */
@@ -200,6 +213,15 @@ export class SettingsSafetyCheckPageElement extends
   private shouldShowNotificationPermissions_(): boolean {
     return this.notificationPermissionSites_.length !== 0 &&
         this.safetyCheckNotificationPermissionsEnabled_;
+  }
+
+  private onUnusedSitePermissionListChanged_(sites: UnusedSitePermissions[]) {
+    this.unusedSitePermissions_ = sites;
+  }
+
+  private shouldShowUnusedSitePermissions_(): boolean {
+    return this.safetyCheckUnusedSitePermissionsEnabled_ &&
+        this.unusedSitePermissions_.length !== 0;
   }
 }
 

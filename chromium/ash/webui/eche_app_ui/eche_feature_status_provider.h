@@ -5,18 +5,20 @@
 #ifndef ASH_WEBUI_ECHE_APP_UI_ECHE_FEATURE_STATUS_PROVIDER_H_
 #define ASH_WEBUI_ECHE_APP_UI_ECHE_FEATURE_STATUS_PROVIDER_H_
 
-#include "ash/components/phonehub/feature_status_provider.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "ash/components/phonehub/phone_hub_manager.h"
-#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
-#include "ash/services/secure_channel/public/cpp/client/connection_manager.h"
 #include "ash/webui/eche_app_ui/feature_status_provider.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/ash/components/phonehub/feature_status_provider.h"
+#include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
+#include "chromeos/ash/services/secure_channel/public/cpp/client/connection_manager.h"
 
 namespace ash {
 
 namespace device_sync {
 class DeviceSyncClient;
+}
+
+namespace phonehub {
+class PhoneHubManager;
 }
 
 namespace eche_app {

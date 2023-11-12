@@ -8,19 +8,13 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/stringprintf.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "base/trace_event/memory_dump_manager.h"
-#include "base/trace_event/process_memory_dump.h"
-#include "base/trace_event/trace_event.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_sizes.h"
-#include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -39,7 +33,6 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_gl_api_implementation.h"
-#include "ui/gl/trace_util.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
@@ -88,8 +81,8 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
       // passes for display compositor) and DrDc is disabled on webview. Hence
       // using is_thread_safe() to grab task_runner is enough to ensure
       // correctness.
-      DCHECK(base::ThreadTaskRunnerHandle::IsSet());
-      task_runner_ = base::ThreadTaskRunnerHandle::Get();
+      DCHECK(base::SingleThreadTaskRunner::HasCurrentDefault());
+      task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
     }
   }
 
@@ -152,23 +145,8 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
         backend_texture_, &pixmap, /*numLevels=*/1, nullptr, nullptr);
   }
 
-  void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
-                    base::trace_event::ProcessMemoryDump* pmd,
-                    uint64_t client_tracing_id) override {
-    SharedImageBacking::OnMemoryDump(dump_name, client_guid, pmd,
-                                     client_tracing_id);
-
-    // Add a |service_guid| which expresses shared ownership between the
-    // various GPU dumps.
-    auto service_guid = gl::GetGLTextureServiceGUIDForTracing(tracing_id_);
-    pmd->CreateSharedGlobalAllocatorDump(service_guid);
-    pmd->AddOwnershipEdge(client_guid, service_guid, kOwningEdgeImportance);
-  }
-
   SkColorType GetSkColorType() {
-    return viz::ResourceFormatToClosestSkColorType(
-        /*gpu_compositing=*/true, format());
+    return viz::ToClosestSkColorType(/*gpu_compositing=*/true, format());
   }
 
   sk_sp<SkSurface> GetSkSurface(
@@ -233,7 +211,7 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
       return false;
     context_state_->set_need_context_state_reset(true);
 
-    DCHECK(!viz::IsResourceFormatCompressed(format()));
+    DCHECK(!format().IsCompressed());
     auto mipmap = usage() & SHARED_IMAGE_USAGE_MIPMAP ? GrMipMapped::kYes
                                                       : GrMipMapped::kNo;
     const std::string label = "WrappedSkImageBackingFactory_Initialize" +
@@ -262,7 +240,6 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
     }
 
     promise_texture_ = SkPromiseImageTexture::Make(backend_texture_);
-    tracing_id_ = GrBackendTextureTracingID(backend_texture_);
 
     return true;
   }
@@ -281,7 +258,7 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
       return false;
     context_state_->set_need_context_state_reset(true);
 
-    if (viz::IsResourceFormatCompressed(format())) {
+    if (format().IsCompressed()) {
       backend_texture_ =
           context_state_->gr_context()->createCompressedBackendTexture(
               size().width(), size().height(), SkImage::kETC1_CompressionType,
@@ -305,7 +282,6 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
     SetCleared();
 
     promise_texture_ = SkPromiseImageTexture::Make(backend_texture_);
-    tracing_id_ = GrBackendTextureTracingID(backend_texture_);
 
     // Note that if the backing is meant to be thread safe (when DrDc and Vulkan
     // is enabled), we need to do additional submit here in order to send the
@@ -331,7 +307,6 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
   sk_sp<SkPromiseImageTexture> promise_texture_;
   int surface_msaa_count_ = 0;
 
-  uint64_t tracing_id_ = 0;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
@@ -347,46 +322,50 @@ class WrappedSkImage::SkiaImageRepresentationImpl
 
   ~SkiaImageRepresentationImpl() override { DCHECK(!write_surface_); }
 
-  sk_sp<SkSurface> BeginWriteAccess(
+  std::vector<sk_sp<SkSurface>> BeginWriteAccess(
       int final_msaa_count,
       const SkSurfaceProps& surface_props,
+      const gfx::Rect& update_rect,
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
     auto surface = wrapped_sk_image()->GetSkSurface(
         final_msaa_count, surface_props, context_state_);
     if (!surface)
-      return nullptr;
+      return {};
     [[maybe_unused]] int save_count = surface->getCanvas()->save();
     DCHECK_EQ(1, save_count);
-    write_surface_ = surface.get();
-    return surface;
+    write_surface_ = surface;
+    return {surface};
   }
 
-  sk_sp<SkPromiseImageTexture> BeginWriteAccess(
+  std::vector<sk_sp<SkPromiseImageTexture>> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
-    return wrapped_sk_image()->promise_texture();
+    auto promise_texture = wrapped_sk_image()->promise_texture();
+    if (!promise_texture)
+      return {};
+    return {promise_texture};
   }
 
-  void EndWriteAccess(sk_sp<SkSurface> surface) override {
-    if (surface) {
-      DCHECK_EQ(surface.get(), write_surface_);
-      surface->getCanvas()->restoreToCount(1);
-      surface.reset();
-      write_surface_ = nullptr;
-
+  void EndWriteAccess() override {
+    if (write_surface_) {
+      write_surface_->getCanvas()->restoreToCount(1);
+      write_surface_.reset();
       DCHECK(wrapped_sk_image()->SkSurfaceUnique(context_state_));
     }
   }
 
-  sk_sp<SkPromiseImageTexture> BeginReadAccess(
+  std::vector<sk_sp<SkPromiseImageTexture>> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
     DCHECK(!write_surface_);
-    return wrapped_sk_image()->promise_texture();
+    auto promise_texture = wrapped_sk_image()->promise_texture();
+    if (!promise_texture)
+      return {};
+    return {promise_texture};
   }
 
   void EndReadAccess() override {
@@ -401,7 +380,7 @@ class WrappedSkImage::SkiaImageRepresentationImpl
     return static_cast<WrappedSkImage*>(backing());
   }
 
-  raw_ptr<SkSurface> write_surface_ = nullptr;
+  sk_sp<SkSurface> write_surface_;
   scoped_refptr<SharedContextState> context_state_;
 };
 
@@ -478,7 +457,6 @@ WrappedSkImageBackingFactory::CreateSharedImage(
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat buffer_format,
     gfx::BufferPlane plane,
-    SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -508,6 +486,9 @@ bool WrappedSkImageBackingFactory::IsSupported(
     gfx::GpuMemoryBufferType gmb_type,
     GrContextType gr_context_type,
     base::span<const uint8_t> pixel_data) {
+  if (format.is_multi_plane()) {
+    return false;
+  }
   // Note that this backing support thread safety only for vulkan mode because
   // the underlying vulkan resources like vulkan images can be shared across
   // multiple vulkan queues. Also note that this backing currently only supports

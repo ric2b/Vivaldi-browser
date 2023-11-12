@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {MockVolumeManager} from '../../background/js/mock_volume_manager.js';
 import {VolumeInfoImpl} from '../../background/js/volume_info_impl.js';
 import {DialogType} from '../../common/js/dialog_type.js';
-import {EntryList, FakeEntryImpl} from '../../common/js/files_app_entry_types.js';
+import {EntryList, FakeEntryImpl, VolumeEntry} from '../../common/js/files_app_entry_types.js';
 import {MockCommandLinePrivate} from '../../common/js/mock_chrome.js';
 import {MockFileEntry, MockFileSystem} from '../../common/js/mock_entry.js';
 import {reportPromise, waitUntil} from '../../common/js/test_error_reporting.js';
 import {TrashRootEntry} from '../../common/js/trash.js';
-import {util} from '../../common/js/util.js';
+import {str, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
 
@@ -56,36 +57,8 @@ let hoge;
 
 // Setup the test components.
 export function setUp() {
-  // Mock LoadTimeData strings.
-  window.loadTimeData.resetForTesting({
-    MY_FILES_ROOT_LABEL: 'My files',
-    DOWNLOADS_DIRECTORY_LABEL: 'Downloads',
-    DRIVE_DIRECTORY_LABEL: 'My Drive',
-    FILES_SINGLE_PARTITION_FORMAT_ENABLED: false,
-    FILES_TRASH_ENABLED: false,
-    UNIFIED_MEDIA_VIEW_ENABLED: false,
-    GUEST_OS: false,
-  });
-  window.loadTimeData.getString = id => {
-    return window.loadTimeData.data_[id] || id;
-  };
-
   // Mock chrome APIs.
   new MockCommandLinePrivate();
-
-  // Mock out chrome.fileManagerPrivate *after* MockCommandLinePrivate
-  // which will create the mock chrome object for us. We only need an
-  // enum for this test (used by unified media views).
-  /** @suppress {const|checkTypes} */
-  chrome.fileManagerPrivate = {};
-
-  /** @suppress {const|checkTypes} */
-  chrome.fileManagerPrivate.RecentFileType = {
-    ALL: 'all',
-    AUDIO: 'audio',
-    IMAGE: 'image',
-    VIDEO: 'video',
-  };
 
   // Override VolumeInfo.prototype.resolveDisplayRoot to be sync.
   VolumeInfoImpl.prototype.resolveDisplayRoot = function(successCallback) {
@@ -133,7 +106,7 @@ export function testModel() {
   assertEquals(
       '/root/shortcut', /** @type {!NavigationModelShortcutItem} */
       (model.item(1)).entry.fullPath);
-  assertEquals('My files', model.item(2).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(2).label);
   assertEquals(
       'drive', /** @type {!NavigationModelVolumeItem} */
       (model.item(3)).volumeInfo.volumeId);
@@ -151,10 +124,9 @@ export function testModel() {
   assertEquals('linux-files-label', myFilesEntryList.getUIChildren()[0].name);
 
   // Trash is displayed as a root when feature is enabled.
-  window.loadTimeData.data_['FILES_TRASH_ENABLED'] = true;
+  loadTimeData.overrideValues({FILES_TRASH_ENABLED: true});
   model.fakeTrashItem = new NavigationModelFakeItem(
-      'trash-label', NavigationModelItemType.TRASH,
-      new TrashRootEntry(volumeManager));
+      'trash-label', NavigationModelItemType.TRASH, new TrashRootEntry());
   model.reorderNavigationItems_();
   assertEquals(7, model.length);
   assertEquals(
@@ -180,10 +152,38 @@ export function testNoRecentOrLinuxFiles() {
   assertEquals(
       '/root/shortcut', /** @type {!NavigationModelShortcutItem} */
       (model.item(0)).entry.fullPath);
-  assertEquals('My files', model.item(1).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(1).label);
+  const driveItem = /** @type {!NavigationModelVolumeItem} */ (model.item(2));
+  assertEquals('drive', driveItem.volumeInfo.volumeId);
+  assertFalse(driveItem.disabled);
+}
+
+/**
+ * Tests model with a disabled Drive volume.
+ */
+export function testDisabledVolumes() {
+  const volumeManager = new MockVolumeManager();
+  volumeManager.isDisabled = (volume) => {
+    return (volume === VolumeManagerCommon.VolumeType.DRIVE);
+  };
+
+  const shortcutListModel = new MockFolderShortcutDataModel(
+      [MockFileEntry.create(drive, '/root/shortcut')]);
+  const recentItem = null;
+
+  const model = new NavigationListModel(
+      volumeManager, shortcutListModel.asFolderShortcutsDataModel(), recentItem,
+      directoryModel, androidAppListModel, DialogType.FULL_PAGE);
+
+  assertEquals(3, model.length);
   assertEquals(
-      'drive', /** @type {!NavigationModelVolumeItem} */
-      (model.item(2)).volumeInfo.volumeId);
+      '/root/shortcut', /** @type {!NavigationModelShortcutItem} */
+      (model.item(0)).entry.fullPath);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(1).label);
+
+  const driveItem = /** @type {!NavigationModelVolumeItem} */ (model.item(2));
+  assertEquals('drive', driveItem.volumeInfo.volumeId);
+  assertTrue(driveItem.disabled);
 }
 
 /**
@@ -253,7 +253,7 @@ export function testAddAndRemoveShortcuts() {
  * Tests testAddAndRemoveVolumes test with SinglePartitionFormat flag is on.
  */
 export function testAddAndRemoveVolumesWhenSinglePartitionOn() {
-  window.loadTimeData.data_['FILES_SINGLE_PARTITION_FORMAT_ENABLED'] = true;
+  loadTimeData.overrideValues({FILES_SINGLE_PARTITION_FORMAT_ENABLED: true});
   testAddAndRemoveVolumes();
 }
 
@@ -282,7 +282,7 @@ export function testAddAndRemoveVolumes() {
   assertEquals(
       '/root/shortcut', /** @type {!NavigationModelShortcutItem} */
       (model.item(0)).entry.fullPath);
-  assertEquals('My files', model.item(1).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(1).label);
   assertEquals(
       'drive', /** @type {!NavigationModelVolumeItem} */
       (model.item(2)).volumeInfo.volumeId);
@@ -308,7 +308,7 @@ export function testAddAndRemoveVolumes() {
   assertEquals(
       '/root/shortcut', /** @type {!NavigationModelShortcutItem} */
       (model.item(0)).entry.fullPath);
-  assertEquals('My files', model.item(1).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(1).label);
   assertEquals(
       'drive', /** @type {!NavigationModelVolumeItem} */
       (model.item(2)).volumeInfo.volumeId);
@@ -342,7 +342,7 @@ export function testAddAndRemoveVolumes() {
   assertEquals(
       '/shortcut2', /** @type {!NavigationModelShortcutItem} */
       (model.item(1)).entry.fullPath);
-  assertEquals('My files', model.item(2).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(2).label);
   assertEquals(
       'drive', /** @type {!NavigationModelVolumeItem} */
       (model.item(3)).volumeInfo.volumeId);
@@ -363,7 +363,7 @@ export function testAddAndRemoveVolumes() {
  * Tests testOrderAndNestItems test with SinglePartitionFormat flag is on.
  */
 export function testOrderAndNestItemsWhenSinglePartitionOn() {
-  window.loadTimeData.data_['FILES_SINGLE_PARTITION_FORMAT_ENABLED'] = true;
+  loadTimeData.overrideValues({FILES_SINGLE_PARTITION_FORMAT_ENABLED: true});
   testOrderAndNestItems();
 }
 
@@ -442,9 +442,9 @@ export function testOrderAndNestItems() {
 
   assertEquals('shortcut', model.item(1).label);
   assertEquals('shortcut2', model.item(2).label);
-  assertEquals('My files', model.item(3).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(3).label);
 
-  assertEquals('My Drive', model.item(4).label);
+  assertEquals(str('DRIVE_DIRECTORY_LABEL'), model.item(4).label);
   assertEquals('smb:file-share', model.item(5).label);
   assertEquals('provided:prov1', model.item(6).label);
   assertEquals('provided:prov2', model.item(7).label);
@@ -549,8 +549,8 @@ export function testMyFilesVolumeEnabled(callback) {
   model.linuxFilesItem = crostiniFakeItem;
 
   assertEquals(2, model.length);
-  assertEquals('My files', model.item(0).label);
-  assertEquals('My Drive', model.item(1).label);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(0).label);
+  assertEquals(str('DRIVE_DIRECTORY_LABEL'), model.item(1).label);
 
   // Android and Crostini are displayed within My files. And there is no
   // Downloads volume inside it. Downloads should be a normal folder inside
@@ -578,6 +578,65 @@ export function testMyFilesVolumeEnabled(callback) {
         assertTrue(foundEntries[0].isDirectory);
       }),
       callback);
+}
+
+/**
+ * Tests that Android and Crostini, which are displayed within MyFiles, are set
+ * to disabled/enabled correctly.
+ */
+export function testMyFilesSubdirectoriesCanBeDisabled() {
+  const volumeManager = new MockVolumeManager();
+  // Item 1 of the volume info list should have Downloads volume type.
+  assertEquals(
+      VolumeManagerCommon.VolumeType.DOWNLOADS,
+      volumeManager.volumeInfoList.item(1).volumeType);
+  // Create a downloads folder inside the item.
+  const downloadsVolume = volumeManager.volumeInfoList.item(1);
+  /** @type {!MockFileSystem} */ (downloadsVolume.fileSystem).populate([
+    '/Downloads/',
+  ]);
+
+  const shortcutListModel = new MockFolderShortcutDataModel([]);
+  const recentItem = null;
+
+  // Create Android 'Play files' volume and set as disabled.
+  volumeManager.volumeInfoList.add(MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.ANDROID_FILES, 'android_files:droid'));
+  volumeManager.isDisabled = (volume) => {
+    return (volume === VolumeManagerCommon.VolumeType.ANDROID_FILES);
+  };
+
+  // Create Crostini 'Linux files' volume. It should be enabled by default.
+  volumeManager.volumeInfoList.add(MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.CROSTINI, 'crostini'));
+
+  // Navigation items built above:
+  //  1. My files
+  //       -> Play files
+  //       -> Linux files
+  //  2. Drive  - added by default by MockVolumeManager.
+
+  // Constructor already calls orderAndNestItems_.
+  const model = new NavigationListModel(
+      volumeManager, shortcutListModel.asFolderShortcutsDataModel(), recentItem,
+      directoryModel, androidAppListModel, DialogType.FULL_PAGE);
+
+  assertEquals(2, model.length);
+  assertEquals(str('MY_FILES_ROOT_LABEL'), model.item(0).label);
+  assertEquals(str('DRIVE_DIRECTORY_LABEL'), model.item(1).label);
+
+  // Android is displayed within My files, and should be disabled.
+  const myFilesItem = /** @type {!NavigationModelFakeItem} */ (model.item(0));
+  const myFilesEntryList = /** @type {!EntryList} */ (myFilesItem.entry);
+  assertEquals(2, myFilesEntryList.getUIChildren().length);
+  const androidItem =
+      /** @type {!VolumeEntry} */ (myFilesEntryList.getUIChildren()[0]);
+  const crostiniItem =
+      /** @type {!VolumeEntry} */ (myFilesEntryList.getUIChildren()[1]);
+  assertEquals('android_files:droid', androidItem.name);
+  assertTrue(androidItem.disabled);
+  assertEquals('crostini', crostiniItem.name);
+  assertFalse(crostiniItem.disabled);
 }
 
 /**

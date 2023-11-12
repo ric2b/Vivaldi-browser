@@ -7,32 +7,38 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
-#include "chrome/browser/autofill_assistant/common_dependencies_chrome.h"
-#include "chrome/browser/fast_checkout/fast_checkout_external_action_delegate.h"
 #include "chrome/browser/fast_checkout/fast_checkout_features.h"
-#include "chrome/browser/fast_checkout/fast_checkout_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/fast_checkout_delegate.h"
-#include "components/autofill_assistant/browser/public/autofill_assistant_factory.h"
-#include "components/autofill_assistant/browser/public/external_action_util.h"
-#include "components/autofill_assistant/browser/public/headless_onboarding_result.h"
-#include "components/autofill_assistant/browser/public/public_script_parameters.h"
-#include "components/autofill_assistant/browser/public/runtime_manager.h"
+#include "components/autofill/core/browser/geo/autofill_country.h"
+#include "components/autofill/core/browser/logging/log_manager.h"
+#include "components/autofill/core/common/autofill_internals/log_message.h"
+#include "components/autofill/core/common/autofill_internals/logging_scope.h"
+#include "components/autofill/core/common/logging/log_macros.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
 
 namespace {
-constexpr char kIntentValue[] = "CHROME_FAST_CHECKOUT";
-constexpr char kTrue[] = "true";
-constexpr char kFalse[] = "false";
-// TODO(crbug.com/1338521): Define and specify proper caller(s) and source(s).
-constexpr char kCaller[] = "7";  // run was started from within Chromium
-constexpr char kSource[] = "1";  // run was started organically
-constexpr char kIsNoRoundTrip[] = "IS_NO_ROUND_TRIP";
+bool IsCompleteAddressProfile(const autofill::AutofillProfile* profile,
+                              const std::string& app_locale) {
+  std::string country_code =
+      base::UTF16ToASCII(profile->GetRawInfo(autofill::ADDRESS_HOME_COUNTRY));
+  if (country_code.empty()) {
+    return false;
+  }
+
+  autofill::AutofillCountry country(country_code, app_locale);
+  return !profile->GetInfo(autofill::NAME_FULL, app_locale).empty() &&
+         !profile->GetRawInfo(autofill::ADDRESS_HOME_STREET_ADDRESS).empty() &&
+         (!country.requires_zip() ||
+          profile->HasRawInfo(autofill::ADDRESS_HOME_ZIP)) &&
+         !profile->GetRawInfo(autofill::EMAIL_ADDRESS).empty() &&
+         !profile->GetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER).empty();
+}
 
 std::vector<autofill::CreditCard*> GetValidCreditCards(
     autofill::PersonalDataManager* pdm) {
@@ -51,41 +57,16 @@ std::vector<autofill::AutofillProfile*> GetValidAddressProfiles(
       pdm->GetProfilesToSuggest();
 
   base::EraseIf(profiles, [&pdm](const autofill::AutofillProfile* profile) {
-    return !autofill_assistant::IsCompleteAddressProfile(profile,
-                                                         pdm->app_locale());
+    return !IsCompleteAddressProfile(profile, pdm->app_locale());
   });
   return profiles;
-}
-
-// Create script parameters map for starting the script.
-base::flat_map<std::string, std::string> CreateScriptParameters(
-    bool run_consentless,
-    GURL url) {
-  return {{autofill_assistant::public_script_parameters::kIntentParameterName,
-           kIntentValue},
-          {autofill_assistant::public_script_parameters::
-               kOriginalDeeplinkParameterName,
-           url.spec()},
-          {autofill_assistant::public_script_parameters::kEnabledParameterName,
-           kTrue},
-          {autofill_assistant::public_script_parameters::
-               kStartImmediatelyParameterName,
-           kTrue},
-          {autofill_assistant::public_script_parameters::kCallerParameterName,
-           kCaller},
-          {autofill_assistant::public_script_parameters::kSourceParameterName,
-           kSource},
-          {kIsNoRoundTrip, run_consentless ? kTrue : kFalse}};
 }
 
 }  // namespace
 
 FastCheckoutClientImpl::FastCheckoutClientImpl(
     content::WebContents* web_contents)
-    : content::WebContentsUserData<FastCheckoutClientImpl>(*web_contents),
-      fast_checkout_prefs_(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext())
-              ->GetPrefs()) {}
+    : content::WebContentsUserData<FastCheckoutClientImpl>(*web_contents) {}
 
 FastCheckoutClientImpl::~FastCheckoutClientImpl() {
   if (is_running_) {
@@ -96,58 +77,44 @@ FastCheckoutClientImpl::~FastCheckoutClientImpl() {
 
 bool FastCheckoutClientImpl::Start(
     base::WeakPtr<autofill::FastCheckoutDelegate> delegate,
-    const GURL& url,
-    bool script_supports_consentless_execution) {
-  if (!ShouldRun(script_supports_consentless_execution))
+    const GURL& url) {
+  if (!ShouldRun()) {
+    LOG_AF(GetAutofillLogManager()) << autofill::LoggingScope::kFastCheckout
+                                    << autofill::LogMessage::kFastCheckout
+                                    << "not triggered because "
+                                       "`ShouldRun()` returned `false`.";
     return false;
+  }
 
-  bool run_consentless =
-      features::kFastCheckoutConsentlessExecutionParam.Get() &&
-      script_supports_consentless_execution;
   is_running_ = true;
   url_ = url;
   delegate_ = std::move(delegate);
   personal_data_manager_observation_.Observe(GetPersonalDataManager());
 
-  fast_checkout_external_action_delegate_ =
-      CreateFastCheckoutExternalActionDelegate();
-  external_script_controller_ = CreateHeadlessScriptController();
-
   SetShouldSuppressKeyboard(true);
 
-  external_script_controller_->StartScript(
-      CreateScriptParameters(run_consentless, url_),
-      base::BindOnce(&FastCheckoutClientImpl::OnRunComplete,
-                     base::Unretained(this)),
-      /*use_autofill_assistant_onboarding=*/!run_consentless,
-      base::BindOnce(&FastCheckoutClientImpl::OnOnboardingCompletedSuccessfully,
-                     base::Unretained(this)),
-      /*suppress_browsing_features=*/false);
+  fast_checkout_controller_ = CreateFastCheckoutController();
+  ShowFastCheckoutUI();
 
   return true;
 }
 
-bool FastCheckoutClientImpl::ShouldRun(
-    bool script_supports_consentless_execution) {
-  if (!base::FeatureList::IsEnabled(features::kFastCheckout))
+bool FastCheckoutClientImpl::ShouldRun() {
+  if (!base::FeatureList::IsEnabled(features::kFastCheckout)) {
+    LOG_AF(GetAutofillLogManager())
+        << autofill::LoggingScope::kFastCheckout
+        << autofill::LogMessage::kFastCheckout
+        << "not triggered because FastCheckout flag is disabled.";
     return false;
+  }
 
-  bool client_supports_consentless_execution =
-      features::kFastCheckoutConsentlessExecutionParam.Get();
-
-  // The run requires consent (`script_supports_consentless_execution == false`)
-  // but the client is consentless.
-  if (!script_supports_consentless_execution &&
-      client_supports_consentless_execution)
+  if (is_running_) {
+    LOG_AF(GetAutofillLogManager())
+        << autofill::LoggingScope::kFastCheckout
+        << autofill::LogMessage::kFastCheckout
+        << "not triggered because Fast Checkout is already running.";
     return false;
-
-  if (is_running_)
-    return false;
-
-  // Client requires consent and has declined onboarding previously.
-  if (fast_checkout_prefs_.IsOnboardingDeclined() &&
-      !client_supports_consentless_execution)
-    return false;
+  }
 
   autofill::PersonalDataManager* pdm = GetPersonalDataManager();
   DCHECK(pdm);
@@ -156,6 +123,11 @@ bool FastCheckoutClientImpl::ShouldRun(
     base::UmaHistogramEnumeration(
         autofill::kUmaKeyFastCheckoutTriggerOutcome,
         autofill::FastCheckoutTriggerOutcome::kFailureNoValidAutofillProfile);
+    LOG_AF(GetAutofillLogManager())
+        << autofill::LoggingScope::kFastCheckout
+        << autofill::LogMessage::kFastCheckout
+        << "not triggered because the client does not have at least one valid "
+           "Autofill profile stored.";
     return false;
   }
   // Trigger only if there is at least 1 complete valid credit card on file.
@@ -163,15 +135,15 @@ bool FastCheckoutClientImpl::ShouldRun(
     base::UmaHistogramEnumeration(
         autofill::kUmaKeyFastCheckoutTriggerOutcome,
         autofill::FastCheckoutTriggerOutcome::kFailureNoValidCreditCard);
+    LOG_AF(GetAutofillLogManager())
+        << autofill::LoggingScope::kFastCheckout
+        << autofill::LogMessage::kFastCheckout
+        << "not triggered because the client does not have at least one "
+           "valid Autofill credit card stored.";
     return false;
   }
 
   return true;
-}
-
-void FastCheckoutClientImpl::OnOnboardingCompletedSuccessfully() {
-  fast_checkout_controller_ = CreateFastCheckoutController();
-  ShowFastCheckoutUI();
 }
 
 void FastCheckoutClientImpl::ShowFastCheckoutUI() {
@@ -187,8 +159,6 @@ void FastCheckoutClientImpl::ShowFastCheckoutUI() {
     return card->GetRawInfo(autofill::CREDIT_CARD_NUMBER).empty();
   });
 
-  GetRuntimeManager()->SetUIState(
-      autofill_assistant::UIState::kShownWithoutBrowsingFeatureSuppression);
   fast_checkout_controller_->Show(profiles_to_suggest, cards_to_suggest);
 }
 
@@ -202,31 +172,16 @@ void FastCheckoutClientImpl::SetShouldSuppressKeyboard(bool suppress) {
   }
 }
 
-void FastCheckoutClientImpl::OnRunComplete(
-    autofill_assistant::HeadlessScriptController::ScriptResult result) {
-  if (result.onboarding_result ==
-      autofill_assistant::HeadlessOnboardingResult::kRejected) {
-    fast_checkout_prefs_.DeclineOnboarding();
-    base::UmaHistogramEnumeration(kUmaKeyFastCheckoutRunOutcome,
-                                  FastCheckoutRunOutcome::kOnboardingDeclined);
-  } else if (result.success) {
-    base::UmaHistogramEnumeration(kUmaKeyFastCheckoutRunOutcome,
-                                  FastCheckoutRunOutcome::kSuccess);
-  } else {
-    base::UmaHistogramEnumeration(kUmaKeyFastCheckoutRunOutcome,
-                                  FastCheckoutRunOutcome::kFail);
-  }
-
+void FastCheckoutClientImpl::OnRunComplete() {
+  // TODO(crbug.com/1334642): Handle result (e.g. report metrics).
   OnHidden();
   Stop();
 }
 
 void FastCheckoutClientImpl::Stop() {
-  external_script_controller_.reset();
   fast_checkout_controller_.reset();
   is_running_ = false;
   personal_data_manager_observation_.Reset();
-  GetRuntimeManager()->SetUIState(autofill_assistant::UIState::kNotShown);
 
   // `OnHidden` is not called if the bottom sheet never managed to show,
   // e.g. due to a failed onboarding. This ensures that keyboard suppression
@@ -238,25 +193,9 @@ bool FastCheckoutClientImpl::IsRunning() const {
   return is_running_;
 }
 
-std::unique_ptr<FastCheckoutExternalActionDelegate>
-FastCheckoutClientImpl::CreateFastCheckoutExternalActionDelegate() {
-  return std::make_unique<FastCheckoutExternalActionDelegate>();
-}
-
 std::unique_ptr<FastCheckoutController>
 FastCheckoutClientImpl::CreateFastCheckoutController() {
   return std::make_unique<FastCheckoutControllerImpl>(&GetWebContents(), this);
-}
-
-std::unique_ptr<autofill_assistant::HeadlessScriptController>
-FastCheckoutClientImpl::CreateHeadlessScriptController() {
-  std::unique_ptr<autofill_assistant::AutofillAssistant> autofill_assistant =
-      autofill_assistant::AutofillAssistantFactory::CreateForBrowserContext(
-          GetWebContents().GetBrowserContext(),
-          std::make_unique<autofill_assistant::CommonDependenciesChrome>(
-              GetWebContents().GetBrowserContext()));
-  return autofill_assistant->CreateHeadlessScriptController(
-      &GetWebContents(), fast_checkout_external_action_delegate_.get());
 }
 
 void FastCheckoutClientImpl::OnHidden() {
@@ -269,8 +208,7 @@ void FastCheckoutClientImpl::OnHidden() {
 void FastCheckoutClientImpl::OnOptionsSelected(
     std::unique_ptr<autofill::AutofillProfile> selected_profile,
     std::unique_ptr<autofill::CreditCard> selected_credit_card) {
-  fast_checkout_external_action_delegate_->SetOptionsSelected(
-      *selected_profile, *selected_credit_card);
+  // TODO(crbug.com/1334642): Signal that FC options have been selected.
   OnHidden();
 }
 
@@ -287,12 +225,6 @@ FastCheckoutClientImpl::GetPersonalDataManager() {
       profile->GetOriginalProfile());
 }
 
-autofill_assistant::RuntimeManager*
-FastCheckoutClientImpl::GetRuntimeManager() {
-  return autofill_assistant::RuntimeManager::GetOrCreateForWebContents(
-      &GetWebContents());
-}
-
 void FastCheckoutClientImpl::OnPersonalDataChanged() {
   if (!delegate_ || !delegate_->IsShowingFastCheckoutUI()) {
     return;
@@ -305,6 +237,19 @@ void FastCheckoutClientImpl::OnPersonalDataChanged() {
   } else {
     ShowFastCheckoutUI();
   }
+}
+
+autofill::LogManager* FastCheckoutClientImpl::GetAutofillLogManager() {
+  if (!delegate_)
+    return nullptr;
+
+  autofill::ContentAutofillDriver* driver =
+      static_cast<autofill::ContentAutofillDriver*>(delegate_->GetDriver());
+
+  if (!driver)
+    return nullptr;
+
+  return driver->autofill_manager()->client()->GetLogManager();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(FastCheckoutClientImpl);

@@ -9,7 +9,6 @@
 
 @protocol VivaldiBookmarkAddEditControllerDelegate
 - (void)didCreateNewFolder:(const bookmarks::BookmarkNode*)folder;
-- (void)didUpdateBookmarksCollection;
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_VIVALDI_BOOKMARK_ADD_EDIT_CONTROLLER_DELEGATE_H_

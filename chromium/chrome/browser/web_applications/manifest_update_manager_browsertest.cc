@@ -20,6 +20,7 @@
 #include "base/containers/flat_tree.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
 #include "base/numerics/safe_conversions.h"
@@ -42,7 +43,6 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
-#include "chrome/browser/web_applications/manifest_update_task.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
@@ -66,6 +66,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -108,8 +109,7 @@
 #include "base/mac/mac_util.h"
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "base/command_line.h"
 #include "chrome/browser/web_applications/os_integration/url_handler_manager_impl.h"
 #include "chrome/browser/web_applications/test/fake_web_app_origin_association_manager.h"
@@ -268,7 +268,7 @@ class UpdateCheckResultAwaiter {
   }
 
   void OnResult(const GURL& url, ManifestUpdateResult result) {
-    if (url != url_) {
+    if (url != *url_) {
       SetCallback();
       return;
     }
@@ -277,15 +277,15 @@ class UpdateCheckResultAwaiter {
   }
 
  private:
-  raw_ptr<Browser> browser_ = nullptr;
-  const GURL& url_;
+  raw_ptr<Browser, DanglingUntriaged> browser_ = nullptr;
+  const raw_ref<const GURL> url_;
   base::RunLoop run_loop_;
   absl::optional<ManifestUpdateResult> result_;
 };
 
 void WaitForUpdatePendingCallback(const GURL& url) {
   base::RunLoop run_loop;
-  ManifestUpdateTask::SetUpdatePendingCallbackForTesting(
+  ManifestUpdateManager::SetUpdatePendingCallbackForTesting(
       base::BindLambdaForTesting([&](const GURL& update_url) {
         if (url == update_url)
           run_loop.Quit();
@@ -297,10 +297,12 @@ void WaitForUpdatePendingCallback(const GURL& url) {
 
 class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
  public:
-  ManifestUpdateManagerBrowserTest() {
+  ManifestUpdateManagerBrowserTest()
+      : update_dialog_scope_(SetIdentityUpdateDialogActionForTesting(
+            AppIdentityUpdate::kSkipped)) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     scoped_feature_list_.InitWithFeatures(
-        {}, {features::kWebAppsCrosapi, chromeos::features::kLacrosPrimary});
+        {}, {features::kWebAppsCrosapi, ash::features::kLacrosPrimary});
 #endif
   }
   ManifestUpdateManagerBrowserTest(const ManifestUpdateManagerBrowserTest&) =
@@ -318,14 +320,14 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(http_server_.Start());
     // Suppress globally to avoid OS hooks deployed for system web app during
     // WebAppProvider setup.
-    chrome::SetAutoAcceptAppIdentityUpdateForTesting(false);
     InProcessBrowserTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
     // Cannot construct RunLoop in constructor due to threading restrictions.
     shortcut_run_loop_.emplace();
-    test::WaitUntilReady(WebAppProvider::GetForTest(browser()->profile()));
+    test::WaitUntilWebAppProviderAndSubsystemsReady(
+        WebAppProvider::GetForTest(browser()->profile()));
   }
 
   void OnShortcutInfoRetrieved(std::unique_ptr<ShortcutInfo> shortcut_info) {
@@ -476,7 +478,10 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
               run_loop.Quit();
             }));
     run_loop.Run();
-    return GetProvider().registrar().LookupExternalAppId(app_url).value();
+    return GetProvider()
+        .registrar_unsafe()
+        .LookupExternalAppId(app_url)
+        .value();
   }
 
   AppId InstallPolicyApp() {
@@ -500,7 +505,10 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
               run_loop.Quit();
             }));
     run_loop.Run();
-    return GetProvider().registrar().LookupExternalAppId(app_url).value();
+    return GetProvider()
+        .registrar_unsafe()
+        .LookupExternalAppId(app_url)
+        .value();
   }
 
   AppId InstallKioskApp() {
@@ -520,7 +528,10 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
               run_loop.Quit();
             }));
     run_loop.Run();
-    return GetProvider().registrar().LookupExternalAppId(app_url).value();
+    return GetProvider()
+        .registrar_unsafe()
+        .LookupExternalAppId(app_url)
+        .value();
   }
 
   AppId InstallWebAppFromSync(const GURL& start_url) {
@@ -594,6 +605,11 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
         app_id, size, x, y);
   }
 
+  void AcceptAppIdentityUpdateDialogForTesting() {
+    update_dialog_scope_ =
+        SetIdentityUpdateDialogActionForTesting(AppIdentityUpdate::kAllowed);
+  }
+
  protected:
   net::EmbeddedTestServer::HandleRequestCallback request_override_;
 
@@ -609,6 +625,7 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
   // size, even if the image is multi-colored.
   std::vector<std::pair<int, SkColor>> updated_colors_;
   OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
+  base::AutoReset<absl::optional<AppIdentityUpdate>> update_dialog_scope_;
 };
 
 enum class UpdateDialogParam {
@@ -834,7 +851,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
             "Different app name");
 }
 
@@ -929,7 +946,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   AppId app_id = InstallWebApp();
 
   GetProvider().sync_bridge().SetAppIsLocallyInstalled(app_id, false);
-  EXPECT_FALSE(GetProvider().registrar().IsLocallyInstalled(app_id));
+  EXPECT_FALSE(GetProvider().registrar_unsafe().IsLocallyInstalled(app_id));
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "red"});
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
@@ -939,17 +956,35 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
 class ManifestUpdateManagerBrowserTest_ExternalPrefMigration
     : public ManifestUpdateManagerBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<test::ExternalPrefMigrationTestCases> {
  public:
   ManifestUpdateManagerBrowserTest_ExternalPrefMigration() {
-    bool enable_migration = GetParam();
-    if (enable_migration) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kUseWebAppDBInsteadOfExternalPrefs}, {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kUseWebAppDBInsteadOfExternalPrefs});
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    switch (GetParam()) {
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB:
+        disabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        disabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
+      case test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB:
+        enabled_features.push_back(features::kMigrateExternalPrefsToWebAppDB);
+        enabled_features.push_back(
+            features::kUseWebAppDBInsteadOfExternalPrefs);
+        break;
     }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
  private:
@@ -977,7 +1012,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
   // Install via ExternallyManagedAppManager, the redirect to a different origin
   // should cause it to install a placeholder app.
   AppId app_id = InstallPolicyApp();
-  EXPECT_TRUE(GetProvider().registrar().IsPlaceholderApp(
+  EXPECT_TRUE(GetProvider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
 
   // Manifest updating should ignore non-redirect loads for placeholder apps
@@ -1019,7 +1054,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
   // Install via ExternallyManagedAppManager, the redirect to a different origin
   // should cause it to install a placeholder app.
   AppId app_id = InstallKioskApp();
-  EXPECT_TRUE(GetProvider().registrar().IsPlaceholderApp(
+  EXPECT_TRUE(GetProvider().registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kKiosk));
 
   // Manifest updating should ignore non-redirect loads for placeholder apps
@@ -1040,9 +1075,15 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
       kUpdateHistogramName, ManifestUpdateResult::kAppIsPlaceholder, 1);
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
-                         ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
+    ::testing::Values(
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kDisableMigrationReadDB,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadPref,
+        test::ExternalPrefMigrationTestCases::kEnableMigrationReadDB),
+    test::GetExternalPrefMigrationTestName);
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                        CheckFindsThemeColorChange) {
@@ -1058,7 +1099,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   )";
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorBLUE);
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppThemeColor(app_id),
+            SK_ColorBLUE);
 
   // Check that OnWebAppInstalled and OnWebAppWillBeUninstalled are not called
   // if in-place web app update happens.
@@ -1083,7 +1125,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   // Updated theme_color loses any transparency.
-  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppThemeColor(app_id),
             SkColorSetARGB(0xFF, 0x00, 0xFF, 0x00));
 }
 
@@ -1101,7 +1143,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   )";
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppBackgroundColor(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppBackgroundColor(app_id),
             SK_ColorBLUE);
 
   // CSS #RRGGBBAA syntax.
@@ -1111,7 +1153,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  EXPECT_EQ(GetProvider().registrar().GetAppBackgroundColor(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppBackgroundColor(app_id),
             SkColorSetARGB(0xFF, 0xFF, 0x00, 0x00));
 }
 
@@ -1135,7 +1177,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   )";
   OverrideManifest(kManifestTemplate, {});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppManifestUrl(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppManifestUrl(app_id),
             GetManifestURL());
 
   // Load a page which contains the same manifest content but at a new manifest
@@ -1148,7 +1190,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(GetProvider().registrar().GetAppManifestUrl(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppManifestUrl(app_id),
             http_server_.GetURL("/banners/manifest_one_icon.json"));
 }
 
@@ -1166,8 +1208,10 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest, CheckKeepsSameName) {
   OverrideManifest(kManifestTemplate,
                    {"App name 1", kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorBLUE);
-  EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id), "App name 1");
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppThemeColor(app_id),
+            SK_ColorBLUE);
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
+            "App name 1");
 
   OverrideManifest(kManifestTemplate,
                    {"App name 2", kInstallableIconList, "red"});
@@ -1181,9 +1225,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest, CheckKeepsSameName) {
                                  {{96, kWin}, kInstallableIconTopLeftColor},
                                  {{128, kAll}, kInstallableIconTopLeftColor},
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
-  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorRED);
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppThemeColor(app_id),
+            SK_ColorRED);
   // The app name must not change without user confirmation.
-  EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id), "App name 1");
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
+            "App name 1");
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -1214,7 +1260,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 }
 
 // TODO(crbug.com/1342625): Test is flaky.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_CheckDoesFindIconUrlChangeForDefaultApps \
   DISABLED_CheckDoesFindIconUrlChangeForDefaultApps
 #else
@@ -1345,7 +1391,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{96, kWin}, kInstallableIconTopLeftColor},
                                  {{128, kAll}, kInstallableIconTopLeftColor},
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
-  EXPECT_EQ(GetProvider().registrar().GetAppScope(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppScope(app_id),
             http_server_.GetURL("/"));
 }
 
@@ -1390,7 +1436,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_UpdateDialog,
                            {{128, kAll}, kInstallableIconTopLeftColor},
                            {{256, kAll}, kInstallableIconTopLeftColor}});
   }
-  EXPECT_EQ(GetProvider().registrar().GetAppScope(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppScope(app_id),
             http_server_.GetURL("/"));
 }
 
@@ -1432,7 +1478,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                {{128, kAll}, kAnotherInstallableIconTopLeftColor},
                {{256, kAll}, kAnotherInstallableIconTopLeftColor},
                {{512, kNotWin}, kAnotherInstallableIconTopLeftColor}});
-  EXPECT_EQ(GetProvider().registrar().GetAppScope(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppScope(app_id),
             http_server_.GetURL("/"));
 }
 
@@ -1524,7 +1570,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
               ManifestUpdateResult::kAppUpdated);
     histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                         ManifestUpdateResult::kAppUpdated, 1);
-    EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
+    EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
               "Different app name");
   } else {
     // Name should not have updated (because the flag is missing).
@@ -1532,7 +1578,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
               ManifestUpdateResult::kAppUpToDate);
     histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                         ManifestUpdateResult::kAppUpdated, 0);
-    EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
+    EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
               "Test app name");
   }
 }
@@ -1591,7 +1637,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppShortName(app_id),
             "Different app name");
 }
 
@@ -1624,7 +1670,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{96, kWin}, kInstallableIconTopLeftColor},
                                  {{128, kAll}, kInstallableIconTopLeftColor},
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
-  EXPECT_EQ(GetProvider().registrar().GetAppDisplayMode(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppDisplayMode(app_id),
             DisplayMode::kStandalone);
 }
 
@@ -1649,14 +1695,14 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(GetProvider().registrar().GetAppDisplayMode(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppDisplayMode(app_id),
             DisplayMode::kBrowser);
 
   // We don't touch the user's launch preference even if the app display mode
   // changes. Instead the effective display mode changes.
-  EXPECT_EQ(GetProvider().registrar().GetAppUserDisplayMode(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppUserDisplayMode(app_id),
             UserDisplayMode::kStandalone);
-  EXPECT_EQ(GetProvider().registrar().GetAppEffectiveDisplayMode(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppEffectiveDisplayMode(app_id),
             DisplayMode::kMinimalUi);
 }
 
@@ -1691,7 +1737,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   std::vector<DisplayMode> app_display_mode_override =
-      GetProvider().registrar().GetAppDisplayModeOverride(app_id);
+      GetProvider().registrar_unsafe().GetAppDisplayModeOverride(app_id);
 
   ASSERT_EQ(2u, app_display_mode_override.size());
   EXPECT_EQ(DisplayMode::kFullscreen, app_display_mode_override[0]);
@@ -1731,7 +1777,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   std::vector<DisplayMode> app_display_mode_override =
-      GetProvider().registrar().GetAppDisplayModeOverride(app_id);
+      GetProvider().registrar_unsafe().GetAppDisplayModeOverride(app_id);
 
   ASSERT_EQ(2u, app_display_mode_override.size());
   EXPECT_EQ(DisplayMode::kMinimalUi, app_display_mode_override[0]);
@@ -1771,7 +1817,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   std::vector<DisplayMode> app_display_mode_override =
-      GetProvider().registrar().GetAppDisplayModeOverride(app_id);
+      GetProvider().registrar_unsafe().GetAppDisplayModeOverride(app_id);
 
   ASSERT_EQ(0u, app_display_mode_override.size());
 }
@@ -1793,8 +1839,10 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                    {R"([ "browser", "fullscreen" ])", kInstallableIconList});
   AppId app_id = InstallWebApp();
 
-  ASSERT_EQ(2u,
-            GetProvider().registrar().GetAppDisplayModeOverride(app_id).size());
+  ASSERT_EQ(2u, GetProvider()
+                    .registrar_unsafe()
+                    .GetAppDisplayModeOverride(app_id)
+                    .size());
 
   // display_override contains only invalid values
   OverrideManifest(kManifestTemplate,
@@ -1811,7 +1859,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   std::vector<DisplayMode> app_display_mode_override =
-      GetProvider().registrar().GetAppDisplayModeOverride(app_id);
+      GetProvider().registrar_unsafe().GetAppDisplayModeOverride(app_id);
 
   ASSERT_EQ(0u, app_display_mode_override.size());
 }
@@ -1975,7 +2023,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_UpdateDialog,
     app_id = InstallWebAppFromSync(GetAppURL());
   }
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   ASSERT_TRUE(web_app);
   EXPECT_TRUE(web_app->is_generated_icon());
 
@@ -1995,14 +2043,15 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_UpdateDialog,
               color_utils::SkColorToRgbaString(SK_ColorDKGRAY));
   }
 
-  if (IsUpdateDialogEnabled())
-    chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  if (IsUpdateDialogEnabled()) {
+    AcceptAppIdentityUpdateDialogForTesting();
+  }
 
   OverrideManifest(kManifest, {"browser"});
 
   ManifestUpdateResult update_result = GetResultAfterPageLoad(GetAppURL());
 
-  ASSERT_EQ(web_app, GetProvider().registrar().GetAppById(app_id));
+  ASSERT_EQ(web_app, GetProvider().registrar_unsafe().GetAppById(app_id));
 
   EXPECT_EQ(update_result, ManifestUpdateResult::kAppUpdated);
 
@@ -2068,8 +2117,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerLaunchHandlerBrowserTest,
     "client_mode": "focus-existing"
   })"});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppById(app_id)->launch_handler(),
-            (LaunchHandler{LaunchHandler::ClientMode::kFocusExisting}));
+  EXPECT_EQ(
+      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler(),
+      (LaunchHandler{LaunchHandler::ClientMode::kFocusExisting}));
 
   // New launch_handler syntax.
   OverrideManifest(kManifestTemplate, {kInstallableIconList, R"({
@@ -2085,8 +2135,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerLaunchHandlerBrowserTest,
                                  {{96, kWin}, kInstallableIconTopLeftColor},
                                  {{128, kAll}, kInstallableIconTopLeftColor},
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
-  EXPECT_EQ(GetProvider().registrar().GetAppById(app_id)->launch_handler(),
-            (LaunchHandler{LaunchHandler::ClientMode::kNavigateExisting}));
+  EXPECT_EQ(
+      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler(),
+      (LaunchHandler{LaunchHandler::ClientMode::kNavigateExisting}));
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2111,7 +2162,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerSystemAppBrowserTest,
 
   histogram_tester_.ExpectBucketCount(
       kUpdateHistogramName, ManifestUpdateResult::kAppIsSystemWebApp, 1);
-  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorGREEN);
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppThemeColor(app_id),
+            SK_ColorGREEN);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -2156,7 +2208,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerWebAppsBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->share_target().has_value());
   EXPECT_EQ(web_app->share_target()->method, apps::ShareTarget::Method::kGet);
 }
@@ -2189,7 +2241,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerWebAppsBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->share_target().has_value());
   EXPECT_EQ(web_app->share_target()->method, apps::ShareTarget::Method::kPost);
 }
@@ -2232,12 +2284,12 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerWebAppsBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->share_target().has_value());
 }
 
 // Functional tests. More tests for detecting file handler updates are
-// available in unit tests at ManifestUpdateTaskTest.
+// available in unit tests at ManifestUpdateDataFetchUtilsTest.
 class ManifestUpdateManagerBrowserTestWithFileHandling
     : public ManifestUpdateManagerBrowserTest {
  public:
@@ -2288,7 +2340,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->file_handlers().empty());
   const auto& file_handler = web_app->file_handlers()[0];
   EXPECT_EQ("plaintext", file_handler.action.query());
@@ -2326,7 +2378,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpToDate, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->file_handlers().empty());
 }
 
@@ -2354,7 +2406,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   OverrideManifest(kFileHandlerManifestTemplate,
                    {".txt", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   const auto& old_file_handler = web_app->file_handlers()[0];
   EXPECT_EQ(1u, old_file_handler.accept.size());
   auto old_extensions = old_file_handler.accept[0].file_extensions;
@@ -2404,15 +2456,16 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
 
   OverrideManifest(kFileHandlerManifestTemplate, {".txt", "red"});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   const auto& old_file_handler = web_app->file_handlers()[0];
   auto old_extensions = old_file_handler.accept[0].file_extensions;
   EXPECT_TRUE(base::Contains(old_extensions, ".txt"));
   const GURL url = GetAppURL();
   const GURL origin = url.DeprecatedGetOriginAsURL();
 
-  EXPECT_EQ(ApiApprovalState::kRequiresPrompt,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kRequiresPrompt,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
   GetProvider().sync_bridge().SetAppFileHandlerApprovalState(
       app_id, ApiApprovalState::kAllowed);
 
@@ -2428,8 +2481,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   EXPECT_TRUE(base::Contains(new_extensions, ".txt"));
 
   // Set back to allowed.
-  EXPECT_EQ(ApiApprovalState::kRequiresPrompt,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kRequiresPrompt,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
   GetProvider().sync_bridge().SetAppFileHandlerApprovalState(
       app_id, ApiApprovalState::kAllowed);
 
@@ -2443,8 +2497,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   EXPECT_TRUE(base::Contains(new_extensions, ".md"));
   EXPECT_TRUE(base::Contains(new_extensions, ".txt"));
 
-  EXPECT_EQ(ApiApprovalState::kAllowed,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kAllowed,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
 
   // Update manifest, asking for /fewer/ file types. Permission should be left
   // on ALLOW.
@@ -2455,8 +2510,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   new_extensions = web_app->file_handlers()[0].accept[0].file_extensions;
   EXPECT_FALSE(base::Contains(new_extensions, ".md"));
   EXPECT_TRUE(base::Contains(new_extensions, ".txt"));
-  EXPECT_EQ(ApiApprovalState::kAllowed,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kAllowed,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
 
 #if BUILDFLAG(IS_LINUX)
   // Make sure that blocking the permission also unregisters the MIME type on
@@ -2476,8 +2532,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   time_override += base::Days(10);
   SetTimeOverride(time_override);
   EXPECT_EQ(ManifestUpdateResult::kAppUpdated, GetResultAfterPageLoad(url));
-  EXPECT_EQ(ApiApprovalState::kDisallowed,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kDisallowed,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
@@ -2504,7 +2561,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   OverrideManifest(kFileHandlerManifestTemplate,
                    {".txt", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  WebAppRegistrar& registrar = GetProvider().registrar();
+  WebAppRegistrar& registrar = GetProvider().registrar_unsafe();
   const WebApp* web_app = registrar.GetAppById(app_id);
 
   ASSERT_FALSE(web_app->file_handlers().empty());
@@ -2516,8 +2573,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   const GURL origin = url.DeprecatedGetOriginAsURL();
 
   // Disallow the API.
-  EXPECT_EQ(ApiApprovalState::kRequiresPrompt,
-            GetProvider().registrar().GetAppFileHandlerApprovalState(app_id));
+  EXPECT_EQ(
+      ApiApprovalState::kRequiresPrompt,
+      GetProvider().registrar_unsafe().GetAppFileHandlerApprovalState(app_id));
   GetProvider().sync_bridge().SetAppFileHandlerApprovalState(
       app_id, ApiApprovalState::kDisallowed);
 
@@ -2570,7 +2628,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTestWithFileHandling,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  auto* file_handlers = GetProvider().registrar().GetAppFileHandlers(app_id);
+  auto* file_handlers =
+      GetProvider().registrar_unsafe().GetAppFileHandlers(app_id);
   ASSERT_TRUE(file_handlers);
   EXPECT_TRUE(file_handlers->empty());
 }
@@ -2695,9 +2754,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(
-      GetProvider().registrar().GetAppShortcutsMenuItemInfos(app_id).size(),
-      2u);
+  EXPECT_EQ(GetProvider()
+                .registrar_unsafe()
+                .GetAppShortcutsMenuItemInfos(app_id)
+                .size(),
+            2u);
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -2735,9 +2796,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(
-      GetProvider().registrar().GetAppShortcutsMenuItemInfos(app_id)[0].name,
-      kAnotherShortcutsItemName16);
+  EXPECT_EQ(GetProvider()
+                .registrar_unsafe()
+                .GetAppShortcutsMenuItemInfos(app_id)[0]
+                .name,
+            kAnotherShortcutsItemName16);
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -2813,9 +2876,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
-  EXPECT_EQ(
-      GetProvider().registrar().GetAppShortcutsMenuItemInfos(app_id)[0].url,
-      http_server_.GetURL(kAnotherShortcutsItemUrl));
+  EXPECT_EQ(GetProvider()
+                .registrar_unsafe()
+                .GetAppShortcutsMenuItemInfos(app_id)[0]
+                .url,
+            http_server_.GetURL(kAnotherShortcutsItemUrl));
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -2987,7 +3052,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
   EXPECT_EQ(GetProvider()
-                .registrar()
+                .registrar_unsafe()
                 .GetAppShortcutsMenuItemInfos(app_id)[0]
                 .GetShortcutIconInfosForPurpose(IconPurpose::ANY)[0]
                 .url,
@@ -3031,7 +3096,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
   EXPECT_EQ(GetProvider()
-                .registrar()
+                .registrar_unsafe()
                 .GetAppShortcutsMenuItemInfos(app_id)[0]
                 .GetShortcutIconInfosForPurpose(IconPurpose::ANY)[0]
                 .square_size_px,
@@ -3052,7 +3117,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   )";
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   base::Time manifest_update_time = web_app->manifest_update_time();
 
   // CSS #RRGGBBAA syntax.
@@ -3088,8 +3153,9 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_UpdateDialog,
     }
   )";
 
-  if (IsUpdateDialogEnabled())
-    chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  if (IsUpdateDialogEnabled()) {
+    AcceptAppIdentityUpdateDialogForTesting();
+  }
 
   OverrideManifest(kManifest, {});
   AppId app_id = InstallWebApp();
@@ -3249,8 +3315,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerIconUpdatingBrowserTest,
 class ManifestUpdateManagerBrowserTest_UrlHandlers
     : public ManifestUpdateManagerBrowserTest {
  public:
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   void SetUpUrlHandlerManager() {
     auto url_handler_manager =
         std::make_unique<UrlHandlerManagerImpl>(browser()->profile());
@@ -3272,7 +3337,7 @@ class ManifestUpdateManagerBrowserTest_UrlHandlers
 
     url_handler_manager->SetAssociationManagerForTesting(
         std::move(association_manager));
-    url_handler_manager->SetSubsystems(&(GetProvider().registrar()));
+    url_handler_manager->SetSubsystems(&(GetProvider().registrar_unsafe()));
     GetProvider().os_integration_manager().set_url_handler_manager(
         std::move(url_handler_manager));
   }
@@ -3300,7 +3365,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
                                           R"({"origin": "https://foo.com"})",
                                       });
   AppId app_id = InstallWebApp();
-  ASSERT_EQ(1u, GetProvider().registrar().GetAppUrlHandlers(app_id).size());
+  ASSERT_EQ(1u,
+            GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id).size());
 
   OverrideManifest(
       kManifestTemplate,
@@ -3310,7 +3376,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
             ManifestUpdateResult::kAppUpdated);
 
   apps::UrlHandlers url_handlers =
-      GetProvider().registrar().GetAppUrlHandlers(app_id);
+      GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id);
   ASSERT_EQ(2u, url_handlers.size());
   EXPECT_TRUE(base::Contains(
       url_handlers,
@@ -3338,7 +3404,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
                                           R"()",
                                       });
   AppId app_id = InstallWebApp();
-  ASSERT_EQ(0u, GetProvider().registrar().GetAppUrlHandlers(app_id).size());
+  ASSERT_EQ(0u,
+            GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id).size());
 
   OverrideManifest(kManifestTemplate,
                    {kInstallableIconList,
@@ -3347,7 +3414,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
             ManifestUpdateResult::kAppUpdated);
 
   apps::UrlHandlers url_handlers =
-      GetProvider().registrar().GetAppUrlHandlers(app_id);
+      GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id);
   ASSERT_EQ(1u, url_handlers.size());
   EXPECT_TRUE(base::Contains(
       url_handlers,
@@ -3374,7 +3441,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
                    });
   AppId app_id = InstallWebApp();
   apps::UrlHandlers url_handlers =
-      GetProvider().registrar().GetAppUrlHandlers(app_id);
+      GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id);
   ASSERT_EQ(1u, url_handlers.size());
   EXPECT_TRUE(base::Contains(
       url_handlers,
@@ -3384,13 +3451,33 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
             ManifestUpdateResult::kAppUpdated);
 
-  url_handlers = GetProvider().registrar().GetAppUrlHandlers(app_id);
+  url_handlers = GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id);
   ASSERT_EQ(0u, url_handlers.size());
 }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
-IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+class ManifestUpdateBrowserTestUrlHandlerSynchronize
+    : public ManifestUpdateManagerBrowserTest_UrlHandlers,
+      public ::testing::WithParamInterface<OsIntegrationSubManagersState> {
+ public:
+  ManifestUpdateBrowserTestUrlHandlerSynchronize() {
+    if (GetParam() == OsIntegrationSubManagersState::kEnabled) {
+      scoped_feature_list_.InitWithFeaturesAndParameters(
+          {{features::kOsIntegrationSubManagers, {{"stage", "write_config"}}}},
+          /*disabled_features=*/{});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          {}, {features::kOsIntegrationSubManagers});
+    }
+  }
+
+  ~ManifestUpdateBrowserTestUrlHandlerSynchronize() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateBrowserTestUrlHandlerSynchronize,
                        NoHandlersChangeUpdateAssociations) {
   constexpr char kManifestTemplate[] = R"(
     {
@@ -3413,7 +3500,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
   apps::UrlHandlers url_handlers =
-      GetProvider().registrar().GetAppUrlHandlers(app_id);
+      GetProvider().registrar_unsafe().GetAppUrlHandlers(app_id);
   ASSERT_EQ(2u, url_handlers.size());
   EXPECT_TRUE(base::Contains(
       url_handlers,
@@ -3450,6 +3537,13 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_UrlHandlers,
   matches = UrlHandlerManagerImpl::GetUrlHandlerMatches(cmd);
   ASSERT_EQ(matches.size(), 0u);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ManifestUpdateBrowserTestUrlHandlerSynchronize,
+    ::testing::Values(OsIntegrationSubManagersState::kEnabled,
+                      OsIntegrationSubManagersState::kDisabled),
+    test::GetOsIntegrationSubManagersTestName);
 #endif
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -3489,7 +3583,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->protocol_handlers().empty());
   const auto& protocol_handler = web_app->protocol_handlers()[0];
   EXPECT_EQ("mailto", protocol_handler.protocol);
@@ -3524,7 +3618,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpToDate, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->protocol_handlers().empty());
 }
 
@@ -3549,7 +3643,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   OverrideManifest(kProtocolHandlerManifestTemplate,
                    {"mailto", "mailto", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_EQ(1u, web_app->protocol_handlers().size());
   const auto& old_protocol_handler = web_app->protocol_handlers()[0];
   EXPECT_EQ("mailto", old_protocol_handler.protocol);
@@ -3607,7 +3701,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->protocol_handlers().empty());
 }
 
@@ -3649,7 +3743,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_LockScreen,
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->lock_screen_start_url().is_empty());
 
   OverrideManifest(kLockScreenStartUrlManifestTemplate, {kInstallableIconList});
@@ -3678,7 +3772,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_LockScreen,
 
   OverrideManifest(kLockScreenStartUrlManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_EQ(http_server_.GetURL("/lock-screen-start"),
             web_app->lock_screen_start_url().spec());
 
@@ -3709,7 +3803,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_LockScreen,
   OverrideManifest(kLockScreenStartUrlManifestTemplate,
                    {"old-relative-url", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   // URL parsed relative to manifest URL, which is in /banners/.
   EXPECT_EQ(http_server_.GetURL("/banners/old-relative-url"),
             web_app->lock_screen_start_url().spec());
@@ -3751,7 +3845,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_LockScreen,
 
   OverrideManifest(kLockScreenStartUrlManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->lock_screen_start_url().is_empty());
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
@@ -3799,7 +3893,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_NoLockScreen,
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->lock_screen_start_url().is_empty());
 
   OverrideManifest(kLockScreenStartUrlManifestTemplate, {kInstallableIconList});
@@ -3837,7 +3931,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->note_taking_new_note_url().is_empty());
 
   OverrideManifest(kNewNoteUrlManifestTemplate, {kInstallableIconList});
@@ -3866,7 +3960,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   OverrideManifest(kNewNoteUrlManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_EQ(http_server_.GetURL("/new"),
             web_app->note_taking_new_note_url().spec());
 
@@ -3897,7 +3991,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   OverrideManifest(kNewNoteUrlManifestTemplate,
                    {"old-relative-url", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   // URL parsed relative to manifest URL, which is in /banners/.
   EXPECT_EQ(http_server_.GetURL("/banners/old-relative-url"),
             web_app->note_taking_new_note_url().spec());
@@ -3939,7 +4033,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   OverrideManifest(kNewNoteUrlManifestTemplate, {kInstallableIconList});
   AppId app_id = InstallWebApp();
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_FALSE(web_app->note_taking_new_note_url().is_empty());
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList});
@@ -3962,8 +4056,8 @@ class BrowserAddedWaiter final : public BrowserListObserver {
     BrowserList::RemoveObserver(this);
     // Post a task to ensure the Remove event has been dispatched to all
     // observers.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  run_loop_.QuitClosure());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, run_loop_.QuitClosure());
   }
 
  private:
@@ -4012,13 +4106,15 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
       InstallShortcutAppForCurrentUrl(browser(), false, override_title);
 
   // The app installed should be the only app installed.
-  auto app_ids = GetProvider().registrar().GetAppIds();
+  auto app_ids = GetProvider().registrar_unsafe().GetAppIds();
   ASSERT_EQ(1u, app_ids.size());
   app_id = app_ids[0];
-  EXPECT_EQ(override_title, GetProvider().registrar().GetAppShortName(app_id));
+  EXPECT_EQ(override_title,
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
 
   // Simulate the user accepting the App Identity update dialog (if it appears).
-  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  base::AutoReset<absl::optional<AppIdentityUpdate>> update_dialog_scope =
+      SetIdentityUpdateDialogActionForTesting(AppIdentityUpdate::kAllowed);
 
   views::AnyWidgetObserver observer(views::test::AnyWidgetTestPasskey{});
   observer.set_shown_callback(
@@ -4053,12 +4149,14 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ManifestId,
   )";
   OverrideManifest(kManifestTemplate, {"/startA", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppStartUrl(app_id).path(), "/startA");
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppStartUrl(app_id).path(),
+            "/startA");
 
   OverrideManifest(kManifestTemplate, {"/startB", kInstallableIconList});
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
             ManifestUpdateResult::kAppUpdated);
-  EXPECT_EQ(GetProvider().registrar().GetAppStartUrl(app_id).path(), "/startB");
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppStartUrl(app_id).path(),
+            "/startB");
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
 }
@@ -4100,7 +4198,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ManifestId,
   AppId app_id = InstallWebApp();
 
   // manifest_id should default to start_url when it's not provided in manifest.
-  EXPECT_EQ(GetProvider().registrar().GetAppById(app_id)->manifest_id().value(),
+  EXPECT_EQ(GetProvider()
+                .registrar_unsafe()
+                .GetAppById(app_id)
+                ->manifest_id()
+                .value(),
             "start");
 
   constexpr char kManifestTemplate2[] = R"(
@@ -4145,14 +4247,20 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ManifestId,
     WebApp* app = update->UpdateApp(app_id);
     app->SetManifestId(absl::nullopt);
   }
-  EXPECT_FALSE(
-      GetProvider().registrar().GetAppById(app_id)->manifest_id().has_value());
+  EXPECT_FALSE(GetProvider()
+                   .registrar_unsafe()
+                   .GetAppById(app_id)
+                   ->manifest_id()
+                   .has_value());
   // Reload page to trigger an manifest update that re-fetches the manifest with
   // id specified to be same as the default start_url.
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
             ManifestUpdateResult::kAppUpdated);
-  EXPECT_TRUE(
-      GetProvider().registrar().GetAppById(app_id)->manifest_id().has_value());
+  EXPECT_TRUE(GetProvider()
+                  .registrar_unsafe()
+                  .GetAppById(app_id)
+                  ->manifest_id()
+                  .has_value());
 }
 
 // This test exercises the upgrade path for App Identity manifest updates with
@@ -4182,7 +4290,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
 
   // Simulate the user accepting the App Identity update dialog (when it
   // appears).
-  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  base::AutoReset<absl::optional<AppIdentityUpdate>> update_dialog_scope =
+      SetIdentityUpdateDialogActionForTesting(AppIdentityUpdate::kAllowed);
 
   // Setup the web app, install it and immediately update the manifest.
   OverrideManifest(kManifestTemplate, {"Test app name", kIconList});
@@ -4221,12 +4330,12 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
                        TestUpgradeDuringShutdownForAppIdentity) {
   // The app installed in the pre-test should be the only app installed.
-  auto app_ids = GetProvider().registrar().GetAppIds();
+  auto app_ids = GetProvider().registrar_unsafe().GetAppIds();
   ASSERT_EQ(1u, app_ids.size());
   AppId app_id = app_ids[0];
 
   EXPECT_EQ("Different app name",
-            GetProvider().registrar().GetAppShortName(app_id));
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
 
   constexpr SkColor kUpdatedIconTopLeftColor = SkColorSetRGB(0xFF, 0x00, 0x00);
   ConfirmShortcutColors(app_id, {{{32, kAll}, kUpdatedIconTopLeftColor},
@@ -4254,7 +4363,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
   )";
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
-  EXPECT_EQ(GetProvider().registrar().GetAppBackgroundColor(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppBackgroundColor(app_id),
             SK_ColorBLUE);
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "red"});
 
@@ -4289,11 +4398,11 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
                        TestUpgradeDuringShutdownForBenignUpdate) {
   // The app installed in the pre-test should be the only app installed.
-  auto app_ids = GetProvider().registrar().GetAppIds();
+  auto app_ids = GetProvider().registrar_unsafe().GetAppIds();
   ASSERT_EQ(1u, app_ids.size());
   AppId app_id = app_ids[0];
 
-  EXPECT_EQ(GetProvider().registrar().GetAppBackgroundColor(app_id),
+  EXPECT_EQ(GetProvider().registrar_unsafe().GetAppBackgroundColor(app_id),
             SK_ColorRED);
 }
 
@@ -4301,7 +4410,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
 // sends the right signal back.
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerAppIdentityBrowserTest,
                        VerifyCallbackUpgradeAllowed) {
-  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  base::AutoReset<absl::optional<AppIdentityUpdate>> update_dialog_scope =
+      SetIdentityUpdateDialogActionForTesting(AppIdentityUpdate::kAllowed);
 
   constexpr char kManifestTemplate[] = R"(
     {
@@ -4632,10 +4742,15 @@ std::string GenerateColoredIconList(int installability_icon,
   return "\n    [\n" + icon_list + "    ]\n  ";
 }
 
-// Disabled due to test flakiness: https://crbug.com/1341954
+// Disabled due to test flakiness: https://crbug.com/1341617
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#define MAYBE_CheckCombinations DISABLED_CheckCombinations
+#else
+#define MAYBE_CheckCombinations CheckCombinations
+#endif
 IN_PROC_BROWSER_TEST_P(
     ManifestUpdateManagerBrowserTest_AppIdentityParameterized,
-    CheckCombinations) {
+    MAYBE_CheckCombinations) {
   constexpr char kManifestTemplate[] = R"(
     {
       "name": "$1",
@@ -4646,7 +4761,7 @@ IN_PROC_BROWSER_TEST_P(
     }
   )";
 
-  ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
+  ManifestUpdateManager::BypassWindowCloseWaitingForTesting() = true;
 
   testing::TestParamInfo<
       std::tuple<AppIdTestParam, AppIdTestParam, AppIdTestParam>>
@@ -4704,8 +4819,9 @@ IN_PROC_BROWSER_TEST_P(
   trace += "---------------------------\n";
 
   if (IsAppIdentityUpdateDialogForIconEnabled() ||
-      IsAppIdentityUpdateDialogForNameEnabled())
-    chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+      IsAppIdentityUpdateDialogForNameEnabled()) {
+    AcceptAppIdentityUpdateDialogForTesting();
+  }
 
   std::string app_name = "Test app name";
 
@@ -4949,7 +5065,7 @@ IN_PROC_BROWSER_TEST_P(
     NOTREACHED();
   }
 
-  const WebApp* web_app = GetProvider().registrar().GetAppById(app_id);
+  const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   ASSERT_TRUE(web_app);
 
   if (TitleUpdate())
@@ -4980,7 +5096,9 @@ IN_PROC_BROWSER_TEST_P(
   }
 
   EXPECT_EQ(ExpectTitleUpdate() ? "Different app name" : "Test app name",
-            GetProvider().registrar().GetAppShortName(app_id));
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
+
+  ManifestUpdateManager::BypassWindowCloseWaitingForTesting() = false;
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -813,7 +813,11 @@ void BookmarkRemoteUpdatesHandler::ReuploadEntityIfNeeded(
   base::UmaHistogramBoolean(
       "Sync.BookmarkEntityReuploadNeeded.OnIncrementalUpdate",
       is_reupload_needed);
-  if (is_reupload_needed) {
+
+  const bool is_reupload_for_thumbnail_needed =
+      ShouldReuploadBookmarkForThumbnail(
+          entity_data.specifics.bookmark(), tracked_entity->bookmark_node());
+  if (is_reupload_needed || is_reupload_for_thumbnail_needed) {
     bookmark_tracker_->IncrementSequenceNumber(tracked_entity);
   }
 }

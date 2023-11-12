@@ -11,10 +11,10 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/lazy_thread_pool_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -47,25 +47,26 @@ void RecordHistogramsOnLauncherThread(base::TimeDelta launch_time) {
 
 }  // namespace
 
+ChildProcessLauncherHelper::Process::Process() = default;
+
+ChildProcessLauncherHelper::Process::~Process() = default;
+
 ChildProcessLauncherHelper::Process::Process(Process&& other)
     : process(std::move(other.process))
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
       ,
       zygote(other.zygote)
 #endif
+#if BUILDFLAG(IS_FUCHSIA)
+      ,
+      sandbox_policy(std::move(other.sandbox_policy))
+#endif
 {
 }
 
 ChildProcessLauncherHelper::Process&
 ChildProcessLauncherHelper::Process::Process::operator=(
-    ChildProcessLauncherHelper::Process&& other) {
-  DCHECK_NE(this, &other);
-  process = std::move(other.process);
-#if BUILDFLAG(USE_ZYGOTE_HANDLE)
-  zygote = other.zygote;
-#endif
-  return *this;
-}
+    ChildProcessLauncherHelper::Process&& other) = default;
 
 ChildProcessLauncherHelper::ChildProcessLauncherHelper(
     int child_process_id,
@@ -80,7 +81,7 @@ ChildProcessLauncherHelper::ChildProcessLauncherHelper(
     const mojo::ProcessErrorCallback& process_error_callback,
     std::unique_ptr<ChildProcessLauncherFileData> file_data)
     : child_process_id_(child_process_id),
-      client_task_runner_(base::SequencedTaskRunnerHandle::Get()),
+      client_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       command_line_(std::move(command_line)),
       delegate_(std::move(delegate)),
       child_process_launcher_(child_process_launcher),
@@ -159,6 +160,9 @@ void ChildProcessLauncherHelper::PostLaunchOnLauncherThread(
   // The LastError is set on the launcher thread, but needs to be transferred to
   // the Client thread.
   DWORD last_error = ::GetLastError();
+  const bool launch_elevated = delegate_->ShouldLaunchElevated();
+#else
+  const bool launch_elevated = false;
 #endif
   if (mojo_channel_)
     mojo_channel_->RemoteProcessLaunchAttempted();
@@ -171,6 +175,9 @@ void ChildProcessLauncherHelper::PostLaunchOnLauncherThread(
   // Take ownership of the broker client invitation here so it's destroyed when
   // we go out of scope regardless of the outcome below.
   mojo::OutgoingInvitation invitation = std::move(mojo_invitation_);
+  if (launch_elevated) {
+    invitation.set_extra_flags(MOJO_SEND_INVITATION_FLAG_ELEVATED);
+  }
   if (process.process.IsValid()) {
 #if !BUILDFLAG(IS_FUCHSIA)
     if (mojo_named_channel_) {

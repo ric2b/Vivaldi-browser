@@ -147,7 +147,9 @@ interface AudioBufferSourceNode : AudioScheduledSourceNode
 interface AudioContext : BaseAudioContext
     attribute @@toStringTag
     getter baseLatency
+    getter onsinkchange
     getter outputLatency
+    getter sinkId
     method close
     method constructor
     method createMediaElementSource
@@ -155,7 +157,9 @@ interface AudioContext : BaseAudioContext
     method createMediaStreamSource
     method getOutputTimestamp
     method resume
+    method setSinkId
     method suspend
+    setter onsinkchange
 interface AudioData
     attribute @@toStringTag
     getter duration
@@ -268,6 +272,10 @@ interface AudioScheduledSourceNode : AudioNode
     method start
     method stop
     setter onended
+interface AudioSinkInfo
+    attribute @@toStringTag
+    getter type
+    method constructor
 interface AudioWorklet : Worklet
     attribute @@toStringTag
     method constructor
@@ -429,6 +437,21 @@ interface ByteLengthQueuingStrategy
 interface CDATASection : Text
     attribute @@toStringTag
     method constructor
+interface CSPViolationReportBody : ReportBody
+    attribute @@toStringTag
+    getter blockedURL
+    getter columnNumber
+    getter disposition
+    getter documentURL
+    getter effectiveDirective
+    getter lineNumber
+    getter originalPolicy
+    getter referrer
+    getter sample
+    getter sourceFile
+    getter statusCode
+    method constructor
+    method toJSON
 interface CSSAnimation : Animation
     attribute @@toStringTag
     getter animationName
@@ -913,6 +936,10 @@ interface CanvasRenderingContext2D
     setter textBaseline
     setter textRendering
     setter wordSpacing
+interface CaptureController
+    attribute @@toStringTag
+    method constructor
+    method setFocusBehavior
 interface ChannelMergerNode : AudioNode
     attribute @@toStringTag
     method constructor
@@ -1007,6 +1034,18 @@ interface CookieStoreManager
     method getSubscriptions
     method subscribe
     method unsubscribe
+interface CoopAccessViolationReportBody : ReportBody
+    attribute @@toStringTag
+    getter columnNumber
+    getter lineNumber
+    getter openeeURL
+    getter openerURL
+    getter otherDocumentURL
+    getter property
+    getter sourceFile
+    getter type
+    method constructor
+    method toJSON
 interface CountQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -1357,6 +1396,16 @@ interface DelegatedInkTrailPresenter
     getter presentationArea
     method constructor
     method updateInkTrailStartPoint
+interface DeprecationReportBody : ReportBody
+    attribute @@toStringTag
+    getter anticipatedRemoval
+    getter columnNumber
+    getter id
+    getter lineNumber
+    getter message
+    getter sourceFile
+    method constructor
+    method toJSON
 interface DeviceMotionEvent : Event
     attribute @@toStringTag
     getter acceleration
@@ -1768,6 +1817,16 @@ interface DocumentFragment : Node
     method querySelector
     method querySelectorAll
     method replaceChildren
+interface DocumentPolicyViolationReportBody : ReportBody
+    attribute @@toStringTag
+    getter columnNumber
+    getter disposition
+    getter featureId
+    getter lineNumber
+    getter message
+    getter sourceFile
+    method constructor
+    method toJSON
 interface DocumentTimeline : AnimationTimeline
     attribute @@toStringTag
     method constructor
@@ -2128,7 +2187,6 @@ interface Event
     getter currentTarget
     getter defaultPrevented
     getter eventPhase
-    getter path
     getter returnValue
     getter srcElement
     getter target
@@ -2261,6 +2319,7 @@ interface FileSystemHandle
     method constructor
     method isSameEntry
     method queryPermission
+    method remove
     method requestPermission
 interface FileSystemWritableFileStream : WritableStream
     attribute @@toStringTag
@@ -3150,6 +3209,7 @@ interface HTMLIFrameElement : HTMLElement
     getter allowPaymentRequest
     getter contentDocument
     getter contentWindow
+    getter credentialless
     getter csp
     getter featurePolicy
     getter frameBorder
@@ -3171,6 +3231,7 @@ interface HTMLIFrameElement : HTMLElement
     setter allow
     setter allowFullscreen
     setter allowPaymentRequest
+    setter credentialless
     setter csp
     setter frameBorder
     setter height
@@ -4414,6 +4475,15 @@ interface IntersectionObserverEntry
     getter target
     getter time
     method constructor
+interface InterventionReportBody : ReportBody
+    attribute @@toStringTag
+    getter columnNumber
+    getter id
+    getter lineNumber
+    getter message
+    getter sourceFile
+    method constructor
+    method toJSON
 interface Keyboard
     attribute @@toStringTag
     method constructor
@@ -4475,6 +4545,7 @@ interface LargestContentfulPaint : PerformanceEntry
 interface LaunchParams
     attribute @@toStringTag
     getter files
+    getter targetURL
     method constructor
 interface LaunchQueue
     attribute @@toStringTag
@@ -4572,6 +4643,221 @@ interface MIDIPort : EventTarget
     method constructor
     method open
     setter onstatechange
+interface MathMLElement : Element
+    attribute @@toStringTag
+    getter attributeStyleMap
+    getter autofocus
+    getter dataset
+    getter nonce
+    getter onabort
+    getter onanimationend
+    getter onanimationiteration
+    getter onanimationstart
+    getter onauxclick
+    getter onbeforeinput
+    getter onbeforematch
+    getter onbeforexrselect
+    getter onblur
+    getter oncancel
+    getter oncanplay
+    getter oncanplaythrough
+    getter onchange
+    getter onclick
+    getter onclose
+    getter oncontentvisibilityautostatechange
+    getter oncontextlost
+    getter oncontextmenu
+    getter oncontextrestored
+    getter oncopy
+    getter oncuechange
+    getter oncut
+    getter ondblclick
+    getter ondrag
+    getter ondragend
+    getter ondragenter
+    getter ondragleave
+    getter ondragover
+    getter ondragstart
+    getter ondrop
+    getter ondurationchange
+    getter onemptied
+    getter onended
+    getter onerror
+    getter onfocus
+    getter onformdata
+    getter ongotpointercapture
+    getter oninput
+    getter oninvalid
+    getter onkeydown
+    getter onkeypress
+    getter onkeyup
+    getter onload
+    getter onloadeddata
+    getter onloadedmetadata
+    getter onloadstart
+    getter onlostpointercapture
+    getter onmousedown
+    getter onmouseenter
+    getter onmouseleave
+    getter onmousemove
+    getter onmouseout
+    getter onmouseover
+    getter onmouseup
+    getter onmousewheel
+    getter onpaste
+    getter onpause
+    getter onplay
+    getter onplaying
+    getter onpointercancel
+    getter onpointerdown
+    getter onpointerenter
+    getter onpointerleave
+    getter onpointermove
+    getter onpointerout
+    getter onpointerover
+    getter onpointerrawupdate
+    getter onpointerup
+    getter onprogress
+    getter onratechange
+    getter onreset
+    getter onresize
+    getter onscroll
+    getter onsecuritypolicyviolation
+    getter onseeked
+    getter onseeking
+    getter onselect
+    getter onselectionchange
+    getter onselectstart
+    getter onslotchange
+    getter onstalled
+    getter onsubmit
+    getter onsuspend
+    getter ontimeupdate
+    getter ontoggle
+    getter ontouchcancel
+    getter ontouchend
+    getter ontouchmove
+    getter ontouchstart
+    getter ontransitioncancel
+    getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
+    getter onvolumechange
+    getter onwaiting
+    getter onwebkitanimationend
+    getter onwebkitanimationiteration
+    getter onwebkitanimationstart
+    getter onwebkittransitionend
+    getter onwheel
+    getter style
+    getter tabIndex
+    method blur
+    method constructor
+    method focus
+    setter autofocus
+    setter nonce
+    setter onabort
+    setter onanimationend
+    setter onanimationiteration
+    setter onanimationstart
+    setter onauxclick
+    setter onbeforeinput
+    setter onbeforematch
+    setter onbeforexrselect
+    setter onblur
+    setter oncancel
+    setter oncanplay
+    setter oncanplaythrough
+    setter onchange
+    setter onclick
+    setter onclose
+    setter oncontentvisibilityautostatechange
+    setter oncontextlost
+    setter oncontextmenu
+    setter oncontextrestored
+    setter oncopy
+    setter oncuechange
+    setter oncut
+    setter ondblclick
+    setter ondrag
+    setter ondragend
+    setter ondragenter
+    setter ondragleave
+    setter ondragover
+    setter ondragstart
+    setter ondrop
+    setter ondurationchange
+    setter onemptied
+    setter onended
+    setter onerror
+    setter onfocus
+    setter onformdata
+    setter ongotpointercapture
+    setter oninput
+    setter oninvalid
+    setter onkeydown
+    setter onkeypress
+    setter onkeyup
+    setter onload
+    setter onloadeddata
+    setter onloadedmetadata
+    setter onloadstart
+    setter onlostpointercapture
+    setter onmousedown
+    setter onmouseenter
+    setter onmouseleave
+    setter onmousemove
+    setter onmouseout
+    setter onmouseover
+    setter onmouseup
+    setter onmousewheel
+    setter onpaste
+    setter onpause
+    setter onplay
+    setter onplaying
+    setter onpointercancel
+    setter onpointerdown
+    setter onpointerenter
+    setter onpointerleave
+    setter onpointermove
+    setter onpointerout
+    setter onpointerover
+    setter onpointerrawupdate
+    setter onpointerup
+    setter onprogress
+    setter onratechange
+    setter onreset
+    setter onresize
+    setter onscroll
+    setter onsecuritypolicyviolation
+    setter onseeked
+    setter onseeking
+    setter onselect
+    setter onselectionchange
+    setter onselectstart
+    setter onslotchange
+    setter onstalled
+    setter onsubmit
+    setter onsuspend
+    setter ontimeupdate
+    setter ontoggle
+    setter ontouchcancel
+    setter ontouchend
+    setter ontouchmove
+    setter ontouchstart
+    setter ontransitioncancel
+    setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
+    setter onvolumechange
+    setter onwaiting
+    setter onwebkitanimationend
+    setter onwebkitanimationiteration
+    setter onwebkitanimationstart
+    setter onwebkittransitionend
+    setter onwheel
+    setter style
+    setter tabIndex
 interface MediaCapabilities
     attribute @@toStringTag
     method constructor
@@ -5611,6 +5897,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter requestStart
     getter responseEnd
     getter responseStart
+    getter responseStatus
     getter secureConnectionStart
     getter serverTiming
     getter transferSize
@@ -6203,6 +6490,17 @@ interface RemotePlayback : EventTarget
     setter onconnect
     setter onconnecting
     setter ondisconnect
+interface Report
+    attribute @@toStringTag
+    getter body
+    getter type
+    getter url
+    method constructor
+    method toJSON
+interface ReportBody
+    attribute @@toStringTag
+    method constructor
+    method toJSON
 interface ReportingObserver
     attribute @@toStringTag
     method constructor
@@ -10422,6 +10720,7 @@ namespace CSS
     getter clientInformation
     getter closed
     getter cookieStore
+    getter credentialless
     getter crossOriginIsolated
     getter crypto
     getter customElements
@@ -10594,7 +10893,6 @@ namespace CSS
     getter top
     getter trustedTypes
     getter visualViewport
-    getter webkitStorageInfo
     getter window
     method NodeFilter
     method alert

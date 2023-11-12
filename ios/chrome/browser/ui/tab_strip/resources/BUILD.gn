@@ -22,9 +22,9 @@ colorset("vivaldi_tab_view_not_selected_tint_color") {
   sources = [ "vivaldi_tab_view_not_selected_tint_color.colorset/Contents.json" ]
 }
 
-imageset("vivaldi_primary_toolbar_panel_button") {
+imageset("tabstrip_new_tab") {
   sources = [
-    "vivaldi_primary_toolbar_panel_button.imageset/Contents.json",
-    "vivaldi_primary_toolbar_panel_button.imageset/vivaldi_primary_toolbar_panel_button.pdf",
+    "tabstrip_new_tab.imageset/Contents.json",
+    "tabstrip_new_tab.imageset/tabstrip_new_tab@2x.png",
   ]
 }

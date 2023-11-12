@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
@@ -245,21 +246,18 @@ bool HasModulesToShow(Profile* profile) {
 
 std::string FilterModules(const std::string& requested_modules,
                           const std::vector<std::string>& available_modules) {
-  std::vector<std::string> requested_list = base::SplitString(
-      requested_modules, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   std::vector<std::string> filtered_modules;
-
-  std::copy_if(requested_list.begin(), requested_list.end(),
-               std::back_inserter(filtered_modules),
-               [available_modules](std::string module) {
-                 return !module.empty() &&
-                        base::Contains(available_modules, module);
-               });
-
+  base::ranges::copy_if(
+      base::SplitString(requested_modules, ",", base::TRIM_WHITESPACE,
+                        base::SPLIT_WANT_NONEMPTY),
+      std::back_inserter(filtered_modules),
+      [&available_modules](const std::string& module) {
+        return !module.empty() && base::Contains(available_modules, module);
+      });
   return base::JoinString(filtered_modules, ",");
 }
 
-base::DictionaryValue GetModules(Profile* profile) {
+base::Value::Dict GetModules(Profile* profile) {
   // This function should not be called when feature is not on.
   DCHECK(welcome::IsEnabled(profile));
 
@@ -276,11 +274,10 @@ base::DictionaryValue GetModules(Profile* profile) {
 
   std::vector<std::string> available_modules = GetAvailableModules(profile);
 
-  base::DictionaryValue modules;
-  modules.SetStringKey("new-user",
-                       FilterModules(new_user_modules, available_modules));
-  modules.SetStringKey("returning-user", FilterModules(returning_user_modules,
-                                                       available_modules));
+  base::Value::Dict modules;
+  modules.Set("new-user", FilterModules(new_user_modules, available_modules));
+  modules.Set("returning-user",
+              FilterModules(returning_user_modules, available_modules));
   return modules;
 }
 

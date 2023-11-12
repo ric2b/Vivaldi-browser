@@ -182,17 +182,31 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
                                        CloneChildrenFlag) override;
 
  private:
+  // Used by ComputeSelection() to specify which values are needed.
+  enum ComputeSelectionFlags {
+    kStart = 1 << 0,
+    kEnd = 1 << 1,
+    kDirection = 1 << 2,
+  };
+
+  struct ComputedSelection {
+    unsigned start = 0;
+    unsigned end = 0;
+    TextFieldSelectionDirection direction = kSelectionHasNoDirection;
+  };
+
   bool ShouldApplySelectionCache() const;
-  unsigned ComputeSelectionStart() const;
-  unsigned ComputeSelectionEnd() const;
-  TextFieldSelectionDirection ComputeSelectionDirection() const;
+  // Computes the selection. `flags` is a bitmask of ComputeSelectionFlags that
+  // indicates what values should be computed.
+  void ComputeSelection(uint32_t flags,
+                        ComputedSelection& computed_selection) const;
   // Returns true if cached values and arguments are not same.
   bool CacheSelection(unsigned start,
                       unsigned end,
                       TextFieldSelectionDirection);
   static unsigned IndexForPosition(HTMLElement* inner_editor, const Position&);
 
-  void DispatchFocusEvent(Element* old_focused_element,
+  bool DispatchFocusEvent(Element* old_focused_element,
                           mojom::blink::FocusType,
                           InputDeviceCapabilities* source_capabilities) final;
   void DispatchBlurEvent(Element* new_focused_element,

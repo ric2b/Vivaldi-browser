@@ -98,6 +98,7 @@ namespace extensions {
 
 const char kVivaldiTabZoom[] = "vivaldi_tab_zoom";
 const char kVivaldiTabMuted[] = "vivaldi_tab_muted";
+const char kVivaldiWorkspace[] = "workspaceId";
 
 const int& VivaldiPrivateTabObserver::kUserDataKey =
     VivaldiTabCheck::kVivaldiTabObserverContextKey;
@@ -114,6 +115,18 @@ bool IsTabMuted(const WebContents* web_contents) {
     mute = json->FindBoolKey(kVivaldiTabMuted);
   }
   return mute ? *mute : false;
+}
+
+bool IsTabInAWorkspace(const WebContents* web_contents) {
+  std::string viv_extdata = web_contents->GetVivExtData();
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  absl::optional<base::Value> json =
+      base::JSONReader::Read(viv_extdata, options);
+  if (json && json->is_dict()) {
+    auto workspace_id = json->FindDoubleKey(kVivaldiWorkspace);
+    return workspace_id.has_value();
+  }
+  return false;
 }
 
 namespace {
@@ -530,14 +543,14 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
     content::RenderViewHost* old_host,
     content::RenderViewHost* new_host) {
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
-    int render_view_id = new_host->GetRoutingID();
-    int process_id = new_host->GetProcess()->GetID();
-
     content::HostZoomMap* host_zoom_map_ =
         content::HostZoomMap::GetForWebContents(web_contents());
-
-    host_zoom_map_->SetTemporaryZoomLevel(process_id, render_view_id,
-                                          tab_zoom_level_);
+    auto* rvhi = static_cast<content::RenderViewHostImpl*>(new_host);
+    content::RenderFrameHost* rfh = rvhi->GetMainRenderFrameHost();
+    if (rfh) {
+      content::GlobalRenderFrameHostId rfh_id = rfh->GetGlobalId();
+      host_zoom_map_->SetTemporaryZoomLevel(rfh_id, tab_zoom_level_);
+    }
   }
 
   // Set the renderer prefs on the new RenderViewHost too.
@@ -648,15 +661,12 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
     SaveZoomLevelToExtData(new_level);
   } else if (old_level != tab_zoom_level_) {
     // Make sure the view has the correct zoom level set.
-    content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-    int render_view_id = rvh->GetRoutingID();
-    int process_id = rvh->GetProcess()->GetID();
-
     content::HostZoomMap* host_zoom_map_ =
         content::HostZoomMap::GetForWebContents(web_contents());
 
-    host_zoom_map_->SetTemporaryZoomLevel(process_id, render_view_id,
-                                          tab_zoom_level_);
+    host_zoom_map_->SetTemporaryZoomLevel(
+      web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
+      tab_zoom_level_);
   }
 }
 

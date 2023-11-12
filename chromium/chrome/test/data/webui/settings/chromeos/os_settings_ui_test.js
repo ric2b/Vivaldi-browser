@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 import {CrSettingsPrefs} from 'chrome://os-settings/chromeos/os_settings.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert} from 'chrome://resources/ash/common/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 /** @fileoverview Suite of tests for the OS Settings ui and main page. */
 
@@ -53,7 +53,7 @@ suite('OSSettingsUi', function() {
     // Check if there are any sub-pages to verify, being careful to filter out
     // any dom-if and template noise when we search.
     const pages = section.querySelector(`:not(dom-if, template)`)
-                      .shadowRoot.querySelector('settings-animated-pages');
+                      .shadowRoot.querySelector('os-settings-animated-pages');
     if (!pages) {
       return;
     }
@@ -101,7 +101,7 @@ suite('OSSettingsUi', function() {
 
     for (const name of sectionNames) {
       const section = settingsPage.shadowRoot.querySelector(
-          `settings-section[section=${name}]`);
+          `os-settings-section[section=${name}]`);
       assertTrue(!!section, 'Did not find ' + name);
       verifySubpagesHidden(section);
     }
@@ -124,7 +124,7 @@ suite('OSSettingsUi', function() {
 
     for (const name of sectionNames) {
       const section = settingsPage.shadowRoot.querySelector(
-          `settings-section[section=${name}]`);
+          `os-settings-section[section=${name}]`);
       assertTrue(!!section, 'Did not find ' + name);
       verifySubpagesHidden(section);
     }
@@ -142,7 +142,7 @@ suite('OSSettingsUi', function() {
     const hiddenSections = ['multidevice', 'osPeople', 'personalization'];
     for (const name of hiddenSections) {
       const section = settingsPage.shadowRoot.querySelector(
-          `settings-section[section=${name}]`);
+          `os-settings-section[section=${name}]`);
       assertFalse(!!section, 'Found unexpected section ' + name);
     }
 
@@ -162,7 +162,7 @@ suite('OSSettingsUi', function() {
     ];
     for (const name of visibleSections) {
       const section = settingsPage.shadowRoot.querySelector(
-          `settings-section[section=${name}]`);
+          `os-settings-section[section=${name}]`);
       assertTrue(!!section, 'Expected section ' + name);
     }
   });

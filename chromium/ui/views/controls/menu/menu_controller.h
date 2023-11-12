@@ -35,10 +35,15 @@
 #include "ui/views/controls/menu/menu_cocoa_watcher_mac.h"
 #endif
 
+namespace gfx {
+class RoundedCornersF;
+}  // namespace gfx
+
 namespace ui {
 class OSExchangeData;
 struct OwnedWindowAnchor;
-}
+}  // namespace ui
+
 namespace views {
 
 class Button;
@@ -96,6 +101,9 @@ class VIEWS_EXPORT MenuController
 
   // If a menu is currently active, this returns the controller for it.
   static MenuController* GetActiveInstance();
+
+  MenuController(const MenuController&) = delete;
+  MenuController& operator=(const MenuController&) = delete;
 
   // Runs the menu at the specified location.
   void Run(Widget* parent,
@@ -232,6 +240,11 @@ class VIEWS_EXPORT MenuController
   }
   bool use_ash_system_ui_layout() const { return use_ash_system_ui_layout_; }
 
+  // The rounded corners of the context menu.
+  absl::optional<gfx::RoundedCornersF> rounded_corners() const {
+    return rounded_corners_;
+  }
+
   // Notifies |this| that |menu_item| is being destroyed.
   void OnMenuItemDestroying(MenuItemView* menu_item);
 
@@ -251,6 +264,9 @@ class VIEWS_EXPORT MenuController
 
   // Enables/disables scrolling via scroll buttons
   void SetEnabledScrollButtons(bool enabled);
+
+  // Sets the customized rounded corners of the context menu.
+  void SetMenuRoundedCorners(absl::optional<gfx::RoundedCornersF> corners);
 
   // Added by Vivaldi.
   void VivaldiOpenMenu(MenuItemView* item);
@@ -344,14 +360,14 @@ class VIEWS_EXPORT MenuController
     //       but is over a menu (for example, the mouse is over a separator or
     //       empty menu), this is null and parent is the menu the mouse was
     //       clicked on.
-    MenuItemView* menu = nullptr;
+    raw_ptr<MenuItemView, DanglingUntriaged> menu = nullptr;
 
     // If type is kMenuItem but the mouse is not over a menu item this is the
     // parent of the menu item the user clicked on. Otherwise this is null.
-    MenuItemView* parent = nullptr;
+    raw_ptr<MenuItemView, DanglingUntriaged> parent = nullptr;
 
     // This is the submenu the mouse is over.
-    SubmenuView* submenu = nullptr;
+    raw_ptr<SubmenuView, DanglingUntriaged> submenu = nullptr;
 
     // Whether the controller should apply SELECTION_OPEN_SUBMENU to this item.
     bool should_submenu_show = false;
@@ -375,9 +391,6 @@ class VIEWS_EXPORT MenuController
 
   // Creates a MenuController. See |for_drop_| member for details on |for_drop|.
   MenuController(bool for_drop, internal::MenuControllerDelegate* delegate);
-
-  MenuController(const MenuController&) = delete;
-  MenuController& operator=(const MenuController&) = delete;
 
   ~MenuController() override;
 
@@ -825,6 +838,9 @@ class VIEWS_EXPORT MenuController
   // Whether scroll buttons are currently enabled (as they are temporarily
   // disabled when either end of the menu is reached)
   bool scroll_buttons_enabled = true;
+
+  // The rounded corners of the context menu.
+  absl::optional<gfx::RoundedCornersF> rounded_corners_ = absl::nullopt;
 };
 
 }  // namespace views

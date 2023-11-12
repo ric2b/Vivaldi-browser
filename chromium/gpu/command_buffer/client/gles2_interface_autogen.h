@@ -827,7 +827,6 @@ virtual void FlushDriverCachesCHROMIUM() = 0;
 virtual GLuint GetLastFlushIdCHROMIUM() = 0;
 virtual void SetActiveURLCHROMIUM(const char* url) = 0;
 virtual void ContextVisibilityHintCHROMIUM(GLboolean visibility) = 0;
-virtual void CoverageModulationCHROMIUM(GLenum components) = 0;
 virtual GLenum GetGraphicsResetStatusKHR() = 0;
 virtual void BlendBarrierKHR() = 0;
 virtual void BindFragDataLocationIndexedEXT(GLuint program,
@@ -879,4 +878,5 @@ virtual void ColorMaskiOES(GLuint buf,
                            GLboolean b,
                            GLboolean a) = 0;
 virtual GLboolean IsEnablediOES(GLenum target, GLuint index) = 0;
+virtual void ProvokingVertexANGLE(GLenum provokeMode) = 0;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_AUTOGEN_H_

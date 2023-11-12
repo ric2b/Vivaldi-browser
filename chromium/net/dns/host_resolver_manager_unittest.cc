@@ -4,7 +4,6 @@
 
 #include "net/dns/host_resolver_manager.h"
 
-#include <algorithm>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -21,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -5231,20 +5231,6 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
                   testing::ElementsAre(CreateExpected("::1", 80))))));
   EXPECT_THAT(response_specified_ipv6.request()->GetDnsAliasResults(),
               testing::Pointee(testing::IsEmpty()));
-
-  // Request with upper case.
-  ResolveHostResponseHelper response_upper(resolver_->CreateRequest(
-      HostPortPair("nx_IPV4", 80), NetworkAnonymizationKey(),
-      NetLogWithSource(), absl::nullopt, resolve_context_.get(),
-      resolve_context_->host_cache()));
-  EXPECT_THAT(response_upper.result_error(), IsOk());
-  EXPECT_THAT(response_upper.request()->GetAddressResults()->endpoints(),
-              testing::ElementsAre(CreateExpected("127.0.0.1", 80)));
-  EXPECT_THAT(response_upper.request()->GetEndpointResults(),
-              testing::Pointee(testing::ElementsAre(ExpectEndpointResult(
-                  testing::ElementsAre(CreateExpected("127.0.0.1", 80))))));
-  EXPECT_THAT(response_upper.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
 }
 
 TEST_F(HostResolverManagerDnsTest,
@@ -7900,11 +7886,17 @@ TEST_F(HostResolverManagerDnsTest, DnsAliases) {
 TEST_F(HostResolverManagerDnsTest, DnsAliasesAreFixedUp) {
   MockDnsClientRuleList rules;
 
+  // Need to manually encode non-URL-canonical names because DNSDomainFromDot()
+  // requires URL-canonical names.
+  constexpr char kNonCanonicalName[] = "\005HOST2\004test\000";
+
   DnsResponse expected_A_response = BuildTestDnsResponse(
       "host.test", dns_protocol::kTypeA,
       {BuildTestAddressRecord("localhost", IPAddress::IPv4Localhost()),
-       BuildTestCnameRecord("HOST2.test", "localhost"),
-       BuildTestCnameRecord("host.test", "HOST2.test")});
+       BuildTestCnameRecord("host2.test", "localhost"),
+       BuildTestDnsRecord(
+           "host.test", dns_protocol::kTypeCNAME,
+           std::string(kNonCanonicalName, sizeof(kNonCanonicalName) - 1))});
 
   AddDnsRule(&rules, "host.test", dns_protocol::kTypeA,
              std::move(expected_A_response), false /* delay */);
@@ -7912,8 +7904,10 @@ TEST_F(HostResolverManagerDnsTest, DnsAliasesAreFixedUp) {
   DnsResponse expected_AAAA_response = BuildTestDnsResponse(
       "host.test", dns_protocol::kTypeAAAA,
       {BuildTestAddressRecord("localhost", IPAddress::IPv6Localhost()),
-       BuildTestCnameRecord("HOST2.test", "localhost"),
-       BuildTestCnameRecord("host.test", "HOST2.test")});
+       BuildTestCnameRecord("host2.test", "localhost"),
+       BuildTestDnsRecord(
+           "host.test", dns_protocol::kTypeCNAME,
+           std::string(kNonCanonicalName, sizeof(kNonCanonicalName) - 1))});
 
   AddDnsRule(&rules, "host.test", dns_protocol::kTypeAAAA,
              std::move(expected_AAAA_response), false /* delay */);
@@ -8871,10 +8865,8 @@ TEST_F(HostResolverManagerDnsTest, TxtQuery) {
                   "foo1", "foo2", "foo3", "bar1", "bar2")));
   std::vector<std::string> results =
       response.request()->GetTextResults().value();
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       foo_records.begin(), foo_records.end()));
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       bar_records.begin(), bar_records.end()));
+  EXPECT_NE(results.end(), base::ranges::search(results, foo_records));
+  EXPECT_NE(results.end(), base::ranges::search(results, bar_records));
 
   // Expect result to be cached.
   EXPECT_EQ(resolve_context_->host_cache()->size(), 1u);
@@ -8887,10 +8879,8 @@ TEST_F(HostResolverManagerDnsTest, TxtQuery) {
               testing::Optional(testing::UnorderedElementsAre(
                   "foo1", "foo2", "foo3", "bar1", "bar2")));
   results = cached_response.request()->GetTextResults().value();
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       foo_records.begin(), foo_records.end()));
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       bar_records.begin(), bar_records.end()));
+  EXPECT_NE(results.end(), base::ranges::search(results, foo_records));
+  EXPECT_NE(results.end(), base::ranges::search(results, bar_records));
 }
 
 TEST_F(HostResolverManagerDnsTest, TxtQueryRejectsIpLiteral) {
@@ -9281,10 +9271,8 @@ TEST_F(HostResolverManagerDnsTest, TxtDnsQuery) {
                   "foo1", "foo2", "foo3", "bar1", "bar2")));
   std::vector<std::string> results =
       response.request()->GetTextResults().value();
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       foo_records.begin(), foo_records.end()));
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       bar_records.begin(), bar_records.end()));
+  EXPECT_NE(results.end(), base::ranges::search(results, foo_records));
+  EXPECT_NE(results.end(), base::ranges::search(results, bar_records));
 
   // Expect result to be cached.
   EXPECT_EQ(resolve_context_->host_cache()->size(), 1u);
@@ -9297,10 +9285,8 @@ TEST_F(HostResolverManagerDnsTest, TxtDnsQuery) {
               testing::Optional(testing::UnorderedElementsAre(
                   "foo1", "foo2", "foo3", "bar1", "bar2")));
   results = cached_response.request()->GetTextResults().value();
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       foo_records.begin(), foo_records.end()));
-  EXPECT_NE(results.end(), std::search(results.begin(), results.end(),
-                                       bar_records.begin(), bar_records.end()));
+  EXPECT_NE(results.end(), base::ranges::search(results, foo_records));
+  EXPECT_NE(results.end(), base::ranges::search(results, bar_records));
 }
 
 TEST_F(HostResolverManagerDnsTest, PtrQuery) {

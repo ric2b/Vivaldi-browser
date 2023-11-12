@@ -376,18 +376,11 @@ CookieDeletionInfo DeletionFilterToInfo(mojom::CookieDeletionFilterPtr filter) {
   }
 
   delete_info.cookie_partition_key_collection =
-      filter->cookie_partition_key_collection;
+      filter->cookie_partition_key_collection
+          ? *filter->cookie_partition_key_collection
+          : net::CookiePartitionKeyCollection::ContainsAll();
 
   return delete_info;
-}
-
-void CookieManager::ConvertPartitionedCookiesToUnpartitioned(const GURL& url) {
-  if (!base::FeatureList::IsEnabled(net::features::kPartitionedCookies) ||
-      base::FeatureList::IsEnabled(
-          net::features::kPartitionedCookiesBypassOriginTrial)) {
-    return;
-  }
-  cookie_store_->ConvertPartitionedCookiesToUnpartitioned(url);
 }
 
 }  // namespace network

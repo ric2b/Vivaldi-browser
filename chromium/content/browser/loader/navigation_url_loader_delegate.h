@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/early_hints.mojom-forward.h"
@@ -81,8 +80,6 @@ class CONTENT_EXPORT NavigationURLLoaderDelegate {
   // |is_download| is true if the request must be downloaded, if it isn't
   // disallowed.
   //
-  // |download_policy| specifies if downloading is disallowed.
-  //
   // Invoking this method will delete the URLLoader, so it needs to take all
   // arguments by value.
   virtual void OnResponseStarted(
@@ -91,7 +88,6 @@ class CONTENT_EXPORT NavigationURLLoaderDelegate {
       mojo::ScopedDataPipeConsumerHandle response_body,
       GlobalRequestID request_id,
       bool is_download,
-      blink::NavigationDownloadPolicy download_policy,
       net::NetworkAnonymizationKey network_anonymization_key,
       absl::optional<SubresourceLoaderParams> subresource_loader_params,
       EarlyHints early_hints) = 0;

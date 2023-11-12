@@ -1,0 +1,17 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_colors") {
+  sources = [
+    "vivaldi_colors_constants.h",
+    "vivaldi_colors_constants.mm",
+  ]
+
+  deps = [ "resources" ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

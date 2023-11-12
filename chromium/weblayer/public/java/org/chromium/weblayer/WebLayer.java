@@ -28,8 +28,6 @@ import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.IBrowserFragment;
 import org.chromium.weblayer_private.interfaces.IMediaRouteDialogFragment;
 import org.chromium.weblayer_private.interfaces.IProfile;
-import org.chromium.weblayer_private.interfaces.IRemoteFragmentClient;
-import org.chromium.weblayer_private.interfaces.ISettingsFragment;
 import org.chromium.weblayer_private.interfaces.IWebLayer;
 import org.chromium.weblayer_private.interfaces.IWebLayerClient;
 import org.chromium.weblayer_private.interfaces.IWebLayerFactory;
@@ -512,25 +510,9 @@ class WebLayer {
     /**
      * Returns remote counterpart for the BrowserFragment: an {@link IBrowserFragment}.
      */
-    /* package */ IBrowserFragment connectFragment(
-            IRemoteFragmentClient remoteFragmentClient, Bundle fragmentArgs) {
+    /* package */ IBrowserFragment connectFragment(Bundle fragmentArgs) {
         try {
-            return mImpl.createBrowserFragmentImpl(
-                    remoteFragmentClient, ObjectWrapper.wrap(fragmentArgs));
-        } catch (RemoteException e) {
-            throw new APICallException(e);
-        }
-    }
-
-    /**
-     * Returns the remote counterpart of the SettingsFragment.
-     */
-    /* package */ ISettingsFragment connectSettingsFragment(
-            IRemoteFragmentClient remoteFragmentClient, Bundle fragmentArgs) {
-        try {
-            assert getSupportedMajorVersionInternal() >= 89;
-            return mImpl.createSettingsFragmentImpl(
-                    remoteFragmentClient, ObjectWrapper.wrap(fragmentArgs));
+            return mImpl.createBrowserFragmentImpl(ObjectWrapper.wrap(fragmentArgs));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -539,10 +521,9 @@ class WebLayer {
     /**
      * Returns the remote counterpart of MediaRouteDialogFragment.
      */
-    /* package */ IMediaRouteDialogFragment connectMediaRouteDialogFragment(
-            IRemoteFragmentClient remoteFragmentClient) {
+    /* package */ IMediaRouteDialogFragment connectMediaRouteDialogFragment() {
         try {
-            return mImpl.createMediaRouteDialogFragmentImpl(remoteFragmentClient);
+            return mImpl.createMediaRouteDialogFragmentImpl();
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

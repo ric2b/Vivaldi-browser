@@ -151,7 +151,7 @@ void ExpectEqual(const cc::FilterOperation& input,
       break;
     case cc::FilterOperation::DROP_SHADOW:
       EXPECT_EQ(input.amount(), output.amount());
-      EXPECT_EQ(input.drop_shadow_offset(), output.drop_shadow_offset());
+      EXPECT_EQ(input.offset(), output.offset());
       EXPECT_EQ(input.drop_shadow_color(), output.drop_shadow_color());
       break;
     case cc::FilterOperation::COLOR_MATRIX:
@@ -171,9 +171,8 @@ void ExpectEqual(const cc::FilterOperation& input,
     case cc::FilterOperation::ALPHA_THRESHOLD:
       NOTREACHED();
       break;
-    case cc::FilterOperation::STRETCH:
-      EXPECT_EQ(input.amount(), output.amount());
-      EXPECT_EQ(input.outer_threshold(), output.outer_threshold());
+    case cc::FilterOperation::OFFSET:
+      EXPECT_EQ(input.offset(), output.offset());
       break;
   }
 }
@@ -621,20 +620,30 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
 
   CompositorFrameTransitionDirective::SharedElement element;
   element.render_pass_id = frame.render_pass_list.front()->id;
+  NavigationID navigation_id = base::UnguessableToken::Create();
+  uint32_t sequence_id = 1u;
+  auto type = CompositorFrameTransitionDirective::Type::kSave;
   frame.metadata.transition_directives.push_back(
-      CompositorFrameTransitionDirective(
-          1u, CompositorFrameTransitionDirective::Type::kSave, {element}));
+      CompositorFrameTransitionDirective(navigation_id, sequence_id, type,
+                                         {element}));
 
   // This ensures de-serialization succeeds if all passes are present.
   CompositorFrame output;
   ASSERT_TRUE(mojo::test::SerializeAndDeserialize<mojom::CompositorFrame>(
       frame, output));
+  EXPECT_EQ(output.metadata.transition_directives.size(), 1u);
+  const auto& directive = output.metadata.transition_directives[0];
+  EXPECT_EQ(directive.navigation_id(), navigation_id);
+  EXPECT_EQ(directive.sequence_id(), sequence_id);
+  EXPECT_EQ(directive.type(), type);
+  EXPECT_EQ(directive.shared_elements().size(), 1u);
+  EXPECT_EQ(directive.shared_elements()[0], element);
 
   element.render_pass_id = CompositorRenderPassId(
       frame.render_pass_list.back()->id.GetUnsafeValue() + 1);
   frame.metadata.transition_directives.push_back(
-      CompositorFrameTransitionDirective(
-          1u, CompositorFrameTransitionDirective::Type::kSave, {element}));
+      CompositorFrameTransitionDirective(navigation_id, sequence_id, type,
+                                         {element}));
 
   // This ensures de-serialization fails if a pass is missing.
   ASSERT_FALSE(mojo::test::SerializeAndDeserialize<mojom::CompositorFrame>(
@@ -766,7 +775,7 @@ TEST_F(StructTraitsTest, RenderPass) {
   const CompositorRenderPassId render_pass_id{3u};
   const gfx::Rect output_rect(45, 22, 120, 13);
   const gfx::Transform transform_to_root =
-      gfx::Transform::AffineForTesting(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
+      gfx::Transform::Affine(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   const gfx::Rect damage_rect(56, 123, 19, 43);
   cc::FilterOperations filters;
   filters.Append(cc::FilterOperation::CreateBlurFilter(0.f));
@@ -787,7 +796,7 @@ TEST_F(StructTraitsTest, RenderPass) {
   input->SetAll(render_pass_id, output_rect, damage_rect, transform_to_root,
                 filters, backdrop_filters, backdrop_filter_bounds,
                 subtree_capture_id, output_rect.size(),
-                SharedElementResourceId(), has_transparent_background,
+                ViewTransitionElementResourceId(), has_transparent_background,
                 cache_render_pass, has_damage_from_contributing_content,
                 generate_mipmap, has_per_quad_damage);
   input->copy_requests.push_back(CopyOutputRequest::CreateStubForTesting());
@@ -924,7 +933,7 @@ TEST_F(StructTraitsTest, RenderPassWithEmptySharedQuadStateList) {
   const gfx::Rect output_rect(45, 22, 120, 13);
   const gfx::Rect damage_rect(56, 123, 19, 43);
   const gfx::Transform transform_to_root =
-      gfx::Transform::AffineForTesting(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
+      gfx::Transform::Affine(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   const absl::optional<gfx::RRectF> backdrop_filter_bounds;
   SubtreeCaptureId subtree_capture_id;
   const bool has_transparent_background = true;
@@ -936,7 +945,7 @@ TEST_F(StructTraitsTest, RenderPassWithEmptySharedQuadStateList) {
   input->SetAll(render_pass_id, output_rect, damage_rect, transform_to_root,
                 cc::FilterOperations(), cc::FilterOperations(),
                 backdrop_filter_bounds, subtree_capture_id, output_rect.size(),
-                SharedElementResourceId(), has_transparent_background,
+                ViewTransitionElementResourceId(), has_transparent_background,
                 cache_render_pass, has_damage_from_contributing_content,
                 generate_mipmap, has_per_quad_damage);
 

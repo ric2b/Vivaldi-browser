@@ -26,7 +26,6 @@ import org.chromium.base.jank_tracker.JankScenario;
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
@@ -48,7 +47,6 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -94,6 +92,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     private final @NonNull Callback<Tab> mBringTabToFrontCallback;
     private final @NonNull Supplier<TabWindowManager> mTabWindowManagerSupplier;
     private final @NonNull JankTracker mJankTracker;
+    private final @NonNull Runnable mClearFocusCallback;
 
     /* Vivaldi */ public @NonNull AutocompleteResult mAutocompleteResult = AutocompleteResult.EMPTY_RESULT;
     private @Nullable Runnable mCurrentAutocompleteRequest;
@@ -106,6 +105,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     private boolean mShouldCacheSuggestions;
     private boolean mClearFocusAfterNavigation;
     private boolean mClearFocusAfterNavigationAsynchronously;
+    private boolean mUrlHasFocus;
 
     // Vivaldi
     private Callback<Boolean> mNativeInitializedCallback;
@@ -189,6 +189,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         mDropdownViewInfoListBuilder.setShareDelegateSupplier(shareDelegateSupplier);
         mDropdownViewInfoListManager =
                 new DropdownItemViewInfoListManager(mSuggestionModels, context);
+        mClearFocusCallback = () -> mDelegate.clearOmniboxFocus();
     }
 
     /**
@@ -212,6 +213,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             stopAutocomplete(false);
             mAutocomplete.removeOnSuggestionsReceivedListener(this);
         }
+        mHandler.removeCallbacks(mClearFocusCallback);
         mDropdownViewInfoListBuilder.destroy();
 
         // Vivaldi
@@ -329,6 +331,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     /** @see org.chromium.chrome.browser.omnibox.UrlFocusChangeListener#onUrlFocusChange(boolean) */
     void onUrlFocusChange(boolean hasFocus) {
+        mUrlHasFocus = hasFocus;
         if (hasFocus) {
             dismissDeleteDialog(DialogDismissalCause.DISMISSED_BY_NATIVE);
             mRefineActionUsage = RefineActionUsage.NOT_USED;
@@ -469,7 +472,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         String refineText = suggestion.getFillIntoEdit();
         if (isSearchSuggestion) refineText = TextUtils.concat(refineText, " ").toString();
 
-        mDelegate.setOmniboxEditingText(refineText);
+        mDelegate.setOmniboxEditingText(refineText, true); // Vivaldi
         onTextChanged(mUrlBarEditingTextProvider.getTextWithoutAutocomplete(),
                 mUrlBarEditingTextProvider.getTextWithAutocomplete());
 
@@ -767,7 +770,9 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
                     && !newSuggestions.isEmpty()) {
                 defaultMatchIsSearch = newSuggestions.get(0).isSearchSuggestion();
             }
-            mDelegate.onSuggestionsChanged(inlineAutocompleteText, defaultMatchIsSearch);
+            if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls() || mUrlHasFocus) {
+                mDelegate.onSuggestionsChanged(inlineAutocompleteText, defaultMatchIsSearch);
+            }
             if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
                 updateOmniboxSuggestionsVisibility();
             }
@@ -905,8 +910,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             }
 
             if (mClearFocusAfterNavigationAsynchronously) {
-                PostTask.postTask(
-                        UiThreadTaskTraits.USER_VISIBLE, () -> mDelegate.clearOmniboxFocus());
+                mHandler.post(mClearFocusCallback);
             } else if (mClearFocusAfterNavigation) {
                 mDelegate.clearOmniboxFocus();
             }
@@ -1052,10 +1056,8 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     @Override
     public void onSuggestionDropdownScroll() {
-        if (mDropdownViewInfoListBuilder.hasFullyConcealedElements()) {
-            mSuggestionsListScrolled = true;
-            mDelegate.setKeyboardVisibility(false, false);
-        }
+        mSuggestionsListScrolled = true;
+        mDelegate.setKeyboardVisibility(false, false);
     }
 
     /**

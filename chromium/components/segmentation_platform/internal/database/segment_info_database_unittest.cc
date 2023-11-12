@@ -9,6 +9,7 @@
 #include "base/test/task_environment.h"
 #include "components/leveldb_proto/public/proto_database.h"
 #include "components/leveldb_proto/testing/fake_db.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using InitStatus = leveldb_proto::Enums::InitStatus;
@@ -32,7 +33,7 @@ proto::SegmentInfo CreateSegment(SegmentId segment_id,
   info.set_segment_id(segment_id);
 
   if (result.has_value()) {
-    info.mutable_prediction_result()->set_result(result.value());
+    info.mutable_prediction_result()->add_result(result.value());
   }
   return info;
 }
@@ -85,7 +86,7 @@ class SegmentInfoDatabaseTest : public testing::Test,
   void WriteResult(SegmentId segment_id, absl::optional<float> result) {
     proto::PredictionResult prediction_result;
     if (result.has_value())
-      prediction_result.set_result(result.value());
+      prediction_result.add_result(result.value());
 
     segment_db_->SaveSegmentResult(segment_id,
                                    result.has_value()
@@ -111,8 +112,8 @@ class SegmentInfoDatabaseTest : public testing::Test,
     EXPECT_EQ(segment_id, get_segment_result_->segment_id());
     EXPECT_EQ(result.has_value(), get_segment_result_->has_prediction_result());
     if (result.has_value()) {
-      EXPECT_EQ(result.value(),
-                get_segment_result_->prediction_result().result());
+      EXPECT_THAT(get_segment_result_->prediction_result().result(),
+                  testing::ElementsAre(result.value()));
     }
   }
 
@@ -205,6 +206,55 @@ TEST_P(SegmentInfoDatabaseTest, Update) {
                              base::DoNothing());
   db_->UpdateCallback(true);
   VerifyDb({kSegmentId, kSegmentId2});
+
+  // Verify GetSegmentInfoForSegments.
+  ExecuteAndVerifyGetSegmentInfoForSegments({kSegmentId2});
+
+  ExecuteAndVerifyGetSegmentInfoForSegments({kSegmentId});
+
+  ExecuteAndVerifyGetSegmentInfoForSegments({kSegmentId, kSegmentId2});
+}
+
+TEST_P(SegmentInfoDatabaseTest, UpdateMultipleSegments) {
+  // Initialize DB with two entry.
+  db_entries_.insert(
+      std::make_pair(ToString(kSegmentId), CreateSegment(kSegmentId)));
+  db_entries_.insert(
+      std::make_pair(ToString(kSegmentId2), CreateSegment(kSegmentId2)));
+  SetUpDB(GetParam());
+
+  segment_db_->Initialize(base::DoNothing());
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
+
+  // Delete both segments.
+  segment_db_->UpdateMultipleSegments({}, {kSegmentId, kSegmentId2},
+                                      base::DoNothing());
+  db_->UpdateCallback(true);
+  VerifyDb({});
+
+  // Insert multiple segments and verify.
+  std::vector<std::pair<SegmentId, proto::SegmentInfo>> segments_to_update;
+  segments_to_update.emplace_back(
+      std::make_pair(kSegmentId, CreateSegment(kSegmentId)));
+  segments_to_update.emplace_back(
+      std::make_pair(kSegmentId2, CreateSegment(kSegmentId2)));
+  segment_db_->UpdateMultipleSegments(segments_to_update, {},
+                                      base::DoNothing());
+  db_->UpdateCallback(true);
+  VerifyDb({kSegmentId, kSegmentId2});
+
+  // Update one of the existing segment and verify.
+  proto::SegmentInfo segment_info = CreateSegment(kSegmentId2);
+  segment_info.mutable_prediction_result()->add_result(0.9f);
+  // Add this entry to `segments_to_update`.
+  segments_to_update.clear();
+  segments_to_update.emplace_back(std::make_pair(kSegmentId2, segment_info));
+  // Call and Verify.
+  segment_db_->UpdateMultipleSegments(segments_to_update, {},
+                                      base::DoNothing());
+  db_->UpdateCallback(true);
+  VerifyDb({kSegmentId, kSegmentId2});
+  VerifyResult(kSegmentId2, 0.9f);
 
   // Verify GetSegmentInfoForSegments.
   ExecuteAndVerifyGetSegmentInfoForSegments({kSegmentId2});

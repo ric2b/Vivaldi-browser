@@ -79,7 +79,7 @@ class SyncedNoteTrackerEntity {
 
  private:
   // Null for tombstones.
-  raw_ptr<const vivaldi::NoteNode> note_node_;
+  raw_ptr<const vivaldi::NoteNode, DanglingUntriaged> note_node_;
 
   // Serializable Sync metadata.
   sync_pb::EntityMetadata metadata_;
